@@ -1,0 +1,9 @@
+//
+// Created by William on 2025-12-09.
+//
+
+#ifndef WILLENGINEV3_SHADER_INTEROP_H
+#define WILLENGINEV3_SHADER_INTEROP_H
+
+
+#endif //WILLENGINEV3_SHADER_INTEROP_H
