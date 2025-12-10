@@ -1,3 +1,6 @@
+#define VMA_IMPLEMENTATION
+#include <vk_mem_alloc.h>
+
 #include "core/will_engine.h"
 
 #include <fmt/format.h>
@@ -14,13 +17,7 @@ int main()
     Platform::CrashHandler crashHandler("crashes/");
     crashHandler.SetLogPath(logger.GetLogPath());
 
-    int* ptr = nullptr;
-    int value = *ptr;
-    fmt::println("{}", value);
-
-    // crashHandler.TriggerManualDump("Testing manual crash dump");
-
-    Engine::WillEngine we{};
+    Engine::WillEngine we{&crashHandler};
     we.Initialize();
     we.Run();
     we.Cleanup();

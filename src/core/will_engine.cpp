@@ -4,24 +4,69 @@
 
 #include "will_engine.h"
 
+#include <SDL3/SDL.h>
 #include <fmt/format.h>
+
+#include "render/vk_context.h"
+#include "render/vk_render_targets.h"
+#include "render/vk_swapchain.h"
+#include "spdlog/spdlog.h"
 
 namespace Engine
 {
-WillEngine::WillEngine() = default;
+WillEngine::WillEngine(Platform::CrashHandler* crashHandler_)
+    : crashHandler(crashHandler_)
+{}
 
 WillEngine::~WillEngine() = default;
 
 void WillEngine::Initialize()
 {
-    fmt::println("Initialize");
+    bool sdlInitSuccess = SDL_Init(SDL_INIT_VIDEO);
+    if (!sdlInitSuccess) {
+        SPDLOG_ERROR("SDL_Init failed: {}", SDL_GetError());
+        exit(1);
+    }
+
+    window = SDLWindowPtr(
+        SDL_CreateWindow(
+            "Template",
+            640,
+            480,
+            SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE),
+        SDL_DestroyWindow
+    );
+    SDL_SetWindowPosition(window.get(), SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
+    SDL_ShowWindow(window.get());
+    int32_t w;
+    int32_t h;
+    SDL_GetWindowSize(window.get(), &w, &h);
+
+    context = std::make_unique<Render::VulkanContext>(window.get());
+    swapchain = std::make_unique<Render::Swapchain>(context.get(), w, h);
+    renderTargets = std::make_unique<Render::RenderTargets>(context.get(), w, h);
 }
+
 void WillEngine::Run()
 {
-    fmt::println("Run");
+    SDL_Event e;
+    bool exit = false;
+    while (true) {
+        while (SDL_PollEvent(&e) != 0) {
+            if (e.type == SDL_EVENT_QUIT) { exit = true; }
+            if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_ESCAPE) { exit = true; }
+        }
+
+        if (exit) {
+            break;
+        }
+
+        frameNumber++;
+    }
 }
+
 void WillEngine::Cleanup()
 {
-    fmt::println("Cleanup");
+    SPDLOG_INFO("Cleanup");
 }
 }

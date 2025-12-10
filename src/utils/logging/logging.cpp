@@ -13,15 +13,6 @@
 
 namespace Utils
 {
-// Mapping: 0=trace, 1=debug, 2=info, 3=warn, 4=error, 5=critical
-#ifndef LOG_LEVEL
-#ifdef NDEBUG
-#define LOG_LEVEL 2  // info
-#else
-#define LOG_LEVEL 0  // trace
-#endif
-#endif
-
 Logger::Logger(std::string_view _logPath)
     : logPath(_logPath)
 {
@@ -37,8 +28,7 @@ Logger::Logger(std::string_view _logPath)
 
         std::vector<spdlog::sink_ptr> sinks{fileSink, consoleSink};
         logger = std::make_shared<spdlog::logger>("engine", sinks.begin(), sinks.end());
-
-        logger->set_level(static_cast<spdlog::level::level_enum>(LOG_LEVEL));
+        logger->set_level(spdlog::level::trace);
         logger->flush_on(spdlog::level::warn);
 
         spdlog::register_logger(logger);
