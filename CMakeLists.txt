@@ -24,6 +24,8 @@ add_subdirectory(extern/SDL EXCLUDE_FROM_ALL)
 add_subdirectory(extern/volk)
 add_subdirectory(extern/vma)
 add_subdirectory(extern/vk-bootstrap)
+set(ENKITS_BUILD_EXAMPLES OFF)
+add_subdirectory(extern/enkiTS)
 
 add_subdirectory(src/render)
 add_subdirectory(src/utils)
@@ -47,6 +49,7 @@ target_link_libraries(will-engine PUBLIC
         utils
         fmt::fmt
         SDL3::SDL3
+        enkiTS
 )
 
 # Post-Build Commands =========================

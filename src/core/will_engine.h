@@ -7,14 +7,13 @@
 #include <memory>
 
 #include <SDL3/SDL.h>
+#include <enkiTS/src/TaskScheduler.h>
 
 #include "platform/crash_handler.h"
 
 namespace Render
 {
-struct VulkanContext;
-struct Swapchain;
-struct RenderTargets;
+class RenderThread;
 }
 
 namespace Engine
@@ -35,11 +34,13 @@ public:
 
 private:
     SDLWindowPtr window{nullptr, nullptr};
-    std::unique_ptr<Render::VulkanContext> context{};
-    std::unique_ptr<Render::Swapchain> swapchain;
-    std::unique_ptr<Render::RenderTargets> renderTargets;
+    std::unique_ptr<enki::TaskScheduler> scheduler{};
 
+    std::unique_ptr<Render::RenderThread> renderThread{};
+
+private:
     uint64_t frameNumber{0};
+    uint32_t currentFrameBufferIndex{0};
 
 private:
     Platform::CrashHandler* crashHandler;

@@ -16,6 +16,13 @@ add_library(render STATIC
         vk_resources.h
         vk_helpers.cpp
         vk_helpers.h
+        vk_render_extents.cpp
+        vk_render_extents.h
+)
+
+target_include_directories(render PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+        ${CMAKE_SOURCE_DIR}/extern
 )
 
 target_link_libraries(render PUBLIC
@@ -24,4 +31,5 @@ target_link_libraries(render PUBLIC
         VulkanMemoryAllocator
         vk-bootstrap::vk-bootstrap
         spdlog::spdlog
+        enkiTS
 )

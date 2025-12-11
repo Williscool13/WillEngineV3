@@ -7,6 +7,7 @@
 #include <SDL3/SDL.h>
 #include <fmt/format.h>
 
+#include "render/render_thread.h"
 #include "render/vk_context.h"
 #include "render/vk_render_targets.h"
 #include "render/vk_swapchain.h"
@@ -22,6 +23,12 @@ WillEngine::~WillEngine() = default;
 
 void WillEngine::Initialize()
 {
+    enki::TaskSchedulerConfig config;
+    config.numTaskThreadsToCreate = enki::GetNumHardwareThreads() - 1;
+    SPDLOG_INFO("Scheduler operating with {} threads.", config.numTaskThreadsToCreate + 1);
+    scheduler = std::make_unique<enki::TaskScheduler>();
+    scheduler->Initialize(config);
+
     bool sdlInitSuccess = SDL_Init(SDL_INIT_VIDEO);
     if (!sdlInitSuccess) {
         SPDLOG_ERROR("SDL_Init failed: {}", SDL_GetError());
@@ -42,13 +49,14 @@ void WillEngine::Initialize()
     int32_t h;
     SDL_GetWindowSize(window.get(), &w, &h);
 
-    context = std::make_unique<Render::VulkanContext>(window.get());
-    swapchain = std::make_unique<Render::Swapchain>(context.get(), w, h);
-    renderTargets = std::make_unique<Render::RenderTargets>(context.get(), w, h);
+    renderThread = std::make_unique<Render::RenderThread>();
+    renderThread->Initialize(this, scheduler.get(), window.get(), w, h);
 }
 
 void WillEngine::Run()
 {
+    renderThread->Start();
+
     SDL_Event e;
     bool exit = false;
     while (true) {
@@ -58,6 +66,7 @@ void WillEngine::Run()
         }
 
         if (exit) {
+            renderThread->RequestShutdown();
             break;
         }
 
@@ -67,6 +76,7 @@ void WillEngine::Run()
 
 void WillEngine::Cleanup()
 {
+    renderThread->Join();
     SPDLOG_INFO("Cleanup");
 }
 }

@@ -6,20 +6,69 @@
 #define WILLENGINEV3_RENDER_THREAD_H
 
 #include <memory>
+#include <glm/glm.hpp>
 
-#include <SDL3/SDL.h>
+namespace enki
+{
+class LambdaPinnedTask;
+class TaskScheduler;
+}
+
+struct SDL_Window;
+
+namespace Engine
+{
+class WillEngine;
+}
 
 namespace Render
 {
-//using SDLWindowPtr = std::unique_ptr<SDL_Window, decltype(&SDL_DestroyWindow)>;
+struct RenderExtents;
+struct RenderTargets;
+struct Swapchain;
+struct VulkanContext;
+}
 
+namespace Render
+{
 class RenderThread
 {
+public:
+    RenderThread();
 
+    ~RenderThread();
+
+    void Initialize(Engine::WillEngine* engine_, enki::TaskScheduler* scheduler_, SDL_Window* window_, uint32_t width, uint32_t height);
+
+    void Start();
+
+    void RequestShutdown();
+
+    void Join();
+
+    void ThreadMain();
 
 private:
-    // SDLWindowPtr window;
-    // std::unique_ptr<struct VulkanContext> context;
+    // Non-owning
+    SDL_Window* window{};
+    Engine::WillEngine* engine{};
+    enki::TaskScheduler* scheduler{};
+
+    // Threading
+    std::atomic<bool> bShouldExit{false};
+    std::unique_ptr<enki::LambdaPinnedTask> pinnedTask{};
+
+    // Owning
+    std::unique_ptr<VulkanContext> context{};
+    std::unique_ptr<Swapchain> swapchain{};
+    std::unique_ptr<RenderTargets> renderTargets{};
+    // std::unique_ptr<ResourceManager> resourceManager{};
+
+    bool bSwapchainOutdated{false};
+    std::unique_ptr<RenderExtents> renderExtents{};
+
+    uint64_t frameNumber{0};
+    uint32_t currentFrameBufferIndex{0};
 };
 } // Render
 
