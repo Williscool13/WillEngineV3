@@ -77,18 +77,30 @@ void WillEngine::Run()
     SDL_Event e;
     bool exit = false;
     while (true) {
-        bool bRequireSwapchainRecreate = false;
         while (SDL_PollEvent(&e) != 0) {
-            if (e.type == SDL_EVENT_QUIT) { exit = true; }
-            if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_ESCAPE) { exit = true; }
-            if (e.type == SDL_EVENT_QUIT) { exit = true; }
-            if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_ESCAPE) { exit = true; }
-            if (e.type == SDL_EVENT_WINDOW_MINIMIZED
-                || e.type == SDL_EVENT_WINDOW_RESTORED
-                || e.type == SDL_EVENT_WINDOW_MAXIMIZED
-                || e.type == SDL_EVENT_WINDOW_RESIZED
-                || e.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED) {
-                bRequireSwapchainRecreate |= true;
+            // input->ProcessEvents(&e);
+            ImGui_ImplSDL3_ProcessEvent(&e);
+            switch (e.type) {
+                case SDL_EVENT_QUIT:
+                    exit = true;
+                    break;
+                case SDL_EVENT_KEY_DOWN:
+                    if (e.key.key == SDLK_ESCAPE) {exit = true;}
+                    break;
+                case SDL_EVENT_WINDOW_MINIMIZED:
+                    bMinimized = true;
+                    bRequireSwapchainRecreate = true;
+                    break;
+                case SDL_EVENT_WINDOW_RESTORED:
+                    bMinimized = false;
+                    bRequireSwapchainRecreate = true;
+                    break;
+                case SDL_EVENT_WINDOW_RESIZED:
+                //case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
+                    bRequireSwapchainRecreate = true;
+                    break;
+                default:
+                    break;
             }
         }
 
@@ -111,7 +123,7 @@ void WillEngine::Run()
         const bool canTransmit = gameFrames.try_acquire();
         if (canTransmit) {
             uint64_t currentFrameBufferIndex = frameBufferIndex % Core::FRAME_BUFFER_COUNT;
-            PrepareFrameBuffer(currentFrameBufferIndex, frameBuffers[currentFrameBufferIndex], bRequireSwapchainRecreate);
+            PrepareFrameBuffer(currentFrameBufferIndex, frameBuffers[currentFrameBufferIndex]);
             frameBufferIndex++;
             renderFrames.release();
         }
@@ -123,7 +135,7 @@ void WillEngine::Run()
 void WillEngine::EngineMain()
 {}
 
-void WillEngine::PrepareFrameBuffer(uint32_t currentFrameBufferIndex, Core::FrameBuffer& frameBuffer, bool bRequireSwapchainRecreate)
+void WillEngine::PrepareFrameBuffer(uint32_t currentFrameBufferIndex, Core::FrameBuffer& frameBuffer)
 {
     DrawImgui();
     frameBuffer.imguiDataSnapshot.SnapUsingSwap(ImGui::GetDrawData(), ImGui::GetTime());
@@ -136,15 +148,16 @@ void WillEngine::PrepareFrameBuffer(uint32_t currentFrameBufferIndex, Core::Fram
     // frameBuffer.deltaTime = deltaTime;
     // frameBuffer.currentFrameBuffer; // only used for validation on render thread
 
-    if (frameBuffer.swapchainRecreateCommand.bRenderRequestsRecreate || bRequireSwapchainRecreate) {
+    frameBuffer.swapchainRecreateCommand.bIsMinimized = bMinimized;
+    if (bRequireSwapchainRecreate) {
         frameBuffer.swapchainRecreateCommand.bEngineCommandsRecreate = true;
-        frameBuffer.swapchainRecreateCommand.bRenderRequestsRecreate = false;
 
         int32_t w;
         int32_t h;
         SDL_GetWindowSize(window.get(), &w, &h);
         frameBuffer.swapchainRecreateCommand.width = w;
         frameBuffer.swapchainRecreateCommand.height = h;
+        bRequireSwapchainRecreate = false;
     }
     else {
         frameBuffer.swapchainRecreateCommand.bEngineCommandsRecreate = false;

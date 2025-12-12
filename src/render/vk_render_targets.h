@@ -23,10 +23,10 @@ struct RenderTargets
     RenderTargets& operator=(const RenderTargets&) = delete;
 
     RenderTargets(RenderTargets&& other) noexcept
-        : drawImage(std::move(other.drawImage))
-        , drawImageView(std::move(other.drawImageView))
-        , depthImage(std::move(other.depthImage))
-        , depthImageView(std::move(other.depthImageView))
+        : colorTarget(std::move(other.colorTarget))
+        , colorTargetView(std::move(other.colorTargetView))
+        , depthTarget(std::move(other.depthTarget))
+        , depthTargetView(std::move(other.depthTargetView))
         , context(other.context)
     {
         other.context = nullptr;
@@ -35,10 +35,10 @@ struct RenderTargets
     RenderTargets& operator=(RenderTargets&& other) noexcept
     {
         if (this != &other) {
-            drawImage = std::move(other.drawImage);
-            drawImageView = std::move(other.drawImageView);
-            depthImage = std::move(other.depthImage);
-            depthImageView = std::move(other.depthImageView);
+            colorTarget = std::move(other.colorTarget);
+            colorTargetView = std::move(other.colorTargetView);
+            depthTarget = std::move(other.depthTarget);
+            depthTargetView = std::move(other.depthTargetView);
             context = other.context;
             other.context = nullptr;
         }
@@ -49,10 +49,10 @@ struct RenderTargets
 
     void Recreate(uint32_t width, uint32_t height);
 
-    AllocatedImage drawImage{};
-    ImageView drawImageView{};
-    AllocatedImage depthImage{};
-    ImageView depthImageView{};
+    AllocatedImage colorTarget{};
+    ImageView colorTargetView{};
+    AllocatedImage depthTarget{};
+    ImageView depthTargetView{};
 
 private:
     VulkanContext* context{};

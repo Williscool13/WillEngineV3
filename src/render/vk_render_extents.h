@@ -20,21 +20,12 @@ struct RenderExtents
           }, renderScale(scale)
     {}
 
-    void RequestResize(uint32_t width, uint32_t height)
+    void ApplyResize(uint32_t width, uint32_t height)
     {
-        pendingResize = {width, height};
-    }
-
-    void ApplyResize()
-    {
-        if (!pendingResize) return;
-
-        renderExtents[0] = pendingResize->width;
-        renderExtents[1] = pendingResize->height;
+        renderExtents[0] = width;
+        renderExtents[1] = height;
         scaledRenderExtents[0] = static_cast<uint32_t>(renderExtents[0] * renderScale + 0.5f);
         scaledRenderExtents[1] = static_cast<uint32_t>(renderExtents[1] * renderScale + 0.5f);
-
-        pendingResize.reset();
     }
 
     void UpdateScale(float newScale)
@@ -44,7 +35,6 @@ struct RenderExtents
         scaledRenderExtents[1] = static_cast<uint32_t>(renderExtents[1] * renderScale + 0.5f);
     }
 
-    [[nodiscard]] bool HasPendingResize() const { return pendingResize.has_value(); }
     [[nodiscard]] std::array<uint32_t, 2> GetExtent() const { return renderExtents; }
     [[nodiscard]] std::array<uint32_t, 2> GetScaledExtent() const { return scaledRenderExtents; }
 
@@ -63,8 +53,6 @@ private:
     std::array<uint32_t, 2> scaledRenderExtents;
     float renderScale;
 
-    struct PendingResize { uint32_t width, height; };
-    std::optional<PendingResize> pendingResize;
 };
 } // Render
 

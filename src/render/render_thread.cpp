@@ -7,10 +7,13 @@
 #include <enkiTS/src/TaskScheduler.h>
 
 #include "vk_context.h"
+#include "vk_helpers.h"
 #include "vk_imgui_wrapper.h"
 #include "vk_render_extents.h"
 #include "vk_render_targets.h"
 #include "vk_swapchain.h"
+#include "vk_utils.h"
+#include "backends/imgui_impl_vulkan.h"
 #include "engine/will_engine.h"
 #include "spdlog/spdlog.h"
 
@@ -29,7 +32,7 @@ void RenderThread::Initialize(Engine::WillEngine* engine_, enki::TaskScheduler* 
 
     context = std::make_unique<VulkanContext>(window);
     swapchain = std::make_unique<Swapchain>(context.get(), width, height);
-    imgui = std::make_unique<ImguiWrapper>(context.get(), window, swapchain->imageCount, swapchain->format);
+    imgui = std::make_unique<ImguiWrapper>(context.get(), window, Core::FRAME_BUFFER_COUNT, COLOR_ATTACHMENT_FORMAT);
     renderTargets = std::make_unique<RenderTargets>(context.get(), width, height);
     renderExtents = std::make_unique<RenderExtents>(width, height, 1.0f);
 
@@ -78,7 +81,6 @@ void RenderThread::RequestShutdown()
 
 void RenderThread::Join()
 {
-    vkDeviceWaitIdle(context->device);
     if (pinnedTask) {
         scheduler->WaitforTask(pinnedTask.get());
     }
@@ -93,36 +95,17 @@ void RenderThread::ThreadMain()
 
         const uint32_t currentFrameInFlight = frameNumber % Core::FRAME_BUFFER_COUNT;
         Core::FrameBuffer& frameBuffer = engine->GetFrameBuffer(currentFrameInFlight);
-
         assert(frameBuffer.currentFrameBuffer == currentFrameInFlight);
 
-        modelMatrixOperationRingBuffer.Enqueue(frameBuffer.modelMatrixOperations);
-        frameBuffer.modelMatrixOperations.clear();
-        instanceOperationRingBuffer.Enqueue(frameBuffer.instanceOperations);
-        frameBuffer.instanceOperations.clear();
-        jointMatrixOperationRingBuffer.Enqueue(frameBuffer.jointMatrixOperations);
-        frameBuffer.jointMatrixOperations.clear();
 
-        if (frameBuffer.swapchainRecreateCommand.bEngineCommandsRecreate) {
+        bEngineRequestsRecreate |= frameBuffer.swapchainRecreateCommand.bEngineCommandsRecreate;
+        bool bShouldRecreate = !frameBuffer.swapchainRecreateCommand.bIsMinimized && bEngineRequestsRecreate;
+        if (bShouldRecreate) {
             SPDLOG_INFO("[RenderThread::ThreadMain] Swapchain Recreated");
             vkDeviceWaitIdle(context->device);
 
-            int32_t w, h;
-            SDL_GetWindowSize(window, &w, &h);
-
-            swapchain->Recreate(w, h);
-            for (FrameSynchronization& fs : frameSynchronization) {
-                fs.RecreateSynchronization();
-            }
-
-            // Input::Input::Get().UpdateWindowExtent(swapchain->extent.width, swapchain->extent.height);
-            renderExtents->RequestResize(w, h);
-        }
-
-        if (renderExtents->HasPendingResize()) {
-            vkDeviceWaitIdle(context->device);
-            renderExtents->ApplyResize();
-
+            swapchain->Recreate(frameBuffer.swapchainRecreateCommand.width, frameBuffer.swapchainRecreateCommand.height);
+            renderExtents->ApplyResize(frameBuffer.swapchainRecreateCommand.width, frameBuffer.swapchainRecreateCommand.height);
             std::array<uint32_t, 2> newExtents = renderExtents->GetExtent();
             renderTargets->Recreate(newExtents[0], newExtents[1]);
 
@@ -131,38 +114,262 @@ void RenderThread::ThreadMain()
             // drawDescriptorInfo.imageView = renderTargets->drawImageView.handle;
             // drawDescriptorInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
             // renderTargetDescriptors.UpdateDescriptor(drawDescriptorInfo, 0, 0, 0);
+
+            bRenderRequestsRecreate = false;
+            bEngineRequestsRecreate = false;
         }
 
-        const AllocatedBuffer& currentModelBuffer = frameResources[currentFrameInFlight].modelBuffer;
-        const AllocatedBuffer& currentInstanceBuffer = frameResources[currentFrameInFlight].instanceBuffer;
-        const AllocatedBuffer& currentJointMatrixBuffers = frameResources[currentFrameInFlight].jointMatrixBuffer;
+        // Wait for the frame N - 3 to finish using resources
         FrameSynchronization& currentFrameSynchronization = frameSynchronization[currentFrameInFlight];
-
-        // Wait for the GPU to finish the last frame that used this frame-in-flight's resources (N - imageCount).
-        vkWaitForFences(context->device, 1, &currentFrameSynchronization.renderFence, true, UINT64_MAX);
-
-        modelMatrixOperationRingBuffer.ProcessOperations(static_cast<char*>(currentModelBuffer.allocationInfo.pMappedData), Core::FRAME_BUFFER_COUNT + 1);
-        instanceOperationRingBuffer.ProcessOperations(static_cast<char*>(currentInstanceBuffer.allocationInfo.pMappedData), Core::FRAME_BUFFER_COUNT, highestInstanceIndex);
-        jointMatrixOperationRingBuffer.ProcessOperations(static_cast<char*>(currentJointMatrixBuffers.allocationInfo.pMappedData), Core::FRAME_BUFFER_COUNT + 1);
-
-        if (swapchain->extent.width > 0 && swapchain->extent.height > 0) {
-            RenderResponse renderResponse = Render(currentFrameInFlight, currentFrameSynchronization, frameBuffer);
-            if (renderResponse == SWAPCHAIN_OUTDATED) {
-                frameBuffer.swapchainRecreateCommand.bRenderRequestsRecreate = true;
-            }
+        FrameResources& currentFrameResources = frameResources[currentFrameInFlight];
+        RenderResponse renderResponse = Render(currentFrameInFlight, currentFrameSynchronization, frameBuffer, currentFrameResources);
+        if (renderResponse == SWAPCHAIN_OUTDATED) {
+            bRenderRequestsRecreate = true;
         }
-
 
         frameNumber++;
         engine->ReleaseGameFrame();
     }
+
+    vkDeviceWaitIdle(context->device);
 }
 
-RenderThread::RenderResponse RenderThread::Render(uint32_t frameInFlight, FrameSynchronization& frameSync, Core::FrameBuffer& frameBuffer)
+RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, FrameSynchronization& frameSync, Core::FrameBuffer& frameBuffer, FrameResources& frameResource)
 {
-    ImDrawDataSnapshot& currentImguiFrameBuffer = frameBuffer.imguiDataSnapshot;
+    vkWaitForFences(context->device, 1, &frameSync.renderFence, true, UINT64_MAX);
+    VK_CHECK(vkResetFences(context->device, 1, &frameSync.renderFence));
+
+    ProcessBufferOperations(frameBuffer, frameResource);
+
+    VK_CHECK(vkResetCommandBuffer(frameSync.commandBuffer, 0));
+    VkCommandBufferBeginInfo beginInfo = VkHelpers::CommandBufferBeginInfo();
+    VK_CHECK(vkBeginCommandBuffer(frameSync.commandBuffer, &beginInfo));
+    VkCommandBuffer cmd = frameSync.commandBuffer;
+
+    ProcessAcquisitions(cmd, frameBuffer);
+
+    if (bRenderRequestsRecreate) {
+        VK_CHECK(vkEndCommandBuffer(cmd));
+        VkCommandBufferSubmitInfo commandBufferSubmitInfo = VkHelpers::CommandBufferSubmitInfo(frameSync.commandBuffer);
+        VkSubmitInfo2 submitInfo = VkHelpers::SubmitInfo(&commandBufferSubmitInfo, nullptr, nullptr);
+        VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, frameSync.renderFence));
+        return SWAPCHAIN_OUTDATED;
+    }
+
+    uint32_t swapchainImageIndex;
+    VkResult e = vkAcquireNextImageKHR(context->device, swapchain->handle, UINT64_MAX, frameSync.swapchainSemaphore, nullptr, &swapchainImageIndex);
+    if (e == VK_ERROR_OUT_OF_DATE_KHR || e == VK_SUBOPTIMAL_KHR) {
+        SPDLOG_TRACE("[RenderThread::Render] Swapchain acquire failed ({})", string_VkResult(e));
+        VK_CHECK(vkEndCommandBuffer(cmd));
+        VkCommandBufferSubmitInfo cmdInfo = VkHelpers::CommandBufferSubmitInfo(cmd);
+        VkSemaphoreSubmitInfo waitInfo = VkHelpers::SemaphoreSubmitInfo(frameSync.swapchainSemaphore, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT);
+        VkSubmitInfo2 submitInfo = VkHelpers::SubmitInfo(&cmdInfo, &waitInfo, nullptr);
+        VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, frameSync.renderFence));
+        return SWAPCHAIN_OUTDATED;
+    }
+
+    VkImage currentSwapchainImage = swapchain->swapchainImages[swapchainImageIndex];
+
+    //
+    {
+        auto subresource = VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT);
+        auto barrier = VkHelpers::ImageMemoryBarrier(
+            renderTargets->colorTarget.handle,
+            subresource,
+            VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, renderTargets->colorTarget.layout,
+            VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+        );
+        renderTargets->colorTarget.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        auto dependencyInfo = VkHelpers::DependencyInfo(&barrier);
+        vkCmdPipelineBarrier2(cmd, &dependencyInfo);
+    }
+
+    std::array<uint32_t, 2> renderExtent = renderExtents->GetScaledExtent();
+    // Imgui Draw
+    {
+        VkRenderingAttachmentInfo imguiAttachment{};
+        imguiAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+        imguiAttachment.pNext = nullptr;
+        imguiAttachment.imageView = renderTargets->colorTargetView.handle;
+        imguiAttachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        imguiAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+        imguiAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        VkRenderingInfo renderInfo{};
+        renderInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+        renderInfo.pNext = nullptr;
+        renderInfo.renderArea = VkRect2D{VkOffset2D{0, 0}, {renderExtent[0], renderExtent[1]}};
+        renderInfo.layerCount = 1;
+        renderInfo.colorAttachmentCount = 1;
+        renderInfo.pColorAttachments = &imguiAttachment;
+        renderInfo.pDepthAttachment = nullptr;
+        renderInfo.pStencilAttachment = nullptr;
+        vkCmdBeginRendering(cmd, &renderInfo);
+        ImGui_ImplVulkan_RenderDrawData(&frameBuffer.imguiDataSnapshot.DrawData, cmd);
+
+        vkCmdEndRendering(cmd);
+    }
+
+    // Prepare for blit
+    {
+        VkImageMemoryBarrier2 barriers[2];
+        barriers[0] = VkHelpers::ImageMemoryBarrier(
+            renderTargets->colorTarget.handle,
+            VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT),
+            VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT, renderTargets->colorTarget.layout,
+            VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
+        );
+        renderTargets->colorTarget.layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        barriers[1] = VkHelpers::ImageMemoryBarrier(
+            currentSwapchainImage,
+            VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT),
+            VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_UNDEFINED,
+            VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
+        );
+        VkDependencyInfo depInfo{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
+        depInfo.imageMemoryBarrierCount = 2;
+        depInfo.pImageMemoryBarriers = barriers;
+        vkCmdPipelineBarrier2(cmd, &depInfo);
+    }
+
+    // Blit
+    {
+        VkOffset3D renderOffset = {static_cast<int32_t>(renderExtent[0]), static_cast<int32_t>(renderExtent[1]), 1};
+        VkOffset3D swapchainOffset = {static_cast<int32_t>(swapchain->extent.width), static_cast<int32_t>(swapchain->extent.height), 1};
+        VkImageBlit2 blitRegion{};
+        blitRegion.sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2;
+        blitRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        blitRegion.srcSubresource.layerCount = 1;
+        blitRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        blitRegion.dstSubresource.layerCount = 1;
+        blitRegion.srcOffsets[0] = {0, 0, 0};
+        blitRegion.srcOffsets[1] = renderOffset;
+        blitRegion.dstOffsets[0] = {0, 0, 0};
+        blitRegion.dstOffsets[1] = swapchainOffset;
+
+        VkBlitImageInfo2 blitInfo{};
+        blitInfo.sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2;
+        blitInfo.srcImage = renderTargets->colorTarget.handle;
+        blitInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        blitInfo.dstImage = currentSwapchainImage;
+        blitInfo.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        blitInfo.regionCount = 1;
+        blitInfo.pRegions = &blitRegion;
+        blitInfo.filter = VK_FILTER_LINEAR;
+
+        vkCmdBlitImage2(cmd, &blitInfo);
+    }
+
+    //
+    {
+        auto subresource = VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT);
+        auto barrier = VkHelpers::ImageMemoryBarrier(
+            currentSwapchainImage,
+            subresource,
+            VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
+        );
+        auto dependencyInfo = VkHelpers::DependencyInfo(&barrier);
+        vkCmdPipelineBarrier2(cmd, &dependencyInfo);
+    }
+
+    VK_CHECK(vkEndCommandBuffer(cmd));
+
+    VkCommandBufferSubmitInfo commandBufferSubmitInfo = VkHelpers::CommandBufferSubmitInfo(frameSync.commandBuffer);
+    VkSemaphoreSubmitInfo swapchainSemaphoreWaitInfo = VkHelpers::SemaphoreSubmitInfo(frameSync.swapchainSemaphore, VK_PIPELINE_STAGE_2_BLIT_BIT);
+    VkSemaphoreSubmitInfo renderSemaphoreSignalInfo = VkHelpers::SemaphoreSubmitInfo(frameSync.renderSemaphore, VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT);
+    VkSubmitInfo2 submitInfo = VkHelpers::SubmitInfo(&commandBufferSubmitInfo, &swapchainSemaphoreWaitInfo, &renderSemaphoreSignalInfo);
+    VK_CHECK(vkResetFences(context->device, 1, &frameSync.renderFence));
+    VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, frameSync.renderFence));
+
+    VkPresentInfoKHR presentInfo = VkHelpers::PresentInfo(&swapchain->handle, nullptr, &swapchainImageIndex);
+    presentInfo.pWaitSemaphores = &frameSync.renderSemaphore;
+    const VkResult presentResult = vkQueuePresentKHR(context->graphicsQueue, &presentInfo);
+
+    if (presentResult == VK_ERROR_OUT_OF_DATE_KHR || presentResult == VK_SUBOPTIMAL_KHR) {
+        SPDLOG_TRACE("[RenderThread::Render] Swapchain presentation failed ({})", string_VkResult(e));
+        return SWAPCHAIN_OUTDATED;
+    }
 
     return SUCCESS;
 }
 
+void RenderThread::ProcessBufferOperations(Core::FrameBuffer& frameBuffer, FrameResources& frameResource)
+{
+    modelMatrixOperationRingBuffer.Enqueue(frameBuffer.modelMatrixOperations);
+    instanceOperationRingBuffer.Enqueue(frameBuffer.instanceOperations);
+    jointMatrixOperationRingBuffer.Enqueue(frameBuffer.jointMatrixOperations);
+    frameBuffer.modelMatrixOperations.clear();
+    frameBuffer.instanceOperations.clear();
+    frameBuffer.jointMatrixOperations.clear();
+
+    const AllocatedBuffer& currentModelBuffer = frameResource.modelBuffer;
+    const AllocatedBuffer& currentInstanceBuffer = frameResource.instanceBuffer;
+    const AllocatedBuffer& currentJointMatrixBuffers = frameResource.jointMatrixBuffer;
+
+    // Copy instance and model changes to CPU mapped memory
+    modelMatrixOperationRingBuffer.ProcessOperations(static_cast<char*>(currentModelBuffer.allocationInfo.pMappedData), Core::FRAME_BUFFER_COUNT + 1);
+    instanceOperationRingBuffer.ProcessOperations(static_cast<char*>(currentInstanceBuffer.allocationInfo.pMappedData), Core::FRAME_BUFFER_COUNT, highestInstanceIndex);
+    jointMatrixOperationRingBuffer.ProcessOperations(static_cast<char*>(currentJointMatrixBuffers.allocationInfo.pMappedData), Core::FRAME_BUFFER_COUNT + 1);
+}
+
+void RenderThread::ProcessAcquisitions(VkCommandBuffer cmd, Core::FrameBuffer& frameBuffer)
+{
+    if (frameBuffer.bufferAcquireOperations.empty() && frameBuffer.imageAcquireOperations.empty()) {
+        return;
+    }
+
+    tempBufferBarriers.clear();
+    tempBufferBarriers.reserve(frameBuffer.bufferAcquireOperations.size());
+    for (const auto& op : frameBuffer.bufferAcquireOperations) {
+        VkBufferMemoryBarrier2 barrier{};
+        barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
+        barrier.pNext = nullptr;
+        barrier.srcStageMask = op.srcStageMask;
+        barrier.srcAccessMask = op.srcAccessMask;
+        barrier.dstStageMask = op.dstStageMask;
+        barrier.dstAccessMask = op.dstAccessMask;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.buffer = reinterpret_cast<VkBuffer>(op.buffer);
+        barrier.offset = op.offset;
+        barrier.size = op.size;
+        tempBufferBarriers.push_back(barrier);
+    }
+
+    tempImageBarriers.clear();
+    tempImageBarriers.reserve(frameBuffer.imageAcquireOperations.size());
+    for (const auto& op : frameBuffer.imageAcquireOperations) {
+        VkImageMemoryBarrier2 barrier{};
+        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+        barrier.pNext = nullptr;
+        barrier.srcStageMask = op.srcStageMask;
+        barrier.srcAccessMask = op.srcAccessMask;
+        barrier.dstStageMask = op.dstStageMask;
+        barrier.dstAccessMask = op.dstAccessMask;
+        barrier.oldLayout = static_cast<VkImageLayout>(op.oldLayout);
+        barrier.newLayout = static_cast<VkImageLayout>(op.newLayout);
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = reinterpret_cast<VkImage>(op.image);
+        barrier.subresourceRange.aspectMask = op.aspectMask;
+        barrier.subresourceRange.baseMipLevel = op.baseMipLevel;
+        barrier.subresourceRange.levelCount = op.levelCount;
+        barrier.subresourceRange.baseArrayLayer = op.baseArrayLayer;
+        barrier.subresourceRange.layerCount = op.layerCount;
+        tempImageBarriers.push_back(barrier);
+    }
+
+    VkDependencyInfo depInfo{};
+    depInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+    depInfo.pNext = nullptr;
+    depInfo.dependencyFlags = 0;
+    depInfo.bufferMemoryBarrierCount = tempBufferBarriers.size();
+    depInfo.pBufferMemoryBarriers = tempBufferBarriers.data();
+    depInfo.imageMemoryBarrierCount = tempImageBarriers.size();
+    depInfo.pImageMemoryBarriers = tempImageBarriers.data();
+    vkCmdPipelineBarrier2(cmd, &depInfo);
+
+    frameBuffer.bufferAcquireOperations.clear();
+    frameBuffer.imageAcquireOperations.clear();
+}
 } // Render

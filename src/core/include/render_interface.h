@@ -90,11 +90,10 @@ struct JointMatrixOperation
 
 struct SwapchainRecreateCommand
 {
-    bool bRenderRequestsRecreate{};
-
     bool bEngineCommandsRecreate{};
     uint32_t width{0};
     uint32_t height{0};
+    bool bIsMinimized{false};
 };
 
 struct FrameBuffer

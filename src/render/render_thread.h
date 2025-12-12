@@ -62,7 +62,11 @@ public:
 
     void ThreadMain();
 
-    RenderResponse Render(uint32_t frameInFlight, FrameSynchronization& frameSync, Core::FrameBuffer& frameBuffer);
+    RenderResponse Render(uint32_t currentFrameIndex, FrameSynchronization& frameSync, Core::FrameBuffer& frameBuffer, FrameResources& frameResource);
+
+    void ProcessBufferOperations(Core::FrameBuffer& frameBuffer, FrameResources& frameResource);
+
+    void ProcessAcquisitions(VkCommandBuffer cmd, Core::FrameBuffer& frameBuffer);
 
 private:
     // Non-owning
@@ -82,8 +86,11 @@ private:
     // std::unique_ptr<ResourceManager> resourceManager{};
     std::unique_ptr<RenderExtents> renderExtents{};
 
-    std::array<FrameSynchronization, 3> frameSynchronization;
-    std::array<FrameResources, 3> frameResources;
+    std::array<FrameSynchronization, Core::FRAME_BUFFER_COUNT> frameSynchronization;
+    std::array<FrameResources, Core::FRAME_BUFFER_COUNT> frameResources;
+
+    std::vector<VkBufferMemoryBarrier2> tempBufferBarriers;
+    std::vector<VkImageMemoryBarrier2> tempImageBarriers;
 
     ModelMatrixOperationRingBuffer modelMatrixOperationRingBuffer;
     InstanceOperationRingBuffer instanceOperationRingBuffer;
@@ -91,6 +98,8 @@ private:
     uint32_t highestInstanceIndex{0};
 
     uint64_t frameNumber{0};
+    bool bEngineRequestsRecreate{false};
+    bool bRenderRequestsRecreate{false};
 };
 } // Render
 

@@ -37,7 +37,7 @@ public:
 
     void EngineMain();
 
-    void PrepareFrameBuffer(uint32_t currentFrameBufferIndex, Core::FrameBuffer& frameBuffer, bool bRequireSwapchainRecreate);
+    void PrepareFrameBuffer(uint32_t currentFrameBufferIndex, Core::FrameBuffer& frameBuffer);
 
     void DrawImgui();
 
@@ -62,9 +62,12 @@ private:
     uint64_t gameFrameCount{0};
     uint32_t frameBufferIndex{0};
     float accumDeltaTime{0};
+    bool bRequireSwapchainRecreate{false};
+    bool bMinimized{false};
 
 private:
     Platform::CrashHandler* crashHandler;
+
 };
 }
 

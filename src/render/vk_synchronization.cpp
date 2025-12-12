@@ -72,9 +72,8 @@ FrameSynchronization& FrameSynchronization::operator=(FrameSynchronization&& oth
 void FrameSynchronization::Initialize()
 {
     VkCommandPoolCreateInfo commandPoolCreateInfo = VkHelpers::CommandPoolCreateInfo(context->graphicsQueueFamily);
-    VkCommandBufferAllocateInfo commandBufferAllocateInfo = VkHelpers::CommandBufferAllocateInfo(1);
     VK_CHECK(vkCreateCommandPool(context->device, &commandPoolCreateInfo, nullptr, &commandPool));
-    commandBufferAllocateInfo.commandPool = commandPool;
+    VkCommandBufferAllocateInfo commandBufferAllocateInfo = VkHelpers::CommandBufferAllocateInfo(2, commandPool);
     VK_CHECK(vkAllocateCommandBuffers(context->device, &commandBufferAllocateInfo, &commandBuffer));
 
     const VkFenceCreateInfo fenceCreateInfo = VkHelpers::FenceCreateInfo();
