@@ -11,6 +11,7 @@
 #include "vk_imgui_wrapper.h"
 #include "vk_render_extents.h"
 #include "vk_render_targets.h"
+#include "vk_resource_manager.h"
 #include "vk_swapchain.h"
 #include "vk_utils.h"
 #include "backends/imgui_impl_vulkan.h"
@@ -24,9 +25,9 @@ RenderThread::RenderThread() = default;
 
 RenderThread::~RenderThread() = default;
 
-void RenderThread::Initialize(Engine::WillEngine* engine_, enki::TaskScheduler* scheduler_, SDL_Window* window_, uint32_t width, uint32_t height)
+void RenderThread::Initialize(Core::FrameSync* engineRenderSync, enki::TaskScheduler* scheduler_, SDL_Window* window_, uint32_t width, uint32_t height)
 {
-    engine = engine_;
+    engineRenderSynchronization = engineRenderSync;
     scheduler = scheduler_;
     window = window_;
 
@@ -35,6 +36,10 @@ void RenderThread::Initialize(Engine::WillEngine* engine_, enki::TaskScheduler* 
     imgui = std::make_unique<ImguiWrapper>(context.get(), window, Core::FRAME_BUFFER_COUNT, COLOR_ATTACHMENT_FORMAT);
     renderTargets = std::make_unique<RenderTargets>(context.get(), width, height);
     renderExtents = std::make_unique<RenderExtents>(width, height, 1.0f);
+    resourceManager = std::make_unique<ResourceManager>(context.get());
+
+    resourceManager->bindlessRenderTargetDescriptorBuffer.ForceAllocateStorageImage({COLOR_TARGET_INDEX, 0}, {nullptr, renderTargets->colorTargetView.handle, VK_IMAGE_LAYOUT_GENERAL});
+    resourceManager->bindlessRenderTargetDescriptorBuffer.ForceAllocateStorageImage({DEPTH_TARGET_INDEX, 0}, {nullptr, renderTargets->depthTargetView.handle, VK_IMAGE_LAYOUT_GENERAL});
 
     for (FrameSynchronization& frameSync : frameSynchronization) {
         frameSync = FrameSynchronization(context.get());
@@ -89,12 +94,12 @@ void RenderThread::Join()
 void RenderThread::ThreadMain()
 {
     while (!bShouldExit.load()) {
-        engine->AcquireRenderFrame();
+        engineRenderSynchronization->renderFrames.acquire();
 
         if (bShouldExit.load()) { break; }
 
         const uint32_t currentFrameInFlight = frameNumber % Core::FRAME_BUFFER_COUNT;
-        Core::FrameBuffer& frameBuffer = engine->GetFrameBuffer(currentFrameInFlight);
+        Core::FrameBuffer& frameBuffer = engineRenderSynchronization->frameBuffers[currentFrameInFlight];
         assert(frameBuffer.currentFrameBuffer == currentFrameInFlight);
 
 
@@ -107,13 +112,10 @@ void RenderThread::ThreadMain()
             swapchain->Recreate(frameBuffer.swapchainRecreateCommand.width, frameBuffer.swapchainRecreateCommand.height);
             renderExtents->ApplyResize(frameBuffer.swapchainRecreateCommand.width, frameBuffer.swapchainRecreateCommand.height);
             std::array<uint32_t, 2> newExtents = renderExtents->GetExtent();
-            renderTargets->Recreate(newExtents[0], newExtents[1]);
 
-            // Upload to descriptor buffer
-            // VkDescriptorImageInfo drawDescriptorInfo;
-            // drawDescriptorInfo.imageView = renderTargets->drawImageView.handle;
-            // drawDescriptorInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-            // renderTargetDescriptors.UpdateDescriptor(drawDescriptorInfo, 0, 0, 0);
+            renderTargets->Recreate(newExtents[0], newExtents[1]);
+            resourceManager->bindlessRenderTargetDescriptorBuffer.ForceAllocateStorageImage({COLOR_TARGET_INDEX, 0}, {nullptr, renderTargets->colorTargetView.handle, VK_IMAGE_LAYOUT_GENERAL});
+            resourceManager->bindlessRenderTargetDescriptorBuffer.ForceAllocateStorageImage({DEPTH_TARGET_INDEX, 0}, {nullptr, renderTargets->depthTargetView.handle, VK_IMAGE_LAYOUT_GENERAL});
 
             bRenderRequestsRecreate = false;
             bEngineRequestsRecreate = false;
@@ -128,7 +130,7 @@ void RenderThread::ThreadMain()
         }
 
         frameNumber++;
-        engine->ReleaseGameFrame();
+        engineRenderSynchronization->gameFrames.release();
     }
 
     vkDeviceWaitIdle(context->device);

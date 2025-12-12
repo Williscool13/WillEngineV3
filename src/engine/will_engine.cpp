@@ -62,8 +62,9 @@ void WillEngine::Initialize()
     // gameFunctions.gameInit(&gameState);
 
 
+    engineRenderSynchronization = std::make_unique<Core::FrameSync>();
     renderThread = std::make_unique<Render::RenderThread>();
-    renderThread->Initialize(this, scheduler.get(), window.get(), w, h);
+    renderThread->Initialize(engineRenderSynchronization.get(), scheduler.get(), window.get(), w, h);
     // assetLoadingThread.Initialize(renderThread.GetVulkanContext(), renderThread.GetResourceManager());
 }
 
@@ -85,7 +86,7 @@ void WillEngine::Run()
                     exit = true;
                     break;
                 case SDL_EVENT_KEY_DOWN:
-                    if (e.key.key == SDLK_ESCAPE) {exit = true;}
+                    if (e.key.key == SDLK_ESCAPE) { exit = true; }
                     break;
                 case SDL_EVENT_WINDOW_MINIMIZED:
                     bMinimized = true;
@@ -96,7 +97,7 @@ void WillEngine::Run()
                     bRequireSwapchainRecreate = true;
                     break;
                 case SDL_EVENT_WINDOW_RESIZED:
-                //case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
+                    //case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
                     bRequireSwapchainRecreate = true;
                     break;
                 default:
@@ -106,7 +107,7 @@ void WillEngine::Run()
 
         if (exit) {
             renderThread->RequestShutdown();
-            renderFrames.release();
+            engineRenderSynchronization->renderFrames.release();
             break;
         }
 
@@ -120,12 +121,12 @@ void WillEngine::Run()
         // gameFunctions.gameUpdate(&gameState, time.GetDeltaTime());
         // accumDeltaTime += time.GetDeltaTime();
 
-        const bool canTransmit = gameFrames.try_acquire();
+        const bool canTransmit = engineRenderSynchronization->gameFrames.try_acquire();
         if (canTransmit) {
             uint64_t currentFrameBufferIndex = frameBufferIndex % Core::FRAME_BUFFER_COUNT;
-            PrepareFrameBuffer(currentFrameBufferIndex, frameBuffers[currentFrameBufferIndex]);
+            PrepareFrameBuffer(currentFrameBufferIndex, engineRenderSynchronization->frameBuffers[currentFrameBufferIndex]);
             frameBufferIndex++;
-            renderFrames.release();
+            engineRenderSynchronization->renderFrames.release();
         }
 
         gameFrameCount++;

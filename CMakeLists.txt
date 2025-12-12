@@ -32,6 +32,7 @@ add_subdirectory(extern/vma)
 add_subdirectory(extern/vk-bootstrap)
 set(ENKITS_BUILD_EXAMPLES OFF)
 add_subdirectory(extern/enkiTS)
+add_subdirectory(extern/OffsetAllocator)
 
 add_subdirectory(src/engine)
 add_subdirectory(src/core)

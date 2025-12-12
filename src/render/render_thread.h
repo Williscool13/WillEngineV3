@@ -13,6 +13,11 @@
 #include "vk_operation_ring_buffer.h"
 #include "vk_synchronization.h"
 
+namespace Core
+{
+class FrameSync;
+}
+
 namespace enki
 {
 class LambdaPinnedTask;
@@ -28,6 +33,7 @@ class WillEngine;
 
 namespace Render
 {
+struct ResourceManager;
 struct ImguiWrapper;
 struct RenderExtents;
 struct RenderTargets;
@@ -52,7 +58,7 @@ public:
 
     ~RenderThread();
 
-    void Initialize(Engine::WillEngine* engine_, enki::TaskScheduler* scheduler_, SDL_Window* window_, uint32_t width, uint32_t height);
+    void Initialize(Core::FrameSync* engineRenderSync, enki::TaskScheduler* scheduler_, SDL_Window* window_, uint32_t width, uint32_t height);
 
     void Start();
 
@@ -71,7 +77,7 @@ public:
 private:
     // Non-owning
     SDL_Window* window{};
-    Engine::WillEngine* engine{}; // maybe create new engine sync to reduce coupling
+    Core::FrameSync* engineRenderSynchronization{};
     enki::TaskScheduler* scheduler{};
 
     // Threading
@@ -83,7 +89,7 @@ private:
     std::unique_ptr<Swapchain> swapchain{};
     std::unique_ptr<ImguiWrapper> imgui{};
     std::unique_ptr<RenderTargets> renderTargets{};
-    // std::unique_ptr<ResourceManager> resourceManager{};
+    std::unique_ptr<ResourceManager> resourceManager{};
     std::unique_ptr<RenderExtents> renderExtents{};
 
     std::array<FrameSynchronization, Core::FRAME_BUFFER_COUNT> frameSynchronization;

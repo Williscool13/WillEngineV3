@@ -23,8 +23,8 @@ add_library(render STATIC
         vk_helpers.h
         vk_render_extents.cpp
         vk_render_extents.h
-        vk_render_resources.cpp
-        vk_render_resources.h
+        vk_resource_manager.cpp
+        vk_resource_manager.h
         vk_imgui_wrapper.cpp
         vk_imgui_wrapper.h
         vk_operation_ring_buffer.cpp
@@ -32,6 +32,16 @@ add_library(render STATIC
         types/render_types.cpp
         types/render_types.h
         shaders/shader_interop.h
+        descriptors/vk_bindless_resources_storage.cpp
+        descriptors/vk_bindless_resources_storage.h
+        descriptors/vk_bindless_resources_sampler_images.cpp
+        descriptors/vk_bindless_resources_sampler_images.h
+        descriptors/vk_bindless_resources_combined.cpp
+        descriptors/vk_bindless_resources_combined.h
+        descriptors/vk_descriptors.cpp
+        descriptors/vk_descriptors.h
+        types/vk_types.cpp
+        types/vk_types.h
 )
 
 target_include_directories(render PRIVATE
@@ -47,6 +57,7 @@ target_link_libraries(render PUBLIC
         vk-bootstrap::vk-bootstrap
         spdlog::spdlog
         enkiTS
+        offsetAllocator
 )
 
 if(WILL_BUILD_EDITOR)

@@ -12,6 +12,13 @@ namespace Render
 {
 struct VulkanContext;
 
+inline constexpr uint32_t COLOR_TARGET_INDEX = 0;
+inline constexpr uint32_t DEPTH_TARGET_INDEX = 1;
+inline constexpr uint32_t GBUFFER_TARGET_0_INDEX = 2;
+inline constexpr uint32_t GBUFFER_TARGET_1_INDEX = 3;
+inline constexpr uint32_t GBUFFER_TARGET_2_INDEX = 4;
+inline constexpr uint32_t GBUFFER_TARGET_3_INDEX = 5;
+
 struct RenderTargets
 {
 
