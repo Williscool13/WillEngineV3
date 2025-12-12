@@ -14,12 +14,10 @@ namespace Render
 struct RenderExtents
 {
     RenderExtents(uint32_t width, uint32_t height, float scale)
-        : renderExtents{width, height}
-    , renderScale(scale)
-    , scaledRenderExtents{
-        static_cast<uint32_t>(width * scale + 0.5f),
-        static_cast<uint32_t>(height * scale + 0.5f)
-    }
+        : renderExtents{width, height}, scaledRenderExtents{
+              static_cast<uint32_t>(width * scale + 0.5f),
+              static_cast<uint32_t>(height * scale + 0.5f)
+          }, renderScale(scale)
     {}
 
     void RequestResize(uint32_t width, uint32_t height)

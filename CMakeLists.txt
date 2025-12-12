@@ -4,6 +4,8 @@ project(will-engine)
 set(CMAKE_CXX_STANDARD 23)
 
 
+option(WILL_BUILD_EDITOR "Build editor features" ON)
+
 # Configuration ==============================
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
     add_compile_definitions(LOG_LEVEL=0) # >= trace
@@ -14,6 +16,10 @@ elseif (CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
 elseif (CMAKE_BUILD_TYPE STREQUAL "Release")
     add_compile_definitions(LOG_LEVEL=2) # >= info
     add_compile_definitions(SPDLOG_ACTIVE_LEVEL=2) # >= info
+endif ()
+
+if (WILL_BUILD_EDITOR)
+    add_compile_definitions(WILL_EDITOR)
 endif ()
 
 # Dependencies ================================
@@ -27,30 +33,49 @@ add_subdirectory(extern/vk-bootstrap)
 set(ENKITS_BUILD_EXAMPLES OFF)
 add_subdirectory(extern/enkiTS)
 
+add_subdirectory(src/engine)
+add_subdirectory(src/core)
 add_subdirectory(src/render)
 add_subdirectory(src/utils)
 add_subdirectory(src/platform)
 
-add_executable(will-engine main.cpp
-        src/core/will_engine.cpp
-        src/core/will_engine.h
-        src/utils/logging/logging.cpp
-        src/utils/logging/logging.h
+
+# Imgui =======================================
+set(IMGUI_DIR ${CMAKE_SOURCE_DIR}/extern/imgui)
+add_library(imgui STATIC
+        ${IMGUI_DIR}/imgui.cpp
+        ${IMGUI_DIR}/imgui_draw.cpp
+        ${IMGUI_DIR}/imgui_tables.cpp
+        ${IMGUI_DIR}/imgui_widgets.cpp
+        ${IMGUI_DIR}/imgui_threaded_rendering.h
+        ${IMGUI_DIR}/backends/imgui_impl_sdl3.cpp
+        ${IMGUI_DIR}/backends/imgui_impl_vulkan.cpp
+        ${IMGUI_DIR}/misc/cpp/imgui_stdlib.cpp
 )
+target_compile_definitions(imgui PUBLIC
+        IMGUI_IMPL_VULKAN_USE_VOLK
+        VK_NO_PROTOTYPES
+)
+target_include_directories(imgui PUBLIC
+        ${CMAKE_SOURCE_DIR}/extern/imgui
+        ${CMAKE_SOURCE_DIR}/extern/volk
+        ${Vulkan_INCLUDE_DIRS}
+)
+
+target_link_libraries(imgui PUBLIC
+        volk
+        SDL3::SDL3
+)
+
+# Builds ======================================
+add_executable(will-engine main.cpp)
 
 target_include_directories(will-engine PRIVATE
         ${CMAKE_SOURCE_DIR}/src
         ${CMAKE_SOURCE_DIR}/extern
 )
 
-target_link_libraries(will-engine PUBLIC
-        render
-        platform
-        utils
-        fmt::fmt
-        SDL3::SDL3
-        enkiTS
-)
+target_link_libraries(will-engine PUBLIC engine)
 
 # Post-Build Commands =========================
 add_custom_command(TARGET will-engine POST_BUILD

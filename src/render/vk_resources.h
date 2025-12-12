@@ -177,26 +177,6 @@ struct Pipeline
 
     Pipeline& operator=(Pipeline&& other) noexcept;
 };
-
-
-namespace VkResources
-{
-    AllocatedBuffer CreateAllocatedBuffer(VulkanContext* context, const VkBufferCreateInfo& bufferInfo, const VmaAllocationCreateInfo& vmaAllocInfo);
-
-    AllocatedBuffer CreateAllocatedStagingBuffer(VulkanContext* context, size_t bufferSize, VkBufferUsageFlags additionalUsages = 0);
-
-    AllocatedBuffer CreateAllocatedReceivingBuffer(VulkanContext* context, size_t bufferSize, VkBufferUsageFlags additionalUsages = 0);
-
-    Sampler CreateSampler(VulkanContext* context, const VkSamplerCreateInfo& samplerCreateInfo);
-
-    DescriptorSetLayout CreateDescriptorSetLayout(VulkanContext* context, const VkDescriptorSetLayoutCreateInfo& layoutCreateInfo);
-
-    PipelineLayout CreatePipelineLayout(VulkanContext* context, const VkPipelineLayoutCreateInfo& layoutCreateInfo);
-
-    Pipeline CreateGraphicsPipeline(VulkanContext* context, const VkGraphicsPipelineCreateInfo& pipelineCreateInfo);
-
-    Pipeline CreateComputePipeline(VulkanContext* context, const VkComputePipelineCreateInfo& pipelineCreateInfo);
-}
 } // Render
 
 #endif //WILL_ENGINE_VK_RESOURCES_H

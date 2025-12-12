@@ -1,13 +1,18 @@
 add_library(render STATIC
         render_thread.cpp
         render_thread.h
+        frame_resources.cpp
+        frame_resources.h
+        render_constants.cpp
+        render_constants.h
         vk_context.cpp
         vk_context.h
         vk_swapchain.cpp
         vk_swapchain.h
+        vk_synchronization.cpp
+        vk_synchronization.h
         vk_render_targets.cpp
         vk_render_targets.h
-        shaders/shader_interop.h
         vk_utils.cpp
         vk_utils.h
         vk_config.cpp
@@ -18,6 +23,15 @@ add_library(render STATIC
         vk_helpers.h
         vk_render_extents.cpp
         vk_render_extents.h
+        vk_render_resources.cpp
+        vk_render_resources.h
+        vk_imgui_wrapper.cpp
+        vk_imgui_wrapper.h
+        vk_operation_ring_buffer.cpp
+        vk_operation_ring_buffer.h
+        types/render_types.cpp
+        types/render_types.h
+        shaders/shader_interop.h
 )
 
 target_include_directories(render PRIVATE
@@ -26,6 +40,7 @@ target_include_directories(render PRIVATE
 )
 
 target_link_libraries(render PUBLIC
+        core
         SDL3::SDL3
         volk
         VulkanMemoryAllocator
@@ -33,3 +48,7 @@ target_link_libraries(render PUBLIC
         spdlog::spdlog
         enkiTS
 )
+
+if(WILL_BUILD_EDITOR)
+    target_link_libraries(render PUBLIC imgui)
+endif()
