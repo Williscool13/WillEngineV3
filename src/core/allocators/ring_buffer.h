@@ -6,6 +6,7 @@
 #define WILLENGINETESTBED_RING_BUFFER_H
 
 #include <array>
+#include <cstddef>
 
 namespace Core
 {

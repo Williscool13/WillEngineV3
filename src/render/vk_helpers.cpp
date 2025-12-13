@@ -6,6 +6,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <vector>
 
 namespace Render
 {
@@ -291,13 +292,13 @@ bool VkHelpers::LoadShaderModule(const std::filesystem::path& filePath, VkDevice
     return true;
 }
 
-VkPipelineShaderStageCreateInfo VkHelpers::PipelineShaderStageCreateInfo(VkShaderModule computeShader, VkShaderStageFlagBits shaderStage)
+VkPipelineShaderStageCreateInfo VkHelpers::PipelineShaderStageCreateInfo(VkShaderModule shader, VkShaderStageFlagBits shaderStage)
 {
     return {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
         .pNext = nullptr,
         .stage = shaderStage,
-        .module = computeShader,
+        .module = shader,
         .pName = "main",
     };
 }

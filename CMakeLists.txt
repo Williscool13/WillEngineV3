@@ -23,6 +23,7 @@ if (WILL_BUILD_EDITOR)
 endif ()
 
 # Dependencies ================================
+add_compile_definitions(GLM_FORCE_DEPTH_ZERO_TO_ONE)
 add_subdirectory(extern/fmt)
 set(SPDLOG_FMT_EXTERNAL ON)
 add_subdirectory(extern/spdlog)
@@ -79,11 +80,35 @@ target_include_directories(will-engine PRIVATE
 target_link_libraries(will-engine PUBLIC engine)
 
 # Shaders =====================================
-set(SHADER_COMMON_INCLUDES
+#   - Use this command to compile any shader interop that needs to be recompiled.
+#     cmake --build cmake-build-debug-visual-studio --target shader_interop
+#   - Or just this if you're in the build folder
+#     cmake --build . --target shader_interop
+
+preprocess_shader_interop(
         ${CMAKE_SOURCE_DIR}/src/render/shaders/shader_interop.h
+        ${CMAKE_SOURCE_DIR}/shaders/shader_interop.slang
 )
+
+# preprocess_shader_interop(
+#       .. more modules
+# )
+
+
+get_property(INTEROP_FILES GLOBAL PROPERTY SHADER_INTEROP_FILES)
+add_custom_target(shader_interop DEPENDS ${INTEROP_FILES})
+
+add_custom_target(regenerate_interop
+        COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target shader_interop
+        COMMENT "Regenerating all shader interop files"
+)
+
 compile_shaders(will-engine
-        ${CMAKE_SOURCE_DIR}/shaders/basicCompute.slang compute computeMain)
+        ${CMAKE_SOURCE_DIR}/shaders/basicCompute.slang compute computeMain
+        ${CMAKE_SOURCE_DIR}/shaders/basicRender.slang task taskMain
+        ${CMAKE_SOURCE_DIR}/shaders/basicRender.slang mesh meshMain
+        ${CMAKE_SOURCE_DIR}/shaders/basicRender.slang fragment fragmentMain
+)
 
 
 # Post-Build Commands =========================

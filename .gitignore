@@ -1,2 +1,5 @@
 # Compiled shaders
 *.spv
+
+# interop generated .slang include files
+*_interop.slang

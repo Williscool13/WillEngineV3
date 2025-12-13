@@ -6,6 +6,7 @@
 #define WILLENGINEV3_RENDER_THREAD_H
 
 #include <array>
+#include <atomic>
 #include <memory>
 #include <glm/glm.hpp>
 
@@ -13,6 +14,7 @@
 #include "vk_operation_ring_buffer.h"
 #include "vk_synchronization.h"
 #include "pipelines/basic_compute_pipeline.h"
+#include "pipelines/basic_render_pipeline.h"
 
 namespace Core
 {
@@ -102,14 +104,17 @@ private:
     ModelMatrixOperationRingBuffer modelMatrixOperationRingBuffer;
     InstanceOperationRingBuffer instanceOperationRingBuffer;
     JointMatrixOperationRingBuffer jointMatrixOperationRingBuffer;
-    uint32_t highestInstanceIndex{0};
+
 
     uint64_t frameNumber{0};
     bool bEngineRequestsRecreate{false};
     bool bRenderRequestsRecreate{false};
+    uint32_t highestInstanceIndex{0};
+    SceneData sceneData{};
 
 private:
     BasicComputePipeline basicComputePipeline;
+    BasicRenderPipeline basicRenderPipeline;
 };
 } // Render
 

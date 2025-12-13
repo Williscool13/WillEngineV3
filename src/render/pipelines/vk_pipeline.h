@@ -38,7 +38,7 @@ public:
 
     RenderPipelineBuilder& DisableMultisampling();
 
-    RenderPipelineBuilder& SetupRenderer(const VkFormat* colorAttachmentFormats, uint32_t colorAttachmentCount,
+    RenderPipelineBuilder& SetupRenderer(const VkFormat* _colorAttachmentFormats, uint32_t colorAttachmentCount,
                                          VkFormat depthAttachmentFormat = VK_FORMAT_UNDEFINED,
                                          VkFormat stencilAttachmentFormat = VK_FORMAT_UNDEFINED);
 

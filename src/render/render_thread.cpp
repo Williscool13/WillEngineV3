@@ -66,6 +66,7 @@ void RenderThread::Initialize(Core::FrameSync* engineRenderSync, enki::TaskSched
     }
 
     basicComputePipeline = BasicComputePipeline(context.get(), resourceManager->bindlessRenderTargetDescriptorBuffer.descriptorSetLayout);
+    basicRenderPipeline = BasicRenderPipeline(context.get());
 }
 
 void RenderThread::Start()
@@ -172,7 +173,31 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Fr
         return SWAPCHAIN_OUTDATED;
     }
 
+    std::array<uint32_t, 2> renderExtent = renderExtents->GetScaledExtent();
     VkImage currentSwapchainImage = swapchain->swapchainImages[swapchainImageIndex];
+    AllocatedBuffer& currentSceneDataBuffer = frameResource.sceneDataBuffer;
+    //
+    {
+        const glm::vec3 cameraPos = {1.0f, 0.0f, 3.0f};
+        const glm::vec3 camreaLook = {0.0f, 0.0f, 0.0f};
+        const glm::vec3 up = {0.0f, 1.0f, 0.0f};
+        glm::mat4 view = glm::lookAt(cameraPos, camreaLook, up);
+        glm::mat4 proj = glm::perspective(
+            glm::radians(75.0f),
+            static_cast<float>(renderExtent[0]) / static_cast<float>(renderExtent[1]),
+            1000.0f,
+            0.1f
+        );
+
+        sceneData.view = view;
+        sceneData.proj = proj;
+        sceneData.viewProj = proj * view;
+        sceneData.deltaTime = 0.1f;
+
+        auto currentSceneData = static_cast<SceneData*>(currentSceneDataBuffer.allocationInfo.pMappedData);
+        memcpy(currentSceneData, &sceneData, sizeof(SceneData));
+    }
+
 
     // Transition to GENERAL for compute shader access
     {
@@ -187,8 +212,6 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Fr
         auto dependencyInfo = VkHelpers::DependencyInfo(&barrier);
         vkCmdPipelineBarrier2(cmd, &dependencyInfo);
     }
-
-    std::array<uint32_t, 2> renderExtent = renderExtents->GetScaledExtent();
     //
     {
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, basicComputePipeline.pipeline.handle);
@@ -223,6 +246,31 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Fr
         renderTargets->colorTarget.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
         auto dependencyInfo = VkHelpers::DependencyInfo(&barrier);
         vkCmdPipelineBarrier2(cmd, &dependencyInfo);
+    }
+
+    //
+    {
+        const VkRenderingAttachmentInfo colorAttachment = VkHelpers::RenderingAttachmentInfo(renderTargets->colorTargetView.handle, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        constexpr VkClearValue depthClear = {.depthStencil = {0.0f, 0u}};
+        const VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(renderTargets->depthTargetView.handle, &depthClear, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+        const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({renderExtent[0], renderExtent[1]}, &colorAttachment, &depthAttachment);
+
+        vkCmdBeginRendering(cmd, &renderInfo);
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, basicRenderPipeline.pipeline.handle);
+
+        VkViewport viewport = VkHelpers::GenerateViewport(renderExtent[0], renderExtent[1]);
+        vkCmdSetViewport(cmd, 0, 1, &viewport);
+        VkRect2D scissor = VkHelpers::GenerateScissor(renderExtent[0], renderExtent[1]);
+        vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+        BasicRenderPushConstant pushData{
+            .modelMatrix = glm::mat4(1.0f),
+            .sceneData = currentSceneDataBuffer.address,
+        };
+
+        vkCmdPushConstants(cmd, basicRenderPipeline.pipelineLayout.handle, VK_SHADER_STAGE_MESH_BIT_EXT, 0, sizeof(BasicRenderPushConstant), &pushData);
+        vkCmdDrawMeshTasksEXT(cmd, 1, 1, 1);
+        vkCmdEndRendering(cmd);
     }
 
     // Imgui Draw

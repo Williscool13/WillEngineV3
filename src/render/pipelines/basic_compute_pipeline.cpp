@@ -35,6 +35,7 @@ BasicComputePipeline::BasicComputePipeline(VulkanContext* context, DescriptorSet
     VkShaderModule computeShader;
     if (!VkHelpers::LoadShaderModule(Platform::GetShaderPath() / "basicCompute_compute.spv", context->device, &computeShader)) {
         SPDLOG_ERROR("Failed to load basicCompute_comp.spv");
+        return;
     }
 
     VkPipelineShaderStageCreateInfo shaderStageCreateInfo = VkHelpers::PipelineShaderStageCreateInfo(computeShader, VK_SHADER_STAGE_COMPUTE_BIT);

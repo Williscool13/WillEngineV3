@@ -75,14 +75,14 @@ RenderPipelineBuilder& RenderPipelineBuilder::DisableMultisampling()
     return SetupMultisampling(VK_FALSE, VK_SAMPLE_COUNT_1_BIT, 1.0f, nullptr, VK_FALSE, VK_FALSE);
 }
 
-RenderPipelineBuilder& RenderPipelineBuilder::SetupRenderer(const VkFormat* colorAttachmentFormats, uint32_t colorAttachmentCount,
+RenderPipelineBuilder& RenderPipelineBuilder::SetupRenderer(const VkFormat* _colorAttachmentFormats, uint32_t colorAttachmentCount,
                                                             VkFormat depthAttachmentFormat, VkFormat stencilAttachmentFormat)
 {
-    this->colorAttachmentFormats = colorAttachmentFormats;
+    this->colorAttachmentFormats = _colorAttachmentFormats;
     this->colorAttachmentFormatCount = colorAttachmentCount;
 
     renderInfo.colorAttachmentCount = colorAttachmentCount;
-    renderInfo.pColorAttachmentFormats = colorAttachmentFormats;
+    renderInfo.pColorAttachmentFormats = _colorAttachmentFormats;
     renderInfo.depthAttachmentFormat = depthAttachmentFormat;
     renderInfo.stencilAttachmentFormat = stencilAttachmentFormat;
 

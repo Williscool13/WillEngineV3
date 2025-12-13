@@ -42,10 +42,12 @@ add_library(render STATIC
         descriptors/vk_descriptors.h
         types/vk_types.cpp
         types/vk_types.h
-        pipelines/basic_compute_pipeline.cpp
-        pipelines/basic_compute_pipeline.h
         pipelines/vk_pipeline.cpp
         pipelines/vk_pipeline.h
+        pipelines/basic_compute_pipeline.cpp
+        pipelines/basic_compute_pipeline.h
+        pipelines/basic_render_pipeline.cpp
+        pipelines/basic_render_pipeline.h
 )
 
 target_include_directories(render PRIVATE
@@ -70,6 +72,34 @@ endif()
 
 find_program(SLANGC slangc REQUIRED)
 
+function(preprocess_shader_interop INPUT_HEADER OUTPUT_SLANG)
+    find_program(GCC_COMPILER gcc)
+    if(GCC_COMPILER)
+        add_custom_command(
+                OUTPUT ${OUTPUT_SLANG}
+                COMMAND ${GCC_COMPILER} -E -P -D__SLANG__ -x c++ ${INPUT_HEADER} -o ${OUTPUT_SLANG}
+                DEPENDS ${INPUT_HEADER}
+                COMMENT "Preprocessing ${OUTPUT_SLANG}"
+        )
+    elseif(MSVC)
+        add_custom_command(
+                OUTPUT ${OUTPUT_SLANG}
+                COMMAND ${CMAKE_CXX_COMPILER} /P /EP /D__SLANG__ /TP ${INPUT_HEADER} /Fi${OUTPUT_SLANG}
+                DEPENDS ${INPUT_HEADER}
+                COMMENT "Preprocessing ${OUTPUT_SLANG}"
+        )
+    else()
+        add_custom_command(
+                OUTPUT ${OUTPUT_SLANG}
+                COMMAND ${CMAKE_CXX_COMPILER} -E -P -D__SLANG__ -x c++ ${INPUT_HEADER} -o ${OUTPUT_SLANG}
+                DEPENDS ${INPUT_HEADER}
+                COMMENT "Preprocessing ${OUTPUT_SLANG}"
+        )
+    endif()
+
+    set_property(GLOBAL APPEND PROPERTY SHADER_INTEROP_FILES ${OUTPUT_SLANG})
+endfunction()
+
 function(compile_shader TARGET SHADER_SOURCE STAGE ENTRY)
     # Parse optional OUTPUT_NAME argument
     set(options "")
@@ -85,19 +115,25 @@ function(compile_shader TARGET SHADER_SOURCE STAGE ENTRY)
     endif()
 
     get_filename_component(SHADER_SOURCE_ABS ${SHADER_SOURCE} ABSOLUTE)
+    get_filename_component(SHADER_INCLUDE_DIR ${SHADER_SOURCE_ABS} DIRECTORY)
 
     set(SHADER_OUTPUT ${CMAKE_BINARY_DIR}/shaders/${SHADER_NAME}_${STAGE}.spv)
+    get_property(INTEROP_FILES GLOBAL PROPERTY SHADER_INTEROP_FILES)
 
     add_custom_command(
             OUTPUT ${SHADER_OUTPUT}
             COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/shaders
-            COMMAND ${SLANGC} ${SHADER_SOURCE_ABS} -target spirv -entry ${ENTRY} -stage ${STAGE} -o ${SHADER_OUTPUT}
-            DEPENDS ${SHADER_SOURCE_ABS} ${SHADER_COMMON_INCLUDES}
+            COMMAND ${SLANGC} ${SHADER_SOURCE_ABS}
+            -target spirv
+            -entry ${ENTRY}
+            -stage ${STAGE}
+            -I ${SHADER_INCLUDE_DIR}
+            -o ${SHADER_OUTPUT}
+            DEPENDS ${SHADER_SOURCE_ABS} ${INTEROP_FILES}
             COMMENT "Compiling ${STAGE} shader: ${SHADER_NAME}_${STAGE}.spv"
             VERBATIM
     )
 
-    # Track outputs in a property
     set_property(TARGET ${TARGET} APPEND PROPERTY SHADER_OUTPUTS ${SHADER_OUTPUT})
 endfunction()
 
@@ -133,5 +169,6 @@ function(compile_shaders TARGET)
     # Create single custom target for all shaders
     get_property(SHADER_OUTPUTS TARGET ${TARGET} PROPERTY SHADER_OUTPUTS)
     add_custom_target(${TARGET}_shaders ALL DEPENDS ${SHADER_OUTPUTS})
+    add_dependencies(${TARGET}_shaders shader_interop)
     add_dependencies(${TARGET} ${TARGET}_shaders)
 endfunction()
