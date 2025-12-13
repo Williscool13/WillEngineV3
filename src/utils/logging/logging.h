@@ -5,9 +5,8 @@
 #ifndef WILL_ENGINE_LOGGING_H
 #define WILL_ENGINE_LOGGING_H
 
+#include <filesystem>
 #include <memory>
-#include <string>
-#include <string_view>
 #include <spdlog/spdlog.h>
 
 namespace Utils
@@ -15,7 +14,7 @@ namespace Utils
 class Logger
 {
 public:
-    explicit Logger(std::string_view logPath = "logs/engine.log");
+    explicit Logger(const std::filesystem::path& _logPath);
 
     ~Logger();
 
@@ -24,13 +23,13 @@ public:
     Logger& operator=(const Logger&) = delete;
 
     [[nodiscard]] std::shared_ptr<spdlog::logger> Get() const { return logger; }
-    [[nodiscard]] std::string_view GetLogPath() const { return logPath; }
+    [[nodiscard]] const std::filesystem::path& GetLogPath() const { return logPath; }
 
     void Flush();
 
 private:
     std::shared_ptr<spdlog::logger> logger;
-    std::string logPath;
+    std::filesystem::path logPath;
 };
 } // Utils
 

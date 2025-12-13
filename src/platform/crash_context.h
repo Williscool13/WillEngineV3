@@ -15,7 +15,7 @@ class CrashContext
 public:
     CrashContext();
 
-    void WriteCrashContext(std::string_view crashReason, std::string_view folderPath);
+    void WriteCrashContext(std::string_view crashReason, const std::filesystem::path& folderPath);
 
 private:
     nlohmann::ordered_json context;

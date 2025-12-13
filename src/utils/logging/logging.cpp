@@ -13,14 +13,13 @@
 
 namespace Utils
 {
-Logger::Logger(std::string_view _logPath)
+Logger::Logger(const std::filesystem::path& _logPath)
     : logPath(_logPath)
 {
-    const std::filesystem::path path(_logPath);
-    std::filesystem::create_directories(path.parent_path());
+    std::filesystem::create_directories(_logPath.parent_path());
 
     try {
-        auto fileSink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(std::string(_logPath), true);
+        auto fileSink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(_logPath.string(), true);
         auto consoleSink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
 
         fileSink->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] [%t] %v");
@@ -34,7 +33,7 @@ Logger::Logger(std::string_view _logPath)
         spdlog::register_logger(logger);
         spdlog::set_default_logger(logger);
 
-        logger->info("Logger initialized: {}", logPath);
+        logger->info("Logger initialized: {}", logPath.string());
     } catch (const std::exception& ex) {
         fmt::print(stderr, "Failed to initialize logger: {}\n", ex.what());
     }

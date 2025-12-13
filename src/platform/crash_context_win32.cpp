@@ -25,7 +25,7 @@ CrashContext::CrashContext()
     CollectSystemInfoWin32();
 }
 
-void CrashContext::WriteCrashContext(std::string_view crashReason, std::string_view folderPath)
+void CrashContext::WriteCrashContext(std::string_view crashReason, const std::filesystem::path& folderPath)
 {
     context["crash"]["reason"] = crashReason;
     context["crash"]["timestamp"] = GetTimestamp();
@@ -33,12 +33,12 @@ void CrashContext::WriteCrashContext(std::string_view crashReason, std::string_v
     CollectProcessInfoWin32();
 
     try {
-        std::string contextPath = std::string(folderPath) + "CrashContext.json";
+        std::filesystem::path contextPath = folderPath / "CrashContext.json";
         std::ofstream file(contextPath);
         file << context.dump(2);
         file.close();
 
-        fmt::println("Crash context written to: {}", contextPath);
+        fmt::println("Crash context written to: {}", contextPath.string());
     } catch (const std::exception& e) {
         fmt::println("Failed to write crash context: {}", e.what());
     }

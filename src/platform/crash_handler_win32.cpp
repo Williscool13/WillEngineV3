@@ -9,6 +9,7 @@
 #include <sstream>
 #include <iomanip>
 #include <chrono>
+#include <utility>
 
 #include <dbghelp.h>
 #include <fmt/format.h>
@@ -25,8 +26,8 @@ namespace Platform
 {
 CrashHandler* CrashHandler::s_instance = nullptr;
 
-CrashHandler::CrashHandler(std::string_view dumpDirectory)
-    : baseDumpDir(dumpDirectory)
+CrashHandler::CrashHandler(std::filesystem::path  dumpDirectory)
+    : baseDumpDir(std::move(dumpDirectory))
 {
     if (s_instance) {
         fmt::println("Warning: Multiple CrashHandler instances created");
@@ -38,7 +39,7 @@ CrashHandler::CrashHandler(std::string_view dumpDirectory)
     // #1 Setup exception filter
     SetUnhandledExceptionFilter(ExceptionFilter);
 
-    fmt::println("Initialized crash handler ({})", baseDumpDir);
+    fmt::println("Initialized crash handler: {}", baseDumpDir.string());
 }
 
 CrashHandler::~CrashHandler()
@@ -55,9 +56,9 @@ LONG WINAPI CrashHandler::ExceptionFilter(PEXCEPTION_POINTERS pExceptionInfo)
         return EXCEPTION_CONTINUE_SEARCH;
     }
 
-    std::string currentCrashFolder = s_instance->CreateCrashFolder();
+    std::filesystem::path currentCrashFolder = s_instance->CreateCrashFolder();
 
-    fmt::println("Crash Detected. Writing to folder: {}", currentCrashFolder);
+    fmt::println("Crash Detected. Writing to folder: {}", currentCrashFolder.string());
 
     // #2 Write crash context
     std::string crashReason = s_instance->GetExceptionDescription(pExceptionInfo);
@@ -81,9 +82,9 @@ LONG WINAPI CrashHandler::ExceptionFilter(PEXCEPTION_POINTERS pExceptionInfo)
     s_instance->CopyLogsToCrashes(currentCrashFolder);
 
     // #4 Write crash dump
-    std::string dumpPath = currentCrashFolder + "Minidump.dmp";
+    auto dumpPath = currentCrashFolder / "Minidump.dmp";
     if (s_instance->WriteDump(pExceptionInfo, dumpPath)) {
-        fmt::println("Crash dump written to {}", dumpPath);
+        fmt::println("Crash dump written to {}", dumpPath.string());
     }
     else {
         fmt::println("Failed to create dump");
@@ -92,10 +93,10 @@ LONG WINAPI CrashHandler::ExceptionFilter(PEXCEPTION_POINTERS pExceptionInfo)
     return EXCEPTION_EXECUTE_HANDLER;
 }
 
-bool CrashHandler::WriteDump(PEXCEPTION_POINTERS pExceptionInfo, std::string_view filename)
+bool CrashHandler::WriteDump(PEXCEPTION_POINTERS pExceptionInfo, const std::filesystem::path& filename)
 {
     HANDLE hFile = CreateFileA(
-        filename.data(),
+    filename.string().c_str(),
         GENERIC_WRITE,
         0, nullptr,
         CREATE_ALWAYS,
@@ -126,7 +127,7 @@ bool CrashHandler::WriteDump(PEXCEPTION_POINTERS pExceptionInfo, std::string_vie
 
 bool CrashHandler::TriggerManualDump(std::string_view reason)
 {
-    const std::string currentCrashFolder = CreateCrashFolder();
+    std::filesystem::path currentCrashFolder = CreateCrashFolder();
 
     CopyLogsToCrashes(currentCrashFolder);
 
@@ -145,7 +146,7 @@ bool CrashHandler::TriggerManualDump(std::string_view reason)
     CrashContext crashContext;
     crashContext.WriteCrashContext(fullReason, currentCrashFolder);
 
-    std::string dumpPath = currentCrashFolder + "Minidump.dmp";
+    auto dumpPath = currentCrashFolder / "Minidump.dmp";
     return WriteDump(&pointers, dumpPath);
 }
 
@@ -154,8 +155,15 @@ std::string CrashHandler::GetTimestamp()
     auto now = std::chrono::system_clock::now();
     auto time_t = std::chrono::system_clock::to_time_t(now);
 
+    std::tm tm_buf{};
+#ifdef _WIN32
+    localtime_s(&tm_buf, &time_t);
+#else
+    localtime_r(&time_t, &tm_buf);
+#endif
+
     std::stringstream ss;
-    ss << std::put_time(std::localtime(&time_t), "%Y%m%d_%H%M%S");
+    ss << std::put_time(&tm_buf, "%Y%m%d_%H%M%S");
     return ss.str();
 }
 
@@ -250,16 +258,16 @@ std::string CrashHandler::GetExceptionDescription(PEXCEPTION_POINTERS pException
     return description;
 }
 
-std::string CrashHandler::CreateCrashFolder()
+std::filesystem::path CrashHandler::CreateCrashFolder()
 {
     std::string timestamp = GetTimestamp();
-    std::string crashFolder = baseDumpDir + timestamp + "/";
+    std::filesystem::path crashFolder = baseDumpDir / timestamp;
 
     std::filesystem::create_directories(crashFolder);
     return crashFolder;
 }
 
-void CrashHandler::CopyLogsToCrashes(const std::string& currentCrashFolder)
+void CrashHandler::CopyLogsToCrashes(const std::filesystem::path& currentCrashFolder)
 {
     try {
         auto defaultLogger = spdlog::default_logger();
@@ -272,11 +280,11 @@ void CrashHandler::CopyLogsToCrashes(const std::string& currentCrashFolder)
             return;
         }
 
-        std::string crashLogPath = currentCrashFolder + "engine.log";
+        std::filesystem::path crashLogPath = currentCrashFolder / "engine.log";
         std::filesystem::copy_file(logPath, crashLogPath,
                                    std::filesystem::copy_options::overwrite_existing);
 
-        fmt::println("Log file copied to: {}", crashLogPath);
+        fmt::println("Log file copied to: {}", crashLogPath.string());
     } catch (const std::exception& ex) {
         fmt::println("Failed to copy logs: {}", ex.what());
     }

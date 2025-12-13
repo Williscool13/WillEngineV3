@@ -7,14 +7,16 @@
 #include <spdlog/spdlog.h>
 
 #include "platform/crash_handler.h"
+#include "platform/paths.h"
 #include "utils/logging/logging.h"
 
 int main()
 {
-    Utils::Logger logger("logs/engine.log");
+    Platform::CrashHandler crashHandler(Platform::GetCrashPath() / "crashes");
+
+    Utils::Logger logger(Platform::GetLogPath() / "engine.log");
     spdlog::info("Engine starting...");
 
-    Platform::CrashHandler crashHandler("crashes/");
     crashHandler.SetLogPath(logger.GetLogPath());
 
     Engine::WillEngine we{&crashHandler};

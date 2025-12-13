@@ -4,6 +4,7 @@
 
 #ifndef WILLENGINEV3_CRASH_HANDLER_H
 #define WILLENGINEV3_CRASH_HANDLER_H
+#include <filesystem>
 #include <string>
 #include <string_view>
 
@@ -16,7 +17,7 @@ namespace Platform
 class CrashHandler
 {
 public:
-    explicit CrashHandler(std::string_view dumpDirectory);
+    explicit CrashHandler(std::filesystem::path  dumpDirectory);
 
     ~CrashHandler();
 
@@ -26,24 +27,24 @@ public:
 
     bool TriggerManualDump(std::string_view reason);
 
-    void SetLogPath(std::string_view path) { logPath = std::string(path); }
+    void SetLogPath(const std::filesystem::path& path) { logPath = path; }
 
 private:
-    std::string baseDumpDir;
-    std::string logPath;
+    std::filesystem::path baseDumpDir;
+    std::filesystem::path logPath;
 
 #ifdef _WIN32
     static LONG WINAPI ExceptionFilter(PEXCEPTION_POINTERS pExceptionInfo);
 
     static CrashHandler* s_instance;
 
-    bool WriteDump(PEXCEPTION_POINTERS pExceptionInfo, std::string_view filename);
+    bool WriteDump(PEXCEPTION_POINTERS pExceptionInfo, const std::filesystem::path& filename);
 
     std::string GetExceptionDescription(PEXCEPTION_POINTERS pExceptionInfo);
 
-    std::string CreateCrashFolder();
+    std::filesystem::path CreateCrashFolder();
 
-    void CopyLogsToCrashes(const std::string& currentCrashFolder);
+    void CopyLogsToCrashes(const std::filesystem::path& currentCrashFolder);
 
     static std::string GetStackTrace(PCONTEXT context);
 #endif
