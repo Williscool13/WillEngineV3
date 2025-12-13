@@ -64,6 +64,8 @@ void RenderThread::Initialize(Core::FrameSync* engineRenderSync, enki::TaskSched
         bufferInfo.size = BINDLESS_MODEL_BUFFER_SIZE;
         frameResource.jointMatrixBuffer = std::move(AllocatedBuffer::CreateAllocatedBuffer(context.get(), bufferInfo, vmaAllocInfo));
     }
+
+    basicComputePipeline = BasicComputePipeline(context.get(), resourceManager->bindlessRenderTargetDescriptorBuffer.descriptorSetLayout);
 }
 
 void RenderThread::Start()
@@ -172,13 +174,50 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Fr
 
     VkImage currentSwapchainImage = swapchain->swapchainImages[swapchainImageIndex];
 
-    //
+    // Transition to GENERAL for compute shader access
     {
         auto subresource = VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT);
         auto barrier = VkHelpers::ImageMemoryBarrier(
             renderTargets->colorTarget.handle,
             subresource,
             VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, renderTargets->colorTarget.layout,
+            VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL
+        );
+        renderTargets->colorTarget.layout = VK_IMAGE_LAYOUT_GENERAL;
+        auto dependencyInfo = VkHelpers::DependencyInfo(&barrier);
+        vkCmdPipelineBarrier2(cmd, &dependencyInfo);
+    }
+
+    std::array<uint32_t, 2> renderExtent = renderExtents->GetScaledExtent();
+    //
+    {
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, basicComputePipeline.pipeline.handle);
+        BasicComputePushConstant pushConstant{
+            .color1 = {0.0f, 0.0f, 0.0f, 0.0f},
+            .color2 = {1.0f, 1.0f, 1.0f, 1.0f},
+            .extent = {renderExtent[0], renderExtent[1]},
+        };
+        vkCmdPushConstants(cmd, basicComputePipeline.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(BasicComputePushConstant), &pushConstant);
+
+        VkDescriptorBufferBindingInfoEXT bindingInfo = resourceManager->bindlessRenderTargetDescriptorBuffer.GetBindingInfo();
+        vkCmdBindDescriptorBuffersEXT(cmd, 1, &bindingInfo);
+        uint32_t bufferIndexImage = 0;
+        VkDeviceSize bufferOffset = 0;
+        vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, basicComputePipeline.pipelineLayout.handle, 0, 1, &bufferIndexImage, &bufferOffset);
+
+
+        uint32_t xDispatch = renderExtent[0] + 15 / 16;
+        uint32_t yDispatch = renderExtent[1] + 15 / 16;
+        vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
+    }
+
+    //
+    {
+        auto subresource = VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT);
+        auto barrier = VkHelpers::ImageMemoryBarrier(
+            renderTargets->colorTarget.handle,
+            subresource,
+            VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, renderTargets->colorTarget.layout,
             VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
         );
         renderTargets->colorTarget.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
@@ -186,7 +225,6 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Fr
         vkCmdPipelineBarrier2(cmd, &dependencyInfo);
     }
 
-    std::array<uint32_t, 2> renderExtent = renderExtents->GetScaledExtent();
     // Imgui Draw
     {
         VkRenderingAttachmentInfo imguiAttachment{};
@@ -210,6 +248,8 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Fr
 
         vkCmdEndRendering(cmd);
     }
+
+
 
     // Prepare for blit
     {

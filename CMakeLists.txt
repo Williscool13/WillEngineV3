@@ -78,6 +78,14 @@ target_include_directories(will-engine PRIVATE
 
 target_link_libraries(will-engine PUBLIC engine)
 
+# Shaders =====================================
+set(SHADER_COMMON_INCLUDES
+        ${CMAKE_SOURCE_DIR}/src/render/shaders/shader_interop.h
+)
+compile_shaders(will-engine
+        ${CMAKE_SOURCE_DIR}/shaders/basicCompute.slang compute computeMain)
+
+
 # Post-Build Commands =========================
 add_custom_command(TARGET will-engine POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different

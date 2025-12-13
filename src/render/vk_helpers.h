@@ -5,6 +5,7 @@
 #ifndef WILL_ENGINE_VK_HELPERS_H
 #define WILL_ENGINE_VK_HELPERS_H
 
+#include <filesystem>
 #include <volk.h>
 
 namespace Render::VkHelpers
@@ -49,7 +50,7 @@ VkImageCreateInfo ImageCreateInfo(VkFormat format, VkExtent3D extent, VkFlags us
 
 VkImageViewCreateInfo ImageViewCreateInfo(VkImage image, VkFormat format, VkFlags aspectFlags);
 
-bool LoadShaderModule(const char* filePath, VkDevice device, VkShaderModule* outShaderModule);
+bool LoadShaderModule(const std::filesystem::path& filePath, VkDevice device, VkShaderModule* outShaderModule);
 
 VkPipelineShaderStageCreateInfo PipelineShaderStageCreateInfo(VkShaderModule computeShader, VkShaderStageFlagBits shaderStage);
 

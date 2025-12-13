@@ -245,12 +245,10 @@ VkImageViewCreateInfo VkHelpers::ImageViewCreateInfo(VkImage image, VkFormat for
     };
 }
 
-bool VkHelpers::LoadShaderModule(const char* filePath, VkDevice device, VkShaderModule* outShaderModule)
+bool VkHelpers::LoadShaderModule(const std::filesystem::path& filePath, VkDevice device, VkShaderModule* outShaderModule)
 {
-    std::filesystem::path shaderPath(filePath);
-
     // open the file. With cursor at the end
-    std::ifstream file(shaderPath, std::ios::ate | std::ios::binary);
+    std::ifstream file(filePath, std::ios::ate | std::ios::binary);
 
 
     if (!file.is_open()) {

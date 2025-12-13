@@ -12,6 +12,7 @@
 #include "frame_resources.h"
 #include "vk_operation_ring_buffer.h"
 #include "vk_synchronization.h"
+#include "pipelines/basic_compute_pipeline.h"
 
 namespace Core
 {
@@ -106,6 +107,9 @@ private:
     uint64_t frameNumber{0};
     bool bEngineRequestsRecreate{false};
     bool bRenderRequestsRecreate{false};
+
+private:
+    BasicComputePipeline basicComputePipeline;
 };
 } // Render
 

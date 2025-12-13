@@ -42,6 +42,10 @@ add_library(render STATIC
         descriptors/vk_descriptors.h
         types/vk_types.cpp
         types/vk_types.h
+        pipelines/basic_compute_pipeline.cpp
+        pipelines/basic_compute_pipeline.h
+        pipelines/vk_pipeline.cpp
+        pipelines/vk_pipeline.h
 )
 
 target_include_directories(render PRIVATE
@@ -63,3 +67,71 @@ target_link_libraries(render PUBLIC
 if(WILL_BUILD_EDITOR)
     target_link_libraries(render PUBLIC imgui)
 endif()
+
+find_program(SLANGC slangc REQUIRED)
+
+function(compile_shader TARGET SHADER_SOURCE STAGE ENTRY)
+    # Parse optional OUTPUT_NAME argument
+    set(options "")
+    set(oneValueArgs OUTPUT_NAME)
+    set(multiValueArgs "")
+    cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+
+    # Use custom output name if provided, otherwise generate from source filename
+    if(ARG_OUTPUT_NAME)
+        set(SHADER_NAME ${ARG_OUTPUT_NAME})
+    else()
+        get_filename_component(SHADER_NAME ${SHADER_SOURCE} NAME_WE)
+    endif()
+
+    get_filename_component(SHADER_SOURCE_ABS ${SHADER_SOURCE} ABSOLUTE)
+
+    set(SHADER_OUTPUT ${CMAKE_BINARY_DIR}/shaders/${SHADER_NAME}_${STAGE}.spv)
+
+    add_custom_command(
+            OUTPUT ${SHADER_OUTPUT}
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/shaders
+            COMMAND ${SLANGC} ${SHADER_SOURCE_ABS} -target spirv -entry ${ENTRY} -stage ${STAGE} -o ${SHADER_OUTPUT}
+            DEPENDS ${SHADER_SOURCE_ABS} ${SHADER_COMMON_INCLUDES}
+            COMMENT "Compiling ${STAGE} shader: ${SHADER_NAME}_${STAGE}.spv"
+            VERBATIM
+    )
+
+    # Track outputs in a property
+    set_property(TARGET ${TARGET} APPEND PROPERTY SHADER_OUTPUTS ${SHADER_OUTPUT})
+endfunction()
+
+
+function(compile_shaders TARGET)
+    set(ARGS ${ARGN})
+    list(LENGTH ARGS NUM_ARGS)
+
+    set(i 0)
+    while(i LESS NUM_ARGS)
+        list(GET ARGS ${i} SHADER_SOURCE)
+        math(EXPR i "${i} + 1")
+        list(GET ARGS ${i} STAGE)
+        math(EXPR i "${i} + 1")
+        list(GET ARGS ${i} ENTRY)
+        math(EXPR i "${i} + 1")
+
+        # Check if next arg exists and is not a path (i.e., it's an output name)
+        if(i LESS NUM_ARGS)
+            list(GET ARGS ${i} NEXT_ARG)
+            # If it doesn't end in .slang, treat as OUTPUT_NAME
+            if(NOT NEXT_ARG MATCHES "\\.(slang|hlsl)$")
+                compile_shader(${TARGET} ${SHADER_SOURCE} ${STAGE} ${ENTRY} OUTPUT_NAME ${NEXT_ARG})
+                math(EXPR i "${i} + 1")
+            else()
+                compile_shader(${TARGET} ${SHADER_SOURCE} ${STAGE} ${ENTRY})
+            endif()
+        else()
+            compile_shader(${TARGET} ${SHADER_SOURCE} ${STAGE} ${ENTRY})
+        endif()
+    endwhile()
+
+    # Create single custom target for all shaders
+    get_property(SHADER_OUTPUTS TARGET ${TARGET} PROPERTY SHADER_OUTPUTS)
+    add_custom_target(${TARGET}_shaders ALL DEPENDS ${SHADER_OUTPUTS})
+    add_dependencies(${TARGET} ${TARGET}_shaders)
+endfunction()
