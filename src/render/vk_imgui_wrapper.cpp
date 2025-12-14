@@ -2,6 +2,7 @@
 // Created by William on 2025-10-09.
 //
 
+#if WILL_EDITOR
 #include "vk_imgui_wrapper.h"
 
 #include <volk.h>
@@ -11,6 +12,7 @@
 
 #include "VkBootstrap.h"
 #include "vk_context.h"
+#include "core/include/render_interface.h"
 
 
 namespace Render
@@ -34,7 +36,6 @@ ImguiWrapper::ImguiWrapper(VulkanContext* context, SDL_Window* window, int32_t s
         pool_info.poolSizeCount = static_cast<uint32_t>(1);
         pool_info.pPoolSizes = pool_sizes;
         vkCreateDescriptorPool(context->device, &pool_info, nullptr, &imguiPool);
-        //VK_CHECK();
     }
 
     float main_scale = SDL_GetDisplayContentScale(SDL_GetPrimaryDisplay());
@@ -68,8 +69,8 @@ ImguiWrapper::ImguiWrapper(VulkanContext* context, SDL_Window* window, int32_t s
     initInfo.Queue = context->graphicsQueue;
     // init_info.PipelineCache = g_PipelineCache;
     initInfo.DescriptorPool = imguiPool;
-    initInfo.MinImageCount = swapchainImageCount == 2 ? vkb::SwapchainBuilder::DOUBLE_BUFFERING : vkb::SwapchainBuilder::TRIPLE_BUFFERING;
-    initInfo.ImageCount = swapchainImageCount;
+    initInfo.MinImageCount = Core::FRAME_BUFFER_COUNT;
+    initInfo.ImageCount = Core::FRAME_BUFFER_COUNT;
     initInfo.MinAllocationSize = 1024 * 1024;
     // initInfo.Allocator = g_Allocator;
     // initInfo.PipelineInfoMain.RenderPass = wd->RenderPass;
@@ -113,3 +114,5 @@ void ImguiWrapper::HandleInput(const SDL_Event& e)
     ImGui_ImplSDL3_ProcessEvent(&e);
 }
 }
+
+#endif

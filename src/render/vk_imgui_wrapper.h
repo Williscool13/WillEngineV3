@@ -5,6 +5,7 @@
 #ifndef WILLENGINETESTBED_IMGUI_H
 #define WILLENGINETESTBED_IMGUI_H
 
+#if WILL_EDITOR
 #include <volk.h>
 
 #include "SDL3/SDL_events.h"
@@ -31,6 +32,6 @@ private:
     VkDescriptorPool imguiPool{VK_NULL_HANDLE};
 };
 }
-
+#endif
 
 #endif //WILLENGINETESTBED_IMGUI_H

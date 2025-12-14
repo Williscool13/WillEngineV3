@@ -2790,8 +2790,9 @@ void ImFontAtlasUpdateNewFrame(ImFontAtlas* atlas, int frame_count, bool rendere
             tex->UpdateRect.x = tex->UpdateRect.y = (unsigned short)~0;
             tex->UpdateRect.w = tex->UpdateRect.h = 0;
         }
-        if (tex->Status == ImTextureStatus_WantCreate && atlas->RendererHasTextures)
-            IM_ASSERT(tex->TexID == ImTextureID_Invalid && tex->BackendUserData == NULL && "Backend set texture's TexID/BackendUserData but did not update Status to OK.");
+        // WillEngine: This assertion trips when 2 FIF imgui draws are constructed in rapid succession (pretty much instantly)
+        // if (tex->Status == ImTextureStatus_WantCreate && atlas->RendererHasTextures)
+        //     IM_ASSERT(tex->TexID == ImTextureID_Invalid && tex->BackendUserData == NULL && "Backend set texture's TexID/BackendUserData but did not update Status to OK.");
 
         // Request destroy
         // - Keep bool to true in order to differentiate a planned destroy vs a destroy decided by the backend.

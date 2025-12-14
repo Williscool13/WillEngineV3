@@ -84,11 +84,12 @@ private: // Subsystems
     std::unique_ptr<Core::TimeManager> timeManager{};
 
 private:
-    uint64_t gameFrameCount{0};
     uint32_t frameBufferIndex{0};
 
 private: // Game DLL
+#ifndef GAME_STATIC
     Platform::DllLoader gameDll;
+#endif
     Core::GameAPI gameFunctions{};
     std::unique_ptr<Core::EngineContext> engineContext{};
     std::unique_ptr<Core::GameState> gameState{};

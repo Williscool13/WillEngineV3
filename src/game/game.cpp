@@ -19,7 +19,7 @@ GAME_API void GameUpdate(Core::EngineContext* ctx, Core::GameState* state, Input
     if (inputFrame.GetKey(Key::F).pressed) {
         SPDLOG_INFO("Game Update on frame {}", timeFrame->frameCount);
     }
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
 }
 
 GAME_API void GameShutdown(Core::EngineContext* ctx, Core::GameState* state)

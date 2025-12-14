@@ -68,6 +68,11 @@ void WillEngine::Initialize()
     renderThread->Initialize(engineRenderSynchronization.get(), scheduler.get(), window.get(), w, h);
     // assetLoadingThread.Initialize(renderThread.GetVulkanContext(), renderThread.GetResourceManager());
 
+#ifdef GAME_STATIC
+    gameFunctions.gameInit = &GameInit;
+    gameFunctions.gameUpdate = &GameUpdate;
+    gameFunctions.gameShutdown = &GameShutdown;
+#else
     if (gameDll.Load("game.dll", "game_temp.dll")) {
         gameFunctions.gameInit = gameDll.GetFunction<Core::GameInitFunc>("GameInit");
         gameFunctions.gameUpdate = gameDll.GetFunction<Core::GameUpdateFunc>("GameUpdate");
@@ -76,6 +81,7 @@ void WillEngine::Initialize()
     else {
         gameFunctions.Stub();
     }
+#endif
 
     engineContext = std::make_unique<Core::EngineContext>();
     gameState = std::make_unique<Core::GameState>();
@@ -154,21 +160,15 @@ void WillEngine::Run()
         gameFunctions.gameUpdate(engineContext.get(), gameState.get(), input, &time);
         inputManager->FrameReset();
 
-        uint32_t currentFrameBufferIndex = frameBufferIndex % Core::FRAME_BUFFER_COUNT;
-
-
-
         const bool canTransmit = engineRenderSynchronization->gameFrames.try_acquire();
         if (canTransmit) {
-            PrepareFrameBuffer(currentFrameBufferIndex, engineRenderSynchronization->frameBuffers[currentFrameBufferIndex], time);
+            PrepareFrameBuffer(frameBufferIndex, engineRenderSynchronization->frameBuffers[frameBufferIndex], time);
 #if WILL_EDITOR
-            PrepareEditor(currentFrameBufferIndex);
+            PrepareEditor(frameBufferIndex);
 #endif
-            frameBufferIndex++;
+            frameBufferIndex = (frameBufferIndex + 1) % Core::FRAME_BUFFER_COUNT;
             engineRenderSynchronization->renderFrames.release();
         }
-
-        gameFrameCount++;
     }
 }
 
@@ -232,6 +232,12 @@ void WillEngine::PrepareEditor(uint32_t currentFrameBufferIndex)
     ImDrawDataSnapshot& imguiSnapshot = engineRenderSynchronization->imguiDataSnapshots[currentFrameBufferIndex];
     DrawImgui();
     imguiSnapshot.SnapUsingSwap(ImGui::GetDrawData(), ImGui::GetTime());
+    static int32_t first = 1;
+    if (first > 0) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        first--;
+    }
+
 }
 #endif
 
@@ -241,6 +247,8 @@ void WillEngine::Cleanup()
     renderThread->Join();
 
     gameFunctions.gameShutdown(engineContext.get(), gameState.get());
+#ifndef GAME_STATIC
     gameDll.Unload();
+#endif
 }
 }

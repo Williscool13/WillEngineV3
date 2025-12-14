@@ -4,25 +4,27 @@ project(will-engine)
 set(CMAKE_CXX_STANDARD 23)
 
 
-option(WILL_BUILD_EDITOR "Build editor features" ON)
+option(WILL_BUILD_EDITOR "Build editor features" OFF)
+option(GAME_STATIC "Build game as static library" OFF)
 
 # Configuration ==============================
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-    add_compile_definitions(LOG_LEVEL=0) # >= trace
-    add_compile_definitions(SPDLOG_ACTIVE_LEVEL=0) # >= trace
+    add_compile_definitions(SPDLOG_ACTIVE_LEVEL=0)
 elseif (CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
-    add_compile_definitions(LOG_LEVEL=1) # >= debug
-    add_compile_definitions(SPDLOG_ACTIVE_LEVEL=1) # >= debug
+    add_compile_definitions(SPDLOG_ACTIVE_LEVEL=1)
 elseif (CMAKE_BUILD_TYPE STREQUAL "Release")
-    add_compile_definitions(LOG_LEVEL=2) # >= info
-    add_compile_definitions(SPDLOG_ACTIVE_LEVEL=2) # >= info
-endif ()
+    add_compile_definitions(SPDLOG_ACTIVE_LEVEL=2)
+elseif (CMAKE_BUILD_TYPE STREQUAL "MinSizeRel")
+    add_compile_definitions(SPDLOG_ACTIVE_LEVEL=2)
+endif()
 
-if (WILL_BUILD_EDITOR)
+if(WILL_BUILD_EDITOR)
     add_compile_definitions(WILL_EDITOR)
-else()
-endif ()
+endif()
 
+if(GAME_STATIC)
+    add_compile_definitions(GAME_STATIC)
+endif()
 # Build =======================================
 add_executable(will-engine main.cpp)
 

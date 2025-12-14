@@ -41,10 +41,14 @@ struct GameAPI
 };
 } // Core
 
+#ifdef GAME_STATIC
+#define GAME_API
+#else
 #ifdef GAME_EXPORTS
 #define GAME_API __declspec(dllexport)
 #else
 #define GAME_API __declspec(dllimport)
+#endif
 #endif
 
 extern "C" {
