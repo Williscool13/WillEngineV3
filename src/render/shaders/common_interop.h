@@ -3,7 +3,7 @@
 //
 
 #ifdef __SLANG__
-module shader_interop;
+module common_interop;
 #define SHADER_PUBLIC public
 #else
 // C++ mode

@@ -12,7 +12,7 @@ namespace Render
 {
 struct VulkanContext;
 
-struct FrameSynchronization
+struct RenderSynchronization
 {
     VulkanContext* context{};
 
@@ -22,15 +22,15 @@ struct FrameSynchronization
     VkSemaphore swapchainSemaphore{};
     VkSemaphore renderSemaphore{};
 
-    FrameSynchronization() = default;
-    explicit FrameSynchronization(VulkanContext* context);
-    ~FrameSynchronization();
+    RenderSynchronization() = default;
+    explicit RenderSynchronization(VulkanContext* context);
+    ~RenderSynchronization();
 
-    FrameSynchronization(const FrameSynchronization&) = delete;
-    FrameSynchronization& operator=(const FrameSynchronization&) = delete;
+    RenderSynchronization(const RenderSynchronization&) = delete;
+    RenderSynchronization& operator=(const RenderSynchronization&) = delete;
 
-    FrameSynchronization(FrameSynchronization&& other) noexcept;
-    FrameSynchronization& operator=(FrameSynchronization&& other) noexcept;
+    RenderSynchronization(RenderSynchronization&& other) noexcept;
+    RenderSynchronization& operator=(RenderSynchronization&& other) noexcept;
 
     void Initialize();
     void RecreateSynchronization();

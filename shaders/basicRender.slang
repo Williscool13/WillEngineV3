@@ -1,4 +1,4 @@
-import shader_interop;
+import common_interop;
 
 static const float4 positions[3] = {
 	float4( 0.0, -1.0, 0.0, 1.0),

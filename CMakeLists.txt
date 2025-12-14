@@ -20,7 +20,21 @@ endif ()
 
 if (WILL_BUILD_EDITOR)
     add_compile_definitions(WILL_EDITOR)
+else()
 endif ()
+
+# Build =======================================
+add_executable(will-engine main.cpp)
+
+target_include_directories(will-engine PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+        ${CMAKE_SOURCE_DIR}/extern
+)
+
+target_link_libraries(will-engine PUBLIC engine)
+
+
+add_dependencies(will-engine game)
 
 # Dependencies ================================
 add_compile_definitions(GLM_FORCE_DEPTH_ZERO_TO_ONE)
@@ -37,10 +51,10 @@ add_subdirectory(extern/OffsetAllocator)
 
 add_subdirectory(src/engine)
 add_subdirectory(src/core)
+add_subdirectory(src/game)
 add_subdirectory(src/render)
 add_subdirectory(src/utils)
 add_subdirectory(src/platform)
-
 
 # Imgui =======================================
 set(IMGUI_DIR ${CMAKE_SOURCE_DIR}/extern/imgui)
@@ -69,16 +83,6 @@ target_link_libraries(imgui PUBLIC
         SDL3::SDL3
 )
 
-# Builds ======================================
-add_executable(will-engine main.cpp)
-
-target_include_directories(will-engine PRIVATE
-        ${CMAKE_SOURCE_DIR}/src
-        ${CMAKE_SOURCE_DIR}/extern
-)
-
-target_link_libraries(will-engine PUBLIC engine)
-
 # Shaders =====================================
 #   - Use this command to compile any shader interop that needs to be recompiled.
 #     cmake --build cmake-build-debug-visual-studio --target shader_interop
@@ -86,8 +90,8 @@ target_link_libraries(will-engine PUBLIC engine)
 #     cmake --build . --target shader_interop
 
 preprocess_shader_interop(
-        ${CMAKE_SOURCE_DIR}/src/render/shaders/shader_interop.h
-        ${CMAKE_SOURCE_DIR}/shaders/shader_interop.slang
+        ${CMAKE_SOURCE_DIR}/src/render/shaders/common_interop.h
+        ${CMAKE_SOURCE_DIR}/shaders/common_interop.slang
 )
 
 # preprocess_shader_interop(

@@ -8,13 +8,15 @@
 
 #include "vk_context.h"
 #include "vk_helpers.h"
-#include "vk_imgui_wrapper.h"
 #include "vk_render_extents.h"
 #include "vk_render_targets.h"
 #include "vk_resource_manager.h"
 #include "vk_swapchain.h"
 #include "vk_utils.h"
+#if WILL_EDITOR
+#include "vk_imgui_wrapper.h"
 #include "backends/imgui_impl_vulkan.h"
+#endif
 #include "engine/will_engine.h"
 #include "spdlog/spdlog.h"
 
@@ -33,7 +35,9 @@ void RenderThread::Initialize(Core::FrameSync* engineRenderSync, enki::TaskSched
 
     context = std::make_unique<VulkanContext>(window);
     swapchain = std::make_unique<Swapchain>(context.get(), width, height);
+#if WILL_EDITOR
     imgui = std::make_unique<ImguiWrapper>(context.get(), window, Core::FRAME_BUFFER_COUNT, COLOR_ATTACHMENT_FORMAT);
+#endif
     renderTargets = std::make_unique<RenderTargets>(context.get(), width, height);
     renderExtents = std::make_unique<RenderExtents>(width, height, 1.0f);
     resourceManager = std::make_unique<ResourceManager>(context.get());
@@ -41,8 +45,8 @@ void RenderThread::Initialize(Core::FrameSync* engineRenderSync, enki::TaskSched
     resourceManager->bindlessRenderTargetDescriptorBuffer.ForceAllocateStorageImage({COLOR_TARGET_INDEX, 0}, {nullptr, renderTargets->colorTargetView.handle, VK_IMAGE_LAYOUT_GENERAL});
     resourceManager->bindlessRenderTargetDescriptorBuffer.ForceAllocateStorageImage({DEPTH_TARGET_INDEX, 0}, {nullptr, renderTargets->depthTargetView.handle, VK_IMAGE_LAYOUT_GENERAL});
 
-    for (FrameSynchronization& frameSync : frameSynchronization) {
-        frameSync = FrameSynchronization(context.get());
+    for (RenderSynchronization& frameSync : frameSynchronization) {
+        frameSync = RenderSynchronization(context.get());
         frameSync.Initialize();
     }
 
@@ -125,9 +129,9 @@ void RenderThread::ThreadMain()
         }
 
         // Wait for the frame N - 3 to finish using resources
-        FrameSynchronization& currentFrameSynchronization = frameSynchronization[currentFrameInFlight];
+        RenderSynchronization& currentRenderSynchronization = frameSynchronization[currentFrameInFlight];
         FrameResources& currentFrameResources = frameResources[currentFrameInFlight];
-        RenderResponse renderResponse = Render(currentFrameInFlight, currentFrameSynchronization, frameBuffer, currentFrameResources);
+        RenderResponse renderResponse = Render(currentFrameInFlight, currentRenderSynchronization, frameBuffer, currentFrameResources);
         if (renderResponse == SWAPCHAIN_OUTDATED) {
             bRenderRequestsRecreate = true;
         }
@@ -139,37 +143,37 @@ void RenderThread::ThreadMain()
     vkDeviceWaitIdle(context->device);
 }
 
-RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, FrameSynchronization& frameSync, Core::FrameBuffer& frameBuffer, FrameResources& frameResource)
+RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, RenderSynchronization& renderSync, Core::FrameBuffer& frameBuffer, FrameResources& frameResource)
 {
-    vkWaitForFences(context->device, 1, &frameSync.renderFence, true, UINT64_MAX);
-    VK_CHECK(vkResetFences(context->device, 1, &frameSync.renderFence));
+    vkWaitForFences(context->device, 1, &renderSync.renderFence, true, UINT64_MAX);
+    VK_CHECK(vkResetFences(context->device, 1, &renderSync.renderFence));
 
     ProcessBufferOperations(frameBuffer, frameResource);
 
-    VK_CHECK(vkResetCommandBuffer(frameSync.commandBuffer, 0));
+    VK_CHECK(vkResetCommandBuffer(renderSync.commandBuffer, 0));
     VkCommandBufferBeginInfo beginInfo = VkHelpers::CommandBufferBeginInfo();
-    VK_CHECK(vkBeginCommandBuffer(frameSync.commandBuffer, &beginInfo));
-    VkCommandBuffer cmd = frameSync.commandBuffer;
+    VK_CHECK(vkBeginCommandBuffer(renderSync.commandBuffer, &beginInfo));
+    VkCommandBuffer cmd = renderSync.commandBuffer;
 
     ProcessAcquisitions(cmd, frameBuffer);
 
     if (bRenderRequestsRecreate) {
         VK_CHECK(vkEndCommandBuffer(cmd));
-        VkCommandBufferSubmitInfo commandBufferSubmitInfo = VkHelpers::CommandBufferSubmitInfo(frameSync.commandBuffer);
+        VkCommandBufferSubmitInfo commandBufferSubmitInfo = VkHelpers::CommandBufferSubmitInfo(renderSync.commandBuffer);
         VkSubmitInfo2 submitInfo = VkHelpers::SubmitInfo(&commandBufferSubmitInfo, nullptr, nullptr);
-        VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, frameSync.renderFence));
+        VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, renderSync.renderFence));
         return SWAPCHAIN_OUTDATED;
     }
 
     uint32_t swapchainImageIndex;
-    VkResult e = vkAcquireNextImageKHR(context->device, swapchain->handle, UINT64_MAX, frameSync.swapchainSemaphore, nullptr, &swapchainImageIndex);
+    VkResult e = vkAcquireNextImageKHR(context->device, swapchain->handle, UINT64_MAX, renderSync.swapchainSemaphore, nullptr, &swapchainImageIndex);
     if (e == VK_ERROR_OUT_OF_DATE_KHR || e == VK_SUBOPTIMAL_KHR) {
         SPDLOG_TRACE("[RenderThread::Render] Swapchain acquire failed ({})", string_VkResult(e));
         VK_CHECK(vkEndCommandBuffer(cmd));
         VkCommandBufferSubmitInfo cmdInfo = VkHelpers::CommandBufferSubmitInfo(cmd);
-        VkSemaphoreSubmitInfo waitInfo = VkHelpers::SemaphoreSubmitInfo(frameSync.swapchainSemaphore, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT);
+        VkSemaphoreSubmitInfo waitInfo = VkHelpers::SemaphoreSubmitInfo(renderSync.swapchainSemaphore, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT);
         VkSubmitInfo2 submitInfo = VkHelpers::SubmitInfo(&cmdInfo, &waitInfo, nullptr);
-        VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, frameSync.renderFence));
+        VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, renderSync.renderFence));
         return SWAPCHAIN_OUTDATED;
     }
 
@@ -273,6 +277,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Fr
         vkCmdEndRendering(cmd);
     }
 
+#if WILL_EDITOR
     // Imgui Draw
     {
         VkRenderingAttachmentInfo imguiAttachment{};
@@ -292,11 +297,12 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Fr
         renderInfo.pDepthAttachment = nullptr;
         renderInfo.pStencilAttachment = nullptr;
         vkCmdBeginRendering(cmd, &renderInfo);
-        ImGui_ImplVulkan_RenderDrawData(&frameBuffer.imguiDataSnapshot.DrawData, cmd);
+        ImDrawDataSnapshot& imguiSnapshot = engineRenderSynchronization->imguiDataSnapshots[currentFrameIndex];
+        ImGui_ImplVulkan_RenderDrawData(&imguiSnapshot.DrawData, cmd);
 
         vkCmdEndRendering(cmd);
     }
-
+#endif
 
 
     // Prepare for blit
@@ -364,15 +370,15 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Fr
 
     VK_CHECK(vkEndCommandBuffer(cmd));
 
-    VkCommandBufferSubmitInfo commandBufferSubmitInfo = VkHelpers::CommandBufferSubmitInfo(frameSync.commandBuffer);
-    VkSemaphoreSubmitInfo swapchainSemaphoreWaitInfo = VkHelpers::SemaphoreSubmitInfo(frameSync.swapchainSemaphore, VK_PIPELINE_STAGE_2_BLIT_BIT);
-    VkSemaphoreSubmitInfo renderSemaphoreSignalInfo = VkHelpers::SemaphoreSubmitInfo(frameSync.renderSemaphore, VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT);
+    VkCommandBufferSubmitInfo commandBufferSubmitInfo = VkHelpers::CommandBufferSubmitInfo(renderSync.commandBuffer);
+    VkSemaphoreSubmitInfo swapchainSemaphoreWaitInfo = VkHelpers::SemaphoreSubmitInfo(renderSync.swapchainSemaphore, VK_PIPELINE_STAGE_2_BLIT_BIT);
+    VkSemaphoreSubmitInfo renderSemaphoreSignalInfo = VkHelpers::SemaphoreSubmitInfo(renderSync.renderSemaphore, VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT);
     VkSubmitInfo2 submitInfo = VkHelpers::SubmitInfo(&commandBufferSubmitInfo, &swapchainSemaphoreWaitInfo, &renderSemaphoreSignalInfo);
-    VK_CHECK(vkResetFences(context->device, 1, &frameSync.renderFence));
-    VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, frameSync.renderFence));
+    VK_CHECK(vkResetFences(context->device, 1, &renderSync.renderFence));
+    VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, renderSync.renderFence));
 
     VkPresentInfoKHR presentInfo = VkHelpers::PresentInfo(&swapchain->handle, nullptr, &swapchainImageIndex);
-    presentInfo.pWaitSemaphores = &frameSync.renderSemaphore;
+    presentInfo.pWaitSemaphores = &renderSync.renderSemaphore;
     const VkResult presentResult = vkQueuePresentKHR(context->graphicsQueue, &presentInfo);
 
     if (presentResult == VK_ERROR_OUT_OF_DATE_KHR || presentResult == VK_SUBOPTIMAL_KHR) {

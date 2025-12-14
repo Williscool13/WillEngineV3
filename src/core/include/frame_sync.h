@@ -7,6 +7,8 @@
 #include <array>
 #include <semaphore>
 
+#include <imgui/imgui_threaded_rendering.h>
+
 #include "render_interface.h"
 
 namespace Core
@@ -14,6 +16,9 @@ namespace Core
 struct FrameSync
 {
     std::array<FrameBuffer, FRAME_BUFFER_COUNT> frameBuffers{};
+#if WILL_EDITOR
+    std::array<ImDrawDataSnapshot, FRAME_BUFFER_COUNT> imguiDataSnapshots{};
+#endif
     std::counting_semaphore<FRAME_BUFFER_COUNT> gameFrames{FRAME_BUFFER_COUNT};
     std::counting_semaphore<FRAME_BUFFER_COUNT> renderFrames{0};
 };

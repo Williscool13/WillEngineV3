@@ -10,11 +10,11 @@
 
 namespace Render
 {
-FrameSynchronization::FrameSynchronization(VulkanContext* context)
+RenderSynchronization::RenderSynchronization(VulkanContext* context)
     : context(context)
 {}
 
-FrameSynchronization::~FrameSynchronization()
+RenderSynchronization::~RenderSynchronization()
 {
     if (context && commandPool != VK_NULL_HANDLE) {
         // Command buffer is freed when pool is destroyed.
@@ -25,7 +25,7 @@ FrameSynchronization::~FrameSynchronization()
     }
 }
 
-FrameSynchronization::FrameSynchronization(FrameSynchronization&& other) noexcept
+RenderSynchronization::RenderSynchronization(RenderSynchronization&& other) noexcept
 {
     context = other.context;
     commandPool = other.commandPool;
@@ -42,7 +42,7 @@ FrameSynchronization::FrameSynchronization(FrameSynchronization&& other) noexcep
     other.renderSemaphore = VK_NULL_HANDLE;
 }
 
-FrameSynchronization& FrameSynchronization::operator=(FrameSynchronization&& other) noexcept
+RenderSynchronization& RenderSynchronization::operator=(RenderSynchronization&& other) noexcept
 {
     if (this != &other) {
         if (context && commandPool != VK_NULL_HANDLE) {
@@ -69,7 +69,7 @@ FrameSynchronization& FrameSynchronization::operator=(FrameSynchronization&& oth
     return *this;
 }
 
-void FrameSynchronization::Initialize()
+void RenderSynchronization::Initialize()
 {
     VkCommandPoolCreateInfo commandPoolCreateInfo = VkHelpers::CommandPoolCreateInfo(context->graphicsQueueFamily);
     VK_CHECK(vkCreateCommandPool(context->device, &commandPoolCreateInfo, nullptr, &commandPool));
@@ -83,7 +83,7 @@ void FrameSynchronization::Initialize()
     VK_CHECK(vkCreateSemaphore(context->device, &semaphoreCreateInfo, nullptr, &renderSemaphore));
 }
 
-void FrameSynchronization::RecreateSynchronization()
+void RenderSynchronization::RecreateSynchronization()
 {
     vkDestroyFence(context->device, renderFence, nullptr);
     vkDestroySemaphore(context->device, swapchainSemaphore, nullptr);

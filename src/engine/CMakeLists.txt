@@ -1,6 +1,8 @@
 add_library(engine STATIC
         will_engine.cpp
         will_engine.h
+        engine_api.cpp
+        engine_api.h
 )
 
 target_include_directories(engine PRIVATE
@@ -19,6 +21,15 @@ target_link_libraries(engine PUBLIC
         enkiTS
 )
 
+target_compile_definitions(engine PRIVATE ENGINE_EXPORTS)
+
 if(WILL_BUILD_EDITOR)
     target_link_libraries(engine PUBLIC imgui)
 endif()
+
+
+add_custom_command(TARGET engine POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        $<TARGET_FILE:engine>
+        $<TARGET_FILE_DIR:will-engine>
+)

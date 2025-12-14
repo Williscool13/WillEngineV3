@@ -11,6 +11,10 @@ add_library(core STATIC
         allocators/handle.h
         include/frame_sync.cpp
         include/frame_sync.h
+        include/game_interface.cpp
+        include/game_interface.h
+        include/engine_context.cpp
+        include/engine_context.h
 
 )
 
@@ -21,5 +25,5 @@ target_include_directories(core PRIVATE
 )
 
 target_link_libraries(core PUBLIC
-        imgui
+        spdlog::spdlog
 )

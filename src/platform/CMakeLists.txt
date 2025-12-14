@@ -2,6 +2,8 @@ add_library(platform STATIC
         crash_handler.h
         crash_context.h
         paths.h
+        dll_loader.h
+        dll_loader_win32.cpp
 )
 
 if(WIN32)

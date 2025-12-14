@@ -37,11 +37,14 @@ class WillEngine;
 namespace Render
 {
 struct ResourceManager;
-struct ImguiWrapper;
 struct RenderExtents;
 struct RenderTargets;
 struct Swapchain;
 struct VulkanContext;
+
+#if WILL_EDITOR
+struct ImguiWrapper;
+#endif
 }
 
 namespace Render
@@ -71,7 +74,7 @@ public:
 
     void ThreadMain();
 
-    RenderResponse Render(uint32_t currentFrameIndex, FrameSynchronization& frameSync, Core::FrameBuffer& frameBuffer, FrameResources& frameResource);
+    RenderResponse Render(uint32_t currentFrameIndex, RenderSynchronization& renderSync, Core::FrameBuffer& frameBuffer, FrameResources& frameResource);
 
     void ProcessBufferOperations(Core::FrameBuffer& frameBuffer, FrameResources& frameResource);
 
@@ -90,12 +93,14 @@ private:
     // Owning
     std::unique_ptr<VulkanContext> context{};
     std::unique_ptr<Swapchain> swapchain{};
+#if WILL_EDITOR
     std::unique_ptr<ImguiWrapper> imgui{};
+#endif
     std::unique_ptr<RenderTargets> renderTargets{};
     std::unique_ptr<ResourceManager> resourceManager{};
     std::unique_ptr<RenderExtents> renderExtents{};
 
-    std::array<FrameSynchronization, Core::FRAME_BUFFER_COUNT> frameSynchronization;
+    std::array<RenderSynchronization, Core::FRAME_BUFFER_COUNT> frameSynchronization;
     std::array<FrameResources, Core::FRAME_BUFFER_COUNT> frameResources;
 
     std::vector<VkBufferMemoryBarrier2> tempBufferBarriers;

@@ -31,7 +31,7 @@ add_library(render STATIC
         vk_operation_ring_buffer.h
         types/render_types.cpp
         types/render_types.h
-        shaders/shader_interop.h
+        shaders/common_interop.h
         descriptors/vk_bindless_resources_storage.cpp
         descriptors/vk_bindless_resources_storage.h
         descriptors/vk_bindless_resources_sampler_images.cpp

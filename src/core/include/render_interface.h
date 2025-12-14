@@ -9,25 +9,18 @@
 
 #include <glm/glm.hpp>
 
-#include "imgui/imgui_threaded_rendering.h"
-
 namespace Core
 {
 constexpr uint32_t FRAME_BUFFER_COUNT = 3;
 
 struct RawCameraData
 {
-    glm::mat4 view{1.0f};
-    glm::mat4 prevView{1.0f};
-
     glm::vec3 cameraWorldPos{0.0f};
-    glm::vec3 prevCameraWorldPos{0.0f};
-
-    float prevFovDegrees{75.0f};
+    glm::vec3 cameraLook{0.0f};
+    glm::vec3 cameraUp{0.0f, 1.0f, 0.0f};
     float fovDegrees{75.0f};
-    float prevNearPlane{0.1f};
+    float aspectRatio{16.0f/9.0f};
     float nearPlane{0.1f};
-    float prevFarPlane{1000.0f};
     float farPlane{1000.0f};
 };
 
@@ -100,7 +93,7 @@ struct FrameBuffer
 {
     SwapchainRecreateCommand swapchainRecreateCommand{};
 
-    RawCameraData rawSceneData{};
+    RawCameraData rawCameraData{};
     float timeElapsed{};
     float deltaTime{};
     uint32_t currentFrameBuffer{};
@@ -111,10 +104,6 @@ struct FrameBuffer
     std::vector<ModelMatrixOperation> modelMatrixOperations;
     std::vector<InstanceOperation> instanceOperations;
     std::vector<JointMatrixOperation> jointMatrixOperations;
-
-#ifdef WILL_EDITOR
-    ImDrawDataSnapshot imguiDataSnapshot;
-#endif
 };
 } // Core
 

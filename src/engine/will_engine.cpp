@@ -7,8 +7,12 @@
 #include <SDL3/SDL.h>
 #include <fmt/format.h>
 
+#include "engine_api.h"
+#if WILL_EDITOR
 #include "backends/imgui_impl_sdl3.h"
 #include "backends/imgui_impl_vulkan.h"
+#endif
+#include "core/include/game_interface.h"
 #include "render/render_thread.h"
 #include "render/vk_render_targets.h"
 #include "render/vk_swapchain.h"
@@ -16,9 +20,13 @@
 
 namespace Engine
 {
+WillEngine* WillEngine::instance = nullptr;
+
 WillEngine::WillEngine(Platform::CrashHandler* crashHandler_)
     : crashHandler(crashHandler_)
-{}
+{
+    instance = this;
+}
 
 WillEngine::~WillEngine() = default;
 
@@ -51,21 +59,27 @@ void WillEngine::Initialize()
     SDL_GetWindowSize(window.get(), &w, &h);
     // Input::Get().Init(window, w, h);
 
-    // if (gameDll.Load("game/hot-reload-game.dll", "hot-reload-game_temp.dll")) {
-    //     gameFunctions.gameInit = gameDll.GetFunction<GameInitFunc>("GameInit");
-    //     gameFunctions.gameUpdate = gameDll.GetFunction<GameUpdateFunc>("GameUpdate");
-    //     gameFunctions.gameShutdown = gameDll.GetFunction<GameShutdownFunc>("GameShutdown");
-    // }
-    // else {
-    //     gameFunctions.Stub();
-    // }
-    // gameFunctions.gameInit(&gameState);
-
-
     engineRenderSynchronization = std::make_unique<Core::FrameSync>();
     renderThread = std::make_unique<Render::RenderThread>();
     renderThread->Initialize(engineRenderSynchronization.get(), scheduler.get(), window.get(), w, h);
     // assetLoadingThread.Initialize(renderThread.GetVulkanContext(), renderThread.GetResourceManager());
+
+    if (gameDll.Load("game.dll", "game_temp.dll")) {
+        gameFunctions.gameInit = gameDll.GetFunction<Core::GameInitFunc>("GameInit");
+        gameFunctions.gameUpdate = gameDll.GetFunction<Core::GameUpdateFunc>("GameUpdate");
+        gameFunctions.gameShutdown = gameDll.GetFunction<Core::GameShutdownFunc>("GameShutdown");
+    } else {
+        gameFunctions.Stub();
+    }
+
+    engineContext = std::make_unique<Core::EngineContext>();
+    gameState = std::make_unique<Core::GameState>();
+    engineContext->logger = spdlog::default_logger();
+    engineContext->updateCamera = EngineAPI::UpdateCamera;
+    engineContext->windowWidth = w;
+    engineContext->windowHeight = h;
+
+    gameFunctions.gameInit(engineContext.get(), gameState.get());
 }
 
 void WillEngine::Run()
@@ -80,7 +94,9 @@ void WillEngine::Run()
     while (true) {
         while (SDL_PollEvent(&e) != 0) {
             // input->ProcessEvents(&e);
+#if WILL_EDITOR
             ImGui_ImplSDL3_ProcessEvent(&e);
+#endif
             switch (e.type) {
                 case SDL_EVENT_QUIT:
                     exit = true;
@@ -117,14 +133,18 @@ void WillEngine::Run()
 
         // assetLoadingThread.ResolveLoads(loadedModelEntryHandles, bufferAcquireOperations, imageAcquireOperations);
 
-        EngineMain();
-        // gameFunctions.gameUpdate(&gameState, time.GetDeltaTime());
+        gameFunctions.gameUpdate(engineContext.get(), gameState.get(), 0.1f);
+
+        uint32_t currentFrameBufferIndex = frameBufferIndex % Core::FRAME_BUFFER_COUNT;
+
         // accumDeltaTime += time.GetDeltaTime();
 
         const bool canTransmit = engineRenderSynchronization->gameFrames.try_acquire();
         if (canTransmit) {
-            uint64_t currentFrameBufferIndex = frameBufferIndex % Core::FRAME_BUFFER_COUNT;
-            PrepareFrameBuffer(currentFrameBufferIndex, engineRenderSynchronization->frameBuffers[currentFrameBufferIndex]);
+            PrepareFrameBuffer(currentFrameBufferIndex, engineRenderSynchronization->frameBuffers[currentFrameBufferIndex], 0.1f);
+#if WILL_EDITOR
+            PrepareEditor(currentFrameBufferIndex);
+#endif
             frameBufferIndex++;
             engineRenderSynchronization->renderFrames.release();
         }
@@ -133,40 +153,40 @@ void WillEngine::Run()
     }
 }
 
-void WillEngine::EngineMain()
-{}
-
-void WillEngine::PrepareFrameBuffer(uint32_t currentFrameBufferIndex, Core::FrameBuffer& frameBuffer)
+void WillEngine::PrepareFrameBuffer(uint32_t currentFrameBufferIndex, Core::FrameBuffer& frameBuffer, float renderDeltaTime)
 {
-    DrawImgui();
-    frameBuffer.imguiDataSnapshot.SnapUsingSwap(ImGui::GetDrawData(), ImGui::GetTime());
-
-
-    // add acquires to acquire buffers..
-
-    // frameBuffer.rawSceneData = sceneData;
-    // frameBuffer.timeElapsed = timeElapsed;
-    // frameBuffer.deltaTime = deltaTime;
-    // frameBuffer.currentFrameBuffer; // only used for validation on render thread
-
-    frameBuffer.swapchainRecreateCommand.bIsMinimized = bMinimized;
+    stagingFrameBuffer.swapchainRecreateCommand.bIsMinimized = bMinimized;
     if (bRequireSwapchainRecreate) {
-        frameBuffer.swapchainRecreateCommand.bEngineCommandsRecreate = true;
+        stagingFrameBuffer.swapchainRecreateCommand.bEngineCommandsRecreate = true;
 
         int32_t w;
         int32_t h;
         SDL_GetWindowSize(window.get(), &w, &h);
-        frameBuffer.swapchainRecreateCommand.width = w;
-        frameBuffer.swapchainRecreateCommand.height = h;
+        stagingFrameBuffer.swapchainRecreateCommand.width = w;
+        stagingFrameBuffer.swapchainRecreateCommand.height = h;
         bRequireSwapchainRecreate = false;
     }
     else {
-        frameBuffer.swapchainRecreateCommand.bEngineCommandsRecreate = false;
+        stagingFrameBuffer.swapchainRecreateCommand.bEngineCommandsRecreate = false;
     }
-    frameBuffer.currentFrameBuffer = currentFrameBufferIndex;
+
+    //stagingFrameBuffer->timeElapsed = ;
+    stagingFrameBuffer.deltaTime = renderDeltaTime;
+    stagingFrameBuffer.currentFrameBuffer = currentFrameBufferIndex;
+
+    // add acquires to acquire buffers..
     // add instance, model, and joint matrix changes...
+
+
+    std::swap(frameBuffer, stagingFrameBuffer);
+    stagingFrameBuffer.modelMatrixOperations.clear();
+    stagingFrameBuffer.instanceOperations.clear();
+    stagingFrameBuffer.jointMatrixOperations.clear();
+    stagingFrameBuffer.bufferAcquireOperations.clear();
+    stagingFrameBuffer.imageAcquireOperations.clear();
 }
 
+#if WILL_EDITOR
 void WillEngine::DrawImgui()
 {
     ImGui_ImplVulkan_NewFrame();
@@ -188,8 +208,20 @@ void WillEngine::DrawImgui()
     ImGui::Render();
 }
 
+void WillEngine::PrepareEditor(uint32_t currentFrameBufferIndex)
+{
+    ImDrawDataSnapshot& imguiSnapshot = engineRenderSynchronization->imguiDataSnapshots[currentFrameBufferIndex];
+    DrawImgui();
+    imguiSnapshot.SnapUsingSwap(ImGui::GetDrawData(), ImGui::GetTime());
+}
+#endif
+
+
 void WillEngine::Cleanup()
 {
     renderThread->Join();
+
+    gameFunctions.gameShutdown(engineContext.get(), gameState.get());
+    gameDll.Unload();
 }
 }
