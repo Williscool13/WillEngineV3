@@ -11,8 +11,8 @@
 #include <glm/glm.hpp>
 
 #include "frame_resources.h"
-#include "vk_operation_ring_buffer.h"
-#include "vk_synchronization.h"
+#include "render/vulkan/vk_operation_ring_buffer.h"
+#include "render/vulkan/vk_synchronization.h"
 #include "pipelines/basic_compute_pipeline.h"
 #include "pipelines/basic_render_pipeline.h"
 

@@ -5,8 +5,8 @@
 #include "vk_bindless_resources_combined.h"
 #include "vk_descriptors.h"
 #include "render/render_constants.h"
-#include "render/vk_context.h"
-#include "render/vk_helpers.h"
+#include "render/vulkan/vk_context.h"
+#include "render/vulkan/vk_helpers.h"
 #include "spdlog/spdlog.h"
 
 namespace Render

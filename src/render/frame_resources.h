@@ -4,7 +4,7 @@
 
 #ifndef WILL_ENGINE_FRAME_RESOURCES_H
 #define WILL_ENGINE_FRAME_RESOURCES_H
-#include "vk_resources.h"
+#include "render/vulkan/vk_resources.h"
 
 namespace Render
 {

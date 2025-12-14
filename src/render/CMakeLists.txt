@@ -5,30 +5,30 @@ add_library(render STATIC
         frame_resources.h
         render_constants.cpp
         render_constants.h
-        vk_context.cpp
-        vk_context.h
-        vk_swapchain.cpp
-        vk_swapchain.h
-        vk_synchronization.cpp
-        vk_synchronization.h
-        vk_render_targets.cpp
-        vk_render_targets.h
-        vk_utils.cpp
-        vk_utils.h
-        vk_config.cpp
-        vk_config.h
-        vk_resources.cpp
-        vk_resources.h
-        vk_helpers.cpp
-        vk_helpers.h
-        vk_render_extents.cpp
-        vk_render_extents.h
-        vk_resource_manager.cpp
-        vk_resource_manager.h
-        vk_imgui_wrapper.cpp
-        vk_imgui_wrapper.h
-        vk_operation_ring_buffer.cpp
-        vk_operation_ring_buffer.h
+        vulkan/vk_context.cpp
+        vulkan/vk_context.h
+        vulkan/vk_swapchain.cpp
+        vulkan/vk_swapchain.h
+        vulkan/vk_synchronization.cpp
+        vulkan/vk_synchronization.h
+        vulkan/vk_render_targets.cpp
+        vulkan/vk_render_targets.h
+        vulkan/vk_utils.cpp
+        vulkan/vk_utils.h
+        vulkan/vk_config.cpp
+        vulkan/vk_config.h
+        vulkan/vk_resources.cpp
+        vulkan/vk_resources.h
+        vulkan/vk_helpers.cpp
+        vulkan/vk_helpers.h
+        vulkan/vk_render_extents.cpp
+        vulkan/vk_render_extents.h
+        vulkan/vk_resource_manager.cpp
+        vulkan/vk_resource_manager.h
+        vulkan/vk_imgui_wrapper.cpp
+        vulkan/vk_imgui_wrapper.h
+        vulkan/vk_operation_ring_buffer.cpp
+        vulkan/vk_operation_ring_buffer.h
         types/render_types.cpp
         types/render_types.h
         shaders/common_interop.h

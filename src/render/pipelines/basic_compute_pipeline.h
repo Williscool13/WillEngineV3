@@ -7,7 +7,7 @@
 
 #include <glm/glm.hpp>
 
-#include "render/vk_resources.h"
+#include "render/vulkan/vk_resources.h"
 
 namespace Render
 {

@@ -4,7 +4,7 @@
 
 #include "vk_descriptors.h"
 
-#include "render/vk_utils.h"
+#include "render/vulkan/vk_utils.h"
 
 namespace Render
 {

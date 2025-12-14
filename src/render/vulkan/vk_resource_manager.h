@@ -6,11 +6,11 @@
 #define WILL_ENGINE_VK_RENDER_RESOURCES_H
 
 #include "offsetAllocator.hpp"
-#include "render_constants.h"
+#include "render/render_constants.h"
 #include "vk_resources.h"
-#include "descriptors/vk_bindless_resources_combined.h"
-#include "descriptors/vk_bindless_resources_sampler_images.h"
-#include "descriptors/vk_bindless_resources_storage.h"
+#include "render/descriptors/vk_bindless_resources_combined.h"
+#include "render/descriptors/vk_bindless_resources_sampler_images.h"
+#include "render/descriptors/vk_bindless_resources_storage.h"
 
 
 namespace Render

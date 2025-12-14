@@ -6,11 +6,11 @@
 #define WILL_ENGINE_VK_BINDLESS_RESOURCES_STORAGE_H
 
 #include "vk_descriptors.h"
-#include "render/vk_resources.h"
+#include "render/vulkan/vk_resources.h"
 #include "core/allocators/handle_allocator.h"
 #include "render/render_constants.h"
-#include "render/vk_context.h"
-#include "render/vk_helpers.h"
+#include "render/vulkan/vk_context.h"
+#include "render/vulkan/vk_helpers.h"
 #include "spdlog/spdlog.h"
 
 namespace Render

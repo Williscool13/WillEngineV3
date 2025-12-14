@@ -6,8 +6,8 @@
 
 #include "vk_pipeline.h"
 #include "platform/paths.h"
-#include "render/vk_context.h"
-#include "render/vk_helpers.h"
+#include "render/vulkan/vk_context.h"
+#include "render/vulkan/vk_helpers.h"
 #include "spdlog/spdlog.h"
 
 namespace Render

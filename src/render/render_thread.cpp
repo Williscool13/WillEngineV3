@@ -6,15 +6,15 @@
 
 #include <enkiTS/src/TaskScheduler.h>
 
-#include "vk_context.h"
-#include "vk_helpers.h"
-#include "vk_render_extents.h"
-#include "vk_render_targets.h"
-#include "vk_resource_manager.h"
-#include "vk_swapchain.h"
-#include "vk_utils.h"
+#include "render/vulkan/vk_context.h"
+#include "render/vulkan/vk_helpers.h"
+#include "render/vulkan/vk_render_extents.h"
+#include "render/vulkan/vk_render_targets.h"
+#include "render/vulkan/vk_resource_manager.h"
+#include "render/vulkan/vk_swapchain.h"
+#include "render/vulkan/vk_utils.h"
 #if WILL_EDITOR
-#include "vk_imgui_wrapper.h"
+#include "render/vulkan/vk_imgui_wrapper.h"
 #include "backends/imgui_impl_vulkan.h"
 #endif
 #include "engine/will_engine.h"
