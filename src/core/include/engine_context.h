@@ -15,6 +15,14 @@
 
 namespace Core
 {
+struct WindowContext
+{
+    uint32_t windowWidth;
+    uint32_t windowHeight;
+
+    bool bCursorHidden;
+};
+
 struct EngineContext
 {
     // const uint8_t* keyboardState;
@@ -25,8 +33,7 @@ struct EngineContext
     float deltaTime;
     float timeElapsed;
 
-    uint32_t windowWidth;
-    uint32_t windowHeight;
+    WindowContext windowContext;
 
     std::shared_ptr<spdlog::logger> logger;
 

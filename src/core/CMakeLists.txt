@@ -25,6 +25,10 @@ add_library(core STATIC
         time/time_manager.h
         time/time_frame.cpp
         time/time_frame.h
+        math/transform.cpp
+        math/transform.h
+        math/constants.cpp
+        math/constants.h
 
 )
 

@@ -4,9 +4,7 @@
 
 #ifndef WILLENGINEV3_WILL_ENGINE_H
 #define WILLENGINEV3_WILL_ENGINE_H
-#include <array>
 #include <memory>
-#include <semaphore>
 
 #include <SDL3/SDL.h>
 #include <enkiTS/src/TaskScheduler.h>
@@ -16,7 +14,12 @@
 #include "core/include/render_interface.h"
 #include "platform/crash_handler.h"
 #include "platform/dll_loader.h"
-#include "render/render_constants.h"
+
+namespace Game
+{
+struct GameState;
+}
+
 
 namespace Core
 {
@@ -79,7 +82,7 @@ private: // Main Systems
 
 private: // Subsystems
     std::unique_ptr<Core::InputManager> inputManager{};
-    bool bCursorActive;
+    bool bCursorHidden{true};
 
     std::unique_ptr<Core::TimeManager> timeManager{};
 
@@ -92,7 +95,7 @@ private: // Game DLL
 #endif
     Core::GameAPI gameFunctions{};
     std::unique_ptr<Core::EngineContext> engineContext{};
-    std::unique_ptr<Core::GameState> gameState{};
+    void* gameState;
 
 private:
     Platform::CrashHandler* crashHandler;

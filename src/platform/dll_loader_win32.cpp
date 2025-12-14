@@ -46,7 +46,7 @@ bool DllLoader::Load(const std::string& dllPath, const std::string& tempCopyName
         return false;
     }
 
-    SPDLOG_INFO("Loaded DLL: {}", loadedPath);
+    SPDLOG_DEBUG("Loaded DLL: {}", loadedPath);
     return true;
 }
 
@@ -55,7 +55,7 @@ void DllLoader::Unload()
     if (handle) {
         FreeLibrary(handle);
         handle = nullptr;
-        SPDLOG_INFO("Unloaded DLL: {}", loadedPath);
+        SPDLOG_DEBUG("Unloaded DLL: {}", loadedPath);
     }
 }
 

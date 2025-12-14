@@ -8,18 +8,34 @@
 
 namespace Core
 {
-void StubInit(EngineContext*, GameState* state)
+size_t StubGetGameStateSize()
 {
-    SPDLOG_WARN("Game DLL not loaded - using stub GameInit");
+    return 0;
 }
 
-void StubUpdate(EngineContext*, GameState* state, InputFrame inputFrame, const TimeFrame* timeFrame)
+void StubStartup(EngineContext*, Game::GameState* state)
 {
-    SPDLOG_WARN("Game DLL not loaded - using stub GameUpdate");
+    SPDLOG_WARN("Game DLL not loaded - stub Startup");
 }
 
-void StubShutdown(EngineContext*, GameState* state)
+void StubLoad(EngineContext*, Game::GameState* state)
 {
-    SPDLOG_WARN("Game DLL not loaded - using stub GameShutdown");
+    SPDLOG_WARN("Game DLL not loaded - stub GameInit");
 }
+
+void StubUpdate(EngineContext*, Game::GameState* state, InputFrame inputFrame, const TimeFrame* timeFrame)
+{
+
+}
+
+void StubUnload(EngineContext*, Game::GameState* state)
+{
+    SPDLOG_WARN("Game DLL not loaded - stub Unload");
+}
+
+void StubShutdown(EngineContext*, Game::GameState* state)
+{
+    SPDLOG_WARN("Game DLL not loaded - stub GameShutdown");
+}
+
 } // Core

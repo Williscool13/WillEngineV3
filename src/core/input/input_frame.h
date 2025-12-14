@@ -78,6 +78,22 @@ struct InputFrame
 
     ButtonState& GetKey(Key k) { return keys[static_cast<size_t>(k)]; }
     ButtonState& GetMouse(MouseButton btn) { return mouseButtons[static_cast<size_t>(btn)]; }
+
+    bool ConsumeKeyPress(Key key)
+    {
+        auto& state = keys[static_cast<size_t>(key)];
+        bool wasPressed = state.pressed;
+        state.pressed = false;
+        return wasPressed;
+    }
+
+    bool ConsumeMousePress(MouseButton button)
+    {
+        auto& state = mouseButtons[static_cast<size_t>(button)];
+        bool wasPressed = state.pressed;
+        state.pressed = false;
+        return wasPressed;
+    }
 };
 } // Core
 

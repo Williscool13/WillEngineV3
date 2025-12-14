@@ -187,15 +187,15 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     AllocatedBuffer& currentSceneDataBuffer = frameResource.sceneDataBuffer;
     //
     {
-        const glm::vec3 cameraPos = {1.0f, 0.0f, 3.0f};
-        const glm::vec3 camreaLook = {0.0f, 0.0f, 0.0f};
-        const glm::vec3 up = {0.0f, 1.0f, 0.0f};
-        glm::mat4 view = glm::lookAt(cameraPos, camreaLook, up);
+        const glm::vec3 cameraPos = frameBuffer.rawCameraData.cameraWorldPos;
+        const glm::vec3 cameraLook = frameBuffer.rawCameraData.cameraLook;
+        const glm::vec3 up = frameBuffer.rawCameraData.cameraUp;
+        glm::mat4 view = glm::lookAt(cameraPos, cameraLook, up);
         glm::mat4 proj = glm::perspective(
-            glm::radians(75.0f),
-            static_cast<float>(renderExtent[0]) / static_cast<float>(renderExtent[1]),
-            1000.0f,
-            0.1f
+            frameBuffer.rawCameraData.fovDegrees,
+            frameBuffer.rawCameraData.aspectRatio,
+            frameBuffer.rawCameraData.farPlane,
+            frameBuffer.rawCameraData.nearPlane
         );
 
         sceneData.view = view;

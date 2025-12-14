@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD 23)
 
 option(WILL_BUILD_EDITOR "Build editor features" OFF)
 option(GAME_STATIC "Build game as static library" OFF)
+option(WILL_BUILD_NO_CONSOLE "Disable the console" OFF)
 
 # Configuration ==============================
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
@@ -26,7 +27,7 @@ if (GAME_STATIC)
     add_compile_definitions(GAME_STATIC)
 endif ()
 # Build =======================================
-if (NOT WILL_BUILD_EDITOR AND WIN32)
+if (NOT WILL_BUILD_EDITOR AND WILL_BUILD_NO_CONSOLE AND WIN32)
     add_executable(will-engine WIN32 main.cpp)
 else ()
     add_executable(will-engine main.cpp)

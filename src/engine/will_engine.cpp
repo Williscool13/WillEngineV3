@@ -8,17 +8,17 @@
 #include <fmt/format.h>
 
 #include "engine_api.h"
+#include "core/include/game_interface.h"
+
+#include "core/input/input_manager.h"
+#include "core/time/time_manager.h"
+#include "render/render_thread.h"
+#include "spdlog/spdlog.h"
+
 #if WILL_EDITOR
 #include "backends/imgui_impl_sdl3.h"
 #include "backends/imgui_impl_vulkan.h"
 #endif
-#include "core/include/game_interface.h"
-#include "core/input/input_manager.h"
-#include "core/time/time_manager.h"
-#include "render/render_thread.h"
-#include "render/vk_render_targets.h"
-#include "render/vk_swapchain.h"
-#include "spdlog/spdlog.h"
 
 namespace Engine
 {
@@ -59,6 +59,7 @@ void WillEngine::Initialize()
     int32_t w;
     int32_t h;
     SDL_GetWindowSize(window.get(), &w, &h);
+    SDL_SetWindowRelativeMouseMode(window.get(), bCursorHidden);
 
     inputManager = std::make_unique<Core::InputManager>(w, h);
     timeManager = std::make_unique<Core::TimeManager>();
@@ -69,13 +70,19 @@ void WillEngine::Initialize()
     // assetLoadingThread.Initialize(renderThread.GetVulkanContext(), renderThread.GetResourceManager());
 
 #ifdef GAME_STATIC
-    gameFunctions.gameInit = &GameInit;
+    gameFunctions.gameGetStateSize = &GameGetStateSize;
+    gameFunctions.gameStartup = &GameStartup;
+    gameFunctions.gameLoad = &GameLoad;
     gameFunctions.gameUpdate = &GameUpdate;
+    gameFunctions.gameUnload = &GameUnload;
     gameFunctions.gameShutdown = &GameShutdown;
 #else
     if (gameDll.Load("game.dll", "game_temp.dll")) {
-        gameFunctions.gameInit = gameDll.GetFunction<Core::GameInitFunc>("GameInit");
+        gameFunctions.gameGetStateSize = gameDll.GetFunction<Core::GameGetGameStateSizeFunc>("GameGetStateSize");
+        gameFunctions.gameStartup = gameDll.GetFunction<Core::GameStartUpFunc>("GameStartup");
+        gameFunctions.gameLoad = gameDll.GetFunction<Core::GameLoadFunc>("GameLoad");
         gameFunctions.gameUpdate = gameDll.GetFunction<Core::GameUpdateFunc>("GameUpdate");
+        gameFunctions.gameUnload = gameDll.GetFunction<Core::GameUnloadFunc>("GameUnload");
         gameFunctions.gameShutdown = gameDll.GetFunction<Core::GameShutdownFunc>("GameShutdown");
     }
     else {
@@ -83,14 +90,18 @@ void WillEngine::Initialize()
     }
 #endif
 
+    size_t stateSize = gameFunctions.gameGetStateSize();
+    gameState = malloc(stateSize);
+
     engineContext = std::make_unique<Core::EngineContext>();
-    gameState = std::make_unique<Core::GameState>();
     engineContext->logger = spdlog::default_logger();
     engineContext->updateCamera = EngineAPI::UpdateCamera;
-    engineContext->windowWidth = w;
-    engineContext->windowHeight = h;
+    engineContext->windowContext.windowWidth = w;
+    engineContext->windowContext.windowHeight = h;
+    engineContext->windowContext.bCursorHidden = bCursorHidden;
 
-    gameFunctions.gameInit(engineContext.get(), gameState.get());
+    gameFunctions.gameStartup(engineContext.get(), static_cast<Game::GameState*>(gameState));
+    gameFunctions.gameLoad(engineContext.get(), static_cast<Game::GameState*>(gameState));
 }
 
 void WillEngine::Run()
@@ -128,6 +139,9 @@ void WillEngine::Run()
                     uint32_t w = e.window.data1;
                     uint32_t h = e.window.data2;
                     inputManager->UpdateWindowExtent(w, h);
+                    engineContext->windowContext.windowWidth = w;
+                    engineContext->windowContext.windowHeight = h;
+                    SDL_SetWindowRelativeMouseMode(window.get(), bCursorHidden);
                 }
                 break;
                 default:
@@ -150,14 +164,35 @@ void WillEngine::Run()
         const TimeFrame& time = timeManager->GetTime();
         stagingFrameBuffer.deltaTime += time.deltaTime;
 #if WILL_EDITOR
+        if (input.GetKey(Key::F5).pressed) {
+            gameFunctions.gameUnload(engineContext.get(), static_cast<Game::GameState*>(gameState));
+            if (gameDll.Reload()) {
+                gameFunctions.gameGetStateSize = gameDll.GetFunction<Core::GameGetGameStateSizeFunc>("GameGetStateSize");
+                gameFunctions.gameStartup = gameDll.GetFunction<Core::GameStartUpFunc>("GameStartup");
+                gameFunctions.gameLoad = gameDll.GetFunction<Core::GameLoadFunc>("GameLoad");
+                gameFunctions.gameUpdate = gameDll.GetFunction<Core::GameUpdateFunc>("GameUpdate");
+                gameFunctions.gameUnload = gameDll.GetFunction<Core::GameUnloadFunc>("GameUnload");
+                gameFunctions.gameShutdown = gameDll.GetFunction<Core::GameShutdownFunc>("GameShutdown");
+                SPDLOG_DEBUG("Game lib was hot-reloaded");
+            }
+            else {
+                gameFunctions.Stub();
+                SPDLOG_DEBUG("Game lib failed to be hot-reloaded");
+            }
+
+            gameFunctions.gameLoad(engineContext.get(), static_cast<Game::GameState*>(gameState));
+        }
+
         if (input.isWindowInputFocus && input.GetKey(Key::PERIOD).pressed) {
-            bCursorActive = !bCursorActive;
-            SDL_SetWindowRelativeMouseMode(window.get(), bCursorActive);
+            bCursorHidden = !bCursorHidden;
+            SDL_SetWindowRelativeMouseMode(window.get(), bCursorHidden);
+            engineContext->windowContext.bCursorHidden = bCursorHidden;
         }
 #endif
 
+
         // assetLoadingThread.ResolveLoads(loadedModelEntryHandles, bufferAcquireOperations, imageAcquireOperations);
-        gameFunctions.gameUpdate(engineContext.get(), gameState.get(), input, &time);
+        gameFunctions.gameUpdate(engineContext.get(), static_cast<Game::GameState*>(gameState), input, &time);
         inputManager->FrameReset();
 
         const bool canTransmit = engineRenderSynchronization->gameFrames.try_acquire();
@@ -246,7 +281,10 @@ void WillEngine::Cleanup()
 {
     renderThread->Join();
 
-    gameFunctions.gameShutdown(engineContext.get(), gameState.get());
+    gameFunctions.gameUnload(engineContext.get(), static_cast<Game::GameState*>(gameState));
+    gameFunctions.gameShutdown(engineContext.get(), static_cast<Game::GameState*>(gameState));
+    free(gameState);
+    gameState = nullptr;
 #ifndef GAME_STATIC
     gameDll.Unload();
 #endif

@@ -1,5 +1,9 @@
 set(GAME_SOURCES
         game.cpp
+        camera/camera.cpp
+        camera/camera.h
+        camera/free_camera.cpp
+        camera/free_camera.h
 )
 
 set(GAME_INCLUDE_DIRS
