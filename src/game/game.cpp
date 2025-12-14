@@ -14,9 +14,11 @@ GAME_API void GameInit(Core::EngineContext* ctx, Core::GameState* state)
     SPDLOG_INFO("Game initialized");
 }
 
-GAME_API void GameUpdate(Core::EngineContext* ctx, Core::GameState* state, float dt)
+GAME_API void GameUpdate(Core::EngineContext* ctx, Core::GameState* state, InputFrame* inputFrame, float dt)
 {
-    SPDLOG_INFO("Game Update");
+    if (inputFrame->GetKey(Key::F).pressed) {
+        SPDLOG_INFO("Game Update");
+    }
 }
 
 GAME_API void GameShutdown(Core::EngineContext* ctx, Core::GameState* state)

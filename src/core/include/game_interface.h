@@ -6,6 +6,7 @@
 #define WILL_ENGINE_GAME_INTERFACE_H
 
 #include "engine_context.h"
+#include "core/input/input_frame.h"
 
 namespace Core
 {
@@ -15,12 +16,12 @@ struct GameState
 };
 
 using GameInitFunc = void(*)(EngineContext*, GameState*);
-using GameUpdateFunc = void(*)(EngineContext*, GameState*, float);
+using GameUpdateFunc = void(*)(EngineContext*, GameState*, InputFrame*, float);
 using GameShutdownFunc = void(*)(EngineContext*, GameState*);
 
 void StubInit(EngineContext*, GameState* state);
 
-void StubUpdate(EngineContext*, GameState* state, float deltaTime);
+void StubUpdate(EngineContext*, GameState* state, InputFrame* inputFrame, float deltaTime);
 
 void StubShutdown(EngineContext*, GameState* state);
 
@@ -47,7 +48,7 @@ struct GameAPI
 
 extern "C" {
     GAME_API void GameInit(Core::EngineContext* ctx, Core::GameState* state);
-    GAME_API void GameUpdate(Core::EngineContext* ctx, Core::GameState* state, float dt);
+    GAME_API void GameUpdate(Core::EngineContext* ctx, Core::GameState* state, InputFrame* inputFrame, float dt);
     GAME_API void GameShutdown(Core::EngineContext* ctx, Core::GameState* state);
 }
 

@@ -13,6 +13,7 @@
 #include "backends/imgui_impl_vulkan.h"
 #endif
 #include "core/include/game_interface.h"
+#include "core/input/input_manager.h"
 #include "render/render_thread.h"
 #include "render/vk_render_targets.h"
 #include "render/vk_swapchain.h"
@@ -60,6 +61,9 @@ void WillEngine::Initialize()
     // Input::Get().Init(window, w, h);
 
     engineRenderSynchronization = std::make_unique<Core::FrameSync>();
+
+    inputManager = std::make_unique<Core::InputManager>();
+    inputManager->Init(w, h);
     renderThread = std::make_unique<Render::RenderThread>();
     renderThread->Initialize(engineRenderSynchronization.get(), scheduler.get(), window.get(), w, h);
     // assetLoadingThread.Initialize(renderThread.GetVulkanContext(), renderThread.GetResourceManager());
@@ -68,7 +72,8 @@ void WillEngine::Initialize()
         gameFunctions.gameInit = gameDll.GetFunction<Core::GameInitFunc>("GameInit");
         gameFunctions.gameUpdate = gameDll.GetFunction<Core::GameUpdateFunc>("GameUpdate");
         gameFunctions.gameShutdown = gameDll.GetFunction<Core::GameShutdownFunc>("GameShutdown");
-    } else {
+    }
+    else {
         gameFunctions.Stub();
     }
 
@@ -113,12 +118,19 @@ void WillEngine::Run()
                     bRequireSwapchainRecreate = true;
                     break;
                 case SDL_EVENT_WINDOW_RESIZED:
-                    //case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
+                    // case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
+                {
                     bRequireSwapchainRecreate = true;
-                    break;
+                    uint32_t w = e.window.data1;
+                    uint32_t h = e.window.data2;
+                    inputManager->UpdateWindowExtent(w, h);
+                }
+                break;
                 default:
                     break;
             }
+
+            inputManager->ProcessEvent(e);
         }
 
         if (exit) {
@@ -127,13 +139,24 @@ void WillEngine::Run()
             break;
         }
 
+        inputManager->UpdateFocus(SDL_GetWindowFlags(window.get()));
+
+        InputFrame input = inputManager->GetCurrentInput();
+#if WILL_EDITOR
+        if (input.isWindowInputFocus && input.GetKey(Key::PERIOD).pressed) {
+            bCursorActive = !bCursorActive;
+            SDL_SetWindowRelativeMouseMode(window.get(), bCursorActive);
+        }
+#endif
+
         // SDL_WindowFlags windowFlags = SDL_GetWindowFlags(window);
         // input.UpdateFocus(windowFlags);
         // time.Update();
 
         // assetLoadingThread.ResolveLoads(loadedModelEntryHandles, bufferAcquireOperations, imageAcquireOperations);
+        gameFunctions.gameUpdate(engineContext.get(), gameState.get(), &input, 0.1f);
+        inputManager->FrameReset();
 
-        gameFunctions.gameUpdate(engineContext.get(), gameState.get(), 0.1f);
 
         uint32_t currentFrameBufferIndex = frameBufferIndex % Core::FRAME_BUFFER_COUNT;
 

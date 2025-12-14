@@ -13,7 +13,7 @@ void StubInit(EngineContext*, GameState* state)
     SPDLOG_WARN("Game DLL not loaded - using stub GameInit");
 }
 
-void StubUpdate(EngineContext*, GameState* state, float deltaTime)
+void StubUpdate(EngineContext*, GameState* state, InputFrame* inputFrame, float deltaTime)
 {
     SPDLOG_WARN("Game DLL not loaded - using stub GameUpdate");
 }

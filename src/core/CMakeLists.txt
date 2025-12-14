@@ -15,6 +15,12 @@ add_library(core STATIC
         include/game_interface.h
         include/engine_context.cpp
         include/engine_context.h
+        input/input_frame.cpp
+        input/input_frame.h
+        input/input_utils.cpp
+        input/input_utils.h
+        input/input_manager.cpp
+        input/input_manager.h
 
 )
 
@@ -26,4 +32,5 @@ target_include_directories(core PRIVATE
 
 target_link_libraries(core PUBLIC
         spdlog::spdlog
+        SDL3::SDL3
 )

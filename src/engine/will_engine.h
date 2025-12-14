@@ -18,6 +18,11 @@
 #include "platform/dll_loader.h"
 #include "render/render_constants.h"
 
+namespace Core
+{
+class InputManager;
+}
+
 namespace Render
 {
 class RenderThread;
@@ -65,6 +70,7 @@ private:
     std::unique_ptr<Core::FrameSync> engineRenderSynchronization{};
     Core::FrameBuffer stagingFrameBuffer{};
 
+    std::unique_ptr<Core::InputManager> inputManager{};
     std::unique_ptr<Render::RenderThread> renderThread{};
 
 private:
@@ -73,6 +79,7 @@ private:
     float accumDeltaTime{0};
     bool bRequireSwapchainRecreate{false};
     bool bMinimized{false};
+    bool bCursorActive;
 
 private: // Game DLL
     Platform::DllLoader gameDll;
