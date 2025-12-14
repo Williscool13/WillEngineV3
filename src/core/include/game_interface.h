@@ -7,6 +7,7 @@
 
 #include "engine_context.h"
 #include "core/input/input_frame.h"
+#include "core/time/time_frame.h"
 
 namespace Core
 {
@@ -16,12 +17,12 @@ struct GameState
 };
 
 using GameInitFunc = void(*)(EngineContext*, GameState*);
-using GameUpdateFunc = void(*)(EngineContext*, GameState*, InputFrame*, float);
+using GameUpdateFunc = void(*)(EngineContext*, GameState*, InputFrame, const TimeFrame*);
 using GameShutdownFunc = void(*)(EngineContext*, GameState*);
 
 void StubInit(EngineContext*, GameState* state);
 
-void StubUpdate(EngineContext*, GameState* state, InputFrame* inputFrame, float deltaTime);
+void StubUpdate(EngineContext*, GameState* state, InputFrame inputFrame, const TimeFrame* timeFrame);
 
 void StubShutdown(EngineContext*, GameState* state);
 
@@ -48,7 +49,7 @@ struct GameAPI
 
 extern "C" {
     GAME_API void GameInit(Core::EngineContext* ctx, Core::GameState* state);
-    GAME_API void GameUpdate(Core::EngineContext* ctx, Core::GameState* state, InputFrame* inputFrame, float dt);
+    GAME_API void GameUpdate(Core::EngineContext* ctx, Core::GameState* state, InputFrame inputFrame, const TimeFrame* timeFrame);
     GAME_API void GameShutdown(Core::EngineContext* ctx, Core::GameState* state);
 }
 

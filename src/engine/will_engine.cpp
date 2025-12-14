@@ -14,6 +14,7 @@
 #endif
 #include "core/include/game_interface.h"
 #include "core/input/input_manager.h"
+#include "core/time/time_manager.h"
 #include "render/render_thread.h"
 #include "render/vk_render_targets.h"
 #include "render/vk_swapchain.h"
@@ -58,12 +59,11 @@ void WillEngine::Initialize()
     int32_t w;
     int32_t h;
     SDL_GetWindowSize(window.get(), &w, &h);
-    // Input::Get().Init(window, w, h);
+
+    inputManager = std::make_unique<Core::InputManager>(w, h);
+    timeManager = std::make_unique<Core::TimeManager>();
 
     engineRenderSynchronization = std::make_unique<Core::FrameSync>();
-
-    inputManager = std::make_unique<Core::InputManager>();
-    inputManager->Init(w, h);
     renderThread = std::make_unique<Render::RenderThread>();
     renderThread->Initialize(engineRenderSynchronization.get(), scheduler.get(), window.get(), w, h);
     // assetLoadingThread.Initialize(renderThread.GetVulkanContext(), renderThread.GetResourceManager());
@@ -90,9 +90,7 @@ void WillEngine::Initialize()
 void WillEngine::Run()
 {
     renderThread->Start();
-
-    // Input& input = Input::Input::Get();
-    // Time& time = Time::Get();
+    timeManager->Reset();
 
     SDL_Event e;
     bool exit = false;
@@ -140,8 +138,11 @@ void WillEngine::Run()
         }
 
         inputManager->UpdateFocus(SDL_GetWindowFlags(window.get()));
+        timeManager->Update();
 
-        InputFrame input = inputManager->GetCurrentInput();
+        const InputFrame& input = inputManager->GetCurrentInput();
+        const TimeFrame& time = timeManager->GetTime();
+        stagingFrameBuffer.deltaTime += time.deltaTime;
 #if WILL_EDITOR
         if (input.isWindowInputFocus && input.GetKey(Key::PERIOD).pressed) {
             bCursorActive = !bCursorActive;
@@ -149,22 +150,17 @@ void WillEngine::Run()
         }
 #endif
 
-        // SDL_WindowFlags windowFlags = SDL_GetWindowFlags(window);
-        // input.UpdateFocus(windowFlags);
-        // time.Update();
-
         // assetLoadingThread.ResolveLoads(loadedModelEntryHandles, bufferAcquireOperations, imageAcquireOperations);
-        gameFunctions.gameUpdate(engineContext.get(), gameState.get(), &input, 0.1f);
+        gameFunctions.gameUpdate(engineContext.get(), gameState.get(), input, &time);
         inputManager->FrameReset();
-
 
         uint32_t currentFrameBufferIndex = frameBufferIndex % Core::FRAME_BUFFER_COUNT;
 
-        // accumDeltaTime += time.GetDeltaTime();
+
 
         const bool canTransmit = engineRenderSynchronization->gameFrames.try_acquire();
         if (canTransmit) {
-            PrepareFrameBuffer(currentFrameBufferIndex, engineRenderSynchronization->frameBuffers[currentFrameBufferIndex], 0.1f);
+            PrepareFrameBuffer(currentFrameBufferIndex, engineRenderSynchronization->frameBuffers[currentFrameBufferIndex], time);
 #if WILL_EDITOR
             PrepareEditor(currentFrameBufferIndex);
 #endif
@@ -176,7 +172,7 @@ void WillEngine::Run()
     }
 }
 
-void WillEngine::PrepareFrameBuffer(uint32_t currentFrameBufferIndex, Core::FrameBuffer& frameBuffer, float renderDeltaTime)
+void WillEngine::PrepareFrameBuffer(uint32_t currentFrameBufferIndex, Core::FrameBuffer& frameBuffer, const TimeFrame& time)
 {
     stagingFrameBuffer.swapchainRecreateCommand.bIsMinimized = bMinimized;
     if (bRequireSwapchainRecreate) {
@@ -193,8 +189,7 @@ void WillEngine::PrepareFrameBuffer(uint32_t currentFrameBufferIndex, Core::Fram
         stagingFrameBuffer.swapchainRecreateCommand.bEngineCommandsRecreate = false;
     }
 
-    //stagingFrameBuffer->timeElapsed = ;
-    stagingFrameBuffer.deltaTime = renderDeltaTime;
+    stagingFrameBuffer.timeElapsed = time.totalTime;
     stagingFrameBuffer.currentFrameBuffer = currentFrameBufferIndex;
 
     // add acquires to acquire buffers..
@@ -207,6 +202,7 @@ void WillEngine::PrepareFrameBuffer(uint32_t currentFrameBufferIndex, Core::Fram
     stagingFrameBuffer.jointMatrixOperations.clear();
     stagingFrameBuffer.bufferAcquireOperations.clear();
     stagingFrameBuffer.imageAcquireOperations.clear();
+    stagingFrameBuffer.deltaTime = 0;
 }
 
 #if WILL_EDITOR

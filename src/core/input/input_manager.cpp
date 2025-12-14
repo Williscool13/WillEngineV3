@@ -6,7 +6,7 @@
 
 namespace Core
 {
-void InputManager::Init(const uint32_t w, const uint32_t h)
+InputManager::InputManager(uint32_t w, uint32_t h)
 {
     this->windowExtents = glm::vec2(static_cast<float>(w), static_cast<float>(h));
 }
@@ -60,7 +60,6 @@ void InputManager::UpdateFocus(const Uint32 sdlWindowFlags)
 
 void InputManager::FrameReset()
 {
-    // Clear edge-triggered states
     for (auto& key : currentInput.keys) {
         key.pressed = false;
         key.released = false;
@@ -71,7 +70,6 @@ void InputManager::FrameReset()
         btn.released = false;
     }
 
-    // Reset deltas
     currentInput.mouseXDelta = 0.0f;
     currentInput.mouseYDelta = 0.0f;
     currentInput.mouseWheelDelta = 0.0f;

@@ -17,7 +17,7 @@ class InputManager
 public:
     InputManager() = default;
 
-    void Init(uint32_t w, uint32_t h);
+    InputManager(uint32_t w, uint32_t h);
 
     void ProcessEvent(const SDL_Event& event);
 
@@ -27,7 +27,7 @@ public:
 
     void UpdateWindowExtent(uint32_t w, uint32_t h);
 
-    InputFrame GetCurrentInput() const { return currentInput; }
+    const InputFrame& GetCurrentInput() const { return currentInput; }
 
 private:
     InputFrame currentInput{};

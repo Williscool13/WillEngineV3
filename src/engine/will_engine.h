@@ -20,6 +20,7 @@
 
 namespace Core
 {
+class TimeManager;
 class InputManager;
 }
 
@@ -50,7 +51,7 @@ public:
 
     void Run();
 
-    void PrepareFrameBuffer(uint32_t currentFrameBufferIndex, Core::FrameBuffer& frameBuffer, float renderDeltaTime);
+    void PrepareFrameBuffer(uint32_t currentFrameBufferIndex, Core::FrameBuffer& frameBuffer, const TimeFrame& time);
 
 #if WILL_EDITOR
     void DrawImgui();
@@ -64,22 +65,27 @@ public:
 
 private:
     static WillEngine* instance;
-    SDLWindowPtr window{nullptr, nullptr};
-    std::unique_ptr<enki::TaskScheduler> scheduler{};
 
+private: // Windowing
+    SDLWindowPtr window{nullptr, nullptr};
+    bool bRequireSwapchainRecreate{false};
+    bool bMinimized{false};
+
+private: // Main Systems
+    std::unique_ptr<enki::TaskScheduler> scheduler{};
+    std::unique_ptr<Render::RenderThread> renderThread{};
     std::unique_ptr<Core::FrameSync> engineRenderSynchronization{};
     Core::FrameBuffer stagingFrameBuffer{};
 
+private: // Subsystems
     std::unique_ptr<Core::InputManager> inputManager{};
-    std::unique_ptr<Render::RenderThread> renderThread{};
+    bool bCursorActive;
+
+    std::unique_ptr<Core::TimeManager> timeManager{};
 
 private:
     uint64_t gameFrameCount{0};
     uint32_t frameBufferIndex{0};
-    float accumDeltaTime{0};
-    bool bRequireSwapchainRecreate{false};
-    bool bMinimized{false};
-    bool bCursorActive;
 
 private: // Game DLL
     Platform::DllLoader gameDll;
