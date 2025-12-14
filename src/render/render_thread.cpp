@@ -71,6 +71,11 @@ void RenderThread::Initialize(Core::FrameSync* engineRenderSync, enki::TaskSched
 
     basicComputePipeline = BasicComputePipeline(context.get(), resourceManager->bindlessRenderTargetDescriptorBuffer.descriptorSetLayout);
     basicRenderPipeline = BasicRenderPipeline(context.get());
+
+    if (basicComputePipeline.pipeline.handle == VK_NULL_HANDLE || basicRenderPipeline.pipeline.handle == VK_NULL_HANDLE) {
+        SPDLOG_ERROR("Failed to compile shaders");
+        exit(1);
+    }
 }
 
 void RenderThread::Start()

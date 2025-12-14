@@ -16,17 +16,21 @@ elseif (CMAKE_BUILD_TYPE STREQUAL "Release")
     add_compile_definitions(SPDLOG_ACTIVE_LEVEL=2)
 elseif (CMAKE_BUILD_TYPE STREQUAL "MinSizeRel")
     add_compile_definitions(SPDLOG_ACTIVE_LEVEL=2)
-endif()
+endif ()
 
-if(WILL_BUILD_EDITOR)
+if (WILL_BUILD_EDITOR)
     add_compile_definitions(WILL_EDITOR)
-endif()
+endif ()
 
-if(GAME_STATIC)
+if (GAME_STATIC)
     add_compile_definitions(GAME_STATIC)
-endif()
+endif ()
 # Build =======================================
-add_executable(will-engine main.cpp)
+if (NOT WILL_BUILD_EDITOR AND WIN32)
+    add_executable(will-engine WIN32 main.cpp)
+else ()
+    add_executable(will-engine main.cpp)
+endif ()
 
 target_include_directories(will-engine PRIVATE
         ${CMAKE_SOURCE_DIR}/src
@@ -34,7 +38,6 @@ target_include_directories(will-engine PRIVATE
 )
 
 target_link_libraries(will-engine PUBLIC engine)
-
 
 add_dependencies(will-engine game)
 
