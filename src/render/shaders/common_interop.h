@@ -2,13 +2,14 @@
 // Created by William on 2025-12-09.
 //
 
+#ifndef WILLENGINEV3_SHADER_INTEROP_H
+#define WILLENGINEV3_SHADER_INTEROP_H
+
 #ifdef __SLANG__
 module common_interop;
 #define SHADER_PUBLIC public
 #else
 // C++ mode
-#ifndef WILLENGINEV3_SHADER_INTEROP_H
-#define WILLENGINEV3_SHADER_INTEROP_H
 #include <glm/glm.hpp>
 #include <cstdint>
 
@@ -33,7 +34,6 @@ using float3x3 = glm::mat3;
 using float4x4 = glm::mat4;
 
 #define SHADER_PUBLIC
-#endif // WILLENGINEV3_SHADER_INTEROP_H
 #endif // __SLANG__
 
 
@@ -73,3 +73,5 @@ SHADER_PUBLIC struct SceneData
 
     SHADER_PUBLIC float deltaTime;
 };
+
+#endif // WILLENGINEV3_SHADER_INTEROP_H

@@ -2,13 +2,15 @@
 // Created by William on 2025-12-15.
 //
 
+
+#ifndef WILLENGINEV3_MODEL_INTEROP_H
+#define WILLENGINEV3_MODEL_INTEROP_H
+
 #ifdef __SLANG__
-module common_interop;
+module model_interop;
 #define SHADER_PUBLIC public
 #else
 // C++ mode
-#ifndef WILLENGINEV3_SHADER_INTEROP_H
-#define WILLENGINEV3_SHADER_INTEROP_H
 #include <glm/glm.hpp>
 #include <cstdint>
 
@@ -33,7 +35,6 @@ using float3x3 = glm::mat3;
 using float4x4 = glm::mat4;
 
 #define SHADER_PUBLIC
-#endif // WILLENGINEV3_SHADER_INTEROP_H
 #endif // __SLANG__
 
 
@@ -109,3 +110,5 @@ SHADER_PUBLIC struct MaterialProperties
     SHADER_PUBLIC float4 alphaProperties; // x: alpha cutoff, y: alpha mode, z: double sided, w: unlit
     SHADER_PUBLIC float4 physicalProperties; // x: IOR, y: dispersion, z: normal scale, w: occlusion strength
 };
+
+#endif // WILLENGINEV3_MODEL_INTEROP_H
