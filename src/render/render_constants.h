@@ -6,6 +6,7 @@
 #define WILL_ENGINE_VK_CONSTANTS_H
 #include <cstdint>
 
+#include "shaders/model_interop.h"
 #include "types/render_types.h"
 #include "types/vk_types.h"
 

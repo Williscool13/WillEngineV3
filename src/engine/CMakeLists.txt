@@ -28,12 +28,5 @@ endif()
 target_compile_definitions(engine PRIVATE ENGINE_EXPORTS)
 
 if(WILL_BUILD_EDITOR)
-    target_link_libraries(engine PUBLIC imgui)
+    target_link_libraries(engine PUBLIC editor)
 endif()
-
-
-add_custom_command(TARGET engine POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        $<TARGET_FILE:engine>
-        $<TARGET_FILE_DIR:will-engine>
-)

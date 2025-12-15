@@ -12,12 +12,14 @@
 
 #include "core/input/input_manager.h"
 #include "core/time/time_manager.h"
+#include "platform/paths.h"
 #include "render/render_thread.h"
 #include "spdlog/spdlog.h"
 
 #if WILL_EDITOR
 #include "backends/imgui_impl_sdl3.h"
 #include "backends/imgui_impl_vulkan.h"
+#include "editor/model-generation/model_generator.h"
 #endif
 
 namespace Engine
@@ -187,6 +189,14 @@ void WillEngine::Run()
             bCursorHidden = !bCursorHidden;
             SDL_SetWindowRelativeMouseMode(window.get(), bCursorHidden);
             engineContext->windowContext.bCursorHidden = bCursorHidden;
+        }
+
+        if (input.GetKey(Key::L).pressed) {
+            auto boxPath = Platform::GetAssetPath() / "BoxTextured.glb";
+
+            Render::MeshInformation mi = {};
+            // Render::UIVertex uiv = {};
+            auto model = Render::ModelGenerator::LoadGltf(boxPath);
         }
 #endif
 

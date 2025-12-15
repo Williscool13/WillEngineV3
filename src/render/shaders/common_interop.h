@@ -39,7 +39,7 @@ using float4x4 = glm::mat4;
 
 SHADER_PUBLIC struct Frustum
 {
-    float4 planes[6];
+    SHADER_PUBLIC float4 planes[6];
 };
 
 SHADER_PUBLIC struct SceneData

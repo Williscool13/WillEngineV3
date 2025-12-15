@@ -2,8 +2,8 @@
 // Created by William on 2025-12-12.
 //
 
-#ifndef WILL_ENGINE_MODEL_TYPES_H
-#define WILL_ENGINE_MODEL_TYPES_H
+#ifndef WILL_ENGINE_RENDER_TYPES_H
+#define WILL_ENGINE_RENDER_TYPES_H
 #include <cstdint>
 #include <string>
 
@@ -16,56 +16,12 @@ namespace Render
 {
 Frustum CreateFrustum(const glm::mat4& viewProj);
 
-struct Meshlet
-{
-    glm::vec4 meshletBoundingSphere;
-
-    glm::vec3 coneApex;
-    float coneCutoff;
-
-    glm::vec3 coneAxis;
-    uint32_t vertexOffset;
-
-    uint32_t meshletVerticesOffset;
-    uint32_t meshletTriangleOffset;
-    uint32_t meshletVerticesCount;
-    uint32_t meshletTriangleCount;
-};
-
-struct MeshletPrimitive
-{
-    uint32_t meshletOffset{0};
-    uint32_t meshletCount{0};
-    uint32_t materialIndex{0};
-    uint32_t bHasTransparent{0};
-    uint32_t bHasSkinning{0};
-    uint32_t padding1{0};
-    uint32_t padding2{0};
-    uint32_t padding3{0};
-    // {3} center, {1} radius
-    glm::vec4 boundingSphere{};
-};
-
 struct Instance
 {
     uint32_t primitiveIndex{INT32_MAX};
     uint32_t modelIndex{INT32_MAX};
     uint32_t jointMatrixOffset{};
     uint32_t bIsAllocated{false};
-};
-
-struct Node
-{
-    std::string name{};
-    uint32_t parent{~0u};
-    uint32_t meshIndex{~0u};
-    uint32_t depth{};
-
-    uint32_t inverseBindIndex{~0u};
-
-    glm::vec3 localTranslation{};
-    glm::quat localRotation{};
-    glm::vec3 localScale{};
 };
 
 struct Model
@@ -90,4 +46,4 @@ struct TaskIndirectDrawParameters
 };
 } // Render
 
-#endif //WILL_ENGINE_MODEL_TYPES_H
+#endif //WILL_ENGINE_RENDER_TYPES_H

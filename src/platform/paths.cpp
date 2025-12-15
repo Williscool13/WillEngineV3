@@ -34,16 +34,28 @@ std::filesystem::path GetShaderPath()
     return GetExecutablePath() / "shaders";
 }
 
+std::filesystem::path GetAssetPath()
+{
+#ifdef ASSETS_PATH
+    return std::filesystem::path(ASSETS_PATH);
+#endif
+    return GetExecutablePath() / "assets";
+}
+
 std::filesystem::path GetLogPath()
 {
-    // This should be UserDataPath in a packaged build
+#ifndef PACKAGED_BUILD
     return GetExecutablePath() / "logs";
+#endif
+    return GetUserDataPath() / "logs";
 }
 
 std::filesystem::path GetCrashPath()
 {
-    // This should be UserDataPath in a packaged build
+#ifndef PACKAGED_BUILD
     return GetExecutablePath() / "crash";
+#endif
+    return GetUserDataPath() / "crash";
 }
 
 std::filesystem::path SetWorkingDirectory()

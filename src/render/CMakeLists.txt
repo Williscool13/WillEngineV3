@@ -48,12 +48,12 @@ add_library(render STATIC
         pipelines/basic_compute_pipeline.h
         pipelines/basic_render_pipeline.cpp
         pipelines/basic_render_pipeline.h
+        shaders/model_interop.h
+        model/model_format.cpp
+        model/model_format.h
+        model/model_types.cpp
+        model/model_types.h
 )
-
-add_subdirectory(model/runtime)
-if(WILL_BUILD_EDITOR)
-    add_subdirectory(model/generation)
-endif()
 
 target_include_directories(render PRIVATE
         ${CMAKE_SOURCE_DIR}/src
@@ -69,13 +69,12 @@ target_link_libraries(render PUBLIC
         spdlog::spdlog
         enkiTS
         offsetAllocator
-        render-model-runtime
+        ktx
 )
 
 if(WILL_BUILD_EDITOR)
-    target_link_libraries(render PRIVATE
-            imgui
-            render-model-generation
+    target_link_libraries(render PUBLIC
+            editor
     )
 endif()
 

@@ -24,6 +24,8 @@ std::filesystem::path GetLogPath();
 std::filesystem::path GetCrashPath();
 
 std::filesystem::path GetShaderPath();
+
+std::filesystem::path GetAssetPath();
 }
 
 #endif //WILL_ENGINE_PLATFORM_H

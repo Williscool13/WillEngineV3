@@ -95,7 +95,7 @@ private: // Game DLL
 #endif
     Core::GameAPI gameFunctions{};
     std::unique_ptr<Core::EngineContext> engineContext{};
-    void* gameState;
+    void* gameState{};
 
 private:
     Platform::CrashHandler* crashHandler;

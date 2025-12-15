@@ -8,6 +8,8 @@ option(WILL_BUILD_EDITOR "Build editor features" OFF)
 option(GAME_STATIC "Build game as static library" OFF)
 option(WILL_BUILD_NO_CONSOLE "Disable the console" OFF)
 
+option(PACKAGED_BUILD "Enable to use UserDataPath for log and crash report paths" OFF)
+
 # Configuration ==============================
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
     add_compile_definitions(SPDLOG_ACTIVE_LEVEL=0)
@@ -26,6 +28,13 @@ endif ()
 if (GAME_STATIC)
     add_compile_definitions(GAME_STATIC)
 endif ()
+
+if (PACKAGED_BUILD)
+    add_compile_definitions(PACKAGED_BUILD)
+else()
+    add_compile_definitions(ASSETS_PATH="${CMAKE_SOURCE_DIR}/assets")
+endif ()
+
 # Build =======================================
 if (NOT WILL_BUILD_EDITOR AND WILL_BUILD_NO_CONSOLE AND WIN32)
     add_executable(will-engine WIN32 main.cpp)
@@ -43,6 +52,7 @@ target_link_libraries(will-engine PUBLIC engine)
 add_dependencies(will-engine game)
 
 # Dependencies ================================
+add_compile_definitions(NOMINMAX)
 add_compile_definitions(GLM_FORCE_DEPTH_ZERO_TO_ONE)
 add_subdirectory(extern/fmt)
 set(SPDLOG_FMT_EXTERNAL ON)
@@ -69,6 +79,9 @@ add_subdirectory(src/game)
 add_subdirectory(src/render)
 add_subdirectory(src/utils)
 add_subdirectory(src/platform)
+if (WILL_BUILD_EDITOR)
+    add_subdirectory(src/editor)
+endif ()
 
 # Imgui =======================================
 set(IMGUI_DIR ${CMAKE_SOURCE_DIR}/extern/imgui)
@@ -108,9 +121,10 @@ preprocess_shader_interop(
         ${CMAKE_SOURCE_DIR}/shaders/common_interop.slang
 )
 
-# preprocess_shader_interop(
-#       .. more modules
-# )
+preprocess_shader_interop(
+        ${CMAKE_SOURCE_DIR}/src/render/shaders/model_interop.h
+        ${CMAKE_SOURCE_DIR}/shaders/model_interop.slang
+)
 
 
 get_property(INTEROP_FILES GLOBAL PROPERTY SHADER_INTEROP_FILES)
