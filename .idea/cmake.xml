@@ -5,7 +5,7 @@
       <configuration PROFILE_NAME="Debug-Visual Studio" ENABLED="true" CONFIG_NAME="Debug" TOOLCHAIN_NAME="Visual Studio" GENERATION_OPTIONS="-DWILL_BUILD_EDITOR=ON -DGAME_STATIC=OFF" />
       <configuration PROFILE_NAME="RelWithDebInfo-Visual Studio" ENABLED="true" CONFIG_NAME="RelWithDebInfo" TOOLCHAIN_NAME="Visual Studio" GENERATION_OPTIONS="-DWILL_BUILD_EDITOR=OFF -DGAME_STATIC=ON" />
       <configuration PROFILE_NAME="Release-Visual Studio" ENABLED="true" CONFIG_NAME="Release" TOOLCHAIN_NAME="Visual Studio" GENERATION_OPTIONS="-DWILL_BUILD_EDITOR=OFF -DGAME_STATIC=ON" />
-      <configuration PROFILE_NAME="MinSizeRel" ENABLED="true" CONFIG_NAME="MinSizeRel" GENERATION_OPTIONS="-DWILL_BUILD_EDITOR=OFF -DGAME_STATIC=ON" />
+      <configuration PROFILE_NAME="MinSizeRel-Visual Studio" ENABLED="true" CONFIG_NAME="MinSizeRel" TOOLCHAIN_NAME="Visual Studio" GENERATION_OPTIONS="-DWILL_BUILD_EDITOR=OFF -DGAME_STATIC=ON" />
     </configurations>
   </component>
 </project>

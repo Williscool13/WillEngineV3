@@ -50,6 +50,11 @@ add_library(render STATIC
         pipelines/basic_render_pipeline.h
 )
 
+add_subdirectory(model/runtime)
+if(WILL_BUILD_EDITOR)
+    add_subdirectory(model/generation)
+endif()
+
 target_include_directories(render PRIVATE
         ${CMAKE_SOURCE_DIR}/src
         ${CMAKE_SOURCE_DIR}/extern
@@ -64,10 +69,14 @@ target_link_libraries(render PUBLIC
         spdlog::spdlog
         enkiTS
         offsetAllocator
+        render-model-runtime
 )
 
 if(WILL_BUILD_EDITOR)
-    target_link_libraries(render PUBLIC imgui)
+    target_link_libraries(render PRIVATE
+            imgui
+            render-model-generation
+    )
 endif()
 
 find_program(SLANGC slangc REQUIRED)
