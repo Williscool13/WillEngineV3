@@ -36,6 +36,7 @@ class WillEngine;
 
 namespace Render
 {
+class ModelGenerator;
 struct ResourceManager;
 struct RenderExtents;
 struct RenderTargets;
@@ -59,6 +60,7 @@ class RenderThread
         SUCCESS,
         SWAPCHAIN_OUTDATED
     };
+
 public:
     RenderThread();
 
@@ -95,6 +97,7 @@ private:
     std::unique_ptr<Swapchain> swapchain{};
 #if WILL_EDITOR
     std::unique_ptr<ImguiWrapper> imgui{};
+    std::unique_ptr<Render::ModelGenerator> modelGenerator{};
 #endif
     std::unique_ptr<RenderTargets> renderTargets{};
     std::unique_ptr<ResourceManager> resourceManager{};
@@ -109,7 +112,6 @@ private:
     ModelMatrixOperationRingBuffer modelMatrixOperationRingBuffer;
     InstanceOperationRingBuffer instanceOperationRingBuffer;
     JointMatrixOperationRingBuffer jointMatrixOperationRingBuffer;
-
 
     uint64_t frameNumber{0};
     bool bEngineRequestsRecreate{false};

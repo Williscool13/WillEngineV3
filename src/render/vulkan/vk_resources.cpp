@@ -342,7 +342,7 @@ AllocatedBuffer AllocatedBuffer::CreateAllocatedReceivingBuffer(const VulkanCont
     const VkBufferCreateInfo bufferInfo{
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
         .size = bufferSize,
-        .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | additionalUsages,
+        .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | additionalUsages,
         .sharingMode = VK_SHARING_MODE_EXCLUSIVE
     };
 

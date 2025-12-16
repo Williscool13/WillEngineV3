@@ -15,9 +15,9 @@ namespace Render
 {
 enum class MaterialType
 {
-    _OPAQUE = 0,
-    _TRANSPARENT = 1,
-    _MASK = 2,
+    SOLID = 0,
+    BLEND = 1,
+    CUTOUT = 2,
 };
 
 struct MeshInformation

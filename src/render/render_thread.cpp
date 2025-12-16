@@ -17,7 +17,9 @@
 #include "render/vulkan/vk_imgui_wrapper.h"
 #include "backends/imgui_impl_vulkan.h"
 #endif
+#include "editor/model-generation/model_generator.h"
 #include "engine/will_engine.h"
+#include "platform/paths.h"
 #include "spdlog/spdlog.h"
 
 
@@ -37,6 +39,7 @@ void RenderThread::Initialize(Core::FrameSync* engineRenderSync, enki::TaskSched
     swapchain = std::make_unique<Swapchain>(context.get(), width, height);
 #if WILL_EDITOR
     imgui = std::make_unique<ImguiWrapper>(context.get(), window, Core::FRAME_BUFFER_COUNT, COLOR_ATTACHMENT_FORMAT);
+    modelGenerator = std::make_unique<ModelGenerator>(context.get(), scheduler);
 #endif
     renderTargets = std::make_unique<RenderTargets>(context.get(), width, height);
     renderExtents = std::make_unique<RenderExtents>(width, height, 1.0f);
@@ -76,6 +79,10 @@ void RenderThread::Initialize(Core::FrameSync* engineRenderSync, enki::TaskSched
         SPDLOG_ERROR("Failed to compile shaders");
         exit(1);
     }
+
+    auto boxPath = Platform::GetAssetPath() / "BoxTextured.glb";
+    auto boxOut = Platform::GetAssetPath() / "BoxTextured.willmodel";
+    auto model = modelGenerator->GenerateWillModel(boxPath, boxOut);
 }
 
 void RenderThread::Start()

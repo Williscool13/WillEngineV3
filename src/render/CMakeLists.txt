@@ -53,6 +53,8 @@ add_library(render STATIC
         model/model_format.h
         model/model_types.cpp
         model/model_types.h
+        model/model_serialization.cpp
+        model/model_serialization.h
 )
 
 target_include_directories(render PRIVATE
@@ -62,6 +64,7 @@ target_include_directories(render PRIVATE
 
 target_link_libraries(render PUBLIC
         core
+        platform
         SDL3::SDL3
         volk
         VulkanMemoryAllocator
@@ -70,6 +73,7 @@ target_link_libraries(render PUBLIC
         enkiTS
         offsetAllocator
         ktx
+        miniz
 )
 
 if(WILL_BUILD_EDITOR)

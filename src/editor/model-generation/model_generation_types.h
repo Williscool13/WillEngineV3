@@ -23,9 +23,30 @@ struct RawGltfModel
 
     std::vector<VkSamplerCreateInfo> samplerInfos{};
     std::vector<AllocatedImage> images{};
-    std::vector<ImageView> imageViews{};
 
     std::vector<Vertex> vertices{};
+    std::vector<uint32_t> meshletVertices{};
+    std::vector<uint8_t> meshletTriangles{};
+    std::vector<Meshlet> meshlets{};
+
+    std::vector<MeshletPrimitive> primitives{};
+    std::vector<MaterialProperties> materials{};
+
+    std::vector<MeshInformation> allMeshes{};
+    std::vector<Node> nodes{};
+    std::vector<uint32_t> nodeRemap{};
+};
+
+struct RawGltfSkinnedModel
+{
+    std::string name{};
+    bool bSuccessfullyLoaded{false};
+    bool bIsSkeletalModel{false};
+
+    std::vector<VkSamplerCreateInfo> samplerInfos{};
+    std::vector<AllocatedImage> images{};
+
+    std::vector<SkinnedVertex> vertices{};
     std::vector<uint32_t> meshletVertices{};
     std::vector<uint8_t> meshletTriangles{};
     std::vector<Meshlet> meshlets{};

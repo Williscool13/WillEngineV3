@@ -16,19 +16,13 @@
 
 namespace Render
 {
-constexpr char MODEL_MAGIC[8] = "WILLGEO";
+constexpr char WILL_MODEL_MAGIC[8] = "WILLMDL";
 constexpr uint32_t MODEL_MAJOR_VERSION = 0;
 constexpr uint32_t MODEL_MINOR_VERSION = 1;
 constexpr uint32_t MODEL_PATCH_VERSION = 1;
 
 struct ModelBinaryHeader
 {
-    char magic[8];
-    uint32_t majorVersion;
-    uint32_t minorVersion;
-    uint32_t patchVersion;
-
-    // Counts for each array
     uint32_t vertexCount;
     uint32_t meshletVertexCount;
     uint32_t meshletTriangleCount;
@@ -41,6 +35,27 @@ struct ModelBinaryHeader
     uint32_t animationCount;
     uint32_t inverseBindMatrixCount;
     uint32_t samplerCount;
+};
+
+constexpr size_t MAX_FILENAME_LENGTH = 128;
+
+struct FileEntry
+{
+    char filename[MAX_FILENAME_LENGTH];
+    uint64_t offset;
+    uint64_t compressedSize;
+    uint64_t uncompressedSize;
+    uint32_t compressionType; // 0 = none, 1 = zlib
+};
+
+struct WillModelHeader
+{
+    char magic[8];
+    uint32_t majorVersion;
+    uint32_t minorVersion;
+    uint32_t patchVersion;
+    uint32_t numFiles;
+    uint64_t fileTableOffset;
 };
 
 struct WillModel

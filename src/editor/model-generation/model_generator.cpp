@@ -7,13 +7,73 @@
 #include <fastgltf/core.hpp>
 #include <fastgltf/types.hpp>
 #include <fastgltf/tools.hpp>
+#include <spdlog/spdlog.h>
+#include <stb/stb_image.h>
+#include <ktx.h>
+#include <meshoptimizer/src/meshoptimizer.h>
 
-#include "spdlog/spdlog.h"
-
+#include "offsetAllocator.hpp"
+#include "render/model/model_format.h"
+#include "render/model/model_serialization.h"
+#include "render/vulkan/vk_context.h"
+#include "render/vulkan/vk_helpers.h"
+#include "render/vulkan/vk_utils.h"
 
 namespace Render
 {
-RawGltfModel ModelGenerator::LoadGltf(const std::filesystem::path& source)
+ModelGenerator::ModelGenerator(VulkanContext* context, enki::TaskScheduler* taskscheduler)
+    : context(context), taskscheduler(taskscheduler), generateTask(this)
+{
+    VkFenceCreateInfo fenceInfo = VkHelpers::FenceCreateInfo();
+    VK_CHECK(vkCreateFence(context->device, &fenceInfo, nullptr, &immFence));
+
+    const VkCommandPoolCreateInfo poolInfo = VkHelpers::CommandPoolCreateInfo(context->graphicsQueueFamily);
+    VK_CHECK(vkCreateCommandPool(context->device, &poolInfo, nullptr, &immCommandPool));
+
+    const VkCommandBufferAllocateInfo allocInfo = VkHelpers::CommandBufferAllocateInfo(1, immCommandPool);
+    VK_CHECK(vkAllocateCommandBuffers(context->device, &allocInfo, &immCommandBuffer));
+
+    imageStagingBuffer = AllocatedBuffer::CreateAllocatedStagingBuffer(context, MODEL_GENERATION_STAGING_BUFFER_SIZE);
+    imageReceivingBuffer = AllocatedBuffer::CreateAllocatedReceivingBuffer(context, MODEL_GENERATION_STAGING_BUFFER_SIZE);
+}
+
+ModelGenerator::~ModelGenerator()
+{
+    vkDestroyCommandPool(context->device, immCommandPool, nullptr);
+    vkDestroyFence(context->device, immFence, nullptr);
+}
+
+void ModelGenerator::GenerateWillModelAsync(const std::filesystem::path& gltfPath, const std::filesystem::path& outputPath)
+{
+    generationProgress.bIsGenerating = true;
+    generationProgress.progress = 0.0f;
+
+    generateTask.gltfPath = gltfPath;
+    generateTask.outputPath = outputPath;
+
+    taskscheduler->AddTaskSetToPipe(&generateTask);
+}
+
+bool ModelGenerator::GenerateWillModel(const std::filesystem::path& gltfPath, const std::filesystem::path& outputPath)
+{
+    UpdateProgress(0.1f, "Loading GLTF");
+    RawGltfSkinnedModel rawModel = LoadGltf(generationProgress, gltfPath);
+
+    if (!rawModel.bSuccessfullyLoaded) {
+        UpdateProgress(0.0f, "Failed to load GLTF");
+        generationProgress.bIsGenerating = false;
+        return false;
+    }
+
+    UpdateProgress(0.45f, "Writing .willmodel");
+    bool success = WriteWillModel(generationProgress, rawModel, outputPath);
+
+    UpdateProgress(0.9f, success ? "Complete" : "Failed to write");
+    generationProgress.bIsGenerating = false;
+    return true;
+}
+
+RawGltfSkinnedModel ModelGenerator::LoadGltf(WillModelGenerationProgress& progress, const std::filesystem::path& source)
 {
     fastgltf::Parser parser{fastgltf::Extensions::KHR_texture_basisu | fastgltf::Extensions::KHR_mesh_quantization | fastgltf::Extensions::KHR_texture_transform};
     constexpr auto gltfOptions = fastgltf::Options::DontRequireValidAssetMember
@@ -23,7 +83,7 @@ RawGltfModel ModelGenerator::LoadGltf(const std::filesystem::path& source)
 
     auto gltfFile = fastgltf::MappedGltfFile::FromPath(source);
 
-    RawGltfModel rawModel{};
+    RawGltfSkinnedModel rawModel{};
     if (!static_cast<bool>(gltfFile)) {
         SPDLOG_ERROR("Failed to open glTF file ({}): {}\n", source.filename().string(), getErrorMessage(gltfFile.error()));
         return rawModel;
@@ -36,7 +96,6 @@ RawGltfModel ModelGenerator::LoadGltf(const std::filesystem::path& source)
     }
 
     fastgltf::Asset gltf = std::move(load.get());
-    rawModel.bSuccessfullyLoaded = true;
     rawModel.name = source.filename().string();
 
     rawModel.samplerInfos.reserve(gltf.samplers.size());
@@ -54,7 +113,776 @@ RawGltfModel ModelGenerator::LoadGltf(const std::filesystem::path& source)
         rawModel.samplerInfos.push_back(samplerInfo);
     }
 
+
+    rawModel.images.reserve(gltf.images.size());
+    imageStagingAllocator.reset();
+    VK_CHECK(vkResetFences(context->device, 1, &immFence));
+    // Image loading
+    {
+        unsigned char* stbiData{nullptr};
+        int32_t width{};
+        int32_t height{};
+        int32_t nrChannels{};
+
+        bool bIsRecording = false;
+
+        std::filesystem::path parentPath = source.parent_path();
+        for (const fastgltf::Image& gltfImage : gltf.images) {
+            AllocatedImage newImage{};
+            std::visit(
+                fastgltf::visitor{
+                    [&](auto& arg) {},
+                    [&](const fastgltf::sources::URI& fileName) {
+                        if (fileName.fileByteOffset != 0) {
+                            SPDLOG_ERROR("[ModelGenerator::LoadGltf] File byte offset is not currently supported.");
+                            return;
+                        };
+
+                        if (!fileName.uri.isLocalPath()) {
+                            SPDLOG_ERROR("[ModelGenerator::LoadGltf] Loading non-local files is not currently supported.");
+                            return;
+                        };
+                        const std::wstring widePath(fileName.uri.path().begin(), fileName.uri.path().end());
+                        const std::filesystem::path fullPath = parentPath / widePath;
+                        stbiData = stbi_load(fullPath.string().c_str(), &width, &height, &nrChannels, 4);
+                    },
+                    [&](const fastgltf::sources::Array& vector) {
+                        // Minimum size for a meaningful check
+                        if (vector.bytes.size() > 30) {
+                            std::string_view strData(reinterpret_cast<const char*>(vector.bytes.data()), std::min(size_t(100), vector.bytes.size()));
+                            if (strData.find("https://git-lfs.github.com/spec") != std::string_view::npos) {
+                                SPDLOG_ERROR("[ModelGenerator::LoadGltf] Git LFS pointer detected instead of actual texture data for image. `git lfs pull` to retrieve files.");
+                                return;
+                            }
+                        }
+
+                        stbiData = stbi_load_from_memory(reinterpret_cast<const unsigned char*>(vector.bytes.data()), static_cast<int>(vector.bytes.size()), &width, &height, &nrChannels, 4);
+                    },
+                    [&](const fastgltf::sources::BufferView& view) {
+                        const fastgltf::BufferView& bufferView = gltf.bufferViews[view.bufferViewIndex];
+                        const fastgltf::Buffer& buffer = gltf.buffers[bufferView.bufferIndex];
+                        // We only care about VectorWithMime here, because we
+                        // specify LoadExternalBuffers, meaning all buffers
+                        // are already loaded into a vector.
+                        std::visit(fastgltf::visitor{
+                                       [](auto&) {}, [&](const fastgltf::sources::Array& vector) {
+                                           stbiData = stbi_load_from_memory(reinterpret_cast<const stbi_uc*>(vector.bytes.data() + bufferView.byteOffset), static_cast<int>(bufferView.byteLength),
+                                                                            &width,
+                                                                            &height,
+                                                                            &nrChannels, 4);
+                                       }
+                                   }, buffer.data);
+                    }
+                }, gltfImage.data);
+
+            if (!stbiData) { break; }
+
+
+            VkExtent3D imagesize;
+            imagesize.width = width;
+            imagesize.height = height;
+            imagesize.depth = 1;
+            const size_t size = width * height * 4;
+            OffsetAllocator::Allocation allocation = imageStagingAllocator.allocate(size);
+            if (allocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
+                if (bIsRecording) {
+                    // Flush staging buffer
+                    VK_CHECK(vkEndCommandBuffer(immCommandBuffer));
+                    VkCommandBufferSubmitInfo cmdSubmitInfo = VkHelpers::CommandBufferSubmitInfo(immCommandBuffer);
+                    const VkSubmitInfo2 submitInfo = VkHelpers::SubmitInfo(&cmdSubmitInfo, nullptr, nullptr);
+                    VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, immFence));
+                    imageStagingAllocator.reset();
+                    VK_CHECK(vkWaitForFences(context->device, 1, &immFence, true, 1000000000));
+                    VK_CHECK(vkResetFences(context->device, 1, &immFence));
+                    VK_CHECK(vkResetCommandBuffer(immCommandBuffer, 0));
+                    bIsRecording = false;
+
+
+                    // Try again
+                    allocation = imageStagingAllocator.allocate(size);
+                    if (allocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
+                        SPDLOG_ERROR("[ModelGenerator::LoadGltf] Texture too large to fit in staging buffer. Increase staging buffer size or do not load this texture");
+                        break;
+                    }
+                }
+                else {
+                    SPDLOG_ERROR("[ModelGenerator::LoadGltf] Texture too large to fit in staging buffer. Increase staging buffer size or do not load this texture");
+                    break;
+                }
+            }
+
+            if (!bIsRecording) {
+                const VkCommandBufferBeginInfo cmdBeginInfo = VkHelpers::CommandBufferBeginInfo();
+                VK_CHECK(vkBeginCommandBuffer(immCommandBuffer, &cmdBeginInfo));
+                bIsRecording = true;
+            }
+
+            newImage = RecordCreateImageFromData(immCommandBuffer, allocation.offset, stbiData, size, imagesize, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, true);
+            stbi_image_free(stbiData);
+            stbiData = nullptr;
+
+
+            rawModel.images.push_back(std::move(newImage));
+        }
+
+        if (rawModel.images.size() != gltf.images.size()) {
+            rawModel.images.clear();
+            return rawModel;
+        }
+
+        if (bIsRecording) {
+            // Final flush staging buffer
+            VK_CHECK(vkEndCommandBuffer(immCommandBuffer));
+            VkCommandBufferSubmitInfo cmdSubmitInfo = VkHelpers::CommandBufferSubmitInfo(immCommandBuffer);
+            const VkSubmitInfo2 submitInfo = VkHelpers::SubmitInfo(&cmdSubmitInfo, nullptr, nullptr);
+            VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, immFence));
+            imageStagingAllocator.reset();
+            VK_CHECK(vkWaitForFences(context->device, 1, &immFence, true, 1000000000));
+            VK_CHECK(vkResetFences(context->device, 1, &immFence));
+            VK_CHECK(vkResetCommandBuffer(immCommandBuffer, 0));
+            bIsRecording = false;
+        }
+    }
+
+
+    rawModel.materials.reserve(gltf.materials.size());
+    for (const fastgltf::Material& gltfMaterial : gltf.materials) {
+        MaterialProperties material = ExtractMaterial(gltf, gltfMaterial);
+        rawModel.materials.push_back(material);
+    }
+
+    std::vector<SkinnedVertex> primitiveVertices{};
+    std::vector<uint32_t> primitiveIndices{};
+
+    rawModel.allMeshes.reserve(gltf.meshes.size());
+    for (fastgltf::Mesh& mesh : gltf.meshes) {
+        MeshInformation meshData{};
+        meshData.name = mesh.name;
+        meshData.primitiveIndices.reserve(mesh.primitives.size());
+        rawModel.primitives.reserve(rawModel.primitives.size() + mesh.primitives.size());
+
+        for (fastgltf::Primitive& p : mesh.primitives) {
+            MeshletPrimitive primitiveData{};
+            uint32_t materialIndex{0};
+
+            if (p.materialIndex.has_value()) {
+                materialIndex = p.materialIndex.value();
+                primitiveData.bHasTransparent = (static_cast<MaterialType>(rawModel.materials[materialIndex].alphaProperties.y) == MaterialType::BLEND);
+            }
+
+            primitiveData.materialIndex = materialIndex;
+
+            // INDICES
+            const fastgltf::Accessor& indexAccessor = gltf.accessors[p.indicesAccessor.value()];
+            primitiveIndices.clear();
+            primitiveIndices.reserve(indexAccessor.count);
+
+            fastgltf::iterateAccessor<std::uint32_t>(gltf, indexAccessor, [&](const std::uint32_t idx) {
+                primitiveIndices.push_back(idx);
+            });
+
+            // POSITION (REQUIRED)
+            const fastgltf::Attribute* positionIt = p.findAttribute("POSITION");
+            const fastgltf::Accessor& posAccessor = gltf.accessors[positionIt->accessorIndex];
+            primitiveVertices.clear();
+            primitiveVertices.resize(posAccessor.count);
+
+            fastgltf::iterateAccessorWithIndex<fastgltf::math::fvec3>(gltf, posAccessor, [&](fastgltf::math::fvec3 v, const size_t index) {
+                primitiveVertices[index] = {};
+                primitiveVertices[index].position = {v.x(), v.y(), v.z()};
+            });
+
+
+            // NORMALS
+            const fastgltf::Attribute* normals = p.findAttribute("NORMAL");
+            if (normals != p.attributes.end()) {
+                fastgltf::iterateAccessorWithIndex<fastgltf::math::fvec3>(gltf, gltf.accessors[normals->accessorIndex], [&](fastgltf::math::fvec3 n, const size_t index) {
+                    primitiveVertices[index].normal = {n.x(), n.y(), n.z()};
+                });
+            }
+
+            // TANGENTS
+            const fastgltf::Attribute* tangents = p.findAttribute("TANGENT");
+            if (tangents != p.attributes.end()) {
+                fastgltf::iterateAccessorWithIndex<fastgltf::math::fvec4>(gltf, gltf.accessors[tangents->accessorIndex], [&](fastgltf::math::fvec4 t, const size_t index) {
+                    primitiveVertices[index].tangent = {t.x(), t.y(), t.z(), t.w()};
+                });
+            }
+
+            // JOINTS_0
+            const fastgltf::Attribute* joints0 = p.findAttribute("JOINTS_0");
+            if (joints0 != p.attributes.end()) {
+                fastgltf::iterateAccessorWithIndex<fastgltf::math::uvec4>(gltf, gltf.accessors[joints0->accessorIndex], [&](fastgltf::math::uvec4 j, const size_t index) {
+                    primitiveVertices[index].joints = {j.x(), j.y(), j.z(), j.w()};
+                });
+            }
+
+            // WEIGHTS_0
+            const fastgltf::Attribute* weights0 = p.findAttribute("WEIGHTS_0");
+            if (weights0 != p.attributes.end()) {
+                fastgltf::iterateAccessorWithIndex<fastgltf::math::fvec4>(gltf, gltf.accessors[weights0->accessorIndex], [&](fastgltf::math::fvec4 w, const size_t index) {
+                    primitiveVertices[index].weights = {w.x(), w.y(), w.z(), w.w()};
+                });
+            }
+
+            // primitiveData.bHasSkinning = joints0 != p.attributes.end() && weights0 != p.attributes.end();
+
+            // UV
+            const fastgltf::Attribute* uvs = p.findAttribute("TEXCOORD_0");
+            if (uvs != p.attributes.end()) {
+                const fastgltf::Accessor& uvAccessor = gltf.accessors[uvs->accessorIndex];
+                switch (uvAccessor.componentType) {
+                    case fastgltf::ComponentType::Byte:
+                        fastgltf::iterateAccessorWithIndex<fastgltf::math::s8vec2>(gltf, uvAccessor, [&](fastgltf::math::s8vec2 uv, const size_t index) {
+                            // f = max(c / 127.0, -1.0)
+                            float u = std::max(static_cast<float>(uv.x()) / 127.0f, -1.0f);
+                            float v = std::max(static_cast<float>(uv.y()) / 127.0f, -1.0f);
+                            primitiveVertices[index].texcoordU = u;
+                            primitiveVertices[index].texcoordV = v;
+                        });
+                        break;
+                    case fastgltf::ComponentType::UnsignedByte:
+                        fastgltf::iterateAccessorWithIndex<fastgltf::math::u8vec2>(gltf, uvAccessor, [&](fastgltf::math::u8vec2 uv, const size_t index) {
+                            // f = c / 255.0
+                            float u = static_cast<float>(uv.x()) / 255.0f;
+                            float v = static_cast<float>(uv.y()) / 255.0f;
+                            primitiveVertices[index].texcoordU = u;
+                            primitiveVertices[index].texcoordV = v;
+                        });
+                        break;
+                    case fastgltf::ComponentType::Short:
+                        fastgltf::iterateAccessorWithIndex<fastgltf::math::s16vec2>(gltf, uvAccessor, [&](fastgltf::math::s16vec2 uv, const size_t index) {
+                            // f = max(c / 32767.0, -1.0)
+                            float u = std::max(
+                                static_cast<float>(uv.x()) / 32767.0f, -1.0f);
+                            float v = std::max(
+                                static_cast<float>(uv.y()) / 32767.0f, -1.0f);
+                            primitiveVertices[index].texcoordU = u;
+                            primitiveVertices[index].texcoordV = v;
+                        });
+                        break;
+                    case fastgltf::ComponentType::UnsignedShort:
+                        fastgltf::iterateAccessorWithIndex<fastgltf::math::u16vec2>(gltf, uvAccessor, [&](fastgltf::math::u16vec2 uv, const size_t index) {
+                            // f = c / 65535.0
+                            float u = static_cast<float>(uv.x()) / 65535.0f;
+                            float v = static_cast<float>(uv.y()) / 65535.0f;
+                            primitiveVertices[index].texcoordU = u;
+                            primitiveVertices[index].texcoordV = v;
+                        });
+                        break;
+                    case fastgltf::ComponentType::Float:
+                        fastgltf::iterateAccessorWithIndex<fastgltf::math::fvec2>(gltf, uvAccessor, [&](fastgltf::math::fvec2 uv, const size_t index) {
+                            primitiveVertices[index].texcoordU = uv.x();
+                            primitiveVertices[index].texcoordV = uv.y();
+                        });
+                        break;
+                    default:
+                        fmt::print("Unsupported UV component type: {}\n", static_cast<int>(uvAccessor.componentType));
+                        break;
+                }
+            }
+
+            // VERTEX COLOR
+            const fastgltf::Attribute* colors = p.findAttribute("COLOR_0");
+            if (colors != p.attributes.end()) {
+                fastgltf::iterateAccessorWithIndex<fastgltf::math::fvec4>(gltf, gltf.accessors[colors->accessorIndex], [&](const fastgltf::math::fvec4& color, const size_t index) {
+                    primitiveVertices[index].color = {
+                        color.x(), color.y(), color.z(), color.w()
+                    };
+                });
+            }
+
+            const size_t max_vertices = 64;
+            const size_t max_triangles = 64;
+            const size_t target_group_size = 8;
+
+            // build clusters (meshlets) out of the mesh
+            size_t max_meshlets = meshopt_buildMeshletsBound(primitiveIndices.size(), max_vertices, max_triangles);
+            std::vector<meshopt_Meshlet> meshlets(max_meshlets);
+            std::vector<unsigned int> meshletVertices(primitiveIndices.size());
+            std::vector<unsigned char> meshletTriangles(primitiveIndices.size());
+
+            std::vector<uint32_t> primitiveVertexPositions;
+            meshlets.resize(meshopt_buildMeshlets(&meshlets[0], &meshletVertices[0], &meshletTriangles[0],
+                                                  primitiveIndices.data(), primitiveIndices.size(),
+                                                  reinterpret_cast<const float*>(primitiveVertices.data()), primitiveVertices.size(), sizeof(Vertex),
+                                                  max_vertices, max_triangles, 0.f));
+
+            // Optimize each meshlet's micro index buffer/vertex layout individually
+            for (auto& meshlet : meshlets) {
+                meshopt_optimizeMeshlet(&meshletVertices[meshlet.vertex_offset], &meshletTriangles[meshlet.triangle_offset], meshlet.triangle_count, meshlet.vertex_count);
+            }
+
+            // Trim the meshlet data to minimize waste for meshletVertices/meshletTriangles
+            {
+                // this is an example of how to trim the vertex/triangle arrays when copying data out to GPU storage
+                const meshopt_Meshlet& last = meshlets.back();
+                meshletVertices.resize(last.vertex_offset + last.vertex_count);
+                meshletTriangles.resize(last.triangle_offset + last.triangle_count * 3);
+            }
+
+
+            // todo: meshlet bounding volume and cone
+            primitiveData.meshletOffset = rawModel.meshlets.size();
+            primitiveData.meshletCount = meshlets.size();
+            primitiveData.boundingSphere = GenerateBoundingSphere(primitiveVertices);
+
+            meshData.primitiveIndices.push_back(rawModel.primitives.size());
+            rawModel.primitives.push_back(primitiveData);
+
+            uint32_t vertexOffset = rawModel.vertices.size();
+            uint32_t meshletVertexOffset = rawModel.meshletVertices.size();
+            uint32_t meshletTrianglesOffset = rawModel.meshletTriangles.size();
+
+            rawModel.vertices.insert(rawModel.vertices.end(), primitiveVertices.begin(), primitiveVertices.end());
+            rawModel.meshletVertices.insert(rawModel.meshletVertices.end(), meshletVertices.begin(), meshletVertices.end());
+            rawModel.meshletTriangles.insert(rawModel.meshletTriangles.end(), meshletTriangles.begin(), meshletTriangles.end());
+
+            for (meshopt_Meshlet& meshlet : meshlets) {
+                meshopt_Bounds bounds = meshopt_computeMeshletBounds(
+                    &meshletVertices[meshlet.vertex_offset],
+                    &meshletTriangles[meshlet.triangle_offset],
+                    meshlet.triangle_count,
+                    reinterpret_cast<const float*>(primitiveVertices.data()),
+                    primitiveVertices.size(),
+                    sizeof(Vertex)
+                );
+
+                rawModel.meshlets.push_back({
+                    .meshletBoundingSphere = glm::vec4(
+                        bounds.center[0], bounds.center[1], bounds.center[2],
+                        bounds.radius
+                    ),
+                    .coneApex = glm::vec3(bounds.cone_apex[0], bounds.cone_apex[1], bounds.cone_apex[2]),
+                    .coneCutoff = bounds.cone_cutoff,
+
+                    .coneAxis = glm::vec3(bounds.cone_axis[0], bounds.cone_axis[1], bounds.cone_axis[2]),
+                    .vertexOffset = vertexOffset,
+
+                    .meshletVerticesOffset = meshletVertexOffset + meshlet.vertex_offset,
+                    .meshletTriangleOffset = meshletTrianglesOffset + meshlet.triangle_offset,
+                    .meshletVerticesCount = meshlet.vertex_count,
+                    .meshletTriangleCount = meshlet.triangle_count,
+                });
+            }
+        }
+
+        rawModel.allMeshes.push_back(meshData);
+    }
+
+
+    rawModel.nodes.reserve(gltf.nodes.size());
+    for (const fastgltf::Node& node : gltf.nodes) {
+        Node node_{};
+        node_.name = node.name;
+
+        if (node.meshIndex.has_value()) {
+            node_.meshIndex = static_cast<int>(*node.meshIndex);
+        }
+
+        std::visit(
+            fastgltf::visitor{
+                [&](fastgltf::math::fmat4x4 matrix) {
+                    glm::mat4 glmMatrix;
+                    for (int i = 0; i < 4; ++i) {
+                        for (int j = 0; j < 4; ++j) {
+                            glmMatrix[i][j] = matrix[i][j];
+                        }
+                    }
+
+                    node_.localTranslation = glm::vec3(glmMatrix[3]);
+                    node_.localRotation = glm::quat_cast(glmMatrix);
+                    node_.localScale = glm::vec3(
+                        glm::length(glm::vec3(glmMatrix[0])),
+                        glm::length(glm::vec3(glmMatrix[1])),
+                        glm::length(glm::vec3(glmMatrix[2]))
+                    );
+                },
+                [&](fastgltf::TRS transform) {
+                    node_.localTranslation = {transform.translation[0], transform.translation[1], transform.translation[2]};
+                    node_.localRotation = {transform.rotation[3], transform.rotation[0], transform.rotation[1], transform.rotation[2]};
+                    node_.localScale = {transform.scale[0], transform.scale[1], transform.scale[2]};
+                }
+            }
+            , node.transform
+        );
+        rawModel.nodes.push_back(node_);
+    }
+
+    for (int i = 0; i < gltf.nodes.size(); i++) {
+        for (std::size_t& child : gltf.nodes[i].children) {
+            rawModel.nodes[child].parent = i;
+        }
+    }
+
+    // only import first skin
+    if (gltf.skins.size() > 0) {
+        fastgltf::Skin& skins = gltf.skins[0];
+
+        if (gltf.skins.size() > 1) {
+            SPDLOG_WARN("Model has {} skins but only loading first skin", gltf.skins.size());
+        }
+
+        if (skins.inverseBindMatrices.has_value()) {
+            const fastgltf::Accessor& inverseBindAccessor = gltf.accessors[skins.inverseBindMatrices.value()];
+            rawModel.inverseBindMatrices.resize(inverseBindAccessor.count);
+            fastgltf::iterateAccessorWithIndex<fastgltf::math::fmat4x4>(gltf, inverseBindAccessor, [&](const fastgltf::math::fmat4x4& m, const size_t index) {
+                glm::mat4 glmMatrix;
+                for (int col = 0; col < 4; ++col) {
+                    for (int row = 0; row < 4; ++row) {
+                        glmMatrix[col][row] = m[col][row];
+                    }
+                }
+                rawModel.inverseBindMatrices[index] = glmMatrix;
+            });
+
+            for (int32_t i = 0; i < skins.joints.size(); ++i) {
+                rawModel.nodes[skins.joints[i]].inverseBindIndex = i;
+            }
+        }
+    }
+
+
+    TopologicalSortNodes(rawModel.nodes, rawModel.nodeRemap);
+
+    for (size_t i = 0; i < rawModel.nodes.size(); ++i) {
+        uint32_t depth = 0;
+        uint32_t currentParent = rawModel.nodes[i].parent;
+
+        while (currentParent != ~0u) {
+            depth++;
+            currentParent = rawModel.nodes[currentParent].parent;
+        }
+
+        rawModel.nodes[i].depth = depth;
+    }
+
+
+    rawModel.animations.reserve(gltf.animations.size());
+    for (fastgltf::Animation& gltfAnim : gltf.animations) {
+        Animation anim{};
+        anim.name = gltfAnim.name;
+
+        for (fastgltf::AnimationSampler& animSampler : gltfAnim.samplers) {
+            AnimationSampler sampler;
+
+            const fastgltf::Accessor& inputAccessor = gltf.accessors[animSampler.inputAccessor];
+            sampler.timestamps.resize(inputAccessor.count);
+            fastgltf::iterateAccessorWithIndex<float>(gltf, inputAccessor, [&](float value, size_t idx) {
+                sampler.timestamps[idx] = value;
+            });
+
+            const fastgltf::Accessor& outputAccessor = gltf.accessors[animSampler.outputAccessor];
+            sampler.values.resize(outputAccessor.count * fastgltf::getNumComponents(outputAccessor.type));
+            if (outputAccessor.type == fastgltf::AccessorType::Vec3) {
+                fastgltf::iterateAccessorWithIndex<fastgltf::math::fvec3>(gltf, outputAccessor,
+                                                                          [&](const fastgltf::math::fvec3& value, size_t idx) {
+                                                                              size_t baseIdx = idx * 3; // Calculate flat base index
+                                                                              sampler.values[baseIdx + 0] = value.x();
+                                                                              sampler.values[baseIdx + 1] = value.y();
+                                                                              sampler.values[baseIdx + 2] = value.z();
+                                                                          });
+            }
+            else if (outputAccessor.type == fastgltf::AccessorType::Vec4) {
+                fastgltf::iterateAccessorWithIndex<fastgltf::math::fvec4>(gltf, outputAccessor,
+                                                                          [&](const fastgltf::math::fvec4& value, size_t idx) {
+                                                                              size_t baseIdx = idx * 4; // Calculate flat base index
+                                                                              sampler.values[baseIdx + 0] = value.x();
+                                                                              sampler.values[baseIdx + 1] = value.y();
+                                                                              sampler.values[baseIdx + 2] = value.z();
+                                                                              sampler.values[baseIdx + 3] = value.w();
+                                                                          });
+            }
+            else if (outputAccessor.type == fastgltf::AccessorType::Scalar) {
+                fastgltf::iterateAccessorWithIndex<float>(gltf, outputAccessor,
+                                                          [&](float value, size_t idx) {
+                                                              sampler.values[idx] = value; // This one is fine since it's 1 component
+                                                          });
+            }
+
+            switch (animSampler.interpolation) {
+                case fastgltf::AnimationInterpolation::Linear:
+                    sampler.interpolation = AnimationSampler::Interpolation::Linear;
+                    break;
+                case fastgltf::AnimationInterpolation::Step:
+                    sampler.interpolation = AnimationSampler::Interpolation::Step;
+                    break;
+                case fastgltf::AnimationInterpolation::CubicSpline:
+                    sampler.interpolation = AnimationSampler::Interpolation::CubicSpline;
+                    break;
+            }
+
+            anim.samplers.push_back(std::move(sampler));
+        }
+
+        anim.channels.reserve(gltfAnim.channels.size());
+        for (auto& gltfChannel : gltfAnim.channels) {
+            AnimationChannel channel{};
+            channel.samplerIndex = gltfChannel.samplerIndex;
+            channel.targetNodeIndex = gltfChannel.nodeIndex.value();
+
+            switch (gltfChannel.path) {
+                case fastgltf::AnimationPath::Translation:
+                    channel.targetPath = AnimationChannel::TargetPath::Translation;
+                    break;
+                case fastgltf::AnimationPath::Rotation:
+                    channel.targetPath = AnimationChannel::TargetPath::Rotation;
+                    break;
+                case fastgltf::AnimationPath::Scale:
+                    channel.targetPath = AnimationChannel::TargetPath::Scale;
+                    break;
+                case fastgltf::AnimationPath::Weights:
+                    channel.targetPath = AnimationChannel::TargetPath::Weights;
+                    break;
+            }
+
+            anim.channels.push_back(channel);
+        }
+
+        anim.duration = 0.0f;
+        for (const auto& sampler : anim.samplers) {
+            if (!sampler.timestamps.empty()) {
+                anim.duration = std::max(anim.duration, sampler.timestamps.back());
+            }
+        }
+
+        rawModel.animations.push_back(std::move(anim));
+    }
+
+    rawModel.bSuccessfullyLoaded = true;
     return rawModel;
+}
+
+bool ModelGenerator::WriteWillModel(WillModelGenerationProgress& progress, const RawGltfSkinnedModel& rawModel, const std::filesystem::path& outputPath)
+{
+    if (std::filesystem::exists("temp")) {
+        std::filesystem::remove_all("temp");
+    }
+    std::filesystem::create_directories("temp");
+    std::ofstream binFile("temp/model.bin", std::ios::binary);
+    WriteModelBinary(binFile, rawModel);
+    binFile.close();
+
+    for (size_t i = 0; i < rawModel.images.size(); i++) {
+        auto& image = rawModel.images[i];
+        uint32_t mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(image.extent.width, image.extent.height)))) + 1;
+
+        // Mip Generation
+        {
+            VK_CHECK(vkResetFences(context->device, 1, &immFence));
+            VK_CHECK(vkResetCommandBuffer(immCommandBuffer, 0));
+
+            const auto cmd = immCommandBuffer;
+            const VkCommandBufferBeginInfo cmdBeginInfo = VkHelpers::CommandBufferBeginInfo();
+            VK_CHECK(vkBeginCommandBuffer(cmd, &cmdBeginInfo));
+
+
+            VkImageMemoryBarrier2 firstBarrier = VkHelpers::ImageMemoryBarrier(
+                image.handle,
+                VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1),
+                VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
+            );
+            VkDependencyInfo firstDepInfo{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
+            firstDepInfo.imageMemoryBarrierCount = 1;
+            firstDepInfo.pImageMemoryBarriers = &firstBarrier;
+            vkCmdPipelineBarrier2(cmd, &firstDepInfo);
+
+            for (uint32_t mip = 1; mip < mipLevels; mip++) {
+                VkImageMemoryBarrier2 barriers[2];
+                barriers[0] = VkHelpers::ImageMemoryBarrier(
+                    image.handle,
+                    VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, mip - 1, 1, 0, 1),
+                    VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
+                );
+                barriers[1] = VkHelpers::ImageMemoryBarrier(
+                    image.handle,
+                    VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, mip, 1, 0, 1),
+                    VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_UNDEFINED,
+                    VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
+                );
+
+                VkDependencyInfo depInfo{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
+                depInfo.imageMemoryBarrierCount = 2;
+                depInfo.pImageMemoryBarriers = barriers;
+                vkCmdPipelineBarrier2(cmd, &depInfo);
+
+                VkImageBlit blit{};
+                blit.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, mip - 1, 0, 1};
+                blit.srcOffsets[0] = {0, 0, 0};
+                blit.srcOffsets[1] = {
+                    static_cast<int32_t>(image.extent.width >> (mip - 1)),
+                    static_cast<int32_t>(image.extent.height >> (mip - 1)),
+                    1
+                };
+                blit.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, mip, 0, 1};
+                blit.dstOffsets[0] = {0, 0, 0};
+                blit.dstOffsets[1] = {
+                    static_cast<int32_t>(image.extent.width >> mip),
+                    static_cast<int32_t>(image.extent.height >> mip),
+                    1
+                };
+
+                vkCmdBlitImage(cmd, image.handle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, image.handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
+            }
+
+            VkImageMemoryBarrier2 finalBarrier = VkHelpers::ImageMemoryBarrier(
+                image.handle,
+                VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, mipLevels - 1, 1, 0, 1),
+                VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
+            );
+            VkDependencyInfo depInfo{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
+            depInfo.imageMemoryBarrierCount = 1;
+            depInfo.pImageMemoryBarriers = &finalBarrier;
+            vkCmdPipelineBarrier2(cmd, &depInfo);
+
+            VK_CHECK(vkEndCommandBuffer(cmd));
+
+            VkCommandBufferSubmitInfo cmdSubmitInfo = VkHelpers::CommandBufferSubmitInfo(cmd);
+            const VkSubmitInfo2 submitInfo = VkHelpers::SubmitInfo(&cmdSubmitInfo, nullptr, nullptr);
+            VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, immFence));
+            VK_CHECK(vkWaitForFences(context->device, 1, &immFence, true, 1000000000));
+            SPDLOG_INFO("Created mipmap chain for image {}", i);
+        }
+
+        ktxTexture2* texture;
+        ktxTextureCreateInfo createInfo{};
+        createInfo.vkFormat = image.format;
+        createInfo.baseWidth = image.extent.width;
+        createInfo.baseHeight = image.extent.height;
+        createInfo.baseDepth = 1;
+        createInfo.numDimensions = 2;
+        createInfo.numLevels = mipLevels;
+        createInfo.numLayers = 1;
+        createInfo.numFaces = 1;
+        createInfo.isArray = KTX_FALSE;
+        createInfo.generateMipmaps = KTX_FALSE;
+
+        ktx_error_code_e result = ktxTexture2_Create(&createInfo, KTX_TEXTURE_CREATE_ALLOC_STORAGE, &texture);
+
+        for (uint32_t mip = 0; mip < mipLevels; mip++) {
+            uint32_t mipWidth = std::max(1u, image.extent.width >> mip);
+            uint32_t mipHeight = std::max(1u, image.extent.height >> mip);
+
+            uint32_t bytesPerPixel = 4; // TODO: Calculate from image.format
+            size_t mipSize = mipWidth * mipHeight * bytesPerPixel;
+
+            VK_CHECK(vkResetFences(context->device, 1, &immFence));
+            VK_CHECK(vkResetCommandBuffer(immCommandBuffer, 0));
+
+            VkCommandBufferBeginInfo cmdBeginInfo = VkHelpers::CommandBufferBeginInfo();
+            VK_CHECK(vkBeginCommandBuffer(immCommandBuffer, &cmdBeginInfo));
+
+            VkBufferImageCopy copyRegion{};
+            copyRegion.bufferOffset = 0;
+            copyRegion.bufferRowLength = 0;
+            copyRegion.bufferImageHeight = 0;
+            copyRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            copyRegion.imageSubresource.mipLevel = mip;
+            copyRegion.imageSubresource.baseArrayLayer = 0;
+            copyRegion.imageSubresource.layerCount = 1;
+            copyRegion.imageOffset = {0, 0, 0};
+            copyRegion.imageExtent = {mipWidth, mipHeight, 1};
+
+            vkCmdCopyImageToBuffer(immCommandBuffer, image.handle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                   imageReceivingBuffer.handle, 1, &copyRegion);
+
+            VK_CHECK(vkEndCommandBuffer(immCommandBuffer));
+
+            VkCommandBufferSubmitInfo cmdSubmitInfo = VkHelpers::CommandBufferSubmitInfo(immCommandBuffer);
+            VkSubmitInfo2 submitInfo = VkHelpers::SubmitInfo(&cmdSubmitInfo, nullptr, nullptr);
+            VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, immFence));
+            VK_CHECK(vkWaitForFences(context->device, 1, &immFence, true, 1000000000));
+
+            void* readbackData = imageReceivingBuffer.allocationInfo.pMappedData;
+            ktxTexture_SetImageFromMemory(ktxTexture(texture), mip, 0, 0, static_cast<const ktx_uint8_t*>(readbackData), mipSize);
+        }
+        // Write KTX2 file
+        std::string ktxPath = "temp/texture_" + std::to_string(i) + ".ktx2";
+
+        ktxBasisParams params{};
+        params.structSize = sizeof(params);
+        params.uastc = KTX_TRUE;
+        // params.uastcRDO = KTX_TRUE;
+        params.qualityLevel = 16;
+        params.verbose = KTX_FALSE;
+
+        result = ktxTexture2_CompressBasisEx(texture, &params);
+
+        ktxTexture_WriteToNamedFile(ktxTexture(texture), ktxPath.c_str());
+        SPDLOG_INFO("Wrote {}", ktxPath);
+        ktxTexture_Destroy(ktxTexture(texture));
+    }
+
+
+    ModelWriter writer{outputPath};
+    writer.AddFileFromDisk("model.bin", "temp/model.bin", true);
+
+    uint32_t i = 0;
+    while (true) {
+        std::string sourcePath = fmt::format("temp/texture_{}.ktx2", i);
+        if (!std::filesystem::exists(sourcePath)) {
+            break;
+        }
+
+        std::string archiveName = fmt::format("textures/texture_{}.ktx2", i);
+        writer.AddFileFromDisk(archiveName, sourcePath, true);
+        i++;
+    }
+
+    writer.Finalize();
+
+    return true;
+}
+
+void ModelGenerator::UpdateProgress(float progress, const std::string& stage)
+{}
+
+void WriteModelBinary(std::ofstream& file, const RawGltfModel& model)
+{}
+
+void WriteModelBinary(std::ofstream& file, const RawGltfSkinnedModel& model)
+{
+    ModelBinaryHeader header{};
+    header.vertexCount = static_cast<uint32_t>(model.vertices.size());
+    header.meshletVertexCount = static_cast<uint32_t>(model.meshletVertices.size());
+    header.meshletTriangleCount = static_cast<uint32_t>(model.meshletTriangles.size());
+    header.meshletCount = static_cast<uint32_t>(model.meshlets.size());
+    header.primitiveCount = static_cast<uint32_t>(model.primitives.size());
+    header.materialCount = static_cast<uint32_t>(model.materials.size());
+    header.meshCount = static_cast<uint32_t>(model.allMeshes.size());
+    header.nodeCount = static_cast<uint32_t>(model.nodes.size());
+    header.nodeRemapCount = static_cast<uint32_t>(model.nodeRemap.size());
+    header.animationCount = static_cast<uint32_t>(model.animations.size());
+    header.inverseBindMatrixCount = static_cast<uint32_t>(model.inverseBindMatrices.size());
+    header.samplerCount = static_cast<uint32_t>(model.samplerInfos.size());
+
+    file.write(reinterpret_cast<const char*>(&header), sizeof(ModelBinaryHeader));
+
+    WriteVector(file, model.vertices);
+    WriteVector(file, model.meshletVertices);
+    WriteVector(file, model.meshletTriangles);
+    WriteVector(file, model.meshlets);
+    WriteVector(file, model.primitives);
+    WriteVector(file, model.materials);
+
+    for (const auto& mesh : model.allMeshes) {
+        WriteMeshInformation(file, mesh);
+    }
+    for (const auto& node : model.nodes) {
+        WriteNode(file, node);
+    }
+
+    WriteVector(file, model.nodeRemap);
+
+    for (const auto& anim : model.animations) {
+        WriteAnimation(file, anim);
+    }
+
+    WriteVector(file, model.inverseBindMatrices);
+    WriteVector(file, model.samplerInfos);
 }
 
 VkFilter ModelGenerator::ExtractFilter(fastgltf::Filter filter)
@@ -107,13 +935,13 @@ MaterialProperties ModelGenerator::ExtractMaterial(fastgltf::Asset& gltf, const 
 
     switch (gltfMaterial.alphaMode) {
         case fastgltf::AlphaMode::Opaque:
-            material.alphaProperties.y = static_cast<float>(MaterialType::_OPAQUE);
+            material.alphaProperties.y = static_cast<float>(MaterialType::SOLID);
             break;
         case fastgltf::AlphaMode::Blend:
-            material.alphaProperties.y = static_cast<float>(MaterialType::_TRANSPARENT);
+            material.alphaProperties.y = static_cast<float>(MaterialType::BLEND);
             break;
         case fastgltf::AlphaMode::Mask:
-            material.alphaProperties.y = static_cast<float>(MaterialType::_MASK);
+            material.alphaProperties.y = static_cast<float>(MaterialType::CUTOUT);
             break;
     }
 
@@ -208,6 +1036,122 @@ glm::vec4 ModelGenerator::GenerateBoundingSphere(const std::vector<Vertex>& vert
     }
     radius = std::nextafter(sqrtf(radius), std::numeric_limits<float>::max());
 
-    return glm::vec4(center, radius);
+    return {center, radius};
+}
+
+glm::vec4 ModelGenerator::GenerateBoundingSphere(const std::vector<SkinnedVertex>& vertices)
+{
+    glm::vec3 center = {0, 0, 0};
+
+    for (auto&& vertex : vertices) {
+        center += vertex.position;
+    }
+    center /= static_cast<float>(vertices.size());
+
+
+    float radius = glm::dot(vertices[0].position - center, vertices[0].position - center);
+    for (size_t i = 1; i < vertices.size(); ++i) {
+        radius = std::max(radius, glm::dot(vertices[i].position - center, vertices[i].position - center));
+    }
+    radius = std::nextafter(sqrtf(radius), std::numeric_limits<float>::max());
+
+    return {center, radius};
+}
+
+void ModelGenerator::TopologicalSortNodes(std::vector<Node>& nodes, std::vector<uint32_t>& oldToNew)
+{
+    oldToNew.resize(nodes.size());
+
+    sortedNodes.clear();
+    sortedNodes.reserve(nodes.size());
+
+    visited.clear();
+    visited.resize(nodes.size(), false);
+
+    // Topological sort
+    std::function<void(uint32_t)> visit = [&](uint32_t idx) {
+        if (visited[idx]) return;
+        visited[idx] = true;
+
+        if (nodes[idx].parent != ~0u) {
+            visit(nodes[idx].parent);
+        }
+
+        oldToNew[idx] = sortedNodes.size();
+        sortedNodes.push_back(nodes[idx]);
+    };
+
+    for (uint32_t i = 0; i < nodes.size(); ++i) {
+        visit(i);
+    }
+
+    for (auto& node : sortedNodes) {
+        if (node.parent != ~0u) {
+            node.parent = oldToNew[node.parent];
+        }
+    }
+
+    nodes = std::move(sortedNodes);
+}
+
+AllocatedImage ModelGenerator::RecordCreateImageFromData(VkCommandBuffer cmd, size_t offset, unsigned char* data, size_t size, VkExtent3D imageExtent, VkFormat format, VkImageUsageFlagBits usage,
+                                                         bool mipmapped)
+{
+    char* bufferOffset = static_cast<char*>(imageStagingBuffer.allocationInfo.pMappedData) + offset;
+    memcpy(bufferOffset, data, size);
+
+    VkImageCreateInfo imageCreateInfo = VkHelpers::ImageCreateInfo(format, imageExtent, usage | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT); // transfer src for mipmap only
+    if (mipmapped) {
+        imageCreateInfo.mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(imageExtent.width, imageExtent.height)))) + 1;
+    }
+    AllocatedImage newImage = AllocatedImage::CreateAllocatedImage(context, imageCreateInfo);
+
+    VkImageMemoryBarrier2 barrier = VkHelpers::ImageMemoryBarrier(
+        newImage.handle,
+        VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 1, 1),
+        VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_UNDEFINED,
+        VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
+    );
+    VkDependencyInfo depInfo{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
+    depInfo.imageMemoryBarrierCount = 1;
+    depInfo.pImageMemoryBarriers = &barrier;
+    vkCmdPipelineBarrier2(cmd, &depInfo);
+
+    VkBufferImageCopy copyRegion = {};
+    copyRegion.bufferOffset = offset;
+    copyRegion.bufferRowLength = 0;
+    copyRegion.bufferImageHeight = 0;
+    copyRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    copyRegion.imageSubresource.mipLevel = 0;
+    copyRegion.imageSubresource.baseArrayLayer = 0;
+    copyRegion.imageSubresource.layerCount = 1;
+    copyRegion.imageExtent = imageExtent;
+
+    vkCmdCopyBufferToImage(cmd, imageStagingBuffer.handle, newImage.handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
+
+
+    VkImageMemoryBarrier2 barriers[2];
+    barriers[0] = VkHelpers::ImageMemoryBarrier(
+        newImage.handle,
+        VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 1, 1),
+        VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    );
+    // barriers[1] = VkHelpers::ImageMemoryBarrier(
+    //     newImage.handle,
+    //     VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 1, 1),
+    //     VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+    //     VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    // );
+    // barriers[1].srcQueueFamilyIndex = context->transferQueueFamily;
+    // barriers[1].dstQueueFamilyIndex = context->graphicsQueueFamily;
+    //depInfo.imageMemoryBarrierCount = 2;
+    depInfo.imageMemoryBarrierCount = 1;
+    depInfo.pImageMemoryBarriers = barriers;
+
+    vkCmdPipelineBarrier2(cmd, &depInfo);
+    newImage.layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+    return newImage;
 }
 } // Render

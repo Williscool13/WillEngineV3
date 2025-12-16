@@ -82,9 +82,8 @@ private: // Main Systems
 
 private: // Subsystems
     std::unique_ptr<Core::InputManager> inputManager{};
-    bool bCursorHidden{true};
-
     std::unique_ptr<Core::TimeManager> timeManager{};
+    bool bCursorHidden{true};
 
 private:
     uint32_t frameBufferIndex{0};

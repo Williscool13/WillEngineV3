@@ -191,13 +191,6 @@ void WillEngine::Run()
             engineContext->windowContext.bCursorHidden = bCursorHidden;
         }
 
-        if (input.GetKey(Key::L).pressed) {
-            auto boxPath = Platform::GetAssetPath() / "BoxTextured.glb";
-
-            Render::MeshInformation mi = {};
-            // Render::UIVertex uiv = {};
-            auto model = Render::ModelGenerator::LoadGltf(boxPath);
-        }
 #endif
 
 

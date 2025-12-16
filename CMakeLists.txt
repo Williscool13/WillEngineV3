@@ -110,6 +110,13 @@ target_link_libraries(imgui PUBLIC
         SDL3::SDL3
 )
 
+# Miniz =======================================
+add_library(miniz STATIC
+        extern/miniz/miniz.c
+        extern/miniz/miniz.h
+)
+target_include_directories(miniz PUBLIC extern/miniz)
+
 # Shaders =====================================
 #   - Use this command to compile any shader interop that needs to be recompiled.
 #     cmake --build cmake-build-debug-visual-studio --target shader_interop
