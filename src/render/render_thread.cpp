@@ -5,6 +5,7 @@
 #include "render_thread.h"
 
 #include <enkiTS/src/TaskScheduler.h>
+#include <spdlog/spdlog.h>
 
 #include "render/vulkan/vk_context.h"
 #include "render/vulkan/vk_helpers.h"
@@ -13,14 +14,13 @@
 #include "render/vulkan/vk_resource_manager.h"
 #include "render/vulkan/vk_swapchain.h"
 #include "render/vulkan/vk_utils.h"
+#include "engine/will_engine.h"
+#include "platform/paths.h"
 #if WILL_EDITOR
 #include "render/vulkan/vk_imgui_wrapper.h"
 #include "backends/imgui_impl_vulkan.h"
-#endif
 #include "editor/model-generation/model_generator.h"
-#include "engine/will_engine.h"
-#include "platform/paths.h"
-#include "spdlog/spdlog.h"
+#endif
 
 
 namespace Render
@@ -39,7 +39,6 @@ void RenderThread::Initialize(Core::FrameSync* engineRenderSync, enki::TaskSched
     swapchain = std::make_unique<Swapchain>(context.get(), width, height);
 #if WILL_EDITOR
     imgui = std::make_unique<ImguiWrapper>(context.get(), window, Core::FRAME_BUFFER_COUNT, COLOR_ATTACHMENT_FORMAT);
-    modelGenerator = std::make_unique<ModelGenerator>(context.get(), scheduler);
 #endif
     renderTargets = std::make_unique<RenderTargets>(context.get(), width, height);
     renderExtents = std::make_unique<RenderExtents>(width, height, 1.0f);
@@ -80,9 +79,14 @@ void RenderThread::Initialize(Core::FrameSync* engineRenderSync, enki::TaskSched
         exit(1);
     }
 
-    auto boxPath = Platform::GetAssetPath() / "BoxTextured.glb";
-    auto boxOut = Platform::GetAssetPath() / "BoxTextured.willmodel";
-    auto model = modelGenerator->GenerateWillModel(boxPath, boxOut);
+
+#if WILL_EDITOR
+    modelGenerator = std::make_unique<ModelGenerator>(context.get(), scheduler);
+    const std::filesystem::path boxPath = Platform::GetAssetPath() / "BoxTextured.glb";
+    const std::filesystem::path boxOut = Platform::GetAssetPath() / "BoxTextured.willmodel";
+    bool boolModelLoaded = modelGenerator->GenerateWillModel(boxPath, boxOut);
+#endif
+
 }
 
 void RenderThread::Start()
