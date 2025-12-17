@@ -25,56 +25,79 @@ ModelGenerator::ModelGenerator(VulkanContext* context, enki::TaskScheduler* task
     : context(context), taskscheduler(taskscheduler), generateTask(this)
 {
     VkFenceCreateInfo fenceInfo = VkHelpers::FenceCreateInfo();
-    VK_CHECK(vkCreateFence(context->device, &fenceInfo, nullptr, &immFence));
+    VK_CHECK(vkCreateFence(context->device, &fenceInfo, nullptr, &immediateParameters.immFence));
 
     const VkCommandPoolCreateInfo poolInfo = VkHelpers::CommandPoolCreateInfo(context->graphicsQueueFamily);
-    VK_CHECK(vkCreateCommandPool(context->device, &poolInfo, nullptr, &immCommandPool));
+    VK_CHECK(vkCreateCommandPool(context->device, &poolInfo, nullptr, &immediateParameters.immCommandPool));
 
-    const VkCommandBufferAllocateInfo allocInfo = VkHelpers::CommandBufferAllocateInfo(1, immCommandPool);
-    VK_CHECK(vkAllocateCommandBuffers(context->device, &allocInfo, &immCommandBuffer));
+    const VkCommandBufferAllocateInfo allocInfo = VkHelpers::CommandBufferAllocateInfo(1, immediateParameters.immCommandPool);
+    VK_CHECK(vkAllocateCommandBuffers(context->device, &allocInfo, &immediateParameters.immCommandBuffer));
 
-    imageStagingBuffer = AllocatedBuffer::CreateAllocatedStagingBuffer(context, MODEL_GENERATION_STAGING_BUFFER_SIZE);
-    imageReceivingBuffer = AllocatedBuffer::CreateAllocatedReceivingBuffer(context, MODEL_GENERATION_STAGING_BUFFER_SIZE);
+    immediateParameters.imageStagingBuffer = AllocatedBuffer::CreateAllocatedStagingBuffer(context, MODEL_GENERATION_STAGING_BUFFER_SIZE);
+    immediateParameters.imageReceivingBuffer = AllocatedBuffer::CreateAllocatedReceivingBuffer(context, MODEL_GENERATION_STAGING_BUFFER_SIZE);
 }
 
 ModelGenerator::~ModelGenerator()
 {
-    vkDestroyCommandPool(context->device, immCommandPool, nullptr);
-    vkDestroyFence(context->device, immFence, nullptr);
+    taskscheduler->WaitforTask(&generateTask);
+    vkDestroyCommandPool(context->device, immediateParameters.immCommandPool, nullptr);
+    vkDestroyFence(context->device, immediateParameters.immFence, nullptr);
 }
 
-void ModelGenerator::GenerateWillModelAsync(const std::filesystem::path& gltfPath, const std::filesystem::path& outputPath)
+GenerateResponse ModelGenerator::GenerateWillModelAsync(const std::filesystem::path& gltfPath, const std::filesystem::path& outputPath)
 {
-    generationProgress.bIsGenerating = true;
-    generationProgress.progress = 0.0f;
+    bool expected = false;
+    if (!bIsGenerating.compare_exchange_strong(expected, true)) {
+        return GenerateResponse::UNABLE_TO_START;
+    }
 
     generateTask.gltfPath = gltfPath;
     generateTask.outputPath = outputPath;
 
     taskscheduler->AddTaskSetToPipe(&generateTask);
+
+    return GenerateResponse::STARTED;
 }
 
-bool ModelGenerator::GenerateWillModel(const std::filesystem::path& gltfPath, const std::filesystem::path& outputPath)
+GenerateResponse ModelGenerator::GenerateWillModel(const std::filesystem::path& gltfPath, const std::filesystem::path& outputPath)
 {
-    UpdateProgress(0.1f, "Loading GLTF");
-    RawGltfSkinnedModel rawModel = LoadGltf(generationProgress, gltfPath);
-
-    if (!rawModel.bSuccessfullyLoaded) {
-        UpdateProgress(0.0f, "Failed to load GLTF");
-        generationProgress.bIsGenerating = false;
-        return false;
+    bool expected = false;
+    if (!bIsGenerating.compare_exchange_strong(expected, true)) {
+        return GenerateResponse::UNABLE_TO_START;
     }
 
-    UpdateProgress(0.45f, "Writing .willmodel");
-    bool success = WriteWillModel(generationProgress, rawModel, outputPath);
+    GenerateWillModel_Internal(gltfPath, outputPath);
 
-    UpdateProgress(0.9f, success ? "Complete" : "Failed to write");
-    generationProgress.bIsGenerating = false;
-    return true;
+    bIsGenerating.store(false, std::memory_order::release);
+    return GenerateResponse::FINISHED;
 }
 
-RawGltfSkinnedModel ModelGenerator::LoadGltf(WillModelGenerationProgress& progress, const std::filesystem::path& source)
+void ModelGenerator::GenerateWillModel_Internal(const std::filesystem::path& gltfPath, const std::filesystem::path& outputPath)
 {
+    generationProgress.loadingState.store(WillModelGenerationProgress::LoadingProgress::LOADING_GLTF, std::memory_order::release);
+    generationProgress.value.store(1, std::memory_order::release);
+    RawGltfModel rawModel = LoadGltf(gltfPath);
+
+    if (!rawModel.bSuccessfullyLoaded) {
+        generationProgress.loadingState.store(WillModelGenerationProgress::LoadingProgress::FAILED, std::memory_order::release);
+        generationProgress.value.store(0, std::memory_order::release);
+        return;
+    }
+
+    generationProgress.loadingState.store(WillModelGenerationProgress::LoadingProgress::WRITING_WILL_MODEL, std::memory_order::release);
+    generationProgress.value.store(70, std::memory_order::release);
+    bool success = WriteWillModel(rawModel, outputPath);
+
+    generationProgress.loadingState.store(success ? WillModelGenerationProgress::LoadingProgress::SUCCESS : WillModelGenerationProgress::LoadingProgress::FAILED, std::memory_order::release);
+    generationProgress.value.store(100, std::memory_order::release);
+}
+
+RawGltfModel ModelGenerator::LoadGltf(const std::filesystem::path& source)
+{
+    constexpr int32 loadGltfProgressStart = 1;
+    constexpr int32 loadGltfProgressTotal = 70;
+    int32 _progress = loadGltfProgressStart;
+    int32 stepDiff = (loadGltfProgressTotal - loadGltfProgressStart) / 9;
     fastgltf::Parser parser{fastgltf::Extensions::KHR_texture_basisu | fastgltf::Extensions::KHR_mesh_quantization | fastgltf::Extensions::KHR_texture_transform};
     constexpr auto gltfOptions = fastgltf::Options::DontRequireValidAssetMember
                                  | fastgltf::Options::AllowDouble
@@ -83,42 +106,51 @@ RawGltfSkinnedModel ModelGenerator::LoadGltf(WillModelGenerationProgress& progre
 
     auto gltfFile = fastgltf::MappedGltfFile::FromPath(source);
 
-    RawGltfSkinnedModel rawModel{};
-    if (!static_cast<bool>(gltfFile)) {
-        SPDLOG_ERROR("Failed to open glTF file ({}): {}\n", source.filename().string(), getErrorMessage(gltfFile.error()));
-        return rawModel;
+    // Parse Model
+    RawGltfModel rawModel{};
+    fastgltf::Asset gltf; {
+        if (!static_cast<bool>(gltfFile)) {
+            SPDLOG_ERROR("Failed to open glTF file ({}): {}\n", source.filename().string(), getErrorMessage(gltfFile.error()));
+            return rawModel;
+        }
+        auto load = parser.loadGltf(gltfFile.get(), source.parent_path(), gltfOptions);
+        if (!load) {
+            SPDLOG_ERROR("Failed to load glTF: {}\n", to_underlying(load.error()));
+            return rawModel;
+        }
+        gltf = std::move(load.get());
     }
+    _progress += stepDiff;
+    generationProgress.value.store(_progress, std::memory_order::release);
 
-    auto load = parser.loadGltf(gltfFile.get(), source.parent_path(), gltfOptions);
-    if (!load) {
-        SPDLOG_ERROR("Failed to load glTF: {}\n", to_underlying(load.error()));
-        return rawModel;
-    }
-
-    fastgltf::Asset gltf = std::move(load.get());
-    rawModel.name = source.filename().string();
-
-    rawModel.samplerInfos.reserve(gltf.samplers.size());
-    for (const fastgltf::Sampler& gltfSampler : gltf.samplers) {
-        VkSamplerCreateInfo samplerInfo = {.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO, .pNext = nullptr};
-        samplerInfo.maxLod = VK_LOD_CLAMP_NONE;
-        samplerInfo.minLod = 0;
-
-        samplerInfo.magFilter = ExtractFilter(gltfSampler.magFilter.value_or(fastgltf::Filter::Nearest));
-        samplerInfo.minFilter = ExtractFilter(gltfSampler.minFilter.value_or(fastgltf::Filter::Nearest));
-
-
-        samplerInfo.mipmapMode = ExtractMipmapMode(gltfSampler.minFilter.value_or(fastgltf::Filter::Linear));
-
-        rawModel.samplerInfos.push_back(samplerInfo);
-    }
-
-
-    rawModel.images.reserve(gltf.images.size());
-    imageStagingAllocator.reset();
-    VK_CHECK(vkResetFences(context->device, 1, &immFence));
-    // Image loading
+    // Samplers
     {
+        rawModel.name = source.filename().string();
+        rawModel.samplerInfos.reserve(gltf.samplers.size());
+        for (const fastgltf::Sampler& gltfSampler : gltf.samplers) {
+            VkSamplerCreateInfo samplerInfo = {.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO, .pNext = nullptr};
+            samplerInfo.maxLod = VK_LOD_CLAMP_NONE;
+            samplerInfo.minLod = 0;
+
+            samplerInfo.magFilter = ExtractFilter(gltfSampler.magFilter.value_or(fastgltf::Filter::Nearest));
+            samplerInfo.minFilter = ExtractFilter(gltfSampler.minFilter.value_or(fastgltf::Filter::Nearest));
+
+
+            samplerInfo.mipmapMode = ExtractMipmapMode(gltfSampler.minFilter.value_or(fastgltf::Filter::Linear));
+
+            rawModel.samplerInfos.push_back(samplerInfo);
+        }
+    }
+    _progress += stepDiff;
+    generationProgress.value.store(_progress, std::memory_order::release);
+
+
+    // Images
+    {
+        rawModel.images.reserve(gltf.images.size());
+        immediateParameters.imageStagingAllocator.reset();
+        VK_CHECK(vkResetFences(context->device, 1, &immediateParameters.immFence));
+
         unsigned char* stbiData{nullptr};
         int32_t width{};
         int32_t height{};
@@ -183,23 +215,23 @@ RawGltfSkinnedModel ModelGenerator::LoadGltf(WillModelGenerationProgress& progre
             imagesize.height = height;
             imagesize.depth = 1;
             const size_t size = width * height * 4;
-            OffsetAllocator::Allocation allocation = imageStagingAllocator.allocate(size);
+            OffsetAllocator::Allocation allocation = immediateParameters.imageStagingAllocator.allocate(size);
             if (allocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
                 if (bIsRecording) {
                     // Flush staging buffer
-                    VK_CHECK(vkEndCommandBuffer(immCommandBuffer));
-                    VkCommandBufferSubmitInfo cmdSubmitInfo = VkHelpers::CommandBufferSubmitInfo(immCommandBuffer);
+                    VK_CHECK(vkEndCommandBuffer(immediateParameters.immCommandBuffer));
+                    VkCommandBufferSubmitInfo cmdSubmitInfo = VkHelpers::CommandBufferSubmitInfo(immediateParameters.immCommandBuffer);
                     const VkSubmitInfo2 submitInfo = VkHelpers::SubmitInfo(&cmdSubmitInfo, nullptr, nullptr);
-                    VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, immFence));
-                    imageStagingAllocator.reset();
-                    VK_CHECK(vkWaitForFences(context->device, 1, &immFence, true, 1000000000));
-                    VK_CHECK(vkResetFences(context->device, 1, &immFence));
-                    VK_CHECK(vkResetCommandBuffer(immCommandBuffer, 0));
+                    VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, immediateParameters.immFence));
+                    immediateParameters.imageStagingAllocator.reset();
+                    VK_CHECK(vkWaitForFences(context->device, 1, &immediateParameters.immFence, true, 1000000000));
+                    VK_CHECK(vkResetFences(context->device, 1, &immediateParameters.immFence));
+                    VK_CHECK(vkResetCommandBuffer(immediateParameters.immCommandBuffer, 0));
                     bIsRecording = false;
 
 
                     // Try again
-                    allocation = imageStagingAllocator.allocate(size);
+                    allocation = immediateParameters.imageStagingAllocator.allocate(size);
                     if (allocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
                         SPDLOG_ERROR("[ModelGenerator::LoadGltf] Texture too large to fit in staging buffer. Increase staging buffer size or do not load this texture");
                         break;
@@ -213,11 +245,11 @@ RawGltfSkinnedModel ModelGenerator::LoadGltf(WillModelGenerationProgress& progre
 
             if (!bIsRecording) {
                 const VkCommandBufferBeginInfo cmdBeginInfo = VkHelpers::CommandBufferBeginInfo();
-                VK_CHECK(vkBeginCommandBuffer(immCommandBuffer, &cmdBeginInfo));
+                VK_CHECK(vkBeginCommandBuffer(immediateParameters.immCommandBuffer, &cmdBeginInfo));
                 bIsRecording = true;
             }
 
-            newImage = RecordCreateImageFromData(immCommandBuffer, allocation.offset, stbiData, size, imagesize, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, true);
+            newImage = RecordCreateImageFromData(immediateParameters.immCommandBuffer, allocation.offset, stbiData, size, imagesize, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, true);
             stbi_image_free(stbiData);
             stbiData = nullptr;
 
@@ -232,28 +264,32 @@ RawGltfSkinnedModel ModelGenerator::LoadGltf(WillModelGenerationProgress& progre
 
         if (bIsRecording) {
             // Final flush staging buffer
-            VK_CHECK(vkEndCommandBuffer(immCommandBuffer));
-            VkCommandBufferSubmitInfo cmdSubmitInfo = VkHelpers::CommandBufferSubmitInfo(immCommandBuffer);
+            VK_CHECK(vkEndCommandBuffer(immediateParameters.immCommandBuffer));
+            VkCommandBufferSubmitInfo cmdSubmitInfo = VkHelpers::CommandBufferSubmitInfo(immediateParameters.immCommandBuffer);
             const VkSubmitInfo2 submitInfo = VkHelpers::SubmitInfo(&cmdSubmitInfo, nullptr, nullptr);
-            VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, immFence));
-            imageStagingAllocator.reset();
-            VK_CHECK(vkWaitForFences(context->device, 1, &immFence, true, 1000000000));
-            VK_CHECK(vkResetFences(context->device, 1, &immFence));
-            VK_CHECK(vkResetCommandBuffer(immCommandBuffer, 0));
+            VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, immediateParameters.immFence));
+            immediateParameters.imageStagingAllocator.reset();
+            VK_CHECK(vkWaitForFences(context->device, 1, &immediateParameters.immFence, true, 1000000000));
+            VK_CHECK(vkResetFences(context->device, 1, &immediateParameters.immFence));
+            VK_CHECK(vkResetCommandBuffer(immediateParameters.immCommandBuffer, 0));
             bIsRecording = false;
         }
     }
+    _progress += stepDiff;
+    generationProgress.value.store(_progress, std::memory_order::release);
 
-
+    // Materials
     rawModel.materials.reserve(gltf.materials.size());
     for (const fastgltf::Material& gltfMaterial : gltf.materials) {
         MaterialProperties material = ExtractMaterial(gltf, gltfMaterial);
         rawModel.materials.push_back(material);
     }
+    _progress += stepDiff;
+    generationProgress.value.store(_progress, std::memory_order::release);
 
+    // Meshes
     std::vector<SkinnedVertex> primitiveVertices{};
     std::vector<uint32_t> primitiveIndices{};
-
     rawModel.allMeshes.reserve(gltf.meshes.size());
     for (fastgltf::Mesh& mesh : gltf.meshes) {
         MeshInformation meshData{};
@@ -325,7 +361,7 @@ RawGltfSkinnedModel ModelGenerator::LoadGltf(WillModelGenerationProgress& progre
                 });
             }
 
-            // primitiveData.bHasSkinning = joints0 != p.attributes.end() && weights0 != p.attributes.end();
+            rawModel.bIsSkeletalModel = joints0 != p.attributes.end() && weights0 != p.attributes.end();
 
             // UV
             const fastgltf::Attribute* uvs = p.findAttribute("TEXCOORD_0");
@@ -469,8 +505,10 @@ RawGltfSkinnedModel ModelGenerator::LoadGltf(WillModelGenerationProgress& progre
 
         rawModel.allMeshes.push_back(meshData);
     }
+    _progress += stepDiff;
+    generationProgress.value.store(_progress, std::memory_order::release);
 
-
+    // Nodes
     rawModel.nodes.reserve(gltf.nodes.size());
     for (const fastgltf::Node& node : gltf.nodes) {
         Node node_{};
@@ -508,15 +546,17 @@ RawGltfSkinnedModel ModelGenerator::LoadGltf(WillModelGenerationProgress& progre
         );
         rawModel.nodes.push_back(node_);
     }
-
     for (int i = 0; i < gltf.nodes.size(); i++) {
         for (std::size_t& child : gltf.nodes[i].children) {
             rawModel.nodes[child].parent = i;
         }
     }
+    _progress += stepDiff;
+    generationProgress.value.store(_progress, std::memory_order::release);
 
+    // Skins
     // only import first skin
-    if (gltf.skins.size() > 0) {
+    if (!gltf.skins.empty()) {
         fastgltf::Skin& skins = gltf.skins[0];
 
         if (gltf.skins.size() > 1) {
@@ -541,10 +581,11 @@ RawGltfSkinnedModel ModelGenerator::LoadGltf(WillModelGenerationProgress& progre
             }
         }
     }
+    _progress += stepDiff;
+    generationProgress.value.store(_progress, std::memory_order::release);
 
-
+    // Node processing
     TopologicalSortNodes(rawModel.nodes, rawModel.nodeRemap);
-
     for (size_t i = 0; i < rawModel.nodes.size(); ++i) {
         uint32_t depth = 0;
         uint32_t currentParent = rawModel.nodes[i].parent;
@@ -556,8 +597,10 @@ RawGltfSkinnedModel ModelGenerator::LoadGltf(WillModelGenerationProgress& progre
 
         rawModel.nodes[i].depth = depth;
     }
+    _progress += stepDiff;
+    generationProgress.value.store(_progress, std::memory_order::release);
 
-
+    // Animations
     rawModel.animations.reserve(gltf.animations.size());
     for (fastgltf::Animation& gltfAnim : gltf.animations) {
         Animation anim{};
@@ -648,12 +691,14 @@ RawGltfSkinnedModel ModelGenerator::LoadGltf(WillModelGenerationProgress& progre
 
         rawModel.animations.push_back(std::move(anim));
     }
+    _progress += stepDiff;
+    generationProgress.value.store(_progress, std::memory_order::release);
 
     rawModel.bSuccessfullyLoaded = true;
     return rawModel;
 }
 
-bool ModelGenerator::WriteWillModel(WillModelGenerationProgress& progress, const RawGltfSkinnedModel& rawModel, const std::filesystem::path& outputPath)
+bool ModelGenerator::WriteWillModel(const RawGltfModel& rawModel, const std::filesystem::path& outputPath)
 {
     if (std::filesystem::exists("temp")) {
         std::filesystem::remove_all("temp");
@@ -663,16 +708,20 @@ bool ModelGenerator::WriteWillModel(WillModelGenerationProgress& progress, const
     WriteModelBinary(binFile, rawModel);
     binFile.close();
 
+    int32_t _progress = 70;
+    const int32_t textureProgressTotal = 30;
+    const int32_t progressPerTexture = rawModel.images.empty() ? 0 : textureProgressTotal / rawModel.images.size();
+
     for (size_t i = 0; i < rawModel.images.size(); i++) {
         auto& image = rawModel.images[i];
         uint32_t mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(image.extent.width, image.extent.height)))) + 1;
 
         // Mip Generation
         {
-            VK_CHECK(vkResetFences(context->device, 1, &immFence));
-            VK_CHECK(vkResetCommandBuffer(immCommandBuffer, 0));
+            VK_CHECK(vkResetFences(context->device, 1, &immediateParameters.immFence));
+            VK_CHECK(vkResetCommandBuffer(immediateParameters.immCommandBuffer, 0));
 
-            const auto cmd = immCommandBuffer;
+            const auto cmd = immediateParameters.immCommandBuffer;
             const VkCommandBufferBeginInfo cmdBeginInfo = VkHelpers::CommandBufferBeginInfo();
             VK_CHECK(vkBeginCommandBuffer(cmd, &cmdBeginInfo));
 
@@ -742,8 +791,8 @@ bool ModelGenerator::WriteWillModel(WillModelGenerationProgress& progress, const
 
             VkCommandBufferSubmitInfo cmdSubmitInfo = VkHelpers::CommandBufferSubmitInfo(cmd);
             const VkSubmitInfo2 submitInfo = VkHelpers::SubmitInfo(&cmdSubmitInfo, nullptr, nullptr);
-            VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, immFence));
-            VK_CHECK(vkWaitForFences(context->device, 1, &immFence, true, 1000000000));
+            VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, immediateParameters.immFence));
+            VK_CHECK(vkWaitForFences(context->device, 1, &immediateParameters.immFence, true, 1000000000));
             SPDLOG_INFO("Created mipmap chain for image {}", i);
         }
 
@@ -762,6 +811,7 @@ bool ModelGenerator::WriteWillModel(WillModelGenerationProgress& progress, const
 
         ktx_error_code_e result = ktxTexture2_Create(&createInfo, KTX_TEXTURE_CREATE_ALLOC_STORAGE, &texture);
 
+        // todo batch all in 1 queue submission and readback all mip levels in another loop after fence wait
         for (uint32_t mip = 0; mip < mipLevels; mip++) {
             uint32_t mipWidth = std::max(1u, image.extent.width >> mip);
             uint32_t mipHeight = std::max(1u, image.extent.height >> mip);
@@ -769,11 +819,11 @@ bool ModelGenerator::WriteWillModel(WillModelGenerationProgress& progress, const
             uint32_t bytesPerPixel = 4; // TODO: Calculate from image.format
             size_t mipSize = mipWidth * mipHeight * bytesPerPixel;
 
-            VK_CHECK(vkResetFences(context->device, 1, &immFence));
-            VK_CHECK(vkResetCommandBuffer(immCommandBuffer, 0));
+            VK_CHECK(vkResetFences(context->device, 1, &immediateParameters.immFence));
+            VK_CHECK(vkResetCommandBuffer(immediateParameters.immCommandBuffer, 0));
 
             VkCommandBufferBeginInfo cmdBeginInfo = VkHelpers::CommandBufferBeginInfo();
-            VK_CHECK(vkBeginCommandBuffer(immCommandBuffer, &cmdBeginInfo));
+            VK_CHECK(vkBeginCommandBuffer(immediateParameters.immCommandBuffer, &cmdBeginInfo));
 
             VkBufferImageCopy copyRegion{};
             copyRegion.bufferOffset = 0;
@@ -786,17 +836,17 @@ bool ModelGenerator::WriteWillModel(WillModelGenerationProgress& progress, const
             copyRegion.imageOffset = {0, 0, 0};
             copyRegion.imageExtent = {mipWidth, mipHeight, 1};
 
-            vkCmdCopyImageToBuffer(immCommandBuffer, image.handle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                                   imageReceivingBuffer.handle, 1, &copyRegion);
+            vkCmdCopyImageToBuffer(immediateParameters.immCommandBuffer, image.handle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                   immediateParameters.imageReceivingBuffer.handle, 1, &copyRegion);
 
-            VK_CHECK(vkEndCommandBuffer(immCommandBuffer));
+            VK_CHECK(vkEndCommandBuffer(immediateParameters.immCommandBuffer));
 
-            VkCommandBufferSubmitInfo cmdSubmitInfo = VkHelpers::CommandBufferSubmitInfo(immCommandBuffer);
+            VkCommandBufferSubmitInfo cmdSubmitInfo = VkHelpers::CommandBufferSubmitInfo(immediateParameters.immCommandBuffer);
             VkSubmitInfo2 submitInfo = VkHelpers::SubmitInfo(&cmdSubmitInfo, nullptr, nullptr);
-            VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, immFence));
-            VK_CHECK(vkWaitForFences(context->device, 1, &immFence, true, 1000000000));
+            VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, immediateParameters.immFence));
+            VK_CHECK(vkWaitForFences(context->device, 1, &immediateParameters.immFence, true, 1000000000));
 
-            void* readbackData = imageReceivingBuffer.allocationInfo.pMappedData;
+            void* readbackData = immediateParameters.imageReceivingBuffer.allocationInfo.pMappedData;
             ktxTexture_SetImageFromMemory(ktxTexture(texture), mip, 0, 0, static_cast<const ktx_uint8_t*>(readbackData), mipSize);
         }
         // Write KTX2 file
@@ -814,6 +864,9 @@ bool ModelGenerator::WriteWillModel(WillModelGenerationProgress& progress, const
         ktxTexture_WriteToNamedFile(ktxTexture(texture), ktxPath.c_str());
         SPDLOG_INFO("Wrote {}", ktxPath);
         ktxTexture_Destroy(ktxTexture(texture));
+
+        _progress += progressPerTexture;
+        generationProgress.value.store(_progress, std::memory_order::release);
     }
 
 
@@ -837,13 +890,7 @@ bool ModelGenerator::WriteWillModel(WillModelGenerationProgress& progress, const
     return true;
 }
 
-void ModelGenerator::UpdateProgress(float progress, const std::string& stage)
-{}
-
 void WriteModelBinary(std::ofstream& file, const RawGltfModel& model)
-{}
-
-void WriteModelBinary(std::ofstream& file, const RawGltfSkinnedModel& model)
 {
     ModelBinaryHeader header{};
     header.vertexCount = static_cast<uint32_t>(model.vertices.size());
@@ -1097,7 +1144,7 @@ void ModelGenerator::TopologicalSortNodes(std::vector<Node>& nodes, std::vector<
 AllocatedImage ModelGenerator::RecordCreateImageFromData(VkCommandBuffer cmd, size_t offset, unsigned char* data, size_t size, VkExtent3D imageExtent, VkFormat format, VkImageUsageFlagBits usage,
                                                          bool mipmapped)
 {
-    char* bufferOffset = static_cast<char*>(imageStagingBuffer.allocationInfo.pMappedData) + offset;
+    char* bufferOffset = static_cast<char*>(immediateParameters.imageStagingBuffer.allocationInfo.pMappedData) + offset;
     memcpy(bufferOffset, data, size);
 
     VkImageCreateInfo imageCreateInfo = VkHelpers::ImageCreateInfo(format, imageExtent, usage | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT); // transfer src for mipmap only
@@ -1127,25 +1174,16 @@ AllocatedImage ModelGenerator::RecordCreateImageFromData(VkCommandBuffer cmd, si
     copyRegion.imageSubresource.layerCount = 1;
     copyRegion.imageExtent = imageExtent;
 
-    vkCmdCopyBufferToImage(cmd, imageStagingBuffer.handle, newImage.handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
+    vkCmdCopyBufferToImage(cmd, immediateParameters.imageStagingBuffer.handle, newImage.handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
 
 
-    VkImageMemoryBarrier2 barriers[2];
+    VkImageMemoryBarrier2 barriers[1];
     barriers[0] = VkHelpers::ImageMemoryBarrier(
         newImage.handle,
         VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 1, 1),
         VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
         VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
     );
-    // barriers[1] = VkHelpers::ImageMemoryBarrier(
-    //     newImage.handle,
-    //     VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 1, 1),
-    //     VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-    //     VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-    // );
-    // barriers[1].srcQueueFamilyIndex = context->transferQueueFamily;
-    // barriers[1].dstQueueFamilyIndex = context->graphicsQueueFamily;
-    //depInfo.imageMemoryBarrierCount = 2;
     depInfo.imageMemoryBarrierCount = 1;
     depInfo.pImageMemoryBarriers = barriers;
 

@@ -94,6 +94,8 @@ add_library(imgui STATIC
         ${IMGUI_DIR}/backends/imgui_impl_sdl3.cpp
         ${IMGUI_DIR}/backends/imgui_impl_vulkan.cpp
         ${IMGUI_DIR}/misc/cpp/imgui_stdlib.cpp
+        src/asset-load/asset_load_thread.cpp
+        src/asset-load/asset_load_thread.h
 )
 target_compile_definitions(imgui PUBLIC
         IMGUI_IMPL_VULKAN_USE_VOLK

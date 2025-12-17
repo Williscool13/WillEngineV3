@@ -15,24 +15,54 @@ namespace Render
 {
 struct WillModelGenerationProgress
 {
-    std::atomic<bool> bIsGenerating{false};
-    std::atomic<float> progress{0.0f}; // 0.0 to 1.0
-    std::string currentStage{};
-    std::mutex stageMutex{};
+    enum LoadingProgress : uint32_t
+    {
+        NONE = 0,
+        LOADING_GLTF,
+        WRITING_WILL_MODEL,
+        FAILED,
+        SUCCESS,
+    };
+
+    std::atomic<LoadingProgress> loadingState{NONE};
+    std::atomic<int32_t> value{0}; // out of 100
 };
 
 constexpr uint32_t MODEL_GENERATION_STAGING_BUFFER_SIZE = 2 * 64 * 1024 * 1024; // 2 x 64 MB (1x uncompressed 4k rgba8, or 4x 4k BC7)
+struct ModelGeneratorImmediateParameters
+{
+    VkFence immFence{VK_NULL_HANDLE};
+    VkCommandPool immCommandPool{VK_NULL_HANDLE};
+    VkCommandBuffer immCommandBuffer{VK_NULL_HANDLE};
+
+    OffsetAllocator::Allocator imageStagingAllocator{MODEL_GENERATION_STAGING_BUFFER_SIZE};
+    AllocatedBuffer imageStagingBuffer{};
+    AllocatedBuffer imageReceivingBuffer{};
+};
+
+enum class GenerateResponse
+{
+    UNABLE_TO_START = 0,
+    STARTED,
+    FINISHED
+};
+
+
 
 class ModelGenerator
 {
 public:
+
+
     ModelGenerator(VulkanContext* context, enki::TaskScheduler* taskscheduler);
 
     ~ModelGenerator();
 
-    void GenerateWillModelAsync(const std::filesystem::path& gltfPath, const std::filesystem::path& outputPath);
+    GenerateResponse GenerateWillModelAsync(const std::filesystem::path& gltfPath, const std::filesystem::path& outputPath);
 
-    bool GenerateWillModel(const std::filesystem::path& gltfPath, const std::filesystem::path& outputPath);
+    GenerateResponse GenerateWillModel(const std::filesystem::path& gltfPath, const std::filesystem::path& outputPath);
+
+    void GenerateWillModel_Internal(const std::filesystem::path& gltfPath, const std::filesystem::path& outputPath);
 
     const WillModelGenerationProgress& GetProgress() const { return generationProgress; }
 
@@ -49,28 +79,14 @@ private:
 
         void ExecuteRange(enki::TaskSetPartition range, uint32_t threadnum) override
         {
-            generator->UpdateProgress(0.1f, "Loading GLTF");
-            RawGltfSkinnedModel rawModel = generator->LoadGltf(generator->generationProgress, gltfPath);
-
-            if (!rawModel.bSuccessfullyLoaded) {
-                generator->UpdateProgress(0.0f, "Failed to load GLTF");
-                generator->generationProgress.bIsGenerating = false;
-                return;
-            }
-
-            generator->UpdateProgress(0.7f, "Writing .willmodel");
-            bool success = generator->WriteWillModel(generator->generationProgress, rawModel, outputPath);
-
-            generator->UpdateProgress(1.0f, success ? "Complete" : "Failed to write");
-            generator->generationProgress.bIsGenerating = false;
+            generator->GenerateWillModel_Internal(gltfPath, outputPath);
+            generator->bIsGenerating.store(false, std::memory_order::release);
         }
     };
 
-    RawGltfSkinnedModel LoadGltf(WillModelGenerationProgress& progress, const std::filesystem::path& source);
+    RawGltfModel LoadGltf(const std::filesystem::path& source);
 
-    bool WriteWillModel(WillModelGenerationProgress& progress, const RawGltfSkinnedModel& rawModel, const std::filesystem::path& outputPath);
-
-    void UpdateProgress(float progress, const std::string& stage);
+    bool WriteWillModel(const RawGltfModel& rawModel, const std::filesystem::path& outputPath);
 
 private:
     static VkFilter ExtractFilter(fastgltf::Filter filter);
@@ -92,16 +108,13 @@ private:
 private:
     VulkanContext* context{};
     enki::TaskScheduler* taskscheduler{};
-    WillModelGenerationProgress generationProgress{};
+
     GenerateTask generateTask;
 
-    VkFence immFence{VK_NULL_HANDLE};
-    VkCommandPool immCommandPool{VK_NULL_HANDLE};
-    VkCommandBuffer immCommandBuffer{VK_NULL_HANDLE};
+    std::atomic<bool> bIsGenerating{false};
+    WillModelGenerationProgress generationProgress{};
 
-    OffsetAllocator::Allocator imageStagingAllocator{MODEL_GENERATION_STAGING_BUFFER_SIZE};
-    AllocatedBuffer imageStagingBuffer{};
-    AllocatedBuffer imageReceivingBuffer{};
+    ModelGeneratorImmediateParameters immediateParameters;
 
 private: // Cache
     std::vector<Node> sortedNodes;
@@ -109,8 +122,6 @@ private: // Cache
 };
 
 void WriteModelBinary(std::ofstream& file, const RawGltfModel& model);
-
-void WriteModelBinary(std::ofstream& file, const RawGltfSkinnedModel& model);
 } // Render
 
 #endif //WILL_ENGINE_MODEL_GENERATOR_H
