@@ -350,7 +350,8 @@ RawGltfModel ModelGenerator::LoadGltf(const std::filesystem::path& source)
 
             if (joints0 != p.attributes.end() && weights0 != p.attributes.end()) {
                 hasSkinned = true;
-            } else {
+            }
+            else {
                 hasStatic = true;
             }
 
@@ -453,8 +454,6 @@ RawGltfModel ModelGenerator::LoadGltf(const std::filesystem::path& source)
                 meshletTriangles.resize(last.triangle_offset + last.triangle_count * 3);
             }
 
-
-            // todo: meshlet bounding volume and cone
             primitiveData.meshletOffset = rawModel.meshlets.size();
             primitiveData.meshletCount = meshlets.size();
             primitiveData.boundingSphere = GenerateBoundingSphere(primitiveVertices);
@@ -807,44 +806,53 @@ bool ModelGenerator::WriteWillModel(const RawGltfModel& rawModel, const std::fil
 
         ktx_error_code_e result = ktxTexture2_Create(&createInfo, KTX_TEXTURE_CREATE_ALLOC_STORAGE, &texture);
 
-        // todo batch all in 1 queue submission and readback all mip levels in another loop after fence wait
+        VK_CHECK(vkResetFences(context->device, 1, &immediateParameters.immFence));
+        VK_CHECK(vkResetCommandBuffer(immediateParameters.immCommandBuffer, 0));
+        VkCommandBufferBeginInfo cmdBeginInfo = VkHelpers::CommandBufferBeginInfo();
+        VK_CHECK(vkBeginCommandBuffer(immediateParameters.immCommandBuffer, &cmdBeginInfo));
+
+        std::vector<VkBufferImageCopy> copyRegions;
+        copyRegions.reserve(mipLevels);
+        size_t bufferOffset = 0;
+
         for (uint32_t mip = 0; mip < mipLevels; mip++) {
             uint32_t mipWidth = std::max(1u, image.extent.width >> mip);
             uint32_t mipHeight = std::max(1u, image.extent.height >> mip);
 
-            uint32_t bytesPerPixel = 4; // TODO: Calculate from image.format
-            size_t mipSize = mipWidth * mipHeight * bytesPerPixel;
-
-            VK_CHECK(vkResetFences(context->device, 1, &immediateParameters.immFence));
-            VK_CHECK(vkResetCommandBuffer(immediateParameters.immCommandBuffer, 0));
-
-            VkCommandBufferBeginInfo cmdBeginInfo = VkHelpers::CommandBufferBeginInfo();
-            VK_CHECK(vkBeginCommandBuffer(immediateParameters.immCommandBuffer, &cmdBeginInfo));
-
             VkBufferImageCopy copyRegion{};
-            copyRegion.bufferOffset = 0;
-            copyRegion.bufferRowLength = 0;
-            copyRegion.bufferImageHeight = 0;
+            copyRegion.bufferOffset = bufferOffset;
             copyRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
             copyRegion.imageSubresource.mipLevel = mip;
             copyRegion.imageSubresource.baseArrayLayer = 0;
             copyRegion.imageSubresource.layerCount = 1;
-            copyRegion.imageOffset = {0, 0, 0};
             copyRegion.imageExtent = {mipWidth, mipHeight, 1};
 
-            vkCmdCopyImageToBuffer(immediateParameters.immCommandBuffer, image.handle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                                   immediateParameters.imageReceivingBuffer.handle, 1, &copyRegion);
-
-            VK_CHECK(vkEndCommandBuffer(immediateParameters.immCommandBuffer));
-
-            VkCommandBufferSubmitInfo cmdSubmitInfo = VkHelpers::CommandBufferSubmitInfo(immediateParameters.immCommandBuffer);
-            VkSubmitInfo2 submitInfo = VkHelpers::SubmitInfo(&cmdSubmitInfo, nullptr, nullptr);
-            VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, immediateParameters.immFence));
-            VK_CHECK(vkWaitForFences(context->device, 1, &immediateParameters.immFence, true, 1000000000));
-
-            void* readbackData = immediateParameters.imageReceivingBuffer.allocationInfo.pMappedData;
-            ktxTexture_SetImageFromMemory(ktxTexture(texture), mip, 0, 0, static_cast<const ktx_uint8_t*>(readbackData), mipSize);
+            copyRegions.push_back(copyRegion);
+            bufferOffset += mipWidth * mipHeight * 4;
         }
+
+        vkCmdCopyImageToBuffer(immediateParameters.immCommandBuffer, image.handle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                               immediateParameters.imageReceivingBuffer.handle, copyRegions.size(), copyRegions.data());
+
+        VK_CHECK(vkEndCommandBuffer(immediateParameters.immCommandBuffer));
+
+        VkCommandBufferSubmitInfo cmdSubmitInfo = VkHelpers::CommandBufferSubmitInfo(immediateParameters.immCommandBuffer);
+        VkSubmitInfo2 submitInfo = VkHelpers::SubmitInfo(&cmdSubmitInfo, nullptr, nullptr);
+        VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, immediateParameters.immFence));
+        VK_CHECK(vkWaitForFences(context->device, 1, &immediateParameters.immFence, true, 1000000000));
+
+        bufferOffset = 0;
+        for (uint32_t mip = 0; mip < mipLevels; mip++) {
+            uint32_t mipWidth = std::max(1u, image.extent.width >> mip);
+            uint32_t mipHeight = std::max(1u, image.extent.height >> mip);
+            size_t mipSize = mipWidth * mipHeight * 4;
+
+            void* readbackData = static_cast<char*>(immediateParameters.imageReceivingBuffer.allocationInfo.pMappedData) + bufferOffset;
+            ktxTexture_SetImageFromMemory(ktxTexture(texture), mip, 0, 0, static_cast<const ktx_uint8_t*>(readbackData), mipSize);
+
+            bufferOffset += mipSize;
+        }
+
         // Write KTX2 file
         std::string ktxPath = "temp/texture_" + std::to_string(i) + ".ktx2";
 
