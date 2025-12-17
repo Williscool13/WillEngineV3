@@ -44,6 +44,11 @@ ModelGenerator::~ModelGenerator()
     vkDestroyFence(context->device, immediateParameters.immFence, nullptr);
 }
 
+void ModelGenerator::WaitForAsyncModelGeneration() const
+{
+    taskscheduler->WaitforTask(&generateTask);
+}
+
 GenerateResponse ModelGenerator::GenerateWillModelAsync(const std::filesystem::path& gltfPath, const std::filesystem::path& outputPath)
 {
     bool expected = false;
@@ -70,26 +75,6 @@ GenerateResponse ModelGenerator::GenerateWillModel(const std::filesystem::path& 
 
     bIsGenerating.store(false, std::memory_order::release);
     return GenerateResponse::FINISHED;
-}
-
-void ModelGenerator::GenerateWillModel_Internal(const std::filesystem::path& gltfPath, const std::filesystem::path& outputPath)
-{
-    generationProgress.loadingState.store(WillModelGenerationProgress::LoadingProgress::LOADING_GLTF, std::memory_order::release);
-    generationProgress.value.store(1, std::memory_order::release);
-    RawGltfModel rawModel = LoadGltf(gltfPath);
-
-    if (!rawModel.bSuccessfullyLoaded) {
-        generationProgress.loadingState.store(WillModelGenerationProgress::LoadingProgress::FAILED, std::memory_order::release);
-        generationProgress.value.store(0, std::memory_order::release);
-        return;
-    }
-
-    generationProgress.loadingState.store(WillModelGenerationProgress::LoadingProgress::WRITING_WILL_MODEL, std::memory_order::release);
-    generationProgress.value.store(70, std::memory_order::release);
-    bool success = WriteWillModel(rawModel, outputPath);
-
-    generationProgress.loadingState.store(success ? WillModelGenerationProgress::LoadingProgress::SUCCESS : WillModelGenerationProgress::LoadingProgress::FAILED, std::memory_order::release);
-    generationProgress.value.store(100, std::memory_order::release);
 }
 
 RawGltfModel ModelGenerator::LoadGltf(const std::filesystem::path& source)
@@ -290,6 +275,8 @@ RawGltfModel ModelGenerator::LoadGltf(const std::filesystem::path& source)
     // Meshes
     std::vector<SkinnedVertex> primitiveVertices{};
     std::vector<uint32_t> primitiveIndices{};
+    bool hasSkinned = false;
+    bool hasStatic = false;
     rawModel.allMeshes.reserve(gltf.meshes.size());
     for (fastgltf::Mesh& mesh : gltf.meshes) {
         MeshInformation meshData{};
@@ -361,7 +348,16 @@ RawGltfModel ModelGenerator::LoadGltf(const std::filesystem::path& source)
                 });
             }
 
-            rawModel.bIsSkeletalModel = joints0 != p.attributes.end() && weights0 != p.attributes.end();
+            if (joints0 != p.attributes.end() && weights0 != p.attributes.end()) {
+                hasSkinned = true;
+            } else {
+                hasStatic = true;
+            }
+
+            if (hasSkinned && hasStatic) {
+                SPDLOG_ERROR("Model contains mixed skinned and static meshes. Split into separate files.");
+                return rawModel;
+            }
 
             // UV
             const fastgltf::Attribute* uvs = p.findAttribute("TEXCOORD_0");
@@ -428,12 +424,12 @@ RawGltfModel ModelGenerator::LoadGltf(const std::filesystem::path& source)
                 });
             }
 
-            const size_t max_vertices = 64;
-            const size_t max_triangles = 64;
-            const size_t target_group_size = 8;
+            // todo: constants_interop.h to define these
+            const size_t maxVertices = 64;
+            const size_t maxTriangles = 64;
 
             // build clusters (meshlets) out of the mesh
-            size_t max_meshlets = meshopt_buildMeshletsBound(primitiveIndices.size(), max_vertices, max_triangles);
+            size_t max_meshlets = meshopt_buildMeshletsBound(primitiveIndices.size(), maxVertices, maxTriangles);
             std::vector<meshopt_Meshlet> meshlets(max_meshlets);
             std::vector<unsigned int> meshletVertices(primitiveIndices.size());
             std::vector<unsigned char> meshletTriangles(primitiveIndices.size());
@@ -442,7 +438,7 @@ RawGltfModel ModelGenerator::LoadGltf(const std::filesystem::path& source)
             meshlets.resize(meshopt_buildMeshlets(&meshlets[0], &meshletVertices[0], &meshletTriangles[0],
                                                   primitiveIndices.data(), primitiveIndices.size(),
                                                   reinterpret_cast<const float*>(primitiveVertices.data()), primitiveVertices.size(), sizeof(Vertex),
-                                                  max_vertices, max_triangles, 0.f));
+                                                  maxVertices, maxTriangles, 0.f));
 
             // Optimize each meshlet's micro index buffer/vertex layout individually
             for (auto& meshlet : meshlets) {
@@ -793,7 +789,7 @@ bool ModelGenerator::WriteWillModel(const RawGltfModel& rawModel, const std::fil
             const VkSubmitInfo2 submitInfo = VkHelpers::SubmitInfo(&cmdSubmitInfo, nullptr, nullptr);
             VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, immediateParameters.immFence));
             VK_CHECK(vkWaitForFences(context->device, 1, &immediateParameters.immFence, true, 1000000000));
-            SPDLOG_INFO("Created mipmap chain for image {}", i);
+            SPDLOG_TRACE("[ModelGenerator::WriteWillModel] Created mipmap chain for image {}", i);
         }
 
         ktxTexture2* texture;
@@ -862,7 +858,7 @@ bool ModelGenerator::WriteWillModel(const RawGltfModel& rawModel, const std::fil
         result = ktxTexture2_CompressBasisEx(texture, &params);
 
         ktxTexture_WriteToNamedFile(ktxTexture(texture), ktxPath.c_str());
-        SPDLOG_INFO("Wrote {}", ktxPath);
+        SPDLOG_TRACE("Wrote {}", ktxPath);
         ktxTexture_Destroy(ktxTexture(texture));
 
         _progress += progressPerTexture;
@@ -888,6 +884,26 @@ bool ModelGenerator::WriteWillModel(const RawGltfModel& rawModel, const std::fil
     writer.Finalize();
 
     return true;
+}
+
+void ModelGenerator::GenerateWillModel_Internal(const std::filesystem::path& gltfPath, const std::filesystem::path& outputPath)
+{
+    generationProgress.loadingState.store(WillModelGenerationProgress::LoadingProgress::LOADING_GLTF, std::memory_order::release);
+    generationProgress.value.store(1, std::memory_order::release);
+    RawGltfModel rawModel = LoadGltf(gltfPath);
+
+    if (!rawModel.bSuccessfullyLoaded) {
+        generationProgress.loadingState.store(WillModelGenerationProgress::LoadingProgress::FAILED, std::memory_order::release);
+        generationProgress.value.store(0, std::memory_order::release);
+        return;
+    }
+
+    generationProgress.loadingState.store(WillModelGenerationProgress::LoadingProgress::WRITING_WILL_MODEL, std::memory_order::release);
+    generationProgress.value.store(70, std::memory_order::release);
+    bool success = WriteWillModel(rawModel, outputPath);
+
+    generationProgress.loadingState.store(success ? WillModelGenerationProgress::LoadingProgress::SUCCESS : WillModelGenerationProgress::LoadingProgress::FAILED, std::memory_order::release);
+    generationProgress.value.store(100, std::memory_order::release);
 }
 
 void WriteModelBinary(std::ofstream& file, const RawGltfModel& model)

@@ -58,11 +58,11 @@ public:
 
     ~ModelGenerator();
 
+    void WaitForAsyncModelGeneration() const;
+
     GenerateResponse GenerateWillModelAsync(const std::filesystem::path& gltfPath, const std::filesystem::path& outputPath);
 
     GenerateResponse GenerateWillModel(const std::filesystem::path& gltfPath, const std::filesystem::path& outputPath);
-
-    void GenerateWillModel_Internal(const std::filesystem::path& gltfPath, const std::filesystem::path& outputPath);
 
     const WillModelGenerationProgress& GetProgress() const { return generationProgress; }
 
@@ -87,6 +87,8 @@ private:
     RawGltfModel LoadGltf(const std::filesystem::path& source);
 
     bool WriteWillModel(const RawGltfModel& rawModel, const std::filesystem::path& outputPath);
+
+    void GenerateWillModel_Internal(const std::filesystem::path& gltfPath, const std::filesystem::path& outputPath);
 
 private:
     static VkFilter ExtractFilter(fastgltf::Filter filter);

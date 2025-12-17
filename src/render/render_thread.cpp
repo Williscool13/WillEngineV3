@@ -90,7 +90,7 @@ void RenderThread::Initialize(Core::FrameSync* engineRenderSync, enki::TaskSched
         auto progress = modelGenerator->GetProgress().value.load(std::memory_order::acquire);
         auto state = modelGenerator->GetProgress().loadingState.load(std::memory_order::acquire);
 
-        SPDLOG_INFO("Progress: {}% - State: {}", progress, static_cast<int>(state));
+        SPDLOG_DEBUG("Progress: {}% - State: {}", progress, static_cast<int>(state));
 
         if (state == WillModelGenerationProgress::LoadingProgress::SUCCESS ||
             state == WillModelGenerationProgress::LoadingProgress::FAILED) {
