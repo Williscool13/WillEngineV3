@@ -8,8 +8,8 @@
 #ifdef __SLANG__
 module common_interop;
 #define SHADER_PUBLIC public
+#define SHADER_CONST const static
 #else
-// C++ mode
 #include <glm/glm.hpp>
 #include <cstdint>
 
@@ -34,6 +34,7 @@ using float3x3 = glm::mat3;
 using float4x4 = glm::mat4;
 
 #define SHADER_PUBLIC
+#define SHADER_CONST constexpr inline
 #endif // __SLANG__
 
 

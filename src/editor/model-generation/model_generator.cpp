@@ -15,6 +15,7 @@
 #include "offsetAllocator.hpp"
 #include "render/model/model_format.h"
 #include "render/model/model_serialization.h"
+#include "render/shaders/constants_interop.h"
 #include "render/vulkan/vk_context.h"
 #include "render/vulkan/vk_helpers.h"
 #include "render/vulkan/vk_utils.h"
@@ -425,12 +426,8 @@ RawGltfModel ModelGenerator::LoadGltf(const std::filesystem::path& source)
                 });
             }
 
-            // todo: constants_interop.h to define these
-            const size_t maxVertices = 64;
-            const size_t maxTriangles = 64;
-
             // build clusters (meshlets) out of the mesh
-            size_t max_meshlets = meshopt_buildMeshletsBound(primitiveIndices.size(), maxVertices, maxTriangles);
+            size_t max_meshlets = meshopt_buildMeshletsBound(primitiveIndices.size(), MESHLET_MAX_VERTICES, MESHLET_MAX_TRIANGLES);
             std::vector<meshopt_Meshlet> meshlets(max_meshlets);
             std::vector<unsigned int> meshletVertices(primitiveIndices.size());
             std::vector<unsigned char> meshletTriangles(primitiveIndices.size());
@@ -439,7 +436,7 @@ RawGltfModel ModelGenerator::LoadGltf(const std::filesystem::path& source)
             meshlets.resize(meshopt_buildMeshlets(&meshlets[0], &meshletVertices[0], &meshletTriangles[0],
                                                   primitiveIndices.data(), primitiveIndices.size(),
                                                   reinterpret_cast<const float*>(primitiveVertices.data()), primitiveVertices.size(), sizeof(Vertex),
-                                                  maxVertices, maxTriangles, 0.f));
+                                                  MESHLET_MAX_VERTICES, MESHLET_MAX_TRIANGLES, 0.f));
 
             // Optimize each meshlet's micro index buffer/vertex layout individually
             for (auto& meshlet : meshlets) {

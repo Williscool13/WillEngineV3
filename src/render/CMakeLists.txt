@@ -55,6 +55,7 @@ add_library(render STATIC
         model/model_types.h
         model/model_serialization.cpp
         model/model_serialization.h
+        shaders/constants_interop.h
 )
 
 target_include_directories(render PRIVATE
