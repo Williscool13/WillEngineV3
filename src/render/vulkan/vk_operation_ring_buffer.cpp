@@ -10,22 +10,22 @@ namespace Render
 {
 void ModelMatrixOperationRingBuffer::Enqueue(const std::vector<Core::ModelMatrixOperation>& operations)
 {
-    count += operations.size();
-    if (count > capacity) {
-        SPDLOG_WARN("ModelMatrix operation buffer has exceeded count limit.");
+    if ((tail - head) + operations.size() > capacity) {
+        SPDLOG_WARN("ModelMatrix operation buffer has exceeded capacity limit.");
     }
     for (const Core::ModelMatrixOperation& op : operations) {
-        buffer[head] = op;
-        head = (head + 1) % capacity;
+        buffer[tail & mask] = op;
+        tail++;
     }
 }
 
 void ModelMatrixOperationRingBuffer::ProcessOperations(char* pMappedData, uint32_t discardCount)
 {
-    uint32_t newCount = count;
-    uint32_t newTail = tail;
+    const size_t count = tail - head;
+    size_t processed = 0;
+
     for (size_t i = 0; i < count; ++i) {
-        const uint32_t opIndex = (tail + i) % capacity;
+        const size_t opIndex = (head + i) & mask;
         Core::ModelMatrixOperation& op = buffer[opIndex];
 
         if (op.frames == 0) {
@@ -38,32 +38,31 @@ void ModelMatrixOperationRingBuffer::ProcessOperations(char* pMappedData, uint32
 
         op.frames++;
         if (op.frames == discardCount) {
-            newTail = (newTail + 1) % capacity;
-            newCount--;
+            processed++;
         }
     }
-    count = newCount;
-    tail = newTail;
+
+    head += processed;
 }
 
 void InstanceOperationRingBuffer::Enqueue(const std::vector<Core::InstanceOperation>& operations)
 {
-    count += operations.size();
-    if (count > capacity) {
-        SPDLOG_WARN("Instance operation buffer has exceeded count limit.");
+    if ((tail - head) + operations.size() > capacity) {
+        SPDLOG_WARN("Instance operation buffer has exceeded capacity limit.");
     }
     for (const Core::InstanceOperation& op : operations) {
-        buffer[head] = op;
-        head = (head + 1) % capacity;
+        buffer[tail & mask] = op;
+        tail++;
     }
 }
 
 void InstanceOperationRingBuffer::ProcessOperations(char* pMappedData, uint32_t discardCount, uint32_t& highestInstanceIndex)
 {
-    uint32_t newCount = count;
-    uint32_t newTail = tail;
+    const size_t count = tail - head;
+    size_t processed = 0;
+
     for (size_t i = 0; i < count; ++i) {
-        const uint32_t opIndex = (tail + i) % capacity;
+        const size_t opIndex = (head + i) & mask;
         Core::InstanceOperation& op = buffer[opIndex];
 
         Instance inst{
@@ -77,32 +76,31 @@ void InstanceOperationRingBuffer::ProcessOperations(char* pMappedData, uint32_t 
 
         op.frames++;
         if (op.frames == discardCount) {
-            newTail = (newTail + 1) % capacity;
-            newCount--;
+            processed++;
         }
     }
-    count = newCount;
-    tail = newTail;
+
+    head += processed;
 }
 
 void JointMatrixOperationRingBuffer::Enqueue(const std::vector<Core::JointMatrixOperation>& operations)
 {
-    count += operations.size();
-    if (count > capacity) {
-        SPDLOG_WARN("JointMatrix operation buffer has exceeded count limit.");
+    if ((tail - head) + operations.size() > capacity) {
+        SPDLOG_WARN("JointMatrix operation buffer has exceeded capacity limit.");
     }
     for (const Core::JointMatrixOperation& op : operations) {
-        buffer[head] = op;
-        head = (head + 1) % capacity;
+        buffer[tail & mask] = op;
+        tail++;
     }
 }
 
 void JointMatrixOperationRingBuffer::ProcessOperations(char* pMappedData, uint32_t discardCount)
 {
-    uint32_t newCount = count;
-    uint32_t newTail = tail;
+    const size_t count = tail - head;
+    size_t processed = 0;
+
     for (size_t i = 0; i < count; ++i) {
-        const uint32_t opIndex = (tail + i) % capacity;
+        const size_t opIndex = (head + i) & mask;
         Core::JointMatrixOperation& op = buffer[opIndex];
 
         if (op.frames == 0) {
@@ -115,11 +113,10 @@ void JointMatrixOperationRingBuffer::ProcessOperations(char* pMappedData, uint32
 
         op.frames++;
         if (op.frames == discardCount) {
-            newTail = (newTail + 1) % capacity;
-            newCount--;
+            processed++;
         }
     }
-    count = newCount;
-    tail = newTail;
+
+    head += processed;
 }
 } // Render

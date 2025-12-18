@@ -13,42 +13,27 @@ namespace Core
 template<typename T, size_t Capacity>
 class RingBuffer
 {
+    static_assert((Capacity & (Capacity - 1)) == 0, "Capacity must be a power of 2");
+    static_assert(Capacity > 0, "Capacity must be greater than 0");
+
 public:
     RingBuffer()
-        : head(0), tail(0)
+        : head(0)
+        , tail(0)
     {}
 
-    bool Push(const T& item)
+    void Push(const T& item)
     {
-        if (IsFull()) return false;
-        buffer[tail] = item;
-        tail = (tail + 1) % Capacity;
-        return true;
-    }
-
-    bool Push(T&& item)
-    {
-        if (IsFull()) return false;
-        buffer[tail] = std::move(item);
-        tail = (tail + 1) % Capacity;
-        return true;
-    }
-
-    template<typename... Args>
-    bool Emplace(Args&&... args)
-    {
-        if (IsFull()) return false;
-        buffer[tail] = T(std::forward<Args>(args)...);
-        tail = (tail + 1) % Capacity;
-        return true;
+        buffer[tail & Mask] = item;
+        tail++;
     }
 
     bool Pop(T& item)
     {
         if (IsEmpty()) return false;
-        item = std::move(buffer[head]);
-        head = (head + 1) % Capacity;
 
+        item = buffer[head & Mask];
+        head++;
         return true;
     }
 
@@ -58,12 +43,13 @@ public:
         tail = 0;
     }
 
-    [[nodiscard]] constexpr size_t GetCapacity() const { return Capacity; }
-    [[nodiscard]] bool IsEmpty() const { return head == tail; }
-    [[nodiscard]] bool IsFull() const { return (tail + 1) % Capacity == head; }
-    [[nodiscard]] size_t GetSize() const { return head <= tail ? tail - head : Capacity - head + tail; }
+    size_t GetSize() const { return tail - head; }
+    constexpr size_t GetCapacity() const { return Capacity; }
+    bool IsEmpty() const { return head == tail; }
+    bool IsFull() const { return (tail - head) >= Capacity; }
 
 private:
+    static constexpr size_t Mask = Capacity - 1;
     std::array<T, Capacity> buffer;
     size_t head;
     size_t tail;
