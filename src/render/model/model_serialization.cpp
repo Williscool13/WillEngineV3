@@ -4,13 +4,15 @@
 
 #include "model_serialization.h"
 
+#include <utility>
+
 #include "miniz/miniz.h"
 #include "spdlog/spdlog.h"
 
 namespace Render
 {
-ModelWriter::ModelWriter(const std::filesystem::path& path)
-    : outputPath(path)
+ModelWriter::ModelWriter(std::filesystem::path  path)
+    : outputPath(std::move(path))
 {}
 
 ModelWriter::~ModelWriter()
@@ -57,11 +59,11 @@ bool ModelWriter::AddFile(const std::string& filename, const void* data, size_t 
     return true;
 }
 
-void ModelWriter::AddFileFromDisk(const std::string& filename, const std::string& sourcePath, bool compress)
+bool ModelWriter::AddFileFromDisk(const std::string& filename, const std::string& sourcePath, bool compress)
 {
     std::ifstream file(sourcePath, std::ios::binary | std::ios::ate);
     if (!file) {
-        throw std::runtime_error("Failed to open file: " + sourcePath);
+        return false;
     }
 
     size_t fileSize = file.tellg();
@@ -70,16 +72,20 @@ void ModelWriter::AddFileFromDisk(const std::string& filename, const std::string
     std::vector<uint8_t> buffer(fileSize);
     file.read(reinterpret_cast<char*>(buffer.data()), fileSize);
 
-    AddFile(filename, buffer.data(), buffer.size(), compress);
+    return AddFile(filename, buffer.data(), buffer.size(), compress);
 }
 
-void ModelWriter::Finalize()
+bool ModelWriter::Finalize()
 {
-    if (finalized) return;
+    if (finalized) {
+        SPDLOG_WARN("Already finalized willmodel was finalized again");
+        return false;
+    }
 
     std::ofstream file(outputPath, std::ios::binary);
     if (!file) {
-        throw std::runtime_error("Failed to create output file: " + outputPath.string());
+        SPDLOG_WARN("Failed to create output file: " + outputPath.string());
+        return false;
     }
 
     uint64_t currentOffset = sizeof(WillModelHeader);
@@ -109,6 +115,7 @@ void ModelWriter::Finalize()
     }
 
     finalized = true;
+    return true;
 }
 
 std::vector<uint8_t> CompressZlib(const void* data, size_t size)
@@ -273,15 +280,21 @@ WillModel LoadModel()
     return {};
 }
 
-ModelReader::ModelReader(const std::string& path)
-    : archivePath(path)
+ModelReader::ModelReader(std::filesystem::path  path)
+    : archivePath(std::move(path))
 {
+    archiveFileName = archivePath.filename().string();
     file.open(archivePath, std::ios::binary);
     if (!file) {
-        throw std::runtime_error("Failed to open archive: " + archivePath);
+        throw std::runtime_error("Failed to open archive: " + archivePath.string());
     }
 
-    ReadHeader();
+    bool headerCheck = ReadHeader();
+    if (!headerCheck) {
+        successfullyLoaded = false;
+        return;
+    }
+
     ReadFileTable();
 }
 
@@ -292,18 +305,30 @@ ModelReader::~ModelReader()
     }
 }
 
-void ModelReader::ReadHeader()
+bool ModelReader::ReadHeader()
 {
     file.seekg(0, std::ios::beg);
     file.read(reinterpret_cast<char*>(&header), sizeof(WillModelHeader));
 
     if (std::strncmp(header.magic, WILL_MODEL_MAGIC, 8) != 0) {
-        throw std::runtime_error("Invalid file format - magic number mismatch");
+        SPDLOG_ERROR("Invalid file format - magic number mismatch");
+        return false;
     }
 
-    // if (header.majorVersion != VERSION) {
-    //     throw std::runtime_error("Unsupported version: " + std::to_string(header.version));
-    // }
+    if (header.majorVersion != MODEL_MAJOR_VERSION) {
+        SPDLOG_ERROR("Loading {}: Major version difference ({} vs current {})", archiveFileName, header.majorVersion, MODEL_MAJOR_VERSION);
+        return false;
+    }
+    if (header.minorVersion != MODEL_MINOR_VERSION) {
+        SPDLOG_WARN("Loading {}: Minor file version difference ({} vs current {})", archiveFileName, header.majorVersion, MODEL_MAJOR_VERSION);
+        return false;
+    }
+    if (header.patchVersion != MODEL_PATCH_VERSION) {
+        SPDLOG_TRACE("Loading {}: patch version difference ({} vs current {})", archiveFileName, header.majorVersion, MODEL_MAJOR_VERSION);
+        return false;
+    }
+
+    return true;
 }
 
 void ModelReader::ReadFileTable()

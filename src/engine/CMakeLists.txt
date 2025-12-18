@@ -15,6 +15,7 @@ target_link_libraries(engine PUBLIC
         render
         # physics
         # audio
+        asset-load
         utils
         platform
         SDL3::SDL3

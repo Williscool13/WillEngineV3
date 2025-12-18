@@ -61,10 +61,8 @@ struct WillModelHeader
 struct WillModel
 {
     std::string name{};
-    bool bSuccessfullyLoaded{false};
     bool bIsSkeletalModel{false};
 
-    std::vector<VkSamplerCreateInfo> samplerInfos{};
     std::vector<Sampler> samplers{};
     std::vector<AllocatedImage> images{};
     std::vector<ImageView> imageViews{};

@@ -152,12 +152,12 @@ RawGltfModel ModelGenerator::LoadGltf(const std::filesystem::path& source)
                     [&](auto& arg) {},
                     [&](const fastgltf::sources::URI& fileName) {
                         if (fileName.fileByteOffset != 0) {
-                            SPDLOG_ERROR("[ModelGenerator::LoadGltf] File byte offset is not currently supported.");
+                            SPDLOG_LOGGER_ERROR(spdlog::default_logger_raw(), "[ModelGenerator::LoadGltf] File byte offset is not currently supported.");
                             return;
                         };
 
                         if (!fileName.uri.isLocalPath()) {
-                            SPDLOG_ERROR("[ModelGenerator::LoadGltf] Loading non-local files is not currently supported.");
+                            SPDLOG_LOGGER_ERROR(spdlog::default_logger_raw(), "[ModelGenerator::LoadGltf] Loading non-local files is not currently supported.");
                             return;
                         };
                         const std::wstring widePath(fileName.uri.path().begin(), fileName.uri.path().end());
@@ -169,7 +169,7 @@ RawGltfModel ModelGenerator::LoadGltf(const std::filesystem::path& source)
                         if (vector.bytes.size() > 30) {
                             std::string_view strData(reinterpret_cast<const char*>(vector.bytes.data()), std::min(size_t(100), vector.bytes.size()));
                             if (strData.find("https://git-lfs.github.com/spec") != std::string_view::npos) {
-                                SPDLOG_ERROR("[ModelGenerator::LoadGltf] Git LFS pointer detected instead of actual texture data for image. `git lfs pull` to retrieve files.");
+                                SPDLOG_LOGGER_ERROR(spdlog::default_logger_raw(), "[ModelGenerator::LoadGltf] Git LFS pointer detected instead of actual texture data for image. `git lfs pull` to retrieve files.");
                                 return;
                             }
                         }
@@ -882,13 +882,14 @@ bool ModelGenerator::WriteWillModel(const RawGltfModel& rawModel, const std::fil
         }
 
         std::string archiveName = fmt::format("textures/texture_{}.ktx2", i);
-        writer.AddFileFromDisk(archiveName, sourcePath, true);
+        bool writeRes = writer.AddFileFromDisk(archiveName, sourcePath, true);
+        if (!writeRes) {
+            return false;
+        }
         i++;
     }
 
-    writer.Finalize();
-
-    return true;
+    return writer.Finalize();
 }
 
 void ModelGenerator::GenerateWillModel_Internal(const std::filesystem::path& gltfPath, const std::filesystem::path& outputPath)

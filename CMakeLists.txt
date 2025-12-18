@@ -77,6 +77,7 @@ add_subdirectory(src/engine)
 add_subdirectory(src/core)
 add_subdirectory(src/game)
 add_subdirectory(src/render)
+add_subdirectory(src/asset-load)
 add_subdirectory(src/utils)
 add_subdirectory(src/platform)
 if (WILL_BUILD_EDITOR)
@@ -94,8 +95,6 @@ add_library(imgui STATIC
         ${IMGUI_DIR}/backends/imgui_impl_sdl3.cpp
         ${IMGUI_DIR}/backends/imgui_impl_vulkan.cpp
         ${IMGUI_DIR}/misc/cpp/imgui_stdlib.cpp
-        src/asset-load/asset_load_thread.cpp
-        src/asset-load/asset_load_thread.h
 )
 target_compile_definitions(imgui PUBLIC
         IMGUI_IMPL_VULKAN_USE_VOLK

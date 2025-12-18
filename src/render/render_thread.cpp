@@ -16,6 +16,7 @@
 #include "render/vulkan/vk_utils.h"
 #include "engine/will_engine.h"
 #include "platform/paths.h"
+
 #if WILL_EDITOR
 #include "render/vulkan/vk_imgui_wrapper.h"
 #include "backends/imgui_impl_vulkan.h"
@@ -81,7 +82,7 @@ void RenderThread::Initialize(Core::FrameSync* engineRenderSync, enki::TaskSched
 
 
 #if WILL_EDITOR
-    modelGenerator = std::make_unique<ModelGenerator>(context.get(), scheduler);
+    /*modelGenerator = std::make_unique<ModelGenerator>(context.get(), scheduler);
     const std::filesystem::path boxPath = Platform::GetAssetPath() / "BoxTextured.glb";
     const std::filesystem::path boxOut = Platform::GetAssetPath() / "BoxTextured.willmodel";
     auto loadResponse = modelGenerator->GenerateWillModelAsync(boxPath, boxOut);
@@ -100,7 +101,7 @@ void RenderThread::Initialize(Core::FrameSync* engineRenderSync, enki::TaskSched
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 
-    SPDLOG_INFO("Generation finished");
+    SPDLOG_INFO("Generation finished");*/
 #endif
 
 }

@@ -165,15 +165,15 @@ inline void ReadAnimation(const uint8_t*& data, Animation& anim)
 class ModelWriter
 {
 public:
-    explicit ModelWriter(const std::filesystem::path& path);
+    explicit ModelWriter(std::filesystem::path path);
 
     ~ModelWriter();
 
     bool AddFile(const std::string& filename, const void* data, size_t size, bool compress);
 
-    void AddFileFromDisk(const std::string& filename, const std::string& sourcePath, bool compress);
+    bool AddFileFromDisk(const std::string& filename, const std::string& sourcePath, bool compress);
 
-    void Finalize();
+    bool Finalize();
 
 private:
     std::filesystem::path outputPath;
@@ -185,7 +185,7 @@ private:
 class ModelReader
 {
 public:
-    explicit ModelReader(const std::string& path);
+    explicit ModelReader(std::filesystem::path path);
 
     ~ModelReader();
 
@@ -201,15 +201,20 @@ public:
 
     const FileEntry* GetFileEntry(const std::string& filename) const;
 
+    bool GetSuccessfullyLoaded() const { return successfullyLoaded; }
+
 private:
-    void ReadHeader();
+    bool ReadHeader();
 
     void ReadFileTable();
 
-    std::string archivePath;
+    std::filesystem::path archivePath;
+    std::string archiveFileName;
     mutable std::ifstream file;
     WillModelHeader header{};
     std::vector<FileEntry> fileEntries;
+
+    bool successfullyLoaded{};
 };
 
 std::vector<uint8_t> CompressZlib(const void* data, size_t size);

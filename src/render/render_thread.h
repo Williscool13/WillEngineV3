@@ -82,6 +82,10 @@ public:
 
     void ProcessAcquisitions(VkCommandBuffer cmd, Core::FrameBuffer& frameBuffer);
 
+public:
+    VulkanContext* GetVulkanContext() const { return context.get(); }
+    ResourceManager* GetResourceManager() const { return resourceManager.get(); }
+
 private:
     // Non-owning
     SDL_Window* window{};

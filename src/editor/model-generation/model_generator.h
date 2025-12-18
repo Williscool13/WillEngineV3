@@ -47,13 +47,9 @@ enum class GenerateResponse
     FINISHED
 };
 
-
-
 class ModelGenerator
 {
 public:
-
-
     ModelGenerator(VulkanContext* context, enki::TaskScheduler* taskscheduler);
 
     ~ModelGenerator();

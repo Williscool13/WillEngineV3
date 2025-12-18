@@ -15,6 +15,11 @@
 #include "platform/crash_handler.h"
 #include "platform/dll_loader.h"
 
+namespace AssetLoad
+{
+class AssetLoadThread;
+}
+
 namespace Game
 {
 struct GameState;
@@ -78,6 +83,7 @@ private: // Main Systems
     std::unique_ptr<enki::TaskScheduler> scheduler{};
     std::unique_ptr<Render::RenderThread> renderThread{};
     std::unique_ptr<Core::FrameSync> engineRenderSynchronization{};
+    std::unique_ptr<AssetLoad::AssetLoadThread> assetLoadThread{};
     Core::FrameBuffer stagingFrameBuffer{};
 
 private: // Subsystems

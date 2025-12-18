@@ -8,6 +8,7 @@
 #include <fmt/format.h>
 
 #include "engine_api.h"
+#include "asset-load/asset_load_thread.h"
 #include "core/include/game_interface.h"
 
 #include "core/input/input_manager.h"
@@ -69,7 +70,8 @@ void WillEngine::Initialize()
     engineRenderSynchronization = std::make_unique<Core::FrameSync>();
     renderThread = std::make_unique<Render::RenderThread>();
     renderThread->Initialize(engineRenderSynchronization.get(), scheduler.get(), window.get(), w, h);
-    // assetLoadingThread.Initialize(renderThread.GetVulkanContext(), renderThread.GetResourceManager());
+    assetLoadThread = std::make_unique<AssetLoad::AssetLoadThread>();
+    assetLoadThread->Initialize(scheduler.get(), renderThread->GetVulkanContext(), renderThread->GetResourceManager());
 
 #ifdef GAME_STATIC
     gameFunctions.gameGetStateSize = &GameGetStateSize;
@@ -154,6 +156,7 @@ void WillEngine::Run()
         }
 
         if (exit) {
+            assetLoadThread->RequestShutdown();
             renderThread->RequestShutdown();
             engineRenderSynchronization->renderFrames.release();
             break;
@@ -192,7 +195,6 @@ void WillEngine::Run()
         }
 
 #endif
-
 
         // assetLoadingThread.ResolveLoads(loadedModelEntryHandles, bufferAcquireOperations, imageAcquireOperations);
         gameFunctions.gameUpdate(engineContext.get(), static_cast<Game::GameState*>(gameState), input, &time);
@@ -282,6 +284,7 @@ void WillEngine::PrepareEditor(uint32_t currentFrameBufferIndex)
 
 void WillEngine::Cleanup()
 {
+    assetLoadThread->Join();
     renderThread->Join();
 
     gameFunctions.gameUnload(engineContext.get(), static_cast<Game::GameState*>(gameState));
