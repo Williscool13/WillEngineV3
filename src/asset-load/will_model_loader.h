@@ -78,7 +78,7 @@ struct WillModelLoader
     Render::WillModelHandle willModelHandle{Render::WillModelHandle::INVALID};
     Render::WillModel* model{nullptr};
 
-    UnpackedWillModel data{};
+    UnpackedWillModel rawData{};
     std::vector<VkSamplerCreateInfo> pendingSamplerInfos;
     std::vector<ktxTexture2*> pendingTextures;
 
@@ -92,7 +92,7 @@ struct WillModelLoader
 
     void TaskImplementation();
 
-    ThreadState ThreadExecute(UploadStaging* uploadStaging);
+    ThreadState ThreadExecute(Render::VulkanContext* context, Render::ResourceManager* resourceManager);
 };
 } // AssetLoad
 

@@ -11,6 +11,10 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 
+#include "offsetAllocator.hpp"
+#include "render/descriptors/vk_bindless_resources_sampler_images.h"
+#include "render/vulkan/vk_resources.h"
+
 namespace Render
 {
 enum class MaterialType
@@ -76,6 +80,39 @@ struct Animation
     std::vector<AnimationChannel> channels;
     float duration;
 };
+
+struct ModelData
+{
+    std::vector<MeshInformation> meshes{};
+    std::vector<Node> nodes{};
+    std::vector<uint32_t> nodeRemap{};
+    std::vector<Animation> animations{};
+
+    std::vector<glm::mat4> inverseBindMatrices{};
+
+    std::vector<Sampler> samplers{};
+    std::vector<AllocatedImage> images{};
+    std::vector<ImageView> imageViews{};
+
+    std::vector<BindlessSamplerHandle> samplerIndexToDescriptorBufferIndexMap{};
+    std::vector<BindlessTextureHandle> textureIndexToDescriptorBufferIndexMap{};
+
+    OffsetAllocator::Allocation vertexAllocation{};
+    OffsetAllocator::Allocation indexAllocation{};
+    OffsetAllocator::Allocation materialAllocation{};
+    OffsetAllocator::Allocation primitiveAllocation{};
+
+    ModelData() = default;
+
+    ModelData(const ModelData&) = delete;
+
+    ModelData& operator=(const ModelData&) = delete;
+
+    ModelData(ModelData&&) noexcept = default;
+
+    ModelData& operator=(ModelData&&) noexcept = default;
+};
+
 } // Render
 
 #endif //WILL_ENGINE_MODEL_TYPES_H

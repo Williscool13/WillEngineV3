@@ -10,6 +10,7 @@
 #include "ktx.h"
 #include "model_format.h"
 #include "TaskScheduler.h"
+#include "core/include/render_interface.h"
 
 namespace Render
 {
@@ -28,23 +29,16 @@ public:
 
     WillModel& operator=(WillModel&&) noexcept = default;
 
-    /**
-     * When entry is marked as `Ready`, asset thread will not modify the contents of this struct further.
-     */
+    std::filesystem::path source{};
+    std::string name{};
 
     // Populated in asset loading thread. Used by game thread
-    std::filesystem::path source{};
-    // todo: modelData should be the final version that is used by the game (see ModelData in test bed)
-    // ModelData modelData{};
+    ModelData modelData{};
 
-
-    // todo: acquire ops move to the asset load thread
-    // AcquireOperations modelAcquires{};
+    std::vector<Core::BufferAcquireOperation> bufferAcquireOps{};
+    std::vector<Core::ImageAcquireOperation> imageAcquireOps{};
 
     uint32_t refCount = 0;
-    // std::vector<UploadStagingHandle> uploadStagingHandles{};
-    // std::chrono::steady_clock::time_point loadStartTime;
-    // std::chrono::steady_clock::time_point loadEndTime;
 };
 } // AssetLoad
 

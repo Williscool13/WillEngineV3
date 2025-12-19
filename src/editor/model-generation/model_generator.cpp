@@ -435,7 +435,7 @@ RawGltfModel ModelGenerator::LoadGltf(const std::filesystem::path& source)
             std::vector<uint32_t> primitiveVertexPositions;
             meshlets.resize(meshopt_buildMeshlets(&meshlets[0], &meshletVertices[0], &meshletTriangles[0],
                                                   primitiveIndices.data(), primitiveIndices.size(),
-                                                  reinterpret_cast<const float*>(primitiveVertices.data()), primitiveVertices.size(), sizeof(Vertex),
+                                                  reinterpret_cast<const float*>(primitiveVertices.data()), primitiveVertices.size(), sizeof(SkinnedVertex),
                                                   MESHLET_MAX_VERTICES, MESHLET_MAX_TRIANGLES, 0.f));
 
             // Optimize each meshlet's micro index buffer/vertex layout individually
@@ -473,7 +473,7 @@ RawGltfModel ModelGenerator::LoadGltf(const std::filesystem::path& source)
                     meshlet.triangle_count,
                     reinterpret_cast<const float*>(primitiveVertices.data()),
                     primitiveVertices.size(),
-                    sizeof(Vertex)
+                    sizeof(SkinnedVertex)
                 );
 
                 rawModel.meshlets.push_back({

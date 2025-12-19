@@ -114,7 +114,7 @@ void AssetLoadThread::ThreadMain()
                     {
                         assetLoad.TaskExecute(scheduler, assetLoad.loadModelTask.get());
                         assetLoad.loadState = WillModelLoadState::TaskExecuting;
-                        SPDLOG_INFO("Started task for {}", assetLoad.model->source.string());
+                        SPDLOG_INFO("Started task for {}", assetLoad.model->name);
                     }
                     break;
                     case WillModelLoadState::TaskExecuting:
@@ -122,25 +122,25 @@ void AssetLoadThread::ThreadMain()
                         WillModelLoader::TaskState res = assetLoad.TaskExecute(scheduler, assetLoad.loadModelTask.get());
                         if (res == WillModelLoader::TaskState::Failed) {
                             assetLoad.loadState = WillModelLoadState::Failed;
-                            SPDLOG_WARN("Failed task for {}", assetLoad.model->source.string());
+                            SPDLOG_WARN("Failed task for {}", assetLoad.model->name);
                         }
                         else if (res == WillModelLoader::TaskState::Complete) {
-                            assetLoad.ThreadExecute(assetLoad.uploadStaging.get());
+                            assetLoad.ThreadExecute(context, resourceManager);
                             assetLoad.loadState = WillModelLoadState::ThreadExecuting;
-                            SPDLOG_INFO("Started thread for {}", assetLoad.model->source.string());
+                            SPDLOG_INFO("Started thread for {}", assetLoad.model->name);
                         }
                     }
                     break;
                     case WillModelLoadState::ThreadExecuting:
                     {
-                        WillModelLoader::ThreadState res = assetLoad.ThreadExecute(assetLoad.uploadStaging.get());
+                        WillModelLoader::ThreadState res = assetLoad.ThreadExecute(context, resourceManager);
                         if (res == WillModelLoader::ThreadState::Failed) {
                             assetLoad.loadState = WillModelLoadState::Failed;
-                            SPDLOG_WARN("Successfully loaded {}", assetLoad.model->source.string());
+                            SPDLOG_WARN("Successfully loaded {}", assetLoad.model->name);
                         }
                         else if (res == WillModelLoader::ThreadState::Complete) {
                             assetLoad.loadState = WillModelLoadState::Loaded;
-                            SPDLOG_INFO("Successfully loaded {}", assetLoad.model->source.string());
+                            SPDLOG_INFO("Successfully loaded {}", assetLoad.model->name);
                         }
                     }
                     break;

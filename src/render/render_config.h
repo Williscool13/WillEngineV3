@@ -24,7 +24,7 @@ inline static constexpr int32_t BINDLESS_STORAGE_IMAGE_COUNT            = 128;
 inline static constexpr int32_t BINDLESS_SAMPLER_COUNT                  = 64;
 inline static constexpr int32_t BINDLESS_SAMPLED_IMAGE_COUNT            = 1024;
 
-inline static constexpr int32_t MEGA_VERTEX_BUFFER_SIZE                 = sizeof(Vertex) * 1048576; // 1 << 20
+inline static constexpr int32_t MEGA_VERTEX_BUFFER_SIZE                 = sizeof(SkinnedVertex) * 1048576; // 1 << 20
 inline static constexpr int32_t MEGA_PRIMITIVE_BUFFER_SIZE              = sizeof(MeshletPrimitive) * 65536;
 
 inline static constexpr int32_t MEGA_MESHLET_VERTEX_BUFFER_SIZE         = 1 << 25; // sizeof(uint32_t)

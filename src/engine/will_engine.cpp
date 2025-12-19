@@ -272,6 +272,7 @@ void WillEngine::DrawImgui()
         Render::WillModelHandle modelHandle = resourceManager->models.Add();
         Render::WillModel* model = resourceManager->models.Get(modelHandle);
         model->source = std::move(boxOut);
+        model->name = model->source.filename().string();
 
         assetLoadThread->RequestLoad(modelHandle);
     }
