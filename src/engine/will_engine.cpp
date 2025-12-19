@@ -72,7 +72,9 @@ void WillEngine::Initialize()
     renderThread->Initialize(engineRenderSynchronization.get(), scheduler.get(), window.get(), w, h);
     assetLoadThread = std::make_unique<AssetLoad::AssetLoadThread>();
     assetLoadThread->Initialize(scheduler.get(), renderThread->GetVulkanContext(), renderThread->GetResourceManager());
-
+#if WILL_EDITOR
+    modelGenerator = std::make_unique<Render::ModelGenerator>(renderThread->GetVulkanContext(), scheduler.get());
+#endif
 #ifdef GAME_STATIC
     gameFunctions.gameGetStateSize = &GameGetStateSize;
     gameFunctions.gameStartup = &GameStartup;
@@ -111,6 +113,7 @@ void WillEngine::Initialize()
 void WillEngine::Run()
 {
     renderThread->Start();
+    assetLoadThread->Start();
     timeManager->Reset();
 
     SDL_Event e;
@@ -263,6 +266,39 @@ void WillEngine::DrawImgui()
         // }
     }
 
+    if (ImGui::Button("Press me!")) {
+        std::filesystem::path boxOut = Platform::GetAssetPath() / "BoxTextured.willmodel";
+        Render::ResourceManager* resourceManager = renderThread->GetResourceManager();
+        Render::WillModelHandle modelHandle = resourceManager->models.Add();
+        Render::WillModel* model = resourceManager->models.Get(modelHandle);
+        model->source = std::move(boxOut);
+
+        assetLoadThread->RequestLoad(modelHandle);
+    }
+
+    if (ImGui::Button("Press me to generate!")) {
+        const std::filesystem::path boxPath = Platform::GetAssetPath() / "BoxTextured.glb";
+        const std::filesystem::path boxOut = Platform::GetAssetPath() / "BoxTextured.willmodel";
+        auto loadResponse = modelGenerator->GenerateWillModelAsync(boxPath, boxOut);
+
+        while (true) {
+            auto progress = modelGenerator->GetProgress().value.load(std::memory_order::acquire);
+            auto state = modelGenerator->GetProgress().loadingState.load(std::memory_order::acquire);
+
+            SPDLOG_DEBUG("Progress: {}% - State: {}", progress, static_cast<int>(state));
+
+            if (state == Render::WillModelGenerationProgress::LoadingProgress::SUCCESS ||
+                state == Render::WillModelGenerationProgress::LoadingProgress::FAILED) {
+                break;
+            }
+
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+
+        SPDLOG_INFO("Generation finished");
+    }
+
+
     ImGui::End();
     ImGui::Render();
 }
@@ -277,7 +313,6 @@ void WillEngine::PrepareEditor(uint32_t currentFrameBufferIndex)
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
         first--;
     }
-
 }
 #endif
 

@@ -101,7 +101,6 @@ private:
     std::unique_ptr<Swapchain> swapchain{};
 #if WILL_EDITOR
     std::unique_ptr<ImguiWrapper> imgui{};
-    std::unique_ptr<Render::ModelGenerator> modelGenerator{};
 #endif
     std::unique_ptr<RenderTargets> renderTargets{};
     std::unique_ptr<ResourceManager> resourceManager{};

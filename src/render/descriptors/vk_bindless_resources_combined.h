@@ -7,7 +7,7 @@
 
 #include "core/allocators/handle.h"
 #include "core/allocators/handle_allocator.h"
-#include "render/render_constants.h"
+#include "render/render_config.h"
 #include "render/vulkan/vk_resources.h"
 
 namespace Render

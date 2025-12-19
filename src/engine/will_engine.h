@@ -34,6 +34,7 @@ class InputManager;
 
 namespace Render
 {
+class ModelGenerator;
 class RenderThread;
 }
 
@@ -84,6 +85,9 @@ private: // Main Systems
     std::unique_ptr<Render::RenderThread> renderThread{};
     std::unique_ptr<Core::FrameSync> engineRenderSynchronization{};
     std::unique_ptr<AssetLoad::AssetLoadThread> assetLoadThread{};
+#if WILL_EDITOR
+    std::unique_ptr<Render::ModelGenerator> modelGenerator{};
+#endif
     Core::FrameBuffer stagingFrameBuffer{};
 
 private: // Subsystems

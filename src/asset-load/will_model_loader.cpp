@@ -1,44 +1,69 @@
 //
-// Created by William on 2025-12-18.
+// Created by William on 2025-12-19.
 //
 
-#include "will_model_asset.h"
+#include "will_model_loader.h"
 
-#include "ktxvulkan.h"
+#include <fstream>
+
 #include "render/model/model_serialization.h"
-#include "spdlog/spdlog.h"
 
 namespace AssetLoad
 {
-WillModelAsset::WillModelAsset() = default;
-
-WillModelAsset::~WillModelAsset() = default;
-
-void WillModelAsset::TaskExecute()
+void LoadModelTask::ExecuteRange(enki::TaskSetPartition range, uint32_t threadnum)
 {
-    // if (!vulkanDeviceInfo) {
-    //     const VkCommandPoolCreateInfo poolInfo = Renderer::VkHelpers::CommandPoolCreateInfo(vulkanContext->graphicsQueueFamily);
-    //     VK_CHECK(vkCreateCommandPool(vulkanContext->device, &poolInfo, nullptr, &ktxTextureCommandPool));
-    //     ktxVulkanFunctions vkFuncs{};
-    //     vkFuncs.vkGetInstanceProcAddr = vkGetInstanceProcAddr;
-    //     vkFuncs.vkGetDeviceProcAddr = vkGetDeviceProcAddr;
-    //     vulkanDeviceInfo = ktxVulkanDeviceInfo_CreateEx(vulkanContext->instance, vulkanContext->physicalDevice, vulkanContext->device, vulkanContext->graphicsQueue, ktxTextureCommandPool, nullptr,
-    //                                                     &vkFuncs);
-    // }
+    if (modelLoader) {
+        modelLoader->TaskImplementation();
+    }
+}
 
+WillModelLoader::WillModelLoader()
+{
+    uploadStaging = std::make_unique<UploadStaging>();
+    loadModelTask = std::make_unique<LoadModelTask>();
+}
+
+WillModelLoader::~WillModelLoader() = default;
+
+void WillModelLoader::Reset()
+{
+    data.Reset();
+    loadState = WillModelLoadState::Idle;
+    willModelHandle = Render::WillModelHandle::INVALID;
+    model = nullptr;
+}
+
+WillModelLoader::TaskState WillModelLoader::TaskExecute(enki::TaskScheduler* scheduler, LoadModelTask* task)
+{
+    if (taskState == TaskState::NotStarted) {
+        task->modelLoader = this;
+        taskState = TaskState::InProgress;
+        scheduler->AddTaskSetToPipe(task);
+    }
+
+    if (task->GetIsComplete()) {
+        return taskState;
+    }
+
+    return TaskState::InProgress;
+}
+
+void WillModelLoader::TaskImplementation()
+{
+    const std::filesystem::path& source = model->source;
     if (!std::filesystem::exists(source)) {
         SPDLOG_ERROR("Failed to find path to willmodel - {}", source.string());
-        SetState(LoadState::Failed);
+        taskState = TaskState::Failed;
         return;
     }
 
-    Render::ModelReader reader(source);
+    Render::ModelReader reader = Render::ModelReader(source);
 
     if (!reader.GetSuccessfullyLoaded()) {
-        SetState(LoadState::Failed);
+        SPDLOG_ERROR("Failed to load willmodel - {}", source.string());
+        taskState = TaskState::Failed;
         return;
     }
-
 
     std::vector<uint8_t> modelBinData = reader.ReadFile("model.bin");
 
@@ -140,12 +165,16 @@ void WillModelAsset::TaskExecute()
     // allocatedImage.extent = {vkTexture.width, vkTexture.height, vkTexture.depth};
     // extractedModel.images.push_back(std::move(allocatedImage));
     // extractedModel.imageViews.push_back(std::move(imageView));
-    // for (VkSamplerCreateInfo& sampler : samplerInfos) {
+    // for (VkSamplerCreateInfo& sampler : pendingSamplerInfos) {
     //     data.samplers.push_back(Render::Sampler::CreateSampler(context.get(), sampler));
     // }
 
     data.name = "Loaded Model";
+    taskState = TaskState::Complete;
 }
 
-void WillModelAsset::ThreadExecute() {}
+WillModelLoader::ThreadState WillModelLoader::ThreadExecute(UploadStaging* uploadStaging)
+{
+    return ThreadState::Complete;
+}
 } // AssetLoad

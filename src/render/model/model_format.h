@@ -57,31 +57,6 @@ struct WillModelHeader
     uint32_t numFiles;
     uint64_t fileTableOffset;
 };
-
-struct WillModel
-{
-    std::string name{};
-    bool bIsSkeletalModel{false};
-
-    std::vector<Sampler> samplers{};
-    std::vector<AllocatedImage> images{};
-    std::vector<ImageView> imageViews{};
-
-    std::vector<Vertex> vertices{};
-    std::vector<uint32_t> meshletVertices{};
-    std::vector<uint8_t> meshletTriangles{};
-    std::vector<Meshlet> meshlets{};
-
-    std::vector<MeshletPrimitive> primitives{};
-    std::vector<MaterialProperties> materials{};
-
-    std::vector<MeshInformation> allMeshes{};
-    std::vector<Node> nodes{};
-    std::vector<uint32_t> nodeRemap{};
-
-    std::vector<Animation> animations;
-    std::vector<glm::mat4> inverseBindMatrices{};
-};
 } // Render
 
 #endif //WILL_ENGINE_MODEL_FORMAT_H

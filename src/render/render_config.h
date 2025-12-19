@@ -30,6 +30,7 @@ inline static constexpr int32_t MEGA_PRIMITIVE_BUFFER_SIZE              = sizeof
 inline static constexpr int32_t MEGA_MESHLET_VERTEX_BUFFER_SIZE         = 1 << 25; // sizeof(uint32_t)
 inline static constexpr int32_t MEGA_MESHLET_TRIANGLE_BUFFER_SIZE       = 1 << 25; // sizeof(uint8_t)
 inline static constexpr int32_t MEGA_MESHLET_BUFFER_SIZE                = 1 << 20; // sizeof(Meshlet)
+inline static constexpr uint32_t MAX_LOADED_MODELS                      = 1024;
 } // Render
 
 #endif //WILL_ENGINE_VK_CONSTANTS_H

@@ -185,6 +185,8 @@ private:
 class ModelReader
 {
 public:
+    ModelReader();
+
     explicit ModelReader(std::filesystem::path path);
 
     ~ModelReader();
@@ -220,8 +222,6 @@ private:
 std::vector<uint8_t> CompressZlib(const void* data, size_t size);
 
 std::vector<uint8_t> DecompressZlib(const void* data, size_t compressedSize, size_t uncompressedSize);
-
-WillModel LoadModel();
 } // Render
 
 #endif //WILL_ENGINE_MODEL_SERIALIZATION_H

@@ -4,17 +4,16 @@
 
 #ifndef WILL_ENGINE_ASSET_LOAD_THREAD_H
 #define WILL_ENGINE_ASSET_LOAD_THREAD_H
+#include <bitset>
 #include <memory>
-#include <unordered_map>
 
 #include <LockFreeQueue/LockFreeQueueCpp11.h>
 
 #include "asset_load_config.h"
 #include "asset_load_types.h"
-#include "i_loadable_asset.h"
 #include "TaskScheduler.h"
-#include "core/allocators/free_list.h"
-#include "core/allocators/handle_allocator.h"
+#include "will_model_loader.h"
+#include "render/vulkan/vk_resource_manager.h"
 
 template<typename T>
 using LockFreeQueue = LockFreeQueueCpp11<T>;
@@ -44,7 +43,10 @@ public:
 
     void RequestShutdown();
 
-    void Join();
+    void Join() const;
+
+public:
+    void RequestLoad(Render::WillModelHandle willmodelHandle);
 
 private: // Threading
     void ThreadMain();
@@ -58,37 +60,13 @@ private: // Threading
     std::atomic<bool> bShouldExit{false};
     std::unique_ptr<enki::LambdaPinnedTask> pinnedTask{};
 
-    LockFreeQueue<AssetLoadRequest> requestQueue{ASSET_LOAD_QUEUE_COUNT};
-    LockFreeQueue<AssetLoadComplete> completeQueue{ASSET_LOAD_QUEUE_COUNT};
+    LockFreeQueue<WillModelLoadRequest> modelLoadQueue{MODEL_LOAD_QUEUE_COUNT};
+    LockFreeQueue<WillModelComplete> modelCompleteQueue{MODEL_LOAD_QUEUE_COUNT};
 
-    std::vector<AssetLoadInProgress> modelsInProgress{};
+    std::bitset<ASSET_LOAD_ASYNC_COUNT> loaderActive;
+    std::array<WillModelLoader, ASSET_LOAD_ASYNC_COUNT> assetLoadSlots{};
 
-private:
     VkCommandPool commandPool{};
-    std::array<UploadStaging, ASSET_LOAD_ASYNC_COUNT> uploadStagingDatas;
-    Core::HandleAllocator<UploadStaging, ASSET_LOAD_ASYNC_COUNT> uploadStagingHandleAllocator{};
-    std::vector<UploadStagingHandle> activeUploadHandles;
-
-private:
-    Core::FreeList<WillModelHandle, MAX_LOADED_MODELS> models;
-    std::unordered_map<std::filesystem::path, WillModelHandle> pathToHandle;
-
-
-    struct LoadTask: enki::ITaskSet
-    {
-        ILoadableAsset* loadableAsset{nullptr};
-
-        explicit LoadTask()
-            : ITaskSet(1)
-        {}
-
-        void ExecuteRange(enki::TaskSetPartition range, uint32_t threadnum) override
-        {
-            if (loadableAsset) {
-                loadableAsset->TaskExecute();
-            }
-        }
-    };
 };
 } // AssetLoad
 

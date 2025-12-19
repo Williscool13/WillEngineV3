@@ -91,9 +91,16 @@ public:
         }
         count = 0;
     }
+
+    [[nodiscard]] bool IsAnyFree() const { return count < MaxSize; }
+
+    /**
+     * Use sparingly, mostly for initialization/deinitialization and debugging
+     * @return
+     */
+    std::vector<T>& GetAllSlots() { return slots; }
 };
 } // Core
-
 
 
 #endif //WILLENGINETESTBED_FREE_LIST_H

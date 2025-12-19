@@ -4,7 +4,7 @@
 
 #include "vk_bindless_resources_combined.h"
 #include "vk_descriptors.h"
-#include "render/render_constants.h"
+#include "render/render_config.h"
 #include "render/vulkan/vk_context.h"
 #include "render/vulkan/vk_helpers.h"
 #include "spdlog/spdlog.h"
@@ -68,7 +68,7 @@ BindlessCombinedHandle BindlessResourcesCombined::AllocateCombined(VkSampler sam
     BindlessCombinedHandle handle = combinedAllocator.Add();
     if (!handle.IsValid()) {
         SPDLOG_WARN("No more combined image sampler indices available");
-        return BindlessCombinedHandle::Invalid;
+        return BindlessCombinedHandle::INVALID;
     }
 
     size_t bindingOffset;

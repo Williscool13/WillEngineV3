@@ -5,40 +5,55 @@
 #ifndef WILL_ENGINE_I_LOADABLE_ASSET_H
 #define WILL_ENGINE_I_LOADABLE_ASSET_H
 
-namespace AssetLoad
+#include <atomic>
+#include <TaskScheduler.h>
+
+/*namespace AssetLoad
 {
+struct LoadModelTask;
+
 class ILoadableAsset
 {
 public:
     enum class LoadState
     {
-        Idle,
+        Unloaded,
         TaskExecuting,
-        TaskComplete,
-        ThreadComplete,
+        ThreadExecuting,
+        Loaded,
         Failed
     };
 
+    enum class TaskState
+    {
+        InProgress,
+        Success,
+        Failed
+    };
+
+    ILoadableAsset() = default;
+
     virtual ~ILoadableAsset() = default;
 
-    virtual void TaskExecute() = 0;
+    ILoadableAsset(const ILoadableAsset&) = delete;
 
-    virtual void ThreadExecute() = 0;
+    ILoadableAsset& operator=(const ILoadableAsset&) = delete;
 
-    LoadState GetState() const
-    {
-        return state.load(std::memory_order_acquire);
-    }
+    ILoadableAsset(ILoadableAsset&&) = delete;
 
-protected:
-    void SetState(LoadState newState)
-    {
-        state.store(newState, std::memory_order_release);
-    }
+    ILoadableAsset& operator=(ILoadableAsset&&) = delete;
 
-    std::atomic<LoadState> state{LoadState::Idle};
+    virtual ExecuteState TaskExecute(enki::TaskScheduler* scheduler, LoadModelTask* task) = 0;
+
+    virtual void TaskImplementation() = 0;
+
+    /**
+     * Return true if all gpu resources have finished uploading (staging finished)
+     * @return
+     #1#
+    virtual ExecuteState ThreadExecute() = 0;
 };
-}
+}*/
 
 
 #endif //WILL_ENGINE_I_LOADABLE_ASSET_H

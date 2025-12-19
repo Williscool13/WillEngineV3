@@ -3,8 +3,8 @@ add_library(render STATIC
         render_thread.h
         frame_resources.cpp
         frame_resources.h
-        render_constants.cpp
-        render_constants.h
+        render_config.cpp
+        render_config.h
         vulkan/vk_context.cpp
         vulkan/vk_context.h
         vulkan/vk_swapchain.cpp
@@ -55,6 +55,8 @@ add_library(render STATIC
         model/model_types.h
         model/model_serialization.cpp
         model/model_serialization.h
+        model/will_model_asset.cpp
+        model/will_model_asset.h
         shaders/constants_interop.h
 )
 
@@ -65,6 +67,7 @@ target_include_directories(render PRIVATE
 
 target_link_libraries(render PUBLIC
         core
+        asset-load
         platform
         SDL3::SDL3
         volk

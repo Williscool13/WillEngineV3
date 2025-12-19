@@ -8,7 +8,7 @@
 #include "vk_descriptors.h"
 #include "render/vulkan/vk_resources.h"
 #include "core/allocators/handle_allocator.h"
-#include "render/render_constants.h"
+#include "render/render_config.h"
 #include "render/vulkan/vk_context.h"
 #include "render/vulkan/vk_helpers.h"
 #include "spdlog/spdlog.h"
@@ -103,7 +103,7 @@ public:
         BindlessStorageImageHandle handle = storageImageAllocator.Add();
         if (!handle.IsValid()) {
             SPDLOG_WARN("No more storage image indices available");
-            return BindlessStorageImageHandle::Invalid;
+            return BindlessStorageImageHandle::INVALID;
         }
 
         size_t bindingOffset;

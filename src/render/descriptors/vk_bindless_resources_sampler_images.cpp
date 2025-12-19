@@ -5,7 +5,7 @@
 #include "vk_bindless_resources_sampler_images.h"
 
 #include "vk_descriptors.h"
-#include "render/render_constants.h"
+#include "render/render_config.h"
 #include "render/vulkan/vk_context.h"
 #include "render/vulkan/vk_helpers.h"
 #include "spdlog/spdlog.h"
@@ -72,7 +72,7 @@ BindlessSamplerHandle BindlessResourcesSamplerImages::AllocateSampler(VkSampler 
     BindlessSamplerHandle handle = samplerAllocator.Add();
     if (!handle.IsValid()) {
         SPDLOG_WARN("No more sampler indices available");
-        return BindlessSamplerHandle::Invalid;
+        return BindlessSamplerHandle::INVALID;
     }
 
     size_t bindingOffset;
@@ -96,7 +96,7 @@ BindlessTextureHandle BindlessResourcesSamplerImages::AllocateTexture(const VkDe
     BindlessTextureHandle handle = textureAllocator.Add();
     if (!handle.IsValid()) {
         SPDLOG_WARN("No more texture indices available");
-        return BindlessTextureHandle::Invalid;
+        return BindlessTextureHandle::INVALID;
     }
 
     size_t bindingOffset;

@@ -1,0 +1,99 @@
+//
+// Created by William on 2025-12-19.
+//
+
+#ifndef WILL_ENGINE_WILL_MODEL_LOADER_H
+#define WILL_ENGINE_WILL_MODEL_LOADER_H
+#include "asset_load_types.h"
+#include "TaskScheduler.h"
+#include "render/vulkan/vk_resource_manager.h"
+
+namespace Render
+{
+struct VulkanContext;
+}
+
+namespace AssetLoad
+{
+struct UploadStaging;
+struct WillModelLoader;
+
+struct LoadModelTask : enki::ITaskSet
+{
+    WillModelLoader* modelLoader{nullptr};
+
+    explicit LoadModelTask()
+        : ITaskSet(1)
+    {}
+
+    void ExecuteRange(enki::TaskSetPartition range, uint32_t threadnum) override;
+};
+
+enum class WillModelLoadState
+{
+    Idle,
+    TaskExecuting,
+    ThreadExecuting,
+    Loaded,
+    Failed
+};
+
+struct WillModelLoader
+{
+    enum class TaskState
+    {
+        NotStarted,
+        InProgress,
+        Complete,
+        Failed,
+    };
+
+    enum class ThreadState
+    {
+        NotStarted,
+        InProgress,
+        Complete,
+        Failed,
+    };
+
+    WillModelLoader();
+
+    ~WillModelLoader();
+
+    WillModelLoader(const WillModelLoader&) = delete;
+
+    WillModelLoader& operator=(const WillModelLoader&) = delete;
+
+    WillModelLoader(WillModelLoader&&) noexcept = default;
+
+    WillModelLoader& operator=(WillModelLoader&&) noexcept = default;
+
+    void Reset();
+
+    std::unique_ptr<LoadModelTask> loadModelTask;
+    std::unique_ptr<UploadStaging> uploadStaging;
+
+    // Transient
+    WillModelLoadState loadState{WillModelLoadState::Idle};
+    Render::WillModelHandle willModelHandle{Render::WillModelHandle::INVALID};
+    Render::WillModel* model{nullptr};
+
+    UnpackedWillModel data{};
+    std::vector<VkSamplerCreateInfo> pendingSamplerInfos;
+    std::vector<ktxTexture2*> pendingTextures;
+
+    // Task Cache
+    TaskState taskState{TaskState::NotStarted};
+
+    // Thread Cache
+    ThreadState threadState{ThreadState::NotStarted};
+
+    TaskState TaskExecute(enki::TaskScheduler* scheduler, LoadModelTask* task);
+
+    void TaskImplementation();
+
+    ThreadState ThreadExecute(UploadStaging* uploadStaging);
+};
+} // AssetLoad
+
+#endif //WILL_ENGINE_WILL_MODEL_LOADER_H

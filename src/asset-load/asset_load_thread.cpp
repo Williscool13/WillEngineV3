@@ -7,6 +7,7 @@
 #include <enkiTS/src/TaskScheduler.h>
 #include <spdlog/spdlog.h>
 
+#include "will_model_loader.h"
 #include "render/vulkan/vk_context.h"
 #include "render/vulkan/vk_helpers.h"
 #include "render/vulkan/vk_utils.h"
@@ -20,8 +21,8 @@ AssetLoadThread::~AssetLoadThread()
     if (context) {
         vkDestroyCommandPool(context->device, commandPool, nullptr);
 
-        for (UploadStaging& uploadStaging : uploadStagingDatas) {
-            vkDestroyFence(context->device, uploadStaging.fence, nullptr);
+        for (int32_t i = 0; i < assetLoadSlots.size(); ++i) {
+            vkDestroyFence(context->device, assetLoadSlots[i].uploadStaging->fence, nullptr);
         }
     }
 }
@@ -34,18 +35,18 @@ void AssetLoadThread::Initialize(enki::TaskScheduler* _scheduler, Render::Vulkan
 
     VkCommandPoolCreateInfo poolInfo = Render::VkHelpers::CommandPoolCreateInfo(context->transferQueueFamily);
     VK_CHECK(vkCreateCommandPool(context->device, &poolInfo, nullptr, &commandPool));
-    VkCommandBufferAllocateInfo cmdInfo = Render::VkHelpers::CommandBufferAllocateInfo(4, commandPool);
+    VkCommandBufferAllocateInfo cmdInfo = Render::VkHelpers::CommandBufferAllocateInfo(ASSET_LOAD_ASYNC_COUNT, commandPool);
     std::array<VkCommandBuffer, ASSET_LOAD_ASYNC_COUNT> commandBuffers{};
     VK_CHECK(vkAllocateCommandBuffers(context->device, &cmdInfo, commandBuffers.data()));
 
-    for (int32_t i = 0; i < uploadStagingDatas.size(); ++i) {
+    for (int32_t i = 0; i < assetLoadSlots.size(); ++i) {
         VkFenceCreateInfo fenceInfo = {
             .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
             .flags = 0, // Unsignaled
         };
-        VK_CHECK(vkCreateFence(context->device, &fenceInfo, nullptr, &uploadStagingDatas[i].fence));
-        uploadStagingDatas[i].commandBuffer = commandBuffers[i];
-        uploadStagingDatas[i].stagingBuffer = Render::AllocatedBuffer::CreateAllocatedStagingBuffer(context, ASSET_LOAD_STAGING_BUFFER_SIZE);
+        VK_CHECK(vkCreateFence(context->device, &fenceInfo, nullptr, &assetLoadSlots[i].uploadStaging->fence));
+        assetLoadSlots[i].uploadStaging->commandBuffer = commandBuffers[i];
+        assetLoadSlots[i].uploadStaging->stagingBuffer = Render::AllocatedBuffer::CreateAllocatedStagingBuffer(context, ASSET_LOAD_STAGING_BUFFER_SIZE);
     }
 
     // CreateDefaultResources();
@@ -55,9 +56,9 @@ void AssetLoadThread::Start()
 {
     bShouldExit.store(false, std::memory_order_release);
 
-    uint32_t renderThreadNum = scheduler->GetNumTaskThreads() - 1;
+    uint32_t assetLoadThreadNum = scheduler->GetNumTaskThreads() - 2;
     pinnedTask = std::make_unique<enki::LambdaPinnedTask>(
-        renderThreadNum,
+        assetLoadThreadNum,
         [this] { ThreadMain(); }
     );
 
@@ -69,66 +70,94 @@ void AssetLoadThread::RequestShutdown()
     bShouldExit.store(true, std::memory_order_release);
 }
 
-void AssetLoadThread::Join()
+void AssetLoadThread::Join() const
 {
     if (pinnedTask) {
         scheduler->WaitforTask(pinnedTask.get());
     }
 }
 
+void AssetLoadThread::RequestLoad(Render::WillModelHandle willmodelHandle)
+{
+    modelLoadQueue.push({willmodelHandle});
+}
+
 void AssetLoadThread::ThreadMain()
 {
     while (!bShouldExit.load()) {
-        // bool didWork = false;
-        //
-        // FinishUploadsInProgress();
-        //
-        // for (int i = static_cast<int>(modelsInProgress.size()) - 1; i >= 0; --i) {
-        //     AssetLoadInProgress& inProgress = modelsInProgress[i];
-        //     ModelEntry* modelEntry = models.Get(inProgress.modelEntryHandle);
-        //
-        //     if (!modelEntry) {
-        //         LOG_ERROR("Model handle became invalid while loading");
-        //         modelsInProgress.erase(modelsInProgress.begin() + i);
-        //         didWork = true;
-        //         continue;
-        //     }
-        //
-        //
-        //     RemoveFinishedUploadStaging(modelEntry->uploadStagingHandles);
-        //
-        //     if (modelEntry->uploadStagingHandles.empty()) {
-        //         if (modelEntry->state.load() != ModelEntry::State::Ready) {
-        //             modelEntry->loadEndTime = std::chrono::steady_clock::now();
-        //             modelEntry->state.store(ModelEntry::State::Ready);
-        //
-        //             auto duration = std::chrono::duration_cast<std::chrono::microseconds>(modelEntry->loadEndTime - modelEntry->loadStartTime);
-        //             LOG_INFO("[Asset Loading Thread] Model '{}' loaded in {:.3f} ms", modelEntry->data.name, duration.count() / 1000.0);
-        //         }
-        //
-        //         completeQueue.push({inProgress.modelEntryHandle, std::move(inProgress.onComplete)});
-        //         modelsInProgress.erase(modelsInProgress.begin() + i);
-        //         didWork = true;
-        //     }
-        // }
-        //
-        // if (uploadStagingHandleAllocator.IsAnyFree()) {
-        //     AssetLoadRequest loadRequest;
-        //     while (requestQueue.pop(loadRequest)) {
-        //         ModelEntryHandle newModelHandle = LoadGltf(loadRequest.path);
-        //         if (newModelHandle == ModelEntryHandle::Invalid) {
-        //             completeQueue.push({newModelHandle, std::move(loadRequest.onComplete)});
-        //         }
-        //         else {
-        //             modelsInProgress.push_back({newModelHandle, std::move(loadRequest.onComplete)});
-        //         }
-        //         didWork = true;
-        //     }
-        // }
-        //
-        // if (!didWork) {
-        //     std::this_thread::sleep_for(std::chrono::milliseconds(1));
-        // }
+        // Try to start
+        for (size_t i = 0; i < ASSET_LOAD_ASYNC_COUNT; ++i) {
+            if (!loaderActive[i]) {
+                WillModelLoadRequest loadRequest{};
+                if (modelLoadQueue.pop(loadRequest)) {
+                    Render::WillModel* modelToLoad = resourceManager->models.Get(loadRequest.willModelHandle);
+                    if (modelToLoad == nullptr) {
+                        SPDLOG_ERROR("[AssetLoadThread::Join] Model load failed to obtain the loadable asset");
+                        modelCompleteQueue.push({loadRequest.willModelHandle});
+                        continue;
+                    }
+
+                    assetLoadSlots[i].loadState = WillModelLoadState::Idle;
+                    assetLoadSlots[i].willModelHandle = loadRequest.willModelHandle;
+                    assetLoadSlots[i].model = modelToLoad;
+                    loaderActive[i] = true;
+                }
+            }
+        }
+
+        // Resolve existing currently loading stuff
+        for (size_t i = 0; i < ASSET_LOAD_ASYNC_COUNT; ++i) {
+            if (loaderActive[i]) {
+                WillModelLoader& assetLoad = assetLoadSlots[i];
+                switch (assetLoad.loadState) {
+                    case WillModelLoadState::Idle:
+                    {
+                        assetLoad.TaskExecute(scheduler, assetLoad.loadModelTask.get());
+                        assetLoad.loadState = WillModelLoadState::TaskExecuting;
+                        SPDLOG_INFO("Started task for {}", assetLoad.model->source.string());
+                    }
+                    break;
+                    case WillModelLoadState::TaskExecuting:
+                    {
+                        WillModelLoader::TaskState res = assetLoad.TaskExecute(scheduler, assetLoad.loadModelTask.get());
+                        if (res == WillModelLoader::TaskState::Failed) {
+                            assetLoad.loadState = WillModelLoadState::Failed;
+                            SPDLOG_WARN("Failed task for {}", assetLoad.model->source.string());
+                        }
+                        else if (res == WillModelLoader::TaskState::Complete) {
+                            assetLoad.ThreadExecute(assetLoad.uploadStaging.get());
+                            assetLoad.loadState = WillModelLoadState::ThreadExecuting;
+                            SPDLOG_INFO("Started thread for {}", assetLoad.model->source.string());
+                        }
+                    }
+                    break;
+                    case WillModelLoadState::ThreadExecuting:
+                    {
+                        WillModelLoader::ThreadState res = assetLoad.ThreadExecute(assetLoad.uploadStaging.get());
+                        if (res == WillModelLoader::ThreadState::Failed) {
+                            assetLoad.loadState = WillModelLoadState::Failed;
+                            SPDLOG_WARN("Successfully loaded {}", assetLoad.model->source.string());
+                        }
+                        else if (res == WillModelLoader::ThreadState::Complete) {
+                            assetLoad.loadState = WillModelLoadState::Loaded;
+                            SPDLOG_INFO("Successfully loaded {}", assetLoad.model->source.string());
+                        }
+                    }
+                    break;
+                    default:
+                        break;
+                }
+
+                if (assetLoad.loadState == WillModelLoadState::Loaded || assetLoad.loadState == WillModelLoadState::Failed) {
+                    assetLoad.taskState = WillModelLoader::TaskState::NotStarted;
+                    assetLoad.threadState = WillModelLoader::ThreadState::NotStarted;
+                    modelCompleteQueue.push({assetLoad.willModelHandle});
+                    loaderActive[i] = false;
+
+                    assetLoad.Reset();
+                }
+            }
+        }
     }
 }
 } // AssetLoad

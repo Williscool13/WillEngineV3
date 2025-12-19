@@ -79,31 +79,6 @@ void RenderThread::Initialize(Core::FrameSync* engineRenderSync, enki::TaskSched
         SPDLOG_ERROR("Failed to compile shaders");
         exit(1);
     }
-
-
-#if WILL_EDITOR
-    /*modelGenerator = std::make_unique<ModelGenerator>(context.get(), scheduler);
-    const std::filesystem::path boxPath = Platform::GetAssetPath() / "BoxTextured.glb";
-    const std::filesystem::path boxOut = Platform::GetAssetPath() / "BoxTextured.willmodel";
-    auto loadResponse = modelGenerator->GenerateWillModelAsync(boxPath, boxOut);
-
-    while (true) {
-        auto progress = modelGenerator->GetProgress().value.load(std::memory_order::acquire);
-        auto state = modelGenerator->GetProgress().loadingState.load(std::memory_order::acquire);
-
-        SPDLOG_DEBUG("Progress: {}% - State: {}", progress, static_cast<int>(state));
-
-        if (state == WillModelGenerationProgress::LoadingProgress::SUCCESS ||
-            state == WillModelGenerationProgress::LoadingProgress::FAILED) {
-            break;
-            }
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    }
-
-    SPDLOG_INFO("Generation finished");*/
-#endif
-
 }
 
 void RenderThread::Start()

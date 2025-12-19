@@ -4,51 +4,43 @@
 
 #ifndef WILL_ENGINE_WILL_MODEL_ASSET_H
 #define WILL_ENGINE_WILL_MODEL_ASSET_H
-#include <atomic>
+
 #include <filesystem>
 
-#include "i_loadable_asset.h"
 #include "ktx.h"
-#include "render/model/model_format.h"
+#include "model_format.h"
+#include "TaskScheduler.h"
 
-namespace AssetLoad
+namespace Render
 {
-class WillModelAsset : public ILoadableAsset
+struct WillModel
 {
 public:
-    WillModelAsset();
+    WillModel();
 
-    ~WillModelAsset();
+    ~WillModel();
 
-    void TaskExecute() override;
+    WillModel(const WillModel&) = delete;
 
-    void ThreadExecute() override;
+    WillModel& operator=(const WillModel&) = delete;
 
-private:
-    enum class UploadState {
-        NotStarted,
-        Uploading,
-        UploadComplete,
-        Ready  // Acquired by render thread
-    };
+    WillModel(WillModel&&) noexcept = default;
+
+    WillModel& operator=(WillModel&&) noexcept = default;
+
     /**
      * When entry is marked as `Ready`, asset thread will not modify the contents of this struct further.
      */
 
     // Populated in asset loading thread. Used by game thread
     std::filesystem::path source{};
-    Render::WillModel data{};
-
-    // Populated in TaskExecute, consumed in ThreadExecute
-    std::vector<VkSamplerCreateInfo> pendingSamplerInfos;
-    std::vector<ktxTexture2*> pendingTextures;
+    // todo: modelData should be the final version that is used by the game (see ModelData in test bed)
+    // ModelData modelData{};
 
 
     // todo: acquire ops move to the asset load thread
     // AcquireOperations modelAcquires{};
 
-
-    // Only accessed by asset loading thread
     uint32_t refCount = 0;
     // std::vector<UploadStagingHandle> uploadStagingHandles{};
     // std::chrono::steady_clock::time_point loadStartTime;

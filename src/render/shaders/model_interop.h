@@ -42,7 +42,7 @@ using float4x4 = glm::mat4;
 SHADER_PUBLIC struct Vertex
 {
     SHADER_PUBLIC float3 position;
-    SHADER_PUBLIC float texcoordX;
+    SHADER_PUBLIC float texcoordU;
     SHADER_PUBLIC float3 normal;
     SHADER_PUBLIC float texcoordV;
     SHADER_PUBLIC float4 tangent;

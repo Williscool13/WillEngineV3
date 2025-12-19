@@ -26,12 +26,12 @@ struct Handle
         return generation < other.generation;
     }
 
-    static const Handle Invalid;
+    static const Handle INVALID;
 };
 
 
 template<typename T>
-inline const Handle<T> Handle<T>::Invalid{
+inline const Handle<T> Handle<T>::INVALID{
     INVALID_HANDLE_INDEX,
     INVALID_HANDLE_GENERATION
 };
