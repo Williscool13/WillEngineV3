@@ -4,11 +4,8 @@
 
 #ifndef WILL_ENGINE_ASSET_LOAD_TYPES_H
 #define WILL_ENGINE_ASSET_LOAD_TYPES_H
-#include <cstdint>
-#include <vector>
 
-#include <ktx.h>
-#include <volk.h>
+#include <vector>
 
 #include "offsetAllocator.hpp"
 #include "render/model/model_types.h"
@@ -26,8 +23,28 @@ namespace AssetLoad
 {
 constexpr uint32_t ASSET_LOAD_STAGING_BUFFER_SIZE = 2 * 64 * 1024 * 1024; // 2MB
 
-struct UploadStaging
+class UploadStaging
 {
+public:
+    UploadStaging() = default;
+
+    ~UploadStaging();
+
+    void Initialize(Render::VulkanContext* _context, VkCommandBuffer _commandBuffer);
+
+    void StartCommandBuffer();
+
+    void SubmitCommandBuffer();
+
+    [[nodiscard]] bool IsReady() const;
+
+    [[nodiscard]] bool IsCommandBufferStarted() const { return bCommandBufferStarted; }
+
+    VkCommandBuffer GetCommandBuffer() const { return commandBuffer; }
+    OffsetAllocator::Allocator& GetStagingAllocator() { return stagingAllocator; }
+    Render::AllocatedBuffer& GetStagingBuffer() { return stagingBuffer; }
+
+private:
     Render::VulkanContext* context{};
     VkCommandBuffer commandBuffer{};
     VkFence fence{};
@@ -35,8 +52,8 @@ struct UploadStaging
     Render::AllocatedBuffer stagingBuffer{};
     OffsetAllocator::Allocator stagingAllocator{ASSET_LOAD_STAGING_BUFFER_SIZE};
 
-    UploadStaging() = default;
-    ~UploadStaging() = default;
+    // Transient
+    bool bCommandBufferStarted = false;
 };
 
 
@@ -44,9 +61,6 @@ struct UnpackedWillModel
 {
     std::string name{};
     bool bIsSkeletalModel{false};
-
-    std::vector<VkSamplerCreateInfo> pendingSamplerInfos{};
-    std::vector<ktxTexture2*> pendingTextures{};
 
     std::vector<SkinnedVertex> vertices{};
     std::vector<uint32_t> meshletVertices{};
@@ -77,10 +91,6 @@ struct UnpackedWillModel
     {
         name.clear();
         bIsSkeletalModel = false;
-
-        pendingSamplerInfos.clear();
-        // destroy ktx texture2s
-        // pendingTextures
 
         vertices.clear();
         meshletVertices.clear();

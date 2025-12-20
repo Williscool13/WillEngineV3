@@ -20,10 +20,6 @@ AssetLoadThread::~AssetLoadThread()
 {
     if (context) {
         vkDestroyCommandPool(context->device, commandPool, nullptr);
-
-        for (int32_t i = 0; i < assetLoadSlots.size(); ++i) {
-            vkDestroyFence(context->device, assetLoadSlots[i].uploadStaging->fence, nullptr);
-        }
     }
 }
 
@@ -40,13 +36,7 @@ void AssetLoadThread::Initialize(enki::TaskScheduler* _scheduler, Render::Vulkan
     VK_CHECK(vkAllocateCommandBuffers(context->device, &cmdInfo, commandBuffers.data()));
 
     for (int32_t i = 0; i < assetLoadSlots.size(); ++i) {
-        VkFenceCreateInfo fenceInfo = {
-            .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-            .flags = 0, // Unsignaled
-        };
-        VK_CHECK(vkCreateFence(context->device, &fenceInfo, nullptr, &assetLoadSlots[i].uploadStaging->fence));
-        assetLoadSlots[i].uploadStaging->commandBuffer = commandBuffers[i];
-        assetLoadSlots[i].uploadStaging->stagingBuffer = Render::AllocatedBuffer::CreateAllocatedStagingBuffer(context, ASSET_LOAD_STAGING_BUFFER_SIZE);
+        assetLoadSlots[i].uploadStaging->Initialize(context, commandBuffers[i]);
     }
 
     // CreateDefaultResources();
@@ -136,11 +126,18 @@ void AssetLoadThread::ThreadMain()
                         WillModelLoader::ThreadState res = assetLoad.ThreadExecute(context, resourceManager);
                         if (res == WillModelLoader::ThreadState::Failed) {
                             assetLoad.loadState = WillModelLoadState::Failed;
-                            SPDLOG_WARN("Successfully loaded {}", assetLoad.model->name);
+                            SPDLOG_WARN("Failed thread execute for {}", assetLoad.model->name);
                         }
                         else if (res == WillModelLoader::ThreadState::Complete) {
-                            assetLoad.loadState = WillModelLoadState::Loaded;
-                            SPDLOG_INFO("Successfully loaded {}", assetLoad.model->name);
+                            const bool postRes = assetLoad.PostThreadExecute(context, resourceManager);
+                            if (postRes) {
+                                assetLoad.loadState = WillModelLoadState::Loaded;
+                                SPDLOG_INFO("Successfully loaded {}", assetLoad.model->name);
+                            }
+                            else {
+                                assetLoad.loadState = WillModelLoadState::Failed;
+                                SPDLOG_INFO("Failed post thread execute for {}", assetLoad.model->name);
+                            }
                         }
                     }
                     break;

@@ -825,6 +825,7 @@ bool ModelGenerator::WriteWillModel(const RawGltfModel& rawModel, const std::fil
             copyRegion.imageExtent = {mipWidth, mipHeight, 1};
 
             copyRegions.push_back(copyRegion);
+            // todo: dimension needs to be extracted from format
             bufferOffset += mipWidth * mipHeight * 4;
         }
 
@@ -927,6 +928,7 @@ void WriteModelBinary(std::ofstream& file, const RawGltfModel& model)
     header.animationCount = static_cast<uint32_t>(model.animations.size());
     header.inverseBindMatrixCount = static_cast<uint32_t>(model.inverseBindMatrices.size());
     header.samplerCount = static_cast<uint32_t>(model.samplerInfos.size());
+    header.textureCount = static_cast<uint32_t>(model.images.size());
 
     file.write(reinterpret_cast<const char*>(&header), sizeof(ModelBinaryHeader));
 

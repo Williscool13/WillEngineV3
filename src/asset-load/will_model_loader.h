@@ -81,6 +81,8 @@ struct WillModelLoader
     UnpackedWillModel rawData{};
     std::vector<VkSamplerCreateInfo> pendingSamplerInfos;
     std::vector<ktxTexture2*> pendingTextures;
+    uint32_t pendingTextureHead{0};
+    std::vector<uint32_t> pendingTextureIndices;
 
     // Task Cache
     TaskState taskState{TaskState::NotStarted};
@@ -93,6 +95,14 @@ struct WillModelLoader
     void TaskImplementation();
 
     ThreadState ThreadExecute(Render::VulkanContext* context, Render::ResourceManager* resourceManager);
+
+    /**
+     * Will only be called once, after ThreadExecute has returned ThreadState::Complete
+     * @param context
+     * @param resourceManager
+     * @return true if the post thread execute succeeded and the model is successfully laoded
+     */
+    bool PostThreadExecute(Render::VulkanContext* context, Render::ResourceManager* resourceManager);
 };
 } // AssetLoad
 

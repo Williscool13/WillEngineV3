@@ -3,3 +3,13 @@
 
 # interop generated .slang include files
 *_interop.slang
+
+# Exclude all .willmodel files except BoxTextured.willmodel
+*.willmodel
+!BoxTextured.willmodel
+
+# Exclude all .gltf/.glb files except BoxTextured.glb
+*.glb
+*.gltf
+!BoxTextured.glb
+

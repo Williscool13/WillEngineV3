@@ -33,6 +33,8 @@ struct BufferAcquireOperation
     uint64_t dstAccessMask;
     uint64_t offset;
     uint64_t size;
+    uint32_t srcQueueFamilyIndex;
+    uint32_t dstQueueFamilyIndex;
 };
 
 struct ImageAcquireOperation
@@ -49,6 +51,8 @@ struct ImageAcquireOperation
     uint64_t dstStageMask;
     uint64_t dstAccessMask;
     uint32_t newLayout;
+    uint32_t srcQueueFamilyIndex;
+    uint32_t dstQueueFamilyIndex;
 };
 
 struct ModelMatrixOperation

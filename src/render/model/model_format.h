@@ -19,7 +19,7 @@ namespace Render
 constexpr char WILL_MODEL_MAGIC[8] = "WILLMDL";
 constexpr uint32_t MODEL_MAJOR_VERSION = 0;
 constexpr uint32_t MODEL_MINOR_VERSION = 1;
-constexpr uint32_t MODEL_PATCH_VERSION = 1;
+constexpr uint32_t MODEL_PATCH_VERSION = 2;
 
 struct ModelBinaryHeader
 {
@@ -35,6 +35,7 @@ struct ModelBinaryHeader
     uint32_t animationCount;
     uint32_t inverseBindMatrixCount;
     uint32_t samplerCount;
+    uint32_t textureCount;
 };
 
 constexpr size_t MAX_FILENAME_LENGTH = 128;
