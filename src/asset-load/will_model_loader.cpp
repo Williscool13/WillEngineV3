@@ -406,199 +406,115 @@ WillModelLoader::ThreadState WillModelLoader::ThreadExecute(Render::VulkanContex
 
     // Geometry
     {
-        // Vertices
-        if (pendingVerticesHead < rawData.vertices.size()) {
-            size_t vertexSize = rawData.bIsSkeletalModel ? sizeof(SkinnedVertex) : sizeof(Vertex);
-            VkBuffer targetBuffer = rawData.bIsSkeletalModel
-                                        ? resourceManager->megaSkinnedVertexBuffer.handle
-                                        : resourceManager->megaVertexBuffer.handle;
+        auto uploadBufferChunked = [&](
+            uint32_t& pendingHead,
+            size_t totalCount,
+            size_t elementSize,
+            const void* sourceData,
+            VkBuffer targetBuffer,
+            VkDeviceSize targetOffset
+        ) -> bool {
+            if (pendingHead >= totalCount) {
+                return true;
+            }
 
-            size_t remainingVertices = rawData.vertices.size() - pendingVerticesHead;
-            size_t remainingSize = remainingVertices * vertexSize;
+            size_t remainingElements = totalCount - pendingHead;
+            size_t remainingSize = remainingElements * elementSize;
 
             OffsetAllocator::Allocation allocation = stagingAllocator.allocate(remainingSize);
             if (allocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
-                size_t maxVertices = stagingAllocator.storageReport().totalFreeSpace / vertexSize;
-                if (maxVertices == 0) {
-                    assert(stagingAllocator.storageReport().totalFreeSpace != ASSET_LOAD_STAGING_BUFFER_SIZE);
+                // Try to fit as much as possible in remaining space
+                size_t freeSpace = stagingAllocator.storageReport().totalFreeSpace;
+                size_t maxElements = freeSpace / elementSize;
+
+                if (maxElements == 0) {
+                    // Can't fit even one element - submit and retry next frame
+                    assert(freeSpace < ASSET_LOAD_STAGING_BUFFER_SIZE && "NO_SPACE on empty staging buffer");
                     uploadStaging->SubmitCommandBuffer();
-                    return ThreadState::InProgress;
+                    return false;
                 }
 
                 // Try partial allocation
-                remainingSize = maxVertices * vertexSize;
+                remainingSize = maxElements * elementSize;
                 allocation = stagingAllocator.allocate(remainingSize);
 
                 if (allocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
-                    // Fragmentation - can't allocate even though we have free space
+                    // Fragmentation - submit and retry
                     uploadStaging->SubmitCommandBuffer();
-                    return ThreadState::InProgress;
+                    return false;
                 }
 
-                size_t chunkSize = maxVertices * vertexSize;
-                allocation = stagingAllocator.allocate(chunkSize);
-                remainingSize = chunkSize;
-                remainingVertices = maxVertices;
+                remainingElements = maxElements;
             }
 
             uploadStaging->StartCommandBuffer();
 
-            const char* vertexData = reinterpret_cast<const char*>(rawData.vertices.data()) + (pendingVerticesHead * vertexSize);
+            const char* elementData = static_cast<const char*>(sourceData) + (pendingHead * elementSize);
             char* stagingPtr = static_cast<char*>(stagingBuffer.allocationInfo.pMappedData) + allocation.offset;
-            memcpy(stagingPtr, vertexData, remainingSize);
+            memcpy(stagingPtr, elementData, remainingSize);
 
             VkBufferCopy copyRegion{};
             copyRegion.srcOffset = allocation.offset;
-            copyRegion.dstOffset = model->modelData.vertexAllocation.offset + (pendingVerticesHead * vertexSize);
+            copyRegion.dstOffset = targetOffset + (pendingHead * elementSize);
             copyRegion.size = remainingSize;
 
             vkCmdCopyBuffer(uploadStaging->GetCommandBuffer(), stagingBuffer.handle, targetBuffer, 1, &copyRegion);
 
-            pendingVerticesHead += remainingVertices;
+            pendingHead += remainingElements;
+            return pendingHead >= totalCount;
+        };
+
+
+        size_t vertexSize = rawData.bIsSkeletalModel ? sizeof(SkinnedVertex) : sizeof(Vertex);
+        VkBuffer targetVertexBuffer = rawData.bIsSkeletalModel ? resourceManager->megaSkinnedVertexBuffer.handle : resourceManager->megaVertexBuffer.handle;
+
+        if (!uploadBufferChunked(pendingVerticesHead,
+                                 rawData.vertices.size(),
+                                 vertexSize,
+                                 rawData.vertices.data(),
+                                 targetVertexBuffer,
+                                 model->modelData.vertexAllocation.offset)
+        ) {
+            return ThreadState::InProgress;
+        }
+        if (!uploadBufferChunked(pendingMeshletVerticesHead,
+                                 rawData.meshletVertices.size(),
+                                 sizeof(uint32_t),
+                                 rawData.meshletVertices.data(),
+                                 resourceManager->megaMeshletVerticesBuffer.handle,
+                                 model->modelData.meshletVertexAllocation.offset)
+        ) {
+            return ThreadState::InProgress;
         }
 
-        // Meshlet Vertices
-        if (pendingMeshletVerticesHead < rawData.meshletVertices.size()) {
-            size_t remainingVertices = rawData.meshletVertices.size() - pendingMeshletVerticesHead;
-            size_t remainingSize = remainingVertices * sizeof(uint32_t);
-
-            OffsetAllocator::Allocation allocation = stagingAllocator.allocate(remainingSize);
-            if (allocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
-                size_t maxVertices = stagingAllocator.storageReport().totalFreeSpace / sizeof(uint32_t);
-                if (maxVertices == 0) {
-                    assert(stagingAllocator.storageReport().totalFreeSpace != ASSET_LOAD_STAGING_BUFFER_SIZE);
-                    uploadStaging->SubmitCommandBuffer();
-                    return ThreadState::InProgress;
-                }
-
-                size_t chunkSize = maxVertices * sizeof(uint32_t);
-                allocation = stagingAllocator.allocate(chunkSize);
-                remainingSize = chunkSize;
-                remainingVertices = maxVertices;
-            }
-
-            uploadStaging->StartCommandBuffer();
-
-            const char* vertexData = reinterpret_cast<const char*>(rawData.meshletVertices.data()) + (pendingMeshletVerticesHead * sizeof(uint32_t));
-            char* stagingPtr = static_cast<char*>(stagingBuffer.allocationInfo.pMappedData) + allocation.offset;
-            memcpy(stagingPtr, vertexData, remainingSize);
-
-            VkBufferCopy copyRegion{};
-            copyRegion.srcOffset = allocation.offset;
-            copyRegion.dstOffset = model->modelData.meshletVertexAllocation.offset + (pendingMeshletVerticesHead * sizeof(uint32_t));
-            copyRegion.size = remainingSize;
-
-            vkCmdCopyBuffer(uploadStaging->GetCommandBuffer(), stagingBuffer.handle, resourceManager->megaMeshletVerticesBuffer.handle, 1, &copyRegion);
-
-            pendingMeshletVerticesHead += remainingVertices;
+        if (!uploadBufferChunked(pendingMeshletTrianglesHead,
+                                 rawData.meshletTriangles.size(),
+                                 sizeof(uint8_t),
+                                 rawData.meshletTriangles.data(),
+                                 resourceManager->megaMeshletTrianglesBuffer.handle,
+                                 model->modelData.meshletTriangleAllocation.offset)
+        ) {
+            return ThreadState::InProgress;
         }
 
-        // Meshlet Triangles
-        if (pendingMeshletTrianglesHead < rawData.meshletTriangles.size()) {
-            size_t remainingTriangles = rawData.meshletTriangles.size() - pendingMeshletTrianglesHead;
-            size_t remainingSize = remainingTriangles * sizeof(uint8_t);
-
-            OffsetAllocator::Allocation allocation = stagingAllocator.allocate(remainingSize);
-            if (allocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
-                size_t maxTriangles = stagingAllocator.storageReport().totalFreeSpace / sizeof(uint8_t);
-                if (maxTriangles == 0) {
-                    assert(stagingAllocator.storageReport().totalFreeSpace != ASSET_LOAD_STAGING_BUFFER_SIZE);
-                    uploadStaging->SubmitCommandBuffer();
-                    return ThreadState::InProgress;
-                }
-
-                size_t chunkSize = maxTriangles * sizeof(uint8_t);
-                allocation = stagingAllocator.allocate(chunkSize);
-                remainingSize = chunkSize;
-                remainingTriangles = maxTriangles;
-            }
-
-            uploadStaging->StartCommandBuffer();
-
-            const char* triangleData = reinterpret_cast<const char*>(rawData.meshletTriangles.data()) + pendingMeshletTrianglesHead;
-            char* stagingPtr = static_cast<char*>(stagingBuffer.allocationInfo.pMappedData) + allocation.offset;
-            memcpy(stagingPtr, triangleData, remainingSize);
-
-            VkBufferCopy copyRegion{};
-            copyRegion.srcOffset = allocation.offset;
-            copyRegion.dstOffset = model->modelData.meshletTriangleAllocation.offset + pendingMeshletTrianglesHead;
-            copyRegion.size = remainingSize;
-
-            vkCmdCopyBuffer(uploadStaging->GetCommandBuffer(), stagingBuffer.handle, resourceManager->megaMeshletTrianglesBuffer.handle, 1, &copyRegion);
-
-            pendingMeshletTrianglesHead += remainingTriangles;
+        if (!uploadBufferChunked(pendingMeshletsHead,
+                                 rawData.meshlets.size(),
+                                 sizeof(Meshlet),
+                                 rawData.meshlets.data(),
+                                 resourceManager->megaMeshletBuffer.handle,
+                                 model->modelData.meshletAllocation.offset)
+        ) {
+            return ThreadState::InProgress;
         }
 
-        // Meshlets
-        if (pendingMeshletsHead < rawData.meshlets.size()) {
-            size_t remainingMeshlets = rawData.meshlets.size() - pendingMeshletsHead;
-            size_t remainingSize = remainingMeshlets * sizeof(Meshlet);
-
-            OffsetAllocator::Allocation allocation = stagingAllocator.allocate(remainingSize);
-            if (allocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
-                size_t maxMeshlets = stagingAllocator.storageReport().totalFreeSpace / sizeof(Meshlet);
-                if (maxMeshlets == 0) {
-                    assert(stagingAllocator.storageReport().totalFreeSpace != ASSET_LOAD_STAGING_BUFFER_SIZE);
-                    uploadStaging->SubmitCommandBuffer();
-                    return ThreadState::InProgress;
-                }
-
-                size_t chunkSize = maxMeshlets * sizeof(Meshlet);
-                allocation = stagingAllocator.allocate(chunkSize);
-                remainingSize = chunkSize;
-                remainingMeshlets = maxMeshlets;
-            }
-
-            uploadStaging->StartCommandBuffer();
-
-            const char* meshletData = reinterpret_cast<const char*>(rawData.meshlets.data()) + (pendingMeshletsHead * sizeof(Meshlet));
-            char* stagingPtr = static_cast<char*>(stagingBuffer.allocationInfo.pMappedData) + allocation.offset;
-            memcpy(stagingPtr, meshletData, remainingSize);
-
-            VkBufferCopy copyRegion{};
-            copyRegion.srcOffset = allocation.offset;
-            copyRegion.dstOffset = model->modelData.meshletAllocation.offset + (pendingMeshletsHead * sizeof(Meshlet));
-            copyRegion.size = remainingSize;
-
-            vkCmdCopyBuffer(uploadStaging->GetCommandBuffer(), stagingBuffer.handle, resourceManager->megaMeshletBuffer.handle, 1, &copyRegion);
-
-            pendingMeshletsHead += remainingMeshlets;
-        }
-
-        // Upload primitives (with offset patching)
-        if (pendingPrimitivesHead < rawData.primitives.size()) {
-            size_t remainingPrimitives = rawData.primitives.size() - pendingPrimitivesHead;
-            size_t remainingSize = remainingPrimitives * sizeof(MeshletPrimitive);
-
-            OffsetAllocator::Allocation allocation = stagingAllocator.allocate(remainingSize);
-            if (allocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
-                size_t maxPrimitives = stagingAllocator.storageReport().totalFreeSpace / sizeof(MeshletPrimitive);
-                if (maxPrimitives == 0) {
-                    assert(stagingAllocator.storageReport().totalFreeSpace != ASSET_LOAD_STAGING_BUFFER_SIZE);
-                    uploadStaging->SubmitCommandBuffer();
-                    return ThreadState::InProgress;
-                }
-
-                size_t chunkSize = maxPrimitives * sizeof(MeshletPrimitive);
-                allocation = stagingAllocator.allocate(chunkSize);
-                remainingSize = chunkSize;
-                remainingPrimitives = maxPrimitives;
-            }
-
-            uploadStaging->StartCommandBuffer();
-
-            const char* primitiveData = reinterpret_cast<const char*>(rawData.primitives.data()) + (pendingPrimitivesHead * sizeof(MeshletPrimitive));
-            char* stagingPtr = static_cast<char*>(stagingBuffer.allocationInfo.pMappedData) + allocation.offset;
-            memcpy(stagingPtr, primitiveData, remainingSize);
-
-            VkBufferCopy copyRegion{};
-            copyRegion.srcOffset = allocation.offset;
-            copyRegion.dstOffset = model->modelData.primitiveAllocation.offset + (pendingPrimitivesHead * sizeof(MeshletPrimitive));
-            copyRegion.size = remainingSize;
-
-            vkCmdCopyBuffer(uploadStaging->GetCommandBuffer(), stagingBuffer.handle, resourceManager->primitiveBuffer.handle, 1, &copyRegion);
-
-            pendingPrimitivesHead += remainingPrimitives;
+        if (!uploadBufferChunked(pendingPrimitivesHead,
+                                 rawData.primitives.size(),
+                                 sizeof(MeshletPrimitive),
+                                 rawData.primitives.data(),
+                                 resourceManager->primitiveBuffer.handle,
+                                 model->modelData.primitiveAllocation.offset)
+        ) {
+            return ThreadState::InProgress;
         }
 
         if (pendingBufferBarrier == 0) {
@@ -620,9 +536,8 @@ WillModelLoader::ThreadState WillModelLoader::ThreadExecute(Render::VulkanContex
                 return barrier;
             };
 
-            size_t vertexSize = rawData.bIsSkeletalModel ? sizeof(SkinnedVertex) : sizeof(Vertex);
             releaseBarriers.push_back(createBufferBarrier(
-                rawData.bIsSkeletalModel ? resourceManager->megaSkinnedVertexBuffer.handle : resourceManager->megaVertexBuffer.handle,
+                targetVertexBuffer,
                 model->modelData.vertexAllocation.offset,
                 rawData.vertices.size() * vertexSize
             ));

@@ -60,7 +60,6 @@ struct ResourceManager
     BindlessResourcesSamplerImages bindlessSamplerTextureDescriptorBuffer{};
     BindlessResourcesStorage<8> bindlessRenderTargetDescriptorBuffer{};
     BindlessResourcesStorage<512> bindlessStorageDescriptorBuffer{};
-    BindlessResourcesCombined bindlessCombinedDescriptorBuffer{};
 
     // Managed by Engine (asset manager)
     Core::HandleAllocator<ModelEntry, BINDLESS_MODEL_BUFFER_COUNT> modelEntryAllocator;
