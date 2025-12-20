@@ -199,7 +199,22 @@ void WillEngine::Run()
 
 #endif
 
-        // assetLoadingThread.ResolveLoads(loadedModelEntryHandles, bufferAcquireOperations, imageAcquireOperations);
+        std::vector<Render::WillModelHandle> modelHandles;
+        assetLoadThread->ResolveLoads(modelHandles);
+
+        for (Render::WillModelHandle& modelHandle : modelHandles) {
+            Render::ResourceManager* resourceManager = renderThread->GetResourceManager();
+            Render::WillModel* model = resourceManager->models.Get(modelHandle);
+
+            stagingFrameBuffer.bufferAcquireOperations.insert(stagingFrameBuffer.bufferAcquireOperations.end(),
+                                                              model->bufferAcquireOps.begin(),
+                                                              model->bufferAcquireOps.end());
+
+            stagingFrameBuffer.imageAcquireOperations.insert(stagingFrameBuffer.imageAcquireOperations.end(),
+                                                             model->imageAcquireOps.begin(),
+                                                             model->imageAcquireOps.end());
+        }
+
         gameFunctions.gameUpdate(engineContext.get(), static_cast<Game::GameState*>(gameState), input, &time);
         inputManager->FrameReset();
 
@@ -274,6 +289,7 @@ void WillEngine::DrawImgui()
         model->source = path;
         model->name = model->source.filename().string();
         assetLoadThread->RequestLoad(modelHandle);
+        return modelHandle;
     };
 
     auto generateModel = [&](const std::filesystem::path& gltfPath, const std::filesystem::path& outPath) {
@@ -296,8 +312,12 @@ void WillEngine::DrawImgui()
         SPDLOG_INFO("Generation finished");
     };
 
+    if (ImGui::Button("Add One BoxTextured")) {
+
+    }
+
     if (ImGui::Button("Load BoxTextured .willmodel")) {
-        loadModel(Platform::GetAssetPath() / "BoxTextured.willmodel");
+        boxModelHandle = loadModel(Platform::GetAssetPath() / "BoxTextured.willmodel");
     }
 
     if (ImGui::Button("Generate BoxTextured.willmodel from BoxTextured.glb")) {

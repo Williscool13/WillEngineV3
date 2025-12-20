@@ -296,7 +296,6 @@ RawGltfModel ModelGenerator::LoadGltf(const std::filesystem::path& source)
                 primitiveData.bHasTransparent = (static_cast<MaterialType>(rawModel.materials[materialIndex].alphaProperties.y) == MaterialType::BLEND);
             }
 
-            primitiveData.materialIndex = materialIndex;
 
             // INDICES
             const fastgltf::Accessor& indexAccessor = gltf.accessors[p.indicesAccessor.value()];
@@ -457,7 +456,7 @@ RawGltfModel ModelGenerator::LoadGltf(const std::filesystem::path& source)
             primitiveData.meshletCount = meshlets.size();
             primitiveData.boundingSphere = GenerateBoundingSphere(primitiveVertices);
 
-            meshData.primitiveIndices.push_back(rawModel.primitives.size());
+            meshData.primitiveIndices.emplace_back(rawModel.primitives.size(), materialIndex);
             rawModel.primitives.push_back(primitiveData);
 
             uint32_t vertexOffset = rawModel.vertices.size();

@@ -16,26 +16,6 @@ namespace Render
 {
 Frustum CreateFrustum(const glm::mat4& viewProj);
 
-//todo move to interop
-struct Instance
-{
-    uint32_t primitiveIndex{UINT32_MAX};
-    uint32_t modelIndex{UINT32_MAX};
-    uint32_t materialIndex{UINT32_MAX};
-    uint32_t jointMatrixOffset{UINT32_MAX};
-    uint32_t bIsAllocated{false};
-    uint32_t padding;
-    uint32_t padding1;
-    uint32_t padding2;
-};
-
-struct Model
-{
-    glm::mat4 modelMatrix{1.0f};
-    glm::mat4 prevModelMatrix{1.0f};
-    glm::vec4 flags{1.0f}; // x: visible, y: shadow-caster, zw: reserved
-};
-
 struct TaskIndirectDrawParameters
 {
     uint32_t groupCountX;

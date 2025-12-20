@@ -70,11 +70,6 @@ RenderPipelineBuilder& RenderPipelineBuilder::SetupMultisampling(VkBool32 sample
     return *this;
 }
 
-RenderPipelineBuilder& RenderPipelineBuilder::DisableMultisampling()
-{
-    return SetupMultisampling(VK_FALSE, VK_SAMPLE_COUNT_1_BIT, 1.0f, nullptr, VK_FALSE, VK_FALSE);
-}
-
 RenderPipelineBuilder& RenderPipelineBuilder::SetupRenderer(const VkFormat* _colorAttachmentFormats, uint32_t colorAttachmentCount,
                                                             VkFormat depthAttachmentFormat, VkFormat stencilAttachmentFormat)
 {
@@ -120,11 +115,6 @@ RenderPipelineBuilder& RenderPipelineBuilder::SetupDepthStencil(VkBool32 depthTe
 RenderPipelineBuilder& RenderPipelineBuilder::EnableDepthTest(VkBool32 depthWriteEnable, VkCompareOp op)
 {
     return SetupDepthStencil(VK_TRUE, depthWriteEnable, op, VK_FALSE, VK_FALSE, {}, {}, 0.0f, 1.0f);
-}
-
-RenderPipelineBuilder& RenderPipelineBuilder::DisableDepthTest()
-{
-    return SetupDepthStencil(VK_FALSE, VK_FALSE, VK_COMPARE_OP_NEVER, VK_FALSE, VK_FALSE, {}, {}, 0.0f, 1.0f);
 }
 
 RenderPipelineBuilder& RenderPipelineBuilder::SetupPipelineLayout(VkPipelineLayout pipelineLayout_)

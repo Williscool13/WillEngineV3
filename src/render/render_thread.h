@@ -15,6 +15,7 @@
 #include "render/vulkan/vk_synchronization.h"
 #include "pipelines/basic_compute_pipeline.h"
 #include "pipelines/basic_render_pipeline.h"
+#include "pipelines/mesh_shader_pipeline.h"
 
 namespace Core
 {
@@ -125,6 +126,7 @@ private:
 private:
     BasicComputePipeline basicComputePipeline;
     BasicRenderPipeline basicRenderPipeline;
+    MeshShaderPipeline meshShaderPipeline;
 };
 } // Render
 

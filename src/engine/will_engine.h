@@ -14,6 +14,7 @@
 #include "core/include/render_interface.h"
 #include "platform/crash_handler.h"
 #include "platform/dll_loader.h"
+#include "render/vulkan/vk_resource_manager.h"
 
 namespace AssetLoad
 {
@@ -94,8 +95,6 @@ private: // Subsystems
     std::unique_ptr<Core::InputManager> inputManager{};
     std::unique_ptr<Core::TimeManager> timeManager{};
     bool bCursorHidden{true};
-
-private:
     uint32_t frameBufferIndex{0};
 
 private: // Game DLL
@@ -108,6 +107,9 @@ private: // Game DLL
 
 private:
     Platform::CrashHandler* crashHandler;
+
+private: // Debugging
+    Render::WillModelHandle boxModelHandle{Render::WillModelHandle::INVALID};
 };
 }
 

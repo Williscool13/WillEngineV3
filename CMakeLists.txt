@@ -152,8 +152,10 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/basicRender.slang task taskMain
         ${CMAKE_SOURCE_DIR}/shaders/basicRender.slang mesh meshMain
         ${CMAKE_SOURCE_DIR}/shaders/basicRender.slang fragment fragmentMain
+        ${CMAKE_SOURCE_DIR}/shaders/meshShading.slang task taskMain
+        ${CMAKE_SOURCE_DIR}/shaders/meshShading.slang mesh meshMain
+        ${CMAKE_SOURCE_DIR}/shaders/meshShading.slang fragment fragmentMain
 )
-
 
 # Post-Build Commands =========================
 add_custom_command(TARGET will-engine POST_BUILD

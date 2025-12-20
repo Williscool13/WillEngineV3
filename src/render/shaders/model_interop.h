@@ -82,7 +82,7 @@ SHADER_PUBLIC struct MeshletPrimitive
 {
     SHADER_PUBLIC uint32_t meshletOffset;
     SHADER_PUBLIC uint32_t meshletCount;
-    SHADER_PUBLIC uint32_t materialIndex;
+    uint32_t padding;
     SHADER_PUBLIC uint32_t bHasTransparent;
     SHADER_PUBLIC float4 boundingSphere; // {3} center, {1} radius
 };
@@ -111,5 +111,25 @@ SHADER_PUBLIC struct MaterialProperties
     SHADER_PUBLIC float4 alphaProperties; // x: alpha cutoff, y: alpha mode, z: double sided, w: unlit
     SHADER_PUBLIC float4 physicalProperties; // x: IOR, y: dispersion, z: normal scale, w: occlusion strength
 };
+
+SHADER_PUBLIC struct Instance
+{
+    SHADER_PUBLIC uint32_t primitiveIndex;
+    SHADER_PUBLIC uint32_t modelIndex;
+    SHADER_PUBLIC uint32_t materialIndex;
+    SHADER_PUBLIC uint32_t jointMatrixOffset;
+    SHADER_PUBLIC uint32_t bIsAllocated;
+    uint32_t padding;
+    uint32_t padding1;
+    uint32_t padding2;
+};
+
+SHADER_PUBLIC struct Model
+{
+    SHADER_PUBLIC float4x4 modelMatrix;
+    SHADER_PUBLIC float4x4 prevModelMatrix;
+    SHADER_PUBLIC float4 flags; // x: visible, y: shadow-caster, zw: reserved
+};
+
 
 #endif // WILLENGINEV3_MODEL_INTEROP_H

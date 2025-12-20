@@ -24,10 +24,16 @@ enum class MaterialType
     CUTOUT = 2,
 };
 
+struct PrimitiveProperties
+{
+    uint32_t index;
+    uint32_t materialIndex;
+};
+
 struct MeshInformation
 {
     std::string name;
-    std::vector<uint32_t> primitiveIndices;
+    std::vector<PrimitiveProperties> primitiveIndices;
 };
 
 struct Node

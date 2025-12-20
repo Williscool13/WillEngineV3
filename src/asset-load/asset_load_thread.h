@@ -48,6 +48,8 @@ public:
 public:
     void RequestLoad(Render::WillModelHandle willmodelHandle);
 
+    void ResolveLoads(std::vector<Render::WillModelHandle>& processedHandles);
+
 private: // Threading
     void ThreadMain();
 

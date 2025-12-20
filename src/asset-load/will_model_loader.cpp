@@ -278,7 +278,7 @@ bool WillModelLoader::PreThreadExecute(Render::VulkanContext* context, Render::R
     uint32_t primitiveOffsetCount = model->modelData.primitiveAllocation.offset / sizeof(MeshletPrimitive);
     for (auto& mesh : rawData.allMeshes) {
         for (auto& primitiveIndex : mesh.primitiveIndices) {
-            primitiveIndex += primitiveOffsetCount;
+            primitiveIndex.index += primitiveOffsetCount;
         }
     }
 

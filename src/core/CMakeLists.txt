@@ -29,7 +29,6 @@ add_library(core STATIC
         math/transform.h
         math/constants.cpp
         math/constants.h
-
 )
 
 

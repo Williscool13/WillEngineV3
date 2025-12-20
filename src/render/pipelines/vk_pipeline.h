@@ -36,8 +36,6 @@ public:
                                               float minSampleShading, const VkSampleMask* pSampleMask,
                                               VkBool32 alphaToCoverageEnable, VkBool32 alphaToOneEnable);
 
-    RenderPipelineBuilder& DisableMultisampling();
-
     RenderPipelineBuilder& SetupRenderer(const VkFormat* _colorAttachmentFormats, uint32_t colorAttachmentCount,
                                          VkFormat depthAttachmentFormat = VK_FORMAT_UNDEFINED,
                                          VkFormat stencilAttachmentFormat = VK_FORMAT_UNDEFINED);
@@ -50,8 +48,6 @@ public:
                                              const VkStencilOpState& back, float minDepthBounds, float maxDepthBounds);
 
     RenderPipelineBuilder& EnableDepthTest(VkBool32 depthWriteEnable, VkCompareOp op);
-
-    RenderPipelineBuilder& DisableDepthTest();
 
     RenderPipelineBuilder& SetupPipelineLayout(VkPipelineLayout pipelineLayout_);
 

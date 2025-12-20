@@ -70,10 +70,13 @@ void RenderThread::Initialize(Core::FrameSync* engineRenderSync, enki::TaskSched
         frameResource.instanceBuffer = std::move(AllocatedBuffer::CreateAllocatedBuffer(context.get(), bufferInfo, vmaAllocInfo));
         bufferInfo.size = BINDLESS_MODEL_BUFFER_SIZE;
         frameResource.jointMatrixBuffer = std::move(AllocatedBuffer::CreateAllocatedBuffer(context.get(), bufferInfo, vmaAllocInfo));
+        bufferInfo.size = BINDLESS_MATERIAL_BUFFER_SIZE;
+        frameResource.materialBuffer = std::move(AllocatedBuffer::CreateAllocatedBuffer(context.get(), bufferInfo, vmaAllocInfo));
     }
 
     basicComputePipeline = BasicComputePipeline(context.get(), resourceManager->bindlessRenderTargetDescriptorBuffer.descriptorSetLayout);
     basicRenderPipeline = BasicRenderPipeline(context.get());
+    meshShaderPipeline = MeshShaderPipeline(context.get(), resourceManager->bindlessSamplerTextureDescriptorBuffer.descriptorSetLayout);
 
     if (basicComputePipeline.pipeline.handle == VK_NULL_HANDLE || basicRenderPipeline.pipeline.handle == VK_NULL_HANDLE) {
         SPDLOG_ERROR("Failed to compile shaders");
@@ -211,6 +214,11 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     }
 
 
+    VkViewport viewport = VkHelpers::GenerateViewport(renderExtent[0], renderExtent[1]);
+    vkCmdSetViewport(cmd, 0, 1, &viewport);
+    VkRect2D scissor = VkHelpers::GenerateScissor(renderExtent[0], renderExtent[1]);
+    vkCmdSetScissor(cmd, 0, 1, &scissor);
+
     // Transition to GENERAL for compute shader access
     {
         auto subresource = VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT);
@@ -260,50 +268,56 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         vkCmdPipelineBarrier2(cmd, &dependencyInfo);
     }
 
-    //
+    // Main Render Pass
     {
         const VkRenderingAttachmentInfo colorAttachment = VkHelpers::RenderingAttachmentInfo(renderTargets->colorTargetView.handle, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
         constexpr VkClearValue depthClear = {.depthStencil = {0.0f, 0u}};
         const VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(renderTargets->depthTargetView.handle, &depthClear, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
         const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({renderExtent[0], renderExtent[1]}, &colorAttachment, &depthAttachment);
-
         vkCmdBeginRendering(cmd, &renderInfo);
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, basicRenderPipeline.pipeline.handle);
 
-        VkViewport viewport = VkHelpers::GenerateViewport(renderExtent[0], renderExtent[1]);
-        vkCmdSetViewport(cmd, 0, 1, &viewport);
-        VkRect2D scissor = VkHelpers::GenerateScissor(renderExtent[0], renderExtent[1]);
-        vkCmdSetScissor(cmd, 0, 1, &scissor);
+        //
+        {
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, basicRenderPipeline.pipeline.handle);
 
-        BasicRenderPushConstant pushData{
-            .modelMatrix = glm::mat4(1.0f),
-            .sceneData = currentSceneDataBuffer.address,
-        };
+            BasicRenderPushConstant pushData{
+                .modelMatrix = glm::mat4(1.0f),
+                .sceneData = currentSceneDataBuffer.address,
+            };
 
-        vkCmdPushConstants(cmd, basicRenderPipeline.pipelineLayout.handle, VK_SHADER_STAGE_MESH_BIT_EXT, 0, sizeof(BasicRenderPushConstant), &pushData);
-        vkCmdDrawMeshTasksEXT(cmd, 1, 1, 1);
+            vkCmdPushConstants(cmd, basicRenderPipeline.pipelineLayout.handle, VK_SHADER_STAGE_MESH_BIT_EXT, 0, sizeof(BasicRenderPushConstant), &pushData);
+            vkCmdDrawMeshTasksEXT(cmd, 1, 1, 1);
+        }
+        //
+        {
+            /*vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, meshShaderPipeline.pipeline.handle);
+            MeshShaderPushConstants pushConstants{
+                .sceneData = currentSceneDataBuffer.address,
+                .vertexBuffer = resourceManager->megaVertexBuffer.address,
+                .primitiveBuffer = resourceManager->primitiveBuffer.address,
+                .meshletVerticesBuffer = resourceManager->megaMeshletVerticesBuffer.address,
+                .meshletTrianglesBuffer = resourceManager->megaMeshletTrianglesBuffer.address,
+                .meshletBuffer = resourceManager->megaMeshletBuffer.address,
+                .materialBuffer = frameResource.materialBuffer.address,
+                .modelBuffer = frameResource.modelBuffer.address,
+                .instanceBuffer = frameResource.instanceBuffer.address,
+                .instanceIndex = 0
+            };
+
+            vkCmdPushConstants(cmd, meshShaderPipeline.pipelineLayout.handle, VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT, 0,
+                               sizeof(MeshShaderPushConstants), &pushConstants);
+            vkCmdDrawMeshTasksEXT(cmd, 1, 1, 1);*/
+        }
+
         vkCmdEndRendering(cmd);
     }
+
 
 #if WILL_EDITOR
     // Imgui Draw
     {
-        VkRenderingAttachmentInfo imguiAttachment{};
-        imguiAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-        imguiAttachment.pNext = nullptr;
-        imguiAttachment.imageView = renderTargets->colorTargetView.handle;
-        imguiAttachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-        imguiAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-        imguiAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-        VkRenderingInfo renderInfo{};
-        renderInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
-        renderInfo.pNext = nullptr;
-        renderInfo.renderArea = VkRect2D{VkOffset2D{0, 0}, {renderExtent[0], renderExtent[1]}};
-        renderInfo.layerCount = 1;
-        renderInfo.colorAttachmentCount = 1;
-        renderInfo.pColorAttachments = &imguiAttachment;
-        renderInfo.pDepthAttachment = nullptr;
-        renderInfo.pStencilAttachment = nullptr;
+        const VkRenderingAttachmentInfo imguiAttachment = VkHelpers::RenderingAttachmentInfo(renderTargets->colorTargetView.handle, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({renderExtent[0], renderExtent[1]}, &imguiAttachment, nullptr);
         vkCmdBeginRendering(cmd, &renderInfo);
         ImDrawDataSnapshot& imguiSnapshot = engineRenderSynchronization->imguiDataSnapshots[currentFrameIndex];
         ImGui_ImplVulkan_RenderDrawData(&imguiSnapshot.DrawData, cmd);

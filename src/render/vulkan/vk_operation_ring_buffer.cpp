@@ -4,6 +4,7 @@
 
 #include "vk_operation_ring_buffer.h"
 
+#include "render/shaders/model_interop.h"
 #include "spdlog/spdlog.h"
 
 namespace Render

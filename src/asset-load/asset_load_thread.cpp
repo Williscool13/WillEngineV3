@@ -72,6 +72,14 @@ void AssetLoadThread::RequestLoad(Render::WillModelHandle willmodelHandle)
     modelLoadQueue.push({willmodelHandle});
 }
 
+void AssetLoadThread::ResolveLoads(std::vector<Render::WillModelHandle>& processedHandles)
+{
+    WillModelComplete completed;
+    while (modelCompleteQueue.pop(completed)) {
+        processedHandles.push_back(completed.willModelHandle);
+    }
+}
+
 void AssetLoadThread::ThreadMain()
 {
     while (!bShouldExit.load(std::memory_order_acquire)) {
@@ -150,7 +158,12 @@ void AssetLoadThread::ThreadMain()
                 }
 
                 if (assetLoad.loadState == WillModelLoadState::Loaded || assetLoad.loadState == WillModelLoadState::Failed) {
-                    if (assetLoad.loadState == WillModelLoadState::Failed) { assetLoad.model->modelData.Reset(); }
+                    if (assetLoad.loadState == WillModelLoadState::Failed) {
+                        assetLoad.model->modelData.Reset();
+                        assetLoad.model->modelLoadState = Render::WillModel::ModelLoadState::FailedToLoad;
+                    } else {
+                        assetLoad.model->modelLoadState = Render::WillModel::ModelLoadState::Loaded;
+                    }
                     modelCompleteQueue.push({assetLoad.willModelHandle});
                     loaderActive[i] = false;
 

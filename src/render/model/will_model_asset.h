@@ -18,6 +18,13 @@ namespace Render
 struct WillModel
 {
 public:
+    enum class ModelLoadState
+    {
+        NotLoaded,
+        Loaded,
+        FailedToLoad
+    };
+public:
     WillModel();
 
     ~WillModel();
@@ -34,6 +41,7 @@ public:
     std::string name{};
 
     // Populated in asset loading thread. Used by game thread
+    ModelLoadState modelLoadState{ModelLoadState::NotLoaded};
     ModelData modelData{};
 
     std::vector<Core::BufferAcquireOperation> bufferAcquireOps{};
