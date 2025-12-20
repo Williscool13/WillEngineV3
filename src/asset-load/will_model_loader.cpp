@@ -123,6 +123,8 @@ void WillModelLoader::TaskImplementation()
     readArray(rawData.inverseBindMatrices, header->inverseBindMatrixCount);
 
     readArray(pendingSamplerInfos, header->samplerCount);
+    std::vector<uint32_t> preferredImageFormats;
+    readArray(preferredImageFormats, header->textureCount);
 
     for (int i = 0; i < header->textureCount; ++i) {
         std::string textureName = fmt::format("textures/texture_{}.ktx2", i);
@@ -144,8 +146,7 @@ void WillModelLoader::TaskImplementation()
         ktx_error_code_e result = ktxTexture2_CreateFromNamedFile(tempKtxPath.c_str(), KTX_TEXTURE_CREATE_NO_FLAGS, &loadedTexture);
 
         if (ktxTexture2_NeedsTranscoding(loadedTexture)) {
-            // todo: predetermine at cook time and use appropriate format based on texture type
-            ktx_transcode_fmt_e targetFormat = KTX_TTF_BC7_RGBA;
+            const ktx_transcode_fmt_e targetFormat = static_cast<ktx_transcode_fmt_e>(preferredImageFormats[i]);
             result = ktxTexture2_TranscodeBasis(loadedTexture, targetFormat, 0);
             if (result != KTX_SUCCESS) {
                 SPDLOG_ERROR("Failed to transcode texture {}", textureName);

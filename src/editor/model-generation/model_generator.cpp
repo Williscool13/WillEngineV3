@@ -169,7 +169,8 @@ RawGltfModel ModelGenerator::LoadGltf(const std::filesystem::path& source)
                         if (vector.bytes.size() > 30) {
                             std::string_view strData(reinterpret_cast<const char*>(vector.bytes.data()), std::min(size_t(100), vector.bytes.size()));
                             if (strData.find("https://git-lfs.github.com/spec") != std::string_view::npos) {
-                                SPDLOG_LOGGER_ERROR(spdlog::default_logger_raw(), "[ModelGenerator::LoadGltf] Git LFS pointer detected instead of actual texture data for image. `git lfs pull` to retrieve files.");
+                                SPDLOG_LOGGER_ERROR(spdlog::default_logger_raw(),
+                                                    "[ModelGenerator::LoadGltf] Git LFS pointer detected instead of actual texture data for image. `git lfs pull` to retrieve files.");
                                 return;
                             }
                         }
@@ -954,6 +955,41 @@ void WriteModelBinary(std::ofstream& file, const RawGltfModel& model)
 
     WriteVector(file, model.inverseBindMatrices);
     WriteVector(file, model.samplerInfos);
+
+    std::vector<uint32_t> preferredImageFormats;
+    preferredImageFormats.resize(model.images.size(), KTX_TTF_BC7_RGBA);
+
+    for (const auto& material : model.materials) {
+        // Color/emissive textures -> BC7 SRGB
+        if (material.textureImageIndices.x >= 0) {
+            preferredImageFormats[material.textureImageIndices.x] = KTX_TTF_BC7_RGBA;
+        }
+        if (material.textureImageIndices.w >= 0) {
+            preferredImageFormats[material.textureImageIndices.w] = KTX_TTF_BC7_RGBA;
+        }
+
+        // Normal map -> BC5
+        if (material.textureImageIndices.z >= 0) {
+            preferredImageFormats[material.textureImageIndices.z] = KTX_TTF_BC5_RG;
+        }
+
+        // Metallic-roughness -> BC7 (linear)
+        if (material.textureImageIndices.y >= 0) {
+            preferredImageFormats[material.textureImageIndices.y] = KTX_TTF_BC7_RGBA;
+        }
+
+        // Occlusion -> BC4
+        if (material.textureImageIndices2.x >= 0) {
+            preferredImageFormats[material.textureImageIndices2.x] = KTX_TTF_BC4_R;
+        }
+
+        // Packed NRM (if used) -> BC7
+        if (material.textureImageIndices2.y >= 0) {
+            preferredImageFormats[material.textureImageIndices2.y] = KTX_TTF_BC7_RGBA;
+        }
+    }
+
+    WriteVector(file, preferredImageFormats);
 }
 
 VkFilter ModelGenerator::ExtractFilter(fastgltf::Filter filter)

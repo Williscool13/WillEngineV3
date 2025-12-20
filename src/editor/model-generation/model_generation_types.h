@@ -23,6 +23,8 @@ struct RawGltfModel
 
     std::vector<VkSamplerCreateInfo> samplerInfos{};
     std::vector<AllocatedImage> images{};
+    // ktx_transcode_fmt_e
+    std::vector<uint32_t> preferredImageFormats{};
 
     std::vector<SkinnedVertex> vertices{};
     std::vector<uint32_t> meshletVertices{};
