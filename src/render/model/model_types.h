@@ -98,8 +98,9 @@ struct ModelData
     std::vector<BindlessTextureHandle> textureIndexToDescriptorBufferIndexMap{};
 
     OffsetAllocator::Allocation vertexAllocation{};
-    OffsetAllocator::Allocation indexAllocation{};
-    OffsetAllocator::Allocation materialAllocation{};
+    OffsetAllocator::Allocation meshletVertexAllocation{};
+    OffsetAllocator::Allocation meshletTriangleAllocation{};
+    OffsetAllocator::Allocation meshletAllocation{};
     OffsetAllocator::Allocation primitiveAllocation{};
 
     ModelData() = default;
@@ -111,6 +112,32 @@ struct ModelData
     ModelData(ModelData&&) noexcept = default;
 
     ModelData& operator=(ModelData&&) noexcept = default;
+
+    void Reset()
+    {
+        meshes.clear();
+        nodes.clear();
+        nodeRemap.clear();
+        animations.clear();
+        inverseBindMatrices.clear();
+        samplers.clear();
+        images.clear();
+        imageViews.clear();
+        samplerIndexToDescriptorBufferIndexMap.clear();
+        textureIndexToDescriptorBufferIndexMap.clear();
+
+        assert(vertexAllocation.metadata == OffsetAllocator::Allocation::NO_SPACE && "Vertex allocation should be freed before reset");
+        assert(meshletVertexAllocation.metadata == OffsetAllocator::Allocation::NO_SPACE && "Meshlet vertex allocation should be freed before reset");
+        assert(meshletTriangleAllocation.metadata == OffsetAllocator::Allocation::NO_SPACE && "Meshlet triangle allocation should be freed before reset");
+        assert(meshletAllocation.metadata == OffsetAllocator::Allocation::NO_SPACE && "Meshlet allocation should be freed before reset");
+        assert(primitiveAllocation.metadata == OffsetAllocator::Allocation::NO_SPACE && "Primitive allocation should be freed before reset");
+
+        vertexAllocation = {};
+        meshletVertexAllocation = {};
+        meshletTriangleAllocation = {};
+        meshletAllocation = {};
+        primitiveAllocation = {};
+    }
 };
 
 } // Render

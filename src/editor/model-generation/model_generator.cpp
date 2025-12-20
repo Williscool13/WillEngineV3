@@ -275,6 +275,7 @@ RawGltfModel ModelGenerator::LoadGltf(const std::filesystem::path& source)
     generationProgress.value.store(_progress, std::memory_order::release);
 
     // Meshes
+    // WillModel stores as SkinnedVertex, when loading, the vertices will be loaded to different buffers depending on whether the model is a skeletal mesh.
     std::vector<SkinnedVertex> primitiveVertices{};
     std::vector<uint32_t> primitiveIndices{};
     bool hasSkinned = false;
@@ -687,6 +688,7 @@ RawGltfModel ModelGenerator::LoadGltf(const std::filesystem::path& source)
     _progress += stepDiff;
     generationProgress.value.store(_progress, std::memory_order::release);
 
+    rawModel.bIsSkeletalModel = hasSkinned;
     rawModel.bSuccessfullyLoaded = true;
     return rawModel;
 }
@@ -930,6 +932,7 @@ void WriteModelBinary(std::ofstream& file, const RawGltfModel& model)
     header.inverseBindMatrixCount = static_cast<uint32_t>(model.inverseBindMatrices.size());
     header.samplerCount = static_cast<uint32_t>(model.samplerInfos.size());
     header.textureCount = static_cast<uint32_t>(model.images.size());
+    header.bIsSkeletalModel = model.bIsSkeletalModel ? 1u : 0u;
 
     file.write(reinterpret_cast<const char*>(&header), sizeof(ModelBinaryHeader));
 

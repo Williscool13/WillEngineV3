@@ -74,7 +74,7 @@ void AssetLoadThread::RequestLoad(Render::WillModelHandle willmodelHandle)
 
 void AssetLoadThread::ThreadMain()
 {
-    while (!bShouldExit.load()) {
+    while (!bShouldExit.load(std::memory_order_acquire)) {
         // Try to start
         for (size_t i = 0; i < ASSET_LOAD_ASYNC_COUNT; ++i) {
             if (!loaderActive[i]) {
@@ -115,20 +115,24 @@ void AssetLoadThread::ThreadMain()
                             SPDLOG_WARN("Failed task for {}", assetLoad.model->name);
                         }
                         else if (res == WillModelLoader::TaskState::Complete) {
-                            assetLoad.ThreadExecute(context, resourceManager);
-                            assetLoad.loadState = WillModelLoadState::ThreadExecuting;
-                            SPDLOG_INFO("Started thread for {}", assetLoad.model->name);
+                            SPDLOG_INFO("Finished task for {}", assetLoad.model->name);
+                            const bool preRes = assetLoad.PreThreadExecute(context, resourceManager);
+                            if (preRes) {
+                                assetLoad.loadState = WillModelLoadState::ThreadExecuting;
+                                assetLoad.ThreadExecute(context, resourceManager);
+                                SPDLOG_INFO("Started thread execute for {}", assetLoad.model->name);
+                            }
+                            else {
+                                assetLoad.loadState = WillModelLoadState::Failed;
+                                SPDLOG_INFO("Failed pre thread execute for {}", assetLoad.model->name);
+                            }
                         }
                     }
                     break;
                     case WillModelLoadState::ThreadExecuting:
                     {
                         WillModelLoader::ThreadState res = assetLoad.ThreadExecute(context, resourceManager);
-                        if (res == WillModelLoader::ThreadState::Failed) {
-                            assetLoad.loadState = WillModelLoadState::Failed;
-                            SPDLOG_WARN("Failed thread execute for {}", assetLoad.model->name);
-                        }
-                        else if (res == WillModelLoader::ThreadState::Complete) {
+                        if (res == WillModelLoader::ThreadState::Complete) {
                             const bool postRes = assetLoad.PostThreadExecute(context, resourceManager);
                             if (postRes) {
                                 assetLoad.loadState = WillModelLoadState::Loaded;
@@ -146,8 +150,7 @@ void AssetLoadThread::ThreadMain()
                 }
 
                 if (assetLoad.loadState == WillModelLoadState::Loaded || assetLoad.loadState == WillModelLoadState::Failed) {
-                    assetLoad.taskState = WillModelLoader::TaskState::NotStarted;
-                    assetLoad.threadState = WillModelLoader::ThreadState::NotStarted;
+                    if (assetLoad.loadState == WillModelLoadState::Failed) { assetLoad.model->modelData.Reset(); }
                     modelCompleteQueue.push({assetLoad.willModelHandle});
                     loaderActive[i] = false;
 

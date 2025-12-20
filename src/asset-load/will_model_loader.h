@@ -50,10 +50,8 @@ struct WillModelLoader
 
     enum class ThreadState
     {
-        NotStarted,
         InProgress,
         Complete,
-        Failed,
     };
 
     WillModelLoader();
@@ -82,22 +80,42 @@ struct WillModelLoader
     std::vector<VkSamplerCreateInfo> pendingSamplerInfos;
     std::vector<ktxTexture2*> pendingTextures;
     uint32_t pendingTextureHead{0};
-    std::vector<uint32_t> pendingTextureIndices;
+    uint32_t pendingVerticesHead{0};
+    uint32_t pendingMeshletVerticesHead{0};
+    uint32_t pendingMeshletTrianglesHead{0};
+    uint32_t pendingMeshletsHead{0};
+    uint32_t pendingPrimitivesHead{0};
+    uint32_t pendingBufferBarrier{0};
 
     // Task Cache
     TaskState taskState{TaskState::NotStarted};
-
-    // Thread Cache
-    ThreadState threadState{ThreadState::NotStarted};
 
     TaskState TaskExecute(enki::TaskScheduler* scheduler, LoadModelTask* task);
 
     void TaskImplementation();
 
+    /**
+     * Will only be called once, before ThreadExecute. Use to validate what ThreadExecute will do.
+     * \n Synchronous
+     * @param context
+     * @param resourceManager
+     * @return true if all validation checks pass and ThreadExecute is safe to begin resource upload
+     */
+    bool PreThreadExecute(Render::VulkanContext* context, Render::ResourceManager* resourceManager);
+
+    /**
+     * Resource upload that may take several frames. This will be called repeatedly until the upload has finished (over multiple ticks).
+     * \n This call can never fail. It can either be in progress or finished with the resource upload.
+     * \n Synchronous, but expected to be called over multiple frames until it returns ThreadState::Finished
+     * @param context
+     * @param resourceManager
+     * @return
+     */
     ThreadState ThreadExecute(Render::VulkanContext* context, Render::ResourceManager* resourceManager);
 
     /**
      * Will only be called once, after ThreadExecute has returned ThreadState::Complete
+     * \n Synchronous
      * @param context
      * @param resourceManager
      * @return true if the post thread execute succeeded and the model is successfully laoded

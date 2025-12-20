@@ -4,13 +4,7 @@
 
 #ifndef WILL_ENGINE_MODEL_FORMAT_H
 #define WILL_ENGINE_MODEL_FORMAT_H
-#include <cstdint>
-#include <string>
-#include <vector>
 
-#include <volk.h>
-
-#include "model_types.h"
 #include "render/shaders/model_interop.h"
 #include "render/vulkan/vk_resources.h"
 
@@ -19,7 +13,7 @@ namespace Render
 constexpr char WILL_MODEL_MAGIC[8] = "WILLMDL";
 constexpr uint32_t MODEL_MAJOR_VERSION = 0;
 constexpr uint32_t MODEL_MINOR_VERSION = 1;
-constexpr uint32_t MODEL_PATCH_VERSION = 3;
+constexpr uint32_t MODEL_PATCH_VERSION = 4;
 
 struct ModelBinaryHeader
 {
@@ -36,6 +30,7 @@ struct ModelBinaryHeader
     uint32_t inverseBindMatrixCount;
     uint32_t samplerCount;
     uint32_t textureCount;
+    uint32_t bIsSkeletalModel;
 };
 
 constexpr size_t MAX_FILENAME_LENGTH = 128;

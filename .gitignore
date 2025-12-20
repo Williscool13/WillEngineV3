@@ -4,12 +4,9 @@
 # interop generated .slang include files
 *_interop.slang
 
-# Exclude all .willmodel files except BoxTextured.willmodel
-*.willmodel
-!BoxTextured.willmodel
+# Exclude everything in assets/ including subdirectories
+assets/**
 
-# Exclude all .gltf/.glb files except BoxTextured.glb
-*.glb
-*.gltf
-!BoxTextured.glb
-
+# Allow BoxTextured files back in
+!assets/BoxTextured.glb
+!assets/BoxTextured.willmodel

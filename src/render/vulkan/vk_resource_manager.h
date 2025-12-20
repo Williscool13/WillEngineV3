@@ -42,22 +42,27 @@ struct ResourceManager
 
     explicit ResourceManager(VulkanContext* context);
 
-    AllocatedBuffer megaVertexBuffer;
+    // Only managed by Asset Load Thread
     OffsetAllocator::Allocator vertexBufferAllocator{MEGA_VERTEX_BUFFER_SIZE};
-    AllocatedBuffer megaMeshletVerticesBuffer;
-    OffsetAllocator::Allocator meshletVerticesBufferAllocator{MEGA_MESHLET_VERTEX_BUFFER_SIZE};
-    AllocatedBuffer megaMeshletTrianglesBuffer;
-    OffsetAllocator::Allocator meshletTrianglesBufferAllocator{MEGA_MESHLET_TRIANGLE_BUFFER_SIZE};
-    AllocatedBuffer megaMeshletBuffer;
+    OffsetAllocator::Allocator skinnedVertexBufferAllocator{MEGA_SKINNED_VERTEX_BUFFER_SIZE};
+    OffsetAllocator::Allocator meshletVertexBufferAllocator{MEGA_MESHLET_VERTEX_BUFFER_SIZE};
+    OffsetAllocator::Allocator meshletTriangleBufferAllocator{MEGA_MESHLET_TRIANGLE_BUFFER_SIZE};
     OffsetAllocator::Allocator meshletBufferAllocator{MEGA_MESHLET_BUFFER_SIZE};
-    AllocatedBuffer primitiveBuffer;
     OffsetAllocator::Allocator primitiveBufferAllocator{MEGA_PRIMITIVE_BUFFER_SIZE};
 
+    // Managed by Asset Load, bound in the Render Threads. Synchronized by engine.
+    AllocatedBuffer megaVertexBuffer;
+    AllocatedBuffer megaSkinnedVertexBuffer;
+    AllocatedBuffer megaMeshletVerticesBuffer;
+    AllocatedBuffer megaMeshletTrianglesBuffer;
+    AllocatedBuffer megaMeshletBuffer;
+    AllocatedBuffer primitiveBuffer;
     BindlessResourcesSamplerImages bindlessSamplerTextureDescriptorBuffer{};
     BindlessResourcesStorage<8> bindlessRenderTargetDescriptorBuffer{};
     BindlessResourcesStorage<512> bindlessStorageDescriptorBuffer{};
     BindlessResourcesCombined bindlessCombinedDescriptorBuffer{};
 
+    // Managed by Engine (asset manager)
     Core::HandleAllocator<ModelEntry, BINDLESS_MODEL_BUFFER_COUNT> modelEntryAllocator;
     Core::HandleAllocator<InstanceEntry, BINDLESS_INSTANCE_BUFFER_COUNT> instanceEntryAllocator;
     Core::HandleAllocator<MaterialEntry, BINDLESS_MATERIAL_BUFFER_COUNT> materialEntryAllocator;

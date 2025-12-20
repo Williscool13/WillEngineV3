@@ -21,7 +21,7 @@ struct VulkanContext;
 
 namespace AssetLoad
 {
-constexpr uint32_t ASSET_LOAD_STAGING_BUFFER_SIZE = 2 * 64 * 1024 * 1024; // 2MB
+constexpr uint32_t ASSET_LOAD_STAGING_BUFFER_SIZE = 32 * 1024 * 1024; // 32MB
 
 class UploadStaging
 {

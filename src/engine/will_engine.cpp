@@ -266,21 +266,18 @@ void WillEngine::DrawImgui()
         // }
     }
 
-    if (ImGui::Button("Press me!")) {
-        std::filesystem::path boxOut = Platform::GetAssetPath() / "BoxTextured.willmodel";
+
+    auto loadModel = [&](const std::filesystem::path& path) {
         Render::ResourceManager* resourceManager = renderThread->GetResourceManager();
         Render::WillModelHandle modelHandle = resourceManager->models.Add();
         Render::WillModel* model = resourceManager->models.Get(modelHandle);
-        model->source = std::move(boxOut);
+        model->source = path;
         model->name = model->source.filename().string();
-
         assetLoadThread->RequestLoad(modelHandle);
-    }
+    };
 
-    if (ImGui::Button("Press me to generate!")) {
-        const std::filesystem::path boxPath = Platform::GetAssetPath() / "BoxTextured.glb";
-        const std::filesystem::path boxOut = Platform::GetAssetPath() / "BoxTextured.willmodel";
-        auto loadResponse = modelGenerator->GenerateWillModelAsync(boxPath, boxOut);
+    auto generateModel = [&](const std::filesystem::path& gltfPath, const std::filesystem::path& outPath) {
+        auto loadResponse = modelGenerator->GenerateWillModelAsync(gltfPath, outPath);
 
         while (true) {
             auto progress = modelGenerator->GetProgress().value.load(std::memory_order::acquire);
@@ -297,6 +294,28 @@ void WillEngine::DrawImgui()
         }
 
         SPDLOG_INFO("Generation finished");
+    };
+
+    if (ImGui::Button("Load BoxTextured .willmodel")) {
+        loadModel(Platform::GetAssetPath() / "BoxTextured.willmodel");
+    }
+
+    if (ImGui::Button("Generate BoxTextured.willmodel from BoxTextured.glb")) {
+        generateModel(
+            Platform::GetAssetPath() / "BoxTextured.glb",
+            Platform::GetAssetPath() / "BoxTextured.willmodel"
+        );
+    }
+
+    if (ImGui::Button("Load dragon.willmodel")) {
+        loadModel(Platform::GetAssetPath() / "dragon/dragon.willmodel");
+    }
+
+    if (ImGui::Button("Generate dragon.willmodel from dragon.glb")) {
+        generateModel(
+            Platform::GetAssetPath() / "dragon/dragon.gltf",
+            Platform::GetAssetPath() / "dragon/dragon.willmodel"
+        );
     }
 
 

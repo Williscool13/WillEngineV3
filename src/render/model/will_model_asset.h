@@ -9,6 +9,7 @@
 
 #include "ktx.h"
 #include "model_format.h"
+#include "model_types.h"
 #include "TaskScheduler.h"
 #include "core/include/render_interface.h"
 
