@@ -811,6 +811,7 @@ bool ModelGenerator::WriteWillModel(const RawGltfModel& rawModel, const std::fil
         std::vector<VkBufferImageCopy> copyRegions;
         copyRegions.reserve(mipLevels);
         size_t bufferOffset = 0;
+        uint32_t bytesPerPixel = VkHelpers::GetBytesPerPixel(image.format);
 
         for (uint32_t mip = 0; mip < mipLevels; mip++) {
             uint32_t mipWidth = std::max(1u, image.extent.width >> mip);
@@ -825,8 +826,7 @@ bool ModelGenerator::WriteWillModel(const RawGltfModel& rawModel, const std::fil
             copyRegion.imageExtent = {mipWidth, mipHeight, 1};
 
             copyRegions.push_back(copyRegion);
-            // todo: dimension needs to be extracted from format
-            bufferOffset += mipWidth * mipHeight * 4;
+            bufferOffset += mipWidth * mipHeight * bytesPerPixel;
         }
 
         vkCmdCopyImageToBuffer(immediateParameters.immCommandBuffer, image.handle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,

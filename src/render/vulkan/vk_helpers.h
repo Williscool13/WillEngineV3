@@ -137,6 +137,8 @@ inline Core::ImageAcquireOperation FromVkBarrier(const VkImageMemoryBarrier2& ba
         .dstQueueFamilyIndex = barrier.dstQueueFamilyIndex
     };
 }
+
+uint32_t GetBytesPerPixel(VkFormat format);
 } // Render
 
 #endif //WILL_ENGINE_VK_HELPERS_H
