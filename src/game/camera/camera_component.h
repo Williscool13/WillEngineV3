@@ -7,7 +7,7 @@
 
 #include <glm/glm.hpp>
 
-namespace Engine
+namespace Game
 {
 struct CameraComponent
 {

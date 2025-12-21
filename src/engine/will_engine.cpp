@@ -9,7 +9,6 @@
 #include <spdlog/spdlog.h>
 #include <entt/entt.hpp>
 
-#include "components.h"
 #include "engine_api.h"
 #include "core/include/game_interface.h"
 #include "core/input/input_manager.h"

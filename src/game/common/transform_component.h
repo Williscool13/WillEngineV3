@@ -7,8 +7,10 @@
 
 #include "core/math/transform.h"
 
-namespace Engine {
-struct TransformComponent {
+namespace Game
+{
+struct TransformComponent
+{
     Transform transform{Transform::IDENTITY};
 };
 }

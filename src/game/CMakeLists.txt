@@ -1,7 +1,10 @@
 set(GAME_SOURCES
         game.cpp
+        common/transform_component.h
         camera/free_camera_component.cpp
         camera/free_camera_component.h
+        camera/camera_component.h
+
         systems/camera_system.cpp
         systems/camera_system.h
         fwd_components.h

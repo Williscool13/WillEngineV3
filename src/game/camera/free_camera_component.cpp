@@ -8,14 +8,14 @@
 #include "core/input/input_frame.h"
 #include "core/time/time_frame.h"
 #include "engine/engine_api.h"
-#include "engine/components/camera_component.h"
-#include "engine/components/transform_component.h"
+#include "camera_component.h"
+#include "../common/transform_component.h"
 
 namespace Game
 {
 void UpdateFreeCamera(Core::EngineContext* ctx, Engine::GameState* state)
 {
-    auto view = state->registry.view<FreeCameraComponent, Engine::CameraComponent, Engine::TransformComponent>();
+    auto view = state->registry.view<FreeCameraComponent, CameraComponent, TransformComponent>();
     for (entt::entity entity : view) {
         const auto& [freeCam, camera, transform] = view.get(entity);
 
