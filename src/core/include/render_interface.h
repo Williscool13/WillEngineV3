@@ -9,9 +9,29 @@
 
 #include <glm/glm.hpp>
 
+#include "core/time/time_frame.h"
+#include "render/shaders/common_interop.h"
+
 namespace Core
 {
 constexpr uint32_t FRAME_BUFFER_COUNT = 3;
+
+struct RenderView
+{
+    glm::mat4 viewMatrix;
+    glm::mat4 projectionMatrix;
+    glm::vec3 cameraPosition;
+    Frustum frustum;
+};
+
+struct ViewFamily {
+    std::vector<RenderView> views;
+
+    // std::vector<PrimitiveInstance> allPrimitives;
+    // std::vector<LightInstance> allLights;
+    // std::vector<ModelInstance> modelMatrices;
+    // std::vector<MaterialInstance> materials;
+};
 
 struct RawCameraData
 {
@@ -96,12 +116,12 @@ struct SwapchainRecreateCommand
 
 struct FrameBuffer
 {
+    ViewFamily mainViewFamily;
+
+    TimeFrame timeFrame;
+    uint32_t currentFrameBuffer{};
     SwapchainRecreateCommand swapchainRecreateCommand{};
 
-    RawCameraData rawCameraData{};
-    float timeElapsed{};
-    float deltaTime{};
-    uint32_t currentFrameBuffer{};
 
     std::vector<BufferAcquireOperation> bufferAcquireOperations;
     std::vector<ImageAcquireOperation> imageAcquireOperations;

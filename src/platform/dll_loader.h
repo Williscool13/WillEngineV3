@@ -50,6 +50,7 @@ private:
     DllHandle handle = nullptr;
     std::string originalPath;
     std::string loadedPath;
+    int32_t reloadCount{0};
 };
 }
 

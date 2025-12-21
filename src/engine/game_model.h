@@ -51,6 +51,21 @@ struct ModelInstance
     OffsetAllocator::Allocation jointMatrixAllocation{};
     uint32_t jointMatrixOffset{0};
 };
+
+/*struct PrimitiveInstance
+{
+
+};
+
+struct ModelInstance
+{
+
+};
+
+struct MaterialInstance
+{
+
+};*/
 } // Game
 
 #endif //WILL_ENGINE_GAME_MODEL_H

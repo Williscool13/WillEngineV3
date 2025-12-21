@@ -16,7 +16,10 @@ public:
     TimeManager();
 
     void Reset();
-    void Update();
+
+    void UpdateGame();
+
+    void UpdateRender();
 
     const TimeFrame& GetTime() const { return currentTime; }
 
@@ -24,6 +27,7 @@ private:
     TimeFrame currentTime{};
     std::chrono::time_point<std::chrono::steady_clock> startTime;
     std::chrono::time_point<std::chrono::steady_clock> lastTime;
+    std::chrono::steady_clock::time_point lastRenderTime;
 };
 } // Core
 

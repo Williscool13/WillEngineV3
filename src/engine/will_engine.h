@@ -14,18 +14,16 @@
 #include "core/include/render_interface.h"
 #include "platform/crash_handler.h"
 #include "platform/dll_loader.h"
-#include "render/vulkan/vk_resource_manager.h"
+
+namespace Engine
+{
+struct GameState;
+}
 
 namespace AssetLoad
 {
 class AssetLoadThread;
 }
-
-namespace Game
-{
-struct GameState;
-}
-
 
 namespace Core
 {
@@ -60,8 +58,6 @@ public:
     void Initialize();
 
     void Run();
-
-    void PrepareFrameBuffer(uint32_t currentFrameBufferIndex, Core::FrameBuffer& frameBuffer, const TimeFrame& time);
 
 #if WILL_EDITOR
     void DrawImgui();
@@ -103,13 +99,12 @@ private: // Game DLL
 #endif
     Core::GameAPI gameFunctions{};
     std::unique_ptr<Core::EngineContext> engineContext{};
-    void* gameState{};
+    std::unique_ptr<GameState> gameState{};
 
 private:
     Platform::CrashHandler* crashHandler;
 
 private: // Debugging
-    Render::WillModelHandle boxModelHandle{Render::WillModelHandle::INVALID};
     bool bCanGenerate = false;
     bool bHasAdded = false;
 };

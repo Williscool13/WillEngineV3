@@ -197,20 +197,10 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     AllocatedBuffer& currentSceneDataBuffer = frameResource.sceneDataBuffer;
     //
     {
-        const glm::vec3 cameraPos = frameBuffer.rawCameraData.cameraWorldPos;
-        const glm::vec3 cameraLook = frameBuffer.rawCameraData.cameraLook;
-        const glm::vec3 up = frameBuffer.rawCameraData.cameraUp;
-        glm::mat4 view = glm::lookAt(cameraPos, cameraLook, up);
-        glm::mat4 proj = glm::perspective(
-            frameBuffer.rawCameraData.fovDegrees,
-            frameBuffer.rawCameraData.aspectRatio,
-            frameBuffer.rawCameraData.farPlane,
-            frameBuffer.rawCameraData.nearPlane
-        );
-
-        sceneData.view = view;
-        sceneData.proj = proj;
-        sceneData.viewProj = proj * view;
+        // todo: address what happens if views is 0
+        sceneData.view = frameBuffer.mainViewFamily.views[0].viewMatrix;
+        sceneData.proj = frameBuffer.mainViewFamily.views[0].projectionMatrix;
+        sceneData.viewProj = sceneData.proj * sceneData.view;
         sceneData.deltaTime = 0.1f;
 
         auto currentSceneData = static_cast<SceneData*>(currentSceneDataBuffer.allocationInfo.pMappedData);

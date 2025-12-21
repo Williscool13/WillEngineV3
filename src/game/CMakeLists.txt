@@ -1,9 +1,10 @@
 set(GAME_SOURCES
         game.cpp
-        camera/camera.cpp
-        camera/camera.h
-        camera/free_camera.cpp
-        camera/free_camera.h
+        camera/free_camera_component.cpp
+        camera/free_camera_component.h
+        systems/camera_system.cpp
+        systems/camera_system.h
+        fwd_components.h
 )
 
 set(GAME_INCLUDE_DIRS
@@ -14,6 +15,7 @@ set(GAME_INCLUDE_DIRS
 set(GAME_LIBRARIES
         core
         spdlog::spdlog
+        render
 )
 
 if (GAME_STATIC)
@@ -26,6 +28,11 @@ else()
     add_custom_command(TARGET game POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
             $<TARGET_FILE:game>
+            $<TARGET_FILE_DIR:will-engine>
+    )
+    add_custom_command(TARGET game POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy
+            $<TARGET_PDB_FILE:game>
             $<TARGET_FILE_DIR:will-engine>
     )
 endif()

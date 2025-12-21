@@ -8,9 +8,6 @@
 #include <cstdint>
 #include <memory>
 
-#include <glm/glm.hpp>
-
-#include "render_interface.h"
 #include "spdlog/logger.h"
 
 namespace Core
@@ -25,19 +22,8 @@ struct WindowContext
 
 struct EngineContext
 {
-    // const uint8_t* keyboardState;
-    // uint32_t keyboardStateSize;
-    // glm::vec2 mouseDelta;
-    // bool bMouseCaptured;
-
-    float deltaTime;
-    float timeElapsed;
-
     WindowContext windowContext;
-
     std::shared_ptr<spdlog::logger> logger;
-
-    void (*updateCamera)(glm::vec3 position, glm::vec3 lookDir, glm::vec3 up, float fovDegrees, float aspect, float nearPlane, float farPlane);
 };
 } // Core
 

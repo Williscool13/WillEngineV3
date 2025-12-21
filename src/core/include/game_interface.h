@@ -6,50 +6,50 @@
 #define WILL_ENGINE_GAME_INTERFACE_H
 
 #include "engine_context.h"
-#include "core/input/input_frame.h"
-#include "core/time/time_frame.h"
 
-namespace Game
+namespace Engine
 {
 struct GameState;
 }
 
 namespace Core
 {
-using GameGetGameStateSizeFunc = size_t(*)();
-using GameStartUpFunc = void(*)(EngineContext*, Game::GameState*);
-using GameLoadFunc = void(*)(EngineContext*, Game::GameState*);
-using GameUpdateFunc = void(*)(EngineContext*, Game::GameState*, InputFrame, const TimeFrame*);
-using GameUnloadFunc = void(*)(EngineContext*, Game::GameState*);
-using GameShutdownFunc = void(*)(EngineContext*, Game::GameState*);
+struct FrameBuffer;
 
-size_t StubGetGameStateSize();
+using GameStartUpFunc = void(*)(EngineContext*, Engine::GameState*);
+using GameLoadFunc = void(*)(EngineContext*, Engine::GameState*);
+using GameUpdateFunc = void(*)(EngineContext*, Engine::GameState*);
+using GamePrepareFrameFunc = void(*)(EngineContext*, Engine::GameState*, FrameBuffer*);
+using GameUnloadFunc = void(*)(EngineContext*, Engine::GameState*);
+using GameShutdownFunc = void(*)(EngineContext*, Engine::GameState*);
 
-void StubStartup(EngineContext*, Game::GameState* state);
+void StubStartup(EngineContext* ctx, Engine::GameState* state);
 
-void StubLoad(EngineContext*, Game::GameState* state);
+void StubLoad(EngineContext* ctx, Engine::GameState* state);
 
-void StubUpdate(EngineContext*, Game::GameState* state, InputFrame inputFrame, const TimeFrame* timeFrame);
+void StubUpdate(EngineContext* ctx, Engine::GameState* state);
 
-void StubUnload(EngineContext*, Game::GameState* state);
+void StubPrepareFrame(EngineContext* ctx, Engine::GameState* state, FrameBuffer* frameBuffer);
 
-void StubShutdown(EngineContext*, Game::GameState* state);
+void StubUnload(EngineContext* ctx, Engine::GameState* state);
+
+void StubShutdown(EngineContext* ctx, Engine::GameState* state);
 
 struct GameAPI
 {
-    GameGetGameStateSizeFunc gameGetStateSize;
     GameStartUpFunc gameStartup;
     GameLoadFunc gameLoad;
     GameUpdateFunc gameUpdate;
+    GamePrepareFrameFunc gamePrepareFrame;
     GameUnloadFunc gameUnload;
     GameShutdownFunc gameShutdown;
 
     void Stub()
     {
-        gameGetStateSize = StubGetGameStateSize;
         gameStartup = StubStartup;
         gameLoad = StubLoad;
         gameUpdate = StubUpdate;
+        gamePrepareFrame = StubPrepareFrame;
         gameUnload = StubUnload;
         gameShutdown = StubShutdown;
     }
@@ -68,44 +68,48 @@ struct GameAPI
 
 extern "C"
 {
-GAME_API size_t GameGetStateSize();
-
 /**
  * Called once when the application starts. Will not be called again during hot-reload.
  * @param ctx
  * @param state
  */
-GAME_API void GameStartup(Core::EngineContext* ctx, Game::GameState* state);
+GAME_API void GameStartup(Core::EngineContext* ctx, Engine::GameState* state);
 
 /**
  * Called once every time the dll is loaded, including on application start after GameStartup.
  * @param ctx
  * @param state
  */
-GAME_API void GameLoad(Core::EngineContext* ctx, Game::GameState* state);
+GAME_API void GameLoad(Core::EngineContext* ctx, Engine::GameState* state);
 
 /**
  * Called every tick. This is executed by the main engine loop.
  * @param ctx
  * @param state
- * @param inputFrame
- * @param timeFrame
  */
-GAME_API void GameUpdate(Core::EngineContext* ctx, Game::GameState* state, InputFrame inputFrame, const TimeFrame* timeFrame);
+GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::GameState* state);
+
+/**
+ * Called before frame buffer is sent directly to the render thread to be drawn.
+ * @param ctx
+ * @param state
+ * @param frameBuffer
+ */
+GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer);
 
 /**
  * Called before unloading DLL during hot-reload. Clean up DLL-specific resources.
  * @param ctx
  * @param state
  */
-GAME_API void GameUnload(Core::EngineContext* ctx, Game::GameState* state);
+GAME_API void GameUnload(Core::EngineContext* ctx, Engine::GameState* state);
 
 /**
  * Called once on application exit after GameUnload.
  * @param ctx
  * @param state
  */
-GAME_API void GameShutdown(Core::EngineContext* ctx, Game::GameState* state);
+GAME_API void GameShutdown(Core::EngineContext* ctx, Engine::GameState* state);
 }
 
 #endif // WILL_ENGINE_GAME_INTERFACE_H

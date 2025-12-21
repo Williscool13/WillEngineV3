@@ -15,7 +15,12 @@ bool DllLoader::Load(const std::string& dllPath, const std::string& tempCopyName
 
     if (!tempCopyName.empty()) {
         std::filesystem::path srcPath(dllPath);
-        std::filesystem::path dstPath = srcPath.parent_path() / tempCopyName;
+
+        // Create subdirectory for temp DLLs
+        std::filesystem::path tempDir = srcPath.parent_path() / "gamedlls";
+        std::filesystem::create_directories(tempDir);
+
+        std::filesystem::path dstPath = tempDir / tempCopyName;
 
         std::error_code ec;
         std::filesystem::copy_file(srcPath, dstPath, std::filesystem::copy_options::overwrite_existing, ec);
@@ -62,6 +67,13 @@ void DllLoader::Unload()
 bool DllLoader::Reload()
 {
     Unload();
-    return Load(originalPath, loadedPath != originalPath ? std::filesystem::path(loadedPath).filename().string() : "");
+#if _DEBUG
+    // LLDB frontend locks the dll for the duration of the program with a debugger. Do this in any debug build
+    return Load(originalPath, fmt::format("game_temp_{}.dll", ++reloadCount));
+#else
+    return Load(originalPath, "game_temp.dll");
+#endif
+
+
 }
 }

@@ -5,15 +5,25 @@
 #ifndef WILL_ENGINE_ENGINE_API_H
 #define WILL_ENGINE_ENGINE_API_H
 
-#include <glm/glm.hpp>
+#include "entt/entt.hpp"
+
+namespace Core
+{
+struct TimeFrame;
+struct InputFrame;
+}
 
 namespace Engine
 {
-class EngineAPI
+struct GameState
 {
-public:
-    static void UpdateCamera(glm::vec3 pos, glm::vec3 look, glm::vec3 up, float fov, float aspect, float n, float f);
+    const Core::InputFrame* inputFrame{nullptr};
+    const Core::TimeFrame* timeFrame{nullptr};
+    entt::registry registry;
 };
+
+class EngineAPI
+{};
 } // Engine
 
 #endif //WILL_ENGINE_ENGINE_API_H

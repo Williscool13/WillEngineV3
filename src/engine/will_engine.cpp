@@ -6,21 +6,21 @@
 
 #include <SDL3/SDL.h>
 #include <fmt/format.h>
+#include <spdlog/spdlog.h>
+#include <entt/entt.hpp>
 
+#include "components.h"
 #include "engine_api.h"
-#include "game_model.h"
-#include "asset-load/asset_load_thread.h"
 #include "core/include/game_interface.h"
-
 #include "core/input/input_manager.h"
 #include "core/time/time_manager.h"
+#include "asset-load/asset_load_thread.h"
 #include "platform/paths.h"
 #include "render/render_thread.h"
-#include "spdlog/spdlog.h"
 
 #if WILL_EDITOR
-#include "backends/imgui_impl_sdl3.h"
-#include "backends/imgui_impl_vulkan.h"
+#include <backends/imgui_impl_sdl3.h>
+#include <backends/imgui_impl_vulkan.h>
 #include "editor/model-generation/model_generator.h"
 #endif
 
@@ -77,18 +77,18 @@ void WillEngine::Initialize()
     modelGenerator = std::make_unique<Render::ModelGenerator>(renderThread->GetVulkanContext(), scheduler.get());
 #endif
 #ifdef GAME_STATIC
-    gameFunctions.gameGetStateSize = &GameGetStateSize;
     gameFunctions.gameStartup = &GameStartup;
     gameFunctions.gameLoad = &GameLoad;
     gameFunctions.gameUpdate = &GameUpdate;
+    gameFunctions.gamePrepareFrame = &GamePrepareFrame;
     gameFunctions.gameUnload = &GameUnload;
     gameFunctions.gameShutdown = &GameShutdown;
 #else
     if (gameDll.Load("game.dll", "game_temp.dll")) {
-        gameFunctions.gameGetStateSize = gameDll.GetFunction<Core::GameGetGameStateSizeFunc>("GameGetStateSize");
         gameFunctions.gameStartup = gameDll.GetFunction<Core::GameStartUpFunc>("GameStartup");
         gameFunctions.gameLoad = gameDll.GetFunction<Core::GameLoadFunc>("GameLoad");
         gameFunctions.gameUpdate = gameDll.GetFunction<Core::GameUpdateFunc>("GameUpdate");
+        gameFunctions.gamePrepareFrame = gameDll.GetFunction<Core::GamePrepareFrameFunc>("GamePrepareFrame");
         gameFunctions.gameUnload = gameDll.GetFunction<Core::GameUnloadFunc>("GameUnload");
         gameFunctions.gameShutdown = gameDll.GetFunction<Core::GameShutdownFunc>("GameShutdown");
     }
@@ -97,18 +97,17 @@ void WillEngine::Initialize()
     }
 #endif
 
-    size_t stateSize = gameFunctions.gameGetStateSize();
-    gameState = malloc(stateSize);
+    gameState = std::make_unique<GameState>();
 
     engineContext = std::make_unique<Core::EngineContext>();
     engineContext->logger = spdlog::default_logger();
-    engineContext->updateCamera = EngineAPI::UpdateCamera;
+    // engineContext->updateCamera = EngineAPI::UpdateCamera;
     engineContext->windowContext.windowWidth = w;
     engineContext->windowContext.windowHeight = h;
     engineContext->windowContext.bCursorHidden = bCursorHidden;
 
-    gameFunctions.gameStartup(engineContext.get(), static_cast<Game::GameState*>(gameState));
-    gameFunctions.gameLoad(engineContext.get(), static_cast<Game::GameState*>(gameState));
+    gameFunctions.gameStartup(engineContext.get(), gameState.get());
+    gameFunctions.gameLoad(engineContext.get(), gameState.get());
 }
 
 void WillEngine::Run()
@@ -167,19 +166,17 @@ void WillEngine::Run()
         }
 
         inputManager->UpdateFocus(SDL_GetWindowFlags(window.get()));
-        timeManager->Update();
+        timeManager->UpdateGame();
 
-        const InputFrame& input = inputManager->GetCurrentInput();
-        const TimeFrame& time = timeManager->GetTime();
-        stagingFrameBuffer.deltaTime += time.deltaTime;
 #if WILL_EDITOR
-        if (input.GetKey(Key::F5).pressed) {
-            gameFunctions.gameUnload(engineContext.get(), static_cast<Game::GameState*>(gameState));
+        InputFrame editorInput = inputManager->GetCurrentInput();
+        if (editorInput.GetKey(Key::F5).pressed) {
+            gameFunctions.gameUnload(engineContext.get(), gameState.get());
             if (gameDll.Reload()) {
-                gameFunctions.gameGetStateSize = gameDll.GetFunction<Core::GameGetGameStateSizeFunc>("GameGetStateSize");
                 gameFunctions.gameStartup = gameDll.GetFunction<Core::GameStartUpFunc>("GameStartup");
                 gameFunctions.gameLoad = gameDll.GetFunction<Core::GameLoadFunc>("GameLoad");
                 gameFunctions.gameUpdate = gameDll.GetFunction<Core::GameUpdateFunc>("GameUpdate");
+                gameFunctions.gamePrepareFrame = gameDll.GetFunction<Core::GamePrepareFrameFunc>("GamePrepareFrame");
                 gameFunctions.gameUnload = gameDll.GetFunction<Core::GameUnloadFunc>("GameUnload");
                 gameFunctions.gameShutdown = gameDll.GetFunction<Core::GameShutdownFunc>("GameShutdown");
                 SPDLOG_DEBUG("Game lib was hot-reloaded");
@@ -189,15 +186,14 @@ void WillEngine::Run()
                 SPDLOG_DEBUG("Game lib failed to be hot-reloaded");
             }
 
-            gameFunctions.gameLoad(engineContext.get(), static_cast<Game::GameState*>(gameState));
+            gameFunctions.gameLoad(engineContext.get(), gameState.get());
         }
 
-        if (input.isWindowInputFocus && input.GetKey(Key::PERIOD).pressed) {
+        if (editorInput.isWindowInputFocus && editorInput.GetKey(Key::PERIOD).pressed) {
             bCursorHidden = !bCursorHidden;
             SDL_SetWindowRelativeMouseMode(window.get(), bCursorHidden);
             engineContext->windowContext.bCursorHidden = bCursorHidden;
         }
-
 #endif
 
         std::vector<Render::WillModelHandle> modelHandles;
@@ -214,18 +210,43 @@ void WillEngine::Run()
             stagingFrameBuffer.imageAcquireOperations.insert(stagingFrameBuffer.imageAcquireOperations.end(),
                                                              model->imageAcquireOps.begin(),
                                                              model->imageAcquireOps.end());
-
-            if (modelHandle == boxModelHandle) {
-                bCanGenerate = true;
-            }
         }
 
-        gameFunctions.gameUpdate(engineContext.get(), static_cast<Game::GameState*>(gameState), input, &time);
+        gameState->inputFrame = &inputManager->GetCurrentInput();
+        gameState->timeFrame = &timeManager->GetTime();
+        gameFunctions.gameUpdate(engineContext.get(), gameState.get());
         inputManager->FrameReset();
 
         const bool canTransmit = engineRenderSynchronization->gameFrames.try_acquire();
         if (canTransmit) {
-            PrepareFrameBuffer(frameBufferIndex, engineRenderSynchronization->frameBuffers[frameBufferIndex], time);
+            timeManager->UpdateRender();
+
+            Core::FrameBuffer& currentFrameBuffer = engineRenderSynchronization->frameBuffers[frameBufferIndex];
+            stagingFrameBuffer.currentFrameBuffer = frameBufferIndex;
+            stagingFrameBuffer.swapchainRecreateCommand.bIsMinimized = bMinimized;
+            if (bRequireSwapchainRecreate) {
+                stagingFrameBuffer.swapchainRecreateCommand.bEngineCommandsRecreate = true;
+
+                int32_t w;
+                int32_t h;
+                SDL_GetWindowSize(window.get(), &w, &h);
+                stagingFrameBuffer.swapchainRecreateCommand.width = w;
+                stagingFrameBuffer.swapchainRecreateCommand.height = h;
+                bRequireSwapchainRecreate = false;
+            }
+            else {
+                stagingFrameBuffer.swapchainRecreateCommand.bEngineCommandsRecreate = false;
+            }
+
+            gameFunctions.gamePrepareFrame(engineContext.get(), gameState.get(), &stagingFrameBuffer);
+
+            std::swap(currentFrameBuffer, stagingFrameBuffer);
+            stagingFrameBuffer.modelMatrixOperations.clear();
+            stagingFrameBuffer.instanceOperations.clear();
+            stagingFrameBuffer.jointMatrixOperations.clear();
+            stagingFrameBuffer.bufferAcquireOperations.clear();
+            stagingFrameBuffer.imageAcquireOperations.clear();
+            stagingFrameBuffer.timeFrame = timeManager->GetTime();
 #if WILL_EDITOR
             PrepareEditor(frameBufferIndex);
 #endif
@@ -233,35 +254,6 @@ void WillEngine::Run()
             engineRenderSynchronization->renderFrames.release();
         }
     }
-}
-
-void WillEngine::PrepareFrameBuffer(uint32_t currentFrameBufferIndex, Core::FrameBuffer& frameBuffer, const TimeFrame& time)
-{
-    stagingFrameBuffer.swapchainRecreateCommand.bIsMinimized = bMinimized;
-    if (bRequireSwapchainRecreate) {
-        stagingFrameBuffer.swapchainRecreateCommand.bEngineCommandsRecreate = true;
-
-        int32_t w;
-        int32_t h;
-        SDL_GetWindowSize(window.get(), &w, &h);
-        stagingFrameBuffer.swapchainRecreateCommand.width = w;
-        stagingFrameBuffer.swapchainRecreateCommand.height = h;
-        bRequireSwapchainRecreate = false;
-    }
-    else {
-        stagingFrameBuffer.swapchainRecreateCommand.bEngineCommandsRecreate = false;
-    }
-
-    stagingFrameBuffer.timeElapsed = time.totalTime;
-    stagingFrameBuffer.currentFrameBuffer = currentFrameBufferIndex;
-
-    std::swap(frameBuffer, stagingFrameBuffer);
-    stagingFrameBuffer.modelMatrixOperations.clear();
-    stagingFrameBuffer.instanceOperations.clear();
-    stagingFrameBuffer.jointMatrixOperations.clear();
-    stagingFrameBuffer.bufferAcquireOperations.clear();
-    stagingFrameBuffer.imageAcquireOperations.clear();
-    stagingFrameBuffer.deltaTime = 0;
 }
 
 #if WILL_EDITOR
@@ -273,13 +265,6 @@ void WillEngine::DrawImgui()
 
     if (ImGui::Begin("Main")) {
         ImGui::Text("Hello!");
-        // float camPos[3];
-        // camPos[0] = freeCamera.transform.translation.x;
-        // camPos[1] = freeCamera.transform.translation.y;
-        // camPos[2] = freeCamera.transform.translation.z;
-        // if (ImGui::DragFloat3("Position", camPos)) {
-        //     freeCamera.transform.translation = {camPos[0], camPos[1], camPos[2]};
-        // }
     }
 
 
@@ -313,7 +298,7 @@ void WillEngine::DrawImgui()
         SPDLOG_INFO("Generation finished");
     };
 
-    if (ImGui::Button("Add One BoxTextured")) {
+    /*if (ImGui::Button("Add One BoxTextured")) {
         if (boxModelHandle.IsValid() && bCanGenerate && !bHasAdded) {
             Render::ResourceManager* resourceManager = renderThread->GetResourceManager();
             Game::ModelInstance mi{};
@@ -426,7 +411,7 @@ void WillEngine::DrawImgui()
             Platform::GetAssetPath() / "dragon/dragon.gltf",
             Platform::GetAssetPath() / "dragon/dragon.willmodel"
         );
-    }
+    }*/
 
 
     ImGui::End();
@@ -452,9 +437,8 @@ void WillEngine::Cleanup()
     assetLoadThread->Join();
     renderThread->Join();
 
-    gameFunctions.gameUnload(engineContext.get(), static_cast<Game::GameState*>(gameState));
-    gameFunctions.gameShutdown(engineContext.get(), static_cast<Game::GameState*>(gameState));
-    free(gameState);
+    gameFunctions.gameUnload(engineContext.get(), gameState.get());
+    gameFunctions.gameShutdown(engineContext.get(), gameState.get());
     gameState = nullptr;
 #ifndef GAME_STATIC
     gameDll.Unload();

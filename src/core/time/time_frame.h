@@ -14,6 +14,9 @@ struct TimeFrame
     float deltaTime;
     float totalTime;
     uint64_t frameCount;
+
+    float renderDeltaTime;
+    float renderTotalTime;
 };
 } // Core
 

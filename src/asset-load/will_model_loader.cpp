@@ -145,15 +145,8 @@ void WillModelLoader::TaskImplementation()
         }
 
         std::vector<uint8_t> ktxData = reader.ReadFile(textureName);
-
-        std::filesystem::create_directories("temp");
-        std::string tempKtxPath = fmt::format("temp/loaded_texture_{}.ktx2", i);
-        std::ofstream tempFile(tempKtxPath, std::ios::binary);
-        tempFile.write(reinterpret_cast<const char*>(ktxData.data()), ktxData.size());
-        tempFile.close();
-
         ktxTexture2* loadedTexture = nullptr;
-        ktx_error_code_e result = ktxTexture2_CreateFromNamedFile(tempKtxPath.c_str(), KTX_TEXTURE_CREATE_NO_FLAGS, &loadedTexture);
+        ktx_error_code_e result = ktxTexture2_CreateFromMemory(ktxData.data(), ktxData.size(), KTX_TEXTURE_CREATE_NO_FLAGS, &loadedTexture);
 
         if (ktxTexture2_NeedsTranscoding(loadedTexture)) {
             const ktx_transcode_fmt_e targetFormat = static_cast<ktx_transcode_fmt_e>(preferredImageFormats[i]);
@@ -498,7 +491,6 @@ WillModelLoader::ThreadState WillModelLoader::ThreadExecute(Render::VulkanContex
         }
         else {
             vertexDataPtr = convertedVertices.data();
-
         }
 
         if (!uploadBufferChunked(pendingVerticesHead,

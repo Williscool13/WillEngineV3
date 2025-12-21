@@ -5,6 +5,10 @@ add_library(engine STATIC
         engine_api.h
         game_model.cpp
         game_model.h
+        components.cpp
+        components.h
+        components/camera_component.h
+        components/transform_component.h
 )
 
 target_include_directories(engine PRIVATE
