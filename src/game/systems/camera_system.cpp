@@ -4,6 +4,8 @@
 
 #include "camera_system.h"
 
+#include "engine/engine_api.h"
+#include "game/fwd_components.h"
 #include "game/camera/free_camera_component.h"
 
 namespace Game::System
@@ -11,5 +13,26 @@ namespace Game::System
 void UpdateCameras(Core::EngineContext* ctx, Engine::GameState* state)
 {
     UpdateFreeCamera(ctx, state);
+}
+
+void BuildViewFamily(Engine::GameState* state, Core::ViewFamily& mainViewFamily)
+{
+    mainViewFamily.views.clear();
+    auto cameraView = state->registry.view<Game::CameraComponent, Game::MainViewportComponent, Game::TransformComponent>();
+
+    for (auto entity : cameraView) {
+        const auto& [cam, transform] = cameraView.get(entity);
+
+        Core::RenderView view;
+
+        view.fovRadians = cam.fovRadians;
+        view.aspectRatio = cam.aspectRatio;
+        view.nearPlane = cam.nearPlane;
+        view.farPlane = cam.farPlane;
+        view.cameraPos = cam.cameraPos;
+        view.cameraLookAt = cam.cameraLookAt;
+        view.cameraUp = cam.cameraUp;
+        mainViewFamily.views.push_back(view);
+    }
 }
 } // Game

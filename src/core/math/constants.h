@@ -10,7 +10,7 @@
 namespace Core::Math
 {
 inline constexpr auto WORLD_UP = glm::vec3(0.0f, 1.0f, 0.0f);
-inline constexpr auto WORLD_FORWARD = glm::vec3(0.0f, 0.0f, 1.0f);
+inline constexpr auto WORLD_FORWARD = glm::vec3(0.0f, 0.0f, -1.0f);
 inline constexpr auto WORLD_RIGHT = glm::vec3(1.0f, 0.0f, 0.0f);
 
 inline constexpr float SPEED_OF_LIGHT = 299792458.0f; // m/s

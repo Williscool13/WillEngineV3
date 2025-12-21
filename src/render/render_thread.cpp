@@ -195,12 +195,20 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     std::array<uint32_t, 2> renderExtent = renderExtents->GetScaledExtent();
     VkImage currentSwapchainImage = swapchain->swapchainImages[swapchainImageIndex];
     AllocatedBuffer& currentSceneDataBuffer = frameResource.sceneDataBuffer;
+
     //
     {
         // todo: address what happens if views is 0
-        sceneData.view = frameBuffer.mainViewFamily.views[0].viewMatrix;
-        sceneData.proj = frameBuffer.mainViewFamily.views[0].projectionMatrix;
-        sceneData.viewProj = sceneData.proj * sceneData.view;
+        const Core::RenderView& view = frameBuffer.mainViewFamily.views[0];
+
+        const glm::mat4 viewMatrix = glm::lookAt(view.cameraPos, view.cameraLookAt, view.cameraUp);
+        const glm::mat4 projMatrix = glm::perspective(view.fovRadians, view.aspectRatio, view.farPlane, view.nearPlane);
+
+        sceneData.view = viewMatrix;
+        sceneData.proj = projMatrix;
+        sceneData.viewProj = projMatrix * viewMatrix;
+        sceneData.cameraWorldPos = glm::vec4(view.cameraPos, 1.0f);
+        sceneData.frustum = Render::CreateFrustum(projMatrix * viewMatrix);
         sceneData.deltaTime = 0.1f;
 
         auto currentSceneData = static_cast<SceneData*>(currentSceneDataBuffer.allocationInfo.pMappedData);

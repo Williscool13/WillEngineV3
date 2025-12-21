@@ -10,7 +10,6 @@
 #include <glm/glm.hpp>
 
 #include "core/time/time_frame.h"
-#include "render/shaders/common_interop.h"
 
 namespace Core
 {
@@ -18,10 +17,16 @@ constexpr uint32_t FRAME_BUFFER_COUNT = 3;
 
 struct RenderView
 {
-    glm::mat4 viewMatrix;
-    glm::mat4 projectionMatrix;
-    glm::vec3 cameraPosition;
-    Frustum frustum;
+    float fovRadians;
+    float aspectRatio;
+    float nearPlane;
+    float farPlane;
+    glm::vec3 cameraPos;
+    glm::vec3 cameraLookAt;
+    glm::vec3 cameraUp;
+
+    // render target color
+    // render target depth
 };
 
 struct ViewFamily {
@@ -31,17 +36,6 @@ struct ViewFamily {
     // std::vector<LightInstance> allLights;
     // std::vector<ModelInstance> modelMatrices;
     // std::vector<MaterialInstance> materials;
-};
-
-struct RawCameraData
-{
-    glm::vec3 cameraWorldPos{0.0f};
-    glm::vec3 cameraLook{0.0f};
-    glm::vec3 cameraUp{0.0f, 1.0f, 0.0f};
-    float fovDegrees{75.0f};
-    float aspectRatio{16.0f/9.0f};
-    float nearPlane{0.1f};
-    float farPlane{1000.0f};
 };
 
 struct BufferAcquireOperation

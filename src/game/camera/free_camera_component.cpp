@@ -10,6 +10,7 @@
 #include "engine/engine_api.h"
 #include "camera_component.h"
 #include "../common/transform_component.h"
+#include "core/math/constants.h"
 
 namespace Game
 {
@@ -45,6 +46,12 @@ void UpdateFreeCamera(Core::EngineContext* ctx, Engine::GameState* state)
             velocity.z -= 1.0f;
         }
 
+        if (state->inputFrame->GetKey(Key::MINUS).down) {
+            freeCam.moveSpeed += 0.1f;
+        }
+        if (state->inputFrame->GetKey(Key::EQUALS).down) {
+            freeCam.lookSpeed -= 0.1f;
+        }
         if (state->inputFrame->GetKey(Key::RIGHTBRACKET).down) {
             freeCam.moveSpeed += 1;
         }
@@ -52,39 +59,40 @@ void UpdateFreeCamera(Core::EngineContext* ctx, Engine::GameState* state)
             freeCam.moveSpeed -= 1;
         }
 
-        // todo: look speed modification
+        freeCam.lookSpeed = glm::clamp(freeCam.lookSpeed, 0.1f, 1.0f);
+        freeCam.moveSpeed = glm::clamp(freeCam.moveSpeed, 1.0f, 100.0f);
 
-        velocity *= state->timeFrame->deltaTime * freeCam.moveSpeed;
-        verticalVelocity *= state->timeFrame->deltaTime * freeCam.moveSpeed;
+        const float scaledMoveSpeed = state->timeFrame->deltaTime * freeCam.moveSpeed;
+        velocity *= scaledMoveSpeed;
+        verticalVelocity *= scaledMoveSpeed;
 
         const float yaw = glm::radians(-state->inputFrame->mouseXDelta * freeCam.lookSpeed);
         const float pitch = glm::radians(-state->inputFrame->mouseYDelta * freeCam.lookSpeed);
 
         const glm::quat currentRotation = transform.transform.rotation;
-        const glm::vec3 forward = currentRotation * glm::vec3(0.0f, 0.0f, -1.0f);
+        const glm::vec3 forward = currentRotation * WORLD_FORWARD;
         const float currentPitch = std::asin(forward.y);
 
         const float newPitch = glm::clamp(currentPitch + pitch, glm::radians(-89.9f), glm::radians(89.9f));
         const float pitchDelta = newPitch - currentPitch;
 
-        const glm::quat yawQuat = glm::angleAxis(yaw, glm::vec3(0.0f, 1.0f, 0.0f));
-        const glm::quat pitchQuat = glm::angleAxis(pitchDelta, glm::vec3(1.0f, 0.0f, 0.0f));
+        const glm::quat yawQuat = glm::angleAxis(yaw, WORLD_UP);
+        const glm::quat pitchQuat = glm::angleAxis(pitchDelta, WORLD_RIGHT);
 
-        glm::quat newRotation = yawQuat * currentRotation * pitchQuat;
-        transform.transform.rotation = glm::normalize(newRotation);
+        transform.transform.rotation = glm::normalize(yawQuat * currentRotation * pitchQuat);
 
-        const glm::vec3 right = transform.transform.rotation * glm::vec3(1.0f, 0.0f, 0.0f);
-        const glm::vec3 forwardDir = transform.transform.rotation * glm::vec3(0.0f, 0.0f, -1.0f);
+        const glm::vec3 right = transform.transform.rotation * WORLD_RIGHT;
+        const glm::vec3 forwardDir = transform.transform.rotation * WORLD_FORWARD;
 
-        glm::vec3 finalVelocity = right * velocity.x + forwardDir * velocity.z;
-        finalVelocity += glm::vec3(0.0f, verticalVelocity, 0.0f);
+        transform.transform.translation += right * velocity.x + forwardDir * velocity.z + WORLD_UP * verticalVelocity;
 
-        transform.transform.translation += finalVelocity;
-
-        glm::mat4 worldMatrix = transform.transform.GetMatrix();
-        camera.view = glm::inverse(worldMatrix);
-        // todo: arrange this some other way, pass camera parameters if needed. Reversal should be transparent to the game
-        camera.projection = glm::perspective(glm::radians(70.0f), 4.0f / 3.0f, 1000.0f, 0.1f);
+        camera.cameraPos = transform.transform.translation;
+        camera.cameraLookAt = transform.transform.translation + forwardDir;
+        camera.cameraUp = WORLD_UP;
+        camera.aspectRatio = ctx->windowContext.windowWidth / ctx->windowContext.windowHeight;
+        camera.fovRadians = glm::radians(90.0f);
+        camera.nearPlane = 0.1f;
+        camera.farPlane = 1000.0f;
     }
 }
 } // Game

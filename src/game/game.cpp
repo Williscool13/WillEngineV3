@@ -26,7 +26,6 @@ GAME_API void GameStartup(Core::EngineContext* ctx, Engine::GameState* state)
     state->registry.emplace<Game::MainViewportComponent>(camera);
 
     spdlog::set_default_logger(ctx->logger);
-
 }
 
 GAME_API void GameLoad(Core::EngineContext* ctx, Engine::GameState* state)
@@ -35,11 +34,10 @@ GAME_API void GameLoad(Core::EngineContext* ctx, Engine::GameState* state)
 
     spdlog::set_default_logger(ctx->logger);
     SPDLOG_TRACE("[Game] Registering engine component types:");
-    SPDLOG_TRACE("  TransformComponent: {}",    entt::type_id<TransformComponent>().hash());
-    SPDLOG_TRACE("  CameraComponent: {}",       entt::type_id<CameraComponent>().hash());
-    SPDLOG_TRACE("  MainViewportComponent: {}", entt::type_id<MainViewportComponent>().hash());
-    SPDLOG_TRACE("  DebugTestComponent: {}",    entt::type_id<DebugTestComponent>().hash());
-    SPDLOG_TRACE("  FreeCameraComponent: {}",   entt::type_id<Game::FreeCameraComponent>().hash());
+    SPDLOG_TRACE("  TransformComponent: {}", entt::type_id<Game::TransformComponent>().hash());
+    SPDLOG_TRACE("  CameraComponent: {}", entt::type_id<Game::CameraComponent>().hash());
+    SPDLOG_TRACE("  MainViewportComponent: {}", entt::type_id<Game::MainViewportComponent>().hash());
+    SPDLOG_TRACE("  FreeCameraComponent: {}", entt::type_id<Game::FreeCameraComponent>().hash());
 }
 
 GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::GameState* state)
@@ -52,21 +50,7 @@ GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::GameState* state)
 
 GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer)
 {
-    // Game::BuildViewFamily(state, fb->mainViewFamily);
-
-    frameBuffer->mainViewFamily.views.clear();
-    auto cameraView = state->registry.view<Game::CameraComponent, Game::MainViewportComponent, Game::TransformComponent>();
-
-    for (auto entity : cameraView) {
-        const auto& [cam, transform] = cameraView.get(entity);
-
-        Core::RenderView view;
-        view.viewMatrix = cam.view;
-        view.projectionMatrix = cam.projection;
-        view.cameraPosition = glm::vec3(transform.transform.translation);
-        view.frustum = Render::CreateFrustum(view.projectionMatrix);
-        frameBuffer->mainViewFamily.views.push_back(view);
-    }
+    Game::System::BuildViewFamily(state, frameBuffer->mainViewFamily);
 }
 
 

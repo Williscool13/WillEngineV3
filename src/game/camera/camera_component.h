@@ -11,8 +11,13 @@ namespace Game
 {
 struct CameraComponent
 {
-    glm::mat4 view;
-    glm::mat4 projection;
+    float fovRadians;
+    float aspectRatio;
+    float nearPlane;
+    float farPlane;
+    glm::vec3 cameraPos;
+    glm::vec3 cameraLookAt;
+    glm::vec3 cameraUp;
 };
 
 struct MainViewportComponent
