@@ -79,6 +79,14 @@ struct WillModelLoader
     UnpackedWillModel rawData{};
     std::vector<VkSamplerCreateInfo> pendingSamplerInfos;
     std::vector<ktxTexture2*> pendingTextures;
+    /**
+     * Cached vector to store SkinnedVertex->Vertex for non-skinned models.
+     */
+    std::vector<Vertex> convertedVertices;
+    /**
+     * Cached vector to store 3x uint8_t->1x uint32_t for meshlet triangles.
+     */
+    std::vector<uint32_t> paddedTriangles;
     uint32_t pendingTextureHead{0};
     uint32_t pendingVerticesHead{0};
     uint32_t pendingMeshletVerticesHead{0};

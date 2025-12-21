@@ -1,3 +1,4 @@
+import shader_types;
 import common_interop;
 import model_interop;
 import constants_interop;
@@ -21,7 +22,7 @@ struct PushConsts {
     Vertex* vertexBuffer;
     MeshletPrimitive* primitiveBuffer;
     uint32_t* meshletVerticesBuffer;
-    MeshletTrianglesData* meshletTrianglesBuffer; // workaround for lack of shader8 support
+    uint32_t* meshletTrianglesBuffer;
     Meshlet* meshletBuffer;
 
     // Dynamics
@@ -46,7 +47,7 @@ groupshared MeshletPayload sharedPayloads[TASK_SHADER_DISPATCH_X];
 
 
 [shader("task")]
-[numthreads(TASK_SHADER_DISPATCH_X, 1, 1)]
+[numthreads(1, 1, 1)]
 void taskMain(uniform PushConsts pushConstants, uint3 dispatchThreadId : SV_DispatchThreadID)
 {
 
@@ -55,37 +56,40 @@ void taskMain(uniform PushConsts pushConstants, uint3 dispatchThreadId : SV_Disp
 
     MeshletPrimitive prim = pushConstants.primitiveBuffer[inst.primitiveIndex];
 
-    // todo: Instance cull w/ primitive bounds and groupshared packing (128 meshlets per task group, 4 processed each)
-
     sharedPayloads[0].meshletBaseIndex = prim.meshletOffset;
     sharedPayloads[0].modelIndex = inst.modelIndex;
     sharedPayloads[0].materialIndex = inst.materialIndex;
 
-    DispatchMesh(prim.meshletCount, TASK_SHADER_DISPATCH_X, 1, sharedPayloads);
+    DispatchMesh(prim.meshletCount, 1, 1, sharedPayloads);
 }
+
+static const float4 positions[3] = {
+	float4( 0.0, -1.0, 0.0, 1.0),
+	float4(-1.0,  1.0, 0.0, 1.0),
+	float4( 1.0,  1.0, 0.0, 1.0)
+};
 
 [shader("mesh")]
 [outputtopology("triangle")]
-[numthreads(MESH_SHADER_DISPATCH_X, 1, 1)]
+[numthreads(64, 1, 1)]
 void meshMain(
     in payload MeshletPayload sharedPayloads[TASK_SHADER_DISPATCH_X],
     out indices uint3 triangles[MAX_PRIMITIVES], out vertices VertexOutput vertices[MAX_VERTICES],
-    uint3 groupId : SV_GroupID, uint3 gtid : SV_GroupThreadID,
-    uniform PushConsts pushConstants)
+    uint3 groupId : SV_GroupID, uint3 gtid : SV_GroupThreadID, uint3 dtid : SV_DispatchThreadID,
+    uniform PushConsts pushConstant)
 {
     MeshletPayload payload = sharedPayloads[0];
     uint meshletIdx = payload.meshletBaseIndex + groupId.x;
     uint32_t instanceIndex = gtid.x;
 
-    Model m = pushConstants.modelBuffer[payload.modelIndex];
-    Meshlet meshlet = pushConstants.meshletBuffer[meshletIdx];
+    Model m = pushConstant.modelBuffer[0];
+    Meshlet meshlet = pushConstant.meshletBuffer[0];
 
-    float4x4 viewProj = pushConstants.sceneData->viewProj;
-
+    float4x4 viewProj = pushConstant.sceneData->viewProj;
     SetMeshOutputCounts(meshlet.meshletVerticesCount, meshlet.meshletTriangleCount);
     for (uint i = instanceIndex; i < meshlet.meshletVerticesCount; i += MESH_SHADER_DISPATCH_X) {
-        uint localVertexIndex = pushConstants.meshletVerticesBuffer[meshlet.meshletVerticesOffset + i];
-        Vertex v = pushConstants.vertexBuffer[meshlet.vertexOffset + localVertexIndex];
+        uint localVertexIndex = pushConstant.meshletVerticesBuffer[meshlet.meshletVerticesOffset + i];
+        Vertex v = pushConstant.vertexBuffer[meshlet.vertexOffset + localVertexIndex];
 
         float4 worldPos = mul(m.modelMatrix, float4(v.position, 1.0));
         float4 clipPos = mul(viewProj, worldPos);
@@ -110,11 +114,12 @@ void meshMain(
     }
 
     for (uint i = instanceIndex; i < meshlet.meshletTriangleCount; i += MESH_SHADER_DISPATCH_X) {
-        uint triOffset = meshlet.meshletTriangleOffset + i * 3;
+        uint triIndex = meshlet.meshletTriangleOffset + i;
+        uint packed = pushConstant.meshletTrianglesBuffer[triIndex];
 
-        uint idx0 = pushConstants.meshletTrianglesBuffer->meshletTriangles[triOffset + 0].triangleIndex;
-        uint idx1 = pushConstants.meshletTrianglesBuffer->meshletTriangles[triOffset + 1].triangleIndex;
-        uint idx2 = pushConstants.meshletTrianglesBuffer->meshletTriangles[triOffset + 2].triangleIndex;
+        uint idx0 = (packed >> 0) & 0xFF;
+        uint idx1 = (packed >> 8) & 0xFF;
+        uint idx2 = (packed >> 16) & 0xFF;
 
         triangles[i] = uint3(idx0, idx1, idx2);
     }

@@ -52,7 +52,7 @@ public:
 
     void Enqueue(const std::vector<Core::InstanceOperation>& operations);
 
-    void ProcessOperations(char* pMappedData, uint32_t discardCount, uint32_t& highestInstanceIndex);
+    void ProcessOperations(char* pMappedData, uint32_t discardCount, int32_t& highestInstanceIndex);
 
     size_t GetSize() const { return tail - head; }
     bool IsFull() const { return (tail - head) >= capacity; }

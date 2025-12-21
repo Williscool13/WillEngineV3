@@ -65,14 +65,18 @@ void RenderThread::Initialize(Core::FrameSync* engineRenderSync, enki::TaskSched
         frameResource.sceneDataBuffer = std::move(AllocatedBuffer::CreateAllocatedBuffer(context.get(), bufferInfo, vmaAllocInfo));
 
         bufferInfo.size = BINDLESS_INSTANCE_BUFFER_SIZE;
-        frameResource.modelBuffer = std::move(AllocatedBuffer::CreateAllocatedBuffer(context.get(), bufferInfo, vmaAllocInfo));
-        bufferInfo.size = BINDLESS_MODEL_BUFFER_SIZE;
         frameResource.instanceBuffer = std::move(AllocatedBuffer::CreateAllocatedBuffer(context.get(), bufferInfo, vmaAllocInfo));
+        bufferInfo.size = BINDLESS_MODEL_BUFFER_SIZE;
+        frameResource.modelBuffer = std::move(AllocatedBuffer::CreateAllocatedBuffer(context.get(), bufferInfo, vmaAllocInfo));
         bufferInfo.size = BINDLESS_MODEL_BUFFER_SIZE;
         frameResource.jointMatrixBuffer = std::move(AllocatedBuffer::CreateAllocatedBuffer(context.get(), bufferInfo, vmaAllocInfo));
         bufferInfo.size = BINDLESS_MATERIAL_BUFFER_SIZE;
         frameResource.materialBuffer = std::move(AllocatedBuffer::CreateAllocatedBuffer(context.get(), bufferInfo, vmaAllocInfo));
     }
+
+    modelMatrixOperationRingBuffer.Initialize(FRAME_BUFFER_OPERATION_COUNT_LIMIT);
+    instanceOperationRingBuffer.Initialize(FRAME_BUFFER_OPERATION_COUNT_LIMIT);
+    jointMatrixOperationRingBuffer.Initialize(FRAME_BUFFER_OPERATION_COUNT_LIMIT);
 
     basicComputePipeline = BasicComputePipeline(context.get(), resourceManager->bindlessRenderTargetDescriptorBuffer.descriptorSetLayout);
     basicRenderPipeline = BasicRenderPipeline(context.get());
@@ -289,8 +293,8 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
             vkCmdDrawMeshTasksEXT(cmd, 1, 1, 1);
         }
         //
-        {
-            /*vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, meshShaderPipeline.pipeline.handle);
+        if (highestInstanceIndex != -1) {
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, meshShaderPipeline.pipeline.handle);
             MeshShaderPushConstants pushConstants{
                 .sceneData = currentSceneDataBuffer.address,
                 .vertexBuffer = resourceManager->megaVertexBuffer.address,
@@ -306,7 +310,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
 
             vkCmdPushConstants(cmd, meshShaderPipeline.pipelineLayout.handle, VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT, 0,
                                sizeof(MeshShaderPushConstants), &pushConstants);
-            vkCmdDrawMeshTasksEXT(cmd, 1, 1, 1);*/
+            vkCmdDrawMeshTasksEXT(cmd, 1, 1, 1);
         }
 
         vkCmdEndRendering(cmd);

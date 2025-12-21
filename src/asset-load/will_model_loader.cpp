@@ -47,8 +47,9 @@ void WillModelLoader::Reset()
     pendingMeshletsHead = 0;
     pendingPrimitivesHead = 0;
     pendingBufferBarrier = 0;
-
     pendingTextures.clear();
+    convertedVertices.clear();
+    paddedTriangles.clear();
 }
 
 WillModelLoader::TaskState WillModelLoader::TaskExecute(enki::TaskScheduler* scheduler, LoadModelTask* task)
@@ -230,7 +231,7 @@ bool WillModelLoader::PreThreadExecute(Render::VulkanContext* context, Render::R
         return false;
     }
 
-    size_t sizeMeshletTriangles = rawData.meshletTriangles.size() * sizeof(uint8_t);
+    size_t sizeMeshletTriangles = rawData.meshletTriangles.size() / 3 * sizeof(uint32_t);
     model->modelData.meshletTriangleAllocation = resourceManager->meshletTriangleBufferAllocator.allocate(sizeMeshletTriangles);
     if (model->modelData.meshletTriangleAllocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
         selectedAllocator->free(model->modelData.vertexAllocation);
@@ -287,6 +288,29 @@ bool WillModelLoader::PreThreadExecute(Render::VulkanContext* context, Render::R
     model->modelData.inverseBindMatrices = std::move(rawData.inverseBindMatrices);
     model->modelData.animations = std::move(rawData.animations);
     model->modelData.nodeRemap = std::move(rawData.nodeRemap);
+
+    // Convert SkinnedVertex to Vertex
+    convertedVertices.reserve(rawData.vertices.size());
+    for (const auto& skinnedVert : rawData.vertices) {
+        Vertex v{};
+        v.position = skinnedVert.position;
+        v.normal = skinnedVert.normal;
+        v.tangent = skinnedVert.tangent;
+        v.texcoordU = skinnedVert.texcoordU;
+        v.texcoordV = skinnedVert.texcoordV;
+        v.color = skinnedVert.color;
+        convertedVertices.push_back(v);
+    }
+
+    // Pack triangle into uint32_t (1x uint8 padding). Better access pattern on GPU
+    paddedTriangles.reserve(rawData.meshletTriangles.size() / 3);
+
+    for (size_t i = 0; i < rawData.meshletTriangles.size(); i += 3) {
+        uint32_t packed = rawData.meshletTriangles[i + 0] |
+                          (rawData.meshletTriangles[i + 1] << 8) |
+                          (rawData.meshletTriangles[i + 2] << 16);
+        paddedTriangles.push_back(packed);
+    }
 
 
     return true;
@@ -418,6 +442,7 @@ WillModelLoader::ThreadState WillModelLoader::ThreadExecute(Render::VulkanContex
                 return true;
             }
 
+            uploadStaging->StartCommandBuffer();
             size_t remainingElements = totalCount - pendingHead;
             size_t remainingSize = remainingElements * elementSize;
 
@@ -467,16 +492,25 @@ WillModelLoader::ThreadState WillModelLoader::ThreadExecute(Render::VulkanContex
 
         size_t vertexSize = rawData.bIsSkeletalModel ? sizeof(SkinnedVertex) : sizeof(Vertex);
         VkBuffer targetVertexBuffer = rawData.bIsSkeletalModel ? resourceManager->megaSkinnedVertexBuffer.handle : resourceManager->megaVertexBuffer.handle;
+        const void* vertexDataPtr;
+        if (rawData.bIsSkeletalModel) {
+            vertexDataPtr = rawData.vertices.data();
+        }
+        else {
+            vertexDataPtr = convertedVertices.data();
+
+        }
 
         if (!uploadBufferChunked(pendingVerticesHead,
                                  rawData.vertices.size(),
                                  vertexSize,
-                                 rawData.vertices.data(),
+                                 vertexDataPtr,
                                  targetVertexBuffer,
                                  model->modelData.vertexAllocation.offset)
         ) {
             return ThreadState::InProgress;
         }
+
         if (!uploadBufferChunked(pendingMeshletVerticesHead,
                                  rawData.meshletVertices.size(),
                                  sizeof(uint32_t),
@@ -488,9 +522,9 @@ WillModelLoader::ThreadState WillModelLoader::ThreadExecute(Render::VulkanContex
         }
 
         if (!uploadBufferChunked(pendingMeshletTrianglesHead,
-                                 rawData.meshletTriangles.size(),
-                                 sizeof(uint8_t),
-                                 rawData.meshletTriangles.data(),
+                                 paddedTriangles.size(),
+                                 sizeof(uint32_t),
+                                 paddedTriangles.data(),
                                  resourceManager->megaMeshletTrianglesBuffer.handle,
                                  model->modelData.meshletTriangleAllocation.offset)
         ) {

@@ -67,8 +67,9 @@ struct ModelMatrixOperation
 struct InstanceOperation
 {
     uint32_t index{};
-    uint32_t primitiveIndex{INT32_MAX};
-    uint32_t modelIndex{INT32_MAX};
+    uint32_t modelIndex{UINT32_MAX};
+    uint32_t primitiveIndex{UINT32_MAX};
+    uint32_t materialIndex{UINT32_MAX};
     uint32_t jointMatrixOffset{0};
     uint32_t bIsAllocated{false};
 
@@ -108,6 +109,8 @@ struct FrameBuffer
     std::vector<ModelMatrixOperation> modelMatrixOperations;
     std::vector<InstanceOperation> instanceOperations;
     std::vector<JointMatrixOperation> jointMatrixOperations;
+    // todo: material operation
+    // todo: rework this whole thing, just send vectors w/ all the primitives, all materials, and all model matrices. Then render thread can do their own logic on what needs to be updated, etc.
 };
 } // Core
 

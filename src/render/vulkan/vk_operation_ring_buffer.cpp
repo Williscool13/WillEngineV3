@@ -57,7 +57,7 @@ void InstanceOperationRingBuffer::Enqueue(const std::vector<Core::InstanceOperat
     }
 }
 
-void InstanceOperationRingBuffer::ProcessOperations(char* pMappedData, uint32_t discardCount, uint32_t& highestInstanceIndex)
+void InstanceOperationRingBuffer::ProcessOperations(char* pMappedData, uint32_t discardCount, int32_t& highestInstanceIndex)
 {
     const size_t count = tail - head;
     size_t processed = 0;
@@ -73,7 +73,7 @@ void InstanceOperationRingBuffer::ProcessOperations(char* pMappedData, uint32_t 
             .bIsAllocated = op.bIsAllocated,
         };
         memcpy(pMappedData + sizeof(Instance) * op.index, &inst, sizeof(Instance));
-        highestInstanceIndex = glm::max(highestInstanceIndex, op.index + 1);
+        highestInstanceIndex = glm::max(highestInstanceIndex, static_cast<int32_t>(op.index));
 
         op.frames++;
         if (op.frames == discardCount) {

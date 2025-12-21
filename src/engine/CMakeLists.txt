@@ -3,6 +3,8 @@ add_library(engine STATIC
         will_engine.h
         engine_api.cpp
         engine_api.h
+        game_model.cpp
+        game_model.h
 )
 
 target_include_directories(engine PRIVATE

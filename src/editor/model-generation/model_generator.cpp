@@ -445,12 +445,9 @@ RawGltfModel ModelGenerator::LoadGltf(const std::filesystem::path& source)
             }
 
             // Trim the meshlet data to minimize waste for meshletVertices/meshletTriangles
-            {
-                // this is an example of how to trim the vertex/triangle arrays when copying data out to GPU storage
-                const meshopt_Meshlet& last = meshlets.back();
-                meshletVertices.resize(last.vertex_offset + last.vertex_count);
-                meshletTriangles.resize(last.triangle_offset + last.triangle_count * 3);
-            }
+            const meshopt_Meshlet& last = meshlets.back();
+            meshletVertices.resize(last.vertex_offset + last.vertex_count);
+            meshletTriangles.resize(last.triangle_offset + last.triangle_count * 3);
 
             primitiveData.meshletOffset = rawModel.meshlets.size();
             primitiveData.meshletCount = meshlets.size();
@@ -465,6 +462,7 @@ RawGltfModel ModelGenerator::LoadGltf(const std::filesystem::path& source)
 
             rawModel.vertices.insert(rawModel.vertices.end(), primitiveVertices.begin(), primitiveVertices.end());
             rawModel.meshletVertices.insert(rawModel.meshletVertices.end(), meshletVertices.begin(), meshletVertices.end());
+
             rawModel.meshletTriangles.insert(rawModel.meshletTriangles.end(), meshletTriangles.begin(), meshletTriangles.end());
 
             for (meshopt_Meshlet& meshlet : meshlets) {

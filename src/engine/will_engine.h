@@ -110,6 +110,8 @@ private:
 
 private: // Debugging
     Render::WillModelHandle boxModelHandle{Render::WillModelHandle::INVALID};
+    bool bCanGenerate = false;
+    bool bHasAdded = false;
 };
 }
 

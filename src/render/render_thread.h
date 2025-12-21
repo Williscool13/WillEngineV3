@@ -120,7 +120,7 @@ private:
     uint64_t frameNumber{0};
     bool bEngineRequestsRecreate{false};
     bool bRenderRequestsRecreate{false};
-    uint32_t highestInstanceIndex{0};
+    int32_t highestInstanceIndex{-1};
     SceneData sceneData{};
 
 private:
