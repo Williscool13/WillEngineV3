@@ -74,27 +74,15 @@ void AssetManager::UnloadModel(WillModelHandle handle)
     Render::WillModel& model = models[handle.index];
     model.refCount--;
 
-    //todo handle deallocation needs to be forwarded to asset load thread, as asset load thread needs to free from geometry offset allocators
     if (model.refCount == 0) {
-        pathToHandle.erase(model.source);
-
-        model.modelData.Reset();
-        model.bufferAcquireOps.clear();
-        model.imageAcquireOps.clear();
-        model.source.clear();
-        model.name.clear();
         model.modelLoadState = Render::WillModel::ModelLoadState::NotLoaded;
-        model.selfHandle = WillModelHandle{};
-
-        modelAllocator.Remove(handle);
+        assetLoadThread->RequestUnLoad(handle, &model);
+        pathToHandle.erase(model.source);
     }
 }
 
 void AssetManager::ResolveModelLoad(Core::FrameBuffer& stagingFrameBuffer)
 {
-    std::vector<AssetLoad::WillModelComplete> modelHandles;
-
-
     AssetLoad::WillModelComplete modelComplete;
     while (assetLoadThread->ResolveLoads(modelComplete)) {
         if (modelComplete.bSuccess) {
@@ -112,12 +100,28 @@ void AssetManager::ResolveModelLoad(Core::FrameBuffer& stagingFrameBuffer)
             SPDLOG_INFO("[AssetManager] Model load succeeded: {}", modelComplete.model->source.string());
         }
         else {
-            modelComplete.model->modelData.Reset();
             modelComplete.model->bufferAcquireOps.clear();
             modelComplete.model->imageAcquireOps.clear();
             modelComplete.model->modelLoadState = Render::WillModel::ModelLoadState::NotLoaded;
             SPDLOG_ERROR("[AssetManager] Model load failed: {}", modelComplete.model->source.string());
         }
+    }
+}
+
+void AssetManager::ResolveModelUnload()
+{
+    AssetLoad::WillModelComplete modelComplete;
+    while (assetLoadThread->ResolveUnload(modelComplete)) {
+        SPDLOG_INFO("[AssetManager] Model unload succeeded: {}", modelComplete.model->source.string());
+        modelComplete.model->modelData.Reset();
+        modelComplete.model->bufferAcquireOps.clear();
+        modelComplete.model->imageAcquireOps.clear();
+        modelComplete.model->source.clear();
+        modelComplete.model->name.clear();
+        modelComplete.model->modelLoadState = Render::WillModel::ModelLoadState::NotLoaded;
+        modelComplete.model->selfHandle = WillModelHandle::INVALID;
+
+        modelAllocator.Remove(modelComplete.willModelHandle);
     }
 }
 } // Engine

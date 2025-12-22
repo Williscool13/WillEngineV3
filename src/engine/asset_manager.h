@@ -56,6 +56,7 @@ public:
     void UnloadModel(WillModelHandle handle);
 
     void ResolveModelLoad(Core::FrameBuffer& stagingFrameBuffer);
+    void ResolveModelUnload();
 
 public:
     Core::HandleAllocator<ModelEntry, Render::BINDLESS_MODEL_BUFFER_COUNT>& GetModelAllocator()

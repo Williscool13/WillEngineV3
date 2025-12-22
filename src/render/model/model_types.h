@@ -89,6 +89,7 @@ struct Animation
 
 struct ModelData
 {
+    bool bIsSkinned{};
     std::vector<MeshInformation> meshes{};
     std::vector<Node> nodes{};
     // todo: node remap is only used by animations. Instead bake the node index change to the animation sampler directly.

@@ -50,6 +50,10 @@ public:
 
     bool ResolveLoads(WillModelComplete& modelComplete);
 
+    void RequestUnLoad(Engine::WillModelHandle willmodelHandle, Render::WillModel* willModelPtr);
+
+    bool ResolveUnload(WillModelComplete& modelComplete);
+
 private: // Threading
     void ThreadMain();
 
@@ -63,7 +67,10 @@ private: // Threading
     std::unique_ptr<enki::LambdaPinnedTask> pinnedTask{};
 
     LockFreeQueue<WillModelLoadRequest> modelLoadQueue{MODEL_LOAD_QUEUE_COUNT};
-    LockFreeQueue<WillModelComplete> modelCompleteQueue{MODEL_LOAD_QUEUE_COUNT};
+    LockFreeQueue<WillModelComplete> modelCompleteLoadQueue{MODEL_LOAD_QUEUE_COUNT};
+
+    LockFreeQueue<WillModelLoadRequest> modelUnloadQueue{MODEL_LOAD_QUEUE_COUNT};
+    LockFreeQueue<WillModelComplete> modelCompleteUnloadQueue{MODEL_LOAD_QUEUE_COUNT};
 
     std::bitset<ASSET_LOAD_ASYNC_COUNT> loaderActive;
     std::array<WillModelLoader, ASSET_LOAD_ASYNC_COUNT> assetLoadSlots{};

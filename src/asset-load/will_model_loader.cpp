@@ -211,6 +211,7 @@ bool WillModelLoader::PreThreadExecute(Render::VulkanContext* context, Render::R
         selectedAllocator = &resourceManager->vertexBufferAllocator;
     }
 
+    model->modelData.bIsSkinned = rawData.bIsSkeletalModel;
     model->modelData.vertexAllocation = selectedAllocator->allocate(sizeVertices);
     if (model->modelData.vertexAllocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
         SPDLOG_ERROR("[WillModelLoader::PreThreadExecute] Not enough space in mega vertex buffer to upload {}", model->name);

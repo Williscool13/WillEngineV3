@@ -22,6 +22,11 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
             boxHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "BoxTextured.willmodel");
         }
     }
+    if (state->inputFrame->GetKey(Key::F2).pressed) {
+        if (boxHandle.IsValid()) {
+            ctx->assetManager->UnloadModel(boxHandle);
+        }
+    }
 }
 
 void DebugPrepareFrame(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer)

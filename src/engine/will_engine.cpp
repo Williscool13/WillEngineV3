@@ -195,6 +195,7 @@ void WillEngine::Run()
 #endif
 
         assetManager->ResolveModelLoad(stagingFrameBuffer);
+        assetManager->ResolveModelUnload();
 
         gameState->inputFrame = &inputManager->GetCurrentInput();
         gameState->timeFrame = &timeManager->GetTime();

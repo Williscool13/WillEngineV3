@@ -75,7 +75,17 @@ void AssetLoadThread::RequestLoad(Engine::WillModelHandle willmodelHandle, Rende
 
 bool AssetLoadThread::ResolveLoads(WillModelComplete& modelComplete)
 {
-    return modelCompleteQueue.pop(modelComplete);
+    return modelCompleteLoadQueue.pop(modelComplete);
+}
+
+void AssetLoadThread::RequestUnLoad(Engine::WillModelHandle willmodelHandle, Render::WillModel* willModelPtr)
+{
+    modelUnloadQueue.push({willmodelHandle, willModelPtr});
+}
+
+bool AssetLoadThread::ResolveUnload(WillModelComplete& modelComplete)
+{
+    return modelCompleteUnloadQueue.pop(modelComplete);
 }
 
 void AssetLoadThread::ThreadMain()
@@ -150,12 +160,38 @@ void AssetLoadThread::ThreadMain()
 
                 if (assetLoad.loadState == WillModelLoadState::Loaded || assetLoad.loadState == WillModelLoadState::Failed) {
                     bool success = assetLoad.loadState == WillModelLoadState::Loaded;
-                    modelCompleteQueue.push({assetLoad.willModelHandle, assetLoad.model, success});
+                    modelCompleteLoadQueue.push({assetLoad.willModelHandle, assetLoad.model, success});
                     loaderActive[i] = false;
 
                     assetLoad.Reset();
                 }
             }
+        }
+
+
+        // Resolve unloads
+        WillModelLoadRequest unloadRequest{};
+        if (modelUnloadQueue.pop(unloadRequest)) {
+            OffsetAllocator::Allocator* selectedAllocator;
+            if (unloadRequest.model->modelData.bIsSkinned) {
+                selectedAllocator = &resourceManager->skinnedVertexBufferAllocator;
+            }
+            else {
+                selectedAllocator = &resourceManager->vertexBufferAllocator;
+            }
+
+            selectedAllocator->free(unloadRequest.model->modelData.vertexAllocation);
+            resourceManager->meshletVertexBufferAllocator.free(unloadRequest.model->modelData.meshletVertexAllocation);
+            resourceManager->meshletTriangleBufferAllocator.free(unloadRequest.model->modelData.meshletTriangleAllocation);
+            resourceManager->meshletBufferAllocator.free(unloadRequest.model->modelData.meshletAllocation);
+            resourceManager->primitiveBufferAllocator.free(unloadRequest.model->modelData.primitiveAllocation);
+            unloadRequest.model->modelData.vertexAllocation.metadata = OffsetAllocator::Allocation::NO_SPACE;
+            unloadRequest.model->modelData.meshletVertexAllocation.metadata = OffsetAllocator::Allocation::NO_SPACE;
+            unloadRequest.model->modelData.meshletTriangleAllocation.metadata = OffsetAllocator::Allocation::NO_SPACE;
+            unloadRequest.model->modelData.meshletAllocation.metadata = OffsetAllocator::Allocation::NO_SPACE;
+            unloadRequest.model->modelData.primitiveAllocation.metadata = OffsetAllocator::Allocation::NO_SPACE;
+
+            modelCompleteUnloadQueue.push({unloadRequest.willModelHandle, unloadRequest.model, true});
         }
     }
 }
