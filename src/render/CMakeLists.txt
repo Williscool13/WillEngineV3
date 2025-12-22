@@ -27,8 +27,6 @@ add_library(render STATIC
         vulkan/vk_resource_manager.h
         vulkan/vk_imgui_wrapper.cpp
         vulkan/vk_imgui_wrapper.h
-        vulkan/vk_operation_ring_buffer.cpp
-        vulkan/vk_operation_ring_buffer.h
         types/render_types.cpp
         types/render_types.h
         shaders/common_interop.h

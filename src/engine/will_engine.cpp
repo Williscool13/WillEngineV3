@@ -227,9 +227,6 @@ void WillEngine::Run()
             gameFunctions.gamePrepareFrame(engineContext.get(), gameState.get(), &stagingFrameBuffer, &currentFrameResources);
 
             std::swap(currentFrameBuffer, stagingFrameBuffer);
-            stagingFrameBuffer.modelMatrixOperations.clear();
-            stagingFrameBuffer.instanceOperations.clear();
-            stagingFrameBuffer.jointMatrixOperations.clear();
             stagingFrameBuffer.bufferAcquireOperations.clear();
             stagingFrameBuffer.imageAcquireOperations.clear();
             stagingFrameBuffer.timeFrame = timeManager->GetTime();

@@ -53,10 +53,6 @@ void RenderThread::Initialize(Core::FrameSync* engineRenderSync, enki::TaskSched
         frameSync.Initialize();
     }
 
-    modelMatrixOperationRingBuffer.Initialize(FRAME_BUFFER_OPERATION_COUNT_LIMIT);
-    instanceOperationRingBuffer.Initialize(FRAME_BUFFER_OPERATION_COUNT_LIMIT);
-    jointMatrixOperationRingBuffer.Initialize(FRAME_BUFFER_OPERATION_COUNT_LIMIT);
-
     basicComputePipeline = BasicComputePipeline(context.get(), resourceManager->bindlessRenderTargetDescriptorBuffer.descriptorSetLayout);
     basicRenderPipeline = BasicRenderPipeline(context.get());
     meshShaderPipeline = MeshShaderPipeline(context.get(), resourceManager->bindlessSamplerTextureDescriptorBuffer.descriptorSetLayout);
@@ -144,8 +140,6 @@ void RenderThread::ThreadMain()
 
 RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, RenderSynchronization& renderSync, Core::FrameBuffer& frameBuffer, FrameResources& frameResource)
 {
-    ProcessBufferOperations(frameBuffer, frameResource);
-
     VK_CHECK(vkResetCommandBuffer(renderSync.commandBuffer, 0));
     VkCommandBufferBeginInfo beginInfo = VkHelpers::CommandBufferBeginInfo();
     VK_CHECK(vkBeginCommandBuffer(renderSync.commandBuffer, &beginInfo));
@@ -393,25 +387,6 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     }
 
     return SUCCESS;
-}
-
-void RenderThread::ProcessBufferOperations(Core::FrameBuffer& frameBuffer, FrameResources& frameResource)
-{
-    modelMatrixOperationRingBuffer.Enqueue(frameBuffer.modelMatrixOperations);
-    instanceOperationRingBuffer.Enqueue(frameBuffer.instanceOperations);
-    jointMatrixOperationRingBuffer.Enqueue(frameBuffer.jointMatrixOperations);
-    frameBuffer.modelMatrixOperations.clear();
-    frameBuffer.instanceOperations.clear();
-    frameBuffer.jointMatrixOperations.clear();
-
-    const AllocatedBuffer& currentModelBuffer = frameResource.modelBuffer;
-    const AllocatedBuffer& currentInstanceBuffer = frameResource.instanceBuffer;
-    const AllocatedBuffer& currentJointMatrixBuffers = frameResource.jointMatrixBuffer;
-
-    // Copy instance and model changes to CPU mapped memory
-    modelMatrixOperationRingBuffer.ProcessOperations(static_cast<char*>(currentModelBuffer.allocationInfo.pMappedData), Core::FRAME_BUFFER_COUNT + 1);
-    instanceOperationRingBuffer.ProcessOperations(static_cast<char*>(currentInstanceBuffer.allocationInfo.pMappedData), Core::FRAME_BUFFER_COUNT, highestInstanceIndex);
-    jointMatrixOperationRingBuffer.ProcessOperations(static_cast<char*>(currentJointMatrixBuffers.allocationInfo.pMappedData), Core::FRAME_BUFFER_COUNT + 1);
 }
 
 void RenderThread::ProcessAcquisitions(VkCommandBuffer cmd, Core::FrameBuffer& frameBuffer)

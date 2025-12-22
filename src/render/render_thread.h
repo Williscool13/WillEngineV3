@@ -8,14 +8,14 @@
 #include <array>
 #include <atomic>
 #include <memory>
-#include <glm/glm.hpp>
 
 #include "frame_resources.h"
-#include "render/vulkan/vk_operation_ring_buffer.h"
+#include "core/include/render_interface.h"
 #include "render/vulkan/vk_synchronization.h"
 #include "pipelines/basic_compute_pipeline.h"
 #include "pipelines/basic_render_pipeline.h"
 #include "pipelines/mesh_shader_pipeline.h"
+#include "shaders/common_interop.h"
 
 namespace Core
 {
@@ -79,8 +79,6 @@ public:
 
     RenderResponse Render(uint32_t currentFrameIndex, RenderSynchronization& renderSync, Core::FrameBuffer& frameBuffer, FrameResources& frameResource);
 
-    void ProcessBufferOperations(Core::FrameBuffer& frameBuffer, FrameResources& frameResource);
-
     void ProcessAcquisitions(VkCommandBuffer cmd, Core::FrameBuffer& frameBuffer);
 
 public:
@@ -111,10 +109,6 @@ private:
 
     std::vector<VkBufferMemoryBarrier2> tempBufferBarriers;
     std::vector<VkImageMemoryBarrier2> tempImageBarriers;
-
-    ModelMatrixOperationRingBuffer modelMatrixOperationRingBuffer;
-    InstanceOperationRingBuffer instanceOperationRingBuffer;
-    JointMatrixOperationRingBuffer jointMatrixOperationRingBuffer;
 
     uint32_t currentFrameInFlight{0};
     uint64_t frameNumber{0};
