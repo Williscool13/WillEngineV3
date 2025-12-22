@@ -298,12 +298,13 @@ void WillEngine::DrawImgui()
         loadModel(Platform::GetAssetPath() / "dragon/dragon.willmodel");
     }
 
+*/
     if (ImGui::Button("Generate dragon.willmodel from dragon.glb")) {
         generateModel(
             Platform::GetAssetPath() / "dragon/dragon.gltf",
             Platform::GetAssetPath() / "dragon/dragon.willmodel"
         );
-    }*/
+    }
 
 
     ImGui::End();

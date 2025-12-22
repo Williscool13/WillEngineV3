@@ -27,7 +27,8 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
 
     if (state->inputFrame->GetKey(Key::F1).pressed) {
         if (!boxHandle.IsValid()) {
-            boxHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "BoxTextured.willmodel");
+            // boxHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "BoxTextured.willmodel");
+            boxHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "dragon/dragon.willmodel");
         }
     }
     if (state->inputFrame->GetKey(Key::F2).pressed) {
@@ -79,9 +80,14 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         renderable.instance.jointMatrixOffset = 0;
         renderable.instance.bIsAllocated = 1;
 
-        renderable.material.colorFactor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
-        renderable.material.metalRoughFactors = {0.0f, 1.0f, 0.0f, 0.0f};
-        renderable.material = model->modelData.materials[0];
+        if (model->modelData.materials.empty()) {
+            renderable.material.colorFactor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+            renderable.material.metalRoughFactors = {0.0f, 1.0f, 0.0f, 0.0f};
+        }
+        else {
+            renderable.material = model->modelData.materials[0];
+        }
+
         // todo: default materials
 
         Transform transform{Transform::IDENTITY};
@@ -94,7 +100,7 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         SPDLOG_INFO("[DebugSystem] Spawned box entity");
     }
 
-    if (state->registry.valid(boxEntity)) {
+    /*if (state->registry.valid(boxEntity)) {
         auto& transform = state->registry.get<TransformComponent>(boxEntity);
 
         float radius = 5.0f;
@@ -102,7 +108,7 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         transform.transform.translation.x = glm::cos(state->timeFrame->totalTime * speed) * radius;
         transform.transform.translation.z = glm::sin(state->timeFrame->totalTime * speed) * radius;
         transform.transform.translation.y = 0.0f;
-    }
+    }*/
 }
 
 void DebugPrepareFrame(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer, Render::FrameResources* frameResources)

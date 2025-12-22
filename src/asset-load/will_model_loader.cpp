@@ -258,12 +258,12 @@ bool WillModelLoader::PreThreadExecute(Render::VulkanContext* context, Render::R
 
     uint32_t vertexOffset = model->modelData.vertexAllocation.offset / (rawData.bIsSkeletalModel ? sizeof(SkinnedVertex) : sizeof(Vertex));
     uint32_t meshletVerticesOffset = model->modelData.meshletVertexAllocation.offset / sizeof(uint32_t);
-    uint32_t meshletTriangleOffset = model->modelData.meshletTriangleAllocation.offset / sizeof(uint8_t);
+    uint32_t meshletTriangleOffset = model->modelData.meshletTriangleAllocation.offset / sizeof(uint32_t);
 
     for (Meshlet& meshlet : rawData.meshlets) {
         meshlet.vertexOffset += vertexOffset;
         meshlet.meshletVerticesOffset += meshletVerticesOffset;
-        meshlet.meshletTriangleOffset += meshletTriangleOffset;
+        meshlet.meshletTriangleOffset = meshlet.meshletTriangleOffset / 3 + meshletTriangleOffset;
     }
 
     uint32_t meshletOffset = model->modelData.meshletAllocation.offset / sizeof(Meshlet);
@@ -580,7 +580,7 @@ WillModelLoader::ThreadState WillModelLoader::ThreadExecute(Render::VulkanContex
             releaseBarriers.push_back(createBufferBarrier(
                 resourceManager->megaMeshletTrianglesBuffer.handle,
                 model->modelData.meshletTriangleAllocation.offset,
-                rawData.meshletTriangles.size() * sizeof(uint8_t)
+                rawData.meshletTriangles.size() * sizeof(uint32_t)
             ));
 
             releaseBarriers.push_back(createBufferBarrier(
