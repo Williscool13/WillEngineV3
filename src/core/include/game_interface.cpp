@@ -24,7 +24,7 @@ void StubUpdate(EngineContext* ctx, Engine::GameState* state)
 
 }
 
-void StubPrepareFrame(EngineContext* ctx, Engine::GameState* state, FrameBuffer* frameBuffer)
+void StubPrepareFrame(EngineContext* ctx, Engine::GameState* state, FrameBuffer* frameBuffer, Render::FrameResources* frameResources)
 {
 
 }

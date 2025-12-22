@@ -12,9 +12,9 @@ namespace Core::Math
 {
 struct Transform
 {
-    glm::vec3 translation{};
-    glm::quat rotation{};
-    glm::vec3 scale{};
+    glm::vec3 translation{0.0f, 0.0f, 0.0f};
+    glm::quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
+    glm::vec3 scale{1.0f, 1.0f, 1.0f};
 
     [[nodiscard]] glm::mat4 GetMatrix() const { return glm::translate(glm::mat4(1.0f), translation) * mat4_cast(rotation) * glm::scale(glm::mat4(1.0f), scale); }
 

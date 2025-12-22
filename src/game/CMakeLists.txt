@@ -10,6 +10,7 @@ set(GAME_SOURCES
         fwd_components.h
         systems/debug_system.cpp
         systems/debug_system.h
+        common/renderable_component.h
 )
 
 set(GAME_INCLUDE_DIRS

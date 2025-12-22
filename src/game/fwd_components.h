@@ -6,6 +6,7 @@
 #define WILL_ENGINE_FWD_COMPONENTS_H
 
 #include "common/transform_component.h"
+#include "common/renderable_component.h"
 #include "camera/free_camera_component.h"
 #include "camera/camera_component.h"
 

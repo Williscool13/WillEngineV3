@@ -101,6 +101,7 @@ struct ModelData
     std::vector<Sampler> samplers{};
     std::vector<AllocatedImage> images{};
     std::vector<ImageView> imageViews{};
+    std::vector<MaterialProperties> materials{};
 
     std::vector<BindlessSamplerHandle> samplerIndexToDescriptorBufferIndexMap{};
     std::vector<BindlessTextureHandle> textureIndexToDescriptorBufferIndexMap{};

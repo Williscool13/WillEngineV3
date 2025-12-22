@@ -8,6 +8,7 @@
 #include "offsetAllocator.hpp"
 #include "render/render_config.h"
 #include "vk_resources.h"
+#include "render/frame_resources.h"
 #include "render/descriptors/vk_bindless_resources_sampler_images.h"
 #include "render/descriptors/vk_bindless_resources_storage.h"
 
@@ -40,6 +41,8 @@ struct ResourceManager
     BindlessResourcesSamplerImages bindlessSamplerTextureDescriptorBuffer{};
     BindlessResourcesStorage<8> bindlessRenderTargetDescriptorBuffer{};
     BindlessResourcesStorage<512> bindlessStorageDescriptorBuffer{};
+
+    std::array<FrameResources, Core::FRAME_BUFFER_COUNT> frameResources;
 
 private:
     VulkanContext* context{};

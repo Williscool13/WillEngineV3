@@ -10,6 +10,7 @@
 #include <glm/glm.hpp>
 
 #include "core/time/time_frame.h"
+#include "render/shaders/model_interop.h"
 
 namespace Core
 {
@@ -32,7 +33,7 @@ struct RenderView
 struct ViewFamily {
     std::vector<RenderView> views;
 
-    // std::vector<PrimitiveInstance> allPrimitives;
+    std::vector<Instance> instances;
     // std::vector<LightInstance> allLights;
     // std::vector<ModelInstance> modelMatrices;
     // std::vector<MaterialInstance> materials;

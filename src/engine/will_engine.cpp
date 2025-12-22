@@ -207,6 +207,7 @@ void WillEngine::Run()
             timeManager->UpdateRender();
 
             Core::FrameBuffer& currentFrameBuffer = engineRenderSynchronization->frameBuffers[frameBufferIndex];
+            Render::FrameResources& currentFrameResources = renderThread->GetResourceManager()->frameResources[frameBufferIndex];
             stagingFrameBuffer.currentFrameBuffer = frameBufferIndex;
             stagingFrameBuffer.swapchainRecreateCommand.bIsMinimized = bMinimized;
             if (bRequireSwapchainRecreate) {
@@ -223,7 +224,7 @@ void WillEngine::Run()
                 stagingFrameBuffer.swapchainRecreateCommand.bEngineCommandsRecreate = false;
             }
 
-            gameFunctions.gamePrepareFrame(engineContext.get(), gameState.get(), &stagingFrameBuffer);
+            gameFunctions.gamePrepareFrame(engineContext.get(), gameState.get(), &stagingFrameBuffer, &currentFrameResources);
 
             std::swap(currentFrameBuffer, stagingFrameBuffer);
             stagingFrameBuffer.modelMatrixOperations.clear();

@@ -10,7 +10,6 @@
 #include "core/include/game_interface.h"
 #include "core/include/render_interface.h"
 #include "core/input/input_frame.h"
-#include "render/types/render_types.h"
 #include "systems/debug_system.h"
 
 
@@ -44,16 +43,16 @@ GAME_API void GameLoad(Core::EngineContext* ctx, Engine::GameState* state)
 GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::GameState* state)
 {
     Game::System::UpdateCameras(ctx, state);
-
     Game::System::DebugUpdate(ctx, state);
 
     Core::InputFrame gameInputCopy = *state->inputFrame;
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
 }
 
-GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer)
+GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer, Render::FrameResources* frameResources)
 {
     Game::System::BuildViewFamily(state, frameBuffer->mainViewFamily);
+    Game::System::DebugPrepareFrame(ctx, state, frameBuffer, frameResources);
 }
 
 

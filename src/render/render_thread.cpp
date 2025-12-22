@@ -53,27 +53,6 @@ void RenderThread::Initialize(Core::FrameSync* engineRenderSync, enki::TaskSched
         frameSync.Initialize();
     }
 
-
-    VkBufferCreateInfo bufferInfo = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
-    bufferInfo.pNext = nullptr;
-    bufferInfo.usage = VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT;
-    VmaAllocationCreateInfo vmaAllocInfo = {};
-    vmaAllocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
-    vmaAllocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
-    for (FrameResources& frameResource : frameResources) {
-        bufferInfo.size = sizeof(SceneData);
-        frameResource.sceneDataBuffer = std::move(AllocatedBuffer::CreateAllocatedBuffer(context.get(), bufferInfo, vmaAllocInfo));
-
-        bufferInfo.size = BINDLESS_INSTANCE_BUFFER_SIZE;
-        frameResource.instanceBuffer = std::move(AllocatedBuffer::CreateAllocatedBuffer(context.get(), bufferInfo, vmaAllocInfo));
-        bufferInfo.size = BINDLESS_MODEL_BUFFER_SIZE;
-        frameResource.modelBuffer = std::move(AllocatedBuffer::CreateAllocatedBuffer(context.get(), bufferInfo, vmaAllocInfo));
-        bufferInfo.size = BINDLESS_MODEL_BUFFER_SIZE;
-        frameResource.jointMatrixBuffer = std::move(AllocatedBuffer::CreateAllocatedBuffer(context.get(), bufferInfo, vmaAllocInfo));
-        bufferInfo.size = BINDLESS_MATERIAL_BUFFER_SIZE;
-        frameResource.materialBuffer = std::move(AllocatedBuffer::CreateAllocatedBuffer(context.get(), bufferInfo, vmaAllocInfo));
-    }
-
     modelMatrixOperationRingBuffer.Initialize(FRAME_BUFFER_OPERATION_COUNT_LIMIT);
     instanceOperationRingBuffer.Initialize(FRAME_BUFFER_OPERATION_COUNT_LIMIT);
     jointMatrixOperationRingBuffer.Initialize(FRAME_BUFFER_OPERATION_COUNT_LIMIT);
@@ -120,7 +99,6 @@ void RenderThread::ThreadMain()
 
         if (bShouldExit.load()) { break; }
 
-        const uint32_t currentFrameInFlight = frameNumber % Core::FRAME_BUFFER_COUNT;
         Core::FrameBuffer& frameBuffer = engineRenderSynchronization->frameBuffers[currentFrameInFlight];
         assert(frameBuffer.currentFrameBuffer == currentFrameInFlight);
 
@@ -145,13 +123,19 @@ void RenderThread::ThreadMain()
 
         // Wait for the frame N - 3 to finish using resources
         RenderSynchronization& currentRenderSynchronization = frameSynchronization[currentFrameInFlight];
-        FrameResources& currentFrameResources = frameResources[currentFrameInFlight];
+        FrameResources& currentFrameResources = resourceManager->frameResources[currentFrameInFlight];
         RenderResponse renderResponse = Render(currentFrameInFlight, currentRenderSynchronization, frameBuffer, currentFrameResources);
         if (renderResponse == SWAPCHAIN_OUTDATED) {
             bRenderRequestsRecreate = true;
         }
 
         frameNumber++;
+        currentFrameInFlight = frameNumber % Core::FRAME_BUFFER_COUNT;
+
+        // Wait for next frame's fence. To allow game thread to directly modify the FIF's data
+        RenderSynchronization& nextFrameRenderSynchronization = frameSynchronization[currentFrameInFlight];
+        vkWaitForFences(context->device, 1, &nextFrameRenderSynchronization.renderFence, true, UINT64_MAX);
+        VK_CHECK(vkResetFences(context->device, 1, &nextFrameRenderSynchronization.renderFence));
         engineRenderSynchronization->gameFrames.release();
     }
 
@@ -160,9 +144,6 @@ void RenderThread::ThreadMain()
 
 RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, RenderSynchronization& renderSync, Core::FrameBuffer& frameBuffer, FrameResources& frameResource)
 {
-    vkWaitForFences(context->device, 1, &renderSync.renderFence, true, UINT64_MAX);
-    VK_CHECK(vkResetFences(context->device, 1, &renderSync.renderFence));
-
     ProcessBufferOperations(frameBuffer, frameResource);
 
     VK_CHECK(vkResetCommandBuffer(renderSync.commandBuffer, 0));
@@ -196,6 +177,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     VkImage currentSwapchainImage = swapchain->swapchainImages[swapchainImageIndex];
     AllocatedBuffer& currentSceneDataBuffer = frameResource.sceneDataBuffer;
 
+    bool bHasAnyModels = !frameBuffer.mainViewFamily.instances.empty();
     //
     {
         // todo: address what happens if views is 0
@@ -291,7 +273,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
             vkCmdDrawMeshTasksEXT(cmd, 1, 1, 1);
         }
         //
-        if (highestInstanceIndex != -1) {
+        if (bHasAnyModels) {
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, meshShaderPipeline.pipeline.handle);
             MeshShaderPushConstants pushConstants{
                 .sceneData = currentSceneDataBuffer.address,

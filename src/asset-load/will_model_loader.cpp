@@ -283,6 +283,7 @@ bool WillModelLoader::PreThreadExecute(Render::VulkanContext* context, Render::R
     model->modelData.inverseBindMatrices = std::move(rawData.inverseBindMatrices);
     model->modelData.animations = std::move(rawData.animations);
     model->modelData.nodeRemap = std::move(rawData.nodeRemap);
+    model->modelData.materials = std::move(rawData.materials);
 
     // Convert SkinnedVertex to Vertex
     convertedVertices.reserve(rawData.vertices.size());

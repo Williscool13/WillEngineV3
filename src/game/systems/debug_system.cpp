@@ -4,6 +4,7 @@
 
 #include "debug_system.h"
 
+#include "game/fwd_components.h"
 #include "core/include/engine_context.h"
 #include "core/input/input_frame.h"
 #include "engine/asset_manager.h"
@@ -12,11 +13,18 @@
 
 namespace Game::System
 {
-//static Engine::WillModelHandle boxHandle = Engine::WillModelHandle::INVALID;
+static Engine::WillModelHandle boxHandle = Engine::WillModelHandle::INVALID;
+static entt::entity boxEntity = entt::null;
 
 void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
 {
-    static Engine::WillModelHandle boxHandle = Engine::WillModelHandle::INVALID;
+    bool static resetted = false;
+    if (!resetted) {
+        boxHandle = Engine::WillModelHandle::INVALID;
+        resetted = true;
+        boxEntity = entt::null;
+    }
+
     if (state->inputFrame->GetKey(Key::F1).pressed) {
         if (!boxHandle.IsValid()) {
             boxHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "BoxTextured.willmodel");
@@ -27,101 +35,91 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
             ctx->assetManager->UnloadModel(boxHandle);
         }
     }
+
+    if (state->inputFrame->GetKey(Key::F3).pressed) {
+        if (!boxHandle.IsValid()) {
+            SPDLOG_WARN("[DebugSystem] No model loaded, press F1 first");
+            return;
+        }
+
+        Render::WillModel* model = ctx->assetManager->GetModel(boxHandle);
+        if (!model || model->modelLoadState != Render::WillModel::ModelLoadState::Loaded) {
+            SPDLOG_WARN("[DebugSystem] Model not ready yet");
+            return;
+        }
+
+        if (state->registry.valid(boxEntity)) {
+            SPDLOG_WARN("[DebugSystem] Box already spawned");
+            return;
+        }
+
+        auto& modelAllocator = ctx->assetManager->GetModelAllocator();
+        auto& instanceAllocator = ctx->assetManager->GetInstanceAllocator();
+        auto& materialAllocator = ctx->assetManager->GetMaterialAllocator();
+
+        Engine::ModelHandle modelEntry = modelAllocator.Add();
+        Engine::InstanceHandle instanceEntry = instanceAllocator.Add();
+        Engine::MaterialHandle materialEntry = materialAllocator.Add();
+
+        if (modelEntry.index == Core::INVALID_HANDLE_INDEX || instanceEntry.index == Core::INVALID_HANDLE_INDEX || materialEntry.index == Core::INVALID_HANDLE_INDEX) {
+            SPDLOG_ERROR("[DebugSystem] Failed to allocate GPU slots");
+            return;
+        }
+
+        RenderableComponent renderable;
+        renderable.modelEntry = modelEntry;
+        renderable.instanceEntry = instanceEntry;
+        renderable.materialEntry = materialEntry;
+
+        renderable.modelFlags = glm::vec4(0.0f);
+
+        renderable.instance.primitiveIndex = model->modelData.meshes[0].primitiveIndices[0].index;
+        renderable.instance.modelIndex = modelEntry.index;
+        renderable.instance.materialIndex = materialEntry.index;
+        renderable.instance.jointMatrixOffset = 0;
+        renderable.instance.bIsAllocated = 1;
+
+        renderable.material.colorFactor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+        renderable.material.metalRoughFactors = {0.0f, 1.0f, 0.0f, 0.0f};
+        renderable.material = model->modelData.materials[0];
+        // todo: default materials
+
+        Transform transform{Transform::IDENTITY};
+        transform.translation = glm::vec3(0.0f);
+
+        boxEntity = state->registry.create();
+        state->registry.emplace<RenderableComponent>(boxEntity, renderable);
+        state->registry.emplace<TransformComponent>(boxEntity, transform);
+
+        SPDLOG_INFO("[DebugSystem] Spawned box entity");
+    }
+
+    if (state->registry.valid(boxEntity)) {
+        auto& transform = state->registry.get<TransformComponent>(boxEntity);
+
+        float radius = 5.0f;
+        float speed = 2.0f;
+        transform.transform.translation.x = glm::cos(state->timeFrame->totalTime * speed) * radius;
+        transform.transform.translation.z = glm::sin(state->timeFrame->totalTime * speed) * radius;
+        transform.transform.translation.y = 0.0f;
+    }
 }
 
-void DebugPrepareFrame(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer)
+void DebugPrepareFrame(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer, Render::FrameResources* frameResources)
 {
-    /*if (state->inputFrame->GetKey(Key::F2).pressed) {
-        if (boxHandle.IsValid()) {
-            Render::WillModel* model = ctx->assetManager->GetModel(boxHandle);
+    Instance* instanceBuffer = static_cast<Instance*>(frameResources->instanceBuffer.allocationInfo.pMappedData);
+    Model* modelBuffer = static_cast<Model*>(frameResources->modelBuffer.allocationInfo.pMappedData);
+    MaterialProperties* materialBuffer = static_cast<MaterialProperties*>(frameResources->materialBuffer.allocationInfo.pMappedData);
 
-            Render::ResourceManager* resourceManager = renderThread->GetResourceManager();
-            Game::ModelInstance mi{};
+    auto view = state->registry.view<RenderableComponent, TransformComponent>();
 
-            Render::WillModel* model = resourceManager->models.Get(boxModelHandle);
-            if (model) {
-                mi.transform = Transform::IDENTITY;
-                mi.nodes.reserve(model->modelData.nodes.size());
-                mi.nodeRemap = model->modelData.nodeRemap;
+    for (auto [entity, renderable, transform] : view.each()) {
+        // todo: prev frame data needs to be figured out
+        modelBuffer[renderable.modelEntry.index] = {transform.transform.GetMatrix(), transform.transform.GetMatrix(), renderable.modelFlags};
+        instanceBuffer[renderable.instanceEntry.index] = renderable.instance;
+        materialBuffer[renderable.materialEntry.index] = renderable.material;
 
-                // todo: skinned mesh support
-                // size_t jointMatrixCount = model->modelData.inverseBindMatrices.size();
-                // bool bHasSkinning = jointMatrixCount > 0;
-                // if (bHasSkinning) {
-                //     rm.jointMatrixAllocation = resourceManager->jointMatrixAllocator.allocate(jointMatrixCount * sizeof(Renderer::Model));
-                //     rm.jointMatrixOffset = rm.jointMatrixAllocation.offset / sizeof(uint32_t);
-                // }
-
-                mi.modelEntryHandle = boxModelHandle;
-                for (const Render::Node& n : model->modelData.nodes) {
-                    mi.nodes.emplace_back(n);
-                    Game::NodeInstance& rn = mi.nodes.back();
-                    // if (n.inverseBindIndex != ~0u) {
-                    //     rn.inverseBindMatrix = model->modelData.inverseBindMatrices[n.inverseBindIndex];
-                    // }
-                }
-
-                for (Game::NodeInstance& node : mi.nodes) {
-                    if (node.meshIndex != ~0u) {
-                        node.modelMatrixHandle = resourceManager->modelEntryAllocator.Add();
-
-                        for (const Render::PrimitiveProperty& primitiveProperty : model->modelData.meshes[node.meshIndex].primitiveIndices) {
-                            Render::InstanceEntryHandle instanceEntry = resourceManager->instanceEntryAllocator.Add();
-                            node.instanceEntryHandles.push_back(instanceEntry);
-
-                            Core::InstanceOperation instanceOp{
-                                .index = instanceEntry.index,
-                                .modelIndex = node.modelMatrixHandle.index,
-                                .primitiveIndex = primitiveProperty.index,
-                                .materialIndex = primitiveProperty.materialIndex, // todo: should also generate material to use here
-                                .jointMatrixOffset = 0,
-                                .bIsAllocated = 1,
-                            };
-                            stagingFrameBuffer.instanceOperations.push_back(instanceOp);
-                        }
-                    }
-                }
-
-                // Update entire transform hierarchy
-                {
-                    glm::mat4 baseTopLevel = mi.transform.GetMatrix();
-                    // Nodes are sorted
-                    for (Game::NodeInstance& ni : mi.nodes) {
-                        glm::mat4 localTransform = ni.transform.GetMatrix();
-
-                        if (ni.parent == ~0u) {
-                            ni.cachedWorldTransform = baseTopLevel * localTransform;
-                        }
-                        else {
-                            ni.cachedWorldTransform = mi.nodes[ni.parent].cachedWorldTransform * localTransform;
-                        }
-                    }
-                    mi.bNeedToSendToRender = true;
-                }
-
-                // Model matrix send to gpu
-                {
-                    if (mi.bNeedToSendToRender) {
-                        for (Game::NodeInstance& node : mi.nodes) {
-                            if (node.meshIndex != ~0u) {
-                                stagingFrameBuffer.modelMatrixOperations.push_back({node.modelMatrixHandle.index, Transform::IDENTITY.GetMatrix()}); //node.cachedWorldTransform});
-                            }
-
-                            // if (node.jointMatrixIndex != ~0u) {
-                            //     glm::mat4 jointMatrix = node.cachedWorldTransform * node.inverseBindMatrix;
-                            //     uint32_t jointMatrixFinalIndex = node.jointMatrixIndex + runtimeMesh.jointMatrixOffset;
-                            //     jointMatrixOperations.push_back({jointMatrixFinalIndex, jointMatrix});
-                            // }
-                        }
-
-                        mi.bNeedToSendToRender = false;
-                    }
-                }
-
-
-                bHasAdded = true;
-            }
-        }
-    }*/
+        frameBuffer->mainViewFamily.instances.push_back(renderable.instance);
+    }
 }
 } // Game::System

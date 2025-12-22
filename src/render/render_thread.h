@@ -108,7 +108,6 @@ private:
     std::unique_ptr<RenderExtents> renderExtents{};
 
     std::array<RenderSynchronization, Core::FRAME_BUFFER_COUNT> frameSynchronization;
-    std::array<FrameResources, Core::FRAME_BUFFER_COUNT> frameResources;
 
     std::vector<VkBufferMemoryBarrier2> tempBufferBarriers;
     std::vector<VkImageMemoryBarrier2> tempImageBarriers;
@@ -117,6 +116,7 @@ private:
     InstanceOperationRingBuffer instanceOperationRingBuffer;
     JointMatrixOperationRingBuffer jointMatrixOperationRingBuffer;
 
+    uint32_t currentFrameInFlight{0};
     uint64_t frameNumber{0};
     bool bEngineRequestsRecreate{false};
     bool bRenderRequestsRecreate{false};
