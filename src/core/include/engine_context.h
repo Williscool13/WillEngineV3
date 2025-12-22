@@ -10,6 +10,11 @@
 
 #include "spdlog/logger.h"
 
+namespace Engine
+{
+class AssetManager;
+}
+
 namespace Core
 {
 struct WindowContext
@@ -24,6 +29,7 @@ struct EngineContext
 {
     WindowContext windowContext;
     std::shared_ptr<spdlog::logger> logger;
+    Engine::AssetManager* assetManager;
 };
 } // Core
 

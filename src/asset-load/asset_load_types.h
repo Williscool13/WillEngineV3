@@ -123,6 +123,7 @@ struct WillModelComplete
 {
     Engine::WillModelHandle willModelHandle;
     Render::WillModel* model;
+    bool bSuccess;
 };
 } // AssetLoad
 

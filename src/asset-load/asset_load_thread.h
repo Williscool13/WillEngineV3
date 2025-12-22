@@ -48,7 +48,7 @@ public:
 public:
     void RequestLoad(Engine::WillModelHandle willmodelHandle, Render::WillModel* willModelPtr);
 
-    void ResolveLoads(std::vector<WillModelComplete>& processedHandles);
+    bool ResolveLoads(WillModelComplete& modelComplete);
 
 private: // Threading
     void ThreadMain();

@@ -73,12 +73,9 @@ void AssetLoadThread::RequestLoad(Engine::WillModelHandle willmodelHandle, Rende
     modelLoadQueue.push({willmodelHandle, willModelPtr});
 }
 
-void AssetLoadThread::ResolveLoads(std::vector<WillModelComplete>& processedHandles)
+bool AssetLoadThread::ResolveLoads(WillModelComplete& modelComplete)
 {
-    WillModelComplete completed;
-    while (modelCompleteQueue.pop(completed)) {
-        processedHandles.push_back(completed);
-    }
+    return modelCompleteQueue.pop(modelComplete);
 }
 
 void AssetLoadThread::ThreadMain()
@@ -152,15 +149,8 @@ void AssetLoadThread::ThreadMain()
                 }
 
                 if (assetLoad.loadState == WillModelLoadState::Loaded || assetLoad.loadState == WillModelLoadState::Failed) {
-                    // todo: move this to asset manager
-                    /*if (assetLoad.loadState == WillModelLoadState::Failed) {
-                        assetLoad.model->modelData.Reset();
-                        assetLoad.model->modelLoadState.store(Render::WillModel::ModelLoadState::FailedToLoad, std::memory_order_release);
-                    }
-                    else {
-                        assetLoad.model->modelLoadState.store(Render::WillModel::ModelLoadState::Loaded, std::memory_order_release);
-                    }*/
-                    modelCompleteQueue.push({assetLoad.willModelHandle, assetLoad.model});
+                    bool success = assetLoad.loadState == WillModelLoadState::Loaded;
+                    modelCompleteQueue.push({assetLoad.willModelHandle, assetLoad.model, success});
                     loaderActive[i] = false;
 
                     assetLoad.Reset();

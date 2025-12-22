@@ -12,6 +12,11 @@
 #include "core/allocators/handle_allocator.h"
 #include "render/vulkan/vk_resource_manager.h"
 
+namespace AssetLoad
+{
+class AssetLoadThread;
+}
+
 namespace Render
 {
 struct WillModel;
@@ -38,7 +43,7 @@ class AssetManager
 {
 
 public:
-    explicit AssetManager(Render::ResourceManager* resourceManager);
+    explicit AssetManager(AssetLoad::AssetLoadThread* assetLoadThread);
     ~AssetManager();
 
     AssetManager(const AssetManager&) = delete;
@@ -49,6 +54,8 @@ public:
     WillModelHandle LoadModel(const std::filesystem::path& path);
     Render::WillModel* GetModel(WillModelHandle handle);
     void UnloadModel(WillModelHandle handle);
+
+    void ResolveModelLoad(Core::FrameBuffer& stagingFrameBuffer);
 
 public:
     Core::HandleAllocator<ModelEntry, Render::BINDLESS_MODEL_BUFFER_COUNT>& GetModelAllocator()
@@ -72,7 +79,7 @@ public:
     }
 
 private:
-    Render::ResourceManager* resourceManager;
+    AssetLoad::AssetLoadThread* assetLoadThread;
 
     Core::HandleAllocator<ModelEntry, Render::BINDLESS_MODEL_BUFFER_COUNT> modelEntryAllocator;
     Core::HandleAllocator<InstanceEntry, Render::BINDLESS_INSTANCE_BUFFER_COUNT> instanceEntryAllocator;
@@ -81,7 +88,8 @@ private:
     OffsetAllocator::Allocator jointMatrixAllocator{Render::BINDLESS_MODEL_BUFFER_SIZE};
 
     std::unordered_map<std::filesystem::path, WillModelHandle> pathToHandle;
-    Core::HandleAllocator<Render::WillModel, MAX_LOADED_MODELS> models;
+    Core::HandleAllocator<Render::WillModel, MAX_LOADED_MODELS> modelAllocator;
+    std::array<Render::WillModel, MAX_LOADED_MODELS> models;
 };
 } // Engine
 

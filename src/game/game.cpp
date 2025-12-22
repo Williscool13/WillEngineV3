@@ -11,6 +11,7 @@
 #include "core/include/render_interface.h"
 #include "core/input/input_frame.h"
 #include "render/types/render_types.h"
+#include "systems/debug_system.h"
 
 
 extern "C"
@@ -43,6 +44,8 @@ GAME_API void GameLoad(Core::EngineContext* ctx, Engine::GameState* state)
 GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::GameState* state)
 {
     Game::System::UpdateCameras(ctx, state);
+
+    Game::System::DebugUpdate(ctx, state);
 
     Core::InputFrame gameInputCopy = *state->inputFrame;
     std::this_thread::sleep_for(std::chrono::milliseconds(1));

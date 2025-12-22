@@ -1,6 +1,3 @@
-#define VMA_IMPLEMENTATION
-#include <vk_mem_alloc.h>
-
 #include "src/engine/will_engine.h"
 
 #include <spdlog/spdlog.h>

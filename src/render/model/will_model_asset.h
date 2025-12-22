@@ -45,19 +45,17 @@ public:
 
     WillModel& operator=(WillModel&&) noexcept = default;
 
+    // Populated by AssetManager
     std::filesystem::path source{};
     std::string name{};
-
-    // Populated in AssetLoadThread
-    ModelData modelData{};
-
-    std::vector<Core::BufferAcquireOperation> bufferAcquireOps{};
-    std::vector<Core::ImageAcquireOperation> imageAcquireOps{};
-
-    // Populated by AssetManager
     Engine::WillModelHandle selfHandle;
     ModelLoadState modelLoadState{ModelLoadState::NotLoaded};
     uint32_t refCount = 0;
+
+    // Populated in AssetLoadThread
+    ModelData modelData{};
+    std::vector<Core::BufferAcquireOperation> bufferAcquireOps{};
+    std::vector<Core::ImageAcquireOperation> imageAcquireOps{};
 };
 } // AssetLoad
 

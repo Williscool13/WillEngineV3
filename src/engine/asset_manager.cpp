@@ -4,23 +4,120 @@
 
 #include "asset_manager.h"
 
+#include "asset-load/asset_load_thread.h"
+
 namespace Engine
 {
-AssetManager::AssetManager(Render::ResourceManager* resourceManager)
-    : resourceManager(resourceManager)
+AssetManager::AssetManager(AssetLoad::AssetLoadThread* assetLoadThread)
+    : assetLoadThread(assetLoadThread)
 {}
 
-AssetManager::~AssetManager() {}
+AssetManager::~AssetManager()
+{
+    for (auto& model : models) {
+        if (modelAllocator.IsValid(model.selfHandle)) {
+            model.refCount = 1;
+            UnloadModel(model.selfHandle);
+        }
+    }
+}
 
 WillModelHandle AssetManager::LoadModel(const std::filesystem::path& path)
 {
-    return WillModelHandle::INVALID;
+    auto it = pathToHandle.find(path);
+    if (it != pathToHandle.end()) {
+        WillModelHandle existingHandle = it->second;
+        if (modelAllocator.IsValid(existingHandle)) {
+            Render::WillModel& model = models[existingHandle.index];
+            model.refCount++;
+            SPDLOG_TRACE("[AssetManager] Model already loaded: {}, refCount: {}", path.string(), model.refCount);
+            return existingHandle;
+        }
+        pathToHandle.erase(it);
+    }
+
+    WillModelHandle handle = modelAllocator.Add();
+    if (!handle.IsValid()) {
+        SPDLOG_ERROR("[AssetManager] Failed to allocate model slot for: {}", path.string());
+        return WillModelHandle{};
+    }
+
+    Render::WillModel& model = models[handle.index];
+    model.selfHandle = handle;
+    model.source = path;
+    model.name = path.stem().string();
+    model.refCount = 1;
+    model.modelLoadState = Render::WillModel::ModelLoadState::NotLoaded;
+
+    pathToHandle[path] = handle;
+
+    assetLoadThread->RequestLoad(model.selfHandle, &model);
+
+    return handle;
 }
 
 Render::WillModel* AssetManager::GetModel(WillModelHandle handle)
 {
-    return nullptr;
+    if (!modelAllocator.IsValid(handle)) {
+        return nullptr;
+    }
+    return &models[handle.index];
 }
 
-void AssetManager::UnloadModel(WillModelHandle handle) {}
+void AssetManager::UnloadModel(WillModelHandle handle)
+{
+    if (!modelAllocator.IsValid(handle)) {
+        SPDLOG_WARN("[AssetManager] Attempted to unload invalid model handle");
+        return;
+    }
+
+    Render::WillModel& model = models[handle.index];
+    model.refCount--;
+
+    //todo handle deallocation needs to be forwarded to asset load thread, as asset load thread needs to free from geometry offset allocators
+    if (model.refCount == 0) {
+        pathToHandle.erase(model.source);
+
+        model.modelData.Reset();
+        model.bufferAcquireOps.clear();
+        model.imageAcquireOps.clear();
+        model.source.clear();
+        model.name.clear();
+        model.modelLoadState = Render::WillModel::ModelLoadState::NotLoaded;
+        model.selfHandle = WillModelHandle{};
+
+        modelAllocator.Remove(handle);
+    }
+}
+
+void AssetManager::ResolveModelLoad(Core::FrameBuffer& stagingFrameBuffer)
+{
+    std::vector<AssetLoad::WillModelComplete> modelHandles;
+
+
+    AssetLoad::WillModelComplete modelComplete;
+    while (assetLoadThread->ResolveLoads(modelComplete)) {
+        if (modelComplete.bSuccess) {
+            stagingFrameBuffer.bufferAcquireOperations.insert(stagingFrameBuffer.bufferAcquireOperations.end(),
+                                                              modelComplete.model->bufferAcquireOps.begin(),
+                                                              modelComplete.model->bufferAcquireOps.end());
+
+            stagingFrameBuffer.imageAcquireOperations.insert(stagingFrameBuffer.imageAcquireOperations.end(),
+                                                             modelComplete.model->imageAcquireOps.begin(),
+                                                             modelComplete.model->imageAcquireOps.end());
+
+            modelComplete.model->bufferAcquireOps.clear();
+            modelComplete.model->imageAcquireOps.clear();
+            modelComplete.model->modelLoadState = Render::WillModel::ModelLoadState::Loaded;
+            SPDLOG_INFO("[AssetManager] Model load succeeded: {}", modelComplete.model->source.string());
+        }
+        else {
+            modelComplete.model->modelData.Reset();
+            modelComplete.model->bufferAcquireOps.clear();
+            modelComplete.model->imageAcquireOps.clear();
+            modelComplete.model->modelLoadState = Render::WillModel::ModelLoadState::NotLoaded;
+            SPDLOG_ERROR("[AssetManager] Model load failed: {}", modelComplete.model->source.string());
+        }
+    }
+}
 } // Engine

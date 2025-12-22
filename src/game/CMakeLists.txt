@@ -8,6 +8,8 @@ set(GAME_SOURCES
         systems/camera_system.cpp
         systems/camera_system.h
         fwd_components.h
+        systems/debug_system.cpp
+        systems/debug_system.h
 )
 
 set(GAME_INCLUDE_DIRS
@@ -17,8 +19,10 @@ set(GAME_INCLUDE_DIRS
 
 set(GAME_LIBRARIES
         core
-        spdlog::spdlog
+        engine
         render
+        platform
+        spdlog::spdlog
 )
 
 if (GAME_STATIC)

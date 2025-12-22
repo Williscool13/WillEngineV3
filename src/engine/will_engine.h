@@ -49,11 +49,6 @@ using SDLWindowPtr = std::unique_ptr<SDL_Window, decltype(&SDL_DestroyWindow)>;
 class WillEngine
 {
 public:
-    static WillEngine& Get()
-    {
-        return *instance;
-    }
-
     WillEngine() = delete;
 
     explicit WillEngine(Platform::CrashHandler* crashHandler_);
@@ -73,9 +68,6 @@ public:
     void Cleanup();
 
     [[nodiscard]] Core::FrameBuffer& GetStagingFrameBuffer() { return stagingFrameBuffer; }
-
-private:
-    static WillEngine* instance;
 
 private: // Windowing
     SDLWindowPtr window{nullptr, nullptr};
