@@ -46,9 +46,9 @@ public:
     void Join() const;
 
 public:
-    void RequestLoad(Render::WillModelHandle willmodelHandle);
+    void RequestLoad(Engine::WillModelHandle willmodelHandle, Render::WillModel* willModelPtr);
 
-    void ResolveLoads(std::vector<Render::WillModelHandle>& processedHandles);
+    void ResolveLoads(std::vector<WillModelComplete>& processedHandles);
 
 private: // Threading
     void ThreadMain();

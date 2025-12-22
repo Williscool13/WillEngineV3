@@ -10,6 +10,7 @@
 #include <glm/glm.hpp>
 
 #include "render/model/model_serialization.h"
+#include "render/model/will_model_asset.h"
 #include "render/vulkan/vk_utils.h"
 
 namespace AssetLoad
@@ -34,7 +35,7 @@ void WillModelLoader::Reset()
     rawData.Reset();
     loadState = WillModelLoadState::Idle;
     taskState = TaskState::NotStarted;
-    willModelHandle = Render::WillModelHandle::INVALID;
+    willModelHandle = Engine::WillModelHandle::INVALID;
     model = nullptr;
     pendingSamplerInfos.clear();
     for (ktxTexture2* texture : pendingTextures) {

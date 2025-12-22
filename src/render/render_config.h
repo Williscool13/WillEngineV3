@@ -31,7 +31,6 @@ inline constexpr int32_t MEGA_PRIMITIVE_BUFFER_SIZE              = sizeof(Meshle
 inline constexpr int32_t MEGA_MESHLET_VERTEX_BUFFER_SIZE         = 1 << 26; // 64MB indices
 inline constexpr int32_t MEGA_MESHLET_TRIANGLE_BUFFER_SIZE       = 1 << 26; // 64MB triangles
 inline constexpr int32_t MEGA_MESHLET_BUFFER_SIZE                = 1 << 21; // 2MB meshlets
-inline constexpr uint32_t MAX_LOADED_MODELS                      = 2048;
 
 inline constexpr uint32_t FRAME_BUFFER_OPERATION_COUNT_LIMIT = 1024;
 } // Render

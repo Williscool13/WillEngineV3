@@ -8,6 +8,7 @@
 #include <spdlog/spdlog.h>
 
 #include "will_model_loader.h"
+#include "render/model/will_model_asset.h"
 #include "render/vulkan/vk_context.h"
 #include "render/vulkan/vk_helpers.h"
 #include "render/vulkan/vk_utils.h"
@@ -67,16 +68,16 @@ void AssetLoadThread::Join() const
     }
 }
 
-void AssetLoadThread::RequestLoad(Render::WillModelHandle willmodelHandle)
+void AssetLoadThread::RequestLoad(Engine::WillModelHandle willmodelHandle, Render::WillModel* willModelPtr)
 {
-    modelLoadQueue.push({willmodelHandle});
+    modelLoadQueue.push({willmodelHandle, willModelPtr});
 }
 
-void AssetLoadThread::ResolveLoads(std::vector<Render::WillModelHandle>& processedHandles)
+void AssetLoadThread::ResolveLoads(std::vector<WillModelComplete>& processedHandles)
 {
     WillModelComplete completed;
     while (modelCompleteQueue.pop(completed)) {
-        processedHandles.push_back(completed.willModelHandle);
+        processedHandles.push_back(completed);
     }
 }
 
@@ -88,16 +89,9 @@ void AssetLoadThread::ThreadMain()
             if (!loaderActive[i]) {
                 WillModelLoadRequest loadRequest{};
                 if (modelLoadQueue.pop(loadRequest)) {
-                    Render::WillModel* modelToLoad = resourceManager->models.Get(loadRequest.willModelHandle);
-                    if (modelToLoad == nullptr) {
-                        SPDLOG_ERROR("[AssetLoadThread::Join] Model load failed to obtain the loadable asset");
-                        modelCompleteQueue.push({loadRequest.willModelHandle});
-                        continue;
-                    }
-
                     assetLoadSlots[i].loadState = WillModelLoadState::Idle;
                     assetLoadSlots[i].willModelHandle = loadRequest.willModelHandle;
-                    assetLoadSlots[i].model = modelToLoad;
+                    assetLoadSlots[i].model = loadRequest.model;
                     loaderActive[i] = true;
                 }
             }
@@ -158,13 +152,15 @@ void AssetLoadThread::ThreadMain()
                 }
 
                 if (assetLoad.loadState == WillModelLoadState::Loaded || assetLoad.loadState == WillModelLoadState::Failed) {
-                    if (assetLoad.loadState == WillModelLoadState::Failed) {
+                    // todo: move this to asset manager
+                    /*if (assetLoad.loadState == WillModelLoadState::Failed) {
                         assetLoad.model->modelData.Reset();
-                        assetLoad.model->modelLoadState = Render::WillModel::ModelLoadState::FailedToLoad;
-                    } else {
-                        assetLoad.model->modelLoadState = Render::WillModel::ModelLoadState::Loaded;
+                        assetLoad.model->modelLoadState.store(Render::WillModel::ModelLoadState::FailedToLoad, std::memory_order_release);
                     }
-                    modelCompleteQueue.push({assetLoad.willModelHandle});
+                    else {
+                        assetLoad.model->modelLoadState.store(Render::WillModel::ModelLoadState::Loaded, std::memory_order_release);
+                    }*/
+                    modelCompleteQueue.push({assetLoad.willModelHandle, assetLoad.model});
                     loaderActive[i] = false;
 
                     assetLoad.Reset();

@@ -16,7 +16,13 @@
 
 namespace Render
 {
+struct WillModel;
 struct VulkanContext;
+}
+
+namespace Engine
+{
+using WillModelHandle = Core::Handle<Render::WillModel>;
 }
 
 namespace AssetLoad
@@ -109,12 +115,14 @@ struct UnpackedWillModel
 
 struct WillModelLoadRequest
 {
-    Render::WillModelHandle willModelHandle;
+    Engine::WillModelHandle willModelHandle;
+    Render::WillModel* model;
 };
 
 struct WillModelComplete
 {
-    Render::WillModelHandle willModelHandle;
+    Engine::WillModelHandle willModelHandle;
+    Render::WillModel* model;
 };
 } // AssetLoad
 

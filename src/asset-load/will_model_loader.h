@@ -5,6 +5,7 @@
 #ifndef WILL_ENGINE_WILL_MODEL_LOADER_H
 #define WILL_ENGINE_WILL_MODEL_LOADER_H
 #include "asset_load_types.h"
+#include "ktx.h"
 #include "TaskScheduler.h"
 #include "render/vulkan/vk_resource_manager.h"
 
@@ -15,7 +16,7 @@ struct VulkanContext;
 
 namespace AssetLoad
 {
-struct UploadStaging;
+class UploadStaging;
 struct WillModelLoader;
 
 struct LoadModelTask : enki::ITaskSet
@@ -73,7 +74,7 @@ struct WillModelLoader
 
     // Transient
     WillModelLoadState loadState{WillModelLoadState::Idle};
-    Render::WillModelHandle willModelHandle{Render::WillModelHandle::INVALID};
+    Engine::WillModelHandle willModelHandle{Engine::WillModelHandle::INVALID};
     Render::WillModel* model{nullptr};
 
     UnpackedWillModel rawData{};

@@ -208,7 +208,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         sceneData.proj = projMatrix;
         sceneData.viewProj = projMatrix * viewMatrix;
         sceneData.cameraWorldPos = glm::vec4(view.cameraPos, 1.0f);
-        sceneData.frustum = Render::CreateFrustum(projMatrix * viewMatrix);
+        sceneData.frustum = CreateFrustum(projMatrix * viewMatrix);
         sceneData.deltaTime = 0.1f;
 
         auto currentSceneData = static_cast<SceneData*>(currentSceneDataBuffer.allocationInfo.pMappedData);

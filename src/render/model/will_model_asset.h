@@ -7,11 +7,19 @@
 
 #include <filesystem>
 
-#include "ktx.h"
-#include "model_format.h"
 #include "model_types.h"
 #include "TaskScheduler.h"
 #include "core/include/render_interface.h"
+
+namespace Render
+{
+struct WillModel;
+}
+
+namespace Engine
+{
+using WillModelHandle = Core::Handle<Render::WillModel>;
+}
 
 namespace Render
 {
@@ -40,13 +48,15 @@ public:
     std::filesystem::path source{};
     std::string name{};
 
-    // Populated in asset loading thread. Used by game thread
-    ModelLoadState modelLoadState{ModelLoadState::NotLoaded};
+    // Populated in AssetLoadThread
     ModelData modelData{};
 
     std::vector<Core::BufferAcquireOperation> bufferAcquireOps{};
     std::vector<Core::ImageAcquireOperation> imageAcquireOps{};
 
+    // Populated by AssetManager
+    Engine::WillModelHandle selfHandle;
+    ModelLoadState modelLoadState{ModelLoadState::NotLoaded};
     uint32_t refCount = 0;
 };
 } // AssetLoad

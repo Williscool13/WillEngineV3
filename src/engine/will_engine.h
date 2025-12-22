@@ -17,6 +17,11 @@
 
 namespace Engine
 {
+class AssetManager;
+}
+
+namespace Engine
+{
 struct GameState;
 }
 
@@ -82,6 +87,7 @@ private: // Main Systems
     std::unique_ptr<Render::RenderThread> renderThread{};
     std::unique_ptr<Core::FrameSync> engineRenderSynchronization{};
     std::unique_ptr<AssetLoad::AssetLoadThread> assetLoadThread{};
+    std::unique_ptr<AssetManager> assetManager{};
 #if WILL_EDITOR
     std::unique_ptr<Render::ModelGenerator> modelGenerator{};
 #endif

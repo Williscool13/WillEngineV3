@@ -9,6 +9,7 @@
 #include <spdlog/spdlog.h>
 #include <entt/entt.hpp>
 
+#include "asset_manager.h"
 #include "engine_api.h"
 #include "core/include/game_interface.h"
 #include "core/input/input_manager.h"
@@ -72,6 +73,7 @@ void WillEngine::Initialize()
     renderThread->Initialize(engineRenderSynchronization.get(), scheduler.get(), window.get(), w, h);
     assetLoadThread = std::make_unique<AssetLoad::AssetLoadThread>();
     assetLoadThread->Initialize(scheduler.get(), renderThread->GetVulkanContext(), renderThread->GetResourceManager());
+    assetManager = std::make_unique<AssetManager>(renderThread->GetResourceManager());
 #if WILL_EDITOR
     modelGenerator = std::make_unique<Render::ModelGenerator>(renderThread->GetVulkanContext(), scheduler.get());
 #endif
@@ -195,20 +197,19 @@ void WillEngine::Run()
         }
 #endif
 
-        std::vector<Render::WillModelHandle> modelHandles;
+        std::vector<AssetLoad::WillModelComplete> modelHandles;
         assetLoadThread->ResolveLoads(modelHandles);
 
-        for (Render::WillModelHandle& modelHandle : modelHandles) {
+        for (auto& modelComplete : modelHandles) {
             Render::ResourceManager* resourceManager = renderThread->GetResourceManager();
-            Render::WillModel* model = resourceManager->models.Get(modelHandle);
 
             stagingFrameBuffer.bufferAcquireOperations.insert(stagingFrameBuffer.bufferAcquireOperations.end(),
-                                                              model->bufferAcquireOps.begin(),
-                                                              model->bufferAcquireOps.end());
+                                                              modelComplete.model->bufferAcquireOps.begin(),
+                                                              modelComplete.model->bufferAcquireOps.end());
 
             stagingFrameBuffer.imageAcquireOperations.insert(stagingFrameBuffer.imageAcquireOperations.end(),
-                                                             model->imageAcquireOps.begin(),
-                                                             model->imageAcquireOps.end());
+                                                             modelComplete.model->imageAcquireOps.begin(),
+                                                             modelComplete.model->imageAcquireOps.end());
         }
 
         gameState->inputFrame = &inputManager->GetCurrentInput();
@@ -267,7 +268,7 @@ void WillEngine::DrawImgui()
     }
 
 
-    auto loadModel = [&](const std::filesystem::path& path) {
+    /*auto loadModel = [&](const std::filesystem::path& path) {
         Render::ResourceManager* resourceManager = renderThread->GetResourceManager();
         Render::WillModelHandle modelHandle = resourceManager->models.Add();
         Render::WillModel* model = resourceManager->models.Get(modelHandle);
@@ -275,7 +276,7 @@ void WillEngine::DrawImgui()
         model->name = model->source.filename().string();
         assetLoadThread->RequestLoad(modelHandle);
         return modelHandle;
-    };
+    };*/
 
     auto generateModel = [&](const std::filesystem::path& gltfPath, const std::filesystem::path& outPath) {
         auto loadResponse = modelGenerator->GenerateWillModelAsync(gltfPath, outPath);

@@ -13,7 +13,7 @@ namespace Game
  * todo: move to game and set up ECS
  */
 
-struct NodeInstance
+/*struct NodeInstance
 {
     uint32_t parent{~0u};
     uint32_t originalNodeIndex{0};
@@ -50,7 +50,7 @@ struct ModelInstance
     Transform transform;
     OffsetAllocator::Allocation jointMatrixAllocation{};
     uint32_t jointMatrixOffset{0};
-};
+};*/
 
 /*struct PrimitiveInstance
 {

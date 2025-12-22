@@ -5,6 +5,10 @@ add_library(engine STATIC
         engine_api.h
         game_model.cpp
         game_model.h
+        asset_manager.cpp
+        asset_manager.h
+        asset_manager_config.h
+        asset_manager_types.h
 )
 
 target_include_directories(engine PRIVATE
