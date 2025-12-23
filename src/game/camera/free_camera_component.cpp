@@ -89,7 +89,7 @@ void UpdateFreeCamera(Core::EngineContext* ctx, Engine::GameState* state)
         camera.cameraPos = transform.transform.translation;
         camera.cameraLookAt = transform.transform.translation + forwardDir;
         camera.cameraUp = WORLD_UP;
-        camera.aspectRatio = ctx->windowContext.windowWidth / ctx->windowContext.windowHeight;
+        camera.aspectRatio = ctx->windowContext.windowWidth / static_cast<float>(ctx->windowContext.windowHeight);
         camera.fovRadians = glm::radians(90.0f);
         camera.nearPlane = 0.1f;
         camera.farPlane = 1000.0f;

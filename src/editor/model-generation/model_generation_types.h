@@ -36,7 +36,6 @@ struct RawGltfModel
 
     std::vector<MeshInformation> allMeshes{};
     std::vector<Node> nodes{};
-    std::vector<uint32_t> nodeRemap{};
 
     std::vector<Animation> animations;
     std::vector<glm::mat4> inverseBindMatrices{};

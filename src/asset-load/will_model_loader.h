@@ -87,7 +87,7 @@ struct WillModelLoader
     /**
      * Cached vector to store 3x uint8_t->1x uint32_t for meshlet triangles.
      */
-    std::vector<uint32_t> paddedTriangles;
+    std::vector<uint32_t> packedTriangles;
     uint32_t pendingTextureHead{0};
     uint32_t pendingVerticesHead{0};
     uint32_t pendingMeshletVerticesHead{0};

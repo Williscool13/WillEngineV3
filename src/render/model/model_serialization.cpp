@@ -190,12 +190,11 @@ bool ModelReader::ReadHeader()
         return false;
     }
     if (header.minorVersion != MODEL_MINOR_VERSION) {
-        SPDLOG_WARN("Loading {}: Minor file version difference ({} vs current {})", archiveFileName, header.majorVersion, MODEL_MAJOR_VERSION);
+        SPDLOG_WARN("Loading {}: Minor file version difference ({} vs current {})", archiveFileName, header.minorVersion, MODEL_MINOR_VERSION);
         return false;
     }
     if (header.patchVersion != MODEL_PATCH_VERSION) {
-        SPDLOG_TRACE("Loading {}: patch version difference ({} vs current {})", archiveFileName, header.majorVersion, MODEL_MAJOR_VERSION);
-        return false;
+        SPDLOG_TRACE("Loading {}: patch version difference ({} vs current {})", archiveFileName, header.patchVersion, MODEL_PATCH_VERSION);
     }
 
     return true;

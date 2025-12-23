@@ -54,7 +54,7 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         }
 
         if (state->registry.valid(dragonEntity)) {
-            SPDLOG_WARN("[DebugSystem] Box already spawned");
+            SPDLOG_WARN("[DebugSystem] Dragon already spawned");
             return;
         }
 
@@ -92,17 +92,15 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
             renderable.material = model->modelData.materials[0];
         }
 
-        // todo: default materials
-
         Transform transform{Transform::IDENTITY};
-        transform.translation = glm::vec3(0.0f);
 
         dragonEntity = state->registry.create();
         state->registry.emplace<RenderableComponent>(dragonEntity, renderable);
         state->registry.emplace<TransformComponent>(dragonEntity, transform);
 
-        SPDLOG_INFO("[DebugSystem] Spawned box entity");
+        SPDLOG_INFO("[DebugSystem] Spawned dragon entity");
     }
+
     if (state->inputFrame->GetKey(Key::F4).pressed) {
         if (!boxHandle.IsValid()) {
             SPDLOG_WARN("[DebugSystem] No model loaded, press F1 first");
@@ -133,7 +131,7 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
             return;
         }
 
-        RenderableComponent renderable;
+        RenderableComponent renderable{};
         renderable.modelEntry = modelEntry;
         renderable.instanceEntry = instanceEntry;
         renderable.materialEntry = materialEntry;
@@ -154,10 +152,8 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
             renderable.material = model->modelData.materials[0];
         }
 
-        // todo: default materials
-
         Transform transform{Transform::IDENTITY};
-        transform.translation = glm::vec3(0.0f);
+        transform.translation = glm::vec3(0.0f, 2.0f, 0.0f);
 
         boxEntity = state->registry.create();
         state->registry.emplace<RenderableComponent>(boxEntity, renderable);
@@ -179,19 +175,19 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
 
 void DebugPrepareFrame(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer, Render::FrameResources* frameResources)
 {
-    Instance* instanceBuffer = static_cast<Instance*>(frameResources->instanceBuffer.allocationInfo.pMappedData);
-    Model* modelBuffer = static_cast<Model*>(frameResources->modelBuffer.allocationInfo.pMappedData);
-    MaterialProperties* materialBuffer = static_cast<MaterialProperties*>(frameResources->materialBuffer.allocationInfo.pMappedData);
+    auto* instanceBuffer = static_cast<Instance*>(frameResources->instanceBuffer.allocationInfo.pMappedData);
+    auto modelBuffer = static_cast<Model*>(frameResources->modelBuffer.allocationInfo.pMappedData);
+    auto materialBuffer = static_cast<MaterialProperties*>(frameResources->materialBuffer.allocationInfo.pMappedData);
 
-    auto view = state->registry.view<RenderableComponent, TransformComponent>();
+    const auto view = state->registry.view<RenderableComponent, TransformComponent>();
 
-    for (auto [entity, renderable, transform] : view.each()) {
+    for (const auto& [entity, renderable, transform] : view.each()) {
         // todo: prev frame data needs to be figured out
         modelBuffer[renderable.modelEntry.index] = {transform.transform.GetMatrix(), transform.transform.GetMatrix(), renderable.modelFlags};
         instanceBuffer[renderable.instanceEntry.index] = renderable.instance;
         materialBuffer[renderable.materialEntry.index] = renderable.material;
 
-        frameBuffer->mainViewFamily.instances.push_back(renderable.instance);
+        frameBuffer->mainViewFamily.instances.push_back(renderable.instanceEntry);
     }
 }
 } // Game::System

@@ -50,7 +50,7 @@ void WillModelLoader::Reset()
     pendingBufferBarrier = 0;
     pendingTextures.clear();
     convertedVertices.clear();
-    paddedTriangles.clear();
+    packedTriangles.clear();
 }
 
 WillModelLoader::TaskState WillModelLoader::TaskExecute(enki::TaskScheduler* scheduler, LoadModelTask* task)
@@ -121,10 +121,6 @@ void WillModelLoader::TaskImplementation()
         ReadNode(dataPtr, rawData.nodes[i]);
     }
 
-    offset = dataPtr - modelBinData.data();
-    readArray(rawData.nodeRemap, header->nodeRemapCount);
-
-    dataPtr = modelBinData.data() + offset;
     rawData.animations.resize(header->animationCount);
     for (uint32_t i = 0; i < header->animationCount; i++) {
         ReadAnimation(dataPtr, rawData.animations[i]);
@@ -279,10 +275,8 @@ bool WillModelLoader::PreThreadExecute(Render::VulkanContext* context, Render::R
     }
 
     model->modelData.meshes = std::move(rawData.allMeshes);
-    model->modelData.nodes = std::move(rawData.nodes);
     model->modelData.inverseBindMatrices = std::move(rawData.inverseBindMatrices);
     model->modelData.animations = std::move(rawData.animations);
-    model->modelData.nodeRemap = std::move(rawData.nodeRemap);
     model->modelData.materials = std::move(rawData.materials);
 
     // Convert SkinnedVertex to Vertex
@@ -299,13 +293,13 @@ bool WillModelLoader::PreThreadExecute(Render::VulkanContext* context, Render::R
     }
 
     // Pack triangle into uint32_t (1x uint8 padding). Better access pattern on GPU
-    paddedTriangles.reserve(rawData.meshletTriangles.size() / 3);
+    packedTriangles.reserve(rawData.meshletTriangles.size() / 3);
 
     for (size_t i = 0; i < rawData.meshletTriangles.size(); i += 3) {
         uint32_t packed = rawData.meshletTriangles[i + 0] |
                           (rawData.meshletTriangles[i + 1] << 8) |
                           (rawData.meshletTriangles[i + 2] << 16);
-        paddedTriangles.push_back(packed);
+        packedTriangles.push_back(packed);
     }
 
 
@@ -517,9 +511,9 @@ WillModelLoader::ThreadState WillModelLoader::ThreadExecute(Render::VulkanContex
         }
 
         if (!uploadBufferChunked(pendingMeshletTrianglesHead,
-                                 paddedTriangles.size(),
+                                 packedTriangles.size(),
                                  sizeof(uint32_t),
-                                 paddedTriangles.data(),
+                                 packedTriangles.data(),
                                  resourceManager->megaMeshletTrianglesBuffer.handle,
                                  model->modelData.meshletTriangleAllocation.offset)
         ) {
@@ -680,12 +674,6 @@ bool WillModelLoader::PostThreadExecute(Render::VulkanContext* context, Render::
             remapTextures(material.textureImageIndices, model->modelData.textureIndexToDescriptorBufferIndexMap);
             remapTextures(material.textureImageIndices2, model->modelData.textureIndexToDescriptorBufferIndexMap);
         }
-
-        // todo: materials will be dynamic here, no longer uploading to staging/copy
-        // Materials
-        // size_t sizeMaterials = meshletModel_.materials.size() * sizeof(Render::MaterialProperties);
-        // model.materialAllocation = materialBufferAllocator.allocate(sizeMaterials);
-        // memcpy(static_cast<char*>(materialBuffer.allocationInfo.pMappedData) + model.materialAllocation.offset, meshletModel_.materials.data(), sizeMaterials);
     }
 
     return true;

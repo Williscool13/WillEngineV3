@@ -171,7 +171,6 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     VkImage currentSwapchainImage = swapchain->swapchainImages[swapchainImageIndex];
     AllocatedBuffer& currentSceneDataBuffer = frameResource.sceneDataBuffer;
 
-    bool bHasAnyModels = !frameBuffer.mainViewFamily.instances.empty();
     //
     {
         // todo: address what happens if views is 0
@@ -267,7 +266,8 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
             vkCmdDrawMeshTasksEXT(cmd, 1, 1, 1);
         }
         //
-        if (bHasAnyModels) {
+
+        for (Engine::InstanceHandle& instance : frameBuffer.mainViewFamily.instances) {
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, meshShaderPipeline.pipeline.handle);
             MeshShaderPushConstants pushConstants{
                 .sceneData = currentSceneDataBuffer.address,
@@ -279,7 +279,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
                 .materialBuffer = frameResource.materialBuffer.address,
                 .modelBuffer = frameResource.modelBuffer.address,
                 .instanceBuffer = frameResource.instanceBuffer.address,
-                .instanceIndex = 0
+                .instanceIndex = instance.index
             };
 
             vkCmdPushConstants(cmd, meshShaderPipeline.pipelineLayout.handle, VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT, 0,

@@ -83,7 +83,7 @@ void AssetManager::UnloadModel(WillModelHandle handle)
 
 void AssetManager::ResolveModelLoad(Core::FrameBuffer& stagingFrameBuffer)
 {
-    AssetLoad::WillModelComplete modelComplete;
+    AssetLoad::WillModelComplete modelComplete{};
     while (assetLoadThread->ResolveLoads(modelComplete)) {
         if (modelComplete.bSuccess) {
             stagingFrameBuffer.bufferAcquireOperations.insert(stagingFrameBuffer.bufferAcquireOperations.end(),
@@ -110,7 +110,7 @@ void AssetManager::ResolveModelLoad(Core::FrameBuffer& stagingFrameBuffer)
 
 void AssetManager::ResolveModelUnload()
 {
-    AssetLoad::WillModelComplete modelComplete;
+    AssetLoad::WillModelComplete modelComplete{};
     while (assetLoadThread->ResolveUnload(modelComplete)) {
         SPDLOG_INFO("[AssetManager] Model unload succeeded: {}", modelComplete.model->source.string());
         modelComplete.model->modelData.Reset();

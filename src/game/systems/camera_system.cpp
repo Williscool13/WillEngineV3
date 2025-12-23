@@ -18,6 +18,7 @@ void UpdateCameras(Core::EngineContext* ctx, Engine::GameState* state)
 void BuildViewFamily(Engine::GameState* state, Core::ViewFamily& mainViewFamily)
 {
     mainViewFamily.views.clear();
+    mainViewFamily.instances.clear();
     auto cameraView = state->registry.view<Game::CameraComponent, Game::MainViewportComponent, Game::TransformComponent>();
 
     for (auto entity : cameraView) {

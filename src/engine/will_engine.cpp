@@ -277,6 +277,12 @@ void WillEngine::DrawImgui()
             Platform::GetAssetPath() / "dragon/dragon.willmodel"
         );
     }
+    if (ImGui::Button("Generate BoxTextured.willmodel from BoxTextured.glb")) {
+        generateModel(
+            Platform::GetAssetPath() / "BoxTextured.glb",
+            Platform::GetAssetPath() / "BoxTextured.willmodel"
+        );
+    }
 
 
     ImGui::End();

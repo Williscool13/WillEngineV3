@@ -575,7 +575,8 @@ RawGltfModel ModelGenerator::LoadGltf(const std::filesystem::path& source)
     generationProgress.value.store(_progress, std::memory_order::release);
 
     // Node processing
-    TopologicalSortNodes(rawModel.nodes, rawModel.nodeRemap);
+    std::vector<uint32_t> nodeRemap{};
+    TopologicalSortNodes(rawModel.nodes, nodeRemap);
     for (size_t i = 0; i < rawModel.nodes.size(); ++i) {
         uint32_t depth = 0;
         uint32_t currentParent = rawModel.nodes[i].parent;
@@ -652,7 +653,7 @@ RawGltfModel ModelGenerator::LoadGltf(const std::filesystem::path& source)
         for (auto& gltfChannel : gltfAnim.channels) {
             AnimationChannel channel{};
             channel.samplerIndex = gltfChannel.samplerIndex;
-            channel.targetNodeIndex = gltfChannel.nodeIndex.value();
+            channel.targetNodeIndex = nodeRemap[gltfChannel.nodeIndex.value()];
 
             switch (gltfChannel.path) {
                 case fastgltf::AnimationPath::Translation:
@@ -923,7 +924,6 @@ void WriteModelBinary(std::ofstream& file, const RawGltfModel& model)
     header.materialCount = static_cast<uint32_t>(model.materials.size());
     header.meshCount = static_cast<uint32_t>(model.allMeshes.size());
     header.nodeCount = static_cast<uint32_t>(model.nodes.size());
-    header.nodeRemapCount = static_cast<uint32_t>(model.nodeRemap.size());
     header.animationCount = static_cast<uint32_t>(model.animations.size());
     header.inverseBindMatrixCount = static_cast<uint32_t>(model.inverseBindMatrices.size());
     header.samplerCount = static_cast<uint32_t>(model.samplerInfos.size());
@@ -945,8 +945,6 @@ void WriteModelBinary(std::ofstream& file, const RawGltfModel& model)
     for (const auto& node : model.nodes) {
         WriteNode(file, node);
     }
-
-    WriteVector(file, model.nodeRemap);
 
     for (const auto& anim : model.animations) {
         WriteAnimation(file, anim);

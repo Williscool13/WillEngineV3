@@ -78,7 +78,6 @@ struct UnpackedWillModel
 
     std::vector<Render::MeshInformation> allMeshes{};
     std::vector<Render::Node> nodes{};
-    std::vector<uint32_t> nodeRemap{};
 
     std::vector<Render::Animation> animations;
     std::vector<glm::mat4> inverseBindMatrices{};
@@ -105,8 +104,6 @@ struct UnpackedWillModel
         primitives.clear();
         materials.clear();
         allMeshes.clear();
-        nodes.clear();
-        nodeRemap.clear();
         animations.clear();
         inverseBindMatrices.clear();
     }
