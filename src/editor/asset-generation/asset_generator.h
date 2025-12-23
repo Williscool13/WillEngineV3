@@ -6,7 +6,7 @@
 #define WILL_ENGINE_MODEL_GENERATOR_H
 #include <filesystem>
 
-#include "model_generation_types.h"
+#include "asset_generation_types.h"
 #include "offsetAllocator.hpp"
 #include "TaskScheduler.h"
 #include "fastgltf/types.hpp"
@@ -29,7 +29,7 @@ struct WillModelGenerationProgress
 };
 
 constexpr uint32_t MODEL_GENERATION_STAGING_BUFFER_SIZE = 2 * 64 * 1024 * 1024; // 2 x 64 MB (1x uncompressed 4k rgba8, or 4x 4k BC7)
-struct ModelGeneratorImmediateParameters
+struct AssetGeneratorImmediateParameters
 {
     VkFence immFence{VK_NULL_HANDLE};
     VkCommandPool immCommandPool{VK_NULL_HANDLE};
@@ -47,12 +47,12 @@ enum class GenerateResponse
     FINISHED
 };
 
-class ModelGenerator
+class AssetGenerator
 {
 public:
-    ModelGenerator(VulkanContext* context, enki::TaskScheduler* taskscheduler);
+    AssetGenerator(VulkanContext* context, enki::TaskScheduler* taskscheduler);
 
-    ~ModelGenerator();
+    ~AssetGenerator();
 
     void WaitForAsyncModelGeneration() const;
 
@@ -60,16 +60,18 @@ public:
 
     GenerateResponse GenerateWillModel(const std::filesystem::path& gltfPath, const std::filesystem::path& outputPath);
 
-    const WillModelGenerationProgress& GetProgress() const { return generationProgress; }
+    const WillModelGenerationProgress& GetModelGenerationProgress() const { return modelGenerationProgress; }
+
+    GenerateResponse GenerateKtxTexture(const std::filesystem::path& imageSource, const std::filesystem::path& outputPath, bool mipmapped);
 
 private:
     struct GenerateTask : enki::ITaskSet
     {
-        ModelGenerator* generator;
+        AssetGenerator* generator;
         std::filesystem::path gltfPath;
         std::filesystem::path outputPath;
 
-        explicit GenerateTask(ModelGenerator* gen)
+        explicit GenerateTask(AssetGenerator* gen)
             : ITaskSet(1), generator(gen)
         {}
 
@@ -110,9 +112,9 @@ private:
     GenerateTask generateTask;
 
     std::atomic<bool> bIsGenerating{false};
-    WillModelGenerationProgress generationProgress{};
+    WillModelGenerationProgress modelGenerationProgress{};
 
-    ModelGeneratorImmediateParameters immediateParameters;
+    AssetGeneratorImmediateParameters immediateParameters;
 
 private: // Cache
     std::vector<Node> sortedNodes;

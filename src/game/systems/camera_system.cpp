@@ -24,7 +24,7 @@ void BuildViewFamily(Engine::GameState* state, Core::ViewFamily& mainViewFamily)
     for (auto entity : cameraView) {
         const auto& [cam, transform] = cameraView.get(entity);
 
-        Core::RenderView view;
+        Core::RenderView view{};
 
         view.fovRadians = cam.fovRadians;
         view.aspectRatio = cam.aspectRatio;

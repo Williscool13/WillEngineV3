@@ -20,7 +20,7 @@
 #if WILL_EDITOR
 #include "render/vulkan/vk_imgui_wrapper.h"
 #include "backends/imgui_impl_vulkan.h"
-#include "editor/model-generation/model_generator.h"
+#include "editor/asset-generation/asset_generator.h"
 #endif
 
 
@@ -190,11 +190,14 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         memcpy(currentSceneData, &sceneData, sizeof(SceneData));
     }
 
+    //
+    {
+        VkViewport viewport = VkHelpers::GenerateViewport(renderExtent[0], renderExtent[1]);
+        vkCmdSetViewport(cmd, 0, 1, &viewport);
+        VkRect2D scissor = VkHelpers::GenerateScissor(renderExtent[0], renderExtent[1]);
+        vkCmdSetScissor(cmd, 0, 1, &scissor);
+    }
 
-    VkViewport viewport = VkHelpers::GenerateViewport(renderExtent[0], renderExtent[1]);
-    vkCmdSetViewport(cmd, 0, 1, &viewport);
-    VkRect2D scissor = VkHelpers::GenerateScissor(renderExtent[0], renderExtent[1]);
-    vkCmdSetScissor(cmd, 0, 1, &scissor);
 
     // Transition to GENERAL for compute shader access
     {
@@ -267,25 +270,34 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         }
         //
 
-        for (Engine::InstanceHandle& instance : frameBuffer.mainViewFamily.instances) {
+        if (!frameBuffer.mainViewFamily.instances.empty()) {
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, meshShaderPipeline.pipeline.handle);
-            MeshShaderPushConstants pushConstants{
-                .sceneData = currentSceneDataBuffer.address,
-                .vertexBuffer = resourceManager->megaVertexBuffer.address,
-                .primitiveBuffer = resourceManager->primitiveBuffer.address,
-                .meshletVerticesBuffer = resourceManager->megaMeshletVerticesBuffer.address,
-                .meshletTrianglesBuffer = resourceManager->megaMeshletTrianglesBuffer.address,
-                .meshletBuffer = resourceManager->megaMeshletBuffer.address,
-                .materialBuffer = frameResource.materialBuffer.address,
-                .modelBuffer = frameResource.modelBuffer.address,
-                .instanceBuffer = frameResource.instanceBuffer.address,
-                .instanceIndex = instance.index
-            };
+            VkDescriptorBufferBindingInfoEXT bindingInfo = resourceManager->bindlessSamplerTextureDescriptorBuffer.GetBindingInfo();
+            vkCmdBindDescriptorBuffersEXT(cmd, 1, &bindingInfo);
+            uint32_t bufferIndexImage = 0;
+            VkDeviceSize bufferOffset = 0;
+            vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, meshShaderPipeline.pipelineLayout.handle, 0, 1, &bufferIndexImage, &bufferOffset);
+            for (Engine::InstanceHandle& instance : frameBuffer.mainViewFamily.instances) {
+                MeshShaderPushConstants pushConstants{
+                    .sceneData = currentSceneDataBuffer.address,
+                    .vertexBuffer = resourceManager->megaVertexBuffer.address,
+                    .primitiveBuffer = resourceManager->primitiveBuffer.address,
+                    .meshletVerticesBuffer = resourceManager->megaMeshletVerticesBuffer.address,
+                    .meshletTrianglesBuffer = resourceManager->megaMeshletTrianglesBuffer.address,
+                    .meshletBuffer = resourceManager->megaMeshletBuffer.address,
+                    .materialBuffer = frameResource.materialBuffer.address,
+                    .modelBuffer = frameResource.modelBuffer.address,
+                    .instanceBuffer = frameResource.instanceBuffer.address,
+                    .instanceIndex = instance.index
+                };
 
-            vkCmdPushConstants(cmd, meshShaderPipeline.pipelineLayout.handle, VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT, 0,
-                               sizeof(MeshShaderPushConstants), &pushConstants);
-            vkCmdDrawMeshTasksEXT(cmd, 1, 1, 1);
+                vkCmdPushConstants(cmd, meshShaderPipeline.pipelineLayout.handle, VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT, 0,
+                                   sizeof(MeshShaderPushConstants), &pushConstants);
+
+                vkCmdDrawMeshTasksEXT(cmd, 1, 1, 1);
+            }
         }
+
 
         vkCmdEndRendering(cmd);
     }

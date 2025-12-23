@@ -85,6 +85,7 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         renderable.instance.bIsAllocated = 1;
 
         if (model->modelData.materials.empty()) {
+            renderable.material = MaterialProperties{};
             renderable.material.colorFactor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
             renderable.material.metalRoughFactors = {0.0f, 1.0f, 0.0f, 0.0f};
         }
@@ -145,6 +146,7 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         renderable.instance.bIsAllocated = 1;
 
         if (model->modelData.materials.empty()) {
+            renderable.material = MaterialProperties{};
             renderable.material.colorFactor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
             renderable.material.metalRoughFactors = {0.0f, 1.0f, 0.0f, 0.0f};
         }

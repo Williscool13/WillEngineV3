@@ -21,7 +21,7 @@
 #if WILL_EDITOR
 #include <backends/imgui_impl_sdl3.h>
 #include <backends/imgui_impl_vulkan.h>
-#include "editor/model-generation/model_generator.h"
+#include "editor/asset-generation/asset_generator.h"
 #endif
 
 namespace Engine
@@ -71,7 +71,7 @@ void WillEngine::Initialize()
     assetLoadThread->Initialize(scheduler.get(), renderThread->GetVulkanContext(), renderThread->GetResourceManager());
     assetManager = std::make_unique<AssetManager>(assetLoadThread.get());
 #if WILL_EDITOR
-    modelGenerator = std::make_unique<Render::ModelGenerator>(renderThread->GetVulkanContext(), scheduler.get());
+    modelGenerator = std::make_unique<Render::AssetGenerator>(renderThread->GetVulkanContext(), scheduler.get());
 #endif
 #ifdef GAME_STATIC
     gameFunctions.gameStartup = &GameStartup;
@@ -254,8 +254,8 @@ void WillEngine::DrawImgui()
         auto loadResponse = modelGenerator->GenerateWillModelAsync(gltfPath, outPath);
 
         while (true) {
-            auto progress = modelGenerator->GetProgress().value.load(std::memory_order::acquire);
-            auto state = modelGenerator->GetProgress().loadingState.load(std::memory_order::acquire);
+            auto progress = modelGenerator->GetModelGenerationProgress().value.load(std::memory_order::acquire);
+            auto state = modelGenerator->GetModelGenerationProgress().loadingState.load(std::memory_order::acquire);
 
             SPDLOG_DEBUG("Progress: {}% - State: {}", progress, static_cast<int>(state));
 
@@ -282,6 +282,20 @@ void WillEngine::DrawImgui()
             Platform::GetAssetPath() / "BoxTextured.glb",
             Platform::GetAssetPath() / "BoxTextured.willmodel"
         );
+    }
+
+    if (ImGui::Button("Create White Texture")) {
+        modelGenerator->GenerateKtxTexture(
+            Platform::GetAssetPath() / "textures/white.png",
+            Platform::GetAssetPath() / "textures/white.ktx2",
+            false);
+    }
+
+    if (ImGui::Button("Create Error Texture")) {
+        modelGenerator->GenerateKtxTexture(
+                    Platform::GetAssetPath() / "textures/error.png",
+                    Platform::GetAssetPath() / "textures/error.ktx2",
+                    false);
     }
 
 

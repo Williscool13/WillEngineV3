@@ -37,7 +37,7 @@ class WillEngine;
 
 namespace Render
 {
-class ModelGenerator;
+class AssetGenerator;
 struct ResourceManager;
 struct RenderExtents;
 struct RenderTargets;

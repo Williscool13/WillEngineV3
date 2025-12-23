@@ -1,9 +1,9 @@
 add_library(editor STATIC
-        model-generation/model_generator.cpp
-        model-generation/model_generator.h
-        model-generation/model_generation_types.cpp
-        model-generation/model_generation_types.h
-        model-generation/stb_impl.cpp
+        asset-generation/asset_generator.cpp
+        asset-generation/asset_generator.h
+        asset-generation/asset_generation_types.cpp
+        asset-generation/asset_generation_types.h
+        asset-generation/stb_impl.cpp
 )
 
 target_include_directories(editor PUBLIC

@@ -57,6 +57,8 @@ public:
 private: // Threading
     void ThreadMain();
 
+    void CreateDefaultResources(VkCommandBuffer cmd);
+
 private:
     Render::VulkanContext* context{};
     Render::ResourceManager* resourceManager{};

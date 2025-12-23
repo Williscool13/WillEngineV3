@@ -45,7 +45,7 @@ struct MeshletPayload
 
 groupshared MeshletPayload sharedPayloads[TASK_SHADER_DISPATCH_X];
 
-
+// ==================== Task Shader ====================
 [shader("task")]
 [numthreads(1, 1, 1)]
 void taskMain(uniform PushConsts pushConstants, uint3 dispatchThreadId : SV_DispatchThreadID)
@@ -63,19 +63,14 @@ void taskMain(uniform PushConsts pushConstants, uint3 dispatchThreadId : SV_Disp
     DispatchMesh(prim.meshletCount, 1, 1, sharedPayloads);
 }
 
-static const float4 positions[3] = {
-	float4( 0.0, -1.0, 0.0, 1.0),
-	float4(-1.0,  1.0, 0.0, 1.0),
-	float4( 1.0,  1.0, 0.0, 1.0)
-};
-
+// ==================== Mesh Shader ====================
 [shader("mesh")]
 [outputtopology("triangle")]
 [numthreads(MESH_SHADER_DISPATCH_X, 1, 1)]
 void meshMain(
     in payload MeshletPayload sharedPayloads[TASK_SHADER_DISPATCH_X],
     out indices uint3 triangles[MAX_PRIMITIVES], out vertices VertexOutput vertices[MAX_VERTICES],
-    uint3 groupId : SV_GroupID, uint3 gtid : SV_GroupThreadID, uint3 dtid : SV_DispatchThreadID,
+    uint3 groupId : SV_GroupID, uint3 gtid : SV_GroupThreadID,
     uniform PushConsts pushConstant)
 {
     MeshletPayload payload = sharedPayloads[0];
@@ -101,16 +96,15 @@ void meshMain(
         vertices[i].tangent = v.tangent;
 
         uint meshletID = groupId.x;
-        uint hash = meshletID * 747796405u + 2891336453u;
+        /*uint hash = meshletID * 747796405u + 2891336453u;
         float3 color = float3(
             (hash & 0xFF) / 255.0,
             ((hash >> 8) & 0xFF) / 255.0,
             ((hash >> 16) & 0xFF) / 255.0
         );
-
-        vertices[i].color = float4(color, 1.0);
-        // vertices[i].color = v.color;
-        // vertices[i].materialIndex = payload.materialIndex;
+        vertices[i].color = float4(color, 1.0);*/
+        vertices[i].color = v.color;
+        vertices[i].materialIndex = payload.materialIndex;
     }
 
     for (uint i = threadIndex; i < meshlet.meshletTriangleCount; i += MESH_SHADER_DISPATCH_X) {
@@ -125,8 +119,34 @@ void meshMain(
     }
 }
 
+// ==================== Fragment Shader ====================
+struct FragmentOutput {
+    float4 color : SV_Target0;
+};
+
+[[vk::binding(0, 0)]]
+SamplerState samplers[];
+[[vk::binding(1, 0)]]
+Texture2D textures[];
+
 [shader("fragment")]
-float4 fragmentMain(VertexOutput vertexInput)
+FragmentOutput fragmentMain(VertexOutput vertexInput, uniform PushConsts pushConstant)
 {
-    return float4(vertexInput.color.xyz, 1.0f);
+    MaterialProperties material = pushConstant.materialBuffer[vertexInput.materialIndex];
+
+    float4 color = vertexInput.color;
+    color = color * textures[material.textureImageIndices[0]].Sample(samplers[material.textureSamplerIndices[0]], vertexInput.uv);
+
+    float3 N = normalize(vertexInput.normal);
+    float3 V = normalize(pushConstant.sceneData->cameraWorldPos.xyz - vertexInput.worldPos);
+    float3 L = normalize(float3(1.0, 1.0, 1.0));
+
+    float3 ambient = float3(0.1, 0.1, 0.1);
+    float3 diffuse = max(dot(N, L), 0.0) * material.colorFactor.rgb;
+
+    FragmentOutput output;
+    output.color = color * float4(ambient + diffuse, material.colorFactor.a);
+
+    output.color = textures[material.textureImageIndices[0]].Sample(samplers[material.textureSamplerIndices[0]], vertexInput.uv);
+    return output;
 }
