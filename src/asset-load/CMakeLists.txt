@@ -4,9 +4,12 @@ add_library(asset-load STATIC
         asset_load_types.cpp
         asset_load_types.h
         asset_load_config.h
-        i_loadable_asset.h
-        will_model_loader.cpp
-        will_model_loader.h
+        texture_loader.cpp
+        texture_loader.h
+        asset_load_job.cpp
+        asset_load_job.h
+        will_model_load_job.cpp
+        will_model_load_job.h
 )
 
 target_include_directories(asset-load PUBLIC

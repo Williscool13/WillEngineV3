@@ -65,4 +65,9 @@ bool UploadStaging::IsReady() const
 {
     return vkGetFenceStatus(context->device, fence) == VK_SUCCESS;
 }
+
+void UploadStaging::WaitForFence() const
+{
+    vkWaitForFences(context->device, 1, &fence, true, UINT64_MAX);
+}
 } // AssetLoad

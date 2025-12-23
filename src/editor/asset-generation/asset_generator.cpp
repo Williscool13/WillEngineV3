@@ -150,10 +150,10 @@ GenerateResponse AssetGenerator::GenerateKtxTexture(const std::filesystem::path&
             VkImageBlit blit{};
             blit.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, mip - 1, 0, 1};
             blit.srcOffsets[0] = {0, 0, 0};
-            blit.srcOffsets[1] = {static_cast<int32_t>(width >> (mip - 1)), static_cast<int32_t>(height >> (mip - 1)), 1};
+            blit.srcOffsets[1] = {((width >> mip) - 1), ((height >> mip) - 1), 1};
             blit.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, mip, 0, 1};
             blit.dstOffsets[0] = {0, 0, 0};
-            blit.dstOffsets[1] = {static_cast<int32_t>(width >> mip), static_cast<int32_t>(height >> mip), 1};
+            blit.dstOffsets[1] = {(width >> mip), (height >> mip), 1};
 
             vkCmdBlitImage(immediateParameters.immCommandBuffer, image.handle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                            image.handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
@@ -891,7 +891,7 @@ bool AssetGenerator::WriteWillModel(const RawGltfModel& rawModel, const std::fil
     binFile.close();
 
     int32_t _progress = 70;
-    const int32_t textureProgressTotal = 30;
+    constexpr int32_t textureProgressTotal = 30;
     const int32_t progressPerTexture = rawModel.images.empty() ? 0 : textureProgressTotal / rawModel.images.size();
 
     for (size_t i = 0; i < rawModel.images.size(); i++) {
@@ -992,6 +992,10 @@ bool AssetGenerator::WriteWillModel(const RawGltfModel& rawModel, const std::fil
         createInfo.generateMipmaps = KTX_FALSE;
 
         ktx_error_code_e result = ktxTexture2_Create(&createInfo, KTX_TEXTURE_CREATE_ALLOC_STORAGE, &texture);
+        if (result) {
+            SPDLOG_ERROR("[ModelGenerator::WriteWillModel] Failed to create ktx texture for texture ", i);
+            return false;
+        }
 
         VK_CHECK(vkResetCommandBuffer(immediateParameters.immCommandBuffer, 0));
         VkCommandBufferBeginInfo cmdBeginInfo = VkHelpers::CommandBufferBeginInfo();

@@ -44,6 +44,8 @@ public:
 
     [[nodiscard]] bool IsReady() const;
 
+    void WaitForFence() const;
+
     [[nodiscard]] bool IsCommandBufferStarted() const { return bCommandBufferStarted; }
 
     VkCommandBuffer GetCommandBuffer() const { return commandBuffer; }

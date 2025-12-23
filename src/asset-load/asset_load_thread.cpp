@@ -7,8 +7,9 @@
 #include <enkiTS/src/TaskScheduler.h>
 #include <spdlog/spdlog.h>
 
-#include "will_model_loader.h"
-#include "render/model/will_model_asset.h"
+#include "asset_load_job.h"
+#include "will_model_load_job.h"
+#include "platform/paths.h"
 #include "render/vulkan/vk_context.h"
 #include "render/vulkan/vk_helpers.h"
 #include "render/vulkan/vk_utils.h"
@@ -32,17 +33,17 @@ void AssetLoadThread::Initialize(enki::TaskScheduler* _scheduler, Render::Vulkan
 
     VkCommandPoolCreateInfo poolInfo = Render::VkHelpers::CommandPoolCreateInfo(context->transferQueueFamily);
     VK_CHECK(vkCreateCommandPool(context->device, &poolInfo, nullptr, &commandPool));
-    VkCommandBufferAllocateInfo cmdInfo = Render::VkHelpers::CommandBufferAllocateInfo(ASSET_LOAD_ASYNC_COUNT, commandPool);
-    std::array<VkCommandBuffer, ASSET_LOAD_ASYNC_COUNT + 1> commandBuffers{};
+    VkCommandBufferAllocateInfo cmdInfo = Render::VkHelpers::CommandBufferAllocateInfo(WILL_MODEL_JOB_COUNT, commandPool);
+    std::array<VkCommandBuffer, WILL_MODEL_JOB_COUNT + 1> commandBuffers{};
     VK_CHECK(vkAllocateCommandBuffers(context->device, &cmdInfo, commandBuffers.data()));
 
-    for (int32_t i = 0; i < assetLoadSlots.size(); ++i) {
-        assetLoadSlots[i].uploadStaging->Initialize(context, commandBuffers[i]);
+    willModelJobs.reserve(WILL_MODEL_JOB_COUNT);
+    for (int32_t i = 0; i < WILL_MODEL_JOB_COUNT; ++i) {
+        auto willModelLoadJob = std::make_unique<WillModelLoadJob>(context, resourceManager, commandBuffers[i]);
+        willModelJobs.emplace_back(std::move(willModelLoadJob));
     }
 
-    VkCommandBuffer customCommandBuffer = commandBuffers[ASSET_LOAD_ASYNC_COUNT];
-
-    CreateDefaultResources(customCommandBuffer);
+    CreateDefaultResources();
 }
 
 void AssetLoadThread::Start()
@@ -93,190 +94,248 @@ bool AssetLoadThread::ResolveUnload(WillModelComplete& modelComplete)
 void AssetLoadThread::ThreadMain()
 {
     while (!bShouldExit.load(std::memory_order_acquire)) {
-        // Try to start
-        for (size_t i = 0; i < ASSET_LOAD_ASYNC_COUNT; ++i) {
-            if (!loaderActive[i]) {
-                WillModelLoadRequest loadRequest{};
-                if (modelLoadQueue.pop(loadRequest)) {
-                    assetLoadSlots[i].loadState = WillModelLoadState::Idle;
-                    assetLoadSlots[i].willModelHandle = loadRequest.willModelHandle;
-                    assetLoadSlots[i].model = loadRequest.model;
-                    loaderActive[i] = true;
+        // Model loading jobs
+        {
+            // Count free model load jobs (4 max)
+            size_t freeJobCount = 0;
+            for (size_t i = 0; i < willModelJobActive.size(); ++i) {
+                if (!willModelJobActive[i]) {
+                    freeJobCount++;
                 }
+            }
+
+            // Only pop as many requests as we have free jobs
+            for (size_t jobsStarted = 0; jobsStarted < freeJobCount; ++jobsStarted) {
+                WillModelLoadRequest loadRequest{};
+                if (!modelLoadQueue.pop(loadRequest)) {
+                    break;
+                }
+
+
+                int32_t slotIdx = -1;
+                for (size_t i = 0; i < 64; ++i) {
+                    if (!(activeSlotMask[i])) {
+                        slotIdx = i;
+                        break;
+                    }
+                }
+
+                // Find free job (guaranteed to exist)
+                int32_t freeJobIdx = -1;
+                for (size_t i = 0; i < willModelJobActive.size(); ++i) {
+                    if (!willModelJobActive[i]) {
+                        freeJobIdx = i;
+                        break;
+                    }
+                }
+
+                WillModelLoadJob* job = willModelJobs[freeJobIdx].get();
+                job->SetOutputModel(loadRequest.willModelHandle, loadRequest.model);
+                willModelJobActive[freeJobIdx] = true;
+
+                assetLoadSlots[slotIdx].job = job;
+                assetLoadSlots[slotIdx].loadState = AssetLoadState::Idle;
+                assetLoadSlots[slotIdx].type = AssetType::WillModel;
+                activeSlotMask[slotIdx] = true;
             }
         }
 
-        // Resolve existing currently loading stuff
-        for (size_t i = 0; i < ASSET_LOAD_ASYNC_COUNT; ++i) {
-            if (loaderActive[i]) {
-                WillModelLoader& assetLoad = assetLoadSlots[i];
-                switch (assetLoad.loadState) {
-                    case WillModelLoadState::Idle:
-                    {
-                        assetLoad.TaskExecute(scheduler, assetLoad.loadModelTask.get());
-                        assetLoad.loadState = WillModelLoadState::TaskExecuting;
-                        SPDLOG_INFO("Started task for {}", assetLoad.model->name);
+        for (size_t slotIdx = 0; slotIdx < 64; ++slotIdx) {
+            if (!activeSlotMask[slotIdx]) {
+                continue;
+            }
+
+            AssetLoadSlot& slot = assetLoadSlots[slotIdx];
+            AssetLoadJob* job = slot.job;
+
+            switch (slot.loadState) {
+                case AssetLoadState::Idle:
+                {
+                    job->TaskExecute(scheduler);
+                    slot.loadState = AssetLoadState::TaskExecuting;
+                }
+                break;
+
+                case AssetLoadState::TaskExecuting:
+                {
+                    TaskState res = job->TaskExecute(scheduler);
+                    if (res == TaskState::Failed) {
+                        slot.loadState = AssetLoadState::Failed;
                     }
-                    break;
-                    case WillModelLoadState::TaskExecuting:
-                    {
-                        WillModelLoader::TaskState res = assetLoad.TaskExecute(scheduler, assetLoad.loadModelTask.get());
-                        if (res == WillModelLoader::TaskState::Failed) {
-                            assetLoad.loadState = WillModelLoadState::Failed;
-                            SPDLOG_WARN("Failed task for {}", assetLoad.model->name);
+                    else if (res == TaskState::Complete) {
+                        bool preRes = job->PreThreadExecute();
+                        if (preRes) {
+                            slot.loadState = AssetLoadState::ThreadExecuting;
                         }
-                        else if (res == WillModelLoader::TaskState::Complete) {
-                            SPDLOG_INFO("Finished task for {}", assetLoad.model->name);
-                            const bool preRes = assetLoad.PreThreadExecute(context, resourceManager);
-                            if (preRes) {
-                                assetLoad.loadState = WillModelLoadState::ThreadExecuting;
-                                assetLoad.ThreadExecute(context, resourceManager);
-                                SPDLOG_INFO("Started thread execute for {}", assetLoad.model->name);
-                            }
-                            else {
-                                assetLoad.loadState = WillModelLoadState::Failed;
-                                SPDLOG_INFO("Failed pre thread execute for {}", assetLoad.model->name);
-                            }
+                        else {
+                            slot.loadState = AssetLoadState::Failed;
                         }
                     }
-                    break;
-                    case WillModelLoadState::ThreadExecuting:
-                    {
-                        WillModelLoader::ThreadState res = assetLoad.ThreadExecute(context, resourceManager);
-                        if (res == WillModelLoader::ThreadState::Complete) {
-                            const bool postRes = assetLoad.PostThreadExecute(context, resourceManager);
-                            if (postRes) {
-                                assetLoad.loadState = WillModelLoadState::Loaded;
-                                SPDLOG_INFO("Successfully loaded {}", assetLoad.model->name);
-                            }
-                            else {
-                                assetLoad.loadState = WillModelLoadState::Failed;
-                                SPDLOG_INFO("Failed post thread execute for {}", assetLoad.model->name);
-                            }
+                }
+                break;
+
+                case AssetLoadState::ThreadExecuting:
+                {
+                    ThreadState res = job->ThreadExecute();
+                    if (res == ThreadState::Complete) {
+                        bool postRes = job->PostThreadExecute();
+                        if (postRes) {
+                            slot.loadState = AssetLoadState::Loaded;
+                        }
+                        else {
+                            slot.loadState = AssetLoadState::Failed;
                         }
                     }
+                }
+                break;
+
+                default:
                     break;
+            }
+
+            if (slot.loadState == AssetLoadState::Loaded || slot.loadState == AssetLoadState::Failed) {
+                bool success = slot.loadState == AssetLoadState::Loaded;
+
+                switch (slot.type) {
+                    case AssetType::WillModel:
+                    {
+                        auto* modelJob = static_cast<WillModelLoadJob*>(job);
+                        modelCompleteLoadQueue.push({modelJob->willModelHandle, modelJob->outputModel, success});
+
+                        // Find job index for deactivation
+                        for (size_t i = 0; i < willModelJobs.size(); ++i) {
+                            if (willModelJobs[i].get() == job) {
+                                job->Reset();
+                                willModelJobActive[i] = false;
+                                break;
+                            }
+                        }
+                        break;
+                    }
+                    case AssetType::Texture:
+                    {
+                        // TODO: Add texture job check here when implemented
+
+                        // auto* texJob = static_cast<TextureLoadJob*>(job);
+                        // textureCompleteLoadQueue.push({texJob->handle, texJob->target, success});
+                        // job->Reset();
+                        // textureJobActive[i] = false;
+
+                        break;
+                    }
                     default:
                         break;
                 }
 
-                if (assetLoad.loadState == WillModelLoadState::Loaded || assetLoad.loadState == WillModelLoadState::Failed) {
-                    bool success = assetLoad.loadState == WillModelLoadState::Loaded;
-                    modelCompleteLoadQueue.push({assetLoad.willModelHandle, assetLoad.model, success});
-                    loaderActive[i] = false;
-
-                    assetLoad.Reset();
-                }
+                // Free slot
+                activeSlotMask[slotIdx] = false;
+                slot.job = nullptr;
+                slot.loadState = AssetLoadState::Unassigned;
+                slot.type = AssetType::None;
             }
-        }
-
-
-        // Resolve unloads
-        WillModelLoadRequest unloadRequest{};
-        if (modelUnloadQueue.pop(unloadRequest)) {
-            OffsetAllocator::Allocator* selectedAllocator;
-            if (unloadRequest.model->modelData.bIsSkinned) {
-                selectedAllocator = &resourceManager->skinnedVertexBufferAllocator;
-            }
-            else {
-                selectedAllocator = &resourceManager->vertexBufferAllocator;
-            }
-
-            selectedAllocator->free(unloadRequest.model->modelData.vertexAllocation);
-            resourceManager->meshletVertexBufferAllocator.free(unloadRequest.model->modelData.meshletVertexAllocation);
-            resourceManager->meshletTriangleBufferAllocator.free(unloadRequest.model->modelData.meshletTriangleAllocation);
-            resourceManager->meshletBufferAllocator.free(unloadRequest.model->modelData.meshletAllocation);
-            resourceManager->primitiveBufferAllocator.free(unloadRequest.model->modelData.primitiveAllocation);
-            unloadRequest.model->modelData.vertexAllocation.metadata = OffsetAllocator::Allocation::NO_SPACE;
-            unloadRequest.model->modelData.meshletVertexAllocation.metadata = OffsetAllocator::Allocation::NO_SPACE;
-            unloadRequest.model->modelData.meshletTriangleAllocation.metadata = OffsetAllocator::Allocation::NO_SPACE;
-            unloadRequest.model->modelData.meshletAllocation.metadata = OffsetAllocator::Allocation::NO_SPACE;
-            unloadRequest.model->modelData.primitiveAllocation.metadata = OffsetAllocator::Allocation::NO_SPACE;
-
-            modelCompleteUnloadQueue.push({unloadRequest.willModelHandle, unloadRequest.model, true});
         }
     }
 }
 
-void AssetLoadThread::CreateDefaultResources(VkCommandBuffer cmd)
+void AssetLoadThread::CreateDefaultResources()
 {
-    /*const uint32_t white = packUnorm4x8(glm::vec4(1, 1, 1, 1));
-    const uint32_t black = glm::packUnorm4x8(glm::vec4(0, 0, 0, 0));
-    const uint32_t magenta = glm::packUnorm4x8(glm::vec4(1, 0, 1, 1));
-    std::array<uint32_t, 16 * 16> pixels{}; //for 16x16 checkerboard texture
-    for (int x = 0; x < 16; x++) {
-        for (int y = 0; y < 16; y++) {
-            pixels[y * 16 + x] = ((x % 2) ^ (y % 2)) ? magenta : black;
+    /*const auto testTexturePath = Platform::GetAssetPath() / "textures/error.ktx2";
+    const uint32_t mipLevels = 1;
+
+    ktxTexture2* texture;
+    ktx_error_code_e result = ktxTexture2_CreateFromNamedFile(testTexturePath.string().c_str(), KTX_TEXTURE_CREATE_NO_FLAGS, &texture);
+    assert(result == KTX_SUCCESS && "Failed to load test texture");
+
+    auto& uploadStaging = assetLoadSlots[0].uploadStaging;
+
+    ktx_size_t dataSize = texture->dataSize;
+    OffsetAllocator::Allocation allocation = uploadStaging->GetStagingAllocator().allocate(dataSize);
+    assert(allocation.metadata != OffsetAllocator::Allocation::NO_SPACE);
+
+    VkExtent3D extent;
+    extent.width = texture->baseWidth;
+    extent.height = texture->baseHeight;
+    extent.depth = texture->baseDepth;
+
+    if (ktxTexture2_NeedsTranscoding(texture)) {
+        // const ktx_transcode_fmt_e targetFormat = KTX_TTF_BC7_RGBA;
+        const ktx_transcode_fmt_e targetFormat = KTX_TTF_RGBA32;
+        result = ktxTexture2_TranscodeBasis(texture, targetFormat, 0);
+        if (result != KTX_SUCCESS) {
+            SPDLOG_ERROR("Failed to transcode texture");
+            ktxTexture2_Destroy(texture);
+            return;
         }
     }
 
-    UploadStagingHandle uploadStagingHandle = GetAvailableStaging();
-    UploadStaging* currentUploadStaging = &uploadStagingDatas[uploadStagingHandle.index];
-    const VkCommandBufferBeginInfo cmdBeginInfo = Render::VkHelpers::CommandBufferBeginInfo();
-    VK_CHECK(vkBeginCommandBuffer(cmd, &cmdBeginInfo));
+    VkFormat imageFormat = ktxTexture2_GetVkFormat(texture);
+    VkImageCreateInfo imageCreateInfo = Render::VkHelpers::ImageCreateInfo(imageFormat, extent, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+    imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
+    imageCreateInfo.mipLevels = mipLevels;
+    imageCreateInfo.arrayLayers = texture->numLayers;
+    imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    Render::AllocatedImage allocatedImage = Render::AllocatedImage::CreateAllocatedImage(context, imageCreateInfo);
 
-    // White texture
-    constexpr size_t whiteSize = 4;
-    constexpr VkExtent3D whiteExtent = {1, 1, 1};
-    OffsetAllocator::Allocation whiteImageAllocation = currentUploadStaging->GetStagingAllocator().allocate(whiteSize);
-    char* whiteBufferOffset = static_cast<char*>(currentUploadStaging->GetStagingBuffer().allocationInfo.pMappedData) + whiteImageAllocation.offset;
-    memcpy(whiteBufferOffset, &white, whiteSize);
-    VkImageCreateInfo whiteImageCreateInfo = Render::VkHelpers::ImageCreateInfo(
-        VK_FORMAT_R8G8B8A8_UNORM, whiteExtent,
-        VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
-    whiteImage = Renderer::VkResources::CreateAllocatedImage(context, whiteImageCreateInfo);
-    UploadTexture(context, newModel, currentUploadStaging, whiteImage, whiteExtent, whiteImageAllocation.offset);
-    VkImageViewCreateInfo whiteImageViewCreateInfo = Renderer::VkHelpers::ImageViewCreateInfo(whiteImage.handle, whiteImage.format, VK_IMAGE_ASPECT_COLOR_BIT);
-    whiteImageView = Renderer::VkResources::CreateImageView(context, whiteImageViewCreateInfo);
-    whiteImageDescriptorIndex = resourceManager->bindlessResourcesDescriptorBuffer.AllocateTexture({
-        .imageView = whiteImageView.handle,
+    VkImageViewCreateInfo viewInfo = Render::VkHelpers::ImageViewCreateInfo(allocatedImage.handle, allocatedImage.format, VK_IMAGE_ASPECT_COLOR_BIT);
+    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    viewInfo.subresourceRange.layerCount = texture->numLayers;
+    viewInfo.subresourceRange.levelCount = mipLevels;
+    Render::ImageView imageView = Render::ImageView::CreateImageView(context, viewInfo);
+
+    uploadStaging->StartCommandBuffer();
+    char* bufferOffset = static_cast<char*>(uploadStaging->GetStagingBuffer().allocationInfo.pMappedData) + allocation.offset;
+    memcpy(bufferOffset, texture->pData, dataSize);
+
+    size_t mipOffset;
+    ktxTexture_GetImageOffset(ktxTexture(texture), 0, 0, 0, &mipOffset);
+
+    VkBufferImageCopy region{};
+    region.bufferOffset = allocation.offset + mipOffset;
+    region.bufferRowLength = 0;
+    region.bufferImageHeight = 0;
+    region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    region.imageSubresource.mipLevel = 0;
+    region.imageSubresource.baseArrayLayer = 0;
+    region.imageSubresource.layerCount = texture->numLayers;
+    region.imageOffset = {0, 0, 0};
+    region.imageExtent = {texture->baseWidth, texture->baseHeight, texture->baseDepth};
+
+    VkImageMemoryBarrier2 barrier = Render::VkHelpers::ImageMemoryBarrier(
+        allocatedImage.handle,
+        Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, mipLevels, 0, texture->numLayers),
+        VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_UNDEFINED,
+        VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
+    );
+    VkDependencyInfo depInfo{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
+    depInfo.imageMemoryBarrierCount = 1;
+    depInfo.pImageMemoryBarriers = &barrier;
+    vkCmdPipelineBarrier2(uploadStaging->GetCommandBuffer(), &depInfo);
+
+    vkCmdCopyBufferToImage(uploadStaging->GetCommandBuffer(), uploadStaging->GetStagingBuffer().handle, allocatedImage.handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+    barrier = Render::VkHelpers::ImageMemoryBarrier(
+        allocatedImage.handle,
+        Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, mipLevels, 0, texture->numLayers),
+        VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    );
+    barrier.srcQueueFamilyIndex = context->transferQueueFamily;
+    barrier.dstQueueFamilyIndex = context->graphicsQueueFamily;
+    vkCmdPipelineBarrier2(uploadStaging->GetCommandBuffer(), &depInfo);
+
+    // model->imageAcquireOps.push_back(Render::VkHelpers::FromVkBarrier(barrier));
+    // model->modelData.images.push_back(std::move(allocatedImage));
+    // model->modelData.imageViews.push_back(std::move(imageView));
+
+    uploadStaging->SubmitCommandBuffer();
+    uploadStaging->WaitForFence();
+
+    ktxTexture2_Destroy(texture);
+
+    auto index = resourceManager->bindlessSamplerTextureDescriptorBuffer.AllocateTexture({
+        .imageView = imageView.handle,
         .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
     });
-    assert(whiteImageDescriptorIndex == 0);
-
-    // Error texture (magenta/black checkerboard)
-    constexpr size_t errorSize = sizeof(pixels);
-    constexpr VkExtent3D errorExtent = {16, 16, 1};
-    OffsetAllocator::Allocation errorImageAllocation = currentUploadStaging->stagingAllocator.allocate(errorSize);
-    char* errorBufferOffset = static_cast<char*>(currentUploadStaging->stagingBuffer.allocationInfo.pMappedData) + errorImageAllocation.offset;
-    memcpy(errorBufferOffset, pixels.data(), errorSize);
-    VkImageCreateInfo errorImageCreateInfo = Renderer::VkHelpers::ImageCreateInfo(
-        VK_FORMAT_R8G8B8A8_UNORM, errorExtent,
-        VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
-    errorImage = Renderer::VkResources::CreateAllocatedImage(context, errorImageCreateInfo);
-    UploadTexture(context, newModel, currentUploadStaging, errorImage, errorExtent, errorImageAllocation.offset);
-    VkImageViewCreateInfo errorImageViewCreateInfo = Renderer::VkHelpers::ImageViewCreateInfo(errorImage.handle, errorImage.format, VK_IMAGE_ASPECT_COLOR_BIT);
-    errorImageView = Renderer::VkResources::CreateImageView(context, errorImageViewCreateInfo);
-    errorImageDescriptorIndex = resourceManager->bindlessResourcesDescriptorBuffer.AllocateTexture({
-        .imageView = errorImageView.handle,
-        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-    });
-    assert(errorImageDescriptorIndex == 1);
-
-    VkSamplerCreateInfo samplerInfo = {
-        .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-        .pNext = nullptr,
-        .magFilter = VK_FILTER_LINEAR,
-        .minFilter = VK_FILTER_LINEAR,
-        .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
-        .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-        .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-        .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-        .mipLodBias = 0.0f,
-        .anisotropyEnable = VK_TRUE,
-        .maxAnisotropy = 16.0f,
-        .compareEnable = VK_FALSE,
-        .compareOp = VK_COMPARE_OP_ALWAYS,
-        .minLod = 0.0f,
-        .maxLod = VK_LOD_CLAMP_NONE,
-        .borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK,
-        .unnormalizedCoordinates = VK_FALSE
-    };
-    defaultSamplerLinear = Renderer::VkResources::CreateSampler(context, samplerInfo);
-    samplerLinearDescriptorIndex = resourceManager->bindlessResourcesDescriptorBuffer.AllocateSampler(defaultSamplerLinear.handle);
-    assert(samplerLinearDescriptorIndex == 0);
-
-    StartUploadStaging(*currentUploadStaging);
-    modelsInProgress.push_back({defaultResourcesHandle});*/
+    assert(index.index == 0);*/
 }
 } // AssetLoad

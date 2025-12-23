@@ -1,64 +1,33 @@
 //
-// Created by William on 2025-12-19.
+// Created by William on 2025-12-23.
 //
 
-#include "will_model_loader.h"
+#include "will_model_load_job.h"
 
-#include <fstream>
-
-#include <ktxvulkan.h>
-#include <glm/glm.hpp>
-
+#include "ktxvulkan.h"
 #include "render/model/model_serialization.h"
 #include "render/model/will_model_asset.h"
-#include "render/vulkan/vk_utils.h"
 
 namespace AssetLoad
 {
-void LoadModelTask::ExecuteRange(enki::TaskSetPartition range, uint32_t threadnum)
-{
-    if (modelLoader) {
-        modelLoader->TaskImplementation();
-    }
-}
+WillModelLoadJob::WillModelLoadJob() = default;
 
-WillModelLoader::WillModelLoader()
+WillModelLoadJob::WillModelLoadJob(Render::VulkanContext* context, Render::ResourceManager* resourceManager, VkCommandBuffer _commandBuffer)
+    : context(context), resourceManager(resourceManager)
 {
+    task = std::make_unique<LoadModelTask>();
     uploadStaging = std::make_unique<UploadStaging>();
-    loadModelTask = std::make_unique<LoadModelTask>();
+    uploadStaging->Initialize(context, _commandBuffer);
 }
 
-WillModelLoader::~WillModelLoader() = default;
+WillModelLoadJob::~WillModelLoadJob() {}
 
-void WillModelLoader::Reset()
-{
-    rawData.Reset();
-    loadState = WillModelLoadState::Idle;
-    taskState = TaskState::NotStarted;
-    willModelHandle = Engine::WillModelHandle::INVALID;
-    model = nullptr;
-    pendingSamplerInfos.clear();
-    for (ktxTexture2* texture : pendingTextures) {
-        ktxTexture2_Destroy(texture);
-    }
-    pendingTextureHead = 0;
-    pendingVerticesHead = 0;
-    pendingMeshletVerticesHead = 0;
-    pendingMeshletTrianglesHead = 0;
-    pendingMeshletsHead = 0;
-    pendingPrimitivesHead = 0;
-    pendingBufferBarrier = 0;
-    pendingTextures.clear();
-    convertedVertices.clear();
-    packedTriangles.clear();
-}
-
-WillModelLoader::TaskState WillModelLoader::TaskExecute(enki::TaskScheduler* scheduler, LoadModelTask* task)
+TaskState WillModelLoadJob::TaskExecute(enki::TaskScheduler* scheduler)
 {
     if (taskState == TaskState::NotStarted) {
-        task->modelLoader = this;
+        task->loadJob = this;
         taskState = TaskState::InProgress;
-        scheduler->AddTaskSetToPipe(task);
+        scheduler->AddTaskSetToPipe(task.get());
     }
 
     if (task->GetIsComplete()) {
@@ -68,134 +37,12 @@ WillModelLoader::TaskState WillModelLoader::TaskExecute(enki::TaskScheduler* sch
     return TaskState::InProgress;
 }
 
-void WillModelLoader::TaskImplementation()
+bool WillModelLoadJob::PreThreadExecute()
 {
-    // todo: tracy profile this step
-    if (!std::filesystem::exists(model->source)) {
-        SPDLOG_ERROR("Failed to find path to willmodel - {}", model->name);
-        taskState = TaskState::Failed;
-        return;
+    if (!outputModel) {
+        return false;
     }
 
-    Render::ModelReader reader = Render::ModelReader(model->source);
-
-    if (!reader.GetSuccessfullyLoaded()) {
-        SPDLOG_ERROR("Failed to load willmodel - {}", model->name);
-        taskState = TaskState::Failed;
-        return;
-    }
-
-    std::vector<uint8_t> modelBinData = reader.ReadFile("model.bin");
-
-    size_t offset = 0;
-    const auto* header = reinterpret_cast<Render::ModelBinaryHeader*>(modelBinData.data());
-    offset += sizeof(Render::ModelBinaryHeader);
-
-    auto readArray = [&]<typename T>(std::vector<T>& vec, uint32_t count) {
-        vec.resize(count);
-        if (count > 0) {
-            std::memcpy(vec.data(), modelBinData.data() + offset, count * sizeof(T));
-            offset += count * sizeof(T);
-        }
-    };
-
-
-    const uint8_t* dataPtr = modelBinData.data() + offset;
-
-    rawData.bIsSkeletalModel = header->bIsSkeletalModel;
-    readArray(rawData.vertices, header->vertexCount);
-    readArray(rawData.meshletVertices, header->meshletVertexCount);
-    readArray(rawData.meshletTriangles, header->meshletTriangleCount);
-    readArray(rawData.meshlets, header->meshletCount);
-    readArray(rawData.primitives, header->primitiveCount);
-    readArray(rawData.materials, header->materialCount);
-
-    dataPtr = modelBinData.data() + offset;
-    rawData.allMeshes.resize(header->meshCount);
-    for (uint32_t i = 0; i < header->meshCount; i++) {
-        ReadMeshInformation(dataPtr, rawData.allMeshes[i]);
-    }
-
-    rawData.nodes.resize(header->nodeCount);
-    for (uint32_t i = 0; i < header->nodeCount; i++) {
-        ReadNode(dataPtr, rawData.nodes[i]);
-    }
-
-    rawData.animations.resize(header->animationCount);
-    for (uint32_t i = 0; i < header->animationCount; i++) {
-        ReadAnimation(dataPtr, rawData.animations[i]);
-    }
-
-    offset = dataPtr - modelBinData.data();
-    readArray(rawData.inverseBindMatrices, header->inverseBindMatrixCount);
-
-    readArray(pendingSamplerInfos, header->samplerCount);
-    std::vector<uint32_t> preferredImageFormats;
-    readArray(preferredImageFormats, header->textureCount);
-
-    for (int i = 0; i < header->textureCount; ++i) {
-        std::string textureName = fmt::format("textures/texture_{}.ktx2", i);
-        if (!reader.HasFile(textureName)) {
-            SPDLOG_ERROR("[WillModelLoader::TaskImplementation] Failed to find texture {}", textureName);
-            pendingTextures.push_back(nullptr);
-            continue;
-        }
-
-        std::vector<uint8_t> ktxData = reader.ReadFile(textureName);
-        ktxTexture2* loadedTexture = nullptr;
-        ktx_error_code_e result = ktxTexture2_CreateFromMemory(ktxData.data(), ktxData.size(), KTX_TEXTURE_CREATE_NO_FLAGS, &loadedTexture);
-
-        if (ktxTexture2_NeedsTranscoding(loadedTexture)) {
-            const ktx_transcode_fmt_e targetFormat = static_cast<ktx_transcode_fmt_e>(preferredImageFormats[i]);
-            result = ktxTexture2_TranscodeBasis(loadedTexture, targetFormat, 0);
-            if (result != KTX_SUCCESS) {
-                SPDLOG_ERROR("Failed to transcode texture {}", textureName);
-                pendingTextures.push_back(nullptr);
-                ktxTexture2_Destroy(loadedTexture);
-                continue;
-            }
-        }
-
-        // Size check
-        ktx_size_t allocSize = loadedTexture->dataSize;
-        if (allocSize >= ASSET_LOAD_STAGING_BUFFER_SIZE) {
-            SPDLOG_ERROR("Texture too big to fit in the staging buffer for texture {}", textureName);
-            pendingTextures.push_back(nullptr);
-            ktxTexture2_Destroy(loadedTexture);
-            continue;
-        }
-
-        // Texture dimension and array check
-        if (loadedTexture->numDimensions != 2) {
-            SPDLOG_ERROR("Engine does not support non 2D image textures {}", textureName);
-            pendingTextures.push_back(nullptr);
-            ktxTexture2_Destroy(loadedTexture);
-            continue;
-        }
-
-        if (loadedTexture->isArray) {
-            SPDLOG_ERROR("Engine does not support texture arrays {}", textureName);
-            pendingTextures.push_back(nullptr);
-            ktxTexture2_Destroy(loadedTexture);
-            continue;
-        }
-
-        if (loadedTexture->isCubemap) {
-            SPDLOG_ERROR("Texture does not support cubemaps {}", textureName);
-            pendingTextures.push_back(nullptr);
-            ktxTexture2_Destroy(loadedTexture);
-            continue;
-        }
-
-        pendingTextures.push_back(loadedTexture);
-    }
-
-    rawData.name = "Loaded Model";
-    taskState = TaskState::Complete;
-}
-
-bool WillModelLoader::PreThreadExecute(Render::VulkanContext* context, Render::ResourceManager* resourceManager)
-{
     OffsetAllocator::Allocator* selectedAllocator;
     size_t sizeVertices;
     if (rawData.bIsSkeletalModel) {
@@ -207,54 +54,54 @@ bool WillModelLoader::PreThreadExecute(Render::VulkanContext* context, Render::R
         selectedAllocator = &resourceManager->vertexBufferAllocator;
     }
 
-    model->modelData.bIsSkinned = rawData.bIsSkeletalModel;
-    model->modelData.vertexAllocation = selectedAllocator->allocate(sizeVertices);
-    if (model->modelData.vertexAllocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
-        SPDLOG_ERROR("[WillModelLoader::PreThreadExecute] Not enough space in mega vertex buffer to upload {}", model->name);
+    outputModel->modelData.bIsSkinned = rawData.bIsSkeletalModel;
+    outputModel->modelData.vertexAllocation = selectedAllocator->allocate(sizeVertices);
+    if (outputModel->modelData.vertexAllocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
+        SPDLOG_ERROR("[WillModelLoader::PreThreadExecute] Not enough space in mega vertex buffer to upload {}", outputModel->name);
         return false;
     }
 
     size_t sizeMeshletVertices = rawData.meshletVertices.size() * sizeof(uint32_t);
-    model->modelData.meshletVertexAllocation = resourceManager->meshletVertexBufferAllocator.allocate(sizeMeshletVertices);
-    if (model->modelData.meshletVertexAllocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
-        selectedAllocator->free(model->modelData.vertexAllocation);
-        SPDLOG_ERROR("[WillModelLoader::PreThreadExecute] Not enough space in mega meshlet vertex buffer to upload {}", model->name);
+    outputModel->modelData.meshletVertexAllocation = resourceManager->meshletVertexBufferAllocator.allocate(sizeMeshletVertices);
+    if (outputModel->modelData.meshletVertexAllocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
+        selectedAllocator->free(outputModel->modelData.vertexAllocation);
+        SPDLOG_ERROR("[WillModelLoader::PreThreadExecute] Not enough space in mega meshlet vertex buffer to upload {}", outputModel->name);
         return false;
     }
 
     size_t sizeMeshletTriangles = rawData.meshletTriangles.size() / 3 * sizeof(uint32_t);
-    model->modelData.meshletTriangleAllocation = resourceManager->meshletTriangleBufferAllocator.allocate(sizeMeshletTriangles);
-    if (model->modelData.meshletTriangleAllocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
-        selectedAllocator->free(model->modelData.vertexAllocation);
-        resourceManager->meshletVertexBufferAllocator.free(model->modelData.meshletVertexAllocation);
-        SPDLOG_ERROR("[WillModelLoader::PreThreadExecute] Not enough space in mega meshlet triangle buffer to upload {}", model->name);
+    outputModel->modelData.meshletTriangleAllocation = resourceManager->meshletTriangleBufferAllocator.allocate(sizeMeshletTriangles);
+    if (outputModel->modelData.meshletTriangleAllocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
+        selectedAllocator->free(outputModel->modelData.vertexAllocation);
+        resourceManager->meshletVertexBufferAllocator.free(outputModel->modelData.meshletVertexAllocation);
+        SPDLOG_ERROR("[WillModelLoader::PreThreadExecute] Not enough space in mega meshlet triangle buffer to upload {}", outputModel->name);
         return false;
     }
 
     size_t sizeMeshlets = rawData.meshlets.size() * sizeof(Meshlet);
-    model->modelData.meshletAllocation = resourceManager->meshletBufferAllocator.allocate(sizeMeshlets);
-    if (model->modelData.meshletAllocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
-        selectedAllocator->free(model->modelData.vertexAllocation);
-        resourceManager->meshletVertexBufferAllocator.free(model->modelData.meshletVertexAllocation);
-        resourceManager->meshletTriangleBufferAllocator.free(model->modelData.meshletTriangleAllocation);
-        SPDLOG_ERROR("[WillModelLoader::PreThreadExecute] Not enough space in mega meshlet buffer to upload {}", model->name);
+    outputModel->modelData.meshletAllocation = resourceManager->meshletBufferAllocator.allocate(sizeMeshlets);
+    if (outputModel->modelData.meshletAllocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
+        selectedAllocator->free(outputModel->modelData.vertexAllocation);
+        resourceManager->meshletVertexBufferAllocator.free(outputModel->modelData.meshletVertexAllocation);
+        resourceManager->meshletTriangleBufferAllocator.free(outputModel->modelData.meshletTriangleAllocation);
+        SPDLOG_ERROR("[WillModelLoader::PreThreadExecute] Not enough space in mega meshlet buffer to upload {}", outputModel->name);
         return false;
     }
 
     size_t sizePrimitives = rawData.primitives.size() * sizeof(MeshletPrimitive);
-    model->modelData.primitiveAllocation = resourceManager->primitiveBufferAllocator.allocate(sizePrimitives);
-    if (model->modelData.primitiveAllocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
-        selectedAllocator->free(model->modelData.vertexAllocation);
-        resourceManager->meshletVertexBufferAllocator.free(model->modelData.meshletVertexAllocation);
-        resourceManager->meshletTriangleBufferAllocator.free(model->modelData.meshletTriangleAllocation);
-        resourceManager->meshletBufferAllocator.free(model->modelData.meshletAllocation);
-        SPDLOG_ERROR("[WillModelLoader::PreThreadExecute] Not enough space in mega primitive buffer to upload {}", model->name);
+    outputModel->modelData.primitiveAllocation = resourceManager->primitiveBufferAllocator.allocate(sizePrimitives);
+    if (outputModel->modelData.primitiveAllocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
+        selectedAllocator->free(outputModel->modelData.vertexAllocation);
+        resourceManager->meshletVertexBufferAllocator.free(outputModel->modelData.meshletVertexAllocation);
+        resourceManager->meshletTriangleBufferAllocator.free(outputModel->modelData.meshletTriangleAllocation);
+        resourceManager->meshletBufferAllocator.free(outputModel->modelData.meshletAllocation);
+        SPDLOG_ERROR("[WillModelLoader::PreThreadExecute] Not enough space in mega primitive buffer to upload {}", outputModel->name);
         return false;
     }
 
-    uint32_t vertexOffset = model->modelData.vertexAllocation.offset / (rawData.bIsSkeletalModel ? sizeof(SkinnedVertex) : sizeof(Vertex));
-    uint32_t meshletVerticesOffset = model->modelData.meshletVertexAllocation.offset / sizeof(uint32_t);
-    uint32_t meshletTriangleOffset = model->modelData.meshletTriangleAllocation.offset / sizeof(uint32_t);
+    uint32_t vertexOffset = outputModel->modelData.vertexAllocation.offset / (rawData.bIsSkeletalModel ? sizeof(SkinnedVertex) : sizeof(Vertex));
+    uint32_t meshletVerticesOffset = outputModel->modelData.meshletVertexAllocation.offset / sizeof(uint32_t);
+    uint32_t meshletTriangleOffset = outputModel->modelData.meshletTriangleAllocation.offset / sizeof(uint32_t);
 
     for (Meshlet& meshlet : rawData.meshlets) {
         meshlet.vertexOffset += vertexOffset;
@@ -262,22 +109,22 @@ bool WillModelLoader::PreThreadExecute(Render::VulkanContext* context, Render::R
         meshlet.meshletTriangleOffset = meshlet.meshletTriangleOffset / 3 + meshletTriangleOffset;
     }
 
-    uint32_t meshletOffset = model->modelData.meshletAllocation.offset / sizeof(Meshlet);
+    uint32_t meshletOffset = outputModel->modelData.meshletAllocation.offset / sizeof(Meshlet);
     for (auto& primitive : rawData.primitives) {
         primitive.meshletOffset += meshletOffset;
     }
 
-    uint32_t primitiveOffsetCount = model->modelData.primitiveAllocation.offset / sizeof(MeshletPrimitive);
+    uint32_t primitiveOffsetCount = outputModel->modelData.primitiveAllocation.offset / sizeof(MeshletPrimitive);
     for (auto& mesh : rawData.allMeshes) {
         for (auto& primitiveIndex : mesh.primitiveIndices) {
             primitiveIndex.index += primitiveOffsetCount;
         }
     }
 
-    model->modelData.meshes = std::move(rawData.allMeshes);
-    model->modelData.inverseBindMatrices = std::move(rawData.inverseBindMatrices);
-    model->modelData.animations = std::move(rawData.animations);
-    model->modelData.materials = std::move(rawData.materials);
+    outputModel->modelData.meshes = std::move(rawData.allMeshes);
+    outputModel->modelData.inverseBindMatrices = std::move(rawData.inverseBindMatrices);
+    outputModel->modelData.animations = std::move(rawData.animations);
+    outputModel->modelData.materials = std::move(rawData.materials);
 
     // Convert SkinnedVertex to Vertex
     convertedVertices.reserve(rawData.vertices.size());
@@ -306,7 +153,7 @@ bool WillModelLoader::PreThreadExecute(Render::VulkanContext* context, Render::R
     return true;
 }
 
-WillModelLoader::ThreadState WillModelLoader::ThreadExecute(Render::VulkanContext* context, Render::ResourceManager* resourceManager)
+ThreadState WillModelLoadJob::ThreadExecute()
 {
     OffsetAllocator::Allocator& stagingAllocator = uploadStaging->GetStagingAllocator();
     Render::AllocatedBuffer& stagingBuffer = uploadStaging->GetStagingBuffer();
@@ -322,8 +169,8 @@ WillModelLoader::ThreadState WillModelLoader::ThreadExecute(Render::VulkanContex
             ktxTexture2* currentTexture = pendingTextures[pendingTextureHead];
 
             if (currentTexture == nullptr) {
-                model->modelData.images.emplace_back();
-                model->modelData.imageViews.emplace_back();
+                outputModel->modelData.images.emplace_back();
+                outputModel->modelData.imageViews.emplace_back();
                 continue;
             }
 
@@ -410,10 +257,10 @@ WillModelLoader::ThreadState WillModelLoader::ThreadExecute(Render::VulkanContex
             vkCmdPipelineBarrier2(uploadStaging->GetCommandBuffer(), &depInfo);
 
             // Image acquires that needs to be executed by render thread
-            model->imageAcquireOps.push_back(Render::VkHelpers::FromVkBarrier(barrier));
+            outputModel->imageAcquireOps.push_back(Render::VkHelpers::FromVkBarrier(barrier));
 
-            model->modelData.images.push_back(std::move(allocatedImage));
-            model->modelData.imageViews.push_back(std::move(imageView));
+            outputModel->modelData.images.push_back(std::move(allocatedImage));
+            outputModel->modelData.imageViews.push_back(std::move(imageView));
             ktxTexture2_Destroy(currentTexture);
         }
     }
@@ -495,7 +342,7 @@ WillModelLoader::ThreadState WillModelLoader::ThreadExecute(Render::VulkanContex
                                  vertexSize,
                                  vertexDataPtr,
                                  targetVertexBuffer,
-                                 model->modelData.vertexAllocation.offset)
+                                 outputModel->modelData.vertexAllocation.offset)
         ) {
             return ThreadState::InProgress;
         }
@@ -505,7 +352,7 @@ WillModelLoader::ThreadState WillModelLoader::ThreadExecute(Render::VulkanContex
                                  sizeof(uint32_t),
                                  rawData.meshletVertices.data(),
                                  resourceManager->megaMeshletVerticesBuffer.handle,
-                                 model->modelData.meshletVertexAllocation.offset)
+                                 outputModel->modelData.meshletVertexAllocation.offset)
         ) {
             return ThreadState::InProgress;
         }
@@ -515,7 +362,7 @@ WillModelLoader::ThreadState WillModelLoader::ThreadExecute(Render::VulkanContex
                                  sizeof(uint32_t),
                                  packedTriangles.data(),
                                  resourceManager->megaMeshletTrianglesBuffer.handle,
-                                 model->modelData.meshletTriangleAllocation.offset)
+                                 outputModel->modelData.meshletTriangleAllocation.offset)
         ) {
             return ThreadState::InProgress;
         }
@@ -525,7 +372,7 @@ WillModelLoader::ThreadState WillModelLoader::ThreadExecute(Render::VulkanContex
                                  sizeof(Meshlet),
                                  rawData.meshlets.data(),
                                  resourceManager->megaMeshletBuffer.handle,
-                                 model->modelData.meshletAllocation.offset)
+                                 outputModel->modelData.meshletAllocation.offset)
         ) {
             return ThreadState::InProgress;
         }
@@ -535,7 +382,7 @@ WillModelLoader::ThreadState WillModelLoader::ThreadExecute(Render::VulkanContex
                                  sizeof(MeshletPrimitive),
                                  rawData.primitives.data(),
                                  resourceManager->primitiveBuffer.handle,
-                                 model->modelData.primitiveAllocation.offset)
+                                 outputModel->modelData.primitiveAllocation.offset)
         ) {
             return ThreadState::InProgress;
         }
@@ -565,31 +412,31 @@ WillModelLoader::ThreadState WillModelLoader::ThreadExecute(Render::VulkanContex
 
             releaseBarriers.push_back(createBufferBarrier(
                 targetVertexBuffer,
-                model->modelData.vertexAllocation.offset,
+                outputModel->modelData.vertexAllocation.offset,
                 rawData.vertices.size() * vertexSize
             ));
 
             releaseBarriers.push_back(createBufferBarrier(
                 resourceManager->megaMeshletVerticesBuffer.handle,
-                model->modelData.meshletVertexAllocation.offset,
+                outputModel->modelData.meshletVertexAllocation.offset,
                 rawData.meshletVertices.size() * sizeof(uint32_t)
             ));
 
             releaseBarriers.push_back(createBufferBarrier(
                 resourceManager->megaMeshletTrianglesBuffer.handle,
-                model->modelData.meshletTriangleAllocation.offset,
+                outputModel->modelData.meshletTriangleAllocation.offset,
                 rawData.meshletTriangles.size() * sizeof(uint32_t)
             ));
 
             releaseBarriers.push_back(createBufferBarrier(
                 resourceManager->megaMeshletBuffer.handle,
-                model->modelData.meshletAllocation.offset,
+                outputModel->modelData.meshletAllocation.offset,
                 rawData.meshlets.size() * sizeof(Meshlet)
             ));
 
             releaseBarriers.push_back(createBufferBarrier(
                 resourceManager->primitiveBuffer.handle,
-                model->modelData.primitiveAllocation.offset,
+                outputModel->modelData.primitiveAllocation.offset,
                 rawData.primitives.size() * sizeof(MeshletPrimitive)
             ));
 
@@ -599,7 +446,7 @@ WillModelLoader::ThreadState WillModelLoader::ThreadExecute(Render::VulkanContex
             vkCmdPipelineBarrier2(uploadStaging->GetCommandBuffer(), &depInfo);
 
             for (auto& barrier : releaseBarriers) {
-                model->bufferAcquireOps.push_back(Render::VkHelpers::FromVkBarrier(barrier));
+                outputModel->bufferAcquireOps.push_back(Render::VkHelpers::FromVkBarrier(barrier));
             }
 
             pendingBufferBarrier = 1;
@@ -615,18 +462,9 @@ WillModelLoader::ThreadState WillModelLoader::ThreadExecute(Render::VulkanContex
     return ThreadState::Complete;
 }
 
-bool WillModelLoader::PostThreadExecute(Render::VulkanContext* context, Render::ResourceManager* resourceManager)
+bool WillModelLoadJob::PostThreadExecute()
 {
-    // Textures
     pendingTextures.clear();
-
-    // Samplers (doesnt need to be created here, but whatever)
-    if (!pendingSamplerInfos.empty()) {
-        for (VkSamplerCreateInfo& sampler : pendingSamplerInfos) {
-            model->modelData.samplers.push_back(Render::Sampler::CreateSampler(context, sampler));
-        }
-        pendingSamplerInfos.clear();
-    }
 
     // Materials
     {
@@ -638,14 +476,14 @@ bool WillModelLoader::PostThreadExecute(Render::VulkanContext* context, Render::
             indices.w = indices.w >= 0 ? map[indices.w].index : 0;
         };
 
-        model->modelData.samplerIndexToDescriptorBufferIndexMap.resize(model->modelData.samplers.size());
-        for (int32_t i = 0; i < model->modelData.samplers.size(); ++i) {
-            model->modelData.samplerIndexToDescriptorBufferIndexMap[i] = resourceManager->bindlessSamplerTextureDescriptorBuffer.AllocateSampler(model->modelData.samplers[i].handle);
+        outputModel->modelData.samplerIndexToDescriptorBufferIndexMap.resize(outputModel->modelData.samplers.size());
+        for (int32_t i = 0; i < outputModel->modelData.samplers.size(); ++i) {
+            outputModel->modelData.samplerIndexToDescriptorBufferIndexMap[i] = resourceManager->bindlessSamplerTextureDescriptorBuffer.AllocateSampler(outputModel->modelData.samplers[i].handle);
         }
 
-        for (MaterialProperties& material : rawData.materials) {
-            remapSamplers(material.textureSamplerIndices, model->modelData.samplerIndexToDescriptorBufferIndexMap);
-            remapSamplers(material.textureSamplerIndices2, model->modelData.samplerIndexToDescriptorBufferIndexMap);
+        for (MaterialProperties& material : outputModel->modelData.materials) {
+            remapSamplers(material.textureSamplerIndices, outputModel->modelData.samplerIndexToDescriptorBufferIndexMap);
+            remapSamplers(material.textureSamplerIndices2, outputModel->modelData.samplerIndexToDescriptorBufferIndexMap);
         }
 
         // Textures
@@ -657,25 +495,181 @@ bool WillModelLoader::PostThreadExecute(Render::VulkanContext* context, Render::
         };
 
 
-        model->modelData.textureIndexToDescriptorBufferIndexMap.resize(model->modelData.imageViews.size());
-        for (int32_t i = 0; i < model->modelData.imageViews.size(); ++i) {
-            if (model->modelData.imageViews[i].handle == VK_NULL_HANDLE) {
-                model->modelData.textureIndexToDescriptorBufferIndexMap[i] = {0, 0};
+        outputModel->modelData.textureIndexToDescriptorBufferIndexMap.resize(outputModel->modelData.imageViews.size());
+        for (int32_t i = 0; i < outputModel->modelData.imageViews.size(); ++i) {
+            if (outputModel->modelData.imageViews[i].handle == VK_NULL_HANDLE) {
+                // todo instead of 0 this should be a constant, maybe constexpr default texture index. Error in debug, white in release
+                outputModel->modelData.textureIndexToDescriptorBufferIndexMap[i] = {0, 0};
                 continue;
             }
 
-            model->modelData.textureIndexToDescriptorBufferIndexMap[i] = resourceManager->bindlessSamplerTextureDescriptorBuffer.AllocateTexture({
-                .imageView = model->modelData.imageViews[i].handle,
+            outputModel->modelData.textureIndexToDescriptorBufferIndexMap[i] = resourceManager->bindlessSamplerTextureDescriptorBuffer.AllocateTexture({
+                .imageView = outputModel->modelData.imageViews[i].handle,
                 .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
             });
         }
 
-        for (MaterialProperties& material : rawData.materials) {
-            remapTextures(material.textureImageIndices, model->modelData.textureIndexToDescriptorBufferIndexMap);
-            remapTextures(material.textureImageIndices2, model->modelData.textureIndexToDescriptorBufferIndexMap);
+        for (MaterialProperties& material : outputModel->modelData.materials) {
+            remapTextures(material.textureImageIndices, outputModel->modelData.textureIndexToDescriptorBufferIndexMap);
+            remapTextures(material.textureImageIndices2, outputModel->modelData.textureIndexToDescriptorBufferIndexMap);
         }
     }
 
     return true;
+}
+
+void WillModelLoadJob::Reset()
+{
+    rawData.Reset();
+    taskState = TaskState::NotStarted;
+    willModelHandle = Engine::WillModelHandle::INVALID;
+    outputModel = nullptr;
+    for (ktxTexture2* texture : pendingTextures) {
+        ktxTexture2_Destroy(texture);
+    }
+    pendingTextureHead = 0;
+    pendingVerticesHead = 0;
+    pendingMeshletVerticesHead = 0;
+    pendingMeshletTrianglesHead = 0;
+    pendingMeshletsHead = 0;
+    pendingPrimitivesHead = 0;
+    pendingBufferBarrier = 0;
+    pendingTextures.clear();
+    convertedVertices.clear();
+    packedTriangles.clear();
+}
+
+void WillModelLoadJob::LoadModelTask::ExecuteRange(enki::TaskSetPartition range, uint32_t threadnum)
+{
+    if (loadJob == nullptr) {
+        return;
+    }
+
+    // todo: tracy profile this step
+    if (!std::filesystem::exists(loadJob->outputModel->source)) {
+        SPDLOG_ERROR("Failed to find path to willmodel - {}", loadJob->outputModel->name);
+        loadJob->taskState = TaskState::Failed;
+        return;
+    }
+
+    Render::ModelReader reader = Render::ModelReader(loadJob->outputModel->source);
+
+    if (!reader.GetSuccessfullyLoaded()) {
+        SPDLOG_ERROR("Failed to load willmodel - {}", loadJob->outputModel->name);
+        loadJob->taskState = TaskState::Failed;
+        return;
+    }
+
+    std::vector<uint8_t> modelBinData = reader.ReadFile("model.bin");
+
+    size_t offset = 0;
+    const auto* header = reinterpret_cast<Render::ModelBinaryHeader*>(modelBinData.data());
+    offset += sizeof(Render::ModelBinaryHeader);
+
+    auto readArray = [&]<typename T>(std::vector<T>& vec, uint32_t count) {
+        vec.resize(count);
+        if (count > 0) {
+            std::memcpy(vec.data(), modelBinData.data() + offset, count * sizeof(T));
+            offset += count * sizeof(T);
+        }
+    };
+
+
+    const uint8_t* dataPtr = modelBinData.data() + offset;
+
+    loadJob->rawData.bIsSkeletalModel = header->bIsSkeletalModel;
+    readArray(loadJob->rawData.vertices, header->vertexCount);
+    readArray(loadJob->rawData.meshletVertices, header->meshletVertexCount);
+    readArray(loadJob->rawData.meshletTriangles, header->meshletTriangleCount);
+    readArray(loadJob->rawData.meshlets, header->meshletCount);
+    readArray(loadJob->rawData.primitives, header->primitiveCount);
+    readArray(loadJob->rawData.materials, header->materialCount);
+
+    dataPtr = modelBinData.data() + offset;
+    loadJob->rawData.allMeshes.resize(header->meshCount);
+    for (uint32_t i = 0; i < header->meshCount; i++) {
+        ReadMeshInformation(dataPtr, loadJob->rawData.allMeshes[i]);
+    }
+
+    loadJob->rawData.nodes.resize(header->nodeCount);
+    for (uint32_t i = 0; i < header->nodeCount; i++) {
+        ReadNode(dataPtr, loadJob->rawData.nodes[i]);
+    }
+
+    loadJob->rawData.animations.resize(header->animationCount);
+    for (uint32_t i = 0; i < header->animationCount; i++) {
+        ReadAnimation(dataPtr, loadJob->rawData.animations[i]);
+    }
+
+    offset = dataPtr - modelBinData.data();
+    readArray(loadJob->rawData.inverseBindMatrices, header->inverseBindMatrixCount);
+
+    std::vector<VkSamplerCreateInfo> samplerInfos{};
+    readArray(samplerInfos, header->samplerCount);
+    for (VkSamplerCreateInfo& sampler : samplerInfos) {
+        loadJob->outputModel->modelData.samplers.push_back(Render::Sampler::CreateSampler(loadJob->context, sampler));
+    }
+    std::vector<uint32_t> preferredImageFormats;
+    readArray(preferredImageFormats, header->textureCount);
+
+    for (int i = 0; i < header->textureCount; ++i) {
+        std::string textureName = fmt::format("textures/texture_{}.ktx2", i);
+        if (!reader.HasFile(textureName)) {
+            SPDLOG_ERROR("[WillModelLoader::TaskImplementation] Failed to find texture {}", textureName);
+            loadJob->pendingTextures.push_back(nullptr);
+            continue;
+        }
+
+        std::vector<uint8_t> ktxData = reader.ReadFile(textureName);
+        ktxTexture2* loadedTexture = nullptr;
+        ktx_error_code_e result = ktxTexture2_CreateFromMemory(ktxData.data(), ktxData.size(), KTX_TEXTURE_CREATE_NO_FLAGS, &loadedTexture);
+
+        if (ktxTexture2_NeedsTranscoding(loadedTexture)) {
+            const ktx_transcode_fmt_e targetFormat = static_cast<ktx_transcode_fmt_e>(preferredImageFormats[i]);
+            result = ktxTexture2_TranscodeBasis(loadedTexture, targetFormat, 0);
+            if (result != KTX_SUCCESS) {
+                SPDLOG_ERROR("Failed to transcode texture {}", textureName);
+                loadJob->pendingTextures.push_back(nullptr);
+                ktxTexture2_Destroy(loadedTexture);
+                continue;
+            }
+        }
+
+        // Size check
+        ktx_size_t allocSize = loadedTexture->dataSize;
+        if (allocSize >= ASSET_LOAD_STAGING_BUFFER_SIZE) {
+            SPDLOG_ERROR("Texture too big to fit in the staging buffer for texture {}", textureName);
+            loadJob->pendingTextures.push_back(nullptr);
+            ktxTexture2_Destroy(loadedTexture);
+            continue;
+        }
+
+        // Texture dimension and array check
+        if (loadedTexture->numDimensions != 2) {
+            SPDLOG_ERROR("Engine does not support non 2D image textures {}", textureName);
+            loadJob->pendingTextures.push_back(nullptr);
+            ktxTexture2_Destroy(loadedTexture);
+            continue;
+        }
+
+        if (loadedTexture->isArray) {
+            SPDLOG_ERROR("Engine does not support texture arrays {}", textureName);
+            loadJob->pendingTextures.push_back(nullptr);
+            ktxTexture2_Destroy(loadedTexture);
+            continue;
+        }
+
+        if (loadedTexture->isCubemap) {
+            SPDLOG_ERROR("Texture does not support cubemaps {}", textureName);
+            loadJob->pendingTextures.push_back(nullptr);
+            ktxTexture2_Destroy(loadedTexture);
+            continue;
+        }
+
+        loadJob->pendingTextures.push_back(loadedTexture);
+    }
+
+    loadJob->rawData.name = "Loaded Model";
+    loadJob->taskState = TaskState::Complete;
 }
 } // AssetLoad

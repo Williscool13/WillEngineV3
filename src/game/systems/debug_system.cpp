@@ -152,6 +152,7 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         }
         else {
             renderable.material = model->modelData.materials[0];
+            //renderable.material.textureImageIndices.x = 0;
         }
 
         Transform transform{Transform::IDENTITY};
