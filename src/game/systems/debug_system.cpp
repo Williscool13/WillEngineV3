@@ -13,31 +13,97 @@
 
 namespace Game::System
 {
+static Engine::WillModelHandle dragonHandle = Engine::WillModelHandle::INVALID;
 static Engine::WillModelHandle boxHandle = Engine::WillModelHandle::INVALID;
+static entt::entity dragonEntity = entt::null;
 static entt::entity boxEntity = entt::null;
 
 void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
 {
     bool static resetted = false;
     if (!resetted) {
+        dragonHandle = Engine::WillModelHandle::INVALID;
         boxHandle = Engine::WillModelHandle::INVALID;
         resetted = true;
+        dragonEntity = entt::null;
         boxEntity = entt::null;
     }
 
     if (state->inputFrame->GetKey(Key::F1).pressed) {
-        if (!boxHandle.IsValid()) {
-            // boxHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "BoxTextured.willmodel");
-            boxHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "dragon/dragon.willmodel");
+        if (!dragonHandle.IsValid()) {
+            dragonHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "dragon/dragon.willmodel");
+            boxHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "BoxTextured.willmodel");
         }
     }
     if (state->inputFrame->GetKey(Key::F2).pressed) {
-        if (boxHandle.IsValid()) {
-            ctx->assetManager->UnloadModel(boxHandle);
+        if (dragonHandle.IsValid()) {
+            ctx->assetManager->UnloadModel(dragonHandle);
         }
     }
 
     if (state->inputFrame->GetKey(Key::F3).pressed) {
+        if (!dragonHandle.IsValid()) {
+            SPDLOG_WARN("[DebugSystem] No model loaded, press F1 first");
+            return;
+        }
+
+        Render::WillModel* model = ctx->assetManager->GetModel(dragonHandle);
+        if (!model || model->modelLoadState != Render::WillModel::ModelLoadState::Loaded) {
+            SPDLOG_WARN("[DebugSystem] Model not ready yet");
+            return;
+        }
+
+        if (state->registry.valid(dragonEntity)) {
+            SPDLOG_WARN("[DebugSystem] Box already spawned");
+            return;
+        }
+
+        auto& modelAllocator = ctx->assetManager->GetModelAllocator();
+        auto& instanceAllocator = ctx->assetManager->GetInstanceAllocator();
+        auto& materialAllocator = ctx->assetManager->GetMaterialAllocator();
+
+        Engine::ModelHandle modelEntry = modelAllocator.Add();
+        Engine::InstanceHandle instanceEntry = instanceAllocator.Add();
+        Engine::MaterialHandle materialEntry = materialAllocator.Add();
+
+        if (modelEntry.index == Core::INVALID_HANDLE_INDEX || instanceEntry.index == Core::INVALID_HANDLE_INDEX || materialEntry.index == Core::INVALID_HANDLE_INDEX) {
+            SPDLOG_ERROR("[DebugSystem] Failed to allocate GPU slots");
+            return;
+        }
+
+        RenderableComponent renderable;
+        renderable.modelEntry = modelEntry;
+        renderable.instanceEntry = instanceEntry;
+        renderable.materialEntry = materialEntry;
+
+        renderable.modelFlags = glm::vec4(0.0f);
+
+        renderable.instance.primitiveIndex = model->modelData.meshes[0].primitiveIndices[0].index;
+        renderable.instance.modelIndex = modelEntry.index;
+        renderable.instance.materialIndex = materialEntry.index;
+        renderable.instance.jointMatrixOffset = 0;
+        renderable.instance.bIsAllocated = 1;
+
+        if (model->modelData.materials.empty()) {
+            renderable.material.colorFactor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+            renderable.material.metalRoughFactors = {0.0f, 1.0f, 0.0f, 0.0f};
+        }
+        else {
+            renderable.material = model->modelData.materials[0];
+        }
+
+        // todo: default materials
+
+        Transform transform{Transform::IDENTITY};
+        transform.translation = glm::vec3(0.0f);
+
+        dragonEntity = state->registry.create();
+        state->registry.emplace<RenderableComponent>(dragonEntity, renderable);
+        state->registry.emplace<TransformComponent>(dragonEntity, transform);
+
+        SPDLOG_INFO("[DebugSystem] Spawned box entity");
+    }
+    if (state->inputFrame->GetKey(Key::F4).pressed) {
         if (!boxHandle.IsValid()) {
             SPDLOG_WARN("[DebugSystem] No model loaded, press F1 first");
             return;

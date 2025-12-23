@@ -34,6 +34,9 @@ struct VulkanContext
     VmaAllocator allocator{};
     VkDebugUtilsMessengerEXT debugMessenger{};
 
+    // Optional Extensions
+    bool bMaintenance9Enabled{false};
+
     VulkanContext() = default;
 
     explicit VulkanContext(SDL_Window* window);

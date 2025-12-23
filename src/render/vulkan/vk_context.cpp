@@ -110,9 +110,28 @@ VulkanContext::VulkanContext(SDL_Window* window)
             .select()
             .value();
 
+
+    // Maintenance9
+    bool supportsMaintenance9 = false; {
+        for (const auto& ext : targetDevice.get_available_extensions()) {
+            if (strcmp(ext.c_str(), VK_KHR_MAINTENANCE_9_EXTENSION_NAME) == 0) {
+                supportsMaintenance9 = true;
+                break;
+            }
+        }
+    }
+
+
     vkb::DeviceBuilder deviceBuilder{targetDevice};
     deviceBuilder.add_pNext(&descriptorBufferFeatures);
     deviceBuilder.add_pNext(&meshShaderFeatures);
+    if (supportsMaintenance9) {
+        VkPhysicalDeviceMaintenance9FeaturesKHR maintenance9Features{};
+        maintenance9Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_9_FEATURES_KHR;
+        maintenance9Features.maintenance9 = VK_TRUE;
+        deviceBuilder.add_pNext(&maintenance9Features);
+    }
+    bMaintenance9Enabled = supportsMaintenance9;
     vkb::Device vkbDevice = deviceBuilder.build().value();
 
     device = vkbDevice.device;

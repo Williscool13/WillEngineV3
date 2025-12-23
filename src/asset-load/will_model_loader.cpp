@@ -562,6 +562,10 @@ WillModelLoader::ThreadState WillModelLoader::ThreadExecute(Render::VulkanContex
                     .offset = offset,
                     .size = size
                 };
+                if (context->bMaintenance9Enabled) {
+                    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                }
                 return barrier;
             };
 
