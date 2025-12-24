@@ -180,20 +180,28 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
 
 
     if (state->inputFrame->GetKey(Key::NUM_0).pressed) {
-        auto& renderable = state->registry.get<RenderableComponent>(boxEntity);
-        renderable.material.textureImageIndices.x = 0;
+        if (boxEntity != entt::null) {
+            auto& renderable = state->registry.get<RenderableComponent>(boxEntity);
+            renderable.material.textureImageIndices.x = 0;
+        }
     }
     if (state->inputFrame->GetKey(Key::NUM_1).pressed) {
-        auto& renderable = state->registry.get<RenderableComponent>(boxEntity);
-        renderable.material.textureImageIndices.x = 1;
+        if (boxEntity != entt::null) {
+            auto& renderable = state->registry.get<RenderableComponent>(boxEntity);
+            renderable.material.textureImageIndices.x = 1;
+        }
     }
     if (state->inputFrame->GetKey(Key::NUM_2).pressed) {
-        auto& renderable = state->registry.get<RenderableComponent>(boxEntity);
-        renderable.material.textureImageIndices.x = 2;
+        if (boxEntity != entt::null) {
+            auto& renderable = state->registry.get<RenderableComponent>(boxEntity);
+            renderable.material.textureImageIndices.x = 2;
+        }
     }
     if (state->inputFrame->GetKey(Key::NUM_3).pressed) {
-        auto& renderable = state->registry.get<RenderableComponent>(boxEntity);
-        renderable.material.textureImageIndices.x = 3;
+        if (boxEntity != entt::null) {
+            auto& renderable = state->registry.get<RenderableComponent>(boxEntity);
+            renderable.material.textureImageIndices.x = 3;
+        }
     }
 
     /*if (state->registry.valid(boxEntity)) {

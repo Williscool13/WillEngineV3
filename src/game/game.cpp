@@ -33,11 +33,6 @@ GAME_API void GameLoad(Core::EngineContext* ctx, Engine::GameState* state)
     SPDLOG_TRACE("Game Load");
 
     spdlog::set_default_logger(ctx->logger);
-    SPDLOG_TRACE("[Game] Registering engine component types:");
-    SPDLOG_TRACE("  TransformComponent: {}", entt::type_id<Game::TransformComponent>().hash());
-    SPDLOG_TRACE("  CameraComponent: {}", entt::type_id<Game::CameraComponent>().hash());
-    SPDLOG_TRACE("  MainViewportComponent: {}", entt::type_id<Game::MainViewportComponent>().hash());
-    SPDLOG_TRACE("  FreeCameraComponent: {}", entt::type_id<Game::FreeCameraComponent>().hash());
 }
 
 GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::GameState* state)

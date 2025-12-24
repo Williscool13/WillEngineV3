@@ -11,6 +11,7 @@ set(GAME_SOURCES
         systems/debug_system.cpp
         systems/debug_system.h
         common/renderable_component.h
+        component_include.h
 )
 
 set(GAME_INCLUDE_DIRS

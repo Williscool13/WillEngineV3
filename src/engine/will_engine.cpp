@@ -55,7 +55,7 @@ void WillEngine::Initialize()
 
     window = SDLWindowPtr(
         SDL_CreateWindow(
-            "Template",
+            "Will Engine",
             640,
             480,
             SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE),

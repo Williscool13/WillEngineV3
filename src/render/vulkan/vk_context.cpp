@@ -16,6 +16,33 @@ namespace Render
 {
 DeviceInfo VulkanContext::deviceInfo{};
 
+static VKAPI_ATTR VkBool32 VKAPI_CALL VulkanDebugCallback(
+    VkDebugUtilsMessageSeverityFlagBitsEXT severity,
+    VkDebugUtilsMessageTypeFlagsEXT type,
+    const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
+    void* pUserData)
+{
+    if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
+        SPDLOG_ERROR("[Vulkan] {}", pCallbackData->pMessage);
+    }
+    else if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
+        SPDLOG_WARN("[Vulkan] {}", pCallbackData->pMessage);
+    }
+    else if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT) {
+        SPDLOG_INFO("[Vulkan] {}", pCallbackData->pMessage);
+    }
+    else {
+        SPDLOG_DEBUG("[Vulkan] {}", pCallbackData->pMessage);
+    }
+
+// #ifdef _DEBUG
+//     if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
+//         __debugbreak();
+// #endif
+
+    return VK_FALSE;
+}
+
 VulkanContext::VulkanContext(SDL_Window* window)
 {
     VkResult res = volkInitialize();
@@ -36,9 +63,9 @@ VulkanContext::VulkanContext(SDL_Window* window)
 #endif
 
 
-    auto resultInstance = builder.set_app_name("Vulkan Test Bed")
+    auto resultInstance = builder.set_app_name("Will Engine")
             .request_validation_layers(bUseValidation)
-            .use_default_debug_messenger()
+            .set_debug_callback(VulkanDebugCallback)
             .require_api_version(1, 3)
             .enable_extensions(enabledInstanceExtensions)
             .add_validation_feature_enable(VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT)
