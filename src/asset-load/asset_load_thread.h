@@ -75,8 +75,6 @@ public:
 
     bool ResolveTextureUnload(TextureComplete& textureComplete);
 
-    Render::Texture SynchronousLoadTexture(std::filesystem::path source);
-
 private: // Threading
     void ThreadMain();
 
@@ -100,7 +98,7 @@ private: // Threading
     LockFreeQueue<TextureComplete> textureCompleteUnloadQueue{TEXTURE_LOAD_QUEUE_COUNT};
 
 
-    std::array<AssetLoadSlot, MAX_ASSET_LOAD_JOB_COUNT> assetLoadSlots;
+    std::array<AssetLoadSlot, MAX_ASSET_LOAD_JOB_COUNT> assetLoadSlots{};
     std::bitset<MAX_ASSET_LOAD_JOB_COUNT> activeSlotMask{0};
 
     std::vector<std::unique_ptr<WillModelLoadJob> > willModelJobs{};
@@ -109,13 +107,6 @@ private: // Threading
     std::bitset<TEXTURE_JOB_COUNT> textureJobActive;
 
     VkCommandPool commandPool{};
-
-private: // Default Textures
-    std::unique_ptr<UploadStaging> synchronousTextureUploadStaging{};
-    Render::BindlessTextureHandle whiteHandle{Render::BindlessTextureHandle::INVALID};
-    Render::Texture defaultWhiteTexture;
-    Render::BindlessTextureHandle errorHandle{Render::BindlessTextureHandle::INVALID};
-    Render::Texture defaultErrorTexture;
 };
 } // AssetLoad
 

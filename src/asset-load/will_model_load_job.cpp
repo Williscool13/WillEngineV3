@@ -471,12 +471,13 @@ bool WillModelLoadJob::PostThreadExecute()
     {
         // Samplers
         auto remapSamplers = [](auto& indices, const std::vector<Render::BindlessSamplerHandle>& map) {
-            indices.x = indices.x >= 0 ? map[indices.x].index : 0;
-            indices.y = indices.y >= 0 ? map[indices.y].index : 0;
-            indices.z = indices.z >= 0 ? map[indices.z].index : 0;
-            indices.w = indices.w >= 0 ? map[indices.w].index : 0;
+            indices.x = indices.x >= 0 ? map[indices.x].index : DEFAULT_SAMPLER_BINDLESS_INDEX;
+            indices.y = indices.y >= 0 ? map[indices.y].index : DEFAULT_SAMPLER_BINDLESS_INDEX;
+            indices.z = indices.z >= 0 ? map[indices.z].index : DEFAULT_SAMPLER_BINDLESS_INDEX;
+            indices.w = indices.w >= 0 ? map[indices.w].index : DEFAULT_SAMPLER_BINDLESS_INDEX;
         };
 
+        // todo: sampler can be hashed since there aren't that many of them. Then the entire engine won't have more than ~20 samplers, just need to find the right index w/ hash
         outputModel->modelData.samplerIndexToDescriptorBufferIndexMap.resize(outputModel->modelData.samplers.size());
         for (int32_t i = 0; i < outputModel->modelData.samplers.size(); ++i) {
             outputModel->modelData.samplerIndexToDescriptorBufferIndexMap[i] = resourceManager->bindlessSamplerTextureDescriptorBuffer.AllocateSampler(outputModel->modelData.samplers[i].handle);
@@ -489,18 +490,17 @@ bool WillModelLoadJob::PostThreadExecute()
 
         // Textures
         auto remapTextures = [](auto& indices, const std::vector<Render::BindlessTextureHandle>& map) {
-            indices.x = indices.x >= 0 ? map[indices.x].index : 0;
-            indices.y = indices.y >= 0 ? map[indices.y].index : 0;
-            indices.z = indices.z >= 0 ? map[indices.z].index : 0;
-            indices.w = indices.w >= 0 ? map[indices.w].index : 0;
+            indices.x = indices.x >= 0 ? map[indices.x].index : WHITE_IMAGE_BINDLESS_INDEX;
+            indices.y = indices.y >= 0 ? map[indices.y].index : WHITE_IMAGE_BINDLESS_INDEX;
+            indices.z = indices.z >= 0 ? map[indices.z].index : WHITE_IMAGE_BINDLESS_INDEX;
+            indices.w = indices.w >= 0 ? map[indices.w].index : WHITE_IMAGE_BINDLESS_INDEX;
         };
 
 
         outputModel->modelData.textureIndexToDescriptorBufferIndexMap.resize(outputModel->modelData.imageViews.size());
         for (int32_t i = 0; i < outputModel->modelData.imageViews.size(); ++i) {
             if (outputModel->modelData.imageViews[i].handle == VK_NULL_HANDLE) {
-                // todo instead of 0 this should be a constant, maybe constexpr default texture index. Error in debug, white in release
-                outputModel->modelData.textureIndexToDescriptorBufferIndexMap[i] = {0, 0};
+                outputModel->modelData.textureIndexToDescriptorBufferIndexMap[i] = {ERROR_IMAGE_BINDLESS_INDEX, 0};
                 continue;
             }
 

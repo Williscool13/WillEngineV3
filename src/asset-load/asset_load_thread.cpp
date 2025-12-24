@@ -8,7 +8,6 @@
 #include <spdlog/spdlog.h>
 
 #include "asset_load_job.h"
-#include "ktxvulkan.h"
 #include "texture_load_job.h"
 #include "will_model_load_job.h"
 #include "platform/paths.h"
@@ -42,27 +41,6 @@ AssetLoadThread::AssetLoadThread(enki::TaskScheduler* scheduler, Render::VulkanC
     for (int32_t i = 0; i < TEXTURE_JOB_COUNT; ++i) {
         textureJobs.emplace_back(std::make_unique<TextureLoadJob>(context, resourceManager, commandBuffers[WILL_MODEL_JOB_COUNT + i]));
     }
-
-    synchronousTextureUploadStaging = std::make_unique<UploadStaging>(context, commandBuffers[WILL_MODEL_JOB_COUNT + TEXTURE_JOB_COUNT], TEXTURE_LOAD_STAGING_SIZE);
-
-    auto errorPath = Platform::GetAssetPath() / "textures/error.ktx2";
-    auto whitePath = Platform::GetAssetPath() / "textures/white.ktx2";
-    defaultErrorTexture = SynchronousLoadTexture(errorPath);
-    defaultWhiteTexture = SynchronousLoadTexture(whitePath);
-
-    assert(defaultWhiteTexture.image.handle != VK_NULL_HANDLE);
-    whiteHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.AllocateTexture({
-        .imageView = defaultWhiteTexture.imageView.handle,
-        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-    });
-    assert(whiteHandle.index == 0);
-
-    assert(defaultErrorTexture.image.handle != VK_NULL_HANDLE);
-    errorHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.AllocateTexture({
-        .imageView = defaultErrorTexture.imageView.handle,
-        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-    });
-    assert(errorHandle.index == 1);
 }
 
 AssetLoadThread::~AssetLoadThread()
@@ -135,141 +113,6 @@ void AssetLoadThread::RequestTextureUnload(Engine::TextureHandle textureHandle, 
 bool AssetLoadThread::ResolveTextureUnload(TextureComplete& textureComplete)
 {
     return textureCompleteUnloadQueue.pop(textureComplete);
-}
-
-Render::Texture AssetLoadThread::SynchronousLoadTexture(std::filesystem::path source)
-{
-    Render::Texture outTexture;
-    outTexture.source = source;
-    outTexture.name = source.filename().string();
-    outTexture.loadState = Render::Texture::LoadState::Loaded;
-    ktxTexture2* ktxTex;
-    ktx_error_code_e result = ktxTexture2_CreateFromNamedFile(
-        source.string().c_str(),
-        KTX_TEXTURE_CREATE_NO_FLAGS,
-        &ktxTex
-    );
-
-    if (result != KTX_SUCCESS) {
-        SPDLOG_ERROR("[AssetLoadThread] Failed to load texture: {}", source.filename().string());
-        return {};
-    }
-
-    if (ktxTexture2_NeedsTranscoding(ktxTex)) {
-        // const ktx_transcode_fmt_e targetFormat = KTX_TTF_BC7_RGBA;
-        const ktx_transcode_fmt_e targetFormat = KTX_TTF_RGBA32;
-        result = ktxTexture2_TranscodeBasis(ktxTex, targetFormat, 0);
-        if (result != KTX_SUCCESS) {
-            SPDLOG_ERROR("[AssetLoadThread] Failed to transcode texture: {}", source.filename().string());
-            ktxTexture2_Destroy(ktxTex);
-            return {};
-        }
-    }
-
-    VkExtent3D extent{
-        .width = ktxTex->baseWidth,
-        .height = ktxTex->baseHeight,
-        .depth = ktxTex->baseDepth
-    };
-
-    VkFormat imageFormat = ktxTexture2_GetVkFormat(ktxTex);
-    VkImageCreateInfo imageCreateInfo = Render::VkHelpers::ImageCreateInfo(
-        imageFormat,
-        extent,
-        VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT
-    );
-    imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
-    imageCreateInfo.mipLevels = ktxTex->numLevels;
-    imageCreateInfo.arrayLayers = ktxTex->numLayers;
-    imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-
-    outTexture.image = Render::AllocatedImage::CreateAllocatedImage(context, imageCreateInfo);
-
-    VkImageViewCreateInfo viewInfo = Render::VkHelpers::ImageViewCreateInfo(
-        outTexture.image.handle,
-        outTexture.image.format,
-        VK_IMAGE_ASPECT_COLOR_BIT
-    );
-    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    viewInfo.subresourceRange.layerCount = ktxTex->numLayers;
-    viewInfo.subresourceRange.levelCount = ktxTex->numLevels;
-
-    outTexture.imageView = Render::ImageView::CreateImageView(context, viewInfo);
-
-    OffsetAllocator::Allocator& stagingAllocator = synchronousTextureUploadStaging->GetStagingAllocator();
-    Render::AllocatedBuffer& stagingBuffer = synchronousTextureUploadStaging->GetStagingBuffer();
-    VkCommandBuffer cmd = synchronousTextureUploadStaging->GetCommandBuffer();
-
-    synchronousTextureUploadStaging->StartCommandBuffer();
-
-    for (uint32_t mip = 0; mip < ktxTex->numLevels; mip++) {
-        size_t mipOffset;
-        ktxTexture_GetImageOffset(ktxTexture(ktxTex), mip, 0, 0, &mipOffset);
-
-        uint32_t mipWidth = std::max(1u, ktxTex->baseWidth >> mip);
-        uint32_t mipHeight = std::max(1u, ktxTex->baseHeight >> mip);
-        uint32_t mipDepth = std::max(1u, ktxTex->baseDepth >> mip);
-
-        size_t mipSize = ktxTexture_GetImageSize(ktxTexture(ktxTex), mip);
-
-        OffsetAllocator::Allocation allocation = stagingAllocator.allocate(mipSize);
-        if (allocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
-            SPDLOG_ERROR("[AssetLoadThread] Staging buffer too small for texture: {}", source.filename().string());
-            ktxTexture2_Destroy(ktxTex);
-            return {};
-        }
-
-        char* stagingPtr = static_cast<char*>(stagingBuffer.allocationInfo.pMappedData) + allocation.offset;
-        memcpy(stagingPtr, ktxTex->pData + mipOffset, mipSize);
-
-        VkImageMemoryBarrier2 preCopyBarrier = Render::VkHelpers::ImageMemoryBarrier(
-            outTexture.image.handle,
-            Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, mip, 1, 0, ktxTex->numLayers),
-            VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_UNDEFINED,
-            VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
-        );
-        VkDependencyInfo depInfo{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
-        depInfo.imageMemoryBarrierCount = 1;
-        depInfo.pImageMemoryBarriers = &preCopyBarrier;
-        vkCmdPipelineBarrier2(cmd, &depInfo);
-
-        VkBufferImageCopy copyRegion{};
-        copyRegion.bufferOffset = allocation.offset;
-        copyRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        copyRegion.imageSubresource.mipLevel = mip;
-        copyRegion.imageSubresource.baseArrayLayer = 0;
-        copyRegion.imageSubresource.layerCount = ktxTex->numLayers;
-        copyRegion.imageOffset = {0, 0, 0};
-        copyRegion.imageExtent = {mipWidth, mipHeight, mipDepth};
-
-        vkCmdCopyBufferToImage(
-            cmd,
-            stagingBuffer.handle,
-            outTexture.image.handle,
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            1,
-            &copyRegion
-        );
-    }
-
-    VkImageMemoryBarrier2 finalBarrier = Render::VkHelpers::ImageMemoryBarrier(
-        outTexture.image.handle,
-        Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, ktxTex->numLevels, 0, ktxTex->numLayers),
-        VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-    );
-    // todo: need acquire barrier
-    VkDependencyInfo finalDepInfo{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
-    finalDepInfo.imageMemoryBarrierCount = 1;
-    finalDepInfo.pImageMemoryBarriers = &finalBarrier;
-    vkCmdPipelineBarrier2(cmd, &finalDepInfo);
-
-    // outputTexture->acquireBarrier = Render::VkHelpers::FromVkBarrier(finalBarrier);
-
-    synchronousTextureUploadStaging->SubmitCommandBuffer();
-
-    ktxTexture2_Destroy(ktxTex);
-    return outTexture;
 }
 
 void AssetLoadThread::ThreadMain()

@@ -5,12 +5,41 @@
 #include "asset_manager.h"
 
 #include "asset-load/asset_load_thread.h"
+#include "platform/paths.h"
 
 namespace Engine
 {
-AssetManager::AssetManager(AssetLoad::AssetLoadThread* assetLoadThread)
-    : assetLoadThread(assetLoadThread)
-{}
+AssetManager::AssetManager(AssetLoad::AssetLoadThread* assetLoadThread, Render::ResourceManager* resourceManager)
+    : assetLoadThread(assetLoadThread), resourceManager(resourceManager)
+{
+    auto errorPath = Platform::GetAssetPath() / "textures/error.ktx2";
+    auto whitePath = Platform::GetAssetPath() / "textures/white.ktx2";
+
+
+    whiteTextureHandle = textureAllocator.Add();
+    assert(whiteTextureHandle.IsValid());
+    Render::Texture& texture = textures[whiteTextureHandle.index];
+    texture.selfHandle = whiteTextureHandle;
+    texture.source = whitePath;
+    texture.name = whitePath.stem().string();
+    texture.loadState = Render::Texture::LoadState::NotLoaded;
+    texture.refCount = 1;
+    texture.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTexture();
+    pathToTextureHandle[whitePath] = whiteTextureHandle;
+    assetLoadThread->RequestTextureLoad(texture.selfHandle, &texture);
+
+    errorTextureHandle = textureAllocator.Add();
+    assert(errorTextureHandle.IsValid());
+    Render::Texture& texture2 = textures[errorTextureHandle.index];
+    texture2.selfHandle = errorTextureHandle;
+    texture2.source = errorPath;
+    texture2.name = errorPath.stem().string();
+    texture2.loadState = Render::Texture::LoadState::NotLoaded;
+    texture2.refCount = 1;
+    texture2.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTexture();
+    pathToTextureHandle[errorPath] = errorTextureHandle;
+    assetLoadThread->RequestTextureLoad(texture2.selfHandle, &texture2);
+}
 
 AssetManager::~AssetManager()
 {
@@ -175,8 +204,9 @@ TextureHandle AssetManager::LoadTexture(const std::filesystem::path& path)
     texture.selfHandle = handle;
     texture.source = path;
     texture.name = path.stem().string();
-    texture.refCount = 1;
     texture.loadState = Render::Texture::LoadState::NotLoaded;
+    texture.refCount = 1;
+    texture.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTexture();
 
     pathToTextureHandle[path] = handle;
 

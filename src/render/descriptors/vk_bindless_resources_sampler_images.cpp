@@ -126,9 +126,9 @@ BindlessTextureHandle BindlessResourcesSamplerImages::ReserveAllocateTexture()
     return handle;
 }
 
-bool BindlessResourcesSamplerImages::ForceAllocateTexture(BindlessTextureHandle handle, const VkDescriptorImageInfo& imageInfo)
+bool BindlessResourcesSamplerImages::UpdateTexture(BindlessTextureHandle textureHandle, const VkDescriptorImageInfo& imageInfo)
 {
-    if (!textureAllocator.IsValid(handle)) {
+    if (!textureAllocator.IsValid(textureHandle)) {
         SPDLOG_ERROR("Invalid texture handle for ForceAllocateTexture");
         return false;
     }
@@ -143,7 +143,7 @@ bool BindlessResourcesSamplerImages::ForceAllocateTexture(BindlessTextureHandle 
     descriptorGetInfo.data.pSampledImage = &imageInfo;
 
     const size_t sampledImageDescriptorSize = VulkanContext::deviceInfo.descriptorBufferProps.sampledImageDescriptorSize;
-    char* bufferPtr = basePtr + handle.index * sampledImageDescriptorSize;
+    char* bufferPtr = basePtr + textureHandle.index * sampledImageDescriptorSize;
     vkGetDescriptorEXT(context->device, &descriptorGetInfo, sampledImageDescriptorSize, bufferPtr);
 
     return true;

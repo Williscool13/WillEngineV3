@@ -72,6 +72,14 @@ public:
     BindlessTextureHandle ReserveAllocateTexture();
 
     /**
+     * Updates a texture descriptor at a given index based on the texture handle passed.
+     * @param textureHandle Target handle in the texture array
+     * @param imageInfo New descriptor info
+     * @return true if handle was valid and updated
+     */
+    bool UpdateTexture(BindlessTextureHandle textureHandle, const VkDescriptorImageInfo& imageInfo);
+
+    /**
      * Release a sampler binding, returning it to the free pool.
      * @param handle Handle returned from AllocateSampler
      * @return true if successfully released
@@ -84,16 +92,6 @@ public:
      * @return true if successfully released
      */
     bool ReleaseTextureBinding(BindlessTextureHandle handle);
-
-    /**
-     * Force-update a texture at a specific index, bypassing allocation tracking.
-     * WARNING: Only use for debugging or replacing existing allocations.
-     *
-     * @param handle Target handle in the texture array
-     * @param imageInfo New descriptor info
-     * @return true if handle was valid and updated
-     */
-    bool ForceAllocateTexture(BindlessTextureHandle handle, const VkDescriptorImageInfo& imageInfo);
 
     /**
      * Get binding info for vkCmdBindDescriptorBuffersEXT.

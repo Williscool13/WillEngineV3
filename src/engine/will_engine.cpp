@@ -67,7 +67,7 @@ void WillEngine::Initialize()
     engineRenderSynchronization = std::make_unique<Core::FrameSync>();
     renderThread = std::make_unique<Render::RenderThread>(engineRenderSynchronization.get(), scheduler.get(), window.get(), w, h);
     assetLoadThread = std::make_unique<AssetLoad::AssetLoadThread>(scheduler.get(), renderThread->GetVulkanContext(), renderThread->GetResourceManager());
-    assetManager = std::make_unique<AssetManager>(assetLoadThread.get());
+    assetManager = std::make_unique<AssetManager>(assetLoadThread.get(), renderThread->GetResourceManager());
 #if WILL_EDITOR
     modelGenerator = std::make_unique<Render::AssetGenerator>(renderThread->GetVulkanContext(), scheduler.get());
 #endif

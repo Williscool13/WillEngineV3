@@ -20,6 +20,7 @@ class AssetLoadThread;
 
 namespace Render
 {
+struct ResourceManager;
 struct WillModel;
 }
 
@@ -34,7 +35,7 @@ using MaterialHandle = Core::Handle<MaterialProperties>;
 class AssetManager
 {
 public:
-    explicit AssetManager(AssetLoad::AssetLoadThread* assetLoadThread);
+    explicit AssetManager(AssetLoad::AssetLoadThread* assetLoadThread, Render::ResourceManager* resourceManager);
 
     ~AssetManager();
 
@@ -85,6 +86,7 @@ public:
 
 private:
     AssetLoad::AssetLoadThread* assetLoadThread;
+    Render::ResourceManager* resourceManager;
 
     Core::HandleAllocator<Model, Render::BINDLESS_MODEL_BUFFER_COUNT> modelEntryAllocator;
     Core::HandleAllocator<Instance, Render::BINDLESS_INSTANCE_BUFFER_COUNT> instanceEntryAllocator;
@@ -100,6 +102,10 @@ private:
     std::array<Render::Texture, MAX_LOADED_TEXTURES> textures{};
 
     std::unordered_map<std::filesystem::path, TextureHandle> pathToTextureHandle;
+
+private: // Default Resources
+    TextureHandle whiteTextureHandle;
+    TextureHandle errorTextureHandle;
 };
 } // Engine
 

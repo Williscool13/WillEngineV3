@@ -30,11 +30,11 @@ public:
     Engine::TextureHandle selfHandle{Engine::TextureHandle::INVALID};
     LoadState loadState{LoadState::NotLoaded};
     uint32_t refCount = 0;
+    BindlessTextureHandle bindlessHandle{};
 
     AllocatedImage image;
     ImageView imageView;
 
-    BindlessTextureHandle bindlessHandle{};
     Core::ImageAcquireOperation acquireBarrier{};
 };
 } // Render

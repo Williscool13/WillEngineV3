@@ -186,10 +186,15 @@ bool TextureLoadJob::PostThreadExecute()
         return false;
     }
 
-    outputTexture->bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.AllocateTexture({
-        .imageView = outputTexture->imageView.handle,
-        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-    });
+    bool updateRes = resourceManager->bindlessSamplerTextureDescriptorBuffer.UpdateTexture(
+        outputTexture->bindlessHandle, {
+            .imageView = outputTexture->imageView.handle,
+            .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+        });
+
+    if (!updateRes) {
+        return false;
+    }
 
     return true;
 }
@@ -211,7 +216,11 @@ void TextureLoadJob::Reset()
 
 void TextureLoadJob::LoadTextureTask::ExecuteRange(enki::TaskSetPartition range, uint32_t threadnum)
 {
-    if (!loadJob || !loadJob->outputTexture) {
+    if (!loadJob) {
+        return;
+    }
+
+    if (!loadJob->outputTexture) {
         loadJob->taskState = TaskState::Failed;
         return;
     }
@@ -238,7 +247,6 @@ void TextureLoadJob::LoadTextureTask::ExecuteRange(enki::TaskSetPartition range,
     }
 
     if (ktxTexture2_NeedsTranscoding(_texture)) {
-        // todo: try to pick a good format based on what information we have
         const ktx_transcode_fmt_e targetFormat = KTX_TTF_BC7_RGBA;
         result = ktxTexture2_TranscodeBasis(_texture, targetFormat, 0);
         if (result != KTX_SUCCESS) {
@@ -258,7 +266,7 @@ void TextureLoadJob::LoadTextureTask::ExecuteRange(enki::TaskSetPartition range,
     }
 
     // Validate it's 2D, not array, not cubemap
-    // for raw textures, add support for cubemap (for IBL)
+    // todo: for raw textures, add support for cubemap (for IBL)
     if (_texture->numDimensions != 2 || _texture->isArray || _texture->isCubemap) {
         SPDLOG_ERROR("[TextureLoadJob] Only 2D textures supported: {}", texturePath.string());
         ktxTexture2_Destroy(_texture);
