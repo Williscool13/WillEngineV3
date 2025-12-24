@@ -16,6 +16,7 @@
 #include "render/vulkan/vk_utils.h"
 #include "engine/will_engine.h"
 #include "platform/paths.h"
+#include "platform/thread_utils.h"
 
 #if WILL_EDITOR
 #include "render/vulkan/vk_imgui_wrapper.h"
@@ -87,6 +88,7 @@ void RenderThread::Join()
 
 void RenderThread::ThreadMain()
 {
+    Platform::SetThreadName("RenderThread");
     while (!bShouldExit.load()) {
         engineRenderSynchronization->renderFrames.acquire();
 

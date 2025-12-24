@@ -19,6 +19,7 @@ static Engine::WillModelHandle dragonHandle = Engine::WillModelHandle::INVALID;
 static Engine::WillModelHandle boxHandle = Engine::WillModelHandle::INVALID;
 static entt::entity dragonEntity = entt::null;
 static entt::entity boxEntity = entt::null;
+static Engine::TextureHandle textureHandle = Engine::TextureHandle::INVALID;
 
 void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
 {
@@ -26,6 +27,7 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
     if (!resetted) {
         dragonHandle = Engine::WillModelHandle::INVALID;
         boxHandle = Engine::WillModelHandle::INVALID;
+        textureHandle = Engine::TextureHandle::INVALID;
         resetted = true;
         dragonEntity = entt::null;
         boxEntity = entt::null;
@@ -168,9 +170,12 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
     }
 
 
+    if (state->inputFrame->GetKey(Key::NUM_8).pressed) {
+        textureHandle = ctx->assetManager->LoadTexture(Platform::GetAssetPath() / "textures/smiling_friend.ktx2");
+        SPDLOG_INFO("Texture index: {}", static_cast<uint32_t>(textureHandle.index));
+    }
     if (state->inputFrame->GetKey(Key::NUM_9).pressed) {
-        Engine::TextureHandle texture = ctx->assetManager->LoadTexture(Platform::GetAssetPath() / "textures/smiling_friend.ktx2");
-        SPDLOG_INFO("Texture index: {}", static_cast<uint32_t>(texture.index));
+        ctx->assetManager->UnloadTexture(textureHandle);
     }
 
 

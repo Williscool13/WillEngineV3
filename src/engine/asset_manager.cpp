@@ -201,6 +201,10 @@ void AssetManager::ResolveUnloads()
         textureComplete.texture->name.clear();
         textureComplete.texture->loadState = Render::Texture::LoadState::NotLoaded;
         textureComplete.texture->selfHandle = TextureHandle::INVALID;
+        if (textureComplete.texture->bindlessHandle.index != 0) {
+            resourceManager->bindlessSamplerTextureDescriptorBuffer.ReleaseTextureBinding(textureComplete.texture->bindlessHandle);
+        }
+        textureComplete.texture->bindlessHandle = Render::BindlessTextureHandle::INVALID;
 
         textureAllocator.Remove(textureComplete.textureHandle);
     }
@@ -251,6 +255,7 @@ Render::Texture* AssetManager::GetTexture(TextureHandle handle)
 
 void AssetManager::UnloadTexture(TextureHandle handle)
 {
+    // todo: add to a queue that only pops after 3 FIF
     if (!textureAllocator.IsValid(handle)) {
         SPDLOG_WARN("[AssetManager] Attempted to unload invalid texture handle");
         return;

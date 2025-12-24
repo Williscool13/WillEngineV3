@@ -213,6 +213,7 @@ ThreadState WillModelLoadJob::ThreadExecute()
 
             size_t textureOffsetInStaging = allocation.offset;
 
+            // todo: upload each mip individually for particularly high quality textures.
             for (uint32_t mip = 0; mip < currentTexture->numLevels; mip++) {
                 size_t mipOffset;
                 ktxTexture_GetImageOffset(ktxTexture(currentTexture), mip, 0, 0, &mipOffset);

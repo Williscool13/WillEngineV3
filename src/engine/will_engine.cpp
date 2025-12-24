@@ -16,6 +16,7 @@
 #include "core/time/time_manager.h"
 #include "asset-load/asset_load_thread.h"
 #include "platform/paths.h"
+#include "platform/thread_utils.h"
 #include "render/render_thread.h"
 
 #if WILL_EDITOR
@@ -34,8 +35,14 @@ WillEngine::~WillEngine() = default;
 
 void WillEngine::Initialize()
 {
+    Platform::SetThreadName("EngineThread");
     enki::TaskSchedulerConfig config;
-    config.numTaskThreadsToCreate = enki::GetNumHardwareThreads() - 1;
+    config.numTaskThreadsToCreate = enki::GetNumHardwareThreads();
+    config.profilerCallbacks.threadStart = [](uint32_t threadNum_) {
+        std::string name = fmt::format("TaskThread{}", threadNum_);
+        Platform::SetThreadName(name.c_str());
+    };
+
     SPDLOG_INFO("Scheduler operating with {} threads.", config.numTaskThreadsToCreate + 1);
     scheduler = std::make_unique<enki::TaskScheduler>();
     scheduler->Initialize(config);

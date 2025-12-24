@@ -3,13 +3,15 @@ add_library(platform STATIC
         crash_context.h
         paths.h
         dll_loader.h
-        dll_loader_win32.cpp
+        thread_utils.h
 )
 
 if(WIN32)
     target_sources(platform PRIVATE
             crash_handler_win32.cpp
             crash_context_win32.cpp
+            dll_loader_win32.cpp
+            thread_utils_win32.cpp
             paths.cpp
     )
     target_link_libraries(platform PUBLIC

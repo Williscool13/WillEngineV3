@@ -11,6 +11,7 @@
 #include "texture_load_job.h"
 #include "will_model_load_job.h"
 #include "platform/paths.h"
+#include "platform/thread_utils.h"
 #include "render/texture_asset.h"
 #include "render/vulkan/vk_context.h"
 #include "render/vulkan/vk_helpers.h"
@@ -122,7 +123,10 @@ Render::Sampler AssetLoadThread::CreateSampler(const VkSamplerCreateInfo& sample
 
 void AssetLoadThread::ThreadMain()
 {
+    Platform::SetThreadName("AssetLoadThread");
     while (!bShouldExit.load(std::memory_order_acquire)) {
+        bool didWork = false;
+
         // Model loading jobs
         {
             // Count free model load jobs (4 max)
@@ -139,7 +143,7 @@ void AssetLoadThread::ThreadMain()
                 if (!modelLoadQueue.pop(loadRequest)) {
                     break;
                 }
-
+                didWork = true;
 
                 int32_t slotIdx = -1;
                 for (size_t i = 0; i < 64; ++i) {
@@ -184,6 +188,7 @@ void AssetLoadThread::ThreadMain()
                 if (!textureLoadQueue.pop(loadRequest)) {
                     break;
                 }
+                didWork = true;
 
                 int32_t slotIdx = -1;
                 for (size_t i = 0; i < 64; ++i) {
@@ -213,10 +218,12 @@ void AssetLoadThread::ThreadMain()
             }
         }
 
+        // Active Slot Processing
         for (size_t slotIdx = 0; slotIdx < 64; ++slotIdx) {
             if (!activeSlotMask[slotIdx]) {
                 continue;
             }
+            didWork = true;
 
             AssetLoadSlot& slot = assetLoadSlots[slotIdx];
             AssetLoadJob* job = slot.job;
@@ -312,6 +319,7 @@ void AssetLoadThread::ThreadMain()
 
         WillModelLoadRequest unloadRequest{};
         if (modelUnloadQueue.pop(unloadRequest)) {
+            didWork = true;
             OffsetAllocator::Allocator* selectedAllocator;
             if (unloadRequest.model->modelData.bIsSkinned) {
                 selectedAllocator = &resourceManager->skinnedVertexBufferAllocator;
@@ -336,9 +344,7 @@ void AssetLoadThread::ThreadMain()
 
         TextureLoadRequest textureUnloadRequest{};
         if (textureUnloadQueue.pop(textureUnloadRequest)) {
-            if (textureUnloadRequest.texture->bindlessHandle.index != 0) {
-                resourceManager->bindlessSamplerTextureDescriptorBuffer.ReleaseTextureBinding(textureUnloadRequest.texture->bindlessHandle);
-            }
+            didWork = true;
 
             textureUnloadRequest.texture->image = {};
             textureUnloadRequest.texture->imageView = {};
