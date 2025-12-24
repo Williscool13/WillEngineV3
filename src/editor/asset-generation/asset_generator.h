@@ -84,7 +84,7 @@ private:
 
     RawGltfModel LoadGltf(const std::filesystem::path& source);
 
-    bool WriteWillModel(const RawGltfModel& rawModel, const std::filesystem::path& outputPath);
+    bool WriteWillModel(RawGltfModel& rawModel, const std::filesystem::path& outputPath);
 
     void GenerateWillModel_Internal(const std::filesystem::path& gltfPath, const std::filesystem::path& outputPath);
 

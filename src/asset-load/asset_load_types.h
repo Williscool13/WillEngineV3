@@ -11,7 +11,9 @@
 #include "render/model/model_types.h"
 #include "render/shaders/model_interop.h"
 #include "render/vulkan/vk_resources.h"
-#include "render/vulkan/vk_resource_manager.h"
+#include "../render/resource_manager.h"
+#include "engine/asset_manager_types.h"
+#include "render/model/will_model_asset.h"
 
 
 namespace Render
@@ -20,23 +22,14 @@ struct WillModel;
 struct VulkanContext;
 }
 
-namespace Engine
-{
-using WillModelHandle = Core::Handle<Render::WillModel>;
-}
-
 namespace AssetLoad
 {
-constexpr uint32_t ASSET_LOAD_STAGING_BUFFER_SIZE = 32 * 1024 * 1024; // 32MB
-
 class UploadStaging
 {
 public:
-    UploadStaging() = default;
+    UploadStaging(Render::VulkanContext* context, VkCommandBuffer commandBuffer, uint32_t stagingSize);
 
     ~UploadStaging();
-
-    void Initialize(Render::VulkanContext* _context, VkCommandBuffer _commandBuffer);
 
     void StartCommandBuffer();
 
@@ -58,7 +51,7 @@ private:
     VkFence fence{};
 
     Render::AllocatedBuffer stagingBuffer{};
-    OffsetAllocator::Allocator stagingAllocator{ASSET_LOAD_STAGING_BUFFER_SIZE};
+    OffsetAllocator::Allocator stagingAllocator{0};
 
     // Transient
     bool bCommandBufferStarted = false;
@@ -123,6 +116,19 @@ struct WillModelComplete
     Engine::WillModelHandle willModelHandle;
     Render::WillModel* model;
     bool bSuccess;
+};
+
+struct TextureLoadRequest
+{
+    Engine::TextureHandle textureHandle;
+    Render::Texture* texture;
+};
+
+struct TextureComplete
+{
+    Engine::TextureHandle textureHandle;
+    Render::Texture* texture;
+    bool success;
 };
 } // AssetLoad
 

@@ -65,9 +65,9 @@ class RenderThread
 public:
     RenderThread();
 
-    ~RenderThread();
+    RenderThread(Core::FrameSync* engineRenderSynchronization, enki::TaskScheduler* scheduler, SDL_Window* window, uint32_t width, uint32_t height);
 
-    void Initialize(Core::FrameSync* engineRenderSync, enki::TaskScheduler* scheduler_, SDL_Window* window_, uint32_t width, uint32_t height);
+    ~RenderThread();
 
     void Start();
 

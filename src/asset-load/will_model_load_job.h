@@ -28,7 +28,7 @@ class WillModelLoadJob : public AssetLoadJob
 public:
     WillModelLoadJob();
 
-    WillModelLoadJob(Render::VulkanContext* context, Render::ResourceManager* resourceManager, VkCommandBuffer _commandBuffer);
+    WillModelLoadJob(Render::VulkanContext* context, Render::ResourceManager* resourceManager, VkCommandBuffer commandBuffer);
 
     ~WillModelLoadJob() override;
 
@@ -50,13 +50,6 @@ public:
 
     void Reset() override;
 
-    void SetOutputModel(Engine::WillModelHandle handle, Render::WillModel* model)
-    {
-        willModelHandle = handle;
-        outputModel = model;
-    }
-
-public:
     Engine::WillModelHandle willModelHandle{Engine::WillModelHandle::INVALID};
     Render::WillModel* outputModel{nullptr};
 

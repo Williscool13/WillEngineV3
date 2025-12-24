@@ -69,6 +69,8 @@ public:
      */
     BindlessTextureHandle AllocateTexture(const VkDescriptorImageInfo& imageInfo);
 
+    BindlessTextureHandle ReserveAllocateTexture();
+
     /**
      * Release a sampler binding, returning it to the free pool.
      * @param handle Handle returned from AllocateSampler

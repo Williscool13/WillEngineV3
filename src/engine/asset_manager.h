@@ -10,7 +10,8 @@
 #include "asset_manager_config.h"
 #include "asset_manager_types.h"
 #include "core/allocators/handle_allocator.h"
-#include "render/vulkan/vk_resource_manager.h"
+#include "render/texture_asset.h"
+#include "render/model/will_model_asset.h"
 
 namespace AssetLoad
 {
@@ -32,22 +33,34 @@ using MaterialHandle = Core::Handle<MaterialProperties>;
 
 class AssetManager
 {
-
 public:
     explicit AssetManager(AssetLoad::AssetLoadThread* assetLoadThread);
+
     ~AssetManager();
 
     AssetManager(const AssetManager&) = delete;
+
     AssetManager& operator=(const AssetManager&) = delete;
+
     AssetManager(AssetManager&&) = delete;
+
     AssetManager& operator=(AssetManager&&) = delete;
 
     WillModelHandle LoadModel(const std::filesystem::path& path);
+
     Render::WillModel* GetModel(WillModelHandle handle);
+
     void UnloadModel(WillModelHandle handle);
 
-    void ResolveModelLoad(Core::FrameBuffer& stagingFrameBuffer);
-    void ResolveModelUnload();
+    TextureHandle LoadTexture(const std::filesystem::path& path);
+
+    Render::Texture* GetTexture(TextureHandle handle);
+
+    void UnloadTexture(TextureHandle handle);
+
+    void ResolveLoads(Core::FrameBuffer& stagingFrameBuffer) const;
+
+    void ResolveUnloads();
 
 public:
     Core::HandleAllocator<Model, Render::BINDLESS_MODEL_BUFFER_COUNT>& GetModelAllocator()
@@ -82,6 +95,11 @@ private:
     std::unordered_map<std::filesystem::path, WillModelHandle> pathToHandle;
     Core::HandleAllocator<Render::WillModel, MAX_LOADED_MODELS> modelAllocator;
     std::array<Render::WillModel, MAX_LOADED_MODELS> models;
+
+    Core::HandleAllocator<Render::Texture, MAX_LOADED_TEXTURES> textureAllocator;
+    std::array<Render::Texture, MAX_LOADED_TEXTURES> textures{};
+
+    std::unordered_map<std::filesystem::path, TextureHandle> pathToTextureHandle;
 };
 } // Engine
 

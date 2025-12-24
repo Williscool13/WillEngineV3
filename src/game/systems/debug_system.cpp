@@ -10,6 +10,8 @@
 #include "engine/asset_manager.h"
 #include "engine/engine_api.h"
 #include "platform/paths.h"
+#include "render/frame_resources.h"
+#include "spdlog/spdlog.h"
 
 namespace Game::System
 {
@@ -152,7 +154,7 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         }
         else {
             renderable.material = model->modelData.materials[0];
-            //renderable.material.textureImageIndices.x = 0;
+            renderable.material.textureImageIndices.x = 0;
         }
 
         Transform transform{Transform::IDENTITY};
@@ -163,6 +165,30 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         state->registry.emplace<TransformComponent>(boxEntity, transform);
 
         SPDLOG_INFO("[DebugSystem] Spawned box entity");
+    }
+
+
+    if (state->inputFrame->GetKey(Key::NUM_9).pressed) {
+        Engine::TextureHandle texture = ctx->assetManager->LoadTexture(Platform::GetAssetPath() / "textures/smiling_friend.ktx2");
+        SPDLOG_INFO("Texture index: {}", static_cast<uint32_t>(texture.index));
+    }
+
+
+    if (state->inputFrame->GetKey(Key::NUM_0).pressed) {
+        auto& renderable = state->registry.get<RenderableComponent>(boxEntity);
+        renderable.material.textureImageIndices.x = 0;
+    }
+    if (state->inputFrame->GetKey(Key::NUM_1).pressed) {
+        auto& renderable = state->registry.get<RenderableComponent>(boxEntity);
+        renderable.material.textureImageIndices.x = 1;
+    }
+    if (state->inputFrame->GetKey(Key::NUM_2).pressed) {
+        auto& renderable = state->registry.get<RenderableComponent>(boxEntity);
+        renderable.material.textureImageIndices.x = 2;
+    }
+    if (state->inputFrame->GetKey(Key::NUM_3).pressed) {
+        auto& renderable = state->registry.get<RenderableComponent>(boxEntity);
+        renderable.material.textureImageIndices.x = 3;
     }
 
     /*if (state->registry.valid(boxEntity)) {

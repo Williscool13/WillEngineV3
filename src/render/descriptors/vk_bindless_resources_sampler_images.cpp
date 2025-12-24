@@ -115,6 +115,17 @@ BindlessTextureHandle BindlessResourcesSamplerImages::AllocateTexture(const VkDe
     return handle;
 }
 
+BindlessTextureHandle BindlessResourcesSamplerImages::ReserveAllocateTexture()
+{
+    BindlessTextureHandle handle = textureAllocator.Add();
+    if (!handle.IsValid()) {
+        SPDLOG_WARN("No more texture indices available");
+        return BindlessTextureHandle::INVALID;
+    }
+
+    return handle;
+}
+
 bool BindlessResourcesSamplerImages::ForceAllocateTexture(BindlessTextureHandle handle, const VkDescriptorImageInfo& imageInfo)
 {
     if (!textureAllocator.IsValid(handle)) {

@@ -13,7 +13,9 @@
 #include "asset_load_job.h"
 #include "asset_load_types.h"
 #include "TaskScheduler.h"
-#include "render/vulkan/vk_resource_manager.h"
+#include "render/resource_manager.h"
+#include "render/texture_asset.h"
+#include "render/model/will_model_asset.h"
 
 template<typename T>
 using LockFreeQueue = LockFreeQueueCpp11<T>;
@@ -26,10 +28,12 @@ struct VulkanContext;
 
 namespace AssetLoad
 {
+class TextureLoadJob;
 class WillModelLoadJob;
 class AssetLoadJob;
 
-struct AssetLoadSlot {
+struct AssetLoadSlot
+{
     AssetLoadState loadState{AssetLoadState::Unassigned};
     AssetLoadJob* job;
     AssetType type{AssetType::None};
@@ -44,9 +48,9 @@ class AssetLoadThread
 public:
     AssetLoadThread();
 
-    ~AssetLoadThread();
+    AssetLoadThread(enki::TaskScheduler* scheduler, Render::VulkanContext* context, Render::ResourceManager* resourceManager);
 
-    void Initialize(enki::TaskScheduler* _scheduler, Render::VulkanContext* _context, Render::ResourceManager* _resourceManager);
+    ~AssetLoadThread();
 
     void Start();
 
@@ -63,10 +67,18 @@ public:
 
     bool ResolveUnload(WillModelComplete& modelComplete);
 
+    void RequestTextureLoad(Engine::TextureHandle textureHandle, Render::Texture* texturePtr);
+
+    bool ResolveTextureLoads(TextureComplete& textureComplete);
+
+    void RequestTextureUnload(Engine::TextureHandle textureHandle, Render::Texture* texturePtr);
+
+    bool ResolveTextureUnload(TextureComplete& textureComplete);
+
+    Render::Texture SynchronousLoadTexture(std::filesystem::path source);
+
 private: // Threading
     void ThreadMain();
-
-    void CreateDefaultResources();
 
 private:
     Render::VulkanContext* context{};
@@ -77,19 +89,33 @@ private: // Threading
     std::atomic<bool> bShouldExit{false};
     std::unique_ptr<enki::LambdaPinnedTask> pinnedTask{};
 
-    LockFreeQueue<WillModelLoadRequest> modelLoadQueue{MODEL_LOAD_QUEUE_COUNT};
-    LockFreeQueue<WillModelComplete> modelCompleteLoadQueue{MODEL_LOAD_QUEUE_COUNT};
+    LockFreeQueue<WillModelLoadRequest> modelLoadQueue{WILL_MODEL_LOAD_QUEUE_COUNT};
+    LockFreeQueue<WillModelComplete> modelCompleteLoadQueue{WILL_MODEL_LOAD_QUEUE_COUNT};
+    LockFreeQueue<WillModelLoadRequest> modelUnloadQueue{WILL_MODEL_LOAD_QUEUE_COUNT};
+    LockFreeQueue<WillModelComplete> modelCompleteUnloadQueue{WILL_MODEL_LOAD_QUEUE_COUNT};
 
-    LockFreeQueue<WillModelLoadRequest> modelUnloadQueue{MODEL_LOAD_QUEUE_COUNT};
-    LockFreeQueue<WillModelComplete> modelCompleteUnloadQueue{MODEL_LOAD_QUEUE_COUNT};
+    LockFreeQueue<TextureLoadRequest> textureLoadQueue{TEXTURE_LOAD_QUEUE_COUNT};
+    LockFreeQueue<TextureComplete> textureCompleteLoadQueue{TEXTURE_LOAD_QUEUE_COUNT};
+    LockFreeQueue<TextureLoadRequest> textureUnloadQueue{TEXTURE_LOAD_QUEUE_COUNT};
+    LockFreeQueue<TextureComplete> textureCompleteUnloadQueue{TEXTURE_LOAD_QUEUE_COUNT};
+
 
     std::array<AssetLoadSlot, MAX_ASSET_LOAD_JOB_COUNT> assetLoadSlots;
     std::bitset<MAX_ASSET_LOAD_JOB_COUNT> activeSlotMask{0};
 
-    std::vector<std::unique_ptr<WillModelLoadJob>> willModelJobs{};
+    std::vector<std::unique_ptr<WillModelLoadJob> > willModelJobs{};
     std::bitset<WILL_MODEL_JOB_COUNT> willModelJobActive;
+    std::vector<std::unique_ptr<TextureLoadJob>> textureJobs;
+    std::bitset<TEXTURE_JOB_COUNT> textureJobActive;
 
     VkCommandPool commandPool{};
+
+private: // Default Textures
+    std::unique_ptr<UploadStaging> synchronousTextureUploadStaging{};
+    Render::BindlessTextureHandle whiteHandle{Render::BindlessTextureHandle::INVALID};
+    Render::Texture defaultWhiteTexture;
+    Render::BindlessTextureHandle errorHandle{Render::BindlessTextureHandle::INVALID};
+    Render::Texture defaultErrorTexture;
 };
 } // AssetLoad
 

@@ -65,10 +65,8 @@ void WillEngine::Initialize()
     timeManager = std::make_unique<Core::TimeManager>();
 
     engineRenderSynchronization = std::make_unique<Core::FrameSync>();
-    renderThread = std::make_unique<Render::RenderThread>();
-    renderThread->Initialize(engineRenderSynchronization.get(), scheduler.get(), window.get(), w, h);
-    assetLoadThread = std::make_unique<AssetLoad::AssetLoadThread>();
-    assetLoadThread->Initialize(scheduler.get(), renderThread->GetVulkanContext(), renderThread->GetResourceManager());
+    renderThread = std::make_unique<Render::RenderThread>(engineRenderSynchronization.get(), scheduler.get(), window.get(), w, h);
+    assetLoadThread = std::make_unique<AssetLoad::AssetLoadThread>(scheduler.get(), renderThread->GetVulkanContext(), renderThread->GetResourceManager());
     assetManager = std::make_unique<AssetManager>(assetLoadThread.get());
 #if WILL_EDITOR
     modelGenerator = std::make_unique<Render::AssetGenerator>(renderThread->GetVulkanContext(), scheduler.get());
@@ -194,8 +192,8 @@ void WillEngine::Run()
         }
 #endif
 
-        assetManager->ResolveModelLoad(stagingFrameBuffer);
-        assetManager->ResolveModelUnload();
+        assetManager->ResolveLoads(stagingFrameBuffer);
+        assetManager->ResolveUnloads();
 
         gameState->inputFrame = &inputManager->GetCurrentInput();
         gameState->timeFrame = &timeManager->GetTime();
@@ -293,11 +291,16 @@ void WillEngine::DrawImgui()
 
     if (ImGui::Button("Create Error Texture")) {
         modelGenerator->GenerateKtxTexture(
-                    Platform::GetAssetPath() / "textures/error.png",
-                    Platform::GetAssetPath() / "textures/error.ktx2",
-                    false);
+            Platform::GetAssetPath() / "textures/error.png",
+            Platform::GetAssetPath() / "textures/error.ktx2",
+            false);
     }
-
+    if (ImGui::Button("Create Smiling Friend Texture")) {
+        modelGenerator->GenerateKtxTexture(
+            Platform::GetAssetPath() / "textures/smiling_friend.jpg",
+            Platform::GetAssetPath() / "textures/smiling_friend.ktx2",
+            false);
+    }
 
     ImGui::End();
     ImGui::Render();

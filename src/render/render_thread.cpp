@@ -11,7 +11,7 @@
 #include "render/vulkan/vk_helpers.h"
 #include "render/vulkan/vk_render_extents.h"
 #include "render/vulkan/vk_render_targets.h"
-#include "render/vulkan/vk_resource_manager.h"
+#include "resource_manager.h"
 #include "render/vulkan/vk_swapchain.h"
 #include "render/vulkan/vk_utils.h"
 #include "engine/will_engine.h"
@@ -28,14 +28,9 @@ namespace Render
 {
 RenderThread::RenderThread() = default;
 
-RenderThread::~RenderThread() = default;
-
-void RenderThread::Initialize(Core::FrameSync* engineRenderSync, enki::TaskScheduler* scheduler_, SDL_Window* window_, uint32_t width, uint32_t height)
+RenderThread::RenderThread(Core::FrameSync* engineRenderSynchronization, enki::TaskScheduler* scheduler, SDL_Window* window, uint32_t width, uint32_t height)
+    : engineRenderSynchronization(engineRenderSynchronization), scheduler(scheduler), window(window)
 {
-    engineRenderSynchronization = engineRenderSync;
-    scheduler = scheduler_;
-    window = window_;
-
     context = std::make_unique<VulkanContext>(window);
     swapchain = std::make_unique<Swapchain>(context.get(), width, height);
 #if WILL_EDITOR
@@ -62,6 +57,8 @@ void RenderThread::Initialize(Core::FrameSync* engineRenderSync, enki::TaskSched
         exit(1);
     }
 }
+
+RenderThread::~RenderThread() = default;
 
 void RenderThread::Start()
 {

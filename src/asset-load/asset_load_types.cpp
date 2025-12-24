@@ -9,23 +9,21 @@
 
 namespace AssetLoad
 {
-UploadStaging::~UploadStaging()
-{
-    if (fence != VK_NULL_HANDLE) {
-        vkDestroyFence(context->device, fence, nullptr);
-    }
-}
-
-void UploadStaging::Initialize(Render::VulkanContext* _context, VkCommandBuffer _commandBuffer)
+UploadStaging::UploadStaging(Render::VulkanContext* context, VkCommandBuffer commandBuffer, uint32_t stagingSize)
+    : context(context), commandBuffer(commandBuffer), stagingBuffer(Render::AllocatedBuffer::CreateAllocatedStagingBuffer(context, stagingSize)), stagingAllocator(stagingSize)
 {
     VkFenceCreateInfo fenceInfo = {
         .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
         .flags = VK_FENCE_CREATE_SIGNALED_BIT, // Unsignaled
     };
-    VK_CHECK(vkCreateFence(_context->device, &fenceInfo, nullptr, &fence));
-    context = _context;
-    commandBuffer = _commandBuffer;
-    stagingBuffer = Render::AllocatedBuffer::CreateAllocatedStagingBuffer(_context, ASSET_LOAD_STAGING_BUFFER_SIZE);
+    VK_CHECK(vkCreateFence(context->device, &fenceInfo, nullptr, &fence));
+}
+
+UploadStaging::~UploadStaging()
+{
+    if (fence != VK_NULL_HANDLE) {
+        vkDestroyFence(context->device, fence, nullptr);
+    }
 }
 
 void UploadStaging::StartCommandBuffer()

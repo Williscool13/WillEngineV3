@@ -7,7 +7,7 @@
 
 #include "offsetAllocator.hpp"
 #include "render/render_config.h"
-#include "vk_resources.h"
+#include "vulkan/vk_resources.h"
 #include "render/frame_resources.h"
 #include "render/descriptors/vk_bindless_resources_sampler_images.h"
 #include "render/descriptors/vk_bindless_resources_storage.h"

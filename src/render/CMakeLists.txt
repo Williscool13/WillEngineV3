@@ -1,6 +1,8 @@
 add_library(render STATIC
         render_thread.cpp
         render_thread.h
+        resource_manager.cpp
+        resource_manager.h
         frame_resources.cpp
         frame_resources.h
         render_config.cpp
@@ -23,8 +25,6 @@ add_library(render STATIC
         vulkan/vk_helpers.h
         vulkan/vk_render_extents.cpp
         vulkan/vk_render_extents.h
-        vulkan/vk_resource_manager.cpp
-        vulkan/vk_resource_manager.h
         vulkan/vk_imgui_wrapper.cpp
         vulkan/vk_imgui_wrapper.h
         types/render_types.cpp
@@ -58,6 +58,8 @@ add_library(render STATIC
         model/will_model_asset.cpp
         model/will_model_asset.h
         shaders/constants_interop.h
+        texture_asset.cpp
+        texture_asset.h
 )
 
 target_include_directories(render PRIVATE

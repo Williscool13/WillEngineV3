@@ -122,7 +122,7 @@ GenerateResponse AssetGenerator::GenerateKtxTexture(const std::filesystem::path&
         VkImageMemoryBarrier2 firstBarrier = VkHelpers::ImageMemoryBarrier(
             image.handle,
             VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1),
-            VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, image.layout,
             VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
         );
         VkDependencyInfo depInfo{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO, .imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &firstBarrier};
@@ -150,7 +150,7 @@ GenerateResponse AssetGenerator::GenerateKtxTexture(const std::filesystem::path&
             VkImageBlit blit{};
             blit.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, mip - 1, 0, 1};
             blit.srcOffsets[0] = {0, 0, 0};
-            blit.srcOffsets[1] = {((width >> mip) - 1), ((height >> mip) - 1), 1};
+            blit.srcOffsets[1] = {(width >> (mip - 1)), (height >> (mip - 1)), 1};
             blit.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, mip, 0, 1};
             blit.dstOffsets[0] = {0, 0, 0};
             blit.dstOffsets[1] = {(width >> mip), (height >> mip), 1};
@@ -168,17 +168,19 @@ GenerateResponse AssetGenerator::GenerateKtxTexture(const std::filesystem::path&
         depInfo.imageMemoryBarrierCount = 1;
         depInfo.pImageMemoryBarriers = &finalBarrier;
         vkCmdPipelineBarrier2(immediateParameters.immCommandBuffer, &depInfo);
+        image.layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
     }
     else {
         // Transition to transfer src for readback
         VkImageMemoryBarrier2 barrier = VkHelpers::ImageMemoryBarrier(
             image.handle,
             VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1),
-            VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, image.layout,
             VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
         );
         VkDependencyInfo depInfo{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO, .imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &barrier};
         vkCmdPipelineBarrier2(immediateParameters.immCommandBuffer, &depInfo);
+        image.layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
     }
 
     // Copy image back to CPU
@@ -266,7 +268,7 @@ GenerateResponse AssetGenerator::GenerateKtxTexture(const std::filesystem::path&
     }
 
     SPDLOG_INFO("[AssetGenerator::GenerateKtxTexture] Wrote {}", outputPath.string());
-    return GenerateResponse::UNABLE_TO_START;
+    return GenerateResponse::FINISHED;
 }
 
 RawGltfModel AssetGenerator::LoadGltf(const std::filesystem::path& source)
@@ -880,7 +882,7 @@ RawGltfModel AssetGenerator::LoadGltf(const std::filesystem::path& source)
     return rawModel;
 }
 
-bool AssetGenerator::WriteWillModel(const RawGltfModel& rawModel, const std::filesystem::path& outputPath)
+bool AssetGenerator::WriteWillModel(RawGltfModel& rawModel, const std::filesystem::path& outputPath)
 {
     if (std::filesystem::exists("temp")) {
         std::filesystem::remove_all("temp");
@@ -910,7 +912,7 @@ bool AssetGenerator::WriteWillModel(const RawGltfModel& rawModel, const std::fil
             VkImageMemoryBarrier2 firstBarrier = VkHelpers::ImageMemoryBarrier(
                 image.handle,
                 VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1),
-                VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, image.layout,
                 VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
             );
             VkDependencyInfo firstDepInfo{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
@@ -967,6 +969,7 @@ bool AssetGenerator::WriteWillModel(const RawGltfModel& rawModel, const std::fil
             depInfo.imageMemoryBarrierCount = 1;
             depInfo.pImageMemoryBarriers = &finalBarrier;
             vkCmdPipelineBarrier2(cmd, &depInfo);
+            image.layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
 
             VK_CHECK(vkEndCommandBuffer(cmd));
 
@@ -1405,7 +1408,7 @@ AllocatedImage AssetGenerator::RecordCreateImageFromData(VkCommandBuffer cmd, si
 
     VkImageMemoryBarrier2 barrier = VkHelpers::ImageMemoryBarrier(
         newImage.handle,
-        VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 1, 1),
+        VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1),
         VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_UNDEFINED,
         VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
     );
@@ -1425,20 +1428,7 @@ AllocatedImage AssetGenerator::RecordCreateImageFromData(VkCommandBuffer cmd, si
     copyRegion.imageExtent = imageExtent;
 
     vkCmdCopyBufferToImage(cmd, immediateParameters.imageStagingBuffer.handle, newImage.handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
-
-
-    VkImageMemoryBarrier2 barriers[1];
-    barriers[0] = VkHelpers::ImageMemoryBarrier(
-        newImage.handle,
-        VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 1, 1),
-        VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-    );
-    depInfo.imageMemoryBarrierCount = 1;
-    depInfo.pImageMemoryBarriers = barriers;
-
-    vkCmdPipelineBarrier2(cmd, &depInfo);
-    newImage.layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    newImage.layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
 
     return newImage;
 }

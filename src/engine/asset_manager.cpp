@@ -81,7 +81,7 @@ void AssetManager::UnloadModel(WillModelHandle handle)
     }
 }
 
-void AssetManager::ResolveModelLoad(Core::FrameBuffer& stagingFrameBuffer)
+void AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuffer) const
 {
     AssetLoad::WillModelComplete modelComplete{};
     while (assetLoadThread->ResolveLoads(modelComplete)) {
@@ -106,9 +106,23 @@ void AssetManager::ResolveModelLoad(Core::FrameBuffer& stagingFrameBuffer)
             SPDLOG_ERROR("[AssetManager] Model load failed: {}", modelComplete.model->source.string());
         }
     }
+
+    AssetLoad::TextureComplete textureComplete{};
+    while (assetLoadThread->ResolveTextureLoads(textureComplete)) {
+        if (textureComplete.success) {
+            stagingFrameBuffer.imageAcquireOperations.push_back(textureComplete.texture->acquireBarrier);
+
+            textureComplete.texture->loadState = Render::Texture::LoadState::Loaded;
+            SPDLOG_INFO("[AssetManager] Texture load succeeded: {}", textureComplete.texture->source.string());
+        }
+        else {
+            textureComplete.texture->loadState = Render::Texture::LoadState::NotLoaded;
+            SPDLOG_ERROR("[AssetManager] Texture load failed: {}", textureComplete.texture->source.string());
+        }
+    }
 }
 
-void AssetManager::ResolveModelUnload()
+void AssetManager::ResolveUnloads()
 {
     AssetLoad::WillModelComplete modelComplete{};
     while (assetLoadThread->ResolveUnload(modelComplete)) {
@@ -122,6 +136,77 @@ void AssetManager::ResolveModelUnload()
         modelComplete.model->selfHandle = WillModelHandle::INVALID;
 
         modelAllocator.Remove(modelComplete.willModelHandle);
+    }
+
+    AssetLoad::TextureComplete textureComplete{};
+    while (assetLoadThread->ResolveTextureUnload(textureComplete)) {
+        SPDLOG_INFO("[AssetManager] Texture unload succeeded: {}", textureComplete.texture->source.string());
+
+        textureComplete.texture->source.clear();
+        textureComplete.texture->name.clear();
+        textureComplete.texture->loadState = Render::Texture::LoadState::NotLoaded;
+        textureComplete.texture->selfHandle = TextureHandle::INVALID;
+
+        textureAllocator.Remove(textureComplete.textureHandle);
+    }
+}
+
+TextureHandle AssetManager::LoadTexture(const std::filesystem::path& path)
+{
+    auto it = pathToTextureHandle.find(path);
+    if (it != pathToTextureHandle.end()) {
+        TextureHandle existingHandle = it->second;
+        if (textureAllocator.IsValid(existingHandle)) {
+            Render::Texture& texture = textures[existingHandle.index];
+            texture.refCount++;
+            SPDLOG_TRACE("[AssetManager] Texture already loaded: {}, refCount: {}", path.string(), texture.refCount);
+            return existingHandle;
+        }
+        pathToTextureHandle.erase(it);
+    }
+
+    TextureHandle handle = textureAllocator.Add();
+    if (!handle.IsValid()) {
+        SPDLOG_ERROR("[AssetManager] Failed to allocate texture slot for: {}", path.string());
+        return TextureHandle{};
+    }
+
+    Render::Texture& texture = textures[handle.index];
+    texture.selfHandle = handle;
+    texture.source = path;
+    texture.name = path.stem().string();
+    texture.refCount = 1;
+    texture.loadState = Render::Texture::LoadState::NotLoaded;
+
+    pathToTextureHandle[path] = handle;
+
+    assetLoadThread->RequestTextureLoad(texture.selfHandle, &texture);
+
+    return handle;
+}
+
+Render::Texture* AssetManager::GetTexture(TextureHandle handle)
+{
+    if (!textureAllocator.IsValid(handle)) {
+        return nullptr;
+    }
+    return &textures[handle.index];
+}
+
+void AssetManager::UnloadTexture(TextureHandle handle)
+{
+    if (!textureAllocator.IsValid(handle)) {
+        SPDLOG_WARN("[AssetManager] Attempted to unload invalid texture handle");
+        return;
+    }
+
+    Render::Texture& texture = textures[handle.index];
+    texture.refCount--;
+
+    if (texture.refCount == 0) {
+        texture.loadState = Render::Texture::LoadState::NotLoaded;
+        assetLoadThread->RequestTextureUnload(handle, &texture);
+        pathToTextureHandle.erase(texture.source);
     }
 }
 } // Engine

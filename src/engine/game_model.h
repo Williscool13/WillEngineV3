@@ -5,7 +5,7 @@
 #ifndef WILL_ENGINE_GAME_MODEL_H
 #define WILL_ENGINE_GAME_MODEL_H
 #include "core/math/transform.h"
-#include "render/vulkan/vk_resource_manager.h"
+#include "../render/resource_manager.h"
 
 namespace Game
 {

@@ -8,8 +8,11 @@
 #include <spdlog/spdlog.h>
 
 #include "asset_load_job.h"
+#include "ktxvulkan.h"
+#include "texture_load_job.h"
 #include "will_model_load_job.h"
 #include "platform/paths.h"
+#include "render/texture_asset.h"
 #include "render/vulkan/vk_context.h"
 #include "render/vulkan/vk_helpers.h"
 #include "render/vulkan/vk_utils.h"
@@ -18,32 +21,55 @@ namespace AssetLoad
 {
 AssetLoadThread::AssetLoadThread() = default;
 
+AssetLoadThread::AssetLoadThread(enki::TaskScheduler* scheduler, Render::VulkanContext* context, Render::ResourceManager* resourceManager)
+    : context(context), resourceManager(resourceManager), scheduler(scheduler)
+{
+    VkCommandPoolCreateInfo poolInfo = Render::VkHelpers::CommandPoolCreateInfo(context->transferQueueFamily);
+    VK_CHECK(vkCreateCommandPool(context->device, &poolInfo, nullptr, &commandPool));
+
+    const uint32_t totalCommandBuffers = WILL_MODEL_JOB_COUNT + TEXTURE_JOB_COUNT + 1;
+    VkCommandBufferAllocateInfo cmdInfo = Render::VkHelpers::CommandBufferAllocateInfo(totalCommandBuffers, commandPool);
+    std::vector<VkCommandBuffer> commandBuffers(totalCommandBuffers);
+    VK_CHECK(vkAllocateCommandBuffers(context->device, &cmdInfo, commandBuffers.data()));
+
+
+    willModelJobs.reserve(WILL_MODEL_JOB_COUNT);
+    for (int32_t i = 0; i < WILL_MODEL_JOB_COUNT; ++i) {
+        willModelJobs.emplace_back(std::make_unique<WillModelLoadJob>(context, resourceManager, commandBuffers[i]));
+    }
+
+    textureJobs.reserve(TEXTURE_JOB_COUNT);
+    for (int32_t i = 0; i < TEXTURE_JOB_COUNT; ++i) {
+        textureJobs.emplace_back(std::make_unique<TextureLoadJob>(context, resourceManager, commandBuffers[WILL_MODEL_JOB_COUNT + i]));
+    }
+
+    synchronousTextureUploadStaging = std::make_unique<UploadStaging>(context, commandBuffers[WILL_MODEL_JOB_COUNT + TEXTURE_JOB_COUNT], TEXTURE_LOAD_STAGING_SIZE);
+
+    auto errorPath = Platform::GetAssetPath() / "textures/error.ktx2";
+    auto whitePath = Platform::GetAssetPath() / "textures/white.ktx2";
+    defaultErrorTexture = SynchronousLoadTexture(errorPath);
+    defaultWhiteTexture = SynchronousLoadTexture(whitePath);
+
+    assert(defaultWhiteTexture.image.handle != VK_NULL_HANDLE);
+    whiteHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.AllocateTexture({
+        .imageView = defaultWhiteTexture.imageView.handle,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    });
+    assert(whiteHandle.index == 0);
+
+    assert(defaultErrorTexture.image.handle != VK_NULL_HANDLE);
+    errorHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.AllocateTexture({
+        .imageView = defaultErrorTexture.imageView.handle,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    });
+    assert(errorHandle.index == 1);
+}
+
 AssetLoadThread::~AssetLoadThread()
 {
     if (context) {
         vkDestroyCommandPool(context->device, commandPool, nullptr);
     }
-}
-
-void AssetLoadThread::Initialize(enki::TaskScheduler* _scheduler, Render::VulkanContext* _context, Render::ResourceManager* _resourceManager)
-{
-    scheduler = _scheduler;
-    context = _context;
-    resourceManager = _resourceManager;
-
-    VkCommandPoolCreateInfo poolInfo = Render::VkHelpers::CommandPoolCreateInfo(context->transferQueueFamily);
-    VK_CHECK(vkCreateCommandPool(context->device, &poolInfo, nullptr, &commandPool));
-    VkCommandBufferAllocateInfo cmdInfo = Render::VkHelpers::CommandBufferAllocateInfo(WILL_MODEL_JOB_COUNT, commandPool);
-    std::array<VkCommandBuffer, WILL_MODEL_JOB_COUNT + 1> commandBuffers{};
-    VK_CHECK(vkAllocateCommandBuffers(context->device, &cmdInfo, commandBuffers.data()));
-
-    willModelJobs.reserve(WILL_MODEL_JOB_COUNT);
-    for (int32_t i = 0; i < WILL_MODEL_JOB_COUNT; ++i) {
-        auto willModelLoadJob = std::make_unique<WillModelLoadJob>(context, resourceManager, commandBuffers[i]);
-        willModelJobs.emplace_back(std::move(willModelLoadJob));
-    }
-
-    CreateDefaultResources();
 }
 
 void AssetLoadThread::Start()
@@ -91,6 +117,161 @@ bool AssetLoadThread::ResolveUnload(WillModelComplete& modelComplete)
     return modelCompleteUnloadQueue.pop(modelComplete);
 }
 
+void AssetLoadThread::RequestTextureLoad(Engine::TextureHandle textureHandle, Render::Texture* texturePtr)
+{
+    textureLoadQueue.push({textureHandle, texturePtr});
+}
+
+bool AssetLoadThread::ResolveTextureLoads(TextureComplete& textureComplete)
+{
+    return textureCompleteLoadQueue.pop(textureComplete);
+}
+
+void AssetLoadThread::RequestTextureUnload(Engine::TextureHandle textureHandle, Render::Texture* texturePtr)
+{
+    textureUnloadQueue.push({textureHandle, texturePtr});
+}
+
+bool AssetLoadThread::ResolveTextureUnload(TextureComplete& textureComplete)
+{
+    return textureCompleteUnloadQueue.pop(textureComplete);
+}
+
+Render::Texture AssetLoadThread::SynchronousLoadTexture(std::filesystem::path source)
+{
+    Render::Texture outTexture;
+    outTexture.source = source;
+    outTexture.name = source.filename().string();
+    outTexture.loadState = Render::Texture::LoadState::Loaded;
+    ktxTexture2* ktxTex;
+    ktx_error_code_e result = ktxTexture2_CreateFromNamedFile(
+        source.string().c_str(),
+        KTX_TEXTURE_CREATE_NO_FLAGS,
+        &ktxTex
+    );
+
+    if (result != KTX_SUCCESS) {
+        SPDLOG_ERROR("[AssetLoadThread] Failed to load texture: {}", source.filename().string());
+        return {};
+    }
+
+    if (ktxTexture2_NeedsTranscoding(ktxTex)) {
+        // const ktx_transcode_fmt_e targetFormat = KTX_TTF_BC7_RGBA;
+        const ktx_transcode_fmt_e targetFormat = KTX_TTF_RGBA32;
+        result = ktxTexture2_TranscodeBasis(ktxTex, targetFormat, 0);
+        if (result != KTX_SUCCESS) {
+            SPDLOG_ERROR("[AssetLoadThread] Failed to transcode texture: {}", source.filename().string());
+            ktxTexture2_Destroy(ktxTex);
+            return {};
+        }
+    }
+
+    VkExtent3D extent{
+        .width = ktxTex->baseWidth,
+        .height = ktxTex->baseHeight,
+        .depth = ktxTex->baseDepth
+    };
+
+    VkFormat imageFormat = ktxTexture2_GetVkFormat(ktxTex);
+    VkImageCreateInfo imageCreateInfo = Render::VkHelpers::ImageCreateInfo(
+        imageFormat,
+        extent,
+        VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT
+    );
+    imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
+    imageCreateInfo.mipLevels = ktxTex->numLevels;
+    imageCreateInfo.arrayLayers = ktxTex->numLayers;
+    imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+    outTexture.image = Render::AllocatedImage::CreateAllocatedImage(context, imageCreateInfo);
+
+    VkImageViewCreateInfo viewInfo = Render::VkHelpers::ImageViewCreateInfo(
+        outTexture.image.handle,
+        outTexture.image.format,
+        VK_IMAGE_ASPECT_COLOR_BIT
+    );
+    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    viewInfo.subresourceRange.layerCount = ktxTex->numLayers;
+    viewInfo.subresourceRange.levelCount = ktxTex->numLevels;
+
+    outTexture.imageView = Render::ImageView::CreateImageView(context, viewInfo);
+
+    OffsetAllocator::Allocator& stagingAllocator = synchronousTextureUploadStaging->GetStagingAllocator();
+    Render::AllocatedBuffer& stagingBuffer = synchronousTextureUploadStaging->GetStagingBuffer();
+    VkCommandBuffer cmd = synchronousTextureUploadStaging->GetCommandBuffer();
+
+    synchronousTextureUploadStaging->StartCommandBuffer();
+
+    for (uint32_t mip = 0; mip < ktxTex->numLevels; mip++) {
+        size_t mipOffset;
+        ktxTexture_GetImageOffset(ktxTexture(ktxTex), mip, 0, 0, &mipOffset);
+
+        uint32_t mipWidth = std::max(1u, ktxTex->baseWidth >> mip);
+        uint32_t mipHeight = std::max(1u, ktxTex->baseHeight >> mip);
+        uint32_t mipDepth = std::max(1u, ktxTex->baseDepth >> mip);
+
+        size_t mipSize = ktxTexture_GetImageSize(ktxTexture(ktxTex), mip);
+
+        OffsetAllocator::Allocation allocation = stagingAllocator.allocate(mipSize);
+        if (allocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
+            SPDLOG_ERROR("[AssetLoadThread] Staging buffer too small for texture: {}", source.filename().string());
+            ktxTexture2_Destroy(ktxTex);
+            return {};
+        }
+
+        char* stagingPtr = static_cast<char*>(stagingBuffer.allocationInfo.pMappedData) + allocation.offset;
+        memcpy(stagingPtr, ktxTex->pData + mipOffset, mipSize);
+
+        VkImageMemoryBarrier2 preCopyBarrier = Render::VkHelpers::ImageMemoryBarrier(
+            outTexture.image.handle,
+            Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, mip, 1, 0, ktxTex->numLayers),
+            VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_UNDEFINED,
+            VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
+        );
+        VkDependencyInfo depInfo{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
+        depInfo.imageMemoryBarrierCount = 1;
+        depInfo.pImageMemoryBarriers = &preCopyBarrier;
+        vkCmdPipelineBarrier2(cmd, &depInfo);
+
+        VkBufferImageCopy copyRegion{};
+        copyRegion.bufferOffset = allocation.offset;
+        copyRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        copyRegion.imageSubresource.mipLevel = mip;
+        copyRegion.imageSubresource.baseArrayLayer = 0;
+        copyRegion.imageSubresource.layerCount = ktxTex->numLayers;
+        copyRegion.imageOffset = {0, 0, 0};
+        copyRegion.imageExtent = {mipWidth, mipHeight, mipDepth};
+
+        vkCmdCopyBufferToImage(
+            cmd,
+            stagingBuffer.handle,
+            outTexture.image.handle,
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            1,
+            &copyRegion
+        );
+    }
+
+    VkImageMemoryBarrier2 finalBarrier = Render::VkHelpers::ImageMemoryBarrier(
+        outTexture.image.handle,
+        Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, ktxTex->numLevels, 0, ktxTex->numLayers),
+        VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    );
+    // todo: need acquire barrier
+    VkDependencyInfo finalDepInfo{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
+    finalDepInfo.imageMemoryBarrierCount = 1;
+    finalDepInfo.pImageMemoryBarriers = &finalBarrier;
+    vkCmdPipelineBarrier2(cmd, &finalDepInfo);
+
+    // outputTexture->acquireBarrier = Render::VkHelpers::FromVkBarrier(finalBarrier);
+
+    synchronousTextureUploadStaging->SubmitCommandBuffer();
+
+    ktxTexture2_Destroy(ktxTex);
+    return outTexture;
+}
+
 void AssetLoadThread::ThreadMain()
 {
     while (!bShouldExit.load(std::memory_order_acquire)) {
@@ -130,12 +311,56 @@ void AssetLoadThread::ThreadMain()
                 }
 
                 WillModelLoadJob* job = willModelJobs[freeJobIdx].get();
-                job->SetOutputModel(loadRequest.willModelHandle, loadRequest.model);
+                job->willModelHandle = loadRequest.willModelHandle;
+                job->outputModel = loadRequest.model;
                 willModelJobActive[freeJobIdx] = true;
 
                 assetLoadSlots[slotIdx].job = job;
                 assetLoadSlots[slotIdx].loadState = AssetLoadState::Idle;
                 assetLoadSlots[slotIdx].type = AssetType::WillModel;
+                activeSlotMask[slotIdx] = true;
+            }
+        }
+
+        // Texture loading jobs
+        {
+            size_t freeTextureJobCount = 0;
+            for (size_t i = 0; i < textureJobActive.size(); ++i) {
+                if (!textureJobActive[i]) {
+                    freeTextureJobCount++;
+                }
+            }
+
+            for (size_t jobsStarted = 0; jobsStarted < freeTextureJobCount; ++jobsStarted) {
+                TextureLoadRequest loadRequest{};
+                if (!textureLoadQueue.pop(loadRequest)) {
+                    break;
+                }
+
+                int32_t slotIdx = -1;
+                for (size_t i = 0; i < 64; ++i) {
+                    if (!(activeSlotMask[i])) {
+                        slotIdx = i;
+                        break;
+                    }
+                }
+
+                int32_t freeJobIdx = -1;
+                for (size_t i = 0; i < textureJobActive.size(); ++i) {
+                    if (!textureJobActive[i]) {
+                        freeJobIdx = i;
+                        break;
+                    }
+                }
+
+                TextureLoadJob* job = textureJobs[freeJobIdx].get();
+                job->textureHandle = loadRequest.textureHandle;
+                job->outputTexture = loadRequest.texture;
+                textureJobActive[freeJobIdx] = true;
+
+                assetLoadSlots[slotIdx].job = job;
+                assetLoadSlots[slotIdx].loadState = AssetLoadState::Idle;
+                assetLoadSlots[slotIdx].type = AssetType::Texture;
                 activeSlotMask[slotIdx] = true;
             }
         }
@@ -202,7 +427,6 @@ void AssetLoadThread::ThreadMain()
                         auto* modelJob = static_cast<WillModelLoadJob*>(job);
                         modelCompleteLoadQueue.push({modelJob->willModelHandle, modelJob->outputModel, success});
 
-                        // Find job index for deactivation
                         for (size_t i = 0; i < willModelJobs.size(); ++i) {
                             if (willModelJobs[i].get() == job) {
                                 job->Reset();
@@ -214,128 +438,65 @@ void AssetLoadThread::ThreadMain()
                     }
                     case AssetType::Texture:
                     {
-                        // TODO: Add texture job check here when implemented
+                        auto* textureJob = static_cast<TextureLoadJob*>(job);
+                        textureCompleteLoadQueue.push({textureJob->textureHandle, textureJob->outputTexture, success});
 
-                        // auto* texJob = static_cast<TextureLoadJob*>(job);
-                        // textureCompleteLoadQueue.push({texJob->handle, texJob->target, success});
-                        // job->Reset();
-                        // textureJobActive[i] = false;
-
+                        for (size_t i = 0; i < textureJobs.size(); ++i) {
+                            if (textureJobs[i].get() == job) {
+                                job->Reset();
+                                textureJobActive[i] = false;
+                                break;
+                            }
+                        }
                         break;
                     }
                     default:
                         break;
                 }
 
-                // Free slot
                 activeSlotMask[slotIdx] = false;
                 slot.job = nullptr;
                 slot.loadState = AssetLoadState::Unassigned;
                 slot.type = AssetType::None;
             }
         }
-    }
-}
 
-void AssetLoadThread::CreateDefaultResources()
-{
-    /*const auto testTexturePath = Platform::GetAssetPath() / "textures/error.ktx2";
-    const uint32_t mipLevels = 1;
 
-    ktxTexture2* texture;
-    ktx_error_code_e result = ktxTexture2_CreateFromNamedFile(testTexturePath.string().c_str(), KTX_TEXTURE_CREATE_NO_FLAGS, &texture);
-    assert(result == KTX_SUCCESS && "Failed to load test texture");
+        WillModelLoadRequest unloadRequest{};
+        if (modelUnloadQueue.pop(unloadRequest)) {
+            OffsetAllocator::Allocator* selectedAllocator;
+            if (unloadRequest.model->modelData.bIsSkinned) {
+                selectedAllocator = &resourceManager->skinnedVertexBufferAllocator;
+            }
+            else {
+                selectedAllocator = &resourceManager->vertexBufferAllocator;
+            }
 
-    auto& uploadStaging = assetLoadSlots[0].uploadStaging;
+            selectedAllocator->free(unloadRequest.model->modelData.vertexAllocation);
+            resourceManager->meshletVertexBufferAllocator.free(unloadRequest.model->modelData.meshletVertexAllocation);
+            resourceManager->meshletTriangleBufferAllocator.free(unloadRequest.model->modelData.meshletTriangleAllocation);
+            resourceManager->meshletBufferAllocator.free(unloadRequest.model->modelData.meshletAllocation);
+            resourceManager->primitiveBufferAllocator.free(unloadRequest.model->modelData.primitiveAllocation);
+            unloadRequest.model->modelData.vertexAllocation.metadata = OffsetAllocator::Allocation::NO_SPACE;
+            unloadRequest.model->modelData.meshletVertexAllocation.metadata = OffsetAllocator::Allocation::NO_SPACE;
+            unloadRequest.model->modelData.meshletTriangleAllocation.metadata = OffsetAllocator::Allocation::NO_SPACE;
+            unloadRequest.model->modelData.meshletAllocation.metadata = OffsetAllocator::Allocation::NO_SPACE;
+            unloadRequest.model->modelData.primitiveAllocation.metadata = OffsetAllocator::Allocation::NO_SPACE;
 
-    ktx_size_t dataSize = texture->dataSize;
-    OffsetAllocator::Allocation allocation = uploadStaging->GetStagingAllocator().allocate(dataSize);
-    assert(allocation.metadata != OffsetAllocator::Allocation::NO_SPACE);
+            modelCompleteUnloadQueue.push({unloadRequest.willModelHandle, unloadRequest.model, true});
+        }
 
-    VkExtent3D extent;
-    extent.width = texture->baseWidth;
-    extent.height = texture->baseHeight;
-    extent.depth = texture->baseDepth;
+        TextureLoadRequest textureUnloadRequest{};
+        if (textureUnloadQueue.pop(textureUnloadRequest)) {
+            if (textureUnloadRequest.texture->bindlessHandle.index != 0) {
+                resourceManager->bindlessSamplerTextureDescriptorBuffer.ReleaseTextureBinding(textureUnloadRequest.texture->bindlessHandle);
+            }
 
-    if (ktxTexture2_NeedsTranscoding(texture)) {
-        // const ktx_transcode_fmt_e targetFormat = KTX_TTF_BC7_RGBA;
-        const ktx_transcode_fmt_e targetFormat = KTX_TTF_RGBA32;
-        result = ktxTexture2_TranscodeBasis(texture, targetFormat, 0);
-        if (result != KTX_SUCCESS) {
-            SPDLOG_ERROR("Failed to transcode texture");
-            ktxTexture2_Destroy(texture);
-            return;
+            textureUnloadRequest.texture->image = {};
+            textureUnloadRequest.texture->imageView = {};
+
+            textureCompleteUnloadQueue.push({textureUnloadRequest.textureHandle, textureUnloadRequest.texture, true});
         }
     }
-
-    VkFormat imageFormat = ktxTexture2_GetVkFormat(texture);
-    VkImageCreateInfo imageCreateInfo = Render::VkHelpers::ImageCreateInfo(imageFormat, extent, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
-    imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
-    imageCreateInfo.mipLevels = mipLevels;
-    imageCreateInfo.arrayLayers = texture->numLayers;
-    imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    Render::AllocatedImage allocatedImage = Render::AllocatedImage::CreateAllocatedImage(context, imageCreateInfo);
-
-    VkImageViewCreateInfo viewInfo = Render::VkHelpers::ImageViewCreateInfo(allocatedImage.handle, allocatedImage.format, VK_IMAGE_ASPECT_COLOR_BIT);
-    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    viewInfo.subresourceRange.layerCount = texture->numLayers;
-    viewInfo.subresourceRange.levelCount = mipLevels;
-    Render::ImageView imageView = Render::ImageView::CreateImageView(context, viewInfo);
-
-    uploadStaging->StartCommandBuffer();
-    char* bufferOffset = static_cast<char*>(uploadStaging->GetStagingBuffer().allocationInfo.pMappedData) + allocation.offset;
-    memcpy(bufferOffset, texture->pData, dataSize);
-
-    size_t mipOffset;
-    ktxTexture_GetImageOffset(ktxTexture(texture), 0, 0, 0, &mipOffset);
-
-    VkBufferImageCopy region{};
-    region.bufferOffset = allocation.offset + mipOffset;
-    region.bufferRowLength = 0;
-    region.bufferImageHeight = 0;
-    region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    region.imageSubresource.mipLevel = 0;
-    region.imageSubresource.baseArrayLayer = 0;
-    region.imageSubresource.layerCount = texture->numLayers;
-    region.imageOffset = {0, 0, 0};
-    region.imageExtent = {texture->baseWidth, texture->baseHeight, texture->baseDepth};
-
-    VkImageMemoryBarrier2 barrier = Render::VkHelpers::ImageMemoryBarrier(
-        allocatedImage.handle,
-        Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, mipLevels, 0, texture->numLayers),
-        VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_UNDEFINED,
-        VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
-    );
-    VkDependencyInfo depInfo{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
-    depInfo.imageMemoryBarrierCount = 1;
-    depInfo.pImageMemoryBarriers = &barrier;
-    vkCmdPipelineBarrier2(uploadStaging->GetCommandBuffer(), &depInfo);
-
-    vkCmdCopyBufferToImage(uploadStaging->GetCommandBuffer(), uploadStaging->GetStagingBuffer().handle, allocatedImage.handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
-
-    barrier = Render::VkHelpers::ImageMemoryBarrier(
-        allocatedImage.handle,
-        Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, mipLevels, 0, texture->numLayers),
-        VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-    );
-    barrier.srcQueueFamilyIndex = context->transferQueueFamily;
-    barrier.dstQueueFamilyIndex = context->graphicsQueueFamily;
-    vkCmdPipelineBarrier2(uploadStaging->GetCommandBuffer(), &depInfo);
-
-    // model->imageAcquireOps.push_back(Render::VkHelpers::FromVkBarrier(barrier));
-    // model->modelData.images.push_back(std::move(allocatedImage));
-    // model->modelData.imageViews.push_back(std::move(imageView));
-
-    uploadStaging->SubmitCommandBuffer();
-    uploadStaging->WaitForFence();
-
-    ktxTexture2_Destroy(texture);
-
-    auto index = resourceManager->bindlessSamplerTextureDescriptorBuffer.AllocateTexture({
-        .imageView = imageView.handle,
-        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-    });
-    assert(index.index == 0);*/
 }
 } // AssetLoad
