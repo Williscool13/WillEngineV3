@@ -8,8 +8,8 @@
 
 namespace Core
 {
-inline static uint32_t INVALID_HANDLE_INDEX = 0xFFFFFF;
-inline static uint32_t INVALID_HANDLE_GENERATION = 0xFF;
+inline static uint32_t INVALID_HANDLE_INDEX = 0;
+inline static uint32_t INVALID_HANDLE_GENERATION = 0;
 
 template<typename T>
 struct Handle

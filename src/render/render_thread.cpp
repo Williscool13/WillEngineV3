@@ -41,8 +41,8 @@ RenderThread::RenderThread(Core::FrameSync* engineRenderSynchronization, enki::T
     renderExtents = std::make_unique<RenderExtents>(width, height, 1.0f);
     resourceManager = std::make_unique<ResourceManager>(context.get());
 
-    resourceManager->bindlessRenderTargetDescriptorBuffer.ForceAllocateStorageImage({COLOR_TARGET_INDEX, 0}, {nullptr, renderTargets->colorTargetView.handle, VK_IMAGE_LAYOUT_GENERAL});
-    resourceManager->bindlessRenderTargetDescriptorBuffer.ForceAllocateStorageImage({DEPTH_TARGET_INDEX, 0}, {nullptr, renderTargets->depthTargetView.handle, VK_IMAGE_LAYOUT_GENERAL});
+    resourceManager->bindlessRenderTargetDescriptorBuffer.ForceAllocateStorageImage({COLOR_TARGET_INDEX, 1}, {nullptr, renderTargets->colorTargetView.handle, VK_IMAGE_LAYOUT_GENERAL});
+    resourceManager->bindlessRenderTargetDescriptorBuffer.ForceAllocateStorageImage({DEPTH_TARGET_INDEX, 1}, {nullptr, renderTargets->depthTargetView.handle, VK_IMAGE_LAYOUT_GENERAL});
 
     for (RenderSynchronization& frameSync : frameSynchronization) {
         frameSync = RenderSynchronization(context.get());

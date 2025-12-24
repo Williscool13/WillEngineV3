@@ -152,13 +152,13 @@ void AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuffer) const
             modelComplete.model->bufferAcquireOps.clear();
             modelComplete.model->imageAcquireOps.clear();
             modelComplete.model->modelLoadState = Render::WillModel::ModelLoadState::Loaded;
-            SPDLOG_INFO("[AssetManager] Model load succeeded: {}", modelComplete.model->source.string());
+            SPDLOG_INFO("[AssetManager] Model load succeeded: {}", modelComplete.model->name);
         }
         else {
             modelComplete.model->bufferAcquireOps.clear();
             modelComplete.model->imageAcquireOps.clear();
             modelComplete.model->modelLoadState = Render::WillModel::ModelLoadState::NotLoaded;
-            SPDLOG_ERROR("[AssetManager] Model load failed: {}", modelComplete.model->source.string());
+            SPDLOG_ERROR("[AssetManager] Model load failed: {}", modelComplete.model->name);
         }
     }
 
@@ -168,11 +168,11 @@ void AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuffer) const
             stagingFrameBuffer.imageAcquireOperations.push_back(textureComplete.texture->acquireBarrier);
 
             textureComplete.texture->loadState = Render::Texture::LoadState::Loaded;
-            SPDLOG_INFO("[AssetManager] Texture load succeeded: {}", textureComplete.texture->source.string());
+            SPDLOG_INFO("[AssetManager] Texture load succeeded: {} (bindless index: {})", textureComplete.texture->name, static_cast<uint32_t>(textureComplete.texture->bindlessHandle.index));
         }
         else {
             textureComplete.texture->loadState = Render::Texture::LoadState::NotLoaded;
-            SPDLOG_ERROR("[AssetManager] Texture load failed: {}", textureComplete.texture->source.string());
+            SPDLOG_ERROR("[AssetManager] Texture load failed: {}", textureComplete.texture->name);
         }
     }
 }
@@ -181,7 +181,7 @@ void AssetManager::ResolveUnloads()
 {
     AssetLoad::WillModelComplete modelComplete{};
     while (assetLoadThread->ResolveUnload(modelComplete)) {
-        SPDLOG_INFO("[AssetManager] Model unload succeeded: {}", modelComplete.model->source.string());
+        SPDLOG_INFO("[AssetManager] Model unload succeeded: {}", modelComplete.model->name);
         modelComplete.model->modelData.Reset();
         modelComplete.model->bufferAcquireOps.clear();
         modelComplete.model->imageAcquireOps.clear();
@@ -195,7 +195,7 @@ void AssetManager::ResolveUnloads()
 
     AssetLoad::TextureComplete textureComplete{};
     while (assetLoadThread->ResolveTextureUnload(textureComplete)) {
-        SPDLOG_INFO("[AssetManager] Texture unload succeeded: {}", textureComplete.texture->source.string());
+        SPDLOG_INFO("[AssetManager] Texture unload succeeded: {}", textureComplete.texture->name);
 
         textureComplete.texture->source.clear();
         textureComplete.texture->name.clear();

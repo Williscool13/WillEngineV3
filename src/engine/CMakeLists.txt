@@ -28,12 +28,12 @@ target_link_libraries(engine PUBLIC
         enkiTS
 )
 
-if(GAME_STATIC)
+if(WILL_ENGINE_GAME_STATIC)
     target_link_libraries(engine PUBLIC game)
 endif()
 
 target_compile_definitions(engine PRIVATE ENGINE_EXPORTS)
 
-if(WILL_BUILD_EDITOR)
+if(WILL_ENGINE_BUILD_EDITOR)
     target_link_libraries(engine PUBLIC editor)
 endif()

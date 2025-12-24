@@ -4,11 +4,11 @@ project(will-engine)
 set(CMAKE_CXX_STANDARD 23)
 
 
-option(WILL_BUILD_EDITOR "Build editor features" OFF)
-option(GAME_STATIC "Build game as static library" OFF)
-option(WILL_BUILD_NO_CONSOLE "Disable the console" OFF)
-
-option(PACKAGED_BUILD "Enable to use UserDataPath for log and crash report paths" OFF)
+option(WILL_ENGINE_BUILD_EDITOR "Build editor features" OFF)
+option(WILL_ENGINE_GAME_STATIC "Build game as static library" OFF)
+option(WILL_ENGINE_NO_CONSOLE "Disable the console" OFF)
+option(WILL_ENGINE_PACKAGED_BUILD "Enable the use UserDataPath for log and crash report paths" OFF)
+option(WILL_ENGINE_BUILD_TESTS "Build test suite" OFF)
 
 # Configuration ==============================
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
@@ -21,22 +21,22 @@ elseif (CMAKE_BUILD_TYPE STREQUAL "MinSizeRel")
     add_compile_definitions(SPDLOG_ACTIVE_LEVEL=2)
 endif ()
 
-if (WILL_BUILD_EDITOR)
+if (WILL_ENGINE_BUILD_EDITOR)
     add_compile_definitions(WILL_EDITOR)
 endif ()
 
-if (GAME_STATIC)
+if (WILL_ENGINE_GAME_STATIC)
     add_compile_definitions(GAME_STATIC)
 endif ()
 
-if (PACKAGED_BUILD)
+if (WILL_ENGINE_PACKAGED_BUILD)
     add_compile_definitions(PACKAGED_BUILD)
-else()
+else ()
     add_compile_definitions(ASSETS_PATH="${CMAKE_SOURCE_DIR}/assets")
 endif ()
 
 # Build =======================================
-if (NOT WILL_BUILD_EDITOR AND WILL_BUILD_NO_CONSOLE AND WIN32)
+if (NOT WILL_ENGINE_BUILD_EDITOR AND WILL_ENGINE_NO_CONSOLE AND WIN32)
     add_executable(will-engine WIN32 main.cpp)
 else ()
     add_executable(will-engine main.cpp)
@@ -80,8 +80,14 @@ add_subdirectory(src/render)
 add_subdirectory(src/asset-load)
 add_subdirectory(src/utils)
 add_subdirectory(src/platform)
-if (WILL_BUILD_EDITOR)
+
+if (WILL_ENGINE_BUILD_EDITOR)
     add_subdirectory(src/editor)
+endif ()
+
+if (WILL_ENGINE_BUILD_TESTS)
+    add_subdirectory(extern/Catch2)
+    add_subdirectory(tests)
 endif ()
 
 # Imgui =======================================

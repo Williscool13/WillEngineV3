@@ -172,7 +172,6 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
 
     if (state->inputFrame->GetKey(Key::NUM_8).pressed) {
         textureHandle = ctx->assetManager->LoadTexture(Platform::GetAssetPath() / "textures/smiling_friend.ktx2");
-        SPDLOG_INFO("Texture index: {}", static_cast<uint32_t>(textureHandle.index));
     }
     if (state->inputFrame->GetKey(Key::NUM_9).pressed) {
         ctx->assetManager->UnloadTexture(textureHandle);

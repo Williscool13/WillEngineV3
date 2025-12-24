@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "handle.h"
+#include "ring_buffer.h"
 
 namespace Core
 {
@@ -16,32 +17,31 @@ template<typename T, size_t MaxSize>
 class HandleAllocator
 {
     std::vector<uint32_t> generations;
-    std::vector<uint32_t> freeIndices;
+    RingBuffer<uint32_t, MaxSize> freeIndices;
     uint32_t count = 0;
 
 public:
     HandleAllocator()
     {
-        generations.resize(MaxSize);
-        freeIndices.reserve(MaxSize);
+        generations.resize(MaxSize, 1);
+
+        // Push indices 0 to MaxSize-1 in order
         for (uint32_t i = 0; i < MaxSize; ++i) {
-            freeIndices.push_back(MaxSize - 1 - i);
+            freeIndices.Push(i);
         }
     }
 
     Handle<T> Add()
     {
-        if (freeIndices.empty()) {
+        uint32_t index;
+        if (!freeIndices.Pop(index)) {
             return Handle<T>(INVALID_HANDLE_INDEX, INVALID_HANDLE_GENERATION);
         }
-        uint32_t index = freeIndices.back();
-        freeIndices.pop_back();
 
         ++count;
 
         return {index, generations[index]};
     }
-
 
     bool Remove(Handle<T> handle)
     {
@@ -50,16 +50,16 @@ public:
         }
 
         ++generations[handle.index];
-        freeIndices.push_back(handle.index);
+        freeIndices.Push(handle.index);
         --count;
         return true;
     }
 
     void Clear()
     {
-        freeIndices.clear();
+        freeIndices.Clear();
         for (uint32_t i = 0; i < MaxSize; ++i) {
-            freeIndices.push_back(MaxSize - 1 - i);
+            freeIndices.Push(i);
             ++generations[i]; // invalidate all existing handles
         }
         count = 0;
@@ -74,13 +74,12 @@ public:
 
     [[nodiscard]] bool IsAnyFree() const
     {
-        return !freeIndices.empty();
+        return !freeIndices.IsEmpty();
     }
 
     [[nodiscard]] uint32_t GetCount() const { return count; }
     [[nodiscard]] uint32_t GetCapacity() const { return MaxSize; }
 };
 }
-
 
 #endif //WILLENGINETESTBED_HANDLE_ALLOCATOR_H

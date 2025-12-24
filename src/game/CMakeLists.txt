@@ -27,7 +27,7 @@ set(GAME_LIBRARIES
         spdlog::spdlog
 )
 
-if (GAME_STATIC)
+if (WILL_ENGINE_GAME_STATIC)
     add_library(game STATIC ${GAME_SOURCES})
 else()
     add_library(game SHARED ${GAME_SOURCES})

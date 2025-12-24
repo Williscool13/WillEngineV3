@@ -82,7 +82,7 @@ target_link_libraries(render PUBLIC
         miniz
 )
 
-if(WILL_BUILD_EDITOR)
+if(WILL_ENGINE_BUILD_EDITOR)
     target_link_libraries(render PUBLIC
             editor
     )

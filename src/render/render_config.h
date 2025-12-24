@@ -19,7 +19,7 @@ inline constexpr int32_t BINDLESS_INSTANCE_BUFFER_SIZE           = sizeof(Instan
 inline constexpr int32_t BINDLESS_MATERIAL_BUFFER_COUNT          = 2048;
 inline constexpr int32_t BINDLESS_MATERIAL_BUFFER_SIZE           = sizeof(MaterialProperties) * BINDLESS_MATERIAL_BUFFER_COUNT;
 
-inline constexpr int32_t BINDLESS_COMBINED_IMAGE_SAMPLER_COUNT   = 0;
+inline constexpr int32_t BINDLESS_COMBINED_IMAGE_SAMPLER_COUNT   = 1;
 inline constexpr int32_t BINDLESS_STORAGE_IMAGE_COUNT            = 128;
 inline constexpr int32_t BINDLESS_SAMPLER_COUNT                  = 128;
 inline constexpr int32_t BINDLESS_SAMPLED_IMAGE_COUNT            = 4096;
