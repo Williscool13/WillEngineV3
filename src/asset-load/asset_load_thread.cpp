@@ -115,6 +115,11 @@ bool AssetLoadThread::ResolveTextureUnload(TextureComplete& textureComplete)
     return textureCompleteUnloadQueue.pop(textureComplete);
 }
 
+Render::Sampler AssetLoadThread::CreateSampler(const VkSamplerCreateInfo& samplerCreateInfo) const
+{
+    return Render::Sampler::CreateSampler(context, samplerCreateInfo);
+}
+
 void AssetLoadThread::ThreadMain()
 {
     while (!bShouldExit.load(std::memory_order_acquire)) {

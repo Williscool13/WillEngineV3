@@ -106,6 +106,7 @@ private:
 private: // Default Resources
     TextureHandle whiteTextureHandle;
     TextureHandle errorTextureHandle;
+    Render::Sampler defaultSampler;
 };
 } // Engine
 

@@ -18,27 +18,53 @@ AssetManager::AssetManager(AssetLoad::AssetLoadThread* assetLoadThread, Render::
 
     whiteTextureHandle = textureAllocator.Add();
     assert(whiteTextureHandle.IsValid());
-    Render::Texture& texture = textures[whiteTextureHandle.index];
-    texture.selfHandle = whiteTextureHandle;
-    texture.source = whitePath;
-    texture.name = whitePath.stem().string();
-    texture.loadState = Render::Texture::LoadState::NotLoaded;
-    texture.refCount = 1;
-    texture.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTexture();
+    Render::Texture& whiteTexture = textures[whiteTextureHandle.index];
+    whiteTexture.selfHandle = whiteTextureHandle;
+    whiteTexture.source = whitePath;
+    whiteTexture.name = whitePath.stem().string();
+    whiteTexture.loadState = Render::Texture::LoadState::NotLoaded;
+    whiteTexture.refCount = 1;
+    whiteTexture.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTexture();
+    assert(whiteTexture.bindlessHandle.index == AssetLoad::WHITE_IMAGE_BINDLESS_INDEX);
     pathToTextureHandle[whitePath] = whiteTextureHandle;
-    assetLoadThread->RequestTextureLoad(texture.selfHandle, &texture);
+    assetLoadThread->RequestTextureLoad(whiteTexture.selfHandle, &whiteTexture);
 
     errorTextureHandle = textureAllocator.Add();
     assert(errorTextureHandle.IsValid());
-    Render::Texture& texture2 = textures[errorTextureHandle.index];
-    texture2.selfHandle = errorTextureHandle;
-    texture2.source = errorPath;
-    texture2.name = errorPath.stem().string();
-    texture2.loadState = Render::Texture::LoadState::NotLoaded;
-    texture2.refCount = 1;
-    texture2.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTexture();
+    Render::Texture& errorTexture = textures[errorTextureHandle.index];
+    errorTexture.selfHandle = errorTextureHandle;
+    errorTexture.source = errorPath;
+    errorTexture.name = errorPath.stem().string();
+    errorTexture.loadState = Render::Texture::LoadState::NotLoaded;
+    errorTexture.refCount = 1;
+    errorTexture.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTexture();
+    assert(errorTexture.bindlessHandle.index == AssetLoad::ERROR_IMAGE_BINDLESS_INDEX);
     pathToTextureHandle[errorPath] = errorTextureHandle;
-    assetLoadThread->RequestTextureLoad(texture2.selfHandle, &texture2);
+    assetLoadThread->RequestTextureLoad(errorTexture.selfHandle, &errorTexture);
+
+    VkSamplerCreateInfo samplerCreateInfo = {
+        .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+        .magFilter = VK_FILTER_NEAREST,
+        .minFilter = VK_FILTER_NEAREST,
+        .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
+        .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        .mipLodBias = 0.0f,
+        .anisotropyEnable = VK_FALSE,
+        .maxAnisotropy = 1.0f,
+        .compareEnable = VK_FALSE,
+        .compareOp = VK_COMPARE_OP_ALWAYS,
+        .minLod = 0.0f,
+        .maxLod = VK_LOD_CLAMP_NONE,
+        .borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK,
+        .unnormalizedCoordinates = VK_FALSE,
+    };
+    defaultSampler = assetLoadThread->CreateSampler(samplerCreateInfo);
+    Render::BindlessSamplerHandle defaultSamplerHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.AllocateSampler(defaultSampler.handle);
+    assert(defaultSamplerHandle.index == AssetLoad::DEFAULT_SAMPLER_BINDLESS_INDEX);
 }
 
 AssetManager::~AssetManager()

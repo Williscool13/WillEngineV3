@@ -75,6 +75,8 @@ public:
 
     bool ResolveTextureUnload(TextureComplete& textureComplete);
 
+    Render::Sampler CreateSampler(const VkSamplerCreateInfo& samplerCreateInfo) const;
+
 private: // Threading
     void ThreadMain();
 
