@@ -34,6 +34,7 @@ MeshShaderPipeline::MeshShaderPipeline(VulkanContext* context, DescriptorSetLayo
     pipelineLayoutCreateInfo.pushConstantRangeCount = 1;
 
     pipelineLayout = PipelineLayout::CreatePipelineLayout(context, pipelineLayoutCreateInfo);
+    pipelineLayout.SetDebugName("Mesh Shader Pipeline Layout");
 
     VkShaderModule taskShader;
     VkShaderModule meshShader;
@@ -66,6 +67,7 @@ MeshShaderPipeline::MeshShaderPipeline(VulkanContext* context, DescriptorSetLayo
     pipelineBuilder.SetupPipelineLayout(pipelineLayout.handle);
     VkGraphicsPipelineCreateInfo pipelineCreateInfo = pipelineBuilder.GeneratePipelineCreateInfo();
     pipeline = Pipeline::CreateGraphicsPipeline(context, pipelineCreateInfo);
+    pipeline.SetDebugName("Mesh Shader Pipeline");
 
     vkDestroyShaderModule(context->device, taskShader, nullptr);
     vkDestroyShaderModule(context->device, meshShader, nullptr);

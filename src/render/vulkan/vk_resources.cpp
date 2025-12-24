@@ -77,6 +77,17 @@ void AllocatedBuffer::Release()
     }
 }
 
+void AllocatedBuffer::SetDebugName(const char* name)
+{
+#ifdef _DEBUG
+    VkDebugUtilsObjectNameInfoEXT nameInfo{VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT};
+    nameInfo.objectType = VK_OBJECT_TYPE_BUFFER;
+    nameInfo.objectHandle = reinterpret_cast<uint64_t>(handle);
+    nameInfo.pObjectName = name;
+    vkSetDebugUtilsObjectNameEXT(context->device, &nameInfo);
+#endif
+}
+
 AllocatedImage::~AllocatedImage()
 {
     if (handle != VK_NULL_HANDLE && allocation != VK_NULL_HANDLE) {
@@ -141,6 +152,17 @@ AllocatedImage& AllocatedImage::operator=(AllocatedImage&& other) noexcept
     return *this;
 }
 
+void AllocatedImage::SetDebugName(const char* name)
+{
+#ifdef _DEBUG
+    VkDebugUtilsObjectNameInfoEXT nameInfo{VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT};
+    nameInfo.objectType = VK_OBJECT_TYPE_IMAGE;
+    nameInfo.objectHandle = reinterpret_cast<uint64_t>(handle);
+    nameInfo.pObjectName = name;
+    vkSetDebugUtilsObjectNameEXT(context->device, &nameInfo);
+#endif
+}
+
 ImageView::~ImageView()
 {
     if (handle != VK_NULL_HANDLE) {
@@ -175,6 +197,17 @@ ImageView& ImageView::operator=(ImageView&& other) noexcept
     return *this;
 }
 
+void ImageView::SetDebugName(const char* name)
+{
+#ifdef _DEBUG
+    VkDebugUtilsObjectNameInfoEXT nameInfo{VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT};
+    nameInfo.objectType = VK_OBJECT_TYPE_IMAGE_VIEW;
+    nameInfo.objectHandle = reinterpret_cast<uint64_t>(handle);
+    nameInfo.pObjectName = name;
+    vkSetDebugUtilsObjectNameEXT(context->device, &nameInfo);
+#endif
+}
+
 Sampler::~Sampler()
 {
     if (handle != VK_NULL_HANDLE) {
@@ -205,6 +238,17 @@ Sampler& Sampler::operator=(Sampler&& other) noexcept
         other.handle = VK_NULL_HANDLE;
     }
     return *this;
+}
+
+void Sampler::SetDebugName(const char* name)
+{
+#ifdef _DEBUG
+    VkDebugUtilsObjectNameInfoEXT nameInfo{VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT};
+    nameInfo.objectType = VK_OBJECT_TYPE_SAMPLER;
+    nameInfo.objectHandle = reinterpret_cast<uint64_t>(handle);
+    nameInfo.pObjectName = name;
+    vkSetDebugUtilsObjectNameEXT(context->device, &nameInfo);
+#endif
 }
 
 DescriptorSetLayout::~DescriptorSetLayout()
@@ -239,6 +283,17 @@ DescriptorSetLayout& DescriptorSetLayout::operator=(DescriptorSetLayout&& other)
     return *this;
 }
 
+void DescriptorSetLayout::SetDebugName(const char* name)
+{
+#ifdef _DEBUG
+    VkDebugUtilsObjectNameInfoEXT nameInfo{VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT};
+    nameInfo.objectType = VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT;
+    nameInfo.objectHandle = reinterpret_cast<uint64_t>(handle);
+    nameInfo.pObjectName = name;
+    vkSetDebugUtilsObjectNameEXT(context->device, &nameInfo);
+#endif
+}
+
 PipelineLayout::~PipelineLayout()
 {
     if (context && handle != VK_NULL_HANDLE) {
@@ -271,6 +326,17 @@ PipelineLayout& PipelineLayout::operator=(PipelineLayout&& other) noexcept
     return *this;
 }
 
+void PipelineLayout::SetDebugName(const char* name)
+{
+#ifdef _DEBUG
+    VkDebugUtilsObjectNameInfoEXT nameInfo{VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT};
+    nameInfo.objectType = VK_OBJECT_TYPE_PIPELINE_LAYOUT;
+    nameInfo.objectHandle = reinterpret_cast<uint64_t>(handle);
+    nameInfo.pObjectName = name;
+    vkSetDebugUtilsObjectNameEXT(context->device, &nameInfo);
+#endif
+}
+
 Pipeline::~Pipeline()
 {
     if (context && handle != VK_NULL_HANDLE) {
@@ -301,6 +367,17 @@ Pipeline& Pipeline::operator=(Pipeline&& other) noexcept
         other.handle = VK_NULL_HANDLE;
     }
     return *this;
+}
+
+void Pipeline::SetDebugName(const char* name)
+{
+#ifdef _DEBUG
+    VkDebugUtilsObjectNameInfoEXT nameInfo{VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT};
+    nameInfo.objectType = VK_OBJECT_TYPE_PIPELINE;
+    nameInfo.objectHandle = reinterpret_cast<uint64_t>(handle);
+    nameInfo.pObjectName = name;
+    vkSetDebugUtilsObjectNameEXT(context->device, &nameInfo);
+#endif
 }
 
 AllocatedBuffer AllocatedBuffer::CreateAllocatedBuffer(const VulkanContext* context, const VkBufferCreateInfo& bufferInfo, const VmaAllocationCreateInfo& vmaAllocInfo)

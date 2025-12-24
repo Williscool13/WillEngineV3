@@ -31,6 +31,7 @@ BasicComputePipeline::BasicComputePipeline(VulkanContext* context, DescriptorSet
     piplineLayoutCreateInfo.pushConstantRangeCount = 1;
 
     pipelineLayout = PipelineLayout::CreatePipelineLayout(context, piplineLayoutCreateInfo);
+    pipelineLayout.SetDebugName("Basic Compute Pipeline Layout");
 
     VkShaderModule computeShader;
     if (!VkHelpers::LoadShaderModule(Platform::GetShaderPath() / "basicCompute_compute.spv", context->device, &computeShader)) {
@@ -41,6 +42,8 @@ BasicComputePipeline::BasicComputePipeline(VulkanContext* context, DescriptorSet
     VkPipelineShaderStageCreateInfo shaderStageCreateInfo = VkHelpers::PipelineShaderStageCreateInfo(computeShader, VK_SHADER_STAGE_COMPUTE_BIT);
     VkComputePipelineCreateInfo computePipelineCreateInfo = VkHelpers::ComputePipelineCreateInfo(pipelineLayout.handle, shaderStageCreateInfo);
     pipeline = Pipeline::CreateComputePipeline(context, computePipelineCreateInfo);
+    pipeline.SetDebugName("Basic Compute Pipeline");
+
     vkDestroyShaderModule(context->device, computeShader, nullptr);
 }
 

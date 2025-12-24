@@ -46,6 +46,8 @@ struct AllocatedBuffer
      * Explicitly release the buffer's resources. Use carefully.
      */
     void Release();
+
+    void SetDebugName(const char* name);
 };
 
 struct AllocatedImage
@@ -72,6 +74,8 @@ struct AllocatedImage
     AllocatedImage(AllocatedImage&& other) noexcept;
 
     AllocatedImage& operator=(AllocatedImage&& other) noexcept;
+
+    void SetDebugName(const char* name);
 };
 
 struct ImageView
@@ -93,6 +97,8 @@ struct ImageView
     ImageView(ImageView&& other) noexcept;
 
     ImageView& operator=(ImageView&& other) noexcept;
+
+    void SetDebugName(const char* name);
 };
 
 struct Sampler
@@ -114,6 +120,8 @@ struct Sampler
     Sampler(Sampler&& other) noexcept;
 
     Sampler& operator=(Sampler&& other) noexcept;
+
+    void SetDebugName(const char* name);
 };
 
 struct DescriptorSetLayout
@@ -134,6 +142,8 @@ struct DescriptorSetLayout
     DescriptorSetLayout(DescriptorSetLayout&& other) noexcept;
 
     DescriptorSetLayout& operator=(DescriptorSetLayout&& other) noexcept;
+
+    void SetDebugName(const char* name);
 };
 
 struct PipelineLayout
@@ -154,6 +164,8 @@ struct PipelineLayout
     PipelineLayout(PipelineLayout&& other) noexcept;
 
     PipelineLayout& operator=(PipelineLayout&& other) noexcept;
+
+    void SetDebugName(const char* name);
 };
 
 struct Pipeline
@@ -176,6 +188,8 @@ struct Pipeline
     Pipeline(Pipeline&& other) noexcept;
 
     Pipeline& operator=(Pipeline&& other) noexcept;
+
+    void SetDebugName(const char* name);
 };
 } // Render
 
