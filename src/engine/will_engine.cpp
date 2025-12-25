@@ -105,11 +105,11 @@ void WillEngine::Initialize()
 
     engineContext = std::make_unique<Core::EngineContext>();
     engineContext->logger = spdlog::default_logger();
-    // engineContext->updateCamera = EngineAPI::UpdateCamera;
     engineContext->windowContext.windowWidth = w;
     engineContext->windowContext.windowHeight = h;
     engineContext->windowContext.bCursorHidden = bCursorHidden;
     engineContext->assetManager = assetManager.get();
+    engineContext->physicsSystem = physicsSystem.get();
 
     gameFunctions.gameStartup(engineContext.get(), gameState.get());
     gameFunctions.gameLoad(engineContext.get(), gameState.get());

@@ -10,6 +10,11 @@
 
 #include "spdlog/logger.h"
 
+namespace Physics
+{
+class PhysicsSystem;
+}
+
 namespace Render
 {
 struct ResourceManager;
@@ -36,6 +41,7 @@ struct EngineContext
     std::shared_ptr<spdlog::logger> logger;
     //Render::ResourceManager* resourceManager;
     Engine::AssetManager* assetManager;
+    Physics::PhysicsSystem* physicsSystem;
 };
 } // Core
 

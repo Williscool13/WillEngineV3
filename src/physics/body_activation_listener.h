@@ -28,16 +28,16 @@ public:
 
     ~BodyActivationListener() override;
 
-private:
-    void OnBodyActivated(const JPH::BodyID& inBodyID, uint64_t inBodyUserData) override;
-
-    void OnBodyDeactivated(const JPH::BodyID& inBodyID, uint64_t inBodyUserData) override;
-
     std::span<const DeferredBodyActivationEvent> GetActivatedEvents();
 
     std::span<const DeferredBodyActivationEvent> GetDeactivatedEvents();
 
     void ClearEvents();
+
+private:
+    void OnBodyActivated(const JPH::BodyID& inBodyID, uint64_t inBodyUserData) override;
+
+    void OnBodyDeactivated(const JPH::BodyID& inBodyID, uint64_t inBodyUserData) override;
 
 private:
     std::array<DeferredBodyActivationEvent, MAX_BODY_ACTIVATION_EVENTS> activatedEvents;

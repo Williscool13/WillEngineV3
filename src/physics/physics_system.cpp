@@ -40,6 +40,7 @@ namespace Physics
 PhysicsSystem::PhysicsSystem() = default;
 
 PhysicsSystem::PhysicsSystem(enki::TaskScheduler* scheduler)
+    : scheduler(scheduler)
 {
     JPH::RegisterDefaultAllocator();
     JPH::Trace = TraceImpl;
@@ -48,6 +49,7 @@ PhysicsSystem::PhysicsSystem(enki::TaskScheduler* scheduler)
     JPH::Factory::sInstance = new JPH::Factory();
     JPH::RegisterTypes();
 
+    tempAllocator= std::make_unique<JPH::TempAllocatorImpl>(PHYSICS_TEMP_ALLOCATOR_SIZE);
     jobSystem = std::make_unique<PhysicsJobSystem>(scheduler, MAX_PHYSICS_JOBS, 8);
 
     physicsSystem.Init(MAX_PHYSICS_BODIES, PHYSICS_BODY_MUTEX_COUNT,
@@ -62,5 +64,16 @@ PhysicsSystem::PhysicsSystem(enki::TaskScheduler* scheduler)
                 MAX_PHYSICS_BODIES, PHYSICS_BODY_MUTEX_COUNT, MAX_BODY_PAIRS, MAX_CONTACT_CONSTRAINTS, MAX_PHYSICS_JOBS);
 }
 
-PhysicsSystem::~PhysicsSystem() = default;
+PhysicsSystem::~PhysicsSystem()
+{
+    JPH::UnregisterTypes();
+    delete JPH::Factory::sInstance;
+    JPH::Factory::sInstance = nullptr;
+};
+
+void PhysicsSystem::Step(float deltaTime)
+{
+    constexpr int cCollisionSteps = 1;
+    physicsSystem.Update(deltaTime, cCollisionSteps, tempAllocator.get(), jobSystem.get());
+}
 } // Physics

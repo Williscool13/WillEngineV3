@@ -8,8 +8,8 @@ namespace Physics
 {
 BPLayerInterfaceImpl::BPLayerInterfaceImpl()
 {
-    mObjectToBroadPhase[Layers::STATIC] = BroadPhaseLayers::STATIC;
-    mObjectToBroadPhase[Layers::DYNAMIC] = BroadPhaseLayers::DYNAMIC;
+    mObjectToBroadPhase[Layers::NON_MOVING] = BroadPhaseLayers::NON_MOVING;
+    mObjectToBroadPhase[Layers::MOVING] = BroadPhaseLayers::MOVING;
 }
 
 JPH::uint BPLayerInterfaceImpl::GetNumBroadPhaseLayers() const

@@ -10,6 +10,6 @@ namespace Physics
 {
 bool ObjectLayerPairFilterImpl::ShouldCollide(JPH::ObjectLayer inLayer1, JPH::ObjectLayer inLayer2) const
 {
-    return !(inLayer1 == Layers::STATIC && inLayer2 == Layers::STATIC);
+    return !(inLayer1 == Layers::NON_MOVING && inLayer2 == Layers::NON_MOVING);
 }
 } // Physics

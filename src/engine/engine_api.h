@@ -20,6 +20,9 @@ struct GameState
     const Core::InputFrame* inputFrame{nullptr};
     const Core::TimeFrame* timeFrame{nullptr};
     entt::registry registry;
+
+    // Physics
+    float physicsDeltaTimeAccumulator = 0.0f;
 };
 
 class EngineAPI

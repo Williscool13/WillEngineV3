@@ -8,7 +8,11 @@
 
 namespace Physics
 {
-inline static constexpr int32_t MAX_PHYSICS_JOBS = 2048;
+inline constexpr float PHYSICS_TIMESTEP = 1 / 60.0f;
+
+inline constexpr uint32_t PHYSICS_TEMP_ALLOCATOR_SIZE = 32 * 1024 * 1024; // 32 MB
+
+inline constexpr int32_t MAX_PHYSICS_JOBS = 2048;
 inline constexpr uint64_t TASK_BUFFER = 64;
 inline constexpr int32_t MAX_PHYSICS_TASKS = 2048 + TASK_BUFFER;
 

@@ -27,8 +27,8 @@ public:
     const char* GetBroadPhaseLayerName(JPH::BroadPhaseLayer inLayer) const
     {
         switch ((JPH::BroadPhaseLayer::Type) inLayer) {
-            case (JPH::BroadPhaseLayer::Type) BroadPhaseLayers::STATIC: return "NON_MOVING";
-            case (JPH::BroadPhaseLayer::Type) BroadPhaseLayers::DYNAMIC: return "MOVING";
+            case (JPH::BroadPhaseLayer::Type) BroadPhaseLayers::NON_MOVING: return "NON_MOVING";
+            case (JPH::BroadPhaseLayer::Type) BroadPhaseLayers::MOVING: return "MOVING";
             default: JPH_ASSERT(false);
                 return "INVALID";
         }

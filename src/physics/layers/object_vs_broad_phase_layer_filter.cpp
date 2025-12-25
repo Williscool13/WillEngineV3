@@ -10,6 +10,6 @@ namespace Physics
 {
 bool ObjectVsBroadPhaseLayerFilterImpl::ShouldCollide(JPH::ObjectLayer inLayer1, JPH::BroadPhaseLayer inLayer2) const
 {
-    return !(inLayer1 == Layers::STATIC && inLayer2 == BroadPhaseLayers::STATIC);
+    return !(inLayer1 == Layers::NON_MOVING && inLayer2 == BroadPhaseLayers::NON_MOVING);
 }
 } // Physics

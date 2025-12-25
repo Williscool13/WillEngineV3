@@ -109,8 +109,8 @@ void RenderThread::ThreadMain()
             std::array<uint32_t, 2> newExtents = renderExtents->GetExtent();
 
             renderTargets->Recreate(newExtents[0], newExtents[1]);
-            resourceManager->bindlessRenderTargetDescriptorBuffer.ForceAllocateStorageImage({COLOR_TARGET_INDEX, 0}, {nullptr, renderTargets->colorTargetView.handle, VK_IMAGE_LAYOUT_GENERAL});
-            resourceManager->bindlessRenderTargetDescriptorBuffer.ForceAllocateStorageImage({DEPTH_TARGET_INDEX, 0}, {nullptr, renderTargets->depthTargetView.handle, VK_IMAGE_LAYOUT_GENERAL});
+            resourceManager->bindlessRenderTargetDescriptorBuffer.ForceAllocateStorageImage({COLOR_TARGET_INDEX, 1}, {nullptr, renderTargets->colorTargetView.handle, VK_IMAGE_LAYOUT_GENERAL});
+            resourceManager->bindlessRenderTargetDescriptorBuffer.ForceAllocateStorageImage({DEPTH_TARGET_INDEX, 1}, {nullptr, renderTargets->depthTargetView.handle, VK_IMAGE_LAYOUT_GENERAL});
 
             bRenderRequestsRecreate = false;
             bEngineRequestsRecreate = false;
