@@ -9,6 +9,7 @@
 module common_interop;
 #define SHADER_PUBLIC public
 #define SHADER_CONST const static
+#define SHADER_ALIGN
 #else
 #include <glm/glm.hpp>
 #include <cstdint>
@@ -35,6 +36,7 @@ using float4x4 = glm::mat4;
 
 #define SHADER_PUBLIC
 #define SHADER_CONST constexpr inline
+#define SHADER_ALIGN alignas(16)
 #endif // __SLANG__
 
 
@@ -43,7 +45,7 @@ SHADER_PUBLIC struct Frustum
     SHADER_PUBLIC float4 planes[6];
 };
 
-SHADER_PUBLIC struct SceneData
+SHADER_PUBLIC struct SHADER_ALIGN SceneData
 {
     SHADER_PUBLIC float4x4 view;
     SHADER_PUBLIC float4x4 proj;

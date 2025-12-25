@@ -8,16 +8,16 @@
 
 using namespace Core;
 
-TEST_CASE("RingBuffer basic operations") {
+TEST_CASE("RingBuffer basic operations", "[data-structures][ring-buffer]") {
     RingBuffer<int, 8> ring;
 
-    SECTION("starts empty") {
+    SECTION("Starts empty") {
         REQUIRE(ring.IsEmpty());
         REQUIRE(ring.GetSize() == 0);
         REQUIRE(ring.GetCapacity() == 8);
     }
 
-    SECTION("push and pop single item") {
+    SECTION("Push and pop single item") {
         ring.Push(42);
         REQUIRE_FALSE(ring.IsEmpty());
         REQUIRE(ring.GetSize() == 1);
@@ -42,7 +42,7 @@ TEST_CASE("RingBuffer basic operations") {
         REQUIRE(value == 3);
     }
 
-    SECTION("wraps around correctly") {
+    SECTION("Wraps around correctly") {
         // Fill buffer
         for (int i = 0; i < 8; i++) {
             ring.Push(i);
@@ -61,12 +61,12 @@ TEST_CASE("RingBuffer basic operations") {
         REQUIRE(ring.GetSize() == 8);
     }
 
-    SECTION("pop from empty returns false") {
+    SECTION("Pop from empty returns false") {
         int value;
         REQUIRE_FALSE(ring.Pop(value));
     }
 
-    SECTION("clear empties buffer") {
+    SECTION("Clear empties buffer") {
         ring.Push(1);
         ring.Push(2);
         ring.Clear();
@@ -75,18 +75,11 @@ TEST_CASE("RingBuffer basic operations") {
         REQUIRE(ring.GetSize() == 0);
     }
 
-    SECTION("overwrites on push when full") {
-        // Fill buffer
+    SECTION("Stays at capacity when full") {
         for (int i = 0; i < 8; i++) {
             ring.Push(i);
         }
-
-        // Push beyond capacity
-        ring.Push(99);
-
-        int value;
-        ring.Pop(value);
-        // Will get either 0 or 99 depending on overwrite behavior
-        REQUIRE(ring.GetSize() <= 8);
+        REQUIRE(ring.IsFull());
+        REQUIRE(ring.GetSize() == 8);
     }
 }

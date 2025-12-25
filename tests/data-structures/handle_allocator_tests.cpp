@@ -10,7 +10,7 @@ using namespace Core;
 
 struct DummyType {};
 
-TEST_CASE("HandleAllocator allocation and deallocation") {
+TEST_CASE("HandleAllocator allocation and deallocation", "[data-structures][handle-allocator]") {
     HandleAllocator<DummyType, 8> allocator;
 
     SECTION("Starts with capacity available") {
@@ -70,7 +70,7 @@ TEST_CASE("HandleAllocator allocation and deallocation") {
     }
 }
 
-TEST_CASE("HandleAllocator handle invalidation") {
+TEST_CASE("HandleAllocator handle invalidation", "[data-structures][handle-allocator]") {
     HandleAllocator<DummyType, 8> allocator;
 
     SECTION("Removed handle becomes invalid") {
@@ -141,7 +141,7 @@ TEST_CASE("HandleAllocator handle invalidation") {
     }
 }
 
-TEST_CASE("HandleAllocator reuse order") {
+TEST_CASE("HandleAllocator reuse order", "[data-structures][handle-allocator]") {
     HandleAllocator<DummyType, 8> allocator;
 
     SECTION("Even wear distribution over time") {
@@ -160,7 +160,7 @@ TEST_CASE("HandleAllocator reuse order") {
     }
 }
 
-TEST_CASE("HandleAllocator count tracking") {
+TEST_CASE("HandleAllocator count tracking", "[data-structures][handle-allocator]") {
     HandleAllocator<DummyType, 8> allocator;
 
     SECTION("Count increases with allocations") {

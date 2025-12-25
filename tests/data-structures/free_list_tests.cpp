@@ -16,7 +16,7 @@ struct TestData {
     TestData(int v) : value(v) {}
 };
 
-TEST_CASE("FreeList allocation and deallocation") {
+TEST_CASE("FreeList allocation and deallocation", "[data-structures][free-list]") {
     FreeList<TestData, 8> list;
 
     SECTION("Starts with capacity available") {
@@ -88,7 +88,7 @@ TEST_CASE("FreeList allocation and deallocation") {
     }
 }
 
-TEST_CASE("FreeList handle invalidation") {
+TEST_CASE("FreeList handle invalidation", "[data-structures][free-list]") {
     FreeList<TestData, 8> list;
 
     SECTION("Removed handle becomes invalid") {
@@ -163,7 +163,7 @@ TEST_CASE("FreeList handle invalidation") {
     }
 }
 
-TEST_CASE("FreeList reuse order") {
+TEST_CASE("FreeList reuse order", "[data-structures][free-list]") {
     FreeList<TestData, 8> list;
 
     SECTION("Even wear distribution over time") {
@@ -184,7 +184,7 @@ TEST_CASE("FreeList reuse order") {
     }
 }
 
-TEST_CASE("FreeList data integrity") {
+TEST_CASE("FreeList data integrity", "[data-structures][free-list]") {
     FreeList<TestData, 8> list;
 
     SECTION("Data persists until removal") {

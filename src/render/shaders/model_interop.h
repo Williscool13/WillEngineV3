@@ -10,6 +10,7 @@
 module model_interop;
 #define SHADER_PUBLIC public
 #define SHADER_CONST const static
+#define SHADER_ALIGN
 #else
 #include <glm/glm.hpp>
 #include <cstdint>
@@ -36,6 +37,7 @@ using float4x4 = glm::mat4;
 
 #define SHADER_PUBLIC
 #define SHADER_CONST constexpr inline
+#define SHADER_ALIGN alignas(16)
 #endif // __SLANG__
 
 
@@ -87,7 +89,7 @@ SHADER_PUBLIC struct MeshletPrimitive
     SHADER_PUBLIC float4 boundingSphere; // {3} center, {1} radius
 };
 
-SHADER_PUBLIC struct MaterialProperties
+SHADER_PUBLIC struct SHADER_ALIGN MaterialProperties
 {
     // Base PBR properties
     SHADER_PUBLIC float4 colorFactor;
@@ -124,7 +126,7 @@ SHADER_PUBLIC struct Instance
     uint32_t padding2;
 };
 
-SHADER_PUBLIC struct Model
+SHADER_PUBLIC struct SHADER_ALIGN Model
 {
     SHADER_PUBLIC float4x4 modelMatrix;
     SHADER_PUBLIC float4x4 prevModelMatrix;

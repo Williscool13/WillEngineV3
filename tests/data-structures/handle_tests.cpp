@@ -10,7 +10,7 @@ using namespace Core;
 
 struct DummyType {};
 
-TEST_CASE("Handle validity") {
+TEST_CASE("Handle validity", "[data-structures][handle]") {
     SECTION("INVALID constant is invalid") {
         REQUIRE_FALSE(Handle<DummyType>::INVALID.IsValid());
     }
@@ -24,15 +24,9 @@ TEST_CASE("Handle validity") {
         Handle<DummyType> h{5, 3};
         REQUIRE(h.IsValid());
     }
-
-    SECTION("Zero-initialized handle behavior") {
-        Handle<DummyType> h{};
-        // Just document what happens - whether valid or not
-        // Behavior will change when you switch to {0,0} = invalid
-    }
 }
 
-TEST_CASE("Handle equality") {
+TEST_CASE("Handle equality", "[data-structures][handle]") {
     Handle<DummyType> h1{10, 2};
     Handle<DummyType> h2{10, 2};
     Handle<DummyType> h3{10, 3};
@@ -43,13 +37,13 @@ TEST_CASE("Handle equality") {
     REQUIRE_FALSE(h1 == h4);
 }
 
-TEST_CASE("Handle ordering") {
+TEST_CASE("Handle ordering", "[data-structures][handle]") {
     REQUIRE(Handle<DummyType>{5, 10} < Handle<DummyType>{6, 1});
     REQUIRE(Handle<DummyType>{5, 2} < Handle<DummyType>{5, 3});
     REQUIRE_FALSE(Handle<DummyType>{5, 2} < Handle<DummyType>{5, 2});
 }
 
-TEST_CASE("Handle bit packing") {
+TEST_CASE("Handle bit packing", "[data-structures][handle]") {
     SECTION("Max values fit correctly") {
         Handle<DummyType> h{0xFFFFFF, 0xFF};
         REQUIRE(h.index == 0xFFFFFF);
