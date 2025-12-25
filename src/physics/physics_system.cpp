@@ -12,6 +12,8 @@
 #include "body_activation_listener.h"
 #include "contact_listener.h"
 #include "physics_job_system.h"
+#include "Jolt/Physics/Body/BodyCreationSettings.h"
+#include "Jolt/Physics/Collision/Shape/BoxShape.h"
 
 
 #ifdef JPH_ENABLE_ASSERTS
@@ -75,5 +77,21 @@ void PhysicsSystem::Step(float deltaTime)
 {
     constexpr int cCollisionSteps = 1;
     physicsSystem.Update(deltaTime, cCollisionSteps, tempAllocator.get(), jobSystem.get());
+}
+
+void PhysicsSystem::Test()
+{
+    JPH::BoxShapeSettings floorShapeSettings(JPH::Vec3(10.0f, 0.5f, 10.0f));
+    floorShapeSettings.SetEmbedded();
+    JPH::ShapeSettings::ShapeResult floorShapeResult = floorShapeSettings.Create();
+    JPH::ShapeRefC floorShape = floorShapeResult.Get();
+    JPH::BodyCreationSettings floorSettings(
+        floorShape,
+        JPH::RVec3(0.0, -0.5, 0.0),
+        JPH::Quat::sIdentity(),
+        JPH::EMotionType::Static,
+        Physics::Layers::NON_MOVING
+    );
+    auto floorBodyID = physicsSystem.GetBodyInterface() .CreateAndAddBody(floorSettings, JPH::EActivation::DontActivate);
 }
 } // Physics

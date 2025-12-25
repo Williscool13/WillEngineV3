@@ -9,7 +9,7 @@
 #include "core/time/time_frame.h"
 #include "engine/engine_api.h"
 #include "camera_component.h"
-#include "../common/transform_component.h"
+#include "game/fwd_components.h"
 #include "core/math/constants.h"
 
 namespace Game

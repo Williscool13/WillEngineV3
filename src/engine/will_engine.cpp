@@ -277,7 +277,6 @@ void WillEngine::DrawImgui()
         SPDLOG_INFO("Generation finished");
     };
 
-
     if (ImGui::Button("Generate dragon.willmodel from dragon.glb")) {
         generateModel(
             Platform::GetAssetPath() / "dragon/dragon.gltf",

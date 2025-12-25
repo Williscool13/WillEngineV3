@@ -23,6 +23,7 @@ struct GameState
 
     // Physics
     float physicsDeltaTimeAccumulator = 0.0f;
+    float physicsInterpolationAlpha = 0.0f;
 };
 
 class EngineAPI

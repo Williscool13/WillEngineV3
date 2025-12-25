@@ -63,6 +63,8 @@ public:
         JPH::RegisterDefaultAllocator();
     }
 
+    void Test();
+
 private:
     enki::TaskScheduler* scheduler;
 

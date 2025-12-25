@@ -6,7 +6,6 @@
 
 #include "engine/engine_api.h"
 #include "game/fwd_components.h"
-#include "game/camera/free_camera_component.h"
 
 namespace Game::System
 {

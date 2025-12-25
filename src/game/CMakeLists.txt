@@ -1,19 +1,21 @@
 set(GAME_SOURCES
         game.cpp
-        common/transform_component.h
-        camera/free_camera_component.cpp
-        camera/free_camera_component.h
-        camera/camera_component.h
+        fwd_components.h
+        component_include.h
+        components/transform_component.h
+        components/renderable_component.h
+        components/camera/free_camera_component.cpp
+        components/camera/free_camera_component.h
+        components/camera/camera_component.h
+        components/physics/physics_body_component.h
 
         systems/camera_system.cpp
         systems/camera_system.h
-        fwd_components.h
         systems/debug_system.cpp
         systems/debug_system.h
-        common/renderable_component.h
-        component_include.h
         systems/physics_system.cpp
         systems/physics_system.h
+
 )
 
 set(GAME_INCLUDE_DIRS
