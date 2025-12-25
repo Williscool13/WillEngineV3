@@ -12,6 +12,8 @@ set(GAME_SOURCES
         systems/debug_system.h
         common/renderable_component.h
         component_include.h
+        systems/physics_system.cpp
+        systems/physics_system.h
 )
 
 set(GAME_INCLUDE_DIRS

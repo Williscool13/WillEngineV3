@@ -77,6 +77,7 @@ add_subdirectory(src/engine)
 add_subdirectory(src/core)
 add_subdirectory(src/game)
 add_subdirectory(src/render)
+add_subdirectory(src/physics)
 add_subdirectory(src/asset-load)
 add_subdirectory(src/utils)
 add_subdirectory(src/platform)
@@ -89,6 +90,14 @@ if (WILL_ENGINE_BUILD_TESTS)
     add_subdirectory(extern/Catch2)
     add_subdirectory(tests)
 endif ()
+
+# Jolt ========================================
+set(PHYSICS_REPO_ROOT "${CMAKE_SOURCE_DIR}/extern/JoltPhysics")
+include("${PHYSICS_REPO_ROOT}/Jolt/Jolt.cmake")
+target_include_directories(Jolt PUBLIC
+        ${PHYSICS_REPO_ROOT}
+)
+set(CMAKE_CXX_STANDARD 23) # Jolt sets cxx standard to 17
 
 # Imgui =======================================
 set(IMGUI_DIR ${CMAKE_SOURCE_DIR}/extern/imgui)

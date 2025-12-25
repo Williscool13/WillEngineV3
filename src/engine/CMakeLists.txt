@@ -19,7 +19,7 @@ target_include_directories(engine PRIVATE
 target_link_libraries(engine PUBLIC
         core
         render
-        # physics
+        physics
         # audio
         asset-load
         utils

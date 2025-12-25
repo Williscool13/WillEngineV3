@@ -15,6 +15,11 @@
 #include "platform/crash_handler.h"
 #include "platform/dll_loader.h"
 
+namespace Physics
+{
+class PhysicsSystem;
+}
+
 namespace Engine
 {
 class AssetManager;
@@ -80,6 +85,7 @@ private: // Main Systems
     std::unique_ptr<Core::FrameSync> engineRenderSynchronization{};
     std::unique_ptr<AssetLoad::AssetLoadThread> assetLoadThread{};
     std::unique_ptr<AssetManager> assetManager{};
+    std::unique_ptr<Physics::PhysicsSystem> physicsSystem{};
 #if WILL_EDITOR
     std::unique_ptr<Render::AssetGenerator> modelGenerator{};
 #endif

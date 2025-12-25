@@ -15,6 +15,7 @@
 #include "core/input/input_manager.h"
 #include "core/time/time_manager.h"
 #include "asset-load/asset_load_thread.h"
+#include "physics/physics_system.h"
 #include "platform/paths.h"
 #include "platform/thread_utils.h"
 #include "render/render_thread.h"
@@ -75,6 +76,7 @@ void WillEngine::Initialize()
     renderThread = std::make_unique<Render::RenderThread>(engineRenderSynchronization.get(), scheduler.get(), window.get(), w, h);
     assetLoadThread = std::make_unique<AssetLoad::AssetLoadThread>(scheduler.get(), renderThread->GetVulkanContext(), renderThread->GetResourceManager());
     assetManager = std::make_unique<AssetManager>(assetLoadThread.get(), renderThread->GetResourceManager());
+    physicsSystem = std::make_unique<Physics::PhysicsSystem>(scheduler.get());
 #if WILL_EDITOR
     modelGenerator = std::make_unique<Render::AssetGenerator>(renderThread->GetVulkanContext(), scheduler.get());
 #endif
