@@ -49,10 +49,14 @@ public:
         return contactListener.GetCollisionEvents();
     }
 
-    void ClearEvents()
+    void ClearCollisionEvents()
+    {
+        contactListener.ClearEvents();
+    }
+
+    void ClearActivationEvents()
     {
         bodyActivationListener.ClearEvents();
-        contactListener.ClearEvents();
     }
 
     JPH::BodyInterface& GetBodyInterface() { return physicsSystem.GetBodyInterface(); }

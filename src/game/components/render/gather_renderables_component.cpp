@@ -7,7 +7,7 @@
 #include "engine/engine_api.h"
 #include "game/components/renderable_component.h"
 #include "game/components/transform_component.h"
-#include "game/components/physics/physics_body_component.h"
+#include "game/components/physics/dynamic_physics_body_component.h"
 #include "render/frame_resources.h"
 #include "render/shaders/model_interop.h"
 
@@ -25,7 +25,7 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
     for (const auto& [entity, renderable, transform] : view.each()) {
         glm::mat4 currentMatrix;
 
-        if (auto* physics = state->registry.try_get<PhysicsBodyComponent>(entity)) {
+        if (auto* physics = state->registry.try_get<DynamicPhysicsBodyComponent>(entity)) {
             float alpha = state->physicsInterpolationAlpha;
             glm::vec3 interpPos = glm::mix(physics->previousPosition, transform.translation, alpha);
             glm::quat interpRot = glm::slerp(physics->previousRotation, transform.rotation, alpha);

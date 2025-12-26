@@ -218,7 +218,7 @@ TextureHandle AssetManager::LoadTexture(const std::filesystem::path& path)
         if (textureAllocator.IsValid(existingHandle)) {
             Render::Texture& texture = textures[existingHandle.index];
             texture.refCount++;
-            SPDLOG_TRACE("[AssetManager] Texture already loaded: {}, refCount: {}", path.string(), texture.refCount);
+            SPDLOG_TRACE("[AssetManager] Texture already loaded: {}, refCount: {}", texture.name, texture.refCount);
             return existingHandle;
         }
         pathToTextureHandle.erase(it);
@@ -226,7 +226,7 @@ TextureHandle AssetManager::LoadTexture(const std::filesystem::path& path)
 
     TextureHandle handle = textureAllocator.Add();
     if (!handle.IsValid()) {
-        SPDLOG_ERROR("[AssetManager] Failed to allocate texture slot for: {}", path.string());
+        SPDLOG_ERROR("[AssetManager] Failed to allocate texture slot for: {}", path.filename().string());
         return TextureHandle{};
     }
 

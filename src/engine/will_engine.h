@@ -94,7 +94,7 @@ private: // Main Systems
 private: // Subsystems
     std::unique_ptr<Core::InputManager> inputManager{};
     std::unique_ptr<Core::TimeManager> timeManager{};
-    bool bCursorHidden{true};
+    bool bCursorHidden{false};
     uint32_t frameBufferIndex{0};
 
 private: // Game DLL

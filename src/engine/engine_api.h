@@ -5,7 +5,9 @@
 #ifndef WILL_ENGINE_ENGINE_API_H
 #define WILL_ENGINE_ENGINE_API_H
 
-#include "entt/entt.hpp"
+#include <entt/entt.hpp>
+#include <Jolt/Jolt.h>
+#include <Jolt/Physics/Body/BodyID.h>
 
 namespace Core
 {
@@ -24,6 +26,7 @@ struct GameState
     // Physics
     float physicsDeltaTimeAccumulator = 0.0f;
     float physicsInterpolationAlpha = 0.0f;
+    std::map<JPH::BodyID, entt::entity> bodyToEntity;
 };
 
 class EngineAPI

@@ -9,6 +9,7 @@
 #include "core/time/time_frame.h"
 #include "game/fwd_components.h"
 #include "engine/engine_api.h"
+#include "game/components/physics/dynamic_physics_body_component.h"
 
 namespace Game::System
 {
@@ -18,9 +19,11 @@ void UpdatePhysics(Core::EngineContext* ctx, Engine::GameState* state)
     state->physicsDeltaTimeAccumulator += state->timeFrame->deltaTime;
 
     while (state->physicsDeltaTimeAccumulator >= Physics::PHYSICS_TIMESTEP) {
-        auto view = state->registry.view<PhysicsBodyComponent, TransformComponent>();
-        for (auto [entity, physicsBody, transform] : view.each()) {
-            auto& bodyInterface = physics->GetBodyInterface();
+        auto& bodyInterface = physics->GetBodyInterface();
+
+        auto view = state->registry.view<DynamicPhysicsBodyComponent, PhysicsBodyComponent, TransformComponent>();
+
+        for (auto [entity, dynamic, physicsBody, transform] : view.each()) {
             if (state->registry.all_of<DirtyPhysicsTransformComponent>(entity)) {
                 bodyInterface.SetPositionAndRotation(
                     physicsBody.bodyID,
@@ -28,27 +31,18 @@ void UpdatePhysics(Core::EngineContext* ctx, Engine::GameState* state)
                     JPH::Quat(transform.rotation.x, transform.rotation.y, transform.rotation.z, transform.rotation.w),
                     JPH::EActivation::Activate
                 );
-                physicsBody.previousPosition = transform.translation;
-                physicsBody.previousRotation = transform.rotation;
             }
-            else {
-                JPH::RVec3 pos = bodyInterface.GetPosition(physicsBody.bodyID);
-                JPH::Quat rot = bodyInterface.GetRotation(physicsBody.bodyID);
 
-                physicsBody.previousPosition = glm::vec3(pos.GetX(), pos.GetY(), pos.GetZ());
-                physicsBody.previousRotation = glm::quat(rot.GetW(), rot.GetX(), rot.GetY(), rot.GetZ());
-            }
+            dynamic.previousPosition = transform.translation;
+            dynamic.previousRotation = transform.rotation;
         }
 
         state->registry.clear<DirtyPhysicsTransformComponent>();
         physics->Step(Physics::PHYSICS_TIMESTEP);
 
-
-        for (auto [entity, physicsBody, transform] : view.each()) {
-            auto& bodyInterface = physics->GetBodyInterface();
+        for (auto [entity, dynamic, physicsBody, transform] : view.each()) {
             JPH::RVec3 pos = bodyInterface.GetPosition(physicsBody.bodyID);
             JPH::Quat rot = bodyInterface.GetRotation(physicsBody.bodyID);
-
             transform.translation = glm::vec3(pos.GetX(), pos.GetY(), pos.GetZ());
             transform.rotation = glm::quat(rot.GetW(), rot.GetX(), rot.GetY(), rot.GetZ());
         }

@@ -8,14 +8,18 @@
 #include <Jolt/Jolt.h>
 #include <Jolt/Physics/Body/BodyID.h>
 
+#include "entt/entt.hpp"
+
 namespace Game
 {
 struct PhysicsBodyComponent
 {
     JPH::BodyID bodyID;
-    glm::vec3 previousPosition{};
-    glm::quat previousRotation{};
 };
+
+void OnPhysicsBodyAdded(entt::registry& reg, entt::entity entity);
+
+void OnPhysicsBodyRemoved(entt::registry& reg, entt::entity entity);
 } // Game
 
 #endif //WILL_ENGINE_PHYSICS_BODY_COMPONENT_H

@@ -18,6 +18,10 @@ set(GAME_SOURCES
         systems/physics_system.cpp
         systems/physics_system.h
         components/render/gather_renderables_component.cpp
+        components/gameplay/floor_component.h
+        components/physics/physics_body_component.cpp
+        components/physics/dynamic_physics_body_component.h
+        components/gameplay/anti_gravity_component.h
 
 )
 

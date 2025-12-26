@@ -27,21 +27,28 @@ GAME_API void GameStartup(Core::EngineContext* ctx, Engine::GameState* state)
     state->registry.emplace<Game::CameraComponent>(camera);
     state->registry.emplace<Game::TransformComponent>(camera);
     state->registry.emplace<Game::MainViewportComponent>(camera);
+    state->registry.ctx().emplace<Engine::GameState*>(state);
 
     spdlog::set_default_logger(ctx->logger);
 }
 
 GAME_API void GameLoad(Core::EngineContext* ctx, Engine::GameState* state)
 {
-    SPDLOG_TRACE("Game Load");
-    ctx->physicsSystem->RegisterAllocator();
     spdlog::set_default_logger(ctx->logger);
+
+    ctx->physicsSystem->RegisterAllocator();
+    state->registry.on_construct<Game::PhysicsBodyComponent>().connect<&Game::OnPhysicsBodyAdded>();
+    state->registry.on_destroy<Game::PhysicsBodyComponent>().connect<&Game::OnPhysicsBodyRemoved>();
 }
 
 GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::GameState* state)
 {
     Game::System::UpdateCameras(ctx, state);
     Game::System::DebugUpdate(ctx, state);
+
+    Game::System::DebugProcessPhysicsCollisions(ctx, state);
+    Game::System::DebugApplyGroundForces(ctx, state);
+
     Game::System::UpdatePhysics(ctx, state);
 
     Core::InputFrame gameInputCopy = *state->inputFrame;
@@ -57,7 +64,8 @@ GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* stat
 
 GAME_API void GameUnload(Core::EngineContext* ctx, Engine::GameState* state)
 {
-    SPDLOG_TRACE("Game Unload");
+    state->registry.on_construct<Game::PhysicsBodyComponent>().disconnect();
+    state->registry.on_destroy<Game::PhysicsBodyComponent>().disconnect();
 }
 
 GAME_API void GameShutdown(Core::EngineContext* ctx, Engine::GameState* state)
