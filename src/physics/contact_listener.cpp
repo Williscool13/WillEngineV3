@@ -27,7 +27,12 @@ void ContactListener::OnContactAdded(const JPH::Body& inBody1, const JPH::Body& 
 {
     size_t idx = eventCount.fetch_add(1, std::memory_order_relaxed);
     if (idx >= MAX_COLLISION_EVENTS) {
-        SPDLOG_WARN("[ContactListener::OnContactAdded] Max contact events have been reached on this frame");
+        int32_t count = warnCount.fetch_add(1, std::memory_order_relaxed);
+        if (count == 0) {
+            SPDLOG_WARN("[ContactListener::OnContactAdded] Max contact events reached (first occurrence)");
+        } else if (count < 3) {
+            SPDLOG_DEBUG("[ContactListener::OnContactAdded] Max contact events reached (occurrence {})", count + 1);
+        }
         return;
     }
 
@@ -38,6 +43,5 @@ void ContactListener::OnContactAdded(const JPH::Body& inBody1, const JPH::Body& 
         inManifold.GetWorldSpaceContactPointOn1(0),
         inManifold.mPenetrationDepth
     };
-
 }
 } // Physics

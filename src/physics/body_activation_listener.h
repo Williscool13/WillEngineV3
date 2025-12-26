@@ -44,6 +44,10 @@ private:
     std::array<DeferredBodyActivationEvent, MAX_BODY_ACTIVATION_EVENTS> deactivatedEvents;
     std::atomic<uint32_t> activatedCount{0};
     std::atomic<uint32_t> deactivatedCount{0};
+
+    std::atomic<int32_t> deactivationWarnCount{0};
+    std::atomic<int32_t> activationWarnCount{0};
+
 };
 } // Physics
 

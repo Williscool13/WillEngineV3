@@ -43,6 +43,8 @@ private:
 
     std::array<DeferredCollisionEvent, MAX_COLLISION_EVENTS> deferredEvents;
     std::atomic<uint32_t> eventCount{0};
+
+    std::atomic<int32_t> warnCount{0};
 };
 } // Physics
 

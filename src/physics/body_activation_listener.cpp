@@ -16,7 +16,12 @@ void BodyActivationListener::OnBodyActivated(const JPH::BodyID& inBodyID, uint64
 {
     size_t idx = activatedCount.fetch_add(1, std::memory_order_relaxed);
     if (idx >= MAX_BODY_ACTIVATION_EVENTS) {
-        SPDLOG_WARN("[BodyActivationListener::OnBodyActivated] Max body activations have been reached on this frame");
+        int32_t count = activationWarnCount.fetch_add(1, std::memory_order_relaxed);
+        if (count == 0) {
+            SPDLOG_WARN("[BodyActivationListener::OnBodyDeactivated] Max body activations reached (first occurrence)");
+        } else if (count < 3) {
+            SPDLOG_DEBUG("[BodyActivationListener::OnBodyDeactivated] Max body activations reached (occurrence {})", count + 1);
+        }
         return;
     }
     activatedEvents[idx] = {inBodyID, inBodyUserData};
@@ -26,7 +31,12 @@ void BodyActivationListener::OnBodyDeactivated(const JPH::BodyID& inBodyID, uint
 {
     size_t idx = deactivatedCount.fetch_add(1, std::memory_order_relaxed);
     if (idx >= MAX_BODY_ACTIVATION_EVENTS) {
-        SPDLOG_WARN("[BodyActivationListener::OnBodyDeactivated] Max body deactivations have been reached on this frame");
+        int32_t count = deactivationWarnCount.fetch_add(1, std::memory_order_relaxed);
+        if (count == 0) {
+            SPDLOG_WARN("[BodyActivationListener::OnBodyDeactivated] Max body deactivations reached (first occurrence)");
+        } else if (count < 3) {
+            SPDLOG_DEBUG("[BodyActivationListener::OnBodyDeactivated] Max body deactivations reached (occurrence {})", count + 1);
+        }
         return;
     }
     deactivatedEvents[idx] = {inBodyID, inBodyUserData};

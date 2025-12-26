@@ -24,7 +24,7 @@ inline constexpr uint32_t MAX_BODY_PAIRS = 65536;
 inline constexpr uint32_t MAX_CONTACT_CONSTRAINTS = 1024 * 1 << 5;
 
 inline constexpr uint32_t MAX_BODY_ACTIVATION_EVENTS = 256;
-static constexpr uint32_t MAX_COLLISION_EVENTS = 1024;
+static constexpr uint32_t MAX_COLLISION_EVENTS = 8192;
 } // Physics
 
 #endif //WILL_ENGINE_PHYSICS_CONFIG_H
