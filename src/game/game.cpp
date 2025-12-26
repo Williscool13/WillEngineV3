@@ -10,6 +10,7 @@
 #include "engine/engine_api.h"
 #include "physics/physics_system.h"
 #include "fwd_components.h"
+#include "components/render/gather_renderables_component.h"
 #include "systems/debug_system.h"
 #include "systems/camera_system.h"
 #include "systems/physics_system.h"
@@ -50,7 +51,7 @@ GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::GameState* state)
 GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer, Render::FrameResources* frameResources)
 {
     Game::System::BuildViewFamily(state, frameBuffer->mainViewFamily);
-    Game::System::DebugPrepareFrame(ctx, state, frameBuffer, frameResources);
+    Game::System::GatherRenderables(ctx, state, frameBuffer, frameResources);
 }
 
 
@@ -61,7 +62,6 @@ GAME_API void GameUnload(Core::EngineContext* ctx, Engine::GameState* state)
 
 GAME_API void GameShutdown(Core::EngineContext* ctx, Engine::GameState* state)
 {
-    Game::System::DebugShutdown(ctx, state);
     SPDLOG_TRACE("Game Shutdown");
 }
 }

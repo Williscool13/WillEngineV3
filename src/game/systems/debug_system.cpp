@@ -6,6 +6,8 @@
 
 #include <Jolt/Jolt.h>
 #include <spdlog/spdlog.h>
+
+#include "asset-load/asset_load_config.h"
 #include "Jolt/Physics/Body/BodyCreationSettings.h"
 #include "Jolt/Physics/Collision/Shape/BoxShape.h"
 
@@ -14,7 +16,6 @@
 #include "engine/asset_manager.h"
 #include "engine/engine_api.h"
 #include "game/fwd_components.h"
-#include "render/frame_resources.h"
 #include "physics/physics_system.h"
 #include "platform/paths.h"
 
@@ -37,12 +38,91 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
     }
 
     if (state->inputFrame->GetKey(Key::F2).pressed) {
-        // We do not insert floor into registry, though maybe we should
+        if (!boxHandle.IsValid()) {
+            SPDLOG_WARN("[DebugSystem] No box model loaded, press F1 first");
+            return;
+        }
+
         auto& bodyInterface = ctx->physicsSystem->GetBodyInterface();
-        SPDLOG_INFO("[DebugSystem] Created physics floor");
+        JPH::BoxShapeSettings floorShapeSettings(JPH::Vec3(10.0f, 0.5f, 10.0f));
+        floorShapeSettings.SetEmbedded();
+        JPH::ShapeSettings::ShapeResult floorShapeResult = floorShapeSettings.Create();
+        JPH::ShapeRefC floorShape = floorShapeResult.Get();
+        JPH::BodyCreationSettings floorSettings(
+            floorShape,
+            JPH::RVec3(0.0, -0.5, 0.0),
+            JPH::Quat::sIdentity(),
+            JPH::EMotionType::Static,
+            Physics::Layers::NON_MOVING
+        );
+        floorBodyID = bodyInterface.CreateAndAddBody(floorSettings, JPH::EActivation::DontActivate);
+
+        // Create renderable for floor
+        Render::WillModel* model = ctx->assetManager->GetModel(boxHandle);
+        if (!model || model->modelLoadState != Render::WillModel::ModelLoadState::Loaded) {
+            SPDLOG_WARN("[DebugSystem] Model not ready yet");
+            return;
+        }
+
+        auto& modelAllocator = ctx->assetManager->GetModelAllocator();
+        auto& instanceAllocator = ctx->assetManager->GetInstanceAllocator();
+        auto& materialAllocator = ctx->assetManager->GetMaterialAllocator();
+
+        Engine::ModelHandle modelEntry = modelAllocator.Add();
+        Engine::InstanceHandle instanceEntry = instanceAllocator.Add();
+        Engine::MaterialHandle materialEntry = materialAllocator.Add();
+
+        if (!modelEntry.IsValid() || !instanceEntry.IsValid() || !materialEntry.IsValid()) {
+            SPDLOG_ERROR("[DebugSystem] Failed to allocate GPU slots");
+            modelAllocator.Remove(modelEntry);
+            instanceAllocator.Remove(instanceEntry);
+            materialAllocator.Remove(materialEntry);
+            return;
+        }
+
+        RenderableComponent renderable{};
+        renderable.modelEntry = modelEntry;
+        renderable.instanceEntry = instanceEntry;
+        renderable.materialEntry = materialEntry;
+        renderable.modelFlags = glm::vec4(0.0f);
+
+        renderable.instance.primitiveIndex = model->modelData.meshes[0].primitiveIndices[0].index;
+        renderable.instance.modelIndex = modelEntry.index;
+        renderable.instance.materialIndex = materialEntry.index;
+        renderable.instance.jointMatrixOffset = 0;
+        renderable.instance.bIsAllocated = 1;
+
+        if (model->modelData.materials.empty()) {
+            renderable.material = MaterialProperties{};
+            renderable.material.colorFactor = glm::vec4(0.5f, 0.5f, 0.5f, 1.0f); // gray floor
+            renderable.material.metalRoughFactors = {0.0f, 1.0f, 0.0f, 0.0f};
+        }
+        else {
+            renderable.material = model->modelData.materials[0];
+            renderable.material.textureImageIndices.x = AssetLoad::ERROR_IMAGE_BINDLESS_INDEX;
+            renderable.material.textureSamplerIndices.x = AssetLoad::DEFAULT_SAMPLER_BINDLESS_INDEX;
+        }
+
+        entt::entity floorEntity = state->registry.create();
+        state->registry.emplace<RenderableComponent>(floorEntity, renderable);
+        TransformComponent floorTransform;
+        floorTransform.translation = glm::vec3(0.0f, -0.5f, 0.0f);
+        floorTransform.rotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+        floorTransform.scale = glm::vec3(20.0f, 1.0f, 20.0f); // scale to match physics shape
+        state->registry.emplace<TransformComponent>(floorEntity, floorTransform);
+        // No PhysicsBodyComponent - static geometry doesn't need interpolation
+
+        SPDLOG_INFO("[DebugSystem] Created physics floor with renderable");
     }
 
     if (state->inputFrame->GetKey(Key::F3).pressed) {
+        auto view = state->registry.view<PhysicsBodyComponent, TransformComponent>();
+        for (auto [entity, physicsBody, transform] : view.each()) {
+            transform.translation += glm::vec3(0, 5.0f, 0);
+            state->registry.emplace_or_replace<DirtyPhysicsTransformComponent>(entity);
+            return;
+        }
+
         if (!boxHandle.IsValid()) {
             SPDLOG_WARN("[DebugSystem] No box model loaded, press F1 first");
             return;
@@ -109,13 +189,10 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
             // renderable.material.textureImageIndices.x = 1;
         }
 
-        Transform transform{};
-        transform.translation = glm::vec3(0.0f, 5.0f, 0.0f);
-
         entt::entity boxEntity = state->registry.create();
         state->registry.emplace<RenderableComponent>(boxEntity, renderable);
-        state->registry.emplace<TransformComponent>(boxEntity, transform);
-        state->registry.emplace<PhysicsBodyComponent>(boxEntity, boxBodyID, transform.translation, transform.rotation);
+        TransformComponent transformComponent = state->registry.emplace<TransformComponent>(boxEntity, glm::vec3(0.0f, 5.0f, 0.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f), glm::vec3(1.0f));
+        state->registry.emplace<PhysicsBodyComponent>(boxEntity, boxBodyID, transformComponent.translation, transformComponent.rotation);
 
 
         SPDLOG_INFO("[DebugSystem] Created falling box");
@@ -130,27 +207,5 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
     }
 
     // todo: if box is no longer moving, lets move it again!
-
 }
-
-void DebugPrepareFrame(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer, Render::FrameResources* frameResources)
-{
-    auto* instanceBuffer = static_cast<Instance*>(frameResources->instanceBuffer.allocationInfo.pMappedData);
-    auto modelBuffer = static_cast<Model*>(frameResources->modelBuffer.allocationInfo.pMappedData);
-    auto materialBuffer = static_cast<MaterialProperties*>(frameResources->materialBuffer.allocationInfo.pMappedData);
-
-    const auto view = state->registry.view<RenderableComponent, TransformComponent>();
-
-    for (const auto& [entity, renderable, transform] : view.each()) {
-        // todo: prev frame data needs to be figured out
-        modelBuffer[renderable.modelEntry.index] = {transform.transform.GetMatrix(), transform.transform.GetMatrix(), renderable.modelFlags};
-        instanceBuffer[renderable.instanceEntry.index] = renderable.instance;
-        materialBuffer[renderable.materialEntry.index] = renderable.material;
-
-        frameBuffer->mainViewFamily.instances.push_back(renderable.instanceEntry);
-    }
-}
-
-void DebugShutdown(Core::EngineContext* ctx, Engine::GameState* state)
-{}
 } // Game::System

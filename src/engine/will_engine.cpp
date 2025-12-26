@@ -336,6 +336,9 @@ void WillEngine::Cleanup()
     gameFunctions.gameUnload(engineContext.get(), gameState.get());
     gameFunctions.gameShutdown(engineContext.get(), gameState.get());
     gameState = nullptr;
+
+    physicsSystem.reset();
+
 #ifndef GAME_STATIC
     gameDll.Unload();
 #endif

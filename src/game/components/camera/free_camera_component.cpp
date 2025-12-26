@@ -69,7 +69,7 @@ void UpdateFreeCamera(Core::EngineContext* ctx, Engine::GameState* state)
         const float yaw = glm::radians(-state->inputFrame->mouseXDelta * freeCam.lookSpeed);
         const float pitch = glm::radians(-state->inputFrame->mouseYDelta * freeCam.lookSpeed);
 
-        const glm::quat currentRotation = transform.transform.rotation;
+        const glm::quat currentRotation = transform.rotation;
         const glm::vec3 forward = currentRotation * WORLD_FORWARD;
         const float currentPitch = std::asin(forward.y);
 
@@ -79,15 +79,15 @@ void UpdateFreeCamera(Core::EngineContext* ctx, Engine::GameState* state)
         const glm::quat yawQuat = glm::angleAxis(yaw, WORLD_UP);
         const glm::quat pitchQuat = glm::angleAxis(pitchDelta, WORLD_RIGHT);
 
-        transform.transform.rotation = glm::normalize(yawQuat * currentRotation * pitchQuat);
+        transform.rotation = glm::normalize(yawQuat * currentRotation * pitchQuat);
 
-        const glm::vec3 right = transform.transform.rotation * WORLD_RIGHT;
-        const glm::vec3 forwardDir = transform.transform.rotation * WORLD_FORWARD;
+        const glm::vec3 right = transform.rotation * WORLD_RIGHT;
+        const glm::vec3 forwardDir = transform.rotation * WORLD_FORWARD;
 
-        transform.transform.translation += right * velocity.x + forwardDir * velocity.z + WORLD_UP * verticalVelocity;
+        transform.translation += right * velocity.x + forwardDir * velocity.z + WORLD_UP * verticalVelocity;
 
-        camera.cameraPos = transform.transform.translation;
-        camera.cameraLookAt = transform.transform.translation + forwardDir;
+        camera.cameraPos = transform.translation;
+        camera.cameraLookAt = transform.translation + forwardDir;
         camera.cameraUp = WORLD_UP;
         camera.aspectRatio = ctx->windowContext.windowWidth / static_cast<float>(ctx->windowContext.windowHeight);
         camera.fovRadians = glm::radians(90.0f);

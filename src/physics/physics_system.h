@@ -63,10 +63,8 @@ public:
         JPH::RegisterDefaultAllocator();
     }
 
-    void Test();
-
 private:
-    enki::TaskScheduler* scheduler;
+    enki::TaskScheduler* scheduler{};
 
     std::unique_ptr<PhysicsJobSystem> jobSystem;
     std::unique_ptr<JPH::TempAllocatorImpl> tempAllocator{};

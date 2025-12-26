@@ -506,6 +506,9 @@ RawGltfModel AssetGenerator::LoadGltf(const std::filesystem::path& source)
             fastgltf::iterateAccessorWithIndex<fastgltf::math::fvec3>(gltf, posAccessor, [&](fastgltf::math::fvec3 v, const size_t index) {
                 primitiveVertices[index] = {};
                 primitiveVertices[index].position = {v.x(), v.y(), v.z()};
+                primitiveVertices[index].color = {1.0f, 1.0f, 1.0f, 1.0f};
+                primitiveVertices[index].normal = {0.0f, 0.0f, 1.0f};
+                primitiveVertices[index].tangent = {1.0f, 0.0f, 0.0f, 1.0f};
             });
 
 

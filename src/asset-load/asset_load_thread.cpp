@@ -351,6 +351,11 @@ void AssetLoadThread::ThreadMain()
 
             textureCompleteUnloadQueue.push({textureUnloadRequest.textureHandle, textureUnloadRequest.texture, true});
         }
+
+        if (!didWork) {
+            std::chrono::milliseconds idleWait = std::chrono::milliseconds(1);
+            std::this_thread::sleep_for(idleWait);
+        }
     }
 }
 } // AssetLoad

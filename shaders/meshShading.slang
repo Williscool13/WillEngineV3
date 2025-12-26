@@ -147,9 +147,5 @@ FragmentOutput fragmentMain(VertexOutput vertexInput, uniform PushConsts pushCon
     FragmentOutput output;
     output.color = color * float4(ambient + diffuse, material.colorFactor.a);
 
-    output.color = textures[material.textureImageIndices[0]].Sample(samplers[material.textureSamplerIndices[0]], vertexInput.uv);
-    // output.color.w = 1.0f;
-    // output.color.x = vertexInput.uv.x;
-    // output.color.y = vertexInput.uv.y;
     return output;
 }
