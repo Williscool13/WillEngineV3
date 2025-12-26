@@ -14,13 +14,19 @@ namespace AssetLoad
 WillModelLoadJob::WillModelLoadJob() = default;
 
 WillModelLoadJob::WillModelLoadJob(Render::VulkanContext* context, Render::ResourceManager* resourceManager, VkCommandBuffer commandBuffer)
-    : context(context), resourceManager(resourceManager)
+    : context(context), resourceManager(resourceManager), commandBuffer(commandBuffer)
 {
     task = std::make_unique<LoadModelTask>();
-    uploadStaging = std::make_unique<UploadStaging>(context, commandBuffer, WILL_MODEL_LOAD_STAGING_SIZE);
 }
 
 WillModelLoadJob::~WillModelLoadJob() = default;
+
+void WillModelLoadJob::StartJob()
+{
+    if (!uploadStaging) {
+        uploadStaging = std::make_unique<UploadStaging>(context, commandBuffer, TEXTURE_LOAD_STAGING_SIZE);
+    }
+}
 
 TaskState WillModelLoadJob::TaskExecute(enki::TaskScheduler* scheduler)
 {

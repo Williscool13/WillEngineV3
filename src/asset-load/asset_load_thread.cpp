@@ -231,6 +231,7 @@ void AssetLoadThread::ThreadMain()
             switch (slot.loadState) {
                 case AssetLoadState::Idle:
                 {
+                    job->StartJob();
                     job->TaskExecute(scheduler);
                     slot.loadState = AssetLoadState::TaskExecuting;
                 }

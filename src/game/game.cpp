@@ -11,6 +11,7 @@
 #include "physics/physics_system.h"
 #include "fwd_components.h"
 #include "components/render/gather_renderables_component.h"
+#include "core/math/constants.h"
 #include "systems/debug_system.h"
 #include "systems/camera_system.h"
 #include "systems/physics_system.h"
@@ -25,7 +26,9 @@ GAME_API void GameStartup(Core::EngineContext* ctx, Engine::GameState* state)
     const entt::entity camera = state->registry.create();
     state->registry.emplace<Game::FreeCameraComponent>(camera);
     state->registry.emplace<Game::CameraComponent>(camera);
-    state->registry.emplace<Game::TransformComponent>(camera);
+    Game::TransformComponent cameraTransform = state->registry.emplace<Game::TransformComponent>(camera);
+    cameraTransform.translation = glm::vec3(0.0f, 3.0f, 5.0f);
+    cameraTransform.rotation = glm::quatLookAt(glm::normalize(glm::vec3(0.0f, 0.0f, 0.0f) - glm::vec3(0.0f, 3.0f, 5.0f)), WORLD_UP);
     state->registry.emplace<Game::MainViewportComponent>(camera);
     state->registry.ctx().emplace<Engine::GameState*>(state);
 

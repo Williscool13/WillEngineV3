@@ -29,6 +29,7 @@ public:
     TextureLoadJob(Render::VulkanContext* context, Render::ResourceManager* resourceManager, VkCommandBuffer commandBuffer);
     ~TextureLoadJob() override;
 
+    void StartJob() override;
     TaskState TaskExecute(enki::TaskScheduler* scheduler) override;
     bool PreThreadExecute() override;
     ThreadState ThreadExecute() override;
@@ -52,6 +53,7 @@ private:
 
     // Task
     TaskState taskState{TaskState::NotStarted};
+    VkCommandBuffer commandBuffer;
     std::unique_ptr<LoadTextureTask> task;
     ktxTexture2* texture{nullptr};
 

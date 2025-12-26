@@ -14,13 +14,19 @@ namespace AssetLoad
 TextureLoadJob::TextureLoadJob() = default;
 
 TextureLoadJob::TextureLoadJob(Render::VulkanContext* context, Render::ResourceManager* resourceManager, VkCommandBuffer commandBuffer)
-    : context(context), resourceManager(resourceManager)
+    : context(context), resourceManager(resourceManager), commandBuffer(commandBuffer)
 {
     task = std::make_unique<LoadTextureTask>();
-    uploadStaging = std::make_unique<UploadStaging>(context, commandBuffer, TEXTURE_LOAD_STAGING_SIZE);
 }
 
 TextureLoadJob::~TextureLoadJob() = default;
+
+void TextureLoadJob::StartJob()
+{
+    if (!uploadStaging) {
+        uploadStaging = std::make_unique<UploadStaging>(context, commandBuffer, TEXTURE_LOAD_STAGING_SIZE);
+    }
+}
 
 TaskState TextureLoadJob::TaskExecute(enki::TaskScheduler* scheduler)
 {

@@ -44,6 +44,8 @@ class AssetLoadJob
 public:
     virtual ~AssetLoadJob() = default;
 
+    virtual void StartJob() = 0;
+
     virtual TaskState TaskExecute(enki::TaskScheduler* scheduler) = 0;
 
     virtual bool PreThreadExecute() = 0;

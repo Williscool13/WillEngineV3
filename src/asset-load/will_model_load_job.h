@@ -40,6 +40,8 @@ public:
 
     WillModelLoadJob& operator=(WillModelLoadJob&&) noexcept = default;
 
+    void StartJob() override;
+
     TaskState TaskExecute(enki::TaskScheduler* scheduler) override;
 
     bool PreThreadExecute() override;
@@ -70,6 +72,7 @@ private:
 
     // Task
     TaskState taskState{TaskState::NotStarted};
+    VkCommandBuffer commandBuffer;
     std::unique_ptr<LoadModelTask> task;
     UnpackedWillModel rawData{};
     std::vector<ktxTexture2*> pendingTextures;
