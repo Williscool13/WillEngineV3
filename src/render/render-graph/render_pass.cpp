@@ -35,10 +35,10 @@ RenderPass& RenderPass::WriteStorageImage(const std::string& name, const Texture
     return *this;
 }
 
-RenderPass& RenderPass::WriteTransferImage(const std::string& name)
+RenderPass& RenderPass::WriteBlitImage(const std::string& name)
 {
     TextureResource* resource = graph.GetOrCreateTexture(name);
-    transferImageWrites.push_back(resource);
+    blitImageWrites.push_back(resource);
     return *this;
 }
 
@@ -56,9 +56,9 @@ RenderPass& RenderPass::ReadSampledImage(const std::string& name) {
     return *this;
 }
 
-RenderPass& RenderPass::ReadTransferImage(const std::string& name) {
+RenderPass& RenderPass::ReadBlitImage(const std::string& name) {
     TextureResource* resource = graph.GetOrCreateTexture(name);
-    transferImageReads.push_back(resource);
+    blitImageReads.push_back(resource);
     return *this;
 }
 

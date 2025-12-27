@@ -226,8 +226,8 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     graph->ImportTexture(swapchainName, currentSwapchainImage, currentSwapchainImageView, VK_IMAGE_LAYOUT_UNDEFINED, VK_PIPELINE_STAGE_2_BLIT_BIT, VK_IMAGE_LAYOUT_UNDEFINED);
 
     RenderPass& blitPass = graph->AddPass("BlitToSwapchain");
-    blitPass.ReadTransferImage("drawImage");
-    blitPass.WriteTransferImage(swapchainName);
+    blitPass.ReadBlitImage("drawImage");
+    blitPass.WriteBlitImage(swapchainName);
     blitPass.Execute([&](VkCommandBuffer cmd) {
         VkImage drawImage = graph->GetImage("drawImage");
 

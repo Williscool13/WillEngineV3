@@ -71,7 +71,7 @@ private:
 
     void CreatePhysicalBuffer(PhysicalResource& resource, const ResourceDimensions& dim);
 
-    void LogBarrier(const VkImageMemoryBarrier2& barrier, const std::string& resourceName);
+    void LogBarrier(const VkImageMemoryBarrier2& barrier, const std::string& resourceName, uint32_t physicalIndex);
 };
 } // Render
 

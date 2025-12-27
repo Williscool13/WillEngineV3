@@ -21,14 +21,14 @@ public:
     // Write
     RenderPass& WriteStorageImage(const std::string& name, TextureInfo info = {});
 
-    RenderPass& WriteTransferImage(const std::string& name);
+    RenderPass& WriteBlitImage(const std::string& name);
 
     // Read
     RenderPass& ReadStorageImage(const std::string& name);
 
     RenderPass& ReadSampledImage(const std::string& name);
 
-    RenderPass& ReadTransferImage(const std::string& name);
+    RenderPass& ReadBlitImage(const std::string& name);
 
     RenderPass& Execute(std::function<void(VkCommandBuffer)> func);
 
@@ -40,8 +40,8 @@ private:
     std::vector<TextureResource*> storageImageReads;
     std::vector<TextureResource*> storageImageWrites;
     std::vector<TextureResource*> sampledImageReads;
-    std::vector<TextureResource*> transferImageReads;
-    std::vector<TextureResource*> transferImageWrites;
+    std::vector<TextureResource*> blitImageReads;
+    std::vector<TextureResource*> blitImageWrites;
 
     std::function<void(VkCommandBuffer_T*)> executeFunc;
 };

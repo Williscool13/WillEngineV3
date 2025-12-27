@@ -130,7 +130,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                     phys.event.stages, phys.event.access, phys.event.layout,
                     VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL
                 );
-                LogBarrier(barrier, tex->name);
+                LogBarrier(barrier, tex->name, tex->physicalIndex);
                 barriers.push_back(barrier);
             }
         }
@@ -144,7 +144,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                     phys.event.stages, phys.event.access, phys.event.layout,
                     VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT, VK_IMAGE_LAYOUT_GENERAL
                 );
-                LogBarrier(barrier, tex->name);
+                LogBarrier(barrier, tex->name, tex->physicalIndex);
                 barriers.push_back(barrier);
             }
         }
@@ -158,12 +158,12 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                     phys.event.stages, phys.event.access, phys.event.layout,
                     VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
                 );
-                LogBarrier(barrier, tex->name);
+                LogBarrier(barrier, tex->name, tex->physicalIndex);
                 barriers.push_back(barrier);
             }
         }
 
-        for (auto* tex : pass->transferImageReads) {
+        for (auto* tex : pass->blitImageReads) {
             auto& phys = GetPhysical(tex);
             if (phys.event.layout != VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL) {
                 auto barrier = VkHelpers::ImageMemoryBarrier(
@@ -172,12 +172,12 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                     phys.event.stages, phys.event.access, phys.event.layout,
                     VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
                 );
-                LogBarrier(barrier, tex->name);
+                LogBarrier(barrier, tex->name, tex->physicalIndex);
                 barriers.push_back(barrier);
             }
         }
 
-        for (auto* tex : pass->transferImageWrites) {
+        for (auto* tex : pass->blitImageWrites) {
             auto& phys = GetPhysical(tex);
             if (phys.event.layout != VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
                 auto barrier = VkHelpers::ImageMemoryBarrier(
@@ -186,7 +186,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                     phys.event.stages, phys.event.access, phys.event.layout,
                     VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
                 );
-                LogBarrier(barrier, tex->name);
+                LogBarrier(barrier, tex->name, tex->physicalIndex);
                 barriers.push_back(barrier);
             }
         }
@@ -214,14 +214,14 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
             phys.event.access = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT;
         }
 
-        for (auto* tex : pass->transferImageWrites) {
+        for (auto* tex : pass->blitImageWrites) {
             auto& phys = GetPhysical(tex);
             phys.event.layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
             phys.event.stages = VK_PIPELINE_STAGE_2_BLIT_BIT;
             phys.event.access = VK_ACCESS_2_TRANSFER_WRITE_BIT;
         }
 
-        for (auto* tex : pass->transferImageReads) {
+        for (auto* tex : pass->blitImageReads) {
             auto& phys = GetPhysical(tex);
             phys.event.layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
             phys.event.stages = VK_PIPELINE_STAGE_2_BLIT_BIT;
@@ -244,7 +244,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                     phys.event.stages, phys.event.access, phys.event.layout,
                     VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT, VK_ACCESS_2_NONE, tex.finalLayout
                 );
-                LogBarrier(finalBarrier, tex.name);
+                LogBarrier(finalBarrier, tex.name, tex.physicalIndex);
                 finalBarriers.push_back(finalBarrier);
                 phys.event.layout = tex.finalLayout;
             }
@@ -333,7 +333,7 @@ PipelineEvent RenderGraph::GetResourceState(const std::string& name) const
     return physicalResources[tex.physicalIndex].event;
 }
 
-void RenderGraph::LogBarrier(const VkImageMemoryBarrier2& barrier, const std::string& resourceName)
+void RenderGraph::LogBarrier(const VkImageMemoryBarrier2& barrier, const std::string& resourceName, uint32_t physicalIndex)
 {
     if (!debugLogging) return;
 
@@ -349,8 +349,9 @@ void RenderGraph::LogBarrier(const VkImageMemoryBarrier2& barrier, const std::st
         }
     };
 
-    SPDLOG_INFO("  [BARRIER] {} : {} -> {}",
+    SPDLOG_INFO("  [BARRIER] {} ({}): {} -> {}",
                 resourceName,
+                physicalIndex,
                 LayoutToString(barrier.oldLayout),
                 LayoutToString(barrier.newLayout));
 }
@@ -366,7 +367,7 @@ TextureResource* RenderGraph::GetOrCreateTexture(const std::string& name)
     uint32_t index = textures.size();
     textures.push_back(TextureResource{
         .name = name,
-        .index = index, // todo: may need custom descriptor buffer free list to manage index
+        .index = index,
     });
     textureNameToIndex[name] = index;
 
