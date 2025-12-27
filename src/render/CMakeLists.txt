@@ -60,6 +60,10 @@ add_library(render STATIC
         shaders/constants_interop.h
         texture_asset.cpp
         texture_asset.h
+        render-graph/render_graph.cpp
+        render-graph/render_graph.h
+        render-graph/render_graph_resources.cpp
+        render-graph/render_graph_resources.h
 )
 
 target_include_directories(render PRIVATE
