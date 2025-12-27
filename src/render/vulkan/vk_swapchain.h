@@ -35,6 +35,7 @@ struct Swapchain
     VkFormat format{};
     VkColorSpaceKHR colorSpace{};
     VkExtent2D extent{};
+    VkImageUsageFlags usages{};
     uint32_t imageCount{};
     std::vector<VkImage> swapchainImages{};
     std::vector<VkImageView> swapchainImageViews{};

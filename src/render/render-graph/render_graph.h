@@ -40,7 +40,7 @@ public:
 
     uint32_t GetDescriptorIndex(const std::string& name);
 
-    void ImportTexture(const std::string& name, VkImage image, VkImageView view, VkImageLayout initialLayout, VkPipelineStageFlags2 initialStage, VkImageLayout finalLayout);
+    void ImportTexture(const std::string& name, VkImage image, VkImageView view, const TextureInfo& info, VkImageLayout initialLayout, VkPipelineStageFlags2 initialStage, VkImageLayout finalLayout);
 
     PipelineEvent GetResourceState(const std::string& name) const;
 
@@ -56,6 +56,13 @@ private:
 
     // Physical resources
     std::vector<PhysicalResource> physicalResources;
+
+    struct ImportedImageInfo {
+        uint32_t physicalIndex;
+        uint32_t lifetime;
+    };
+
+    std::unordered_map<VkImage, ImportedImageInfo> importedImages;
 
     // Render passes
     std::vector<std::unique_ptr<RenderPass> > passes;

@@ -38,26 +38,47 @@ RenderPass& RenderPass::WriteStorageImage(const std::string& name, const Texture
 RenderPass& RenderPass::WriteBlitImage(const std::string& name)
 {
     TextureResource* resource = graph.GetOrCreateTexture(name);
+    if (resource->textureInfo.format != VK_FORMAT_UNDEFINED) {
+        assert((resource->textureInfo.usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT) &&
+            "Texture must have TRANSFER_DST usage for blit writes");
+    }
+
     blitImageWrites.push_back(resource);
     return *this;
 }
 
-RenderPass& RenderPass::ReadStorageImage(const std::string& name) {
+RenderPass& RenderPass::ReadStorageImage(const std::string& name)
+{
     TextureResource* resource = graph.GetOrCreateTexture(name);
-    resource->usageType = TextureUsageType::Storage;
+    if (resource->textureInfo.format != VK_FORMAT_UNDEFINED) {
+        assert((resource->textureInfo.usage & VK_IMAGE_USAGE_STORAGE_BIT) &&
+            "Texture must have STORAGE usage for storage reads");
+    }
+
     storageImageReads.push_back(resource);
     return *this;
 }
 
-RenderPass& RenderPass::ReadSampledImage(const std::string& name) {
+RenderPass& RenderPass::ReadSampledImage(const std::string& name)
+{
     TextureResource* resource = graph.GetOrCreateTexture(name);
-    resource->usageType = TextureUsageType::Sampled;
+    if (resource->textureInfo.format != VK_FORMAT_UNDEFINED) {
+        assert((resource->textureInfo.usage & VK_IMAGE_USAGE_SAMPLED_BIT) &&
+            "Texture must have SAMPLED usage for sampled reads");
+    }
+
     sampledImageReads.push_back(resource);
     return *this;
 }
 
-RenderPass& RenderPass::ReadBlitImage(const std::string& name) {
+RenderPass& RenderPass::ReadBlitImage(const std::string& name)
+{
     TextureResource* resource = graph.GetOrCreateTexture(name);
+    if (resource->textureInfo.format != VK_FORMAT_UNDEFINED) {
+        assert((resource->textureInfo.usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) &&
+            "Texture must have TRANSFER_SRC usage for blit reads");
+    }
+
     blitImageReads.push_back(resource);
     return *this;
 }

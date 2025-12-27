@@ -67,6 +67,7 @@ void Swapchain::Create(uint32_t width, uint32_t height)
     format = vkbSwapchain.image_format;
     colorSpace = vkbSwapchain.color_space;
     extent = {vkbSwapchain.extent.width, vkbSwapchain.extent.height};
+    usages = vkbSwapchain.image_usage_flags;
     swapchainImages = imagesResult.value();
     swapchainImageViews = viewsResult.value();
 }

@@ -7,6 +7,7 @@
 #include <cassert>
 #include <utility>
 
+#include "render_graph_config.h"
 #include "render_pass.h"
 #include "render/resource_manager.h"
 #include "render/vulkan/vk_utils.h"
@@ -55,6 +56,9 @@ void RenderGraph::Compile()
             bool foundAlias = false;
             for (uint32_t i = 0; i < physicalResources.size(); i++) {
                 auto& phys = physicalResources[i];
+                if (phys.bIsImported) {
+                    continue;
+                }
 
                 if (phys.dimensions == desiredDim) {
                     // TODO: Also check if lifetimes are disjoint
@@ -262,21 +266,32 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
 void RenderGraph::Reset()
 {
     passes.clear();
+    textures.clear();
+    textureNameToIndex.clear();
+
+    for (auto it = importedImages.begin(); it != importedImages.end();) {
+        if (--it->second.lifetime == 0) {
+            auto& phys = physicalResources[it->second.physicalIndex];
+
+            phys.image = VK_NULL_HANDLE;
+            phys.view = VK_NULL_HANDLE;
+            phys.bIsImported = false;
+
+            it = importedImages.erase(it);
+        }
+        else {
+            ++it;
+        }
+    }
 }
 
 VkImage RenderGraph::GetImage(const std::string& name)
 {
     auto it = textureNameToIndex.find(name);
-    if (it == textureNameToIndex.end()) {
-        SPDLOG_ERROR("Texture '{}' not found", name);
-        return VK_NULL_HANDLE;
-    }
+    assert(it != textureNameToIndex.end() && "Texture not found");
 
     auto& tex = textures[it->second];
-    if (!tex.HasPhysical()) {
-        SPDLOG_ERROR("Texture '{}' has no physical resource", name);
-        return VK_NULL_HANDLE;
-    }
+    assert(tex.HasPhysical() && "Texture has no physical resource");
 
     return physicalResources[tex.physicalIndex].image;
 }
@@ -284,27 +299,36 @@ VkImage RenderGraph::GetImage(const std::string& name)
 uint32_t RenderGraph::GetDescriptorIndex(const std::string& name)
 {
     auto it = textureNameToIndex.find(name);
-    if (it == textureNameToIndex.end()) {
-        SPDLOG_ERROR("Texture '{}' not found", name);
-        return UINT32_MAX;
-    }
+    assert(it != textureNameToIndex.end() && "Texture not found");
 
     auto& tex = textures[it->second];
-    if (!tex.HasPhysical()) {
-        SPDLOG_ERROR("Texture '{}' has no physical resource", name);
-        return UINT32_MAX;
-    }
+    assert(tex.HasPhysical() && "Texture has no physical resource");
 
     return physicalResources[tex.physicalIndex].descriptorIndex;
 }
 
-void RenderGraph::ImportTexture(const std::string& name, VkImage image, VkImageView view, VkImageLayout initialLayout, VkPipelineStageFlags2 initialStage, VkImageLayout finalLayout)
+void RenderGraph::ImportTexture(const std::string& name,
+                                VkImage image,
+                                VkImageView view,
+                                const TextureInfo& info,
+                                VkImageLayout initialLayout,
+                                VkPipelineStageFlags2 initialStage,
+                                VkImageLayout finalLayout)
 {
     TextureResource* tex = GetOrCreateTexture(name);
+    tex->textureInfo = info;
 
     if (!tex->HasPhysical()) {
-        tex->physicalIndex = physicalResources.size();
-        physicalResources.emplace_back();
+        auto it = importedImages.find(image);
+        if (it != importedImages.end()) {
+            tex->physicalIndex = it->second.physicalIndex;
+            it->second.lifetime = IMPORTED_TEXTURE_PHYSICAL_LIFETIME;
+        }
+        else {
+            tex->physicalIndex = physicalResources.size();
+            physicalResources.emplace_back();
+            importedImages[image] = {tex->physicalIndex, IMPORTED_TEXTURE_PHYSICAL_LIFETIME};
+        }
     }
 
     auto& phys = physicalResources[tex->physicalIndex];
@@ -314,6 +338,18 @@ void RenderGraph::ImportTexture(const std::string& name, VkImage image, VkImageV
     phys.event.stages = initialStage;
     phys.event.access = VK_ACCESS_2_NONE;
     phys.bIsImported = true;
+
+    // Set dimensions...
+    phys.dimensions.type = ResourceDimensions::Type::Image;
+    phys.dimensions.format = info.format;
+    phys.dimensions.width = info.width;
+    phys.dimensions.height = info.height;
+    phys.dimensions.depth = 1;
+    phys.dimensions.levels = 1;
+    phys.dimensions.layers = 1;
+    phys.dimensions.samples = 1;
+    phys.dimensions.imageUsage = info.usage;
+    phys.dimensions.name = name;
 
     tex->finalLayout = finalLayout;
 }

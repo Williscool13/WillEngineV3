@@ -223,7 +223,8 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     });
 
     std::string swapchainName = "swapchain_" + std::to_string(swapchainImageIndex);
-    graph->ImportTexture(swapchainName, currentSwapchainImage, currentSwapchainImageView, VK_IMAGE_LAYOUT_UNDEFINED, VK_PIPELINE_STAGE_2_BLIT_BIT, VK_IMAGE_LAYOUT_UNDEFINED);
+    graph->ImportTexture(swapchainName, currentSwapchainImage, currentSwapchainImageView, {swapchain->format, swapchain->extent.width, swapchain->extent.height, swapchain->usages},
+                         VK_IMAGE_LAYOUT_UNDEFINED, VK_PIPELINE_STAGE_2_BLIT_BIT, VK_IMAGE_LAYOUT_UNDEFINED);
 
     RenderPass& blitPass = graph->AddPass("BlitToSwapchain");
     blitPass.ReadBlitImage("drawImage");
