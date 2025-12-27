@@ -17,6 +17,11 @@
 #include "pipelines/mesh_shader_pipeline.h"
 #include "shaders/common_interop.h"
 
+namespace Render
+{
+class RenderGraph;
+}
+
 namespace Core
 {
 class FrameSync;
@@ -104,6 +109,7 @@ private:
     std::unique_ptr<RenderTargets> renderTargets{};
     std::unique_ptr<ResourceManager> resourceManager{};
     std::unique_ptr<RenderExtents> renderExtents{};
+    std::unique_ptr<RenderGraph> graph{};
 
     std::array<RenderSynchronization, Core::FRAME_BUFFER_COUNT> frameSynchronization;
 

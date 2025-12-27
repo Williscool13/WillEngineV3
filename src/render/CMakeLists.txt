@@ -64,6 +64,10 @@ add_library(render STATIC
         render-graph/render_graph.h
         render-graph/render_graph_resources.cpp
         render-graph/render_graph_resources.h
+        render-graph/render_pass.cpp
+        render-graph/render_pass.h
+        descriptors/vk_bindless_transient_rdg_resources.cpp
+        descriptors/vk_bindless_transient_rdg_resources.h
 )
 
 target_include_directories(render PRIVATE

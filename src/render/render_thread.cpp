@@ -17,6 +17,8 @@
 #include "engine/will_engine.h"
 #include "platform/paths.h"
 #include "platform/thread_utils.h"
+#include "render-graph/render_graph.h"
+#include "render-graph/render_pass.h"
 
 #if WILL_EDITOR
 #include "render/vulkan/vk_imgui_wrapper.h"
@@ -40,16 +42,17 @@ RenderThread::RenderThread(Core::FrameSync* engineRenderSynchronization, enki::T
     renderTargets = std::make_unique<RenderTargets>(context.get(), width, height);
     renderExtents = std::make_unique<RenderExtents>(width, height, 1.0f);
     resourceManager = std::make_unique<ResourceManager>(context.get());
+    graph = std::make_unique<RenderGraph>(context.get(), resourceManager.get());
 
-    resourceManager->bindlessRenderTargetDescriptorBuffer.ForceAllocateStorageImage({COLOR_TARGET_INDEX, 1}, {nullptr, renderTargets->colorTargetView.handle, VK_IMAGE_LAYOUT_GENERAL});
-    resourceManager->bindlessRenderTargetDescriptorBuffer.ForceAllocateStorageImage({DEPTH_TARGET_INDEX, 1}, {nullptr, renderTargets->depthTargetView.handle, VK_IMAGE_LAYOUT_GENERAL});
+    resourceManager->bindlessRenderTargetDescriptorBuffer.WriteDescriptor(COLOR_TARGET_INDEX, {nullptr, renderTargets->colorTargetView.handle, VK_IMAGE_LAYOUT_GENERAL});
+    resourceManager->bindlessRenderTargetDescriptorBuffer.WriteDescriptor(DEPTH_TARGET_INDEX, {nullptr, renderTargets->depthTargetView.handle, VK_IMAGE_LAYOUT_GENERAL});
 
     for (RenderSynchronization& frameSync : frameSynchronization) {
         frameSync = RenderSynchronization(context.get());
         frameSync.Initialize();
     }
 
-    basicComputePipeline = BasicComputePipeline(context.get(), resourceManager->bindlessRenderTargetDescriptorBuffer.descriptorSetLayout);
+    basicComputePipeline = BasicComputePipeline(context.get(), resourceManager->bindlessRDGTransientDescriptorBuffer.descriptorSetLayout);
     basicRenderPipeline = BasicRenderPipeline(context.get());
     meshShaderPipeline = MeshShaderPipeline(context.get(), resourceManager->bindlessSamplerTextureDescriptorBuffer.descriptorSetLayout);
 
@@ -109,8 +112,8 @@ void RenderThread::ThreadMain()
             std::array<uint32_t, 2> newExtents = renderExtents->GetExtent();
 
             renderTargets->Recreate(newExtents[0], newExtents[1]);
-            resourceManager->bindlessRenderTargetDescriptorBuffer.ForceAllocateStorageImage({COLOR_TARGET_INDEX, 1}, {nullptr, renderTargets->colorTargetView.handle, VK_IMAGE_LAYOUT_GENERAL});
-            resourceManager->bindlessRenderTargetDescriptorBuffer.ForceAllocateStorageImage({DEPTH_TARGET_INDEX, 1}, {nullptr, renderTargets->depthTargetView.handle, VK_IMAGE_LAYOUT_GENERAL});
+            resourceManager->bindlessRenderTargetDescriptorBuffer.WriteDescriptor(COLOR_TARGET_INDEX, {nullptr, renderTargets->colorTargetView.handle, VK_IMAGE_LAYOUT_GENERAL});
+            resourceManager->bindlessRenderTargetDescriptorBuffer.WriteDescriptor(DEPTH_TARGET_INDEX, {nullptr, renderTargets->depthTargetView.handle, VK_IMAGE_LAYOUT_GENERAL});
 
             bRenderRequestsRecreate = false;
             bEngineRequestsRecreate = false;
@@ -168,10 +171,12 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
 
     std::array<uint32_t, 2> renderExtent = renderExtents->GetScaledExtent();
     VkImage currentSwapchainImage = swapchain->swapchainImages[swapchainImageIndex];
-    AllocatedBuffer& currentSceneDataBuffer = frameResource.sceneDataBuffer;
+    graph->Reset();
+
+    // AllocatedBuffer& currentSceneDataBuffer = frameResource.sceneDataBuffer;
 
     //
-    {
+    /*{
         // todo: address what happens if views is 0
         const Core::RenderView& view = frameBuffer.mainViewFamily.views[0];
 
@@ -187,161 +192,72 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
 
         auto currentSceneData = static_cast<SceneData*>(currentSceneDataBuffer.allocationInfo.pMappedData);
         memcpy(currentSceneData, &sceneData, sizeof(SceneData));
-    }
+    }*/
 
-    //
-    {
-        VkViewport viewport = VkHelpers::GenerateViewport(renderExtent[0], renderExtent[1]);
-        vkCmdSetViewport(cmd, 0, 1, &viewport);
-        VkRect2D scissor = VkHelpers::GenerateScissor(renderExtent[0], renderExtent[1]);
-        vkCmdSetScissor(cmd, 0, 1, &scissor);
-    }
+    RenderPass& computePass = graph->AddPass("ComputeDraw");
+    computePass.WriteStorageImage("drawImage", {
+                                      VK_FORMAT_R8G8B8A8_UNORM, renderExtent[0], renderExtent[1],
+                                      VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT
+                                  }, true);
+    computePass.Execute([&](VkCommandBuffer cmd) {
+        VkImage drawImage = graph->GetImage("drawImage");
 
-
-    // Transition to GENERAL for compute shader access
-    {
-        auto subresource = VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT);
+        // Transition UNDEFINED -> GENERAL
         auto barrier = VkHelpers::ImageMemoryBarrier(
-            renderTargets->colorTarget.handle,
-            subresource,
-            VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, renderTargets->colorTarget.layout,
-            VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL
+            drawImage,
+            VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT),
+            VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_UNDEFINED,
+            VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL
         );
-        renderTargets->colorTarget.layout = VK_IMAGE_LAYOUT_GENERAL;
-        auto dependencyInfo = VkHelpers::DependencyInfo(&barrier);
-        vkCmdPipelineBarrier2(cmd, &dependencyInfo);
-    }
-    //
-    {
+        auto depInfo = VkHelpers::DependencyInfo(&barrier);
+        vkCmdPipelineBarrier2(cmd, &depInfo);
+
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, basicComputePipeline.pipeline.handle);
+
         BasicComputePushConstant pushConstant{
             .color1 = {0.0f, 0.0f, 0.0f, 0.0f},
             .color2 = {1.0f, 1.0f, 1.0f, 1.0f},
             .extent = {renderExtent[0], renderExtent[1]},
+            .index = graph->GetStorageDescriptorIndex("drawImage"),
         };
         vkCmdPushConstants(cmd, basicComputePipeline.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(BasicComputePushConstant), &pushConstant);
 
-        VkDescriptorBufferBindingInfoEXT bindingInfo = resourceManager->bindlessRenderTargetDescriptorBuffer.GetBindingInfo();
+        VkDescriptorBufferBindingInfoEXT bindingInfo = resourceManager->bindlessRDGTransientDescriptorBuffer.GetBindingInfo();
         vkCmdBindDescriptorBuffersEXT(cmd, 1, &bindingInfo);
         uint32_t bufferIndexImage = 0;
         VkDeviceSize bufferOffset = 0;
         vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, basicComputePipeline.pipelineLayout.handle, 0, 1, &bufferIndexImage, &bufferOffset);
 
-
-        uint32_t xDispatch = renderExtent[0] + 15 / 16;
-        uint32_t yDispatch = renderExtent[1] + 15 / 16;
+        uint32_t xDispatch = (renderExtent[0] + 15) / 16;
+        uint32_t yDispatch = (renderExtent[1] + 15) / 16;
         vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
-    }
+    });
 
-    //
-    {
-        auto subresource = VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT);
-        auto barrier = VkHelpers::ImageMemoryBarrier(
-            renderTargets->colorTarget.handle,
-            subresource,
-            VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, renderTargets->colorTarget.layout,
-            VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-        );
-        renderTargets->colorTarget.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-        auto dependencyInfo = VkHelpers::DependencyInfo(&barrier);
-        vkCmdPipelineBarrier2(cmd, &dependencyInfo);
-    }
+    RenderPass& blitPass = graph->AddPass("BlitToSwapchain");
+    blitPass.Execute([&](VkCommandBuffer cmd) {
+        VkImage drawImage = graph->GetImage("drawImage");
 
-    // Main Render Pass
-    {
-        const VkRenderingAttachmentInfo colorAttachment = VkHelpers::RenderingAttachmentInfo(renderTargets->colorTargetView.handle, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-        constexpr VkClearValue depthClear = {.depthStencil = {0.0f, 0u}};
-        const VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(renderTargets->depthTargetView.handle, &depthClear, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
-        const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({renderExtent[0], renderExtent[1]}, &colorAttachment, &depthAttachment);
-        vkCmdBeginRendering(cmd, &renderInfo);
-
-        //
-        {
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, basicRenderPipeline.pipeline.handle);
-
-            BasicRenderPushConstant pushData{
-                .modelMatrix = glm::mat4(1.0f),
-                .sceneData = currentSceneDataBuffer.address,
-            };
-
-            vkCmdPushConstants(cmd, basicRenderPipeline.pipelineLayout.handle, VK_SHADER_STAGE_MESH_BIT_EXT, 0, sizeof(BasicRenderPushConstant), &pushData);
-            vkCmdDrawMeshTasksEXT(cmd, 1, 1, 1);
-        }
-        //
-
-        if (!frameBuffer.mainViewFamily.instances.empty()) {
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, meshShaderPipeline.pipeline.handle);
-            VkDescriptorBufferBindingInfoEXT bindingInfo = resourceManager->bindlessSamplerTextureDescriptorBuffer.GetBindingInfo();
-            vkCmdBindDescriptorBuffersEXT(cmd, 1, &bindingInfo);
-            uint32_t bufferIndexImage = 0;
-            VkDeviceSize bufferOffset = 0;
-            vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, meshShaderPipeline.pipelineLayout.handle, 0, 1, &bufferIndexImage, &bufferOffset);
-            for (Engine::InstanceHandle& instance : frameBuffer.mainViewFamily.instances) {
-                MeshShaderPushConstants pushConstants{
-                    .sceneData = currentSceneDataBuffer.address,
-                    .vertexBuffer = resourceManager->megaVertexBuffer.address,
-                    .primitiveBuffer = resourceManager->primitiveBuffer.address,
-                    .meshletVerticesBuffer = resourceManager->megaMeshletVerticesBuffer.address,
-                    .meshletTrianglesBuffer = resourceManager->megaMeshletTrianglesBuffer.address,
-                    .meshletBuffer = resourceManager->megaMeshletBuffer.address,
-                    .materialBuffer = frameResource.materialBuffer.address,
-                    .modelBuffer = frameResource.modelBuffer.address,
-                    .instanceBuffer = frameResource.instanceBuffer.address,
-                    .instanceIndex = instance.index
-                };
-
-                vkCmdPushConstants(cmd, meshShaderPipeline.pipelineLayout.handle, VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT, 0,
-                                   sizeof(MeshShaderPushConstants), &pushConstants);
-
-                vkCmdDrawMeshTasksEXT(cmd, 1, 1, 1);
-            }
-        }
-
-
-        vkCmdEndRendering(cmd);
-    }
-
-
-#if WILL_EDITOR
-    // Imgui Draw
-    {
-        const VkRenderingAttachmentInfo imguiAttachment = VkHelpers::RenderingAttachmentInfo(renderTargets->colorTargetView.handle, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-        const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({renderExtent[0], renderExtent[1]}, &imguiAttachment, nullptr);
-        vkCmdBeginRendering(cmd, &renderInfo);
-        ImDrawDataSnapshot& imguiSnapshot = engineRenderSynchronization->imguiDataSnapshots[currentFrameIndex];
-        ImGui_ImplVulkan_RenderDrawData(&imguiSnapshot.DrawData, cmd);
-
-        vkCmdEndRendering(cmd);
-    }
-#endif
-
-
-    // Prepare for blit
-    {
         VkImageMemoryBarrier2 barriers[2];
+        // GENERAL -> TRANSFER_SRC
         barriers[0] = VkHelpers::ImageMemoryBarrier(
-            renderTargets->colorTarget.handle,
+            drawImage,
             VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT),
-            VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT, renderTargets->colorTarget.layout,
+            VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL,
             VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
         );
-        renderTargets->colorTarget.layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        // UNDEFINED -> TRANSFER_DST
         barriers[1] = VkHelpers::ImageMemoryBarrier(
             currentSwapchainImage,
             VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT),
-            VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_UNDEFINED,
+            VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_UNDEFINED,
             VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
         );
-        VkDependencyInfo depInfo{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
-        depInfo.imageMemoryBarrierCount = 2;
-        depInfo.pImageMemoryBarriers = barriers;
+        auto depInfo = VkHelpers::DependencyInfo(barriers, 2);
         vkCmdPipelineBarrier2(cmd, &depInfo);
-    }
 
-    // Blit
-    {
         VkOffset3D renderOffset = {static_cast<int32_t>(renderExtent[0]), static_cast<int32_t>(renderExtent[1]), 1};
         VkOffset3D swapchainOffset = {static_cast<int32_t>(swapchain->extent.width), static_cast<int32_t>(swapchain->extent.height), 1};
+
         VkImageBlit2 blitRegion{};
         blitRegion.sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2;
         blitRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -355,8 +271,8 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
 
         VkBlitImageInfo2 blitInfo{};
         blitInfo.sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2;
-        blitInfo.srcImage = renderTargets->colorTarget.handle;
-        blitInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        blitInfo.srcImage = drawImage;
+        blitInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL; // Wrong, but you'll fix with barriers
         blitInfo.dstImage = currentSwapchainImage;
         blitInfo.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
         blitInfo.regionCount = 1;
@@ -364,20 +280,19 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         blitInfo.filter = VK_FILTER_LINEAR;
 
         vkCmdBlitImage2(cmd, &blitInfo);
-    }
 
-    //
-    {
-        auto subresource = VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT);
-        auto barrier = VkHelpers::ImageMemoryBarrier(
+        auto presentBarrier = VkHelpers::ImageMemoryBarrier(
             currentSwapchainImage,
-            subresource,
+            VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT),
             VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
+            VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
         );
-        auto dependencyInfo = VkHelpers::DependencyInfo(&barrier);
-        vkCmdPipelineBarrier2(cmd, &dependencyInfo);
-    }
+        auto presentDepInfo = VkHelpers::DependencyInfo(&presentBarrier);
+        vkCmdPipelineBarrier2(cmd, &presentDepInfo);
+    });
+
+    graph->Compile();
+    graph->Execute(cmd);
 
     VK_CHECK(vkEndCommandBuffer(cmd));
 
@@ -393,7 +308,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     const VkResult presentResult = vkQueuePresentKHR(context->graphicsQueue, &presentInfo);
 
     if (presentResult == VK_ERROR_OUT_OF_DATE_KHR || presentResult == VK_SUBOPTIMAL_KHR) {
-        SPDLOG_TRACE("[RenderThread::Render] Swapchain presentation failed ({})", string_VkResult(e));
+        SPDLOG_TRACE("[RenderThread::Render] Swapchain presentation failed ({})", string_VkResult(presentResult));
         return SWAPCHAIN_OUTDATED;
     }
 

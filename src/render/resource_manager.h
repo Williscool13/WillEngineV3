@@ -6,6 +6,7 @@
 #define WILL_ENGINE_VK_RENDER_RESOURCES_H
 
 #include "offsetAllocator.hpp"
+#include "descriptors/vk_bindless_transient_rdg_resources.h"
 #include "render/render_config.h"
 #include "vulkan/vk_resources.h"
 #include "render/frame_resources.h"
@@ -41,6 +42,8 @@ struct ResourceManager
     BindlessResourcesSamplerImages bindlessSamplerTextureDescriptorBuffer{};
     BindlessResourcesStorage<8> bindlessRenderTargetDescriptorBuffer{};
     BindlessResourcesStorage<512> bindlessStorageDescriptorBuffer{};
+
+    BindlessTransientRDGResourcesDescriptorBuffer<16, 64, 128> bindlessRDGTransientDescriptorBuffer{};
 
     std::array<FrameResources, Core::FRAME_BUFFER_COUNT> frameResources;
 

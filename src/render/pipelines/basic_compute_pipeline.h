@@ -18,6 +18,7 @@ struct BasicComputePushConstant
     glm::vec4 color1;
     glm::vec4 color2;
     glm::ivec2 extent;
+    uint32_t index;
 };
 
 class BasicComputePipeline

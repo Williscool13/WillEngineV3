@@ -93,6 +93,16 @@ VkDependencyInfo VkHelpers::DependencyInfo(VkImageMemoryBarrier2* imageBarrier)
     };
 }
 
+VkDependencyInfo VkHelpers::DependencyInfo(VkImageMemoryBarrier2* imageBarrier, uint32_t count)
+{
+    return {
+        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .pNext = nullptr,
+        .imageMemoryBarrierCount = count,
+        .pImageMemoryBarriers = imageBarrier,
+    };
+}
+
 VkCommandPoolCreateInfo VkHelpers::CommandPoolCreateInfo(uint32_t queueFamilyIndex)
 {
     return {

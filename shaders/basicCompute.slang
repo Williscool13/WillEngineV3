@@ -11,12 +11,17 @@ struct PushConstants
     float4 color1;
     float4 color2;
     int2 renderSize;
+    uint32_t targetStorageImageIndex;
 };
 
 [[vk::push_constant]]
 PushConstants pc;
 
 [[vk::binding(0, 0)]]
+SamplerState samplers[];
+[[vk::binding(1, 0)]]
+Texture2D textures[];
+[[vk::binding(2, 0)]]
 RWTexture2D<float4> renderTextures[];
 
 [shader("compute")]
@@ -29,7 +34,7 @@ void computeMain(uint3 threadId : SV_DispatchThreadID)
 
     int2 texelCoord = int2(threadId.xy);
     int2 size;
-    renderTextures[0].GetDimensions(size.x, size.y);
+    renderTextures[pc.targetStorageImageIndex].GetDimensions(size.x, size.y);
 
     if(texelCoord.x < size.x && texelCoord.y < size.y)
     {
@@ -48,6 +53,6 @@ void computeMain(uint3 threadId : SV_DispatchThreadID)
 
         float3 color = ray_color(ray_direction, pc.color1.xyz, pc.color2.xyz);
         color = float3(float(texelCoord.x) / float(size.x), 1.0f - float(texelCoord.y) / float(size.y), 0.0);
-        renderTextures[0][texelCoord] = float4(color, 1.0);
+        renderTextures[pc.targetStorageImageIndex][texelCoord] = float4(color, 1.0);
     };
 }

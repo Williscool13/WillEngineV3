@@ -7,34 +7,99 @@
 #include <cassert>
 #include <utility>
 
+#include "render_pass.h"
+#include "render/resource_manager.h"
+
 namespace Render
 {
+RenderGraph::RenderGraph(VulkanContext* context, ResourceManager* resourceManager)
+    : context(context), resourceManager(resourceManager)
+{}
+
 RenderPass& RenderGraph::AddPass(const std::string& name)
 {
     passes.push_back(std::make_unique<RenderPass>(*this, name));
     return *passes.back();
 }
 
-void RenderGraph::Compile() {}
+void RenderGraph::Compile()
+{
+    /*for (auto& tex : textures) {
+        tex.usageType = TextureUsageType::Unknown;
+        tex.descriptorIndex = UINT32_MAX;
+    }*/
+
+    for (auto& tex : textures) {
+        if (!tex.IsAllocated()) {
+            VkImageCreateInfo drawImageCreateInfo = VkHelpers::ImageCreateInfo(tex.textureInfo.format, {tex.textureInfo.width, tex.textureInfo.height, 1}, tex.textureInfo.usage);
+            tex.image = AllocatedImage::CreateAllocatedImage(context, drawImageCreateInfo);
+            VkImageViewCreateInfo viewInfo = Render::VkHelpers::ImageViewCreateInfo(
+                tex.image.handle,
+                tex.textureInfo.format,
+                VK_IMAGE_ASPECT_COLOR_BIT
+            );
+
+            tex.view = ImageView::CreateImageView(context, viewInfo);
+        }
+    }
+    for (auto& tex : textures) {
+        if (tex.HasDescriptor() && tex.IsAllocated()) {
+            VkImageLayout descriptorLayout;
+
+            if (tex.usageType == TextureUsageType::Storage) {
+                descriptorLayout = VK_IMAGE_LAYOUT_GENERAL;
+                resourceManager->bindlessRDGTransientDescriptorBuffer.WriteStorageImageDescriptor(tex.descriptorIndex, {nullptr, tex.view.handle, descriptorLayout});
+            }
+            else {
+                // todo: will also need an accompanying sampler for this. Perhaps just make a few defaults (linear and nearest) and choose between them
+                descriptorLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                resourceManager->bindlessRDGTransientDescriptorBuffer.WriteSampledImageDescriptor(tex.descriptorIndex, {nullptr, tex.view.handle, descriptorLayout});
+            }
+        }
+    }
+}
 
 void RenderGraph::Execute(VkCommandBuffer cmd)
-{}
+{
+    for (auto& pass : passes) {
+        if (pass->executeFunc) {
+            pass->executeFunc(cmd);
+        }
+    }
+}
 
 void RenderGraph::Reset()
 {
     passes.clear();
+    storageDescriptorAllocator = 0;
+    sampledDescriptorAllocator = 0;
 }
 
-uint32_t RenderGraph::GetDescriptor(const std::string& name)
+uint32_t RenderGraph::GetStorageDescriptor()
+{
+    return storageDescriptorAllocator++;
+}
+
+uint32_t RenderGraph::GetSampledDescriptor(const std::string& name)
+{
+    auto& tex = textures[textureNameToIndex[name]];
+
+    if (!tex.HasDescriptor()) {
+        tex.usageType = TextureUsageType::Sampled;
+        tex.descriptorIndex = sampledDescriptorAllocator++;
+    }
+
+    assert(tex.usageType == TextureUsageType::Sampled);
+    return tex.descriptorIndex;
+}
+
+uint32_t RenderGraph::GetStorageDescriptorIndex(const std::string& name)
 {
     auto it = textureNameToIndex.find(name);
     assert(it != textureNameToIndex.end() && "Texture not found");
 
     auto& tex = textures[it->second];
-    if (!tex.HasDescriptor()) {
-        // todo: allocate from free list
-        tex.descriptorIndex = 0;
-    }
+    assert(tex.HasDescriptor() && "Texture has no been assigned a descriptor index");
 
     return tex.descriptorIndex;
 }
@@ -56,33 +121,4 @@ TextureResource* RenderGraph::GetOrCreateTexture(const std::string& name)
 
     return &textures[index];
 }
-
-RenderPass::RenderPass(RenderGraph& renderGraph, std::string name)
-    : graph(renderGraph), renderPassName(std::move(name))
-{}
-
-RenderPass& RenderPass::WriteStorageImage(const std::string& name, const TextureInfo info)
-{
-    TextureResource* resource = graph.GetOrCreateTexture(name);
-
-    if (info.format != VK_FORMAT_UNDEFINED) {
-        if (resource->textureInfo.format == VK_FORMAT_UNDEFINED) {
-            resource->textureInfo = info;
-        }
-        else {
-            assert(resource->textureInfo.format == info.format && "Format mismatch");
-            assert(resource->textureInfo.width == info.width && "Width mismatch");
-            assert(resource->textureInfo.height == info.height && "Height mismatch");
-        }
-    }
-    else {
-        assert(resource->textureInfo.format != VK_FORMAT_UNDEFINED && "Texture not defined - provide TextureInfo on first use");
-    }
-
-    writtenStorageImages.push_back(resource);
-    return *this;
-}
-
-RenderPass& RenderPass::Execute(std::function<void(VkCommandBuffer)> func)
-{}
 } // Render

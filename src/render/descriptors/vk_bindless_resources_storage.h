@@ -126,14 +126,14 @@ public:
      * Force-update a storage image at a specific handle, bypassing allocation tracking.
      * WARNING: Only use for debugging or replacing existing allocations.
      *
-     * @param handle Target handle in the storage image array
+     * @param index Target handle in the storage image array
      * @param imageInfo New descriptor info
      * @return true if handle was valid and updated
      */
-    bool ForceAllocateStorageImage(BindlessStorageImageHandle handle, const VkDescriptorImageInfo& imageInfo)
+    bool WriteDescriptor(uint32_t index, const VkDescriptorImageInfo& imageInfo)
     {
-        if (!storageImageAllocator.IsValid(handle)) {
-            SPDLOG_ERROR("Invalid storage image handle for ForceAllocateStorageImage");
+        if (index > Count){
+            SPDLOG_ERROR("Invalid storage index for ForceAllocateStorageImage");
             return false;
         }
 
@@ -147,7 +147,7 @@ public:
         descriptorGetInfo.data.pStorageImage = &imageInfo;
 
         const size_t storageImageDescriptorSize = VulkanContext::deviceInfo.descriptorBufferProps.storageImageDescriptorSize;
-        char* bufferPtr = basePtr + handle.index * storageImageDescriptorSize;
+        char* bufferPtr = basePtr + index * storageImageDescriptorSize;
         vkGetDescriptorEXT(context->device, &descriptorGetInfo, storageImageDescriptorSize, bufferPtr);
 
         return true;

@@ -26,6 +26,8 @@ VkImageSubresourceRange SubresourceRange(VkImageAspectFlags aspectMask, uint32_t
 
 VkDependencyInfo DependencyInfo(VkImageMemoryBarrier2* imageBarrier);
 
+VkDependencyInfo DependencyInfo(VkImageMemoryBarrier2* imageBarrier, uint32_t count);
+
 VkCommandPoolCreateInfo CommandPoolCreateInfo(uint32_t queueFamilyIndex);
 
 VkCommandBufferAllocateInfo CommandBufferAllocateInfo(uint32_t bufferCount, VkCommandPool commandPool = VK_NULL_HANDLE);
@@ -66,7 +68,8 @@ VkViewport GenerateViewport(uint32_t width, uint32_t height);
 
 VkRect2D GenerateScissor(uint32_t width, uint32_t height);
 
-inline VkBufferMemoryBarrier2 ToVkBarrier(const Core::BufferAcquireOperation& op) {
+inline VkBufferMemoryBarrier2 ToVkBarrier(const Core::BufferAcquireOperation& op)
+{
     return VkBufferMemoryBarrier2{
         .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
         .pNext = nullptr,
@@ -82,7 +85,8 @@ inline VkBufferMemoryBarrier2 ToVkBarrier(const Core::BufferAcquireOperation& op
     };
 }
 
-inline VkImageMemoryBarrier2 ToVkBarrier(const Core::ImageAcquireOperation& op) {
+inline VkImageMemoryBarrier2 ToVkBarrier(const Core::ImageAcquireOperation& op)
+{
     return VkImageMemoryBarrier2{
         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
         .pNext = nullptr,
@@ -105,7 +109,8 @@ inline VkImageMemoryBarrier2 ToVkBarrier(const Core::ImageAcquireOperation& op) 
     };
 }
 
-inline Core::BufferAcquireOperation FromVkBarrier(const VkBufferMemoryBarrier2& barrier) {
+inline Core::BufferAcquireOperation FromVkBarrier(const VkBufferMemoryBarrier2& barrier)
+{
     return Core::BufferAcquireOperation{
         .buffer = reinterpret_cast<uint64_t>(barrier.buffer),
         .srcStageMask = barrier.srcStageMask,
@@ -119,7 +124,8 @@ inline Core::BufferAcquireOperation FromVkBarrier(const VkBufferMemoryBarrier2& 
     };
 }
 
-inline Core::ImageAcquireOperation FromVkBarrier(const VkImageMemoryBarrier2& barrier) {
+inline Core::ImageAcquireOperation FromVkBarrier(const VkImageMemoryBarrier2& barrier)
+{
     return Core::ImageAcquireOperation{
         .image = reinterpret_cast<uint64_t>(barrier.image),
         .aspectMask = barrier.subresourceRange.aspectMask,

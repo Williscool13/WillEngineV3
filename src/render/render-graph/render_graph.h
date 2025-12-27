@@ -15,12 +15,15 @@
 
 namespace Render
 {
+struct ResourceManager;
 struct TextureResource;
 class RenderPass;
 
 class RenderGraph
 {
 public:
+    RenderGraph(VulkanContext* context, ResourceManager* resourceManager);
+
     RenderPass& AddPass(const std::string& name);
 
     void Compile();
@@ -29,33 +32,33 @@ public:
 
     void Reset();
 
-    uint32_t GetDescriptor(const std::string& name);
+    uint32_t GetStorageDescriptor();
+
+    uint32_t GetSampledDescriptor(const std::string& name);
+
+    VkImage GetImage(const std::string& name) {
+        return textures[textureNameToIndex[name]].image.handle;
+    }
+
+    uint32_t GetStorageDescriptorIndex(const std::string& name);
 
 private:
     friend class RenderPass;
+    VulkanContext* context;
+    ResourceManager* resourceManager;
+
+
     std::vector<std::unique_ptr<RenderPass> > passes;
 
     std::vector<TextureResource> textures;
     std::unordered_map<std::string, uint32_t> textureNameToIndex;
 
+private:
+    uint32_t storageDescriptorAllocator = 0;
+    uint32_t sampledDescriptorAllocator = 0;
+
     // Helper for passes to get/create resources
     TextureResource* GetOrCreateTexture(const std::string& name);
-};
-
-class RenderPass
-{
-public:
-    RenderPass(RenderGraph& renderGraph, std::string name);
-
-    RenderPass& WriteStorageImage(const std::string& name, TextureInfo info = {});
-
-    RenderPass& Execute(std::function<void(VkCommandBuffer)> func);
-
-private:
-    RenderGraph& graph;
-    std::string renderPassName;
-
-    std::vector<TextureResource*> writtenStorageImages;
 };
 } // Render
 

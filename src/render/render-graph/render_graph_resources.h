@@ -13,13 +13,19 @@
 
 namespace Render
 {
+enum class TextureUsageType
+{
+    Unknown,
+    Storage,
+    Sampled
+};
+
 struct TextureInfo
 {
     VkFormat format;
     uint32_t width;
     uint32_t height;
     VkImageUsageFlags usage;
-
 
     TextureInfo() = default;
 
@@ -33,6 +39,7 @@ struct TextureResource
     uint32_t index;
 
     TextureInfo textureInfo;
+    TextureUsageType usageType = TextureUsageType::Unknown;
 
     // Physical resource (set during Compile)
     // todo likely will not use these data types
@@ -47,7 +54,6 @@ struct TextureResource
     [[nodiscard]] bool IsAllocated() const { return image.handle != VK_NULL_HANDLE; }
     [[nodiscard]] bool HasDescriptor() const { return descriptorIndex != UINT32_MAX; }
 };
-
 } // Render
 
 #endif //WILL_ENGINE_RENDER_GRAPH_RESOURCES_H
