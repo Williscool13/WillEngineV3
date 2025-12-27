@@ -171,6 +171,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
 
     std::array<uint32_t, 2> renderExtent = renderExtents->GetScaledExtent();
     VkImage currentSwapchainImage = swapchain->swapchainImages[swapchainImageIndex];
+    VkImageView currentSwapchainImageView = swapchain->swapchainImageViews[swapchainImageIndex];
     graph->Reset();
 
     // AllocatedBuffer& currentSceneDataBuffer = frameResource.sceneDataBuffer;
@@ -198,27 +199,15 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     computePass.WriteStorageImage("drawImage", {
                                       VK_FORMAT_R8G8B8A8_UNORM, renderExtent[0], renderExtent[1],
                                       VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT
-                                  }, true);
+                                  });
     computePass.Execute([&](VkCommandBuffer cmd) {
-        VkImage drawImage = graph->GetImage("drawImage");
-
-        // Transition UNDEFINED -> GENERAL
-        auto barrier = VkHelpers::ImageMemoryBarrier(
-            drawImage,
-            VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT),
-            VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_UNDEFINED,
-            VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL
-        );
-        auto depInfo = VkHelpers::DependencyInfo(&barrier);
-        vkCmdPipelineBarrier2(cmd, &depInfo);
-
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, basicComputePipeline.pipeline.handle);
 
         BasicComputePushConstant pushConstant{
             .color1 = {0.0f, 0.0f, 0.0f, 0.0f},
             .color2 = {1.0f, 1.0f, 1.0f, 1.0f},
             .extent = {renderExtent[0], renderExtent[1]},
-            .index = graph->GetStorageDescriptorIndex("drawImage"),
+            .index = graph->GetDescriptorIndex("drawImage"),
         };
         vkCmdPushConstants(cmd, basicComputePipeline.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(BasicComputePushConstant), &pushConstant);
 
@@ -233,27 +222,14 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
     });
 
+    std::string swapchainName = "swapchain_" + std::to_string(swapchainImageIndex);
+    graph->ImportTexture(swapchainName, currentSwapchainImage, currentSwapchainImageView, VK_IMAGE_LAYOUT_UNDEFINED, VK_PIPELINE_STAGE_2_BLIT_BIT, VK_IMAGE_LAYOUT_UNDEFINED);
+
     RenderPass& blitPass = graph->AddPass("BlitToSwapchain");
+    blitPass.ReadTransferImage("drawImage");
+    blitPass.WriteTransferImage(swapchainName);
     blitPass.Execute([&](VkCommandBuffer cmd) {
         VkImage drawImage = graph->GetImage("drawImage");
-
-        VkImageMemoryBarrier2 barriers[2];
-        // GENERAL -> TRANSFER_SRC
-        barriers[0] = VkHelpers::ImageMemoryBarrier(
-            drawImage,
-            VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT),
-            VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL,
-            VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
-        );
-        // UNDEFINED -> TRANSFER_DST
-        barriers[1] = VkHelpers::ImageMemoryBarrier(
-            currentSwapchainImage,
-            VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT),
-            VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_UNDEFINED,
-            VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
-        );
-        auto depInfo = VkHelpers::DependencyInfo(barriers, 2);
-        vkCmdPipelineBarrier2(cmd, &depInfo);
 
         VkOffset3D renderOffset = {static_cast<int32_t>(renderExtent[0]), static_cast<int32_t>(renderExtent[1]), 1};
         VkOffset3D swapchainOffset = {static_cast<int32_t>(swapchain->extent.width), static_cast<int32_t>(swapchain->extent.height), 1};
@@ -280,25 +256,31 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         blitInfo.filter = VK_FILTER_LINEAR;
 
         vkCmdBlitImage2(cmd, &blitInfo);
-
-        auto presentBarrier = VkHelpers::ImageMemoryBarrier(
-            currentSwapchainImage,
-            VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT),
-            VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
-        );
-        auto presentDepInfo = VkHelpers::DependencyInfo(&presentBarrier);
-        vkCmdPipelineBarrier2(cmd, &presentDepInfo);
     });
 
+    graph->SetDebugLogging(true);
     graph->Compile();
     graph->Execute(cmd);
+
+    auto swapchainState = graph->GetResourceState(swapchainName);
+
+    VkImageMemoryBarrier2 presentBarrier = VkHelpers::ImageMemoryBarrier(
+        currentSwapchainImage,
+        VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT),
+        swapchainState.stages, swapchainState.access, swapchainState.layout,
+        VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
+    );
+
+    VkDependencyInfo depInfo = {VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
+    depInfo.imageMemoryBarrierCount = 1;
+    depInfo.pImageMemoryBarriers = &presentBarrier;
+    vkCmdPipelineBarrier2(cmd, &depInfo);
 
     VK_CHECK(vkEndCommandBuffer(cmd));
 
     VkCommandBufferSubmitInfo commandBufferSubmitInfo = VkHelpers::CommandBufferSubmitInfo(renderSync.commandBuffer);
     VkSemaphoreSubmitInfo swapchainSemaphoreWaitInfo = VkHelpers::SemaphoreSubmitInfo(renderSync.swapchainSemaphore, VK_PIPELINE_STAGE_2_BLIT_BIT);
-    VkSemaphoreSubmitInfo renderSemaphoreSignalInfo = VkHelpers::SemaphoreSubmitInfo(renderSync.renderSemaphore, VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT);
+    VkSemaphoreSubmitInfo renderSemaphoreSignalInfo = VkHelpers::SemaphoreSubmitInfo(renderSync.renderSemaphore, VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT);
     VkSubmitInfo2 submitInfo = VkHelpers::SubmitInfo(&commandBufferSubmitInfo, &swapchainSemaphoreWaitInfo, &renderSemaphoreSignalInfo);
     VK_CHECK(vkResetFences(context->device, 1, &renderSync.renderFence));
     VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, renderSync.renderFence));

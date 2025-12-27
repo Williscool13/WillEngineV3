@@ -18,7 +18,17 @@ class RenderPass
 public:
     RenderPass(RenderGraph& renderGraph, std::string name);
 
-    RenderPass& WriteStorageImage(const std::string& name, TextureInfo info = {}, bool bAsDescriptor = false);
+    // Write
+    RenderPass& WriteStorageImage(const std::string& name, TextureInfo info = {});
+
+    RenderPass& WriteTransferImage(const std::string& name);
+
+    // Read
+    RenderPass& ReadStorageImage(const std::string& name);
+
+    RenderPass& ReadSampledImage(const std::string& name);
+
+    RenderPass& ReadTransferImage(const std::string& name);
 
     RenderPass& Execute(std::function<void(VkCommandBuffer)> func);
 
@@ -27,7 +37,12 @@ private:
     RenderGraph& graph;
     std::string renderPassName;
 
-    std::vector<TextureResource*> writtenStorageImages;
+    std::vector<TextureResource*> storageImageReads;
+    std::vector<TextureResource*> storageImageWrites;
+    std::vector<TextureResource*> sampledImageReads;
+    std::vector<TextureResource*> transferImageReads;
+    std::vector<TextureResource*> transferImageWrites;
+
     std::function<void(VkCommandBuffer_T*)> executeFunc;
 };
 } // Render

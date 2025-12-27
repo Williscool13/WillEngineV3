@@ -43,7 +43,7 @@ struct ResourceManager
     BindlessResourcesStorage<8> bindlessRenderTargetDescriptorBuffer{};
     BindlessResourcesStorage<512> bindlessStorageDescriptorBuffer{};
 
-    BindlessTransientRDGResourcesDescriptorBuffer<16, 64, 128> bindlessRDGTransientDescriptorBuffer{};
+    BindlessTransientRDGResourcesDescriptorBuffer<8, 128, 128> bindlessRDGTransientDescriptorBuffer{};
 
     std::array<FrameResources, Core::FRAME_BUFFER_COUNT> frameResources;
 
