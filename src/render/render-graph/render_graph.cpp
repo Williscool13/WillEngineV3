@@ -86,14 +86,13 @@ void RenderGraph::Compile()
     // 2. Write descriptors only if not already written
     for (auto& phys : physicalResources) {
         if (phys.NeedsDescriptorWrite()) {
-            // todo replace descriptor index assignment here with a free list for random insert/removal (which I expect to see)
-            phys.descriptorIndex = static_cast<uint32_t>(&phys - &physicalResources[0]);
+            phys.descriptorHandle = transientImageHandleAllocator.Add();
 
             resourceManager->bindlessRDGTransientDescriptorBuffer.WriteStorageImageDescriptor(
-                phys.descriptorIndex, {nullptr, phys.view, VK_IMAGE_LAYOUT_GENERAL}
+                phys.descriptorHandle.index, {nullptr, phys.view, VK_IMAGE_LAYOUT_GENERAL}
             );
             resourceManager->bindlessRDGTransientDescriptorBuffer.WriteSampledImageDescriptor(
-                phys.descriptorIndex, {nullptr, phys.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}
+                phys.descriptorHandle.index, {nullptr, phys.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}
             );
 
             phys.descriptorWritten = true;
@@ -403,6 +402,7 @@ void RenderGraph::Reset()
             phys.image = VK_NULL_HANDLE;
             phys.view = VK_NULL_HANDLE;
             phys.bIsImported = false;
+            transientImageHandleAllocator.Remove(phys.descriptorHandle);
             it = importedImages.erase(it);
         }
         else {
@@ -531,7 +531,7 @@ uint32_t RenderGraph::GetDescriptorIndex(const std::string& name)
     auto& tex = textures[it->second];
     assert(tex.HasPhysical() && "Texture has no physical resource");
 
-    return physicalResources[tex.physicalIndex].descriptorIndex;
+    return physicalResources[tex.physicalIndex].descriptorHandle.index;
 }
 
 VkImageView RenderGraph::GetImageView(const std::string& name)

@@ -11,13 +11,15 @@
 #include <volk.h>
 
 #include "render_graph_resources.h"
-#include "../vulkan/vk_resources.h"
+#include "render/vulkan/vk_resources.h"
+#include "core/allocators/handle_allocator.h"
 
 namespace Render
 {
 struct ResourceManager;
-struct TextureResource;
 class RenderPass;
+struct TextureResource;
+using TransientImageHandle = Core::Handle<TextureResource>;
 
 class RenderGraph
 {
@@ -62,6 +64,7 @@ private:
     std::vector<TextureResource> textures;
     std::unordered_map<std::string, uint32_t> textureNameToIndex;
     static constexpr uint32_t MAX_TEXTURES = 128;
+    Core::HandleAllocator<TextureResource, MAX_TEXTURES> transientImageHandleAllocator;
 
     std::vector<BufferResource> buffers;
     std::unordered_map<std::string, uint32_t> bufferNameToIndex;

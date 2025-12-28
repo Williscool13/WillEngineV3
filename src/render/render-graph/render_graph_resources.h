@@ -9,10 +9,14 @@
 
 #include <volk.h>
 
+#include "core/allocators/handle.h"
 #include "render/vulkan/vk_resources.h"
 
 namespace Render
 {
+struct TextureResource;
+using TransientImageHandle = Core::Handle<TextureResource>;
+
 struct PipelineEvent
 {
     VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -78,7 +82,7 @@ struct PhysicalResource
     VkImage image = VK_NULL_HANDLE;
     VkImageView view = VK_NULL_HANDLE;
     VmaAllocation imageAllocation = VK_NULL_HANDLE;
-    uint32_t descriptorIndex = UINT32_MAX;
+    TransientImageHandle descriptorHandle = TransientImageHandle::INVALID;
     bool descriptorWritten = false;
 
     // Buffer resources (valid if dimensions.is_buffer())
