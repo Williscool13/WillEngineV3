@@ -18,7 +18,6 @@ RenderGraph::RenderGraph(VulkanContext* context, ResourceManager* resourceManage
     : context(context), resourceManager(resourceManager)
 {
     textures.reserve(MAX_TEXTURES);
-    // todo: physical resources limit
     physicalResources.reserve(MAX_TEXTURES);
 }
 
@@ -35,8 +34,50 @@ RenderPass& RenderGraph::AddPass(const std::string& name)
     return *passes.back();
 }
 
+void RenderGraph::AccumulateTextureUsage() const
+{
+    for (auto& pass : passes) {
+        for (auto* tex : pass->storageImageWrites) {
+            tex->accumulatedUsage |= VK_IMAGE_USAGE_STORAGE_BIT;
+        }
+
+        for (auto* tex : pass->storageImageReads) {
+            tex->accumulatedUsage |= VK_IMAGE_USAGE_STORAGE_BIT;
+        }
+
+        for (auto* tex : pass->sampledImageReads) {
+            tex->accumulatedUsage |= VK_IMAGE_USAGE_SAMPLED_BIT;
+        }
+
+        for (auto* tex : pass->blitImageReads) {
+            tex->accumulatedUsage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+        }
+
+        for (auto* tex : pass->blitImageWrites) {
+            tex->accumulatedUsage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        }
+
+        for (auto& attachment : pass->colorAttachments) {
+            attachment->accumulatedUsage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+        }
+
+        if (pass->depthAttachment) {
+            pass->depthAttachment->accumulatedUsage |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+        }
+    }
+}
+
+void RenderGraph::CalculateLifetimes()
+{
+
+}
+
 void RenderGraph::Compile()
 {
+    AccumulateTextureUsage();
+
+    CalculateLifetimes();
+
     for (auto& tex : textures) {
         if (!tex.HasPhysical()) {
             // Build desired dimensions for this texture
@@ -49,7 +90,7 @@ void RenderGraph::Compile()
             desiredDim.levels = 1;
             desiredDim.layers = 1;
             desiredDim.samples = 1;
-            desiredDim.imageUsage = tex.textureInfo.usage;
+            desiredDim.imageUsage = tex.accumulatedUsage;
             desiredDim.name = tex.name;
 
             // Try to find existing physical resource with matching dimensions
@@ -427,12 +468,14 @@ void RenderGraph::ImportTexture(const std::string& name,
                                 VkImage image,
                                 VkImageView view,
                                 const TextureInfo& info,
+                                VkImageUsageFlags usage,
                                 VkImageLayout initialLayout,
                                 VkPipelineStageFlags2 initialStage,
                                 VkImageLayout finalLayout)
 {
     TextureResource* tex = GetOrCreateTexture(name);
     tex->textureInfo = info;
+    tex->accumulatedUsage = usage;
 
     if (!tex->HasPhysical()) {
         auto it = importedImages.find(image);
@@ -442,7 +485,6 @@ void RenderGraph::ImportTexture(const std::string& name,
             assert(phys.dimensions.format == info.format && "Reimported image format mismatch");
             assert(phys.dimensions.width == info.width && "Reimported image width mismatch");
             assert(phys.dimensions.height == info.height && "Reimported image height mismatch");
-            assert(phys.dimensions.imageUsage == info.usage && "Reimported image usage mismatch");
 
             it->second.lifetime = IMPORTED_RESOURCES_PHYSICAL_LIFETIME;
         }
@@ -463,7 +505,6 @@ void RenderGraph::ImportTexture(const std::string& name,
             phys.dimensions.levels = 1;
             phys.dimensions.layers = 1;
             phys.dimensions.samples = 1;
-            phys.dimensions.imageUsage = info.usage;
         }
     }
 

@@ -37,10 +37,6 @@ RenderPass& RenderPass::WriteStorageImage(const std::string& name, const Texture
 RenderPass& RenderPass::WriteBlitImage(const std::string& name)
 {
     TextureResource* resource = graph.GetOrCreateTexture(name);
-    if (resource->textureInfo.format != VK_FORMAT_UNDEFINED) {
-        assert((resource->textureInfo.usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT) &&"Texture must have TRANSFER_DST usage for blit writes");
-    }
-
     blitImageWrites.push_back(resource);
     return *this;
 }
@@ -52,14 +48,11 @@ RenderPass& RenderPass::WriteColorAttachment(const std::string& name, const Text
     if (texInfo.format != VK_FORMAT_UNDEFINED) {
         if (resource->textureInfo.format == VK_FORMAT_UNDEFINED) {
             resource->textureInfo = texInfo;
-            resource->textureInfo.usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
         }
     }
     else {
         assert(resource->textureInfo.format != VK_FORMAT_UNDEFINED && "Texture not defined - provide TextureInfo on first use");
     }
-
-    assert((resource->textureInfo.usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) &&"Texture must have COLOR_ATTACHMENT usage");
 
     colorAttachments.push_back(resource);
     return *this;
@@ -72,14 +65,12 @@ RenderPass& RenderPass::WriteDepthAttachment(const std::string& name, const Text
     if (texInfo.format != VK_FORMAT_UNDEFINED) {
         if (resource->textureInfo.format == VK_FORMAT_UNDEFINED) {
             resource->textureInfo = texInfo;
-            resource->textureInfo.usage |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
         }
     }
     else {
         assert(resource->textureInfo.format != VK_FORMAT_UNDEFINED && "Texture not defined - provide TextureInfo on first use");
     }
 
-    assert((resource->textureInfo.usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) && "Texture must have DEPTH_STENCIL_ATTACHMENT usage");
     assert(depthAttachment == nullptr && "Only one depth attachment per pass");
 
     depthAttachment = resource;
@@ -94,7 +85,6 @@ RenderPass& RenderPass::ReadDepthAttachment(const std::string& name)
         assert(resource->textureInfo.format != VK_FORMAT_UNDEFINED && "Texture not defined - provide TextureInfo on first use");
     }
 
-    assert((resource->textureInfo.usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) && "Texture must have DEPTH_STENCIL_ATTACHMENT usage");
     assert(depthAttachment == nullptr && "Only one depth attachment per pass");
 
     depthAttachment = resource;
@@ -105,10 +95,6 @@ RenderPass& RenderPass::ReadDepthAttachment(const std::string& name)
 RenderPass& RenderPass::ReadStorageImage(const std::string& name)
 {
     TextureResource* resource = graph.GetOrCreateTexture(name);
-    if (resource->textureInfo.format != VK_FORMAT_UNDEFINED) {
-        assert((resource->textureInfo.usage & VK_IMAGE_USAGE_STORAGE_BIT) && "Texture must have STORAGE usage for storage reads");
-    }
-
     storageImageReads.push_back(resource);
     return *this;
 }
@@ -116,10 +102,6 @@ RenderPass& RenderPass::ReadStorageImage(const std::string& name)
 RenderPass& RenderPass::ReadSampledImage(const std::string& name)
 {
     TextureResource* resource = graph.GetOrCreateTexture(name);
-    if (resource->textureInfo.format != VK_FORMAT_UNDEFINED) {
-        assert((resource->textureInfo.usage & VK_IMAGE_USAGE_SAMPLED_BIT) && "Texture must have SAMPLED usage for sampled reads");
-    }
-
     sampledImageReads.push_back(resource);
     return *this;
 }
@@ -127,10 +109,6 @@ RenderPass& RenderPass::ReadSampledImage(const std::string& name)
 RenderPass& RenderPass::ReadBlitImage(const std::string& name)
 {
     TextureResource* resource = graph.GetOrCreateTexture(name);
-    if (resource->textureInfo.format != VK_FORMAT_UNDEFINED) {
-        assert((resource->textureInfo.usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) && "Texture must have TRANSFER_SRC usage for blit reads");
-    }
-
     blitImageReads.push_back(resource);
     return *this;
 }

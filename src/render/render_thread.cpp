@@ -205,7 +205,6 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
                                       COLOR_ATTACHMENT_FORMAT,
                                       renderExtent[0],
                                       renderExtent[1],
-                                      VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT
                                   });
     computePass.Execute([&](VkCommandBuffer cmd) {
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, basicComputePipeline.pipeline.handle);
@@ -241,7 +240,6 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         .format = VK_FORMAT_D32_SFLOAT,
         .width = renderExtent[0],
         .height = renderExtent[1],
-        .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT
     };
     colorPass.WriteDepthAttachment("depthTarget", depthInfo);
     colorPass.ReadBuffer("sceneData", VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
@@ -311,7 +309,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     }
 
     std::string swapchainName = "swapchain_" + std::to_string(swapchainImageIndex);
-    graph->ImportTexture(swapchainName, currentSwapchainImage, currentSwapchainImageView, {swapchain->format, swapchain->extent.width, swapchain->extent.height, swapchain->usages},
+    graph->ImportTexture(swapchainName, currentSwapchainImage, currentSwapchainImageView, {swapchain->format, swapchain->extent.width, swapchain->extent.height},  swapchain->usages,
                          VK_IMAGE_LAYOUT_UNDEFINED, VK_PIPELINE_STAGE_2_BLIT_BIT, VK_IMAGE_LAYOUT_UNDEFINED);
 
     auto& blitPass = graph->AddPass("BlitToSwapchain");

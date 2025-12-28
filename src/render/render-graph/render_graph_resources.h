@@ -112,7 +112,6 @@ struct TextureInfo
     VkFormat format;
     uint32_t width;
     uint32_t height;
-    VkImageUsageFlags usage;
 };
 
 struct TextureResource
@@ -122,6 +121,8 @@ struct TextureResource
     uint32_t physicalIndex = UINT32_MAX;
 
     TextureInfo textureInfo;
+    VkImageUsageFlags accumulatedUsage;
+
     VkImageLayout finalLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
     [[nodiscard]] bool HasPhysical() const { return physicalIndex != UINT32_MAX; }
