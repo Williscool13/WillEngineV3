@@ -13,8 +13,6 @@ add_library(render STATIC
         vulkan/vk_swapchain.h
         vulkan/vk_synchronization.cpp
         vulkan/vk_synchronization.h
-        vulkan/vk_render_targets.cpp
-        vulkan/vk_render_targets.h
         vulkan/vk_utils.cpp
         vulkan/vk_utils.h
         vulkan/vk_config.cpp

@@ -124,15 +124,6 @@ RenderPass& RenderPass::ReadBuffer(const std::string& name, VkPipelineStageFlags
     return *this;
 }
 
-RenderPass& RenderPass::Blit(const std::string& src, const std::string& dst, VkFilter filter)
-{
-    ReadBlitImage(src);
-    WriteBlitImage(dst);
-
-    blitOps.push_back({src, dst, filter});
-    return *this;
-}
-
 RenderPass& RenderPass::Execute(std::function<void(VkCommandBuffer)> func)
 {
     executeFunc = std::move(func);

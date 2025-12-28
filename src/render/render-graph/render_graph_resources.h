@@ -6,6 +6,7 @@
 #define WILL_ENGINE_RENDER_GRAPH_RESOURCES_H
 
 #include <string>
+#include <vector>
 
 #include <volk.h>
 
@@ -44,31 +45,21 @@ struct ResourceDimensions
 
     // Shared
     std::string name;
-    // RenderGraphQueueFlags queues = 0;
-    uint32_t flags = 0; // PERSISTENT_BIT, TRANSIENT_BIT, etc.
 
-    bool is_buffer() const { return type == Type::Buffer; }
-    bool is_image() const { return type == Type::Image; }
+    [[nodiscard]] bool IsBuffer() const { return type == Type::Buffer; }
+    [[nodiscard]] bool IsImage() const { return type == Type::Image; }
 
-    // For aliasing - check if two resources can share physical memory
     bool operator==(const ResourceDimensions& other) const
     {
-        if (type != other.type) return false;
-
-        if (is_buffer()) {
-            return bufferSize == other.bufferSize &&
-                   bufferUsage == other.bufferUsage;
-        }
-        else {
-            return format == other.format &&
-                   width == other.width &&
-                   height == other.height &&
-                   depth == other.depth &&
-                   levels == other.levels &&
-                   layers == other.layers &&
-                   samples == other.samples &&
-                   imageUsage == other.imageUsage;
-        }
+        return bufferSize == other.bufferSize &&
+               bufferUsage == other.bufferUsage &&
+               format == other.format &&
+               width == other.width &&
+               height == other.height &&
+               depth == other.depth &&
+               levels == other.levels &&
+               layers == other.layers &&
+               samples == other.samples;
     }
 };
 
@@ -77,6 +68,8 @@ struct PhysicalResource
     ResourceDimensions dimensions;
     PipelineEvent event;
     bool bIsImported = false;
+
+    std::vector<uint32_t> logicalResourceIndices;
 
     // Image resources (valid if dimensions.is_image())
     VkImage image = VK_NULL_HANDLE;
@@ -91,20 +84,11 @@ struct PhysicalResource
     VkDeviceAddress bufferAddress = 0;
     bool addressRetrieved = false;
 
-    bool IsAllocated() const
-    {
-        return dimensions.is_image() ? (image != VK_NULL_HANDLE) : (buffer != VK_NULL_HANDLE);
-    }
+    [[nodiscard]] bool IsAllocated() const { return dimensions.IsImage() ? (image != VK_NULL_HANDLE) : (buffer != VK_NULL_HANDLE); }
 
-    bool NeedsDescriptorWrite() const
-    {
-        return dimensions.is_image() && IsAllocated() && !descriptorWritten;
-    }
+    [[nodiscard]] bool NeedsDescriptorWrite() const { return dimensions.IsImage() && IsAllocated() && !descriptorWritten; }
 
-    bool NeedsAddressRetrieval() const
-    {
-        return dimensions.is_buffer() && IsAllocated() && !addressRetrieved;
-    }
+    [[nodiscard]] bool NeedsAddressRetrieval() const { return dimensions.IsBuffer() && IsAllocated() && !addressRetrieved; }
 };
 
 struct TextureInfo
@@ -121,7 +105,10 @@ struct TextureResource
     uint32_t physicalIndex = UINT32_MAX;
 
     TextureInfo textureInfo;
+
     VkImageUsageFlags accumulatedUsage;
+    uint32_t firstPass = UINT32_MAX;
+    uint32_t lastPass = 0;
 
     VkImageLayout finalLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
@@ -142,6 +129,9 @@ struct BufferResource
     uint32_t index = UINT32_MAX;
     BufferInfo bufferInfo = {};
     uint32_t physicalIndex = UINT32_MAX;
+
+    uint32_t firstPass = UINT32_MAX;
+    uint32_t lastPass = 0;
 
     [[nodiscard]] bool HasPhysical() const { return physicalIndex != UINT32_MAX; }
 };

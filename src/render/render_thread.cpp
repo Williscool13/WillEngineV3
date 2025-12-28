@@ -10,7 +10,6 @@
 #include "render/vulkan/vk_context.h"
 #include "render/vulkan/vk_helpers.h"
 #include "render/vulkan/vk_render_extents.h"
-#include "render/vulkan/vk_render_targets.h"
 #include "resource_manager.h"
 #include "render/vulkan/vk_swapchain.h"
 #include "render/vulkan/vk_utils.h"
@@ -39,13 +38,9 @@ RenderThread::RenderThread(Core::FrameSync* engineRenderSynchronization, enki::T
 #if WILL_EDITOR
     imgui = std::make_unique<ImguiWrapper>(context.get(), window, Core::FRAME_BUFFER_COUNT, COLOR_ATTACHMENT_FORMAT);
 #endif
-    renderTargets = std::make_unique<RenderTargets>(context.get(), width, height);
     renderExtents = std::make_unique<RenderExtents>(width, height, 1.0f);
     resourceManager = std::make_unique<ResourceManager>(context.get());
     graph = std::make_unique<RenderGraph>(context.get(), resourceManager.get());
-
-    resourceManager->bindlessRenderTargetDescriptorBuffer.WriteDescriptor(COLOR_TARGET_INDEX, {nullptr, renderTargets->colorTargetView.handle, VK_IMAGE_LAYOUT_GENERAL});
-    resourceManager->bindlessRenderTargetDescriptorBuffer.WriteDescriptor(DEPTH_TARGET_INDEX, {nullptr, renderTargets->depthTargetView.handle, VK_IMAGE_LAYOUT_GENERAL});
 
     for (RenderSynchronization& frameSync : frameSynchronization) {
         frameSync = RenderSynchronization(context.get());
@@ -109,14 +104,11 @@ void RenderThread::ThreadMain()
 
             swapchain->Recreate(frameBuffer.swapchainRecreateCommand.width, frameBuffer.swapchainRecreateCommand.height);
             renderExtents->ApplyResize(frameBuffer.swapchainRecreateCommand.width, frameBuffer.swapchainRecreateCommand.height);
-            std::array<uint32_t, 2> newExtents = renderExtents->GetExtent();
-
-            renderTargets->Recreate(newExtents[0], newExtents[1]);
-            resourceManager->bindlessRenderTargetDescriptorBuffer.WriteDescriptor(COLOR_TARGET_INDEX, {nullptr, renderTargets->colorTargetView.handle, VK_IMAGE_LAYOUT_GENERAL});
-            resourceManager->bindlessRenderTargetDescriptorBuffer.WriteDescriptor(DEPTH_TARGET_INDEX, {nullptr, renderTargets->depthTargetView.handle, VK_IMAGE_LAYOUT_GENERAL});
 
             bRenderRequestsRecreate = false;
             bEngineRequestsRecreate = false;
+
+            graph->InvalidateAll();
         }
 
         // Wait for the frame N - 3 to finish using resources
@@ -233,7 +225,8 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
     };
 
-    graph->ImportBuffer("sceneData", currentSceneDataBuffer.handle, sceneBufferInfo, VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
+    std::string sceneDataName = "sceneData_" + std::to_string(currentFrameIndex);
+    graph->ImportBuffer(sceneDataName, currentSceneDataBuffer.handle, sceneBufferInfo, VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
     RenderPass& colorPass = graph->AddPass("MainRender");
     colorPass.WriteColorAttachment("drawImage");
     TextureInfo depthInfo = {
@@ -242,7 +235,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         .height = renderExtent[1],
     };
     colorPass.WriteDepthAttachment("depthTarget", depthInfo);
-    colorPass.ReadBuffer("sceneData", VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
+    colorPass.ReadBuffer(sceneDataName, VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
     colorPass.Execute([&](VkCommandBuffer cmd) {
         const VkRenderingAttachmentInfo colorAttachment = VkHelpers::RenderingAttachmentInfo(graph->GetImageView("drawImage"), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
         constexpr VkClearValue depthClear = {.depthStencil = {0.0f, 0u}};
@@ -255,7 +248,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
 
         BasicRenderPushConstant pushData{
             .modelMatrix = glm::mat4(1.0f),
-            .sceneData = graph->GetBufferAddress("sceneData"),
+            .sceneData = graph->GetBufferAddress(sceneDataName),
         };
 
         vkCmdPushConstants(cmd, basicRenderPipeline.pipelineLayout.handle, VK_SHADER_STAGE_MESH_BIT_EXT, 0, sizeof(BasicRenderPushConstant), &pushData);
@@ -268,7 +261,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         RenderPass& meshPass = graph->AddPass("MeshRender");
         meshPass.WriteColorAttachment("drawImage");
         meshPass.WriteDepthAttachment("depthTarget");
-        meshPass.ReadBuffer("sceneData", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
+        meshPass.ReadBuffer(sceneDataName, VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
 
         meshPass.Execute([&](VkCommandBuffer cmd) {
             const VkRenderingAttachmentInfo colorAttachment = VkHelpers::RenderingAttachmentInfo(graph->GetImageView("drawImage"), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
@@ -286,7 +279,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
 
             for (Engine::InstanceHandle& instance : frameBuffer.mainViewFamily.instances) {
                 MeshShaderPushConstants pushConstants{
-                    .sceneData = currentSceneDataBuffer.address,
+                    .sceneData = graph->GetBufferAddress(sceneDataName),
                     .vertexBuffer = resourceManager->megaVertexBuffer.address,
                     .primitiveBuffer = resourceManager->primitiveBuffer.address,
                     .meshletVerticesBuffer = resourceManager->megaMeshletVerticesBuffer.address,
@@ -313,7 +306,37 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
                          VK_IMAGE_LAYOUT_UNDEFINED, VK_PIPELINE_STAGE_2_BLIT_BIT, VK_IMAGE_LAYOUT_UNDEFINED);
 
     auto& blitPass = graph->AddPass("BlitToSwapchain");
-    blitPass.Blit("drawImage", swapchainName, VK_FILTER_LINEAR);
+    blitPass.ReadBlitImage("drawImage");
+    blitPass.WriteBlitImage(swapchainName);
+    blitPass.Execute([&](VkCommandBuffer cmd) {
+        VkImage drawImage = graph->GetImage("drawImage");
+
+        VkOffset3D renderOffset = {static_cast<int32_t>(renderExtent[0]), static_cast<int32_t>(renderExtent[1]), 1};
+        VkOffset3D swapchainOffset = {static_cast<int32_t>(swapchain->extent.width), static_cast<int32_t>(swapchain->extent.height), 1};
+
+        VkImageBlit2 blitRegion{};
+        blitRegion.sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2;
+        blitRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        blitRegion.srcSubresource.layerCount = 1;
+        blitRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        blitRegion.dstSubresource.layerCount = 1;
+        blitRegion.srcOffsets[0] = {0, 0, 0};
+        blitRegion.srcOffsets[1] = renderOffset;
+        blitRegion.dstOffsets[0] = {0, 0, 0};
+        blitRegion.dstOffsets[1] = swapchainOffset;
+
+        VkBlitImageInfo2 blitInfo{};
+        blitInfo.sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2;
+        blitInfo.srcImage = drawImage;
+        blitInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        blitInfo.dstImage = currentSwapchainImage;
+        blitInfo.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        blitInfo.regionCount = 1;
+        blitInfo.pRegions = &blitRegion;
+        blitInfo.filter = VK_FILTER_LINEAR;
+
+        vkCmdBlitImage2(cmd, &blitInfo);
+    });
 
     // graph->SetDebugLogging(true);
     graph->Compile();

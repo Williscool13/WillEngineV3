@@ -69,7 +69,29 @@ void RenderGraph::AccumulateTextureUsage() const
 
 void RenderGraph::CalculateLifetimes()
 {
+    for (uint32_t passIdx = 0; passIdx < passes.size(); passIdx++) {
+        auto& pass = passes[passIdx];
 
+        auto UpdateTextureLifetime = [passIdx](TextureResource* tex) {
+            tex->firstPass = std::min(tex->firstPass, passIdx);
+            tex->lastPass = std::max(tex->lastPass, passIdx);
+        };
+
+        auto UpdateBufferLifetime = [passIdx](BufferResource* buf) {
+            buf->firstPass = std::min(buf->firstPass, passIdx);
+            buf->lastPass = std::max(buf->lastPass, passIdx);
+        };
+
+        for (auto* tex : pass->storageImageWrites) { UpdateTextureLifetime(tex); }
+        for (auto* tex : pass->storageImageReads) { UpdateTextureLifetime(tex); }
+        for (auto* tex : pass->sampledImageReads) { UpdateTextureLifetime(tex); }
+        for (auto* tex : pass->blitImageWrites) { UpdateTextureLifetime(tex); }
+        for (auto* tex : pass->blitImageReads) { UpdateTextureLifetime(tex); }
+        for (auto& attachment : pass->colorAttachments) { UpdateTextureLifetime(attachment); }
+        if (pass->depthAttachment) { UpdateTextureLifetime(pass->depthAttachment); }
+
+        for (auto& bufRead : pass->bufferReads) UpdateBufferLifetime(bufRead.resource);
+    }
 }
 
 void RenderGraph::Compile()
@@ -97,13 +119,27 @@ void RenderGraph::Compile()
             bool foundAlias = false;
             for (uint32_t i = 0; i < physicalResources.size(); i++) {
                 auto& phys = physicalResources[i];
-                if (phys.bIsImported) {
-                    continue;
+                if (phys.bIsImported) { continue; }
+                if (phys.dimensions != desiredDim) { continue; }
+
+                // Physical usage must be a superset: (phys & required) == required
+                if ((phys.dimensions.imageUsage & tex.accumulatedUsage) != tex.accumulatedUsage) { continue; }
+
+                bool canAlias = true;
+                for (uint32_t logicalIdx : phys.logicalResourceIndices) {
+                    auto& existing = textures[logicalIdx];
+
+                    bool overlap = !(tex.lastPass < existing.firstPass || existing.lastPass < tex.firstPass);
+
+                    if (overlap) {
+                        canAlias = false;
+                        break;
+                    }
                 }
 
-                if (phys.dimensions == desiredDim) {
-                    // TODO: Also check if lifetimes are disjoint
+                if (canAlias) {
                     tex.physicalIndex = i;
+                    phys.logicalResourceIndices.push_back(tex.index);
                     foundAlias = true;
                     break;
                 }
@@ -114,6 +150,7 @@ void RenderGraph::Compile()
                 tex.physicalIndex = physicalResources.size();
                 physicalResources.emplace_back();
                 physicalResources.back().dimensions = desiredDim;
+                physicalResources.back().logicalResourceIndices.push_back(tex.index);
             }
         }
 
@@ -128,6 +165,7 @@ void RenderGraph::Compile()
     for (auto& phys : physicalResources) {
         if (phys.NeedsDescriptorWrite()) {
             phys.descriptorHandle = transientImageHandleAllocator.Add();
+            assert(phys.descriptorHandle.IsValid() && "Invalid descriptor handle assigned to physical resource");
 
             resourceManager->bindlessRDGTransientDescriptorBuffer.WriteStorageImageDescriptor(
                 phys.descriptorHandle.index, {nullptr, phys.view, VK_IMAGE_LAYOUT_GENERAL}
@@ -302,56 +340,6 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
             vkCmdPipelineBarrier2(cmd, &depInfo);
         }
 
-        for (auto& blitOp : pass->blitOps) {
-            VkImage srcImage = GetImage(blitOp.src);
-            VkImage dstImage = GetImage(blitOp.dst);
-
-            auto& srcTex = textures[textureNameToIndex[blitOp.src]];
-            auto& dstTex = textures[textureNameToIndex[blitOp.dst]];
-
-            VkOffset3D srcExtent = {
-                static_cast<int32_t>(srcTex.textureInfo.width),
-                static_cast<int32_t>(srcTex.textureInfo.height),
-                1
-            };
-            VkOffset3D dstExtent = {
-                static_cast<int32_t>(dstTex.textureInfo.width),
-                static_cast<int32_t>(dstTex.textureInfo.height),
-                1
-            };
-
-            VkImageBlit2 blitRegion = {
-                .sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2,
-                .srcSubresource = {
-                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                    .mipLevel = 0,
-                    .baseArrayLayer = 0,
-                    .layerCount = 1
-                },
-                .srcOffsets = {{0, 0, 0}, srcExtent},
-                .dstSubresource = {
-                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                    .mipLevel = 0,
-                    .baseArrayLayer = 0,
-                    .layerCount = 1
-                },
-                .dstOffsets = {{0, 0, 0}, dstExtent}
-            };
-
-            VkBlitImageInfo2 blitInfo = {
-                .sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2,
-                .srcImage = srcImage,
-                .srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                .dstImage = dstImage,
-                .dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                .regionCount = 1,
-                .pRegions = &blitRegion,
-                .filter = blitOp.filter
-            };
-
-            vkCmdBlitImage2(cmd, &blitInfo);
-        }
-
         // Execute pass
         if (pass->executeFunc) {
             pass->executeFunc(cmd);
@@ -437,6 +425,10 @@ void RenderGraph::Reset()
     buffers.clear();
     bufferNameToIndex.clear();
 
+    for (auto& phys : physicalResources) {
+        phys.logicalResourceIndices.clear();
+    }
+
     for (auto it = importedImages.begin(); it != importedImages.end();) {
         if (--it->second.lifetime == 0) {
             auto& phys = physicalResources[it->second.physicalIndex];
@@ -462,6 +454,24 @@ void RenderGraph::Reset()
             ++it;
         }
     }
+}
+
+void RenderGraph::InvalidateAll()
+{
+    textures.clear();
+    textureNameToIndex.clear();
+    buffers.clear();
+    bufferNameToIndex.clear();
+
+    passes.clear();
+    importedImages.clear();
+    importedBuffers.clear();
+
+
+    for (PhysicalResource& physicalResource : physicalResources) {
+        DestroyPhysicalResource(physicalResource);
+    }
+    physicalResources.clear();
 }
 
 void RenderGraph::ImportTexture(const std::string& name,
@@ -688,7 +698,7 @@ void RenderGraph::DestroyPhysicalResource(PhysicalResource& resource)
         return;
     }
 
-    if (resource.dimensions.is_image()) {
+    if (resource.dimensions.IsImage()) {
         if (resource.view != VK_NULL_HANDLE) {
             vkDestroyImageView(context->device, resource.view, nullptr);
             resource.view = VK_NULL_HANDLE;
@@ -698,6 +708,7 @@ void RenderGraph::DestroyPhysicalResource(PhysicalResource& resource)
             resource.image = VK_NULL_HANDLE;
             resource.imageAllocation = VK_NULL_HANDLE;
         }
+        transientImageHandleAllocator.Remove(resource.descriptorHandle);
     }
     else {
         if (resource.buffer != VK_NULL_HANDLE) {

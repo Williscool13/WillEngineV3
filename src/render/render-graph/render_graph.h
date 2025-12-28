@@ -42,6 +42,8 @@ public:
 
     void SetDebugLogging(bool enable) { debugLogging = enable; }
 
+    void InvalidateAll();
+
     void ImportTexture(const std::string& name, VkImage image, VkImageView view, const TextureInfo& info, VkImageUsageFlags usage, VkImageLayout initialLayout, VkPipelineStageFlags2 initialStage, VkImageLayout finalLayout);
 
     void ImportBuffer(const std::string& name, VkBuffer buffer, const BufferInfo& info, VkPipelineStageFlags2 initialStage);

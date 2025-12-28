@@ -45,7 +45,6 @@ namespace Render
 class AssetGenerator;
 struct ResourceManager;
 struct RenderExtents;
-struct RenderTargets;
 struct Swapchain;
 struct VulkanContext;
 
@@ -106,7 +105,6 @@ private:
 #if WILL_EDITOR
     std::unique_ptr<ImguiWrapper> imgui{};
 #endif
-    std::unique_ptr<RenderTargets> renderTargets{};
     std::unique_ptr<ResourceManager> resourceManager{};
     std::unique_ptr<RenderExtents> renderExtents{};
     std::unique_ptr<RenderGraph> graph{};
