@@ -236,6 +236,17 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
 
         SPDLOG_INFO("[DebugSystem] Created falling boxes");
     }
+
+    if (state->inputFrame->GetKey(Key::NUM_1).pressed) {
+        auto view = state->registry.view<RenderDebugViewComponent>();
+        for (auto [entity, debugViewComponent] : view.each()) {
+            if (debugViewComponent.debugIndex != 1) {
+                debugViewComponent.debugIndex = 1;
+            } else {
+                debugViewComponent.debugIndex = 0;
+            }
+        }
+    }
 }
 
 void DebugProcessPhysicsCollisions(Core::EngineContext* ctx, Engine::GameState* state)

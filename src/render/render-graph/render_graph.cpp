@@ -34,6 +34,9 @@ RenderPass& RenderGraph::AddPass(const std::string& name)
     return *passes.back();
 }
 
+void RenderGraph::PrunePasses()
+{}
+
 void RenderGraph::AccumulateTextureUsage() const
 {
     for (auto& pass : passes) {
@@ -161,7 +164,6 @@ void RenderGraph::Compile()
         }
     }
 
-    // 2. Write descriptors only if not already written
     for (auto& phys : physicalResources) {
         if (phys.NeedsDescriptorWrite()) {
             phys.descriptorHandle = transientImageHandleAllocator.Add();
@@ -208,7 +210,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
             if (phys.event.layout != VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
                 auto barrier = VkHelpers::ImageMemoryBarrier(
                     phys.image,
-                    VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT),
+                    VkHelpers::SubresourceRange(phys.aspect),
                     phys.event.stages, phys.event.access, phys.event.layout,
                     VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
                     VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT,
@@ -224,7 +226,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
             if (phys.event.layout != VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
                 auto barrier = VkHelpers::ImageMemoryBarrier(
                     phys.image,
-                    VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_DEPTH_BIT), // May need stencil too
+                    VkHelpers::SubresourceRange(phys.aspect),
                     phys.event.stages, phys.event.access, phys.event.layout,
                     VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
                     VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
@@ -240,7 +242,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
             if (phys.event.layout != VK_IMAGE_LAYOUT_GENERAL) {
                 auto barrier = VkHelpers::ImageMemoryBarrier(
                     phys.image,
-                    VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT),
+                    VkHelpers::SubresourceRange(phys.aspect),
                     phys.event.stages, phys.event.access, phys.event.layout,
                     VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL
                 );
@@ -254,7 +256,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
             if (phys.event.layout != VK_IMAGE_LAYOUT_GENERAL) {
                 auto barrier = VkHelpers::ImageMemoryBarrier(
                     phys.image,
-                    VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT),
+                    VkHelpers::SubresourceRange(phys.aspect),
                     phys.event.stages, phys.event.access, phys.event.layout,
                     VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT, VK_IMAGE_LAYOUT_GENERAL
                 );
@@ -268,7 +270,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
             if (phys.event.layout != VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
                 auto barrier = VkHelpers::ImageMemoryBarrier(
                     phys.image,
-                    VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT),
+                    VkHelpers::SubresourceRange(phys.aspect),
                     phys.event.stages, phys.event.access, phys.event.layout,
                     VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
                 );
@@ -282,7 +284,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
             if (phys.event.layout != VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL) {
                 auto barrier = VkHelpers::ImageMemoryBarrier(
                     phys.image,
-                    VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT),
+                    VkHelpers::SubresourceRange(phys.aspect),
                     phys.event.stages, phys.event.access, phys.event.layout,
                     VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
                 );
@@ -296,7 +298,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
             if (phys.event.layout != VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
                 auto barrier = VkHelpers::ImageMemoryBarrier(
                     phys.image,
-                    VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT),
+                    VkHelpers::SubresourceRange(phys.aspect),
                     phys.event.stages, phys.event.access, phys.event.layout,
                     VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
                 );
@@ -367,6 +369,20 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
             phys.event.access = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT;
         }
 
+        for (auto* tex : pass->storageImageReads) {
+            auto& phys = GetPhysical(tex);
+            phys.event.layout = VK_IMAGE_LAYOUT_GENERAL;
+            phys.event.stages = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+            phys.event.access = VK_ACCESS_2_SHADER_STORAGE_READ_BIT;
+        }
+
+        for (auto* tex : pass->sampledImageReads) {
+            auto& phys = GetPhysical(tex);
+            phys.event.layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            phys.event.stages = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+            phys.event.access = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT;
+        }
+
         for (auto* tex : pass->blitImageWrites) {
             auto& phys = GetPhysical(tex);
             phys.event.layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
@@ -380,6 +396,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
             phys.event.stages = VK_PIPELINE_STAGE_2_BLIT_BIT;
             phys.event.access = VK_ACCESS_2_TRANSFER_READ_BIT;
         }
+
         for (auto& bufRead : pass->bufferReads) {
             auto& phys = physicalResources[bufRead.resource->physicalIndex];
             phys.event.stages = bufRead.stages;
@@ -523,6 +540,7 @@ void RenderGraph::ImportTexture(const std::string& name,
     phys.event.stages = initialStage;
     phys.event.access = VK_ACCESS_2_NONE;
 
+    phys.aspect = VkHelpers::GetImageAspect(info.format);
     phys.dimensions.name = name;
 
     tex->finalLayout = finalLayout;
@@ -760,6 +778,7 @@ void RenderGraph::CreatePhysicalImage(PhysicalResource& resource, const Resource
     );
     VK_CHECK(vkCreateImageView(context->device, &viewInfo, nullptr, &resource.view));
 
+    resource.aspect = aspectFlags;
     resource.dimensions = dim;
     resource.event = {};
 }

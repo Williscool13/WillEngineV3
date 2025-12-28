@@ -4,6 +4,12 @@
 
 #ifndef WILL_ENGINE_DEBUG_SYSTEM_H
 #define WILL_ENGINE_DEBUG_SYSTEM_H
+#include <cstdint>
+
+namespace Render
+{
+struct FrameResources;
+}
 
 namespace Engine
 {
@@ -12,7 +18,16 @@ struct GameState;
 
 namespace Core
 {
+struct FrameBuffer;
 struct EngineContext;
+}
+
+namespace Game
+{
+struct RenderDebugViewComponent
+{
+    uint32_t debugIndex;
+};
 }
 
 namespace Game::System

@@ -4,11 +4,21 @@
 
 #include "resource_manager.h"
 
+#include "vulkan/vk_utils.h"
+
 namespace Render
 {
 ResourceManager::ResourceManager() = default;
 
-ResourceManager::~ResourceManager() = default;
+ResourceManager::~ResourceManager()
+{
+    if (pointSampler != VK_NULL_HANDLE) {
+        vkDestroySampler(context->device, pointSampler, nullptr);
+    }
+    if (linearSampler != VK_NULL_HANDLE) {
+        vkDestroySampler(context->device, linearSampler, nullptr);
+    }
+};
 
 ResourceManager::ResourceManager(VulkanContext* context)
     : context(context)
@@ -59,5 +69,49 @@ ResourceManager::ResourceManager(VulkanContext* context)
 
     bindlessSamplerTextureDescriptorBuffer = BindlessResourcesSamplerImages(context);
     bindlessRDGTransientDescriptorBuffer = BindlessTransientRDGResourcesDescriptorBuffer<8, 128, 128>(context);
+
+    VkSamplerCreateInfo pointSamplerInfo = {
+        .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+        .magFilter = VK_FILTER_NEAREST,
+        .minFilter = VK_FILTER_NEAREST,
+        .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
+        .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        .mipLodBias = 0.0f,
+        .anisotropyEnable = VK_FALSE,
+        .maxAnisotropy = 1.0f,
+        .compareEnable = VK_FALSE,
+        .compareOp = VK_COMPARE_OP_ALWAYS,
+        .minLod = 0.0f,
+        .maxLod = 0.0f,
+        .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK,
+        .unnormalizedCoordinates = VK_FALSE
+    };
+
+    VK_CHECK(vkCreateSampler(context->device, &pointSamplerInfo, nullptr, &pointSampler));
+    bindlessRDGTransientDescriptorBuffer.WriteSamplerDescriptor(pointSamplerIndex, {pointSampler, nullptr, {}});
+
+    VkSamplerCreateInfo linearSamplerInfo = {
+        .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+        .magFilter = VK_FILTER_LINEAR,
+        .minFilter = VK_FILTER_LINEAR,
+        .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+        .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        .mipLodBias = 0.0f,
+        .anisotropyEnable = VK_FALSE,
+        .maxAnisotropy = 1.0f,
+        .compareEnable = VK_FALSE,
+        .compareOp = VK_COMPARE_OP_ALWAYS,
+        .minLod = 0.0f,
+        .maxLod = 0.0f,
+        .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK,
+        .unnormalizedCoordinates = VK_FALSE
+    };
+
+    VK_CHECK(vkCreateSampler(context->device, &linearSamplerInfo, nullptr, &linearSampler));
+    bindlessRDGTransientDescriptorBuffer.WriteSamplerDescriptor(linearSamplerIndex, {linearSampler, nullptr, {}});
 }
 } // Render

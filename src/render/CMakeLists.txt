@@ -67,6 +67,9 @@ add_library(render STATIC
         descriptors/vk_bindless_transient_rdg_resources.cpp
         descriptors/vk_bindless_transient_rdg_resources.h
         render-graph/render_graph_config.h
+        pipelines/compute_pipeline.cpp
+        pipelines/compute_pipeline.h
+        shaders/push_constant_interop.h
 )
 
 target_include_directories(render PRIVATE

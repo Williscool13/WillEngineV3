@@ -152,6 +152,10 @@ preprocess_shader_interop(
         ${CMAKE_SOURCE_DIR}/src/render/shaders/constants_interop.h
         ${CMAKE_SOURCE_DIR}/shaders/constants_interop.slang
 )
+preprocess_shader_interop(
+        ${CMAKE_SOURCE_DIR}/src/render/shaders/push_constant_interop.h
+        ${CMAKE_SOURCE_DIR}/shaders/push_constant_interop.slang
+)
 
 
 get_property(INTEROP_FILES GLOBAL PROPERTY SHADER_INTEROP_FILES)
@@ -163,6 +167,7 @@ add_custom_target(regenerate_interop
 )
 
 compile_shaders(will-engine
+        ${CMAKE_SOURCE_DIR}/shaders/debugDepth.slang compute computeMain
         ${CMAKE_SOURCE_DIR}/shaders/basicCompute.slang compute computeMain
         ${CMAKE_SOURCE_DIR}/shaders/basicRender.slang task taskMain
         ${CMAKE_SOURCE_DIR}/shaders/basicRender.slang mesh meshMain

@@ -30,6 +30,7 @@ GAME_API void GameStartup(Core::EngineContext* ctx, Engine::GameState* state)
     cameraTransform.translation = glm::vec3(0.0f, 3.0f, 5.0f);
     cameraTransform.rotation = glm::quatLookAt(glm::normalize(glm::vec3(0.0f, 0.0f, 0.0f) - glm::vec3(0.0f, 3.0f, 5.0f)), WORLD_UP);
     state->registry.emplace<Game::MainViewportComponent>(camera);
+    state->registry.emplace<Game::RenderDebugViewComponent>(camera);
     state->registry.ctx().emplace<Engine::GameState*>(state);
 
     spdlog::set_default_logger(ctx->logger);

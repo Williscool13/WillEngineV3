@@ -14,6 +14,7 @@
 #include "render/vulkan/vk_synchronization.h"
 #include "pipelines/basic_compute_pipeline.h"
 #include "pipelines/basic_render_pipeline.h"
+#include "pipelines/compute_pipeline.h"
 #include "pipelines/mesh_shader_pipeline.h"
 #include "shaders/common_interop.h"
 
@@ -85,6 +86,8 @@ public:
 
     void ProcessAcquisitions(VkCommandBuffer cmd, Core::FrameBuffer& frameBuffer);
 
+    void CreatePipelines();
+
 public:
     VulkanContext* GetVulkanContext() const { return context.get(); }
     ResourceManager* GetResourceManager() const { return resourceManager.get(); }
@@ -125,6 +128,7 @@ private:
     BasicComputePipeline basicComputePipeline;
     BasicRenderPipeline basicRenderPipeline;
     MeshShaderPipeline meshShaderPipeline;
+    ComputePipeline depthDebugPipeline;
 };
 } // Render
 

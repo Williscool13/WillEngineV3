@@ -18,6 +18,7 @@
 #include "platform/thread_utils.h"
 #include "render-graph/render_graph.h"
 #include "render-graph/render_pass.h"
+#include "shaders/push_constant_interop.h"
 
 #if WILL_EDITOR
 #include "render/vulkan/vk_imgui_wrapper.h"
@@ -47,9 +48,7 @@ RenderThread::RenderThread(Core::FrameSync* engineRenderSynchronization, enki::T
         frameSync.Initialize();
     }
 
-    basicComputePipeline = BasicComputePipeline(context.get(), resourceManager->bindlessRDGTransientDescriptorBuffer.descriptorSetLayout);
-    basicRenderPipeline = BasicRenderPipeline(context.get());
-    meshShaderPipeline = MeshShaderPipeline(context.get(), resourceManager->bindlessSamplerTextureDescriptorBuffer.descriptorSetLayout);
+    CreatePipelines();
 
     if (basicComputePipeline.pipeline.handle == VK_NULL_HANDLE || basicRenderPipeline.pipeline.handle == VK_NULL_HANDLE) {
         SPDLOG_ERROR("Failed to compile shaders");
@@ -192,12 +191,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
 
     graph->Reset();
     RenderPass& computePass = graph->AddPass("ComputeDraw");
-    computePass.WriteStorageImage("drawImage",
-                                  {
-                                      COLOR_ATTACHMENT_FORMAT,
-                                      renderExtent[0],
-                                      renderExtent[1],
-                                  });
+    computePass.WriteStorageImage("drawImage", {COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1],});
     computePass.Execute([&](VkCommandBuffer cmd) {
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, basicComputePipeline.pipeline.handle);
 
@@ -301,8 +295,40 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         });
     }
 
+    if (frameBuffer.mainViewFamily.views[0].debug == 1) {
+        auto& depthDebugPass = graph->AddPass("DepthDebug");
+        depthDebugPass.ReadSampledImage("depthTarget");
+        depthDebugPass.WriteStorageImage("drawImage");
+        depthDebugPass.Execute([&](VkCommandBuffer cmd) {
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, depthDebugPipeline.pipeline.handle);
+
+            DepthDebugPushConstant pushData{
+                .extent = {renderExtent[0], renderExtent[1]},
+                .nearPlane = frameBuffer.mainViewFamily.views[0].nearPlane,
+                .farPlane = frameBuffer.mainViewFamily.views[0].farPlane,
+                .depthTextureIndex = graph->GetDescriptorIndex("depthTarget"),
+                .samplerIndex = resourceManager->linearSamplerIndex,
+                .outputImageIndex = graph->GetDescriptorIndex("drawImage")
+            };
+
+            vkCmdPushConstants(cmd, depthDebugPipeline.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(DepthDebugPushConstant), &pushData);
+
+            // Bind your bindless descriptor buffers
+            VkDescriptorBufferBindingInfoEXT bindingInfo = resourceManager->bindlessRDGTransientDescriptorBuffer.GetBindingInfo();
+            vkCmdBindDescriptorBuffersEXT(cmd, 1, &bindingInfo);
+            uint32_t bufferIndex = 0;
+            VkDeviceSize offset = 0;
+            vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, depthDebugPipeline.pipelineLayout.handle, 0, 1, &bufferIndex, &offset);
+
+            uint32_t xDispatch = (renderExtent[0] + 15) / 16;
+            uint32_t yDispatch = (renderExtent[1] + 15) / 16;
+            vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
+        });
+    }
+
+
     std::string swapchainName = "swapchain_" + std::to_string(swapchainImageIndex);
-    graph->ImportTexture(swapchainName, currentSwapchainImage, currentSwapchainImageView, {swapchain->format, swapchain->extent.width, swapchain->extent.height},  swapchain->usages,
+    graph->ImportTexture(swapchainName, currentSwapchainImage, currentSwapchainImageView, {swapchain->format, swapchain->extent.width, swapchain->extent.height}, swapchain->usages,
                          VK_IMAGE_LAYOUT_UNDEFINED, VK_PIPELINE_STAGE_2_BLIT_BIT, VK_IMAGE_LAYOUT_UNDEFINED);
 
     auto& blitPass = graph->AddPass("BlitToSwapchain");
@@ -338,7 +364,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         vkCmdBlitImage2(cmd, &blitInfo);
     });
 
-    // graph->SetDebugLogging(true);
+    graph->SetDebugLogging(false);
     graph->Compile();
     graph->Execute(renderSync.commandBuffer);
 
@@ -436,5 +462,27 @@ void RenderThread::ProcessAcquisitions(VkCommandBuffer cmd, Core::FrameBuffer& f
 
     frameBuffer.bufferAcquireOperations.clear();
     frameBuffer.imageAcquireOperations.clear();
+}
+
+void RenderThread::CreatePipelines()
+{
+    basicComputePipeline = BasicComputePipeline(context.get(), resourceManager->bindlessRDGTransientDescriptorBuffer.descriptorSetLayout);
+    basicRenderPipeline = BasicRenderPipeline(context.get());
+    meshShaderPipeline = MeshShaderPipeline(context.get(), resourceManager->bindlessSamplerTextureDescriptorBuffer.descriptorSetLayout);
+    //
+    {
+        VkPushConstantRange pushConstantRange{};
+        pushConstantRange.offset = 0;
+        pushConstantRange.size = sizeof(DepthDebugPushConstant);
+        pushConstantRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+        VkPipelineLayoutCreateInfo piplineLayoutCreateInfo{};
+        piplineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        piplineLayoutCreateInfo.pSetLayouts = &resourceManager->bindlessRDGTransientDescriptorBuffer.descriptorSetLayout.handle;
+        piplineLayoutCreateInfo.setLayoutCount = 1;
+        piplineLayoutCreateInfo.pPushConstantRanges = &pushConstantRange;
+        piplineLayoutCreateInfo.pushConstantRangeCount = 1;
+
+        depthDebugPipeline = ComputePipeline(context.get(), piplineLayoutCreateInfo, Platform::GetShaderPath() / "debugDepth_compute.spv");
+    }
 }
 } // Render

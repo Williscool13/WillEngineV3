@@ -4,6 +4,7 @@
 
 #include "camera_system.h"
 
+#include "debug_system.h"
 #include "engine/engine_api.h"
 #include "game/fwd_components.h"
 
@@ -18,7 +19,8 @@ void BuildViewFamily(Engine::GameState* state, Core::ViewFamily& mainViewFamily)
 {
     mainViewFamily.views.clear();
     mainViewFamily.instances.clear();
-    auto cameraView = state->registry.view<Game::CameraComponent, Game::MainViewportComponent, Game::TransformComponent>();
+    auto cameraView = state->registry.view<CameraComponent, MainViewportComponent, TransformComponent>();
+
 
     for (auto entity : cameraView) {
         const auto& [cam, transform] = cameraView.get(entity);
@@ -32,6 +34,11 @@ void BuildViewFamily(Engine::GameState* state, Core::ViewFamily& mainViewFamily)
         view.cameraPos = cam.cameraPos;
         view.cameraLookAt = cam.cameraLookAt;
         view.cameraUp = cam.cameraUp;
+
+        if (auto* debugView = state->registry.try_get<RenderDebugViewComponent>(entity)) {
+            view.debug = debugView->debugIndex;
+        }
+
         mainViewFamily.views.push_back(view);
     }
 }

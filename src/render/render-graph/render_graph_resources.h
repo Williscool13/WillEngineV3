@@ -75,6 +75,7 @@ struct PhysicalResource
     VkImage image = VK_NULL_HANDLE;
     VkImageView view = VK_NULL_HANDLE;
     VmaAllocation imageAllocation = VK_NULL_HANDLE;
+    VkImageAspectFlags aspect = VK_IMAGE_ASPECT_NONE;
     TransientImageHandle descriptorHandle = TransientImageHandle::INVALID;
     bool descriptorWritten = false;
 

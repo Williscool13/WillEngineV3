@@ -34,6 +34,8 @@ struct RenderView
 
     // render target color
     // render target depth
+
+    uint32_t debug;
 };
 
 struct ViewFamily {

@@ -30,6 +30,8 @@ public:
 
     RenderPass& AddPass(const std::string& name);
 
+    void PrunePasses();
+
     void AccumulateTextureUsage() const;
 
     void CalculateLifetimes();

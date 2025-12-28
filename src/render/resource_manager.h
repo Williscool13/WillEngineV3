@@ -40,6 +40,11 @@ struct ResourceManager
     AllocatedBuffer megaMeshletBuffer;
     AllocatedBuffer primitiveBuffer;
     BindlessResourcesSamplerImages bindlessSamplerTextureDescriptorBuffer{};
+
+    uint32_t pointSamplerIndex{0};
+    VkSampler pointSampler;
+    uint32_t linearSamplerIndex{1};
+    VkSampler linearSampler;
     BindlessTransientRDGResourcesDescriptorBuffer<8, 128, 128> bindlessRDGTransientDescriptorBuffer{};
 
     std::array<FrameResources, Core::FRAME_BUFFER_COUNT> frameResources;
