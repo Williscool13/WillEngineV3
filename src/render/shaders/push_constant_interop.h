@@ -47,7 +47,6 @@ SHADER_PUBLIC struct DepthDebugPushConstant
     SHADER_PUBLIC uint depthTextureIndex;
     SHADER_PUBLIC uint samplerIndex;
     SHADER_PUBLIC uint outputImageIndex;
-
 };
 
 #endif //WILL_ENGINE_PUSH_CONSTANT_INTEROP_H

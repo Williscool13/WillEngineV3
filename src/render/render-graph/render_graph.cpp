@@ -35,7 +35,9 @@ RenderPass& RenderGraph::AddPass(const std::string& name)
 }
 
 void RenderGraph::PrunePasses()
-{}
+{
+    // Add pruning when productive pruning is actually relevant
+}
 
 void RenderGraph::AccumulateTextureUsage() const
 {
@@ -99,6 +101,8 @@ void RenderGraph::CalculateLifetimes()
 
 void RenderGraph::Compile()
 {
+    PrunePasses();
+
     AccumulateTextureUsage();
 
     CalculateLifetimes();

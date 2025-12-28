@@ -169,6 +169,9 @@ add_custom_target(regenerate_interop
 compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/debugDepth.slang compute computeMain
         ${CMAKE_SOURCE_DIR}/shaders/basicCompute.slang compute computeMain
+        ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute computeVisibility instancingVisibility
+        ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute computePrefixSum instancingPrefixSum
+        ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute computeCompactAndGenerateIndirect instancingCompactAndGenerateIndirect
         ${CMAKE_SOURCE_DIR}/shaders/basicRender.slang task taskMain
         ${CMAKE_SOURCE_DIR}/shaders/basicRender.slang mesh meshMain
         ${CMAKE_SOURCE_DIR}/shaders/basicRender.slang fragment fragmentMain

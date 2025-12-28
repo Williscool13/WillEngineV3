@@ -223,12 +223,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     graph->ImportBuffer(sceneDataName, currentSceneDataBuffer.handle, sceneBufferInfo, VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
     RenderPass& colorPass = graph->AddPass("MainRender");
     colorPass.WriteColorAttachment("drawImage");
-    TextureInfo depthInfo = {
-        .format = VK_FORMAT_D32_SFLOAT,
-        .width = renderExtent[0],
-        .height = renderExtent[1],
-    };
-    colorPass.WriteDepthAttachment("depthTarget", depthInfo);
+    colorPass.WriteDepthAttachment("depthTarget", {VK_FORMAT_D32_SFLOAT,renderExtent[0],renderExtent[1]});
     colorPass.ReadBuffer(sceneDataName, VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
     colorPass.Execute([&](VkCommandBuffer cmd) {
         const VkRenderingAttachmentInfo colorAttachment = VkHelpers::RenderingAttachmentInfo(graph->GetImageView("drawImage"), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
@@ -295,7 +290,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         });
     }
 
-    if (frameBuffer.mainViewFamily.views[0].debug == 1) {
+    if (frameBuffer.mainViewFamily.views[0].debug != 0) {
         auto& depthDebugPass = graph->AddPass("DepthDebug");
         depthDebugPass.ReadSampledImage("depthTarget");
         depthDebugPass.WriteStorageImage("drawImage");
