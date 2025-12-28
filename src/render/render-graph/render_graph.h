@@ -51,6 +51,8 @@ public:
 
     [[nodiscard]] PipelineEvent GetResourceState(const std::string& name) const;
 
+    [[nodiscard]] ResourceManager* GetResourceManager() const { return resourceManager;}
+
 private:
     friend class RenderPass;
     VulkanContext* context;

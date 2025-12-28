@@ -86,6 +86,7 @@ void RenderGraph::Compile()
     // 2. Write descriptors only if not already written
     for (auto& phys : physicalResources) {
         if (phys.NeedsDescriptorWrite()) {
+            // todo replace descriptor index assignment here with a free list for random insert/removal (which I expect to see)
             phys.descriptorIndex = static_cast<uint32_t>(&phys - &physicalResources[0]);
 
             resourceManager->bindlessRDGTransientDescriptorBuffer.WriteStorageImageDescriptor(
@@ -261,6 +262,56 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
             vkCmdPipelineBarrier2(cmd, &depInfo);
         }
 
+        for (auto& blitOp : pass->blitOps) {
+            VkImage srcImage = GetImage(blitOp.src);
+            VkImage dstImage = GetImage(blitOp.dst);
+
+            auto& srcTex = textures[textureNameToIndex[blitOp.src]];
+            auto& dstTex = textures[textureNameToIndex[blitOp.dst]];
+
+            VkOffset3D srcExtent = {
+                static_cast<int32_t>(srcTex.textureInfo.width),
+                static_cast<int32_t>(srcTex.textureInfo.height),
+                1
+            };
+            VkOffset3D dstExtent = {
+                static_cast<int32_t>(dstTex.textureInfo.width),
+                static_cast<int32_t>(dstTex.textureInfo.height),
+                1
+            };
+
+            VkImageBlit2 blitRegion = {
+                .sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2,
+                .srcSubresource = {
+                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                    .mipLevel = 0,
+                    .baseArrayLayer = 0,
+                    .layerCount = 1
+                },
+                .srcOffsets = {{0, 0, 0}, srcExtent},
+                .dstSubresource = {
+                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                    .mipLevel = 0,
+                    .baseArrayLayer = 0,
+                    .layerCount = 1
+                },
+                .dstOffsets = {{0, 0, 0}, dstExtent}
+            };
+
+            VkBlitImageInfo2 blitInfo = {
+                .sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2,
+                .srcImage = srcImage,
+                .srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                .dstImage = dstImage,
+                .dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                .regionCount = 1,
+                .pRegions = &blitRegion,
+                .filter = blitOp.filter
+            };
+
+            vkCmdBlitImage2(cmd, &blitInfo);
+        }
+
         // Execute pass
         if (pass->executeFunc) {
             pass->executeFunc(cmd);
@@ -387,6 +438,12 @@ void RenderGraph::ImportTexture(const std::string& name,
         auto it = importedImages.find(image);
         if (it != importedImages.end()) {
             tex->physicalIndex = it->second.physicalIndex;
+            auto& phys = physicalResources[it->second.physicalIndex];
+            assert(phys.dimensions.format == info.format && "Reimported image format mismatch");
+            assert(phys.dimensions.width == info.width && "Reimported image width mismatch");
+            assert(phys.dimensions.height == info.height && "Reimported image height mismatch");
+            assert(phys.dimensions.imageUsage == info.usage && "Reimported image usage mismatch");
+
             it->second.lifetime = IMPORTED_RESOURCES_PHYSICAL_LIFETIME;
         }
         else {
@@ -429,6 +486,9 @@ void RenderGraph::ImportBuffer(const std::string& name, VkBuffer buffer, const B
         auto it = importedBuffers.find(buffer);
         if (it != importedBuffers.end()) {
             buf->physicalIndex = it->second.physicalIndex;
+            auto& phys = physicalResources[it->second.physicalIndex];
+            assert(phys.dimensions.bufferSize == info.size && "Reimported buffer size mismatch");
+            assert(phys.dimensions.bufferUsage == info.usage && "Reimported buffer usage mismatch");
             it->second.lifetime = IMPORTED_RESOURCES_PHYSICAL_LIFETIME;
         }
         else {

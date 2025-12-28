@@ -201,10 +201,12 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     graph->Reset();
     RenderPass& computePass = graph->AddPass("ComputeDraw");
     computePass.WriteStorageImage("drawImage",
-                                  {COLOR_ATTACHMENT_FORMAT,
+                                  {
+                                      COLOR_ATTACHMENT_FORMAT,
                                       renderExtent[0],
                                       renderExtent[1],
-                                      VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT});
+                                      VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT
+                                  });
     computePass.Execute([&](VkCommandBuffer cmd) {
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, basicComputePipeline.pipeline.handle);
 
@@ -264,42 +266,56 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         vkCmdEndRendering(cmd);
     });
 
+    if (!frameBuffer.mainViewFamily.instances.empty()) {
+        RenderPass& meshPass = graph->AddPass("MeshRender");
+        meshPass.WriteColorAttachment("drawImage");
+        meshPass.WriteDepthAttachment("depthTarget");
+        meshPass.ReadBuffer("sceneData", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
+
+        meshPass.Execute([&](VkCommandBuffer cmd) {
+            const VkRenderingAttachmentInfo colorAttachment = VkHelpers::RenderingAttachmentInfo(graph->GetImageView("drawImage"), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+            const VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(graph->GetImageView("depthTarget"), nullptr, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+            const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({renderExtent[0], renderExtent[1]}, &colorAttachment, &depthAttachment);
+
+            vkCmdBeginRendering(cmd, &renderInfo);
+
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, meshShaderPipeline.pipeline.handle);
+            VkDescriptorBufferBindingInfoEXT bindingInfo = graph->GetResourceManager()->bindlessSamplerTextureDescriptorBuffer.GetBindingInfo();
+            vkCmdBindDescriptorBuffersEXT(cmd, 1, &bindingInfo);
+            uint32_t bufferIndexImage = 0;
+            VkDeviceSize bufferOffset = 0;
+            vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, meshShaderPipeline.pipelineLayout.handle, 0, 1, &bufferIndexImage, &bufferOffset);
+
+            for (Engine::InstanceHandle& instance : frameBuffer.mainViewFamily.instances) {
+                MeshShaderPushConstants pushConstants{
+                    .sceneData = currentSceneDataBuffer.address,
+                    .vertexBuffer = resourceManager->megaVertexBuffer.address,
+                    .primitiveBuffer = resourceManager->primitiveBuffer.address,
+                    .meshletVerticesBuffer = resourceManager->megaMeshletVerticesBuffer.address,
+                    .meshletTrianglesBuffer = resourceManager->megaMeshletTrianglesBuffer.address,
+                    .meshletBuffer = resourceManager->megaMeshletBuffer.address,
+                    .materialBuffer = frameResource.materialBuffer.address,
+                    .modelBuffer = frameResource.modelBuffer.address,
+                    .instanceBuffer = frameResource.instanceBuffer.address,
+                    .instanceIndex = instance.index
+                };
+
+                vkCmdPushConstants(cmd, meshShaderPipeline.pipelineLayout.handle, VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                                   0, sizeof(MeshShaderPushConstants), &pushConstants);
+
+                vkCmdDrawMeshTasksEXT(cmd, 1, 1, 1);
+            }
+
+            vkCmdEndRendering(cmd);
+        });
+    }
+
     std::string swapchainName = "swapchain_" + std::to_string(swapchainImageIndex);
     graph->ImportTexture(swapchainName, currentSwapchainImage, currentSwapchainImageView, {swapchain->format, swapchain->extent.width, swapchain->extent.height, swapchain->usages},
                          VK_IMAGE_LAYOUT_UNDEFINED, VK_PIPELINE_STAGE_2_BLIT_BIT, VK_IMAGE_LAYOUT_UNDEFINED);
 
-    RenderPass& blitPass = graph->AddPass("BlitToSwapchain");
-    blitPass.ReadBlitImage("drawImage");
-    blitPass.WriteBlitImage(swapchainName);
-    blitPass.Execute([&](VkCommandBuffer cmd) {
-        VkImage drawImage = graph->GetImage("drawImage");
-
-        VkOffset3D renderOffset = {static_cast<int32_t>(renderExtent[0]), static_cast<int32_t>(renderExtent[1]), 1};
-        VkOffset3D swapchainOffset = {static_cast<int32_t>(swapchain->extent.width), static_cast<int32_t>(swapchain->extent.height), 1};
-
-        VkImageBlit2 blitRegion{};
-        blitRegion.sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2;
-        blitRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        blitRegion.srcSubresource.layerCount = 1;
-        blitRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        blitRegion.dstSubresource.layerCount = 1;
-        blitRegion.srcOffsets[0] = {0, 0, 0};
-        blitRegion.srcOffsets[1] = renderOffset;
-        blitRegion.dstOffsets[0] = {0, 0, 0};
-        blitRegion.dstOffsets[1] = swapchainOffset;
-
-        VkBlitImageInfo2 blitInfo{};
-        blitInfo.sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2;
-        blitInfo.srcImage = drawImage;
-        blitInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL; // Wrong, but you'll fix with barriers
-        blitInfo.dstImage = currentSwapchainImage;
-        blitInfo.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        blitInfo.regionCount = 1;
-        blitInfo.pRegions = &blitRegion;
-        blitInfo.filter = VK_FILTER_LINEAR;
-
-        vkCmdBlitImage2(cmd, &blitInfo);
-    });
+    auto& blitPass = graph->AddPass("BlitToSwapchain");
+    blitPass.Blit("drawImage", swapchainName, VK_FILTER_LINEAR);
 
     // graph->SetDebugLogging(true);
     graph->Compile();
