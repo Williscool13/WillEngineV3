@@ -13,26 +13,6 @@
 
 namespace Render
 {
-enum class TextureUsageType
-{
-    Unknown,
-    Storage,
-    Sampled
-};
-
-struct TextureInfo
-{
-    VkFormat format;
-    uint32_t width;
-    uint32_t height;
-    VkImageUsageFlags usage;
-
-    TextureInfo() = default;
-
-    TextureInfo(VkFormat fmt, uint32_t w, uint32_t h, VkImageUsageFlags u = 0)
-        : format(fmt), width(w), height(h), usage(u) {}
-};
-
 struct PipelineEvent
 {
     VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -123,6 +103,14 @@ struct PhysicalResource
     }
 };
 
+struct TextureInfo
+{
+    VkFormat format;
+    uint32_t width;
+    uint32_t height;
+    VkImageUsageFlags usage;
+};
+
 struct TextureResource
 {
     std::string name;
@@ -130,12 +118,27 @@ struct TextureResource
     uint32_t physicalIndex = UINT32_MAX;
 
     TextureInfo textureInfo;
-    TextureUsageType usageType = TextureUsageType::Unknown;
     VkImageLayout finalLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
     [[nodiscard]] bool HasPhysical() const { return physicalIndex != UINT32_MAX; }
 
     [[nodiscard]] bool HasFinalLayout() const { return finalLayout != VK_IMAGE_LAYOUT_UNDEFINED; }
+};
+
+struct BufferInfo
+{
+    VkDeviceSize size;
+    VkBufferUsageFlags usage;
+};
+
+struct BufferResource
+{
+    std::string name;
+    uint32_t index = UINT32_MAX;
+    BufferInfo bufferInfo = {};
+    uint32_t physicalIndex = UINT32_MAX;
+
+    [[nodiscard]] bool HasPhysical() const { return physicalIndex != UINT32_MAX; }
 };
 } // Render
 

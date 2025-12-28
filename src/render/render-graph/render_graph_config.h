@@ -10,7 +10,7 @@
 
 namespace Render
 {
-inline constexpr uint32_t IMPORTED_TEXTURE_PHYSICAL_LIFETIME = Core::FRAME_BUFFER_COUNT * 2;
+inline constexpr uint32_t IMPORTED_RESOURCES_PHYSICAL_LIFETIME = Core::FRAME_BUFFER_COUNT * 2;
 } // Render
 
 #endif //WILL_ENGINE_RENDER_GRAPH_CONFIG_H

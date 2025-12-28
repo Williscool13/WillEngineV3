@@ -23,12 +23,21 @@ public:
 
     RenderPass& WriteBlitImage(const std::string& name);
 
+    RenderPass& WriteColorAttachment(const std::string& name, const TextureInfo& texInfo = {});
+
+    RenderPass& WriteDepthAttachment(const std::string& name, const TextureInfo& texInfo = {});
+
+
     // Read
+    RenderPass& ReadDepthAttachment(const std::string& name);
+
     RenderPass& ReadStorageImage(const std::string& name);
 
     RenderPass& ReadSampledImage(const std::string& name);
 
     RenderPass& ReadBlitImage(const std::string& name);
+
+    RenderPass& ReadBuffer(const std::string& name, VkPipelineStageFlags2 stages = VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT);
 
     RenderPass& Execute(std::function<void(VkCommandBuffer)> func);
 
@@ -37,11 +46,22 @@ private:
     RenderGraph& graph;
     std::string renderPassName;
 
+    struct BufferRead
+    {
+        BufferResource* resource;
+        VkPipelineStageFlags2 stages;
+    };
+
+    std::vector<TextureResource*> colorAttachments;
+    TextureResource* depthAttachment = nullptr;
+    bool depthReadOnly = false;
+
     std::vector<TextureResource*> storageImageReads;
     std::vector<TextureResource*> storageImageWrites;
     std::vector<TextureResource*> sampledImageReads;
     std::vector<TextureResource*> blitImageReads;
     std::vector<TextureResource*> blitImageWrites;
+    std::vector<BufferRead> bufferReads;
 
     std::function<void(VkCommandBuffer_T*)> executeFunc;
 };

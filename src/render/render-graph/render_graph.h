@@ -36,13 +36,20 @@ public:
 
     void SetDebugLogging(bool enable) { debugLogging = enable; }
 
+    void ImportTexture(const std::string& name, VkImage image, VkImageView view, const TextureInfo& info, VkImageLayout initialLayout, VkPipelineStageFlags2 initialStage, VkImageLayout finalLayout);
+
+    void ImportBuffer(const std::string& name, VkBuffer buffer, const BufferInfo& info, VkPipelineStageFlags2 initialStage);
+
+
     VkImage GetImage(const std::string& name);
 
     uint32_t GetDescriptorIndex(const std::string& name);
 
-    void ImportTexture(const std::string& name, VkImage image, VkImageView view, const TextureInfo& info, VkImageLayout initialLayout, VkPipelineStageFlags2 initialStage, VkImageLayout finalLayout);
+    VkImageView GetImageView(const std::string& name);
 
-    PipelineEvent GetResourceState(const std::string& name) const;
+    VkDeviceAddress GetBufferAddress(const std::string& name);
+
+    [[nodiscard]] PipelineEvent GetResourceState(const std::string& name) const;
 
 private:
     friend class RenderPass;
@@ -54,15 +61,27 @@ private:
     std::unordered_map<std::string, uint32_t> textureNameToIndex;
     static constexpr uint32_t MAX_TEXTURES = 128;
 
+    std::vector<BufferResource> buffers;
+    std::unordered_map<std::string, uint32_t> bufferNameToIndex;
+
     // Physical resources
     std::vector<PhysicalResource> physicalResources;
 
-    struct ImportedImageInfo {
+    struct ImportedImageInfo
+    {
         uint32_t physicalIndex;
         uint32_t lifetime;
     };
 
     std::unordered_map<VkImage, ImportedImageInfo> importedImages;
+
+    struct ImportedBufferInfo
+    {
+        uint32_t physicalIndex;
+        uint32_t lifetime;
+    };
+
+    std::unordered_map<VkBuffer, ImportedBufferInfo> importedBuffers;
 
     // Render passes
     std::vector<std::unique_ptr<RenderPass> > passes;
@@ -72,13 +91,15 @@ private:
 private:
     TextureResource* GetOrCreateTexture(const std::string& name);
 
+    BufferResource* GetOrCreateBuffer(const std::string& name);
+
     void DestroyPhysicalResource(PhysicalResource& resource);
 
     void CreatePhysicalImage(PhysicalResource& resource, const ResourceDimensions& dim);
 
     void CreatePhysicalBuffer(PhysicalResource& resource, const ResourceDimensions& dim);
 
-    void LogBarrier(const VkImageMemoryBarrier2& barrier, const std::string& resourceName, uint32_t physicalIndex);
+    void LogBarrier(const VkImageMemoryBarrier2& barrier, const std::string& resourceName, uint32_t physicalIndex) const;
 };
 } // Render
 
