@@ -214,32 +214,32 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
     });
 
-    graph->ImportBuffer("vertexBuffer", resourceManager->megaVertexBuffer.handle, resourceManager->megaVertexBuffer.address,
-                        {resourceManager->megaVertexBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT}, VK_PIPELINE_STAGE_2_NONE);
-    graph->ImportBuffer("skinnedVertexBuffer", resourceManager->megaSkinnedVertexBuffer.handle, resourceManager->megaSkinnedVertexBuffer.address,
-                        {resourceManager->megaSkinnedVertexBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT}, VK_PIPELINE_STAGE_2_NONE);
-    graph->ImportBuffer("meshletVertexBuffer", resourceManager->megaMeshletVerticesBuffer.handle, resourceManager->megaMeshletVerticesBuffer.address,
-                        {resourceManager->megaMeshletVerticesBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT}, VK_PIPELINE_STAGE_2_NONE);
-    graph->ImportBuffer("meshletTriangleBuffer", resourceManager->megaMeshletTrianglesBuffer.handle, resourceManager->megaMeshletTrianglesBuffer.address,
-                        {resourceManager->megaMeshletTrianglesBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT}, VK_PIPELINE_STAGE_2_NONE);
-    graph->ImportBuffer("meshletBuffer", resourceManager->megaMeshletBuffer.handle, resourceManager->megaMeshletBuffer.address,
-                        {resourceManager->megaMeshletBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT}, VK_PIPELINE_STAGE_2_NONE);
-    graph->ImportBuffer("primitiveBuffer", resourceManager->primitiveBuffer.handle, resourceManager->primitiveBuffer.address,
-                        {resourceManager->primitiveBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT}, VK_PIPELINE_STAGE_2_NONE);
-    graph->ImportBuffer("sceneData", frameResource.sceneDataBuffer.handle, frameResource.sceneDataBuffer.address,
-                        {frameResource.sceneDataBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT}, VK_PIPELINE_STAGE_2_NONE);
-    graph->ImportBuffer("instanceBuffer", frameResource.instanceBuffer.handle, frameResource.instanceBuffer.address,
-                        {frameResource.instanceBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT}, VK_PIPELINE_STAGE_2_NONE);
-    graph->ImportBuffer("modelBuffer", frameResource.modelBuffer.handle, frameResource.modelBuffer.address,
-                        {frameResource.modelBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT}, VK_PIPELINE_STAGE_2_NONE);
-    graph->ImportBuffer("jointMatrixBuffer", frameResource.jointMatrixBuffer.handle, frameResource.jointMatrixBuffer.address,
-                        {frameResource.jointMatrixBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT}, VK_PIPELINE_STAGE_2_NONE);
-    graph->ImportBuffer("materialBuffer", frameResource.materialBuffer.handle, frameResource.materialBuffer.address,
-                        {frameResource.materialBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT}, VK_PIPELINE_STAGE_2_NONE);
-    graph->ImportBuffer("debugReadbackBuffer", resourceManager->debugReadbackBuffer.handle, resourceManager->debugReadbackBuffer.address,
-                        {resourceManager->debugReadbackBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT}, VK_PIPELINE_STAGE_2_NONE);
+    graph->ImportBufferNoBarrier("vertexBuffer", resourceManager->megaVertexBuffer.handle, resourceManager->megaVertexBuffer.address,
+                                 {resourceManager->megaVertexBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
+    graph->ImportBufferNoBarrier("skinnedVertexBuffer", resourceManager->megaSkinnedVertexBuffer.handle, resourceManager->megaSkinnedVertexBuffer.address,
+                                 {resourceManager->megaSkinnedVertexBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
+    graph->ImportBufferNoBarrier("meshletVertexBuffer", resourceManager->megaMeshletVerticesBuffer.handle, resourceManager->megaMeshletVerticesBuffer.address,
+                                 {resourceManager->megaMeshletVerticesBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
+    graph->ImportBufferNoBarrier("meshletTriangleBuffer", resourceManager->megaMeshletTrianglesBuffer.handle, resourceManager->megaMeshletTrianglesBuffer.address,
+                                 {resourceManager->megaMeshletTrianglesBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
+    graph->ImportBufferNoBarrier("meshletBuffer", resourceManager->megaMeshletBuffer.handle, resourceManager->megaMeshletBuffer.address,
+                                 {resourceManager->megaMeshletBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
+    graph->ImportBufferNoBarrier("primitiveBuffer", resourceManager->primitiveBuffer.handle, resourceManager->primitiveBuffer.address,
+                                 {resourceManager->primitiveBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
+    graph->ImportBufferNoBarrier("sceneData", frameResource.sceneDataBuffer.handle, frameResource.sceneDataBuffer.address,
+                                 {frameResource.sceneDataBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
+    graph->ImportBufferNoBarrier("instanceBuffer", frameResource.instanceBuffer.handle, frameResource.instanceBuffer.address,
+                                 {frameResource.instanceBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
+    graph->ImportBufferNoBarrier("modelBuffer", frameResource.modelBuffer.handle, frameResource.modelBuffer.address,
+                                 {frameResource.modelBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
+    graph->ImportBufferNoBarrier("jointMatrixBuffer", frameResource.jointMatrixBuffer.handle, frameResource.jointMatrixBuffer.address,
+                                 {frameResource.jointMatrixBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
+    graph->ImportBufferNoBarrier("materialBuffer", frameResource.materialBuffer.handle, frameResource.materialBuffer.address,
+                                 {frameResource.materialBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
+    graph->ImportBufferNoBarrier("debugReadbackBuffer", resourceManager->debugReadbackBuffer.handle, resourceManager->debugReadbackBuffer.address,
+                                 {resourceManager->debugReadbackBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
 
-    /*graph->CreateBuffer("packedVisibilityBuffer", INSTANCING_PACKED_VISIBILITY_SIZE);
+    graph->CreateBuffer("packedVisibilityBuffer", INSTANCING_PACKED_VISIBILITY_SIZE);
     graph->CreateBuffer("instanceOffsetBuffer", INSTANCING_INSTANCE_OFFSET_SIZE);
     graph->CreateBuffer("primitiveCountBuffer", INSTANCING_PRIMITIVE_COUNT_SIZE);
     graph->CreateBuffer("compactedInstanceBuffer", INSTANCING_COMPACTED_INSTANCE_BUFFER);
@@ -282,7 +282,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         // todo: this should be "highest instance index", which we should store as an atomic in the resource manager. But not sure.
         // vkCmdDispatch(cmd, (200 + 63) / 64, 1, 1);
         vkCmdDispatch(cmd, 1, 1, 1);
-    });*/
+    });
 
 
     /*
@@ -314,7 +314,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
 
         BasicRenderPushConstant pushData{
             .modelMatrix = glm::mat4(1.0f),
-            .sceneData = graph->GetBufferAddress("sceneData"),
+            .sceneData = frameResource.sceneDataBuffer.address,
         };
 
         vkCmdPushConstants(cmd, basicRenderPipeline.pipelineLayout.handle, VK_SHADER_STAGE_MESH_BIT_EXT, 0, sizeof(BasicRenderPushConstant), &pushData);
@@ -327,15 +327,15 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         RenderPass& meshPass = graph->AddPass("MeshRender");
         meshPass.WriteColorAttachment("drawImage");
         meshPass.WriteDepthAttachment("depthTarget");
-        // meshPass.ReadBuffer("sceneData", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
-        // meshPass.ReadBuffer("vertexBuffer", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
-        // meshPass.ReadBuffer("primitiveBuffer", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
-        // meshPass.ReadBuffer("meshletVertexBuffer", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
-        // meshPass.ReadBuffer("meshletTriangleBuffer", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
-        // meshPass.ReadBuffer("meshletBuffer", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
-        // meshPass.ReadBuffer("materialBuffer", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
-        // meshPass.ReadBuffer("modelBuffer", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
-        // meshPass.ReadBuffer("instanceBuffer", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
+        meshPass.ReadBuffer("sceneData", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
+        meshPass.ReadBuffer("vertexBuffer", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
+        meshPass.ReadBuffer("primitiveBuffer", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
+        meshPass.ReadBuffer("meshletVertexBuffer", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
+        meshPass.ReadBuffer("meshletTriangleBuffer", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
+        meshPass.ReadBuffer("meshletBuffer", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
+        meshPass.ReadBuffer("materialBuffer", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
+        meshPass.ReadBuffer("modelBuffer", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
+        meshPass.ReadBuffer("instanceBuffer", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
 
         meshPass.Execute([&](VkCommandBuffer cmd) {
             const VkRenderingAttachmentInfo colorAttachment = VkHelpers::RenderingAttachmentInfo(graph->GetImageView("drawImage"), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
@@ -353,26 +353,17 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
 
             for (Engine::InstanceHandle& instance : frameBuffer.mainViewFamily.instances) {
                 MeshShaderPushConstants pushConstants{
-                    .sceneData = frameResource.sceneDataBuffer.address,
-                    .vertexBuffer = resourceManager->megaVertexBuffer.address,
-                    .primitiveBuffer = resourceManager->primitiveBuffer.address,
-                    .meshletVerticesBuffer = resourceManager->megaMeshletVerticesBuffer.address,
-                    .meshletTrianglesBuffer = resourceManager->megaMeshletTrianglesBuffer.address,
-                    .meshletBuffer = resourceManager->megaMeshletBuffer.address,
-                    .materialBuffer = frameResource.materialBuffer.address,
-                    .modelBuffer = frameResource.modelBuffer.address,
-                    .instanceBuffer = frameResource.instanceBuffer.address,
+                    .sceneData = graph->GetBufferAddress("sceneData"),
+                    .vertexBuffer = graph->GetBufferAddress("vertexBuffer"),
+                    .primitiveBuffer = graph->GetBufferAddress("primitiveBuffer"),
+                    .meshletVerticesBuffer = graph->GetBufferAddress("meshletVertexBuffer"),
+                    .meshletTrianglesBuffer = graph->GetBufferAddress("meshletTriangleBuffer"),
+                    .meshletBuffer = graph->GetBufferAddress("meshletBuffer"),
+                    .materialBuffer = graph->GetBufferAddress("materialBuffer"),
+                    .modelBuffer = graph->GetBufferAddress("modelBuffer"),
+                    .instanceBuffer = graph->GetBufferAddress("instanceBuffer"),
                     .instanceIndex = instance.index
                 };
-                /*.sceneData = graph->GetBufferAddress("sceneData"),
-.vertexBuffer = graph->GetBufferAddress("vertexBuffer"),
-.primitiveBuffer = graph->GetBufferAddress("primitiveBuffer"),
-.meshletVerticesBuffer = graph->GetBufferAddress("meshletVertexBuffer"),
-.meshletTrianglesBuffer = graph->GetBufferAddress("meshletTriangleBuffer"),
-.meshletBuffer = graph->GetBufferAddress("meshletBuffer"),
-.materialBuffer = graph->GetBufferAddress("materialBuffer"),
-.modelBuffer = graph->GetBufferAddress("modelBuffer"),
-.instanceBuffer = graph->GetBufferAddress("instanceBuffer"),*/
 
                 vkCmdPushConstants(cmd, meshShaderPipeline.pipelineLayout.handle, VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT,
                                    0, sizeof(MeshShaderPushConstants), &pushConstants);
@@ -453,8 +444,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         vkCmdBlitImage2(cmd, &blitInfo);
     });
 
-    //graph->SetDebugLogging(frameNumber % 180 == 0);
-    graph->SetDebugLogging(true);
+    graph->SetDebugLogging(frameNumber % 180 == 0);
     graph->Compile();
     graph->Execute(renderSync.commandBuffer);
     graph->PrepareSwapchain(renderSync.commandBuffer, swapchainName);

@@ -377,6 +377,8 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
 
         for (auto& bufWrite : pass->bufferWrites) {
             auto& phys = physicalResources[bufWrite.resource->physicalIndex];
+            if (phys.bDisableBarriers) { continue; }
+
             VkAccessFlags2 desiredAccess = VK_ACCESS_2_SHADER_WRITE_BIT;
 
             if (!phys.bUsedThisFrame || phys.event.stages != bufWrite.stages || phys.event.access != desiredAccess) {
@@ -400,6 +402,8 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
         }
         for (auto& bufWrite : pass->bufferWriteTransfer) {
             auto& phys = physicalResources[bufWrite.resource->physicalIndex];
+            if (phys.bDisableBarriers) { continue; }
+
             VkAccessFlags2 desiredAccess = VK_ACCESS_2_TRANSFER_WRITE_BIT;
 
             if (!phys.bUsedThisFrame || phys.event.stages != bufWrite.stages || phys.event.access != desiredAccess) {
@@ -424,6 +428,8 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
 
         for (auto& bufRead : pass->bufferReadTransfer) {
             auto& phys = physicalResources[bufRead.resource->physicalIndex];
+            if (phys.bDisableBarriers) { continue; }
+
             VkAccessFlags2 desiredAccess = VK_ACCESS_2_TRANSFER_READ_BIT;
 
             if (!phys.bUsedThisFrame || phys.event.stages != bufRead.stages || phys.event.access != desiredAccess) {
@@ -444,6 +450,8 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
 
         for (auto& bufRead : pass->bufferReads) {
             auto& phys = physicalResources[bufRead.resource->physicalIndex];
+            if (phys.bDisableBarriers) { continue; }
+
             VkAccessFlags2 desiredAccess = VK_ACCESS_2_SHADER_READ_BIT;
             if (!phys.bUsedThisFrame || phys.event.stages != bufRead.stages || phys.event.access != desiredAccess) {
                 VkBufferMemoryBarrier2 barrier = {
@@ -707,6 +715,43 @@ void RenderGraph::ImportTexture(const std::string& name,
     phys.dimensions.name = name;
 
     tex->finalLayout = finalLayout;
+}
+
+void RenderGraph::ImportBufferNoBarrier(const std::string& name, VkBuffer buffer, VkDeviceAddress address, const BufferInfo& info)
+{
+    BufferResource* buf = GetOrCreateBuffer(name);
+    buf->bufferInfo = info;
+    buf->accumulatedUsage = info.usage;
+    if (!buf->HasPhysical()) {
+        auto it = importedBuffers.find(name);
+        if (it != importedBuffers.end()) {
+            buf->physicalIndex = it->second;
+            auto& phys = physicalResources[it->second];
+            assert(phys.dimensions.bufferSize == info.size && "Reimported buffer size mismatch");
+            assert(phys.dimensions.bufferUsage == info.usage && "Reimported buffer usage mismatch");
+            phys.buffer = buffer;
+            phys.bufferAddress = address;
+            phys.addressRetrieved = true;
+        }
+        else {
+            buf->physicalIndex = physicalResources.size();
+            physicalResources.emplace_back();
+            importedBuffers[name] = {buf->physicalIndex};
+
+            auto& phys = physicalResources[buf->physicalIndex];
+            phys.buffer = buffer;
+            phys.bufferAddress = address;
+            phys.bIsImported = true;
+
+            phys.dimensions.type = ResourceDimensions::Type::Buffer;
+            phys.dimensions.bufferSize = info.size;
+            phys.dimensions.bufferUsage = info.usage;
+        }
+    }
+
+    auto& phys = physicalResources[buf->physicalIndex];
+    phys.dimensions.name = name;
+    phys.bDisableBarriers = true;
 }
 
 void RenderGraph::ImportBuffer(const std::string& name, VkBuffer buffer, VkDeviceAddress address, const BufferInfo& info, VkPipelineStageFlags2 initialStage)

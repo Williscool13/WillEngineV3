@@ -67,6 +67,7 @@ struct PhysicalResource
     ResourceDimensions dimensions;
     PipelineEvent event;
     bool bIsImported = false;
+    bool bDisableBarriers = false;
 
     std::vector<uint32_t> logicalResourceIndices;
     bool bUsedThisFrame = false;
