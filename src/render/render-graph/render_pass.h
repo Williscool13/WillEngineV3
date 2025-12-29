@@ -41,7 +41,9 @@ public:
 
     RenderPass& ReadBlitImage(const std::string& name);
 
-    RenderPass& ReadBuffer(const std::string& name, VkPipelineStageFlags2 stages = VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT);
+    RenderPass& ReadBuffer(const std::string& name, VkPipelineStageFlags2 stages);
+
+    RenderPass& ReadTransferBuffer(const std::string& name, VkPipelineStageFlags2 stages);
 
     RenderPass& ReadIndirectBuffer(const std::string& name);
 
@@ -70,6 +72,7 @@ private:
 
     std::vector<BufferAccess> bufferReads;
     std::vector<BufferAccess> bufferWrites;
+    std::vector<BufferAccess> bufferReadTransfer;
     std::vector<BufferAccess> bufferWriteTransfer;
 
     std::function<void(VkCommandBuffer_T*)> executeFunc;

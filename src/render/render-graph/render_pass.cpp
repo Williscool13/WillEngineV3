@@ -137,6 +137,15 @@ RenderPass& RenderPass::ReadBuffer(const std::string& name, VkPipelineStageFlags
     return *this;
 }
 
+RenderPass& RenderPass::ReadTransferBuffer(const std::string& name, VkPipelineStageFlags2 stages)
+{
+    BufferResource* resource = graph.GetOrCreateBuffer(name);
+    assert(resource->bufferInfo.size > 0 && "Buffer not defined - import or create buffer first");
+    resource->accumulatedUsage |= VK_BUFFER_USAGE_2_TRANSFER_SRC_BIT;
+    bufferReadTransfer.push_back({resource, stages});
+    return *this;
+}
+
 RenderPass& RenderPass::ReadIndirectBuffer(const std::string& name)
 {
     BufferResource* resource = graph.GetOrCreateBuffer(name);

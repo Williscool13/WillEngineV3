@@ -49,6 +49,8 @@ struct ResourceManager
 
     std::array<FrameResources, Core::FRAME_BUFFER_COUNT> frameResources;
 
+    AllocatedBuffer debugReadbackBuffer;
+
 private:
     VulkanContext* context{};
 };

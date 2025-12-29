@@ -255,6 +255,30 @@ void WillEngine::DrawImgui()
 
     if (ImGui::Begin("Main")) {
         ImGui::Text("Hello!");
+
+        if (ImGui::CollapsingHeader("Visibility Debug")) {
+            uint32_t* data = static_cast<uint32_t*>(renderThread->GetResourceManager()->debugReadbackBuffer.allocationInfo.pMappedData);
+
+            for (int chunk = 0; chunk < 1; chunk++) {
+                uint32_t bits = data[chunk];
+
+                // Count set bits manually
+                int count = 0;
+                for (int i = 0; i < 32; i++) {
+                    if (bits & (1u << i)) count++;
+                }
+
+                ImGui::Text("Chunk %d: 0x%08x (%d visible)", chunk, bits, count);
+
+                ImGui::Indent();
+                for (int bit = 0; bit < 32; bit++) {
+                    if (bits & (1u << bit)) {
+                        ImGui::Text("Instance %d visible", chunk * 32 + bit);
+                    }
+                }
+                ImGui::Unindent();
+            }
+        }
     }
 
     auto generateModel = [&](const std::filesystem::path& gltfPath, const std::filesystem::path& outPath) {

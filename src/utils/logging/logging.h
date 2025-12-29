@@ -18,6 +18,8 @@ public:
 
     ~Logger();
 
+    void ArchiveLogs();
+
     Logger(const Logger&) = delete;
 
     Logger& operator=(const Logger&) = delete;

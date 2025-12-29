@@ -22,5 +22,7 @@ int main(int argc, char* argv[])
     we.Run();
     we.Cleanup();
 
+    logger.ArchiveLogs();
+
     return 0;
 }

@@ -71,6 +71,14 @@ ResourceManager::ResourceManager(VulkanContext* context)
     bindlessSamplerTextureDescriptorBuffer = BindlessResourcesSamplerImages(context);
     bindlessRDGTransientDescriptorBuffer = BindlessTransientRDGResourcesDescriptorBuffer<8, 128, 128>(context);
 
+    bufferInfo.usage = VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_2_TRANSFER_DST_BIT;
+    vmaAllocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
+    vmaAllocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+
+    bufferInfo.size = 1024 * 1024;
+    debugReadbackBuffer = AllocatedBuffer::CreateAllocatedBuffer(context, bufferInfo, vmaAllocInfo);
+    debugReadbackBuffer.SetDebugName("Debug Readback Buffer");
+
     VkSamplerCreateInfo pointSamplerInfo = {
         .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
         .magFilter = VK_FILTER_NEAREST,

@@ -39,6 +39,31 @@ Logger::Logger(const std::filesystem::path& _logPath)
     }
 }
 
+void Logger::ArchiveLogs()
+{
+    if (!std::filesystem::exists(logPath)) {
+        return;
+    }
+
+    const auto now = std::chrono::system_clock::now();
+    const auto time = std::chrono::system_clock::to_time_t(now);
+    std::tm tm;
+
+#ifdef _WIN32
+    localtime_s(&tm, &time);
+#else
+    localtime_r(&time, &tm);
+#endif
+
+    char timestamp[64];
+    std::strftime(timestamp, sizeof(timestamp), "%Y%m%d_%H%M%S", &tm);
+    std::filesystem::path archivePath = logPath.parent_path() / (std::string("engine_") + timestamp + ".log");
+
+    Flush();
+
+    std::filesystem::copy_file(logPath, archivePath, std::filesystem::copy_options::overwrite_existing);
+}
+
 Logger::~Logger()
 {
     if (logger) {

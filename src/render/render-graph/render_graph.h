@@ -66,10 +66,6 @@ public:
 
     VkDeviceAddress GetBufferAddress(const std::string& name);
 
-
-    [[nodiscard]] const PhysicalResource* GetPhysicalResource(const std::string& name) const;
-    [[nodiscard]] PipelineEvent GetResourceState(const std::string& name) const;
-
     [[nodiscard]] ResourceManager* GetResourceManager() const { return resourceManager; }
 
 private:
@@ -89,14 +85,8 @@ private:
     // Physical resources
     std::vector<PhysicalResource> physicalResources;
 
-    struct ImportedImageInfo
-    {
-        uint32_t physicalIndex;
-        uint32_t lifetime;
-    };
-
-    std::unordered_map<VkImage, ImportedImageInfo> importedImages;
     // name : physicalIndex
+    std::unordered_map<VkImage, uint32_t> importedImages;
     std::unordered_map<std::string, uint32_t> importedBuffers;
 
     // Render passes
