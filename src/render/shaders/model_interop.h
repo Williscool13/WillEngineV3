@@ -126,6 +126,15 @@ SHADER_PUBLIC struct Instance
     uint32_t padding2;
 };
 
+// Instancing will populate a buffer with these. All instances in that array will be allocated, so we can omit
+SHADER_PUBLIC struct CompactedInstance
+{
+    SHADER_PUBLIC uint32_t primitiveIndex;
+    SHADER_PUBLIC uint32_t modelIndex;
+    SHADER_PUBLIC uint32_t materialIndex;
+    SHADER_PUBLIC uint32_t jointMatrixOffset;
+};
+
 SHADER_PUBLIC struct SHADER_ALIGN Model
 {
     SHADER_PUBLIC float4x4 modelMatrix;

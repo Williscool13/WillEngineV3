@@ -237,6 +237,35 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     graph->ImportBuffer("materialBuffer", frameResource.materialBuffer.handle, frameResource.materialBuffer.address,
                         {frameResource.materialBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT}, VK_PIPELINE_STAGE_2_NONE);
 
+    graph->CreateBuffer("packedVisibilityBuffer", INSTANCING_PACKED_VISIBILITY_SIZE);
+    graph->CreateBuffer("instanceOffsetBuffer", INSTANCING_INSTANCE_OFFSET_SIZE);
+    graph->CreateBuffer("primitiveCountBuffer", INSTANCING_PRIMITIVE_COUNT_SIZE);
+    graph->CreateBuffer("compactedInstanceBuffer", INSTANCING_COMPACTED_INSTANCE_BUFFER);
+    graph->CreateBuffer("indirectCountBuffer", INSTANCING_MESH_INDIRECT_COUNT);
+    graph->CreateBuffer("indirectBuffer", INSTANCING_MESH_INDIRECT_PARAMETERS);
+
+    RenderPass& clearPass = graph->AddPass("ClearInstancingBuffers");
+    clearPass.WriteTransferBuffer("packedVisibilityBuffer", VK_PIPELINE_STAGE_2_CLEAR_BIT);
+    clearPass.WriteTransferBuffer("instanceOffsetBuffer", VK_PIPELINE_STAGE_2_CLEAR_BIT);
+    clearPass.WriteTransferBuffer("primitiveCountBuffer", VK_PIPELINE_STAGE_2_CLEAR_BIT);
+    clearPass.WriteTransferBuffer("compactedInstanceBuffer", VK_PIPELINE_STAGE_2_CLEAR_BIT);
+    clearPass.WriteTransferBuffer("indirectCountBuffer", VK_PIPELINE_STAGE_2_CLEAR_BIT);
+    clearPass.WriteTransferBuffer("indirectBuffer", VK_PIPELINE_STAGE_2_CLEAR_BIT);
+    clearPass.Execute([&](VkCommandBuffer cmd) {
+        auto packedVisibilityBuffer = graph->GetBuffer("packedVisibilityBuffer");
+        auto instanceOffsetBuffer = graph->GetBuffer("instanceOffsetBuffer");
+        auto primitiveCountBuffer = graph->GetBuffer("primitiveCountBuffer");
+        auto compactedInstanceBuffer = graph->GetBuffer("compactedInstanceBuffer");
+        auto indirectCountBuffer = graph->GetBuffer("indirectCountBuffer");
+        auto indirectBuffer = graph->GetBuffer("indirectBuffer");
+        vkCmdFillBuffer(cmd, packedVisibilityBuffer, 0, VK_WHOLE_SIZE, 0);
+        vkCmdFillBuffer(cmd, instanceOffsetBuffer, 0, VK_WHOLE_SIZE, 0);
+        vkCmdFillBuffer(cmd, primitiveCountBuffer, 0, VK_WHOLE_SIZE, 0);
+        vkCmdFillBuffer(cmd, compactedInstanceBuffer, 0, VK_WHOLE_SIZE, 0);
+        vkCmdFillBuffer(cmd, indirectCountBuffer, 0, VK_WHOLE_SIZE, 0);
+        vkCmdFillBuffer(cmd, indirectBuffer, 0, VK_WHOLE_SIZE, 0);
+    });
+
     RenderPass& colorPass = graph->AddPass("MainRender");
     colorPass.WriteColorAttachment("drawImage");
     colorPass.WriteDepthAttachment("depthTarget", {VK_FORMAT_D32_SFLOAT, renderExtent[0], renderExtent[1]});
@@ -375,23 +404,10 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         vkCmdBlitImage2(cmd, &blitInfo);
     });
 
-    graph->SetDebugLogging(false);
+    graph->SetDebugLogging(frameNumber % 180 == 0);
     graph->Compile();
     graph->Execute(renderSync.commandBuffer);
-
-    auto swapchainState = graph->GetResourceState(swapchainName);
-
-    VkImageMemoryBarrier2 presentBarrier = VkHelpers::ImageMemoryBarrier(
-        currentSwapchainImage,
-        VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT),
-        swapchainState.stages, swapchainState.access, swapchainState.layout,
-        VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
-    );
-
-    VkDependencyInfo depInfo = {VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
-    depInfo.imageMemoryBarrierCount = 1;
-    depInfo.pImageMemoryBarriers = &presentBarrier;
-    vkCmdPipelineBarrier2(renderSync.commandBuffer, &depInfo);
+    graph->PrepareSwapchain(renderSync.commandBuffer, swapchainName);
 
     VK_CHECK(vkEndCommandBuffer(renderSync.commandBuffer));
 
@@ -494,6 +510,25 @@ void RenderThread::CreatePipelines()
         piplineLayoutCreateInfo.pushConstantRangeCount = 1;
 
         depthDebugPipeline = ComputePipeline(context.get(), piplineLayoutCreateInfo, Platform::GetShaderPath() / "debugDepth_compute.spv");
+    } {
+        VkPipelineLayoutCreateInfo computePipelineLayoutCreateInfo{};
+        computePipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        computePipelineLayoutCreateInfo.pNext = nullptr;
+        computePipelineLayoutCreateInfo.pSetLayouts = nullptr;
+        computePipelineLayoutCreateInfo.setLayoutCount = 0;
+        VkPushConstantRange pushConstant{};
+        pushConstant.offset = 0;
+        pushConstant.size = sizeof(VisibilityPushConstant);
+        pushConstant.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+        computePipelineLayoutCreateInfo.pPushConstantRanges = &pushConstant;
+        computePipelineLayoutCreateInfo.pushConstantRangeCount = 1;
+        instancingVisibility = ComputePipeline(context.get(), computePipelineLayoutCreateInfo, Platform::GetShaderPath() / "instancingVisibility_compute.spv");
+
+        pushConstant.size = sizeof(PrefixSumPushConstant);
+        instancingPrefixSum = ComputePipeline(context.get(), computePipelineLayoutCreateInfo, Platform::GetShaderPath() / "instancingPrefixSum_compute.spv");
+
+        pushConstant.size = sizeof(IndirectWritePushConstant);
+        instancingIndirectConstruction = ComputePipeline(context.get(), computePipelineLayoutCreateInfo, Platform::GetShaderPath() / "instancingCompactAndGenerateIndirect_compute.spv");
     }
 }
 } // Render

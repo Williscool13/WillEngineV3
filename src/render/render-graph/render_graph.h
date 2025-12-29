@@ -40,28 +40,37 @@ public:
 
     void Execute(VkCommandBuffer cmd);
 
+    void PrepareSwapchain(VkCommandBuffer cmd, const std::string& name);
+
     void Reset();
 
     void SetDebugLogging(bool enable) { debugLogging = enable; }
 
     void InvalidateAll();
 
-    void ImportTexture(const std::string& name, VkImage image, VkImageView view, const TextureInfo& info, VkImageUsageFlags usage, VkImageLayout initialLayout, VkPipelineStageFlags2 initialStage, VkImageLayout finalLayout);
+    void CreateBuffer(const std::string& name, VkDeviceSize size);
+
+    void ImportTexture(const std::string& name, VkImage image, VkImageView view, const TextureInfo& info, VkImageUsageFlags usage, VkImageLayout initialLayout, VkPipelineStageFlags2 initialStage,
+                       VkImageLayout finalLayout);
 
     void ImportBuffer(const std::string& name, VkBuffer buffer, VkDeviceAddress address, const BufferInfo& info, VkPipelineStageFlags2 initialStage);
 
 
     VkImage GetImage(const std::string& name);
 
+    VkImageView GetImageView(const std::string& name);
+
     uint32_t GetDescriptorIndex(const std::string& name);
 
-    VkImageView GetImageView(const std::string& name);
+    VkBuffer GetBuffer(const std::string& name);
 
     VkDeviceAddress GetBufferAddress(const std::string& name);
 
+
+    [[nodiscard]] const PhysicalResource* GetPhysicalResource(const std::string& name) const;
     [[nodiscard]] PipelineEvent GetResourceState(const std::string& name) const;
 
-    [[nodiscard]] ResourceManager* GetResourceManager() const { return resourceManager;}
+    [[nodiscard]] ResourceManager* GetResourceManager() const { return resourceManager; }
 
 private:
     friend class RenderPass;

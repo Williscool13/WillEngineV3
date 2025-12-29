@@ -27,6 +27,10 @@ public:
 
     RenderPass& WriteDepthAttachment(const std::string& name, const TextureInfo& texInfo = {});
 
+    RenderPass& WriteBuffer(const std::string& name, VkPipelineStageFlags2 stages);
+
+    RenderPass& WriteTransferBuffer(const std::string& name, VkPipelineStageFlags2 stages);
+
 
     // Read
     RenderPass& ReadDepthAttachment(const std::string& name);
@@ -39,6 +43,8 @@ public:
 
     RenderPass& ReadBuffer(const std::string& name, VkPipelineStageFlags2 stages = VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT);
 
+    RenderPass& ReadIndirectBuffer(const std::string& name);
+
     RenderPass& Execute(std::function<void(VkCommandBuffer)> func);
 
 private:
@@ -46,7 +52,7 @@ private:
     RenderGraph& graph;
     std::string renderPassName;
 
-    struct BufferRead
+    struct BufferAccess
     {
         BufferResource* resource;
         VkPipelineStageFlags2 stages;
@@ -61,7 +67,10 @@ private:
     std::vector<TextureResource*> sampledImageReads;
     std::vector<TextureResource*> blitImageReads;
     std::vector<TextureResource*> blitImageWrites;
-    std::vector<BufferRead> bufferReads;
+
+    std::vector<BufferAccess> bufferReads;
+    std::vector<BufferAccess> bufferWrites;
+    std::vector<BufferAccess> bufferWriteTransfer;
 
     std::function<void(VkCommandBuffer_T*)> executeFunc;
 };

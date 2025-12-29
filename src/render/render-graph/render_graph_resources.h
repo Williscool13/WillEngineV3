@@ -20,7 +20,6 @@ using TransientImageHandle = Core::Handle<TextureResource>;
 
 struct PipelineEvent
 {
-    VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
     VkPipelineStageFlags2 stages = VK_PIPELINE_STAGE_2_NONE;
     VkAccessFlags2 access = VK_ACCESS_2_NONE;
 };
@@ -89,7 +88,7 @@ struct PhysicalResource
 
     [[nodiscard]] bool NeedsDescriptorWrite() const { return dimensions.IsImage() && IsAllocated() && !descriptorWritten; }
 
-    [[nodiscard]] bool NeedsAddressRetrieval() const { return dimensions.IsBuffer() && IsAllocated() && !addressRetrieved; }
+    [[nodiscard]] bool NeedsAddressRetrieval() const { return dimensions.IsBuffer() && IsAllocated() && !addressRetrieved && (dimensions.bufferUsage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT ) == VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT; }
 };
 
 struct TextureInfo
@@ -107,6 +106,7 @@ struct TextureResource
 
     TextureInfo textureInfo;
 
+    VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
     VkImageUsageFlags accumulatedUsage;
     uint32_t firstPass = UINT32_MAX;
     uint32_t lastPass = 0;
@@ -131,6 +131,7 @@ struct BufferResource
     BufferInfo bufferInfo = {};
     uint32_t physicalIndex = UINT32_MAX;
 
+    VkBufferUsageFlags accumulatedUsage = 0;
     uint32_t firstPass = UINT32_MAX;
     uint32_t lastPass = 0;
 

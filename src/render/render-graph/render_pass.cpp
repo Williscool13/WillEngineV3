@@ -77,6 +77,21 @@ RenderPass& RenderPass::WriteDepthAttachment(const std::string& name, const Text
     return *this;
 }
 
+RenderPass& RenderPass::WriteBuffer(const std::string& name, VkPipelineStageFlags2 stages)
+{
+    BufferResource* resource = graph.GetOrCreateBuffer(name);
+    resource->accumulatedUsage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+    bufferWrites.push_back({resource, stages});
+    return *this;
+}
+
+RenderPass& RenderPass::WriteTransferBuffer(const std::string& name, VkPipelineStageFlags2 stages)
+{BufferResource* resource = graph.GetOrCreateBuffer(name);
+    resource->accumulatedUsage |= VK_BUFFER_USAGE_2_TRANSFER_DST_BIT;
+    bufferWriteTransfer.push_back({resource, stages});
+    return *this;
+}
+
 RenderPass& RenderPass::ReadDepthAttachment(const std::string& name)
 {
     TextureResource* resource = graph.GetOrCreateTexture(name);
@@ -116,11 +131,17 @@ RenderPass& RenderPass::ReadBlitImage(const std::string& name)
 RenderPass& RenderPass::ReadBuffer(const std::string& name, VkPipelineStageFlags2 stages)
 {
     BufferResource* resource = graph.GetOrCreateBuffer(name);
-
-    // Validate that buffer has been defined (imported or created)
     assert(resource->bufferInfo.size > 0 && "Buffer not defined - import or create buffer first");
-
+    resource->accumulatedUsage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
     bufferReads.push_back({resource, stages});
+    return *this;
+}
+
+RenderPass& RenderPass::ReadIndirectBuffer(const std::string& name)
+{
+    BufferResource* resource = graph.GetOrCreateBuffer(name);
+    resource->accumulatedUsage |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
+    bufferReads.push_back({resource, VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT});
     return *this;
 }
 

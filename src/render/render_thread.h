@@ -129,6 +129,10 @@ private:
     BasicRenderPipeline basicRenderPipeline;
     MeshShaderPipeline meshShaderPipeline;
     ComputePipeline depthDebugPipeline;
+
+    ComputePipeline instancingVisibility;
+    ComputePipeline instancingPrefixSum;
+    ComputePipeline instancingIndirectConstruction;
 };
 } // Render
 

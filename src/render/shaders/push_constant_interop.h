@@ -93,8 +93,9 @@ SHADER_PUBLIC struct IndirectWritePushConstant {
     SHADER_PUBLIC SHADER_PTR(PrimitiveCount) primitiveCountBuffer;
     // Read-Write
     // todo: packed doesn't need bIsAllocated, can be optimized
-    SHADER_PUBLIC SHADER_PTR(Instance) compactedInstanceBuffer;
-    SHADER_PUBLIC SHADER_PTR(InstancedMeshIndirectParameterBuffer) indirectBuffer;
+    SHADER_PUBLIC SHADER_PTR(CompactedInstance) compactedInstanceBuffer;
+    SHADER_PUBLIC SHADER_PTR(InstancedMeshIndirectCountBuffer) indirectCountBuffer;
+    SHADER_PUBLIC SHADER_PTR(InstancedMeshIndirectDrawParameters) indirectBuffer;
 };
 
 #endif //WILL_ENGINE_PUSH_CONSTANT_INTEROP_H

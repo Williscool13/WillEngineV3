@@ -3,7 +3,9 @@ import model_interop;
 import shader_functions;
 import instancing_interop;
 import push_constant_interop;
+import constants_interop;
 // =============== Compute Shader (Instance Visibility and Primitive Accumulation Count) ===============
+// Evaluates the visibility of each instance and outputs to a packed visibility buffer
 [shader("compute")]
 [numthreads(64, 1, 1)]
 void computeVisibility(uniform VisibilityPushConstant pushConstant, uint3 dtid : SV_DispatchThreadID)
@@ -33,9 +35,8 @@ void computeVisibility(uniform VisibilityPushConstant pushConstant, uint3 dtid :
         uint32_t bitMask = 1u << visibilityChunkBit;
         InterlockedOr(pushConstant.packedVisibilityBuffer[visibilityChunkIndex], bitMask);
 
-        uint32_t primitiveOffset = pushConstant.primitiveCountBuffer[inst.primitiveIndex].count.add(1);
-        // Warning: Narrowing, if instanceCount ever intends on exceeding 65536, need to change primitiveOffset to uint32_t
-        pushConstant.instanceOffsetBuffer[instanceID] = primitiveOffset;
+        uint32_t instanceOffset = pushConstant.primitiveCountBuffer[inst.primitiveIndex].count.add(1);
+        pushConstant.instanceOffsetBuffer[instanceID] = instanceOffset;
     }
 }
 
@@ -54,7 +55,7 @@ void computePrefixSum(uniform PrefixSumPushConstant pushConstant) {
 }
 
 // =============== Compute Shader (Instance Draw buffer write) ===============
-const static int32_t TASK_SHADER_DISPATCH_X = 64;
+// Each thread operates on 1 instance. The 0th instance of a primitive will populate the indirect
 
 [shader("compute")]
 [numthreads(64, 1, 1)]
@@ -70,10 +71,16 @@ void computeCompactAndGenerateIndirect(uniform IndirectWritePushConstant pushCon
     if (!visible) return;
 
     Instance inst = pushConstant.instanceBuffer[instanceID];
-    uint32_t primitiveOffset = pushConstant.instanceOffsetBuffer[instanceID];
-    uint32_t globalOffset = pushConstant.primitiveCountBuffer[inst.primitiveIndex].offset;
 
-    pushConstant.compactedInstanceBuffer[globalOffset + primitiveOffset] = inst;
+    // Offset to 0th primitive of a given primitive
+    uint32_t primitiveOffset = pushConstant.primitiveCountBuffer[inst.primitiveIndex].offset;
+    // Instance offset within primitive group
+    uint32_t instanceOffset = pushConstant.instanceOffsetBuffer[instanceID];
+
+    pushConstant.compactedInstanceBuffer[primitiveOffset + instanceOffset].primitiveIndex = inst.primitiveIndex;
+    pushConstant.compactedInstanceBuffer[primitiveOffset + instanceOffset].modelIndex = inst.modelIndex;
+    pushConstant.compactedInstanceBuffer[primitiveOffset + instanceOffset].materialIndex = inst.materialIndex;
+    pushConstant.compactedInstanceBuffer[primitiveOffset + instanceOffset].jointMatrixOffset = inst.jointMatrixOffset;
 
     if (primitiveOffset == 0) {
         MeshletPrimitive prim = pushConstant.primitiveBuffer[inst.primitiveIndex];
@@ -85,12 +92,12 @@ void computeCompactAndGenerateIndirect(uniform IndirectWritePushConstant pushCon
         parameters.groupCountX = numChunks;
         parameters.groupCountY = count;
         parameters.groupCountZ = 1;
-        parameters.compactedInstanceStart = globalOffset;
+        parameters.compactedInstanceStart = primitiveOffset;
 
         parameters.meshletOffset = prim.meshletOffset;
         parameters.meshletCount = prim.meshletCount;
 
-        uint32_t indirectIndex = pushConstant.indirectBuffer->meshIndirectCount.add(1);
-        pushConstant.indirectBuffer->parameters[indirectIndex] = parameters;
+        uint32_t indirectIndex = pushConstant.indirectCountBuffer->meshIndirectCount.add(1);
+        pushConstant.indirectBuffer[indirectIndex] = parameters;
     }
 }

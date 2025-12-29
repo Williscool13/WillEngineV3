@@ -68,17 +68,12 @@ SHADER_PUBLIC struct InstancedMeshIndirectDrawParameters
     SHADER_PUBLIC uint32_t padding2;
 };
 
-SHADER_PUBLIC struct InstancedMeshIndirectParameterBuffer
+SHADER_PUBLIC struct InstancedMeshIndirectCountBuffer
 {
     SHADER_PUBLIC SHADER_ATOMIC(uint32_t) meshIndirectCount;
     SHADER_PUBLIC uint32_t padding0;
     SHADER_PUBLIC uint32_t padding1;
     SHADER_PUBLIC uint32_t padding2;
-#ifdef __SLANG__
-    SHADER_PUBLIC InstancedMeshIndirectDrawParameters[] parameters;
-#else
-    SHADER_PUBLIC InstancedMeshIndirectDrawParameters parameters[];
-#endif
 };
 
 #endif //WILL_ENGINE_INSTANCING_INTEROP_H
