@@ -1,4 +1,3 @@
-import shader_types;
 import common_interop;
 import model_interop;
 import constants_interop;

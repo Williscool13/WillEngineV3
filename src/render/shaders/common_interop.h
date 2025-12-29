@@ -10,6 +10,7 @@ module common_interop;
 #define SHADER_PUBLIC public
 #define SHADER_CONST const static
 #define SHADER_ALIGN
+#define SHADER_PTR(T) T*
 #else
 #include <glm/glm.hpp>
 #include <cstdint>
@@ -37,6 +38,7 @@ using float4x4 = glm::mat4;
 #define SHADER_PUBLIC
 #define SHADER_CONST constexpr inline
 #define SHADER_ALIGN alignas(16)
+#define SHADER_PTR(T) VkDeviceAddress
 #endif // __SLANG__
 
 

@@ -1,29 +1,9 @@
 import common_interop;
 import model_interop;
 import shader_functions;
+import instancing_interop;
+import push_constant_interop;
 // =============== Compute Shader (Instance Visibility and Primitive Accumulation Count) ===============
-
-
-struct PrimitiveCount
-{
-    Atomic<uint32_t> count;
-    uint32_t offset;
-};
-
-
-struct VisibilityPushConstant {
-    // Read-Only
-    SceneData* sceneData;
-    MeshletPrimitive* primitiveBuffer;
-    Model* modelBuffer;
-    Instance* instanceBuffer;
-
-    // Read-Write
-    uint32_t* packedVisibilityBuffer;
-    uint32_t* instanceOffsetBuffer;
-    PrimitiveCount* primitiveCountBuffer;
-};
-
 [shader("compute")]
 [numthreads(64, 1, 1)]
 void computeVisibility(uniform VisibilityPushConstant pushConstant, uint3 dtid : SV_DispatchThreadID)
@@ -62,13 +42,6 @@ void computeVisibility(uniform VisibilityPushConstant pushConstant, uint3 dtid :
 // =============== Compute Shader (Accumulation to determine offset of each instance) ===============
 // Note: This is a simple single threaded prefix sum implementation. It is unlikely to be the real bottleneck of the packed instance buffer generation.
 //     If needed, expand this with multi-pass complex GPU prefix sum and intermediate buffers.
-struct PrefixSumPushConstant {
-    // Read-Write
-    PrimitiveCount* primitiveCountBuffer;
-
-    // Read-Only
-    uint32_t highestPrimitiveIndex;
-};
 
 [shader("compute")]
 [numthreads(1, 1, 1)]
@@ -81,43 +54,6 @@ void computePrefixSum(uniform PrefixSumPushConstant pushConstant) {
 }
 
 // =============== Compute Shader (Instance Draw buffer write) ===============
-struct InstancedMeshIndirectDrawParameters {
-    // indirect parameters
-    uint32_t groupCountX;
-    uint32_t groupCountY; // offset
-    uint32_t groupCountZ;
-    uint32_t compactedInstanceStart;
-
-    uint32_t meshletOffset;
-    uint32_t meshletCount;
-    uint32_t padding1;
-    uint32_t padding2;
-};
-
-struct InstancedMeshIndirectParameterBuffer {
-    Atomic<uint32_t> meshIndirectCount;
-    uint32_t padding0;
-    uint32_t padding1;
-    uint32_t padding2;
-    InstancedMeshIndirectDrawParameters[] parameters;
-}
-
-struct IndirectWritePushConstant {
-    // Read-Only
-    SceneData* sceneData;
-    MeshletPrimitive* primitiveBuffer;
-    Model* modelBuffer;
-    Instance* instanceBuffer;
-
-    uint32_t* packedVisibilityBuffer;
-    uint32_t* instanceOffsetBuffer;
-    PrimitiveCount* primitiveCountBuffer;
-    // Read-Write
-    // todo: packed doesn't need bIsAllocated, can be optimized
-    Instance* compactedInstanceBuffer;
-    InstancedMeshIndirectParameterBuffer* indirectBuffer;
-};
-
 const static int32_t TASK_SHADER_DISPATCH_X = 64;
 
 [shader("compute")]

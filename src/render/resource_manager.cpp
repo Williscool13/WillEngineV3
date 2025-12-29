@@ -52,19 +52,20 @@ ResourceManager::ResourceManager(VulkanContext* context)
     for (int32_t i = 0; i < frameResources.size(); ++i) {
         bufferInfo.size = sizeof(SceneData);
         frameResources[i].sceneDataBuffer = std::move(AllocatedBuffer::CreateAllocatedBuffer(context, bufferInfo, vmaAllocInfo));
+        frameResources[i].sceneDataBuffer.SetDebugName(("sceneData_" + std::to_string(i)).c_str());
 
         bufferInfo.size = BINDLESS_INSTANCE_BUFFER_SIZE;
         frameResources[i].instanceBuffer = std::move(AllocatedBuffer::CreateAllocatedBuffer(context, bufferInfo, vmaAllocInfo));
-        frameResources[i].instanceBuffer.SetDebugName(fmt::format("Instance Buffer {}", i).c_str());
+        frameResources[i].instanceBuffer.SetDebugName(("instanceBuffer_" + std::to_string(i)).c_str());
         bufferInfo.size = BINDLESS_MODEL_BUFFER_SIZE;
         frameResources[i].modelBuffer = std::move(AllocatedBuffer::CreateAllocatedBuffer(context, bufferInfo, vmaAllocInfo));
-        frameResources[i].modelBuffer.SetDebugName(fmt::format("Model Buffer {}", i).c_str());
+        frameResources[i].modelBuffer.SetDebugName(("modelBuffer_" + std::to_string(i)).c_str());
         bufferInfo.size = BINDLESS_MODEL_BUFFER_SIZE;
         frameResources[i].jointMatrixBuffer = std::move(AllocatedBuffer::CreateAllocatedBuffer(context, bufferInfo, vmaAllocInfo));
-        frameResources[i].jointMatrixBuffer.SetDebugName(fmt::format("Joint Matrix Buffer {}", i).c_str());
+        frameResources[i].jointMatrixBuffer.SetDebugName(("jointMatrixBuffer_" + std::to_string(i)).c_str());
         bufferInfo.size = BINDLESS_MATERIAL_BUFFER_SIZE;
         frameResources[i].materialBuffer = std::move(AllocatedBuffer::CreateAllocatedBuffer(context, bufferInfo, vmaAllocInfo));
-        frameResources[i].materialBuffer.SetDebugName(fmt::format("Material Buffer {}", i).c_str());
+        frameResources[i].materialBuffer.SetDebugName(("materialBuffer_" + std::to_string(i)).c_str());
     }
 
     bindlessSamplerTextureDescriptorBuffer = BindlessResourcesSamplerImages(context);

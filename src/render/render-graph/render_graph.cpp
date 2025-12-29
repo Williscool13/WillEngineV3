@@ -18,6 +18,7 @@ RenderGraph::RenderGraph(VulkanContext* context, ResourceManager* resourceManage
     : context(context), resourceManager(resourceManager)
 {
     textures.reserve(MAX_TEXTURES);
+    importedBuffers.reserve(32);
     physicalResources.reserve(MAX_TEXTURES);
 }
 
@@ -463,18 +464,6 @@ void RenderGraph::Reset()
             ++it;
         }
     }
-
-    for (auto it = importedBuffers.begin(); it != importedBuffers.end();) {
-        if (--it->second.lifetime == 0) {
-            auto& phys = physicalResources[it->second.physicalIndex];
-            phys.buffer = VK_NULL_HANDLE;
-            phys.bIsImported = false;
-            it = importedBuffers.erase(it);
-        }
-        else {
-            ++it;
-        }
-    }
 }
 
 void RenderGraph::InvalidateAll()
@@ -517,6 +506,9 @@ void RenderGraph::ImportTexture(const std::string& name,
             assert(phys.dimensions.width == info.width && "Reimported image width mismatch");
             assert(phys.dimensions.height == info.height && "Reimported image height mismatch");
 
+            // Imported textures need:
+            //   1. Unique names per FIF
+            //   2. Remain alive as a descriptor for more than 1 frame
             it->second.lifetime = IMPORTED_RESOURCES_PHYSICAL_LIFETIME;
         }
         else {
@@ -550,27 +542,30 @@ void RenderGraph::ImportTexture(const std::string& name,
     tex->finalLayout = finalLayout;
 }
 
-void RenderGraph::ImportBuffer(const std::string& name, VkBuffer buffer, const BufferInfo& info, VkPipelineStageFlags2 initialStage)
+void RenderGraph::ImportBuffer(const std::string& name, VkBuffer buffer, VkDeviceAddress address, const BufferInfo& info, VkPipelineStageFlags2 initialStage)
 {
     BufferResource* buf = GetOrCreateBuffer(name);
     buf->bufferInfo = info;
 
     if (!buf->HasPhysical()) {
-        auto it = importedBuffers.find(buffer);
+        auto it = importedBuffers.find(name);
         if (it != importedBuffers.end()) {
-            buf->physicalIndex = it->second.physicalIndex;
-            auto& phys = physicalResources[it->second.physicalIndex];
+            buf->physicalIndex = it->second;
+            auto& phys = physicalResources[it->second];
             assert(phys.dimensions.bufferSize == info.size && "Reimported buffer size mismatch");
             assert(phys.dimensions.bufferUsage == info.usage && "Reimported buffer usage mismatch");
-            it->second.lifetime = IMPORTED_RESOURCES_PHYSICAL_LIFETIME;
+            phys.buffer = buffer;
+            phys.bufferAddress = address;
+            phys.addressRetrieved = true;
         }
         else {
             buf->physicalIndex = physicalResources.size();
             physicalResources.emplace_back();
-            importedBuffers[buffer] = {buf->physicalIndex, IMPORTED_RESOURCES_PHYSICAL_LIFETIME};
+            importedBuffers[name] = {buf->physicalIndex};
 
             auto& phys = physicalResources[buf->physicalIndex];
             phys.buffer = buffer;
+            phys.bufferAddress = address;
             phys.bIsImported = true;
 
             phys.dimensions.type = ResourceDimensions::Type::Buffer;

@@ -70,6 +70,7 @@ add_library(render STATIC
         pipelines/compute_pipeline.cpp
         pipelines/compute_pipeline.h
         shaders/push_constant_interop.h
+        shaders/instancing_interop.h
 )
 
 target_include_directories(render PRIVATE

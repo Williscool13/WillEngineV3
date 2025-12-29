@@ -214,17 +214,33 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
     });
 
-    BufferInfo sceneBufferInfo = {
-        .size = sizeof(SceneData),
-        .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
-    };
+    graph->ImportBuffer("vertexBuffer", resourceManager->megaVertexBuffer.handle, resourceManager->megaVertexBuffer.address,
+                        {resourceManager->megaVertexBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT}, VK_PIPELINE_STAGE_2_NONE);
+    graph->ImportBuffer("skinnedVertexBuffer", resourceManager->megaSkinnedVertexBuffer.handle, resourceManager->megaSkinnedVertexBuffer.address,
+                        {resourceManager->megaSkinnedVertexBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT}, VK_PIPELINE_STAGE_2_NONE);
+    graph->ImportBuffer("meshletVertexBuffer", resourceManager->megaMeshletVerticesBuffer.handle, resourceManager->megaMeshletVerticesBuffer.address,
+                        {resourceManager->megaMeshletVerticesBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT}, VK_PIPELINE_STAGE_2_NONE);
+    graph->ImportBuffer("meshletTriangleBuffer", resourceManager->megaMeshletTrianglesBuffer.handle, resourceManager->megaMeshletTrianglesBuffer.address,
+                        {resourceManager->megaMeshletTrianglesBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT}, VK_PIPELINE_STAGE_2_NONE);
+    graph->ImportBuffer("meshletBuffer", resourceManager->megaMeshletBuffer.handle, resourceManager->megaMeshletBuffer.address,
+                        {resourceManager->megaMeshletBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT}, VK_PIPELINE_STAGE_2_NONE);
+    graph->ImportBuffer("primitiveBuffer", resourceManager->primitiveBuffer.handle, resourceManager->primitiveBuffer.address,
+                        {resourceManager->primitiveBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT}, VK_PIPELINE_STAGE_2_NONE);
+    graph->ImportBuffer("sceneData", frameResource.sceneDataBuffer.handle, frameResource.sceneDataBuffer.address,
+                        {frameResource.sceneDataBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT}, VK_PIPELINE_STAGE_2_NONE);
+    graph->ImportBuffer("instanceBuffer", frameResource.instanceBuffer.handle, frameResource.instanceBuffer.address,
+                        {frameResource.instanceBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT}, VK_PIPELINE_STAGE_2_NONE);
+    graph->ImportBuffer("modelBuffer", frameResource.modelBuffer.handle, frameResource.modelBuffer.address,
+                        {frameResource.modelBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT}, VK_PIPELINE_STAGE_2_NONE);
+    graph->ImportBuffer("jointMatrixBuffer", frameResource.jointMatrixBuffer.handle, frameResource.jointMatrixBuffer.address,
+                        {frameResource.jointMatrixBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT}, VK_PIPELINE_STAGE_2_NONE);
+    graph->ImportBuffer("materialBuffer", frameResource.materialBuffer.handle, frameResource.materialBuffer.address,
+                        {frameResource.materialBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT}, VK_PIPELINE_STAGE_2_NONE);
 
-    std::string sceneDataName = "sceneData_" + std::to_string(currentFrameIndex);
-    graph->ImportBuffer(sceneDataName, currentSceneDataBuffer.handle, sceneBufferInfo, VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
     RenderPass& colorPass = graph->AddPass("MainRender");
     colorPass.WriteColorAttachment("drawImage");
-    colorPass.WriteDepthAttachment("depthTarget", {VK_FORMAT_D32_SFLOAT,renderExtent[0],renderExtent[1]});
-    colorPass.ReadBuffer(sceneDataName, VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
+    colorPass.WriteDepthAttachment("depthTarget", {VK_FORMAT_D32_SFLOAT, renderExtent[0], renderExtent[1]});
+    colorPass.ReadBuffer("sceneData", VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
     colorPass.Execute([&](VkCommandBuffer cmd) {
         const VkRenderingAttachmentInfo colorAttachment = VkHelpers::RenderingAttachmentInfo(graph->GetImageView("drawImage"), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
         constexpr VkClearValue depthClear = {.depthStencil = {0.0f, 0u}};
@@ -237,7 +253,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
 
         BasicRenderPushConstant pushData{
             .modelMatrix = glm::mat4(1.0f),
-            .sceneData = graph->GetBufferAddress(sceneDataName),
+            .sceneData = graph->GetBufferAddress("sceneData"),
         };
 
         vkCmdPushConstants(cmd, basicRenderPipeline.pipelineLayout.handle, VK_SHADER_STAGE_MESH_BIT_EXT, 0, sizeof(BasicRenderPushConstant), &pushData);
@@ -250,7 +266,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         RenderPass& meshPass = graph->AddPass("MeshRender");
         meshPass.WriteColorAttachment("drawImage");
         meshPass.WriteDepthAttachment("depthTarget");
-        meshPass.ReadBuffer(sceneDataName, VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
+        meshPass.ReadBuffer("sceneData", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
 
         meshPass.Execute([&](VkCommandBuffer cmd) {
             const VkRenderingAttachmentInfo colorAttachment = VkHelpers::RenderingAttachmentInfo(graph->GetImageView("drawImage"), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
@@ -268,7 +284,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
 
             for (Engine::InstanceHandle& instance : frameBuffer.mainViewFamily.instances) {
                 MeshShaderPushConstants pushConstants{
-                    .sceneData = graph->GetBufferAddress(sceneDataName),
+                    .sceneData = graph->GetBufferAddress("sceneData"),
                     .vertexBuffer = resourceManager->megaVertexBuffer.address,
                     .primitiveBuffer = resourceManager->primitiveBuffer.address,
                     .meshletVerticesBuffer = resourceManager->megaMeshletVerticesBuffer.address,

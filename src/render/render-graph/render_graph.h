@@ -48,7 +48,7 @@ public:
 
     void ImportTexture(const std::string& name, VkImage image, VkImageView view, const TextureInfo& info, VkImageUsageFlags usage, VkImageLayout initialLayout, VkPipelineStageFlags2 initialStage, VkImageLayout finalLayout);
 
-    void ImportBuffer(const std::string& name, VkBuffer buffer, const BufferInfo& info, VkPipelineStageFlags2 initialStage);
+    void ImportBuffer(const std::string& name, VkBuffer buffer, VkDeviceAddress address, const BufferInfo& info, VkPipelineStageFlags2 initialStage);
 
 
     VkImage GetImage(const std::string& name);
@@ -87,14 +87,8 @@ private:
     };
 
     std::unordered_map<VkImage, ImportedImageInfo> importedImages;
-
-    struct ImportedBufferInfo
-    {
-        uint32_t physicalIndex;
-        uint32_t lifetime;
-    };
-
-    std::unordered_map<VkBuffer, ImportedBufferInfo> importedBuffers;
+    // name : physicalIndex
+    std::unordered_map<std::string, uint32_t> importedBuffers;
 
     // Render passes
     std::vector<std::unique_ptr<RenderPass> > passes;
