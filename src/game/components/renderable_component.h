@@ -9,15 +9,19 @@
 
 namespace Game
 {
+
+struct PrimitiveData
+{
+    uint32_t primitiveIndex;
+    Engine::MaterialID materialID;
+};
+
 struct RenderableComponent
 {
-    Engine::ModelHandle modelEntry;
-    Engine::InstanceHandle instanceEntry;
-    Engine::MaterialHandle materialEntry;
-
     glm::vec4 modelFlags;
-    Instance instance;
-    MaterialProperties material;
+
+    std::array<PrimitiveData, 64> primitives;
+    uint8_t primitiveCount = 0;
 };
 }
 #endif //WILL_ENGINE_RENDERABLE_COMPONENT_H

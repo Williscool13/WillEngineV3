@@ -23,7 +23,7 @@ struct EngineContext;
 
 namespace Game::System
 {
-void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer, const Render::FrameResources* frameResources);
+void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer);
 } // Game
 
 #endif //WILL_ENGINE_GATHER_RENDERABLES_COMPONENT_H

@@ -27,13 +27,13 @@ enum class MaterialType
 struct PrimitiveProperty
 {
     uint32_t index;
-    uint32_t materialIndex;
+    int32_t materialIndex;
 };
 
 struct MeshInformation
 {
     std::string name;
-    std::vector<PrimitiveProperty> primitiveIndices;
+    std::vector<PrimitiveProperty> primitiveProperties;
 };
 
 struct Node

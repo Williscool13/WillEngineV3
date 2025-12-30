@@ -11,12 +11,9 @@
 
 #include "core/allocators/handle.h"
 #include "core/time/time_frame.h"
+#include "engine/material_manager.h"
 #include "render/shaders/model_interop.h"
 
-namespace Engine
-{
-using InstanceHandle = Core::Handle<Instance>;
-}
 
 namespace Core
 {
@@ -41,10 +38,18 @@ struct RenderView
 struct ViewFamily {
     std::vector<RenderView> views;
 
-    std::vector<Engine::InstanceHandle> instances;
+    std::vector<glm::mat4> modelMatrices;
+
+    struct InstanceData {
+        uint32_t primitiveIndex;
+        Engine::MaterialID materialID;
+        uint32_t modelIndex;
+        uint32_t gpuMaterialIndex;
+    };
+    std::vector<InstanceData> instances;
+
+    std::vector<MaterialProperties> materials;
     // std::vector<LightInstance> allLights;
-    // std::vector<ModelInstance> modelMatrices;
-    // std::vector<MaterialInstance> materials;
 };
 
 struct BufferAcquireOperation

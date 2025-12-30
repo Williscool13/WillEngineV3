@@ -59,10 +59,10 @@ GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::GameState* state)
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
 }
 
-GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer, Render::FrameResources* frameResources)
+GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer)
 {
     Game::System::BuildViewFamily(state, frameBuffer->mainViewFamily);
-    Game::System::GatherRenderables(ctx, state, frameBuffer, frameResources);
+    Game::System::GatherRenderables(ctx, state, frameBuffer);
 }
 
 

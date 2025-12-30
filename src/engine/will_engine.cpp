@@ -166,7 +166,6 @@ void WillEngine::Run()
         if (exit) {
             assetLoadThread->RequestShutdown();
             renderThread->RequestShutdown();
-            engineRenderSynchronization->renderFrames.release();
             break;
         }
 
@@ -214,7 +213,6 @@ void WillEngine::Run()
             timeManager->UpdateRender();
 
             Core::FrameBuffer& currentFrameBuffer = engineRenderSynchronization->frameBuffers[frameBufferIndex];
-            Render::FrameResources& currentFrameResources = renderThread->GetResourceManager()->frameResources[frameBufferIndex];
             stagingFrameBuffer.currentFrameBuffer = frameBufferIndex;
             stagingFrameBuffer.swapchainRecreateCommand.bIsMinimized = bMinimized;
             if (bRequireSwapchainRecreate) {
@@ -231,9 +229,13 @@ void WillEngine::Run()
                 stagingFrameBuffer.swapchainRecreateCommand.bEngineCommandsRecreate = false;
             }
 
-            gameFunctions.gamePrepareFrame(engineContext.get(), gameState.get(), &stagingFrameBuffer, &currentFrameResources);
+            gameFunctions.gamePrepareFrame(engineContext.get(), gameState.get(), &stagingFrameBuffer);
 
             std::swap(currentFrameBuffer, stagingFrameBuffer);
+            stagingFrameBuffer.mainViewFamily.modelMatrices.clear();
+            stagingFrameBuffer.mainViewFamily.instances.clear();
+            stagingFrameBuffer.mainViewFamily.materials.clear();
+            stagingFrameBuffer.mainViewFamily.views.clear();
             stagingFrameBuffer.bufferAcquireOperations.clear();
             stagingFrameBuffer.imageAcquireOperations.clear();
             stagingFrameBuffer.timeFrame = timeManager->GetTime();

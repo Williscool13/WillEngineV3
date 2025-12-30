@@ -74,13 +74,13 @@ void ReadDynamicVector(const uint8_t*& data, std::vector<T>& vec)
 inline void WriteMeshInformation(std::ofstream& file, const MeshInformation& mesh)
 {
     WriteString(file, mesh.name);
-    WriteDynamicVector(file, mesh.primitiveIndices);
+    WriteDynamicVector(file, mesh.primitiveProperties);
 }
 
 inline void ReadMeshInformation(const uint8_t*& data, MeshInformation& mesh)
 {
     ReadString(data, mesh.name);
-    ReadDynamicVector(data, mesh.primitiveIndices);
+    ReadDynamicVector(data, mesh.primitiveProperties);
 }
 
 inline void WriteNode(std::ofstream& file, const Node& node)

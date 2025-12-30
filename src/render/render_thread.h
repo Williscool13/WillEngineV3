@@ -113,6 +113,7 @@ private:
     std::unique_ptr<RenderGraph> graph{};
 
     std::array<RenderSynchronization, Core::FRAME_BUFFER_COUNT> frameSynchronization;
+    std::array<FrameResources, Core::FRAME_BUFFER_COUNT> frameResources;
 
     std::vector<VkBufferMemoryBarrier2> tempBufferBarriers;
     std::vector<VkImageMemoryBarrier2> tempImageBarriers;

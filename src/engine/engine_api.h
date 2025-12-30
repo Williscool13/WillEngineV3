@@ -9,6 +9,8 @@
 #include <Jolt/Jolt.h>
 #include <Jolt/Physics/Body/BodyID.h>
 
+#include "game/systems/debug_system.h"
+
 namespace Core
 {
 struct TimeFrame;
@@ -27,6 +29,9 @@ struct GameState
     float physicsDeltaTimeAccumulator = 0.0f;
     float physicsInterpolationAlpha = 0.0f;
     std::map<JPH::BodyID, entt::entity> bodyToEntity;
+
+    // Debug
+    Game::DebugData debugData;
 };
 
 class EngineAPI

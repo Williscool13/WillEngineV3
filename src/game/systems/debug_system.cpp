@@ -62,43 +62,28 @@ void CreateBox(Core::EngineContext* ctx, Engine::GameState* state, glm::vec3 pos
         return;
     }
 
-    auto& modelAllocator = ctx->assetManager->GetModelAllocator();
-    auto& instanceAllocator = ctx->assetManager->GetInstanceAllocator();
-    auto& materialAllocator = ctx->assetManager->GetMaterialAllocator();
-
-    Engine::ModelHandle modelEntry = modelAllocator.Add();
-    Engine::InstanceHandle instanceEntry = instanceAllocator.Add();
-    Engine::MaterialHandle materialEntry = materialAllocator.Add();
-
-    if (!modelEntry.IsValid() || !instanceEntry.IsValid() || !materialEntry.IsValid()) {
-        SPDLOG_ERROR("[DebugSystem] Failed to allocate GPU slots");
-        modelAllocator.Remove(modelEntry);
-        instanceAllocator.Remove(instanceEntry);
-        materialAllocator.Remove(materialEntry);
-        return;
-    }
-
     RenderableComponent renderable{};
-    renderable.modelEntry = modelEntry;
-    renderable.instanceEntry = instanceEntry;
-    renderable.materialEntry = materialEntry;
+    Engine::MaterialManager& materialManager = ctx->assetManager->GetMaterialManager();
+    Render::MeshInformation& submesh = model->modelData.meshes[0];
+
+    for (size_t i = 0; i < submesh.primitiveProperties.size(); ++i) {
+        Render::PrimitiveProperty& primitive = submesh.primitiveProperties[i];
+
+        Engine::MaterialID matID;
+        if (primitive.materialIndex == -1) {
+            matID = materialManager.GetDefaultMaterial();
+        }
+        else {
+            matID = materialManager.GetOrCreate(model->modelData.materials[primitive.materialIndex]);
+        }
+
+        renderable.primitives[i] = {
+            .primitiveIndex = primitive.index,
+            .materialID = matID
+        };
+    }
+    renderable.primitiveCount = submesh.primitiveProperties.size();
     renderable.modelFlags = glm::vec4(0.0f);
-
-    renderable.instance.primitiveIndex = model->modelData.meshes[0].primitiveIndices[0].index;
-    renderable.instance.modelIndex = modelEntry.index;
-    renderable.instance.materialIndex = materialEntry.index;
-    renderable.instance.jointMatrixOffset = 0;
-    renderable.instance.bIsAllocated = 1;
-
-    if (model->modelData.materials.empty()) {
-        renderable.material = MaterialProperties{};
-        renderable.material.colorFactor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
-        renderable.material.metalRoughFactors = {0.0f, 1.0f, 0.0f, 0.0f};
-    }
-    else {
-        renderable.material = model->modelData.materials[0];
-        renderable.material.textureImageIndices.x = 3;
-    }
 
     entt::entity boxEntity = state->registry.create();
     state->registry.emplace<RenderableComponent>(boxEntity, renderable);
@@ -142,44 +127,28 @@ entt::entity CreateStaticBox(Core::EngineContext* ctx, Engine::GameState* state,
         return entt::null;
     }
 
-    auto& modelAllocator = ctx->assetManager->GetModelAllocator();
-    auto& instanceAllocator = ctx->assetManager->GetInstanceAllocator();
-    auto& materialAllocator = ctx->assetManager->GetMaterialAllocator();
-
-    Engine::ModelHandle modelEntry = modelAllocator.Add();
-    Engine::InstanceHandle instanceEntry = instanceAllocator.Add();
-    Engine::MaterialHandle materialEntry = materialAllocator.Add();
-
-    if (!modelEntry.IsValid() || !instanceEntry.IsValid() || !materialEntry.IsValid()) {
-        SPDLOG_ERROR("[CreateStaticBox] Failed to allocate GPU slots");
-        modelAllocator.Remove(modelEntry);
-        instanceAllocator.Remove(instanceEntry);
-        materialAllocator.Remove(materialEntry);
-        return entt::null;
-    }
-
     RenderableComponent renderable{};
-    renderable.modelEntry = modelEntry;
-    renderable.instanceEntry = instanceEntry;
-    renderable.materialEntry = materialEntry;
+    Engine::MaterialManager& materialManager = ctx->assetManager->GetMaterialManager();
+    Render::MeshInformation& submesh = model->modelData.meshes[0];
+
+    for (size_t i = 0; i < submesh.primitiveProperties.size(); ++i) {
+        Render::PrimitiveProperty& primitive = submesh.primitiveProperties[i];
+
+        Engine::MaterialID matID;
+        if (primitive.materialIndex == -1) {
+            matID = materialManager.GetDefaultMaterial();
+        }
+        else {
+            matID = materialManager.GetOrCreate(model->modelData.materials[primitive.materialIndex]);
+        }
+
+        renderable.primitives[i] = {
+            .primitiveIndex = primitive.index,
+            .materialID = matID
+        };
+    }
+    renderable.primitiveCount = submesh.primitiveProperties.size();
     renderable.modelFlags = glm::vec4(0.0f);
-
-    renderable.instance.primitiveIndex = model->modelData.meshes[0].primitiveIndices[0].index;
-    renderable.instance.modelIndex = modelEntry.index;
-    renderable.instance.materialIndex = materialEntry.index;
-    renderable.instance.jointMatrixOffset = 0;
-    renderable.instance.bIsAllocated = 1;
-
-    if (model->modelData.materials.empty()) {
-        renderable.material = MaterialProperties{};
-        renderable.material.colorFactor = color;
-        renderable.material.metalRoughFactors = {0.0f, 1.0f, 0.0f, 0.0f};
-    }
-    else {
-        renderable.material = model->modelData.materials[0];
-        renderable.material.textureImageIndices.x = AssetLoad::ERROR_IMAGE_BINDLESS_INDEX;
-        renderable.material.textureSamplerIndices.x = AssetLoad::DEFAULT_SAMPLER_BINDLESS_INDEX;
-    }
 
     // Create entity
     entt::entity entity = state->registry.create();
@@ -242,7 +211,8 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         for (auto [entity, debugViewComponent] : view.each()) {
             if (debugViewComponent.debugIndex != 1) {
                 debugViewComponent.debugIndex = 1;
-            } else {
+            }
+            else {
                 debugViewComponent.debugIndex = 0;
             }
         }

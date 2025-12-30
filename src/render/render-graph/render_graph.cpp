@@ -651,6 +651,7 @@ void RenderGraph::InvalidateAll()
         DestroyPhysicalResource(physicalResource);
     }
     physicalResources.clear();
+    transientImageHandleAllocator.Clear();
 }
 
 void RenderGraph::CreateBuffer(const std::string& name, VkDeviceSize size)

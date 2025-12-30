@@ -475,12 +475,12 @@ RawGltfModel AssetGenerator::LoadGltf(const std::filesystem::path& source)
     for (fastgltf::Mesh& mesh : gltf.meshes) {
         MeshInformation meshData{};
         meshData.name = mesh.name;
-        meshData.primitiveIndices.reserve(mesh.primitives.size());
+        meshData.primitiveProperties.reserve(mesh.primitives.size());
         rawModel.primitives.reserve(rawModel.primitives.size() + mesh.primitives.size());
 
         for (fastgltf::Primitive& p : mesh.primitives) {
             MeshletPrimitive primitiveData{};
-            uint32_t materialIndex{0};
+            int32_t materialIndex{-1};
 
             if (p.materialIndex.has_value()) {
                 materialIndex = p.materialIndex.value();
@@ -647,7 +647,7 @@ RawGltfModel AssetGenerator::LoadGltf(const std::filesystem::path& source)
             primitiveData.meshletCount = meshlets.size();
             primitiveData.boundingSphere = GenerateBoundingSphere(primitiveVertices);
 
-            meshData.primitiveIndices.emplace_back(rawModel.primitives.size(), materialIndex);
+            meshData.primitiveProperties.emplace_back(rawModel.primitives.size(), materialIndex);
             rawModel.primitives.push_back(primitiveData);
 
             uint32_t vertexOffset = rawModel.vertices.size();

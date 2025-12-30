@@ -4,22 +4,18 @@
 
 #include "gather_renderables_component.h"
 
+#include "core/include/engine_context.h"
 #include "engine/engine_api.h"
 #include "game/components/renderable_component.h"
 #include "game/components/transform_component.h"
 #include "game/components/physics/dynamic_physics_body_component.h"
-#include "render/frame_resources.h"
-#include "render/shaders/model_interop.h"
 
 
 namespace Game::System
 {
-void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer, const Render::FrameResources* frameResources)
+void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer)
 {
-    auto instanceBuffer = static_cast<Instance*>(frameResources->instanceBuffer.allocationInfo.pMappedData);
-    auto modelBuffer = static_cast<Model*>(frameResources->modelBuffer.allocationInfo.pMappedData);
-    auto materialBuffer = static_cast<MaterialProperties*>(frameResources->materialBuffer.allocationInfo.pMappedData);
-
+    auto& materialManager = ctx->assetManager->GetMaterialManager();
     const auto view = state->registry.view<RenderableComponent, TransformComponent>();
 
     for (const auto& [entity, renderable, transform] : view.each()) {
@@ -29,22 +25,33 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
             float alpha = state->physicsInterpolationAlpha;
             glm::vec3 interpPos = glm::mix(physics->previousPosition, transform.translation, alpha);
             glm::quat interpRot = glm::slerp(physics->previousRotation, transform.rotation, alpha);
-
             currentMatrix = glm::translate(glm::mat4(1.0f), interpPos) * glm::mat4_cast(interpRot);
         }
         else {
             currentMatrix = GetMatrix(transform);
         }
 
-        modelBuffer[renderable.modelEntry.index] = {
-            currentMatrix, // current frame
-            currentMatrix, // previous frame todo: add later
-            renderable.modelFlags
-        };
-        instanceBuffer[renderable.instanceEntry.index] = renderable.instance;
-        materialBuffer[renderable.materialEntry.index] = renderable.material;
+        frameBuffer->mainViewFamily.modelMatrices.push_back(currentMatrix);
+        uint32_t modelIndex = frameBuffer->mainViewFamily.modelMatrices.size() - 1;
 
-        frameBuffer->mainViewFamily.instances.push_back(renderable.instanceEntry);
+        for (uint8_t i = 0; i < renderable.primitiveCount; ++i) {
+            auto& prim = renderable.primitives[i];
+            frameBuffer->mainViewFamily.instances.push_back({
+                .primitiveIndex = prim.primitiveIndex,
+                .materialID = prim.materialID,
+                .modelIndex = modelIndex
+            });
+        }
+    }
+
+    std::unordered_map<Engine::MaterialID, uint32_t> materialRemap;
+    for (auto& instance : frameBuffer->mainViewFamily.instances) {
+        if (!materialRemap.contains(instance.materialID)) {
+            uint32_t gpuIndex = frameBuffer->mainViewFamily.materials.size();
+            materialRemap[instance.materialID] = gpuIndex;
+            frameBuffer->mainViewFamily.materials.push_back(materialManager.Get(instance.materialID));
+        }
+        instance.gpuMaterialIndex = materialRemap[instance.materialID];
     }
 }
 }

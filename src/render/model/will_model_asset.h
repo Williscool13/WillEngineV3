@@ -19,7 +19,6 @@ struct WillModel;
 namespace Engine
 {
 using WillModelHandle = Core::Handle<Render::WillModel>;
-using MaterialHandle = Core::Handle<MaterialProperties>;
 }
 
 namespace Render

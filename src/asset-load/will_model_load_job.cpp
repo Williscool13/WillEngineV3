@@ -122,7 +122,7 @@ bool WillModelLoadJob::PreThreadExecute()
 
     uint32_t primitiveOffsetCount = outputModel->modelData.primitiveAllocation.offset / sizeof(MeshletPrimitive);
     for (auto& mesh : rawData.allMeshes) {
-        for (auto& primitiveIndex : mesh.primitiveIndices) {
+        for (auto& primitiveIndex : mesh.primitiveProperties) {
             primitiveIndex.index += primitiveOffsetCount;
         }
     }

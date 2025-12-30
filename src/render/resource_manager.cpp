@@ -45,29 +45,6 @@ ResourceManager::ResourceManager(VulkanContext* context)
     primitiveBuffer = AllocatedBuffer::CreateAllocatedBuffer(context, bufferInfo, vmaAllocInfo);
     primitiveBuffer.SetDebugName("Mega Primitive Buffer");
 
-    bufferInfo.usage = VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT;
-    vmaAllocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
-    vmaAllocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
-
-    for (int32_t i = 0; i < frameResources.size(); ++i) {
-        bufferInfo.size = sizeof(SceneData);
-        frameResources[i].sceneDataBuffer = std::move(AllocatedBuffer::CreateAllocatedBuffer(context, bufferInfo, vmaAllocInfo));
-        frameResources[i].sceneDataBuffer.SetDebugName(("sceneData_" + std::to_string(i)).c_str());
-
-        bufferInfo.size = BINDLESS_INSTANCE_BUFFER_SIZE;
-        frameResources[i].instanceBuffer = std::move(AllocatedBuffer::CreateAllocatedBuffer(context, bufferInfo, vmaAllocInfo));
-        frameResources[i].instanceBuffer.SetDebugName(("instanceBuffer_" + std::to_string(i)).c_str());
-        bufferInfo.size = BINDLESS_MODEL_BUFFER_SIZE;
-        frameResources[i].modelBuffer = std::move(AllocatedBuffer::CreateAllocatedBuffer(context, bufferInfo, vmaAllocInfo));
-        frameResources[i].modelBuffer.SetDebugName(("modelBuffer_" + std::to_string(i)).c_str());
-        bufferInfo.size = BINDLESS_MODEL_BUFFER_SIZE;
-        frameResources[i].jointMatrixBuffer = std::move(AllocatedBuffer::CreateAllocatedBuffer(context, bufferInfo, vmaAllocInfo));
-        frameResources[i].jointMatrixBuffer.SetDebugName(("jointMatrixBuffer_" + std::to_string(i)).c_str());
-        bufferInfo.size = BINDLESS_MATERIAL_BUFFER_SIZE;
-        frameResources[i].materialBuffer = std::move(AllocatedBuffer::CreateAllocatedBuffer(context, bufferInfo, vmaAllocInfo));
-        frameResources[i].materialBuffer.SetDebugName(("materialBuffer_" + std::to_string(i)).c_str());
-    }
-
     bindlessSamplerTextureDescriptorBuffer = BindlessResourcesSamplerImages(context);
     bindlessRDGTransientDescriptorBuffer = BindlessTransientRDGResourcesDescriptorBuffer<8, 128, 128>(context);
 

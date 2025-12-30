@@ -7,11 +7,6 @@
 
 #include "engine_context.h"
 
-namespace Render
-{
-struct FrameResources;
-}
-
 namespace Engine
 {
 struct GameState;
@@ -24,7 +19,7 @@ struct FrameBuffer;
 using GameStartUpFunc = void(*)(EngineContext*, Engine::GameState*);
 using GameLoadFunc = void(*)(EngineContext*, Engine::GameState*);
 using GameUpdateFunc = void(*)(EngineContext*, Engine::GameState*);
-using GamePrepareFrameFunc = void(*)(EngineContext*, Engine::GameState*, FrameBuffer*, Render::FrameResources*);
+using GamePrepareFrameFunc = void(*)(EngineContext*, Engine::GameState*, FrameBuffer*);
 using GameUnloadFunc = void(*)(EngineContext*, Engine::GameState*);
 using GameShutdownFunc = void(*)(EngineContext*, Engine::GameState*);
 
@@ -34,7 +29,7 @@ void StubLoad(EngineContext* ctx, Engine::GameState* state);
 
 void StubUpdate(EngineContext* ctx, Engine::GameState* state);
 
-void StubPrepareFrame(EngineContext* ctx, Engine::GameState* state, FrameBuffer* frameBuffer, Render::FrameResources* frameResources);
+void StubPrepareFrame(EngineContext* ctx, Engine::GameState* state, FrameBuffer* frameBuffer);
 
 void StubUnload(EngineContext* ctx, Engine::GameState* state);
 
@@ -100,7 +95,7 @@ GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::GameState* state);
  * @param state
  * @param frameBuffer
  */
-GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer, Render::FrameResources* frameResources);
+GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer);
 
 /**
  * Called before unloading DLL during hot-reload. Clean up DLL-specific resources.

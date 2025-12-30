@@ -9,6 +9,8 @@ add_library(engine STATIC
         asset_manager.h
         asset_manager_config.h
         asset_manager_types.h
+        material_manager.cpp
+        material_manager.h
 )
 
 target_include_directories(engine PRIVATE

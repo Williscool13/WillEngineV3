@@ -5,6 +5,9 @@
 #ifndef WILL_ENGINE_DEBUG_SYSTEM_H
 #define WILL_ENGINE_DEBUG_SYSTEM_H
 #include <cstdint>
+#include <vector>
+
+#include "engine/material_manager.h"
 
 namespace Render
 {
@@ -27,6 +30,11 @@ namespace Game
 struct RenderDebugViewComponent
 {
     uint32_t debugIndex;
+};
+
+struct DebugData
+{
+    std::vector<Engine::MaterialID> materials;
 };
 }
 

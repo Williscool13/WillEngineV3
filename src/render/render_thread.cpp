@@ -48,6 +48,32 @@ RenderThread::RenderThread(Core::FrameSync* engineRenderSynchronization, enki::T
         frameSync.Initialize();
     }
 
+    VkBufferCreateInfo bufferInfo = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+    bufferInfo.pNext = nullptr;
+    bufferInfo.usage = VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT;
+    VmaAllocationCreateInfo vmaAllocInfo = {};
+    vmaAllocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
+    vmaAllocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+
+    for (int32_t i = 0; i < frameResources.size(); ++i) {
+        bufferInfo.size = sizeof(SceneData);
+        frameResources[i].sceneDataBuffer = std::move(AllocatedBuffer::CreateAllocatedBuffer(context.get(), bufferInfo, vmaAllocInfo));
+        frameResources[i].sceneDataBuffer.SetDebugName(("sceneData_" + std::to_string(i)).c_str());
+
+        bufferInfo.size = BINDLESS_INSTANCE_BUFFER_SIZE;
+        frameResources[i].instanceBuffer = std::move(AllocatedBuffer::CreateAllocatedBuffer(context.get(), bufferInfo, vmaAllocInfo));
+        frameResources[i].instanceBuffer.SetDebugName(("instanceBuffer_" + std::to_string(i)).c_str());
+        bufferInfo.size = BINDLESS_MODEL_BUFFER_SIZE;
+        frameResources[i].modelBuffer = std::move(AllocatedBuffer::CreateAllocatedBuffer(context.get(), bufferInfo, vmaAllocInfo));
+        frameResources[i].modelBuffer.SetDebugName(("modelBuffer_" + std::to_string(i)).c_str());
+        bufferInfo.size = BINDLESS_MODEL_BUFFER_SIZE;
+        frameResources[i].jointMatrixBuffer = std::move(AllocatedBuffer::CreateAllocatedBuffer(context.get(), bufferInfo, vmaAllocInfo));
+        frameResources[i].jointMatrixBuffer.SetDebugName(("jointMatrixBuffer_" + std::to_string(i)).c_str());
+        bufferInfo.size = BINDLESS_MATERIAL_BUFFER_SIZE;
+        frameResources[i].materialBuffer = std::move(AllocatedBuffer::CreateAllocatedBuffer(context.get(), bufferInfo, vmaAllocInfo));
+        frameResources[i].materialBuffer.SetDebugName(("materialBuffer_" + std::to_string(i)).c_str());
+    }
+
     CreatePipelines();
 
     if (basicComputePipeline.pipeline.handle == VK_NULL_HANDLE || basicRenderPipeline.pipeline.handle == VK_NULL_HANDLE) {
@@ -87,10 +113,13 @@ void RenderThread::ThreadMain()
 {
     Platform::SetThreadName("RenderThread");
     while (!bShouldExit.load()) {
-        engineRenderSynchronization->renderFrames.acquire();
+        if (!engineRenderSynchronization->renderFrames.try_acquire_for(std::chrono::milliseconds(100))) {
+            continue;
+        }
 
         if (bShouldExit.load()) { break; }
 
+        currentFrameInFlight = frameNumber % Core::FRAME_BUFFER_COUNT;
         Core::FrameBuffer& frameBuffer = engineRenderSynchronization->frameBuffers[currentFrameInFlight];
         assert(frameBuffer.currentFrameBuffer == currentFrameInFlight);
 
@@ -112,19 +141,13 @@ void RenderThread::ThreadMain()
 
         // Wait for the frame N - 3 to finish using resources
         RenderSynchronization& currentRenderSynchronization = frameSynchronization[currentFrameInFlight];
-        FrameResources& currentFrameResources = resourceManager->frameResources[currentFrameInFlight];
+        FrameResources& currentFrameResources = frameResources[currentFrameInFlight];
         RenderResponse renderResponse = Render(currentFrameInFlight, currentRenderSynchronization, frameBuffer, currentFrameResources);
         if (renderResponse == SWAPCHAIN_OUTDATED) {
             bRenderRequestsRecreate = true;
         }
 
         frameNumber++;
-        currentFrameInFlight = frameNumber % Core::FRAME_BUFFER_COUNT;
-
-        // Wait for next frame's fence. To allow game thread to directly modify the FIF's data
-        RenderSynchronization& nextFrameRenderSynchronization = frameSynchronization[currentFrameInFlight];
-        vkWaitForFences(context->device, 1, &nextFrameRenderSynchronization.renderFence, true, UINT64_MAX);
-        VK_CHECK(vkResetFences(context->device, 1, &nextFrameRenderSynchronization.renderFence));
         engineRenderSynchronization->gameFrames.release();
     }
 
@@ -133,6 +156,9 @@ void RenderThread::ThreadMain()
 
 RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, RenderSynchronization& renderSync, Core::FrameBuffer& frameBuffer, FrameResources& frameResource)
 {
+    vkWaitForFences(context->device, 1, &renderSync.renderFence, true, UINT64_MAX);
+    VK_CHECK(vkResetFences(context->device, 1, &renderSync.renderFence));
+
     VK_CHECK(vkResetCommandBuffer(renderSync.commandBuffer, 0));
     VkCommandBufferBeginInfo beginInfo = VkHelpers::CommandBufferBeginInfo();
     VK_CHECK(vkBeginCommandBuffer(renderSync.commandBuffer, &beginInfo));
@@ -167,6 +193,31 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
 
     //
     {
+        auto* modelBuffer = static_cast<Model*>(frameResource.modelBuffer.allocationInfo.pMappedData);
+        for (size_t i = 0; i < frameBuffer.mainViewFamily.modelMatrices.size(); ++i) {
+            modelBuffer[i] = {
+                .modelMatrix = frameBuffer.mainViewFamily.modelMatrices[i],
+                .prevModelMatrix = frameBuffer.mainViewFamily.modelMatrices[i], // TODO: actual prev frame
+                .flags = glm::vec4(0.0f)
+            };
+        }
+
+        auto* materialBuffer = static_cast<MaterialProperties*>(frameResource.materialBuffer.allocationInfo.pMappedData);
+        memcpy(materialBuffer, frameBuffer.mainViewFamily.materials.data(), frameBuffer.mainViewFamily.materials.size() * sizeof(MaterialProperties));
+
+
+        auto* instanceBuffer = static_cast<Instance*>(frameResource.instanceBuffer.allocationInfo.pMappedData);
+        for (size_t i = 0; i < frameBuffer.mainViewFamily.instances.size(); ++i) {
+            auto& inst = frameBuffer.mainViewFamily.instances[i];
+            instanceBuffer[i] = {
+                .primitiveIndex = inst.primitiveIndex,
+                .modelIndex = inst.modelIndex,
+                .materialIndex = inst.gpuMaterialIndex,
+                .jointMatrixOffset = 0,
+                .bIsAllocated = 1
+            };
+        }
+
         // todo: address what happens if views is 0
         const Core::RenderView& view = frameBuffer.mainViewFamily.views[0];
 
@@ -353,7 +404,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
             VkDeviceSize bufferOffset = 0;
             vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, meshShaderPipeline.pipelineLayout.handle, 0, 1, &bufferIndexImage, &bufferOffset);
 
-            for (Engine::InstanceHandle& instance : frameBuffer.mainViewFamily.instances) {
+            for (int32_t i = 0; i < frameBuffer.mainViewFamily.instances.size(); ++i) {
                 MeshShaderPushConstants pushConstants{
                     .sceneData = graph->GetBufferAddress("sceneData"),
                     .vertexBuffer = graph->GetBufferAddress("vertexBuffer"),
@@ -364,7 +415,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
                     .materialBuffer = graph->GetBufferAddress("materialBuffer"),
                     .modelBuffer = graph->GetBufferAddress("modelBuffer"),
                     .instanceBuffer = graph->GetBufferAddress("instanceBuffer"),
-                    .instanceIndex = instance.index
+                    .instanceIndex = static_cast<uint32_t>(i)
                 };
 
                 vkCmdPushConstants(cmd, meshShaderPipeline.pipelineLayout.handle, VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT,
