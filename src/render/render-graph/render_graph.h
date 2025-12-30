@@ -62,6 +62,8 @@ public:
 
     VkImageView GetImageView(const std::string& name);
 
+    const ResourceDimensions& GetImageDimensions(const std::string& name);
+
     uint32_t GetDescriptorIndex(const std::string& name);
 
     VkBuffer GetBuffer(const std::string& name);

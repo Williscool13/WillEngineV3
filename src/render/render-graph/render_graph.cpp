@@ -814,6 +814,17 @@ VkImageView RenderGraph::GetImageView(const std::string& name)
     return physicalResources[tex.physicalIndex].view;
 }
 
+const ResourceDimensions& RenderGraph::GetImageDimensions(const std::string& name)
+{
+    auto it = textureNameToIndex.find(name);
+    assert(it != textureNameToIndex.end() && "Texture not found");
+
+    auto& tex = textures[it->second];
+    assert(tex.HasPhysical() && "Texture has no physical resource");
+
+    return physicalResources[tex.physicalIndex].dimensions;
+}
+
 uint32_t RenderGraph::GetDescriptorIndex(const std::string& name)
 {
     auto it = textureNameToIndex.find(name);

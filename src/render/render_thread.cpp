@@ -194,11 +194,11 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     computePass.WriteStorageImage("drawImage", {COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1],});
     computePass.Execute([&](VkCommandBuffer cmd) {
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, basicComputePipeline.pipeline.handle);
-
+        const ResourceDimensions& dims = graph->GetImageDimensions("drawImage");
         BasicComputePushConstant pushConstant{
             .color1 = {0.0f, 0.0f, 0.0f, 0.0f},
             .color2 = {1.0f, 1.0f, 1.0f, 1.0f},
-            .extent = {renderExtent[0], renderExtent[1]},
+            .extent = {dims.width, dims.height},
             .index = graph->GetDescriptorIndex("drawImage"),
         };
         vkCmdPushConstants(cmd, basicComputePipeline.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(BasicComputePushConstant), &pushConstant);
@@ -209,8 +209,8 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         VkDeviceSize bufferOffset = 0;
         vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, basicComputePipeline.pipelineLayout.handle, 0, 1, &bufferIndexImage, &bufferOffset);
 
-        uint32_t xDispatch = (renderExtent[0] + 15) / 16;
-        uint32_t yDispatch = (renderExtent[1] + 15) / 16;
+        uint32_t xDispatch = (dims.width + 15) / 16;
+        uint32_t yDispatch = (dims.height + 15) / 16;
         vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
     });
 
@@ -306,7 +306,8 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         const VkRenderingAttachmentInfo colorAttachment = VkHelpers::RenderingAttachmentInfo(graph->GetImageView("drawImage"), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
         constexpr VkClearValue depthClear = {.depthStencil = {0.0f, 0u}};
         const VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(graph->GetImageView("depthTarget"), &depthClear, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
-        const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({renderExtent[0], renderExtent[1]}, &colorAttachment, &depthAttachment);
+        const ResourceDimensions& dims = graph->GetImageDimensions("drawImage");
+        const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({dims.width, dims.height}, &colorAttachment, &depthAttachment);
 
         vkCmdBeginRendering(cmd, &renderInfo);
 
@@ -340,7 +341,8 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         meshPass.Execute([&](VkCommandBuffer cmd) {
             const VkRenderingAttachmentInfo colorAttachment = VkHelpers::RenderingAttachmentInfo(graph->GetImageView("drawImage"), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
             const VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(graph->GetImageView("depthTarget"), nullptr, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
-            const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({renderExtent[0], renderExtent[1]}, &colorAttachment, &depthAttachment);
+            const ResourceDimensions& dims = graph->GetImageDimensions("drawImage");
+            const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({dims.width, dims.height}, &colorAttachment, &depthAttachment);
 
             vkCmdBeginRendering(cmd, &renderInfo);
 
@@ -406,6 +408,21 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         });
     }
 
+
+#if WILL_EDITOR
+    auto& imguiEditorPass = graph->AddPass("ImguiEditor");
+    imguiEditorPass.ReadSampledImage("depthTarget");
+    imguiEditorPass.Execute([&](VkCommandBuffer cmd) {
+        const VkRenderingAttachmentInfo imguiAttachment = VkHelpers::RenderingAttachmentInfo(graph->GetImageView("drawImage"), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        const ResourceDimensions& dims = graph->GetImageDimensions("drawImage");
+        const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({dims.width, dims.height}, &imguiAttachment, nullptr);
+        vkCmdBeginRendering(cmd, &renderInfo);
+        ImDrawDataSnapshot& imguiSnapshot = engineRenderSynchronization->imguiDataSnapshots[currentFrameIndex];
+        ImGui_ImplVulkan_RenderDrawData(&imguiSnapshot.DrawData, cmd);
+
+        vkCmdEndRendering(cmd);
+    });
+#endif
 
     std::string swapchainName = "swapchain_" + std::to_string(swapchainImageIndex);
     graph->ImportTexture(swapchainName, currentSwapchainImage, currentSwapchainImageView, {swapchain->format, swapchain->extent.width, swapchain->extent.height}, swapchain->usages,
