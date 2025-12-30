@@ -287,8 +287,6 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
                                  {frameResource.jointMatrixBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
     graph->ImportBufferNoBarrier("materialBuffer", frameResource.materialBuffer.handle, frameResource.materialBuffer.address,
                                  {frameResource.materialBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
-    graph->ImportBufferNoBarrier("debugReadbackBuffer", resourceManager->debugReadbackBuffer.handle, resourceManager->debugReadbackBuffer.address,
-                                 {resourceManager->debugReadbackBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
 
     graph->CreateBuffer("packedVisibilityBuffer", INSTANCING_PACKED_VISIBILITY_SIZE);
     graph->CreateBuffer("instanceOffsetBuffer", INSTANCING_INSTANCE_OFFSET_SIZE);
@@ -336,7 +334,8 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     });
 
 
-    /*
+    graph->ImportBuffer("debugReadbackBuffer", resourceManager->debugReadbackBuffer.handle, resourceManager->debugReadbackBuffer.address,
+                                 {resourceManager->debugReadbackBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT}, resourceManager->debugReadbackLastKnownState);
     RenderPass& readbackPass = graph->AddPass("DebugReadback");
     readbackPass.ReadTransferBuffer("packedVisibilityBuffer", VK_PIPELINE_STAGE_2_TRANSFER_BIT);
     readbackPass.WriteTransferBuffer("debugReadbackBuffer", VK_PIPELINE_STAGE_2_TRANSFER_BIT);
@@ -347,7 +346,6 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         copyRegion.size = 10 * sizeof(uint32_t);
         vkCmdCopyBuffer(cmd, graph->GetBuffer("packedVisibilityBuffer"), graph->GetBuffer("debugReadbackBuffer"), 1, &copyRegion);
     });
-    */
 
     RenderPass& colorPass = graph->AddPass("MainRender");
     colorPass.WriteColorAttachment("drawImage");
@@ -517,7 +515,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     graph->Execute(renderSync.commandBuffer);
     graph->PrepareSwapchain(renderSync.commandBuffer, swapchainName);
 
-    // auto [stages, access] = graph->GetBufferFinalState("debugReadbackBuffer");
+    resourceManager->debugReadbackLastKnownState = graph->GetBufferState("debugReadbackBuffer");
 
     VK_CHECK(vkEndCommandBuffer(renderSync.commandBuffer));
 

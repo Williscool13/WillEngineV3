@@ -19,8 +19,16 @@ void computeVisibility(uniform VisibilityPushConstant pushConstant, uint3 dtid :
     Model model = pushConstant.modelBuffer[inst.modelIndex];
 
     float4 boundingSphere = prim.boundingSphere;
+    float3 scale = float3(
+        length(model.modelMatrix[0].xyz),
+        length(model.modelMatrix[1].xyz),
+        length(model.modelMatrix[2].xyz)
+    );
+    float maxScale = max(max(scale.x, scale.y), scale.z);
+
+    float worldRadius = boundingSphere.w * maxScale;
     float3 worldCenter = mul(model.modelMatrix, float4(boundingSphere.xyz, 1.0)).xyz;
-    float4 worldBounds = float4(worldCenter, boundingSphere.w);
+    float4 worldBounds = float4(worldCenter, worldRadius);
 
     bool bVisible = true;
     if (!frustumCullSphere(pushConstant.sceneData->frustum, worldBounds)) {

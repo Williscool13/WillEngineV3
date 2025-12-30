@@ -755,7 +755,7 @@ void RenderGraph::ImportBufferNoBarrier(const std::string& name, VkBuffer buffer
     phys.bDisableBarriers = true;
 }
 
-void RenderGraph::ImportBuffer(const std::string& name, VkBuffer buffer, VkDeviceAddress address, const BufferInfo& info, VkPipelineStageFlags2 initialStage)
+void RenderGraph::ImportBuffer(const std::string& name, VkBuffer buffer, VkDeviceAddress address, const BufferInfo& info, PipelineEvent initialState)
 {
     BufferResource* buf = GetOrCreateBuffer(name);
     buf->bufferInfo = info;
@@ -788,8 +788,8 @@ void RenderGraph::ImportBuffer(const std::string& name, VkBuffer buffer, VkDevic
     }
 
     auto& phys = physicalResources[buf->physicalIndex];
-    phys.event.stages = initialStage;
-    phys.event.access = VK_ACCESS_2_NONE;
+    phys.event.stages = initialState.stages;
+    phys.event.access = initialState.access;
     phys.dimensions.name = name;
 }
 
@@ -866,6 +866,17 @@ VkDeviceAddress RenderGraph::GetBufferAddress(const std::string& name)
     }
 
     return phys.bufferAddress;
+}
+
+PipelineEvent RenderGraph::GetBufferState(const std::string& name)
+{
+    auto it = bufferNameToIndex.find(name);
+    assert(it != bufferNameToIndex.end() && "Buffer not found");
+
+    auto& buf = buffers[it->second];
+    assert(buf.HasPhysical() && "Buffer has no physical resource");
+
+    return physicalResources[buf.physicalIndex].event;
 }
 
 void RenderGraph::LogBarrier(const VkImageMemoryBarrier2& barrier, const std::string& resourceName, uint32_t physicalIndex) const

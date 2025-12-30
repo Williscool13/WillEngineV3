@@ -55,7 +55,7 @@ public:
 
     void ImportBufferNoBarrier(const std::string& name, VkBuffer buffer, VkDeviceAddress address, const BufferInfo& info);
 
-    void ImportBuffer(const std::string& name, VkBuffer buffer, VkDeviceAddress address, const BufferInfo& info, VkPipelineStageFlags2 initialStage);
+    void ImportBuffer(const std::string& name, VkBuffer buffer, VkDeviceAddress address, const BufferInfo& info, PipelineEvent initialState);
 
 
     VkImage GetImage(const std::string& name);
@@ -71,6 +71,8 @@ public:
     VkDeviceAddress GetBufferAddress(const std::string& name);
 
     [[nodiscard]] ResourceManager* GetResourceManager() const { return resourceManager; }
+
+    PipelineEvent GetBufferState(const std::string& name);
 
 private:
     friend class RenderPass;

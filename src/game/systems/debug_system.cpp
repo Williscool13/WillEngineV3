@@ -69,13 +69,14 @@ void CreateBox(Core::EngineContext* ctx, Engine::GameState* state, glm::vec3 pos
     for (size_t i = 0; i < submesh.primitiveProperties.size(); ++i) {
         Render::PrimitiveProperty& primitive = submesh.primitiveProperties[i];
 
-        Engine::MaterialID matID;
-        if (primitive.materialIndex == -1) {
-            matID = materialManager.GetDefaultMaterial();
+        MaterialProperties material;
+        if (primitive.materialIndex != -1) {
+            material = model->modelData.materials[primitive.materialIndex];
+        } else {
+            material = materialManager.Get(materialManager.GetDefaultMaterial());
         }
-        else {
-            matID = materialManager.GetOrCreate(model->modelData.materials[primitive.materialIndex]);
-        }
+        material.textureImageIndices.x = 3;
+        Engine::MaterialID matID = materialManager.GetOrCreate(material);
 
         renderable.primitives[i] = {
             .primitiveIndex = primitive.index,
@@ -134,13 +135,15 @@ entt::entity CreateStaticBox(Core::EngineContext* ctx, Engine::GameState* state,
     for (size_t i = 0; i < submesh.primitiveProperties.size(); ++i) {
         Render::PrimitiveProperty& primitive = submesh.primitiveProperties[i];
 
-        Engine::MaterialID matID;
-        if (primitive.materialIndex == -1) {
-            matID = materialManager.GetDefaultMaterial();
+        MaterialProperties material;
+        if (primitive.materialIndex != -1) {
+            material = model->modelData.materials[primitive.materialIndex];
+        } else {
+            material = materialManager.Get(materialManager.GetDefaultMaterial());
         }
-        else {
-            matID = materialManager.GetOrCreate(model->modelData.materials[primitive.materialIndex]);
-        }
+        material.textureImageIndices.x = AssetLoad::ERROR_IMAGE_BINDLESS_INDEX;
+        material.textureSamplerIndices.x = AssetLoad::DEFAULT_SAMPLER_BINDLESS_INDEX;
+        Engine::MaterialID matID = materialManager.GetOrCreate(material);
 
         renderable.primitives[i] = {
             .primitiveIndex = primitive.index,

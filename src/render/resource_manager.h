@@ -12,6 +12,7 @@
 #include "render/frame_resources.h"
 #include "render/descriptors/vk_bindless_resources_sampler_images.h"
 #include "render/descriptors/vk_bindless_resources_storage.h"
+#include "render-graph/render_graph_resources.h"
 
 
 namespace Render
@@ -48,6 +49,7 @@ struct ResourceManager
     BindlessTransientRDGResourcesDescriptorBuffer<8, 128, 128> bindlessRDGTransientDescriptorBuffer{};
 
     AllocatedBuffer debugReadbackBuffer;
+    PipelineEvent debugReadbackLastKnownState;
 
 private:
     VulkanContext* context{};
