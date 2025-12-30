@@ -128,6 +128,7 @@ bool WillModelLoadJob::PreThreadExecute()
     }
 
     outputModel->modelData.meshes = std::move(rawData.allMeshes);
+    outputModel->modelData.nodes = std::move(rawData.nodes);
     outputModel->modelData.inverseBindMatrices = std::move(rawData.inverseBindMatrices);
     outputModel->modelData.animations = std::move(rawData.animations);
     outputModel->modelData.materials = std::move(rawData.materials);
@@ -292,13 +293,14 @@ ThreadState WillModelLoadJob::ThreadExecute()
             size_t remainingSize = remainingElements * elementSize;
 
             OffsetAllocator::Allocation allocation = stagingAllocator.allocate(remainingSize);
+
+            // Can't fit entire data, will try to upload in chunks. Start by trying to fit as much as possible in remaining space
             if (allocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
-                // Try to fit as much as possible in remaining space
                 size_t freeSpace = stagingAllocator.storageReport().totalFreeSpace;
                 size_t maxElements = freeSpace / elementSize;
 
+                // Can't fit even one element - submit and retry next frame
                 if (maxElements == 0) {
-                    // Can't fit even one element - submit and retry next frame
                     assert(freeSpace < WILL_MODEL_LOAD_STAGING_SIZE && "NO_SPACE on empty staging buffer");
                     uploadStaging->SubmitCommandBuffer();
                     return false;
@@ -308,16 +310,24 @@ ThreadState WillModelLoadJob::ThreadExecute()
                 remainingSize = maxElements * elementSize;
                 allocation = stagingAllocator.allocate(remainingSize);
 
+                // Still can't fit. Likely caused by fragmentation - submit and retry
                 if (allocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
-                    // Fragmentation - submit and retry
                     uploadStaging->SubmitCommandBuffer();
                     return false;
                 }
 
-                remainingElements = maxElements;
+                const char* elementData = static_cast<const char*>(sourceData) + (pendingHead * elementSize);
+                char* stagingPtr = static_cast<char*>(stagingBuffer.allocationInfo.pMappedData) + allocation.offset;
+                memcpy(stagingPtr, elementData, remainingSize);
+                VkBufferCopy copyRegion{};
+                copyRegion.srcOffset = allocation.offset;
+                copyRegion.dstOffset = targetOffset + (pendingHead * elementSize);
+                copyRegion.size = remainingSize;
+                vkCmdCopyBuffer(uploadStaging->GetCommandBuffer(), stagingBuffer.handle, targetBuffer, 1, &copyRegion);
+                uploadStaging->SubmitCommandBuffer();
+                pendingHead += maxElements;
+                return false;
             }
-
-            uploadStaging->StartCommandBuffer();
 
             const char* elementData = static_cast<const char*>(sourceData) + (pendingHead * elementSize);
             char* stagingPtr = static_cast<char*>(stagingBuffer.allocationInfo.pMappedData) + allocation.offset;

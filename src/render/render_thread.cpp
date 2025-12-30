@@ -510,7 +510,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         vkCmdBlitImage2(cmd, &blitInfo);
     });
 
-    graph->SetDebugLogging(frameNumber % 180 == 0);
+    // graph->SetDebugLogging(frameNumber % 180 == 0);
     graph->Compile();
     graph->Execute(renderSync.commandBuffer);
     graph->PrepareSwapchain(renderSync.commandBuffer, swapchainName);

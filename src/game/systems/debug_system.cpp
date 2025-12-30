@@ -72,7 +72,8 @@ void CreateBox(Core::EngineContext* ctx, Engine::GameState* state, glm::vec3 pos
         MaterialProperties material;
         if (primitive.materialIndex != -1) {
             material = model->modelData.materials[primitive.materialIndex];
-        } else {
+        }
+        else {
             material = materialManager.Get(materialManager.GetDefaultMaterial());
         }
         material.textureImageIndices.x = 3;
@@ -98,11 +99,6 @@ entt::entity CreateStaticBox(Core::EngineContext* ctx, Engine::GameState* state,
                              glm::vec3 renderPos, glm::vec3 renderScale,
                              glm::vec4 color = glm::vec4(0.5f, 0.5f, 0.5f, 1.0f))
 {
-    if (!boxHandle.IsValid()) {
-        SPDLOG_WARN("[CreateStaticBox] No box model loaded");
-        return entt::null;
-    }
-
     auto& bodyInterface = ctx->physicsSystem->GetBodyInterface();
 
     // Create physics body
@@ -138,7 +134,8 @@ entt::entity CreateStaticBox(Core::EngineContext* ctx, Engine::GameState* state,
         MaterialProperties material;
         if (primitive.materialIndex != -1) {
             material = model->modelData.materials[primitive.materialIndex];
-        } else {
+        }
+        else {
             material = materialManager.Get(materialManager.GetDefaultMaterial());
         }
         material.textureImageIndices.x = AssetLoad::ERROR_IMAGE_BINDLESS_INDEX;
@@ -177,6 +174,13 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
     }
 
     if (state->inputFrame->GetKey(Key::F2).pressed) {
+        if (!boxHandle.IsValid()) {
+            SPDLOG_WARN("[DebugUpdate] Box model not loaded");
+            return;
+        }
+
+        textureHandle = ctx->assetManager->LoadTexture(Platform::GetAssetPath() / "textures/smiling_friend.ktx2");
+
         entt::entity floor = CreateStaticBox(
             ctx, state,
             JPH::RVec3(0.0, -0.5, 0.0), JPH::Vec3(10.0f, 0.5f, 10.0f), // physics
@@ -195,18 +199,81 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         CreateStaticBox(ctx, state, JPH::RVec3(10, 2.5, 0), JPH::Vec3(0.5, 2.5, 10),
                         glm::vec3(10, 2.5, 0), glm::vec3(1, 5, 20)); // right
 
-        SPDLOG_INFO("[DebugSystem] Created physics floor and arena walls");
-    }
-
-    if (state->inputFrame->GetKey(Key::F3).pressed) {
-        textureHandle = ctx->assetManager->LoadTexture(Platform::GetAssetPath() / "textures/smiling_friend.ktx2");
-
         for (int i = 0; i < 5; i++) {
             glm::vec3 spawnPos = glm::vec3(i * 2.0f - 4.0f, 5.0f, 0.0f);
             CreateBox(ctx, state, spawnPos);
         }
 
+        SPDLOG_INFO("[DebugSystem] Created physics floor and arena walls");
         SPDLOG_INFO("[DebugSystem] Created falling boxes");
+    }
+
+    if (state->inputFrame->GetKey(Key::F3).pressed) {
+        Render::WillModel* dragon = ctx->assetManager->GetModel(dragonHandle);
+        if (!dragon || dragon->modelLoadState != Render::WillModel::ModelLoadState::Loaded) {
+            SPDLOG_WARN("[DebugSystem] Dragon model not ready yet");
+            return;
+        }
+
+        Engine::MaterialManager& materialManager = ctx->assetManager->GetMaterialManager();
+        Render::MeshInformation& submesh = dragon->modelData.meshes[0];
+        glm::vec3 meshOffset = glm::vec3(0.0f);
+        glm::quat meshRotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+        glm::vec3 meshScale = glm::vec3(1.0f);
+
+        for (size_t i = 0; i < dragon->modelData.nodes.size(); ++i) {
+            const auto& node = dragon->modelData.nodes[i];
+            if (node.meshIndex == 0) {
+                meshOffset = node.localTranslation;
+                meshRotation = node.localRotation;
+                meshScale = node.localScale;
+
+                uint32_t parentIdx = node.parent;
+                while (parentIdx != ~0u) {
+                    const auto& parentNode = dragon->modelData.nodes[parentIdx];
+                    meshOffset = parentNode.localRotation * (parentNode.localScale * meshOffset) + parentNode.localTranslation;
+                    meshRotation = parentNode.localRotation * meshRotation;
+                    meshScale = parentNode.localScale * meshScale;
+                    parentIdx = parentNode.parent;
+                }
+                break;
+            }
+        }
+
+        std::vector<glm::vec3> dragonPositions = {
+            glm::vec3(-7.0f, 1.0f, -7.0f) + meshOffset,
+            glm::vec3(7.0f, 1.0f, 7.0f) + meshOffset,
+            glm::vec3(0.0f, 1.0f, -7.0f) + meshOffset
+        };
+
+        for (const auto& pos : dragonPositions) {
+            RenderableComponent renderable{};
+
+            for (size_t i = 0; i < submesh.primitiveProperties.size(); ++i) {
+                Render::PrimitiveProperty& primitive = submesh.primitiveProperties[i];
+
+                Engine::MaterialID matID;
+                if (primitive.materialIndex == -1) {
+                    matID = materialManager.GetDefaultMaterial();
+                }
+                else {
+                    matID = materialManager.GetOrCreate(dragon->modelData.materials[primitive.materialIndex]);
+                }
+
+                renderable.primitives[i] = {
+                    .primitiveIndex = primitive.index,
+                    .materialID = matID
+                };
+            }
+            renderable.primitiveCount = submesh.primitiveProperties.size();
+            renderable.modelFlags = glm::vec4(0.0f);
+
+            entt::entity dragonEntity = state->registry.create();
+            state->registry.emplace<RenderableComponent>(dragonEntity, renderable);
+            state->registry.emplace<TransformComponent>(dragonEntity, pos, meshRotation, meshScale * 1.5f);
+        }
+
+        SPDLOG_INFO("[DebugSystem] Spawned dragons around arena");
     }
 
     if (state->inputFrame->GetKey(Key::NUM_1).pressed) {
