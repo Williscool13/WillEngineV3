@@ -683,6 +683,7 @@ void RenderGraph::ImportTexture(const std::string& name,
             assert(phys.dimensions.width == info.width && "Reimported image width mismatch");
             assert(phys.dimensions.height == info.height && "Reimported image height mismatch");
 
+            // todo improve this
             // Imported textures need:
             //   1. Unique names per FIF
             //   2. Remain alive as a descriptor for more than 1 frame (we keep physical resources alive indefinitely so this is not a concern)

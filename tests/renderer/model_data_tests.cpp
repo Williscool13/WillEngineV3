@@ -277,7 +277,6 @@ TEST_CASE("Instance data", "[renderer][model-data]") {
         REQUIRE(inst.modelIndex == 0);
         REQUIRE(inst.materialIndex == 0);
         REQUIRE(inst.jointMatrixOffset == 0);
-        REQUIRE(inst.bIsAllocated == 0);
     }
 
     SECTION("Valid instance data") {
@@ -286,13 +285,11 @@ TEST_CASE("Instance data", "[renderer][model-data]") {
         inst.modelIndex = 10;
         inst.materialIndex = 2;
         inst.jointMatrixOffset = 100;
-        inst.bIsAllocated = 1;
 
         REQUIRE(inst.primitiveIndex == 5);
         REQUIRE(inst.modelIndex == 10);
         REQUIRE(inst.materialIndex == 2);
         REQUIRE(inst.jointMatrixOffset == 100);
-        REQUIRE(inst.bIsAllocated == 1);
     }
 }
 

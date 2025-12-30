@@ -7,13 +7,12 @@ import constants_interop;
 // =============== Compute Shader (Instance Visibility and Primitive Accumulation Count) ===============
 // Evaluates the visibility of each instance and outputs to a packed visibility buffer
 [shader("compute")]
-[numthreads(64, 1, 1)]
+[numthreads(INSTANCING_VISIBILITY_DISPATCH_X, 1, 1)]
 void computeVisibility(uniform VisibilityPushConstant pushConstant, uint3 dtid : SV_DispatchThreadID)
 {
     uint instanceID = dtid.x;
 
     Instance inst = pushConstant.instanceBuffer[instanceID];
-    if (inst.bIsAllocated == 0) { return; }
 
     MeshletPrimitive prim = pushConstant.primitiveBuffer[inst.primitiveIndex];
     Model model = pushConstant.modelBuffer[inst.modelIndex];
@@ -66,7 +65,7 @@ void computePrefixSum(uniform PrefixSumPushConstant pushConstant) {
 // Each thread operates on 1 instance. The 0th instance of a primitive will populate the indirect
 
 [shader("compute")]
-[numthreads(64, 1, 1)]
+[numthreads(INSTANCING_CONSTRUCTION_DISPATCH_X, 1, 1)]
 void computeCompactAndGenerateIndirect(uniform IndirectWritePushConstant pushConstant, uint3 dtid : SV_DispatchThreadID)
 {
     uint instanceID = dtid.x;
@@ -90,7 +89,7 @@ void computeCompactAndGenerateIndirect(uniform IndirectWritePushConstant pushCon
     pushConstant.compactedInstanceBuffer[primitiveOffset + instanceOffset].materialIndex = inst.materialIndex;
     pushConstant.compactedInstanceBuffer[primitiveOffset + instanceOffset].jointMatrixOffset = inst.jointMatrixOffset;
 
-    if (primitiveOffset == 0) {
+    if (instanceOffset == 0) {
         MeshletPrimitive prim = pushConstant.primitiveBuffer[inst.primitiveIndex];
         uint totalMeshlets = prim.meshletCount;
         uint numChunks = (totalMeshlets + (TASK_SHADER_DISPATCH_X - 1)) / TASK_SHADER_DISPATCH_X;

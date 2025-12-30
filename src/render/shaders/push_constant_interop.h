@@ -71,6 +71,7 @@ SHADER_PUBLIC struct VisibilityPushConstant {
     SHADER_PUBLIC SHADER_PTR(uint32_t) packedVisibilityBuffer;
     SHADER_PUBLIC SHADER_PTR(uint32_t) instanceOffsetBuffer;
     SHADER_PUBLIC SHADER_PTR(PrimitiveCount) primitiveCountBuffer;
+    SHADER_PUBLIC uint32_t instanceCount;
 };
 
 SHADER_PUBLIC struct PrefixSumPushConstant {
@@ -92,8 +93,7 @@ SHADER_PUBLIC struct IndirectWritePushConstant {
     SHADER_PUBLIC SHADER_PTR(uint32_t) instanceOffsetBuffer;
     SHADER_PUBLIC SHADER_PTR(PrimitiveCount) primitiveCountBuffer;
     // Read-Write
-    // todo: packed doesn't need bIsAllocated, can be optimized
-    SHADER_PUBLIC SHADER_PTR(CompactedInstance) compactedInstanceBuffer;
+    SHADER_PUBLIC SHADER_PTR(Instance) compactedInstanceBuffer;
     SHADER_PUBLIC SHADER_PTR(InstancedMeshIndirectCountBuffer) indirectCountBuffer;
     SHADER_PUBLIC SHADER_PTR(InstancedMeshIndirectDrawParameters) indirectBuffer;
 };

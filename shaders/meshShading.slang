@@ -51,7 +51,6 @@ void taskMain(uniform PushConsts pushConstants, uint3 dispatchThreadId : SV_Disp
 {
 
     Instance inst = pushConstants.instanceBuffer[pushConstants.instanceIndex];
-    if (inst.bIsAllocated == 0) { return; }
 
     MeshletPrimitive prim = pushConstants.primitiveBuffer[inst.primitiveIndex];
 

@@ -38,7 +38,7 @@ void WillEngine::Initialize()
 {
     Platform::SetThreadName("EngineThread");
     enki::TaskSchedulerConfig config;
-    config.numTaskThreadsToCreate = enki::GetNumHardwareThreads();
+    config.numTaskThreadsToCreate = enki::GetNumHardwareThreads() - 1;
     config.profilerCallbacks.threadStart = [](uint32_t threadNum_) {
         std::string name = fmt::format("TaskThread{}", threadNum_);
         Platform::SetThreadName(name.c_str());
@@ -258,27 +258,31 @@ void WillEngine::DrawImgui()
     if (ImGui::Begin("Main")) {
         ImGui::Text("Hello!");
 
+        /*if (ImGui::CollapsingHeader("Visibility Debug")) {
+            PrimitiveCount* data = static_cast<PrimitiveCount*>(renderThread->GetResourceManager()->debugReadbackBuffer.allocationInfo.pMappedData);
+
+            for (int i = 0; i < 2; i++) {
+                uint32_t count = data[i].count;
+                uint32_t offset = data[i].offset;
+                ImGui::Text("Primitive %d: count=%u, offset=%u", i, count, offset);
+            }
+        }*/
+
         if (ImGui::CollapsingHeader("Visibility Debug")) {
-            uint32_t* data = static_cast<uint32_t*>(renderThread->GetResourceManager()->debugReadbackBuffer.allocationInfo.pMappedData);
+            uint8_t* data = static_cast<uint8_t*>(renderThread->GetResourceManager()->debugReadbackBuffer.allocationInfo.pMappedData);
 
-            for (int chunk = 0; chunk < 1; chunk++) {
-                uint32_t bits = data[chunk];
+            uint32_t indirectCount = *reinterpret_cast<uint32_t*>(data);
+            ImGui::Text("Indirect Draw Count: %u", indirectCount);
 
-                // Count set bits manually
-                int count = 0;
-                for (int i = 0; i < 32; i++) {
-                    if (bits & (1u << i)) count++;
+            InstancedMeshIndirectDrawParameters* params = reinterpret_cast<InstancedMeshIndirectDrawParameters*>(data + sizeof(uint32_t));
+
+            for (uint32_t i = 0; i < std::min(indirectCount, 10u); i++) {
+                if (ImGui::TreeNode((void*)(intptr_t)i, "Draw %u", i)) {
+                    ImGui::Text("Dispatch: (%u, %u, %u)", params[i].groupCountX, params[i].groupCountY, params[i].groupCountZ);
+                    ImGui::Text("Instance Start: %u", params[i].compactedInstanceStart);
+                    ImGui::Text("Meshlet Offset: %u, Count: %u", params[i].meshletOffset, params[i].meshletCount);
+                    ImGui::TreePop();
                 }
-
-                ImGui::Text("Chunk %d: 0x%08x (%d visible)", chunk, bits, count);
-
-                ImGui::Indent();
-                for (int bit = 0; bit < 32; bit++) {
-                    if (bits & (1u << bit)) {
-                        ImGui::Text("Instance %d visible", chunk * 32 + bit);
-                    }
-                }
-                ImGui::Unindent();
             }
         }
     }
