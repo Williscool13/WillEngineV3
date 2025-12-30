@@ -146,11 +146,11 @@ RenderPass& RenderPass::ReadTransferBuffer(const std::string& name, VkPipelineSt
     return *this;
 }
 
-RenderPass& RenderPass::ReadIndirectBuffer(const std::string& name)
+RenderPass& RenderPass::ReadIndirectBuffer(const std::string& name, VkPipelineStageFlags2 stages)
 {
     BufferResource* resource = graph.GetOrCreateBuffer(name);
     resource->accumulatedUsage |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
-    bufferReads.push_back({resource, VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT});
+    bufferIndirectReads.push_back({resource, stages});
     return *this;
 }
 

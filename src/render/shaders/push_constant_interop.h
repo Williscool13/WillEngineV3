@@ -60,7 +60,8 @@ SHADER_PUBLIC struct DepthDebugPushConstant
     SHADER_PUBLIC uint outputImageIndex;
 };
 
-SHADER_PUBLIC struct VisibilityPushConstant {
+SHADER_PUBLIC struct VisibilityPushConstant
+{
     // Read-Only
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC SHADER_PTR(MeshletPrimitive) primitiveBuffer;
@@ -74,7 +75,8 @@ SHADER_PUBLIC struct VisibilityPushConstant {
     SHADER_PUBLIC uint32_t instanceCount;
 };
 
-SHADER_PUBLIC struct PrefixSumPushConstant {
+SHADER_PUBLIC struct PrefixSumPushConstant
+{
     // Read-Write
     SHADER_PUBLIC SHADER_PTR(PrimitiveCount) primitiveCountBuffer;
 
@@ -82,7 +84,8 @@ SHADER_PUBLIC struct PrefixSumPushConstant {
     SHADER_PUBLIC uint32_t highestPrimitiveIndex;
 };
 
-SHADER_PUBLIC struct IndirectWritePushConstant {
+SHADER_PUBLIC struct IndirectWritePushConstant
+{
     // Read-Only
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC SHADER_PTR(MeshletPrimitive) primitiveBuffer;
@@ -96,6 +99,22 @@ SHADER_PUBLIC struct IndirectWritePushConstant {
     SHADER_PUBLIC SHADER_PTR(Instance) compactedInstanceBuffer;
     SHADER_PUBLIC SHADER_PTR(InstancedMeshIndirectCountBuffer) indirectCountBuffer;
     SHADER_PUBLIC SHADER_PTR(InstancedMeshIndirectDrawParameters) indirectBuffer;
+};
+
+SHADER_PUBLIC struct InstancedMeshShadingPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+
+    SHADER_PUBLIC SHADER_PTR(Vertex) vertexBuffer;
+    SHADER_PUBLIC SHADER_PTR(uint32_t) meshletVerticesBuffer;
+    SHADER_PUBLIC SHADER_PTR(uint32_t) meshletTrianglesBuffer;
+    SHADER_PUBLIC SHADER_PTR(Meshlet) meshletBuffer;
+
+    SHADER_PUBLIC SHADER_PTR(InstancedMeshIndirectDrawParameters) indirectBuffer;
+
+    SHADER_PUBLIC SHADER_PTR(Instance) compactedInstanceBuffer;
+    SHADER_PUBLIC SHADER_PTR(MaterialProperties) materialBuffer;
+    SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
 };
 
 #endif //WILL_ENGINE_PUSH_CONSTANT_INTEROP_H

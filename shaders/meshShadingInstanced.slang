@@ -1,0 +1,186 @@
+import common_interop;
+import constants_interop;
+import model_interop;
+import instancing_interop;
+import push_constant_interop;
+
+import shader_functions;
+
+// =============== Task Shader ===============
+struct VertexOutput
+{
+    float4 position : SV_Position;
+    float3 worldPos : TEXCOORD1;
+    float3 normal : TEXCOORD2;
+    float4 tangent : TEXCOORD3;
+    float4 color : COLOR0;
+    float2 uv : TEXCOORD0;
+    nointerpolation uint32_t materialIndex : TEXCOORD4;
+};
+
+// Per https://developer.nvidia.com/blog/using-mesh-shaders-for-professional-graphics/
+// Task shader output should ideally be below 236/108. We can hit 108 if we turn uint32_t to uint8_t and store offsets in the payload.
+// 4 + 4 + 4 + 64 = 86
+struct MeshletPayload {
+    uint32_t modelIndex;
+    uint32_t materialIndex;
+    uint32_t groupMeshletOffset;
+
+    uint8_t meshletIndices[TASK_SHADER_DISPATCH_X];
+};
+
+groupshared MeshletPayload sharedPayload;
+groupshared uint32_t visibleMeshletCount;
+
+[shader("task")]
+[numthreads(TASK_SHADER_DISPATCH_X, 1, 1)]
+void taskMain(uniform InstancedMeshShadingPushConstant pushConstant,
+    uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID, uint drawIndex : SV_DrawIndex)
+{
+    InstancedMeshIndirectDrawParameters indirectParameters = pushConstant.indirectBuffer[drawIndex];
+
+    uint32_t instanceIndex = indirectParameters.compactedInstanceStart + gid.y;
+    Instance inst = pushConstant.compactedInstanceBuffer[instanceIndex];
+
+    uint32_t groupMeshletOffset = indirectParameters.meshletOffset + (gid.x * TASK_SHADER_DISPATCH_X);
+    uint32_t totalMeshlets = indirectParameters.meshletCount;
+
+    // thread 0 populates shared information for mesh shader
+    if (gtid.x == 0) {
+        visibleMeshletCount = 0;
+
+        sharedPayload.modelIndex = inst.modelIndex;
+        sharedPayload.materialIndex = inst.materialIndex;
+        sharedPayload.groupMeshletOffset = groupMeshletOffset;
+    }
+
+    GroupMemoryBarrierWithGroupSync();
+
+
+    Model model = pushConstant.modelBuffer[inst.modelIndex];
+
+    // group thread count is only 64, will never exceed uint8
+    uint8_t meshletID = (uint8_t)gtid.x;
+    uint localMeshletCount = min(TASK_SHADER_DISPATCH_X, totalMeshlets - (gid.x * TASK_SHADER_DISPATCH_X));
+
+    if (meshletID < localMeshletCount) {
+        Meshlet mlet = pushConstant.meshletBuffer[groupMeshletOffset + meshletID];
+
+        // Transform to world space
+        float3 scale = float3(
+            length(model.modelMatrix[0].xyz),
+            length(model.modelMatrix[1].xyz),
+            length(model.modelMatrix[2].xyz)
+        );
+        float maxScale = max(max(scale.x, scale.y), scale.z);
+        float worldRadius = mlet.meshletBoundingSphere.w * maxScale;
+        float3 worldCenter = mul(model.modelMatrix, float4(mlet.meshletBoundingSphere.xyz, 1.0)).xyz;
+        float4 worldBounds = float4(worldCenter, worldRadius);
+
+        bool visible = true;
+        if (!frustumCullSphere(pushConstant.sceneData->frustum, worldBounds)) {
+            visible = false;
+        }
+
+        if (visible && !backfaceCullCone(mlet.coneAxis, mlet.coneCutoff, worldCenter, worldRadius, pushConstant.sceneData->cameraWorldPos.xyz, (float3x3)model.modelMatrix)) {
+            visible = false;
+        }
+
+        if (visible) {
+            uint index;
+            InterlockedAdd(visibleMeshletCount, 1, index);
+            sharedPayload.meshletIndices[index] = meshletID;
+        }
+    }
+
+    GroupMemoryBarrierWithGroupSync();
+
+    if (gtid.x == 0) {
+        uint count = visibleMeshletCount;
+        DispatchMesh(count, 1, 1, sharedPayload);
+    }
+}
+
+[shader("mesh")]
+[outputtopology("triangle")]
+[numthreads(MESH_SHADER_DISPATCH_X, 1, 1)]
+void meshMain(
+    in payload MeshletPayload inPayload, out indices uint3 triangles[MESHLET_MAX_TRIANGLES], out vertices VertexOutput vertices[MESHLET_MAX_VERTICES],
+    uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID,
+    uniform InstancedMeshShadingPushConstant pushConstant)
+{
+    uint32_t payloadMeshletIndex = gid.x;
+    uint32_t meshletIndex = inPayload.groupMeshletOffset + inPayload.meshletIndices[payloadMeshletIndex];
+    Meshlet meshlet = pushConstant.meshletBuffer[meshletIndex];
+
+    Model m = pushConstant.modelBuffer[inPayload.modelIndex];
+    float4x4 viewProj = pushConstant.sceneData->viewProj;
+
+    SetMeshOutputCounts(meshlet.meshletVerticesCount, meshlet.meshletTriangleCount);
+    uint32_t threadIndex = gtid.x;
+    for (uint i = threadIndex; i < meshlet.meshletVerticesCount; i += MESH_SHADER_DISPATCH_X) {
+        uint localVertexIndex = pushConstant.meshletVerticesBuffer[meshlet.meshletVerticesOffset + i];
+        Vertex v = pushConstant.vertexBuffer[meshlet.vertexOffset + localVertexIndex];
+        float4 worldPos = mul(m.modelMatrix, float4(v.position, 1.0));
+        float4 clipPos = mul(viewProj, worldPos);
+        vertices[i].position = clipPos;
+        vertices[i].worldPos = worldPos.xyz;
+        vertices[i].normal = normalize(mul(adjugate((float3x3)m.modelMatrix), v.normal));
+        vertices[i].tangent = float4(normalize(mul(adjugate((float3x3)m.modelMatrix), v.tangent.xyz)), v.tangent.w);
+        vertices[i].uv = float2(v.texcoordU, v.texcoordV);
+
+
+        uint meshletID = gid.x;
+        /*uint hash = meshletID * 747796405u + 2891336453u;
+        float3 color = float3(
+            (hash & 0xFF) / 255.0,
+            ((hash >> 8) & 0xFF) / 255.0,
+            ((hash >> 16) & 0xFF) / 255.0
+        );
+        vertices[i].color = float4(color * v.color.xyz, 1.0);*/
+        vertices[i].color = v.color;
+
+        vertices[i].materialIndex = inPayload.materialIndex;
+    }
+
+    for (uint i = threadIndex; i < meshlet.meshletTriangleCount; i += MESH_SHADER_DISPATCH_X) {
+        uint triIndex = meshlet.meshletTriangleOffset + i;
+        uint packed = pushConstant.meshletTrianglesBuffer[triIndex];
+
+        uint idx0 = (packed >> 0) & 0xFF;
+        uint idx1 = (packed >> 8) & 0xFF;
+        uint idx2 = (packed >> 16) & 0xFF;
+
+        triangles[i] = uint3(idx0, idx1, idx2);
+    }
+}
+
+struct FragmentOutput {
+    float4 color : SV_Target0;
+};
+
+[[vk::binding(0, 0)]]
+SamplerState samplers[];
+[[vk::binding(1, 0)]]
+Texture2D textures[];
+
+[shader("fragment")]
+FragmentOutput fragmentMain(VertexOutput vertexInput, uniform InstancedMeshShadingPushConstant pushConstant)
+{
+    MaterialProperties material = pushConstant.materialBuffer[vertexInput.materialIndex];
+
+    float4 color = vertexInput.color;
+    color = color * textures[material.textureImageIndices[0]].Sample(samplers[material.textureSamplerIndices[0]], vertexInput.uv);
+
+    float3 N = normalize(vertexInput.normal);
+    float3 V = normalize(pushConstant.sceneData->cameraWorldPos.xyz - vertexInput.worldPos);
+    float3 L = normalize(float3(1.0, 1.0, 1.0));
+
+    float3 ambient = float3(0.1, 0.1, 0.1);
+    float3 diffuse = max(dot(N, L), 0.0) * material.colorFactor.rgb;
+
+    FragmentOutput output;
+    output.color = color * float4(ambient + diffuse, material.colorFactor.a);
+
+    return output;
+}

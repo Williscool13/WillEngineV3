@@ -11,7 +11,9 @@ import constants_interop;
 void computeVisibility(uniform VisibilityPushConstant pushConstant, uint3 dtid : SV_DispatchThreadID)
 {
     uint instanceID = dtid.x;
-
+    if (instanceID >= pushConstant.instanceCount) {
+        return;
+    }
     Instance inst = pushConstant.instanceBuffer[instanceID];
 
     MeshletPrimitive prim = pushConstant.primitiveBuffer[inst.primitiveIndex];
@@ -24,7 +26,6 @@ void computeVisibility(uniform VisibilityPushConstant pushConstant, uint3 dtid :
         length(model.modelMatrix[2].xyz)
     );
     float maxScale = max(max(scale.x, scale.y), scale.z);
-
     float worldRadius = boundingSphere.w * maxScale;
     float3 worldCenter = mul(model.modelMatrix, float4(boundingSphere.xyz, 1.0)).xyz;
     float4 worldBounds = float4(worldCenter, worldRadius);

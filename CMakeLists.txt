@@ -182,6 +182,9 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/meshShading.slang task taskMain
         ${CMAKE_SOURCE_DIR}/shaders/meshShading.slang mesh meshMain
         ${CMAKE_SOURCE_DIR}/shaders/meshShading.slang fragment fragmentMain
+        ${CMAKE_SOURCE_DIR}/shaders/meshShadingInstanced.slang task taskMain
+        ${CMAKE_SOURCE_DIR}/shaders/meshShadingInstanced.slang mesh meshMain
+        ${CMAKE_SOURCE_DIR}/shaders/meshShadingInstanced.slang fragment fragmentMain
 )
 
 # Post-Build Commands =========================

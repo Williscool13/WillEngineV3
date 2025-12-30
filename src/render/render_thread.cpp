@@ -380,6 +380,60 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
             uint32_t xDispatch = (frameBuffer.mainViewFamily.instances.size() + (INSTANCING_CONSTRUCTION_DISPATCH_X - 1)) / INSTANCING_CONSTRUCTION_DISPATCH_X;
             vkCmdDispatch(cmd, xDispatch, 1, 1);
         });
+
+        RenderPass& instancedMeshShading = graph->AddPass("InstancedMeshShading");
+        instancedMeshShading.WriteColorAttachment("drawImage");
+        instancedMeshShading.WriteDepthAttachment("depthTarget", {VK_FORMAT_D32_SFLOAT, renderExtent[0], renderExtent[1]});
+        instancedMeshShading.ReadBuffer("sceneData", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
+        instancedMeshShading.ReadBuffer("vertexBuffer", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
+        instancedMeshShading.ReadBuffer("meshletVertexBuffer", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
+        instancedMeshShading.ReadBuffer("meshletTriangleBuffer", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
+        instancedMeshShading.ReadBuffer("meshletBuffer", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
+        instancedMeshShading.ReadBuffer("compactedInstanceBuffer", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
+        instancedMeshShading.ReadBuffer("materialBuffer", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
+        instancedMeshShading.ReadBuffer("modelBuffer", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
+        instancedMeshShading.ReadIndirectBuffer("indirectBuffer", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT);
+        instancedMeshShading.ReadIndirectBuffer("indirectCountBuffer", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT);
+        instancedMeshShading.Execute([&](VkCommandBuffer cmd) {
+            const VkRenderingAttachmentInfo colorAttachment = VkHelpers::RenderingAttachmentInfo(graph->GetImageView("drawImage"), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+            constexpr VkClearValue depthClear = {.depthStencil = {0.0f, 0u}};
+            const VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(graph->GetImageView("depthTarget"), &depthClear, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+            const ResourceDimensions& dims = graph->GetImageDimensions("drawImage");
+            const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({dims.width, dims.height}, &colorAttachment, &depthAttachment);
+
+            vkCmdBeginRendering(cmd, &renderInfo);
+
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, meshShadingInstancedPipeline.pipeline.handle);
+            VkDescriptorBufferBindingInfoEXT bindingInfo = graph->GetResourceManager()->bindlessSamplerTextureDescriptorBuffer.GetBindingInfo();
+            vkCmdBindDescriptorBuffersEXT(cmd, 1, &bindingInfo);
+            uint32_t bufferIndexImage = 0;
+            VkDeviceSize bufferOffset = 0;
+            vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, meshShadingInstancedPipeline.pipelineLayout.handle, 0, 1, &bufferIndexImage, &bufferOffset);
+
+            InstancedMeshShadingPushConstant pushConstants{
+                .sceneData = graph->GetBufferAddress("sceneData"),
+                .vertexBuffer = graph->GetBufferAddress("vertexBuffer"),
+                .meshletVerticesBuffer = graph->GetBufferAddress("meshletVertexBuffer"),
+                .meshletTrianglesBuffer = graph->GetBufferAddress("meshletTriangleBuffer"),
+                .meshletBuffer = graph->GetBufferAddress("meshletBuffer"),
+                .indirectBuffer = graph->GetBufferAddress("indirectBuffer"),
+                .compactedInstanceBuffer = graph->GetBufferAddress("compactedInstanceBuffer"),
+                .materialBuffer = graph->GetBufferAddress("materialBuffer"),
+                .modelBuffer = graph->GetBufferAddress("modelBuffer"),
+            };
+
+            vkCmdPushConstants(cmd, meshShadingInstancedPipeline.pipelineLayout.handle, VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                               0, sizeof(InstancedMeshShadingPushConstant), &pushConstants);
+
+            vkCmdDrawMeshTasksIndirectCountEXT(cmd,
+                                               graph->GetBuffer("indirectBuffer"), 0,
+                                               graph->GetBuffer("indirectCountBuffer"), 0,
+                                               MEGA_PRIMITIVE_BUFFER_COUNT,
+                                               //2,
+                                               sizeof(InstancedMeshIndirectDrawParameters));
+
+            vkCmdEndRendering(cmd);
+        });
     }
 
 #if WILL_EDITOR
@@ -403,85 +457,6 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         vkCmdCopyBuffer(cmd, graph->GetBuffer("indirectBuffer"), graph->GetBuffer("debugReadbackBuffer"), 1, &indirectCopy);
     });
 #endif
-
-    RenderPass& colorPass = graph->AddPass("MainRender");
-    colorPass.WriteColorAttachment("drawImage");
-    colorPass.WriteDepthAttachment("depthTarget", {VK_FORMAT_D32_SFLOAT, renderExtent[0], renderExtent[1]});
-    colorPass.ReadBuffer("sceneData", VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
-    colorPass.Execute([&](VkCommandBuffer cmd) {
-        const VkRenderingAttachmentInfo colorAttachment = VkHelpers::RenderingAttachmentInfo(graph->GetImageView("drawImage"), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-        constexpr VkClearValue depthClear = {.depthStencil = {0.0f, 0u}};
-        const VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(graph->GetImageView("depthTarget"), &depthClear, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
-        const ResourceDimensions& dims = graph->GetImageDimensions("drawImage");
-        const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({dims.width, dims.height}, &colorAttachment, &depthAttachment);
-
-        vkCmdBeginRendering(cmd, &renderInfo);
-
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, basicRenderPipeline.pipeline.handle);
-
-        BasicRenderPushConstant pushData{
-            .modelMatrix = glm::mat4(1.0f),
-            .sceneData = frameResource.sceneDataBuffer.address,
-        };
-
-        vkCmdPushConstants(cmd, basicRenderPipeline.pipelineLayout.handle, VK_SHADER_STAGE_MESH_BIT_EXT, 0, sizeof(BasicRenderPushConstant), &pushData);
-        vkCmdDrawMeshTasksEXT(cmd, 1, 1, 1);
-
-        vkCmdEndRendering(cmd);
-    });
-
-    if (!frameBuffer.mainViewFamily.instances.empty()) {
-        RenderPass& meshPass = graph->AddPass("MeshRender");
-        meshPass.WriteColorAttachment("drawImage");
-        meshPass.WriteDepthAttachment("depthTarget");
-        meshPass.ReadBuffer("sceneData", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
-        meshPass.ReadBuffer("vertexBuffer", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
-        meshPass.ReadBuffer("primitiveBuffer", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
-        meshPass.ReadBuffer("meshletVertexBuffer", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
-        meshPass.ReadBuffer("meshletTriangleBuffer", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
-        meshPass.ReadBuffer("meshletBuffer", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
-        meshPass.ReadBuffer("materialBuffer", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
-        meshPass.ReadBuffer("modelBuffer", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
-        meshPass.ReadBuffer("instanceBuffer", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
-
-        meshPass.Execute([&](VkCommandBuffer cmd) {
-            const VkRenderingAttachmentInfo colorAttachment = VkHelpers::RenderingAttachmentInfo(graph->GetImageView("drawImage"), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-            const VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(graph->GetImageView("depthTarget"), nullptr, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
-            const ResourceDimensions& dims = graph->GetImageDimensions("drawImage");
-            const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({dims.width, dims.height}, &colorAttachment, &depthAttachment);
-
-            vkCmdBeginRendering(cmd, &renderInfo);
-
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, meshShaderPipeline.pipeline.handle);
-            VkDescriptorBufferBindingInfoEXT bindingInfo = graph->GetResourceManager()->bindlessSamplerTextureDescriptorBuffer.GetBindingInfo();
-            vkCmdBindDescriptorBuffersEXT(cmd, 1, &bindingInfo);
-            uint32_t bufferIndexImage = 0;
-            VkDeviceSize bufferOffset = 0;
-            vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, meshShaderPipeline.pipelineLayout.handle, 0, 1, &bufferIndexImage, &bufferOffset);
-
-            for (int32_t i = 0; i < frameBuffer.mainViewFamily.instances.size(); ++i) {
-                MeshShaderPushConstants pushConstants{
-                    .sceneData = graph->GetBufferAddress("sceneData"),
-                    .vertexBuffer = graph->GetBufferAddress("vertexBuffer"),
-                    .primitiveBuffer = graph->GetBufferAddress("primitiveBuffer"),
-                    .meshletVerticesBuffer = graph->GetBufferAddress("meshletVertexBuffer"),
-                    .meshletTrianglesBuffer = graph->GetBufferAddress("meshletTriangleBuffer"),
-                    .meshletBuffer = graph->GetBufferAddress("meshletBuffer"),
-                    .materialBuffer = graph->GetBufferAddress("materialBuffer"),
-                    .modelBuffer = graph->GetBufferAddress("modelBuffer"),
-                    .instanceBuffer = graph->GetBufferAddress("instanceBuffer"),
-                    .instanceIndex = static_cast<uint32_t>(i)
-                };
-
-                vkCmdPushConstants(cmd, meshShaderPipeline.pipelineLayout.handle, VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT,
-                                   0, sizeof(MeshShaderPushConstants), &pushConstants);
-
-                vkCmdDrawMeshTasksEXT(cmd, 1, 1, 1);
-            }
-
-            vkCmdEndRendering(cmd);
-        });
-    }
 
     if (frameBuffer.mainViewFamily.views[0].debug != 0) {
         auto& depthDebugPass = graph->AddPass("DepthDebug");
@@ -661,6 +636,7 @@ void RenderThread::CreatePipelines()
     basicComputePipeline = BasicComputePipeline(context.get(), resourceManager->bindlessRDGTransientDescriptorBuffer.descriptorSetLayout);
     basicRenderPipeline = BasicRenderPipeline(context.get());
     meshShaderPipeline = MeshShaderPipeline(context.get(), resourceManager->bindlessSamplerTextureDescriptorBuffer.descriptorSetLayout);
+    meshShadingInstancedPipeline = MeshShadingInstancedPipeline(context.get(), resourceManager->bindlessSamplerTextureDescriptorBuffer.descriptorSetLayout);
     //
     {
         VkPushConstantRange pushConstantRange{};
@@ -675,7 +651,10 @@ void RenderThread::CreatePipelines()
         piplineLayoutCreateInfo.pushConstantRangeCount = 1;
 
         depthDebugPipeline = ComputePipeline(context.get(), piplineLayoutCreateInfo, Platform::GetShaderPath() / "debugDepth_compute.spv");
-    } {
+    }
+
+    //
+    {
         VkPipelineLayoutCreateInfo computePipelineLayoutCreateInfo{};
         computePipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
         computePipelineLayoutCreateInfo.pNext = nullptr;

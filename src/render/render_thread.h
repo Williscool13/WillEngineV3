@@ -16,6 +16,7 @@
 #include "pipelines/basic_render_pipeline.h"
 #include "pipelines/compute_pipeline.h"
 #include "pipelines/mesh_shader_pipeline.h"
+#include "pipelines/mesh_shading_instanced_pipeline.h"
 #include "shaders/common_interop.h"
 
 namespace Render
@@ -134,6 +135,7 @@ private:
     ComputePipeline instancingVisibility;
     ComputePipeline instancingPrefixSum;
     ComputePipeline instancingIndirectConstruction;
+    MeshShadingInstancedPipeline meshShadingInstancedPipeline;
 };
 } // Render
 

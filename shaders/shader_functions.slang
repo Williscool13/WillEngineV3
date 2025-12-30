@@ -1,5 +1,6 @@
 import common_interop;
 
+// Returns false if it has been culled
 bool frustumCullSphere(Frustum frustum, float4 sphere) {
     // sphere.xyz = center, sphere.w = radius
     for (int i = 0; i < 6; i++) {
@@ -10,4 +11,22 @@ bool frustumCullSphere(Frustum frustum, float4 sphere) {
         }
     }
     return true;
+}
+
+// Returns false if backface culled
+bool backfaceCullCone(float3 coneAxis, float coneCutoff, float3 center, float radius, float3 cameraPos, float3x3 modelMatrix) {
+    float3 worldConeAxis = normalize(mul(modelMatrix, coneAxis));
+    float3 cameraToCenter = center - cameraPos;
+    float centerDist = length(cameraToCenter);
+
+    // Cone is backfacing if: dot(center - camera, axis) >= cutoff * dist + radius
+    return dot(cameraToCenter, worldConeAxis) < coneCutoff * centerDist + radius;
+}
+
+float3x3 adjugate(float3x3 m) {
+    return float3x3(
+        cross(m[1], m[2]),
+        cross(m[2], m[0]),
+        cross(m[0], m[1])
+    );
 }

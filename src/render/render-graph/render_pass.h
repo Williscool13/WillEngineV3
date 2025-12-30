@@ -45,7 +45,7 @@ public:
 
     RenderPass& ReadTransferBuffer(const std::string& name, VkPipelineStageFlags2 stages);
 
-    RenderPass& ReadIndirectBuffer(const std::string& name);
+    RenderPass& ReadIndirectBuffer(const std::string& name, VkPipelineStageFlags2 stages);
 
     RenderPass& Execute(std::function<void(VkCommandBuffer)> func);
 
@@ -74,6 +74,7 @@ private:
     std::vector<BufferAccess> bufferWrites;
     std::vector<BufferAccess> bufferReadTransfer;
     std::vector<BufferAccess> bufferWriteTransfer;
+    std::vector<BufferAccess> bufferIndirectReads;
 
     std::function<void(VkCommandBuffer_T*)> executeFunc;
 };
