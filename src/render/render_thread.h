@@ -136,6 +136,7 @@ private:
     ComputePipeline instancingPrefixSum;
     ComputePipeline instancingIndirectConstruction;
     MeshShadingInstancedPipeline meshShadingInstancedPipeline;
+    ComputePipeline deferredResolve;
 };
 } // Render
 

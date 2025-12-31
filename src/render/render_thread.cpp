@@ -227,8 +227,11 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         sceneData.view = viewMatrix;
         sceneData.proj = projMatrix;
         sceneData.viewProj = projMatrix * viewMatrix;
+        sceneData.invView = glm::inverse(viewMatrix);
+        sceneData.invProj = glm::inverse(projMatrix);
+        sceneData.invViewProj = glm::inverse(sceneData.viewProj);
         sceneData.cameraWorldPos = glm::vec4(view.cameraPos, 1.0f);
-        sceneData.frustum = CreateFrustum(projMatrix * viewMatrix);
+        sceneData.frustum = CreateFrustum(sceneData.viewProj);
         sceneData.deltaTime = 0.1f;
 
         auto currentSceneData = static_cast<SceneData*>(currentSceneDataBuffer.allocationInfo.pMappedData);
@@ -428,6 +431,43 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
                                            sizeof(InstancedMeshIndirectDrawParameters));
 
         vkCmdEndRendering(cmd);
+    });
+
+    RenderPass& deferredResolvePass = graph->AddPass("InstancedMeshShading");
+    deferredResolvePass.ReadSampledImage("albedoTarget");
+    deferredResolvePass.ReadSampledImage("normalTarget");
+    deferredResolvePass.ReadSampledImage("pbrTarget");
+    deferredResolvePass.ReadSampledImage("velocityTarget");
+    deferredResolvePass.ReadSampledImage("depthTarget");
+    deferredResolvePass.WriteStorageImage("drawImage");
+    deferredResolvePass.Execute([&](VkCommandBuffer cmd) {
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, deferredResolve.pipeline.handle);
+
+        DeferredResolvePushConstant pushData{
+            .directionalLightDirection = glm::vec4(0.5f, -1.0f, 0.3f, 3.0f),
+            .directionalLightColor = glm::vec4(1.0f, 0.95f, 0.9f, 0.0f),
+            .sceneData = graph->GetBufferAddress("sceneData"),
+            .extent = {renderExtent[0], renderExtent[1]},
+            .albedoIndex = graph->GetDescriptorIndex("albedoTarget"),
+            .normalIndex = graph->GetDescriptorIndex("normalTarget"),
+            .pbrIndex = graph->GetDescriptorIndex("pbrTarget"),
+            .depthIndex = graph->GetDescriptorIndex("depthTarget"),
+            .velocityIndex = graph->GetDescriptorIndex("velocityTarget"),
+            .pointSamplerIndex = resourceManager->pointSamplerIndex,
+            .outputImageIndex = graph->GetDescriptorIndex("drawImage"),
+        };
+
+        vkCmdPushConstants(cmd, deferredResolve.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(DeferredResolvePushConstant), &pushData);
+
+        VkDescriptorBufferBindingInfoEXT bindingInfo = resourceManager->bindlessRDGTransientDescriptorBuffer.GetBindingInfo();
+        vkCmdBindDescriptorBuffersEXT(cmd, 1, &bindingInfo);
+        uint32_t bufferIndex = 0;
+        VkDeviceSize offset = 0;
+        vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, deferredResolve.pipelineLayout.handle, 0, 1, &bufferIndex, &offset);
+
+        uint32_t xDispatch = (renderExtent[0] + 15) / 16;
+        uint32_t yDispatch = (renderExtent[1] + 15) / 16;
+        vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
     });
 
 #if WILL_EDITOR
@@ -659,6 +699,9 @@ void RenderThread::CreatePipelines()
         piplineLayoutCreateInfo.pushConstantRangeCount = 1;
 
         debugVisualizePipeline = ComputePipeline(context.get(), piplineLayoutCreateInfo, Platform::GetShaderPath() / "debugVisualize_compute.spv");
+
+        pushConstantRange.size = sizeof(DeferredResolvePushConstant);
+        deferredResolve = ComputePipeline(context.get(), piplineLayoutCreateInfo, Platform::GetShaderPath() / "deferredResolve_compute.spv");
     }
 
     //
