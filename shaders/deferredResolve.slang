@@ -28,7 +28,7 @@ void computeMain(uint3 threadID : SV_DispatchThreadID) {
     float roughness = pbrData.g;
     float metallic = pbrData.r;
 
-    float3 N = normalize(viewNormal);
+    float3 N = normalize(viewNormal * 2.0 - 1.0);
     float3 V = normalize(-viewPosition);
 
     // Directional light in view space (transform from world space)
@@ -40,7 +40,7 @@ void computeMain(uint3 threadID : SV_DispatchThreadID) {
     //float G = G_Smith(N, V, L, roughness);
     float G = G_SCHLICKGGX_SMITH(N, V, L, roughness);
     float3 F0 = lerp(float3(0.04, 0.04, 0.04), albedo.xyz, metallic);
-    float3 F = F_Schlick(V, H, F0);
+    float3 F = F_SCHLICK(V, H, F0);
 
     float3 numerator = NDF * G * F;
     float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0);

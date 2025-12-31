@@ -18,10 +18,12 @@ struct PrimitiveData
 
 struct RenderableComponent
 {
-    glm::vec4 modelFlags;
+    glm::vec4 modelFlags;// x: visible, y: shadow-caster, zw: reserved
 
     std::array<PrimitiveData, 64> primitives;
     uint8_t primitiveCount = 0;
+
+    glm::mat4 previousModelMatrix{1.0f};
 };
 }
 #endif //WILL_ENGINE_RENDERABLE_COMPONENT_H

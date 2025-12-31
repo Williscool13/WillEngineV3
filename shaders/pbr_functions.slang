@@ -1,29 +1,18 @@
 module pbr_functions;
 
 
-public float D_GGX(float3 N, float3 H, float roughness) {
+public float D_GGX(float3 N, float3 H, float roughness){
+    // Brian Karis says GGX NDF has a longer "tail" that appears more natural
     float a = roughness * roughness;
-    float a2 = a * a;
-    float NdotH = max(dot(N, H), 0.0);
+    float a2 = a * a; // disney reparameterization
+    float NdotH = max(dot(N, H), 0.0f);
     float NdotH2 = NdotH * NdotH;
-    float denom = (NdotH2 * (a2 - 1.0) + 1.0);
-    return a2 / (3.14159265359 * denom * denom);
-}
 
-public float G_SchlickGGX(float NdotV, float roughness) {
-    float r = roughness + 1.0;
-    float k = (r * r) / 8.0;
-    return NdotV / (NdotV * (1.0 - k) + k);
+    float num = a2;
+    float premult = NdotH2 * (a2 - 1.0f) + 1.0f;
+    float denom = 3.14159265359 * premult * premult;
+    return num / denom;
 }
-
-public float G_Smith(float3 N, float3 V, float3 L, float roughness) {
-    float NdotV = max(dot(N, V), 0.0);
-    float NdotL = max(dot(N, L), 0.0);
-    float ggx1 = G_SchlickGGX(NdotV, roughness);
-    float ggx2 = G_SchlickGGX(NdotL, roughness);
-    return ggx1 * ggx2;
-}
-
 
 float G_SCHLICKGGX(float NdotX, float k){
     float num = NdotX;
@@ -46,7 +35,17 @@ public float G_SCHLICKGGX_SMITH(float3 N, float3 V, float3 L, float roughness){
     return ggx1 * ggx2;
 }
 
-public float3 F_Schlick(float3 V, float3 H, float3 F0) {
-    float cosTheta = max(dot(V, H), 0.0);
-    return F0 + (1.0 - F0) * pow(1.0 - cosTheta, 5.0);
+float FRESNEL_POWER_UNREAL(float3 V, float3 H){
+    float VDotH = dot(V, H);
+    return (-5.55473 * VDotH - 6.98316) * VDotH;
+}
+
+public float3 F_SCHLICK(float3 V, float3 H, float3 F0){
+    float VdotH = max(dot(V, H), 0.0f);
+
+    // classic
+    //return F0 + (1.0f - F0) * pow(1.0f - VdotH, 5.0f);
+
+    // unreal optimized
+    return F0 + (1 - F0) * pow(2, FRESNEL_POWER_UNREAL(V, H));
 }

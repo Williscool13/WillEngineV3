@@ -196,11 +196,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     {
         auto* modelBuffer = static_cast<Model*>(frameResource.modelBuffer.allocationInfo.pMappedData);
         for (size_t i = 0; i < frameBuffer.mainViewFamily.modelMatrices.size(); ++i) {
-            modelBuffer[i] = {
-                .modelMatrix = frameBuffer.mainViewFamily.modelMatrices[i],
-                .prevModelMatrix = frameBuffer.mainViewFamily.modelMatrices[i], // TODO: actual prev frame
-                .flags = glm::vec4(0.0f)
-            };
+            modelBuffer[i] = frameBuffer.mainViewFamily.modelMatrices[i];
         }
 
         auto* materialBuffer = static_cast<MaterialProperties*>(frameResource.materialBuffer.allocationInfo.pMappedData);
@@ -218,11 +214,13 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
             };
         }
 
-        // todo: address what happens if views is 0
         const Core::RenderView& view = frameBuffer.mainViewFamily.mainView;
 
-        const glm::mat4 viewMatrix = glm::lookAt(view.cameraPos, view.cameraLookAt, view.cameraUp);
-        const glm::mat4 projMatrix = glm::perspective(view.fovRadians, view.aspectRatio, view.farPlane, view.nearPlane);
+        const glm::mat4 viewMatrix = glm::lookAt(view.currentViewData.cameraPos, view.currentViewData.cameraLookAt, view.currentViewData.cameraUp);
+        const glm::mat4 projMatrix = glm::perspective(view.currentViewData.fovRadians, view.currentViewData.aspectRatio, view.currentViewData.farPlane, view.currentViewData.nearPlane);
+
+        const glm::mat4 prevViewMatrix = glm::lookAt(view.previousViewData.cameraPos, view.previousViewData.cameraLookAt, view.previousViewData.cameraUp);
+        const glm::mat4 prevProjMatrix = glm::perspective(view.previousViewData.fovRadians, view.previousViewData.aspectRatio, view.previousViewData.farPlane, view.previousViewData.nearPlane);
 
         sceneData.view = viewMatrix;
         sceneData.proj = projMatrix;
@@ -230,7 +228,10 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         sceneData.invView = glm::inverse(viewMatrix);
         sceneData.invProj = glm::inverse(projMatrix);
         sceneData.invViewProj = glm::inverse(sceneData.viewProj);
-        sceneData.cameraWorldPos = glm::vec4(view.cameraPos, 1.0f);
+
+        sceneData.prevViewProj = prevProjMatrix * prevViewMatrix;
+
+        sceneData.cameraWorldPos = glm::vec4(view.currentViewData.cameraPos, 1.0f);
         sceneData.frustum = CreateFrustum(sceneData.viewProj);
         sceneData.deltaTime = 0.1f;
 
@@ -433,7 +434,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         vkCmdEndRendering(cmd);
     });
 
-    RenderPass& deferredResolvePass = graph->AddPass("InstancedMeshShading");
+    RenderPass& deferredResolvePass = graph->AddPass("DeferredResolve");
     deferredResolvePass.ReadSampledImage("albedoTarget");
     deferredResolvePass.ReadSampledImage("normalTarget");
     deferredResolvePass.ReadSampledImage("pbrTarget");
@@ -453,7 +454,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
             .pbrIndex = graph->GetDescriptorIndex("pbrTarget"),
             .depthIndex = graph->GetDescriptorIndex("depthTarget"),
             .velocityIndex = graph->GetDescriptorIndex("velocityTarget"),
-            .pointSamplerIndex = resourceManager->pointSamplerIndex,
+            .pointSamplerIndex = resourceManager->linearSamplerIndex,
             .outputImageIndex = graph->GetDescriptorIndex("drawImage"),
         };
 
@@ -516,8 +517,8 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
 
             DebugVisualizePushConstant pushData{
                 .extent = {renderExtent[0], renderExtent[1]},
-                .nearPlane = frameBuffer.mainViewFamily.mainView.nearPlane,
-                .farPlane = frameBuffer.mainViewFamily.mainView.farPlane,
+                .nearPlane = frameBuffer.mainViewFamily.mainView.currentViewData.nearPlane,
+                .farPlane = frameBuffer.mainViewFamily.mainView.currentViewData.farPlane,
                 .textureIndex = graph->GetDescriptorIndex(debugTargetName),
                 .samplerIndex = resourceManager->linearSamplerIndex,
                 .outputImageIndex = graph->GetDescriptorIndex("drawImage"),

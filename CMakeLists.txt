@@ -170,6 +170,16 @@ add_custom_target(regenerate_interop
         COMMENT "Regenerating all shader interop files"
 )
 
+set_property(GLOBAL PROPERTY SHADER_INCLUDE_FILES "")
+
+function(add_shader_include INCLUDE_FILE)
+    get_filename_component(INCLUDE_ABS ${INCLUDE_FILE} ABSOLUTE)
+    set_property(GLOBAL APPEND PROPERTY SHADER_INCLUDE_FILES ${INCLUDE_ABS})
+endfunction()
+
+add_shader_include("${CMAKE_SOURCE_DIR}/shaders/shader_functions.slang")
+add_shader_include("${CMAKE_SOURCE_DIR}/shaders/pbr_functions.slang")
+
 compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/debugVisualize.slang compute computeMain
         ${CMAKE_SOURCE_DIR}/shaders/basicCompute.slang compute computeMain

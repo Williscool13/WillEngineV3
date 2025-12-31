@@ -58,12 +58,12 @@ SHADER_PUBLIC struct SHADER_ALIGN SceneData
     SHADER_PUBLIC float4x4 invViewProj;
     // SHADER_PUBLIC float4x4 viewProjCameraLookDirection;
 
-    // SHADER_PUBLIC float4x4 prevView;
-    // SHADER_PUBLIC float4x4 prevProj;
-    // SHADER_PUBLIC float4x4 prevViewProj;
-    // SHADER_PUBLIC float4x4 prevInvView;
-    // SHADER_PUBLIC float4x4 prevInvProj;
-    // SHADER_PUBLIC float4x4 prevInvViewProj;
+    //SHADER_PUBLIC float4x4 prevView;
+    //SHADER_PUBLIC float4x4 prevProj;
+    SHADER_PUBLIC float4x4 prevViewProj;
+    //SHADER_PUBLIC float4x4 prevInvView;
+    //SHADER_PUBLIC float4x4 prevInvProj;
+    //SHADER_PUBLIC float4x4 prevInvViewProj;
     // SHADER_PUBLIC float4x4 prevViewProjCameraLookDirection;
 
     SHADER_PUBLIC float4 cameraWorldPos;

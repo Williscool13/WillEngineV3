@@ -33,9 +33,12 @@ float3x3 adjugate(float3x3 m) {
 
 // Reconstructs position of a pixel based on inverse project and depth buffer
 float3 reconstructViewPosition(float4x4 invProj, float2 uv, float depth) {
+
     float2 ndc = uv * 2.0 - 1.0;
     // Note: NDC Y-flip required because viewport uses negative height
+    //uv.y = 1 - uv.y;
     ndc.y = -ndc.y;
+
     float4 positionVS = mul(invProj, float4(ndc, depth, 1.0));
     return positionVS.xyz / positionVS.w;
 }

@@ -19,7 +19,7 @@ namespace Core
 {
 constexpr uint32_t FRAME_BUFFER_COUNT = 3;
 
-struct RenderView
+struct ViewData
 {
     float fovRadians;
     float aspectRatio;
@@ -28,6 +28,12 @@ struct RenderView
     glm::vec3 cameraPos;
     glm::vec3 cameraLookAt;
     glm::vec3 cameraUp;
+};
+
+struct RenderView
+{
+    ViewData currentViewData;
+    ViewData previousViewData;
 
     // render target color
     // render target depth
@@ -39,7 +45,7 @@ struct ViewFamily {
     RenderView mainView;
     std::vector<RenderView> portalViews;
 
-    std::vector<glm::mat4> modelMatrices;
+    std::vector<Model> modelMatrices;
 
     struct InstanceData {
         uint32_t primitiveIndex;

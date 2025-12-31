@@ -33,17 +33,18 @@ void computeMain(uint3 threadID : SV_DispatchThreadID) {
             float4 albedo  = textures[pc.textureIndex].SampleLevel(samplers[pc.samplerIndex], uv, 0);
             renderTextures[pc.outputImageIndex][threadID.xy] = float4(albedo.x, albedo.y, albedo.z, 1.0f);
             break;
-        case 3: // Normal (view space, stored in SNORM [-1,1])
+        case 3: // Normal (view space, stored in packed unorm [0,1])
             float3 normal = textures[pc.textureIndex].SampleLevel(samplers[pc.samplerIndex], uv, 0).xyz;
-            renderTextures[pc.outputImageIndex][threadID.xy] = float4(normal * 0.5 + 0.5, 1.0);
+            renderTextures[pc.outputImageIndex][threadID.xy] = float4(normal, 1.0);
             break;
         case 4: // PBR (R=metallic, G=roughness)
             float4 pbr = textures[pc.textureIndex].SampleLevel(samplers[pc.samplerIndex], uv, 0);
             renderTextures[pc.outputImageIndex][threadID.xy] = float4(pbr.r, pbr.g, 0.0, 1.0);
             break;
-        case 5: // Velocity (motion vectors)
+        case 5: // Velocity
             float2 velocity = textures[pc.textureIndex].SampleLevel(samplers[pc.samplerIndex], uv, 0).xy;
-            renderTextures[pc.outputImageIndex][threadID.xy] = float4(abs(velocity) * 10.0, 0.0, 1.0);
+            float2 centered = abs((velocity - 0.5) * 10.0);
+            renderTextures[pc.outputImageIndex][threadID.xy] = float4(centered, 0.0, 1.0);
             break;
         default:
             renderTextures[pc.outputImageIndex][threadID.xy] = float4(1.0, 0.0, 1.0, 1.0); // Magenta for invalid

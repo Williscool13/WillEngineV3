@@ -5,19 +5,14 @@
 #ifndef WILL_ENGINE_CAMERACOMPONENT_H
 #define WILL_ENGINE_CAMERACOMPONENT_H
 
-#include <glm/glm.hpp>
+#include "core/include/render_interface.h"
 
 namespace Game
 {
 struct CameraComponent
 {
-    float fovRadians;
-    float aspectRatio;
-    float nearPlane;
-    float farPlane;
-    glm::vec3 cameraPos;
-    glm::vec3 cameraLookAt;
-    glm::vec3 cameraUp;
+    Core::ViewData currentViewData;
+    Core::ViewData previousViewData;
 };
 
 struct MainViewportComponent

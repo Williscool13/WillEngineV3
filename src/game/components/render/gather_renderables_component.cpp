@@ -31,7 +31,7 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
             currentMatrix = GetMatrix(transform);
         }
 
-        frameBuffer->mainViewFamily.modelMatrices.push_back(currentMatrix);
+        frameBuffer->mainViewFamily.modelMatrices.push_back({currentMatrix, renderable.previousModelMatrix});
         uint32_t modelIndex = frameBuffer->mainViewFamily.modelMatrices.size() - 1;
 
         for (uint8_t i = 0; i < renderable.primitiveCount; ++i) {
@@ -42,6 +42,8 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
                 .modelIndex = modelIndex
             });
         }
+
+        renderable.previousModelMatrix = currentMatrix;
     }
 
     std::unordered_map<Engine::MaterialID, uint32_t> materialRemap;

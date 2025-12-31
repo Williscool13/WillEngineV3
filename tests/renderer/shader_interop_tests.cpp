@@ -182,9 +182,6 @@ TEST_CASE("Model structure size and alignment", "[renderer][shader-interop]") {
 
         // prevModelMatrix at offset 64
         REQUIRE(reinterpret_cast<const char*>(&m.prevModelMatrix) - base == 64);
-
-        // flags at offset 128
-        REQUIRE(reinterpret_cast<const char*>(&m.flags) - base == 128);
     }
 }
 

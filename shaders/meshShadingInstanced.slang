@@ -10,12 +10,13 @@ import shader_functions;
 struct VertexOutput
 {
     float4 position : SV_Position;
-    float3 worldPos : TEXCOORD1;
     float3 viewNormal : TEXCOORD2;
     float4 tangent : TEXCOORD3;
     float4 color : COLOR0;
     float2 uv : TEXCOORD0;
     nointerpolation uint32_t materialIndex : TEXCOORD4;
+    float4 currentClipPos : TEXCOORD5;
+    float4 previousClipPos : TEXCOORD6;
 };
 
 // Per https://developer.nvidia.com/blog/using-mesh-shaders-for-professional-graphics/
@@ -116,6 +117,7 @@ void meshMain(
 
     Model m = pushConstant.modelBuffer[inPayload.modelIndex];
     float4x4 viewProj = pushConstant.sceneData->viewProj;
+    float4x4 prevViewProj = pushConstant.sceneData->prevViewProj;
     float3x3 viewRotation = (float3x3)pushConstant.sceneData.view;
 
     SetMeshOutputCounts(meshlet.meshletVerticesCount, meshlet.meshletTriangleCount);
@@ -123,17 +125,13 @@ void meshMain(
     for (uint i = threadIndex; i < meshlet.meshletVerticesCount; i += MESH_SHADER_DISPATCH_X) {
         uint localVertexIndex = pushConstant.meshletVerticesBuffer[meshlet.meshletVerticesOffset + i];
         Vertex v = pushConstant.vertexBuffer[meshlet.vertexOffset + localVertexIndex];
-        float4 worldPos = mul(m.modelMatrix, float4(v.position, 1.0));
-        float4 clipPos = mul(viewProj, worldPos);
+        float4 clipPos = mul(viewProj, mul(m.modelMatrix, float4(v.position, 1.0)));
         vertices[i].position = clipPos;
-        vertices[i].worldPos = worldPos.xyz;
         vertices[i].viewNormal = normalize(mul(viewRotation, mul(adjugate((float3x3)m.modelMatrix), v.normal)));
         vertices[i].tangent = float4(normalize(mul(adjugate((float3x3)m.modelMatrix), v.tangent.xyz)), v.tangent.w);
         vertices[i].uv = float2(v.texcoordU, v.texcoordV);
-
-
-        uint meshletID = gid.x;
-        /*uint hash = meshletID * 747796405u + 2891336453u;
+        /*uint meshletID = gid.x;
+        uint hash = meshletID * 747796405u + 2891336453u;
         float3 color = float3(
             (hash & 0xFF) / 255.0,
             ((hash >> 8) & 0xFF) / 255.0,
@@ -141,8 +139,9 @@ void meshMain(
         );
         vertices[i].color = float4(color * v.color.xyz, 1.0);*/
         vertices[i].color = v.color;
-
         vertices[i].materialIndex = inPayload.materialIndex;
+        vertices[i].currentClipPos = clipPos;
+        vertices[i].previousClipPos = mul(prevViewProj, mul(m.prevModelMatrix, float4(v.position, 1.0)));
     }
 
     for (uint i = threadIndex; i < meshlet.meshletTriangleCount; i += MESH_SHADER_DISPATCH_X) {
@@ -182,9 +181,13 @@ FragmentOutput fragmentMain(VertexOutput vertexInput, uniform InstancedMeshShadi
 
     FragmentOutput output;
     output.albedo = albedo;
-    output.normal = float4(viewNormal, 1.0);
+    output.normal = float4(viewNormal * 0.5 + 0.5, 1.0);
     output.pbr = float4(material.metalRoughFactors.x, material.metalRoughFactors.y, 0.0, 0.0);
-    output.velocity = float2(0.0, 0.0); // TODO: compute from current/previous positions
+
+    float2 currNdc = vertexInput.currentClipPos.xy / vertexInput.currentClipPos.w;
+    float2 prevNdc = vertexInput.previousClipPos.xy / vertexInput.previousClipPos.w;
+    float2 velocity = (currNdc - prevNdc) * 0.5 + 0.5f;
+    output.velocity = velocity;
 
     return output;
 }

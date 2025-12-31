@@ -150,6 +150,7 @@ function(compile_shader TARGET SHADER_SOURCE STAGE ENTRY)
 
     set(SHADER_OUTPUT ${CMAKE_BINARY_DIR}/shaders/${SHADER_NAME}_${STAGE}.spv)
     get_property(INTEROP_FILES GLOBAL PROPERTY SHADER_INTEROP_FILES)
+    get_property(INCLUDE_FILES GLOBAL PROPERTY SHADER_INCLUDE_FILES)
 
     add_custom_command(
             OUTPUT ${SHADER_OUTPUT}
@@ -160,7 +161,7 @@ function(compile_shader TARGET SHADER_SOURCE STAGE ENTRY)
             -stage ${STAGE}
             -I ${SHADER_INCLUDE_DIR}
             -o ${SHADER_OUTPUT}
-            DEPENDS ${SHADER_SOURCE_ABS} ${INTEROP_FILES}
+            DEPENDS ${SHADER_SOURCE_ABS} ${INTEROP_FILES} ${INCLUDE_FILES}
             COMMENT "Compiling ${STAGE} shader: ${SHADER_NAME}_${STAGE}.spv"
             VERBATIM
     )

@@ -126,7 +126,6 @@ SHADER_PUBLIC struct SHADER_ALIGN Model
 {
     SHADER_PUBLIC float4x4 modelMatrix;
     SHADER_PUBLIC float4x4 prevModelMatrix;
-    SHADER_PUBLIC float4 flags; // x: visible, y: shadow-caster, zw: reserved
 };
 
 

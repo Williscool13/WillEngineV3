@@ -22,13 +22,9 @@ void BuildViewFamily(Engine::GameState* state, Core::ViewFamily& mainViewFamily)
 
     const auto& [cam, transform] = cameraView.get(mainCamera);
 
-    mainViewFamily.mainView.fovRadians = cam.fovRadians;
-    mainViewFamily.mainView.aspectRatio = cam.aspectRatio;
-    mainViewFamily.mainView.nearPlane = cam.nearPlane;
-    mainViewFamily.mainView.farPlane = cam.farPlane;
-    mainViewFamily.mainView.cameraPos = cam.cameraPos;
-    mainViewFamily.mainView.cameraLookAt = cam.cameraLookAt;
-    mainViewFamily.mainView.cameraUp = cam.cameraUp;
+    mainViewFamily.mainView.currentViewData = cam.currentViewData;
+    mainViewFamily.mainView.previousViewData = cam.previousViewData;
+    cam.previousViewData = cam.currentViewData;
 
     if (auto* debugView = state->registry.try_get<RenderDebugViewComponent>(mainCamera)) {
         mainViewFamily.mainView.debug = debugView->debugIndex;
