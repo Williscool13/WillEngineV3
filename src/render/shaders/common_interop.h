@@ -73,8 +73,8 @@ SHADER_PUBLIC struct SHADER_ALIGN SceneData
 
     SHADER_PUBLIC Frustum frustum;
 
-    // SHADER_PUBLIC float2 renderTargetSize;
-    // SHADER_PUBLIC float2 texelSize;
+    SHADER_PUBLIC float2 mainRenderTargetSize;
+    SHADER_PUBLIC float2 texelSize;
 
     // SHADER_PUBLIC float2 cameraPlanes;
 

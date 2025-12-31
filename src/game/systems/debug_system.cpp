@@ -310,6 +310,12 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
             debugViewComponent.debugIndex = (debugViewComponent.debugIndex == 5) ? 0 : 5;
         }
     }
+    if (state->inputFrame->GetKey(Key::NUM_6).pressed) {
+        auto view = state->registry.view<RenderDebugViewComponent>();
+        for (auto [entity, debugViewComponent] : view.each()) {
+            debugViewComponent.debugIndex = (debugViewComponent.debugIndex == 6) ? 0 : 6;
+        }
+    }
 }
 
 void DebugProcessPhysicsCollisions(Core::EngineContext* ctx, Engine::GameState* state)

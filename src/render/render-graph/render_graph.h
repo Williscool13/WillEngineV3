@@ -14,12 +14,24 @@
 #include "render/vulkan/vk_resources.h"
 #include "core/allocators/handle_allocator.h"
 
+
 namespace Render
 {
 struct ResourceManager;
 class RenderPass;
 struct TextureResource;
 using TransientImageHandle = Core::Handle<TextureResource>;
+
+struct FrameCarryover
+{
+    std::string srcName;
+    std::string dstName;
+
+    TextureInfo textInfo;
+    VkImageLayout layout;
+    VkImageUsageFlags accumulatedUsage;
+    uint32_t dstPhysicalIndex;
+};
 
 class RenderGraph
 {
@@ -48,7 +60,9 @@ public:
 
     void InvalidateAll();
 
-    void CreateImage(const std::string& name, const TextureInfo& texInfo);
+    void CreateTexture(const std::string& name, const TextureInfo& texInfo);
+
+    void CreateTextureWithUsage(const std::string& name, const TextureInfo& texInfo, VkImageUsageFlags usage);
 
     void CreateBuffer(const std::string& name, VkDeviceSize size);
 
@@ -59,6 +73,8 @@ public:
 
     void ImportBuffer(const std::string& name, VkBuffer buffer, VkDeviceAddress address, const BufferInfo& info, PipelineEvent initialState);
 
+
+    bool HasTexture(const std::string& name);
 
     VkImage GetImage(const std::string& name);
 
@@ -75,6 +91,8 @@ public:
     [[nodiscard]] ResourceManager* GetResourceManager() const { return resourceManager; }
 
     PipelineEvent GetBufferState(const std::string& name);
+
+    void CarryToNextFrame(const std::string& name, const std::string& newName);
 
 private:
     friend class RenderPass;
@@ -100,9 +118,13 @@ private:
     // Render passes
     std::vector<std::unique_ptr<RenderPass> > passes;
 
+    std::vector<FrameCarryover> carryovers;
+
     bool debugLogging = false;
 
 private:
+    TextureResource* GetTexture(const std::string& name);
+
     TextureResource* GetOrCreateTexture(const std::string& name);
 
     BufferResource* GetOrCreateBuffer(const std::string& name);

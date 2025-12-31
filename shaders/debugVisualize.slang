@@ -46,6 +46,10 @@ void computeMain(uint3 threadID : SV_DispatchThreadID) {
             float2 centered = abs((velocity - 0.5) * 100.0);
             renderTextures[pc.outputImageIndex][threadID.xy] = float4(centered, 0.0, 1.0);
             break;
+        case 6: // TAA resolve
+            float4 color  = textures[pc.textureIndex].SampleLevel(samplers[pc.samplerIndex], uv, 0);
+            renderTextures[pc.outputImageIndex][threadID.xy] = float4(color.x, color.y, color.z, 1.0f);
+            break;
         default:
             renderTextures[pc.outputImageIndex][threadID.xy] = float4(1.0, 0.0, 1.0, 1.0); // Magenta for invalid
             break;

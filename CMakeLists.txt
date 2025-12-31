@@ -196,6 +196,7 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/meshShadingInstanced.slang mesh meshMain
         ${CMAKE_SOURCE_DIR}/shaders/meshShadingInstanced.slang fragment fragmentMain
         ${CMAKE_SOURCE_DIR}/shaders/deferredResolve.slang compute computeMain
+        ${CMAKE_SOURCE_DIR}/shaders/temporalAntialiasing.slang compute computeMain
 )
 
 # Post-Build Commands =========================

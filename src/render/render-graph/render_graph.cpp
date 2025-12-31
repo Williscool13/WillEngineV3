@@ -130,6 +130,7 @@ void RenderGraph::Compile()
             for (uint32_t i = 0; i < physicalResources.size(); i++) {
                 auto& phys = physicalResources[i];
                 if (phys.bIsImported) { continue; }
+                if (!phys.bCanAlias) { continue; }
                 if (phys.dimensions != desiredDim) { continue; }
 
                 // Physical usage must be a superset: (phys & required) == required
@@ -150,6 +151,7 @@ void RenderGraph::Compile()
                 if (canAlias) {
                     tex.physicalIndex = i;
                     phys.logicalResourceIndices.push_back(tex.index);
+                    phys.lastLogicalResourceUse = tex.name;
                     foundAlias = true;
                     break;
                 }
@@ -161,6 +163,7 @@ void RenderGraph::Compile()
                 physicalResources.emplace_back();
                 physicalResources.back().dimensions = desiredDim;
                 physicalResources.back().logicalResourceIndices.push_back(tex.index);
+                physicalResources.back().lastLogicalResourceUse = tex.name;
             }
         }
 
@@ -218,6 +221,7 @@ void RenderGraph::Compile()
                 physicalResources.emplace_back();
                 physicalResources.back().dimensions = desiredDim;
                 physicalResources.back().logicalResourceIndices.push_back(buf.index);
+                physicalResources.back().lastLogicalResourceUse = buf.name;
             }
         }
 
@@ -650,6 +654,15 @@ void RenderGraph::PrepareSwapchain(VkCommandBuffer cmd, const std::string& name)
 
 void RenderGraph::Reset()
 {
+    for (FrameCarryover& carryover : carryovers) {
+        if (TextureResource* tex = GetTexture(carryover.srcName)) {
+            carryover.dstPhysicalIndex = tex->physicalIndex;
+            carryover.textInfo = tex->textureInfo;
+            carryover.layout = tex->layout;
+            carryover.accumulatedUsage = tex->accumulatedUsage;
+        }
+    }
+
     passes.clear();
     textures.clear();
     textureNameToIndex.clear();
@@ -658,7 +671,22 @@ void RenderGraph::Reset()
 
     for (auto& phys : physicalResources) {
         phys.logicalResourceIndices.clear();
+        phys.bCanAlias = true;
     }
+
+    for (auto& carryover : carryovers) {
+        TextureResource* newTex = GetOrCreateTexture(carryover.dstName);
+        newTex->textureInfo = carryover.textInfo;
+        newTex->physicalIndex = carryover.dstPhysicalIndex;
+        newTex->layout = carryover.layout;
+        newTex->accumulatedUsage = carryover.accumulatedUsage;
+
+        PhysicalResource& phys = physicalResources[newTex->physicalIndex];
+        phys.logicalResourceIndices.push_back(newTex->index);
+        phys.lastLogicalResourceUse = newTex->name;
+        phys.bCanAlias = false;
+    }
+    carryovers.clear();
 }
 
 void RenderGraph::InvalidateAll()
@@ -678,13 +706,22 @@ void RenderGraph::InvalidateAll()
     }
     physicalResources.clear();
     transientImageHandleAllocator.Clear();
+    carryovers.clear();
 }
 
-void RenderGraph::CreateImage(const std::string& name, const TextureInfo& texInfo)
+void RenderGraph::CreateTexture(const std::string& name, const TextureInfo& texInfo)
 {
     TextureResource* resource = GetOrCreateTexture(name);
     assert(texInfo.format != VK_FORMAT_UNDEFINED && "Texture info uses undefined format");
     resource->textureInfo = texInfo;
+}
+
+void RenderGraph::CreateTextureWithUsage(const std::string& name, const TextureInfo& texInfo, VkImageUsageFlags usage)
+{
+    TextureResource* resource = GetOrCreateTexture(name);
+    assert(texInfo.format != VK_FORMAT_UNDEFINED && "Texture info uses undefined format");
+    resource->textureInfo = texInfo;
+    resource->accumulatedUsage |= usage;
 }
 
 void RenderGraph::CreateBuffer(const std::string& name, VkDeviceSize size)
@@ -748,6 +785,7 @@ void RenderGraph::ImportTexture(const std::string& name,
 
     phys.aspect = VkHelpers::GetImageAspect(info.format);
     phys.dimensions.name = name;
+    phys.lastLogicalResourceUse = name;
 
     tex->finalLayout = finalLayout;
 }
@@ -786,6 +824,7 @@ void RenderGraph::ImportBufferNoBarrier(const std::string& name, VkBuffer buffer
 
     auto& phys = physicalResources[buf->physicalIndex];
     phys.dimensions.name = name;
+    phys.lastLogicalResourceUse = name;
     phys.bDisableBarriers = true;
 }
 
@@ -825,6 +864,13 @@ void RenderGraph::ImportBuffer(const std::string& name, VkBuffer buffer, VkDevic
     phys.event.stages = initialState.stages;
     phys.event.access = initialState.access;
     phys.dimensions.name = name;
+    phys.lastLogicalResourceUse = name;
+}
+
+bool RenderGraph::HasTexture(const std::string& name)
+{
+    auto it = textureNameToIndex.find(name);
+    return it != textureNameToIndex.end();
 }
 
 VkImage RenderGraph::GetImage(const std::string& name)
@@ -913,6 +959,16 @@ PipelineEvent RenderGraph::GetBufferState(const std::string& name)
     return physicalResources[buf.physicalIndex].event;
 }
 
+void RenderGraph::CarryToNextFrame(const std::string& name, const std::string& newName)
+{
+    for (const auto& c : carryovers) {
+        assert(c.srcName != name && "Source texture already designated for carryover");
+        assert(c.dstName != newName && "Destination name already used in another carryover");
+    }
+
+    carryovers.emplace_back(name, newName);
+}
+
 void RenderGraph::LogBarrier(const VkImageMemoryBarrier2& barrier, const std::string& resourceName, uint32_t physicalIndex) const
 {
     if (!debugLogging) return;
@@ -938,6 +994,16 @@ void RenderGraph::LogBarrier(const VkImageMemoryBarrier2& barrier, const std::st
     SPDLOG_INFO("  [BARRIER] {} ({}): {} -> {}", resourceName, physicalIndex, LayoutToString(barrier.oldLayout), LayoutToString(barrier.newLayout));
 }
 
+
+TextureResource* RenderGraph::GetTexture(const std::string& name)
+{
+    auto it = textureNameToIndex.find(name);
+    if (it != textureNameToIndex.end()) {
+        return &textures[it->second];
+    }
+
+    return nullptr;
+}
 
 TextureResource* RenderGraph::GetOrCreateTexture(const std::string& name)
 {

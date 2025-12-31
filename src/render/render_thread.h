@@ -137,6 +137,8 @@ private:
     ComputePipeline instancingIndirectConstruction;
     MeshShadingInstancedPipeline meshShadingInstancedPipeline;
     ComputePipeline deferredResolve;
+
+    ComputePipeline temporalAntialiasing;
 };
 } // Render
 

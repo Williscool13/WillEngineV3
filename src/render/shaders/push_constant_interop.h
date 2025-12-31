@@ -132,4 +132,15 @@ SHADER_PUBLIC struct DeferredResolvePushConstant {
     SHADER_PUBLIC uint32_t outputImageIndex;
 };
 
+SHADER_PUBLIC struct TemporalAntialiasingPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC uint32_t pointSamplerIndex;
+    SHADER_PUBLIC uint32_t linearSamplerIndex;
+    SHADER_PUBLIC uint32_t colorResolvedIndex;
+    SHADER_PUBLIC uint32_t colorHistoryIndex;
+    SHADER_PUBLIC uint32_t velocityIndex;
+    SHADER_PUBLIC uint32_t outputImageIndex;
+};
+
 #endif //WILL_ENGINE_PUSH_CONSTANT_INTEROP_H

@@ -64,10 +64,13 @@ struct ResourceDimensions
 
 struct PhysicalResource
 {
+    std::string lastLogicalResourceUse{};
+
     ResourceDimensions dimensions;
     PipelineEvent event;
     bool bIsImported = false;
     bool bDisableBarriers = false;
+    bool bCanAlias = true;
 
     std::vector<uint32_t> logicalResourceIndices;
     bool bUsedThisFrame = false;

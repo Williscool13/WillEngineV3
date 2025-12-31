@@ -251,6 +251,10 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         sceneData.prevViewProj = jitteredPrevProj * prevViewMatrix;
 
         sceneData.cameraWorldPos = glm::vec4(view.currentViewData.cameraPos, 1.0f);
+
+        sceneData.texelSize = glm::vec2(1.0f, 1.0f) / glm::vec2(renderExtent[0], renderExtent[1]);
+        sceneData.mainRenderTargetSize = glm::vec2(renderExtent[0], renderExtent[1]);
+
         sceneData.frustum = CreateFrustum(sceneData.viewProj);
         sceneData.deltaTime = 0.1f;
 
@@ -295,12 +299,12 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     graph->CreateBuffer("indirectCountBuffer", INSTANCING_MESH_INDIRECT_COUNT);
     graph->CreateBuffer("indirectBuffer", INSTANCING_MESH_INDIRECT_PARAMETERS);
 
-    graph->CreateImage("albedoTarget", {GBUFFER_ALBEDO_FORMAT, renderExtent[0], renderExtent[1],});
-    graph->CreateImage("normalTarget", {GBUFFER_NORMAL_FORMAT, renderExtent[0], renderExtent[1],});
-    graph->CreateImage("pbrTarget", {GBUFFER_PBR_FORMAT, renderExtent[0], renderExtent[1],});
-    graph->CreateImage("velocityTarget", {GBUFFER_MOTION_FORMAT, renderExtent[0], renderExtent[1],});
-    graph->CreateImage("depthTarget", {VK_FORMAT_D32_SFLOAT, renderExtent[0], renderExtent[1]});
-    graph->CreateImage("drawImage", {COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1],});
+    graph->CreateTexture("albedoTarget", {GBUFFER_ALBEDO_FORMAT, renderExtent[0], renderExtent[1],});
+    graph->CreateTexture("normalTarget", {GBUFFER_NORMAL_FORMAT, renderExtent[0], renderExtent[1],});
+    graph->CreateTexture("pbrTarget", {GBUFFER_PBR_FORMAT, renderExtent[0], renderExtent[1],});
+    graph->CreateTexture("velocityTarget", {GBUFFER_MOTION_FORMAT, renderExtent[0], renderExtent[1],});
+    graph->CreateTexture("depthTarget", {VK_FORMAT_D32_SFLOAT, renderExtent[0], renderExtent[1]});
+    graph->CreateTexture("deferredResolve", {COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1],});
 
     if (!frameBuffer.bFreezeVisibility) {
         RenderPass& clearPass = graph->AddPass("ClearInstancingBuffers");
@@ -459,7 +463,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     deferredResolvePass.ReadSampledImage("pbrTarget");
     deferredResolvePass.ReadSampledImage("velocityTarget");
     deferredResolvePass.ReadSampledImage("depthTarget");
-    deferredResolvePass.WriteStorageImage("drawImage");
+    deferredResolvePass.WriteStorageImage("deferredResolve");
     deferredResolvePass.Execute([&](VkCommandBuffer cmd) {
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, deferredResolve.pipeline.handle);
 
@@ -474,7 +478,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
             .depthIndex = graph->GetDescriptorIndex("depthTarget"),
             .velocityIndex = graph->GetDescriptorIndex("velocityTarget"),
             .pointSamplerIndex = resourceManager->linearSamplerIndex,
-            .outputImageIndex = graph->GetDescriptorIndex("drawImage"),
+            .outputImageIndex = graph->GetDescriptorIndex("deferredResolve"),
         };
 
         vkCmdPushConstants(cmd, deferredResolve.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(DeferredResolvePushConstant), &pushData);
@@ -489,6 +493,57 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         uint32_t yDispatch = (renderExtent[1] + 15) / 16;
         vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
     });
+
+    graph->CreateTextureWithUsage("taaCurrent",
+                                  {COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1]},
+                                  VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT
+    );
+
+
+    if (!graph->HasTexture("taaHistory")) {
+        // todo: add copy image pass functions
+        RenderPass& taaPass = graph->AddPass("TemporalAntialiasingFirstFrame");
+        taaPass.ReadBlitImage("deferredResolve");
+        taaPass.WriteBlitImage("taaCurrent");
+        taaPass.Execute([&](VkCommandBuffer cmd) {
+            VkImage drawImage = graph->GetImage("deferredResolve");
+            VkImage taaImage = graph->GetImage("taaCurrent");
+
+            VkOffset3D renderOffset = {static_cast<int32_t>(renderExtent[0]), static_cast<int32_t>(renderExtent[1]), 1};
+
+            VkImageBlit2 blitRegion{};
+            blitRegion.sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2;
+            blitRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            blitRegion.srcSubresource.layerCount = 1;
+            blitRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            blitRegion.dstSubresource.layerCount = 1;
+            blitRegion.srcOffsets[0] = {0, 0, 0};
+            blitRegion.srcOffsets[1] = renderOffset;
+            blitRegion.dstOffsets[0] = {0, 0, 0};
+            blitRegion.dstOffsets[1] = renderOffset;
+
+            VkBlitImageInfo2 blitInfo{};
+            blitInfo.sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2;
+            blitInfo.srcImage = drawImage;
+            blitInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            blitInfo.dstImage = taaImage;
+            blitInfo.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            blitInfo.regionCount = 1;
+            blitInfo.pRegions = &blitRegion;
+            blitInfo.filter = VK_FILTER_LINEAR;
+
+            vkCmdBlitImage2(cmd, &blitInfo);
+        });
+    }
+    else {
+        RenderPass& taaPass = graph->AddPass("TemporalAntialiasing");
+        taaPass.ReadSampledImage("deferredResolve");
+        taaPass.ReadSampledImage("taaHistory");
+        taaPass.ReadSampledImage("velocityTarget");
+        taaPass.WriteStorageImage("taaCurrent");
+    }
+    graph->CarryToNextFrame("taaCurrent", "taaHistory");
+
 
 #if WILL_EDITOR
     graph->ImportBuffer("debugReadbackBuffer", resourceManager->debugReadbackBuffer.handle, resourceManager->debugReadbackBuffer.address,
@@ -519,7 +574,8 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
             "albedoTarget",
             "normalTarget",
             "pbrTarget",
-            "velocityTarget"
+            "velocityTarget",
+            "taaCurrent",
         };
 
         uint32_t debugIndex = frameBuffer.mainViewFamily.mainView.debug;
@@ -530,7 +586,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
 
         auto& debugVisPass = graph->AddPass("DebugVisualize");
         debugVisPass.ReadSampledImage(debugTargetName);
-        debugVisPass.WriteStorageImage("drawImage");
+        debugVisPass.WriteStorageImage("deferredResolve");
         debugVisPass.Execute([&, debugTargetName, debugIndex](VkCommandBuffer cmd) {
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, debugVisualizePipeline.pipeline.handle);
 
@@ -540,7 +596,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
                 .farPlane = frameBuffer.mainViewFamily.mainView.currentViewData.farPlane,
                 .textureIndex = graph->GetDescriptorIndex(debugTargetName),
                 .samplerIndex = resourceManager->linearSamplerIndex,
-                .outputImageIndex = graph->GetDescriptorIndex("drawImage"),
+                .outputImageIndex = graph->GetDescriptorIndex("deferredResolve"),
                 .debugType = debugIndex
             };
 
@@ -560,10 +616,10 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
 
 #if WILL_EDITOR
     auto& imguiEditorPass = graph->AddPass("ImguiEditor");
-    imguiEditorPass.WriteColorAttachment("drawImage");
+    imguiEditorPass.WriteColorAttachment("deferredResolve");
     imguiEditorPass.Execute([&](VkCommandBuffer cmd) {
-        const VkRenderingAttachmentInfo imguiAttachment = VkHelpers::RenderingAttachmentInfo(graph->GetImageView("drawImage"), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-        const ResourceDimensions& dims = graph->GetImageDimensions("drawImage");
+        const VkRenderingAttachmentInfo imguiAttachment = VkHelpers::RenderingAttachmentInfo(graph->GetImageView("deferredResolve"), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        const ResourceDimensions& dims = graph->GetImageDimensions("deferredResolve");
         const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({dims.width, dims.height}, &imguiAttachment, nullptr);
         vkCmdBeginRendering(cmd, &renderInfo);
         ImDrawDataSnapshot& imguiSnapshot = engineRenderSynchronization->imguiDataSnapshots[currentFrameIndex];
@@ -578,10 +634,10 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
                          VK_IMAGE_LAYOUT_UNDEFINED, VK_PIPELINE_STAGE_2_BLIT_BIT, VK_IMAGE_LAYOUT_UNDEFINED);
 
     auto& blitPass = graph->AddPass("BlitToSwapchain");
-    blitPass.ReadBlitImage("drawImage");
+    blitPass.ReadBlitImage("deferredResolve");
     blitPass.WriteBlitImage(swapchainName);
     blitPass.Execute([&](VkCommandBuffer cmd) {
-        VkImage drawImage = graph->GetImage("drawImage");
+        VkImage drawImage = graph->GetImage("deferredResolve");
 
         VkOffset3D renderOffset = {static_cast<int32_t>(renderExtent[0]), static_cast<int32_t>(renderExtent[1]), 1};
         VkOffset3D swapchainOffset = {static_cast<int32_t>(swapchain->extent.width), static_cast<int32_t>(swapchain->extent.height), 1};
@@ -722,6 +778,9 @@ void RenderThread::CreatePipelines()
 
         pushConstantRange.size = sizeof(DeferredResolvePushConstant);
         deferredResolve = ComputePipeline(context.get(), piplineLayoutCreateInfo, Platform::GetShaderPath() / "deferredResolve_compute.spv");
+
+        pushConstantRange.size = sizeof(TemporalAntialiasingPushConstant);
+        temporalAntialiasing = ComputePipeline(context.get(), piplineLayoutCreateInfo, Platform::GetShaderPath() / "temporalAntialiasing_compute.spv");
     }
 
     //
