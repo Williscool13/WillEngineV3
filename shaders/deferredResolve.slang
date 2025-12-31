@@ -58,11 +58,6 @@ void computeMain(uint3 threadID : SV_DispatchThreadID) {
 
     // Ambient
     float3 ambient = albedo.xyz * 0.03;
-    // float3 ambient = 0.01f;
     float3 finalColor = directLight + ambient;
     renderTextures[pc.outputImageIndex][threadID.xy] = float4(finalColor, 1.0);
-    float NdotV = dot(N, V);
-    renderTextures[pc.outputImageIndex][threadID.xy] = float4(NdotV, NdotV, NdotV, 1.0);
-    // renderTextures[pc.outputImageIndex][threadID.xy] = float4(depth, depth, depth, 1.0);
-    //renderTextures[pc.outputImageIndex][threadID.xy] = float4(viewPosition, 1.0);
 }

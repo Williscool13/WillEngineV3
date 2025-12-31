@@ -92,7 +92,7 @@ void UpdateFreeCamera(Core::EngineContext* ctx, Engine::GameState* state)
         camera.aspectRatio = ctx->windowContext.windowWidth / static_cast<float>(ctx->windowContext.windowHeight);
         camera.fovRadians = glm::radians(70.0f);
         camera.nearPlane = 0.1f;
-        camera.farPlane = 1000.0f;
+        camera.farPlane = 100.0f;
     }
 }
 } // Game
