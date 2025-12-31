@@ -304,7 +304,6 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     graph->CreateTexture("pbrTarget", {GBUFFER_PBR_FORMAT, renderExtent[0], renderExtent[1],});
     graph->CreateTexture("velocityTarget", {GBUFFER_MOTION_FORMAT, renderExtent[0], renderExtent[1],});
     graph->CreateTexture("depthTarget", {VK_FORMAT_D32_SFLOAT, renderExtent[0], renderExtent[1]});
-    graph->CreateTexture("deferredResolve", {COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1],});
 
     if (!frameBuffer.bFreezeVisibility) {
         RenderPass& clearPass = graph->AddPass("ClearInstancingBuffers");
@@ -457,6 +456,8 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         vkCmdEndRendering(cmd);
     });
 
+    graph->CreateTextureWithUsage("deferredResolve", {COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1],}, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+
     RenderPass& deferredResolvePass = graph->AddPass("DeferredResolve");
     deferredResolvePass.ReadSampledImage("albedoTarget");
     deferredResolvePass.ReadSampledImage("normalTarget");
@@ -541,9 +542,67 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         taaPass.ReadSampledImage("taaHistory");
         taaPass.ReadSampledImage("velocityTarget");
         taaPass.WriteStorageImage("taaCurrent");
+        taaPass.Execute([&](VkCommandBuffer cmd) {
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, temporalAntialiasing.pipeline.handle);
+            TemporalAntialiasingPushConstant pushData{
+                .sceneData = graph->GetBufferAddress("sceneData"),
+                .pointSamplerIndex = resourceManager->pointSamplerIndex,
+                .linearSamplerIndex = resourceManager->linearSamplerIndex,
+                .colorResolvedIndex = graph->GetDescriptorIndex("deferredResolve"),
+                .colorHistoryIndex = graph->GetDescriptorIndex("taaHistory"),
+                .velocityIndex = graph->GetDescriptorIndex("velocityTarget"),
+                .outputImageIndex = graph->GetDescriptorIndex("taaCurrent"),
+            };
+
+            vkCmdPushConstants(cmd, temporalAntialiasing.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(TemporalAntialiasingPushConstant), &pushData);
+
+            VkDescriptorBufferBindingInfoEXT bindingInfo = resourceManager->bindlessRDGTransientDescriptorBuffer.GetBindingInfo();
+            vkCmdBindDescriptorBuffersEXT(cmd, 1, &bindingInfo);
+            uint32_t bufferIndex = 0;
+            VkDeviceSize offset = 0;
+            vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, temporalAntialiasing.pipelineLayout.handle, 0, 1, &bufferIndex, &offset);
+
+            uint32_t xDispatch = (renderExtent[0] + 15) / 16;
+            uint32_t yDispatch = (renderExtent[1] + 15) / 16;
+            vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
+        });
     }
     graph->CarryToNextFrame("taaCurrent", "taaHistory");
 
+    graph->CreateTexture("finalImage",{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1]});
+
+    RenderPass& finalCopyPass = graph->AddPass("finalCopy");
+    finalCopyPass.ReadBlitImage("taaCurrent");
+    finalCopyPass.WriteBlitImage("finalImage");
+    finalCopyPass.Execute([&](VkCommandBuffer cmd) {
+        VkImage src = graph->GetImage("taaCurrent");
+        VkImage dst = graph->GetImage("finalImage");
+
+        VkOffset3D renderOffset = {static_cast<int32_t>(renderExtent[0]), static_cast<int32_t>(renderExtent[1]), 1};
+
+        VkImageBlit2 blitRegion{};
+        blitRegion.sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2;
+        blitRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        blitRegion.srcSubresource.layerCount = 1;
+        blitRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        blitRegion.dstSubresource.layerCount = 1;
+        blitRegion.srcOffsets[0] = {0, 0, 0};
+        blitRegion.srcOffsets[1] = renderOffset;
+        blitRegion.dstOffsets[0] = {0, 0, 0};
+        blitRegion.dstOffsets[1] = renderOffset;
+
+        VkBlitImageInfo2 blitInfo{};
+        blitInfo.sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2;
+        blitInfo.srcImage = src;
+        blitInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        blitInfo.dstImage = dst;
+        blitInfo.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        blitInfo.regionCount = 1;
+        blitInfo.pRegions = &blitRegion;
+        blitInfo.filter = VK_FILTER_LINEAR;
+
+        vkCmdBlitImage2(cmd, &blitInfo);
+    });
 
 #if WILL_EDITOR
     graph->ImportBuffer("debugReadbackBuffer", resourceManager->debugReadbackBuffer.handle, resourceManager->debugReadbackBuffer.address,
@@ -575,6 +634,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
             "normalTarget",
             "pbrTarget",
             "velocityTarget",
+            "taaHistory",
             "taaCurrent",
         };
 
@@ -586,7 +646,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
 
         auto& debugVisPass = graph->AddPass("DebugVisualize");
         debugVisPass.ReadSampledImage(debugTargetName);
-        debugVisPass.WriteStorageImage("deferredResolve");
+        debugVisPass.WriteStorageImage("finalImage");
         debugVisPass.Execute([&, debugTargetName, debugIndex](VkCommandBuffer cmd) {
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, debugVisualizePipeline.pipeline.handle);
 
@@ -596,7 +656,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
                 .farPlane = frameBuffer.mainViewFamily.mainView.currentViewData.farPlane,
                 .textureIndex = graph->GetDescriptorIndex(debugTargetName),
                 .samplerIndex = resourceManager->linearSamplerIndex,
-                .outputImageIndex = graph->GetDescriptorIndex("deferredResolve"),
+                .outputImageIndex = graph->GetDescriptorIndex("finalImage"),
                 .debugType = debugIndex
             };
 
@@ -616,10 +676,10 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
 
 #if WILL_EDITOR
     auto& imguiEditorPass = graph->AddPass("ImguiEditor");
-    imguiEditorPass.WriteColorAttachment("deferredResolve");
+    imguiEditorPass.WriteColorAttachment("finalImage");
     imguiEditorPass.Execute([&](VkCommandBuffer cmd) {
-        const VkRenderingAttachmentInfo imguiAttachment = VkHelpers::RenderingAttachmentInfo(graph->GetImageView("deferredResolve"), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-        const ResourceDimensions& dims = graph->GetImageDimensions("deferredResolve");
+        const VkRenderingAttachmentInfo imguiAttachment = VkHelpers::RenderingAttachmentInfo(graph->GetImageView("finalImage"), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        const ResourceDimensions& dims = graph->GetImageDimensions("finalImage");
         const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({dims.width, dims.height}, &imguiAttachment, nullptr);
         vkCmdBeginRendering(cmd, &renderInfo);
         ImDrawDataSnapshot& imguiSnapshot = engineRenderSynchronization->imguiDataSnapshots[currentFrameIndex];
@@ -634,10 +694,10 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
                          VK_IMAGE_LAYOUT_UNDEFINED, VK_PIPELINE_STAGE_2_BLIT_BIT, VK_IMAGE_LAYOUT_UNDEFINED);
 
     auto& blitPass = graph->AddPass("BlitToSwapchain");
-    blitPass.ReadBlitImage("deferredResolve");
+    blitPass.ReadBlitImage("finalImage");
     blitPass.WriteBlitImage(swapchainName);
     blitPass.Execute([&](VkCommandBuffer cmd) {
-        VkImage drawImage = graph->GetImage("deferredResolve");
+        VkImage drawImage = graph->GetImage("finalImage");
 
         VkOffset3D renderOffset = {static_cast<int32_t>(renderExtent[0]), static_cast<int32_t>(renderExtent[1]), 1};
         VkOffset3D swapchainOffset = {static_cast<int32_t>(swapchain->extent.width), static_cast<int32_t>(swapchain->extent.height), 1};

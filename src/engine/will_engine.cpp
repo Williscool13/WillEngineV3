@@ -321,6 +321,12 @@ void WillEngine::DrawImgui()
             Platform::GetAssetPath() / "BoxTextured.willmodel"
         );
     }
+    if (ImGui::Button("Generate sponza.willmodel from sponza.gltf")) {
+        generateModel(
+            Platform::GetAssetPath() / "sponza2/sponza.gltf",
+            Platform::GetAssetPath() / "sponza2/sponza.willmodel"
+        );
+    }
 
     if (ImGui::Button("Create White Texture")) {
         modelGenerator->GenerateKtxTexture(

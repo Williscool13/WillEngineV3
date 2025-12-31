@@ -108,6 +108,7 @@ struct TextureResource
     std::string name;
     uint32_t index;
     uint32_t physicalIndex = UINT32_MAX;
+    bool bCanUseAliasedTexture = true;
 
     TextureInfo textureInfo;
 

@@ -133,6 +133,11 @@ void RenderGraph::Compile()
                 if (!phys.bCanAlias) { continue; }
                 if (phys.dimensions != desiredDim) { continue; }
 
+                if (!tex.bCanUseAliasedTexture && !phys.logicalResourceIndices.empty()) {
+                    // Cross-frame resources can't alias at all.
+                    continue;
+                }
+
                 // Physical usage must be a superset: (phys & required) == required
                 if ((phys.dimensions.imageUsage & tex.accumulatedUsage) != tex.accumulatedUsage) { continue; }
 
@@ -163,6 +168,7 @@ void RenderGraph::Compile()
                 physicalResources.emplace_back();
                 physicalResources.back().dimensions = desiredDim;
                 physicalResources.back().logicalResourceIndices.push_back(tex.index);
+                physicalResources.back().bCanAlias = tex.bCanUseAliasedTexture;
                 physicalResources.back().lastLogicalResourceUse = tex.name;
             }
         }
@@ -961,6 +967,8 @@ PipelineEvent RenderGraph::GetBufferState(const std::string& name)
 
 void RenderGraph::CarryToNextFrame(const std::string& name, const std::string& newName)
 {
+    TextureResource* tex = GetOrCreateTexture(name);
+    tex->bCanUseAliasedTexture = false;
     for (const auto& c : carryovers) {
         assert(c.srcName != name && "Source texture already designated for carryover");
         assert(c.dstName != newName && "Destination name already used in another carryover");
