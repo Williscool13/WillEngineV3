@@ -680,6 +680,13 @@ void RenderGraph::InvalidateAll()
     transientImageHandleAllocator.Clear();
 }
 
+void RenderGraph::CreateImage(const std::string& name, const TextureInfo& texInfo)
+{
+    TextureResource* resource = GetOrCreateTexture(name);
+    assert(texInfo.format != VK_FORMAT_UNDEFINED && "Texture info uses undefined format");
+    resource->textureInfo = texInfo;
+}
+
 void RenderGraph::CreateBuffer(const std::string& name, VkDeviceSize size)
 {
     BufferResource* buf = GetOrCreateBuffer(name);

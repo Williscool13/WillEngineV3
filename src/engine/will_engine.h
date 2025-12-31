@@ -111,6 +111,7 @@ private:
 private: // Debugging
     bool bCanGenerate = false;
     bool bHasAdded = false;
+    bool bFreezeVisibility = false;
 };
 }
 

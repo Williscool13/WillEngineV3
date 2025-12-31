@@ -50,14 +50,15 @@ using float4x4 = glm::mat4;
 #define SHADER_ATOMIC(T) T
 #endif // __SLANG__
 
-SHADER_PUBLIC struct DepthDebugPushConstant
+SHADER_PUBLIC struct DebugVisualizePushConstant
 {
     SHADER_PUBLIC int2 extent;
     SHADER_PUBLIC float nearPlane;
     SHADER_PUBLIC float farPlane;
-    SHADER_PUBLIC uint depthTextureIndex;
+    SHADER_PUBLIC uint textureIndex;
     SHADER_PUBLIC uint samplerIndex;
     SHADER_PUBLIC uint outputImageIndex;
+    SHADER_PUBLIC uint debugType;
 };
 
 SHADER_PUBLIC struct VisibilityPushConstant

@@ -48,6 +48,8 @@ public:
 
     void InvalidateAll();
 
+    void CreateImage(const std::string& name, const TextureInfo& texInfo);
+
     void CreateBuffer(const std::string& name, VkDeviceSize size);
 
     void ImportTexture(const std::string& name, VkImage image, VkImageView view, const TextureInfo& info, VkImageUsageFlags usage, VkImageLayout initialLayout, VkPipelineStageFlags2 initialStage,

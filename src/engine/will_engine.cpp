@@ -230,12 +230,13 @@ void WillEngine::Run()
             }
 
             gameFunctions.gamePrepareFrame(engineContext.get(), gameState.get(), &stagingFrameBuffer);
+            stagingFrameBuffer.bFreezeVisibility = bFreezeVisibility;
 
             std::swap(currentFrameBuffer, stagingFrameBuffer);
             stagingFrameBuffer.mainViewFamily.modelMatrices.clear();
             stagingFrameBuffer.mainViewFamily.instances.clear();
             stagingFrameBuffer.mainViewFamily.materials.clear();
-            stagingFrameBuffer.mainViewFamily.views.clear();
+            stagingFrameBuffer.mainViewFamily.mainView = {};
             stagingFrameBuffer.bufferAcquireOperations.clear();
             stagingFrameBuffer.imageAcquireOperations.clear();
             stagingFrameBuffer.timeFrame = timeManager->GetTime();
@@ -256,6 +257,7 @@ void WillEngine::DrawImgui()
     ImGui::NewFrame();
 
     if (ImGui::Begin("Main")) {
+        ImGui::Checkbox("Freeze Visibility Calculations", &bFreezeVisibility);
         ImGui::Text("Hello!");
 
         /*if (ImGui::CollapsingHeader("Visibility Debug")) {

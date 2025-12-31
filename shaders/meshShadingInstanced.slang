@@ -11,7 +11,7 @@ struct VertexOutput
 {
     float4 position : SV_Position;
     float3 worldPos : TEXCOORD1;
-    float3 normal : TEXCOORD2;
+    float3 viewNormal : TEXCOORD2;
     float4 tangent : TEXCOORD3;
     float4 color : COLOR0;
     float2 uv : TEXCOORD0;
@@ -101,6 +101,7 @@ void taskMain(uniform InstancedMeshShadingPushConstant pushConstant,
     }
 }
 
+// ==================== Mesh Shader ====================
 [shader("mesh")]
 [outputtopology("triangle")]
 [numthreads(MESH_SHADER_DISPATCH_X, 1, 1)]
@@ -115,6 +116,7 @@ void meshMain(
 
     Model m = pushConstant.modelBuffer[inPayload.modelIndex];
     float4x4 viewProj = pushConstant.sceneData->viewProj;
+    float3x3 viewRotation = (float3x3)pushConstant.sceneData.view;
 
     SetMeshOutputCounts(meshlet.meshletVerticesCount, meshlet.meshletTriangleCount);
     uint32_t threadIndex = gtid.x;
@@ -125,7 +127,7 @@ void meshMain(
         float4 clipPos = mul(viewProj, worldPos);
         vertices[i].position = clipPos;
         vertices[i].worldPos = worldPos.xyz;
-        vertices[i].normal = normalize(mul(adjugate((float3x3)m.modelMatrix), v.normal));
+        vertices[i].viewNormal = normalize(mul(viewRotation, mul(adjugate((float3x3)m.modelMatrix), v.normal)));
         vertices[i].tangent = float4(normalize(mul(adjugate((float3x3)m.modelMatrix), v.tangent.xyz)), v.tangent.w);
         vertices[i].uv = float2(v.texcoordU, v.texcoordV);
 
@@ -155,8 +157,12 @@ void meshMain(
     }
 }
 
+// ==================== Fragment Shader ====================
 struct FragmentOutput {
-    float4 color : SV_Target0;
+    float4 albedo : SV_Target0;
+    float4 normal : SV_Target1;
+    float4 pbr : SV_Target2;
+    float2 velocity : SV_Target3;
 };
 
 [[vk::binding(0, 0)]]
@@ -169,18 +175,16 @@ FragmentOutput fragmentMain(VertexOutput vertexInput, uniform InstancedMeshShadi
 {
     MaterialProperties material = pushConstant.materialBuffer[vertexInput.materialIndex];
 
-    float4 color = vertexInput.color;
-    color = color * textures[material.textureImageIndices[0]].Sample(samplers[material.textureSamplerIndices[0]], vertexInput.uv);
+    float4 albedoSample = textures[material.textureImageIndices[0]].Sample(samplers[material.textureSamplerIndices[0]], vertexInput.uv);
+    float4 albedo = vertexInput.color * albedoSample * material.colorFactor;
 
-    float3 N = normalize(vertexInput.normal);
-    float3 V = normalize(pushConstant.sceneData->cameraWorldPos.xyz - vertexInput.worldPos);
-    float3 L = normalize(float3(1.0, 1.0, 1.0));
-
-    float3 ambient = float3(0.1, 0.1, 0.1);
-    float3 diffuse = max(dot(N, L), 0.0) * material.colorFactor.rgb;
+    float3 viewNormal = normalize(vertexInput.viewNormal);
 
     FragmentOutput output;
-    output.color = color * float4(ambient + diffuse, material.colorFactor.a);
+    output.albedo = albedo;
+    output.normal = float4(viewNormal, 1.0);
+    output.pbr = float4(material.metalRoughFactors.x, material.metalRoughFactors.y, 0.0, 0.0);
+    output.velocity = float2(0.0, 0.0); // TODO: compute from current/previous positions
 
     return output;
 }

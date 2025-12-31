@@ -64,11 +64,14 @@ VkRenderingAttachmentInfo RenderingAttachmentInfo(VkImageView view, const VkClea
 
 VkRenderingInfo RenderingInfo(VkExtent2D renderExtent, const VkRenderingAttachmentInfo* colorAttachment, const VkRenderingAttachmentInfo* depthAttachment);
 
+VkRenderingInfo RenderingInfo(const VkExtent2D renderExtent, const VkRenderingAttachmentInfo* colorAttachment, uint32_t colorAttachmentCount, const VkRenderingAttachmentInfo* depthAttachment);
+
 VkViewport GenerateViewport(uint32_t width, uint32_t height);
 
 VkRect2D GenerateScissor(uint32_t width, uint32_t height);
 
-static VkImageAspectFlags GetImageAspect(VkFormat format) {
+static VkImageAspectFlags GetImageAspect(VkFormat format)
+{
     switch (format) {
         case VK_FORMAT_D16_UNORM:
         case VK_FORMAT_D32_SFLOAT:

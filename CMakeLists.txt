@@ -171,7 +171,7 @@ add_custom_target(regenerate_interop
 )
 
 compile_shaders(will-engine
-        ${CMAKE_SOURCE_DIR}/shaders/debugDepth.slang compute computeMain
+        ${CMAKE_SOURCE_DIR}/shaders/debugVisualize.slang compute computeMain
         ${CMAKE_SOURCE_DIR}/shaders/basicCompute.slang compute computeMain
         ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute computeVisibility instancingVisibility
         ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute computePrefixSum instancingPrefixSum

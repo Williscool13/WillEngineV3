@@ -21,7 +21,7 @@ public:
     // Write
     RenderPass& WriteStorageImage(const std::string& name, TextureInfo info = {});
 
-    RenderPass& WriteBlitImage(const std::string& name);
+    RenderPass& WriteBlitImage(const std::string& name, const TextureInfo& texInfo = {});
 
     RenderPass& WriteColorAttachment(const std::string& name, const TextureInfo& texInfo = {});
 

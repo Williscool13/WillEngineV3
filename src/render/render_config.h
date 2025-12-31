@@ -20,19 +20,21 @@ inline constexpr int32_t BINDLESS_INSTANCE_BUFFER_SIZE              = sizeof(Ins
 inline constexpr int32_t BINDLESS_MATERIAL_BUFFER_COUNT             = 2048;
 inline constexpr int32_t BINDLESS_MATERIAL_BUFFER_SIZE              = sizeof(MaterialProperties) * BINDLESS_MATERIAL_BUFFER_COUNT;
 
-inline constexpr int32_t BINDLESS_COMBINED_IMAGE_SAMPLER_COUNT      = 1;
-inline constexpr int32_t BINDLESS_STORAGE_IMAGE_COUNT               = 128;
-inline constexpr int32_t BINDLESS_SAMPLER_COUNT                     = 128;
-inline constexpr int32_t BINDLESS_SAMPLED_IMAGE_COUNT               = 4096;
-
 inline constexpr int32_t MEGA_VERTEX_BUFFER_SIZE                    = sizeof(Vertex) * 2097152;             // 2M verts (~100MB)
 inline constexpr int32_t MEGA_SKINNED_VERTEX_BUFFER_SIZE            = sizeof(SkinnedVertex) * 1048576;      // 1M skinned (~100MB)
 inline constexpr int32_t MEGA_PRIMITIVE_BUFFER_COUNT                = 65536;                               // 128K primitives
 inline constexpr int32_t MEGA_PRIMITIVE_BUFFER_SIZE                 = sizeof(MeshletPrimitive) * MEGA_PRIMITIVE_BUFFER_COUNT;
+inline constexpr int32_t SCENE_DATA_COUNT                           = 4; // Up to 4 views per frame
+inline constexpr int32_t SCENE_DATA_BUFFER_SIZE                     = sizeof(SceneData) * SCENE_DATA_COUNT;
 
 inline constexpr int32_t MEGA_MESHLET_VERTEX_BUFFER_SIZE            = 1 << 26; // 64MB indices
 inline constexpr int32_t MEGA_MESHLET_TRIANGLE_BUFFER_SIZE          = 1 << 26; // 64MB triangles
 inline constexpr int32_t MEGA_MESHLET_BUFFER_SIZE                   = 1 << 21; // 2MB meshlets
+
+inline constexpr int32_t BINDLESS_COMBINED_IMAGE_SAMPLER_COUNT      = 1;
+inline constexpr int32_t BINDLESS_STORAGE_IMAGE_COUNT               = 128;
+inline constexpr int32_t BINDLESS_SAMPLER_COUNT                     = 128;
+inline constexpr int32_t BINDLESS_SAMPLED_IMAGE_COUNT               = 4096;
 
 inline constexpr int32_t INSTANCING_PACKED_VISIBILITY_SIZE          = sizeof(uint32_t) * (BINDLESS_INSTANCE_BUFFER_COUNT + 31) / 32;
 inline constexpr int32_t INSTANCING_INSTANCE_OFFSET_SIZE            = sizeof(uint32_t) * BINDLESS_INSTANCE_BUFFER_COUNT;

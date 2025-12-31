@@ -279,12 +279,35 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
     if (state->inputFrame->GetKey(Key::NUM_1).pressed) {
         auto view = state->registry.view<RenderDebugViewComponent>();
         for (auto [entity, debugViewComponent] : view.each()) {
-            if (debugViewComponent.debugIndex != 1) {
-                debugViewComponent.debugIndex = 1;
-            }
-            else {
-                debugViewComponent.debugIndex = 0;
-            }
+            debugViewComponent.debugIndex = (debugViewComponent.debugIndex == 1) ? 0 : 1;
+        }
+    }
+
+    if (state->inputFrame->GetKey(Key::NUM_2).pressed) {
+        auto view = state->registry.view<RenderDebugViewComponent>();
+        for (auto [entity, debugViewComponent] : view.each()) {
+            debugViewComponent.debugIndex = (debugViewComponent.debugIndex == 2) ? 0 : 2;
+        }
+    }
+
+    if (state->inputFrame->GetKey(Key::NUM_3).pressed) {
+        auto view = state->registry.view<RenderDebugViewComponent>();
+        for (auto [entity, debugViewComponent] : view.each()) {
+            debugViewComponent.debugIndex = (debugViewComponent.debugIndex == 3) ? 0 : 3;
+        }
+    }
+
+    if (state->inputFrame->GetKey(Key::NUM_4).pressed) {
+        auto view = state->registry.view<RenderDebugViewComponent>();
+        for (auto [entity, debugViewComponent] : view.each()) {
+            debugViewComponent.debugIndex = (debugViewComponent.debugIndex == 4) ? 0 : 4;
+        }
+    }
+
+    if (state->inputFrame->GetKey(Key::NUM_5).pressed) {
+        auto view = state->registry.view<RenderDebugViewComponent>();
+        for (auto [entity, debugViewComponent] : view.each()) {
+            debugViewComponent.debugIndex = (debugViewComponent.debugIndex == 5) ? 0 : 5;
         }
     }
 }

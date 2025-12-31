@@ -62,8 +62,8 @@ MeshShadingInstancedPipeline::MeshShadingInstancedPipeline(VulkanContext* contex
     pipelineBuilder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
     pipelineBuilder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_COUNTER_CLOCKWISE);
     pipelineBuilder.EnableDepthTest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
-    VkFormat colorFormats[1] = {COLOR_ATTACHMENT_FORMAT};
-    pipelineBuilder.SetupRenderer(colorFormats, 1, DEPTH_ATTACHMENT_FORMAT);
+    VkFormat colorFormats[5] = {GBUFFER_ALBEDO_FORMAT, GBUFFER_NORMAL_FORMAT, GBUFFER_PBR_FORMAT, GBUFFER_MOTION_FORMAT};
+    pipelineBuilder.SetupRenderer(colorFormats, 4, DEPTH_ATTACHMENT_FORMAT);
     pipelineBuilder.SetupPipelineLayout(pipelineLayout.handle);
     VkGraphicsPipelineCreateInfo pipelineCreateInfo = pipelineBuilder.GeneratePipelineCreateInfo();
     pipeline = Pipeline::CreateGraphicsPipeline(context, pipelineCreateInfo);

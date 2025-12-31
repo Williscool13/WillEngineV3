@@ -36,7 +36,8 @@ struct RenderView
 };
 
 struct ViewFamily {
-    std::vector<RenderView> views;
+    RenderView mainView;
+    std::vector<RenderView> portalViews;
 
     std::vector<glm::mat4> modelMatrices;
 
@@ -101,6 +102,9 @@ struct FrameBuffer
 
     std::vector<BufferAcquireOperation> bufferAcquireOperations;
     std::vector<ImageAcquireOperation> imageAcquireOperations;
+
+    // Debug
+    bool bFreezeVisibility = false;
 };
 } // Core
 

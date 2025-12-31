@@ -34,9 +34,17 @@ RenderPass& RenderPass::WriteStorageImage(const std::string& name, const Texture
     return *this;
 }
 
-RenderPass& RenderPass::WriteBlitImage(const std::string& name)
+RenderPass& RenderPass::WriteBlitImage(const std::string& name, const TextureInfo& texInfo)
 {
     TextureResource* resource = graph.GetOrCreateTexture(name);
+    if (texInfo.format != VK_FORMAT_UNDEFINED) {
+        if (resource->textureInfo.format == VK_FORMAT_UNDEFINED) {
+            resource->textureInfo = texInfo;
+        }
+    }
+    else {
+        assert(resource->textureInfo.format != VK_FORMAT_UNDEFINED && "Texture not defined - provide TextureInfo on first use");
+    }
     blitImageWrites.push_back(resource);
     return *this;
 }
@@ -149,7 +157,7 @@ RenderPass& RenderPass::ReadTransferBuffer(const std::string& name, VkPipelineSt
 RenderPass& RenderPass::ReadIndirectBuffer(const std::string& name, VkPipelineStageFlags2 stages)
 {
     BufferResource* resource = graph.GetOrCreateBuffer(name);
-    resource->accumulatedUsage |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
+    resource->accumulatedUsage |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
     bufferIndirectReads.push_back({resource, stages});
     return *this;
 }

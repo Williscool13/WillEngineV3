@@ -130,7 +130,7 @@ private:
     BasicComputePipeline basicComputePipeline;
     BasicRenderPipeline basicRenderPipeline;
     MeshShaderPipeline meshShaderPipeline;
-    ComputePipeline depthDebugPipeline;
+    ComputePipeline debugVisualizePipeline;
 
     ComputePipeline instancingVisibility;
     ComputePipeline instancingPrefixSum;

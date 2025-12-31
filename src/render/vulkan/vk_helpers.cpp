@@ -352,6 +352,20 @@ VkRenderingInfo VkHelpers::RenderingInfo(const VkExtent2D renderExtent, const Vk
     };
 }
 
+VkRenderingInfo VkHelpers::RenderingInfo(const VkExtent2D renderExtent, const VkRenderingAttachmentInfo* colorAttachment, uint32_t colorAttachmentCount, const VkRenderingAttachmentInfo* depthAttachment)
+{
+    return {
+        .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
+        .pNext = nullptr,
+        .renderArea = VkRect2D{VkOffset2D{0, 0}, renderExtent},
+        .layerCount = 1,
+        .colorAttachmentCount = colorAttachmentCount,
+        .pColorAttachments = colorAttachment,
+        .pDepthAttachment = depthAttachment,
+        .pStencilAttachment = nullptr,
+    };
+}
+
 VkViewport VkHelpers::GenerateViewport(uint32_t width, uint32_t height)
 {
     return {
