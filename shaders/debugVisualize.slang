@@ -43,7 +43,7 @@ void computeMain(uint3 threadID : SV_DispatchThreadID) {
             break;
         case 5: // Velocity
             float2 velocity = textures[pc.textureIndex].SampleLevel(samplers[pc.samplerIndex], uv, 0).xy;
-            float2 centered = abs((velocity - 0.5) * 10.0);
+            float2 centered = abs((velocity - 0.5) * 100.0);
             renderTextures[pc.outputImageIndex][threadID.xy] = float4(centered, 0.0, 1.0);
             break;
         default:

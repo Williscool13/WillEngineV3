@@ -5,11 +5,10 @@
 #ifndef WILL_ENGINE_VK_CONSTANTS_H
 #define WILL_ENGINE_VK_CONSTANTS_H
 #include <cstdint>
+#include <array>
 
 #include "shaders/instancing_interop.h"
 #include "shaders/model_interop.h"
-#include "types/render_types.h"
-#include "types/vk_types.h"
 
 namespace Render
 {
@@ -44,6 +43,30 @@ inline constexpr int32_t INSTANCING_MESH_INDIRECT_COUNT             = sizeof(Ins
 inline constexpr int32_t INSTANCING_MESH_INDIRECT_PARAMETERS        = sizeof(InstancedMeshIndirectDrawParameters) * MEGA_PRIMITIVE_BUFFER_COUNT;
 
 inline constexpr uint32_t FRAME_BUFFER_OPERATION_COUNT_LIMIT = 1024;
+
+inline constexpr uint32_t HALTON_SEQUENCE_COUNT = 16;
+struct HaltonSample {
+    float x, y;
+};
+// Pre-computed 16-point Halton sequence (base 2, 3)
+inline constexpr std::array<HaltonSample, HALTON_SEQUENCE_COUNT> HALTON_SEQUENCE{
+    HaltonSample(0.5f, 0.5f),
+    {0.25f,    0.66666667f},
+    {0.75f,    0.11111111f},
+    {0.125f,   0.44444445f},
+    {0.625f,   0.7777778f},
+    {0.375f,   0.22222222f},
+    {0.875f,   0.5555556f},
+    {0.0625f,  0.8888889f},
+    {0.5625f,  0.037037037f},
+    {0.3125f,  0.3703704f},
+    {0.8125f,  0.7037037f},
+    {0.1875f,  0.14814815f},
+    {0.6875f,  0.4814815f},
+    {0.4375f,  0.8148148f},
+    {0.9375f,  0.25925925f},
+    {0.03125f, 0.5925926f},
+};
 } // Render
 
 #endif //WILL_ENGINE_VK_CONSTANTS_H

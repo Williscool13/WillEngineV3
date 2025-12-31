@@ -20,6 +20,7 @@
 #include "render-graph/render_pass.h"
 #include "shaders/constants_interop.h"
 #include "shaders/push_constant_interop.h"
+#include "types/render_types.h"
 
 #if WILL_EDITOR
 #include "render/vulkan/vk_imgui_wrapper.h"
@@ -222,14 +223,32 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         const glm::mat4 prevViewMatrix = glm::lookAt(view.previousViewData.cameraPos, view.previousViewData.cameraLookAt, view.previousViewData.cameraUp);
         const glm::mat4 prevProjMatrix = glm::perspective(view.previousViewData.fovRadians, view.previousViewData.aspectRatio, view.previousViewData.farPlane, view.previousViewData.nearPlane);
 
+        HaltonSample jitter = HALTON_SEQUENCE[frameNumber % HALTON_SEQUENCE_COUNT];
+        float jitterX = (jitter.x - 0.5f) * (2.0f / renderExtent[0]);
+        float jitterY = (jitter.y - 0.5f) * (2.0f / renderExtent[1]);
+
+        glm::mat4 jitteredProj = projMatrix;
+        jitteredProj[2][0] += jitterX;
+        jitteredProj[2][1] += jitterY;
+
+        HaltonSample prevJitter = HALTON_SEQUENCE[(frameNumber - 1) % HALTON_SEQUENCE_COUNT];
+        float prevJitterX = (prevJitter.x - 0.5f) * (2.0f / renderExtent[0]);
+        float prevJitterY = (prevJitter.y - 0.5f) * (2.0f / renderExtent[1]);
+        glm::mat4 jitteredPrevProj = prevProjMatrix;
+        jitteredPrevProj[2][0] += prevJitterX;
+        jitteredPrevProj[2][1] += prevJitterY;
+
+        sceneData.jitter = {jitterX, jitterY};
+        sceneData.prevJitter = {prevJitterX, prevJitterY};
+
         sceneData.view = viewMatrix;
-        sceneData.proj = projMatrix;
-        sceneData.viewProj = projMatrix * viewMatrix;
+        sceneData.proj = jitteredProj;
+        sceneData.viewProj = jitteredProj * viewMatrix;
         sceneData.invView = glm::inverse(viewMatrix);
-        sceneData.invProj = glm::inverse(projMatrix);
+        sceneData.invProj = glm::inverse(jitteredProj);
         sceneData.invViewProj = glm::inverse(sceneData.viewProj);
 
-        sceneData.prevViewProj = prevProjMatrix * prevViewMatrix;
+        sceneData.prevViewProj = jitteredPrevProj * prevViewMatrix;
 
         sceneData.cameraWorldPos = glm::vec4(view.currentViewData.cameraPos, 1.0f);
         sceneData.frustum = CreateFrustum(sceneData.viewProj);

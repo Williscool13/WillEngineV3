@@ -42,3 +42,22 @@ float3 reconstructViewPosition(float4x4 invProj, float2 uv, float depth) {
     float4 positionVS = mul(invProj, float4(ndc, depth, 1.0));
     return positionVS.xyz / positionVS.w;
 }
+float3 RGBToYCoCg(float3 rgb) {
+    float Y  = dot(rgb, float3( 0.25,  0.5,   0.25));
+    float Co = dot(rgb, float3( 0.5,   0.0,  -0.5));
+    float Cg = dot(rgb, float3(-0.25,  0.5,  -0.25));
+    return float3(Y, Co, Cg);
+}
+
+float3 YCoCgToRGB(float3 ycocg) {
+    float Y  = ycocg.x;
+    float Co = ycocg.y;
+    float Cg = ycocg.z;
+
+    float tmp = Y - Cg;
+    float r = tmp + Co;
+    float g = Y + Cg;
+    float b = tmp - Co;
+
+    return float3(r, g, b);
+}

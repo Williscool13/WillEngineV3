@@ -68,6 +68,8 @@ SHADER_PUBLIC struct SHADER_ALIGN SceneData
 
     SHADER_PUBLIC float4 cameraWorldPos;
     // SHADER_PUBLIC float4 prevCameraWorldPos;
+    SHADER_PUBLIC float2 jitter;
+    SHADER_PUBLIC float2 prevJitter;
 
     SHADER_PUBLIC Frustum frustum;
 
