@@ -294,14 +294,6 @@ TEST_CASE("Instance data", "[renderer][model-data]") {
 }
 
 TEST_CASE("Model matrix data", "[renderer][model-data]") {
-    SECTION("Default initialization") {
-        Model model{};
-
-        // Check that matrices are initialized (likely to identity or zero)
-        REQUIRE(model.flags.x == 0.0f);
-        REQUIRE(model.flags.y == 0.0f);
-    }
-
     SECTION("Identity matrix") {
         Model model{};
         model.modelMatrix = glm::mat4(1.0f);
@@ -319,14 +311,6 @@ TEST_CASE("Model matrix data", "[renderer][model-data]") {
         REQUIRE(model.modelMatrix[3][0] == 5.0f);
         REQUIRE(model.modelMatrix[3][1] == 10.0f);
         REQUIRE(model.modelMatrix[3][2] == 15.0f);
-    }
-
-    SECTION("Visibility flags") {
-        Model model{};
-        model.flags = float4{1.0f, 1.0f, 0.0f, 0.0f}; // visible=true, shadow-caster=true
-
-        REQUIRE(model.flags.x == 1.0f); // visible
-        REQUIRE(model.flags.y == 1.0f); // shadow caster
     }
 
     SECTION("Previous model matrix for motion blur") {

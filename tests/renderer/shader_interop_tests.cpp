@@ -146,12 +146,8 @@ TEST_CASE("Instance structure size and alignment", "[renderer][shader-interop]")
         // uint32 modelIndex (4)
         // uint32 materialIndex (4)
         // uint32 jointMatrixOffset (4)
-        // uint32 bIsAllocated (4)
-        // uint32 padding (4)
-        // uint32 padding1 (4)
-        // uint32 padding2 (4)
-        // Total: 32 bytes
-        REQUIRE(sizeof(Instance) == 32);
+        // Total: 16 bytes
+        REQUIRE(sizeof(Instance) == 16);
     }
 
     SECTION("Instance alignment") {
@@ -163,9 +159,8 @@ TEST_CASE("Model structure size and alignment", "[renderer][shader-interop]") {
     SECTION("Model size") {
         // float4x4 modelMatrix (64)
         // float4x4 prevModelMatrix (64)
-        // float4 flags (16)
-        // Total: 144 bytes
-        REQUIRE(sizeof(Model) == 144);
+        // Total: 128 bytes
+        REQUIRE(sizeof(Model) == 128);
     }
 
     SECTION("Model alignment") {
@@ -198,16 +193,8 @@ TEST_CASE("Frustum structure size and alignment", "[renderer][shader-interop]") 
 
 TEST_CASE("SceneData structure size and alignment", "[renderer][shader-interop]") {
     SECTION("SceneData size") {
-        // float4x4 view (64)
-        // float4x4 proj (64)
-        // float4x4 viewProj (64)
-        // float4 cameraWorldPos (16)
-        // Frustum frustum (96)
-        // float deltaTime (4) + padding to align next struct
-        // Total: 64 + 64 + 64 + 16 + 96 + 4 = 308 bytes
-        // But likely padded to 16-byte alignment: 320 bytes
         size_t size = sizeof(SceneData);
-        REQUIRE((size == 308 || size == 320)); // Allow for potential padding
+        REQUIRE(size ==608);
     }
 
     SECTION("SceneData alignment") {
@@ -218,24 +205,12 @@ TEST_CASE("SceneData structure size and alignment", "[renderer][shader-interop]"
     SECTION("SceneData field offsets") {
         SceneData sd{};
         const char* base = reinterpret_cast<const char*>(&sd);
-
-        // view at offset 0
         REQUIRE(reinterpret_cast<const char*>(&sd.view) - base == 0);
-
-        // proj at offset 64
         REQUIRE(reinterpret_cast<const char*>(&sd.proj) - base == 64);
-
-        // viewProj at offset 128
         REQUIRE(reinterpret_cast<const char*>(&sd.viewProj) - base == 128);
-
-        // cameraWorldPos at offset 192
-        REQUIRE(reinterpret_cast<const char*>(&sd.cameraWorldPos) - base == 192);
-
-        // frustum at offset 208
-        REQUIRE(reinterpret_cast<const char*>(&sd.frustum) - base == 208);
-
-        // deltaTime at offset 304 (208 + 96)
-        REQUIRE(reinterpret_cast<const char*>(&sd.deltaTime) - base == 304);
+        REQUIRE(reinterpret_cast<const char*>(&sd.cameraWorldPos) - base == 448);
+        REQUIRE(reinterpret_cast<const char*>(&sd.frustum) - base == 480);
+        REQUIRE(reinterpret_cast<const char*>(&sd.deltaTime) - base == 592);
     }
 }
 
@@ -281,8 +256,8 @@ TEST_CASE("Structure padding ensures GPU compatibility", "[renderer][shader-inte
         REQUIRE(sizeof(Meshlet) == 64);
         REQUIRE(sizeof(MeshletPrimitive) == 32);
         REQUIRE(sizeof(MaterialProperties) == 224);
-        REQUIRE(sizeof(Instance) == 32);
-        REQUIRE(sizeof(Model) == 144);
+        REQUIRE(sizeof(Instance) == 16);
+        REQUIRE(sizeof(Model) == 128);
         REQUIRE(sizeof(Frustum) == 96);
     }
 
