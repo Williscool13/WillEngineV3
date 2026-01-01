@@ -40,31 +40,47 @@ void WillEngine::Initialize()
 {
     ZoneScoped;
     tracy::SetThreadName("EngineThread");
-    Platform::SetThreadName("EngineThread"); {
+    Platform::SetThreadName("EngineThread");
+
+    //
+    {
         ZoneScopedN("SchedulerInit");
+        static constexpr std::array<const char*, 64> kTaskThreadNames = {
+            "TaskThread0",  "TaskThread1",  "TaskThread2",  "TaskThread3",
+            "TaskThread4",  "TaskThread5",  "TaskThread6",  "TaskThread7",
+            "TaskThread8",  "TaskThread9",  "TaskThread10", "TaskThread11",
+            "TaskThread12", "TaskThread13", "TaskThread14", "TaskThread15",
+            "TaskThread16", "TaskThread17", "TaskThread18", "TaskThread19",
+            "TaskThread20", "TaskThread21", "TaskThread22", "TaskThread23",
+            "TaskThread24", "TaskThread25", "TaskThread26", "TaskThread27",
+            "TaskThread28", "TaskThread29", "TaskThread30", "TaskThread31",
+            "TaskThread32", "TaskThread33", "TaskThread34", "TaskThread35",
+            "TaskThread36", "TaskThread37", "TaskThread38", "TaskThread39",
+            "TaskThread40", "TaskThread41", "TaskThread42", "TaskThread43",
+            "TaskThread44", "TaskThread45", "TaskThread46", "TaskThread47",
+            "TaskThread48", "TaskThread49", "TaskThread50", "TaskThread51",
+            "TaskThread52", "TaskThread53", "TaskThread54", "TaskThread55",
+            "TaskThread56", "TaskThread57", "TaskThread58", "TaskThread59",
+            "TaskThread60", "TaskThread61", "TaskThread62", "TaskThread63"
+        };
+
         enki::TaskSchedulerConfig config;
-        config.numTaskThreadsToCreate = enki::GetNumHardwareThreads() - 1;
+        config.numTaskThreadsToCreate = glm::min(64u, enki::GetNumHardwareThreads() - 1);
         config.profilerCallbacks.threadStart = [](uint32_t threadNum_) {
             // 0 is Engine Thread
             // N - 1 is Render Thread
             // N - 2 is Asset Load Thread
             if (threadNum_ < enki::GetNumHardwareThreads() - 3) {
-                std::string name = fmt::format("TaskThread{}", threadNum_);
-                tracy::SetThreadName(name.c_str());
-                Platform::SetThreadName(name.c_str());
+                const char* name = kTaskThreadNames[threadNum_];
+                tracy::SetThreadName(name);
+                Platform::SetThreadName(name);
             }
         };
-        config.profilerCallbacks.waitForNewTaskSuspendStart = [](uint32_t) {
-            ZoneScopedN("enkiWaitIdle");
-        };
+        config.profilerCallbacks.waitForNewTaskSuspendStart = [](uint32_t) {};
         config.profilerCallbacks.waitForNewTaskSuspendStop = [](uint32_t) {};
-        config.profilerCallbacks.waitForTaskCompleteStart = [](uint32_t) {
-            ZoneScopedN("enkiWaitTask");
-        };
+        config.profilerCallbacks.waitForTaskCompleteStart = [](uint32_t) {};
         config.profilerCallbacks.waitForTaskCompleteStop = [](uint32_t) {};
-        config.profilerCallbacks.waitForTaskCompleteSuspendStart = [](uint32_t) {
-            ZoneScopedN("enkiWaitTaskSuspend");
-        };
+        config.profilerCallbacks.waitForTaskCompleteSuspendStart = [](uint32_t) {};
         config.profilerCallbacks.waitForTaskCompleteSuspendStop = [](uint32_t) {};
 
         SPDLOG_INFO("Scheduler operating with {} threads.", config.numTaskThreadsToCreate + 1);

@@ -118,10 +118,14 @@ void RenderThread::ThreadMain()
     tracy::SetThreadName("RenderThread");
 
     while (!bShouldExit.load()) {
-        ZoneScopedN("WaitForFrame");
-        if (!engineRenderSynchronization->renderFrames.try_acquire_for(std::chrono::milliseconds(100))) {
-            continue;
+        // Wait for frame
+        {
+            ZoneScopedN("WaitForFrame");
+            if (!engineRenderSynchronization->renderFrames.try_acquire_for(std::chrono::milliseconds(100))) {
+                continue;
+            }
         }
+
 
         if (bShouldExit.load()) { break; }
 

@@ -8,6 +8,7 @@
 #include "ktxvulkan.h"
 #include "render/model/model_serialization.h"
 #include "render/model/will_model_asset.h"
+#include "tracy/Tracy.hpp"
 
 namespace AssetLoad
 {
@@ -182,7 +183,6 @@ ThreadState WillModelLoadJob::ThreadExecute()
             }
 
             ktx_size_t dataSize = currentTexture->dataSize;
-            // todo: wll never have enough space for 4k textures.
             OffsetAllocator::Allocation allocation = stagingAllocator.allocate(dataSize);
             if (allocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
                 assert(stagingAllocator.storageReport().totalFreeSpace != WILL_MODEL_LOAD_STAGING_SIZE);
@@ -570,15 +570,18 @@ void WillModelLoadJob::Reset()
 
 void WillModelLoadJob::LoadModelTask::ExecuteRange(enki::TaskSetPartition range, uint32_t threadnum)
 {
+    ZoneScopedN("LoadModelTask");
     if (loadJob == nullptr) {
         return;
     }
 
-    // todo: tracy profile this step
-    if (!std::filesystem::exists(loadJob->outputModel->source)) {
-        SPDLOG_ERROR("Failed to find path to willmodel - {}", loadJob->outputModel->name);
-        loadJob->taskState = TaskState::Failed;
-        return;
+    {
+        ZoneScopedN("FileExistsCheck");
+        if (!std::filesystem::exists(loadJob->outputModel->source)) {
+            SPDLOG_ERROR("Failed to find path to willmodel - {}", loadJob->outputModel->name);
+            loadJob->taskState = TaskState::Failed;
+            return;
+        }
     }
 
     Render::ModelReader reader = Render::ModelReader(loadJob->outputModel->source);
@@ -589,7 +592,11 @@ void WillModelLoadJob::LoadModelTask::ExecuteRange(enki::TaskSetPartition range,
         return;
     }
 
-    std::vector<uint8_t> modelBinData = reader.ReadFile("model.bin");
+    std::vector<uint8_t> modelBinData;
+    {
+        ZoneScopedN("ReadModelBin");
+        modelBinData = reader.ReadFile("model.bin");
+    }
 
     size_t offset = 0;
     const auto* header = reinterpret_cast<Render::ModelBinaryHeader*>(modelBinData.data());
@@ -603,99 +610,134 @@ void WillModelLoadJob::LoadModelTask::ExecuteRange(enki::TaskSetPartition range,
         }
     };
 
-
     const uint8_t* dataPtr = modelBinData.data() + offset;
 
-    loadJob->rawData.bIsSkeletalModel = header->bIsSkeletalModel;
-    readArray(loadJob->rawData.vertices, header->vertexCount);
-    readArray(loadJob->rawData.meshletVertices, header->meshletVertexCount);
-    readArray(loadJob->rawData.meshletTriangles, header->meshletTriangleCount);
-    readArray(loadJob->rawData.meshlets, header->meshletCount);
-    readArray(loadJob->rawData.primitives, header->primitiveCount);
-    readArray(loadJob->rawData.materials, header->materialCount);
+    {
+        ZoneScopedN("ParseGeometryData");
+        loadJob->rawData.bIsSkeletalModel = header->bIsSkeletalModel;
+        readArray(loadJob->rawData.vertices, header->vertexCount);
+        readArray(loadJob->rawData.meshletVertices, header->meshletVertexCount);
+        readArray(loadJob->rawData.meshletTriangles, header->meshletTriangleCount);
+        readArray(loadJob->rawData.meshlets, header->meshletCount);
+        readArray(loadJob->rawData.primitives, header->primitiveCount);
+        readArray(loadJob->rawData.materials, header->materialCount);
+    }
 
     dataPtr = modelBinData.data() + offset;
-    loadJob->rawData.allMeshes.resize(header->meshCount);
-    for (uint32_t i = 0; i < header->meshCount; i++) {
-        ReadMeshInformation(dataPtr, loadJob->rawData.allMeshes[i]);
+
+    {
+        ZoneScopedN("ParseMeshes");
+        loadJob->rawData.allMeshes.resize(header->meshCount);
+        for (uint32_t i = 0; i < header->meshCount; i++) {
+            ReadMeshInformation(dataPtr, loadJob->rawData.allMeshes[i]);
+        }
     }
 
-    loadJob->rawData.nodes.resize(header->nodeCount);
-    for (uint32_t i = 0; i < header->nodeCount; i++) {
-        ReadNode(dataPtr, loadJob->rawData.nodes[i]);
+    {
+        ZoneScopedN("ParseNodes");
+        loadJob->rawData.nodes.resize(header->nodeCount);
+        for (uint32_t i = 0; i < header->nodeCount; i++) {
+            ReadNode(dataPtr, loadJob->rawData.nodes[i]);
+        }
     }
 
-    loadJob->rawData.animations.resize(header->animationCount);
-    for (uint32_t i = 0; i < header->animationCount; i++) {
-        ReadAnimation(dataPtr, loadJob->rawData.animations[i]);
+    {
+        ZoneScopedN("ParseAnimations");
+        loadJob->rawData.animations.resize(header->animationCount);
+        for (uint32_t i = 0; i < header->animationCount; i++) {
+            ReadAnimation(dataPtr, loadJob->rawData.animations[i]);
+        }
     }
 
     offset = dataPtr - modelBinData.data();
-    readArray(loadJob->rawData.inverseBindMatrices, header->inverseBindMatrixCount);
-
-    std::vector<VkSamplerCreateInfo> samplerInfos{};
-    readArray(samplerInfos, header->samplerCount);
-    for (VkSamplerCreateInfo& sampler : samplerInfos) {
-        loadJob->outputModel->modelData.samplers.push_back(Render::Sampler::CreateSampler(loadJob->context, sampler));
+    {
+        ZoneScopedN("ParseSkeletalData");
+        readArray(loadJob->rawData.inverseBindMatrices, header->inverseBindMatrixCount);
     }
+
+    {
+        ZoneScopedN("CreateSamplers");
+        std::vector<VkSamplerCreateInfo> samplerInfos{};
+        readArray(samplerInfos, header->samplerCount);
+        for (VkSamplerCreateInfo& sampler : samplerInfos) {
+            loadJob->outputModel->modelData.samplers.push_back(Render::Sampler::CreateSampler(loadJob->context, sampler));
+        }
+    }
+
     std::vector<uint32_t> preferredImageFormats;
     readArray(preferredImageFormats, header->textureCount);
 
-    for (int i = 0; i < header->textureCount; ++i) {
-        std::string textureName = fmt::format("textures/texture_{}.ktx2", i);
-        if (!reader.HasFile(textureName)) {
-            SPDLOG_ERROR("[WillModelLoader::TaskImplementation] Failed to find texture {}", textureName);
-            loadJob->pendingTextures.push_back(nullptr);
-            continue;
-        }
+    {
+        ZoneScopedN("LoadTextures");
+        for (int i = 0; i < header->textureCount; ++i) {
+            ZoneScopedN("LoadSingleTexture");
 
-        std::vector<uint8_t> ktxData = reader.ReadFile(textureName);
-        ktxTexture2* loadedTexture = nullptr;
-        ktx_error_code_e result = ktxTexture2_CreateFromMemory(ktxData.data(), ktxData.size(), KTX_TEXTURE_CREATE_NO_FLAGS, &loadedTexture);
+            std::string textureName = fmt::format("textures/texture_{}.ktx2", i);
+            if (!reader.HasFile(textureName)) {
+                SPDLOG_ERROR("[WillModelLoader::TaskImplementation] Failed to find texture {}", textureName);
+                loadJob->pendingTextures.push_back(nullptr);
+                continue;
+            }
 
-        if (ktxTexture2_NeedsTranscoding(loadedTexture)) {
-            const ktx_transcode_fmt_e targetFormat = static_cast<ktx_transcode_fmt_e>(preferredImageFormats[i]);
-            result = ktxTexture2_TranscodeBasis(loadedTexture, targetFormat, 0);
-            if (result != KTX_SUCCESS) {
-                SPDLOG_ERROR("Failed to transcode texture {}", textureName);
+            std::vector<uint8_t> ktxData;
+            {
+                ZoneScopedN("ReadKTXFile");
+                ktxData = reader.ReadFile(textureName);
+            }
+
+            ktxTexture2* loadedTexture = nullptr;
+            ktx_error_code_e result;
+
+            {
+                ZoneScopedN("KTXCreateFromMemory");
+                result = ktxTexture2_CreateFromMemory(ktxData.data(), ktxData.size(), KTX_TEXTURE_CREATE_NO_FLAGS, &loadedTexture);
+            }
+
+            if (ktxTexture2_NeedsTranscoding(loadedTexture)) {
+                ZoneScopedN("KTXTranscode");
+                const ktx_transcode_fmt_e targetFormat = static_cast<ktx_transcode_fmt_e>(preferredImageFormats[i]);
+                result = ktxTexture2_TranscodeBasis(loadedTexture, targetFormat, 0);
+                if (result != KTX_SUCCESS) {
+                    SPDLOG_ERROR("Failed to transcode texture {}", textureName);
+                    loadJob->pendingTextures.push_back(nullptr);
+                    ktxTexture2_Destroy(loadedTexture);
+                    continue;
+                }
+            }
+
+            // Size check
+            ktx_size_t allocSize = loadedTexture->dataSize;
+            if (allocSize >= WILL_MODEL_LOAD_STAGING_SIZE) {
+                SPDLOG_ERROR("Texture too big to fit in the staging buffer for texture {}", textureName);
                 loadJob->pendingTextures.push_back(nullptr);
                 ktxTexture2_Destroy(loadedTexture);
                 continue;
             }
-        }
 
-        // Size check
-        ktx_size_t allocSize = loadedTexture->dataSize;
-        if (allocSize >= WILL_MODEL_LOAD_STAGING_SIZE) {
-            SPDLOG_ERROR("Texture too big to fit in the staging buffer for texture {}", textureName);
-            loadJob->pendingTextures.push_back(nullptr);
-            ktxTexture2_Destroy(loadedTexture);
-            continue;
-        }
+            // Texture dimension and array check
+            if (loadedTexture->numDimensions != 2) {
+                SPDLOG_ERROR("Engine does not support non 2D image textures {}", textureName);
+                loadJob->pendingTextures.push_back(nullptr);
+                ktxTexture2_Destroy(loadedTexture);
+                continue;
+            }
 
-        // Texture dimension and array check
-        if (loadedTexture->numDimensions != 2) {
-            SPDLOG_ERROR("Engine does not support non 2D image textures {}", textureName);
-            loadJob->pendingTextures.push_back(nullptr);
-            ktxTexture2_Destroy(loadedTexture);
-            continue;
-        }
+            if (loadedTexture->isArray) {
+                SPDLOG_ERROR("Engine does not support texture arrays {}", textureName);
+                loadJob->pendingTextures.push_back(nullptr);
+                ktxTexture2_Destroy(loadedTexture);
+                continue;
+            }
 
-        if (loadedTexture->isArray) {
-            SPDLOG_ERROR("Engine does not support texture arrays {}", textureName);
-            loadJob->pendingTextures.push_back(nullptr);
-            ktxTexture2_Destroy(loadedTexture);
-            continue;
-        }
+            if (loadedTexture->isCubemap) {
+                SPDLOG_ERROR("Texture does not support cubemaps {}", textureName);
+                loadJob->pendingTextures.push_back(nullptr);
+                ktxTexture2_Destroy(loadedTexture);
+                continue;
+            }
 
-        if (loadedTexture->isCubemap) {
-            SPDLOG_ERROR("Texture does not support cubemaps {}", textureName);
-            loadJob->pendingTextures.push_back(nullptr);
-            ktxTexture2_Destroy(loadedTexture);
-            continue;
+            loadJob->pendingTextures.push_back(loadedTexture);
         }
-
-        loadJob->pendingTextures.push_back(loadedTexture);
     }
 
     loadJob->rawData.name = "Loaded Model";

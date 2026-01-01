@@ -19,6 +19,7 @@
 #include "render/vulkan/vk_context.h"
 #include "render/vulkan/vk_helpers.h"
 #include "render/vulkan/vk_utils.h"
+#include "tracy/Tracy.hpp"
 
 namespace Render
 {
@@ -245,7 +246,7 @@ GenerateResponse AssetGenerator::GenerateKtxTexture(const std::filesystem::path&
         bufferOffset += mipSize;
     }
 
-    // Compress to UASTC
+    /*// Compress to UASTC
     ktxBasisParams params{};
     params.structSize = sizeof(params);
     params.uastc = KTX_TRUE;
@@ -257,7 +258,7 @@ GenerateResponse AssetGenerator::GenerateKtxTexture(const std::filesystem::path&
         SPDLOG_ERROR("[AssetGenerator::GenerateKtxTexture] Failed to compress texture");
         ktxTexture_Destroy(ktxTexture(texture));
         return GenerateResponse::UNABLE_TO_START;
-    }
+    }*/
 
     result = ktxTexture_WriteToNamedFile(ktxTexture(texture), outputPath.string().c_str());
     ktxTexture_Destroy(ktxTexture(texture));
@@ -621,23 +622,26 @@ RawGltfModel AssetGenerator::LoadGltf(const std::filesystem::path& source)
                 });
             }
 
-            // build clusters (meshlets) out of the mesh
             size_t max_meshlets = meshopt_buildMeshletsBound(primitiveIndices.size(), MESHLET_MAX_VERTICES, MESHLET_MAX_TRIANGLES);
             std::vector<meshopt_Meshlet> meshlets(max_meshlets);
             std::vector<unsigned int> meshletVertices(primitiveIndices.size());
-            std::vector<unsigned char> meshletTriangles(primitiveIndices.size());
-
-            std::vector<uint32_t> primitiveVertexPositions;
-            meshlets.resize(meshopt_buildMeshlets(&meshlets[0], &meshletVertices[0], &meshletTriangles[0],
-                                                  primitiveIndices.data(), primitiveIndices.size(),
-                                                  reinterpret_cast<const float*>(primitiveVertices.data()), primitiveVertices.size(), sizeof(SkinnedVertex),
-                                                  MESHLET_MAX_VERTICES, MESHLET_MAX_TRIANGLES, 0.f));
-
-            // Optimize each meshlet's micro index buffer/vertex layout individually
-            for (auto& meshlet : meshlets) {
-                meshopt_optimizeMeshlet(&meshletVertices[meshlet.vertex_offset], &meshletTriangles[meshlet.triangle_offset], meshlet.triangle_count, meshlet.vertex_count);
+            std::vector<unsigned char> meshletTriangles(primitiveIndices.size()); {
+                ZoneScopedN("BuildMeshlets");
+                // build clusters (meshlets) out of the mesh
+                std::vector<uint32_t> primitiveVertexPositions;
+                meshlets.resize(meshopt_buildMeshlets(&meshlets[0], &meshletVertices[0], &meshletTriangles[0],
+                                                      primitiveIndices.data(), primitiveIndices.size(),
+                                                      reinterpret_cast<const float*>(primitiveVertices.data()), primitiveVertices.size(), sizeof(SkinnedVertex),
+                                                      MESHLET_MAX_VERTICES, MESHLET_MAX_TRIANGLES, 0.f));
             }
 
+            // Optimize each meshlet's micro index buffer/vertex layout individually
+            {
+                ZoneScopedN("OptimizeMeshlets");
+                for (auto& meshlet : meshlets) {
+                    meshopt_optimizeMeshlet(&meshletVertices[meshlet.vertex_offset], &meshletTriangles[meshlet.triangle_offset], meshlet.triangle_count, meshlet.vertex_count);
+                }
+            }
             // Trim the meshlet data to minimize waste for meshletVertices/meshletTriangles
             const meshopt_Meshlet& last = meshlets.back();
             meshletVertices.resize(last.vertex_offset + last.vertex_count);
@@ -659,32 +663,36 @@ RawGltfModel AssetGenerator::LoadGltf(const std::filesystem::path& source)
 
             rawModel.meshletTriangles.insert(rawModel.meshletTriangles.end(), meshletTriangles.begin(), meshletTriangles.end());
 
-            for (meshopt_Meshlet& meshlet : meshlets) {
-                meshopt_Bounds bounds = meshopt_computeMeshletBounds(
-                    &meshletVertices[meshlet.vertex_offset],
-                    &meshletTriangles[meshlet.triangle_offset],
-                    meshlet.triangle_count,
-                    reinterpret_cast<const float*>(primitiveVertices.data()),
-                    primitiveVertices.size(),
-                    sizeof(SkinnedVertex)
-                );
+            //
+            {
+                ZoneScopedN("ComputeMeshletBounds");
+                for (meshopt_Meshlet& meshlet : meshlets) {
+                    meshopt_Bounds bounds = meshopt_computeMeshletBounds(
+                        &meshletVertices[meshlet.vertex_offset],
+                        &meshletTriangles[meshlet.triangle_offset],
+                        meshlet.triangle_count,
+                        reinterpret_cast<const float*>(primitiveVertices.data()),
+                        primitiveVertices.size(),
+                        sizeof(SkinnedVertex)
+                    );
 
-                rawModel.meshlets.push_back({
-                    .meshletBoundingSphere = glm::vec4(
-                        bounds.center[0], bounds.center[1], bounds.center[2],
-                        bounds.radius
-                    ),
-                    .coneApex = glm::vec3(bounds.cone_apex[0], bounds.cone_apex[1], bounds.cone_apex[2]),
-                    .coneCutoff = bounds.cone_cutoff,
+                    rawModel.meshlets.push_back({
+                        .meshletBoundingSphere = glm::vec4(
+                            bounds.center[0], bounds.center[1], bounds.center[2],
+                            bounds.radius
+                        ),
+                        .coneApex = glm::vec3(bounds.cone_apex[0], bounds.cone_apex[1], bounds.cone_apex[2]),
+                        .coneCutoff = bounds.cone_cutoff,
 
-                    .coneAxis = glm::vec3(bounds.cone_axis[0], bounds.cone_axis[1], bounds.cone_axis[2]),
-                    .vertexOffset = vertexOffset,
+                        .coneAxis = glm::vec3(bounds.cone_axis[0], bounds.cone_axis[1], bounds.cone_axis[2]),
+                        .vertexOffset = vertexOffset,
 
-                    .meshletVerticesOffset = meshletVertexOffset + meshlet.vertex_offset,
-                    .meshletTriangleOffset = meshletTrianglesOffset + meshlet.triangle_offset,
-                    .meshletVerticesCount = meshlet.vertex_count,
-                    .meshletTriangleCount = meshlet.triangle_count,
-                });
+                        .meshletVerticesOffset = meshletVertexOffset + meshlet.vertex_offset,
+                        .meshletTriangleOffset = meshletTrianglesOffset + meshlet.triangle_offset,
+                        .meshletVerticesCount = meshlet.vertex_count,
+                        .meshletTriangleCount = meshlet.triangle_count,
+                    });
+                }
             }
         }
 
@@ -887,24 +895,35 @@ RawGltfModel AssetGenerator::LoadGltf(const std::filesystem::path& source)
 
 bool AssetGenerator::WriteWillModel(RawGltfModel& rawModel, const std::filesystem::path& outputPath)
 {
-    if (std::filesystem::exists("temp")) {
-        std::filesystem::remove_all("temp");
+    //
+    {
+        ZoneScopedN("CleanupTempDirectory");
+        if (std::filesystem::exists("temp")) {
+            std::filesystem::remove_all("temp");
+        }
+        std::filesystem::create_directories("temp");
     }
-    std::filesystem::create_directories("temp");
-    std::ofstream binFile("temp/model.bin", std::ios::binary);
-    WriteModelBinary(binFile, rawModel);
-    binFile.close();
 
-    int32_t _progress = 70;
-    constexpr int32_t textureProgressTotal = 30;
-    const int32_t progressPerTexture = rawModel.images.empty() ? 0 : textureProgressTotal / rawModel.images.size();
+    //
+    {
+        ZoneScopedN("WriteModelBinary");
+        std::ofstream binFile("temp/model.bin", std::ios::binary);
+        WriteModelBinary(binFile, rawModel);
+        binFile.close();
+    }
+
+    float _progress = 70.0f;
+    constexpr float textureProgressTotal = 30.0f;
+    const float progressPerTexture = rawModel.images.empty() ? 0.0f : textureProgressTotal / static_cast<float>(rawModel.images.size());
 
     for (size_t i = 0; i < rawModel.images.size(); i++) {
+        ZoneScopedN("ProcessTexture");
         auto& image = rawModel.images[i];
         uint32_t mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(image.extent.width, image.extent.height)))) + 1;
 
         // Mip Generation
         {
+            ZoneScopedN("GenerateMipmaps");
             VK_CHECK(vkResetCommandBuffer(immediateParameters.immCommandBuffer, 0));
 
             const auto cmd = immediateParameters.immCommandBuffer;
@@ -997,73 +1016,95 @@ bool AssetGenerator::WriteWillModel(RawGltfModel& rawModel, const std::filesyste
         createInfo.isArray = KTX_FALSE;
         createInfo.generateMipmaps = KTX_FALSE;
 
-        ktx_error_code_e result = ktxTexture2_Create(&createInfo, KTX_TEXTURE_CREATE_ALLOC_STORAGE, &texture);
+        ktx_error_code_e result;
+        //
+        {
+            ZoneScopedN("KTXCreate");
+            result = ktxTexture2_Create(&createInfo, KTX_TEXTURE_CREATE_ALLOC_STORAGE, &texture);
+        }
+
         if (result) {
             SPDLOG_ERROR("[ModelGenerator::WriteWillModel] Failed to create ktx texture for texture ", i);
             return false;
         }
 
-        VK_CHECK(vkResetCommandBuffer(immediateParameters.immCommandBuffer, 0));
-        VkCommandBufferBeginInfo cmdBeginInfo = VkHelpers::CommandBufferBeginInfo();
-        VK_CHECK(vkBeginCommandBuffer(immediateParameters.immCommandBuffer, &cmdBeginInfo));
+        //
+        {
+            ZoneScopedN("CopyImageToCPU");
+            VK_CHECK(vkResetCommandBuffer(immediateParameters.immCommandBuffer, 0));
+            VkCommandBufferBeginInfo cmdBeginInfo = VkHelpers::CommandBufferBeginInfo();
+            VK_CHECK(vkBeginCommandBuffer(immediateParameters.immCommandBuffer, &cmdBeginInfo));
 
-        std::vector<VkBufferImageCopy> copyRegions;
-        copyRegions.reserve(mipLevels);
-        size_t bufferOffset = 0;
-        uint32_t bytesPerPixel = VkHelpers::GetBytesPerPixel(image.format);
+            std::vector<VkBufferImageCopy> copyRegions;
+            copyRegions.reserve(mipLevels);
+            size_t bufferOffset = 0;
+            uint32_t bytesPerPixel = VkHelpers::GetBytesPerPixel(image.format);
 
-        for (uint32_t mip = 0; mip < mipLevels; mip++) {
-            uint32_t mipWidth = std::max(1u, image.extent.width >> mip);
-            uint32_t mipHeight = std::max(1u, image.extent.height >> mip);
+            for (uint32_t mip = 0; mip < mipLevels; mip++) {
+                uint32_t mipWidth = std::max(1u, image.extent.width >> mip);
+                uint32_t mipHeight = std::max(1u, image.extent.height >> mip);
 
-            VkBufferImageCopy copyRegion{};
-            copyRegion.bufferOffset = bufferOffset;
-            copyRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            copyRegion.imageSubresource.mipLevel = mip;
-            copyRegion.imageSubresource.baseArrayLayer = 0;
-            copyRegion.imageSubresource.layerCount = 1;
-            copyRegion.imageExtent = {mipWidth, mipHeight, 1};
+                VkBufferImageCopy copyRegion{};
+                copyRegion.bufferOffset = bufferOffset;
+                copyRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                copyRegion.imageSubresource.mipLevel = mip;
+                copyRegion.imageSubresource.baseArrayLayer = 0;
+                copyRegion.imageSubresource.layerCount = 1;
+                copyRegion.imageExtent = {mipWidth, mipHeight, 1};
 
-            copyRegions.push_back(copyRegion);
-            bufferOffset += mipWidth * mipHeight * bytesPerPixel;
+                copyRegions.push_back(copyRegion);
+                bufferOffset += mipWidth * mipHeight * bytesPerPixel;
+            }
+
+            vkCmdCopyImageToBuffer(immediateParameters.immCommandBuffer, image.handle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                   immediateParameters.imageReceivingBuffer.handle, copyRegions.size(), copyRegions.data());
+
+            VK_CHECK(vkEndCommandBuffer(immediateParameters.immCommandBuffer));
+
+            VkCommandBufferSubmitInfo cmdSubmitInfo = VkHelpers::CommandBufferSubmitInfo(immediateParameters.immCommandBuffer);
+            VkSubmitInfo2 submitInfo = VkHelpers::SubmitInfo(&cmdSubmitInfo, nullptr, nullptr);
+            VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, immediateParameters.immFence));
+            VK_CHECK(vkWaitForFences(context->device, 1, &immediateParameters.immFence, true, 1000000000));
+            VK_CHECK(vkResetFences(context->device, 1, &immediateParameters.immFence));
         }
 
-        vkCmdCopyImageToBuffer(immediateParameters.immCommandBuffer, image.handle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                               immediateParameters.imageReceivingBuffer.handle, copyRegions.size(), copyRegions.data());
+        //
+        {
+            ZoneScopedN("CopyToKTX");
+            size_t bufferOffset = 0;
+            for (uint32_t mip = 0; mip < mipLevels; mip++) {
+                uint32_t mipWidth = std::max(1u, image.extent.width >> mip);
+                uint32_t mipHeight = std::max(1u, image.extent.height >> mip);
+                size_t mipSize = mipWidth * mipHeight * 4;
 
-        VK_CHECK(vkEndCommandBuffer(immediateParameters.immCommandBuffer));
+                void* readbackData = static_cast<char*>(immediateParameters.imageReceivingBuffer.allocationInfo.pMappedData) + bufferOffset;
+                ktxTexture_SetImageFromMemory(ktxTexture(texture), mip, 0, 0, static_cast<const ktx_uint8_t*>(readbackData), mipSize);
 
-        VkCommandBufferSubmitInfo cmdSubmitInfo = VkHelpers::CommandBufferSubmitInfo(immediateParameters.immCommandBuffer);
-        VkSubmitInfo2 submitInfo = VkHelpers::SubmitInfo(&cmdSubmitInfo, nullptr, nullptr);
-        VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, immediateParameters.immFence));
-        VK_CHECK(vkWaitForFences(context->device, 1, &immediateParameters.immFence, true, 1000000000));
-        VK_CHECK(vkResetFences(context->device, 1, &immediateParameters.immFence));
-
-        bufferOffset = 0;
-        for (uint32_t mip = 0; mip < mipLevels; mip++) {
-            uint32_t mipWidth = std::max(1u, image.extent.width >> mip);
-            uint32_t mipHeight = std::max(1u, image.extent.height >> mip);
-            size_t mipSize = mipWidth * mipHeight * 4;
-
-            void* readbackData = static_cast<char*>(immediateParameters.imageReceivingBuffer.allocationInfo.pMappedData) + bufferOffset;
-            ktxTexture_SetImageFromMemory(ktxTexture(texture), mip, 0, 0, static_cast<const ktx_uint8_t*>(readbackData), mipSize);
-
-            bufferOffset += mipSize;
+                bufferOffset += mipSize;
+            }
         }
 
-        // Write KTX2 file
+
         std::string ktxPath = "temp/texture_" + std::to_string(i) + ".ktx2";
+        //
+        {
+            ZoneScopedN("CompressUASTC");
 
-        ktxBasisParams params{};
-        params.structSize = sizeof(params);
-        params.uastc = KTX_TRUE;
-        // params.uastcRDO = KTX_TRUE;
-        params.qualityLevel = 16;
-        params.verbose = KTX_FALSE;
+            ktxBasisParams params{};
+            params.structSize = sizeof(params);
+            params.uastc = KTX_TRUE;
+            // params.uastcRDO = KTX_TRUE;
+            params.qualityLevel = 16;
+            params.verbose = KTX_FALSE;
 
-        result = ktxTexture2_CompressBasisEx(texture, &params);
+            result = ktxTexture2_CompressBasisEx(texture, &params);
+        }
+        //
+        {
+            ZoneScopedN("WriteKTXFile");
+            ktxTexture_WriteToNamedFile(ktxTexture(texture), ktxPath.c_str());
+        }
 
-        ktxTexture_WriteToNamedFile(ktxTexture(texture), ktxPath.c_str());
         SPDLOG_TRACE("Wrote {}", ktxPath);
         ktxTexture_Destroy(ktxTexture(texture));
 
@@ -1071,32 +1112,49 @@ bool AssetGenerator::WriteWillModel(RawGltfModel& rawModel, const std::filesyste
         modelGenerationProgress.value.store(_progress, std::memory_order::release);
     }
 
-    ModelWriter writer{outputPath};
-    writer.AddFileFromDisk("model.bin", "temp/model.bin", true);
+    //
+    {
+        ZoneScopedN("CreateArchive");
 
-    uint32_t i = 0;
-    while (true) {
-        std::string sourcePath = fmt::format("temp/texture_{}.ktx2", i);
-        if (!std::filesystem::exists(sourcePath)) {
-            break;
+        ModelWriter writer{outputPath};
+        writer.AddFileFromDisk("model.bin", "temp/model.bin", true);
+
+        uint32_t i = 0;
+        while (true) {
+            std::string sourcePath = fmt::format("temp/texture_{}.ktx2", i);
+            if (!std::filesystem::exists(sourcePath)) {
+                break;
+            }
+
+            std::string archiveName = fmt::format("textures/texture_{}.ktx2", i);
+            bool writeRes = writer.AddFileFromDisk(archiveName, sourcePath, true);
+            if (!writeRes) {
+                return false;
+            }
+            i++;
         }
 
-        std::string archiveName = fmt::format("textures/texture_{}.ktx2", i);
-        bool writeRes = writer.AddFileFromDisk(archiveName, sourcePath, true);
-        if (!writeRes) {
-            return false;
-        }
-        i++;
+        bool success = writer.Finalize();
+
+        // Ensure progress reaches 100%
+        modelGenerationProgress.value.store(100, std::memory_order::release);
+
+        return success;
     }
-
-    return writer.Finalize();
 }
 
 void AssetGenerator::GenerateWillModel_Internal(const std::filesystem::path& gltfPath, const std::filesystem::path& outputPath)
 {
+    ZoneScopedN("GenerateWillModel_Internal");
+
     modelGenerationProgress.loadingState.store(WillModelGenerationProgress::LoadingProgress::LOADING_GLTF, std::memory_order::release);
     modelGenerationProgress.value.store(1, std::memory_order::release);
-    RawGltfModel rawModel = LoadGltf(gltfPath);
+    RawGltfModel rawModel;
+    //
+    {
+        ZoneScopedN("LoadGltf");
+        rawModel = LoadGltf(gltfPath);
+    }
 
     if (!rawModel.bSuccessfullyLoaded) {
         modelGenerationProgress.loadingState.store(WillModelGenerationProgress::LoadingProgress::FAILED, std::memory_order::release);
@@ -1106,7 +1164,12 @@ void AssetGenerator::GenerateWillModel_Internal(const std::filesystem::path& glt
 
     modelGenerationProgress.loadingState.store(WillModelGenerationProgress::LoadingProgress::WRITING_WILL_MODEL, std::memory_order::release);
     modelGenerationProgress.value.store(70, std::memory_order::release);
-    bool success = WriteWillModel(rawModel, outputPath);
+    bool success;
+    //
+    {
+        ZoneScopedN("WriteWillModel");
+        success = WriteWillModel(rawModel, outputPath);
+    }
 
     modelGenerationProgress.loadingState.store(success ? WillModelGenerationProgress::LoadingProgress::SUCCESS : WillModelGenerationProgress::LoadingProgress::FAILED, std::memory_order::release);
     modelGenerationProgress.value.store(100, std::memory_order::release);

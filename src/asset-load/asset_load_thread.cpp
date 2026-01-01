@@ -262,6 +262,9 @@ void AssetLoadThread::ThreadMain()
                         else if (res == TaskState::Complete) {
                             bool preRes = job->PreThreadExecute();
                             if (preRes) {
+                                auto duration = std::chrono::steady_clock::now() - slot.startTime;
+                                auto durationMs = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
+                                SPDLOG_INFO("'{}' task completed in {}ms", slot.name, durationMs);
                                 slot.loadState = AssetLoadState::ThreadExecuting;
                             }
                             else {
