@@ -26,6 +26,8 @@
 #include "editor/asset-generation/asset_generator.h"
 #endif
 
+#include <tracy/Tracy.hpp>
+
 namespace Engine
 {
 WillEngine::WillEngine(Platform::CrashHandler* crashHandler_)
@@ -36,83 +38,153 @@ WillEngine::~WillEngine() = default;
 
 void WillEngine::Initialize()
 {
-    Platform::SetThreadName("EngineThread");
-    enki::TaskSchedulerConfig config;
-    config.numTaskThreadsToCreate = enki::GetNumHardwareThreads() - 1;
-    config.profilerCallbacks.threadStart = [](uint32_t threadNum_) {
-        std::string name = fmt::format("TaskThread{}", threadNum_);
-        Platform::SetThreadName(name.c_str());
-    };
+    ZoneScoped;
+    tracy::SetThreadName("EngineThread");
+    Platform::SetThreadName("EngineThread"); {
+        ZoneScopedN("SchedulerInit");
+        enki::TaskSchedulerConfig config;
+        config.numTaskThreadsToCreate = enki::GetNumHardwareThreads() - 1;
+        config.profilerCallbacks.threadStart = [](uint32_t threadNum_) {
+            // 0 is Engine Thread
+            // N - 1 is Render Thread
+            // N - 2 is Asset Load Thread
+            if (threadNum_ < enki::GetNumHardwareThreads() - 3) {
+                std::string name = fmt::format("TaskThread{}", threadNum_);
+                tracy::SetThreadName(name.c_str());
+                Platform::SetThreadName(name.c_str());
+            }
+        };
+        config.profilerCallbacks.waitForNewTaskSuspendStart = [](uint32_t) {
+            ZoneScopedN("enkiWaitIdle");
+        };
+        config.profilerCallbacks.waitForNewTaskSuspendStop = [](uint32_t) {};
+        config.profilerCallbacks.waitForTaskCompleteStart = [](uint32_t) {
+            ZoneScopedN("enkiWaitTask");
+        };
+        config.profilerCallbacks.waitForTaskCompleteStop = [](uint32_t) {};
+        config.profilerCallbacks.waitForTaskCompleteSuspendStart = [](uint32_t) {
+            ZoneScopedN("enkiWaitTaskSuspend");
+        };
+        config.profilerCallbacks.waitForTaskCompleteSuspendStop = [](uint32_t) {};
 
-    SPDLOG_INFO("Scheduler operating with {} threads.", config.numTaskThreadsToCreate + 1);
-    scheduler = std::make_unique<enki::TaskScheduler>();
-    scheduler->Initialize(config);
-
-    bool sdlInitSuccess = SDL_Init(SDL_INIT_VIDEO);
-    if (!sdlInitSuccess) {
-        SPDLOG_ERROR("SDL_Init failed: {}", SDL_GetError());
-        exit(1);
+        SPDLOG_INFO("Scheduler operating with {} threads.", config.numTaskThreadsToCreate + 1);
+        scheduler = std::make_unique<enki::TaskScheduler>();
+        scheduler->Initialize(config);
     }
 
-    window = SDLWindowPtr(
-        SDL_CreateWindow(
-            "Will Engine",
-            640,
-            480,
-            SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE),
-        SDL_DestroyWindow
-    );
-    SDL_SetWindowPosition(window.get(), SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
-    SDL_ShowWindow(window.get());
+    //
+    {
+        ZoneScopedN("SDL_Init");
+        bool sdlInitSuccess = SDL_Init(SDL_INIT_VIDEO);
+        if (!sdlInitSuccess) {
+            SPDLOG_ERROR("SDL_Init failed: {}", SDL_GetError());
+            exit(1);
+        }
+    }
+
     int32_t w;
     int32_t h;
-    SDL_GetWindowSize(window.get(), &w, &h);
-    SDL_SetWindowRelativeMouseMode(window.get(), bCursorHidden);
+    //
+    {
+        ZoneScopedN("WindowCreation");
+        window = SDLWindowPtr(
+            SDL_CreateWindow(
+                "Will Engine",
+                640,
+                480,
+                SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE),
+            SDL_DestroyWindow
+        );
+        SDL_SetWindowPosition(window.get(), SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
+        SDL_ShowWindow(window.get());
+        SDL_GetWindowSize(window.get(), &w, &h);
+        SDL_SetWindowRelativeMouseMode(window.get(), bCursorHidden);
+    }
 
-    inputManager = std::make_unique<Core::InputManager>(w, h);
-    timeManager = std::make_unique<Core::TimeManager>();
+    //
+    {
+        ZoneScopedN("CreateInputManager");
+        inputManager = std::make_unique<Core::InputManager>(w, h);
+    }
 
-    engineRenderSynchronization = std::make_unique<Core::FrameSync>();
-    renderThread = std::make_unique<Render::RenderThread>(engineRenderSynchronization.get(), scheduler.get(), window.get(), w, h);
-    assetLoadThread = std::make_unique<AssetLoad::AssetLoadThread>(scheduler.get(), renderThread->GetVulkanContext(), renderThread->GetResourceManager());
-    assetManager = std::make_unique<AssetManager>(assetLoadThread.get(), renderThread->GetResourceManager());
-    physicsSystem = std::make_unique<Physics::PhysicsSystem>(scheduler.get());
+    //
+    {
+        ZoneScopedN("CreateTimeManager");
+        timeManager = std::make_unique<Core::TimeManager>();
+    }
+
+    //
+    {
+        ZoneScopedN("CreateRenderThread");
+        engineRenderSynchronization = std::make_unique<Core::FrameSync>();
+        renderThread = std::make_unique<Render::RenderThread>(engineRenderSynchronization.get(), scheduler.get(), window.get(), w, h);
+    }
+
+    //
+    {
+        ZoneScopedN("CreateAssetLoadThread");
+        assetLoadThread = std::make_unique<AssetLoad::AssetLoadThread>(scheduler.get(), renderThread->GetVulkanContext(), renderThread->GetResourceManager());
+    }
+
+    //
+    {
+        ZoneScopedN("CreateAssetManager");
+        assetManager = std::make_unique<AssetManager>(assetLoadThread.get(), renderThread->GetResourceManager());
+    }
+
+    //
+    {
+        ZoneScopedN("CreatePhysicsSystem");
+        physicsSystem = std::make_unique<Physics::PhysicsSystem>(scheduler.get());
+    }
+
+
 #if WILL_EDITOR
-    modelGenerator = std::make_unique<Render::AssetGenerator>(renderThread->GetVulkanContext(), scheduler.get());
+    //
+    {
+        ZoneScopedN("CreateModelGenerator");
+        modelGenerator = std::make_unique<Render::AssetGenerator>(renderThread->GetVulkanContext(), scheduler.get());
+    }
+
 #endif
+
+    //
+    {
+        ZoneScopedN("PrepareGameFunctions");
 #ifdef GAME_STATIC
-    gameFunctions.gameStartup = &GameStartup;
-    gameFunctions.gameLoad = &GameLoad;
-    gameFunctions.gameUpdate = &GameUpdate;
-    gameFunctions.gamePrepareFrame = &GamePrepareFrame;
-    gameFunctions.gameUnload = &GameUnload;
-    gameFunctions.gameShutdown = &GameShutdown;
+        gameFunctions.gameStartup = &GameStartup;
+        gameFunctions.gameLoad = &GameLoad;
+        gameFunctions.gameUpdate = &GameUpdate;
+        gameFunctions.gamePrepareFrame = &GamePrepareFrame;
+        gameFunctions.gameUnload = &GameUnload;
+        gameFunctions.gameShutdown = &GameShutdown;
 #else
-    if (gameDll.Load("game.dll", "game_temp.dll")) {
-        gameFunctions.gameStartup = gameDll.GetFunction<Core::GameStartUpFunc>("GameStartup");
-        gameFunctions.gameLoad = gameDll.GetFunction<Core::GameLoadFunc>("GameLoad");
-        gameFunctions.gameUpdate = gameDll.GetFunction<Core::GameUpdateFunc>("GameUpdate");
-        gameFunctions.gamePrepareFrame = gameDll.GetFunction<Core::GamePrepareFrameFunc>("GamePrepareFrame");
-        gameFunctions.gameUnload = gameDll.GetFunction<Core::GameUnloadFunc>("GameUnload");
-        gameFunctions.gameShutdown = gameDll.GetFunction<Core::GameShutdownFunc>("GameShutdown");
-    }
-    else {
-        gameFunctions.Stub();
-    }
+        if (gameDll.Load("game.dll", "game_temp.dll")) {
+            gameFunctions.gameStartup = gameDll.GetFunction<Core::GameStartUpFunc>("GameStartup");
+            gameFunctions.gameLoad = gameDll.GetFunction<Core::GameLoadFunc>("GameLoad");
+            gameFunctions.gameUpdate = gameDll.GetFunction<Core::GameUpdateFunc>("GameUpdate");
+            gameFunctions.gamePrepareFrame = gameDll.GetFunction<Core::GamePrepareFrameFunc>("GamePrepareFrame");
+            gameFunctions.gameUnload = gameDll.GetFunction<Core::GameUnloadFunc>("GameUnload");
+            gameFunctions.gameShutdown = gameDll.GetFunction<Core::GameShutdownFunc>("GameShutdown");
+        }
+        else {
+            gameFunctions.Stub();
+        }
 #endif
 
-    gameState = std::make_unique<GameState>();
+        gameState = std::make_unique<GameState>();
 
-    engineContext = std::make_unique<Core::EngineContext>();
-    engineContext->logger = spdlog::default_logger();
-    engineContext->windowContext.windowWidth = w;
-    engineContext->windowContext.windowHeight = h;
-    engineContext->windowContext.bCursorHidden = bCursorHidden;
-    engineContext->assetManager = assetManager.get();
-    engineContext->physicsSystem = physicsSystem.get();
+        engineContext = std::make_unique<Core::EngineContext>();
+        engineContext->logger = spdlog::default_logger();
+        engineContext->windowContext.windowWidth = w;
+        engineContext->windowContext.windowHeight = h;
+        engineContext->windowContext.bCursorHidden = bCursorHidden;
+        engineContext->assetManager = assetManager.get();
+        engineContext->physicsSystem = physicsSystem.get();
 
-    gameFunctions.gameStartup(engineContext.get(), gameState.get());
-    gameFunctions.gameLoad(engineContext.get(), gameState.get());
+        gameFunctions.gameStartup(engineContext.get(), gameState.get());
+        gameFunctions.gameLoad(engineContext.get(), gameState.get());
+    }
 }
 
 void WillEngine::Run()
@@ -203,49 +275,60 @@ void WillEngine::Run()
         assetManager->ResolveLoads(stagingFrameBuffer);
         assetManager->ResolveUnloads();
 
-        gameState->inputFrame = &inputManager->GetCurrentInput();
-        gameState->timeFrame = &timeManager->GetTime();
-        gameFunctions.gameUpdate(engineContext.get(), gameState.get());
-        inputManager->FrameReset();
-
-        const bool canTransmit = engineRenderSynchronization->gameFrames.try_acquire();
-        if (canTransmit) {
-            timeManager->UpdateRender();
-
-            Core::FrameBuffer& currentFrameBuffer = engineRenderSynchronization->frameBuffers[frameBufferIndex];
-            stagingFrameBuffer.currentFrameBuffer = frameBufferIndex;
-            stagingFrameBuffer.swapchainRecreateCommand.bIsMinimized = bMinimized;
-            if (bRequireSwapchainRecreate) {
-                stagingFrameBuffer.swapchainRecreateCommand.bEngineCommandsRecreate = true;
-
-                int32_t w;
-                int32_t h;
-                SDL_GetWindowSize(window.get(), &w, &h);
-                stagingFrameBuffer.swapchainRecreateCommand.width = w;
-                stagingFrameBuffer.swapchainRecreateCommand.height = h;
-                bRequireSwapchainRecreate = false;
-            }
-            else {
-                stagingFrameBuffer.swapchainRecreateCommand.bEngineCommandsRecreate = false;
-            }
-
-            gameFunctions.gamePrepareFrame(engineContext.get(), gameState.get(), &stagingFrameBuffer);
-            stagingFrameBuffer.bFreezeVisibility = bFreezeVisibility;
-
-            std::swap(currentFrameBuffer, stagingFrameBuffer);
-            stagingFrameBuffer.mainViewFamily.modelMatrices.clear();
-            stagingFrameBuffer.mainViewFamily.instances.clear();
-            stagingFrameBuffer.mainViewFamily.materials.clear();
-            stagingFrameBuffer.mainViewFamily.mainView = {};
-            stagingFrameBuffer.bufferAcquireOperations.clear();
-            stagingFrameBuffer.imageAcquireOperations.clear();
-            stagingFrameBuffer.timeFrame = timeManager->GetTime();
-#if WILL_EDITOR
-            PrepareEditor(frameBufferIndex);
-#endif
-            frameBufferIndex = (frameBufferIndex + 1) % Core::FRAME_BUFFER_COUNT;
-            engineRenderSynchronization->renderFrames.release();
+        //
+        {
+            ZoneScopedN("GameFrame");
+            gameState->inputFrame = &inputManager->GetCurrentInput();
+            gameState->timeFrame = &timeManager->GetTime();
+            gameFunctions.gameUpdate(engineContext.get(), gameState.get());
+            inputManager->FrameReset();
         }
+
+
+        //
+        {
+            ZoneScopedN("PrepareRenderFrameData");
+            const bool canTransmit = engineRenderSynchronization->gameFrames.try_acquire();
+            if (canTransmit) {
+                timeManager->UpdateRender();
+
+                Core::FrameBuffer& currentFrameBuffer = engineRenderSynchronization->frameBuffers[frameBufferIndex];
+                stagingFrameBuffer.currentFrameBuffer = frameBufferIndex;
+                stagingFrameBuffer.swapchainRecreateCommand.bIsMinimized = bMinimized;
+                if (bRequireSwapchainRecreate) {
+                    stagingFrameBuffer.swapchainRecreateCommand.bEngineCommandsRecreate = true;
+
+                    int32_t w;
+                    int32_t h;
+                    SDL_GetWindowSize(window.get(), &w, &h);
+                    stagingFrameBuffer.swapchainRecreateCommand.width = w;
+                    stagingFrameBuffer.swapchainRecreateCommand.height = h;
+                    bRequireSwapchainRecreate = false;
+                }
+                else {
+                    stagingFrameBuffer.swapchainRecreateCommand.bEngineCommandsRecreate = false;
+                }
+
+                gameFunctions.gamePrepareFrame(engineContext.get(), gameState.get(), &stagingFrameBuffer);
+                stagingFrameBuffer.bFreezeVisibility = bFreezeVisibility;
+
+                std::swap(currentFrameBuffer, stagingFrameBuffer);
+                stagingFrameBuffer.mainViewFamily.modelMatrices.clear();
+                stagingFrameBuffer.mainViewFamily.instances.clear();
+                stagingFrameBuffer.mainViewFamily.materials.clear();
+                stagingFrameBuffer.mainViewFamily.mainView = {};
+                stagingFrameBuffer.bufferAcquireOperations.clear();
+                stagingFrameBuffer.imageAcquireOperations.clear();
+                stagingFrameBuffer.timeFrame = timeManager->GetTime();
+#if WILL_EDITOR
+                PrepareEditor(frameBufferIndex);
+#endif
+                frameBufferIndex = (frameBufferIndex + 1) % Core::FRAME_BUFFER_COUNT;
+                engineRenderSynchronization->renderFrames.release();
+            }
+        }
+
+        FrameMark;
     }
 }
 
@@ -279,7 +362,7 @@ void WillEngine::DrawImgui()
             InstancedMeshIndirectDrawParameters* params = reinterpret_cast<InstancedMeshIndirectDrawParameters*>(data + sizeof(uint32_t));
 
             for (uint32_t i = 0; i < std::min(indirectCount, 10u); i++) {
-                if (ImGui::TreeNode((void*)(intptr_t)i, "Draw %u", i)) {
+                if (ImGui::TreeNode((void*) (intptr_t) i, "Draw %u", i)) {
                     ImGui::Text("Dispatch: (%u, %u, %u)", params[i].groupCountX, params[i].groupCountY, params[i].groupCountZ);
                     ImGui::Text("Instance Start: %u", params[i].compactedInstanceStart);
                     ImGui::Text("Meshlet Offset: %u, Count: %u", params[i].meshletOffset, params[i].meshletCount);

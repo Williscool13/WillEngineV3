@@ -36,7 +36,9 @@ set(GAME_LIBRARIES
         render
         platform
         spdlog::spdlog
+        tracy
 )
+
 
 if (WILL_ENGINE_GAME_STATIC)
     add_library(game STATIC ${GAME_SOURCES})
@@ -44,7 +46,6 @@ else()
     add_library(game SHARED ${GAME_SOURCES})
     target_compile_definitions(game PRIVATE GAME_EXPORTS)
 
-    # Copy DLL to engine directory for hot-reload
     add_custom_command(TARGET game POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
             $<TARGET_FILE:game>
@@ -57,6 +58,6 @@ else()
     )
 endif()
 
-# Common configuration for both
 target_include_directories(game PRIVATE ${GAME_INCLUDE_DIRS})
+target_compile_definitions(game PRIVATE TRACY_IMPORTS)
 target_link_libraries(game PUBLIC ${GAME_LIBRARIES})

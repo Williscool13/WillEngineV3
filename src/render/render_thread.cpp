@@ -20,6 +20,7 @@
 #include "render-graph/render_pass.h"
 #include "shaders/constants_interop.h"
 #include "shaders/push_constant_interop.h"
+#include "tracy/Tracy.hpp"
 #include "types/render_types.h"
 
 #if WILL_EDITOR
@@ -113,43 +114,52 @@ void RenderThread::Join()
 
 void RenderThread::ThreadMain()
 {
-    Platform::SetThreadName("RenderThread");
+    ZoneScoped;
+    tracy::SetThreadName("RenderThread");
+
     while (!bShouldExit.load()) {
+        ZoneScopedN("WaitForFrame");
         if (!engineRenderSynchronization->renderFrames.try_acquire_for(std::chrono::milliseconds(100))) {
             continue;
         }
 
         if (bShouldExit.load()) { break; }
 
-        currentFrameInFlight = frameNumber % Core::FRAME_BUFFER_COUNT;
-        Core::FrameBuffer& frameBuffer = engineRenderSynchronization->frameBuffers[currentFrameInFlight];
-        assert(frameBuffer.currentFrameBuffer == currentFrameInFlight);
+        // Render Frame
+        {
+            ZoneScopedN("RenderFrame");
+            currentFrameInFlight = frameNumber % Core::FRAME_BUFFER_COUNT;
+            Core::FrameBuffer& frameBuffer = engineRenderSynchronization->frameBuffers[currentFrameInFlight];
+            assert(frameBuffer.currentFrameBuffer == currentFrameInFlight);
 
 
-        bEngineRequestsRecreate |= frameBuffer.swapchainRecreateCommand.bEngineCommandsRecreate;
-        bool bShouldRecreate = !frameBuffer.swapchainRecreateCommand.bIsMinimized && bEngineRequestsRecreate;
-        if (bShouldRecreate) {
-            SPDLOG_INFO("[RenderThread::ThreadMain] Swapchain Recreated");
-            vkDeviceWaitIdle(context->device);
+            bEngineRequestsRecreate |= frameBuffer.swapchainRecreateCommand.bEngineCommandsRecreate;
+            bool bShouldRecreate = !frameBuffer.swapchainRecreateCommand.bIsMinimized && bEngineRequestsRecreate;
+            if (bShouldRecreate) {
+                SPDLOG_INFO("[RenderThread::ThreadMain] Swapchain Recreated");
+                vkDeviceWaitIdle(context->device);
 
-            swapchain->Recreate(frameBuffer.swapchainRecreateCommand.width, frameBuffer.swapchainRecreateCommand.height);
-            renderExtents->ApplyResize(frameBuffer.swapchainRecreateCommand.width, frameBuffer.swapchainRecreateCommand.height);
+                swapchain->Recreate(frameBuffer.swapchainRecreateCommand.width, frameBuffer.swapchainRecreateCommand.height);
+                renderExtents->ApplyResize(frameBuffer.swapchainRecreateCommand.width, frameBuffer.swapchainRecreateCommand.height);
 
-            bRenderRequestsRecreate = false;
-            bEngineRequestsRecreate = false;
+                bRenderRequestsRecreate = false;
+                bEngineRequestsRecreate = false;
 
-            graph->InvalidateAll();
+                graph->InvalidateAll();
+            }
+
+            // Wait for the frame N - 3 to finish using resources
+            RenderSynchronization& currentRenderSynchronization = frameSynchronization[currentFrameInFlight];
+            FrameResources& currentFrameResources = frameResources[currentFrameInFlight];
+            RenderResponse renderResponse = Render(currentFrameInFlight, currentRenderSynchronization, frameBuffer, currentFrameResources);
+            if (renderResponse == SWAPCHAIN_OUTDATED) {
+                bRenderRequestsRecreate = true;
+            }
+
+            frameNumber++;
         }
 
-        // Wait for the frame N - 3 to finish using resources
-        RenderSynchronization& currentRenderSynchronization = frameSynchronization[currentFrameInFlight];
-        FrameResources& currentFrameResources = frameResources[currentFrameInFlight];
-        RenderResponse renderResponse = Render(currentFrameInFlight, currentRenderSynchronization, frameBuffer, currentFrameResources);
-        if (renderResponse == SWAPCHAIN_OUTDATED) {
-            bRenderRequestsRecreate = true;
-        }
-
-        frameNumber++;
+        FrameMark;
         engineRenderSynchronization->gameFrames.release();
     }
 
@@ -410,6 +420,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     instancedMeshShading.ReadBuffer("materialBuffer", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
     instancedMeshShading.ReadBuffer("modelBuffer", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
     instancedMeshShading.ReadIndirectBuffer("indirectBuffer", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT);
+    // todo: indirect count buffer doesnt need task/mesh shader bit it, it is only used in indirect. Barriers in RDG need to be fixed.
     instancedMeshShading.ReadIndirectBuffer("indirectCountBuffer", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT);
     instancedMeshShading.Execute([&](VkCommandBuffer cmd) {
         const VkRenderingAttachmentInfo albedoAttachment = VkHelpers::RenderingAttachmentInfo(graph->GetImageView("albedoTarget"), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
@@ -569,7 +580,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     }
     graph->CarryToNextFrame("taaCurrent", "taaHistory");
 
-    graph->CreateTexture("finalImage",{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1]});
+    graph->CreateTexture("finalImage", {COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1]});
 
     RenderPass& finalCopyPass = graph->AddPass("finalCopy");
     finalCopyPass.ReadBlitImage("taaCurrent");

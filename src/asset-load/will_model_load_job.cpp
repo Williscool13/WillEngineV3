@@ -187,6 +187,7 @@ ThreadState WillModelLoadJob::ThreadExecute()
             if (allocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
                 assert(stagingAllocator.storageReport().totalFreeSpace != WILL_MODEL_LOAD_STAGING_SIZE);
                 uploadStaging->SubmitCommandBuffer();
+                uploadCount++;
                 return ThreadState::InProgress;
             }
 
@@ -303,6 +304,7 @@ ThreadState WillModelLoadJob::ThreadExecute()
                 if (maxElements == 0) {
                     assert(freeSpace < WILL_MODEL_LOAD_STAGING_SIZE && "NO_SPACE on empty staging buffer");
                     uploadStaging->SubmitCommandBuffer();
+                    uploadCount++;
                     return false;
                 }
 
@@ -313,6 +315,7 @@ ThreadState WillModelLoadJob::ThreadExecute()
                 // Still can't fit. Likely caused by fragmentation - submit and retry
                 if (allocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
                     uploadStaging->SubmitCommandBuffer();
+                    uploadCount++;
                     return false;
                 }
 
@@ -325,6 +328,7 @@ ThreadState WillModelLoadJob::ThreadExecute()
                 copyRegion.size = remainingSize;
                 vkCmdCopyBuffer(uploadStaging->GetCommandBuffer(), stagingBuffer.handle, targetBuffer, 1, &copyRegion);
                 uploadStaging->SubmitCommandBuffer();
+                uploadCount++;
                 pendingHead += maxElements;
                 return false;
             }
@@ -474,6 +478,7 @@ ThreadState WillModelLoadJob::ThreadExecute()
 
     if (uploadStaging->IsCommandBufferStarted()) {
         uploadStaging->SubmitCommandBuffer();
+        uploadCount++;
         return ThreadState::InProgress;
     }
 
@@ -536,6 +541,11 @@ bool WillModelLoadJob::PostThreadExecute()
     return true;
 }
 
+uint32_t WillModelLoadJob::GetUploadCount()
+{
+    return uploadCount;
+}
+
 void WillModelLoadJob::Reset()
 {
     rawData.Reset();
@@ -555,6 +565,7 @@ void WillModelLoadJob::Reset()
     pendingTextures.clear();
     convertedVertices.clear();
     packedTriangles.clear();
+    uploadCount = 0;
 }
 
 void WillModelLoadJob::LoadModelTask::ExecuteRange(enki::TaskSetPartition range, uint32_t threadnum)

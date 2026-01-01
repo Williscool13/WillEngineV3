@@ -58,6 +58,8 @@ public:
 
     virtual bool PostThreadExecute() = 0;
 
+    virtual uint32_t GetUploadCount() = 0;
+
     virtual void Reset() = 0;
 };
 } // AssetLoad

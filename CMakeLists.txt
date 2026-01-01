@@ -9,6 +9,7 @@ option(WILL_ENGINE_GAME_STATIC "Build game as static library" OFF)
 option(WILL_ENGINE_NO_CONSOLE "Disable the console" OFF)
 option(WILL_ENGINE_PACKAGED_BUILD "Enable the use UserDataPath for log and crash report paths" OFF)
 option(WILL_ENGINE_BUILD_TESTS "Build test suite" OFF)
+option(WILL_ENGINE_ENABLE_PROFILER "Enables tracy profiler" ON)
 
 # Configuration ==============================
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
@@ -133,6 +134,20 @@ add_library(miniz STATIC
 )
 target_include_directories(miniz PUBLIC extern/miniz)
 
+# Tracy =======================================
+add_library(tracy SHARED
+        extern/tracy/public/TracyClient.cpp
+)
+target_include_directories(tracy PUBLIC
+        extern/tracy/public
+)
+if(WILL_ENGINE_ENABLE_PROFILER)
+    target_compile_definitions(tracy PUBLIC
+            TRACY_ENABLE
+    )
+endif()
+target_compile_definitions(tracy PRIVATE TRACY_EXPORTS)
+
 # Shaders =====================================
 #   - Use this command to compile any shader interop that needs to be recompiled.
 #     cmake --build cmake-build-debug-visual-studio --target shader_interop
@@ -203,5 +218,10 @@ compile_shaders(will-engine
 add_custom_command(TARGET will-engine POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
         $<TARGET_FILE:SDL3::SDL3>
+        $<TARGET_FILE_DIR:will-engine>
+)
+add_custom_command(TARGET will-engine POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        $<TARGET_FILE:tracy>
         $<TARGET_FILE_DIR:will-engine>
 )

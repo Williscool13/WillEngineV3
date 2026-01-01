@@ -93,6 +93,7 @@ target_link_libraries(render PUBLIC
         offsetAllocator
         ktx
         miniz
+        tracy
 )
 
 if(WILL_ENGINE_BUILD_EDITOR)

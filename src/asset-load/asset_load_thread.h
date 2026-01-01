@@ -34,9 +34,12 @@ class AssetLoadJob;
 
 struct AssetLoadSlot
 {
+    std::string name;
     AssetLoadState loadState{AssetLoadState::Unassigned};
     AssetLoadJob* job;
     AssetType type{AssetType::None};
+    std::chrono::steady_clock::time_point startTime;
+    uint32_t uploadCount = 0;
 };
 
 /**

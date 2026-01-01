@@ -16,6 +16,7 @@
 #include "render/vulkan/vk_context.h"
 #include "render/vulkan/vk_helpers.h"
 #include "render/vulkan/vk_utils.h"
+#include "tracy/Tracy.hpp"
 
 namespace AssetLoad
 {
@@ -123,12 +124,17 @@ Render::Sampler AssetLoadThread::CreateSampler(const VkSamplerCreateInfo& sample
 
 void AssetLoadThread::ThreadMain()
 {
+    ZoneScoped;
+    tracy::SetThreadName("AssetLoadThread");
     Platform::SetThreadName("AssetLoadThread");
+
     while (!bShouldExit.load(std::memory_order_acquire)) {
+        ZoneScopedN("AssetLoadLoop");
         bool didWork = false;
 
         // Model loading jobs
         {
+            ZoneScopedN("ModelJobDispatch");
             // Count free model load jobs (4 max)
             size_t freeJobCount = 0;
             for (size_t i = 0; i < willModelJobActive.size(); ++i) {
@@ -167,15 +173,20 @@ void AssetLoadThread::ThreadMain()
                 job->outputModel = loadRequest.model;
                 willModelJobActive[freeJobIdx] = true;
 
+
+                assetLoadSlots[slotIdx].name = loadRequest.model->name;
                 assetLoadSlots[slotIdx].job = job;
                 assetLoadSlots[slotIdx].loadState = AssetLoadState::Idle;
                 assetLoadSlots[slotIdx].type = AssetType::WillModel;
+                assetLoadSlots[slotIdx].startTime = std::chrono::steady_clock::now();
+                assetLoadSlots[slotIdx].uploadCount = 0;
                 activeSlotMask[slotIdx] = true;
             }
         }
 
         // Texture loading jobs
         {
+            ZoneScopedN("TextureJobDispatch");
             size_t freeTextureJobCount = 0;
             for (size_t i = 0; i < textureJobActive.size(); ++i) {
                 if (!textureJobActive[i]) {
@@ -211,149 +222,175 @@ void AssetLoadThread::ThreadMain()
                 job->outputTexture = loadRequest.texture;
                 textureJobActive[freeJobIdx] = true;
 
+                assetLoadSlots[slotIdx].name = loadRequest.texture->name;
                 assetLoadSlots[slotIdx].job = job;
                 assetLoadSlots[slotIdx].loadState = AssetLoadState::Idle;
                 assetLoadSlots[slotIdx].type = AssetType::Texture;
+                assetLoadSlots[slotIdx].startTime = std::chrono::steady_clock::now();
+                assetLoadSlots[slotIdx].uploadCount = 0;
                 activeSlotMask[slotIdx] = true;
             }
         }
 
         // Active Slot Processing
-        for (size_t slotIdx = 0; slotIdx < 64; ++slotIdx) {
-            if (!activeSlotMask[slotIdx]) {
-                continue;
-            }
-            didWork = true;
-
-            AssetLoadSlot& slot = assetLoadSlots[slotIdx];
-            AssetLoadJob* job = slot.job;
-
-            switch (slot.loadState) {
-                case AssetLoadState::Idle:
-                {
-                    job->StartJob();
-                    job->TaskExecute(scheduler);
-                    slot.loadState = AssetLoadState::TaskExecuting;
+        {
+            ZoneScopedN("ProcessSlots");
+            for (size_t slotIdx = 0; slotIdx < 64; ++slotIdx) {
+                if (!activeSlotMask[slotIdx]) {
+                    continue;
                 }
-                break;
+                didWork = true;
 
-                case AssetLoadState::TaskExecuting:
-                {
-                    TaskState res = job->TaskExecute(scheduler);
-                    if (res == TaskState::Failed) {
-                        slot.loadState = AssetLoadState::Failed;
-                    }
-                    else if (res == TaskState::Complete) {
-                        bool preRes = job->PreThreadExecute();
-                        if (preRes) {
-                            slot.loadState = AssetLoadState::ThreadExecuting;
-                        }
-                        else {
-                            slot.loadState = AssetLoadState::Failed;
-                        }
-                    }
-                }
-                break;
+                AssetLoadSlot& slot = assetLoadSlots[slotIdx];
+                AssetLoadJob* job = slot.job;
 
-                case AssetLoadState::ThreadExecuting:
-                {
-                    ThreadState res = job->ThreadExecute();
-                    if (res == ThreadState::Complete) {
-                        bool postRes = job->PostThreadExecute();
-                        if (postRes) {
-                            slot.loadState = AssetLoadState::Loaded;
-                        }
-                        else {
-                            slot.loadState = AssetLoadState::Failed;
-                        }
+                switch (slot.loadState) {
+                    case AssetLoadState::Idle:
+                    {
+                        job->StartJob();
+                        job->TaskExecute(scheduler);
+                        slot.loadState = AssetLoadState::TaskExecuting;
                     }
-                }
-                break;
-
-                default:
                     break;
-            }
 
-            if (slot.loadState == AssetLoadState::Loaded || slot.loadState == AssetLoadState::Failed) {
-                bool success = slot.loadState == AssetLoadState::Loaded;
-
-                switch (slot.type) {
-                    case AssetType::WillModel:
+                    case AssetLoadState::TaskExecuting:
                     {
-                        auto* modelJob = static_cast<WillModelLoadJob*>(job);
-                        modelCompleteLoadQueue.push({modelJob->willModelHandle, modelJob->outputModel, success});
-
-                        for (size_t i = 0; i < willModelJobs.size(); ++i) {
-                            if (willModelJobs[i].get() == job) {
-                                job->Reset();
-                                willModelJobActive[i] = false;
-                                break;
+                        TaskState res = job->TaskExecute(scheduler);
+                        if (res == TaskState::Failed) {
+                            slot.loadState = AssetLoadState::Failed;
+                        }
+                        else if (res == TaskState::Complete) {
+                            bool preRes = job->PreThreadExecute();
+                            if (preRes) {
+                                slot.loadState = AssetLoadState::ThreadExecuting;
+                            }
+                            else {
+                                slot.loadState = AssetLoadState::Failed;
                             }
                         }
-                        break;
                     }
-                    case AssetType::Texture:
-                    {
-                        auto* textureJob = static_cast<TextureLoadJob*>(job);
-                        textureCompleteLoadQueue.push({textureJob->textureHandle, textureJob->outputTexture, success});
+                    break;
 
-                        for (size_t i = 0; i < textureJobs.size(); ++i) {
-                            if (textureJobs[i].get() == job) {
-                                job->Reset();
-                                textureJobActive[i] = false;
-                                break;
+                    case AssetLoadState::ThreadExecuting:
+                    {
+                        ThreadState res = job->ThreadExecute();
+                        if (res == ThreadState::Complete) {
+                            bool postRes = job->PostThreadExecute();
+                            slot.uploadCount = job->GetUploadCount();
+                            if (postRes) {
+                                slot.loadState = AssetLoadState::Loaded;
+                            }
+                            else {
+                                slot.loadState = AssetLoadState::Failed;
                             }
                         }
-                        break;
                     }
+                    break;
+
                     default:
                         break;
                 }
 
-                activeSlotMask[slotIdx] = false;
-                slot.job = nullptr;
-                slot.loadState = AssetLoadState::Unassigned;
-                slot.type = AssetType::None;
+                if (slot.loadState == AssetLoadState::Loaded || slot.loadState == AssetLoadState::Failed) {
+                    auto duration = std::chrono::steady_clock::now() - slot.startTime;
+                    auto durationMs = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
+
+                    bool success = slot.loadState == AssetLoadState::Loaded;
+                    switch (slot.type) {
+                        case AssetType::WillModel:
+                        {
+                            auto* modelJob = static_cast<WillModelLoadJob*>(job);
+                            modelCompleteLoadQueue.push({modelJob->willModelHandle, modelJob->outputModel, success});
+
+                            for (size_t i = 0; i < willModelJobs.size(); ++i) {
+                                if (willModelJobs[i].get() == job) {
+                                    job->Reset();
+                                    willModelJobActive[i] = false;
+                                    break;
+                                }
+                            }
+                            if (success) {
+                                SPDLOG_INFO("'{}' willmodel loaded in {}ms with {} uploads", slot.name, durationMs, slot.uploadCount);
+                            } else {
+                                SPDLOG_INFO("'{}' willmodel failed to load in {}ms with {} uploads", slot.name, durationMs, slot.uploadCount);
+                            }
+                            break;
+                        }
+                        case AssetType::Texture:
+                        {
+                            auto* textureJob = static_cast<TextureLoadJob*>(job);
+                            textureCompleteLoadQueue.push({textureJob->textureHandle, textureJob->outputTexture, success});
+
+                            for (size_t i = 0; i < textureJobs.size(); ++i) {
+                                if (textureJobs[i].get() == job) {
+                                    job->Reset();
+                                    textureJobActive[i] = false;
+                                    break;
+                                }
+                            }
+                            if (success) {
+                                SPDLOG_INFO("'{}' texture loaded in {}ms with {} uploads", slot.name, durationMs, slot.uploadCount);
+                            } else {
+                                SPDLOG_INFO("'{}' texture failed to load in {}ms with {} uploads", slot.name, durationMs, slot.uploadCount);
+                            }
+                            break;
+                        }
+                        default:
+                            break;
+                    }
+
+                    activeSlotMask[slotIdx] = false;
+                    slot.job = nullptr;
+                    slot.loadState = AssetLoadState::Unassigned;
+                    slot.type = AssetType::None;
+                    slot.uploadCount = 0;
+                }
             }
         }
 
 
-        WillModelLoadRequest unloadRequest{};
-        if (modelUnloadQueue.pop(unloadRequest)) {
-            didWork = true;
-            OffsetAllocator::Allocator* selectedAllocator;
-            if (unloadRequest.model->modelData.bIsSkinned) {
-                selectedAllocator = &resourceManager->skinnedVertexBufferAllocator;
-            }
-            else {
-                selectedAllocator = &resourceManager->vertexBufferAllocator;
+        // Unloads
+        {
+            ZoneScopedN("ProcessUnloads");
+            WillModelLoadRequest unloadRequest{};
+            if (modelUnloadQueue.pop(unloadRequest)) {
+                didWork = true;
+                OffsetAllocator::Allocator* selectedAllocator;
+                if (unloadRequest.model->modelData.bIsSkinned) {
+                    selectedAllocator = &resourceManager->skinnedVertexBufferAllocator;
+                }
+                else {
+                    selectedAllocator = &resourceManager->vertexBufferAllocator;
+                }
+
+                selectedAllocator->free(unloadRequest.model->modelData.vertexAllocation);
+                resourceManager->meshletVertexBufferAllocator.free(unloadRequest.model->modelData.meshletVertexAllocation);
+                resourceManager->meshletTriangleBufferAllocator.free(unloadRequest.model->modelData.meshletTriangleAllocation);
+                resourceManager->meshletBufferAllocator.free(unloadRequest.model->modelData.meshletAllocation);
+                resourceManager->primitiveBufferAllocator.free(unloadRequest.model->modelData.primitiveAllocation);
+                unloadRequest.model->modelData.vertexAllocation.metadata = OffsetAllocator::Allocation::NO_SPACE;
+                unloadRequest.model->modelData.meshletVertexAllocation.metadata = OffsetAllocator::Allocation::NO_SPACE;
+                unloadRequest.model->modelData.meshletTriangleAllocation.metadata = OffsetAllocator::Allocation::NO_SPACE;
+                unloadRequest.model->modelData.meshletAllocation.metadata = OffsetAllocator::Allocation::NO_SPACE;
+                unloadRequest.model->modelData.primitiveAllocation.metadata = OffsetAllocator::Allocation::NO_SPACE;
+
+                modelCompleteUnloadQueue.push({unloadRequest.willModelHandle, unloadRequest.model, true});
             }
 
-            selectedAllocator->free(unloadRequest.model->modelData.vertexAllocation);
-            resourceManager->meshletVertexBufferAllocator.free(unloadRequest.model->modelData.meshletVertexAllocation);
-            resourceManager->meshletTriangleBufferAllocator.free(unloadRequest.model->modelData.meshletTriangleAllocation);
-            resourceManager->meshletBufferAllocator.free(unloadRequest.model->modelData.meshletAllocation);
-            resourceManager->primitiveBufferAllocator.free(unloadRequest.model->modelData.primitiveAllocation);
-            unloadRequest.model->modelData.vertexAllocation.metadata = OffsetAllocator::Allocation::NO_SPACE;
-            unloadRequest.model->modelData.meshletVertexAllocation.metadata = OffsetAllocator::Allocation::NO_SPACE;
-            unloadRequest.model->modelData.meshletTriangleAllocation.metadata = OffsetAllocator::Allocation::NO_SPACE;
-            unloadRequest.model->modelData.meshletAllocation.metadata = OffsetAllocator::Allocation::NO_SPACE;
-            unloadRequest.model->modelData.primitiveAllocation.metadata = OffsetAllocator::Allocation::NO_SPACE;
+            TextureLoadRequest textureUnloadRequest{};
+            if (textureUnloadQueue.pop(textureUnloadRequest)) {
+                didWork = true;
 
-            modelCompleteUnloadQueue.push({unloadRequest.willModelHandle, unloadRequest.model, true});
+                textureUnloadRequest.texture->image = {};
+                textureUnloadRequest.texture->imageView = {};
+
+                textureCompleteUnloadQueue.push({textureUnloadRequest.textureHandle, textureUnloadRequest.texture, true});
+            }
         }
 
-        TextureLoadRequest textureUnloadRequest{};
-        if (textureUnloadQueue.pop(textureUnloadRequest)) {
-            didWork = true;
-
-            textureUnloadRequest.texture->image = {};
-            textureUnloadRequest.texture->imageView = {};
-
-            textureCompleteUnloadQueue.push({textureUnloadRequest.textureHandle, textureUnloadRequest.texture, true});
-        }
 
         if (!didWork) {
+            ZoneScopedN("IdleSleep");
             std::chrono::microseconds idleWait = std::chrono::microseconds(10);
             std::this_thread::sleep_for(idleWait);
         }

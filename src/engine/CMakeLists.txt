@@ -28,7 +28,10 @@ target_link_libraries(engine PUBLIC
         platform
         SDL3::SDL3
         enkiTS
+        tracy
 )
+
+target_compile_definitions(engine PRIVATE TRACY_IMPORTS)
 
 if(WILL_ENGINE_GAME_STATIC)
     target_link_libraries(engine PUBLIC game)

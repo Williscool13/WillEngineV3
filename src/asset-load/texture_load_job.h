@@ -26,14 +26,23 @@ class TextureLoadJob : public AssetLoadJob
 {
 public:
     TextureLoadJob();
+
     TextureLoadJob(Render::VulkanContext* context, Render::ResourceManager* resourceManager, VkCommandBuffer commandBuffer);
+
     ~TextureLoadJob() override;
 
     void StartJob() override;
+
     TaskState TaskExecute(enki::TaskScheduler* scheduler) override;
+
     bool PreThreadExecute() override;
+
     ThreadState ThreadExecute() override;
+
     bool PostThreadExecute() override;
+
+    uint32_t GetUploadCount() override;
+
     void Reset() override;
 
     Engine::TextureHandle textureHandle{Engine::TextureHandle::INVALID};
@@ -45,6 +54,7 @@ private:
         TextureLoadJob* loadJob{nullptr};
 
         explicit LoadTextureTask() : ITaskSet(1) {}
+
         void ExecuteRange(enki::TaskSetPartition range, uint32_t threadnum) override;
     };
 
@@ -62,6 +72,8 @@ private:
     int32_t currentMip{0};
     bool bPendingInitialBarrier{true};
     bool bPendingFinalBarrier{true};
+
+    uint32_t uploadCount{0};
 };
 } // AssetLoad
 

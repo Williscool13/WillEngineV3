@@ -21,4 +21,7 @@ target_link_libraries(asset-load PUBLIC
         core
         render
         enkiTS
+        tracy
 )
+
+target_compile_definitions(asset-load PRIVATE TRACY_IMPORTS)

@@ -105,6 +105,7 @@ void computeCompactAndGenerateIndirect(uniform IndirectWritePushConstant pushCon
         parameters.meshletOffset = prim.meshletOffset;
         parameters.meshletCount = prim.meshletCount;
 
+        // todo: can optimize by removing indirect index here. Can specify/calculate in prefix sum pass
         uint32_t indirectIndex = pushConstant.indirectCountBuffer->meshIndirectCount.add(1);
         pushConstant.indirectBuffer[indirectIndex] = parameters;
     }

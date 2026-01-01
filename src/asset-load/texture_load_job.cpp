@@ -128,6 +128,7 @@ ThreadState TextureLoadJob::ThreadExecute()
         OffsetAllocator::Allocation allocation = stagingAllocator.allocate(mipSize);
         if (allocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
             uploadStaging->SubmitCommandBuffer();
+            uploadCount++;
             return ThreadState::InProgress;
         }
 
@@ -180,6 +181,7 @@ ThreadState TextureLoadJob::ThreadExecute()
 
     if (uploadStaging->IsCommandBufferStarted()) {
         uploadStaging->SubmitCommandBuffer();
+        uploadCount++;
         return ThreadState::InProgress;
     }
 
@@ -205,6 +207,11 @@ bool TextureLoadJob::PostThreadExecute()
     return true;
 }
 
+uint32_t TextureLoadJob::GetUploadCount()
+{
+    return uploadCount;
+}
+
 void TextureLoadJob::Reset()
 {
     if (texture) {
@@ -218,6 +225,7 @@ void TextureLoadJob::Reset()
     currentMip = 0;
     bPendingFinalBarrier = true;
     bPendingInitialBarrier = true;
+    uploadCount = 0;
 }
 
 void TextureLoadJob::LoadTextureTask::ExecuteRange(enki::TaskSetPartition range, uint32_t threadnum)

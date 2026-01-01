@@ -50,6 +50,8 @@ public:
 
     bool PostThreadExecute() override;
 
+    uint32_t GetUploadCount() override;
+
     void Reset() override;
 
     Engine::WillModelHandle willModelHandle{Engine::WillModelHandle::INVALID};
@@ -94,6 +96,8 @@ private:
     uint32_t pendingMeshletsHead{0};
     uint32_t pendingPrimitivesHead{0};
     uint32_t pendingBufferBarrier{0};
+
+    uint32_t uploadCount{0};
 };
 } // AssetLoad
 
