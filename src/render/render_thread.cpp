@@ -353,7 +353,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
                 // todo: optimize the F* out of this. Use multiple passes if necessary
                 PrefixSumPushConstant prefixSumPushConstant{
                     .primitiveCountBuffer = graph->GetBufferAddress("primitiveCountBuffer"),
-                    .highestPrimitiveIndex = 2,
+                    .highestPrimitiveIndex = 200,
                 };
 
                 vkCmdPushConstants(cmd, instancingPrefixSum.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PrefixSumPushConstant), &prefixSumPushConstant);

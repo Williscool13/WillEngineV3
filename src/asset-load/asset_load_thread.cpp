@@ -354,7 +354,7 @@ void AssetLoadThread::ThreadMain()
         }
 
         if (!didWork) {
-            std::chrono::milliseconds idleWait = std::chrono::milliseconds(1);
+            std::chrono::microseconds idleWait = std::chrono::microseconds(10);
             std::this_thread::sleep_for(idleWait);
         }
     }

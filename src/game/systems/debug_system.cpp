@@ -27,6 +27,7 @@ namespace Game::System
 {
 static Engine::WillModelHandle dragonHandle = Engine::WillModelHandle::INVALID;
 static Engine::WillModelHandle boxHandle = Engine::WillModelHandle::INVALID;
+static Engine::WillModelHandle sponzaHandle = Engine::WillModelHandle::INVALID;
 static Engine::TextureHandle textureHandle = Engine::TextureHandle::INVALID;
 static JPH::BodyID boxBodyID;
 static JPH::BodyID floorBodyID;
@@ -76,7 +77,7 @@ void CreateBox(Core::EngineContext* ctx, Engine::GameState* state, glm::vec3 pos
         else {
             material = materialManager.Get(materialManager.GetDefaultMaterial());
         }
-        material.textureImageIndices.x = 3;
+        // material.textureImageIndices.x = 3;
         Engine::MaterialID matID = materialManager.GetOrCreate(material);
 
         renderable.primitives[i] = {
@@ -138,8 +139,8 @@ entt::entity CreateStaticBox(Core::EngineContext* ctx, Engine::GameState* state,
         else {
             material = materialManager.Get(materialManager.GetDefaultMaterial());
         }
-        material.textureImageIndices.x = AssetLoad::ERROR_IMAGE_BINDLESS_INDEX;
-        material.textureSamplerIndices.x = AssetLoad::DEFAULT_SAMPLER_BINDLESS_INDEX;
+        // material.textureImageIndices.x = AssetLoad::ERROR_IMAGE_BINDLESS_INDEX;
+        // material.textureSamplerIndices.x = AssetLoad::DEFAULT_SAMPLER_BINDLESS_INDEX;
         Engine::MaterialID matID = materialManager.GetOrCreate(material);
 
         renderable.primitives[i] = {
@@ -168,8 +169,9 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
 {
     if (state->inputFrame->GetKey(Key::F1).pressed) {
         if (!dragonHandle.IsValid()) {
-            dragonHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "dragon/dragon.willmodel");
-            boxHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "BoxTextured.willmodel");
+            // dragonHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "dragon/dragon.willmodel");
+            // boxHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "BoxTextured.willmodel");
+            sponzaHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "sponza2/sponza.willmodel");
         }
     }
 
@@ -274,6 +276,78 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         }
 
         SPDLOG_INFO("[DebugSystem] Spawned dragons around arena");
+    }
+
+    if (state->inputFrame->GetKey(Key::F4).pressed) {
+        Render::WillModel* sponza = ctx->assetManager->GetModel(sponzaHandle);
+        if (!sponza || sponza->modelLoadState != Render::WillModel::ModelLoadState::Loaded) {
+            SPDLOG_WARN("[DebugSystem] Sponza model not ready yet");
+            return;
+        }
+
+        Engine::MaterialManager& materialManager = ctx->assetManager->GetMaterialManager();
+
+        std::vector<glm::vec3> worldTranslations(sponza->modelData.nodes.size());
+        std::vector<glm::quat> worldRotations(sponza->modelData.nodes.size());
+        std::vector<glm::vec3> worldScales(sponza->modelData.nodes.size());
+
+        for (size_t i = 0; i < sponza->modelData.nodes.size(); ++i) {
+            const auto& node = sponza->modelData.nodes[i];
+
+            if (node.parent == ~0u) {
+                worldTranslations[i] = node.localTranslation;
+                worldRotations[i] = node.localRotation;
+                worldScales[i] = node.localScale;
+            }
+            else {
+                const glm::vec3& parentT = worldTranslations[node.parent];
+                const glm::quat& parentR = worldRotations[node.parent];
+                const glm::vec3& parentS = worldScales[node.parent];
+
+                worldTranslations[i] = parentR * (parentS * node.localTranslation) + parentT;
+                worldRotations[i] = parentR * node.localRotation;
+                worldScales[i] = parentS * node.localScale;
+            }
+        }
+
+        for (size_t i = 0; i < sponza->modelData.nodes.size(); ++i) {
+            const auto& node = sponza->modelData.nodes[i];
+            if (node.meshIndex == ~0u) continue;
+
+            Render::MeshInformation& mesh = sponza->modelData.meshes[node.meshIndex];
+
+            if (mesh.primitiveProperties.size() > 128) {
+                SPDLOG_WARN("[DebugSystem] Node {} has {} primitives, limiting to 128", i, mesh.primitiveProperties.size());
+            }
+
+            RenderableComponent renderable{};
+            size_t primCount = std::min(mesh.primitiveProperties.size(), static_cast<size_t>(128));
+
+            for (size_t j = 0; j < primCount; ++j) {
+                Render::PrimitiveProperty& primitive = mesh.primitiveProperties[j];
+
+                Engine::MaterialID matID;
+                if (primitive.materialIndex == -1) {
+                    matID = materialManager.GetDefaultMaterial();
+                }
+                else {
+                    matID = materialManager.GetOrCreate(sponza->modelData.materials[primitive.materialIndex]);
+                }
+
+                renderable.primitives[j] = {
+                    .primitiveIndex = primitive.index,
+                    .materialID = matID
+                };
+            }
+            renderable.primitiveCount = primCount;
+            renderable.modelFlags = glm::vec4(0.0f);
+
+            entt::entity sponzaEntity = state->registry.create();
+            state->registry.emplace<RenderableComponent>(sponzaEntity, renderable);
+            state->registry.emplace<TransformComponent>(sponzaEntity, worldTranslations[i], worldRotations[i], worldScales[i]);
+        }
+
+        SPDLOG_INFO("[DebugSystem] Spawned sponza");
     }
 
     if (state->inputFrame->GetKey(Key::NUM_1).pressed) {

@@ -186,9 +186,9 @@ FragmentOutput fragmentMain(VertexOutput vertexInput, uniform InstancedMeshShadi
 
     float2 currNdc = vertexInput.currentClipPos.xy / vertexInput.currentClipPos.w;
     float2 prevNdc = vertexInput.previousClipPos.xy / vertexInput.previousClipPos.w;
-    float2 velocity = (prevNdc - currNdc);
-    velocity -= pushConstant.sceneData.jitter;
-    velocity += pushConstant.sceneData.prevJitter;
+    float2 currJitter = pushConstant.sceneData.jitter;
+    float2 prevJitter = pushConstant.sceneData.prevJitter;
+    float2 velocity = currNdc - prevNdc + currJitter - prevJitter;
     output.velocity = velocity * 0.5 + 0.5f;
 
     return output;
