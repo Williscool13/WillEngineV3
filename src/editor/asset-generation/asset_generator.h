@@ -2,8 +2,8 @@
 // Created by William on 2025-12-15.
 //
 
-#ifndef WILL_ENGINE_MODEL_GENERATOR_H
-#define WILL_ENGINE_MODEL_GENERATOR_H
+#ifndef WILL_ENGINE_ASSET_GENERATOR_H
+#define WILL_ENGINE_ASSET_GENERATOR_H
 #include <filesystem>
 
 #include "asset_generation_types.h"

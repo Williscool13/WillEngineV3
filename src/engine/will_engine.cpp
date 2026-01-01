@@ -24,6 +24,7 @@
 #include <backends/imgui_impl_sdl3.h>
 #include <backends/imgui_impl_vulkan.h>
 #include "editor/asset-generation/asset_generator.h"
+#include "editor/model-generator/model_generator.h"
 #endif
 
 #include <tracy/Tracy.hpp>
@@ -413,6 +414,13 @@ void WillEngine::DrawImgui()
             Platform::GetAssetPath() / "dragon/dragon.gltf",
             Platform::GetAssetPath() / "dragon/dragon.willmodel"
         );
+    }
+
+    if (ImGui::Button("Generate dragon.glb from dragon.gltf")) {
+        /*Editor::ModelGenerator::ProcessModelsWithMeshlet(
+            Platform::GetAssetPath() / "dragon/dragon.gltf",
+            Platform::GetAssetPath() / "dragon/dragon.glb"
+        );*/
     }
     if (ImGui::Button("Generate BoxTextured.willmodel from BoxTextured.glb")) {
         generateModel(
