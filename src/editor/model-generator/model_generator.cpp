@@ -1,20 +1,16 @@
-
 // Created by William on 2026-01-02.
 //
 
 #include "model_generator.h"
 
-#include <fstream>
 #include <glm/glm.hpp>
-#include <cgltf/cgltf.h>
 #include <meshoptimizer.h>
 #include <tracy/Tracy.hpp>
 #include <json/nlohmann/json.hpp>
-#include <utility>
 
-#include "cgltf/cgltf_write.h"
 #include "render/shaders/constants_interop.h"
 #include "render/shaders/model_interop.h"
+#include "tinygltf/tiny_gltf.h"
 
 
 namespace Editor
@@ -93,7 +89,7 @@ MeshletBuildResult ModelGenerator::BuildMeshlets(std::vector<glm::vec3> vertices
 MeshletBufferIndices ModelGenerator::AddMeshletBuffers(std::filesystem::path output, cgltf_data* data, const std::vector<Meshlet>& meshlets, const std::vector<uint32_t>& meshletVerts,
                                                        const std::vector<uint8_t>& meshletTris)
 {
-    const size_t meshletsSize = meshlets.size() * sizeof(meshopt_Meshlet);
+    /*const size_t meshletsSize = meshlets.size() * sizeof(meshopt_Meshlet);
     const size_t vertSize = meshletVerts.size() * sizeof(uint32_t);
     const size_t trisSize = meshletTris.size() * sizeof(uint8_t);
 
@@ -139,7 +135,7 @@ MeshletBufferIndices ModelGenerator::AddMeshletBuffers(std::filesystem::path out
 
     /*memcpy(newBuffer->data, meshlets.data(), meshletsSize);
     memcpy(static_cast<uint8_t*>(newBuffer->data) + meshletsAligned, meshletVerts.data(), vertSize);
-    memcpy(static_cast<uint8_t*>(newBuffer->data) + meshletsAligned + vertAligned, meshletTris.data(), trisSize);*/
+    memcpy(static_cast<uint8_t*>(newBuffer->data) + meshletsAligned + vertAligned, meshletTris.data(), trisSize);#1#
 
     cgltf_size baseViewIdx = data->buffer_views_count;
     /*data->buffer_views = static_cast<cgltf_buffer_view*>(realloc(data->buffer_views, (data->buffer_views_count + 3) * sizeof(cgltf_buffer_view)));
@@ -160,27 +156,33 @@ MeshletBufferIndices ModelGenerator::AddMeshletBuffers(std::filesystem::path out
     memset(triView, 0, sizeof(cgltf_buffer_view));
     triView->buffer = newBuffer;
     triView->offset = meshletsAligned + vertAligned;
-    triView->size = trisSize;*/
+    triView->size = trisSize;#1#*/
 
-    return {baseViewIdx, baseViewIdx + 1, baseViewIdx + 2};
+    //return {baseViewIdx, baseViewIdx + 1, baseViewIdx + 2};
+    return {0, 1, 2};
 }
 
 bool ModelGenerator::ProcessModelsWithMeshlet(std::filesystem::path input, std::filesystem::path output)
 {
-    cgltf_options options = {};
-    cgltf_data* data = nullptr;
-    cgltf_result result = cgltf_parse_file(&options, input.string().c_str(), &data);
-    if (result != cgltf_result_success) {
+    tinygltf::Model model;
+    tinygltf::TinyGLTF loader;
+    std::string err, warn;
+
+    bool ret;
+    if (input.extension() == ".gltf") {
+        ret = loader.LoadASCIIFromFile(&model, &err, &warn, input.string());
+    }
+    else {
+        ret = loader.LoadBinaryFromFile(&model, &err, &warn, input.string());
+    }
+
+    if (!ret) {
         return false;
     }
 
-    result = cgltf_load_buffers(&options, data, input.string().c_str());
-    if (result != cgltf_result_success) {
-        cgltf_free(data);
-        return false;
-    }
+    return loader.WriteGltfSceneToFile(&model, output.string(), true, true, true, true);
 
-    std::vector<glm::vec3> positions;
+    /*std::vector<glm::vec3> positions;
     std::vector<uint32_t> indices;
     for (cgltf_size meshIndex = 0; meshIndex < data->meshes_count; ++meshIndex) {
         cgltf_mesh& mesh = data->meshes[meshIndex];
@@ -249,8 +251,6 @@ bool ModelGenerator::ProcessModelsWithMeshlet(std::filesystem::path input, std::
         return false;
     }
 
-    return true;
-
-
+    return true;*/
 }
 } // Editor
