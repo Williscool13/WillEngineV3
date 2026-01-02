@@ -1,13 +1,16 @@
-//
+
 // Created by William on 2026-01-02.
 //
 
 #include "model_generator.h"
 
+#include <fstream>
 #include <glm/glm.hpp>
 #include <cgltf/cgltf.h>
 #include <meshoptimizer.h>
 #include <tracy/Tracy.hpp>
+#include <json/nlohmann/json.hpp>
+#include <utility>
 
 #include "cgltf/cgltf_write.h"
 #include "render/shaders/constants_interop.h"
@@ -21,7 +24,7 @@ MeshletBuildResult ModelGenerator::BuildMeshlets(std::vector<glm::vec3> vertices
     ZoneScopedN("BuildMeshlets");
     size_t maxMeshlets = meshopt_buildMeshletsBound(indices.size(), MESHLET_MAX_VERTICES, MESHLET_MAX_TRIANGLES);
     std::vector<meshopt_Meshlet> meshlets(maxMeshlets);
-    std::vector<unsigned int> meshletVertices(vertices.size());
+    std::vector<unsigned int> meshletVertices(vertices.size() * 3);
     std::vector<unsigned char> meshletTriangles(indices.size());
 
     // meshopt_optimizeVertexCache(indices, ...);
@@ -87,8 +90,8 @@ MeshletBuildResult ModelGenerator::BuildMeshlets(std::vector<glm::vec3> vertices
     return {outputMeshlets, meshletVertices, meshletTriangles};
 }
 
-MeshletBufferIndices ModelGenerator::AddMeshletBuffers(cgltf_data* data, const std::vector<Meshlet>& meshlets, const std::vector<uint32_t>& meshletVerts,
-                                                                       const std::vector<uint8_t>& meshletTris)
+MeshletBufferIndices ModelGenerator::AddMeshletBuffers(std::filesystem::path output, cgltf_data* data, const std::vector<Meshlet>& meshlets, const std::vector<uint32_t>& meshletVerts,
+                                                       const std::vector<uint8_t>& meshletTris)
 {
     const size_t meshletsSize = meshlets.size() * sizeof(meshopt_Meshlet);
     const size_t vertSize = meshletVerts.size() * sizeof(uint32_t);
@@ -99,7 +102,18 @@ MeshletBufferIndices ModelGenerator::AddMeshletBuffers(cgltf_data* data, const s
     const size_t totalSize = meshletsAligned + vertAligned + trisSize;
 
     // Allocate new buffer in data->buffers array
+    cgltf_buffer* oldBufferPtr = data->buffers;
     data->buffers = static_cast<cgltf_buffer*>(realloc(data->buffers, (data->buffers_count + 1) * sizeof(cgltf_buffer)));
+
+    if (data->buffers != oldBufferPtr) {
+        for (cgltf_size i = 0; i < data->buffer_views_count; ++i) {
+            if (data->buffer_views[i].buffer != nullptr) {
+                ptrdiff_t offset = data->buffer_views[i].buffer - oldBufferPtr;
+                data->buffer_views[i].buffer = data->buffers + offset;
+            }
+        }
+    }
+
     cgltf_size newBufferIdx = data->buffers_count;
     data->buffers_count += 1;
 
@@ -108,14 +122,27 @@ MeshletBufferIndices ModelGenerator::AddMeshletBuffers(cgltf_data* data, const s
 
     newBuffer->size = totalSize;
     newBuffer->data = malloc(totalSize);
-    newBuffer->uri = nullptr;
 
-    memcpy(newBuffer->data, meshlets.data(), meshletsSize);
+    std::filesystem::path binPath = std::move(output);
+    binPath.replace_extension(".meshlet.bin");
+
+    std::ofstream binFile(binPath, std::ios::binary);
+    binFile.write(reinterpret_cast<const char*>(meshlets.data()), meshletsSize);
+    binFile.write(reinterpret_cast<const char*>(meshletVerts.data()), vertSize);
+    binFile.write(reinterpret_cast<const char*>(meshletTris.data()), trisSize);
+    binFile.close();
+
+    newBuffer->size = totalSize;
+    std::string filename = binPath.filename().string();
+    newBuffer->uri = static_cast<char*>(malloc(filename.size() + 1));
+    memcpy(newBuffer->uri, filename.c_str(), filename.size() + 1);
+
+    /*memcpy(newBuffer->data, meshlets.data(), meshletsSize);
     memcpy(static_cast<uint8_t*>(newBuffer->data) + meshletsAligned, meshletVerts.data(), vertSize);
-    memcpy(static_cast<uint8_t*>(newBuffer->data) + meshletsAligned + vertAligned, meshletTris.data(), trisSize);
+    memcpy(static_cast<uint8_t*>(newBuffer->data) + meshletsAligned + vertAligned, meshletTris.data(), trisSize);*/
 
     cgltf_size baseViewIdx = data->buffer_views_count;
-    data->buffer_views = static_cast<cgltf_buffer_view*>(realloc(data->buffer_views, (data->buffer_views_count + 3) * sizeof(cgltf_buffer_view)));
+    /*data->buffer_views = static_cast<cgltf_buffer_view*>(realloc(data->buffer_views, (data->buffer_views_count + 3) * sizeof(cgltf_buffer_view)));
 
     cgltf_buffer_view* meshletView = &data->buffer_views[data->buffer_views_count++];
     memset(meshletView, 0, sizeof(cgltf_buffer_view));
@@ -133,7 +160,7 @@ MeshletBufferIndices ModelGenerator::AddMeshletBuffers(cgltf_data* data, const s
     memset(triView, 0, sizeof(cgltf_buffer_view));
     triView->buffer = newBuffer;
     triView->offset = meshletsAligned + vertAligned;
-    triView->size = trisSize;
+    triView->size = trisSize;*/
 
     return {baseViewIdx, baseViewIdx + 1, baseViewIdx + 2};
 }
@@ -194,25 +221,36 @@ bool ModelGenerator::ProcessModelsWithMeshlet(std::filesystem::path input, std::
 
             auto [meshlets, meshletVertices, meshletTriangles] = BuildMeshlets(positions, indices);
 
-            auto [meshletBufferIdx, meshletVertexIdx, meshletTriangleIdx] = AddMeshletBuffers(data, meshlets, meshletVertices, meshletTriangles);
-            std::ostringstream json;
-            json << "{"
-                 << "\"willEngine_meshlets\":{"
-                 << "\"meshletView\":" << meshletBufferIdx << ","
-                 << "\"vertexView\":" << meshletVertexIdx << ","
-                 << "\"triangleView\":" << meshletTriangleIdx << ","
-                 << "\"meshletCount\":" << meshlets.size()
-                 << "}}";
+             auto [meshletBufferIdx, meshletVertexIdx, meshletTriangleIdx] = AddMeshletBuffers(output, data, meshlets, meshletVertices, meshletTriangles);
+            nlohmann::json j = {
+                {
+                    "willEngine_meshlets", {
+                        {"meshletView", 0}, //meshletBufferIdx},
+                        {"vertexView", 1}, //meshletVertexIdx},
+                        {"triangleView", 2}, //meshletTriangleIdx},
+                        {"meshletCount", meshlets.size()}
+                    }
+                }
+            };
 
-            std::string jsonStr = json.str();
+            std::string jsonStr = j.dump();
             primitive.extras.data = static_cast<char*>(malloc(jsonStr.size() + 1));
             memcpy(primitive.extras.data, jsonStr.c_str(), jsonStr.size() + 1);
         }
     }
 
+    options.type = cgltf_file_type_glb;
     result = cgltf_write_file(&options, output.string().c_str(), data);
     cgltf_free(data);
-    return result == cgltf_result_success;
-}
+    //return result == cgltf_result_success;
 
+    result = cgltf_parse_file(&options, output.string().c_str(), &data);
+    if (result != cgltf_result_success) {
+        return false;
+    }
+
+    return true;
+
+
+}
 } // Editor

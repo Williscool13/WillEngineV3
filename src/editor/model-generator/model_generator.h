@@ -35,7 +35,7 @@ public:
 
     static bool ProcessModelsWithMeshlet(std::filesystem::path input, std::filesystem::path output);
 
-    static MeshletBufferIndices AddMeshletBuffers(cgltf_data* data, const std::vector<Meshlet>& meshlets, const std::vector<uint32_t>& meshletVerts, const std::vector<uint8_t>& meshletTris);
+    static MeshletBufferIndices AddMeshletBuffers(std::filesystem::path output, cgltf_data* data, const std::vector<Meshlet>& meshlets, const std::vector<uint32_t>& meshletVerts, const std::vector<uint8_t>& meshletTris);
 };
 
 } // Editor

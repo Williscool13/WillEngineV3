@@ -7,6 +7,7 @@ add_library(editor STATIC
         model-generator/model_generator.cpp
         model-generator/model_generator.h
         model-generator/cgltf_impl.cpp
+        model-generator/cgltf_write_impl.cpp
 )
 
 target_include_directories(editor PUBLIC

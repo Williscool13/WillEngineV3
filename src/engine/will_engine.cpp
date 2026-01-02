@@ -417,10 +417,10 @@ void WillEngine::DrawImgui()
     }
 
     if (ImGui::Button("Generate dragon.glb from dragon.gltf")) {
-        /*Editor::ModelGenerator::ProcessModelsWithMeshlet(
+        Editor::ModelGenerator::ProcessModelsWithMeshlet(
             Platform::GetAssetPath() / "dragon/dragon.gltf",
             Platform::GetAssetPath() / "dragon/dragon.glb"
-        );*/
+        );
     }
     if (ImGui::Button("Generate BoxTextured.willmodel from BoxTextured.glb")) {
         generateModel(
