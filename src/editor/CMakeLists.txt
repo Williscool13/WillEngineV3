@@ -4,8 +4,6 @@ add_library(editor STATIC
         asset-generation/asset_generation_types.cpp
         asset-generation/asset_generation_types.h
         asset-generation/stb_impl.cpp
-        model-generator/model_generator.cpp
-        model-generator/model_generator.h
 )
 
 target_include_directories(editor PUBLIC
@@ -20,5 +18,4 @@ target_link_libraries(editor PUBLIC
         imgui
         enkiTS
         meshoptimizer
-        tinygltf
 )

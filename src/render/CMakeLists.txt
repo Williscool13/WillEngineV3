@@ -73,7 +73,6 @@ add_library(render STATIC
         shaders/instancing_interop.h
         pipelines/mesh_shading_instanced_pipeline.cpp
         pipelines/mesh_shading_instanced_pipeline.h
-        model/tinygltf_impl.cpp
 )
 
 target_include_directories(render PRIVATE

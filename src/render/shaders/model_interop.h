@@ -76,7 +76,7 @@ SHADER_PUBLIC struct Meshlet
 
     SHADER_PUBLIC uint32_t meshletVertexOffset;
     SHADER_PUBLIC uint32_t meshletTriangleOffset;
-    SHADER_PUBLIC uint32_t meshletVerticesCount;
+    SHADER_PUBLIC uint32_t meshletVertexCount;
     SHADER_PUBLIC uint32_t meshletTriangleCount;
 };
 

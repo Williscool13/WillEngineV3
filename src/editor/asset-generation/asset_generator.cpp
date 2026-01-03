@@ -693,7 +693,7 @@ RawGltfModel AssetGenerator::LoadGltf(const std::filesystem::path& source)
 
                         .meshletVertexOffset = meshletVertexOffset + meshlet.vertex_offset,
                         .meshletTriangleOffset = meshletTrianglesOffset + meshlet.triangle_offset,
-                        .meshletVerticesCount = meshlet.vertex_count,
+                        .meshletVertexCount = meshlet.vertex_count,
                         .meshletTriangleCount = meshlet.triangle_count,
                     });
                 }

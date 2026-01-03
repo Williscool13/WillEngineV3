@@ -140,13 +140,13 @@ TEST_CASE("Meshlet bounding and culling data", "[renderer][model-data]") {
         m.vertexOffset = 100;
         m.meshletVertexOffset = 50;
         m.meshletTriangleOffset = 75;
-        m.meshletVerticesCount = 64;
+        m.meshletVertexCount = 64;
         m.meshletTriangleCount = 124;
 
         REQUIRE(m.vertexOffset == 100);
         REQUIRE(m.meshletVertexOffset == 50);
         REQUIRE(m.meshletTriangleOffset == 75);
-        REQUIRE(m.meshletVerticesCount == 64);
+        REQUIRE(m.meshletVertexCount == 64);
         REQUIRE(m.meshletTriangleCount == 124);
     }
 }

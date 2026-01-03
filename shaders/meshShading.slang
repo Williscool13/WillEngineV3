@@ -79,8 +79,8 @@ void meshMain(
     Meshlet meshlet = pushConstant.meshletBuffer[meshletIdx];
 
     float4x4 viewProj = pushConstant.sceneData->viewProj;
-    SetMeshOutputCounts(meshlet.meshletVerticesCount, meshlet.meshletTriangleCount);
-    for (uint i = threadIndex; i < meshlet.meshletVerticesCount; i += MESH_SHADER_DISPATCH_X) {
+    SetMeshOutputCounts(meshlet.meshletVertexCount, meshlet.meshletTriangleCount);
+    for (uint i = threadIndex; i < meshlet.meshletVertexCount; i += MESH_SHADER_DISPATCH_X) {
         uint localVertexIndex = pushConstant.meshletVerticesBuffer[meshlet.meshletVertexOffset + i];
         Vertex v = pushConstant.vertexBuffer[meshlet.vertexOffset + localVertexIndex];
 

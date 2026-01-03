@@ -6,9 +6,6 @@
 
 #include "asset_load_config.h"
 #include "ktxvulkan.h"
-#include "tiny_gltf.h"
-#include "editor/asset-generation/asset_generation_types.h"
-#include "editor/asset-generation/asset_generation_types.h"
 #include "render/model/model_serialization.h"
 #include "render/model/will_model_asset.h"
 #include "tracy/Tracy.hpp"
@@ -571,659 +568,179 @@ void WillModelLoadJob::Reset()
     uploadCount = 0;
 }
 
-glm::vec4 WillModelLoadJob::GenerateBoundingSphere(std::span<Vertex> vertices)
-{
-    glm::vec3 center = {0, 0, 0};
-
-    for (auto&& vertex : vertices) {
-        center += vertex.position;
-    }
-    center /= static_cast<float>(vertices.size());
-
-
-    float radius = glm::dot(vertices[0].position - center, vertices[0].position - center);
-    for (size_t i = 1; i < vertices.size(); ++i) {
-        radius = std::max(radius, glm::dot(vertices[i].position - center, vertices[i].position - center));
-    }
-    radius = std::nextafter(sqrtf(radius), std::numeric_limits<float>::max());
-
-    return {center, radius};
-}
-
-glm::vec4 WillModelLoadJob::GenerateBoundingSphere(std::span<SkinnedVertex> vertices)
-{
-    glm::vec3 center = {0, 0, 0};
-
-    for (auto&& vertex : vertices) {
-        center += vertex.position;
-    }
-    center /= static_cast<float>(vertices.size());
-
-
-    float radius = glm::dot(vertices[0].position - center, vertices[0].position - center);
-    for (size_t i = 1; i < vertices.size(); ++i) {
-        radius = std::max(radius, glm::dot(vertices[i].position - center, vertices[i].position - center));
-    }
-    radius = std::nextafter(sqrtf(radius), std::numeric_limits<float>::max());
-
-    return {center, radius};
-}
-
 void WillModelLoadJob::LoadModelTask::ExecuteRange(enki::TaskSetPartition range, uint32_t threadnum)
 {
     ZoneScopedN("LoadModelTask");
-
-    tinygltf::Model model;
-    tinygltf::TinyGLTF loader;
-    loader.SetImageLoader(StubLoadImageData, nullptr);
-    loader.SetImageWriter(StubWriteImageData, nullptr);
-    std::string err, warn;
-
     if (loadJob == nullptr) {
         return;
     }
 
-    //
     {
         ZoneScopedN("FileExistsCheck");
         if (!std::filesystem::exists(loadJob->outputModel->source)) {
-            SPDLOG_ERROR("Failed to find path to model - {}", loadJob->outputModel->name);
+            SPDLOG_ERROR("Failed to find path to willmodel - {}", loadJob->outputModel->name);
             loadJob->taskState = TaskState::Failed;
             return;
         }
     }
 
-    bool ret;
-    //
-    {
-        ZoneScopedN("LoadGLTF");
-        if (loadJob->outputModel->source.extension() == ".glb") {
-            ret = loader.LoadBinaryFromFile(&model, &err, &warn, loadJob->outputModel->source.string());
-        }
-        else {
-            ret = loader.LoadASCIIFromFile(&model, &err, &warn, loadJob->outputModel->source.string());
-        }
-    }
+    Render::ModelReader reader = Render::ModelReader(loadJob->outputModel->source);
 
-    if (!warn.empty()) {
-        SPDLOG_WARN("GLTF Warning: {}", warn);
-    }
-
-    if (!err.empty()) {
-        SPDLOG_ERROR("GLTF Error: {}", err);
-    }
-
-    if (!ret) {
-        SPDLOG_ERROR("Failed to load GLTF model - {}", loadJob->outputModel->name);
+    if (!reader.GetSuccessfullyLoaded()) {
+        SPDLOG_ERROR("Failed to load willmodel - {}", loadJob->outputModel->name);
         loadJob->taskState = TaskState::Failed;
         return;
     }
 
-    //
+    std::vector<uint8_t> modelBinData;
     {
-        ZoneScopedN("ParseMaterials");
-        loadJob->rawData.materials.reserve(model.materials.size());
-        for (const auto& gltfMaterial : model.materials) {
-            MaterialProperties material = {};
-
-            material.colorFactor = glm::vec4(
-                gltfMaterial.pbrMetallicRoughness.baseColorFactor[0],
-                gltfMaterial.pbrMetallicRoughness.baseColorFactor[1],
-                gltfMaterial.pbrMetallicRoughness.baseColorFactor[2],
-                gltfMaterial.pbrMetallicRoughness.baseColorFactor[3]
-            );
-
-            material.metalRoughFactors.x = gltfMaterial.pbrMetallicRoughness.metallicFactor;
-            material.metalRoughFactors.y = gltfMaterial.pbrMetallicRoughness.roughnessFactor;
-
-            material.alphaProperties.x = gltfMaterial.alphaCutoff;
-            material.alphaProperties.z = gltfMaterial.doubleSided ? 1.0f : 0.0f;
-
-            if (gltfMaterial.alphaMode == "OPAQUE") {
-                material.alphaProperties.y = static_cast<float>(Render::MaterialType::SOLID);
-            }
-            else if (gltfMaterial.alphaMode == "BLEND") {
-                material.alphaProperties.y = static_cast<float>(Render::MaterialType::BLEND);
-            }
-            else if (gltfMaterial.alphaMode == "MASK") {
-                material.alphaProperties.y = static_cast<float>(Render::MaterialType::CUTOUT);
-            }
-
-            material.emissiveFactor = glm::vec4(
-                gltfMaterial.emissiveFactor[0],
-                gltfMaterial.emissiveFactor[1],
-                gltfMaterial.emissiveFactor[2],
-                1.0f
-            );
-
-            material.textureImageIndices = glm::ivec4(-1);
-            material.textureSamplerIndices = glm::ivec4(-1);
-            material.textureImageIndices2 = glm::ivec4(-1);
-            material.textureSamplerIndices2 = glm::ivec4(-1);
-
-            if (gltfMaterial.pbrMetallicRoughness.baseColorTexture.index >= 0) {
-                const auto& tex = model.textures[gltfMaterial.pbrMetallicRoughness.baseColorTexture.index];
-                material.textureImageIndices.x = tex.source;
-                material.textureSamplerIndices.x = tex.sampler;
-            }
-
-            if (gltfMaterial.pbrMetallicRoughness.metallicRoughnessTexture.index >= 0) {
-                const auto& tex = model.textures[gltfMaterial.pbrMetallicRoughness.metallicRoughnessTexture.index];
-                material.textureImageIndices.y = tex.source;
-                material.textureSamplerIndices.y = tex.sampler;
-            }
-
-            if (gltfMaterial.normalTexture.index >= 0) {
-                const auto& tex = model.textures[gltfMaterial.normalTexture.index];
-                material.textureImageIndices.z = tex.source;
-                material.textureSamplerIndices.z = tex.sampler;
-                material.physicalProperties.z = gltfMaterial.normalTexture.scale;
-            }
-
-            if (gltfMaterial.emissiveTexture.index >= 0) {
-                const auto& tex = model.textures[gltfMaterial.emissiveTexture.index];
-                material.textureImageIndices.w = tex.source;
-                material.textureSamplerIndices.w = tex.sampler;
-            }
-
-            if (gltfMaterial.occlusionTexture.index >= 0) {
-                const auto& tex = model.textures[gltfMaterial.occlusionTexture.index];
-                material.textureImageIndices2.x = tex.source;
-                material.textureSamplerIndices2.x = tex.sampler;
-                material.physicalProperties.w = gltfMaterial.occlusionTexture.strength;
-            }
-
-            loadJob->rawData.materials.push_back(material);
-        }
+        ZoneScopedN("ReadModelBin");
+        modelBinData = reader.ReadFile("model.bin");
     }
 
-    //
+    size_t offset = 0;
+    const auto* header = reinterpret_cast<Render::ModelBinaryHeader*>(modelBinData.data());
+    offset += sizeof(Render::ModelBinaryHeader);
+
+    auto readArray = [&]<typename T>(std::vector<T>& vec, uint32_t count) {
+        vec.resize(count);
+        if (count > 0) {
+            std::memcpy(vec.data(), modelBinData.data() + offset, count * sizeof(T));
+            offset += count * sizeof(T);
+        }
+    };
+
+    const uint8_t* dataPtr = modelBinData.data() + offset;
+
     {
         ZoneScopedN("ParseGeometryData");
+        loadJob->rawData.bIsSkeletalModel = header->bIsSkeletalModel;
+        readArray(loadJob->rawData.vertices, header->vertexCount);
+        readArray(loadJob->rawData.meshletVertices, header->meshletVertexCount);
+        readArray(loadJob->rawData.meshletTriangles, header->meshletTriangleCount);
+        readArray(loadJob->rawData.meshlets, header->meshletCount);
+        readArray(loadJob->rawData.primitives, header->primitiveCount);
+        readArray(loadJob->rawData.materials, header->materialCount);
+    }
 
-        // Extract meshlet data from model extras
-        if (model.extras.Has("meshletBufferView")) {
-            int meshletViewIdx = model.extras.Get("meshletBufferView").GetNumberAsInt();
-            int vertexIndirectionViewIdx = model.extras.Get("vertexIndirectionBufferView").GetNumberAsInt();
-            int triangleViewIdx = model.extras.Get("triangleBufferView").GetNumberAsInt();
+    dataPtr = modelBinData.data() + offset;
 
-            const auto& meshletView = model.bufferViews[meshletViewIdx];
-            const auto& meshletBuffer = model.buffers[meshletView.buffer];
-            const uint8_t* meshletData = meshletBuffer.data.data() + meshletView.byteOffset;
-            loadJob->rawData.meshlets.resize(meshletView.byteLength / sizeof(Meshlet));
-            std::memcpy(loadJob->rawData.meshlets.data(), meshletData, meshletView.byteLength);
-
-            const auto& vertexIndirectionView = model.bufferViews[vertexIndirectionViewIdx];
-            const auto& vertexIndirectionBuffer = model.buffers[vertexIndirectionView.buffer];
-            const uint8_t* vertexIndirectionData = vertexIndirectionBuffer.data.data() + vertexIndirectionView.byteOffset;
-            loadJob->rawData.meshletVertices.resize(vertexIndirectionView.byteLength / sizeof(uint32_t));
-            std::memcpy(loadJob->rawData.meshletVertices.data(), vertexIndirectionData, vertexIndirectionView.byteLength);
-
-            const auto& triangleView = model.bufferViews[triangleViewIdx];
-            const auto& triangleBuffer = model.buffers[triangleView.buffer];
-            const uint8_t* triangleData = triangleBuffer.data.data() + triangleView.byteOffset;
-            loadJob->rawData.meshletTriangles.resize(triangleView.byteLength);
-            std::memcpy(loadJob->rawData.meshletTriangles.data(), triangleData, triangleView.byteLength);
-        }
-
-        for (const auto& mesh : model.meshes) {
-            Render::MeshInformation meshInfo;
-            meshInfo.name = mesh.name;
-
-            for (const auto& primitive : mesh.primitives) {
-                MeshletPrimitive primData;
-
-                if (primitive.extras.Has("meshletOffset")) {
-                    primData.meshletOffset = primitive.extras.Get("meshletOffset").GetNumberAsInt();
-                    primData.meshletCount = primitive.extras.Get("meshletCount").GetNumberAsInt();
-                }
-
-                int materialIndex = -1;
-                if (primitive.material >= 0) {
-                    materialIndex = primitive.material;
-                    primData.bHasTransparent = (static_cast<Render::MaterialType>(loadJob->rawData.materials[materialIndex].alphaProperties.y) == Render::MaterialType::BLEND);
-                }
-
-                auto posIt = primitive.attributes.find("POSITION");
-                if (posIt == primitive.attributes.end()) {
-                    SPDLOG_ERROR("Primitive missing POSITION attribute");
-                    continue;
-                }
-
-                const auto& posAccessor = model.accessors[posIt->second];
-                const auto& posBufferView = model.bufferViews[posAccessor.bufferView];
-                const auto& posBuffer = model.buffers[posBufferView.buffer];
-
-                const float* posData = reinterpret_cast<const float*>(
-                    posBuffer.data.data() + posBufferView.byteOffset + posAccessor.byteOffset
-                );
-
-                size_t vertexStart = loadJob->rawData.vertices.size();
-                loadJob->rawData.vertices.resize(vertexStart + posAccessor.count);
-
-                for (size_t i = 0; i < posAccessor.count; ++i) {
-                    loadJob->rawData.vertices[vertexStart + i].position = glm::vec3(
-                        posData[i * 3], posData[i * 3 + 1], posData[i * 3 + 2]
-                    );
-                    loadJob->rawData.vertices[vertexStart + i].color = glm::vec4(1.0f);
-                    loadJob->rawData.vertices[vertexStart + i].normal = glm::vec3(0.0f, 0.0f, 1.0f);
-                    loadJob->rawData.vertices[vertexStart + i].tangent = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
-                    loadJob->rawData.vertices[vertexStart + i].texcoordU = 0.0f;
-                    loadJob->rawData.vertices[vertexStart + i].texcoordV = 0.0f;
-                }
-
-                // NORMALS
-                auto normalIt = primitive.attributes.find("NORMAL");
-                if (normalIt != primitive.attributes.end()) {
-                    const auto& normalAccessor = model.accessors[normalIt->second];
-                    const auto& normalBufferView = model.bufferViews[normalAccessor.bufferView];
-                    const auto& normalBuffer = model.buffers[normalBufferView.buffer];
-
-                    const float* normalData = reinterpret_cast<const float*>(
-                        normalBuffer.data.data() + normalBufferView.byteOffset + normalAccessor.byteOffset
-                    );
-
-                    for (size_t i = 0; i < normalAccessor.count; ++i) {
-                        loadJob->rawData.vertices[vertexStart + i].normal = glm::vec3(
-                            normalData[i * 3], normalData[i * 3 + 1], normalData[i * 3 + 2]
-                        );
-                    }
-                }
-
-                // TANGENTS
-                auto tangentIt = primitive.attributes.find("TANGENT");
-                if (tangentIt != primitive.attributes.end()) {
-                    const auto& tangentAccessor = model.accessors[tangentIt->second];
-                    const auto& tangentBufferView = model.bufferViews[tangentAccessor.bufferView];
-                    const auto& tangentBuffer = model.buffers[tangentBufferView.buffer];
-
-                    const float* tangentData = reinterpret_cast<const float*>(
-                        tangentBuffer.data.data() + tangentBufferView.byteOffset + tangentAccessor.byteOffset
-                    );
-
-                    for (size_t i = 0; i < tangentAccessor.count; ++i) {
-                        loadJob->rawData.vertices[vertexStart + i].tangent = glm::vec4(
-                            tangentData[i * 4], tangentData[i * 4 + 1], tangentData[i * 4 + 2], tangentData[i * 4 + 3]
-                        );
-                    }
-                }
-
-                // JOINTS_0
-                bool hasJoints = false;
-                auto jointsIt = primitive.attributes.find("JOINTS_0");
-                if (jointsIt != primitive.attributes.end()) {
-                    const auto& jointsAccessor = model.accessors[jointsIt->second];
-                    const auto& jointsBufferView = model.bufferViews[jointsAccessor.bufferView];
-                    const auto& jointsBuffer = model.buffers[jointsBufferView.buffer];
-
-                    const uint8_t* jointsData = jointsBuffer.data.data() + jointsBufferView.byteOffset + jointsAccessor.byteOffset;
-
-                    for (size_t i = 0; i < jointsAccessor.count; ++i) {
-                        if (jointsAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT) {
-                            const uint16_t* joints = reinterpret_cast<const uint16_t*>(jointsData) + i * 4;
-                            loadJob->rawData.vertices[vertexStart + i].joints = glm::uvec4(joints[0], joints[1], joints[2], joints[3]);
-                        }
-                        else if (jointsAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE) {
-                            loadJob->rawData.vertices[vertexStart + i].joints = glm::uvec4(
-                                jointsData[i * 4], jointsData[i * 4 + 1], jointsData[i * 4 + 2], jointsData[i * 4 + 3]
-                            );
-                        }
-                    }
-                    hasJoints = true;
-                }
-
-                // WEIGHTS_0
-                bool hasWeights = false;
-                auto weightsIt = primitive.attributes.find("WEIGHTS_0");
-                if (weightsIt != primitive.attributes.end()) {
-                    const auto& weightsAccessor = model.accessors[weightsIt->second];
-                    const auto& weightsBufferView = model.bufferViews[weightsAccessor.bufferView];
-                    const auto& weightsBuffer = model.buffers[weightsBufferView.buffer];
-
-                    const float* weightsData = reinterpret_cast<const float*>(
-                        weightsBuffer.data.data() + weightsBufferView.byteOffset + weightsAccessor.byteOffset
-                    );
-
-                    for (size_t i = 0; i < weightsAccessor.count; ++i) {
-                        loadJob->rawData.vertices[vertexStart + i].weights = glm::vec4(
-                            weightsData[i * 4], weightsData[i * 4 + 1], weightsData[i * 4 + 2], weightsData[i * 4 + 3]
-                        );
-                    }
-                    hasWeights = true;
-                }
-
-                static bool hasSkinned = false;
-                static bool hasStatic = false;
-                if (hasJoints && hasWeights) {
-                    hasSkinned = true;
-                }
-                else {
-                    hasStatic = true;
-                }
-
-                if (hasSkinned && hasStatic) {
-                    SPDLOG_ERROR("Model contains mixed skinned and static meshes. Split into separate files.");
-                    loadJob->taskState = TaskState::Failed;
-                    return;
-                }
-
-                // TEXCOORD_0 (UV)
-                auto uvIt = primitive.attributes.find("TEXCOORD_0");
-                if (uvIt != primitive.attributes.end()) {
-                    const auto& uvAccessor = model.accessors[uvIt->second];
-                    const auto& uvBufferView = model.bufferViews[uvAccessor.bufferView];
-                    const auto& uvBuffer = model.buffers[uvBufferView.buffer];
-
-                    const uint8_t* uvData = uvBuffer.data.data() + uvBufferView.byteOffset + uvAccessor.byteOffset;
-
-                    for (size_t i = 0; i < uvAccessor.count; ++i) {
-                        float u = 0.0f, v = 0.0f;
-
-                        switch (uvAccessor.componentType) {
-                            case TINYGLTF_COMPONENT_TYPE_BYTE:
-                            {
-                                const int8_t* uv = reinterpret_cast<const int8_t*>(uvData) + i * 2;
-                                u = std::max(static_cast<float>(uv[0]) / 127.0f, -1.0f);
-                                v = std::max(static_cast<float>(uv[1]) / 127.0f, -1.0f);
-                                break;
-                            }
-                            case TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE:
-                            {
-                                u = static_cast<float>(uvData[i * 2]) / 255.0f;
-                                v = static_cast<float>(uvData[i * 2 + 1]) / 255.0f;
-                                break;
-                            }
-                            case TINYGLTF_COMPONENT_TYPE_SHORT:
-                            {
-                                const int16_t* uv = reinterpret_cast<const int16_t*>(uvData) + i * 2;
-                                u = std::max(static_cast<float>(uv[0]) / 32767.0f, -1.0f);
-                                v = std::max(static_cast<float>(uv[1]) / 32767.0f, -1.0f);
-                                break;
-                            }
-                            case TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT:
-                            {
-                                const uint16_t* uv = reinterpret_cast<const uint16_t*>(uvData) + i * 2;
-                                u = static_cast<float>(uv[0]) / 65535.0f;
-                                v = static_cast<float>(uv[1]) / 65535.0f;
-                                break;
-                            }
-                            case TINYGLTF_COMPONENT_TYPE_FLOAT:
-                            {
-                                const float* uv = reinterpret_cast<const float*>(uvData) + i * 2;
-                                u = uv[0];
-                                v = uv[1];
-                                break;
-                            }
-                            default:
-                                SPDLOG_WARN("Unsupported UV component type: {}", uvAccessor.componentType);
-                                break;
-                        }
-
-                        loadJob->rawData.vertices[vertexStart + i].texcoordU = u;
-                        loadJob->rawData.vertices[vertexStart + i].texcoordV = v;
-                    }
-                }
-
-                // COLOR_0 (Vertex Color)
-                auto colorIt = primitive.attributes.find("COLOR_0");
-                if (colorIt != primitive.attributes.end()) {
-                    const auto& colorAccessor = model.accessors[colorIt->second];
-                    const auto& colorBufferView = model.bufferViews[colorAccessor.bufferView];
-                    const auto& colorBuffer = model.buffers[colorBufferView.buffer];
-
-                    const float* colorData = reinterpret_cast<const float*>(
-                        colorBuffer.data.data() + colorBufferView.byteOffset + colorAccessor.byteOffset
-                    );
-
-                    for (size_t i = 0; i < colorAccessor.count; ++i) {
-                        if (colorAccessor.type == TINYGLTF_TYPE_VEC4) {
-                            loadJob->rawData.vertices[vertexStart + i].color = glm::vec4(
-                                colorData[i * 4], colorData[i * 4 + 1], colorData[i * 4 + 2], colorData[i * 4 + 3]
-                            );
-                        }
-                        else if (colorAccessor.type == TINYGLTF_TYPE_VEC3) {
-                            loadJob->rawData.vertices[vertexStart + i].color = glm::vec4(
-                                colorData[i * 3], colorData[i * 3 + 1], colorData[i * 3 + 2], 1.0f
-                            );
-                        }
-                    }
-                }
-
-                primData.boundingSphere = GenerateBoundingSphere(std::span(loadJob->rawData.vertices.data() + vertexStart, loadJob->rawData.vertices.size() - vertexStart));
-
-                meshInfo.primitiveProperties.emplace_back(loadJob->rawData.primitives.size(), materialIndex);
-                loadJob->rawData.primitives.push_back(primData);
-            }
-
-            loadJob->rawData.allMeshes.push_back(meshInfo);
+    {
+        ZoneScopedN("ParseMeshes");
+        loadJob->rawData.allMeshes.resize(header->meshCount);
+        for (uint32_t i = 0; i < header->meshCount; i++) {
+            ReadMeshInformation(dataPtr, loadJob->rawData.allMeshes[i]);
         }
     }
 
-
-    //
     {
         ZoneScopedN("ParseNodes");
-        loadJob->rawData.nodes.reserve(model.nodes.size());
-        for (const auto& gltfNode : model.nodes) {
-            Render::Node node;
-            node.name = gltfNode.name;
-            node.meshIndex = gltfNode.mesh;
-            node.parent = ~0u;
-
-            if (!gltfNode.matrix.empty()) {
-                // Matrix decomposition
-                glm::mat4 mat;
-                for (int i = 0; i < 16; ++i) {
-                    mat[i / 4][i % 4] = gltfNode.matrix[i];
-                }
-                node.localTranslation = glm::vec3(mat[3]);
-                node.localRotation = glm::quat_cast(mat);
-                node.localScale = glm::vec3(
-                    glm::length(glm::vec3(mat[0])),
-                    glm::length(glm::vec3(mat[1])),
-                    glm::length(glm::vec3(mat[2]))
-                );
-            }
-            else {
-                // TRS
-                if (gltfNode.translation.size() == 3) {
-                    node.localTranslation = glm::vec3(gltfNode.translation[0], gltfNode.translation[1], gltfNode.translation[2]);
-                }
-                if (gltfNode.rotation.size() == 4) {
-                    node.localRotation = glm::quat(gltfNode.rotation[3], gltfNode.rotation[0], gltfNode.rotation[1], gltfNode.rotation[2]);
-                }
-                if (gltfNode.scale.size() == 3) {
-                    node.localScale = glm::vec3(gltfNode.scale[0], gltfNode.scale[1], gltfNode.scale[2]);
-                }
-            }
-
-            loadJob->rawData.nodes.push_back(node);
-        }
-
-        // Set parent indices
-        for (size_t i = 0; i < model.nodes.size(); ++i) {
-            for (int childIdx : model.nodes[i].children) {
-                loadJob->rawData.nodes[childIdx].parent = i;
-            }
+        loadJob->rawData.nodes.resize(header->nodeCount);
+        for (uint32_t i = 0; i < header->nodeCount; i++) {
+            ReadNode(dataPtr, loadJob->rawData.nodes[i]);
         }
     }
 
-    //
-    {
-        ZoneScopedN("ParseSkins");
-        if (!model.skins.empty()) {
-            const auto& skin = model.skins[0];
-
-            if (skin.inverseBindMatrices >= 0) {
-                const auto& accessor = model.accessors[skin.inverseBindMatrices];
-                const auto& bufferView = model.bufferViews[accessor.bufferView];
-                const auto& buffer = model.buffers[bufferView.buffer];
-
-                const float* data = reinterpret_cast<const float*>(
-                    buffer.data.data() + bufferView.byteOffset + accessor.byteOffset
-                );
-
-                loadJob->rawData.inverseBindMatrices.resize(accessor.count);
-                for (size_t i = 0; i < accessor.count; ++i) {
-                    glm::mat4 mat;
-                    for (int j = 0; j < 16; ++j) {
-                        mat[j / 4][j % 4] = data[i * 16 + j];
-                    }
-                    loadJob->rawData.inverseBindMatrices[i] = mat;
-                }
-
-                // Set inverse bind indices on nodes
-                for (size_t i = 0; i < skin.joints.size(); ++i) {
-                    loadJob->rawData.nodes[skin.joints[i]].inverseBindIndex = i;
-                }
-            }
-        }
-    }
-
-    //
     {
         ZoneScopedN("ParseAnimations");
-        loadJob->rawData.animations.reserve(model.animations.size());
-        for (const auto& gltfAnim : model.animations) {
-            Render::Animation anim;
-            anim.name = gltfAnim.name;
-
-            // Samplers
-            anim.samplers.reserve(gltfAnim.samplers.size());
-            for (const auto& gltfSampler : gltfAnim.samplers) {
-                Render::AnimationSampler sampler;
-
-                // Input (timestamps)
-                const auto& inputAccessor = model.accessors[gltfSampler.input];
-                const auto& inputBufferView = model.bufferViews[inputAccessor.bufferView];
-                const auto& inputBuffer = model.buffers[inputBufferView.buffer];
-                const float* inputData = reinterpret_cast<const float*>(
-                    inputBuffer.data.data() + inputBufferView.byteOffset + inputAccessor.byteOffset
-                );
-
-                sampler.timestamps.resize(inputAccessor.count);
-                std::memcpy(sampler.timestamps.data(), inputData, inputAccessor.count * sizeof(float));
-
-                // Output (values)
-                const auto& outputAccessor = model.accessors[gltfSampler.output];
-                const auto& outputBufferView = model.bufferViews[outputAccessor.bufferView];
-                const auto& outputBuffer = model.buffers[outputBufferView.buffer];
-                const float* outputData = reinterpret_cast<const float*>(
-                    outputBuffer.data.data() + outputBufferView.byteOffset + outputAccessor.byteOffset
-                );
-
-                size_t componentCount = 1;
-                if (outputAccessor.type == TINYGLTF_TYPE_VEC3) componentCount = 3;
-                else if (outputAccessor.type == TINYGLTF_TYPE_VEC4) componentCount = 4;
-
-                sampler.values.resize(outputAccessor.count * componentCount);
-                std::memcpy(sampler.values.data(), outputData, sampler.values.size() * sizeof(float));
-
-                // Interpolation
-                if (gltfSampler.interpolation == "LINEAR") {
-                    sampler.interpolation = Render::AnimationSampler::Interpolation::Linear;
-                }
-                else if (gltfSampler.interpolation == "STEP") {
-                    sampler.interpolation = Render::AnimationSampler::Interpolation::Step;
-                }
-                else if (gltfSampler.interpolation == "CUBICSPLINE") {
-                    sampler.interpolation = Render::AnimationSampler::Interpolation::CubicSpline;
-                }
-
-                anim.samplers.push_back(sampler);
-            }
-
-            // Channels
-            anim.channels.reserve(gltfAnim.channels.size());
-            for (const auto& gltfChannel : gltfAnim.channels) {
-                Render::AnimationChannel channel;
-                channel.samplerIndex = gltfChannel.sampler;
-                channel.targetNodeIndex = gltfChannel.target_node;
-
-                if (gltfChannel.target_path == "translation") {
-                    channel.targetPath = Render::AnimationChannel::TargetPath::Translation;
-                }
-                else if (gltfChannel.target_path == "rotation") {
-                    channel.targetPath = Render::AnimationChannel::TargetPath::Rotation;
-                }
-                else if (gltfChannel.target_path == "scale") {
-                    channel.targetPath = Render::AnimationChannel::TargetPath::Scale;
-                }
-                else if (gltfChannel.target_path == "weights") {
-                    channel.targetPath = Render::AnimationChannel::TargetPath::Weights;
-                }
-
-                anim.channels.push_back(channel);
-            }
-
-            // Calculate duration
-            anim.duration = 0.0f;
-            for (const auto& sampler : anim.samplers) {
-                if (!sampler.timestamps.empty()) {
-                    anim.duration = std::max(anim.duration, sampler.timestamps.back());
-                }
-            }
-
-            loadJob->rawData.animations.push_back(anim);
+        loadJob->rawData.animations.resize(header->animationCount);
+        for (uint32_t i = 0; i < header->animationCount; i++) {
+            ReadAnimation(dataPtr, loadJob->rawData.animations[i]);
         }
     }
 
-    //
+    offset = dataPtr - modelBinData.data();
+    {
+        ZoneScopedN("ParseSkeletalData");
+        readArray(loadJob->rawData.inverseBindMatrices, header->inverseBindMatrixCount);
+    }
+
     {
         ZoneScopedN("CreateSamplers");
-        loadJob->outputModel->modelData.samplers.reserve(model.samplers.size());
-        for (const auto& gltfSampler : model.samplers) {
-            VkSamplerCreateInfo samplerInfo = {.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
-            samplerInfo.maxLod = VK_LOD_CLAMP_NONE;
-            samplerInfo.minLod = 0;
-
-            // Mag filter
-            samplerInfo.magFilter = (gltfSampler.magFilter == TINYGLTF_TEXTURE_FILTER_NEAREST)
-                                        ? VK_FILTER_NEAREST
-                                        : VK_FILTER_LINEAR;
-
-            // Min filter
-            samplerInfo.minFilter = (gltfSampler.minFilter == TINYGLTF_TEXTURE_FILTER_NEAREST ||
-                                     gltfSampler.minFilter == TINYGLTF_TEXTURE_FILTER_NEAREST_MIPMAP_NEAREST ||
-                                     gltfSampler.minFilter == TINYGLTF_TEXTURE_FILTER_NEAREST_MIPMAP_LINEAR)
-                                        ? VK_FILTER_NEAREST
-                                        : VK_FILTER_LINEAR;
-
-            // Mipmap mode
-            samplerInfo.mipmapMode = (gltfSampler.minFilter == TINYGLTF_TEXTURE_FILTER_NEAREST_MIPMAP_NEAREST ||
-                                      gltfSampler.minFilter == TINYGLTF_TEXTURE_FILTER_LINEAR_MIPMAP_NEAREST)
-                                         ? VK_SAMPLER_MIPMAP_MODE_NEAREST
-                                         : VK_SAMPLER_MIPMAP_MODE_LINEAR;
-
-            // Wrap modes
-            auto convertWrap = [](int wrap) {
-                switch (wrap) {
-                    case TINYGLTF_TEXTURE_WRAP_REPEAT: return VK_SAMPLER_ADDRESS_MODE_REPEAT;
-                    case TINYGLTF_TEXTURE_WRAP_CLAMP_TO_EDGE: return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-                    case TINYGLTF_TEXTURE_WRAP_MIRRORED_REPEAT: return VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
-                    default: return VK_SAMPLER_ADDRESS_MODE_REPEAT;
-                }
-            };
-
-            samplerInfo.addressModeU = convertWrap(gltfSampler.wrapS);
-            samplerInfo.addressModeV = convertWrap(gltfSampler.wrapT);
-            samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-
-            loadJob->outputModel->modelData.samplers.push_back(Render::Sampler::CreateSampler(loadJob->context, samplerInfo));
+        std::vector<VkSamplerCreateInfo> samplerInfos{};
+        readArray(samplerInfos, header->samplerCount);
+        for (VkSamplerCreateInfo& sampler : samplerInfos) {
+            loadJob->outputModel->modelData.samplers.push_back(Render::Sampler::CreateSampler(loadJob->context, sampler));
         }
     }
 
-    //
+    std::vector<uint32_t> preferredImageFormats;
+    readArray(preferredImageFormats, header->textureCount);
+
     {
         ZoneScopedN("LoadTextures");
-        // WIP - always append nullptr
-        for (size_t i = 0; i < model.images.size(); ++i) {
-            loadJob->pendingTextures.push_back(nullptr);
+        for (int i = 0; i < header->textureCount; ++i) {
+            ZoneScopedN("LoadSingleTexture");
+
+            std::string textureName = fmt::format("textures/texture_{}.ktx2", i);
+            if (!reader.HasFile(textureName)) {
+                SPDLOG_ERROR("[WillModelLoader::TaskImplementation] Failed to find texture {}", textureName);
+                loadJob->pendingTextures.push_back(nullptr);
+                continue;
+            }
+
+            std::vector<uint8_t> ktxData;
+            {
+                ZoneScopedN("ReadKTXFile");
+                ktxData = reader.ReadFile(textureName);
+            }
+
+            ktxTexture2* loadedTexture = nullptr;
+            ktx_error_code_e result;
+
+            {
+                ZoneScopedN("KTXCreateFromMemory");
+                result = ktxTexture2_CreateFromMemory(ktxData.data(), ktxData.size(), KTX_TEXTURE_CREATE_NO_FLAGS, &loadedTexture);
+            }
+
+            if (ktxTexture2_NeedsTranscoding(loadedTexture)) {
+                ZoneScopedN("KTXTranscode");
+                const ktx_transcode_fmt_e targetFormat = static_cast<ktx_transcode_fmt_e>(preferredImageFormats[i]);
+                result = ktxTexture2_TranscodeBasis(loadedTexture, targetFormat, 0);
+                if (result != KTX_SUCCESS) {
+                    SPDLOG_ERROR("Failed to transcode texture {}", textureName);
+                    loadJob->pendingTextures.push_back(nullptr);
+                    ktxTexture2_Destroy(loadedTexture);
+                    continue;
+                }
+            }
+
+            // Size check
+            ktx_size_t allocSize = loadedTexture->dataSize;
+            if (allocSize >= WILL_MODEL_LOAD_STAGING_SIZE) {
+                SPDLOG_ERROR("Texture too big to fit in the staging buffer for texture {}", textureName);
+                loadJob->pendingTextures.push_back(nullptr);
+                ktxTexture2_Destroy(loadedTexture);
+                continue;
+            }
+
+            // Texture dimension and array check
+            if (loadedTexture->numDimensions != 2) {
+                SPDLOG_ERROR("Engine does not support non 2D image textures {}", textureName);
+                loadJob->pendingTextures.push_back(nullptr);
+                ktxTexture2_Destroy(loadedTexture);
+                continue;
+            }
+
+            if (loadedTexture->isArray) {
+                SPDLOG_ERROR("Engine does not support texture arrays {}", textureName);
+                loadJob->pendingTextures.push_back(nullptr);
+                ktxTexture2_Destroy(loadedTexture);
+                continue;
+            }
+
+            if (loadedTexture->isCubemap) {
+                SPDLOG_ERROR("Texture does not support cubemaps {}", textureName);
+                loadJob->pendingTextures.push_back(nullptr);
+                ktxTexture2_Destroy(loadedTexture);
+                continue;
+            }
+
+            loadJob->pendingTextures.push_back(loadedTexture);
         }
     }
 
-    loadJob->rawData.name = model.scenes.empty() ? "Loaded Model" : model.scenes[0].name;
-    loadJob->rawData.bIsSkeletalModel = !model.skins.empty();
+    loadJob->rawData.name = "Loaded Model";
     loadJob->taskState = TaskState::Complete;
 }
 } // AssetLoad

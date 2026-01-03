@@ -79,9 +79,9 @@ TEST_CASE("Meshlet structure size and alignment", "[renderer][shader-interop]") 
         // float4 boundingSphere (16)
         // float3 coneApex (12) + float coneCutoff (4) = 16
         // float3 coneAxis (12) + uint32 vertexOffset (4) = 16
-        // uint32 meshletVerticesOffset (4)
+        // uint32 meshletVertexOffset (4)
         // uint32 meshletTriangleOffset (4)
-        // uint32 meshletVerticesCount (4)
+        // uint32 meshletVertexCount (4)
         // uint32 meshletTriangleCount (4)
         // Total: 16 + 16 + 16 + 4 + 4 + 4 + 4 = 64 bytes
         REQUIRE(sizeof(Meshlet) == 64);

@@ -120,9 +120,9 @@ void meshMain(
     float4x4 prevViewProj = pushConstant.sceneData->prevViewProj;
     float3x3 viewRotation = (float3x3)pushConstant.sceneData.view;
 
-    SetMeshOutputCounts(meshlet.meshletVerticesCount, meshlet.meshletTriangleCount);
+    SetMeshOutputCounts(meshlet.meshletVertexCount, meshlet.meshletTriangleCount);
     uint32_t threadIndex = gtid.x;
-    for (uint i = threadIndex; i < meshlet.meshletVerticesCount; i += MESH_SHADER_DISPATCH_X) {
+    for (uint i = threadIndex; i < meshlet.meshletVertexCount; i += MESH_SHADER_DISPATCH_X) {
         uint localVertexIndex = pushConstant.meshletVerticesBuffer[meshlet.meshletVertexOffset + i];
         Vertex v = pushConstant.vertexBuffer[meshlet.vertexOffset + localVertexIndex];
         float4 clipPos = mul(viewProj, mul(m.modelMatrix, float4(v.position, 1.0)));

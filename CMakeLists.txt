@@ -147,19 +147,6 @@ if(WILL_ENGINE_ENABLE_PROFILER)
     )
 endif()
 target_compile_definitions(tracy PRIVATE TRACY_EXPORTS)
-# TinyGLTF ====================================
-set(TINYGLTF_BUILD_LOADER_EXAMPLE OFF CACHE INTERNAL "" FORCE)
-set(TINYGLTF_HEADER_ONLY ON CACHE INTERNAL "" FORCE)
-set(TINYGLTF_INSTALL OFF CACHE INTERNAL "" FORCE)
-add_subdirectory(extern/tinygltf)
-target_include_directories(tinygltf INTERFACE
-        ${CMAKE_SOURCE_DIR}/extern/json/nlohmann
-)
-target_compile_definitions(tinygltf INTERFACE
-        TINYGLTF_NO_STB_IMAGE
-        TINYGLTF_NO_STB_IMAGE_WRITE
-        TINYGLTF_NO_INCLUDE_JSON
-)
 
 # Shaders =====================================
 #   - Use this command to compile any shader interop that needs to be recompiled.
