@@ -573,9 +573,7 @@ void WillModelLoadJob::LoadModelTask::ExecuteRange(enki::TaskSetPartition range,
     ZoneScopedN("LoadModelTask");
     if (loadJob == nullptr) {
         return;
-    }
-
-    {
+    } {
         ZoneScopedN("FileExistsCheck");
         if (!std::filesystem::exists(loadJob->outputModel->source)) {
             SPDLOG_ERROR("Failed to find path to willmodel - {}", loadJob->outputModel->name);
@@ -592,8 +590,7 @@ void WillModelLoadJob::LoadModelTask::ExecuteRange(enki::TaskSetPartition range,
         return;
     }
 
-    std::vector<uint8_t> modelBinData;
-    {
+    std::vector<uint8_t> modelBinData; {
         ZoneScopedN("ReadModelBin");
         modelBinData = reader.ReadFile("model.bin");
     }
@@ -610,9 +607,7 @@ void WillModelLoadJob::LoadModelTask::ExecuteRange(enki::TaskSetPartition range,
         }
     };
 
-    const uint8_t* dataPtr = modelBinData.data() + offset;
-
-    {
+    const uint8_t* dataPtr = modelBinData.data() + offset; {
         ZoneScopedN("ParseGeometryData");
         loadJob->rawData.bIsSkeletalModel = header->bIsSkeletalModel;
         readArray(loadJob->rawData.vertices, header->vertexCount);
@@ -623,25 +618,19 @@ void WillModelLoadJob::LoadModelTask::ExecuteRange(enki::TaskSetPartition range,
         readArray(loadJob->rawData.materials, header->materialCount);
     }
 
-    dataPtr = modelBinData.data() + offset;
-
-    {
+    dataPtr = modelBinData.data() + offset; {
         ZoneScopedN("ParseMeshes");
         loadJob->rawData.allMeshes.resize(header->meshCount);
         for (uint32_t i = 0; i < header->meshCount; i++) {
             ReadMeshInformation(dataPtr, loadJob->rawData.allMeshes[i]);
         }
-    }
-
-    {
+    } {
         ZoneScopedN("ParseNodes");
         loadJob->rawData.nodes.resize(header->nodeCount);
         for (uint32_t i = 0; i < header->nodeCount; i++) {
             ReadNode(dataPtr, loadJob->rawData.nodes[i]);
         }
-    }
-
-    {
+    } {
         ZoneScopedN("ParseAnimations");
         loadJob->rawData.animations.resize(header->animationCount);
         for (uint32_t i = 0; i < header->animationCount; i++) {
@@ -649,13 +638,10 @@ void WillModelLoadJob::LoadModelTask::ExecuteRange(enki::TaskSetPartition range,
         }
     }
 
-    offset = dataPtr - modelBinData.data();
-    {
+    offset = dataPtr - modelBinData.data(); {
         ZoneScopedN("ParseSkeletalData");
         readArray(loadJob->rawData.inverseBindMatrices, header->inverseBindMatrixCount);
-    }
-
-    {
+    } {
         ZoneScopedN("CreateSamplers");
         std::vector<VkSamplerCreateInfo> samplerInfos{};
         readArray(samplerInfos, header->samplerCount);
@@ -664,9 +650,7 @@ void WillModelLoadJob::LoadModelTask::ExecuteRange(enki::TaskSetPartition range,
         }
     }
 
-    std::vector<uint32_t> preferredImageFormats;
-    readArray(preferredImageFormats, header->textureCount);
-
+    //
     {
         ZoneScopedN("LoadTextures");
         for (int i = 0; i < header->textureCount; ++i) {
@@ -679,29 +663,23 @@ void WillModelLoadJob::LoadModelTask::ExecuteRange(enki::TaskSetPartition range,
                 continue;
             }
 
-            std::vector<uint8_t> ktxData;
-            {
-                ZoneScopedN("ReadKTXFile");
-                ktxData = reader.ReadFile(textureName);
-            }
-
             ktxTexture2* loadedTexture = nullptr;
             ktx_error_code_e result;
+            std::vector<uint8_t> ktxData;
 
+            //
             {
-                ZoneScopedN("KTXCreateFromMemory");
-                result = ktxTexture2_CreateFromMemory(ktxData.data(), ktxData.size(), KTX_TEXTURE_CREATE_NO_FLAGS, &loadedTexture);
-            }
-
-            if (ktxTexture2_NeedsTranscoding(loadedTexture)) {
-                ZoneScopedN("KTXTranscode");
-                const ktx_transcode_fmt_e targetFormat = static_cast<ktx_transcode_fmt_e>(preferredImageFormats[i]);
-                result = ktxTexture2_TranscodeBasis(loadedTexture, targetFormat, 0);
-                if (result != KTX_SUCCESS) {
-                    SPDLOG_ERROR("Failed to transcode texture {}", textureName);
-                    loadJob->pendingTextures.push_back(nullptr);
-                    ktxTexture2_Destroy(loadedTexture);
-                    continue;
+                ZoneScopedN("CreateKtxTexture")
+                //
+                {
+                    // todo: optimize this to be much faster. Supposedly mmap can help here?
+                    ZoneScopedN("ReadKTXFile");
+                    ktxData = reader.ReadFile(textureName);
+                }
+                //
+                {
+                    ZoneScopedN("KTXCreateFromMemory");
+                    result = ktxTexture2_CreateFromMemory(ktxData.data(), ktxData.size(), KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, &loadedTexture);
                 }
             }
 

@@ -920,6 +920,39 @@ bool AssetGenerator::WriteWillModel(RawGltfModel& rawModel, const std::filesyste
     constexpr float textureProgressTotal = 30.0f;
     const float progressPerTexture = rawModel.images.empty() ? 0.0f : textureProgressTotal / static_cast<float>(rawModel.images.size());
 
+    std::vector<ktx_transcode_fmt_e> preferredImageFormats;
+    preferredImageFormats.resize(rawModel.images.size(), KTX_TTF_BC7_RGBA);
+
+    for (const auto& material : rawModel.materials) {
+        // Color/emissive textures -> BC7 SRGB
+        if (material.textureImageIndices.x >= 0) {
+            preferredImageFormats[material.textureImageIndices.x] = KTX_TTF_BC7_RGBA;
+        }
+        if (material.textureImageIndices.w >= 0) {
+            preferredImageFormats[material.textureImageIndices.w] = KTX_TTF_BC7_RGBA;
+        }
+
+        // Normal map -> BC5
+        if (material.textureImageIndices.z >= 0) {
+            preferredImageFormats[material.textureImageIndices.z] = KTX_TTF_BC5_RG;
+        }
+
+        // Metallic-roughness -> BC7 (linear)
+        if (material.textureImageIndices.y >= 0) {
+            preferredImageFormats[material.textureImageIndices.y] = KTX_TTF_BC7_RGBA;
+        }
+
+        // Occlusion -> BC4
+        if (material.textureImageIndices2.x >= 0) {
+            preferredImageFormats[material.textureImageIndices2.x] = KTX_TTF_BC4_R;
+        }
+
+        // Packed NRM (if used) -> BC7
+        if (material.textureImageIndices2.y >= 0) {
+            preferredImageFormats[material.textureImageIndices2.y] = KTX_TTF_BC7_RGBA;
+        }
+    }
+
     for (size_t i = 0; i < rawModel.images.size(); i++) {
         ZoneScopedN("ProcessTexture");
         auto& image = rawModel.images[i];
@@ -1092,16 +1125,14 @@ bool AssetGenerator::WriteWillModel(RawGltfModel& rawModel, const std::filesyste
         std::string ktxPath = "temp/texture_" + std::to_string(i) + ".ktx2";
         //
         {
-            ZoneScopedN("CompressUASTC");
-
-            ktxBasisParams params{};
-            params.structSize = sizeof(params);
-            params.uastc = KTX_TRUE;
-            // params.uastcRDO = KTX_TRUE;
-            params.qualityLevel = 16;
-            params.verbose = KTX_FALSE;
-
-            result = ktxTexture2_CompressBasisEx(texture, &params);
+            // todo: this is slow and unnecessary. Need dedicated libraries to convert from rgba8 unorm to target format.
+            ZoneScopedN("CompressUASTCTranscodeBC");
+            // ktxBasisParams params = {};
+            // params.structSize = sizeof(params);
+            // params.uastc = KTX_TRUE;
+            // params.uastcFlags = KTX_PACK_UASTC_LEVEL_DEFAULT;
+            // ktxTexture2_CompressBasisEx(texture, &params);
+            // ktxTexture2_TranscodeBasis(texture, preferredImageFormats[i], 0);
         }
         //
         {
@@ -1218,41 +1249,6 @@ void WriteModelBinary(std::ofstream& file, const RawGltfModel& model)
 
     WriteVector(file, model.inverseBindMatrices);
     WriteVector(file, model.samplerInfos);
-
-    std::vector<uint32_t> preferredImageFormats;
-    preferredImageFormats.resize(model.images.size(), KTX_TTF_BC7_RGBA);
-
-    for (const auto& material : model.materials) {
-        // Color/emissive textures -> BC7 SRGB
-        if (material.textureImageIndices.x >= 0) {
-            preferredImageFormats[material.textureImageIndices.x] = KTX_TTF_BC7_RGBA;
-        }
-        if (material.textureImageIndices.w >= 0) {
-            preferredImageFormats[material.textureImageIndices.w] = KTX_TTF_BC7_RGBA;
-        }
-
-        // Normal map -> BC5
-        if (material.textureImageIndices.z >= 0) {
-            preferredImageFormats[material.textureImageIndices.z] = KTX_TTF_BC5_RG;
-        }
-
-        // Metallic-roughness -> BC7 (linear)
-        if (material.textureImageIndices.y >= 0) {
-            preferredImageFormats[material.textureImageIndices.y] = KTX_TTF_BC7_RGBA;
-        }
-
-        // Occlusion -> BC4
-        if (material.textureImageIndices2.x >= 0) {
-            preferredImageFormats[material.textureImageIndices2.x] = KTX_TTF_BC4_R;
-        }
-
-        // Packed NRM (if used) -> BC7
-        if (material.textureImageIndices2.y >= 0) {
-            preferredImageFormats[material.textureImageIndices2.y] = KTX_TTF_BC7_RGBA;
-        }
-    }
-
-    WriteVector(file, preferredImageFormats);
 }
 
 VkFilter AssetGenerator::ExtractFilter(fastgltf::Filter filter)
