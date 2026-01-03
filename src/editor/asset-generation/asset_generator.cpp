@@ -42,7 +42,6 @@ AssetGenerator::AssetGenerator(VulkanContext* context, enki::TaskScheduler* task
 
 AssetGenerator::~AssetGenerator()
 {
-    taskscheduler->WaitforTask(&generateTask);
     vkDestroyCommandPool(context->device, immediateParameters.immCommandPool, nullptr);
     vkDestroyFence(context->device, immediateParameters.immFence, nullptr);
 }
@@ -270,6 +269,11 @@ GenerateResponse AssetGenerator::GenerateKtxTexture(const std::filesystem::path&
 
     SPDLOG_INFO("[AssetGenerator::GenerateKtxTexture] Wrote {}", outputPath.string());
     return GenerateResponse::FINISHED;
+}
+
+void AssetGenerator::Join()
+{
+    taskscheduler->WaitforTask(&generateTask);
 }
 
 RawGltfModel AssetGenerator::LoadGltf(const std::filesystem::path& source)

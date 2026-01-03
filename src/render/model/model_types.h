@@ -45,9 +45,9 @@ struct Node
 
     uint32_t inverseBindIndex{~0u};
 
-    glm::vec3 localTranslation{};
-    glm::quat localRotation{};
-    glm::vec3 localScale{};
+    glm::vec3 localTranslation{0.0f};
+    glm::quat localRotation{1.0f, 0.0f, 0.0f, 0.0f};
+    glm::vec3 localScale{1.0f};
 };
 
 struct AnimationSampler

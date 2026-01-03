@@ -64,6 +64,8 @@ public:
 
     GenerateResponse GenerateKtxTexture(const std::filesystem::path& imageSource, const std::filesystem::path& outputPath, bool mipmapped);
 
+    void Join();
+
 private:
     struct GenerateTask : enki::ITaskSet
     {

@@ -428,6 +428,12 @@ void WillEngine::DrawImgui()
             Platform::GetAssetPath() / "sponza2/sponza.glb"
         );
     }
+    if (ImGui::Button("Generate BoxTextured_willmodel.glb from BoxTextured.glb")) {
+        Editor::ModelGenerator::ProcessModelsWithMeshlet(
+            Platform::GetAssetPath() / "BoxTextured.glb",
+            Platform::GetAssetPath() / "BoxTextured_willmodel.glb"
+        );
+    }
     if (ImGui::Button("Generate BoxTextured.willmodel from BoxTextured.glb")) {
         generateModel(
             Platform::GetAssetPath() / "BoxTextured.glb",
@@ -483,6 +489,11 @@ void WillEngine::Cleanup()
 {
     assetLoadThread->Join();
     renderThread->Join();
+
+#if WILL_EDITOR
+    modelGenerator->Join();
+#endif
+    scheduler->ShutdownNow();
 
     gameFunctions.gameUnload(engineContext.get(), gameState.get());
     gameFunctions.gameShutdown(engineContext.get(), gameState.get());

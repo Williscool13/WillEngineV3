@@ -170,7 +170,7 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
     if (state->inputFrame->GetKey(Key::F1).pressed) {
         if (!dragonHandle.IsValid()) {
             dragonHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "dragon/dragon.glb");
-            // boxHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "BoxTextured.willmodel");
+            boxHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "BoxTextured_willmodel.glb");
             sponzaHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "sponza2/sponza.glb");
         }
     }

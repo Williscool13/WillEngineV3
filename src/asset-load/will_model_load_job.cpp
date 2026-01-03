@@ -659,7 +659,7 @@ void WillModelLoadJob::LoadModelTask::ExecuteRange(enki::TaskSetPartition range,
         return;
     }
 
-      //
+    //
     {
         ZoneScopedN("ParseMaterials");
         loadJob->rawData.materials.reserve(model.materials.size());
@@ -812,7 +812,182 @@ void WillModelLoadJob::LoadModelTask::ExecuteRange(enki::TaskSetPartition range,
                     loadJob->rawData.vertices[vertexStart + i].texcoordV = 0.0f;
                 }
 
-                // TODO: Parse normals, UVs, tangents, colors, joints, weights
+                // NORMALS
+                auto normalIt = primitive.attributes.find("NORMAL");
+                if (normalIt != primitive.attributes.end()) {
+                    const auto& normalAccessor = model.accessors[normalIt->second];
+                    const auto& normalBufferView = model.bufferViews[normalAccessor.bufferView];
+                    const auto& normalBuffer = model.buffers[normalBufferView.buffer];
+
+                    const float* normalData = reinterpret_cast<const float*>(
+                        normalBuffer.data.data() + normalBufferView.byteOffset + normalAccessor.byteOffset
+                    );
+
+                    for (size_t i = 0; i < normalAccessor.count; ++i) {
+                        loadJob->rawData.vertices[vertexStart + i].normal = glm::vec3(
+                            normalData[i * 3], normalData[i * 3 + 1], normalData[i * 3 + 2]
+                        );
+                    }
+                }
+
+                // TANGENTS
+                auto tangentIt = primitive.attributes.find("TANGENT");
+                if (tangentIt != primitive.attributes.end()) {
+                    const auto& tangentAccessor = model.accessors[tangentIt->second];
+                    const auto& tangentBufferView = model.bufferViews[tangentAccessor.bufferView];
+                    const auto& tangentBuffer = model.buffers[tangentBufferView.buffer];
+
+                    const float* tangentData = reinterpret_cast<const float*>(
+                        tangentBuffer.data.data() + tangentBufferView.byteOffset + tangentAccessor.byteOffset
+                    );
+
+                    for (size_t i = 0; i < tangentAccessor.count; ++i) {
+                        loadJob->rawData.vertices[vertexStart + i].tangent = glm::vec4(
+                            tangentData[i * 4], tangentData[i * 4 + 1], tangentData[i * 4 + 2], tangentData[i * 4 + 3]
+                        );
+                    }
+                }
+
+                // JOINTS_0
+                bool hasJoints = false;
+                auto jointsIt = primitive.attributes.find("JOINTS_0");
+                if (jointsIt != primitive.attributes.end()) {
+                    const auto& jointsAccessor = model.accessors[jointsIt->second];
+                    const auto& jointsBufferView = model.bufferViews[jointsAccessor.bufferView];
+                    const auto& jointsBuffer = model.buffers[jointsBufferView.buffer];
+
+                    const uint8_t* jointsData = jointsBuffer.data.data() + jointsBufferView.byteOffset + jointsAccessor.byteOffset;
+
+                    for (size_t i = 0; i < jointsAccessor.count; ++i) {
+                        if (jointsAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT) {
+                            const uint16_t* joints = reinterpret_cast<const uint16_t*>(jointsData) + i * 4;
+                            loadJob->rawData.vertices[vertexStart + i].joints = glm::uvec4(joints[0], joints[1], joints[2], joints[3]);
+                        }
+                        else if (jointsAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE) {
+                            loadJob->rawData.vertices[vertexStart + i].joints = glm::uvec4(
+                                jointsData[i * 4], jointsData[i * 4 + 1], jointsData[i * 4 + 2], jointsData[i * 4 + 3]
+                            );
+                        }
+                    }
+                    hasJoints = true;
+                }
+
+                // WEIGHTS_0
+                bool hasWeights = false;
+                auto weightsIt = primitive.attributes.find("WEIGHTS_0");
+                if (weightsIt != primitive.attributes.end()) {
+                    const auto& weightsAccessor = model.accessors[weightsIt->second];
+                    const auto& weightsBufferView = model.bufferViews[weightsAccessor.bufferView];
+                    const auto& weightsBuffer = model.buffers[weightsBufferView.buffer];
+
+                    const float* weightsData = reinterpret_cast<const float*>(
+                        weightsBuffer.data.data() + weightsBufferView.byteOffset + weightsAccessor.byteOffset
+                    );
+
+                    for (size_t i = 0; i < weightsAccessor.count; ++i) {
+                        loadJob->rawData.vertices[vertexStart + i].weights = glm::vec4(
+                            weightsData[i * 4], weightsData[i * 4 + 1], weightsData[i * 4 + 2], weightsData[i * 4 + 3]
+                        );
+                    }
+                    hasWeights = true;
+                }
+
+                static bool hasSkinned = false;
+                static bool hasStatic = false;
+                if (hasJoints && hasWeights) {
+                    hasSkinned = true;
+                }
+                else {
+                    hasStatic = true;
+                }
+
+                if (hasSkinned && hasStatic) {
+                    SPDLOG_ERROR("Model contains mixed skinned and static meshes. Split into separate files.");
+                    loadJob->taskState = TaskState::Failed;
+                    return;
+                }
+
+                // TEXCOORD_0 (UV)
+                auto uvIt = primitive.attributes.find("TEXCOORD_0");
+                if (uvIt != primitive.attributes.end()) {
+                    const auto& uvAccessor = model.accessors[uvIt->second];
+                    const auto& uvBufferView = model.bufferViews[uvAccessor.bufferView];
+                    const auto& uvBuffer = model.buffers[uvBufferView.buffer];
+
+                    const uint8_t* uvData = uvBuffer.data.data() + uvBufferView.byteOffset + uvAccessor.byteOffset;
+
+                    for (size_t i = 0; i < uvAccessor.count; ++i) {
+                        float u = 0.0f, v = 0.0f;
+
+                        switch (uvAccessor.componentType) {
+                            case TINYGLTF_COMPONENT_TYPE_BYTE:
+                            {
+                                const int8_t* uv = reinterpret_cast<const int8_t*>(uvData) + i * 2;
+                                u = std::max(static_cast<float>(uv[0]) / 127.0f, -1.0f);
+                                v = std::max(static_cast<float>(uv[1]) / 127.0f, -1.0f);
+                                break;
+                            }
+                            case TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE:
+                            {
+                                u = static_cast<float>(uvData[i * 2]) / 255.0f;
+                                v = static_cast<float>(uvData[i * 2 + 1]) / 255.0f;
+                                break;
+                            }
+                            case TINYGLTF_COMPONENT_TYPE_SHORT:
+                            {
+                                const int16_t* uv = reinterpret_cast<const int16_t*>(uvData) + i * 2;
+                                u = std::max(static_cast<float>(uv[0]) / 32767.0f, -1.0f);
+                                v = std::max(static_cast<float>(uv[1]) / 32767.0f, -1.0f);
+                                break;
+                            }
+                            case TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT:
+                            {
+                                const uint16_t* uv = reinterpret_cast<const uint16_t*>(uvData) + i * 2;
+                                u = static_cast<float>(uv[0]) / 65535.0f;
+                                v = static_cast<float>(uv[1]) / 65535.0f;
+                                break;
+                            }
+                            case TINYGLTF_COMPONENT_TYPE_FLOAT:
+                            {
+                                const float* uv = reinterpret_cast<const float*>(uvData) + i * 2;
+                                u = uv[0];
+                                v = uv[1];
+                                break;
+                            }
+                            default:
+                                SPDLOG_WARN("Unsupported UV component type: {}", uvAccessor.componentType);
+                                break;
+                        }
+
+                        loadJob->rawData.vertices[vertexStart + i].texcoordU = u;
+                        loadJob->rawData.vertices[vertexStart + i].texcoordV = v;
+                    }
+                }
+
+                // COLOR_0 (Vertex Color)
+                auto colorIt = primitive.attributes.find("COLOR_0");
+                if (colorIt != primitive.attributes.end()) {
+                    const auto& colorAccessor = model.accessors[colorIt->second];
+                    const auto& colorBufferView = model.bufferViews[colorAccessor.bufferView];
+                    const auto& colorBuffer = model.buffers[colorBufferView.buffer];
+
+                    const float* colorData = reinterpret_cast<const float*>(
+                        colorBuffer.data.data() + colorBufferView.byteOffset + colorAccessor.byteOffset
+                    );
+
+                    for (size_t i = 0; i < colorAccessor.count; ++i) {
+                        if (colorAccessor.type == TINYGLTF_TYPE_VEC4) {
+                            loadJob->rawData.vertices[vertexStart + i].color = glm::vec4(
+                                colorData[i * 4], colorData[i * 4 + 1], colorData[i * 4 + 2], colorData[i * 4 + 3]
+                            );
+                        }
+                        else if (colorAccessor.type == TINYGLTF_TYPE_VEC3) {
+                            loadJob->rawData.vertices[vertexStart + i].color = glm::vec4(
+                                colorData[i * 3], colorData[i * 3 + 1], colorData[i * 3 + 2], 1.0f
+                            );
+                        }
+                    }
+                }
 
                 primData.boundingSphere = GenerateBoundingSphere(std::span(loadJob->rawData.vertices.data() + vertexStart, loadJob->rawData.vertices.size() - vertexStart));
 
