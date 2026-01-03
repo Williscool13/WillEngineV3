@@ -4,9 +4,12 @@
 
 #ifndef WILL_ENGINE_WILL_MODEL_LOAD_JOB_H
 #define WILL_ENGINE_WILL_MODEL_LOAD_JOB_H
+#include <span>
+
 #include "asset_load_job.h"
 #include "asset_load_types.h"
 #include "ktx.h"
+#include "tiny_gltf.h"
 #include "engine/asset_manager_types.h"
 
 namespace enki
@@ -54,6 +57,10 @@ public:
 
     void Reset() override;
 
+    static glm::vec4 GenerateBoundingSphere(std::span<Vertex> vertices);
+
+    static glm::vec4 GenerateBoundingSphere(std::span<SkinnedVertex> vertices);
+
     Engine::WillModelHandle willModelHandle{Engine::WillModelHandle::INVALID};
     Render::WillModel* outputModel{nullptr};
 
@@ -68,6 +75,34 @@ private:
 
         void ExecuteRange(enki::TaskSetPartition range, uint32_t threadnum) override;
     };
+
+    static bool StubLoadImageData(tinygltf::Image* image,
+                       const int image_idx,
+                       std::string* err,
+                       std::string* warn,
+                       int req_width,
+                       int req_height,
+                       const unsigned char* bytes,
+                       int size,
+                       void* user_data)
+    {
+        return true;
+    }
+
+    static bool StubWriteImageData(const std::string* basepath,
+                        const std::string* filename,
+                        const tinygltf::Image* image,
+                        bool embedImages,
+                        const tinygltf::FsCallbacks* fs_cb,
+                        const tinygltf::URICallbacks* uri_cb,
+                        std::string* out_uri,
+                        void* user_data)
+    {
+        if (out_uri) {
+            *out_uri = *filename;
+        }
+        return true;
+    }
 
     Render::VulkanContext* context{nullptr};
     Render::ResourceManager* resourceManager{nullptr};

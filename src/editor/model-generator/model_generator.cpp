@@ -10,18 +10,25 @@
 
 #include "render/shaders/constants_interop.h"
 #include "render/shaders/model_interop.h"
+#include "spdlog/spdlog.h"
 #include "tinygltf/tiny_gltf.h"
 
 
 namespace Editor
 {
-MeshletBuildResult ModelGenerator::BuildMeshlets(std::vector<glm::vec3> vertices, std::vector<uint32_t> indices)
+void ModelGenerator::BuildMeshlets(const std::vector<glm::vec3>& vertices,
+                                   const std::vector<uint32_t>& indices,
+                                   std::vector<Meshlet>& outMeshlets,
+                                   std::vector<uint32_t>& outMeshletVertices,
+                                   std::vector<uint8_t>& outMeshletTriangles)
 {
     ZoneScopedN("BuildMeshlets");
     size_t maxMeshlets = meshopt_buildMeshletsBound(indices.size(), MESHLET_MAX_VERTICES, MESHLET_MAX_TRIANGLES);
     std::vector<meshopt_Meshlet> meshlets(maxMeshlets);
-    std::vector<unsigned int> meshletVertices(vertices.size() * 3);
-    std::vector<unsigned char> meshletTriangles(indices.size());
+
+    outMeshletVertices.resize(indices.size());
+    outMeshletTriangles.resize(indices.size());
+
 
     // meshopt_optimizeVertexCache(indices, ...);
     // meshopt_optimizeVertexFetch(vertices, indices);
@@ -30,7 +37,7 @@ MeshletBuildResult ModelGenerator::BuildMeshlets(std::vector<glm::vec3> vertices
     {
         ZoneScopedN("Building");
         std::vector<uint32_t> primitiveVertexPositions;
-        meshlets.resize(meshopt_buildMeshlets(&meshlets[0], &meshletVertices[0], &meshletTriangles[0],
+        meshlets.resize(meshopt_buildMeshlets(&meshlets[0], &outMeshletVertices[0], &outMeshletTriangles[0],
                                               indices.data(), indices.size(),
                                               reinterpret_cast<const float*>(vertices.data()), vertices.size(), sizeof(glm::vec3),
                                               MESHLET_MAX_VERTICES, MESHLET_MAX_TRIANGLES, 0.f));
@@ -40,31 +47,30 @@ MeshletBuildResult ModelGenerator::BuildMeshlets(std::vector<glm::vec3> vertices
     {
         ZoneScopedN("Optimize");
         for (auto& meshlet : meshlets) {
-            meshopt_optimizeMeshlet(&meshletVertices[meshlet.vertex_offset], &meshletTriangles[meshlet.triangle_offset], meshlet.triangle_count, meshlet.vertex_count);
+            meshopt_optimizeMeshlet(&outMeshletVertices[meshlet.vertex_offset], &outMeshletTriangles[meshlet.triangle_offset], meshlet.triangle_count, meshlet.vertex_count);
         }
     }
 
     // Trim the meshlet data to minimize waste for meshletVertices/meshletTriangles
     const meshopt_Meshlet& last = meshlets.back();
-    meshletVertices.resize(last.vertex_offset + last.vertex_count);
-    meshletTriangles.resize(last.triangle_offset + last.triangle_count * 3);
+    outMeshletVertices.resize(last.vertex_offset + last.vertex_count);
+    outMeshletTriangles.resize(last.triangle_offset + last.triangle_count * 3);
 
-    std::vector<Meshlet> outputMeshlets{};
-    outputMeshlets.reserve(meshlets.size());
+    outMeshlets.reserve(meshlets.size());
     // Compute Meshlet Bounds
     {
         ZoneScopedN("ComputeBounds");
         for (meshopt_Meshlet& meshlet : meshlets) {
             meshopt_Bounds bounds = meshopt_computeMeshletBounds(
-                &meshletVertices[meshlet.vertex_offset],
-                &meshletTriangles[meshlet.triangle_offset],
+                &outMeshletVertices[meshlet.vertex_offset],
+                &outMeshletTriangles[meshlet.triangle_offset],
                 meshlet.triangle_count,
                 reinterpret_cast<const float*>(vertices.data()),
                 vertices.size(),
                 sizeof(glm::vec3)
             );
 
-            outputMeshlets.push_back({
+            outMeshlets.push_back({
                 .meshletBoundingSphere = glm::vec4(
                     bounds.center[0], bounds.center[1], bounds.center[2],
                     bounds.radius
@@ -73,100 +79,25 @@ MeshletBuildResult ModelGenerator::BuildMeshlets(std::vector<glm::vec3> vertices
                 .coneCutoff = bounds.cone_cutoff,
 
                 .coneAxis = glm::vec3(bounds.cone_axis[0], bounds.cone_axis[1], bounds.cone_axis[2]),
-                .vertexOffset = 0, // Engine needs to += w/ meshletOffset
+                .vertexOffset = 0,
 
-                .meshletVerticesOffset = meshlet.vertex_offset, // Engine needs to += w/ meshletVertexOffset
-                .meshletTriangleOffset = meshlet.triangle_offset, // Engine needs to += w/ meshletTriangleOffset
+                .meshletVertexOffset = meshlet.vertex_offset,
+                .meshletTriangleOffset = meshlet.triangle_offset,
                 .meshletVerticesCount = meshlet.vertex_count,
                 .meshletTriangleCount = meshlet.triangle_count,
             });
         }
     }
-
-    return {outputMeshlets, meshletVertices, meshletTriangles};
 }
 
-MeshletBufferIndices ModelGenerator::AddMeshletBuffers(std::filesystem::path output, cgltf_data* data, const std::vector<Meshlet>& meshlets, const std::vector<uint32_t>& meshletVerts,
-                                                       const std::vector<uint8_t>& meshletTris)
-{
-    /*const size_t meshletsSize = meshlets.size() * sizeof(meshopt_Meshlet);
-    const size_t vertSize = meshletVerts.size() * sizeof(uint32_t);
-    const size_t trisSize = meshletTris.size() * sizeof(uint8_t);
-
-    const size_t meshletsAligned = (meshletsSize + 3) & ~3;
-    const size_t vertAligned = (vertSize + 3) & ~3;
-    const size_t totalSize = meshletsAligned + vertAligned + trisSize;
-
-    // Allocate new buffer in data->buffers array
-    cgltf_buffer* oldBufferPtr = data->buffers;
-    data->buffers = static_cast<cgltf_buffer*>(realloc(data->buffers, (data->buffers_count + 1) * sizeof(cgltf_buffer)));
-
-    if (data->buffers != oldBufferPtr) {
-        for (cgltf_size i = 0; i < data->buffer_views_count; ++i) {
-            if (data->buffer_views[i].buffer != nullptr) {
-                ptrdiff_t offset = data->buffer_views[i].buffer - oldBufferPtr;
-                data->buffer_views[i].buffer = data->buffers + offset;
-            }
-        }
-    }
-
-    cgltf_size newBufferIdx = data->buffers_count;
-    data->buffers_count += 1;
-
-    cgltf_buffer* newBuffer = &data->buffers[newBufferIdx];
-    memset(newBuffer, 0, sizeof(cgltf_buffer));
-
-    newBuffer->size = totalSize;
-    newBuffer->data = malloc(totalSize);
-
-    std::filesystem::path binPath = std::move(output);
-    binPath.replace_extension(".meshlet.bin");
-
-    std::ofstream binFile(binPath, std::ios::binary);
-    binFile.write(reinterpret_cast<const char*>(meshlets.data()), meshletsSize);
-    binFile.write(reinterpret_cast<const char*>(meshletVerts.data()), vertSize);
-    binFile.write(reinterpret_cast<const char*>(meshletTris.data()), trisSize);
-    binFile.close();
-
-    newBuffer->size = totalSize;
-    std::string filename = binPath.filename().string();
-    newBuffer->uri = static_cast<char*>(malloc(filename.size() + 1));
-    memcpy(newBuffer->uri, filename.c_str(), filename.size() + 1);
-
-    /*memcpy(newBuffer->data, meshlets.data(), meshletsSize);
-    memcpy(static_cast<uint8_t*>(newBuffer->data) + meshletsAligned, meshletVerts.data(), vertSize);
-    memcpy(static_cast<uint8_t*>(newBuffer->data) + meshletsAligned + vertAligned, meshletTris.data(), trisSize);#1#
-
-    cgltf_size baseViewIdx = data->buffer_views_count;
-    /*data->buffer_views = static_cast<cgltf_buffer_view*>(realloc(data->buffer_views, (data->buffer_views_count + 3) * sizeof(cgltf_buffer_view)));
-
-    cgltf_buffer_view* meshletView = &data->buffer_views[data->buffer_views_count++];
-    memset(meshletView, 0, sizeof(cgltf_buffer_view));
-    meshletView->buffer = newBuffer;
-    meshletView->offset = 0;
-    meshletView->size = meshletsSize;
-
-    cgltf_buffer_view* vertView = &data->buffer_views[data->buffer_views_count++];
-    memset(vertView, 0, sizeof(cgltf_buffer_view));
-    vertView->buffer = newBuffer;
-    vertView->offset = meshletsAligned;
-    vertView->size = vertSize;
-
-    cgltf_buffer_view* triView = &data->buffer_views[data->buffer_views_count++];
-    memset(triView, 0, sizeof(cgltf_buffer_view));
-    triView->buffer = newBuffer;
-    triView->offset = meshletsAligned + vertAligned;
-    triView->size = trisSize;#1#*/
-
-    //return {baseViewIdx, baseViewIdx + 1, baseViewIdx + 2};
-    return {0, 1, 2};
-}
-
-bool ModelGenerator::ProcessModelsWithMeshlet(std::filesystem::path input, std::filesystem::path output)
+bool ModelGenerator::ProcessModelsWithMeshlet(const std::filesystem::path& input, const std::filesystem::path& output)
 {
     tinygltf::Model model;
     tinygltf::TinyGLTF loader;
+    loader.SetImageLoader(StubLoadImageData, nullptr);
+    loader.SetImageWriter(StubWriteImageData, nullptr);
     std::string err, warn;
+
 
     bool ret;
     if (input.extension() == ".gltf") {
@@ -180,77 +111,142 @@ bool ModelGenerator::ProcessModelsWithMeshlet(std::filesystem::path input, std::
         return false;
     }
 
-    return loader.WriteGltfSceneToFile(&model, output.string(), true, true, true, true);
 
-    /*std::vector<glm::vec3> positions;
+    std::vector<uint32_t> meshletVertexIndirectionBuffer;
+    std::vector<uint8_t> meshletTriangleBuffer;
+    std::vector<Meshlet> meshletBuffer;
+
+    std::vector<uint32_t> tempMeshletVertexIndirectionBuffer;
+    std::vector<uint8_t> tempMeshletTriangleBuffer;
+    std::vector<Meshlet> tempMeshletBuffer;
+
+    uint32_t vertexOffset{0};
+    std::vector<glm::vec3> positions;
     std::vector<uint32_t> indices;
-    for (cgltf_size meshIndex = 0; meshIndex < data->meshes_count; ++meshIndex) {
-        cgltf_mesh& mesh = data->meshes[meshIndex];
-
-        for (cgltf_size primIndex = 0; primIndex < mesh.primitives_count; ++primIndex) {
-            cgltf_primitive& primitive = mesh.primitives[primIndex];
-
-            // Find POSITION attribute
-            cgltf_accessor* posAccessor = nullptr;
-            for (cgltf_size i = 0; i < primitive.attributes_count; ++i) {
-                if (primitive.attributes[i].type == cgltf_attribute_type_position) {
-                    posAccessor = primitive.attributes[i].data;
-                    break;
-                }
-            }
-
-            if (posAccessor == nullptr) {
-                cgltf_free(data);
-                return false;
-            }
+    for (auto& mesh : model.meshes) {
+        for (auto& primitive : mesh.primitives) {
+            // Get position data
+            const tinygltf::Accessor& posAccessor = model.accessors[primitive.attributes.find("POSITION")->second];
+            const tinygltf::BufferView& posBufferView = model.bufferViews[posAccessor.bufferView];
+            const tinygltf::Buffer& posBuffer = model.buffers[posBufferView.buffer];
 
             positions.clear();
-            positions.resize(posAccessor->count);
+            positions.resize(posAccessor.count);
 
-            for (cgltf_size i = 0; i < posAccessor->count; ++i) {
-                float pos[3];
-                cgltf_accessor_read_float(posAccessor, i, pos, 3);
-                positions[i] = {pos[0], pos[1], pos[2]};
+            auto posData = reinterpret_cast<const float*>(posBuffer.data.data() + posBufferView.byteOffset + posAccessor.byteOffset);
+
+            for (size_t i = 0; i < posAccessor.count; ++i) {
+                positions[i] = glm::vec3(posData[i * 3], posData[i * 3 + 1], posData[i * 3 + 2]);
             }
 
-            cgltf_accessor* indexAccessor = primitive.indices;
+            const tinygltf::Accessor& indexAccessor = model.accessors[primitive.indices];
+            const tinygltf::BufferView& indexBufferView = model.bufferViews[indexAccessor.bufferView];
+            const tinygltf::Buffer& indexBuffer = model.buffers[indexBufferView.buffer];
+
             indices.clear();
-            indices.resize(indexAccessor->count);
+            indices.resize(indexAccessor.count);
 
-            for (cgltf_size i = 0; i < indexAccessor->count; ++i) {
-                indices[i] = static_cast<uint32_t>(cgltf_accessor_read_index(indexAccessor, i));
+            const uint8_t* indexData = indexBuffer.data.data() + indexBufferView.byteOffset + indexAccessor.byteOffset;
+
+            for (size_t i = 0; i < indexAccessor.count; ++i) {
+                if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT) {
+                    indices[i] = reinterpret_cast<const uint16_t*>(indexData)[i];
+                }
+                else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT) {
+                    indices[i] = reinterpret_cast<const uint32_t*>(indexData)[i];
+                }
+                else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE) {
+                    indices[i] = indexData[i];
+                }
             }
 
-            auto [meshlets, meshletVertices, meshletTriangles] = BuildMeshlets(positions, indices);
+            BuildMeshlets(positions, indices, tempMeshletBuffer, tempMeshletVertexIndirectionBuffer, tempMeshletTriangleBuffer);
 
-             auto [meshletBufferIdx, meshletVertexIdx, meshletTriangleIdx] = AddMeshletBuffers(output, data, meshlets, meshletVertices, meshletTriangles);
-            nlohmann::json j = {
-                {
-                    "willEngine_meshlets", {
-                        {"meshletView", 0}, //meshletBufferIdx},
-                        {"vertexView", 1}, //meshletVertexIdx},
-                        {"triangleView", 2}, //meshletTriangleIdx},
-                        {"meshletCount", meshlets.size()}
-                    }
-                }
-            };
+            uint32_t vertexIndirectionOffset = meshletVertexIndirectionBuffer.size();
+            uint32_t triangleOffset = meshletTriangleBuffer.size();
+            uint32_t meshletOffset = meshletBuffer.size();
 
-            std::string jsonStr = j.dump();
-            primitive.extras.data = static_cast<char*>(malloc(jsonStr.size() + 1));
-            memcpy(primitive.extras.data, jsonStr.c_str(), jsonStr.size() + 1);
+            uint32_t vertexIndirectionCount = tempMeshletVertexIndirectionBuffer.size();
+            uint32_t triangleCount = tempMeshletTriangleBuffer.size();
+            uint32_t meshletCount = tempMeshletBuffer.size();
+
+            for (Meshlet& meshlet : tempMeshletBuffer) {
+                meshlet.vertexOffset += vertexOffset;
+                meshlet.meshletTriangleOffset += meshletTriangleBuffer.size();
+                meshlet.meshletVertexOffset += meshletVertexIndirectionBuffer.size();
+            }
+            vertexOffset += positions.size();
+
+            meshletVertexIndirectionBuffer.insert(meshletVertexIndirectionBuffer.end(), tempMeshletVertexIndirectionBuffer.begin(), tempMeshletVertexIndirectionBuffer.end());
+            meshletTriangleBuffer.insert(meshletTriangleBuffer.end(), tempMeshletTriangleBuffer.begin(), tempMeshletTriangleBuffer.end());
+            meshletBuffer.insert(meshletBuffer.end(), tempMeshletBuffer.begin(), tempMeshletBuffer.end());
+
+            tinygltf::Value::Object extras;
+            extras["meshletOffset"] = tinygltf::Value(static_cast<int>(meshletOffset));
+            extras["meshletCount"] = tinygltf::Value(static_cast<int>(meshletCount));
+            extras["vertexIndirectionOffset"] = tinygltf::Value(static_cast<int>(vertexIndirectionOffset));
+            extras["vertexIndirectionCount"] = tinygltf::Value(static_cast<int>(vertexIndirectionCount));
+            extras["triangleOffset"] = tinygltf::Value(static_cast<int>(triangleOffset));
+            extras["triangleCount"] = tinygltf::Value(static_cast<int>(triangleCount));
+
+            primitive.extras = tinygltf::Value(extras);
+
+            tempMeshletBuffer.clear();
+            tempMeshletVertexIndirectionBuffer.clear();
+            tempMeshletTriangleBuffer.clear();
         }
     }
 
-    options.type = cgltf_file_type_glb;
-    result = cgltf_write_file(&options, output.string().c_str(), data);
-    cgltf_free(data);
-    //return result == cgltf_result_success;
 
-    result = cgltf_parse_file(&options, output.string().c_str(), &data);
-    if (result != cgltf_result_success) {
-        return false;
-    }
+    std::vector<uint8_t> meshletData;
 
-    return true;*/
+    size_t meshletBufferOffset = meshletData.size();
+    meshletData.insert(meshletData.end(),
+                       reinterpret_cast<uint8_t*>(meshletBuffer.data()),
+                       reinterpret_cast<uint8_t*>(meshletBuffer.data() + meshletBuffer.size()));
+
+    size_t vertexIndirectionBufferOffset = meshletData.size();
+    meshletData.insert(meshletData.end(),
+                       reinterpret_cast<uint8_t*>(meshletVertexIndirectionBuffer.data()),
+                       reinterpret_cast<uint8_t*>(meshletVertexIndirectionBuffer.data() + meshletVertexIndirectionBuffer.size()));
+
+    size_t triangleBufferOffset = meshletData.size();
+    meshletData.insert(meshletData.end(),
+                       meshletTriangleBuffer.begin(),
+                       meshletTriangleBuffer.end());
+
+    tinygltf::Buffer buffer;
+    buffer.data = std::move(meshletData);
+    auto bufferIndex = static_cast<int32_t>(model.buffers.size());
+    model.buffers.push_back(buffer);
+
+    tinygltf::BufferView meshletView;
+    meshletView.buffer = bufferIndex;
+    meshletView.byteOffset = meshletBufferOffset;
+    meshletView.byteLength = meshletBuffer.size() * sizeof(Meshlet);
+    auto meshletViewIndex = static_cast<int32_t>(model.bufferViews.size());
+    model.bufferViews.push_back(meshletView);
+
+    tinygltf::BufferView vertexIndirectionView;
+    vertexIndirectionView.buffer = bufferIndex;
+    vertexIndirectionView.byteOffset = vertexIndirectionBufferOffset;
+    vertexIndirectionView.byteLength = meshletVertexIndirectionBuffer.size() * sizeof(uint32_t);
+    auto vertexIndirectionViewIndex = static_cast<int32_t>(model.bufferViews.size());
+    model.bufferViews.push_back(vertexIndirectionView);
+
+    tinygltf::BufferView triangleView;
+    triangleView.buffer = bufferIndex;
+    triangleView.byteOffset = triangleBufferOffset;
+    triangleView.byteLength = meshletTriangleBuffer.size();
+    auto triangleViewIndex = static_cast<int32_t>(model.bufferViews.size());
+    model.bufferViews.push_back(triangleView);
+
+    tinygltf::Value::Object modelExtras;
+    modelExtras["meshletBufferView"] = tinygltf::Value(meshletViewIndex);
+    modelExtras["vertexIndirectionBufferView"] = tinygltf::Value(vertexIndirectionViewIndex);
+    modelExtras["triangleBufferView"] = tinygltf::Value(triangleViewIndex);
+    model.extras = tinygltf::Value(modelExtras);
+
+    return loader.WriteGltfSceneToFile(&model, output.string(), true, true, true, true);
 }
 } // Editor

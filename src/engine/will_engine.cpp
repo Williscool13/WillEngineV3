@@ -422,6 +422,12 @@ void WillEngine::DrawImgui()
             Platform::GetAssetPath() / "dragon/dragon.glb"
         );
     }
+    if (ImGui::Button("Generate sponza.glb from sponza.gltf")) {
+        Editor::ModelGenerator::ProcessModelsWithMeshlet(
+            Platform::GetAssetPath() / "sponza2/sponza.gltf",
+            Platform::GetAssetPath() / "sponza2/sponza.glb"
+        );
+    }
     if (ImGui::Button("Generate BoxTextured.willmodel from BoxTextured.glb")) {
         generateModel(
             Platform::GetAssetPath() / "BoxTextured.glb",

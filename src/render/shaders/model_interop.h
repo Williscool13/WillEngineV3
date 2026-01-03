@@ -74,7 +74,7 @@ SHADER_PUBLIC struct Meshlet
     SHADER_PUBLIC float3 coneAxis;
     SHADER_PUBLIC uint32_t vertexOffset;
 
-    SHADER_PUBLIC uint32_t meshletVerticesOffset;
+    SHADER_PUBLIC uint32_t meshletVertexOffset;
     SHADER_PUBLIC uint32_t meshletTriangleOffset;
     SHADER_PUBLIC uint32_t meshletVerticesCount;
     SHADER_PUBLIC uint32_t meshletTriangleCount;

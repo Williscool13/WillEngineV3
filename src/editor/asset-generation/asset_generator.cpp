@@ -687,7 +687,7 @@ RawGltfModel AssetGenerator::LoadGltf(const std::filesystem::path& source)
                         .coneAxis = glm::vec3(bounds.cone_axis[0], bounds.cone_axis[1], bounds.cone_axis[2]),
                         .vertexOffset = vertexOffset,
 
-                        .meshletVerticesOffset = meshletVertexOffset + meshlet.vertex_offset,
+                        .meshletVertexOffset = meshletVertexOffset + meshlet.vertex_offset,
                         .meshletTriangleOffset = meshletTrianglesOffset + meshlet.triangle_offset,
                         .meshletVerticesCount = meshlet.vertex_count,
                         .meshletTriangleCount = meshlet.triangle_count,
