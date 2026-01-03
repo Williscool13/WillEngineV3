@@ -31,6 +31,7 @@ static Engine::WillModelHandle sponzaHandle = Engine::WillModelHandle::INVALID;
 static Engine::TextureHandle textureHandle = Engine::TextureHandle::INVALID;
 static JPH::BodyID boxBodyID;
 static JPH::BodyID floorBodyID;
+static Engine::MaterialID boxMatID;
 
 void CreateBox(Core::EngineContext* ctx, Engine::GameState* state, glm::vec3 position)
 {
@@ -77,12 +78,12 @@ void CreateBox(Core::EngineContext* ctx, Engine::GameState* state, glm::vec3 pos
         else {
             material = materialManager.Get(materialManager.GetDefaultMaterial());
         }
-        // material.textureImageIndices.x = 3;
-        Engine::MaterialID matID = materialManager.GetOrCreate(material);
+        material.textureImageIndices.x = 3;
+        boxMatID = materialManager.GetOrCreate(material);
 
         renderable.primitives[i] = {
             .primitiveIndex = primitive.index,
-            .materialID = matID
+            .materialID = boxMatID
         };
     }
     renderable.primitiveCount = submesh.primitiveProperties.size();
@@ -139,8 +140,8 @@ entt::entity CreateStaticBox(Core::EngineContext* ctx, Engine::GameState* state,
         else {
             material = materialManager.Get(materialManager.GetDefaultMaterial());
         }
-        // material.textureImageIndices.x = AssetLoad::ERROR_IMAGE_BINDLESS_INDEX;
-        // material.textureSamplerIndices.x = AssetLoad::DEFAULT_SAMPLER_BINDLESS_INDEX;
+        material.textureImageIndices.x = AssetLoad::ERROR_IMAGE_BINDLESS_INDEX;
+        material.textureSamplerIndices.x = AssetLoad::DEFAULT_SAMPLER_BINDLESS_INDEX;
         Engine::MaterialID matID = materialManager.GetOrCreate(material);
 
         renderable.primitives[i] = {
@@ -389,6 +390,25 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         for (auto [entity, debugViewComponent] : view.each()) {
             debugViewComponent.debugIndex = (debugViewComponent.debugIndex == 6) ? 0 : 6;
         }
+    }
+
+    if (state->inputFrame->GetKey(Key::I).pressed) {
+        Engine::MaterialManager& materialManager = ctx->assetManager->GetMaterialManager();
+        MaterialProperties boxMat = materialManager.Get(boxMatID);
+        boxMat.textureImageIndices.x = 0;
+        materialManager.Update(boxMatID, boxMat);
+    }
+    if (state->inputFrame->GetKey(Key::O).pressed) {
+        Engine::MaterialManager& materialManager = ctx->assetManager->GetMaterialManager();
+        MaterialProperties boxMat = materialManager.Get(boxMatID);
+        boxMat.textureImageIndices.x--;
+        materialManager.Update(boxMatID, boxMat);
+    }
+    if (state->inputFrame->GetKey(Key::P).pressed) {
+        Engine::MaterialManager& materialManager = ctx->assetManager->GetMaterialManager();
+        MaterialProperties boxMat = materialManager.Get(boxMatID);
+        boxMat.textureImageIndices.x++;
+        materialManager.Update(boxMatID, boxMat);
     }
 }
 

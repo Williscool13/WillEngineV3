@@ -134,6 +134,29 @@ add_library(miniz STATIC
 )
 target_include_directories(miniz PUBLIC extern/miniz)
 
+# bc7enc_rdo ==================================
+add_library(bc7enc_rdo STATIC
+        extern/bc7enc_rdo/bc7enc.cpp
+        extern/bc7enc_rdo/bc7enc.h
+        extern/bc7enc_rdo/bc7decomp_ref.cpp
+        extern/bc7enc_rdo/bc7decomp.cpp
+        extern/bc7enc_rdo/bc7decomp.h
+        extern/bc7enc_rdo/rgbcx.cpp
+        extern/bc7enc_rdo/rgbcx.h
+        extern/bc7enc_rdo/rdo_bc_encoder.cpp
+        extern/bc7enc_rdo/rdo_bc_encoder.h
+        extern/bc7enc_rdo/ert.cpp
+        extern/bc7enc_rdo/ert.h
+        extern/bc7enc_rdo/utils.cpp
+        extern/bc7enc_rdo/utils.h
+        extern/bc7enc_rdo/dds_defs.h
+        extern/bc7enc_rdo/lodepng.cpp
+        extern/bc7enc_rdo/lodepng.h
+        extern/bc7enc_rdo/miniz.h
+)
+
+target_include_directories(bc7enc_rdo PUBLIC extern/bc7enc_rdo)
+
 # Tracy =======================================
 add_library(tracy SHARED
         extern/tracy/public/TracyClient.cpp

@@ -18,4 +18,5 @@ target_link_libraries(editor PUBLIC
         imgui
         enkiTS
         meshoptimizer
+        bc7enc_rdo
 )

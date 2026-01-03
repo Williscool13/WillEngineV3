@@ -13,6 +13,7 @@
 #include <meshoptimizer/src/meshoptimizer.h>
 
 #include "offsetAllocator.hpp"
+#include "bc7enc_rdo/rdo_bc_encoder.h"
 #include "render/model/model_format.h"
 #include "render/model/model_serialization.h"
 #include "render/shaders/constants_interop.h"
@@ -920,38 +921,42 @@ bool AssetGenerator::WriteWillModel(RawGltfModel& rawModel, const std::filesyste
     constexpr float textureProgressTotal = 30.0f;
     const float progressPerTexture = rawModel.images.empty() ? 0.0f : textureProgressTotal / static_cast<float>(rawModel.images.size());
 
-    std::vector<ktx_transcode_fmt_e> preferredImageFormats;
-    preferredImageFormats.resize(rawModel.images.size(), KTX_TTF_BC7_RGBA);
+    std::vector<DXGI_FORMAT> preferredImageFormats;
+    preferredImageFormats.resize(rawModel.images.size(), DXGI_FORMAT_BC7_UNORM);
 
     for (const auto& material : rawModel.materials) {
         // Color/emissive textures -> BC7 SRGB
         if (material.textureImageIndices.x >= 0) {
-            preferredImageFormats[material.textureImageIndices.x] = KTX_TTF_BC7_RGBA;
+            preferredImageFormats[material.textureImageIndices.x] = DXGI_FORMAT_BC7_UNORM;
         }
         if (material.textureImageIndices.w >= 0) {
-            preferredImageFormats[material.textureImageIndices.w] = KTX_TTF_BC7_RGBA;
+            preferredImageFormats[material.textureImageIndices.w] = DXGI_FORMAT_BC7_UNORM;
         }
 
         // Normal map -> BC5
         if (material.textureImageIndices.z >= 0) {
-            preferredImageFormats[material.textureImageIndices.z] = KTX_TTF_BC5_RG;
+            preferredImageFormats[material.textureImageIndices.z] = DXGI_FORMAT_BC5_UNORM;
         }
 
         // Metallic-roughness -> BC7 (linear)
         if (material.textureImageIndices.y >= 0) {
-            preferredImageFormats[material.textureImageIndices.y] = KTX_TTF_BC7_RGBA;
+            preferredImageFormats[material.textureImageIndices.y] = DXGI_FORMAT_BC7_UNORM;
         }
 
         // Occlusion -> BC4
         if (material.textureImageIndices2.x >= 0) {
-            preferredImageFormats[material.textureImageIndices2.x] = KTX_TTF_BC4_R;
+            preferredImageFormats[material.textureImageIndices2.x] = DXGI_FORMAT_BC4_UNORM;
         }
 
         // Packed NRM (if used) -> BC7
         if (material.textureImageIndices2.y >= 0) {
-            preferredImageFormats[material.textureImageIndices2.y] = KTX_TTF_BC7_RGBA;
+            preferredImageFormats[material.textureImageIndices2.y] = DXGI_FORMAT_BC7_UNORM;
         }
     }
+
+    rdo_bc::rdo_bc_params encodeParams;
+    encodeParams.m_bc7_uber_level = 4;
+    encodeParams.m_rdo_lambda = 0.0f;
 
     for (size_t i = 0; i < rawModel.images.size(); i++) {
         ZoneScopedN("ProcessTexture");
@@ -1040,31 +1045,7 @@ bool AssetGenerator::WriteWillModel(RawGltfModel& rawModel, const std::filesyste
             SPDLOG_TRACE("[ModelGenerator::WriteWillModel] Created mipmap chain for image {}", i);
         }
 
-        ktxTexture2* texture;
-        ktxTextureCreateInfo createInfo{};
-        createInfo.vkFormat = image.format;
-        createInfo.baseWidth = image.extent.width;
-        createInfo.baseHeight = image.extent.height;
-        createInfo.baseDepth = 1;
-        createInfo.numDimensions = 2;
-        createInfo.numLevels = mipLevels;
-        createInfo.numLayers = 1;
-        createInfo.numFaces = 1;
-        createInfo.isArray = KTX_FALSE;
-        createInfo.generateMipmaps = KTX_FALSE;
-
-        ktx_error_code_e result;
-        //
-        {
-            ZoneScopedN("KTXCreate");
-            result = ktxTexture2_Create(&createInfo, KTX_TEXTURE_CREATE_ALLOC_STORAGE, &texture);
-        }
-
-        if (result) {
-            SPDLOG_ERROR("[ModelGenerator::WriteWillModel] Failed to create ktx texture for texture ", i);
-            return false;
-        }
-
+        std::vector<std::vector<uint8_t> > mipData(mipLevels);
         //
         {
             ZoneScopedN("CopyImageToCPU");
@@ -1075,7 +1056,7 @@ bool AssetGenerator::WriteWillModel(RawGltfModel& rawModel, const std::filesyste
             std::vector<VkBufferImageCopy> copyRegions;
             copyRegions.reserve(mipLevels);
             size_t bufferOffset = 0;
-            uint32_t bytesPerPixel = VkHelpers::GetBytesPerPixel(image.format);
+            uint32_t bytesPerPixel = 4;
 
             for (uint32_t mip = 0; mip < mipLevels; mip++) {
                 uint32_t mipWidth = std::max(1u, image.extent.width >> mip);
@@ -1090,6 +1071,7 @@ bool AssetGenerator::WriteWillModel(RawGltfModel& rawModel, const std::filesyste
                 copyRegion.imageExtent = {mipWidth, mipHeight, 1};
 
                 copyRegions.push_back(copyRegion);
+                mipData[mip].resize(mipWidth * mipHeight * bytesPerPixel);
                 bufferOffset += mipWidth * mipHeight * bytesPerPixel;
             }
 
@@ -1103,37 +1085,86 @@ bool AssetGenerator::WriteWillModel(RawGltfModel& rawModel, const std::filesyste
             VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, immediateParameters.immFence));
             VK_CHECK(vkWaitForFences(context->device, 1, &immediateParameters.immFence, true, 1000000000));
             VK_CHECK(vkResetFences(context->device, 1, &immediateParameters.immFence));
-        }
 
-        //
-        {
-            ZoneScopedN("CopyToKTX");
-            size_t bufferOffset = 0;
+            // Copy from staging buffer to mipData vectors
+            size_t offset = 0;
             for (uint32_t mip = 0; mip < mipLevels; mip++) {
-                uint32_t mipWidth = std::max(1u, image.extent.width >> mip);
-                uint32_t mipHeight = std::max(1u, image.extent.height >> mip);
-                size_t mipSize = mipWidth * mipHeight * 4;
-
-                void* readbackData = static_cast<char*>(immediateParameters.imageReceivingBuffer.allocationInfo.pMappedData) + bufferOffset;
-                ktxTexture_SetImageFromMemory(ktxTexture(texture), mip, 0, 0, static_cast<const ktx_uint8_t*>(readbackData), mipSize);
-
-                bufferOffset += mipSize;
+                void* readbackData = static_cast<char*>(immediateParameters.imageReceivingBuffer.allocationInfo.pMappedData) + offset;
+                memcpy(mipData[mip].data(), readbackData, mipData[mip].size());
+                offset += mipData[mip].size();
             }
         }
 
+        ktxTexture2* texture;
+        VkFormat targetVkFormat;
 
-        std::string ktxPath = "temp/texture_" + std::to_string(i) + ".ktx2";
+        switch (preferredImageFormats[i]) {
+            case DXGI_FORMAT_BC7_UNORM: targetVkFormat = VK_FORMAT_BC7_UNORM_BLOCK;
+                break;
+            case DXGI_FORMAT_BC7_UNORM_SRGB: targetVkFormat = VK_FORMAT_BC7_SRGB_BLOCK;
+                break;
+            case DXGI_FORMAT_BC5_UNORM: targetVkFormat = VK_FORMAT_BC5_UNORM_BLOCK;
+                break;
+            case DXGI_FORMAT_BC4_UNORM: targetVkFormat = VK_FORMAT_BC4_UNORM_BLOCK;
+                break;
+            default: targetVkFormat = VK_FORMAT_BC7_UNORM_BLOCK;
+                break;
+        }
+
+        ktxTextureCreateInfo createInfo{};
+        createInfo.vkFormat = targetVkFormat;
+        createInfo.baseWidth = image.extent.width;
+        createInfo.baseHeight = image.extent.height;
+        createInfo.baseDepth = 1;
+        createInfo.numDimensions = 2;
+        createInfo.numLevels = mipLevels;
+        createInfo.numLayers = 1;
+        createInfo.numFaces = 1;
+        createInfo.isArray = KTX_FALSE;
+        createInfo.generateMipmaps = KTX_FALSE;
+
         //
         {
-            // todo: this is slow and unnecessary. Need dedicated libraries to convert from rgba8 unorm to target format.
-            ZoneScopedN("CompressUASTCTranscodeBC");
-            // ktxBasisParams params = {};
-            // params.structSize = sizeof(params);
-            // params.uastc = KTX_TRUE;
-            // params.uastcFlags = KTX_PACK_UASTC_LEVEL_DEFAULT;
-            // ktxTexture2_CompressBasisEx(texture, &params);
-            // ktxTexture2_TranscodeBasis(texture, preferredImageFormats[i], 0);
+            ZoneScopedN("KTXCreate");
+            ktx_error_code_e result = ktxTexture2_Create(&createInfo, KTX_TEXTURE_CREATE_ALLOC_STORAGE, &texture);
+            if (result != KTX_SUCCESS) {
+                SPDLOG_ERROR("[ModelGenerator::WriteWillModel] Failed to create ktx texture for texture {}", i);
+                return false;
+            }
         }
+
+        //
+        {
+            ZoneScopedN("EncodeBC");
+            encodeParams.m_dxgi_format = preferredImageFormats[i];
+
+            for (uint32_t mip = 0; mip < mipLevels; mip++) {
+                ZoneScopedN("EncodeMip");
+
+                uint32_t mipWidth = std::max(1u, image.extent.width >> mip);
+                uint32_t mipHeight = std::max(1u, image.extent.height >> mip);
+
+                utils::image_u8 srcImage(mipWidth, mipHeight);
+                const uint8_t* rgbaData = mipData[mip].data();
+                for (uint32_t y = 0; y < mipHeight; ++y) {
+                    for (uint32_t x = 0; x < mipWidth; ++x) {
+                        const uint8_t* pixel = &rgbaData[(y * mipWidth + x) * 4];
+                        srcImage(x, y).set(pixel[0], pixel[1], pixel[2], pixel[3]);
+                    }
+                }
+
+                rdo_bc::rdo_bc_encoder encoder;
+                encoder.init(srcImage, encodeParams);
+                encoder.encode();
+
+                const void* compressedBlocks = encoder.get_blocks();
+                uint32_t blocksSizeInBytes = encoder.get_total_blocks_size_in_bytes();
+
+                ktxTexture_SetImageFromMemory(ktxTexture(texture), mip, 0, 0, static_cast<const ktx_uint8_t*>(compressedBlocks), blocksSizeInBytes);
+            }
+        }
+
+        std::string ktxPath = "temp/texture_" + std::to_string(i) + ".ktx2";
         //
         {
             ZoneScopedN("WriteKTXFile");
