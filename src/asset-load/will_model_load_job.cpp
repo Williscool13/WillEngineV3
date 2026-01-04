@@ -672,7 +672,6 @@ void WillModelLoadJob::LoadModelTask::ExecuteRange(enki::TaskSetPartition range,
                 ZoneScopedN("CreateKtxTexture")
                 //
                 {
-                    // todo: optimize this to be much faster. Supposedly mmap can help here?
                     ZoneScopedN("ReadKTXFile");
                     ktxData = reader.ReadFile(textureName);
                 }
@@ -680,8 +679,15 @@ void WillModelLoadJob::LoadModelTask::ExecuteRange(enki::TaskSetPartition range,
                 {
                     ZoneScopedN("KTXCreateFromMemory");
                     result = ktxTexture2_CreateFromMemory(ktxData.data(), ktxData.size(), KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, &loadedTexture);
+                    if (result != KTX_SUCCESS) {
+                        SPDLOG_ERROR("[TextureLoadJob] Failed to load KTX texture: {}", textureName);
+                        loadJob->taskState = TaskState::Failed;
+                        return;
+                    }
                 }
             }
+
+            assert(!ktxTexture2_NeedsTranscoding(loadedTexture) && "This engine no longer supports UASTC/ETC1S compressed textures");
 
             // Size check
             ktx_size_t allocSize = loadedTexture->dataSize;

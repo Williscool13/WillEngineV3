@@ -8,6 +8,7 @@
 #include "asset_load_types.h"
 #include "ktxvulkan.h"
 #include "render/texture_asset.h"
+#include "tracy/Tracy.hpp"
 
 namespace AssetLoad
 {
@@ -90,6 +91,7 @@ bool TextureLoadJob::PreThreadExecute()
 
 ThreadState TextureLoadJob::ThreadExecute()
 {
+    ZoneScopedN("TextureLoadJob::ThreadExecute");
     OffsetAllocator::Allocator& stagingAllocator = uploadStaging->GetStagingAllocator();
     Render::AllocatedBuffer& stagingBuffer = uploadStaging->GetStagingBuffer();
 
@@ -116,6 +118,7 @@ ThreadState TextureLoadJob::ThreadExecute()
 
 
     for (; currentMip < texture->numLevels; currentMip++) {
+        ZoneScopedN("Upload Mip");
         size_t mipOffset;
         ktxTexture_GetImageOffset(ktxTexture(texture), currentMip, 0, 0, &mipOffset);
 
@@ -230,6 +233,7 @@ void TextureLoadJob::Reset()
 
 void TextureLoadJob::LoadTextureTask::ExecuteRange(enki::TaskSetPartition range, uint32_t threadnum)
 {
+    ZoneScopedN("LoadTextureTask::ExecuteRange");
     if (!loadJob) {
         return;
     }
@@ -248,28 +252,24 @@ void TextureLoadJob::LoadTextureTask::ExecuteRange(enki::TaskSetPartition range,
     }
 
     ktxTexture2* _texture;
-    ktx_error_code_e result = ktxTexture2_CreateFromNamedFile(
-        texturePath.string().c_str(),
-        KTX_TEXTURE_CREATE_NO_FLAGS,
-        &_texture
-    );
+    //
+    {
+        ZoneScopedN("KTXCreateFromMemory");
+        ktx_error_code_e result = ktxTexture2_CreateFromNamedFile(
+            texturePath.string().c_str(),
+            KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT,
+            &_texture
+        );
 
-    if (result != KTX_SUCCESS) {
-        SPDLOG_ERROR("[TextureLoadJob] Failed to load KTX texture: {}", texturePath.string());
-        loadJob->taskState = TaskState::Failed;
-        return;
-    }
-
-    if (ktxTexture2_NeedsTranscoding(_texture)) {
-        const ktx_transcode_fmt_e targetFormat = KTX_TTF_BC7_RGBA;
-        result = ktxTexture2_TranscodeBasis(_texture, targetFormat, 0);
         if (result != KTX_SUCCESS) {
-            SPDLOG_ERROR("[TextureLoadJob] Failed to transcode texture: {}", texturePath.string());
-            ktxTexture2_Destroy(_texture);
+            SPDLOG_ERROR("[TextureLoadJob] Failed to load KTX texture: {}", texturePath.string());
             loadJob->taskState = TaskState::Failed;
             return;
         }
     }
+
+
+    assert(!ktxTexture2_NeedsTranscoding(_texture) && "This engine no longer supports UASTC/ETC1S compressed textures");
 
     // Validate size
     if (_texture->dataSize >= TEXTURE_LOAD_STAGING_SIZE) {

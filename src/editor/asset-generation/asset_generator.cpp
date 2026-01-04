@@ -82,143 +82,168 @@ GenerateResponse AssetGenerator::GenerateWillModel(const std::filesystem::path& 
 
 GenerateResponse AssetGenerator::GenerateKtxTexture(const std::filesystem::path& imageSource, const std::filesystem::path& outputPath, bool mipmapped)
 {
-    int width, height, nrChannels;
-    stbi_uc* stbiData = stbi_load(imageSource.string().c_str(), &width, &height, &nrChannels, 4);
+    ZoneScopedN("GenerateKtxTexture");
 
-    if (!stbiData) {
-        SPDLOG_ERROR("[AssetGenerator::GenerateKtxTexture] Failed to load image: {}", imageSource.string());
-        return GenerateResponse::UNABLE_TO_START;
-    }
-
-    VkExtent3D imagesize = {static_cast<uint32_t>(width), static_cast<uint32_t>(height), 1};
-    const size_t size = width * height * 4;
-
-    OffsetAllocator::Allocation allocation = immediateParameters.imageStagingAllocator.allocate(size);
-    if (allocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
-        SPDLOG_ERROR("[AssetGenerator::GenerateKtxTexture] Texture too large for staging buffer");
-        stbi_image_free(stbiData);
-        return GenerateResponse::UNABLE_TO_START;
-    }
-
-    VkCommandBufferBeginInfo cmdBeginInfo = VkHelpers::CommandBufferBeginInfo();
-    VK_CHECK(vkBeginCommandBuffer(immediateParameters.immCommandBuffer, &cmdBeginInfo));
-
-    AllocatedImage image = RecordCreateImageFromData(
-        immediateParameters.immCommandBuffer,
-        allocation.offset,
-        stbiData,
-        size,
-        imagesize,
-        VK_FORMAT_R8G8B8A8_UNORM,
-        static_cast<VkImageUsageFlagBits>(VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT),
-        mipmapped
-    );
-
-    stbi_image_free(stbiData);
-
-    uint32_t mipLevels = mipmapped ? static_cast<uint32_t>(std::floor(std::log2(std::max(width, height)))) + 1 : 1;
-
-    if (mipmapped && mipLevels > 1) {
-        // Generate mipmaps via blitting
-        VkImageMemoryBarrier2 firstBarrier = VkHelpers::ImageMemoryBarrier(
-            image.handle,
-            VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1),
-            VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, image.layout,
-            VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
-        );
-        VkDependencyInfo depInfo{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO, .imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &firstBarrier};
-        vkCmdPipelineBarrier2(immediateParameters.immCommandBuffer, &depInfo);
-
-        for (uint32_t mip = 1; mip < mipLevels; mip++) {
-            VkImageMemoryBarrier2 barriers[2];
-            barriers[0] = VkHelpers::ImageMemoryBarrier(
-                image.handle,
-                VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, mip - 1, 1, 0, 1),
-                VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
-            );
-            barriers[1] = VkHelpers::ImageMemoryBarrier(
-                image.handle,
-                VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, mip, 1, 0, 1),
-                VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_UNDEFINED,
-                VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
-            );
-
-            depInfo.imageMemoryBarrierCount = 2;
-            depInfo.pImageMemoryBarriers = barriers;
-            vkCmdPipelineBarrier2(immediateParameters.immCommandBuffer, &depInfo);
-
-            VkImageBlit blit{};
-            blit.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, mip - 1, 0, 1};
-            blit.srcOffsets[0] = {0, 0, 0};
-            blit.srcOffsets[1] = {(width >> (mip - 1)), (height >> (mip - 1)), 1};
-            blit.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, mip, 0, 1};
-            blit.dstOffsets[0] = {0, 0, 0};
-            blit.dstOffsets[1] = {(width >> mip), (height >> mip), 1};
-
-            vkCmdBlitImage(immediateParameters.immCommandBuffer, image.handle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                           image.handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
+    stbi_uc* stbiData = nullptr;
+    int32_t width, height, nrChannels;
+    AllocatedImage image;
+    //
+    {
+        ZoneScopedN("LoadImage");
+        stbiData = stbi_load(imageSource.string().c_str(), &width, &height, &nrChannels, 4);
+        if (!stbiData) {
+            SPDLOG_ERROR("[AssetGenerator::GenerateKtxTexture] Failed to load image: {}", imageSource.string());
+            return GenerateResponse::UNABLE_TO_START;
         }
 
-        VkImageMemoryBarrier2 finalBarrier = VkHelpers::ImageMemoryBarrier(
-            image.handle,
-            VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, mipLevels, 0, 1),
-            VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
+        VkExtent3D imagesize = {static_cast<uint32_t>(width), static_cast<uint32_t>(height), 1};
+        const size_t size = width * height * 4;
+
+        OffsetAllocator::Allocation allocation = immediateParameters.imageStagingAllocator.allocate(size);
+        if (allocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
+            SPDLOG_ERROR("[AssetGenerator::GenerateKtxTexture] Texture too large for staging buffer");
+            stbi_image_free(stbiData);
+            return GenerateResponse::UNABLE_TO_START;
+        }
+
+        VkCommandBufferBeginInfo cmdBeginInfo = VkHelpers::CommandBufferBeginInfo();
+        VK_CHECK(vkBeginCommandBuffer(immediateParameters.immCommandBuffer, &cmdBeginInfo));
+
+        image = RecordCreateImageFromData(
+            immediateParameters.immCommandBuffer,
+            allocation.offset,
+            stbiData,
+            size,
+            imagesize,
+            VK_FORMAT_R8G8B8A8_UNORM,
+            static_cast<VkImageUsageFlagBits>(VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT),
+            mipmapped
         );
-        depInfo.imageMemoryBarrierCount = 1;
-        depInfo.pImageMemoryBarriers = &finalBarrier;
-        vkCmdPipelineBarrier2(immediateParameters.immCommandBuffer, &depInfo);
-        image.layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+
+        stbi_image_free(stbiData);
     }
-    else {
-        // Transition to transfer src for readback
-        VkImageMemoryBarrier2 barrier = VkHelpers::ImageMemoryBarrier(
-            image.handle,
-            VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1),
-            VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, image.layout,
-            VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
-        );
-        VkDependencyInfo depInfo{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO, .imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &barrier};
-        vkCmdPipelineBarrier2(immediateParameters.immCommandBuffer, &depInfo);
-        image.layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+
+    uint32_t mipLevels = mipmapped ? static_cast<uint32_t>(std::floor(std::log2(std::max(width, height)))) + 1 : 1;
+    //
+    {
+        ZoneScopedN("GenerateMipmaps");
+        if (mipmapped && mipLevels > 1) {
+            // Generate mipmaps via blitting
+            VkImageMemoryBarrier2 firstBarrier = VkHelpers::ImageMemoryBarrier(
+                image.handle,
+                VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1),
+                VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, image.layout,
+                VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
+            );
+            VkDependencyInfo depInfo{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO, .imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &firstBarrier};
+            vkCmdPipelineBarrier2(immediateParameters.immCommandBuffer, &depInfo);
+
+            for (uint32_t mip = 1; mip < mipLevels; mip++) {
+                VkImageMemoryBarrier2 barriers[2];
+                barriers[0] = VkHelpers::ImageMemoryBarrier(
+                    image.handle,
+                    VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, mip - 1, 1, 0, 1),
+                    VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
+                );
+                barriers[1] = VkHelpers::ImageMemoryBarrier(
+                    image.handle,
+                    VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, mip, 1, 0, 1),
+                    VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_UNDEFINED,
+                    VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
+                );
+
+                depInfo.imageMemoryBarrierCount = 2;
+                depInfo.pImageMemoryBarriers = barriers;
+                vkCmdPipelineBarrier2(immediateParameters.immCommandBuffer, &depInfo);
+
+                VkImageBlit blit{};
+                blit.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, mip - 1, 0, 1};
+                blit.srcOffsets[0] = {0, 0, 0};
+                blit.srcOffsets[1] = {(width >> (mip - 1)), (height >> (mip - 1)), 1};
+                blit.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, mip, 0, 1};
+                blit.dstOffsets[0] = {0, 0, 0};
+                blit.dstOffsets[1] = {(width >> mip), (height >> mip), 1};
+
+                vkCmdBlitImage(immediateParameters.immCommandBuffer, image.handle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                               image.handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
+            }
+
+            VkImageMemoryBarrier2 finalBarrier = VkHelpers::ImageMemoryBarrier(
+                image.handle,
+                VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, mipLevels, 0, 1),
+                VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
+            );
+            depInfo.imageMemoryBarrierCount = 1;
+            depInfo.pImageMemoryBarriers = &finalBarrier;
+            vkCmdPipelineBarrier2(immediateParameters.immCommandBuffer, &depInfo);
+            image.layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        }
+        else {
+            // Transition to transfer src for readback
+            VkImageMemoryBarrier2 barrier = VkHelpers::ImageMemoryBarrier(
+                image.handle,
+                VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1),
+                VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, image.layout,
+                VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
+            );
+            VkDependencyInfo depInfo{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO, .imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &barrier};
+            vkCmdPipelineBarrier2(immediateParameters.immCommandBuffer, &depInfo);
+            image.layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        }
     }
+
+    std::vector<std::vector<uint8_t> > mipData(mipLevels);
 
     // Copy image back to CPU
-    std::vector<VkBufferImageCopy> copyRegions;
-    copyRegions.reserve(mipLevels);
-    size_t bufferOffset = 0;
+    {
+        ZoneScopedN("CopyImageToCPU");
+        std::vector<VkBufferImageCopy> copyRegions;
+        copyRegions.reserve(mipLevels);
+        size_t bufferOffset = 0;
 
-    for (uint32_t mip = 0; mip < mipLevels; mip++) {
-        uint32_t mipWidth = std::max(1u, static_cast<uint32_t>(width) >> mip);
-        uint32_t mipHeight = std::max(1u, static_cast<uint32_t>(height) >> mip);
+        for (uint32_t mip = 0; mip < mipLevels; mip++) {
+            uint32_t mipWidth = std::max(1u, static_cast<uint32_t>(width) >> mip);
+            uint32_t mipHeight = std::max(1u, static_cast<uint32_t>(height) >> mip);
 
-        VkBufferImageCopy copyRegion{};
-        copyRegion.bufferOffset = bufferOffset;
-        copyRegion.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, mip, 0, 1};
-        copyRegion.imageExtent = {mipWidth, mipHeight, 1};
+            VkBufferImageCopy copyRegion{};
+            copyRegion.bufferOffset = bufferOffset;
+            copyRegion.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, mip, 0, 1};
+            copyRegion.imageExtent = {mipWidth, mipHeight, 1};
 
-        copyRegions.push_back(copyRegion);
-        bufferOffset += mipWidth * mipHeight * 4;
+            copyRegions.push_back(copyRegion);
+            mipData[mip].resize(mipWidth * mipHeight * 4);
+            bufferOffset += mipWidth * mipHeight * 4;
+        }
+
+        vkCmdCopyImageToBuffer(immediateParameters.immCommandBuffer, image.handle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                               immediateParameters.imageReceivingBuffer.handle, copyRegions.size(), copyRegions.data());
+
+        VK_CHECK(vkEndCommandBuffer(immediateParameters.immCommandBuffer));
+
+        VkCommandBufferSubmitInfo cmdSubmitInfo = VkHelpers::CommandBufferSubmitInfo(immediateParameters.immCommandBuffer);
+        VkSubmitInfo2 submitInfo = VkHelpers::SubmitInfo(&cmdSubmitInfo, nullptr, nullptr);
+        VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, immediateParameters.immFence));
+        VK_CHECK(vkWaitForFences(context->device, 1, &immediateParameters.immFence, true, 1000000000));
+        VK_CHECK(vkResetFences(context->device, 1, &immediateParameters.immFence));
+
+        size_t offset = 0;
+        for (uint32_t mip = 0; mip < mipLevels; mip++) {
+            void* readbackData = static_cast<char*>(immediateParameters.imageReceivingBuffer.allocationInfo.pMappedData) + offset;
+            memcpy(mipData[mip].data(), readbackData, mipData[mip].size());
+            offset += mipData[mip].size();
+        }
     }
 
-    vkCmdCopyImageToBuffer(immediateParameters.immCommandBuffer, image.handle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                           immediateParameters.imageReceivingBuffer.handle, copyRegions.size(), copyRegions.data());
 
-    VK_CHECK(vkEndCommandBuffer(immediateParameters.immCommandBuffer));
-
-    VkCommandBufferSubmitInfo cmdSubmitInfo = VkHelpers::CommandBufferSubmitInfo(immediateParameters.immCommandBuffer);
-    VkSubmitInfo2 submitInfo = VkHelpers::SubmitInfo(&cmdSubmitInfo, nullptr, nullptr);
-    VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, immediateParameters.immFence));
-    VK_CHECK(vkWaitForFences(context->device, 1, &immediateParameters.immFence, true, 1000000000));
-    VK_CHECK(vkResetFences(context->device, 1, &immediateParameters.immFence));
-
-    // Create KTX2 texture
     ktxTexture2* texture;
+    VkFormat targetVkFormat = VK_FORMAT_BC7_UNORM_BLOCK;
+
     ktxTextureCreateInfo createInfo{};
-    createInfo.vkFormat = VK_FORMAT_R8G8B8A8_UNORM;
-    createInfo.baseWidth = width;
-    createInfo.baseHeight = height;
+    createInfo.vkFormat = targetVkFormat;
+    createInfo.baseWidth = image.extent.width;
+    createInfo.baseHeight = image.extent.height;
     createInfo.baseDepth = 1;
     createInfo.numDimensions = 2;
     createInfo.numLevels = mipLevels;
@@ -227,48 +252,64 @@ GenerateResponse AssetGenerator::GenerateKtxTexture(const std::filesystem::path&
     createInfo.isArray = KTX_FALSE;
     createInfo.generateMipmaps = KTX_FALSE;
 
-    ktx_error_code_e result = ktxTexture2_Create(&createInfo, KTX_TEXTURE_CREATE_ALLOC_STORAGE, &texture);
-    if (result != KTX_SUCCESS) {
-        SPDLOG_ERROR("[AssetGenerator::GenerateKtxTexture] Failed to create KTX texture");
-        return GenerateResponse::UNABLE_TO_START;
+    //
+    {
+        ZoneScopedN("KTXCreate");
+        ktx_error_code_e result = ktxTexture2_Create(&createInfo, KTX_TEXTURE_CREATE_ALLOC_STORAGE, &texture);
+        if (result != KTX_SUCCESS) {
+            SPDLOG_ERROR("[ModelGenerator::WriteWillModel] Failed to create ktx texture for {}", outputPath.string());
+            return GenerateResponse::UNABLE_TO_START;
+        }
     }
 
-    // Copy mip data from readback buffer to KTX
-    bufferOffset = 0;
-    for (uint32_t mip = 0; mip < mipLevels; mip++) {
-        uint32_t mipWidth = std::max(1u, static_cast<uint32_t>(width) >> mip);
-        uint32_t mipHeight = std::max(1u, static_cast<uint32_t>(height) >> mip);
-        size_t mipSize = mipWidth * mipHeight * 4;
+    //
+    {
+        ZoneScopedN("EncodeBC");
+        rdo_bc::rdo_bc_params encodeParams;
+        encodeParams.m_bc7_uber_level = 4;
+        encodeParams.m_rdo_lambda = 0.0f;
+        encodeParams.m_dxgi_format = DXGI_FORMAT_BC7_UNORM;
 
-        void* readbackData = static_cast<char*>(immediateParameters.imageReceivingBuffer.allocationInfo.pMappedData) + bufferOffset;
-        ktxTexture_SetImageFromMemory(ktxTexture(texture), mip, 0, 0, static_cast<const ktx_uint8_t*>(readbackData), mipSize);
+        for (uint32_t mip = 0; mip < mipLevels; mip++) {
+            ZoneScopedN("EncodeMip");
 
-        bufferOffset += mipSize;
+            uint32_t mipWidth = std::max(1u, image.extent.width >> mip);
+            uint32_t mipHeight = std::max(1u, image.extent.height >> mip);
+
+            utils::image_u8 srcImage(mipWidth, mipHeight);
+            const uint8_t* rgbaData = mipData[mip].data();
+            for (uint32_t y = 0; y < mipHeight; ++y) {
+                for (uint32_t x = 0; x < mipWidth; ++x) {
+                    const uint8_t* pixel = &rgbaData[(y * mipWidth + x) * 4];
+                    srcImage(x, y).set(pixel[0], pixel[1], pixel[2], pixel[3]);
+                }
+            }
+
+            rdo_bc::rdo_bc_encoder encoder;
+            encoder.init(srcImage, encodeParams);
+            encoder.encode();
+
+            const void* compressedBlocks = encoder.get_blocks();
+            uint32_t blocksSizeInBytes = encoder.get_total_blocks_size_in_bytes();
+
+            ktxTexture_SetImageFromMemory(ktxTexture(texture), mip, 0, 0, static_cast<const ktx_uint8_t*>(compressedBlocks), blocksSizeInBytes);
+        }
     }
 
-    /*// Compress to UASTC
-    ktxBasisParams params{};
-    params.structSize = sizeof(params);
-    params.uastc = KTX_TRUE;
-    params.qualityLevel = 16;
-    params.verbose = KTX_FALSE;
-
-    result = ktxTexture2_CompressBasisEx(texture, &params);
-    if (result != KTX_SUCCESS) {
-        SPDLOG_ERROR("[AssetGenerator::GenerateKtxTexture] Failed to compress texture");
+    //
+    {
+        ZoneScopedN("WriteKTXFile");
+        ktx_error_code_e result = ktxTexture_WriteToNamedFile(ktxTexture(texture), outputPath.string().c_str());
         ktxTexture_Destroy(ktxTexture(texture));
-        return GenerateResponse::UNABLE_TO_START;
-    }*/
 
-    result = ktxTexture_WriteToNamedFile(ktxTexture(texture), outputPath.string().c_str());
-    ktxTexture_Destroy(ktxTexture(texture));
+        if (result != KTX_SUCCESS) {
+            SPDLOG_ERROR("[AssetGenerator::GenerateKtxTexture] Failed to write KTX file");
+            return GenerateResponse::UNABLE_TO_START;
+        }
 
-    if (result != KTX_SUCCESS) {
-        SPDLOG_ERROR("[AssetGenerator::GenerateKtxTexture] Failed to write KTX file");
-        return GenerateResponse::UNABLE_TO_START;
+        SPDLOG_INFO("[AssetGenerator::GenerateKtxTexture] Wrote {}", outputPath.string());
     }
 
-    SPDLOG_INFO("[AssetGenerator::GenerateKtxTexture] Wrote {}", outputPath.string());
     return GenerateResponse::FINISHED;
 }
 
@@ -954,10 +995,6 @@ bool AssetGenerator::WriteWillModel(RawGltfModel& rawModel, const std::filesyste
         }
     }
 
-    rdo_bc::rdo_bc_params encodeParams;
-    encodeParams.m_bc7_uber_level = 4;
-    encodeParams.m_rdo_lambda = 0.0f;
-
     for (size_t i = 0; i < rawModel.images.size(); i++) {
         ZoneScopedN("ProcessTexture");
         auto& image = rawModel.images[i];
@@ -1136,6 +1173,9 @@ bool AssetGenerator::WriteWillModel(RawGltfModel& rawModel, const std::filesyste
         //
         {
             ZoneScopedN("EncodeBC");
+            rdo_bc::rdo_bc_params encodeParams;
+            encodeParams.m_bc7_uber_level = 4;
+            encodeParams.m_rdo_lambda = 0.0f;
             encodeParams.m_dxgi_format = preferredImageFormats[i];
 
             for (uint32_t mip = 0; mip < mipLevels; mip++) {
