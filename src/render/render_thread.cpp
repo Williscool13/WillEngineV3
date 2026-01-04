@@ -688,13 +688,12 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         });
     }
 
-    std::string swapchainName = "swapchain_" + std::to_string(swapchainImageIndex);
-    graph->ImportTexture(swapchainName, currentSwapchainImage, currentSwapchainImageView, {swapchain->format, swapchain->extent.width, swapchain->extent.height}, swapchain->usages,
+    graph->ImportTexture("swapchainImage", currentSwapchainImage, currentSwapchainImageView, {swapchain->format, swapchain->extent.width, swapchain->extent.height}, swapchain->usages,
                          VK_IMAGE_LAYOUT_UNDEFINED, VK_PIPELINE_STAGE_2_BLIT_BIT, VK_IMAGE_LAYOUT_UNDEFINED);
 
     auto& blitPass = graph->AddPass("BlitToSwapchain");
     blitPass.ReadBlitImage("finalImage");
-    blitPass.WriteBlitImage(swapchainName);
+    blitPass.WriteBlitImage("swapchainImage");
     blitPass.Execute([&](VkCommandBuffer cmd) {
         VkImage drawImage = graph->GetImage("finalImage");
 
@@ -728,7 +727,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     graph->SetDebugLogging(frameBuffer.bLogRDG);
     graph->Compile();
     graph->Execute(renderSync.commandBuffer);
-    graph->PrepareSwapchain(renderSync.commandBuffer, swapchainName);
+    graph->PrepareSwapchain(renderSync.commandBuffer, "swapchainImage");
 
     resourceManager->debugReadbackLastKnownState = graph->GetBufferState("debugReadbackBuffer");
 

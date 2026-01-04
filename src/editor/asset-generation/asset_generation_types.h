@@ -26,6 +26,7 @@ struct RawGltfModel
     // ktx_transcode_fmt_e
     std::vector<uint32_t> preferredImageFormats{};
 
+    // todo: decouple skinned and non-skinned vertex properties. Make a new vector below this one w/ skinned stuff
     std::vector<SkinnedVertex> vertices{};
     std::vector<uint32_t> meshletVertices{};
     std::vector<uint8_t> meshletTriangles{};
