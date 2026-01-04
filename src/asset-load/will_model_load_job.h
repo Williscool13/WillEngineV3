@@ -92,6 +92,9 @@ private:
      */
     std::vector<uint32_t> packedTriangles;
     uint32_t pendingTextureHead{0};
+    bool bPendingPreCopyBarrier = true;
+    bool bPendingFinalBarrier = true;
+    uint32_t pendingMipHead{0};
     uint32_t pendingVerticesHead{0};
     uint32_t pendingMeshletVerticesHead{0};
     uint32_t pendingMeshletTrianglesHead{0};

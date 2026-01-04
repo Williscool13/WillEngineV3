@@ -157,41 +157,12 @@ bool WillModelLoadJob::PreThreadExecute()
         packedTriangles.push_back(packed);
     }
 
-
-    return true;
-}
-
-ThreadState WillModelLoadJob::ThreadExecute()
-{
-    OffsetAllocator::Allocator& stagingAllocator = uploadStaging->GetStagingAllocator();
-    Render::AllocatedBuffer& stagingBuffer = uploadStaging->GetStagingBuffer();
-
-    // KTX texture upload
-    {
-        // Do not block thread waiting for fence
-        if (!uploadStaging->IsReady()) {
-            return ThreadState::InProgress;
+    for (auto currentTexture : pendingTextures) {
+        if (currentTexture == nullptr) {
+            outputModel->modelData.images.emplace_back();
+            outputModel->modelData.imageViews.emplace_back();
         }
-
-        for (; pendingTextureHead < pendingTextures.size(); pendingTextureHead++) {
-            ktxTexture2* currentTexture = pendingTextures[pendingTextureHead];
-
-            if (currentTexture == nullptr) {
-                outputModel->modelData.images.emplace_back();
-                outputModel->modelData.imageViews.emplace_back();
-                continue;
-            }
-
-            ktx_size_t dataSize = currentTexture->dataSize;
-            OffsetAllocator::Allocation allocation = stagingAllocator.allocate(dataSize);
-            if (allocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
-                assert(stagingAllocator.storageReport().totalFreeSpace != WILL_MODEL_LOAD_STAGING_SIZE);
-                uploadStaging->SubmitCommandBuffer();
-                uploadCount++;
-                return ThreadState::InProgress;
-            }
-
-
+        else {
             VkExtent3D extent;
             extent.width = currentTexture->baseWidth;
             extent.height = currentTexture->baseHeight;
@@ -210,68 +181,116 @@ ThreadState WillModelLoadJob::ThreadExecute()
             viewInfo.subresourceRange.layerCount = currentTexture->numLayers;
             viewInfo.subresourceRange.levelCount = currentTexture->numLevels;
             Render::ImageView imageView = Render::ImageView::CreateImageView(context, viewInfo);
-
-            std::vector<VkBufferImageCopy> copyRegions;
-            copyRegions.resize(currentTexture->numLevels);
-
-            uploadStaging->StartCommandBuffer();
-            char* bufferOffset = static_cast<char*>(stagingBuffer.allocationInfo.pMappedData) + allocation.offset;
-            memcpy(bufferOffset, currentTexture->pData, dataSize);
-
-
-            size_t textureOffsetInStaging = allocation.offset;
-
-            // todo: upload each mip individually for particularly high quality textures.
-            for (uint32_t mip = 0; mip < currentTexture->numLevels; mip++) {
-                size_t mipOffset;
-                ktxTexture_GetImageOffset(ktxTexture(currentTexture), mip, 0, 0, &mipOffset);
-
-                VkBufferImageCopy& region = copyRegions[mip];
-                region.bufferOffset = textureOffsetInStaging + mipOffset;
-                region.bufferRowLength = 0;
-                region.bufferImageHeight = 0;
-                region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-                region.imageSubresource.mipLevel = mip;
-                region.imageSubresource.baseArrayLayer = 0;
-                region.imageSubresource.layerCount = 1;
-                region.imageSubresource.layerCount = currentTexture->numLayers;
-                region.imageOffset = {0, 0, 0};
-                region.imageExtent = {
-                    std::max(1u, currentTexture->baseWidth >> mip),
-                    std::max(1u, currentTexture->baseHeight >> mip),
-                    std::max(1u, currentTexture->baseDepth >> mip)
-                };
-            }
-
-            VkImageMemoryBarrier2 barrier = Render::VkHelpers::ImageMemoryBarrier(
-                allocatedImage.handle,
-                Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, currentTexture->numLevels, 0, currentTexture->numLayers),
-                VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_UNDEFINED,
-                VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
-            );
-            VkDependencyInfo depInfo{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
-            depInfo.imageMemoryBarrierCount = 1;
-            depInfo.pImageMemoryBarriers = &barrier;
-            vkCmdPipelineBarrier2(uploadStaging->GetCommandBuffer(), &depInfo);
-
-            vkCmdCopyBufferToImage(uploadStaging->GetCommandBuffer(), stagingBuffer.handle, allocatedImage.handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, copyRegions.size(), copyRegions.data());
-
-            barrier = Render::VkHelpers::ImageMemoryBarrier(
-                allocatedImage.handle,
-                Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, currentTexture->numLevels, 0, currentTexture->numLayers),
-                VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-            );
-            barrier.srcQueueFamilyIndex = context->transferQueueFamily;
-            barrier.dstQueueFamilyIndex = context->graphicsQueueFamily;
-            vkCmdPipelineBarrier2(uploadStaging->GetCommandBuffer(), &depInfo);
-
-            // Image acquires that needs to be executed by render thread
-            outputModel->imageAcquireOps.push_back(Render::VkHelpers::FromVkBarrier(barrier));
-
             outputModel->modelData.images.push_back(std::move(allocatedImage));
             outputModel->modelData.imageViews.push_back(std::move(imageView));
+        }
+    }
+
+    return true;
+}
+
+ThreadState WillModelLoadJob::ThreadExecute()
+{
+    OffsetAllocator::Allocator& stagingAllocator = uploadStaging->GetStagingAllocator();
+    Render::AllocatedBuffer& stagingBuffer = uploadStaging->GetStagingBuffer();
+
+    // KTX texture upload
+    {
+        // Do not block thread waiting for fence
+        if (!uploadStaging->IsReady()) {
+            return ThreadState::InProgress;
+        }
+
+        for (; pendingTextureHead < pendingTextures.size(); pendingTextureHead++) {
+            ktxTexture2* currentTexture = pendingTextures[pendingTextureHead];
+            if (currentTexture == nullptr) {
+                continue;
+            }
+
+            Render::AllocatedImage& image = outputModel->modelData.images[pendingTextureHead];
+            Render::ImageView& imageView = outputModel->modelData.imageViews[pendingTextureHead];
+
+            uploadStaging->StartCommandBuffer();
+            if (bPendingPreCopyBarrier) {
+                VkImageMemoryBarrier2 preCopyBarrier = Render::VkHelpers::ImageMemoryBarrier(
+                    image.handle,
+                    Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, currentTexture->numLevels, 0, currentTexture->numLayers),
+                    VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_UNDEFINED,
+                    VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
+                );
+
+                VkDependencyInfo depInfo{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
+                depInfo.imageMemoryBarrierCount = 1;
+                depInfo.pImageMemoryBarriers = &preCopyBarrier;
+                vkCmdPipelineBarrier2(uploadStaging->GetCommandBuffer(), &depInfo);
+
+                bPendingPreCopyBarrier = false;
+            }
+
+            for (; pendingMipHead < currentTexture->numLevels; pendingMipHead++) {
+                ZoneScopedN("Upload Mip");
+                size_t mipOffset;
+                ktxTexture_GetImageOffset(ktxTexture(currentTexture), pendingMipHead, 0, 0, &mipOffset);
+                uint32_t mipWidth = std::max(1u, currentTexture->baseWidth >> pendingMipHead);
+                uint32_t mipHeight = std::max(1u, currentTexture->baseHeight >> pendingMipHead);
+                uint32_t mipDepth = std::max(1u, currentTexture->baseDepth >> pendingMipHead);
+                size_t mipSize = ktxTexture_GetImageSize(ktxTexture(currentTexture), pendingMipHead);
+
+                OffsetAllocator::Allocation allocation = stagingAllocator.allocate(mipSize);
+                if (allocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
+                    uploadStaging->SubmitCommandBuffer();
+                    uploadCount++;
+                    return ThreadState::InProgress;
+                }
+
+                char* stagingPtr = static_cast<char*>(stagingBuffer.allocationInfo.pMappedData) + allocation.offset;
+                memcpy(stagingPtr, currentTexture->pData + mipOffset, mipSize);
+
+                VkBufferImageCopy copyRegion{};
+                copyRegion.bufferOffset = allocation.offset;
+                copyRegion.bufferRowLength = 0;
+                copyRegion.bufferImageHeight = 0;
+                copyRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                copyRegion.imageSubresource.mipLevel = pendingMipHead;
+                copyRegion.imageSubresource.baseArrayLayer = 0;
+                copyRegion.imageSubresource.layerCount = currentTexture->numLayers;
+                copyRegion.imageOffset = {0, 0, 0};
+                copyRegion.imageExtent = {mipWidth, mipHeight, mipDepth};
+
+                vkCmdCopyBufferToImage(
+                    uploadStaging->GetCommandBuffer(),
+                    stagingBuffer.handle,
+                    image.handle,
+                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    1,
+                    &copyRegion
+                );
+            }
+
+            if (bPendingFinalBarrier) {
+                VkImageMemoryBarrier2 finalBarrier = Render::VkHelpers::ImageMemoryBarrier(
+                    image.handle,
+                    Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, currentTexture->numLevels, 0, currentTexture->numLayers),
+                    VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+                );
+                finalBarrier.srcQueueFamilyIndex = context->transferQueueFamily;
+                finalBarrier.dstQueueFamilyIndex = context->graphicsQueueFamily;
+
+                VkDependencyInfo depInfo{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
+                depInfo.imageMemoryBarrierCount = 1;
+                depInfo.pImageMemoryBarriers = &finalBarrier;
+                vkCmdPipelineBarrier2(uploadStaging->GetCommandBuffer(), &depInfo);
+
+                // Image acquires that needs to be executed by render thread
+                outputModel->imageAcquireOps.push_back(Render::VkHelpers::FromVkBarrier(finalBarrier));
+                bPendingFinalBarrier = false;
+            }
+
             ktxTexture2_Destroy(currentTexture);
+            pendingMipHead = 0;
+            bPendingPreCopyBarrier = true;
+            bPendingFinalBarrier = true;
         }
     }
 
@@ -690,9 +709,9 @@ void WillModelLoadJob::LoadModelTask::ExecuteRange(enki::TaskSetPartition range,
             assert(!ktxTexture2_NeedsTranscoding(loadedTexture) && "This engine no longer supports UASTC/ETC1S compressed textures");
 
             // Size check
-            ktx_size_t allocSize = loadedTexture->dataSize;
-            if (allocSize >= WILL_MODEL_LOAD_STAGING_SIZE) {
-                SPDLOG_ERROR("Texture too big to fit in the staging buffer for texture {}", textureName);
+            ktx_size_t mip0Size = ktxTexture_GetImageSize(ktxTexture(loadedTexture), 0);
+            if (mip0Size > WILL_MODEL_LOAD_STAGING_SIZE) {
+                SPDLOG_WARN("Texture too big to fit in the staging buffer for texture {}, pruning", textureName);
                 loadJob->pendingTextures.push_back(nullptr);
                 ktxTexture2_Destroy(loadedTexture);
                 continue;
@@ -700,21 +719,21 @@ void WillModelLoadJob::LoadModelTask::ExecuteRange(enki::TaskSetPartition range,
 
             // Texture dimension and array check
             if (loadedTexture->numDimensions != 2) {
-                SPDLOG_ERROR("Engine does not support non 2D image textures {}", textureName);
+                SPDLOG_WARN("Engine does not support non 2D image textures {}, pruning", textureName);
                 loadJob->pendingTextures.push_back(nullptr);
                 ktxTexture2_Destroy(loadedTexture);
                 continue;
             }
 
             if (loadedTexture->isArray) {
-                SPDLOG_ERROR("Engine does not support texture arrays {}", textureName);
+                SPDLOG_WARN("Engine does not support texture arrays {}, pruning", textureName);
                 loadJob->pendingTextures.push_back(nullptr);
                 ktxTexture2_Destroy(loadedTexture);
                 continue;
             }
 
             if (loadedTexture->isCubemap) {
-                SPDLOG_ERROR("Texture does not support cubemaps {}", textureName);
+                SPDLOG_WARN("Texture does not support cubemaps {}, pruning", textureName);
                 loadJob->pendingTextures.push_back(nullptr);
                 ktxTexture2_Destroy(loadedTexture);
                 continue;

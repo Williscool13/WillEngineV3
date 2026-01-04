@@ -16,7 +16,7 @@ inline constexpr uint32_t TEXTURE_JOB_COUNT = 4;
 inline constexpr uint32_t TEXTURE_LOAD_QUEUE_COUNT = 128;
 
 inline constexpr uint32_t WILL_MODEL_LOAD_STAGING_SIZE = 16 * 1024 * 1024; // 16MB
-inline constexpr uint32_t TEXTURE_LOAD_STAGING_SIZE    = 12 * 1024 * 1024; // 12MB, BC7 compressed is ~10.7MB mip 0 4k texture
+inline constexpr uint32_t TEXTURE_LOAD_STAGING_SIZE    = 16 * 1024 * 1024; // 16MB, Mip0 BC7 == 16777217, which is exactly 16MB
 
 inline constexpr uint32_t DEFAULT_SAMPLER_BINDLESS_INDEX = 0;
 inline constexpr uint32_t WHITE_IMAGE_BINDLESS_INDEX = 0;

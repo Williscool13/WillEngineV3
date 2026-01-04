@@ -99,6 +99,7 @@ ThreadState TextureLoadJob::ThreadExecute()
         return ThreadState::InProgress;
     }
 
+
     if (bPendingInitialBarrier) {
         uploadStaging->StartCommandBuffer();
         VkImageMemoryBarrier2 preCopyBarrier = Render::VkHelpers::ImageMemoryBarrier(
@@ -118,14 +119,13 @@ ThreadState TextureLoadJob::ThreadExecute()
 
 
     for (; currentMip < texture->numLevels; currentMip++) {
+        uploadStaging->StartCommandBuffer();
         ZoneScopedN("Upload Mip");
         size_t mipOffset;
         ktxTexture_GetImageOffset(ktxTexture(texture), currentMip, 0, 0, &mipOffset);
-
         uint32_t mipWidth = std::max(1u, texture->baseWidth >> currentMip);
         uint32_t mipHeight = std::max(1u, texture->baseHeight >> currentMip);
         uint32_t mipDepth = std::max(1u, texture->baseDepth >> currentMip);
-
         size_t mipSize = ktxTexture_GetImageSize(ktxTexture(texture), currentMip);
 
         OffsetAllocator::Allocation allocation = stagingAllocator.allocate(mipSize);
@@ -162,7 +162,6 @@ ThreadState TextureLoadJob::ThreadExecute()
 
     if (bPendingFinalBarrier) {
         uploadStaging->StartCommandBuffer();
-
         VkImageMemoryBarrier2 finalBarrier;
         finalBarrier = Render::VkHelpers::ImageMemoryBarrier(
             outputTexture->image.handle,
@@ -272,7 +271,7 @@ void TextureLoadJob::LoadTextureTask::ExecuteRange(enki::TaskSetPartition range,
     assert(!ktxTexture2_NeedsTranscoding(_texture) && "This engine no longer supports UASTC/ETC1S compressed textures");
 
     // Validate size
-    if (_texture->dataSize >= TEXTURE_LOAD_STAGING_SIZE) {
+    if (_texture->dataSize > TEXTURE_LOAD_STAGING_SIZE) {
         SPDLOG_ERROR("[TextureLoadJob] Texture too large for staging buffer: {}", texturePath.string());
         ktxTexture2_Destroy(_texture);
         loadJob->taskState = TaskState::Failed;

@@ -27,6 +27,7 @@ namespace Game::System
 {
 static Engine::WillModelHandle dragonHandle = Engine::WillModelHandle::INVALID;
 static Engine::WillModelHandle boxHandle = Engine::WillModelHandle::INVALID;
+static Engine::WillModelHandle box4kHandle = Engine::WillModelHandle::INVALID;
 static Engine::WillModelHandle sponzaHandle = Engine::WillModelHandle::INVALID;
 static Engine::TextureHandle textureHandle = Engine::TextureHandle::INVALID;
 static JPH::BodyID boxBodyID;
@@ -78,7 +79,7 @@ void CreateBox(Core::EngineContext* ctx, Engine::GameState* state, glm::vec3 pos
         else {
             material = materialManager.Get(materialManager.GetDefaultMaterial());
         }
-        material.textureImageIndices.x = 3;
+        // material.textureImageIndices.x = 3;
         boxMatID = materialManager.GetOrCreate(material);
 
         renderable.primitives[i] = {
@@ -140,8 +141,8 @@ entt::entity CreateStaticBox(Core::EngineContext* ctx, Engine::GameState* state,
         else {
             material = materialManager.Get(materialManager.GetDefaultMaterial());
         }
-        material.textureImageIndices.x = AssetLoad::ERROR_IMAGE_BINDLESS_INDEX;
-        material.textureSamplerIndices.x = AssetLoad::DEFAULT_SAMPLER_BINDLESS_INDEX;
+        // material.textureImageIndices.x = AssetLoad::ERROR_IMAGE_BINDLESS_INDEX;
+        // material.textureSamplerIndices.x = AssetLoad::DEFAULT_SAMPLER_BINDLESS_INDEX;
         Engine::MaterialID matID = materialManager.GetOrCreate(material);
 
         renderable.primitives[i] = {
@@ -171,14 +172,17 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
     if (state->inputFrame->GetKey(Key::F1).pressed) {
         if (!dragonHandle.IsValid()) {
             dragonHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "dragon/dragon.willmodel");
-            boxHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "BoxTextured.willmodel");
+            //boxHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "BoxTextured.willmodel");
+            boxHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "BoxTextured4k.willmodel");
+            // box4kHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "BoxTextured4k.willmodel");
             sponzaHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "sponza2/sponza.willmodel");
         }
     }
 
     if (state->inputFrame->GetKey(Key::F2).pressed) {
-        if (!boxHandle.IsValid()) {
-            SPDLOG_WARN("[DebugUpdate] Box model not loaded");
+        Render::WillModel* box = ctx->assetManager->GetModel(boxHandle);
+        if (!box || box->modelLoadState != Render::WillModel::ModelLoadState::Loaded) {
+            SPDLOG_WARN("[DebugSystem] Box model not ready yet");
             return;
         }
 
