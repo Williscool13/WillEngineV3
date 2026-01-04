@@ -162,6 +162,14 @@ RenderPass& RenderPass::ReadIndirectBuffer(const std::string& name, VkPipelineSt
     return *this;
 }
 
+RenderPass& RenderPass::ReadIndirectCountBuffer(const std::string& name, VkPipelineStageFlags2 stages)
+{
+    BufferResource* resource = graph.GetOrCreateBuffer(name);
+    resource->accumulatedUsage |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
+    bufferIndirectCountReads.push_back({resource, stages});
+    return *this;
+}
+
 RenderPass& RenderPass::Execute(std::function<void(VkCommandBuffer)> func)
 {
     executeFunc = std::move(func);

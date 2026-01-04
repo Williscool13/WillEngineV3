@@ -486,8 +486,31 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
             auto& phys = physicalResources[bufRead.resource->physicalIndex];
             if (phys.bDisableBarriers) { continue; }
 
-            // todo: indirect data wants both, indirect count only needs read. Need to fix this, add more functionality to optionally specify access flags
             VkAccessFlags2 desiredAccess = VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_2_SHADER_READ_BIT;
+            if (!phys.bUsedThisFrame || phys.event.stages != bufRead.stages || phys.event.access != desiredAccess) {
+                VkBufferMemoryBarrier2 barrier = {
+                    .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+                    .srcStageMask = phys.event.stages,
+                    .srcAccessMask = phys.event.access,
+                    .dstStageMask = bufRead.stages,
+                    .dstAccessMask = desiredAccess,
+                    .buffer = phys.buffer,
+                    .offset = 0,
+                    .size = VK_WHOLE_SIZE
+                };
+                bufferBarriers.push_back(barrier);
+                if (debugLogging) {
+                    SPDLOG_INFO("  [BUFFER BARRIER] {}: stage change", bufRead.resource->name);
+                }
+            }
+            phys.bUsedThisFrame = true;
+        }
+
+        for (auto& bufRead : pass->bufferIndirectCountReads) {
+            auto& phys = physicalResources[bufRead.resource->physicalIndex];
+            if (phys.bDisableBarriers) { continue; }
+
+            VkAccessFlags2 desiredAccess = VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT;
             if (!phys.bUsedThisFrame || phys.event.stages != bufRead.stages || phys.event.access != desiredAccess) {
                 VkBufferMemoryBarrier2 barrier = {
                     .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
@@ -601,6 +624,11 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
             auto& phys = physicalResources[bufRead.resource->physicalIndex];
             phys.event.stages = bufRead.stages;
             phys.event.access = VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_2_SHADER_READ_BIT;
+        }
+        for (auto& bufRead : pass->bufferIndirectCountReads) {
+            auto& phys = physicalResources[bufRead.resource->physicalIndex];
+            phys.event.stages = bufRead.stages;
+            phys.event.access = VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT;
         }
     }
 

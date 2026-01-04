@@ -424,8 +424,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     instancedMeshShading.ReadBuffer("materialBuffer", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
     instancedMeshShading.ReadBuffer("modelBuffer", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
     instancedMeshShading.ReadIndirectBuffer("indirectBuffer", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT);
-    // todo: indirect count buffer doesnt need task/mesh shader bit it, it is only used in indirect. Barriers in RDG need to be fixed.
-    instancedMeshShading.ReadIndirectBuffer("indirectCountBuffer", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT);
+    instancedMeshShading.ReadIndirectCountBuffer("indirectCountBuffer", VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT);
     instancedMeshShading.Execute([&](VkCommandBuffer cmd) {
         const VkRenderingAttachmentInfo albedoAttachment = VkHelpers::RenderingAttachmentInfo(graph->GetImageView("albedoTarget"), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
         const VkRenderingAttachmentInfo normalAttachment = VkHelpers::RenderingAttachmentInfo(graph->GetImageView("normalTarget"), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
