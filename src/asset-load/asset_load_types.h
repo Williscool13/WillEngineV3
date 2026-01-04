@@ -12,6 +12,7 @@
 #include "render/shaders/model_interop.h"
 #include "render/vulkan/vk_resources.h"
 #include "../render/resource_manager.h"
+#include "core/allocators/linear_allocator.h"
 #include "engine/asset_manager_types.h"
 #include "render/model/will_model_asset.h"
 
@@ -42,7 +43,7 @@ public:
     [[nodiscard]] bool IsCommandBufferStarted() const { return bCommandBufferStarted; }
 
     VkCommandBuffer GetCommandBuffer() const { return commandBuffer; }
-    OffsetAllocator::Allocator& GetStagingAllocator() { return stagingAllocator; }
+    Core::LinearAllocator& GetStagingAllocator() { return stagingAllocator; }
     Render::AllocatedBuffer& GetStagingBuffer() { return stagingBuffer; }
 
 private:
@@ -51,7 +52,7 @@ private:
     VkFence fence{};
 
     Render::AllocatedBuffer stagingBuffer{};
-    OffsetAllocator::Allocator stagingAllocator{0};
+    Core::LinearAllocator stagingAllocator{0};
 
     // Transient
     bool bCommandBufferStarted = false;

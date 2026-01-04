@@ -92,7 +92,7 @@ bool TextureLoadJob::PreThreadExecute()
 ThreadState TextureLoadJob::ThreadExecute()
 {
     ZoneScopedN("TextureLoadJob::ThreadExecute");
-    OffsetAllocator::Allocator& stagingAllocator = uploadStaging->GetStagingAllocator();
+    Core::LinearAllocator& stagingAllocator = uploadStaging->GetStagingAllocator();
     Render::AllocatedBuffer& stagingBuffer = uploadStaging->GetStagingBuffer();
 
     if (!uploadStaging->IsReady()) {
@@ -128,19 +128,19 @@ ThreadState TextureLoadJob::ThreadExecute()
         uint32_t mipDepth = std::max(1u, texture->baseDepth >> currentMip);
         size_t mipSize = ktxTexture_GetImageSize(ktxTexture(texture), currentMip);
 
-        OffsetAllocator::Allocation allocation = stagingAllocator.allocate(mipSize);
-        if (allocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
+        size_t allocation = stagingAllocator.Allocate(mipSize);
+        if (allocation == SIZE_MAX) {
             uploadStaging->SubmitCommandBuffer();
             uploadCount++;
             return ThreadState::InProgress;
         }
 
-        char* stagingPtr = static_cast<char*>(stagingBuffer.allocationInfo.pMappedData) + allocation.offset;
+        char* stagingPtr = static_cast<char*>(stagingBuffer.allocationInfo.pMappedData) + allocation;
         memcpy(stagingPtr, texture->pData + mipOffset, mipSize);
 
 
         VkBufferImageCopy copyRegion{};
-        copyRegion.bufferOffset = allocation.offset;
+        copyRegion.bufferOffset = allocation;
         copyRegion.bufferRowLength = 0;
         copyRegion.bufferImageHeight = 0;
         copyRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;

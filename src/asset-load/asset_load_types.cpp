@@ -56,7 +56,7 @@ void UploadStaging::SubmitCommandBuffer()
     VK_CHECK(vkQueueSubmit2(context->transferQueue, 1, &submitInfo, fence));
 
     bCommandBufferStarted = false;
-    stagingAllocator.reset();
+    stagingAllocator.Reset();
 }
 
 bool UploadStaging::IsReady() const

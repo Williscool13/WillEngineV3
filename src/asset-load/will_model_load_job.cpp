@@ -191,7 +191,7 @@ bool WillModelLoadJob::PreThreadExecute()
 
 ThreadState WillModelLoadJob::ThreadExecute()
 {
-    OffsetAllocator::Allocator& stagingAllocator = uploadStaging->GetStagingAllocator();
+    Core::LinearAllocator& stagingAllocator = uploadStaging->GetStagingAllocator();
     Render::AllocatedBuffer& stagingBuffer = uploadStaging->GetStagingBuffer();
 
     // KTX texture upload
@@ -236,18 +236,18 @@ ThreadState WillModelLoadJob::ThreadExecute()
                 uint32_t mipDepth = std::max(1u, currentTexture->baseDepth >> pendingMipHead);
                 size_t mipSize = ktxTexture_GetImageSize(ktxTexture(currentTexture), pendingMipHead);
 
-                OffsetAllocator::Allocation allocation = stagingAllocator.allocate(mipSize);
-                if (allocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
+                size_t allocation = stagingAllocator.Allocate(mipSize);
+                if (allocation == SIZE_MAX) {
                     uploadStaging->SubmitCommandBuffer();
                     uploadCount++;
                     return ThreadState::InProgress;
                 }
 
-                char* stagingPtr = static_cast<char*>(stagingBuffer.allocationInfo.pMappedData) + allocation.offset;
+                char* stagingPtr = static_cast<char*>(stagingBuffer.allocationInfo.pMappedData) + allocation;
                 memcpy(stagingPtr, currentTexture->pData + mipOffset, mipSize);
 
                 VkBufferImageCopy copyRegion{};
-                copyRegion.bufferOffset = allocation.offset;
+                copyRegion.bufferOffset = allocation;
                 copyRegion.bufferRowLength = 0;
                 copyRegion.bufferImageHeight = 0;
                 copyRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -312,11 +312,11 @@ ThreadState WillModelLoadJob::ThreadExecute()
             size_t remainingElements = totalCount - pendingHead;
             size_t remainingSize = remainingElements * elementSize;
 
-            OffsetAllocator::Allocation allocation = stagingAllocator.allocate(remainingSize);
+            size_t allocation = stagingAllocator.Allocate(remainingSize);
 
             // Can't fit entire data, will try to upload in chunks. Start by trying to fit as much as possible in remaining space
-            if (allocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
-                size_t freeSpace = stagingAllocator.storageReport().totalFreeSpace;
+            if (allocation == SIZE_MAX) {
+                size_t freeSpace = stagingAllocator.GetRemaining();
                 size_t maxElements = freeSpace / elementSize;
 
                 // Can't fit even one element - submit and retry next frame
@@ -327,22 +327,15 @@ ThreadState WillModelLoadJob::ThreadExecute()
                     return false;
                 }
 
-                // Try partial allocation
                 remainingSize = maxElements * elementSize;
-                allocation = stagingAllocator.allocate(remainingSize);
-
-                // Still can't fit. Likely caused by fragmentation - submit and retry
-                if (allocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
-                    uploadStaging->SubmitCommandBuffer();
-                    uploadCount++;
-                    return false;
-                }
+                allocation = stagingAllocator.Allocate(remainingSize);
+                assert(allocation != SIZE_MAX && "Allocation of remaining memory failed even though there should have been enough space");
 
                 const char* elementData = static_cast<const char*>(sourceData) + (pendingHead * elementSize);
-                char* stagingPtr = static_cast<char*>(stagingBuffer.allocationInfo.pMappedData) + allocation.offset;
+                char* stagingPtr = static_cast<char*>(stagingBuffer.allocationInfo.pMappedData) + allocation;
                 memcpy(stagingPtr, elementData, remainingSize);
                 VkBufferCopy copyRegion{};
-                copyRegion.srcOffset = allocation.offset;
+                copyRegion.srcOffset = allocation;
                 copyRegion.dstOffset = targetOffset + (pendingHead * elementSize);
                 copyRegion.size = remainingSize;
                 vkCmdCopyBuffer(uploadStaging->GetCommandBuffer(), stagingBuffer.handle, targetBuffer, 1, &copyRegion);
@@ -353,11 +346,11 @@ ThreadState WillModelLoadJob::ThreadExecute()
             }
 
             const char* elementData = static_cast<const char*>(sourceData) + (pendingHead * elementSize);
-            char* stagingPtr = static_cast<char*>(stagingBuffer.allocationInfo.pMappedData) + allocation.offset;
+            char* stagingPtr = static_cast<char*>(stagingBuffer.allocationInfo.pMappedData) + allocation;
             memcpy(stagingPtr, elementData, remainingSize);
 
             VkBufferCopy copyRegion{};
-            copyRegion.srcOffset = allocation.offset;
+            copyRegion.srcOffset = allocation;
             copyRegion.dstOffset = targetOffset + (pendingHead * elementSize);
             copyRegion.size = remainingSize;
 
