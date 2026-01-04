@@ -4,10 +4,13 @@
 
 #include "will_engine.h"
 
+#include <tracy/Tracy.hpp>
 #include <SDL3/SDL.h>
 #include <fmt/format.h>
 #include <spdlog/spdlog.h>
 #include <entt/entt.hpp>
+#include <backends/imgui_impl_sdl3.h>
+#include <backends/imgui_impl_vulkan.h>
 
 #include "asset_manager.h"
 #include "engine_api.h"
@@ -21,12 +24,8 @@
 #include "render/render_thread.h"
 
 #if WILL_EDITOR
-#include <backends/imgui_impl_sdl3.h>
-#include <backends/imgui_impl_vulkan.h>
 #include "editor/asset-generation/asset_generator.h"
 #endif
-
-#include <tracy/Tracy.hpp>
 
 namespace Engine
 {
@@ -192,6 +191,7 @@ void WillEngine::Initialize()
 
         engineContext = std::make_unique<Core::EngineContext>();
         engineContext->logger = spdlog::default_logger();
+        engineContext->imguiContext = ImGui::GetCurrentContext();
         engineContext->windowContext.windowWidth = w;
         engineContext->windowContext.windowHeight = h;
         engineContext->windowContext.bCursorHidden = bCursorHidden;
@@ -213,10 +213,7 @@ void WillEngine::Run()
     bool exit = false;
     while (true) {
         while (SDL_PollEvent(&e) != 0) {
-            // input->ProcessEvents(&e);
-#if WILL_EDITOR
             ImGui_ImplSDL3_ProcessEvent(&e);
-#endif
             switch (e.type) {
                 case SDL_EVENT_QUIT:
                     exit = true;
@@ -325,9 +322,13 @@ void WillEngine::Run()
                     stagingFrameBuffer.swapchainRecreateCommand.bEngineCommandsRecreate = false;
                 }
 
+                ImGui_ImplVulkan_NewFrame();
+                ImGui_ImplSDL3_NewFrame();
+                ImGui::NewFrame();
                 gameFunctions.gamePrepareFrame(engineContext.get(), gameState.get(), &stagingFrameBuffer);
                 stagingFrameBuffer.bFreezeVisibility = bFreezeVisibility;
                 stagingFrameBuffer.bLogRDG = bLogRDG;
+                stagingFrameBuffer.bDrawImgui = bDrawImgui;
 
                 std::swap(currentFrameBuffer, stagingFrameBuffer);
                 stagingFrameBuffer.mainViewFamily.modelMatrices.clear();
@@ -337,9 +338,8 @@ void WillEngine::Run()
                 stagingFrameBuffer.bufferAcquireOperations.clear();
                 stagingFrameBuffer.imageAcquireOperations.clear();
                 stagingFrameBuffer.timeFrame = timeManager->GetTime();
-#if WILL_EDITOR
-                PrepareEditor(frameBufferIndex);
-#endif
+
+                PrepareImgui(frameBufferIndex);
                 frameBufferIndex = (frameBufferIndex + 1) % Core::FRAME_BUFFER_COUNT;
                 engineRenderSynchronization->renderFrames.release();
             }
@@ -349,13 +349,8 @@ void WillEngine::Run()
     }
 }
 
-#if WILL_EDITOR
-void WillEngine::DrawImgui()
+void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
 {
-    ImGui_ImplVulkan_NewFrame();
-    ImGui_ImplSDL3_NewFrame();
-    ImGui::NewFrame();
-
     if (ImGui::Begin("Main")) {
         ImGui::Checkbox("Freeze Visibility Calculations", &bFreezeVisibility);
         if (ImGui::Button("Log RDG")) {
@@ -393,6 +388,7 @@ void WillEngine::DrawImgui()
             }
         }
     }
+#if WILL_EDITOR
 
     auto generateModel = [&](const std::filesystem::path& gltfPath, const std::filesystem::path& outPath) {
         auto loadResponse = modelGenerator->GenerateWillModelAsync(gltfPath, outPath);
@@ -459,15 +455,11 @@ void WillEngine::DrawImgui()
             Platform::GetAssetPath() / "textures/smiling_friend.ktx2",
             false);
     }
-
+#endif
     ImGui::End();
     ImGui::Render();
-}
 
-void WillEngine::PrepareEditor(uint32_t currentFrameBufferIndex)
-{
     ImDrawDataSnapshot& imguiSnapshot = engineRenderSynchronization->imguiDataSnapshots[currentFrameBufferIndex];
-    DrawImgui();
     imguiSnapshot.SnapUsingSwap(ImGui::GetDrawData(), ImGui::GetTime());
     static int32_t first = 1;
     if (first > 0) {
@@ -475,8 +467,6 @@ void WillEngine::PrepareEditor(uint32_t currentFrameBufferIndex)
         first--;
     }
 }
-#endif
-
 
 void WillEngine::Cleanup()
 {

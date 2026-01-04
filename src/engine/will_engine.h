@@ -64,11 +64,7 @@ public:
 
     void Run();
 
-#if WILL_EDITOR
-    void DrawImgui();
-
-    void PrepareEditor(uint32_t currentFrameBufferIndex);
-#endif
+    void PrepareImgui(uint32_t currentFrameBufferIndex);
 
     void Cleanup();
 
@@ -109,6 +105,11 @@ private:
     Platform::CrashHandler* crashHandler;
 
 private: // Debugging
+#if WILL_EDITOR
+    bool bDrawImgui = true;
+#else
+    bool bDrawImgui = false;
+#endif
     bool bCanGenerate = false;
     bool bHasAdded = false;
     bool bFreezeVisibility = false;

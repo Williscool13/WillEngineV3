@@ -15,7 +15,6 @@ target_link_libraries(editor PUBLIC
         core
         render
         fastgltf
-        imgui
         enkiTS
         meshoptimizer
         bc7enc_rdo

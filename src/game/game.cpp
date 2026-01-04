@@ -10,6 +10,7 @@
 #include "engine/engine_api.h"
 #include "physics/physics_system.h"
 #include "fwd_components.h"
+#include "imgui.h"
 #include "components/render/gather_renderables_component.h"
 #include "core/math/constants.h"
 #include "systems/debug_system.h"
@@ -39,6 +40,7 @@ GAME_API void GameStartup(Core::EngineContext* ctx, Engine::GameState* state)
 GAME_API void GameLoad(Core::EngineContext* ctx, Engine::GameState* state)
 {
     spdlog::set_default_logger(ctx->logger);
+    ImGui::SetCurrentContext(ctx->imguiContext);
 
     ctx->physicsSystem->RegisterAllocator();
     state->registry.on_construct<Game::PhysicsBodyComponent>().connect<&Game::OnPhysicsBodyAdded>();
@@ -63,6 +65,12 @@ GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* stat
 {
     Game::System::BuildViewFamily(state, frameBuffer->mainViewFamily);
     Game::System::GatherRenderables(ctx, state, frameBuffer);
+
+    if (ImGui::Begin("Test 2")) {
+        ImGui::Text("Test Text 2");
+    }
+
+    ImGui::End();
 }
 
 

@@ -2,7 +2,6 @@
 // Created by William on 2025-10-09.
 //
 
-#if WILL_EDITOR
 #include "vk_imgui_wrapper.h"
 
 #include <volk.h>
@@ -114,5 +113,3 @@ void ImguiWrapper::HandleInput(const SDL_Event& e)
     ImGui_ImplSDL3_ProcessEvent(&e);
 }
 }
-
-#endif

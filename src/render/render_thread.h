@@ -49,10 +49,7 @@ struct ResourceManager;
 struct RenderExtents;
 struct Swapchain;
 struct VulkanContext;
-
-#if WILL_EDITOR
 struct ImguiWrapper;
-#endif
 }
 
 namespace Render
@@ -106,9 +103,7 @@ private:
     // Owning
     std::unique_ptr<VulkanContext> context{};
     std::unique_ptr<Swapchain> swapchain{};
-#if WILL_EDITOR
     std::unique_ptr<ImguiWrapper> imgui{};
-#endif
     std::unique_ptr<ResourceManager> resourceManager{};
     std::unique_ptr<RenderExtents> renderExtents{};
     std::unique_ptr<RenderGraph> graph{};

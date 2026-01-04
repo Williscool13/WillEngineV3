@@ -29,6 +29,7 @@ target_link_libraries(engine PUBLIC
         SDL3::SDL3
         enkiTS
         tracy
+        imgui
 )
 
 target_compile_definitions(engine PRIVATE TRACY_IMPORTS)

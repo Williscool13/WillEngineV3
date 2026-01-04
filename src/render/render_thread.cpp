@@ -22,12 +22,8 @@
 #include "shaders/push_constant_interop.h"
 #include "tracy/Tracy.hpp"
 #include "types/render_types.h"
-
-#if WILL_EDITOR
 #include "render/vulkan/vk_imgui_wrapper.h"
 #include "backends/imgui_impl_vulkan.h"
-#include "editor/asset-generation/asset_generator.h"
-#endif
 
 
 namespace Render
@@ -39,9 +35,7 @@ RenderThread::RenderThread(Core::FrameSync* engineRenderSynchronization, enki::T
 {
     context = std::make_unique<VulkanContext>(window);
     swapchain = std::make_unique<Swapchain>(context.get(), width, height);
-#if WILL_EDITOR
     imgui = std::make_unique<ImguiWrapper>(context.get(), window, Core::FRAME_BUFFER_COUNT, COLOR_ATTACHMENT_FORMAT);
-#endif
     renderExtents = std::make_unique<RenderExtents>(width, height, 1.0f);
     resourceManager = std::make_unique<ResourceManager>(context.get());
     graph = std::make_unique<RenderGraph>(context.get(), resourceManager.get());
@@ -679,20 +673,20 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         });
     }
 
-#if WILL_EDITOR
-    auto& imguiEditorPass = graph->AddPass("ImguiEditor");
-    imguiEditorPass.WriteColorAttachment("finalImage");
-    imguiEditorPass.Execute([&](VkCommandBuffer cmd) {
-        const VkRenderingAttachmentInfo imguiAttachment = VkHelpers::RenderingAttachmentInfo(graph->GetImageView("finalImage"), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-        const ResourceDimensions& dims = graph->GetImageDimensions("finalImage");
-        const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({dims.width, dims.height}, &imguiAttachment, nullptr);
-        vkCmdBeginRendering(cmd, &renderInfo);
-        ImDrawDataSnapshot& imguiSnapshot = engineRenderSynchronization->imguiDataSnapshots[currentFrameIndex];
-        ImGui_ImplVulkan_RenderDrawData(&imguiSnapshot.DrawData, cmd);
+    if (frameBuffer.bDrawImgui) {
+        auto& imguiEditorPass = graph->AddPass("ImguiEditor");
+        imguiEditorPass.WriteColorAttachment("finalImage");
+        imguiEditorPass.Execute([&](VkCommandBuffer cmd) {
+            const VkRenderingAttachmentInfo imguiAttachment = VkHelpers::RenderingAttachmentInfo(graph->GetImageView("finalImage"), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+            const ResourceDimensions& dims = graph->GetImageDimensions("finalImage");
+            const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({dims.width, dims.height}, &imguiAttachment, nullptr);
+            vkCmdBeginRendering(cmd, &renderInfo);
+            ImDrawDataSnapshot& imguiSnapshot = engineRenderSynchronization->imguiDataSnapshots[currentFrameIndex];
+            ImGui_ImplVulkan_RenderDrawData(&imguiSnapshot.DrawData, cmd);
 
-        vkCmdEndRendering(cmd);
-    });
-#endif
+            vkCmdEndRendering(cmd);
+        });
+    }
 
     std::string swapchainName = "swapchain_" + std::to_string(swapchainImageIndex);
     graph->ImportTexture(swapchainName, currentSwapchainImage, currentSwapchainImageView, {swapchain->format, swapchain->extent.width, swapchain->extent.height}, swapchain->usages,

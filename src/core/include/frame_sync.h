@@ -16,9 +16,7 @@ namespace Core
 struct FrameSync
 {
     std::array<FrameBuffer, FRAME_BUFFER_COUNT> frameBuffers{};
-#if WILL_EDITOR
     std::array<ImDrawDataSnapshot, FRAME_BUFFER_COUNT> imguiDataSnapshots{};
-#endif
     std::counting_semaphore<FRAME_BUFFER_COUNT> gameFrames{FRAME_BUFFER_COUNT};
     std::counting_semaphore<FRAME_BUFFER_COUNT> renderFrames{0};
 };

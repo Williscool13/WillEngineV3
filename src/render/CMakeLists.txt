@@ -93,6 +93,7 @@ target_link_libraries(render PUBLIC
         offsetAllocator
         ktx
         miniz
+        imgui
         tracy
 )
 

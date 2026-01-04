@@ -25,6 +25,8 @@ namespace Engine
 class AssetManager;
 }
 
+struct ImGuiContext;
+
 namespace Core
 {
 struct WindowContext
@@ -39,6 +41,7 @@ struct EngineContext
 {
     WindowContext windowContext;
     std::shared_ptr<spdlog::logger> logger;
+    ImGuiContext* imguiContext;
     //Render::ResourceManager* resourceManager;
     Engine::AssetManager* assetManager;
     Physics::PhysicsSystem* physicsSystem;

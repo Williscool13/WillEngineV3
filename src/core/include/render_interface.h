@@ -110,6 +110,7 @@ struct FrameBuffer
     std::vector<ImageAcquireOperation> imageAcquireOperations;
 
     // Debug
+    bool bDrawImgui = false;
     bool bFreezeVisibility = false;
     bool bLogRDG = false;
 };
