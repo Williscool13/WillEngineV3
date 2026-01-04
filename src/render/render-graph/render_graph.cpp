@@ -304,7 +304,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT,
                 VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
             );
-            LogBarrier(barrier, attachment->name, attachment->physicalIndex);
+            LogImageBarrier(barrier, attachment->name, attachment->physicalIndex);
             barriers.push_back(barrier);
         }
 
@@ -318,7 +318,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
                 VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
             );
-            LogBarrier(barrier, pass->depthAttachment->name, pass->depthAttachment->physicalIndex);
+            LogImageBarrier(barrier, pass->depthAttachment->name, pass->depthAttachment->physicalIndex);
             barriers.push_back(barrier);
         }
 
@@ -330,7 +330,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 phys.event.stages, phys.event.access, tex->layout,
                 VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL
             );
-            LogBarrier(barrier, tex->name, tex->physicalIndex);
+            LogImageBarrier(barrier, tex->name, tex->physicalIndex);
             barriers.push_back(barrier);
         }
 
@@ -342,7 +342,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 phys.event.stages, phys.event.access, tex->layout,
                 VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT, VK_IMAGE_LAYOUT_GENERAL
             );
-            LogBarrier(barrier, tex->name, tex->physicalIndex);
+            LogImageBarrier(barrier, tex->name, tex->physicalIndex);
             barriers.push_back(barrier);
         }
 
@@ -354,7 +354,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 phys.event.stages, phys.event.access, tex->layout,
                 VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
             );
-            LogBarrier(barrier, tex->name, tex->physicalIndex);
+            LogImageBarrier(barrier, tex->name, tex->physicalIndex);
             barriers.push_back(barrier);
         }
 
@@ -366,7 +366,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 phys.event.stages, phys.event.access, tex->layout,
                 VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
             );
-            LogBarrier(barrier, tex->name, tex->physicalIndex);
+            LogImageBarrier(barrier, tex->name, tex->physicalIndex);
             barriers.push_back(barrier);
         }
 
@@ -378,7 +378,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 phys.event.stages, phys.event.access, tex->layout,
                 VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
             );
-            LogBarrier(barrier, tex->name, tex->physicalIndex);
+            LogImageBarrier(barrier, tex->name, tex->physicalIndex);
             barriers.push_back(barrier);
         }
         for (auto* tex : pass->copyImageReads) {
@@ -389,7 +389,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 phys.event.stages, phys.event.access, tex->layout,
                 VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
             );
-            LogBarrier(barrier, tex->name, tex->physicalIndex);
+            LogImageBarrier(barrier, tex->name, tex->physicalIndex);
             barriers.push_back(barrier);
         }
 
@@ -401,7 +401,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 phys.event.stages, phys.event.access, tex->layout,
                 VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
             );
-            LogBarrier(barrier, tex->name, tex->physicalIndex);
+            LogImageBarrier(barrier, tex->name, tex->physicalIndex);
             barriers.push_back(barrier);
         }
 
@@ -425,10 +425,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                     .size = VK_WHOLE_SIZE
                 };
                 bufferBarriers.push_back(barrier);
-
-                if (debugLogging) {
-                    SPDLOG_INFO("  [BUFFER BARRIER] {} (write): stage change", bufWrite.resource->name);
-                }
+                LogBufferBarrier(bufWrite.resource->name, desiredAccess);
             }
             phys.bUsedThisFrame = true;
         }
@@ -450,10 +447,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                     .size = VK_WHOLE_SIZE
                 };
                 bufferBarriers.push_back(barrier);
-
-                if (debugLogging) {
-                    SPDLOG_INFO("  [BUFFER BARRIER] {} (write): stage change", bufWrite.resource->name);
-                }
+                LogBufferBarrier(bufWrite.resource->name, desiredAccess);
             }
             phys.bUsedThisFrame = true;
         }
@@ -476,6 +470,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                     .size = VK_WHOLE_SIZE
                 };
                 bufferBarriers.push_back(barrier);
+                LogBufferBarrier(bufRead.resource->name, desiredAccess);
             }
             phys.bUsedThisFrame = true;
         }
@@ -497,9 +492,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                     .size = VK_WHOLE_SIZE
                 };
                 bufferBarriers.push_back(barrier);
-                if (debugLogging) {
-                    SPDLOG_INFO("  [BUFFER BARRIER] {}: stage change", bufRead.resource->name);
-                }
+                LogBufferBarrier(bufRead.resource->name, desiredAccess);
             }
             phys.bUsedThisFrame = true;
         }
@@ -521,9 +514,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                     .size = VK_WHOLE_SIZE
                 };
                 bufferBarriers.push_back(barrier);
-                if (debugLogging) {
-                    SPDLOG_INFO("  [BUFFER BARRIER] {}: stage change", bufRead.resource->name);
-                }
+                LogBufferBarrier(bufRead.resource->name, desiredAccess);
             }
             phys.bUsedThisFrame = true;
         }
@@ -545,9 +536,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                     .size = VK_WHOLE_SIZE
                 };
                 bufferBarriers.push_back(barrier);
-                if (debugLogging) {
-                    SPDLOG_INFO("  [BUFFER BARRIER] {}: stage change", bufRead.resource->name);
-                }
+                LogBufferBarrier(bufRead.resource->name, desiredAccess);
             }
             phys.bUsedThisFrame = true;
         }
@@ -691,7 +680,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                     phys.event.stages, phys.event.access, tex.layout,
                     VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT, VK_ACCESS_2_NONE, tex.finalLayout
                 );
-                LogBarrier(finalBarrier, tex.name, tex.physicalIndex);
+                LogImageBarrier(finalBarrier, tex.name, tex.physicalIndex);
                 finalBarriers.push_back(finalBarrier);
                 tex.layout = tex.finalLayout;
             }
@@ -1049,7 +1038,7 @@ void RenderGraph::CarryToNextFrame(const std::string& name, const std::string& n
     carryovers.emplace_back(name, newName);
 }
 
-void RenderGraph::LogBarrier(const VkImageMemoryBarrier2& barrier, const std::string& resourceName, uint32_t physicalIndex) const
+void RenderGraph::LogImageBarrier(const VkImageMemoryBarrier2& barrier, const std::string& resourceName, uint32_t physicalIndex) const
 {
     if (!debugLogging) return;
 
@@ -1072,6 +1061,18 @@ void RenderGraph::LogBarrier(const VkImageMemoryBarrier2& barrier, const std::st
     };
 
     SPDLOG_INFO("  [BARRIER] {} ({}): {} -> {}", resourceName, physicalIndex, LayoutToString(barrier.oldLayout), LayoutToString(barrier.newLayout));
+}
+
+void RenderGraph::LogBufferBarrier(const std::string& resourceName, VkAccessFlags2 access) const
+{
+    if (!debugLogging) return;
+
+    const char* accessType = "read";
+    if (access & (VK_ACCESS_2_SHADER_WRITE_BIT | VK_ACCESS_2_TRANSFER_WRITE_BIT)) {
+        accessType = "write";
+    }
+
+    SPDLOG_INFO("  [BUFFER BARRIER] {} ({})", resourceName, accessType);
 }
 
 

@@ -135,7 +135,9 @@ private:
 
     void CreatePhysicalBuffer(PhysicalResource& resource, const ResourceDimensions& dim);
 
-    void LogBarrier(const VkImageMemoryBarrier2& barrier, const std::string& resourceName, uint32_t physicalIndex) const;
+    void LogImageBarrier(const VkImageMemoryBarrier2& barrier, const std::string& resourceName, uint32_t physicalIndex) const;
+
+    void LogBufferBarrier(const std::string& resourceName, VkAccessFlags2 access) const;
 };
 } // Render
 
