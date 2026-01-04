@@ -49,6 +49,21 @@ RenderPass& RenderPass::WriteBlitImage(const std::string& name, const TextureInf
     return *this;
 }
 
+RenderPass& RenderPass::WriteCopyImage(const std::string& name, const TextureInfo& texInfo)
+{
+    TextureResource* resource = graph.GetOrCreateTexture(name);
+    if (texInfo.format != VK_FORMAT_UNDEFINED) {
+        if (resource->textureInfo.format == VK_FORMAT_UNDEFINED) {
+            resource->textureInfo = texInfo;
+        }
+    }
+    else {
+        assert(resource->textureInfo.format != VK_FORMAT_UNDEFINED && "Texture not defined - provide TextureInfo on first use");
+    }
+    copyImageWrites.push_back(resource);
+    return *this;
+}
+
 RenderPass& RenderPass::WriteColorAttachment(const std::string& name, const TextureInfo& texInfo)
 {
     TextureResource* resource = graph.GetOrCreateTexture(name);
@@ -133,6 +148,14 @@ RenderPass& RenderPass::ReadBlitImage(const std::string& name)
 {
     TextureResource* resource = graph.GetOrCreateTexture(name);
     blitImageReads.push_back(resource);
+    return *this;
+}
+
+RenderPass& RenderPass::ReadCopyImage(const std::string& name)
+{
+
+    TextureResource* resource = graph.GetOrCreateTexture(name);
+    copyImageReads.push_back(resource);
     return *this;
 }
 

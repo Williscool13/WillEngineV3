@@ -111,6 +111,7 @@ struct FrameBuffer
 
     // Debug
     bool bFreezeVisibility = false;
+    bool bLogRDG = false;
 };
 } // Core
 

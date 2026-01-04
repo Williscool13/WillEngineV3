@@ -127,7 +127,6 @@ SHADER_PUBLIC struct DeferredResolvePushConstant {
     SHADER_PUBLIC uint32_t normalIndex;
     SHADER_PUBLIC uint32_t pbrIndex;
     SHADER_PUBLIC uint32_t depthIndex;
-    SHADER_PUBLIC uint32_t velocityIndex;
     SHADER_PUBLIC uint32_t pointSamplerIndex;
     SHADER_PUBLIC uint32_t outputImageIndex;
 };

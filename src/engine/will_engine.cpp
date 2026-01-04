@@ -327,6 +327,7 @@ void WillEngine::Run()
 
                 gameFunctions.gamePrepareFrame(engineContext.get(), gameState.get(), &stagingFrameBuffer);
                 stagingFrameBuffer.bFreezeVisibility = bFreezeVisibility;
+                stagingFrameBuffer.bLogRDG = bLogRDG;
 
                 std::swap(currentFrameBuffer, stagingFrameBuffer);
                 stagingFrameBuffer.mainViewFamily.modelMatrices.clear();
@@ -357,6 +358,11 @@ void WillEngine::DrawImgui()
 
     if (ImGui::Begin("Main")) {
         ImGui::Checkbox("Freeze Visibility Calculations", &bFreezeVisibility);
+        if (ImGui::Button("Log RDG")) {
+            bLogRDG = true;
+        } else {
+            bLogRDG = false;
+        }
         ImGui::Text("Hello!");
 
         /*if (ImGui::CollapsingHeader("Visibility Debug")) {

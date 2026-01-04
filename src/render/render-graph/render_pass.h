@@ -23,6 +23,8 @@ public:
 
     RenderPass& WriteBlitImage(const std::string& name, const TextureInfo& texInfo = {});
 
+    RenderPass& WriteCopyImage(const std::string& name, const TextureInfo& texInfo = {});
+
     RenderPass& WriteColorAttachment(const std::string& name, const TextureInfo& texInfo = {});
 
     RenderPass& WriteDepthAttachment(const std::string& name, const TextureInfo& texInfo = {});
@@ -40,6 +42,8 @@ public:
     RenderPass& ReadSampledImage(const std::string& name);
 
     RenderPass& ReadBlitImage(const std::string& name);
+
+    RenderPass& ReadCopyImage(const std::string& name);
 
     RenderPass& ReadBuffer(const std::string& name, VkPipelineStageFlags2 stages);
 
@@ -71,6 +75,8 @@ private:
     std::vector<TextureResource*> sampledImageReads;
     std::vector<TextureResource*> blitImageReads;
     std::vector<TextureResource*> blitImageWrites;
+    std::vector<TextureResource*> copyImageReads;
+    std::vector<TextureResource*> copyImageWrites;
 
     std::vector<BufferAccess> bufferReads;
     std::vector<BufferAccess> bufferWrites;

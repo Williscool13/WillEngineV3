@@ -476,7 +476,6 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     deferredResolvePass.ReadSampledImage("albedoTarget");
     deferredResolvePass.ReadSampledImage("normalTarget");
     deferredResolvePass.ReadSampledImage("pbrTarget");
-    deferredResolvePass.ReadSampledImage("velocityTarget");
     deferredResolvePass.ReadSampledImage("depthTarget");
     deferredResolvePass.WriteStorageImage("deferredResolve");
     deferredResolvePass.Execute([&](VkCommandBuffer cmd) {
@@ -491,7 +490,6 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
             .normalIndex = graph->GetDescriptorIndex("normalTarget"),
             .pbrIndex = graph->GetDescriptorIndex("pbrTarget"),
             .depthIndex = graph->GetDescriptorIndex("depthTarget"),
-            .velocityIndex = graph->GetDescriptorIndex("velocityTarget"),
             .pointSamplerIndex = resourceManager->linearSamplerIndex,
             .outputImageIndex = graph->GetDescriptorIndex("deferredResolve"),
         };
@@ -516,38 +514,31 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
 
 
     if (!graph->HasTexture("taaHistory")) {
-        // todo: add copy image pass functions
         RenderPass& taaPass = graph->AddPass("TemporalAntialiasingFirstFrame");
-        taaPass.ReadBlitImage("deferredResolve");
-        taaPass.WriteBlitImage("taaCurrent");
+        taaPass.ReadCopyImage("deferredResolve");
+        taaPass.WriteCopyImage("taaCurrent");
         taaPass.Execute([&](VkCommandBuffer cmd) {
             VkImage drawImage = graph->GetImage("deferredResolve");
             VkImage taaImage = graph->GetImage("taaCurrent");
 
-            VkOffset3D renderOffset = {static_cast<int32_t>(renderExtent[0]), static_cast<int32_t>(renderExtent[1]), 1};
+            VkImageCopy2 copyRegion{};
+            copyRegion.sType = VK_STRUCTURE_TYPE_IMAGE_COPY_2;
+            copyRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            copyRegion.srcSubresource.layerCount = 1;
+            copyRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            copyRegion.dstSubresource.layerCount = 1;
+            copyRegion.extent = {renderExtent[0], renderExtent[1], 1};
 
-            VkImageBlit2 blitRegion{};
-            blitRegion.sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2;
-            blitRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            blitRegion.srcSubresource.layerCount = 1;
-            blitRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            blitRegion.dstSubresource.layerCount = 1;
-            blitRegion.srcOffsets[0] = {0, 0, 0};
-            blitRegion.srcOffsets[1] = renderOffset;
-            blitRegion.dstOffsets[0] = {0, 0, 0};
-            blitRegion.dstOffsets[1] = renderOffset;
+            VkCopyImageInfo2 copyInfo{};
+            copyInfo.sType = VK_STRUCTURE_TYPE_COPY_IMAGE_INFO_2;
+            copyInfo.srcImage = drawImage;
+            copyInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            copyInfo.dstImage = taaImage;
+            copyInfo.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            copyInfo.regionCount = 1;
+            copyInfo.pRegions = &copyRegion;
 
-            VkBlitImageInfo2 blitInfo{};
-            blitInfo.sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2;
-            blitInfo.srcImage = drawImage;
-            blitInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-            blitInfo.dstImage = taaImage;
-            blitInfo.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-            blitInfo.regionCount = 1;
-            blitInfo.pRegions = &blitRegion;
-            blitInfo.filter = VK_FILTER_LINEAR;
-
-            vkCmdBlitImage2(cmd, &blitInfo);
+            vkCmdCopyImage2(cmd, &copyInfo);
         });
     }
     else {
@@ -740,7 +731,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         vkCmdBlitImage2(cmd, &blitInfo);
     });
 
-    // graph->SetDebugLogging(frameNumber % 180 == 0);
+    graph->SetDebugLogging(frameBuffer.bLogRDG);
     graph->Compile();
     graph->Execute(renderSync.commandBuffer);
     graph->PrepareSwapchain(renderSync.commandBuffer, swapchainName);
