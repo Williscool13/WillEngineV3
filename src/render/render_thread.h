@@ -91,6 +91,19 @@ public:
     ResourceManager* GetResourceManager() const { return resourceManager.get(); }
 
 private:
+    void SetupFrameUniforms(FrameResources& frameResource, Core::FrameBuffer& frameBuffer, const std::array<uint32_t, 2>& renderExtent);
+
+    void SetupCascadedShadows(RenderGraph& graph, Core::FrameBuffer& frameBuffer, FrameResources& frameResource);
+
+    void SetupInstancingPipeline(RenderGraph& graph, Core::FrameBuffer& frameBuffer);
+
+    void SetupMainGeometryPass(RenderGraph& graph);
+
+    void SetupDeferredLighting(RenderGraph& graph, const std::array<uint32_t, 2>& renderExtent);
+
+    void SetupTemporalAntialiasing(RenderGraph& graph, const std::array<uint32_t, 2>& renderExtent);
+
+private:
     // Non-owning
     SDL_Window* window{};
     Core::FrameSync* engineRenderSynchronization{};
@@ -106,7 +119,7 @@ private:
     std::unique_ptr<ImguiWrapper> imgui{};
     std::unique_ptr<ResourceManager> resourceManager{};
     std::unique_ptr<RenderExtents> renderExtents{};
-    std::unique_ptr<RenderGraph> graph{};
+    std::unique_ptr<RenderGraph> renderGraph{};
 
     std::array<RenderSynchronization, Core::FRAME_BUFFER_COUNT> frameSynchronization;
     std::array<FrameResources, Core::FRAME_BUFFER_COUNT> frameResources;
