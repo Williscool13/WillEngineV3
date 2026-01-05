@@ -174,7 +174,8 @@ FragmentOutput fragmentMain(VertexOutput vertexInput, uniform InstancedMeshShadi
 {
     MaterialProperties material = pushConstant.materialBuffer[vertexInput.materialIndex];
 
-    float4 albedoSample = textures[material.textureImageIndices[0]].Sample(samplers[material.textureSamplerIndices[0]], vertexInput.uv);
+    // float4 albedoSample = textures[material.textureImageIndices[0]].Sample(samplers[material.textureSamplerIndices[0]], vertexInput.uv);
+    float4 albedoSample = textures[material.textureImageIndices[0]].SampleBias(samplers[material.textureSamplerIndices[0]], vertexInput.uv, -1.0);
     float4 albedo = vertexInput.color * albedoSample * material.colorFactor;
 
     float3 viewNormal = normalize(vertexInput.viewNormal);

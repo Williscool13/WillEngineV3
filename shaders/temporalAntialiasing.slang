@@ -34,12 +34,67 @@ float3 neighborhoodClamp(float3 historyColor, float2 uv) {
     return clamp(historyColor, minColor, maxColor);
 }
 
+// https://www.elopezr.com/temporal-aa-and-the-quest-for-the-holy-trail/ and help from AI
+float3 SampleHistoryCatmullRom(float2 uv) {
+    float2 texelSize = pc.sceneData.texelSize;
+
+    float2 samplePos = uv / texelSize;
+    float2 texelCenter = floor(samplePos - 0.5) + 0.5;
+    float2 f = samplePos - texelCenter;
+
+    float2 f2 = f * f;
+    float2 f3 = f2 * f;
+
+    float2 w0 = -0.5 * f3 + f2 - 0.5 * f;
+    float2 w1 = 1.5 * f3 - 2.5 * f2 + 1.0;
+    float2 w2 = -1.5 * f3 + 2.0 * f2 + 0.5 * f;
+    float2 w3 = 0.5 * f3 - 0.5 * f2;
+
+    float2 w12 = w1 + w2;
+    float2 offset12 = w2 / w12;
+
+    float2 tc0 = (texelCenter - 1.0) * texelSize;
+    float2 tc12 = (texelCenter + offset12) * texelSize;
+    float2 tc3 = (texelCenter + 2.0) * texelSize;
+
+    float3 color =
+        textures[pc.colorHistoryIndex].SampleLevel(samplers[pc.linearSamplerIndex], float2(tc12.x, tc0.y), 0).rgb * (w12.x * w0.y) +
+        textures[pc.colorHistoryIndex].SampleLevel(samplers[pc.linearSamplerIndex], float2(tc0.x, tc12.y), 0).rgb * (w0.x * w12.y) +
+        textures[pc.colorHistoryIndex].SampleLevel(samplers[pc.linearSamplerIndex], tc12, 0).rgb * (w12.x * w12.y) +
+        textures[pc.colorHistoryIndex].SampleLevel(samplers[pc.linearSamplerIndex], float2(tc3.x, tc12.y), 0).rgb * (w3.x * w12.y) +
+        textures[pc.colorHistoryIndex].SampleLevel(samplers[pc.linearSamplerIndex], float2(tc12.x, tc3.y), 0).rgb * (w12.x * w3.y);
+
+    return color;
+}
+
+// https://www.elopezr.com/temporal-aa-and-the-quest-for-the-holy-trail/ and help from AI
+float2 GetVelocityDilated(float2 uv) {
+    float closestDepth = 1.0; // far plane
+    float2 closestVelocity = float2(0.0);
+
+    for (int y = -1; y <= 1; ++y) {
+        for (int x = -1; x <= 1; ++x) {
+            float2 offset = float2(x, y) * pc.sceneData.texelSize;
+            float2 sampleUv = uv + offset;
+
+            float depth = textures[pc.depthIndex].SampleLevel(samplers[pc.pointSamplerIndex], sampleUv, 0).r;
+            if (depth < closestDepth) {
+                closestDepth = depth;
+                closestVelocity = textures[pc.velocityIndex].SampleLevel(samplers[pc.pointSamplerIndex], sampleUv, 0).rg;
+            }
+        }
+    }
+
+    return closestVelocity;
+}
+
 [numthreads(16, 16, 1)]
 void computeMain(uint3 threadID : SV_DispatchThreadID) {
     if (threadID.x >= pc.sceneData.mainRenderTargetSize.x || threadID.y >= pc.sceneData.mainRenderTargetSize.y) return;
     float2 uv = (float2(threadID.xy) + 0.5) / float2(pc.sceneData.mainRenderTargetSize);
 
-    float2 velocity = textures[pc.velocityIndex].SampleLevel(samplers[pc.pointSamplerIndex], uv, 0).rg;
+    //float2 velocity = textures[pc.velocityIndex].SampleLevel(samplers[pc.pointSamplerIndex], uv, 0).rg;
+    float2 velocity = GetVelocityDilated(uv);
     velocity = (velocity - 0.5);
     velocity.y = -velocity.y;
 
@@ -53,7 +108,8 @@ void computeMain(uint3 threadID : SV_DispatchThreadID) {
         resultRGB = currentColor;
     } else {
         float3 currentYCoCg = RGBToYCoCg(currentColor);
-        float3 historyColor = textures[pc.colorHistoryIndex].SampleLevel(samplers[pc.linearSamplerIndex], historyUv, 0).rgb;
+        // float3 historyColor = textures[pc.colorHistoryIndex].SampleLevel(samplers[pc.linearSamplerIndex], historyUv, 0).rgb;
+        float3 historyColor = SampleHistoryCatmullRom(historyUv);
         float3 historyYCoCg = RGBToYCoCg(historyColor);
 
         float3 neighborClampedYCoCg = RGBToYCoCg(neighborhoodClamp(YCoCgToRGB(historyYCoCg), uv));

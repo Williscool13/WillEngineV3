@@ -538,6 +538,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     else {
         RenderPass& taaPass = graph->AddPass("TemporalAntialiasing");
         taaPass.ReadSampledImage("deferredResolve");
+        taaPass.ReadSampledImage("depthTarget");
         taaPass.ReadSampledImage("taaHistory");
         taaPass.ReadSampledImage("velocityTarget");
         taaPass.WriteStorageImage("taaCurrent");
@@ -548,6 +549,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
                 .pointSamplerIndex = resourceManager->pointSamplerIndex,
                 .linearSamplerIndex = resourceManager->linearSamplerIndex,
                 .colorResolvedIndex = graph->GetDescriptorIndex("deferredResolve"),
+                .depthIndex = graph->GetDescriptorIndex("depthTarget"),
                 .colorHistoryIndex = graph->GetDescriptorIndex("taaHistory"),
                 .velocityIndex = graph->GetDescriptorIndex("velocityTarget"),
                 .outputImageIndex = graph->GetDescriptorIndex("taaCurrent"),
