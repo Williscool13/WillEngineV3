@@ -16,6 +16,7 @@ import common_interop;
 import model_interop;
 import constants_interop;
 import instancing_interop;
+import shadows_interop;
 #else
 #include <glm/glm.hpp>
 #include <volk.h>
@@ -142,6 +143,24 @@ SHADER_PUBLIC struct TemporalAntialiasingPushConstant
     SHADER_PUBLIC uint32_t colorHistoryIndex;
     SHADER_PUBLIC uint32_t velocityIndex;
     SHADER_PUBLIC uint32_t outputImageIndex;
+};
+
+SHADER_PUBLIC struct ShadowMeshShadingPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC SHADER_PTR(ShadowData) shadowData;
+
+    SHADER_PUBLIC SHADER_PTR(Vertex) vertexBuffer;
+    SHADER_PUBLIC SHADER_PTR(uint32_t) meshletVerticesBuffer;
+    SHADER_PUBLIC SHADER_PTR(uint32_t) meshletTrianglesBuffer;
+    SHADER_PUBLIC SHADER_PTR(Meshlet) meshletBuffer;
+
+    SHADER_PUBLIC SHADER_PTR(InstancedMeshIndirectDrawParameters) indirectBuffer;
+
+    SHADER_PUBLIC SHADER_PTR(Instance) compactedInstanceBuffer;
+    SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
+
+    SHADER_PUBLIC uint32_t cascadeIndex;
 };
 
 #endif //WILL_ENGINE_PUSH_CONSTANT_INTEROP_H

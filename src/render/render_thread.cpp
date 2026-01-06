@@ -24,6 +24,7 @@
 #include "types/render_types.h"
 #include "render/vulkan/vk_imgui_wrapper.h"
 #include "backends/imgui_impl_vulkan.h"
+#include "shadows/shadow_helpers.h"
 
 
 namespace Render
@@ -69,6 +70,9 @@ RenderThread::RenderThread(Core::FrameSync* engineRenderSynchronization, enki::T
         bufferInfo.size = BINDLESS_MATERIAL_BUFFER_SIZE;
         frameResources[i].materialBuffer = std::move(AllocatedBuffer::CreateAllocatedBuffer(context.get(), bufferInfo, vmaAllocInfo));
         frameResources[i].materialBuffer.SetDebugName(("materialBuffer_" + std::to_string(i)).c_str());
+        bufferInfo.size = SHADOW_CASCADE_BUFFER_SIZE;
+        frameResources[i].shadowBuffer = std::move(AllocatedBuffer::CreateAllocatedBuffer(context.get(), bufferInfo, vmaAllocInfo));
+        frameResources[i].shadowBuffer.SetDebugName(("shadowBuffer_" + std::to_string(i)).c_str());
     }
 
     CreatePipelines();
@@ -209,27 +213,27 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     renderGraph->Reset();
 
     renderGraph->ImportBufferNoBarrier("vertexBuffer", resourceManager->megaVertexBuffer.handle, resourceManager->megaVertexBuffer.address,
-                                 {resourceManager->megaVertexBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
+                                       {resourceManager->megaVertexBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
     renderGraph->ImportBufferNoBarrier("skinnedVertexBuffer", resourceManager->megaSkinnedVertexBuffer.handle, resourceManager->megaSkinnedVertexBuffer.address,
-                                 {resourceManager->megaSkinnedVertexBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
+                                       {resourceManager->megaSkinnedVertexBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
     renderGraph->ImportBufferNoBarrier("meshletVertexBuffer", resourceManager->megaMeshletVerticesBuffer.handle, resourceManager->megaMeshletVerticesBuffer.address,
-                                 {resourceManager->megaMeshletVerticesBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
+                                       {resourceManager->megaMeshletVerticesBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
     renderGraph->ImportBufferNoBarrier("meshletTriangleBuffer", resourceManager->megaMeshletTrianglesBuffer.handle, resourceManager->megaMeshletTrianglesBuffer.address,
-                                 {resourceManager->megaMeshletTrianglesBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
+                                       {resourceManager->megaMeshletTrianglesBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
     renderGraph->ImportBufferNoBarrier("meshletBuffer", resourceManager->megaMeshletBuffer.handle, resourceManager->megaMeshletBuffer.address,
-                                 {resourceManager->megaMeshletBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
+                                       {resourceManager->megaMeshletBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
     renderGraph->ImportBufferNoBarrier("primitiveBuffer", resourceManager->primitiveBuffer.handle, resourceManager->primitiveBuffer.address,
-                                 {resourceManager->primitiveBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
+                                       {resourceManager->primitiveBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
     renderGraph->ImportBufferNoBarrier("sceneData", frameResource.sceneDataBuffer.handle, frameResource.sceneDataBuffer.address,
-                                 {frameResource.sceneDataBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
+                                       {frameResource.sceneDataBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
     renderGraph->ImportBufferNoBarrier("instanceBuffer", frameResource.instanceBuffer.handle, frameResource.instanceBuffer.address,
-                                 {frameResource.instanceBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
+                                       {frameResource.instanceBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
     renderGraph->ImportBufferNoBarrier("modelBuffer", frameResource.modelBuffer.handle, frameResource.modelBuffer.address,
-                                 {frameResource.modelBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
+                                       {frameResource.modelBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
     renderGraph->ImportBufferNoBarrier("jointMatrixBuffer", frameResource.jointMatrixBuffer.handle, frameResource.jointMatrixBuffer.address,
-                                 {frameResource.jointMatrixBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
+                                       {frameResource.jointMatrixBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
     renderGraph->ImportBufferNoBarrier("materialBuffer", frameResource.materialBuffer.handle, frameResource.materialBuffer.address,
-                                 {frameResource.materialBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
+                                       {frameResource.materialBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
 
     renderGraph->CreateBuffer("packedVisibilityBuffer", INSTANCING_PACKED_VISIBILITY_SIZE);
     renderGraph->CreateBuffer("instanceOffsetBuffer", INSTANCING_INSTANCE_OFFSET_SIZE);
@@ -252,8 +256,8 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
 
     SetupDeferredLighting(*renderGraph, renderExtent);
     renderGraph->CreateTextureWithUsage("taaCurrent",
-                                  {COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1]},
-                                  VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT
+                                        {COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1]},
+                                        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT
     );
 
     SetupTemporalAntialiasing(*renderGraph, renderExtent);
@@ -295,7 +299,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
 
 #if WILL_EDITOR
     renderGraph->ImportBuffer("debugReadbackBuffer", resourceManager->debugReadbackBuffer.handle, resourceManager->debugReadbackBuffer.address,
-                        {resourceManager->debugReadbackBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT}, resourceManager->debugReadbackLastKnownState);
+                              {resourceManager->debugReadbackBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT}, resourceManager->debugReadbackLastKnownState);
     RenderPass& readbackPass = renderGraph->AddPass("DebugReadback");
     readbackPass.ReadTransferBuffer("indirectBuffer", VK_PIPELINE_STAGE_2_TRANSFER_BIT);
     readbackPass.ReadTransferBuffer("indirectCountBuffer", VK_PIPELINE_STAGE_2_TRANSFER_BIT);
@@ -379,7 +383,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     }
 
     renderGraph->ImportTexture("swapchainImage", currentSwapchainImage, currentSwapchainImageView, {swapchain->format, swapchain->extent.width, swapchain->extent.height}, swapchain->usages,
-                         VK_IMAGE_LAYOUT_UNDEFINED, VK_PIPELINE_STAGE_2_BLIT_BIT, VK_IMAGE_LAYOUT_UNDEFINED);
+                               VK_IMAGE_LAYOUT_UNDEFINED, VK_PIPELINE_STAGE_2_BLIT_BIT, VK_IMAGE_LAYOUT_UNDEFINED);
 
     auto& blitPass = renderGraph->AddPass("BlitToSwapchain");
     blitPass.ReadBlitImage("finalImage");
@@ -628,7 +632,62 @@ void RenderThread::SetupFrameUniforms(FrameResources& frameResource, Core::Frame
 }
 
 void RenderThread::SetupCascadedShadows(RenderGraph& graph, Core::FrameBuffer& frameBuffer, FrameResources& frameResource)
-{}
+{
+    Core::ShadowConfiguration shadowConfig = frameBuffer.mainViewFamily.shadowConfiguration;
+    ShadowCascadePreset shadowPreset = SHADOW_PRESETS[static_cast<uint32_t>(shadowConfig.quality)];
+    Core::DirectionalLight directionalLight = frameBuffer.mainViewFamily.directionalLight;
+
+    ShadowData shadowData;
+
+    const float ratio = shadowConfig.cascadeFarPlane / shadowConfig.cascadeNearPlane;
+    shadowData.nearSplits[0] = shadowConfig.cascadeNearPlane;
+    for (size_t i = 1; i < SHADOW_CASCADE_COUNT; i++) {
+        const float si = static_cast<float>(i) / static_cast<float>(SHADOW_CASCADE_COUNT);
+
+        const float uniformTerm = shadowConfig.cascadeNearPlane + (shadowConfig.cascadeFarPlane - shadowConfig.cascadeNearPlane) * si;
+        const float logTerm = shadowConfig.cascadeNearPlane * std::pow(ratio, si);
+        const float nearValue = shadowConfig.splitLambda * logTerm + (1.0f - shadowConfig.splitLambda) * uniformTerm;
+
+        const float farValue = nearValue * shadowConfig.splitOverlap;
+
+        shadowData.nearSplits[i] = nearValue;
+        shadowData.farSplits[i - 1] = farValue;
+    }
+    shadowData.farSplits[SHADOW_CASCADE_COUNT - 1] = shadowConfig.cascadeFarPlane;
+
+    shadowData.mainLightDirection = glm::vec4(directionalLight.direction, 0.0f);
+    for (int i = 0; i < SHADOW_CASCADE_COUNT; ++i) {
+        shadowData.lightSpaceMatrices[i] = GenerateLightSpaceMatrix(
+            static_cast<float>(shadowPreset.extents[i].width),
+            shadowData.nearSplits[i],
+            shadowData.farSplits[i],
+            frameBuffer.mainViewFamily.directionalLight.direction,
+            frameBuffer.mainViewFamily.mainView.currentViewData
+        );
+    }
+
+    // todo: tweak shadow intensity
+    shadowData.shadowIntensity = 1.0f;
+
+    AllocatedBuffer& shadowBuffer = frameResource.shadowBuffer;
+    auto currentShadowData = static_cast<ShadowData*>(shadowBuffer.allocationInfo.pMappedData);
+    memcpy(currentShadowData, &shadowData, sizeof(ShadowData));
+
+    renderGraph->ImportBufferNoBarrier("shadowData", shadowBuffer.handle, shadowBuffer.address, {shadowBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
+
+    for (int32_t cascadeLevel{0}; cascadeLevel < SHADOW_CASCADE_COUNT; ++cascadeLevel) {
+        // prepare instancing
+        //   perhaps instancing should use the same for all? will be some wasted, but maybe faster than doing indirect for all 4? Could profile
+
+        std::string shadowMapName = fmt::format("shadowCascade_{}", cascadeLevel);
+        renderGraph->CreateTexture(shadowMapName, {SHADOW_CASCADE_FORMAT, shadowPreset.extents[cascadeLevel].width, shadowPreset.extents[cascadeLevel].height});
+
+        RenderPass& shadowPass = graph.AddPass(fmt::format("ShadowCascadePass_{}", cascadeLevel));
+        shadowPass.WriteDepthAttachment(shadowMapName);
+
+        // draw
+    }
+}
 
 void RenderThread::SetupInstancingPipeline(RenderGraph& graph, Core::FrameBuffer& frameBuffer)
 {

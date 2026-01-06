@@ -22,6 +22,8 @@ struct FrameResources
     AllocatedBuffer modelBuffer;
     AllocatedBuffer jointMatrixBuffer;
     AllocatedBuffer materialBuffer;
+
+    AllocatedBuffer shadowBuffer;
 };
 } // Render
 

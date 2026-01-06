@@ -191,6 +191,10 @@ preprocess_shader_interop(
         ${CMAKE_SOURCE_DIR}/shaders/instancing_interop.slang
 )
 preprocess_shader_interop(
+        ${CMAKE_SOURCE_DIR}/src/render/shaders/shadows_interop.h
+        ${CMAKE_SOURCE_DIR}/shaders/shadows_interop.slang
+)
+preprocess_shader_interop(
         ${CMAKE_SOURCE_DIR}/src/render/shaders/constants_interop.h
         ${CMAKE_SOURCE_DIR}/shaders/constants_interop.slang
 )
@@ -233,6 +237,8 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/meshShadingInstanced.slang task taskMain
         ${CMAKE_SOURCE_DIR}/shaders/meshShadingInstanced.slang mesh meshMain
         ${CMAKE_SOURCE_DIR}/shaders/meshShadingInstanced.slang fragment fragmentMain
+        ${CMAKE_SOURCE_DIR}/shaders/shadowMeshShadingInstanced.slang task taskMain
+        ${CMAKE_SOURCE_DIR}/shaders/shadowMeshShadingInstanced.slang mesh meshMain
         ${CMAKE_SOURCE_DIR}/shaders/deferredResolve.slang compute computeMain
         ${CMAKE_SOURCE_DIR}/shaders/temporalAntialiasing.slang compute computeMain
 )

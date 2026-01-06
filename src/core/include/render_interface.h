@@ -27,6 +27,7 @@ struct ViewData
     float farPlane;
     glm::vec3 cameraPos;
     glm::vec3 cameraLookAt;
+    glm::vec3 cameraForward;
     glm::vec3 cameraUp;
 };
 
@@ -39,6 +40,31 @@ struct RenderView
     // render target depth
 
     uint32_t debug;
+};
+
+enum class ShadowQuality
+{
+    Ultra = 0,
+    High,
+    Medium,
+    Low
+};
+
+
+struct ShadowConfiguration {
+    float cascadeNearPlane = 0.1f;
+    float cascadeFarPlane = 200.0f;
+    float splitLambda = 0.5f;
+    float splitOverlap = 1.05f;
+    ShadowQuality quality = ShadowQuality::High;
+    bool enabled = true;
+};
+
+struct DirectionalLight
+{
+    glm::vec3 direction;
+    float intensity;
+    glm::vec3 color;
 };
 
 struct ViewFamily {
@@ -56,7 +82,10 @@ struct ViewFamily {
     std::vector<InstanceData> instances;
 
     std::vector<MaterialProperties> materials;
+    DirectionalLight directionalLight;
     // std::vector<LightInstance> allLights;
+
+    ShadowConfiguration shadowConfiguration{};
 };
 
 struct BufferAcquireOperation
