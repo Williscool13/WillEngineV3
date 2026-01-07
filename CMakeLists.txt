@@ -226,6 +226,7 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/debugVisualize.slang compute computeMain
         ${CMAKE_SOURCE_DIR}/shaders/basicCompute.slang compute computeMain
         ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute computeVisibility instancingVisibility
+        ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute computeVisibilityShadows instancingShadowsVisibility
         ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute computePrefixSum instancingPrefixSum
         ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute computeCompactAndGenerateIndirect instancingCompactAndGenerateIndirect
         ${CMAKE_SOURCE_DIR}/shaders/basicRender.slang task taskMain

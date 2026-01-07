@@ -73,7 +73,6 @@ struct PhysicalResource
     bool bCanAlias = true;
 
     std::vector<uint32_t> logicalResourceIndices;
-    bool bUsedThisFrame = false;
 
     // Image resources (valid if dimensions.is_image())
     VkImage image = VK_NULL_HANDLE;

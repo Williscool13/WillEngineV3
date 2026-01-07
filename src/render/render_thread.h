@@ -17,6 +17,7 @@
 #include "pipelines/compute_pipeline.h"
 #include "pipelines/mesh_shader_pipeline.h"
 #include "pipelines/mesh_shading_instanced_pipeline.h"
+#include "pipelines/shadow_mesh_shading_instanced_pipeline.h"
 #include "shaders/common_interop.h"
 
 namespace Render
@@ -141,9 +142,11 @@ private:
     ComputePipeline debugVisualizePipeline;
 
     ComputePipeline instancingVisibility;
+    ComputePipeline instancingShadowsVisibility;
     ComputePipeline instancingPrefixSum;
     ComputePipeline instancingIndirectConstruction;
     MeshShadingInstancedPipeline meshShadingInstancedPipeline;
+    ShadowMeshShadingInstancedPipeline shadowMeshShadingInstancedPipeline;
     ComputePipeline deferredResolve;
 
     ComputePipeline temporalAntialiasing;

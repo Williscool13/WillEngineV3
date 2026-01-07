@@ -17,22 +17,22 @@ ShadowMeshShadingInstancedPipeline::ShadowMeshShadingInstancedPipeline() = defau
 
 ShadowMeshShadingInstancedPipeline::~ShadowMeshShadingInstancedPipeline() = default;
 
-ShadowMeshShadingInstancedPipeline::ShadowMeshShadingInstancedPipeline(VulkanContext* context, DescriptorSetLayout& bindlessResources)
+ShadowMeshShadingInstancedPipeline::ShadowMeshShadingInstancedPipeline(VulkanContext* context)
 {
     VkPushConstantRange renderPushConstantRange{};
     renderPushConstantRange.offset = 0;
     renderPushConstantRange.size = sizeof(ShadowMeshShadingPushConstant);
-    renderPushConstantRange.stageFlags = VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT;
+    renderPushConstantRange.stageFlags = VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT;
 
     VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo{};
     pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutCreateInfo.pSetLayouts = &bindlessResources.handle;
-    pipelineLayoutCreateInfo.setLayoutCount = 1;
+    pipelineLayoutCreateInfo.pSetLayouts = nullptr;
+    pipelineLayoutCreateInfo.setLayoutCount = 0;
     pipelineLayoutCreateInfo.pPushConstantRanges = &renderPushConstantRange;
     pipelineLayoutCreateInfo.pushConstantRangeCount = 1;
 
     pipelineLayout = PipelineLayout::CreatePipelineLayout(context, pipelineLayoutCreateInfo);
-    pipelineLayout.SetDebugName("Mesh Shader Pipeline Layout");
+    pipelineLayout.SetDebugName("Cascaded Shadow Map Pipeline Layout");
 
     VkShaderModule taskShader;
     VkShaderModule meshShader;

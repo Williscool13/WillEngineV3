@@ -78,6 +78,22 @@ SHADER_PUBLIC struct VisibilityPushConstant
     SHADER_PUBLIC uint32_t instanceCount;
 };
 
+SHADER_PUBLIC struct VisibilityShadowsPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC SHADER_PTR(ShadowData) shadowData;
+    SHADER_PUBLIC SHADER_PTR(MeshletPrimitive) primitiveBuffer;
+    SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
+    SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
+
+    // Read-Write
+    SHADER_PUBLIC SHADER_PTR(uint32_t) packedVisibilityBuffer;
+    SHADER_PUBLIC SHADER_PTR(uint32_t) instanceOffsetBuffer;
+    SHADER_PUBLIC SHADER_PTR(PrimitiveCount) primitiveCountBuffer;
+    SHADER_PUBLIC uint32_t instanceCount;
+    SHADER_PUBLIC uint32_t cascadeLevel;
+};
+
 SHADER_PUBLIC struct PrefixSumPushConstant
 {
     // Read-Write

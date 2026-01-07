@@ -51,9 +51,10 @@ enum class ShadowQuality
 };
 
 
-struct ShadowConfiguration {
+struct ShadowConfiguration
+{
     float cascadeNearPlane = 0.1f;
-    float cascadeFarPlane = 200.0f;
+    float cascadeFarPlane = 100.0f;
     float splitLambda = 0.5f;
     float splitOverlap = 1.05f;
     ShadowQuality quality = ShadowQuality::High;
@@ -62,23 +63,26 @@ struct ShadowConfiguration {
 
 struct DirectionalLight
 {
-    glm::vec3 direction;
-    float intensity;
-    glm::vec3 color;
+    glm::vec3 direction{0.577f, -0.577f, 0.577f};
+    float intensity{1.0f};
+    glm::vec3 color{1.0f, 1.0f, 1.0f};
 };
 
-struct ViewFamily {
+struct ViewFamily
+{
     RenderView mainView;
     std::vector<RenderView> portalViews;
 
     std::vector<Model> modelMatrices;
 
-    struct InstanceData {
+    struct InstanceData
+    {
         uint32_t primitiveIndex;
         Engine::MaterialID materialID;
         uint32_t modelIndex;
         uint32_t gpuMaterialIndex;
     };
+
     std::vector<InstanceData> instances;
 
     std::vector<MaterialProperties> materials;

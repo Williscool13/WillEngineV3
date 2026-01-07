@@ -17,7 +17,7 @@ public:
 
     ~ShadowMeshShadingInstancedPipeline();
 
-    ShadowMeshShadingInstancedPipeline(VulkanContext* context, DescriptorSetLayout& bindlessResources);
+    explicit ShadowMeshShadingInstancedPipeline(VulkanContext* context);
 
     ShadowMeshShadingInstancedPipeline(const ShadowMeshShadingInstancedPipeline&) = delete;
 
@@ -34,8 +34,6 @@ public:
 private:
     VulkanContext* context{nullptr};
 };
-class mesh_shading_instanced_pipeline
-{};
 } // Render
 
 #endif //WILL_ENGINE_SHADOW_MESH_SHADING_INSTANCED_PIPELINE_H

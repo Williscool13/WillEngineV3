@@ -48,6 +48,49 @@ void computeVisibility(uniform VisibilityPushConstant pushConstant, uint3 dtid :
     }
 }
 
+[shader("compute")]
+[numthreads(INSTANCING_VISIBILITY_DISPATCH_X, 1, 1)]
+void computeVisibilityShadows(uniform VisibilityShadowsPushConstant pushConstant, uint3 dtid : SV_DispatchThreadID)
+{
+    uint instanceID = dtid.x;
+    if (instanceID >= pushConstant.instanceCount) {
+        return;
+    }
+    Instance inst = pushConstant.instanceBuffer[instanceID];
+
+    MeshletPrimitive prim = pushConstant.primitiveBuffer[inst.primitiveIndex];
+    Model model = pushConstant.modelBuffer[inst.modelIndex];
+
+    float4 boundingSphere = prim.boundingSphere;
+    float3 scale = float3(
+        length(model.modelMatrix[0].xyz),
+        length(model.modelMatrix[1].xyz),
+        length(model.modelMatrix[2].xyz)
+    );
+    float maxScale = max(max(scale.x, scale.y), scale.z);
+    float worldRadius = boundingSphere.w * maxScale;
+    float3 worldCenter = mul(model.modelMatrix, float4(boundingSphere.xyz, 1.0)).xyz;
+    float4 worldBounds = float4(worldCenter, worldRadius);
+
+    bool bVisible = true;
+    Frustum frustum = pushConstant.shadowData->lightFrustums[pushConstant.cascadeLevel];
+    if (!frustumCullSphere(frustum, worldBounds)) {
+        bVisible = false;
+    }
+
+    // set visibility bit (uint32_t chunks)
+    int visibilityChunkIndex = instanceID / 32;
+    int visibilityChunkBit = instanceID % 32;
+
+    if (bVisible) {
+        uint32_t bitMask = 1u << visibilityChunkBit;
+        InterlockedOr(pushConstant.packedVisibilityBuffer[visibilityChunkIndex], bitMask);
+
+        uint32_t instanceOffset = pushConstant.primitiveCountBuffer[inst.primitiveIndex].count.add(1);
+        pushConstant.instanceOffsetBuffer[instanceID] = instanceOffset;
+    }
+}
+
 // =============== Compute Shader (Accumulation to determine offset of each instance) ===============
 // Note: This is a simple single threaded prefix sum implementation. It is unlikely to be the real bottleneck of the packed instance buffer generation.
 //     If needed, expand this with multi-pass complex GPU prefix sum and intermediate buffers.

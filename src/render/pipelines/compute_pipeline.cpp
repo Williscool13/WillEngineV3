@@ -23,7 +23,7 @@ ComputePipeline::ComputePipeline(VulkanContext* context, VkPipelineLayoutCreateI
 
     VkShaderModule computeShader;
     if (!VkHelpers::LoadShaderModule(shaderSource, context->device, &computeShader)) {
-        SPDLOG_ERROR("Failed to load basicCompute_comp.spv");
+        SPDLOG_ERROR("Failed to load {}.spv", shaderSource.filename().string());
         return;
     }
 
