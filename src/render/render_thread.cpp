@@ -236,7 +236,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
                                        {frameResource.materialBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
 
     renderGraph->ImportBuffer("debugReadbackBuffer", resourceManager->debugReadbackBuffer.handle, resourceManager->debugReadbackBuffer.address,
-                   {resourceManager->debugReadbackBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT}, resourceManager->debugReadbackLastKnownState);
+                              {resourceManager->debugReadbackBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT}, resourceManager->debugReadbackLastKnownState);
 
     renderGraph->CreateBuffer("packedVisibilityBuffer", INSTANCING_PACKED_VISIBILITY_SIZE);
     renderGraph->CreateBuffer("instanceOffsetBuffer", INSTANCING_INSTANCE_OFFSET_SIZE);
@@ -328,8 +328,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
             "normalTarget",
             "pbrTarget",
             "velocityTarget",
-            "taaHistory",
-            "taaCurrent",
+            "shadowCascade_1",
         };
 
         uint32_t debugIndex = frameBuffer.mainViewFamily.mainView.debug;
@@ -344,8 +343,10 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         debugVisPass.Execute([&, debugTargetName, debugIndex](VkCommandBuffer cmd) {
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, debugVisualizePipeline.pipeline.handle);
 
+            const ResourceDimensions& dims = renderGraph->GetImageDimensions(debugTargetName);
             DebugVisualizePushConstant pushData{
-                .extent = {renderExtent[0], renderExtent[1]},
+                .srcExtent = {dims.width, dims.height},
+                .dstExtent = {renderExtent[0], renderExtent[1]},
                 .nearPlane = frameBuffer.mainViewFamily.mainView.currentViewData.nearPlane,
                 .farPlane = frameBuffer.mainViewFamily.mainView.currentViewData.farPlane,
                 .textureIndex = renderGraph->GetDescriptorIndex(debugTargetName),
@@ -761,7 +762,6 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, Core::FrameBuffer& f
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, instancingIndirectConstruction.pipeline.handle);
 
                 IndirectWritePushConstant pushConstant{
-                    .sceneData = graph.GetBufferAddress("sceneData"),
                     .primitiveBuffer = graph.GetBufferAddress("primitiveBuffer"),
                     .modelBuffer = graph.GetBufferAddress("modelBuffer"),
                     .instanceBuffer = graph.GetBufferAddress("instanceBuffer"),
@@ -781,7 +781,37 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, Core::FrameBuffer& f
 
         RenderPass& shadowPass = graph.AddPass(shadowPassName);
         shadowPass.WriteDepthAttachment(shadowMapName);
-        // Add draw calls here
+        shadowPass.Execute([&, shadowPreset, cascadeLevel, shadowMapName](VkCommandBuffer cmd) {
+            constexpr VkClearValue depthClear = {.depthStencil = {0.0f, 0u}};
+            const VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageView(shadowMapName), &depthClear, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+            const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({shadowPreset.extents[cascadeLevel].width, shadowPreset.extents[cascadeLevel].height}, nullptr, 0, &depthAttachment);
+
+            vkCmdBeginRendering(cmd, &renderInfo);
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, shadowMeshShadingInstancedPipeline.pipeline.handle);
+
+            ShadowMeshShadingPushConstant pushConstants{
+                .sceneData = graph.GetBufferAddress("sceneData"),
+                .shadowData = graph.GetBufferAddress("shadowData"),
+                .vertexBuffer = graph.GetBufferAddress("vertexBuffer"),
+                .meshletVerticesBuffer = graph.GetBufferAddress("meshletVertexBuffer"),
+                .meshletTrianglesBuffer = graph.GetBufferAddress("meshletTriangleBuffer"),
+                .meshletBuffer = graph.GetBufferAddress("meshletBuffer"),
+                .indirectBuffer = graph.GetBufferAddress("indirectBuffer"),
+                .compactedInstanceBuffer = graph.GetBufferAddress("compactedInstanceBuffer"),
+                .modelBuffer = graph.GetBufferAddress("modelBuffer"),
+            };
+
+            vkCmdPushConstants(cmd, meshShadingInstancedPipeline.pipelineLayout.handle, VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                               0, sizeof(InstancedMeshShadingPushConstant), &pushConstants);
+
+            vkCmdDrawMeshTasksIndirectCountEXT(cmd,
+                                               graph.GetBuffer("indirectBuffer"), 0,
+                                               graph.GetBuffer("indirectCountBuffer"), 0,
+                                               MEGA_PRIMITIVE_BUFFER_COUNT,
+                                               sizeof(InstancedMeshIndirectDrawParameters));
+
+            vkCmdEndRendering(cmd);
+        });
 #if WILL_EDITOR
         if (cascadeLevel == 0) {
             RenderPass& readbackPass = graph.AddPass("ShadowDebugReadback");
@@ -878,7 +908,6 @@ void RenderThread::SetupInstancingPipeline(RenderGraph& graph, Core::FrameBuffer
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, instancingIndirectConstruction.pipeline.handle);
 
                 IndirectWritePushConstant indirectWritePushConstant{
-                    .sceneData = graph.GetBufferAddress("sceneData"),
                     .primitiveBuffer = graph.GetBufferAddress("primitiveBuffer"),
                     .modelBuffer = graph.GetBufferAddress("modelBuffer"),
                     .instanceBuffer = graph.GetBufferAddress("instanceBuffer"),

@@ -54,7 +54,8 @@ using float4x4 = glm::mat4;
 
 SHADER_PUBLIC struct DebugVisualizePushConstant
 {
-    SHADER_PUBLIC int2 extent;
+    SHADER_PUBLIC int2 srcExtent;
+    SHADER_PUBLIC int2 dstExtent;
     SHADER_PUBLIC float nearPlane;
     SHADER_PUBLIC float farPlane;
     SHADER_PUBLIC uint textureIndex;
@@ -106,7 +107,6 @@ SHADER_PUBLIC struct PrefixSumPushConstant
 SHADER_PUBLIC struct IndirectWritePushConstant
 {
     // Read-Only
-    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC SHADER_PTR(MeshletPrimitive) primitiveBuffer;
     SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
     SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;

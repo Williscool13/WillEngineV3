@@ -55,10 +55,10 @@ public:
 
     RenderPass& Execute(std::function<void(VkCommandBuffer)> func);
 
+    std::string renderPassName;
 private:
     friend class RenderGraph;
     RenderGraph& graph;
-    std::string renderPassName;
 
     struct BufferAccess
     {

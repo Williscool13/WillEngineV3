@@ -543,7 +543,12 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
 
         // Execute pass
         if (pass->executeFunc) {
+            VkDebugUtilsLabelEXT label = {};
+            label.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT;
+            label.pLabelName = pass->renderPassName.c_str();
+            vkCmdBeginDebugUtilsLabelEXT(cmd, &label);
             pass->executeFunc(cmd);
+            vkCmdEndDebugUtilsLabelEXT(cmd);
         }
 
 
