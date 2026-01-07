@@ -43,6 +43,7 @@ namespace Game::System
 void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state);
 void DebugProcessPhysicsCollisions(Core::EngineContext* ctx, Engine::GameState* state);
 void DebugApplyGroundForces(Core::EngineContext* ctx, Engine::GameState* state);
+void DebugVisualizeCascadeCorners(Core::EngineContext* ctx, Engine::GameState* state);
 } // Game::System
 
 #endif //WILL_ENGINE_DEBUG_SYSTEM_H

@@ -55,6 +55,10 @@ void RenderGraph::AccumulateTextureUsage() const
             tex->accumulatedUsage |= VK_IMAGE_USAGE_SAMPLED_BIT;
         }
 
+        for (auto* tex : pass->clearImageWrites) {
+            tex->accumulatedUsage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        }
+
         for (auto* tex : pass->blitImageReads) {
             tex->accumulatedUsage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
         }
@@ -99,6 +103,7 @@ void RenderGraph::CalculateLifetimes()
         for (auto* tex : pass->storageImageWrites) { UpdateTextureLifetime(tex); }
         for (auto* tex : pass->storageImageReads) { UpdateTextureLifetime(tex); }
         for (auto* tex : pass->sampledImageReads) { UpdateTextureLifetime(tex); }
+        for (auto* tex : pass->clearImageWrites) { UpdateTextureLifetime(tex); }
         for (auto* tex : pass->blitImageWrites) { UpdateTextureLifetime(tex); }
         for (auto* tex : pass->blitImageReads) { UpdateTextureLifetime(tex); }
         for (auto* tex : pass->copyImageReads) { UpdateTextureLifetime(tex); }
@@ -367,7 +372,17 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
             LogImageBarrier(barrier, tex->name, tex->physicalIndex);
             barriers.push_back(barrier);
         }
-
+        for (auto* tex : pass->clearImageWrites) {
+            auto& phys = GetPhysical(tex);
+            auto barrier = VkHelpers::ImageMemoryBarrier(
+                phys.image,
+                VkHelpers::SubresourceRange(phys.aspect),
+                phys.event.stages, phys.event.access, tex->layout,
+                VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
+            );
+            LogImageBarrier(barrier, tex->name, tex->physicalIndex);
+            barriers.push_back(barrier);
+        }
         for (auto* tex : pass->blitImageWrites) {
             auto& phys = GetPhysical(tex);
             auto barrier = VkHelpers::ImageMemoryBarrier(
@@ -587,13 +602,18 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
             phys.event.access = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT;
         }
 
+        for (auto* tex : pass->clearImageWrites) {
+            auto& phys = GetPhysical(tex);
+            tex->layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            phys.event.stages = VK_PIPELINE_STAGE_2_CLEAR_BIT;
+            phys.event.access = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+        }
         for (auto* tex : pass->blitImageWrites) {
             auto& phys = GetPhysical(tex);
             tex->layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
             phys.event.stages = VK_PIPELINE_STAGE_2_BLIT_BIT;
             phys.event.access = VK_ACCESS_2_TRANSFER_WRITE_BIT;
         }
-
         for (auto* tex : pass->blitImageReads) {
             auto& phys = GetPhysical(tex);
             tex->layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;

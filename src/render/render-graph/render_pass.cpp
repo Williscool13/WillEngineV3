@@ -34,6 +34,21 @@ RenderPass& RenderPass::WriteStorageImage(const std::string& name, const Texture
     return *this;
 }
 
+RenderPass& RenderPass::WriteClearImage(const std::string& name, const TextureInfo& texInfo)
+{
+    TextureResource* resource = graph.GetOrCreateTexture(name);
+    if (texInfo.format != VK_FORMAT_UNDEFINED) {
+        if (resource->textureInfo.format == VK_FORMAT_UNDEFINED) {
+            resource->textureInfo = texInfo;
+        }
+    }
+    else {
+        assert(resource->textureInfo.format != VK_FORMAT_UNDEFINED && "Texture not defined - provide TextureInfo on first use");
+    }
+    clearImageWrites.push_back(resource);
+    return *this;
+}
+
 RenderPass& RenderPass::WriteBlitImage(const std::string& name, const TextureInfo& texInfo)
 {
     TextureResource* resource = graph.GetOrCreateTexture(name);
@@ -109,7 +124,8 @@ RenderPass& RenderPass::WriteBuffer(const std::string& name, VkPipelineStageFlag
 }
 
 RenderPass& RenderPass::WriteTransferBuffer(const std::string& name, VkPipelineStageFlags2 stages)
-{BufferResource* resource = graph.GetOrCreateBuffer(name);
+{
+    BufferResource* resource = graph.GetOrCreateBuffer(name);
     resource->accumulatedUsage |= VK_BUFFER_USAGE_2_TRANSFER_DST_BIT;
     bufferWriteTransfer.push_back({resource, stages});
     return *this;
@@ -153,7 +169,6 @@ RenderPass& RenderPass::ReadBlitImage(const std::string& name)
 
 RenderPass& RenderPass::ReadCopyImage(const std::string& name)
 {
-
     TextureResource* resource = graph.GetOrCreateTexture(name);
     copyImageReads.push_back(resource);
     return *this;

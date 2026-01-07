@@ -395,6 +395,24 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
             debugViewComponent.debugIndex = (debugViewComponent.debugIndex == 6) ? 0 : 6;
         }
     }
+    if (state->inputFrame->GetKey(Key::NUM_7).pressed) {
+        auto view = state->registry.view<RenderDebugViewComponent>();
+        for (auto [entity, debugViewComponent] : view.each()) {
+            debugViewComponent.debugIndex = (debugViewComponent.debugIndex == 7) ? 0 : 7;
+        }
+    }
+    if (state->inputFrame->GetKey(Key::NUM_8).pressed) {
+        auto view = state->registry.view<RenderDebugViewComponent>();
+        for (auto [entity, debugViewComponent] : view.each()) {
+            debugViewComponent.debugIndex = (debugViewComponent.debugIndex == 8) ? 0 : 8;
+        }
+    }
+    if (state->inputFrame->GetKey(Key::NUM_9).pressed) {
+        auto view = state->registry.view<RenderDebugViewComponent>();
+        for (auto [entity, debugViewComponent] : view.each()) {
+            debugViewComponent.debugIndex = (debugViewComponent.debugIndex == 9) ? 0 : 9;
+        }
+    }
 
     if (state->inputFrame->GetKey(Key::I).pressed) {
         Engine::MaterialManager& materialManager = ctx->assetManager->GetMaterialManager();
@@ -413,6 +431,10 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         MaterialProperties boxMat = materialManager.Get(boxMatID);
         boxMat.textureImageIndices.x++;
         materialManager.Update(boxMatID, boxMat);
+    }
+
+    if (state->inputFrame->GetKey(Key::C).pressed) {
+        DebugVisualizeCascadeCorners(ctx, state);
     }
 }
 
@@ -454,4 +476,116 @@ void DebugApplyGroundForces(Core::EngineContext* ctx, Engine::GameState* state)
         bodyInterface.AddImpulse(physics.bodyID, JPH::Vec3(0, 100.0f, 0));
     }
 }
+
+static std::array<glm::vec3, 8> GetPerspectiveFrustumCornersWorldSpace(
+    float near, float far, float fovRadians, float aspectRatio,
+    const glm::vec3& cameraPos, const glm::vec3& cameraForward)
+{
+    const float halfVSide = far * tanf(fovRadians * 0.5f);
+    const float halfHSide = halfVSide * aspectRatio;
+    const glm::vec3 frontMultFar = far * cameraForward;
+
+    glm::vec3 right = glm::normalize(glm::cross(cameraForward, glm::vec3(0, 1, 0)));
+    glm::vec3 up = glm::normalize(glm::cross(right, cameraForward));
+
+    std::array<glm::vec3, 8> corners{};
+
+    const float halfVSideNear = near * tanf(fovRadians * 0.5f);
+    const float halfHSideNear = halfVSideNear * aspectRatio;
+    const glm::vec3 frontMultNear = near * cameraForward;
+
+    corners[0] = cameraPos + frontMultNear - up * halfVSideNear - right * halfHSideNear;
+    corners[1] = cameraPos + frontMultNear + up * halfVSideNear - right * halfHSideNear;
+    corners[2] = cameraPos + frontMultNear + up * halfVSideNear + right * halfHSideNear;
+    corners[3] = cameraPos + frontMultNear - up * halfVSideNear + right * halfHSideNear;
+    corners[4] = cameraPos + frontMultFar - up * halfVSide - right * halfHSide;
+    corners[5] = cameraPos + frontMultFar + up * halfVSide - right * halfHSide;
+    corners[6] = cameraPos + frontMultFar + up * halfVSide + right * halfHSide;
+    corners[7] = cameraPos + frontMultFar - up * halfVSide + right * halfHSide;
+
+    return corners;
+}
+
+void DebugVisualizeCascadeCorners(Core::EngineContext* ctx, Engine::GameState* state)
+{
+    if (!boxHandle.IsValid()) {
+        SPDLOG_WARN("[DebugSystem] Load box model (F1) first");
+        return;
+    }
+
+    Render::WillModel* box = ctx->assetManager->GetModel(boxHandle);
+    if (!box || box->modelLoadState != Render::WillModel::ModelLoadState::Loaded) {
+        SPDLOG_WARN("[DebugSystem] Box model not ready");
+        return;
+    }
+
+
+    auto cameraView = state->registry.view<CameraComponent, TransformComponent>();
+    auto [cameraEntity, camera, transform] = *cameraView.each().begin();
+    Core::ViewData viewData = camera.currentViewData;
+    float nearPlane = camera.currentViewData.nearPlane;
+    float farPlane = camera.currentViewData.farPlane;
+
+    const float ratio = farPlane / nearPlane;
+    float nearSplits[4], farSplits[4];
+    nearSplits[0] = nearPlane;
+
+    for (size_t i = 1; i < 4; i++) {
+        const float si = static_cast<float>(i) / 4.0f;
+        const float lambda = 0.5f; // Split lambda
+        const float uniformTerm = nearPlane + (farPlane - nearPlane) * si;
+        const float logTerm = nearPlane * std::pow(ratio, si);
+        nearSplits[i] = lambda * logTerm + (1.0f - lambda) * uniformTerm;
+        farSplits[i - 1] = nearSplits[i] * 1.05f; // Split overlap
+    }
+    farSplits[3] = farPlane;
+
+    glm::vec4 cascadeColors[4] = {
+        glm::vec4(1, 0, 0, 1),
+        glm::vec4(0, 1, 0, 1),
+        glm::vec4(0, 0, 1, 1),
+        glm::vec4(1, 0, 1, 1)
+    };
+
+    Engine::MaterialManager& materialManager = ctx->assetManager->GetMaterialManager();
+    Render::MeshInformation& submesh = box->modelData.meshes[0];
+
+    for (int cascade = 0; cascade < 4; ++cascade) {
+        std::array<glm::vec3, 8> corners = GetPerspectiveFrustumCornersWorldSpace(
+            nearSplits[cascade], farSplits[cascade],
+            viewData.fovRadians, viewData.aspectRatio,
+            viewData.cameraPos, viewData.cameraForward
+        );
+
+        MaterialProperties material = materialManager.Get(materialManager.GetDefaultMaterial());
+        material.colorFactor = cascadeColors[cascade];
+        Engine::MaterialID matID = materialManager.GetOrCreate(material);
+
+        for (int i = 0; i < 8; ++i) {
+            RenderableComponent renderable{};
+
+            for (size_t j = 0; j < submesh.primitiveProperties.size(); ++j) {
+                renderable.primitives[j] = {
+                    .primitiveIndex = submesh.primitiveProperties[j].index,
+                    .materialID = matID
+                };
+            }
+            renderable.primitiveCount = submesh.primitiveProperties.size();
+            renderable.modelFlags = glm::vec4(0.0f);
+
+            entt::entity cornerEntity = state->registry.create();
+            state->registry.emplace<RenderableComponent>(cornerEntity, renderable);
+            state->registry.emplace<TransformComponent>(
+                cornerEntity,
+                corners[i],
+                glm::quat(1.0f, 0.0f, 0.0f, 0.0f),
+                glm::vec3(1.0f)
+            );
+        }
+    }
+
+    SPDLOG_INFO("[DebugSystem] Spawned cascade corner markers");
+}
+
+
 } // Game::System

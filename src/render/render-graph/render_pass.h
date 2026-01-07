@@ -21,6 +21,8 @@ public:
     // Write
     RenderPass& WriteStorageImage(const std::string& name, TextureInfo info = {});
 
+    RenderPass& WriteClearImage(const std::string& name, const TextureInfo& texInfo = {});
+
     RenderPass& WriteBlitImage(const std::string& name, const TextureInfo& texInfo = {});
 
     RenderPass& WriteCopyImage(const std::string& name, const TextureInfo& texInfo = {});
@@ -73,6 +75,7 @@ private:
     std::vector<TextureResource*> storageImageReads;
     std::vector<TextureResource*> storageImageWrites;
     std::vector<TextureResource*> sampledImageReads;
+    std::vector<TextureResource*> clearImageWrites;
     std::vector<TextureResource*> blitImageReads;
     std::vector<TextureResource*> blitImageWrites;
     std::vector<TextureResource*> copyImageReads;

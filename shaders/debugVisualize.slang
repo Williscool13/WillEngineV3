@@ -47,9 +47,21 @@ void computeMain(uint3 threadID : SV_DispatchThreadID) {
             float2 centered = abs((velocity - 0.5) * 100.0);
             renderTextures[pc.outputImageIndex][threadID.xy] = float4(centered, 0.0, 1.0);
             break;
-        case 6: // CSM 0
+        case 6: // CSM
             float4 color  = textures[pc.textureIndex].SampleLevel(samplers[pc.samplerIndex], srcUV, 0);
             renderTextures[pc.outputImageIndex][threadID.xy] = float4(color.x, color.y, color.z, 1.0f);
+            break;
+        case 7: // CSM
+            float4 color2  = textures[pc.textureIndex].SampleLevel(samplers[pc.samplerIndex], srcUV, 0);
+            renderTextures[pc.outputImageIndex][threadID.xy] = float4(color2.x, color2.y, color2.z, 1.0f);
+            break;
+        case 8: // CSM
+            float4 color3  = textures[pc.textureIndex].SampleLevel(samplers[pc.samplerIndex], srcUV, 0);
+            renderTextures[pc.outputImageIndex][threadID.xy] = float4(color3.x, color3.y, color3.z, 1.0f);
+            break;
+        case 9: // CSM
+            float4 color4  = textures[pc.textureIndex].SampleLevel(samplers[pc.samplerIndex], srcUV, 0);
+            renderTextures[pc.outputImageIndex][threadID.xy] = float4(color4.x, color4.y, color4.z, 1.0f);
             break;
         default:
             renderTextures[pc.outputImageIndex][threadID.xy] = float4(1.0, 0.0, 1.0, 1.0); // Magenta for invalid

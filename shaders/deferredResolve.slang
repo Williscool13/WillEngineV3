@@ -20,6 +20,9 @@ void computeMain(uint3 threadID : SV_DispatchThreadID) {
     float4 albedo = textures[pc.albedoIndex].SampleLevel(samplers[pc.pointSamplerIndex], uv, 0);
 
     float depth = textures[pc.depthIndex].SampleLevel(samplers[pc.pointSamplerIndex], uv, 0).r;
+    if (depth <= 0.0) {
+        return;
+    }
     float3 viewNormal = textures[pc.normalIndex].SampleLevel(samplers[pc.pointSamplerIndex], uv, 0).xyz;
     float4 pbrData = textures[pc.pbrIndex].SampleLevel(samplers[pc.pointSamplerIndex], uv, 0);
 

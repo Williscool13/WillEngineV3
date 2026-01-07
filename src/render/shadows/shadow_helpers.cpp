@@ -74,29 +74,28 @@ glm::mat4 GenerateLightSpaceMatrix(
 
 std::array<glm::vec3, 8> GetPerspectiveFrustumCornersWorldSpace(const float nearPlane, const float farPlane, const float fov, const float aspect, const glm::vec3 position, const glm::vec3 viewDir)
 {
-    std::array<glm::vec3, 8> output;
+    std::array<glm::vec3, 8> output{};
     constexpr glm::vec3 up{0.0f, 1.0f, 0.0f};
 
     const glm::vec3 right = normalize(cross(viewDir, up));
-    const glm::vec3 up_corrected = normalize(cross(right, viewDir));
+    const glm::vec3 upCorrected = normalize(cross(right, viewDir));
 
-    const float near_height = glm::tan(fov * 0.5f) * nearPlane;
-    const float near_width = near_height * aspect;
-    const float far_height = glm::tan(fov * 0.5f) * farPlane;
-    const float far_width = far_height * aspect;
+    const float nearHeight = glm::tan(fov * 0.5f) * nearPlane;
+    const float nearWidth = nearHeight * aspect;
+    const float farHeight = glm::tan(fov * 0.5f) * farPlane;
+    const float farWidth = farHeight * aspect;
 
     const glm::vec3 near_center = position + viewDir * nearPlane;
-    output[0] = glm::vec3(near_center - up_corrected * near_height - right * near_width); // bottom-left
-    output[1] = glm::vec3(near_center + up_corrected * near_height - right * near_width); // top-left
-    output[2] = glm::vec3(near_center + up_corrected * near_height + right * near_width); // top-right
-    output[3] = glm::vec3(near_center - up_corrected * near_height + right * near_width); // bottom-right
+    output[0] = glm::vec3(near_center - upCorrected * nearHeight - right * nearWidth); // bottom-left
+    output[1] = glm::vec3(near_center + upCorrected * nearHeight - right * nearWidth); // top-left
+    output[2] = glm::vec3(near_center + upCorrected * nearHeight + right * nearWidth); // top-right
+    output[3] = glm::vec3(near_center - upCorrected * nearHeight + right * nearWidth); // bottom-right
 
-    // Far face corners
-    const glm::vec3 far_center = position + viewDir * farPlane;
-    output[4] = glm::vec3(far_center - up_corrected * far_height - right * far_width); // bottom-left
-    output[5] = glm::vec3(far_center + up_corrected * far_height - right * far_width); // top-left
-    output[6] = glm::vec3(far_center + up_corrected * far_height + right * far_width); // top-right
-    output[7] = glm::vec3(far_center - up_corrected * far_height + right * far_width); // bottom-right
+    const glm::vec3 farCenter = position + viewDir * farPlane;
+    output[4] = glm::vec3(farCenter - upCorrected * farHeight - right * farWidth); // bottom-left
+    output[5] = glm::vec3(farCenter + upCorrected * farHeight - right * farWidth); // top-left
+    output[6] = glm::vec3(farCenter + upCorrected * farHeight + right * farWidth); // top-right
+    output[7] = glm::vec3(farCenter - upCorrected * farHeight + right * farWidth); // bottom-right
 
     return output;
 }

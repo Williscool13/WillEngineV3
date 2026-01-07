@@ -256,6 +256,14 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     SetupMainGeometryPass(*renderGraph);
 
     renderGraph->CreateTextureWithUsage("deferredResolve", {COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1],}, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+    RenderPass& clearDeferredImagePass = renderGraph->AddPass("ClearDeferredImage");
+    clearDeferredImagePass.WriteClearImage("deferredResolve");
+    clearDeferredImagePass.Execute([&](VkCommandBuffer cmd) {
+        VkImage img = renderGraph->GetImage("deferredResolve");
+        constexpr VkClearColorValue clearColor = {0.0f, 0.1f, 0.2f, 1.0f};
+        VkImageSubresourceRange colorSubresource = VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 1, 1);
+        vkCmdClearColorImage(cmd, img, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &colorSubresource);
+    });
 
     SetupDeferredLighting(*renderGraph, renderExtent);
     renderGraph->CreateTextureWithUsage("taaCurrent",
@@ -328,7 +336,10 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
             "normalTarget",
             "pbrTarget",
             "velocityTarget",
+            "shadowCascade_0",
             "shadowCascade_1",
+            "shadowCascade_2",
+            "shadowCascade_3",
         };
 
         uint32_t debugIndex = frameBuffer.mainViewFamily.mainView.debug;
@@ -813,7 +824,7 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, Core::FrameBuffer& f
             vkCmdEndRendering(cmd);
         });
 #if WILL_EDITOR
-        if (cascadeLevel == 0) {
+        if (cascadeLevel == 3) {
             RenderPass& readbackPass = graph.AddPass("ShadowDebugReadback");
             readbackPass.ReadTransferBuffer("indirectBuffer", VK_PIPELINE_STAGE_2_TRANSFER_BIT);
             readbackPass.ReadTransferBuffer("indirectCountBuffer", VK_PIPELINE_STAGE_2_TRANSFER_BIT);
