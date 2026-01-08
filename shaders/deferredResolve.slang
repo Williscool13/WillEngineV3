@@ -1,5 +1,7 @@
 import push_constant_interop;
 import shader_functions;
+import shadow_functions;
+import constants_interop;
 import pbr_functions;
 
 [[vk::binding(0, 0)]]
@@ -17,14 +19,14 @@ void computeMain(uint3 threadID : SV_DispatchThreadID) {
     if (threadID.x >= pc.extent.x || threadID.y >= pc.extent.y) return;
 
     float2 uv = (float2(threadID.xy) + 0.5) / float2(pc.extent);
-    float4 albedo = textures[pc.albedoIndex].SampleLevel(samplers[pc.pointSamplerIndex], uv, 0);
+    float4 albedo = textures[GetAlbedoIndex(pc.packedGBufferIndices)].SampleLevel(samplers[pc.pointSamplerIndex], uv, 0);
 
-    float depth = textures[pc.depthIndex].SampleLevel(samplers[pc.pointSamplerIndex], uv, 0).r;
+    float depth = textures[GetDepthIndex(pc.packedGBufferIndices)].SampleLevel(samplers[pc.pointSamplerIndex], uv, 0).r;
     if (depth <= 0.0) {
         return;
     }
-    float3 viewNormal = textures[pc.normalIndex].SampleLevel(samplers[pc.pointSamplerIndex], uv, 0).xyz;
-    float4 pbrData = textures[pc.pbrIndex].SampleLevel(samplers[pc.pointSamplerIndex], uv, 0);
+    float3 viewNormal = textures[GetNormalIndex(pc.packedGBufferIndices)].SampleLevel(samplers[pc.pointSamplerIndex], uv, 0).xyz;
+    float4 pbrData = textures[GetPBRIndex(pc.packedGBufferIndices)].SampleLevel(samplers[pc.pointSamplerIndex], uv, 0);
 
     float3 viewPosition = reconstructViewPosition(pc->sceneData.invProj, uv, depth);
 
@@ -56,8 +58,46 @@ void computeMain(uint3 threadID : SV_DispatchThreadID) {
     float nDotL = max(dot(N, L), 0.0);
     float3 diffuse = kD * albedo.xyz / 3.14159265359;
 
-    // Simple lighting (no shadows/IBL yet)
-    float3 directLight = (diffuse + specular) * nDotL * pc.directionalLightDirection.w * pc.directionalLightColor.xyz;
+    float4 worldPosition = mul(pc.sceneData.invView, float4(viewPosition, 1.0f));
+
+
+    // float3 debugWorldPos = abs(worldPosition.xyz) * 0.1;
+    // renderTextures[pc.outputImageIndex][threadID.xy] = float4(debugWorldPos, 1.0);
+    // return;
+
+    // float depthVis = abs(viewPosition.z) / 100.0; // Scale by far plane or expected max depth
+    // renderTextures[pc.outputImageIndex][threadID.xy] = float4(depthVis, depthVis, depthVis, 1.0);
+    // return;
+
+    // float4 lightSpacePos = mul(pc.shadowData.lightSpaceMatrices[0], float4(worldPosition.xyz, 1.0));
+    // float3 projCoords = lightSpacePos.xyz / lightSpacePos.w;
+    // float lightDepth = abs(projCoords.z);
+    // renderTextures[pc.outputImageIndex][threadID.xy] = float4(lightDepth, lightDepth, lightDepth, 1.0);
+    // return;
+
+    // float viewSpaceDepth = abs(viewPosition.z);
+    // int cascadeLevel = SHADOW_CASCADE_COUNT - 1;
+    // for (int i = 0; i < SHADOW_CASCADE_COUNT - 1; ++i) {
+    //     if (viewSpaceDepth <= pc.shadowData.farSplits[i]) {
+    //         cascadeLevel = i;
+    //         break;
+    //     }
+    // }
+    // float3 cascadeColors[4] = {
+    //     float3(1.0, 0.0, 0.0),  // Red
+    //     float3(0.0, 1.0, 0.0),  // Green
+    //     float3(0.0, 0.0, 1.0),  // Blue
+    //     float3(1.0, 0.0, 1.0)   // Magenta
+    // };
+    // float3 cascadeDebug = cascadeLevel >= 0 && cascadeLevel < 4 ? cascadeColors[cascadeLevel] : float3(1.0, 1.0, 0.0);
+    // renderTextures[pc.outputImageIndex][threadID.xy] = float4(cascadeDebug, 1.0);
+    // return;
+
+
+    float shadowFactor = getShadowFactor(worldPosition.xyz, abs(viewPosition.z), pc.shadowData, pc.packedCSMIndices, textures, samplers[pc.pointSamplerIndex]);
+
+    nDotL = 1.0f;
+    float3 directLight = (diffuse + specular) * nDotL * shadowFactor * pc.directionalLightDirection.w * pc.directionalLightColor.xyz;
 
     // Ambient
     float3 ambient = albedo.xyz * 0.03;

@@ -220,6 +220,7 @@ function(add_shader_include INCLUDE_FILE)
 endfunction()
 
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/shader_functions.slang")
+add_shader_include("${CMAKE_SOURCE_DIR}/shaders/shadow_functions.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/pbr_functions.slang")
 
 compile_shaders(will-engine

@@ -104,7 +104,8 @@ inline constexpr std::array<ShadowCascadePreset, 4> SHADOW_PRESETS = {
         // High
         {
             {
-                VkExtent2D{2048, 2048}, {2048, 2048}, {1024, 1024}, {512, 512}
+                //VkExtent2D{2048, 2048}, {2048, 2048}, {1024, 1024}, {512, 512}
+                VkExtent2D{2048, 2048}, {2048, 2048}, {2048, 2048}, {2048, 2048}
             },
             {
                 CascadeBias{1.5f, 2.0f}, {1.75f, 2.25f}, {2.25f, 2.75f}, {3.0f, 3.5f}

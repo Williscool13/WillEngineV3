@@ -61,3 +61,8 @@ float3 YCoCgToRGB(float3 ycocg) {
 
     return float3(r, g, b);
 }
+
+uint GetAlbedoIndex(uint packed) { return packed & 0xFF; }
+uint GetNormalIndex(uint packed) { return (packed >> 8) & 0xFF; }
+uint GetPBRIndex(uint packed) { return (packed >> 16) & 0xFF; }
+uint GetDepthIndex(uint packed) { return (packed >> 24) & 0xFF; }

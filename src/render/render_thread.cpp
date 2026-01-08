@@ -810,10 +810,11 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, Core::FrameBuffer& f
                 .indirectBuffer = graph.GetBufferAddress("indirectBuffer"),
                 .compactedInstanceBuffer = graph.GetBufferAddress("compactedInstanceBuffer"),
                 .modelBuffer = graph.GetBufferAddress("modelBuffer"),
+                .cascadeIndex = static_cast<uint32_t>(cascadeLevel),
             };
 
-            vkCmdPushConstants(cmd, meshShadingInstancedPipeline.pipelineLayout.handle, VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT,
-                               0, sizeof(InstancedMeshShadingPushConstant), &pushConstants);
+            vkCmdPushConstants(cmd, shadowMeshShadingInstancedPipeline.pipelineLayout.handle, VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT,
+                               0, sizeof(ShadowMeshShadingPushConstant), &pushConstants);
 
             vkCmdDrawMeshTasksIndirectCountEXT(cmd,
                                                graph.GetBuffer("indirectBuffer"), 0,
@@ -1013,15 +1014,28 @@ void RenderThread::SetupDeferredLighting(RenderGraph& graph, const std::array<ui
     deferredResolvePass.Execute([&](VkCommandBuffer cmd) {
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, deferredResolve.pipeline.handle);
 
+        uint32_t packedShadowMapIndices = PackCascadeIndices(
+            graph.GetDescriptorIndex("shadowCascade_0"),
+            graph.GetDescriptorIndex("shadowCascade_1"),
+            graph.GetDescriptorIndex("shadowCascade_2"),
+            graph.GetDescriptorIndex("shadowCascade_3")
+        );
+
+        uint32_t packedGBufferIndices = VkHelpers::PackGBufferIndices(
+            graph.GetDescriptorIndex("albedoTarget"),
+            graph.GetDescriptorIndex("normalTarget"),
+            graph.GetDescriptorIndex("pbrTarget"),
+            graph.GetDescriptorIndex("depthTarget")
+        );
+
         DeferredResolvePushConstant pushData{
             .directionalLightDirection = glm::vec4(0.5f, -1.0f, 0.3f, 3.0f),
             .directionalLightColor = glm::vec4(1.0f, 0.95f, 0.9f, 0.0f),
             .sceneData = graph.GetBufferAddress("sceneData"),
+            .shadowData = graph.GetBufferAddress("shadowData"),
             .extent = {renderExtent[0], renderExtent[1]},
-            .albedoIndex = graph.GetDescriptorIndex("albedoTarget"),
-            .normalIndex = graph.GetDescriptorIndex("normalTarget"),
-            .pbrIndex = graph.GetDescriptorIndex("pbrTarget"),
-            .depthIndex = graph.GetDescriptorIndex("depthTarget"),
+            .packedGBufferIndices = packedGBufferIndices,
+            .packedCSMIndices = packedShadowMapIndices,
             .pointSamplerIndex = resourceManager->linearSamplerIndex,
             .outputImageIndex = graph.GetDescriptorIndex("deferredResolve"),
         };

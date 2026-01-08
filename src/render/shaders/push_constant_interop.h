@@ -140,11 +140,10 @@ SHADER_PUBLIC struct DeferredResolvePushConstant {
     SHADER_PUBLIC float4 directionalLightDirection; // direction (xyz), intensity (w)
     SHADER_PUBLIC float4 directionalLightColor; // color (xyz), padding
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC SHADER_PTR(ShadowData) shadowData;
     SHADER_PUBLIC uint2 extent;
-    SHADER_PUBLIC uint32_t albedoIndex;
-    SHADER_PUBLIC uint32_t normalIndex;
-    SHADER_PUBLIC uint32_t pbrIndex;
-    SHADER_PUBLIC uint32_t depthIndex;
+    SHADER_PUBLIC uint32_t packedGBufferIndices; // albedo, normal, pbr, depth
+    SHADER_PUBLIC uint32_t packedCSMIndices; // 8 l0, 8 l1, 8l2, 8l3
     SHADER_PUBLIC uint32_t pointSamplerIndex;
     SHADER_PUBLIC uint32_t outputImageIndex;
 };
