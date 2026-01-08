@@ -632,6 +632,57 @@ void RenderThread::SetupFrameUniforms(FrameResources& frameResource, Core::Frame
         sceneData.invProj = glm::inverse(jitteredProj);
         sceneData.invViewProj = glm::inverse(sceneData.viewProj);
 
+        // Debug shadow view project
+        {
+            Core::ShadowConfiguration shadowConfig = frameBuffer.mainViewFamily.shadowConfiguration;
+            ShadowCascadePreset shadowPreset = SHADOW_PRESETS[static_cast<uint32_t>(shadowConfig.quality)];
+            Core::DirectionalLight directionalLight = frameBuffer.mainViewFamily.directionalLight;
+
+            ShadowData shadowData{};
+
+            const float ratio = shadowConfig.cascadeFarPlane / shadowConfig.cascadeNearPlane;
+            shadowData.nearSplits[0] = shadowConfig.cascadeNearPlane;
+            for (size_t i = 1; i < SHADOW_CASCADE_COUNT; i++) {
+                const float si = static_cast<float>(i) / static_cast<float>(SHADOW_CASCADE_COUNT);
+
+                const float uniformTerm = shadowConfig.cascadeNearPlane + (shadowConfig.cascadeFarPlane - shadowConfig.cascadeNearPlane) * si;
+                const float logTerm = shadowConfig.cascadeNearPlane * std::pow(ratio, si);
+                const float nearValue = shadowConfig.splitLambda * logTerm + (1.0f - shadowConfig.splitLambda) * uniformTerm;
+
+                const float farValue = nearValue * shadowConfig.splitOverlap;
+
+                shadowData.nearSplits[i] = nearValue;
+                shadowData.farSplits[i - 1] = farValue;
+            }
+            shadowData.farSplits[SHADOW_CASCADE_COUNT - 1] = shadowConfig.cascadeFarPlane;
+
+            shadowData.mainLightDirection = glm::vec4(directionalLight.direction, 0.0f);
+            ViewProjMatrix pairs[SHADOW_CASCADE_COUNT]{};
+            for (int i = 0; i < SHADOW_CASCADE_COUNT; ++i) {
+                ViewProjMatrix viewProj = GenerateLightSpaceMatrix(
+                    static_cast<float>(shadowPreset.extents[i].width),
+                    shadowData.nearSplits[i],
+                    shadowData.farSplits[i],
+                    frameBuffer.mainViewFamily.directionalLight.direction,
+                    frameBuffer.mainViewFamily.mainView.currentViewData
+                );
+                shadowData.lightSpaceMatrices[i] = viewProj.proj * viewProj.view;
+                pairs[i] = viewProj;;
+                shadowData.lightFrustums[i] = CreateFrustum(shadowData.lightSpaceMatrices[i]);
+            }
+
+            // todo: tweak shadow intensity
+            shadowData.shadowIntensity = 1.0f;
+
+            glm::mat4 lightViewProj = shadowData.lightSpaceMatrices[0];
+            sceneData.view = pairs[0].view;
+            sceneData.proj = pairs[0].proj;
+            sceneData.viewProj = lightViewProj;
+            sceneData.invView = glm::inverse(sceneData.view);
+            sceneData.invProj = glm::inverse(sceneData.proj);
+            sceneData.invViewProj = glm::inverse(lightViewProj);
+        }
+
         sceneData.prevViewProj = jitteredPrevProj * prevViewMatrix;
 
         sceneData.cameraWorldPos = glm::vec4(view.currentViewData.cameraPos, 1.0f);
@@ -674,13 +725,14 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, Core::FrameBuffer& f
 
     shadowData.mainLightDirection = glm::vec4(directionalLight.direction, 0.0f);
     for (int i = 0; i < SHADOW_CASCADE_COUNT; ++i) {
-        shadowData.lightSpaceMatrices[i] = GenerateLightSpaceMatrix(
+        ViewProjMatrix viewProj = GenerateLightSpaceMatrix(
             static_cast<float>(shadowPreset.extents[i].width),
             shadowData.nearSplits[i],
             shadowData.farSplits[i],
             frameBuffer.mainViewFamily.directionalLight.direction,
             frameBuffer.mainViewFamily.mainView.currentViewData
         );
+        shadowData.lightSpaceMatrices[i] = viewProj.proj * viewProj.view;
         shadowData.lightFrustums[i] = CreateFrustum(shadowData.lightSpaceMatrices[i]);
     }
 
@@ -1029,8 +1081,6 @@ void RenderThread::SetupDeferredLighting(RenderGraph& graph, const std::array<ui
         );
 
         DeferredResolvePushConstant pushData{
-            .directionalLightDirection = glm::vec4(0.5f, -1.0f, 0.3f, 3.0f),
-            .directionalLightColor = glm::vec4(1.0f, 0.95f, 0.9f, 0.0f),
             .sceneData = graph.GetBufferAddress("sceneData"),
             .shadowData = graph.GetBufferAddress("shadowData"),
             .extent = {renderExtent[0], renderExtent[1]},

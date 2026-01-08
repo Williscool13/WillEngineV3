@@ -137,8 +137,6 @@ SHADER_PUBLIC struct InstancedMeshShadingPushConstant
 };
 
 SHADER_PUBLIC struct DeferredResolvePushConstant {
-    SHADER_PUBLIC float4 directionalLightDirection; // direction (xyz), intensity (w)
-    SHADER_PUBLIC float4 directionalLightColor; // color (xyz), padding
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC SHADER_PTR(ShadowData) shadowData;
     SHADER_PUBLIC uint2 extent;

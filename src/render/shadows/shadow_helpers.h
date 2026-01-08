@@ -13,7 +13,13 @@
 
 namespace Render
 {
-glm::mat4 GenerateLightSpaceMatrix(
+struct ViewProjMatrix
+{
+    glm::mat4 view;
+    glm::mat4 proj;
+};
+
+ViewProjMatrix GenerateLightSpaceMatrix(
     float cascadeExtent,
     float cascadeNear,
     float cascadeFar,

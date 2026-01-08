@@ -12,7 +12,7 @@
 
 namespace Render
 {
-glm::mat4 GenerateLightSpaceMatrix(
+ViewProjMatrix GenerateLightSpaceMatrix(
     float cascadeExtent,
     float cascadeNear,
     float cascadeFar,
@@ -69,7 +69,7 @@ glm::mat4 GenerateLightSpaceMatrix(
     auto lightProj = glm::ortho(-radius, radius, -radius, radius, radius * zMult, -radius * zMult);
     // }
 
-    return lightProj * lightView;
+    return {lightView, lightProj};
 }
 
 std::array<glm::vec3, 8> GetPerspectiveFrustumCornersWorldSpace(const float nearPlane, const float farPlane, const float fov, const float aspect, const glm::vec3 position, const glm::vec3 viewDir)

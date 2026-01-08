@@ -37,7 +37,7 @@ void computeMain(uint3 threadID : SV_DispatchThreadID) {
     float3 V = normalize(-viewPosition);
 
     // Directional light in view space (transform from world space)
-    float3 L = normalize(mul((float3x3)pc.sceneData->view, normalize(-pc.directionalLightDirection.xyz)));
+    float3 L = normalize(mul((float3x3)pc.sceneData->view, normalize(-pc.shadowData.mainLightDirection.xyz)));
     float3 H = normalize(V + L);
 
     // SPECULAR: Cook-Torrance BRDF
@@ -97,7 +97,8 @@ void computeMain(uint3 threadID : SV_DispatchThreadID) {
     float shadowFactor = getShadowFactor(worldPosition.xyz, abs(viewPosition.z), pc.shadowData, pc.packedCSMIndices, textures, samplers[pc.pointSamplerIndex]);
 
     nDotL = 1.0f;
-    float3 directLight = (diffuse + specular) * nDotL * shadowFactor * pc.directionalLightDirection.w * pc.directionalLightColor.xyz;
+    const float lightIntensity = 3.0f;
+    float3 directLight = (diffuse + specular) * nDotL * shadowFactor * lightIntensity;
 
     // Ambient
     float3 ambient = albedo.xyz * 0.03;
