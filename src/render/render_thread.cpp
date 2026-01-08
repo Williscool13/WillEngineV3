@@ -203,11 +203,6 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     VkImage currentSwapchainImage = swapchain->swapchainImages[swapchainImageIndex];
     VkImageView currentSwapchainImageView = swapchain->swapchainImageViews[swapchainImageIndex];
 
-    VkViewport viewport = VkHelpers::GenerateViewport(renderExtent[0], renderExtent[1]);
-    vkCmdSetViewport(renderSync.commandBuffer, 0, 1, &viewport);
-    VkRect2D scissor = VkHelpers::GenerateScissor(renderExtent[0], renderExtent[1]);
-    vkCmdSetScissor(renderSync.commandBuffer, 0, 1, &scissor);
-
     SetupFrameUniforms(frameResource, frameBuffer, renderExtent);
 
     renderGraph->Reset();
@@ -633,7 +628,7 @@ void RenderThread::SetupFrameUniforms(FrameResources& frameResource, Core::Frame
         sceneData.invViewProj = glm::inverse(sceneData.viewProj);
 
         // Debug shadow view project
-        {
+        /*{
             Core::ShadowConfiguration shadowConfig = frameBuffer.mainViewFamily.shadowConfiguration;
             ShadowCascadePreset shadowPreset = SHADOW_PRESETS[static_cast<uint32_t>(shadowConfig.quality)];
             Core::DirectionalLight directionalLight = frameBuffer.mainViewFamily.directionalLight;
@@ -681,7 +676,7 @@ void RenderThread::SetupFrameUniforms(FrameResources& frameResource, Core::Frame
             sceneData.invView = glm::inverse(sceneData.view);
             sceneData.invProj = glm::inverse(sceneData.proj);
             sceneData.invViewProj = glm::inverse(lightViewProj);
-        }
+        }*/
 
         sceneData.prevViewProj = jitteredPrevProj * prevViewMatrix;
 
@@ -845,6 +840,10 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, Core::FrameBuffer& f
         RenderPass& shadowPass = graph.AddPass(shadowPassName);
         shadowPass.WriteDepthAttachment(shadowMapName);
         shadowPass.Execute([&, shadowPreset, cascadeLevel, shadowMapName](VkCommandBuffer cmd) {
+            VkViewport viewport = VkHelpers::GenerateViewport(shadowPreset.extents[cascadeLevel].width, shadowPreset.extents[cascadeLevel].height);
+            vkCmdSetViewport(cmd, 0, 1, &viewport);
+            VkRect2D scissor = VkHelpers::GenerateScissor(shadowPreset.extents[cascadeLevel].width, shadowPreset.extents[cascadeLevel].height);
+            vkCmdSetScissor(cmd, 0, 1, &scissor);
             constexpr VkClearValue depthClear = {.depthStencil = {0.0f, 0u}};
             const VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageView(shadowMapName), &depthClear, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
             const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({shadowPreset.extents[cascadeLevel].width, shadowPreset.extents[cascadeLevel].height}, nullptr, 0, &depthAttachment);
@@ -1010,6 +1009,11 @@ void RenderThread::SetupMainGeometryPass(RenderGraph& graph)
     instancedMeshShading.ReadIndirectBuffer("indirectBuffer", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT);
     instancedMeshShading.ReadIndirectCountBuffer("indirectCountBuffer", VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT);
     instancedMeshShading.Execute([&](VkCommandBuffer cmd) {
+        const ResourceDimensions& dims = graph.GetImageDimensions("albedoTarget");
+        VkViewport viewport = VkHelpers::GenerateViewport(dims.width, dims.height);
+        vkCmdSetViewport(cmd, 0, 1, &viewport);
+        VkRect2D scissor = VkHelpers::GenerateScissor(dims.width, dims.height);
+        vkCmdSetScissor(cmd, 0, 1, &scissor);
         const VkRenderingAttachmentInfo albedoAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageView("albedoTarget"), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
         const VkRenderingAttachmentInfo normalAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageView("normalTarget"), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
         const VkRenderingAttachmentInfo pbrAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageView("pbrTarget"), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
@@ -1018,7 +1022,6 @@ void RenderThread::SetupMainGeometryPass(RenderGraph& graph)
         const VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageView("depthTarget"), &depthClear, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
 
         const VkRenderingAttachmentInfo colorAttachments[] = {albedoAttachment, normalAttachment, pbrAttachment, velocityAttachment};
-        const ResourceDimensions& dims = graph.GetImageDimensions("albedoTarget");
         const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({dims.width, dims.height}, colorAttachments, 4, &depthAttachment);
 
         vkCmdBeginRendering(cmd, &renderInfo);
@@ -1062,6 +1065,10 @@ void RenderThread::SetupDeferredLighting(RenderGraph& graph, const std::array<ui
     deferredResolvePass.ReadSampledImage("normalTarget");
     deferredResolvePass.ReadSampledImage("pbrTarget");
     deferredResolvePass.ReadSampledImage("depthTarget");
+    deferredResolvePass.ReadSampledImage("shadowCascade_0");
+    deferredResolvePass.ReadSampledImage("shadowCascade_1");
+    deferredResolvePass.ReadSampledImage("shadowCascade_2");
+    deferredResolvePass.ReadSampledImage("shadowCascade_3");
     deferredResolvePass.WriteStorageImage("deferredResolve");
     deferredResolvePass.Execute([&](VkCommandBuffer cmd) {
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, deferredResolve.pipeline.handle);

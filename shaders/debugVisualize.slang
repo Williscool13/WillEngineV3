@@ -49,7 +49,9 @@ void computeMain(uint3 threadID : SV_DispatchThreadID) {
             break;
         case 6: // CSM
             float4 color  = textures[pc.textureIndex].SampleLevel(samplers[pc.samplerIndex], srcUV, 0);
-            renderTextures[pc.outputImageIndex][threadID.xy] = float4(color.x, color.y, color.z, 1.0f);
+            //float linearCsm = LinearizeDepth(color.x);
+            float linearCsm = abs(color.x);
+            renderTextures[pc.outputImageIndex][threadID.xy] = float4(linearCsm, linearCsm, linearCsm, 1.0f);
             break;
         case 7: // CSM
             float4 color2  = textures[pc.textureIndex].SampleLevel(samplers[pc.samplerIndex], srcUV, 0);

@@ -22,6 +22,7 @@ float G_SCHLICKGGX(float NdotX, float k){
 
 public float G_SCHLICKGGX_SMITH(float3 N, float3 V, float3 L, float roughness){
     // height correlated smith method
+    // todo: apparently this is not height correlated. Fix
 
     // "Disney reduced hotness" - Brian Karis
     float r = (roughness + 1);

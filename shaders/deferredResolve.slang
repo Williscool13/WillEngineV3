@@ -71,9 +71,15 @@ void computeMain(uint3 threadID : SV_DispatchThreadID) {
 
     // float4 lightSpacePos = mul(pc.shadowData.lightSpaceMatrices[0], float4(worldPosition.xyz, 1.0));
     // float3 projCoords = lightSpacePos.xyz / lightSpacePos.w;
-    // float lightDepth = abs(projCoords.z);
+    // float lightDepth = projCoords.z;
     // renderTextures[pc.outputImageIndex][threadID.xy] = float4(lightDepth, lightDepth, lightDepth, 1.0);
-    // return;
+    // uint shadowMapIndex = GetCascadeIndex(pc.packedCSMIndices, 0);
+    // Texture2D shadowMap = textures[shadowMapIndex];
+    // projCoords = projCoords * 0.5 + 0.5;
+    // projCoords.y = 1 - projCoords.y;
+    // float shadowDepth = shadowMap.SampleLevel(samplers[pc.pointSamplerIndex], projCoords.xy, 0).r;
+    // float lightDepth2 = shadowDepth;
+    // renderTextures[pc.outputImageIndex][threadID.xy] = float4(lightDepth2, lightDepth2, lightDepth2, 1.0);
 
     // float viewSpaceDepth = abs(viewPosition.z);
     // int cascadeLevel = SHADOW_CASCADE_COUNT - 1;

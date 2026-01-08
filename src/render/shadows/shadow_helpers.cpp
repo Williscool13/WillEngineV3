@@ -63,7 +63,7 @@ ViewProjMatrix GenerateLightSpaceMatrix(
     glm::vec3 eye = frustumCenter - (lightDirection * radius * 2.0f);
     glm::mat4 lightView = glm::lookAt(eye, frustumCenter, WORLD_UP);
 
-    constexpr float zMult = 10.0f;
+    constexpr float zMult = 3.0f;
     // glm::mat4 lightProj = glm::ortho(-radius, radius, -radius, radius, -radius * zMult, radius * zMult);
     // if (reversedDepth) {
     auto lightProj = glm::ortho(-radius, radius, -radius, radius, radius * zMult, -radius * zMult);

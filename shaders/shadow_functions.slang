@@ -3,7 +3,7 @@ module shadow_functions;
 import constants_interop;
 import shadows_interop;
 
-uint GetCascadeIndex(uint packedIndices, uint cascadeLevel)
+public uint GetCascadeIndex(uint packedIndices, uint cascadeLevel)
 {
     return (packedIndices >> (cascadeLevel * 8)) & 0xFF;
 }
@@ -23,12 +23,13 @@ public float getShadowFactor(float3 worldPos, float viewSpaceDepth, ShadowData* 
             break;
         }
     }
+     cascadeLevel = 0;
 
 
     float4 lightSpacePos = mul(shadowData.lightSpaceMatrices[cascadeLevel], float4(worldPos, 1.0));
     float3 projCoords = lightSpacePos.xyz / lightSpacePos.w;
     projCoords.xy = projCoords.xy * 0.5 + 0.5;
-    // projCoords.y = 1 - projCoords.y;
+    projCoords.y = 1 - projCoords.y;
 
 
     uint shadowMapIndex = GetCascadeIndex(packedCSMIndices, cascadeLevel);
@@ -36,6 +37,7 @@ public float getShadowFactor(float3 worldPos, float viewSpaceDepth, ShadowData* 
 
     float shadowDepth = shadowMap.SampleLevel(sampler, projCoords.xy, 0).r;
     // float shadowFactor1 = projCoords.z <= shadowDepth ? 1.0f : 0.0f;
+
     float shadowFactor1 = projCoords.z >= shadowDepth ? 1.0f : 0.0f;
 
     // Cascade blending
