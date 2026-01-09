@@ -36,8 +36,6 @@ public float getShadowFactor(float3 worldPos, float viewSpaceDepth, ShadowData* 
     Texture2D shadowMap = textures[shadowMapIndex];
 
     float shadowDepth = shadowMap.SampleLevel(sampler, projCoords.xy, 0).r;
-    // float shadowFactor1 = projCoords.z <= shadowDepth ? 1.0f : 0.0f;
-
     float shadowFactor1 = projCoords.z >= shadowDepth ? 1.0f : 0.0f;
 
     // Cascade blending

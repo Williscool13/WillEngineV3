@@ -15,7 +15,6 @@
 #include "render/vulkan/vk_utils.h"
 #include "engine/will_engine.h"
 #include "platform/paths.h"
-#include "platform/thread_utils.h"
 #include "render-graph/render_graph.h"
 #include "render-graph/render_pass.h"
 #include "shaders/constants_interop.h"
@@ -32,7 +31,7 @@ namespace Render
 RenderThread::RenderThread() = default;
 
 RenderThread::RenderThread(Core::FrameSync* engineRenderSynchronization, enki::TaskScheduler* scheduler, SDL_Window* window, uint32_t width, uint32_t height)
-    : engineRenderSynchronization(engineRenderSynchronization), scheduler(scheduler), window(window)
+    : window(window), engineRenderSynchronization(engineRenderSynchronization), scheduler(scheduler)
 {
     context = std::make_unique<VulkanContext>(window);
     swapchain = std::make_unique<Swapchain>(context.get(), width, height);
@@ -103,7 +102,7 @@ void RenderThread::RequestShutdown()
     bShouldExit.store(true, std::memory_order_release);
 }
 
-void RenderThread::Join()
+void RenderThread::Join() const
 {
     if (pinnedTask) {
         scheduler->WaitforTask(pinnedTask.get());
@@ -251,7 +250,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     SetupMainGeometryPass(*renderGraph);
 
     renderGraph->CreateTextureWithUsage("deferredResolve", {COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1],}, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
-    RenderPass& clearDeferredImagePass = renderGraph->AddPass("ClearDeferredImage");
+    RenderPass& clearDeferredImagePass = renderGraph->AddPass("ClearDeferredImage", VK_PIPELINE_STAGE_2_CLEAR_BIT);
     clearDeferredImagePass.WriteClearImage("deferredResolve");
     clearDeferredImagePass.Execute([&](VkCommandBuffer cmd) {
         VkImage img = renderGraph->GetImage("deferredResolve");
@@ -270,7 +269,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     renderGraph->CarryToNextFrame("taaCurrent", "taaHistory");
     renderGraph->CreateTexture("finalImage", {COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1]});
 
-    RenderPass& finalCopyPass = renderGraph->AddPass("finalCopy");
+    RenderPass& finalCopyPass = renderGraph->AddPass("finalCopy", VK_PIPELINE_STAGE_2_BLIT_BIT);
     finalCopyPass.ReadBlitImage("taaCurrent");
     finalCopyPass.WriteBlitImage("finalImage");
     finalCopyPass.Execute([&](VkCommandBuffer cmd) {
@@ -343,7 +342,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         }
         const char* debugTargetName = debugTargets[debugIndex];
 
-        auto& debugVisPass = renderGraph->AddPass("DebugVisualize");
+        auto& debugVisPass = renderGraph->AddPass("DebugVisualize", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
         debugVisPass.ReadSampledImage(debugTargetName);
         debugVisPass.WriteStorageImage("finalImage");
         debugVisPass.Execute([&, debugTargetName, debugIndex](VkCommandBuffer cmd) {
@@ -376,7 +375,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     }
 
     if (frameBuffer.bDrawImgui) {
-        auto& imguiEditorPass = renderGraph->AddPass("ImguiEditor");
+        auto& imguiEditorPass = renderGraph->AddPass("ImguiEditor", 0);
         imguiEditorPass.WriteColorAttachment("finalImage");
         imguiEditorPass.Execute([&](VkCommandBuffer cmd) {
             const VkRenderingAttachmentInfo imguiAttachment = VkHelpers::RenderingAttachmentInfo(renderGraph->GetImageView("finalImage"), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
@@ -393,7 +392,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     renderGraph->ImportTexture("swapchainImage", currentSwapchainImage, currentSwapchainImageView, {swapchain->format, swapchain->extent.width, swapchain->extent.height}, swapchain->usages,
                                VK_IMAGE_LAYOUT_UNDEFINED, VK_PIPELINE_STAGE_2_BLIT_BIT, VK_IMAGE_LAYOUT_UNDEFINED);
 
-    auto& blitPass = renderGraph->AddPass("BlitToSwapchain");
+    auto& blitPass = renderGraph->AddPass("BlitToSwapchain", VK_PIPELINE_STAGE_2_BLIT_BIT);
     blitPass.ReadBlitImage("finalImage");
     blitPass.WriteBlitImage("swapchainImage");
     blitPass.Execute([&](VkCommandBuffer cmd) {
@@ -750,10 +749,10 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, Core::FrameBuffer& f
 
         graph.CreateTexture(shadowMapName, {SHADOW_CASCADE_FORMAT, shadowPreset.extents[cascadeLevel].width, shadowPreset.extents[cascadeLevel].height});
 
-        RenderPass& clearPass = graph.AddPass(clearPassName);
-        clearPass.WriteTransferBuffer("packedVisibilityBuffer", VK_PIPELINE_STAGE_2_CLEAR_BIT);
-        clearPass.WriteTransferBuffer("primitiveCountBuffer", VK_PIPELINE_STAGE_2_CLEAR_BIT);
-        clearPass.WriteTransferBuffer("indirectCountBuffer", VK_PIPELINE_STAGE_2_CLEAR_BIT);
+        RenderPass& clearPass = graph.AddPass(clearPassName, VK_PIPELINE_STAGE_2_CLEAR_BIT);
+        clearPass.WriteTransferBuffer("packedVisibilityBuffer");
+        clearPass.WriteTransferBuffer("primitiveCountBuffer");
+        clearPass.WriteTransferBuffer("indirectCountBuffer");
         clearPass.Execute([&](VkCommandBuffer cmd) {
             vkCmdFillBuffer(cmd, graph.GetBuffer("packedVisibilityBuffer"), 0, VK_WHOLE_SIZE, 0);
             vkCmdFillBuffer(cmd, graph.GetBuffer("primitiveCountBuffer"), 0, VK_WHOLE_SIZE, 0);
@@ -761,15 +760,15 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, Core::FrameBuffer& f
         });
 
         if (!frameBuffer.mainViewFamily.instances.empty()) {
-            RenderPass& visibilityPass = graph.AddPass(visPassName);
-            visibilityPass.ReadBuffer("primitiveBuffer", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-            visibilityPass.ReadBuffer("modelBuffer", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-            visibilityPass.ReadBuffer("instanceBuffer", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-            visibilityPass.ReadBuffer("sceneData", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-            visibilityPass.ReadBuffer("shadowData", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-            visibilityPass.WriteBuffer("packedVisibilityBuffer", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-            visibilityPass.WriteBuffer("instanceOffsetBuffer", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-            visibilityPass.WriteBuffer("primitiveCountBuffer", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+            RenderPass& visibilityPass = graph.AddPass(visPassName, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+            visibilityPass.ReadBuffer("primitiveBuffer");
+            visibilityPass.ReadBuffer("modelBuffer");
+            visibilityPass.ReadBuffer("instanceBuffer");
+            visibilityPass.ReadBuffer("sceneData");
+            visibilityPass.ReadBuffer("shadowData");
+            visibilityPass.WriteBuffer("packedVisibilityBuffer");
+            visibilityPass.WriteBuffer("instanceOffsetBuffer");
+            visibilityPass.WriteBuffer("primitiveCountBuffer");
             visibilityPass.Execute([&, cascadeLevel](VkCommandBuffer cmd) {
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, instancingShadowsVisibility.pipeline.handle);
 
@@ -791,8 +790,8 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, Core::FrameBuffer& f
                 vkCmdDispatch(cmd, xDispatch, 1, 1);
             });
 
-            RenderPass& prefixSumPass = graph.AddPass(prefixPassName);
-            prefixSumPass.ReadBuffer("primitiveCountBuffer", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+            RenderPass& prefixSumPass = graph.AddPass(prefixPassName, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+            prefixSumPass.ReadBuffer("primitiveCountBuffer");
             prefixSumPass.Execute([&](VkCommandBuffer cmd) {
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, instancingPrefixSum.pipeline.handle);
 
@@ -805,17 +804,17 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, Core::FrameBuffer& f
                 vkCmdDispatch(cmd, 1, 1, 1);
             });
 
-            RenderPass& indirectPass = graph.AddPass(indirectPassName);
-            indirectPass.ReadBuffer("sceneData", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-            indirectPass.ReadBuffer("primitiveBuffer", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-            indirectPass.ReadBuffer("modelBuffer", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-            indirectPass.ReadBuffer("instanceBuffer", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-            indirectPass.ReadBuffer("packedVisibilityBuffer", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-            indirectPass.ReadBuffer("instanceOffsetBuffer", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-            indirectPass.ReadBuffer("primitiveCountBuffer", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-            indirectPass.WriteBuffer("compactedInstanceBuffer", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-            indirectPass.WriteBuffer("indirectCountBuffer", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-            indirectPass.WriteBuffer("indirectBuffer", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+            RenderPass& indirectPass = graph.AddPass(indirectPassName, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+            indirectPass.ReadBuffer("sceneData");
+            indirectPass.ReadBuffer("primitiveBuffer");
+            indirectPass.ReadBuffer("modelBuffer");
+            indirectPass.ReadBuffer("instanceBuffer");
+            indirectPass.ReadBuffer("packedVisibilityBuffer");
+            indirectPass.ReadBuffer("instanceOffsetBuffer");
+            indirectPass.ReadBuffer("primitiveCountBuffer");
+            indirectPass.WriteBuffer("compactedInstanceBuffer");
+            indirectPass.WriteBuffer("indirectCountBuffer");
+            indirectPass.WriteBuffer("indirectBuffer");
             indirectPass.Execute([&](VkCommandBuffer cmd) {
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, instancingIndirectConstruction.pipeline.handle);
 
@@ -837,7 +836,7 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, Core::FrameBuffer& f
             });
         }
 
-        RenderPass& shadowPass = graph.AddPass(shadowPassName);
+        RenderPass& shadowPass = graph.AddPass(shadowPassName, VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT);
         shadowPass.WriteDepthAttachment(shadowMapName);
         shadowPass.Execute([&, shadowPreset, cascadeLevel, shadowMapName](VkCommandBuffer cmd) {
             VkViewport viewport = VkHelpers::GenerateViewport(shadowPreset.extents[cascadeLevel].width, shadowPreset.extents[cascadeLevel].height);
@@ -850,6 +849,7 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, Core::FrameBuffer& f
 
             vkCmdBeginRendering(cmd, &renderInfo);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, shadowMeshShadingInstancedPipeline.pipeline.handle);
+            vkCmdSetDepthBias(cmd, -shadowPreset.biases[cascadeLevel].linear, 0.0f, -shadowPreset.biases[cascadeLevel].sloped);
 
             ShadowMeshShadingPushConstant pushConstants{
                 .sceneData = graph.GetBufferAddress("sceneData"),
@@ -877,10 +877,10 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, Core::FrameBuffer& f
         });
 #if WILL_EDITOR
         if (cascadeLevel == 3) {
-            RenderPass& readbackPass = graph.AddPass("ShadowDebugReadback");
-            readbackPass.ReadTransferBuffer("indirectBuffer", VK_PIPELINE_STAGE_2_TRANSFER_BIT);
-            readbackPass.ReadTransferBuffer("indirectCountBuffer", VK_PIPELINE_STAGE_2_TRANSFER_BIT);
-            readbackPass.WriteTransferBuffer("debugReadbackBuffer", VK_PIPELINE_STAGE_2_TRANSFER_BIT);
+            RenderPass& readbackPass = graph.AddPass("ShadowDebugReadback", VK_PIPELINE_STAGE_2_COPY_BIT);
+            readbackPass.ReadTransferBuffer("indirectBuffer");
+            readbackPass.ReadTransferBuffer("indirectCountBuffer");
+            readbackPass.WriteTransferBuffer("debugReadbackBuffer");
             readbackPass.Execute([&](VkCommandBuffer cmd) {
                 VkBufferCopy countCopy{};
                 countCopy.srcOffset = 0;
@@ -902,10 +902,10 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, Core::FrameBuffer& f
 void RenderThread::SetupInstancingPipeline(RenderGraph& graph, Core::FrameBuffer& frameBuffer)
 {
     if (!frameBuffer.bFreezeVisibility) {
-        RenderPass& clearPass = graph.AddPass("ClearInstancingBuffers");
-        clearPass.WriteTransferBuffer("packedVisibilityBuffer", VK_PIPELINE_STAGE_2_CLEAR_BIT);
-        clearPass.WriteTransferBuffer("primitiveCountBuffer", VK_PIPELINE_STAGE_2_CLEAR_BIT);
-        clearPass.WriteTransferBuffer("indirectCountBuffer", VK_PIPELINE_STAGE_2_CLEAR_BIT);
+        RenderPass& clearPass = graph.AddPass("ClearInstancingBuffers", VK_PIPELINE_STAGE_2_CLEAR_BIT);
+        clearPass.WriteTransferBuffer("packedVisibilityBuffer");
+        clearPass.WriteTransferBuffer("primitiveCountBuffer");
+        clearPass.WriteTransferBuffer("indirectCountBuffer");
         clearPass.Execute([&](VkCommandBuffer cmd) {
             vkCmdFillBuffer(cmd, graph.GetBuffer("packedVisibilityBuffer"), 0, VK_WHOLE_SIZE, 0);
             vkCmdFillBuffer(cmd, graph.GetBuffer("primitiveCountBuffer"), 0, VK_WHOLE_SIZE, 0);
@@ -913,14 +913,14 @@ void RenderThread::SetupInstancingPipeline(RenderGraph& graph, Core::FrameBuffer
         });
 
         if (!frameBuffer.mainViewFamily.instances.empty()) {
-            RenderPass& visibilityPass = graph.AddPass("ComputeVisibility");
-            visibilityPass.ReadBuffer("primitiveBuffer", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-            visibilityPass.ReadBuffer("modelBuffer", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-            visibilityPass.ReadBuffer("instanceBuffer", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-            visibilityPass.ReadBuffer("sceneData", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-            visibilityPass.WriteBuffer("packedVisibilityBuffer", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-            visibilityPass.WriteBuffer("instanceOffsetBuffer", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-            visibilityPass.WriteBuffer("primitiveCountBuffer", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+            RenderPass& visibilityPass = graph.AddPass("ComputeVisibility", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+            visibilityPass.ReadBuffer("primitiveBuffer");
+            visibilityPass.ReadBuffer("modelBuffer");
+            visibilityPass.ReadBuffer("instanceBuffer");
+            visibilityPass.ReadBuffer("sceneData");
+            visibilityPass.WriteBuffer("packedVisibilityBuffer");
+            visibilityPass.WriteBuffer("instanceOffsetBuffer");
+            visibilityPass.WriteBuffer("primitiveCountBuffer");
             visibilityPass.Execute([&](VkCommandBuffer cmd) {
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, instancingVisibility.pipeline.handle);
 
@@ -941,8 +941,8 @@ void RenderThread::SetupInstancingPipeline(RenderGraph& graph, Core::FrameBuffer
                 vkCmdDispatch(cmd, xDispatch, 1, 1);
             });
 
-            RenderPass& prefixSumPass = graph.AddPass("PrefixSum");
-            prefixSumPass.ReadBuffer("primitiveCountBuffer", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+            RenderPass& prefixSumPass = graph.AddPass("PrefixSum", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+            prefixSumPass.ReadBuffer("primitiveCountBuffer");
             prefixSumPass.Execute([&](VkCommandBuffer cmd) {
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, instancingPrefixSum.pipeline.handle);
 
@@ -956,17 +956,17 @@ void RenderThread::SetupInstancingPipeline(RenderGraph& graph, Core::FrameBuffer
                 vkCmdDispatch(cmd, 1, 1, 1);
             });
 
-            RenderPass& indirectConstructionPass = graph.AddPass("IndirectConstruction");
-            indirectConstructionPass.ReadBuffer("sceneData", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-            indirectConstructionPass.ReadBuffer("primitiveBuffer", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-            indirectConstructionPass.ReadBuffer("modelBuffer", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-            indirectConstructionPass.ReadBuffer("instanceBuffer", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-            indirectConstructionPass.ReadBuffer("packedVisibilityBuffer", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-            indirectConstructionPass.ReadBuffer("instanceOffsetBuffer", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-            indirectConstructionPass.ReadBuffer("primitiveCountBuffer", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-            indirectConstructionPass.WriteBuffer("compactedInstanceBuffer", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-            indirectConstructionPass.WriteBuffer("indirectCountBuffer", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-            indirectConstructionPass.WriteBuffer("indirectBuffer", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+            RenderPass& indirectConstructionPass = graph.AddPass("IndirectConstruction", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+            indirectConstructionPass.ReadBuffer("sceneData");
+            indirectConstructionPass.ReadBuffer("primitiveBuffer");
+            indirectConstructionPass.ReadBuffer("modelBuffer");
+            indirectConstructionPass.ReadBuffer("instanceBuffer");
+            indirectConstructionPass.ReadBuffer("packedVisibilityBuffer");
+            indirectConstructionPass.ReadBuffer("instanceOffsetBuffer");
+            indirectConstructionPass.ReadBuffer("primitiveCountBuffer");
+            indirectConstructionPass.WriteBuffer("compactedInstanceBuffer");
+            indirectConstructionPass.WriteBuffer("indirectCountBuffer");
+            indirectConstructionPass.WriteBuffer("indirectBuffer");
             indirectConstructionPass.Execute([&](VkCommandBuffer cmd) {
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, instancingIndirectConstruction.pipeline.handle);
 
@@ -992,22 +992,15 @@ void RenderThread::SetupInstancingPipeline(RenderGraph& graph, Core::FrameBuffer
 
 void RenderThread::SetupMainGeometryPass(RenderGraph& graph)
 {
-    RenderPass& instancedMeshShading = graph.AddPass("InstancedMeshShading");
+    RenderPass& instancedMeshShading = graph.AddPass("InstancedMeshShading", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT);
     instancedMeshShading.WriteColorAttachment("albedoTarget");
     instancedMeshShading.WriteColorAttachment("normalTarget");
     instancedMeshShading.WriteColorAttachment("pbrTarget");
     instancedMeshShading.WriteColorAttachment("velocityTarget");
     instancedMeshShading.WriteDepthAttachment("depthTarget");
-    instancedMeshShading.ReadBuffer("sceneData", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
-    instancedMeshShading.ReadBuffer("vertexBuffer", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
-    instancedMeshShading.ReadBuffer("meshletVertexBuffer", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
-    instancedMeshShading.ReadBuffer("meshletTriangleBuffer", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
-    instancedMeshShading.ReadBuffer("meshletBuffer", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
-    instancedMeshShading.ReadBuffer("compactedInstanceBuffer", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
-    instancedMeshShading.ReadBuffer("materialBuffer", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
-    instancedMeshShading.ReadBuffer("modelBuffer", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
-    instancedMeshShading.ReadIndirectBuffer("indirectBuffer", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT);
-    instancedMeshShading.ReadIndirectCountBuffer("indirectCountBuffer", VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT);
+    instancedMeshShading.ReadBuffer("compactedInstanceBuffer");
+    instancedMeshShading.ReadIndirectBuffer("indirectBuffer");
+    instancedMeshShading.ReadIndirectCountBuffer("indirectCountBuffer");
     instancedMeshShading.Execute([&](VkCommandBuffer cmd) {
         const ResourceDimensions& dims = graph.GetImageDimensions("albedoTarget");
         VkViewport viewport = VkHelpers::GenerateViewport(dims.width, dims.height);
@@ -1060,7 +1053,7 @@ void RenderThread::SetupMainGeometryPass(RenderGraph& graph)
 
 void RenderThread::SetupDeferredLighting(RenderGraph& graph, const std::array<uint32_t, 2>& renderExtent)
 {
-    RenderPass& deferredResolvePass = graph.AddPass("DeferredResolve");
+    RenderPass& deferredResolvePass = graph.AddPass("DeferredResolve", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
     deferredResolvePass.ReadSampledImage("albedoTarget");
     deferredResolvePass.ReadSampledImage("normalTarget");
     deferredResolvePass.ReadSampledImage("pbrTarget");
@@ -1114,7 +1107,7 @@ void RenderThread::SetupDeferredLighting(RenderGraph& graph, const std::array<ui
 void RenderThread::SetupTemporalAntialiasing(RenderGraph& graph, const std::array<uint32_t, 2>& renderExtent)
 {
     if (!graph.HasTexture("taaHistory")) {
-        RenderPass& taaPass = graph.AddPass("TemporalAntialiasingFirstFrame");
+        RenderPass& taaPass = graph.AddPass("TemporalAntialiasingFirstFrame", VK_PIPELINE_STAGE_2_COPY_BIT);
         taaPass.ReadCopyImage("deferredResolve");
         taaPass.WriteCopyImage("taaCurrent");
         taaPass.Execute([&](VkCommandBuffer cmd) {
@@ -1142,7 +1135,7 @@ void RenderThread::SetupTemporalAntialiasing(RenderGraph& graph, const std::arra
         });
     }
     else {
-        RenderPass& taaPass = graph.AddPass("TemporalAntialiasing");
+        RenderPass& taaPass = graph.AddPass("TemporalAntialiasing", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
         taaPass.ReadSampledImage("deferredResolve");
         taaPass.ReadSampledImage("depthTarget");
         taaPass.ReadSampledImage("taaHistory");

@@ -28,9 +28,9 @@ RenderGraph::~RenderGraph()
     }
 }
 
-RenderPass& RenderGraph::AddPass(const std::string& name)
+RenderPass& RenderGraph::AddPass(const std::string& name, VkPipelineStageFlags2 stages)
 {
-    passes.push_back(std::make_unique<RenderPass>(*this, name));
+    passes.push_back(std::make_unique<RenderPass>(*this, name, stages));
     return *passes.back();
 }
 
@@ -110,12 +110,12 @@ void RenderGraph::CalculateLifetimes()
         for (auto& attachment : pass->colorAttachments) { UpdateTextureLifetime(attachment); }
         if (pass->depthAttachment) { UpdateTextureLifetime(pass->depthAttachment); }
 
-        for (auto& bufRead : pass->bufferReads) { UpdateBufferLifetime(bufRead.resource); }
-        for (auto& bufRead : pass->bufferWrites) { UpdateBufferLifetime(bufRead.resource); }
-        for (auto& bufRead : pass->bufferReadTransfer) { UpdateBufferLifetime(bufRead.resource); }
-        for (auto& bufRead : pass->bufferWriteTransfer) { UpdateBufferLifetime(bufRead.resource); }
-        for (auto& bufWrite : pass->bufferIndirectReads) { UpdateBufferLifetime(bufWrite.resource); }
-        for (auto& bufWrite : pass->bufferIndirectCountReads) { UpdateBufferLifetime(bufWrite.resource); }
+        for (auto& buf : pass->bufferReads) { UpdateBufferLifetime(buf); }
+        for (auto& buf : pass->bufferWrites) { UpdateBufferLifetime(buf); }
+        for (auto& buf : pass->bufferReadTransfer) { UpdateBufferLifetime(buf); }
+        for (auto& buf : pass->bufferWriteTransfer) { UpdateBufferLifetime(buf); }
+        for (auto& buf : pass->bufferIndirectReads) { UpdateBufferLifetime(buf); }
+        for (auto& buf : pass->bufferIndirectCountReads) { UpdateBufferLifetime(buf); }
     }
 }
 
@@ -353,7 +353,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 phys.image,
                 VkHelpers::SubresourceRange(phys.aspect),
                 phys.event.stages, phys.event.access, tex->layout,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL
+                pass->stages, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL
             );
             LogImageBarrier(barrier, tex->name, tex->physicalIndex);
             barriers.push_back(barrier);
@@ -365,7 +365,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 phys.image,
                 VkHelpers::SubresourceRange(phys.aspect),
                 phys.event.stages, phys.event.access, tex->layout,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT, VK_IMAGE_LAYOUT_GENERAL
+                pass->stages, VK_ACCESS_2_SHADER_STORAGE_READ_BIT, VK_IMAGE_LAYOUT_GENERAL
             );
             LogImageBarrier(barrier, tex->name, tex->physicalIndex);
             barriers.push_back(barrier);
@@ -377,7 +377,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 phys.image,
                 VkHelpers::SubresourceRange(phys.aspect),
                 phys.event.stages, phys.event.access, tex->layout,
-                VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+                pass->stages, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
             );
             LogImageBarrier(barrier, tex->name, tex->physicalIndex);
             barriers.push_back(barrier);
@@ -442,8 +442,8 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
 
         std::vector<VkBufferMemoryBarrier2> bufferBarriers;
 
-        for (auto& bufWrite : pass->bufferWrites) {
-            auto& phys = physicalResources[bufWrite.resource->physicalIndex];
+        for (auto& buf : pass->bufferWrites) {
+            auto& phys = physicalResources[buf->physicalIndex];
             if (phys.bDisableBarriers) { continue; }
 
             VkAccessFlags2 desiredAccess = VK_ACCESS_2_SHADER_WRITE_BIT;
@@ -452,17 +452,17 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
                 .srcStageMask = phys.event.stages,
                 .srcAccessMask = phys.event.access,
-                .dstStageMask = bufWrite.stages,
+                .dstStageMask = pass->stages,
                 .dstAccessMask = desiredAccess,
                 .buffer = phys.buffer,
                 .offset = 0,
                 .size = VK_WHOLE_SIZE
             };
             bufferBarriers.push_back(barrier);
-            LogBufferBarrier(bufWrite.resource->name, desiredAccess);
+            LogBufferBarrier(buf->name, desiredAccess);
         }
         for (auto& bufWrite : pass->bufferWriteTransfer) {
-            auto& phys = physicalResources[bufWrite.resource->physicalIndex];
+            auto& phys = physicalResources[bufWrite->physicalIndex];
             if (phys.bDisableBarriers) { continue; }
 
             VkAccessFlags2 desiredAccess = VK_ACCESS_2_TRANSFER_WRITE_BIT;
@@ -471,18 +471,18 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
                 .srcStageMask = phys.event.stages,
                 .srcAccessMask = phys.event.access,
-                .dstStageMask = bufWrite.stages,
+                .dstStageMask = pass->stages,
                 .dstAccessMask = desiredAccess,
                 .buffer = phys.buffer,
                 .offset = 0,
                 .size = VK_WHOLE_SIZE
             };
             bufferBarriers.push_back(barrier);
-            LogBufferBarrier(bufWrite.resource->name, desiredAccess);
+            LogBufferBarrier(bufWrite->name, desiredAccess);
         }
 
         for (auto& bufRead : pass->bufferReadTransfer) {
-            auto& phys = physicalResources[bufRead.resource->physicalIndex];
+            auto& phys = physicalResources[bufRead->physicalIndex];
             if (phys.bDisableBarriers) { continue; }
 
             VkAccessFlags2 desiredAccess = VK_ACCESS_2_TRANSFER_READ_BIT;
@@ -491,18 +491,18 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
                 .srcStageMask = phys.event.stages,
                 .srcAccessMask = phys.event.access,
-                .dstStageMask = bufRead.stages,
+                .dstStageMask = pass->stages,
                 .dstAccessMask = desiredAccess,
                 .buffer = phys.buffer,
                 .offset = 0,
                 .size = VK_WHOLE_SIZE
             };
             bufferBarriers.push_back(barrier);
-            LogBufferBarrier(bufRead.resource->name, desiredAccess);
+            LogBufferBarrier(bufRead->name, desiredAccess);
         }
 
         for (auto& bufRead : pass->bufferReads) {
-            auto& phys = physicalResources[bufRead.resource->physicalIndex];
+            auto& phys = physicalResources[bufRead->physicalIndex];
             if (phys.bDisableBarriers) { continue; }
 
             VkAccessFlags2 desiredAccess = VK_ACCESS_2_SHADER_READ_BIT;
@@ -510,18 +510,18 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
                 .srcStageMask = phys.event.stages,
                 .srcAccessMask = phys.event.access,
-                .dstStageMask = bufRead.stages,
+                .dstStageMask = pass->stages,
                 .dstAccessMask = desiredAccess,
                 .buffer = phys.buffer,
                 .offset = 0,
                 .size = VK_WHOLE_SIZE
             };
             bufferBarriers.push_back(barrier);
-            LogBufferBarrier(bufRead.resource->name, desiredAccess);
+            LogBufferBarrier(bufRead->name, desiredAccess);
         }
 
         for (auto& bufRead : pass->bufferIndirectReads) {
-            auto& phys = physicalResources[bufRead.resource->physicalIndex];
+            auto& phys = physicalResources[bufRead->physicalIndex];
             if (phys.bDisableBarriers) { continue; }
 
             VkAccessFlags2 desiredAccess = VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_2_SHADER_READ_BIT;
@@ -529,18 +529,18 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
                 .srcStageMask = phys.event.stages,
                 .srcAccessMask = phys.event.access,
-                .dstStageMask = bufRead.stages,
+                .dstStageMask = pass->stages,
                 .dstAccessMask = desiredAccess,
                 .buffer = phys.buffer,
                 .offset = 0,
                 .size = VK_WHOLE_SIZE
             };
             bufferBarriers.push_back(barrier);
-            LogBufferBarrier(bufRead.resource->name, desiredAccess);
+            LogBufferBarrier(bufRead->name, desiredAccess);
         }
 
         for (auto& bufRead : pass->bufferIndirectCountReads) {
-            auto& phys = physicalResources[bufRead.resource->physicalIndex];
+            auto& phys = physicalResources[bufRead->physicalIndex];
             if (phys.bDisableBarriers) { continue; }
 
             VkAccessFlags2 desiredAccess = VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT;
@@ -548,14 +548,14 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
                 .srcStageMask = phys.event.stages,
                 .srcAccessMask = phys.event.access,
-                .dstStageMask = bufRead.stages,
+                .dstStageMask = pass->stages,
                 .dstAccessMask = desiredAccess,
                 .buffer = phys.buffer,
                 .offset = 0,
                 .size = VK_WHOLE_SIZE
             };
             bufferBarriers.push_back(barrier);
-            LogBufferBarrier(bufRead.resource->name, desiredAccess);
+            LogBufferBarrier(bufRead->name, desiredAccess);
         }
 
         if (!barriers.empty() || !bufferBarriers.empty()) {
@@ -606,21 +606,21 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
         for (auto* tex : pass->storageImageWrites) {
             auto& phys = GetPhysical(tex);
             tex->layout = VK_IMAGE_LAYOUT_GENERAL;
-            phys.event.stages = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+            phys.event.stages = pass->stages;
             phys.event.access = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT;
         }
 
         for (auto* tex : pass->storageImageReads) {
             auto& phys = GetPhysical(tex);
             tex->layout = VK_IMAGE_LAYOUT_GENERAL;
-            phys.event.stages = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+            phys.event.stages = pass->stages;
             phys.event.access = VK_ACCESS_2_SHADER_STORAGE_READ_BIT;
         }
 
         for (auto* tex : pass->sampledImageReads) {
             auto& phys = GetPhysical(tex);
             tex->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            phys.event.stages = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+            phys.event.stages = pass->stages;
             phys.event.access = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT;
         }
 
@@ -658,36 +658,36 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
         }
 
         for (auto& bufWrite : pass->bufferWrites) {
-            auto& phys = physicalResources[bufWrite.resource->physicalIndex];
-            phys.event.stages = bufWrite.stages;
+            auto& phys = physicalResources[bufWrite->physicalIndex];
+            phys.event.stages = pass->stages;
             phys.event.access = VK_ACCESS_2_SHADER_WRITE_BIT;
         }
         for (auto& bufWrite : pass->bufferWriteTransfer) {
-            auto& phys = physicalResources[bufWrite.resource->physicalIndex];
-            phys.event.stages = bufWrite.stages;
+            auto& phys = physicalResources[bufWrite->physicalIndex];
+            phys.event.stages = pass->stages;
             phys.event.access = VK_ACCESS_2_TRANSFER_WRITE_BIT;
         }
 
         for (auto& bufRead : pass->bufferReads) {
-            auto& phys = physicalResources[bufRead.resource->physicalIndex];
-            phys.event.stages = bufRead.stages;
+            auto& phys = physicalResources[bufRead->physicalIndex];
+            phys.event.stages = pass->stages;
             phys.event.access = VK_ACCESS_2_SHADER_READ_BIT;
         }
 
         for (auto& bufRead : pass->bufferReadTransfer) {
-            auto& phys = physicalResources[bufRead.resource->physicalIndex];
-            phys.event.stages = bufRead.stages;
+            auto& phys = physicalResources[bufRead->physicalIndex];
+            phys.event.stages = pass->stages;
             phys.event.access = VK_ACCESS_2_TRANSFER_READ_BIT;
         }
 
         for (auto& bufRead : pass->bufferIndirectReads) {
-            auto& phys = physicalResources[bufRead.resource->physicalIndex];
-            phys.event.stages = bufRead.stages;
+            auto& phys = physicalResources[bufRead->physicalIndex];
+            phys.event.stages = pass->stages;
             phys.event.access = VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_2_SHADER_READ_BIT;
         }
         for (auto& bufRead : pass->bufferIndirectCountReads) {
-            auto& phys = physicalResources[bufRead.resource->physicalIndex];
-            phys.event.stages = bufRead.stages;
+            auto& phys = physicalResources[bufRead->physicalIndex];
+            phys.event.stages = pass->stages;
             phys.event.access = VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT;
         }
     }

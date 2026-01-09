@@ -16,7 +16,7 @@ struct TextureResource;
 class RenderPass
 {
 public:
-    RenderPass(RenderGraph& renderGraph, std::string name);
+    RenderPass(RenderGraph& renderGraph, std::string name, VkPipelineStageFlags2 stages);
 
     // Write
     RenderPass& WriteStorageImage(const std::string& name, TextureInfo info = {});
@@ -27,13 +27,25 @@ public:
 
     RenderPass& WriteCopyImage(const std::string& name, const TextureInfo& texInfo = {});
 
+    /**
+     * Color attachments have hard coded stage masks, so the pass does not need to specify stages for it.
+     * @param name
+     * @param texInfo
+     * @return
+     */
     RenderPass& WriteColorAttachment(const std::string& name, const TextureInfo& texInfo = {});
 
+    /**
+     * Depth attachments have hard coded stage masks, so the pass does not need to specify stages for it.
+     * @param name
+     * @param texInfo
+     * @return
+     */
     RenderPass& WriteDepthAttachment(const std::string& name, const TextureInfo& texInfo = {});
 
-    RenderPass& WriteBuffer(const std::string& name, VkPipelineStageFlags2 stages);
+    RenderPass& WriteBuffer(const std::string& name);
 
-    RenderPass& WriteTransferBuffer(const std::string& name, VkPipelineStageFlags2 stages);
+    RenderPass& WriteTransferBuffer(const std::string& name);
 
 
     // Read
@@ -47,26 +59,22 @@ public:
 
     RenderPass& ReadCopyImage(const std::string& name);
 
-    RenderPass& ReadBuffer(const std::string& name, VkPipelineStageFlags2 stages);
+    RenderPass& ReadBuffer(const std::string& name);
 
-    RenderPass& ReadTransferBuffer(const std::string& name, VkPipelineStageFlags2 stages);
+    RenderPass& ReadTransferBuffer(const std::string& name);
 
-    RenderPass& ReadIndirectBuffer(const std::string& name, VkPipelineStageFlags2 stages);
+    RenderPass& ReadIndirectBuffer(const std::string& name);
 
-    RenderPass& ReadIndirectCountBuffer(const std::string& name, VkPipelineStageFlags2 stages);
+    RenderPass& ReadIndirectCountBuffer(const std::string& name);
 
     RenderPass& Execute(std::function<void(VkCommandBuffer)> func);
 
+    RenderGraph& graph;
     std::string renderPassName;
+    VkPipelineStageFlags2 stages;
+
 private:
     friend class RenderGraph;
-    RenderGraph& graph;
-
-    struct BufferAccess
-    {
-        BufferResource* resource;
-        VkPipelineStageFlags2 stages;
-    };
 
     std::vector<TextureResource*> colorAttachments;
     TextureResource* depthAttachment = nullptr;
@@ -81,12 +89,12 @@ private:
     std::vector<TextureResource*> copyImageReads;
     std::vector<TextureResource*> copyImageWrites;
 
-    std::vector<BufferAccess> bufferReads;
-    std::vector<BufferAccess> bufferWrites;
-    std::vector<BufferAccess> bufferReadTransfer;
-    std::vector<BufferAccess> bufferWriteTransfer;
-    std::vector<BufferAccess> bufferIndirectReads;
-    std::vector<BufferAccess> bufferIndirectCountReads;
+    std::vector<BufferResource*> bufferReads;
+    std::vector<BufferResource*> bufferWrites;
+    std::vector<BufferResource*> bufferReadTransfer;
+    std::vector<BufferResource*> bufferWriteTransfer;
+    std::vector<BufferResource*> bufferIndirectReads;
+    std::vector<BufferResource*> bufferIndirectCountReads;
 
     std::function<void(VkCommandBuffer_T*)> executeFunc;
 };

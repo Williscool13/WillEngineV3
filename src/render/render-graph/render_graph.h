@@ -40,7 +40,7 @@ public:
 
     ~RenderGraph();
 
-    RenderPass& AddPass(const std::string& name);
+    RenderPass& AddPass(const std::string& name, VkPipelineStageFlags2 stages);
 
     void PrunePasses();
 

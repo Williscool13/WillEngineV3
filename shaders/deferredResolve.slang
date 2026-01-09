@@ -102,7 +102,6 @@ void computeMain(uint3 threadID : SV_DispatchThreadID) {
 
     float shadowFactor = getShadowFactor(worldPosition.xyz, abs(viewPosition.z), pc.shadowData, pc.packedCSMIndices, textures, samplers[pc.pointSamplerIndex]);
 
-    nDotL = 1.0f;
     const float lightIntensity = 3.0f;
     float3 directLight = (diffuse + specular) * nDotL * shadowFactor * lightIntensity;
 

@@ -77,7 +77,7 @@ public:
 
     void RequestShutdown();
 
-    void Join();
+    void Join() const;
 
     void ThreadMain();
 
