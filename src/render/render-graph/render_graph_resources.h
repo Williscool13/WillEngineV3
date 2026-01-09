@@ -72,6 +72,8 @@ struct PhysicalResource
     bool bDisableBarriers = false;
     bool bCanAlias = true;
 
+    uint64_t lastUsedFrame = 0;
+
     std::vector<uint32_t> logicalResourceIndices;
 
     // Image resources (valid if dimensions.is_image())

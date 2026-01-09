@@ -27,10 +27,10 @@ struct FrameCarryover
     std::string srcName;
     std::string dstName;
 
+    VkImage physicalImage;
     TextureInfo textInfo;
     VkImageLayout layout;
     VkImageUsageFlags accumulatedUsage;
-    uint32_t dstPhysicalIndex;
 };
 
 class RenderGraph
@@ -48,13 +48,13 @@ public:
 
     void CalculateLifetimes();
 
-    void Compile();
+    void Compile(int64_t currentFrame);
 
     void Execute(VkCommandBuffer cmd);
 
     void PrepareSwapchain(VkCommandBuffer cmd, const std::string& name);
 
-    void Reset();
+    void Reset(uint64_t currentFrame, uint64_t maxFramesUnused);
 
     void SetDebugLogging(bool enable) { debugLogging = enable; }
 
@@ -110,10 +110,6 @@ private:
 
     // Physical resources
     std::vector<PhysicalResource> physicalResources;
-
-    // name : physicalIndex
-    std::unordered_map<VkImage, uint32_t> importedImages;
-    std::unordered_map<std::string, uint32_t> importedBuffers;
 
     // Render passes
     std::vector<std::unique_ptr<RenderPass> > passes;

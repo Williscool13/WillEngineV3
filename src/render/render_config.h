@@ -15,6 +15,8 @@
 
 namespace Render
 {
+inline constexpr int32_t RDG_PHYSICAL_RESOURCE_UNUSED_THRESHOLD = 1024;
+
 inline constexpr int32_t BINDLESS_MODEL_BUFFER_COUNT = 16384;
 inline constexpr int32_t BINDLESS_MODEL_BUFFER_SIZE = sizeof(Model) * BINDLESS_MODEL_BUFFER_COUNT;
 inline constexpr int32_t BINDLESS_INSTANCE_BUFFER_COUNT = 131072;
@@ -44,8 +46,6 @@ inline constexpr int32_t INSTANCING_PRIMITIVE_COUNT_SIZE = sizeof(PrimitiveCount
 inline constexpr int32_t INSTANCING_COMPACTED_INSTANCE_BUFFER_SIZE = sizeof(Instance) * BINDLESS_INSTANCE_BUFFER_COUNT;
 inline constexpr int32_t INSTANCING_MESH_INDIRECT_COUNT = sizeof(InstancedMeshIndirectCountBuffer);
 inline constexpr int32_t INSTANCING_MESH_INDIRECT_PARAMETERS = sizeof(InstancedMeshIndirectDrawParameters) * MEGA_PRIMITIVE_BUFFER_COUNT;
-
-inline constexpr uint32_t FRAME_BUFFER_OPERATION_COUNT_LIMIT = 1024;
 
 inline constexpr uint32_t HALTON_SEQUENCE_COUNT = 16;
 

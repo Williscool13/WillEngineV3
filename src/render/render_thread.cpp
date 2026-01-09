@@ -205,7 +205,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
 
     SetupFrameUniforms(frameResource, frameBuffer, renderExtent);
 
-    renderGraph->Reset();
+    renderGraph->Reset(frameNumber, RDG_PHYSICAL_RESOURCE_UNUSED_THRESHOLD);
 
     renderGraph->ImportBufferNoBarrier("vertexBuffer", resourceManager->megaVertexBuffer.handle, resourceManager->megaVertexBuffer.address,
                                        {resourceManager->megaVertexBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
@@ -427,7 +427,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     });
 
     renderGraph->SetDebugLogging(frameBuffer.bLogRDG);
-    renderGraph->Compile();
+    renderGraph->Compile(frameNumber);
     renderGraph->Execute(renderSync.commandBuffer);
     renderGraph->PrepareSwapchain(renderSync.commandBuffer, "swapchainImage");
 

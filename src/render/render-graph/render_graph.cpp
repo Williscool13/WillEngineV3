@@ -18,8 +18,7 @@ RenderGraph::RenderGraph(VulkanContext* context, ResourceManager* resourceManage
     : context(context), resourceManager(resourceManager)
 {
     textures.reserve(MAX_TEXTURES);
-    importedBuffers.reserve(32);
-    physicalResources.reserve(MAX_TEXTURES);
+    physicalResources.reserve(256);
 }
 
 RenderGraph::~RenderGraph()
@@ -75,7 +74,7 @@ void RenderGraph::AccumulateTextureUsage() const
             tex->accumulatedUsage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
         }
 
-        for (auto& attachment : pass->colorAttachments) {
+        for (auto* attachment : pass->colorAttachments) {
             attachment->accumulatedUsage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
         }
 
@@ -120,7 +119,7 @@ void RenderGraph::CalculateLifetimes()
     }
 }
 
-void RenderGraph::Compile()
+void RenderGraph::Compile(int64_t currentFrame)
 {
     PrunePasses();
 
@@ -151,13 +150,18 @@ void RenderGraph::Compile()
                 if (!phys.bCanAlias) { continue; }
                 if (phys.dimensions != desiredDim) { continue; }
 
+                // Cross-frame resources can't alias at all.
+                // Well, not strictly true. If a texture is carried over to next frame, it can be aliased if the other use is before the texture's first pass.
                 if (!tex.bCanUseAliasedTexture && !phys.logicalResourceIndices.empty()) {
-                    // Cross-frame resources can't alias at all.
                     continue;
                 }
 
-                // Physical usage must be a superset: (phys & required) == required
-                if ((phys.dimensions.imageUsage & tex.accumulatedUsage) != tex.accumulatedUsage) { continue; }
+                // If reusing already existing allocated resource, must be superset
+                if (phys.IsAllocated()) {
+                    if ((phys.dimensions.imageUsage & tex.accumulatedUsage) != tex.accumulatedUsage) {
+                        continue;
+                    }
+                }
 
                 bool canAlias = true;
                 for (uint32_t logicalIdx : phys.logicalResourceIndices) {
@@ -175,6 +179,9 @@ void RenderGraph::Compile()
                     tex.physicalIndex = i;
                     phys.logicalResourceIndices.push_back(tex.index);
                     phys.lastLogicalResourceUse = tex.name;
+                    if (!phys.IsAllocated()) {
+                        phys.dimensions.imageUsage |= tex.accumulatedUsage;
+                    }
                     foundAlias = true;
                     break;
                 }
@@ -190,12 +197,14 @@ void RenderGraph::Compile()
                 physicalResources.back().lastLogicalResourceUse = tex.name;
             }
         }
+    }
 
+    for (auto& tex : textures) {
         auto& phys = physicalResources[tex.physicalIndex];
-
         if (!phys.IsAllocated() && tex.textureInfo.format != VK_FORMAT_UNDEFINED) {
             CreatePhysicalImage(phys, phys.dimensions);
         }
+        phys.lastUsedFrame = currentFrame;
     }
 
     for (auto& buf : buffers) {
@@ -221,7 +230,13 @@ void RenderGraph::Compile()
                 if (!phys.dimensions.IsBuffer()) continue;
 
                 if (phys.dimensions.bufferSize != desiredDim.bufferSize) continue;
-                if ((phys.dimensions.bufferUsage & buf.accumulatedUsage) != buf.accumulatedUsage) continue;
+
+                // If already allocated, must be superset
+                if (phys.IsAllocated()) {
+                    if ((phys.dimensions.bufferUsage & buf.accumulatedUsage) != buf.accumulatedUsage) {
+                        continue;
+                    }
+                }
 
                 bool canAlias = true;
                 for (uint32_t logicalIdx : phys.logicalResourceIndices) {
@@ -235,6 +250,9 @@ void RenderGraph::Compile()
                 if (canAlias) {
                     buf.physicalIndex = i;
                     phys.logicalResourceIndices.push_back(buf.index);
+                    if (!phys.IsAllocated()) {
+                        phys.dimensions.bufferUsage |= buf.accumulatedUsage;
+                    }
                     foundAlias = true;
                     break;
                 }
@@ -248,12 +266,16 @@ void RenderGraph::Compile()
                 physicalResources.back().lastLogicalResourceUse = buf.name;
             }
         }
+    }
+
+    for (auto& buf : buffers) {
+        if (buf.accumulatedUsage == 0) continue;
 
         auto& phys = physicalResources[buf.physicalIndex];
-
         if (!phys.IsAllocated() && buf.bufferInfo.size > 0) {
             CreatePhysicalBuffer(phys, phys.dimensions);
         }
+        phys.lastUsedFrame = currentFrame;
     }
 
     for (auto& phys : physicalResources) {
@@ -724,11 +746,12 @@ void RenderGraph::PrepareSwapchain(VkCommandBuffer cmd, const std::string& name)
     vkCmdPipelineBarrier2(cmd, &depInfo);
 }
 
-void RenderGraph::Reset()
+void RenderGraph::Reset(uint64_t currentFrame, uint64_t maxFramesUnused)
 {
     for (FrameCarryover& carryover : carryovers) {
         if (TextureResource* tex = GetTexture(carryover.srcName)) {
-            carryover.dstPhysicalIndex = tex->physicalIndex;
+            PhysicalResource& phys = physicalResources[tex->physicalIndex];
+            carryover.physicalImage = phys.image;
             carryover.textInfo = tex->textureInfo;
             carryover.layout = tex->layout;
             carryover.accumulatedUsage = tex->accumulatedUsage;
@@ -746,14 +769,41 @@ void RenderGraph::Reset()
         phys.bCanAlias = true;
     }
 
+    // ====== This is the only time it is safe to reorder physical resource indices ======
+    for (int i = static_cast<int>(physicalResources.size()) - 1; i >= 0; --i) {
+        auto& phys = physicalResources[i];
+
+        if (phys.bIsImported) { continue; }
+        if (!phys.IsAllocated()) { continue; }
+
+        if (currentFrame - phys.lastUsedFrame > maxFramesUnused) {
+            DestroyPhysicalResource(phys);
+            physicalResources.erase(physicalResources.begin() + i);
+        }
+    }
+    // ============================================================================ ======
+
     for (auto& carryover : carryovers) {
+        uint32_t physicalIndex = UINT32_MAX;
+        for (uint32_t i = 0; i < physicalResources.size(); i++) {
+            if (physicalResources[i].image == carryover.physicalImage) {
+                physicalIndex = i;
+                break;
+            }
+        }
+
+        if (physicalIndex == UINT32_MAX) {
+            SPDLOG_ERROR("Carryover texture '{}' physical resource not found", carryover.dstName);
+            continue;
+        }
+
         TextureResource* newTex = GetOrCreateTexture(carryover.dstName);
         newTex->textureInfo = carryover.textInfo;
-        newTex->physicalIndex = carryover.dstPhysicalIndex;
+        newTex->physicalIndex = physicalIndex;
         newTex->layout = carryover.layout;
         newTex->accumulatedUsage = carryover.accumulatedUsage;
 
-        PhysicalResource& phys = physicalResources[newTex->physicalIndex];
+        PhysicalResource& phys = physicalResources[physicalIndex];
         phys.logicalResourceIndices.push_back(newTex->index);
         phys.lastLogicalResourceUse = newTex->name;
         phys.bCanAlias = false;
@@ -769,9 +819,6 @@ void RenderGraph::InvalidateAll()
     bufferNameToIndex.clear();
 
     passes.clear();
-    importedImages.clear();
-    importedBuffers.clear();
-
 
     for (PhysicalResource& physicalResource : physicalResources) {
         DestroyPhysicalResource(physicalResource);
@@ -817,18 +864,24 @@ void RenderGraph::ImportTexture(const std::string& name,
     tex->accumulatedUsage = usage;
 
     if (!tex->HasPhysical()) {
-        auto it = importedImages.find(image);
-        if (it != importedImages.end()) {
-            tex->physicalIndex = it->second;
-            auto& phys = physicalResources[it->second];
-            assert(phys.dimensions.format == info.format && "Reimported image format mismatch");
-            assert(phys.dimensions.width == info.width && "Reimported image width mismatch");
-            assert(phys.dimensions.height == info.height && "Reimported image height mismatch");
+        uint32_t foundIndex = UINT32_MAX;
+        for (uint32_t i = 0; i < physicalResources.size(); i++) {
+            auto& phys = physicalResources[i];
+            if (phys.bIsImported && phys.image == image) {
+                foundIndex = i;
+                assert(phys.dimensions.format == info.format && "Reimported image format mismatch");
+                assert(phys.dimensions.width == info.width && "Reimported image width mismatch");
+                assert(phys.dimensions.height == info.height && "Reimported image height mismatch");
+                break;
+            }
+        }
+
+        if (foundIndex != UINT32_MAX) {
+            tex->physicalIndex = foundIndex;
         }
         else {
             tex->physicalIndex = physicalResources.size();
             physicalResources.emplace_back();
-            importedImages[image] = tex->physicalIndex;
             auto& phys = physicalResources[tex->physicalIndex];
             phys.image = image;
             phys.view = view;
@@ -863,21 +916,25 @@ void RenderGraph::ImportBufferNoBarrier(const std::string& name, VkBuffer buffer
     buf->bufferInfo = info;
     buf->accumulatedUsage = info.usage;
     if (!buf->HasPhysical()) {
-        auto it = importedBuffers.find(name);
-        if (it != importedBuffers.end()) {
-            buf->physicalIndex = it->second;
-            auto& phys = physicalResources[it->second];
-            assert(phys.dimensions.bufferSize == info.size && "Reimported buffer size mismatch");
-            assert(phys.dimensions.bufferUsage == info.usage && "Reimported buffer usage mismatch");
-            phys.buffer = buffer;
-            phys.bufferAddress = address;
-            phys.addressRetrieved = true;
+        uint32_t foundIndex = UINT32_MAX;
+        for (uint32_t i = 0; i < physicalResources.size(); i++) {
+            auto& phys = physicalResources[i];
+            if (phys.bIsImported && phys.buffer == buffer) {
+                foundIndex = i;
+                assert(phys.dimensions.bufferSize == info.size && "Reimported buffer size mismatch");
+                assert(phys.dimensions.bufferUsage == info.usage && "Reimported buffer usage mismatch");
+                assert(phys.bufferAddress == address && "Reimported buffer address mismatch");
+                assert(phys.addressRetrieved && "Reimported buffer not marked as address retrieved");
+                break;
+            }
+        }
+
+        if (foundIndex != UINT32_MAX) {
+            buf->physicalIndex = foundIndex;
         }
         else {
             buf->physicalIndex = physicalResources.size();
             physicalResources.emplace_back();
-            importedBuffers[name] = {buf->physicalIndex};
-
             auto& phys = physicalResources[buf->physicalIndex];
             phys.buffer = buffer;
             phys.bufferAddress = address;
@@ -901,21 +958,25 @@ void RenderGraph::ImportBuffer(const std::string& name, VkBuffer buffer, VkDevic
     buf->bufferInfo = info;
     buf->accumulatedUsage = info.usage;
     if (!buf->HasPhysical()) {
-        auto it = importedBuffers.find(name);
-        if (it != importedBuffers.end()) {
-            buf->physicalIndex = it->second;
-            auto& phys = physicalResources[it->second];
-            assert(phys.dimensions.bufferSize == info.size && "Reimported buffer size mismatch");
-            assert(phys.dimensions.bufferUsage == info.usage && "Reimported buffer usage mismatch");
-            phys.buffer = buffer;
-            phys.bufferAddress = address;
-            phys.addressRetrieved = true;
+        uint32_t foundIndex = UINT32_MAX;
+        for (uint32_t i = 0; i < physicalResources.size(); i++) {
+            auto& phys = physicalResources[i];
+            if (phys.bIsImported && phys.buffer == buffer) {
+                foundIndex = i;
+                assert(phys.dimensions.bufferSize == info.size && "Reimported buffer size mismatch");
+                assert(phys.dimensions.bufferUsage == info.usage && "Reimported buffer usage mismatch");
+                assert(phys.bufferAddress == address && "Reimported buffer address mismatch");
+                assert(phys.addressRetrieved && "Reimported buffer not marked as address retrieved");
+                break;
+            }
+        }
+
+        if (foundIndex != UINT32_MAX) {
+            buf->physicalIndex = foundIndex;
         }
         else {
             buf->physicalIndex = physicalResources.size();
             physicalResources.emplace_back();
-            importedBuffers[name] = {buf->physicalIndex};
-
             auto& phys = physicalResources[buf->physicalIndex];
             phys.buffer = buffer;
             phys.bufferAddress = address;
@@ -932,6 +993,7 @@ void RenderGraph::ImportBuffer(const std::string& name, VkBuffer buffer, VkDevic
     phys.event.access = initialState.access;
     phys.dimensions.name = name;
     phys.lastLogicalResourceUse = name;
+    phys.bDisableBarriers = false;
 }
 
 bool RenderGraph::HasTexture(const std::string& name)

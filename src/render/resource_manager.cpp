@@ -32,6 +32,9 @@ ResourceManager::ResourceManager(VulkanContext* context)
     bufferInfo.size = MEGA_VERTEX_BUFFER_SIZE;
     megaVertexBuffer = AllocatedBuffer::CreateAllocatedBuffer(context, bufferInfo, vmaAllocInfo);
     megaVertexBuffer.SetDebugName("Mega Vertex Buffer");
+    bufferInfo.size = MEGA_SKINNED_VERTEX_BUFFER_SIZE;
+    megaSkinnedVertexBuffer = AllocatedBuffer::CreateAllocatedBuffer(context, bufferInfo, vmaAllocInfo);
+    megaSkinnedVertexBuffer.SetDebugName("Mega Skinned Vertex Buffer");
     bufferInfo.size = MEGA_MESHLET_VERTEX_BUFFER_SIZE;
     megaMeshletVerticesBuffer = AllocatedBuffer::CreateAllocatedBuffer(context, bufferInfo, vmaAllocInfo);
     megaMeshletVerticesBuffer.SetDebugName("Mega Meshlet Vertex Buffer");
