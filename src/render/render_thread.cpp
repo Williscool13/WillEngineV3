@@ -75,11 +75,6 @@ RenderThread::RenderThread(Core::FrameSync* engineRenderSynchronization, enki::T
     }
 
     CreatePipelines();
-
-    if (basicComputePipeline.pipeline.handle == VK_NULL_HANDLE || basicRenderPipeline.pipeline.handle == VK_NULL_HANDLE) {
-        SPDLOG_ERROR("Failed to compile shaders");
-        exit(1);
-    }
 }
 
 RenderThread::~RenderThread() = default;
@@ -521,9 +516,6 @@ void RenderThread::ProcessAcquisitions(VkCommandBuffer cmd, Core::FrameBuffer& f
 
 void RenderThread::CreatePipelines()
 {
-    basicComputePipeline = BasicComputePipeline(context.get(), resourceManager->bindlessRDGTransientDescriptorBuffer.descriptorSetLayout);
-    basicRenderPipeline = BasicRenderPipeline(context.get());
-    meshShaderPipeline = MeshShaderPipeline(context.get(), resourceManager->bindlessSamplerTextureDescriptorBuffer.descriptorSetLayout);
     meshShadingInstancedPipeline = MeshShadingInstancedPipeline(context.get(), resourceManager->bindlessSamplerTextureDescriptorBuffer.descriptorSetLayout);
     shadowMeshShadingInstancedPipeline = ShadowMeshShadingInstancedPipeline(context.get());
     //
@@ -1096,6 +1088,7 @@ void RenderThread::SetupDeferredLighting(RenderGraph& graph, const Core::FrameBu
             .packedGBufferIndices = packedGBufferIndices,
             .packedCSMIndices = packedShadowMapIndices,
             .pointSamplerIndex = resourceManager->pointSamplerIndex,
+            .depthCompareSamplerIndex = resourceManager->depthCompareSamplerIndex,
             .outputImageIndex = graph.GetDescriptorIndex("deferredResolve"),
         };
 

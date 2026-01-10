@@ -57,6 +57,9 @@ SHADER_PUBLIC struct SHADER_ALIGN ShadowData
     SHADER_PUBLIC Frustum lightFrustums[SHADOW_CASCADE_COUNT];
     SHADER_PUBLIC float4 mainLightDirection;
     SHADER_PUBLIC float shadowIntensity;
+    SHADER_PUBLIC float lightSizes[SHADOW_CASCADE_COUNT];
+    SHADER_PUBLIC uint32_t blockerSearchSamples[SHADOW_CASCADE_COUNT];
+    SHADER_PUBLIC uint32_t pcfSamples[SHADOW_CASCADE_COUNT];
     float padding[3];
 };
 

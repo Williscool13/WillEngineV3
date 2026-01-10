@@ -9,7 +9,6 @@
 #include "descriptors/vk_bindless_transient_rdg_resources.h"
 #include "render/render_config.h"
 #include "vulkan/vk_resources.h"
-#include "render/frame_resources.h"
 #include "render/descriptors/vk_bindless_resources_sampler_images.h"
 #include "render/descriptors/vk_bindless_resources_storage.h"
 #include "render-graph/render_graph_resources.h"
@@ -46,7 +45,10 @@ struct ResourceManager
     VkSampler pointSampler;
     uint32_t linearSamplerIndex{1};
     VkSampler linearSampler;
-    BindlessTransientRDGResourcesDescriptorBuffer<8, 128, 128> bindlessRDGTransientDescriptorBuffer{};
+
+    uint32_t depthCompareSamplerIndex{0};
+    VkSampler depthCompareSampler;
+    BindlessTransientRDGResourcesDescriptorBuffer<4, 4, 128, 128> bindlessRDGTransientDescriptorBuffer{};
 
     AllocatedBuffer debugReadbackBuffer;
     PipelineEvent debugReadbackLastKnownState;

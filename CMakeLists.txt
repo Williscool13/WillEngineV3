@@ -225,17 +225,10 @@ add_shader_include("${CMAKE_SOURCE_DIR}/shaders/pbr_functions.slang")
 
 compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/debugVisualize.slang compute computeMain
-        ${CMAKE_SOURCE_DIR}/shaders/basicCompute.slang compute computeMain
         ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute computeVisibility instancingVisibility
         ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute computeVisibilityShadows instancingShadowsVisibility
         ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute computePrefixSum instancingPrefixSum
         ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute computeCompactAndGenerateIndirect instancingCompactAndGenerateIndirect
-        ${CMAKE_SOURCE_DIR}/shaders/basicRender.slang task taskMain
-        ${CMAKE_SOURCE_DIR}/shaders/basicRender.slang mesh meshMain
-        ${CMAKE_SOURCE_DIR}/shaders/basicRender.slang fragment fragmentMain
-        ${CMAKE_SOURCE_DIR}/shaders/meshShading.slang task taskMain
-        ${CMAKE_SOURCE_DIR}/shaders/meshShading.slang mesh meshMain
-        ${CMAKE_SOURCE_DIR}/shaders/meshShading.slang fragment fragmentMain
         ${CMAKE_SOURCE_DIR}/shaders/meshShadingInstanced.slang task taskMain
         ${CMAKE_SOURCE_DIR}/shaders/meshShadingInstanced.slang mesh meshMain
         ${CMAKE_SOURCE_DIR}/shaders/meshShadingInstanced.slang fragment fragmentMain

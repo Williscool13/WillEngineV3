@@ -40,12 +40,6 @@ add_library(render STATIC
         types/vk_types.h
         pipelines/vk_pipeline.cpp
         pipelines/vk_pipeline.h
-        pipelines/basic_compute_pipeline.cpp
-        pipelines/basic_compute_pipeline.h
-        pipelines/basic_render_pipeline.cpp
-        pipelines/basic_render_pipeline.h
-        pipelines/mesh_shader_pipeline.cpp
-        pipelines/mesh_shader_pipeline.h
         shaders/model_interop.h
         model/model_format.cpp
         model/model_format.h

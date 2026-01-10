@@ -83,10 +83,18 @@ struct CascadeBias
     float sloped;
 };
 
+struct PCSSSamples
+{
+    uint32_t blockerSearchSamples;
+    uint32_t pcfSamples;
+};
+
 struct ShadowCascadePreset
 {
     std::array<VkExtent2D, SHADOW_CASCADE_COUNT> extents;
     std::array<CascadeBias, SHADOW_CASCADE_COUNT> biases;
+    std::array<PCSSSamples, SHADOW_CASCADE_COUNT> pcssSamples;
+    std::array<float, SHADOW_CASCADE_COUNT> lightSizes;
 };
 
 inline constexpr std::array<ShadowCascadePreset, 4> SHADOW_PRESETS = {

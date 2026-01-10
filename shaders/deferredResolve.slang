@@ -7,8 +7,10 @@ import pbr_functions;
 [[vk::binding(0, 0)]]
 SamplerState samplers[];
 [[vk::binding(1, 0)]]
-Texture2D textures[];
+SamplerComparisonState compareSamplers[];
 [[vk::binding(2, 0)]]
+Texture2D textures[];
+[[vk::binding(3, 0)]]
 RWTexture2D<float4> renderTextures[];
 
 [[vk::push_constant]]
@@ -59,7 +61,7 @@ void computeMain(uint3 threadID : SV_DispatchThreadID) {
 
     float4 worldPosition = mul(pc.sceneData.invView, float4(viewPosition, 1.0f));
 
-    float shadowFactor = getShadowFactor(worldPosition.xyz, abs(viewPosition.z), pc.shadowData, pc.packedCSMIndices, textures, samplers[pc.pointSamplerIndex]);
+    float shadowFactor = getShadowFactor(worldPosition.xyz, abs(viewPosition.z), pc.shadowData, pc.packedCSMIndices, textures, samplers[pc.pointSamplerIndex], compareSamplers[pc.depthCompareSamplerIndex]);
 
     const float lightIntensity = 3.0f;
     float3 directLight = (diffuse + specular) * nDotL * shadowFactor * lightIntensity;

@@ -143,6 +143,7 @@ SHADER_PUBLIC struct DeferredResolvePushConstant {
     SHADER_PUBLIC uint32_t packedGBufferIndices; // albedo, normal, pbr, depth
     SHADER_PUBLIC uint32_t packedCSMIndices; // 8 l0, 8 l1, 8l2, 8l3
     SHADER_PUBLIC uint32_t pointSamplerIndex;
+    SHADER_PUBLIC uint32_t depthCompareSamplerIndex;
     SHADER_PUBLIC uint32_t outputImageIndex;
 };
 

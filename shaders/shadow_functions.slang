@@ -8,7 +8,8 @@ public uint getCascadeIndex(uint packedIndices, uint cascadeLevel)
     return (packedIndices >> (cascadeLevel * 8)) & 0xFF;
 }
 
-public float getShadowFactor(float3 worldPos, float viewSpaceDepth, ShadowData* shadowData, uint32_t packedCSMIndices, Texture2D textures[], SamplerState sampler) {
+public float getShadowFactor(float3 worldPos, float viewSpaceDepth, ShadowData* shadowData, uint32_t packedCSMIndices,
+                            Texture2D textures[], SamplerState pointSampler, SamplerComparisonState comparisonSampler) {
     if (viewSpaceDepth < shadowData->nearSplits[0]) {
         return 0.0f; // Too close = shadowed
     }
@@ -29,12 +30,10 @@ public float getShadowFactor(float3 worldPos, float viewSpaceDepth, ShadowData* 
     projCoords.xy = projCoords.xy * 0.5 + 0.5;
     projCoords.y = 1 - projCoords.y;
 
-
     uint shadowMapIndex = getCascadeIndex(packedCSMIndices, cascadeLevel);
     Texture2D shadowMap = textures[NonUniformResourceIndex(shadowMapIndex)];
 
-    float shadowDepth = shadowMap.SampleLevel(sampler, projCoords.xy, 0).r;
-    float shadowFactor1 = projCoords.z >= shadowDepth ? 1.0f : 0.0f;
+    float shadowFactor1 = shadowMap.SampleCmpLevelZero(comparisonSampler, projCoords.xy, projCoords.z);
 
     // Cascade blending
     if (cascadeLevel == SHADOW_CASCADE_COUNT - 1) {
@@ -58,11 +57,9 @@ public float getShadowFactor(float3 worldPos, float viewSpaceDepth, ShadowData* 
             nextProjCoords.y = 1 - nextProjCoords.y;
 
             uint nextShadowMapIndex = getCascadeIndex(packedCSMIndices, cascadeLevel + 1);
-            Texture2D nextShadowMap = textures[nextShadowMapIndex];
+            Texture2D nextShadowMap = textures[NonUniformResourceIndex(nextShadowMapIndex)];
 
-
-            float nextShadowDepth = nextShadowMap.SampleLevel(sampler, nextProjCoords.xy, 0).r;
-            float shadowFactor2 = nextProjCoords.z >= nextShadowDepth ? 1.0f : 0.0f;
+            float shadowFactor2 = nextShadowMap.SampleCmpLevelZero(comparisonSampler, nextProjCoords.xy, nextProjCoords.z);
             float blendFactor = smoothstep(blendStart, blendEnd, viewSpaceDepth);
 
             return lerp(shadowFactor1, shadowFactor2, blendFactor);

@@ -18,6 +18,9 @@ ResourceManager::~ResourceManager()
     if (linearSampler != VK_NULL_HANDLE) {
         vkDestroySampler(context->device, linearSampler, nullptr);
     }
+    if (depthCompareSampler != VK_NULL_HANDLE) {
+        vkDestroySampler(context->device, depthCompareSampler, nullptr);
+    }
 };
 
 ResourceManager::ResourceManager(VulkanContext* context)
@@ -49,7 +52,7 @@ ResourceManager::ResourceManager(VulkanContext* context)
     primitiveBuffer.SetDebugName("Mega Primitive Buffer");
 
     bindlessSamplerTextureDescriptorBuffer = BindlessResourcesSamplerImages(context);
-    bindlessRDGTransientDescriptorBuffer = BindlessTransientRDGResourcesDescriptorBuffer<8, 128, 128>(context);
+    bindlessRDGTransientDescriptorBuffer = BindlessTransientRDGResourcesDescriptorBuffer<4, 4, 128, 128>(context);
 
     bufferInfo.usage = VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_2_TRANSFER_DST_BIT;
     vmaAllocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
@@ -102,5 +105,27 @@ ResourceManager::ResourceManager(VulkanContext* context)
 
     VK_CHECK(vkCreateSampler(context->device, &linearSamplerInfo, nullptr, &linearSampler));
     bindlessRDGTransientDescriptorBuffer.WriteSamplerDescriptor(linearSamplerIndex, {linearSampler, nullptr, {}});
+
+    VkSamplerCreateInfo depthCompareSamplerInfo = {
+        .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+        .magFilter = VK_FILTER_LINEAR,
+        .minFilter = VK_FILTER_LINEAR,
+        .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
+        .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        .mipLodBias = 0.0f,
+        .anisotropyEnable = VK_FALSE,
+        .maxAnisotropy = 1.0f,
+        .compareEnable = VK_TRUE,
+        .compareOp = VK_COMPARE_OP_GREATER_OR_EQUAL,
+        .minLod = 0.0f,
+        .maxLod = 0.0f,
+        .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK,
+        .unnormalizedCoordinates = VK_FALSE
+    };
+
+    VK_CHECK(vkCreateSampler(context->device, &depthCompareSamplerInfo, nullptr, &depthCompareSampler));
+    bindlessRDGTransientDescriptorBuffer.WriteCompareSamplerDescriptor(depthCompareSamplerIndex, {depthCompareSampler, nullptr, {}});
 }
 } // Render

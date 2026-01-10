@@ -12,10 +12,7 @@
 #include "frame_resources.h"
 #include "core/include/render_interface.h"
 #include "render/vulkan/vk_synchronization.h"
-#include "pipelines/basic_compute_pipeline.h"
-#include "pipelines/basic_render_pipeline.h"
 #include "pipelines/compute_pipeline.h"
-#include "pipelines/mesh_shader_pipeline.h"
 #include "pipelines/mesh_shading_instanced_pipeline.h"
 #include "pipelines/shadow_mesh_shading_instanced_pipeline.h"
 #include "shaders/common_interop.h"
@@ -136,9 +133,6 @@ private:
     SceneData sceneData{};
 
 private:
-    BasicComputePipeline basicComputePipeline;
-    BasicRenderPipeline basicRenderPipeline;
-    MeshShaderPipeline meshShaderPipeline;
     ComputePipeline debugVisualizePipeline;
 
     ComputePipeline instancingVisibility;
