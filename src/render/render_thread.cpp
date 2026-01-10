@@ -724,6 +724,9 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, Core::FrameBuffer& f
         );
         shadowData.lightSpaceMatrices[i] = viewProj.proj * viewProj.view;
         shadowData.lightFrustums[i] = CreateFrustum(shadowData.lightSpaceMatrices[i]);
+        shadowData.lightSizes[i] = shadowConfig.cascadePreset.lightSizes[i];
+        shadowData.blockerSearchSamples[i] = shadowConfig.cascadePreset.pcssSamples[i].blockerSearchSamples;
+        shadowData.pcfSamples[i] = shadowConfig.cascadePreset.pcssSamples[i].pcfSamples;
     }
 
     // todo: tweak shadow intensity

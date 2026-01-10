@@ -55,7 +55,9 @@ GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::GameState* state)
     Game::System::DebugProcessPhysicsCollisions(ctx, state);
     Game::System::DebugApplyGroundForces(ctx, state);
 
-    Game::System::UpdatePhysics(ctx, state);
+    if (state->bEnablePhysics) {
+        Game::System::UpdatePhysics(ctx, state);
+    }
 
     Core::InputFrame gameInputCopy = *state->inputFrame;
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
@@ -67,7 +69,7 @@ GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* stat
     Game::System::GatherRenderables(ctx, state, frameBuffer);
 
     if (ImGui::Begin("Test 2")) {
-        ImGui::Text("Test Text 2");
+        ImGui::Checkbox("Enable Physics", &state->bEnablePhysics);
 
         if (ImGui::CollapsingHeader("Shadow Settings")) {
             const char* qualityNames[] = {"Ultra", "High", "Medium", "Low", "Custom"};
@@ -84,12 +86,20 @@ GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* stat
             ImGui::Separator();
             ImGui::Text("Current Configuration:");
             for (int i = 0; i < 4; ++i) {
-                ImGui::Text("Cascade %d: %dx%d, Bias: %.2f/%.2f",
-                    i,
+                ImGui::Text("Cascade %d:", i);
+                ImGui::Indent();
+                ImGui::Text("  Resolution: %dx%d",
                     state->shadowConfig.cascadePreset.extents[i].width,
-                    state->shadowConfig.cascadePreset.extents[i].height,
+                    state->shadowConfig.cascadePreset.extents[i].height);
+                ImGui::Text("  Bias: %.2f/%.2f",
                     state->shadowConfig.cascadePreset.biases[i].linear,
                     state->shadowConfig.cascadePreset.biases[i].sloped);
+                ImGui::Text("  PCSS Samples: %u blocker, %u PCF",
+                    state->shadowConfig.cascadePreset.pcssSamples[i].blockerSearchSamples,
+                    state->shadowConfig.cascadePreset.pcssSamples[i].pcfSamples);
+                ImGui::Text("  Light Size: %.4f",
+                    state->shadowConfig.cascadePreset.lightSizes[i]);
+                ImGui::Unindent();
             }
 
             // Custom quality editing
@@ -101,11 +111,16 @@ GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* stat
 
                 for (int i = 0; i < 4; ++i) {
                     ImGui::PushID(i);
-                    ImGui::Text("Cascade %d", i);
-                    ImGui::InputInt("Width", reinterpret_cast<int*>(&customPreset.extents[i].width));
-                    ImGui::InputInt("Height", reinterpret_cast<int*>(&customPreset.extents[i].height));
-                    ImGui::InputFloat("Linear Bias", &customPreset.biases[i].linear);
-                    ImGui::InputFloat("Sloped Bias", &customPreset.biases[i].sloped);
+                    if (ImGui::TreeNode("Cascade", "Cascade %d", i)) {
+                        ImGui::InputInt("Width", reinterpret_cast<int*>(&customPreset.extents[i].width));
+                        ImGui::InputInt("Height", reinterpret_cast<int*>(&customPreset.extents[i].height));
+                        ImGui::InputFloat("Linear Bias", &customPreset.biases[i].linear);
+                        ImGui::InputFloat("Sloped Bias", &customPreset.biases[i].sloped);
+                        ImGui::InputScalar("Blocker Samples", ImGuiDataType_U32, &customPreset.pcssSamples[i].blockerSearchSamples);
+                        ImGui::InputScalar("PCF Samples", ImGuiDataType_U32, &customPreset.pcssSamples[i].pcfSamples);
+                        ImGui::InputFloat("Light Size", &customPreset.lightSizes[i]);
+                        ImGui::TreePop();
+                    }
                     ImGui::PopID();
                 }
 

@@ -30,6 +30,7 @@ struct GameState
     float physicsDeltaTimeAccumulator = 0.0f;
     float physicsInterpolationAlpha = 0.0f;
     std::map<JPH::BodyID, entt::entity> bodyToEntity;
+    bool bEnablePhysics = true;
 
     // Shadows
     Core::ShadowQuality shadowQuality = Core::ShadowQuality::Ultra;

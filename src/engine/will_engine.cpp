@@ -292,7 +292,7 @@ void WillEngine::Run()
             gameFunctions.gameLoad(engineContext.get(), gameState.get());
         }
 
-        if (editorInput.isWindowInputFocus && editorInput.GetKey(Key::PERIOD).pressed) {
+        if (editorInput.isWindowInputFocus && !ImGui::GetIO().WantCaptureKeyboard && editorInput.GetKey(Key::PERIOD).pressed) {
             bCursorHidden = !bCursorHidden;
             if (bCursorHidden) {
                 ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NoMouse;

@@ -106,6 +106,12 @@ inline constexpr std::array<ShadowCascadePreset, 4> SHADOW_PRESETS = {
             },
             {
                 CascadeBias{1.25f, 1.75f}, {1.5f, 2.0f}, {2.0f, 2.5f}, {2.5f, 3.0f}
+            },
+            {
+                PCSSSamples{36, 64}, {36, 64}, {24, 48}, {16, 32}
+            },
+            {
+                0.001f, 0.002f, 0.004f, 0.008f
             }
         },
 
@@ -115,7 +121,13 @@ inline constexpr std::array<ShadowCascadePreset, 4> SHADOW_PRESETS = {
                 VkExtent2D{2048, 2048}, {2048, 2048}, {1024, 1024}, {512, 512}
             },
             {
-                CascadeBias{20.5f, 2.0f}, {1.75f, 2.25f}, {2.25f, 2.75f}, {3.0f, 3.5f}
+                CascadeBias{1.5f, 2.0f}, {1.75f, 2.25f}, {2.25f, 2.75f}, {3.0f, 3.5f}
+            },
+            {
+                PCSSSamples{24, 48}, {24, 48}, {16, 32}, {12, 24}
+            },
+            {
+                0.006f, 0.012f, 0.024f, 0.048f
             }
         },
 
@@ -126,6 +138,12 @@ inline constexpr std::array<ShadowCascadePreset, 4> SHADOW_PRESETS = {
             },
             {
                 CascadeBias{2.0f, 2.5f}, {2.5f, 3.0f}, {3.0f, 3.5f}, {4.0f, 4.5f}
+            },
+            {
+                PCSSSamples{16, 32}, {16, 32}, {12, 24}, {8, 16}
+            },
+            {
+                0.008f, 0.016f, 0.032f, 0.064f
             }
         },
 
@@ -136,6 +154,12 @@ inline constexpr std::array<ShadowCascadePreset, 4> SHADOW_PRESETS = {
             },
             {
                 CascadeBias{2.5f, 3.0f}, {3.0f, 3.5f}, {4.0f, 4.5f}, {5.0f, 5.5f}
+            },
+            {
+                PCSSSamples{12, 24}, {12, 24}, {8, 16}, {8, 16}
+            },
+            {
+                0.01f, 0.02f, 0.04f, 0.08f
             }
         }
     }
