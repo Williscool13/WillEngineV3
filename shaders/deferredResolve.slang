@@ -42,7 +42,6 @@ void computeMain(uint3 threadID : SV_DispatchThreadID) {
 
     // SPECULAR: Cook-Torrance BRDF
     float NDF = D_GGX(N, H, roughness);
-    //float G = G_Smith(N, V, L, roughness);
     float G = G_SCHLICKGGX_SMITH(N, V, L, roughness);
     float3 F0 = lerp(float3(0.04, 0.04, 0.04), albedo.xyz, metallic);
     float3 F = F_SCHLICK(V, H, F0);
@@ -59,46 +58,6 @@ void computeMain(uint3 threadID : SV_DispatchThreadID) {
     float3 diffuse = kD * albedo.xyz / 3.14159265359;
 
     float4 worldPosition = mul(pc.sceneData.invView, float4(viewPosition, 1.0f));
-
-
-    // float3 debugWorldPos = abs(worldPosition.xyz) * 0.1;
-    // renderTextures[pc.outputImageIndex][threadID.xy] = float4(debugWorldPos, 1.0);
-    // return;
-
-    // float depthVis = abs(viewPosition.z) / 100.0; // Scale by far plane or expected max depth
-    // renderTextures[pc.outputImageIndex][threadID.xy] = float4(depthVis, depthVis, depthVis, 1.0);
-    // return;
-
-    // float4 lightSpacePos = mul(pc.shadowData.lightSpaceMatrices[0], float4(worldPosition.xyz, 1.0));
-    // float3 projCoords = lightSpacePos.xyz / lightSpacePos.w;
-    // float lightDepth = projCoords.z;
-    // renderTextures[pc.outputImageIndex][threadID.xy] = float4(lightDepth, lightDepth, lightDepth, 1.0);
-    // uint shadowMapIndex = GetCascadeIndex(pc.packedCSMIndices, 0);
-    // Texture2D shadowMap = textures[shadowMapIndex];
-    // projCoords = projCoords * 0.5 + 0.5;
-    // projCoords.y = 1 - projCoords.y;
-    // float shadowDepth = shadowMap.SampleLevel(samplers[pc.pointSamplerIndex], projCoords.xy, 0).r;
-    // float lightDepth2 = shadowDepth;
-    // renderTextures[pc.outputImageIndex][threadID.xy] = float4(lightDepth2, lightDepth2, lightDepth2, 1.0);
-
-    // float viewSpaceDepth = abs(viewPosition.z);
-    // int cascadeLevel = SHADOW_CASCADE_COUNT - 1;
-    // for (int i = 0; i < SHADOW_CASCADE_COUNT - 1; ++i) {
-    //     if (viewSpaceDepth <= pc.shadowData.farSplits[i]) {
-    //         cascadeLevel = i;
-    //         break;
-    //     }
-    // }
-    // float3 cascadeColors[4] = {
-    //     float3(1.0, 0.0, 0.0),  // Red
-    //     float3(0.0, 1.0, 0.0),  // Green
-    //     float3(0.0, 0.0, 1.0),  // Blue
-    //     float3(1.0, 0.0, 1.0)   // Magenta
-    // };
-    // float3 cascadeDebug = cascadeLevel >= 0 && cascadeLevel < 4 ? cascadeColors[cascadeLevel] : float3(1.0, 1.0, 0.0);
-    // renderTextures[pc.outputImageIndex][threadID.xy] = float4(cascadeDebug, 1.0);
-    // return;
-
 
     float shadowFactor = getShadowFactor(worldPosition.xyz, abs(viewPosition.z), pc.shadowData, pc.packedCSMIndices, textures, samplers[pc.pointSamplerIndex]);
 

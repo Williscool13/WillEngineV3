@@ -206,6 +206,11 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
 
     renderGraph->Reset(frameNumber, RDG_PHYSICAL_RESOURCE_UNUSED_THRESHOLD);
 
+    renderGraph->ImportBufferNoBarrier("sceneData", frameResource.sceneDataBuffer.handle, frameResource.sceneDataBuffer.address,
+                                        {frameResource.sceneDataBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
+    renderGraph->ImportBufferNoBarrier("shadowData", frameResource.shadowBuffer.handle, frameResource.shadowBuffer.address,
+                                       {frameResource.shadowBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
+
     renderGraph->ImportBufferNoBarrier("vertexBuffer", resourceManager->megaVertexBuffer.handle, resourceManager->megaVertexBuffer.address,
                                        {resourceManager->megaVertexBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
     renderGraph->ImportBufferNoBarrier("skinnedVertexBuffer", resourceManager->megaSkinnedVertexBuffer.handle, resourceManager->megaSkinnedVertexBuffer.address,
@@ -218,8 +223,6 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
                                        {resourceManager->megaMeshletBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
     renderGraph->ImportBufferNoBarrier("primitiveBuffer", resourceManager->primitiveBuffer.handle, resourceManager->primitiveBuffer.address,
                                        {resourceManager->primitiveBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
-    renderGraph->ImportBufferNoBarrier("sceneData", frameResource.sceneDataBuffer.handle, frameResource.sceneDataBuffer.address,
-                                       {frameResource.sceneDataBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
     renderGraph->ImportBufferNoBarrier("instanceBuffer", frameResource.instanceBuffer.handle, frameResource.instanceBuffer.address,
                                        {frameResource.instanceBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
     renderGraph->ImportBufferNoBarrier("modelBuffer", frameResource.modelBuffer.handle, frameResource.modelBuffer.address,
@@ -245,7 +248,9 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     renderGraph->CreateTexture("velocityTarget", {GBUFFER_MOTION_FORMAT, renderExtent[0], renderExtent[1],});
     renderGraph->CreateTexture("depthTarget", {VK_FORMAT_D32_SFLOAT, renderExtent[0], renderExtent[1]});
 
-    SetupCascadedShadows(*renderGraph, frameBuffer, frameResource);
+    if (frameBuffer.mainViewFamily.shadowConfig.enabled) {
+        SetupCascadedShadows(*renderGraph, frameBuffer, frameResource);
+    }
     SetupInstancingPipeline(*renderGraph, frameBuffer);
     SetupMainGeometryPass(*renderGraph);
 
@@ -259,7 +264,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         vkCmdClearColorImage(cmd, img, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &colorSubresource);
     });
 
-    SetupDeferredLighting(*renderGraph, renderExtent);
+    SetupDeferredLighting(*renderGraph, frameBuffer, renderExtent);
     renderGraph->CreateTextureWithUsage("taaCurrent",
                                         {COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1]},
                                         VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT
@@ -695,8 +700,7 @@ void RenderThread::SetupFrameUniforms(FrameResources& frameResource, Core::Frame
 
 void RenderThread::SetupCascadedShadows(RenderGraph& graph, Core::FrameBuffer& frameBuffer, FrameResources& frameResource)
 {
-    Core::ShadowConfiguration shadowConfig = frameBuffer.mainViewFamily.shadowConfiguration;
-    ShadowCascadePreset shadowPreset = SHADOW_PRESETS[static_cast<uint32_t>(shadowConfig.quality)];
+    Core::ShadowConfiguration shadowConfig = frameBuffer.mainViewFamily.shadowConfig;
     Core::DirectionalLight directionalLight = frameBuffer.mainViewFamily.directionalLight;
 
     ShadowData shadowData{};
@@ -720,7 +724,7 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, Core::FrameBuffer& f
     shadowData.mainLightDirection = glm::vec4(directionalLight.direction, 0.0f);
     for (int i = 0; i < SHADOW_CASCADE_COUNT; ++i) {
         ViewProjMatrix viewProj = GenerateLightSpaceMatrix(
-            static_cast<float>(shadowPreset.extents[i].width),
+            static_cast<float>(shadowConfig.cascadePreset.extents[i].width),
             shadowData.nearSplits[i],
             shadowData.farSplits[i],
             frameBuffer.mainViewFamily.directionalLight.direction,
@@ -737,8 +741,6 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, Core::FrameBuffer& f
     auto currentShadowData = static_cast<ShadowData*>(shadowBuffer.allocationInfo.pMappedData);
     memcpy(currentShadowData, &shadowData, sizeof(ShadowData));
 
-    graph.ImportBufferNoBarrier("shadowData", shadowBuffer.handle, shadowBuffer.address, {shadowBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
-
     for (int32_t cascadeLevel = 0; cascadeLevel < SHADOW_CASCADE_COUNT; ++cascadeLevel) {
         std::string shadowMapName = "shadowCascade_" + std::to_string(cascadeLevel);
         std::string clearPassName = "ClearShadowBuffers_" + std::to_string(cascadeLevel);
@@ -747,7 +749,7 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, Core::FrameBuffer& f
         std::string indirectPassName = "ShadowIndirectConstruction_" + std::to_string(cascadeLevel);
         std::string shadowPassName = "ShadowCascadePass_" + std::to_string(cascadeLevel);
 
-        graph.CreateTexture(shadowMapName, {SHADOW_CASCADE_FORMAT, shadowPreset.extents[cascadeLevel].width, shadowPreset.extents[cascadeLevel].height});
+        graph.CreateTexture(shadowMapName, {SHADOW_CASCADE_FORMAT, shadowConfig.cascadePreset.extents[cascadeLevel].width, shadowConfig.cascadePreset.extents[cascadeLevel].height});
 
         RenderPass& clearPass = graph.AddPass(clearPassName, VK_PIPELINE_STAGE_2_CLEAR_BIT);
         clearPass.WriteTransferBuffer("packedVisibilityBuffer");
@@ -838,18 +840,18 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, Core::FrameBuffer& f
 
         RenderPass& shadowPass = graph.AddPass(shadowPassName, VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
         shadowPass.WriteDepthAttachment(shadowMapName);
-        shadowPass.Execute([&, shadowPreset, cascadeLevel, shadowMapName](VkCommandBuffer cmd) {
-            VkViewport viewport = VkHelpers::GenerateViewport(shadowPreset.extents[cascadeLevel].width, shadowPreset.extents[cascadeLevel].height);
+        shadowPass.Execute([&, shadowConfig, cascadeLevel, shadowMapName](VkCommandBuffer cmd) {
+            VkViewport viewport = VkHelpers::GenerateViewport(shadowConfig.cascadePreset.extents[cascadeLevel].width, shadowConfig.cascadePreset.extents[cascadeLevel].height);
             vkCmdSetViewport(cmd, 0, 1, &viewport);
-            VkRect2D scissor = VkHelpers::GenerateScissor(shadowPreset.extents[cascadeLevel].width, shadowPreset.extents[cascadeLevel].height);
+            VkRect2D scissor = VkHelpers::GenerateScissor(shadowConfig.cascadePreset.extents[cascadeLevel].width, shadowConfig.cascadePreset.extents[cascadeLevel].height);
             vkCmdSetScissor(cmd, 0, 1, &scissor);
             constexpr VkClearValue depthClear = {.depthStencil = {0.0f, 0u}};
             const VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageView(shadowMapName), &depthClear, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
-            const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({shadowPreset.extents[cascadeLevel].width, shadowPreset.extents[cascadeLevel].height}, nullptr, 0, &depthAttachment);
+            const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({shadowConfig.cascadePreset.extents[cascadeLevel].width, shadowConfig.cascadePreset.extents[cascadeLevel].height}, nullptr, 0, &depthAttachment);
 
             vkCmdBeginRendering(cmd, &renderInfo);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, shadowMeshShadingInstancedPipeline.pipeline.handle);
-            vkCmdSetDepthBias(cmd, -shadowPreset.biases[cascadeLevel].linear, 0.0f, -shadowPreset.biases[cascadeLevel].sloped);
+            vkCmdSetDepthBias(cmd, -shadowConfig.cascadePreset.biases[cascadeLevel].linear, 0.0f, -shadowConfig.cascadePreset.biases[cascadeLevel].sloped);
 
             ShadowMeshShadingPushConstant pushConstants{
                 .sceneData = graph.GetBufferAddress("sceneData"),
@@ -1051,27 +1053,34 @@ void RenderThread::SetupMainGeometryPass(RenderGraph& graph)
     });
 }
 
-void RenderThread::SetupDeferredLighting(RenderGraph& graph, const std::array<uint32_t, 2>& renderExtent)
+void RenderThread::SetupDeferredLighting(RenderGraph& graph, const Core::FrameBuffer& frameBuffer, const std::array<uint32_t, 2>& renderExtent)
 {
+    bool bShadowsEnabled = frameBuffer.mainViewFamily.shadowConfig.enabled;
+
     RenderPass& deferredResolvePass = graph.AddPass("DeferredResolve", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
     deferredResolvePass.ReadSampledImage("albedoTarget");
     deferredResolvePass.ReadSampledImage("normalTarget");
     deferredResolvePass.ReadSampledImage("pbrTarget");
     deferredResolvePass.ReadSampledImage("depthTarget");
-    deferredResolvePass.ReadSampledImage("shadowCascade_0");
-    deferredResolvePass.ReadSampledImage("shadowCascade_1");
-    deferredResolvePass.ReadSampledImage("shadowCascade_2");
-    deferredResolvePass.ReadSampledImage("shadowCascade_3");
+    if (bShadowsEnabled) {
+        deferredResolvePass.ReadSampledImage("shadowCascade_0");
+        deferredResolvePass.ReadSampledImage("shadowCascade_1");
+        deferredResolvePass.ReadSampledImage("shadowCascade_2");
+        deferredResolvePass.ReadSampledImage("shadowCascade_3");
+    }
+
     deferredResolvePass.WriteStorageImage("deferredResolve");
-    deferredResolvePass.Execute([&](VkCommandBuffer cmd) {
+    deferredResolvePass.Execute([&, bShadowsEnabled](VkCommandBuffer cmd) {
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, deferredResolve.pipeline.handle);
 
-        uint32_t packedShadowMapIndices = PackCascadeIndices(
-            graph.GetDescriptorIndex("shadowCascade_0"),
-            graph.GetDescriptorIndex("shadowCascade_1"),
-            graph.GetDescriptorIndex("shadowCascade_2"),
-            graph.GetDescriptorIndex("shadowCascade_3")
-        );
+        uint32_t packedShadowMapIndices = bShadowsEnabled
+                                              ? PackCascadeIndices(
+                                                  graph.GetDescriptorIndex("shadowCascade_0"),
+                                                  graph.GetDescriptorIndex("shadowCascade_1"),
+                                                  graph.GetDescriptorIndex("shadowCascade_2"),
+                                                  graph.GetDescriptorIndex("shadowCascade_3")
+                                              )
+                                              : 0xFFFFFFFF;
 
         uint32_t packedGBufferIndices = VkHelpers::PackGBufferIndices(
             graph.GetDescriptorIndex("albedoTarget"),
@@ -1086,7 +1095,7 @@ void RenderThread::SetupDeferredLighting(RenderGraph& graph, const std::array<ui
             .extent = {renderExtent[0], renderExtent[1]},
             .packedGBufferIndices = packedGBufferIndices,
             .packedCSMIndices = packedShadowMapIndices,
-            .pointSamplerIndex = resourceManager->linearSamplerIndex,
+            .pointSamplerIndex = resourceManager->pointSamplerIndex,
             .outputImageIndex = graph.GetDescriptorIndex("deferredResolve"),
         };
 

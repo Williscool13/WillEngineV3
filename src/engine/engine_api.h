@@ -10,6 +10,7 @@
 #include <Jolt/Physics/Body/BodyID.h>
 
 #include "game/systems/debug_system.h"
+#include "core/include/render_interface.h"
 
 namespace Core
 {
@@ -29,6 +30,10 @@ struct GameState
     float physicsDeltaTimeAccumulator = 0.0f;
     float physicsInterpolationAlpha = 0.0f;
     std::map<JPH::BodyID, entt::entity> bodyToEntity;
+
+    // Shadows
+    Core::ShadowQuality shadowQuality = Core::ShadowQuality::Ultra;
+    Core::ShadowConfiguration shadowConfig;
 
     // Debug
     Game::DebugData debugData;

@@ -25,8 +25,8 @@ void BuildViewFamily(Engine::GameState* state, Core::ViewFamily& mainViewFamily)
     mainViewFamily.mainView.currentViewData = cam.currentViewData;
     mainViewFamily.mainView.previousViewData = cam.previousViewData;
     cam.previousViewData = cam.currentViewData;
-    mainViewFamily.shadowConfiguration.cascadeNearPlane = mainViewFamily.mainView.currentViewData.nearPlane;
-    mainViewFamily.shadowConfiguration.cascadeFarPlane = mainViewFamily.mainView.currentViewData.farPlane;
+    mainViewFamily.shadowConfig.cascadeNearPlane = mainViewFamily.mainView.currentViewData.nearPlane;
+    mainViewFamily.shadowConfig.cascadeFarPlane = mainViewFamily.mainView.currentViewData.farPlane;
 
     if (auto* debugView = state->registry.try_get<RenderDebugViewComponent>(mainCamera)) {
         mainViewFamily.mainView.debug = debugView->debugIndex;

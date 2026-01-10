@@ -100,7 +100,7 @@ private:
 
     void SetupMainGeometryPass(RenderGraph& graph);
 
-    void SetupDeferredLighting(RenderGraph& graph, const std::array<uint32_t, 2>& renderExtent);
+    void SetupDeferredLighting(RenderGraph& graph, const Core::FrameBuffer& frameBuffer, const std::array<uint32_t, 2>& renderExtent);
 
     void SetupTemporalAntialiasing(RenderGraph& graph, const std::array<uint32_t, 2>& renderExtent);
 

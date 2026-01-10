@@ -42,4 +42,5 @@ target_include_directories(core PRIVATE
 target_link_libraries(core PUBLIC
         spdlog::spdlog
         SDL3::SDL3
+        render
 )

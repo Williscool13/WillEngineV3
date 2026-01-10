@@ -697,7 +697,7 @@ RawGltfModel AssetGenerator::LoadGltf(const std::filesystem::path& source)
             primitiveData.meshletCount = meshlets.size();
             primitiveData.boundingSphere = GenerateBoundingSphere(primitiveVertices);
 
-            meshData.primitiveProperties.emplace_back(rawModel.primitives.size(), materialIndex);
+            meshData.primitiveProperties.emplace_back(static_cast<uint32_t>(rawModel.primitives.size()), materialIndex);
             rawModel.primitives.push_back(primitiveData);
 
             uint32_t vertexOffset = rawModel.vertices.size();

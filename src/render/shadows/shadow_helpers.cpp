@@ -32,7 +32,7 @@ ViewProjMatrix GenerateLightSpaceMatrix(
     // render_utils::getPerspectiveFrustumCornersWorldSpace(viewProj, corners2);
 
     // https://alextardif.com/shadowmapping.html
-    glm::vec3 frustumCenter = glm::vec3(0.0f);
+    auto frustumCenter = glm::vec3(0.0f);
     for (const glm::vec3& corner : corners) {
         frustumCenter += corner;
     }
@@ -64,10 +64,8 @@ ViewProjMatrix GenerateLightSpaceMatrix(
     glm::mat4 lightView = glm::lookAt(eye, frustumCenter, WORLD_UP);
 
     constexpr float zMult = 3.0f;
-    // glm::mat4 lightProj = glm::ortho(-radius, radius, -radius, radius, -radius * zMult, radius * zMult);
-    // if (reversedDepth) {
     auto lightProj = glm::ortho(-radius, radius, -radius, radius, radius * zMult, -radius * zMult);
-    // }
+    // auto lightProj = glm::ortho(-radius, radius, -radius, radius, -radius * zMult, radius * zMult);
 
     return {lightView, lightProj};
 }

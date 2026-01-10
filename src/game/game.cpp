@@ -68,11 +68,63 @@ GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* stat
 
     if (ImGui::Begin("Test 2")) {
         ImGui::Text("Test Text 2");
+
+        if (ImGui::CollapsingHeader("Shadow Settings")) {
+            const char* qualityNames[] = {"Ultra", "High", "Medium", "Low", "Custom"};
+            int currentQuality = static_cast<int>(state->shadowQuality);
+            if (ImGui::Combo("Quality", &currentQuality, qualityNames, 5)) {
+                state->shadowQuality = static_cast<Core::ShadowQuality>(currentQuality);
+                if (currentQuality < 4) {
+                    // Copy preset into cascadePreset
+                    state->shadowConfig.cascadePreset = Render::SHADOW_PRESETS[currentQuality];
+                }
+            }
+
+            // Display current preset data (read-only)
+            ImGui::Separator();
+            ImGui::Text("Current Configuration:");
+            for (int i = 0; i < 4; ++i) {
+                ImGui::Text("Cascade %d: %dx%d, Bias: %.2f/%.2f",
+                    i,
+                    state->shadowConfig.cascadePreset.extents[i].width,
+                    state->shadowConfig.cascadePreset.extents[i].height,
+                    state->shadowConfig.cascadePreset.biases[i].linear,
+                    state->shadowConfig.cascadePreset.biases[i].sloped);
+            }
+
+            // Custom quality editing
+            if (state->shadowQuality == Core::ShadowQuality::Custom) {
+                ImGui::Separator();
+                ImGui::Text("Custom Settings:");
+
+                static Render::ShadowCascadePreset customPreset = state->shadowConfig.cascadePreset;
+
+                for (int i = 0; i < 4; ++i) {
+                    ImGui::PushID(i);
+                    ImGui::Text("Cascade %d", i);
+                    ImGui::InputInt("Width", reinterpret_cast<int*>(&customPreset.extents[i].width));
+                    ImGui::InputInt("Height", reinterpret_cast<int*>(&customPreset.extents[i].height));
+                    ImGui::InputFloat("Linear Bias", &customPreset.biases[i].linear);
+                    ImGui::InputFloat("Sloped Bias", &customPreset.biases[i].sloped);
+                    ImGui::PopID();
+                }
+
+                if (ImGui::Button("Apply Custom Settings")) {
+                    state->shadowConfig.cascadePreset = customPreset;
+                }
+            }
+
+            ImGui::Separator();
+            ImGui::SliderFloat("Split Lambda", &state->shadowConfig.splitLambda, 0.0f, 1.0f);
+            ImGui::SliderFloat("Split Overlap", &state->shadowConfig.splitOverlap, 1.0f, 1.2f);
+            ImGui::Checkbox("Enabled", &state->shadowConfig.enabled);
+        }
     }
+
+    frameBuffer->mainViewFamily.shadowConfig = state->shadowConfig;
 
     ImGui::End();
 }
-
 
 GAME_API void GameUnload(Core::EngineContext* ctx, Engine::GameState* state)
 {

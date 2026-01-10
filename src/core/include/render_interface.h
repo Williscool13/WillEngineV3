@@ -12,6 +12,7 @@
 #include "core/allocators/handle.h"
 #include "core/time/time_frame.h"
 #include "engine/material_manager.h"
+#include "render/render_config.h"
 #include "render/shaders/model_interop.h"
 
 
@@ -47,7 +48,8 @@ enum class ShadowQuality
     Ultra = 0,
     High,
     Medium,
-    Low
+    Low,
+    Custom
 };
 
 
@@ -57,7 +59,7 @@ struct ShadowConfiguration
     float cascadeFarPlane = 100.0f;
     float splitLambda = 0.5f;
     float splitOverlap = 1.05f;
-    ShadowQuality quality = ShadowQuality::High;
+    Render::ShadowCascadePreset cascadePreset = Render::SHADOW_PRESETS[static_cast<uint32_t>(ShadowQuality::Ultra)];
     bool enabled = true;
 };
 
@@ -89,7 +91,7 @@ struct ViewFamily
     DirectionalLight directionalLight;
     // std::vector<LightInstance> allLights;
 
-    ShadowConfiguration shadowConfiguration{};
+    ShadowConfiguration shadowConfig{};
 };
 
 struct BufferAcquireOperation
