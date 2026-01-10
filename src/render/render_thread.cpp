@@ -836,7 +836,7 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, Core::FrameBuffer& f
             });
         }
 
-        RenderPass& shadowPass = graph.AddPass(shadowPassName, VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT);
+        RenderPass& shadowPass = graph.AddPass(shadowPassName, VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
         shadowPass.WriteDepthAttachment(shadowMapName);
         shadowPass.Execute([&, shadowPreset, cascadeLevel, shadowMapName](VkCommandBuffer cmd) {
             VkViewport viewport = VkHelpers::GenerateViewport(shadowPreset.extents[cascadeLevel].width, shadowPreset.extents[cascadeLevel].height);
@@ -992,7 +992,7 @@ void RenderThread::SetupInstancingPipeline(RenderGraph& graph, Core::FrameBuffer
 
 void RenderThread::SetupMainGeometryPass(RenderGraph& graph)
 {
-    RenderPass& instancedMeshShading = graph.AddPass("InstancedMeshShading", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT);
+    RenderPass& instancedMeshShading = graph.AddPass("InstancedMeshShading", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
     instancedMeshShading.WriteColorAttachment("albedoTarget");
     instancedMeshShading.WriteColorAttachment("normalTarget");
     instancedMeshShading.WriteColorAttachment("pbrTarget");

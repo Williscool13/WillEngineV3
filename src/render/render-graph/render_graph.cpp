@@ -529,7 +529,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
                 .srcStageMask = phys.event.stages,
                 .srcAccessMask = phys.event.access,
-                .dstStageMask = pass->stages,
+                .dstStageMask = pass->stages | VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT,
                 .dstAccessMask = desiredAccess,
                 .buffer = phys.buffer,
                 .offset = 0,
@@ -548,7 +548,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
                 .srcStageMask = phys.event.stages,
                 .srcAccessMask = phys.event.access,
-                .dstStageMask = pass->stages,
+                .dstStageMask = VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT,
                 .dstAccessMask = desiredAccess,
                 .buffer = phys.buffer,
                 .offset = 0,
@@ -682,12 +682,12 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
 
         for (auto& bufRead : pass->bufferIndirectReads) {
             auto& phys = physicalResources[bufRead->physicalIndex];
-            phys.event.stages = pass->stages;
+            phys.event.stages = pass->stages | VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT;
             phys.event.access = VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_2_SHADER_READ_BIT;
         }
         for (auto& bufRead : pass->bufferIndirectCountReads) {
             auto& phys = physicalResources[bufRead->physicalIndex];
-            phys.event.stages = pass->stages;
+            phys.event.stages = VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT;
             phys.event.access = VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT;
         }
     }
