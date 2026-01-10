@@ -20,44 +20,46 @@ void UpdateFreeCamera(Core::EngineContext* ctx, Engine::GameState* state)
     for (entt::entity entity : view) {
         const auto& [freeCam, camera, transform] = view.get(entity);
 
-        if (!ctx->windowContext.bCursorHidden) {
-            return;
-        }
-
         glm::vec3 velocity{0.f};
         float verticalVelocity{0.f};
+        float yaw = 0;
+        float pitch = 0;
+        if (!ctx->bImguiKeyboardCaptured && !ctx->bImguiMouseCaptured && ctx->windowContext.bCursorHidden) {
+            if (state->inputFrame->GetKey(Key::D).down) {
+                velocity.x += 1.0f;
+            }
+            if (state->inputFrame->GetKey(Key::A).down) {
+                velocity.x -= 1.0f;
+            }
+            if (state->inputFrame->GetKey(Key::LCTRL).down) {
+                verticalVelocity -= 1.0f;
+            }
+            if (state->inputFrame->GetKey(Key::SPACE).down) {
+                verticalVelocity += 1.0f;
+            }
+            if (state->inputFrame->GetKey(Key::W).down) {
+                velocity.z += 1.0f;
+            }
+            if (state->inputFrame->GetKey(Key::S).down) {
+                velocity.z -= 1.0f;
+            }
 
-        if (state->inputFrame->GetKey(Key::D).down) {
-            velocity.x += 1.0f;
-        }
-        if (state->inputFrame->GetKey(Key::A).down) {
-            velocity.x -= 1.0f;
-        }
-        if (state->inputFrame->GetKey(Key::LCTRL).down) {
-            verticalVelocity -= 1.0f;
-        }
-        if (state->inputFrame->GetKey(Key::SPACE).down) {
-            verticalVelocity += 1.0f;
-        }
-        if (state->inputFrame->GetKey(Key::W).down) {
-            velocity.z += 1.0f;
-        }
-        if (state->inputFrame->GetKey(Key::S).down) {
-            velocity.z -= 1.0f;
+            if (state->inputFrame->GetKey(Key::MINUS).down) {
+                freeCam.moveSpeed += 0.1f;
+            }
+            if (state->inputFrame->GetKey(Key::EQUALS).down) {
+                freeCam.lookSpeed -= 0.1f;
+            }
+            if (state->inputFrame->GetKey(Key::RIGHTBRACKET).down) {
+                freeCam.moveSpeed += 1;
+            }
+            if (state->inputFrame->GetKey(Key::LEFTBRACKET).down) {
+                freeCam.moveSpeed -= 1;
+            }
+            yaw = glm::radians(-state->inputFrame->mouseXDelta * freeCam.lookSpeed);
+            pitch = glm::radians(-state->inputFrame->mouseYDelta * freeCam.lookSpeed);
         }
 
-        if (state->inputFrame->GetKey(Key::MINUS).down) {
-            freeCam.moveSpeed += 0.1f;
-        }
-        if (state->inputFrame->GetKey(Key::EQUALS).down) {
-            freeCam.lookSpeed -= 0.1f;
-        }
-        if (state->inputFrame->GetKey(Key::RIGHTBRACKET).down) {
-            freeCam.moveSpeed += 1;
-        }
-        if (state->inputFrame->GetKey(Key::LEFTBRACKET).down) {
-            freeCam.moveSpeed -= 1;
-        }
 
         freeCam.lookSpeed = glm::clamp(freeCam.lookSpeed, 0.1f, 1.0f);
         freeCam.moveSpeed = glm::clamp(freeCam.moveSpeed, 1.0f, 100.0f);
@@ -65,9 +67,6 @@ void UpdateFreeCamera(Core::EngineContext* ctx, Engine::GameState* state)
         const float scaledMoveSpeed = state->timeFrame->deltaTime * freeCam.moveSpeed;
         velocity *= scaledMoveSpeed;
         verticalVelocity *= scaledMoveSpeed;
-
-        const float yaw = glm::radians(-state->inputFrame->mouseXDelta * freeCam.lookSpeed);
-        const float pitch = glm::radians(-state->inputFrame->mouseYDelta * freeCam.lookSpeed);
 
         const glm::quat currentRotation = transform.rotation;
         const glm::vec3 forward = currentRotation * WORLD_FORWARD;
@@ -90,7 +89,7 @@ void UpdateFreeCamera(Core::EngineContext* ctx, Engine::GameState* state)
         camera.currentViewData.cameraLookAt = transform.translation + forwardDir;
         camera.currentViewData.cameraForward = forwardDir;
         camera.currentViewData.cameraUp = WORLD_UP;
-        camera.currentViewData.aspectRatio = ctx->windowContext.windowWidth / static_cast<float>(ctx->windowContext.windowHeight);
+        camera.currentViewData.aspectRatio = static_cast<float>(ctx->windowContext.windowWidth) / static_cast<float>(ctx->windowContext.windowHeight);
         camera.currentViewData.fovRadians = glm::radians(70.0f);
         camera.currentViewData.nearPlane = 0.1f;
         camera.currentViewData.farPlane = 100.0f;

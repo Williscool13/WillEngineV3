@@ -45,9 +45,9 @@ void WillEngine::Initialize()
     {
         ZoneScopedN("SchedulerInit");
         static constexpr std::array<const char*, 64> kTaskThreadNames = {
-            "TaskThread0",  "TaskThread1",  "TaskThread2",  "TaskThread3",
-            "TaskThread4",  "TaskThread5",  "TaskThread6",  "TaskThread7",
-            "TaskThread8",  "TaskThread9",  "TaskThread10", "TaskThread11",
+            "TaskThread0", "TaskThread1", "TaskThread2", "TaskThread3",
+            "TaskThread4", "TaskThread5", "TaskThread6", "TaskThread7",
+            "TaskThread8", "TaskThread9", "TaskThread10", "TaskThread11",
             "TaskThread12", "TaskThread13", "TaskThread14", "TaskThread15",
             "TaskThread16", "TaskThread17", "TaskThread18", "TaskThread19",
             "TaskThread20", "TaskThread21", "TaskThread22", "TaskThread23",
@@ -113,7 +113,6 @@ void WillEngine::Initialize()
         SDL_SetWindowPosition(window.get(), SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
         SDL_ShowWindow(window.get());
         SDL_GetWindowSize(window.get(), &w, &h);
-        SDL_SetWindowRelativeMouseMode(window.get(), bCursorHidden);
     }
 
     //
@@ -165,6 +164,33 @@ void WillEngine::Initialize()
 
     //
     {
+        ZoneScopedN("InitializeGameStateAndEngineContext");
+#if !WILL_EDITOR
+        ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NoKeyboard;
+        bCursorHidden = true;
+#endif
+        if (bCursorHidden) {
+            ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NoMouse;
+            SDL_SetWindowRelativeMouseMode(window.get(), true);
+        }
+        else {
+            ImGui::GetIO().ConfigFlags &= ~ImGuiConfigFlags_NoMouse;
+            SDL_SetWindowRelativeMouseMode(window.get(), false);
+        }
+
+        gameState = std::make_unique<GameState>();
+
+        engineContext = std::make_unique<Core::EngineContext>();
+        engineContext->logger = spdlog::default_logger();
+        engineContext->imguiContext = ImGui::GetCurrentContext();
+        engineContext->windowContext.windowWidth = w;
+        engineContext->windowContext.windowHeight = h;
+        engineContext->windowContext.bCursorHidden = bCursorHidden;
+        engineContext->assetManager = assetManager.get();
+        engineContext->physicsSystem = physicsSystem.get();
+    }
+    //
+    {
         ZoneScopedN("PrepareGameFunctions");
 #ifdef GAME_STATIC
         gameFunctions.gameStartup = &GameStartup;
@@ -186,17 +212,6 @@ void WillEngine::Initialize()
             gameFunctions.Stub();
         }
 #endif
-
-        gameState = std::make_unique<GameState>();
-
-        engineContext = std::make_unique<Core::EngineContext>();
-        engineContext->logger = spdlog::default_logger();
-        engineContext->imguiContext = ImGui::GetCurrentContext();
-        engineContext->windowContext.windowWidth = w;
-        engineContext->windowContext.windowHeight = h;
-        engineContext->windowContext.bCursorHidden = bCursorHidden;
-        engineContext->assetManager = assetManager.get();
-        engineContext->physicsSystem = physicsSystem.get();
 
         gameFunctions.gameStartup(engineContext.get(), gameState.get());
         gameFunctions.gameLoad(engineContext.get(), gameState.get());
@@ -238,7 +253,6 @@ void WillEngine::Run()
                     inputManager->UpdateWindowExtent(w, h);
                     engineContext->windowContext.windowWidth = w;
                     engineContext->windowContext.windowHeight = h;
-                    SDL_SetWindowRelativeMouseMode(window.get(), bCursorHidden);
                 }
                 break;
                 default:
@@ -280,13 +294,25 @@ void WillEngine::Run()
 
         if (editorInput.isWindowInputFocus && editorInput.GetKey(Key::PERIOD).pressed) {
             bCursorHidden = !bCursorHidden;
-            SDL_SetWindowRelativeMouseMode(window.get(), bCursorHidden);
+            if (bCursorHidden) {
+                ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NoMouse;
+                SDL_SetWindowRelativeMouseMode(window.get(), true);
+                ImGui::SetWindowFocus(nullptr);
+            }
+            else {
+                ImGui::GetIO().ConfigFlags &= ~ImGuiConfigFlags_NoMouse;
+                SDL_SetWindowRelativeMouseMode(window.get(), false);
+            }
+
             engineContext->windowContext.bCursorHidden = bCursorHidden;
         }
 #endif
 
         assetManager->ResolveLoads(stagingFrameBuffer);
         assetManager->ResolveUnloads();
+
+        engineContext->bImguiKeyboardCaptured = ImGui::GetIO().WantCaptureKeyboard;
+        engineContext->bImguiMouseCaptured = ImGui::GetIO().WantCaptureMouse;
 
         //
         {
@@ -355,7 +381,8 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
         ImGui::Checkbox("Freeze Visibility Calculations", &bFreezeVisibility);
         if (ImGui::Button("Log RDG")) {
             bLogRDG = true;
-        } else {
+        }
+        else {
             bLogRDG = false;
         }
         ImGui::Text("Hello!");

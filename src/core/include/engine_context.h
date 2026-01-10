@@ -41,7 +41,11 @@ struct EngineContext
 {
     WindowContext windowContext;
     std::shared_ptr<spdlog::logger> logger;
+
+    // Imgui
     ImGuiContext* imguiContext;
+    bool bImguiKeyboardCaptured = false;
+    bool bImguiMouseCaptured = false;
     //Render::ResourceManager* resourceManager;
     Engine::AssetManager* assetManager;
     Physics::PhysicsSystem* physicsSystem;

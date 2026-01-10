@@ -355,6 +355,7 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         SPDLOG_INFO("[DebugSystem] Spawned sponza");
     }
 
+    if (ctx->bImguiKeyboardCaptured) { return; }
     if (state->inputFrame->GetKey(Key::NUM_1).pressed) {
         auto view = state->registry.view<RenderDebugViewComponent>();
         for (auto [entity, debugViewComponent] : view.each()) {
@@ -586,6 +587,4 @@ void DebugVisualizeCascadeCorners(Core::EngineContext* ctx, Engine::GameState* s
 
     SPDLOG_INFO("[DebugSystem] Spawned cascade corner markers");
 }
-
-
 } // Game::System
