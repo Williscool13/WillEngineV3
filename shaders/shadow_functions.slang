@@ -1,9 +1,8 @@
+import shader_constants;
 module shadow_functions;
 
-import common_interop;
 import constants_interop;
 import shadows_interop;
-import shader_constants;
 
 public uint getCascadeIndex(uint packedIndices, uint cascadeLevel)
 {
@@ -165,10 +164,9 @@ float pcss(Texture2D shadowMap, SamplerState sampler, SamplerComparisonState com
     return shadowFactor1;
 }*/
 
-public float getShadowFactor(float3 viewPos, float3 viewNormal, SceneData* sceneData, ShadowData* shadowData, uint32_t packedCSMIndices,
+public float getShadowFactor(float3 worldPos, float viewSpaceDepth, ShadowData* shadowData, uint32_t packedCSMIndices,
                             Texture2D textures[], SamplerState sampler, SamplerComparisonState comparisonSampler)
 {
-    float viewSpaceDepth = abs(viewPos.z);
     if (viewSpaceDepth < shadowData->nearSplits[0]) {
         return 0.0f;
     }
@@ -183,12 +181,6 @@ public float getShadowFactor(float3 viewPos, float3 viewNormal, SceneData* scene
             break;
         }
     }
-
-    float baseOffset = 0.01f;
-    float offset = baseOffset * (1 << cascadeLevel);
-    float3 offsetPosition = viewPos + viewNormal * offset;
-    float4 offsetWorldPosition = mul(sceneData.invView, float4(offsetPosition, 1.0f));
-    float3 worldPos = offsetWorldPosition.xyz;
 
     float4 lightSpacePos = mul(shadowData.lightSpaceMatrices[cascadeLevel], float4(worldPos, 1.0));
     float3 projCoords = lightSpacePos.xyz / lightSpacePos.w;
@@ -205,12 +197,12 @@ public float getShadowFactor(float3 viewPos, float3 viewNormal, SceneData* scene
 
     // Cascade blending
     if (cascadeLevel == SHADOW_CASCADE_COUNT - 1) {
-        float blendStart = shadowData.farSplits[cascadeLevel] * 0.98;
-        float blendEnd = shadowData.farSplits[cascadeLevel];
-        if (viewSpaceDepth >= blendStart) {
-            float blendFactor = smoothstep(blendStart, blendEnd, viewSpaceDepth);
-            return lerp(shadowFactor1, 1.0, blendFactor);
-        }
+        // float blendStart = shadowData.farSplits[cascadeLevel] * 0.9;
+        // float blendEnd = shadowData.farSplits[cascadeLevel];
+        // if (viewSpaceDepth >= blendStart) {
+        //     float blendFactor = smoothstep(blendStart, blendEnd, viewSpaceDepth);
+        //     return lerp(shadowFactor1, 1.0, blendFactor);
+        // }
     } else {
         float blendStart = shadowData.nearSplits[cascadeLevel + 1];
         float blendEnd = shadowData.farSplits[cascadeLevel];
