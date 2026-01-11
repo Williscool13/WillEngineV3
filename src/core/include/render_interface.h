@@ -58,7 +58,7 @@ struct ShadowConfiguration
     float cascadeNearPlane = 0.1f;
     float cascadeFarPlane = 100.0f;
     float splitLambda = 0.5f;
-    float splitOverlap = 1.05f;
+    float splitOverlap = 1.10f;
     Render::ShadowCascadePreset cascadePreset = Render::SHADOW_PRESETS[static_cast<uint32_t>(ShadowQuality::Ultra)];
     bool enabled = true;
 };
