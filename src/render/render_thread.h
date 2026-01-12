@@ -80,7 +80,7 @@ public:
 
     RenderResponse Render(uint32_t currentFrameIndex, RenderSynchronization& renderSync, Core::FrameBuffer& frameBuffer, FrameResources& frameResource);
 
-    void ProcessAcquisitions(VkCommandBuffer cmd, Core::FrameBuffer& frameBuffer);
+    void ProcessAcquisitions(VkCommandBuffer cmd, const std::vector<Core::BufferAcquireOperation>& bufferAcquireOperations, const std::vector<Core::ImageAcquireOperation>& imageAcquireOperations);
 
 public:
     VulkanContext* GetVulkanContext() const { return context.get(); }
@@ -89,19 +89,19 @@ public:
 private:
     void CreatePipelines();
 
-    void SetupFrameUniforms(VkCommandBuffer cmd, FrameResources& frameResource, Core::FrameBuffer& frameBuffer, std::array<uint32_t, 2> renderExtent);
+    void SetupFrameUniforms(VkCommandBuffer cmd, const Core::ViewFamily& viewFamily, FrameResources& frameResource, std::array<uint32_t, 2> renderExtent) const;
 
-    void SetupCascadedShadows(RenderGraph& graph, Core::FrameBuffer& frameBuffer, FrameResources& frameResource);
+    void SetupCascadedShadows(RenderGraph& graph, const Core::ViewFamily& viewFamily) const;
 
-    void SetupInstancingPipeline(RenderGraph& graph, Core::FrameBuffer& frameBuffer);
+    void SetupInstancing(RenderGraph& graph, const Core::ViewFamily& viewFamily) const;
 
-    void SetupMainGeometryPass(RenderGraph& graph);
+    void SetupMainGeometryPass(RenderGraph& graph, const Core::ViewFamily& viewFamily) const;
 
-    void SetupDeferredLighting(RenderGraph& graph, const Core::FrameBuffer& frameBuffer, std::array<uint32_t, 2> renderExtent);
+    void SetupDeferredLighting(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, bool bEnableShadows) const;
 
-    void SetupTemporalAntialiasing(RenderGraph& graph, std::array<uint32_t, 2> renderExtent);
+    void SetupTemporalAntialiasing(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent) const;
 
-    void SetupPostProcessing(RenderGraph& graph, const Core::FrameBuffer& frameBuffer, std::array<uint32_t, 2> renderExtent);
+    void SetupPostProcessing(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent) const;
 
 private:
     // Non-owning
@@ -131,8 +131,7 @@ private:
     uint64_t frameNumber{0};
     bool bEngineRequestsRecreate{false};
     bool bRenderRequestsRecreate{false};
-    int32_t highestInstanceIndex{-1};
-    SceneData sceneData{};
+    bool bFrozenVisibility{false};
 
 private:
     PipelineLayout globalPipelineLayout;
