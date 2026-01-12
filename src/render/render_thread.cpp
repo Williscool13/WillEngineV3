@@ -653,8 +653,7 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, Core::FrameBuffer& f
         shadowData.pcfSamples[i] = shadowConfig.cascadePreset.pcssSamples[i].pcfSamples;
     }
 
-    // todo: tweak shadow intensity
-    shadowData.shadowIntensity = 1.0f;
+    shadowData.shadowIntensity = shadowConfig.shadowIntensity;
 
     AllocatedBuffer& shadowBuffer = frameResource.shadowBuffer;
     auto currentShadowData = static_cast<ShadowData*>(shadowBuffer.allocationInfo.pMappedData);

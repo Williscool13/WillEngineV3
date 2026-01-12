@@ -125,13 +125,14 @@ public float GetShadowFactor(float3 viewPos, float3 viewNormal, SceneData* scene
     float cascadeFar = shadowData.farSplits[cascadeLevel];
     // float shadowFactor1 = PCSS(shadowMap, sampler, comparisonSampler, projCoords.xy, projCoords.z, viewSpaceDepth, lightSize, cascadeNear, cascadeFar, pcfSamples);
 
+    float outShadowFactor = shadowFactor1;
     // Cascade blending
     if (cascadeLevel == SHADOW_CASCADE_COUNT - 1) {
         float blendStart = shadowData.farSplits[cascadeLevel] * 0.98;
         float blendEnd = shadowData.farSplits[cascadeLevel];
         if (viewSpaceDepth >= blendStart) {
             float blendFactor = smoothstep(blendStart, blendEnd, viewSpaceDepth);
-            return lerp(shadowFactor1, 1.0, blendFactor);
+            outShadowFactor = lerp(shadowFactor1, 1.0, blendFactor);
         }
     } else {
         float blendStart = shadowData.nearSplits[cascadeLevel + 1];
@@ -153,9 +154,9 @@ public float GetShadowFactor(float3 viewPos, float3 viewNormal, SceneData* scene
             // float shadowFactor2 = PCSS(nextShadowMap, sampler, comparisonSampler, nextProjCoords.xy, nextProjCoords.z, viewSpaceDepth, nextLightSize, shadowData->nearSplits[cascadeLevel + 1], shadowData->farSplits[cascadeLevel + 1], nextPcfSamples);
 
             float blendFactor = smoothstep(blendStart, blendEnd, viewSpaceDepth);
-            return lerp(shadowFactor1, shadowFactor2, blendFactor);
+            outShadowFactor = lerp(shadowFactor1, shadowFactor2, blendFactor);
         }
     }
 
-    return shadowFactor1;
+     return lerp(shadowData.shadowIntensity, 1.0, outShadowFactor);
 }

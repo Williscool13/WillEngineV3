@@ -60,6 +60,7 @@ struct ShadowConfiguration
     float splitLambda = 0.5f;
     float splitOverlap = 1.10f;
     Render::ShadowCascadePreset cascadePreset = Render::SHADOW_PRESETS[static_cast<uint32_t>(ShadowQuality::Ultra)];
+    float shadowIntensity = 0.0f; // lower is darker
     bool enabled = true;
 };
 
