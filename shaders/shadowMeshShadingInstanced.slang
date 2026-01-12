@@ -7,6 +7,8 @@ import push_constant_interop;
 
 import shader_functions;
 
+import bindless_declarations;
+
 struct ShadowPayload {
     uint32_t modelIndex;
     uint32_t groupMeshletOffset;

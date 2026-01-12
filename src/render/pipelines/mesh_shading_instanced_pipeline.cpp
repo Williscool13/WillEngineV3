@@ -19,7 +19,7 @@ MeshShadingInstancedPipeline::MeshShadingInstancedPipeline() = default;
 
 MeshShadingInstancedPipeline::~MeshShadingInstancedPipeline() = default;
 
-MeshShadingInstancedPipeline::MeshShadingInstancedPipeline(VulkanContext* context, DescriptorSetLayout& bindlessResources)
+MeshShadingInstancedPipeline::MeshShadingInstancedPipeline(VulkanContext* context, std::array<VkDescriptorSetLayout, 2> descriptorSets)
 {
     VkPushConstantRange renderPushConstantRange{};
     renderPushConstantRange.offset = 0;
@@ -28,8 +28,8 @@ MeshShadingInstancedPipeline::MeshShadingInstancedPipeline(VulkanContext* contex
 
     VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo{};
     pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutCreateInfo.pSetLayouts = &bindlessResources.handle;
-    pipelineLayoutCreateInfo.setLayoutCount = 1;
+    pipelineLayoutCreateInfo.pSetLayouts = descriptorSets.data();
+    pipelineLayoutCreateInfo.setLayoutCount = descriptorSets.size();
     pipelineLayoutCreateInfo.pPushConstantRanges = &renderPushConstantRange;
     pipelineLayoutCreateInfo.pushConstantRangeCount = 1;
 

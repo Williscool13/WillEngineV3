@@ -4,6 +4,8 @@ import model_interop;
 import instancing_interop;
 import push_constant_interop;
 
+//import bindless_declarations;
+
 import shader_functions;
 
 // =============== Task Shader ===============
@@ -163,11 +165,21 @@ struct FragmentOutput {
     float4 pbr : SV_Target2;
     float2 velocity : SV_Target3;
 };
-
+// Descriptor buffer for model textures
 [[vk::binding(0, 0)]]
-SamplerState samplers[];
+public SamplerState assetSamplers[];
 [[vk::binding(1, 0)]]
-Texture2D textures[];
+public Texture2D assetTextures[];
+
+// Descriptor buffer for RDG
+[[vk::binding(0, 1)]]
+public SamplerState rdgSamplers[];
+[[vk::binding(1, 1)]]
+public SamplerComparisonState rdgCompareSamplers[];
+[[vk::binding(2, 1)]]
+public Texture2D rdgTextures[];
+[[vk::binding(3, 1)]]
+public RWTexture2D<float4> rdgRenderTextures[];
 
 [shader("fragment")]
 FragmentOutput fragmentMain(VertexOutput vertexInput, uniform InstancedMeshShadingPushConstant pushConstant)
@@ -175,7 +187,7 @@ FragmentOutput fragmentMain(VertexOutput vertexInput, uniform InstancedMeshShadi
     MaterialProperties material = pushConstant.materialBuffer[vertexInput.materialIndex];
 
     // float4 albedoSample = textures[material.textureImageIndices[0]].Sample(samplers[material.textureSamplerIndices[0]], vertexInput.uv);
-    float4 albedoSample = textures[material.textureImageIndices[0]].SampleBias(samplers[material.textureSamplerIndices[0]], vertexInput.uv, -1.0);
+    float4 albedoSample = assetTextures[material.textureImageIndices[0]].SampleBias(assetSamplers[material.textureSamplerIndices[0]], vertexInput.uv, -1.0);
     float4 albedo = vertexInput.color * albedoSample * material.colorFactor;
 
     float3 viewNormal = normalize(vertexInput.viewNormal);

@@ -177,4 +177,16 @@ SHADER_PUBLIC struct ShadowMeshShadingPushConstant
     SHADER_PUBLIC uint32_t cascadeIndex;
 };
 
+SHADER_PUBLIC struct TonemapSDRPushConstant
+{
+    // 0=ACES, 1=Uncharted2, 2=Reinhard
+    SHADER_PUBLIC uint32_t tonemapOperator;
+    SHADER_PUBLIC uint32_t outputWidth;
+    SHADER_PUBLIC uint32_t outputHeight;
+    SHADER_PUBLIC uint32_t srcImageIndex;
+    SHADER_PUBLIC uint32_t dstImageIndex;
+    SHADER_PUBLIC uint32_t pointSamplerIndex;
+    SHADER_PUBLIC uint32_t linearSamplerIndex;
+};
+
 #endif //WILL_ENGINE_PUSH_CONSTANT_INTEROP_H

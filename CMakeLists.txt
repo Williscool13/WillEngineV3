@@ -223,6 +223,7 @@ add_shader_include("${CMAKE_SOURCE_DIR}/shaders/shader_constants.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/shader_functions.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/shadow_functions.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/pbr_functions.slang")
+add_shader_include("${CMAKE_SOURCE_DIR}/shaders/bindless_declarations.slang")
 
 compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/debugVisualize.slang compute computeMain
@@ -237,6 +238,7 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/shadowMeshShadingInstanced.slang mesh meshMain
         ${CMAKE_SOURCE_DIR}/shaders/deferredResolve.slang compute computeMain
         ${CMAKE_SOURCE_DIR}/shaders/temporalAntialiasing.slang compute computeMain
+        ${CMAKE_SOURCE_DIR}/shaders/postprocess.slang compute computeSDRTonemap tonemapSDR
 )
 
 # Post-Build Commands =========================

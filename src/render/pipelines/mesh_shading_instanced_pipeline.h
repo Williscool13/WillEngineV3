@@ -4,6 +4,8 @@
 
 #ifndef WILL_ENGINE_MESH_SHADER_INSTANCED_PIPELINE_H
 #define WILL_ENGINE_MESH_SHADER_INSTANCED_PIPELINE_H
+#include <array>
+
 #include "render/vulkan/vk_resources.h"
 
 namespace Render
@@ -17,7 +19,7 @@ public:
 
     ~MeshShadingInstancedPipeline();
 
-    MeshShadingInstancedPipeline(VulkanContext* context, DescriptorSetLayout& bindlessResources);
+    MeshShadingInstancedPipeline(VulkanContext* context, std::array<VkDescriptorSetLayout, 2> descriptorSets);
 
     MeshShadingInstancedPipeline(const MeshShadingInstancedPipeline&) = delete;
 

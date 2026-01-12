@@ -82,14 +82,14 @@ public:
 
     void ProcessAcquisitions(VkCommandBuffer cmd, Core::FrameBuffer& frameBuffer);
 
-    void CreatePipelines();
-
 public:
     VulkanContext* GetVulkanContext() const { return context.get(); }
     ResourceManager* GetResourceManager() const { return resourceManager.get(); }
 
 private:
-    void SetupFrameUniforms(FrameResources& frameResource, Core::FrameBuffer& frameBuffer, const std::array<uint32_t, 2>& renderExtent);
+    void CreatePipelines();
+
+    void SetupFrameUniforms(VkCommandBuffer cmd, FrameResources& frameResource, Core::FrameBuffer& frameBuffer, const std::array<uint32_t, 2>& renderExtent);
 
     void SetupCascadedShadows(RenderGraph& graph, Core::FrameBuffer& frameBuffer, FrameResources& frameResource);
 
@@ -100,6 +100,8 @@ private:
     void SetupDeferredLighting(RenderGraph& graph, const Core::FrameBuffer& frameBuffer, const std::array<uint32_t, 2>& renderExtent);
 
     void SetupTemporalAntialiasing(RenderGraph& graph, const std::array<uint32_t, 2>& renderExtent);
+
+    void SetupPostProcessing(RenderGraph& graph, std::array<uint32_t, 2> renderExtent);
 
 private:
     // Non-owning
@@ -133,17 +135,20 @@ private:
     SceneData sceneData{};
 
 private:
+    PipelineLayout globalPipelineLayout;
     ComputePipeline debugVisualizePipeline;
 
-    ComputePipeline instancingVisibility;
-    ComputePipeline instancingShadowsVisibility;
-    ComputePipeline instancingPrefixSum;
-    ComputePipeline instancingIndirectConstruction;
+    ComputePipeline instancingVisibilityPipeline;
+    ComputePipeline instancingShadowsVisibilityPipeline;
+    ComputePipeline instancingPrefixSumPipeline;
+    ComputePipeline instancingIndirectConstructionPipeline;
+
     MeshShadingInstancedPipeline meshShadingInstancedPipeline;
     ShadowMeshShadingInstancedPipeline shadowMeshShadingInstancedPipeline;
-    ComputePipeline deferredResolve;
+    ComputePipeline deferredResolvePipeline;
+    ComputePipeline temporalAntialiasingPipeline;
 
-    ComputePipeline temporalAntialiasing;
+    ComputePipeline tonemapSDRPipeline;
 };
 } // Render
 

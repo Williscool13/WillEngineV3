@@ -1,13 +1,6 @@
 import push_constant_interop;
 
-[[vk::binding(0, 0)]]
-SamplerState samplers[];
-[[vk::binding(1, 0)]]
-SamplerComparisonState compareSamplers[];
-[[vk::binding(2, 0)]]
-Texture2D textures[];
-[[vk::binding(3, 0)]]
-RWTexture2D<float4> renderTextures[];
+import bindless_declarations;
 
 [[vk::push_constant]]
 DebugVisualizePushConstant pc;
@@ -27,47 +20,47 @@ void computeMain(uint3 threadID : SV_DispatchThreadID) {
 
     switch (pc.debugType) {
         case 1: // Depth
-            float depth = textures[pc.textureIndex].SampleLevel(samplers[pc.samplerIndex], srcUV, 0).r;
+            float depth = rdgTextures[pc.textureIndex].SampleLevel(rdgSamplers[pc.samplerIndex], srcUV, 0).r;
             float linear = LinearizeDepth(depth);
-            renderTextures[pc.outputImageIndex][threadID.xy] = float4(linear, linear, linear, 1.0);
+            rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(linear, linear, linear, 1.0);
             break;
         case 2: // Albedo
-            float4 albedo  = textures[pc.textureIndex].SampleLevel(samplers[pc.samplerIndex], srcUV, 0);
-            renderTextures[pc.outputImageIndex][threadID.xy] = float4(albedo.x, albedo.y, albedo.z, 1.0f);
+            float4 albedo  = rdgTextures[pc.textureIndex].SampleLevel(rdgSamplers[pc.samplerIndex], srcUV, 0);
+            rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(albedo.x, albedo.y, albedo.z, 1.0f);
             break;
         case 3: // Normal (view space, stored in packed unorm [0,1])
-            float3 normal = textures[pc.textureIndex].SampleLevel(samplers[pc.samplerIndex], srcUV, 0).xyz;
-            renderTextures[pc.outputImageIndex][threadID.xy] = float4(normal, 1.0);
+            float3 normal = rdgTextures[pc.textureIndex].SampleLevel(rdgSamplers[pc.samplerIndex], srcUV, 0).xyz;
+            rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(normal, 1.0);
             break;
         case 4: // PBR (R=metallic, G=roughness)
-            float4 pbr = textures[pc.textureIndex].SampleLevel(samplers[pc.samplerIndex], srcUV, 0);
-            renderTextures[pc.outputImageIndex][threadID.xy] = float4(pbr.r, pbr.g, 0.0, 1.0);
+            float4 pbr = rdgTextures[pc.textureIndex].SampleLevel(rdgSamplers[pc.samplerIndex], srcUV, 0);
+            rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(pbr.r, pbr.g, 0.0, 1.0);
             break;
         case 5: // Velocity
-            float2 velocity = textures[pc.textureIndex].SampleLevel(samplers[pc.samplerIndex], srcUV, 0).xy;
+            float2 velocity = rdgTextures[pc.textureIndex].SampleLevel(rdgSamplers[pc.samplerIndex], srcUV, 0).xy;
             float2 centered = abs((velocity - 0.5) * 100.0);
-            renderTextures[pc.outputImageIndex][threadID.xy] = float4(centered, 0.0, 1.0);
+            rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(centered, 0.0, 1.0);
             break;
         case 6: // CSM
-            float4 color  = textures[pc.textureIndex].SampleLevel(samplers[pc.samplerIndex], srcUV, 0);
+            float4 color  = rdgTextures[pc.textureIndex].SampleLevel(rdgSamplers[pc.samplerIndex], srcUV, 0);
             //float linearCsm = LinearizeDepth(color.x);
             float linearCsm = abs(color.x);
-            renderTextures[pc.outputImageIndex][threadID.xy] = float4(linearCsm, linearCsm, linearCsm, 1.0f);
+            rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(linearCsm, linearCsm, linearCsm, 1.0f);
             break;
         case 7: // CSM
-            float4 color2  = textures[pc.textureIndex].SampleLevel(samplers[pc.samplerIndex], srcUV, 0);
-            renderTextures[pc.outputImageIndex][threadID.xy] = float4(color2.x, color2.y, color2.z, 1.0f);
+            float4 color2  = rdgTextures[pc.textureIndex].SampleLevel(rdgSamplers[pc.samplerIndex], srcUV, 0);
+            rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(color2.x, color2.y, color2.z, 1.0f);
             break;
         case 8: // CSM
-            float4 color3  = textures[pc.textureIndex].SampleLevel(samplers[pc.samplerIndex], srcUV, 0);
-            renderTextures[pc.outputImageIndex][threadID.xy] = float4(color3.x, color3.y, color3.z, 1.0f);
+            float4 color3  = rdgTextures[pc.textureIndex].SampleLevel(rdgSamplers[pc.samplerIndex], srcUV, 0);
+            rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(color3.x, color3.y, color3.z, 1.0f);
             break;
         case 9: // CSM
-            float4 color4  = textures[pc.textureIndex].SampleLevel(samplers[pc.samplerIndex], srcUV, 0);
-            renderTextures[pc.outputImageIndex][threadID.xy] = float4(color4.x, color4.y, color4.z, 1.0f);
+            float4 color4  = rdgTextures[pc.textureIndex].SampleLevel(rdgSamplers[pc.samplerIndex], srcUV, 0);
+            rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(color4.x, color4.y, color4.z, 1.0f);
             break;
         default:
-            renderTextures[pc.outputImageIndex][threadID.xy] = float4(1.0, 0.0, 1.0, 1.0); // Magenta for invalid
+            rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(1.0, 0.0, 1.0, 1.0); // Magenta for invalid
             break;
     }
 }

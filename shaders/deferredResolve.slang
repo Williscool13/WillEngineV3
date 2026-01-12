@@ -4,14 +4,7 @@ import shadow_functions;
 import constants_interop;
 import pbr_functions;
 
-[[vk::binding(0, 0)]]
-SamplerState samplers[];
-[[vk::binding(1, 0)]]
-SamplerComparisonState compareSamplers[];
-[[vk::binding(2, 0)]]
-Texture2D textures[];
-[[vk::binding(3, 0)]]
-RWTexture2D<float4> renderTextures[];
+import bindless_declarations;
 
 [[vk::push_constant]]
 DeferredResolvePushConstant pc;
@@ -21,14 +14,14 @@ void computeMain(uint3 threadID : SV_DispatchThreadID) {
     if (threadID.x >= pc.extent.x || threadID.y >= pc.extent.y) return;
 
     float2 uv = (float2(threadID.xy) + 0.5) / float2(pc.extent);
-    float4 albedo = textures[GetAlbedoIndex(pc.packedGBufferIndices)].SampleLevel(samplers[pc.pointSamplerIndex], uv, 0);
+    float4 albedo = rdgTextures[GetAlbedoIndex(pc.packedGBufferIndices)].SampleLevel(rdgSamplers[pc.pointSamplerIndex], uv, 0);
 
-    float depth = textures[GetDepthIndex(pc.packedGBufferIndices)].SampleLevel(samplers[pc.pointSamplerIndex], uv, 0).r;
+    float depth = rdgTextures[GetDepthIndex(pc.packedGBufferIndices)].SampleLevel(rdgSamplers[pc.pointSamplerIndex], uv, 0).r;
     if (depth <= 0.0) {
         return;
     }
-    float3 viewNormal = textures[GetNormalIndex(pc.packedGBufferIndices)].SampleLevel(samplers[pc.pointSamplerIndex], uv, 0).xyz;
-    float4 pbrData = textures[GetPBRIndex(pc.packedGBufferIndices)].SampleLevel(samplers[pc.pointSamplerIndex], uv, 0);
+    float3 viewNormal = rdgTextures[GetNormalIndex(pc.packedGBufferIndices)].SampleLevel(rdgSamplers[pc.pointSamplerIndex], uv, 0).xyz;
+    float4 pbrData = rdgTextures[GetPBRIndex(pc.packedGBufferIndices)].SampleLevel(rdgSamplers[pc.pointSamplerIndex], uv, 0);
 
     float3 viewPosition = reconstructViewPosition(pc->sceneData.invProj, uv, depth);
 
@@ -63,7 +56,7 @@ void computeMain(uint3 threadID : SV_DispatchThreadID) {
     if (pc.packedCSMIndices == ~0x0) {
         shadowFactor = 1.0f;
     } else {
-        shadowFactor = getShadowFactor(viewPosition, N,  pc.sceneData, pc.shadowData, pc.packedCSMIndices, textures, samplers[pc.pointSamplerIndex], compareSamplers[pc.depthCompareSamplerIndex]);
+        shadowFactor = getShadowFactor(viewPosition, N,  pc.sceneData, pc.shadowData, pc.packedCSMIndices, rdgTextures, rdgSamplers[pc.pointSamplerIndex], rdgCompareSamplers[pc.depthCompareSamplerIndex]);
     }
 
     const float lightIntensity = 3.0f;
@@ -72,5 +65,5 @@ void computeMain(uint3 threadID : SV_DispatchThreadID) {
     // Ambient
     float3 ambient = albedo.xyz * 0.03;
     float3 finalColor = directLight + ambient;
-    renderTextures[pc.outputImageIndex][threadID.xy] = float4(finalColor, 1.0);
+    rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(finalColor, 1.0);
 }

@@ -4,6 +4,9 @@ import shader_functions;
 import instancing_interop;
 import push_constant_interop;
 import constants_interop;
+
+import bindless_declarations;
+
 // =============== Compute Shader (Instance Visibility and Primitive Accumulation Count) ===============
 // Evaluates the visibility of each instance and outputs to a packed visibility buffer
 [shader("compute")]

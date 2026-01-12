@@ -2,14 +2,7 @@ import common_interop;
 import push_constant_interop;
 import shader_functions;
 
-[[vk::binding(0, 0)]]
-SamplerState samplers[];
-[[vk::binding(1, 0)]]
-SamplerComparisonState compareSamplers[];
-[[vk::binding(2, 0)]]
-Texture2D textures[];
-[[vk::binding(3, 0)]]
-RWTexture2D<float4> renderTextures[];
+import bindless_declarations;
 
 [[vk::push_constant]]
 TemporalAntialiasingPushConstant pc;
@@ -18,17 +11,17 @@ float3 neighborhoodClamp(float3 historyColor, float2 uv) {
     float2 du = float2(pc.sceneData.texelSize.x, 0.0);
     float2 dv = float2(0.0, pc.sceneData.texelSize.y);
 
-    float3 topL = textures[pc.colorResolvedIndex].SampleLevel(samplers[pc.linearSamplerIndex], uv - dv - du, 0).rgb;
-    float3 topM = textures[pc.colorResolvedIndex].SampleLevel(samplers[pc.linearSamplerIndex], uv - dv, 0).rgb;
-    float3 topR = textures[pc.colorResolvedIndex].SampleLevel(samplers[pc.linearSamplerIndex], uv - dv + du, 0).rgb;
+    float3 topL = rdgTextures[pc.colorResolvedIndex].SampleLevel(rdgSamplers[pc.linearSamplerIndex], uv - dv - du, 0).rgb;
+    float3 topM = rdgTextures[pc.colorResolvedIndex].SampleLevel(rdgSamplers[pc.linearSamplerIndex], uv - dv, 0).rgb;
+    float3 topR = rdgTextures[pc.colorResolvedIndex].SampleLevel(rdgSamplers[pc.linearSamplerIndex], uv - dv + du, 0).rgb;
 
-    float3 midL = textures[pc.colorResolvedIndex].SampleLevel(samplers[pc.linearSamplerIndex], uv - du, 0).rgb;
-    float3 midM = textures[pc.colorResolvedIndex].SampleLevel(samplers[pc.linearSamplerIndex], uv, 0).rgb;
-    float3 midR = textures[pc.colorResolvedIndex].SampleLevel(samplers[pc.linearSamplerIndex], uv + du, 0).rgb;
+    float3 midL = rdgTextures[pc.colorResolvedIndex].SampleLevel(rdgSamplers[pc.linearSamplerIndex], uv - du, 0).rgb;
+    float3 midM = rdgTextures[pc.colorResolvedIndex].SampleLevel(rdgSamplers[pc.linearSamplerIndex], uv, 0).rgb;
+    float3 midR = rdgTextures[pc.colorResolvedIndex].SampleLevel(rdgSamplers[pc.linearSamplerIndex], uv + du, 0).rgb;
 
-    float3 botL = textures[pc.colorResolvedIndex].SampleLevel(samplers[pc.linearSamplerIndex], uv + dv - du, 0).rgb;
-    float3 botM = textures[pc.colorResolvedIndex].SampleLevel(samplers[pc.linearSamplerIndex], uv + dv, 0).rgb;
-    float3 botR = textures[pc.colorResolvedIndex].SampleLevel(samplers[pc.linearSamplerIndex], uv + dv + du, 0).rgb;
+    float3 botL = rdgTextures[pc.colorResolvedIndex].SampleLevel(rdgSamplers[pc.linearSamplerIndex], uv + dv - du, 0).rgb;
+    float3 botM = rdgTextures[pc.colorResolvedIndex].SampleLevel(rdgSamplers[pc.linearSamplerIndex], uv + dv, 0).rgb;
+    float3 botR = rdgTextures[pc.colorResolvedIndex].SampleLevel(rdgSamplers[pc.linearSamplerIndex], uv + dv + du, 0).rgb;
 
     float3 minColor = min(min(min(min(min(min(min(min(topL, topM), topR), midL), midM), midR), botL), botM), botR);
     float3 maxColor = max(max(max(max(max(max(max(max(topL, topM), topR), midL), midM), midR), botL), botM), botR);
@@ -60,11 +53,11 @@ float3 SampleHistoryCatmullRom(float2 uv) {
     float2 tc3 = (texelCenter + 2.0) * texelSize;
 
     float3 color =
-        textures[pc.colorHistoryIndex].SampleLevel(samplers[pc.linearSamplerIndex], float2(tc12.x, tc0.y), 0).rgb * (w12.x * w0.y) +
-        textures[pc.colorHistoryIndex].SampleLevel(samplers[pc.linearSamplerIndex], float2(tc0.x, tc12.y), 0).rgb * (w0.x * w12.y) +
-        textures[pc.colorHistoryIndex].SampleLevel(samplers[pc.linearSamplerIndex], tc12, 0).rgb * (w12.x * w12.y) +
-        textures[pc.colorHistoryIndex].SampleLevel(samplers[pc.linearSamplerIndex], float2(tc3.x, tc12.y), 0).rgb * (w3.x * w12.y) +
-        textures[pc.colorHistoryIndex].SampleLevel(samplers[pc.linearSamplerIndex], float2(tc12.x, tc3.y), 0).rgb * (w12.x * w3.y);
+        rdgTextures[pc.colorHistoryIndex].SampleLevel(rdgSamplers[pc.linearSamplerIndex], float2(tc12.x, tc0.y), 0).rgb * (w12.x * w0.y) +
+        rdgTextures[pc.colorHistoryIndex].SampleLevel(rdgSamplers[pc.linearSamplerIndex], float2(tc0.x, tc12.y), 0).rgb * (w0.x * w12.y) +
+        rdgTextures[pc.colorHistoryIndex].SampleLevel(rdgSamplers[pc.linearSamplerIndex], tc12, 0).rgb * (w12.x * w12.y) +
+        rdgTextures[pc.colorHistoryIndex].SampleLevel(rdgSamplers[pc.linearSamplerIndex], float2(tc3.x, tc12.y), 0).rgb * (w3.x * w12.y) +
+        rdgTextures[pc.colorHistoryIndex].SampleLevel(rdgSamplers[pc.linearSamplerIndex], float2(tc12.x, tc3.y), 0).rgb * (w12.x * w3.y);
 
     return color;
 }
@@ -79,10 +72,10 @@ float2 GetVelocityDilated(float2 uv) {
             float2 offset = float2(x, y) * pc.sceneData.texelSize;
             float2 sampleUv = uv + offset;
 
-            float depth = textures[pc.depthIndex].SampleLevel(samplers[pc.pointSamplerIndex], sampleUv, 0).r;
+            float depth = rdgTextures[pc.depthIndex].SampleLevel(rdgSamplers[pc.pointSamplerIndex], sampleUv, 0).r;
             if (depth < closestDepth) {
                 closestDepth = depth;
-                closestVelocity = textures[pc.velocityIndex].SampleLevel(samplers[pc.pointSamplerIndex], sampleUv, 0).rg;
+                closestVelocity = rdgTextures[pc.velocityIndex].SampleLevel(rdgSamplers[pc.pointSamplerIndex], sampleUv, 0).rg;
             }
         }
     }
@@ -95,7 +88,7 @@ void computeMain(uint3 threadID : SV_DispatchThreadID) {
     if (threadID.x >= pc.sceneData.mainRenderTargetSize.x || threadID.y >= pc.sceneData.mainRenderTargetSize.y) return;
     float2 uv = (float2(threadID.xy) + 0.5) / float2(pc.sceneData.mainRenderTargetSize);
 
-    //float2 velocity = textures[pc.velocityIndex].SampleLevel(samplers[pc.pointSamplerIndex], uv, 0).rg;
+    //float2 velocity = rdgTextures[pc.velocityIndex].SampleLevel(rdgSamplers[pc.pointSamplerIndex], uv, 0).rg;
     float2 velocity = GetVelocityDilated(uv);
     velocity = (velocity - 0.5);
     velocity.y = -velocity.y;
@@ -103,14 +96,14 @@ void computeMain(uint3 threadID : SV_DispatchThreadID) {
     float2 historyUv = uv - velocity;
     bool validHistory = all(historyUv >= float2(0.0)) && all(historyUv <= float2(1.0));
 
-    float3 currentColor = textures[pc.colorResolvedIndex].SampleLevel(samplers[pc.linearSamplerIndex], uv, 0).rgb;
+    float3 currentColor = rdgTextures[pc.colorResolvedIndex].SampleLevel(rdgSamplers[pc.linearSamplerIndex], uv, 0).rgb;
     float3 resultRGB;
 
     if (!validHistory) {
         resultRGB = currentColor;
     } else {
         float3 currentYCoCg = RGBToYCoCg(currentColor);
-        // float3 historyColor = textures[pc.colorHistoryIndex].SampleLevel(samplers[pc.linearSamplerIndex], historyUv, 0).rgb;
+        // float3 historyColor = rdgTextures[pc.colorHistoryIndex].SampleLevel(rdgSamplers[pc.linearSamplerIndex], historyUv, 0).rgb;
         float3 historyColor = SampleHistoryCatmullRom(historyUv);
         float3 historyYCoCg = RGBToYCoCg(historyColor);
 
@@ -122,5 +115,5 @@ void computeMain(uint3 threadID : SV_DispatchThreadID) {
         resultRGB = YCoCgToRGB(resultYCoCg);
     }
 
-    renderTextures[pc.outputImageIndex][threadID.xy] = float4(resultRGB, 1.0);
+    rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(resultRGB, 1.0);
 }

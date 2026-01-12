@@ -197,12 +197,12 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     VkImage currentSwapchainImage = swapchain->swapchainImages[swapchainImageIndex];
     VkImageView currentSwapchainImageView = swapchain->swapchainImageViews[swapchainImageIndex];
 
-    SetupFrameUniforms(frameResource, frameBuffer, renderExtent);
+    SetupFrameUniforms(renderSync.commandBuffer, frameResource, frameBuffer, renderExtent);
 
     renderGraph->Reset(frameNumber, RDG_PHYSICAL_RESOURCE_UNUSED_THRESHOLD);
 
     renderGraph->ImportBufferNoBarrier("sceneData", frameResource.sceneDataBuffer.handle, frameResource.sceneDataBuffer.address,
-                                        {frameResource.sceneDataBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
+                                       {frameResource.sceneDataBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
     renderGraph->ImportBufferNoBarrier("shadowData", frameResource.shadowBuffer.handle, frameResource.shadowBuffer.address,
                                        {frameResource.shadowBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
 
@@ -302,6 +302,8 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         vkCmdBlitImage2(cmd, &blitInfo);
     });
 
+    // SetupPostProcessing(*renderGraph, renderExtent);
+
 #if WILL_EDITOR
     /*RenderPass& readbackPass = renderGraph->AddPass("DebugReadback");
     readbackPass.ReadTransferBuffer("indirectBuffer", VK_PIPELINE_STAGE_2_TRANSFER_BIT);
@@ -361,12 +363,6 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
             };
 
             vkCmdPushConstants(cmd, debugVisualizePipeline.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(DebugVisualizePushConstant), &pushData);
-
-            VkDescriptorBufferBindingInfoEXT bindingInfo = resourceManager->bindlessRDGTransientDescriptorBuffer.GetBindingInfo();
-            vkCmdBindDescriptorBuffersEXT(cmd, 1, &bindingInfo);
-            uint32_t bufferIndex = 0;
-            VkDeviceSize offset = 0;
-            vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, debugVisualizePipeline.pipelineLayout.handle, 0, 1, &bufferIndex, &offset);
 
             uint32_t xDispatch = (renderExtent[0] + 15) / 16;
             uint32_t yDispatch = (renderExtent[1] + 15) / 16;
@@ -516,58 +512,66 @@ void RenderThread::ProcessAcquisitions(VkCommandBuffer cmd, Core::FrameBuffer& f
 
 void RenderThread::CreatePipelines()
 {
-    meshShadingInstancedPipeline = MeshShadingInstancedPipeline(context.get(), resourceManager->bindlessSamplerTextureDescriptorBuffer.descriptorSetLayout);
+    std::array layouts{
+        resourceManager->bindlessSamplerTextureDescriptorBuffer.descriptorSetLayout.handle,
+        resourceManager->bindlessRDGTransientDescriptorBuffer.descriptorSetLayout.handle
+    };
+
+    VkPipelineLayoutCreateInfo layoutInfo{};
+    layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    layoutInfo.pSetLayouts = layouts.data();
+    layoutInfo.setLayoutCount = layouts.size();
+    globalPipelineLayout = PipelineLayout::CreatePipelineLayout(context.get(), layoutInfo);
+
+    meshShadingInstancedPipeline = MeshShadingInstancedPipeline(context.get(), layouts);
     shadowMeshShadingInstancedPipeline = ShadowMeshShadingInstancedPipeline(context.get());
     //
     {
-        VkPushConstantRange pushConstantRange{};
-        pushConstantRange.offset = 0;
-        pushConstantRange.size = sizeof(DebugVisualizePushConstant);
-        pushConstantRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-        VkPipelineLayoutCreateInfo piplineLayoutCreateInfo{};
-        piplineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-        piplineLayoutCreateInfo.pSetLayouts = &resourceManager->bindlessRDGTransientDescriptorBuffer.descriptorSetLayout.handle;
-        piplineLayoutCreateInfo.setLayoutCount = 1;
-        piplineLayoutCreateInfo.pPushConstantRanges = &pushConstantRange;
-        piplineLayoutCreateInfo.pushConstantRangeCount = 1;
-
-        debugVisualizePipeline = ComputePipeline(context.get(), piplineLayoutCreateInfo, Platform::GetShaderPath() / "debugVisualize_compute.spv");
-
-        pushConstantRange.size = sizeof(DeferredResolvePushConstant);
-        deferredResolve = ComputePipeline(context.get(), piplineLayoutCreateInfo, Platform::GetShaderPath() / "deferredResolve_compute.spv");
-
-        pushConstantRange.size = sizeof(TemporalAntialiasingPushConstant);
-        temporalAntialiasing = ComputePipeline(context.get(), piplineLayoutCreateInfo, Platform::GetShaderPath() / "temporalAntialiasing_compute.spv");
-    }
-
-    //
-    {
-        VkPipelineLayoutCreateInfo computePipelineLayoutCreateInfo{};
-        computePipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-        computePipelineLayoutCreateInfo.pNext = nullptr;
-        computePipelineLayoutCreateInfo.pSetLayouts = nullptr;
-        computePipelineLayoutCreateInfo.setLayoutCount = 0;
         VkPushConstantRange pushConstant{};
         pushConstant.offset = 0;
-        pushConstant.size = sizeof(VisibilityPushConstant);
         pushConstant.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-        computePipelineLayoutCreateInfo.pPushConstantRanges = &pushConstant;
-        computePipelineLayoutCreateInfo.pushConstantRangeCount = 1;
-        instancingVisibility = ComputePipeline(context.get(), computePipelineLayoutCreateInfo, Platform::GetShaderPath() / "instancingVisibility_compute.spv");
+        VkPipelineLayoutCreateInfo piplineLayoutCreateInfo{};
+        piplineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        piplineLayoutCreateInfo.pSetLayouts = layouts.data();
+        piplineLayoutCreateInfo.setLayoutCount = layouts.size();
+        piplineLayoutCreateInfo.pPushConstantRanges = &pushConstant;
+        piplineLayoutCreateInfo.pushConstantRangeCount = 1;
+
+        pushConstant.size = sizeof(DebugVisualizePushConstant);
+        debugVisualizePipeline = ComputePipeline(context.get(), piplineLayoutCreateInfo, Platform::GetShaderPath() / "debugVisualize_compute.spv");
+
+        pushConstant.size = sizeof(DeferredResolvePushConstant);
+        deferredResolvePipeline = ComputePipeline(context.get(), piplineLayoutCreateInfo, Platform::GetShaderPath() / "deferredResolve_compute.spv");
+
+        pushConstant.size = sizeof(TemporalAntialiasingPushConstant);
+        temporalAntialiasingPipeline = ComputePipeline(context.get(), piplineLayoutCreateInfo, Platform::GetShaderPath() / "temporalAntialiasing_compute.spv");
+
+        pushConstant.size = sizeof(VisibilityPushConstant);
+        instancingVisibilityPipeline = ComputePipeline(context.get(), piplineLayoutCreateInfo, Platform::GetShaderPath() / "instancingVisibility_compute.spv");
 
         pushConstant.size = sizeof(VisibilityShadowsPushConstant);
-        instancingShadowsVisibility = ComputePipeline(context.get(), computePipelineLayoutCreateInfo, Platform::GetShaderPath() / "instancingShadowsVisibility_compute.spv");
+        instancingShadowsVisibilityPipeline = ComputePipeline(context.get(), piplineLayoutCreateInfo, Platform::GetShaderPath() / "instancingShadowsVisibility_compute.spv");
 
         pushConstant.size = sizeof(PrefixSumPushConstant);
-        instancingPrefixSum = ComputePipeline(context.get(), computePipelineLayoutCreateInfo, Platform::GetShaderPath() / "instancingPrefixSum_compute.spv");
+        instancingPrefixSumPipeline = ComputePipeline(context.get(), piplineLayoutCreateInfo, Platform::GetShaderPath() / "instancingPrefixSum_compute.spv");
 
         pushConstant.size = sizeof(IndirectWritePushConstant);
-        instancingIndirectConstruction = ComputePipeline(context.get(), computePipelineLayoutCreateInfo, Platform::GetShaderPath() / "instancingCompactAndGenerateIndirect_compute.spv");
+        instancingIndirectConstructionPipeline = ComputePipeline(context.get(), piplineLayoutCreateInfo, Platform::GetShaderPath() / "instancingCompactAndGenerateIndirect_compute.spv");
+
+        pushConstant.size = sizeof(TonemapSDRPushConstant);
+        tonemapSDRPipeline = ComputePipeline(context.get(), piplineLayoutCreateInfo, Platform::GetShaderPath() / "tonemapSDR_compute.spv");
     }
 }
 
-void RenderThread::SetupFrameUniforms(FrameResources& frameResource, Core::FrameBuffer& frameBuffer, const std::array<uint32_t, 2>& renderExtent)
+void RenderThread::SetupFrameUniforms(VkCommandBuffer cmd, FrameResources& frameResource, Core::FrameBuffer& frameBuffer, const std::array<uint32_t, 2>& renderExtent)
 {
+    std::array bindings{resourceManager->bindlessSamplerTextureDescriptorBuffer.GetBindingInfo(), resourceManager->bindlessRDGTransientDescriptorBuffer.GetBindingInfo()};
+    std::array indices{0u, 1u};
+    std::array<VkDeviceSize, 2> offsets{0, 0};
+    vkCmdBindDescriptorBuffersEXT(cmd, bindings.size(), bindings.data());
+    vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, globalPipelineLayout.handle, 0, bindings.size(), indices.data(), offsets.data());
+    vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, globalPipelineLayout.handle, 0, bindings.size(), indices.data(), offsets.data());
+
     //
     {
         auto* modelBuffer = static_cast<Model*>(frameResource.modelBuffer.allocationInfo.pMappedData);
@@ -768,7 +772,7 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, Core::FrameBuffer& f
             visibilityPass.WriteBuffer("instanceOffsetBuffer");
             visibilityPass.WriteBuffer("primitiveCountBuffer");
             visibilityPass.Execute([&, cascadeLevel](VkCommandBuffer cmd) {
-                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, instancingShadowsVisibility.pipeline.handle);
+                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, instancingShadowsVisibilityPipeline.pipeline.handle);
 
                 VisibilityShadowsPushConstant pushData{
                     .sceneData = graph.GetBufferAddress("sceneData"),
@@ -783,7 +787,7 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, Core::FrameBuffer& f
                     .cascadeLevel = static_cast<uint32_t>(cascadeLevel)
                 };
 
-                vkCmdPushConstants(cmd, instancingShadowsVisibility.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(VisibilityShadowsPushConstant), &pushData);
+                vkCmdPushConstants(cmd, instancingShadowsVisibilityPipeline.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(VisibilityShadowsPushConstant), &pushData);
                 uint32_t xDispatch = (frameBuffer.mainViewFamily.instances.size() + (INSTANCING_VISIBILITY_DISPATCH_X - 1)) / INSTANCING_VISIBILITY_DISPATCH_X;
                 vkCmdDispatch(cmd, xDispatch, 1, 1);
             });
@@ -791,14 +795,14 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, Core::FrameBuffer& f
             RenderPass& prefixSumPass = graph.AddPass(prefixPassName, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
             prefixSumPass.ReadBuffer("primitiveCountBuffer");
             prefixSumPass.Execute([&](VkCommandBuffer cmd) {
-                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, instancingPrefixSum.pipeline.handle);
+                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, instancingPrefixSumPipeline.pipeline.handle);
 
                 PrefixSumPushConstant pushConstant{
                     .primitiveCountBuffer = graph.GetBufferAddress("primitiveCountBuffer"),
                     .highestPrimitiveIndex = 200,
                 };
 
-                vkCmdPushConstants(cmd, instancingPrefixSum.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PrefixSumPushConstant), &pushConstant);
+                vkCmdPushConstants(cmd, instancingPrefixSumPipeline.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PrefixSumPushConstant), &pushConstant);
                 vkCmdDispatch(cmd, 1, 1, 1);
             });
 
@@ -814,7 +818,7 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, Core::FrameBuffer& f
             indirectPass.WriteBuffer("indirectCountBuffer");
             indirectPass.WriteBuffer("indirectBuffer");
             indirectPass.Execute([&](VkCommandBuffer cmd) {
-                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, instancingIndirectConstruction.pipeline.handle);
+                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, instancingIndirectConstructionPipeline.pipeline.handle);
 
                 IndirectWritePushConstant pushConstant{
                     .primitiveBuffer = graph.GetBufferAddress("primitiveBuffer"),
@@ -828,7 +832,7 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, Core::FrameBuffer& f
                     .indirectBuffer = graph.GetBufferAddress("indirectBuffer"),
                 };
 
-                vkCmdPushConstants(cmd, instancingIndirectConstruction.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(IndirectWritePushConstant), &pushConstant);
+                vkCmdPushConstants(cmd, instancingIndirectConstructionPipeline.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(IndirectWritePushConstant), &pushConstant);
                 uint32_t xDispatch = (frameBuffer.mainViewFamily.instances.size() + (INSTANCING_CONSTRUCTION_DISPATCH_X - 1)) / INSTANCING_CONSTRUCTION_DISPATCH_X;
                 vkCmdDispatch(cmd, xDispatch, 1, 1);
             });
@@ -843,7 +847,8 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, Core::FrameBuffer& f
             vkCmdSetScissor(cmd, 0, 1, &scissor);
             constexpr VkClearValue depthClear = {.depthStencil = {0.0f, 0u}};
             const VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageView(shadowMapName), &depthClear, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
-            const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({shadowConfig.cascadePreset.extents[cascadeLevel].width, shadowConfig.cascadePreset.extents[cascadeLevel].height}, nullptr, 0, &depthAttachment);
+            const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({shadowConfig.cascadePreset.extents[cascadeLevel].width, shadowConfig.cascadePreset.extents[cascadeLevel].height}, nullptr, 0,
+                                                                        &depthAttachment);
 
             vkCmdBeginRendering(cmd, &renderInfo);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, shadowMeshShadingInstancedPipeline.pipeline.handle);
@@ -920,7 +925,7 @@ void RenderThread::SetupInstancingPipeline(RenderGraph& graph, Core::FrameBuffer
             visibilityPass.WriteBuffer("instanceOffsetBuffer");
             visibilityPass.WriteBuffer("primitiveCountBuffer");
             visibilityPass.Execute([&](VkCommandBuffer cmd) {
-                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, instancingVisibility.pipeline.handle);
+                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, instancingVisibilityPipeline.pipeline.handle);
 
                 // todo: profile; a lot of instances, 100k. Try first all of the same primitive. Then try again with a few different primitives (but total remains around the same)
                 VisibilityPushConstant visibilityPushData{
@@ -934,7 +939,7 @@ void RenderThread::SetupInstancingPipeline(RenderGraph& graph, Core::FrameBuffer
                     .instanceCount = static_cast<uint32_t>(frameBuffer.mainViewFamily.instances.size())
                 };
 
-                vkCmdPushConstants(cmd, instancingVisibility.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(VisibilityPushConstant), &visibilityPushData);
+                vkCmdPushConstants(cmd, instancingVisibilityPipeline.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(VisibilityPushConstant), &visibilityPushData);
                 uint32_t xDispatch = (frameBuffer.mainViewFamily.instances.size() + (INSTANCING_VISIBILITY_DISPATCH_X - 1)) / INSTANCING_VISIBILITY_DISPATCH_X;
                 vkCmdDispatch(cmd, xDispatch, 1, 1);
             });
@@ -942,7 +947,7 @@ void RenderThread::SetupInstancingPipeline(RenderGraph& graph, Core::FrameBuffer
             RenderPass& prefixSumPass = graph.AddPass("PrefixSum", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
             prefixSumPass.ReadBuffer("primitiveCountBuffer");
             prefixSumPass.Execute([&](VkCommandBuffer cmd) {
-                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, instancingPrefixSum.pipeline.handle);
+                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, instancingPrefixSumPipeline.pipeline.handle);
 
                 // todo: optimize the F* out of this. Use multiple passes if necessary
                 PrefixSumPushConstant prefixSumPushConstant{
@@ -950,7 +955,7 @@ void RenderThread::SetupInstancingPipeline(RenderGraph& graph, Core::FrameBuffer
                     .highestPrimitiveIndex = 200,
                 };
 
-                vkCmdPushConstants(cmd, instancingPrefixSum.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PrefixSumPushConstant), &prefixSumPushConstant);
+                vkCmdPushConstants(cmd, instancingPrefixSumPipeline.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PrefixSumPushConstant), &prefixSumPushConstant);
                 vkCmdDispatch(cmd, 1, 1, 1);
             });
 
@@ -966,7 +971,7 @@ void RenderThread::SetupInstancingPipeline(RenderGraph& graph, Core::FrameBuffer
             indirectConstructionPass.WriteBuffer("indirectCountBuffer");
             indirectConstructionPass.WriteBuffer("indirectBuffer");
             indirectConstructionPass.Execute([&](VkCommandBuffer cmd) {
-                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, instancingIndirectConstruction.pipeline.handle);
+                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, instancingIndirectConstructionPipeline.pipeline.handle);
 
                 IndirectWritePushConstant indirectWritePushConstant{
                     .primitiveBuffer = graph.GetBufferAddress("primitiveBuffer"),
@@ -980,7 +985,7 @@ void RenderThread::SetupInstancingPipeline(RenderGraph& graph, Core::FrameBuffer
                     .indirectBuffer = graph.GetBufferAddress("indirectBuffer"),
                 };
 
-                vkCmdPushConstants(cmd, instancingIndirectConstruction.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(IndirectWritePushConstant), &indirectWritePushConstant);
+                vkCmdPushConstants(cmd, instancingIndirectConstructionPipeline.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(IndirectWritePushConstant), &indirectWritePushConstant);
                 uint32_t xDispatch = (frameBuffer.mainViewFamily.instances.size() + (INSTANCING_CONSTRUCTION_DISPATCH_X - 1)) / INSTANCING_CONSTRUCTION_DISPATCH_X;
                 vkCmdDispatch(cmd, xDispatch, 1, 1);
             });
@@ -1018,11 +1023,6 @@ void RenderThread::SetupMainGeometryPass(RenderGraph& graph)
         vkCmdBeginRendering(cmd, &renderInfo);
 
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, meshShadingInstancedPipeline.pipeline.handle);
-        VkDescriptorBufferBindingInfoEXT bindingInfo = graph.GetResourceManager()->bindlessSamplerTextureDescriptorBuffer.GetBindingInfo();
-        vkCmdBindDescriptorBuffersEXT(cmd, 1, &bindingInfo);
-        uint32_t bufferIndexImage = 0;
-        VkDeviceSize bufferOffset = 0;
-        vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, meshShadingInstancedPipeline.pipelineLayout.handle, 0, 1, &bufferIndexImage, &bufferOffset);
 
         InstancedMeshShadingPushConstant pushConstants{
             .sceneData = graph.GetBufferAddress("sceneData"),
@@ -1067,7 +1067,7 @@ void RenderThread::SetupDeferredLighting(RenderGraph& graph, const Core::FrameBu
 
     deferredResolvePass.WriteStorageImage("deferredResolve");
     deferredResolvePass.Execute([&, bShadowsEnabled](VkCommandBuffer cmd) {
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, deferredResolve.pipeline.handle);
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, deferredResolvePipeline.pipeline.handle);
 
         uint32_t packedShadowMapIndices = bShadowsEnabled
                                               ? PackCascadeIndices(
@@ -1096,13 +1096,7 @@ void RenderThread::SetupDeferredLighting(RenderGraph& graph, const Core::FrameBu
             .outputImageIndex = graph.GetDescriptorIndex("deferredResolve"),
         };
 
-        vkCmdPushConstants(cmd, deferredResolve.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(DeferredResolvePushConstant), &pushData);
-
-        VkDescriptorBufferBindingInfoEXT bindingInfo = resourceManager->bindlessRDGTransientDescriptorBuffer.GetBindingInfo();
-        vkCmdBindDescriptorBuffersEXT(cmd, 1, &bindingInfo);
-        uint32_t bufferIndex = 0;
-        VkDeviceSize offset = 0;
-        vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, deferredResolve.pipelineLayout.handle, 0, 1, &bufferIndex, &offset);
+        vkCmdPushConstants(cmd, deferredResolvePipeline.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(DeferredResolvePushConstant), &pushData);
 
         uint32_t xDispatch = (renderExtent[0] + 15) / 16;
         uint32_t yDispatch = (renderExtent[1] + 15) / 16;
@@ -1148,7 +1142,7 @@ void RenderThread::SetupTemporalAntialiasing(RenderGraph& graph, const std::arra
         taaPass.ReadSampledImage("velocityTarget");
         taaPass.WriteStorageImage("taaCurrent");
         taaPass.Execute([&](VkCommandBuffer cmd) {
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, temporalAntialiasing.pipeline.handle);
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, temporalAntialiasingPipeline.pipeline.handle);
             TemporalAntialiasingPushConstant pushData{
                 .sceneData = graph.GetBufferAddress("sceneData"),
                 .pointSamplerIndex = resourceManager->pointSamplerIndex,
@@ -1160,18 +1154,36 @@ void RenderThread::SetupTemporalAntialiasing(RenderGraph& graph, const std::arra
                 .outputImageIndex = graph.GetDescriptorIndex("taaCurrent"),
             };
 
-            vkCmdPushConstants(cmd, temporalAntialiasing.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(TemporalAntialiasingPushConstant), &pushData);
-
-            VkDescriptorBufferBindingInfoEXT bindingInfo = resourceManager->bindlessRDGTransientDescriptorBuffer.GetBindingInfo();
-            vkCmdBindDescriptorBuffersEXT(cmd, 1, &bindingInfo);
-            uint32_t bufferIndex = 0;
-            VkDeviceSize offset = 0;
-            vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, temporalAntialiasing.pipelineLayout.handle, 0, 1, &bufferIndex, &offset);
+            vkCmdPushConstants(cmd, temporalAntialiasingPipeline.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(TemporalAntialiasingPushConstant), &pushData);
 
             uint32_t xDispatch = (renderExtent[0] + 15) / 16;
             uint32_t yDispatch = (renderExtent[1] + 15) / 16;
             vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
         });
     }
+}
+
+void RenderThread::SetupPostProcessing(RenderGraph& graph, std::array<uint32_t, 2> renderExtent)
+{
+    // todo: add support for HDR swapchain
+    renderGraph->CreateTexture("postHDRImage", {COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1]});
+    RenderPass& tonemapPass = graph.AddPass("TonemapSDR", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+    tonemapPass.ReadSampledImage("finalImage");
+    tonemapPass.WriteStorageImage("postHDRImage");
+    tonemapPass.Execute([&](VkCommandBuffer cmd) {
+        TonemapSDRPushConstant pushData{
+            .tonemapOperator = 0,
+            .outputWidth = renderExtent[0],
+            .outputHeight = renderExtent[1],
+            .srcImageIndex = graph.GetDescriptorIndex("deferredResolve"),
+            .dstImageIndex = graph.GetDescriptorIndex("postHDRImage"),
+            .pointSamplerIndex = resourceManager->pointSamplerIndex,
+            .linearSamplerIndex = resourceManager->linearSamplerIndex,
+        };
+
+        uint32_t xDispatch = (renderExtent[0] + 15) / 16;
+        uint32_t yDispatch = (renderExtent[1] + 15) / 16;
+        vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
+    });
 }
 } // Render
