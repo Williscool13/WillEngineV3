@@ -33,6 +33,7 @@ struct GameState
     bool bEnablePhysics = true;
 
     // Shadows
+    Core::DirectionalLight directionalLight{};
     Core::ShadowQuality shadowQuality = Core::ShadowQuality::Ultra;
     Core::ShadowConfiguration shadowConfig;
 

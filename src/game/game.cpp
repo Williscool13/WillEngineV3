@@ -71,6 +71,15 @@ GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* stat
     if (ImGui::Begin("Test 2")) {
         ImGui::Checkbox("Enable Physics", &state->bEnablePhysics);
 
+        if (ImGui::CollapsingHeader("Directional Light")) {
+            ImGui::SliderFloat3("Direction", &state->directionalLight.direction.x, -1.0f, 1.0f);
+            if (ImGui::Button("Normalize Direction")) {
+                frameBuffer->mainViewFamily.directionalLight.direction = glm::normalize(state->directionalLight.direction);
+            }
+            ImGui::SliderFloat("Intensity", &state->directionalLight.intensity, 0.0f, 5.0f);
+            ImGui::ColorEdit3("Color", &state->directionalLight.color.x);
+        }
+
         if (ImGui::CollapsingHeader("Shadow Settings")) {
             const char* qualityNames[] = {"Ultra", "High", "Medium", "Low", "Custom"};
             int currentQuality = static_cast<int>(state->shadowQuality);
@@ -136,6 +145,7 @@ GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* stat
         }
     }
 
+    frameBuffer->mainViewFamily.directionalLight = state->directionalLight;
     frameBuffer->mainViewFamily.shadowConfig = state->shadowConfig;
 
     ImGui::End();

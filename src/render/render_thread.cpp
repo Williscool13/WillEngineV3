@@ -694,6 +694,7 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, Core::FrameBuffer& f
 {
     Core::ShadowConfiguration shadowConfig = frameBuffer.mainViewFamily.shadowConfig;
     Core::DirectionalLight directionalLight = frameBuffer.mainViewFamily.directionalLight;
+    directionalLight.direction = normalize(directionalLight.direction);
 
     ShadowData shadowData{};
 
@@ -719,7 +720,7 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, Core::FrameBuffer& f
             static_cast<float>(shadowConfig.cascadePreset.extents[i].width),
             shadowData.nearSplits[i],
             shadowData.farSplits[i],
-            frameBuffer.mainViewFamily.directionalLight.direction,
+            directionalLight.direction,
             frameBuffer.mainViewFamily.mainView.currentViewData
         );
         shadowData.lightSpaceMatrices[i] = viewProj.proj * viewProj.view;

@@ -355,6 +355,79 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         SPDLOG_INFO("[DebugSystem] Spawned sponza");
     }
 
+    if (state->inputFrame->GetKey(Key::F6).pressed) {
+        Render::WillModel* dragon = ctx->assetManager->GetModel(dragonHandle);
+        if (!dragon || dragon->modelLoadState != Render::WillModel::ModelLoadState::Loaded) {
+            SPDLOG_WARN("[DebugSystem] Dragon model not ready yet");
+            return;
+        }
+
+        Engine::MaterialManager& materialManager = ctx->assetManager->GetMaterialManager();
+        Render::MeshInformation& submesh = dragon->modelData.meshes[0];
+        glm::vec3 meshOffset = glm::vec3(0.0f);
+        glm::quat meshRotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+        glm::vec3 meshScale = glm::vec3(1.0f);
+
+        for (size_t i = 0; i < dragon->modelData.nodes.size(); ++i) {
+            const auto& node = dragon->modelData.nodes[i];
+            if (node.meshIndex == 0) {
+                meshOffset = node.localTranslation;
+                meshRotation = node.localRotation;
+                meshScale = node.localScale;
+
+                uint32_t parentIdx = node.parent;
+                while (parentIdx != ~0u) {
+                    const auto& parentNode = dragon->modelData.nodes[parentIdx];
+                    meshOffset = parentNode.localRotation * (parentNode.localScale * meshOffset) + parentNode.localTranslation;
+                    meshRotation = parentNode.localRotation * meshRotation;
+                    meshScale = parentNode.localScale * meshScale;
+                    parentIdx = parentNode.parent;
+                }
+                break;
+            }
+        }
+
+        // Create massive shadow test floor
+        entt::entity shadowFloor = CreateStaticBox(
+            ctx, state,
+            JPH::RVec3(0.0, -0.5, 0.0), JPH::Vec3(50.0f, 0.5f, 50.0f), // physics
+            glm::vec3(0.0f, -0.5f, 0.0f), glm::vec3(100.0f, 1.0f, 100.0f), // render
+            glm::vec4(0.3f, 0.3f, 0.3f, 1.0f) // dark gray
+        );
+
+        // Create vertical column of dragons
+        for (int y = 0; y < 10; ++y) {
+            glm::vec3 pos = glm::vec3(0.0f, 1.0f + y * 3.0f, 0.0f) + meshOffset;
+
+            RenderableComponent renderable{};
+
+            for (size_t i = 0; i < submesh.primitiveProperties.size(); ++i) {
+                Render::PrimitiveProperty& primitive = submesh.primitiveProperties[i];
+
+                Engine::MaterialID matID;
+                if (primitive.materialIndex == -1) {
+                    matID = materialManager.GetDefaultMaterial();
+                }
+                else {
+                    matID = materialManager.GetOrCreate(dragon->modelData.materials[primitive.materialIndex]);
+                }
+
+                renderable.primitives[i] = {
+                    .primitiveIndex = primitive.index,
+                    .materialID = matID
+                };
+            }
+            renderable.primitiveCount = submesh.primitiveProperties.size();
+            renderable.modelFlags = glm::vec4(0.0f);
+
+            entt::entity dragonEntity = state->registry.create();
+            state->registry.emplace<RenderableComponent>(dragonEntity, renderable);
+            state->registry.emplace<TransformComponent>(dragonEntity, pos, meshRotation, meshScale * 1.5f);
+        }
+
+        SPDLOG_INFO("[DebugSystem] Created PCSS test scene: 100x100 floor + vertical dragon column");
+    }
+
     if (ctx->bImguiKeyboardCaptured) { return; }
     if (state->inputFrame->GetKey(Key::NUM_1).pressed) {
         auto view = state->registry.view<RenderDebugViewComponent>();
