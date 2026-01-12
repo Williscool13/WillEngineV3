@@ -4,7 +4,7 @@ import model_interop;
 import instancing_interop;
 import push_constant_interop;
 
-//import bindless_declarations;
+import bindless_declarations;
 
 import shader_functions;
 
@@ -37,7 +37,7 @@ groupshared uint32_t visibleMeshletCount;
 
 [shader("task")]
 [numthreads(TASK_SHADER_DISPATCH_X, 1, 1)]
-void taskMain(uniform InstancedMeshShadingPushConstant pushConstant,
+void TaskMain(uniform InstancedMeshShadingPushConstant pushConstant,
     uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID, uint drawIndex : SV_DrawIndex)
 {
     InstancedMeshIndirectDrawParameters indirectParameters = pushConstant.indirectBuffer[drawIndex];
@@ -81,11 +81,11 @@ void taskMain(uniform InstancedMeshShadingPushConstant pushConstant,
         float4 worldBounds = float4(worldCenter, worldRadius);
 
         bool visible = true;
-        if (!frustumCullSphere(pushConstant.sceneData->frustum, worldBounds)) {
+        if (!FrustumCullSphere(pushConstant.sceneData->frustum, worldBounds)) {
             visible = false;
         }
 
-        if (visible && !backfaceCullCone(mlet.coneAxis, mlet.coneCutoff, worldCenter, worldRadius, pushConstant.sceneData->cameraWorldPos.xyz, (float3x3)model.modelMatrix)) {
+        if (visible && !BackfaceCullCone(mlet.coneAxis, mlet.coneCutoff, worldCenter, worldRadius, pushConstant.sceneData->cameraWorldPos.xyz, (float3x3)model.modelMatrix)) {
             visible = false;
         }
 
@@ -108,7 +108,7 @@ void taskMain(uniform InstancedMeshShadingPushConstant pushConstant,
 [shader("mesh")]
 [outputtopology("triangle")]
 [numthreads(MESH_SHADER_DISPATCH_X, 1, 1)]
-void meshMain(
+void MeshMain(
     in payload MeshletPayload inPayload, out indices uint3 triangles[MESHLET_MAX_TRIANGLES], out vertices VertexOutput vertices[MESHLET_MAX_VERTICES],
     uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID,
     uniform InstancedMeshShadingPushConstant pushConstant)
@@ -129,8 +129,8 @@ void meshMain(
         Vertex v = pushConstant.vertexBuffer[meshlet.vertexOffset + localVertexIndex];
         float4 clipPos = mul(viewProj, mul(m.modelMatrix, float4(v.position, 1.0)));
         vertices[i].position = clipPos;
-        vertices[i].viewNormal = normalize(mul(viewRotation, mul(adjugate((float3x3)m.modelMatrix), v.normal)));
-        vertices[i].tangent = float4(normalize(mul(adjugate((float3x3)m.modelMatrix), v.tangent.xyz)), v.tangent.w);
+        vertices[i].viewNormal = normalize(mul(viewRotation, mul(Adjugate((float3x3)m.modelMatrix), v.normal)));
+        vertices[i].tangent = float4(normalize(mul(Adjugate((float3x3)m.modelMatrix), v.tangent.xyz)), v.tangent.w);
         vertices[i].uv = float2(v.texcoordU, v.texcoordV);
         /*uint meshletID = gid.x;
         uint hash = meshletID * 747796405u + 2891336453u;
@@ -165,24 +165,9 @@ struct FragmentOutput {
     float4 pbr : SV_Target2;
     float2 velocity : SV_Target3;
 };
-// Descriptor buffer for model textures
-[[vk::binding(0, 0)]]
-public SamplerState assetSamplers[];
-[[vk::binding(1, 0)]]
-public Texture2D assetTextures[];
-
-// Descriptor buffer for RDG
-[[vk::binding(0, 1)]]
-public SamplerState rdgSamplers[];
-[[vk::binding(1, 1)]]
-public SamplerComparisonState rdgCompareSamplers[];
-[[vk::binding(2, 1)]]
-public Texture2D rdgTextures[];
-[[vk::binding(3, 1)]]
-public RWTexture2D<float4> rdgRenderTextures[];
 
 [shader("fragment")]
-FragmentOutput fragmentMain(VertexOutput vertexInput, uniform InstancedMeshShadingPushConstant pushConstant)
+FragmentOutput FragmentMain(VertexOutput vertexInput, uniform InstancedMeshShadingPushConstant pushConstant)
 {
     MaterialProperties material = pushConstant.materialBuffer[vertexInput.materialIndex];
 

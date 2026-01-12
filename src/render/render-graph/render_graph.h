@@ -62,8 +62,6 @@ public:
 
     void CreateTexture(const std::string& name, const TextureInfo& texInfo);
 
-    void CreateTextureWithUsage(const std::string& name, const TextureInfo& texInfo, VkImageUsageFlags usage);
-
     void CreateBuffer(const std::string& name, VkDeviceSize size);
 
     void ImportTexture(const std::string& name, VkImage image, VkImageView view, const TextureInfo& info, VkImageUsageFlags usage, VkImageLayout initialLayout, VkPipelineStageFlags2 initialStage,
@@ -92,7 +90,7 @@ public:
 
     PipelineEvent GetBufferState(const std::string& name);
 
-    void CarryToNextFrame(const std::string& name, const std::string& newName);
+    void CarryToNextFrame(const std::string& name, const std::string& newName, VkImageUsageFlags additionalUsage);
 
 private:
     friend class RenderPass;

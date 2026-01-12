@@ -7,7 +7,7 @@ import bindless_declarations;
 [[vk::push_constant]]
 TemporalAntialiasingPushConstant pc;
 
-float3 neighborhoodClamp(float3 historyColor, float2 uv) {
+float3 NeighborhoodClamp(float3 historyColor, float2 uv) {
     float2 du = float2(pc.sceneData.texelSize.x, 0.0);
     float2 dv = float2(0.0, pc.sceneData.texelSize.y);
 
@@ -84,7 +84,7 @@ float2 GetVelocityDilated(float2 uv) {
 }
 
 [numthreads(16, 16, 1)]
-void computeMain(uint3 threadID : SV_DispatchThreadID) {
+void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
     if (threadID.x >= pc.sceneData.mainRenderTargetSize.x || threadID.y >= pc.sceneData.mainRenderTargetSize.y) return;
     float2 uv = (float2(threadID.xy) + 0.5) / float2(pc.sceneData.mainRenderTargetSize);
 
@@ -107,7 +107,7 @@ void computeMain(uint3 threadID : SV_DispatchThreadID) {
         float3 historyColor = SampleHistoryCatmullRom(historyUv);
         float3 historyYCoCg = RGBToYCoCg(historyColor);
 
-        float3 neighborClampedYCoCg = RGBToYCoCg(neighborhoodClamp(YCoCgToRGB(historyYCoCg), uv));
+        float3 neighborClampedYCoCg = RGBToYCoCg(NeighborhoodClamp(YCoCgToRGB(historyYCoCg), uv));
         historyYCoCg = neighborClampedYCoCg;
 
         float alpha = 0.1;

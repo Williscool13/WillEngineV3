@@ -17,6 +17,7 @@ import model_interop;
 import constants_interop;
 import instancing_interop;
 import shadows_interop;
+import lights_interop;
 #else
 #include <glm/glm.hpp>
 #include <volk.h>
@@ -139,6 +140,7 @@ SHADER_PUBLIC struct InstancedMeshShadingPushConstant
 SHADER_PUBLIC struct DeferredResolvePushConstant {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC SHADER_PTR(ShadowData) shadowData;
+    SHADER_PUBLIC SHADER_PTR(LightData) lightData;
     SHADER_PUBLIC uint2 extent;
     SHADER_PUBLIC uint32_t packedGBufferIndices; // albedo, normal, pbr, depth
     SHADER_PUBLIC uint32_t packedCSMIndices; // 8 l0, 8 l1, 8l2, 8l3
@@ -180,7 +182,7 @@ SHADER_PUBLIC struct ShadowMeshShadingPushConstant
 SHADER_PUBLIC struct TonemapSDRPushConstant
 {
     // 0=ACES, 1=Uncharted2, 2=Reinhard
-    SHADER_PUBLIC uint32_t tonemapOperator;
+    SHADER_PUBLIC int32_t tonemapOperator;
     SHADER_PUBLIC uint32_t outputWidth;
     SHADER_PUBLIC uint32_t outputHeight;
     SHADER_PUBLIC uint32_t srcImageIndex;

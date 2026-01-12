@@ -20,7 +20,7 @@ groupshared uint32_t visibleMeshletCount;
 
 [shader("task")]
 [numthreads(TASK_SHADER_DISPATCH_X, 1, 1)]
-void taskMain(uniform ShadowMeshShadingPushConstant pushConstant,
+void TaskMain(uniform ShadowMeshShadingPushConstant pushConstant,
     uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID, uint drawIndex : SV_DrawIndex)
 {
     InstancedMeshIndirectDrawParameters indirectParameters = pushConstant.indirectBuffer[drawIndex];
@@ -49,7 +49,7 @@ void taskMain(uniform ShadowMeshShadingPushConstant pushConstant,
         float3 worldCenter = mul(model.modelMatrix, float4(mlet.meshletBoundingSphere.xyz, 1.0)).xyz;
         float4 worldBounds = float4(worldCenter, worldRadius);
 
-        bool visible = frustumCullSphere(pushConstant.shadowData->lightFrustums[pushConstant.cascadeIndex], worldBounds);
+        bool visible = FrustumCullSphere(pushConstant.shadowData->lightFrustums[pushConstant.cascadeIndex], worldBounds);
 
         if (visible) {
             uint index;
@@ -67,7 +67,7 @@ void taskMain(uniform ShadowMeshShadingPushConstant pushConstant,
 [shader("mesh")]
 [outputtopology("triangle")]
 [numthreads(MESH_SHADER_DISPATCH_X, 1, 1)]
-void meshMain(
+void MeshMain(
     in payload ShadowPayload inPayload,
     out indices uint3 triangles[MESHLET_MAX_TRIANGLES],
     out vertices float4 positions[MESHLET_MAX_VERTICES] : SV_Position,

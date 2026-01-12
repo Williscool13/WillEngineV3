@@ -10,6 +10,7 @@
 #include <volk.h>
 
 #include "shaders/instancing_interop.h"
+#include "shaders/lights_interop.h"
 #include "shaders/model_interop.h"
 #include "shaders/shadows_interop.h"
 
@@ -28,8 +29,10 @@ inline constexpr int32_t MEGA_VERTEX_BUFFER_SIZE = sizeof(Vertex) * 2097152; // 
 inline constexpr int32_t MEGA_SKINNED_VERTEX_BUFFER_SIZE = sizeof(SkinnedVertex) * 1048576; // 1M skinned (~100MB)
 inline constexpr int32_t MEGA_PRIMITIVE_BUFFER_COUNT = 65536; // 128K primitives
 inline constexpr int32_t MEGA_PRIMITIVE_BUFFER_SIZE = sizeof(MeshletPrimitive) * MEGA_PRIMITIVE_BUFFER_COUNT;
-inline constexpr int32_t SCENE_DATA_COUNT = 4; // Up to 4 views per frame
-inline constexpr int32_t SCENE_DATA_BUFFER_SIZE = sizeof(SceneData) * SCENE_DATA_COUNT;
+inline constexpr int32_t VIEW_COUNT = 4; // Up to 4 views per frame
+inline constexpr int32_t SCENE_DATA_BUFFER_SIZE = sizeof(SceneData) * VIEW_COUNT;
+inline constexpr int32_t SHADOW_DATA_BUFFER_SIZE = sizeof(ShadowData) * SHADOW_CASCADE_COUNT * VIEW_COUNT;
+inline constexpr int32_t LIGHT_DATA_BUFFER_SIZE = sizeof(LightData) * VIEW_COUNT;
 
 inline constexpr int32_t MEGA_MESHLET_VERTEX_BUFFER_SIZE = 1 << 26; // 64MB indices
 inline constexpr int32_t MEGA_MESHLET_TRIANGLE_BUFFER_SIZE = 1 << 26; // 64MB triangles
@@ -74,7 +77,6 @@ inline constexpr std::array<HaltonSample, HALTON_SEQUENCE_COUNT> HALTON_SEQUENCE
     {0.03125f, 0.5925926f},
 };
 
-inline constexpr int32_t SHADOW_CASCADE_BUFFER_SIZE = sizeof(ShadowData) * SHADOW_CASCADE_COUNT;
 
 
 struct CascadeBias

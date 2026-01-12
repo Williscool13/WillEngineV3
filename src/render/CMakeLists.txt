@@ -72,6 +72,7 @@ add_library(render STATIC
         shadows/shadow_helpers.h
         pipelines/shadow_mesh_shading_instanced_pipeline.cpp
         pipelines/shadow_mesh_shading_instanced_pipeline.h
+        shaders/lights_interop.h
 )
 
 target_include_directories(render PRIVATE

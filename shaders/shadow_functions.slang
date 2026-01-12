@@ -5,17 +5,17 @@ import constants_interop;
 import shadows_interop;
 import shader_constants;
 
-public uint getCascadeIndex(uint packedIndices, uint cascadeLevel)
+public uint GetCascadeIndex(uint packedIndices, uint cascadeLevel)
 {
     return (packedIndices >> (cascadeLevel * 8)) & 0xFF;
 }
 
-float depthToZ(float depth, float n, float f) {
+float DepthToZ(float depth, float n, float f) {
 	// return n * f / (depth * (n - f) + f); (normal depth buffer)
 	return n * f / (f - depth * (f - n));
 }
 
-float pcf(Texture2D shadowMap, SamplerComparisonState comparisonSampler, float2 uv, float receiverDepth, float filterRadius, int32_t sampleCount) {
+float PCF(Texture2D shadowMap, SamplerComparisonState comparisonSampler, float2 uv, float receiverDepth, float filterRadius, int32_t sampleCount) {
 	float sum = 0.0;
 	for (int i = 0; i < sampleCount; ++i) {
 		float2 offset;
@@ -42,7 +42,7 @@ float pcf(Texture2D shadowMap, SamplerComparisonState comparisonSampler, float2 
 	return sum / sampleCount;
 }
 
-float findBlockerDistance(Texture2D shadowMap, SamplerState sampler, float2 uv, float receiverDepth, float nearPlane, float farPlane, float searchRadius, float lightSize)
+float FindBlockerDistance(Texture2D shadowMap, SamplerState sampler, float2 uv, float receiverDepth, float nearPlane, float farPlane, float searchRadius, float lightSize)
 {
     float blockerSum = 0.0;
     int blockerCount = 0;
@@ -52,7 +52,7 @@ float findBlockerDistance(Texture2D shadowMap, SamplerState sampler, float2 uv, 
         float shadowDepth = shadowMap.SampleLevel(sampler, uv + offset, 0).r;
 
         if (shadowDepth >= receiverDepth) {
-            float blockerViewDepth = depthToZ(shadowDepth, nearPlane, farPlane);
+            float blockerViewDepth = DepthToZ(shadowDepth, nearPlane, farPlane);
             blockerSum += blockerViewDepth;
             blockerCount++;
         }
@@ -65,11 +65,11 @@ float findBlockerDistance(Texture2D shadowMap, SamplerState sampler, float2 uv, 
     return blockerSum / float(blockerCount);
 }
 
-float pcss(Texture2D shadowMap, SamplerState sampler, SamplerComparisonState comparisonSampler, float2 uv, float receiverDepth, float receiverViewSpaceDepth, float lightSize, float nearPlane, float farPlane, int pcfSamples)
+float PCSS(Texture2D shadowMap, SamplerState sampler, SamplerComparisonState comparisonSampler, float2 uv, float receiverDepth, float receiverViewSpaceDepth, float lightSize, float nearPlane, float farPlane, int pcfSamples)
 {
     // Blocker search
     float searchRadius = lightSize * (receiverViewSpaceDepth - nearPlane) / receiverViewSpaceDepth;
-    float avgBlockerDepth = findBlockerDistance(shadowMap, sampler, uv, receiverDepth, nearPlane, farPlane, searchRadius, lightSize);
+    float avgBlockerDepth = FindBlockerDistance(shadowMap, sampler, uv, receiverDepth, nearPlane, farPlane, searchRadius, lightSize);
 
     if (avgBlockerDepth < 0.0) {
         return 1.0f;
@@ -81,10 +81,10 @@ float pcss(Texture2D shadowMap, SamplerState sampler, SamplerComparisonState com
     filterRadius = clamp(filterRadius, 0.001, 0.05);
 
 
-    return pcf(shadowMap, comparisonSampler, uv, receiverDepth, filterRadius, pcfSamples);
+    return PCF(shadowMap, comparisonSampler, uv, receiverDepth, filterRadius, pcfSamples);
 }
 
-public float getShadowFactor(float3 viewPos, float3 viewNormal, SceneData* sceneData, ShadowData* shadowData, uint32_t packedCSMIndices,
+public float GetShadowFactor(float3 viewPos, float3 viewNormal, SceneData* sceneData, ShadowData* shadowData, uint32_t packedCSMIndices,
                             Texture2D textures[], SamplerState sampler, SamplerComparisonState comparisonSampler)
 {
     float viewSpaceDepth = abs(viewPos.z);
@@ -114,16 +114,16 @@ public float getShadowFactor(float3 viewPos, float3 viewNormal, SceneData* scene
     projCoords.xy = projCoords.xy * 0.5 + 0.5;
     projCoords.y = 1 - projCoords.y;
 
-    uint shadowMapIndex = getCascadeIndex(packedCSMIndices, cascadeLevel);
+    uint shadowMapIndex = GetCascadeIndex(packedCSMIndices, cascadeLevel);
     Texture2D shadowMap = textures[NonUniformResourceIndex(shadowMapIndex)];
 
     float lightSize = shadowData->lightSizes[cascadeLevel];
     int pcfSamples = int(shadowData->pcfSamples[cascadeLevel]);
 
-    float shadowFactor1 = pcf(shadowMap, comparisonSampler, projCoords.xy, projCoords.z, lightSize, pcfSamples);
+    float shadowFactor1 = PCF(shadowMap, comparisonSampler, projCoords.xy, projCoords.z, lightSize, pcfSamples);
     float cascadeNear = shadowData.nearSplits[cascadeLevel];
     float cascadeFar = shadowData.farSplits[cascadeLevel];
-    // float shadowFactor1 = pcss(shadowMap, sampler, comparisonSampler, projCoords.xy, projCoords.z, viewSpaceDepth, lightSize, cascadeNear, cascadeFar, pcfSamples);
+    // float shadowFactor1 = PCSS(shadowMap, sampler, comparisonSampler, projCoords.xy, projCoords.z, viewSpaceDepth, lightSize, cascadeNear, cascadeFar, pcfSamples);
 
     // Cascade blending
     if (cascadeLevel == SHADOW_CASCADE_COUNT - 1) {
@@ -143,14 +143,14 @@ public float getShadowFactor(float3 viewPos, float3 viewNormal, SceneData* scene
             nextProjCoords.xy = nextProjCoords.xy * 0.5 + 0.5;
             nextProjCoords.y = 1 - nextProjCoords.y;
 
-            uint nextShadowMapIndex = getCascadeIndex(packedCSMIndices, cascadeLevel + 1);
+            uint nextShadowMapIndex = GetCascadeIndex(packedCSMIndices, cascadeLevel + 1);
             Texture2D nextShadowMap = textures[NonUniformResourceIndex(nextShadowMapIndex)];
 
             float nextLightSize = shadowData->lightSizes[cascadeLevel + 1];
             int nextPcfSamples = int(shadowData->pcfSamples[cascadeLevel + 1]);
 
-            float shadowFactor2 = pcf(nextShadowMap, comparisonSampler, nextProjCoords.xy, nextProjCoords.z, nextLightSize, nextPcfSamples);
-            // float shadowFactor2 = pcss(nextShadowMap, sampler, comparisonSampler, nextProjCoords.xy, nextProjCoords.z, viewSpaceDepth, nextLightSize, shadowData->nearSplits[cascadeLevel + 1], shadowData->farSplits[cascadeLevel + 1], nextPcfSamples);
+            float shadowFactor2 = PCF(nextShadowMap, comparisonSampler, nextProjCoords.xy, nextProjCoords.z, nextLightSize, nextPcfSamples);
+            // float shadowFactor2 = PCSS(nextShadowMap, sampler, comparisonSampler, nextProjCoords.xy, nextProjCoords.z, viewSpaceDepth, nextLightSize, shadowData->nearSplits[cascadeLevel + 1], shadowData->farSplits[cascadeLevel + 1], nextPcfSamples);
 
             float blendFactor = smoothstep(blendStart, blendEnd, viewSpaceDepth);
             return lerp(shadowFactor1, shadowFactor2, blendFactor);

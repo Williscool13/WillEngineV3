@@ -1,9 +1,9 @@
 //
-// Created by William on 2025-12-29.
+// Created by William on 2026-01-12.
 //
 
-#ifndef WILL_ENGINE_SHADOWS_INTEROP_H
-#define WILL_ENGINE_SHADOWS_INTEROP_H
+#ifndef WILL_ENGINE_LIGHTS_INTEROP_H
+#define WILL_ENGINE_LIGHTS_INTEROP_H
 
 #ifdef __SLANG__
 module SHADOWS_interop;
@@ -49,18 +49,12 @@ using float4x4 = glm::mat4;
 #define SHADER_ATOMIC(T) T
 #endif // __SLANG__
 
-SHADER_PUBLIC struct SHADER_ALIGN ShadowData
+SHADER_PUBLIC struct SHADER_ALIGN LightData
 {
-    SHADER_PUBLIC float nearSplits[SHADOW_CASCADE_COUNT];
-    SHADER_PUBLIC float farSplits[SHADOW_CASCADE_COUNT];
-    SHADER_PUBLIC float4x4 lightSpaceMatrices[SHADOW_CASCADE_COUNT];
-    SHADER_PUBLIC Frustum lightFrustums[SHADOW_CASCADE_COUNT];
-    SHADER_PUBLIC float shadowIntensity;
-    SHADER_PUBLIC float lightSizes[SHADOW_CASCADE_COUNT];
-    SHADER_PUBLIC uint32_t blockerSearchSamples[SHADOW_CASCADE_COUNT];
-    SHADER_PUBLIC uint32_t pcfSamples[SHADOW_CASCADE_COUNT];
-    float padding[3];
+    SHADER_PUBLIC float4 mainLightDirection; // xyz direction, w intensity
+    SHADER_PUBLIC float4 mainLightColor; // xyz color
+
 };
 
 
-#endif //WILL_ENGINE_SHADOWS_INTEROP_H
+#endif //WILL_ENGINE_LIGHTS_INTEROP_H

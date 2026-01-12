@@ -2,39 +2,79 @@ import push_constant_interop;
 
 import bindless_declarations;
 
-float3 ACESFilmic(float3 x) {
-    float a = 2.51;
-    float b = 0.03;
-    float c = 2.43;
-    float d = 0.59;
-    float e = 0.14;
-    return saturate((x * (a * x + b)) / (x * (c * x + d) + e));
+static const float3x3 ACESInputMat = {
+    {0.59719, 0.35458, 0.04823},
+    {0.07600, 0.90834, 0.01566},
+    {0.02840, 0.13383, 0.83777}
+};
+
+static const float3x3 ACESOutputMat = {
+    { 1.60475, -0.53108, -0.07367},
+    {-0.10208,  1.10813, -0.00605},
+    {-0.00327, -0.07276,  1.07602}
+};
+
+float3 RRTAndODTFit(float3 v) {
+    float3 a = v * (v + 0.0245786) - 0.000090537;
+    float3 b = v * (0.983729 * v + 0.4329510) + 0.238081;
+    return a / b;
 }
 
+// Godot (?) https://github.com/TheRealMJP/BakingLab
+float3 ACESFitted(float3 color) {
+    color = mul(ACESInputMat, color);
+    color = RRTAndODTFit(color);
+    color = mul(ACESOutputMat, color);
+    return saturate(color);
+}
+
+// Uncharted 2 https://www.gdcvault.com/play/1012351/Uncharted-2-HDR
 float3 Uncharted2Tonemap(float3 x) {
-    float A = 0.15, B = 0.50, C = 0.10, D = 0.20, E = 0.02, F = 0.30;
+    float A = 0.15;
+    float B = 0.50;
+    float C = 0.10;
+    float D = 0.20;
+    float E = 0.02;
+    float F = 0.30;
+
     return ((x * (A * x + C * B) + D * E) / (x * (A * x + B) + D * F)) - E / F;
 }
 
+// Classic reinhard
 float3 ReinhardTonemap(float3 x) {
     return x / (1.0 + x);
 }
 
+// Lottes 2016 https://gpuopen.com/learn/optimized-reversible-tonemapper-for-resolve/
+float3 LottesTonemapSimple(float3 c) {
+    return c / (max(max(c.r, c.g), c.b) + 1.0);
+}
+
 [shader("compute")]
 [numthreads(16, 16, 1)]
-void computeSDRTonemap(uniform TonemapSDRPushConstant pc, uint3 threadId : SV_DispatchThreadID) {
+void ComputeSDRTonemap(uniform TonemapSDRPushConstant pc, uint3 threadId : SV_DispatchThreadID) {
     int2 texelCoord = int2(threadId.xy);
 
     float2 uv = (float2(texelCoord) + 0.5) / float2(pc.outputWidth, pc.outputHeight);
     float3 hdrColor = rdgTextures[pc.srcImageIndex].SampleLevel(rdgSamplers[pc.linearSamplerIndex], uv, 0).rgb;
 
     float3 ldrColor;
-    if (pc.tonemapOperator == 0) {
-        ldrColor = ACESFilmic(hdrColor);
-    } else if (pc.tonemapOperator == 1) {
-        ldrColor = Uncharted2Tonemap(hdrColor);
-    } else if (pc.tonemapOperator == 2) {
-        ldrColor = ReinhardTonemap(hdrColor);
+    switch (pc.tonemapOperator) {
+        case 0:
+            ldrColor = ACESFitted(hdrColor);
+            break;
+        case 1:
+            ldrColor = Uncharted2Tonemap(hdrColor);
+            break;
+        case 2:
+            ldrColor = ReinhardTonemap(hdrColor);
+            break;
+        case 3:
+            ldrColor = LottesTonemapSimple(hdrColor);
+            break;
+        default:
+            ldrColor = hdrColor;
+            break;
     }
 
     rdgRenderTextures[pc.dstImageIndex][texelCoord] = float4(ldrColor, 1.0);

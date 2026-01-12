@@ -835,14 +835,6 @@ void RenderGraph::CreateTexture(const std::string& name, const TextureInfo& texI
     resource->textureInfo = texInfo;
 }
 
-void RenderGraph::CreateTextureWithUsage(const std::string& name, const TextureInfo& texInfo, VkImageUsageFlags usage)
-{
-    TextureResource* resource = GetOrCreateTexture(name);
-    assert(texInfo.format != VK_FORMAT_UNDEFINED && "Texture info uses undefined format");
-    resource->textureInfo = texInfo;
-    resource->accumulatedUsage |= usage;
-}
-
 void RenderGraph::CreateBuffer(const std::string& name, VkDeviceSize size)
 {
     BufferResource* buf = GetOrCreateBuffer(name);
@@ -1088,10 +1080,11 @@ PipelineEvent RenderGraph::GetBufferState(const std::string& name)
     return physicalResources[buf.physicalIndex].event;
 }
 
-void RenderGraph::CarryToNextFrame(const std::string& name, const std::string& newName)
+void RenderGraph::CarryToNextFrame(const std::string& name, const std::string& newName, VkImageUsageFlags additionalUsage)
 {
     TextureResource* tex = GetOrCreateTexture(name);
     tex->bCanUseAliasedTexture = false;
+    tex->accumulatedUsage |= additionalUsage;
     for (const auto& c : carryovers) {
         assert(c.srcName != name && "Source texture already designated for carryover");
         assert(c.dstName != newName && "Destination name already used in another carryover");

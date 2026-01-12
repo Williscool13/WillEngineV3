@@ -1,7 +1,7 @@
 import common_interop;
 
 // Returns false if it has been culled
-bool frustumCullSphere(Frustum frustum, float4 sphere) {
+bool FrustumCullSphere(Frustum frustum, float4 sphere) {
     // sphere.xyz = center, sphere.w = radius
     for (int i = 0; i < 6; i++) {
         float4 plane = frustum.planes[i];
@@ -14,7 +14,7 @@ bool frustumCullSphere(Frustum frustum, float4 sphere) {
 }
 
 // Returns false if backface culled
-bool backfaceCullCone(float3 coneAxis, float coneCutoff, float3 center, float radius, float3 cameraPos, float3x3 modelMatrix) {
+bool BackfaceCullCone(float3 coneAxis, float coneCutoff, float3 center, float radius, float3 cameraPos, float3x3 modelMatrix) {
     float3 worldConeAxis = normalize(mul(modelMatrix, coneAxis));
     float3 cameraToCenter = center - cameraPos;
     float centerDist = length(cameraToCenter);
@@ -23,7 +23,7 @@ bool backfaceCullCone(float3 coneAxis, float coneCutoff, float3 center, float ra
     return dot(cameraToCenter, worldConeAxis) < coneCutoff * centerDist + radius;
 }
 
-float3x3 adjugate(float3x3 m) {
+float3x3 Adjugate(float3x3 m) {
     return float3x3(
         cross(m[1], m[2]),
         cross(m[2], m[0]),
@@ -32,7 +32,7 @@ float3x3 adjugate(float3x3 m) {
 }
 
 // Reconstructs position of a pixel based on inverse project and depth buffer
-float3 reconstructViewPosition(float4x4 invProj, float2 uv, float depth) {
+float3 ReconstructViewPosition(float4x4 invProj, float2 uv, float depth) {
 
     float2 ndc = uv * 2.0 - 1.0;
     // Note: NDC Y-flip required because viewport uses negative height

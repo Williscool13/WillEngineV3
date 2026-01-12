@@ -69,6 +69,12 @@ GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* stat
     Game::System::GatherRenderables(ctx, state, frameBuffer);
 
     if (ImGui::Begin("Test 2")) {
+        const char* tonemapOperators[] = {"None", "ACES", "Uncharted 2", "Reinhard", "Lottes"};
+        int currentItem = state->tonemapOperator + 1;
+        if (ImGui::Combo("Tonemap Operator", &currentItem, tonemapOperators, IM_ARRAYSIZE(tonemapOperators))) {
+            state->tonemapOperator = currentItem - 1;
+        }
+
         ImGui::Checkbox("Enable Physics", &state->bEnablePhysics);
 
         if (ImGui::CollapsingHeader("Directional Light")) {
@@ -98,16 +104,16 @@ GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* stat
                 ImGui::Text("Cascade %d:", i);
                 ImGui::Indent();
                 ImGui::Text("  Resolution: %dx%d",
-                    state->shadowConfig.cascadePreset.extents[i].width,
-                    state->shadowConfig.cascadePreset.extents[i].height);
+                            state->shadowConfig.cascadePreset.extents[i].width,
+                            state->shadowConfig.cascadePreset.extents[i].height);
                 ImGui::Text("  Bias: %.2f/%.2f",
-                    state->shadowConfig.cascadePreset.biases[i].linear,
-                    state->shadowConfig.cascadePreset.biases[i].sloped);
+                            state->shadowConfig.cascadePreset.biases[i].linear,
+                            state->shadowConfig.cascadePreset.biases[i].sloped);
                 ImGui::Text("  PCSS Samples: %u blocker, %u PCF",
-                    state->shadowConfig.cascadePreset.pcssSamples[i].blockerSearchSamples,
-                    state->shadowConfig.cascadePreset.pcssSamples[i].pcfSamples);
+                            state->shadowConfig.cascadePreset.pcssSamples[i].blockerSearchSamples,
+                            state->shadowConfig.cascadePreset.pcssSamples[i].pcfSamples);
                 ImGui::Text("  Light Size: %.4f",
-                    state->shadowConfig.cascadePreset.lightSizes[i]);
+                            state->shadowConfig.cascadePreset.lightSizes[i]);
                 ImGui::Unindent();
             }
 
@@ -147,6 +153,7 @@ GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* stat
 
     frameBuffer->mainViewFamily.directionalLight = state->directionalLight;
     frameBuffer->mainViewFamily.shadowConfig = state->shadowConfig;
+    frameBuffer->mainViewFamily.tonemapOperator = state->tonemapOperator;
 
     ImGui::End();
 }

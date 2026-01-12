@@ -11,7 +11,7 @@ import bindless_declarations;
 // Evaluates the visibility of each instance and outputs to a packed visibility buffer
 [shader("compute")]
 [numthreads(INSTANCING_VISIBILITY_DISPATCH_X, 1, 1)]
-void computeVisibility(uniform VisibilityPushConstant pushConstant, uint3 dtid : SV_DispatchThreadID)
+void ComputeVisibility(uniform VisibilityPushConstant pushConstant, uint3 dtid : SV_DispatchThreadID)
 {
     uint instanceID = dtid.x;
     if (instanceID >= pushConstant.instanceCount) {
@@ -34,7 +34,7 @@ void computeVisibility(uniform VisibilityPushConstant pushConstant, uint3 dtid :
     float4 worldBounds = float4(worldCenter, worldRadius);
 
     bool bVisible = true;
-    if (!frustumCullSphere(pushConstant.sceneData->frustum, worldBounds)) {
+    if (!FrustumCullSphere(pushConstant.sceneData->frustum, worldBounds)) {
         bVisible = false;
     }
 
@@ -53,7 +53,7 @@ void computeVisibility(uniform VisibilityPushConstant pushConstant, uint3 dtid :
 
 [shader("compute")]
 [numthreads(INSTANCING_VISIBILITY_DISPATCH_X, 1, 1)]
-void computeVisibilityShadows(uniform VisibilityShadowsPushConstant pushConstant, uint3 dtid : SV_DispatchThreadID)
+void ComputeVisibilityShadows(uniform VisibilityShadowsPushConstant pushConstant, uint3 dtid : SV_DispatchThreadID)
 {
     uint instanceID = dtid.x;
     if (instanceID >= pushConstant.instanceCount) {
@@ -77,7 +77,7 @@ void computeVisibilityShadows(uniform VisibilityShadowsPushConstant pushConstant
 
     bool bVisible = true;
     Frustum frustum = pushConstant.shadowData->lightFrustums[pushConstant.cascadeLevel];
-    if (!frustumCullSphere(frustum, worldBounds)) {
+    if (!FrustumCullSphere(frustum, worldBounds)) {
         bVisible = false;
     }
 
@@ -100,7 +100,7 @@ void computeVisibilityShadows(uniform VisibilityShadowsPushConstant pushConstant
 
 [shader("compute")]
 [numthreads(1, 1, 1)]
-void computePrefixSum(uniform PrefixSumPushConstant pushConstant) {
+void ComputePrefixSum(uniform PrefixSumPushConstant pushConstant) {
     uint sum = 0;
     for (uint i = 0; i < pushConstant.highestPrimitiveIndex; i++) {
         pushConstant.primitiveCountBuffer[i].offset = sum;
@@ -113,7 +113,7 @@ void computePrefixSum(uniform PrefixSumPushConstant pushConstant) {
 
 [shader("compute")]
 [numthreads(INSTANCING_CONSTRUCTION_DISPATCH_X, 1, 1)]
-void computeCompactAndGenerateIndirect(uniform IndirectWritePushConstant pushConstant, uint3 dtid : SV_DispatchThreadID)
+void ComputeCompactAndGenerateIndirect(uniform IndirectWritePushConstant pushConstant, uint3 dtid : SV_DispatchThreadID)
 {
     uint instanceID = dtid.x;
 

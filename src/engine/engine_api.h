@@ -37,6 +37,9 @@ struct GameState
     Core::ShadowQuality shadowQuality = Core::ShadowQuality::Ultra;
     Core::ShadowConfiguration shadowConfig;
 
+    // Post-Process
+    int32_t tonemapOperator{2};
+
     // Debug
     Game::DebugData debugData;
 };

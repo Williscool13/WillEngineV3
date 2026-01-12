@@ -195,6 +195,10 @@ preprocess_shader_interop(
         ${CMAKE_SOURCE_DIR}/shaders/shadows_interop.slang
 )
 preprocess_shader_interop(
+        ${CMAKE_SOURCE_DIR}/src/render/shaders/lights_interop.h
+        ${CMAKE_SOURCE_DIR}/shaders/lights_interop.slang
+)
+preprocess_shader_interop(
         ${CMAKE_SOURCE_DIR}/src/render/shaders/constants_interop.h
         ${CMAKE_SOURCE_DIR}/shaders/constants_interop.slang
 )
@@ -226,19 +230,19 @@ add_shader_include("${CMAKE_SOURCE_DIR}/shaders/pbr_functions.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/bindless_declarations.slang")
 
 compile_shaders(will-engine
-        ${CMAKE_SOURCE_DIR}/shaders/debugVisualize.slang compute computeMain
-        ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute computeVisibility instancingVisibility
-        ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute computeVisibilityShadows instancingShadowsVisibility
-        ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute computePrefixSum instancingPrefixSum
-        ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute computeCompactAndGenerateIndirect instancingCompactAndGenerateIndirect
-        ${CMAKE_SOURCE_DIR}/shaders/meshShadingInstanced.slang task taskMain
-        ${CMAKE_SOURCE_DIR}/shaders/meshShadingInstanced.slang mesh meshMain
-        ${CMAKE_SOURCE_DIR}/shaders/meshShadingInstanced.slang fragment fragmentMain
-        ${CMAKE_SOURCE_DIR}/shaders/shadowMeshShadingInstanced.slang task taskMain
-        ${CMAKE_SOURCE_DIR}/shaders/shadowMeshShadingInstanced.slang mesh meshMain
-        ${CMAKE_SOURCE_DIR}/shaders/deferredResolve.slang compute computeMain
-        ${CMAKE_SOURCE_DIR}/shaders/temporalAntialiasing.slang compute computeMain
-        ${CMAKE_SOURCE_DIR}/shaders/postprocess.slang compute computeSDRTonemap tonemapSDR
+        ${CMAKE_SOURCE_DIR}/shaders/debugVisualize.slang compute ComputeMain
+        ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputeVisibility instancingVisibility
+        ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputeVisibilityShadows instancingShadowsVisibility
+        ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputePrefixSum instancingPrefixSum
+        ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputeCompactAndGenerateIndirect instancingCompactAndGenerateIndirect
+        ${CMAKE_SOURCE_DIR}/shaders/meshShadingInstanced.slang task TaskMain
+        ${CMAKE_SOURCE_DIR}/shaders/meshShadingInstanced.slang mesh MeshMain
+        ${CMAKE_SOURCE_DIR}/shaders/meshShadingInstanced.slang fragment FragmentMain
+        ${CMAKE_SOURCE_DIR}/shaders/shadowMeshShadingInstanced.slang task TaskMain
+        ${CMAKE_SOURCE_DIR}/shaders/shadowMeshShadingInstanced.slang mesh MeshMain
+        ${CMAKE_SOURCE_DIR}/shaders/deferredResolve.slang compute ComputeMain
+        ${CMAKE_SOURCE_DIR}/shaders/temporalAntialiasing.slang compute ComputeMain
+        ${CMAKE_SOURCE_DIR}/shaders/postprocess.slang compute ComputeSDRTonemap tonemapSDR
 )
 
 # Post-Build Commands =========================

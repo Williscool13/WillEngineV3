@@ -69,9 +69,12 @@ RenderThread::RenderThread(Core::FrameSync* engineRenderSynchronization, enki::T
         bufferInfo.size = BINDLESS_MATERIAL_BUFFER_SIZE;
         frameResources[i].materialBuffer = std::move(AllocatedBuffer::CreateAllocatedBuffer(context.get(), bufferInfo, vmaAllocInfo));
         frameResources[i].materialBuffer.SetDebugName(("materialBuffer_" + std::to_string(i)).c_str());
-        bufferInfo.size = SHADOW_CASCADE_BUFFER_SIZE;
+        bufferInfo.size = SHADOW_DATA_BUFFER_SIZE;
         frameResources[i].shadowBuffer = std::move(AllocatedBuffer::CreateAllocatedBuffer(context.get(), bufferInfo, vmaAllocInfo));
         frameResources[i].shadowBuffer.SetDebugName(("shadowBuffer_" + std::to_string(i)).c_str());
+        bufferInfo.size = LIGHT_DATA_BUFFER_SIZE;
+        frameResources[i].lightBuffer = std::move(AllocatedBuffer::CreateAllocatedBuffer(context.get(), bufferInfo, vmaAllocInfo));
+        frameResources[i].lightBuffer.SetDebugName(("lightBuffer_" + std::to_string(i)).c_str());
     }
 
     CreatePipelines();
@@ -205,6 +208,8 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
                                        {frameResource.sceneDataBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
     renderGraph->ImportBufferNoBarrier("shadowData", frameResource.shadowBuffer.handle, frameResource.shadowBuffer.address,
                                        {frameResource.shadowBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
+    renderGraph->ImportBufferNoBarrier("lightData", frameResource.lightBuffer.handle, frameResource.lightBuffer.address,
+                                       {frameResource.lightBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
 
     renderGraph->ImportBufferNoBarrier("vertexBuffer", resourceManager->megaVertexBuffer.handle, resourceManager->megaVertexBuffer.address,
                                        {resourceManager->megaVertexBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
@@ -249,60 +254,17 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     SetupInstancingPipeline(*renderGraph, frameBuffer);
     SetupMainGeometryPass(*renderGraph);
 
-    renderGraph->CreateTextureWithUsage("deferredResolve", {COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1],}, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
-    RenderPass& clearDeferredImagePass = renderGraph->AddPass("ClearDeferredImage", VK_PIPELINE_STAGE_2_CLEAR_BIT);
-    clearDeferredImagePass.WriteClearImage("deferredResolve");
-    clearDeferredImagePass.Execute([&](VkCommandBuffer cmd) {
-        VkImage img = renderGraph->GetImage("deferredResolve");
-        constexpr VkClearColorValue clearColor = {0.0f, 0.1f, 0.2f, 1.0f};
-        VkImageSubresourceRange colorSubresource = VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 1, 1);
-        vkCmdClearColorImage(cmd, img, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &colorSubresource);
-    });
-
+    // IN : albedoTarget, normalTarget, pbrTarget, depthTarget, shadowCascade_0, shadowCascade_1, shadowCascade_2, shadowCascade_3
+    // OUT: deferredResolve
     SetupDeferredLighting(*renderGraph, frameBuffer, renderExtent);
-    renderGraph->CreateTextureWithUsage("taaCurrent",
-                                        {COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1]},
-                                        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT
-    );
 
+    // IN : deferredResolve
+    // OUT: taaCurrent, taaOutput
     SetupTemporalAntialiasing(*renderGraph, renderExtent);
-    renderGraph->CarryToNextFrame("taaCurrent", "taaHistory");
-    renderGraph->CreateTexture("finalImage", {COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1]});
+    renderGraph->CarryToNextFrame("taaCurrent", "taaHistory", VK_IMAGE_USAGE_SAMPLED_BIT);
 
-    RenderPass& finalCopyPass = renderGraph->AddPass("finalCopy", VK_PIPELINE_STAGE_2_BLIT_BIT);
-    finalCopyPass.ReadBlitImage("taaCurrent");
-    finalCopyPass.WriteBlitImage("finalImage");
-    finalCopyPass.Execute([&](VkCommandBuffer cmd) {
-        VkImage src = renderGraph->GetImage("taaCurrent");
-        VkImage dst = renderGraph->GetImage("finalImage");
-
-        VkOffset3D renderOffset = {static_cast<int32_t>(renderExtent[0]), static_cast<int32_t>(renderExtent[1]), 1};
-
-        VkImageBlit2 blitRegion{};
-        blitRegion.sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2;
-        blitRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        blitRegion.srcSubresource.layerCount = 1;
-        blitRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        blitRegion.dstSubresource.layerCount = 1;
-        blitRegion.srcOffsets[0] = {0, 0, 0};
-        blitRegion.srcOffsets[1] = renderOffset;
-        blitRegion.dstOffsets[0] = {0, 0, 0};
-        blitRegion.dstOffsets[1] = renderOffset;
-
-        VkBlitImageInfo2 blitInfo{};
-        blitInfo.sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2;
-        blitInfo.srcImage = src;
-        blitInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-        blitInfo.dstImage = dst;
-        blitInfo.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        blitInfo.regionCount = 1;
-        blitInfo.pRegions = &blitRegion;
-        blitInfo.filter = VK_FILTER_LINEAR;
-
-        vkCmdBlitImage2(cmd, &blitInfo);
-    });
-
-    // SetupPostProcessing(*renderGraph, renderExtent);
+    // todo: shoud never be passing framebfufer wholesale
+    SetupPostProcessing(*renderGraph, frameBuffer, renderExtent);
 
 #if WILL_EDITOR
     /*RenderPass& readbackPass = renderGraph->AddPass("DebugReadback");
@@ -563,7 +525,7 @@ void RenderThread::CreatePipelines()
     }
 }
 
-void RenderThread::SetupFrameUniforms(VkCommandBuffer cmd, FrameResources& frameResource, Core::FrameBuffer& frameBuffer, const std::array<uint32_t, 2>& renderExtent)
+void RenderThread::SetupFrameUniforms(VkCommandBuffer cmd, FrameResources& frameResource, Core::FrameBuffer& frameBuffer, const std::array<uint32_t, 2> renderExtent)
 {
     std::array bindings{resourceManager->bindlessSamplerTextureDescriptorBuffer.GetBindingInfo(), resourceManager->bindlessRDGTransientDescriptorBuffer.GetBindingInfo()};
     std::array indices{0u, 1u};
@@ -626,58 +588,6 @@ void RenderThread::SetupFrameUniforms(VkCommandBuffer cmd, FrameResources& frame
         sceneData.invView = glm::inverse(viewMatrix);
         sceneData.invProj = glm::inverse(jitteredProj);
         sceneData.invViewProj = glm::inverse(sceneData.viewProj);
-
-        // Debug shadow view project
-        /*{
-            Core::ShadowConfiguration shadowConfig = frameBuffer.mainViewFamily.shadowConfiguration;
-            ShadowCascadePreset shadowPreset = SHADOW_PRESETS[static_cast<uint32_t>(shadowConfig.quality)];
-            Core::DirectionalLight directionalLight = frameBuffer.mainViewFamily.directionalLight;
-
-            ShadowData shadowData{};
-
-            const float ratio = shadowConfig.cascadeFarPlane / shadowConfig.cascadeNearPlane;
-            shadowData.nearSplits[0] = shadowConfig.cascadeNearPlane;
-            for (size_t i = 1; i < SHADOW_CASCADE_COUNT; i++) {
-                const float si = static_cast<float>(i) / static_cast<float>(SHADOW_CASCADE_COUNT);
-
-                const float uniformTerm = shadowConfig.cascadeNearPlane + (shadowConfig.cascadeFarPlane - shadowConfig.cascadeNearPlane) * si;
-                const float logTerm = shadowConfig.cascadeNearPlane * std::pow(ratio, si);
-                const float nearValue = shadowConfig.splitLambda * logTerm + (1.0f - shadowConfig.splitLambda) * uniformTerm;
-
-                const float farValue = nearValue * shadowConfig.splitOverlap;
-
-                shadowData.nearSplits[i] = nearValue;
-                shadowData.farSplits[i - 1] = farValue;
-            }
-            shadowData.farSplits[SHADOW_CASCADE_COUNT - 1] = shadowConfig.cascadeFarPlane;
-
-            shadowData.mainLightDirection = glm::vec4(directionalLight.direction, 0.0f);
-            ViewProjMatrix pairs[SHADOW_CASCADE_COUNT]{};
-            for (int i = 0; i < SHADOW_CASCADE_COUNT; ++i) {
-                ViewProjMatrix viewProj = GenerateLightSpaceMatrix(
-                    static_cast<float>(shadowPreset.extents[i].width),
-                    shadowData.nearSplits[i],
-                    shadowData.farSplits[i],
-                    frameBuffer.mainViewFamily.directionalLight.direction,
-                    frameBuffer.mainViewFamily.mainView.currentViewData
-                );
-                shadowData.lightSpaceMatrices[i] = viewProj.proj * viewProj.view;
-                pairs[i] = viewProj;;
-                shadowData.lightFrustums[i] = CreateFrustum(shadowData.lightSpaceMatrices[i]);
-            }
-
-            // todo: tweak shadow intensity
-            shadowData.shadowIntensity = 1.0f;
-
-            glm::mat4 lightViewProj = shadowData.lightSpaceMatrices[0];
-            sceneData.view = pairs[0].view;
-            sceneData.proj = pairs[0].proj;
-            sceneData.viewProj = lightViewProj;
-            sceneData.invView = glm::inverse(sceneData.view);
-            sceneData.invProj = glm::inverse(sceneData.proj);
-            sceneData.invViewProj = glm::inverse(lightViewProj);
-        }*/
-
         sceneData.prevViewProj = jitteredPrevProj * prevViewMatrix;
 
         sceneData.cameraWorldPos = glm::vec4(view.currentViewData.cameraPos, 1.0f);
@@ -691,6 +601,16 @@ void RenderThread::SetupFrameUniforms(VkCommandBuffer cmd, FrameResources& frame
         AllocatedBuffer& currentSceneDataBuffer = frameResource.sceneDataBuffer;
         auto currentSceneData = static_cast<SceneData*>(currentSceneDataBuffer.allocationInfo.pMappedData);
         memcpy(currentSceneData, &sceneData, sizeof(SceneData));
+    }
+
+    // Lights
+    {
+        LightData lightData;
+        lightData.mainLightDirection = {frameBuffer.mainViewFamily.directionalLight.direction, frameBuffer.mainViewFamily.directionalLight.intensity};
+        lightData.mainLightColor = {frameBuffer.mainViewFamily.directionalLight.color, 0.0f};
+        AllocatedBuffer& currentLightBuffer = frameResource.lightBuffer;
+        auto currentLightData = static_cast<LightData*>(currentLightBuffer.allocationInfo.pMappedData);
+        memcpy(currentLightData, &lightData, sizeof(LightData));
     }
 }
 
@@ -718,7 +638,6 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, Core::FrameBuffer& f
     }
     shadowData.farSplits[SHADOW_CASCADE_COUNT - 1] = shadowConfig.cascadeFarPlane;
 
-    shadowData.mainLightDirection = glm::vec4(directionalLight.direction, 0.0f);
     for (int i = 0; i < SHADOW_CASCADE_COUNT; ++i) {
         ViewProjMatrix viewProj = GenerateLightSpaceMatrix(
             static_cast<float>(shadowConfig.cascadePreset.extents[i].width),
@@ -1049,8 +968,18 @@ void RenderThread::SetupMainGeometryPass(RenderGraph& graph)
     });
 }
 
-void RenderThread::SetupDeferredLighting(RenderGraph& graph, const Core::FrameBuffer& frameBuffer, const std::array<uint32_t, 2>& renderExtent)
+void RenderThread::SetupDeferredLighting(RenderGraph& graph, const Core::FrameBuffer& frameBuffer, const std::array<uint32_t, 2> renderExtent)
 {
+    graph.CreateTexture("deferredResolve", {COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1],});
+    RenderPass& clearDeferredImagePass = graph.AddPass("ClearDeferredImage", VK_PIPELINE_STAGE_2_CLEAR_BIT);
+    clearDeferredImagePass.WriteClearImage("deferredResolve");
+    clearDeferredImagePass.Execute([&](VkCommandBuffer cmd) {
+        VkImage img = graph.GetImage("deferredResolve");
+        constexpr VkClearColorValue clearColor = {0.0f, 0.1f, 0.2f, 1.0f};
+        VkImageSubresourceRange colorSubresource = VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 1, 1);
+        vkCmdClearColorImage(cmd, img, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &colorSubresource);
+    });
+
     bool bShadowsEnabled = frameBuffer.mainViewFamily.shadowConfig.enabled;
 
     RenderPass& deferredResolvePass = graph.AddPass("DeferredResolve", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
@@ -1066,7 +995,7 @@ void RenderThread::SetupDeferredLighting(RenderGraph& graph, const Core::FrameBu
     }
 
     deferredResolvePass.WriteStorageImage("deferredResolve");
-    deferredResolvePass.Execute([&, bShadowsEnabled](VkCommandBuffer cmd) {
+    deferredResolvePass.Execute([&, bShadowsEnabled, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, deferredResolvePipeline.pipeline.handle);
 
         uint32_t packedShadowMapIndices = bShadowsEnabled
@@ -1088,7 +1017,8 @@ void RenderThread::SetupDeferredLighting(RenderGraph& graph, const Core::FrameBu
         DeferredResolvePushConstant pushData{
             .sceneData = graph.GetBufferAddress("sceneData"),
             .shadowData = graph.GetBufferAddress("shadowData"),
-            .extent = {renderExtent[0], renderExtent[1]},
+            .lightData = graph.GetBufferAddress("lightData"),
+            .extent = {width, height},
             .packedGBufferIndices = packedGBufferIndices,
             .packedCSMIndices = packedShadowMapIndices,
             .pointSamplerIndex = resourceManager->pointSamplerIndex,
@@ -1098,19 +1028,21 @@ void RenderThread::SetupDeferredLighting(RenderGraph& graph, const Core::FrameBu
 
         vkCmdPushConstants(cmd, deferredResolvePipeline.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(DeferredResolvePushConstant), &pushData);
 
-        uint32_t xDispatch = (renderExtent[0] + 15) / 16;
-        uint32_t yDispatch = (renderExtent[1] + 15) / 16;
+        uint32_t xDispatch = (width + 15) / 16;
+        uint32_t yDispatch = (height + 15) / 16;
         vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
     });
 }
 
-void RenderThread::SetupTemporalAntialiasing(RenderGraph& graph, const std::array<uint32_t, 2>& renderExtent)
+void RenderThread::SetupTemporalAntialiasing(RenderGraph& graph, const std::array<uint32_t, 2> renderExtent)
 {
+    graph.CreateTexture("taaCurrent", {COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1]});
+
     if (!graph.HasTexture("taaHistory")) {
         RenderPass& taaPass = graph.AddPass("TemporalAntialiasingFirstFrame", VK_PIPELINE_STAGE_2_COPY_BIT);
         taaPass.ReadCopyImage("deferredResolve");
         taaPass.WriteCopyImage("taaCurrent");
-        taaPass.Execute([&](VkCommandBuffer cmd) {
+        taaPass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
             VkImage drawImage = graph.GetImage("deferredResolve");
             VkImage taaImage = graph.GetImage("taaCurrent");
 
@@ -1120,7 +1052,7 @@ void RenderThread::SetupTemporalAntialiasing(RenderGraph& graph, const std::arra
             copyRegion.srcSubresource.layerCount = 1;
             copyRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
             copyRegion.dstSubresource.layerCount = 1;
-            copyRegion.extent = {renderExtent[0], renderExtent[1], 1};
+            copyRegion.extent = {width, height, 1};
 
             VkCopyImageInfo2 copyInfo{};
             copyInfo.sType = VK_STRUCTURE_TYPE_COPY_IMAGE_INFO_2;
@@ -1141,7 +1073,7 @@ void RenderThread::SetupTemporalAntialiasing(RenderGraph& graph, const std::arra
         taaPass.ReadSampledImage("taaHistory");
         taaPass.ReadSampledImage("velocityTarget");
         taaPass.WriteStorageImage("taaCurrent");
-        taaPass.Execute([&](VkCommandBuffer cmd) {
+        taaPass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, temporalAntialiasingPipeline.pipeline.handle);
             TemporalAntialiasingPushConstant pushData{
                 .sceneData = graph.GetBufferAddress("sceneData"),
@@ -1156,33 +1088,74 @@ void RenderThread::SetupTemporalAntialiasing(RenderGraph& graph, const std::arra
 
             vkCmdPushConstants(cmd, temporalAntialiasingPipeline.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(TemporalAntialiasingPushConstant), &pushData);
 
-            uint32_t xDispatch = (renderExtent[0] + 15) / 16;
-            uint32_t yDispatch = (renderExtent[1] + 15) / 16;
+            uint32_t xDispatch = (width + 15) / 16;
+            uint32_t yDispatch = (height + 15) / 16;
             vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
         });
     }
+
+    graph.CreateTexture("taaOutput", {COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1]});
+
+    RenderPass& finalCopyPass = graph.AddPass("finalCopy", VK_PIPELINE_STAGE_2_BLIT_BIT);
+    finalCopyPass.ReadBlitImage("taaCurrent");
+    finalCopyPass.WriteBlitImage("taaOutput");
+    finalCopyPass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
+        VkImage src = graph.GetImage("taaCurrent");
+        VkImage dst = graph.GetImage("taaOutput");
+
+        VkOffset3D renderOffset = {static_cast<int32_t>(width), static_cast<int32_t>(height), 1};
+
+        VkImageBlit2 blitRegion{};
+        blitRegion.sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2;
+        blitRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        blitRegion.srcSubresource.layerCount = 1;
+        blitRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        blitRegion.dstSubresource.layerCount = 1;
+        blitRegion.srcOffsets[0] = {0, 0, 0};
+        blitRegion.srcOffsets[1] = renderOffset;
+        blitRegion.dstOffsets[0] = {0, 0, 0};
+        blitRegion.dstOffsets[1] = renderOffset;
+
+        VkBlitImageInfo2 blitInfo{};
+        blitInfo.sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2;
+        blitInfo.srcImage = src;
+        blitInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        blitInfo.dstImage = dst;
+        blitInfo.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        blitInfo.regionCount = 1;
+        blitInfo.pRegions = &blitRegion;
+        blitInfo.filter = VK_FILTER_LINEAR;
+
+        vkCmdBlitImage2(cmd, &blitInfo);
+    });
 }
 
-void RenderThread::SetupPostProcessing(RenderGraph& graph, std::array<uint32_t, 2> renderExtent)
+void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::FrameBuffer& frameBuffer, const std::array<uint32_t, 2> renderExtent)
 {
     // todo: add support for HDR swapchain
-    renderGraph->CreateTexture("postHDRImage", {COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1]});
+    // "postHDRImage"
+    graph.CreateTexture("finalImage", {COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1]});
+
     RenderPass& tonemapPass = graph.AddPass("TonemapSDR", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-    tonemapPass.ReadSampledImage("finalImage");
-    tonemapPass.WriteStorageImage("postHDRImage");
-    tonemapPass.Execute([&](VkCommandBuffer cmd) {
+    tonemapPass.ReadSampledImage("taaOutput");
+    tonemapPass.WriteStorageImage("finalImage");
+    tonemapPass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, tonemapSDRPipeline.pipeline.handle);
+
         TonemapSDRPushConstant pushData{
-            .tonemapOperator = 0,
-            .outputWidth = renderExtent[0],
-            .outputHeight = renderExtent[1],
-            .srcImageIndex = graph.GetDescriptorIndex("deferredResolve"),
-            .dstImageIndex = graph.GetDescriptorIndex("postHDRImage"),
+            .tonemapOperator = frameBuffer.mainViewFamily.tonemapOperator,
+            .outputWidth = width,
+            .outputHeight = height,
+            .srcImageIndex = graph.GetDescriptorIndex("taaOutput"),
+            .dstImageIndex = graph.GetDescriptorIndex("finalImage"),
             .pointSamplerIndex = resourceManager->pointSamplerIndex,
             .linearSamplerIndex = resourceManager->linearSamplerIndex,
         };
 
-        uint32_t xDispatch = (renderExtent[0] + 15) / 16;
-        uint32_t yDispatch = (renderExtent[1] + 15) / 16;
+        vkCmdPushConstants(cmd, tonemapSDRPipeline.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(TonemapSDRPushConstant), &pushData);
+
+        uint32_t xDispatch = (width + 15) / 16;
+        uint32_t yDispatch = (height + 15) / 16;
         vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
     });
 }

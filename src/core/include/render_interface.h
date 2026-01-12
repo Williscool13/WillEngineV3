@@ -75,8 +75,6 @@ struct ViewFamily
     RenderView mainView;
     std::vector<RenderView> portalViews;
 
-    std::vector<Model> modelMatrices;
-
     struct InstanceData
     {
         uint32_t primitiveIndex;
@@ -85,13 +83,16 @@ struct ViewFamily
         uint32_t gpuMaterialIndex;
     };
 
+    std::vector<Model> modelMatrices;
     std::vector<InstanceData> instances;
-
     std::vector<MaterialProperties> materials;
+
+    ShadowConfiguration shadowConfig{};
+
     DirectionalLight directionalLight;
     // std::vector<LightInstance> allLights;
 
-    ShadowConfiguration shadowConfig{};
+    int32_t tonemapOperator{2};
 };
 
 struct BufferAcquireOperation

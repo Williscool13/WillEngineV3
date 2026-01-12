@@ -89,7 +89,7 @@ public:
 private:
     void CreatePipelines();
 
-    void SetupFrameUniforms(VkCommandBuffer cmd, FrameResources& frameResource, Core::FrameBuffer& frameBuffer, const std::array<uint32_t, 2>& renderExtent);
+    void SetupFrameUniforms(VkCommandBuffer cmd, FrameResources& frameResource, Core::FrameBuffer& frameBuffer, std::array<uint32_t, 2> renderExtent);
 
     void SetupCascadedShadows(RenderGraph& graph, Core::FrameBuffer& frameBuffer, FrameResources& frameResource);
 
@@ -97,11 +97,11 @@ private:
 
     void SetupMainGeometryPass(RenderGraph& graph);
 
-    void SetupDeferredLighting(RenderGraph& graph, const Core::FrameBuffer& frameBuffer, const std::array<uint32_t, 2>& renderExtent);
+    void SetupDeferredLighting(RenderGraph& graph, const Core::FrameBuffer& frameBuffer, std::array<uint32_t, 2> renderExtent);
 
-    void SetupTemporalAntialiasing(RenderGraph& graph, const std::array<uint32_t, 2>& renderExtent);
+    void SetupTemporalAntialiasing(RenderGraph& graph, std::array<uint32_t, 2> renderExtent);
 
-    void SetupPostProcessing(RenderGraph& graph, std::array<uint32_t, 2> renderExtent);
+    void SetupPostProcessing(RenderGraph& graph, const Core::FrameBuffer& frameBuffer, std::array<uint32_t, 2> renderExtent);
 
 private:
     // Non-owning

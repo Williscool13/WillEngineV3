@@ -10,7 +10,7 @@ import bindless_declarations;
 DeferredResolvePushConstant pc;
 
 [numthreads(16, 16, 1)]
-void computeMain(uint3 threadID : SV_DispatchThreadID) {
+void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
     if (threadID.x >= pc.extent.x || threadID.y >= pc.extent.y) return;
 
     float2 uv = (float2(threadID.xy) + 0.5) / float2(pc.extent);
@@ -23,7 +23,7 @@ void computeMain(uint3 threadID : SV_DispatchThreadID) {
     float3 viewNormal = rdgTextures[GetNormalIndex(pc.packedGBufferIndices)].SampleLevel(rdgSamplers[pc.pointSamplerIndex], uv, 0).xyz;
     float4 pbrData = rdgTextures[GetPBRIndex(pc.packedGBufferIndices)].SampleLevel(rdgSamplers[pc.pointSamplerIndex], uv, 0);
 
-    float3 viewPosition = reconstructViewPosition(pc->sceneData.invProj, uv, depth);
+    float3 viewPosition = ReconstructViewPosition(pc->sceneData.invProj, uv, depth);
 
     float roughness = pbrData.g;
     float metallic = pbrData.r;
@@ -32,7 +32,7 @@ void computeMain(uint3 threadID : SV_DispatchThreadID) {
     float3 V = normalize(-viewPosition);
 
     // Directional light in view space (transform from world space)
-    float3 L = normalize(mul((float3x3)pc.sceneData->view, normalize(-pc.shadowData.mainLightDirection.xyz)));
+    float3 L = normalize(mul((float3x3)pc.sceneData->view, normalize(-pc.lightData.mainLightDirection.xyz)));
     float3 H = normalize(V + L);
 
     // SPECULAR: Cook-Torrance BRDF
@@ -56,11 +56,13 @@ void computeMain(uint3 threadID : SV_DispatchThreadID) {
     if (pc.packedCSMIndices == ~0x0) {
         shadowFactor = 1.0f;
     } else {
-        shadowFactor = getShadowFactor(viewPosition, N,  pc.sceneData, pc.shadowData, pc.packedCSMIndices, rdgTextures, rdgSamplers[pc.pointSamplerIndex], rdgCompareSamplers[pc.depthCompareSamplerIndex]);
+        shadowFactor = GetShadowFactor(viewPosition, N,  pc.sceneData, pc.shadowData, pc.packedCSMIndices, rdgTextures, rdgSamplers[pc.pointSamplerIndex], rdgCompareSamplers[pc.depthCompareSamplerIndex]);
     }
 
-    const float lightIntensity = 3.0f;
-    float3 directLight = (diffuse + specular) * nDotL * shadowFactor * lightIntensity;
+    const float lightIntensity = pc.lightData.mainLightDirection.w;
+    const float3 lightColor = pc.lightData.mainLightColor.rgb;
+    float3 directLight = (diffuse + specular) * nDotL * shadowFactor * lightIntensity * lightColor;
+
 
     // Ambient
     float3 ambient = albedo.xyz * 0.03;
