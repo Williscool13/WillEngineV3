@@ -22,7 +22,7 @@ class RenderPass;
 struct TextureResource;
 using TransientImageHandle = Core::Handle<TextureResource>;
 
-struct FrameCarryover
+struct TextureFrameCarryover
 {
     std::string srcName;
     std::string dstName;
@@ -31,6 +31,15 @@ struct FrameCarryover
     TextureInfo textInfo;
     VkImageLayout layout;
     VkImageUsageFlags accumulatedUsage;
+};
+struct BufferFrameCarryover
+{
+    std::string srcName;
+    std::string dstName;
+
+    VkBuffer buffer;
+    BufferInfo bufferInfo;
+    VkBufferUsageFlags accumulatedUsage;
 };
 
 class RenderGraph
@@ -82,7 +91,7 @@ public:
 
     uint32_t GetDescriptorIndex(const std::string& name);
 
-    VkBuffer GetBuffer(const std::string& name);
+    VkBuffer GetBufferHandle(const std::string& name);
 
     VkDeviceAddress GetBufferAddress(const std::string& name);
 
@@ -90,7 +99,9 @@ public:
 
     PipelineEvent GetBufferState(const std::string& name);
 
-    void CarryToNextFrame(const std::string& name, const std::string& newName, VkImageUsageFlags additionalUsage);
+    void CarryTextureToNextFrame(const std::string& name, const std::string& newName, VkImageUsageFlags additionalUsage);
+
+    void CarryBufferToNextFrame(const std::string& name, const std::string& newName, VkBufferUsageFlags additionalUsage);
 
 private:
     friend class RenderPass;
@@ -112,7 +123,8 @@ private:
     // Render passes
     std::vector<std::unique_ptr<RenderPass> > passes;
 
-    std::vector<FrameCarryover> carryovers;
+    std::vector<TextureFrameCarryover> textureCarryovers;
+    std::vector<BufferFrameCarryover> bufferCarryovers;
 
     bool debugLogging = false;
 
@@ -120,6 +132,8 @@ private:
     TextureResource* GetTexture(const std::string& name);
 
     TextureResource* GetOrCreateTexture(const std::string& name);
+
+    BufferResource* GetBuffer(const std::string& name);
 
     BufferResource* GetOrCreateBuffer(const std::string& name);
 

@@ -227,9 +227,15 @@ void RenderGraph::Compile(int64_t currentFrame)
                 auto& phys = physicalResources[i];
 
                 if (phys.bIsImported) continue;
+                if (!phys.bCanAlias) { continue; }
                 if (!phys.dimensions.IsBuffer()) continue;
 
                 if (phys.dimensions.bufferSize != desiredDim.bufferSize) continue;
+
+                // Cross-frame resources can't alias at all.
+                if (!buf.bCanUseAliasedBuffer && !phys.logicalResourceIndices.empty()) {
+                    continue;
+                }
 
                 // If already allocated, must be superset
                 if (phys.IsAllocated()) {
@@ -263,6 +269,7 @@ void RenderGraph::Compile(int64_t currentFrame)
                 physicalResources.emplace_back();
                 physicalResources.back().dimensions = desiredDim;
                 physicalResources.back().logicalResourceIndices.push_back(buf.index);
+                physicalResources.back().bCanAlias = buf.bCanUseAliasedBuffer;
                 physicalResources.back().lastLogicalResourceUse = buf.name;
             }
         }
@@ -748,13 +755,21 @@ void RenderGraph::PrepareSwapchain(VkCommandBuffer cmd, const std::string& name)
 
 void RenderGraph::Reset(uint64_t currentFrame, uint64_t maxFramesUnused)
 {
-    for (FrameCarryover& carryover : carryovers) {
-        if (TextureResource* tex = GetTexture(carryover.srcName)) {
-            PhysicalResource& phys = physicalResources[tex->physicalIndex];
+    for (TextureFrameCarryover& carryover : textureCarryovers) {
+        if (const TextureResource* tex = GetTexture(carryover.srcName)) {
+            const PhysicalResource& phys = physicalResources[tex->physicalIndex];
             carryover.physicalImage = phys.image;
             carryover.textInfo = tex->textureInfo;
             carryover.layout = tex->layout;
             carryover.accumulatedUsage = tex->accumulatedUsage;
+        }
+    }
+    for (BufferFrameCarryover& carryover : bufferCarryovers) {
+        if (const BufferResource* buf = GetBuffer(carryover.srcName)) {
+            const PhysicalResource& phys = physicalResources[buf->physicalIndex];
+            carryover.buffer = phys.buffer;
+            carryover.bufferInfo = buf->bufferInfo;
+            carryover.accumulatedUsage = buf->accumulatedUsage;
         }
     }
 
@@ -783,7 +798,7 @@ void RenderGraph::Reset(uint64_t currentFrame, uint64_t maxFramesUnused)
     }
     // ============================================================================ ======
 
-    for (auto& carryover : carryovers) {
+    for (auto& carryover : textureCarryovers) {
         uint32_t physicalIndex = UINT32_MAX;
         for (uint32_t i = 0; i < physicalResources.size(); i++) {
             if (physicalResources[i].image == carryover.physicalImage) {
@@ -799,16 +814,42 @@ void RenderGraph::Reset(uint64_t currentFrame, uint64_t maxFramesUnused)
 
         TextureResource* newTex = GetOrCreateTexture(carryover.dstName);
         newTex->textureInfo = carryover.textInfo;
-        newTex->physicalIndex = physicalIndex;
         newTex->layout = carryover.layout;
         newTex->accumulatedUsage = carryover.accumulatedUsage;
+        newTex->physicalIndex = physicalIndex;
 
         PhysicalResource& phys = physicalResources[physicalIndex];
         phys.logicalResourceIndices.push_back(newTex->index);
         phys.lastLogicalResourceUse = newTex->name;
         phys.bCanAlias = false;
     }
-    carryovers.clear();
+    textureCarryovers.clear();
+
+    for (auto& carryover : bufferCarryovers) {
+        uint32_t physicalIndex = UINT32_MAX;
+        for (uint32_t i = 0; i < physicalResources.size(); i++) {
+            if (physicalResources[i].buffer == carryover.buffer) {
+                physicalIndex = i;
+                break;
+            }
+        }
+
+        if (physicalIndex == UINT32_MAX) {
+            SPDLOG_ERROR("Carryover buffer '{}' physical resource not found", carryover.dstName);
+            continue;
+        }
+
+        BufferResource* newBuf = GetOrCreateBuffer(carryover.dstName);
+        newBuf->bufferInfo = carryover.bufferInfo;
+        newBuf->accumulatedUsage = carryover.accumulatedUsage;
+        newBuf->physicalIndex = physicalIndex;
+
+        PhysicalResource& phys = physicalResources[physicalIndex];
+        phys.logicalResourceIndices.push_back(newBuf->index);
+        phys.lastLogicalResourceUse = newBuf->name;
+        phys.bCanAlias = false;
+    }
+    bufferCarryovers.clear();
 }
 
 void RenderGraph::InvalidateAll()
@@ -825,12 +866,19 @@ void RenderGraph::InvalidateAll()
     }
     physicalResources.clear();
     transientImageHandleAllocator.Clear();
-    carryovers.clear();
+    textureCarryovers.clear();
 }
 
 void RenderGraph::CreateTexture(const std::string& name, const TextureInfo& texInfo)
 {
     TextureResource* resource = GetOrCreateTexture(name);
+
+    if (resource->textureInfo.format != VK_FORMAT_UNDEFINED) {
+        assert(resource->textureInfo.format == texInfo.format && "Texture format mismatch");
+        assert(resource->textureInfo.width == texInfo.width && "Texture width mismatch");
+        assert(resource->textureInfo.height == texInfo.height && "Texture height mismatch");
+    }
+
     assert(texInfo.format != VK_FORMAT_UNDEFINED && "Texture info uses undefined format");
     resource->textureInfo = texInfo;
 }
@@ -838,6 +886,10 @@ void RenderGraph::CreateTexture(const std::string& name, const TextureInfo& texI
 void RenderGraph::CreateBuffer(const std::string& name, VkDeviceSize size)
 {
     BufferResource* buf = GetOrCreateBuffer(name);
+
+    if (buf->bufferInfo.size != 0) {
+        assert(buf->bufferInfo.size == size && "Buffer size mismatch");
+    }
 
     buf->bufferInfo.size = size;
 }
@@ -1038,7 +1090,7 @@ uint32_t RenderGraph::GetDescriptorIndex(const std::string& name)
     return physicalResources[tex.physicalIndex].descriptorHandle.index;
 }
 
-VkBuffer RenderGraph::GetBuffer(const std::string& name)
+VkBuffer RenderGraph::GetBufferHandle(const std::string& name)
 {
     auto it = bufferNameToIndex.find(name);
     assert(it != bufferNameToIndex.end() && "Buffer not found");
@@ -1080,17 +1132,46 @@ PipelineEvent RenderGraph::GetBufferState(const std::string& name)
     return physicalResources[buf.physicalIndex].event;
 }
 
-void RenderGraph::CarryToNextFrame(const std::string& name, const std::string& newName, VkImageUsageFlags additionalUsage)
+void RenderGraph::CarryTextureToNextFrame(const std::string& name, const std::string& newName, VkImageUsageFlags additionalUsage)
 {
     TextureResource* tex = GetOrCreateTexture(name);
     tex->bCanUseAliasedTexture = false;
     tex->accumulatedUsage |= additionalUsage;
-    for (const auto& c : carryovers) {
-        assert(c.srcName != name && "Source texture already designated for carryover");
-        assert(c.dstName != newName && "Destination name already used in another carryover");
+
+    if (tex->physicalIndex != UINT32_MAX) {
+        auto& phys = physicalResources[tex->physicalIndex];
+        if (phys.IsAllocated()) {
+            assert((phys.dimensions.bufferUsage & additionalUsage) == additionalUsage && "Existing physical texture usage is not a superset of required usage");
+        }
     }
 
-    carryovers.emplace_back(name, newName);
+    for (const auto& c : textureCarryovers) {
+        assert(c.srcName != name && "Source texture already designated for carryover");
+        assert(c.dstName != newName && "Destination texture name already used in another carryover");
+    }
+
+    textureCarryovers.emplace_back(name, newName);
+}
+
+void RenderGraph::CarryBufferToNextFrame(const std::string& name, const std::string& newName, VkBufferUsageFlags additionalUsage)
+{
+    BufferResource* buf = GetOrCreateBuffer(name);
+    buf->bCanUseAliasedBuffer = false;
+    buf->accumulatedUsage |= additionalUsage;
+
+    if (buf->physicalIndex != UINT32_MAX) {
+        auto& phys = physicalResources[buf->physicalIndex];
+        if (phys.IsAllocated()) {
+            assert((phys.dimensions.bufferUsage & additionalUsage) == additionalUsage && "Existing physical buffer usage is not a superset of required usage");
+        }
+    }
+
+    for (const auto& c : bufferCarryovers) {
+        assert(c.srcName != name && "Source buffer already designated for carryover");
+        assert(c.dstName != newName && "Destination buffer name already used in another carryover");
+    }
+
+    bufferCarryovers.emplace_back(name, newName);
 }
 
 void RenderGraph::LogImageBarrier(const VkImageMemoryBarrier2& barrier, const std::string& resourceName, uint32_t physicalIndex) const
@@ -1156,6 +1237,16 @@ TextureResource* RenderGraph::GetOrCreateTexture(const std::string& name)
     textureNameToIndex[name] = index;
 
     return &textures[index];
+}
+
+BufferResource* RenderGraph::GetBuffer(const std::string& name)
+{
+    auto it = bufferNameToIndex.find(name);
+    if (it != bufferNameToIndex.end()) {
+        return &buffers[it->second];
+    }
+
+    return nullptr;
 }
 
 BufferResource* RenderGraph::GetOrCreateBuffer(const std::string& name)

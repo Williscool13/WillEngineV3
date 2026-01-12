@@ -251,23 +251,38 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     renderGraph->CreateTexture("velocityTarget", {GBUFFER_MOTION_FORMAT, renderExtent[0], renderExtent[1],});
     renderGraph->CreateTexture("depthTarget", {VK_FORMAT_D32_SFLOAT, renderExtent[0], renderExtent[1]});
 
-    if (frameBuffer.mainViewFamily.shadowConfig.enabled) {
+    bool bHasShadows = frameBuffer.mainViewFamily.shadowConfig.enabled && !viewFamily.instances.empty();
+    if (bHasShadows) {
         SetupCascadedShadows(*renderGraph, viewFamily);
     }
 
-    if (!frameBuffer.bFreezeVisibility) {
+    if (frameBuffer.bFreezeVisibility) {
+        if (!bFrozenVisibility) {
+            // Note that freezing visibility will freeze to the main camera's frustum.
+            //   Shadows will render main camera's visible instances, so some shadows may be missing.
+            SetupInstancing(*renderGraph, viewFamily);
+            bFrozenVisibility = true;
+        }
+
+        renderGraph->CarryBufferToNextFrame("compactedInstanceBuffer", "compactedInstanceBuffer", 0);
+        renderGraph->CarryBufferToNextFrame("indirectBuffer", "indirectBuffer", 0);
+        renderGraph->CarryBufferToNextFrame("indirectCountBuffer", "indirectCountBuffer", 0);
+    }
+    else {
         SetupInstancing(*renderGraph, viewFamily);
+        bFrozenVisibility = false;
     }
     SetupMainGeometryPass(*renderGraph, viewFamily);
 
     // IN : albedoTarget, normalTarget, pbrTarget, depthTarget, shadowCascade_0, shadowCascade_1, shadowCascade_2, shadowCascade_3
     // OUT: deferredResolve
-    SetupDeferredLighting(*renderGraph, viewFamily, renderExtent, frameBuffer.mainViewFamily.shadowConfig.enabled);
+
+    SetupDeferredLighting(*renderGraph, viewFamily, renderExtent, bHasShadows);
 
     // IN : deferredResolve
     // OUT: taaCurrent, taaOutput
     SetupTemporalAntialiasing(*renderGraph, viewFamily, renderExtent);
-    renderGraph->CarryToNextFrame("taaCurrent", "taaHistory", VK_IMAGE_USAGE_SAMPLED_BIT);
+    renderGraph->CarryTextureToNextFrame("taaCurrent", "taaHistory", VK_IMAGE_USAGE_SAMPLED_BIT);
 
     SetupPostProcessing(*renderGraph, viewFamily, renderExtent);
 
@@ -281,13 +296,13 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         countCopy.srcOffset = 0;
         countCopy.dstOffset = 0;
         countCopy.size = sizeof(uint32_t);
-        vkCmdCopyBuffer(cmd, renderGraph->GetBuffer("indirectCountBuffer"), renderGraph->GetBuffer("debugReadbackBuffer"), 1, &countCopy);
+        vkCmdCopyBuffer(cmd, renderGraph->GetBufferHandle("indirectCountBuffer"), renderGraph->GetBufferHandle("debugReadbackBuffer"), 1, &countCopy);
 
         VkBufferCopy indirectCopy{};
         indirectCopy.srcOffset = 0;
         indirectCopy.dstOffset = sizeof(uint32_t);
         indirectCopy.size = 10 * sizeof(InstancedMeshIndirectDrawParameters);
-        vkCmdCopyBuffer(cmd, renderGraph->GetBuffer("indirectBuffer"), renderGraph->GetBuffer("debugReadbackBuffer"), 1, &indirectCopy);
+        vkCmdCopyBuffer(cmd, renderGraph->GetBufferHandle("indirectBuffer"), renderGraph->GetBufferHandle("debugReadbackBuffer"), 1, &indirectCopy);
     });
 #endif
 
@@ -670,25 +685,27 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFami
 
     for (int32_t cascadeLevel = 0; cascadeLevel < SHADOW_CASCADE_COUNT; ++cascadeLevel) {
         std::string shadowMapName = "shadowCascade_" + std::to_string(cascadeLevel);
-        std::string clearPassName = "ClearShadowBuffers_" + std::to_string(cascadeLevel);
-        std::string visPassName = "ShadowVisibility_" + std::to_string(cascadeLevel);
-        std::string prefixPassName = "ShadowPrefixSum_" + std::to_string(cascadeLevel);
-        std::string indirectPassName = "ShadowIndirectConstruction_" + std::to_string(cascadeLevel);
         std::string shadowPassName = "ShadowCascadePass_" + std::to_string(cascadeLevel);
 
         graph.CreateTexture(shadowMapName, {SHADOW_CASCADE_FORMAT, shadowConfig.cascadePreset.extents[cascadeLevel].width, shadowConfig.cascadePreset.extents[cascadeLevel].height});
 
-        RenderPass& clearPass = graph.AddPass(clearPassName, VK_PIPELINE_STAGE_2_CLEAR_BIT);
-        clearPass.WriteTransferBuffer("packedVisibilityBuffer");
-        clearPass.WriteTransferBuffer("primitiveCountBuffer");
-        clearPass.WriteTransferBuffer("indirectCountBuffer");
-        clearPass.Execute([&](VkCommandBuffer cmd) {
-            vkCmdFillBuffer(cmd, graph.GetBuffer("packedVisibilityBuffer"), 0, VK_WHOLE_SIZE, 0);
-            vkCmdFillBuffer(cmd, graph.GetBuffer("primitiveCountBuffer"), 0, VK_WHOLE_SIZE, 0);
-            vkCmdFillBuffer(cmd, graph.GetBuffer("indirectCountBuffer"), 0, VK_WHOLE_SIZE, 0);
-        });
+        if (!bFrozenVisibility) {
+            std::string clearPassName = "ClearShadowBuffers_" + std::to_string(cascadeLevel);
+            std::string visPassName = "ShadowVisibility_" + std::to_string(cascadeLevel);
+            std::string prefixPassName = "ShadowPrefixSum_" + std::to_string(cascadeLevel);
+            std::string indirectPassName = "ShadowIndirectConstruction_" + std::to_string(cascadeLevel);
 
-        if (!viewFamily.instances.empty()) {
+
+            RenderPass& clearPass = graph.AddPass(clearPassName, VK_PIPELINE_STAGE_2_CLEAR_BIT);
+            clearPass.WriteTransferBuffer("packedVisibilityBuffer");
+            clearPass.WriteTransferBuffer("primitiveCountBuffer");
+            clearPass.WriteTransferBuffer("indirectCountBuffer");
+            clearPass.Execute([&](VkCommandBuffer cmd) {
+                vkCmdFillBuffer(cmd, graph.GetBufferHandle("packedVisibilityBuffer"), 0, VK_WHOLE_SIZE, 0);
+                vkCmdFillBuffer(cmd, graph.GetBufferHandle("primitiveCountBuffer"), 0, VK_WHOLE_SIZE, 0);
+                vkCmdFillBuffer(cmd, graph.GetBufferHandle("indirectCountBuffer"), 0, VK_WHOLE_SIZE, 0);
+            });
+
             RenderPass& visibilityPass = graph.AddPass(visPassName, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
             visibilityPass.ReadBuffer("primitiveBuffer");
             visibilityPass.ReadBuffer("modelBuffer");
@@ -798,8 +815,8 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFami
                                0, sizeof(ShadowMeshShadingPushConstant), &pushConstants);
 
             vkCmdDrawMeshTasksIndirectCountEXT(cmd,
-                                               graph.GetBuffer("indirectBuffer"), 0,
-                                               graph.GetBuffer("indirectCountBuffer"), 0,
+                                               graph.GetBufferHandle("indirectBuffer"), 0,
+                                               graph.GetBufferHandle("indirectCountBuffer"), 0,
                                                MEGA_PRIMITIVE_BUFFER_COUNT,
                                                sizeof(InstancedMeshIndirectDrawParameters));
 
@@ -815,9 +832,9 @@ void RenderThread::SetupInstancing(RenderGraph& graph, const Core::ViewFamily& v
     clearPass.WriteTransferBuffer("primitiveCountBuffer");
     clearPass.WriteTransferBuffer("indirectCountBuffer");
     clearPass.Execute([&](VkCommandBuffer cmd) {
-        vkCmdFillBuffer(cmd, graph.GetBuffer("packedVisibilityBuffer"), 0, VK_WHOLE_SIZE, 0);
-        vkCmdFillBuffer(cmd, graph.GetBuffer("primitiveCountBuffer"), 0, VK_WHOLE_SIZE, 0);
-        vkCmdFillBuffer(cmd, graph.GetBuffer("indirectCountBuffer"), 0, VK_WHOLE_SIZE, 0);
+        vkCmdFillBuffer(cmd, graph.GetBufferHandle("packedVisibilityBuffer"), 0, VK_WHOLE_SIZE, 0);
+        vkCmdFillBuffer(cmd, graph.GetBufferHandle("primitiveCountBuffer"), 0, VK_WHOLE_SIZE, 0);
+        vkCmdFillBuffer(cmd, graph.GetBufferHandle("indirectCountBuffer"), 0, VK_WHOLE_SIZE, 0);
     });
 
     if (!viewFamily.instances.empty()) {
@@ -944,8 +961,8 @@ void RenderThread::SetupMainGeometryPass(RenderGraph& graph, const Core::ViewFam
                            0, sizeof(InstancedMeshShadingPushConstant), &pushConstants);
 
         vkCmdDrawMeshTasksIndirectCountEXT(cmd,
-                                           graph.GetBuffer("indirectBuffer"), 0,
-                                           graph.GetBuffer("indirectCountBuffer"), 0,
+                                           graph.GetBufferHandle("indirectBuffer"), 0,
+                                           graph.GetBufferHandle("indirectCountBuffer"), 0,
                                            MEGA_PRIMITIVE_BUFFER_COUNT,
                                            sizeof(InstancedMeshIndirectDrawParameters));
 

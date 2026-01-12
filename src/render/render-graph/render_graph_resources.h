@@ -112,9 +112,9 @@ struct TextureResource
     bool bCanUseAliasedTexture = true;
 
     TextureInfo textureInfo;
-
     VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
     VkImageUsageFlags accumulatedUsage;
+
     uint32_t firstPass = UINT32_MAX;
     uint32_t lastPass = 0;
 
@@ -135,10 +135,12 @@ struct BufferResource
 {
     std::string name;
     uint32_t index = UINT32_MAX;
-    BufferInfo bufferInfo = {};
     uint32_t physicalIndex = UINT32_MAX;
+    bool bCanUseAliasedBuffer = true;
 
+    BufferInfo bufferInfo = {};
     VkBufferUsageFlags accumulatedUsage = 0;
+
     uint32_t firstPass = UINT32_MAX;
     uint32_t lastPass = 0;
 
