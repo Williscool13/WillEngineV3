@@ -919,6 +919,7 @@ void RenderGraph::InvalidateAll()
     physicalResources.clear();
     transientImageHandleAllocator.Clear();
     textureCarryovers.clear();
+    bufferCarryovers.clear();
 }
 
 void RenderGraph::CreateTexture(const std::string& name, const TextureInfo& texInfo)
@@ -1129,7 +1130,8 @@ VkImageView RenderGraph::GetImageView(const std::string& name)
     return physicalResources[tex.physicalIndex].imageView;
 }
 
-VkImageView RenderGraph::GetImageViewMip(const std::string& name, uint32_t mipLevel) {
+VkImageView RenderGraph::GetImageViewMip(const std::string& name, uint32_t mipLevel)
+{
     auto it = textureNameToIndex.find(name);
     assert(it != textureNameToIndex.end() && "Texture not found");
     assert(mipLevel < RDG_MAX_MIP_LEVELS);
