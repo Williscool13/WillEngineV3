@@ -54,9 +54,7 @@ float3 LottesTonemapSimple(float3 c) {
 [numthreads(16, 16, 1)]
 void ComputeSDRTonemap(uniform TonemapSDRPushConstant pc, uint3 threadId : SV_DispatchThreadID) {
     int2 texelCoord = int2(threadId.xy);
-
-    float2 uv = (float2(texelCoord) + 0.5) / float2(pc.outputWidth, pc.outputHeight);
-    float3 hdrColor = rdgTextures[pc.srcImageIndex].SampleLevel(rdgSamplers[pc.linearSamplerIndex], uv, 0).rgb;
+    float3 hdrColor = rdgTextures[pc.srcImageIndex].Load(int3(texelCoord, 0)).rgb;
 
     float3 ldrColor;
     switch (pc.tonemapOperator) {
@@ -80,17 +78,38 @@ void ComputeSDRTonemap(uniform TonemapSDRPushConstant pc, uint3 threadId : SV_Di
     rdgRenderTextures[pc.dstImageIndex][texelCoord] = float4(ldrColor, 1.0);
 }
 
-// [numthreads(16, 16, 1)]
-// void ComputeExposureDownsample(uniform ExposureDownsamplePushConstant pc, uint3 tid : SV_DispatchThreadID) {
-//     uint2 srcCoord = tid.xy * 2;
-//
-//     float sum = 0;
-//
-//     [ForceUnroll]
-//     for (int i = 0; i < 4; i++) {
-//         uint2 offset = uint2(i & 1, i >> 1);
-//         sum += rdgRenderTextures[pc.srcImageIndex].Load(int3(srcCoord + offset, pc.srcMipLevel));
-//     }
-//
-//     rdgRenderTextures[pc.dstImageIndex][tid.xy] = sum * 0.25;
-// }
+
+// ==================== Exposure ====================
+groupshared uint sharedHistogram[256];
+
+uint HDRToHistogramBin(float3 hdrColor, float minLogLuminance, float oneOverLogLuminanceRange)
+{
+    static const float EPSILON = 0.005;
+
+    float luminance = dot(hdrColor, float3(0.2126, 0.7152, 0.0722));
+
+    if (luminance < EPSILON)
+    {
+        return 0;
+    }
+
+    float logLuminance = saturate((log2(luminance) - minLogLuminance) * oneOverLogLuminanceRange);
+    return uint(logLuminance * 254.0 + 1.0);
+}
+
+[numthreads(16, 16, 1)]
+void ComputeBuildHistogramExposure(uniform HistogramBuildPushConstant pc, uint3 tid : SV_DispatchThreadID, uint groupIndex : SV_GroupIndex) {
+    sharedHistogram[groupIndex] = 0;
+
+    GroupMemoryBarrierWithGroupSync();
+
+    if (tid.x < pc.width && tid.y < pc.height) {
+        float3 hdrColor = rdgTextures[pc.hdrImageIndex].Load(int3(tid.xy, 0)).rgb;
+        uint binIndex = HDRToHistogramBin(hdrColor, pc.minLogLuminance, pc.oneOverLogLuminanceRange);
+        InterlockedAdd(sharedHistogram[binIndex], 1);
+    }
+    GroupMemoryBarrierWithGroupSync();
+
+
+    InterlockedAdd(pc.histogramBufferAddress[groupIndex], sharedHistogram[groupIndex]);
+}

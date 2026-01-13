@@ -177,6 +177,11 @@ target_compile_definitions(tracy PRIVATE TRACY_EXPORTS)
 #   - Or just this if you're in the build folder
 #     cmake --build . --target shader_interop
 
+#   - Recompile shaders with
+#     cmake --build cmake-build-debug-visual-studio --target will-engine_shaders
+#   - Or just this if you're in the build folder
+#     cmake --build . --target will-engine_shaders
+
 preprocess_shader_interop(
         ${CMAKE_SOURCE_DIR}/src/render/shaders/common_interop.h
         ${CMAKE_SOURCE_DIR}/shaders/common_interop.slang
@@ -211,11 +216,6 @@ preprocess_shader_interop(
 get_property(INTEROP_FILES GLOBAL PROPERTY SHADER_INTEROP_FILES)
 add_custom_target(shader_interop DEPENDS ${INTEROP_FILES})
 
-add_custom_target(regenerate_interop
-        COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target shader_interop
-        COMMENT "Regenerating all shader interop files"
-)
-
 set_property(GLOBAL PROPERTY SHADER_INCLUDE_FILES "")
 
 function(add_shader_include INCLUDE_FILE)
@@ -243,6 +243,7 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/deferredResolve.slang compute ComputeMain
         ${CMAKE_SOURCE_DIR}/shaders/temporalAntialiasing.slang compute ComputeMain
         ${CMAKE_SOURCE_DIR}/shaders/postprocess.slang compute ComputeSDRTonemap tonemapSDR
+        ${CMAKE_SOURCE_DIR}/shaders/postprocess.slang compute ComputeBuildHistogramExposure buildHistogramExposure
 )
 
 # Post-Build Commands =========================

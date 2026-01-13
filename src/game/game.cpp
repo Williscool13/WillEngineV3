@@ -96,7 +96,7 @@ GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* stat
                 }
             }
 
-            ImGui::SliderFloat("Intensity", &state->shadowConfig.shadowIntensity, 0.0f, 1.0f);
+            ImGui::SliderFloat("Shadow Intensity", &state->shadowConfig.shadowIntensity, 0.0f, 1.0f);
 
 
             // Display current preset data (read-only)

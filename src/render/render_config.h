@@ -53,6 +53,8 @@ inline constexpr int32_t INSTANCING_COMPACTED_INSTANCE_BUFFER_SIZE = sizeof(Inst
 inline constexpr int32_t INSTANCING_MESH_INDIRECT_COUNT = sizeof(InstancedMeshIndirectCountBuffer);
 inline constexpr int32_t INSTANCING_MESH_INDIRECT_PARAMETERS = sizeof(InstancedMeshIndirectDrawParameters) * MEGA_PRIMITIVE_BUFFER_COUNT;
 
+inline constexpr int32_t POST_PROCESS_LUMINANCE_BUFFER_SIZE = sizeof(uint32_t) * POST_PROCESS_LUMINANCE_DISPATCH_X * POST_PROCESS_LUMINANCE_DISPATCH_Y;
+
 inline constexpr uint32_t HALTON_SEQUENCE_COUNT = 16;
 
 struct HaltonSample

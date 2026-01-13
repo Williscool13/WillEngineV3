@@ -387,16 +387,6 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
         }
         ImGui::Text("Hello!");
 
-        /*if (ImGui::CollapsingHeader("Visibility Debug")) {
-            PrimitiveCount* data = static_cast<PrimitiveCount*>(renderThread->GetResourceManager()->debugReadbackBuffer.allocationInfo.pMappedData);
-
-            for (int i = 0; i < 2; i++) {
-                uint32_t count = data[i].count;
-                uint32_t offset = data[i].offset;
-                ImGui::Text("Primitive %d: count=%u, offset=%u", i, count, offset);
-            }
-        }*/
-
         if (ImGui::CollapsingHeader("Visibility Debug")) {
             uint8_t* data = static_cast<uint8_t*>(renderThread->GetResourceManager()->debugReadbackBuffer.allocationInfo.pMappedData);
 
@@ -411,6 +401,21 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
                     ImGui::Text("Instance Start: %u", params[i].compactedInstanceStart);
                     ImGui::Text("Meshlet Offset: %u, Count: %u", params[i].meshletOffset, params[i].meshletCount);
                     ImGui::TreePop();
+                }
+            }
+        }
+
+        if (ImGui::CollapsingHeader("Luminance Histogram")) {
+            uint8_t* data = static_cast<uint8_t*>(renderThread->GetResourceManager()->debugReadbackBuffer.allocationInfo.pMappedData);
+            size_t histogramOffset = sizeof(uint32_t) + 10 * sizeof(InstancedMeshIndirectDrawParameters);
+            uint32_t* histogram = reinterpret_cast<uint32_t*>(data + histogramOffset);
+
+            ImGui::Text("First 64 bins (8x8):");
+            for (int row = 0; row < 8; row++) {
+                for (int col = 0; col < 8; col++) {
+                    int bin = row * 8 + col;
+                    ImGui::Text("%5u", histogram[bin]);
+                    if (col < 7) ImGui::SameLine();
                 }
             }
         }

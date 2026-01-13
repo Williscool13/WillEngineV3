@@ -117,6 +117,7 @@ void RenderGraph::CalculateLifetimes()
 
         for (auto& buf : pass->bufferReads) { UpdateBufferLifetime(buf); }
         for (auto& buf : pass->bufferWrites) { UpdateBufferLifetime(buf); }
+        for (auto& buf : pass->bufferReadWrite) { UpdateBufferLifetime(buf); }
         for (auto& buf : pass->bufferReadTransfer) { UpdateBufferLifetime(buf); }
         for (auto& buf : pass->bufferWriteTransfer) { UpdateBufferLifetime(buf); }
         for (auto& buf : pass->bufferIndirectReads) { UpdateBufferLifetime(buf); }
@@ -492,6 +493,25 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
             bufferBarriers.push_back(barrier);
             LogBufferBarrier(buf->name, desiredAccess);
         }
+        for (auto& buf : pass->bufferReadWrite) {
+            auto& phys = physicalResources[buf->physicalIndex];
+            if (phys.bDisableBarriers) { continue; }
+
+            VkAccessFlags2 desiredAccess = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT;
+
+            VkBufferMemoryBarrier2 barrier = {
+                .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+                .srcStageMask = phys.event.stages,
+                .srcAccessMask = phys.event.access,
+                .dstStageMask = pass->stages,
+                .dstAccessMask = desiredAccess,
+                .buffer = phys.buffer,
+                .offset = 0,
+                .size = VK_WHOLE_SIZE
+            };
+            bufferBarriers.push_back(barrier);
+            LogBufferBarrier(buf->name, desiredAccess);
+        }
         for (auto& bufWrite : pass->bufferWriteTransfer) {
             auto& phys = physicalResources[bufWrite->physicalIndex];
             if (phys.bDisableBarriers) { continue; }
@@ -692,21 +712,25 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
             phys.event.access = VK_ACCESS_2_TRANSFER_READ_BIT;
         }
 
+        for (auto& bufRead : pass->bufferReads) {
+            auto& phys = physicalResources[bufRead->physicalIndex];
+            phys.event.stages = pass->stages;
+            phys.event.access = VK_ACCESS_2_SHADER_READ_BIT;
+        }
         for (auto& bufWrite : pass->bufferWrites) {
             auto& phys = physicalResources[bufWrite->physicalIndex];
             phys.event.stages = pass->stages;
             phys.event.access = VK_ACCESS_2_SHADER_WRITE_BIT;
         }
+        for (auto& bufWrite : pass->bufferReadWrite) {
+            auto& phys = physicalResources[bufWrite->physicalIndex];
+            phys.event.stages = pass->stages;
+            phys.event.access = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT;;
+        }
         for (auto& bufWrite : pass->bufferWriteTransfer) {
             auto& phys = physicalResources[bufWrite->physicalIndex];
             phys.event.stages = pass->stages;
             phys.event.access = VK_ACCESS_2_TRANSFER_WRITE_BIT;
-        }
-
-        for (auto& bufRead : pass->bufferReads) {
-            auto& phys = physicalResources[bufRead->physicalIndex];
-            phys.event.stages = pass->stages;
-            phys.event.access = VK_ACCESS_2_SHADER_READ_BIT;
         }
 
         for (auto& bufRead : pass->bufferReadTransfer) {
@@ -1075,6 +1099,12 @@ bool RenderGraph::HasTexture(const std::string& name)
 {
     auto it = textureNameToIndex.find(name);
     return it != textureNameToIndex.end();
+}
+
+bool RenderGraph::HasBuffer(const std::string& name)
+{
+    auto it = bufferNameToIndex.find(name);
+    return it != bufferNameToIndex.end();
 }
 
 VkImage RenderGraph::GetImage(const std::string& name)

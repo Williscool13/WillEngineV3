@@ -283,12 +283,13 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     SetupTemporalAntialiasing(*renderGraph, viewFamily, renderExtent);
     renderGraph->CarryTextureToNextFrame("taaCurrent", "taaHistory", VK_IMAGE_USAGE_SAMPLED_BIT);
 
-    SetupPostProcessing(*renderGraph, viewFamily, renderExtent);
+    SetupPostProcessing(*renderGraph, viewFamily, renderExtent, frameBuffer.timeFrame.renderDeltaTime);
 
 #if WILL_EDITOR
     RenderPass& readbackPass = renderGraph->AddPass("DebugReadback", VK_PIPELINE_STAGE_2_COPY_BIT);
     readbackPass.ReadTransferBuffer("indirectBuffer");
     readbackPass.ReadTransferBuffer("indirectCountBuffer");
+    readbackPass.ReadTransferBuffer("luminanceHistogram");
     readbackPass.WriteTransferBuffer("debugReadbackBuffer");
     readbackPass.Execute([&](VkCommandBuffer cmd) {
         VkBufferCopy countCopy{};
@@ -302,6 +303,12 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         indirectCopy.dstOffset = sizeof(uint32_t);
         indirectCopy.size = 10 * sizeof(InstancedMeshIndirectDrawParameters);
         vkCmdCopyBuffer(cmd, renderGraph->GetBufferHandle("indirectBuffer"), renderGraph->GetBufferHandle("debugReadbackBuffer"), 1, &indirectCopy);
+
+        VkBufferCopy histogramCopy{};
+        histogramCopy.srcOffset = 0;
+        histogramCopy.dstOffset = sizeof(uint32_t) + 10 * sizeof(InstancedMeshIndirectDrawParameters);
+        histogramCopy.size = 256 * sizeof(uint32_t);
+        vkCmdCopyBuffer(cmd, renderGraph->GetBufferHandle("luminanceHistogram"), renderGraph->GetBufferHandle("debugReadbackBuffer"), 1, &histogramCopy);
     });
 #endif
 
@@ -539,6 +546,9 @@ void RenderThread::CreatePipelines()
         pushConstant.size = sizeof(IndirectWritePushConstant);
         instancingIndirectConstructionPipeline = ComputePipeline(context.get(), piplineLayoutCreateInfo, Platform::GetShaderPath() / "instancingCompactAndGenerateIndirect_compute.spv");
 
+        pushConstant.size = sizeof(HistogramBuildPushConstant);
+        histogramBuildPipeline = ComputePipeline(context.get(), piplineLayoutCreateInfo, Platform::GetShaderPath() / "buildHistogramExposure_compute.spv");
+
         pushConstant.size = sizeof(TonemapSDRPushConstant);
         tonemapSDRPipeline = ComputePipeline(context.get(), piplineLayoutCreateInfo, Platform::GetShaderPath() / "tonemapSDR_compute.spv");
     }
@@ -696,7 +706,7 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFami
             std::string indirectPassName = "ShadowIndirectConstruction_" + std::to_string(cascadeLevel);
 
 
-            RenderPass& clearPass = graph.AddPass(clearPassName, VK_PIPELINE_STAGE_2_CLEAR_BIT);
+            RenderPass& clearPass = graph.AddPass(clearPassName, VK_PIPELINE_STAGE_2_TRANSFER_BIT);
             clearPass.WriteTransferBuffer("packedVisibilityBuffer");
             clearPass.WriteTransferBuffer("primitiveCountBuffer");
             clearPass.WriteTransferBuffer("indirectCountBuffer");
@@ -827,7 +837,7 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFami
 
 void RenderThread::SetupInstancing(RenderGraph& graph, const Core::ViewFamily& viewFamily) const
 {
-    RenderPass& clearPass = graph.AddPass("ClearInstancingBuffers", VK_PIPELINE_STAGE_2_CLEAR_BIT);
+    RenderPass& clearPass = graph.AddPass("ClearInstancingBuffers", VK_PIPELINE_STAGE_2_TRANSFER_BIT);
     clearPass.WriteTransferBuffer("packedVisibilityBuffer");
     clearPass.WriteTransferBuffer("primitiveCountBuffer");
     clearPass.WriteTransferBuffer("indirectCountBuffer");
@@ -1130,8 +1140,66 @@ void RenderThread::SetupTemporalAntialiasing(RenderGraph& graph, const Core::Vie
     });
 }
 
-void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamily& viewFamily, const std::array<uint32_t, 2> renderExtent) const
+void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamily& viewFamily, const std::array<uint32_t, 2> renderExtent, float deltaTime) const
 {
+    // Exposure
+    {
+        renderGraph->CreateBuffer("luminanceHistogram", POST_PROCESS_LUMINANCE_BUFFER_SIZE);
+
+        if (!graph.HasBuffer("exposureBuffer")) {
+            renderGraph->CreateBuffer("exposureBuffer", sizeof(float));
+        }
+        renderGraph->CarryBufferToNextFrame("exposureBuffer", "exposureBuffer", 0);
+
+        auto& clearPass = graph.AddPass("Clear Histogram", VK_PIPELINE_STAGE_TRANSFER_BIT);
+        clearPass.WriteTransferBuffer("luminanceHistogram");
+        clearPass.Execute([&](VkCommandBuffer cmd) {
+            vkCmdFillBuffer(cmd, graph.GetBufferHandle("luminanceHistogram"), 0, VK_WHOLE_SIZE, 0);
+        });
+
+        auto& histogramPass = graph.AddPass("Build Histogram", VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+        histogramPass.ReadSampledImage("taaOutput");
+        histogramPass.WriteBuffer("luminanceHistogram");
+        histogramPass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
+            constexpr float minLogLuminance = -10.0;
+            constexpr float maxLogLuminance = 2.0;
+            constexpr float logLuminanceRange = maxLogLuminance - minLogLuminance;
+            constexpr float oneOverLogLuminanceRange = 1.0 / logLuminanceRange;
+            HistogramBuildPushConstant pc{
+                .hdrImageIndex = graph.GetSampledImageViewDescriptorIndex("taaOutput"),
+                .histogramBufferAddress = graph.GetBufferAddress("luminanceHistogram"),
+                .width = width,
+                .height = height,
+                .minLogLuminance = minLogLuminance,
+                .oneOverLogLuminanceRange = oneOverLogLuminanceRange,
+            };
+
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, histogramBuildPipeline.pipeline.handle);
+            vkCmdPushConstants(cmd, histogramBuildPipeline.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(HistogramBuildPushConstant), &pc);
+            uint32_t xDispatch = (width + POST_PROCESS_LUMINANCE_DISPATCH_X - 1) / POST_PROCESS_LUMINANCE_DISPATCH_X;
+            uint32_t yDispatch = (height + POST_PROCESS_LUMINANCE_DISPATCH_Y - 1) / POST_PROCESS_LUMINANCE_DISPATCH_Y;
+            vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
+        });
+
+        auto& exposurePass = graph.AddPass("Calculate Exposure", VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+        exposurePass.ReadBuffer("luminanceHistogram");
+        exposurePass.ReadWriteBuffer("exposureBuffer");
+        /*exposurePass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
+            ExposureCalculatePushConstant pc{};
+            pc.histogramBufferAddress = graph.GetBufferAddress("luminanceHistogram");
+            pc.exposureBufferAddress = graph.GetBufferAddress("exposureBuffer");
+            pc.targetPercentile = 0.9f;
+            pc.minExposure = 0.3f;
+            pc.maxExposure = 3.0f;
+            pc.adaptationSpeed = 1.0f * deltaTime;
+            pc.totalPixels = width * height;
+
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, exposureCalculatePipeline.pipeline.handle);
+            vkCmdPushConstants(cmd, exposureCalculatePipeline.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            vkCmdDispatch(cmd, 1, 1, 1);
+        });*/
+    }
+
     // todo: add support for HDR swapchain
     // "postHDRImage"
     graph.CreateTexture("finalImage", TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
@@ -1140,75 +1208,19 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
     tonemapPass.ReadSampledImage("taaOutput");
     tonemapPass.WriteStorageImage("finalImage");
     tonemapPass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, tonemapSDRPipeline.pipeline.handle);
-
         TonemapSDRPushConstant pushData{
             .tonemapOperator = viewFamily.tonemapOperator,
             .outputWidth = width,
             .outputHeight = height,
             .srcImageIndex = graph.GetSampledImageViewDescriptorIndex("taaOutput"),
             .dstImageIndex = graph.GetStorageImageViewDescriptorIndex("finalImage"),
-            .pointSamplerIndex = resourceManager->pointSamplerIndex,
-            .linearSamplerIndex = resourceManager->linearSamplerIndex,
         };
 
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, tonemapSDRPipeline.pipeline.handle);
         vkCmdPushConstants(cmd, tonemapSDRPipeline.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(TonemapSDRPushConstant), &pushData);
-
         uint32_t xDispatch = (width + 15) / 16;
         uint32_t yDispatch = (height + 15) / 16;
         vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
     });
-
-
-    // Exposure
-    {
-        const uint32_t startWidth = renderExtent[0] / 4;
-        const uint32_t startHeight = renderExtent[1] / 4;
-        const uint32_t numMips = static_cast<uint32_t>(std::floor(std::log2(std::max(startWidth, startHeight)))) + 1;
-
-        TextureInfo luminanceTextureInfo{VK_FORMAT_R16_SFLOAT, startWidth, startHeight, numMips};
-        graph.CreateTexture("luminance", luminanceTextureInfo);
-
-        // OUT: w / 2, h / 2
-        auto& hdrToLumPass = graph.AddPass("HDR to Luminance", VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
-        hdrToLumPass.ReadSampledImage("taaOutput");
-        hdrToLumPass.WriteStorageImage("luminance");
-        hdrToLumPass.Execute([&](VkCommandBuffer cmd) {
-            // Convert HDR to luminance in mip 0
-        });
-
-        for (uint32_t mip = 1; mip < numMips; mip++) {
-            auto& downsamplePass = graph.AddPass("Downsample Lum Mip " + std::to_string(mip), VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
-            downsamplePass.ReadWriteImage("luminance");
-            downsamplePass.Execute([&, mip](VkCommandBuffer cmd) {
-                // vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, exposureDownsamplePipeline.pipeline.handle);
-                //
-                // const auto dims = graph.GetImageDimensions("luminance");
-                // const uint32_t prevMipWidth = std::max(1u, dims.width >> mip - 1);
-                // const uint32_t prevMipHeight = std::max(1u, dims.height >> mip - 1);
-                // const uint32_t mipWidth = std::max(1u, dims.width >> mip);
-                // const uint32_t mipHeight = std::max(1u, dims.height >> mip);
-                // ExposureDownsamplePushConstant pc{
-                //     .inputWidth = prevMipWidth,
-                //     .inputHeight = prevMipHeight,
-                //     .outputWidth = mipWidth,
-                //     .outputHeight = mipHeight,
-                //     .srcImageIndex = graph.GetSampledImageViewDescriptorIndex("luminance"),
-                //     .dstImageIndex = graph.GetStorageImageViewDescriptorIndex("luminance", mip),
-                //     .pointSamplerIndex = resourceManager->pointSamplerIndex,
-                // };
-                //
-                // vkCmdPushConstants(cmd, exposureDownsamplePipeline.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-                // vkCmdDispatch(cmd, (mipWidth + 15) / 16, (mipHeight + 15) / 16, 1);
-            });
-        }
-
-        auto& exposurePass = graph.AddPass("Calculate Exposure", VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
-        exposurePass.ReadSampledImage("luminance");
-        exposurePass.Execute([&](VkCommandBuffer cmd) {
-            // Read luminance from mip numMips-1 (1x1 pixel)
-            // Calculate exposure, blend temporally, write to exposure buffer
-        });
-    }
 }
 } // Render

@@ -187,19 +187,27 @@ SHADER_PUBLIC struct TonemapSDRPushConstant
     SHADER_PUBLIC uint32_t outputHeight;
     SHADER_PUBLIC uint32_t srcImageIndex;
     SHADER_PUBLIC uint32_t dstImageIndex;
-    SHADER_PUBLIC uint32_t pointSamplerIndex;
-    SHADER_PUBLIC uint32_t linearSamplerIndex;
 };
 
-SHADER_PUBLIC struct ExposureDownsamplePushConstant
+SHADER_PUBLIC struct HistogramBuildPushConstant
 {
-    SHADER_PUBLIC uint32_t inputWidth;
-    SHADER_PUBLIC uint32_t inputHeight;
-    SHADER_PUBLIC uint32_t outputWidth;
-    SHADER_PUBLIC uint32_t outputHeight;
-    SHADER_PUBLIC uint32_t srcImageIndex;
-    SHADER_PUBLIC uint32_t dstImageIndex;
-    SHADER_PUBLIC uint32_t pointSamplerIndex;
+    SHADER_PUBLIC uint32_t hdrImageIndex;
+    SHADER_PUBLIC SHADER_PTR(uint32_t) histogramBufferAddress;
+    SHADER_PUBLIC uint32_t width;
+    SHADER_PUBLIC uint32_t height;
+    SHADER_PUBLIC float minLogLuminance;
+    SHADER_PUBLIC float oneOverLogLuminanceRange;
+};
+
+SHADER_PUBLIC struct ExposureCalculatePushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(uint32_t) histogramBufferAddress;
+    SHADER_PUBLIC SHADER_PTR(float) exposureBufferAddress;
+    SHADER_PUBLIC float targetPercentile;
+    SHADER_PUBLIC float minExposure;
+    SHADER_PUBLIC float maxExposure;
+    SHADER_PUBLIC float adaptationSpeed;
+    SHADER_PUBLIC uint32_t totalPixels;
 };
 
 #endif //WILL_ENGINE_PUSH_CONSTANT_INTEROP_H

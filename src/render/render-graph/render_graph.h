@@ -84,6 +84,8 @@ public:
 
     bool HasTexture(const std::string& name);
 
+    bool HasBuffer(const std::string& name);
+
     VkImage GetImage(const std::string& name);
 
     VkImageView GetImageView(const std::string& name);

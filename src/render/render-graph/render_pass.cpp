@@ -131,6 +131,14 @@ RenderPass& RenderPass::WriteTransferBuffer(const std::string& name)
     return *this;
 }
 
+RenderPass& RenderPass::ReadWriteBuffer(const std::string& name)
+{
+    BufferResource* resource = graph.GetOrCreateBuffer(name);
+    resource->accumulatedUsage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+    bufferReadWrite.push_back(resource);
+    return *this;
+}
+
 RenderPass& RenderPass::ReadWriteImage(const std::string& name, const TextureInfo& texInfo)
 {
     TextureResource* resource = graph.GetOrCreateTexture(name);

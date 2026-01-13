@@ -101,7 +101,7 @@ private:
 
     void SetupTemporalAntialiasing(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent) const;
 
-    void SetupPostProcessing(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent) const;
+    void SetupPostProcessing(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, float deltaTime) const;
 
 private:
     // Non-owning
@@ -147,7 +147,8 @@ private:
     ComputePipeline deferredResolvePipeline;
     ComputePipeline temporalAntialiasingPipeline;
 
-    ComputePipeline exposureDownsamplePipeline;
+    ComputePipeline histogramBuildPipeline;
+    ComputePipeline exposureCalculatePipeline;
     ComputePipeline tonemapSDRPipeline;
 };
 } // Render

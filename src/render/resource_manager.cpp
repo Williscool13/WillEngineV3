@@ -58,7 +58,7 @@ ResourceManager::ResourceManager(VulkanContext* context)
     vmaAllocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
     vmaAllocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
 
-    bufferInfo.size = 1024 * 1024;
+    bufferInfo.size = 8 * 1024 * 1024;
     debugReadbackBuffer = AllocatedBuffer::CreateAllocatedBuffer(context, bufferInfo, vmaAllocInfo);
     debugReadbackBuffer.SetDebugName("Debug Readback Buffer");
 

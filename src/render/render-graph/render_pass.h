@@ -47,6 +47,8 @@ public:
 
     RenderPass& WriteTransferBuffer(const std::string& name);
 
+    RenderPass& ReadWriteBuffer(const std::string& name);
+
     RenderPass& ReadWriteImage(const std::string& name, const TextureInfo& texInfo = {});
 
     // Read
@@ -93,6 +95,7 @@ private:
 
     std::vector<BufferResource*> bufferReads;
     std::vector<BufferResource*> bufferWrites;
+    std::vector<BufferResource*> bufferReadWrite;
     std::vector<BufferResource*> bufferReadTransfer;
     std::vector<BufferResource*> bufferWriteTransfer;
     std::vector<BufferResource*> bufferIndirectReads;
