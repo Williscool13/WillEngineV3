@@ -11,6 +11,7 @@
 #include <volk.h>
 
 #include "core/allocators/handle.h"
+#include "render/render_config.h"
 #include "render/vulkan/vk_resources.h"
 
 namespace Render
@@ -77,12 +78,14 @@ struct PhysicalResource
     std::vector<uint32_t> logicalResourceIndices;
 
     // Image resources (valid if dimensions.is_image())
-    VkImage image = VK_NULL_HANDLE;
-    VkImageView view = VK_NULL_HANDLE;
-    VmaAllocation imageAllocation = VK_NULL_HANDLE;
-    VkImageAspectFlags aspect = VK_IMAGE_ASPECT_NONE;
-    TransientImageHandle descriptorHandle = TransientImageHandle::INVALID;
-    bool descriptorWritten = false;
+    VkImage image{VK_NULL_HANDLE};
+    VkImageView imageView{VK_NULL_HANDLE};
+    std::array<VkImageView, RDG_MAX_MIP_LEVELS> mipViews{};
+    VmaAllocation imageAllocation{VK_NULL_HANDLE};
+    VkImageAspectFlags aspect{VK_IMAGE_ASPECT_NONE};
+    TransientImageHandle sampledDescriptorHandle{TransientImageHandle::INVALID};
+    std::array<TransientImageHandle, RDG_MAX_MIP_LEVELS> storageMipDescriptorHandles{};
+    bool descriptorWritten{false};
 
     // Buffer resources (valid if dimensions.is_buffer())
     VkBuffer buffer = VK_NULL_HANDLE;
@@ -94,7 +97,10 @@ struct PhysicalResource
 
     [[nodiscard]] bool NeedsDescriptorWrite() const { return dimensions.IsImage() && IsAllocated() && !descriptorWritten; }
 
-    [[nodiscard]] bool NeedsAddressRetrieval() const { return dimensions.IsBuffer() && IsAllocated() && !addressRetrieved && (dimensions.bufferUsage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT ) == VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT; }
+    [[nodiscard]] bool NeedsAddressRetrieval() const
+    {
+        return dimensions.IsBuffer() && IsAllocated() && !addressRetrieved && (dimensions.bufferUsage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) == VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+    }
 };
 
 struct TextureInfo

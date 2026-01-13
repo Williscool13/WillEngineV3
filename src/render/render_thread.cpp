@@ -276,7 +276,6 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
 
     // IN : albedoTarget, normalTarget, pbrTarget, depthTarget, shadowCascade_0, shadowCascade_1, shadowCascade_2, shadowCascade_3
     // OUT: deferredResolve
-
     SetupDeferredLighting(*renderGraph, viewFamily, renderExtent, bHasShadows);
 
     // IN : deferredResolve
@@ -338,9 +337,9 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
                 .dstExtent = {renderExtent[0], renderExtent[1]},
                 .nearPlane = viewFamily.mainView.currentViewData.nearPlane,
                 .farPlane = viewFamily.mainView.currentViewData.farPlane,
-                .textureIndex = renderGraph->GetDescriptorIndex(debugTargetName),
+                .textureIndex = renderGraph->GetSampledImageViewDescriptorIndex(debugTargetName),
                 .samplerIndex = resourceManager->linearSamplerIndex,
-                .outputImageIndex = renderGraph->GetDescriptorIndex("finalImage"),
+                .outputImageIndex = renderGraph->GetStorageImageViewDescriptorIndex("finalImage"),
                 .debugType = debugIndex
             };
 
@@ -353,7 +352,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     }
 
     if (frameBuffer.bDrawImgui) {
-        auto& imguiEditorPass = renderGraph->AddPass("ImguiEditor", 0);
+        auto& imguiEditorPass = renderGraph->AddPass("ImguiEditor", VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT);
         imguiEditorPass.WriteColorAttachment("finalImage");
         imguiEditorPass.Execute([&](VkCommandBuffer cmd) {
             const VkRenderingAttachmentInfo imguiAttachment = VkHelpers::RenderingAttachmentInfo(renderGraph->GetImageView("finalImage"), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
@@ -1000,18 +999,18 @@ void RenderThread::SetupDeferredLighting(RenderGraph& graph, const Core::ViewFam
 
         uint32_t packedShadowMapIndices = bEnableShadows
                                               ? PackCascadeIndices(
-                                                  graph.GetDescriptorIndex("shadowCascade_0"),
-                                                  graph.GetDescriptorIndex("shadowCascade_1"),
-                                                  graph.GetDescriptorIndex("shadowCascade_2"),
-                                                  graph.GetDescriptorIndex("shadowCascade_3")
+                                                  graph.GetSampledImageViewDescriptorIndex("shadowCascade_0"),
+                                                  graph.GetSampledImageViewDescriptorIndex("shadowCascade_1"),
+                                                  graph.GetSampledImageViewDescriptorIndex("shadowCascade_2"),
+                                                  graph.GetSampledImageViewDescriptorIndex("shadowCascade_3")
                                               )
                                               : 0xFFFFFFFF;
 
         uint32_t packedGBufferIndices = VkHelpers::PackGBufferIndices(
-            graph.GetDescriptorIndex("albedoTarget"),
-            graph.GetDescriptorIndex("normalTarget"),
-            graph.GetDescriptorIndex("pbrTarget"),
-            graph.GetDescriptorIndex("depthTarget")
+            graph.GetSampledImageViewDescriptorIndex("albedoTarget"),
+            graph.GetSampledImageViewDescriptorIndex("normalTarget"),
+            graph.GetSampledImageViewDescriptorIndex("pbrTarget"),
+            graph.GetSampledImageViewDescriptorIndex("depthTarget")
         );
 
         DeferredResolvePushConstant pushData{
@@ -1023,7 +1022,7 @@ void RenderThread::SetupDeferredLighting(RenderGraph& graph, const Core::ViewFam
             .packedCSMIndices = packedShadowMapIndices,
             .pointSamplerIndex = resourceManager->pointSamplerIndex,
             .depthCompareSamplerIndex = resourceManager->depthCompareSamplerIndex,
-            .outputImageIndex = graph.GetDescriptorIndex("deferredResolve"),
+            .outputImageIndex = graph.GetStorageImageViewDescriptorIndex("deferredResolve"),
         };
 
         vkCmdPushConstants(cmd, deferredResolvePipeline.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(DeferredResolvePushConstant), &pushData);
@@ -1079,11 +1078,11 @@ void RenderThread::SetupTemporalAntialiasing(RenderGraph& graph, const Core::Vie
                 .sceneData = graph.GetBufferAddress("sceneData"),
                 .pointSamplerIndex = resourceManager->pointSamplerIndex,
                 .linearSamplerIndex = resourceManager->linearSamplerIndex,
-                .colorResolvedIndex = graph.GetDescriptorIndex("deferredResolve"),
-                .depthIndex = graph.GetDescriptorIndex("depthTarget"),
-                .colorHistoryIndex = graph.GetDescriptorIndex("taaHistory"),
-                .velocityIndex = graph.GetDescriptorIndex("velocityTarget"),
-                .outputImageIndex = graph.GetDescriptorIndex("taaCurrent"),
+                .colorResolvedIndex = graph.GetSampledImageViewDescriptorIndex("deferredResolve"),
+                .depthIndex = graph.GetSampledImageViewDescriptorIndex("depthTarget"),
+                .colorHistoryIndex = graph.GetSampledImageViewDescriptorIndex("taaHistory"),
+                .velocityIndex = graph.GetSampledImageViewDescriptorIndex("velocityTarget"),
+                .outputImageIndex = graph.GetStorageImageViewDescriptorIndex("taaCurrent"),
             };
 
             vkCmdPushConstants(cmd, temporalAntialiasingPipeline.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(TemporalAntialiasingPushConstant), &pushData);
@@ -1146,8 +1145,8 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
             .tonemapOperator = viewFamily.tonemapOperator,
             .outputWidth = width,
             .outputHeight = height,
-            .srcImageIndex = graph.GetDescriptorIndex("taaOutput"),
-            .dstImageIndex = graph.GetDescriptorIndex("finalImage"),
+            .srcImageIndex = graph.GetSampledImageViewDescriptorIndex("taaOutput"),
+            .dstImageIndex = graph.GetStorageImageViewDescriptorIndex("finalImage"),
             .pointSamplerIndex = resourceManager->pointSamplerIndex,
             .linearSamplerIndex = resourceManager->linearSamplerIndex,
         };

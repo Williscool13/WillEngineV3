@@ -13,6 +13,7 @@
 #include "render_graph_resources.h"
 #include "render/vulkan/vk_resources.h"
 #include "core/allocators/handle_allocator.h"
+#include "render/render_config.h"
 
 
 namespace Render
@@ -87,9 +88,13 @@ public:
 
     VkImageView GetImageView(const std::string& name);
 
+    VkImageView GetImageViewMip(const std::string& name, uint32_t mipLevel);
+
     const ResourceDimensions& GetImageDimensions(const std::string& name);
 
-    uint32_t GetDescriptorIndex(const std::string& name);
+    uint32_t GetSampledImageViewDescriptorIndex(const std::string& name);
+
+    uint32_t GetStorageImageViewDescriptorIndex(const std::string& name, uint32_t mipLevel = 0);
 
     VkBuffer GetBufferHandle(const std::string& name);
 
@@ -111,8 +116,9 @@ private:
     // Logical resources
     std::vector<TextureResource> textures;
     std::unordered_map<std::string, uint32_t> textureNameToIndex;
-    static constexpr uint32_t MAX_TEXTURES = 128;
-    Core::HandleAllocator<TextureResource, MAX_TEXTURES> transientImageHandleAllocator;
+
+    Core::HandleAllocator<TextureResource, RDG_MAX_SAMPLED_TEXTURES> transientImageHandleAllocator;
+    Core::HandleAllocator<TextureResource, RDG_MAX_STORAGE_TEXTURES> transientStorageImageHandleAllocator;
 
     std::vector<BufferResource> buffers;
     std::unordered_map<std::string, uint32_t> bufferNameToIndex;

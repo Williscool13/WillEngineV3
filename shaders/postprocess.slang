@@ -79,3 +79,18 @@ void ComputeSDRTonemap(uniform TonemapSDRPushConstant pc, uint3 threadId : SV_Di
 
     rdgRenderTextures[pc.dstImageIndex][texelCoord] = float4(ldrColor, 1.0);
 }
+
+// [numthreads(16, 16, 1)]
+// void ComputeExposureDownsample(uniform ExposureDownsamplePushConstant pc, uint3 tid : SV_DispatchThreadID) {
+//     uint2 srcCoord = tid.xy * 2;
+//
+//     float sum = 0;
+//
+//     [ForceUnroll]
+//     for (int i = 0; i < 4; i++) {
+//         uint2 offset = uint2(i & 1, i >> 1);
+//         sum += rdgRenderTextures[pc.srcImageIndex].Load(int3(srcCoord + offset, pc.srcMipLevel));
+//     }
+//
+//     rdgRenderTextures[pc.dstImageIndex][tid.xy] = sum * 0.25;
+// }

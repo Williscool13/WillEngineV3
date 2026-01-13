@@ -48,7 +48,7 @@ struct ResourceManager
 
     uint32_t depthCompareSamplerIndex{0};
     VkSampler depthCompareSampler;
-    BindlessTransientRDGResourcesDescriptorBuffer<4, 4, 128, 128> bindlessRDGTransientDescriptorBuffer{};
+    BindlessTransientRDGResourcesDescriptorBuffer<4, 4, RDG_MAX_SAMPLED_TEXTURES, RDG_MAX_STORAGE_TEXTURES> bindlessRDGTransientDescriptorBuffer{};
 
     AllocatedBuffer debugReadbackBuffer;
     PipelineEvent debugReadbackLastKnownState;

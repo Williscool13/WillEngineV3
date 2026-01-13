@@ -16,7 +16,10 @@
 
 namespace Render
 {
-inline constexpr int32_t RDG_PHYSICAL_RESOURCE_UNUSED_THRESHOLD = 1024;
+inline constexpr int32_t RDG_PHYSICAL_RESOURCE_UNUSED_THRESHOLD = 1024; // in ticks
+inline constexpr int32_t RDG_MAX_SAMPLED_TEXTURES = 128;
+inline constexpr int32_t RDG_MAX_STORAGE_TEXTURES = 1024;
+inline constexpr int32_t RDG_MAX_MIP_LEVELS = 12;
 
 inline constexpr int32_t BINDLESS_MODEL_BUFFER_COUNT = 16384;
 inline constexpr int32_t BINDLESS_MODEL_BUFFER_SIZE = sizeof(Model) * BINDLESS_MODEL_BUFFER_COUNT;

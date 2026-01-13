@@ -191,4 +191,15 @@ SHADER_PUBLIC struct TonemapSDRPushConstant
     SHADER_PUBLIC uint32_t linearSamplerIndex;
 };
 
+SHADER_PUBLIC struct ExposureDownsamplePushConstant
+{
+    SHADER_PUBLIC uint32_t inputWidth;
+    SHADER_PUBLIC uint32_t inputHeight;
+    SHADER_PUBLIC uint32_t outputWidth;
+    SHADER_PUBLIC uint32_t outputHeight;
+    SHADER_PUBLIC uint32_t srcImageIndex;
+    SHADER_PUBLIC uint32_t dstImageIndex;
+    SHADER_PUBLIC uint32_t pointSamplerIndex;
+};
+
 #endif //WILL_ENGINE_PUSH_CONSTANT_INTEROP_H

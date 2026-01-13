@@ -17,7 +17,7 @@ namespace Render
 RenderGraph::RenderGraph(VulkanContext* context, ResourceManager* resourceManager)
     : context(context), resourceManager(resourceManager)
 {
-    textures.reserve(MAX_TEXTURES);
+    textures.reserve(RDG_MAX_SAMPLED_TEXTURES);
     physicalResources.reserve(256);
 }
 
@@ -287,15 +287,22 @@ void RenderGraph::Compile(int64_t currentFrame)
 
     for (auto& phys : physicalResources) {
         if (phys.NeedsDescriptorWrite()) {
-            phys.descriptorHandle = transientImageHandleAllocator.Add();
-            assert(phys.descriptorHandle.IsValid() && "Invalid descriptor handle assigned to physical resource");
+            phys.sampledDescriptorHandle = transientImageHandleAllocator.Add();
+            assert(phys.sampledDescriptorHandle.IsValid() && "Invalid descriptor handle assigned to physical resource");
 
-            resourceManager->bindlessRDGTransientDescriptorBuffer.WriteStorageImageDescriptor(
-                phys.descriptorHandle.index, {nullptr, phys.view, VK_IMAGE_LAYOUT_GENERAL}
-            );
             resourceManager->bindlessRDGTransientDescriptorBuffer.WriteSampledImageDescriptor(
-                phys.descriptorHandle.index, {nullptr, phys.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}
+                phys.sampledDescriptorHandle.index, {nullptr, phys.imageView, VK_IMAGE_LAYOUT_GENERAL}
             );
+
+            for (uint32_t mip = 0; mip < phys.dimensions.levels; ++mip) {
+                phys.storageMipDescriptorHandles[mip] = transientStorageImageHandleAllocator.Add();
+                assert(phys.storageMipDescriptorHandles[mip].IsValid() && "Invalid descriptor handle assigned to physical resource view");
+
+                resourceManager->bindlessRDGTransientDescriptorBuffer.WriteStorageImageDescriptor(
+                    phys.storageMipDescriptorHandles[mip].index,
+                    {nullptr, phys.mipViews[mip], VK_IMAGE_LAYOUT_GENERAL}
+                );
+            }
 
             phys.descriptorWritten = true;
         }
@@ -928,7 +935,8 @@ void RenderGraph::ImportTexture(const std::string& name,
             physicalResources.emplace_back();
             auto& phys = physicalResources[tex->physicalIndex];
             phys.image = image;
-            phys.view = view;
+            phys.imageView = view;
+            phys.mipViews[0] = view;
             phys.bIsImported = true;
 
             phys.dimensions.type = ResourceDimensions::Type::Image;
@@ -1065,7 +1073,18 @@ VkImageView RenderGraph::GetImageView(const std::string& name)
     auto& tex = textures[it->second];
     assert(tex.HasPhysical() && "Texture has no physical resource");
 
-    return physicalResources[tex.physicalIndex].view;
+    return physicalResources[tex.physicalIndex].imageView;
+}
+
+VkImageView RenderGraph::GetImageViewMip(const std::string& name, uint32_t mipLevel) {
+    auto it = textureNameToIndex.find(name);
+    assert(it != textureNameToIndex.end() && "Texture not found");
+    assert(mipLevel < RDG_MAX_MIP_LEVELS);
+
+    auto& tex = textures[it->second];
+    assert(tex.HasPhysical() && "Texture has no physical resource");
+
+    return physicalResources[tex.physicalIndex].mipViews[mipLevel];
 }
 
 const ResourceDimensions& RenderGraph::GetImageDimensions(const std::string& name)
@@ -1079,7 +1098,7 @@ const ResourceDimensions& RenderGraph::GetImageDimensions(const std::string& nam
     return physicalResources[tex.physicalIndex].dimensions;
 }
 
-uint32_t RenderGraph::GetDescriptorIndex(const std::string& name)
+uint32_t RenderGraph::GetSampledImageViewDescriptorIndex(const std::string& name)
 {
     auto it = textureNameToIndex.find(name);
     assert(it != textureNameToIndex.end() && "Texture not found");
@@ -1087,7 +1106,18 @@ uint32_t RenderGraph::GetDescriptorIndex(const std::string& name)
     auto& tex = textures[it->second];
     assert(tex.HasPhysical() && "Texture has no physical resource");
 
-    return physicalResources[tex.physicalIndex].descriptorHandle.index;
+    return physicalResources[tex.physicalIndex].sampledDescriptorHandle.index;
+}
+
+uint32_t RenderGraph::GetStorageImageViewDescriptorIndex(const std::string& name, uint32_t mipLevel)
+{
+    auto it = textureNameToIndex.find(name);
+    assert(it != textureNameToIndex.end() && "Texture not found");
+
+    auto& tex = textures[it->second];
+    assert(tex.HasPhysical() && "Texture has no physical resource");
+
+    return physicalResources[tex.physicalIndex].storageMipDescriptorHandles[mipLevel].index;
 }
 
 VkBuffer RenderGraph::GetBufferHandle(const std::string& name)
@@ -1273,16 +1303,20 @@ void RenderGraph::DestroyPhysicalResource(PhysicalResource& resource)
     }
 
     if (resource.dimensions.IsImage()) {
-        if (resource.view != VK_NULL_HANDLE) {
-            vkDestroyImageView(context->device, resource.view, nullptr);
-            resource.view = VK_NULL_HANDLE;
+        for (VkImageView& view : resource.mipViews) {
+            vkDestroyImageView(context->device, view, nullptr);
+            view = VK_NULL_HANDLE;
+        }
+        if (resource.imageView != VK_NULL_HANDLE) {
+            vkDestroyImageView(context->device, resource.imageView, nullptr);
+            resource.imageView = VK_NULL_HANDLE;
         }
         if (resource.image != VK_NULL_HANDLE) {
             vmaDestroyImage(context->allocator, resource.image, resource.imageAllocation);
             resource.image = VK_NULL_HANDLE;
             resource.imageAllocation = VK_NULL_HANDLE;
         }
-        transientImageHandleAllocator.Remove(resource.descriptorHandle);
+        transientImageHandleAllocator.Remove(resource.sampledDescriptorHandle);
     }
     else {
         if (resource.buffer != VK_NULL_HANDLE) {
@@ -1332,7 +1366,17 @@ void RenderGraph::CreatePhysicalImage(PhysicalResource& resource, const Resource
         dim.format,
         aspectFlags
     );
-    VK_CHECK(vkCreateImageView(context->device, &viewInfo, nullptr, &resource.view));
+
+    VkImageViewCreateInfo sampledViewInfo = viewInfo;
+    sampledViewInfo.subresourceRange.levelCount = dim.levels;
+    VK_CHECK(vkCreateImageView(context->device, &sampledViewInfo, nullptr, &resource.imageView));
+
+    for (uint32_t mip = 0; mip < dim.levels; ++mip) {
+        VkImageViewCreateInfo mipViewInfo = viewInfo;
+        mipViewInfo.subresourceRange.baseMipLevel = mip;
+        mipViewInfo.subresourceRange.levelCount = 1;
+        VK_CHECK(vkCreateImageView(context->device, &mipViewInfo, nullptr, &resource.mipViews[mip]));
+    }
 
     resource.aspect = aspectFlags;
     resource.dimensions = dim;
