@@ -147,6 +147,7 @@ private:
     ComputePipeline deferredResolvePipeline;
     ComputePipeline temporalAntialiasingPipeline;
 
+    ComputePipeline exposureDownsamplePipeline;
     ComputePipeline tonemapSDRPipeline;
 };
 } // Render

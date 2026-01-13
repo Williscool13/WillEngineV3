@@ -12,18 +12,18 @@ RenderPass::RenderPass(RenderGraph& renderGraph, std::string name, VkPipelineSta
     : graph(renderGraph), renderPassName(std::move(name)), stages(stages)
 {}
 
-RenderPass& RenderPass::WriteStorageImage(const std::string& name, const TextureInfo info)
+RenderPass& RenderPass::WriteStorageImage(const std::string& name, const TextureInfo texInfo)
 {
     TextureResource* resource = graph.GetOrCreateTexture(name);
 
-    if (info.format != VK_FORMAT_UNDEFINED) {
+    if (texInfo.format != VK_FORMAT_UNDEFINED) {
         if (resource->textureInfo.format == VK_FORMAT_UNDEFINED) {
-            resource->textureInfo = info;
+            resource->textureInfo = texInfo;
         }
         else {
-            assert(resource->textureInfo.format == info.format && "Format mismatch");
-            assert(resource->textureInfo.width == info.width && "Width mismatch");
-            assert(resource->textureInfo.height == info.height && "Height mismatch");
+            assert(resource->textureInfo.format == texInfo.format && "Format mismatch");
+            assert(resource->textureInfo.width == texInfo.width && "Width mismatch");
+            assert(resource->textureInfo.height == texInfo.height && "Height mismatch");
         }
     }
     else {
@@ -128,6 +128,28 @@ RenderPass& RenderPass::WriteTransferBuffer(const std::string& name)
     BufferResource* resource = graph.GetOrCreateBuffer(name);
     resource->accumulatedUsage |= VK_BUFFER_USAGE_2_TRANSFER_DST_BIT;
     bufferWriteTransfer.push_back(resource);
+    return *this;
+}
+
+RenderPass& RenderPass::ReadWriteImage(const std::string& name, const TextureInfo& texInfo)
+{
+    TextureResource* resource = graph.GetOrCreateTexture(name);
+
+    if (texInfo.format != VK_FORMAT_UNDEFINED) {
+        if (resource->textureInfo.format == VK_FORMAT_UNDEFINED) {
+            resource->textureInfo = texInfo;
+        }
+        else {
+            assert(resource->textureInfo.format == texInfo.format && "Format mismatch");
+            assert(resource->textureInfo.width == texInfo.width && "Width mismatch");
+            assert(resource->textureInfo.height == texInfo.height && "Height mismatch");
+        }
+    }
+    else {
+        assert(resource->textureInfo.format != VK_FORMAT_UNDEFINED && "Texture not defined - provide TextureInfo on first use");
+    }
+
+    imageReadWrite.push_back(resource);
     return *this;
 }
 

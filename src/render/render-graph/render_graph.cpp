@@ -54,6 +54,10 @@ void RenderGraph::AccumulateTextureUsage() const
             tex->accumulatedUsage |= VK_IMAGE_USAGE_SAMPLED_BIT;
         }
 
+        for (auto* tex : pass->imageReadWrite) {
+            tex->accumulatedUsage |= VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+        }
+
         for (auto* tex : pass->clearImageWrites) {
             tex->accumulatedUsage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
         }
@@ -102,6 +106,7 @@ void RenderGraph::CalculateLifetimes()
         for (auto* tex : pass->storageImageWrites) { UpdateTextureLifetime(tex); }
         for (auto* tex : pass->storageImageReads) { UpdateTextureLifetime(tex); }
         for (auto* tex : pass->sampledImageReads) { UpdateTextureLifetime(tex); }
+        for (auto* tex : pass->imageReadWrite) { UpdateTextureLifetime(tex); }
         for (auto* tex : pass->clearImageWrites) { UpdateTextureLifetime(tex); }
         for (auto* tex : pass->blitImageWrites) { UpdateTextureLifetime(tex); }
         for (auto* tex : pass->blitImageReads) { UpdateTextureLifetime(tex); }
@@ -136,7 +141,7 @@ void RenderGraph::Compile(int64_t currentFrame)
             desiredDim.width = tex.textureInfo.width;
             desiredDim.height = tex.textureInfo.height;
             desiredDim.depth = 1;
-            desiredDim.levels = 1;
+            desiredDim.levels = tex.textureInfo.mipLevels;
             desiredDim.layers = 1;
             desiredDim.samples = 1;
             desiredDim.imageUsage = tex.accumulatedUsage;
@@ -397,6 +402,18 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
             barriers.push_back(barrier);
         }
 
+        for (auto* tex : pass->imageReadWrite) {
+            auto& phys = GetPhysical(tex);
+            auto barrier = VkHelpers::ImageMemoryBarrier(
+                phys.image,
+                VkHelpers::SubresourceRange(phys.aspect),
+                phys.event.stages, phys.event.access, tex->layout,
+                pass->stages, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL
+            );
+            LogImageBarrier(barrier, tex->name, tex->physicalIndex);
+            barriers.push_back(barrier);
+        }
+
         for (auto* tex : pass->blitImageReads) {
             auto& phys = GetPhysical(tex);
             auto barrier = VkHelpers::ImageMemoryBarrier(
@@ -623,19 +640,23 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
             phys.event.stages = pass->stages;
             phys.event.access = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT;
         }
-
         for (auto* tex : pass->storageImageReads) {
             auto& phys = GetPhysical(tex);
             tex->layout = VK_IMAGE_LAYOUT_GENERAL;
             phys.event.stages = pass->stages;
             phys.event.access = VK_ACCESS_2_SHADER_STORAGE_READ_BIT;
         }
-
         for (auto* tex : pass->sampledImageReads) {
             auto& phys = GetPhysical(tex);
             tex->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             phys.event.stages = pass->stages;
             phys.event.access = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT;
+        }
+        for (auto* tex : pass->imageReadWrite) {
+            auto& phys = GetPhysical(tex);
+            tex->layout = VK_IMAGE_LAYOUT_GENERAL;
+            phys.event.stages = pass->stages;
+            phys.event.access = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT;
         }
 
         for (auto* tex : pass->clearImageWrites) {
@@ -884,6 +905,7 @@ void RenderGraph::CreateTexture(const std::string& name, const TextureInfo& texI
         assert(resource->textureInfo.format == texInfo.format && "Texture format mismatch");
         assert(resource->textureInfo.width == texInfo.width && "Texture width mismatch");
         assert(resource->textureInfo.height == texInfo.height && "Texture height mismatch");
+        assert(resource->textureInfo.mipLevels == texInfo.mipLevels && "Texture mip level mismatch");
     }
 
     assert(texInfo.format != VK_FORMAT_UNDEFINED && "Texture info uses undefined format");
@@ -923,6 +945,7 @@ void RenderGraph::ImportTexture(const std::string& name,
                 assert(phys.dimensions.format == info.format && "Reimported image format mismatch");
                 assert(phys.dimensions.width == info.width && "Reimported image width mismatch");
                 assert(phys.dimensions.height == info.height && "Reimported image height mismatch");
+                assert(phys.dimensions.levels == info.mipLevels && "Reimported image mip level mismatch");
                 break;
             }
         }
@@ -944,7 +967,7 @@ void RenderGraph::ImportTexture(const std::string& name,
             phys.dimensions.width = info.width;
             phys.dimensions.height = info.height;
             phys.dimensions.depth = 1;
-            phys.dimensions.levels = 1;
+            phys.dimensions.levels = info.mipLevels;
             phys.dimensions.layers = 1;
             phys.dimensions.samples = 1;
         }

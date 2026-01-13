@@ -245,11 +245,11 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     renderGraph->CreateBuffer("indirectCountBuffer", INSTANCING_MESH_INDIRECT_COUNT);
     renderGraph->CreateBuffer("indirectBuffer", INSTANCING_MESH_INDIRECT_PARAMETERS);
 
-    renderGraph->CreateTexture("albedoTarget", {GBUFFER_ALBEDO_FORMAT, renderExtent[0], renderExtent[1],});
-    renderGraph->CreateTexture("normalTarget", {GBUFFER_NORMAL_FORMAT, renderExtent[0], renderExtent[1],});
-    renderGraph->CreateTexture("pbrTarget", {GBUFFER_PBR_FORMAT, renderExtent[0], renderExtent[1],});
-    renderGraph->CreateTexture("velocityTarget", {GBUFFER_MOTION_FORMAT, renderExtent[0], renderExtent[1],});
-    renderGraph->CreateTexture("depthTarget", {VK_FORMAT_D32_SFLOAT, renderExtent[0], renderExtent[1]});
+    renderGraph->CreateTexture("albedoTarget", TextureInfo{GBUFFER_ALBEDO_FORMAT, renderExtent[0], renderExtent[1], 1});
+    renderGraph->CreateTexture("normalTarget", TextureInfo{GBUFFER_NORMAL_FORMAT, renderExtent[0], renderExtent[1], 1});
+    renderGraph->CreateTexture("pbrTarget", TextureInfo{GBUFFER_PBR_FORMAT, renderExtent[0], renderExtent[1], 1});
+    renderGraph->CreateTexture("velocityTarget", TextureInfo{GBUFFER_MOTION_FORMAT, renderExtent[0], renderExtent[1], 1});
+    renderGraph->CreateTexture("depthTarget", TextureInfo{VK_FORMAT_D32_SFLOAT, renderExtent[0], renderExtent[1], 1});
 
     bool bHasShadows = frameBuffer.mainViewFamily.shadowConfig.enabled && !viewFamily.instances.empty();
     if (bHasShadows) {
@@ -366,7 +366,8 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         });
     }
 
-    renderGraph->ImportTexture("swapchainImage", currentSwapchainImage, currentSwapchainImageView, {swapchain->format, swapchain->extent.width, swapchain->extent.height}, swapchain->usages,
+    renderGraph->ImportTexture("swapchainImage", currentSwapchainImage, currentSwapchainImageView, TextureInfo{swapchain->format, swapchain->extent.width, swapchain->extent.height, 1},
+                               swapchain->usages,
                                VK_IMAGE_LAYOUT_UNDEFINED, VK_PIPELINE_STAGE_2_BLIT_BIT, VK_IMAGE_LAYOUT_UNDEFINED);
 
     auto& blitPass = renderGraph->AddPass("BlitToSwapchain", VK_PIPELINE_STAGE_2_BLIT_BIT);
@@ -686,7 +687,7 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFami
         std::string shadowMapName = "shadowCascade_" + std::to_string(cascadeLevel);
         std::string shadowPassName = "ShadowCascadePass_" + std::to_string(cascadeLevel);
 
-        graph.CreateTexture(shadowMapName, {SHADOW_CASCADE_FORMAT, shadowConfig.cascadePreset.extents[cascadeLevel].width, shadowConfig.cascadePreset.extents[cascadeLevel].height});
+        graph.CreateTexture(shadowMapName, TextureInfo{SHADOW_CASCADE_FORMAT, shadowConfig.cascadePreset.extents[cascadeLevel].width, shadowConfig.cascadePreset.extents[cascadeLevel].height, 1});
 
         if (!bFrozenVisibility) {
             std::string clearPassName = "ClearShadowBuffers_" + std::to_string(cascadeLevel);
@@ -971,7 +972,7 @@ void RenderThread::SetupMainGeometryPass(RenderGraph& graph, const Core::ViewFam
 
 void RenderThread::SetupDeferredLighting(RenderGraph& graph, const Core::ViewFamily& viewFamily, const std::array<uint32_t, 2> renderExtent, bool bEnableShadows) const
 {
-    graph.CreateTexture("deferredResolve", {COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1],});
+    graph.CreateTexture("deferredResolve", TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
     RenderPass& clearDeferredImagePass = graph.AddPass("ClearDeferredImage", VK_PIPELINE_STAGE_2_CLEAR_BIT);
     clearDeferredImagePass.WriteClearImage("deferredResolve");
     clearDeferredImagePass.Execute([&](VkCommandBuffer cmd) {
@@ -1035,7 +1036,7 @@ void RenderThread::SetupDeferredLighting(RenderGraph& graph, const Core::ViewFam
 
 void RenderThread::SetupTemporalAntialiasing(RenderGraph& graph, const Core::ViewFamily& viewFamily, const std::array<uint32_t, 2> renderExtent) const
 {
-    graph.CreateTexture("taaCurrent", {COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1]});
+    graph.CreateTexture("taaCurrent", TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
 
     if (!graph.HasTexture("taaHistory")) {
         RenderPass& taaPass = graph.AddPass("TemporalAntialiasingFirstFrame", VK_PIPELINE_STAGE_2_COPY_BIT);
@@ -1093,7 +1094,7 @@ void RenderThread::SetupTemporalAntialiasing(RenderGraph& graph, const Core::Vie
         });
     }
 
-    graph.CreateTexture("taaOutput", {COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1]});
+    graph.CreateTexture("taaOutput", TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
 
     RenderPass& finalCopyPass = graph.AddPass("finalCopy", VK_PIPELINE_STAGE_2_BLIT_BIT);
     finalCopyPass.ReadBlitImage("taaCurrent");
@@ -1133,7 +1134,7 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
 {
     // todo: add support for HDR swapchain
     // "postHDRImage"
-    graph.CreateTexture("finalImage", {COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1]});
+    graph.CreateTexture("finalImage", TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
 
     RenderPass& tonemapPass = graph.AddPass("TonemapSDR", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
     tonemapPass.ReadSampledImage("taaOutput");
@@ -1157,5 +1158,57 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
         uint32_t yDispatch = (height + 15) / 16;
         vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
     });
+
+
+    // Exposure
+    {
+        const uint32_t startWidth = renderExtent[0] / 4;
+        const uint32_t startHeight = renderExtent[1] / 4;
+        const uint32_t numMips = static_cast<uint32_t>(std::floor(std::log2(std::max(startWidth, startHeight)))) + 1;
+
+        TextureInfo luminanceTextureInfo{VK_FORMAT_R16_SFLOAT, startWidth, startHeight, numMips};
+        graph.CreateTexture("luminance", luminanceTextureInfo);
+
+        // OUT: w / 2, h / 2
+        auto& hdrToLumPass = graph.AddPass("HDR to Luminance", VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+        hdrToLumPass.ReadSampledImage("taaOutput");
+        hdrToLumPass.WriteStorageImage("luminance");
+        hdrToLumPass.Execute([&](VkCommandBuffer cmd) {
+            // Convert HDR to luminance in mip 0
+        });
+
+        for (uint32_t mip = 1; mip < numMips; mip++) {
+            auto& downsamplePass = graph.AddPass("Downsample Lum Mip " + std::to_string(mip), VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+            downsamplePass.ReadWriteImage("luminance");
+            downsamplePass.Execute([&, mip](VkCommandBuffer cmd) {
+                // vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, exposureDownsamplePipeline.pipeline.handle);
+                //
+                // const auto dims = graph.GetImageDimensions("luminance");
+                // const uint32_t prevMipWidth = std::max(1u, dims.width >> mip - 1);
+                // const uint32_t prevMipHeight = std::max(1u, dims.height >> mip - 1);
+                // const uint32_t mipWidth = std::max(1u, dims.width >> mip);
+                // const uint32_t mipHeight = std::max(1u, dims.height >> mip);
+                // ExposureDownsamplePushConstant pc{
+                //     .inputWidth = prevMipWidth,
+                //     .inputHeight = prevMipHeight,
+                //     .outputWidth = mipWidth,
+                //     .outputHeight = mipHeight,
+                //     .srcImageIndex = graph.GetSampledImageViewDescriptorIndex("luminance"),
+                //     .dstImageIndex = graph.GetStorageImageViewDescriptorIndex("luminance", mip),
+                //     .pointSamplerIndex = resourceManager->pointSamplerIndex,
+                // };
+                //
+                // vkCmdPushConstants(cmd, exposureDownsamplePipeline.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+                // vkCmdDispatch(cmd, (mipWidth + 15) / 16, (mipHeight + 15) / 16, 1);
+            });
+        }
+
+        auto& exposurePass = graph.AddPass("Calculate Exposure", VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+        exposurePass.ReadSampledImage("luminance");
+        exposurePass.Execute([&](VkCommandBuffer cmd) {
+            // Read luminance from mip numMips-1 (1x1 pixel)
+            // Calculate exposure, blend temporally, write to exposure buffer
+        });
+    }
 }
 } // Render

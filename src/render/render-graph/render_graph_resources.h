@@ -105,9 +105,10 @@ struct PhysicalResource
 
 struct TextureInfo
 {
-    VkFormat format;
-    uint32_t width;
-    uint32_t height;
+    VkFormat format{VK_FORMAT_UNDEFINED};
+    uint32_t width{0};
+    uint32_t height{0};
+    uint32_t mipLevels{1};
 };
 
 struct TextureResource
