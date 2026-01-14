@@ -243,7 +243,8 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/deferredResolve.slang compute ComputeMain
         ${CMAKE_SOURCE_DIR}/shaders/temporalAntialiasing.slang compute ComputeMain
         ${CMAKE_SOURCE_DIR}/shaders/postprocess.slang compute ComputeSDRTonemap tonemapSDR
-        ${CMAKE_SOURCE_DIR}/shaders/postprocess.slang compute ComputeBuildHistogramExposure buildHistogramExposure
+        ${CMAKE_SOURCE_DIR}/shaders/postprocess.slang compute ComputeBuildHistogramExposure exposureBuildHistogram
+        ${CMAKE_SOURCE_DIR}/shaders/postprocess.slang compute ComputeAverageExposure exposureCalculateAverage
 )
 
 # Post-Build Commands =========================

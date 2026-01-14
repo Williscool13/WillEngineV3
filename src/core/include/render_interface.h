@@ -90,10 +90,13 @@ struct ViewFamily
 
     ShadowConfiguration shadowConfig{};
 
-    DirectionalLight directionalLight;
+    DirectionalLight directionalLight{};
     // std::vector<LightInstance> allLights;
 
+    // Post Process (move into single struct and into view)
     int32_t tonemapOperator{2};
+    float exposureTargetLuminance{0.18f};
+    float exposureAdaptationRate{2.0f};
 };
 
 struct BufferAcquireOperation

@@ -419,6 +419,14 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
                 }
             }
         }
+
+        if (ImGui::CollapsingHeader("Auto Exposure")) {
+            uint8_t* data = static_cast<uint8_t*>(renderThread->GetResourceManager()->debugReadbackBuffer.allocationInfo.pMappedData);
+            size_t exposureOffset = sizeof(uint32_t) + 10 * sizeof(InstancedMeshIndirectDrawParameters) + 256 * sizeof(uint32_t);
+            float exposure = *reinterpret_cast<float*>(data + exposureOffset);
+
+            ImGui::Text("Current Exposure: %.4f", exposure);
+        }
     }
 #if WILL_EDITOR
 

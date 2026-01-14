@@ -1,4 +1,5 @@
 import push_constant_interop;
+import constants_interop;
 
 import bindless_declarations;
 
@@ -56,22 +57,26 @@ void ComputeSDRTonemap(uniform TonemapSDRPushConstant pc, uint3 threadId : SV_Di
     int2 texelCoord = int2(threadId.xy);
     float3 hdrColor = rdgTextures[pc.srcImageIndex].Load(int3(texelCoord, 0)).rgb;
 
+    float avgLuminance = pc.luminanceBufferAddress[0];
+    float exposure = pc.targetLuminance / max(avgLuminance, 0.001);
+    float3 exposedColor = hdrColor * exposure;
+
     float3 ldrColor;
     switch (pc.tonemapOperator) {
         case 0:
-            ldrColor = ACESFitted(hdrColor);
+            ldrColor = ACESFitted(exposedColor);
             break;
         case 1:
-            ldrColor = Uncharted2Tonemap(hdrColor);
+            ldrColor = Uncharted2Tonemap(exposedColor);
             break;
         case 2:
-            ldrColor = ReinhardTonemap(hdrColor);
+            ldrColor = ReinhardTonemap(exposedColor);
             break;
         case 3:
-            ldrColor = LottesTonemapSimple(hdrColor);
+            ldrColor = LottesTonemapSimple(exposedColor);
             break;
         default:
-            ldrColor = hdrColor;
+            ldrColor = exposedColor;
             break;
     }
 
@@ -80,14 +85,13 @@ void ComputeSDRTonemap(uniform TonemapSDRPushConstant pc, uint3 threadId : SV_Di
 
 
 // ==================== Exposure ====================
-groupshared uint sharedHistogram[256];
-
+groupshared uint sharedHistogram[POST_PROCESS_LUMINANCE_HISTOGRAM_SIZE];
+// https://bruop.github.io/exposure/
+// https://www.alextardif.com/HistogramLuminance.html
 uint HDRToHistogramBin(float3 hdrColor, float minLogLuminance, float oneOverLogLuminanceRange)
 {
     static const float EPSILON = 0.005;
-
     float luminance = dot(hdrColor, float3(0.2126, 0.7152, 0.0722));
-
     if (luminance < EPSILON)
     {
         return 0;
@@ -97,7 +101,7 @@ uint HDRToHistogramBin(float3 hdrColor, float minLogLuminance, float oneOverLogL
     return uint(logLuminance * 254.0 + 1.0);
 }
 
-[numthreads(16, 16, 1)]
+[numthreads(POST_PROCESS_LUMINANCE_DISPATCH_X, POST_PROCESS_LUMINANCE_DISPATCH_Y, 1)]
 void ComputeBuildHistogramExposure(uniform HistogramBuildPushConstant pc, uint3 tid : SV_DispatchThreadID, uint groupIndex : SV_GroupIndex) {
     sharedHistogram[groupIndex] = 0;
 
@@ -113,3 +117,34 @@ void ComputeBuildHistogramExposure(uniform HistogramBuildPushConstant pc, uint3 
 
     InterlockedAdd(pc.histogramBufferAddress[groupIndex], sharedHistogram[groupIndex]);
 }
+
+groupshared uint sharedHistogramAverage[POST_PROCESS_LUMINANCE_HISTOGRAM_SIZE];
+
+[numthreads(POST_PROCESS_LUMINANCE_HISTOGRAM_SIZE, 1, 1)]
+void ComputeAverageExposure(uniform ExposureCalculatePushConstant pc, uint3 tid : SV_DispatchThreadID, uint groupIndex : SV_GroupIndex) {
+    uint countForThisBin = pc.histogramBufferAddress[groupIndex];
+    sharedHistogramAverage[groupIndex] = countForThisBin * groupIndex;
+
+    GroupMemoryBarrierWithGroupSync();
+
+     // Reset the count stored in the buffer in anticipation of the next pass
+     // todo: ensure this happens in the RDG
+    //   histogram[localIndex] = 0;
+
+    for (uint cutoff = (POST_PROCESS_LUMINANCE_HISTOGRAM_SIZE >> 1); cutoff > 0; cutoff >>= 1) {
+        if (uint(groupIndex) < cutoff) {
+            sharedHistogramAverage[groupIndex] += sharedHistogramAverage[groupIndex + cutoff];
+        }
+
+        GroupMemoryBarrierWithGroupSync();
+    }
+
+    if (groupIndex == 0) {
+        float weightedLogAverage = (sharedHistogramAverage[0] / max(pc.totalPixels - float(countForThisBin), 1.0)) - 1.0;
+        float weightedAvgLum = exp2(((weightedLogAverage / 254.0) * pc.logLuminanceRange) + pc.minLogLuminance);
+        float lumLastFrame = pc.luminanceBufferAddress[0];
+        float adaptedLum = lumLastFrame + (weightedAvgLum - lumLastFrame) * pc.adaptationSpeed;
+        pc.luminanceBufferAddress[0] = adaptedLum;
+    }
+}
+

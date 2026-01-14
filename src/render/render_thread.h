@@ -147,8 +147,8 @@ private:
     ComputePipeline deferredResolvePipeline;
     ComputePipeline temporalAntialiasingPipeline;
 
-    ComputePipeline histogramBuildPipeline;
-    ComputePipeline exposureCalculatePipeline;
+    ComputePipeline exposureBuildHistogramPipeline;
+    ComputePipeline exposureCalculateAveragePipeline;
     ComputePipeline tonemapSDRPipeline;
 };
 } // Render

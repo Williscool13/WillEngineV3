@@ -290,25 +290,37 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     readbackPass.ReadTransferBuffer("indirectBuffer");
     readbackPass.ReadTransferBuffer("indirectCountBuffer");
     readbackPass.ReadTransferBuffer("luminanceHistogram");
+    readbackPass.ReadTransferBuffer("luminanceBuffer");
     readbackPass.WriteTransferBuffer("debugReadbackBuffer");
     readbackPass.Execute([&](VkCommandBuffer cmd) {
+        size_t offsetSoFar = 0;
         VkBufferCopy countCopy{};
         countCopy.srcOffset = 0;
         countCopy.dstOffset = 0;
         countCopy.size = sizeof(uint32_t);
         vkCmdCopyBuffer(cmd, renderGraph->GetBufferHandle("indirectCountBuffer"), renderGraph->GetBufferHandle("debugReadbackBuffer"), 1, &countCopy);
+        offsetSoFar += sizeof(uint32_t);
 
         VkBufferCopy indirectCopy{};
         indirectCopy.srcOffset = 0;
-        indirectCopy.dstOffset = sizeof(uint32_t);
+        indirectCopy.dstOffset = offsetSoFar;
         indirectCopy.size = 10 * sizeof(InstancedMeshIndirectDrawParameters);
         vkCmdCopyBuffer(cmd, renderGraph->GetBufferHandle("indirectBuffer"), renderGraph->GetBufferHandle("debugReadbackBuffer"), 1, &indirectCopy);
+        offsetSoFar += 10 * sizeof(InstancedMeshIndirectDrawParameters);
 
         VkBufferCopy histogramCopy{};
         histogramCopy.srcOffset = 0;
-        histogramCopy.dstOffset = sizeof(uint32_t) + 10 * sizeof(InstancedMeshIndirectDrawParameters);
+        histogramCopy.dstOffset = offsetSoFar;
         histogramCopy.size = 256 * sizeof(uint32_t);
         vkCmdCopyBuffer(cmd, renderGraph->GetBufferHandle("luminanceHistogram"), renderGraph->GetBufferHandle("debugReadbackBuffer"), 1, &histogramCopy);
+        offsetSoFar += 256 * sizeof(uint32_t);
+
+        VkBufferCopy averageExposureCopy{};
+        averageExposureCopy.srcOffset = 0;
+        averageExposureCopy.dstOffset = offsetSoFar;
+        averageExposureCopy.size = sizeof(uint32_t);
+        vkCmdCopyBuffer(cmd, renderGraph->GetBufferHandle("luminanceBuffer"), renderGraph->GetBufferHandle("debugReadbackBuffer"), 1, &averageExposureCopy);
+        offsetSoFar += sizeof(uint32_t);
     });
 #endif
 
@@ -547,7 +559,10 @@ void RenderThread::CreatePipelines()
         instancingIndirectConstructionPipeline = ComputePipeline(context.get(), piplineLayoutCreateInfo, Platform::GetShaderPath() / "instancingCompactAndGenerateIndirect_compute.spv");
 
         pushConstant.size = sizeof(HistogramBuildPushConstant);
-        histogramBuildPipeline = ComputePipeline(context.get(), piplineLayoutCreateInfo, Platform::GetShaderPath() / "buildHistogramExposure_compute.spv");
+        exposureBuildHistogramPipeline = ComputePipeline(context.get(), piplineLayoutCreateInfo, Platform::GetShaderPath() / "exposureBuildHistogram_compute.spv");
+
+        pushConstant.size = sizeof(ExposureCalculatePushConstant);
+        exposureCalculateAveragePipeline = ComputePipeline(context.get(), piplineLayoutCreateInfo, Platform::GetShaderPath() / "exposureCalculateAverage_compute.spv");
 
         pushConstant.size = sizeof(TonemapSDRPushConstant);
         tonemapSDRPipeline = ComputePipeline(context.get(), piplineLayoutCreateInfo, Platform::GetShaderPath() / "tonemapSDR_compute.spv");
@@ -1146,10 +1161,10 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
     {
         renderGraph->CreateBuffer("luminanceHistogram", POST_PROCESS_LUMINANCE_BUFFER_SIZE);
 
-        if (!graph.HasBuffer("exposureBuffer")) {
-            renderGraph->CreateBuffer("exposureBuffer", sizeof(float));
+        if (!graph.HasBuffer("luminanceBuffer")) {
+            renderGraph->CreateBuffer("luminanceBuffer", sizeof(float));
         }
-        renderGraph->CarryBufferToNextFrame("exposureBuffer", "exposureBuffer", 0);
+        renderGraph->CarryBufferToNextFrame("luminanceBuffer", "luminanceBuffer", 0);
 
         auto& clearPass = graph.AddPass("Clear Histogram", VK_PIPELINE_STAGE_TRANSFER_BIT);
         clearPass.WriteTransferBuffer("luminanceHistogram");
@@ -1174,8 +1189,8 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
                 .oneOverLogLuminanceRange = oneOverLogLuminanceRange,
             };
 
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, histogramBuildPipeline.pipeline.handle);
-            vkCmdPushConstants(cmd, histogramBuildPipeline.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(HistogramBuildPushConstant), &pc);
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, exposureBuildHistogramPipeline.pipeline.handle);
+            vkCmdPushConstants(cmd, exposureBuildHistogramPipeline.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(HistogramBuildPushConstant), &pc);
             uint32_t xDispatch = (width + POST_PROCESS_LUMINANCE_DISPATCH_X - 1) / POST_PROCESS_LUMINANCE_DISPATCH_X;
             uint32_t yDispatch = (height + POST_PROCESS_LUMINANCE_DISPATCH_Y - 1) / POST_PROCESS_LUMINANCE_DISPATCH_Y;
             vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
@@ -1183,21 +1198,25 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
 
         auto& exposurePass = graph.AddPass("Calculate Exposure", VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
         exposurePass.ReadBuffer("luminanceHistogram");
-        exposurePass.ReadWriteBuffer("exposureBuffer");
-        /*exposurePass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
-            ExposureCalculatePushConstant pc{};
-            pc.histogramBufferAddress = graph.GetBufferAddress("luminanceHistogram");
-            pc.exposureBufferAddress = graph.GetBufferAddress("exposureBuffer");
-            pc.targetPercentile = 0.9f;
-            pc.minExposure = 0.3f;
-            pc.maxExposure = 3.0f;
-            pc.adaptationSpeed = 1.0f * deltaTime;
-            pc.totalPixels = width * height;
+        exposurePass.ReadWriteBuffer("luminanceBuffer");
+        exposurePass.Execute([&, deltaTime, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
+            constexpr float minLogLuminance = -10.0;
+            constexpr float maxLogLuminance = 2.0;
+            constexpr float logLuminanceRange = maxLogLuminance - minLogLuminance;
+            constexpr float oneOverLogLuminanceRange = 1.0 / logLuminanceRange;
+            ExposureCalculatePushConstant pc{
+                .histogramBufferAddress = graph.GetBufferAddress("luminanceHistogram"),
+                .luminanceBufferAddress = graph.GetBufferAddress("luminanceBuffer"),
+                .minLogLuminance = minLogLuminance,
+                .logLuminanceRange = logLuminanceRange,
+                .adaptationSpeed = viewFamily.exposureAdaptationRate * deltaTime,
+                .totalPixels = width * height,
+            };
 
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, exposureCalculatePipeline.pipeline.handle);
-            vkCmdPushConstants(cmd, exposureCalculatePipeline.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, exposureCalculateAveragePipeline.pipeline.handle);
+            vkCmdPushConstants(cmd, exposureCalculateAveragePipeline.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, 1, 1, 1);
-        });*/
+        });
     }
 
     // todo: add support for HDR swapchain
@@ -1210,6 +1229,8 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
     tonemapPass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
         TonemapSDRPushConstant pushData{
             .tonemapOperator = viewFamily.tonemapOperator,
+            .targetLuminance = viewFamily.exposureTargetLuminance,
+            .luminanceBufferAddress = graph.GetBufferAddress("luminanceBuffer"),
             .outputWidth = width,
             .outputHeight = height,
             .srcImageIndex = graph.GetSampledImageViewDescriptorIndex("taaOutput"),
