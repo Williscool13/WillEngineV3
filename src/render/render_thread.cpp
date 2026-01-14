@@ -566,6 +566,12 @@ void RenderThread::CreatePipelines()
 
         pushConstant.size = sizeof(TonemapSDRPushConstant);
         tonemapSDRPipeline = ComputePipeline(context.get(), piplineLayoutCreateInfo, Platform::GetShaderPath() / "tonemapSDR_compute.spv");
+
+        pushConstant.size = sizeof(MotionBlurTileVelocityPushConstant);
+        motionBlurTileMaxPipeline = ComputePipeline(context.get(), piplineLayoutCreateInfo, Platform::GetShaderPath() / "motionBlurTileMax_compute.spv");
+
+        pushConstant.size = sizeof(MotionBlurNeighborMaxPushConstant);
+        motionBlurNeighborMaxPipeline = ComputePipeline(context.get(), piplineLayoutCreateInfo, Platform::GetShaderPath() / "motionBlurBlurNeighborMax_compute.spv");
     }
 }
 
@@ -1243,5 +1249,48 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
         uint32_t yDispatch = (height + 15) / 16;
         vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
     });
+
+    // Motion Blur
+    {
+        uint32_t blurTiledX = (renderExtent[0] + POST_PROCESS_MOTION_BLUR_TILE_SIZE - 1) / POST_PROCESS_MOTION_BLUR_TILE_SIZE;
+        uint32_t blurTiledY = (renderExtent[1] + POST_PROCESS_MOTION_BLUR_TILE_SIZE - 1) / POST_PROCESS_MOTION_BLUR_TILE_SIZE;
+        graph.CreateTexture("motionBlurTiledMax", TextureInfo{GBUFFER_MOTION_FORMAT, blurTiledX, blurTiledY, 1});
+        RenderPass& motionBlurTiledMaxPass = graph.AddPass("MotionBlurTiledMax", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+        motionBlurTiledMaxPass.ReadSampledImage("velocityTarget");
+        motionBlurTiledMaxPass.WriteStorageImage("motionBlurTiledMax");
+        motionBlurTiledMaxPass.Execute([&, width = renderExtent[0], height = renderExtent[1], blurTiledX, blurTiledY](VkCommandBuffer cmd) {
+            MotionBlurTileVelocityPushConstant pc{
+                .velocityBufferIndex = graph.GetSampledImageViewDescriptorIndex("velocityTarget"),
+                .tileMaxIndex = graph.GetStorageImageViewDescriptorIndex("motionBlurTiledMax"),
+                .velocityBufferSize = {width, height},
+                .tileBufferSize = {blurTiledX, blurTiledY},
+            };
+
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, motionBlurTileMaxPipeline.pipeline.handle);
+            vkCmdPushConstants(cmd, motionBlurTileMaxPipeline.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            uint32_t xDispatch = (blurTiledX + POST_PROCESS_MOTION_BLUR_TILE_DISPATCH_X - 1) / POST_PROCESS_MOTION_BLUR_TILE_DISPATCH_X;
+            uint32_t yDispatch = (blurTiledY + POST_PROCESS_MOTION_BLUR_TILE_DISPATCH_Y - 1) / POST_PROCESS_MOTION_BLUR_TILE_DISPATCH_Y;
+            vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
+        });
+
+
+        graph.CreateTexture("motionBlurTiledAverageMax", TextureInfo{GBUFFER_MOTION_FORMAT, blurTiledX, blurTiledY, 1});
+        RenderPass& motionBlurNeighborMax = graph.AddPass("MotionBlurNeighborMax", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+        motionBlurNeighborMax.ReadSampledImage("motionBlurTiledMax");
+        motionBlurNeighborMax.WriteStorageImage("motionBlurTiledAverageMax");
+        motionBlurNeighborMax.Execute([&, blurTiledX, blurTiledY](VkCommandBuffer cmd) {
+            MotionBlurNeighborMaxPushConstant pc{
+                .tileBufferSize = {blurTiledX, blurTiledY},
+                .tileMaxIndex =  graph.GetSampledImageViewDescriptorIndex("motionBlurTiledMax"),
+                .neighborMaxIndex = graph.GetStorageImageViewDescriptorIndex("motionBlurTiledAverageMax"),
+            };
+
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, motionBlurNeighborMaxPipeline.pipeline.handle);
+            vkCmdPushConstants(cmd, motionBlurNeighborMaxPipeline.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            uint32_t xDispatch = (blurTiledX + POST_PROCESS_MOTION_BLUR_CONVOLUTION_DISPATCH_X - 1) / POST_PROCESS_MOTION_BLUR_CONVOLUTION_DISPATCH_X;
+            uint32_t yDispatch = (blurTiledY + POST_PROCESS_MOTION_BLUR_CONVOLUTION_DISPATCH_Y - 1) / POST_PROCESS_MOTION_BLUR_CONVOLUTION_DISPATCH_Y;
+            vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
+        });
+    }
 }
 } // Render

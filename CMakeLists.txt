@@ -245,6 +245,8 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/postprocess.slang compute ComputeSDRTonemap tonemapSDR
         ${CMAKE_SOURCE_DIR}/shaders/postprocess.slang compute ComputeBuildHistogramExposure exposureBuildHistogram
         ${CMAKE_SOURCE_DIR}/shaders/postprocess.slang compute ComputeAverageExposure exposureCalculateAverage
+        ${CMAKE_SOURCE_DIR}/shaders/postprocess.slang compute ComputeMotionBlurTileMax motionBlurTileMax
+        ${CMAKE_SOURCE_DIR}/shaders/postprocess.slang compute ComputeMotionBlurNeighborMax motionBlurBlurNeighborMax
 )
 
 # Post-Build Commands =========================

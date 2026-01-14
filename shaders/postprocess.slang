@@ -3,6 +3,8 @@ import constants_interop;
 
 import bindless_declarations;
 
+
+// ==================== Tonemapping ====================
 static const float3x3 ACESInputMat = {
     {0.59719, 0.35458, 0.04823},
     {0.07600, 0.90834, 0.01566},
@@ -53,8 +55,8 @@ float3 LottesTonemapSimple(float3 c) {
 
 [shader("compute")]
 [numthreads(16, 16, 1)]
-void ComputeSDRTonemap(uniform TonemapSDRPushConstant pc, uint3 threadId : SV_DispatchThreadID) {
-    int2 texelCoord = int2(threadId.xy);
+void ComputeSDRTonemap(uniform TonemapSDRPushConstant pc, uint3 dtid : SV_DispatchThreadID) {
+    int2 texelCoord = int2(dtid.xy);
     float3 hdrColor = rdgTextures[pc.srcImageIndex].Load(int3(texelCoord, 0)).rgb;
 
     float avgLuminance = pc.luminanceBufferAddress[0];
@@ -127,10 +129,6 @@ void ComputeAverageExposure(uniform ExposureCalculatePushConstant pc, uint3 tid 
 
     GroupMemoryBarrierWithGroupSync();
 
-     // Reset the count stored in the buffer in anticipation of the next pass
-     // todo: ensure this happens in the RDG
-    //   histogram[localIndex] = 0;
-
     for (uint cutoff = (POST_PROCESS_LUMINANCE_HISTOGRAM_SIZE >> 1); cutoff > 0; cutoff >>= 1) {
         if (uint(groupIndex) < cutoff) {
             sharedHistogramAverage[groupIndex] += sharedHistogramAverage[groupIndex + cutoff];
@@ -147,4 +145,73 @@ void ComputeAverageExposure(uniform ExposureCalculatePushConstant pc, uint3 tid 
         pc.luminanceBufferAddress[0] = adaptedLum;
     }
 }
+
+// ==================== Motion Blur (Per Object) ====================
+[numthreads(POST_PROCESS_MOTION_BLUR_TILE_DISPATCH_X, POST_PROCESS_MOTION_BLUR_TILE_DISPATCH_Y, 1)]
+void ComputeMotionBlurTileMax(uniform MotionBlurTileVelocityPushConstant pc, uint3 dtid : SV_DispatchThreadID) {
+    uint2 tileCoord = dtid.xy;
+
+    if (any(tileCoord >= pc.tileBufferSize)) {
+        return;
+    }
+
+    float maxVelocityLengthSq = 0.0;
+    float2 maxVelocity = float2(0.0f, 0.0f);
+
+    uint2 tileStart = tileCoord * POST_PROCESS_MOTION_BLUR_TILE_SIZE;
+
+    [ForceUnroll]
+    for (uint y = 0; y < POST_PROCESS_MOTION_BLUR_TILE_SIZE; ++y) {
+        [ForceUnroll]
+        for (uint x = 0; x < POST_PROCESS_MOTION_BLUR_TILE_SIZE; ++x) {
+            uint2 pixelCoord = tileStart + uint2(x, y);
+
+            if (any(pixelCoord >= pc.velocityBufferSize))
+                continue;
+
+            float2 velocity = rdgTextures[pc.velocityBufferIndex].Load(int3(pixelCoord, 0)).rg;
+            float velocityLengthSq = dot(velocity, velocity);
+
+            if (velocityLengthSq > maxVelocityLengthSq) {
+                maxVelocityLengthSq = velocityLengthSq;
+                maxVelocity = velocity;
+            }
+        }
+    }
+
+    rdgRenderTextures[pc.tileMaxIndex][tileCoord] = float4(maxVelocity, 0, 0);
+}
+
+[numthreads(POST_PROCESS_MOTION_BLUR_CONVOLUTION_DISPATCH_X, POST_PROCESS_MOTION_BLUR_CONVOLUTION_DISPATCH_Y, 1)]
+void ComputeMotionBlurNeighborMax(uniform MotionBlurNeighborMaxPushConstant pc, uint3 dtid : SV_DispatchThreadID) {
+    uint2 tileCoord = dtid.xy;
+
+    if (any(tileCoord >= pc.tileBufferSize)) {
+        return;
+    }
+
+    float maxVelocityLengthSq = 0.0;
+    float2 maxVelocity = float2(0.0f, 0.0f);
+
+    [ForceUnroll]
+    for (int y = -1; y <= 1; ++y) {
+        [ForceUnroll]
+        for (int x = -1; x <= 1; ++x) {
+            int2 sampleCoord = int2(tileCoord) + int2(x, y);
+
+            sampleCoord = clamp(sampleCoord, int2(0, 0), int2(pc.tileBufferSize) - int2(1, 1));
+
+            float2 velocity = rdgTextures[pc.tileMaxIndex].Load(int3(sampleCoord, 0)).rg;
+            float velocityLengthSq = dot(velocity, velocity);
+
+            if (velocityLengthSq > maxVelocityLengthSq) {
+                maxVelocityLengthSq = velocityLengthSq;
+                maxVelocity = velocity;
+            }
+        }
+    }
+
+    rdgRenderTextures[pc.neighborMaxIndex][tileCoord] = float4(maxVelocity, 0.0f, 0.0f);
+}
+
 

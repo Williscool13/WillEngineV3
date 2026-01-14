@@ -211,4 +211,20 @@ SHADER_PUBLIC struct ExposureCalculatePushConstant
     SHADER_PUBLIC uint32_t totalPixels;
 };
 
+SHADER_PUBLIC struct MotionBlurTileVelocityPushConstant
+{
+    SHADER_PUBLIC uint32_t velocityBufferIndex;
+    SHADER_PUBLIC uint32_t tileMaxIndex;
+    SHADER_PUBLIC uint2 velocityBufferSize;
+    SHADER_PUBLIC uint2 tileBufferSize;
+};
+
+SHADER_PUBLIC struct MotionBlurNeighborMaxPushConstant {
+    SHADER_PUBLIC uint2 tileBufferSize;
+    SHADER_PUBLIC uint tileMaxIndex;
+    SHADER_PUBLIC uint neighborMaxIndex;
+};
+
+
+
 #endif //WILL_ENGINE_PUSH_CONSTANT_INTEROP_H

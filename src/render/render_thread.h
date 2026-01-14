@@ -150,6 +150,8 @@ private:
     ComputePipeline exposureBuildHistogramPipeline;
     ComputePipeline exposureCalculateAveragePipeline;
     ComputePipeline tonemapSDRPipeline;
+    ComputePipeline motionBlurTileMaxPipeline;
+    ComputePipeline motionBlurNeighborMaxPipeline;
 };
 } // Render
 

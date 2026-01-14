@@ -1398,8 +1398,7 @@ void RenderGraph::CreatePhysicalImage(PhysicalResource& resource, const Resource
     imageInfo.samples = static_cast<VkSampleCountFlagBits>(dim.samples);
 
     VmaAllocationCreateInfo allocInfo = {};
-    allocInfo.usage = VMA_MEMORY_USAGE_AUTO;
-    allocInfo.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
+    allocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
 
     VK_CHECK(vmaCreateImage(context->allocator, &imageInfo, &allocInfo,
         &resource.image, &resource.imageAllocation, nullptr));
