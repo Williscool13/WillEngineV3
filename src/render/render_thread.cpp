@@ -327,15 +327,15 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     if (viewFamily.mainView.debug != 0) {
         static constexpr const char* debugTargets[] = {
             "depthTarget",
-            "depthTarget",
-            "albedoTarget",
-            "normalTarget",
-            "pbrTarget",
-            "velocityTarget",
-            "shadowCascade_0",
-            "shadowCascade_1",
-            "shadowCascade_2",
-            "shadowCascade_3",
+            "depthTarget", // 1
+            "albedoTarget", // 2
+            "normalTarget", // 3
+            "pbrTarget", // 4
+            "velocityTarget", // 5
+            "motionBlurTiledMax", // 6
+            "motionBlurTiledNeighborMax", // 7
+            "shadowCascade_2", // 8
+            "shadowCascade_3", // 9
         };
 
         uint32_t debugIndex = viewFamily.mainView.debug;
@@ -346,7 +346,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
 
         auto& debugVisPass = renderGraph->AddPass("DebugVisualize", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
         debugVisPass.ReadSampledImage(debugTargetName);
-        debugVisPass.WriteStorageImage("finalImage");
+        debugVisPass.WriteStorageImage("postProcessOutput");
         debugVisPass.Execute([&, debugTargetName, debugIndex](VkCommandBuffer cmd) {
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, debugVisualizePipeline.pipeline.handle);
 
@@ -357,8 +357,8 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
                 .nearPlane = viewFamily.mainView.currentViewData.nearPlane,
                 .farPlane = viewFamily.mainView.currentViewData.farPlane,
                 .textureIndex = renderGraph->GetSampledImageViewDescriptorIndex(debugTargetName),
-                .samplerIndex = resourceManager->linearSamplerIndex,
-                .outputImageIndex = renderGraph->GetStorageImageViewDescriptorIndex("finalImage"),
+                .samplerIndex = resourceManager->pointSamplerIndex,
+                .outputImageIndex = renderGraph->GetStorageImageViewDescriptorIndex("postProcessOutput"),
                 .debugType = debugIndex
             };
 
@@ -372,10 +372,10 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
 
     if (frameBuffer.bDrawImgui) {
         auto& imguiEditorPass = renderGraph->AddPass("ImguiEditor", VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT);
-        imguiEditorPass.WriteColorAttachment("finalImage");
+        imguiEditorPass.WriteColorAttachment("postProcessOutput");
         imguiEditorPass.Execute([&](VkCommandBuffer cmd) {
-            const VkRenderingAttachmentInfo imguiAttachment = VkHelpers::RenderingAttachmentInfo(renderGraph->GetImageView("finalImage"), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-            const ResourceDimensions& dims = renderGraph->GetImageDimensions("finalImage");
+            const VkRenderingAttachmentInfo imguiAttachment = VkHelpers::RenderingAttachmentInfo(renderGraph->GetImageView("postProcessOutput"), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+            const ResourceDimensions& dims = renderGraph->GetImageDimensions("postProcessOutput");
             const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({dims.width, dims.height}, &imguiAttachment, nullptr);
             vkCmdBeginRendering(cmd, &renderInfo);
             ImDrawDataSnapshot& imguiSnapshot = engineRenderSynchronization->imguiDataSnapshots[currentFrameIndex];
@@ -390,10 +390,10 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
                                VK_IMAGE_LAYOUT_UNDEFINED, VK_PIPELINE_STAGE_2_BLIT_BIT, VK_IMAGE_LAYOUT_UNDEFINED);
 
     auto& blitPass = renderGraph->AddPass("BlitToSwapchain", VK_PIPELINE_STAGE_2_BLIT_BIT);
-    blitPass.ReadBlitImage("finalImage");
+    blitPass.ReadBlitImage("postProcessOutput");
     blitPass.WriteBlitImage("swapchainImage");
     blitPass.Execute([&](VkCommandBuffer cmd) {
-        VkImage drawImage = renderGraph->GetImage("finalImage");
+        VkImage drawImage = renderGraph->GetImage("postProcessOutput");
 
         VkOffset3D renderOffset = {static_cast<int32_t>(renderExtent[0]), static_cast<int32_t>(renderExtent[1]), 1};
         VkOffset3D swapchainOffset = {static_cast<int32_t>(swapchain->extent.width), static_cast<int32_t>(swapchain->extent.height), 1};
@@ -572,6 +572,9 @@ void RenderThread::CreatePipelines()
 
         pushConstant.size = sizeof(MotionBlurNeighborMaxPushConstant);
         motionBlurNeighborMaxPipeline = ComputePipeline(context.get(), piplineLayoutCreateInfo, Platform::GetShaderPath() / "motionBlurBlurNeighborMax_compute.spv");
+
+        pushConstant.size = sizeof(MotionBlurReconstructionPushConstant);
+        motionBlurReconstructionPipeline = ComputePipeline(context.get(), piplineLayoutCreateInfo, Platform::GetShaderPath() / "motionBlurReconstruction_compute.spv");
     }
 }
 
@@ -640,6 +643,7 @@ void RenderThread::SetupFrameUniforms(VkCommandBuffer cmd, const Core::ViewFamil
         sceneData.invProj = glm::inverse(jitteredProj);
         sceneData.invViewProj = glm::inverse(sceneData.viewProj);
         sceneData.prevViewProj = jitteredPrevProj * prevViewMatrix;
+        sceneData.unjitteredPrevViewProj = prevProjMatrix * prevViewMatrix;
 
         sceneData.cameraWorldPos = glm::vec4(view.currentViewData.cameraPos, 1.0f);
 
@@ -1163,6 +1167,8 @@ void RenderThread::SetupTemporalAntialiasing(RenderGraph& graph, const Core::Vie
 
 void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamily& viewFamily, const std::array<uint32_t, 2> renderExtent, float deltaTime) const
 {
+    graph.CreateTexture("postProcessOutput", TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
+
     // Exposure
     {
         renderGraph->CreateBuffer("luminanceHistogram", POST_PROCESS_LUMINANCE_BUFFER_SIZE);
@@ -1225,30 +1231,33 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
         });
     }
 
-    // todo: add support for HDR swapchain
-    // "postHDRImage"
-    graph.CreateTexture("finalImage", TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
+    // Tonemap
+    {
+        // todo: add support for HDR swapchain
+        graph.CreateTexture("tonemapOutput", TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
 
-    RenderPass& tonemapPass = graph.AddPass("TonemapSDR", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-    tonemapPass.ReadSampledImage("taaOutput");
-    tonemapPass.WriteStorageImage("finalImage");
-    tonemapPass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
-        TonemapSDRPushConstant pushData{
-            .tonemapOperator = viewFamily.tonemapOperator,
-            .targetLuminance = viewFamily.exposureTargetLuminance,
-            .luminanceBufferAddress = graph.GetBufferAddress("luminanceBuffer"),
-            .outputWidth = width,
-            .outputHeight = height,
-            .srcImageIndex = graph.GetSampledImageViewDescriptorIndex("taaOutput"),
-            .dstImageIndex = graph.GetStorageImageViewDescriptorIndex("finalImage"),
-        };
+        RenderPass& tonemapPass = graph.AddPass("TonemapSDR", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+        tonemapPass.ReadSampledImage("taaOutput");
+        tonemapPass.WriteStorageImage("tonemapOutput");
+        tonemapPass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
+            TonemapSDRPushConstant pushData{
+                .tonemapOperator = viewFamily.tonemapOperator,
+                .targetLuminance = viewFamily.exposureTargetLuminance,
+                .luminanceBufferAddress = graph.GetBufferAddress("luminanceBuffer"),
+                .outputWidth = width,
+                .outputHeight = height,
+                .srcImageIndex = graph.GetSampledImageViewDescriptorIndex("taaOutput"),
+                .dstImageIndex = graph.GetStorageImageViewDescriptorIndex("tonemapOutput"),
+            };
 
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, tonemapSDRPipeline.pipeline.handle);
-        vkCmdPushConstants(cmd, tonemapSDRPipeline.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(TonemapSDRPushConstant), &pushData);
-        uint32_t xDispatch = (width + 15) / 16;
-        uint32_t yDispatch = (height + 15) / 16;
-        vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
-    });
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, tonemapSDRPipeline.pipeline.handle);
+            vkCmdPushConstants(cmd, tonemapSDRPipeline.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(TonemapSDRPushConstant), &pushData);
+            uint32_t xDispatch = (width + 15) / 16;
+            uint32_t yDispatch = (height + 15) / 16;
+            vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
+        });
+    }
+
 
     // Motion Blur
     {
@@ -1274,21 +1283,47 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
         });
 
 
-        graph.CreateTexture("motionBlurTiledAverageMax", TextureInfo{GBUFFER_MOTION_FORMAT, blurTiledX, blurTiledY, 1});
+        graph.CreateTexture("motionBlurTiledNeighborMax", TextureInfo{GBUFFER_MOTION_FORMAT, blurTiledX, blurTiledY, 1});
         RenderPass& motionBlurNeighborMax = graph.AddPass("MotionBlurNeighborMax", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
         motionBlurNeighborMax.ReadSampledImage("motionBlurTiledMax");
-        motionBlurNeighborMax.WriteStorageImage("motionBlurTiledAverageMax");
+        motionBlurNeighborMax.WriteStorageImage("motionBlurTiledNeighborMax");
         motionBlurNeighborMax.Execute([&, blurTiledX, blurTiledY](VkCommandBuffer cmd) {
             MotionBlurNeighborMaxPushConstant pc{
                 .tileBufferSize = {blurTiledX, blurTiledY},
-                .tileMaxIndex =  graph.GetSampledImageViewDescriptorIndex("motionBlurTiledMax"),
-                .neighborMaxIndex = graph.GetStorageImageViewDescriptorIndex("motionBlurTiledAverageMax"),
+                .tileMaxIndex = graph.GetSampledImageViewDescriptorIndex("motionBlurTiledMax"),
+                .neighborMaxIndex = graph.GetStorageImageViewDescriptorIndex("motionBlurTiledNeighborMax"),
             };
 
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, motionBlurNeighborMaxPipeline.pipeline.handle);
             vkCmdPushConstants(cmd, motionBlurNeighborMaxPipeline.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             uint32_t xDispatch = (blurTiledX + POST_PROCESS_MOTION_BLUR_CONVOLUTION_DISPATCH_X - 1) / POST_PROCESS_MOTION_BLUR_CONVOLUTION_DISPATCH_X;
             uint32_t yDispatch = (blurTiledY + POST_PROCESS_MOTION_BLUR_CONVOLUTION_DISPATCH_Y - 1) / POST_PROCESS_MOTION_BLUR_CONVOLUTION_DISPATCH_Y;
+            vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
+        });
+
+        // graph.CreateTexture("motionBlurOutput", TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
+        RenderPass& motionBlurReconstructionPass = graph.AddPass("MotionBlurReconstruction", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+        motionBlurReconstructionPass.ReadSampledImage("tonemapOutput");
+        motionBlurReconstructionPass.ReadSampledImage("velocityTarget");
+        motionBlurReconstructionPass.ReadSampledImage("depthTarget");
+        motionBlurReconstructionPass.ReadSampledImage("motionBlurTiledNeighborMax");
+        motionBlurReconstructionPass.WriteStorageImage("postProcessOutput");
+        motionBlurReconstructionPass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
+            MotionBlurReconstructionPushConstant pc{
+                .sceneData = graph.GetBufferAddress("sceneData"),
+                .sceneColorIndex = graph.GetSampledImageViewDescriptorIndex("tonemapOutput"),
+                .velocityBufferIndex = graph.GetSampledImageViewDescriptorIndex("velocityTarget"),
+                .depthBufferIndex = graph.GetSampledImageViewDescriptorIndex("depthTarget"),
+                .tileNeighborMaxIndex = graph.GetSampledImageViewDescriptorIndex("motionBlurTiledNeighborMax"),
+                .outputIndex = graph.GetStorageImageViewDescriptorIndex("postProcessOutput"),
+                .velocityScale = 1.0f,
+                .depthThreshold = 0.1f,
+            };
+
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, motionBlurReconstructionPipeline.pipeline.handle);
+            vkCmdPushConstants(cmd, motionBlurReconstructionPipeline.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            uint32_t xDispatch = (width + POST_PROCESS_MOTION_BLUR_DISPATCH_X - 1) / POST_PROCESS_MOTION_BLUR_DISPATCH_X;
+            uint32_t yDispatch = (height + POST_PROCESS_MOTION_BLUR_DISPATCH_Y - 1) / POST_PROCESS_MOTION_BLUR_DISPATCH_Y;
             vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
         });
     }

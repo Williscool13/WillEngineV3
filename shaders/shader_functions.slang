@@ -33,7 +33,6 @@ float3x3 Adjugate(float3x3 m) {
 
 // Reconstructs position of a pixel based on inverse project and depth buffer
 float3 ReconstructViewPosition(float4x4 invProj, float2 uv, float depth) {
-
     float2 ndc = uv * 2.0 - 1.0;
     // Note: NDC Y-flip required because viewport uses negative height
     //uv.y = 1 - uv.y;
@@ -42,6 +41,32 @@ float3 ReconstructViewPosition(float4x4 invProj, float2 uv, float depth) {
     float4 positionVS = mul(invProj, float4(ndc, depth, 1.0));
     return positionVS.xyz / positionVS.w;
 }
+
+// Reconstructs position of a pixel based on inverse project and depth buffer
+float3 ReconstructWorldPosition(float4x4 invViewProj, float2 uv, float depth) {
+    float2 ndc = uv * 2.0 - 1.0;
+    // Note: NDC Y-flip required because viewport uses negative height
+    //uv.y = 1 - uv.y;
+    ndc.y = -ndc.y;
+
+    float4 clipPos = float4(ndc, depth, 1.0);
+    float4 worldPos = mul(invViewProj, clipPos);
+    return worldPos.xyz / worldPos.w;
+}
+float3 ReconstructWorldPosition(float4x4 invView, float4x4 invProj, float2 uv, float depth) {
+    float2 ndc = uv * 2.0 - 1.0;
+    // Note: NDC Y-flip required because viewport uses negative height
+    //uv.y = 1 - uv.y;
+    ndc.y = -ndc.y;
+
+    float4 clipPos = float4(ndc, depth, 1.0);
+    float4 viewPos = mul(invProj, clipPos);
+    viewPos.xyz /= viewPos.w;
+
+    float4 worldPos = mul(invView, float4(viewPos.xyz, 1.0));
+    return worldPos.xyz;
+}
+
 float3 RGBToYCoCg(float3 rgb) {
     float Y  = dot(rgb, float3( 0.25,  0.5,   0.25));
     float Co = dot(rgb, float3( 0.5,   0.0,  -0.5));

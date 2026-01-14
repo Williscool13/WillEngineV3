@@ -225,6 +225,15 @@ SHADER_PUBLIC struct MotionBlurNeighborMaxPushConstant {
     SHADER_PUBLIC uint neighborMaxIndex;
 };
 
-
+SHADER_PUBLIC struct MotionBlurReconstructionPushConstant {
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC uint32_t sceneColorIndex;
+    SHADER_PUBLIC uint32_t velocityBufferIndex;
+    SHADER_PUBLIC uint32_t depthBufferIndex;
+    SHADER_PUBLIC uint32_t tileNeighborMaxIndex;
+    SHADER_PUBLIC uint32_t outputIndex;
+    SHADER_PUBLIC float velocityScale;  // 1.0f default
+    SHADER_PUBLIC float depthThreshold; // 0.1f default
+};
 
 #endif //WILL_ENGINE_PUSH_CONSTANT_INTEROP_H

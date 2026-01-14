@@ -152,6 +152,7 @@ private:
     ComputePipeline tonemapSDRPipeline;
     ComputePipeline motionBlurTileMaxPipeline;
     ComputePipeline motionBlurNeighborMaxPipeline;
+    ComputePipeline motionBlurReconstructionPipeline;
 };
 } // Render
 

@@ -1,6 +1,8 @@
 import push_constant_interop;
 import constants_interop;
 
+import shader_functions;
+
 import bindless_declarations;
 
 
@@ -214,4 +216,82 @@ void ComputeMotionBlurNeighborMax(uniform MotionBlurNeighborMaxPushConstant pc, 
     rdgRenderTextures[pc.neighborMaxIndex][tileCoord] = float4(maxVelocity, 0.0f, 0.0f);
 }
 
+float2 ComputeCameraMotion(float4x4 invViewProj, float4x4 prevViewProj, float2 uv, float depth) {
+    float3 worldPos = ReconstructWorldPosition(invViewProj, uv, depth);
 
+    float4 prevClipPos = mul(prevViewProj, float4(worldPos, 1.0));
+    float2 prevNDC = prevClipPos.xy / prevClipPos.w;
+    prevNDC.y = -prevNDC.y;
+    float2 prevUV = prevNDC * 0.5 + 0.5;
+
+    return uv - prevUV;
+}
+
+[numthreads(POST_PROCESS_MOTION_BLUR_DISPATCH_X, POST_PROCESS_MOTION_BLUR_DISPATCH_Y, 1)]
+void ComputeMotionBlurReconstruction(uniform MotionBlurReconstructionPushConstant pc, uint3 dtid : SV_DispatchThreadID) {
+    uint2 pixelCoord = dtid.xy;
+
+    if (any(pixelCoord >= pc.sceneData->mainRenderTargetSize)) {
+        return;
+    }
+
+    float2 uv = (float2(pixelCoord) + 0.5) / pc.sceneData->mainRenderTargetSize;
+
+    float3 centerColor = rdgTextures[pc.sceneColorIndex].Load(int3(pixelCoord, 0)).rgb;
+    float centerDepth = rdgTextures[pc.depthBufferIndex].Load(int3(pixelCoord, 0)).r;
+    float2 totalVelocity = rdgTextures[pc.velocityBufferIndex].Load(int3(pixelCoord, 0)).rg;
+    totalVelocity = (totalVelocity - 0.5);
+    totalVelocity.y = -totalVelocity.y;
+
+    float2 cameraMotion = ComputeCameraMotion(pc.sceneData->invViewProj, pc.sceneData->prevViewProj, uv, centerDepth);
+    float2 prevJitter = pc.sceneData->prevJitter;
+    prevJitter.y = -prevJitter.y;
+    cameraMotion -= prevJitter * 0.5;
+    float2 objectVelocity = (totalVelocity - cameraMotion) * pc.velocityScale;
+
+    float2 objectVelocityPixels = objectVelocity * pc.sceneData->mainRenderTargetSize;
+    float velocityMagnitude = length(objectVelocityPixels);
+
+    if (velocityMagnitude < 0.5) {
+        rdgRenderTextures[pc.outputIndex][pixelCoord] = float4(centerColor, 1.0);
+        return;
+    }
+
+    rdgRenderTextures[pc.outputIndex][pixelCoord] = float4(centerColor, 1.0);
+    return;
+
+    // rdgRenderTextures[pc.outputIndex][pixelCoord] = float4(1.0f, 0.0f, 1.0f, 1.0);
+    // return;
+
+    float3 colorAccum = centerColor;
+    float weightAccum = 1.0;
+
+    [ForceUnroll]
+    for (int i = 1; i <= POST_PROCESS_MOTION_BLUR_SAMPLE_COUNT / 2; ++i) {
+        float t = float(i) / float(POST_PROCESS_MOTION_BLUR_SAMPLE_COUNT / 2);
+
+        for (int dir = -1; dir <= 1; dir += 2) {
+            float2 sampleUV = uv + objectVelocity * t * float(dir);
+
+            if (any(sampleUV < 0.0) || any(sampleUV > 1.0)) {
+                continue;
+            }
+
+            int2 sampleCoord = int2(sampleUV * pc.sceneData->mainRenderTargetSize);
+
+            float3 sampleColor = rdgTextures[pc.sceneColorIndex].Load(int3(sampleCoord, 0)).rgb;
+            float sampleDepth = rdgTextures[pc.depthBufferIndex].Load(int3(sampleCoord, 0)).r;
+
+            // Depth-aware weighting
+            float depthDiff = abs(centerDepth - sampleDepth);
+            float depthWeight = depthDiff < pc.depthThreshold ? 1.0 : 0.0;
+
+            colorAccum += sampleColor * depthWeight;
+            weightAccum += depthWeight;
+        }
+    }
+
+    float3 finalColor = colorAccum / weightAccum;
+
+    rdgRenderTextures[pc.outputIndex][pixelCoord] = float4(finalColor, 1.0);
+}

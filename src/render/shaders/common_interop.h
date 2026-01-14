@@ -66,6 +66,8 @@ SHADER_PUBLIC struct SHADER_ALIGN SceneData
     //SHADER_PUBLIC float4x4 prevInvViewProj;
     // SHADER_PUBLIC float4x4 prevViewProjCameraLookDirection;
 
+    SHADER_PUBLIC float4x4 unjitteredPrevViewProj;
+
     SHADER_PUBLIC float4 cameraWorldPos;
     // SHADER_PUBLIC float4 prevCameraWorldPos;
     SHADER_PUBLIC float2 jitter;
