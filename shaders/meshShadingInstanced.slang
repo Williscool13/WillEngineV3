@@ -118,8 +118,12 @@ void MeshMain(
     Meshlet meshlet = pushConstant.meshletBuffer[meshletIndex];
 
     Model m = pushConstant.modelBuffer[inPayload.modelIndex];
-    float4x4 viewProj = pushConstant.sceneData->viewProj;
-    float4x4 prevViewProj = pushConstant.sceneData->prevViewProj;
+
+    float4x4 jitteredViewProj = pushConstant.sceneData->viewProj;
+    float4x4 viewProj = pushConstant.sceneData->unjitteredViewProj;
+    float4x4 jitteredPrevViewProj = pushConstant.sceneData->prevViewProj;
+    float4x4 prevViewProj = pushConstant.sceneData->unjitteredPrevViewProj;
+
     float3x3 viewRotation = (float3x3)pushConstant.sceneData.view;
 
     SetMeshOutputCounts(meshlet.meshletVertexCount, meshlet.meshletTriangleCount);
@@ -127,7 +131,7 @@ void MeshMain(
     for (uint i = threadIndex; i < meshlet.meshletVertexCount; i += MESH_SHADER_DISPATCH_X) {
         uint localVertexIndex = pushConstant.meshletVerticesBuffer[meshlet.meshletVertexOffset + i];
         Vertex v = pushConstant.vertexBuffer[meshlet.vertexOffset + localVertexIndex];
-        float4 clipPos = mul(viewProj, mul(m.modelMatrix, float4(v.position, 1.0)));
+        float4 clipPos = mul(jitteredViewProj, mul(m.modelMatrix, float4(v.position, 1.0)));
         vertices[i].position = clipPos;
         vertices[i].viewNormal = normalize(mul(viewRotation, mul(Adjugate((float3x3)m.modelMatrix), v.normal)));
         vertices[i].tangent = float4(normalize(mul(Adjugate((float3x3)m.modelMatrix), v.tangent.xyz)), v.tangent.w);
@@ -142,7 +146,7 @@ void MeshMain(
         vertices[i].color = float4(color * v.color.xyz, 1.0);*/
         vertices[i].color = v.color;
         vertices[i].materialIndex = inPayload.materialIndex;
-        vertices[i].currentClipPos = clipPos;
+        vertices[i].currentClipPos = mul(viewProj, mul(m.modelMatrix, float4(v.position, 1.0)));
         vertices[i].previousClipPos = mul(prevViewProj, mul(m.prevModelMatrix, float4(v.position, 1.0)));
     }
 
@@ -184,10 +188,7 @@ FragmentOutput FragmentMain(VertexOutput vertexInput, uniform InstancedMeshShadi
 
     float2 currNdc = vertexInput.currentClipPos.xy / vertexInput.currentClipPos.w;
     float2 prevNdc = vertexInput.previousClipPos.xy / vertexInput.previousClipPos.w;
-    float2 currJitter = pushConstant.sceneData.jitter;
-    float2 prevJitter = pushConstant.sceneData.prevJitter;
-    float2 velocity = currNdc - prevNdc + currJitter - prevJitter;
-    output.velocity = velocity * 0.5 + 0.5f;
+    output.velocity = currNdc - prevNdc;
 
     return output;
 }

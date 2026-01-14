@@ -643,6 +643,8 @@ void RenderThread::SetupFrameUniforms(VkCommandBuffer cmd, const Core::ViewFamil
         sceneData.invProj = glm::inverse(jitteredProj);
         sceneData.invViewProj = glm::inverse(sceneData.viewProj);
         sceneData.prevViewProj = jitteredPrevProj * prevViewMatrix;
+
+        sceneData.unjitteredViewProj = projMatrix * viewMatrix;
         sceneData.unjitteredPrevViewProj = prevProjMatrix * prevViewMatrix;
 
         sceneData.cameraWorldPos = glm::vec4(view.currentViewData.cameraPos, 1.0f);

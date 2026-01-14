@@ -240,7 +240,7 @@ void ComputeMotionBlurReconstruction(uniform MotionBlurReconstructionPushConstan
     float3 centerColor = rdgTextures[pc.sceneColorIndex].Load(int3(pixelCoord, 0)).rgb;
     float centerDepth = rdgTextures[pc.depthBufferIndex].Load(int3(pixelCoord, 0)).r;
     float2 totalVelocity = rdgTextures[pc.velocityBufferIndex].Load(int3(pixelCoord, 0)).rg;
-    totalVelocity = (totalVelocity - 0.5);
+    totalVelocity = totalVelocity * 0.5;
     totalVelocity.y = -totalVelocity.y;
 
     float2 cameraMotion = ComputeCameraMotion(pc.sceneData->invViewProj, pc.sceneData->prevViewProj, uv, centerDepth);

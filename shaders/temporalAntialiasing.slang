@@ -90,7 +90,7 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
 
     //float2 velocity = rdgTextures[pc.velocityIndex].SampleLevel(rdgSamplers[pc.pointSamplerIndex], uv, 0).rg;
     float2 velocity = GetVelocityDilated(uv);
-    velocity = (velocity - 0.5);
+    velocity = velocity * 0.5;
     velocity.y = -velocity.y;
 
     float2 historyUv = uv - velocity;
