@@ -620,7 +620,7 @@ void RenderThread::SetupFrameUniforms(VkCommandBuffer cmd, const Core::ViewFamil
         SceneData sceneData{};
         sceneData.view = viewMatrix;
 
-        if (viewFamily.postProcessConfig.bbEnableTemporalAntialiasing) {
+        if (viewFamily.postProcessConfig.bEnableTemporalAntialiasing) {
             HaltonSample jitter = HALTON_SEQUENCE[frameNumber % HALTON_SEQUENCE_COUNT];
             float jitterX = (jitter.x - 0.5f) * (2.0f / renderExtent[0]);
             float jitterY = (jitter.y - 0.5f) * (2.0f / renderExtent[1]);
@@ -1098,7 +1098,7 @@ void RenderThread::SetupTemporalAntialiasing(RenderGraph& graph, const Core::Vie
 {
     graph.CreateTexture("taaCurrent", TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
 
-    if (!graph.HasTexture("taaHistory") || !viewFamily.postProcessConfig.bbEnableTemporalAntialiasing) {
+    if (!graph.HasTexture("taaHistory") || !viewFamily.postProcessConfig.bEnableTemporalAntialiasing) {
         RenderPass& taaPass = graph.AddPass("TemporalAntialiasingFirstFrame", VK_PIPELINE_STAGE_2_COPY_BIT);
         taaPass.ReadCopyImage("deferredResolve");
         taaPass.WriteCopyImage("taaCurrent");
@@ -1343,6 +1343,7 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
                 .outputIndex = graph.GetStorageImageViewDescriptorIndex("postProcessOutput"),
                 .velocityScale = viewFamily.postProcessConfig.motionBlurVelocityScale,
                 .depthThreshold = viewFamily.postProcessConfig.motionBlurDepthThreshold,
+                .depthFalloff = viewFamily.postProcessConfig.motionBlurDepthThreshold * 2.0f,
             };
 
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, motionBlurReconstructionPipeline.pipeline.handle);

@@ -234,6 +234,8 @@ SHADER_PUBLIC struct MotionBlurReconstructionPushConstant {
     SHADER_PUBLIC uint32_t outputIndex;
     SHADER_PUBLIC float velocityScale;  // 1.0f default
     SHADER_PUBLIC float depthThreshold; // 0.1f default
+    SHADER_PUBLIC float depthFalloff; // depthThreshold * 2 default
+
 };
 
 #endif //WILL_ENGINE_PUSH_CONSTANT_INTEROP_H

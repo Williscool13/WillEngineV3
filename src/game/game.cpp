@@ -69,7 +69,7 @@ GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* stat
     Game::System::GatherRenderables(ctx, state, frameBuffer);
 
     if (ImGui::Begin("Post-Processing")) {
-        ImGui::Checkbox("Enable TAA", &state->postProcess.bbEnableTemporalAntialiasing);
+        ImGui::Checkbox("Enable TAA", &state->postProcess.bEnableTemporalAntialiasing);
 
         const char* tonemapOperators[] = {"None", "ACES", "Uncharted 2", "Reinhard", "Lottes"};
         int currentItem = state->postProcess.tonemapOperator + 1;

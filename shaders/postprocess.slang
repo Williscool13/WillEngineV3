@@ -237,7 +237,17 @@ void ComputeMotionBlurReconstruction(uniform MotionBlurReconstructionPushConstan
 
     float2 uv = (float2(pixelCoord) + 0.5) / pc.sceneData->mainRenderTargetSize;
 
+    // Tile rejection (reject low velocity)
+    uint2 tileCoord = pixelCoord / POST_PROCESS_MOTION_BLUR_TILE_SIZE;
+    float2 neighborMaxVelocity = rdgTextures[pc.tileNeighborMaxIndex].Load(int3(tileCoord, 0)).rg;
+    float neighborMaxMagnitude = length(neighborMaxVelocity * pc.sceneData->mainRenderTargetSize);
+
     float3 centerColor = rdgTextures[pc.sceneColorIndex].Load(int3(pixelCoord, 0)).rgb;
+    if (neighborMaxMagnitude < 0.5) {
+        rdgRenderTextures[pc.outputIndex][pixelCoord] = float4(centerColor, 1.0);
+        return;
+    }
+
     float centerDepth = rdgTextures[pc.depthBufferIndex].Load(int3(pixelCoord, 0)).r;
     float2 totalVelocity = rdgTextures[pc.velocityBufferIndex].Load(int3(pixelCoord, 0)).rg;
     totalVelocity = totalVelocity * 0.5;
@@ -249,38 +259,33 @@ void ComputeMotionBlurReconstruction(uniform MotionBlurReconstructionPushConstan
     float2 prevJitter = pc.sceneData->prevJitter;
     prevJitter.y = -prevJitter.y;
     cameraMotion += (jitter - prevJitter) * 0.5;
-    float2 objectVelocity = (totalVelocity - cameraMotion) * pc.velocityScale;
-
-    float2 objectVelocityPixels = objectVelocity * pc.sceneData->mainRenderTargetSize;
-    float velocityMagnitude = length(objectVelocityPixels);
-
-    if (velocityMagnitude < 0.5) {
-        rdgRenderTextures[pc.outputIndex][pixelCoord] = float4(centerColor, 1.0);
-        return;
-    }
+    float2 centerVelocity = (totalVelocity - cameraMotion) * pc.velocityScale;
 
     float3 colorAccum = centerColor;
     float weightAccum = 1.0;
 
+    float noise = frac(52.9829189 * frac(0.06711056 * pixelCoord.x + 0.00583715 * pixelCoord.y));
+    float2 blurVelocity = centerVelocity;
+
     [ForceUnroll]
     for (int i = 1; i <= POST_PROCESS_MOTION_BLUR_SAMPLE_COUNT / 2; ++i) {
-        float t = float(i) / float(POST_PROCESS_MOTION_BLUR_SAMPLE_COUNT / 2);
+        float t = (float(i) - 0.5 + noise) / float(POST_PROCESS_MOTION_BLUR_SAMPLE_COUNT / 2);
 
+        [ForceUnroll]
         for (int dir = -1; dir <= 1; dir += 2) {
-            float2 sampleUV = uv + objectVelocity * t * float(dir);
+            float2 sampleUV = uv + blurVelocity * t * float(dir);
 
             if (any(sampleUV < 0.0) || any(sampleUV > 1.0)) {
                 continue;
             }
 
             int2 sampleCoord = int2(sampleUV * pc.sceneData->mainRenderTargetSize);
-
             float3 sampleColor = rdgTextures[pc.sceneColorIndex].Load(int3(sampleCoord, 0)).rgb;
             float sampleDepth = rdgTextures[pc.depthBufferIndex].Load(int3(sampleCoord, 0)).r;
 
             // Depth-aware weighting
-            float depthDiff = abs(centerDepth - sampleDepth);
-            float depthWeight = depthDiff < pc.depthThreshold ? 1.0 : 0.0;
+            float depthDiff = centerDepth - sampleDepth;
+            float depthWeight = saturate(1.0 - (depthDiff - pc.depthThreshold) / pc.depthFalloff);
 
             colorAccum += sampleColor * depthWeight;
             weightAccum += depthWeight;

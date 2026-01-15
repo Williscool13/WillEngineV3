@@ -86,9 +86,10 @@ float2 GetVelocityDilated(float2 uv) {
 [numthreads(16, 16, 1)]
 void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
     if (threadID.x >= pc.sceneData.mainRenderTargetSize.x || threadID.y >= pc.sceneData.mainRenderTargetSize.y) return;
-    float2 uv = (float2(threadID.xy) + 0.5) / float2(pc.sceneData.mainRenderTargetSize);
+    int2 texelCoord = int2(threadID.xy);
+    float2 uv = (float2(texelCoord.xy) + 0.5) / float2(pc.sceneData.mainRenderTargetSize);
 
-    //float2 velocity = rdgTextures[pc.velocityIndex].SampleLevel(rdgSamplers[pc.pointSamplerIndex], uv, 0).rg;
+    // float2 velocity = rdgTextures[pc.velocityIndex].Load(int3(texelCoord, 0)).rg;
     float2 velocity = GetVelocityDilated(uv);
     velocity = velocity * 0.5;
     velocity.y = -velocity.y;
@@ -96,7 +97,8 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
     float2 historyUv = uv - velocity;
     bool validHistory = all(historyUv >= float2(0.0)) && all(historyUv <= float2(1.0));
 
-    float3 currentColor = rdgTextures[pc.colorResolvedIndex].SampleLevel(rdgSamplers[pc.linearSamplerIndex], uv, 0).rgb;
+    // float3 currentColor = rdgTextures[pc.colorResolvedIndex].SampleLevel(rdgSamplers[pc.linearSamplerIndex], uv, 0).rgb;
+    float3 currentColor = rdgTextures[pc.colorResolvedIndex].Load(int3(texelCoord, 0)).rgb;
     float3 resultRGB;
 
     if (!validHistory) {

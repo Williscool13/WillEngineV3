@@ -74,7 +74,7 @@ struct DirectionalLight
 struct PostProcessConfiguration
 {
     // Post Process (move into view)
-    bool bbEnableTemporalAntialiasing{true};
+    bool bEnableTemporalAntialiasing{true};
 
     int32_t tonemapOperator{3};
     float exposureTargetLuminance{0.18f};

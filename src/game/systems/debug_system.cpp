@@ -31,8 +31,6 @@ static Engine::WillModelHandle boxHandle = Engine::WillModelHandle::INVALID;
 static Engine::WillModelHandle box4kHandle = Engine::WillModelHandle::INVALID;
 static Engine::WillModelHandle sponzaHandle = Engine::WillModelHandle::INVALID;
 static Engine::TextureHandle textureHandle = Engine::TextureHandle::INVALID;
-static JPH::BodyID boxBodyID;
-static JPH::BodyID floorBodyID;
 static Engine::MaterialID boxMatID;
 
 entt::entity CreateBox(Core::EngineContext* ctx, Engine::GameState* state, glm::vec3 position, bool bUsePhysics)
@@ -42,23 +40,27 @@ entt::entity CreateBox(Core::EngineContext* ctx, Engine::GameState* state, glm::
         return entt::null;
     }
 
-    auto& bodyInterface = ctx->physicsSystem->GetBodyInterface();
+    JPH::BodyID bodyId;
+    if (bUsePhysics) {
+        auto& bodyInterface = ctx->physicsSystem->GetBodyInterface();
 
-    JPH::BoxShapeSettings boxShapeSettings(JPH::Vec3(0.5f, 0.5f, 0.5f));
-    boxShapeSettings.SetDensity(12.5f);
-    boxShapeSettings.SetEmbedded();
-    JPH::ShapeSettings::ShapeResult boxShapeResult = boxShapeSettings.Create();
-    JPH::ShapeRefC boxShape = boxShapeResult.Get();
+        JPH::BoxShapeSettings boxShapeSettings(JPH::Vec3(0.5f, 0.5f, 0.5f));
+        boxShapeSettings.SetDensity(12.5f);
+        boxShapeSettings.SetEmbedded();
+        JPH::ShapeSettings::ShapeResult boxShapeResult = boxShapeSettings.Create();
+        JPH::ShapeRefC boxShape = boxShapeResult.Get();
 
-    JPH::BodyCreationSettings boxSettings(
-        boxShape,
-        JPH::RVec3(position.x, position.y, position.z),
-        JPH::Quat::sIdentity(),
-        JPH::EMotionType::Dynamic,
-        Physics::Layers::MOVING
-    );
+        JPH::BodyCreationSettings boxSettings(
+            boxShape,
+            JPH::RVec3(position.x, position.y, position.z),
+            JPH::Quat::sIdentity(),
+            JPH::EMotionType::Dynamic,
+            Physics::Layers::MOVING
+        );
 
-    boxBodyID = bodyInterface.CreateAndAddBody(boxSettings, JPH::EActivation::Activate);
+        bodyId = bodyInterface.CreateAndAddBody(boxSettings, JPH::EActivation::Activate);
+    }
+
 
     Render::WillModel* model = ctx->assetManager->GetModel(boxHandle);
     if (!model || model->modelLoadState != Render::WillModel::ModelLoadState::Loaded) {
@@ -95,7 +97,7 @@ entt::entity CreateBox(Core::EngineContext* ctx, Engine::GameState* state, glm::
     state->registry.emplace<RenderableComponent>(boxEntity, renderable);
     TransformComponent transformComponent = state->registry.emplace<TransformComponent>(boxEntity, position, glm::quat(1.0f, 0.0f, 0.0f, 0.0f), glm::vec3(1.0f));
     if (bUsePhysics) {
-        state->registry.emplace<PhysicsBodyComponent>(boxEntity, boxBodyID);
+        state->registry.emplace<PhysicsBodyComponent>(boxEntity, bodyId);
         state->registry.emplace<DynamicPhysicsBodyComponent>(boxEntity, transformComponent.translation, transformComponent.rotation);
     }
 
@@ -174,20 +176,22 @@ entt::entity CreateStaticBox(Core::EngineContext* ctx, Engine::GameState* state,
 
 void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
 {
-    auto view = state->registry.view<MotionBlurMovementComponent, TransformComponent>();
-    float time = state->timeFrame->totalTime;
-    int index = 0;
-    for (auto [entity, motionBlur, transform] : view.each()) {
-        float speed = 2.0f + index * 1.5f;
-        float offset = sin(time * speed) * 3.0f;
+    if (state->bEnablePhysics) {
+        auto view = state->registry.view<MotionBlurMovementComponent, TransformComponent>();
+        float time = state->timeFrame->totalTime;
+        int index = 0;
+        for (auto [entity, motionBlur, transform] : view.each()) {
+            float speed = 2.0f + index * 1.5f;
+            float offset = sin(time * speed) * 3.0f;
 
-        if (motionBlur.bIsHorizontal) {
-            transform.translation.x = 8.0f + offset;
+            if (motionBlur.bIsHorizontal) {
+                transform.translation.x = 8.0f + offset;
+            }
+            else {
+                transform.translation.y = 10.0f + offset;
+            }
+            ++index;
         }
-        else {
-            transform.translation.y = 10.0f + offset;
-        }
-        ++index;
     }
 
     if (state->inputFrame->GetKey(Key::F1).pressed) {
