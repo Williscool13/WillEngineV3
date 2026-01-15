@@ -213,10 +213,12 @@ SHADER_PUBLIC struct ExposureCalculatePushConstant
 
 SHADER_PUBLIC struct MotionBlurTileVelocityPushConstant
 {
-    SHADER_PUBLIC uint32_t velocityBufferIndex;
-    SHADER_PUBLIC uint32_t tileMaxIndex;
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC uint2 velocityBufferSize;
     SHADER_PUBLIC uint2 tileBufferSize;
+    SHADER_PUBLIC uint32_t velocityBufferIndex;
+    SHADER_PUBLIC uint32_t depthBufferIndex;
+    SHADER_PUBLIC uint32_t tileMaxIndex;
 };
 
 SHADER_PUBLIC struct MotionBlurNeighborMaxPushConstant {
@@ -233,8 +235,8 @@ SHADER_PUBLIC struct MotionBlurReconstructionPushConstant {
     SHADER_PUBLIC uint32_t tileNeighborMaxIndex;
     SHADER_PUBLIC uint32_t outputIndex;
     SHADER_PUBLIC float velocityScale;  // 1.0f default
-    SHADER_PUBLIC float depthThreshold; // 0.1f default
-    SHADER_PUBLIC float depthFalloff; // depthThreshold * 2 default
+    SHADER_PUBLIC float depthScale; // 1.0f?
+
 
 };
 

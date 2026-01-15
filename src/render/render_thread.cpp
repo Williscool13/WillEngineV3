@@ -1294,10 +1294,12 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
         motionBlurTiledMaxPass.WriteStorageImage("motionBlurTiledMax");
         motionBlurTiledMaxPass.Execute([&, width = renderExtent[0], height = renderExtent[1], blurTiledX, blurTiledY](VkCommandBuffer cmd) {
             MotionBlurTileVelocityPushConstant pc{
-                .velocityBufferIndex = graph.GetSampledImageViewDescriptorIndex("velocityTarget"),
-                .tileMaxIndex = graph.GetStorageImageViewDescriptorIndex("motionBlurTiledMax"),
+                .sceneData = graph.GetBufferAddress("sceneData"),
                 .velocityBufferSize = {width, height},
                 .tileBufferSize = {blurTiledX, blurTiledY},
+                .velocityBufferIndex = graph.GetSampledImageViewDescriptorIndex("velocityTarget"),
+                .depthBufferIndex = graph.GetSampledImageViewDescriptorIndex("depthTarget"),
+                .tileMaxIndex = graph.GetStorageImageViewDescriptorIndex("motionBlurTiledMax"),
             };
 
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, motionBlurTileMaxPipeline.pipeline.handle);
@@ -1342,8 +1344,7 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
                 .tileNeighborMaxIndex = graph.GetSampledImageViewDescriptorIndex("motionBlurTiledNeighborMax"),
                 .outputIndex = graph.GetStorageImageViewDescriptorIndex("postProcessOutput"),
                 .velocityScale = viewFamily.postProcessConfig.motionBlurVelocityScale,
-                .depthThreshold = viewFamily.postProcessConfig.motionBlurDepthThreshold,
-                .depthFalloff = viewFamily.postProcessConfig.motionBlurDepthThreshold * 2.0f,
+                .depthScale = viewFamily.postProcessConfig.motionBlurDepthScale,
             };
 
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, motionBlurReconstructionPipeline.pipeline.handle);

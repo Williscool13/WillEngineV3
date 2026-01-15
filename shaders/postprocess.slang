@@ -162,9 +162,15 @@ void ComputeMotionBlurTileMax(uniform MotionBlurTileVelocityPushConstant pc, uin
 
     uint2 tileStart = tileCoord * POST_PROCESS_MOTION_BLUR_TILE_SIZE;
 
-    [ForceUnroll]
+    float2 jitter = pc.sceneData->jitter;
+    jitter.y = -jitter.y;
+    float2 prevJitter = pc.sceneData->prevJitter;
+    prevJitter.y = -prevJitter.y;
+    float2 jitterDiff = (jitter - prevJitter) * 0.5;
+
+
     for (uint y = 0; y < POST_PROCESS_MOTION_BLUR_TILE_SIZE; ++y) {
-        [ForceUnroll]
+
         for (uint x = 0; x < POST_PROCESS_MOTION_BLUR_TILE_SIZE; ++x) {
             uint2 pixelCoord = tileStart + uint2(x, y);
 
@@ -172,6 +178,13 @@ void ComputeMotionBlurTileMax(uniform MotionBlurTileVelocityPushConstant pc, uin
                 continue;
 
             float2 velocity = rdgTextures[pc.velocityBufferIndex].Load(int3(pixelCoord, 0)).rg;
+            velocity = velocity * 0.5;
+            velocity.y = -velocity.y;
+            float2 uv = (float2(pixelCoord) + 0.5) / pc.sceneData->mainRenderTargetSize;
+            float depth = rdgTextures[pc.depthBufferIndex].Load(int3(pixelCoord, 0)).r;
+            float2 cameraMotion = ComputeCameraMotion(pc.sceneData->invViewProj, pc.sceneData->prevViewProj, uv, depth);
+            cameraMotion += jitterDiff;
+            velocity -= cameraMotion;
             float velocityLengthSq = dot(velocity, velocity);
 
             if (velocityLengthSq > maxVelocityLengthSq) {
@@ -227,45 +240,62 @@ float2 ComputeCameraMotion(float4x4 invViewProj, float4x4 prevViewProj, float2 u
     return uv - prevUV;
 }
 
+float2 DepthCmp(float centerDepth, float sampleDepth, float depthScale) {
+    return saturate(0.5 + float2(depthScale, -depthScale) * (sampleDepth - centerDepth));
+}
+//
+// float2 SpreadCmp(float offsetLen, float2 spreadLen, float pixelToSampleUnitsScale) {
+//     return saturate(pixelToSampleUnitsScale * spreadLen - offsetLen + 1.0);
+// }
+//
+// float SampleWeight(float centerDepth, float sampleDepth, float offsetLen, float centerSpreadLen, float sampleSpreadLen, float pixelToSampleUnitsScale, float depthScale) {
+//     float2 depthCmp = DepthCmp(centerDepth, sampleDepth, depthScale);
+//     float2 spreadCmp = SpreadCmp(offsetLen, float2(centerSpreadLen, sampleSpreadLen), pixelToSampleUnitsScale);
+//     return dot(depthCmp, spreadCmp);
+// }
+
 [numthreads(POST_PROCESS_MOTION_BLUR_DISPATCH_X, POST_PROCESS_MOTION_BLUR_DISPATCH_Y, 1)]
 void ComputeMotionBlurReconstruction(uniform MotionBlurReconstructionPushConstant pc, uint3 dtid : SV_DispatchThreadID) {
     uint2 pixelCoord = dtid.xy;
-
-    if (any(pixelCoord >= pc.sceneData->mainRenderTargetSize)) {
-        return;
-    }
+    if (any(pixelCoord >= pc.sceneData->mainRenderTargetSize)) return;
 
     float2 uv = (float2(pixelCoord) + 0.5) / pc.sceneData->mainRenderTargetSize;
 
-    // Tile rejection (reject low velocity)
+    // Early out if tile has low velocity
     uint2 tileCoord = pixelCoord / POST_PROCESS_MOTION_BLUR_TILE_SIZE;
     float2 neighborMaxVelocity = rdgTextures[pc.tileNeighborMaxIndex].Load(int3(tileCoord, 0)).rg;
-    float neighborMaxMagnitude = length(neighborMaxVelocity * pc.sceneData->mainRenderTargetSize);
-
+    float neighborMaxLen = length(neighborMaxVelocity * pc.sceneData->mainRenderTargetSize);
     float3 centerColor = rdgTextures[pc.sceneColorIndex].Load(int3(pixelCoord, 0)).rgb;
-    if (neighborMaxMagnitude < 0.5) {
+    if (neighborMaxLen < 0.5) {
         rdgRenderTextures[pc.outputIndex][pixelCoord] = float4(centerColor, 1.0);
         return;
     }
 
-    float centerDepth = rdgTextures[pc.depthBufferIndex].Load(int3(pixelCoord, 0)).r;
-    float2 totalVelocity = rdgTextures[pc.velocityBufferIndex].Load(int3(pixelCoord, 0)).rg;
-    totalVelocity = totalVelocity * 0.5;
-    totalVelocity.y = -totalVelocity.y;
-
-    float2 cameraMotion = ComputeCameraMotion(pc.sceneData->invViewProj, pc.sceneData->prevViewProj, uv, centerDepth);
+    // Jitter correction
     float2 jitter = pc.sceneData->jitter;
     jitter.y = -jitter.y;
     float2 prevJitter = pc.sceneData->prevJitter;
     prevJitter.y = -prevJitter.y;
-    cameraMotion += (jitter - prevJitter) * 0.5;
-    float2 centerVelocity = (totalVelocity - cameraMotion) * pc.velocityScale;
+    float2 jitterDiff = (jitter - prevJitter) * 0.5;
+
+    float centerDepth = rdgTextures[pc.depthBufferIndex].Load(int3(pixelCoord, 0)).r;
+
+    // Velocity from [-1, 1] to [-0.5, 0.5]. Flip Y because of flipped viewport during rendering.
+    float2 totalVelocity = rdgTextures[pc.velocityBufferIndex].Load(int3(pixelCoord, 0)).rg;
+    totalVelocity = totalVelocity * 0.5;
+    totalVelocity.y = -totalVelocity.y;
+    // Unjitter camera motion
+    float2 cameraMotion = ComputeCameraMotion(pc.sceneData->invViewProj, pc.sceneData->prevViewProj, uv, centerDepth);
+    cameraMotion += jitterDiff;
+    // Velocity of object only
+    float2 centerVelocity = totalVelocity - cameraMotion;
+
 
     float3 colorAccum = centerColor;
     float weightAccum = 1.0;
 
+    float2 blurDir = neighborMaxVelocity;
     float noise = frac(52.9829189 * frac(0.06711056 * pixelCoord.x + 0.00583715 * pixelCoord.y));
-    float2 blurVelocity = centerVelocity;
 
     [ForceUnroll]
     for (int i = 1; i <= POST_PROCESS_MOTION_BLUR_SAMPLE_COUNT / 2; ++i) {
@@ -273,26 +303,30 @@ void ComputeMotionBlurReconstruction(uniform MotionBlurReconstructionPushConstan
 
         [ForceUnroll]
         for (int dir = -1; dir <= 1; dir += 2) {
-            float2 sampleUV = uv + blurVelocity * t * float(dir);
+            float2 sampleUV = uv + blurDir * t * float(dir);
 
-            if (any(sampleUV < 0.0) || any(sampleUV > 1.0)) {
-                continue;
-            }
+            if (any(sampleUV < 0.0) || any(sampleUV > 1.0)) { continue; }
 
             int2 sampleCoord = int2(sampleUV * pc.sceneData->mainRenderTargetSize);
             float3 sampleColor = rdgTextures[pc.sceneColorIndex].Load(int3(sampleCoord, 0)).rgb;
             float sampleDepth = rdgTextures[pc.depthBufferIndex].Load(int3(sampleCoord, 0)).r;
 
-            // Depth-aware weighting
-            float depthDiff = centerDepth - sampleDepth;
-            float depthWeight = saturate(1.0 - (depthDiff - pc.depthThreshold) / pc.depthFalloff);
+            // Get sample's velocity for its spread length
+            float2 sampleTotalVel = rdgTextures[pc.velocityBufferIndex].Load(int3(sampleCoord, 0)).rg;
+            sampleTotalVel = sampleTotalVel * 0.5;
+            sampleTotalVel.y = -sampleTotalVel.y;
+            float2 sampleCameraMotion = ComputeCameraMotion(pc.sceneData->invViewProj, pc.sceneData->prevViewProj, sampleUV, sampleDepth);
+            sampleCameraMotion += jitterDiff;
+            float2 sampleVelocity = sampleTotalVel - sampleCameraMotion;
 
-            colorAccum += sampleColor * depthWeight;
-            weightAccum += depthWeight;
+            float2 d = DepthCmp(centerDepth, sampleDepth, pc.depthScale);
+
+            float weight = dot(d, float2(1.0f));
+
+            colorAccum += sampleColor * weight;
+            weightAccum += weight;
         }
     }
 
-    float3 finalColor = colorAccum / weightAccum;
-
-    rdgRenderTextures[pc.outputIndex][pixelCoord] = float4(finalColor, 1.0);
+    rdgRenderTextures[pc.outputIndex][pixelCoord] = float4(colorAccum / weightAccum, 1.0);
 }

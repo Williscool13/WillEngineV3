@@ -80,7 +80,7 @@ struct PostProcessConfiguration
     float exposureTargetLuminance{0.18f};
     float exposureAdaptationRate{2.0f};
     float motionBlurVelocityScale{1.0f};
-    float motionBlurDepthThreshold{0.1f};
+    float motionBlurDepthScale{0.1f};
 };
 
 struct ViewFamily

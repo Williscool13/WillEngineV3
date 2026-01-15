@@ -77,7 +77,7 @@ GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* stat
             state->postProcess.tonemapOperator = currentItem - 1;
         }
 
-        ImGui::DragFloat("Motion Blur Depth Threshold", &state->postProcess.motionBlurDepthThreshold);
+        ImGui::DragFloat("Motion Blur Depth Threshold", &state->postProcess.motionBlurDepthScale);
         ImGui::DragFloat("Motion Blur Velocity Scale", &state->postProcess.motionBlurVelocityScale);
     }
     ImGui::End();
