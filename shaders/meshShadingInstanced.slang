@@ -120,9 +120,7 @@ void MeshMain(
     Model m = pushConstant.modelBuffer[inPayload.modelIndex];
 
     float4x4 jitteredViewProj = pushConstant.sceneData->viewProj;
-    float4x4 viewProj = pushConstant.sceneData->unjitteredViewProj;
     float4x4 jitteredPrevViewProj = pushConstant.sceneData->prevViewProj;
-    float4x4 prevViewProj = pushConstant.sceneData->unjitteredPrevViewProj;
 
     float3x3 viewRotation = (float3x3)pushConstant.sceneData.view;
 
@@ -146,8 +144,8 @@ void MeshMain(
         vertices[i].color = float4(color * v.color.xyz, 1.0);*/
         vertices[i].color = v.color;
         vertices[i].materialIndex = inPayload.materialIndex;
-        vertices[i].currentClipPos = mul(viewProj, mul(m.modelMatrix, float4(v.position, 1.0)));
-        vertices[i].previousClipPos = mul(prevViewProj, mul(m.prevModelMatrix, float4(v.position, 1.0)));
+        vertices[i].currentClipPos = clipPos;
+        vertices[i].previousClipPos = mul(jitteredPrevViewProj, mul(m.prevModelMatrix, float4(v.position, 1.0)));
     }
 
     for (uint i = threadIndex; i < meshlet.meshletTriangleCount; i += MESH_SHADER_DISPATCH_X) {
@@ -188,6 +186,8 @@ FragmentOutput FragmentMain(VertexOutput vertexInput, uniform InstancedMeshShadi
 
     float2 currNdc = vertexInput.currentClipPos.xy / vertexInput.currentClipPos.w;
     float2 prevNdc = vertexInput.previousClipPos.xy / vertexInput.previousClipPos.w;
+    currNdc += pushConstant.sceneData->jitter;
+    prevNdc += pushConstant.sceneData->prevJitter;
     output.velocity = currNdc - prevNdc;
 
     return output;
