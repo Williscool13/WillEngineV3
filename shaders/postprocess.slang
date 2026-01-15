@@ -243,16 +243,10 @@ float2 ComputeCameraMotion(float4x4 invViewProj, float4x4 prevViewProj, float2 u
 float2 DepthCmp(float centerDepth, float sampleDepth, float depthScale) {
     return saturate(0.5 + float2(depthScale, -depthScale) * (sampleDepth - centerDepth));
 }
-//
-// float2 SpreadCmp(float offsetLen, float2 spreadLen, float pixelToSampleUnitsScale) {
-//     return saturate(pixelToSampleUnitsScale * spreadLen - offsetLen + 1.0);
-// }
-//
-// float SampleWeight(float centerDepth, float sampleDepth, float offsetLen, float centerSpreadLen, float sampleSpreadLen, float pixelToSampleUnitsScale, float depthScale) {
-//     float2 depthCmp = DepthCmp(centerDepth, sampleDepth, depthScale);
-//     float2 spreadCmp = SpreadCmp(offsetLen, float2(centerSpreadLen, sampleSpreadLen), pixelToSampleUnitsScale);
-//     return dot(depthCmp, spreadCmp);
-// }
+
+float2 SpreadCmp(float offsetLen, float2 spreadLen) {
+    return saturate(spreadLen - offsetLen + 1.0);
+}
 
 [numthreads(POST_PROCESS_MOTION_BLUR_DISPATCH_X, POST_PROCESS_MOTION_BLUR_DISPATCH_Y, 1)]
 void ComputeMotionBlurReconstruction(uniform MotionBlurReconstructionPushConstant pc, uint3 dtid : SV_DispatchThreadID) {
@@ -291,6 +285,14 @@ void ComputeMotionBlurReconstruction(uniform MotionBlurReconstructionPushConstan
     float2 centerVelocity = totalVelocity - cameraMotion;
 
 
+    // Center's blur spread in pixels
+    float centerSpreadLen = length(centerVelocity * pc.sceneData->mainRenderTargetSize);
+    // Total blur length we're sampling along (neighbor max defines the sampling range)
+    float blurLen = neighborMaxLen;
+    // Converts pixel distances to "sample units" where 1.0 = full blur length
+    // This normalizes offsetLen against the blur radius for the spread comparison
+    float pixelToSampleUnitsScale = 1.0 / max(blurLen * 2, 1.0);
+
     float3 colorAccum = centerColor;
     float weightAccum = 1.0;
 
@@ -300,6 +302,9 @@ void ComputeMotionBlurReconstruction(uniform MotionBlurReconstructionPushConstan
     [ForceUnroll]
     for (int i = 1; i <= POST_PROCESS_MOTION_BLUR_SAMPLE_COUNT / 2; ++i) {
         float t = (float(i) - 0.5 + noise) / float(POST_PROCESS_MOTION_BLUR_SAMPLE_COUNT / 2);
+
+        // Distance from center to this sample in pixels
+        float offsetLen = t * blurLen;
 
         [ForceUnroll]
         for (int dir = -1; dir <= 1; dir += 2) {
@@ -319,9 +324,23 @@ void ComputeMotionBlurReconstruction(uniform MotionBlurReconstructionPushConstan
             sampleCameraMotion += jitterDiff;
             float2 sampleVelocity = sampleTotalVel - sampleCameraMotion;
 
+            // Sample's blur spread in pixels
+            float sampleSpreadLen = length(sampleVelocity * pc.sceneData->mainRenderTargetSize);
+
+            // Depth comparison: which pixel is in front?
+            // d.x = weight if center is behind (sample is foreground)
+            // d.y = weight if sample is behind (center is foreground)
             float2 d = DepthCmp(centerDepth, sampleDepth, pc.depthScale);
 
-            float weight = dot(d, float2(1.0f));
+            // Spread comparison: does the blur reach?
+            // s.x = does center's blur spread reach this sample distance?
+            // s.y = does sample's blur spread reach the center?
+            float2 s = SpreadCmp(offsetLen, float2(centerSpreadLen, sampleSpreadLen));
+
+            // Combined weight:
+            // d.x * s.x = center behind, center's blur reaches sample (background bleeds forward)
+            // d.y * s.y = sample behind, sample's blur reaches center (foreground bleeds onto background)
+            float weight = dot(d, s);
 
             colorAccum += sampleColor * weight;
             weightAccum += weight;
