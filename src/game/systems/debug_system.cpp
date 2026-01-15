@@ -16,6 +16,7 @@
 #include "engine/asset_manager.h"
 #include "engine/engine_api.h"
 #include "game/fwd_components.h"
+#include "game/components/debug/motion_blur_movement_component.h"
 #include "game/components/gameplay/anti_gravity_component.h"
 #include "game/components/gameplay/floor_component.h"
 #include "game/components/physics/dynamic_physics_body_component.h"
@@ -34,11 +35,11 @@ static JPH::BodyID boxBodyID;
 static JPH::BodyID floorBodyID;
 static Engine::MaterialID boxMatID;
 
-void CreateBox(Core::EngineContext* ctx, Engine::GameState* state, glm::vec3 position)
+entt::entity CreateBox(Core::EngineContext* ctx, Engine::GameState* state, glm::vec3 position, bool bUsePhysics)
 {
     if (!boxHandle.IsValid()) {
         SPDLOG_WARN("[DebugSystem] No box model loaded, press F1 first");
-        return;
+        return entt::null;
     }
 
     auto& bodyInterface = ctx->physicsSystem->GetBodyInterface();
@@ -62,7 +63,7 @@ void CreateBox(Core::EngineContext* ctx, Engine::GameState* state, glm::vec3 pos
     Render::WillModel* model = ctx->assetManager->GetModel(boxHandle);
     if (!model || model->modelLoadState != Render::WillModel::ModelLoadState::Loaded) {
         SPDLOG_WARN("[DebugSystem] Model not ready yet");
-        return;
+        return entt::null;
     }
 
     RenderableComponent renderable{};
@@ -93,8 +94,12 @@ void CreateBox(Core::EngineContext* ctx, Engine::GameState* state, glm::vec3 pos
     entt::entity boxEntity = state->registry.create();
     state->registry.emplace<RenderableComponent>(boxEntity, renderable);
     TransformComponent transformComponent = state->registry.emplace<TransformComponent>(boxEntity, position, glm::quat(1.0f, 0.0f, 0.0f, 0.0f), glm::vec3(1.0f));
-    state->registry.emplace<PhysicsBodyComponent>(boxEntity, boxBodyID);
-    state->registry.emplace<DynamicPhysicsBodyComponent>(boxEntity, transformComponent.translation, transformComponent.rotation);
+    if (bUsePhysics) {
+        state->registry.emplace<PhysicsBodyComponent>(boxEntity, boxBodyID);
+        state->registry.emplace<DynamicPhysicsBodyComponent>(boxEntity, transformComponent.translation, transformComponent.rotation);
+    }
+
+    return boxEntity;
 }
 
 entt::entity CreateStaticBox(Core::EngineContext* ctx, Engine::GameState* state,
@@ -169,6 +174,22 @@ entt::entity CreateStaticBox(Core::EngineContext* ctx, Engine::GameState* state,
 
 void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
 {
+    auto view = state->registry.view<MotionBlurMovementComponent, TransformComponent>();
+    float time = state->timeFrame->totalTime;
+    int index = 0;
+    for (auto [entity, motionBlur, transform] : view.each()) {
+        float speed = 2.0f + index * 1.5f;
+        float offset = sin(time * speed) * 3.0f;
+
+        if (motionBlur.bIsHorizontal) {
+            transform.translation.x = 8.0f + offset;
+        }
+        else {
+            transform.translation.y = 10.0f + offset;
+        }
+        ++index;
+    }
+
     if (state->inputFrame->GetKey(Key::F1).pressed) {
         if (!dragonHandle.IsValid()) {
             dragonHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "dragon/dragon.willmodel");
@@ -208,11 +229,27 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
 
         for (int i = 0; i < 5; i++) {
             glm::vec3 spawnPos = glm::vec3(i * 2.0f - 4.0f, 5.0f, 0.0f);
-            CreateBox(ctx, state, spawnPos);
+            CreateBox(ctx, state, spawnPos, true);
         }
 
         SPDLOG_INFO("[DebugSystem] Created physics floor and arena walls");
         SPDLOG_INFO("[DebugSystem] Created falling boxes");
+
+        for (int i = 0; i < 5; ++i) {
+            glm::vec3 spawnPos = glm::vec3(8.0f, 10.0f + i * 1.2f, 0.0f);
+            entt::entity motionBox = CreateBox(ctx, state, spawnPos, false);
+            if (motionBox != entt::null) {
+                state->registry.emplace<MotionBlurMovementComponent>(motionBox, true);
+            }
+        }
+
+        for (int i = 0; i < 5; ++i) {
+            glm::vec3 spawnPos = glm::vec3(-8.0f + i * 2.0f, 10.0f, 0);
+            entt::entity motionBox = CreateBox(ctx, state, spawnPos, false);
+            if (motionBox != entt::null) {
+                state->registry.emplace<MotionBlurMovementComponent>(motionBox, false);
+            }
+        }
     }
 
     if (state->inputFrame->GetKey(Key::F3).pressed) {

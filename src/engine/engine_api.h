@@ -38,7 +38,7 @@ struct GameState
     Core::ShadowConfiguration shadowConfig;
 
     // Post-Process
-    int32_t tonemapOperator{2};
+    Core::PostProcessConfiguration postProcess{};
 
     // Debug
     Game::DebugData debugData;

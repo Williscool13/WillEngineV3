@@ -374,7 +374,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         auto& imguiEditorPass = renderGraph->AddPass("ImguiEditor", VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT);
         imguiEditorPass.WriteColorAttachment("postProcessOutput");
         imguiEditorPass.Execute([&](VkCommandBuffer cmd) {
-            const VkRenderingAttachmentInfo imguiAttachment = VkHelpers::RenderingAttachmentInfo(renderGraph->GetImageView("postProcessOutput"), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+            const VkRenderingAttachmentInfo imguiAttachment = VkHelpers::RenderingAttachmentInfo(renderGraph->GetImageViewHandle("postProcessOutput"), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
             const ResourceDimensions& dims = renderGraph->GetImageDimensions("postProcessOutput");
             const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({dims.width, dims.height}, &imguiAttachment, nullptr);
             vkCmdBeginRendering(cmd, &renderInfo);
@@ -393,7 +393,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     blitPass.ReadBlitImage("postProcessOutput");
     blitPass.WriteBlitImage("swapchainImage");
     blitPass.Execute([&](VkCommandBuffer cmd) {
-        VkImage drawImage = renderGraph->GetImage("postProcessOutput");
+        VkImage drawImage = renderGraph->GetImageHandle("postProcessOutput");
 
         VkOffset3D renderOffset = {static_cast<int32_t>(renderExtent[0]), static_cast<int32_t>(renderExtent[1]), 1};
         VkOffset3D swapchainOffset = {static_cast<int32_t>(swapchain->extent.width), static_cast<int32_t>(swapchain->extent.height), 1};
@@ -617,32 +617,40 @@ void RenderThread::SetupFrameUniforms(VkCommandBuffer cmd, const Core::ViewFamil
         const glm::mat4 prevViewMatrix = glm::lookAt(view.previousViewData.cameraPos, view.previousViewData.cameraLookAt, view.previousViewData.cameraUp);
         const glm::mat4 prevProjMatrix = glm::perspective(view.previousViewData.fovRadians, view.previousViewData.aspectRatio, view.previousViewData.farPlane, view.previousViewData.nearPlane);
 
-        HaltonSample jitter = HALTON_SEQUENCE[frameNumber % HALTON_SEQUENCE_COUNT];
-        float jitterX = (jitter.x - 0.5f) * (2.0f / renderExtent[0]);
-        float jitterY = (jitter.y - 0.5f) * (2.0f / renderExtent[1]);
-
-        glm::mat4 jitteredProj = projMatrix;
-        jitteredProj[2][0] += jitterX;
-        jitteredProj[2][1] += jitterY;
-
-        HaltonSample prevJitter = HALTON_SEQUENCE[(frameNumber - 1) % HALTON_SEQUENCE_COUNT];
-        float prevJitterX = (prevJitter.x - 0.5f) * (2.0f / renderExtent[0]);
-        float prevJitterY = (prevJitter.y - 0.5f) * (2.0f / renderExtent[1]);
-        glm::mat4 jitteredPrevProj = prevProjMatrix;
-        jitteredPrevProj[2][0] += prevJitterX;
-        jitteredPrevProj[2][1] += prevJitterY;
-
         SceneData sceneData{};
-        sceneData.jitter = {jitterX, jitterY};
-        sceneData.prevJitter = {prevJitterX, prevJitterY};
-
         sceneData.view = viewMatrix;
-        sceneData.proj = jitteredProj;
-        sceneData.viewProj = jitteredProj * viewMatrix;
-        sceneData.invView = glm::inverse(viewMatrix);
-        sceneData.invProj = glm::inverse(jitteredProj);
+
+        if (viewFamily.postProcessConfig.bbEnableTemporalAntialiasing) {
+            HaltonSample jitter = HALTON_SEQUENCE[frameNumber % HALTON_SEQUENCE_COUNT];
+            float jitterX = (jitter.x - 0.5f) * (2.0f / renderExtent[0]);
+            float jitterY = (jitter.y - 0.5f) * (2.0f / renderExtent[1]);
+
+            glm::mat4 jitteredProj = projMatrix;
+            jitteredProj[2][0] += jitterX;
+            jitteredProj[2][1] += jitterY;
+
+            HaltonSample prevJitter = HALTON_SEQUENCE[(frameNumber - 1) % HALTON_SEQUENCE_COUNT];
+            float prevJitterX = (prevJitter.x - 0.5f) * (2.0f / renderExtent[0]);
+            float prevJitterY = (prevJitter.y - 0.5f) * (2.0f / renderExtent[1]);
+            glm::mat4 jitteredPrevProj = prevProjMatrix;
+            jitteredPrevProj[2][0] += prevJitterX;
+            jitteredPrevProj[2][1] += prevJitterY;
+
+            sceneData.jitter = {jitterX, jitterY};
+            sceneData.prevJitter = {prevJitterX, prevJitterY};
+            sceneData.proj = jitteredProj;
+            sceneData.prevViewProj = jitteredPrevProj * prevViewMatrix;
+        } else {
+            sceneData.jitter = {0.0f, 0.0f};
+            sceneData.prevJitter = {0.0f, 0.0f};
+            sceneData.proj = projMatrix;
+            sceneData.prevViewProj = prevProjMatrix * prevViewMatrix;
+        }
+
+        sceneData.viewProj = sceneData.proj * sceneData.view;
+        sceneData.invView = glm::inverse(sceneData.view);
+        sceneData.invProj = glm::inverse(sceneData.proj);
         sceneData.invViewProj = glm::inverse(sceneData.viewProj);
-        sceneData.prevViewProj = jitteredPrevProj * prevViewMatrix;
 
         sceneData.unjitteredViewProj = projMatrix * viewMatrix;
         sceneData.unjitteredPrevViewProj = prevProjMatrix * prevViewMatrix;
@@ -827,7 +835,7 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFami
             VkRect2D scissor = VkHelpers::GenerateScissor(shadowConfig.cascadePreset.extents[cascadeLevel].width, shadowConfig.cascadePreset.extents[cascadeLevel].height);
             vkCmdSetScissor(cmd, 0, 1, &scissor);
             constexpr VkClearValue depthClear = {.depthStencil = {0.0f, 0u}};
-            const VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageView(shadowMapName), &depthClear, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+            const VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(shadowMapName), &depthClear, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
             const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({shadowConfig.cascadePreset.extents[cascadeLevel].width, shadowConfig.cascadePreset.extents[cascadeLevel].height}, nullptr, 0,
                                                                         &depthAttachment);
 
@@ -953,6 +961,21 @@ void RenderThread::SetupInstancing(RenderGraph& graph, const Core::ViewFamily& v
 
 void RenderThread::SetupMainGeometryPass(RenderGraph& graph, const Core::ViewFamily& viewFamily) const
 {
+    RenderPass& clearGBufferPass = graph.AddPass("ClearGBuffer", VK_PIPELINE_STAGE_2_CLEAR_BIT);
+    clearGBufferPass.WriteClearImage("albedoTarget");
+    clearGBufferPass.WriteClearImage("normalTarget");
+    clearGBufferPass.WriteClearImage("pbrTarget");
+    clearGBufferPass.WriteClearImage("velocityTarget");
+    clearGBufferPass.Execute([&](VkCommandBuffer cmd) {
+        VkClearColorValue clearColor = {{0.0f, 0.0f, 0.0f, 0.0f}};
+        VkImageSubresourceRange range = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+
+        vkCmdClearColorImage(cmd, graph.GetImageHandle("albedoTarget"), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &range);
+        vkCmdClearColorImage(cmd, graph.GetImageHandle("normalTarget"), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &range);
+        vkCmdClearColorImage(cmd, graph.GetImageHandle("pbrTarget"), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &range);
+        vkCmdClearColorImage(cmd, graph.GetImageHandle("velocityTarget"), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &range);
+    });
+
     RenderPass& instancedMeshShading = graph.AddPass("InstancedMeshShading", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
     instancedMeshShading.WriteColorAttachment("albedoTarget");
     instancedMeshShading.WriteColorAttachment("normalTarget");
@@ -968,12 +991,12 @@ void RenderThread::SetupMainGeometryPass(RenderGraph& graph, const Core::ViewFam
         vkCmdSetViewport(cmd, 0, 1, &viewport);
         VkRect2D scissor = VkHelpers::GenerateScissor(dims.width, dims.height);
         vkCmdSetScissor(cmd, 0, 1, &scissor);
-        const VkRenderingAttachmentInfo albedoAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageView("albedoTarget"), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-        const VkRenderingAttachmentInfo normalAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageView("normalTarget"), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-        const VkRenderingAttachmentInfo pbrAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageView("pbrTarget"), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-        const VkRenderingAttachmentInfo velocityAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageView("velocityTarget"), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        const VkRenderingAttachmentInfo albedoAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle("albedoTarget"), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        const VkRenderingAttachmentInfo normalAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle("normalTarget"), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        const VkRenderingAttachmentInfo pbrAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle("pbrTarget"), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        const VkRenderingAttachmentInfo velocityAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle("velocityTarget"), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
         constexpr VkClearValue depthClear = {.depthStencil = {0.0f, 0u}};
-        const VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageView("depthTarget"), &depthClear, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+        const VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle("depthTarget"), &depthClear, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
 
         const VkRenderingAttachmentInfo colorAttachments[] = {albedoAttachment, normalAttachment, pbrAttachment, velocityAttachment};
         const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({dims.width, dims.height}, colorAttachments, 4, &depthAttachment);
@@ -1013,7 +1036,7 @@ void RenderThread::SetupDeferredLighting(RenderGraph& graph, const Core::ViewFam
     RenderPass& clearDeferredImagePass = graph.AddPass("ClearDeferredImage", VK_PIPELINE_STAGE_2_CLEAR_BIT);
     clearDeferredImagePass.WriteClearImage("deferredResolve");
     clearDeferredImagePass.Execute([&](VkCommandBuffer cmd) {
-        VkImage img = graph.GetImage("deferredResolve");
+        VkImage img = graph.GetImageHandle("deferredResolve");
         constexpr VkClearColorValue clearColor = {0.0f, 0.1f, 0.2f, 1.0f};
         VkImageSubresourceRange colorSubresource = VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 1, 1);
         vkCmdClearColorImage(cmd, img, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &colorSubresource);
@@ -1075,13 +1098,13 @@ void RenderThread::SetupTemporalAntialiasing(RenderGraph& graph, const Core::Vie
 {
     graph.CreateTexture("taaCurrent", TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
 
-    if (!graph.HasTexture("taaHistory")) {
+    if (!graph.HasTexture("taaHistory") || !viewFamily.postProcessConfig.bbEnableTemporalAntialiasing) {
         RenderPass& taaPass = graph.AddPass("TemporalAntialiasingFirstFrame", VK_PIPELINE_STAGE_2_COPY_BIT);
         taaPass.ReadCopyImage("deferredResolve");
         taaPass.WriteCopyImage("taaCurrent");
         taaPass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
-            VkImage drawImage = graph.GetImage("deferredResolve");
-            VkImage taaImage = graph.GetImage("taaCurrent");
+            VkImage drawImage = graph.GetImageHandle("deferredResolve");
+            VkImage taaImage = graph.GetImageHandle("taaCurrent");
 
             VkImageCopy2 copyRegion{};
             copyRegion.sType = VK_STRUCTURE_TYPE_IMAGE_COPY_2;
@@ -1137,8 +1160,8 @@ void RenderThread::SetupTemporalAntialiasing(RenderGraph& graph, const Core::Vie
     finalCopyPass.ReadBlitImage("taaCurrent");
     finalCopyPass.WriteBlitImage("taaOutput");
     finalCopyPass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
-        VkImage src = graph.GetImage("taaCurrent");
-        VkImage dst = graph.GetImage("taaOutput");
+        VkImage src = graph.GetImageHandle("taaCurrent");
+        VkImage dst = graph.GetImageHandle("taaOutput");
 
         VkOffset3D renderOffset = {static_cast<int32_t>(width), static_cast<int32_t>(height), 1};
 
@@ -1223,7 +1246,7 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
                 .luminanceBufferAddress = graph.GetBufferAddress("luminanceBuffer"),
                 .minLogLuminance = minLogLuminance,
                 .logLuminanceRange = logLuminanceRange,
-                .adaptationSpeed = viewFamily.exposureAdaptationRate * deltaTime,
+                .adaptationSpeed = viewFamily.postProcessConfig.exposureAdaptationRate * deltaTime,
                 .totalPixels = width * height,
             };
 
@@ -1243,8 +1266,8 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
         tonemapPass.WriteStorageImage("tonemapOutput");
         tonemapPass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
             TonemapSDRPushConstant pushData{
-                .tonemapOperator = viewFamily.tonemapOperator,
-                .targetLuminance = viewFamily.exposureTargetLuminance,
+                .tonemapOperator = viewFamily.postProcessConfig.tonemapOperator,
+                .targetLuminance = viewFamily.postProcessConfig.exposureTargetLuminance,
                 .luminanceBufferAddress = graph.GetBufferAddress("luminanceBuffer"),
                 .outputWidth = width,
                 .outputHeight = height,
@@ -1318,8 +1341,8 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
                 .depthBufferIndex = graph.GetSampledImageViewDescriptorIndex("depthTarget"),
                 .tileNeighborMaxIndex = graph.GetSampledImageViewDescriptorIndex("motionBlurTiledNeighborMax"),
                 .outputIndex = graph.GetStorageImageViewDescriptorIndex("postProcessOutput"),
-                .velocityScale = 1.0f,
-                .depthThreshold = 0.1f,
+                .velocityScale = viewFamily.postProcessConfig.motionBlurVelocityScale,
+                .depthThreshold = viewFamily.postProcessConfig.motionBlurDepthThreshold,
             };
 
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, motionBlurReconstructionPipeline.pipeline.handle);

@@ -1108,7 +1108,7 @@ bool RenderGraph::HasBuffer(const std::string& name)
     return it != bufferNameToIndex.end();
 }
 
-VkImage RenderGraph::GetImage(const std::string& name)
+VkImage RenderGraph::GetImageHandle(const std::string& name)
 {
     auto it = textureNameToIndex.find(name);
     assert(it != textureNameToIndex.end() && "Texture not found");
@@ -1119,7 +1119,7 @@ VkImage RenderGraph::GetImage(const std::string& name)
     return physicalResources[tex.physicalIndex].image;
 }
 
-VkImageView RenderGraph::GetImageView(const std::string& name)
+VkImageView RenderGraph::GetImageViewHandle(const std::string& name)
 {
     auto it = textureNameToIndex.find(name);
     assert(it != textureNameToIndex.end() && "Texture not found");
@@ -1130,7 +1130,7 @@ VkImageView RenderGraph::GetImageView(const std::string& name)
     return physicalResources[tex.physicalIndex].imageView;
 }
 
-VkImageView RenderGraph::GetImageViewMip(const std::string& name, uint32_t mipLevel)
+VkImageView RenderGraph::GetImageViewMipHandle(const std::string& name, uint32_t mipLevel)
 {
     auto it = textureNameToIndex.find(name);
     assert(it != textureNameToIndex.end() && "Texture not found");

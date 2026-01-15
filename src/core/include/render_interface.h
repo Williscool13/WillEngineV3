@@ -71,6 +71,18 @@ struct DirectionalLight
     glm::vec3 color{1.0f, 1.0f, 1.0f};
 };
 
+struct PostProcessConfiguration
+{
+    // Post Process (move into view)
+    bool bbEnableTemporalAntialiasing{true};
+
+    int32_t tonemapOperator{3};
+    float exposureTargetLuminance{0.18f};
+    float exposureAdaptationRate{2.0f};
+    float motionBlurVelocityScale{1.0f};
+    float motionBlurDepthThreshold{0.1f};
+};
+
 struct ViewFamily
 {
     RenderView mainView;
@@ -93,10 +105,7 @@ struct ViewFamily
     DirectionalLight directionalLight{};
     // std::vector<LightInstance> allLights;
 
-    // Post Process (move into single struct and into view)
-    int32_t tonemapOperator{2};
-    float exposureTargetLuminance{0.18f};
-    float exposureAdaptationRate{2.0f};
+    PostProcessConfiguration postProcessConfig{};
 };
 
 struct BufferAcquireOperation

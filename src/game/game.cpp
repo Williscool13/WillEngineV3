@@ -68,13 +68,21 @@ GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* stat
     Game::System::BuildViewFamily(state, frameBuffer->mainViewFamily);
     Game::System::GatherRenderables(ctx, state, frameBuffer);
 
-    if (ImGui::Begin("Test 2")) {
+    if (ImGui::Begin("Post-Processing")) {
+        ImGui::Checkbox("Enable TAA", &state->postProcess.bbEnableTemporalAntialiasing);
+
         const char* tonemapOperators[] = {"None", "ACES", "Uncharted 2", "Reinhard", "Lottes"};
-        int currentItem = state->tonemapOperator + 1;
+        int currentItem = state->postProcess.tonemapOperator + 1;
         if (ImGui::Combo("Tonemap Operator", &currentItem, tonemapOperators, IM_ARRAYSIZE(tonemapOperators))) {
-            state->tonemapOperator = currentItem - 1;
+            state->postProcess.tonemapOperator = currentItem - 1;
         }
 
+        ImGui::DragFloat("Motion Blur Depth Threshold", &state->postProcess.motionBlurDepthThreshold);
+        ImGui::DragFloat("Motion Blur Velocity Scale", &state->postProcess.motionBlurVelocityScale);
+    }
+    ImGui::End();
+
+    if (ImGui::Begin("Test 2")) {
         ImGui::Checkbox("Enable Physics", &state->bEnablePhysics);
 
         if (ImGui::CollapsingHeader("Directional Light")) {
@@ -155,7 +163,7 @@ GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* stat
 
     frameBuffer->mainViewFamily.directionalLight = state->directionalLight;
     frameBuffer->mainViewFamily.shadowConfig = state->shadowConfig;
-    frameBuffer->mainViewFamily.tonemapOperator = state->tonemapOperator;
+    frameBuffer->mainViewFamily.postProcessConfig = state->postProcess;
 
     ImGui::End();
 }

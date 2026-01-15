@@ -244,9 +244,11 @@ void ComputeMotionBlurReconstruction(uniform MotionBlurReconstructionPushConstan
     totalVelocity.y = -totalVelocity.y;
 
     float2 cameraMotion = ComputeCameraMotion(pc.sceneData->invViewProj, pc.sceneData->prevViewProj, uv, centerDepth);
+    float2 jitter = pc.sceneData->jitter;
+    jitter.y = -jitter.y;
     float2 prevJitter = pc.sceneData->prevJitter;
     prevJitter.y = -prevJitter.y;
-    cameraMotion -= prevJitter * 0.5;
+    cameraMotion += (jitter - prevJitter) * 0.5;
     float2 objectVelocity = (totalVelocity - cameraMotion) * pc.velocityScale;
 
     float2 objectVelocityPixels = objectVelocity * pc.sceneData->mainRenderTargetSize;
@@ -256,12 +258,6 @@ void ComputeMotionBlurReconstruction(uniform MotionBlurReconstructionPushConstan
         rdgRenderTextures[pc.outputIndex][pixelCoord] = float4(centerColor, 1.0);
         return;
     }
-
-    rdgRenderTextures[pc.outputIndex][pixelCoord] = float4(centerColor, 1.0);
-    return;
-
-    // rdgRenderTextures[pc.outputIndex][pixelCoord] = float4(1.0f, 0.0f, 1.0f, 1.0);
-    // return;
 
     float3 colorAccum = centerColor;
     float weightAccum = 1.0;

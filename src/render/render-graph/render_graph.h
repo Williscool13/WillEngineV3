@@ -86,11 +86,11 @@ public:
 
     bool HasBuffer(const std::string& name);
 
-    VkImage GetImage(const std::string& name);
+    VkImage GetImageHandle(const std::string& name);
 
-    VkImageView GetImageView(const std::string& name);
+    VkImageView GetImageViewHandle(const std::string& name);
 
-    VkImageView GetImageViewMip(const std::string& name, uint32_t mipLevel);
+    VkImageView GetImageViewMipHandle(const std::string& name, uint32_t mipLevel);
 
     const ResourceDimensions& GetImageDimensions(const std::string& name);
 
