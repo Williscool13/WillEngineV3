@@ -251,6 +251,8 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/postprocess.slang compute ComputeBloomThreshold bloomThreshold
         ${CMAKE_SOURCE_DIR}/shaders/postprocess.slang compute ComputeBloomDownsample bloomDownsample
         ${CMAKE_SOURCE_DIR}/shaders/postprocess.slang compute ComputeBloomUpsample bloomUpsample
+        ${CMAKE_SOURCE_DIR}/shaders/postprocess.slang compute ComputeVignetteAberration vignetteAberration
+        ${CMAKE_SOURCE_DIR}/shaders/postprocess.slang compute ComputeFilmGrain filmGrain
 )
 
 # Post-Build Commands =========================

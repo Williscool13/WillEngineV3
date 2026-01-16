@@ -585,6 +585,12 @@ void RenderThread::CreatePipelines()
 
         pushConstant.size = sizeof(BloomUpsamplePushConstant);
         bloomUpsamplePipeline = ComputePipeline(context.get(), piplineLayoutCreateInfo, Platform::GetShaderPath() / "bloomUpsample_compute.spv");
+
+        pushConstant.size = sizeof(VignetteChromaticAberrationPushConstant);
+        vignetteAberrationPipeline = ComputePipeline(context.get(), piplineLayoutCreateInfo, Platform::GetShaderPath() / "vignetteAberration_compute.spv");
+
+        pushConstant.size = sizeof(FilmGrainPushConstant);
+        filmGrainPipeline = ComputePipeline(context.get(), piplineLayoutCreateInfo, Platform::GetShaderPath() / "filmGrain_compute.spv");
     }
 }
 
@@ -1201,6 +1207,7 @@ void RenderThread::SetupTemporalAntialiasing(RenderGraph& graph, const Core::Vie
 
 void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamily& viewFamily, const std::array<uint32_t, 2> renderExtent, float deltaTime) const
 {
+    const Core::PostProcessConfiguration& ppConfig = viewFamily.postProcessConfig;
     graph.CreateTexture("postProcessOutput", TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
 
     // Exposure
@@ -1255,7 +1262,7 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
                 .luminanceBufferAddress = graph.GetBufferAddress("luminanceBuffer"),
                 .minLogLuminance = minLogLuminance,
                 .logLuminanceRange = logLuminanceRange,
-                .adaptationSpeed = viewFamily.postProcessConfig.exposureAdaptationRate * deltaTime,
+                .adaptationSpeed = ppConfig.exposureAdaptationRate * deltaTime,
                 .totalPixels = width * height,
             };
 
@@ -1267,7 +1274,6 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
 
     // Bloom
     {
-        const Core::PostProcessConfiguration& ppConfig = viewFamily.postProcessConfig;
         const uint32_t numDownsamples = (renderExtent[0] >= 3840) ? 6 : 5;
 
         // Create mipmapped bloom chain
@@ -1351,11 +1357,11 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
         tonemapPass.WriteStorageImage("tonemapOutput");
         tonemapPass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
             TonemapSDRPushConstant pushData{
-                .tonemapOperator = viewFamily.postProcessConfig.tonemapOperator,
-                .targetLuminance = viewFamily.postProcessConfig.exposureTargetLuminance,
+                .tonemapOperator = ppConfig.tonemapOperator,
+                .targetLuminance = ppConfig.exposureTargetLuminance,
                 .luminanceBufferAddress = graph.GetBufferAddress("luminanceBuffer"),
                 .bloomImageIndex = graph.GetSampledImageViewDescriptorIndex("bloomChain"),
-                .bloomIntensity = viewFamily.postProcessConfig.bloomIntensity,
+                .bloomIntensity = ppConfig.bloomIntensity,
                 .outputWidth = width,
                 .outputHeight = height,
                 .srcImageIndex = graph.GetSampledImageViewDescriptorIndex("taaOutput"),
@@ -1414,13 +1420,13 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
             vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
         });
 
-        // graph.CreateTexture("motionBlurOutput", TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
+        graph.CreateTexture("motionBlurOutput", TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
         RenderPass& motionBlurReconstructionPass = graph.AddPass("MotionBlurReconstruction", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
         motionBlurReconstructionPass.ReadSampledImage("tonemapOutput");
         motionBlurReconstructionPass.ReadSampledImage("velocityTarget");
         motionBlurReconstructionPass.ReadSampledImage("depthTarget");
         motionBlurReconstructionPass.ReadSampledImage("motionBlurTiledNeighborMax");
-        motionBlurReconstructionPass.WriteStorageImage("postProcessOutput");
+        motionBlurReconstructionPass.WriteStorageImage("motionBlurOutput");
         motionBlurReconstructionPass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
             MotionBlurReconstructionPushConstant pc{
                 .sceneData = graph.GetBufferAddress("sceneData"),
@@ -1428,9 +1434,9 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
                 .velocityBufferIndex = graph.GetSampledImageViewDescriptorIndex("velocityTarget"),
                 .depthBufferIndex = graph.GetSampledImageViewDescriptorIndex("depthTarget"),
                 .tileNeighborMaxIndex = graph.GetSampledImageViewDescriptorIndex("motionBlurTiledNeighborMax"),
-                .outputIndex = graph.GetStorageImageViewDescriptorIndex("postProcessOutput"),
-                .velocityScale = viewFamily.postProcessConfig.motionBlurVelocityScale,
-                .depthScale = viewFamily.postProcessConfig.motionBlurDepthScale,
+                .outputIndex = graph.GetStorageImageViewDescriptorIndex("motionBlurOutput"),
+                .velocityScale = ppConfig.motionBlurVelocityScale,
+                .depthScale = ppConfig.motionBlurDepthScale,
             };
 
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, motionBlurReconstructionPipeline.pipeline.handle);
@@ -1439,6 +1445,60 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
             uint32_t yDispatch = (height + POST_PROCESS_MOTION_BLUR_DISPATCH_Y - 1) / POST_PROCESS_MOTION_BLUR_DISPATCH_Y;
             vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
         });
+    }
+
+    // Vignette + Chromatic Aberration
+    {
+        graph.CreateTexture("vignetteAberrationOutput", TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
+        RenderPass& vignetteAberrationPass = graph.AddPass("Vignette+Aberration", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+        vignetteAberrationPass.ReadSampledImage("motionBlurOutput");
+        vignetteAberrationPass.WriteStorageImage("vignetteAberrationOutput");
+        vignetteAberrationPass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
+            VignetteChromaticAberrationPushConstant pc{
+                .sceneData = graph.GetBufferAddress("sceneData"),
+                .inputIndex = graph.GetSampledImageViewDescriptorIndex("motionBlurOutput"),
+                .outputIndex = graph.GetStorageImageViewDescriptorIndex("vignetteAberrationOutput"),
+                .chromaticAberrationStrength = ppConfig.chromaticAberrationStrength,
+                .vignetteStrength = ppConfig.vignetteStrength,
+                .vignetteRadius = ppConfig.vignetteRadius,
+                .vignetteSmoothness = ppConfig.vignetteSmoothness,
+            };
+
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, vignetteAberrationPipeline.pipeline.handle);
+            vkCmdPushConstants(cmd, vignetteAberrationPipeline.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            uint32_t xDispatch = (width + POST_PROCESS_VIGNETTE_ABERRATION_DISPATCH_X - 1) / POST_PROCESS_VIGNETTE_ABERRATION_DISPATCH_X;
+            uint32_t yDispatch = (height + POST_PROCESS_VIGNETTE_ABERRATION_DISPATCH_Y - 1) / POST_PROCESS_VIGNETTE_ABERRATION_DISPATCH_Y;
+            vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
+        });
+    }
+
+    // Film Grain
+    {
+        // graph.CreateTexture("filmGrainOutput", TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
+        RenderPass& filmGrainPass = graph.AddPass("FilmGrain", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+        filmGrainPass.ReadSampledImage("vignetteAberrationOutput");
+        filmGrainPass.WriteStorageImage("postProcessOutput");
+        filmGrainPass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
+            FilmGrainPushConstant pc{
+                .sceneData = graph.GetBufferAddress("sceneData"),
+                .inputIndex = graph.GetSampledImageViewDescriptorIndex("vignetteAberrationOutput"),
+                .outputIndex = graph.GetStorageImageViewDescriptorIndex("postProcessOutput"),
+                .grainStrength = ppConfig.grainStrength,
+                .grainSize = ppConfig.grainSize,
+                .frameIndex = static_cast<uint32_t>(frameNumber),
+            };
+
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, filmGrainPipeline.pipeline.handle);
+            vkCmdPushConstants(cmd, filmGrainPipeline.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            uint32_t xDispatch = (width + POST_PROCESS_FILM_GRAIN_DISPATCH_X - 1) / POST_PROCESS_FILM_GRAIN_DISPATCH_X;
+            uint32_t yDispatch = (height + POST_PROCESS_FILM_GRAIN_DISPATCH_Y - 1) / POST_PROCESS_FILM_GRAIN_DISPATCH_Y;
+            vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
+        });
+    }
+
+    // Sharpening (todo)
+    {
+
     }
 }
 } // Render

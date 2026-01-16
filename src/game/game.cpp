@@ -69,6 +69,22 @@ GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* stat
     Game::System::GatherRenderables(ctx, state, frameBuffer);
 
     if (ImGui::Begin("Post-Processing")) {
+        constexpr Core::PostProcessConfiguration defaultPP{};
+        if (ImGui::Button("Reset All to Defaults")) {
+            state->postProcess = defaultPP;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Disable All Effects")) {
+            state->postProcess.bEnableTemporalAntialiasing = false;
+            state->postProcess.tonemapOperator = -1;
+            state->postProcess.bloomIntensity = 0.0f;
+            state->postProcess.motionBlurVelocityScale = 0.0f;
+            state->postProcess.chromaticAberrationStrength = 0.0f;
+            state->postProcess.vignetteStrength = 0.0f;
+            state->postProcess.grainStrength = 0.0f;
+        }
+
+        ImGui::Spacing();
         ImGui::SeparatorText("Anti-Aliasing");
         ImGui::Checkbox("Enable TAA", &state->postProcess.bEnableTemporalAntialiasing);
 
@@ -84,6 +100,11 @@ GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* stat
         ImGui::SeparatorText("Exposure");
         ImGui::SliderFloat("Target Luminance", &state->postProcess.exposureTargetLuminance, 0.01f, 1.0f, "%.3f");
         ImGui::SliderFloat("Adaptation Speed", &state->postProcess.exposureAdaptationRate, 0.1f, 50.0f, "%.1f");
+        if (ImGui::Button("Reset Exposure")) {
+            state->postProcess.exposureTargetLuminance = defaultPP.exposureTargetLuminance;
+            state->postProcess.exposureAdaptationRate = defaultPP.exposureAdaptationRate;
+        }
+
 
         ImGui::Spacing();
         ImGui::SeparatorText("Bloom");
@@ -91,17 +112,68 @@ GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* stat
         ImGui::SliderFloat("Threshold", &state->postProcess.bloomThreshold, 0.0f, 2.0f, "%.2f");
         ImGui::SliderFloat("Soft Threshold", &state->postProcess.bloomSoftThreshold, 0.0f, 1.0f, "%.2f");
         ImGui::SliderFloat("Radius", &state->postProcess.bloomRadius, 0.5f, 2.0f, "%.2f");
-        if (ImGui::Button("Reset Bloom Defaults")) {
-            state->postProcess.bloomIntensity = 0.04f;
-            state->postProcess.bloomThreshold = 1.0f;
-            state->postProcess.bloomSoftThreshold = 0.5f;
-            state->postProcess.bloomRadius = 1.0f;
+        if (ImGui::Button("Reset Bloom")) {
+            state->postProcess.bloomIntensity = defaultPP.bloomIntensity;
+            state->postProcess.bloomThreshold = defaultPP.bloomThreshold;
+            state->postProcess.bloomSoftThreshold = defaultPP.bloomSoftThreshold;
+            state->postProcess.bloomRadius = defaultPP.bloomRadius;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Disable Bloom")) {
+            state->postProcess.bloomIntensity = 0.0f;
         }
 
         ImGui::Spacing();
         ImGui::SeparatorText("Motion Blur");
         ImGui::SliderFloat("Velocity Scale", &state->postProcess.motionBlurVelocityScale, 0.0f, 2.0f, "%.2f");
         ImGui::SliderFloat("Depth Threshold", &state->postProcess.motionBlurDepthScale, 0.0f, 1.0f, "%.3f");
+        if (ImGui::Button("Reset Motion Blur")) {
+            state->postProcess.motionBlurVelocityScale = defaultPP.motionBlurVelocityScale;
+            state->postProcess.motionBlurDepthScale = defaultPP.motionBlurDepthScale;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Disable Motion Blur")) {
+            state->postProcess.motionBlurVelocityScale = 0.0f;
+        }
+
+        ImGui::Spacing();
+        ImGui::SeparatorText("Chromatic Aberration");
+        ImGui::SliderFloat("Aberration Strength", &state->postProcess.chromaticAberrationStrength, 0.0f, 100.0f, "%.2f");
+        if (ImGui::Button("Reset Aberration")) {
+            state->postProcess.chromaticAberrationStrength = defaultPP.chromaticAberrationStrength;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Disable Aberration")) {
+            state->postProcess.chromaticAberrationStrength = 0.0f;
+        }
+
+        ImGui::Spacing();
+        ImGui::SeparatorText("Vignette");
+        ImGui::SliderFloat("Vignette Strength", &state->postProcess.vignetteStrength, 0.0f, 1.0f, "%.2f");
+        ImGui::SliderFloat("Vignette Radius", &state->postProcess.vignetteRadius, 0.5f, 1.0f, "%.2f");
+        ImGui::SliderFloat("Vignette Smoothness", &state->postProcess.vignetteSmoothness, 0.1f, 1.0f, "%.2f");
+        if (ImGui::Button("Reset Vignette")) {
+            state->postProcess.vignetteStrength = defaultPP.vignetteStrength;
+            state->postProcess.vignetteRadius = defaultPP.vignetteRadius;
+            state->postProcess.vignetteSmoothness = defaultPP.vignetteSmoothness;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Disable Vignette")) {
+            state->postProcess.vignetteStrength = 0.0f;
+        }
+
+        ImGui::Spacing();
+        ImGui::SeparatorText("Film Grain");
+        ImGui::SliderFloat("Grain Strength", &state->postProcess.grainStrength, 0.0f, 0.15f, "%.3f");
+        ImGui::SliderFloat("Grain Size", &state->postProcess.grainSize, 1.0f, 3.0f, "%.2f");
+        if (ImGui::Button("Reset Grain")) {
+            state->postProcess.grainStrength = defaultPP.grainStrength;
+            state->postProcess.grainSize = defaultPP.grainSize;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Disable Grain")) {
+            state->postProcess.grainStrength = 0.0f;
+        }
     }
     ImGui::End();
 

@@ -482,3 +482,60 @@ void ComputeBloomUpsample(uniform BloomUpsamplePushConstant pc, uint3 dtid : SV_
 
     rdgRenderTextures[pc.outputIndex][pixelCoord] = float4(result, 1.0);
 }
+
+[shader("compute")]
+[numthreads(POST_PROCESS_VIGNETTE_ABERRATION_DISPATCH_X, POST_PROCESS_VIGNETTE_ABERRATION_DISPATCH_Y, 1)]
+void ComputeVignetteAberration(uniform VignetteChromaticAberrationPushConstant pc, uint3 dtid : SV_DispatchThreadID) {
+    if (any(dtid.xy >= pc.sceneData.mainRenderTargetSize)) return;
+
+    uint2 pixelCoord = dtid.xy;
+    float2 uv = (dtid.xy + 0.5) / pc.sceneData.mainRenderTargetSize;
+    float2 centerOffset = uv - 0.5;
+    float distFromCenter = length(centerOffset);
+
+    // Chromatic aberration
+    float2 direction = distFromCenter > 0.0001 ? normalize(centerOffset) : float2(0, 0);
+    float aberrationOffset = distFromCenter * pc.chromaticAberrationStrength / pc.sceneData.mainRenderTargetSize.x;
+    float2 uvR = uv + direction * aberrationOffset;
+    float2 uvG = uv;
+    float2 uvB = uv - direction * aberrationOffset;
+    float r = rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uvR, 0).r;
+    float g = rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uvG, 0).g;
+    float b = rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uvB, 0).b;
+    float3 color = float3(r, g, b);
+
+    // Vignette
+    float vignette = smoothstep(
+        pc.vignetteRadius,
+        pc.vignetteRadius - pc.vignetteSmoothness,
+        distFromCenter
+    );
+    vignette = lerp(1.0, vignette, pc.vignetteStrength);
+    color *= vignette;
+    rdgRenderTextures[pc.outputIndex][pixelCoord] = float4(color, 1.0);
+}
+
+float FilmGrainHash(float2 p) {
+    float3 p3 = frac(float3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return frac((p3.x + p3.y) * p3.z);
+}
+
+[shader("compute")]
+[numthreads(POST_PROCESS_FILM_GRAIN_DISPATCH_X, POST_PROCESS_FILM_GRAIN_DISPATCH_Y, 1)]
+void ComputeFilmGrain(uniform FilmGrainPushConstant pc, uint3 dtid : SV_DispatchThreadID) {
+    if (any(dtid.xy >= pc.sceneData.mainRenderTargetSize)) return;
+    uint2 pixelCoord = dtid.xy;
+
+    float2 uv = (dtid.xy + 0.5) / pc.sceneData.mainRenderTargetSize;
+
+    float2 grainUV = uv * pc.sceneData.mainRenderTargetSize / pc.grainSize;
+    grainUV += float2(pc.frameIndex * 0.123, pc.frameIndex * 0.456);
+
+    float noise = FilmGrainHash(grainUV);
+    noise = noise * 2.0 - 1.0;
+
+    float3 color = rdgTextures[pc.inputIndex].Load(int3(pixelCoord, 0)).rgb;
+    color += noise * pc.grainStrength;
+    rdgRenderTextures[pc.outputIndex][pixelCoord] = float4(color, 1.0);
+}

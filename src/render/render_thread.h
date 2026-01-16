@@ -156,6 +156,8 @@ private:
     ComputePipeline motionBlurTileMaxPipeline;
     ComputePipeline motionBlurNeighborMaxPipeline;
     ComputePipeline motionBlurReconstructionPipeline;
+    ComputePipeline vignetteAberrationPipeline;
+    ComputePipeline filmGrainPipeline;
 };
 } // Render
 

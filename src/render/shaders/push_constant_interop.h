@@ -266,4 +266,25 @@ SHADER_PUBLIC struct BloomUpsamplePushConstant
     SHADER_PUBLIC float radius;
 };
 
+SHADER_PUBLIC struct VignetteChromaticAberrationPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC uint32_t inputIndex;
+    SHADER_PUBLIC uint32_t outputIndex;
+    SHADER_PUBLIC float chromaticAberrationStrength;
+    SHADER_PUBLIC float vignetteStrength;
+    SHADER_PUBLIC float vignetteRadius;
+    SHADER_PUBLIC float vignetteSmoothness;
+};
+
+SHADER_PUBLIC struct FilmGrainPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC uint32_t inputIndex;
+    SHADER_PUBLIC uint32_t outputIndex;
+    SHADER_PUBLIC float grainStrength;
+    SHADER_PUBLIC float grainSize;
+    SHADER_PUBLIC uint frameIndex;
+};
+
 #endif //WILL_ENGINE_PUSH_CONSTANT_INTEROP_H

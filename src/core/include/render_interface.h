@@ -88,6 +88,15 @@ struct PostProcessConfiguration
     float bloomSoftThreshold{0.5f};
     float bloomRadius{1.0f};
     float bloomIntensity{0.04f};
+
+    float chromaticAberrationStrength{1.5f};
+
+    float vignetteStrength{0.2f};
+    float vignetteRadius{0.8f};
+    float vignetteSmoothness{0.5f};
+
+    float grainStrength{0.01f};
+    float grainSize{1.5f};
 };
 
 struct ViewFamily
