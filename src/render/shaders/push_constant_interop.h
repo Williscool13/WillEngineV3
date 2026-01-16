@@ -295,4 +295,17 @@ SHADER_PUBLIC struct SharpeningPushConstant
     SHADER_PUBLIC float sharpness;
 };
 
+SHADER_PUBLIC struct ColorGradingPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC uint32_t inputIndex;
+    SHADER_PUBLIC uint32_t outputIndex;
+    SHADER_PUBLIC float exposure;
+    SHADER_PUBLIC float contrast;
+    SHADER_PUBLIC float saturation;
+    SHADER_PUBLIC float temperature;
+    SHADER_PUBLIC float tint;
+};
+
+
 #endif //WILL_ENGINE_PUSH_CONSTANT_INTEROP_H

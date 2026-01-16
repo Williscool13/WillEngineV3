@@ -159,6 +159,7 @@ private:
     ComputePipeline vignetteAberrationPipeline;
     ComputePipeline filmGrainPipeline;
     ComputePipeline sharpeningPipeline;
+    ComputePipeline colorGradingPipeline;
 };
 } // Render
 

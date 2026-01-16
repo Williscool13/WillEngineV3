@@ -138,6 +138,21 @@ GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* stat
         }
 
         ImGui::Spacing();
+        ImGui::SeparatorText("Color Grading");
+        ImGui::SliderFloat("Exposure Offset", &state->postProcess.colorGradingExposure, -2.0f, 2.0f, "%.2f");
+        ImGui::SliderFloat("Contrast", &state->postProcess.colorGradingContrast, 0.5f, 2.0f, "%.2f");
+        ImGui::SliderFloat("Saturation", &state->postProcess.colorGradingSaturation, 0.0f, 2.0f, "%.2f");
+        ImGui::SliderFloat("Temperature", &state->postProcess.colorGradingTemperature, -1.0f, 1.0f, "%.2f");
+        ImGui::SliderFloat("Tint", &state->postProcess.colorGradingTint, -1.0f, 1.0f, "%.2f");
+        if (ImGui::Button("Reset Color Grading")) {
+            state->postProcess.colorGradingExposure = defaultPP.colorGradingExposure;
+            state->postProcess.colorGradingContrast = defaultPP.colorGradingContrast;
+            state->postProcess.colorGradingSaturation = defaultPP.colorGradingSaturation;
+            state->postProcess.colorGradingTemperature = defaultPP.colorGradingTemperature;
+            state->postProcess.colorGradingTint = defaultPP.colorGradingTint;
+        }
+
+        ImGui::Spacing();
         ImGui::SeparatorText("Chromatic Aberration");
         ImGui::SliderFloat("Aberration Strength", &state->postProcess.chromaticAberrationStrength, 0.0f, 100.0f, "%.2f");
         if (ImGui::Button("Reset Aberration")) {

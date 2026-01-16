@@ -76,18 +76,24 @@ struct PostProcessConfiguration
     // Post Process (move into view)
     bool bEnableTemporalAntialiasing{true};
 
-    int32_t tonemapOperator{3};
-
     float exposureTargetLuminance{0.18f};
     float exposureAdaptationRate{16.0f};
-
-    float motionBlurVelocityScale{1.0f};
-    float motionBlurDepthScale{0.1f};
 
     float bloomThreshold{1.0f};
     float bloomSoftThreshold{0.5f};
     float bloomRadius{1.0f};
     float bloomIntensity{0.04f};
+
+    int32_t tonemapOperator{3};
+
+    float motionBlurVelocityScale{1.0f};
+    float motionBlurDepthScale{0.1f};
+
+    float colorGradingExposure = 0.0f;
+    float colorGradingContrast = 1.0f;
+    float colorGradingSaturation = 1.0f;
+    float colorGradingTemperature = 0.0f;
+    float colorGradingTint = 0.0f;
 
     float chromaticAberrationStrength{1.5f};
 

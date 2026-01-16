@@ -601,3 +601,36 @@ void ComputeSharpening(uniform SharpeningPushConstant pc, uint3 dtid : SV_Dispat
 
     rdgRenderTextures[pc.outputIndex][pixelCoord] = float4(sharpened, 1.0);*/
 }
+
+// ==================== Color Grading ===============================
+[shader("compute")]
+[numthreads(POST_PROCESS_COLOR_GRADING_DISPATCH_X, POST_PROCESS_COLOR_GRADING_DISPATCH_Y, 1)]
+void ComputeColorGrading(uniform ColorGradingPushConstant pc, uint3 dtid : SV_DispatchThreadID) {
+    if (any(dtid.xy >= pc.sceneData.mainRenderTargetSize)) return;
+
+    uint2 pixelCoord = dtid.xy;
+    float3 color = rdgTextures[pc.inputIndex].Load(int3(pixelCoord, 0)).rgb;
+
+    color *= exp2(pc.exposure);
+
+    color = (color - 0.5) * pc.contrast + 0.5;
+
+    float luma = dot(color, float3(0.2126, 0.7152, 0.0722));
+    color = lerp(float3(luma, luma, luma), color, pc.saturation);
+
+    if (pc.temperature > 0.0) {
+        color.r += pc.temperature * 0.1;
+        color.b -= pc.temperature * 0.1;
+    } else {
+        color.r += pc.temperature * 0.1;
+        color.b -= pc.temperature * 0.1;
+    }
+
+    if (pc.tint > 0.0) {
+        color.g -= pc.tint * 0.1;
+    } else {
+        color.g -= pc.tint * 0.1;
+    }
+
+    rdgRenderTextures[pc.outputIndex][pixelCoord] = float4(color, 1.0);
+}

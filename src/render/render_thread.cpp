@@ -594,6 +594,9 @@ void RenderThread::CreatePipelines()
 
         pushConstant.size = sizeof(SharpeningPushConstant);
         sharpeningPipeline = ComputePipeline(context.get(), piplineLayoutCreateInfo, Platform::GetShaderPath() / "sharpening_compute.spv");
+
+        pushConstant.size = sizeof(ColorGradingPushConstant);
+        colorGradingPipeline = ComputePipeline(context.get(), piplineLayoutCreateInfo, Platform::GetShaderPath() / "colorGrading_compute.spv");
     }
 }
 
@@ -1471,16 +1474,42 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
         });
     }
 
+    // Color Grading
+    {
+        graph.CreateTexture("colorGradingOutput", TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
+        RenderPass& colorGradingPass = graph.AddPass("ColorGrading", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+        colorGradingPass.ReadSampledImage("motionBlurOutput");
+        colorGradingPass.WriteStorageImage("colorGradingOutput");
+        colorGradingPass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
+            ColorGradingPushConstant pc{
+                .sceneData = graph.GetBufferAddress("sceneData"),
+                .inputIndex = graph.GetSampledImageViewDescriptorIndex("motionBlurOutput"),
+                .outputIndex = graph.GetStorageImageViewDescriptorIndex("colorGradingOutput"),
+                .exposure = ppConfig.colorGradingExposure,
+                .contrast = ppConfig.colorGradingContrast,
+                .saturation = ppConfig.colorGradingSaturation,
+                .temperature = ppConfig.colorGradingTemperature,
+                .tint = ppConfig.colorGradingTint,
+            };
+
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, colorGradingPipeline.pipeline.handle);
+            vkCmdPushConstants(cmd, colorGradingPipeline.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            uint32_t xDispatch = (width + POST_PROCESS_COLOR_GRADING_DISPATCH_X - 1) / POST_PROCESS_COLOR_GRADING_DISPATCH_X;
+            uint32_t yDispatch = (height + POST_PROCESS_COLOR_GRADING_DISPATCH_Y - 1) / POST_PROCESS_COLOR_GRADING_DISPATCH_Y;
+            vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
+        });
+    }
+
     // Vignette + Chromatic Aberration
     {
         graph.CreateTexture("vignetteAberrationOutput", TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
         RenderPass& vignetteAberrationPass = graph.AddPass("Vignette+Aberration", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-        vignetteAberrationPass.ReadSampledImage("motionBlurOutput");
+        vignetteAberrationPass.ReadSampledImage("colorGradingOutput");
         vignetteAberrationPass.WriteStorageImage("vignetteAberrationOutput");
         vignetteAberrationPass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
             VignetteChromaticAberrationPushConstant pc{
                 .sceneData = graph.GetBufferAddress("sceneData"),
-                .inputIndex = graph.GetSampledImageViewDescriptorIndex("motionBlurOutput"),
+                .inputIndex = graph.GetSampledImageViewDescriptorIndex("colorGradingOutput"),
                 .outputIndex = graph.GetStorageImageViewDescriptorIndex("vignetteAberrationOutput"),
                 .chromaticAberrationStrength = ppConfig.chromaticAberrationStrength,
                 .vignetteStrength = ppConfig.vignetteStrength,

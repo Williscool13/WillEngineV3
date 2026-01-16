@@ -254,6 +254,7 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/postprocess.slang compute ComputeVignetteAberration vignetteAberration
         ${CMAKE_SOURCE_DIR}/shaders/postprocess.slang compute ComputeFilmGrain filmGrain
         ${CMAKE_SOURCE_DIR}/shaders/postprocess.slang compute ComputeSharpening sharpening
+        ${CMAKE_SOURCE_DIR}/shaders/postprocess.slang compute ComputeColorGrading colorGrading
 )
 
 # Post-Build Commands =========================
