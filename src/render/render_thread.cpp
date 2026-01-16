@@ -333,10 +333,10 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
             "normalTarget", // 3
             "pbrTarget", // 4
             "velocityTarget", // 5
-            "motionBlurTiledMax", // 6
-            "motionBlurTiledNeighborMax", // 7
-            "emissiveTarget", // 8
-            "shadowCascade_3", // 9
+            "motionBlurTiledNeighborMax", // 6
+            "bloomThreshold", // 7
+            "bloomDown4", // 8
+            "bloomUp0", // 9
         };
 
         uint32_t debugIndex = viewFamily.mainView.debug;
@@ -577,13 +577,13 @@ void RenderThread::CreatePipelines()
         pushConstant.size = sizeof(MotionBlurReconstructionPushConstant);
         motionBlurReconstructionPipeline = ComputePipeline(context.get(), piplineLayoutCreateInfo, Platform::GetShaderPath() / "motionBlurReconstruction_compute.spv");
 
-        pushConstant.size = sizeof(MotionBlurReconstructionPushConstant);
+        pushConstant.size = sizeof(BloomThresholdPushConstant);
         bloomThresholdPipeline = ComputePipeline(context.get(), piplineLayoutCreateInfo, Platform::GetShaderPath() / "bloomThreshold_compute.spv");
 
-        pushConstant.size = sizeof(MotionBlurReconstructionPushConstant);
+        pushConstant.size = sizeof(BloomDownsamplePushConstant);
         bloomDownsamplePipeline = ComputePipeline(context.get(), piplineLayoutCreateInfo, Platform::GetShaderPath() / "bloomDownsample_compute.spv");
 
-        pushConstant.size = sizeof(MotionBlurReconstructionPushConstant);
+        pushConstant.size = sizeof(BloomUpsamplePushConstant);
         bloomUpsamplePipeline = ComputePipeline(context.get(), piplineLayoutCreateInfo, Platform::GetShaderPath() / "bloomUpsample_compute.spv");
     }
 }
@@ -1266,7 +1266,7 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
     }
 
     // Bloom
-    /*{
+    {
         const Core::PostProcessConfiguration& ppConfig = viewFamily.postProcessConfig;
 
         const uint32_t numDownsamples = (renderExtent[0] >= 3840) ? 6 : 5;
@@ -1349,7 +1349,7 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
 
             currentMip = upName;
         }
-    }*/
+    }
 
     // Motion Blur
     {
@@ -1429,12 +1429,15 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
 
         RenderPass& tonemapPass = graph.AddPass("TonemapSDR", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
         tonemapPass.ReadSampledImage("motionBlurOutput");
+        tonemapPass.ReadSampledImage("bloomUp0");
         tonemapPass.WriteStorageImage("postProcessOutput");
         tonemapPass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
             TonemapSDRPushConstant pushData{
                 .tonemapOperator = viewFamily.postProcessConfig.tonemapOperator,
                 .targetLuminance = viewFamily.postProcessConfig.exposureTargetLuminance,
                 .luminanceBufferAddress = graph.GetBufferAddress("luminanceBuffer"),
+                .bloomImageIndex = graph.GetSampledImageViewDescriptorIndex("bloomUp0"),
+                .bloomIntensity = viewFamily.postProcessConfig.bloomIntensity,
                 .outputWidth = width,
                 .outputHeight = height,
                 .srcImageIndex = graph.GetSampledImageViewDescriptorIndex("motionBlurOutput"),

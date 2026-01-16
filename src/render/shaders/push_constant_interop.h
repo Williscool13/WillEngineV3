@@ -185,6 +185,8 @@ SHADER_PUBLIC struct TonemapSDRPushConstant
     SHADER_PUBLIC int32_t tonemapOperator;
     SHADER_PUBLIC float targetLuminance;
     SHADER_PUBLIC SHADER_PTR(float) luminanceBufferAddress;
+    SHADER_PUBLIC uint32_t bloomImageIndex;
+    SHADER_PUBLIC float bloomIntensity;
     SHADER_PUBLIC uint32_t outputWidth;
     SHADER_PUBLIC uint32_t outputHeight;
     SHADER_PUBLIC uint32_t srcImageIndex;

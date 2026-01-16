@@ -69,20 +69,43 @@ GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* stat
     Game::System::GatherRenderables(ctx, state, frameBuffer);
 
     if (ImGui::Begin("Post-Processing")) {
+        ImGui::SeparatorText("Anti-Aliasing");
         ImGui::Checkbox("Enable TAA", &state->postProcess.bEnableTemporalAntialiasing);
 
+        ImGui::Spacing();
+        ImGui::SeparatorText("Tonemapping");
         const char* tonemapOperators[] = {"None", "ACES", "Uncharted 2", "Reinhard", "Lottes"};
         int currentItem = state->postProcess.tonemapOperator + 1;
-        if (ImGui::Combo("Tonemap Operator", &currentItem, tonemapOperators, IM_ARRAYSIZE(tonemapOperators))) {
+        if (ImGui::Combo("Operator", &currentItem, tonemapOperators, IM_ARRAYSIZE(tonemapOperators))) {
             state->postProcess.tonemapOperator = currentItem - 1;
         }
 
-        ImGui::DragFloat("Motion Blur Depth Threshold", &state->postProcess.motionBlurDepthScale);
-        ImGui::DragFloat("Motion Blur Velocity Scale", &state->postProcess.motionBlurVelocityScale);
+        ImGui::Spacing();
+        ImGui::SeparatorText("Exposure");
+        ImGui::SliderFloat("Target Luminance", &state->postProcess.exposureTargetLuminance, 0.01f, 1.0f, "%.3f");
+        ImGui::SliderFloat("Adaptation Speed", &state->postProcess.exposureAdaptationRate, 0.1f, 50.0f, "%.1f");
+
+        ImGui::Spacing();
+        ImGui::SeparatorText("Bloom");
+        ImGui::SliderFloat("Intensity", &state->postProcess.bloomIntensity, 0.0f, 0.2f, "%.3f");
+        ImGui::SliderFloat("Threshold", &state->postProcess.bloomThreshold, 0.0f, 2.0f, "%.2f");
+        ImGui::SliderFloat("Soft Threshold", &state->postProcess.bloomSoftThreshold, 0.0f, 1.0f, "%.2f");
+        ImGui::SliderFloat("Radius", &state->postProcess.bloomRadius, 0.5f, 2.0f, "%.2f");
+        if (ImGui::Button("Reset Bloom Defaults")) {
+            state->postProcess.bloomIntensity = 0.04f;
+            state->postProcess.bloomThreshold = 1.0f;
+            state->postProcess.bloomSoftThreshold = 0.5f;
+            state->postProcess.bloomRadius = 1.0f;
+        }
+
+        ImGui::Spacing();
+        ImGui::SeparatorText("Motion Blur");
+        ImGui::SliderFloat("Velocity Scale", &state->postProcess.motionBlurVelocityScale, 0.0f, 2.0f, "%.2f");
+        ImGui::SliderFloat("Depth Threshold", &state->postProcess.motionBlurDepthScale, 0.0f, 1.0f, "%.3f");
     }
     ImGui::End();
 
-    if (ImGui::Begin("Test 2")) {
+    if (ImGui::Begin("Scene")) {
         ImGui::Checkbox("Enable Physics", &state->bEnablePhysics);
 
         if (ImGui::CollapsingHeader("Directional Light")) {
@@ -106,8 +129,6 @@ GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* stat
 
             ImGui::SliderFloat("Shadow Intensity", &state->shadowConfig.shadowIntensity, 0.0f, 1.0f);
 
-
-            // Display current preset data (read-only)
             ImGui::Separator();
             ImGui::Text("Current Configuration:");
             for (int i = 0; i < 4; ++i) {
@@ -127,7 +148,6 @@ GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* stat
                 ImGui::Unindent();
             }
 
-            // Custom quality editing
             if (state->shadowQuality == Core::ShadowQuality::Custom) {
                 ImGui::Separator();
                 ImGui::Text("Custom Settings:");

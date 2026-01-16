@@ -58,8 +58,11 @@ float3 LottesTonemapSimple(float3 c) {
 [shader("compute")]
 [numthreads(16, 16, 1)]
 void ComputeSDRTonemap(uniform TonemapSDRPushConstant pc, uint3 dtid : SV_DispatchThreadID) {
-    int2 texelCoord = int2(dtid.xy);
-    float3 hdrColor = rdgTextures[pc.srcImageIndex].Load(int3(texelCoord, 0)).rgb;
+    int2 pixelCoord = int2(dtid.xy);
+    float3 sceneColor = rdgTextures[pc.srcImageIndex].Load(int3(pixelCoord, 0)).rgb;
+
+    float3 bloom = rdgTextures[pc.bloomImageIndex].Load(int3(pixelCoord, 0)).rgb;
+    float3 hdrColor = sceneColor + bloom * pc.bloomIntensity;
 
     float avgLuminance = pc.luminanceBufferAddress[0];
     float exposure = pc.targetLuminance / max(avgLuminance, 0.001);
@@ -84,7 +87,7 @@ void ComputeSDRTonemap(uniform TonemapSDRPushConstant pc, uint3 dtid : SV_Dispat
             break;
     }
 
-    rdgRenderTextures[pc.dstImageIndex][texelCoord] = float4(ldrColor, 1.0);
+    rdgRenderTextures[pc.dstImageIndex][pixelCoord] = float4(ldrColor, 1.0);
 }
 
 

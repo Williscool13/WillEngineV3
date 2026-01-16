@@ -87,6 +87,7 @@ struct PostProcessConfiguration
     float bloomThreshold{1.0f};
     float bloomSoftThreshold{0.5f};
     float bloomRadius{1.0f};
+    float bloomIntensity{0.04f};
 };
 
 struct ViewFamily
