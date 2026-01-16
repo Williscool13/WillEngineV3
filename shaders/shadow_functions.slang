@@ -5,11 +5,6 @@ import constants_interop;
 import shadows_interop;
 import shader_constants;
 
-public uint GetCascadeIndex(uint packedIndices, uint cascadeLevel)
-{
-    return (packedIndices >> (cascadeLevel * 8)) & 0xFF;
-}
-
 float DepthToZ(float depth, float n, float f) {
 	// return n * f / (depth * (n - f) + f); (normal depth buffer)
 	return n * f / (f - depth * (f - n));
@@ -84,7 +79,7 @@ float PCSS(Texture2D shadowMap, SamplerState sampler, SamplerComparisonState com
     return PCF(shadowMap, comparisonSampler, uv, receiverDepth, filterRadius, pcfSamples);
 }
 
-public float GetShadowFactor(float3 viewPos, float3 viewNormal, SceneData* sceneData, ShadowData* shadowData, uint32_t packedCSMIndices,
+public float GetShadowFactor(float3 viewPos, float3 viewNormal, SceneData* sceneData, ShadowData* shadowData, int4 csmIndices,
                             Texture2D textures[], SamplerState sampler, SamplerComparisonState comparisonSampler)
 {
     float viewSpaceDepth = abs(viewPos.z);
@@ -114,7 +109,7 @@ public float GetShadowFactor(float3 viewPos, float3 viewNormal, SceneData* scene
     projCoords.xy = projCoords.xy * 0.5 + 0.5;
     projCoords.y = 1 - projCoords.y;
 
-    uint shadowMapIndex = GetCascadeIndex(packedCSMIndices, cascadeLevel);
+    uint shadowMapIndex = csmIndices[cascadeLevel];
     Texture2D shadowMap = textures[NonUniformResourceIndex(shadowMapIndex)];
 
     float lightSize = shadowData->lightSizes[cascadeLevel];
@@ -144,7 +139,7 @@ public float GetShadowFactor(float3 viewPos, float3 viewNormal, SceneData* scene
             nextProjCoords.xy = nextProjCoords.xy * 0.5 + 0.5;
             nextProjCoords.y = 1 - nextProjCoords.y;
 
-            uint nextShadowMapIndex = GetCascadeIndex(packedCSMIndices, cascadeLevel + 1);
+            uint nextShadowMapIndex = csmIndices[cascadeLevel + 1];
             Texture2D nextShadowMap = textures[NonUniformResourceIndex(nextShadowMapIndex)];
 
             float nextLightSize = shadowData->lightSizes[cascadeLevel + 1];

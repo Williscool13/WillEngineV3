@@ -1,6 +1,7 @@
 import common_interop;
 import push_constant_interop;
 import shader_functions;
+import constants_interop;
 
 import bindless_declarations;
 
@@ -11,17 +12,17 @@ float3 NeighborhoodClamp(float3 historyColor, float2 uv) {
     float2 du = float2(pc.sceneData.texelSize.x, 0.0);
     float2 dv = float2(0.0, pc.sceneData.texelSize.y);
 
-    float3 topL = rdgTextures[pc.colorResolvedIndex].SampleLevel(rdgSamplers[pc.linearSamplerIndex], uv - dv - du, 0).rgb;
-    float3 topM = rdgTextures[pc.colorResolvedIndex].SampleLevel(rdgSamplers[pc.linearSamplerIndex], uv - dv, 0).rgb;
-    float3 topR = rdgTextures[pc.colorResolvedIndex].SampleLevel(rdgSamplers[pc.linearSamplerIndex], uv - dv + du, 0).rgb;
+    float3 topL = rdgTextures[pc.colorResolvedIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv - dv - du, 0).rgb;
+    float3 topM = rdgTextures[pc.colorResolvedIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv - dv, 0).rgb;
+    float3 topR = rdgTextures[pc.colorResolvedIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv - dv + du, 0).rgb;
 
-    float3 midL = rdgTextures[pc.colorResolvedIndex].SampleLevel(rdgSamplers[pc.linearSamplerIndex], uv - du, 0).rgb;
-    float3 midM = rdgTextures[pc.colorResolvedIndex].SampleLevel(rdgSamplers[pc.linearSamplerIndex], uv, 0).rgb;
-    float3 midR = rdgTextures[pc.colorResolvedIndex].SampleLevel(rdgSamplers[pc.linearSamplerIndex], uv + du, 0).rgb;
+    float3 midL = rdgTextures[pc.colorResolvedIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv - du, 0).rgb;
+    float3 midM = rdgTextures[pc.colorResolvedIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv, 0).rgb;
+    float3 midR = rdgTextures[pc.colorResolvedIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + du, 0).rgb;
 
-    float3 botL = rdgTextures[pc.colorResolvedIndex].SampleLevel(rdgSamplers[pc.linearSamplerIndex], uv + dv - du, 0).rgb;
-    float3 botM = rdgTextures[pc.colorResolvedIndex].SampleLevel(rdgSamplers[pc.linearSamplerIndex], uv + dv, 0).rgb;
-    float3 botR = rdgTextures[pc.colorResolvedIndex].SampleLevel(rdgSamplers[pc.linearSamplerIndex], uv + dv + du, 0).rgb;
+    float3 botL = rdgTextures[pc.colorResolvedIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + dv - du, 0).rgb;
+    float3 botM = rdgTextures[pc.colorResolvedIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + dv, 0).rgb;
+    float3 botR = rdgTextures[pc.colorResolvedIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + dv + du, 0).rgb;
 
     float3 minColor = min(min(min(min(min(min(min(min(topL, topM), topR), midL), midM), midR), botL), botM), botR);
     float3 maxColor = max(max(max(max(max(max(max(max(topL, topM), topR), midL), midM), midR), botL), botM), botR);
@@ -53,11 +54,11 @@ float3 SampleHistoryCatmullRom(float2 uv) {
     float2 tc3 = (texelCenter + 2.0) * texelSize;
 
     float3 color =
-        rdgTextures[pc.colorHistoryIndex].SampleLevel(rdgSamplers[pc.linearSamplerIndex], float2(tc12.x, tc0.y), 0).rgb * (w12.x * w0.y) +
-        rdgTextures[pc.colorHistoryIndex].SampleLevel(rdgSamplers[pc.linearSamplerIndex], float2(tc0.x, tc12.y), 0).rgb * (w0.x * w12.y) +
-        rdgTextures[pc.colorHistoryIndex].SampleLevel(rdgSamplers[pc.linearSamplerIndex], tc12, 0).rgb * (w12.x * w12.y) +
-        rdgTextures[pc.colorHistoryIndex].SampleLevel(rdgSamplers[pc.linearSamplerIndex], float2(tc3.x, tc12.y), 0).rgb * (w3.x * w12.y) +
-        rdgTextures[pc.colorHistoryIndex].SampleLevel(rdgSamplers[pc.linearSamplerIndex], float2(tc12.x, tc3.y), 0).rgb * (w12.x * w3.y);
+        rdgTextures[pc.colorHistoryIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], float2(tc12.x, tc0.y), 0).rgb * (w12.x * w0.y) +
+        rdgTextures[pc.colorHistoryIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], float2(tc0.x, tc12.y), 0).rgb * (w0.x * w12.y) +
+        rdgTextures[pc.colorHistoryIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], tc12, 0).rgb * (w12.x * w12.y) +
+        rdgTextures[pc.colorHistoryIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], float2(tc3.x, tc12.y), 0).rgb * (w3.x * w12.y) +
+        rdgTextures[pc.colorHistoryIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], float2(tc12.x, tc3.y), 0).rgb * (w12.x * w3.y);
 
     return color;
 }
@@ -72,10 +73,10 @@ float2 GetVelocityDilated(float2 uv) {
             float2 offset = float2(x, y) * pc.sceneData.texelSize;
             float2 sampleUv = uv + offset;
 
-            float depth = rdgTextures[pc.depthIndex].SampleLevel(rdgSamplers[pc.pointSamplerIndex], sampleUv, 0).r;
+            float depth = rdgTextures[pc.depthIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], sampleUv, 0).r;
             if (depth < closestDepth) {
                 closestDepth = depth;
-                closestVelocity = rdgTextures[pc.velocityIndex].SampleLevel(rdgSamplers[pc.pointSamplerIndex], sampleUv, 0).rg;
+                closestVelocity = rdgTextures[pc.velocityIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], sampleUv, 0).rg;
             }
         }
     }
@@ -97,7 +98,7 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
     float2 historyUv = uv - velocity;
     bool validHistory = all(historyUv >= float2(0.0)) && all(historyUv <= float2(1.0));
 
-    // float3 currentColor = rdgTextures[pc.colorResolvedIndex].SampleLevel(rdgSamplers[pc.linearSamplerIndex], uv, 0).rgb;
+    // float3 currentColor = rdgTextures[pc.colorResolvedIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv, 0).rgb;
     float3 currentColor = rdgTextures[pc.colorResolvedIndex].Load(int3(texelCoord, 0)).rgb;
     float3 resultRGB;
 
@@ -105,7 +106,7 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
         resultRGB = currentColor;
     } else {
         float3 currentYCoCg = RGBToYCoCg(currentColor);
-        // float3 historyColor = rdgTextures[pc.colorHistoryIndex].SampleLevel(rdgSamplers[pc.linearSamplerIndex], historyUv, 0).rgb;
+        // float3 historyColor = rdgTextures[pc.colorHistoryIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], historyUv, 0).rgb;
         float3 historyColor = SampleHistoryCatmullRom(historyUv);
         float3 historyYCoCg = RGBToYCoCg(historyColor);
 

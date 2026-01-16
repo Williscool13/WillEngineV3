@@ -248,6 +248,9 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/postprocess.slang compute ComputeMotionBlurTileMax motionBlurTileMax
         ${CMAKE_SOURCE_DIR}/shaders/postprocess.slang compute ComputeMotionBlurNeighborMax motionBlurBlurNeighborMax
         ${CMAKE_SOURCE_DIR}/shaders/postprocess.slang compute ComputeMotionBlurReconstruction motionBlurReconstruction
+        ${CMAKE_SOURCE_DIR}/shaders/postprocess.slang compute ComputeBloomThreshold bloomThreshold
+        ${CMAKE_SOURCE_DIR}/shaders/postprocess.slang compute ComputeBloomDownsample bloomDownsample
+        ${CMAKE_SOURCE_DIR}/shaders/postprocess.slang compute ComputeBloomUpsample bloomUpsample
 )
 
 # Post-Build Commands =========================

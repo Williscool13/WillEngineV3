@@ -41,12 +41,8 @@ struct ResourceManager
     AllocatedBuffer primitiveBuffer;
     BindlessResourcesSamplerImages bindlessSamplerTextureDescriptorBuffer{};
 
-    uint32_t pointSamplerIndex{0};
     VkSampler pointSampler;
-    uint32_t linearSamplerIndex{1};
     VkSampler linearSampler;
-
-    uint32_t depthCompareSamplerIndex{0};
     VkSampler depthCompareSampler;
     BindlessTransientRDGResourcesDescriptorBuffer<4, 4, RDG_MAX_SAMPLED_TEXTURES, RDG_MAX_STORAGE_TEXTURES> bindlessRDGTransientDescriptorBuffer{};
 

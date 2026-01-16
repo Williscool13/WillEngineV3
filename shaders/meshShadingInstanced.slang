@@ -165,7 +165,8 @@ struct FragmentOutput {
     float4 albedo : SV_Target0;
     float4 normal : SV_Target1;
     float4 pbr : SV_Target2;
-    float2 velocity : SV_Target3;
+    float4 emissive : SV_Target3;
+    float2 velocity : SV_Target4;
 };
 
 [shader("fragment")]
@@ -181,8 +182,9 @@ FragmentOutput FragmentMain(VertexOutput vertexInput, uniform InstancedMeshShadi
 
     FragmentOutput output;
     output.albedo = albedo;
-    output.normal = float4(viewNormal * 0.5 + 0.5, 1.0);
-    output.pbr = float4(material.metalRoughFactors.x, material.metalRoughFactors.y, 0.0, 0.0);
+    output.normal = float4(viewNormal * 0.5 + 0.5, 1.0); // add normal texture
+    output.pbr = float4(material.metalRoughFactors.x, material.metalRoughFactors.y, 0.0, 0.0); // add pbr texture
+    output.emissive = material.emissiveFactor; // add emissive texture
 
     float2 currNdc = vertexInput.currentClipPos.xy / vertexInput.currentClipPos.w;
     float2 prevNdc = vertexInput.previousClipPos.xy / vertexInput.previousClipPos.w;

@@ -77,10 +77,16 @@ struct PostProcessConfiguration
     bool bEnableTemporalAntialiasing{true};
 
     int32_t tonemapOperator{3};
+
     float exposureTargetLuminance{0.18f};
-    float exposureAdaptationRate{2.0f};
+    float exposureAdaptationRate{16.0f};
+
     float motionBlurVelocityScale{1.0f};
     float motionBlurDepthScale{0.1f};
+
+    float bloomThreshold{1.0f};
+    float bloomSoftThreshold{0.5f};
+    float bloomRadius{1.0f};
 };
 
 struct ViewFamily

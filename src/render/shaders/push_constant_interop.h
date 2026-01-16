@@ -60,7 +60,6 @@ SHADER_PUBLIC struct DebugVisualizePushConstant
     SHADER_PUBLIC float nearPlane;
     SHADER_PUBLIC float farPlane;
     SHADER_PUBLIC uint textureIndex;
-    SHADER_PUBLIC uint samplerIndex;
     SHADER_PUBLIC uint outputImageIndex;
     SHADER_PUBLIC uint debugType;
 };
@@ -137,23 +136,24 @@ SHADER_PUBLIC struct InstancedMeshShadingPushConstant
     SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
 };
 
-SHADER_PUBLIC struct DeferredResolvePushConstant {
+SHADER_PUBLIC struct DeferredResolvePushConstant
+{
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC SHADER_PTR(ShadowData) shadowData;
     SHADER_PUBLIC SHADER_PTR(LightData) lightData;
     SHADER_PUBLIC uint2 extent;
-    SHADER_PUBLIC uint32_t packedGBufferIndices; // albedo, normal, pbr, depth
-    SHADER_PUBLIC uint32_t packedCSMIndices; // 8 l0, 8 l1, 8l2, 8l3
-    SHADER_PUBLIC uint32_t pointSamplerIndex;
-    SHADER_PUBLIC uint32_t depthCompareSamplerIndex;
+    SHADER_PUBLIC int4 csmIndices;
+    SHADER_PUBLIC uint32_t albedoIndex;
+    SHADER_PUBLIC uint32_t normalIndex;
+    SHADER_PUBLIC uint32_t pbrIndex;
+    SHADER_PUBLIC uint32_t emissiveIndex;
+    SHADER_PUBLIC uint32_t depthIndex;
     SHADER_PUBLIC uint32_t outputImageIndex;
 };
 
 SHADER_PUBLIC struct TemporalAntialiasingPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
-    SHADER_PUBLIC uint32_t pointSamplerIndex;
-    SHADER_PUBLIC uint32_t linearSamplerIndex;
     SHADER_PUBLIC uint32_t colorResolvedIndex;
     SHADER_PUBLIC uint32_t depthIndex;
     SHADER_PUBLIC uint32_t colorHistoryIndex;
@@ -221,23 +221,45 @@ SHADER_PUBLIC struct MotionBlurTileVelocityPushConstant
     SHADER_PUBLIC uint32_t tileMaxIndex;
 };
 
-SHADER_PUBLIC struct MotionBlurNeighborMaxPushConstant {
+SHADER_PUBLIC struct MotionBlurNeighborMaxPushConstant
+{
     SHADER_PUBLIC uint2 tileBufferSize;
     SHADER_PUBLIC uint tileMaxIndex;
     SHADER_PUBLIC uint neighborMaxIndex;
 };
 
-SHADER_PUBLIC struct MotionBlurReconstructionPushConstant {
+SHADER_PUBLIC struct MotionBlurReconstructionPushConstant
+{
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC uint32_t sceneColorIndex;
     SHADER_PUBLIC uint32_t velocityBufferIndex;
     SHADER_PUBLIC uint32_t depthBufferIndex;
     SHADER_PUBLIC uint32_t tileNeighborMaxIndex;
     SHADER_PUBLIC uint32_t outputIndex;
-    SHADER_PUBLIC float velocityScale;  // 1.0f default
+    SHADER_PUBLIC float velocityScale; // 1.0f default
     SHADER_PUBLIC float depthScale; // 1.0f?
+};
 
+SHADER_PUBLIC struct BloomThresholdPushConstant
+{
+    SHADER_PUBLIC uint32_t inputColorIndex;
+    SHADER_PUBLIC uint32_t outputIndex;
+    SHADER_PUBLIC float threshold;
+    SHADER_PUBLIC float softThreshold;
+};
 
+SHADER_PUBLIC struct BloomDownsamplePushConstant
+{
+    SHADER_PUBLIC uint32_t inputIndex;
+    SHADER_PUBLIC uint32_t outputIndex;
+};
+
+SHADER_PUBLIC struct BloomUpsamplePushConstant
+{
+    SHADER_PUBLIC uint32_t lowerMipIndex;
+    SHADER_PUBLIC uint32_t higherMipIndex;
+    SHADER_PUBLIC uint32_t outputIndex;
+    SHADER_PUBLIC float radius; // Typically 1.0
 };
 
 #endif //WILL_ENGINE_PUSH_CONSTANT_INTEROP_H

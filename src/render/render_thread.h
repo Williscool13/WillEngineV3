@@ -150,6 +150,9 @@ private:
     ComputePipeline exposureBuildHistogramPipeline;
     ComputePipeline exposureCalculateAveragePipeline;
     ComputePipeline tonemapSDRPipeline;
+    ComputePipeline bloomThresholdPipeline;
+    ComputePipeline bloomDownsamplePipeline;
+    ComputePipeline bloomUpsamplePipeline;
     ComputePipeline motionBlurTileMaxPipeline;
     ComputePipeline motionBlurNeighborMaxPipeline;
     ComputePipeline motionBlurReconstructionPipeline;

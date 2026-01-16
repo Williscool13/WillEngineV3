@@ -82,7 +82,7 @@ ResourceManager::ResourceManager(VulkanContext* context)
     };
 
     VK_CHECK(vkCreateSampler(context->device, &pointSamplerInfo, nullptr, &pointSampler));
-    bindlessRDGTransientDescriptorBuffer.WriteSamplerDescriptor(pointSamplerIndex, {pointSampler, nullptr, {}});
+    bindlessRDGTransientDescriptorBuffer.WriteSamplerDescriptor(RDG_POINT_SAMPLER_INDEX, {pointSampler, nullptr, {}});
 
     VkSamplerCreateInfo linearSamplerInfo = {
         .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
@@ -104,7 +104,7 @@ ResourceManager::ResourceManager(VulkanContext* context)
     };
 
     VK_CHECK(vkCreateSampler(context->device, &linearSamplerInfo, nullptr, &linearSampler));
-    bindlessRDGTransientDescriptorBuffer.WriteSamplerDescriptor(linearSamplerIndex, {linearSampler, nullptr, {}});
+    bindlessRDGTransientDescriptorBuffer.WriteSamplerDescriptor(RDG_LINEAR_SAMPLER_INDEX, {linearSampler, nullptr, {}});
 
     VkSamplerCreateInfo depthCompareSamplerInfo = {
         .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
@@ -126,6 +126,6 @@ ResourceManager::ResourceManager(VulkanContext* context)
     };
 
     VK_CHECK(vkCreateSampler(context->device, &depthCompareSamplerInfo, nullptr, &depthCompareSampler));
-    bindlessRDGTransientDescriptorBuffer.WriteCompareSamplerDescriptor(depthCompareSamplerIndex, {depthCompareSampler, nullptr, {}});
+    bindlessRDGTransientDescriptorBuffer.WriteCompareSamplerDescriptor(RDG_LINEAR_DEPTH_SAMPLER_INDEX, {depthCompareSampler, nullptr, {}});
 }
 } // Render

@@ -174,6 +174,82 @@ entt::entity CreateStaticBox(Core::EngineContext* ctx, Engine::GameState* state,
     return entity;
 }
 
+// Add this function alongside CreateBox and CreateStaticBox:
+entt::entity CreateGlowingBox(Core::EngineContext* ctx, Engine::GameState* state, glm::vec3 position,
+                              glm::vec4 emissive = glm::vec4(1.0f, 0.8f, 0.3f, 10.0f), bool bUsePhysics = true)
+{
+    if (!boxHandle.IsValid()) {
+        SPDLOG_WARN("[DebugSystem] No box model loaded, press F1 first");
+        return entt::null;
+    }
+
+    JPH::BodyID bodyId;
+    if (bUsePhysics) {
+        auto& bodyInterface = ctx->physicsSystem->GetBodyInterface();
+
+        JPH::BoxShapeSettings boxShapeSettings(JPH::Vec3(0.5f, 0.5f, 0.5f));
+        boxShapeSettings.SetDensity(12.5f);
+        boxShapeSettings.SetEmbedded();
+        JPH::ShapeSettings::ShapeResult boxShapeResult = boxShapeSettings.Create();
+        JPH::ShapeRefC boxShape = boxShapeResult.Get();
+
+        JPH::BodyCreationSettings boxSettings(
+            boxShape,
+            JPH::RVec3(position.x, position.y, position.z),
+            JPH::Quat::sIdentity(),
+            JPH::EMotionType::Dynamic,
+            Physics::Layers::MOVING
+        );
+
+        bodyId = bodyInterface.CreateAndAddBody(boxSettings, JPH::EActivation::Activate);
+    }
+
+    Render::WillModel* model = ctx->assetManager->GetModel(boxHandle);
+    if (!model || model->modelLoadState != Render::WillModel::ModelLoadState::Loaded) {
+        SPDLOG_WARN("[DebugSystem] Model not ready yet");
+        return entt::null;
+    }
+
+    RenderableComponent renderable{};
+    Engine::MaterialManager& materialManager = ctx->assetManager->GetMaterialManager();
+    Render::MeshInformation& submesh = model->modelData.meshes[0];
+
+    for (size_t i = 0; i < submesh.primitiveProperties.size(); ++i) {
+        Render::PrimitiveProperty& primitive = submesh.primitiveProperties[i];
+
+        MaterialProperties material;
+        if (primitive.materialIndex != -1) {
+            material = model->modelData.materials[primitive.materialIndex];
+        }
+        else {
+            material = materialManager.Get(materialManager.GetDefaultMaterial());
+        }
+
+        material.emissiveFactor = emissive;
+
+        Engine::MaterialID matID = materialManager.GetOrCreate(material);
+
+        renderable.primitives[i] = {
+            .primitiveIndex = primitive.index,
+            .materialID = matID
+        };
+    }
+    renderable.primitiveCount = submesh.primitiveProperties.size();
+    renderable.modelFlags = glm::vec4(0.0f);
+
+    entt::entity boxEntity = state->registry.create();
+    state->registry.emplace<RenderableComponent>(boxEntity, renderable);
+    TransformComponent transformComponent = state->registry.emplace<TransformComponent>(
+        boxEntity, position, glm::quat(1.0f, 0.0f, 0.0f, 0.0f), glm::vec3(1.0f));
+
+    if (bUsePhysics) {
+        state->registry.emplace<PhysicsBodyComponent>(boxEntity, bodyId);
+        state->registry.emplace<DynamicPhysicsBodyComponent>(boxEntity, transformComponent.translation, transformComponent.rotation);
+    }
+
+    return boxEntity;
+}
+
 void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
 {
     if (state->bEnablePhysics) {
@@ -254,6 +330,21 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
                 state->registry.emplace<MotionBlurMovementComponent>(motionBox, false);
             }
         }
+
+        for (int i = 0; i < 5; ++i) {
+            glm::vec3 spawnPos = glm::vec3(i * 2.0f - 4.0f, 3.0f, 4.0f);
+
+            glm::vec4 emissive;
+            if (i == 0) emissive = glm::vec4(1.0f, 0.2f, 0.1f, 15.0f);  // Bright red-orange
+            else if (i == 1) emissive = glm::vec4(0.2f, 0.8f, 1.0f, 12.0f);  // Bright cyan
+            else if (i == 2) emissive = glm::vec4(1.0f, 1.0f, 0.3f, 20.0f);  // Super bright yellow
+            else if (i == 3) emissive = glm::vec4(0.8f, 0.2f, 1.0f, 10.0f);  // Purple
+            else emissive = glm::vec4(1.0f, 1.0f, 1.0f, 25.0f);  // Mega bright white
+
+            entt::entity glowBox = CreateGlowingBox(ctx, state, spawnPos, emissive, false);
+        }
+
+        SPDLOG_INFO("[DebugSystem] Created glowing boxes for bloom testing");
     }
 
     if (state->inputFrame->GetKey(Key::F3).pressed) {

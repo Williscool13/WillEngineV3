@@ -188,6 +188,7 @@ void RenderGraph::Compile(int64_t currentFrame)
                     if (!phys.IsAllocated()) {
                         phys.dimensions.imageUsage |= tex.accumulatedUsage;
                     }
+                    phys.bCanAlias = tex.bCanUseAliasedTexture;
                     foundAlias = true;
                     break;
                 }

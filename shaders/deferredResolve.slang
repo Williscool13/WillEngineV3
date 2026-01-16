@@ -14,15 +14,15 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
     if (threadID.x >= pc.extent.x || threadID.y >= pc.extent.y) return;
 
     float2 uv = (float2(threadID.xy) + 0.5) / float2(pc.extent);
-    float4 albedo = rdgTextures[GetAlbedoIndex(pc.packedGBufferIndices)].SampleLevel(rdgSamplers[pc.pointSamplerIndex], uv, 0);
+    float4 albedo = rdgTextures[pc.albedoIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], uv, 0);
 
-    float depth = rdgTextures[GetDepthIndex(pc.packedGBufferIndices)].SampleLevel(rdgSamplers[pc.pointSamplerIndex], uv, 0).r;
+    float depth = rdgTextures[pc.depthIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], uv, 0).r;
     if (depth <= 0.0) {
         return;
     }
-    float3 viewNormal = rdgTextures[GetNormalIndex(pc.packedGBufferIndices)].SampleLevel(rdgSamplers[pc.pointSamplerIndex], uv, 0).xyz;
-    float4 pbrData = rdgTextures[GetPBRIndex(pc.packedGBufferIndices)].SampleLevel(rdgSamplers[pc.pointSamplerIndex], uv, 0);
-
+    float3 viewNormal = rdgTextures[pc.normalIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], uv, 0).xyz;
+    float4 pbrData = rdgTextures[pc.pbrIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], uv, 0);
+    float4 emissiveData = rdgTextures[pc.emissiveIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], uv, 0);
     float3 viewPosition = ReconstructViewPosition(pc->sceneData.invProj, uv, depth);
 
     float roughness = pbrData.g;
@@ -53,10 +53,10 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
     float3 diffuse = kD * albedo.xyz / 3.14159265359;
 
     float shadowFactor;
-    if (pc.packedCSMIndices == ~0x0) {
+    if (any(pc.csmIndices == int4(-1, -1, -1, -1))) {
         shadowFactor = 1.0f;
     } else {
-        shadowFactor = GetShadowFactor(viewPosition, N,  pc.sceneData, pc.shadowData, pc.packedCSMIndices, rdgTextures, rdgSamplers[pc.pointSamplerIndex], rdgCompareSamplers[pc.depthCompareSamplerIndex]);
+        shadowFactor = GetShadowFactor(viewPosition, N,  pc.sceneData, pc.shadowData, pc.csmIndices, rdgTextures, rdgSamplers[RDG_POINT_SAMPLER_INDEX], rdgCompareSamplers[RDG_LINEAR_DEPTH_SAMPLER_INDEX]);
     }
 
     const float lightIntensity = pc.lightData.mainLightDirection.w;
@@ -66,6 +66,7 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
 
     // Ambient
     float3 ambient = albedo.xyz * 0.03;
-    float3 finalColor = directLight + ambient;
+    float3 emissive = emissiveData.rgb * emissiveData.a;
+    float3 finalColor = directLight + ambient + emissive;
     rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(finalColor, 1.0);
 }
