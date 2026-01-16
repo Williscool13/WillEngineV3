@@ -334,9 +334,9 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
             "pbrTarget", // 4
             "velocityTarget", // 5
             "motionBlurTiledNeighborMax", // 6
-            "bloomThreshold", // 7
-            "bloomDown4", // 8
-            "bloomUp0", // 9
+            "bloomChain", // 7
+            "bloomChain", // 8
+            "bloomChain", // 9
         };
 
         uint32_t debugIndex = viewFamily.mainView.debug;
@@ -1268,87 +1268,106 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
     // Bloom
     {
         const Core::PostProcessConfiguration& ppConfig = viewFamily.postProcessConfig;
-
         const uint32_t numDownsamples = (renderExtent[0] >= 3840) ? 6 : 5;
 
-        graph.CreateTexture("bloomThreshold", TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
+        // Create mipmapped bloom chain
+        uint32_t numMips = numDownsamples + 1;
+        graph.CreateTexture("bloomChain", TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], numMips});
+
+        // Threshold pass - write directly to mip 0
         RenderPass& thresholdPass = graph.AddPass("BloomThreshold", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-        thresholdPass.ReadSampledImage("taaOutput"); // Input is TAA output (HDR)
-        thresholdPass.WriteStorageImage("bloomThreshold");
+        thresholdPass.ReadSampledImage("taaOutput");
+        thresholdPass.ReadWriteImage("bloomChain");
         thresholdPass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
             BloomThresholdPushConstant pc{
                 .inputColorIndex = graph.GetSampledImageViewDescriptorIndex("taaOutput"),
-                .outputIndex = graph.GetStorageImageViewDescriptorIndex("bloomThreshold"),
+                .outputIndex = graph.GetStorageImageViewDescriptorIndex("bloomChain", 0),
                 .threshold = ppConfig.bloomThreshold,
                 .softThreshold = ppConfig.bloomSoftThreshold,
             };
 
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, bloomThresholdPipeline.pipeline.handle);
             vkCmdPushConstants(cmd, bloomThresholdPipeline.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-            uint32_t xDispatch = (width + 7) / 8;
-            uint32_t yDispatch = (height + 7) / 8;
+            uint32_t xDispatch = (width + POST_PROCESS_BLOOM_DISPATCH_X - 1) / POST_PROCESS_BLOOM_DISPATCH_X;
+            uint32_t yDispatch = (height + POST_PROCESS_BLOOM_DISPATCH_Y - 1) / POST_PROCESS_BLOOM_DISPATCH_Y;
             vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
         });
 
-        std::vector<std::string> mipNames;
-        mipNames.push_back("bloomThreshold");
-        uint32_t mipWidth = renderExtent[0];
-        uint32_t mipHeight = renderExtent[1];
+        // Downsample chain
         for (uint32_t i = 0; i < numDownsamples; ++i) {
-            mipWidth = std::max(1u, mipWidth / 2);
-            mipHeight = std::max(1u, mipHeight / 2);
-
-            std::string mipName = std::format("bloomDown{}", i);
-            graph.CreateTexture(mipName, TextureInfo{COLOR_ATTACHMENT_FORMAT, mipWidth, mipHeight, 1});
+            uint32_t mipWidth = std::max(1u, renderExtent[0] >> (i + 1));
+            uint32_t mipHeight = std::max(1u, renderExtent[1] >> (i + 1));
 
             RenderPass& downsamplePass = graph.AddPass(std::format("BloomDownsample{}", i), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-            downsamplePass.ReadSampledImage(mipNames.back());
-            downsamplePass.WriteStorageImage(mipName);
-            downsamplePass.Execute([&, i, mipWidth, mipHeight, srcName = mipNames.back(), dstName = mipName](VkCommandBuffer cmd) {
+            downsamplePass.ReadWriteImage("bloomChain");
+            downsamplePass.Execute([&, mipWidth, mipHeight, srcMip = i, dstMip = i + 1](VkCommandBuffer cmd) {
                 BloomDownsamplePushConstant pc{
-                    .inputIndex = graph.GetSampledImageViewDescriptorIndex(srcName),
-                    .outputIndex = graph.GetStorageImageViewDescriptorIndex(dstName),
+                    .inputIndex = graph.GetSampledImageViewDescriptorIndex("bloomChain"),
+                    .outputIndex = graph.GetStorageImageViewDescriptorIndex("bloomChain", dstMip),
+                    .srcMipLevel = srcMip,
                 };
 
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, bloomDownsamplePipeline.pipeline.handle);
                 vkCmdPushConstants(cmd, bloomDownsamplePipeline.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-                uint32_t xDispatch = (mipWidth + 7) / 8;
-                uint32_t yDispatch = (mipHeight + 7) / 8;
+                uint32_t xDispatch = (mipWidth + POST_PROCESS_BLOOM_DISPATCH_X - 1) / POST_PROCESS_BLOOM_DISPATCH_X;
+                uint32_t yDispatch = (mipHeight + POST_PROCESS_BLOOM_DISPATCH_Y - 1) / POST_PROCESS_BLOOM_DISPATCH_Y;
                 vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
             });
-
-            mipNames.push_back(mipName);
         }
 
-        std::string currentMip = mipNames.back();
+        // Upsample chain
         for (int i = numDownsamples - 1; i >= 0; --i) {
-            mipWidth = renderExtent[0] >> i;
-            mipHeight = renderExtent[1] >> i;
-
-            std::string upName = std::format("bloomUp{}", i);
-            graph.CreateTexture(upName, TextureInfo{COLOR_ATTACHMENT_FORMAT, mipWidth, mipHeight, 1});
+            uint32_t mipWidth = std::max(1u, renderExtent[0] >> i);
+            uint32_t mipHeight = std::max(1u, renderExtent[1] >> i);
 
             RenderPass& upsamplePass = graph.AddPass(std::format("BloomUpsample{}", i), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-            upsamplePass.ReadSampledImage(currentMip); // Lower mip (smaller)
-            upsamplePass.ReadSampledImage(mipNames[i]); // Higher mip (larger)
-            upsamplePass.WriteStorageImage(upName);
-            upsamplePass.Execute([&, mipWidth, mipHeight, lowerMip = currentMip, higherMip = mipNames[i], dstName = upName](VkCommandBuffer cmd) {
+            upsamplePass.ReadWriteImage("bloomChain");
+            upsamplePass.Execute([&, mipWidth, mipHeight, dstMip = i, lowerMip = i + 1](VkCommandBuffer cmd) {
                 BloomUpsamplePushConstant pc{
-                    .lowerMipIndex = graph.GetSampledImageViewDescriptorIndex(lowerMip),
-                    .higherMipIndex = graph.GetSampledImageViewDescriptorIndex(higherMip),
-                    .outputIndex = graph.GetStorageImageViewDescriptorIndex(dstName),
+                    .inputIndex = graph.GetSampledImageViewDescriptorIndex("bloomChain"),
+                    .outputIndex = graph.GetStorageImageViewDescriptorIndex("bloomChain", dstMip),
+                    .lowerMipLevel = static_cast<uint32_t>(lowerMip),
+                    .higherMipLevel = static_cast<uint32_t>(dstMip),
                     .radius = ppConfig.bloomRadius,
                 };
 
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, bloomUpsamplePipeline.pipeline.handle);
                 vkCmdPushConstants(cmd, bloomUpsamplePipeline.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-                uint32_t xDispatch = (mipWidth + 7) / 8;
-                uint32_t yDispatch = (mipHeight + 7) / 8;
+                uint32_t xDispatch = (mipWidth + POST_PROCESS_BLOOM_DISPATCH_X - 1) / POST_PROCESS_BLOOM_DISPATCH_X;
+                uint32_t yDispatch = (mipHeight + POST_PROCESS_BLOOM_DISPATCH_Y - 1) / POST_PROCESS_BLOOM_DISPATCH_Y;
                 vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
             });
-
-            currentMip = upName;
         }
+    }
+
+
+    // Tonemap
+    {
+        // todo: add support for HDR swapchain
+        graph.CreateTexture("tonemapOutput", TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
+        RenderPass& tonemapPass = graph.AddPass("TonemapSDR", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+        tonemapPass.ReadSampledImage("taaOutput");
+        tonemapPass.ReadSampledImage("bloomChain");
+        tonemapPass.WriteStorageImage("tonemapOutput");
+        tonemapPass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
+            TonemapSDRPushConstant pushData{
+                .tonemapOperator = viewFamily.postProcessConfig.tonemapOperator,
+                .targetLuminance = viewFamily.postProcessConfig.exposureTargetLuminance,
+                .luminanceBufferAddress = graph.GetBufferAddress("luminanceBuffer"),
+                .bloomImageIndex = graph.GetSampledImageViewDescriptorIndex("bloomChain"),
+                .bloomIntensity = viewFamily.postProcessConfig.bloomIntensity,
+                .outputWidth = width,
+                .outputHeight = height,
+                .srcImageIndex = graph.GetSampledImageViewDescriptorIndex("taaOutput"),
+                .dstImageIndex = graph.GetStorageImageViewDescriptorIndex("tonemapOutput"),
+            };
+
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, tonemapSDRPipeline.pipeline.handle);
+            vkCmdPushConstants(cmd, tonemapSDRPipeline.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(TonemapSDRPushConstant), &pushData);
+            uint32_t xDispatch = (width + 15) / 16;
+            uint32_t yDispatch = (height + 15) / 16;
+            vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
+        });
     }
 
     // Motion Blur
@@ -1395,21 +1414,21 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
             vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
         });
 
-        graph.CreateTexture("motionBlurOutput", TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
+        // graph.CreateTexture("motionBlurOutput", TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
         RenderPass& motionBlurReconstructionPass = graph.AddPass("MotionBlurReconstruction", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-        motionBlurReconstructionPass.ReadSampledImage("taaOutput");
+        motionBlurReconstructionPass.ReadSampledImage("tonemapOutput");
         motionBlurReconstructionPass.ReadSampledImage("velocityTarget");
         motionBlurReconstructionPass.ReadSampledImage("depthTarget");
         motionBlurReconstructionPass.ReadSampledImage("motionBlurTiledNeighborMax");
-        motionBlurReconstructionPass.WriteStorageImage("motionBlurOutput");
+        motionBlurReconstructionPass.WriteStorageImage("postProcessOutput");
         motionBlurReconstructionPass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
             MotionBlurReconstructionPushConstant pc{
                 .sceneData = graph.GetBufferAddress("sceneData"),
-                .sceneColorIndex = graph.GetSampledImageViewDescriptorIndex("taaOutput"),
+                .sceneColorIndex = graph.GetSampledImageViewDescriptorIndex("tonemapOutput"),
                 .velocityBufferIndex = graph.GetSampledImageViewDescriptorIndex("velocityTarget"),
                 .depthBufferIndex = graph.GetSampledImageViewDescriptorIndex("depthTarget"),
                 .tileNeighborMaxIndex = graph.GetSampledImageViewDescriptorIndex("motionBlurTiledNeighborMax"),
-                .outputIndex = graph.GetStorageImageViewDescriptorIndex("motionBlurOutput"),
+                .outputIndex = graph.GetStorageImageViewDescriptorIndex("postProcessOutput"),
                 .velocityScale = viewFamily.postProcessConfig.motionBlurVelocityScale,
                 .depthScale = viewFamily.postProcessConfig.motionBlurDepthScale,
             };
@@ -1418,36 +1437,6 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
             vkCmdPushConstants(cmd, motionBlurReconstructionPipeline.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             uint32_t xDispatch = (width + POST_PROCESS_MOTION_BLUR_DISPATCH_X - 1) / POST_PROCESS_MOTION_BLUR_DISPATCH_X;
             uint32_t yDispatch = (height + POST_PROCESS_MOTION_BLUR_DISPATCH_Y - 1) / POST_PROCESS_MOTION_BLUR_DISPATCH_Y;
-            vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
-        });
-    }
-
-    // Tonemap
-    {
-        // todo: add support for HDR swapchain
-        // graph.CreateTexture("tonemapOutput", TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
-
-        RenderPass& tonemapPass = graph.AddPass("TonemapSDR", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-        tonemapPass.ReadSampledImage("motionBlurOutput");
-        tonemapPass.ReadSampledImage("bloomUp0");
-        tonemapPass.WriteStorageImage("postProcessOutput");
-        tonemapPass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
-            TonemapSDRPushConstant pushData{
-                .tonemapOperator = viewFamily.postProcessConfig.tonemapOperator,
-                .targetLuminance = viewFamily.postProcessConfig.exposureTargetLuminance,
-                .luminanceBufferAddress = graph.GetBufferAddress("luminanceBuffer"),
-                .bloomImageIndex = graph.GetSampledImageViewDescriptorIndex("bloomUp0"),
-                .bloomIntensity = viewFamily.postProcessConfig.bloomIntensity,
-                .outputWidth = width,
-                .outputHeight = height,
-                .srcImageIndex = graph.GetSampledImageViewDescriptorIndex("motionBlurOutput"),
-                .dstImageIndex = graph.GetStorageImageViewDescriptorIndex("postProcessOutput"),
-            };
-
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, tonemapSDRPipeline.pipeline.handle);
-            vkCmdPushConstants(cmd, tonemapSDRPipeline.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(TonemapSDRPushConstant), &pushData);
-            uint32_t xDispatch = (width + 15) / 16;
-            uint32_t yDispatch = (height + 15) / 16;
             vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
         });
     }

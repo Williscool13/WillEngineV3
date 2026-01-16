@@ -254,14 +254,16 @@ SHADER_PUBLIC struct BloomDownsamplePushConstant
 {
     SHADER_PUBLIC uint32_t inputIndex;
     SHADER_PUBLIC uint32_t outputIndex;
+    SHADER_PUBLIC uint32_t srcMipLevel;
 };
 
 SHADER_PUBLIC struct BloomUpsamplePushConstant
 {
-    SHADER_PUBLIC uint32_t lowerMipIndex;
-    SHADER_PUBLIC uint32_t higherMipIndex;
+    SHADER_PUBLIC uint32_t inputIndex;
     SHADER_PUBLIC uint32_t outputIndex;
-    SHADER_PUBLIC float radius; // Typically 1.0
+    SHADER_PUBLIC uint32_t lowerMipLevel;
+    SHADER_PUBLIC uint32_t higherMipLevel;
+    SHADER_PUBLIC float radius;
 };
 
 #endif //WILL_ENGINE_PUSH_CONSTANT_INTEROP_H

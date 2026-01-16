@@ -165,14 +165,6 @@ inline Core::ImageAcquireOperation FromVkBarrier(const VkImageMemoryBarrier2& ba
 }
 
 uint32_t GetBytesPerPixel(VkFormat format);
-
-inline uint32_t PackGBufferIndices(uint8_t albedo, uint8_t normal, uint8_t pbr, uint8_t depth)
-{
-    return static_cast<uint32_t>(albedo) |
-           (static_cast<uint32_t>(normal) << 8) |
-           (static_cast<uint32_t>(pbr) << 16) |
-           (static_cast<uint32_t>(depth) << 24);
-}
 } // Render
 
 #endif //WILL_ENGINE_VK_HELPERS_H
