@@ -97,6 +97,8 @@ struct PostProcessConfiguration
 
     float grainStrength{0.01f};
     float grainSize{1.5f};
+
+    float sharpeningStrength{0.4f};
 };
 
 struct ViewFamily

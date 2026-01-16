@@ -82,6 +82,7 @@ GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* stat
             state->postProcess.chromaticAberrationStrength = 0.0f;
             state->postProcess.vignetteStrength = 0.0f;
             state->postProcess.grainStrength = 0.0f;
+            state->postProcess.sharpeningStrength = 0.0f;
         }
 
         ImGui::Spacing();
@@ -174,6 +175,18 @@ GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* stat
         if (ImGui::Button("Disable Grain")) {
             state->postProcess.grainStrength = 0.0f;
         }
+
+        ImGui::Spacing();
+        ImGui::SeparatorText("Sharpening");
+        ImGui::SliderFloat("Sharpening Strength", &state->postProcess.sharpeningStrength, 0.0f, 100.0f, "%.02f");
+        if (ImGui::Button("Reset Sharpening")) {
+            state->postProcess.sharpeningStrength = defaultPP.sharpeningStrength;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Disable Sharpening")) {
+            state->postProcess.sharpeningStrength = 0.0f;
+        }
+
     }
     ImGui::End();
 

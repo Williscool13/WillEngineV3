@@ -158,6 +158,7 @@ private:
     ComputePipeline motionBlurReconstructionPipeline;
     ComputePipeline vignetteAberrationPipeline;
     ComputePipeline filmGrainPipeline;
+    ComputePipeline sharpeningPipeline;
 };
 } // Render
 

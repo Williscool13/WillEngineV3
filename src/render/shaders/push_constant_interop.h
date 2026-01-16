@@ -287,4 +287,12 @@ SHADER_PUBLIC struct FilmGrainPushConstant
     SHADER_PUBLIC uint frameIndex;
 };
 
+SHADER_PUBLIC struct SharpeningPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC uint32_t inputIndex;
+    SHADER_PUBLIC uint32_t outputIndex;
+    SHADER_PUBLIC float sharpness;
+};
+
 #endif //WILL_ENGINE_PUSH_CONSTANT_INTEROP_H

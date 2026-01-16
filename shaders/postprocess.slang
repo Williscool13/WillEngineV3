@@ -483,6 +483,7 @@ void ComputeBloomUpsample(uniform BloomUpsamplePushConstant pc, uint3 dtid : SV_
     rdgRenderTextures[pc.outputIndex][pixelCoord] = float4(result, 1.0);
 }
 
+// ==================== Vignette & Aberration =======================
 [shader("compute")]
 [numthreads(POST_PROCESS_VIGNETTE_ABERRATION_DISPATCH_X, POST_PROCESS_VIGNETTE_ABERRATION_DISPATCH_Y, 1)]
 void ComputeVignetteAberration(uniform VignetteChromaticAberrationPushConstant pc, uint3 dtid : SV_DispatchThreadID) {
@@ -521,6 +522,7 @@ float FilmGrainHash(float2 p) {
     return frac((p3.x + p3.y) * p3.z);
 }
 
+// ==================== Film Grain ==================================
 [shader("compute")]
 [numthreads(POST_PROCESS_FILM_GRAIN_DISPATCH_X, POST_PROCESS_FILM_GRAIN_DISPATCH_Y, 1)]
 void ComputeFilmGrain(uniform FilmGrainPushConstant pc, uint3 dtid : SV_DispatchThreadID) {
@@ -538,4 +540,64 @@ void ComputeFilmGrain(uniform FilmGrainPushConstant pc, uint3 dtid : SV_Dispatch
     float3 color = rdgTextures[pc.inputIndex].Load(int3(pixelCoord, 0)).rgb;
     color += noise * pc.grainStrength;
     rdgRenderTextures[pc.outputIndex][pixelCoord] = float4(color, 1.0);
+}
+
+// ==================== Sharpening ==================================
+[shader("compute")]
+[numthreads(POST_PROCESS_SHARPENING_DISPATCH_X, POST_PROCESS_SHARPENING_DISPATCH_Y, 1)]
+void ComputeSharpening(uniform SharpeningPushConstant pc, uint3 dtid : SV_DispatchThreadID) {
+    if (any(dtid.xy >= pc.sceneData.mainRenderTargetSize)) return;
+
+    uint2 pixelCoord = dtid.xy;
+    float2 uv = (dtid.xy + 0.5) / pc.sceneData.mainRenderTargetSize;
+    float2 texelSize = 1.0 / pc.sceneData.mainRenderTargetSize;
+
+    // Sample center and cross neighbors
+    float3 b = rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 0, -1) * texelSize, 0).rgb;
+    float3 d = rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2(-1,  0) * texelSize, 0).rgb;
+    float3 e = rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv, 0).rgb;
+    float3 f = rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 1,  0) * texelSize, 0).rgb;
+    float3 h = rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 0,  1) * texelSize, 0).rgb;
+
+    // Simple unsharp mask approach
+    float3 blurred = (b + d + f + h) * 0.25;
+    float3 sharpened = e + (e - blurred) * pc.sharpness;
+
+    // Clamp to prevent overshooting
+    sharpened = max(float3(0, 0, 0), sharpened);
+
+    rdgRenderTextures[pc.outputIndex][pixelCoord] = float4(sharpened, 1.0);
+
+    // FFX CAS (I think this is wrong somehow/somewhere)
+    /*if (any(dtid.xy >= pc.sceneData.mainRenderTargetSize)) return;
+
+    uint2 pixelCoord = dtid.xy;
+    float2 uv = (dtid.xy + 0.5) / pc.sceneData.mainRenderTargetSize;
+    float2 texelSize = 1.0 / pc.sceneData.mainRenderTargetSize;
+
+    float3 a = rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2(-1, -1) * texelSize, 0).rgb;
+    float3 b = rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 0, -1) * texelSize, 0).rgb;
+    float3 c = rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 1, -1) * texelSize, 0).rgb;
+    float3 d = rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2(-1,  0) * texelSize, 0).rgb;
+    float3 e = rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 0,  0) * texelSize, 0).rgb;
+    float3 f = rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 1,  0) * texelSize, 0).rgb;
+    float3 g = rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2(-1,  1) * texelSize, 0).rgb;
+    float3 h = rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 0,  1) * texelSize, 0).rgb;
+    float3 i = rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 1,  1) * texelSize, 0).rgb;
+    float3 minRGB = min(min(min(d, e), min(f, b)), h);
+    float3 maxRGB = max(max(max(d, e), max(f, b)), h);
+
+    // Edge Detection
+    float3 amplify = clamp(minRGB / (maxRGB + 0.00001) - 1.0, 0.0, 1.0);
+    amplify = sqrt(amplify);
+
+    float3 w = amplify * pc.sharpness;
+    float3 weightSum = 1.0 + 4.0 * w;
+
+    float3 sharpened = (b + d + f + h) * w + e;
+    sharpened /= weightSum;
+
+    sharpened = clamp(sharpened, minRGB, maxRGB);
+
+    rdgRenderTextures[pc.outputIndex][pixelCoord] = float4(sharpened, 1.0);*/
 }

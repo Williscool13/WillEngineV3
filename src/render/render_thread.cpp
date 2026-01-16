@@ -591,6 +591,9 @@ void RenderThread::CreatePipelines()
 
         pushConstant.size = sizeof(FilmGrainPushConstant);
         filmGrainPipeline = ComputePipeline(context.get(), piplineLayoutCreateInfo, Platform::GetShaderPath() / "filmGrain_compute.spv");
+
+        pushConstant.size = sizeof(SharpeningPushConstant);
+        sharpeningPipeline = ComputePipeline(context.get(), piplineLayoutCreateInfo, Platform::GetShaderPath() / "sharpening_compute.spv");
     }
 }
 
@@ -1346,13 +1349,34 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
         }
     }
 
+    // Sharpening
+    {
+        graph.CreateTexture("sharpeningOutput", TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
+        RenderPass& sharpeningPass = graph.AddPass("Sharpening", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+        sharpeningPass.ReadSampledImage("taaOutput");
+        sharpeningPass.WriteStorageImage("sharpeningOutput");
+        sharpeningPass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
+            SharpeningPushConstant pc{
+                .sceneData = graph.GetBufferAddress("sceneData"),
+                .inputIndex = graph.GetSampledImageViewDescriptorIndex("taaOutput"),
+                .outputIndex = graph.GetStorageImageViewDescriptorIndex("sharpeningOutput"),
+                .sharpness = ppConfig.sharpeningStrength,
+            };
+
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, sharpeningPipeline.pipeline.handle);
+            vkCmdPushConstants(cmd, sharpeningPipeline.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            uint32_t xDispatch = (width + POST_PROCESS_SHARPENING_DISPATCH_X - 1) / POST_PROCESS_SHARPENING_DISPATCH_X;
+            uint32_t yDispatch = (height + POST_PROCESS_SHARPENING_DISPATCH_Y - 1) / POST_PROCESS_SHARPENING_DISPATCH_Y;
+            vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
+        });
+    }
 
     // Tonemap
     {
         // todo: add support for HDR swapchain
         graph.CreateTexture("tonemapOutput", TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
         RenderPass& tonemapPass = graph.AddPass("TonemapSDR", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-        tonemapPass.ReadSampledImage("taaOutput");
+        tonemapPass.ReadSampledImage("sharpeningOutput");
         tonemapPass.ReadSampledImage("bloomChain");
         tonemapPass.WriteStorageImage("tonemapOutput");
         tonemapPass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
@@ -1364,7 +1388,7 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
                 .bloomIntensity = ppConfig.bloomIntensity,
                 .outputWidth = width,
                 .outputHeight = height,
-                .srcImageIndex = graph.GetSampledImageViewDescriptorIndex("taaOutput"),
+                .srcImageIndex = graph.GetSampledImageViewDescriptorIndex("sharpeningOutput"),
                 .dstImageIndex = graph.GetStorageImageViewDescriptorIndex("tonemapOutput"),
             };
 
@@ -1494,11 +1518,6 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
             uint32_t yDispatch = (height + POST_PROCESS_FILM_GRAIN_DISPATCH_Y - 1) / POST_PROCESS_FILM_GRAIN_DISPATCH_Y;
             vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
         });
-    }
-
-    // Sharpening (todo)
-    {
-
     }
 }
 } // Render
