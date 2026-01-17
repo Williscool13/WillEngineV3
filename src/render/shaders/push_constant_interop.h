@@ -308,4 +308,16 @@ SHADER_PUBLIC struct ColorGradingPushConstant
 };
 
 
+SHADER_PUBLIC struct GTAODepthPrepassPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC uint32_t inputDepth;
+    SHADER_PUBLIC uint32_t outputDepth0;
+    SHADER_PUBLIC uint32_t outputDepth1;
+    SHADER_PUBLIC uint32_t outputDepth2;
+    SHADER_PUBLIC uint32_t outputDepth3;
+    SHADER_PUBLIC uint32_t outputDepth4;
+};
+
+
 #endif //WILL_ENGINE_PUSH_CONSTANT_INTEROP_H

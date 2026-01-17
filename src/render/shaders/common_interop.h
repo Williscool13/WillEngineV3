@@ -81,6 +81,12 @@ SHADER_PUBLIC struct SHADER_ALIGN SceneData
 
     // SHADER_PUBLIC float2 cameraPlanes;
 
+    SHADER_PUBLIC float2 ndcToViewMul;
+    SHADER_PUBLIC float2 ndcToViewAdd;
+    SHADER_PUBLIC float2 ndcToViewMulXPixelSize;
+    SHADER_PUBLIC float depthLinearizeMult;
+    SHADER_PUBLIC float depthLinearizeAdd;
+
     SHADER_PUBLIC float deltaTime;
 };
 

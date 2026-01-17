@@ -164,11 +164,11 @@ add_library(tracy SHARED
 target_include_directories(tracy PUBLIC
         extern/tracy/public
 )
-if(WILL_ENGINE_ENABLE_PROFILER)
+if (WILL_ENGINE_ENABLE_PROFILER)
     target_compile_definitions(tracy PUBLIC
             TRACY_ENABLE
     )
-endif()
+endif ()
 target_compile_definitions(tracy PRIVATE TRACY_EXPORTS)
 
 # Shaders =====================================
@@ -230,31 +230,31 @@ add_shader_include("${CMAKE_SOURCE_DIR}/shaders/pbr_functions.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/bindless_declarations.slang")
 
 compile_shaders(will-engine
-        ${CMAKE_SOURCE_DIR}/shaders/debugVisualize.slang compute ComputeMain
+        ${CMAKE_SOURCE_DIR}/shaders/debug_visualize.slang compute ComputeMain debugVisualize
         ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputeVisibility instancingVisibility
         ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputeVisibilityShadows instancingShadowsVisibility
         ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputePrefixSum instancingPrefixSum
         ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputeCompactAndGenerateIndirect instancingCompactAndGenerateIndirect
-        ${CMAKE_SOURCE_DIR}/shaders/meshShadingInstanced.slang task TaskMain
-        ${CMAKE_SOURCE_DIR}/shaders/meshShadingInstanced.slang mesh MeshMain
-        ${CMAKE_SOURCE_DIR}/shaders/meshShadingInstanced.slang fragment FragmentMain
-        ${CMAKE_SOURCE_DIR}/shaders/shadowMeshShadingInstanced.slang task TaskMain
-        ${CMAKE_SOURCE_DIR}/shaders/shadowMeshShadingInstanced.slang mesh MeshMain
-        ${CMAKE_SOURCE_DIR}/shaders/deferredResolve.slang compute ComputeMain
-        ${CMAKE_SOURCE_DIR}/shaders/temporalAntialiasing.slang compute ComputeMain
-        ${CMAKE_SOURCE_DIR}/shaders/postprocess.slang compute ComputeSDRTonemap tonemapSDR
-        ${CMAKE_SOURCE_DIR}/shaders/postprocess.slang compute ComputeBuildHistogramExposure exposureBuildHistogram
-        ${CMAKE_SOURCE_DIR}/shaders/postprocess.slang compute ComputeAverageExposure exposureCalculateAverage
-        ${CMAKE_SOURCE_DIR}/shaders/postprocess.slang compute ComputeMotionBlurTileMax motionBlurTileMax
-        ${CMAKE_SOURCE_DIR}/shaders/postprocess.slang compute ComputeMotionBlurNeighborMax motionBlurBlurNeighborMax
-        ${CMAKE_SOURCE_DIR}/shaders/postprocess.slang compute ComputeMotionBlurReconstruction motionBlurReconstruction
-        ${CMAKE_SOURCE_DIR}/shaders/postprocess.slang compute ComputeBloomThreshold bloomThreshold
-        ${CMAKE_SOURCE_DIR}/shaders/postprocess.slang compute ComputeBloomDownsample bloomDownsample
-        ${CMAKE_SOURCE_DIR}/shaders/postprocess.slang compute ComputeBloomUpsample bloomUpsample
-        ${CMAKE_SOURCE_DIR}/shaders/postprocess.slang compute ComputeVignetteAberration vignetteAberration
-        ${CMAKE_SOURCE_DIR}/shaders/postprocess.slang compute ComputeFilmGrain filmGrain
-        ${CMAKE_SOURCE_DIR}/shaders/postprocess.slang compute ComputeSharpening sharpening
-        ${CMAKE_SOURCE_DIR}/shaders/postprocess.slang compute ComputeColorGrading colorGrading
+        ${CMAKE_SOURCE_DIR}/shaders/mesh_shading_instanced.slang task TaskMain meshShadingInstanced
+        ${CMAKE_SOURCE_DIR}/shaders/mesh_shading_instanced.slang mesh MeshMain meshShadingInstanced
+        ${CMAKE_SOURCE_DIR}/shaders/mesh_shading_instanced.slang fragment FragmentMain meshShadingInstanced
+        ${CMAKE_SOURCE_DIR}/shaders/shadow_mesh_shading_instanced.slang task TaskMain shadowMeshShadingInstanced
+        ${CMAKE_SOURCE_DIR}/shaders/shadow_mesh_shading_instanced.slang mesh MeshMain shadowMeshShadingInstanced
+        ${CMAKE_SOURCE_DIR}/shaders/deferred_resolve.slang compute ComputeMain deferredResolve
+        ${CMAKE_SOURCE_DIR}/shaders/temporal_antialiasing.slang compute ComputeMain temporalAntialiasing
+        ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeSDRTonemap tonemapSDR
+        ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeBuildHistogramExposure exposureBuildHistogram
+        ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeAverageExposure exposureCalculateAverage
+        ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeMotionBlurTileMax motionBlurTileMax
+        ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeMotionBlurNeighborMax motionBlurBlurNeighborMax
+        ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeMotionBlurReconstruction motionBlurReconstruction
+        ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeBloomThreshold bloomThreshold
+        ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeBloomDownsample bloomDownsample
+        ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeBloomUpsample bloomUpsample
+        ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeVignetteAberration vignetteAberration
+        ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeFilmGrain filmGrain
+        ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeSharpening sharpening
+        ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeColorGrading colorGrading
 )
 
 # Post-Build Commands =========================

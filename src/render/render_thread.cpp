@@ -683,6 +683,20 @@ void RenderThread::SetupFrameUniforms(VkCommandBuffer cmd, const Core::ViewFamil
         sceneData.texelSize = glm::vec2(1.0f, 1.0f) / glm::vec2(renderExtent[0], renderExtent[1]);
         sceneData.mainRenderTargetSize = glm::vec2(renderExtent[0], renderExtent[1]);
 
+
+        sceneData.depthLinearizeMult = -projMatrix[3][2];
+        sceneData.depthLinearizeAdd = projMatrix[2][2];
+        if (sceneData.depthLinearizeMult * sceneData.depthLinearizeAdd < 0) {
+            sceneData.depthLinearizeAdd = -sceneData.depthLinearizeAdd;
+        }
+        float tanHalfFOVY = 1.0f / projMatrix[1][1];
+        float tanHalfFOVX = 1.0F / projMatrix[0][0];
+        glm::vec2 cameraTanHalfFOV{tanHalfFOVX, tanHalfFOVY};
+        sceneData.ndcToViewMul = {cameraTanHalfFOV.x * 2.0f, cameraTanHalfFOV.y * -2.0f};
+        sceneData.ndcToViewAdd = {cameraTanHalfFOV.x * -1.0f, cameraTanHalfFOV.y * 1.0f};
+        const glm::vec2 texelSize = {1.0f / static_cast<float>(renderExtent[0]), 1.0f / static_cast<float>(renderExtent[1])};
+        sceneData.ndcToViewMulXPixelSize = {sceneData.ndcToViewMul.x * texelSize.x, sceneData.ndcToViewMul.y * texelSize.y};
+
         sceneData.frustum = CreateFrustum(sceneData.viewProj);
         sceneData.deltaTime = 0.1f;
 

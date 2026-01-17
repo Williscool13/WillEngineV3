@@ -31,6 +31,16 @@ float3x3 Adjugate(float3x3 m) {
     );
 }
 
+/*float3 CheapReconstructViewSpacePosition(float2 ndcToViewMul, float2 ndcToViewAdd, float2 uv, float viewSpaceDepth)
+{
+    float3 ret;
+    ret.xy = (ndcToViewMul * uv.xy + ndcToViewAdd) * viewSpaceDepth;
+    ret.y = -ret.y;
+    ret.z = -viewSpaceDepth;
+    ret = float3(0.0f);
+    return ret;
+}*/
+
 // Reconstructs position of a pixel based on inverse project and depth buffer
 float3 ReconstructViewPosition(float4x4 invProj, float2 uv, float depth) {
     float2 ndc = uv * 2.0 - 1.0;

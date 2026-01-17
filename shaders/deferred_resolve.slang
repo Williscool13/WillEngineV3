@@ -6,11 +6,8 @@ import pbr_functions;
 
 import bindless_declarations;
 
-[[vk::push_constant]]
-DeferredResolvePushConstant pc;
-
 [numthreads(16, 16, 1)]
-void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
+void ComputeMain(uniform DeferredResolvePushConstant pc, uint3 threadID : SV_DispatchThreadID) {
     if (threadID.x >= pc.extent.x || threadID.y >= pc.extent.y) return;
 
     float2 uv = (float2(threadID.xy) + 0.5) / float2(pc.extent);
@@ -23,7 +20,8 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
     float3 viewNormal = rdgTextures[pc.normalIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], uv, 0).xyz;
     float4 pbrData = rdgTextures[pc.pbrIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], uv, 0);
     float4 emissiveData = rdgTextures[pc.emissiveIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], uv, 0);
-    float3 viewPosition = ReconstructViewPosition(pc->sceneData.invProj, uv, depth);
+    float3 viewPosition = ReconstructViewPosition(pc.sceneData->invProj, uv, depth);
+    // float3 viewPosition = CheapReconstructViewSpacePosition(pc.sceneData->ndcToViewMul, pc.sceneData->ndcToViewAdd, uv, depth);
 
     float roughness = pbrData.g;
     float metallic = pbrData.r;
@@ -62,7 +60,6 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
     const float lightIntensity = pc.lightData.mainLightDirection.w;
     const float3 lightColor = pc.lightData.mainLightColor.rgb;
     float3 directLight = (diffuse + specular) * nDotL * shadowFactor * lightIntensity * lightColor;
-
 
     // Ambient
     float3 ambient = albedo.xyz * 0.03;
