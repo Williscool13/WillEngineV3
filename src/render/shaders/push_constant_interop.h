@@ -317,6 +317,9 @@ SHADER_PUBLIC struct GTAODepthPrepassPushConstant
     SHADER_PUBLIC uint32_t outputDepth2;
     SHADER_PUBLIC uint32_t outputDepth3;
     SHADER_PUBLIC uint32_t outputDepth4;
+    SHADER_PUBLIC float effectRadius;
+    SHADER_PUBLIC float effectFalloffRange;
+    SHADER_PUBLIC float radiusMultiplier;
 };
 
 

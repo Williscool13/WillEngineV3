@@ -31,15 +31,22 @@ float3x3 Adjugate(float3x3 m) {
     );
 }
 
-/*float3 CheapReconstructViewSpacePosition(float2 ndcToViewMul, float2 ndcToViewAdd, float2 uv, float viewSpaceDepth)
+float ScreenToViewSpaceDepth(float screenDepth, float depthLinearizeMul, float depthLinearizeAdd) {
+    // Optimization by XeGTAO
+    // https://github.com/GameTechDev/XeGTAO/blob/a5b1686c7ea37788eeb3576b5be47f7c03db532c/Source/Rendering/Shaders/XeGTAO.hlsli#L112
+    return depthLinearizeMul / (depthLinearizeAdd - screenDepth);
+}
+
+// Reconstructs position of a pixel based on inverse project and depth buffer. Doesn't work in all cases.
+float3 CheapReconstructViewSpacePosition(float2 ndcToViewMul, float2 ndcToViewAdd, float2 uv, float viewSpaceDepth)
 {
     float3 ret;
-    ret.xy = (ndcToViewMul * uv.xy + ndcToViewAdd) * viewSpaceDepth;
+    uv.y = 1 - uv.y;
+    ret.xy = (ndcToViewMul * uv + ndcToViewAdd) * viewSpaceDepth;
     ret.y = -ret.y;
     ret.z = -viewSpaceDepth;
-    ret = float3(0.0f);
     return ret;
-}*/
+}
 
 // Reconstructs position of a pixel based on inverse project and depth buffer
 float3 ReconstructViewPosition(float4x4 invProj, float2 uv, float depth) {
@@ -62,19 +69,6 @@ float3 ReconstructWorldPosition(float4x4 invViewProj, float2 uv, float depth) {
     float4 clipPos = float4(ndc, depth, 1.0);
     float4 worldPos = mul(invViewProj, clipPos);
     return worldPos.xyz / worldPos.w;
-}
-float3 ReconstructWorldPosition(float4x4 invView, float4x4 invProj, float2 uv, float depth) {
-    float2 ndc = uv * 2.0 - 1.0;
-    // Note: NDC Y-flip required because viewport uses negative height
-    //uv.y = 1 - uv.y;
-    ndc.y = -ndc.y;
-
-    float4 clipPos = float4(ndc, depth, 1.0);
-    float4 viewPos = mul(invProj, clipPos);
-    viewPos.xyz /= viewPos.w;
-
-    float4 worldPos = mul(invView, float4(viewPos.xyz, 1.0));
-    return worldPos.xyz;
 }
 
 float3 RGBToYCoCg(float3 rgb) {

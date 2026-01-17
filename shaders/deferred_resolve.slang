@@ -20,8 +20,8 @@ void ComputeMain(uniform DeferredResolvePushConstant pc, uint3 threadID : SV_Dis
     float3 viewNormal = rdgTextures[pc.normalIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], uv, 0).xyz;
     float4 pbrData = rdgTextures[pc.pbrIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], uv, 0);
     float4 emissiveData = rdgTextures[pc.emissiveIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], uv, 0);
-    float3 viewPosition = ReconstructViewPosition(pc.sceneData->invProj, uv, depth);
-    // float3 viewPosition = CheapReconstructViewSpacePosition(pc.sceneData->ndcToViewMul, pc.sceneData->ndcToViewAdd, uv, depth);
+    float viewSpaceDepth =  ScreenToViewSpaceDepth(depth, pc.sceneData.depthLinearizeMult, pc.sceneData.depthLinearizeAdd);
+    float3 viewPosition = CheapReconstructViewSpacePosition(pc.sceneData->ndcToViewMul, pc.sceneData->ndcToViewAdd, uv, viewSpaceDepth);
 
     float roughness = pbrData.g;
     float metallic = pbrData.r;

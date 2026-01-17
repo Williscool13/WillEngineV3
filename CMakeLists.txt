@@ -242,6 +242,7 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/shadow_mesh_shading_instanced.slang mesh MeshMain shadowMeshShadingInstanced
         ${CMAKE_SOURCE_DIR}/shaders/deferred_resolve.slang compute ComputeMain deferredResolve
         ${CMAKE_SOURCE_DIR}/shaders/temporal_antialiasing.slang compute ComputeMain temporalAntialiasing
+        ${CMAKE_SOURCE_DIR}/shaders/ground_truth_ambient_occlusion.slang compute ComputeGTAODepthPrepass gtaoDepthPrepass
         ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeSDRTonemap tonemapSDR
         ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeBuildHistogramExposure exposureBuildHistogram
         ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeAverageExposure exposureCalculateAverage

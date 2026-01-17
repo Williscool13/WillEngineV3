@@ -122,6 +122,9 @@ VulkanContext::VulkanContext(SDL_Window* window)
     features10.shaderInt16 = VK_TRUE;
     features10.shaderInt64 = VK_TRUE;
 
+    // Gather
+    features10.shaderImageGatherExtended = VK_TRUE;
+
 
     vkb::PhysicalDeviceSelector selector{vkb_inst};
     vkb::PhysicalDevice targetDevice = selector

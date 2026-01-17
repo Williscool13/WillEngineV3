@@ -99,6 +99,8 @@ private:
 
     void SetupDeferredLighting(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, bool bEnableShadows) const;
 
+    void SetupGroundTruthAmbientOcclusion(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent) const;
+
     void SetupTemporalAntialiasing(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent) const;
 
     void SetupPostProcessing(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, float deltaTime) const;
@@ -146,6 +148,8 @@ private:
     ShadowMeshShadingInstancedPipeline shadowMeshShadingInstancedPipeline;
     ComputePipeline deferredResolvePipeline;
     ComputePipeline temporalAntialiasingPipeline;
+
+    ComputePipeline gtaoDepthPrefilter;
 
     ComputePipeline exposureBuildHistogramPipeline;
     ComputePipeline exposureCalculateAveragePipeline;

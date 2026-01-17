@@ -38,26 +38,28 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
             rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(pbr.r, pbr.g, 0.0, 1.0);
             break;
         case 5: // Velocity
-            float2 velocity = rdgTextures[pc.textureIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], srcUV, 0).xy;
-            float2 centered = abs((velocity) * 1000.0);
-            rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(centered, 0.0, 1.0);
+            float4 velocity = rdgTextures[pc.textureIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], srcUV, 0);
+            velocity /= 1000.0f;
+            rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(velocity.x, velocity.y, velocity.z, 1.0);
             break;
         case 6: // CSM
-            float4 color  = rdgTextures[pc.textureIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], srcUV, 0);
-            float2 colorMovement = abs((color.rg) * 100.0);
-            rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(colorMovement.x, colorMovement.y, 0.0f, 1.0f);
+            float4 color  = rdgTextures[pc.textureIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], srcUV, 1);
+            color /= 1000.0f;
+            rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(color.x, color.y, color.z, 1.0f);
             break;
         case 7: // CSM
-            float4 color2  = rdgTextures[pc.textureIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], srcUV, 0);
-            float2 colorMovement2 = abs((color2.rg) * 100.0);
-            rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(colorMovement2.x, colorMovement2.y, 0.0f, 1.0f);
+            float4 color2  = rdgTextures[pc.textureIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], srcUV, 2);
+            color2 /= 1000.0f;
+            rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(color2.x, color2.y, color2.z, 1.0f);
             break;
         case 8: // CSM
-            float4 color3  = rdgTextures[pc.textureIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], srcUV, 0);
+            float4 color3  = rdgTextures[pc.textureIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], srcUV, 3);
+            color3 /= 1000.0f;
             rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(color3.x, color3.y, color3.z, 1.0f);
             break;
         case 9: // CSM
-            float4 color4  = rdgTextures[pc.textureIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], srcUV, 8);
+            float4 color4  = rdgTextures[pc.textureIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], srcUV, 4);
+            color4 /= 1000.0f;
             rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(color4.x, color4.y, color4.z, 1.0f);
             break;
         default:

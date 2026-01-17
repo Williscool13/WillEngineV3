@@ -275,6 +275,8 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     }
     SetupMainGeometryPass(*renderGraph, viewFamily);
 
+    SetupGroundTruthAmbientOcclusion(*renderGraph, viewFamily, renderExtent);
+
     // IN : albedoTarget, normalTarget, pbrTarget, emissiveTarget, depthTarget, shadowCascade_0, shadowCascade_1, shadowCascade_2, shadowCascade_3
     // OUT: deferredResolve
     SetupDeferredLighting(*renderGraph, viewFamily, renderExtent, bHasShadows);
@@ -332,11 +334,11 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
             "albedoTarget", // 2
             "normalTarget", // 3
             "pbrTarget", // 4
-            "velocityTarget", // 5
-            "motionBlurTiledNeighborMax", // 6
-            "bloomChain", // 7
-            "bloomChain", // 8
-            "bloomChain", // 9
+            "gtaoDepth", // 5
+            "gtaoDepth", // 6
+            "gtaoDepth", // 7
+            "gtaoDepth", // 8
+            "gtaoDepth", // 9
         };
 
         uint32_t debugIndex = viewFamily.mainView.debug;
@@ -559,6 +561,9 @@ void RenderThread::CreatePipelines()
         pushConstant.size = sizeof(IndirectWritePushConstant);
         instancingIndirectConstructionPipeline = ComputePipeline(context.get(), piplineLayoutCreateInfo, Platform::GetShaderPath() / "instancingCompactAndGenerateIndirect_compute.spv");
 
+        pushConstant.size = sizeof(GTAODepthPrepassPushConstant);
+        gtaoDepthPrefilter = ComputePipeline(context.get(), piplineLayoutCreateInfo, Platform::GetShaderPath() / "gtaoDepthPrepass_compute.spv");
+
         pushConstant.size = sizeof(HistogramBuildPushConstant);
         exposureBuildHistogramPipeline = ComputePipeline(context.get(), piplineLayoutCreateInfo, Platform::GetShaderPath() / "exposureBuildHistogram_compute.spv");
 
@@ -682,7 +687,6 @@ void RenderThread::SetupFrameUniforms(VkCommandBuffer cmd, const Core::ViewFamil
 
         sceneData.texelSize = glm::vec2(1.0f, 1.0f) / glm::vec2(renderExtent[0], renderExtent[1]);
         sceneData.mainRenderTargetSize = glm::vec2(renderExtent[0], renderExtent[1]);
-
 
         sceneData.depthLinearizeMult = -projMatrix[3][2];
         sceneData.depthLinearizeAdd = projMatrix[2][2];
@@ -1127,6 +1131,39 @@ void RenderThread::SetupDeferredLighting(RenderGraph& graph, const Core::ViewFam
 
         uint32_t xDispatch = (width + 15) / 16;
         uint32_t yDispatch = (height + 15) / 16;
+        vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
+    });
+}
+
+void RenderThread::SetupGroundTruthAmbientOcclusion(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent) const
+{
+    const Core::GTAOConfiguration& gtaoConfig = viewFamily.gtaoConfig;
+
+    graph.CreateTexture("gtaoDepth", TextureInfo{VK_FORMAT_R16_SFLOAT, renderExtent[0], renderExtent[1], 5});
+
+    RenderPass& depthPrepass = graph.AddPass("GTAODepthPrepass", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+    depthPrepass.ReadSampledImage("depthTarget");
+    depthPrepass.WriteStorageImage("gtaoDepth");
+    depthPrepass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
+        GTAODepthPrepassPushConstant pc{
+            .sceneData = graph.GetBufferAddress("sceneData"),
+            .inputDepth = graph.GetSampledImageViewDescriptorIndex("depthTarget"),
+            .outputDepth0 = graph.GetStorageImageViewDescriptorIndex("gtaoDepth", 0),
+            .outputDepth1 = graph.GetStorageImageViewDescriptorIndex("gtaoDepth", 1),
+            .outputDepth2 = graph.GetStorageImageViewDescriptorIndex("gtaoDepth", 2),
+            .outputDepth3 = graph.GetStorageImageViewDescriptorIndex("gtaoDepth",3),
+            .outputDepth4 = graph.GetStorageImageViewDescriptorIndex("gtaoDepth", 4),
+            .effectRadius = gtaoConfig.effectRadius,
+            .effectFalloffRange = gtaoConfig.effectFalloffRange,
+            .radiusMultiplier = gtaoConfig.radiusMultiplier,
+        };
+
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, gtaoDepthPrefilter.pipeline.handle);
+        vkCmdPushConstants(cmd, gtaoDepthPrefilter.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+
+
+        uint32_t xDispatch = (width / 2 + GTAO_DEPTH_PREPASS_DISPATCH_X - 1) / GTAO_DEPTH_PREPASS_DISPATCH_X;
+        uint32_t yDispatch = (height / 2 + GTAO_DEPTH_PREPASS_DISPATCH_Y - 1) / GTAO_DEPTH_PREPASS_DISPATCH_Y;
         vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
     });
 }

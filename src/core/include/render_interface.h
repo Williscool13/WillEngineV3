@@ -107,6 +107,13 @@ struct PostProcessConfiguration
     float sharpeningStrength{0.4f};
 };
 
+struct GTAOConfiguration
+{
+    float effectRadius{0.5f};
+    float radiusMultiplier{1.0f};
+    float effectFalloffRange{0.615f};
+};
+
 struct ViewFamily
 {
     RenderView mainView;
@@ -129,6 +136,7 @@ struct ViewFamily
     DirectionalLight directionalLight{};
     // std::vector<LightInstance> allLights;
 
+    GTAOConfiguration gtaoConfig{};
     PostProcessConfiguration postProcessConfig{};
 };
 

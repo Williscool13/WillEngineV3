@@ -15,8 +15,7 @@ float ScreenToViewSpaceDepth(float screenDepth, float depthLinearizeMul, float d
 }
 
 float ClampDepth(float depth){
-    // kind of redundant, the view space depth can only be as far as the depth buffer (which is 1000.0f at time of writing)
-    return clamp( depth, 0.0, 3.402823466e+38 );
+    return clamp( depth, 0.0, 65504.0);
 }
 
 float DepthMipPrefilter(float depth0, float depth1, float depth2, float depth3, float effectRadius, float radiusMultiplier, float falloffRange) {
@@ -42,14 +41,14 @@ float DepthMipPrefilter(float depth0, float depth1, float depth2, float depth3, 
     return (weight0 * depth0 + weight1 * depth1 + weight2 * depth2 + weight3 * depth3) / weightSum;
 }
 
-groupshared float scratchDepths[8][8];
-[numthreads(16, 16, 1)]
-void ComputeGTAODepthPrepass(uniform GTAODepthPrepassPushConstant pc, uint3 threadID : SV_DispatchThreadID) {
-    int2 groupThreadID = int2(threadID.xy);
+groupshared float g_scratchDepths[8][8];
 
+[shader("compute")]
+[numthreads(GTAO_DEPTH_PREPASS_DISPATCH_X, GTAO_DEPTH_PREPASS_DISPATCH_Y, 1)]
+void ComputeGTAODepthPrepass(uniform GTAODepthPrepassPushConstant pc, uint3 dtid : SV_DispatchThreadID, uint3 gtid : SV_GroupThreadID) {
     // MIP 0
-    const int2 baseCoord = threadID.xy;
-    const int2 screenPos = int2(baseCoord.xy) * 2; // We process 2x2 pixels in MIP 0
+    const uint2 baseCoord = dtid.xy;
+    const int2 screenPos = int2(baseCoord) * 2; // We process 2x2 pixels in MIP 0
 
     if (screenPos.x > pc.sceneData->mainRenderTargetSize.x || screenPos.y > pc.sceneData->mainRenderTargetSize.y) {
         return;
@@ -63,70 +62,59 @@ void ComputeGTAODepthPrepass(uniform GTAODepthPrepassPushConstant pc, uint3 thre
     float rDepth2 = depths.x;
     float rDepth3 = depths.y;
 
-    float depth0 = ClampDepth(ScreenToViewSpaceDepth(rDepth0, pc.depthLinearizeMult, pushConstants.depthLinearizeAdd));
-    float depth1 = ClampDepth(ScreenToViewSpaceDepth(rDepth1, pc.depthLinearizeMult, pushConstants.depthLinearizeAdd));
-    float depth2 = ClampDepth(ScreenToViewSpaceDepth(rDepth2, pc.depthLinearizeMult, pushConstants.depthLinearizeAdd));
-    float depth3 = ClampDepth(ScreenToViewSpaceDepth(rDepth3, pc.depthLinearizeMult, pushConstants.depthLinearizeAdd));
+    float depth0 = ClampDepth(ScreenToViewSpaceDepth(rDepth0, pc.sceneData->depthLinearizeMult, pc.sceneData->depthLinearizeAdd));
+    float depth1 = ClampDepth(ScreenToViewSpaceDepth(rDepth1, pc.sceneData->depthLinearizeMult, pc.sceneData->depthLinearizeAdd));
+    float depth2 = ClampDepth(ScreenToViewSpaceDepth(rDepth2, pc.sceneData->depthLinearizeMult, pc.sceneData->depthLinearizeAdd));
+    float depth3 = ClampDepth(ScreenToViewSpaceDepth(rDepth3, pc.sceneData->depthLinearizeMult, pc.sceneData->depthLinearizeAdd));
 
-    imageStore(outDepth0, screenPos + ivec2(0, 0), vec4(depth0));
-    imageStore(outDepth0, screenPos + ivec2(1, 0), vec4(depth1));
-    imageStore(outDepth0, screenPos + ivec2(0, 1), vec4(depth2));
-    imageStore(outDepth0, screenPos + ivec2(1, 1), vec4(depth3));
-
-    if (pushConstants.debug == 1){
-        imageStore(debugImage, screenPos + ivec2(0, 0), vec4(vec3(depth0 / 1000.0f), 1.0f));
-        imageStore(debugImage, screenPos + ivec2(1, 0), vec4(vec3(depth1 / 1000.0f), 1.0f));
-        imageStore(debugImage, screenPos + ivec2(0, 1), vec4(vec3(depth2 / 1000.0f), 1.0f));
-        imageStore(debugImage, screenPos + ivec2(1, 1), vec4(vec3(depth3 / 1000.0f), 1.0f));
-    }
+    rdgRenderTextures[pc.outputDepth0][screenPos + int2(0, 0)] = float4(depth0, 0.0f, 0.0f, 0.0f);
+    rdgRenderTextures[pc.outputDepth0][screenPos + int2(1, 0)] = float4(depth1, 0.0f, 0.0f, 0.0f);
+    rdgRenderTextures[pc.outputDepth0][screenPos + int2(0, 1)] = float4(depth2, 0.0f, 0.0f, 0.0f);
+    rdgRenderTextures[pc.outputDepth0][screenPos + int2(1, 1)] = float4(depth3, 0.0f, 0.0f, 0.0f);
 
     // MIP 1
-    float dm1 = depthMipFilter(depth0, depth1, depth2, depth3, pushConstants.effectRadius, pushConstants.radiusMultiplier, pushConstants.effectFalloffRange);
-    imageStore(outDepth1, ivec2(baseCoord), vec4(dm1));
-    g_scratchDepths[groupThreadID.x][groupThreadID.y] = dm1;
+    float dm1 = DepthMipPrefilter(depth0, depth1, depth2, depth3, pc.effectRadius, pc.radiusMultiplier, pc.effectFalloffRange);
+    rdgRenderTextures[pc.outputDepth1][baseCoord] = float4(dm1, 0.0f, 0.0f, 0.0f);
+    g_scratchDepths[gtid.x][gtid.y] = dm1;
 
-    memoryBarrierShared();
-    barrier();
+    GroupMemoryBarrierWithGroupSync();
 
     // MIP 2
-    if (all(equal(groupThreadID.xy % 2u, uvec2(0u)))){
-        float inTL = g_scratchDepths[groupThreadID.x+0][groupThreadID.y+0];
-        float inTR = g_scratchDepths[groupThreadID.x+1][groupThreadID.y+0];
-        float inBL = g_scratchDepths[groupThreadID.x+0][groupThreadID.y+1];
-        float inBR = g_scratchDepths[groupThreadID.x+1][groupThreadID.y+1];
+    if (all(gtid.xy % 2u == uint2(0u))) {
+        float inTL = g_scratchDepths[gtid.x+0][gtid.y+0];
+        float inTR = g_scratchDepths[gtid.x+1][gtid.y+0];
+        float inBL = g_scratchDepths[gtid.x+0][gtid.y+1];
+        float inBR = g_scratchDepths[gtid.x+1][gtid.y+1];
 
-        float dm2 = depthMipFilter(inTL, inTR, inBL, inBR, pushConstants.effectRadius, pushConstants.radiusMultiplier, pushConstants.effectFalloffRange);
-        imageStore(outDepth2, ivec2(baseCoord/2u), vec4(dm2));
-        g_scratchDepths[groupThreadID.x][groupThreadID.y] = dm2;
+        float dm2 = DepthMipPrefilter(inTL, inTR, inBL, inBR, pc.effectRadius, pc.radiusMultiplier, pc.effectFalloffRange);
+        rdgRenderTextures[pc.outputDepth2][baseCoord/2u] = float4(dm2, 0.0f, 0.0f, 0.0f);
+        g_scratchDepths[gtid.x][gtid.y] = dm2;
     }
 
-    memoryBarrierShared();
-    barrier();
+    GroupMemoryBarrierWithGroupSync();
 
     // MIP 3
-    if (all(equal(groupThreadID.xy % 4u, uvec2(0u)))){
-        float inTL = g_scratchDepths[groupThreadID.x+0][groupThreadID.y+0];
-        float inTR = g_scratchDepths[groupThreadID.x+2][groupThreadID.y+0];
-        float inBL = g_scratchDepths[groupThreadID.x+0][groupThreadID.y+2];
-        float inBR = g_scratchDepths[groupThreadID.x+2][groupThreadID.y+2];
+    if (all(gtid.xy % 4u == uint2(0u))) {
+        float inTL = g_scratchDepths[gtid.x+0][gtid.y+0];
+        float inTR = g_scratchDepths[gtid.x+2][gtid.y+0];
+        float inBL = g_scratchDepths[gtid.x+0][gtid.y+2];
+        float inBR = g_scratchDepths[gtid.x+2][gtid.y+2];
 
-        float dm3 = depthMipFilter(inTL, inTR, inBL, inBR, pushConstants.effectRadius, pushConstants.radiusMultiplier, pushConstants.effectFalloffRange);
-        imageStore(outDepth3, ivec2(baseCoord/4u), vec4(dm3));
-        g_scratchDepths[groupThreadID.x][groupThreadID.y] = dm3;
+        float dm3 = DepthMipPrefilter(inTL, inTR, inBL, inBR, pc.effectRadius, pc.radiusMultiplier, pc.effectFalloffRange);
+        rdgRenderTextures[pc.outputDepth3][baseCoord/4u] = float4(dm3, 0.0f, 0.0f, 0.0f);
+        g_scratchDepths[gtid.x][gtid.y] = dm3;
     }
 
-    memoryBarrierShared();
-    barrier();
+    GroupMemoryBarrierWithGroupSync();
 
     // MIP 4
-    if (all(equal(groupThreadID.xy % 8u, uvec2(0u)))){
-        float inTL = g_scratchDepths[groupThreadID.x+0][groupThreadID.y+0];
-        float inTR = g_scratchDepths[groupThreadID.x+4][groupThreadID.y+0];
-        float inBL = g_scratchDepths[groupThreadID.x+0][groupThreadID.y+4];
-        float inBR = g_scratchDepths[groupThreadID.x+4][groupThreadID.y+4];
+    if (all(gtid.xy % 8u == uint2(0u))) {
+        float inTL = g_scratchDepths[gtid.x+0][gtid.y+0];
+        float inTR = g_scratchDepths[gtid.x+4][gtid.y+0];
+        float inBL = g_scratchDepths[gtid.x+0][gtid.y+4];
+        float inBR = g_scratchDepths[gtid.x+4][gtid.y+4];
 
-        float dm4 = depthMipFilter(inTL, inTR, inBL, inBR, pushConstants.effectRadius, pushConstants.radiusMultiplier, pushConstants.effectFalloffRange);
-        imageStore(outDepth4, ivec2(baseCoord/8u), vec4(dm4));
-        //g_scratchDepths[groupThreadID.x][groupThreadID.y] = dm4;
+        float dm4 = DepthMipPrefilter(inTL, inTR, inBL, inBR, pc.effectRadius, pc.radiusMultiplier, pc.effectFalloffRange);
+        rdgRenderTextures[pc.outputDepth4][baseCoord/8u] = float4(dm4, 0.0f, 0.0f, 0.0f);
     }
 }
