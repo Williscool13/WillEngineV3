@@ -322,5 +322,25 @@ SHADER_PUBLIC struct GTAODepthPrepassPushConstant
     SHADER_PUBLIC float radiusMultiplier;
 };
 
+SHADER_PUBLIC struct GTAOMainPushConstant {
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC uint32_t prefilteredDepthIndex;
+    SHADER_PUBLIC uint32_t normalBufferIndex;
+    SHADER_PUBLIC uint32_t aoOutputIndex;
+    SHADER_PUBLIC uint32_t edgeDataIndex;
+
+    SHADER_PUBLIC float effectRadius;
+    SHADER_PUBLIC float radiusMultiplier;
+    SHADER_PUBLIC float effectFalloffRange;
+    SHADER_PUBLIC float sampleDistributionPower;
+    SHADER_PUBLIC float thinOccluderCompensation;
+    SHADER_PUBLIC float finalValuePower;
+    SHADER_PUBLIC float depthMipSamplingOffset;
+
+    SHADER_PUBLIC float sliceCount;
+    SHADER_PUBLIC float stepsPerSlice;
+    SHADER_PUBLIC uint32_t noiseIndex;
+};
+
 
 #endif //WILL_ENGINE_PUSH_CONSTANT_INTEROP_H

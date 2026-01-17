@@ -149,7 +149,8 @@ private:
     ComputePipeline deferredResolvePipeline;
     ComputePipeline temporalAntialiasingPipeline;
 
-    ComputePipeline gtaoDepthPrefilter;
+    ComputePipeline gtaoDepthPrepassPipeline;
+    ComputePipeline gtaoMainPipeline;
 
     ComputePipeline exposureBuildHistogramPipeline;
     ComputePipeline exposureCalculateAveragePipeline;
