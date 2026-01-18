@@ -24,7 +24,7 @@ class RenderGraph;
 
 namespace Core
 {
-class FrameSync;
+struct FrameSync;
 }
 
 namespace enki

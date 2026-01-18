@@ -283,21 +283,25 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     // OUT: deferredResolve
     SetupDeferredLighting(*renderGraph, viewFamily, renderExtent, bHasShadows);
 
-    if (viewFamily.mainView.debug != 0) {
+    if (viewFamily.mainView.debug != -1) {
+        int32_t debugIndex = viewFamily.mainView.debug;
+        if (viewFamily.mainView.debug == 0) {
+            debugIndex = 10;
+        }
         static constexpr const char* debugTargets[] = {
-            "depthTarget",
+            "dummy",
             "depthTarget", // 1
             "albedoTarget", // 2
             "normalTarget", // 3
             "pbrTarget", // 4
-            "gtaoAO", // 5
-            "gtaoEdges", // 6
-            "gtaoFiltered", // 7
+            "gtaoFiltered", // 5
+            "gtaoDepth", // 6
+            "gtaoDepth", // 7
             "gtaoDepth", // 8
             "gtaoDepth", // 9
+            "gtaoDepth", // 0
         };
 
-        uint32_t debugIndex = viewFamily.mainView.debug;
         if (debugIndex >= std::size(debugTargets)) {
             debugIndex = 1;
         }
@@ -317,7 +321,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
                     .farPlane = viewFamily.mainView.currentViewData.farPlane,
                     .textureIndex = renderGraph->GetSampledImageViewDescriptorIndex(debugTargetName),
                     .outputImageIndex = renderGraph->GetStorageImageViewDescriptorIndex("deferredResolve"),
-                    .debugType = debugIndex
+                    .debugType = static_cast<uint32_t>(debugIndex)
                 };
 
                 vkCmdPushConstants(cmd, debugVisualizePipeline.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(DebugVisualizePushConstant), &pushData);
@@ -698,13 +702,13 @@ void RenderThread::SetupFrameUniforms(VkCommandBuffer cmd, const Core::ViewFamil
         sceneData.texelSize = glm::vec2(1.0f, 1.0f) / glm::vec2(renderExtent[0], renderExtent[1]);
         sceneData.mainRenderTargetSize = glm::vec2(renderExtent[0], renderExtent[1]);
 
-        sceneData.depthLinearizeMult = -projMatrix[3][2];
-        sceneData.depthLinearizeAdd = projMatrix[2][2];
+        sceneData.depthLinearizeMult = -sceneData.proj[3][2];
+        sceneData.depthLinearizeAdd = sceneData.proj[2][2];
         if (sceneData.depthLinearizeMult * sceneData.depthLinearizeAdd < 0) {
             sceneData.depthLinearizeAdd = -sceneData.depthLinearizeAdd;
         }
-        float tanHalfFOVY = 1.0f / projMatrix[1][1];
-        float tanHalfFOVX = 1.0F / projMatrix[0][0];
+        float tanHalfFOVY = 1.0f / sceneData.proj[1][1];
+        float tanHalfFOVX = 1.0F / sceneData.proj[0][0];
         glm::vec2 cameraTanHalfFOV{tanHalfFOVX, tanHalfFOVY};
         sceneData.ndcToViewMul = {cameraTanHalfFOV.x * 2.0f, cameraTanHalfFOV.y * -2.0f};
         sceneData.ndcToViewAdd = {cameraTanHalfFOV.x * -1.0f, cameraTanHalfFOV.y * 1.0f};

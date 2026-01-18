@@ -12,17 +12,15 @@ float3 NeighborhoodClamp(float3 historyColor, float2 uv) {
     float2 du = float2(pc.sceneData.texelSize.x, 0.0);
     float2 dv = float2(0.0, pc.sceneData.texelSize.y);
 
-    float3 topL = rdgTextures[pc.colorResolvedIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv - dv - du, 0).rgb;
-    float3 topM = rdgTextures[pc.colorResolvedIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv - dv, 0).rgb;
-    float3 topR = rdgTextures[pc.colorResolvedIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv - dv + du, 0).rgb;
-
-    float3 midL = rdgTextures[pc.colorResolvedIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv - du, 0).rgb;
-    float3 midM = rdgTextures[pc.colorResolvedIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv, 0).rgb;
-    float3 midR = rdgTextures[pc.colorResolvedIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + du, 0).rgb;
-
-    float3 botL = rdgTextures[pc.colorResolvedIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + dv - du, 0).rgb;
-    float3 botM = rdgTextures[pc.colorResolvedIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + dv, 0).rgb;
-    float3 botR = rdgTextures[pc.colorResolvedIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + dv + du, 0).rgb;
+    float3 topL = RGBToYCoCg(rdgTextures[pc.colorResolvedIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv - dv - du, 0).rgb);
+    float3 topM = RGBToYCoCg(rdgTextures[pc.colorResolvedIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv - dv, 0).rgb);
+    float3 topR = RGBToYCoCg(rdgTextures[pc.colorResolvedIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv - dv + du, 0).rgb);
+    float3 midL = RGBToYCoCg(rdgTextures[pc.colorResolvedIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv - du, 0).rgb);
+    float3 midM = RGBToYCoCg(rdgTextures[pc.colorResolvedIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv, 0).rgb);
+    float3 midR = RGBToYCoCg(rdgTextures[pc.colorResolvedIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + du, 0).rgb);
+    float3 botL = RGBToYCoCg(rdgTextures[pc.colorResolvedIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + dv - du, 0).rgb);
+    float3 botM = RGBToYCoCg(rdgTextures[pc.colorResolvedIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + dv, 0).rgb);
+    float3 botR = RGBToYCoCg(rdgTextures[pc.colorResolvedIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + dv + du, 0).rgb);
 
     float3 minColor = min(min(min(min(min(min(min(min(topL, topM), topR), midL), midM), midR), botL), botM), botR);
     float3 maxColor = max(max(max(max(max(max(max(max(topL, topM), topR), midL), midM), midR), botL), botM), botR);
@@ -56,7 +54,7 @@ float3 SampleHistoryCatmullRom(float2 uv) {
     float3 color =
         rdgTextures[pc.colorHistoryIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], float2(tc12.x, tc0.y), 0).rgb * (w12.x * w0.y) +
         rdgTextures[pc.colorHistoryIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], float2(tc0.x, tc12.y), 0).rgb * (w0.x * w12.y) +
-        rdgTextures[pc.colorHistoryIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], tc12, 0).rgb * (w12.x * w12.y) +
+        rdgTextures[pc.colorHistoryIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], tc12, 0).rgb                  * (w12.x * w12.y) +
         rdgTextures[pc.colorHistoryIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], float2(tc3.x, tc12.y), 0).rgb * (w3.x * w12.y) +
         rdgTextures[pc.colorHistoryIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], float2(tc12.x, tc3.y), 0).rgb * (w12.x * w3.y);
 
@@ -110,7 +108,7 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
         float3 historyColor = SampleHistoryCatmullRom(historyUv);
         float3 historyYCoCg = RGBToYCoCg(historyColor);
 
-        float3 neighborClampedYCoCg = RGBToYCoCg(NeighborhoodClamp(YCoCgToRGB(historyYCoCg), uv));
+        float3 neighborClampedYCoCg = NeighborhoodClamp(historyYCoCg, uv);
         historyYCoCg = neighborClampedYCoCg;
 
         float alpha = 0.1;

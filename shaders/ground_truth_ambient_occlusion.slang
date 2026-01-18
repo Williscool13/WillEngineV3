@@ -41,7 +41,7 @@ float DepthMipPrefilter(float depth0, float depth1, float depth2, float depth3, 
     return (weight0 * depth0 + weight1 * depth1 + weight2 * depth2 + weight3 * depth3) / weightSum;
 }
 
-groupshared float g_scratchDepths[8][8];
+groupshared float g_scratchDepths[GTAO_DEPTH_PREPASS_DISPATCH_X][GTAO_DEPTH_PREPASS_DISPATCH_Y];
 
 [shader("compute")]
 [numthreads(GTAO_DEPTH_PREPASS_DISPATCH_X, GTAO_DEPTH_PREPASS_DISPATCH_Y, 1)]
@@ -54,7 +54,7 @@ void ComputeGTAODepthPrepass(uniform GTAODepthPrepassPushConstant pc, uint3 dtid
         return;
     }
 
-    float2 uv = (float2(screenPos) + 0.5) * pc.sceneData->texelSize;
+    float2 uv = float2(screenPos) * pc.sceneData->texelSize;
 
     float4 depths = rdgTextures[pc.inputDepth].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], uv, int2(1, 1));
     float rDepth0 = depths.w;
@@ -181,11 +181,8 @@ float4 XE_GTAO_CalculateDepthEdges(float centerZ, float leftZ, float rightZ, flo
 }
 
 float XeGTAO_PackEdges(float4 edgesLRTB) {
-    // Pack 4 edge values into single float (each edge gets 6 bits precision)
-    edgesLRTB = saturate(edgesLRTB) * 255.0;
-    uint4 iEdges = uint4(edgesLRTB);
-    // Simple packing - you might want to adjust this
-    return float((iEdges.x << 0) | (iEdges.y << 8) | (iEdges.z << 16) | (iEdges.w << 24)) / float(0xFFFFFFFF);
+    edgesLRTB = round(saturate(edgesLRTB) * 2.9);
+    return dot(edgesLRTB, float4(64.0/255.0, 16.0/255.0, 4.0/255.0, 1.0/255.0));
 }
 
 [shader("compute")]
@@ -214,7 +211,7 @@ void ComputeGTAOMain(uniform GTAOMainPushConstant pc, uint3 dtid : SV_DispatchTh
     float packedEdges = XeGTAO_PackEdges(edges);
     rdgRenderTextures[pc.edgeDataIndex][screenPos] = float4(packedEdges, 0, 0, 0);
 
-    float3 viewNormal = rdgTextures[pc.normalBufferIndex].Sample(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv).rgb;
+    float3 viewNormal = rdgTextures[pc.normalBufferIndex].Sample(rdgSamplers[RDG_POINT_SAMPLER_INDEX], uv).rgb;
     viewNormal = viewNormal * 2.0 - 1.0;
 
     // Move center pixel slightly towards camera to avoid precision artifacts

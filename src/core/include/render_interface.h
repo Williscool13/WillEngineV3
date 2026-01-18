@@ -40,7 +40,7 @@ struct RenderView
     // render target color
     // render target depth
 
-    uint32_t debug;
+    int32_t debug{-1};
 };
 
 enum class ShadowQuality
@@ -112,11 +112,11 @@ struct GTAOConfiguration
     bool bEnabled{true};
 
     float effectRadius{0.5f};
-    float radiusMultiplier{1.0f};
+    float radiusMultiplier{1.457f};
     float effectFalloffRange{0.615f};
     float sampleDistributionPower{2.0f};
     float thinOccluderCompensation{0.0f};
-    float finalValuePower{2.0f};
+    float finalValuePower{2.2f};
     float depthMipSamplingOffset{3.3f};
     // float sliceCount{3.0f};
     float sliceCount{9.0f};
@@ -127,7 +127,7 @@ struct GTAOConfiguration
 
 struct ViewFamily
 {
-    RenderView mainView;
+    RenderView mainView{};
     std::vector<RenderView> portalViews;
 
     struct InstanceData
@@ -192,7 +192,7 @@ struct SwapchainRecreateCommand
 
 struct FrameBuffer
 {
-    ViewFamily mainViewFamily;
+    ViewFamily mainViewFamily{};
 
     TimeFrame timeFrame;
     uint32_t currentFrameBuffer{};

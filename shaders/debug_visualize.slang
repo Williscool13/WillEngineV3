@@ -42,22 +42,29 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
             rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(velocity.x, velocity.x, velocity.x, 1.0);
             break;
         case 6: // CSM
-            float4 color  = rdgTextures[pc.textureIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], srcUV, 1);
+            float4 color = rdgTextures[pc.textureIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], srcUV, 0);
+            color /= 1000.0f;
             rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(color.x, color.x, color.x, 1.0f);
             break;
         case 7: // CSM
-            float4 color2  = rdgTextures[pc.textureIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], srcUV, 2);
+            float4 color2 = rdgTextures[pc.textureIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], srcUV, 1);
+            color2 /= 1000.0f;
             rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(color2.x, color2.x, color2.x, 1.0f);
             break;
-        case 8: // CSM
-            float4 color3  = rdgTextures[pc.textureIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], srcUV, 3);
+        case 8:
+            float4 color3 = rdgTextures[pc.textureIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], srcUV, 2);
             color3 /= 1000.0f;
-            rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(color3.x, color3.y, color3.z, 1.0f);
+            rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(color3.x, color3.x, color3.x, 1.0f);
             break;
-        case 9: // CSM
-            float4 color4  = rdgTextures[pc.textureIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], srcUV, 4);
+        case 9:
+            float4 color4 = rdgTextures[pc.textureIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], srcUV, 3);
             color4 /= 1000.0f;
-            rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(color4.x, color4.y, color4.z, 1.0f);
+            rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(color4.x, color4.x, color4.x, 1.0f);
+            break;
+        case 10:
+            float4 color5 = rdgTextures[pc.textureIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], srcUV, 4);
+            color5 /= 1000.0f;
+            rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(color5.x, color5.x, color5.x, 1.0f);
             break;
         default:
             rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(1.0, 0.0, 1.0, 1.0); // Magenta for invalid

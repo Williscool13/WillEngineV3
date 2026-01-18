@@ -29,7 +29,7 @@ namespace Game
 {
 struct RenderDebugViewComponent
 {
-    uint32_t debugIndex;
+    int32_t debugIndex{-1};
 };
 
 struct DebugData
