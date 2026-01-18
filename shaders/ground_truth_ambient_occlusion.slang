@@ -214,12 +214,11 @@ void ComputeGTAOMain(uniform GTAOMainPushConstant pc, uint3 dtid : SV_DispatchTh
     float packedEdges = XeGTAO_PackEdges(edges);
     rdgRenderTextures[pc.edgeDataIndex][screenPos] = float4(packedEdges, 0, 0, 0);
 
-
     float3 viewNormal = rdgTextures[pc.normalBufferIndex].Sample(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv).rgb;
     viewNormal = viewNormal * 2.0 - 1.0;
 
     // Move center pixel slightly towards camera to avoid precision artifacts
-    viewSpaceZM = viewSpaceZM * 0.998f;
+    viewSpaceZM = viewSpaceZM * 0.99920;
 
     // Reconstruct view space position
     float3 vPos = CheapReconstructViewSpacePosition(pc.sceneData->ndcToViewMul, pc.sceneData->ndcToViewAdd, uv, viewSpaceZM);
@@ -352,4 +351,114 @@ void ComputeGTAOMain(uniform GTAOMainPushConstant pc, uint3 dtid : SV_DispatchTh
 
     visibility = saturate(visibility / XE_GTAO_OCCLUSION_TERM_SCALE);
     rdgRenderTextures[pc.aoOutputIndex][screenPos] = float4(visibility, 0, 0, 0);
+}
+
+// ==================== GTAO Denoise Pass ===============================
+
+float4 XeGTAO_UnpackEdges(float packedVal) {
+    uint packedValU = uint(packedVal * 255.5);
+    float4 edgesLRTB;
+    edgesLRTB.x = float((packedValU >> 6) & 0x03) / 3.0;
+    edgesLRTB.y = float((packedValU >> 4) & 0x03) / 3.0;
+    edgesLRTB.z = float((packedValU >> 2) & 0x03) / 3.0;
+    edgesLRTB.w = float((packedValU >> 0) & 0x03) / 3.0;
+    return saturate(edgesLRTB);
+}
+
+void XeGTAO_AddSample(float ssaoValue, float edgeValue, inout float sum, inout float sumWeight) {
+    float weight = edgeValue;
+    sum += (weight * ssaoValue);
+    sumWeight += weight;
+}
+
+[shader("compute")]
+[numthreads(GTAO_DENOISE_DISPATCH_X, GTAO_DENOISE_DISPATCH_Y, 1)]
+void ComputeGTAODenoise(uniform GTAODenoisePushConstant pc, uint3 dtid : SV_DispatchThreadID) {
+    // Each dispatch operates on 2x1 pixels
+    const int2 screenPos = int2(dtid.xy) * int2(2, 1);
+
+    if (screenPos.x >= pc.sceneData->mainRenderTargetSize.x || screenPos.y >= pc.sceneData->mainRenderTargetSize.y) {
+        return;
+    }
+
+    // Blur amount depends on whether this is final pass
+    float blurAmount = pc.isFinalDenoisePass == 1 ? pc.denoiseBlurBeta : (pc.denoiseBlurBeta / 5.0);
+    float diagWeight = 0.85 * 0.5;
+
+    float aoTerm[2];
+    float4 edgesC_LRTB[2];
+    float weightTL[2];
+    float weightTR[2];
+    float weightBL[2];
+    float weightBR[2];
+
+    // Gather edge and AO data
+    float2 gatherCenter = float2(screenPos) * pc.sceneData->texelSize;
+
+    float4 edgesQ0 = rdgTextures[pc.edgeDataIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], gatherCenter, int2(0, 0));
+    float4 edgesQ1 = rdgTextures[pc.edgeDataIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], gatherCenter, int2(2, 0));
+    float4 edgesQ2 = rdgTextures[pc.edgeDataIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], gatherCenter, int2(1, 2));
+
+    float4 visQ0 = rdgTextures[pc.rawAOIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], gatherCenter, int2(0, 0));
+    float4 visQ1 = rdgTextures[pc.rawAOIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], gatherCenter, int2(2, 0));
+    float4 visQ2 = rdgTextures[pc.rawAOIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], gatherCenter, int2(0, 2));
+    float4 visQ3 = rdgTextures[pc.rawAOIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], gatherCenter, int2(2, 2));
+
+    for (int side = 0; side < 2; side++) {
+        const int2 sideScreenPos = int2(screenPos.x + side, screenPos.y);
+
+        float4 edgesL_LRTB = XeGTAO_UnpackEdges(side == 0 ? edgesQ0.x : edgesQ0.y);
+        float4 edgesT_LRTB = XeGTAO_UnpackEdges(side == 0 ? edgesQ0.z : edgesQ1.w);
+        float4 edgesR_LRTB = XeGTAO_UnpackEdges(side == 0 ? edgesQ1.x : edgesQ1.y);
+        float4 edgesB_LRTB = XeGTAO_UnpackEdges(side == 0 ? edgesQ2.w : edgesQ2.z);
+
+        edgesC_LRTB[side] = XeGTAO_UnpackEdges(side == 0 ? edgesQ0.y : edgesQ1.x);
+
+        // Enforce edge symmetry
+        edgesC_LRTB[side] *= float4(edgesL_LRTB.y, edgesR_LRTB.x, edgesT_LRTB.w, edgesB_LRTB.z);
+
+        // Allow small AO leaking to reduce aliasing
+        const float leak_threshold = 2.5;
+        const float leak_strength = 0.5;
+        float edginess = (saturate(4.0 - leak_threshold - dot(edgesC_LRTB[side], float4(1, 1, 1, 1))) / (4.0 - leak_threshold)) * leak_strength;
+        edgesC_LRTB[side] = saturate(edgesC_LRTB[side] + edginess);
+
+        // Diagonal weights
+        weightTL[side] = diagWeight * (edgesC_LRTB[side].x * edgesL_LRTB.z + edgesC_LRTB[side].z * edgesT_LRTB.x);
+        weightTR[side] = diagWeight * (edgesC_LRTB[side].z * edgesT_LRTB.y + edgesC_LRTB[side].y * edgesR_LRTB.z);
+        weightBL[side] = diagWeight * (edgesC_LRTB[side].w * edgesB_LRTB.x + edgesC_LRTB[side].x * edgesL_LRTB.w);
+        weightBR[side] = diagWeight * (edgesC_LRTB[side].y * edgesR_LRTB.w + edgesC_LRTB[side].w * edgesB_LRTB.y);
+
+        // Gather AO samples
+        float ssaoValue   = side == 0 ? visQ0[1] : visQ1[0];
+        float ssaoValueL  = side == 0 ? visQ0[0] : visQ0[1];
+        float ssaoValueT  = side == 0 ? visQ0[2] : visQ1[3];
+        float ssaoValueR  = side == 0 ? visQ1[0] : visQ1[1];
+        float ssaoValueB  = side == 0 ? visQ2[2] : visQ3[3];
+        float ssaoValueTL = side == 0 ? visQ0[3] : visQ0[2];
+        float ssaoValueBR = side == 0 ? visQ3[3] : visQ3[2];
+        float ssaoValueTR = side == 0 ? visQ1[3] : visQ1[2];
+        float ssaoValueBL = side == 0 ? visQ2[3] : visQ2[2];
+
+        // Weighted blur
+        float sumWeight = blurAmount;
+        float sum = ssaoValue * sumWeight;
+
+        XeGTAO_AddSample(ssaoValueL, edgesC_LRTB[side].x, sum, sumWeight);
+        XeGTAO_AddSample(ssaoValueR, edgesC_LRTB[side].y, sum, sumWeight);
+        XeGTAO_AddSample(ssaoValueT, edgesC_LRTB[side].z, sum, sumWeight);
+        XeGTAO_AddSample(ssaoValueB, edgesC_LRTB[side].w, sum, sumWeight);
+
+        XeGTAO_AddSample(ssaoValueTL, weightTL[side], sum, sumWeight);
+        XeGTAO_AddSample(ssaoValueTR, weightTR[side], sum, sumWeight);
+        XeGTAO_AddSample(ssaoValueBL, weightBL[side], sum, sumWeight);
+        XeGTAO_AddSample(ssaoValueBR, weightBR[side], sum, sumWeight);
+
+        aoTerm[side] = sum / sumWeight;
+
+        // Apply occlusion term scale on final pass
+        float outputValue = aoTerm[side] * (pc.isFinalDenoisePass  == 1 ? XE_GTAO_OCCLUSION_TERM_SCALE : 1.0);
+
+        rdgRenderTextures[pc.filteredAOIndex][sideScreenPos] = float4(outputValue, 0, 0, 0);
+    }
 }

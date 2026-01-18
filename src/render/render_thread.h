@@ -151,6 +151,7 @@ private:
 
     ComputePipeline gtaoDepthPrepassPipeline;
     ComputePipeline gtaoMainPipeline;
+    ComputePipeline gtaoDenoisePipeline;
 
     ComputePipeline exposureBuildHistogramPipeline;
     ComputePipeline exposureCalculateAveragePipeline;

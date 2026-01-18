@@ -244,6 +244,7 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/temporal_antialiasing.slang compute ComputeMain temporalAntialiasing
         ${CMAKE_SOURCE_DIR}/shaders/ground_truth_ambient_occlusion.slang compute ComputeGTAODepthPrepass gtaoDepthPrepass
         ${CMAKE_SOURCE_DIR}/shaders/ground_truth_ambient_occlusion.slang compute ComputeGTAOMain gtaoMain
+        ${CMAKE_SOURCE_DIR}/shaders/ground_truth_ambient_occlusion.slang compute ComputeGTAODenoise gtaoDenoise
         ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeSDRTonemap tonemapSDR
         ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeBuildHistogramExposure exposureBuildHistogram
         ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeAverageExposure exposureCalculateAverage

@@ -43,13 +43,11 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
             break;
         case 6: // CSM
             float4 color  = rdgTextures[pc.textureIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], srcUV, 1);
-            color /= 1000.0f;
-            rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(color.x, color.y, color.z, 1.0f);
+            rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(color.x, color.x, color.x, 1.0f);
             break;
         case 7: // CSM
             float4 color2  = rdgTextures[pc.textureIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], srcUV, 2);
-            color2 /= 1000.0f;
-            rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(color2.x, color2.y, color2.z, 1.0f);
+            rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(color2.x, color2.x, color2.x, 1.0f);
             break;
         case 8: // CSM
             float4 color3  = rdgTextures[pc.textureIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], srcUV, 3);

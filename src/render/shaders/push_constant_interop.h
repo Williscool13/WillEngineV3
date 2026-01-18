@@ -342,5 +342,14 @@ SHADER_PUBLIC struct GTAOMainPushConstant {
     SHADER_PUBLIC uint32_t noiseIndex;
 };
 
+SHADER_PUBLIC struct GTAODenoisePushConstant {
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC uint32_t rawAOIndex;
+    SHADER_PUBLIC uint32_t edgeDataIndex;
+    SHADER_PUBLIC uint32_t filteredAOIndex;
+    SHADER_PUBLIC float denoiseBlurBeta;
+    SHADER_PUBLIC uint32_t isFinalDenoisePass;
+};
+
 
 #endif //WILL_ENGINE_PUSH_CONSTANT_INTEROP_H

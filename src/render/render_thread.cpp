@@ -335,8 +335,8 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
             "normalTarget", // 3
             "pbrTarget", // 4
             "gtaoAO", // 5
-            "gtaoDepth", // 6
-            "gtaoDepth", // 7
+            "gtaoEdges", // 6
+            "gtaoFiltered", // 7
             "gtaoDepth", // 8
             "gtaoDepth", // 9
         };
@@ -566,6 +566,9 @@ void RenderThread::CreatePipelines()
 
         pushConstant.size = sizeof(GTAOMainPushConstant);
         gtaoMainPipeline = ComputePipeline(context.get(), piplineLayoutCreateInfo, Platform::GetShaderPath() / "gtaoMain_compute.spv");
+
+        pushConstant.size = sizeof(GTAODenoisePushConstant);
+        gtaoDenoisePipeline = ComputePipeline(context.get(), piplineLayoutCreateInfo, Platform::GetShaderPath() / "gtaoDenoise_compute.spv");
 
         pushConstant.size = sizeof(HistogramBuildPushConstant);
         exposureBuildHistogramPipeline = ComputePipeline(context.get(), piplineLayoutCreateInfo, Platform::GetShaderPath() / "exposureBuildHistogram_compute.spv");
@@ -1157,7 +1160,7 @@ void RenderThread::SetupGroundTruthAmbientOcclusion(RenderGraph& graph, const Co
             .outputDepth0 = graph.GetStorageImageViewDescriptorIndex("gtaoDepth", 0),
             .outputDepth1 = graph.GetStorageImageViewDescriptorIndex("gtaoDepth", 1),
             .outputDepth2 = graph.GetStorageImageViewDescriptorIndex("gtaoDepth", 2),
-            .outputDepth3 = graph.GetStorageImageViewDescriptorIndex("gtaoDepth",3),
+            .outputDepth3 = graph.GetStorageImageViewDescriptorIndex("gtaoDepth", 3),
             .outputDepth4 = graph.GetStorageImageViewDescriptorIndex("gtaoDepth", 4),
             .effectRadius = gtaoConfig.effectRadius,
             .effectFalloffRange = gtaoConfig.effectFalloffRange,
@@ -1204,6 +1207,31 @@ void RenderThread::SetupGroundTruthAmbientOcclusion(RenderGraph& graph, const Co
 
         uint32_t xDispatch = (width + GTAO_MAIN_PASS_DISPATCH_X - 1) / GTAO_MAIN_PASS_DISPATCH_X;
         uint32_t yDispatch = (height + GTAO_MAIN_PASS_DISPATCH_Y - 1) / GTAO_MAIN_PASS_DISPATCH_Y;
+        vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
+    });
+
+    // Denoise pass(es) - typically run 2-3 times for better quality
+    graph.CreateTexture("gtaoFiltered", TextureInfo{VK_FORMAT_R8_UNORM, renderExtent[0], renderExtent[1], 1});
+
+    RenderPass& denoisePass = graph.AddPass("GTAODenoise", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+    denoisePass.ReadSampledImage("gtaoAO");
+    denoisePass.ReadSampledImage("gtaoEdges");
+    denoisePass.WriteStorageImage("gtaoFiltered");
+    denoisePass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
+        GTAODenoisePushConstant pc{
+            .sceneData = graph.GetBufferAddress("sceneData"),
+            .rawAOIndex = graph.GetSampledImageViewDescriptorIndex("gtaoAO"),
+            .edgeDataIndex = graph.GetSampledImageViewDescriptorIndex("gtaoEdges"),
+            .filteredAOIndex = graph.GetStorageImageViewDescriptorIndex("gtaoFiltered"),
+            .denoiseBlurBeta = 1.2f,
+            .isFinalDenoisePass = 1,
+        };
+
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, gtaoDenoisePipeline.pipeline.handle);
+        vkCmdPushConstants(cmd, gtaoDenoisePipeline.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+
+        uint32_t xDispatch = (width / 2 + GTAO_DENOISE_DISPATCH_X - 1) / GTAO_DENOISE_DISPATCH_X;
+        uint32_t yDispatch = (height + GTAO_DENOISE_DISPATCH_Y - 1) / GTAO_DENOISE_DISPATCH_Y;
         vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
     });
 }
