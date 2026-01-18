@@ -109,9 +109,20 @@ struct PostProcessConfiguration
 
 struct GTAOConfiguration
 {
+    bool bEnabled{true};
+
     float effectRadius{0.5f};
     float radiusMultiplier{1.0f};
     float effectFalloffRange{0.615f};
+    float sampleDistributionPower{2.0f};
+    float thinOccluderCompensation{0.0f};
+    float finalValuePower{2.0f};
+    float depthMipSamplingOffset{3.3f};
+    // float sliceCount{3.0f};
+    float sliceCount{9.0f};
+    // float stepsPerSlice{3.0f};
+    float stepsPerSlice{3.0f};
+    float denoiseBlurBeta{1.2f};
 };
 
 struct ViewFamily

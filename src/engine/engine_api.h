@@ -37,6 +37,8 @@ struct GameState
     Core::ShadowQuality shadowQuality = Core::ShadowQuality::Ultra;
     Core::ShadowConfiguration shadowConfig;
 
+    Core::GTAOConfiguration gtaoConfig{};
+
     // Post-Process
     Core::PostProcessConfiguration postProcess{};
 

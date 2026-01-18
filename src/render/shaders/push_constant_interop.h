@@ -148,6 +148,7 @@ SHADER_PUBLIC struct DeferredResolvePushConstant
     SHADER_PUBLIC uint32_t pbrIndex;
     SHADER_PUBLIC uint32_t emissiveIndex;
     SHADER_PUBLIC uint32_t depthIndex;
+    SHADER_PUBLIC int32_t gtaoFilteredIndex;
     SHADER_PUBLIC uint32_t outputImageIndex;
 };
 
@@ -336,7 +337,6 @@ SHADER_PUBLIC struct GTAOMainPushConstant {
     SHADER_PUBLIC float thinOccluderCompensation;
     SHADER_PUBLIC float finalValuePower;
     SHADER_PUBLIC float depthMipSamplingOffset;
-
     SHADER_PUBLIC float sliceCount;
     SHADER_PUBLIC float stepsPerSlice;
     SHADER_PUBLIC uint32_t noiseIndex;

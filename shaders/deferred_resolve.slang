@@ -57,12 +57,20 @@ void ComputeMain(uniform DeferredResolvePushConstant pc, uint3 threadID : SV_Dis
         shadowFactor = GetShadowFactor(viewPosition, N,  pc.sceneData, pc.shadowData, pc.csmIndices, rdgTextures, rdgSamplers[RDG_POINT_SAMPLER_INDEX], rdgCompareSamplers[RDG_LINEAR_DEPTH_SAMPLER_INDEX]);
     }
 
+    float gtao;
+    if (pc.gtaoFilteredIndex >= 0) {
+        gtao = rdgTextures[pc.gtaoFilteredIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], uv, 0).x;
+    } else {
+        gtao = 1.0f;
+    }
+
+
     const float lightIntensity = pc.lightData.mainLightDirection.w;
     const float3 lightColor = pc.lightData.mainLightColor.rgb;
     float3 directLight = (diffuse + specular) * nDotL * shadowFactor * lightIntensity * lightColor;
 
     // Ambient
-    float3 ambient = albedo.xyz * 0.03;
+    float3 ambient = albedo.xyz * 0.03 * gtao;
     float3 emissive = emissiveData.rgb * emissiveData.a;
     float3 finalColor = directLight + ambient + emissive;
     rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(finalColor, 1.0);

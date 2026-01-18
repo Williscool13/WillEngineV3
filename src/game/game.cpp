@@ -86,6 +86,10 @@ GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* stat
         }
 
         ImGui::Spacing();
+        ImGui::SeparatorText("Ground Truth Ambient Occlusion");
+        ImGui::Checkbox("Enable GTAO", &state->gtaoConfig.bEnabled);
+
+        ImGui::Spacing();
         ImGui::SeparatorText("Anti-Aliasing");
         ImGui::Checkbox("Enable TAA", &state->postProcess.bEnableTemporalAntialiasing);
 
@@ -284,6 +288,7 @@ GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* stat
     frameBuffer->mainViewFamily.directionalLight = state->directionalLight;
     frameBuffer->mainViewFamily.shadowConfig = state->shadowConfig;
     frameBuffer->mainViewFamily.postProcessConfig = state->postProcess;
+    frameBuffer->mainViewFamily.gtaoConfig = state->gtaoConfig;
 
     ImGui::End();
 }

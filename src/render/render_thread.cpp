@@ -275,11 +275,59 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     }
     SetupMainGeometryPass(*renderGraph, viewFamily);
 
-    SetupGroundTruthAmbientOcclusion(*renderGraph, viewFamily, renderExtent);
+    if (viewFamily.gtaoConfig.bEnabled) {
+        SetupGroundTruthAmbientOcclusion(*renderGraph, viewFamily, renderExtent);
+    }
 
     // IN : albedoTarget, normalTarget, pbrTarget, emissiveTarget, depthTarget, shadowCascade_0, shadowCascade_1, shadowCascade_2, shadowCascade_3
     // OUT: deferredResolve
     SetupDeferredLighting(*renderGraph, viewFamily, renderExtent, bHasShadows);
+
+    if (viewFamily.mainView.debug != 0) {
+        static constexpr const char* debugTargets[] = {
+            "depthTarget",
+            "depthTarget", // 1
+            "albedoTarget", // 2
+            "normalTarget", // 3
+            "pbrTarget", // 4
+            "gtaoAO", // 5
+            "gtaoEdges", // 6
+            "gtaoFiltered", // 7
+            "gtaoDepth", // 8
+            "gtaoDepth", // 9
+        };
+
+        uint32_t debugIndex = viewFamily.mainView.debug;
+        if (debugIndex >= std::size(debugTargets)) {
+            debugIndex = 1;
+        }
+        const char* debugTargetName = debugTargets[debugIndex];
+
+        auto& debugVisPass = renderGraph->AddPass("DebugVisualize", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+        debugVisPass.ReadSampledImage(debugTargetName);
+        debugVisPass.WriteStorageImage("deferredResolve");
+        debugVisPass.Execute([&, debugTargetName, debugIndex](VkCommandBuffer cmd) {
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, debugVisualizePipeline.pipeline.handle);
+
+            const ResourceDimensions& dims = renderGraph->GetImageDimensions(debugTargetName);
+            DebugVisualizePushConstant pushData{
+                .srcExtent = {dims.width, dims.height},
+                .dstExtent = {renderExtent[0], renderExtent[1]},
+                .nearPlane = viewFamily.mainView.currentViewData.nearPlane,
+                .farPlane = viewFamily.mainView.currentViewData.farPlane,
+                .textureIndex = renderGraph->GetSampledImageViewDescriptorIndex(debugTargetName),
+                .outputImageIndex = renderGraph->GetStorageImageViewDescriptorIndex("deferredResolve"),
+                .debugType = debugIndex
+            };
+
+            vkCmdPushConstants(cmd, debugVisualizePipeline.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(DebugVisualizePushConstant), &pushData);
+
+            uint32_t xDispatch = (renderExtent[0] + 15) / 16;
+            uint32_t yDispatch = (renderExtent[1] + 15) / 16;
+            vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
+        });
+    }
+
 
     // IN : deferredResolve
     // OUT: taaCurrent, taaOutput
@@ -326,51 +374,6 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         offsetSoFar += sizeof(uint32_t);
     });
 #endif
-
-    if (viewFamily.mainView.debug != 0) {
-        static constexpr const char* debugTargets[] = {
-            "depthTarget",
-            "depthTarget", // 1
-            "albedoTarget", // 2
-            "normalTarget", // 3
-            "pbrTarget", // 4
-            "gtaoAO", // 5
-            "gtaoEdges", // 6
-            "gtaoFiltered", // 7
-            "gtaoDepth", // 8
-            "gtaoDepth", // 9
-        };
-
-        uint32_t debugIndex = viewFamily.mainView.debug;
-        if (debugIndex >= std::size(debugTargets)) {
-            debugIndex = 1;
-        }
-        const char* debugTargetName = debugTargets[debugIndex];
-
-        auto& debugVisPass = renderGraph->AddPass("DebugVisualize", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-        debugVisPass.ReadSampledImage(debugTargetName);
-        debugVisPass.WriteStorageImage("postProcessOutput");
-        debugVisPass.Execute([&, debugTargetName, debugIndex](VkCommandBuffer cmd) {
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, debugVisualizePipeline.pipeline.handle);
-
-            const ResourceDimensions& dims = renderGraph->GetImageDimensions(debugTargetName);
-            DebugVisualizePushConstant pushData{
-                .srcExtent = {dims.width, dims.height},
-                .dstExtent = {renderExtent[0], renderExtent[1]},
-                .nearPlane = viewFamily.mainView.currentViewData.nearPlane,
-                .farPlane = viewFamily.mainView.currentViewData.farPlane,
-                .textureIndex = renderGraph->GetSampledImageViewDescriptorIndex(debugTargetName),
-                .outputImageIndex = renderGraph->GetStorageImageViewDescriptorIndex("postProcessOutput"),
-                .debugType = debugIndex
-            };
-
-            vkCmdPushConstants(cmd, debugVisualizePipeline.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(DebugVisualizePushConstant), &pushData);
-
-            uint32_t xDispatch = (renderExtent[0] + 15) / 16;
-            uint32_t yDispatch = (renderExtent[1] + 15) / 16;
-            vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
-        });
-    }
 
     if (frameBuffer.bDrawImgui) {
         auto& imguiEditorPass = renderGraph->AddPass("ImguiEditor", VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT);
@@ -1099,6 +1102,10 @@ void RenderThread::SetupDeferredLighting(RenderGraph& graph, const Core::ViewFam
     deferredResolvePass.ReadSampledImage("pbrTarget");
     deferredResolvePass.ReadSampledImage("emissiveTarget");
     deferredResolvePass.ReadSampledImage("depthTarget");
+    if (viewFamily.gtaoConfig.bEnabled) {
+        deferredResolvePass.ReadSampledImage("gtaoFiltered");
+    }
+
     if (bEnableShadows) {
         deferredResolvePass.ReadSampledImage("shadowCascade_0");
         deferredResolvePass.ReadSampledImage("shadowCascade_1");
@@ -1119,6 +1126,8 @@ void RenderThread::SetupDeferredLighting(RenderGraph& graph, const Core::ViewFam
             csmIndices.w = graph.GetSampledImageViewDescriptorIndex("shadowCascade_3");
         }
 
+        int32_t gtaoIndex = viewFamily.gtaoConfig.bEnabled ? graph.GetSampledImageViewDescriptorIndex("gtaoFiltered") : -1;
+
         DeferredResolvePushConstant pushData{
             .sceneData = graph.GetBufferAddress("sceneData"),
             .shadowData = graph.GetBufferAddress("shadowData"),
@@ -1130,6 +1139,7 @@ void RenderThread::SetupDeferredLighting(RenderGraph& graph, const Core::ViewFam
             .pbrIndex = graph.GetSampledImageViewDescriptorIndex("pbrTarget"),
             .emissiveIndex = graph.GetSampledImageViewDescriptorIndex("emissiveTarget"),
             .depthIndex = graph.GetSampledImageViewDescriptorIndex("depthTarget"),
+            .gtaoFilteredIndex = gtaoIndex,
             .outputImageIndex = graph.GetStorageImageViewDescriptorIndex("deferredResolve"),
         };
 
@@ -1189,16 +1199,15 @@ void RenderThread::SetupGroundTruthAmbientOcclusion(RenderGraph& graph, const Co
             .aoOutputIndex = graph.GetStorageImageViewDescriptorIndex("gtaoAO"),
             .edgeDataIndex = graph.GetStorageImageViewDescriptorIndex("gtaoEdges"),
 
-            .effectRadius = 0.5f,
-            .radiusMultiplier = 1.0f,
-            .effectFalloffRange = 0.615f,
-            .sampleDistributionPower = 2.0f,
-            .thinOccluderCompensation = 0.0f,
-            .finalValuePower = 2.0f,
-            .depthMipSamplingOffset = 3.3f,
-
-            .sliceCount = 3.0f,
-            .stepsPerSlice = 3.0f,
+            .effectRadius = gtaoConfig.effectRadius,
+            .radiusMultiplier = gtaoConfig.radiusMultiplier,
+            .effectFalloffRange = gtaoConfig.effectFalloffRange,
+            .sampleDistributionPower = gtaoConfig.sampleDistributionPower,
+            .thinOccluderCompensation = gtaoConfig.thinOccluderCompensation,
+            .finalValuePower = gtaoConfig.finalValuePower,
+            .depthMipSamplingOffset = gtaoConfig.depthMipSamplingOffset,
+            .sliceCount = gtaoConfig.sliceCount,
+            .stepsPerSlice = gtaoConfig.stepsPerSlice,
             .noiseIndex = static_cast<uint32_t>(frameNumber % 64),
         };
 
@@ -1223,7 +1232,7 @@ void RenderThread::SetupGroundTruthAmbientOcclusion(RenderGraph& graph, const Co
             .rawAOIndex = graph.GetSampledImageViewDescriptorIndex("gtaoAO"),
             .edgeDataIndex = graph.GetSampledImageViewDescriptorIndex("gtaoEdges"),
             .filteredAOIndex = graph.GetStorageImageViewDescriptorIndex("gtaoFiltered"),
-            .denoiseBlurBeta = 1.2f,
+            .denoiseBlurBeta = gtaoConfig.denoiseBlurBeta,
             .isFinalDenoisePass = 1,
         };
 
