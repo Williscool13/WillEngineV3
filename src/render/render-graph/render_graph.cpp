@@ -184,11 +184,11 @@ void RenderGraph::Compile(int64_t currentFrame)
                 if (canAlias) {
                     tex.physicalIndex = i;
                     phys.logicalResourceIndices.push_back(tex.index);
-                    phys.lastLogicalResourceUse = tex.name;
                     if (!phys.IsAllocated()) {
                         phys.dimensions.imageUsage |= tex.accumulatedUsage;
                     }
                     phys.bCanAlias = tex.bCanUseAliasedTexture;
+                    AppendUsageChain(phys, tex.name, tex.bCanUseAliasedTexture, bDebugLogging);
                     foundAlias = true;
                     break;
                 }
@@ -198,10 +198,11 @@ void RenderGraph::Compile(int64_t currentFrame)
                 // No alias found, allocate new physical resource
                 tex.physicalIndex = physicalResources.size();
                 physicalResources.emplace_back();
-                physicalResources.back().dimensions = desiredDim;
-                physicalResources.back().logicalResourceIndices.push_back(tex.index);
-                physicalResources.back().bCanAlias = tex.bCanUseAliasedTexture;
-                physicalResources.back().lastLogicalResourceUse = tex.name;
+                auto& newPhys = physicalResources.back();
+                newPhys.dimensions = desiredDim;
+                newPhys.logicalResourceIndices.push_back(tex.index);
+                newPhys.bCanAlias = tex.bCanUseAliasedTexture;
+                AppendUsageChain(newPhys, tex.name, tex.bCanUseAliasedTexture, bDebugLogging);
             }
         }
     }
@@ -216,7 +217,7 @@ void RenderGraph::Compile(int64_t currentFrame)
 
     for (auto& buf : buffers) {
         if (buf.accumulatedUsage == 0) {
-            if (debugLogging) {
+            if (bDebugLogging) {
                 SPDLOG_WARN("Buffer '{}' created but never used", buf.name);
             }
             continue;
@@ -266,6 +267,7 @@ void RenderGraph::Compile(int64_t currentFrame)
                     if (!phys.IsAllocated()) {
                         phys.dimensions.bufferUsage |= buf.accumulatedUsage;
                     }
+                    AppendUsageChain(phys, buf.name, buf.bCanUseAliasedBuffer, bDebugLogging);
                     foundAlias = true;
                     break;
                 }
@@ -274,10 +276,11 @@ void RenderGraph::Compile(int64_t currentFrame)
             if (!foundAlias) {
                 buf.physicalIndex = physicalResources.size();
                 physicalResources.emplace_back();
-                physicalResources.back().dimensions = desiredDim;
-                physicalResources.back().logicalResourceIndices.push_back(buf.index);
-                physicalResources.back().bCanAlias = buf.bCanUseAliasedBuffer;
-                physicalResources.back().lastLogicalResourceUse = buf.name;
+                auto& newPhys = physicalResources.back();
+                newPhys.dimensions = desiredDim;
+                newPhys.logicalResourceIndices.push_back(buf.index);
+                newPhys.bCanAlias = buf.bCanUseAliasedBuffer;
+                AppendUsageChain(newPhys, buf.name, buf.bCanUseAliasedBuffer, bDebugLogging);
             }
         }
     }
@@ -321,16 +324,26 @@ void RenderGraph::Compile(int64_t currentFrame)
             phys.addressRetrieved = true;
         }
     }
+
+    if (bDebugLogging) {
+        SPDLOG_INFO("=== Physical Resource Aliasing Chains ===");
+        for (size_t i = 0; i < physicalResources.size(); ++i) {
+            const auto& phys = physicalResources[i];
+            if (!phys.usageChain.empty()) {
+                SPDLOG_INFO("  Phys[{}]: {}", i, phys.usageChain);
+            }
+        }
+    }
 }
 
 void RenderGraph::Execute(VkCommandBuffer cmd)
 {
-    if (debugLogging) {
+    if (bDebugLogging) {
         SPDLOG_INFO("=== RenderGraph Execution ===");
     }
 
     for (auto& pass : passes) {
-        if (debugLogging) {
+        if (bDebugLogging) {
             SPDLOG_INFO("[PASS] {}", pass->renderPassName);
         }
         std::vector<VkImageMemoryBarrier2> barriers;
@@ -611,7 +624,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
         }
 
         if (!barriers.empty() || !bufferBarriers.empty()) {
-            if (debugLogging) {
+            if (bDebugLogging) {
                 if (!barriers.empty() && !bufferBarriers.empty()) {
                     SPDLOG_INFO("  Inserting {} image, {} buffer barrier(s)", barriers.size(), bufferBarriers.size());
                 }
@@ -753,7 +766,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
     }
 
     // Final barriers for imported resources
-    if (debugLogging) {
+    if (bDebugLogging) {
         SPDLOG_INFO("[FINAL BARRIERS]");
     }
     std::vector<VkImageMemoryBarrier2> finalBarriers;
@@ -873,7 +886,8 @@ void RenderGraph::Reset(uint64_t currentFrame, uint64_t maxFramesUnused)
 
         PhysicalResource& phys = physicalResources[physicalIndex];
         phys.logicalResourceIndices.push_back(newTex->index);
-        phys.lastLogicalResourceUse = newTex->name;
+        phys.usageChain.clear();
+        AppendUsageChain(phys, newTex->name, newTex->bCanUseAliasedTexture, bDebugLogging);
         phys.bCanAlias = false;
     }
     textureCarryovers.clear();
@@ -899,7 +913,8 @@ void RenderGraph::Reset(uint64_t currentFrame, uint64_t maxFramesUnused)
 
         PhysicalResource& phys = physicalResources[physicalIndex];
         phys.logicalResourceIndices.push_back(newBuf->index);
-        phys.lastLogicalResourceUse = newBuf->name;
+        phys.usageChain.clear();
+        AppendUsageChain(phys, newBuf->name, newBuf->bCanUseAliasedBuffer, bDebugLogging);
         phys.bCanAlias = false;
     }
     bufferCarryovers.clear();
@@ -1006,8 +1021,7 @@ void RenderGraph::ImportTexture(const std::string& name,
 
     phys.aspect = VkHelpers::GetImageAspect(info.format);
     phys.dimensions.name = name;
-    phys.lastLogicalResourceUse = name;
-
+    phys.usageChain.clear();
     tex->finalLayout = finalLayout;
 }
 
@@ -1049,7 +1063,7 @@ void RenderGraph::ImportBufferNoBarrier(const std::string& name, VkBuffer buffer
 
     auto& phys = physicalResources[buf->physicalIndex];
     phys.dimensions.name = name;
-    phys.lastLogicalResourceUse = name;
+    phys.usageChain.clear();
     phys.bDisableBarriers = true;
 }
 
@@ -1093,7 +1107,7 @@ void RenderGraph::ImportBuffer(const std::string& name, VkBuffer buffer, VkDevic
     phys.event.stages = initialState.stages;
     phys.event.access = initialState.access;
     phys.dimensions.name = name;
-    phys.lastLogicalResourceUse = name;
+    phys.usageChain.clear();
     phys.bDisableBarriers = false;
 }
 
@@ -1262,7 +1276,7 @@ void RenderGraph::CarryBufferToNextFrame(const std::string& name, const std::str
 
 void RenderGraph::LogImageBarrier(const VkImageMemoryBarrier2& barrier, const std::string& resourceName, uint32_t physicalIndex) const
 {
-    if (!debugLogging) return;
+    if (!bDebugLogging) return;
 
     auto LayoutToString = [](VkImageLayout layout) -> const char* {
         switch (layout) {
@@ -1287,7 +1301,7 @@ void RenderGraph::LogImageBarrier(const VkImageMemoryBarrier2& barrier, const st
 
 void RenderGraph::LogBufferBarrier(const std::string& resourceName, VkAccessFlags2 access) const
 {
-    if (!debugLogging) return;
+    if (!bDebugLogging) return;
 
     const char* accessType = "read";
     if (access & (VK_ACCESS_2_SHADER_WRITE_BIT | VK_ACCESS_2_TRANSFER_WRITE_BIT)) {

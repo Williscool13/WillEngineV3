@@ -302,30 +302,31 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
             debugIndex = 1;
         }
         const char* debugTargetName = debugTargets[debugIndex];
+        if (renderGraph->HasTexture(debugTargetName)) {
+            auto& debugVisPass = renderGraph->AddPass("DebugVisualize", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+            debugVisPass.ReadSampledImage(debugTargetName);
+            debugVisPass.WriteStorageImage("deferredResolve");
+            debugVisPass.Execute([&, debugTargetName, debugIndex](VkCommandBuffer cmd) {
+                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, debugVisualizePipeline.pipeline.handle);
 
-        auto& debugVisPass = renderGraph->AddPass("DebugVisualize", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-        debugVisPass.ReadSampledImage(debugTargetName);
-        debugVisPass.WriteStorageImage("deferredResolve");
-        debugVisPass.Execute([&, debugTargetName, debugIndex](VkCommandBuffer cmd) {
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, debugVisualizePipeline.pipeline.handle);
+                const ResourceDimensions& dims = renderGraph->GetImageDimensions(debugTargetName);
+                DebugVisualizePushConstant pushData{
+                    .srcExtent = {dims.width, dims.height},
+                    .dstExtent = {renderExtent[0], renderExtent[1]},
+                    .nearPlane = viewFamily.mainView.currentViewData.nearPlane,
+                    .farPlane = viewFamily.mainView.currentViewData.farPlane,
+                    .textureIndex = renderGraph->GetSampledImageViewDescriptorIndex(debugTargetName),
+                    .outputImageIndex = renderGraph->GetStorageImageViewDescriptorIndex("deferredResolve"),
+                    .debugType = debugIndex
+                };
 
-            const ResourceDimensions& dims = renderGraph->GetImageDimensions(debugTargetName);
-            DebugVisualizePushConstant pushData{
-                .srcExtent = {dims.width, dims.height},
-                .dstExtent = {renderExtent[0], renderExtent[1]},
-                .nearPlane = viewFamily.mainView.currentViewData.nearPlane,
-                .farPlane = viewFamily.mainView.currentViewData.farPlane,
-                .textureIndex = renderGraph->GetSampledImageViewDescriptorIndex(debugTargetName),
-                .outputImageIndex = renderGraph->GetStorageImageViewDescriptorIndex("deferredResolve"),
-                .debugType = debugIndex
-            };
+                vkCmdPushConstants(cmd, debugVisualizePipeline.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(DebugVisualizePushConstant), &pushData);
 
-            vkCmdPushConstants(cmd, debugVisualizePipeline.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(DebugVisualizePushConstant), &pushData);
-
-            uint32_t xDispatch = (renderExtent[0] + 15) / 16;
-            uint32_t yDispatch = (renderExtent[1] + 15) / 16;
-            vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
-        });
+                uint32_t xDispatch = (renderExtent[0] + 15) / 16;
+                uint32_t yDispatch = (renderExtent[1] + 15) / 16;
+                vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
+            });
+        }
     }
 
 

@@ -65,7 +65,7 @@ struct ResourceDimensions
 
 struct PhysicalResource
 {
-    std::string lastLogicalResourceUse{};
+    std::string usageChain{};
 
     ResourceDimensions dimensions;
     PipelineEvent event;

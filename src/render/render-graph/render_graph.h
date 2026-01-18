@@ -66,7 +66,7 @@ public:
 
     void Reset(uint64_t currentFrame, uint64_t maxFramesUnused);
 
-    void SetDebugLogging(bool enable) { debugLogging = enable; }
+    void SetDebugLogging(bool enable) { bDebugLogging = enable; }
 
     void InvalidateAll();
 
@@ -134,7 +134,7 @@ private:
     std::vector<TextureFrameCarryover> textureCarryovers;
     std::vector<BufferFrameCarryover> bufferCarryovers;
 
-    bool debugLogging = false;
+    bool bDebugLogging = false;
 
 private:
     TextureResource* GetTexture(const std::string& name);
@@ -154,6 +154,17 @@ private:
     void LogImageBarrier(const VkImageMemoryBarrier2& barrier, const std::string& resourceName, uint32_t physicalIndex) const;
 
     void LogBufferBarrier(const std::string& resourceName, VkAccessFlags2 access) const;
+
+    static void AppendUsageChain(PhysicalResource& phys, const std::string& logicalName, bool canAlias, bool debugLogging)
+    {
+        if (!debugLogging) return;
+
+        if (phys.usageChain.empty()) {
+            phys.usageChain = canAlias ? logicalName : "[noalias]" + logicalName;
+        } else {
+            phys.usageChain += "->" + logicalName;
+        }
+    }
 };
 } // Render
 

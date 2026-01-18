@@ -14,8 +14,6 @@
 #include "asset_load_types.h"
 #include "TaskScheduler.h"
 #include "render/resource_manager.h"
-#include "render/texture_asset.h"
-#include "render/model/will_model_asset.h"
 
 template<typename T>
 using LockFreeQueue = LockFreeQueueCpp11<T>;
