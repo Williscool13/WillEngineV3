@@ -10,7 +10,7 @@
 #include <LockFreeQueue/LockFreeQueueCpp11.h>
 
 #include "asset_load_config.h"
-#include "asset_load_job.h"
+#include "asset-load-jobs/asset_load_job.h"
 #include "asset_load_types.h"
 #include "TaskScheduler.h"
 #include "render/resource_manager.h"
@@ -26,6 +26,7 @@ struct VulkanContext;
 
 namespace AssetLoad
 {
+class PipelineLoadJob;
 class TextureLoadJob;
 class WillModelLoadJob;
 class AssetLoadJob;
@@ -76,6 +77,10 @@ public:
 
     bool ResolveTextureUnload(TextureComplete& textureComplete);
 
+    void RequestPipelineLoad(const std::string& name, Render::PipelineEntry* entry);
+
+    bool ResolvePipelineLoads(PipelineComplete& pipelineComplete);
+
     Render::Sampler CreateSampler(const VkSamplerCreateInfo& samplerCreateInfo) const;
 
 private: // Threading
@@ -100,6 +105,8 @@ private: // Threading
     LockFreeQueue<TextureLoadRequest> textureUnloadQueue{TEXTURE_LOAD_QUEUE_COUNT};
     LockFreeQueue<TextureComplete> textureCompleteUnloadQueue{TEXTURE_LOAD_QUEUE_COUNT};
 
+    LockFreeQueue<PipelineLoadRequest> pipelineLoadQueue{PIPELINE_LOAD_QUEUE_COUNT};
+    LockFreeQueue<PipelineComplete> pipelineCompleteLoadQueue{PIPELINE_LOAD_QUEUE_COUNT};
 
     std::array<AssetLoadSlot, MAX_ASSET_LOAD_JOB_COUNT> assetLoadSlots{};
     std::bitset<MAX_ASSET_LOAD_JOB_COUNT> activeSlotMask{0};
@@ -108,6 +115,8 @@ private: // Threading
     std::bitset<WILL_MODEL_JOB_COUNT> willModelJobActive;
     std::vector<std::unique_ptr<TextureLoadJob>> textureJobs;
     std::bitset<TEXTURE_JOB_COUNT> textureJobActive;
+    std::vector<std::unique_ptr<PipelineLoadJob>> pipelineJobs;
+    std::bitset<PIPELINE_JOB_COUNT> pipelineJobActive;
 
     VkCommandPool commandPool{};
 };

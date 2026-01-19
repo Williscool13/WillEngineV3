@@ -23,6 +23,7 @@
 #include "types/render_types.h"
 #include "render/vulkan/vk_imgui_wrapper.h"
 #include "backends/imgui_impl_vulkan.h"
+#include "pipelines/pipeline_manager.h"
 #include "shadows/shadow_helpers.h"
 
 
@@ -30,8 +31,9 @@ namespace Render
 {
 RenderThread::RenderThread() = default;
 
-RenderThread::RenderThread(Core::FrameSync* engineRenderSynchronization, enki::TaskScheduler* scheduler, SDL_Window* window, uint32_t width, uint32_t height)
-    : window(window), engineRenderSynchronization(engineRenderSynchronization), scheduler(scheduler)
+RenderThread::RenderThread(Core::FrameSync* engineRenderSynchronization, enki::TaskScheduler* scheduler, SDL_Window* window, uint32_t width,
+                           uint32_t height)
+    : window(window), engineRenderSynchronization(engineRenderSynchronization), scheduler(scheduler), assetLoadThread(assetLoadThread)
 {
     context = std::make_unique<VulkanContext>(window);
     swapchain = std::make_unique<Swapchain>(context.get(), width, height);
@@ -76,11 +78,21 @@ RenderThread::RenderThread(Core::FrameSync* engineRenderSynchronization, enki::T
         frameResources[i].lightBuffer = std::move(AllocatedBuffer::CreateAllocatedBuffer(context.get(), bufferInfo, vmaAllocInfo));
         frameResources[i].lightBuffer.SetDebugName(("lightBuffer_" + std::to_string(i)).c_str());
     }
-
-    CreatePipelines();
 }
 
 RenderThread::~RenderThread() = default;
+
+void RenderThread::InitializePipelineManager(AssetLoad::AssetLoadThread* _assetLoadThread)
+{
+    std::array layouts{
+        resourceManager->bindlessSamplerTextureDescriptorBuffer.descriptorSetLayout.handle,
+        resourceManager->bindlessRDGTransientDescriptorBuffer.descriptorSetLayout.handle
+    };
+    pipelineManager = std::make_unique<PipelineManager>(context.get(), _assetLoadThread, layouts);
+    assetLoadThread = _assetLoadThread;
+
+    CreatePipelines();
+}
 
 void RenderThread::Start()
 {
@@ -113,6 +125,7 @@ void RenderThread::ThreadMain()
     tracy::SetThreadName("RenderThread");
 
     while (!bShouldExit.load()) {
+        pipelineManager->Update(frameNumber);
         // Wait for frame
         {
             ZoneScopedN("WaitForFrame");
@@ -618,6 +631,8 @@ void RenderThread::CreatePipelines()
         pushConstant.size = sizeof(ColorGradingPushConstant);
         colorGradingPipeline = ComputePipeline(context.get(), piplineLayoutCreateInfo, Platform::GetShaderPath() / "colorGrading_compute.spv");
     }
+
+    pipelineManager->RegisterComputePipeline("taa_resolve", Platform::GetShaderPath() / "temporalAntialiasing_compute.spv", sizeof(TemporalAntialiasingPushConstant));
 }
 
 void RenderThread::SetupFrameUniforms(VkCommandBuffer cmd, const Core::ViewFamily& viewFamily, FrameResources& frameResource, const std::array<uint32_t, 2> renderExtent) const
@@ -1292,7 +1307,19 @@ void RenderThread::SetupTemporalAntialiasing(RenderGraph& graph, const Core::Vie
         taaPass.ReadSampledImage("velocityHistory");
         taaPass.WriteStorageImage("taaCurrent");
         taaPass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, temporalAntialiasingPipeline.pipeline.handle);
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("taa_resolve");
+            VkPipeline tPipeline;
+            VkPipelineLayout tPipelineLayout;
+            if (!pipelineEntry || pipelineEntry->pipeline == VK_NULL_HANDLE || pipelineEntry->layout == VK_NULL_HANDLE) {
+                tPipeline = temporalAntialiasingPipeline.pipeline.handle;
+                tPipelineLayout = temporalAntialiasingPipeline.pipelineLayout.handle;
+            }
+            else {
+                tPipeline = pipelineEntry->pipeline;
+                tPipelineLayout = pipelineEntry->layout;
+            }
+
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, tPipeline);
             TemporalAntialiasingPushConstant pushData{
                 .sceneData = graph.GetBufferAddress("sceneData"),
                 .colorResolvedIndex = graph.GetSampledImageViewDescriptorIndex("deferredResolve"),
@@ -1303,7 +1330,7 @@ void RenderThread::SetupTemporalAntialiasing(RenderGraph& graph, const Core::Vie
                 .outputImageIndex = graph.GetStorageImageViewDescriptorIndex("taaCurrent"),
             };
 
-            vkCmdPushConstants(cmd, temporalAntialiasingPipeline.pipelineLayout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(TemporalAntialiasingPushConstant), &pushData);
+            vkCmdPushConstants(cmd, tPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(TemporalAntialiasingPushConstant), &pushData);
 
             uint32_t xDispatch = (width + 15) / 16;
             uint32_t yDispatch = (height + 15) / 16;

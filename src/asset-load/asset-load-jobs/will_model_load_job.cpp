@@ -4,7 +4,7 @@
 
 #include "will_model_load_job.h"
 
-#include "asset_load_config.h"
+#include "asset-load/asset_load_config.h"
 #include "ktxvulkan.h"
 #include "render/model/model_serialization.h"
 #include "render/model/will_model_asset.h"

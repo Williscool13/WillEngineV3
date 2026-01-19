@@ -7,7 +7,7 @@
 #include <span>
 
 #include "asset_load_job.h"
-#include "asset_load_types.h"
+#include "asset-load/asset_load_types.h"
 #include "ktx.h"
 #include "engine/asset_manager_types.h"
 

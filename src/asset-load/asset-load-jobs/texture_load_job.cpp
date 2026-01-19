@@ -4,8 +4,8 @@
 
 #include "texture_load_job.h"
 
-#include "asset_load_config.h"
-#include "asset_load_types.h"
+#include "asset-load/asset_load_config.h"
+#include "asset-load/asset_load_types.h"
 #include "ktxvulkan.h"
 #include "render/texture_asset.h"
 #include "tracy/Tracy.hpp"

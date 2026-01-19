@@ -142,6 +142,13 @@ void WillEngine::Initialize()
 
     //
     {
+        ZoneScopedN("InitializePipelineManager");
+        renderThread->InitializePipelineManager(assetLoadThread.get());
+    }
+
+
+    //
+    {
         ZoneScopedN("CreateAssetManager");
         assetManager = std::make_unique<AssetManager>(assetLoadThread.get(), renderThread->GetResourceManager());
     }

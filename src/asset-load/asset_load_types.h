@@ -7,7 +7,6 @@
 
 #include <vector>
 
-#include "offsetAllocator.hpp"
 #include "render/model/model_types.h"
 #include "render/shaders/model_interop.h"
 #include "render/vulkan/vk_resources.h"
@@ -19,6 +18,7 @@
 
 namespace Render
 {
+struct PipelineEntry;
 struct WillModel;
 struct VulkanContext;
 }
@@ -129,6 +129,19 @@ struct TextureComplete
 {
     Engine::TextureHandle textureHandle;
     Render::Texture* texture;
+    bool success;
+};
+
+struct PipelineLoadRequest
+{
+    std::string name;
+    Render::PipelineEntry* entry;
+};
+
+struct PipelineComplete
+{
+    std::string name;
+    Render::PipelineEntry* entry;
     bool success;
 };
 } // AssetLoad

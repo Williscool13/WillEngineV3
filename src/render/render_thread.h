@@ -17,8 +17,14 @@
 #include "pipelines/shadow_mesh_shading_instanced_pipeline.h"
 #include "shaders/common_interop.h"
 
+namespace AssetLoad
+{
+class AssetLoadThread;
+}
+
 namespace Render
 {
+class PipelineManager;
 class RenderGraph;
 }
 
@@ -70,6 +76,8 @@ public:
 
     ~RenderThread();
 
+    void InitializePipelineManager(AssetLoad::AssetLoadThread* assetLoadThread);
+
     void Start();
 
     void RequestShutdown();
@@ -110,6 +118,7 @@ private:
     SDL_Window* window{};
     Core::FrameSync* engineRenderSynchronization{};
     enki::TaskScheduler* scheduler{};
+    AssetLoad::AssetLoadThread* assetLoadThread{};
 
     // Threading
     std::atomic<bool> bShouldExit{false};
@@ -122,6 +131,7 @@ private:
     std::unique_ptr<ResourceManager> resourceManager{};
     std::unique_ptr<RenderExtents> renderExtents{};
     std::unique_ptr<RenderGraph> renderGraph{};
+    std::unique_ptr<PipelineManager> pipelineManager{};
 
     std::array<RenderSynchronization, Core::FRAME_BUFFER_COUNT> frameSynchronization;
     std::array<FrameResources, Core::FRAME_BUFFER_COUNT> frameResources;

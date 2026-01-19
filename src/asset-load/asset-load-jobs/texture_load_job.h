@@ -13,7 +13,7 @@
 
 namespace Render
 {
-class Texture;
+struct Texture;
 struct ResourceManager;
 struct VulkanContext;
 }
@@ -63,7 +63,7 @@ private:
 
     // Task
     TaskState taskState{TaskState::NotStarted};
-    VkCommandBuffer commandBuffer;
+    VkCommandBuffer commandBuffer{VK_NULL_HANDLE};
     std::unique_ptr<LoadTextureTask> task;
     ktxTexture2* texture{nullptr};
 

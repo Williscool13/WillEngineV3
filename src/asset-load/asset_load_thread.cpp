@@ -7,9 +7,9 @@
 #include <enkiTS/src/TaskScheduler.h>
 #include <spdlog/spdlog.h>
 
-#include "asset_load_job.h"
-#include "texture_load_job.h"
-#include "will_model_load_job.h"
+#include "asset-load-jobs/pipeline_load_job.h"
+#include "asset-load-jobs/texture_load_job.h"
+#include "asset-load-jobs/will_model_load_job.h"
 #include "platform/paths.h"
 #include "platform/thread_utils.h"
 #include "render/texture_asset.h"
@@ -28,7 +28,7 @@ AssetLoadThread::AssetLoadThread(enki::TaskScheduler* scheduler, Render::VulkanC
     VkCommandPoolCreateInfo poolInfo = Render::VkHelpers::CommandPoolCreateInfo(context->transferQueueFamily);
     VK_CHECK(vkCreateCommandPool(context->device, &poolInfo, nullptr, &commandPool));
 
-    const uint32_t totalCommandBuffers = WILL_MODEL_JOB_COUNT + TEXTURE_JOB_COUNT + 1;
+    constexpr uint32_t totalCommandBuffers = WILL_MODEL_JOB_COUNT + TEXTURE_JOB_COUNT + 1;
     VkCommandBufferAllocateInfo cmdInfo = Render::VkHelpers::CommandBufferAllocateInfo(totalCommandBuffers, commandPool);
     std::vector<VkCommandBuffer> commandBuffers(totalCommandBuffers);
     VK_CHECK(vkAllocateCommandBuffers(context->device, &cmdInfo, commandBuffers.data()));
@@ -42,6 +42,11 @@ AssetLoadThread::AssetLoadThread(enki::TaskScheduler* scheduler, Render::VulkanC
     textureJobs.reserve(TEXTURE_JOB_COUNT);
     for (int32_t i = 0; i < TEXTURE_JOB_COUNT; ++i) {
         textureJobs.emplace_back(std::make_unique<TextureLoadJob>(context, resourceManager, commandBuffers[WILL_MODEL_JOB_COUNT + i]));
+    }
+
+    pipelineJobs.reserve(PIPELINE_JOB_COUNT);
+    for (int32_t i = 0; i < PIPELINE_JOB_COUNT; ++i) {
+        pipelineJobs.emplace_back(std::make_unique<PipelineLoadJob>(context, resourceManager));
     }
 }
 
@@ -115,6 +120,16 @@ void AssetLoadThread::RequestTextureUnload(Engine::TextureHandle textureHandle, 
 bool AssetLoadThread::ResolveTextureUnload(TextureComplete& textureComplete)
 {
     return textureCompleteUnloadQueue.pop(textureComplete);
+}
+
+void AssetLoadThread::RequestPipelineLoad(const std::string& name, Render::PipelineEntry* entry)
+{
+    pipelineLoadQueue.push({name, entry});
+}
+
+bool AssetLoadThread::ResolvePipelineLoads(PipelineComplete& pipelineComplete)
+{
+    return pipelineCompleteLoadQueue.pop(pipelineComplete);
 }
 
 Render::Sampler AssetLoadThread::CreateSampler(const VkSamplerCreateInfo& samplerCreateInfo) const
@@ -232,6 +247,53 @@ void AssetLoadThread::ThreadMain()
             }
         }
 
+        // Pipeline loading jobs
+        {
+            ZoneScopedN("PipelineJobDispatch");
+            size_t freePipelineJobCount = 0;
+            for (size_t i = 0; i < pipelineJobActive.size(); ++i) {
+                if (!pipelineJobActive[i]) {
+                    freePipelineJobCount++;
+                }
+            }
+
+            for (size_t jobsStarted = 0; jobsStarted < freePipelineJobCount; ++jobsStarted) {
+                PipelineLoadRequest loadRequest{};
+                if (!pipelineLoadQueue.pop(loadRequest)) {
+                    break;
+                }
+                didWork = true;
+
+                int32_t slotIdx = -1;
+                for (size_t i = 0; i < 64; ++i) {
+                    if (!(activeSlotMask[i])) {
+                        slotIdx = i;
+                        break;
+                    }
+                }
+
+                int32_t freeJobIdx = -1;
+                for (size_t i = 0; i < pipelineJobActive.size(); ++i) {
+                    if (!pipelineJobActive[i]) {
+                        freeJobIdx = i;
+                        break;
+                    }
+                }
+
+                PipelineLoadJob* job = pipelineJobs[freeJobIdx].get();
+                job->outputEntry = loadRequest.entry;
+                pipelineJobActive[freeJobIdx] = true;
+
+                assetLoadSlots[slotIdx].name = loadRequest.name;
+                assetLoadSlots[slotIdx].job = job;
+                assetLoadSlots[slotIdx].loadState = AssetLoadState::Idle;
+                assetLoadSlots[slotIdx].type = AssetType::Pipeline;
+                assetLoadSlots[slotIdx].startTime = std::chrono::steady_clock::now();
+                assetLoadSlots[slotIdx].uploadCount = 0;
+                activeSlotMask[slotIdx] = true;
+            }
+        }
+
         // Active Slot Processing
         {
             ZoneScopedN("ProcessSlots");
@@ -246,13 +308,9 @@ void AssetLoadThread::ThreadMain()
 
                 switch (slot.loadState) {
                     case AssetLoadState::Idle:
-                    {
                         job->StartJob();
-                        job->TaskExecute(scheduler);
                         slot.loadState = AssetLoadState::TaskExecuting;
-                    }
-                    break;
-
+                        // Fallthrough
                     case AssetLoadState::TaskExecuting:
                     {
                         TaskState res = job->TaskExecute(scheduler);
@@ -302,7 +360,7 @@ void AssetLoadThread::ThreadMain()
                     switch (slot.type) {
                         case AssetType::WillModel:
                         {
-                            auto* modelJob = static_cast<WillModelLoadJob*>(job);
+                            auto* modelJob = dynamic_cast<WillModelLoadJob*>(job);
                             modelCompleteLoadQueue.push({modelJob->willModelHandle, modelJob->outputModel, success});
 
                             for (size_t i = 0; i < willModelJobs.size(); ++i) {
@@ -314,14 +372,15 @@ void AssetLoadThread::ThreadMain()
                             }
                             if (success) {
                                 SPDLOG_INFO("'{}' willmodel loaded in {}ms with {} uploads", slot.name, durationMs, slot.uploadCount);
-                            } else {
+                            }
+                            else {
                                 SPDLOG_INFO("'{}' willmodel failed to load in {}ms with {} uploads", slot.name, durationMs, slot.uploadCount);
                             }
                             break;
                         }
                         case AssetType::Texture:
                         {
-                            auto* textureJob = static_cast<TextureLoadJob*>(job);
+                            auto* textureJob = dynamic_cast<TextureLoadJob*>(job);
                             textureCompleteLoadQueue.push({textureJob->textureHandle, textureJob->outputTexture, success});
 
                             for (size_t i = 0; i < textureJobs.size(); ++i) {
@@ -333,8 +392,29 @@ void AssetLoadThread::ThreadMain()
                             }
                             if (success) {
                                 SPDLOG_INFO("'{}' texture loaded in {}ms with {} uploads", slot.name, durationMs, slot.uploadCount);
-                            } else {
+                            }
+                            else {
                                 SPDLOG_INFO("'{}' texture failed to load in {}ms with {} uploads", slot.name, durationMs, slot.uploadCount);
+                            }
+                            break;
+                        }
+                        case AssetType::Pipeline:
+                        {
+                            auto* pipelineJob = dynamic_cast<PipelineLoadJob*>(job);
+                            pipelineCompleteLoadQueue.push({slot.name, pipelineJob->outputEntry, success});
+
+                            for (size_t i = 0; i < pipelineJobs.size(); ++i) {
+                                if (pipelineJobs[i].get() == job) {
+                                    job->Reset();
+                                    pipelineJobActive[i] = false;
+                                    break;
+                                }
+                            }
+                            if (success) {
+                                SPDLOG_INFO("'{}' pipeline loaded in {}ms", slot.name, durationMs);
+                            }
+                            else {
+                                SPDLOG_INFO("'{}' pipeline failed to load in {}ms", slot.name, durationMs);
                             }
                             break;
                         }

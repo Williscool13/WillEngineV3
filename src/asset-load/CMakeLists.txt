@@ -4,12 +4,14 @@ add_library(asset-load STATIC
         asset_load_types.cpp
         asset_load_types.h
         asset_load_config.h
-        asset_load_job.cpp
-        asset_load_job.h
-        will_model_load_job.cpp
-        will_model_load_job.h
-        texture_load_job.cpp
-        texture_load_job.h
+        asset-load-jobs/asset_load_job.cpp
+        asset-load-jobs/asset_load_job.h
+        asset-load-jobs/will_model_load_job.cpp
+        asset-load-jobs/will_model_load_job.h
+        asset-load-jobs/texture_load_job.cpp
+        asset-load-jobs/texture_load_job.h
+        asset-load-jobs/pipeline_load_job.cpp
+        asset-load-jobs/pipeline_load_job.h
 )
 
 target_include_directories(asset-load PUBLIC
