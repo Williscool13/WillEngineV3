@@ -274,6 +274,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         bFrozenVisibility = false;
     }
     SetupMainGeometryPass(*renderGraph, viewFamily);
+    renderGraph->CarryTextureToNextFrame("velocityTarget", "velocityHistory", 0);
 
     if (viewFamily.gtaoConfig.bEnabled) {
         SetupGroundTruthAmbientOcclusion(*renderGraph, viewFamily, renderExtent);
@@ -294,7 +295,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
             "albedoTarget", // 2
             "normalTarget", // 3
             "pbrTarget", // 4
-            "gtaoFiltered", // 5
+            "velocityTarget", // 5
             "gtaoDepth", // 6
             "gtaoDepth", // 7
             "gtaoDepth", // 8
@@ -1254,7 +1255,7 @@ void RenderThread::SetupTemporalAntialiasing(RenderGraph& graph, const Core::Vie
 {
     graph.CreateTexture("taaCurrent", TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
 
-    if (!graph.HasTexture("taaHistory") || !viewFamily.postProcessConfig.bEnableTemporalAntialiasing) {
+    if (!graph.HasTexture("taaHistory") || !graph.HasTexture("velocityHistory") || !viewFamily.postProcessConfig.bEnableTemporalAntialiasing) {
         RenderPass& taaPass = graph.AddPass("TemporalAntialiasingFirstFrame", VK_PIPELINE_STAGE_2_COPY_BIT);
         taaPass.ReadCopyImage("deferredResolve");
         taaPass.WriteCopyImage("taaCurrent");
@@ -1288,6 +1289,7 @@ void RenderThread::SetupTemporalAntialiasing(RenderGraph& graph, const Core::Vie
         taaPass.ReadSampledImage("depthTarget");
         taaPass.ReadSampledImage("taaHistory");
         taaPass.ReadSampledImage("velocityTarget");
+        taaPass.ReadSampledImage("velocityHistory");
         taaPass.WriteStorageImage("taaCurrent");
         taaPass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, temporalAntialiasingPipeline.pipeline.handle);
@@ -1297,6 +1299,7 @@ void RenderThread::SetupTemporalAntialiasing(RenderGraph& graph, const Core::Vie
                 .depthIndex = graph.GetSampledImageViewDescriptorIndex("depthTarget"),
                 .colorHistoryIndex = graph.GetSampledImageViewDescriptorIndex("taaHistory"),
                 .velocityIndex = graph.GetSampledImageViewDescriptorIndex("velocityTarget"),
+                .velocityHistoryIndex = graph.GetSampledImageViewDescriptorIndex("velocityHistory"),
                 .outputImageIndex = graph.GetStorageImageViewDescriptorIndex("taaCurrent"),
             };
 
@@ -1461,7 +1464,7 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
         }
 
         // Upsample chain
-        for (int i = numDownsamples - 1; i >= 0; --i) {
+        for (int32_t i = static_cast<int32_t>(numDownsamples) - 1; i >= 0; --i) {
             uint32_t mipWidth = std::max(1u, renderExtent[0] >> i);
             uint32_t mipHeight = std::max(1u, renderExtent[1] >> i);
 
