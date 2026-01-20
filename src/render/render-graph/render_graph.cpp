@@ -953,6 +953,13 @@ void RenderGraph::CreateTexture(const std::string& name, const TextureInfo& texI
     resource->textureInfo = texInfo;
 }
 
+void RenderGraph::AliasTexture(const std::string& aliasName, const std::string& existingName)
+{
+    auto it = textureNameToIndex.find(existingName);
+    assert(it != textureNameToIndex.end() && "Aliasing texture failed because existing texture doesn't exist");
+    textureNameToIndex[aliasName] = it->second;
+}
+
 void RenderGraph::CreateBuffer(const std::string& name, VkDeviceSize size)
 {
     BufferResource* buf = GetOrCreateBuffer(name);
@@ -1248,6 +1255,9 @@ void RenderGraph::CarryTextureToNextFrame(const std::string& name, const std::st
     for (const auto& c : textureCarryovers) {
         assert(c.srcName != name && "Source texture already designated for carryover");
         assert(c.dstName != newName && "Destination texture name already used in another carryover");
+        if (const TextureResource* otherTex = GetTexture(c.srcName)) {
+            assert(otherTex->index != tex->index && "Cannot carry over texture already marked to be carried over");
+        }
     }
 
     textureCarryovers.emplace_back(name, newName);

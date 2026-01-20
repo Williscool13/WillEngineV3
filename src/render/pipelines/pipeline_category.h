@@ -13,7 +13,7 @@ enum class PipelineCategory : uint32_t
     None                 = 0,
     Instancing           = 1 << 0,
     Geometry             = 1 << 1,
-    ShadowRendering      = 1 << 2,
+    Shadow               = 1 << 2,
     GTAO                 = 1 << 3,
     TAA                  = 1 << 4,
     Exposure             = 1 << 5,
@@ -27,7 +27,7 @@ enum class PipelineCategory : uint32_t
     Debug                = 1 << 13,
 
     MainGeometry= Instancing | Geometry,
-    ShadowPass  = Instancing | ShadowRendering,
+    ShadowPass  = Instancing | Shadow,
     PostProcess = TAA | Exposure | Bloom | MotionBlur | Tonemap | ColorGrade | Vignette | FilmGrain | Sharpening | GTAO,
     All         = ~0U,
 };

@@ -105,7 +105,7 @@ private:
 
     void SetupMainGeometryPass(RenderGraph& graph, const Core::ViewFamily& viewFamily) const;
 
-    void SetupDeferredLighting(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, bool bEnableShadows) const;
+    void SetupDeferredLighting(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent) const;
 
     void SetupGroundTruthAmbientOcclusion(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent) const;
 

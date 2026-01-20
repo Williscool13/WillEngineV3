@@ -72,6 +72,8 @@ public:
 
     void CreateTexture(const std::string& name, const TextureInfo& texInfo);
 
+    void AliasTexture(const std::string& aliasName, const std::string& existingName);
+
     void CreateBuffer(const std::string& name, VkDeviceSize size);
 
     void ImportTexture(const std::string& name, VkImage image, VkImageView view, const TextureInfo& info, VkImageUsageFlags usage, VkImageLayout initialLayout, VkPipelineStageFlags2 initialStage,
@@ -80,7 +82,6 @@ public:
     void ImportBufferNoBarrier(const std::string& name, VkBuffer buffer, VkDeviceAddress address, const BufferInfo& info);
 
     void ImportBuffer(const std::string& name, VkBuffer buffer, VkDeviceAddress address, const BufferInfo& info, PipelineEvent initialState);
-
 
     bool HasTexture(const std::string& name);
 
