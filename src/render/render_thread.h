@@ -147,35 +147,8 @@ private:
 
 private:
     PipelineLayout globalPipelineLayout;
-    ComputePipeline debugVisualizePipeline;
-
-    ComputePipeline instancingVisibilityPipeline;
-    ComputePipeline instancingShadowsVisibilityPipeline;
-    ComputePipeline instancingPrefixSumPipeline;
-    ComputePipeline instancingIndirectConstructionPipeline;
-
     MeshShadingInstancedPipeline meshShadingInstancedPipeline;
     ShadowMeshShadingInstancedPipeline shadowMeshShadingInstancedPipeline;
-    ComputePipeline deferredResolvePipeline;
-    ComputePipeline temporalAntialiasingPipeline;
-
-    ComputePipeline gtaoDepthPrepassPipeline;
-    ComputePipeline gtaoMainPipeline;
-    ComputePipeline gtaoDenoisePipeline;
-
-    ComputePipeline exposureBuildHistogramPipeline;
-    ComputePipeline exposureCalculateAveragePipeline;
-    ComputePipeline tonemapSDRPipeline;
-    ComputePipeline bloomThresholdPipeline;
-    ComputePipeline bloomDownsamplePipeline;
-    ComputePipeline bloomUpsamplePipeline;
-    ComputePipeline motionBlurTileMaxPipeline;
-    ComputePipeline motionBlurNeighborMaxPipeline;
-    ComputePipeline motionBlurReconstructionPipeline;
-    ComputePipeline vignetteAberrationPipeline;
-    ComputePipeline filmGrainPipeline;
-    ComputePipeline sharpeningPipeline;
-    ComputePipeline colorGradingPipeline;
 };
 } // Render
 

@@ -75,6 +75,8 @@ add_library(render STATIC
         shaders/lights_interop.h
         pipelines/pipeline_manager.cpp
         pipelines/pipeline_manager.h
+        pipelines/pipeline_category.cpp
+        pipelines/pipeline_category.h
 )
 
 target_include_directories(render PRIVATE

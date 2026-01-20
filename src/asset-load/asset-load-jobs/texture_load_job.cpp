@@ -46,45 +46,7 @@ TaskState TextureLoadJob::TaskExecute(enki::TaskScheduler* scheduler)
 
 bool TextureLoadJob::PreThreadExecute()
 {
-    if (!outputTexture || !texture) {
-        return false;
-    }
-
-    VkExtent3D extent{
-        .width = texture->baseWidth,
-        .height = texture->baseHeight,
-        .depth = texture->baseDepth
-    };
-
-    VkFormat imageFormat = ktxTexture2_GetVkFormat(texture);
-    VkImageCreateInfo imageCreateInfo = Render::VkHelpers::ImageCreateInfo(
-        imageFormat,
-        extent,
-        VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT
-    );
-    imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
-    imageCreateInfo.mipLevels = texture->numLevels;
-    imageCreateInfo.arrayLayers = texture->numLayers;
-    imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-
-    outputTexture->image = Render::AllocatedImage::CreateAllocatedImage(context, imageCreateInfo);
-
-    VkImageViewCreateInfo viewInfo = Render::VkHelpers::ImageViewCreateInfo(
-        outputTexture->image.handle,
-        outputTexture->image.format,
-        VK_IMAGE_ASPECT_COLOR_BIT
-    );
-    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    viewInfo.subresourceRange.layerCount = texture->numLayers;
-    viewInfo.subresourceRange.levelCount = texture->numLevels;
-
-    outputTexture->imageView = Render::ImageView::CreateImageView(context, viewInfo);
-
-    // Validate lowest mip level is smaller than staging size
-    size_t mipSize = ktxTexture_GetImageSize(ktxTexture(texture), 0);
-    if (mipSize >= TEXTURE_LOAD_STAGING_SIZE) {
-        return false;
-    }
+    ZoneScopedN("TextureLoadJob::PreThreadExecute");
 
     return true;
 }
@@ -286,6 +248,45 @@ void TextureLoadJob::LoadTextureTask::ExecuteRange(enki::TaskSetPartition range,
         loadJob->taskState = TaskState::Failed;
         return;
     }
+
+    // Validate lowest mip level is smaller than staging size
+    size_t mipSize = ktxTexture_GetImageSize(ktxTexture(_texture), 0);
+    if (mipSize >= TEXTURE_LOAD_STAGING_SIZE) {
+        SPDLOG_ERROR("[TextureLoadJob] Only 2D textures supported: {}", texturePath.string());
+        ktxTexture2_Destroy(_texture);
+        loadJob->taskState = TaskState::Failed;
+        return;
+    }
+
+    VkExtent3D extent{
+        .width = _texture->baseWidth,
+        .height = _texture->baseHeight,
+        .depth = _texture->baseDepth
+    };
+
+    VkFormat imageFormat = ktxTexture2_GetVkFormat(_texture);
+    VkImageCreateInfo imageCreateInfo = Render::VkHelpers::ImageCreateInfo(
+        imageFormat,
+        extent,
+        VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT
+    );
+    imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
+    imageCreateInfo.mipLevels = _texture->numLevels;
+    imageCreateInfo.arrayLayers = _texture->numLayers;
+    imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+    loadJob->outputTexture->image = Render::AllocatedImage::CreateAllocatedImage(loadJob->context, imageCreateInfo);
+
+    VkImageViewCreateInfo viewInfo = Render::VkHelpers::ImageViewCreateInfo(
+        loadJob->outputTexture->image.handle,
+        loadJob->outputTexture->image.format,
+        VK_IMAGE_ASPECT_COLOR_BIT
+    );
+    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    viewInfo.subresourceRange.layerCount = _texture->numLayers;
+    viewInfo.subresourceRange.levelCount = _texture->numLevels;
+
+    loadJob->outputTexture->imageView = Render::ImageView::CreateImageView(loadJob->context, viewInfo);
 
     loadJob->texture = _texture;
     loadJob->taskState = TaskState::Complete;

@@ -230,34 +230,34 @@ add_shader_include("${CMAKE_SOURCE_DIR}/shaders/pbr_functions.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/bindless_declarations.slang")
 
 compile_shaders(will-engine
-        ${CMAKE_SOURCE_DIR}/shaders/debug_visualize.slang compute ComputeMain debugVisualize
-        ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputeVisibility instancingVisibility
-        ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputeVisibilityShadows instancingShadowsVisibility
-        ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputePrefixSum instancingPrefixSum
-        ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputeCompactAndGenerateIndirect instancingCompactAndGenerateIndirect
-        ${CMAKE_SOURCE_DIR}/shaders/mesh_shading_instanced.slang task TaskMain meshShadingInstanced
-        ${CMAKE_SOURCE_DIR}/shaders/mesh_shading_instanced.slang mesh MeshMain meshShadingInstanced
-        ${CMAKE_SOURCE_DIR}/shaders/mesh_shading_instanced.slang fragment FragmentMain meshShadingInstanced
-        ${CMAKE_SOURCE_DIR}/shaders/shadow_mesh_shading_instanced.slang task TaskMain shadowMeshShadingInstanced
-        ${CMAKE_SOURCE_DIR}/shaders/shadow_mesh_shading_instanced.slang mesh MeshMain shadowMeshShadingInstanced
-        ${CMAKE_SOURCE_DIR}/shaders/deferred_resolve.slang compute ComputeMain deferredResolve
-        ${CMAKE_SOURCE_DIR}/shaders/temporal_antialiasing.slang compute ComputeMain temporalAntialiasing
-        ${CMAKE_SOURCE_DIR}/shaders/ground_truth_ambient_occlusion.slang compute ComputeGTAODepthPrepass gtaoDepthPrepass
-        ${CMAKE_SOURCE_DIR}/shaders/ground_truth_ambient_occlusion.slang compute ComputeGTAOMain gtaoMain
-        ${CMAKE_SOURCE_DIR}/shaders/ground_truth_ambient_occlusion.slang compute ComputeGTAODenoise gtaoDenoise
-        ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeSDRTonemap tonemapSDR
-        ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeBuildHistogramExposure exposureBuildHistogram
-        ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeAverageExposure exposureCalculateAverage
-        ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeMotionBlurTileMax motionBlurTileMax
-        ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeMotionBlurNeighborMax motionBlurBlurNeighborMax
-        ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeMotionBlurReconstruction motionBlurReconstruction
-        ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeBloomThreshold bloomThreshold
-        ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeBloomDownsample bloomDownsample
-        ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeBloomUpsample bloomUpsample
-        ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeVignetteAberration vignetteAberration
-        ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeFilmGrain filmGrain
+        ${CMAKE_SOURCE_DIR}/shaders/debug_visualize.slang compute ComputeMain debug_visualize
+        ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputeVisibility instancing_visibility
+        ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputeVisibilityShadows instancing_shadows_visibility
+        ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputePrefixSum instancing_prefix_sum
+        ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputeCompactAndGenerateIndirect instancing_indirect_construction
+        ${CMAKE_SOURCE_DIR}/shaders/mesh_shading_instanced.slang task TaskMain mesh_shading_instanced
+        ${CMAKE_SOURCE_DIR}/shaders/mesh_shading_instanced.slang mesh MeshMain mesh_shading_instanced
+        ${CMAKE_SOURCE_DIR}/shaders/mesh_shading_instanced.slang fragment FragmentMain mesh_shading_instanced
+        ${CMAKE_SOURCE_DIR}/shaders/shadow_mesh_shading_instanced.slang task TaskMain shadow_mesh_shading_instanced
+        ${CMAKE_SOURCE_DIR}/shaders/shadow_mesh_shading_instanced.slang mesh MeshMain shadow_mesh_shading_instanced
+        ${CMAKE_SOURCE_DIR}/shaders/deferred_resolve.slang compute ComputeMain deferred_resolve
+        ${CMAKE_SOURCE_DIR}/shaders/temporal_antialiasing.slang compute ComputeMain temporal_antialiasing
+        ${CMAKE_SOURCE_DIR}/shaders/ground_truth_ambient_occlusion.slang compute ComputeGTAODepthPrepass gtao_depth_prepass
+        ${CMAKE_SOURCE_DIR}/shaders/ground_truth_ambient_occlusion.slang compute ComputeGTAOMain gtao_main
+        ${CMAKE_SOURCE_DIR}/shaders/ground_truth_ambient_occlusion.slang compute ComputeGTAODenoise gtao_denoise
+        ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeSDRTonemap tonemap_sdr
+        ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeBuildHistogramExposure exposure_build_histogram
+        ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeAverageExposure exposure_calculate_average
+        ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeMotionBlurTileMax motion_blur_tile_max
+        ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeMotionBlurNeighborMax motion_blur_neighbor_max
+        ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeMotionBlurReconstruction motion_blur_reconstruction
+        ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeBloomThreshold bloom_threshold
+        ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeBloomDownsample bloom_downsample
+        ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeBloomUpsample bloom_upsample
+        ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeVignetteAberration vignette_aberration
+        ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeFilmGrain film_grain
         ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeSharpening sharpening
-        ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeColorGrading colorGrading
+        ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeColorGrading color_grading
 )
 
 # Post-Build Commands =========================

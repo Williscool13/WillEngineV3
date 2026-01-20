@@ -39,15 +39,15 @@ MeshShadingInstancedPipeline::MeshShadingInstancedPipeline(VulkanContext* contex
     VkShaderModule taskShader;
     VkShaderModule meshShader;
     VkShaderModule fragShader;
-    if (!VkHelpers::LoadShaderModule("shaders\\meshShadingInstanced_task.spv", context->device, &taskShader)) {
+    if (!VkHelpers::LoadShaderModule("shaders\\mesh_shading_instanced_task.spv", context->device, &taskShader)) {
         SPDLOG_ERROR("Failed to load meshShading_task.spv");
         return;
     }
-    if (!VkHelpers::LoadShaderModule("shaders\\meshShadingInstanced_mesh.spv", context->device, &meshShader)) {
+    if (!VkHelpers::LoadShaderModule("shaders\\mesh_shading_instanced_mesh.spv", context->device, &meshShader)) {
         SPDLOG_ERROR("Failed to load meshShading_mesh.spv");
         return;
     }
-    if (!VkHelpers::LoadShaderModule("shaders\\meshShadingInstanced_fragment.spv", context->device, &fragShader)) {
+    if (!VkHelpers::LoadShaderModule("shaders\\mesh_shading_instanced_fragment.spv", context->device, &fragShader)) {
         SPDLOG_ERROR("Failed to load meshShading_fragment.spv");
         return;
     }

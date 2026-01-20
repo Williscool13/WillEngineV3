@@ -36,11 +36,11 @@ ShadowMeshShadingInstancedPipeline::ShadowMeshShadingInstancedPipeline(VulkanCon
 
     VkShaderModule taskShader;
     VkShaderModule meshShader;
-    if (!VkHelpers::LoadShaderModule("shaders\\shadowMeshShadingInstanced_task.spv", context->device, &taskShader)) {
+    if (!VkHelpers::LoadShaderModule("shaders\\shadow_mesh_shading_instanced_task.spv", context->device, &taskShader)) {
         SPDLOG_ERROR("Failed to load meshShading_task.spv");
         return;
     }
-    if (!VkHelpers::LoadShaderModule("shaders\\shadowMeshShadingInstanced_mesh.spv", context->device, &meshShader)) {
+    if (!VkHelpers::LoadShaderModule("shaders\\shadow_mesh_shading_instanced_mesh.spv", context->device, &meshShader)) {
         SPDLOG_ERROR("Failed to load meshShading_mesh.spv");
         return;
     }

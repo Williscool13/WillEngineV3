@@ -36,6 +36,20 @@ public:
     Render::PipelineEntry* outputEntry{nullptr};
 
 private:
+    struct LoadPipelineTask : enki::ITaskSet
+    {
+        PipelineLoadJob* loadJob{nullptr};
+
+        explicit LoadPipelineTask() : ITaskSet(1) {}
+
+        void ExecuteRange(enki::TaskSetPartition range, uint32_t threadnum) override;
+    };
+
+    // Task
+    TaskState taskState{TaskState::NotStarted};
+    std::unique_ptr<LoadPipelineTask> task;
+
+
     Render::VulkanContext* context;
     Render::ResourceManager* resourceManager;
 };

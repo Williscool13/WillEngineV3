@@ -301,6 +301,8 @@ void AssetLoadThread::ThreadMain()
                 if (!activeSlotMask[slotIdx]) {
                     continue;
                 }
+                ZoneScopedN("ProcessSlot");
+                TracyMessageL(std::to_string(slotIdx).c_str());
                 didWork = true;
 
                 AssetLoadSlot& slot = assetLoadSlots[slotIdx];
@@ -308,21 +310,23 @@ void AssetLoadThread::ThreadMain()
 
                 switch (slot.loadState) {
                     case AssetLoadState::Idle:
+                    {
+                        ZoneScopedN("StartJob");
                         job->StartJob();
                         slot.loadState = AssetLoadState::TaskExecuting;
-                        // Fallthrough
+                    }
+                    // Fallthrough
                     case AssetLoadState::TaskExecuting:
                     {
+                        ZoneScopedN("TaskExecute");
                         TaskState res = job->TaskExecute(scheduler);
                         if (res == TaskState::Failed) {
                             slot.loadState = AssetLoadState::Failed;
                         }
                         else if (res == TaskState::Complete) {
+                            ZoneScopedN("PreThreadExecute");
                             bool preRes = job->PreThreadExecute();
                             if (preRes) {
-                                auto duration = std::chrono::steady_clock::now() - slot.startTime;
-                                auto durationMs = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
-                                SPDLOG_INFO("'{}' task completed in {}ms", slot.name, durationMs);
                                 slot.loadState = AssetLoadState::ThreadExecuting;
                             }
                             else {
@@ -334,8 +338,10 @@ void AssetLoadThread::ThreadMain()
 
                     case AssetLoadState::ThreadExecuting:
                     {
+                        ZoneScopedN("ThreadExecute");
                         ThreadState res = job->ThreadExecute();
                         if (res == ThreadState::Complete) {
+                            ZoneScopedN("PostThreadExecute");
                             bool postRes = job->PostThreadExecute();
                             slot.uploadCount = job->GetUploadCount();
                             if (postRes) {
@@ -353,6 +359,7 @@ void AssetLoadThread::ThreadMain()
                 }
 
                 if (slot.loadState == AssetLoadState::Loaded || slot.loadState == AssetLoadState::Failed) {
+                    ZoneScopedN("CompleteSlot");
                     auto duration = std::chrono::steady_clock::now() - slot.startTime;
                     auto durationMs = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
 
@@ -360,16 +367,27 @@ void AssetLoadThread::ThreadMain()
                     switch (slot.type) {
                         case AssetType::WillModel:
                         {
+                            ZoneScopedN("CompleteWillModel");
                             auto* modelJob = dynamic_cast<WillModelLoadJob*>(job);
-                            modelCompleteLoadQueue.push({modelJob->willModelHandle, modelJob->outputModel, success});
+                            //
+                            {
+                                ZoneScopedN("PushCompleteQueue");
+                                modelCompleteLoadQueue.push({modelJob->willModelHandle, modelJob->outputModel, success});
+                            }
 
-                            for (size_t i = 0; i < willModelJobs.size(); ++i) {
-                                if (willModelJobs[i].get() == job) {
-                                    job->Reset();
-                                    willModelJobActive[i] = false;
-                                    break;
+                            //
+                            {
+                                ZoneScopedN("FindAndResetJob");
+
+                                for (size_t i = 0; i < willModelJobs.size(); ++i) {
+                                    if (willModelJobs[i].get() == job) {
+                                        job->Reset();
+                                        willModelJobActive[i] = false;
+                                        break;
+                                    }
                                 }
                             }
+
                             if (success) {
                                 SPDLOG_INFO("'{}' willmodel loaded in {}ms with {} uploads", slot.name, durationMs, slot.uploadCount);
                             }
@@ -380,16 +398,25 @@ void AssetLoadThread::ThreadMain()
                         }
                         case AssetType::Texture:
                         {
+                            ZoneScopedN("CompleteTexture");
                             auto* textureJob = dynamic_cast<TextureLoadJob*>(job);
-                            textureCompleteLoadQueue.push({textureJob->textureHandle, textureJob->outputTexture, success});
-
-                            for (size_t i = 0; i < textureJobs.size(); ++i) {
-                                if (textureJobs[i].get() == job) {
-                                    job->Reset();
-                                    textureJobActive[i] = false;
-                                    break;
+                            //
+                            {
+                                ZoneScopedN("PushCompleteQueue");
+                                textureCompleteLoadQueue.push({textureJob->textureHandle, textureJob->outputTexture, success});
+                            }
+                            //
+                            {
+                                ZoneScopedN("FindAndResetJob");
+                                for (size_t i = 0; i < textureJobs.size(); ++i) {
+                                    if (textureJobs[i].get() == job) {
+                                        job->Reset();
+                                        textureJobActive[i] = false;
+                                        break;
+                                    }
                                 }
                             }
+
                             if (success) {
                                 SPDLOG_INFO("'{}' texture loaded in {}ms with {} uploads", slot.name, durationMs, slot.uploadCount);
                             }
@@ -400,16 +427,25 @@ void AssetLoadThread::ThreadMain()
                         }
                         case AssetType::Pipeline:
                         {
+                            ZoneScopedN("CompletePipeline");
                             auto* pipelineJob = dynamic_cast<PipelineLoadJob*>(job);
-                            pipelineCompleteLoadQueue.push({slot.name, pipelineJob->outputEntry, success});
-
-                            for (size_t i = 0; i < pipelineJobs.size(); ++i) {
-                                if (pipelineJobs[i].get() == job) {
-                                    job->Reset();
-                                    pipelineJobActive[i] = false;
-                                    break;
+                            //
+                            {
+                                ZoneScopedN("PushCompleteQueue");
+                                pipelineCompleteLoadQueue.push({slot.name, pipelineJob->outputEntry, success});
+                            }
+                            //
+                            {
+                                ZoneScopedN("FindAndResetJob");
+                                for (size_t i = 0; i < pipelineJobs.size(); ++i) {
+                                    if (pipelineJobs[i].get() == job) {
+                                        job->Reset();
+                                        pipelineJobActive[i] = false;
+                                        break;
+                                    }
                                 }
                             }
+
                             if (success) {
                                 SPDLOG_INFO("'{}' pipeline loaded in {}ms", slot.name, durationMs);
                             }
@@ -421,12 +457,15 @@ void AssetLoadThread::ThreadMain()
                         default:
                             break;
                     }
-
-                    activeSlotMask[slotIdx] = false;
-                    slot.job = nullptr;
-                    slot.loadState = AssetLoadState::Unassigned;
-                    slot.type = AssetType::None;
-                    slot.uploadCount = 0;
+                    //
+                    {
+                        ZoneScopedN("ClearSlot");
+                        activeSlotMask[slotIdx] = false;
+                        slot.job = nullptr;
+                        slot.loadState = AssetLoadState::Unassigned;
+                        slot.type = AssetType::None;
+                        slot.uploadCount = 0;
+                    }
                 }
             }
         }

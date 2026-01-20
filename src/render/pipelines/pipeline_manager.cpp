@@ -26,7 +26,7 @@ PipelineManager::~PipelineManager()
     }
 }
 
-void PipelineManager::RegisterComputePipeline(const std::string& name, const std::filesystem::path& shaderPath, uint32_t pushConstantSize)
+void PipelineManager::RegisterComputePipeline(const std::string& name, const std::filesystem::path& shaderPath, uint32_t pushConstantSize, PipelineCategory category)
 {
     if (pipelines.contains(name)) {
         SPDLOG_WARN("Pipeline '{}' already registered, skipping", name);
@@ -34,7 +34,7 @@ void PipelineManager::RegisterComputePipeline(const std::string& name, const std
     }
 
     PipelineData data;
-    data.isCompute = true;
+    data.category = category;
 
     data.versions.emplace_back();
     PipelineEntry& entry = data.versions.back();
@@ -118,6 +118,18 @@ void PipelineManager::Update(uint32_t frameNumber)
             versions.end()
         );
     }
+}
+
+bool PipelineManager::IsCategoryReady(PipelineCategory category) const
+{
+    for (auto& pipeline : pipelines){
+        if (static_cast<uint32_t>(pipeline.second.category & category) != 0) {
+            if (pipeline.second.versions.empty() || pipeline.second.versions[0].pipeline == VK_NULL_HANDLE) {
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
 void PipelineManager::ReloadModified()

@@ -11,6 +11,7 @@
 #include <unordered_map>
 #include <volk.h>
 
+#include "pipeline_category.h"
 #include "asset-load/asset_load_thread.h"
 
 namespace AssetLoad
@@ -39,7 +40,7 @@ struct PipelineEntry
 struct PipelineData
 {
     std::vector<PipelineEntry> versions;
-    bool isCompute;
+    PipelineCategory category;
 };
 
 class PipelineManager
@@ -53,7 +54,7 @@ public:
 
     PipelineManager& operator=(const PipelineManager&) = delete;
 
-    void RegisterComputePipeline(const std::string& name, const std::filesystem::path& shaderPath, uint32_t pushConstantSize);
+    void RegisterComputePipeline(const std::string& name, const std::filesystem::path& shaderPath, uint32_t pushConstantSize, PipelineCategory category);
 
     void RegisterGraphicsPipeline(const std::string& name, const std::filesystem::path& shaderPath, const VkGraphicsPipelineCreateInfo& pipelineInfo);
 
@@ -62,6 +63,8 @@ public:
     void ReloadModified();
 
     void Update(uint32_t frameNumber);
+
+    bool IsCategoryReady(PipelineCategory category) const;
 
 private:
     void SubmitPipelineLoad(const std::string& name, PipelineEntry& entry) const;
