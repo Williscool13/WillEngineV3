@@ -264,6 +264,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     renderGraph->CreateTexture("emissive_target", TextureInfo{GBUFFER_EMISSIVE_FORMAT, renderExtent[0], renderExtent[1], 1});
     renderGraph->CreateTexture("velocity_target", TextureInfo{GBUFFER_MOTION_FORMAT, renderExtent[0], renderExtent[1], 1});
     renderGraph->CreateTexture("depth_target", TextureInfo{VK_FORMAT_D32_SFLOAT, renderExtent[0], renderExtent[1], 1});
+    renderGraph->CreateTexture("deferred_resolve_target", TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
 
     RenderPass& clearGBufferPass = renderGraph->AddPass("Clear GBuffer", VK_PIPELINE_STAGE_2_CLEAR_BIT);
     clearGBufferPass.WriteClearImage("albedo_target");
@@ -320,7 +321,10 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
 
     // IN : albedoTarget, normalTarget, pbrTarget, emissiveTarget, depth_target, shadow_cascade_0, shadow_cascade_1, shadow_cascade_2, shadow_cascade_3
     // OUT: deferred_resolve_target
-    SetupDeferredLighting(*renderGraph, viewFamily, renderExtent);
+    bool bHasDeferred = pipelineManager->IsCategoryReady(PipelineCategory::DeferredShading);
+    if (bHasDeferred) {
+        SetupDeferredLighting(*renderGraph, viewFamily, renderExtent);
+    }
 
     bool bHasDebugPass = viewFamily.mainView.debug != -1 && pipelineManager->IsCategoryReady(PipelineCategory::Debug);
     if (bHasDebugPass) {
@@ -381,8 +385,12 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     } else {
         renderGraph->AliasTexture("taa_output", "deferred_resolve_target");
     }
-    renderGraph->CarryTextureToNextFrame("taa_current", "taa_history", VK_IMAGE_USAGE_SAMPLED_BIT);
-    renderGraph->CarryTextureToNextFrame("velocity_target", "velocity_history", VK_IMAGE_USAGE_SAMPLED_BIT);
+    if (renderGraph->HasTexture("taa_current")) {
+        renderGraph->CarryTextureToNextFrame("taa_current", "taa_history", VK_IMAGE_USAGE_SAMPLED_BIT);
+    }
+    if (renderGraph->HasTexture("velocity_target")) {
+        renderGraph->CarryTextureToNextFrame("velocity_target", "velocity_history", VK_IMAGE_USAGE_SAMPLED_BIT);
+    }
 
     bool bHasPostProcess = pipelineManager->IsCategoryReady(PipelineCategory::PostProcess);
     if (bHasPostProcess) {
@@ -603,7 +611,7 @@ void RenderThread::CreatePipelines()
     meshShadingInstancedPipeline = MeshShadingInstancedPipeline(context.get(), layouts);
 
     pipelineManager->RegisterComputePipeline("deferred_resolve", Platform::GetShaderPath() / "deferred_resolve_compute.spv",
-                                             sizeof(DeferredResolvePushConstant), PipelineCategory::Geometry);
+                                             sizeof(DeferredResolvePushConstant), PipelineCategory::DeferredShading);
 
     pipelineManager->RegisterComputePipeline("temporal_antialiasing", Platform::GetShaderPath() / "temporal_antialiasing_compute.spv",
                                              sizeof(TemporalAntialiasingPushConstant), PipelineCategory::TAA);
@@ -1100,7 +1108,6 @@ void RenderThread::SetupMainGeometryPass(RenderGraph& graph, const Core::ViewFam
 
 void RenderThread::SetupDeferredLighting(RenderGraph& graph, const Core::ViewFamily& viewFamily, const std::array<uint32_t, 2> renderExtent) const
 {
-    graph.CreateTexture("deferred_resolve_target", TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
     RenderPass& clearDeferredImagePass = graph.AddPass("Clear Deferred Image", VK_PIPELINE_STAGE_2_CLEAR_BIT);
     clearDeferredImagePass.WriteClearImage("deferred_resolve_target");
     clearDeferredImagePass.Execute([&](VkCommandBuffer cmd) {
