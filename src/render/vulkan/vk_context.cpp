@@ -125,10 +125,10 @@ VulkanContext::VulkanContext(SDL_Window* window)
     // Gather
     features10.shaderImageGatherExtended = VK_TRUE;
 
-    VkPhysicalDeviceComputeShaderDerivativesFeaturesKHR computeShaderDerivativesFeaturesKhr{};
-    computeShaderDerivativesFeaturesKhr.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COMPUTE_SHADER_DERIVATIVES_FEATURES_KHR;
-    computeShaderDerivativesFeaturesKhr.computeDerivativeGroupQuads = VK_TRUE;
-    computeShaderDerivativesFeaturesKhr.computeDerivativeGroupLinear = VK_TRUE;
+    // VkPhysicalDeviceComputeShaderDerivativesFeaturesKHR computeShaderDerivativesFeaturesKhr{};
+    // computeShaderDerivativesFeaturesKhr.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COMPUTE_SHADER_DERIVATIVES_FEATURES_KHR;
+    // computeShaderDerivativesFeaturesKhr.computeDerivativeGroupQuads = VK_TRUE;
+    // computeShaderDerivativesFeaturesKhr.computeDerivativeGroupLinear = VK_TRUE;
 
     vkb::PhysicalDeviceSelector selector{vkb_inst};
     vkb::PhysicalDevice targetDevice = selector
@@ -139,6 +139,7 @@ VulkanContext::VulkanContext(SDL_Window* window)
             .set_required_features(features10)
             .add_required_extension(VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME)
             .add_required_extension(VK_EXT_MESH_SHADER_EXTENSION_NAME)
+            // .add_required_extension(VK_KHR_COMPUTE_SHADER_DERIVATIVES_EXTENSION_NAME)
             .require_separate_transfer_queue()
             .set_surface(surface)
             .select()
@@ -159,7 +160,7 @@ VulkanContext::VulkanContext(SDL_Window* window)
     vkb::DeviceBuilder deviceBuilder{targetDevice};
     deviceBuilder.add_pNext(&descriptorBufferFeatures);
     deviceBuilder.add_pNext(&meshShaderFeatures);
-    deviceBuilder.add_pNext(&computeShaderDerivativesFeaturesKhr);
+    // deviceBuilder.add_pNext(&computeShaderDerivativesFeaturesKhr);
     if (supportsMaintenance9) {
         VkPhysicalDeviceMaintenance9FeaturesKHR maintenance9Features{};
         maintenance9Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_9_FEATURES_KHR;

@@ -211,7 +211,7 @@ void ComputeGTAOMain(uniform GTAOMainPushConstant pc, uint3 dtid : SV_DispatchTh
     float packedEdges = XeGTAO_PackEdges(edges);
     rdgRenderTextures[pc.edgeDataIndex][screenPos] = float4(packedEdges, 0, 0, 0);
 
-    float3 viewNormal = rdgTextures[pc.normalBufferIndex].Sample(rdgSamplers[RDG_POINT_SAMPLER_INDEX], uv).rgb;
+    float3 viewNormal = rdgTextures[pc.normalBufferIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], uv, 0).rgb;
     viewNormal = viewNormal * 2.0 - 1.0;
 
     // Move center pixel slightly towards camera to avoid precision artifacts
