@@ -54,20 +54,20 @@ bool PipelineLoadJob::PostThreadExecute()
 void PipelineLoadJob::Reset()
 {
     taskState = TaskState::NotStarted;
-    outputEntry = nullptr;
+    outputDate = nullptr;
 }
 
 void PipelineLoadJob::LoadPipelineTask::ExecuteRange(enki::TaskSetPartition range, uint32_t threadnum)
 {
     ZoneScopedN("LoadPipelineTask");
-    if (!loadJob || !loadJob->outputEntry) {
+    if (!loadJob || !loadJob->outputDate) {
         if (loadJob) {
             loadJob->taskState = TaskState::Failed;
         }
         return;
     }
 
-    auto* outputEntry = loadJob->outputEntry;
+    auto* outputEntry = loadJob->outputDate;
     assert(outputEntry);
 
     VkShaderModule shaderModule = VK_NULL_HANDLE;
@@ -77,7 +77,7 @@ void PipelineLoadJob::LoadPipelineTask::ExecuteRange(enki::TaskSetPartition rang
         return;
     }
 
-    VkResult layoutResult = vkCreatePipelineLayout(loadJob->context->device, &outputEntry->layoutCreateInfo, nullptr, &outputEntry->layout);
+    VkResult layoutResult = vkCreatePipelineLayout(loadJob->context->device, &outputEntry->layoutCreateInfo, nullptr, &outputEntry->loadingEntry.layout);
     if (layoutResult != VK_SUCCESS) {
         SPDLOG_ERROR("Failed to create pipeline layout for: {}", outputEntry->shaderPath.string());
         vkDestroyShaderModule(loadJob->context->device, shaderModule, nullptr);
@@ -87,12 +87,12 @@ void PipelineLoadJob::LoadPipelineTask::ExecuteRange(enki::TaskSetPartition rang
 
     if (outputEntry->bIsCompute) {
         VkPipelineShaderStageCreateInfo shaderStage = Render::VkHelpers::PipelineShaderStageCreateInfo(shaderModule, VK_SHADER_STAGE_COMPUTE_BIT);
-        VkComputePipelineCreateInfo pipelineInfo = Render::VkHelpers::ComputePipelineCreateInfo(outputEntry->layout, shaderStage);
-        VkResult pipelineResult = vkCreateComputePipelines(loadJob->context->device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &outputEntry->pipeline);
+        VkComputePipelineCreateInfo pipelineInfo = Render::VkHelpers::ComputePipelineCreateInfo(outputEntry->loadingEntry.layout, shaderStage);
+        VkResult pipelineResult = vkCreateComputePipelines(loadJob->context->device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &outputEntry->loadingEntry.pipeline);
 
         if (pipelineResult != VK_SUCCESS) {
             SPDLOG_ERROR("Failed to create compute pipeline: {}", outputEntry->shaderPath.string());
-            vkDestroyPipelineLayout(loadJob->context->device, outputEntry->layout, nullptr);
+            vkDestroyPipelineLayout(loadJob->context->device, outputEntry->loadingEntry.layout, nullptr);
             vkDestroyShaderModule(loadJob->context->device, shaderModule, nullptr);
             loadJob->taskState = TaskState::Failed;
             return;
@@ -101,7 +101,7 @@ void PipelineLoadJob::LoadPipelineTask::ExecuteRange(enki::TaskSetPartition rang
     else {
         // TODO: Graphics pipeline support
         SPDLOG_ERROR("Graphics pipeline creation not yet implemented");
-        vkDestroyPipelineLayout(loadJob->context->device, outputEntry->layout, nullptr);
+        vkDestroyPipelineLayout(loadJob->context->device, outputEntry->loadingEntry.layout, nullptr);
         vkDestroyShaderModule(loadJob->context->device, shaderModule, nullptr);
         loadJob->taskState = TaskState::Failed;
         return;

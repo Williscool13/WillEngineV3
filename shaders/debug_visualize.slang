@@ -23,7 +23,7 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
         case 1: // Depth
             float depth = rdgTextures[pc.textureIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], srcUV, 0).r;
             float linear = LinearizeDepth(depth);
-            rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(linear, linear, linear, 1.0);
+            rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(linear, 0.0f, 0.0f, 1.0);
             break;
         case 2: // Albedo
             float4 albedo  = rdgTextures[pc.textureIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], srcUV, 0);

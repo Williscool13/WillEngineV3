@@ -6,6 +6,7 @@
 
 #include <cassert>
 #include <utility>
+#include <unordered_set>
 
 #include "render_graph_config.h"
 #include "render_pass.h"
@@ -1413,6 +1414,7 @@ void RenderGraph::DestroyPhysicalResource(PhysicalResource& resource)
 
 void RenderGraph::CreatePhysicalImage(PhysicalResource& resource, const ResourceDimensions& dim)
 {
+    resource.debugName = fmt::format("PhysicalResource{}", debugNameCounter++);
     VkImageCreateInfo imageInfo = VkHelpers::ImageCreateInfo(
         dim.format,
         {dim.width, dim.height, dim.depth},
@@ -1460,10 +1462,19 @@ void RenderGraph::CreatePhysicalImage(PhysicalResource& resource, const Resource
     resource.aspect = aspectFlags;
     resource.dimensions = dim;
     resource.event = {};
+
+#ifdef _DEBUG
+    VkDebugUtilsObjectNameInfoEXT nameInfo{VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT};
+    nameInfo.objectType = VK_OBJECT_TYPE_IMAGE;
+    nameInfo.objectHandle = reinterpret_cast<uint64_t>(resource.image);
+    nameInfo.pObjectName = resource.debugName.c_str();
+    vkSetDebugUtilsObjectNameEXT(context->device, &nameInfo);
+#endif
 }
 
 void RenderGraph::CreatePhysicalBuffer(PhysicalResource& resource, const ResourceDimensions& dim)
 {
+    resource.debugName = fmt::format("PhysicalResource{}", debugNameCounter++);
     VkBufferCreateInfo bufferInfo = {};
     bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     bufferInfo.size = dim.bufferSize;
@@ -1477,5 +1488,13 @@ void RenderGraph::CreatePhysicalBuffer(PhysicalResource& resource, const Resourc
 
     resource.dimensions = dim;
     resource.event = {};
+
+#ifdef _DEBUG
+    VkDebugUtilsObjectNameInfoEXT nameInfo{VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT};
+    nameInfo.objectType = VK_OBJECT_TYPE_BUFFER;
+    nameInfo.objectHandle = reinterpret_cast<uint64_t>(resource.buffer);
+    nameInfo.pObjectName = resource.debugName.c_str();
+    vkSetDebugUtilsObjectNameEXT(context->device, &nameInfo);
+#endif
 }
 } // Render

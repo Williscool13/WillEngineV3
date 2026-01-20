@@ -15,13 +15,31 @@ PipelineManager::PipelineManager(VulkanContext* context, AssetLoad::AssetLoadThr
 PipelineManager::~PipelineManager()
 {
     for (auto& pipeline : pipelines) {
-        for (auto& entry : pipeline.second.versions) {
-            if (entry.pipeline != VK_NULL_HANDLE) {
-                vkDestroyPipeline(context->device, entry.pipeline, nullptr);
-            }
-            if (entry.layout != VK_NULL_HANDLE) {
-                vkDestroyPipelineLayout(context->device, entry.layout, nullptr);
-            }
+        if (pipeline.second.activeEntry.pipeline != VK_NULL_HANDLE) {
+            vkDestroyPipeline(context->device, pipeline.second.activeEntry.pipeline, nullptr);
+            pipeline.second.activeEntry.pipeline = VK_NULL_HANDLE;
+        }
+        if (pipeline.second.activeEntry.layout != VK_NULL_HANDLE) {
+            vkDestroyPipelineLayout(context->device, pipeline.second.activeEntry.layout, nullptr);
+            pipeline.second.activeEntry.layout = VK_NULL_HANDLE;
+        }
+
+        if (pipeline.second.loadingEntry.pipeline != VK_NULL_HANDLE) {
+            vkDestroyPipeline(context->device, pipeline.second.loadingEntry.pipeline, nullptr);
+            pipeline.second.loadingEntry.pipeline = VK_NULL_HANDLE;
+        }
+        if (pipeline.second.loadingEntry.layout != VK_NULL_HANDLE) {
+            vkDestroyPipelineLayout(context->device, pipeline.second.loadingEntry.layout, nullptr);
+            pipeline.second.loadingEntry.layout = VK_NULL_HANDLE;
+        }
+
+        if (pipeline.second.retiredEntry.pipeline != VK_NULL_HANDLE) {
+            vkDestroyPipeline(context->device, pipeline.second.retiredEntry.pipeline, nullptr);
+            pipeline.second.retiredEntry.pipeline = VK_NULL_HANDLE;
+        }
+        if (pipeline.second.retiredEntry.layout != VK_NULL_HANDLE) {
+            vkDestroyPipelineLayout(context->device, pipeline.second.retiredEntry.layout, nullptr);
+            pipeline.second.retiredEntry.layout = VK_NULL_HANDLE;
         }
     }
 }
@@ -33,31 +51,29 @@ void PipelineManager::RegisterComputePipeline(const std::string& name, const std
         return;
     }
 
-    PipelineData data;
+    pipelines[name] = {};
+    PipelineData& data = pipelines[name];
     data.category = category;
+    data.shaderPath = shaderPath;
+    data.retirementFrame = 0;
+    data.pushConstantRange.offset = 0;
+    data.pushConstantRange.size = pushConstantSize;
+    data.pushConstantRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 
-    data.versions.emplace_back();
-    PipelineEntry& entry = data.versions.back();
-    entry.shaderPath = shaderPath;
+    data.layoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    data.layoutCreateInfo.pSetLayouts = globalDescriptorSetLayouts.data();
+    data.layoutCreateInfo.setLayoutCount = static_cast<uint32_t>(globalDescriptorSetLayouts.size());
+    data.layoutCreateInfo.pPushConstantRanges = &data.pushConstantRange;
+    data.layoutCreateInfo.pushConstantRangeCount = 1;
 
-    entry.pushConstantRange.offset = 0;
-    entry.pushConstantRange.size = pushConstantSize;
-    entry.pushConstantRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+    data.bIsCompute = true;
+    data.loadingEntry.pipeline = VK_NULL_HANDLE;
+    data.loadingEntry.layout = VK_NULL_HANDLE;
+    data.activeEntry.pipeline = VK_NULL_HANDLE;
+    data.activeEntry.layout = VK_NULL_HANDLE;
 
-    entry.layoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    entry.layoutCreateInfo.pSetLayouts = globalDescriptorSetLayouts.data();
-    entry.layoutCreateInfo.setLayoutCount = static_cast<uint32_t>(globalDescriptorSetLayouts.size());
-    entry.layoutCreateInfo.pPushConstantRanges = &entry.pushConstantRange;
-    entry.layoutCreateInfo.pushConstantRangeCount = 1;
 
-    entry.bIsCompute = true;
-    entry.pipeline = VK_NULL_HANDLE;
-    entry.layout = VK_NULL_HANDLE;
-    entry.retirementFrame = 0;
-
-    pipelines[name] = std::move(data);
-
-    SubmitPipelineLoad(name, pipelines[name].versions[0]);
+    SubmitPipelineLoad(name, &pipelines[name]);
 
     SPDLOG_INFO("Registered compute pipeline: {}", name);
 }
@@ -75,17 +91,12 @@ const PipelineEntry* PipelineManager::GetPipelineEntry(const std::string& name)
         return nullptr;
     }
 
-    if (it->second.versions.empty()) {
-        SPDLOG_ERROR("Pipeline '{}' has no versions", name);
-        return nullptr;
-    }
-
-    return &it->second.versions[0];
+    return &it->second.activeEntry;
 }
 
-void PipelineManager::SubmitPipelineLoad(const std::string& name, PipelineEntry& entry) const
+void PipelineManager::SubmitPipelineLoad(const std::string& name, PipelineData* data) const
 {
-    assetLoadThread->RequestPipelineLoad(name, &entry);
+    assetLoadThread->RequestPipelineLoad(name, data);
 }
 
 void PipelineManager::Update(uint32_t frameNumber)
@@ -96,35 +107,45 @@ void PipelineManager::Update(uint32_t frameNumber)
     while (assetLoadThread->ResolvePipelineLoads(complete)) {
         if (complete.success) {
             SPDLOG_INFO("Pipeline '{}' async load completed", complete.name);
+            pipelines[complete.name].retiredEntry = pipelines[complete.name].activeEntry;
+            pipelines[complete.name].retirementFrame = currentFrame + 3;
+
+            pipelines[complete.name].activeEntry = pipelines[complete.name].loadingEntry;
+
+            pipelines[complete.name].loadingEntry = {};
+            pipelines[complete.name].bLoading = false;
         }
         else {
             SPDLOG_ERROR("Pipeline '{}' async load failed", complete.name);
+            pipelines[complete.name].loadingEntry = {};
+            pipelines[complete.name].bLoading = false;
         }
     }
 
-    for (auto& [name, data] : pipelines) {
-        auto& versions = data.versions;
+    if (bReloadRequested.exchange(false, std::memory_order_acquire)) {
+        ReloadModified();
+    }
 
-        versions.erase(
-            std::remove_if(versions.begin() + 1, versions.end(),
-                           [this](const PipelineEntry& entry) {
-                               if (entry.retirementFrame > 0 && currentFrame >= entry.retirementFrame) {
-                                   vkDestroyPipeline(context->device, entry.pipeline, nullptr);
-                                   vkDestroyPipelineLayout(context->device, entry.layout, nullptr);
-                                   return true;
-                               }
-                               return false;
-                           }),
-            versions.end()
-        );
+    for (auto& pipeline : pipelines) {
+        if (currentFrame > pipeline.second.retirementFrame) {
+            if (pipeline.second.retiredEntry.pipeline != VK_NULL_HANDLE) {
+                vkDestroyPipeline(context->device, pipeline.second.retiredEntry.pipeline, nullptr);
+                pipeline.second.retiredEntry.pipeline = VK_NULL_HANDLE;
+            }
+            if (pipeline.second.retiredEntry.layout != VK_NULL_HANDLE) {
+                vkDestroyPipelineLayout(context->device, pipeline.second.retiredEntry.layout, nullptr);
+                pipeline.second.retiredEntry.layout = VK_NULL_HANDLE;
+            }
+            pipeline.second.retirementFrame = 0;
+        }
     }
 }
 
 bool PipelineManager::IsCategoryReady(PipelineCategory category) const
 {
-    for (auto& pipeline : pipelines){
+    for (auto& pipeline : pipelines) {
         if (static_cast<uint32_t>(pipeline.second.category & category) != 0) {
-            if (pipeline.second.versions.empty() || pipeline.second.versions[0].pipeline == VK_NULL_HANDLE) {
+            if (pipeline.second.activeEntry.layout == VK_NULL_HANDLE || pipeline.second.activeEntry.pipeline == VK_NULL_HANDLE) {
                 return false;
             }
         }
@@ -137,29 +158,15 @@ void PipelineManager::ReloadModified()
     SPDLOG_INFO("Checking for modified shaders...");
 
     for (auto& [name, data] : pipelines) {
-        if (data.versions.empty()) { continue; }
+        if (data.bLoading) { continue; }
+        if (data.retirementFrame != 0) { continue; }
 
-        auto& active = data.versions[0];
-        if (active.pipeline == VK_NULL_HANDLE) { continue; }
+        auto currentTime = std::filesystem::last_write_time(data.shaderPath);
 
-        auto currentTime = std::filesystem::last_write_time(active.shaderPath);
-
-        if (currentTime != active.lastModified) {
+        if (currentTime != data.lastModified) {
             SPDLOG_INFO("Shader modified, rebuilding pipeline: {}", name);
-
-            active.retirementFrame = currentFrame + 3;
-
-            PipelineEntry newEntry;
-            newEntry.shaderPath = active.shaderPath;
-            newEntry.layoutCreateInfo = active.layoutCreateInfo;
-            newEntry.graphicsCreateInfo = active.graphicsCreateInfo;
-            newEntry.bIsCompute = active.bIsCompute;
-            newEntry.pipeline = VK_NULL_HANDLE;
-            newEntry.layout = VK_NULL_HANDLE;
-            newEntry.retirementFrame = 0;
-
-            data.versions.insert(data.versions.begin(), newEntry);
-            SubmitPipelineLoad(name, data.versions[0]);
+            data.bLoading = true;
+            SubmitPipelineLoad(name, &data);
         }
     }
 }

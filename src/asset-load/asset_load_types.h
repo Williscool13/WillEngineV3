@@ -18,7 +18,7 @@
 
 namespace Render
 {
-struct PipelineEntry;
+struct PipelineData;
 struct WillModel;
 struct VulkanContext;
 }
@@ -135,13 +135,13 @@ struct TextureComplete
 struct PipelineLoadRequest
 {
     std::string name;
-    Render::PipelineEntry* entry;
+    Render::PipelineData* entry;
 };
 
 struct PipelineComplete
 {
     std::string name;
-    Render::PipelineEntry* entry;
+    Render::PipelineData* entry;
     bool success;
 };
 } // AssetLoad

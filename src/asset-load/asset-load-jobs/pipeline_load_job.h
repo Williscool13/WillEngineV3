@@ -12,7 +12,7 @@
 
 namespace Render
 {
-struct PipelineEntry;
+struct PipelineData;
 class VulkanContext;
 class ResourceManager;
 }
@@ -33,7 +33,7 @@ public:
     void Reset() override;
     uint32_t GetUploadCount() override { return 0; }
 
-    Render::PipelineEntry* outputEntry{nullptr};
+    Render::PipelineData* outputDate{nullptr};
 
 private:
     struct LoadPipelineTask : enki::ITaskSet

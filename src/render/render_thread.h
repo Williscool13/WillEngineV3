@@ -93,6 +93,7 @@ public:
 public:
     VulkanContext* GetVulkanContext() const { return context.get(); }
     ResourceManager* GetResourceManager() const { return resourceManager.get(); }
+    PipelineManager* GetPipelineManager() const { return pipelineManager.get(); }
 
 private:
     void CreatePipelines();

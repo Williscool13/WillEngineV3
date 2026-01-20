@@ -22,6 +22,7 @@
 #include "platform/paths.h"
 #include "platform/thread_utils.h"
 #include "render/render_thread.h"
+#include "render/pipelines/pipeline_manager.h"
 
 #if WILL_EDITOR
 #include "editor/asset-generation/asset_generator.h"
@@ -297,6 +298,12 @@ void WillEngine::Run()
             }
 
             gameFunctions.gameLoad(engineContext.get(), gameState.get());
+        }
+
+        if (editorInput.GetKey(Key::LCTRL).down && editorInput.GetKey(Key::R).pressed) {
+            if (Render::PipelineManager* pipelineManager = renderThread->GetPipelineManager()) {
+                pipelineManager->RequestReload();
+            }
         }
 
         if (editorInput.isWindowInputFocus && !ImGui::GetIO().WantCaptureKeyboard && editorInput.GetKey(Key::PERIOD).pressed) {

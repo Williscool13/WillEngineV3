@@ -77,7 +77,7 @@ public:
 
     bool ResolveTextureUnload(TextureComplete& textureComplete);
 
-    void RequestPipelineLoad(const std::string& name, Render::PipelineEntry* entry);
+    void RequestPipelineLoad(const std::string& name, Render::PipelineData* data);
 
     bool ResolvePipelineLoads(PipelineComplete& pipelineComplete);
 

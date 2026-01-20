@@ -65,6 +65,7 @@ struct ResourceDimensions
 
 struct PhysicalResource
 {
+    std::string debugName{};
     std::string usageChain{};
 
     ResourceDimensions dimensions;

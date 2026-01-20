@@ -136,6 +136,7 @@ private:
     std::vector<BufferFrameCarryover> bufferCarryovers;
 
     bool bDebugLogging = false;
+    uint32_t debugNameCounter{0};
 
 private:
     TextureResource* GetTexture(const std::string& name);

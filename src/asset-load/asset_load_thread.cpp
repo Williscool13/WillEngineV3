@@ -122,9 +122,9 @@ bool AssetLoadThread::ResolveTextureUnload(TextureComplete& textureComplete)
     return textureCompleteUnloadQueue.pop(textureComplete);
 }
 
-void AssetLoadThread::RequestPipelineLoad(const std::string& name, Render::PipelineEntry* entry)
+void AssetLoadThread::RequestPipelineLoad(const std::string& name, Render::PipelineData* data)
 {
-    pipelineLoadQueue.push({name, entry});
+    pipelineLoadQueue.push({name, data});
 }
 
 bool AssetLoadThread::ResolvePipelineLoads(PipelineComplete& pipelineComplete)
@@ -281,7 +281,7 @@ void AssetLoadThread::ThreadMain()
                 }
 
                 PipelineLoadJob* job = pipelineJobs[freeJobIdx].get();
-                job->outputEntry = loadRequest.entry;
+                job->outputDate = loadRequest.entry;
                 pipelineJobActive[freeJobIdx] = true;
 
                 assetLoadSlots[slotIdx].name = loadRequest.name;
@@ -302,7 +302,6 @@ void AssetLoadThread::ThreadMain()
                     continue;
                 }
                 ZoneScopedN("ProcessSlot");
-                TracyMessageL(std::to_string(slotIdx).c_str());
                 didWork = true;
 
                 AssetLoadSlot& slot = assetLoadSlots[slotIdx];
@@ -432,7 +431,7 @@ void AssetLoadThread::ThreadMain()
                             //
                             {
                                 ZoneScopedN("PushCompleteQueue");
-                                pipelineCompleteLoadQueue.push({slot.name, pipelineJob->outputEntry, success});
+                                pipelineCompleteLoadQueue.push({slot.name, pipelineJob->outputDate, success});
                             }
                             //
                             {

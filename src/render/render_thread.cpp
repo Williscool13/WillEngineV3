@@ -129,20 +129,13 @@ void RenderThread::ThreadMain()
         // Wait for frame
         {
             ZoneScopedN("WaitForFrame");
-            if (!engineRenderSynchronization->renderFrames.try_acquire_for(std::chrono::milliseconds(100))) {
+            if (!engineRenderSynchronization->renderFrames.try_acquire_for(std::chrono::milliseconds(10))) {
                 continue;
             }
         }
 
 
         if (bShouldExit.load()) { break; }
-
-        // todo Remove
-        while (!pipelineManager->IsCategoryReady(PipelineCategory::All)) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            SPDLOG_INFO("Startup delayed by +1 cycle because of wait for pipelines");
-            pipelineManager->Update(frameNumber);
-        }
 
         // Render Frame
         {
@@ -389,9 +382,9 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         renderGraph->AliasTexture("taa_output", "deferred_resolve_target");
     }
     renderGraph->CarryTextureToNextFrame("taa_current", "taa_history", VK_IMAGE_USAGE_SAMPLED_BIT);
-    renderGraph->CarryTextureToNextFrame("velocity_target", "velocity_history", 0);
+    renderGraph->CarryTextureToNextFrame("velocity_target", "velocity_history", VK_IMAGE_USAGE_SAMPLED_BIT);
 
-    bool bHasPostProcess = pipelineManager->IsCategoryReady(PipelineCategory::PostProcess) && false;
+    bool bHasPostProcess = pipelineManager->IsCategoryReady(PipelineCategory::PostProcess);
     if (bHasPostProcess) {
         SetupPostProcessing(*renderGraph, viewFamily, renderExtent, frameBuffer.timeFrame.renderDeltaTime);
     } else {
