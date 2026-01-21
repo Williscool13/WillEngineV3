@@ -114,6 +114,8 @@ private: // Debugging
     bool bHasAdded = false;
     bool bFreezeVisibility = false;
     bool bLogRDG = false;
+    bool bActiveShaderHotReload = false;
+    float shaderHotReloadTimer = 0.0f;
 };
 }
 

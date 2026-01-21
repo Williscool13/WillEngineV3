@@ -281,6 +281,7 @@ void WillEngine::Run()
 
 #if WILL_EDITOR
         InputFrame editorInput = inputManager->GetCurrentInput();
+        TimeFrame editorTime = timeManager->GetTime();
         if (editorInput.GetKey(Key::F5).pressed) {
             gameFunctions.gameUnload(engineContext.get(), gameState.get());
             if (gameDll.Reload()) {
@@ -301,8 +302,16 @@ void WillEngine::Run()
         }
 
         if (editorInput.GetKey(Key::LCTRL).down && editorInput.GetKey(Key::R).pressed) {
-            if (Render::PipelineManager* pipelineManager = renderThread->GetPipelineManager()) {
-                pipelineManager->RequestReload();
+            bActiveShaderHotReload = !bActiveShaderHotReload;
+            shaderHotReloadTimer = 0.0f;
+        }
+        if (bActiveShaderHotReload) {
+            shaderHotReloadTimer += editorTime.deltaTime;
+            if (shaderHotReloadTimer >= 0.5f) {
+                shaderHotReloadTimer = 0.0f;
+                if (Render::PipelineManager* pipelineManager = renderThread->GetPipelineManager()) {
+                    pipelineManager->RequestReload();
+                }
             }
         }
 
@@ -391,7 +400,13 @@ void WillEngine::Run()
 
 void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
 {
-    if (ImGui::Begin("Main")) {
+    if (ImGui::Begin("Engine")) {
+        ImGui::Text("Shader Hot Reload: %s", bActiveShaderHotReload ? "ON" : "OFF");
+        if (bActiveShaderHotReload) {
+            ImGui::SameLine();
+            ImGui::TextDisabled("(%.1fs)", shaderHotReloadTimer);
+        }
+
         ImGui::Checkbox("Freeze Visibility Calculations", &bFreezeVisibility);
         if (ImGui::Button("Log RDG")) {
             bLogRDG = true;
@@ -399,7 +414,6 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
         else {
             bLogRDG = false;
         }
-        ImGui::Text("Hello!");
 
         if (ImGui::CollapsingHeader("Visibility Debug")) {
             uint8_t* data = static_cast<uint8_t*>(renderThread->GetResourceManager()->debugReadbackBuffer.allocationInfo.pMappedData);

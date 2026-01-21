@@ -122,7 +122,7 @@ void PipelineManager::Update(uint32_t frameNumber)
         }
     }
 
-    if (bReloadRequested.exchange(false, std::memory_order_acquire)) {
+    if (bReloadRequested.exchange(false, std::memory_order_relaxed)) {
         ReloadModified();
     }
 
@@ -155,8 +155,6 @@ bool PipelineManager::IsCategoryReady(PipelineCategory category) const
 
 void PipelineManager::ReloadModified()
 {
-    SPDLOG_INFO("Checking for modified shaders...");
-
     for (auto& [name, data] : pipelines) {
         if (data.bLoading) { continue; }
         if (data.retirementFrame != 0) { continue; }

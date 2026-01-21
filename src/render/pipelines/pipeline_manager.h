@@ -54,7 +54,7 @@ struct PipelineData
 class PipelineManager
 {
 public: // Thread-Safe
-    void RequestReload() { bReloadRequested.store(true, std::memory_order_release); }
+    void RequestReload() { bReloadRequested.store(true, std::memory_order_relaxed); }
 
 public:
     explicit PipelineManager(VulkanContext* context, AssetLoad::AssetLoadThread* assetLoadThread, const std::array<VkDescriptorSetLayout, 2>& globalLayouts);
