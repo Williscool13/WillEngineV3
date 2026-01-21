@@ -136,19 +136,29 @@ SHADER_PUBLIC struct InstancedMeshShadingPushConstant
     SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
 };
 
-SHADER_PUBLIC struct DeferredResolvePushConstant
+SHADER_PUBLIC struct ShadowsResolvePushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC SHADER_PTR(ShadowData) shadowData;
     SHADER_PUBLIC SHADER_PTR(LightData) lightData;
-    SHADER_PUBLIC uint2 extent;
+    SHADER_PUBLIC int32_t gtaoFilteredIndex;
+    SHADER_PUBLIC uint32_t outputImageIndex;
     SHADER_PUBLIC int4 csmIndices;
+    SHADER_PUBLIC uint32_t depthIndex;
+    SHADER_PUBLIC uint32_t normalIndex;
+};
+
+SHADER_PUBLIC struct SHADER_ALIGN DeferredResolvePushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC SHADER_PTR(ShadowData) shadowData;
+    SHADER_PUBLIC SHADER_PTR(LightData) lightData;
     SHADER_PUBLIC uint32_t albedoIndex;
     SHADER_PUBLIC uint32_t normalIndex;
     SHADER_PUBLIC uint32_t pbrIndex;
     SHADER_PUBLIC uint32_t emissiveIndex;
     SHADER_PUBLIC uint32_t depthIndex;
-    SHADER_PUBLIC int32_t gtaoFilteredIndex;
+    SHADER_PUBLIC uint32_t shadowsIndex;
     SHADER_PUBLIC uint32_t outputImageIndex;
 };
 

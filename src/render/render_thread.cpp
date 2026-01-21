@@ -265,6 +265,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     renderGraph->CreateTexture("velocity_target", TextureInfo{GBUFFER_MOTION_FORMAT, renderExtent[0], renderExtent[1], 1});
     renderGraph->CreateTexture("depth_target", TextureInfo{VK_FORMAT_D32_SFLOAT, renderExtent[0], renderExtent[1], 1});
     renderGraph->CreateTexture("deferred_resolve_target", TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
+    renderGraph->CreateTexture("shadows_resolve_target", TextureInfo{VK_FORMAT_R8G8_UNORM, renderExtent[0], renderExtent[1], 1});
 
     RenderPass& clearGBufferPass = renderGraph->AddPass("Clear GBuffer", VK_PIPELINE_STAGE_2_CLEAR_BIT);
     clearGBufferPass.WriteClearImage("albedo_target");
@@ -320,6 +321,8 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         SetupGroundTruthAmbientOcclusion(*renderGraph, viewFamily, renderExtent);
     }
 
+    SetupShadowsResolve(*renderGraph, viewFamily, renderExtent);
+
     // IN : albedoTarget, normalTarget, pbrTarget, emissiveTarget, depth_target, shadow_cascade_0, shadow_cascade_1, shadow_cascade_2, shadow_cascade_3
     // OUT: deferred_resolve_target
     bool bHasDeferred = pipelineManager->IsCategoryReady(PipelineCategory::DeferredShading);
@@ -332,7 +335,8 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     bool bHasTAAPass = pipelineManager->IsCategoryReady(PipelineCategory::TAA);
     if (bHasTAAPass) {
         SetupTemporalAntialiasing(*renderGraph, viewFamily, renderExtent);
-    } else {
+    }
+    else {
         renderGraph->AliasTexture("taa_output", "deferred_resolve_target");
     }
     if (renderGraph->HasTexture("taa_current")) {
@@ -345,7 +349,8 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     bool bHasPostProcess = pipelineManager->IsCategoryReady(PipelineCategory::PostProcess);
     if (bHasPostProcess) {
         SetupPostProcessing(*renderGraph, viewFamily, renderExtent, frameBuffer.timeFrame.renderDeltaTime);
-    } else {
+    }
+    else {
         renderGraph->AliasTexture("post_process_output", "taa_output");
     }
 
@@ -610,6 +615,8 @@ void RenderThread::CreatePipelines()
 
     meshShadingInstancedPipeline = MeshShadingInstancedPipeline(context.get(), layouts);
 
+    pipelineManager->RegisterComputePipeline("shadows_resolve", Platform::GetShaderPath() / "shadows_resolve_compute.spv",
+                                             sizeof(ShadowsResolvePushConstant), PipelineCategory::ShadowCombine);
     pipelineManager->RegisterComputePipeline("deferred_resolve", Platform::GetShaderPath() / "deferred_resolve_compute.spv",
                                              sizeof(DeferredResolvePushConstant), PipelineCategory::DeferredShading);
 
@@ -1106,6 +1113,59 @@ void RenderThread::SetupMainGeometryPass(RenderGraph& graph, const Core::ViewFam
     });
 }
 
+void RenderThread::SetupShadowsResolve(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent) const
+{
+    RenderPass& shadowsResolvePass = graph.AddPass("Shadows Resolve", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+    shadowsResolvePass.ReadSampledImage("normal_target");
+    shadowsResolvePass.ReadSampledImage("depth_target");
+
+    bool bHasGTAO = graph.HasTexture("gtao_filtered");
+    if (bHasGTAO) {
+        shadowsResolvePass.ReadSampledImage("gtao_filtered");
+    }
+
+    bool bHasShadows = graph.HasTexture("shadow_cascade_0");
+    if (bHasShadows) {
+        shadowsResolvePass.ReadSampledImage("shadow_cascade_0");
+        shadowsResolvePass.ReadSampledImage("shadow_cascade_1");
+        shadowsResolvePass.ReadSampledImage("shadow_cascade_2");
+        shadowsResolvePass.ReadSampledImage("shadow_cascade_3");
+    }
+
+    shadowsResolvePass.WriteStorageImage("shadows_resolve_target");
+    shadowsResolvePass.Execute([&, bHasShadows, bHasGTAO, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("shadows_resolve");
+
+        glm::ivec4 csmIndices{-1, -1, -1, -1};
+        if (bHasShadows) {
+            csmIndices.x = static_cast<int32_t>(graph.GetSampledImageViewDescriptorIndex("shadow_cascade_0"));
+            csmIndices.y = static_cast<int32_t>(graph.GetSampledImageViewDescriptorIndex("shadow_cascade_1"));
+            csmIndices.z = static_cast<int32_t>(graph.GetSampledImageViewDescriptorIndex("shadow_cascade_2"));
+            csmIndices.w = static_cast<int32_t>(graph.GetSampledImageViewDescriptorIndex("shadow_cascade_3"));
+        }
+
+        int32_t gtaoIndex = bHasGTAO ? static_cast<int32_t>(graph.GetSampledImageViewDescriptorIndex("gtao_filtered")) : -1;
+
+        ShadowsResolvePushConstant pc{
+            .sceneData = graph.GetBufferAddress("scene_data"),
+            .shadowData = graph.GetBufferAddress("shadow_data"),
+            .lightData = graph.GetBufferAddress("light_data"),
+            .gtaoFilteredIndex = gtaoIndex,
+            .outputImageIndex = graph.GetStorageImageViewDescriptorIndex("shadows_resolve_target"),
+            .csmIndices = csmIndices,
+            .depthIndex = graph.GetSampledImageViewDescriptorIndex("depth_target"),
+            .normalIndex = graph.GetSampledImageViewDescriptorIndex("normal_target"),
+        };
+
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+
+        uint32_t xDispatch = (width + 15) / 16;
+        uint32_t yDispatch = (height + 15) / 16;
+        vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
+    });
+}
+
 void RenderThread::SetupDeferredLighting(RenderGraph& graph, const Core::ViewFamily& viewFamily, const std::array<uint32_t, 2> renderExtent) const
 {
     RenderPass& clearDeferredImagePass = graph.AddPass("Clear Deferred Image", VK_PIPELINE_STAGE_2_CLEAR_BIT);
@@ -1123,44 +1183,20 @@ void RenderThread::SetupDeferredLighting(RenderGraph& graph, const Core::ViewFam
     deferredResolvePass.ReadSampledImage("pbr_target");
     deferredResolvePass.ReadSampledImage("emissive_target");
     deferredResolvePass.ReadSampledImage("depth_target");
-    bool bHasGTAO = graph.HasTexture("gtao_filtered");
-    if (bHasGTAO) {
-        deferredResolvePass.ReadSampledImage("gtao_filtered");
-    }
-
-    bool bHasShadows = graph.HasTexture("shadow_cascade_0");
-    if (bHasShadows) {
-        deferredResolvePass.ReadSampledImage("shadow_cascade_0");
-        deferredResolvePass.ReadSampledImage("shadow_cascade_1");
-        deferredResolvePass.ReadSampledImage("shadow_cascade_2");
-        deferredResolvePass.ReadSampledImage("shadow_cascade_3");
-    }
-
+    deferredResolvePass.ReadSampledImage("shadows_resolve_target");
     deferredResolvePass.WriteStorageImage("deferred_resolve_target");
-    deferredResolvePass.Execute([&, bHasShadows, bHasGTAO, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
+    deferredResolvePass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("deferred_resolve");
-        glm::ivec4 csmIndices{-1, -1, -1, -1};
-        if (bHasShadows) {
-            csmIndices.x = graph.GetSampledImageViewDescriptorIndex("shadow_cascade_0");
-            csmIndices.y = graph.GetSampledImageViewDescriptorIndex("shadow_cascade_1");
-            csmIndices.z = graph.GetSampledImageViewDescriptorIndex("shadow_cascade_2");
-            csmIndices.w = graph.GetSampledImageViewDescriptorIndex("shadow_cascade_3");
-        }
-
-        int32_t gtaoIndex = bHasGTAO ? graph.GetSampledImageViewDescriptorIndex("gtao_filtered") : -1;
 
         DeferredResolvePushConstant pushData{
             .sceneData = graph.GetBufferAddress("scene_data"),
-            .shadowData = graph.GetBufferAddress("shadow_data"),
             .lightData = graph.GetBufferAddress("light_data"),
-            .extent = {width, height},
-            .csmIndices = csmIndices,
             .albedoIndex = graph.GetSampledImageViewDescriptorIndex("albedo_target"),
             .normalIndex = graph.GetSampledImageViewDescriptorIndex("normal_target"),
             .pbrIndex = graph.GetSampledImageViewDescriptorIndex("pbr_target"),
             .emissiveIndex = graph.GetSampledImageViewDescriptorIndex("emissive_target"),
             .depthIndex = graph.GetSampledImageViewDescriptorIndex("depth_target"),
-            .gtaoFilteredIndex = gtaoIndex,
+            .shadowsIndex = graph.GetSampledImageViewDescriptorIndex("shadows_resolve_target"),
             .outputImageIndex = graph.GetStorageImageViewDescriptorIndex("deferred_resolve_target"),
         };
 
