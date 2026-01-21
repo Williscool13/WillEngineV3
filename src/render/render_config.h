@@ -32,7 +32,7 @@ inline constexpr int32_t MEGA_VERTEX_BUFFER_SIZE = sizeof(Vertex) * 2097152; // 
 inline constexpr int32_t MEGA_SKINNED_VERTEX_BUFFER_SIZE = sizeof(SkinnedVertex) * 1048576; // 1M skinned (~100MB)
 inline constexpr int32_t MEGA_PRIMITIVE_BUFFER_COUNT = 65536; // 128K primitives
 inline constexpr int32_t MEGA_PRIMITIVE_BUFFER_SIZE = sizeof(MeshletPrimitive) * MEGA_PRIMITIVE_BUFFER_COUNT;
-inline constexpr int32_t VIEW_COUNT = 4; // Up to 4 views per frame
+inline constexpr int32_t VIEW_COUNT = 4; // Up to 4 views per frame, 0 is main view. 1 is portal. Idk what 2/3 are (maybe remove)
 inline constexpr int32_t SCENE_DATA_BUFFER_SIZE = sizeof(SceneData) * VIEW_COUNT;
 inline constexpr int32_t SHADOW_DATA_BUFFER_SIZE = sizeof(ShadowData) * SHADOW_CASCADE_COUNT * VIEW_COUNT;
 inline constexpr int32_t LIGHT_DATA_BUFFER_SIZE = sizeof(LightData) * VIEW_COUNT;
@@ -50,7 +50,7 @@ inline constexpr int32_t INSTANCING_PACKED_VISIBILITY_SIZE = sizeof(uint32_t) * 
 inline constexpr int32_t INSTANCING_INSTANCE_OFFSET_SIZE = sizeof(uint32_t) * BINDLESS_INSTANCE_BUFFER_COUNT;
 inline constexpr int32_t INSTANCING_PRIMITIVE_COUNT_SIZE = sizeof(PrimitiveCount) * MEGA_PRIMITIVE_BUFFER_COUNT;
 inline constexpr int32_t INSTANCING_COMPACTED_INSTANCE_BUFFER_SIZE = sizeof(Instance) * BINDLESS_INSTANCE_BUFFER_COUNT;
-inline constexpr int32_t INSTANCING_MESH_INDIRECT_COUNT = sizeof(InstancedMeshIndirectCountBuffer);
+inline constexpr int32_t INSTANCING_MESH_INDIRECT_COUNT_SIZE = sizeof(InstancedMeshIndirectCountBuffer);
 inline constexpr int32_t INSTANCING_MESH_INDIRECT_PARAMETERS = sizeof(InstancedMeshIndirectDrawParameters) * MEGA_PRIMITIVE_BUFFER_COUNT;
 
 inline constexpr int32_t POST_PROCESS_LUMINANCE_BUFFER_SIZE = sizeof(uint32_t) * POST_PROCESS_LUMINANCE_DISPATCH_X * POST_PROCESS_LUMINANCE_DISPATCH_Y;

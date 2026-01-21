@@ -37,13 +37,13 @@ groupshared uint32_t visibleMeshletCount;
 
 [shader("task")]
 [numthreads(TASK_SHADER_DISPATCH_X, 1, 1)]
-void TaskMain(uniform InstancedMeshShadingPushConstant pushConstant,
+void TaskMain(uniform InstancedMeshShadingPushConstant pc,
     uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID, uint drawIndex : SV_DrawIndex)
 {
-    InstancedMeshIndirectDrawParameters indirectParameters = pushConstant.indirectBuffer[drawIndex];
+    InstancedMeshIndirectDrawParameters indirectParameters = pc.indirectBuffer[drawIndex];
 
     uint32_t instanceIndex = indirectParameters.compactedInstanceStart + gid.y;
-    Instance inst = pushConstant.compactedInstanceBuffer[instanceIndex];
+    Instance inst = pc.compactedInstanceBuffer[instanceIndex];
 
     uint32_t groupMeshletOffset = indirectParameters.meshletOffset + (gid.x * TASK_SHADER_DISPATCH_X);
     uint32_t totalMeshlets = indirectParameters.meshletCount;
@@ -60,14 +60,14 @@ void TaskMain(uniform InstancedMeshShadingPushConstant pushConstant,
     GroupMemoryBarrierWithGroupSync();
 
 
-    Model model = pushConstant.modelBuffer[inst.modelIndex];
+    Model model = pc.modelBuffer[inst.modelIndex];
 
     // group thread count is only 64, will never exceed uint8
     uint8_t meshletID = (uint8_t)gtid.x;
     uint localMeshletCount = min(TASK_SHADER_DISPATCH_X, totalMeshlets - (gid.x * TASK_SHADER_DISPATCH_X));
 
     if (meshletID < localMeshletCount) {
-        Meshlet mlet = pushConstant.meshletBuffer[groupMeshletOffset + meshletID];
+        Meshlet mlet = pc.meshletBuffer[groupMeshletOffset + meshletID];
 
         // Transform to world space
         float3 scale = float3(
@@ -81,11 +81,11 @@ void TaskMain(uniform InstancedMeshShadingPushConstant pushConstant,
         float4 worldBounds = float4(worldCenter, worldRadius);
 
         bool visible = true;
-        if (!FrustumCullSphere(pushConstant.sceneData->frustum, worldBounds)) {
+        if (!FrustumCullSphere(pc.sceneData[pc.sceneDataIndex].frustum, worldBounds)) {
             visible = false;
         }
 
-        if (visible && !BackfaceCullCone(mlet.coneAxis, mlet.coneCutoff, worldCenter, worldRadius, pushConstant.sceneData->cameraWorldPos.xyz, (float3x3)model.modelMatrix)) {
+        if (visible && !BackfaceCullCone(mlet.coneAxis, mlet.coneCutoff, worldCenter, worldRadius, pc.sceneData[pc.sceneDataIndex].cameraWorldPos.xyz, (float3x3)model.modelMatrix)) {
             visible = false;
         }
 
@@ -111,24 +111,24 @@ void TaskMain(uniform InstancedMeshShadingPushConstant pushConstant,
 void MeshMain(
     in payload MeshletPayload inPayload, out indices uint3 triangles[MESHLET_MAX_TRIANGLES], out vertices VertexOutput vertices[MESHLET_MAX_VERTICES],
     uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID,
-    uniform InstancedMeshShadingPushConstant pushConstant)
+    uniform InstancedMeshShadingPushConstant pc)
 {
     uint32_t payloadMeshletIndex = gid.x;
     uint32_t meshletIndex = inPayload.groupMeshletOffset + inPayload.meshletIndices[payloadMeshletIndex];
-    Meshlet meshlet = pushConstant.meshletBuffer[meshletIndex];
+    Meshlet meshlet = pc.meshletBuffer[meshletIndex];
 
-    Model m = pushConstant.modelBuffer[inPayload.modelIndex];
+    Model m = pc.modelBuffer[inPayload.modelIndex];
 
-    float4x4 jitteredViewProj = pushConstant.sceneData->viewProj;
-    float4x4 jitteredPrevViewProj = pushConstant.sceneData->prevViewProj;
+    float4x4 jitteredViewProj = pc.sceneData[pc.sceneDataIndex].viewProj;
+    float4x4 jitteredPrevViewProj = pc.sceneData[pc.sceneDataIndex].prevViewProj;
 
-    float3x3 viewRotation = (float3x3)pushConstant.sceneData.view;
+    float3x3 viewRotation = (float3x3)pc.sceneData[pc.sceneDataIndex].view;
 
     SetMeshOutputCounts(meshlet.meshletVertexCount, meshlet.meshletTriangleCount);
     uint32_t threadIndex = gtid.x;
     for (uint i = threadIndex; i < meshlet.meshletVertexCount; i += MESH_SHADER_DISPATCH_X) {
-        uint localVertexIndex = pushConstant.meshletVerticesBuffer[meshlet.meshletVertexOffset + i];
-        Vertex v = pushConstant.vertexBuffer[meshlet.vertexOffset + localVertexIndex];
+        uint localVertexIndex = pc.meshletVerticesBuffer[meshlet.meshletVertexOffset + i];
+        Vertex v = pc.vertexBuffer[meshlet.vertexOffset + localVertexIndex];
         float4 clipPos = mul(jitteredViewProj, mul(m.modelMatrix, float4(v.position, 1.0)));
         vertices[i].position = clipPos;
         vertices[i].viewNormal = normalize(mul(viewRotation, mul(Adjugate((float3x3)m.modelMatrix), v.normal)));
@@ -150,7 +150,7 @@ void MeshMain(
 
     for (uint i = threadIndex; i < meshlet.meshletTriangleCount; i += MESH_SHADER_DISPATCH_X) {
         uint triIndex = meshlet.meshletTriangleOffset + i;
-        uint packed = pushConstant.meshletTrianglesBuffer[triIndex];
+        uint packed = pc.meshletTrianglesBuffer[triIndex];
 
         uint idx0 = (packed >> 0) & 0xFF;
         uint idx1 = (packed >> 8) & 0xFF;
@@ -170,9 +170,9 @@ struct FragmentOutput {
 };
 
 [shader("fragment")]
-FragmentOutput FragmentMain(VertexOutput vertexInput, uniform InstancedMeshShadingPushConstant pushConstant)
+FragmentOutput FragmentMain(VertexOutput vertexInput, uniform InstancedMeshShadingPushConstant pc)
 {
-    MaterialProperties material = pushConstant.materialBuffer[vertexInput.materialIndex];
+    MaterialProperties material = pc.materialBuffer[vertexInput.materialIndex];
 
     // float4 albedoSample = textures[material.textureImageIndices[0]].Sample(samplers[material.textureSamplerIndices[0]], vertexInput.uv);
     float4 albedoSample = assetTextures[material.textureImageIndices[0]].SampleBias(assetSamplers[material.textureSamplerIndices[0]], vertexInput.uv, -1.0);
@@ -188,8 +188,8 @@ FragmentOutput FragmentMain(VertexOutput vertexInput, uniform InstancedMeshShadi
 
     float2 currNdc = vertexInput.currentClipPos.xy / vertexInput.currentClipPos.w;
     float2 prevNdc = vertexInput.previousClipPos.xy / vertexInput.previousClipPos.w;
-    currNdc += pushConstant.sceneData->jitter;
-    prevNdc += pushConstant.sceneData->prevJitter;
+    currNdc += pc.sceneData[pc.sceneDataIndex].jitter;
+    prevNdc += pc.sceneData[pc.sceneDataIndex].prevJitter;
     output.velocity = currNdc - prevNdc;
 
     return output;

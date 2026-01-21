@@ -31,5 +31,18 @@ void BuildViewFamily(Engine::GameState* state, Core::ViewFamily& mainViewFamily)
     if (auto* debugView = state->registry.try_get<RenderDebugViewComponent>(mainCamera)) {
         mainViewFamily.mainView.debug = debugView->debugIndex;
     }
+
+    mainViewFamily.portalViews.clear();
+    Core::RenderView portalView{};
+    portalView.currentViewData.fovRadians = cam.currentViewData.fovRadians;
+    portalView.currentViewData.aspectRatio = cam.currentViewData.aspectRatio;
+    portalView.currentViewData.nearPlane = cam.currentViewData.nearPlane;
+    portalView.currentViewData.farPlane = cam.currentViewData.farPlane;
+    portalView.currentViewData.cameraPos = glm::vec3(0.0f, 0.0f, 0.0f);
+    portalView.currentViewData.cameraLookAt = glm::vec3(0.0f, 0.0f, -1.0f);
+    portalView.currentViewData.cameraForward = glm::vec3(0.0f, 0.0f, -1.0f);
+    portalView.currentViewData.cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
+    portalView.previousViewData = portalView.currentViewData;
+    mainViewFamily.portalViews.push_back(portalView);
 }
 } // Game

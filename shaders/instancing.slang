@@ -11,16 +11,16 @@ import bindless_declarations;
 // Evaluates the visibility of each instance and outputs to a packed visibility buffer
 [shader("compute")]
 [numthreads(INSTANCING_VISIBILITY_DISPATCH_X, 1, 1)]
-void ComputeVisibility(uniform VisibilityPushConstant pushConstant, uint3 dtid : SV_DispatchThreadID)
+void ComputeVisibility(uniform VisibilityPushConstant pc, uint3 dtid : SV_DispatchThreadID)
 {
     uint instanceID = dtid.x;
-    if (instanceID >= pushConstant.instanceCount) {
+    if (instanceID >= pc.instanceCount) {
         return;
     }
-    Instance inst = pushConstant.instanceBuffer[instanceID];
+    Instance inst = pc.instanceBuffer[instanceID];
 
-    MeshletPrimitive prim = pushConstant.primitiveBuffer[inst.primitiveIndex];
-    Model model = pushConstant.modelBuffer[inst.modelIndex];
+    MeshletPrimitive prim = pc.primitiveBuffer[inst.primitiveIndex];
+    Model model = pc.modelBuffer[inst.modelIndex];
 
     float4 boundingSphere = prim.boundingSphere;
     float3 scale = float3(
@@ -34,7 +34,7 @@ void ComputeVisibility(uniform VisibilityPushConstant pushConstant, uint3 dtid :
     float4 worldBounds = float4(worldCenter, worldRadius);
 
     bool bVisible = true;
-    if (!FrustumCullSphere(pushConstant.sceneData->frustum, worldBounds)) {
+    if (!FrustumCullSphere(pc.sceneData[pc.sceneDataIndex].frustum, worldBounds)) {
         bVisible = false;
     }
 
@@ -44,25 +44,25 @@ void ComputeVisibility(uniform VisibilityPushConstant pushConstant, uint3 dtid :
 
     if (bVisible) {
         uint32_t bitMask = 1u << visibilityChunkBit;
-        InterlockedOr(pushConstant.packedVisibilityBuffer[visibilityChunkIndex], bitMask);
+        InterlockedOr(pc.packedVisibilityBuffer[visibilityChunkIndex], bitMask);
 
-        uint32_t instanceOffset = pushConstant.primitiveCountBuffer[inst.primitiveIndex].count.add(1);
-        pushConstant.instanceOffsetBuffer[instanceID] = instanceOffset;
+        uint32_t instanceOffset = pc.primitiveCountBuffer[inst.primitiveIndex].count.add(1);
+        pc.instanceOffsetBuffer[instanceID] = instanceOffset;
     }
 }
 
 [shader("compute")]
 [numthreads(INSTANCING_VISIBILITY_DISPATCH_X, 1, 1)]
-void ComputeVisibilityShadows(uniform VisibilityShadowsPushConstant pushConstant, uint3 dtid : SV_DispatchThreadID)
+void ComputeVisibilityShadows(uniform VisibilityShadowsPushConstant pc, uint3 dtid : SV_DispatchThreadID)
 {
     uint instanceID = dtid.x;
-    if (instanceID >= pushConstant.instanceCount) {
+    if (instanceID >= pc.instanceCount) {
         return;
     }
-    Instance inst = pushConstant.instanceBuffer[instanceID];
+    Instance inst = pc.instanceBuffer[instanceID];
 
-    MeshletPrimitive prim = pushConstant.primitiveBuffer[inst.primitiveIndex];
-    Model model = pushConstant.modelBuffer[inst.modelIndex];
+    MeshletPrimitive prim = pc.primitiveBuffer[inst.primitiveIndex];
+    Model model = pc.modelBuffer[inst.modelIndex];
 
     float4 boundingSphere = prim.boundingSphere;
     float3 scale = float3(
@@ -76,7 +76,7 @@ void ComputeVisibilityShadows(uniform VisibilityShadowsPushConstant pushConstant
     float4 worldBounds = float4(worldCenter, worldRadius);
 
     bool bVisible = true;
-    Frustum frustum = pushConstant.shadowData->lightFrustums[pushConstant.cascadeLevel];
+    Frustum frustum = pc.shadowData->lightFrustums[pc.cascadeLevel];
     if (!FrustumCullSphere(frustum, worldBounds)) {
         bVisible = false;
     }
@@ -87,10 +87,10 @@ void ComputeVisibilityShadows(uniform VisibilityShadowsPushConstant pushConstant
 
     if (bVisible) {
         uint32_t bitMask = 1u << visibilityChunkBit;
-        InterlockedOr(pushConstant.packedVisibilityBuffer[visibilityChunkIndex], bitMask);
+        InterlockedOr(pc.packedVisibilityBuffer[visibilityChunkIndex], bitMask);
 
-        uint32_t instanceOffset = pushConstant.primitiveCountBuffer[inst.primitiveIndex].count.add(1);
-        pushConstant.instanceOffsetBuffer[instanceID] = instanceOffset;
+        uint32_t instanceOffset = pc.primitiveCountBuffer[inst.primitiveIndex].count.add(1);
+        pc.instanceOffsetBuffer[instanceID] = instanceOffset;
     }
 }
 
@@ -100,11 +100,11 @@ void ComputeVisibilityShadows(uniform VisibilityShadowsPushConstant pushConstant
 
 [shader("compute")]
 [numthreads(1, 1, 1)]
-void ComputePrefixSum(uniform PrefixSumPushConstant pushConstant) {
+void ComputePrefixSum(uniform PrefixSumPushConstant pc) {
     uint sum = 0;
-    for (uint i = 0; i < pushConstant.highestPrimitiveIndex; i++) {
-        pushConstant.primitiveCountBuffer[i].offset = sum;
-        sum += pushConstant.primitiveCountBuffer[i].count.load();
+    for (uint i = 0; i < pc.highestPrimitiveIndex; i++) {
+        pc.primitiveCountBuffer[i].offset = sum;
+        sum += pc.primitiveCountBuffer[i].count.load();
     }
 }
 
@@ -113,34 +113,34 @@ void ComputePrefixSum(uniform PrefixSumPushConstant pushConstant) {
 
 [shader("compute")]
 [numthreads(INSTANCING_CONSTRUCTION_DISPATCH_X, 1, 1)]
-void ComputeCompactAndGenerateIndirect(uniform IndirectWritePushConstant pushConstant, uint3 dtid : SV_DispatchThreadID)
+void ComputeCompactAndGenerateIndirect(uniform IndirectWritePushConstant pc, uint3 dtid : SV_DispatchThreadID)
 {
     uint instanceID = dtid.x;
 
     uint visChunkIndex = instanceID / 32;
     uint visChunkBit = instanceID % 32;
-    uint32_t visChunk = pushConstant.packedVisibilityBuffer[visChunkIndex];
+    uint32_t visChunk = pc.packedVisibilityBuffer[visChunkIndex];
     bool visible = (visChunk & (1u << visChunkBit)) != 0;
 
     if (!visible) return;
 
-    Instance inst = pushConstant.instanceBuffer[instanceID];
+    Instance inst = pc.instanceBuffer[instanceID];
 
     // Offset to 0th primitive of a given primitive
-    uint32_t primitiveOffset = pushConstant.primitiveCountBuffer[inst.primitiveIndex].offset;
+    uint32_t primitiveOffset = pc.primitiveCountBuffer[inst.primitiveIndex].offset;
     // Instance offset within primitive group
-    uint32_t instanceOffset = pushConstant.instanceOffsetBuffer[instanceID];
+    uint32_t instanceOffset = pc.instanceOffsetBuffer[instanceID];
 
-    pushConstant.compactedInstanceBuffer[primitiveOffset + instanceOffset].primitiveIndex = inst.primitiveIndex;
-    pushConstant.compactedInstanceBuffer[primitiveOffset + instanceOffset].modelIndex = inst.modelIndex;
-    pushConstant.compactedInstanceBuffer[primitiveOffset + instanceOffset].materialIndex = inst.materialIndex;
-    pushConstant.compactedInstanceBuffer[primitiveOffset + instanceOffset].jointMatrixOffset = inst.jointMatrixOffset;
+    pc.compactedInstanceBuffer[primitiveOffset + instanceOffset].primitiveIndex = inst.primitiveIndex;
+    pc.compactedInstanceBuffer[primitiveOffset + instanceOffset].modelIndex = inst.modelIndex;
+    pc.compactedInstanceBuffer[primitiveOffset + instanceOffset].materialIndex = inst.materialIndex;
+    pc.compactedInstanceBuffer[primitiveOffset + instanceOffset].jointMatrixOffset = inst.jointMatrixOffset;
 
     if (instanceOffset == 0) {
-        MeshletPrimitive prim = pushConstant.primitiveBuffer[inst.primitiveIndex];
+        MeshletPrimitive prim = pc.primitiveBuffer[inst.primitiveIndex];
         uint totalMeshlets = prim.meshletCount;
         uint numChunks = (totalMeshlets + (TASK_SHADER_DISPATCH_X - 1)) / TASK_SHADER_DISPATCH_X;
-        uint32_t count = pushConstant.primitiveCountBuffer[inst.primitiveIndex].count.load();
+        uint32_t count = pc.primitiveCountBuffer[inst.primitiveIndex].count.load();
 
         InstancedMeshIndirectDrawParameters parameters;
         parameters.groupCountX = numChunks;
@@ -152,7 +152,7 @@ void ComputeCompactAndGenerateIndirect(uniform IndirectWritePushConstant pushCon
         parameters.meshletCount = prim.meshletCount;
 
         // todo: can optimize by removing indirect index here. Can specify/calculate in prefix sum pass
-        uint32_t indirectIndex = pushConstant.indirectCountBuffer->meshIndirectCount.add(1);
-        pushConstant.indirectBuffer[indirectIndex] = parameters;
+        uint32_t indirectIndex = pc.indirectCountBuffer->meshIndirectCount.add(1);
+        pc.indirectBuffer[indirectIndex] = parameters;
     }
 }

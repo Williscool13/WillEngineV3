@@ -15,7 +15,6 @@
 #include "pipelines/compute_pipeline.h"
 #include "pipelines/mesh_shading_instanced_pipeline.h"
 #include "pipelines/shadow_mesh_shading_instanced_pipeline.h"
-#include "shaders/common_interop.h"
 
 namespace AssetLoad
 {
@@ -98,19 +97,26 @@ public:
 private:
     void CreatePipelines();
 
-    void SetupFrameUniforms(VkCommandBuffer cmd, const Core::ViewFamily& viewFamily, FrameResources& frameResource, std::array<uint32_t, 2> renderExtent) const;
+    void SetupFrameUniforms(VkCommandBuffer cmd, const Core::ViewFamily& viewFamily, FrameResources& frameResource, std::array<uint32_t, 2> renderExtent, float renderDeltaTime) const;
 
     void SetupCascadedShadows(RenderGraph& graph, const Core::ViewFamily& viewFamily) const;
 
-    void SetupInstancing(RenderGraph& graph, const Core::ViewFamily& viewFamily) const;
+    struct GBufferTargets {
+        std::string albedo;
+        std::string normal;
+        std::string pbr;
+        std::string emissive;
+        std::string velocity;
+        std::string depth;
+    };
 
-    void SetupMainGeometryPass(RenderGraph& graph, const Core::ViewFamily& viewFamily) const;
+    void SetupMainGeometryPass(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneIndex) const;
+
+    void SetupGroundTruthAmbientOcclusion(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent) const;
 
     void SetupShadowsResolve(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent) const;
 
     void SetupDeferredLighting(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent) const;
-
-    void SetupGroundTruthAmbientOcclusion(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent) const;
 
     void SetupTemporalAntialiasing(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent) const;
 

@@ -77,6 +77,8 @@ add_library(render STATIC
         pipelines/pipeline_manager.h
         pipelines/pipeline_category.cpp
         pipelines/pipeline_category.h
+        render-view/render_view_helpers.cpp
+        render-view/render_view_helpers.h
 )
 
 target_include_directories(render PRIVATE

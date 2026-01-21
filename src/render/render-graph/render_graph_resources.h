@@ -72,6 +72,8 @@ struct PhysicalResource
     PipelineEvent event;
     bool bIsImported = false;
     bool bDisableBarriers = false;
+
+    int32_t lifetime{0};
     bool bCanAlias = true;
 
     uint64_t lastUsedFrame = 0;
