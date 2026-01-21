@@ -182,7 +182,7 @@ void ComputeMotionBlurTileMax(uniform MotionBlurTileVelocityPushConstant pc, uin
             float2 velocity = NDCVelocity * 0.5;
             float2 uv = (float2(pixelCoord) + 0.5) / pc.sceneData->mainRenderTargetSize;
             float depth = rdgTextures[pc.depthBufferIndex].Load(int3(pixelCoord, 0)).r;
-            float2 cameraMotion = ComputeCameraMotion(pc.sceneData->invViewProj, pc.sceneData->prevViewProj, uv, depth);
+            float2 cameraMotion = ComputeCameraMotion(pc.sceneData->clipToPrevClip, uv, depth);
             cameraMotion += jitterDiff;
             velocity -= cameraMotion;
             float velocityLengthSq = dot(velocity, velocity);
@@ -229,13 +229,10 @@ void ComputeMotionBlurNeighborMax(uniform MotionBlurNeighborMaxPushConstant pc, 
     rdgRenderTextures[pc.neighborMaxIndex][tileCoord] = float4(maxVelocity, 0.0f, 0.0f);
 }
 
-float2 ComputeCameraMotion(float4x4 invViewProj, float4x4 prevViewProj, float2 uv, float depth) {
-    float3 worldPos = ReconstructWorldPosition(invViewProj, uv, depth);
-
-    float4 prevClipPos = mul(prevViewProj, float4(worldPos, 1.0));
-    float2 prevNDC = prevClipPos.xy / prevClipPos.w;
-    float2 prevUV = prevNDC * 0.5 + 0.5;
-
+float2 ComputeCameraMotion(float4x4 clipToPrevClip, float2 uv, float depth) {
+    float4 clipPos = float4(uv * 2.0 - 1.0, depth, 1.0);
+    float4 prevClipPos = mul(clipToPrevClip, clipPos);
+    float2 prevUV = (prevClipPos.xy / prevClipPos.w) * 0.5 + 0.5;
     return uv - prevUV;
 }
 
@@ -275,7 +272,7 @@ void ComputeMotionBlurReconstruction(uniform MotionBlurReconstructionPushConstan
     float2 totalNDCVelocity = rdgTextures[pc.velocityBufferIndex].Load(int3(pixelCoord, 0)).rg;
     float2 totalVelocity = totalNDCVelocity * 0.5;
     // Unjitter camera motion
-    float2 cameraMotion = ComputeCameraMotion(pc.sceneData->invViewProj, pc.sceneData->prevViewProj, uv, centerDepth);
+    float2 cameraMotion = ComputeCameraMotion(pc.sceneData->clipToPrevClip, uv, centerDepth);
     cameraMotion += jitterDiff;
     // Velocity of object only
     float2 centerVelocity = (totalVelocity - cameraMotion) * pc.velocityScale;
@@ -315,7 +312,7 @@ void ComputeMotionBlurReconstruction(uniform MotionBlurReconstructionPushConstan
             // Get sample's velocity for its spread length
             float2 sampleTotalVel = rdgTextures[pc.velocityBufferIndex].Load(int3(sampleCoord, 0)).rg;
             sampleTotalVel = sampleTotalVel * 0.5;
-            float2 sampleCameraMotion = ComputeCameraMotion(pc.sceneData->invViewProj, pc.sceneData->prevViewProj, sampleUV, sampleDepth);
+            float2 sampleCameraMotion = ComputeCameraMotion(pc.sceneData->clipToPrevClip, sampleUV, sampleDepth);
             sampleCameraMotion += jitterDiff;
             float2 sampleVelocity = sampleTotalVel - sampleCameraMotion;
 

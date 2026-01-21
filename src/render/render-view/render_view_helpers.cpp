@@ -21,6 +21,7 @@ SceneData GenerateSceneData(const Core::RenderView& view, const Core::PostProces
 
     SceneData sceneData{};
     sceneData.view = viewMatrix;
+    sceneData.prevView = prevViewMatrix;
 
     if (ppConfig.bEnableTemporalAntialiasing) {
         HaltonSample jitter = HALTON_SEQUENCE[frameNumber % HALTON_SEQUENCE_COUNT];
@@ -41,22 +42,28 @@ SceneData GenerateSceneData(const Core::RenderView& view, const Core::PostProces
         sceneData.jitter = {jitterX, jitterY};
         sceneData.prevJitter = {prevJitterX, prevJitterY};
         sceneData.proj = jitteredProj;
-        sceneData.prevViewProj = jitteredPrevProj * prevViewMatrix;
+        sceneData.prevProj = jitteredPrevProj;
+
     }
     else {
         sceneData.jitter = {0.0f, 0.0f};
         sceneData.prevJitter = {0.0f, 0.0f};
         sceneData.proj = projMatrix;
-        sceneData.prevViewProj = prevProjMatrix * prevViewMatrix;
+        sceneData.prevProj = prevProjMatrix;
     }
 
+
     sceneData.viewProj = sceneData.proj * sceneData.view;
+    sceneData.prevViewProj = sceneData.prevProj * sceneData.prevView;
+
     sceneData.invView = glm::inverse(sceneData.view);
     sceneData.invProj = glm::inverse(sceneData.proj);
     sceneData.invViewProj = glm::inverse(sceneData.viewProj);
 
+
     sceneData.unjitteredViewProj = projMatrix * viewMatrix;
     sceneData.unjitteredPrevViewProj = prevProjMatrix * prevViewMatrix;
+    sceneData.clipToPrevClip = sceneData.prevProj * sceneData.prevView * sceneData.invView * sceneData.invProj;
 
     sceneData.cameraWorldPos = glm::vec4(view.currentViewData.cameraPos, 1.0f);
 

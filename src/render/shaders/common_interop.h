@@ -55,9 +55,12 @@ SHADER_PUBLIC struct SHADER_ALIGN SceneData
     SHADER_PUBLIC float4x4 invView;
     SHADER_PUBLIC float4x4 invProj;
     SHADER_PUBLIC float4x4 invViewProj;
+    SHADER_PUBLIC float4x4 prevView;
+    SHADER_PUBLIC float4x4 prevProj;
     SHADER_PUBLIC float4x4 prevViewProj;
     SHADER_PUBLIC float4x4 unjitteredViewProj;
     SHADER_PUBLIC float4x4 unjitteredPrevViewProj;
+    SHADER_PUBLIC float4x4 clipToPrevClip; // currClip -> prevClip space in 1 single multiplication
 
     SHADER_PUBLIC Frustum frustum;
 

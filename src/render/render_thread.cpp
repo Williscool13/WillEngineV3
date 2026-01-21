@@ -252,7 +252,6 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     renderGraph->ImportBuffer("debug_readback_buffer", resourceManager->debugReadbackBuffer.handle, resourceManager->debugReadbackBuffer.address,
                               {resourceManager->debugReadbackBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT}, resourceManager->debugReadbackLastKnownState);
 
-    renderGraph->CreateTexture("shadows_resolve_target", TextureInfo{VK_FORMAT_R8G8_UNORM, renderExtent[0], renderExtent[1], 1});
     bool bHasShadows = viewFamily.shadowConfig.enabled && !viewFamily.instances.empty() && pipelineManager->IsCategoryReady(PipelineCategory::ShadowPass);
     if (bHasShadows) {
         SetupCascadedShadows(*renderGraph, viewFamily);
@@ -297,7 +296,6 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
 
     bool bHasPostProcess = pipelineManager->IsCategoryReady(PipelineCategory::PostProcess);
     if (bHasPostProcess) {
-        renderGraph->CreateTexture("post_process_output", TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
         SetupPostProcessing(*renderGraph, viewFamily, renderExtent, frameBuffer.timeFrame.renderDeltaTime);
     }
     else {
@@ -1134,16 +1132,10 @@ void RenderThread::SetupGroundTruthAmbientOcclusion(RenderGraph& graph, const Co
 void RenderThread::SetupShadowsResolve(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent) const
 {
     if (!graph.HasTexture("normal_target")) {
-        RenderPass& clearPass = graph.AddPass("Clear Shadows Resolve", VK_PIPELINE_STAGE_2_CLEAR_BIT);
-        clearPass.WriteClearImage("shadows_resolve_target");
-        clearPass.Execute([&](VkCommandBuffer cmd) {
-            VkClearColorValue clearColor = {{1.0f, 1.0f, 1.0f, 1.0f}};
-            VkImageSubresourceRange range = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-            vkCmdClearColorImage(cmd, graph.GetImageHandle("shadows_resolve_target"), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &range);
-        });
         return;
     }
 
+    renderGraph->CreateTexture("shadows_resolve_target", TextureInfo{VK_FORMAT_R8G8_UNORM, renderExtent[0], renderExtent[1], 1});
     RenderPass& shadowsResolvePass = graph.AddPass("Shadows Resolve", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
     shadowsResolvePass.ReadSampledImage("normal_target");
     shadowsResolvePass.ReadSampledImage("depth_target");
@@ -1206,7 +1198,7 @@ void RenderThread::SetupDeferredLighting(RenderGraph& graph, const Core::ViewFam
         vkCmdClearColorImage(cmd, img, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &colorSubresource);
     });
 
-    if (!graph.HasTexture("albedo_target")) {
+    if (!graph.HasTexture("normal_target")) {
         return;
     }
 
@@ -1345,18 +1337,11 @@ void RenderThread::SetupTemporalAntialiasing(RenderGraph& graph, const Core::Vie
 void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamily& viewFamily, const std::array<uint32_t, 2> renderExtent, float deltaTime) const
 {
     if (!graph.HasTexture("normal_target")) {
-        graph.CreateTexture("post_process_output", TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
-
-        RenderPass& clearPass = graph.AddPass("Clear Post Process", VK_PIPELINE_STAGE_2_CLEAR_BIT);
-        clearPass.WriteClearImage("post_process_output");
-        clearPass.Execute([&](VkCommandBuffer cmd) {
-            VkClearColorValue clearColor = {{0.3f, 0.0f, 0.0f, 1.0f}};
-            VkImageSubresourceRange range = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-            vkCmdClearColorImage(cmd, graph.GetImageHandle("post_process_output"), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &range);
-        });
+        renderGraph->AliasTexture("post_process_output", "taa_output");
         return;
     }
 
+    renderGraph->CreateTexture("post_process_output", TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
     const Core::PostProcessConfiguration& ppConfig = viewFamily.postProcessConfig;
 
     // Exposure

@@ -299,7 +299,7 @@ void RenderGraph::Compile(int64_t currentFrame)
     }
 
     for (auto& phys : physicalResources) {
-        if (phys.NeedsDescriptorWrite()) {
+        if (phys.NeedsDescriptorWrite() && phys.imageView != VK_NULL_HANDLE) {
             phys.sampledDescriptorHandle = transientImageHandleAllocator.Add();
             assert(phys.sampledDescriptorHandle.IsValid() && "Invalid descriptor handle assigned to physical resource");
 
@@ -1429,8 +1429,14 @@ void RenderGraph::CreatePhysicalImage(PhysicalResource& resource, const Resource
     VmaAllocationCreateInfo allocInfo = {};
     allocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
 
-    VK_CHECK(vmaCreateImage(context->allocator, &imageInfo, &allocInfo,
-        &resource.image, &resource.imageAllocation, nullptr));
+    VK_CHECK(vmaCreateImage(context->allocator, &imageInfo, &allocInfo, &resource.image, &resource.imageAllocation, nullptr));
+#ifdef _DEBUG
+    VkDebugUtilsObjectNameInfoEXT nameInfo{VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT};
+    nameInfo.objectType = VK_OBJECT_TYPE_IMAGE;
+    nameInfo.objectHandle = reinterpret_cast<uint64_t>(resource.image);
+    nameInfo.pObjectName = resource.debugName.c_str();
+    vkSetDebugUtilsObjectNameEXT(context->device, &nameInfo);
+#endif
 
     VkImageAspectFlags aspectFlags = VK_IMAGE_ASPECT_COLOR_BIT;
 
@@ -1443,6 +1449,16 @@ void RenderGraph::CreatePhysicalImage(PhysicalResource& resource, const Resource
     else if (dim.format == VK_FORMAT_S8_UINT) {
         aspectFlags = VK_IMAGE_ASPECT_STENCIL_BIT;
     }
+
+    resource.aspect = aspectFlags;
+    resource.dimensions = dim;
+    resource.event = {};
+
+    constexpr VkImageUsageFlags TRANSFER_ONLY = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    if ((dim.imageUsage & ~TRANSFER_ONLY) == 0) {
+        return;
+    }
+
 
     VkImageViewCreateInfo viewInfo = VkHelpers::ImageViewCreateInfo(
         resource.image,
@@ -1460,18 +1476,6 @@ void RenderGraph::CreatePhysicalImage(PhysicalResource& resource, const Resource
         mipViewInfo.subresourceRange.levelCount = 1;
         VK_CHECK(vkCreateImageView(context->device, &mipViewInfo, nullptr, &resource.mipViews[mip]));
     }
-
-    resource.aspect = aspectFlags;
-    resource.dimensions = dim;
-    resource.event = {};
-
-#ifdef _DEBUG
-    VkDebugUtilsObjectNameInfoEXT nameInfo{VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT};
-    nameInfo.objectType = VK_OBJECT_TYPE_IMAGE;
-    nameInfo.objectHandle = reinterpret_cast<uint64_t>(resource.image);
-    nameInfo.pObjectName = resource.debugName.c_str();
-    vkSetDebugUtilsObjectNameEXT(context->device, &nameInfo);
-#endif
 }
 
 void RenderGraph::CreatePhysicalBuffer(PhysicalResource& resource, const ResourceDimensions& dim)
