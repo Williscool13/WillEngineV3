@@ -11,16 +11,15 @@ void ComputeMain(uniform DeferredResolvePushConstant pc, uint3 threadID : SV_Dis
     if (threadID.x >= pc.extent.x || threadID.y >= pc.extent.y) return;
 
     float2 uv = (float2(threadID.xy) + 0.5) / float2(pc.extent);
-    float4 albedo = rdgTextures[pc.albedoIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], uv, 0);
-
-    float depth = rdgTextures[pc.depthIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], uv, 0).r;
+    float4 albedo = rdgTextures[pc.albedoIndex].Load(int3(threadID.xy, 0));
+    float depth = rdgTextures[pc.depthIndex].Load(int3(threadID.xy, 0)).r;
     if (depth <= 0.0) {
         return;
     }
-    float3 viewNormal = rdgTextures[pc.normalIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], uv, 0).xyz;
-    float4 pbrData = rdgTextures[pc.pbrIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], uv, 0);
-    float4 emissiveData = rdgTextures[pc.emissiveIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], uv, 0);
-    float viewSpaceDepth =  ScreenToViewSpaceDepth(depth, pc.sceneData.depthLinearizeMult, pc.sceneData.depthLinearizeAdd);
+    float3 viewNormal = rdgTextures[pc.normalIndex].Load(int3(threadID.xy, 0)).xyz;
+    float4 pbrData = rdgTextures[pc.pbrIndex].Load(int3(threadID.xy, 0));
+    float4 emissiveData = rdgTextures[pc.emissiveIndex].Load(int3(threadID.xy, 0));
+    float viewSpaceDepth = ScreenToViewSpaceDepth(depth, pc.sceneData.depthLinearizeMult, pc.sceneData.depthLinearizeAdd);
     float3 viewPosition = CheapReconstructViewSpacePosition(pc.sceneData->ndcToViewMul, pc.sceneData->ndcToViewAdd, uv, viewSpaceDepth);
 
     float roughness = pbrData.g;
@@ -59,11 +58,10 @@ void ComputeMain(uniform DeferredResolvePushConstant pc, uint3 threadID : SV_Dis
 
     float gtao;
     if (pc.gtaoFilteredIndex >= 0) {
-        gtao = rdgTextures[pc.gtaoFilteredIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], uv, 0).x;
+        gtao = rdgTextures[pc.gtaoFilteredIndex].Load(int3(threadID.xy, 0)).x;
     } else {
         gtao = 1.0f;
     }
-
 
     const float lightIntensity = pc.lightData.mainLightDirection.w;
     const float3 lightColor = pc.lightData.mainLightColor.rgb;

@@ -109,7 +109,6 @@ float ComputeVelocityDisocclusion(float2 uv, float2 currentVelocityUV) {
 
     float2 previousVelocityNDC = rdgTextures[pc.velocityHistoryIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], historyUv, 0).rg;
     float2 previousVelocityUV = previousVelocityNDC * 0.5;
-    previousVelocityUV.y = -previousVelocityUV.y;
 
     float velocityDelta = length(previousVelocityUV - currentVelocityUV);
     float disocclusion = saturate((velocityDelta - 0.001) * 10.0);
@@ -126,7 +125,6 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
 
     float2 velocityNDC = GetVelocityDilated(uv);
     float2 velocity = velocityNDC * 0.5;
-    velocity.y = -velocity.y;
 
     float velocityDisocclusion = ComputeVelocityDisocclusion(uv, velocity);
 

@@ -107,7 +107,6 @@ public float GetShadowFactor(float3 viewPos, float3 viewNormal, SceneData* scene
     float4 lightSpacePos = mul(shadowData.lightSpaceMatrices[cascadeLevel], float4(worldPos, 1.0));
     float3 projCoords = lightSpacePos.xyz / lightSpacePos.w;
     projCoords.xy = projCoords.xy * 0.5 + 0.5;
-    projCoords.y = 1 - projCoords.y;
 
     uint shadowMapIndex = csmIndices[cascadeLevel];
     Texture2D shadowMap = textures[NonUniformResourceIndex(shadowMapIndex)];
@@ -137,7 +136,6 @@ public float GetShadowFactor(float3 viewPos, float3 viewNormal, SceneData* scene
             float4 nextLightSpacePos = mul(shadowData.lightSpaceMatrices[cascadeLevel + 1], float4(worldPos, 1.0));
             float3 nextProjCoords = nextLightSpacePos.xyz / nextLightSpacePos.w;
             nextProjCoords.xy = nextProjCoords.xy * 0.5 + 0.5;
-            nextProjCoords.y = 1 - nextProjCoords.y;
 
             uint nextShadowMapIndex = csmIndices[cascadeLevel + 1];
             Texture2D nextShadowMap = textures[NonUniformResourceIndex(nextShadowMapIndex)];

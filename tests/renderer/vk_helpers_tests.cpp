@@ -78,7 +78,7 @@ TEST_CASE("SubresourceRange creation", "[renderer][vk-helpers]") {
 
 TEST_CASE("GenerateViewport creates correct viewport", "[renderer][vk-helpers]") {
     SECTION("1920x1080 viewport") {
-        auto viewport = GenerateViewport(1920, 1080);
+        auto viewport = GenerateFlippedViewport(1920, 1080);
 
         REQUIRE(viewport.x == 0.0f);
         REQUIRE(viewport.y == 1080.0f); // Inverted: y starts at height
@@ -89,7 +89,7 @@ TEST_CASE("GenerateViewport creates correct viewport", "[renderer][vk-helpers]")
     }
 
     SECTION("Small viewport") {
-        auto viewport = GenerateViewport(256, 256);
+        auto viewport = GenerateFlippedViewport(256, 256);
 
         REQUIRE(viewport.width == 256.0f);
         REQUIRE(viewport.y == 256.0f); // Inverted: y starts at height
@@ -97,7 +97,7 @@ TEST_CASE("GenerateViewport creates correct viewport", "[renderer][vk-helpers]")
     }
 
     SECTION("Asymmetric viewport") {
-        auto viewport = GenerateViewport(2560, 1440);
+        auto viewport = GenerateFlippedViewport(2560, 1440);
 
         REQUIRE(viewport.width == 2560.0f);
         REQUIRE(viewport.y == 1440.0f); // Inverted: y starts at height

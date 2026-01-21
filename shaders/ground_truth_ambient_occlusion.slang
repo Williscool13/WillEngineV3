@@ -265,7 +265,7 @@ void ComputeGTAOMain(uniform GTAOMainPushConstant pc, uint3 dtid : SV_DispatchTh
         float phi = sliceK * XE_GTAO_PI;
         float cosPhi = cos(phi);
         float sinPhi = sin(phi);
-        float2 omega = float2(cosPhi, -sinPhi);
+        float2 omega = float2(cosPhi, sinPhi); // Flip sinPhi because of vulkan 0,0 at top left.
 
         omega *= screenspaceRadius;
 

@@ -66,6 +66,8 @@ VkRenderingInfo RenderingInfo(VkExtent2D renderExtent, const VkRenderingAttachme
 
 VkRenderingInfo RenderingInfo(const VkExtent2D renderExtent, const VkRenderingAttachmentInfo* colorAttachment, uint32_t colorAttachmentCount, const VkRenderingAttachmentInfo* depthAttachment);
 
+VkViewport GenerateFlippedViewport(uint32_t width, uint32_t height);
+
 VkViewport GenerateViewport(uint32_t width, uint32_t height);
 
 VkRect2D GenerateScissor(uint32_t width, uint32_t height);

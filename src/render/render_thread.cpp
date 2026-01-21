@@ -37,7 +37,7 @@ RenderThread::RenderThread(Core::FrameSync* engineRenderSynchronization, enki::T
 {
     context = std::make_unique<VulkanContext>(window);
     swapchain = std::make_unique<Swapchain>(context.get(), width, height);
-    imgui = std::make_unique<ImguiWrapper>(context.get(), window, Core::FRAME_BUFFER_COUNT, COLOR_ATTACHMENT_FORMAT);
+    imgui = std::make_unique<ImguiWrapper>(context.get(), window, Core::FRAME_BUFFER_COUNT, swapchain->format);
     renderExtents = std::make_unique<RenderExtents>(width, height, 1.0f);
     resourceManager = std::make_unique<ResourceManager>(context.get());
     renderGraph = std::make_unique<RenderGraph>(context.get(), resourceManager.get());
@@ -276,6 +276,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         VkClearColorValue clearColor = {{0.0f, 0.0f, 0.0f, 0.0f}};
         VkImageSubresourceRange range = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
 
+        // todo optimize w/ vkCmdClearAttachment (or whatever)
         vkCmdClearColorImage(cmd, renderGraph->GetImageHandle("albedo_target"), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &range);
         vkCmdClearColorImage(cmd, renderGraph->GetImageHandle("normal_target"), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &range);
         vkCmdClearColorImage(cmd, renderGraph->GetImageHandle("pbr_target"), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &range);
@@ -325,57 +326,6 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     if (bHasDeferred) {
         SetupDeferredLighting(*renderGraph, viewFamily, renderExtent);
     }
-
-    bool bHasDebugPass = viewFamily.mainView.debug != -1 && pipelineManager->IsCategoryReady(PipelineCategory::Debug);
-    if (bHasDebugPass) {
-        int32_t debugIndex = viewFamily.mainView.debug;
-        if (viewFamily.mainView.debug == 0) {
-            debugIndex = 10;
-        }
-        static constexpr const char* debugTargets[] = {
-            "dummy",
-            "depth_target", // 1
-            "albedo_target", // 2
-            "normal_target", // 3
-            "pbr_target", // 4
-            "velocity_target", // 5
-            "gtao_depth", // 6
-            "gtao_depth", // 7
-            "gtao_depth", // 8
-            "gtao_depth", // 9
-            "gtao_depth", // 0
-        };
-
-        if (debugIndex >= std::size(debugTargets)) {
-            debugIndex = 1;
-        }
-        const char* debugTargetName = debugTargets[debugIndex];
-        if (renderGraph->HasTexture(debugTargetName)) {
-            auto& debugVisPass = renderGraph->AddPass("Debug Visualize", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-            debugVisPass.ReadSampledImage(debugTargetName);
-            debugVisPass.WriteStorageImage("deferred_resolve_target");
-            debugVisPass.Execute([&, debugTargetName, debugIndex](VkCommandBuffer cmd) {
-                const ResourceDimensions& dims = renderGraph->GetImageDimensions(debugTargetName);
-                DebugVisualizePushConstant pushData{
-                    .srcExtent = {dims.width, dims.height},
-                    .dstExtent = {renderExtent[0], renderExtent[1]},
-                    .nearPlane = viewFamily.mainView.currentViewData.nearPlane,
-                    .farPlane = viewFamily.mainView.currentViewData.farPlane,
-                    .textureIndex = renderGraph->GetSampledImageViewDescriptorIndex(debugTargetName),
-                    .outputImageIndex = renderGraph->GetStorageImageViewDescriptorIndex("deferred_resolve_target"),
-                    .debugType = static_cast<uint32_t>(debugIndex)
-                };
-
-                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("debug_visualize");
-                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
-                vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(DebugVisualizePushConstant), &pushData);
-                uint32_t xDispatch = (renderExtent[0] + 15) / 16;
-                uint32_t yDispatch = (renderExtent[1] + 15) / 16;
-                vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
-            });
-        }
-    }
-
 
     // IN : deferred_resolve_target
     // OUT: taaCurrent, taaOutput
@@ -441,20 +391,54 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     }
 #endif
 
-    if (frameBuffer.bDrawImgui) {
-        auto& imguiEditorPass = renderGraph->AddPass("Imgui Draw", VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT);
-        imguiEditorPass.WriteColorAttachment("post_process_output");
-        imguiEditorPass.Execute([&](VkCommandBuffer cmd) {
-            const VkRenderingAttachmentInfo imguiAttachment = VkHelpers::RenderingAttachmentInfo(renderGraph->GetImageViewHandle("post_process_output"), nullptr,
-                                                                                                 VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-            const ResourceDimensions& dims = renderGraph->GetImageDimensions("post_process_output");
-            const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({dims.width, dims.height}, &imguiAttachment, nullptr);
-            vkCmdBeginRendering(cmd, &renderInfo);
-            ImDrawDataSnapshot& imguiSnapshot = engineRenderSynchronization->imguiDataSnapshots[currentFrameIndex];
-            ImGui_ImplVulkan_RenderDrawData(&imguiSnapshot.DrawData, cmd);
+    bool bHasDebugPass = viewFamily.mainView.debug != -1 && pipelineManager->IsCategoryReady(PipelineCategory::Debug);
+    if (bHasDebugPass) {
+        int32_t debugIndex = viewFamily.mainView.debug;
+        if (viewFamily.mainView.debug == 0) {
+            debugIndex = 10;
+        }
+        static constexpr const char* debugTargets[] = {
+            "dummy",
+            "depth_target", // 1
+            "albedo_target", // 2
+            "normal_target", // 3
+            "pbr_target", // 4
+            "velocity_target", // 5
+            "motion_blur_tiled_max", // 6
+            "motion_blur_tiled_neighbor_max", // 7
+            "motion_blur_output", // 8
+            "gtao_depth", // 9
+            "gtao_depth", // 0
+        };
 
-            vkCmdEndRendering(cmd);
-        });
+        if (debugIndex >= std::size(debugTargets)) {
+            debugIndex = 1;
+        }
+        const char* debugTargetName = debugTargets[debugIndex];
+        if (renderGraph->HasTexture(debugTargetName)) {
+            auto& debugVisPass = renderGraph->AddPass("Debug Visualize", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+            debugVisPass.ReadSampledImage(debugTargetName);
+            debugVisPass.WriteStorageImage("post_process_output");
+            debugVisPass.Execute([&, debugTargetName, debugIndex](VkCommandBuffer cmd) {
+                const ResourceDimensions& dims = renderGraph->GetImageDimensions(debugTargetName);
+                DebugVisualizePushConstant pushData{
+                    .srcExtent = {dims.width, dims.height},
+                    .dstExtent = {renderExtent[0], renderExtent[1]},
+                    .nearPlane = viewFamily.mainView.currentViewData.nearPlane,
+                    .farPlane = viewFamily.mainView.currentViewData.farPlane,
+                    .textureIndex = renderGraph->GetSampledImageViewDescriptorIndex(debugTargetName),
+                    .outputImageIndex = renderGraph->GetStorageImageViewDescriptorIndex("post_process_output"),
+                    .debugType = static_cast<uint32_t>(debugIndex)
+                };
+
+                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("debug_visualize");
+                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+                vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(DebugVisualizePushConstant), &pushData);
+                uint32_t xDispatch = (renderExtent[0] + 15) / 16;
+                uint32_t yDispatch = (renderExtent[1] + 15) / 16;
+                vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
+            });
+        }
     }
 
     renderGraph->ImportTexture("swapchain_image", currentSwapchainImage, currentSwapchainImageView, TextureInfo{swapchain->format, swapchain->extent.width, swapchain->extent.height, 1},
@@ -478,8 +462,8 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         blitRegion.dstSubresource.layerCount = 1;
         blitRegion.srcOffsets[0] = {0, 0, 0};
         blitRegion.srcOffsets[1] = renderOffset;
-        blitRegion.dstOffsets[0] = {0, 0, 0};
-        blitRegion.dstOffsets[1] = swapchainOffset;
+        blitRegion.dstOffsets[0] = {0, swapchainOffset.y, 0};
+        blitRegion.dstOffsets[1] = {swapchainOffset.x, 0, swapchainOffset.z};
 
         VkBlitImageInfo2 blitInfo{};
         blitInfo.sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2;
@@ -493,6 +477,22 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
 
         vkCmdBlitImage2(cmd, &blitInfo);
     });
+
+    if (frameBuffer.bDrawImgui) {
+        auto& imguiEditorPass = renderGraph->AddPass("Imgui Draw", VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT);
+        imguiEditorPass.WriteColorAttachment("swapchain_image");
+        imguiEditorPass.Execute([&](VkCommandBuffer cmd) {
+            const VkRenderingAttachmentInfo imguiAttachment = VkHelpers::RenderingAttachmentInfo(renderGraph->GetImageViewHandle("swapchain_image"), nullptr,
+                                                                                                 VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+            const ResourceDimensions& dims = renderGraph->GetImageDimensions("swapchain_image");
+            const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({dims.width, dims.height}, &imguiAttachment, nullptr);
+            vkCmdBeginRendering(cmd, &renderInfo);
+            ImDrawDataSnapshot& imguiSnapshot = engineRenderSynchronization->imguiDataSnapshots[currentFrameIndex];
+            ImGui_ImplVulkan_RenderDrawData(&imguiSnapshot.DrawData, cmd);
+
+            vkCmdEndRendering(cmd);
+        });
+    }
 
     renderGraph->SetDebugLogging(frameBuffer.bLogRDG);
     renderGraph->Compile(frameNumber);

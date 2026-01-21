@@ -41,7 +41,6 @@ float ScreenToViewSpaceDepth(float screenDepth, float depthLinearizeMul, float d
 float3 CheapReconstructViewSpacePosition(float2 ndcToViewMul, float2 ndcToViewAdd, float2 uv, float viewSpaceDepth)
 {
     float3 ret;
-    uv.y = 1 - uv.y;
     ret.xy = (ndcToViewMul * uv + ndcToViewAdd) * viewSpaceDepth;
     ret.y = -ret.y;
     ret.z = -viewSpaceDepth;
@@ -51,10 +50,6 @@ float3 CheapReconstructViewSpacePosition(float2 ndcToViewMul, float2 ndcToViewAd
 // Reconstructs position of a pixel based on inverse project and depth buffer
 float3 ReconstructViewPosition(float4x4 invProj, float2 uv, float depth) {
     float2 ndc = uv * 2.0 - 1.0;
-    // Note: NDC Y-flip required because viewport uses negative height
-    //uv.y = 1 - uv.y;
-    ndc.y = -ndc.y;
-
     float4 positionVS = mul(invProj, float4(ndc, depth, 1.0));
     return positionVS.xyz / positionVS.w;
 }
@@ -62,10 +57,6 @@ float3 ReconstructViewPosition(float4x4 invProj, float2 uv, float depth) {
 // Reconstructs position of a pixel based on inverse project and depth buffer
 float3 ReconstructWorldPosition(float4x4 invViewProj, float2 uv, float depth) {
     float2 ndc = uv * 2.0 - 1.0;
-    // Note: NDC Y-flip required because viewport uses negative height
-    //uv.y = 1 - uv.y;
-    ndc.y = -ndc.y;
-
     float4 clipPos = float4(ndc, depth, 1.0);
     float4 worldPos = mul(invViewProj, clipPos);
     return worldPos.xyz / worldPos.w;
@@ -90,8 +81,3 @@ float3 YCoCgToRGB(float3 ycocg) {
 
     return float3(r, g, b);
 }
-
-uint GetAlbedoIndex(uint packed) { return packed & 0xFF; }
-uint GetNormalIndex(uint packed) { return (packed >> 8) & 0xFF; }
-uint GetPBRIndex(uint packed) { return (packed >> 16) & 0xFF; }
-uint GetDepthIndex(uint packed) { return (packed >> 24) & 0xFF; }

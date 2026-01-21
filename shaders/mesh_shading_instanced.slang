@@ -17,8 +17,8 @@ struct VertexOutput
     float4 color : COLOR0;
     float2 uv : TEXCOORD0;
     nointerpolation uint32_t materialIndex : TEXCOORD4;
-    float4 currentClipPos : TEXCOORD5;
-    float4 previousClipPos : TEXCOORD6;
+    noperspective float4 currentClipPos : TEXCOORD5;
+    noperspective float4 previousClipPos : TEXCOORD6;
 };
 
 // Per https://developer.nvidia.com/blog/using-mesh-shaders-for-professional-graphics/
