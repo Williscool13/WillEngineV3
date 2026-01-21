@@ -52,42 +52,34 @@ SHADER_PUBLIC struct SHADER_ALIGN SceneData
     SHADER_PUBLIC float4x4 view;
     SHADER_PUBLIC float4x4 proj;
     SHADER_PUBLIC float4x4 viewProj;
-
     SHADER_PUBLIC float4x4 invView;
     SHADER_PUBLIC float4x4 invProj;
     SHADER_PUBLIC float4x4 invViewProj;
-    // SHADER_PUBLIC float4x4 viewProjCameraLookDirection;
-
-    //SHADER_PUBLIC float4x4 prevView;
-    //SHADER_PUBLIC float4x4 prevProj;
     SHADER_PUBLIC float4x4 prevViewProj;
-    //SHADER_PUBLIC float4x4 prevInvView;
-    //SHADER_PUBLIC float4x4 prevInvProj;
-    //SHADER_PUBLIC float4x4 prevInvViewProj;
-    // SHADER_PUBLIC float4x4 prevViewProjCameraLookDirection;
-
     SHADER_PUBLIC float4x4 unjitteredViewProj;
     SHADER_PUBLIC float4x4 unjitteredPrevViewProj;
 
+    SHADER_PUBLIC Frustum frustum;
+
     SHADER_PUBLIC float4 cameraWorldPos;
-    // SHADER_PUBLIC float4 prevCameraWorldPos;
+
     SHADER_PUBLIC float2 jitter;
     SHADER_PUBLIC float2 prevJitter;
-
-    SHADER_PUBLIC Frustum frustum;
 
     SHADER_PUBLIC float2 mainRenderTargetSize;
     SHADER_PUBLIC float2 texelSize;
 
-    // SHADER_PUBLIC float2 cameraPlanes;
-
     SHADER_PUBLIC float2 ndcToViewMul;
     SHADER_PUBLIC float2 ndcToViewAdd;
+
     SHADER_PUBLIC float2 ndcToViewMulXPixelSize;
+    SHADER_PUBLIC float2 _pad0;
+
+
     SHADER_PUBLIC float depthLinearizeMult;
     SHADER_PUBLIC float depthLinearizeAdd;
-
     SHADER_PUBLIC float deltaTime;
+    SHADER_PUBLIC float _pad1;
 };
 
 #endif // WILLENGINEV3_SHADER_INTEROP_H

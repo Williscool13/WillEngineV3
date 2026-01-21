@@ -84,7 +84,6 @@ void TaskMain(uniform InstancedMeshShadingPushConstant pc,
         if (!FrustumCullSphere(pc.sceneData[pc.sceneDataIndex].frustum, worldBounds)) {
             visible = false;
         }
-
         if (visible && !BackfaceCullCone(mlet.coneAxis, mlet.coneCutoff, worldCenter, worldRadius, pc.sceneData[pc.sceneDataIndex].cameraWorldPos.xyz, (float3x3)model.modelMatrix)) {
             visible = false;
         }
