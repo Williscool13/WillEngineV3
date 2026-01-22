@@ -54,7 +54,7 @@ public:
 
     void PrunePasses();
 
-    void AccumulateTextureUsage() const;
+    void AccumulateTextureUsage();
 
     void CalculateLifetimes();
 

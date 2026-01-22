@@ -20,8 +20,8 @@ RenderGraph::RenderGraph(VulkanContext* context, ResourceManager* resourceManage
 {
     textures.reserve(RDG_MAX_SAMPLED_TEXTURES);
     physicalResources.reserve(256);
-    textures.reserve(256);
-    buffers.reserve(256);
+    // textures.reserve(256);
+    // buffers.reserve(256);
 }
 
 RenderGraph::~RenderGraph()
@@ -42,51 +42,62 @@ void RenderGraph::PrunePasses()
     // Add pruning when productive pruning is actually relevant
 }
 
-void RenderGraph::AccumulateTextureUsage() const
+void RenderGraph::AccumulateTextureUsage()
 {
     for (auto& pass : passes) {
-        for (auto* tex : pass->storageImageWrites) {
-            tex->accumulatedUsage |= VK_IMAGE_USAGE_STORAGE_BIT;
+        for (const uint32_t texIndex : pass->storageImageWrites) {
+            auto& tex = textures[texIndex];
+            tex.accumulatedUsage |= VK_IMAGE_USAGE_STORAGE_BIT;
         }
 
-        for (auto* tex : pass->storageImageReads) {
-            tex->accumulatedUsage |= VK_IMAGE_USAGE_STORAGE_BIT;
+        for (const uint32_t texIndex : pass->storageImageReads) {
+            auto& tex = textures[texIndex];
+            tex.accumulatedUsage |= VK_IMAGE_USAGE_STORAGE_BIT;
         }
 
-        for (auto* tex : pass->sampledImageReads) {
-            tex->accumulatedUsage |= VK_IMAGE_USAGE_SAMPLED_BIT;
+        for (const uint32_t texIndex : pass->sampledImageReads) {
+            auto& tex = textures[texIndex];
+            tex.accumulatedUsage |= VK_IMAGE_USAGE_SAMPLED_BIT;
         }
 
-        for (auto* tex : pass->imageReadWrite) {
-            tex->accumulatedUsage |= VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+        for (const uint32_t texIndex : pass->imageReadWrite) {
+            auto& tex = textures[texIndex];
+            tex.accumulatedUsage |= VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
         }
 
-        for (auto* tex : pass->clearImageWrites) {
-            tex->accumulatedUsage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        for (const uint32_t texIndex : pass->clearImageWrites) {
+            auto& tex = textures[texIndex];
+            tex.accumulatedUsage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
         }
 
-        for (auto* tex : pass->blitImageReads) {
-            tex->accumulatedUsage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+        for (const uint32_t texIndex : pass->blitImageReads) {
+            auto& tex = textures[texIndex];
+            tex.accumulatedUsage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
         }
 
-        for (auto* tex : pass->blitImageWrites) {
-            tex->accumulatedUsage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        for (const uint32_t texIndex : pass->blitImageWrites) {
+            auto& tex = textures[texIndex];
+            tex.accumulatedUsage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
         }
 
-        for (auto* tex : pass->copyImageReads) {
-            tex->accumulatedUsage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+        for (const uint32_t texIndex : pass->copyImageReads) {
+            auto& tex = textures[texIndex];
+            tex.accumulatedUsage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
         }
 
-        for (auto* tex : pass->copyImageWrites) {
-            tex->accumulatedUsage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        for (const uint32_t texIndex : pass->copyImageWrites) {
+            auto& tex = textures[texIndex];
+            tex.accumulatedUsage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
         }
 
-        for (auto* attachment : pass->colorAttachments) {
-            attachment->accumulatedUsage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+        for (const uint32_t texIndex : pass->colorAttachments) {
+            auto& tex = textures[texIndex];
+            tex.accumulatedUsage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
         }
 
-        if (pass->depthAttachment) {
-            pass->depthAttachment->accumulatedUsage |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+        if (pass->depthAttachment != UINT_MAX) {
+            auto& tex = textures[pass->depthAttachment];
+            tex.accumulatedUsage |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
         }
     }
 }
@@ -96,35 +107,35 @@ void RenderGraph::CalculateLifetimes()
     for (uint32_t passIdx = 0; passIdx < passes.size(); passIdx++) {
         auto& pass = passes[passIdx];
 
-        auto UpdateTextureLifetime = [passIdx](TextureResource* tex) {
-            tex->firstPass = std::min(tex->firstPass, passIdx);
-            tex->lastPass = std::max(tex->lastPass, passIdx);
+        auto UpdateTextureLifetime = [passIdx](TextureResource& tex) {
+            tex.firstPass = std::min(tex.firstPass, passIdx);
+            tex.lastPass = std::max(tex.lastPass, passIdx);
         };
 
-        auto UpdateBufferLifetime = [passIdx](BufferResource* buf) {
-            buf->firstPass = std::min(buf->firstPass, passIdx);
-            buf->lastPass = std::max(buf->lastPass, passIdx);
+        auto UpdateBufferLifetime = [passIdx](BufferResource& buf) {
+            buf.firstPass = std::min(buf.firstPass, passIdx);
+            buf.lastPass = std::max(buf.lastPass, passIdx);
         };
 
-        for (auto* tex : pass->storageImageWrites) { UpdateTextureLifetime(tex); }
-        for (auto* tex : pass->storageImageReads) { UpdateTextureLifetime(tex); }
-        for (auto* tex : pass->sampledImageReads) { UpdateTextureLifetime(tex); }
-        for (auto* tex : pass->imageReadWrite) { UpdateTextureLifetime(tex); }
-        for (auto* tex : pass->clearImageWrites) { UpdateTextureLifetime(tex); }
-        for (auto* tex : pass->blitImageWrites) { UpdateTextureLifetime(tex); }
-        for (auto* tex : pass->blitImageReads) { UpdateTextureLifetime(tex); }
-        for (auto* tex : pass->copyImageReads) { UpdateTextureLifetime(tex); }
-        for (auto* tex : pass->copyImageWrites) { UpdateTextureLifetime(tex); }
-        for (auto& attachment : pass->colorAttachments) { UpdateTextureLifetime(attachment); }
-        if (pass->depthAttachment) { UpdateTextureLifetime(pass->depthAttachment); }
+        for (const uint32_t texIndex : pass->storageImageWrites) { UpdateTextureLifetime(textures[texIndex]); }
+        for (const uint32_t texIndex : pass->storageImageReads) { UpdateTextureLifetime(textures[texIndex]); }
+        for (const uint32_t texIndex : pass->sampledImageReads) { UpdateTextureLifetime(textures[texIndex]); }
+        for (const uint32_t texIndex : pass->imageReadWrite) { UpdateTextureLifetime(textures[texIndex]); }
+        for (const uint32_t texIndex : pass->clearImageWrites) { UpdateTextureLifetime(textures[texIndex]); }
+        for (const uint32_t texIndex : pass->blitImageWrites) { UpdateTextureLifetime(textures[texIndex]); }
+        for (const uint32_t texIndex : pass->blitImageReads) { UpdateTextureLifetime(textures[texIndex]); }
+        for (const uint32_t texIndex : pass->copyImageReads) { UpdateTextureLifetime(textures[texIndex]); }
+        for (const uint32_t texIndex : pass->copyImageWrites) { UpdateTextureLifetime(textures[texIndex]); }
+        for (const uint32_t texIndex : pass->colorAttachments) { UpdateTextureLifetime(textures[texIndex]); }
+        if (pass->depthAttachment != UINT_MAX) { UpdateTextureLifetime(textures[pass->depthAttachment]); }
 
-        for (auto& buf : pass->bufferReads) { UpdateBufferLifetime(buf); }
-        for (auto& buf : pass->bufferWrites) { UpdateBufferLifetime(buf); }
-        for (auto& buf : pass->bufferReadWrite) { UpdateBufferLifetime(buf); }
-        for (auto& buf : pass->bufferReadTransfer) { UpdateBufferLifetime(buf); }
-        for (auto& buf : pass->bufferWriteTransfer) { UpdateBufferLifetime(buf); }
-        for (auto& buf : pass->bufferIndirectReads) { UpdateBufferLifetime(buf); }
-        for (auto& buf : pass->bufferIndirectCountReads) { UpdateBufferLifetime(buf); }
+        for (const uint32_t bufIndex : pass->bufferReads) { UpdateBufferLifetime(buffers[bufIndex]); }
+        for (const uint32_t bufIndex : pass->bufferWrites) { UpdateBufferLifetime(buffers[bufIndex]); }
+        for (const uint32_t bufIndex : pass->bufferReadWrite) { UpdateBufferLifetime(buffers[bufIndex]); }
+        for (const uint32_t bufIndex : pass->bufferReadTransfer) { UpdateBufferLifetime(buffers[bufIndex]); }
+        for (const uint32_t bufIndex : pass->bufferWriteTransfer) { UpdateBufferLifetime(buffers[bufIndex]); }
+        for (const uint32_t bufIndex : pass->bufferIndirectReads) { UpdateBufferLifetime(buffers[bufIndex]); }
+        for (const uint32_t bufIndex : pass->bufferIndirectCountReads) { UpdateBufferLifetime(buffers[bufIndex]); }
     }
 }
 
@@ -351,148 +362,163 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
         }
         std::vector<VkImageMemoryBarrier2> barriers;
 
-        // Helper lambda to get physical resource
-        auto GetPhysical = [this](TextureResource* tex) -> PhysicalResource& {
-            return physicalResources[tex->physicalIndex];
+        auto GetPhysical = [this](uint32_t texIndex) -> PhysicalResource& {
+            return physicalResources[textures[texIndex].physicalIndex];
         };
 
-        for (auto& attachment : pass->colorAttachments) {
-            auto& phys = GetPhysical(attachment);
+        for (const uint32_t texIndex : pass->colorAttachments) {
+            auto& tex = textures[texIndex];
+            auto& phys = GetPhysical(texIndex);
             auto barrier = VkHelpers::ImageMemoryBarrier(
                 phys.image,
                 VkHelpers::SubresourceRange(phys.aspect),
-                phys.event.stages, phys.event.access, attachment->layout,
+                phys.event.stages, phys.event.access, tex.layout,
                 VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
                 VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT,
                 VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
             );
-            LogImageBarrier(barrier, attachment->name, attachment->physicalIndex);
+            LogImageBarrier(barrier, tex.name, tex.physicalIndex);
             barriers.push_back(barrier);
         }
 
-        if (pass->depthAttachment) {
-            auto& phys = GetPhysical(pass->depthAttachment);
+        if (pass->depthAttachment != UINT_MAX) {
+            const uint32_t texIndex = pass->depthAttachment;
+            auto& tex = textures[texIndex];
+            auto& phys = GetPhysical(texIndex);
             auto barrier = VkHelpers::ImageMemoryBarrier(
                 phys.image,
                 VkHelpers::SubresourceRange(phys.aspect),
-                phys.event.stages, phys.event.access, pass->depthAttachment->layout,
+                phys.event.stages, phys.event.access, tex.layout,
                 VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
                 VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
                 VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
             );
-            LogImageBarrier(barrier, pass->depthAttachment->name, pass->depthAttachment->physicalIndex);
+            LogImageBarrier(barrier, tex.name, tex.physicalIndex);
             barriers.push_back(barrier);
         }
 
-        for (auto* tex : pass->storageImageWrites) {
-            auto& phys = GetPhysical(tex);
+        for (const uint32_t texIndex : pass->storageImageWrites) {
+            auto& tex = textures[texIndex];
+            auto& phys = GetPhysical(texIndex);
             auto barrier = VkHelpers::ImageMemoryBarrier(
                 phys.image,
                 VkHelpers::SubresourceRange(phys.aspect),
-                phys.event.stages, phys.event.access, tex->layout,
+                phys.event.stages, phys.event.access, tex.layout,
                 pass->stages, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL
             );
-            LogImageBarrier(barrier, tex->name, tex->physicalIndex);
+            LogImageBarrier(barrier, tex.name, tex.physicalIndex);
             barriers.push_back(barrier);
         }
 
-        for (auto* tex : pass->storageImageReads) {
-            auto& phys = GetPhysical(tex);
+        for (const uint32_t texIndex : pass->storageImageReads) {
+            auto& tex = textures[texIndex];
+            auto& phys = GetPhysical(texIndex);
             auto barrier = VkHelpers::ImageMemoryBarrier(
                 phys.image,
                 VkHelpers::SubresourceRange(phys.aspect),
-                phys.event.stages, phys.event.access, tex->layout,
+                phys.event.stages, phys.event.access, tex.layout,
                 pass->stages, VK_ACCESS_2_SHADER_STORAGE_READ_BIT, VK_IMAGE_LAYOUT_GENERAL
             );
-            LogImageBarrier(barrier, tex->name, tex->physicalIndex);
+            LogImageBarrier(barrier, tex.name, tex.physicalIndex);
             barriers.push_back(barrier);
         }
 
-        for (auto* tex : pass->sampledImageReads) {
-            auto& phys = GetPhysical(tex);
+        for (const uint32_t texIndex : pass->sampledImageReads) {
+            auto& tex = textures[texIndex];
+            auto& phys = GetPhysical(texIndex);
             auto barrier = VkHelpers::ImageMemoryBarrier(
                 phys.image,
                 VkHelpers::SubresourceRange(phys.aspect),
-                phys.event.stages, phys.event.access, tex->layout,
+                phys.event.stages, phys.event.access, tex.layout,
                 pass->stages, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
             );
-            LogImageBarrier(barrier, tex->name, tex->physicalIndex);
+            LogImageBarrier(barrier, tex.name, tex.physicalIndex);
             barriers.push_back(barrier);
         }
 
-        for (auto* tex : pass->imageReadWrite) {
-            auto& phys = GetPhysical(tex);
+        for (const uint32_t texIndex : pass->imageReadWrite) {
+            auto& tex = textures[texIndex];
+            auto& phys = GetPhysical(texIndex);
             auto barrier = VkHelpers::ImageMemoryBarrier(
                 phys.image,
                 VkHelpers::SubresourceRange(phys.aspect),
-                phys.event.stages, phys.event.access, tex->layout,
+                phys.event.stages, phys.event.access, tex.layout,
                 pass->stages, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL
             );
-            LogImageBarrier(barrier, tex->name, tex->physicalIndex);
+            LogImageBarrier(barrier, tex.name, tex.physicalIndex);
             barriers.push_back(barrier);
         }
 
-        for (auto* tex : pass->blitImageReads) {
-            auto& phys = GetPhysical(tex);
+        for (const uint32_t texIndex : pass->blitImageReads) {
+            auto& tex = textures[texIndex];
+            auto& phys = GetPhysical(texIndex);
             auto barrier = VkHelpers::ImageMemoryBarrier(
                 phys.image,
                 VkHelpers::SubresourceRange(phys.aspect),
-                phys.event.stages, phys.event.access, tex->layout,
+                phys.event.stages, phys.event.access, tex.layout,
                 VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
             );
-            LogImageBarrier(barrier, tex->name, tex->physicalIndex);
-            barriers.push_back(barrier);
-        }
-        for (auto* tex : pass->clearImageWrites) {
-            auto& phys = GetPhysical(tex);
-            auto barrier = VkHelpers::ImageMemoryBarrier(
-                phys.image,
-                VkHelpers::SubresourceRange(phys.aspect),
-                phys.event.stages, phys.event.access, tex->layout,
-                VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
-            );
-            LogImageBarrier(barrier, tex->name, tex->physicalIndex);
-            barriers.push_back(barrier);
-        }
-        for (auto* tex : pass->blitImageWrites) {
-            auto& phys = GetPhysical(tex);
-            auto barrier = VkHelpers::ImageMemoryBarrier(
-                phys.image,
-                VkHelpers::SubresourceRange(phys.aspect),
-                phys.event.stages, phys.event.access, tex->layout,
-                VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
-            );
-            LogImageBarrier(barrier, tex->name, tex->physicalIndex);
-            barriers.push_back(barrier);
-        }
-        for (auto* tex : pass->copyImageReads) {
-            auto& phys = GetPhysical(tex);
-            auto barrier = VkHelpers::ImageMemoryBarrier(
-                phys.image,
-                VkHelpers::SubresourceRange(phys.aspect),
-                phys.event.stages, phys.event.access, tex->layout,
-                VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
-            );
-            LogImageBarrier(barrier, tex->name, tex->physicalIndex);
+            LogImageBarrier(barrier, tex.name, tex.physicalIndex);
             barriers.push_back(barrier);
         }
 
-        for (auto* tex : pass->copyImageWrites) {
-            auto& phys = GetPhysical(tex);
+        for (const uint32_t texIndex : pass->clearImageWrites) {
+            auto& tex = textures[texIndex];
+            auto& phys = GetPhysical(texIndex);
             auto barrier = VkHelpers::ImageMemoryBarrier(
                 phys.image,
                 VkHelpers::SubresourceRange(phys.aspect),
-                phys.event.stages, phys.event.access, tex->layout,
+                phys.event.stages, phys.event.access, tex.layout,
+                VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
+            );
+            LogImageBarrier(barrier, tex.name, tex.physicalIndex);
+            barriers.push_back(barrier);
+        }
+
+        for (const uint32_t texIndex : pass->blitImageWrites) {
+            auto& tex = textures[texIndex];
+            auto& phys = GetPhysical(texIndex);
+            auto barrier = VkHelpers::ImageMemoryBarrier(
+                phys.image,
+                VkHelpers::SubresourceRange(phys.aspect),
+                phys.event.stages, phys.event.access, tex.layout,
+                VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
+            );
+            LogImageBarrier(barrier, tex.name, tex.physicalIndex);
+            barriers.push_back(barrier);
+        }
+
+        for (const uint32_t texIndex : pass->copyImageReads) {
+            auto& tex = textures[texIndex];
+            auto& phys = GetPhysical(texIndex);
+            auto barrier = VkHelpers::ImageMemoryBarrier(
+                phys.image,
+                VkHelpers::SubresourceRange(phys.aspect),
+                phys.event.stages, phys.event.access, tex.layout,
+                VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
+            );
+            LogImageBarrier(barrier, tex.name, tex.physicalIndex);
+            barriers.push_back(barrier);
+        }
+
+        for (const uint32_t texIndex : pass->copyImageWrites) {
+            auto& tex = textures[texIndex];
+            auto& phys = GetPhysical(texIndex);
+            auto barrier = VkHelpers::ImageMemoryBarrier(
+                phys.image,
+                VkHelpers::SubresourceRange(phys.aspect),
+                phys.event.stages, phys.event.access, tex.layout,
                 VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
             );
-            LogImageBarrier(barrier, tex->name, tex->physicalIndex);
+            LogImageBarrier(barrier, tex.name, tex.physicalIndex);
             barriers.push_back(barrier);
         }
 
         std::vector<VkBufferMemoryBarrier2> bufferBarriers;
 
-        for (auto& buf : pass->bufferWrites) {
-            auto& phys = physicalResources[buf->physicalIndex];
+        for (const uint32_t bufIndex : pass->bufferWrites) {
+            auto& buf = buffers[bufIndex];
+            auto& phys = physicalResources[buf.physicalIndex];
             if (phys.bDisableBarriers) { continue; }
 
             VkAccessFlags2 desiredAccess = VK_ACCESS_2_SHADER_WRITE_BIT;
@@ -508,10 +534,12 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 .size = VK_WHOLE_SIZE
             };
             bufferBarriers.push_back(barrier);
-            LogBufferBarrier(buf->name, desiredAccess);
+            LogBufferBarrier(buf.name, desiredAccess);
         }
-        for (auto& buf : pass->bufferReadWrite) {
-            auto& phys = physicalResources[buf->physicalIndex];
+
+        for (const uint32_t bufIndex : pass->bufferReadWrite) {
+            auto& buf = buffers[bufIndex];
+            auto& phys = physicalResources[buf.physicalIndex];
             if (phys.bDisableBarriers) { continue; }
 
             VkAccessFlags2 desiredAccess = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT;
@@ -527,10 +555,12 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 .size = VK_WHOLE_SIZE
             };
             bufferBarriers.push_back(barrier);
-            LogBufferBarrier(buf->name, desiredAccess);
+            LogBufferBarrier(buf.name, desiredAccess);
         }
-        for (auto& bufWrite : pass->bufferWriteTransfer) {
-            auto& phys = physicalResources[bufWrite->physicalIndex];
+
+        for (const uint32_t bufIndex : pass->bufferWriteTransfer) {
+            auto& buf = buffers[bufIndex];
+            auto& phys = physicalResources[buf.physicalIndex];
             if (phys.bDisableBarriers) { continue; }
 
             VkAccessFlags2 desiredAccess = VK_ACCESS_2_TRANSFER_WRITE_BIT;
@@ -546,11 +576,12 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 .size = VK_WHOLE_SIZE
             };
             bufferBarriers.push_back(barrier);
-            LogBufferBarrier(bufWrite->name, desiredAccess);
+            LogBufferBarrier(buf.name, desiredAccess);
         }
 
-        for (auto& bufRead : pass->bufferReadTransfer) {
-            auto& phys = physicalResources[bufRead->physicalIndex];
+        for (const uint32_t bufIndex : pass->bufferReadTransfer) {
+            auto& buf = buffers[bufIndex];
+            auto& phys = physicalResources[buf.physicalIndex];
             if (phys.bDisableBarriers) { continue; }
 
             VkAccessFlags2 desiredAccess = VK_ACCESS_2_TRANSFER_READ_BIT;
@@ -566,11 +597,12 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 .size = VK_WHOLE_SIZE
             };
             bufferBarriers.push_back(barrier);
-            LogBufferBarrier(bufRead->name, desiredAccess);
+            LogBufferBarrier(buf.name, desiredAccess);
         }
 
-        for (auto& bufRead : pass->bufferReads) {
-            auto& phys = physicalResources[bufRead->physicalIndex];
+        for (const uint32_t bufIndex : pass->bufferReads) {
+            auto& buf = buffers[bufIndex];
+            auto& phys = physicalResources[buf.physicalIndex];
             if (phys.bDisableBarriers) { continue; }
 
             VkAccessFlags2 desiredAccess = VK_ACCESS_2_SHADER_READ_BIT;
@@ -585,11 +617,12 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 .size = VK_WHOLE_SIZE
             };
             bufferBarriers.push_back(barrier);
-            LogBufferBarrier(bufRead->name, desiredAccess);
+            LogBufferBarrier(buf.name, desiredAccess);
         }
 
-        for (auto& bufRead : pass->bufferIndirectReads) {
-            auto& phys = physicalResources[bufRead->physicalIndex];
+        for (const uint32_t bufIndex : pass->bufferIndirectReads) {
+            auto& buf = buffers[bufIndex];
+            auto& phys = physicalResources[buf.physicalIndex];
             if (phys.bDisableBarriers) { continue; }
 
             VkAccessFlags2 desiredAccess = VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_2_SHADER_READ_BIT;
@@ -604,11 +637,12 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 .size = VK_WHOLE_SIZE
             };
             bufferBarriers.push_back(barrier);
-            LogBufferBarrier(bufRead->name, desiredAccess);
+            LogBufferBarrier(buf.name, desiredAccess);
         }
 
-        for (auto& bufRead : pass->bufferIndirectCountReads) {
-            auto& phys = physicalResources[bufRead->physicalIndex];
+        for (const uint32_t bufIndex : pass->bufferIndirectCountReads) {
+            auto& buf = buffers[bufIndex];
+            auto& phys = physicalResources[buf.physicalIndex];
             if (phys.bDisableBarriers) { continue; }
 
             VkAccessFlags2 desiredAccess = VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT;
@@ -623,7 +657,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 .size = VK_WHOLE_SIZE
             };
             bufferBarriers.push_back(barrier);
-            LogBufferBarrier(bufRead->name, desiredAccess);
+            LogBufferBarrier(buf.name, desiredAccess);
         }
 
         if (!barriers.empty() || !bufferBarriers.empty()) {
@@ -656,113 +690,140 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
             vkCmdEndDebugUtilsLabelEXT(cmd);
         }
 
-
-        for (auto& attachment : pass->colorAttachments) {
-            auto& phys = GetPhysical(attachment);
-            attachment->layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        for (const uint32_t texIndex : pass->colorAttachments) {
+            auto& tex = textures[texIndex];
+            auto& phys = GetPhysical(texIndex);
+            tex.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
             phys.event.stages = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
             phys.event.access = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
         }
 
-        if (pass->depthAttachment) {
-            auto& phys = GetPhysical(pass->depthAttachment);
-            pass->depthAttachment->layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        if (pass->depthAttachment != UINT_MAX) {
+            const uint32_t texIndex = pass->depthAttachment;
+            auto& tex = textures[texIndex];
+            auto& phys = GetPhysical(texIndex);
+            tex.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
             phys.event.stages = VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
             phys.event.access = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
         }
 
-        for (auto* tex : pass->storageImageWrites) {
-            auto& phys = GetPhysical(tex);
-            tex->layout = VK_IMAGE_LAYOUT_GENERAL;
+        for (const uint32_t texIndex : pass->storageImageWrites) {
+            auto& tex = textures[texIndex];
+            auto& phys = GetPhysical(texIndex);
+            tex.layout = VK_IMAGE_LAYOUT_GENERAL;
             phys.event.stages = pass->stages;
             phys.event.access = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT;
         }
-        for (auto* tex : pass->storageImageReads) {
-            auto& phys = GetPhysical(tex);
-            tex->layout = VK_IMAGE_LAYOUT_GENERAL;
+
+        for (const uint32_t texIndex : pass->storageImageReads) {
+            auto& tex = textures[texIndex];
+            auto& phys = GetPhysical(texIndex);
+            tex.layout = VK_IMAGE_LAYOUT_GENERAL;
             phys.event.stages = pass->stages;
             phys.event.access = VK_ACCESS_2_SHADER_STORAGE_READ_BIT;
         }
-        for (auto* tex : pass->sampledImageReads) {
-            auto& phys = GetPhysical(tex);
-            tex->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+        for (const uint32_t texIndex : pass->sampledImageReads) {
+            auto& tex = textures[texIndex];
+            auto& phys = GetPhysical(texIndex);
+            tex.layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             phys.event.stages = pass->stages;
             phys.event.access = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT;
         }
-        for (auto* tex : pass->imageReadWrite) {
-            auto& phys = GetPhysical(tex);
-            tex->layout = VK_IMAGE_LAYOUT_GENERAL;
+
+        for (const uint32_t texIndex : pass->imageReadWrite) {
+            auto& tex = textures[texIndex];
+            auto& phys = GetPhysical(texIndex);
+            tex.layout = VK_IMAGE_LAYOUT_GENERAL;
             phys.event.stages = pass->stages;
             phys.event.access = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT;
         }
 
-        for (auto* tex : pass->clearImageWrites) {
-            auto& phys = GetPhysical(tex);
-            tex->layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        for (const uint32_t texIndex : pass->clearImageWrites) {
+            auto& tex = textures[texIndex];
+            auto& phys = GetPhysical(texIndex);
+            tex.layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
             phys.event.stages = VK_PIPELINE_STAGE_2_CLEAR_BIT;
             phys.event.access = VK_ACCESS_2_TRANSFER_WRITE_BIT;
         }
-        for (auto* tex : pass->blitImageWrites) {
-            auto& phys = GetPhysical(tex);
-            tex->layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+
+        for (const uint32_t texIndex : pass->blitImageWrites) {
+            auto& tex = textures[texIndex];
+            auto& phys = GetPhysical(texIndex);
+            tex.layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
             phys.event.stages = VK_PIPELINE_STAGE_2_BLIT_BIT;
             phys.event.access = VK_ACCESS_2_TRANSFER_WRITE_BIT;
         }
-        for (auto* tex : pass->blitImageReads) {
-            auto& phys = GetPhysical(tex);
-            tex->layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+
+        for (const uint32_t texIndex : pass->blitImageReads) {
+            auto& tex = textures[texIndex];
+            auto& phys = GetPhysical(texIndex);
+            tex.layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
             phys.event.stages = VK_PIPELINE_STAGE_2_BLIT_BIT;
             phys.event.access = VK_ACCESS_2_TRANSFER_READ_BIT;
         }
 
-        for (auto* tex : pass->copyImageWrites) {
-            auto& phys = GetPhysical(tex);
-            tex->layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        for (const uint32_t texIndex : pass->copyImageWrites) {
+            auto& tex = textures[texIndex];
+            auto& phys = GetPhysical(texIndex);
+            tex.layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
             phys.event.stages = VK_PIPELINE_STAGE_2_COPY_BIT;
             phys.event.access = VK_ACCESS_2_TRANSFER_WRITE_BIT;
         }
 
-        for (auto* tex : pass->copyImageReads) {
-            auto& phys = GetPhysical(tex);
-            tex->layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        for (const uint32_t texIndex : pass->copyImageReads) {
+            auto& tex = textures[texIndex];
+            auto& phys = GetPhysical(texIndex);
+            tex.layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
             phys.event.stages = VK_PIPELINE_STAGE_2_COPY_BIT;
             phys.event.access = VK_ACCESS_2_TRANSFER_READ_BIT;
         }
 
-        for (auto& bufRead : pass->bufferReads) {
-            auto& phys = physicalResources[bufRead->physicalIndex];
+        for (const uint32_t bufIndex : pass->bufferReads) {
+            auto& buf = buffers[bufIndex];
+            auto& phys = physicalResources[buf.physicalIndex];
             phys.event.stages = pass->stages;
             phys.event.access = VK_ACCESS_2_SHADER_READ_BIT;
         }
-        for (auto& bufWrite : pass->bufferWrites) {
-            auto& phys = physicalResources[bufWrite->physicalIndex];
+
+        for (const uint32_t bufIndex : pass->bufferWrites) {
+            auto& buf = buffers[bufIndex];
+            auto& phys = physicalResources[buf.physicalIndex];
             phys.event.stages = pass->stages;
             phys.event.access = VK_ACCESS_2_SHADER_WRITE_BIT;
         }
-        for (auto& bufWrite : pass->bufferReadWrite) {
-            auto& phys = physicalResources[bufWrite->physicalIndex];
+
+        for (const uint32_t bufIndex : pass->bufferReadWrite) {
+            auto& buf = buffers[bufIndex];
+            auto& phys = physicalResources[buf.physicalIndex];
             phys.event.stages = pass->stages;
-            phys.event.access = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT;;
+            phys.event.access = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT;
         }
-        for (auto& bufWrite : pass->bufferWriteTransfer) {
-            auto& phys = physicalResources[bufWrite->physicalIndex];
+
+        for (const uint32_t bufIndex : pass->bufferWriteTransfer) {
+            auto& buf = buffers[bufIndex];
+            auto& phys = physicalResources[buf.physicalIndex];
             phys.event.stages = pass->stages;
             phys.event.access = VK_ACCESS_2_TRANSFER_WRITE_BIT;
         }
 
-        for (auto& bufRead : pass->bufferReadTransfer) {
-            auto& phys = physicalResources[bufRead->physicalIndex];
+        for (const uint32_t bufIndex : pass->bufferReadTransfer) {
+            auto& buf = buffers[bufIndex];
+            auto& phys = physicalResources[buf.physicalIndex];
             phys.event.stages = pass->stages;
             phys.event.access = VK_ACCESS_2_TRANSFER_READ_BIT;
         }
 
-        for (auto& bufRead : pass->bufferIndirectReads) {
-            auto& phys = physicalResources[bufRead->physicalIndex];
+        for (const uint32_t bufIndex : pass->bufferIndirectReads) {
+            auto& buf = buffers[bufIndex];
+            auto& phys = physicalResources[buf.physicalIndex];
             phys.event.stages = pass->stages | VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT;
             phys.event.access = VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_2_SHADER_READ_BIT;
         }
-        for (auto& bufRead : pass->bufferIndirectCountReads) {
-            auto& phys = physicalResources[bufRead->physicalIndex];
+
+        for (const uint32_t bufIndex : pass->bufferIndirectCountReads) {
+            auto& buf = buffers[bufIndex];
+            auto& phys = physicalResources[buf.physicalIndex];
             phys.event.stages = VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT;
             phys.event.access = VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT;
         }

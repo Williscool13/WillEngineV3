@@ -79,27 +79,27 @@ public:
 private:
     friend class RenderGraph;
 
-    std::vector<TextureResource*> colorAttachments;
-    TextureResource* depthAttachment = nullptr;
+    std::vector<uint32_t> colorAttachments{};
+    uint32_t depthAttachment{UINT_MAX};
     bool depthReadOnly = false;
 
-    std::vector<TextureResource*> storageImageReads;
-    std::vector<TextureResource*> storageImageWrites;
-    std::vector<TextureResource*> sampledImageReads;
-    std::vector<TextureResource*> imageReadWrite;
-    std::vector<TextureResource*> clearImageWrites;
-    std::vector<TextureResource*> blitImageReads;
-    std::vector<TextureResource*> blitImageWrites;
-    std::vector<TextureResource*> copyImageReads;
-    std::vector<TextureResource*> copyImageWrites;
+    std::vector<uint32_t> storageImageReads;
+    std::vector<uint32_t> storageImageWrites;
+    std::vector<uint32_t> sampledImageReads;
+    std::vector<uint32_t> imageReadWrite;
+    std::vector<uint32_t> clearImageWrites;
+    std::vector<uint32_t> blitImageReads;
+    std::vector<uint32_t> blitImageWrites;
+    std::vector<uint32_t> copyImageReads;
+    std::vector<uint32_t> copyImageWrites;
 
-    std::vector<BufferResource*> bufferReads;
-    std::vector<BufferResource*> bufferWrites;
-    std::vector<BufferResource*> bufferReadWrite;
-    std::vector<BufferResource*> bufferReadTransfer;
-    std::vector<BufferResource*> bufferWriteTransfer;
-    std::vector<BufferResource*> bufferIndirectReads;
-    std::vector<BufferResource*> bufferIndirectCountReads;
+    std::vector<uint32_t> bufferReads;
+    std::vector<uint32_t> bufferWrites;
+    std::vector<uint32_t> bufferReadWrite;
+    std::vector<uint32_t> bufferReadTransfer;
+    std::vector<uint32_t> bufferWriteTransfer;
+    std::vector<uint32_t> bufferIndirectReads;
+    std::vector<uint32_t> bufferIndirectCountReads;
 
     std::function<void(VkCommandBuffer_T*)> executeFunc;
 };
