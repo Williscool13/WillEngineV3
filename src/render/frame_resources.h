@@ -10,17 +10,14 @@
 
 namespace Render
 {
-/**
- * Buffers designed to be created multiple times, 1 per frame in flight.
- * \n Packaged into a struct for convenience and clarity.
- */
-struct FrameResources
+struct FrameResourceLimits
 {
-    AllocatedBuffer instanceBuffer;
-    AllocatedBuffer modelBuffer;
-    AllocatedBuffer jointMatrixBuffer;
-    AllocatedBuffer materialBuffer;
+    size_t highestInstanceBuffer{64};
+    size_t highestModelBuffer{64};
+    size_t highestJointMatrixBuffer{64};
+    size_t highestMaterialBuffer{64};
 };
+
 } // Render
 
 #endif //WILL_ENGINE_FRAME_RESOURCES_H

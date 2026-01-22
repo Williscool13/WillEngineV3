@@ -23,6 +23,7 @@
 #include "types/render_types.h"
 #include "render/vulkan/vk_imgui_wrapper.h"
 #include "backends/imgui_impl_vulkan.h"
+#include "core/math/math_helpers.h"
 #include "pipelines/pipeline_manager.h"
 #include "render-view/render_view_helpers.h"
 #include "shadows/shadow_helpers.h"
@@ -54,21 +55,6 @@ RenderThread::RenderThread(Core::FrameSync* engineRenderSynchronization, enki::T
     VmaAllocationCreateInfo vmaAllocInfo = {};
     vmaAllocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
     vmaAllocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
-
-    for (int32_t i = 0; i < frameResources.size(); ++i) {
-        bufferInfo.size = BINDLESS_INSTANCE_BUFFER_SIZE;
-        frameResources[i].instanceBuffer = std::move(AllocatedBuffer::CreateAllocatedBuffer(context.get(), bufferInfo, vmaAllocInfo));
-        frameResources[i].instanceBuffer.SetDebugName(("instanceBuffer_" + std::to_string(i)).c_str());
-        bufferInfo.size = BINDLESS_MODEL_BUFFER_SIZE;
-        frameResources[i].modelBuffer = std::move(AllocatedBuffer::CreateAllocatedBuffer(context.get(), bufferInfo, vmaAllocInfo));
-        frameResources[i].modelBuffer.SetDebugName(("modelBuffer_" + std::to_string(i)).c_str());
-        bufferInfo.size = BINDLESS_MODEL_BUFFER_SIZE;
-        frameResources[i].jointMatrixBuffer = std::move(AllocatedBuffer::CreateAllocatedBuffer(context.get(), bufferInfo, vmaAllocInfo));
-        frameResources[i].jointMatrixBuffer.SetDebugName(("jointMatrixBuffer_" + std::to_string(i)).c_str());
-        bufferInfo.size = BINDLESS_MATERIAL_BUFFER_SIZE;
-        frameResources[i].materialBuffer = std::move(AllocatedBuffer::CreateAllocatedBuffer(context.get(), bufferInfo, vmaAllocInfo));
-        frameResources[i].materialBuffer.SetDebugName(("materialBuffer_" + std::to_string(i)).c_str());
-    }
 }
 
 RenderThread::~RenderThread() = default;
@@ -153,8 +139,7 @@ void RenderThread::ThreadMain()
 
             // Wait for the frame N - 3 to finish using resources
             RenderSynchronization& currentRenderSynchronization = frameSynchronization[currentFrameInFlight];
-            FrameResources& currentFrameResources = frameResources[currentFrameInFlight];
-            RenderResponse renderResponse = Render(currentFrameInFlight, currentRenderSynchronization, frameBuffer, currentFrameResources);
+            RenderResponse renderResponse = Render(currentFrameInFlight, currentRenderSynchronization, frameBuffer);
             if (renderResponse == SWAPCHAIN_OUTDATED) {
                 bRenderRequestsRecreate = true;
             }
@@ -169,7 +154,7 @@ void RenderThread::ThreadMain()
     vkDeviceWaitIdle(context->device);
 }
 
-RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, RenderSynchronization& renderSync, Core::FrameBuffer& frameBuffer, FrameResources& frameResource)
+RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, RenderSynchronization& renderSync, Core::FrameBuffer& frameBuffer)
 {
     VK_CHECK(vkWaitForFences(context->device, 1, &renderSync.renderFence, true, UINT64_MAX));
     VK_CHECK(vkResetFences(context->device, 1, &renderSync.renderFence));
@@ -217,18 +202,9 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     vkCmdSetDescriptorBufferOffsetsEXT(renderSync.commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, globalPipelineLayout.handle, 0, bindings.size(), indices.data(), offsets.data());
     vkCmdSetDescriptorBufferOffsetsEXT(renderSync.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, globalPipelineLayout.handle, 0, bindings.size(), indices.data(), offsets.data());
 
-    SetupFrameUniforms(viewFamily, frameResource, renderExtent, frameBuffer.timeFrame.renderDeltaTime);
+    SetupFrameUniforms(viewFamily, renderExtent, frameBuffer.timeFrame.renderDeltaTime);
+    SetupModelUniforms(viewFamily);
 
-    renderGraph->ImportBufferNoBarrier("primitive_buffer", resourceManager->primitiveBuffer.handle, resourceManager->primitiveBuffer.address,
-                                       {resourceManager->primitiveBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
-    renderGraph->ImportBufferNoBarrier("instance_buffer", frameResource.instanceBuffer.handle, frameResource.instanceBuffer.address,
-                                       {frameResource.instanceBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
-    renderGraph->ImportBufferNoBarrier("model_buffer", frameResource.modelBuffer.handle, frameResource.modelBuffer.address,
-                                       {frameResource.modelBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
-    renderGraph->ImportBufferNoBarrier("joint_matrix_buffer", frameResource.jointMatrixBuffer.handle, frameResource.jointMatrixBuffer.address,
-                                       {frameResource.jointMatrixBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
-    renderGraph->ImportBufferNoBarrier("material_buffer", frameResource.materialBuffer.handle, frameResource.materialBuffer.address,
-                                       {frameResource.materialBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
 
     renderGraph->ImportBufferNoBarrier("vertex_buffer", resourceManager->megaVertexBuffer.handle, resourceManager->megaVertexBuffer.address,
                                        {resourceManager->megaVertexBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
@@ -240,6 +216,8 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
                                        {resourceManager->megaMeshletTrianglesBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
     renderGraph->ImportBufferNoBarrier("meshlet_buffer", resourceManager->megaMeshletBuffer.handle, resourceManager->megaMeshletBuffer.address,
                                        {resourceManager->megaMeshletBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
+    renderGraph->ImportBufferNoBarrier("primitive_buffer", resourceManager->primitiveBuffer.handle, resourceManager->primitiveBuffer.address,
+                                       {resourceManager->primitiveBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
 
     renderGraph->ImportBuffer("debug_readback_buffer", resourceManager->debugReadbackBuffer.handle, resourceManager->debugReadbackBuffer.address,
                               {resourceManager->debugReadbackBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT}, resourceManager->debugReadbackLastKnownState);
@@ -603,28 +581,8 @@ void RenderThread::CreatePipelines()
                                              sizeof(DebugVisualizePushConstant), PipelineCategory::Debug);
 }
 
-void RenderThread::SetupFrameUniforms(const Core::ViewFamily& viewFamily, FrameResources& frameResource, const std::array<uint32_t, 2> renderExtent, float renderDeltaTime) const
+void RenderThread::SetupFrameUniforms(const Core::ViewFamily& viewFamily, const std::array<uint32_t, 2> renderExtent, float renderDeltaTime) const
 {
-    auto* modelBuffer = static_cast<Model*>(frameResource.modelBuffer.allocationInfo.pMappedData);
-    for (size_t i = 0; i < viewFamily.modelMatrices.size(); ++i) {
-        modelBuffer[i] = viewFamily.modelMatrices[i];
-    }
-
-    auto* materialBuffer = static_cast<MaterialProperties*>(frameResource.materialBuffer.allocationInfo.pMappedData);
-    memcpy(materialBuffer, viewFamily.materials.data(), viewFamily.materials.size() * sizeof(MaterialProperties));
-
-
-    auto* instanceBuffer = static_cast<Instance*>(frameResource.instanceBuffer.allocationInfo.pMappedData);
-    for (size_t i = 0; i < viewFamily.instances.size(); ++i) {
-        auto& inst = viewFamily.instances[i];
-        instanceBuffer[i] = {
-            .primitiveIndex = inst.primitiveIndex,
-            .modelIndex = inst.modelIndex,
-            .materialIndex = inst.gpuMaterialIndex,
-            .jointMatrixOffset = 0,
-        };
-    }
-
     renderGraph->CreateBuffer("scene_data", SCENE_DATA_BUFFER_SIZE);
     renderGraph->CreateBuffer("shadow_data", SHADOW_DATA_BUFFER_SIZE);
     renderGraph->CreateBuffer("light_data", LIGHT_DATA_BUFFER_SIZE);
@@ -750,6 +708,105 @@ void RenderThread::SetupFrameUniforms(const Core::ViewFamily& viewFamily, FrameR
         });
 }
 
+void RenderThread::SetupModelUniforms(const Core::ViewFamily& viewFamily)
+{
+    if (viewFamily.instances.empty() || viewFamily.modelMatrices.empty() || viewFamily.materials.empty()) {
+        return;
+    }
+
+    frameResourceLimits.highestInstanceBuffer = std::max(frameResourceLimits.highestInstanceBuffer, NextPowerOfTwo(viewFamily.instances.size()));
+    frameResourceLimits.highestModelBuffer = std::max(frameResourceLimits.highestModelBuffer, NextPowerOfTwo(viewFamily.modelMatrices.size()));
+    frameResourceLimits.highestMaterialBuffer = std::max(frameResourceLimits.highestMaterialBuffer, NextPowerOfTwo(viewFamily.materials.size()));
+    // frameResourceLimits.highestJointMatrixBuffer = std::max(frameResourceLimits.highestJointMatrixBuffer, NextPowerOfTwo(jointMatrixCount));
+
+    size_t instanceBufferSize = frameResourceLimits.highestInstanceBuffer * sizeof(Instance);
+    size_t modelBufferSize = frameResourceLimits.highestModelBuffer * sizeof(Model);
+    // todo update when doing mesh skinning
+    size_t jointMatrixBufferSize = frameResourceLimits.highestModelBuffer * sizeof(glm::mat4);
+    size_t materialBufferSize = frameResourceLimits.highestMaterialBuffer * sizeof(MaterialProperties);
+
+    renderGraph->CreateBuffer("instance_buffer", instanceBufferSize);
+    renderGraph->CreateBuffer("model_buffer", modelBufferSize);
+    renderGraph->CreateBuffer("joint_matrix_buffer", jointMatrixBufferSize);
+    renderGraph->CreateBuffer("material_buffer", materialBufferSize);
+
+    UploadAllocation instanceUpload = renderGraph->AllocateTransient(viewFamily.instances.size() * sizeof(Instance));
+    auto* instanceBuffer = static_cast<Instance*>(instanceUpload.ptr);
+    for (size_t i = 0; i < viewFamily.instances.size(); ++i) {
+        auto& inst = viewFamily.instances[i];
+        instanceBuffer[i] = {
+            .primitiveIndex = inst.primitiveIndex,
+            .modelIndex = inst.modelIndex,
+            .materialIndex = inst.gpuMaterialIndex,
+            .jointMatrixOffset = 0,
+        };
+    }
+
+    UploadAllocation modelUpload = renderGraph->AllocateTransient(viewFamily.modelMatrices.size() * sizeof(Model));
+    auto* modelBuffer = static_cast<Model*>(modelUpload.ptr);
+    for (size_t i = 0; i < viewFamily.modelMatrices.size(); ++i) {
+        modelBuffer[i] = viewFamily.modelMatrices[i];
+    }
+
+    UploadAllocation materialUpload = renderGraph->AllocateTransient(viewFamily.materials.size() * sizeof(MaterialProperties));
+    memcpy(materialUpload.ptr, viewFamily.materials.data(), viewFamily.materials.size() * sizeof(MaterialProperties));
+
+    RenderPass& uploadModelsPass = renderGraph->AddPass("Upload Model Uniforms", VK_PIPELINE_STAGE_2_TRANSFER_BIT);
+    uploadModelsPass.WriteTransferBuffer("instance_buffer");
+    uploadModelsPass.WriteTransferBuffer("model_buffer");
+    uploadModelsPass.WriteTransferBuffer("material_buffer");
+    VkBuffer srcBuffer = renderGraph->GetTransientUploadBuffer();
+    uploadModelsPass.Execute([&, srcBuffer,
+            instanceOffset = instanceUpload.offset,
+            instanceSize = viewFamily.instances.size() * sizeof(Instance),
+            modelOffset = modelUpload.offset,
+            modelSize = viewFamily.modelMatrices.size() * sizeof(Model),
+            materialOffset = materialUpload.offset,
+            materialSize = viewFamily.materials.size() * sizeof(MaterialProperties)](VkCommandBuffer cmd) {
+            VkBufferCopy2 instanceCopy{};
+            instanceCopy.sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2;
+            instanceCopy.srcOffset = instanceOffset;
+            instanceCopy.dstOffset = 0;
+            instanceCopy.size = instanceSize;
+            VkCopyBufferInfo2 instanceCopyInfo{
+                .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
+                .srcBuffer = srcBuffer,
+                .dstBuffer = renderGraph->GetBufferHandle("instance_buffer"),
+                .regionCount = 1,
+                .pRegions = &instanceCopy
+            };
+            vkCmdCopyBuffer2(cmd, &instanceCopyInfo);
+
+            VkBufferCopy2 modelCopy{};
+            modelCopy.sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2;
+            modelCopy.srcOffset = modelOffset;
+            modelCopy.dstOffset = 0;
+            modelCopy.size = modelSize;
+            VkCopyBufferInfo2 modelCopyInfo{
+                .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
+                .srcBuffer = srcBuffer,
+                .dstBuffer = renderGraph->GetBufferHandle("model_buffer"),
+                .regionCount = 1,
+                .pRegions = &modelCopy
+            };
+            vkCmdCopyBuffer2(cmd, &modelCopyInfo);
+
+            VkBufferCopy2 materialCopy{};
+            materialCopy.sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2;
+            materialCopy.srcOffset = materialOffset;
+            materialCopy.dstOffset = 0;
+            materialCopy.size = materialSize;
+            VkCopyBufferInfo2 materialCopyInfo{
+                .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
+                .srcBuffer = srcBuffer,
+                .dstBuffer = renderGraph->GetBufferHandle("material_buffer"),
+                .regionCount = 1,
+                .pRegions = &materialCopy
+            };
+            vkCmdCopyBuffer2(cmd, &materialCopyInfo);
+        });
+}
+
 void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFamily& viewFamily) const
 {
     Core::ShadowConfiguration shadowConfig = viewFamily.shadowConfig;
@@ -869,6 +926,7 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFami
         shadowPass.WriteDepthAttachment(shadowMapName);
         visibilityPass.ReadBuffer("scene_data");
         visibilityPass.ReadBuffer("shadow_data");
+        visibilityPass.ReadBuffer("model_buffer");
         shadowPass.ReadBuffer(compactedInstanceName);
         shadowPass.ReadIndirectBuffer(indirectName);
         shadowPass.ReadIndirectCountBuffer(indirectCountName);
@@ -1020,6 +1078,8 @@ void RenderThread::SetupMainGeometryPass(RenderGraph& graph, const Core::ViewFam
     instancedMeshShading.WriteColorAttachment(targets.velocity);
     instancedMeshShading.WriteDepthAttachment(targets.depth);
     instancedMeshShading.ReadBuffer("scene_data");
+    instancedMeshShading.ReadBuffer("model_buffer");
+    instancedMeshShading.ReadBuffer("material_buffer");
     instancedMeshShading.ReadBuffer("compacted_instance_buffer");
     instancedMeshShading.ReadIndirectBuffer("indirect_buffer");
     instancedMeshShading.ReadIndirectCountBuffer("indirect_count_buffer");

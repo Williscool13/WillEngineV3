@@ -85,7 +85,7 @@ public:
 
     void ThreadMain();
 
-    RenderResponse Render(uint32_t currentFrameIndex, RenderSynchronization& renderSync, Core::FrameBuffer& frameBuffer, FrameResources& frameResource);
+    RenderResponse Render(uint32_t currentFrameIndex, RenderSynchronization& renderSync, Core::FrameBuffer& frameBuffer);
 
     void ProcessAcquisitions(VkCommandBuffer cmd, const std::vector<Core::BufferAcquireOperation>& bufferAcquireOperations, const std::vector<Core::ImageAcquireOperation>& imageAcquireOperations);
 
@@ -97,7 +97,10 @@ public:
 private:
     void CreatePipelines();
 
-    void SetupFrameUniforms(const Core::ViewFamily& viewFamily, FrameResources& frameResource, std::array<uint32_t, 2> renderExtent, float renderDeltaTime) const;
+    void SetupFrameUniforms(const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, float renderDeltaTime) const;
+
+    void
+    SetupModelUniforms(const Core::ViewFamily& viewFamily);
 
     void SetupCascadedShadows(RenderGraph& graph, const Core::ViewFamily& viewFamily) const;
 
@@ -143,13 +146,13 @@ private:
     std::unique_ptr<PipelineManager> pipelineManager{};
 
     std::array<RenderSynchronization, Core::FRAME_BUFFER_COUNT> frameSynchronization;
-    std::array<FrameResources, Core::FRAME_BUFFER_COUNT> frameResources;
 
     std::vector<VkBufferMemoryBarrier2> tempBufferBarriers;
     std::vector<VkImageMemoryBarrier2> tempImageBarriers;
 
     uint32_t currentFrameInFlight{0};
     uint64_t frameNumber{0};
+    FrameResourceLimits frameResourceLimits{};
     bool bEngineRequestsRecreate{false};
     bool bRenderRequestsRecreate{false};
     bool bFrozenVisibility{false};

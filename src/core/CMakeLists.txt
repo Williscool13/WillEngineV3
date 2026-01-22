@@ -31,6 +31,8 @@ add_library(core STATIC
         math/constants.h
         allocators/linear_allocator.cpp
         allocators/linear_allocator.h
+        math/math_helpers.cpp
+        math/math_helpers.h
 )
 
 
