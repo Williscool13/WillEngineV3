@@ -66,7 +66,7 @@ public:
 
     void PrepareSwapchain(VkCommandBuffer cmd, const std::string& name);
 
-    void Reset(uint64_t currentFrame, uint64_t maxFramesUnused);
+    void Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint64_t maxFramesUnused);
 
     void SetDebugLogging(bool enable) { bDebugLogging = enable; }
 
@@ -113,10 +113,10 @@ public:
 
     void CarryBufferToNextFrame(const std::string& name, const std::string& newName, VkBufferUsageFlags additionalUsage);
 
-public: // FrameBuffer Uploader
-    void ResetFrameBuffers(uint32_t currentFrameInFlight) { uploadArenas[currentFrameInFlight].allocator.Reset(); }
+public: // Transient Uploader
+    UploadAllocation AllocateTransient(size_t size);
 
-    FrameBufferUploadArena& GetFrameBufferUploadArena(uint32_t currentFrameInFlight) { return uploadArenas[currentFrameInFlight]; }
+    VkBuffer GetTransientUploadBuffer() const { return uploadArenas[currentFrameIndex].buffer.handle; }
 
 private:
     friend class RenderPass;
@@ -142,7 +142,8 @@ private:
     std::vector<TextureFrameCarryover> textureCarryovers;
     std::vector<BufferFrameCarryover> bufferCarryovers;
 
-    std::array<FrameBufferUploadArena, Core::FRAME_BUFFER_COUNT> uploadArenas{};
+    uint32_t currentFrameIndex{0};
+    std::array<TransientUploadArena, Core::FRAME_BUFFER_COUNT> uploadArenas{};
 
     bool bDebugLogging = false;
     uint32_t debugNameCounter{0};
@@ -161,6 +162,8 @@ private:
     void CreatePhysicalImage(PhysicalResource& resource, const ResourceDimensions& dim);
 
     void CreatePhysicalBuffer(PhysicalResource& resource, const ResourceDimensions& dim);
+
+    void RecreateTransientArena(uint32_t frameIndex, size_t newSize);
 
     void LogImageBarrier(const VkImageMemoryBarrier2& barrier, const std::string& resourceName, uint32_t physicalIndex) const;
 

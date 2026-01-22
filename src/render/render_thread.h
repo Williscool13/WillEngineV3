@@ -97,7 +97,7 @@ public:
 private:
     void CreatePipelines();
 
-    void SetupFrameUniforms(VkCommandBuffer cmd, const Core::ViewFamily& viewFamily, FrameResources& frameResource, std::array<uint32_t, 2> renderExtent, float renderDeltaTime, uint32_t currentFrameIndex) const;
+    void SetupFrameUniforms(const Core::ViewFamily& viewFamily, FrameResources& frameResource, std::array<uint32_t, 2> renderExtent, float renderDeltaTime) const;
 
     void SetupCascadedShadows(RenderGraph& graph, const Core::ViewFamily& viewFamily) const;
 

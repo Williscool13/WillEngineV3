@@ -30,10 +30,12 @@ RenderGraph::RenderGraph(VulkanContext* context, ResourceManager* resourceManage
         VmaAllocationCreateInfo vmaAllocInfo = {};
         vmaAllocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
         vmaAllocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
-        bufferInfo.size = SCENE_DATA_BUFFER_SIZE;
+        bufferInfo.size = RDG_DEFAULT_UPLOAD_LINEAR_ALLOCATOR_SIZE;
 
         uploadArenas[i].buffer = std::move(AllocatedBuffer::CreateAllocatedBuffer(context, bufferInfo, vmaAllocInfo));
         uploadArenas[i].buffer.SetDebugName(("frameBufferUploader_" + std::to_string(i)).c_str());
+        uploadArenas[i].allocator = Core::LinearAllocator(RDG_DEFAULT_UPLOAD_LINEAR_ALLOCATOR_SIZE);
+        uploadArenas[i].size = RDG_DEFAULT_UPLOAD_LINEAR_ALLOCATOR_SIZE;
     }
 }
 
@@ -897,8 +899,11 @@ void RenderGraph::PrepareSwapchain(VkCommandBuffer cmd, const std::string& name)
     vkCmdPipelineBarrier2(cmd, &depInfo);
 }
 
-void RenderGraph::Reset(uint64_t currentFrame, uint64_t maxFramesUnused)
+void RenderGraph::Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint64_t maxFramesUnused)
 {
+    currentFrameIndex = _currentFrameIndex;
+    uploadArenas[currentFrameIndex].allocator.Reset();
+
     for (TextureFrameCarryover& carryover : textureCarryovers) {
         if (const TextureResource* tex = GetTexture(carryover.srcName)) {
             const PhysicalResource& phys = physicalResources[tex->physicalIndex];
@@ -1360,6 +1365,48 @@ void RenderGraph::CarryBufferToNextFrame(const std::string& name, const std::str
     }
 
     bufferCarryovers.emplace_back(name, newName);
+}
+
+UploadAllocation RenderGraph::AllocateTransient(size_t size)
+{
+    TransientUploadArena& arena = uploadArenas[currentFrameIndex];
+    size_t offset = arena.allocator.Allocate(size);
+
+    if (offset == SIZE_MAX) {
+        size_t required = arena.allocator.GetUsed() + size;
+        size_t newSize = std::max(arena.size * 2, required);
+        RecreateTransientArena(currentFrameIndex, newSize);
+        offset = arena.allocator.Allocate(size);
+        assert(offset != SIZE_MAX && "Still OOM after resize");
+    }
+
+    return {
+        .ptr = static_cast<char*>(arena.buffer.allocationInfo.pMappedData) + offset,
+        .address = arena.buffer.address + offset,
+        .offset = offset
+    };
+}
+
+void RenderGraph::RecreateTransientArena(uint32_t frameIndex, size_t newSize)
+{
+    TransientUploadArena& arena = uploadArenas[frameIndex];
+    Core::LinearAllocator newAllocator = Core::LinearAllocator::CreateExpanded(arena.allocator, newSize);
+
+    VkBufferCreateInfo bufferInfo = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+    bufferInfo.pNext = nullptr;
+    bufferInfo.usage = VK_BUFFER_USAGE_2_TRANSFER_SRC_BIT;
+    VmaAllocationCreateInfo vmaAllocInfo = {};
+    vmaAllocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
+    vmaAllocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+    bufferInfo.size = newSize;
+    AllocatedBuffer newBuffer = AllocatedBuffer::CreateAllocatedBuffer(context, bufferInfo, vmaAllocInfo);
+    newBuffer.SetDebugName(("frameBufferUploader_" + std::to_string(frameIndex)).c_str());
+
+    memcpy(newBuffer.allocationInfo.pMappedData, arena.buffer.allocationInfo.pMappedData, arena.allocator.GetUsed());
+
+    arena.buffer = std::move(newBuffer);
+    arena.allocator = newAllocator;
+    arena.size = newSize;
 }
 
 void RenderGraph::LogImageBarrier(const VkImageMemoryBarrier2& barrier, const std::string& resourceName, uint32_t physicalIndex) const

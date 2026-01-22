@@ -22,6 +22,16 @@ public:
         assert(size > 0 && size < SIZE_MAX);
     }
 
+    [[nodiscard]] static LinearAllocator CreateExpanded(const LinearAllocator& old, size_t newCapacity)
+    {
+        assert(newCapacity >= old.capacity && "New capacity must be >= old capacity");
+        assert(newCapacity > 0 && newCapacity < SIZE_MAX);
+
+        LinearAllocator expanded(newCapacity);
+        expanded.head = old.head;
+        return expanded;
+    }
+
     size_t Allocate(size_t size)
     {
         if (head + size > capacity) {

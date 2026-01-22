@@ -208,10 +208,17 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     Core::ViewFamily& viewFamily = frameBuffer.mainViewFamily;
 
 
-    renderGraph->Reset(frameNumber, RDG_PHYSICAL_RESOURCE_UNUSED_THRESHOLD);
-    renderGraph->ResetFrameBuffers(currentFrameIndex);
+    renderGraph->Reset(currentFrameIndex, frameNumber, RDG_PHYSICAL_RESOURCE_UNUSED_THRESHOLD);
 
-    SetupFrameUniforms(renderSync.commandBuffer, viewFamily, frameResource, renderExtent, frameBuffer.timeFrame.renderDeltaTime, currentFrameIndex);
+    std::array bindings{resourceManager->bindlessSamplerTextureDescriptorBuffer.GetBindingInfo(), resourceManager->bindlessRDGTransientDescriptorBuffer.GetBindingInfo()};
+    std::array indices{0u, 1u};
+    std::array<VkDeviceSize, 2> offsets{0, 0};
+    vkCmdBindDescriptorBuffersEXT(renderSync.commandBuffer, bindings.size(), bindings.data());
+    vkCmdSetDescriptorBufferOffsetsEXT(renderSync.commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, globalPipelineLayout.handle, 0, bindings.size(), indices.data(), offsets.data());
+    vkCmdSetDescriptorBufferOffsetsEXT(renderSync.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, globalPipelineLayout.handle, 0, bindings.size(), indices.data(), offsets.data());
+
+    SetupFrameUniforms(viewFamily, frameResource, renderExtent, frameBuffer.timeFrame.renderDeltaTime);
+
     renderGraph->ImportBufferNoBarrier("primitive_buffer", resourceManager->primitiveBuffer.handle, resourceManager->primitiveBuffer.address,
                                        {resourceManager->primitiveBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
     renderGraph->ImportBufferNoBarrier("instance_buffer", frameResource.instanceBuffer.handle, frameResource.instanceBuffer.address,
@@ -596,17 +603,8 @@ void RenderThread::CreatePipelines()
                                              sizeof(DebugVisualizePushConstant), PipelineCategory::Debug);
 }
 
-void RenderThread::SetupFrameUniforms(VkCommandBuffer cmd, const Core::ViewFamily& viewFamily, FrameResources& frameResource, const std::array<uint32_t, 2> renderExtent, float renderDeltaTime,
-                                      uint32_t currentFrameIndex) const
+void RenderThread::SetupFrameUniforms(const Core::ViewFamily& viewFamily, FrameResources& frameResource, const std::array<uint32_t, 2> renderExtent, float renderDeltaTime) const
 {
-    std::array bindings{resourceManager->bindlessSamplerTextureDescriptorBuffer.GetBindingInfo(), resourceManager->bindlessRDGTransientDescriptorBuffer.GetBindingInfo()};
-    std::array indices{0u, 1u};
-    std::array<VkDeviceSize, 2> offsets{0, 0};
-    vkCmdBindDescriptorBuffersEXT(cmd, bindings.size(), bindings.data());
-    vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, globalPipelineLayout.handle, 0, bindings.size(), indices.data(), offsets.data());
-    vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, globalPipelineLayout.handle, 0, bindings.size(), indices.data(), offsets.data());
-
-
     auto* modelBuffer = static_cast<Model*>(frameResource.modelBuffer.allocationInfo.pMappedData);
     for (size_t i = 0; i < viewFamily.modelMatrices.size(); ++i) {
         modelBuffer[i] = viewFamily.modelMatrices[i];
@@ -627,23 +625,18 @@ void RenderThread::SetupFrameUniforms(VkCommandBuffer cmd, const Core::ViewFamil
         };
     }
 
-    FrameBufferUploadArena& frameBufferUploader = renderGraph->GetFrameBufferUploadArena(currentFrameIndex);
     renderGraph->CreateBuffer("scene_data", SCENE_DATA_BUFFER_SIZE);
     renderGraph->CreateBuffer("shadow_data", SHADOW_DATA_BUFFER_SIZE);
     renderGraph->CreateBuffer("light_data", LIGHT_DATA_BUFFER_SIZE);
 
     // Scene Data
     SceneData sceneData = GenerateSceneData(viewFamily.mainView, viewFamily.postProcessConfig, renderExtent, frameNumber, renderDeltaTime);
-    size_t sceneDataAllocationOffset = frameBufferUploader.allocator.Allocate(sizeof(SceneData));
-    auto sceneDataPtr = static_cast<char*>(frameBufferUploader.buffer.allocationInfo.pMappedData) + sceneDataAllocationOffset;
-    memcpy(sceneDataPtr, &sceneData, sizeof(SceneData));
-
+    UploadAllocation sceneDataUploadAllocation = renderGraph->AllocateTransient(sizeof(SceneData));
+    memcpy(sceneDataUploadAllocation.ptr, &sceneData, sizeof(SceneData));
     // Portal Scene Data
     SceneData portalSceneData = GenerateSceneData(viewFamily.portalViews[0], viewFamily.postProcessConfig, renderExtent, frameNumber, renderDeltaTime);
-    size_t portalSceneDataAllocationOffset = frameBufferUploader.allocator.Allocate(sizeof(SceneData));
-    auto portalSceneDataPtr = static_cast<char*>(frameBufferUploader.buffer.allocationInfo.pMappedData) + portalSceneDataAllocationOffset;
-    memcpy(portalSceneDataPtr, &portalSceneData, sizeof(SceneData));
-
+    UploadAllocation portalSceneDataUploadAllocation = renderGraph->AllocateTransient(sizeof(SceneData));
+    memcpy(portalSceneDataUploadAllocation.ptr, &portalSceneData, sizeof(SceneData));
 
     // Shadow Data
     Core::ShadowConfiguration shadowConfig = viewFamily.shadowConfig;
@@ -688,70 +681,73 @@ void RenderThread::SetupFrameUniforms(VkCommandBuffer cmd, const Core::ViewFamil
         shadowData.shadowIntensity = shadowConfig.shadowIntensity;
     }
 
-    size_t shadowDataAllocationOffset = frameBufferUploader.allocator.Allocate(sizeof(ShadowData));
-    auto shadowDataPtr = static_cast<char*>(frameBufferUploader.buffer.allocationInfo.pMappedData) + shadowDataAllocationOffset;
-    memcpy(shadowDataPtr, &shadowData, sizeof(ShadowData));
+    UploadAllocation shadowDataUploadAllocation = renderGraph->AllocateTransient(sizeof(ShadowData));
+    memcpy(shadowDataUploadAllocation.ptr, &shadowData, sizeof(ShadowData));
 
     // Lights
     LightData lightData{};
     lightData.mainLightDirection = {viewFamily.directionalLight.direction, viewFamily.directionalLight.intensity};
     lightData.mainLightColor = {viewFamily.directionalLight.color, 0.0f};
 
-    size_t lightDataAllocationOffset = frameBufferUploader.allocator.Allocate(sizeof(LightData));
-    auto lightDataPtr = static_cast<char*>(frameBufferUploader.buffer.allocationInfo.pMappedData) + lightDataAllocationOffset;
-    memcpy(lightDataPtr, &lightData, sizeof(LightData));
+    UploadAllocation lightDataUploadAllocation = renderGraph->AllocateTransient(sizeof(LightData));
+    memcpy(lightDataUploadAllocation.ptr, &lightData, sizeof(LightData));
 
     auto& uploadUniformsPass = renderGraph->AddPass("Upload Uniforms", VK_PIPELINE_STAGE_2_TRANSFER_BIT);
     uploadUniformsPass.WriteTransferBuffer("scene_data");
     uploadUniformsPass.WriteTransferBuffer("shadow_data");
     uploadUniformsPass.WriteTransferBuffer("light_data");
-    uploadUniformsPass.Execute([&, sceneDataAllocationOffset, portalSceneDataAllocationOffset, shadowDataAllocationOffset, lightDataAllocationOffset](VkCommandBuffer cmd) {
-        std::array<VkBufferCopy2, 2> sceneDataRegions{};
-        sceneDataRegions[0].sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2;
-        sceneDataRegions[0].srcOffset = sceneDataAllocationOffset;
-        sceneDataRegions[0].dstOffset = 0;
-        sceneDataRegions[0].size = sizeof(SceneData);
-        sceneDataRegions[1].sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2;
-        sceneDataRegions[1].srcOffset = portalSceneDataAllocationOffset;
-        sceneDataRegions[1].dstOffset = sizeof(SceneData);
-        sceneDataRegions[1].size = sizeof(SceneData);
-        const VkCopyBufferInfo2 sceneDataCopyInfo{
-            .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
-            .srcBuffer = frameBufferUploader.buffer.handle,
-            .dstBuffer = renderGraph->GetBufferHandle("scene_data"),
-            .regionCount = sceneDataRegions.size(),
-            .pRegions = sceneDataRegions.data()
-        };
-        vkCmdCopyBuffer2(cmd, &sceneDataCopyInfo);
+    VkBuffer srcBuffer = renderGraph->GetTransientUploadBuffer();
+    uploadUniformsPass.Execute([&, srcBuffer,
+            sceneOffset = sceneDataUploadAllocation.offset,
+            portalOffset = portalSceneDataUploadAllocation.offset,
+            shadowOffset = shadowDataUploadAllocation.offset,
+            lightOffset = lightDataUploadAllocation.offset](VkCommandBuffer cmd) {
+            std::array<VkBufferCopy2, 2> sceneDataRegions{};
+            sceneDataRegions[0].sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2;
+            sceneDataRegions[0].srcOffset = sceneOffset;
+            sceneDataRegions[0].dstOffset = 0;
+            sceneDataRegions[0].size = sizeof(SceneData);
+            sceneDataRegions[1].sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2;
+            sceneDataRegions[1].srcOffset = portalOffset;
+            sceneDataRegions[1].dstOffset = sizeof(SceneData);
+            sceneDataRegions[1].size = sizeof(SceneData);
+            const VkCopyBufferInfo2 sceneDataCopyInfo{
+                .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
+                .srcBuffer = srcBuffer,
+                .dstBuffer = renderGraph->GetBufferHandle("scene_data"),
+                .regionCount = sceneDataRegions.size(),
+                .pRegions = sceneDataRegions.data()
+            };
+            vkCmdCopyBuffer2(cmd, &sceneDataCopyInfo);
 
-        std::array<VkBufferCopy2, 1> shadowDataRegions{};
-        shadowDataRegions[0].sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2;
-        shadowDataRegions[0].srcOffset = shadowDataAllocationOffset;
-        shadowDataRegions[0].dstOffset = 0;
-        shadowDataRegions[0].size = sizeof(ShadowData);
-        const VkCopyBufferInfo2 shadowDataCopyInfo{
-            .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
-            .srcBuffer = frameBufferUploader.buffer.handle,
-            .dstBuffer = renderGraph->GetBufferHandle("shadow_data"),
-            .regionCount = shadowDataRegions.size(),
-            .pRegions = shadowDataRegions.data()
-        };
-        vkCmdCopyBuffer2(cmd, &shadowDataCopyInfo);
+            std::array<VkBufferCopy2, 1> shadowDataRegions{};
+            shadowDataRegions[0].sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2;
+            shadowDataRegions[0].srcOffset = shadowOffset;
+            shadowDataRegions[0].dstOffset = 0;
+            shadowDataRegions[0].size = sizeof(ShadowData);
+            const VkCopyBufferInfo2 shadowDataCopyInfo{
+                .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
+                .srcBuffer = srcBuffer,
+                .dstBuffer = renderGraph->GetBufferHandle("shadow_data"),
+                .regionCount = shadowDataRegions.size(),
+                .pRegions = shadowDataRegions.data()
+            };
+            vkCmdCopyBuffer2(cmd, &shadowDataCopyInfo);
 
-        std::array<VkBufferCopy2, 1> lightDataRegions{};
-        lightDataRegions[0].sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2;
-        lightDataRegions[0].srcOffset = lightDataAllocationOffset;
-        lightDataRegions[0].dstOffset = 0;
-        lightDataRegions[0].size = sizeof(LightData);
-        const VkCopyBufferInfo2 lightDataCopyInfo{
-            .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
-            .srcBuffer = frameBufferUploader.buffer.handle,
-            .dstBuffer = renderGraph->GetBufferHandle("light_data"),
-            .regionCount = lightDataRegions.size(),
-            .pRegions = lightDataRegions.data()
-        };
-        vkCmdCopyBuffer2(cmd, &lightDataCopyInfo);
-    });
+            std::array<VkBufferCopy2, 1> lightDataRegions{};
+            lightDataRegions[0].sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2;
+            lightDataRegions[0].srcOffset = lightOffset;
+            lightDataRegions[0].dstOffset = 0;
+            lightDataRegions[0].size = sizeof(LightData);
+            const VkCopyBufferInfo2 lightDataCopyInfo{
+                .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
+                .srcBuffer = srcBuffer,
+                .dstBuffer = renderGraph->GetBufferHandle("light_data"),
+                .regionCount = lightDataRegions.size(),
+                .pRegions = lightDataRegions.data()
+            };
+            vkCmdCopyBuffer2(cmd, &lightDataCopyInfo);
+        });
 }
 
 void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFamily& viewFamily) const

@@ -157,10 +157,17 @@ struct BufferResource
     [[nodiscard]] bool HasPhysical() const { return physicalIndex != UINT32_MAX; }
 };
 
-struct FrameBufferUploadArena
+struct UploadAllocation {
+    void* ptr;
+    VkDeviceAddress address;
+    size_t offset;
+};
+
+struct TransientUploadArena
 {
     AllocatedBuffer buffer;
     Core::LinearAllocator allocator{RDG_DEFAULT_UPLOAD_LINEAR_ALLOCATOR_SIZE};
+    size_t size;
 };
 } // Render
 
