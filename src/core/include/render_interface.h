@@ -86,8 +86,8 @@ struct PostProcessConfiguration
 
     int32_t tonemapOperator{3};
 
-    float motionBlurVelocityScale{1.0f};
-    float motionBlurDepthScale{3.0f};
+    float motionBlurVelocityScale{0.8f};
+    float motionBlurDepthScale{50.0f};
 
     float colorGradingExposure = 0.0f;
     float colorGradingContrast = 1.0f;

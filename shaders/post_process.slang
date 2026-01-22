@@ -219,7 +219,7 @@ void ComputeMotionBlurNeighborMax(uniform MotionBlurNeighborMaxPushConstant pc, 
 }
 
 float2 DepthCmp(float centerDepth, float sampleDepth, float depthScale) {
-    return saturate(0.5 + float2(-depthScale, depthScale) * (centerDepth - sampleDepth));
+    return saturate(0.5 + float2(depthScale, -depthScale) * ((1 - sampleDepth) - (1 - centerDepth)));
 }
 
 float2 SpreadCmp(float offsetLen, float2 spreadLen) {
@@ -271,7 +271,7 @@ void ComputeMotionBlurReconstruction(uniform MotionBlurReconstructionPushConstan
             float sampleSpreadLen = length(sampleObjectVelocity * pc.velocityScale * pc.sceneData->mainRenderTargetSize);
 
             float2 d = DepthCmp(centerDepth, sampleDepth, pc.depthScale);
-            float2 s = SpreadCmp(t, float2(centerSpreadLen, sampleSpreadLen));
+            float2 s = SpreadCmp(abs(t), float2(centerSpreadLen, sampleSpreadLen));
 
             float weight = dot(d, s);
             colorAccum += sampleColor * weight;
