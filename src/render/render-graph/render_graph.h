@@ -13,6 +13,7 @@
 #include "render_graph_resources.h"
 #include "render/vulkan/vk_resources.h"
 #include "core/allocators/handle_allocator.h"
+#include "core/include/render_interface.h"
 #include "render/render_config.h"
 
 
@@ -33,6 +34,7 @@ struct TextureFrameCarryover
     VkImageLayout layout;
     VkImageUsageFlags accumulatedUsage;
 };
+
 struct BufferFrameCarryover
 {
     std::string srcName;
@@ -111,6 +113,11 @@ public:
 
     void CarryBufferToNextFrame(const std::string& name, const std::string& newName, VkBufferUsageFlags additionalUsage);
 
+public: // FrameBuffer Uploader
+    void ResetFrameBuffers(uint32_t currentFrameInFlight) { uploadArenas[currentFrameInFlight].allocator.Reset(); }
+
+    FrameBufferUploadArena& GetFrameBufferUploadArena(uint32_t currentFrameInFlight) { return uploadArenas[currentFrameInFlight]; }
+
 private:
     friend class RenderPass;
     VulkanContext* context;
@@ -134,6 +141,8 @@ private:
 
     std::vector<TextureFrameCarryover> textureCarryovers;
     std::vector<BufferFrameCarryover> bufferCarryovers;
+
+    std::array<FrameBufferUploadArena, Core::FRAME_BUFFER_COUNT> uploadArenas{};
 
     bool bDebugLogging = false;
     uint32_t debugNameCounter{0};
@@ -163,7 +172,8 @@ private:
 
         if (phys.usageChain.empty()) {
             phys.usageChain = canAlias ? logicalName : "[noalias]" + logicalName;
-        } else {
+        }
+        else {
             phys.usageChain += "->" + logicalName;
         }
     }

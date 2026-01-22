@@ -56,10 +56,6 @@ RenderThread::RenderThread(Core::FrameSync* engineRenderSynchronization, enki::T
     vmaAllocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
 
     for (int32_t i = 0; i < frameResources.size(); ++i) {
-        bufferInfo.size = SCENE_DATA_BUFFER_SIZE;
-        frameResources[i].sceneDataBuffer = std::move(AllocatedBuffer::CreateAllocatedBuffer(context.get(), bufferInfo, vmaAllocInfo));
-        frameResources[i].sceneDataBuffer.SetDebugName(("sceneData_" + std::to_string(i)).c_str());
-
         bufferInfo.size = BINDLESS_INSTANCE_BUFFER_SIZE;
         frameResources[i].instanceBuffer = std::move(AllocatedBuffer::CreateAllocatedBuffer(context.get(), bufferInfo, vmaAllocInfo));
         frameResources[i].instanceBuffer.SetDebugName(("instanceBuffer_" + std::to_string(i)).c_str());
@@ -72,12 +68,6 @@ RenderThread::RenderThread(Core::FrameSync* engineRenderSynchronization, enki::T
         bufferInfo.size = BINDLESS_MATERIAL_BUFFER_SIZE;
         frameResources[i].materialBuffer = std::move(AllocatedBuffer::CreateAllocatedBuffer(context.get(), bufferInfo, vmaAllocInfo));
         frameResources[i].materialBuffer.SetDebugName(("materialBuffer_" + std::to_string(i)).c_str());
-        bufferInfo.size = SHADOW_DATA_BUFFER_SIZE;
-        frameResources[i].shadowBuffer = std::move(AllocatedBuffer::CreateAllocatedBuffer(context.get(), bufferInfo, vmaAllocInfo));
-        frameResources[i].shadowBuffer.SetDebugName(("shadowBuffer_" + std::to_string(i)).c_str());
-        bufferInfo.size = LIGHT_DATA_BUFFER_SIZE;
-        frameResources[i].lightBuffer = std::move(AllocatedBuffer::CreateAllocatedBuffer(context.get(), bufferInfo, vmaAllocInfo));
-        frameResources[i].lightBuffer.SetDebugName(("lightBuffer_" + std::to_string(i)).c_str());
     }
 }
 
@@ -217,16 +207,21 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     VkImageView currentSwapchainImageView = swapchain->swapchainImageViews[swapchainImageIndex];
     Core::ViewFamily& viewFamily = frameBuffer.mainViewFamily;
 
-    SetupFrameUniforms(renderSync.commandBuffer, viewFamily, frameResource, renderExtent, frameBuffer.timeFrame.renderDeltaTime);
 
     renderGraph->Reset(frameNumber, RDG_PHYSICAL_RESOURCE_UNUSED_THRESHOLD);
+    renderGraph->ResetFrameBuffers(currentFrameIndex);
 
-    renderGraph->ImportBufferNoBarrier("scene_data", frameResource.sceneDataBuffer.handle, frameResource.sceneDataBuffer.address,
-                                       {frameResource.sceneDataBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
-    renderGraph->ImportBufferNoBarrier("shadow_data", frameResource.shadowBuffer.handle, frameResource.shadowBuffer.address,
-                                       {frameResource.shadowBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
-    renderGraph->ImportBufferNoBarrier("light_data", frameResource.lightBuffer.handle, frameResource.lightBuffer.address,
-                                       {frameResource.lightBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
+    SetupFrameUniforms(renderSync.commandBuffer, viewFamily, frameResource, renderExtent, frameBuffer.timeFrame.renderDeltaTime, currentFrameIndex);
+    renderGraph->ImportBufferNoBarrier("primitive_buffer", resourceManager->primitiveBuffer.handle, resourceManager->primitiveBuffer.address,
+                                       {resourceManager->primitiveBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
+    renderGraph->ImportBufferNoBarrier("instance_buffer", frameResource.instanceBuffer.handle, frameResource.instanceBuffer.address,
+                                       {frameResource.instanceBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
+    renderGraph->ImportBufferNoBarrier("model_buffer", frameResource.modelBuffer.handle, frameResource.modelBuffer.address,
+                                       {frameResource.modelBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
+    renderGraph->ImportBufferNoBarrier("joint_matrix_buffer", frameResource.jointMatrixBuffer.handle, frameResource.jointMatrixBuffer.address,
+                                       {frameResource.jointMatrixBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
+    renderGraph->ImportBufferNoBarrier("material_buffer", frameResource.materialBuffer.handle, frameResource.materialBuffer.address,
+                                       {frameResource.materialBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
 
     renderGraph->ImportBufferNoBarrier("vertex_buffer", resourceManager->megaVertexBuffer.handle, resourceManager->megaVertexBuffer.address,
                                        {resourceManager->megaVertexBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
@@ -238,16 +233,6 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
                                        {resourceManager->megaMeshletTrianglesBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
     renderGraph->ImportBufferNoBarrier("meshlet_buffer", resourceManager->megaMeshletBuffer.handle, resourceManager->megaMeshletBuffer.address,
                                        {resourceManager->megaMeshletBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
-    renderGraph->ImportBufferNoBarrier("primitive_buffer", resourceManager->primitiveBuffer.handle, resourceManager->primitiveBuffer.address,
-                                       {resourceManager->primitiveBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
-    renderGraph->ImportBufferNoBarrier("instance_buffer", frameResource.instanceBuffer.handle, frameResource.instanceBuffer.address,
-                                       {frameResource.instanceBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
-    renderGraph->ImportBufferNoBarrier("model_buffer", frameResource.modelBuffer.handle, frameResource.modelBuffer.address,
-                                       {frameResource.modelBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
-    renderGraph->ImportBufferNoBarrier("joint_matrix_buffer", frameResource.jointMatrixBuffer.handle, frameResource.jointMatrixBuffer.address,
-                                       {frameResource.jointMatrixBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
-    renderGraph->ImportBufferNoBarrier("material_buffer", frameResource.materialBuffer.handle, frameResource.materialBuffer.address,
-                                       {frameResource.materialBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
 
     renderGraph->ImportBuffer("debug_readback_buffer", resourceManager->debugReadbackBuffer.handle, resourceManager->debugReadbackBuffer.address,
                               {resourceManager->debugReadbackBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT}, resourceManager->debugReadbackLastKnownState);
@@ -611,7 +596,8 @@ void RenderThread::CreatePipelines()
                                              sizeof(DebugVisualizePushConstant), PipelineCategory::Debug);
 }
 
-void RenderThread::SetupFrameUniforms(VkCommandBuffer cmd, const Core::ViewFamily& viewFamily, FrameResources& frameResource, const std::array<uint32_t, 2> renderExtent, float renderDeltaTime) const
+void RenderThread::SetupFrameUniforms(VkCommandBuffer cmd, const Core::ViewFamily& viewFamily, FrameResources& frameResource, const std::array<uint32_t, 2> renderExtent, float renderDeltaTime,
+                                      uint32_t currentFrameIndex) const
 {
     std::array bindings{resourceManager->bindlessSamplerTextureDescriptorBuffer.GetBindingInfo(), resourceManager->bindlessRDGTransientDescriptorBuffer.GetBindingInfo()};
     std::array indices{0u, 1u};
@@ -641,28 +627,33 @@ void RenderThread::SetupFrameUniforms(VkCommandBuffer cmd, const Core::ViewFamil
         };
     }
 
+    FrameBufferUploadArena& frameBufferUploader = renderGraph->GetFrameBufferUploadArena(currentFrameIndex);
+    renderGraph->CreateBuffer("scene_data", SCENE_DATA_BUFFER_SIZE);
+    renderGraph->CreateBuffer("shadow_data", SHADOW_DATA_BUFFER_SIZE);
+    renderGraph->CreateBuffer("light_data", LIGHT_DATA_BUFFER_SIZE);
+
     // Scene Data
+    SceneData sceneData = GenerateSceneData(viewFamily.mainView, viewFamily.postProcessConfig, renderExtent, frameNumber, renderDeltaTime);
+    size_t sceneDataAllocationOffset = frameBufferUploader.allocator.Allocate(sizeof(SceneData));
+    auto sceneDataPtr = static_cast<char*>(frameBufferUploader.buffer.allocationInfo.pMappedData) + sceneDataAllocationOffset;
+    memcpy(sceneDataPtr, &sceneData, sizeof(SceneData));
+
+    // Portal Scene Data
+    SceneData portalSceneData = GenerateSceneData(viewFamily.portalViews[0], viewFamily.postProcessConfig, renderExtent, frameNumber, renderDeltaTime);
+    size_t portalSceneDataAllocationOffset = frameBufferUploader.allocator.Allocate(sizeof(SceneData));
+    auto portalSceneDataPtr = static_cast<char*>(frameBufferUploader.buffer.allocationInfo.pMappedData) + portalSceneDataAllocationOffset;
+    memcpy(portalSceneDataPtr, &portalSceneData, sizeof(SceneData));
+
+
+    // Shadow Data
+    Core::ShadowConfiguration shadowConfig = viewFamily.shadowConfig;
+    Core::DirectionalLight directionalLight = viewFamily.directionalLight;
+    directionalLight.direction = normalize(directionalLight.direction);
+    const Core::RenderView& selectedShadowView = viewFamily.mainView;
+
+    ShadowData shadowData{};
+    //
     {
-        SceneData sceneData = GenerateSceneData(viewFamily.mainView, viewFamily.postProcessConfig, renderExtent, frameNumber, renderDeltaTime);
-        AllocatedBuffer& currentSceneDataBuffer = frameResource.sceneDataBuffer;
-        auto currentSceneData = static_cast<SceneData*>(currentSceneDataBuffer.allocationInfo.pMappedData);
-        memcpy(currentSceneData, &sceneData, sizeof(SceneData));
-
-        SceneData portalSceneData = GenerateSceneData(viewFamily.portalViews[0], viewFamily.postProcessConfig, renderExtent, frameNumber, renderDeltaTime);
-        auto portalSceneDataPtr = currentSceneData + 1;
-        memcpy(portalSceneDataPtr, &portalSceneData, sizeof(SceneData));
-        // memcpy(currentSceneData, &portalSceneData, sizeof(SceneData));
-        // memcpy(portalSceneDataPtr, &sceneData, sizeof(SceneData));
-    }
-
-    // Shadows
-    {
-        Core::ShadowConfiguration shadowConfig = viewFamily.shadowConfig;
-        Core::DirectionalLight directionalLight = viewFamily.directionalLight;
-        directionalLight.direction = normalize(directionalLight.direction);
-        const Core::RenderView& selectedShadowView = viewFamily.mainView;
-
-        ShadowData shadowData{};
         const float ratio = shadowConfig.cascadeFarPlane / shadowConfig.cascadeNearPlane;
         shadowData.nearSplits[0] = shadowConfig.cascadeNearPlane;
         for (size_t i = 1; i < SHADOW_CASCADE_COUNT; i++) {
@@ -695,21 +686,72 @@ void RenderThread::SetupFrameUniforms(VkCommandBuffer cmd, const Core::ViewFamil
         }
 
         shadowData.shadowIntensity = shadowConfig.shadowIntensity;
-
-        AllocatedBuffer& shadowBuffer = frameResource.shadowBuffer;
-        auto currentShadowData = static_cast<ShadowData*>(shadowBuffer.allocationInfo.pMappedData);
-        memcpy(currentShadowData, &shadowData, sizeof(ShadowData));
     }
+
+    size_t shadowDataAllocationOffset = frameBufferUploader.allocator.Allocate(sizeof(ShadowData));
+    auto shadowDataPtr = static_cast<char*>(frameBufferUploader.buffer.allocationInfo.pMappedData) + shadowDataAllocationOffset;
+    memcpy(shadowDataPtr, &shadowData, sizeof(ShadowData));
 
     // Lights
-    {
-        LightData lightData{};
-        lightData.mainLightDirection = {viewFamily.directionalLight.direction, viewFamily.directionalLight.intensity};
-        lightData.mainLightColor = {viewFamily.directionalLight.color, 0.0f};
-        AllocatedBuffer& currentLightBuffer = frameResource.lightBuffer;
-        auto currentLightData = static_cast<LightData*>(currentLightBuffer.allocationInfo.pMappedData);
-        memcpy(currentLightData, &lightData, sizeof(LightData));
-    }
+    LightData lightData{};
+    lightData.mainLightDirection = {viewFamily.directionalLight.direction, viewFamily.directionalLight.intensity};
+    lightData.mainLightColor = {viewFamily.directionalLight.color, 0.0f};
+
+    size_t lightDataAllocationOffset = frameBufferUploader.allocator.Allocate(sizeof(LightData));
+    auto lightDataPtr = static_cast<char*>(frameBufferUploader.buffer.allocationInfo.pMappedData) + lightDataAllocationOffset;
+    memcpy(lightDataPtr, &lightData, sizeof(LightData));
+
+    auto& uploadUniformsPass = renderGraph->AddPass("Upload Uniforms", VK_PIPELINE_STAGE_2_TRANSFER_BIT);
+    uploadUniformsPass.WriteTransferBuffer("scene_data");
+    uploadUniformsPass.WriteTransferBuffer("shadow_data");
+    uploadUniformsPass.WriteTransferBuffer("light_data");
+    uploadUniformsPass.Execute([&, sceneDataAllocationOffset, portalSceneDataAllocationOffset, shadowDataAllocationOffset, lightDataAllocationOffset](VkCommandBuffer cmd) {
+        std::array<VkBufferCopy2, 2> sceneDataRegions{};
+        sceneDataRegions[0].sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2;
+        sceneDataRegions[0].srcOffset = sceneDataAllocationOffset;
+        sceneDataRegions[0].dstOffset = 0;
+        sceneDataRegions[0].size = sizeof(SceneData);
+        sceneDataRegions[1].sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2;
+        sceneDataRegions[1].srcOffset = portalSceneDataAllocationOffset;
+        sceneDataRegions[1].dstOffset = sizeof(SceneData);
+        sceneDataRegions[1].size = sizeof(SceneData);
+        const VkCopyBufferInfo2 sceneDataCopyInfo{
+            .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
+            .srcBuffer = frameBufferUploader.buffer.handle,
+            .dstBuffer = renderGraph->GetBufferHandle("scene_data"),
+            .regionCount = sceneDataRegions.size(),
+            .pRegions = sceneDataRegions.data()
+        };
+        vkCmdCopyBuffer2(cmd, &sceneDataCopyInfo);
+
+        std::array<VkBufferCopy2, 1> shadowDataRegions{};
+        shadowDataRegions[0].sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2;
+        shadowDataRegions[0].srcOffset = shadowDataAllocationOffset;
+        shadowDataRegions[0].dstOffset = 0;
+        shadowDataRegions[0].size = sizeof(ShadowData);
+        const VkCopyBufferInfo2 shadowDataCopyInfo{
+            .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
+            .srcBuffer = frameBufferUploader.buffer.handle,
+            .dstBuffer = renderGraph->GetBufferHandle("shadow_data"),
+            .regionCount = shadowDataRegions.size(),
+            .pRegions = shadowDataRegions.data()
+        };
+        vkCmdCopyBuffer2(cmd, &shadowDataCopyInfo);
+
+        std::array<VkBufferCopy2, 1> lightDataRegions{};
+        lightDataRegions[0].sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2;
+        lightDataRegions[0].srcOffset = lightDataAllocationOffset;
+        lightDataRegions[0].dstOffset = 0;
+        lightDataRegions[0].size = sizeof(LightData);
+        const VkCopyBufferInfo2 lightDataCopyInfo{
+            .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
+            .srcBuffer = frameBufferUploader.buffer.handle,
+            .dstBuffer = renderGraph->GetBufferHandle("light_data"),
+            .regionCount = lightDataRegions.size(),
+            .pRegions = lightDataRegions.data()
+        };
+        vkCmdCopyBuffer2(cmd, &lightDataCopyInfo);
+    });
 }
 
 void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFamily& viewFamily) const
@@ -753,11 +795,11 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFami
         });
 
         RenderPass& visibilityPass = graph.AddPass(visPassName, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+        visibilityPass.ReadBuffer("scene_data");
+        visibilityPass.ReadBuffer("shadow_data");
         visibilityPass.ReadBuffer("primitive_buffer");
         visibilityPass.ReadBuffer("model_buffer");
         visibilityPass.ReadBuffer("instance_buffer");
-        visibilityPass.ReadBuffer("scene_data");
-        visibilityPass.ReadBuffer("shadow_data");
         visibilityPass.WriteBuffer(packedVisName);
         visibilityPass.WriteBuffer(instanceOffsetName);
         visibilityPass.WriteBuffer(primitiveCountName);
@@ -797,7 +839,6 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFami
         });
 
         RenderPass& indirectPass = graph.AddPass(indirectPassName, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-        indirectPass.ReadBuffer("scene_data");
         indirectPass.ReadBuffer("primitive_buffer");
         indirectPass.ReadBuffer("model_buffer");
         indirectPass.ReadBuffer("instance_buffer");
@@ -829,11 +870,12 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFami
 
 
         RenderPass& shadowPass = graph.AddPass(shadowPassName, VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
+        shadowPass.WriteDepthAttachment(shadowMapName);
+        visibilityPass.ReadBuffer("scene_data");
+        visibilityPass.ReadBuffer("shadow_data");
         shadowPass.ReadBuffer(compactedInstanceName);
         shadowPass.ReadIndirectBuffer(indirectName);
         shadowPass.ReadIndirectCountBuffer(indirectCountName);
-        shadowPass.WriteDepthAttachment(shadowMapName);
-
         shadowPass.Execute([&, shadowConfig, cascadeLevel, shadowMapName, compactedInstanceName, indirectName, indirectCountName](VkCommandBuffer cmd) {
             VkViewport viewport = VkHelpers::GenerateViewport(shadowConfig.cascadePreset.extents[cascadeLevel].width, shadowConfig.cascadePreset.extents[cascadeLevel].height);
             vkCmdSetViewport(cmd, 0, 1, &viewport);
@@ -901,10 +943,10 @@ void RenderThread::SetupMainGeometryPass(RenderGraph& graph, const Core::ViewFam
         vkCmdFillBuffer(cmd, graph.GetBufferHandle("indirect_count_buffer"), 0, VK_WHOLE_SIZE, 0);
     });
     RenderPass& visibilityPass = graph.AddPass("Compute Visibility", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+    visibilityPass.ReadBuffer("scene_data");
     visibilityPass.ReadBuffer("primitive_buffer");
     visibilityPass.ReadBuffer("model_buffer");
     visibilityPass.ReadBuffer("instance_buffer");
-    visibilityPass.ReadBuffer("scene_data");
     visibilityPass.WriteBuffer("packed_visibility_buffer");
     visibilityPass.WriteBuffer("instance_offset_buffer");
     visibilityPass.WriteBuffer("primitive_count_buffer");
@@ -945,7 +987,6 @@ void RenderThread::SetupMainGeometryPass(RenderGraph& graph, const Core::ViewFam
     });
 
     RenderPass& indirectConstructionPass = graph.AddPass("Indirect Construction", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-    indirectConstructionPass.ReadBuffer("scene_data");
     indirectConstructionPass.ReadBuffer("primitive_buffer");
     indirectConstructionPass.ReadBuffer("model_buffer");
     indirectConstructionPass.ReadBuffer("instance_buffer");
@@ -982,6 +1023,7 @@ void RenderThread::SetupMainGeometryPass(RenderGraph& graph, const Core::ViewFam
     instancedMeshShading.WriteColorAttachment(targets.emissive);
     instancedMeshShading.WriteColorAttachment(targets.velocity);
     instancedMeshShading.WriteDepthAttachment(targets.depth);
+    instancedMeshShading.ReadBuffer("scene_data");
     instancedMeshShading.ReadBuffer("compacted_instance_buffer");
     instancedMeshShading.ReadIndirectBuffer("indirect_buffer");
     instancedMeshShading.ReadIndirectCountBuffer("indirect_count_buffer");
@@ -1042,6 +1084,7 @@ void RenderThread::SetupGroundTruthAmbientOcclusion(RenderGraph& graph, const Co
     graph.CreateTexture("gtao_edges", TextureInfo{VK_FORMAT_R8_UNORM, renderExtent[0], renderExtent[1], 1});
 
     RenderPass& depthPrepass = graph.AddPass("GTAO Depth Prepass", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+    depthPrepass.ReadBuffer("scene_data");
     depthPrepass.ReadSampledImage("depth_target");
     depthPrepass.WriteStorageImage("gtao_depth");
     depthPrepass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
@@ -1154,6 +1197,9 @@ void RenderThread::SetupShadowsResolve(RenderGraph& graph, const Core::ViewFamil
         shadowsResolvePass.ReadSampledImage("shadow_cascade_3");
     }
 
+    shadowsResolvePass.ReadBuffer("scene_data");
+    shadowsResolvePass.ReadBuffer("shadow_data");
+    shadowsResolvePass.ReadBuffer("light_data");
     shadowsResolvePass.WriteStorageImage("shadows_resolve_target");
     shadowsResolvePass.Execute([&, bHasShadows, bHasGTAO, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("shadows_resolve");
@@ -1204,6 +1250,8 @@ void RenderThread::SetupDeferredLighting(RenderGraph& graph, const Core::ViewFam
     }
 
     RenderPass& deferredResolvePass = graph.AddPass("Deferred Resolve", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+    deferredResolvePass.ReadBuffer("scene_data");
+    deferredResolvePass.ReadBuffer("light_data");
     deferredResolvePass.ReadSampledImage("albedo_target");
     deferredResolvePass.ReadSampledImage("normal_target");
     deferredResolvePass.ReadSampledImage("pbr_target");
@@ -1272,6 +1320,7 @@ void RenderThread::SetupTemporalAntialiasing(RenderGraph& graph, const Core::Vie
     }
 
     RenderPass& taaPass = graph.AddPass("TAA Main", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+    taaPass.ReadBuffer("scene_data");
     taaPass.ReadSampledImage("deferred_resolve_target");
     taaPass.ReadSampledImage("depth_target");
     taaPass.ReadSampledImage("taa_history");
@@ -1490,6 +1539,7 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
     {
         graph.CreateTexture("sharpening_output", TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
         RenderPass& sharpeningPass = graph.AddPass("Sharpening", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+        sharpeningPass.ReadBuffer("scene_data");
         sharpeningPass.ReadSampledImage("taa_output");
         sharpeningPass.WriteStorageImage("sharpening_output");
         sharpeningPass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
@@ -1545,6 +1595,7 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
         uint32_t blurTiledY = (renderExtent[1] + POST_PROCESS_MOTION_BLUR_TILE_SIZE - 1) / POST_PROCESS_MOTION_BLUR_TILE_SIZE;
         graph.CreateTexture("motion_blur_tiled_max", TextureInfo{GBUFFER_MOTION_FORMAT, blurTiledX, blurTiledY, 1});
         RenderPass& motionBlurTiledMaxPass = graph.AddPass("Motion Blur Tiled Max", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+        motionBlurTiledMaxPass.ReadBuffer("scene_data");
         motionBlurTiledMaxPass.ReadSampledImage("velocity_target");
         motionBlurTiledMaxPass.WriteStorageImage("motion_blur_tiled_max");
         motionBlurTiledMaxPass.Execute([&, width = renderExtent[0], height = renderExtent[1], blurTiledX, blurTiledY](VkCommandBuffer cmd) {
@@ -1585,6 +1636,7 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
 
         graph.CreateTexture("motion_blur_output", TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
         RenderPass& motionBlurReconstructionPass = graph.AddPass("Motion Blur Reconstruction", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+        motionBlurReconstructionPass.ReadBuffer("scene_data");
         motionBlurReconstructionPass.ReadSampledImage("tonemap_output");
         motionBlurReconstructionPass.ReadSampledImage("velocity_target");
         motionBlurReconstructionPass.ReadSampledImage("depth_target");
@@ -1615,6 +1667,7 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
     {
         graph.CreateTexture("color_grading_output", TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
         RenderPass& colorGradingPass = graph.AddPass("Color Grading", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+        colorGradingPass.ReadBuffer("scene_data");
         colorGradingPass.ReadSampledImage("motion_blur_output");
         colorGradingPass.WriteStorageImage("color_grading_output");
         colorGradingPass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
@@ -1642,6 +1695,7 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
     {
         graph.CreateTexture("vignette_aberration_output", TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
         RenderPass& vignetteAberrationPass = graph.AddPass("Vignette and Aberration", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+        vignetteAberrationPass.ReadBuffer("scene_data");
         vignetteAberrationPass.ReadSampledImage("color_grading_output");
         vignetteAberrationPass.WriteStorageImage("vignette_aberration_output");
         vignetteAberrationPass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
@@ -1668,6 +1722,7 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
     {
         // graph.CreateTexture("filmGrainOutput", TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
         RenderPass& filmGrainPass = graph.AddPass("Film Grain", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+        filmGrainPass.ReadBuffer("scene_data");
         filmGrainPass.ReadSampledImage("vignette_aberration_output");
         filmGrainPass.WriteStorageImage("post_process_output");
         filmGrainPass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {

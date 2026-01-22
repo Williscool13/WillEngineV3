@@ -11,6 +11,7 @@
 #include <volk.h>
 
 #include "core/allocators/handle.h"
+#include "core/allocators/linear_allocator.h"
 #include "render/render_config.h"
 #include "render/vulkan/vk_resources.h"
 
@@ -73,7 +74,6 @@ struct PhysicalResource
     bool bIsImported = false;
     bool bDisableBarriers = false;
 
-    int32_t lifetime{0};
     bool bCanAlias = true;
 
     uint64_t lastUsedFrame = 0;
@@ -155,6 +155,12 @@ struct BufferResource
     uint32_t lastPass = 0;
 
     [[nodiscard]] bool HasPhysical() const { return physicalIndex != UINT32_MAX; }
+};
+
+struct FrameBufferUploadArena
+{
+    AllocatedBuffer buffer;
+    Core::LinearAllocator allocator{RDG_DEFAULT_UPLOAD_LINEAR_ALLOCATOR_SIZE};
 };
 } // Render
 

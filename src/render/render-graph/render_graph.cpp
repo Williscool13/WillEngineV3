@@ -22,6 +22,19 @@ RenderGraph::RenderGraph(VulkanContext* context, ResourceManager* resourceManage
     physicalResources.reserve(256);
     textures.reserve(256);
     buffers.reserve(256);
+
+    for (int32_t i = 0; i < uploadArenas.size(); ++i) {
+        VkBufferCreateInfo bufferInfo = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+        bufferInfo.pNext = nullptr;
+        bufferInfo.usage = VK_BUFFER_USAGE_2_TRANSFER_SRC_BIT;
+        VmaAllocationCreateInfo vmaAllocInfo = {};
+        vmaAllocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
+        vmaAllocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+        bufferInfo.size = SCENE_DATA_BUFFER_SIZE;
+
+        uploadArenas[i].buffer = std::move(AllocatedBuffer::CreateAllocatedBuffer(context, bufferInfo, vmaAllocInfo));
+        uploadArenas[i].buffer.SetDebugName(("frameBufferUploader_" + std::to_string(i)).c_str());
+    }
 }
 
 RenderGraph::~RenderGraph()
@@ -197,10 +210,10 @@ void RenderGraph::Compile(int64_t currentFrame)
 
                 if (canAlias) {
                     tex.physicalIndex = i;
-                    phys.logicalResourceIndices.push_back(tex.index);
                     if (!phys.IsAllocated()) {
                         phys.dimensions.imageUsage |= tex.accumulatedUsage;
                     }
+                    phys.logicalResourceIndices.push_back(tex.index);
                     phys.bCanAlias = tex.bCanUseAliasedTexture;
                     AppendUsageChain(phys, tex.name, tex.bCanUseAliasedTexture, bDebugLogging);
                     foundAlias = true;
@@ -281,6 +294,7 @@ void RenderGraph::Compile(int64_t currentFrame)
                     if (!phys.IsAllocated()) {
                         phys.dimensions.bufferUsage |= buf.accumulatedUsage;
                     }
+                    phys.bCanAlias = buf.bCanUseAliasedBuffer;
                     AppendUsageChain(phys, buf.name, buf.bCanUseAliasedBuffer, bDebugLogging);
                     foundAlias = true;
                     break;

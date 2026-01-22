@@ -16,15 +16,10 @@ namespace Render
  */
 struct FrameResources
 {
-    AllocatedBuffer sceneDataBuffer;
-
     AllocatedBuffer instanceBuffer;
     AllocatedBuffer modelBuffer;
     AllocatedBuffer jointMatrixBuffer;
     AllocatedBuffer materialBuffer;
-
-    AllocatedBuffer lightBuffer;
-    AllocatedBuffer shadowBuffer;
 };
 } // Render
 
