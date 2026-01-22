@@ -130,8 +130,8 @@ GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* stat
 
         ImGui::Spacing();
         ImGui::SeparatorText("Motion Blur");
-        ImGui::SliderFloat("Velocity Scale", &state->postProcess.motionBlurVelocityScale, 0.0f, 2.0f, "%.2f");
-        ImGui::SliderFloat("Depth Threshold", &state->postProcess.motionBlurDepthScale, 0.0f, 1.0f, "%.3f");
+        ImGui::DragFloat("Velocity Scale", &state->postProcess.motionBlurVelocityScale, 0.05f, 0.0f, 4.0f, "%.2f");
+        ImGui::DragFloat("Depth Scale", &state->postProcess.motionBlurDepthScale, 0.1f, 2.0f, 10.0f, "%.2f");
         if (ImGui::Button("Reset Motion Blur")) {
             state->postProcess.motionBlurVelocityScale = defaultPP.motionBlurVelocityScale;
             state->postProcess.motionBlurDepthScale = defaultPP.motionBlurDepthScale;

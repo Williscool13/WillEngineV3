@@ -55,6 +55,7 @@ using float4x4 = glm::mat4;
 
 SHADER_PUBLIC struct DebugVisualizePushConstant
 {
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC int2 srcExtent;
     SHADER_PUBLIC int2 dstExtent;
     SHADER_PUBLIC float nearPlane;
@@ -234,10 +235,8 @@ SHADER_PUBLIC struct ExposureCalculatePushConstant
 SHADER_PUBLIC struct MotionBlurTileVelocityPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
-    SHADER_PUBLIC uint2 velocityBufferSize;
     SHADER_PUBLIC uint2 tileBufferSize;
     SHADER_PUBLIC uint32_t velocityBufferIndex;
-    SHADER_PUBLIC uint32_t depthBufferIndex;
     SHADER_PUBLIC uint32_t tileMaxIndex;
 };
 

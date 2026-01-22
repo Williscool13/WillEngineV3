@@ -19,6 +19,7 @@ struct VertexOutput
     nointerpolation uint32_t materialIndex : TEXCOORD4;
     noperspective float4 currentClipPos : TEXCOORD5;
     noperspective float4 previousClipPos : TEXCOORD6;
+    noperspective float4 objectOnlyPrevClipPos : TEXCOORD7;
 };
 
 // Per https://developer.nvidia.com/blog/using-mesh-shaders-for-professional-graphics/
@@ -145,6 +146,7 @@ void MeshMain(
         vertices[i].materialIndex = inPayload.materialIndex;
         vertices[i].currentClipPos = clipPos;
         vertices[i].previousClipPos = mul(jitteredPrevViewProj, mul(m.prevModelMatrix, float4(v.position, 1.0)));
+        vertices[i].objectOnlyPrevClipPos = mul(jitteredViewProj, mul(m.prevModelMatrix, float4(v.position, 1.0)));
     }
 
     for (uint i = threadIndex; i < meshlet.meshletTriangleCount; i += MESH_SHADER_DISPATCH_X) {
@@ -165,7 +167,7 @@ struct FragmentOutput {
     float4 normal : SV_Target1;
     float4 pbr : SV_Target2;
     float4 emissive : SV_Target3;
-    float2 velocity : SV_Target4;
+    float4 velocity : SV_Target4;
 };
 
 [shader("fragment")]
@@ -189,7 +191,12 @@ FragmentOutput FragmentMain(VertexOutput vertexInput, uniform InstancedMeshShadi
     float2 prevNdc = vertexInput.previousClipPos.xy / vertexInput.previousClipPos.w;
     currNdc += pc.sceneData[pc.sceneDataIndex].jitter;
     prevNdc += pc.sceneData[pc.sceneDataIndex].prevJitter;
-    output.velocity = currNdc - prevNdc;
+    float2 totalVelocity = currNdc - prevNdc;
+
+    float2 objectOnlyPrevNdc = vertexInput.objectOnlyPrevClipPos.xy / vertexInput.objectOnlyPrevClipPos.w;
+    objectOnlyPrevNdc += pc.sceneData[pc.sceneDataIndex].jitter;
+    float2 objectVelocity = currNdc - objectOnlyPrevNdc;
+    output.velocity = float4(totalVelocity, objectVelocity);
 
     return output;
 }

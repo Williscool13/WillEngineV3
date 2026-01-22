@@ -374,7 +374,8 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
             debugVisPass.WriteStorageImage("post_process_output");
             debugVisPass.Execute([&, debugTargetName, debugIndex](VkCommandBuffer cmd) {
                 const ResourceDimensions& dims = renderGraph->GetImageDimensions(debugTargetName);
-                DebugVisualizePushConstant pushData{
+                DebugVisualizePushConstant pc{
+                    .sceneData = renderGraph->GetBufferAddress("scene_data"),
                     .srcExtent = {dims.width, dims.height},
                     .dstExtent = {renderExtent[0], renderExtent[1]},
                     .nearPlane = viewFamily.mainView.currentViewData.nearPlane,
@@ -386,7 +387,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
 
                 const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("debug_visualize");
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
-                vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(DebugVisualizePushConstant), &pushData);
+                vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 uint32_t xDispatch = (renderExtent[0] + 15) / 16;
                 uint32_t yDispatch = (renderExtent[1] + 15) / 16;
                 vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
@@ -1549,10 +1550,8 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
         motionBlurTiledMaxPass.Execute([&, width = renderExtent[0], height = renderExtent[1], blurTiledX, blurTiledY](VkCommandBuffer cmd) {
             MotionBlurTileVelocityPushConstant pc{
                 .sceneData = graph.GetBufferAddress("scene_data"),
-                .velocityBufferSize = {width, height},
                 .tileBufferSize = {blurTiledX, blurTiledY},
                 .velocityBufferIndex = graph.GetSampledImageViewDescriptorIndex("velocity_target"),
-                .depthBufferIndex = graph.GetSampledImageViewDescriptorIndex("depth_target"),
                 .tileMaxIndex = graph.GetStorageImageViewDescriptorIndex("motion_blur_tiled_max"),
             };
 

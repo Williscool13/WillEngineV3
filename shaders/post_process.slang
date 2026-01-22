@@ -164,37 +164,26 @@ void ComputeMotionBlurTileMax(uniform MotionBlurTileVelocityPushConstant pc, uin
     float2 maxVelocity = float2(0.0f, 0.0f);
 
     uint2 tileStart = tileCoord * POST_PROCESS_MOTION_BLUR_TILE_SIZE;
-
-    float2 jitter = pc.sceneData->jitter;
-    float2 prevJitter = pc.sceneData->prevJitter;
-    float2 jitterDiff = (jitter - prevJitter) * 0.5;
-
-
+    [ForceUnroll]
     for (uint y = 0; y < POST_PROCESS_MOTION_BLUR_TILE_SIZE; ++y) {
-
+        [ForceUnroll]
         for (uint x = 0; x < POST_PROCESS_MOTION_BLUR_TILE_SIZE; ++x) {
             uint2 pixelCoord = tileStart + uint2(x, y);
 
-            if (any(pixelCoord >= pc.velocityBufferSize))
+            if (any(pixelCoord >= pc.sceneData->mainRenderTargetSize))
                 continue;
 
-            float2 NDCVelocity = rdgTextures[pc.velocityBufferIndex].Load(int3(pixelCoord, 0)).rg;
-            float2 velocity = NDCVelocity * 0.5;
-            float2 uv = (float2(pixelCoord) + 0.5) / pc.sceneData->mainRenderTargetSize;
-            float depth = rdgTextures[pc.depthBufferIndex].Load(int3(pixelCoord, 0)).r;
-            float2 cameraMotion = ComputeCameraMotion(pc.sceneData->clipToPrevClip, uv, depth);
-            cameraMotion += jitterDiff;
-            velocity -= cameraMotion;
-            float velocityLengthSq = dot(velocity, velocity);
+            float2 objectVelocity = rdgTextures[pc.velocityBufferIndex].Load(int3(pixelCoord, 0)).ba;
+            float velocityLengthSq = dot(objectVelocity, objectVelocity);
 
             if (velocityLengthSq > maxVelocityLengthSq) {
                 maxVelocityLengthSq = velocityLengthSq;
-                maxVelocity = velocity;
+                maxVelocity = objectVelocity;
             }
         }
     }
 
-    rdgRenderTextures[pc.tileMaxIndex][tileCoord] = float4(maxVelocity, 1.0f, 0);
+    rdgRenderTextures[pc.tileMaxIndex][tileCoord] = float4(maxVelocity, 0.0f, 0);
 }
 
 [numthreads(POST_PROCESS_MOTION_BLUR_CONVOLUTION_DISPATCH_X, POST_PROCESS_MOTION_BLUR_CONVOLUTION_DISPATCH_Y, 1)]
@@ -229,15 +218,8 @@ void ComputeMotionBlurNeighborMax(uniform MotionBlurNeighborMaxPushConstant pc, 
     rdgRenderTextures[pc.neighborMaxIndex][tileCoord] = float4(maxVelocity, 0.0f, 0.0f);
 }
 
-float2 ComputeCameraMotion(float4x4 clipToPrevClip, float2 uv, float depth) {
-    float4 clipPos = float4(uv * 2.0 - 1.0, depth, 1.0);
-    float4 prevClipPos = mul(clipToPrevClip, clipPos);
-    float2 prevUV = (prevClipPos.xy / prevClipPos.w) * 0.5 + 0.5;
-    return uv - prevUV;
-}
-
 float2 DepthCmp(float centerDepth, float sampleDepth, float depthScale) {
-    return saturate(0.5 + float2(depthScale, -depthScale) * (sampleDepth - centerDepth));
+    return saturate(0.5 + float2(-depthScale, depthScale) * (centerDepth - sampleDepth));
 }
 
 float2 SpreadCmp(float offsetLen, float2 spreadLen) {
@@ -252,97 +234,56 @@ void ComputeMotionBlurReconstruction(uniform MotionBlurReconstructionPushConstan
 
     float2 uv = (float2(pixelCoord) + 0.5) / pc.sceneData->mainRenderTargetSize;
 
-    // Early out if tile has low velocity
     uint2 tileCoord = pixelCoord / POST_PROCESS_MOTION_BLUR_TILE_SIZE;
-    float2 neighborMaxVelocity = rdgTextures[pc.tileNeighborMaxIndex].Load(int3(tileCoord, 0)).rg;
+    float2 neighborMaxVelocity = rdgTextures[pc.tileNeighborMaxIndex].Load(int3(tileCoord, 0)).rg * 0.5;
     float neighborMaxLen = length(neighborMaxVelocity * pc.sceneData->mainRenderTargetSize);
     float3 centerColor = rdgTextures[pc.sceneColorIndex].Load(int3(pixelCoord, 0)).rgb;
-    if (neighborMaxLen < 0.5) {
+
+    float blurLen = neighborMaxLen * pc.velocityScale;
+    if (blurLen < 0.5) {
         rdgRenderTextures[pc.outputIndex][pixelCoord] = float4(centerColor, 1.0);
         return;
     }
 
-    // Jitter correction
-    float2 jitter = pc.sceneData->jitter;
-    float2 prevJitter = pc.sceneData->prevJitter;
-    float2 jitterDiff = (jitter - prevJitter) * 0.5;
-
+    float2 objectVelocity = rdgTextures[pc.velocityBufferIndex].Load(int3(pixelCoord, 0)).ba * 0.5;
     float centerDepth = rdgTextures[pc.depthBufferIndex].Load(int3(pixelCoord, 0)).r;
+    float centerSpreadLen = length(objectVelocity * pc.velocityScale * pc.sceneData->mainRenderTargetSize);
 
-    float2 totalNDCVelocity = rdgTextures[pc.velocityBufferIndex].Load(int3(pixelCoord, 0)).rg;
-    float2 totalVelocity = totalNDCVelocity * 0.5;
-    // Unjitter camera motion
-    float2 cameraMotion = ComputeCameraMotion(pc.sceneData->clipToPrevClip, uv, centerDepth);
-    cameraMotion += jitterDiff;
-    // Velocity of object only
-    float2 centerVelocity = (totalVelocity - cameraMotion) * pc.velocityScale;
-
-
-    // Center's blur spread in pixels
-    float centerSpreadLen = length(centerVelocity * pc.sceneData->mainRenderTargetSize);
-    // Total blur length we're sampling along (neighbor max defines the sampling range)
-    float blurLen = neighborMaxLen;
-    // Converts pixel distances to "sample units" where 1.0 = full blur length
-    // This normalizes offsetLen against the blur radius for the spread comparison
-    float pixelToSampleUnitsScale = 1.0 / max(blurLen * 2, 1.0);
-
-    float3 colorAccum = centerColor;
-    float weightAccum = 1.0;
+    float3 colorAccum = float3(0.0, 0.0, 0.0);
+    float weightAccum = 0.0;
+    float sampleCount = 0.0;
 
     float2 blurDir = neighborMaxVelocity * pc.velocityScale;
     float noise = frac(52.9829189 * frac(0.06711056 * pixelCoord.x + 0.00583715 * pixelCoord.y));
 
-    [ForceUnroll]
     for (int i = 1; i <= POST_PROCESS_MOTION_BLUR_SAMPLE_COUNT / 2; ++i) {
         float t = (float(i) - 0.5 + noise) / float(POST_PROCESS_MOTION_BLUR_SAMPLE_COUNT / 2);
 
-        // Distance from center to this sample in pixels
-        float offsetLen = t * blurLen;
-
-        [ForceUnroll]
         for (int dir = -1; dir <= 1; dir += 2) {
             float2 sampleUV = uv + blurDir * t * float(dir);
 
-            if (any(sampleUV < 0.0) || any(sampleUV > 1.0)) { continue; }
+            if (any(sampleUV < 0.0) || any(sampleUV > 1.0)) continue;
 
             int2 sampleCoord = int2(sampleUV * pc.sceneData->mainRenderTargetSize);
             float3 sampleColor = rdgTextures[pc.sceneColorIndex].Load(int3(sampleCoord, 0)).rgb;
             float sampleDepth = rdgTextures[pc.depthBufferIndex].Load(int3(sampleCoord, 0)).r;
+            float2 sampleObjectVelocity = rdgTextures[pc.velocityBufferIndex].Load(int3(sampleCoord, 0)).ba * 0.5;
+            float sampleSpreadLen = length(sampleObjectVelocity * pc.velocityScale * pc.sceneData->mainRenderTargetSize);
 
-            // Get sample's velocity for its spread length
-            float2 sampleTotalVel = rdgTextures[pc.velocityBufferIndex].Load(int3(sampleCoord, 0)).rg;
-            sampleTotalVel = sampleTotalVel * 0.5;
-            float2 sampleCameraMotion = ComputeCameraMotion(pc.sceneData->clipToPrevClip, sampleUV, sampleDepth);
-            sampleCameraMotion += jitterDiff;
-            float2 sampleVelocity = sampleTotalVel - sampleCameraMotion;
-
-            // Sample's blur spread in pixels
-            float sampleSpreadLen = length(sampleVelocity * pc.sceneData->mainRenderTargetSize);
-
-            // Depth comparison: which pixel is in front?
-            // d.x = weight if center is behind (sample is foreground)
-            // d.y = weight if sample is behind (center is foreground)
             float2 d = DepthCmp(centerDepth, sampleDepth, pc.depthScale);
+            float2 s = SpreadCmp(t, float2(centerSpreadLen, sampleSpreadLen));
 
-            // Spread comparison: does the blur reach?
-            // s.x = does center's blur spread reach this sample distance?
-            // s.y = does sample's blur spread reach the center?
-            float2 s = SpreadCmp(offsetLen, float2(centerSpreadLen, sampleSpreadLen));
-
-            // Combined weight:
-            // d.x * s.x = center behind, center's blur reaches sample (background bleeds forward)
-            // d.y * s.y = sample behind, sample's blur reaches center (foreground bleeds onto background)
             float weight = dot(d, s);
-
             colorAccum += sampleColor * weight;
             weightAccum += weight;
+            sampleCount += 1.0;
         }
     }
 
-    rdgRenderTextures[pc.outputIndex][pixelCoord] = float4(colorAccum / weightAccum, 1.0);
+    float4 sumColor = float4(colorAccum, weightAccum) / sampleCount;
+    float3 finalColor = sumColor.rgb + (1.0 - sumColor.w) * centerColor;
+    rdgRenderTextures[pc.outputIndex][pixelCoord] = float4(finalColor, 1.0);
 }
-
-
 // ==================== Bloom =======================================
 float Luminance(float3 color) {
     return dot(color, float3(0.2126, 0.7152, 0.0722));

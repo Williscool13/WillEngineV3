@@ -40,10 +40,12 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
         case 5: // Velocity
             float4 velocity = rdgTextures[pc.textureIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], srcUV, 0);
             velocity *= 10000.0f;
-            rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(velocity.x, velocity.g, 0.0f, 1.0);
+            rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(velocity.b, velocity.a, 0.0f, 1.0);
+            // rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(velocity.r, velocity.g, 0.0f, 1.0);
             break;
         case 6: // CSM
             float4 color = rdgTextures[pc.textureIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], srcUV, 0);
+            color *= 10000.0f;
             rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(color.x, color.y, color.z, 1.0f);
             break;
         case 7: // CSM
