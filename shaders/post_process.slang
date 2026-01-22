@@ -219,7 +219,9 @@ void ComputeMotionBlurNeighborMax(uniform MotionBlurNeighborMaxPushConstant pc, 
 }
 
 float2 DepthCmp(float centerDepth, float sampleDepth, float depthScale) {
-    return saturate(0.5 + float2(depthScale, -depthScale) * ((1 - sampleDepth) - (1 - centerDepth)));
+    float s = (1 - sampleDepth);
+    float c = (1 - centerDepth);
+    return saturate(0.5 + float2(depthScale, -depthScale) * (s - c));
 }
 
 float2 SpreadCmp(float offsetLen, float2 spreadLen) {

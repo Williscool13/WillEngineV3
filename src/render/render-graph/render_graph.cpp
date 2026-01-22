@@ -20,8 +20,8 @@ RenderGraph::RenderGraph(VulkanContext* context, ResourceManager* resourceManage
 {
     textures.reserve(RDG_MAX_SAMPLED_TEXTURES);
     physicalResources.reserve(256);
-    // textures.reserve(256);
-    // buffers.reserve(256);
+    textures.reserve(256);
+    buffers.reserve(256);
 }
 
 RenderGraph::~RenderGraph()
