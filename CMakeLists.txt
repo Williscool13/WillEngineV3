@@ -175,16 +175,6 @@ endif ()
 target_compile_definitions(tracy PRIVATE TRACY_EXPORTS)
 
 # Shaders =====================================
-#   - Use this command to compile any shader interop that needs to be recompiled.
-#     cmake --build cmake-build-debug-visual-studio --target shader_interop
-#   - Or just this if you're in the build folder
-#     cmake --build . --target shader_interop
-
-#   - Recompile shaders with
-#     cmake --build cmake-build-debug-visual-studio --target will-engine_shaders
-#   - Or just this if you're in the build folder
-#     cmake --build . --target will-engine_shaders
-
 preprocess_shader_interop(
         ${CMAKE_SOURCE_DIR}/src/render/shaders/common_interop.h
         ${CMAKE_SOURCE_DIR}/shaders/common_interop.slang
