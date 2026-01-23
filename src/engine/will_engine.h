@@ -113,8 +113,6 @@ private: // Debugging
 #else
     bool bDrawImgui = false;
 #endif
-    bool bCanGenerate = false;
-    bool bHasAdded = false;
     bool bFreezeVisibility = false;
     bool bLogRDG = false;
 

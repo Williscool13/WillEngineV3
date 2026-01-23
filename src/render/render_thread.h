@@ -130,7 +130,6 @@ private:
     SDL_Window* window{};
     Core::FrameSync* engineRenderSynchronization{};
     enki::TaskScheduler* scheduler{};
-    AssetLoad::AssetLoadThread* assetLoadThread{};
 
     // Threading
     std::atomic<bool> bShouldExit{false};

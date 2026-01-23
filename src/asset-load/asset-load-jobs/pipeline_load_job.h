@@ -22,7 +22,7 @@ namespace AssetLoad
 class PipelineLoadJob : public AssetLoadJob
 {
 public:
-    PipelineLoadJob(Render::VulkanContext* context, Render::ResourceManager* resourceManager);
+    PipelineLoadJob(Render::VulkanContext* context, Render::ResourceManager* resourceManager, VkPipelineCache pipelineCache);
     ~PipelineLoadJob() override = default;
 
     void StartJob() override;
@@ -52,6 +52,7 @@ private:
 
     Render::VulkanContext* context;
     Render::ResourceManager* resourceManager;
+    VkPipelineCache pipelineCache{VK_NULL_HANDLE};
 };
 } // AssetLoad
 

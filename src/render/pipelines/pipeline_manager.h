@@ -57,7 +57,7 @@ public: // Thread-Safe
     void RequestReload() { bReloadRequested.store(true, std::memory_order_relaxed); }
 
 public:
-    explicit PipelineManager(VulkanContext* context, AssetLoad::AssetLoadThread* assetLoadThread, const std::array<VkDescriptorSetLayout, 2>& globalLayouts);
+    explicit PipelineManager(VulkanContext* context, const std::array<VkDescriptorSetLayout, 2>& globalLayouts);
 
     ~PipelineManager();
 
@@ -77,14 +77,19 @@ public:
 
     bool IsCategoryReady(PipelineCategory category) const;
 
+    void SetAssetLoadThread(AssetLoad::AssetLoadThread* _assetLoadThread);
+
+    VkPipelineCache GetPipelineCache() const { return pipelineCache; }
+
 private:
     void SubmitPipelineLoad(const std::string& name, PipelineData* data) const;
 
     VulkanContext* context;
-    AssetLoad::AssetLoadThread* assetLoadThread;
+    AssetLoad::AssetLoadThread* assetLoadThread{nullptr};
     std::unordered_map<std::string, PipelineData> pipelines;
     uint32_t currentFrame;
     std::array<VkDescriptorSetLayout, 2> globalDescriptorSetLayouts;
+    VkPipelineCache pipelineCache{VK_NULL_HANDLE};
 
     std::atomic<bool> bReloadRequested{false};
 };

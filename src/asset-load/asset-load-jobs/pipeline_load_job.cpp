@@ -12,8 +12,8 @@
 
 namespace AssetLoad
 {
-PipelineLoadJob::PipelineLoadJob(Render::VulkanContext* context, Render::ResourceManager* resourceManager)
-    : context(context), resourceManager(resourceManager)
+PipelineLoadJob::PipelineLoadJob(Render::VulkanContext* context, Render::ResourceManager* resourceManager, VkPipelineCache pipelineCache)
+    : context(context), resourceManager(resourceManager), pipelineCache(pipelineCache)
 {
     task = std::make_unique<LoadPipelineTask>();
 }
@@ -88,7 +88,7 @@ void PipelineLoadJob::LoadPipelineTask::ExecuteRange(enki::TaskSetPartition rang
     if (outputEntry->bIsCompute) {
         VkPipelineShaderStageCreateInfo shaderStage = Render::VkHelpers::PipelineShaderStageCreateInfo(shaderModule, VK_SHADER_STAGE_COMPUTE_BIT);
         VkComputePipelineCreateInfo pipelineInfo = Render::VkHelpers::ComputePipelineCreateInfo(outputEntry->loadingEntry.layout, shaderStage);
-        VkResult pipelineResult = vkCreateComputePipelines(loadJob->context->device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &outputEntry->loadingEntry.pipeline);
+        VkResult pipelineResult = vkCreateComputePipelines(loadJob->context->device, loadJob->pipelineCache, 1, &pipelineInfo, nullptr, &outputEntry->loadingEntry.pipeline);
 
         if (pipelineResult != VK_SUCCESS) {
             SPDLOG_ERROR("Failed to create compute pipeline: {}", outputEntry->shaderPath.string());

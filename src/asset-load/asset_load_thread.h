@@ -20,6 +20,7 @@ using LockFreeQueue = LockFreeQueueCpp11<T>;
 
 namespace Render
 {
+class PipelineManager;
 struct ResourceManager;
 struct VulkanContext;
 }
@@ -50,7 +51,7 @@ class AssetLoadThread
 public:
     AssetLoadThread();
 
-    AssetLoadThread(enki::TaskScheduler* scheduler, Render::VulkanContext* context, Render::ResourceManager* resourceManager);
+    AssetLoadThread(enki::TaskScheduler* scheduler, Render::VulkanContext* context, Render::ResourceManager* resourceManager, Render::PipelineManager* pipelineManager);
 
     ~AssetLoadThread();
 

@@ -13,6 +13,7 @@
 #include "platform/paths.h"
 #include "platform/thread_utils.h"
 #include "render/texture_asset.h"
+#include "render/pipelines/pipeline_manager.h"
 #include "render/vulkan/vk_context.h"
 #include "render/vulkan/vk_helpers.h"
 #include "render/vulkan/vk_utils.h"
@@ -22,7 +23,7 @@ namespace AssetLoad
 {
 AssetLoadThread::AssetLoadThread() = default;
 
-AssetLoadThread::AssetLoadThread(enki::TaskScheduler* scheduler, Render::VulkanContext* context, Render::ResourceManager* resourceManager)
+AssetLoadThread::AssetLoadThread(enki::TaskScheduler* scheduler, Render::VulkanContext* context, Render::ResourceManager* resourceManager, Render::PipelineManager* pipelineManager)
     : context(context), resourceManager(resourceManager), scheduler(scheduler)
 {
     VkCommandPoolCreateInfo poolInfo = Render::VkHelpers::CommandPoolCreateInfo(context->transferQueueFamily);
@@ -46,7 +47,7 @@ AssetLoadThread::AssetLoadThread(enki::TaskScheduler* scheduler, Render::VulkanC
 
     pipelineJobs.reserve(PIPELINE_JOB_COUNT);
     for (int32_t i = 0; i < PIPELINE_JOB_COUNT; ++i) {
-        pipelineJobs.emplace_back(std::make_unique<PipelineLoadJob>(context, resourceManager));
+        pipelineJobs.emplace_back(std::make_unique<PipelineLoadJob>(context, resourceManager, pipelineManager->GetPipelineCache()));
     }
 }
 

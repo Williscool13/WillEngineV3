@@ -4,16 +4,59 @@
 
 #include "pipeline_manager.h"
 
+#include <fstream>
 #include <ranges>
+
+#include "platform/paths.h"
+#include "render/vulkan/vk_utils.h"
 
 namespace Render
 {
-PipelineManager::PipelineManager(VulkanContext* context, AssetLoad::AssetLoadThread* assetLoadThread, const std::array<VkDescriptorSetLayout, 2>& globalLayouts)
-    : context(context), assetLoadThread(assetLoadThread), currentFrame(0), globalDescriptorSetLayouts(globalLayouts)
-{}
+PipelineManager::PipelineManager(VulkanContext* context, const std::array<VkDescriptorSetLayout, 2>& globalLayouts)
+    : context(context), currentFrame(0), globalDescriptorSetLayouts(globalLayouts)
+{
+    std::filesystem::path cachePath = Platform::GetCachePath() / "pipeline.cache";
+
+    std::vector<char> cacheData;
+    if (std::filesystem::exists(cachePath)) {
+        std::ifstream file(cachePath, std::ios::binary | std::ios::ate);
+        if (file) {
+            size_t fileSize = file.tellg();
+            file.seekg(0);
+            cacheData.resize(fileSize);
+            file.read(cacheData.data(), fileSize);
+            SPDLOG_INFO("Loaded pipeline cache: {} bytes", fileSize);
+        }
+    }
+
+    VkPipelineCacheCreateInfo cacheInfo{VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO};
+    cacheInfo.initialDataSize = cacheData.size();
+    cacheInfo.pInitialData = cacheData.data();
+
+    VK_CHECK(vkCreatePipelineCache(context->device, &cacheInfo, nullptr, &pipelineCache));
+}
 
 PipelineManager::~PipelineManager()
 {
+    if (pipelineCache != VK_NULL_HANDLE) {
+        size_t cacheSize = 0;
+        vkGetPipelineCacheData(context->device, pipelineCache, &cacheSize, nullptr);
+
+        if (cacheSize > 0) {
+            std::vector<char> cacheData(cacheSize);
+            vkGetPipelineCacheData(context->device, pipelineCache, &cacheSize, cacheData.data());
+
+            std::filesystem::path cachePath = Platform::GetCachePath() / "pipeline.cache";
+            std::ofstream file(cachePath, std::ios::binary);
+            if (file) {
+                file.write(cacheData.data(), cacheSize);
+                SPDLOG_INFO("Saved pipeline cache: {} bytes", cacheSize);
+            }
+        }
+
+        vkDestroyPipelineCache(context->device, pipelineCache, nullptr);
+    }
+
     for (auto& pipeline : pipelines) {
         if (pipeline.second.activeEntry.pipeline != VK_NULL_HANDLE) {
             vkDestroyPipeline(context->device, pipeline.second.activeEntry.pipeline, nullptr);
@@ -151,6 +194,11 @@ bool PipelineManager::IsCategoryReady(PipelineCategory category) const
         }
     }
     return true;
+}
+
+void PipelineManager::SetAssetLoadThread(AssetLoad::AssetLoadThread* _assetLoadThread)
+{
+    assetLoadThread = _assetLoadThread;
 }
 
 void PipelineManager::ReloadModified()

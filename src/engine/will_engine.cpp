@@ -138,7 +138,7 @@ void WillEngine::Initialize()
     //
     {
         ZoneScopedN("CreateAssetLoadThread");
-        assetLoadThread = std::make_unique<AssetLoad::AssetLoadThread>(scheduler.get(), renderThread->GetVulkanContext(), renderThread->GetResourceManager());
+        assetLoadThread = std::make_unique<AssetLoad::AssetLoadThread>(scheduler.get(), renderThread->GetVulkanContext(), renderThread->GetResourceManager(), renderThread->GetPipelineManager());
     }
 
     //

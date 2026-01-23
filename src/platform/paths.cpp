@@ -38,24 +38,27 @@ std::filesystem::path GetAssetPath()
 {
 #ifdef ASSETS_PATH
     return std::filesystem::path(ASSETS_PATH);
-#endif
+#else
     return GetExecutablePath() / "assets";
+#endif
 }
 
 std::filesystem::path GetLogPath()
 {
 #ifndef PACKAGED_BUILD
     return GetExecutablePath() / "logs";
-#endif
+#else
     return GetUserDataPath() / "logs";
+#endif
 }
 
 std::filesystem::path GetCrashPath()
 {
 #ifndef PACKAGED_BUILD
     return GetExecutablePath() / "crash";
-#endif
+#else
     return GetUserDataPath() / "crash";
+#endif
 }
 
 std::filesystem::path SetWorkingDirectory()
@@ -63,5 +66,18 @@ std::filesystem::path SetWorkingDirectory()
     auto exePath = GetExecutablePath();
     std::filesystem::current_path(exePath);
     return exePath;
+}
+
+std::filesystem::path GetCachePath()
+{
+#ifndef PACKAGED_BUILD
+    auto result = GetExecutablePath() / "cache";
+    std::filesystem::create_directories(result);
+    return result;
+#else
+    auto result = GetUserDataPath() / "cache";
+    std::filesystem::create_directories(result);
+    return result;
+#endif
 }
 } // Platform

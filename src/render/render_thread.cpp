@@ -35,7 +35,7 @@ RenderThread::RenderThread() = default;
 
 RenderThread::RenderThread(Core::FrameSync* engineRenderSynchronization, enki::TaskScheduler* scheduler, SDL_Window* window, uint32_t width,
                            uint32_t height)
-    : window(window), engineRenderSynchronization(engineRenderSynchronization), scheduler(scheduler), assetLoadThread(assetLoadThread)
+    : window(window), engineRenderSynchronization(engineRenderSynchronization), scheduler(scheduler)
 {
     context = std::make_unique<VulkanContext>(window);
     swapchain = std::make_unique<Swapchain>(context.get(), width, height);
@@ -43,6 +43,11 @@ RenderThread::RenderThread(Core::FrameSync* engineRenderSynchronization, enki::T
     renderExtents = std::make_unique<RenderExtents>(width, height, 1.0f);
     resourceManager = std::make_unique<ResourceManager>(context.get());
     renderGraph = std::make_unique<RenderGraph>(context.get(), resourceManager.get());
+    std::array layouts{
+        resourceManager->bindlessSamplerTextureDescriptorBuffer.descriptorSetLayout.handle,
+        resourceManager->bindlessRDGTransientDescriptorBuffer.descriptorSetLayout.handle
+    };
+    pipelineManager = std::make_unique<PipelineManager>(context.get(), layouts);
 
     for (RenderSynchronization& frameSync : frameSynchronization) {
         frameSync = RenderSynchronization(context.get());
@@ -61,13 +66,7 @@ RenderThread::~RenderThread() = default;
 
 void RenderThread::InitializePipelineManager(AssetLoad::AssetLoadThread* _assetLoadThread)
 {
-    std::array layouts{
-        resourceManager->bindlessSamplerTextureDescriptorBuffer.descriptorSetLayout.handle,
-        resourceManager->bindlessRDGTransientDescriptorBuffer.descriptorSetLayout.handle
-    };
-    pipelineManager = std::make_unique<PipelineManager>(context.get(), _assetLoadThread, layouts);
-    assetLoadThread = _assetLoadThread;
-
+    pipelineManager->SetAssetLoadThread(_assetLoadThread);
     CreatePipelines();
 }
 
