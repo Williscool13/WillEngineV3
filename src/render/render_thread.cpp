@@ -831,7 +831,6 @@ void RenderThread::SetupModelUniforms(const Core::ViewFamily& viewFamily)
             modelSize = viewFamily.modelMatrices.size() * sizeof(Model),
             materialOffset = materialUpload.offset,
             materialSize = viewFamily.materials.size() * sizeof(MaterialProperties)](VkCommandBuffer cmd) {
-
             if (bHasMainInstances) {
                 VkBufferCopy2 instanceCopy{};
                 instanceCopy.sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2;
@@ -898,6 +897,22 @@ void RenderThread::SetupModelUniforms(const Core::ViewFamily& viewFamily)
         size_t indirectCommandBufferSize = frameResourceLimits.highestDirectIndirectCommandBuffer * sizeof(DrawMeshTasksIndirectCommand);
         renderGraph->CreateBuffer("direct_indirect_command_buffer", indirectCommandBufferSize);
     }
+
+    const size_t instanceCount = viewFamily.mainInstances.size();
+    const size_t instanceCountPow2 = NextPowerOfTwo(instanceCount);
+
+    frameResourceLimits.highestPackedVisibilityBuffer = std::max(frameResourceLimits.highestPackedVisibilityBuffer, instanceCountPow2);
+    frameResourceLimits.highestInstanceOffsetBuffer = std::max(frameResourceLimits.highestInstanceOffsetBuffer, instanceCountPow2);
+    frameResourceLimits.highestCompactedInstanceBuffer = std::max(frameResourceLimits.highestCompactedInstanceBuffer, instanceCountPow2);
+
+    renderGraph->CreateBuffer("packed_visibility_buffer", sizeof(uint32_t) * (frameResourceLimits.highestPackedVisibilityBuffer + 31) / 32);
+    renderGraph->CreateBuffer("instance_offset_buffer", frameResourceLimits.highestInstanceOffsetBuffer * sizeof(uint32_t));
+    renderGraph->CreateBuffer("compacted_instance_buffer", (frameResourceLimits.highestCompactedInstanceBuffer) * sizeof(Instance));
+
+    // todo: somehow cap primitives so its not unbounded
+    renderGraph->CreateBuffer("indirect_count_buffer", INSTANCING_MESH_INDIRECT_COUNT_SIZE);
+    renderGraph->CreateBuffer("primitive_count_buffer", INSTANCING_PRIMITIVE_COUNT_SIZE);
+    renderGraph->CreateBuffer("indirect_buffer", INSTANCING_MESH_INDIRECT_PARAMETERS);
 }
 
 void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFamily& viewFamily) const
@@ -923,10 +938,12 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFami
         std::string compactedInstanceName = "shadow_compacted_instance_" + std::to_string(cascadeLevel);
         std::string indirectName = "shadow_indirect_" + std::to_string(cascadeLevel);
 
-        renderGraph->CreateBuffer(packedVisName, INSTANCING_PACKED_VISIBILITY_SIZE);
-        renderGraph->CreateBuffer(instanceOffsetName, INSTANCING_INSTANCE_OFFSET_SIZE);
+
+        renderGraph->CreateBuffer(packedVisName, sizeof(uint32_t) * (frameResourceLimits.highestPackedVisibilityBuffer + 31) / 32);
+        renderGraph->CreateBuffer(instanceOffsetName, frameResourceLimits.highestInstanceOffsetBuffer * sizeof(uint32_t));
+        renderGraph->CreateBuffer(compactedInstanceName, (frameResourceLimits.highestCompactedInstanceBuffer) * sizeof(Instance));
+        // todo: limit these as well
         renderGraph->CreateBuffer(primitiveCountName, INSTANCING_PRIMITIVE_COUNT_SIZE);
-        renderGraph->CreateBuffer(compactedInstanceName, INSTANCING_COMPACTED_INSTANCE_BUFFER_SIZE);
         renderGraph->CreateBuffer(indirectCountName, INSTANCING_MESH_INDIRECT_COUNT_SIZE);
         renderGraph->CreateBuffer(indirectName, INSTANCING_MESH_INDIRECT_PARAMETERS);
 
@@ -1017,9 +1034,13 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFami
 
         RenderPass& shadowPass = graph.AddPass(shadowPassName, VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
         shadowPass.ReadWriteDepthAttachment(shadowMapName);
-        visibilityPass.ReadBuffer("scene_data");
-        visibilityPass.ReadBuffer("shadow_data");
-        visibilityPass.ReadBuffer("model_buffer");
+        shadowPass.ReadBuffer("scene_data");
+        shadowPass.ReadBuffer("shadow_data");
+        shadowPass.ReadBuffer("model_buffer");
+        shadowPass.ReadBuffer("vertex_buffer");
+        shadowPass.ReadBuffer("meshlet_vertex_buffer");
+        shadowPass.ReadBuffer("meshlet_triangle_buffer");
+        shadowPass.ReadBuffer("meshlet_buffer");
         shadowPass.ReadBuffer(compactedInstanceName);
         shadowPass.ReadIndirectBuffer(indirectName);
         shadowPass.ReadIndirectCountBuffer(indirectCountName);
@@ -1041,7 +1062,7 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFami
                 .meshletVerticesBuffer = graph.GetBufferAddress("meshlet_vertex_buffer"),
                 .meshletTrianglesBuffer = graph.GetBufferAddress("meshlet_triangle_buffer"),
                 .meshletBuffer = graph.GetBufferAddress("meshlet_buffer"),
-                .indirectBuffer = graph.GetBufferAddress("indirect_buffer"),
+                .indirectBuffer = graph.GetBufferAddress(indirectName),
                 .compactedInstanceBuffer = graph.GetBufferAddress(compactedInstanceName),
                 .modelBuffer = graph.GetBufferAddress("model_buffer"),
                 .cascadeIndex = static_cast<uint32_t>(cascadeLevel),
@@ -1063,17 +1084,9 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFami
     }
 }
 
-void RenderThread::SetupMainGeometryPass(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneIndex, bool bClearTargets) const
+void RenderThread::SetupMainGeometryPass(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneIndex,
+                                         bool bClearTargets)
 {
-    if (viewFamily.mainInstances.empty()) { return; }
-    // todo: these should be watermark as well instead of lump-allocating from the start
-    renderGraph->CreateBuffer("packed_visibility_buffer", INSTANCING_PACKED_VISIBILITY_SIZE);
-    renderGraph->CreateBuffer("instance_offset_buffer", INSTANCING_INSTANCE_OFFSET_SIZE);
-    renderGraph->CreateBuffer("primitive_count_buffer", INSTANCING_PRIMITIVE_COUNT_SIZE);
-    renderGraph->CreateBuffer("compacted_instance_buffer", INSTANCING_COMPACTED_INSTANCE_BUFFER_SIZE);
-    renderGraph->CreateBuffer("indirect_count_buffer", INSTANCING_MESH_INDIRECT_COUNT_SIZE);
-    renderGraph->CreateBuffer("indirect_buffer", INSTANCING_MESH_INDIRECT_PARAMETERS);
-
     RenderPass& clearPass = graph.AddPass("Clear Instancing Buffers", VK_PIPELINE_STAGE_2_TRANSFER_BIT);
     clearPass.WriteTransferBuffer("packed_visibility_buffer");
     clearPass.WriteTransferBuffer("primitive_count_buffer");
@@ -1218,9 +1231,9 @@ void RenderThread::SetupMainGeometryPass(RenderGraph& graph, const Core::ViewFam
     });
 }
 
-void RenderThread::SetupDirectGeometryPass(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneIndex, bool bClearTargets) const
+void RenderThread::SetupDirectGeometryPass(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneIndex,
+                                           bool bClearTargets) const
 {
-    // todo: case where direct geometry exists but main geometry does not, so render targets were never created.
     if (viewFamily.customStencilDraws.empty()) { return; }
 
     size_t totalInstances = 0;

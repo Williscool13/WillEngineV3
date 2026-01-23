@@ -19,6 +19,9 @@ struct FrameResourceLimits
     size_t highestMaterialBuffer{64};
 
     size_t highestDirectIndirectCommandBuffer{64};
+    size_t highestPackedVisibilityBuffer{64};
+    size_t highestInstanceOffsetBuffer{64};
+    size_t highestCompactedInstanceBuffer{64};
 };
 
 } // Render
