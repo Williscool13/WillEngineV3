@@ -13,6 +13,12 @@ bool DllLoader::Load(const std::string& dllPath, const std::string& tempCopyName
 {
     originalPath = dllPath;
 
+    std::error_code ec;
+    lastWriteTime = std::filesystem::last_write_time(dllPath, ec);
+    if (ec) {
+        SPDLOG_WARN("Failed to get DLL timestamp: {}", ec.message());
+    }
+
     if (!tempCopyName.empty()) {
         std::filesystem::path srcPath(dllPath);
 
@@ -31,15 +37,6 @@ bool DllLoader::Load(const std::string& dllPath, const std::string& tempCopyName
         }
 
         loadedPath = dstPath.string();
-
-        std::filesystem::path pdbSrc = srcPath;
-        pdbSrc.replace_extension(".pdb");
-        std::filesystem::path pdbDst = dstPath;
-        pdbDst.replace_extension(".pdb");
-
-        if (std::filesystem::exists(pdbSrc)) {
-            std::filesystem::copy_file(pdbSrc, pdbDst, std::filesystem::copy_options::overwrite_existing, ec);
-        }
     }
     else {
         loadedPath = dllPath;
@@ -64,16 +61,23 @@ void DllLoader::Unload()
     }
 }
 
-bool DllLoader::Reload()
+DllLoadResponse DllLoader::Reload()
 {
+    std::error_code ec;
+    auto currentWriteTime = std::filesystem::last_write_time(originalPath, ec);
+
+    if (ec) {
+        SPDLOG_ERROR("Failed to check DLL timestamp: {}", ec.message());
+        return DllLoadResponse::FailedToLoad;
+    }
+
+    if (currentWriteTime == lastWriteTime) {
+        SPDLOG_DEBUG("DLL unchanged, skipping reload");
+        return DllLoadResponse::NoChanges;
+    }
+
     Unload();
-#if _DEBUG
-    // LLDB frontend locks the dll for the duration of the program with a debugger. Do this in any debug build
-    return Load(originalPath, fmt::format("game_temp_{}.dll", ++reloadCount));
-#else
-    return Load(originalPath, "game_temp.dll");
-#endif
-
-
+    bool res = Load(originalPath, "game_temp.dll");
+    return res ? DllLoadResponse::Loaded : DllLoadResponse::FailedToLoad;
 }
 }

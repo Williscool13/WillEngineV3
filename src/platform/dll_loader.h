@@ -16,6 +16,13 @@ using DllHandle = void*;
 
 namespace Platform
 {
+enum class DllLoadResponse
+{
+    Loaded,
+    FailedToLoad,
+    NoChanges,
+};
+
 class DllLoader
 {
 public:
@@ -31,7 +38,7 @@ public:
 
     void Unload();
 
-    bool Reload();
+    DllLoadResponse Reload();
 
     template<typename FuncType>
     FuncType GetFunction(const char* functionName)
@@ -51,6 +58,7 @@ private:
     std::string originalPath;
     std::string loadedPath;
     int32_t reloadCount{0};
+    std::filesystem::file_time_type lastWriteTime{};
 };
 }
 

@@ -284,18 +284,23 @@ void WillEngine::Run()
         TimeFrame editorTime = timeManager->GetTime();
         if (editorInput.GetKey(Key::F5).pressed) {
             gameFunctions.gameUnload(engineContext.get(), gameState.get());
-            if (gameDll.Reload()) {
-                gameFunctions.gameStartup = gameDll.GetFunction<Core::GameStartUpFunc>("GameStartup");
-                gameFunctions.gameLoad = gameDll.GetFunction<Core::GameLoadFunc>("GameLoad");
-                gameFunctions.gameUpdate = gameDll.GetFunction<Core::GameUpdateFunc>("GameUpdate");
-                gameFunctions.gamePrepareFrame = gameDll.GetFunction<Core::GamePrepareFrameFunc>("GamePrepareFrame");
-                gameFunctions.gameUnload = gameDll.GetFunction<Core::GameUnloadFunc>("GameUnload");
-                gameFunctions.gameShutdown = gameDll.GetFunction<Core::GameShutdownFunc>("GameShutdown");
-                SPDLOG_DEBUG("Game lib was hot-reloaded");
-            }
-            else {
-                gameFunctions.Stub();
-                SPDLOG_DEBUG("Game lib failed to be hot-reloaded");
+            auto reloadResponse = gameDll.Reload();
+            switch (reloadResponse) {
+                case Platform::DllLoadResponse::Loaded:
+                    SPDLOG_DEBUG("Game lib was hot-reloaded");
+                // Fallthrough
+                case Platform::DllLoadResponse::NoChanges:
+                    gameFunctions.gameStartup = gameDll.GetFunction<Core::GameStartUpFunc>("GameStartup");
+                    gameFunctions.gameLoad = gameDll.GetFunction<Core::GameLoadFunc>("GameLoad");
+                    gameFunctions.gameUpdate = gameDll.GetFunction<Core::GameUpdateFunc>("GameUpdate");
+                    gameFunctions.gamePrepareFrame = gameDll.GetFunction<Core::GamePrepareFrameFunc>("GamePrepareFrame");
+                    gameFunctions.gameUnload = gameDll.GetFunction<Core::GameUnloadFunc>("GameUnload");
+                    gameFunctions.gameShutdown = gameDll.GetFunction<Core::GameShutdownFunc>("GameShutdown");
+                    break;
+                case Platform::DllLoadResponse::FailedToLoad:
+                    gameFunctions.Stub();
+                    SPDLOG_DEBUG("Game lib failed to be hot-reloaded");
+                    break;
             }
 
             gameFunctions.gameLoad(engineContext.get(), gameState.get());
