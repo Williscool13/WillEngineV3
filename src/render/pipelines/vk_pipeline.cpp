@@ -95,26 +95,45 @@ RenderPipelineBuilder& RenderPipelineBuilder::SetupBlending(const VkPipelineColo
     return *this;
 }
 
-RenderPipelineBuilder& RenderPipelineBuilder::SetupDepthStencil(VkBool32 depthTestEnable, VkBool32 depthWriteEnable,
-                                                                VkCompareOp compareOp, VkBool32 depthBoundsTestEnable,
-                                                                VkBool32 stencilTestEnable, const VkStencilOpState& front,
-                                                                const VkStencilOpState& back, float minDepthBounds, float maxDepthBounds)
+RenderPipelineBuilder& RenderPipelineBuilder::SetupDepthState(VkBool32 depthTestEnable, VkBool32 depthWriteEnable, VkCompareOp compareOp, VkBool32 depthBoundsTestEnable)
 {
     depthStencil.depthTestEnable = depthTestEnable;
     depthStencil.depthWriteEnable = depthWriteEnable;
     depthStencil.depthCompareOp = compareOp;
     depthStencil.depthBoundsTestEnable = depthBoundsTestEnable;
-    depthStencil.stencilTestEnable = stencilTestEnable;
-    depthStencil.front = front;
-    depthStencil.back = back;
-    depthStencil.minDepthBounds = minDepthBounds;
-    depthStencil.maxDepthBounds = maxDepthBounds;
     return *this;
 }
 
-RenderPipelineBuilder& RenderPipelineBuilder::EnableDepthTest(VkBool32 depthWriteEnable, VkCompareOp op)
+RenderPipelineBuilder& RenderPipelineBuilder::SetupStencilState(
+    VkBool32 stencilTestEnable,
+    VkStencilOp failOp,
+    VkStencilOp passOp,
+    VkStencilOp depthFailOp,
+    VkCompareOp compareOp,
+    uint32_t compareMask,
+    uint32_t writeMask,
+    uint32_t reference)
 {
-    return SetupDepthStencil(VK_TRUE, depthWriteEnable, op, VK_FALSE, VK_FALSE, {}, {}, 0.0f, 1.0f);
+    depthStencil.stencilTestEnable = stencilTestEnable;
+
+    depthStencil.front.failOp = failOp;
+    depthStencil.front.passOp = passOp;
+    depthStencil.front.depthFailOp = depthFailOp;
+    depthStencil.front.compareOp = compareOp;
+    depthStencil.front.compareMask = compareMask;
+    depthStencil.front.writeMask = writeMask;
+    depthStencil.front.reference = reference;
+
+    // Same for back face
+    depthStencil.back.failOp = failOp;
+    depthStencil.back.passOp = passOp;
+    depthStencil.back.depthFailOp = depthFailOp;
+    depthStencil.back.compareOp = compareOp;
+    depthStencil.back.compareMask = compareMask;
+    depthStencil.back.writeMask = writeMask;
+    depthStencil.back.reference = reference;
+
+    return *this;
 }
 
 RenderPipelineBuilder& RenderPipelineBuilder::SetupPipelineLayout(VkPipelineLayout pipelineLayout_)

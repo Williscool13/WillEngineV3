@@ -85,6 +85,11 @@ private: // Main Systems
     std::unique_ptr<Physics::PhysicsSystem> physicsSystem{};
 #if WILL_EDITOR
     std::unique_ptr<Render::AssetGenerator> modelGenerator{};
+    bool isGenerating = false;
+    std::string currentAssetName;
+    std::string lastCompletedAsset;
+    bool lastSuccess = false;
+    bool hasCompleted = false;
 #endif
     Core::FrameBuffer stagingFrameBuffer{};
 

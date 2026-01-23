@@ -16,6 +16,7 @@ set(GAME_SOURCES
         components/physics/dynamic_physics_body_component.h
         components/gameplay/anti_gravity_component.h
         components/debug/motion_blur_movement_component.h
+        components/render/portal_plane_component.h
 
         systems/camera_system.cpp
         systems/camera_system.h

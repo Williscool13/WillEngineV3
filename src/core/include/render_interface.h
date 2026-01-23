@@ -125,21 +125,29 @@ struct GTAOConfiguration
     float denoiseBlurBeta{1.2f};
 };
 
+struct InstanceData
+{
+    uint32_t primitiveIndex;
+    Engine::MaterialID materialID;
+    uint32_t modelIndex;
+    uint32_t gpuMaterialIndex;
+};
+
+struct CustomStencilDrawBatch
+{
+    uint32_t stencilValue{0};
+    std::vector<InstanceData> instances;
+};
+
 struct ViewFamily
 {
     RenderView mainView{};
     std::vector<RenderView> portalViews;
 
-    struct InstanceData
-    {
-        uint32_t primitiveIndex;
-        Engine::MaterialID materialID;
-        uint32_t modelIndex;
-        uint32_t gpuMaterialIndex;
-    };
+    std::vector<InstanceData> mainInstances;
+    std::vector<CustomStencilDrawBatch> customStencilDraws;
 
     std::vector<Model> modelMatrices;
-    std::vector<InstanceData> instances;
     std::vector<MaterialProperties> materials;
 
     ShadowConfiguration shadowConfig{};

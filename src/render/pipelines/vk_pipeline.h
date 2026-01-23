@@ -30,7 +30,10 @@ public:
     RenderPipelineBuilder& SetupRasterization(VkPolygonMode polygonMode, VkCullModeFlags cullMode, VkFrontFace frontFace,
                                               float lineWidth = 1.0f, bool rasterizerDiscardEnable = false);
 
-    RenderPipelineBuilder& EnableDepthBias(float depthBiasConstantFactor, float depthBiasClamp, float depthBiasSlopeFactor);
+    RenderPipelineBuilder& EnableDepthBias(
+        float depthBiasConstantFactor = 0.0f,
+        float depthBiasClamp = 0.0f,
+        float depthBiasSlopeFactor = 0.0f);
 
     RenderPipelineBuilder& SetupMultisampling(VkBool32 sampleShadingEnable, VkSampleCountFlagBits rasterizationSamples,
                                               float minSampleShading, const VkSampleMask* pSampleMask,
@@ -42,12 +45,23 @@ public:
 
     RenderPipelineBuilder& SetupBlending(const VkPipelineColorBlendAttachmentState* blendAttachmentStates, uint32_t count);
 
-    RenderPipelineBuilder& SetupDepthStencil(VkBool32 depthTestEnable, VkBool32 depthWriteEnable,
-                                             VkCompareOp compareOp, VkBool32 depthBoundsTestEnable,
-                                             VkBool32 stencilTestEnable, const VkStencilOpState& front,
-                                             const VkStencilOpState& back, float minDepthBounds, float maxDepthBounds);
+    RenderPipelineBuilder& SetupDepthState(
+        VkBool32 depthTestEnable = VK_TRUE,
+        VkBool32 depthWriteEnable = VK_TRUE,
+        VkCompareOp compareOp = VK_COMPARE_OP_GREATER,
+        VkBool32 depthBoundsTestEnable = VK_FALSE
+    );
 
-    RenderPipelineBuilder& EnableDepthTest(VkBool32 depthWriteEnable, VkCompareOp op);
+    RenderPipelineBuilder& SetupStencilState(
+        VkBool32 stencilTestEnable = VK_FALSE,
+        VkStencilOp failOp = VK_STENCIL_OP_KEEP,
+        VkStencilOp passOp = VK_STENCIL_OP_KEEP,
+        VkStencilOp depthFailOp = VK_STENCIL_OP_KEEP,
+        VkCompareOp compareOp = VK_COMPARE_OP_ALWAYS,
+        uint32_t compareMask = 0xFF,
+        uint32_t writeMask = 0xFF,
+        uint32_t reference = 0
+    );
 
     RenderPipelineBuilder& SetupPipelineLayout(VkPipelineLayout pipelineLayout_);
 

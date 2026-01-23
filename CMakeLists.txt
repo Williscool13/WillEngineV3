@@ -231,6 +231,11 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/mesh_shading_instanced.slang task TaskMain mesh_shading_instanced
         ${CMAKE_SOURCE_DIR}/shaders/mesh_shading_instanced.slang mesh MeshMain mesh_shading_instanced
         ${CMAKE_SOURCE_DIR}/shaders/mesh_shading_instanced.slang fragment FragmentMain mesh_shading_instanced
+        ${CMAKE_SOURCE_DIR}/shaders/mesh_shading_direct.slang compute ComputeMain mesh_shading_direct_build_indirect
+        ${CMAKE_SOURCE_DIR}/shaders/mesh_shading_direct.slang task TaskMain mesh_shading_direct
+        ${CMAKE_SOURCE_DIR}/shaders/mesh_shading_direct.slang mesh MeshMain mesh_shading_direct
+        ${CMAKE_SOURCE_DIR}/shaders/mesh_shading_direct.slang fragment FragmentMain mesh_shading_direct
+
         ${CMAKE_SOURCE_DIR}/shaders/shadow_mesh_shading_instanced.slang task TaskMain shadow_mesh_shading_instanced
         ${CMAKE_SOURCE_DIR}/shaders/shadow_mesh_shading_instanced.slang mesh MeshMain shadow_mesh_shading_instanced
         ${CMAKE_SOURCE_DIR}/shaders/shadows_resolve.slang compute ComputeMain shadows_resolve

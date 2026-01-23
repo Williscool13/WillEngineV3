@@ -200,7 +200,7 @@ SHADER_PUBLIC struct ShadowMeshShadingPushConstant
 
 SHADER_PUBLIC struct TonemapSDRPushConstant
 {
-    // 0=ACES, 1=Uncharted2, 2=Reinhard
+    // 0=ACES, 1=Uncharted2, 2=Reinhard, 3=Lottes
     SHADER_PUBLIC int32_t tonemapOperator;
     SHADER_PUBLIC float targetLuminance;
     SHADER_PUBLIC SHADER_PTR(float) luminanceBufferAddress;
@@ -210,6 +210,31 @@ SHADER_PUBLIC struct TonemapSDRPushConstant
     SHADER_PUBLIC uint32_t outputHeight;
     SHADER_PUBLIC uint32_t srcImageIndex;
     SHADER_PUBLIC uint32_t dstImageIndex;
+};
+
+SHADER_PUBLIC struct BuildDirectIndirectPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(MeshletPrimitive) primitiveBuffer;
+    SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
+    SHADER_PUBLIC SHADER_PTR(DrawMeshTasksIndirectCommand) indirectCommandBuffer;
+    SHADER_PUBLIC uint32_t instanceCount;
+};
+
+SHADER_PUBLIC struct DirectMeshShadingPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+
+    SHADER_PUBLIC SHADER_PTR(Vertex) vertexBuffer;
+    SHADER_PUBLIC SHADER_PTR(uint32_t) meshletVerticesBuffer;
+    SHADER_PUBLIC SHADER_PTR(uint32_t) meshletTrianglesBuffer;
+    SHADER_PUBLIC SHADER_PTR(Meshlet) meshletBuffer;
+    SHADER_PUBLIC SHADER_PTR(MeshletPrimitive) primitiveBuffer;
+
+    SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
+    SHADER_PUBLIC SHADER_PTR(MaterialProperties) materialBuffer;
+    SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
+
+    SHADER_PUBLIC uint32_t sceneDataIndex;
 };
 
 SHADER_PUBLIC struct HistogramBuildPushConstant

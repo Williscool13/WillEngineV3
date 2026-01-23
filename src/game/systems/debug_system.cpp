@@ -20,6 +20,7 @@
 #include "game/components/gameplay/anti_gravity_component.h"
 #include "game/components/gameplay/floor_component.h"
 #include "game/components/physics/dynamic_physics_body_component.h"
+#include "game/components/render/portal_plane_component.h"
 #include "physics/physics_system.h"
 #include "platform/paths.h"
 
@@ -30,8 +31,58 @@ static Engine::WillModelHandle dragonHandle = Engine::WillModelHandle::INVALID;
 static Engine::WillModelHandle boxHandle = Engine::WillModelHandle::INVALID;
 static Engine::WillModelHandle box4kHandle = Engine::WillModelHandle::INVALID;
 static Engine::WillModelHandle sponzaHandle = Engine::WillModelHandle::INVALID;
+static Engine::WillModelHandle portalPlaneHandle = Engine::WillModelHandle::INVALID;
 static Engine::TextureHandle textureHandle = Engine::TextureHandle::INVALID;
 static Engine::MaterialID boxMatID;
+
+void CreatePortalPlane(Core::EngineContext* ctx, Engine::GameState* state, glm::vec3 position, glm::quat rotation, glm::vec3 scale)
+{
+    if (!portalPlaneHandle.IsValid()) {
+        SPDLOG_WARN("[DebugSystem] Portal plane model not loaded, press F1 first");
+        return;
+    }
+
+    Render::WillModel* plane = ctx->assetManager->GetModel(portalPlaneHandle);
+    if (!plane || plane->modelLoadState != Render::WillModel::ModelLoadState::Loaded) {
+        SPDLOG_WARN("[DebugSystem] Portal plane model not ready yet");
+        return;
+    }
+
+    RenderableComponent renderable{};
+    Engine::MaterialManager& materialManager = ctx->assetManager->GetMaterialManager();
+    Render::MeshInformation& submesh = plane->modelData.meshes[0];
+
+    for (size_t i = 0; i < submesh.primitiveProperties.size(); ++i) {
+        Render::PrimitiveProperty& primitive = submesh.primitiveProperties[i];
+
+        MaterialProperties material;
+        if (primitive.materialIndex != -1) {
+            material = plane->modelData.materials[primitive.materialIndex];
+        }
+        else {
+            material = materialManager.Get(materialManager.GetDefaultMaterial());
+        }
+
+        material.colorFactor = glm::vec4(0.3f, 0.6f, 1.0f, 1.0f);
+
+        Engine::MaterialID matID = materialManager.GetOrCreate(material);
+
+        renderable.primitives[i] = {
+            .primitiveIndex = primitive.index,
+            .materialID = matID
+        };
+    }
+    renderable.primitiveCount = submesh.primitiveProperties.size();
+    renderable.modelFlags = glm::vec4(0.0f);
+
+    entt::entity planeEntity = state->registry.create();
+    state->registry.emplace<RenderableComponent>(planeEntity, renderable);
+    state->registry.emplace<TransformComponent>(planeEntity, position, rotation, scale);
+    state->registry.emplace<PortalPlaneComponent>(planeEntity);
+
+    SPDLOG_INFO("[DebugSystem] Created portal plane at ({}, {}, {})",
+                position.x, position.y, position.z);
+}
 
 entt::entity CreateBox(Core::EngineContext* ctx, Engine::GameState* state, glm::vec3 position, bool bUsePhysics)
 {
@@ -277,6 +328,7 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
             boxHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "BoxTextured4k.willmodel");
             // box4kHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "BoxTextured4k.willmodel");
             sponzaHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "sponza2/sponza.willmodel");
+            portalPlaneHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "Plane.willmodel");
         }
     }
 
@@ -335,11 +387,11 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
             glm::vec3 spawnPos = glm::vec3(i * 2.0f - 4.0f, 3.0f, 4.0f);
 
             glm::vec4 emissive;
-            if (i == 0) emissive = glm::vec4(1.0f, 0.2f, 0.1f, 15.0f);  // Bright red-orange
-            else if (i == 1) emissive = glm::vec4(0.2f, 0.8f, 1.0f, 12.0f);  // Bright cyan
-            else if (i == 2) emissive = glm::vec4(1.0f, 1.0f, 0.3f, 20.0f);  // Super bright yellow
-            else if (i == 3) emissive = glm::vec4(0.8f, 0.2f, 1.0f, 10.0f);  // Purple
-            else emissive = glm::vec4(1.0f, 1.0f, 1.0f, 25.0f);  // Mega bright white
+            if (i == 0) emissive = glm::vec4(1.0f, 0.2f, 0.1f, 15.0f); // Bright red-orange
+            else if (i == 1) emissive = glm::vec4(0.2f, 0.8f, 1.0f, 12.0f); // Bright cyan
+            else if (i == 2) emissive = glm::vec4(1.0f, 1.0f, 0.3f, 20.0f); // Super bright yellow
+            else if (i == 3) emissive = glm::vec4(0.8f, 0.2f, 1.0f, 10.0f); // Purple
+            else emissive = glm::vec4(1.0f, 1.0f, 1.0f, 25.0f); // Mega bright white
 
             entt::entity glowBox = CreateGlowingBox(ctx, state, spawnPos, emissive, false);
         }
@@ -485,6 +537,15 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         }
 
         SPDLOG_INFO("[DebugSystem] Spawned sponza");
+    }
+
+    if (state->inputFrame->GetKey(Key::F5).pressed) {
+        CreatePortalPlane(
+            ctx, state,
+            glm::vec3(0.0f, 5.0f, 0.0f),
+            glm::angleAxis(glm::radians(180.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
+            glm::vec3(0.01f, 0.01f, 0.01f)
+        );
     }
 
     if (state->inputFrame->GetKey(Key::F6).pressed) {

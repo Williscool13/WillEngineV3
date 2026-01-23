@@ -53,8 +53,8 @@ ShadowMeshShadingInstancedPipeline::ShadowMeshShadingInstancedPipeline(VulkanCon
     pipelineBuilder.SetShaders(shaderStages, 2);
     pipelineBuilder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
     pipelineBuilder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE);
-    pipelineBuilder.EnableDepthTest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
-    pipelineBuilder.EnableDepthBias(0.0f, 0.0f, 0.0f);
+    pipelineBuilder.SetupDepthState(true, true, VK_COMPARE_OP_GREATER_OR_EQUAL);
+    pipelineBuilder.EnableDepthBias();
     pipelineBuilder.SetupRenderer(nullptr, 0, SHADOW_CASCADE_FORMAT);
     pipelineBuilder.SetupPipelineLayout(pipelineLayout.handle);
     pipelineBuilder.AddDynamicState(VK_DYNAMIC_STATE_DEPTH_BIAS);

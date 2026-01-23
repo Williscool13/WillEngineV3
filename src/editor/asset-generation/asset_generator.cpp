@@ -1356,7 +1356,22 @@ VkSamplerMipmapMode AssetGenerator::ExtractMipmapMode(fastgltf::Filter filter)
 
 MaterialProperties AssetGenerator::ExtractMaterial(fastgltf::Asset& gltf, const fastgltf::Material& gltfMaterial)
 {
-    MaterialProperties material = {};
+    MaterialProperties material{};
+    material.colorFactor = glm::vec4(1.0f);
+    material.metalRoughFactors = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
+    material.textureImageIndices = glm::ivec4(-1);
+    material.textureSamplerIndices = glm::ivec4(-1);
+    material.textureImageIndices2 = glm::ivec4(-1);
+    material.textureSamplerIndices2 = glm::ivec4(-1);
+    material.colorUvTransform = glm::vec4(1.0f, 1.0f, 0.0f, 0.0f);
+    material.metalRoughUvTransform = glm::vec4(1.0f, 1.0f, 0.0f, 0.0f);
+    material.normalUvTransform = glm::vec4(1.0f, 1.0f, 0.0f, 0.0f);
+    material.emissiveUvTransform = glm::vec4(1.0f, 1.0f, 0.0f, 0.0f);
+    material.occlusionUvTransform = glm::vec4(1.0f, 1.0f, 0.0f, 0.0f);
+    material.emissiveFactor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+    material.alphaProperties = glm::vec4(0.5f, 0.0f, 0.0f, 0.0f);
+    material.physicalProperties = glm::vec4(1.5f, 0.0f, 1.0f, 0.0f);
+
     material.colorFactor = glm::vec4(
         gltfMaterial.pbrData.baseColorFactor[0],
         gltfMaterial.pbrData.baseColorFactor[1],

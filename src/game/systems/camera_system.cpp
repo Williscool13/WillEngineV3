@@ -44,5 +44,12 @@ void BuildViewFamily(Engine::GameState* state, Core::ViewFamily& mainViewFamily)
     portalView.currentViewData.cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
     portalView.previousViewData = portalView.currentViewData;
     mainViewFamily.portalViews.push_back(portalView);
+
+    mainViewFamily.modelMatrices.clear();
+    mainViewFamily.mainInstances.clear();
+    for (Core::CustomStencilDrawBatch& customStencilBatch : mainViewFamily.customStencilDraws) {
+        customStencilBatch.instances.clear();
+    }
+    mainViewFamily.materials.clear();
 }
 } // Game

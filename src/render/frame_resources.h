@@ -13,9 +13,12 @@ namespace Render
 struct FrameResourceLimits
 {
     size_t highestInstanceBuffer{64};
+    size_t highestDirectInstanceBuffer{64};
     size_t highestModelBuffer{64};
     size_t highestJointMatrixBuffer{64};
     size_t highestMaterialBuffer{64};
+
+    size_t highestDirectIndirectCommandBuffer{64};
 };
 
 } // Render

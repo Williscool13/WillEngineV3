@@ -5,19 +5,55 @@ import instancing_interop;
 import push_constant_interop;
 
 import bindless_declarations;
-
 import shader_functions;
 
 // =============== Shader Summary ============
-/*  This shader is the main geometry pass for the majority of objects in this engine.
-*   It is executed through indirect commands generated from instancing compute shaders in `instancing.slang`
+/*  This shader is for direct (non-instanced) geometry passes.
+*   Used for custom draws with small instance counts (portals, special effects, stencil marking).
 *
-*   The instancing pass determines instance visibility by culling and does a prefix sum and indirect generation pass.
-*   The resulting indirect buffer will have X, Y, 1 task dispatches. Where X is meshletCount / TASK_SHADER_DISPATCH_X and Y is the number of instances for that gltf primitive.
+*   Unlike the main instanced path, this skips GPU instance culling and compaction.
+*   Instead, all submitted instances are drawn, but meshlet-level culling still occurs in the task shader.
 *
-*   Task shader executes culling on a meshlet level and dispatches only meshlets that are visible.
-*   Mesh shader is straightforward and acts as the vertex shader. It does no culling at the moment.
+*   Flow:
+*   1. Compute shader: Builds indirect draw commands by reading primitive meshlet counts
+*   2. Task shader: Performs frustum and backface culling on meshlets, dispatches visible meshlets
+*   3. Mesh shader: Assembles geometry for visible meshlets
+*   4. Fragment shader: Outputs to G-buffers (same as main instanced path)
 */
+
+// =============== Compute Shader (Build Indirect Commands) ===============
+/*  Compute shader that generates VkDrawMeshTasksIndirectCommandEXT for each instance.
+*   Each instance gets one indirect command with the correct number of task groups.
+*
+*   One thread per instance, reads primitive meshlet count and calculates required task groups.
+*   Outputs 1 indirect command per instance. Not terribly efficient, but this is designed for low instance count special cases.
+*/
+
+struct VkDrawMeshTasksIndirectCommandEXT
+{
+    uint32_t groupCountX;
+    uint32_t groupCountY;
+    uint32_t groupCountZ;
+};
+
+[shader("compute")]
+[numthreads(64, 1, 1)]
+void ComputeMain(uniform BuildDirectIndirectPushConstant pc, uint3 gid : SV_DispatchThreadID)
+{
+    uint32_t instanceIndex = gid.x;
+    if (instanceIndex >= pc.instanceCount) {
+        return;
+    }
+
+    Instance inst = pc.instanceBuffer[instanceIndex];
+    MeshletPrimitive prim = pc.primitiveBuffer[inst.primitiveIndex];
+
+    uint32_t taskGroupCount = (prim.meshletCount + TASK_SHADER_DISPATCH_X - 1) / TASK_SHADER_DISPATCH_X;
+
+    pc.indirectCommandBuffer[instanceIndex].groupCountX = taskGroupCount;
+    pc.indirectCommandBuffer[instanceIndex].groupCountY = 1;
+    pc.indirectCommandBuffer[instanceIndex].groupCountZ = 1;
+}
 
 // =============== Task Shader ===============
 struct VertexOutput
@@ -33,14 +69,10 @@ struct VertexOutput
     noperspective float4 objectOnlyPrevClipPos : TEXCOORD7;
 };
 
-// Per https://developer.nvidia.com/blog/using-mesh-shaders-for-professional-graphics/
-// Task shader output should ideally be below 236/108. We can hit 108 if we turn uint32_t to uint8_t and store offsets in the payload.
-// 4 + 4 + 4 + 64 = 86
 struct MeshletPayload {
     uint32_t modelIndex;
     uint32_t materialIndex;
     uint32_t groupMeshletOffset;
-
     uint8_t meshletIndices[TASK_SHADER_DISPATCH_X];
 };
 
@@ -49,21 +81,17 @@ groupshared uint32_t visibleMeshletCount;
 
 [shader("task")]
 [numthreads(TASK_SHADER_DISPATCH_X, 1, 1)]
-void TaskMain(uniform InstancedMeshShadingPushConstant pc,
+void TaskMain(uniform DirectMeshShadingPushConstant pc,
     uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID, uint drawIndex : SV_DrawIndex)
 {
-    InstancedMeshIndirectDrawParameters indirectParameters = pc.indirectBuffer[drawIndex];
+    Instance inst = pc.instanceBuffer[drawIndex];
+    MeshletPrimitive prim = pc.primitiveBuffer[inst.primitiveIndex];
 
-    uint32_t instanceIndex = indirectParameters.compactedInstanceStart + gid.y;
-    Instance inst = pc.compactedInstanceBuffer[instanceIndex];
+    uint32_t groupMeshletOffset = prim.meshletOffset + (gid.x * TASK_SHADER_DISPATCH_X);
+    uint32_t totalMeshlets = prim.meshletCount;
 
-    uint32_t groupMeshletOffset = indirectParameters.meshletOffset + (gid.x * TASK_SHADER_DISPATCH_X);
-    uint32_t totalMeshlets = indirectParameters.meshletCount;
-
-    // thread 0 populates shared information for mesh shader
     if (gtid.x == 0) {
         visibleMeshletCount = 0;
-
         sharedPayload.modelIndex = inst.modelIndex;
         sharedPayload.materialIndex = inst.materialIndex;
         sharedPayload.groupMeshletOffset = groupMeshletOffset;
@@ -71,17 +99,14 @@ void TaskMain(uniform InstancedMeshShadingPushConstant pc,
 
     GroupMemoryBarrierWithGroupSync();
 
-
     Model model = pc.modelBuffer[inst.modelIndex];
 
-    // group thread count is only 64, will never exceed uint8
     uint8_t meshletID = (uint8_t)gtid.x;
     uint localMeshletCount = min(TASK_SHADER_DISPATCH_X, totalMeshlets - (gid.x * TASK_SHADER_DISPATCH_X));
 
     if (meshletID < localMeshletCount) {
         Meshlet mlet = pc.meshletBuffer[groupMeshletOffset + meshletID];
 
-        // Transform to world space
         float3 scale = float3(
             length(model.modelMatrix[0].xyz),
             length(model.modelMatrix[1].xyz),
@@ -120,9 +145,11 @@ void TaskMain(uniform InstancedMeshShadingPushConstant pc,
 [outputtopology("triangle")]
 [numthreads(MESH_SHADER_DISPATCH_X, 1, 1)]
 void MeshMain(
-    in payload MeshletPayload inPayload, out indices uint3 triangles[MESHLET_MAX_TRIANGLES], out vertices VertexOutput vertices[MESHLET_MAX_VERTICES],
+    in payload MeshletPayload inPayload,
+    out indices uint3 triangles[MESHLET_MAX_TRIANGLES],
+    out vertices VertexOutput vertices[MESHLET_MAX_VERTICES],
     uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID,
-    uniform InstancedMeshShadingPushConstant pc)
+    uniform DirectMeshShadingPushConstant pc)
 {
     uint32_t payloadMeshletIndex = gid.x;
     uint32_t meshletIndex = inPayload.groupMeshletOffset + inPayload.meshletIndices[payloadMeshletIndex];
@@ -145,14 +172,6 @@ void MeshMain(
         vertices[i].viewNormal = normalize(mul(viewRotation, mul(Adjugate((float3x3)m.modelMatrix), v.normal)));
         vertices[i].tangent = float4(normalize(mul(Adjugate((float3x3)m.modelMatrix), v.tangent.xyz)), v.tangent.w);
         vertices[i].uv = float2(v.texcoordU, v.texcoordV);
-        /*uint meshletID = gid.x;
-        uint hash = meshletID * 747796405u + 2891336453u;
-        float3 color = float3(
-            (hash & 0xFF) / 255.0,
-            ((hash >> 8) & 0xFF) / 255.0,
-            ((hash >> 16) & 0xFF) / 255.0
-        );
-        vertices[i].color = float4(color * v.color.xyz, 1.0);*/
         vertices[i].color = v.color;
         vertices[i].materialIndex = inPayload.materialIndex;
         vertices[i].currentClipPos = clipPos;
@@ -182,11 +201,10 @@ struct FragmentOutput {
 };
 
 [shader("fragment")]
-FragmentOutput FragmentMain(VertexOutput vertexInput, uniform InstancedMeshShadingPushConstant pc)
+FragmentOutput FragmentMain(VertexOutput vertexInput, uniform DirectMeshShadingPushConstant pc)
 {
     MaterialProperties material = pc.materialBuffer[vertexInput.materialIndex];
 
-    // float4 albedoSample = textures[material.textureImageIndices[0]].Sample(samplers[material.textureSamplerIndices[0]], vertexInput.uv);
     float4 albedoSample = assetTextures[material.textureImageIndices[0]].SampleBias(assetSamplers[material.textureSamplerIndices[0]], vertexInput.uv, -1.0);
     float4 albedo = vertexInput.color * albedoSample * material.colorFactor;
 
@@ -194,9 +212,9 @@ FragmentOutput FragmentMain(VertexOutput vertexInput, uniform InstancedMeshShadi
 
     FragmentOutput output;
     output.albedo = albedo;
-    output.normal = float4(viewNormal * 0.5 + 0.5, 1.0); // add normal texture
-    output.pbr = float4(material.metalRoughFactors.x, material.metalRoughFactors.y, 0.0, 0.0); // add pbr texture
-    output.emissive = material.emissiveFactor; // add emissive texture
+    output.normal = float4(viewNormal * 0.5 + 0.5, 1.0);
+    output.pbr = float4(material.metalRoughFactors.x, material.metalRoughFactors.y, 0.0, 0.0);
+    output.emissive = material.emissiveFactor;
 
     float2 currNdc = vertexInput.currentClipPos.xy / vertexInput.currentClipPos.w;
     float2 prevNdc = vertexInput.previousClipPos.xy / vertexInput.previousClipPos.w;

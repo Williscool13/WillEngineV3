@@ -397,14 +397,9 @@ void WillEngine::Run()
                 stagingFrameBuffer.bDrawImgui = bDrawImgui;
 
                 std::swap(currentFrameBuffer, stagingFrameBuffer);
-                stagingFrameBuffer.mainViewFamily.modelMatrices.clear();
-                stagingFrameBuffer.mainViewFamily.instances.clear();
-                stagingFrameBuffer.mainViewFamily.materials.clear();
-                stagingFrameBuffer.mainViewFamily.mainView = {};
+                stagingFrameBuffer.timeFrame = timeManager->GetTime();
                 stagingFrameBuffer.bufferAcquireOperations.clear();
                 stagingFrameBuffer.imageAcquireOperations.clear();
-                stagingFrameBuffer.timeFrame = timeManager->GetTime();
-
                 PrepareImgui(frameBufferIndex);
                 frameBufferIndex = (frameBufferIndex + 1) % Core::FRAME_BUFFER_COUNT;
                 engineRenderSynchronization->renderFrames.release();
@@ -417,13 +412,15 @@ void WillEngine::Run()
 
 void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
 {
-    if (ImGui::Begin("Engine")) {
+#if WILL_EDITOR
+    if (ImGui::Begin("Editor")) {
 #if !GAME_STATIC
         float gameDllTimeSinceReload = gameDllWatcher.GetTimeSinceLastTrigger();
         int gameDllSeconds = static_cast<int>(gameDllTimeSinceReload);
         if (gameDllSeconds < 60) {
             ImGui::Text("Game DLL: %ds since reload", gameDllSeconds);
-        } else {
+        }
+        else {
             ImGui::Text("Game DLL: >60s since reload");
         }
 #endif
@@ -432,7 +429,8 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
         int shaderSeconds = static_cast<int>(shaderTimeSinceReload);
         if (shaderSeconds < 60) {
             ImGui::Text("Shaders: %ds since reload", shaderSeconds);
-        } else {
+        }
+        else {
             ImGui::Text("Shaders: >60s since reload");
         }
 
@@ -485,77 +483,112 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
             ImGui::Text("Current Exposure: %.4f", exposure);
         }
     }
-#if WILL_EDITOR
 
-    auto generateModel = [&](const std::filesystem::path& gltfPath, const std::filesystem::path& outPath) {
-        auto loadResponse = modelGenerator->GenerateWillModelAsync(gltfPath, outPath);
-
-        while (true) {
-            auto progress = modelGenerator->GetModelGenerationProgress().value.load(std::memory_order::acquire);
-            auto state = modelGenerator->GetModelGenerationProgress().loadingState.load(std::memory_order::acquire);
-
-            SPDLOG_DEBUG("Progress: {}% - State: {}", progress, static_cast<int>(state));
-
-            if (state == Render::WillModelGenerationProgress::LoadingProgress::SUCCESS ||
-                state == Render::WillModelGenerationProgress::LoadingProgress::FAILED) {
-                break;
+    if (ImGui::CollapsingHeader("Asset Generation")) {
+        auto startGeneration = [&](const std::string& name, const std::filesystem::path& gltfPath, const std::filesystem::path& outPath) {
+            if (!isGenerating) {
+                modelGenerator->GenerateWillModelAsync(gltfPath, outPath);
+                isGenerating = true;
+                currentAssetName = name;
             }
+        };
 
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+        if (isGenerating) {
+            auto progress = modelGenerator->GetModelGenerationProgress().value.load(std::memory_order::relaxed);
+            auto state = modelGenerator->GetModelGenerationProgress().loadingState.load(std::memory_order::relaxed);
+
+            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "Generating: %s", currentAssetName.c_str());
+            ImGui::ProgressBar(progress / 100.0f, ImVec2(-1.0f, 0.0f), std::to_string(progress).append("%").c_str());
+
+            if (state == Render::WillModelGenerationProgress::LoadingProgress::SUCCESS) {
+                SPDLOG_INFO("Generation finished: {}", currentAssetName);
+                lastCompletedAsset = currentAssetName;
+                lastSuccess = true;
+                hasCompleted = true;
+                isGenerating = false;
+                currentAssetName.clear();
+            }
+            else if (state == Render::WillModelGenerationProgress::LoadingProgress::FAILED) {
+                SPDLOG_ERROR("Generation failed: {}", currentAssetName);
+                lastCompletedAsset = currentAssetName;
+                lastSuccess = false;
+                hasCompleted = true;
+                isGenerating = false;
+                currentAssetName.clear();
+            }
         }
 
-        SPDLOG_INFO("Generation finished");
-    };
+        if (hasCompleted) {
+            if (lastSuccess) {
+                ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Completed: %s", lastCompletedAsset.c_str());
+            } else {
+                ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Failed: %s", lastCompletedAsset.c_str());
+            }
+        }
 
-    if (ImGui::Button("Generate dragon.willmodel from dragon.glb")) {
-        generateModel(
-            Platform::GetAssetPath() / "dragon/dragon.gltf",
-            Platform::GetAssetPath() / "dragon/dragon.willmodel"
-        );
-    }
+        ImGui::Separator();
+        ImGui::Text("Generate Models:");
 
-    if (ImGui::Button("Generate BoxTextured.willmodel from BoxTextured.glb")) {
-        generateModel(
-            Platform::GetAssetPath() / "BoxTextured.glb",
-            Platform::GetAssetPath() / "BoxTextured.willmodel"
-        );
-    }
-    if (ImGui::Button("Generate BoxTextured4k.willmodel from BoxTextured4k.glb")) {
-        generateModel(
-            Platform::GetAssetPath() / "BoxTextured4k.glb",
-            Platform::GetAssetPath() / "BoxTextured4k.willmodel"
-        );
-    }
-    if (ImGui::Button("Generate sponza.willmodel from sponza.gltf")) {
-        generateModel(
-            Platform::GetAssetPath() / "sponza2/sponza.gltf",
-            Platform::GetAssetPath() / "sponza2/sponza.willmodel"
-        );
-    }
+        ImGui::BeginDisabled(isGenerating);
+        if (ImGui::Button("dragon.willmodel")) {
+            startGeneration("dragon",
+                            Platform::GetAssetPath() / "dragon/dragon.gltf",
+                            Platform::GetAssetPath() / "dragon/dragon.willmodel");
+        }
 
-    if (ImGui::Button("Create White Texture")) {
-        modelGenerator->GenerateKtxTexture(
-            Platform::GetAssetPath() / "textures/white.png",
-            Platform::GetAssetPath() / "textures/white.ktx2",
-            false);
-    }
+        if (ImGui::Button("BoxTextured.willmodel")) {
+            startGeneration("BoxTextured",
+                            Platform::GetAssetPath() / "BoxTextured.glb",
+                            Platform::GetAssetPath() / "BoxTextured.willmodel");
+        }
 
-    if (ImGui::Button("Create Error Texture")) {
-        modelGenerator->GenerateKtxTexture(
-            Platform::GetAssetPath() / "textures/error.png",
-            Platform::GetAssetPath() / "textures/error.ktx2",
-            false);
+        if (ImGui::Button("BoxTextured4k.willmodel")) {
+            startGeneration("BoxTextured4k",
+                            Platform::GetAssetPath() / "BoxTextured4k.glb",
+                            Platform::GetAssetPath() / "BoxTextured4k.willmodel");
+        }
+
+        if (ImGui::Button("sponza.willmodel")) {
+            startGeneration("sponza",
+                            Platform::GetAssetPath() / "sponza2/sponza.gltf",
+                            Platform::GetAssetPath() / "sponza2/sponza.willmodel");
+        }
+        if (ImGui::Button("plane.willmodel")) {
+            startGeneration("plane",
+                            Platform::GetAssetPath() / "Plane.glb",
+                            Platform::GetAssetPath() / "Plane.willmodel");
+        }
+
+        ImGui::Separator();
+        ImGui::Text("Generate Textures:");
+
+        if (ImGui::Button("white.ktx2")) {
+            modelGenerator->GenerateKtxTexture(
+                Platform::GetAssetPath() / "textures/white.png",
+                Platform::GetAssetPath() / "textures/white.ktx2",
+                false);
+        }
+
+        if (ImGui::Button("error.ktx2")) {
+            modelGenerator->GenerateKtxTexture(
+                Platform::GetAssetPath() / "textures/error.png",
+                Platform::GetAssetPath() / "textures/error.ktx2",
+                false);
+        }
+
+        if (ImGui::Button("smiling_friend.ktx2")) {
+            modelGenerator->GenerateKtxTexture(
+                Platform::GetAssetPath() / "textures/smiling_friend.jpg",
+                Platform::GetAssetPath() / "textures/smiling_friend.ktx2",
+                false);
+        }
+        ImGui::EndDisabled();
     }
-    if (ImGui::Button("Create Smiling Friend Texture")) {
-        modelGenerator->GenerateKtxTexture(
-            Platform::GetAssetPath() / "textures/smiling_friend.jpg",
-            Platform::GetAssetPath() / "textures/smiling_friend.ktx2",
-            false);
-    }
-#endif
     ImGui::End();
-    ImGui::Render();
+#endif
 
+    ImGui::Render();
     ImDrawDataSnapshot& imguiSnapshot = engineRenderSynchronization->imguiDataSnapshots[currentFrameBufferIndex];
     imguiSnapshot.SnapUsingSwap(ImGui::GetDrawData(), ImGui::GetTime());
     static int32_t first = 1;

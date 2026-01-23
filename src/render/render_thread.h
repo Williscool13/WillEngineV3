@@ -13,6 +13,7 @@
 #include "core/include/render_interface.h"
 #include "render/vulkan/vk_synchronization.h"
 #include "pipelines/compute_pipeline.h"
+#include "pipelines/mesh_shading_direct_pipeline.h"
 #include "pipelines/mesh_shading_instanced_pipeline.h"
 #include "pipelines/shadow_mesh_shading_instanced_pipeline.h"
 
@@ -113,7 +114,9 @@ private:
         std::string depth;
     };
 
-    void SetupMainGeometryPass(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneIndex) const;
+    void SetupMainGeometryPass(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneIndex, bool bClearTargets) const;
+
+    void SetupDirectGeometryPass(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneIndex, bool bClearTargets) const;
 
     void SetupGroundTruthAmbientOcclusion(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent) const;
 
@@ -158,7 +161,9 @@ private:
 
 private:
     PipelineLayout globalPipelineLayout;
+
     MeshShadingInstancedPipeline meshShadingInstancedPipeline;
+    MeshShadingDirectPipeline meshShadingDirectPipeline;
     ShadowMeshShadingInstancedPipeline shadowMeshShadingInstancedPipeline;
 };
 } // Render

@@ -79,6 +79,8 @@ add_library(render STATIC
         pipelines/pipeline_category.h
         render-view/render_view_helpers.cpp
         render-view/render_view_helpers.h
+        pipelines/mesh_shading_direct_pipeline.cpp
+        pipelines/mesh_shading_direct_pipeline.h
 )
 
 target_include_directories(render PRIVATE

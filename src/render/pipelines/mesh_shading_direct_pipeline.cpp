@@ -1,8 +1,8 @@
 //
-// Created by William on 2025-12-30.
+// Created by William on 2025-01-23.
 //
 
-#include "mesh_shading_instanced_pipeline.h"
+#include "mesh_shading_direct_pipeline.h"
 
 #include <algorithm>
 
@@ -15,15 +15,15 @@
 
 namespace Render
 {
-MeshShadingInstancedPipeline::MeshShadingInstancedPipeline() = default;
+MeshShadingDirectPipeline::MeshShadingDirectPipeline() = default;
 
-MeshShadingInstancedPipeline::~MeshShadingInstancedPipeline() = default;
+MeshShadingDirectPipeline::~MeshShadingDirectPipeline() = default;
 
-MeshShadingInstancedPipeline::MeshShadingInstancedPipeline(VulkanContext* context, std::array<VkDescriptorSetLayout, 2> descriptorSets)
+MeshShadingDirectPipeline::MeshShadingDirectPipeline(VulkanContext* context, std::array<VkDescriptorSetLayout, 2> descriptorSets)
 {
     VkPushConstantRange renderPushConstantRange{};
     renderPushConstantRange.offset = 0;
-    renderPushConstantRange.size = sizeof(InstancedMeshShadingPushConstant);
+    renderPushConstantRange.size = sizeof(DirectMeshShadingPushConstant);
     renderPushConstantRange.stageFlags = VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT;
 
     VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo{};
@@ -34,21 +34,21 @@ MeshShadingInstancedPipeline::MeshShadingInstancedPipeline(VulkanContext* contex
     pipelineLayoutCreateInfo.pushConstantRangeCount = 1;
 
     pipelineLayout = PipelineLayout::CreatePipelineLayout(context, pipelineLayoutCreateInfo);
-    pipelineLayout.SetDebugName("Mesh Shader Pipeline Layout");
+    pipelineLayout.SetDebugName("Direct Mesh Shader Pipeline Layout");
 
     VkShaderModule taskShader;
     VkShaderModule meshShader;
     VkShaderModule fragShader;
-    if (!VkHelpers::LoadShaderModule("shaders\\mesh_shading_instanced_task.spv", context->device, &taskShader)) {
-        SPDLOG_ERROR("Failed to load meshShading_task.spv");
+    if (!VkHelpers::LoadShaderModule("shaders\\mesh_shading_direct_task.spv", context->device, &taskShader)) {
+        SPDLOG_ERROR("Failed to load mesh_shading_direct_task.spv");
         return;
     }
-    if (!VkHelpers::LoadShaderModule("shaders\\mesh_shading_instanced_mesh.spv", context->device, &meshShader)) {
-        SPDLOG_ERROR("Failed to load meshShading_mesh.spv");
+    if (!VkHelpers::LoadShaderModule("shaders\\mesh_shading_direct_mesh.spv", context->device, &meshShader)) {
+        SPDLOG_ERROR("Failed to load mesh_shading_direct_mesh.spv");
         return;
     }
-    if (!VkHelpers::LoadShaderModule("shaders\\mesh_shading_instanced_fragment.spv", context->device, &fragShader)) {
-        SPDLOG_ERROR("Failed to load meshShading_fragment.spv");
+    if (!VkHelpers::LoadShaderModule("shaders\\mesh_shading_direct_fragment.spv", context->device, &fragShader)) {
+        SPDLOG_ERROR("Failed to load mesh_shading_direct_fragment.spv");
         return;
     }
 
@@ -62,19 +62,22 @@ MeshShadingInstancedPipeline::MeshShadingInstancedPipeline(VulkanContext* contex
     pipelineBuilder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
     pipelineBuilder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE);
     pipelineBuilder.SetupDepthState(true, true, VK_COMPARE_OP_GREATER_OR_EQUAL);
+    pipelineBuilder.SetupStencilState(VK_TRUE, VK_STENCIL_OP_KEEP, VK_STENCIL_OP_REPLACE, VK_STENCIL_OP_KEEP, VK_COMPARE_OP_ALWAYS);
+
     VkFormat colorFormats[5] = {GBUFFER_ALBEDO_FORMAT, GBUFFER_NORMAL_FORMAT, GBUFFER_PBR_FORMAT, GBUFFER_EMISSIVE_FORMAT, GBUFFER_MOTION_FORMAT};
     pipelineBuilder.SetupRenderer(colorFormats, 5, DEPTH_ATTACHMENT_FORMAT);
     pipelineBuilder.SetupPipelineLayout(pipelineLayout.handle);
+    pipelineBuilder.AddDynamicState(VK_DYNAMIC_STATE_STENCIL_REFERENCE);
     VkGraphicsPipelineCreateInfo pipelineCreateInfo = pipelineBuilder.GeneratePipelineCreateInfo();
     pipeline = Pipeline::CreateGraphicsPipeline(context, pipelineCreateInfo);
-    pipeline.SetDebugName("Mesh Shader Pipeline");
+    pipeline.SetDebugName("Direct Mesh Shader Pipeline");
 
     vkDestroyShaderModule(context->device, taskShader, nullptr);
     vkDestroyShaderModule(context->device, meshShader, nullptr);
     vkDestroyShaderModule(context->device, fragShader, nullptr);
 }
 
-MeshShadingInstancedPipeline::MeshShadingInstancedPipeline(MeshShadingInstancedPipeline&& other) noexcept
+MeshShadingDirectPipeline::MeshShadingDirectPipeline(MeshShadingDirectPipeline&& other) noexcept
 {
     pipelineLayout = std::move(other.pipelineLayout);
     pipeline = std::move(other.pipeline);
@@ -82,7 +85,7 @@ MeshShadingInstancedPipeline::MeshShadingInstancedPipeline(MeshShadingInstancedP
     other.context = nullptr;
 }
 
-MeshShadingInstancedPipeline& MeshShadingInstancedPipeline::operator=(MeshShadingInstancedPipeline&& other) noexcept
+MeshShadingDirectPipeline& MeshShadingDirectPipeline::operator=(MeshShadingDirectPipeline&& other) noexcept
 {
     if (this != &other) {
         pipelineLayout = std::move(other.pipelineLayout);

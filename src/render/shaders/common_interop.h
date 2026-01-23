@@ -85,4 +85,11 @@ SHADER_PUBLIC struct SHADER_ALIGN SceneData
     SHADER_PUBLIC float _pad1;
 };
 
+SHADER_PUBLIC struct DrawMeshTasksIndirectCommand
+{
+    SHADER_PUBLIC uint32_t groupCountX;
+    SHADER_PUBLIC uint32_t groupCountY;
+    SHADER_PUBLIC uint32_t groupCountZ;
+};
+
 #endif // WILLENGINEV3_SHADER_INTEROP_H
