@@ -120,6 +120,8 @@ private: // Debugging
 #endif
     bool bFreezeVisibility = false;
     bool bLogRDG = false;
+    std::chrono::high_resolution_clock::time_point lastFrameAcquireTime;
+    float lastFrameTimeMs = 0.0f;
 
 };
 }

@@ -110,8 +110,8 @@ void RenderGraph::AccumulateTextureUsage()
             tex.accumulatedUsage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
         }
 
-        if (pass->depthAttachment != UINT_MAX) {
-            auto& tex = textures[pass->depthAttachment];
+        if (pass->depthStencilAttachment != UINT_MAX) {
+            auto& tex = textures[pass->depthStencilAttachment];
             tex.accumulatedUsage |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
         }
     }
@@ -142,7 +142,7 @@ void RenderGraph::CalculateLifetimes()
         for (const uint32_t texIndex : pass->copyImageReads) { UpdateTextureLifetime(textures[texIndex]); }
         for (const uint32_t texIndex : pass->copyImageWrites) { UpdateTextureLifetime(textures[texIndex]); }
         for (const uint32_t texIndex : pass->colorAttachments) { UpdateTextureLifetime(textures[texIndex]); }
-        if (pass->depthAttachment != UINT_MAX) { UpdateTextureLifetime(textures[pass->depthAttachment]); }
+        if (pass->depthStencilAttachment != UINT_MAX) { UpdateTextureLifetime(textures[pass->depthStencilAttachment]); }
 
         for (const uint32_t bufIndex : pass->bufferReads) { UpdateBufferLifetime(buffers[bufIndex]); }
         for (const uint32_t bufIndex : pass->bufferWrites) { UpdateBufferLifetime(buffers[bufIndex]); }
@@ -263,11 +263,11 @@ void RenderGraph::Compile(int64_t currentFrame)
             for (uint32_t i = 0; i < physicalResources.size(); i++) {
                 auto& phys = physicalResources[i];
 
-                if (phys.bIsImported) continue;
+                if (phys.bIsImported) { continue; }
                 if (!phys.bCanAlias) { continue; }
-                if (!phys.dimensions.IsBuffer()) continue;
+                if (!phys.dimensions.IsBuffer()) { continue; }
 
-                if (phys.dimensions.bufferSize != desiredDim.bufferSize) continue;
+                if (phys.dimensions.bufferSize != desiredDim.bufferSize) { continue; }
 
                 // Cross-frame resources can't alias at all.
                 if (!buf.bCanUseAliasedBuffer && !phys.logicalResourceIndices.empty()) {
@@ -316,7 +316,7 @@ void RenderGraph::Compile(int64_t currentFrame)
     }
 
     for (auto& buf : buffers) {
-        if (buf.accumulatedUsage == 0) continue;
+        if (buf.accumulatedUsage == 0) { continue; }
 
         auto& phys = physicalResources[buf.physicalIndex];
         if (!phys.IsAllocated() && buf.bufferInfo.size > 0) {
@@ -397,17 +397,23 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
             barriers.push_back(barrier);
         }
 
-        if (pass->depthAttachment != UINT_MAX) {
-            const uint32_t texIndex = pass->depthAttachment;
+        if (pass->depthStencilAttachment != UINT_MAX) {
+            const uint32_t texIndex = pass->depthStencilAttachment;
             auto& tex = textures[texIndex];
             auto& phys = GetPhysical(texIndex);
+
+            VkPipelineStageFlags2 dstStages = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
+            VkAccessFlags2 dstAccess = 0;
+            if ((pass->depthAccessType & DepthAccessType::Read) != DepthAccessType::None) {
+                dstAccess |= VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
+            }
+            if ((pass->depthAccessType & DepthAccessType::Write) != DepthAccessType::None) {
+                dstAccess |= VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+            }
             auto barrier = VkHelpers::ImageMemoryBarrier(
                 phys.image,
                 VkHelpers::SubresourceRange(phys.aspect),
-                phys.event.stages, phys.event.access, tex.layout,
-                VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
-                VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-                VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+                phys.event.stages, phys.event.access, tex.layout, dstStages, dstAccess, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
             );
             LogImageBarrier(barrier, tex.name, tex.physicalIndex);
             barriers.push_back(barrier);
@@ -714,13 +720,22 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
             phys.event.access = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
         }
 
-        if (pass->depthAttachment != UINT_MAX) {
-            const uint32_t texIndex = pass->depthAttachment;
+        if (pass->depthStencilAttachment != UINT_MAX) {
+            VkAccessFlags2 dstAccess = 0;
+            if ((pass->depthAccessType & DepthAccessType::Read) != DepthAccessType::None) {
+                dstAccess |= VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
+            }
+            if ((pass->depthAccessType & DepthAccessType::Write) != DepthAccessType::None) {
+                dstAccess |= VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+            }
+            assert(dstAccess != 0 && "Depth/stencil attachment must have at least Read or Write access");
+
+            const uint32_t texIndex = pass->depthStencilAttachment;
             auto& tex = textures[texIndex];
             auto& phys = GetPhysical(texIndex);
             tex.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-            phys.event.stages = VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
-            phys.event.access = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+            phys.event.stages = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
+            phys.event.access = dstAccess;
         }
 
         for (const uint32_t texIndex : pass->storageImageWrites) {

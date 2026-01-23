@@ -47,6 +47,8 @@ public:
 
     RenderPass& WriteTransferBuffer(const std::string& name);
 
+    RenderPass& ReadWriteDepthAttachment(const std::string& name, const TextureInfo& texInfo = {});
+
     RenderPass& ReadWriteBuffer(const std::string& name);
 
     RenderPass& ReadWriteImage(const std::string& name, const TextureInfo& texInfo = {});
@@ -80,8 +82,9 @@ private:
     friend class RenderGraph;
 
     std::vector<uint32_t> colorAttachments{};
-    uint32_t depthAttachment{UINT_MAX};
-    bool depthReadOnly = false;
+    uint32_t depthStencilAttachment{UINT_MAX};
+    DepthAccessType depthAccessType{0};
+
 
     std::vector<uint32_t> storageImageReads;
     std::vector<uint32_t> storageImageWrites;

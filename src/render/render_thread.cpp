@@ -1016,7 +1016,7 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFami
 
 
         RenderPass& shadowPass = graph.AddPass(shadowPassName, VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
-        shadowPass.WriteDepthAttachment(shadowMapName);
+        shadowPass.ReadWriteDepthAttachment(shadowMapName);
         visibilityPass.ReadBuffer("scene_data");
         visibilityPass.ReadBuffer("shadow_data");
         visibilityPass.ReadBuffer("model_buffer");
@@ -1163,7 +1163,7 @@ void RenderThread::SetupMainGeometryPass(RenderGraph& graph, const Core::ViewFam
     instancedMeshShading.WriteColorAttachment(targets.pbr);
     instancedMeshShading.WriteColorAttachment(targets.emissive);
     instancedMeshShading.WriteColorAttachment(targets.velocity);
-    instancedMeshShading.WriteDepthAttachment(targets.depth);
+    instancedMeshShading.ReadWriteDepthAttachment(targets.depth);
     instancedMeshShading.ReadBuffer("scene_data");
     instancedMeshShading.ReadBuffer("model_buffer");
     instancedMeshShading.ReadBuffer("material_buffer");
@@ -1254,7 +1254,7 @@ void RenderThread::SetupDirectGeometryPass(RenderGraph& graph, const Core::ViewF
     directMeshShading.WriteColorAttachment(targets.pbr);
     directMeshShading.WriteColorAttachment(targets.emissive);
     directMeshShading.WriteColorAttachment(targets.velocity);
-    directMeshShading.WriteDepthAttachment(targets.depth);
+    directMeshShading.ReadWriteDepthAttachment(targets.depth);
     directMeshShading.ReadBuffer("scene_data");
     directMeshShading.ReadBuffer("model_buffer");
     directMeshShading.ReadBuffer("material_buffer");
@@ -1646,7 +1646,7 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
         if (!graph.HasBuffer("luminance_buffer")) {
             renderGraph->CreateBuffer("luminance_buffer", sizeof(float));
         }
-        renderGraph->CarryBufferToNextFrame("luminance_buffer", "luminance_buffer", 0);
+        renderGraph->CarryBufferToNextFrame("luminance_buffer", "luminance_buffer", VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
 
         auto& clearPass = graph.AddPass("Clear Histogram", VK_PIPELINE_STAGE_TRANSFER_BIT);
         clearPass.WriteTransferBuffer("luminance_histogram");
@@ -1843,7 +1843,7 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
         motionBlurTiledMaxPass.ReadBuffer("scene_data");
         motionBlurTiledMaxPass.ReadSampledImage("velocity_target");
         motionBlurTiledMaxPass.WriteStorageImage("motion_blur_tiled_max");
-        motionBlurTiledMaxPass.Execute([&, width = renderExtent[0], height = renderExtent[1], blurTiledX, blurTiledY](VkCommandBuffer cmd) {
+        motionBlurTiledMaxPass.Execute([&, blurTiledX, blurTiledY](VkCommandBuffer cmd) {
             MotionBlurTileVelocityPushConstant pc{
                 .sceneData = graph.GetBufferAddress("scene_data"),
                 .tileBufferSize = {blurTiledX, blurTiledY},

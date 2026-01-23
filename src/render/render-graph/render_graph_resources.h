@@ -20,6 +20,30 @@ namespace Render
 struct TextureResource;
 using TransientImageHandle = Core::Handle<TextureResource>;
 
+enum class DepthAccessType
+{
+    None = 0,
+    Read = 1 << 0,
+    Write = 1 << 1,
+};
+
+inline DepthAccessType operator|(DepthAccessType a, DepthAccessType b) {
+    return static_cast<DepthAccessType>(static_cast<int>(a) | static_cast<int>(b));
+}
+
+inline DepthAccessType& operator|=(DepthAccessType& a, DepthAccessType b) {
+    a = a | b;
+    return a;
+}
+
+inline DepthAccessType operator&(DepthAccessType a, DepthAccessType b) {
+    return static_cast<DepthAccessType>(static_cast<int>(a) & static_cast<int>(b));
+}
+
+inline bool operator!(DepthAccessType a) {
+    return static_cast<int>(a) == 0;
+}
+
 struct PipelineEvent
 {
     VkPipelineStageFlags2 stages = VK_PIPELINE_STAGE_2_NONE;

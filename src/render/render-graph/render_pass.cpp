@@ -109,9 +109,10 @@ RenderPass& RenderPass::WriteDepthAttachment(const std::string& name, const Text
         assert(resource->textureInfo.format != VK_FORMAT_UNDEFINED && "Texture not defined - provide TextureInfo on first use");
     }
 
-    assert(depthAttachment == UINT_MAX && "Only one depth attachment per pass");
+    assert(depthStencilAttachment == UINT_MAX && "Only one depth attachment per pass");
 
-    depthAttachment = resource->index;
+    depthStencilAttachment = resource->index;
+    depthAccessType |= DepthAccessType::Write;
     return *this;
 }
 
@@ -128,6 +129,26 @@ RenderPass& RenderPass::WriteTransferBuffer(const std::string& name)
     BufferResource* resource = graph.GetOrCreateBuffer(name);
     resource->accumulatedUsage |= VK_BUFFER_USAGE_2_TRANSFER_DST_BIT;
     bufferWriteTransfer.push_back(resource->index);
+    return *this;
+}
+
+RenderPass& RenderPass::ReadWriteDepthAttachment(const std::string& name, const TextureInfo& texInfo)
+{
+    TextureResource* resource = graph.GetOrCreateTexture(name);
+
+    if (texInfo.format != VK_FORMAT_UNDEFINED) {
+        if (resource->textureInfo.format == VK_FORMAT_UNDEFINED) {
+            resource->textureInfo = texInfo;
+        }
+    }
+    else {
+        assert(resource->textureInfo.format != VK_FORMAT_UNDEFINED && "Texture not defined - provide TextureInfo on first use");
+    }
+
+    assert(depthStencilAttachment == UINT_MAX && "Only one depth attachment per pass");
+
+    depthStencilAttachment = resource->index;
+    depthAccessType = DepthAccessType::Read | DepthAccessType::Write;
     return *this;
 }
 
@@ -169,10 +190,10 @@ RenderPass& RenderPass::ReadDepthAttachment(const std::string& name)
         assert(resource->textureInfo.format != VK_FORMAT_UNDEFINED && "Texture not defined - provide TextureInfo on first use");
     }
 
-    assert(depthAttachment == UINT_MAX && "Only one depth attachment per pass");
+    assert(depthStencilAttachment == UINT_MAX && "Only one depth attachment per pass");
 
-    depthAttachment = resource->index;
-    depthReadOnly = true;
+    depthStencilAttachment = resource->index;
+    depthAccessType = DepthAccessType::Read;
     return *this;
 }
 
