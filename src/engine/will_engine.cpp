@@ -224,6 +224,51 @@ void WillEngine::Initialize()
         gameFunctions.gameStartup(engineContext.get(), gameState.get());
         gameFunctions.gameLoad(engineContext.get(), gameState.get());
     }
+
+#if WILL_EDITOR
+#if !GAME_STATIC
+    auto gameDirectory = Platform::GetExecutablePath() / "src/game";
+    if (exists(gameDirectory)) {
+        gameDllWatcher.Start(gameDirectory.string(), [&]() {
+            gameFunctions.gameUnload(engineContext.get(), gameState.get());
+            auto reloadResponse = gameDll.Reload();
+            switch (reloadResponse) {
+                case Platform::DllLoadResponse::Loaded:
+                    SPDLOG_DEBUG("Game lib was hot-reloaded");
+                // Fallthrough
+                case Platform::DllLoadResponse::NoChanges:
+                    gameFunctions.gameStartup = gameDll.GetFunction<Core::GameStartUpFunc>("GameStartup");
+                    gameFunctions.gameLoad = gameDll.GetFunction<Core::GameLoadFunc>("GameLoad");
+                    gameFunctions.gameUpdate = gameDll.GetFunction<Core::GameUpdateFunc>("GameUpdate");
+                    gameFunctions.gamePrepareFrame = gameDll.GetFunction<Core::GamePrepareFrameFunc>("GamePrepareFrame");
+                    gameFunctions.gameUnload = gameDll.GetFunction<Core::GameUnloadFunc>("GameUnload");
+                    gameFunctions.gameShutdown = gameDll.GetFunction<Core::GameShutdownFunc>("GameShutdown");
+                    break;
+                case Platform::DllLoadResponse::FailedToLoad:
+                    gameFunctions.Stub();
+                    SPDLOG_DEBUG("Game lib failed to be hot-reloaded");
+                    break;
+            }
+
+            gameFunctions.gameLoad(engineContext.get(), gameState.get());
+        });
+    }
+    else {
+        SPDLOG_WARN("Game dll path not found.");
+    }
+#endif
+    auto shaderDirectory = Platform::GetShaderPath();
+    if (exists(shaderDirectory)) {
+        shaderWatcher.Start(shaderDirectory.string(), [&]() {
+            if (Render::PipelineManager* pipelineManager = renderThread->GetPipelineManager()) {
+                pipelineManager->RequestReload();
+            }
+        });
+    }
+    else {
+        SPDLOG_WARN("Shader path not found.");
+    }
+#endif
 }
 
 void WillEngine::Run()
@@ -282,43 +327,10 @@ void WillEngine::Run()
 #if WILL_EDITOR
         InputFrame editorInput = inputManager->GetCurrentInput();
         TimeFrame editorTime = timeManager->GetTime();
-        if (editorInput.GetKey(Key::F5).pressed) {
-            gameFunctions.gameUnload(engineContext.get(), gameState.get());
-            auto reloadResponse = gameDll.Reload();
-            switch (reloadResponse) {
-                case Platform::DllLoadResponse::Loaded:
-                    SPDLOG_DEBUG("Game lib was hot-reloaded");
-                // Fallthrough
-                case Platform::DllLoadResponse::NoChanges:
-                    gameFunctions.gameStartup = gameDll.GetFunction<Core::GameStartUpFunc>("GameStartup");
-                    gameFunctions.gameLoad = gameDll.GetFunction<Core::GameLoadFunc>("GameLoad");
-                    gameFunctions.gameUpdate = gameDll.GetFunction<Core::GameUpdateFunc>("GameUpdate");
-                    gameFunctions.gamePrepareFrame = gameDll.GetFunction<Core::GamePrepareFrameFunc>("GamePrepareFrame");
-                    gameFunctions.gameUnload = gameDll.GetFunction<Core::GameUnloadFunc>("GameUnload");
-                    gameFunctions.gameShutdown = gameDll.GetFunction<Core::GameShutdownFunc>("GameShutdown");
-                    break;
-                case Platform::DllLoadResponse::FailedToLoad:
-                    gameFunctions.Stub();
-                    SPDLOG_DEBUG("Game lib failed to be hot-reloaded");
-                    break;
-            }
-
-            gameFunctions.gameLoad(engineContext.get(), gameState.get());
-        }
-
-        if (editorInput.GetKey(Key::LCTRL).down && editorInput.GetKey(Key::R).pressed) {
-            bActiveShaderHotReload = !bActiveShaderHotReload;
-            shaderHotReloadTimer = 0.0f;
-        }
-        if (bActiveShaderHotReload) {
-            shaderHotReloadTimer += editorTime.deltaTime;
-            if (shaderHotReloadTimer >= 0.5f) {
-                shaderHotReloadTimer = 0.0f;
-                if (Render::PipelineManager* pipelineManager = renderThread->GetPipelineManager()) {
-                    pipelineManager->RequestReload();
-                }
-            }
-        }
+#if !GAME_STATIC
+        gameDllWatcher.Poll();
+#endif
+        shaderWatcher.Poll();
 
         if (editorInput.isWindowInputFocus && !ImGui::GetIO().WantCaptureKeyboard && editorInput.GetKey(Key::PERIOD).pressed) {
             bCursorHidden = !bCursorHidden;
@@ -406,10 +418,22 @@ void WillEngine::Run()
 void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
 {
     if (ImGui::Begin("Engine")) {
-        ImGui::Text("Shader Hot Reload: %s", bActiveShaderHotReload ? "ON" : "OFF");
-        if (bActiveShaderHotReload) {
-            ImGui::SameLine();
-            ImGui::TextDisabled("(%.1fs)", shaderHotReloadTimer);
+#if !GAME_STATIC
+        float gameDllTimeSinceReload = gameDllWatcher.GetTimeSinceLastTrigger();
+        int gameDllSeconds = static_cast<int>(gameDllTimeSinceReload);
+        if (gameDllSeconds < 60) {
+            ImGui::Text("Game DLL: %ds since reload", gameDllSeconds);
+        } else {
+            ImGui::Text("Game DLL: >60s since reload");
+        }
+#endif
+
+        float shaderTimeSinceReload = shaderWatcher.GetTimeSinceLastTrigger();
+        int shaderSeconds = static_cast<int>(shaderTimeSinceReload);
+        if (shaderSeconds < 60) {
+            ImGui::Text("Shaders: %ds since reload", shaderSeconds);
+        } else {
+            ImGui::Text("Shaders: >60s since reload");
         }
 
         ImGui::Checkbox("Freeze Visibility Calculations", &bFreezeVisibility);

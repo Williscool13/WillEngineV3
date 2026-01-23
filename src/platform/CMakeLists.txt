@@ -4,6 +4,7 @@ add_library(platform STATIC
         paths.h
         dll_loader.h
         thread_utils.h
+        directory_watcher.h
 )
 
 if(WIN32)
@@ -12,6 +13,7 @@ if(WIN32)
             crash_context_win32.cpp
             dll_loader_win32.cpp
             thread_utils_win32.cpp
+            directory_watcher_win32.cpp
             paths.cpp
     )
     target_link_libraries(platform PUBLIC

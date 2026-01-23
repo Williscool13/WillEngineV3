@@ -13,6 +13,7 @@
 #include "core/include/game_interface.h"
 #include "core/include/render_interface.h"
 #include "platform/crash_handler.h"
+#include "platform/directory_watcher.h"
 #include "platform/dll_loader.h"
 
 namespace Physics
@@ -95,7 +96,9 @@ private: // Subsystems
 
 private: // Game DLL
 #ifndef GAME_STATIC
-    Platform::DllLoader gameDll;
+    Platform::DllLoader gameDll{};
+    Platform::DirectoryWatcher gameDllWatcher{};
+    Platform::DirectoryWatcher shaderWatcher{};
 #endif
     Core::GameAPI gameFunctions{};
     std::unique_ptr<Core::EngineContext> engineContext{};
@@ -114,8 +117,7 @@ private: // Debugging
     bool bHasAdded = false;
     bool bFreezeVisibility = false;
     bool bLogRDG = false;
-    bool bActiveShaderHotReload = true;
-    float shaderHotReloadTimer = 0.0f;
+
 };
 }
 
