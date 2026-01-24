@@ -28,9 +28,9 @@ struct VertexOutput
     float4 color : COLOR0;
     float2 uv : TEXCOORD0;
     nointerpolation uint32_t materialIndex : TEXCOORD4;
-    noperspective float4 currentClipPos : TEXCOORD5;
-    noperspective float4 previousClipPos : TEXCOORD6;
-    noperspective float4 objectOnlyPrevClipPos : TEXCOORD7;
+    float4 currentClipPos : COLOR1;
+    float4 previousClipPos : COLOR2;
+    float4 objectOnlyPrevClipPos : COLOR3;
 };
 
 // Per https://developer.nvidia.com/blog/using-mesh-shaders-for-professional-graphics/
@@ -140,7 +140,8 @@ void MeshMain(
     for (uint i = threadIndex; i < meshlet.meshletVertexCount; i += MESH_SHADER_DISPATCH_X) {
         uint localVertexIndex = pc.meshletVerticesBuffer[meshlet.meshletVertexOffset + i];
         Vertex v = pc.vertexBuffer[meshlet.vertexOffset + localVertexIndex];
-        float4 clipPos = mul(jitteredViewProj, mul(m.modelMatrix, float4(v.position, 1.0)));
+        float4 clipPos =     mul(jitteredViewProj,      mul(m.modelMatrix,     float4(v.position, 1.0)));
+        float4 prevClipPos = mul(jitteredPrevViewProj,  mul(m.prevModelMatrix, float4(v.position, 1.0)));
         vertices[i].position = clipPos;
         vertices[i].viewNormal = normalize(mul(viewRotation, mul(Adjugate((float3x3)m.modelMatrix), v.normal)));
         vertices[i].tangent = float4(normalize(mul(Adjugate((float3x3)m.modelMatrix), v.tangent.xyz)), v.tangent.w);
@@ -156,7 +157,7 @@ void MeshMain(
         vertices[i].color = v.color;
         vertices[i].materialIndex = inPayload.materialIndex;
         vertices[i].currentClipPos = clipPos;
-        vertices[i].previousClipPos = mul(jitteredPrevViewProj, mul(m.prevModelMatrix, float4(v.position, 1.0)));
+        vertices[i].previousClipPos = prevClipPos;
         vertices[i].objectOnlyPrevClipPos = mul(jitteredViewProj, mul(m.prevModelMatrix, float4(v.position, 1.0)));
     }
 
@@ -186,7 +187,6 @@ FragmentOutput FragmentMain(VertexOutput vertexInput, uniform InstancedMeshShadi
 {
     MaterialProperties material = pc.materialBuffer[vertexInput.materialIndex];
 
-    // float4 albedoSample = textures[material.textureImageIndices[0]].Sample(samplers[material.textureSamplerIndices[0]], vertexInput.uv);
     float4 albedoSample = assetTextures[material.textureImageIndices[0]].SampleBias(assetSamplers[material.textureSamplerIndices[0]], vertexInput.uv, -1.0);
     float4 albedo = vertexInput.color * albedoSample * material.colorFactor;
 
@@ -200,12 +200,9 @@ FragmentOutput FragmentMain(VertexOutput vertexInput, uniform InstancedMeshShadi
 
     float2 currNdc = vertexInput.currentClipPos.xy / vertexInput.currentClipPos.w;
     float2 prevNdc = vertexInput.previousClipPos.xy / vertexInput.previousClipPos.w;
-    currNdc += pc.sceneData[pc.sceneDataIndex].jitter;
-    prevNdc += pc.sceneData[pc.sceneDataIndex].prevJitter;
     float2 totalVelocity = currNdc - prevNdc;
 
     float2 objectOnlyPrevNdc = vertexInput.objectOnlyPrevClipPos.xy / vertexInput.objectOnlyPrevClipPos.w;
-    objectOnlyPrevNdc += pc.sceneData[pc.sceneDataIndex].jitter;
     float2 objectVelocity = currNdc - objectOnlyPrevNdc;
     output.velocity = float4(totalVelocity, objectVelocity);
 

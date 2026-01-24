@@ -25,16 +25,16 @@ SceneData GenerateSceneData(const Core::RenderView& view, const Core::PostProces
 
     if (ppConfig.bEnableTemporalAntialiasing) {
         HaltonSample jitter = HALTON_SEQUENCE[frameNumber % HALTON_SEQUENCE_COUNT];
-        float jitterX = (jitter.x - 0.5f) * (2.0f / renderExtent[0]);
-        float jitterY = (jitter.y - 0.5f) * (2.0f / renderExtent[1]);
+        float jitterX = (jitter.x - 0.5f) * (1.0f / renderExtent[0]);
+        float jitterY = (jitter.y - 0.5f) * (1.0f / renderExtent[1]);
 
         glm::mat4 jitteredProj = projMatrix;
         jitteredProj[2][0] += jitterX;
         jitteredProj[2][1] += jitterY;
 
         HaltonSample prevJitter = HALTON_SEQUENCE[(frameNumber - 1) % HALTON_SEQUENCE_COUNT];
-        float prevJitterX = (prevJitter.x - 0.5f) * (2.0f / renderExtent[0]);
-        float prevJitterY = (prevJitter.y - 0.5f) * (2.0f / renderExtent[1]);
+        float prevJitterX = (prevJitter.x - 0.5f) * (1.0f / renderExtent[0]);
+        float prevJitterY = (prevJitter.y - 0.5f) * (1.0f / renderExtent[1]);
         glm::mat4 jitteredPrevProj = prevProjMatrix;
         jitteredPrevProj[2][0] += prevJitterX;
         jitteredPrevProj[2][1] += prevJitterY;

@@ -70,14 +70,11 @@ void PipelineLoadJob::LoadPipelineTask::ExecuteRange(enki::TaskSetPartition rang
     auto* outputEntry = loadJob->outputDate;
     assert(outputEntry);
 
-    bool res = outputEntry->CreatePipeline(loadJob->context, loadJob->pipelineCache);
-    if (res) {
-        loadJob->taskState = TaskState::Complete;
-        return;
-    } else {
-        loadJob->taskState = TaskState::Failed;
-        return;
+    //
+    {
+        ZoneScopedN("CreatePipeline");
+        bool res = outputEntry->CreatePipeline(loadJob->context, loadJob->pipelineCache);
+        loadJob->taskState = res ? TaskState::Complete : TaskState::Failed;
     }
 }
-
 } // AssetLoad
