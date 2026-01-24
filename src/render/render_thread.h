@@ -107,7 +107,7 @@ private:
         std::string pbr;
         std::string emissive;
         std::string velocity;
-        std::string depth;
+        std::string depthStencil;
     };
 
     void SetupMainGeometryPass(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneIndex, bool bClearTargets);

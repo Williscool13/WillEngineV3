@@ -24,18 +24,19 @@ SceneData GenerateSceneData(const Core::RenderView& view, const Core::PostProces
     sceneData.prevView = prevViewMatrix;
 
     if (ppConfig.bEnableTemporalAntialiasing) {
-        HaltonSample jitter = HALTON_SEQUENCE[frameNumber % HALTON_SEQUENCE_COUNT];
-        float jitterX = (jitter.x - 0.5f) * (1.0f / renderExtent[0]);
-        float jitterY = (jitter.y - 0.5f) * (1.0f / renderExtent[1]);
-
         glm::mat4 jitteredProj = projMatrix;
+        float haltonX = 2.0f * Halton((frameNumber + 1) % HALTON_SEQUENCE_COUNT + 1, 2) - 1.0f;
+        float haltonY = 2.0f * Halton((frameNumber + 1) % HALTON_SEQUENCE_COUNT + 1, 3) - 1.0f;
+        float jitterX = haltonX * (1.0f / renderExtent[0]);
+        float jitterY = haltonY * (1.0f / renderExtent[1]);
         jitteredProj[2][0] += jitterX;
         jitteredProj[2][1] += jitterY;
 
-        HaltonSample prevJitter = HALTON_SEQUENCE[(frameNumber - 1) % HALTON_SEQUENCE_COUNT];
-        float prevJitterX = (prevJitter.x - 0.5f) * (1.0f / renderExtent[0]);
-        float prevJitterY = (prevJitter.y - 0.5f) * (1.0f / renderExtent[1]);
         glm::mat4 jitteredPrevProj = prevProjMatrix;
+        float prevHaltonX = 2.0f * Halton((frameNumber) % HALTON_SEQUENCE_COUNT + 1, 2) - 1.0f;
+        float prevHaltonY = 2.0f * Halton((frameNumber) % HALTON_SEQUENCE_COUNT + 1, 3) - 1.0f;
+        float prevJitterX = prevHaltonX * (1.0f / renderExtent[0]);
+        float prevJitterY = prevHaltonY * (1.0f / renderExtent[1]);
         jitteredPrevProj[2][0] += prevJitterX;
         jitteredPrevProj[2][1] += prevJitterY;
 
@@ -43,7 +44,6 @@ SceneData GenerateSceneData(const Core::RenderView& view, const Core::PostProces
         sceneData.prevJitter = {prevJitterX, prevJitterY};
         sceneData.proj = jitteredProj;
         sceneData.prevProj = jitteredPrevProj;
-
     }
     else {
         sceneData.jitter = {0.0f, 0.0f};
@@ -87,5 +87,19 @@ SceneData GenerateSceneData(const Core::RenderView& view, const Core::PostProces
     sceneData.deltaTime = deltaTime;
 
     return sceneData;
+}
+
+float Halton(uint32_t i, uint32_t b)
+{
+    float f = 1.0f;
+    float r = 0.0f;
+
+    while (i > 0) {
+        f /= static_cast<float>(b);
+        r = r + f * static_cast<float>(i % b);
+        i = static_cast<uint32_t>(floorf(static_cast<float>(i) / static_cast<float>(b)));
+    }
+
+    return r;
 }
 } // Render

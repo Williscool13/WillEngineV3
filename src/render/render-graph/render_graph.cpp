@@ -334,6 +334,22 @@ void RenderGraph::Compile(int64_t currentFrame)
                 phys.sampledDescriptorHandle.index, {nullptr, phys.imageView, VK_IMAGE_LAYOUT_GENERAL}
             );
 
+            if (phys.depthOnlyView != VK_NULL_HANDLE) {
+                phys.depthOnlyDescriptorHandle = transientImageHandleAllocator.Add();
+                assert(phys.depthOnlyDescriptorHandle.IsValid());
+                resourceManager->bindlessRDGTransientDescriptorBuffer.WriteSampledImageDescriptor(
+                    phys.depthOnlyDescriptorHandle.index, {nullptr, phys.depthOnlyView, VK_IMAGE_LAYOUT_GENERAL}
+                );
+            }
+
+            if (phys.stencilOnlyView != VK_NULL_HANDLE) {
+                phys.stencilOnlyDescriptorHandle = transientImageHandleAllocator.Add();
+                assert(phys.stencilOnlyDescriptorHandle.IsValid());
+                resourceManager->bindlessRDGTransientDescriptorBuffer.WriteSampledImageDescriptor(
+                    phys.stencilOnlyDescriptorHandle.index, {nullptr, phys.stencilOnlyView, VK_IMAGE_LAYOUT_GENERAL}
+                );
+            }
+
             for (uint32_t mip = 0; mip < phys.dimensions.levels; ++mip) {
                 phys.storageMipDescriptorHandles[mip] = transientStorageImageHandleAllocator.Add();
                 assert(phys.storageMipDescriptorHandles[mip].IsValid() && "Invalid descriptor handle assigned to physical resource view");
@@ -1032,6 +1048,7 @@ void RenderGraph::InvalidateAll()
     }
     physicalResources.clear();
     transientImageHandleAllocator.Clear();
+    transientStorageImageHandleAllocator.Clear();
     textureCarryovers.clear();
     bufferCarryovers.clear();
 }
@@ -1262,6 +1279,42 @@ VkImageView RenderGraph::GetImageViewMipHandle(const std::string& name, uint32_t
     return physicalResources[tex.physicalIndex].mipViews[mipLevel];
 }
 
+VkImageView RenderGraph::GetDepthOnlyImageViewHandle(const std::string& name)
+{
+    auto it = textureNameToIndex.find(name);
+    assert(it != textureNameToIndex.end() && "Texture not found");
+
+    auto& tex = textures[it->second];
+    assert(tex.HasPhysical() && "Texture has no physical resource");
+
+    auto& phys = physicalResources[tex.physicalIndex];
+
+    if (phys.aspect == VK_IMAGE_ASPECT_DEPTH_BIT) {
+        return phys.imageView;
+    }
+
+    assert(phys.depthOnlyView != VK_NULL_HANDLE && "Texture has no depth only view");
+    return phys.depthOnlyView;
+}
+
+VkImageView RenderGraph::GetStencilOnlyImageViewHandle(const std::string& name)
+{
+    auto it = textureNameToIndex.find(name);
+    assert(it != textureNameToIndex.end() && "Texture not found");
+
+    auto& tex = textures[it->second];
+    assert(tex.HasPhysical() && "Texture has no physical resource");
+
+    auto& phys = physicalResources[tex.physicalIndex];
+
+    if (phys.aspect == VK_IMAGE_ASPECT_STENCIL_BIT) {
+        return phys.imageView;
+    }
+
+    assert(phys.stencilOnlyView != VK_NULL_HANDLE && "Texture has no stencil only view");
+    return phys.stencilOnlyView;
+}
+
 const ResourceDimensions& RenderGraph::GetImageDimensions(const std::string& name)
 {
     auto it = textureNameToIndex.find(name);
@@ -1293,6 +1346,40 @@ uint32_t RenderGraph::GetStorageImageViewDescriptorIndex(const std::string& name
     assert(tex.HasPhysical() && "Texture has no physical resource");
 
     return physicalResources[tex.physicalIndex].storageMipDescriptorHandles[mipLevel].index;
+}
+
+uint32_t RenderGraph::GetDepthOnlyImageViewDescriptorIndex(const std::string& name)
+{
+    auto it = textureNameToIndex.find(name);
+    assert(it != textureNameToIndex.end() && "Texture not found");
+
+    auto& tex = textures[it->second];
+    assert(tex.HasPhysical() && "Texture has no physical resource");
+    auto& phys = physicalResources[tex.physicalIndex];
+
+    if (phys.aspect == VK_IMAGE_ASPECT_DEPTH_BIT) {
+        return phys.sampledDescriptorHandle.index;
+    }
+
+    assert(phys.depthOnlyDescriptorHandle.IsValid() && "Texture has no depth only descriptor");
+    return phys.depthOnlyDescriptorHandle.index;
+}
+
+uint32_t RenderGraph::GetStencilOnlyImageViewDescriptorIndex(const std::string& name)
+{
+    auto it = textureNameToIndex.find(name);
+    assert(it != textureNameToIndex.end() && "Texture not found");
+
+    auto& tex = textures[it->second];
+    assert(tex.HasPhysical() && "Texture has no physical resource");
+    auto& phys = physicalResources[tex.physicalIndex];
+
+    if (phys.aspect == VK_IMAGE_ASPECT_STENCIL_BIT) {
+        return phys.sampledDescriptorHandle.index;
+    }
+
+    assert(phys.stencilOnlyDescriptorHandle.IsValid() && "Texture has no stencil only descriptor");
+    return phys.stencilOnlyDescriptorHandle.index;
 }
 
 VkBuffer RenderGraph::GetBufferHandle(const std::string& name)
@@ -1531,6 +1618,14 @@ void RenderGraph::DestroyPhysicalResource(PhysicalResource& resource)
             vkDestroyImageView(context->device, resource.imageView, nullptr);
             resource.imageView = VK_NULL_HANDLE;
         }
+        if (resource.depthOnlyView != VK_NULL_HANDLE) {
+            vkDestroyImageView(context->device, resource.depthOnlyView, nullptr);
+            resource.depthOnlyView = VK_NULL_HANDLE;
+        }
+        if (resource.stencilOnlyView != VK_NULL_HANDLE) {
+            vkDestroyImageView(context->device, resource.stencilOnlyView, nullptr);
+            resource.stencilOnlyView = VK_NULL_HANDLE;
+        }
         if (resource.image != VK_NULL_HANDLE) {
             vmaDestroyImage(context->allocator, resource.image, resource.imageAllocation);
             resource.image = VK_NULL_HANDLE;
@@ -1607,10 +1702,28 @@ void RenderGraph::CreatePhysicalImage(PhysicalResource& resource, const Resource
     sampledViewInfo.subresourceRange.levelCount = dim.levels;
     VK_CHECK(vkCreateImageView(context->device, &sampledViewInfo, nullptr, &resource.imageView));
 
+    if ((aspectFlags & VK_IMAGE_ASPECT_DEPTH_BIT) && (aspectFlags & VK_IMAGE_ASPECT_STENCIL_BIT)) {
+        VkImageViewCreateInfo depthViewInfo = viewInfo;
+        depthViewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+        depthViewInfo.subresourceRange.levelCount = dim.levels;
+        VK_CHECK(vkCreateImageView(context->device, &depthViewInfo, nullptr, &resource.depthOnlyView));
+
+        VkImageViewCreateInfo stencilViewInfo = viewInfo;
+        stencilViewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT;
+        stencilViewInfo.subresourceRange.levelCount = dim.levels;
+        VK_CHECK(vkCreateImageView(context->device, &stencilViewInfo, nullptr, &resource.stencilOnlyView));
+    }
+
     for (uint32_t mip = 0; mip < dim.levels; ++mip) {
         VkImageViewCreateInfo mipViewInfo = viewInfo;
         mipViewInfo.subresourceRange.baseMipLevel = mip;
         mipViewInfo.subresourceRange.levelCount = 1;
+
+        // For depth+stencil, mipViews are depth-only (stencil mips not supported)
+        if ((aspectFlags & VK_IMAGE_ASPECT_DEPTH_BIT) && (aspectFlags & VK_IMAGE_ASPECT_STENCIL_BIT)) {
+            mipViewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+        }
+
         VK_CHECK(vkCreateImageView(context->device, &mipViewInfo, nullptr, &resource.mipViews[mip]));
     }
 }

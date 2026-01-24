@@ -133,14 +133,12 @@ void PipelineManager::RegisterGraphicsPipeline(const std::string& name, Graphics
     data.category = category;
     data.retirementFrame = 0;
 
-    // Copy shader paths and stage count from builder
     data.shaderStageCount = builder.shaderStageCount;
     for (uint32_t i = 0; i < builder.shaderStageCount; ++i) {
         data.shaderPaths[i] = builder.shaderPaths[i];
         data.shaderStages[i] = builder.shaderStages[i];
     }
 
-    // Copy vertex input
     data.vertexBindingCount = builder.vertexBindingCount;
     for (uint32_t i = 0; i < builder.vertexBindingCount; ++i) {
         data.vertexBindings[i] = builder.vertexBindings[i];
@@ -150,25 +148,21 @@ void PipelineManager::RegisterGraphicsPipeline(const std::string& name, Graphics
         data.vertexAttributes[i] = builder.vertexAttributes[i];
     }
 
-    // Copy color attachments
     data.colorAttachmentFormatCount = builder.colorAttachmentFormatCount;
     for (uint32_t i = 0; i < builder.colorAttachmentFormatCount; ++i) {
         data.colorAttachmentFormats[i] = builder.colorAttachmentFormats[i];
     }
 
-    // Copy blend states
     data.blendAttachmentStateCount = builder.blendAttachmentStateCount;
     for (uint32_t i = 0; i < builder.blendAttachmentStateCount; ++i) {
         data.blendAttachmentStates[i] = builder.blendAttachmentStates[i];
     }
 
-    // Copy dynamic states
     data.dynamicStateCount = builder.dynamicStateCount;
     for (uint32_t i = 0; i < builder.dynamicStateCount; ++i) {
         data.dynamicStates[i] = builder.dynamicStates[i];
     }
 
-    // Copy all the state create infos
     data.vertexInputInfo = builder.vertexInputInfo;
     data.inputAssembly = builder.inputAssembly;
     data.viewportState = builder.viewportState;

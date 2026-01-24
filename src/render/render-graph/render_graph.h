@@ -95,11 +95,19 @@ public:
 
     VkImageView GetImageViewMipHandle(const std::string& name, uint32_t mipLevel);
 
+    VkImageView GetDepthOnlyImageViewHandle(const std::string& name);
+
+    VkImageView GetStencilOnlyImageViewHandle(const std::string& name);
+
     const ResourceDimensions& GetImageDimensions(const std::string& name);
 
     uint32_t GetSampledImageViewDescriptorIndex(const std::string& name);
 
     uint32_t GetStorageImageViewDescriptorIndex(const std::string& name, uint32_t mipLevel = 0);
+
+    uint32_t GetDepthOnlyImageViewDescriptorIndex(const std::string& name);
+
+    uint32_t GetStencilOnlyImageViewDescriptorIndex(const std::string& name);
 
     VkBuffer GetBufferHandle(const std::string& name);
 

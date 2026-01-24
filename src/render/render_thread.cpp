@@ -238,7 +238,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         renderGraph->CreateTexture(targets.pbr, TextureInfo{GBUFFER_PBR_FORMAT, renderExtent[0], renderExtent[1], 1});
         renderGraph->CreateTexture(targets.emissive, TextureInfo{GBUFFER_EMISSIVE_FORMAT, renderExtent[0], renderExtent[1], 1});
         renderGraph->CreateTexture(targets.velocity, TextureInfo{GBUFFER_MOTION_FORMAT, renderExtent[0], renderExtent[1], 1});
-        renderGraph->CreateTexture(targets.depth, TextureInfo{VK_FORMAT_D32_SFLOAT, renderExtent[0], renderExtent[1], 1});
+        renderGraph->CreateTexture(targets.depthStencil, TextureInfo{DEPTH_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
 
         if (bHasMainGeometry) {
             SetupMainGeometryPass(*renderGraph, viewFamily, renderExtent, targets, 0, true);
@@ -295,6 +295,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         readbackPass.ReadTransferBuffer("indirect_count_buffer");
         readbackPass.ReadTransferBuffer("luminance_histogram");
         readbackPass.ReadTransferBuffer("luminance_buffer");
+        readbackPass.ReadCopyImage("depth_target");
         readbackPass.WriteTransferBuffer("debug_readback_buffer");
         readbackPass.Execute([&](VkCommandBuffer cmd) {
             size_t offsetSoFar = 0;
@@ -325,6 +326,26 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
             averageExposureCopy.size = sizeof(uint32_t);
             vkCmdCopyBuffer(cmd, renderGraph->GetBufferHandle("luminance_buffer"), renderGraph->GetBufferHandle("debug_readback_buffer"), 1, &averageExposureCopy);
             offsetSoFar += sizeof(uint32_t);
+
+            VkBufferImageCopy stencilRegion{};
+            stencilRegion.bufferOffset = offsetSoFar;
+            stencilRegion.bufferRowLength = 0;
+            stencilRegion.bufferImageHeight = 0;
+            stencilRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT;
+            stencilRegion.imageSubresource.mipLevel = 0;
+            stencilRegion.imageSubresource.baseArrayLayer = 0;
+            stencilRegion.imageSubresource.layerCount = 1;
+            stencilRegion.imageOffset = {0, 0, 0};
+            stencilRegion.imageExtent = {renderExtent[0], renderExtent[1], 1};
+
+            vkCmdCopyImageToBuffer(
+                cmd,
+                renderGraph->GetImageHandle("depth_target"),
+                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                renderGraph->GetBufferHandle("debug_readback_buffer"),
+                1,
+                &stencilRegion
+            );
         });
     }
 #endif
@@ -359,17 +380,32 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
             debugVisPass.WriteStorageImage("post_process_output");
             debugVisPass.Execute([&, debugTargetName, debugIndex](VkCommandBuffer cmd) {
                 const ResourceDimensions& dims = renderGraph->GetImageDimensions(debugTargetName);
+                VkImageAspectFlags aspect = VkHelpers::GetImageAspect(dims.format);
+
+                uint32_t inputIndex;
+                if (aspect == VK_IMAGE_ASPECT_DEPTH_BIT ||
+                    (aspect & (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)) == (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)) {
+                    inputIndex = renderGraph->GetDepthOnlyImageViewDescriptorIndex(debugTargetName);
+                    // inputIndex = renderGraph->GetStencilOnlyImageViewDescriptorIndex(debugTargetName);
+                }
+                else if (aspect == VK_IMAGE_ASPECT_STENCIL_BIT) {
+                    inputIndex = renderGraph->GetStencilOnlyImageViewDescriptorIndex(debugTargetName);
+                }
+                else {
+                    inputIndex = renderGraph->GetSampledImageViewDescriptorIndex(debugTargetName);
+                }
+
+
                 DebugVisualizePushConstant pc{
                     .sceneData = renderGraph->GetBufferAddress("scene_data"),
                     .srcExtent = {dims.width, dims.height},
                     .dstExtent = {renderExtent[0], renderExtent[1]},
                     .nearPlane = viewFamily.mainView.currentViewData.nearPlane,
                     .farPlane = viewFamily.mainView.currentViewData.farPlane,
-                    .textureIndex = renderGraph->GetSampledImageViewDescriptorIndex(debugTargetName),
+                    .textureIndex = inputIndex,
                     .outputImageIndex = renderGraph->GetStorageImageViewDescriptorIndex("post_process_output"),
                     .debugType = static_cast<uint32_t>(debugIndex)
                 };
-
                 const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("debug_visualize");
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
@@ -624,6 +660,7 @@ void RenderThread::CreatePipelines()
         builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
         builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE);
         builder.SetupDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_GREATER_OR_EQUAL);
+        builder.SetupStencilState(VK_TRUE, VK_STENCIL_OP_KEEP, VK_STENCIL_OP_REPLACE, VK_STENCIL_OP_KEEP, VK_COMPARE_OP_ALWAYS, 0xFF, 0xFF, 128);
 
         VkFormat colorFormats[5] = {
             GBUFFER_ALBEDO_FORMAT,
@@ -632,7 +669,7 @@ void RenderThread::CreatePipelines()
             GBUFFER_EMISSIVE_FORMAT,
             GBUFFER_MOTION_FORMAT
         };
-        builder.SetupRenderer(colorFormats, 5, DEPTH_ATTACHMENT_FORMAT);
+        builder.SetupRenderer(colorFormats, 5, DEPTH_ATTACHMENT_FORMAT, DEPTH_ATTACHMENT_FORMAT);
 
         pipelineManager->RegisterGraphicsPipeline(
             "mesh_shading_instanced",
@@ -652,7 +689,7 @@ void RenderThread::CreatePipelines()
         builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
         builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE);
         builder.SetupDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_GREATER_OR_EQUAL);
-        builder.SetupStencilState(VK_TRUE, VK_STENCIL_OP_KEEP, VK_STENCIL_OP_REPLACE, VK_STENCIL_OP_KEEP, VK_COMPARE_OP_ALWAYS);
+        builder.SetupStencilState(VK_TRUE, VK_STENCIL_OP_KEEP, VK_STENCIL_OP_REPLACE, VK_STENCIL_OP_KEEP, VK_COMPARE_OP_ALWAYS, 0xFF, 0xFF, 16);
 
         VkFormat colorFormats[5] = {
             GBUFFER_ALBEDO_FORMAT,
@@ -661,8 +698,8 @@ void RenderThread::CreatePipelines()
             GBUFFER_EMISSIVE_FORMAT,
             GBUFFER_MOTION_FORMAT
         };
-        builder.SetupRenderer(colorFormats, 5, DEPTH_ATTACHMENT_FORMAT);
-        builder.AddDynamicState(VK_DYNAMIC_STATE_STENCIL_REFERENCE);
+        builder.SetupRenderer(colorFormats, 5, DEPTH_ATTACHMENT_FORMAT, DEPTH_ATTACHMENT_FORMAT);
+        // builder.AddDynamicState(VK_DYNAMIC_STATE_STENCIL_REFERENCE);
 
         pipelineManager->RegisterGraphicsPipeline(
             "mesh_shading_direct",
@@ -1254,7 +1291,7 @@ void RenderThread::SetupMainGeometryPass(RenderGraph& graph, const Core::ViewFam
     instancedMeshShading.WriteColorAttachment(targets.pbr);
     instancedMeshShading.WriteColorAttachment(targets.emissive);
     instancedMeshShading.WriteColorAttachment(targets.velocity);
-    instancedMeshShading.ReadWriteDepthAttachment(targets.depth);
+    instancedMeshShading.ReadWriteDepthAttachment(targets.depthStencil);
     instancedMeshShading.ReadBuffer("scene_data");
     instancedMeshShading.ReadBuffer("model_buffer");
     instancedMeshShading.ReadBuffer("material_buffer");
@@ -1267,7 +1304,7 @@ void RenderThread::SetupMainGeometryPass(RenderGraph& graph, const Core::ViewFam
         VkRect2D scissor = VkHelpers::GenerateScissor(width, height);
         vkCmdSetScissor(cmd, 0, 1, &scissor);
         constexpr VkClearValue colorClear = {.color = {{0.0f, 0.0f, 0.0f, 0.0f}}};
-        constexpr VkClearValue depthClear = {.depthStencil = {0.0f, 0u}};
+        constexpr VkClearValue depthClear = {.depthStencil = {0.0f, 1u}};
         const VkClearValue* _colorClear = bClearTargets ? &colorClear : nullptr;
         const VkClearValue* _depthClear = bClearTargets ? &depthClear : nullptr;
         const VkRenderingAttachmentInfo albedoAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.albedo), _colorClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
@@ -1275,10 +1312,13 @@ void RenderThread::SetupMainGeometryPass(RenderGraph& graph, const Core::ViewFam
         const VkRenderingAttachmentInfo pbrAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.pbr), _colorClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
         const VkRenderingAttachmentInfo emissiveTarget = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.emissive), _colorClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
         const VkRenderingAttachmentInfo velocityAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.velocity), _colorClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-        const VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depth), _depthClear, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+        const VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), _depthClear,
+                                                                                             VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+        const VkRenderingAttachmentInfo stencilAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), _depthClear,
+                                                                                               VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
         const VkRenderingAttachmentInfo colorAttachments[] = {albedoAttachment, normalAttachment, pbrAttachment, emissiveTarget, velocityAttachment};
-        const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, colorAttachments, 5, &depthAttachment);
+        const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, colorAttachments, 5, &depthAttachment, &stencilAttachment);
 
         vkCmdBeginRendering(cmd, &renderInfo);
 
@@ -1346,7 +1386,7 @@ void RenderThread::SetupDirectGeometryPass(RenderGraph& graph, const Core::ViewF
     directMeshShading.WriteColorAttachment(targets.pbr);
     directMeshShading.WriteColorAttachment(targets.emissive);
     directMeshShading.WriteColorAttachment(targets.velocity);
-    directMeshShading.ReadWriteDepthAttachment(targets.depth);
+    directMeshShading.ReadWriteDepthAttachment(targets.depthStencil);
     directMeshShading.ReadBuffer("scene_data");
     directMeshShading.ReadBuffer("model_buffer");
     directMeshShading.ReadBuffer("material_buffer");
@@ -1359,7 +1399,7 @@ void RenderThread::SetupDirectGeometryPass(RenderGraph& graph, const Core::ViewF
         vkCmdSetScissor(cmd, 0, 1, &scissor);
 
         constexpr VkClearValue colorClear = {.color = {{0.0f, 0.0f, 0.0f, 0.0f}}};
-        constexpr VkClearValue depthClear = {.depthStencil = {0.0f, 0u}};
+        constexpr VkClearValue depthClear = {.depthStencil = {0.0f, 1u}};
         const VkClearValue* _colorClear = bClearTargets ? &colorClear : nullptr;
         const VkClearValue* _depthClear = bClearTargets ? &depthClear : nullptr;
         const VkRenderingAttachmentInfo albedoAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.albedo), _colorClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
@@ -1367,10 +1407,13 @@ void RenderThread::SetupDirectGeometryPass(RenderGraph& graph, const Core::ViewF
         const VkRenderingAttachmentInfo pbrAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.pbr), _colorClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
         const VkRenderingAttachmentInfo emissiveTarget = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.emissive), _colorClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
         const VkRenderingAttachmentInfo velocityAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.velocity), _colorClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-        const VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depth), _depthClear, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+        const VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), _depthClear,
+                                                                                             VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+        const VkRenderingAttachmentInfo stencilAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), _depthClear,
+                                                                                               VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
         const VkRenderingAttachmentInfo colorAttachments[] = {albedoAttachment, normalAttachment, pbrAttachment, emissiveTarget, velocityAttachment};
-        const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, colorAttachments, 5, &depthAttachment);
+        const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, colorAttachments, 5, &depthAttachment, &stencilAttachment);
 
         vkCmdBeginRendering(cmd, &renderInfo);
 
@@ -1396,7 +1439,7 @@ void RenderThread::SetupDirectGeometryPass(RenderGraph& graph, const Core::ViewF
         for (const auto& customDraw : viewFamily.customStencilDraws) {
             if (customDraw.instances.empty()) continue;
 
-            vkCmdSetStencilReference(cmd, VK_STENCIL_FACE_FRONT_AND_BACK, customDraw.stencilValue);
+            // vkCmdSetStencilReference(cmd, VK_STENCIL_FACE_FRONT_AND_BACK, customDraw.stencilValue);
             vkCmdDrawMeshTasksIndirectEXT(cmd, graph.GetBufferHandle("direct_indirect_command_buffer"),
                                           instanceOffset * sizeof(DrawMeshTasksIndirectCommand),
                                           static_cast<uint32_t>(customDraw.instances.size()),
@@ -1426,7 +1469,7 @@ void RenderThread::SetupGroundTruthAmbientOcclusion(RenderGraph& graph, const Co
     depthPrepass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
         GTAODepthPrepassPushConstant pc{
             .sceneData = graph.GetBufferAddress("scene_data"),
-            .inputDepth = graph.GetSampledImageViewDescriptorIndex("depth_target"),
+            .inputDepth = graph.GetDepthOnlyImageViewDescriptorIndex("depth_target"),
             .outputDepth0 = graph.GetStorageImageViewDescriptorIndex("gtao_depth", 0),
             .outputDepth1 = graph.GetStorageImageViewDescriptorIndex("gtao_depth", 1),
             .outputDepth2 = graph.GetStorageImageViewDescriptorIndex("gtao_depth", 2),
@@ -1557,7 +1600,7 @@ void RenderThread::SetupShadowsResolve(RenderGraph& graph, const Core::ViewFamil
             .gtaoFilteredIndex = gtaoIndex,
             .outputImageIndex = graph.GetStorageImageViewDescriptorIndex("shadows_resolve_target"),
             .csmIndices = csmIndices,
-            .depthIndex = graph.GetSampledImageViewDescriptorIndex("depth_target"),
+            .depthIndex = graph.GetDepthOnlyImageViewDescriptorIndex("depth_target"),
             .normalIndex = graph.GetSampledImageViewDescriptorIndex("normal_target"),
         };
 
@@ -1605,7 +1648,7 @@ void RenderThread::SetupDeferredLighting(RenderGraph& graph, const Core::ViewFam
             .normalIndex = graph.GetSampledImageViewDescriptorIndex("normal_target"),
             .pbrIndex = graph.GetSampledImageViewDescriptorIndex("pbr_target"),
             .emissiveIndex = graph.GetSampledImageViewDescriptorIndex("emissive_target"),
-            .depthIndex = graph.GetSampledImageViewDescriptorIndex("depth_target"),
+            .depthIndex = graph.GetDepthOnlyImageViewDescriptorIndex("depth_target"),
             .shadowsIndex = graph.GetSampledImageViewDescriptorIndex("shadows_resolve_target"),
             .outputImageIndex = graph.GetStorageImageViewDescriptorIndex("deferred_resolve_target"),
         };
@@ -1667,7 +1710,7 @@ void RenderThread::SetupTemporalAntialiasing(RenderGraph& graph, const Core::Vie
         TemporalAntialiasingPushConstant pushData{
             .sceneData = graph.GetBufferAddress("scene_data"),
             .colorResolvedIndex = graph.GetSampledImageViewDescriptorIndex("deferred_resolve_target"),
-            .depthIndex = graph.GetSampledImageViewDescriptorIndex("depth_target"),
+            .depthIndex = graph.GetDepthOnlyImageViewDescriptorIndex("depth_target"),
             .colorHistoryIndex = graph.GetSampledImageViewDescriptorIndex("taa_history"),
             .velocityIndex = graph.GetSampledImageViewDescriptorIndex("velocity_target"),
             .velocityHistoryIndex = graph.GetSampledImageViewDescriptorIndex("velocity_history"),
@@ -1983,7 +2026,7 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
                 .sceneData = graph.GetBufferAddress("scene_data"),
                 .sceneColorIndex = graph.GetSampledImageViewDescriptorIndex("tonemap_output"),
                 .velocityBufferIndex = graph.GetSampledImageViewDescriptorIndex("velocity_target"),
-                .depthBufferIndex = graph.GetSampledImageViewDescriptorIndex("depth_target"),
+                .depthBufferIndex = graph.GetDepthOnlyImageViewDescriptorIndex("depth_target"),
                 .tileNeighborMaxIndex = graph.GetSampledImageViewDescriptorIndex("motion_blur_tiled_neighbor_max"),
                 .outputIndex = graph.GetStorageImageViewDescriptorIndex("motion_blur_output"),
                 .velocityScale = ppConfig.motionBlurVelocityScale,

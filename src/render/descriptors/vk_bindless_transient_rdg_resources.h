@@ -12,7 +12,7 @@
 
 namespace Render
 {
-template<size_t SamplerCount, size_t CompareSamplerCount, size_t SampledImageCount, size_t StorageImageCount>
+template<size_t SamplerCount, size_t CompareSamplerCount, size_t SampledImageCount, size_t FloatStorageImageCount>
 class BindlessTransientRDGResourcesDescriptorBuffer
 {
 public:
@@ -22,7 +22,7 @@ public:
     uint32_t GetSamplerCount() { return SamplerCount; }
     uint32_t GetCompareSamplerCount() { return CompareSamplerCount; }
     uint32_t GetSampledImageCount() { return SampledImageCount; }
-    uint32_t GetStorageImageCount() { return StorageImageCount; }
+    uint32_t GetStorageImageCount() { return FloatStorageImageCount; }
 
 public:
     BindlessTransientRDGResourcesDescriptorBuffer() = default;
@@ -34,7 +34,7 @@ public:
         layoutBuilder.AddBinding(0, VK_DESCRIPTOR_TYPE_SAMPLER, CompareSamplerCount);
         layoutBuilder.AddBinding(1, VK_DESCRIPTOR_TYPE_SAMPLER, SamplerCount);
         layoutBuilder.AddBinding(2, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, SampledImageCount);
-        layoutBuilder.AddBinding(3, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, StorageImageCount);
+        layoutBuilder.AddBinding(3, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, FloatStorageImageCount);
 
         VkDescriptorSetLayoutCreateInfo layoutCreateInfo = layoutBuilder.Build(
             static_cast<VkShaderStageFlagBits>(VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT),
@@ -148,7 +148,7 @@ public:
     }
     bool WriteStorageImageDescriptor(uint32_t index, const VkDescriptorImageInfo& imageInfo)
     {
-        if (index >= StorageImageCount) {
+        if (index >= FloatStorageImageCount) {
             SPDLOG_ERROR("Invalid storage image index {}", index);
             return false;
         }

@@ -76,8 +76,9 @@ void CreatePortalPlane(Core::EngineContext* ctx, Engine::GameState* state, glm::
     renderable.modelFlags = glm::vec4(0.0f);
 
     entt::entity planeEntity = state->registry.create();
+    TransformComponent transformComp = state->registry.emplace<TransformComponent>(planeEntity, position, rotation, scale);
+    renderable.previousModelMatrix = GetMatrix(transformComp);
     state->registry.emplace<RenderableComponent>(planeEntity, renderable);
-    state->registry.emplace<TransformComponent>(planeEntity, position, rotation, scale);
     state->registry.emplace<PortalPlaneComponent>(planeEntity);
 
     SPDLOG_INFO("[DebugSystem] Created portal plane at ({}, {}, {})",
