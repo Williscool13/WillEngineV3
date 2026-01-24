@@ -122,13 +122,17 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
     int2 texelCoord = int2(threadID.xy);
     float2 uv = (float2(texelCoord.xy) + 0.5) / float2(pc.sceneData.mainRenderTargetSize);
 
-
+    // todo: FIX VELOCITY.... AGAIN
+    // float2 velocityNDC = rdgTextures[pc.velocityIndex].Load(int3(texelCoord, 0)).rg;
     float2 velocityNDC = GetVelocityDilated(uv);
-    float2 velocity = velocityNDC * 0.5;
+    float2 velocity = velocityNDC * 0.5f;
+    velocity.y = 1 - velocity.y;
+    velocity = float2(0.0f);
 
     float velocityDisocclusion = ComputeVelocityDisocclusion(uv, velocity);
+    velocityDisocclusion = 0;
 
-    float2 historyUv = uv - velocity;
+    float2 historyUv = uv + velocity;
     bool validHistory = all(historyUv >= float2(0.0)) && all(historyUv <= float2(1.0));
 
     float3 currentColor = rdgTextures[pc.colorResolvedIndex].Load(int3(texelCoord, 0)).rgb;
@@ -148,6 +152,7 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
         float lumaHistory = historyYCoCg.r;
         float lumaDiff = abs(lumaCurrent - lumaHistory) / max(lumaCurrent, 0.2);
         alpha = lerp(alpha, min(alpha * 2.0, 0.5), lumaDiff);
+        alpha = 0.1f;
 
         float3 resultYCoCg = lerp(historyYCoCg, currentYCoCg, alpha);
         resultRGB = YCoCgToRGB(resultYCoCg);

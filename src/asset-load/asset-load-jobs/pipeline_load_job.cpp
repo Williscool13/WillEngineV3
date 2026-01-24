@@ -70,48 +70,14 @@ void PipelineLoadJob::LoadPipelineTask::ExecuteRange(enki::TaskSetPartition rang
     auto* outputEntry = loadJob->outputDate;
     assert(outputEntry);
 
-    VkShaderModule shaderModule = VK_NULL_HANDLE;
-    if (!Render::VkHelpers::LoadShaderModule(outputEntry->shaderPath, loadJob->context->device, &shaderModule)) {
-        SPDLOG_ERROR("Failed to load shader: {}", outputEntry->shaderPath.string());
+    bool res = outputEntry->CreatePipeline(loadJob->context, loadJob->pipelineCache);
+    if (res) {
+        loadJob->taskState = TaskState::Complete;
+        return;
+    } else {
         loadJob->taskState = TaskState::Failed;
         return;
     }
-
-    VkResult layoutResult = vkCreatePipelineLayout(loadJob->context->device, &outputEntry->layoutCreateInfo, nullptr, &outputEntry->loadingEntry.layout);
-    if (layoutResult != VK_SUCCESS) {
-        SPDLOG_ERROR("Failed to create pipeline layout for: {}", outputEntry->shaderPath.string());
-        vkDestroyShaderModule(loadJob->context->device, shaderModule, nullptr);
-        loadJob->taskState = TaskState::Failed;
-        return;
-    }
-
-    if (outputEntry->bIsCompute) {
-        VkPipelineShaderStageCreateInfo shaderStage = Render::VkHelpers::PipelineShaderStageCreateInfo(shaderModule, VK_SHADER_STAGE_COMPUTE_BIT);
-        VkComputePipelineCreateInfo pipelineInfo = Render::VkHelpers::ComputePipelineCreateInfo(outputEntry->loadingEntry.layout, shaderStage);
-        VkResult pipelineResult = vkCreateComputePipelines(loadJob->context->device, loadJob->pipelineCache, 1, &pipelineInfo, nullptr, &outputEntry->loadingEntry.pipeline);
-
-        if (pipelineResult != VK_SUCCESS) {
-            SPDLOG_ERROR("Failed to create compute pipeline: {}", outputEntry->shaderPath.string());
-            vkDestroyPipelineLayout(loadJob->context->device, outputEntry->loadingEntry.layout, nullptr);
-            vkDestroyShaderModule(loadJob->context->device, shaderModule, nullptr);
-            loadJob->taskState = TaskState::Failed;
-            return;
-        }
-    }
-    else {
-        // TODO: Graphics pipeline support
-        SPDLOG_ERROR("Graphics pipeline creation not yet implemented");
-        vkDestroyPipelineLayout(loadJob->context->device, outputEntry->loadingEntry.layout, nullptr);
-        vkDestroyShaderModule(loadJob->context->device, shaderModule, nullptr);
-        loadJob->taskState = TaskState::Failed;
-        return;
-    }
-
-    outputEntry->lastModified = std::filesystem::last_write_time(outputEntry->shaderPath);
-    outputEntry->retirementFrame = 0;
-    vkDestroyShaderModule(loadJob->context->device, shaderModule, nullptr);
-
-    loadJob->taskState = TaskState::Complete;
 }
 
 } // AssetLoad

@@ -12,6 +12,8 @@
 #include <volk.h>
 
 #include "pipeline_category.h"
+#include "pipeline_data.h"
+#include "graphics_pipeline_builder.h"
 #include "asset-load/asset_load_thread.h"
 
 namespace AssetLoad
@@ -22,34 +24,6 @@ class AssetLoadThread;
 namespace Render
 {
 struct VulkanContext;
-
-struct PipelineEntry
-{
-    VkPipeline pipeline{VK_NULL_HANDLE};
-    VkPipelineLayout layout{VK_NULL_HANDLE};
-};
-
-struct PipelineData
-{
-    // Initialized once, never modified again
-    PipelineCategory category{PipelineCategory::None};
-    std::filesystem::path shaderPath{};
-    VkPipelineLayoutCreateInfo layoutCreateInfo{};
-    VkPushConstantRange pushConstantRange{};
-    VkGraphicsPipelineCreateInfo graphicsCreateInfo{};
-
-    // If true, loadingEntry is managed by asset load thead, do not touch.
-    bool bLoading{false};
-    PipelineEntry loadingEntry{};
-
-    PipelineEntry activeEntry{};
-    std::filesystem::file_time_type lastModified{};
-
-    PipelineEntry retiredEntry{};
-    uint32_t retirementFrame{0};
-
-    bool bIsCompute;
-};
 
 class PipelineManager
 {
@@ -67,7 +41,7 @@ public:
 
     void RegisterComputePipeline(const std::string& name, const std::filesystem::path& shaderPath, uint32_t pushConstantSize, PipelineCategory category);
 
-    void RegisterGraphicsPipeline(const std::string& name, const std::filesystem::path& shaderPath, const VkGraphicsPipelineCreateInfo& pipelineInfo);
+    void RegisterGraphicsPipeline(const std::string& name, GraphicsPipelineBuilder& builder, uint32_t pushConstantSize, VkShaderStageFlags pushConstantStages, PipelineCategory category);
 
     const PipelineEntry* GetPipelineEntry(const std::string& name);
 
@@ -84,9 +58,33 @@ public:
 private:
     void SubmitPipelineLoad(const std::string& name, PipelineData* data) const;
 
+
+    void HandlePipelineCompletion(PipelineData& pipeline, const AssetLoad::PipelineComplete& complete) const;
+
+    template<typename PipelineMap>
+    void CleanupRetiredPipelines(PipelineMap& pipelines)
+    {
+        for (auto& [name, pipeline] : pipelines) {
+            if (pipeline.retirementFrame != 0 && currentFrame > pipeline.retirementFrame) {
+                if (pipeline.retiredEntry.pipeline != VK_NULL_HANDLE) {
+                    vkDestroyPipeline(context->device, pipeline.retiredEntry.pipeline, nullptr);
+                    pipeline.retiredEntry.pipeline = VK_NULL_HANDLE;
+                }
+                if (pipeline.retiredEntry.layout != VK_NULL_HANDLE) {
+                    vkDestroyPipelineLayout(context->device, pipeline.retiredEntry.layout, nullptr);
+                    pipeline.retiredEntry.layout = VK_NULL_HANDLE;
+                }
+                pipeline.retirementFrame = 0;
+            }
+        }
+    }
+
+private:
     VulkanContext* context;
     AssetLoad::AssetLoadThread* assetLoadThread{nullptr};
-    std::unordered_map<std::string, PipelineData> pipelines;
+    std::unordered_map<std::string, GraphicsPipelineData> graphicsPipelines;
+    std::unordered_map<std::string, ComputePipelineData> computePipelines;
+
     uint32_t currentFrame;
     std::array<VkDescriptorSetLayout, 2> globalDescriptorSetLayouts;
     VkPipelineCache pipelineCache{VK_NULL_HANDLE};

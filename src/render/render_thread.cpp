@@ -25,6 +25,7 @@
 #include "backends/imgui_impl_vulkan.h"
 #include "core/math/math_helpers.h"
 #include "pipelines/pipeline_manager.h"
+#include "pipelines/graphics_pipeline_builder.h"
 #include "render-view/render_view_helpers.h"
 #include "shadows/shadow_helpers.h"
 
@@ -264,7 +265,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
 
     // IN : deferred_resolve_target
     // OUT: taaCurrent, taaOutput
-    bool bHasTAAPass = pipelineManager->IsCategoryReady(PipelineCategory::TAA);
+    bool bHasTAAPass = pipelineManager->IsCategoryReady(PipelineCategory::TAA) && viewFamily.postProcessConfig.bEnableTemporalAntialiasing;
     if (bHasTAAPass) {
         SetupTemporalAntialiasing(*renderGraph, viewFamily, renderExtent);
     }
@@ -533,7 +534,6 @@ void RenderThread::CreatePipelines()
     layoutInfo.setLayoutCount = layouts.size();
     globalPipelineLayout = PipelineLayout::CreatePipelineLayout(context.get(), layoutInfo);
 
-
     pipelineManager->RegisterComputePipeline("instancing_visibility", Platform::GetShaderPath() / "instancing_visibility_compute.spv",
                                              sizeof(VisibilityPushConstant), PipelineCategory::Instancing);
     pipelineManager->RegisterComputePipeline("instancing_prefix_sum", Platform::GetShaderPath() / "instancing_prefix_sum_compute.spv",
@@ -546,10 +546,6 @@ void RenderThread::CreatePipelines()
 
     pipelineManager->RegisterComputePipeline("instancing_shadows_visibility", Platform::GetShaderPath() / "instancing_shadows_visibility_compute.spv",
                                              sizeof(VisibilityShadowsPushConstant), PipelineCategory::Instancing | PipelineCategory::Shadow);
-
-    shadowMeshShadingInstancedPipeline = ShadowMeshShadingInstancedPipeline(context.get());
-    meshShadingInstancedPipeline = MeshShadingInstancedPipeline(context.get(), layouts);
-    meshShadingDirectPipeline = MeshShadingDirectPipeline(context.get(), layouts);
 
     pipelineManager->RegisterComputePipeline("shadows_resolve", Platform::GetShaderPath() / "shadows_resolve_compute.spv",
                                              sizeof(ShadowsResolvePushConstant), PipelineCategory::ShadowCombine);
@@ -596,6 +592,87 @@ void RenderThread::CreatePipelines()
 
     pipelineManager->RegisterComputePipeline("debug_visualize", Platform::GetShaderPath() / "debug_visualize_compute.spv",
                                              sizeof(DebugVisualizePushConstant), PipelineCategory::Debug);
+
+    GraphicsPipelineBuilder builder;
+
+    // Shadow cascade pipeline
+    {
+        builder.AddShaderStage("shaders/shadow_mesh_shading_instanced_task.spv", VK_SHADER_STAGE_TASK_BIT_EXT);
+        builder.AddShaderStage("shaders/shadow_mesh_shading_instanced_mesh.spv", VK_SHADER_STAGE_MESH_BIT_EXT);
+        builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+        builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE);
+        builder.SetupDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_GREATER_OR_EQUAL);
+        builder.EnableDepthBias();
+        builder.SetupRenderer(nullptr, 0, SHADOW_CASCADE_FORMAT);
+        builder.AddDynamicState(VK_DYNAMIC_STATE_DEPTH_BIAS);
+
+        pipelineManager->RegisterGraphicsPipeline(
+            "shadow_cascade_instanced",
+            builder,
+            sizeof(ShadowMeshShadingPushConstant),
+            VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT,
+            PipelineCategory::Shadow
+        );
+        builder.Clear();
+    }
+
+    // Instanced mesh shading pipeline
+    {
+        builder.AddShaderStage("shaders/mesh_shading_instanced_task.spv", VK_SHADER_STAGE_TASK_BIT_EXT);
+        builder.AddShaderStage("shaders/mesh_shading_instanced_mesh.spv", VK_SHADER_STAGE_MESH_BIT_EXT);
+        builder.AddShaderStage("shaders/mesh_shading_instanced_fragment.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
+        builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+        builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE);
+        builder.SetupDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_GREATER_OR_EQUAL);
+
+        VkFormat colorFormats[5] = {
+            GBUFFER_ALBEDO_FORMAT,
+            GBUFFER_NORMAL_FORMAT,
+            GBUFFER_PBR_FORMAT,
+            GBUFFER_EMISSIVE_FORMAT,
+            GBUFFER_MOTION_FORMAT
+        };
+        builder.SetupRenderer(colorFormats, 5, DEPTH_ATTACHMENT_FORMAT);
+
+        pipelineManager->RegisterGraphicsPipeline(
+            "mesh_shading_instanced",
+            builder,
+            sizeof(InstancedMeshShadingPushConstant),
+            VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT,
+            PipelineCategory::Geometry
+        );
+        builder.Clear();
+    }
+
+    // Direct mesh shading pipeline
+    {
+        builder.AddShaderStage("shaders/mesh_shading_direct_task.spv", VK_SHADER_STAGE_TASK_BIT_EXT);
+        builder.AddShaderStage("shaders/mesh_shading_direct_mesh.spv", VK_SHADER_STAGE_MESH_BIT_EXT);
+        builder.AddShaderStage("shaders/mesh_shading_direct_fragment.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
+        builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+        builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE);
+        builder.SetupDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_GREATER_OR_EQUAL);
+        builder.SetupStencilState(VK_TRUE, VK_STENCIL_OP_KEEP, VK_STENCIL_OP_REPLACE, VK_STENCIL_OP_KEEP, VK_COMPARE_OP_ALWAYS);
+
+        VkFormat colorFormats[5] = {
+            GBUFFER_ALBEDO_FORMAT,
+            GBUFFER_NORMAL_FORMAT,
+            GBUFFER_PBR_FORMAT,
+            GBUFFER_EMISSIVE_FORMAT,
+            GBUFFER_MOTION_FORMAT
+        };
+        builder.SetupRenderer(colorFormats, 5, DEPTH_ATTACHMENT_FORMAT);
+        builder.AddDynamicState(VK_DYNAMIC_STATE_STENCIL_REFERENCE);
+
+        pipelineManager->RegisterGraphicsPipeline(
+            "mesh_shading_direct",
+            builder,
+            sizeof(DirectMeshShadingPushConstant),
+            VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT,
+            PipelineCategory::CustomStencilPass
+        );
+        builder.Clear();
+    }
 }
 
 void RenderThread::SetupFrameUniforms(const Core::ViewFamily& viewFamily, const std::array<uint32_t, 2> renderExtent, float renderDeltaTime) const
@@ -1068,9 +1145,10 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFami
                 .cascadeIndex = static_cast<uint32_t>(cascadeLevel),
             };
 
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, shadowMeshShadingInstancedPipeline.pipeline.handle);
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("shadow_cascade_instanced");
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineEntry->pipeline);
             vkCmdSetDepthBias(cmd, -shadowConfig.cascadePreset.biases[cascadeLevel].linear, 0.0f, -shadowConfig.cascadePreset.biases[cascadeLevel].sloped);
-            vkCmdPushConstants(cmd, shadowMeshShadingInstancedPipeline.pipelineLayout.handle, VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT,
+            vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT,
                                0, sizeof(ShadowMeshShadingPushConstant), &pushConstants);
 
             vkCmdDrawMeshTasksIndirectCountEXT(cmd,
@@ -1217,8 +1295,9 @@ void RenderThread::SetupMainGeometryPass(RenderGraph& graph, const Core::ViewFam
             .sceneDataIndex = sceneIndex,
         };
 
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, meshShadingInstancedPipeline.pipeline.handle);
-        vkCmdPushConstants(cmd, meshShadingInstancedPipeline.pipelineLayout.handle, VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT,
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("mesh_shading_instanced");
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineEntry->pipeline);
+        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT,
                            0, sizeof(InstancedMeshShadingPushConstant), &pushConstants);
 
         vkCmdDrawMeshTasksIndirectCountEXT(cmd,
@@ -1308,17 +1387,16 @@ void RenderThread::SetupDirectGeometryPass(RenderGraph& graph, const Core::ViewF
             .sceneDataIndex = sceneIndex,
         };
 
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, meshShadingDirectPipeline.pipeline.handle);
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("mesh_shading_direct");
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineEntry->pipeline);
+        vkCmdPushConstants(cmd, pipelineEntry->layout,
+                           VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(DirectMeshShadingPushConstant), &pushConstants);
 
         uint32_t instanceOffset = 0;
         for (const auto& customDraw : viewFamily.customStencilDraws) {
             if (customDraw.instances.empty()) continue;
 
             vkCmdSetStencilReference(cmd, VK_STENCIL_FACE_FRONT_AND_BACK, customDraw.stencilValue);
-            vkCmdPushConstants(cmd, meshShadingDirectPipeline.pipelineLayout.handle,
-                               VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT,
-                               0, sizeof(DirectMeshShadingPushConstant), &pushConstants);
-
             vkCmdDrawMeshTasksIndirectEXT(cmd, graph.GetBufferHandle("direct_indirect_command_buffer"),
                                           instanceOffset * sizeof(DrawMeshTasksIndirectCommand),
                                           static_cast<uint32_t>(customDraw.instances.size()),
@@ -1548,7 +1626,7 @@ void RenderThread::SetupTemporalAntialiasing(RenderGraph& graph, const Core::Vie
     if (!graph.HasTexture("taa_history") || !graph.HasTexture("velocity_history")) {
         renderGraph->AliasTexture("taa_output", "deferred_resolve_target");
 
-        RenderPass& taaPass = graph.AddPass("TAA First Frame", VK_PIPELINE_STAGE_2_COPY_BIT);
+        RenderPass& taaPass = graph.AddPass("TAA Copy Deferred", VK_PIPELINE_STAGE_2_COPY_BIT);
         taaPass.ReadCopyImage("deferred_resolve_target");
         taaPass.WriteCopyImage("taa_current");
         taaPass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {

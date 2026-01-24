@@ -38,8 +38,8 @@ add_library(render STATIC
         descriptors/vk_descriptors.h
         types/vk_types.cpp
         types/vk_types.h
-        pipelines/vk_pipeline.cpp
-        pipelines/vk_pipeline.h
+        pipelines/graphics_pipeline_builder.cpp
+        pipelines/graphics_pipeline_builder.h
         shaders/model_interop.h
         model/model_format.cpp
         model/model_format.h
@@ -61,17 +61,11 @@ add_library(render STATIC
         descriptors/vk_bindless_transient_rdg_resources.cpp
         descriptors/vk_bindless_transient_rdg_resources.h
         render-graph/render_graph_config.h
-        pipelines/compute_pipeline.cpp
-        pipelines/compute_pipeline.h
         shaders/push_constant_interop.h
         shaders/instancing_interop.h
-        pipelines/mesh_shading_instanced_pipeline.cpp
-        pipelines/mesh_shading_instanced_pipeline.h
         shaders/shadows_interop.h
         shadows/shadow_helpers.cpp
         shadows/shadow_helpers.h
-        pipelines/shadow_mesh_shading_instanced_pipeline.cpp
-        pipelines/shadow_mesh_shading_instanced_pipeline.h
         shaders/lights_interop.h
         pipelines/pipeline_manager.cpp
         pipelines/pipeline_manager.h
@@ -79,8 +73,8 @@ add_library(render STATIC
         pipelines/pipeline_category.h
         render-view/render_view_helpers.cpp
         render-view/render_view_helpers.h
-        pipelines/mesh_shading_direct_pipeline.cpp
-        pipelines/mesh_shading_direct_pipeline.h
+        pipelines/pipeline_data.cpp
+        pipelines/pipeline_data.h
 )
 
 target_include_directories(render PRIVATE

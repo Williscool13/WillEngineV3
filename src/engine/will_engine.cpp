@@ -405,8 +405,6 @@ void WillEngine::Run()
                 engineRenderSynchronization->renderFrames.release();
             }
         }
-
-        FrameMark;
     }
 }
 

@@ -7,13 +7,13 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include "render/pipelines/vk_pipeline.h"
+#include "render/pipelines/graphics_pipeline_builder.h"
 
 using namespace Render;
 
 TEST_CASE("RenderPipelineBuilder method chaining", "[renderer][pipeline-builder]") {
     SECTION("All methods return reference for chaining") {
-        RenderPipelineBuilder builder;
+        GraphicsPipelineBuilder builder;
 
         VkPipelineShaderStageCreateInfo shaderStages[2] = {};
         VkVertexInputBindingDescription binding = {};
@@ -23,18 +23,18 @@ TEST_CASE("RenderPipelineBuilder method chaining", "[renderer][pipeline-builder]
         VkStencilOpState stencilOp = {};
 
         // Test that all methods return a reference for chaining
-        RenderPipelineBuilder& ref1 = builder.SetShaders(shaderStages, 2);
-        RenderPipelineBuilder& ref2 = ref1.SetupVertexInput(&binding, 1, &attribute, 1);
-        RenderPipelineBuilder& ref3 = ref2.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
-        RenderPipelineBuilder& ref4 = ref3.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_COUNTER_CLOCKWISE);
-        RenderPipelineBuilder& ref5 = ref4.SetupMultisampling(VK_FALSE, VK_SAMPLE_COUNT_1_BIT, 1.0f, nullptr, VK_FALSE, VK_FALSE);
-        RenderPipelineBuilder& ref6 = ref5.SetupRenderer(&colorFormat, 1);
-        RenderPipelineBuilder& ref7 = ref6.SetupBlending(&blendState, 1);
-        RenderPipelineBuilder& ref8 = ref7.SetupDepthStencil(VK_TRUE, VK_TRUE, VK_COMPARE_OP_LESS, VK_FALSE, VK_FALSE, stencilOp, stencilOp, 0.0f, 1.0f);
-        RenderPipelineBuilder& ref9 = ref8.EnableDepthTest(VK_TRUE, VK_COMPARE_OP_LESS);
-        RenderPipelineBuilder& ref10 = ref9.SetupPipelineLayout(VK_NULL_HANDLE);
-        RenderPipelineBuilder& ref11 = ref10.SetupTessellation(4);
-        RenderPipelineBuilder& ref12 = ref11.AddDynamicState(VK_DYNAMIC_STATE_LINE_WIDTH);
+        GraphicsPipelineBuilder& ref1 = builder.SetShaders(shaderStages, 2);
+        GraphicsPipelineBuilder& ref2 = ref1.SetupVertexInput(&binding, 1, &attribute, 1);
+        GraphicsPipelineBuilder& ref3 = ref2.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+        GraphicsPipelineBuilder& ref4 = ref3.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_COUNTER_CLOCKWISE);
+        GraphicsPipelineBuilder& ref5 = ref4.SetupMultisampling(VK_FALSE, VK_SAMPLE_COUNT_1_BIT, 1.0f, nullptr, VK_FALSE, VK_FALSE);
+        GraphicsPipelineBuilder& ref6 = ref5.SetupRenderer(&colorFormat, 1);
+        GraphicsPipelineBuilder& ref7 = ref6.SetupBlending(&blendState, 1);
+        GraphicsPipelineBuilder& ref8 = ref7.SetupDepthStencil(VK_TRUE, VK_TRUE, VK_COMPARE_OP_LESS, VK_FALSE, VK_FALSE, stencilOp, stencilOp, 0.0f, 1.0f);
+        GraphicsPipelineBuilder& ref9 = ref8.EnableDepthTest(VK_TRUE, VK_COMPARE_OP_LESS);
+        GraphicsPipelineBuilder& ref10 = ref9.SetupPipelineLayout(VK_NULL_HANDLE);
+        GraphicsPipelineBuilder& ref11 = ref10.SetupTessellation(4);
+        GraphicsPipelineBuilder& ref12 = ref11.AddDynamicState(VK_DYNAMIC_STATE_LINE_WIDTH);
 
         // All references should point to the same builder
         REQUIRE(&ref1 == &builder);
@@ -54,7 +54,7 @@ TEST_CASE("RenderPipelineBuilder method chaining", "[renderer][pipeline-builder]
 
 TEST_CASE("RenderPipelineBuilder shader stages", "[renderer][pipeline-builder]") {
     SECTION("Set shader stages") {
-        RenderPipelineBuilder builder;
+        GraphicsPipelineBuilder builder;
         VkPipelineShaderStageCreateInfo shaderStages[2] = {
             {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, .stage = VK_SHADER_STAGE_VERTEX_BIT},
             {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, .stage = VK_SHADER_STAGE_FRAGMENT_BIT}
@@ -69,7 +69,7 @@ TEST_CASE("RenderPipelineBuilder shader stages", "[renderer][pipeline-builder]")
     }
 
     SECTION("Single shader stage") {
-        RenderPipelineBuilder builder;
+        GraphicsPipelineBuilder builder;
         VkPipelineShaderStageCreateInfo shaderStage = {
             .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
             .stage = VK_SHADER_STAGE_COMPUTE_BIT
@@ -85,7 +85,7 @@ TEST_CASE("RenderPipelineBuilder shader stages", "[renderer][pipeline-builder]")
 
 TEST_CASE("RenderPipelineBuilder vertex input", "[renderer][pipeline-builder]") {
     SECTION("With vertex bindings and attributes") {
-        RenderPipelineBuilder builder;
+        GraphicsPipelineBuilder builder;
 
         VkVertexInputBindingDescription binding = {
             .binding = 0,
@@ -108,7 +108,7 @@ TEST_CASE("RenderPipelineBuilder vertex input", "[renderer][pipeline-builder]") 
     }
 
     SECTION("No vertex input (mesh shaders)") {
-        RenderPipelineBuilder builder;
+        GraphicsPipelineBuilder builder;
 
         builder.SetupVertexInput(nullptr, 0, nullptr, 0);
 
@@ -122,7 +122,7 @@ TEST_CASE("RenderPipelineBuilder vertex input", "[renderer][pipeline-builder]") 
 
 TEST_CASE("RenderPipelineBuilder input assembly", "[renderer][pipeline-builder]") {
     SECTION("Triangle list topology") {
-        RenderPipelineBuilder builder;
+        GraphicsPipelineBuilder builder;
 
         builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, false);
 
@@ -134,7 +134,7 @@ TEST_CASE("RenderPipelineBuilder input assembly", "[renderer][pipeline-builder]"
     }
 
     SECTION("Triangle strip with primitive restart") {
-        RenderPipelineBuilder builder;
+        GraphicsPipelineBuilder builder;
 
         builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP, true);
 
@@ -145,7 +145,7 @@ TEST_CASE("RenderPipelineBuilder input assembly", "[renderer][pipeline-builder]"
     }
 
     SECTION("Line list topology") {
-        RenderPipelineBuilder builder;
+        GraphicsPipelineBuilder builder;
 
         builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_LINE_LIST, false);
 
@@ -157,7 +157,7 @@ TEST_CASE("RenderPipelineBuilder input assembly", "[renderer][pipeline-builder]"
 
 TEST_CASE("RenderPipelineBuilder rasterization", "[renderer][pipeline-builder]") {
     SECTION("Fill mode with backface culling") {
-        RenderPipelineBuilder builder;
+        GraphicsPipelineBuilder builder;
 
         builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_COUNTER_CLOCKWISE);
 
@@ -171,7 +171,7 @@ TEST_CASE("RenderPipelineBuilder rasterization", "[renderer][pipeline-builder]")
     }
 
     SECTION("Wireframe mode with no culling") {
-        RenderPipelineBuilder builder;
+        GraphicsPipelineBuilder builder;
 
         builder.SetupRasterization(VK_POLYGON_MODE_LINE, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE, 2.0f);
 
@@ -183,7 +183,7 @@ TEST_CASE("RenderPipelineBuilder rasterization", "[renderer][pipeline-builder]")
     }
 
     SECTION("With depth bias") {
-        RenderPipelineBuilder builder;
+        GraphicsPipelineBuilder builder;
 
         builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_COUNTER_CLOCKWISE);
         builder.EnableDepthBias(1.0f, 0.0f, 1.5f);
@@ -199,7 +199,7 @@ TEST_CASE("RenderPipelineBuilder rasterization", "[renderer][pipeline-builder]")
 
 TEST_CASE("RenderPipelineBuilder multisampling", "[renderer][pipeline-builder]") {
     SECTION("No multisampling") {
-        RenderPipelineBuilder builder;
+        GraphicsPipelineBuilder builder;
 
         builder.SetupMultisampling(VK_FALSE, VK_SAMPLE_COUNT_1_BIT, 1.0f, nullptr, VK_FALSE, VK_FALSE);
 
@@ -211,7 +211,7 @@ TEST_CASE("RenderPipelineBuilder multisampling", "[renderer][pipeline-builder]")
     }
 
     SECTION("4x MSAA with sample shading") {
-        RenderPipelineBuilder builder;
+        GraphicsPipelineBuilder builder;
 
         builder.SetupMultisampling(VK_TRUE, VK_SAMPLE_COUNT_4_BIT, 0.25f, nullptr, VK_FALSE, VK_FALSE);
 
@@ -225,7 +225,7 @@ TEST_CASE("RenderPipelineBuilder multisampling", "[renderer][pipeline-builder]")
 
 TEST_CASE("RenderPipelineBuilder depth and stencil", "[renderer][pipeline-builder]") {
     SECTION("Depth test enabled with write enabled") {
-        RenderPipelineBuilder builder;
+        GraphicsPipelineBuilder builder;
 
         builder.EnableDepthTest(VK_TRUE, VK_COMPARE_OP_LESS);
 
@@ -238,7 +238,7 @@ TEST_CASE("RenderPipelineBuilder depth and stencil", "[renderer][pipeline-builde
     }
 
     SECTION("Depth test enabled with write disabled") {
-        RenderPipelineBuilder builder;
+        GraphicsPipelineBuilder builder;
 
         builder.EnableDepthTest(VK_FALSE, VK_COMPARE_OP_LESS_OR_EQUAL);
 
@@ -250,7 +250,7 @@ TEST_CASE("RenderPipelineBuilder depth and stencil", "[renderer][pipeline-builde
     }
 
     SECTION("Depth test with different compare ops") {
-        RenderPipelineBuilder builder;
+        GraphicsPipelineBuilder builder;
 
         builder.EnableDepthTest(VK_TRUE, VK_COMPARE_OP_GREATER);
 
@@ -264,7 +264,7 @@ TEST_CASE("RenderPipelineBuilder depth and stencil", "[renderer][pipeline-builde
 
 TEST_CASE("RenderPipelineBuilder color blending", "[renderer][pipeline-builder]") {
     SECTION("Alpha blending") {
-        RenderPipelineBuilder builder;
+        GraphicsPipelineBuilder builder;
 
         VkPipelineColorBlendAttachmentState blendState = {
             .blendEnable = VK_TRUE,
@@ -288,7 +288,7 @@ TEST_CASE("RenderPipelineBuilder color blending", "[renderer][pipeline-builder]"
     }
 
     SECTION("Multiple render targets") {
-        RenderPipelineBuilder builder;
+        GraphicsPipelineBuilder builder;
 
         VkPipelineColorBlendAttachmentState blendStates[2] = {
             {.blendEnable = VK_FALSE, .colorWriteMask = 0xF},
@@ -305,7 +305,7 @@ TEST_CASE("RenderPipelineBuilder color blending", "[renderer][pipeline-builder]"
 
 TEST_CASE("RenderPipelineBuilder rendering setup", "[renderer][pipeline-builder]") {
     SECTION("Single color attachment") {
-        RenderPipelineBuilder builder;
+        GraphicsPipelineBuilder builder;
 
         VkFormat format = VK_FORMAT_R8G8B8A8_UNORM;
         builder.SetupRenderer(&format, 1);
@@ -321,7 +321,7 @@ TEST_CASE("RenderPipelineBuilder rendering setup", "[renderer][pipeline-builder]
     }
 
     SECTION("Multiple color attachments with depth") {
-        RenderPipelineBuilder builder;
+        GraphicsPipelineBuilder builder;
 
         VkFormat formats[2] = {VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_R16G16B16A16_SFLOAT};
         builder.SetupRenderer(formats, 2, VK_FORMAT_D32_SFLOAT);
@@ -336,7 +336,7 @@ TEST_CASE("RenderPipelineBuilder rendering setup", "[renderer][pipeline-builder]
 
 TEST_CASE("RenderPipelineBuilder dynamic states", "[renderer][pipeline-builder]") {
     SECTION("Default dynamic states") {
-        RenderPipelineBuilder builder;
+        GraphicsPipelineBuilder builder;
 
         auto createInfo = builder.GeneratePipelineCreateInfo();
 
@@ -346,7 +346,7 @@ TEST_CASE("RenderPipelineBuilder dynamic states", "[renderer][pipeline-builder]"
     }
 
     SECTION("Add custom dynamic state") {
-        RenderPipelineBuilder builder;
+        GraphicsPipelineBuilder builder;
 
         builder.AddDynamicState(VK_DYNAMIC_STATE_LINE_WIDTH);
 
@@ -356,7 +356,7 @@ TEST_CASE("RenderPipelineBuilder dynamic states", "[renderer][pipeline-builder]"
     }
 
     SECTION("Multiple custom dynamic states") {
-        RenderPipelineBuilder builder;
+        GraphicsPipelineBuilder builder;
 
         builder.AddDynamicState(VK_DYNAMIC_STATE_DEPTH_BIAS);
         builder.AddDynamicState(VK_DYNAMIC_STATE_BLEND_CONSTANTS);
@@ -369,7 +369,7 @@ TEST_CASE("RenderPipelineBuilder dynamic states", "[renderer][pipeline-builder]"
 
 TEST_CASE("RenderPipelineBuilder tessellation", "[renderer][pipeline-builder]") {
     SECTION("Tessellation disabled by default") {
-        RenderPipelineBuilder builder;
+        GraphicsPipelineBuilder builder;
 
         auto createInfo = builder.GeneratePipelineCreateInfo();
 
@@ -377,7 +377,7 @@ TEST_CASE("RenderPipelineBuilder tessellation", "[renderer][pipeline-builder]") 
     }
 
     SECTION("Enable tessellation") {
-        RenderPipelineBuilder builder;
+        GraphicsPipelineBuilder builder;
 
         builder.SetupTessellation(4);
 
@@ -388,7 +388,7 @@ TEST_CASE("RenderPipelineBuilder tessellation", "[renderer][pipeline-builder]") 
     }
 
     SECTION("Custom control points") {
-        RenderPipelineBuilder builder;
+        GraphicsPipelineBuilder builder;
 
         builder.SetupTessellation(16);
 
@@ -400,7 +400,7 @@ TEST_CASE("RenderPipelineBuilder tessellation", "[renderer][pipeline-builder]") 
 
 TEST_CASE("RenderPipelineBuilder clear and reuse", "[renderer][pipeline-builder]") {
     SECTION("Clear resets builder state") {
-        RenderPipelineBuilder builder;
+        GraphicsPipelineBuilder builder;
 
         VkPipelineShaderStageCreateInfo shaderStages[2] = {};
         VkFormat format = VK_FORMAT_R8G8B8A8_UNORM;
@@ -419,7 +419,7 @@ TEST_CASE("RenderPipelineBuilder clear and reuse", "[renderer][pipeline-builder]
     }
 
     SECTION("Builder can be reused after clear") {
-        RenderPipelineBuilder builder;
+        GraphicsPipelineBuilder builder;
 
         VkPipelineShaderStageCreateInfo shaderStages[1] = {};
         builder.SetShaders(shaderStages, 1);
@@ -436,7 +436,7 @@ TEST_CASE("RenderPipelineBuilder clear and reuse", "[renderer][pipeline-builder]
 
 TEST_CASE("RenderPipelineBuilder pipeline layout", "[renderer][pipeline-builder]") {
     SECTION("Set pipeline layout") {
-        RenderPipelineBuilder builder;
+        GraphicsPipelineBuilder builder;
 
         VkPipelineLayout layout = reinterpret_cast<VkPipelineLayout>(0x12345678);
         builder.SetupPipelineLayout(layout);
@@ -449,7 +449,7 @@ TEST_CASE("RenderPipelineBuilder pipeline layout", "[renderer][pipeline-builder]
 
 TEST_CASE("RenderPipelineBuilder create info structure", "[renderer][pipeline-builder]") {
     SECTION("Create info has correct sType") {
-        RenderPipelineBuilder builder;
+        GraphicsPipelineBuilder builder;
 
         auto createInfo = builder.GeneratePipelineCreateInfo();
 
@@ -457,7 +457,7 @@ TEST_CASE("RenderPipelineBuilder create info structure", "[renderer][pipeline-bu
     }
 
     SECTION("Create info has descriptor buffer flag") {
-        RenderPipelineBuilder builder;
+        GraphicsPipelineBuilder builder;
 
         auto createInfo = builder.GeneratePipelineCreateInfo();
 
@@ -465,7 +465,7 @@ TEST_CASE("RenderPipelineBuilder create info structure", "[renderer][pipeline-bu
     }
 
     SECTION("Custom flags can be passed") {
-        RenderPipelineBuilder builder;
+        GraphicsPipelineBuilder builder;
 
         auto createInfo = builder.GeneratePipelineCreateInfo(
             static_cast<VkPipelineCreateFlagBits>(VK_PIPELINE_CREATE_DISABLE_OPTIMIZATION_BIT)

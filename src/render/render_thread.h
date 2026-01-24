@@ -12,10 +12,6 @@
 #include "frame_resources.h"
 #include "core/include/render_interface.h"
 #include "render/vulkan/vk_synchronization.h"
-#include "pipelines/compute_pipeline.h"
-#include "pipelines/mesh_shading_direct_pipeline.h"
-#include "pipelines/mesh_shading_instanced_pipeline.h"
-#include "pipelines/shadow_mesh_shading_instanced_pipeline.h"
 
 namespace AssetLoad
 {
@@ -161,10 +157,6 @@ private:
 
 private:
     PipelineLayout globalPipelineLayout;
-
-    MeshShadingInstancedPipeline meshShadingInstancedPipeline;
-    MeshShadingDirectPipeline meshShadingDirectPipeline;
-    ShadowMeshShadingInstancedPipeline shadowMeshShadingInstancedPipeline;
 };
 } // Render
 
