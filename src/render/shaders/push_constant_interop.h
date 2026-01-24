@@ -60,9 +60,10 @@ SHADER_PUBLIC struct DebugVisualizePushConstant
     SHADER_PUBLIC int2 dstExtent;
     SHADER_PUBLIC float nearPlane;
     SHADER_PUBLIC float farPlane;
-    SHADER_PUBLIC uint textureIndex;
+    SHADER_PUBLIC uint textureArrayIndex;
+    SHADER_PUBLIC uint textureIndexInArray;
+    SHADER_PUBLIC uint valueTransformationType;
     SHADER_PUBLIC uint outputImageIndex;
-    SHADER_PUBLIC uint debugType;
 };
 
 SHADER_PUBLIC struct VisibilityPushConstant

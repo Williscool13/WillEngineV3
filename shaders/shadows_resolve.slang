@@ -13,7 +13,7 @@ void ComputeMain(uniform ShadowsResolvePushConstant pc, uint3 threadID : SV_Disp
     float depth = rdgTextures[pc.depthIndex].Load(int3(threadID.xy, 0)).r;
 
     if (depth <= 0.0) {
-        rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(1.0, 1.0, 0.0, 0.0);
+        rdgStorageFloat2[pc.outputImageIndex][threadID.xy] = float2(1.0, 1.0);
         return;
     }
 
@@ -38,5 +38,5 @@ void ComputeMain(uniform ShadowsResolvePushConstant pc, uint3 threadID : SV_Disp
         gtao = 1.0f;
     }
 
-    rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(shadowFactor, gtao, 0.0, 0.0);
+    rdgStorageFloat2[pc.outputImageIndex][threadID.xy] = float2(shadowFactor, gtao);
 }

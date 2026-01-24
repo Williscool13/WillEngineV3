@@ -19,60 +19,48 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
 
     float2 srcUV = (float2(threadID.xy) + 0.5) / float2(pc.dstExtent);
 
-    switch (pc.debugType) {
-        case 1: // Depth
-            float dSample = rdgTextures[pc.textureIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], srcUV, 0).r;
-            // float v= dSample;
-            float v = LinearizeDepth(dSample);
-            rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(v, v, v, 1.0);
+    uint2 texCoord = uint2(threadID.xy);
+
+    float4 srcPixel = float4(1.0f, 0.0f, 0.0f, 1.0f);
+    switch (pc.textureArrayIndex) {
+        case 3:
+            srcPixel.xyzw = rdgStorageFloat4[pc.textureIndexInArray].Load(texCoord, 0).rgba;
             break;
-        case 2: // Albedo
-            float4 albedo  = rdgTextures[pc.textureIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], srcUV, 0);
-            rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(albedo.x, albedo.y, albedo.z, 1.0f);
+        case 4:
+            srcPixel.xy = rdgStorageFloat2[pc.textureIndexInArray].Load(texCoord, 0).rg;
             break;
-        case 3: // Normal (view space, stored in packed unorm [0,1])
-            float3 normal = rdgTextures[pc.textureIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], srcUV, 0).xyz;
-            rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(normal, 1.0);
+        case 5:
+            float v = rdgStorageFloat[pc.textureIndexInArray].Load(texCoord, 0).r;
+            srcPixel.xyz = float3(v);
             break;
-        case 4: // PBR (R=metallic, G=roughness)
-            float4 pbr = rdgTextures[pc.textureIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], srcUV, 0);
-            rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(pbr.r, pbr.g, 0.0, 1.0);
+        case 6:
+            srcPixel.xyzw = rdgStorageUInt4[pc.textureIndexInArray].Load(texCoord, 0).rgba;
             break;
-        case 5: // Velocity
-            float4 velocity = rdgTextures[pc.textureIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], srcUV, 0);
-            velocity = abs(velocity);
-            // velocity *= 100000;
-            rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(velocity.r, velocity.g, 0.0f, 1.0);
-            // rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(velocity.r, velocity.g, 0.0f, 1.0);
-            break;
-        case 6: // CSM
-            float4 color = rdgTextures[pc.textureIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], srcUV, 0);
-            if (length(color) < 0.000001){
-                color = float4(0.0f);
-            }
-            color *= 100000.0f;
-            rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(color.x, color.y, color.z, 1.0f);
-            break;
-        case 7: // CSM
-            float4 color2 = rdgTextures[pc.textureIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], srcUV, 1);
-            rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(color2.x, color2.y, color2.z, 1.0f);
-            break;
-        case 8:
-            float4 color3 = rdgTextures[pc.textureIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], srcUV, 2);
-            rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(color3.x, color3.y, color3.z, 1.0f);
-            break;
-        case 9:
-            float4 color4 = rdgTextures[pc.textureIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], srcUV, 3);
-            color4 /= 1000.0f;
-            rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(color4.x, color4.x, color4.x, 1.0f);
-            break;
-        case 10:
-            float4 color5 = rdgTextures[pc.textureIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], srcUV, 4);
-            color5 /= 1000.0f;
-            rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(color5.x, color5.x, color5.x, 1.0f);
-            break;
-        default:
-            rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(1.0, 0.0, 1.0, 1.0); // Magenta for invalid
+        case 7:
+            float v1 = rdgStorageUInt[pc.textureIndexInArray].Load(texCoord, 0).r;
+            srcPixel.xyz = float3(v1);
             break;
     }
+
+    switch (pc.valueTransformationType) {
+        case 1: // DepthRemap
+            srcPixel.x = LinearizeDepth(srcPixel.x);
+            srcPixel.y = LinearizeDepth(srcPixel.y);
+            srcPixel.z = LinearizeDepth(srcPixel.z);
+            break;
+        case 2: // MultiplyBy1000
+            srcPixel.xyz *= 1000.0f;
+            break;
+        case 3: // MultiplyBy10000
+            srcPixel.xyz *= 10000.0f;
+            break;
+        case 4: // DivideBy1000
+            srcPixel.xyz /= 1000.0f;
+            break;
+        case 5: // DivideBy10000
+            srcPixel.xyz /= 10000.0f;
+            break;
+    }
+
+    rdgStorageFloat4[pc.outputImageIndex][threadID.xy] = srcPixel;
 }

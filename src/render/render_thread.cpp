@@ -350,6 +350,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     }
 #endif
 
+
     bool bHasDebugPass = viewFamily.mainView.debug != -1 && pipelineManager->IsCategoryReady(PipelineCategory::Debug);
     if (bHasDebugPass) {
         int32_t debugIndex = viewFamily.mainView.debug;
@@ -380,21 +381,29 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
             debugVisPass.WriteStorageImage("post_process_output");
             debugVisPass.Execute([&, debugTargetName, debugIndex](VkCommandBuffer cmd) {
                 const ResourceDimensions& dims = renderGraph->GetImageDimensions(debugTargetName);
-                VkImageAspectFlags aspect = VkHelpers::GetImageAspect(dims.format);
+                VkImageAspectFlags aspect = renderGraph->GetImageAspect(debugTargetName);
+                StorageImageType storageType = GetStorageImageType(dims.format, aspect);
 
-                uint32_t inputIndex;
-                if (aspect == VK_IMAGE_ASPECT_DEPTH_BIT ||
-                    (aspect & (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)) == (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)) {
-                    inputIndex = renderGraph->GetDepthOnlyImageViewDescriptorIndex(debugTargetName);
-                    // inputIndex = renderGraph->GetStencilOnlyImageViewDescriptorIndex(debugTargetName);
+                uint32_t textureArrayIndex{3};
+                switch (storageType) {
+                    case StorageImageType::Float4:
+                        textureArrayIndex = 3;
+                        break;
+                    case StorageImageType::Float2:
+                        textureArrayIndex = 4;
+                        break;
+                    case StorageImageType::Float:
+                        textureArrayIndex = 5;
+                        break;
+                    case StorageImageType::UInt4:
+                        textureArrayIndex = 6;
+                        break;
+                    case StorageImageType::UInt:
+                        textureArrayIndex = 7;
+                        break;
                 }
-                else if (aspect == VK_IMAGE_ASPECT_STENCIL_BIT) {
-                    inputIndex = renderGraph->GetStencilOnlyImageViewDescriptorIndex(debugTargetName);
-                }
-                else {
-                    inputIndex = renderGraph->GetSampledImageViewDescriptorIndex(debugTargetName);
-                }
-
+                uint32_t textureIndexInArray = renderGraph->GetStorageImageViewDescriptorIndex(debugTargetName);
+                uint32_t outputIndexIndex = renderGraph->GetStorageImageViewDescriptorIndex("post_process_output");
 
                 DebugVisualizePushConstant pc{
                     .sceneData = renderGraph->GetBufferAddress("scene_data"),
@@ -402,9 +411,10 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
                     .dstExtent = {renderExtent[0], renderExtent[1]},
                     .nearPlane = viewFamily.mainView.currentViewData.nearPlane,
                     .farPlane = viewFamily.mainView.currentViewData.farPlane,
-                    .textureIndex = inputIndex,
-                    .outputImageIndex = renderGraph->GetStorageImageViewDescriptorIndex("post_process_output"),
-                    .debugType = static_cast<uint32_t>(debugIndex)
+                    .textureArrayIndex = textureArrayIndex,
+                    .textureIndexInArray = textureIndexInArray,
+                    .valueTransformationType = 0, //static_cast<uint32_t>(DebugTransformationType::DepthRemap),
+                    .outputImageIndex = outputIndexIndex,
                 };
                 const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("debug_visualize");
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
@@ -1458,9 +1468,10 @@ void RenderThread::SetupGroundTruthAmbientOcclusion(RenderGraph& graph, const Co
     const Core::GTAOConfiguration& gtaoConfig = viewFamily.gtaoConfig;
 
     graph.CreateTexture("gtao_depth", TextureInfo{VK_FORMAT_R16_SFLOAT, renderExtent[0], renderExtent[1], 5});
-
     graph.CreateTexture("gtao_ao", TextureInfo{VK_FORMAT_R8_UNORM, renderExtent[0], renderExtent[1], 1});
     graph.CreateTexture("gtao_edges", TextureInfo{VK_FORMAT_R8_UNORM, renderExtent[0], renderExtent[1], 1});
+    // Denoise pass(es) - typically run 2-3 times for better quality
+    graph.CreateTexture("gtao_filtered", TextureInfo{VK_FORMAT_R8_UNORM, renderExtent[0], renderExtent[1], 1});
 
     RenderPass& depthPrepass = graph.AddPass("GTAO Depth Prepass", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
     depthPrepass.ReadBuffer("scene_data");
@@ -1523,9 +1534,6 @@ void RenderThread::SetupGroundTruthAmbientOcclusion(RenderGraph& graph, const Co
         uint32_t yDispatch = (height + GTAO_MAIN_PASS_DISPATCH_Y - 1) / GTAO_MAIN_PASS_DISPATCH_Y;
         vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
     });
-
-    // Denoise pass(es) - typically run 2-3 times for better quality
-    graph.CreateTexture("gtao_filtered", TextureInfo{VK_FORMAT_R8_UNORM, renderExtent[0], renderExtent[1], 1});
 
     RenderPass& denoisePass = graph.AddPass("GTAO Denoise", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
     denoisePass.ReadSampledImage("gtao_ao");
@@ -1972,7 +1980,10 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
     {
         uint32_t blurTiledX = (renderExtent[0] + POST_PROCESS_MOTION_BLUR_TILE_SIZE - 1) / POST_PROCESS_MOTION_BLUR_TILE_SIZE;
         uint32_t blurTiledY = (renderExtent[1] + POST_PROCESS_MOTION_BLUR_TILE_SIZE - 1) / POST_PROCESS_MOTION_BLUR_TILE_SIZE;
-        graph.CreateTexture("motion_blur_tiled_max", TextureInfo{GBUFFER_MOTION_FORMAT, blurTiledX, blurTiledY, 1});
+        graph.CreateTexture("motion_blur_tiled_max", TextureInfo{VK_FORMAT_R16G16_SFLOAT, blurTiledX, blurTiledY, 1});
+        graph.CreateTexture("motion_blur_tiled_neighbor_max", TextureInfo{VK_FORMAT_R16G16_SFLOAT, blurTiledX, blurTiledY, 1});
+        graph.CreateTexture("motion_blur_output", TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
+
         RenderPass& motionBlurTiledMaxPass = graph.AddPass("Motion Blur Tiled Max", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
         motionBlurTiledMaxPass.ReadBuffer("scene_data");
         motionBlurTiledMaxPass.ReadSampledImage("velocity_target");
@@ -1994,7 +2005,6 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
         });
 
 
-        graph.CreateTexture("motion_blur_tiled_neighbor_max", TextureInfo{GBUFFER_MOTION_FORMAT, blurTiledX, blurTiledY, 1});
         RenderPass& motionBlurNeighborMax = graph.AddPass("Motion Blur Neighbor Max", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
         motionBlurNeighborMax.ReadSampledImage("motion_blur_tiled_max");
         motionBlurNeighborMax.WriteStorageImage("motion_blur_tiled_neighbor_max");
@@ -2013,7 +2023,7 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
             vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
         });
 
-        graph.CreateTexture("motion_blur_output", TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
+
         RenderPass& motionBlurReconstructionPass = graph.AddPass("Motion Blur Reconstruction", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
         motionBlurReconstructionPass.ReadBuffer("scene_data");
         motionBlurReconstructionPass.ReadSampledImage("tonemap_output");

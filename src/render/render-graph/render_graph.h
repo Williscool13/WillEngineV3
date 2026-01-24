@@ -101,6 +101,8 @@ public:
 
     const ResourceDimensions& GetImageDimensions(const std::string& name);
 
+    const VkImageAspectFlags GetImageAspect(const std::string& name);
+
     uint32_t GetSampledImageViewDescriptorIndex(const std::string& name);
 
     uint32_t GetStorageImageViewDescriptorIndex(const std::string& name, uint32_t mipLevel = 0);
@@ -135,8 +137,12 @@ private:
     std::vector<TextureResource> textures;
     std::unordered_map<std::string, uint32_t> textureNameToIndex;
 
-    Core::HandleAllocator<TextureResource, RDG_MAX_SAMPLED_TEXTURES> transientImageHandleAllocator;
-    Core::HandleAllocator<TextureResource, RDG_MAX_STORAGE_TEXTURES> transientStorageImageHandleAllocator;
+    Core::HandleAllocator<TextureResource, RDG_MAX_SAMPLED_TEXTURES> transientSampledImageHandleAllocator;
+    Core::HandleAllocator<TextureResource, RDG_MAX_STORAGE_FLOAT4> transientStorageFloat4HandleAllocator;
+    Core::HandleAllocator<TextureResource, RDG_MAX_STORAGE_FLOAT2> transientStorageFloat2HandleAllocator;
+    Core::HandleAllocator<TextureResource, RDG_MAX_STORAGE_FLOAT> transientStorageFloatHandleAllocator;
+    Core::HandleAllocator<TextureResource, RDG_MAX_STORAGE_UINT4> transientStorageUInt4HandleAllocator;
+    Core::HandleAllocator<TextureResource, RDG_MAX_STORAGE_UINT> transientStorageUIntHandleAllocator;
 
     std::vector<BufferResource> buffers;
     std::unordered_map<std::string, uint32_t> bufferNameToIndex;

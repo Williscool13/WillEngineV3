@@ -52,7 +52,16 @@ ResourceManager::ResourceManager(VulkanContext* context)
     primitiveBuffer.SetDebugName("Mega Primitive Buffer");
 
     bindlessSamplerTextureDescriptorBuffer = BindlessResourcesSamplerImages(context);
-    bindlessRDGTransientDescriptorBuffer = BindlessTransientRDGResourcesDescriptorBuffer<4, 4, RDG_MAX_SAMPLED_TEXTURES, RDG_MAX_STORAGE_TEXTURES>(context);
+    bindlessRDGTransientDescriptorBuffer = BindlessTransientRDGResourcesDescriptorBuffer<
+        4,
+        4,
+        RDG_MAX_SAMPLED_TEXTURES,
+        RDG_MAX_STORAGE_FLOAT4,
+        RDG_MAX_STORAGE_FLOAT2,
+        RDG_MAX_STORAGE_FLOAT,
+        RDG_MAX_STORAGE_UINT4,
+        RDG_MAX_STORAGE_UINT
+    >(context);
 
     bufferInfo.usage = VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_2_TRANSFER_DST_BIT;
     vmaAllocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;

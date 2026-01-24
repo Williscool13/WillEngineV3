@@ -6,6 +6,7 @@ import shader_functions;
 import bindless_declarations;
 
 
+// todo: Do not reference scene data in any PP shader. PP calculations should happen on final image size, which does not necessarily have to be scene data `mainRenderTargetSize`
 // ==================== Tonemapping ====================
 static const float3x3 ACESInputMat = {
     {0.59719, 0.35458, 0.04823},
@@ -87,7 +88,7 @@ void ComputeSDRTonemap(uniform TonemapSDRPushConstant pc, uint3 dtid : SV_Dispat
             break;
     }
 
-    rdgRenderTextures[pc.dstImageIndex][pixelCoord] = float4(ldrColor, 1.0);
+    rdgStorageFloat4[pc.dstImageIndex][pixelCoord] = float4(ldrColor, 1.0);
 }
 
 
@@ -183,7 +184,7 @@ void ComputeMotionBlurTileMax(uniform MotionBlurTileVelocityPushConstant pc, uin
         }
     }
 
-    rdgRenderTextures[pc.tileMaxIndex][tileCoord] = float4(maxVelocity, 0.0f, 0);
+    rdgStorageFloat2[pc.tileMaxIndex][tileCoord] = float2(maxVelocity);
 }
 
 [numthreads(POST_PROCESS_MOTION_BLUR_CONVOLUTION_DISPATCH_X, POST_PROCESS_MOTION_BLUR_CONVOLUTION_DISPATCH_Y, 1)]
@@ -215,7 +216,7 @@ void ComputeMotionBlurNeighborMax(uniform MotionBlurNeighborMaxPushConstant pc, 
         }
     }
 
-    rdgRenderTextures[pc.neighborMaxIndex][tileCoord] = float4(maxVelocity, 0.0f, 0.0f);
+    rdgStorageFloat2[pc.neighborMaxIndex][tileCoord] = float2(maxVelocity);
 }
 
 float2 DepthCmp(float centerDepth, float sampleDepth, float depthScale) {
@@ -243,7 +244,7 @@ void ComputeMotionBlurReconstruction(uniform MotionBlurReconstructionPushConstan
 
     float blurLen = neighborMaxLen * pc.velocityScale;
     if (blurLen < 0.5) {
-        rdgRenderTextures[pc.outputIndex][pixelCoord] = float4(centerColor, 1.0);
+        rdgStorageFloat4[pc.outputIndex][pixelCoord] = float4(centerColor, 1.0);
         return;
     }
 
@@ -284,7 +285,7 @@ void ComputeMotionBlurReconstruction(uniform MotionBlurReconstructionPushConstan
 
     float4 sumColor = float4(colorAccum, weightAccum) / sampleCount;
     float3 finalColor = sumColor.rgb + (1.0 - sumColor.w) * centerColor;
-    rdgRenderTextures[pc.outputIndex][pixelCoord] = float4(finalColor, 1.0);
+    rdgStorageFloat4[pc.outputIndex][pixelCoord] = float4(finalColor, 1.0);
 }
 // ==================== Bloom =======================================
 float Luminance(float3 color) {
@@ -308,8 +309,9 @@ float3 ApplyThreshold(float3 color, float threshold, float softThreshold) {
 void ComputeBloomThreshold(uniform BloomThresholdPushConstant pc, uint3 dtid : SV_DispatchThreadID) {
     uint2 pixelCoord = dtid.xy;
 
+    // todo: do not get dimensions
     uint2 outputSize;
-    rdgRenderTextures[pc.outputIndex].GetDimensions(outputSize.x, outputSize.y);
+    rdgStorageFloat4[pc.outputIndex].GetDimensions(outputSize.x, outputSize.y);
 
     if (any(pixelCoord >= outputSize)) {
         return;
@@ -317,15 +319,16 @@ void ComputeBloomThreshold(uniform BloomThresholdPushConstant pc, uint3 dtid : S
 
     float3 color = rdgTextures[pc.inputColorIndex].Load(int3(pixelCoord, 0)).rgb;
     float3 thresholded = ApplyThreshold(color, pc.threshold, pc.softThreshold);
-    rdgRenderTextures[pc.outputIndex][pixelCoord] = float4(thresholded, 1.0);
+    rdgStorageFloat4[pc.outputIndex][pixelCoord] = float4(thresholded, 1.0);
 }
 
 [numthreads(POST_PROCESS_BLOOM_DISPATCH_X, POST_PROCESS_BLOOM_DISPATCH_Y, 1)]
 void ComputeBloomDownsample(uniform BloomDownsamplePushConstant pc, uint3 dtid : SV_DispatchThreadID) {
     uint2 pixelCoord = dtid.xy;
 
+    // todo: do not get dimensions
     uint2 outputSize;
-    rdgRenderTextures[pc.outputIndex].GetDimensions(outputSize.x, outputSize.y);
+    rdgStorageFloat4[pc.outputIndex].GetDimensions(outputSize.x, outputSize.y);
 
     if (any(pixelCoord >= outputSize)) {
         return;
@@ -367,7 +370,7 @@ void ComputeBloomDownsample(uniform BloomDownsamplePushConstant pc, uint3 dtid :
         (F + G + L + K) * 0.125 / 4.0 +
         (G + H + M + L) * 0.125 / 4.0;
 
-    rdgRenderTextures[pc.outputIndex][pixelCoord] = float4(result, 1.0);
+    rdgStorageFloat4[pc.outputIndex][pixelCoord] = float4(result, 1.0);
 }
 
 [numthreads(POST_PROCESS_BLOOM_DISPATCH_X, POST_PROCESS_BLOOM_DISPATCH_Y, 1)]
@@ -375,7 +378,7 @@ void ComputeBloomUpsample(uniform BloomUpsamplePushConstant pc, uint3 dtid : SV_
     uint2 pixelCoord = dtid.xy;
 
     uint2 outputSize;
-    rdgRenderTextures[pc.outputIndex].GetDimensions(outputSize.x, outputSize.y);
+    rdgStorageFloat4[pc.outputIndex].GetDimensions(outputSize.x, outputSize.y);
 
     if (any(pixelCoord >= outputSize)) {
         return;
@@ -411,7 +414,7 @@ void ComputeBloomUpsample(uniform BloomUpsamplePushConstant pc, uint3 dtid : SV_
     float3 higher = rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv, pc.higherMipLevel).rgb;
     result += higher;
 
-    rdgRenderTextures[pc.outputIndex][pixelCoord] = float4(result, 1.0);
+    rdgStorageFloat4[pc.outputIndex][pixelCoord] = float4(result, 1.0);
 }
 
 // ==================== Vignette & Aberration =======================
@@ -444,7 +447,7 @@ void ComputeVignetteAberration(uniform VignetteChromaticAberrationPushConstant p
     );
     vignette = lerp(1.0, vignette, pc.vignetteStrength);
     color *= vignette;
-    rdgRenderTextures[pc.outputIndex][pixelCoord] = float4(color, 1.0);
+    rdgStorageFloat4[pc.outputIndex][pixelCoord] = float4(color, 1.0);
 }
 
 float FilmGrainHash(float2 p) {
@@ -470,7 +473,7 @@ void ComputeFilmGrain(uniform FilmGrainPushConstant pc, uint3 dtid : SV_Dispatch
 
     float3 color = rdgTextures[pc.inputIndex].Load(int3(pixelCoord, 0)).rgb;
     color += noise * pc.grainStrength;
-    rdgRenderTextures[pc.outputIndex][pixelCoord] = float4(color, 1.0);
+    rdgStorageFloat4[pc.outputIndex][pixelCoord] = float4(color, 1.0);
 }
 
 // ==================== Sharpening ==================================
@@ -497,7 +500,7 @@ void ComputeSharpening(uniform SharpeningPushConstant pc, uint3 dtid : SV_Dispat
     // Clamp to prevent overshooting
     sharpened = max(float3(0, 0, 0), sharpened);
 
-    rdgRenderTextures[pc.outputIndex][pixelCoord] = float4(sharpened, 1.0);
+    rdgStorageFloat4[pc.outputIndex][pixelCoord] = float4(sharpened, 1.0);
 
     // FFX CAS (I think this is wrong somehow/somewhere)
     /*if (any(dtid.xy >= pc.sceneData.mainRenderTargetSize)) return;
@@ -563,5 +566,5 @@ void ComputeColorGrading(uniform ColorGradingPushConstant pc, uint3 dtid : SV_Di
         color.g -= pc.tint * 0.1;
     }
 
-    rdgRenderTextures[pc.outputIndex][pixelCoord] = float4(color, 1.0);
+    rdgStorageFloat4[pc.outputIndex][pixelCoord] = float4(color, 1.0);
 }

@@ -153,5 +153,5 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
         resultRGB = YCoCgToRGB(resultYCoCg);
     }
 
-    rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(resultRGB, 1.0);
+    rdgStorageFloat4[pc.outputImageIndex][threadID.xy] = float4(resultRGB, 1.0);
 }

@@ -327,40 +327,88 @@ void RenderGraph::Compile(int64_t currentFrame)
 
     for (auto& phys : physicalResources) {
         if (phys.NeedsDescriptorWrite() && phys.imageView != VK_NULL_HANDLE) {
-            phys.sampledDescriptorHandle = transientImageHandleAllocator.Add();
-            assert(phys.sampledDescriptorHandle.IsValid() && "Invalid descriptor handle assigned to physical resource");
-
-            resourceManager->bindlessRDGTransientDescriptorBuffer.WriteSampledImageDescriptor(
-                phys.sampledDescriptorHandle.index, {nullptr, phys.imageView, VK_IMAGE_LAYOUT_GENERAL}
-            );
-
-            if (phys.depthOnlyView != VK_NULL_HANDLE) {
-                phys.depthOnlyDescriptorHandle = transientImageHandleAllocator.Add();
-                assert(phys.depthOnlyDescriptorHandle.IsValid());
+            if (phys.NeedsDescriptorWrite() && phys.imageView != VK_NULL_HANDLE) {
+                phys.sampledDescriptorHandle = transientSampledImageHandleAllocator.Add();
+                assert(phys.sampledDescriptorHandle.IsValid());
                 resourceManager->bindlessRDGTransientDescriptorBuffer.WriteSampledImageDescriptor(
-                    phys.depthOnlyDescriptorHandle.index, {nullptr, phys.depthOnlyView, VK_IMAGE_LAYOUT_GENERAL}
+                    phys.sampledDescriptorHandle.index, {nullptr, phys.imageView, VK_IMAGE_LAYOUT_GENERAL}
                 );
+
+                if (phys.depthOnlyView != VK_NULL_HANDLE) {
+                    phys.depthOnlyDescriptorHandle = transientSampledImageHandleAllocator.Add();
+                    assert(phys.depthOnlyDescriptorHandle.IsValid());
+                    resourceManager->bindlessRDGTransientDescriptorBuffer.WriteSampledImageDescriptor(
+                        phys.depthOnlyDescriptorHandle.index, {nullptr, phys.depthOnlyView, VK_IMAGE_LAYOUT_GENERAL}
+                    );
+                }
+
+                if (phys.stencilOnlyView != VK_NULL_HANDLE) {
+                    phys.stencilOnlyDescriptorHandle = transientStorageUIntHandleAllocator.Add();
+                    assert(phys.stencilOnlyDescriptorHandle.IsValid());
+                    resourceManager->bindlessRDGTransientDescriptorBuffer.WriteStorageUIntDescriptor(
+                        phys.stencilOnlyDescriptorHandle.index,
+                        {nullptr, phys.stencilOnlyView, VK_IMAGE_LAYOUT_GENERAL}
+                    );
+                }
+
+                StorageImageType storageType = GetStorageImageType(phys.dimensions.format, phys.aspect);
+                for (uint32_t mip = 0; mip < phys.dimensions.levels; ++mip) {
+                    switch (storageType) {
+                        case StorageImageType::Float4:
+                        {
+                            phys.storageMipDescriptorHandles[mip] = transientStorageFloat4HandleAllocator.Add();
+                            assert(phys.storageMipDescriptorHandles[mip].IsValid());
+                            resourceManager->bindlessRDGTransientDescriptorBuffer.WriteStorageFloat4Descriptor(
+                                phys.storageMipDescriptorHandles[mip].index,
+                                {nullptr, phys.mipViews[mip], VK_IMAGE_LAYOUT_GENERAL}
+                            );
+                            break;
+                        }
+                        case StorageImageType::Float2:
+                        {
+                            phys.storageMipDescriptorHandles[mip] = transientStorageFloat2HandleAllocator.Add();
+                            assert(phys.storageMipDescriptorHandles[mip].IsValid());
+                            resourceManager->bindlessRDGTransientDescriptorBuffer.WriteStorageFloat2Descriptor(
+                                phys.storageMipDescriptorHandles[mip].index,
+                                {nullptr, phys.mipViews[mip], VK_IMAGE_LAYOUT_GENERAL}
+                            );
+                            break;
+                        }
+                        case StorageImageType::Float:
+                        {
+                            phys.storageMipDescriptorHandles[mip] = transientStorageFloatHandleAllocator.Add();
+                            assert(phys.storageMipDescriptorHandles[mip].IsValid());
+                            resourceManager->bindlessRDGTransientDescriptorBuffer.WriteStorageFloatDescriptor(
+                                phys.storageMipDescriptorHandles[mip].index,
+                                {nullptr, phys.mipViews[mip], VK_IMAGE_LAYOUT_GENERAL}
+                            );
+                            break;
+                        }
+                        case StorageImageType::UInt4:
+                        {
+                            phys.storageMipDescriptorHandles[mip] = transientStorageUInt4HandleAllocator.Add();
+                            assert(phys.storageMipDescriptorHandles[mip].IsValid());
+                            resourceManager->bindlessRDGTransientDescriptorBuffer.WriteStorageUIntDescriptor(
+                                phys.storageMipDescriptorHandles[mip].index,
+                                {nullptr, phys.mipViews[mip], VK_IMAGE_LAYOUT_GENERAL}
+                            );
+                            break;
+                        }
+                        case StorageImageType::UInt:
+                        {
+                            phys.storageMipDescriptorHandles[mip] = transientStorageUIntHandleAllocator.Add();
+                            assert(phys.storageMipDescriptorHandles[mip].IsValid());
+                            resourceManager->bindlessRDGTransientDescriptorBuffer.WriteStorageUIntDescriptor(
+                                phys.storageMipDescriptorHandles[mip].index,
+                                {nullptr, phys.mipViews[mip], VK_IMAGE_LAYOUT_GENERAL}
+                            );
+                            break;
+                        }
+                    }
+                }
+
+                phys.descriptorWritten = true;
             }
-
-            if (phys.stencilOnlyView != VK_NULL_HANDLE) {
-                phys.stencilOnlyDescriptorHandle = transientImageHandleAllocator.Add();
-                assert(phys.stencilOnlyDescriptorHandle.IsValid());
-                resourceManager->bindlessRDGTransientDescriptorBuffer.WriteSampledImageDescriptor(
-                    phys.stencilOnlyDescriptorHandle.index, {nullptr, phys.stencilOnlyView, VK_IMAGE_LAYOUT_GENERAL}
-                );
-            }
-
-            for (uint32_t mip = 0; mip < phys.dimensions.levels; ++mip) {
-                phys.storageMipDescriptorHandles[mip] = transientStorageImageHandleAllocator.Add();
-                assert(phys.storageMipDescriptorHandles[mip].IsValid() && "Invalid descriptor handle assigned to physical resource view");
-
-                resourceManager->bindlessRDGTransientDescriptorBuffer.WriteStorageImageDescriptor(
-                    phys.storageMipDescriptorHandles[mip].index,
-                    {nullptr, phys.mipViews[mip], VK_IMAGE_LAYOUT_GENERAL}
-                );
-            }
-
-            phys.descriptorWritten = true;
         }
 
         if (phys.NeedsAddressRetrieval()) {
@@ -1047,8 +1095,12 @@ void RenderGraph::InvalidateAll()
         DestroyPhysicalResource(physicalResource);
     }
     physicalResources.clear();
-    transientImageHandleAllocator.Clear();
-    transientStorageImageHandleAllocator.Clear();
+    transientSampledImageHandleAllocator.Clear();
+    transientStorageFloat4HandleAllocator.Clear();
+    transientStorageFloat2HandleAllocator.Clear();
+    transientStorageFloatHandleAllocator.Clear();
+    transientStorageUInt4HandleAllocator.Clear();
+    transientStorageUIntHandleAllocator.Clear();
     textureCarryovers.clear();
     bufferCarryovers.clear();
 }
@@ -1324,6 +1376,18 @@ const ResourceDimensions& RenderGraph::GetImageDimensions(const std::string& nam
     assert(tex.HasPhysical() && "Texture has no physical resource");
 
     return physicalResources[tex.physicalIndex].dimensions;
+}
+
+const VkImageAspectFlags RenderGraph::GetImageAspect(const std::string& name)
+{
+
+    auto it = textureNameToIndex.find(name);
+    assert(it != textureNameToIndex.end() && "Texture not found");
+
+    auto& tex = textures[it->second];
+    assert(tex.HasPhysical() && "Texture has no physical resource");
+
+    return physicalResources[tex.physicalIndex].aspect;
 }
 
 uint32_t RenderGraph::GetSampledImageViewDescriptorIndex(const std::string& name)
@@ -1631,7 +1695,8 @@ void RenderGraph::DestroyPhysicalResource(PhysicalResource& resource)
             resource.image = VK_NULL_HANDLE;
             resource.imageAllocation = VK_NULL_HANDLE;
         }
-        transientImageHandleAllocator.Remove(resource.sampledDescriptorHandle);
+        // todo release handles for other lists as well here
+        transientSampledImageHandleAllocator.Remove(resource.sampledDescriptorHandle);
     }
     else {
         if (resource.buffer != VK_NULL_HANDLE) {
@@ -1703,6 +1768,7 @@ void RenderGraph::CreatePhysicalImage(PhysicalResource& resource, const Resource
     VK_CHECK(vkCreateImageView(context->device, &sampledViewInfo, nullptr, &resource.imageView));
 
     if ((aspectFlags & VK_IMAGE_ASPECT_DEPTH_BIT) && (aspectFlags & VK_IMAGE_ASPECT_STENCIL_BIT)) {
+        // If Depth+Stencil, imageView is combined. Make 2 additional separate imageViews
         VkImageViewCreateInfo depthViewInfo = viewInfo;
         depthViewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
         depthViewInfo.subresourceRange.levelCount = dim.levels;

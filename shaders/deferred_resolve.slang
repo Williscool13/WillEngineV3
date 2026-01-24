@@ -61,5 +61,5 @@ void ComputeMain(uniform DeferredResolvePushConstant pc, uint3 threadID : SV_Dis
     float3 ambient = albedo.xyz * 0.03 * gtao;
     float3 emissive = emissiveData.rgb * emissiveData.a;
     float3 finalColor = directLight + ambient + emissive;
-    rdgRenderTextures[pc.outputImageIndex][threadID.xy] = float4(finalColor, 1.0);
+    rdgStorageFloat4[pc.outputImageIndex][threadID.xy] = float4(finalColor, 1.0);
 }

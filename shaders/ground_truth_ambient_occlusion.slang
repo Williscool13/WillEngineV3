@@ -67,14 +67,14 @@ void ComputeGTAODepthPrepass(uniform GTAODepthPrepassPushConstant pc, uint3 dtid
     float depth2 = ClampDepth(ScreenToViewSpaceDepth(rDepth2, pc.sceneData->depthLinearizeMult, pc.sceneData->depthLinearizeAdd));
     float depth3 = ClampDepth(ScreenToViewSpaceDepth(rDepth3, pc.sceneData->depthLinearizeMult, pc.sceneData->depthLinearizeAdd));
 
-    rdgRenderTextures[pc.outputDepth0][screenPos + int2(0, 0)] = float4(depth0, 0.0f, 0.0f, 0.0f);
-    rdgRenderTextures[pc.outputDepth0][screenPos + int2(1, 0)] = float4(depth1, 0.0f, 0.0f, 0.0f);
-    rdgRenderTextures[pc.outputDepth0][screenPos + int2(0, 1)] = float4(depth2, 0.0f, 0.0f, 0.0f);
-    rdgRenderTextures[pc.outputDepth0][screenPos + int2(1, 1)] = float4(depth3, 0.0f, 0.0f, 0.0f);
+    rdgStorageFloat[pc.outputDepth0][screenPos + int2(0, 0)] = depth0;
+    rdgStorageFloat[pc.outputDepth0][screenPos + int2(1, 0)] = depth1;
+    rdgStorageFloat[pc.outputDepth0][screenPos + int2(0, 1)] = depth2;
+    rdgStorageFloat[pc.outputDepth0][screenPos + int2(1, 1)] = depth3;
 
     // MIP 1
     float dm1 = DepthMipPrefilter(depth0, depth1, depth2, depth3, pc.effectRadius, pc.radiusMultiplier, pc.effectFalloffRange);
-    rdgRenderTextures[pc.outputDepth1][baseCoord] = float4(dm1, 0.0f, 0.0f, 0.0f);
+    rdgStorageFloat[pc.outputDepth1][baseCoord] = dm1;
     g_scratchDepths[gtid.x][gtid.y] = dm1;
 
     GroupMemoryBarrierWithGroupSync();
@@ -87,7 +87,7 @@ void ComputeGTAODepthPrepass(uniform GTAODepthPrepassPushConstant pc, uint3 dtid
         float inBR = g_scratchDepths[gtid.x+1][gtid.y+1];
 
         float dm2 = DepthMipPrefilter(inTL, inTR, inBL, inBR, pc.effectRadius, pc.radiusMultiplier, pc.effectFalloffRange);
-        rdgRenderTextures[pc.outputDepth2][baseCoord/2u] = float4(dm2, 0.0f, 0.0f, 0.0f);
+        rdgStorageFloat[pc.outputDepth2][baseCoord/2u] = dm2;
         g_scratchDepths[gtid.x][gtid.y] = dm2;
     }
 
@@ -101,7 +101,7 @@ void ComputeGTAODepthPrepass(uniform GTAODepthPrepassPushConstant pc, uint3 dtid
         float inBR = g_scratchDepths[gtid.x+2][gtid.y+2];
 
         float dm3 = DepthMipPrefilter(inTL, inTR, inBL, inBR, pc.effectRadius, pc.radiusMultiplier, pc.effectFalloffRange);
-        rdgRenderTextures[pc.outputDepth3][baseCoord/4u] = float4(dm3, 0.0f, 0.0f, 0.0f);
+        rdgStorageFloat[pc.outputDepth3][baseCoord/4u] = dm3;
         g_scratchDepths[gtid.x][gtid.y] = dm3;
     }
 
@@ -115,7 +115,7 @@ void ComputeGTAODepthPrepass(uniform GTAODepthPrepassPushConstant pc, uint3 dtid
         float inBR = g_scratchDepths[gtid.x+4][gtid.y+4];
 
         float dm4 = DepthMipPrefilter(inTL, inTR, inBL, inBR, pc.effectRadius, pc.radiusMultiplier, pc.effectFalloffRange);
-        rdgRenderTextures[pc.outputDepth4][baseCoord/8u] = float4(dm4, 0.0f, 0.0f, 0.0f);
+        rdgStorageFloat[pc.outputDepth4][baseCoord/8u] = dm4;
     }
 }
 
@@ -209,7 +209,7 @@ void ComputeGTAOMain(uniform GTAOMainPushConstant pc, uint3 dtid : SV_DispatchTh
     // Calculate and store edge data
     float4 edges = XE_GTAO_CalculateDepthEdges(viewSpaceZM, viewSpaceZL, viewSpaceZR, viewSpaceZT, viewSpaceZB);
     float packedEdges = XeGTAO_PackEdges(edges);
-    rdgRenderTextures[pc.edgeDataIndex][screenPos] = float4(packedEdges, 0, 0, 0);
+    rdgStorageFloat[pc.edgeDataIndex][screenPos] = packedEdges;
 
     float3 viewNormal = rdgTextures[pc.normalBufferIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], uv, 0).rgb;
     viewNormal = viewNormal * 2.0 - 1.0;
@@ -251,7 +251,7 @@ void ComputeGTAOMain(uniform GTAOMainPushConstant pc, uint3 dtid : SV_DispatchTh
     if (screenspaceRadius < pixelTooCloseThreshold) {
         visibility = 1.0;
         visibility = saturate(visibility / XE_GTAO_OCCLUSION_TERM_SCALE);
-        rdgRenderTextures[pc.aoOutputIndex][screenPos] = float4(visibility, 0, 0, 0);
+        rdgStorageFloat[pc.aoOutputIndex][screenPos] = visibility;
         return;
     }
 
@@ -347,7 +347,7 @@ void ComputeGTAOMain(uniform GTAOMainPushConstant pc, uint3 dtid : SV_DispatchTh
     visibility = max(0.03, visibility);
 
     visibility = saturate(visibility / XE_GTAO_OCCLUSION_TERM_SCALE);
-    rdgRenderTextures[pc.aoOutputIndex][screenPos] = float4(visibility, 0, 0, 0);
+    rdgStorageFloat[pc.aoOutputIndex][screenPos] = visibility;
 }
 
 // ==================== GTAO Denoise Pass ===============================
@@ -456,6 +456,6 @@ void ComputeGTAODenoise(uniform GTAODenoisePushConstant pc, uint3 dtid : SV_Disp
         // Apply occlusion term scale on final pass
         float outputValue = aoTerm[side] * (pc.isFinalDenoisePass  == 1 ? XE_GTAO_OCCLUSION_TERM_SCALE : 1.0);
 
-        rdgRenderTextures[pc.filteredAOIndex][sideScreenPos] = float4(outputValue, 0, 0, 0);
+        rdgStorageFloat[pc.filteredAOIndex][sideScreenPos] = outputValue;
     }
 }

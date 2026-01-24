@@ -12,17 +12,21 @@
 
 namespace Render
 {
-template<size_t SamplerCount, size_t CompareSamplerCount, size_t SampledImageCount, size_t FloatStorageImageCount>
+template<size_t SamplerCount, size_t CompareSamplerCount, size_t SampledImageCount,
+    size_t StorageFloat4Count, size_t StorageFloat2Count, size_t StorageFloatCount, size_t StorageUInt4Count, size_t StorageUIntCount>
 class BindlessTransientRDGResourcesDescriptorBuffer
 {
 public:
-    /// Descriptor set layout defining the bindless resource structure
     DescriptorSetLayout descriptorSetLayout{};
 
     uint32_t GetSamplerCount() { return SamplerCount; }
     uint32_t GetCompareSamplerCount() { return CompareSamplerCount; }
     uint32_t GetSampledImageCount() { return SampledImageCount; }
-    uint32_t GetStorageImageCount() { return FloatStorageImageCount; }
+    uint32_t GetStorageFloat4Count() { return StorageFloat4Count; }
+    uint32_t GetStorageFloat2Count() { return StorageFloat2Count; }
+    uint32_t GetStorageFloatCount() { return StorageFloatCount; }
+    uint32_t GetStorageUInt4Count() { return StorageUInt4Count; }
+    uint32_t GetStorageUIntCount() { return StorageUIntCount; }
 
 public:
     BindlessTransientRDGResourcesDescriptorBuffer() = default;
@@ -31,10 +35,14 @@ public:
         : context(context)
     {
         DescriptorLayoutBuilder layoutBuilder{1};
-        layoutBuilder.AddBinding(0, VK_DESCRIPTOR_TYPE_SAMPLER, CompareSamplerCount);
-        layoutBuilder.AddBinding(1, VK_DESCRIPTOR_TYPE_SAMPLER, SamplerCount);
+        layoutBuilder.AddBinding(0, VK_DESCRIPTOR_TYPE_SAMPLER, SamplerCount);
+        layoutBuilder.AddBinding(1, VK_DESCRIPTOR_TYPE_SAMPLER, CompareSamplerCount);
         layoutBuilder.AddBinding(2, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, SampledImageCount);
-        layoutBuilder.AddBinding(3, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, FloatStorageImageCount);
+        layoutBuilder.AddBinding(3, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, StorageFloat4Count);
+        layoutBuilder.AddBinding(4, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, StorageFloat2Count);
+        layoutBuilder.AddBinding(5, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, StorageFloatCount);
+        layoutBuilder.AddBinding(6, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, StorageUInt4Count);
+        layoutBuilder.AddBinding(7, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, StorageUIntCount);
 
         VkDescriptorSetLayoutCreateInfo layoutCreateInfo = layoutBuilder.Build(
             static_cast<VkShaderStageFlagBits>(VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT),
@@ -52,7 +60,7 @@ public:
         vmaAllocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
         vmaAllocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
         buffer = AllocatedBuffer::CreateAllocatedBuffer(context, bufferInfo, vmaAllocInfo);
-    };
+    }
 
     ~BindlessTransientRDGResourcesDescriptorBuffer() = default;
 
@@ -86,93 +94,69 @@ public:
             SPDLOG_ERROR("Invalid sampler index: {}", index);
             return false;
         }
-
-        size_t bindingOffset;
-        vkGetDescriptorSetLayoutBindingOffsetEXT(context->device, descriptorSetLayout.handle, 0, &bindingOffset);
-        char* basePtr = static_cast<char*>(buffer.allocationInfo.pMappedData) + bindingOffset;
-
-        VkDescriptorGetInfoEXT descriptorGetInfo{};
-        descriptorGetInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT;
-        descriptorGetInfo.type = VK_DESCRIPTOR_TYPE_SAMPLER;
-        descriptorGetInfo.data.pSampler = &imageInfo.sampler;
-
-        const size_t storageImageDescriptorSize = VulkanContext::deviceInfo.descriptorBufferProps.samplerDescriptorSize;
-        char* bufferPtr = basePtr + index * storageImageDescriptorSize;
-        vkGetDescriptorEXT(context->device, &descriptorGetInfo, storageImageDescriptorSize, bufferPtr);
-
-        return true;
+        return WriteDescriptorHelper(0, index, VK_DESCRIPTOR_TYPE_SAMPLER,
+                                     VulkanContext::deviceInfo.descriptorBufferProps.samplerDescriptorSize,
+                                     [&](VkDescriptorGetInfoEXT& info) { info.data.pSampler = &imageInfo.sampler; });
     }
+
     bool WriteCompareSamplerDescriptor(uint32_t index, const VkDescriptorImageInfo& imageInfo)
     {
         if (index >= CompareSamplerCount) {
             SPDLOG_ERROR("Invalid compare sampler index: {}", index);
             return false;
         }
-
-        size_t bindingOffset;
-        vkGetDescriptorSetLayoutBindingOffsetEXT(context->device, descriptorSetLayout.handle, 1, &bindingOffset);
-        char* basePtr = static_cast<char*>(buffer.allocationInfo.pMappedData) + bindingOffset;
-
-        VkDescriptorGetInfoEXT descriptorGetInfo{};
-        descriptorGetInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT;
-        descriptorGetInfo.type = VK_DESCRIPTOR_TYPE_SAMPLER;
-        descriptorGetInfo.data.pSampler = &imageInfo.sampler;
-
-        const size_t storageImageDescriptorSize = VulkanContext::deviceInfo.descriptorBufferProps.samplerDescriptorSize;
-        char* bufferPtr = basePtr + index * storageImageDescriptorSize;
-        vkGetDescriptorEXT(context->device, &descriptorGetInfo, storageImageDescriptorSize, bufferPtr);
-
-        return true;
+        return WriteDescriptorHelper(1, index, VK_DESCRIPTOR_TYPE_SAMPLER,
+                                     VulkanContext::deviceInfo.descriptorBufferProps.samplerDescriptorSize,
+                                     [&](VkDescriptorGetInfoEXT& info) { info.data.pSampler = &imageInfo.sampler; });
     }
+
     bool WriteSampledImageDescriptor(uint32_t index, const VkDescriptorImageInfo& imageInfo)
     {
         if (index >= SampledImageCount) {
             SPDLOG_ERROR("Invalid sampled image index: {}", index);
             return false;
         }
-
-        size_t bindingOffset;
-        vkGetDescriptorSetLayoutBindingOffsetEXT(context->device, descriptorSetLayout.handle, 2, &bindingOffset);
-        char* basePtr = static_cast<char*>(buffer.allocationInfo.pMappedData) + bindingOffset;
-
-        VkDescriptorGetInfoEXT descriptorGetInfo{};
-        descriptorGetInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT;
-        descriptorGetInfo.type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-        descriptorGetInfo.data.pSampledImage = &imageInfo;
-
-        const size_t storageImageDescriptorSize = VulkanContext::deviceInfo.descriptorBufferProps.sampledImageDescriptorSize;
-        char* bufferPtr = basePtr + index * storageImageDescriptorSize;
-        vkGetDescriptorEXT(context->device, &descriptorGetInfo, storageImageDescriptorSize, bufferPtr);
-
-        return true;
+        return WriteDescriptorHelper(2, index, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                                     VulkanContext::deviceInfo.descriptorBufferProps.sampledImageDescriptorSize,
+                                     [&](VkDescriptorGetInfoEXT& info) { info.data.pSampledImage = &imageInfo; });
     }
-    bool WriteStorageImageDescriptor(uint32_t index, const VkDescriptorImageInfo& imageInfo)
+
+    bool WriteStorageFloat4Descriptor(uint32_t index, const VkDescriptorImageInfo& imageInfo)
     {
-        if (index >= FloatStorageImageCount) {
-            SPDLOG_ERROR("Invalid storage image index {}", index);
+        if (index >= StorageFloat4Count) {
+            SPDLOG_ERROR("Invalid storage float4 index: {}", index);
             return false;
         }
-
-        size_t bindingOffset;
-        vkGetDescriptorSetLayoutBindingOffsetEXT(context->device, descriptorSetLayout.handle, 3, &bindingOffset);
-        char* basePtr = static_cast<char*>(buffer.allocationInfo.pMappedData) + bindingOffset;
-
-        VkDescriptorGetInfoEXT descriptorGetInfo{};
-        descriptorGetInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT;
-        descriptorGetInfo.type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-        descriptorGetInfo.data.pStorageImage = &imageInfo;
-
-        const size_t storageImageDescriptorSize = VulkanContext::deviceInfo.descriptorBufferProps.storageImageDescriptorSize;
-        char* bufferPtr = basePtr + index * storageImageDescriptorSize;
-        vkGetDescriptorEXT(context->device, &descriptorGetInfo, storageImageDescriptorSize, bufferPtr);
-
-        return true;
+        return WriteStorageImageHelper(3, index, imageInfo);
     }
 
-    /**
-    * Get binding info for vkCmdBindDescriptorBuffersEXT.
-    * @return Descriptor buffer binding info
-    */
+    bool WriteStorageFloat2Descriptor(uint32_t index, const VkDescriptorImageInfo& imageInfo)
+    {
+        if (index >= StorageFloat2Count) {
+            SPDLOG_ERROR("Invalid storage float2 index: {}", index);
+            return false;
+        }
+        return WriteStorageImageHelper(4, index, imageInfo);
+    }
+
+    bool WriteStorageFloatDescriptor(uint32_t index, const VkDescriptorImageInfo& imageInfo)
+    {
+        if (index >= StorageFloatCount) {
+            SPDLOG_ERROR("Invalid storage float index: {}", index);
+            return false;
+        }
+        return WriteStorageImageHelper(5, index, imageInfo);
+    }
+
+    bool WriteStorageUIntDescriptor(uint32_t index, const VkDescriptorImageInfo& imageInfo)
+    {
+        if (index >= StorageUIntCount) {
+            SPDLOG_ERROR("Invalid storage uint index: {}", index);
+            return false;
+        }
+        return WriteStorageImageHelper(6, index, imageInfo);
+    }
+
     [[nodiscard]] VkDescriptorBufferBindingInfoEXT GetBindingInfo() const
     {
         VkDescriptorBufferBindingInfoEXT descriptorBufferBindingInfo{};
@@ -184,8 +168,33 @@ public:
 
 private:
     VulkanContext* context{};
-    AllocatedBuffer buffer{}; ///< GPU buffer containing descriptor data
-    VkDeviceSize descriptorSetSize{}; ///< Aligned size of the descriptor set
+    AllocatedBuffer buffer{};
+    VkDeviceSize descriptorSetSize{};
+
+    template<typename ConfigFunc>
+    bool WriteDescriptorHelper(uint32_t binding, uint32_t index, VkDescriptorType type,
+                               size_t descriptorSize, ConfigFunc&& configFunc)
+    {
+        size_t bindingOffset;
+        vkGetDescriptorSetLayoutBindingOffsetEXT(context->device, descriptorSetLayout.handle, binding, &bindingOffset);
+        char* basePtr = static_cast<char*>(buffer.allocationInfo.pMappedData) + bindingOffset;
+
+        VkDescriptorGetInfoEXT descriptorGetInfo{};
+        descriptorGetInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT;
+        descriptorGetInfo.type = type;
+        configFunc(descriptorGetInfo);
+
+        char* bufferPtr = basePtr + index * descriptorSize;
+        vkGetDescriptorEXT(context->device, &descriptorGetInfo, descriptorSize, bufferPtr);
+        return true;
+    }
+
+    bool WriteStorageImageHelper(uint32_t binding, uint32_t index, const VkDescriptorImageInfo& imageInfo)
+    {
+        return WriteDescriptorHelper(binding, index, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                                     VulkanContext::deviceInfo.descriptorBufferProps.storageImageDescriptorSize,
+                                     [&](VkDescriptorGetInfoEXT& info) { info.data.pStorageImage = &imageInfo; });
+    }
 };
 } // Render
 

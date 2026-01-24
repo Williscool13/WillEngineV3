@@ -8,6 +8,7 @@
 #ifdef __SLANG__
 module common_interop;
 #define SHADER_PUBLIC public
+#define SHADER_ENUM enum
 #define SHADER_CONST const static
 #define SHADER_ALIGN
 #define SHADER_PTR(T) T*
@@ -36,11 +37,21 @@ using float3x3 = glm::mat3;
 using float4x4 = glm::mat4;
 
 #define SHADER_PUBLIC
+#define SHADER_ENUM enum class
 #define SHADER_CONST constexpr inline
 #define SHADER_ALIGN alignas(16)
 #define SHADER_PTR(T) VkDeviceAddress
 #endif // __SLANG__
 
+SHADER_PUBLIC SHADER_ENUM DebugTransformationType
+{
+    None,
+    DepthRemap,
+    MultiplyBy1000,
+    MultiplyBy10000,
+    DivideBy1000,
+    DivideBy10000
+};
 
 SHADER_PUBLIC struct Frustum
 {

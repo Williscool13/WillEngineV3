@@ -17,8 +17,13 @@
 namespace Render
 {
 inline constexpr int32_t RDG_PHYSICAL_RESOURCE_UNUSED_THRESHOLD = 1024; // in ticks
-inline constexpr int32_t RDG_MAX_SAMPLED_TEXTURES = 128;
-inline constexpr int32_t RDG_MAX_STORAGE_TEXTURES = 1024;
+inline constexpr int32_t RDG_MAX_SAMPLED_TEXTURES = 256;
+inline constexpr int32_t RDG_MAX_STORAGE_FLOAT4 = 512;
+inline constexpr int32_t RDG_MAX_STORAGE_FLOAT2 = 128;
+inline constexpr int32_t RDG_MAX_STORAGE_FLOAT  = 256;
+inline constexpr int32_t RDG_MAX_STORAGE_UINT4   = 64;
+inline constexpr int32_t RDG_MAX_STORAGE_UINT   = 64;
+
 inline constexpr int32_t RDG_MAX_MIP_LEVELS = 12;
 inline constexpr int32_t RDG_DEFAULT_UPLOAD_LINEAR_ALLOCATOR_SIZE = 1 * 1024 * 1024; // 1MB base (doubles as needed)
 
