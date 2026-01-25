@@ -745,7 +745,7 @@ void RenderThread::CreatePipelines()
 
     // Portal Composite
     {
-        builder.AddShaderStage("shaders/portal_composite_vertex.spv", VK_SHADER_STAGE_VERTEX_BIT);
+        builder.AddShaderStage("shaders/fullscreen_pass_vertex.spv", VK_SHADER_STAGE_VERTEX_BIT);
         builder.AddShaderStage("shaders/portal_composite_fragment.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
         builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
         builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);

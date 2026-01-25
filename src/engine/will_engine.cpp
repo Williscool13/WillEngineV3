@@ -446,7 +446,7 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
             uint32_t indirectCount = *reinterpret_cast<uint32_t*>(data);
             ImGui::Text("Indirect Draw Count: %u", indirectCount);
 
-            InstancedMeshIndirectDrawParameters* params = reinterpret_cast<InstancedMeshIndirectDrawParameters*>(data + sizeof(uint32_t));
+            auto* params = reinterpret_cast<InstancedMeshIndirectDrawParameters*>(data + sizeof(uint32_t));
 
             for (uint32_t i = 0; i < std::min(indirectCount, 10u); i++) {
                 if (ImGui::TreeNode((void*) (intptr_t) i, "Draw %u", i)) {
@@ -459,9 +459,9 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
         }
 
         if (ImGui::CollapsingHeader("Luminance Histogram")) {
-            uint8_t* data = static_cast<uint8_t*>(renderThread->GetResourceManager()->debugReadbackBuffer.allocationInfo.pMappedData);
+            auto data = static_cast<uint8_t*>(renderThread->GetResourceManager()->debugReadbackBuffer.allocationInfo.pMappedData);
             size_t histogramOffset = sizeof(uint32_t) + 10 * sizeof(InstancedMeshIndirectDrawParameters);
-            uint32_t* histogram = reinterpret_cast<uint32_t*>(data + histogramOffset);
+            auto histogram = reinterpret_cast<uint32_t*>(data + histogramOffset);
 
             ImGui::Text("First 64 bins (8x8):");
             for (int row = 0; row < 8; row++) {

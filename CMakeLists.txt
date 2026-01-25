@@ -236,7 +236,6 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/mesh_shading_direct.slang mesh MeshMain mesh_shading_direct
         ${CMAKE_SOURCE_DIR}/shaders/mesh_shading_direct.slang fragment FragmentMain mesh_shading_direct
 
-        ${CMAKE_SOURCE_DIR}/shaders/portal_rendering.slang vertex VertexMain portal_composite
         ${CMAKE_SOURCE_DIR}/shaders/portal_rendering.slang fragment FragmentMain portal_composite
 
         ${CMAKE_SOURCE_DIR}/shaders/shadow_mesh_shading_instanced.slang task TaskMain shadow_mesh_shading_instanced
@@ -260,6 +259,8 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeFilmGrain film_grain
         ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeSharpening sharpening
         ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeColorGrading color_grading
+
+        ${CMAKE_SOURCE_DIR}/shaders/common_shaders.slang vertex FullscreenPassVertexMain fullscreen_pass
 )
 
 # Post-Build Commands =========================
