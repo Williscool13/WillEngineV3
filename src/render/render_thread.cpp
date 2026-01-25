@@ -283,7 +283,8 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         }
     }
 
-    if (bHasAnyGeometry) {
+    bool bHasPortalView = !viewFamily.portalViews.empty();
+    if (bHasAnyGeometry && bHasPortalView) {
         renderGraph->CreateTexture(portalTargets.albedo, TextureInfo{GBUFFER_ALBEDO_FORMAT, renderExtent[0], renderExtent[1], 1});
         renderGraph->CreateTexture(portalTargets.normal, TextureInfo{GBUFFER_NORMAL_FORMAT, renderExtent[0], renderExtent[1], 1});
         renderGraph->CreateTexture(portalTargets.pbr, TextureInfo{GBUFFER_PBR_FORMAT, renderExtent[0], renderExtent[1], 1});
@@ -751,9 +752,13 @@ void RenderThread::SetupFrameUniforms(const Core::ViewFamily& viewFamily, const 
     UploadAllocation sceneDataUploadAllocation = renderGraph->AllocateTransient(sizeof(SceneData));
     memcpy(sceneDataUploadAllocation.ptr, &sceneData, sizeof(SceneData));
     // Portal Scene Data
-    SceneData portalSceneData = GenerateSceneData(viewFamily.portalViews[0], viewFamily.postProcessConfig, renderExtent, frameNumber, renderDeltaTime);
-    UploadAllocation portalSceneDataUploadAllocation = renderGraph->AllocateTransient(sizeof(SceneData));
-    memcpy(portalSceneDataUploadAllocation.ptr, &portalSceneData, sizeof(SceneData));
+    UploadAllocation portalSceneDataUploadAllocation{};
+    bool bHasPortal = !viewFamily.portalViews.empty();
+    if (bHasPortal) {
+        SceneData portalSceneData = GenerateSceneData(viewFamily.portalViews[0], viewFamily.postProcessConfig, renderExtent, frameNumber, renderDeltaTime);
+        portalSceneDataUploadAllocation = renderGraph->AllocateTransient(sizeof(SceneData));
+        memcpy(portalSceneDataUploadAllocation.ptr, &portalSceneData, sizeof(SceneData));
+    }
 
     // Shadow Data
     Core::ShadowConfiguration shadowConfig = viewFamily.shadowConfig;
@@ -816,23 +821,28 @@ void RenderThread::SetupFrameUniforms(const Core::ViewFamily& viewFamily, const 
     VkBuffer srcBuffer = renderGraph->GetTransientUploadBuffer();
     uploadUniformsPass.Execute([&, srcBuffer,
             sceneOffset = sceneDataUploadAllocation.offset,
-            portalOffset = portalSceneDataUploadAllocation.offset,
+            portalOffset = portalSceneDataUploadAllocation.offset, bHasPortal,
             shadowOffset = shadowDataUploadAllocation.offset,
             lightOffset = lightDataUploadAllocation.offset](VkCommandBuffer cmd) {
             std::array<VkBufferCopy2, 2> sceneDataRegions{};
+            uint32_t sceneDataCount{1};
             sceneDataRegions[0].sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2;
             sceneDataRegions[0].srcOffset = sceneOffset;
             sceneDataRegions[0].dstOffset = 0;
             sceneDataRegions[0].size = sizeof(SceneData);
-            sceneDataRegions[1].sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2;
-            sceneDataRegions[1].srcOffset = portalOffset;
-            sceneDataRegions[1].dstOffset = sizeof(SceneData);
-            sceneDataRegions[1].size = sizeof(SceneData);
+            if (bHasPortal) {
+                sceneDataRegions[1].sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2;
+                sceneDataRegions[1].srcOffset = portalOffset;
+                sceneDataRegions[1].dstOffset = sizeof(SceneData);
+                sceneDataRegions[1].size = sizeof(SceneData);
+                sceneDataCount++;
+            }
+
             const VkCopyBufferInfo2 sceneDataCopyInfo{
                 .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
                 .srcBuffer = srcBuffer,
                 .dstBuffer = renderGraph->GetBufferHandle("scene_data"),
-                .regionCount = sceneDataRegions.size(),
+                .regionCount = sceneDataCount,
                 .pRegions = sceneDataRegions.data()
             };
             vkCmdCopyBuffer2(cmd, &sceneDataCopyInfo);

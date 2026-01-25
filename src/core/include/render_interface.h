@@ -47,8 +47,6 @@ struct RenderView
 
     // render target color
     // render target depth
-
-    int32_t debug{-1};
 };
 
 enum class ShadowQuality

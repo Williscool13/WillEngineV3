@@ -31,7 +31,6 @@ GAME_API void GameStartup(Core::EngineContext* ctx, Engine::GameState* state)
     cameraTransform.translation = glm::vec3(0.0f, 3.0f, 5.0f);
     cameraTransform.rotation = glm::quatLookAt(glm::normalize(glm::vec3(0.0f, 0.0f, 0.0f) - glm::vec3(0.0f, 3.0f, 5.0f)), WORLD_UP);
     state->registry.emplace<Game::MainViewportComponent>(camera);
-    state->registry.emplace<Game::RenderDebugViewComponent>(camera);
     state->registry.ctx().emplace<Engine::GameState*>(state);
 
     spdlog::set_default_logger(ctx->logger);
@@ -78,11 +77,24 @@ GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::GameState* state)
 
 GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer)
 {
+    frameBuffer->mainViewFamily.modelMatrices.clear();
+    frameBuffer->mainViewFamily.mainInstances.clear();
+    for (Core::CustomStencilDrawBatch& customStencilBatch : frameBuffer->mainViewFamily.customStencilDraws) {
+        customStencilBatch.instances.clear();
+    }
+    frameBuffer->mainViewFamily.materials.clear();
+    frameBuffer->mainViewFamily.portalViews.clear();
+
+
     Game::System::BuildViewFamily(state, frameBuffer->mainViewFamily);
+    if (state->bEnablePortal) {
+        Game::System::BuildPortalViewFamily(state, frameBuffer->mainViewFamily);
+    }
     Game::System::GatherRenderables(ctx, state, frameBuffer);
 
     if (ImGui::Begin("Debug View")) {
         ImGui::Text("Current: %s", state->debugResourceName.empty() ? "None" : state->debugResourceName.c_str());
+        ImGui::Checkbox("Enable Portals", &state->bEnablePortal);
 
         if (ImGui::Button("Disable Debug View")) {
             state->debugResourceName.clear();

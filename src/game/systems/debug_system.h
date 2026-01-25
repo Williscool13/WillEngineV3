@@ -30,11 +30,6 @@ struct EngineContext;
 
 namespace Game
 {
-struct RenderDebugViewComponent
-{
-    int32_t debugIndex{-1};
-};
-
 struct DebugHotkey
 {
     Key key;

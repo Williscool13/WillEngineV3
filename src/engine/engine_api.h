@@ -43,6 +43,7 @@ struct GameState
     Core::PostProcessConfiguration postProcess{};
 
     // Debug
+    bool bEnablePortal{true};
     std::string debugResourceName{};
     DebugTransformationType debugTransformationType{};
     Core::DebugViewAspect debugViewAspect{};
