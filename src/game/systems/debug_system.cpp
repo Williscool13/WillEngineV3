@@ -19,6 +19,7 @@
 #include "game/components/debug/motion_blur_movement_component.h"
 #include "game/components/gameplay/anti_gravity_component.h"
 #include "game/components/gameplay/floor_component.h"
+#include "game/components/gameplay/portals/portal_component.h"
 #include "game/components/physics/dynamic_physics_body_component.h"
 #include "game/components/render/portal_plane_component.h"
 #include "physics/physics_system.h"
@@ -31,59 +32,8 @@ static Engine::WillModelHandle dragonHandle = Engine::WillModelHandle::INVALID;
 static Engine::WillModelHandle boxHandle = Engine::WillModelHandle::INVALID;
 static Engine::WillModelHandle box4kHandle = Engine::WillModelHandle::INVALID;
 static Engine::WillModelHandle sponzaHandle = Engine::WillModelHandle::INVALID;
-static Engine::WillModelHandle portalPlaneHandle = Engine::WillModelHandle::INVALID;
 static Engine::TextureHandle textureHandle = Engine::TextureHandle::INVALID;
 static Engine::MaterialID boxMatID;
-
-void CreatePortalPlane(Core::EngineContext* ctx, Engine::GameState* state, glm::vec3 position, glm::quat rotation, glm::vec3 scale)
-{
-    if (!portalPlaneHandle.IsValid()) {
-        SPDLOG_WARN("[DebugSystem] Portal plane model not loaded, press F1 first");
-        return;
-    }
-
-    Render::WillModel* plane = ctx->assetManager->GetModel(portalPlaneHandle);
-    if (!plane || plane->modelLoadState != Render::WillModel::ModelLoadState::Loaded) {
-        SPDLOG_WARN("[DebugSystem] Portal plane model not ready yet");
-        return;
-    }
-
-    RenderableComponent renderable{};
-    Engine::MaterialManager& materialManager = ctx->assetManager->GetMaterialManager();
-    Render::MeshInformation& submesh = plane->modelData.meshes[0];
-
-    for (size_t i = 0; i < submesh.primitiveProperties.size(); ++i) {
-        Render::PrimitiveProperty& primitive = submesh.primitiveProperties[i];
-
-        MaterialProperties material;
-        if (primitive.materialIndex != -1) {
-            material = plane->modelData.materials[primitive.materialIndex];
-        }
-        else {
-            material = materialManager.Get(materialManager.GetDefaultMaterial());
-        }
-
-        material.colorFactor = glm::vec4(0.3f, 0.6f, 1.0f, 1.0f);
-
-        Engine::MaterialID matID = materialManager.GetOrCreate(material);
-
-        renderable.primitives[i] = {
-            .primitiveIndex = primitive.index,
-            .materialID = matID
-        };
-    }
-    renderable.primitiveCount = submesh.primitiveProperties.size();
-    renderable.modelFlags = glm::vec4(0.0f);
-
-    entt::entity planeEntity = state->registry.create();
-    TransformComponent transformComp = state->registry.emplace<TransformComponent>(planeEntity, position, rotation, scale);
-    renderable.previousModelMatrix = GetMatrix(transformComp);
-    state->registry.emplace<RenderableComponent>(planeEntity, renderable);
-    state->registry.emplace<PortalPlaneComponent>(planeEntity);
-
-    SPDLOG_INFO("[DebugSystem] Created portal plane at ({}, {}, {})",
-                position.x, position.y, position.z);
-}
 
 entt::entity CreateBox(Core::EngineContext* ctx, Engine::GameState* state, glm::vec3 position, bool bUsePhysics)
 {
@@ -329,7 +279,10 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
             boxHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "BoxTextured4k.willmodel");
             // box4kHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "BoxTextured4k.willmodel");
             sponzaHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "sponza2/sponza.willmodel");
-            portalPlaneHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "Plane.willmodel");
+        }
+
+        if (!state->portalPlaneHandle.IsValid()) {
+            state->portalPlaneHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "Plane.willmodel");
         }
     }
 
@@ -541,13 +494,41 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
     }
 
     if (state->inputFrame->GetKey(Key::F5).pressed) {
-        CreatePortalPlane(
-            ctx, state,
-            glm::vec3(0.0f, 5.0f, 0.0f),
-            glm::angleAxis(glm::radians(180.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
-            glm::vec3(0.01f, 0.01f, 0.01f)
-        );
+        glm::vec3 posA = glm::vec3(-5.0f, 2.0f, 0.0f);
+        glm::quat rotA = glm::angleAxis(glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+
+        glm::vec3 posB = glm::vec3(5.0f, 2.0f, 0.0f);
+        glm::quat rotB = glm::angleAxis(glm::radians(-90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+
+        CreatePortalPair(ctx, state, posA, rotA, posB, rotB);
     }
+
+    if (state->inputFrame->GetKey(Key::F7).pressed) {
+        // Floor
+        CreateStaticBox(
+            ctx, state,
+            JPH::RVec3(0.0, -0.5, 0.0), JPH::Vec3(15.0f, 0.5f, 15.0f),
+            glm::vec3(0.0f, -0.5f, 0.0f), glm::vec3(30.0f, 1.0f, 30.0f),
+            glm::vec4(0.4f, 0.4f, 0.4f, 1.0f)
+        );
+
+        glm::vec3 posA = glm::vec3(-8.0f, 2.0f, 0.0f);
+        glm::quat rotA = glm::angleAxis(glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+
+        glm::vec3 posB = glm::vec3(8.0f, 2.0f, 0.0f);
+        glm::quat rotB = glm::angleAxis(glm::radians(-90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+
+        CreatePortalPair(ctx, state, posA, rotA, posB, rotB);
+
+        // Place colored boxes near each portal tosee through
+        CreateGlowingBox(ctx, state, glm::vec3(-6.0f, 1.0f, 0.0f),
+                         glm::vec4(1.0f, 0.2f, 0.1f, 10.0f), false);
+        CreateGlowingBox(ctx, state, glm::vec3(6.0f, 1.0f, 0.0f),
+                         glm::vec4(0.2f, 0.8f, 1.0f, 10.0f), false);
+
+        SPDLOG_INFO("[DebugSystem] Created portal test scene");
+    }
+
 
     if (state->inputFrame->GetKey(Key::F6).pressed) {
         Render::WillModel* dragon = ctx->assetManager->GetModel(dragonHandle);

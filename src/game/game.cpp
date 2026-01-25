@@ -11,7 +11,12 @@
 #include "physics/physics_system.h"
 #include "fwd_components.h"
 #include "imgui.h"
-#include "components/render/gather_renderables_component.h"
+#include "components/gameplay/anti_gravity_component.h"
+#include "components/gameplay/floor_component.h"
+#include "components/gameplay/portals/portal_component.h"
+#include "components/physics/dynamic_physics_body_component.h"
+#include "systems/gather_renderables_system.h"
+#include "components/render/portal_plane_component.h"
 #include "core/math/constants.h"
 #include "systems/debug_system.h"
 #include "systems/camera_system.h"
@@ -38,6 +43,21 @@ GAME_API void GameStartup(Core::EngineContext* ctx, Engine::GameState* state)
 
 GAME_API void GameLoad(Core::EngineContext* ctx, Engine::GameState* state)
 {
+    SPDLOG_TRACE("[Game] Registering engine component types:");
+    SPDLOG_TRACE("  TransformComponent: {}", entt::type_id<Game::TransformComponent>().hash());
+    SPDLOG_TRACE("  CameraComponent: {}", entt::type_id<Game::CameraComponent>().hash());
+    SPDLOG_TRACE("  MainViewportComponent: {}", entt::type_id<Game::MainViewportComponent>().hash());
+    SPDLOG_TRACE("  FreeCameraComponent: {}", entt::type_id<Game::FreeCameraComponent>().hash());
+    SPDLOG_TRACE("  FreeCameraComponent: {}", entt::type_id<Game::PortalPlaneComponent>().hash());
+    SPDLOG_TRACE("  FreeCameraComponent: {}", entt::type_id<Game::PortalComponent>().hash());
+    SPDLOG_TRACE("  FreeCameraComponent: {}", entt::type_id<Game::AntiGravityComponent>().hash());
+    SPDLOG_TRACE("  FreeCameraComponent: {}", entt::type_id<Game::FloorComponent>().hash());
+    SPDLOG_TRACE("  FreeCameraComponent: {}", entt::type_id<Game::DynamicPhysicsBodyComponent>().hash());
+    SPDLOG_TRACE("  FreeCameraComponent: {}", entt::type_id<Game::PhysicsBodyComponent>().hash());
+    SPDLOG_TRACE("  FreeCameraComponent: {}", entt::type_id<Game::DirtyPhysicsTransformComponent>().hash());
+    SPDLOG_TRACE("  FreeCameraComponent: {}", entt::type_id<Game::RenderableComponent>().hash());
+    SPDLOG_TRACE("  FreeCameraComponent: {}", entt::type_id<Game::TransformComponent>().hash());
+
     spdlog::set_default_logger(ctx->logger);
     ImGui::SetCurrentContext(ctx->imguiContext);
 
@@ -93,7 +113,16 @@ GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* stat
     Game::System::GatherRenderables(ctx, state, frameBuffer);
 
     if (ImGui::Begin("Debug View")) {
-        ImGui::Text("Current: %s", state->debugResourceName.empty() ? "None" : state->debugResourceName.c_str());
+        auto cameraView = state->registry.view<Game::CameraComponent, Game::MainViewportComponent, Game::TransformComponent>();
+        const auto& [cam, transform] = cameraView.get(cameraView.front());
+        ImGui::Text("Camera Pos: (%.2f, %.2f, %.2f)",
+                    transform.translation.x, transform.translation.y, transform.translation.z);
+        ImGui::Text("Camera Forward: (%.2f, %.2f, %.2f)",
+                    cam.currentViewData.cameraForward.x,
+                    cam.currentViewData.cameraForward.y,
+                    cam.currentViewData.cameraForward.z);
+
+        ImGui::Text("Current Debug View: %s", state->debugResourceName.empty() ? "None" : state->debugResourceName.c_str());
         ImGui::Checkbox("Enable Portals", &state->bEnablePortal);
 
         if (ImGui::Button("Disable Debug View")) {

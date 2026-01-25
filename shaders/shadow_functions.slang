@@ -79,7 +79,7 @@ float PCSS(Texture2D shadowMap, SamplerState sampler, SamplerComparisonState com
     return PCF(shadowMap, comparisonSampler, uv, receiverDepth, filterRadius, pcfSamples);
 }
 
-public float GetShadowFactor(float3 viewPos, float3 viewNormal, SceneData* sceneData, ShadowData* shadowData, int4 csmIndices,
+public float GetShadowFactor(float3 viewPos, float3 viewNormal, SceneData sceneData, ShadowData* shadowData, int4 csmIndices,
                             Texture2D textures[], SamplerState sampler, SamplerComparisonState comparisonSampler)
 {
     float viewSpaceDepth = abs(viewPos.z);

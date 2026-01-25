@@ -11,6 +11,7 @@
 
 #include "game/systems/debug_system.h"
 #include "core/include/render_interface.h"
+#include "render/model/will_model_asset.h"
 
 namespace Core
 {
@@ -41,6 +42,10 @@ struct GameState
 
     // Post-Process
     Core::PostProcessConfiguration postProcess{};
+
+    // Loaded models debug
+    WillModelHandle portalPlaneHandle{WillModelHandle::INVALID};
+
 
     // Debug
     bool bEnablePortal{true};

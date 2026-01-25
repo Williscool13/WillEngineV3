@@ -2,9 +2,9 @@
 // Created by William on 2025-12-26.
 //
 
-#include "gather_renderables_component.h"
+#include "gather_renderables_system.h"
 
-#include "portal_plane_component.h"
+#include "../components/render/portal_plane_component.h"
 #include "core/include/engine_context.h"
 #include "engine/engine_api.h"
 #include "game/components/renderable_component.h"

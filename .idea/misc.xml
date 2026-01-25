@@ -27,5 +27,8 @@
       <file path="$PROJECT_DIR$/extern/vma" />
       <file path="$PROJECT_DIR$/extern/volk" />
     </libraryRoots>
+    <excludeRoots>
+      <file path="$PROJECT_DIR$/extern" />
+    </excludeRoots>
   </component>
 </project>

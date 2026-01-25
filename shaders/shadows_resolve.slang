@@ -27,7 +27,7 @@ void ComputeMain(uniform ShadowsResolvePushConstant pc, uint3 threadID : SV_Disp
     if (any(pc.csmIndices == int4(-1, -1, -1, -1))) {
         shadowFactor = 1.0f;
     } else {
-        shadowFactor = GetShadowFactor(viewPosition, N, pc.sceneData, pc.shadowData, pc.csmIndices, rdgTextures, rdgSamplers[RDG_POINT_SAMPLER_INDEX], rdgCompareSamplers[RDG_LINEAR_DEPTH_SAMPLER_INDEX]);
+        shadowFactor = GetShadowFactor(viewPosition, N, pc.sceneData[pc.sceneDataIndex], pc.shadowData, pc.csmIndices, rdgTextures, rdgSamplers[RDG_POINT_SAMPLER_INDEX], rdgCompareSamplers[RDG_LINEAR_DEPTH_SAMPLER_INDEX]);
     }
 
     // GTAO

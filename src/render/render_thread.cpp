@@ -320,15 +320,17 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     }
 
     PostProcessTargets ppTargets{targets.outFinalColor, targets.velocity, targets.depthStencil};
+    PostProcessTargets taaTargets{targets.outFinalColor, targets.velocity, targets.depthStencil};
+    std::string finalOutput = targets.outFinalColor;
     if (bHasAnyGeometry) {
         bool bHasTAAPass = pipelineManager->IsCategoryReady(PipelineCategory::TAA) && viewFamily.postProcessConfig.bEnableTemporalAntialiasing;
         if (bHasTAAPass) {
-            ppTargets.finalColor = SetupTemporalAntialiasing(*renderGraph, viewFamily, renderExtent, ppTargets);
+            taaTargets.finalColor = SetupTemporalAntialiasing(*renderGraph, viewFamily, renderExtent, ppTargets);
         }
 
         bool bHasPostProcess = pipelineManager->IsCategoryReady(PipelineCategory::PostProcess);
         if (bHasPostProcess) {
-            ppTargets.finalColor = SetupPostProcessing(*renderGraph, viewFamily, renderExtent, ppTargets, frameBuffer.timeFrame.renderDeltaTime);
+            finalOutput = SetupPostProcessing(*renderGraph, viewFamily, renderExtent, taaTargets, frameBuffer.timeFrame.renderDeltaTime);
         }
     }
 
@@ -383,7 +385,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         if (renderGraph->HasTexture(debugTargetName)) {
             auto& debugVisPass = renderGraph->AddPass("Debug Visualize", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
             debugVisPass.ReadSampledImage(debugTargetName);
-            debugVisPass.WriteStorageImage(ppTargets.finalColor);
+            debugVisPass.WriteStorageImage(finalOutput);
             debugVisPass.Execute([&, debugTargetName](VkCommandBuffer cmd) {
                 const ResourceDimensions& dims = renderGraph->GetImageDimensions(debugTargetName);
                 VkImageAspectFlags aspect = renderGraph->GetImageAspect(debugTargetName);
@@ -426,7 +428,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
                     textureIndexInArray = renderGraph->GetStencilOnlyStorageImageViewDescriptorIndex(debugTargetName);
                 }
 
-                uint32_t outputIndexIndex = renderGraph->GetStorageImageViewDescriptorIndex(ppTargets.finalColor);
+                uint32_t outputIndexIndex = renderGraph->GetStorageImageViewDescriptorIndex(finalOutput);
 
                 DebugVisualizePushConstant pc{
                     .sceneData = renderGraph->GetBufferAddress("scene_data"),
@@ -454,10 +456,10 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
                                VK_IMAGE_LAYOUT_UNDEFINED, VK_PIPELINE_STAGE_2_BLIT_BIT, VK_IMAGE_LAYOUT_UNDEFINED);
 
     auto& blitPass = renderGraph->AddPass("Blit To Swapchain", VK_PIPELINE_STAGE_2_BLIT_BIT);
-    blitPass.ReadBlitImage(ppTargets.finalColor);
+    blitPass.ReadBlitImage(finalOutput);
     blitPass.WriteBlitImage("swapchain_image");
     blitPass.Execute([&](VkCommandBuffer cmd) {
-        VkImage drawImage = renderGraph->GetImageHandle(ppTargets.finalColor);
+        VkImage drawImage = renderGraph->GetImageHandle(finalOutput);
 
         VkOffset3D renderOffset = {static_cast<int32_t>(renderExtent[0]), static_cast<int32_t>(renderExtent[1]), 1};
         VkOffset3D swapchainOffset = {static_cast<int32_t>(swapchain->extent.width), static_cast<int32_t>(swapchain->extent.height), 1};
@@ -1181,6 +1183,8 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFami
             vkCmdDispatch(cmd, 1, 1, 1);
         });
 
+        // todo: Shadow needs to also draw direct draw instances
+        // todo: This needs to not draw if there are no instanced draws.
         RenderPass& indirectPass = graph.AddPass(indirectPassName, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
         indirectPass.ReadBuffer("primitive_buffer");
         indirectPass.ReadBuffer("model_buffer");

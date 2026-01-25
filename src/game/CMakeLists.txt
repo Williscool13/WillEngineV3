@@ -9,8 +9,7 @@ set(GAME_SOURCES
         components/camera/camera_component.h
         components/physics/physics_body_component.h
         components/dirty_physics_transform_component.h
-        components/render/gather_renderables_component.h
-        components/render/gather_renderables_component.cpp
+        components/gameplay/portals/portal_component.h
         components/gameplay/floor_component.h
         components/physics/physics_body_component.cpp
         components/physics/dynamic_physics_body_component.h
@@ -24,6 +23,8 @@ set(GAME_SOURCES
         systems/debug_system.h
         systems/physics_system.cpp
         systems/physics_system.h
+        systems/gather_renderables_system.h
+        systems/gather_renderables_system.cpp
 )
 
 set(GAME_INCLUDE_DIRS
