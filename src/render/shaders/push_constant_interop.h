@@ -398,5 +398,12 @@ SHADER_PUBLIC struct GTAODenoisePushConstant {
     SHADER_PUBLIC uint32_t sceneDataIndex;
 };
 
+SHADER_PUBLIC struct PortalCompositePushConstant
+{
+    SHADER_PUBLIC uint32_t portalColorIndex;
+    SHADER_PUBLIC uint32_t portalVelocityIndex;
+    SHADER_PUBLIC uint32_t portalDepthIndex;
+};
+
 
 #endif //WILL_ENGINE_PUSH_CONSTANT_INTEROP_H

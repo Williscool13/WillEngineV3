@@ -283,8 +283,8 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         }
     }
 
-    bool bHasPortalView = !viewFamily.portalViews.empty();
-    if (bHasAnyGeometry && bHasPortalView) {
+    bool bHasPortalView = bHasAnyGeometry && !viewFamily.portalViews.empty();
+    if (bHasPortalView) {
         renderGraph->CreateTexture(portalTargets.albedo, TextureInfo{GBUFFER_ALBEDO_FORMAT, renderExtent[0], renderExtent[1], 1});
         renderGraph->CreateTexture(portalTargets.normal, TextureInfo{GBUFFER_NORMAL_FORMAT, renderExtent[0], renderExtent[1], 1});
         renderGraph->CreateTexture(portalTargets.pbr, TextureInfo{GBUFFER_PBR_FORMAT, renderExtent[0], renderExtent[1], 1});
@@ -315,6 +315,9 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
 
 
     // Portal Composite
+    if (bHasPortalView) {
+        SetupPortalComposite(*renderGraph, viewFamily, renderExtent, targets, portalTargets);
+    }
 
     PostProcessTargets ppTargets{targets.outFinalColor, targets.velocity, targets.depthStencil};
     if (bHasAnyGeometry) {
@@ -736,6 +739,32 @@ void RenderThread::CreatePipelines()
             sizeof(DirectMeshShadingPushConstant),
             VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT,
             PipelineCategory::CustomStencilPass
+        );
+        builder.Clear();
+    }
+
+    // Portal Composite
+    {
+        builder.AddShaderStage("shaders/portal_composite_vertex.spv", VK_SHADER_STAGE_VERTEX_BIT);
+        builder.AddShaderStage("shaders/portal_composite_fragment.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
+        builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+        builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
+        builder.SetupDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_ALWAYS);
+        builder.SetupStencilState(VK_TRUE, VK_STENCIL_OP_KEEP, VK_STENCIL_OP_KEEP, VK_STENCIL_OP_KEEP, VK_COMPARE_OP_EQUAL);
+
+        VkFormat colorFormats[2] = {
+            COLOR_ATTACHMENT_FORMAT,
+            GBUFFER_MOTION_FORMAT
+        };
+        builder.SetupRenderer(colorFormats, 2, DEPTH_ATTACHMENT_FORMAT, DEPTH_ATTACHMENT_FORMAT);
+        builder.AddDynamicState(VK_DYNAMIC_STATE_STENCIL_REFERENCE);
+
+        pipelineManager->RegisterGraphicsPipeline(
+            "portal_composite",
+            builder,
+            sizeof(PortalCompositePushConstant),
+            VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+            PipelineCategory::PortalRendering
         );
         builder.Clear();
     }
@@ -1236,7 +1265,7 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFami
 }
 
 void RenderThread::SetupMainGeometryPass(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneIndex,
-                                         bool bClearTargets)
+                                         bool bClearTargets) const
 {
     RenderPass& clearPass = graph.AddPass("Clear Instancing Buffers", VK_PIPELINE_STAGE_2_TRANSFER_BIT);
     clearPass.WriteTransferBuffer("packed_visibility_buffer");
@@ -1709,6 +1738,45 @@ void RenderThread::SetupDeferredLighting(RenderGraph& graph, const Core::ViewFam
         vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
     });
 }
+
+void RenderThread::SetupPortalComposite(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, const GBufferTargets& targets,
+                                        const GBufferTargets& portalTargets) const
+{
+    RenderPass& portalCompositePass = graph.AddPass("Portal Composite", VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT);
+    portalCompositePass.ReadSampledImage(portalTargets.outFinalColor);
+    portalCompositePass.ReadSampledImage(portalTargets.velocity);
+    portalCompositePass.ReadSampledImage(portalTargets.depthStencil);
+    portalCompositePass.WriteColorAttachment(targets.outFinalColor);
+    portalCompositePass.WriteColorAttachment(targets.velocity);
+    portalCompositePass.ReadWriteDepthAttachment(targets.depthStencil);
+    portalCompositePass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
+        VkRenderingAttachmentInfo colorAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.outFinalColor), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        VkRenderingAttachmentInfo velocityAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.velocity), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), nullptr, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+        VkRenderingAttachmentInfo stencilAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), nullptr, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+
+        std::array colorAttachments = {colorAttachment, velocityAttachment};
+        VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, colorAttachments.data(), 2, &depthAttachment, &stencilAttachment);
+        vkCmdBeginRendering(cmd, &renderInfo);
+
+        PortalCompositePushConstant pc{
+            .portalColorIndex = graph.GetSampledImageViewDescriptorIndex(portalTargets.outFinalColor),
+            .portalVelocityIndex = graph.GetSampledImageViewDescriptorIndex(portalTargets.velocity),
+            .portalDepthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(portalTargets.depthStencil),
+        };
+
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("portal_composite");
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineEntry->pipeline);
+        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pc), &pc);
+        vkCmdSetStencilReference(cmd, VK_STENCIL_FACE_FRONT_AND_BACK, 1);
+
+        // Because this writes to SV_Depth, apparently all future draw calls to this depth will not use early Z out lol. (stackoverflow 2018)
+        vkCmdDraw(cmd, 3, 1, 0, 0);
+
+        vkCmdEndRendering(cmd);
+    });
+}
+
 
 std::string RenderThread::SetupTemporalAntialiasing(RenderGraph& graph, const Core::ViewFamily& viewFamily, const std::array<uint32_t, 2> renderExtent, const PostProcessTargets& ppTargets) const
 {
