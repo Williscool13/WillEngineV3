@@ -43,7 +43,9 @@ struct GameState
     Core::PostProcessConfiguration postProcess{};
 
     // Debug
-    Game::DebugData debugData;
+    std::string debugResourceName{};
+    DebugTransformationType debugTransformationType{};
+    Core::DebugViewAspect debugViewAspect{};
 };
 
 class EngineAPI

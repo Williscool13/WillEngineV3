@@ -148,13 +148,22 @@ public:
         return WriteStorageImageHelper(5, index, imageInfo);
     }
 
-    bool WriteStorageUIntDescriptor(uint32_t index, const VkDescriptorImageInfo& imageInfo)
+    bool WriteStorageUInt4Descriptor(uint32_t index, const VkDescriptorImageInfo& imageInfo)
     {
         if (index >= StorageUIntCount) {
             SPDLOG_ERROR("Invalid storage uint index: {}", index);
             return false;
         }
         return WriteStorageImageHelper(6, index, imageInfo);
+    }
+
+    bool WriteStorageUIntDescriptor(uint32_t index, const VkDescriptorImageInfo& imageInfo)
+    {
+        if (index >= StorageUIntCount) {
+            SPDLOG_ERROR("Invalid storage uint index: {}", index);
+            return false;
+        }
+        return WriteStorageImageHelper(7, index, imageInfo);
     }
 
     [[nodiscard]] VkDescriptorBufferBindingInfoEXT GetBindingInfo() const

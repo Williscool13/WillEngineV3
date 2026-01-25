@@ -6,6 +6,7 @@
 #define WILL_ENGINE_RENDER_INTERFACE_H
 
 #include <cstdint>
+#include <string>
 
 #include <glm/glm.hpp>
 
@@ -30,6 +31,13 @@ struct ViewData
     glm::vec3 cameraLookAt;
     glm::vec3 cameraForward;
     glm::vec3 cameraUp;
+};
+
+enum class DebugViewAspect
+{
+    None,
+    Depth,
+    Stencil
 };
 
 struct RenderView
@@ -157,6 +165,12 @@ struct ViewFamily
 
     GTAOConfiguration gtaoConfig{};
     PostProcessConfiguration postProcessConfig{};
+
+
+    // Debugging
+    std::string debugResourceName{};
+    DebugTransformationType debugTransformationType{};
+    DebugViewAspect debugViewAspect{};
 };
 
 struct BufferAcquireOperation

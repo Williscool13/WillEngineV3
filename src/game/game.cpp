@@ -55,6 +55,19 @@ GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::GameState* state)
     Game::System::DebugProcessPhysicsCollisions(ctx, state);
     Game::System::DebugApplyGroundForces(ctx, state);
 
+    for (const auto& hotkey : Game::DEBUG_HOTKEYS) {
+        if (state->inputFrame->GetKey(hotkey.key).pressed) {
+            if (state->debugResourceName == hotkey.resourceName && state->debugViewAspect == hotkey.aspect) {
+                state->debugResourceName.clear();
+            }
+            else {
+                state->debugResourceName = hotkey.resourceName;
+                state->debugTransformationType = hotkey.transform;
+                state->debugViewAspect = hotkey.aspect;
+            }
+        }
+    }
+
     if (state->bEnablePhysics) {
         Game::System::UpdatePhysics(ctx, state);
     }
@@ -67,6 +80,80 @@ GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* stat
 {
     Game::System::BuildViewFamily(state, frameBuffer->mainViewFamily);
     Game::System::GatherRenderables(ctx, state, frameBuffer);
+
+    if (ImGui::Begin("Debug View")) {
+        ImGui::Text("Current: %s", state->debugResourceName.empty() ? "None" : state->debugResourceName.c_str());
+
+        if (ImGui::Button("Disable Debug View")) {
+            state->debugResourceName.clear();
+        }
+
+        ImGui::Separator();
+
+        if (ImGui::CollapsingHeader("Hotkeys", ImGuiTreeNodeFlags_DefaultOpen)) {
+            const char* keyNames[] = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "0"};
+            for (size_t i = 0; i < std::size(Game::DEBUG_HOTKEYS); ++i) {
+                ImGui::Text("%s: %s (%s)", keyNames[i], Game::DEBUG_HOTKEYS[i].name, Game::DEBUG_HOTKEYS[i].resourceName);
+            }
+        }
+
+        ImGui::Separator();
+
+        auto setDebugTarget = [&](const char* name, DebugTransformationType transform, Core::DebugViewAspect aspect) {
+            if (state->debugResourceName == name && state->debugViewAspect == aspect) {
+                state->debugResourceName.clear();
+            }
+            else {
+                state->debugResourceName = name;
+                state->debugTransformationType = transform;
+                state->debugViewAspect = aspect;
+            }
+        };
+        if (ImGui::CollapsingHeader("G-Buffer")) {
+            if (ImGui::Button("Depth Target")) setDebugTarget("depth_target", DebugTransformationType::DepthRemap, Core::DebugViewAspect::Depth);
+            if (ImGui::Button("Stencil Target")) setDebugTarget("depth_target", DebugTransformationType::StencilRemap, Core::DebugViewAspect::Stencil);
+            if (ImGui::Button("Albedo Target")) setDebugTarget("albedo_target", DebugTransformationType::None, Core::DebugViewAspect::None);
+            if (ImGui::Button("Normal Target")) setDebugTarget("normal_target", DebugTransformationType::None, Core::DebugViewAspect::None);
+            if (ImGui::Button("PBR Target")) setDebugTarget("pbr_target", DebugTransformationType::None, Core::DebugViewAspect::None);
+            if (ImGui::Button("Emissive Target")) setDebugTarget("emissive_target", DebugTransformationType::None, Core::DebugViewAspect::None);
+            if (ImGui::Button("Velocity Target")) setDebugTarget("velocity_target", DebugTransformationType::None, Core::DebugViewAspect::None);
+        }
+
+        if (ImGui::CollapsingHeader("Shadows")) {
+            if (ImGui::Button("Shadow Cascade 0")) setDebugTarget("shadow_cascade_0", DebugTransformationType::DepthRemap, Core::DebugViewAspect::Depth);
+            if (ImGui::Button("Shadow Cascade 1")) setDebugTarget("shadow_cascade_1", DebugTransformationType::DepthRemap, Core::DebugViewAspect::Depth);
+            if (ImGui::Button("Shadow Cascade 2")) setDebugTarget("shadow_cascade_2", DebugTransformationType::DepthRemap, Core::DebugViewAspect::Depth);
+            if (ImGui::Button("Shadow Cascade 3")) setDebugTarget("shadow_cascade_3", DebugTransformationType::DepthRemap, Core::DebugViewAspect::Depth);
+            if (ImGui::Button("Shadows Resolve")) setDebugTarget("shadows_resolve_target", DebugTransformationType::None, Core::DebugViewAspect::None);
+        }
+
+        if (ImGui::CollapsingHeader("Lighting")) {
+            if (ImGui::Button("Deferred Resolve")) setDebugTarget("deferred_resolve_target", DebugTransformationType::None, Core::DebugViewAspect::None);
+            if (ImGui::Button("GTAO Depth")) setDebugTarget("gtao_depth", DebugTransformationType::None, Core::DebugViewAspect::None);
+            if (ImGui::Button("GTAO AO")) setDebugTarget("gtao_ao", DebugTransformationType::None, Core::DebugViewAspect::None);
+            if (ImGui::Button("GTAO Edges")) setDebugTarget("gtao_edges", DebugTransformationType::None, Core::DebugViewAspect::None);
+            if (ImGui::Button("GTAO Filtered")) setDebugTarget("gtao_filtered", DebugTransformationType::None, Core::DebugViewAspect::None);
+        }
+
+        if (ImGui::CollapsingHeader("Anti-Aliasing")) {
+            if (ImGui::Button("TAA Current")) setDebugTarget("taa_current", DebugTransformationType::None, Core::DebugViewAspect::None);
+            if (ImGui::Button("TAA Output")) setDebugTarget("taa_output", DebugTransformationType::None, Core::DebugViewAspect::None);
+        }
+
+        if (ImGui::CollapsingHeader("Post-Processing")) {
+            if (ImGui::Button("Bloom Chain")) setDebugTarget("bloom_chain", DebugTransformationType::None, Core::DebugViewAspect::None);
+            if (ImGui::Button("Sharpening Output")) setDebugTarget("sharpening_output", DebugTransformationType::None, Core::DebugViewAspect::None);
+            if (ImGui::Button("Tonemap Output")) setDebugTarget("tonemap_output", DebugTransformationType::None, Core::DebugViewAspect::None);
+            if (ImGui::Button("Motion Blur Tiled Max")) setDebugTarget("motion_blur_tiled_max", DebugTransformationType::None, Core::DebugViewAspect::None);
+            if (ImGui::Button("Motion Blur Neighbor Max")) setDebugTarget("motion_blur_tiled_neighbor_max", DebugTransformationType::None, Core::DebugViewAspect::None);
+            if (ImGui::Button("Motion Blur Output")) setDebugTarget("motion_blur_output", DebugTransformationType::None, Core::DebugViewAspect::None);
+            if (ImGui::Button("Color Grading Output")) setDebugTarget("color_grading_output", DebugTransformationType::None, Core::DebugViewAspect::None);
+            if (ImGui::Button("Vignette Aberration Output")) setDebugTarget("vignette_aberration_output", DebugTransformationType::None, Core::DebugViewAspect::None);
+            if (ImGui::Button("Post Process Output")) setDebugTarget("post_process_output", DebugTransformationType::None, Core::DebugViewAspect::None);
+        }
+    }
+    ImGui::End();
+
 
     if (ImGui::Begin("Post-Processing")) {
         constexpr Core::PostProcessConfiguration defaultPP{};
@@ -205,7 +292,6 @@ GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* stat
         if (ImGui::Button("Disable Sharpening")) {
             state->postProcess.sharpeningStrength = 0.0f;
         }
-
     }
     ImGui::End();
 
@@ -289,6 +375,9 @@ GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* stat
     frameBuffer->mainViewFamily.shadowConfig = state->shadowConfig;
     frameBuffer->mainViewFamily.postProcessConfig = state->postProcess;
     frameBuffer->mainViewFamily.gtaoConfig = state->gtaoConfig;
+    frameBuffer->mainViewFamily.debugResourceName = state->debugResourceName;
+    frameBuffer->mainViewFamily.debugTransformationType = state->debugTransformationType;
+    frameBuffer->mainViewFamily.debugViewAspect = state->debugViewAspect;
 
     ImGui::End();
 }

@@ -107,9 +107,9 @@ public:
 
     uint32_t GetStorageImageViewDescriptorIndex(const std::string& name, uint32_t mipLevel = 0);
 
-    uint32_t GetDepthOnlyImageViewDescriptorIndex(const std::string& name);
+    uint32_t GetDepthOnlySampledImageViewDescriptorIndex(const std::string& name);
 
-    uint32_t GetStencilOnlyImageViewDescriptorIndex(const std::string& name);
+    uint32_t GetStencilOnlyStorageImageViewDescriptorIndex(const std::string& name);
 
     VkBuffer GetBufferHandle(const std::string& name);
 

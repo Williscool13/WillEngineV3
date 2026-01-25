@@ -17,27 +17,37 @@ float LinearizeDepth(float depth) {
 void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
     if (threadID.x >= pc.dstExtent.x || threadID.y >= pc.dstExtent.y) return;
 
-    float2 srcUV = (float2(threadID.xy) + 0.5) / float2(pc.dstExtent);
-
+    float2 uv = (float2(threadID.xy) + 0.5) / float2(pc.dstExtent);
     uint2 texCoord = uint2(threadID.xy);
 
     float4 srcPixel = float4(1.0f, 0.0f, 0.0f, 1.0f);
     switch (pc.textureArrayIndex) {
+        case 0: // Sampled 4 channel
+            srcPixel.xyzw = rdgTextures[pc.textureIndexInArray].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv, 0).rgba;
+            break;
+        case 1: // Sampled 2 channel
+            srcPixel.xy = rdgTextures[pc.textureIndexInArray].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv, 0).rg;
+            break;
+        case 2: // Sampled 1 channel
+            float c = rdgTextures[pc.textureIndexInArray].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv, 0).r;
+            srcPixel.xyz = float3(c);
+            break;
         case 3:
-            srcPixel.xyzw = rdgStorageFloat4[pc.textureIndexInArray].Load(texCoord, 0).rgba;
+            srcPixel.xyzw = rdgStorageFloat4[pc.textureIndexInArray].Load(texCoord).rgba;
             break;
         case 4:
-            srcPixel.xy = rdgStorageFloat2[pc.textureIndexInArray].Load(texCoord, 0).rg;
+            srcPixel.xy = rdgStorageFloat2[pc.textureIndexInArray].Load(texCoord).rg;
             break;
         case 5:
-            float v = rdgStorageFloat[pc.textureIndexInArray].Load(texCoord, 0).r;
+            float v = rdgStorageFloat[pc.textureIndexInArray].Load(texCoord).r;
             srcPixel.xyz = float3(v);
             break;
         case 6:
-            srcPixel.xyzw = rdgStorageUInt4[pc.textureIndexInArray].Load(texCoord, 0).rgba;
+            uint4 yes = rdgStorageUInt4[pc.textureIndexInArray].Load(texCoord).rgba;
+            srcPixel.xyzw = float4(yes);
             break;
         case 7:
-            float v1 = rdgStorageUInt[pc.textureIndexInArray].Load(texCoord, 0).r;
+            uint v1 = rdgStorageUInt[pc.textureIndexInArray].Load(texCoord).r;
             srcPixel.xyz = float3(v1);
             break;
     }
@@ -59,6 +69,9 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
             break;
         case 5: // DivideBy10000
             srcPixel.xyz /= 10000.0f;
+            break;
+        case 6: // StencilRemap
+            srcPixel.xyz /= 255.0f;
             break;
     }
 

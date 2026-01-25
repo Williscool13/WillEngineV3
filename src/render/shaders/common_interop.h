@@ -50,7 +50,8 @@ SHADER_PUBLIC SHADER_ENUM DebugTransformationType
     MultiplyBy1000,
     MultiplyBy10000,
     DivideBy1000,
-    DivideBy10000
+    DivideBy10000,
+    StencilRemap
 };
 
 SHADER_PUBLIC struct Frustum

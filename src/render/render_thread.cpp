@@ -351,58 +351,56 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
 #endif
 
 
-    bool bHasDebugPass = viewFamily.mainView.debug != -1 && pipelineManager->IsCategoryReady(PipelineCategory::Debug);
+    bool bHasDebugPass = !viewFamily.debugResourceName.empty() && pipelineManager->IsCategoryReady(PipelineCategory::Debug);
     if (bHasDebugPass) {
-        int32_t debugIndex = viewFamily.mainView.debug;
-        if (viewFamily.mainView.debug == 0) {
-            debugIndex = 10;
-        }
-        static constexpr const char* debugTargets[] = {
-            "dummy",
-            "depth_target", // 1
-            "albedo_target", // 2
-            "normal_target", // 3
-            "pbr_target", // 4
-            "velocity_target", // 5
-            "motion_blur_tiled_max", // 6
-            "motion_blur_tiled_neighbor_max", // 7
-            "motion_blur_output", // 8
-            "gtao_depth", // 9
-            "gtao_depth", // 0
-        };
+        const char* debugTargetName = viewFamily.debugResourceName.c_str();
 
-        if (debugIndex >= std::size(debugTargets)) {
-            debugIndex = 1;
-        }
-        const char* debugTargetName = debugTargets[debugIndex];
         if (renderGraph->HasTexture(debugTargetName)) {
             auto& debugVisPass = renderGraph->AddPass("Debug Visualize", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
             debugVisPass.ReadSampledImage(debugTargetName);
             debugVisPass.WriteStorageImage("post_process_output");
-            debugVisPass.Execute([&, debugTargetName, debugIndex](VkCommandBuffer cmd) {
+            debugVisPass.Execute([&, debugTargetName](VkCommandBuffer cmd) {
                 const ResourceDimensions& dims = renderGraph->GetImageDimensions(debugTargetName);
                 VkImageAspectFlags aspect = renderGraph->GetImageAspect(debugTargetName);
-                StorageImageType storageType = GetStorageImageType(dims.format, aspect);
 
+                VkImageAspectFlags viewAspect = aspect;
+                if (viewFamily.debugViewAspect == Core::DebugViewAspect::Depth) {
+                    viewAspect = VK_IMAGE_ASPECT_DEPTH_BIT;
+                }
+                else if (viewFamily.debugViewAspect == Core::DebugViewAspect::Stencil) {
+                    viewAspect = VK_IMAGE_ASPECT_STENCIL_BIT;
+                }
+
+                StorageImageType storageType = GetStorageImageType(dims.format, viewAspect);
                 uint32_t textureArrayIndex{3};
                 switch (storageType) {
                     case StorageImageType::Float4:
-                        textureArrayIndex = 3;
+                        textureArrayIndex = 0;
                         break;
                     case StorageImageType::Float2:
-                        textureArrayIndex = 4;
+                        textureArrayIndex = 1;
                         break;
                     case StorageImageType::Float:
-                        textureArrayIndex = 5;
+                        textureArrayIndex = 2;
                         break;
                     case StorageImageType::UInt4:
-                        textureArrayIndex = 6;
+                        textureArrayIndex = 0;
                         break;
                     case StorageImageType::UInt:
-                        textureArrayIndex = 7;
+                        textureArrayIndex = 2;
                         break;
                 }
-                uint32_t textureIndexInArray = renderGraph->GetStorageImageViewDescriptorIndex(debugTargetName);
+
+                uint32_t textureIndexInArray = renderGraph->GetSampledImageViewDescriptorIndex(debugTargetName);
+                if (viewFamily.debugViewAspect == Core::DebugViewAspect::Depth) {
+                    textureIndexInArray = renderGraph->GetDepthOnlySampledImageViewDescriptorIndex(debugTargetName);
+                }
+                else if (viewFamily.debugViewAspect == Core::DebugViewAspect::Stencil) {
+                    // uint storage descriptor array
+                    textureArrayIndex = 7;
+                    textureIndexInArray = renderGraph->GetStencilOnlyStorageImageViewDescriptorIndex(debugTargetName);
+                }
+
                 uint32_t outputIndexIndex = renderGraph->GetStorageImageViewDescriptorIndex("post_process_output");
 
                 DebugVisualizePushConstant pc{
@@ -413,7 +411,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
                     .farPlane = viewFamily.mainView.currentViewData.farPlane,
                     .textureArrayIndex = textureArrayIndex,
                     .textureIndexInArray = textureIndexInArray,
-                    .valueTransformationType = 0, //static_cast<uint32_t>(DebugTransformationType::DepthRemap),
+                    .valueTransformationType = static_cast<uint32_t>(viewFamily.debugTransformationType),
                     .outputImageIndex = outputIndexIndex,
                 };
                 const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("debug_visualize");
@@ -670,7 +668,6 @@ void RenderThread::CreatePipelines()
         builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
         builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE);
         builder.SetupDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_GREATER_OR_EQUAL);
-        builder.SetupStencilState(VK_TRUE, VK_STENCIL_OP_KEEP, VK_STENCIL_OP_REPLACE, VK_STENCIL_OP_KEEP, VK_COMPARE_OP_ALWAYS, 0xFF, 0xFF, 128);
 
         VkFormat colorFormats[5] = {
             GBUFFER_ALBEDO_FORMAT,
@@ -699,7 +696,7 @@ void RenderThread::CreatePipelines()
         builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
         builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE);
         builder.SetupDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_GREATER_OR_EQUAL);
-        builder.SetupStencilState(VK_TRUE, VK_STENCIL_OP_KEEP, VK_STENCIL_OP_REPLACE, VK_STENCIL_OP_KEEP, VK_COMPARE_OP_ALWAYS, 0xFF, 0xFF, 16);
+        builder.SetupStencilState(VK_TRUE, VK_STENCIL_OP_KEEP, VK_STENCIL_OP_REPLACE, VK_STENCIL_OP_KEEP, VK_COMPARE_OP_ALWAYS);
 
         VkFormat colorFormats[5] = {
             GBUFFER_ALBEDO_FORMAT,
@@ -709,7 +706,7 @@ void RenderThread::CreatePipelines()
             GBUFFER_MOTION_FORMAT
         };
         builder.SetupRenderer(colorFormats, 5, DEPTH_ATTACHMENT_FORMAT, DEPTH_ATTACHMENT_FORMAT);
-        // builder.AddDynamicState(VK_DYNAMIC_STATE_STENCIL_REFERENCE);
+        builder.AddDynamicState(VK_DYNAMIC_STATE_STENCIL_REFERENCE);
 
         pipelineManager->RegisterGraphicsPipeline(
             "mesh_shading_direct",
@@ -1314,7 +1311,7 @@ void RenderThread::SetupMainGeometryPass(RenderGraph& graph, const Core::ViewFam
         VkRect2D scissor = VkHelpers::GenerateScissor(width, height);
         vkCmdSetScissor(cmd, 0, 1, &scissor);
         constexpr VkClearValue colorClear = {.color = {{0.0f, 0.0f, 0.0f, 0.0f}}};
-        constexpr VkClearValue depthClear = {.depthStencil = {0.0f, 1u}};
+        constexpr VkClearValue depthClear = {.depthStencil = {0.0f, 0u}};
         const VkClearValue* _colorClear = bClearTargets ? &colorClear : nullptr;
         const VkClearValue* _depthClear = bClearTargets ? &depthClear : nullptr;
         const VkRenderingAttachmentInfo albedoAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.albedo), _colorClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
@@ -1409,7 +1406,7 @@ void RenderThread::SetupDirectGeometryPass(RenderGraph& graph, const Core::ViewF
         vkCmdSetScissor(cmd, 0, 1, &scissor);
 
         constexpr VkClearValue colorClear = {.color = {{0.0f, 0.0f, 0.0f, 0.0f}}};
-        constexpr VkClearValue depthClear = {.depthStencil = {0.0f, 1u}};
+        constexpr VkClearValue depthClear = {.depthStencil = {0.0f, 0u}};
         const VkClearValue* _colorClear = bClearTargets ? &colorClear : nullptr;
         const VkClearValue* _depthClear = bClearTargets ? &depthClear : nullptr;
         const VkRenderingAttachmentInfo albedoAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.albedo), _colorClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
@@ -1449,7 +1446,7 @@ void RenderThread::SetupDirectGeometryPass(RenderGraph& graph, const Core::ViewF
         for (const auto& customDraw : viewFamily.customStencilDraws) {
             if (customDraw.instances.empty()) continue;
 
-            // vkCmdSetStencilReference(cmd, VK_STENCIL_FACE_FRONT_AND_BACK, customDraw.stencilValue);
+            vkCmdSetStencilReference(cmd, VK_STENCIL_FACE_FRONT_AND_BACK, customDraw.stencilValue);
             vkCmdDrawMeshTasksIndirectEXT(cmd, graph.GetBufferHandle("direct_indirect_command_buffer"),
                                           instanceOffset * sizeof(DrawMeshTasksIndirectCommand),
                                           static_cast<uint32_t>(customDraw.instances.size()),
@@ -1480,7 +1477,7 @@ void RenderThread::SetupGroundTruthAmbientOcclusion(RenderGraph& graph, const Co
     depthPrepass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
         GTAODepthPrepassPushConstant pc{
             .sceneData = graph.GetBufferAddress("scene_data"),
-            .inputDepth = graph.GetDepthOnlyImageViewDescriptorIndex("depth_target"),
+            .inputDepth = graph.GetDepthOnlySampledImageViewDescriptorIndex("depth_target"),
             .outputDepth0 = graph.GetStorageImageViewDescriptorIndex("gtao_depth", 0),
             .outputDepth1 = graph.GetStorageImageViewDescriptorIndex("gtao_depth", 1),
             .outputDepth2 = graph.GetStorageImageViewDescriptorIndex("gtao_depth", 2),
@@ -1608,7 +1605,7 @@ void RenderThread::SetupShadowsResolve(RenderGraph& graph, const Core::ViewFamil
             .gtaoFilteredIndex = gtaoIndex,
             .outputImageIndex = graph.GetStorageImageViewDescriptorIndex("shadows_resolve_target"),
             .csmIndices = csmIndices,
-            .depthIndex = graph.GetDepthOnlyImageViewDescriptorIndex("depth_target"),
+            .depthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex("depth_target"),
             .normalIndex = graph.GetSampledImageViewDescriptorIndex("normal_target"),
         };
 
@@ -1656,7 +1653,7 @@ void RenderThread::SetupDeferredLighting(RenderGraph& graph, const Core::ViewFam
             .normalIndex = graph.GetSampledImageViewDescriptorIndex("normal_target"),
             .pbrIndex = graph.GetSampledImageViewDescriptorIndex("pbr_target"),
             .emissiveIndex = graph.GetSampledImageViewDescriptorIndex("emissive_target"),
-            .depthIndex = graph.GetDepthOnlyImageViewDescriptorIndex("depth_target"),
+            .depthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex("depth_target"),
             .shadowsIndex = graph.GetSampledImageViewDescriptorIndex("shadows_resolve_target"),
             .outputImageIndex = graph.GetStorageImageViewDescriptorIndex("deferred_resolve_target"),
         };
@@ -1718,7 +1715,7 @@ void RenderThread::SetupTemporalAntialiasing(RenderGraph& graph, const Core::Vie
         TemporalAntialiasingPushConstant pushData{
             .sceneData = graph.GetBufferAddress("scene_data"),
             .colorResolvedIndex = graph.GetSampledImageViewDescriptorIndex("deferred_resolve_target"),
-            .depthIndex = graph.GetDepthOnlyImageViewDescriptorIndex("depth_target"),
+            .depthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex("depth_target"),
             .colorHistoryIndex = graph.GetSampledImageViewDescriptorIndex("taa_history"),
             .velocityIndex = graph.GetSampledImageViewDescriptorIndex("velocity_target"),
             .velocityHistoryIndex = graph.GetSampledImageViewDescriptorIndex("velocity_history"),
@@ -2038,7 +2035,7 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
                 .srcBufferSize = {width, height},
                 .sceneColorIndex = graph.GetSampledImageViewDescriptorIndex("tonemap_output"),
                 .velocityBufferIndex = graph.GetSampledImageViewDescriptorIndex("velocity_target"),
-                .depthBufferIndex = graph.GetDepthOnlyImageViewDescriptorIndex("depth_target"),
+                .depthBufferIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex("depth_target"),
                 .tileNeighborMaxIndex = graph.GetSampledImageViewDescriptorIndex("motion_blur_tiled_neighbor_max"),
                 .outputIndex = graph.GetStorageImageViewDescriptorIndex("motion_blur_output"),
                 .velocityScale = ppConfig.motionBlurVelocityScale,

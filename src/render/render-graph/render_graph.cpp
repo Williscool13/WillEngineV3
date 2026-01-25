@@ -1412,7 +1412,7 @@ uint32_t RenderGraph::GetStorageImageViewDescriptorIndex(const std::string& name
     return physicalResources[tex.physicalIndex].storageMipDescriptorHandles[mipLevel].index;
 }
 
-uint32_t RenderGraph::GetDepthOnlyImageViewDescriptorIndex(const std::string& name)
+uint32_t RenderGraph::GetDepthOnlySampledImageViewDescriptorIndex(const std::string& name)
 {
     auto it = textureNameToIndex.find(name);
     assert(it != textureNameToIndex.end() && "Texture not found");
@@ -1429,7 +1429,7 @@ uint32_t RenderGraph::GetDepthOnlyImageViewDescriptorIndex(const std::string& na
     return phys.depthOnlyDescriptorHandle.index;
 }
 
-uint32_t RenderGraph::GetStencilOnlyImageViewDescriptorIndex(const std::string& name)
+uint32_t RenderGraph::GetStencilOnlyStorageImageViewDescriptorIndex(const std::string& name)
 {
     auto it = textureNameToIndex.find(name);
     assert(it != textureNameToIndex.end() && "Texture not found");
