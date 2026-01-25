@@ -260,7 +260,7 @@ SHADER_PUBLIC struct ExposureCalculatePushConstant
 
 SHADER_PUBLIC struct MotionBlurTileVelocityPushConstant
 {
-    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC uint2 velocityBufferSize;
     SHADER_PUBLIC uint2 tileBufferSize;
     SHADER_PUBLIC uint32_t velocityBufferIndex;
     SHADER_PUBLIC uint32_t tileMaxIndex;
@@ -275,7 +275,7 @@ SHADER_PUBLIC struct MotionBlurNeighborMaxPushConstant
 
 SHADER_PUBLIC struct MotionBlurReconstructionPushConstant
 {
-    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC uint2 srcBufferSize;
     SHADER_PUBLIC uint32_t sceneColorIndex;
     SHADER_PUBLIC uint32_t velocityBufferIndex;
     SHADER_PUBLIC uint32_t depthBufferIndex;
@@ -287,6 +287,7 @@ SHADER_PUBLIC struct MotionBlurReconstructionPushConstant
 
 SHADER_PUBLIC struct BloomThresholdPushConstant
 {
+    SHADER_PUBLIC uint2 outputExtent;
     SHADER_PUBLIC uint32_t inputColorIndex;
     SHADER_PUBLIC uint32_t outputIndex;
     SHADER_PUBLIC float threshold;
@@ -295,6 +296,7 @@ SHADER_PUBLIC struct BloomThresholdPushConstant
 
 SHADER_PUBLIC struct BloomDownsamplePushConstant
 {
+    SHADER_PUBLIC uint2 outputExtent;
     SHADER_PUBLIC uint32_t inputIndex;
     SHADER_PUBLIC uint32_t outputIndex;
     SHADER_PUBLIC uint32_t srcMipLevel;
@@ -311,7 +313,7 @@ SHADER_PUBLIC struct BloomUpsamplePushConstant
 
 SHADER_PUBLIC struct VignetteChromaticAberrationPushConstant
 {
-    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC uint2 outputExtent;
     SHADER_PUBLIC uint32_t inputIndex;
     SHADER_PUBLIC uint32_t outputIndex;
     SHADER_PUBLIC float chromaticAberrationStrength;
@@ -322,7 +324,7 @@ SHADER_PUBLIC struct VignetteChromaticAberrationPushConstant
 
 SHADER_PUBLIC struct FilmGrainPushConstant
 {
-    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC uint2 outputExtent;
     SHADER_PUBLIC uint32_t inputIndex;
     SHADER_PUBLIC uint32_t outputIndex;
     SHADER_PUBLIC float grainStrength;
@@ -332,7 +334,7 @@ SHADER_PUBLIC struct FilmGrainPushConstant
 
 SHADER_PUBLIC struct SharpeningPushConstant
 {
-    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC uint2 outputExtent;
     SHADER_PUBLIC uint32_t inputIndex;
     SHADER_PUBLIC uint32_t outputIndex;
     SHADER_PUBLIC float sharpness;
@@ -340,7 +342,7 @@ SHADER_PUBLIC struct SharpeningPushConstant
 
 SHADER_PUBLIC struct ColorGradingPushConstant
 {
-    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC uint2 outputExtent;
     SHADER_PUBLIC uint32_t inputIndex;
     SHADER_PUBLIC uint32_t outputIndex;
     SHADER_PUBLIC float exposure;

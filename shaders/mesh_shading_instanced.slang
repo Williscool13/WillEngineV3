@@ -204,6 +204,7 @@ FragmentOutput FragmentMain(VertexOutput vertexInput, uniform InstancedMeshShadi
     float2 prevJitter = pc.sceneData[pc.sceneDataIndex].prevJitter;
     float2 totalVelocity = (currNdc + currJitter) - (prevNdc + prevJitter);
     float2 objectOnlyPrevNdc = vertexInput.objectOnlyPrevClipPos.xy / vertexInput.objectOnlyPrevClipPos.w;
+    // float2 objectVelocity = (currNdc + currJitter) - (objectOnlyPrevNdc + currJitter);
     float2 objectVelocity = currNdc - objectOnlyPrevNdc;
     output.velocity = float4(totalVelocity, objectVelocity);
 

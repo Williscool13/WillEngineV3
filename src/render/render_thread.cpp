@@ -1859,6 +1859,7 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
         thresholdPass.ReadWriteImage("bloom_chain");
         thresholdPass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
             BloomThresholdPushConstant pc{
+                .outputExtent = {width, height},
                 .inputColorIndex = graph.GetSampledImageViewDescriptorIndex("taa_output"),
                 .outputIndex = graph.GetStorageImageViewDescriptorIndex("bloom_chain", 0),
                 .threshold = ppConfig.bloomThreshold,
@@ -1880,8 +1881,9 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
 
             RenderPass& downsamplePass = graph.AddPass(std::format("Bloom Downsample {}", i), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
             downsamplePass.ReadWriteImage("bloom_chain");
-            downsamplePass.Execute([&, mipWidth, mipHeight, srcMip = i, dstMip = i + 1](VkCommandBuffer cmd) {
+            downsamplePass.Execute([&, width = renderExtent[0], height = renderExtent[1], mipWidth, mipHeight, srcMip = i, dstMip = i + 1](VkCommandBuffer cmd) {
                 BloomDownsamplePushConstant pc{
+                    .outputExtent = {mipWidth, mipHeight},
                     .inputIndex = graph.GetSampledImageViewDescriptorIndex("bloom_chain"),
                     .outputIndex = graph.GetStorageImageViewDescriptorIndex("bloom_chain", dstMip),
                     .srcMipLevel = srcMip,
@@ -1931,7 +1933,7 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
         sharpeningPass.WriteStorageImage("sharpening_output");
         sharpeningPass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
             SharpeningPushConstant pc{
-                .sceneData = graph.GetBufferAddress("scene_data"),
+                .outputExtent = {width, height},
                 .inputIndex = graph.GetSampledImageViewDescriptorIndex("taa_output"),
                 .outputIndex = graph.GetStorageImageViewDescriptorIndex("sharpening_output"),
                 .sharpness = ppConfig.sharpeningStrength,
@@ -1988,9 +1990,9 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
         motionBlurTiledMaxPass.ReadBuffer("scene_data");
         motionBlurTiledMaxPass.ReadSampledImage("velocity_target");
         motionBlurTiledMaxPass.WriteStorageImage("motion_blur_tiled_max");
-        motionBlurTiledMaxPass.Execute([&, blurTiledX, blurTiledY](VkCommandBuffer cmd) {
+        motionBlurTiledMaxPass.Execute([&, width = renderExtent[0], height = renderExtent[1], blurTiledX, blurTiledY](VkCommandBuffer cmd) {
             MotionBlurTileVelocityPushConstant pc{
-                .sceneData = graph.GetBufferAddress("scene_data"),
+                .velocityBufferSize = {width, height},
                 .tileBufferSize = {blurTiledX, blurTiledY},
                 .velocityBufferIndex = graph.GetSampledImageViewDescriptorIndex("velocity_target"),
                 .tileMaxIndex = graph.GetStorageImageViewDescriptorIndex("motion_blur_tiled_max"),
@@ -2033,7 +2035,7 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
         motionBlurReconstructionPass.WriteStorageImage("motion_blur_output");
         motionBlurReconstructionPass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
             MotionBlurReconstructionPushConstant pc{
-                .sceneData = graph.GetBufferAddress("scene_data"),
+                .srcBufferSize = {width, height},
                 .sceneColorIndex = graph.GetSampledImageViewDescriptorIndex("tonemap_output"),
                 .velocityBufferIndex = graph.GetSampledImageViewDescriptorIndex("velocity_target"),
                 .depthBufferIndex = graph.GetDepthOnlyImageViewDescriptorIndex("depth_target"),
@@ -2061,7 +2063,7 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
         colorGradingPass.WriteStorageImage("color_grading_output");
         colorGradingPass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
             ColorGradingPushConstant pc{
-                .sceneData = graph.GetBufferAddress("scene_data"),
+                .outputExtent = {width, height},
                 .inputIndex = graph.GetSampledImageViewDescriptorIndex("motion_blur_output"),
                 .outputIndex = graph.GetStorageImageViewDescriptorIndex("color_grading_output"),
                 .exposure = ppConfig.colorGradingExposure,
@@ -2089,7 +2091,7 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
         vignetteAberrationPass.WriteStorageImage("vignette_aberration_output");
         vignetteAberrationPass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
             VignetteChromaticAberrationPushConstant pc{
-                .sceneData = graph.GetBufferAddress("scene_data"),
+                .outputExtent = {width, height},
                 .inputIndex = graph.GetSampledImageViewDescriptorIndex("color_grading_output"),
                 .outputIndex = graph.GetStorageImageViewDescriptorIndex("vignette_aberration_output"),
                 .chromaticAberrationStrength = ppConfig.chromaticAberrationStrength,
@@ -2116,7 +2118,7 @@ void RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamil
         filmGrainPass.WriteStorageImage("post_process_output");
         filmGrainPass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
             FilmGrainPushConstant pc{
-                .sceneData = graph.GetBufferAddress("scene_data"),
+                .outputExtent = {width, height},
                 .inputIndex = graph.GetSampledImageViewDescriptorIndex("vignette_aberration_output"),
                 .outputIndex = graph.GetStorageImageViewDescriptorIndex("post_process_output"),
                 .grainStrength = ppConfig.grainStrength,

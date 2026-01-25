@@ -1674,29 +1674,66 @@ void RenderGraph::DestroyPhysicalResource(PhysicalResource& resource)
     }
 
     if (resource.dimensions.IsImage()) {
-        for (VkImageView& view : resource.mipViews) {
-            vkDestroyImageView(context->device, view, nullptr);
-            view = VK_NULL_HANDLE;
+        for (uint32_t mip = 0; mip < resource.dimensions.levels; ++mip) {
+            if (resource.mipViews[mip] != VK_NULL_HANDLE) {
+                vkDestroyImageView(context->device, resource.mipViews[mip], nullptr);
+                resource.mipViews[mip] = VK_NULL_HANDLE;
+            }
+            if (resource.storageMipDescriptorHandles[mip].IsValid()) {
+                StorageImageType storageType = GetStorageImageType(resource.dimensions.format, resource.aspect);
+                switch (storageType) {
+                    case StorageImageType::Float4:
+                        transientStorageFloat4HandleAllocator.Remove(resource.storageMipDescriptorHandles[mip]);
+                        break;
+                    case StorageImageType::Float2:
+                        transientStorageFloat2HandleAllocator.Remove(resource.storageMipDescriptorHandles[mip]);
+                        break;
+                    case StorageImageType::Float:
+                        transientStorageFloatHandleAllocator.Remove(resource.storageMipDescriptorHandles[mip]);
+                        break;
+                    case StorageImageType::UInt4:
+                        transientStorageUInt4HandleAllocator.Remove(resource.storageMipDescriptorHandles[mip]);
+                        break;
+                    case StorageImageType::UInt:
+                        transientStorageUIntHandleAllocator.Remove(resource.storageMipDescriptorHandles[mip]);
+                        break;
+                }
+                resource.storageMipDescriptorHandles[mip] = {};
+            }
         }
+
         if (resource.imageView != VK_NULL_HANDLE) {
             vkDestroyImageView(context->device, resource.imageView, nullptr);
             resource.imageView = VK_NULL_HANDLE;
         }
+        if (resource.sampledDescriptorHandle.IsValid()) {
+            transientSampledImageHandleAllocator.Remove(resource.sampledDescriptorHandle);
+            resource.sampledDescriptorHandle = {};
+        }
+
         if (resource.depthOnlyView != VK_NULL_HANDLE) {
             vkDestroyImageView(context->device, resource.depthOnlyView, nullptr);
             resource.depthOnlyView = VK_NULL_HANDLE;
         }
+        if (resource.depthOnlyDescriptorHandle.IsValid()) {
+            transientSampledImageHandleAllocator.Remove(resource.depthOnlyDescriptorHandle);
+            resource.depthOnlyDescriptorHandle = {};
+        }
+
         if (resource.stencilOnlyView != VK_NULL_HANDLE) {
             vkDestroyImageView(context->device, resource.stencilOnlyView, nullptr);
             resource.stencilOnlyView = VK_NULL_HANDLE;
         }
+        if (resource.stencilOnlyDescriptorHandle.IsValid()) {
+            transientStorageUIntHandleAllocator.Remove(resource.stencilOnlyDescriptorHandle);
+            resource.stencilOnlyDescriptorHandle = {};
+        }
+
         if (resource.image != VK_NULL_HANDLE) {
             vmaDestroyImage(context->allocator, resource.image, resource.imageAllocation);
             resource.image = VK_NULL_HANDLE;
             resource.imageAllocation = VK_NULL_HANDLE;
         }
-        // todo release handles for other lists as well here
-        transientSampledImageHandleAllocator.Remove(resource.sampledDescriptorHandle);
     }
     else {
         if (resource.buffer != VK_NULL_HANDLE) {

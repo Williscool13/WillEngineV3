@@ -5,8 +5,6 @@ import shader_functions;
 
 import bindless_declarations;
 
-
-// todo: Do not reference scene data in any PP shader. PP calculations should happen on final image size, which does not necessarily have to be scene data `mainRenderTargetSize`
 // ==================== Tonemapping ====================
 static const float3x3 ACESInputMat = {
     {0.59719, 0.35458, 0.04823},
@@ -171,7 +169,7 @@ void ComputeMotionBlurTileMax(uniform MotionBlurTileVelocityPushConstant pc, uin
         for (uint x = 0; x < POST_PROCESS_MOTION_BLUR_TILE_SIZE; ++x) {
             uint2 pixelCoord = tileStart + uint2(x, y);
 
-            if (any(pixelCoord >= pc.sceneData->mainRenderTargetSize))
+            if (any(pixelCoord >= pc.velocityBufferSize))
                 continue;
 
             float2 objectVelocity = rdgTextures[pc.velocityBufferIndex].Load(int3(pixelCoord, 0)).ba;
@@ -233,13 +231,13 @@ float2 SpreadCmp(float offsetLen, float2 spreadLen) {
 [numthreads(POST_PROCESS_MOTION_BLUR_DISPATCH_X, POST_PROCESS_MOTION_BLUR_DISPATCH_Y, 1)]
 void ComputeMotionBlurReconstruction(uniform MotionBlurReconstructionPushConstant pc, uint3 dtid : SV_DispatchThreadID) {
     uint2 pixelCoord = dtid.xy;
-    if (any(pixelCoord >= pc.sceneData->mainRenderTargetSize)) return;
+    if (any(pixelCoord >= pc.srcBufferSize)) return;
 
-    float2 uv = (float2(pixelCoord) + 0.5) / pc.sceneData->mainRenderTargetSize;
+    float2 uv = (float2(pixelCoord) + 0.5) / pc.srcBufferSize;
 
     uint2 tileCoord = pixelCoord / POST_PROCESS_MOTION_BLUR_TILE_SIZE;
     float2 neighborMaxVelocity = rdgTextures[pc.tileNeighborMaxIndex].Load(int3(tileCoord, 0)).rg * 0.5;
-    float neighborMaxLen = length(neighborMaxVelocity * pc.sceneData->mainRenderTargetSize);
+    float neighborMaxLen = length(neighborMaxVelocity * pc.srcBufferSize);
     float3 centerColor = rdgTextures[pc.sceneColorIndex].Load(int3(pixelCoord, 0)).rgb;
 
     float blurLen = neighborMaxLen * pc.velocityScale;
@@ -250,7 +248,7 @@ void ComputeMotionBlurReconstruction(uniform MotionBlurReconstructionPushConstan
 
     float2 objectVelocity = rdgTextures[pc.velocityBufferIndex].Load(int3(pixelCoord, 0)).ba * 0.5;
     float centerDepth = rdgTextures[pc.depthBufferIndex].Load(int3(pixelCoord, 0)).r;
-    float centerSpreadLen = length(objectVelocity * pc.velocityScale * pc.sceneData->mainRenderTargetSize);
+    float centerSpreadLen = length(objectVelocity * pc.velocityScale * pc.srcBufferSize);
 
     float3 colorAccum = float3(0.0, 0.0, 0.0);
     float weightAccum = 0.0;
@@ -267,11 +265,11 @@ void ComputeMotionBlurReconstruction(uniform MotionBlurReconstructionPushConstan
 
             if (any(sampleUV < 0.0) || any(sampleUV > 1.0)) continue;
 
-            int2 sampleCoord = int2(sampleUV * pc.sceneData->mainRenderTargetSize);
+            int2 sampleCoord = int2(sampleUV * pc.srcBufferSize);
             float3 sampleColor = rdgTextures[pc.sceneColorIndex].Load(int3(sampleCoord, 0)).rgb;
             float sampleDepth = rdgTextures[pc.depthBufferIndex].Load(int3(sampleCoord, 0)).r;
             float2 sampleObjectVelocity = rdgTextures[pc.velocityBufferIndex].Load(int3(sampleCoord, 0)).ba * 0.5;
-            float sampleSpreadLen = length(sampleObjectVelocity * pc.velocityScale * pc.sceneData->mainRenderTargetSize);
+            float sampleSpreadLen = length(sampleObjectVelocity * pc.velocityScale * pc.srcBufferSize);
 
             float2 d = DepthCmp(centerDepth, sampleDepth, pc.depthScale);
             float2 s = SpreadCmp(abs(t), float2(centerSpreadLen, sampleSpreadLen));
@@ -309,11 +307,7 @@ float3 ApplyThreshold(float3 color, float threshold, float softThreshold) {
 void ComputeBloomThreshold(uniform BloomThresholdPushConstant pc, uint3 dtid : SV_DispatchThreadID) {
     uint2 pixelCoord = dtid.xy;
 
-    // todo: do not get dimensions
-    uint2 outputSize;
-    rdgStorageFloat4[pc.outputIndex].GetDimensions(outputSize.x, outputSize.y);
-
-    if (any(pixelCoord >= outputSize)) {
+    if (any(pixelCoord >= pc.outputExtent)) {
         return;
     }
 
@@ -326,15 +320,11 @@ void ComputeBloomThreshold(uniform BloomThresholdPushConstant pc, uint3 dtid : S
 void ComputeBloomDownsample(uniform BloomDownsamplePushConstant pc, uint3 dtid : SV_DispatchThreadID) {
     uint2 pixelCoord = dtid.xy;
 
-    // todo: do not get dimensions
-    uint2 outputSize;
-    rdgStorageFloat4[pc.outputIndex].GetDimensions(outputSize.x, outputSize.y);
-
-    if (any(pixelCoord >= outputSize)) {
+    if (any(pixelCoord >= pc.outputExtent)) {
         return;
     }
 
-    float2 uv = (float2(pixelCoord) + 0.5) / float2(outputSize);
+    float2 uv = (float2(pixelCoord) + 0.5) / float2(pc.outputExtent);
 
     uint2 inputSize;
     uint numMips;
@@ -421,16 +411,16 @@ void ComputeBloomUpsample(uniform BloomUpsamplePushConstant pc, uint3 dtid : SV_
 [shader("compute")]
 [numthreads(POST_PROCESS_VIGNETTE_ABERRATION_DISPATCH_X, POST_PROCESS_VIGNETTE_ABERRATION_DISPATCH_Y, 1)]
 void ComputeVignetteAberration(uniform VignetteChromaticAberrationPushConstant pc, uint3 dtid : SV_DispatchThreadID) {
-    if (any(dtid.xy >= pc.sceneData.mainRenderTargetSize)) return;
+    if (any(dtid.xy >= pc.outputExtent)) return;
 
     uint2 pixelCoord = dtid.xy;
-    float2 uv = (dtid.xy + 0.5) / pc.sceneData.mainRenderTargetSize;
+    float2 uv = (dtid.xy + 0.5) / pc.outputExtent;
     float2 centerOffset = uv - 0.5;
     float distFromCenter = length(centerOffset);
 
     // Chromatic aberration
     float2 direction = distFromCenter > 0.0001 ? normalize(centerOffset) : float2(0, 0);
-    float aberrationOffset = distFromCenter * pc.chromaticAberrationStrength / pc.sceneData.mainRenderTargetSize.x;
+    float aberrationOffset = distFromCenter * pc.chromaticAberrationStrength / pc.outputExtent.x;
     float2 uvR = uv + direction * aberrationOffset;
     float2 uvG = uv;
     float2 uvB = uv - direction * aberrationOffset;
@@ -460,12 +450,12 @@ float FilmGrainHash(float2 p) {
 [shader("compute")]
 [numthreads(POST_PROCESS_FILM_GRAIN_DISPATCH_X, POST_PROCESS_FILM_GRAIN_DISPATCH_Y, 1)]
 void ComputeFilmGrain(uniform FilmGrainPushConstant pc, uint3 dtid : SV_DispatchThreadID) {
-    if (any(dtid.xy >= pc.sceneData.mainRenderTargetSize)) return;
+    if (any(dtid.xy >= pc.outputExtent)) return;
     uint2 pixelCoord = dtid.xy;
 
-    float2 uv = (dtid.xy + 0.5) / pc.sceneData.mainRenderTargetSize;
+    float2 uv = (dtid.xy + 0.5) / pc.outputExtent;
 
-    float2 grainUV = uv * pc.sceneData.mainRenderTargetSize / pc.grainSize;
+    float2 grainUV = uv * pc.outputExtent / pc.grainSize;
     grainUV += float2(pc.frameIndex * 0.123, pc.frameIndex * 0.456);
 
     float noise = FilmGrainHash(grainUV);
@@ -480,11 +470,11 @@ void ComputeFilmGrain(uniform FilmGrainPushConstant pc, uint3 dtid : SV_Dispatch
 [shader("compute")]
 [numthreads(POST_PROCESS_SHARPENING_DISPATCH_X, POST_PROCESS_SHARPENING_DISPATCH_Y, 1)]
 void ComputeSharpening(uniform SharpeningPushConstant pc, uint3 dtid : SV_DispatchThreadID) {
-    if (any(dtid.xy >= pc.sceneData.mainRenderTargetSize)) return;
+    if (any(dtid.xy >= pc.outputExtent)) return;
 
     uint2 pixelCoord = dtid.xy;
-    float2 uv = (dtid.xy + 0.5) / pc.sceneData.mainRenderTargetSize;
-    float2 texelSize = 1.0 / pc.sceneData.mainRenderTargetSize;
+    float2 uv = (dtid.xy + 0.5) / pc.outputExtent;
+    float2 texelSize = 1.0 / pc.outputExtent;
 
     // Sample center and cross neighbors
     float3 b = rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 0, -1) * texelSize, 0).rgb;
@@ -503,11 +493,11 @@ void ComputeSharpening(uniform SharpeningPushConstant pc, uint3 dtid : SV_Dispat
     rdgStorageFloat4[pc.outputIndex][pixelCoord] = float4(sharpened, 1.0);
 
     // FFX CAS (I think this is wrong somehow/somewhere)
-    /*if (any(dtid.xy >= pc.sceneData.mainRenderTargetSize)) return;
+    /*if (any(dtid.xy >= pc.outputExtent)) return;
 
     uint2 pixelCoord = dtid.xy;
-    float2 uv = (dtid.xy + 0.5) / pc.sceneData.mainRenderTargetSize;
-    float2 texelSize = 1.0 / pc.sceneData.mainRenderTargetSize;
+    float2 uv = (dtid.xy + 0.5) / pc.outputExtent;
+    float2 texelSize = 1.0 / pc.outputExtent;
 
     float3 a = rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2(-1, -1) * texelSize, 0).rgb;
     float3 b = rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 0, -1) * texelSize, 0).rgb;
@@ -540,7 +530,7 @@ void ComputeSharpening(uniform SharpeningPushConstant pc, uint3 dtid : SV_Dispat
 [shader("compute")]
 [numthreads(POST_PROCESS_COLOR_GRADING_DISPATCH_X, POST_PROCESS_COLOR_GRADING_DISPATCH_Y, 1)]
 void ComputeColorGrading(uniform ColorGradingPushConstant pc, uint3 dtid : SV_DispatchThreadID) {
-    if (any(dtid.xy >= pc.sceneData.mainRenderTargetSize)) return;
+    if (any(dtid.xy >= pc.outputExtent)) return;
 
     uint2 pixelCoord = dtid.xy;
     float3 color = rdgTextures[pc.inputIndex].Load(int3(pixelCoord, 0)).rgb;
