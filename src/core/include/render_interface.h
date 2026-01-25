@@ -126,9 +126,7 @@ struct GTAOConfiguration
     float thinOccluderCompensation{0.0f};
     float finalValuePower{2.2f};
     float depthMipSamplingOffset{3.3f};
-    // float sliceCount{3.0f};
-    float sliceCount{9.0f};
-    // float stepsPerSlice{3.0f};
+    float sliceCount{5.0f};
     float stepsPerSlice{3.0f};
     float denoiseBlurBeta{1.2f};
 };

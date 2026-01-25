@@ -250,7 +250,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     }
     bool bHasGTAO = viewFamily.gtaoConfig.bEnabled && pipelineManager->IsCategoryReady(PipelineCategory::GTAO);
     if (bHasGTAO) {
-        SetupGroundTruthAmbientOcclusion(*renderGraph, viewFamily, renderExtent);
+        SetupGroundTruthAmbientOcclusion(*renderGraph, viewFamily, renderExtent, 0);
     }
 
     SetupShadowsResolve(*renderGraph, viewFamily, renderExtent);
@@ -1089,7 +1089,6 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFami
         visibilityPass.WriteBuffer(primitiveCountName);
         visibilityPass.Execute([&, cascadeLevel, packedVisName, instanceOffsetName, primitiveCountName](VkCommandBuffer cmd) {
             VisibilityShadowsPushConstant pushData{
-                .sceneData = graph.GetBufferAddress("scene_data"),
                 .shadowData = graph.GetBufferAddress("shadow_data"),
                 .primitiveBuffer = graph.GetBufferAddress("primitive_buffer"),
                 .modelBuffer = graph.GetBufferAddress("model_buffer"),
@@ -1177,7 +1176,6 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFami
 
             vkCmdBeginRendering(cmd, &renderInfo);
             ShadowMeshShadingPushConstant pushConstants{
-                .sceneData = graph.GetBufferAddress("scene_data"),
                 .shadowData = graph.GetBufferAddress("shadow_data"),
                 .vertexBuffer = graph.GetBufferAddress("vertex_buffer"),
                 .meshletVerticesBuffer = graph.GetBufferAddress("meshlet_vertex_buffer"),
@@ -1459,7 +1457,7 @@ void RenderThread::SetupDirectGeometryPass(RenderGraph& graph, const Core::ViewF
     });
 }
 
-void RenderThread::SetupGroundTruthAmbientOcclusion(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent) const
+void RenderThread::SetupGroundTruthAmbientOcclusion(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, uint32_t sceneDataIndex) const
 {
     if (!graph.HasTexture("depth_target")) { return; }
     const Core::GTAOConfiguration& gtaoConfig = viewFamily.gtaoConfig;
@@ -1468,13 +1466,14 @@ void RenderThread::SetupGroundTruthAmbientOcclusion(RenderGraph& graph, const Co
     graph.CreateTexture("gtao_ao", TextureInfo{VK_FORMAT_R8_UNORM, renderExtent[0], renderExtent[1], 1});
     graph.CreateTexture("gtao_edges", TextureInfo{VK_FORMAT_R8_UNORM, renderExtent[0], renderExtent[1], 1});
     // Denoise pass(es) - typically run 2-3 times for better quality
+    graph.CreateTexture("gtao_temp", TextureInfo{VK_FORMAT_R8_UNORM, renderExtent[0], renderExtent[1], 1});
     graph.CreateTexture("gtao_filtered", TextureInfo{VK_FORMAT_R8_UNORM, renderExtent[0], renderExtent[1], 1});
 
     RenderPass& depthPrepass = graph.AddPass("GTAO Depth Prepass", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
     depthPrepass.ReadBuffer("scene_data");
     depthPrepass.ReadSampledImage("depth_target");
     depthPrepass.WriteStorageImage("gtao_depth");
-    depthPrepass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
+    depthPrepass.Execute([&, width = renderExtent[0], height = renderExtent[1], sceneDataIndex](VkCommandBuffer cmd) {
         GTAODepthPrepassPushConstant pc{
             .sceneData = graph.GetBufferAddress("scene_data"),
             .inputDepth = graph.GetDepthOnlySampledImageViewDescriptorIndex("depth_target"),
@@ -1486,6 +1485,7 @@ void RenderThread::SetupGroundTruthAmbientOcclusion(RenderGraph& graph, const Co
             .effectRadius = gtaoConfig.effectRadius,
             .effectFalloffRange = gtaoConfig.effectFalloffRange,
             .radiusMultiplier = gtaoConfig.radiusMultiplier,
+            .sceneDataIndex = sceneDataIndex,
         };
 
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("gtao_depth_prepass");
@@ -1503,7 +1503,7 @@ void RenderThread::SetupGroundTruthAmbientOcclusion(RenderGraph& graph, const Co
     gtaoMainPass.ReadSampledImage("normal_target");
     gtaoMainPass.WriteStorageImage("gtao_ao");
     gtaoMainPass.WriteStorageImage("gtao_edges");
-    gtaoMainPass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
+    gtaoMainPass.Execute([&, width = renderExtent[0], height = renderExtent[1], sceneDataIndex](VkCommandBuffer cmd) {
         GTAOMainPushConstant pc{
             .sceneData = graph.GetBufferAddress("scene_data"),
             .prefilteredDepthIndex = graph.GetSampledImageViewDescriptorIndex("gtao_depth"),
@@ -1521,6 +1521,7 @@ void RenderThread::SetupGroundTruthAmbientOcclusion(RenderGraph& graph, const Co
             .sliceCount = gtaoConfig.sliceCount,
             .stepsPerSlice = gtaoConfig.stepsPerSlice,
             .noiseIndex = static_cast<uint32_t>(frameNumber % 64),
+            .sceneDataIndex = sceneDataIndex,
         };
 
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("gtao_main");
@@ -1532,18 +1533,43 @@ void RenderThread::SetupGroundTruthAmbientOcclusion(RenderGraph& graph, const Co
         vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
     });
 
-    RenderPass& denoisePass = graph.AddPass("GTAO Denoise", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-    denoisePass.ReadSampledImage("gtao_ao");
-    denoisePass.ReadSampledImage("gtao_edges");
-    denoisePass.WriteStorageImage("gtao_filtered");
-    denoisePass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
+    RenderPass& denoise1 = graph.AddPass("GTAO Denoise 1", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+    denoise1.ReadSampledImage("gtao_ao");
+    denoise1.ReadSampledImage("gtao_edges");
+    denoise1.WriteStorageImage("gtao_temp");
+    denoise1.Execute([&, width = renderExtent[0], height = renderExtent[1], sceneDataIndex](VkCommandBuffer cmd) {
         GTAODenoisePushConstant pc{
             .sceneData = graph.GetBufferAddress("scene_data"),
             .rawAOIndex = graph.GetSampledImageViewDescriptorIndex("gtao_ao"),
             .edgeDataIndex = graph.GetSampledImageViewDescriptorIndex("gtao_edges"),
+            .filteredAOIndex = graph.GetStorageImageViewDescriptorIndex("gtao_temp"),
+            .denoiseBlurBeta = 1e4f,
+            .isFinalDenoisePass = 0,
+            .sceneDataIndex = sceneDataIndex,
+        };
+
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("gtao_denoise");
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+
+        uint32_t xDispatch = (width / 2 + GTAO_DENOISE_DISPATCH_X - 1) / GTAO_DENOISE_DISPATCH_X;
+        uint32_t yDispatch = (height + GTAO_DENOISE_DISPATCH_Y - 1) / GTAO_DENOISE_DISPATCH_Y;
+        vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
+    });
+
+    RenderPass& denoise2 = graph.AddPass("GTAO Denoise 2", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+    denoise2.ReadSampledImage("gtao_temp");
+    denoise2.ReadSampledImage("gtao_edges");
+    denoise2.WriteStorageImage("gtao_filtered");
+    denoise2.Execute([&, width = renderExtent[0], height = renderExtent[1], sceneDataIndex](VkCommandBuffer cmd) {
+        GTAODenoisePushConstant pc{
+            .sceneData = graph.GetBufferAddress("scene_data"),
+            .rawAOIndex = graph.GetSampledImageViewDescriptorIndex("gtao_temp"),
+            .edgeDataIndex = graph.GetSampledImageViewDescriptorIndex("gtao_edges"),
             .filteredAOIndex = graph.GetStorageImageViewDescriptorIndex("gtao_filtered"),
             .denoiseBlurBeta = gtaoConfig.denoiseBlurBeta,
             .isFinalDenoisePass = 1,
+            .sceneDataIndex = sceneDataIndex,
         };
 
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("gtao_denoise");

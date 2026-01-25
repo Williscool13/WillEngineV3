@@ -87,7 +87,6 @@ SHADER_PUBLIC struct VisibilityPushConstant
 SHADER_PUBLIC struct VisibilityShadowsPushConstant
 {
     // Read-Only
-    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC SHADER_PTR(ShadowData) shadowData;
     SHADER_PUBLIC SHADER_PTR(MeshletPrimitive) primitiveBuffer;
     SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
@@ -183,7 +182,6 @@ SHADER_PUBLIC struct TemporalAntialiasingPushConstant
 
 SHADER_PUBLIC struct ShadowMeshShadingPushConstant
 {
-    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC SHADER_PTR(ShadowData) shadowData;
 
     SHADER_PUBLIC SHADER_PTR(Vertex) vertexBuffer;
@@ -365,6 +363,7 @@ SHADER_PUBLIC struct GTAODepthPrepassPushConstant
     SHADER_PUBLIC float effectRadius;
     SHADER_PUBLIC float effectFalloffRange;
     SHADER_PUBLIC float radiusMultiplier;
+    SHADER_PUBLIC uint32_t sceneDataIndex;
 };
 
 SHADER_PUBLIC struct GTAOMainPushConstant {
@@ -384,6 +383,7 @@ SHADER_PUBLIC struct GTAOMainPushConstant {
     SHADER_PUBLIC float sliceCount;
     SHADER_PUBLIC float stepsPerSlice;
     SHADER_PUBLIC uint32_t noiseIndex;
+    SHADER_PUBLIC uint32_t sceneDataIndex;
 };
 
 SHADER_PUBLIC struct GTAODenoisePushConstant {
@@ -393,6 +393,7 @@ SHADER_PUBLIC struct GTAODenoisePushConstant {
     SHADER_PUBLIC uint32_t filteredAOIndex;
     SHADER_PUBLIC float denoiseBlurBeta;
     SHADER_PUBLIC uint32_t isFinalDenoisePass;
+    SHADER_PUBLIC uint32_t sceneDataIndex;
 };
 
 

@@ -50,11 +50,11 @@ void ComputeGTAODepthPrepass(uniform GTAODepthPrepassPushConstant pc, uint3 dtid
     const uint2 baseCoord = dtid.xy;
     const int2 screenPos = int2(baseCoord) * 2; // We process 2x2 pixels in MIP 0
 
-    if (screenPos.x > pc.sceneData->mainRenderTargetSize.x || screenPos.y > pc.sceneData->mainRenderTargetSize.y) {
+    if (screenPos.x > pc.sceneData[pc.sceneDataIndex].mainRenderTargetSize.x || screenPos.y > pc.sceneData[pc.sceneDataIndex].mainRenderTargetSize.y) {
         return;
     }
 
-    float2 uv = float2(screenPos) * pc.sceneData->texelSize;
+    float2 uv = float2(screenPos) * pc.sceneData[pc.sceneDataIndex].texelSize;
 
     float4 depths = rdgTextures[pc.inputDepth].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], uv, int2(1, 1));
     float rDepth0 = depths.w;
@@ -62,10 +62,10 @@ void ComputeGTAODepthPrepass(uniform GTAODepthPrepassPushConstant pc, uint3 dtid
     float rDepth2 = depths.x;
     float rDepth3 = depths.y;
 
-    float depth0 = ClampDepth(ScreenToViewSpaceDepth(rDepth0, pc.sceneData->depthLinearizeMult, pc.sceneData->depthLinearizeAdd));
-    float depth1 = ClampDepth(ScreenToViewSpaceDepth(rDepth1, pc.sceneData->depthLinearizeMult, pc.sceneData->depthLinearizeAdd));
-    float depth2 = ClampDepth(ScreenToViewSpaceDepth(rDepth2, pc.sceneData->depthLinearizeMult, pc.sceneData->depthLinearizeAdd));
-    float depth3 = ClampDepth(ScreenToViewSpaceDepth(rDepth3, pc.sceneData->depthLinearizeMult, pc.sceneData->depthLinearizeAdd));
+    float depth0 = ClampDepth(ScreenToViewSpaceDepth(rDepth0, pc.sceneData[pc.sceneDataIndex].depthLinearizeMult, pc.sceneData[pc.sceneDataIndex].depthLinearizeAdd));
+    float depth1 = ClampDepth(ScreenToViewSpaceDepth(rDepth1, pc.sceneData[pc.sceneDataIndex].depthLinearizeMult, pc.sceneData[pc.sceneDataIndex].depthLinearizeAdd));
+    float depth2 = ClampDepth(ScreenToViewSpaceDepth(rDepth2, pc.sceneData[pc.sceneDataIndex].depthLinearizeMult, pc.sceneData[pc.sceneDataIndex].depthLinearizeAdd));
+    float depth3 = ClampDepth(ScreenToViewSpaceDepth(rDepth3, pc.sceneData[pc.sceneDataIndex].depthLinearizeMult, pc.sceneData[pc.sceneDataIndex].depthLinearizeAdd));
 
     rdgStorageFloat[pc.outputDepth0][screenPos + int2(0, 0)] = depth0;
     rdgStorageFloat[pc.outputDepth0][screenPos + int2(1, 0)] = depth1;
@@ -190,13 +190,13 @@ float XeGTAO_PackEdges(float4 edgesLRTB) {
 void ComputeGTAOMain(uniform GTAOMainPushConstant pc, uint3 dtid : SV_DispatchThreadID) {
     const int2 screenPos = int2(dtid.xy);
 
-    if (screenPos.x >= pc.sceneData->mainRenderTargetSize.x || screenPos.y >= pc.sceneData->mainRenderTargetSize.y) {
+    if (screenPos.x >= pc.sceneData[pc.sceneDataIndex].mainRenderTargetSize.x || screenPos.y >= pc.sceneData[pc.sceneDataIndex].mainRenderTargetSize.y) {
         return;
     }
 
-    float2 uv = (float2(screenPos) + 0.5) * pc.sceneData->texelSize;
+    float2 uv = (float2(screenPos) + 0.5) * pc.sceneData[pc.sceneDataIndex].texelSize;
 
-    float2 gatherCenter = float2(screenPos) * pc.sceneData->texelSize;
+    float2 gatherCenter = float2(screenPos) * pc.sceneData[pc.sceneDataIndex].texelSize;
     float4 valuesUL = rdgTextures[pc.prefilteredDepthIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], gatherCenter);
     float4 valuesBR = rdgTextures[pc.prefilteredDepthIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], gatherCenter, int2(1, 1));
 
@@ -218,7 +218,7 @@ void ComputeGTAOMain(uniform GTAOMainPushConstant pc, uint3 dtid : SV_DispatchTh
     viewSpaceZM = viewSpaceZM * 0.99920;
 
     // Reconstruct view space position
-    float3 vPos = CheapReconstructViewSpacePosition(pc.sceneData->ndcToViewMul, pc.sceneData->ndcToViewAdd, uv, viewSpaceZM);
+    float3 vPos = CheapReconstructViewSpacePosition(pc.sceneData[pc.sceneDataIndex].ndcToViewMul, pc.sceneData[pc.sceneDataIndex].ndcToViewAdd, uv, viewSpaceZM);
     float3 viewVec = normalize(-vPos);
 
     // Prevents normals that are facing away from the view vector - xeGTAO struggles with extreme cases, but in Vanilla it seems rare so it's disabled by default
@@ -242,7 +242,7 @@ void ComputeGTAOMain(uniform GTAOMainPushConstant pc, uint3 dtid : SV_DispatchTh
     float noiseSample = noise.y;
 
     const float pixelTooCloseThreshold = 1.3;
-    const float2 pixelDirRBViewspaceSizeAtCenterZ = viewSpaceZM.xx * pc.sceneData->ndcToViewMulXPixelSize;
+    const float2 pixelDirRBViewspaceSizeAtCenterZ = viewSpaceZM.xx * pc.sceneData[pc.sceneDataIndex].ndcToViewMulXPixelSize;
 
     float screenspaceRadius = effectRadius / pixelDirRBViewspaceSizeAtCenterZ.x;
 
@@ -299,15 +299,15 @@ void ComputeGTAOMain(uniform GTAOMainPushConstant pc, uint3 dtid : SV_DispatchTh
             const int XE_GTAO_DEPTH_MIP_LEVELS = 5;
             const float mipLevel = clamp(log2(sampleOffsetLength) - pc.depthMipSamplingOffset, 0.0, float(XE_GTAO_DEPTH_MIP_LEVELS));
 
-            sampleOffset = round(sampleOffset) * pc.sceneData->texelSize;
+            sampleOffset = round(sampleOffset) * pc.sceneData[pc.sceneDataIndex].texelSize;
 
             float2 sampleScreenPos0 = uv + sampleOffset;
             float SZ0 = rdgTextures[pc.prefilteredDepthIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], sampleScreenPos0, mipLevel).r;
-            float3 samplePos0 = CheapReconstructViewSpacePosition(pc.sceneData->ndcToViewMul, pc.sceneData->ndcToViewAdd, sampleScreenPos0, SZ0);
+            float3 samplePos0 = CheapReconstructViewSpacePosition(pc.sceneData[pc.sceneDataIndex].ndcToViewMul, pc.sceneData[pc.sceneDataIndex].ndcToViewAdd, sampleScreenPos0, SZ0);
 
             float2 sampleScreenPos1 = uv - sampleOffset;
             float SZ1 = rdgTextures[pc.prefilteredDepthIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], sampleScreenPos1, mipLevel).r;
-            float3 samplePos1 = CheapReconstructViewSpacePosition(pc.sceneData->ndcToViewMul, pc.sceneData->ndcToViewAdd, sampleScreenPos1, SZ1);
+            float3 samplePos1 = CheapReconstructViewSpacePosition(pc.sceneData[pc.sceneDataIndex].ndcToViewMul, pc.sceneData[pc.sceneDataIndex].ndcToViewAdd, sampleScreenPos1, SZ1);
 
             float3 sampleDelta0 = samplePos0 - vPos;
             float3 sampleDelta1 = samplePos1 - vPos;
@@ -374,7 +374,7 @@ void ComputeGTAODenoise(uniform GTAODenoisePushConstant pc, uint3 dtid : SV_Disp
     // Each dispatch operates on 2x1 pixels
     const int2 screenPos = int2(dtid.xy) * int2(2, 1);
 
-    if (screenPos.x >= pc.sceneData->mainRenderTargetSize.x || screenPos.y >= pc.sceneData->mainRenderTargetSize.y) {
+    if (screenPos.x >= pc.sceneData[pc.sceneDataIndex].mainRenderTargetSize.x || screenPos.y >= pc.sceneData[pc.sceneDataIndex].mainRenderTargetSize.y) {
         return;
     }
 
@@ -390,7 +390,7 @@ void ComputeGTAODenoise(uniform GTAODenoisePushConstant pc, uint3 dtid : SV_Disp
     float weightBR[2];
 
     // Gather edge and AO data
-    float2 gatherCenter = float2(screenPos) * pc.sceneData->texelSize;
+    float2 gatherCenter = float2(screenPos) * pc.sceneData[pc.sceneDataIndex].texelSize;
 
     float4 edgesQ0 = rdgTextures[pc.edgeDataIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], gatherCenter, int2(0, 0));
     float4 edgesQ1 = rdgTextures[pc.edgeDataIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], gatherCenter, int2(2, 0));
