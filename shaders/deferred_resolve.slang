@@ -7,9 +7,9 @@ import bindless_declarations;
 
 [numthreads(16, 16, 1)]
 void ComputeMain(uniform DeferredResolvePushConstant pc, uint3 threadID : SV_DispatchThreadID) {
-    if (threadID.x >= pc.sceneData->mainRenderTargetSize.x || threadID.y >= pc.sceneData->mainRenderTargetSize.y) return;
+    if (threadID.x >= pc.sceneData[pc.sceneDataIndex].mainRenderTargetSize.x || threadID.y >= pc.sceneData[pc.sceneDataIndex].mainRenderTargetSize.y) return;
 
-    float2 uv = (float2(threadID.xy) + 0.5) / float2(pc.sceneData->mainRenderTargetSize);
+    float2 uv = (float2(threadID.xy) + 0.5) / float2(pc.sceneData[pc.sceneDataIndex].mainRenderTargetSize);
     float4 albedo = rdgTextures[pc.albedoIndex].Load(int3(threadID.xy, 0));
     float depth = rdgTextures[pc.depthIndex].Load(int3(threadID.xy, 0)).r;
     if (depth <= 0.0) {
@@ -20,8 +20,8 @@ void ComputeMain(uniform DeferredResolvePushConstant pc, uint3 threadID : SV_Dis
     float4 emissiveData = rdgTextures[pc.emissiveIndex].Load(int3(threadID.xy, 0));
     float2 shadows = rdgTextures[pc.shadowsIndex].Load(int3(threadID.xy, 0)).xy;
 
-    float viewSpaceDepth = ScreenToViewSpaceDepth(depth, pc.sceneData->depthLinearizeMult, pc.sceneData->depthLinearizeAdd);
-    float3 viewPosition = CheapReconstructViewSpacePosition(pc.sceneData->ndcToViewMul, pc.sceneData->ndcToViewAdd, uv, viewSpaceDepth);
+    float viewSpaceDepth = ScreenToViewSpaceDepth(depth, pc.sceneData[pc.sceneDataIndex].depthLinearizeMult, pc.sceneData[pc.sceneDataIndex].depthLinearizeAdd);
+    float3 viewPosition = CheapReconstructViewSpacePosition(pc.sceneData[pc.sceneDataIndex].ndcToViewMul, pc.sceneData[pc.sceneDataIndex].ndcToViewAdd, uv, viewSpaceDepth);
 
     float roughness = pbrData.g;
     float metallic = pbrData.r;
@@ -30,7 +30,7 @@ void ComputeMain(uniform DeferredResolvePushConstant pc, uint3 threadID : SV_Dis
     float3 V = normalize(-viewPosition);
 
     // Directional light in view space (transform from world space)
-    float3 L = normalize(mul((float3x3)pc.sceneData->view, normalize(-pc.lightData->mainLightDirection.xyz)));
+    float3 L = normalize(mul((float3x3)pc.sceneData[pc.sceneDataIndex].view, normalize(-pc.lightData->mainLightDirection.xyz)));
     float3 H = normalize(V + L);
 
     // SPECULAR: Cook-Torrance BRDF

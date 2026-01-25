@@ -480,26 +480,6 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
 
             ImGui::Text("Current Exposure: %.4f", exposure);
         }
-
-        if (ImGui::CollapsingHeader("Stencil Debug")) {
-            uint8_t* data = static_cast<uint8_t*>(renderThread->GetResourceManager()->debugReadbackBuffer.allocationInfo.pMappedData);
-            size_t stencilOffset = sizeof(uint32_t) + 10 * sizeof(InstancedMeshIndirectDrawParameters) + 256 * sizeof(uint32_t) + sizeof(uint32_t);
-            uint8_t* stencilData = data + stencilOffset;
-
-            auto [width, height] = std::array<uint32_t, 2>{640, 480};
-
-            ImGui::Text("Stencil samples:");
-            ImGui::Text("Top-left [0,0]: %u", stencilData[0]);
-            ImGui::Text("Center [%u,%u]: %u", width/2, height/2, stencilData[(height/2) * width + (width/2)]);
-            ImGui::Text("Bottom-right [%u,%u]: %u", width-1, height-1, stencilData[(height-1) * width + (width-1)]);
-
-            // Sample a few more spots
-            ImGui::Text("Quarter points:");
-            ImGui::Text("  [%u,%u]: %u", width/4, height/4, stencilData[(height/4) * width + (width/4)]);
-            ImGui::Text("  [%u,%u]: %u", 3*width/4, height/4, stencilData[(height/4) * width + (3*width/4)]);
-            ImGui::Text("  [%u,%u]: %u", width/4, 3*height/4, stencilData[(3*height/4) * width + (width/4)]);
-            ImGui::Text("  [%u,%u]: %u", 3*width/4, 3*height/4, stencilData[(3*height/4) * width + (3*width/4)]);
-        }
     }
 
     if (ImGui::CollapsingHeader("Asset Generation")) {

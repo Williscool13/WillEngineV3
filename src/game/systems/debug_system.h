@@ -53,7 +53,7 @@ static const DebugHotkey DEBUG_HOTKEYS[] = {
     {Key::NUM_6, "Motion Blur Tiled Max", "motion_blur_tiled_max", DebugTransformationType::None, Core::DebugViewAspect::None},
     {Key::NUM_7, "Motion Blur Neighbor Max", "motion_blur_tiled_neighbor_max", DebugTransformationType::None, Core::DebugViewAspect::None},
     {Key::NUM_8, "Motion Blur Output", "motion_blur_output", DebugTransformationType::None, Core::DebugViewAspect::None},
-    {Key::NUM_9, "GTAO Filtered", "gtao_filtered", DebugTransformationType::None, Core::DebugViewAspect::None},
+    {Key::NUM_9, "Portal Deferred Resolve", "portal_deferred_resolve", DebugTransformationType::None, Core::DebugViewAspect::None},
     {Key::NUM_0, "Stencil Target", "depth_target", DebugTransformationType::StencilRemap, Core::DebugViewAspect::Stencil},
 };
 

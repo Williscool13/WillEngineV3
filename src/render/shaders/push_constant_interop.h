@@ -153,6 +153,7 @@ SHADER_PUBLIC struct ShadowsResolvePushConstant
     SHADER_PUBLIC int4 csmIndices;
     SHADER_PUBLIC uint32_t depthIndex;
     SHADER_PUBLIC uint32_t normalIndex;
+    SHADER_PUBLIC uint32_t sceneDataIndex;
 };
 
 SHADER_PUBLIC struct SHADER_ALIGN DeferredResolvePushConstant
@@ -167,6 +168,7 @@ SHADER_PUBLIC struct SHADER_ALIGN DeferredResolvePushConstant
     SHADER_PUBLIC uint32_t depthIndex;
     SHADER_PUBLIC uint32_t shadowsIndex;
     SHADER_PUBLIC uint32_t outputImageIndex;
+    SHADER_PUBLIC uint32_t sceneDataIndex;
 };
 
 SHADER_PUBLIC struct TemporalAntialiasingPushConstant
