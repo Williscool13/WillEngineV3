@@ -12,10 +12,11 @@ AudioLoadSlot::AudioLoadSlot() = default;
 
 AudioLoadSlot::~AudioLoadSlot() = default;
 
-void AudioLoadSlot::Initialize(enki::TaskScheduler* _scheduler, LockFreeQueue<AudioLoadCompleteTransient>* _completeQueue)
+void AudioLoadSlot::Initialize(enki::TaskScheduler* _scheduler, std::function<void(bool success, AudioSlotHandle slotHandle)> _notifyCallback)
 {
+
     scheduler = _scheduler;
-    loadCompleteQueue = _completeQueue;
+    notifyCallback = _notifyCallback;
     task = std::make_unique<LoadAudioTask>();
 }
 
@@ -38,6 +39,8 @@ void AudioLoadSlot::LoadAudioTask::ExecuteRange(enki::TaskSetPartition range, ui
 {
     loadSlot->audioEntry->mixAudio = MIX_LoadAudio(loadSlot->audioEntry->mixer, loadSlot->audioEntry->source.string().c_str(), false);
     const bool bSuccess = loadSlot->audioEntry->mixAudio != nullptr;
-    loadSlot->loadCompleteQueue->push({bSuccess, loadSlot->audioSlotHandle});
+    if (loadSlot->notifyCallback) {
+        loadSlot->notifyCallback(bSuccess, loadSlot->audioSlotHandle);
+    }
 }
 } // Audio

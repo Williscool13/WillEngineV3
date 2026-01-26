@@ -28,7 +28,7 @@ public:
 
     ~AudioLoadSlot();
 
-    void Initialize(enki::TaskScheduler* _scheduler, LockFreeQueue<AudioLoadCompleteTransient>* _completeQueue);
+    void Initialize(enki::TaskScheduler* _scheduler, std::function<void(bool success, AudioSlotHandle slotHandle)> _notifyCallback);
 
     void Launch(AudioSlotHandle _audioSlotHandle, Audio::WillAudio* _audioEntry);
 
@@ -50,7 +50,7 @@ private:
 
     std::unique_ptr<LoadAudioTask> task{nullptr};
     enki::TaskScheduler* scheduler{nullptr};
-    LockFreeQueue<AudioLoadCompleteTransient>* loadCompleteQueue{nullptr};
+    std::function<void(bool success, AudioSlotHandle slotHandle)> notifyCallback;
 };
 } // Audio
 

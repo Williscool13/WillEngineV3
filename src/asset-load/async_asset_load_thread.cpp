@@ -14,7 +14,13 @@ namespace AssetLoad
 AsyncAssetLoadThread::AsyncAssetLoadThread(enki::TaskScheduler* scheduler)
 {
     for (int32_t i = 0; i < AUDIO_JOB_COUNT; ++i) {
-        audioLoadSlots[i].Initialize(scheduler, &audioLoadCompleteTransientQueue);
+        audioLoadSlots[i].Initialize(scheduler, [this](bool bSuccess, AudioSlotHandle slotHandle) {
+            // If handle allocator is thread safe, the transient queue can be removed.
+            audioLoadCompleteTransientQueue.push({bSuccess, slotHandle});
+            workCounter.fetch_add(1, std::memory_order_release);
+            wakeCV.notify_one();
+            SPDLOG_INFO("Finished Loading audio file...");
+        });
     }
 
     thisThread = std::jthread([this] { ThreadMain(); });
