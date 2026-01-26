@@ -25,6 +25,8 @@ struct VulkanContext;
 
 namespace AssetLoad
 {
+class AudioLoadSlot;
+
 class UploadStaging
 {
 public:
@@ -142,6 +144,24 @@ struct PipelineComplete
 {
     std::string name;
     Render::PipelineData* entry;
+    bool success;
+};
+
+struct AudioLoadRequest
+{
+    Audio::WillAudio* audioEntry;
+};
+
+using AudioSlotHandle = Core::Handle<AudioLoadSlot>;
+struct AudioLoadCompleteTransient
+{
+    bool success;
+    AudioSlotHandle loadSlotHandle;
+};
+
+struct AudioLoadComplete
+{
+    Audio::WillAudio* audioEntry;
     bool success;
 };
 } // AssetLoad

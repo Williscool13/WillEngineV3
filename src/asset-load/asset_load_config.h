@@ -16,6 +16,8 @@ inline constexpr uint32_t TEXTURE_JOB_COUNT = 4;
 inline constexpr uint32_t TEXTURE_LOAD_QUEUE_COUNT = 128;
 inline constexpr uint32_t PIPELINE_JOB_COUNT = 8;
 inline constexpr uint32_t PIPELINE_LOAD_QUEUE_COUNT = 512;
+inline constexpr uint32_t AUDIO_JOB_COUNT = 16;
+inline constexpr uint32_t AUDIO_JOB_QUEUE_COUNT = 128;
 
 inline constexpr uint32_t WILL_MODEL_LOAD_STAGING_SIZE = 16 * 1024 * 1024; // 16MB
 inline constexpr uint32_t TEXTURE_LOAD_STAGING_SIZE    = 16 * 1024 * 1024; // 16MB, Mip0 BC7 == 16777217, which is exactly 16MB

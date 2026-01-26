@@ -20,6 +20,7 @@ struct WillAudio
         FailedToLoad
     };
 
+    MIX_Mixer* mixer;
     std::filesystem::path source{};
     std::string name{};
     Engine::AudioHandle selfHandle;
