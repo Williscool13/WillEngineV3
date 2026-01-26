@@ -22,6 +22,7 @@ target_include_directories(asset-load PUBLIC
 target_link_libraries(asset-load PUBLIC
         core
         render
+        audio
         enkiTS
         tracy
 )

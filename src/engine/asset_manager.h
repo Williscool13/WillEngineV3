@@ -13,6 +13,7 @@
 #include "core/allocators/handle_allocator.h"
 #include "render/texture_asset.h"
 #include "render/model/will_model_asset.h"
+#include "audio/audio_asset.h"
 
 namespace AssetLoad
 {
@@ -43,18 +44,28 @@ public:
 
     AssetManager& operator=(AssetManager&&) = delete;
 
+public: // Models
     WillModelHandle LoadModel(const std::filesystem::path& path);
 
     Render::WillModel* GetModel(WillModelHandle handle);
 
     void UnloadModel(WillModelHandle handle);
 
+public: // Textures
     TextureHandle LoadTexture(const std::filesystem::path& path);
 
     Render::Texture* GetTexture(TextureHandle handle);
 
     void UnloadTexture(TextureHandle handle);
 
+public: // Audio
+    AudioHandle LoadAudio(const std::filesystem::path& path);
+
+    Audio::WillAudio* GetAudio(AudioHandle handle);
+
+    void UnloadAudio(AudioHandle handle);
+
+public: // Called by engine to process loads
     void ResolveLoads(Core::FrameBuffer& stagingFrameBuffer) const;
 
     void ResolveUnloads();
@@ -86,8 +97,11 @@ private:
 
     Core::HandleAllocator<Render::Texture, MAX_LOADED_TEXTURES> textureAllocator;
     std::array<Render::Texture, MAX_LOADED_TEXTURES> textures{};
-
     std::unordered_map<std::filesystem::path, TextureHandle> pathToTextureHandle;
+
+    Core::HandleAllocator<Audio::WillAudio, MAX_LOADED_AUDIO> audioAllocator;
+    std::array<Audio::WillAudio, MAX_LOADED_AUDIO> audios{};
+    std::unordered_map<std::filesystem::path, AudioHandle> pathToAudioHandle;
 
 private: // Default Resources
     TextureHandle whiteTextureHandle;

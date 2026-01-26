@@ -106,7 +106,7 @@ WillModelHandle AssetManager::LoadModel(const std::filesystem::path& path)
 
     pathToHandle[path] = handle;
 
-    assetLoadThread->RequestLoad(model.selfHandle, &model);
+    assetLoadThread->RequestModelLoad(model.selfHandle, &model);
 
     return handle;
 }
@@ -131,7 +131,7 @@ void AssetManager::UnloadModel(WillModelHandle handle)
 
     if (model.refCount == 0) {
         model.modelLoadState = Render::WillModel::ModelLoadState::NotLoaded;
-        assetLoadThread->RequestUnLoad(handle, &model);
+        assetLoadThread->RequestModelUnload(handle, &model);
         pathToHandle.erase(model.source);
     }
 }
@@ -139,7 +139,7 @@ void AssetManager::UnloadModel(WillModelHandle handle)
 void AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuffer) const
 {
     AssetLoad::WillModelComplete modelComplete{};
-    while (assetLoadThread->ResolveLoads(modelComplete)) {
+    while (assetLoadThread->ResolveModelLoads(modelComplete)) {
         if (modelComplete.bSuccess) {
             stagingFrameBuffer.bufferAcquireOperations.insert(stagingFrameBuffer.bufferAcquireOperations.end(),
                                                               modelComplete.model->bufferAcquireOps.begin(),
@@ -180,7 +180,7 @@ void AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuffer) const
 void AssetManager::ResolveUnloads()
 {
     AssetLoad::WillModelComplete modelComplete{};
-    while (assetLoadThread->ResolveUnload(modelComplete)) {
+    while (assetLoadThread->ResolveModelUnload(modelComplete)) {
         SPDLOG_INFO("[AssetManager] Model unload succeeded: {}", modelComplete.model->name);
         modelComplete.model->modelData.Reset();
         modelComplete.model->bufferAcquireOps.clear();
@@ -264,10 +264,79 @@ void AssetManager::UnloadTexture(TextureHandle handle)
     Render::Texture& texture = textures[handle.index];
     texture.refCount--;
 
+    SPDLOG_TRACE("[AssetManager] Texture refCount decremented: {}, refCount: {}", texture.name, texture.refCount);
+
     if (texture.refCount == 0) {
         texture.loadState = Render::Texture::LoadState::NotLoaded;
         assetLoadThread->RequestTextureUnload(handle, &texture);
         pathToTextureHandle.erase(texture.source);
+    }
+}
+
+AudioHandle AssetManager::LoadAudio(const std::filesystem::path& path)
+{
+    auto it = pathToAudioHandle.find(path);
+    if (it != pathToAudioHandle.end()) {
+        AudioHandle existingHandle = it->second;
+        if (audioAllocator.IsValid(existingHandle)) {
+            Audio::WillAudio& audio = audios[existingHandle.index];
+            audio.refCount++;
+            return existingHandle;
+        }
+        pathToAudioHandle.erase(it);
+    }
+
+    AudioHandle handle = audioAllocator.Add();
+    if (!handle.IsValid()) {
+        SPDLOG_ERROR("[AssetManager] Failed to allocate audio slot for: {}", path.string());
+        return AudioHandle{};
+    }
+
+    Audio::WillAudio& audio = audios[handle.index];
+    audio.selfHandle = handle;
+    audio.source = path;
+    audio.name = path.stem().string();
+    audio.refCount = 1;
+    audio.loadState = Audio::WillAudio::AudioLoadState::NotLoaded;
+
+    pathToAudioHandle[path] = handle;
+
+    // assetLoadThread->RequestAudioLoad(audio.selfHandle, &audio);
+
+    return handle;
+}
+
+Audio::WillAudio* AssetManager::GetAudio(AudioHandle handle)
+{
+    if (!audioAllocator.IsValid(handle)) {
+        return nullptr;
+    }
+    return &audios[handle.index];
+}
+
+void AssetManager::UnloadAudio(AudioHandle handle)
+{
+    if (!audioAllocator.IsValid(handle)) {
+        SPDLOG_WARN("[AssetManager] Attempted to unload invalid audio handle");
+        return;
+    }
+
+    Audio::WillAudio& audio = audios[handle.index];
+    audio.refCount--;
+
+    SPDLOG_TRACE("[AssetManager] Audio refCount decremented: {}, refCount: {}", audio.name, audio.refCount);
+
+    if (audio.refCount == 0) {
+        if (audio.mixAudio != nullptr) {
+            // SDL_mixer is thread-safe. No need to async unload
+            MIX_DestroyAudio(audio.mixAudio);
+            audio.mixAudio = nullptr;
+        }
+
+        pathToAudioHandle.erase(audio.source);
+        audioAllocator.Remove(handle);
+
+        SPDLOG_INFO("[AssetManager] Audio unloaded: {}", audio.name);
     }
 }
 } // Engine

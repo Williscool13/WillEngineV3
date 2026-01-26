@@ -1,6 +1,8 @@
 add_library(audio STATIC
         audio_manager.cpp
         audio_manager.h
+        audio_asset.cpp
+        audio_asset.h
 )
 
 target_include_directories(audio PRIVATE

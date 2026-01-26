@@ -83,22 +83,22 @@ void AssetLoadThread::Join() const
     }
 }
 
-void AssetLoadThread::RequestLoad(Engine::WillModelHandle willmodelHandle, Render::WillModel* willModelPtr)
+void AssetLoadThread::RequestModelLoad(Engine::WillModelHandle willmodelHandle, Render::WillModel* willModelPtr)
 {
     modelLoadQueue.push({willmodelHandle, willModelPtr});
 }
 
-bool AssetLoadThread::ResolveLoads(WillModelComplete& modelComplete)
-{
-    return modelCompleteLoadQueue.pop(modelComplete);
-}
-
-void AssetLoadThread::RequestUnLoad(Engine::WillModelHandle willmodelHandle, Render::WillModel* willModelPtr)
+void AssetLoadThread::RequestModelUnload(Engine::WillModelHandle willmodelHandle, Render::WillModel* willModelPtr)
 {
     modelUnloadQueue.push({willmodelHandle, willModelPtr});
 }
 
-bool AssetLoadThread::ResolveUnload(WillModelComplete& modelComplete)
+bool AssetLoadThread::ResolveModelLoads(WillModelComplete& modelComplete)
+{
+    return modelCompleteLoadQueue.pop(modelComplete);
+}
+
+bool AssetLoadThread::ResolveModelUnload(WillModelComplete& modelComplete)
 {
     return modelCompleteUnloadQueue.pop(modelComplete);
 }

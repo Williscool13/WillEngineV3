@@ -61,23 +61,28 @@ public:
 
     void Join() const;
 
-public:
-    void RequestLoad(Engine::WillModelHandle willmodelHandle, Render::WillModel* willModelPtr);
+public: // Models
+    void RequestModelLoad(Engine::WillModelHandle willmodelHandle, Render::WillModel* willModelPtr);
 
-    bool ResolveLoads(WillModelComplete& modelComplete);
+    void RequestModelUnload(Engine::WillModelHandle willmodelHandle, Render::WillModel* willModelPtr);
 
-    void RequestUnLoad(Engine::WillModelHandle willmodelHandle, Render::WillModel* willModelPtr);
+    bool ResolveModelLoads(WillModelComplete& modelComplete);
 
-    bool ResolveUnload(WillModelComplete& modelComplete);
+    bool ResolveModelUnload(WillModelComplete& modelComplete);
 
+public: // Textures
     void RequestTextureLoad(Engine::TextureHandle textureHandle, Render::Texture* texturePtr);
-
-    bool ResolveTextureLoads(TextureComplete& textureComplete);
 
     void RequestTextureUnload(Engine::TextureHandle textureHandle, Render::Texture* texturePtr);
 
+    bool ResolveTextureLoads(TextureComplete& textureComplete);
+
     bool ResolveTextureUnload(TextureComplete& textureComplete);
 
+public: // Audio
+
+
+public: // Pipelines
     void RequestPipelineLoad(const std::string& name, Render::PipelineData* data);
 
     bool ResolvePipelineLoads(PipelineComplete& pipelineComplete);
