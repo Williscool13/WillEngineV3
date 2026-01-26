@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -19,12 +19,25 @@
   3. This notice may not be removed or altered from any source distribution.
 */
 
-#ifndef SDL_rotate_h_
-#define SDL_rotate_h_
+#include "SDL_internal.h"
 
-extern SDL_Surface *SDLgfx_rotateSurface(SDL_Surface *src, double angle, int smooth, int flipx, int flipy,
-                                         const SDL_Rect *rect_dest, double cangle, double sangle, const SDL_FPoint *center);
-extern void SDLgfx_rotozoomSurfaceSizeTrig(int width, int height, double angle, const SDL_FPoint *center,
-                                           SDL_Rect *rect_dest, double *cangle, double *sangle);
+#ifndef SDL_libthai_h_
+#define SDL_libthai_h_
 
-#endif // SDL_rotate_h_
+#ifdef HAVE_LIBTHAI_H
+#include <thai/thcell.h>
+
+typedef size_t (*SDL_LibThaiMakeCells)(const thchar_t *s, size_t, struct thcell_t cells[], size_t *, int);
+
+typedef struct SDL_LibThai {
+    SDL_SharedObject *lib;
+ 
+    SDL_LibThaiMakeCells make_cells;
+} SDL_LibThai;
+
+extern SDL_LibThai *SDL_LibThai_Create(void);
+extern void SDL_LibThai_Destroy(SDL_LibThai *th);
+
+#endif // HAVE_LIBTHAI_H
+
+#endif // SDL_libthai_h_

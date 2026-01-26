@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -42,6 +42,9 @@ static SDL_SensorDriver *SDL_sensor_drivers[] = {
 #endif
 #ifdef SDL_SENSOR_N3DS
     &SDL_N3DS_SensorDriver,
+#endif
+#ifdef SDL_SENSOR_EMSCRIPTEN
+    &SDL_EMSCRIPTEN_SensorDriver,
 #endif
 #if defined(SDL_SENSOR_DUMMY) || defined(SDL_SENSOR_DISABLED)
     &SDL_DUMMY_SensorDriver

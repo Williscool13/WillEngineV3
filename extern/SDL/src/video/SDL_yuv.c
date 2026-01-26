@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -1557,9 +1557,7 @@ static bool SDL_ConvertPixels_PackUVPlanes_to_NV_std(int width, int height, cons
         dstUV += dstUVPitchLeft;
     }
 
-    if (tmp) {
-        SDL_free(tmp);
-    }
+    SDL_free(tmp);
     return true;
 }
 
@@ -1611,9 +1609,7 @@ static bool SDL_ConvertPixels_SplitNV_to_UVPlanes_std(int width, int height, con
         dst2 += dstUVPitchLeft;
     }
 
-    if (tmp) {
-        SDL_free(tmp);
-    }
+    SDL_free(tmp);
     return true;
 }
 

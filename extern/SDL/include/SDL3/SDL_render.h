@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -109,6 +109,10 @@ typedef enum SDL_TextureAccess
  * The addressing mode for a texture when used in SDL_RenderGeometry().
  *
  * This affects how texture coordinates are interpreted outside of [0, 1]
+ *
+ * Texture wrapping is always supported for power of two texture sizes, and is
+ * supported for other texture sizes if
+ * SDL_PROP_RENDERER_TEXTURE_WRAPPING_BOOLEAN is set to true.
  *
  * \since This enum is available since SDL 3.4.0.
  */
@@ -474,6 +478,8 @@ extern SDL_DECLSPEC const char * SDLCALL SDL_GetRendererName(SDL_Renderer *rende
  * - `SDL_PROP_RENDERER_TEXTURE_FORMATS_POINTER`: a (const SDL_PixelFormat *)
  *   array of pixel formats, terminated with SDL_PIXELFORMAT_UNKNOWN,
  *   representing the available texture formats for this renderer.
+ * - `SDL_PROP_RENDERER_TEXTURE_WRAPPING_BOOLEAN`: true if the renderer
+ *   supports SDL_TEXTURE_ADDRESS_WRAP on non-power-of-two textures.
  * - `SDL_PROP_RENDERER_OUTPUT_COLORSPACE_NUMBER`: an SDL_Colorspace value
  *   describing the colorspace for output to the display, defaults to
  *   SDL_COLORSPACE_SRGB.
@@ -550,6 +556,7 @@ extern SDL_DECLSPEC SDL_PropertiesID SDLCALL SDL_GetRendererProperties(SDL_Rende
 #define SDL_PROP_RENDERER_VSYNC_NUMBER                              "SDL.renderer.vsync"
 #define SDL_PROP_RENDERER_MAX_TEXTURE_SIZE_NUMBER                   "SDL.renderer.max_texture_size"
 #define SDL_PROP_RENDERER_TEXTURE_FORMATS_POINTER                   "SDL.renderer.texture_formats"
+#define SDL_PROP_RENDERER_TEXTURE_WRAPPING_BOOLEAN                  "SDL.renderer.texture_wrapping"
 #define SDL_PROP_RENDERER_OUTPUT_COLORSPACE_NUMBER                  "SDL.renderer.output_colorspace"
 #define SDL_PROP_RENDERER_HDR_ENABLED_BOOLEAN                       "SDL.renderer.HDR_enabled"
 #define SDL_PROP_RENDERER_SDR_WHITE_POINT_FLOAT                     "SDL.renderer.SDR_white_point"
@@ -761,9 +768,10 @@ extern SDL_DECLSPEC SDL_Texture * SDLCALL SDL_CreateTextureFromSurface(SDL_Rende
  *
  * With the vulkan renderer:
  *
- * - `SDL_PROP_TEXTURE_CREATE_VULKAN_TEXTURE_NUMBER`: the VkImage with layout
- *   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL associated with the texture, if
- *   you want to wrap an existing texture.
+ * - `SDL_PROP_TEXTURE_CREATE_VULKAN_TEXTURE_NUMBER`: the VkImage associated
+ *   with the texture, if you want to wrap an existing texture.
+ * - `SDL_PROP_TEXTURE_CREATE_VULKAN_LAYOUT_NUMBER`: the VkImageLayout for the
+ *   VkImage, defaults to VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL.
  *
  * With the GPU renderer:
  *
@@ -821,6 +829,7 @@ extern SDL_DECLSPEC SDL_Texture * SDLCALL SDL_CreateTextureWithProperties(SDL_Re
 #define SDL_PROP_TEXTURE_CREATE_OPENGLES2_TEXTURE_U_NUMBER      "SDL.texture.create.opengles2.texture_u"
 #define SDL_PROP_TEXTURE_CREATE_OPENGLES2_TEXTURE_V_NUMBER      "SDL.texture.create.opengles2.texture_v"
 #define SDL_PROP_TEXTURE_CREATE_VULKAN_TEXTURE_NUMBER           "SDL.texture.create.vulkan.texture"
+#define SDL_PROP_TEXTURE_CREATE_VULKAN_LAYOUT_NUMBER            "SDL.texture.create.vulkan.layout"
 #define SDL_PROP_TEXTURE_CREATE_GPU_TEXTURE_POINTER             "SDL.texture.create.gpu.texture"
 #define SDL_PROP_TEXTURE_CREATE_GPU_TEXTURE_UV_POINTER          "SDL.texture.create.gpu.texture_uv"
 #define SDL_PROP_TEXTURE_CREATE_GPU_TEXTURE_U_POINTER           "SDL.texture.create.gpu.texture_u"
@@ -1697,8 +1706,8 @@ extern SDL_DECLSPEC bool SDLCALL SDL_RenderCoordinatesToWindow(SDL_Renderer *ren
  *
  * \param renderer the rendering context.
  * \param event the event to modify.
- * \returns true on success or false on failure; call SDL_GetError() for more
- *          information.
+ * \returns true if the event is converted or doesn't need conversion, or
+ *          false on failure; call SDL_GetError() for more information.
  *
  * \threadsafety This function should only be called on the main thread.
  *
@@ -2383,6 +2392,7 @@ extern SDL_DECLSPEC bool SDLCALL SDL_RenderTextureTiled(SDL_Renderer *renderer, 
  * \since This function is available since SDL 3.2.0.
  *
  * \sa SDL_RenderTexture
+ * \sa SDL_RenderTexture9GridTiled
  */
 extern SDL_DECLSPEC bool SDLCALL SDL_RenderTexture9Grid(SDL_Renderer *renderer, SDL_Texture *texture, const SDL_FRect *srcrect, float left_width, float right_width, float top_height, float bottom_height, float scale, const SDL_FRect *dstrect);
 
@@ -2420,6 +2430,7 @@ extern SDL_DECLSPEC bool SDLCALL SDL_RenderTexture9Grid(SDL_Renderer *renderer, 
  * \since This function is available since SDL 3.4.0.
  *
  * \sa SDL_RenderTexture
+ * \sa SDL_RenderTexture9Grid
  */
 extern SDL_DECLSPEC bool SDLCALL SDL_RenderTexture9GridTiled(SDL_Renderer *renderer, SDL_Texture *texture, const SDL_FRect *srcrect, float left_width, float right_width, float top_height, float bottom_height, float scale, const SDL_FRect *dstrect, float tileScale);
 
@@ -2952,7 +2963,7 @@ typedef struct SDL_GPURenderState SDL_GPURenderState;
  * \sa SDL_SetGPURenderState
  * \sa SDL_DestroyGPURenderState
  */
-extern SDL_DECLSPEC SDL_GPURenderState * SDLCALL SDL_CreateGPURenderState(SDL_Renderer *renderer, SDL_GPURenderStateCreateInfo *createinfo);
+extern SDL_DECLSPEC SDL_GPURenderState * SDLCALL SDL_CreateGPURenderState(SDL_Renderer *renderer, const SDL_GPURenderStateCreateInfo *createinfo);
 
 /**
  * Set fragment shader uniform variables in a custom GPU render state.

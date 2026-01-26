@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -1434,10 +1434,10 @@ static MetalTexture *METAL_INTERNAL_CreateTexture(
     // This format isn't natively supported so let's swizzle!
     if (createinfo->format == SDL_GPU_TEXTUREFORMAT_B4G4R4A4_UNORM) {
         if (@available(macOS 10.15, iOS 13.0, tvOS 13.0, *)) {
-            textureDescriptor.swizzle = MTLTextureSwizzleChannelsMake(MTLTextureSwizzleBlue,
-                                                                      MTLTextureSwizzleGreen,
-                                                                      MTLTextureSwizzleRed,
-                                                                      MTLTextureSwizzleAlpha);
+            textureDescriptor.swizzle = MTLTextureSwizzleChannelsMake(MTLTextureSwizzleGreen,
+                                                                      MTLTextureSwizzleBlue,
+                                                                      MTLTextureSwizzleAlpha,
+                                                                      MTLTextureSwizzleRed);
         } else {
             SET_STRING_ERROR_AND_RETURN("SDL_GPU_TEXTUREFORMAT_B4G4R4A4_UNORM is not supported", NULL);
         }
@@ -2409,6 +2409,7 @@ static void METAL_BindGraphicsPipeline(
 {
     @autoreleasepool {
         MetalCommandBuffer *metalCommandBuffer = (MetalCommandBuffer *)commandBuffer;
+        MetalGraphicsPipeline *previousPipeline = metalCommandBuffer->graphics_pipeline;
         MetalGraphicsPipeline *pipeline = (MetalGraphicsPipeline *)graphicsPipeline;
         SDL_GPURasterizerState *rast = &pipeline->rasterizerState;
         Uint32 i;
@@ -2451,6 +2452,17 @@ static void METAL_BindGraphicsPipeline(
             if (metalCommandBuffer->fragmentUniformBuffers[i] == NULL) {
                 metalCommandBuffer->fragmentUniformBuffers[i] = METAL_INTERNAL_AcquireUniformBufferFromPool(
                     metalCommandBuffer);
+            }
+        }
+
+        if (previousPipeline && previousPipeline != pipeline) {
+            // if the number of uniform buffers has changed, the storage buffers will move as well
+            // and need a rebind at their new locations
+            if (previousPipeline->header.num_vertex_uniform_buffers != pipeline->header.num_vertex_uniform_buffers) {
+                metalCommandBuffer->needVertexStorageBufferBind = true;
+            }
+            if (previousPipeline->header.num_fragment_uniform_buffers != pipeline->header.num_fragment_uniform_buffers) {
+                metalCommandBuffer->needFragmentStorageBufferBind = true;
             }
         }
     }
@@ -4515,10 +4527,18 @@ static SDL_GPUDevice *METAL_CreateDevice(bool debugMode, bool preferLowPower, SD
 
 #ifdef SDL_PLATFORM_MACOS
         hasHardwareSupport = true;
+        bool allowMacFamily1 = SDL_GetBooleanProperty(
+            props,
+            SDL_PROP_GPU_DEVICE_CREATE_METAL_ALLOW_MACFAMILY1_BOOLEAN,
+            false);
         if (@available(macOS 10.15, *)) {
-            hasHardwareSupport = [device supportsFamily:MTLGPUFamilyMac2];
+            hasHardwareSupport = allowMacFamily1 ?
+                [device supportsFamily:MTLGPUFamilyMac1] :
+                [device supportsFamily:MTLGPUFamilyMac2];
         } else if (@available(macOS 10.14, *)) {
-            hasHardwareSupport = [device supportsFeatureSet:MTLFeatureSet_macOS_GPUFamily2_v1];
+            hasHardwareSupport = allowMacFamily1 ?
+                [device supportsFeatureSet:MTLFeatureSet_macOS_GPUFamily1_v4] :
+                [device supportsFeatureSet:MTLFeatureSet_macOS_GPUFamily2_v1];
         }
 #elif defined(SDL_PLATFORM_VISIONOS)
         hasHardwareSupport = true;

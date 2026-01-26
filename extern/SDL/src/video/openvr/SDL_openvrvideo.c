@@ -64,7 +64,7 @@ SDL_ELF_NOTE_DLOPEN(
     "Support for OpenVR video",
     SDL_ELF_NOTE_DLOPEN_PRIORITY_SUGGESTED,
     SDL_OPENVR_DRIVER_DYNAMIC
-);
+)
 
 #define MARKER_ID 0
 #define MARKER_STR "vr-marker,frame_end,type,application"
@@ -505,7 +505,7 @@ static bool OPENVR_SetupJoystickBasedOnLoadedActionManifest(SDL_VideoData * vide
         return SDL_SetError("Failed to get action set handle");
     }
 
-    videodata->input_action_handles_buttons_count = sizeof(k_pchBooleanActionPaths) / sizeof(k_pchBooleanActionPaths[0]);
+    videodata->input_action_handles_buttons_count = SDL_arraysize(k_pchBooleanActionPaths);
     videodata->input_action_handles_buttons = SDL_malloc(videodata->input_action_handles_buttons_count * sizeof(VRActionHandle_t));
 
     for (int i = 0; i < videodata->input_action_handles_buttons_count; i++)
@@ -518,7 +518,7 @@ static bool OPENVR_SetupJoystickBasedOnLoadedActionManifest(SDL_VideoData * vide
         }
     }
 
-    videodata->input_action_handles_axes_count = sizeof(k_pchAnalogActionPaths) / sizeof(k_pchAnalogActionPaths[0]);
+    videodata->input_action_handles_axes_count = SDL_arraysize(k_pchAnalogActionPaths);
     videodata->input_action_handles_axes = SDL_malloc(videodata->input_action_handles_axes_count * sizeof(VRActionHandle_t));
 
     for (int i = 0; i < videodata->input_action_handles_axes_count; i++)
@@ -1141,9 +1141,7 @@ static void OPENVR_DestroyWindow(SDL_VideoDevice *_this, SDL_Window *window)
     SDL_WindowData *data;
 
     data = window->internal;
-    if (data) {
-        SDL_free(data);
-    }
+    SDL_free(data);
     window->internal = NULL;
 }
 
@@ -1272,20 +1270,14 @@ static void OPENVR_ShowScreenKeyboard(SDL_VideoDevice *_this, SDL_Window *window
     videodata->oOverlay->ShowKeyboardForOverlay(videodata->overlayID,
            input_mode, line_mode,
            EKeyboardFlags_KeyboardFlag_Minimal, "Virtual Keyboard", 128, "", 0);
-    videodata->bKeyboardShown = true;
+    SDL_SendScreenKeyboardShown();
 }
 
 static void OPENVR_HideScreenKeyboard(SDL_VideoDevice *_this, SDL_Window *window)
 {
     SDL_VideoData *videodata = (SDL_VideoData *)_this->internal;
     videodata->oOverlay->HideKeyboard();
-    videodata->bKeyboardShown = false;
-}
-
-static bool OPENVR_IsScreenKeyboardShown(SDL_VideoDevice *_this, SDL_Window *window)
-{
-    SDL_VideoData *videodata = (SDL_VideoData *)_this->internal;
-    return videodata->bKeyboardShown;
+    SDL_SendScreenKeyboardHidden();
 }
 
 static SDL_Cursor *OPENVR_CreateCursor(SDL_Surface * surface, int hot_x, int hot_y)
@@ -1662,7 +1654,6 @@ static SDL_VideoDevice *OPENVR_CreateDevice(void)
     device->HasScreenKeyboardSupport = OPENVR_HasScreenKeyboardSupport;
     device->ShowScreenKeyboard = OPENVR_ShowScreenKeyboard;
     device->HideScreenKeyboard = OPENVR_HideScreenKeyboard;
-    device->IsScreenKeyboardShown = OPENVR_IsScreenKeyboardShown;
     device->SetWindowIcon = OPENVR_SetWindowIcon;
 
     return device;

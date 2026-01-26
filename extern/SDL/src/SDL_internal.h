@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -63,7 +63,6 @@
 #include "SDL_build_config.h"
 
 #include "dynapi/SDL_dynapi.h"
-#include "dynapi/SDL_dynapi_dlopennote.h"
 
 #if SDL_DYNAMIC_API
 #include "dynapi/SDL_dynapi_overrides.h"
@@ -265,6 +264,7 @@ extern "C" {
 
 #include "SDL_utils_c.h"
 #include "SDL_hashtable.h"
+
 
 /* SDL_ExitProcess is not declared in any public header, although
    it is shared between some parts of SDL, because we don't want

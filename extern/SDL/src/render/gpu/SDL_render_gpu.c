@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -32,7 +32,6 @@
 typedef struct GPU_VertexShaderUniformData
 {
     Float4X4 mvp;
-    SDL_FColor color;
 } GPU_VertexShaderUniformData;
 
 typedef struct GPU_SimpleFragmentShaderUniformData
@@ -118,7 +117,6 @@ typedef struct GPU_RenderData
         SDL_GPUColorTargetInfo color_attachment;
         SDL_GPUViewport viewport;
         SDL_Rect scissor;
-        SDL_FColor draw_color;
         bool scissor_enabled;
         bool scissor_was_enabled;
     } state;
@@ -154,6 +152,19 @@ typedef struct GPU_TextureData
     SDL_GPUTexture *textureNV;
 #endif
 } GPU_TextureData;
+
+// TODO: Sort this list based on what the GPU driver prefers?
+static const SDL_PixelFormat supported_formats[] = {
+    SDL_PIXELFORMAT_BGRA32, // SDL_PIXELFORMAT_ARGB8888 on little endian systems
+    SDL_PIXELFORMAT_RGBA32,
+    SDL_PIXELFORMAT_BGRX32,
+    SDL_PIXELFORMAT_RGBX32,
+    SDL_PIXELFORMAT_ABGR2101010,
+    SDL_PIXELFORMAT_RGBA64_FLOAT,
+    SDL_PIXELFORMAT_RGB565,
+    SDL_PIXELFORMAT_ARGB1555,
+    SDL_PIXELFORMAT_ARGB4444
+};
 
 static bool GPU_SupportsBlendMode(SDL_Renderer *renderer, SDL_BlendMode blendMode)
 {
@@ -524,7 +535,6 @@ static bool GPU_UpdateTexture(SDL_Renderer *renderer, SDL_Texture *texture, cons
         if (texture->format == SDL_PIXELFORMAT_P010) {
             UVpitch = (pitch + 3) & ~3;
         } else {
-            bpp = 1;
             UVpitch = (pitch + 1) & ~1;
         }
         retval &= GPU_UpdateTextureInternal(renderdata, cpass, data->textureNV, bpp, rect->x / 2, rect->y / 2, (rect->w + 1) / 2, (rect->h + 1) / 2, UVplane, UVpitch);
@@ -536,8 +546,13 @@ static bool GPU_UpdateTexture(SDL_Renderer *renderer, SDL_Texture *texture, cons
         const Uint8 *Uplane = Yplane + rect->h * Ypitch;
         const Uint8 *Vplane = Uplane + ((rect->h + 1) / 2) * UVpitch;
 
-        retval &= GPU_UpdateTextureInternal(renderdata, cpass, data->textureU, bpp, rect->x / 2, rect->y / 2, (rect->w + 1) / 2, (rect->h + 1) / 2, Uplane, UVpitch);
-        retval &= GPU_UpdateTextureInternal(renderdata, cpass, data->textureV, bpp, rect->x / 2, rect->y / 2, (rect->w + 1) / 2, (rect->h + 1) / 2, Vplane, UVpitch);
+        if (texture->format == SDL_PIXELFORMAT_YV12) {
+            retval &= GPU_UpdateTextureInternal(renderdata, cpass, data->textureV, bpp, rect->x / 2, rect->y / 2, (rect->w + 1) / 2, (rect->h + 1) / 2, Uplane, UVpitch);
+            retval &= GPU_UpdateTextureInternal(renderdata, cpass, data->textureU, bpp, rect->x / 2, rect->y / 2, (rect->w + 1) / 2, (rect->h + 1) / 2, Vplane, UVpitch);
+        } else {
+            retval &= GPU_UpdateTextureInternal(renderdata, cpass, data->textureU, bpp, rect->x / 2, rect->y / 2, (rect->w + 1) / 2, (rect->h + 1) / 2, Uplane, UVpitch);
+            retval &= GPU_UpdateTextureInternal(renderdata, cpass, data->textureV, bpp, rect->x / 2, rect->y / 2, (rect->w + 1) / 2, (rect->h + 1) / 2, Vplane, UVpitch);
+        }
     }
 #endif
 
@@ -626,35 +641,32 @@ static bool GPU_QueueNoOp(SDL_Renderer *renderer, SDL_RenderCommand *cmd)
     return true; // nothing to do in this backend.
 }
 
-static SDL_FColor GetDrawCmdColor(SDL_Renderer *renderer, SDL_RenderCommand *cmd)
-{
-    SDL_FColor color = cmd->data.color.color;
-
-    if (SDL_RenderingLinearSpace(renderer)) {
-        SDL_ConvertToLinear(&color);
-    }
-
-    color.r *= cmd->data.color.color_scale;
-    color.g *= cmd->data.color.color_scale;
-    color.b *= cmd->data.color.color_scale;
-
-    return color;
-}
-
 static bool GPU_QueueDrawPoints(SDL_Renderer *renderer, SDL_RenderCommand *cmd, const SDL_FPoint *points, int count)
 {
-    float *verts = (float *)SDL_AllocateRenderVertices(renderer, count * 2 * sizeof(float), 0, &cmd->data.draw.first);
+    float *verts;
+    size_t sz = 2 * sizeof(float) + 4 * sizeof(float);
+    SDL_FColor color = cmd->data.draw.color;
+    bool convert_color = SDL_RenderingLinearSpace(renderer);
 
+    verts = (float *)SDL_AllocateRenderVertices(renderer, count * sz, 0, &cmd->data.draw.first);
     if (!verts) {
         return false;
+    }
+
+    if (convert_color) {
+        SDL_ConvertToLinear(&color);
     }
 
     cmd->data.draw.count = count;
     for (int i = 0; i < count; i++) {
         *(verts++) = 0.5f + points[i].x;
         *(verts++) = 0.5f + points[i].y;
-    }
 
+        *(verts++) = color.r;
+        *(verts++) = color.g;
+        *(verts++) = color.b;
+        *(verts++) = color.a;
+    }
     return true;
 }
 
@@ -666,7 +678,7 @@ static bool GPU_QueueGeometry(SDL_Renderer *renderer, SDL_RenderCommand *cmd, SD
     int i;
     int count = indices ? num_indices : num_vertices;
     float *verts;
-    size_t sz = 2 * sizeof(float) + 4 * sizeof(float) + (texture ? 2 : 0) * sizeof(float);
+    size_t sz = 2 * sizeof(float) + 4 * sizeof(float) + 2 * sizeof(float);
     bool convert_color = SDL_RenderingLinearSpace(renderer);
 
     verts = (float *)SDL_AllocateRenderVertices(renderer, count * sz, 0, &cmd->data.draw.first);
@@ -706,10 +718,13 @@ static bool GPU_QueueGeometry(SDL_Renderer *renderer, SDL_RenderCommand *cmd, SD
         *(verts++) = col_.b;
         *(verts++) = col_.a;
 
-        if (texture) {
+        if (uv) {
             float *uv_ = (float *)((char *)uv + j * uv_stride);
             *(verts++) = uv_[0];
             *(verts++) = uv_[1];
+        } else {
+            *(verts++) = 0.0f;
+            *(verts++) = 0.0f;
         }
     }
     return true;
@@ -751,8 +766,6 @@ static void PushVertexUniforms(GPU_RenderData *data, SDL_RenderCommand *cmd)
     uniforms.mvp.m[3][0] = -1.0f;
     uniforms.mvp.m[3][1] = 1.0f;
     uniforms.mvp.m[3][3] = 1.0f;
-
-    uniforms.color = data->state.draw_color;
 
     SDL_PushGPUVertexUniformData(data->state.command_buffer, 0, &uniforms, sizeof(uniforms));
 }
@@ -924,7 +937,7 @@ static void CalculateAdvancedShaderConstants(SDL_Renderer *renderer, const SDL_R
         output_headroom = renderer->HDR_headroom;
     }
 
-    if (texture->HDR_headroom > output_headroom) {
+    if (texture->HDR_headroom > output_headroom && output_headroom > 0.0f) {
         constants->tonemap_method = TONEMAP_CHROME;
         constants->tonemap_factor1 = (output_headroom / (texture->HDR_headroom * texture->HDR_headroom));
         constants->tonemap_factor2 = (1.0f / output_headroom);
@@ -1194,8 +1207,7 @@ static bool GPU_RunCommandQueue(SDL_Renderer *renderer, SDL_RenderCommand *cmd, 
         switch (cmd->command) {
         case SDL_RENDERCMD_SETDRAWCOLOR:
         {
-            data->state.draw_color = GetDrawCmdColor(renderer, cmd);
-            break;
+            break; // this isn't currently used in this render backend.
         }
 
         case SDL_RENDERCMD_SETVIEWPORT:
@@ -1221,7 +1233,15 @@ static bool GPU_RunCommandQueue(SDL_Renderer *renderer, SDL_RenderCommand *cmd, 
 
         case SDL_RENDERCMD_CLEAR:
         {
-            data->state.color_attachment.clear_color = GetDrawCmdColor(renderer, cmd);
+            bool convert_color = SDL_RenderingLinearSpace(renderer);
+            SDL_FColor color = cmd->data.color.color;
+            if (convert_color) {
+                SDL_ConvertToLinear(&color);
+            }
+            color.r *= cmd->data.color.color_scale;
+            color.g *= cmd->data.color.color_scale;
+            color.b *= cmd->data.color.color_scale;
+            data->state.color_attachment.clear_color = color;
             data->state.color_attachment.load_op = SDL_GPU_LOADOP_CLEAR;
             break;
         }
@@ -1246,22 +1266,29 @@ static bool GPU_RunCommandQueue(SDL_Renderer *renderer, SDL_RenderCommand *cmd, 
             } else {
                 // let's group non joined lines
                 SDL_RenderCommand *finalcmd = cmd;
-                SDL_RenderCommand *nextcmd = cmd->next;
+                SDL_RenderCommand *nextcmd;
+                float thiscolorscale = cmd->data.draw.color_scale;
                 SDL_BlendMode thisblend = cmd->data.draw.blend;
+                SDL_GPURenderState *thisrenderstate = cmd->data.draw.gpu_render_state;
 
-                while (nextcmd) {
+                for (nextcmd = cmd->next; nextcmd; nextcmd = nextcmd->next) {
                     const SDL_RenderCommandType nextcmdtype = nextcmd->command;
                     if (nextcmdtype != SDL_RENDERCMD_DRAW_LINES) {
+                        if (nextcmdtype == SDL_RENDERCMD_SETDRAWCOLOR) {
+                            // The vertex data has the draw color built in, ignore this
+                            continue;
+                        }
                         break; // can't go any further on this draw call, different render command up next.
                     } else if (nextcmd->data.draw.count != 2) {
                         break; // can't go any further on this draw call, those are joined lines
-                    } else if (nextcmd->data.draw.blend != thisblend) {
+                    } else if (nextcmd->data.draw.blend != thisblend ||
+                               nextcmd->data.draw.color_scale != thiscolorscale ||
+                               nextcmd->data.draw.gpu_render_state != thisrenderstate) {
                         break; // can't go any further on this draw call, different blendmode copy up next.
                     } else {
                         finalcmd = nextcmd; // we can combine copy operations here. Mark this one as the furthest okay command.
                         count += (Uint32)nextcmd->data.draw.count;
                     }
-                    nextcmd = nextcmd->next;
                 }
 
                 Draw(data, cmd, count, offset, SDL_GPU_PRIMITIVETYPE_LINELIST);
@@ -1275,40 +1302,47 @@ static bool GPU_RunCommandQueue(SDL_Renderer *renderer, SDL_RenderCommand *cmd, 
         {
             /* as long as we have the same copy command in a row, with the
                same texture, we can combine them all into a single draw call. */
+            float thiscolorscale = cmd->data.draw.color_scale;
             SDL_Texture *thistexture = cmd->data.draw.texture;
             SDL_BlendMode thisblend = cmd->data.draw.blend;
             SDL_ScaleMode thisscalemode = cmd->data.draw.texture_scale_mode;
             SDL_TextureAddressMode thisaddressmode_u = cmd->data.draw.texture_address_mode_u;
             SDL_TextureAddressMode thisaddressmode_v = cmd->data.draw.texture_address_mode_v;
+            SDL_GPURenderState *thisrenderstate = cmd->data.draw.gpu_render_state;
             const SDL_RenderCommandType thiscmdtype = cmd->command;
             SDL_RenderCommand *finalcmd = cmd;
-            SDL_RenderCommand *nextcmd = cmd->next;
+            SDL_RenderCommand *nextcmd;
             Uint32 count = (Uint32)cmd->data.draw.count;
             Uint32 offset = (Uint32)cmd->data.draw.first;
 
-            while (nextcmd) {
+            for (nextcmd = cmd->next; nextcmd; nextcmd = nextcmd->next) {
                 const SDL_RenderCommandType nextcmdtype = nextcmd->command;
                 if (nextcmdtype != thiscmdtype) {
+                    if (nextcmdtype == SDL_RENDERCMD_SETDRAWCOLOR) {
+                        // The vertex data has the draw color built in, ignore this
+                        continue;
+                    }
                     break; // can't go any further on this draw call, different render command up next.
                 } else if (nextcmd->data.draw.texture != thistexture ||
                            nextcmd->data.draw.texture_scale_mode != thisscalemode ||
                            nextcmd->data.draw.texture_address_mode_u != thisaddressmode_u ||
                            nextcmd->data.draw.texture_address_mode_v != thisaddressmode_v ||
-                           nextcmd->data.draw.blend != thisblend) {
-                    // FIXME should we check address mode too?
+                           nextcmd->data.draw.blend != thisblend ||
+                           nextcmd->data.draw.color_scale != thiscolorscale ||
+                           nextcmd->data.draw.gpu_render_state != thisrenderstate) {
                     break; // can't go any further on this draw call, different texture/blendmode copy up next.
                 } else {
                     finalcmd = nextcmd; // we can combine copy operations here. Mark this one as the furthest okay command.
                     count += (Uint32)nextcmd->data.draw.count;
                 }
-                nextcmd = nextcmd->next;
             }
 
-            SDL_GPUPrimitiveType prim = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST; // SDL_RENDERCMD_GEOMETRY
-            if (thiscmdtype == SDL_RENDERCMD_DRAW_POINTS) {
+            SDL_GPUPrimitiveType prim;
+            if (thiscmdtype == SDL_RENDERCMD_GEOMETRY) {
+                prim = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+            } else {
                 prim = SDL_GPU_PRIMITIVETYPE_POINTLIST;
             }
-
             Draw(data, cmd, count, offset, prim);
 
             cmd = finalcmd; // skip any copy commands we just combined in here.
@@ -1438,6 +1472,8 @@ static bool CreateBackbuffer(GPU_RenderData *data, Uint32 w, Uint32 h, SDL_GPUTe
     tci.num_levels = 1;
     tci.sample_count = SDL_GPU_SAMPLECOUNT_1;
     tci.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
+
+    SDL_ReleaseGPUTexture(data->device, data->backbuffer.texture);
 
     data->backbuffer.texture = SDL_CreateGPUTexture(data->device, &tci);
     data->backbuffer.width = w;
@@ -1689,6 +1725,12 @@ static bool GPU_CreateRenderer(SDL_Renderer *renderer, SDL_Window *window, SDL_P
         SDL_SetBooleanProperty(create_props, SDL_PROP_GPU_DEVICE_CREATE_DEBUGMODE_BOOLEAN, debug);
         SDL_SetBooleanProperty(create_props, SDL_PROP_GPU_DEVICE_CREATE_PREFERLOWPOWER_BOOLEAN, lowpower);
 
+        // Vulkan windows get the Vulkan GPU backend by default
+        if (!SDL_HasProperty(create_props, SDL_PROP_GPU_DEVICE_CREATE_NAME_STRING) &&
+            (SDL_GetWindowFlags(window) & SDL_WINDOW_VULKAN)) {
+            SDL_SetStringProperty(create_props, SDL_PROP_GPU_DEVICE_CREATE_NAME_STRING, "vulkan");
+        }
+
         // Set hints for the greatest hardware compatibility
         // This property allows using the renderer on Intel Haswell and Broadwell GPUs.
         if (!SDL_HasProperty(create_props, SDL_PROP_GPU_DEVICE_CREATE_D3D12_ALLOW_FEWER_RESOURCE_SLOTS_BOOLEAN)) {
@@ -1706,6 +1748,10 @@ static bool GPU_CreateRenderer(SDL_Renderer *renderer, SDL_Window *window, SDL_P
         }
         if (!SDL_HasProperty(create_props, SDL_PROP_GPU_DEVICE_CREATE_FEATURE_ANISOTROPY_BOOLEAN)) {
             SDL_SetBooleanProperty(create_props, SDL_PROP_GPU_DEVICE_CREATE_FEATURE_ANISOTROPY_BOOLEAN, false);
+        }
+        // These properties allow using the renderer on more macOS devices.
+        if (!SDL_HasProperty(create_props, SDL_PROP_GPU_DEVICE_CREATE_METAL_ALLOW_MACFAMILY1_BOOLEAN)) {
+            SDL_SetBooleanProperty(create_props, SDL_PROP_GPU_DEVICE_CREATE_METAL_ALLOW_MACFAMILY1_BOOLEAN, false);
         }
 
         GPU_FillSupportedShaderFormats(create_props);
@@ -1763,12 +1809,14 @@ static bool GPU_CreateRenderer(SDL_Renderer *renderer, SDL_Window *window, SDL_P
         }
     }
 
-    SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_BGRA32);
-    SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_RGBA32);
-    SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_BGRX32);
-    SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_RGBX32);
-    SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_ABGR2101010);
-    SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_RGBA64_FLOAT);
+    for (int i = 0; i < SDL_arraysize(supported_formats); i++) {
+        if (SDL_GPUTextureSupportsFormat(data->device,
+                                         SDL_GetGPUTextureFormatFromPixelFormat(supported_formats[i]),
+                                         SDL_GPU_TEXTURETYPE_2D,
+                                         SDL_GPU_TEXTUREUSAGE_SAMPLER)) {
+            SDL_AddSupportedTextureFormat(renderer, supported_formats[i]);
+        }
+    }
     SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_INDEX8);
     SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_YV12);
     SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_IYUV);
@@ -1778,10 +1826,6 @@ static bool GPU_CreateRenderer(SDL_Renderer *renderer, SDL_Window *window, SDL_P
 
     SDL_SetNumberProperty(SDL_GetRendererProperties(renderer), SDL_PROP_RENDERER_MAX_TEXTURE_SIZE_NUMBER, 16384);
 
-    data->state.draw_color.r = 1.0f;
-    data->state.draw_color.g = 1.0f;
-    data->state.draw_color.b = 1.0f;
-    data->state.draw_color.a = 1.0f;
     data->state.viewport.min_depth = 0;
     data->state.viewport.max_depth = 1;
     data->state.command_buffer = SDL_AcquireGPUCommandBuffer(data->device);

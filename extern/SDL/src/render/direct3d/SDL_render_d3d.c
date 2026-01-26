@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -198,15 +198,25 @@ static bool D3D_SetError(const char *prefix, HRESULT result)
     return SDL_SetError("%s: %s", prefix, error);
 }
 
+static const struct {
+    Uint32 sdl;
+    D3DFORMAT d3d;
+} d3d_format_map[] = {
+    { SDL_PIXELFORMAT_ARGB8888,     D3DFMT_A8R8G8B8      },
+    { SDL_PIXELFORMAT_XRGB8888,     D3DFMT_X8R8G8B8      },
+    { SDL_PIXELFORMAT_ABGR8888,     D3DFMT_A8B8G8R8      },
+    { SDL_PIXELFORMAT_XBGR8888,     D3DFMT_X8B8G8R8      },
+    { SDL_PIXELFORMAT_ARGB2101010,  D3DFMT_A2R10G10B10   },
+    { SDL_PIXELFORMAT_RGB565,       D3DFMT_R5G6B5        },
+    { SDL_PIXELFORMAT_ARGB1555,     D3DFMT_A1R5G5B5      },
+    { SDL_PIXELFORMAT_XRGB1555,     D3DFMT_X1R5G5B5      },
+    { SDL_PIXELFORMAT_ARGB4444,     D3DFMT_A4R4G4B4      },
+    { SDL_PIXELFORMAT_XRGB4444,     D3DFMT_X4R4G4B4      }
+};
+
 static D3DFORMAT PixelFormatToD3DFMT(Uint32 format)
 {
     switch (format) {
-    case SDL_PIXELFORMAT_RGB565:
-        return D3DFMT_R5G6B5;
-    case SDL_PIXELFORMAT_XRGB8888:
-        return D3DFMT_X8R8G8B8;
-    case SDL_PIXELFORMAT_ARGB8888:
-        return D3DFMT_A8R8G8B8;
     case SDL_PIXELFORMAT_INDEX8:
     case SDL_PIXELFORMAT_YV12:
     case SDL_PIXELFORMAT_IYUV:
@@ -214,22 +224,23 @@ static D3DFORMAT PixelFormatToD3DFMT(Uint32 format)
     case SDL_PIXELFORMAT_NV21:
         return D3DFMT_L8;
     default:
+        for (int i = 0; i < SDL_arraysize(d3d_format_map); i++) {
+            if (d3d_format_map[i].sdl == format) {
+                return d3d_format_map[i].d3d;
+            }
+        }
         return D3DFMT_UNKNOWN;
     }
 }
 
 static SDL_PixelFormat D3DFMTToPixelFormat(D3DFORMAT format)
 {
-    switch (format) {
-    case D3DFMT_R5G6B5:
-        return SDL_PIXELFORMAT_RGB565;
-    case D3DFMT_X8R8G8B8:
-        return SDL_PIXELFORMAT_XRGB8888;
-    case D3DFMT_A8R8G8B8:
-        return SDL_PIXELFORMAT_ARGB8888;
-    default:
-        return SDL_PIXELFORMAT_UNKNOWN;
+    for (int i = 0; i < SDL_arraysize(d3d_format_map); i++) {
+        if (d3d_format_map[i].d3d == format) {
+            return d3d_format_map[i].sdl;
+        }
     }
+    return SDL_PIXELFORMAT_UNKNOWN;
 }
 
 static void D3D_InitRenderState(D3D_RenderData *data)
@@ -1313,10 +1324,7 @@ static bool D3D_RunCommandQueue(SDL_Renderer *renderer, SDL_RenderCommand *cmd, 
         switch (cmd->command) {
         case SDL_RENDERCMD_SETDRAWCOLOR:
         {
-            /* currently this is sent with each vertex, but if we move to
-               shaders, we can put this in a uniform here and reduce vertex
-               buffer bandwidth */
-            break;
+            break; // this isn't currently used in this render backend.
         }
 
         case SDL_RENDERCMD_SETVIEWPORT:
@@ -1377,43 +1385,74 @@ static bool D3D_RunCommandQueue(SDL_Renderer *renderer, SDL_RenderCommand *cmd, 
             break;
         }
 
-        case SDL_RENDERCMD_DRAW_POINTS:
-        {
-            const size_t count = cmd->data.draw.count;
-            const size_t first = cmd->data.draw.first;
-            SetDrawState(data, cmd);
-            if (vbo) {
-                IDirect3DDevice9_DrawPrimitive(data->device, D3DPT_POINTLIST, (UINT)(first / sizeof(Vertex)), (UINT)count);
-            } else {
-                const Vertex *verts = (Vertex *)(((Uint8 *)vertices) + first);
-                IDirect3DDevice9_DrawPrimitiveUP(data->device, D3DPT_POINTLIST, (UINT)count, verts, sizeof(Vertex));
-            }
-            break;
-        }
-
         case SDL_RENDERCMD_DRAW_LINES:
         {
-            const size_t count = cmd->data.draw.count;
+            size_t count = cmd->data.draw.count;
             const size_t first = cmd->data.draw.first;
+            const size_t start = first / sizeof(Vertex);
             const Vertex *verts = (Vertex *)(((Uint8 *)vertices) + first);
-
-            /* DirectX 9 has the same line rasterization semantics as GDI,
-               so we need to close the endpoint of the line with a second draw call.
-               NOLINTNEXTLINE(clang-analyzer-core.NullDereference): FIXME: Can verts truly not be NULL ? */
-            const bool close_endpoint = ((count == 2) || (verts[0].x != verts[count - 1].x) || (verts[0].y != verts[count - 1].y));
 
             SetDrawState(data, cmd);
 
-            if (vbo) {
-                IDirect3DDevice9_DrawPrimitive(data->device, D3DPT_LINESTRIP, (UINT)(first / sizeof(Vertex)), (UINT)(count - 1));
-                if (close_endpoint) {
-                    IDirect3DDevice9_DrawPrimitive(data->device, D3DPT_POINTLIST, (UINT)((first / sizeof(Vertex)) + (count - 1)), 1);
+            // Add the final point in the line
+            size_t line_start = 0;
+            size_t line_end = line_start + count - 1;
+            if (count == 2 || verts[line_start].x != verts[line_end].x || verts[line_start].y != verts[line_end].y) {
+                if (vbo) {
+                    IDirect3DDevice9_DrawPrimitive(data->device, D3DPT_POINTLIST, (UINT)(start + line_end), 1);
+                } else {
+                    IDirect3DDevice9_DrawPrimitiveUP(data->device, D3DPT_POINTLIST, 1, &verts[line_end], sizeof(Vertex));
+                }
+            }
+
+            if (count > 2) {
+                // joined lines cannot be grouped
+                if (vbo) {
+                    IDirect3DDevice9_DrawPrimitive(data->device, D3DPT_LINESTRIP, (UINT)start, (UINT)(count - 1));
+                } else {
+                    IDirect3DDevice9_DrawPrimitiveUP(data->device, D3DPT_LINESTRIP, (UINT)(count - 1), verts, sizeof(Vertex));
                 }
             } else {
-                IDirect3DDevice9_DrawPrimitiveUP(data->device, D3DPT_LINESTRIP, (UINT)(count - 1), verts, sizeof(Vertex));
-                if (close_endpoint) {
-                    IDirect3DDevice9_DrawPrimitiveUP(data->device, D3DPT_POINTLIST, 1, &verts[count - 1], sizeof(Vertex));
+                // let's group non joined lines
+                SDL_RenderCommand *finalcmd = cmd;
+                SDL_RenderCommand *nextcmd;
+                SDL_BlendMode thisblend = cmd->data.draw.blend;
+
+                for (nextcmd = cmd->next; nextcmd; nextcmd = nextcmd->next) {
+                    const SDL_RenderCommandType nextcmdtype = nextcmd->command;
+                    if (nextcmdtype != SDL_RENDERCMD_DRAW_LINES) {
+                        if (nextcmdtype == SDL_RENDERCMD_SETDRAWCOLOR) {
+                            // The vertex data has the draw color built in, ignore this
+                            continue;
+                        }
+                        break; // can't go any further on this draw call, different render command up next.
+                    } else if (nextcmd->data.draw.count != 2) {
+                        break; // can't go any further on this draw call, those are joined lines
+                    } else if (nextcmd->data.draw.blend != thisblend) {
+                        break; // can't go any further on this draw call, different blendmode copy up next.
+                    } else {
+                        finalcmd = nextcmd; // we can combine copy operations here. Mark this one as the furthest okay command.
+
+                        // Add the final point in the line
+                        line_start = count;
+                        line_end = line_start + nextcmd->data.draw.count - 1;
+                        if (verts[line_start].x != verts[line_end].x || verts[line_start].y != verts[line_end].y) {
+                            if (vbo) {
+                                IDirect3DDevice9_DrawPrimitive(data->device, D3DPT_POINTLIST, (UINT)(start + line_end), 1);
+                            } else {
+                                IDirect3DDevice9_DrawPrimitiveUP(data->device, D3DPT_POINTLIST, 1, &verts[line_end], sizeof(Vertex));
+                            }
+                        }
+                        count += nextcmd->data.draw.count;
+                    }
                 }
+
+                if (vbo) {
+                    IDirect3DDevice9_DrawPrimitive(data->device, D3DPT_LINELIST, (UINT)start, (UINT)(count - 1));
+                } else {
+                    IDirect3DDevice9_DrawPrimitiveUP(data->device, D3DPT_LINELIST, (UINT)(count - 1), verts, sizeof(Vertex));
+                }
+                cmd = finalcmd; // skip any copy commands we just combined in here.
             }
             break;
         }
@@ -1427,17 +1466,59 @@ static bool D3D_RunCommandQueue(SDL_Renderer *renderer, SDL_RenderCommand *cmd, 
         case SDL_RENDERCMD_COPY_EX: // unused
             break;
 
+        case SDL_RENDERCMD_DRAW_POINTS:
         case SDL_RENDERCMD_GEOMETRY:
         {
-            const size_t count = cmd->data.draw.count;
+            /* as long as we have the same copy command in a row, with the
+               same texture, we can combine them all into a single draw call. */
+            SDL_Texture *thistexture = cmd->data.draw.texture;
+            SDL_BlendMode thisblend = cmd->data.draw.blend;
+            SDL_ScaleMode thisscalemode = cmd->data.draw.texture_scale_mode;
+            SDL_TextureAddressMode thisaddressmode_u = cmd->data.draw.texture_address_mode_u;
+            SDL_TextureAddressMode thisaddressmode_v = cmd->data.draw.texture_address_mode_v;
+            const SDL_RenderCommandType thiscmdtype = cmd->command;
+            SDL_RenderCommand *finalcmd = cmd;
+            SDL_RenderCommand *nextcmd;
+            size_t count = cmd->data.draw.count;
             const size_t first = cmd->data.draw.first;
-            SetDrawState(data, cmd);
-            if (vbo) {
-                IDirect3DDevice9_DrawPrimitive(data->device, D3DPT_TRIANGLELIST, (UINT)(first / sizeof(Vertex)), (UINT)count / 3);
-            } else {
-                const Vertex *verts = (Vertex *)(((Uint8 *)vertices) + first);
-                IDirect3DDevice9_DrawPrimitiveUP(data->device, D3DPT_TRIANGLELIST, (UINT)count / 3, verts, sizeof(Vertex));
+            const size_t start = first / sizeof(Vertex);
+            const Vertex *verts = (Vertex *)(((Uint8 *)vertices) + first);
+            for (nextcmd = cmd->next; nextcmd; nextcmd = nextcmd->next) {
+                const SDL_RenderCommandType nextcmdtype = nextcmd->command;
+                if (nextcmdtype != thiscmdtype) {
+                    if (nextcmdtype == SDL_RENDERCMD_SETDRAWCOLOR) {
+                        // The vertex data has the draw color built in, ignore this
+                        continue;
+                    }
+                    break; // can't go any further on this draw call, different render command up next.
+                } else if (nextcmd->data.draw.texture != thistexture ||
+                           nextcmd->data.draw.texture_scale_mode != thisscalemode ||
+                           nextcmd->data.draw.texture_address_mode_u != thisaddressmode_u ||
+                           nextcmd->data.draw.texture_address_mode_v != thisaddressmode_v ||
+                           nextcmd->data.draw.blend != thisblend) {
+                    break; // can't go any further on this draw call, different texture/blendmode copy up next.
+                } else {
+                    finalcmd = nextcmd; // we can combine copy operations here. Mark this one as the furthest okay command.
+                    count += nextcmd->data.draw.count;
+                }
             }
+
+            SetDrawState(data, cmd);
+
+            if (thiscmdtype == SDL_RENDERCMD_GEOMETRY) {
+                if (vbo) {
+                    IDirect3DDevice9_DrawPrimitive(data->device, D3DPT_TRIANGLELIST, (UINT)start, (UINT)count / 3);
+                } else {
+                    IDirect3DDevice9_DrawPrimitiveUP(data->device, D3DPT_TRIANGLELIST, (UINT)count / 3, verts, sizeof(Vertex));
+                }
+            } else {
+                if (vbo) {
+                    IDirect3DDevice9_DrawPrimitive(data->device, D3DPT_POINTLIST, (UINT)start, (UINT)count);
+                } else {
+                    IDirect3DDevice9_DrawPrimitiveUP(data->device, D3DPT_POINTLIST, (UINT)count, verts, sizeof(Vertex));
+                }
+            }
+            cmd = finalcmd; // skip any copy commands we just combined in here.
             break;
         }
 
@@ -1745,6 +1826,7 @@ static bool D3D_CreateRenderer(SDL_Renderer *renderer, SDL_Window *window, SDL_P
     D3D_RenderData *data;
     HRESULT result;
     HWND hwnd;
+    D3DDISPLAYMODE displayMode;
     D3DPRESENT_PARAMETERS pparams;
     IDirect3DSwapChain9 *chain;
     D3DCAPS9 caps;
@@ -1803,7 +1885,6 @@ static bool D3D_CreateRenderer(SDL_Renderer *renderer, SDL_Window *window, SDL_P
     D3D_InvalidateCachedState(renderer);
 
     renderer->name = D3D_RenderDriver.name;
-    SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_ARGB8888);
 
     SDL_GetWindowSizeInPixels(window, &w, &h);
     if (SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN) {
@@ -1843,6 +1924,13 @@ static bool D3D_CreateRenderer(SDL_Renderer *renderer, SDL_Window *window, SDL_P
     } else {
         device_flags |= D3DCREATE_SOFTWARE_VERTEXPROCESSING;
     }
+    if (caps.TextureCaps & D3DPTEXTURECAPS_POW2) {
+        if (caps.TextureCaps & D3DPTEXTURECAPS_NONPOW2CONDITIONAL) {
+            renderer->npot_texture_wrap_unsupported = true;
+        } else {
+            return SDL_SetError("Non-power-of-two textures are not supported");
+        }
+    }
 
     if (SDL_GetHintBoolean(SDL_HINT_RENDER_DIRECT3D_THREADSAFE, false)) {
         device_flags |= D3DCREATE_MULTITHREADED;
@@ -1880,6 +1968,20 @@ static bool D3D_CreateRenderer(SDL_Renderer *renderer, SDL_Window *window, SDL_P
     // Store the default render target
     IDirect3DDevice9_GetRenderTarget(data->device, 0, &data->defaultRenderTarget);
     data->currentRenderTarget = NULL;
+
+    // Detect the supported texture formats
+    IDirect3D9_GetAdapterDisplayMode(data->d3d, data->adapter, &displayMode);
+    for (int i = 0; i < SDL_arraysize(d3d_format_map); i++) {
+        if (SUCCEEDED(IDirect3D9_CheckDeviceFormat(data->d3d,
+                                                   data->adapter,
+                                                   D3DDEVTYPE_HAL,
+                                                   displayMode.Format,
+                                                   0,
+                                                   D3DRTYPE_TEXTURE,
+                                                   d3d_format_map[i].d3d))) {
+            SDL_AddSupportedTextureFormat(renderer, d3d_format_map[i].sdl);
+        }
+    }
 
     // Set up parameters for rendering
     D3D_InitRenderState(data);

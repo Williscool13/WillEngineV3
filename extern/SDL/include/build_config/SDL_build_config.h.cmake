@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -199,8 +199,10 @@
 #cmakedefine HAVE_SEM_TIMEDWAIT 1
 #cmakedefine HAVE_GETAUXVAL 1
 #cmakedefine HAVE_ELF_AUX_INFO 1
-#cmakedefine HAVE_POLL 1
+#cmakedefine HAVE_PPOLL 1
 #cmakedefine HAVE__EXIT 1
+#cmakedefine HAVE_GETRESUID 1
+#cmakedefine HAVE_GETRESGID 1
 
 #endif /* HAVE_LIBC */
 
@@ -218,6 +220,8 @@
 #cmakedefine HAVE_LIBURING_H 1
 #cmakedefine HAVE_FRIBIDI_H 1
 #cmakedefine SDL_FRIBIDI_DYNAMIC @SDL_FRIBIDI_DYNAMIC@
+#cmakedefine HAVE_LIBTHAI_H 1
+#cmakedefine SDL_LIBTHAI_DYNAMIC @SDL_LIBTHAI_DYNAMIC@
 
 #cmakedefine HAVE_DDRAW_H 1
 #cmakedefine HAVE_DSOUND_H 1
@@ -238,7 +242,7 @@
 #cmakedefine HAVE_POSIX_SPAWN_FILE_ACTIONS_ADDCHDIR 1
 #cmakedefine HAVE_POSIX_SPAWN_FILE_ACTIONS_ADDCHDIR_NP 1
 
-#cmakedefine HAVE_DLOPEN_NOTES 1
+#cmakedefine SDL_DISABLE_DLOPEN_NOTES 1
 
 /* SDL internal assertion support */
 #cmakedefine SDL_DEFAULT_ASSERT_LEVEL_CONFIGURED 1
@@ -344,6 +348,7 @@
 #cmakedefine SDL_SENSOR_DUMMY 1
 #cmakedefine SDL_SENSOR_VITA 1
 #cmakedefine SDL_SENSOR_N3DS 1
+#cmakedefine SDL_SENSOR_EMSCRIPTEN 1
 
 #cmakedefine SDL_SENSOR_PRIVATE 1
 
@@ -436,6 +441,7 @@
 #cmakedefine SDL_VIDEO_DRIVER_X11_XINPUT2 1
 #cmakedefine SDL_VIDEO_DRIVER_X11_XINPUT2_SUPPORTS_MULTITOUCH 1
 #cmakedefine SDL_VIDEO_DRIVER_X11_XINPUT2_SUPPORTS_SCROLLINFO 1
+#cmakedefine SDL_VIDEO_DRIVER_X11_XINPUT2_SUPPORTS_GESTURE @SDL_VIDEO_DRIVER_X11_XINPUT2_SUPPORTS_GESTURE@
 #cmakedefine SDL_VIDEO_DRIVER_X11_XRANDR 1
 #cmakedefine SDL_VIDEO_DRIVER_X11_XSCRNSAVER 1
 #cmakedefine SDL_VIDEO_DRIVER_X11_XSHAPE 1

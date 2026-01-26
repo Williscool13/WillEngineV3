@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -1290,3 +1290,10 @@
 #define SDL_LoadPNG SDL_LoadPNG_REAL
 #define SDL_SavePNG_IO SDL_SavePNG_IO_REAL
 #define SDL_SavePNG SDL_SavePNG_REAL
+#define SDL_GetSystemPageSize SDL_GetSystemPageSize_REAL
+#define SDL_GetPenDeviceType SDL_GetPenDeviceType_REAL
+#define SDL_CreateAnimatedCursor SDL_CreateAnimatedCursor_REAL
+#define SDL_RotateSurface SDL_RotateSurface_REAL
+#define SDL_LoadSurface_IO SDL_LoadSurface_IO_REAL
+#define SDL_LoadSurface SDL_LoadSurface_REAL
+#define SDL_SetWindowFillDocument SDL_SetWindowFillDocument_REAL

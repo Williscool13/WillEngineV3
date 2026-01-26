@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -184,7 +184,6 @@ Sint32 JNI_OnLoad(JavaVM *vm, void *reserved)
 {
     (void)vm;
     (void)reserved;
-    SDL_Unsupported();
-    return -1; // JNI_ERR
+    return 0x00010004; // JNI_VERSION_1_4
 }
 #endif

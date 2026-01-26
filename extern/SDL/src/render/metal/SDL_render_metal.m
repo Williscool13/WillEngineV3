@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -682,7 +682,7 @@ static bool METAL_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture, SD
 {
     @autoreleasepool {
         SDL3METAL_RenderData *data = (__bridge SDL3METAL_RenderData *)renderer->internal;
-        MTLPixelFormat pixfmt;
+        MTLPixelFormat pixfmt = MTLPixelFormatInvalid;
         MTLTextureDescriptor *mtltexdesc;
         id<MTLTexture> mtltexture = nil, mtltextureUv = nil;
         SDL3METAL_TextureData *texturedata;
@@ -715,6 +715,26 @@ static bool METAL_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture, SD
         case SDL_PIXELFORMAT_ABGR2101010:
             pixfmt = MTLPixelFormatRGB10A2Unorm;
             break;
+        case SDL_PIXELFORMAT_RGB565:
+            if (@available(macOS 11.0, *)) {
+                pixfmt = MTLPixelFormatB5G6R5Unorm;
+            }
+            break;
+        case SDL_PIXELFORMAT_RGBA5551:
+            if (@available(macOS 11.0, *)) {
+                pixfmt = MTLPixelFormatA1BGR5Unorm;
+            }
+            break;
+        case SDL_PIXELFORMAT_ARGB1555:
+            if (@available(macOS 11.0, *)) {
+                pixfmt = MTLPixelFormatBGR5A1Unorm;
+            }
+            break;
+        case SDL_PIXELFORMAT_RGBA4444:
+            if (@available(macOS 11.0, *)) {
+                pixfmt = MTLPixelFormatABGR4Unorm;
+            }
+            break;
         case SDL_PIXELFORMAT_INDEX8:
         case SDL_PIXELFORMAT_IYUV:
         case SDL_PIXELFORMAT_YV12:
@@ -732,6 +752,10 @@ static bool METAL_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture, SD
             pixfmt = MTLPixelFormatRGBA32Float;
             break;
         default:
+            break;
+        }
+
+        if (pixfmt == MTLPixelFormatInvalid) {
             return SDL_SetError("Texture format %s not supported by Metal", SDL_GetPixelFormatName(texture->format));
         }
 
@@ -795,9 +819,8 @@ static bool METAL_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture, SD
             texturedata.fragmentFunction = SDL_METAL_FRAGMENT_YUV;
         } else if (nv12) {
             texturedata.fragmentFunction = SDL_METAL_FRAGMENT_NV12;
-        }
 #endif
-        else {
+        } else {
             texturedata.fragmentFunction = SDL_METAL_FRAGMENT_COPY;
         }
         texturedata.mtltexture = mtltexture;
@@ -1251,7 +1274,7 @@ static bool METAL_QueueDrawLines(SDL_Renderer *renderer, SDL_RenderCommand *cmd,
        angles. Maybe !!! FIXME for later, though. */
 
     points -= 2; // update the last line.
-    verts -= 2 + 1;
+    verts -= 6;
 
     {
         const float xstart = points[0].x;
@@ -1460,7 +1483,7 @@ static void SetupShaderConstants(SDL_Renderer *renderer, const SDL_RenderCommand
             output_headroom = renderer->HDR_headroom;
         }
 
-        if (texture->HDR_headroom > output_headroom) {
+        if (texture->HDR_headroom > output_headroom && output_headroom > 0.0f) {
             constants->tonemap_method = TONEMAP_CHROME;
             constants->tonemap_factor1 = (output_headroom / (texture->HDR_headroom * texture->HDR_headroom));
             constants->tonemap_factor2 = (1.0f / output_headroom);
@@ -1785,13 +1808,42 @@ static bool METAL_RunCommandQueue(SDL_Renderer *renderer, SDL_RenderCommand *cmd
                 break;
             }
 
-            case SDL_RENDERCMD_DRAW_POINTS:
             case SDL_RENDERCMD_DRAW_LINES:
             {
-                const size_t count = cmd->data.draw.count;
-                const MTLPrimitiveType primtype = (cmd->command == SDL_RENDERCMD_DRAW_POINTS) ? MTLPrimitiveTypePoint : MTLPrimitiveTypeLineStrip;
                 if (SetDrawState(renderer, cmd, SDL_METAL_FRAGMENT_SOLID, NULL, CONSTANTS_OFFSET_HALF_PIXEL_TRANSFORM, mtlbufvertex, &statecache)) {
-                    [data.mtlcmdencoder drawPrimitives:primtype vertexStart:0 vertexCount:count];
+                    size_t count = cmd->data.draw.count;
+                    if (count > 2) {
+                        // joined lines cannot be grouped
+                        [data.mtlcmdencoder drawPrimitives:MTLPrimitiveTypeLineStrip vertexStart:0 vertexCount:count];
+                    } else {
+                        // let's group non joined lines
+                        SDL_RenderCommand *finalcmd = cmd;
+                        SDL_RenderCommand *nextcmd;
+                        float thiscolorscale = cmd->data.draw.color_scale;
+                        SDL_BlendMode thisblend = cmd->data.draw.blend;
+
+                        for (nextcmd = cmd->next; nextcmd; nextcmd = nextcmd->next) {
+                            const SDL_RenderCommandType nextcmdtype = nextcmd->command;
+                            if (nextcmdtype != SDL_RENDERCMD_DRAW_LINES) {
+                                if (nextcmdtype == SDL_RENDERCMD_SETDRAWCOLOR) {
+                                    // The vertex data has the draw color built in, ignore this
+                                    continue;
+                                }
+                                break; // can't go any further on this draw call, different render command up next.
+                            } else if (nextcmd->data.draw.count != 2) {
+                                break; // can't go any further on this draw call, those are joined lines
+                            } else if (nextcmd->data.draw.blend != thisblend ||
+                                       nextcmd->data.draw.color_scale != thiscolorscale) {
+                                break; // can't go any further on this draw call, different blendmode copy up next.
+                            } else {
+                                finalcmd = nextcmd; // we can combine copy operations here. Mark this one as the furthest okay command.
+                                count += nextcmd->data.draw.count;
+                            }
+                        }
+
+                        [data.mtlcmdencoder drawPrimitives:MTLPrimitiveTypeLine vertexStart:0 vertexCount:count];
+                        cmd = finalcmd; // skip any copy commands we just combined in here.
+                    }
                 }
                 break;
             }
@@ -1805,20 +1857,56 @@ static bool METAL_RunCommandQueue(SDL_Renderer *renderer, SDL_RenderCommand *cmd
             case SDL_RENDERCMD_COPY_EX: // unused
                 break;
 
+            case SDL_RENDERCMD_DRAW_POINTS:
             case SDL_RENDERCMD_GEOMETRY:
             {
-                const size_t count = cmd->data.draw.count;
-                SDL_Texture *texture = cmd->data.draw.texture;
-
-                if (texture) {
-                    if (SetCopyState(renderer, cmd, CONSTANTS_OFFSET_IDENTITY, mtlbufvertex, &statecache)) {
-                        [data.mtlcmdencoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:count];
-                    }
-                } else {
-                    if (SetDrawState(renderer, cmd, SDL_METAL_FRAGMENT_SOLID, NULL, CONSTANTS_OFFSET_IDENTITY, mtlbufvertex, &statecache)) {
-                        [data.mtlcmdencoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:count];
+                float thiscolorscale = cmd->data.draw.color_scale;
+                SDL_Texture *thistexture = cmd->data.draw.texture;
+                SDL_BlendMode thisblend = cmd->data.draw.blend;
+                SDL_ScaleMode thisscalemode = cmd->data.draw.texture_scale_mode;
+                SDL_TextureAddressMode thisaddressmode_u = cmd->data.draw.texture_address_mode_u;
+                SDL_TextureAddressMode thisaddressmode_v = cmd->data.draw.texture_address_mode_v;
+                const SDL_RenderCommandType thiscmdtype = cmd->command;
+                SDL_RenderCommand *finalcmd = cmd;
+                SDL_RenderCommand *nextcmd;
+                size_t count = cmd->data.draw.count;
+                for (nextcmd = cmd->next; nextcmd; nextcmd = nextcmd->next) {
+                    const SDL_RenderCommandType nextcmdtype = nextcmd->command;
+                    if (nextcmdtype != thiscmdtype) {
+                        if (nextcmdtype == SDL_RENDERCMD_SETDRAWCOLOR) {
+                            // The vertex data has the draw color built in, ignore this
+                            continue;
+                        }
+                        break; // can't go any further on this draw call, different render command up next.
+                    } else if (nextcmd->data.draw.texture != thistexture ||
+                               nextcmd->data.draw.texture_scale_mode != thisscalemode ||
+                               nextcmd->data.draw.texture_address_mode_u != thisaddressmode_u ||
+                               nextcmd->data.draw.texture_address_mode_v != thisaddressmode_v ||
+                               nextcmd->data.draw.blend != thisblend ||
+                               nextcmd->data.draw.color_scale != thiscolorscale) {
+                        break; // can't go any further on this draw call, different texture/blendmode copy up next.
+                    } else {
+                        finalcmd = nextcmd; // we can combine copy operations here. Mark this one as the furthest okay command.
+                        count += nextcmd->data.draw.count;
                     }
                 }
+
+                if (thiscmdtype == SDL_RENDERCMD_GEOMETRY) {
+                    if (thistexture) {
+                        if (SetCopyState(renderer, cmd, CONSTANTS_OFFSET_IDENTITY, mtlbufvertex, &statecache)) {
+                            [data.mtlcmdencoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:count];
+                        }
+                    } else {
+                        if (SetDrawState(renderer, cmd, SDL_METAL_FRAGMENT_SOLID, NULL, CONSTANTS_OFFSET_IDENTITY, mtlbufvertex, &statecache)) {
+                            [data.mtlcmdencoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:count];
+                        }
+                    }
+                } else {
+                    if (SetDrawState(renderer, cmd, SDL_METAL_FRAGMENT_SOLID, NULL, CONSTANTS_OFFSET_HALF_PIXEL_TRANSFORM, mtlbufvertex, &statecache)) {
+                        [data.mtlcmdencoder drawPrimitives:MTLPrimitiveTypePoint vertexStart:0 vertexCount:count];
+                    }
+                }
+                cmd = finalcmd; // skip any copy commands we just combined in here.
                 break;
             }
 
@@ -1884,6 +1972,18 @@ static SDL_Surface *METAL_RenderReadPixels(SDL_Renderer *renderer, const SDL_Rec
             break;
         case MTLPixelFormatRGBA16Float:
             format = SDL_PIXELFORMAT_RGBA64_FLOAT;
+            break;
+        case MTLPixelFormatB5G6R5Unorm:
+            format = SDL_PIXELFORMAT_RGB565;
+            break;
+        case MTLPixelFormatA1BGR5Unorm:
+            format = SDL_PIXELFORMAT_RGBA5551;
+            break;
+        case MTLPixelFormatBGR5A1Unorm:
+            format = SDL_PIXELFORMAT_ARGB1555;
+            break;
+        case MTLPixelFormatABGR4Unorm:
+            format = SDL_PIXELFORMAT_RGBA4444;
             break;
         default:
             SDL_SetError("Unknown framebuffer pixel format");
@@ -2301,6 +2401,14 @@ static bool METAL_CreateRenderer(SDL_Renderer *renderer, SDL_Window *window, SDL
         SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_ABGR2101010);
         SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_RGBA64_FLOAT);
         SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_RGBA128_FLOAT);
+        if (@available(macOS 11.0, iOS 13.0, tvOS 13.0, *)) {
+            if ([mtldevice supportsFamily:MTLGPUFamilyApple1]) {
+                SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_RGB565);
+                SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_RGBA5551);
+                SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_ARGB1555);
+                SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_RGBA4444);
+            }
+        }
         SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_INDEX8);
         SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_YV12);
         SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_IYUV);

@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -480,6 +480,8 @@ static EM_BOOL Emscripten_HandleFullscreenChange(int eventType, const Emscripten
 {
     SDL_WindowData *window_data = userData;
 
+    window_data->fullscreen_change_in_progress = false;
+
     if (fullscreenChangeEvent->isFullscreen) {
         SDL_SendWindowEvent(window_data->window, SDL_EVENT_WINDOW_ENTER_FULLSCREEN, 0, 0);
         window_data->fullscreen_mode_flags = 0;
@@ -495,10 +497,21 @@ static EM_BOOL Emscripten_HandleFullscreenChange(int eventType, const Emscripten
 static EM_BOOL Emscripten_HandleFullscreenChangeGlobal(int eventType, const EmscriptenFullscreenChangeEvent *fullscreenChangeEvent, void *userData)
 {
     SDL_VideoDevice *device = userData;
-    SDL_Window *window = Emscripten_GetFocusedWindow(device);
+    SDL_Window *window = NULL;
+    for (window = device->windows; window != NULL; window = window->next) {
+        const char *canvas_id = window->internal->canvas_id;
+        if (*canvas_id == '#') {
+            canvas_id++;
+        }
+        if (SDL_strcmp(fullscreenChangeEvent->id, canvas_id) == 0) {
+            break;  // this is the window.
+        }
+    }
+
     if (window) {
         return Emscripten_HandleFullscreenChange(eventType, fullscreenChangeEvent, window->internal);
     }
+
     return EM_FALSE;
 }
 
@@ -516,10 +529,10 @@ static EM_BOOL Emscripten_HandleResize(int eventType, const EmscriptenUiEvent *u
                 force = true;
             }
         }
-
-        if (window_data->fill_document || (window_data->window->flags & SDL_WINDOW_RESIZABLE)) {
+        const bool fill_document = (Emscripten_fill_document_window == window_data->window);
+        if (fill_document || (window_data->window->flags & SDL_WINDOW_RESIZABLE)) {
             double w, h;
-            if (window_data->fill_document) {
+            if (fill_document) {
                 w = (double) uiEvent->windowInnerWidth;
                 h = (double) uiEvent->windowInnerHeight;
             } else {
@@ -612,6 +625,19 @@ static EM_BOOL Emscripten_HandleOrientationChange(int eventType, const Emscripte
     SDL_WindowData *window_data = (SDL_WindowData *) userData;
     SDL_SendDisplayEvent(SDL_GetVideoDisplayForWindow(window_data->window), SDL_EVENT_DISPLAY_ORIENTATION, orientation, 0);
 
+    // fake a UI event so we can tell the app the canvas might have resized.
+    EmscriptenUiEvent uiEvent;
+    SDL_zero(uiEvent);
+    uiEvent.documentBodyClientWidth = MAIN_THREAD_EM_ASM_INT( { return document.body.clientWidth; } );
+    uiEvent.documentBodyClientHeight = MAIN_THREAD_EM_ASM_INT( { return document.body.clientHeight; } );
+    uiEvent.windowInnerWidth = MAIN_THREAD_EM_ASM_INT( { return window.innerWidth; } );
+    uiEvent.windowInnerHeight = MAIN_THREAD_EM_ASM_INT( { return window.innerHeight; } );
+    uiEvent.windowOuterWidth = MAIN_THREAD_EM_ASM_INT( { return window.outerWidth; } );
+    uiEvent.windowOuterHeight = MAIN_THREAD_EM_ASM_INT( { return window.outerHeight; } );
+    uiEvent.scrollTop = MAIN_THREAD_EM_ASM_INT( { return window.pageXOffset; } );
+    uiEvent.scrollLeft = MAIN_THREAD_EM_ASM_INT( { return window.pageYOffset; } );
+    Emscripten_HandleResize(EMSCRIPTEN_EVENT_RESIZE, &uiEvent, userData);
+
     return 0;
 }
 
@@ -625,6 +651,7 @@ typedef struct Emscripten_PointerEvent
     int pointerid;
     int button;
     int buttons;
+    int down;
     float movementX;
     float movementY;
     float targetX;
@@ -639,14 +666,14 @@ typedef struct Emscripten_PointerEvent
 static void Emscripten_HandleMouseButton(SDL_WindowData *window_data, const Emscripten_PointerEvent *event)
 {
     Uint8 sdl_button;
-    bool down;
+    const bool down = (event->down != 0);
     switch (event->button) {
-        #define CHECK_MOUSE_BUTTON(jsbutton, downflag, sdlbutton) case jsbutton: down = (event->buttons & downflag) != 0; ; sdl_button = SDL_BUTTON_##sdlbutton; break
-        CHECK_MOUSE_BUTTON(0, 1, LEFT);
-        CHECK_MOUSE_BUTTON(1, 4, MIDDLE);
-        CHECK_MOUSE_BUTTON(2, 2, RIGHT);
-        CHECK_MOUSE_BUTTON(3, 8, X1);
-        CHECK_MOUSE_BUTTON(4, 16, X2);
+        #define CHECK_MOUSE_BUTTON(jsbutton, sdlbutton) case jsbutton: sdl_button = SDL_BUTTON_##sdlbutton; break
+        CHECK_MOUSE_BUTTON(0, LEFT);
+        CHECK_MOUSE_BUTTON(1, MIDDLE);
+        CHECK_MOUSE_BUTTON(2, RIGHT);
+        CHECK_MOUSE_BUTTON(3, X1);
+        CHECK_MOUSE_BUTTON(4, X2);
         #undef CHECK_MOUSE_BUTTON
         default: sdl_button = 0; break;
     }
@@ -750,7 +777,7 @@ static void Emscripten_UpdateTouchFromEvent(SDL_WindowData *window_data, const E
 static void Emscripten_UpdatePenFromEvent(SDL_WindowData *window_data, const Emscripten_PointerEvent *event)
 {
     SDL_assert(event->pointer_type == PTRTYPE_PEN);
-    const SDL_PenID pen = SDL_FindPenByHandle((void *) (size_t) event->pointerid);
+    const SDL_PenID pen = SDL_FindPenByHandle((void *) (size_t) 1);   // something > 0 for the single pen handle.
     if (pen) {
         // rescale (in case canvas is being scaled)
         double client_w, client_h;
@@ -835,14 +862,24 @@ static void Emscripten_HandleMouseFocus(SDL_WindowData *window_data, const Emscr
 static void Emscripten_HandlePenEnter(SDL_WindowData *window_data, const Emscripten_PointerEvent *event)
 {
     SDL_assert(event->pointer_type == PTRTYPE_PEN);
-    // Web browsers offer almost none of this information as specifics, but can without warning offer any of these specific things.
-    SDL_PenInfo peninfo;
-    SDL_zero(peninfo);
-    peninfo.capabilities = SDL_PEN_CAPABILITY_PRESSURE | SDL_PEN_CAPABILITY_ROTATION | SDL_PEN_CAPABILITY_XTILT | SDL_PEN_CAPABILITY_YTILT | SDL_PEN_CAPABILITY_TANGENTIAL_PRESSURE | SDL_PEN_CAPABILITY_ERASER;
-    peninfo.max_tilt = 90.0f;
-    peninfo.num_buttons = 2;
-    peninfo.subtype = SDL_PEN_TYPE_PEN;
-    SDL_AddPenDevice(0, NULL, &peninfo, (void *) (size_t) event->pointerid);
+
+    // event->pointerid is one continuous interaction; it doesn't necessarily track a specific tool over time, like the same finger's ID changed on each new touch event.
+    // as such, we only expose a single pen, and when the touch ends, we say it lost proximity instead of the calling SDL_RemovePenDevice().
+
+    SDL_PenID pen = SDL_FindPenByHandle((void *) (size_t) 1);  // something > 0 for the single pen handle.
+    if (pen) {
+        SDL_SendPenProximity(0, pen, window_data->window, true);
+    } else {
+        // Web browsers offer almost none of this information as specifics, but can without warning offer any of these specific things.
+        SDL_PenInfo peninfo;
+        SDL_zero(peninfo);
+        peninfo.capabilities = SDL_PEN_CAPABILITY_PRESSURE | SDL_PEN_CAPABILITY_ROTATION | SDL_PEN_CAPABILITY_XTILT | SDL_PEN_CAPABILITY_YTILT | SDL_PEN_CAPABILITY_TANGENTIAL_PRESSURE | SDL_PEN_CAPABILITY_ERASER;
+        peninfo.max_tilt = 90.0f;
+        peninfo.num_buttons = 2;
+        peninfo.subtype = SDL_PEN_TYPE_PEN;
+        SDL_AddPenDevice(0, NULL, window_data->window, &peninfo, (void *) (size_t) 1, true);
+    }
+
     Emscripten_UpdatePenFromEvent(window_data, event);
 }
 
@@ -862,10 +899,10 @@ EMSCRIPTEN_KEEPALIVE void Emscripten_HandlePointerEnter(SDL_WindowData *window_d
 
 static void Emscripten_HandlePenLeave(SDL_WindowData *window_data, const Emscripten_PointerEvent *event)
 {
-    const SDL_PenID pen = SDL_FindPenByHandle((void *) (size_t) event->pointerid);
+    const SDL_PenID pen = SDL_FindPenByHandle((void *) (size_t) 1);   // something > 0 for the single pen handle.
     if (pen) {
         Emscripten_UpdatePointerFromEvent(window_data, event);  // last data updates?
-        SDL_RemovePenDevice(0, pen);
+        SDL_SendPenProximity(0, pen, window_data->window, false);
     }
 }
 
@@ -949,6 +986,7 @@ static void Emscripten_prep_pointer_event_callbacks(void)
                     HEAP32[idx++] = event.pointerId;
                     HEAP32[idx++] = (typeof(event.button) !== "undefined") ? event.button : -1;
                     HEAP32[idx++] = event.buttons;
+                    HEAP32[idx++] = (event.type == "pointerdown") ? 1 : 0;
                     HEAPF32[idx++] = event.movementX;
                     HEAPF32[idx++] = event.movementY;
                     HEAPF32[idx++] = event.clientX - left;

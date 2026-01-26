@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -143,6 +143,9 @@ extern bool SDL_IsJoystickFlydigiController(Uint16 vendor_id, Uint16 product_id)
 
 // Function to return whether a joystick is a Steam Deck
 extern bool SDL_IsJoystickSteamDeck(Uint16 vendor_id, Uint16 product_id);
+
+// Function to return whether a joystick is a Steam Triton
+extern bool SDL_IsJoystickSteamTriton(Uint16 vendor_id, Uint16 product_id);
 
 // Function to return whether a joystick guid comes from the XInput driver
 extern bool SDL_IsJoystickXInput(SDL_GUID guid);

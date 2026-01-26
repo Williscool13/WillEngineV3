@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -189,6 +189,8 @@ static bool SDL_MainIsReady = false;
 static bool SDL_MainIsReady = true;
 #endif
 static SDL_ThreadID SDL_MainThreadID = 0;
+static SDL_ThreadID SDL_EventsThreadID = 0;
+static SDL_ThreadID SDL_VideoThreadID = 0;
 static bool SDL_bInMainQuit = false;
 static Uint8 SDL_SubsystemRefCount[32];
 
@@ -266,20 +268,27 @@ void SDL_SetMainReady(void)
 
 bool SDL_IsMainThread(void)
 {
-    if (SDL_MainThreadID == 0) {
-        // Not initialized yet?
-        return true;
+    if (SDL_VideoThreadID) {
+        return (SDL_GetCurrentThreadID() == SDL_VideoThreadID);
     }
-    if (SDL_MainThreadID == SDL_GetCurrentThreadID()) {
-        return true;
+    if (SDL_EventsThreadID) {
+        return (SDL_GetCurrentThreadID() == SDL_EventsThreadID);
     }
-    return false;
+    if (SDL_MainThreadID) {
+        return (SDL_GetCurrentThreadID() == SDL_MainThreadID);
+    }
+    return true;
 }
 
 // Initialize all the subsystems that require initialization before threads start
 void SDL_InitMainThread(void)
 {
     static bool done_info = false;
+
+    // If we haven't done it by now, mark this as the main thread
+    if (SDL_MainThreadID == 0) {
+        SDL_MainThreadID = SDL_GetCurrentThreadID();
+    }
 
     SDL_InitTLSData();
     SDL_InitEnvironment();
@@ -335,6 +344,11 @@ bool SDL_InitSubSystem(SDL_InitFlags flags)
     if (flags & SDL_INIT_EVENTS) {
         if (SDL_ShouldInitSubsystem(SDL_INIT_EVENTS)) {
             SDL_IncrementSubsystemRefCount(SDL_INIT_EVENTS);
+
+            // Note which thread initialized events
+            // This is the thread which should be pumping events
+            SDL_EventsThreadID = SDL_GetCurrentThreadID();
+
             if (!SDL_InitEvents()) {
                 SDL_DecrementSubsystemRefCount(SDL_INIT_EVENTS);
                 goto quit_and_error;
@@ -354,12 +368,16 @@ bool SDL_InitSubSystem(SDL_InitFlags flags)
                 goto quit_and_error;
             }
 
+            SDL_IncrementSubsystemRefCount(SDL_INIT_VIDEO);
+
             // We initialize video on the main thread
             // On Apple platforms this is a requirement.
             // On other platforms, this is the definition.
-            SDL_MainThreadID = SDL_GetCurrentThreadID();
+            SDL_VideoThreadID = SDL_GetCurrentThreadID();
+#ifdef SDL_PLATFORM_APPLE
+            SDL_assert(SDL_VideoThreadID == SDL_MainThreadID);
+#endif
 
-            SDL_IncrementSubsystemRefCount(SDL_INIT_VIDEO);
             if (!SDL_VideoInit(NULL)) {
                 SDL_DecrementSubsystemRefCount(SDL_INIT_VIDEO);
                 SDL_PushError();
@@ -609,6 +627,7 @@ void SDL_QuitSubSystem(SDL_InitFlags flags)
         if (SDL_ShouldQuitSubsystem(SDL_INIT_VIDEO)) {
             SDL_QuitRender();
             SDL_VideoQuit();
+            SDL_VideoThreadID = 0;
             // video implies events
             SDL_QuitSubSystem(SDL_INIT_EVENTS);
         }
@@ -619,6 +638,7 @@ void SDL_QuitSubSystem(SDL_InitFlags flags)
     if (flags & SDL_INIT_EVENTS) {
         if (SDL_ShouldQuitSubsystem(SDL_INIT_EVENTS)) {
             SDL_QuitEvents();
+            SDL_EventsThreadID = 0;
         }
         SDL_DecrementSubsystemRefCount(SDL_INIT_EVENTS);
     }
@@ -669,7 +689,7 @@ void SDL_Quit(void)
     SDL_DBus_Quit();
 #endif
 
-#if defined(SDL_PLATFORM_UNIX) && !defined(SDL_PLATFORM_ANDROID) && !defined(SDL_PLATFORM_EMSCRIPTEN)
+#if defined(SDL_PLATFORM_UNIX) && !defined(SDL_PLATFORM_ANDROID) && !defined(SDL_PLATFORM_EMSCRIPTEN) && !defined(SDL_PLATFORM_PRIVATE)
     SDL_Gtk_Quit();
 #endif
 
@@ -686,7 +706,7 @@ void SDL_Quit(void)
     /* Now that every subsystem has been quit, we reset the subsystem refcount
      * and the list of initialized subsystems.
      */
-    SDL_memset(SDL_SubsystemRefCount, 0x0, sizeof(SDL_SubsystemRefCount));
+    SDL_zeroa(SDL_SubsystemRefCount);
 
     SDL_QuitLog();
     SDL_QuitHints();
@@ -760,6 +780,8 @@ const char *SDL_GetPlatform(void)
     return "Xbox One";
 #elif defined(SDL_PLATFORM_XBOXSERIES)
     return "Xbox Series X|S";
+#elif defined(SDL_PLATFORM_VISIONOS)
+    return "visionOS";
 #elif defined(SDL_PLATFORM_IOS)
     return "iOS";
 #elif defined(SDL_PLATFORM_TVOS)

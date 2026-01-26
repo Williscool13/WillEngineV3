@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -161,9 +161,7 @@ bool SDL_Zenity_ShowMessageBox(const SDL_MessageBoxData *messageboxdata, int *bu
     if (buttonID) {
         char *output = SDL_ReadProcess(process, NULL, &exit_code);
         if (exit_code < 0 || exit_code == 255) {
-            if (output) {
-                SDL_free(output);
-            }
+            SDL_free(output);
         } else if (output) {
             // It likes to add a newline...
             char *tmp = SDL_strrchr(output, '\n');

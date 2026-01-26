@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -1532,6 +1532,7 @@ static bool PSP_CreateRenderer(SDL_Renderer *renderer, SDL_Window *window, SDL_P
     renderer->window = window;
 
     renderer->name = PSP_RenderDriver.name;
+    renderer->npot_texture_wrap_unsupported = true;
     SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_BGR565);
     SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_ABGR1555);
     SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_ABGR4444);
