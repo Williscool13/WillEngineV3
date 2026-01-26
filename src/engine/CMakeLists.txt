@@ -22,7 +22,7 @@ target_link_libraries(engine PUBLIC
         core
         render
         physics
-        # audio
+        audio
         asset-load
         utils
         platform

@@ -16,6 +16,11 @@
 #include "platform/directory_watcher.h"
 #include "platform/dll_loader.h"
 
+namespace Audio
+{
+class AudioManager;
+}
+
 namespace Physics
 {
 class PhysicsSystem;
@@ -80,6 +85,7 @@ private: // Main Systems
     std::unique_ptr<enki::TaskScheduler> scheduler{};
     std::unique_ptr<Render::RenderThread> renderThread{};
     std::unique_ptr<Core::FrameSync> engineRenderSynchronization{};
+    std::unique_ptr<Audio::AudioManager> audioManager{};
     std::unique_ptr<AssetLoad::AssetLoadThread> assetLoadThread{};
     std::unique_ptr<AssetManager> assetManager{};
     std::unique_ptr<Physics::PhysicsSystem> physicsSystem{};

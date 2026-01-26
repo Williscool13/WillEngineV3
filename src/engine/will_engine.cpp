@@ -18,6 +18,7 @@
 #include "core/input/input_manager.h"
 #include "core/time/time_manager.h"
 #include "asset-load/asset_load_thread.h"
+#include "audio/audio_manager.h"
 #include "physics/physics_system.h"
 #include "platform/paths.h"
 #include "platform/thread_utils.h"
@@ -91,7 +92,7 @@ void WillEngine::Initialize()
     //
     {
         ZoneScopedN("SDL_Init");
-        bool sdlInitSuccess = SDL_Init(SDL_INIT_VIDEO);
+        bool sdlInitSuccess = SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO);
         if (!sdlInitSuccess) {
             SPDLOG_ERROR("SDL_Init failed: {}", SDL_GetError());
             exit(1);
@@ -133,6 +134,12 @@ void WillEngine::Initialize()
         ZoneScopedN("CreateRenderThread");
         engineRenderSynchronization = std::make_unique<Core::FrameSync>();
         renderThread = std::make_unique<Render::RenderThread>(engineRenderSynchronization.get(), scheduler.get(), window.get(), w, h);
+    }
+
+    //
+    {
+        ZoneScopedN("CreateAudioManager");
+        audioManager = std::make_unique<Audio::AudioManager>();
     }
 
     //
