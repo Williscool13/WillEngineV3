@@ -51,6 +51,8 @@ public:
 
     ~AsyncAssetLoadManager();
 
+    void ThreadMain();
+
     // Audio Loading
     void RequestAudioLoad(Audio::WillAudio* audioEntry);
     bool TryDequeueAudioComplete(AudioLoadComplete& outResult);
@@ -71,12 +73,13 @@ public:
 
 private:
     // Audio loading
-    moodycamel::ConcurrentQueue<AudioLoadRequest> pipelineRequestQueue;
+    moodycamel::ConcurrentQueue<AudioLoadRequest> audioRequestQueue;
     Core::HandleAllocator<AudioLoadSlot, AUDIO_JOB_COUNT> audioLoadAllocator;
     std::array<AudioLoadSlot, AUDIO_JOB_COUNT> audioLoadSlots;
     moodycamel::ConcurrentQueue<AudioLoadComplete> audioLoadCompleteQueue;
 
     // Pipeline loading
+    moodycamel::ConcurrentQueue<PipelineLoadRequest> pipelineRequestQueue;
     Core::HandleAllocator<PipelineLoadSlot, PIPELINE_JOB_COUNT> pipelineLoadAllocator;
     std::array<PipelineLoadSlot, PIPELINE_JOB_COUNT> pipelineLoadSlots;
     moodycamel::ConcurrentQueue<PipelineLoadComplete> pipelineLoadCompleteQueue;
@@ -84,6 +87,12 @@ private:
     enki::TaskScheduler* scheduler;
     Render::VulkanContext* context;
     VkPipelineCache pipelineCache;
+
+    std::jthread thisThread;
+    std::atomic<bool> bShouldExit{false};
+    std::atomic<uint32_t> workCounter{0};
+    std::mutex wakeMutex;
+    std::condition_variable wakeCV;
 
     void OnAudioLoadComplete(bool success, AudioSlotHandle slotHandle);
     void OnPipelineLoadComplete(bool success, PipelineSlotHandle slotHandle);

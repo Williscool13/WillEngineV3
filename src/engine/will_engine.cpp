@@ -84,6 +84,7 @@ void WillEngine::Initialize()
         config.profilerCallbacks.waitForTaskCompleteStop = [](uint32_t) {};
         config.profilerCallbacks.waitForTaskCompleteSuspendStart = [](uint32_t) {};
         config.profilerCallbacks.waitForTaskCompleteSuspendStop = [](uint32_t) {};
+        config.numExternalTaskThreads = 1; // Async Asset Load Manager
 
         SPDLOG_INFO("Scheduler operating with {} threads.", config.numTaskThreadsToCreate + 1);
         scheduler = std::make_unique<enki::TaskScheduler>();

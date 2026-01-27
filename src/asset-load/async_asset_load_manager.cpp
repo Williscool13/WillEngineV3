@@ -8,40 +8,42 @@
 #include <tracy/Tracy.hpp>
 
 #include "audio/audio_asset.h"
+#include "platform/thread_utils.h"
 #include "render/pipelines//pipeline_data.h"
 
 namespace AssetLoad
 {
-AsyncAssetLoadManager::AsyncAssetLoadManager(enki::TaskScheduler* scheduler,
-                                             Render::VulkanContext* context,
-                                             VkPipelineCache pipelineCache)
-    : scheduler(scheduler)
-      , context(context)
-      , pipelineCache(pipelineCache)
+AsyncAssetLoadManager::AsyncAssetLoadManager(enki::TaskScheduler* scheduler, Render::VulkanContext* context, VkPipelineCache pipelineCache)
+    : scheduler(scheduler), context(context), pipelineCache(pipelineCache)
 {
-    // Initialize audio slots
     for (uint32_t i = 0; i < AUDIO_JOB_COUNT; ++i) {
         audioLoadSlots[i].Initialize(scheduler, [this](bool success, AudioSlotHandle slotHandle) {
             OnAudioLoadComplete(success, slotHandle);
         });
     }
 
-    // Initialize pipeline slots
     for (uint32_t i = 0; i < PIPELINE_JOB_COUNT; ++i) {
         pipelineLoadSlots[i].Initialize(scheduler, context, pipelineCache, [this](bool success, PipelineSlotHandle slotHandle) {
             OnPipelineLoadComplete(success, slotHandle);
         });
     }
+    thisThread = std::jthread([this] { ThreadMain(); });
 }
 
 AsyncAssetLoadManager::~AsyncAssetLoadManager()
 {
+    bShouldExit.store(true, std::memory_order_release);
+    workCounter.fetch_add(1);
+    wakeCV.notify_one();
+
     while (GetActiveAudioLoadCount() > 0 || GetActivePipelineLoadCount() > 0) {
         AudioLoadComplete audioResult;
         while (TryDequeueAudioComplete(audioResult)) {}
 
         PipelineLoadComplete pipelineResult;
         while (TryDequeuePipelineComplete(pipelineResult)) {}
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 
     AudioLoadComplete audioResult;
@@ -49,6 +51,55 @@ AsyncAssetLoadManager::~AsyncAssetLoadManager()
 
     PipelineLoadComplete pipelineResult;
     while (TryDequeuePipelineComplete(pipelineResult)) {}
+}
+
+void AsyncAssetLoadManager::ThreadMain()
+{
+    ZoneScoped;
+    tracy::SetThreadName("AsyncAssetLoadThread");
+    Platform::SetThreadName("AsyncAssetLoadThread");
+
+    scheduler->RegisterExternalTaskThread();
+
+    while (!bShouldExit.load(std::memory_order_acquire)) {
+        {
+            ZoneScopedN("Process Audio Requests");
+            AudioLoadRequest audioReq;
+            if (audioRequestQueue.try_dequeue(audioReq)) {
+                Core::Handle<AudioLoadSlot> slotHandle = audioLoadAllocator.Add();
+                if (slotHandle.IsValid()) {
+                    AudioLoadSlot& slot = audioLoadSlots[slotHandle.index];
+                    slot.Launch(slotHandle, audioReq.audioEntry);
+                }
+            }
+        }
+
+        {
+            ZoneScopedN("Process Pipeline Requests");
+            PipelineLoadRequest pipelineReq;
+            if (pipelineRequestQueue.try_dequeue(pipelineReq)) {
+                Core::Handle<PipelineLoadSlot> slotHandle = pipelineLoadAllocator.Add();
+                if (slotHandle.IsValid()) {
+                    PipelineLoadSlot& slot = pipelineLoadSlots[slotHandle.index];
+                    slot.Launch(slotHandle, pipelineReq.entry);
+                }
+            }
+        }
+
+        if (workCounter.load(std::memory_order_acquire) > 0) {
+            workCounter.fetch_sub(1);
+        }
+        else {
+            ZoneScopedN("Idle - Waiting for Work");
+            std::unique_lock lock(wakeMutex);
+            wakeCV.wait(lock, [&] {
+                return workCounter.load(std::memory_order_acquire) > 0 || bShouldExit.load(std::memory_order_acquire);
+            });
+            if (workCounter.load(std::memory_order_acquire) > 0) {
+                workCounter.fetch_sub(1);
+            }
+        }
+    }
 }
 
 void AsyncAssetLoadManager::RequestAudioLoad(Audio::WillAudio* audioEntry)
@@ -60,16 +111,9 @@ void AsyncAssetLoadManager::RequestAudioLoad(Audio::WillAudio* audioEntry)
         return;
     }
 
-    Core::Handle<AudioLoadSlot> slotHandle = audioLoadAllocator.Add();
-    if (!slotHandle.IsValid()) {
-        SPDLOG_WARN("Audio load slots full ({}), dropping request for: {}", AUDIO_JOB_COUNT, audioEntry->source.string());
-        return;
-    }
-
-    AudioLoadSlot& slot = audioLoadSlots[slotHandle.index];
-    slot.Launch(slotHandle, audioEntry);
-
-    SPDLOG_DEBUG("Started loading audio file: {} (slot: {})", audioEntry->source.string(), slotHandle.index);
+    audioRequestQueue.enqueue({audioEntry});
+    workCounter.fetch_add(1);
+    wakeCV.notify_one();
 }
 
 bool AsyncAssetLoadManager::TryDequeueAudioComplete(AudioLoadComplete& outResult)
@@ -110,16 +154,9 @@ void AsyncAssetLoadManager::RequestPipelineLoad(Render::PipelineData* pipelineDa
         return;
     }
 
-    Core::Handle<PipelineLoadSlot> slotHandle = pipelineLoadAllocator.Add();
-    if (!slotHandle.IsValid()) {
-        SPDLOG_WARN("Pipeline load slots full ({}), dropping request", PIPELINE_JOB_COUNT);
-        return;
-    }
-
-    PipelineLoadSlot& slot = pipelineLoadSlots[slotHandle.index];
-    slot.Launch(slotHandle, pipelineData);
-
-    SPDLOG_DEBUG("Started loading pipeline (slot: {})", slotHandle.index);
+    pipelineRequestQueue.enqueue({pipelineData});
+    workCounter.fetch_add(1);
+    wakeCV.notify_one();
 }
 
 bool AsyncAssetLoadManager::TryDequeuePipelineComplete(PipelineLoadComplete& outResult)

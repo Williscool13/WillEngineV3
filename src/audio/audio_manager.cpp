@@ -72,7 +72,7 @@ void AudioManager::Update()
 {
     AssetLoad::AudioLoadComplete complete;
     while (asyncAssetLoadManager->TryDequeueAudioComplete(complete)) {
-
+        complete.audioEntry->loadState = WillAudio::AudioLoadState::Loaded;
         SPDLOG_INFO("Finished loading audio asset {}", complete.audioEntry->name);
     }
 }
