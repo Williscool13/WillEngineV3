@@ -27,6 +27,7 @@ public:
     virtual bool CreatePipeline(VulkanContext* ctx, VkPipelineCache pipelineCache) = 0;
 
     // Initialized once, never modified again
+    std::string name{};
     PipelineCategory category{PipelineCategory::None};
     VkPipelineLayoutCreateInfo layoutCreateInfo{};
     VkPushConstantRange pushConstantRange{};

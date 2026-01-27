@@ -56,8 +56,6 @@ AudioManager::AudioManager(AssetLoad::AsyncAssetLoadManager* asyncAssetLoadManag
 
     SPDLOG_INFO("Requesting async load for: {} (handle: {}/{})", musicPath.string(), audioHandle.index, audioHandle.generation);
     asyncAssetLoadManager->RequestAudioLoad(&testAudio);
-
-    SPDLOG_INFO("Active async loads: {}", asyncAssetLoadManager->GetActiveLoadCount());
 }
 
 AudioManager::~AudioManager()
@@ -72,6 +70,10 @@ AudioManager::~AudioManager()
 
 void AudioManager::Update()
 {
-    asyncAssetLoadManager->ProcessCompletedLoads();
+    AssetLoad::AudioLoadComplete complete;
+    while (asyncAssetLoadManager->TryDequeueAudioComplete(complete)) {
+
+        SPDLOG_INFO("Finished loading audio asset {}", complete.audioEntry->name);
+    }
 }
 } // Audio

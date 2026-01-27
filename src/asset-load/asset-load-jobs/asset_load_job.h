@@ -13,8 +13,6 @@ enum class AssetType
     None,
     WillModel,
     Texture,
-    Pipeline,
-    // AudioClip
 };
 enum class AssetLoadState
 {

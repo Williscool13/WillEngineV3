@@ -79,13 +79,6 @@ public: // Textures
 
     bool ResolveTextureUnload(TextureComplete& textureComplete);
 
-public: // Audio
-
-
-public: // Pipelines
-    void RequestPipelineLoad(const std::string& name, Render::PipelineData* data);
-
-    bool ResolvePipelineLoads(PipelineComplete& pipelineComplete);
 
     Render::Sampler CreateSampler(const VkSamplerCreateInfo& samplerCreateInfo) const;
 
@@ -111,9 +104,6 @@ private: // Threading
     LockFreeQueue<TextureLoadRequest> textureUnloadQueue{TEXTURE_LOAD_QUEUE_COUNT};
     LockFreeQueue<TextureComplete> textureCompleteUnloadQueue{TEXTURE_LOAD_QUEUE_COUNT};
 
-    LockFreeQueue<PipelineLoadRequest> pipelineLoadQueue{PIPELINE_LOAD_QUEUE_COUNT};
-    LockFreeQueue<PipelineComplete> pipelineCompleteLoadQueue{PIPELINE_LOAD_QUEUE_COUNT};
-
     std::array<AssetLoadSlot, MAX_ASSET_LOAD_JOB_COUNT> assetLoadSlots{};
     std::bitset<MAX_ASSET_LOAD_JOB_COUNT> activeSlotMask{0};
 
@@ -121,8 +111,6 @@ private: // Threading
     std::bitset<WILL_MODEL_JOB_COUNT> willModelJobActive;
     std::vector<std::unique_ptr<TextureLoadJob>> textureJobs;
     std::bitset<TEXTURE_JOB_COUNT> textureJobActive;
-    std::vector<std::unique_ptr<PipelineLoadJob>> pipelineJobs;
-    std::bitset<PIPELINE_JOB_COUNT> pipelineJobActive;
 
     VkCommandPool commandPool{};
 };

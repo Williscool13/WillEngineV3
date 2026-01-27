@@ -10,6 +10,7 @@
 #include <memory>
 
 #include "frame_resources.h"
+#include "asset-load/async_asset_load_manager.h"
 #include "core/include/render_interface.h"
 #include "render/vulkan/vk_synchronization.h"
 
@@ -72,7 +73,7 @@ public:
 
     ~RenderThread();
 
-    void InitializePipelineManager(AssetLoad::GpuAssetUploadThread* assetLoadThread);
+    void InitializePipelineManager(AssetLoad::AsyncAssetLoadManager* _asyncAssetLoadManager);
 
     void Start();
 

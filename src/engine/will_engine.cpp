@@ -140,7 +140,7 @@ void WillEngine::Initialize()
     //
     {
         ZoneScopedN("CreateAssetLoadThread");
-        asyncAssetLoadManager = std::make_unique<AssetLoad::AsyncAssetLoadManager>(scheduler.get());
+        asyncAssetLoadManager = std::make_unique<AssetLoad::AsyncAssetLoadManager>(scheduler.get(), renderThread->GetVulkanContext(), renderThread->GetPipelineManager()->GetPipelineCache());
         assetLoadThread = std::make_unique<AssetLoad::GpuAssetUploadThread>(scheduler.get(), renderThread->GetVulkanContext(), renderThread->GetResourceManager(), renderThread->GetPipelineManager());
     }
 
@@ -153,7 +153,7 @@ void WillEngine::Initialize()
     //
     {
         ZoneScopedN("InitializePipelineManager");
-        renderThread->InitializePipelineManager(assetLoadThread.get());
+        renderThread->InitializePipelineManager(asyncAssetLoadManager.get());
     }
 
 

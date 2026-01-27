@@ -65,9 +65,9 @@ RenderThread::RenderThread(Core::FrameSync* engineRenderSynchronization, enki::T
 
 RenderThread::~RenderThread() = default;
 
-void RenderThread::InitializePipelineManager(AssetLoad::GpuAssetUploadThread* _assetLoadThread)
+void RenderThread::InitializePipelineManager(AssetLoad::AsyncAssetLoadManager* _asyncAssetLoadManager)
 {
-    pipelineManager->SetAssetLoadThread(_assetLoadThread);
+    pipelineManager->SetAssetLoadThread(_asyncAssetLoadManager);
     CreatePipelines();
 }
 

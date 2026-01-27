@@ -8,6 +8,7 @@
 #include <ranges>
 
 #include "graphics_pipeline_builder.h"
+#include "asset-load/async_asset_load_manager.h"
 #include "platform/paths.h"
 #include "render/vulkan/vk_utils.h"
 
@@ -104,6 +105,7 @@ void PipelineManager::RegisterComputePipeline(const std::string& name, const std
     }
 
     ComputePipelineData& data = computePipelines[name];
+    data.name = name;
     data.category = category;
     data.shaderPath = shaderPath;
     data.retirementFrame = 0;
@@ -117,7 +119,7 @@ void PipelineManager::RegisterComputePipeline(const std::string& name, const std
     data.layoutCreateInfo.pPushConstantRanges = &data.pushConstantRange;
     data.layoutCreateInfo.pushConstantRangeCount = pushConstantSize > 0 ? 1 : 0;
 
-    SubmitPipelineLoad(name, &data);
+    SubmitPipelineLoad(&data);
 
     SPDLOG_INFO("Registered compute pipeline: {}", name);
 }
@@ -130,6 +132,7 @@ void PipelineManager::RegisterGraphicsPipeline(const std::string& name, Graphics
     }
 
     GraphicsPipelineData& data = graphicsPipelines[name];
+    data.name = name;
     data.category = category;
     data.retirementFrame = 0;
 
@@ -187,7 +190,7 @@ void PipelineManager::RegisterGraphicsPipeline(const std::string& name, Graphics
     data.layoutCreateInfo.pPushConstantRanges = &data.pushConstantRange;
     data.layoutCreateInfo.pushConstantRangeCount = pushConstantSize > 0 ? 1 : 0;
 
-    SubmitPipelineLoad(name, &data);
+    SubmitPipelineLoad(&data);
 
     SPDLOG_INFO("Registered graphics pipeline: {}", name);
 }
@@ -206,25 +209,47 @@ const PipelineEntry* PipelineManager::GetPipelineEntry(const std::string& name)
     return nullptr;
 }
 
-void PipelineManager::SubmitPipelineLoad(const std::string& name, PipelineData* data) const
+void PipelineManager::SubmitPipelineLoad(PipelineData* data) const
 {
-    assetLoadThread->RequestPipelineLoad(name, data);
+    asyncAssetLoadManager->RequestPipelineLoad(data);
+}
+
+void PipelineManager::HandlePipelineCompletion(PipelineData& pipeline, bool bSuccess) const
+{
+    if (bSuccess) {
+        pipeline.retiredEntry = pipeline.activeEntry;
+        pipeline.retirementFrame = currentFrame + 3;
+        pipeline.activeEntry = pipeline.loadingEntry;
+        pipeline.loadingEntry = {};
+        pipeline.bLoading = false;
+    }
+    else {
+        SPDLOG_ERROR("Pipeline '{}' async load failed", pipeline.name);
+        pipeline.loadingEntry = {};
+        pipeline.bLoading = false;
+    }
 }
 
 void PipelineManager::Update(uint32_t frameNumber)
 {
     currentFrame = frameNumber;
 
-    AssetLoad::PipelineComplete complete;
-    while (assetLoadThread->ResolvePipelineLoads(complete)) {
-        if (auto it = computePipelines.find(complete.name); it != computePipelines.end()) {
-            if (complete.success) SPDLOG_INFO("Compute pipeline '{}' loaded", complete.name);
-            HandlePipelineCompletion(it->second, complete);
-        } else if (auto it = graphicsPipelines.find(complete.name); it != graphicsPipelines.end()) {
-            if (complete.success) SPDLOG_INFO("Graphics pipeline '{}' loaded", complete.name);
-            HandlePipelineCompletion(it->second, complete);
-        } else {
-            SPDLOG_ERROR("Pipeline '{}' not found", complete.name);
+    AssetLoad::PipelineLoadComplete complete;
+    while (asyncAssetLoadManager->TryDequeuePipelineComplete(complete)) {
+        if (auto it = computePipelines.find(complete.pipelineData->name); it != computePipelines.end()) {
+            if (complete.success) {
+                SPDLOG_INFO("Compute pipeline '{}' loaded", complete.pipelineData->name);
+            }
+            HandlePipelineCompletion(it->second, complete.success);
+        }
+        else if (auto it2 = graphicsPipelines.find(complete.pipelineData->name); it2 != graphicsPipelines.end()) {
+            if (complete.success) {
+                SPDLOG_INFO("Graphics pipeline '{}' loaded", complete.pipelineData->name);
+            }
+            HandlePipelineCompletion(it2->second, complete.success);
+        }
+        else {
+            SPDLOG_ERROR("Pipeline '{}' not found", complete.pipelineData->name);
         }
     }
 
@@ -257,9 +282,9 @@ bool PipelineManager::IsCategoryReady(PipelineCategory category) const
     return true;
 }
 
-void PipelineManager::SetAssetLoadThread(AssetLoad::GpuAssetUploadThread* _assetLoadThread)
+void PipelineManager::SetAssetLoadThread(AssetLoad::AsyncAssetLoadManager* _asyncAssetLoadManager)
 {
-    assetLoadThread = _assetLoadThread;
+    asyncAssetLoadManager = _asyncAssetLoadManager;
 }
 
 void PipelineManager::ReloadModified()
@@ -271,7 +296,7 @@ void PipelineManager::ReloadModified()
         if (currentTime != data.lastModified) {
             SPDLOG_INFO("Compute shader modified, rebuilding pipeline: {}", name);
             data.bLoading = true;
-            SubmitPipelineLoad(name, &data);
+            SubmitPipelineLoad(&data);
         }
     }
 
@@ -289,24 +314,8 @@ void PipelineManager::ReloadModified()
         if (currentTime != data.lastModified) {
             SPDLOG_INFO("Graphics shader modified, rebuilding pipeline: {}", name);
             data.bLoading = true;
-            SubmitPipelineLoad(name, &data);
+            SubmitPipelineLoad(&data);
         }
     }
 }
-
-void PipelineManager::HandlePipelineCompletion(PipelineData& pipeline, const AssetLoad::PipelineComplete& complete) const
-{
-    if (complete.success) {
-        pipeline.retiredEntry = pipeline.activeEntry;
-        pipeline.retirementFrame = currentFrame + 3;
-        pipeline.activeEntry = pipeline.loadingEntry;
-        pipeline.loadingEntry = {};
-        pipeline.bLoading = false;
-    } else {
-        SPDLOG_ERROR("Pipeline '{}' async load failed", complete.name);
-        pipeline.loadingEntry = {};
-        pipeline.bLoading = false;
-    }
-}
-
 } // Render

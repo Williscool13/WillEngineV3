@@ -7,7 +7,7 @@
 #include <enkiTS/src/TaskScheduler.h>
 #include <spdlog/spdlog.h>
 
-#include "asset-load-jobs/pipeline_load_job.h"
+#include "asset-load-jobs/pipeline_load_slot.h"
 #include "asset-load-jobs/texture_load_job.h"
 #include "asset-load-jobs/will_model_load_job.h"
 
@@ -43,11 +43,6 @@ GpuAssetUploadThread::GpuAssetUploadThread(enki::TaskScheduler* scheduler, Rende
     textureJobs.reserve(TEXTURE_JOB_COUNT);
     for (int32_t i = 0; i < TEXTURE_JOB_COUNT; ++i) {
         textureJobs.emplace_back(std::make_unique<TextureLoadJob>(context, resourceManager, commandBuffers[WILL_MODEL_JOB_COUNT + i]));
-    }
-
-    pipelineJobs.reserve(PIPELINE_JOB_COUNT);
-    for (int32_t i = 0; i < PIPELINE_JOB_COUNT; ++i) {
-        pipelineJobs.emplace_back(std::make_unique<PipelineLoadJob>(context, resourceManager, pipelineManager->GetPipelineCache()));
     }
 }
 
@@ -121,16 +116,6 @@ void GpuAssetUploadThread::RequestTextureUnload(Engine::TextureHandle textureHan
 bool GpuAssetUploadThread::ResolveTextureUnload(TextureComplete& textureComplete)
 {
     return textureCompleteUnloadQueue.pop(textureComplete);
-}
-
-void GpuAssetUploadThread::RequestPipelineLoad(const std::string& name, Render::PipelineData* data)
-{
-    pipelineLoadQueue.push({name, data});
-}
-
-bool GpuAssetUploadThread::ResolvePipelineLoads(PipelineComplete& pipelineComplete)
-{
-    return pipelineCompleteLoadQueue.pop(pipelineComplete);
 }
 
 Render::Sampler GpuAssetUploadThread::CreateSampler(const VkSamplerCreateInfo& samplerCreateInfo) const
@@ -242,53 +227,6 @@ void GpuAssetUploadThread::ThreadMain()
                 assetLoadSlots[slotIdx].job = job;
                 assetLoadSlots[slotIdx].loadState = AssetLoadState::Idle;
                 assetLoadSlots[slotIdx].type = AssetType::Texture;
-                assetLoadSlots[slotIdx].startTime = std::chrono::steady_clock::now();
-                assetLoadSlots[slotIdx].uploadCount = 0;
-                activeSlotMask[slotIdx] = true;
-            }
-        }
-
-        // Pipeline loading jobs
-        {
-            ZoneScopedN("PipelineJobDispatch");
-            size_t freePipelineJobCount = 0;
-            for (size_t i = 0; i < pipelineJobActive.size(); ++i) {
-                if (!pipelineJobActive[i]) {
-                    freePipelineJobCount++;
-                }
-            }
-
-            for (size_t jobsStarted = 0; jobsStarted < freePipelineJobCount; ++jobsStarted) {
-                PipelineLoadRequest loadRequest{};
-                if (!pipelineLoadQueue.pop(loadRequest)) {
-                    break;
-                }
-                didWork = true;
-
-                int32_t slotIdx = -1;
-                for (size_t i = 0; i < 64; ++i) {
-                    if (!(activeSlotMask[i])) {
-                        slotIdx = i;
-                        break;
-                    }
-                }
-
-                int32_t freeJobIdx = -1;
-                for (size_t i = 0; i < pipelineJobActive.size(); ++i) {
-                    if (!pipelineJobActive[i]) {
-                        freeJobIdx = i;
-                        break;
-                    }
-                }
-
-                PipelineLoadJob* job = pipelineJobs[freeJobIdx].get();
-                job->outputDate = loadRequest.entry;
-                pipelineJobActive[freeJobIdx] = true;
-
-                assetLoadSlots[slotIdx].name = loadRequest.name;
-                assetLoadSlots[slotIdx].job = job;
-                assetLoadSlots[slotIdx].loadState = AssetLoadState::Idle;
-                assetLoadSlots[slotIdx].type = AssetType::Pipeline;
                 assetLoadSlots[slotIdx].startTime = std::chrono::steady_clock::now();
                 assetLoadSlots[slotIdx].uploadCount = 0;
                 activeSlotMask[slotIdx] = true;
@@ -422,35 +360,6 @@ void GpuAssetUploadThread::ThreadMain()
                             }
                             else {
                                 SPDLOG_INFO("'{}' texture failed to load in {}ms with {} uploads", slot.name, durationMs, slot.uploadCount);
-                            }
-                            break;
-                        }
-                        case AssetType::Pipeline:
-                        {
-                            ZoneScopedN("CompletePipeline");
-                            auto* pipelineJob = dynamic_cast<PipelineLoadJob*>(job);
-                            //
-                            {
-                                ZoneScopedN("PushCompleteQueue");
-                                pipelineCompleteLoadQueue.push({slot.name, pipelineJob->outputDate, success});
-                            }
-                            //
-                            {
-                                ZoneScopedN("FindAndResetJob");
-                                for (size_t i = 0; i < pipelineJobs.size(); ++i) {
-                                    if (pipelineJobs[i].get() == job) {
-                                        job->Reset();
-                                        pipelineJobActive[i] = false;
-                                        break;
-                                    }
-                                }
-                            }
-
-                            if (success) {
-                                SPDLOG_INFO("'{}' pipeline loaded in {}ms", slot.name, durationMs);
-                            }
-                            else {
-                                SPDLOG_INFO("'{}' pipeline failed to load in {}ms", slot.name, durationMs);
                             }
                             break;
                         }

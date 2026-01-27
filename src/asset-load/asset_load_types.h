@@ -16,6 +16,12 @@
 #include "render/model/will_model_asset.h"
 
 
+namespace AssetLoad
+{
+class AudioLoadSlot;
+class PipelineLoadSlot;
+}
+
 namespace Render
 {
 struct PipelineData;
@@ -25,7 +31,6 @@ struct VulkanContext;
 
 namespace AssetLoad
 {
-class AudioLoadSlot;
 
 class UploadStaging
 {
@@ -134,30 +139,8 @@ struct TextureComplete
     bool success;
 };
 
-struct PipelineLoadRequest
-{
-    std::string name;
-    Render::PipelineData* entry;
-};
-
-struct PipelineComplete
-{
-    std::string name;
-    Render::PipelineData* entry;
-    bool success;
-};
-
-struct AudioLoadRequest
-{
-    Audio::WillAudio* audioEntry;
-};
-
 using AudioSlotHandle = Core::Handle<AudioLoadSlot>;
-struct AudioLoadCompleteTransient
-{
-    bool success;
-    AudioSlotHandle loadSlotHandle;
-};
+using PipelineSlotHandle = Core::Handle<PipelineLoadSlot>;
 } // AssetLoad
 
 #endif //WILL_ENGINE_ASSET_LOAD_TYPES_H

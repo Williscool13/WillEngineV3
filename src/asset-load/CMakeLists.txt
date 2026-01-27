@@ -10,12 +10,15 @@ add_library(asset-load STATIC
         asset-load-jobs/will_model_load_job.h
         asset-load-jobs/texture_load_job.cpp
         asset-load-jobs/texture_load_job.h
-        asset-load-jobs/pipeline_load_job.cpp
-        asset-load-jobs/pipeline_load_job.h
+
+        asset-load-jobs/pipeline_load_slot.cpp
+        asset-load-jobs/pipeline_load_slot.h
+        asset-load-jobs/audio_load_slot.cpp
+        asset-load-jobs/audio_load_slot.h
         async_asset_load_manager.cpp
         async_asset_load_manager.h
-        asset-load-jobs/audio_load_job.cpp
-        asset-load-jobs/audio_load_job.h
+
+
 )
 
 target_include_directories(asset-load PUBLIC
