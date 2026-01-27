@@ -46,14 +46,14 @@ struct AssetLoadSlot
  * Asset loading thread class, responsible for asynchronously loading any assets necessary for the game. Crosses multiple engine boundaries by nature.
  * \n Will only ever assign 4 tasks at a time
  */
-class AssetLoadThread
+class GpuAssetUploadThread
 {
 public:
-    AssetLoadThread();
+    GpuAssetUploadThread();
 
-    AssetLoadThread(enki::TaskScheduler* scheduler, Render::VulkanContext* context, Render::ResourceManager* resourceManager, Render::PipelineManager* pipelineManager);
+    GpuAssetUploadThread(enki::TaskScheduler* scheduler, Render::VulkanContext* context, Render::ResourceManager* resourceManager, Render::PipelineManager* pipelineManager);
 
-    ~AssetLoadThread();
+    ~GpuAssetUploadThread();
 
     void Start();
 

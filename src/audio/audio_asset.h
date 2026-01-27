@@ -20,9 +20,9 @@ struct WillAudio
         FailedToLoad
     };
 
+    std::string name{};
     MIX_Mixer* mixer;
     std::filesystem::path source{};
-    std::string name{};
     Engine::AudioHandle selfHandle;
     AudioLoadState loadState{AudioLoadState::NotLoaded};
     uint32_t refCount = 0;

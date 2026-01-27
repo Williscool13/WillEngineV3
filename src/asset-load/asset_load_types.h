@@ -158,12 +158,6 @@ struct AudioLoadCompleteTransient
     bool success;
     AudioSlotHandle loadSlotHandle;
 };
-
-struct AudioLoadComplete
-{
-    Audio::WillAudio* audioEntry;
-    bool success;
-};
 } // AssetLoad
 
 #endif //WILL_ENGINE_ASSET_LOAD_TYPES_H

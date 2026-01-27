@@ -1,0 +1,210 @@
+f3583f9 2025-12-09 Initial commit.
+20ad0f6 2025-12-09 Crash handling and logging.
+f8db478 2025-12-10 Initial SDL windowing and vulkan setup code. SDL, vk-bootstrap, vma, volk, glm dependencies added.
+3d39098 2025-12-11 enkits scheduler and pinned render thread.
+f368413 2025-12-12 Imgui dependency added. Render thread development.
+a5bbf12 2025-12-12 Fix swapchain issues during rapid minimize/restore.
+85bdf6d 2025-12-12 Render allocators implemented. Descriptor buffer set up for bindless rendering. Resource manager and engine-render synchronizations et up. Offset Allocator dependency added.
+a136dd7 2025-12-13 Engine platform path search set up. Update crash handlers and logs to use filsystem::path.
+8684f4e 2025-12-13 Basic compute shader drawing to render target implemented.
+73f35fd 2025-12-13 Basic mesh shader implemented. Shader interoperability figured out.
+b920b94 2025-12-14 Implemented hot-reloadable game module with DLL loading infrastructure.
+0897e37 2025-12-14 Input manager.
+70fac18 2025-12-14 Time manager.
+cdc0932 2025-12-14 Prepare build configurations for non-editor builds (all release variants). Added support for compiling game lib statically in release builds that do not require hot-reloading.
+e16fc55 2025-12-14 Minor touch-ups for release builds.
+b990080 2025-12-14 Hotreloading additions. Free camera implementation.
+fb0f53c 2025-12-14 Vulkan file reorganization.
+5597ee0 2025-12-15 Model cooking dependencies added (ktx, fastgltf, miniz).
+a46eec3 2025-12-15 New editor lib. Initial model generation files. New PACKAGED_BUILD cmake option for filepath.
+d02f9fd 2025-12-15 Fix interop header guards.
+b4bd9c8 2025-12-16 Miniz and stb editor dependency added. Willmodel generation implemented.
+1c16fd4 2025-12-16 Fix compilation issue in release builds.
+16f46d6 2025-12-17 Async willmodel generation.
+cb6385d 2025-12-17 Minor willmodel generator improvements.
+77f5301 2025-12-17 Optimize mip map generation to be executed in a single pass.
+5dc2da8 2025-12-17 shader constants interop.
+c568c1a 2025-12-18 Refactor operation ring buffers to use unbounded head/tail counters with bitwise masking.
+583f1e6 2025-12-18 Asset loading thread WIP.
+73f7631 2025-12-19 Will model unpacking asset load.
+cde8d27 2025-12-19 Will model resource upload and final model loading WIP.
+61f8843 2025-12-20 Will model texture resource upload.
+cd09793 2025-12-20 Extract bytes per pixel based on image format rather than hard-coding 4.
+f5aaa42 2025-12-20 Precompute and store preferred texture compression format for use during loading.
+b1bfb4e 2025-12-20 Geometry upload for willmodels. Added proper divergence to vertex buffer upload for skinned vs nonskinned meshes
+6e3ec8d 2025-12-20 Simplify geometry loading code. Render config changed.
+7f8d47f 2025-12-20 Meshlet rendering WIP.
+66489a4 2025-12-21 Mesh shading with packed triangle vertices.
+852f054 2025-12-21 enTT dependency added. Migrated most camera controlling code to ECS. Game now constructs render views.
+6c54142 2025-12-22 Move all components to game lib.
+5b54fe4 2025-12-22 Update camera update convention.
+2cc293e 2025-12-22 Asset Manager initial files.
+ef1f07b 2025-12-22 Refined asset manager load model loop.
+74b6137 2025-12-22 Model unload now passed through asset load to free offsset allocator allocations.
+a67f228 2025-12-22 Model generation and update with ECS.
+9be5feb 2025-12-22 Remove old operation buffer technique of updating render buffers.
+2d7856f 2025-12-23 Fix incorrect meshlet triangle offsets for packed triangle indices.
+bd925b0 2025-12-23 Maintenenace9 optional support.
+9300cde 2025-12-23 Remove node remap, instead embedding node remap into the animation channels. Added support to draw multiple primitive insteances.
+93212f2 2025-12-23 Renamed model generator to asset generator. Ktx2 texture export implemented.
+afbb2c4 2025-12-23 Refactored model load into an extendable job system.
+bf852ca 2025-12-24 Texture loading.
+681416c 2025-12-24 Improved default texture loading sequence.
+1492269 2025-12-24 Default sampler.
+235de34 2025-12-24 Thread naming for easier debugging.
+0816406 2025-12-24 Custom vulkan error message log output.
+8bc58fe 2025-12-24 Debug vulkan resource names.
+0058a02 2025-12-24 Basic tests with Catch2 for data structures.
+02f97f1 2025-12-25 Additional tests for some renderer structs. Pure data tests for pipeline builder and render extents. Also tests for frustum and fixed an incorrect frustum calculation for the near plane.
+9bfd462 2025-12-25 Joly physics integration into engine.
+a4d051d 2025-12-25 Basic physics implementation.
+5c6e309 2025-12-25 Dedveloped the physics update in physics system, rearranged much of the component code.
+16cc41f 2025-12-26 Made a new gather renderables system. Fixed physics crash when closing the application. Added interpolation between physics steps for rendering to smooth out rendering physics due to fixed time step.
+08eb03b 2025-12-26 Some scene setup and modifications to the physics listeners.
+51e7e86 2025-12-26 Physics boxes bouncing in an arena demo.
+6f98052 2025-12-26 Reduce memory footprint of engine by lazy loading asset load resources.
+f032b12 2025-12-27 Render graph WIP.
+d45135f 2025-12-27 Render graph compute shading.
+564d26c 2025-12-27 Render graph barriers.
+26392f6 2025-12-28 Rename transfer to blit operation in preparation of adding more render graph operations.
+ef62d5f 2025-12-28 RDG imported textures lifetime management and reuse.
+5df7169 2025-12-28 Render basic mesh shader triangles.
+53ac6a4 2025-12-28 RDG basic mesh draw pass. Added shorthand for blit operation to simplify execution.
+9025c2a 2025-12-28 Assign transient image descriptor index with free list instead of using index in physical textures array.
+5468f11 2025-12-28 RDG accumulate texture usage instead of defining it ahead of time.
+4ba24a3 2025-12-28 RDG revert blit specialized pass. Removed old render target struct. Add some untested lifetime texture aliasing.
+2dede42 2025-12-28 Debug view of depth buffer.
+4eb3a9d 2025-12-28 GPU instancing WIP.
+a298d29 2025-12-29 Instancing shader interop improvements. RDG imported buffers improvements.
+3cfe956 2025-12-29 RDG buffer barriers added for transfer writes. Added transient buffers and buffer aliasing. Moved image layout to logical images. Separated indirect count and data buffers.
+9327b9e 2025-12-29 RDG moved swapchain final prep to render graph. Log now archives logs if application terminates gracefully. RDG added dedicated transfer write.
+03e0f1e 2025-12-29 Add option to disable barriers for some imported buffers.
+a852a0e 2025-12-30 Add imgui render pass.
+5633930 2025-12-30 Reworked how per-frame data is transmitted to the GPU. Removed all GPU buffer access from game thread. Added material manager for material reuse. Fixed flickering caused by incorrect MT synchronizations.
+ea60447 2025-12-30 Fix barrier issues with debug readback. Added scaling to frustum checks in visibility pass.
+6c39702 2025-12-30 Spawn dragon model and copy nodes from raw model.
+05b7dc4 2025-12-30 Instancing WIP, indirect command construction.
+70b8a9a 2025-12-30 Instanced task/mesh shader rendering.
+b9e2499 2025-12-31 Ability to freeze visibility updates. Render to render targets. Developed debug visualization.
+ef859f5 2025-12-31 Deferred rendering WIP.
+dd4ea01 2025-12-31 Fix issue with position reconstruction in deferred resolve.
+76507bc 2025-12-31 Velocity data generation.
+456acd8 2025-12-31 Velocity data generation fixed.
+eb9dd6d 2026-01-01 RDG TAA carry over frames logic.
+bf608f4 2026-01-01 TAA testing.
+dae85dd 2026-01-01 Fixed TAA ghosting and warping from velocity.
+1badbc0 2026-01-01 Fix failing tests.
+fd76450 2026-01-01 Tracy profiler dependency added. Basic profiles for engine initialization and the 3 main engine threads.
+8a3daa7 2026-01-01 Add profiling traces to many asset related engine functions.
+b972c18 2026-01-02 cgltf dependency added. Initial set up for new model generator.
+de1efa5 2026-01-02 cgltf glb file generation experimentation.
+6fff801 2026-01-02 Removed cgltf dependency. Added tinygltf dependency.
+4c83a65 2026-01-03 New glb model loading flow.
+26bf508 2026-01-03 Load vertex properties with tinygltf. Fix crash when shutting down application during model load.
+05daf63 2026-01-03 Remove tinygltf. Revert all changes back to willmodel.
+3682eb1 2026-01-03 Remove uastc/transcode steps to significantly improve load times.
+648fa52 2026-01-03 Compress to bc7 with bc7enc_rdo.
+303d188 2026-01-04 Remove all trace of UASTC compression/transcoding from texture loading.
+79315da 2026-01-04 Add support for 4k textures, both as standalone and as part of a model.
+54af18d 2026-01-04 Replaced offset allocators with linear allocators in staging buffer model and texture upload.
+433cb74 2026-01-04 Add a new ReadIndirectCountBuffer to the RDG to specify using the indirect count buffer to be used for draw indirect, but not for shader read.
+1a659e3 2026-01-04 Improved RDG debugging, added new copy operations.
+183cd6f 2026-01-04 Slight improvements to RDG buffer debugs.
+4e8aa01 2026-01-04 Allow imgui state to be created in game dll. Reintroduced imgui to be accessible in non-editor builds (still disabled by default).
+6ec7866 2026-01-04 Removed FIF names for swapchain image.
+9362120 2026-01-05 Some TAA improvements from https://www.elopezr.com/temporal-aa-and-the-quest-for-the-holy-trail/
+bf9545c 2026-01-05 Reorder main render pass to prepare for cascaded shadow map.
+823a129 2026-01-06 CSM WIP.
+d547b9b 2026-01-07 CSM instancing visibility pass.
+f7e6b26 2026-01-07 CSM draw pass.
+3d4d4d1 2026-01-07 Some CSM debugs. Fix near/far plane not set from game.
+c2e160d 2026-01-08 Fix incorrect shadow draw push constant. Compacted image indices for deferred (Gbuffer and shadow map index).
+d018d24 2026-01-08 More shadow debugs.
+dd00e3b 2026-01-09 Fix shadow cascades incorrectly aliasing. Initial implementation of CSM.
+6716896 2026-01-09 Improve RDG aliasing by accumulating usages and defer resource creation. Delete transient physical resources that have not been used for 1024 frames.
+56d6694 2026-01-09 Added depth bias. Fixed synchronization issues from bad stage masks. Reworked RDG to make AddPass specify stage mask for all barriers in the pass.
+c317719 2026-01-10 Modified some indirect buffer barriers to be more hardcoded.
+ff19447 2026-01-10 Allow game to dynamically modify shadows quality (enabled/quality).
+ffdabbd 2026-01-10 Added new compare samplers to the RDG bindless descriptor buffer. Implement hardware bilinear sampling for shadow maps. Removed unused pipelines.
+097551a 2026-01-10 Add better input management/state so that inputs are not applied in-game if they are being focused by imgui.
+9d52381 2026-01-10 Cascaded shadow map PCF development WIP.
+d9b241a 2026-01-11 Minor CSM ultra quality bias, sample, and light size tweaks
+a969642 2026-01-11 Add normal shadow world position offset to help with peter-panning. Further minor adjustments to shadows.
+a7b08d8 2026-01-11 Add normal shadow world position offset to help with peter-panning. Further minor adjustments to shadows.
+7f66a6a 2026-01-11 Merge remote-tracking branch 'origin/main'
+d235f96 2026-01-12 Final attempts at pcss.
+29fc454 2026-01-12 Standardize pipeline layout for entire engine to reduce number of times descriptor buffers are bound. Initial code for post process.
+3643997 2026-01-12 Add light data buffer. Implement and adjust tonemapping.
+0a0d138 2026-01-12 Add shadow intensity parameter.
+667d4bd 2026-01-12 Render thread code maintenance. Remove framebuffer as a parameter to setup functions.
+b07123b 2026-01-13 RDG add ability to carryover buffers. Add more assertions to catch issues with RDG. Fix indirect draw freeze to work with new aliasing rules.
+bfa68a7 2026-01-13 Add support for mip image views in the RDG for exposure downsampling.
+1e437e4 2026-01-13 RDG add some read-write image functions for exposure/mip chains.
+82efd73 2026-01-13 Build histogram compute pass. Buffer read-write barrier. RDG read-write buffer
+e419dd7 2026-01-13 Fix buffer carryover not clearing when swapchain is remade.
+0f7d6a9 2026-01-14 Exposure implemented.
+daa9f0a 2026-01-14 Motion blur gather passes.
+a9da422 2026-01-14 Motion blur reconstruction pass WIP.
+be591e4 2026-01-15 Change velocity buffer format. Do an additional matrix multiplication in mesh shader to generate velocity data to fix incorrect velocity data.
+a92f4e6 2026-01-15 Fix velocity buffer, remove extra unnecessary matrix multiplication.
+966237e 2026-01-15 Increase tile size to 20. Add some debug boxes to help visualize motion blur. Finalize motion blur.
+39fa3ac 2026-01-15 Depth blend motion blur.
+f90a4d3 2026-01-16 Depth blend motion blur 2.
+cc414a3 2026-01-16 Velocity reproject motion blur compensation.
+5409af5 2026-01-16 Move basic sampler indices into a compile time constant. Fix issue with textures aliasing when they shouldn't be. Initial commit for bloom.
+e5c29c4 2026-01-16 Bloom implemented.
+a4cd2f6 2026-01-16 Update bloom to use a single image w/ mipmaps instead of multiple unique images.
+8e62ab1 2026-01-16 Chromatic aberration, vignette, and grain.
+e35c0ee 2026-01-16 Sharpening pass.
+0d7dff9 2026-01-16 Color grading.
+1b9b28f 2026-01-17 Rename shaders to standardize naming convention. Some GTAO shader code WIP.
+60588f6 2026-01-17 GTAO depth prepass implemented.
+5fc8b63 2026-01-17 GTAO main pass, issues with KHR_compute_shader_derivatives.
+6d05554 2026-01-18 GTAO denoise pass.
+aae9cdf 2026-01-18 Parameterize gtao and include in deferred resolve calculations.
+29e3db1 2026-01-18 Additional debug logging to monitor resource aliasing. Fix crashes if debug viewing a resource that is not created.
+7856aa3 2026-01-19 Final GTAO bug fixed. Many changes to the debug systems to help facilitate further debugging.
+f516e32 2026-01-19 Temporal antialiasing adjustments. Variance clipping instead of neighborhood clamping. Use velocity magnitude dilation. Add velocity disocclusion check.
+98544c4 2026-01-19 Initial commit for async pipeline loading.
+279fd54 2026-01-20 Rename a pipelines, shaders, and RDG resources to be more consistent. Make full use of the pipeline manager to load all compute shaders. Improve asset load times for textures.
+329dbbb 2026-01-20 Some defensive programming in case some pipelines are not ready at time of draw. Set up RDG texture user defined aliasing.
+07f347f 2026-01-20 Set up hot reloading for shaders.
+067f1dd 2026-01-20 Prevent enigne from crashing if all pipelines fail to load
+775c329 2026-01-21 Fix incorrect sample in gtao pass that caused validation errors related to compute shader derivatives.
+ed315ee 2026-01-21 Unflip viewport.
+1ad768a 2026-01-21 Added a dedicated shadow resolve pass to decouple deferred resolve from shadows.
+921830d 2026-01-21 Toggle hotreload so I don't have to press manual hotreload every time.
+60b0e98 2026-01-21 Setting up portal rendering WIP.
+e2fc735 2026-01-21 Fix alignment issues with the scene data buffer.
+686626c 2026-01-21 Optimize camera motion generation by compacting transformation into a single matrix. Fix some validation issues related to invalid image views being made.
+d738f3f 2026-01-22 Finishing touches on motion blur.
+fbbf9ec 2026-01-22 Finishing touches on motion blur.
+bacd1dc 2026-01-22 Replaced ptrs with indices for logical resources to minimize risk of vector realloc causing ptrs to invalidate.
+de280a6 2026-01-22 Left behind.
+80316e8 2026-01-23 Move FIF buffers into RDG by using a per-frame uploader.
+1a484c0 2026-01-23 Auto-resize transient upload arena on demand to minimize wasted GPU memory.
+5e44e9a 2026-01-23 Convert model uniform per-FIF buffers into RDG and update the space required to resize on demand.
+3b89e89 2026-01-23 Compile shaders and build game bat files.
+dbe7686 2026-01-23 Updated hotreloading. Remove useless pdb copy.
+eedfaef 2026-01-23 Directory watcher for shaders and game dll.
+fa1fdd2 2026-01-23 Implemented pipeline cache.
+257af6c 2026-01-23 Add direct mesh shading pipeline for custom stencil draws without instancing/culling.
+95f13ae 2026-01-24 Add read write depth attachment to RDG. Fix luminance buffer carryover synchronization issue w/ debug readback.
+516a57b 2026-01-24 Fix incorrect buffer used for shadow pass that occasionally caused a crash. Add watermark for instance data buffers in geometry and shadow passes.
+160d26a 2026-01-24 Set up graphics pipeline to be created asynchronously.
+c85d74a 2026-01-24 Final fixes to TAA.
+c6d8ac0 2026-01-24 Stencil addition to main render pass.
+3460d7c 2026-01-24 Add new descriptor buffer texture arrays for the different image formats, theoretically improving performance and enables accessing stencil images as a storage image.
+660ef4d 2026-01-25 Fix descriptor handles not getting released if a physical resource is destroyed. Remove all trace of scene data from postprocessing.
+a53d37f 2026-01-25 Improve texture debug vis controls.
+2b22691 2026-01-25 Update GTAO passes to use scene data index.
+9ceb1a9 2026-01-25 Improve robustness of render target use in the primary draw path. Finally set up rendering from another point of view.
+e33af79 2026-01-25 Portal rendering disable debug.
+d723f4b 2026-01-25 Portal rendering functional.
+74aba04 2026-01-25 Add a common vertex shader for fullscreen passes.
+88570e6 2026-01-25 Fix issue with portals incorrectly using the wrong render targets due to using ref type. Some basic portal set up attempts.
+666c062 2026-01-26 Update SDL3 and add SDL_Mixer dependency.
+e3fc629 2026-01-26 Implement basic audio playback.
+4baa7e3 2026-01-26 Audio asset load WIP.
+960fc8b 2026-01-26 Audio async asset load WIP.
+477f473 2026-01-26 Correctly notify the async asset load thread when the transient queue is pushed to.

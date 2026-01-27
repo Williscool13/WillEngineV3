@@ -18,6 +18,7 @@
 #include "core/input/input_manager.h"
 #include "core/time/time_manager.h"
 #include "asset-load/asset_load_thread.h"
+#include "asset-load/async_asset_load_manager.h"
 #include "audio/audio_manager.h"
 #include "physics/physics_system.h"
 #include "platform/paths.h"
@@ -138,14 +139,15 @@ void WillEngine::Initialize()
 
     //
     {
-        ZoneScopedN("CreateAudioManager");
-        audioManager = std::make_unique<Audio::AudioManager>();
+        ZoneScopedN("CreateAssetLoadThread");
+        asyncAssetLoadManager = std::make_unique<AssetLoad::AsyncAssetLoadManager>(scheduler.get());
+        assetLoadThread = std::make_unique<AssetLoad::GpuAssetUploadThread>(scheduler.get(), renderThread->GetVulkanContext(), renderThread->GetResourceManager(), renderThread->GetPipelineManager());
     }
 
     //
     {
-        ZoneScopedN("CreateAssetLoadThread");
-        assetLoadThread = std::make_unique<AssetLoad::AssetLoadThread>(scheduler.get(), renderThread->GetVulkanContext(), renderThread->GetResourceManager(), renderThread->GetPipelineManager());
+        ZoneScopedN("CreateAudioManager");
+        audioManager = std::make_unique<Audio::AudioManager>(asyncAssetLoadManager.get());
     }
 
     //
@@ -328,8 +330,11 @@ void WillEngine::Run()
             break;
         }
 
+        audioManager->Update();
+
         inputManager->UpdateFocus(SDL_GetWindowFlags(window.get()));
         timeManager->UpdateGame();
+
 
 #if WILL_EDITOR
         InputFrame editorInput = inputManager->GetCurrentInput();

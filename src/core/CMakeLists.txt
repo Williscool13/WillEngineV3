@@ -33,6 +33,8 @@ add_library(core STATIC
         allocators/linear_allocator.h
         math/math_helpers.cpp
         math/math_helpers.h
+        allocators/lock_free_handle_allocator.cpp
+        allocators/lock_free_handle_allocator.h
 )
 
 

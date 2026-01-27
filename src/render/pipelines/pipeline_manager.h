@@ -18,7 +18,7 @@
 
 namespace AssetLoad
 {
-class AssetLoadThread;
+class GpuAssetUploadThread;
 }
 
 namespace Render
@@ -51,7 +51,7 @@ public:
 
     bool IsCategoryReady(PipelineCategory category) const;
 
-    void SetAssetLoadThread(AssetLoad::AssetLoadThread* _assetLoadThread);
+    void SetAssetLoadThread(AssetLoad::GpuAssetUploadThread* _assetLoadThread);
 
     VkPipelineCache GetPipelineCache() const { return pipelineCache; }
 
@@ -81,7 +81,7 @@ private:
 
 private:
     VulkanContext* context;
-    AssetLoad::AssetLoadThread* assetLoadThread{nullptr};
+    AssetLoad::GpuAssetUploadThread* assetLoadThread{nullptr};
     std::unordered_map<std::string, GraphicsPipelineData> graphicsPipelines;
     std::unordered_map<std::string, ComputePipelineData> computePipelines;
 

@@ -14,4 +14,5 @@ target_link_libraries(audio PUBLIC
         spdlog::spdlog
         SDL3::SDL3
         SDL3_mixer::SDL3_mixer
+        asset-load
 )

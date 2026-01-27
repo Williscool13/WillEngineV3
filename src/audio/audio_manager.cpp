@@ -4,13 +4,16 @@
 
 #include "audio_manager.h"
 
+#include "audio_asset.h"
+#include "asset-load/async_asset_load_manager.h"
 #include "platform/paths.h"
 #include "SDL_mixer/include/SDL3_mixer/SDL_mixer.h"
 #include "spdlog/spdlog.h"
 
 namespace Audio
 {
-AudioManager::AudioManager()
+AudioManager::AudioManager(AssetLoad::AsyncAssetLoadManager* asyncAssetLoadManager)
+    : asyncAssetLoadManager(asyncAssetLoadManager)
 {
     MIX_Init();
 
@@ -33,6 +36,28 @@ AudioManager::AudioManager()
     }
     MIX_SetTrackAudio(musicMixerTrack, music);
     MIX_PlayTrack(musicMixerTrack, NULL);
+
+
+
+    Core::Handle<WillAudio> audioHandle = audioHandleAllocator.Add();
+    if (!audioHandle.IsValid()) {
+        SPDLOG_ERROR("Failed to allocate audio handle");
+        return;
+    }
+
+    WillAudio& testAudio = audioAssets[audioHandle.index];
+    testAudio.name = "test_music";
+    testAudio.source = musicPath;
+    testAudio.mixer = mixer;
+    testAudio.mixAudio = nullptr;
+
+    namedAudio["test_music"] = audioHandle;
+
+
+    SPDLOG_INFO("Requesting async load for: {} (handle: {}/{})", musicPath.string(), audioHandle.index, audioHandle.generation);
+    asyncAssetLoadManager->RequestAudioLoad(&testAudio);
+
+    SPDLOG_INFO("Active async loads: {}", asyncAssetLoadManager->GetActiveLoadCount());
 }
 
 AudioManager::~AudioManager()
@@ -43,5 +68,10 @@ AudioManager::~AudioManager()
     MIX_DestroyAudio(music);
     MIX_DestroyMixer(mixer);
     MIX_Quit();
+}
+
+void AudioManager::Update()
+{
+    asyncAssetLoadManager->ProcessCompletedLoads();
 }
 } // Audio

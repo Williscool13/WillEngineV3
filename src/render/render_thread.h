@@ -15,7 +15,7 @@
 
 namespace AssetLoad
 {
-class AssetLoadThread;
+class GpuAssetUploadThread;
 }
 
 namespace Render
@@ -72,7 +72,7 @@ public:
 
     ~RenderThread();
 
-    void InitializePipelineManager(AssetLoad::AssetLoadThread* assetLoadThread);
+    void InitializePipelineManager(AssetLoad::GpuAssetUploadThread* assetLoadThread);
 
     void Start();
 

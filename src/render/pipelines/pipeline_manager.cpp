@@ -257,7 +257,7 @@ bool PipelineManager::IsCategoryReady(PipelineCategory category) const
     return true;
 }
 
-void PipelineManager::SetAssetLoadThread(AssetLoad::AssetLoadThread* _assetLoadThread)
+void PipelineManager::SetAssetLoadThread(AssetLoad::GpuAssetUploadThread* _assetLoadThread)
 {
     assetLoadThread = _assetLoadThread;
 }

@@ -10,7 +10,7 @@
 #include "asset-load-jobs/pipeline_load_job.h"
 #include "asset-load-jobs/texture_load_job.h"
 #include "asset-load-jobs/will_model_load_job.h"
-#include "platform/paths.h"
+
 #include "platform/thread_utils.h"
 #include "render/texture_asset.h"
 #include "render/pipelines/pipeline_manager.h"
@@ -21,9 +21,9 @@
 
 namespace AssetLoad
 {
-AssetLoadThread::AssetLoadThread() = default;
+GpuAssetUploadThread::GpuAssetUploadThread() = default;
 
-AssetLoadThread::AssetLoadThread(enki::TaskScheduler* scheduler, Render::VulkanContext* context, Render::ResourceManager* resourceManager, Render::PipelineManager* pipelineManager)
+GpuAssetUploadThread::GpuAssetUploadThread(enki::TaskScheduler* scheduler, Render::VulkanContext* context, Render::ResourceManager* resourceManager, Render::PipelineManager* pipelineManager)
     : context(context), resourceManager(resourceManager), scheduler(scheduler)
 {
     VkCommandPoolCreateInfo poolInfo = Render::VkHelpers::CommandPoolCreateInfo(context->transferQueueFamily);
@@ -51,14 +51,14 @@ AssetLoadThread::AssetLoadThread(enki::TaskScheduler* scheduler, Render::VulkanC
     }
 }
 
-AssetLoadThread::~AssetLoadThread()
+GpuAssetUploadThread::~GpuAssetUploadThread()
 {
     if (context) {
         vkDestroyCommandPool(context->device, commandPool, nullptr);
     }
 }
 
-void AssetLoadThread::Start()
+void GpuAssetUploadThread::Start()
 {
     bShouldExit.store(false, std::memory_order_release);
 
@@ -71,74 +71,74 @@ void AssetLoadThread::Start()
     scheduler->AddPinnedTask(pinnedTask.get());
 }
 
-void AssetLoadThread::RequestShutdown()
+void GpuAssetUploadThread::RequestShutdown()
 {
     bShouldExit.store(true, std::memory_order_release);
 }
 
-void AssetLoadThread::Join() const
+void GpuAssetUploadThread::Join() const
 {
     if (pinnedTask) {
         scheduler->WaitforTask(pinnedTask.get());
     }
 }
 
-void AssetLoadThread::RequestModelLoad(Engine::WillModelHandle willmodelHandle, Render::WillModel* willModelPtr)
+void GpuAssetUploadThread::RequestModelLoad(Engine::WillModelHandle willmodelHandle, Render::WillModel* willModelPtr)
 {
     modelLoadQueue.push({willmodelHandle, willModelPtr});
 }
 
-void AssetLoadThread::RequestModelUnload(Engine::WillModelHandle willmodelHandle, Render::WillModel* willModelPtr)
+void GpuAssetUploadThread::RequestModelUnload(Engine::WillModelHandle willmodelHandle, Render::WillModel* willModelPtr)
 {
     modelUnloadQueue.push({willmodelHandle, willModelPtr});
 }
 
-bool AssetLoadThread::ResolveModelLoads(WillModelComplete& modelComplete)
+bool GpuAssetUploadThread::ResolveModelLoads(WillModelComplete& modelComplete)
 {
     return modelCompleteLoadQueue.pop(modelComplete);
 }
 
-bool AssetLoadThread::ResolveModelUnload(WillModelComplete& modelComplete)
+bool GpuAssetUploadThread::ResolveModelUnload(WillModelComplete& modelComplete)
 {
     return modelCompleteUnloadQueue.pop(modelComplete);
 }
 
-void AssetLoadThread::RequestTextureLoad(Engine::TextureHandle textureHandle, Render::Texture* texturePtr)
+void GpuAssetUploadThread::RequestTextureLoad(Engine::TextureHandle textureHandle, Render::Texture* texturePtr)
 {
     textureLoadQueue.push({textureHandle, texturePtr});
 }
 
-bool AssetLoadThread::ResolveTextureLoads(TextureComplete& textureComplete)
+bool GpuAssetUploadThread::ResolveTextureLoads(TextureComplete& textureComplete)
 {
     return textureCompleteLoadQueue.pop(textureComplete);
 }
 
-void AssetLoadThread::RequestTextureUnload(Engine::TextureHandle textureHandle, Render::Texture* texturePtr)
+void GpuAssetUploadThread::RequestTextureUnload(Engine::TextureHandle textureHandle, Render::Texture* texturePtr)
 {
     textureUnloadQueue.push({textureHandle, texturePtr});
 }
 
-bool AssetLoadThread::ResolveTextureUnload(TextureComplete& textureComplete)
+bool GpuAssetUploadThread::ResolveTextureUnload(TextureComplete& textureComplete)
 {
     return textureCompleteUnloadQueue.pop(textureComplete);
 }
 
-void AssetLoadThread::RequestPipelineLoad(const std::string& name, Render::PipelineData* data)
+void GpuAssetUploadThread::RequestPipelineLoad(const std::string& name, Render::PipelineData* data)
 {
     pipelineLoadQueue.push({name, data});
 }
 
-bool AssetLoadThread::ResolvePipelineLoads(PipelineComplete& pipelineComplete)
+bool GpuAssetUploadThread::ResolvePipelineLoads(PipelineComplete& pipelineComplete)
 {
     return pipelineCompleteLoadQueue.pop(pipelineComplete);
 }
 
-Render::Sampler AssetLoadThread::CreateSampler(const VkSamplerCreateInfo& samplerCreateInfo) const
+Render::Sampler GpuAssetUploadThread::CreateSampler(const VkSamplerCreateInfo& samplerCreateInfo) const
 {
     return Render::Sampler::CreateSampler(context, samplerCreateInfo);
 }
 
-void AssetLoadThread::ThreadMain()
+void GpuAssetUploadThread::ThreadMain()
 {
     ZoneScoped;
     tracy::SetThreadName("AssetLoadThread");

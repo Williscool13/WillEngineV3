@@ -14,8 +14,8 @@ inline static uint32_t INVALID_HANDLE_GENERATION = 0;
 template<typename T>
 struct Handle
 {
-    uint32_t index: 24;
-    uint32_t generation: 8;
+    uint32_t index;
+    uint32_t generation;
 
     [[nodiscard]] bool IsValid() const { return generation != INVALID_HANDLE_GENERATION; }
     bool operator==(Handle other) const { return index == other.index && generation == other.generation; }

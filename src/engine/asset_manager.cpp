@@ -9,7 +9,7 @@
 
 namespace Engine
 {
-AssetManager::AssetManager(AssetLoad::AssetLoadThread* assetLoadThread, Render::ResourceManager* resourceManager)
+AssetManager::AssetManager(AssetLoad::GpuAssetUploadThread* assetLoadThread, Render::ResourceManager* resourceManager)
     : assetLoadThread(assetLoadThread), resourceManager(resourceManager)
 {
     auto errorPath = Platform::GetAssetPath() / "textures/error.ktx2";

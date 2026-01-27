@@ -17,7 +17,7 @@
 
 namespace AssetLoad
 {
-class AssetLoadThread;
+class GpuAssetUploadThread;
 }
 
 namespace Render
@@ -32,7 +32,7 @@ namespace Engine
 class AssetManager
 {
 public:
-    explicit AssetManager(AssetLoad::AssetLoadThread* assetLoadThread, Render::ResourceManager* resourceManager);
+    explicit AssetManager(AssetLoad::GpuAssetUploadThread* assetLoadThread, Render::ResourceManager* resourceManager);
 
     ~AssetManager();
 
@@ -82,7 +82,7 @@ public:
     }
 
 private:
-    AssetLoad::AssetLoadThread* assetLoadThread;
+    AssetLoad::GpuAssetUploadThread* assetLoadThread;
     Render::ResourceManager* resourceManager;
 
     MaterialManager materialManager;
