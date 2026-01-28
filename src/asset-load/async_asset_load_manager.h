@@ -74,13 +74,13 @@ public:
 private:
     // Audio loading
     moodycamel::ConcurrentQueue<AudioLoadRequest> audioRequestQueue;
-    Core::HandleAllocator<AudioLoadSlot, AUDIO_JOB_COUNT> audioLoadAllocator;
+    Core::LockFreeHandleAllocator<AudioLoadSlot, AUDIO_JOB_COUNT> audioLoadAllocator;
     std::array<AudioLoadSlot, AUDIO_JOB_COUNT> audioLoadSlots;
     moodycamel::ConcurrentQueue<AudioLoadComplete> audioLoadCompleteQueue;
 
     // Pipeline loading
     moodycamel::ConcurrentQueue<PipelineLoadRequest> pipelineRequestQueue;
-    Core::HandleAllocator<PipelineLoadSlot, PIPELINE_JOB_COUNT> pipelineLoadAllocator;
+    Core::LockFreeHandleAllocator<PipelineLoadSlot, PIPELINE_JOB_COUNT> pipelineLoadAllocator;
     std::array<PipelineLoadSlot, PIPELINE_JOB_COUNT> pipelineLoadSlots;
     moodycamel::ConcurrentQueue<PipelineLoadComplete> pipelineLoadCompleteQueue;
 
