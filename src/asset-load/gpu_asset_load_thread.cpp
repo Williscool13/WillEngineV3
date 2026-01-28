@@ -2,7 +2,7 @@
 // Created by William on 2025-12-17.
 //
 
-#include "asset_load_thread.h"
+#include "gpu_asset_load_thread.h"
 
 #include <enkiTS/src/TaskScheduler.h>
 #include <spdlog/spdlog.h>
@@ -34,12 +34,6 @@ GpuAssetUploadThread::GpuAssetUploadThread(enki::TaskScheduler* scheduler, Rende
     std::vector<VkCommandBuffer> commandBuffers(totalCommandBuffers);
     VK_CHECK(vkAllocateCommandBuffers(context->device, &cmdInfo, commandBuffers.data()));
 
-
-    willModelJobs.reserve(WILL_MODEL_JOB_COUNT);
-    for (int32_t i = 0; i < WILL_MODEL_JOB_COUNT; ++i) {
-        willModelJobs.emplace_back(std::make_unique<WillModelLoadJob>(context, resourceManager, commandBuffers[i]));
-    }
-
     textureJobs.reserve(TEXTURE_JOB_COUNT);
     for (int32_t i = 0; i < TEXTURE_JOB_COUNT; ++i) {
         textureJobs.emplace_back(std::make_unique<TextureLoadJob>(context, resourceManager, commandBuffers[WILL_MODEL_JOB_COUNT + i]));
@@ -55,67 +49,47 @@ GpuAssetUploadThread::~GpuAssetUploadThread()
 
 void GpuAssetUploadThread::Start()
 {
-    bShouldExit.store(false, std::memory_order_release);
-
-    uint32_t assetLoadThreadNum = scheduler->GetNumTaskThreads() - 2;
-    pinnedTask = std::make_unique<enki::LambdaPinnedTask>(
-        assetLoadThreadNum,
-        [this] { ThreadMain(); }
-    );
-
-    scheduler->AddPinnedTask(pinnedTask.get());
+    thisThread = std::jthread([this] { ThreadMain(); });
 }
 
 void GpuAssetUploadThread::RequestShutdown()
 {
     bShouldExit.store(true, std::memory_order_release);
+    workCounter.fetch_add(1);
+    wakeCV.notify_one();
 }
 
-void GpuAssetUploadThread::Join() const
+void GpuAssetUploadThread::Join()
 {
-    if (pinnedTask) {
-        scheduler->WaitforTask(pinnedTask.get());
-    }
-}
-
-void GpuAssetUploadThread::RequestModelLoad(Engine::WillModelHandle willmodelHandle, Render::WillModel* willModelPtr)
-{
-    modelLoadQueue.push({willmodelHandle, willModelPtr});
-}
-
-void GpuAssetUploadThread::RequestModelUnload(Engine::WillModelHandle willmodelHandle, Render::WillModel* willModelPtr)
-{
-    modelUnloadQueue.push({willmodelHandle, willModelPtr});
-}
-
-bool GpuAssetUploadThread::ResolveModelLoads(WillModelComplete& modelComplete)
-{
-    return modelCompleteLoadQueue.pop(modelComplete);
-}
-
-bool GpuAssetUploadThread::ResolveModelUnload(WillModelComplete& modelComplete)
-{
-    return modelCompleteUnloadQueue.pop(modelComplete);
+    thisThread.join();
 }
 
 void GpuAssetUploadThread::RequestTextureLoad(Engine::TextureHandle textureHandle, Render::Texture* texturePtr)
 {
-    textureLoadQueue.push({textureHandle, texturePtr});
+    ZoneScoped;
+
+    // textureLoadQueue.enqueue({textureHandle, texturePtr});
+    // workCounter.fetch_add(1);
+    // wakeCV.notify_one();
 }
 
 bool GpuAssetUploadThread::ResolveTextureLoads(TextureComplete& textureComplete)
 {
-    return textureCompleteLoadQueue.pop(textureComplete);
+    return textureCompleteLoadQueue.try_dequeue(textureComplete);
 }
 
 void GpuAssetUploadThread::RequestTextureUnload(Engine::TextureHandle textureHandle, Render::Texture* texturePtr)
 {
-    textureUnloadQueue.push({textureHandle, texturePtr});
+    ZoneScoped;
+
+    textureUnloadQueue.enqueue({textureHandle, texturePtr});
+    workCounter.fetch_add(1);
+    wakeCV.notify_one();
 }
 
 bool GpuAssetUploadThread::ResolveTextureUnload(TextureComplete& textureComplete)
 {
-    return textureCompleteUnloadQueue.pop(textureComplete);
+    return textureCompleteUnloadQueue.try_dequeue(textureComplete);
 }
 
 Render::Sampler GpuAssetUploadThread::CreateSampler(const VkSamplerCreateInfo& samplerCreateInfo) const
@@ -126,64 +100,14 @@ Render::Sampler GpuAssetUploadThread::CreateSampler(const VkSamplerCreateInfo& s
 void GpuAssetUploadThread::ThreadMain()
 {
     ZoneScoped;
-    tracy::SetThreadName("AssetLoadThread");
-    Platform::SetThreadName("AssetLoadThread");
+    tracy::SetThreadName("GPUAssetLoadThread");
+    Platform::SetThreadName("GPUAssetLoadThread");
+
+    scheduler->RegisterExternalTaskThread();
 
     while (!bShouldExit.load(std::memory_order_acquire)) {
         ZoneScopedN("AssetLoadLoop");
         bool didWork = false;
-
-        // Model loading jobs
-        {
-            ZoneScopedN("ModelJobDispatch");
-            // Count free model load jobs (4 max)
-            size_t freeJobCount = 0;
-            for (size_t i = 0; i < willModelJobActive.size(); ++i) {
-                if (!willModelJobActive[i]) {
-                    freeJobCount++;
-                }
-            }
-
-            // Only pop as many requests as we have free jobs
-            for (size_t jobsStarted = 0; jobsStarted < freeJobCount; ++jobsStarted) {
-                WillModelLoadRequest loadRequest{};
-                if (!modelLoadQueue.pop(loadRequest)) {
-                    break;
-                }
-                didWork = true;
-
-                int32_t slotIdx = -1;
-                for (size_t i = 0; i < 64; ++i) {
-                    if (!(activeSlotMask[i])) {
-                        slotIdx = i;
-                        break;
-                    }
-                }
-
-                // Find free job (guaranteed to exist)
-                int32_t freeJobIdx = -1;
-                for (size_t i = 0; i < willModelJobActive.size(); ++i) {
-                    if (!willModelJobActive[i]) {
-                        freeJobIdx = i;
-                        break;
-                    }
-                }
-
-                WillModelLoadJob* job = willModelJobs[freeJobIdx].get();
-                job->willModelHandle = loadRequest.willModelHandle;
-                job->outputModel = loadRequest.model;
-                willModelJobActive[freeJobIdx] = true;
-
-
-                assetLoadSlots[slotIdx].name = loadRequest.model->name;
-                assetLoadSlots[slotIdx].job = job;
-                assetLoadSlots[slotIdx].loadState = AssetLoadState::Idle;
-                assetLoadSlots[slotIdx].type = AssetType::WillModel;
-                assetLoadSlots[slotIdx].startTime = std::chrono::steady_clock::now();
-                assetLoadSlots[slotIdx].uploadCount = 0;
-                activeSlotMask[slotIdx] = true;
-            }
-        }
 
         // Texture loading jobs
         {
@@ -197,7 +121,7 @@ void GpuAssetUploadThread::ThreadMain()
 
             for (size_t jobsStarted = 0; jobsStarted < freeTextureJobCount; ++jobsStarted) {
                 TextureLoadRequest loadRequest{};
-                if (!textureLoadQueue.pop(loadRequest)) {
+                if (!textureLoadQueue.try_dequeue(loadRequest)) {
                     break;
                 }
                 didWork = true;
@@ -303,37 +227,6 @@ void GpuAssetUploadThread::ThreadMain()
 
                     bool success = slot.loadState == AssetLoadState::Loaded;
                     switch (slot.type) {
-                        case AssetType::WillModel:
-                        {
-                            ZoneScopedN("CompleteWillModel");
-                            auto* modelJob = dynamic_cast<WillModelLoadJob*>(job);
-                            //
-                            {
-                                ZoneScopedN("PushCompleteQueue");
-                                modelCompleteLoadQueue.push({modelJob->willModelHandle, modelJob->outputModel, success});
-                            }
-
-                            //
-                            {
-                                ZoneScopedN("FindAndResetJob");
-
-                                for (size_t i = 0; i < willModelJobs.size(); ++i) {
-                                    if (willModelJobs[i].get() == job) {
-                                        job->Reset();
-                                        willModelJobActive[i] = false;
-                                        break;
-                                    }
-                                }
-                            }
-
-                            if (success) {
-                                SPDLOG_INFO("'{}' willmodel loaded in {}ms with {} uploads", slot.name, durationMs, slot.uploadCount);
-                            }
-                            else {
-                                SPDLOG_INFO("'{}' willmodel failed to load in {}ms with {} uploads", slot.name, durationMs, slot.uploadCount);
-                            }
-                            break;
-                        }
                         case AssetType::Texture:
                         {
                             ZoneScopedN("CompleteTexture");
@@ -341,7 +234,7 @@ void GpuAssetUploadThread::ThreadMain()
                             //
                             {
                                 ZoneScopedN("PushCompleteQueue");
-                                textureCompleteLoadQueue.push({textureJob->textureHandle, textureJob->outputTexture, success});
+                                textureCompleteLoadQueue.try_enqueue({textureJob->textureHandle, textureJob->outputTexture, success});
                             }
                             //
                             {
@@ -383,47 +276,30 @@ void GpuAssetUploadThread::ThreadMain()
         // Unloads
         {
             ZoneScopedN("ProcessUnloads");
-            WillModelLoadRequest unloadRequest{};
-            if (modelUnloadQueue.pop(unloadRequest)) {
-                didWork = true;
-                OffsetAllocator::Allocator* selectedAllocator;
-                if (unloadRequest.model->modelData.bIsSkinned) {
-                    selectedAllocator = &resourceManager->skinnedVertexBufferAllocator;
-                }
-                else {
-                    selectedAllocator = &resourceManager->vertexBufferAllocator;
-                }
-
-                selectedAllocator->free(unloadRequest.model->modelData.vertexAllocation);
-                resourceManager->meshletVertexBufferAllocator.free(unloadRequest.model->modelData.meshletVertexAllocation);
-                resourceManager->meshletTriangleBufferAllocator.free(unloadRequest.model->modelData.meshletTriangleAllocation);
-                resourceManager->meshletBufferAllocator.free(unloadRequest.model->modelData.meshletAllocation);
-                resourceManager->primitiveBufferAllocator.free(unloadRequest.model->modelData.primitiveAllocation);
-                unloadRequest.model->modelData.vertexAllocation.metadata = OffsetAllocator::Allocation::NO_SPACE;
-                unloadRequest.model->modelData.meshletVertexAllocation.metadata = OffsetAllocator::Allocation::NO_SPACE;
-                unloadRequest.model->modelData.meshletTriangleAllocation.metadata = OffsetAllocator::Allocation::NO_SPACE;
-                unloadRequest.model->modelData.meshletAllocation.metadata = OffsetAllocator::Allocation::NO_SPACE;
-                unloadRequest.model->modelData.primitiveAllocation.metadata = OffsetAllocator::Allocation::NO_SPACE;
-
-                modelCompleteUnloadQueue.push({unloadRequest.willModelHandle, unloadRequest.model, true});
-            }
-
             TextureLoadRequest textureUnloadRequest{};
-            if (textureUnloadQueue.pop(textureUnloadRequest)) {
+            if (textureUnloadQueue.try_dequeue(textureUnloadRequest)) {
                 didWork = true;
 
                 textureUnloadRequest.texture->image = {};
                 textureUnloadRequest.texture->imageView = {};
 
-                textureCompleteUnloadQueue.push({textureUnloadRequest.textureHandle, textureUnloadRequest.texture, true});
+                textureCompleteUnloadQueue.try_enqueue({textureUnloadRequest.textureHandle, textureUnloadRequest.texture, true});
             }
         }
 
 
-        if (!didWork) {
-            ZoneScopedN("IdleSleep");
-            std::chrono::microseconds idleWait = std::chrono::microseconds(10);
-            std::this_thread::sleep_for(idleWait);
+        if (workCounter.load(std::memory_order_acquire) > 0) {
+            workCounter.fetch_sub(1);
+        }
+        else {
+            ZoneScopedN("Idle - Waiting for Work");
+            std::unique_lock lock(wakeMutex);
+            wakeCV.wait(lock, [&] {
+                return workCounter.load(std::memory_order_acquire) > 0 || bShouldExit.load(std::memory_order_acquire);
+            });
+            if (workCounter.load(std::memory_order_acquire) > 0) {
+                workCounter.fetch_sub(1);
+            }
         }
     }
 }

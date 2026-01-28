@@ -13,6 +13,7 @@
 
 #include "asset-load-jobs/audio_load_slot.h"
 #include "asset-load-jobs/pipeline_load_slot.h"
+#include "asset-load-jobs/will_model_load_job.h"
 #include "core/allocators/lock_free_handle_allocator.h"
 
 namespace AssetLoad
@@ -25,7 +26,7 @@ struct AudioLoadRequest
 struct AudioLoadComplete
 {
     Audio::WillAudio* audioEntry;
-    bool success;
+    bool bSuccess;
 };
 
 struct PipelineLoadRequest
@@ -36,17 +37,26 @@ struct PipelineLoadRequest
 struct PipelineLoadComplete
 {
     Render::PipelineData* pipelineData;
-    bool success;
+    bool bSuccess;
 };
 
+struct WillModelLoadRequest
+{
+    Render::WillModel* model;
+};
+
+struct WillModelLoadComplete
+{
+    Render::WillModel* model;
+    bool bSuccess;
+};
 
 class AsyncAssetLoadManager
 {
 public:
-    static constexpr uint32_t AUDIO_JOB_COUNT = 256;
-
     AsyncAssetLoadManager(enki::TaskScheduler* scheduler,
                           Render::VulkanContext* context,
+                          Render::ResourceManager* resourceManager,
                           VkPipelineCache pipelineCache);
 
     ~AsyncAssetLoadManager();
@@ -61,6 +71,9 @@ public:
     void RequestPipelineLoad(Render::PipelineData* pipelineData);
     bool TryDequeuePipelineComplete(PipelineLoadComplete& outResult);
 
+    void RequestModelLoad(Render::WillModel* model);
+    bool TryDequeueModelComplete(WillModelLoadComplete& outResult);
+
     [[nodiscard]] uint32_t GetActiveAudioLoadCount() const
     {
         return audioLoadAllocator.GetCount();
@@ -71,7 +84,18 @@ public:
         return pipelineLoadAllocator.GetCount();
     }
 
+    [[nodiscard]] uint32_t GetActiveModelLoadCount() const
+    {
+        return modelLoadAllocator.GetCount();
+    }
+
 private:
+    std::jthread thisThread;
+    std::atomic<bool> bShouldExit{false};
+    std::atomic<uint32_t> workCounter{0};
+    std::mutex wakeMutex;
+    std::condition_variable wakeCV;
+
     // Audio loading
     moodycamel::ConcurrentQueue<AudioLoadRequest> audioRequestQueue;
     Core::LockFreeHandleAllocator<AudioLoadSlot, AUDIO_JOB_COUNT> audioLoadAllocator;
@@ -84,18 +108,24 @@ private:
     std::array<PipelineLoadSlot, PIPELINE_JOB_COUNT> pipelineLoadSlots;
     moodycamel::ConcurrentQueue<PipelineLoadComplete> pipelineLoadCompleteQueue;
 
+    // GPU Uploads
+    Core::LockFreeHandleAllocator<UploadStaging, 8> uploadStagingAllocator{};
+    std::array<UploadStaging, 8> uploadStagings{};
+
+    moodycamel::ConcurrentQueue<WillModelLoadRequest> modelRequestQueue;
+    Core::LockFreeHandleAllocator<WillModelLoadSlot, MODEL_JOB_COUNT> modelLoadAllocator;
+    std::array<WillModelLoadSlot, MODEL_JOB_COUNT> modelLoadSlots;
+    moodycamel::ConcurrentQueue<WillModelLoadComplete> modelLoadCompleteQueue;
+
+    // todo: same for textures
+
     enki::TaskScheduler* scheduler;
     Render::VulkanContext* context;
     VkPipelineCache pipelineCache;
 
-    std::jthread thisThread;
-    std::atomic<bool> bShouldExit{false};
-    std::atomic<uint32_t> workCounter{0};
-    std::mutex wakeMutex;
-    std::condition_variable wakeCV;
-
     void OnAudioLoadComplete(bool success, AudioSlotHandle slotHandle);
     void OnPipelineLoadComplete(bool success, PipelineSlotHandle slotHandle);
+    void OnModelLoadComplete(bool success, ModelSlotHandle modelSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle);
 };
 } // AssetLoad
 #endif //WILL_ENGINE_ASYNC_ASSET_LOAD_THREAD_H

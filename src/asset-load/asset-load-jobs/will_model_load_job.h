@@ -25,64 +25,56 @@ struct VulkanContext;
 
 namespace AssetLoad
 {
-class WillModelLoadJob : public AssetLoadJob
+class WillModelLoadSlot
 {
 public:
-    WillModelLoadJob();
+    WillModelLoadSlot();
 
-    WillModelLoadJob(Render::VulkanContext* context, Render::ResourceManager* resourceManager, VkCommandBuffer commandBuffer);
+    ~WillModelLoadSlot();
 
-    ~WillModelLoadJob() override;
+    void Initialize(enki::TaskScheduler* _scheduler, Render::VulkanContext* _context, Render::ResourceManager* _resourceManager,
+                    std::function<void(VkCommandBuffer cmd, VkFence fence)> _dispatchCommandBufferCallback,
+                    std::function<void(bool success, ModelSlotHandle modelSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle)> _notifyCallback);
 
-    WillModelLoadJob(const WillModelLoadJob&) = delete;
+    void Launch(ModelSlotHandle _modelSlotHandle, UploadStagingSlotHandle _uploadStagingSlotHandle, UploadStaging* _uploadStaging, Render::WillModel* _outputModel);
 
-    WillModelLoadJob& operator=(const WillModelLoadJob&) = delete;
+    void Clear();
 
-    WillModelLoadJob(WillModelLoadJob&&) noexcept = default;
+    bool LoadModelFromDisk();
 
-    WillModelLoadJob& operator=(WillModelLoadJob&&) noexcept = default;
+    bool AllocateGPUResources() const;
 
-    void StartJob() override;
+    void PrepareUploadData();
 
-    TaskState TaskExecute(enki::TaskScheduler* scheduler) override;
+    void UploadTextures(VkCommandBuffer cmd, const std::function<void(bool)>& submitAndWait);
 
-    bool PreThreadExecute() override;
+    void UploadGeometry(VkCommandBuffer cmd, const std::function<void(bool)>& submitAndWait);
 
-    ThreadState ThreadExecute() override;
+    void PostUploadSetup();
 
-    bool PostThreadExecute() override;
+    ModelSlotHandle modelSlotHandle{};
+    UploadStagingSlotHandle uploadStagingSlotHandle{};
 
-    uint32_t GetUploadCount() override;
-
-    void Reset() override;
-
-    Engine::WillModelHandle willModelHandle{Engine::WillModelHandle::INVALID};
     Render::WillModel* outputModel{nullptr};
+    UploadStaging* uploadStaging{nullptr};
 
 private:
     struct LoadModelTask : enki::ITaskSet
     {
-        WillModelLoadJob* loadJob{nullptr};
+        WillModelLoadSlot* loadSlot{nullptr};
 
-        explicit LoadModelTask()
-            : ITaskSet(1)
-        {}
+        explicit LoadModelTask() : ITaskSet(1) {}
 
-        void ExecuteRange(enki::TaskSetPartition range, uint32_t threadnum) override;
+        void ExecuteRange(enki::TaskSetPartition range, uint32_t threadNum) override;
     };
 
+    std::unique_ptr<LoadModelTask> task{nullptr};
+    enki::TaskScheduler* scheduler{nullptr};
     Render::VulkanContext* context{nullptr};
     Render::ResourceManager* resourceManager{nullptr};
 
-    // Task
-    TaskState taskState{TaskState::NotStarted};
-    VkCommandBuffer commandBuffer;
-    std::unique_ptr<LoadModelTask> task;
     UnpackedWillModel rawData{};
     std::vector<ktxTexture2*> pendingTextures;
-
-    // Thread
-    std::unique_ptr<UploadStaging> uploadStaging;
     /**
      * Cached vector to store SkinnedVertex->Vertex for non-skinned models.
      */
@@ -91,18 +83,9 @@ private:
      * Cached vector to store 3x uint8_t->1x uint32_t for meshlet triangles.
      */
     std::vector<uint32_t> packedTriangles;
-    uint32_t pendingTextureHead{0};
-    bool bPendingPreCopyBarrier = true;
-    bool bPendingFinalBarrier = true;
-    uint32_t pendingMipHead{0};
-    uint32_t pendingVerticesHead{0};
-    uint32_t pendingMeshletVerticesHead{0};
-    uint32_t pendingMeshletTrianglesHead{0};
-    uint32_t pendingMeshletsHead{0};
-    uint32_t pendingPrimitivesHead{0};
-    uint32_t pendingBufferBarrier{0};
 
-    uint32_t uploadCount{0};
+    std::function<void(VkCommandBuffer cmd, VkFence fence)> _dispatchCommandBufferCallback;
+    std::function<void(bool success, ModelSlotHandle modelSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle)> _notifyCallback;
 };
 } // AssetLoad
 

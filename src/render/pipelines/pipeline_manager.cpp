@@ -237,16 +237,16 @@ void PipelineManager::Update(uint32_t frameNumber)
     AssetLoad::PipelineLoadComplete complete;
     while (asyncAssetLoadManager->TryDequeuePipelineComplete(complete)) {
         if (auto it = computePipelines.find(complete.pipelineData->name); it != computePipelines.end()) {
-            if (complete.success) {
+            if (complete.bSuccess) {
                 SPDLOG_INFO("Compute pipeline '{}' loaded", complete.pipelineData->name);
             }
-            HandlePipelineCompletion(it->second, complete.success);
+            HandlePipelineCompletion(it->second, complete.bSuccess);
         }
         else if (auto it2 = graphicsPipelines.find(complete.pipelineData->name); it2 != graphicsPipelines.end()) {
-            if (complete.success) {
+            if (complete.bSuccess) {
                 SPDLOG_INFO("Graphics pipeline '{}' loaded", complete.pipelineData->name);
             }
-            HandlePipelineCompletion(it2->second, complete.success);
+            HandlePipelineCompletion(it2->second, complete.bSuccess);
         }
         else {
             SPDLOG_ERROR("Pipeline '{}' not found", complete.pipelineData->name);

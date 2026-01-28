@@ -14,7 +14,7 @@
 #include "pipeline_category.h"
 #include "pipeline_data.h"
 #include "graphics_pipeline_builder.h"
-#include "asset-load/asset_load_thread.h"
+#include "asset-load/gpu_asset_load_thread.h"
 
 namespace AssetLoad
 {

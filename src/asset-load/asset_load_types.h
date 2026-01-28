@@ -18,6 +18,11 @@
 
 namespace AssetLoad
 {
+class WillModelLoadSlot;
+}
+
+namespace AssetLoad
+{
 class AudioLoadSlot;
 class PipelineLoadSlot;
 }
@@ -35,40 +40,24 @@ namespace AssetLoad
 class UploadStaging
 {
 public:
-    UploadStaging(Render::VulkanContext* context, VkCommandBuffer commandBuffer, uint32_t stagingSize);
+    UploadStaging();
 
     ~UploadStaging();
 
-    void StartCommandBuffer();
+    void Initialize(Render::VulkanContext* context, size_t stagingSize);
 
-    void SubmitCommandBuffer();
-
-    [[nodiscard]] bool IsReady() const;
-
-    void WaitForFence() const;
-
-    [[nodiscard]] bool IsCommandBufferStarted() const { return bCommandBufferStarted; }
-
-    VkCommandBuffer GetCommandBuffer() const { return commandBuffer; }
     Core::LinearAllocator& GetStagingAllocator() { return stagingAllocator; }
     Render::AllocatedBuffer& GetStagingBuffer() { return stagingBuffer; }
 
 private:
-    Render::VulkanContext* context{};
-    VkCommandBuffer commandBuffer{};
-    VkFence fence{};
-
+    bool bStagingExists{false};
     Render::AllocatedBuffer stagingBuffer{};
-    Core::LinearAllocator stagingAllocator{0};
-
-    // Transient
-    bool bCommandBufferStarted = false;
+    Core::LinearAllocator stagingAllocator{1};
 };
 
 
 struct UnpackedWillModel
 {
-    std::string name{};
     bool bIsSkeletalModel{false};
 
     std::vector<SkinnedVertex> vertices{};
@@ -97,7 +86,6 @@ struct UnpackedWillModel
 
     void Reset()
     {
-        name.clear();
         bIsSkeletalModel = false;
 
         vertices.clear();
@@ -113,18 +101,6 @@ struct UnpackedWillModel
 };
 
 
-struct WillModelLoadRequest
-{
-    Engine::WillModelHandle willModelHandle;
-    Render::WillModel* model;
-};
-
-struct WillModelComplete
-{
-    Engine::WillModelHandle willModelHandle;
-    Render::WillModel* model;
-    bool bSuccess;
-};
 
 struct TextureLoadRequest
 {
@@ -141,6 +117,8 @@ struct TextureComplete
 
 using AudioSlotHandle = Core::Handle<AudioLoadSlot>;
 using PipelineSlotHandle = Core::Handle<PipelineLoadSlot>;
+using ModelSlotHandle = Core::Handle<WillModelLoadSlot>;
+using UploadStagingSlotHandle = Core::Handle<UploadStaging>;
 } // AssetLoad
 
 #endif //WILL_ENGINE_ASSET_LOAD_TYPES_H

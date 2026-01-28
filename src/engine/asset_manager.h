@@ -15,9 +15,10 @@
 #include "render/model/will_model_asset.h"
 #include "audio/audio_asset.h"
 
+
 namespace AssetLoad
 {
-class GpuAssetUploadThread;
+class AsyncAssetLoadManager;
 }
 
 namespace Render
@@ -32,7 +33,7 @@ namespace Engine
 class AssetManager
 {
 public:
-    explicit AssetManager(AssetLoad::GpuAssetUploadThread* assetLoadThread, Render::ResourceManager* resourceManager);
+    AssetManager(AssetLoad::AsyncAssetLoadManager* assetLoadManager, Render::ResourceManager* resourceManager);
 
     ~AssetManager();
 
@@ -82,7 +83,7 @@ public:
     }
 
 private:
-    AssetLoad::GpuAssetUploadThread* assetLoadThread;
+    AssetLoad::AsyncAssetLoadManager* assetLoadManager;
     Render::ResourceManager* resourceManager;
 
     MaterialManager materialManager;
@@ -104,8 +105,8 @@ private:
     std::unordered_map<std::filesystem::path, AudioHandle> pathToAudioHandle;
 
 private: // Default Resources
-    TextureHandle whiteTextureHandle;
-    TextureHandle errorTextureHandle;
+    TextureHandle whiteTextureHandle = TextureHandle::INVALID;
+    TextureHandle errorTextureHandle = TextureHandle::INVALID;
     Render::Sampler defaultSampler;
 };
 } // Engine

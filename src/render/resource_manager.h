@@ -25,11 +25,17 @@ struct ResourceManager
     explicit ResourceManager(VulkanContext* context);
 
     // Only managed by Asset Load Thread
+    std::mutex vertexBufferAllocatorMutex;
     OffsetAllocator::Allocator vertexBufferAllocator{MEGA_VERTEX_BUFFER_SIZE};
+    std::mutex skinnedVertexBufferAllocatorMutex;
     OffsetAllocator::Allocator skinnedVertexBufferAllocator{MEGA_SKINNED_VERTEX_BUFFER_SIZE};
+    std::mutex meshletVertexBufferAllocatorMutex;
     OffsetAllocator::Allocator meshletVertexBufferAllocator{MEGA_MESHLET_VERTEX_BUFFER_SIZE};
+    std::mutex meshletTriangleBufferAllocatorMutex;
     OffsetAllocator::Allocator meshletTriangleBufferAllocator{MEGA_MESHLET_TRIANGLE_BUFFER_SIZE};
+    std::mutex meshletBufferAllocatorMutex;
     OffsetAllocator::Allocator meshletBufferAllocator{MEGA_MESHLET_BUFFER_SIZE};
+    std::mutex primitiveBufferAllocatorMutex;
     OffsetAllocator::Allocator primitiveBufferAllocator{MEGA_PRIMITIVE_BUFFER_SIZE};
 
     // Managed by Asset Load, bound in the Render Threads. Synchronized by engine.
@@ -58,7 +64,6 @@ struct ResourceManager
     AllocatedBuffer debugReadbackBuffer;
     PipelineEvent debugReadbackLastKnownState;
 
-private:
     VulkanContext* context{};
 };
 } // Render

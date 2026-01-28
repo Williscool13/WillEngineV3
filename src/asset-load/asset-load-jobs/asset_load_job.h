@@ -11,7 +11,6 @@ namespace AssetLoad
 enum class AssetType
 {
     None,
-    WillModel,
     Texture,
 };
 enum class AssetLoadState

@@ -45,11 +45,13 @@ public:
 
     WillModel& operator=(WillModel&&) noexcept = default;
 
-    // Populated by AssetManager
+    // Populated by AssetManager, never changed
     std::filesystem::path source{};
     std::string name{};
     Engine::WillModelHandle selfHandle;
     ModelLoadState modelLoadState{ModelLoadState::NotLoaded};
+
+    // Populated by AssetManager, sometimes changed
     uint32_t refCount = 0;
 
     // Populated in AssetLoadThread

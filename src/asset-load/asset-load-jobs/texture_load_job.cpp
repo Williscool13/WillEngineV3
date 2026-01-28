@@ -25,7 +25,7 @@ TextureLoadJob::~TextureLoadJob() = default;
 void TextureLoadJob::StartJob()
 {
     if (!uploadStaging) {
-        uploadStaging = std::make_unique<UploadStaging>(context, commandBuffer, TEXTURE_LOAD_STAGING_SIZE);
+        // uploadStaging = std::make_unique<UploadStaging>(context, commandBuffer, TEXTURE_LOAD_STAGING_SIZE);
     }
 }
 
@@ -53,7 +53,7 @@ bool TextureLoadJob::PreThreadExecute()
 
 ThreadState TextureLoadJob::ThreadExecute()
 {
-    ZoneScopedN("TextureLoadJob::ThreadExecute");
+    /*ZoneScopedN("TextureLoadJob::ThreadExecute");
     Core::LinearAllocator& stagingAllocator = uploadStaging->GetStagingAllocator();
     Render::AllocatedBuffer& stagingBuffer = uploadStaging->GetStagingBuffer();
 
@@ -147,7 +147,7 @@ ThreadState TextureLoadJob::ThreadExecute()
         uploadStaging->SubmitCommandBuffer();
         uploadCount++;
         return ThreadState::InProgress;
-    }
+    }*/
 
     return ThreadState::Complete;
 }

@@ -5,14 +5,9 @@
 #ifndef WILL_ENGINE_AUDIO_LOAD_JOB_H
 #define WILL_ENGINE_AUDIO_LOAD_JOB_H
 
-#include <LockFreeQueue/LockFreeQueueCpp11.h>
 #include <TaskScheduler.h>
 
 #include "asset-load/asset_load_types.h"
-
-
-template<typename T>
-using LockFreeQueue = LockFreeQueueCpp11<T>;
 
 namespace AssetLoad
 {

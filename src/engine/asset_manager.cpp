@@ -4,19 +4,20 @@
 
 #include "asset_manager.h"
 
-#include "asset-load/asset_load_thread.h"
+#include "asset-load/async_asset_load_manager.h"
+#include "asset-load/gpu_asset_load_thread.h"
 #include "platform/paths.h"
 
 namespace Engine
 {
-AssetManager::AssetManager(AssetLoad::GpuAssetUploadThread* assetLoadThread, Render::ResourceManager* resourceManager)
-    : assetLoadThread(assetLoadThread), resourceManager(resourceManager)
+AssetManager::AssetManager(AssetLoad::AsyncAssetLoadManager* assetLoadManager, Render::ResourceManager* resourceManager)
+    : assetLoadManager(assetLoadManager), resourceManager(resourceManager)
 {
     auto errorPath = Platform::GetAssetPath() / "textures/error.ktx2";
     auto whitePath = Platform::GetAssetPath() / "textures/white.ktx2";
 
 
-    whiteTextureHandle = textureAllocator.Add();
+    /*whiteTextureHandle = textureAllocator.Add();
     assert(whiteTextureHandle.IsValid());
     Render::Texture& whiteTexture = textures[whiteTextureHandle.index];
     whiteTexture.selfHandle = whiteTextureHandle;
@@ -40,7 +41,7 @@ AssetManager::AssetManager(AssetLoad::GpuAssetUploadThread* assetLoadThread, Ren
     errorTexture.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTexture();
     assert(errorTexture.bindlessHandle.index == AssetLoad::ERROR_IMAGE_BINDLESS_INDEX);
     pathToTextureHandle[errorPath] = errorTextureHandle;
-    assetLoadThread->RequestTextureLoad(errorTexture.selfHandle, &errorTexture);
+    assetLoadThread->RequestTextureLoad(errorTexture.selfHandle, &errorTexture);*/
 
     VkSamplerCreateInfo samplerCreateInfo = {
         .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
@@ -62,7 +63,8 @@ AssetManager::AssetManager(AssetLoad::GpuAssetUploadThread* assetLoadThread, Ren
         .borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK,
         .unnormalizedCoordinates = VK_FALSE,
     };
-    defaultSampler = assetLoadThread->CreateSampler(samplerCreateInfo);
+
+    defaultSampler = Render::Sampler::CreateSampler(resourceManager->context, samplerCreateInfo);
     Render::BindlessSamplerHandle defaultSamplerHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.AllocateSampler(defaultSampler.handle);
     assert(defaultSamplerHandle.index == AssetLoad::DEFAULT_SAMPLER_BINDLESS_INDEX);
 }
@@ -106,7 +108,7 @@ WillModelHandle AssetManager::LoadModel(const std::filesystem::path& path)
 
     pathToHandle[path] = handle;
 
-    assetLoadThread->RequestModelLoad(model.selfHandle, &model);
+    assetLoadManager->RequestModelLoad(&model);
 
     return handle;
 }
@@ -131,38 +133,38 @@ void AssetManager::UnloadModel(WillModelHandle handle)
 
     if (model.refCount == 0) {
         model.modelLoadState = Render::WillModel::ModelLoadState::NotLoaded;
-        assetLoadThread->RequestModelUnload(handle, &model);
+        // assetLoadThread->RequestModelUnload(handle, &model);
         pathToHandle.erase(model.source);
     }
 }
 
 void AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuffer) const
 {
-    AssetLoad::WillModelComplete modelComplete{};
-    while (assetLoadThread->ResolveModelLoads(modelComplete)) {
-        if (modelComplete.bSuccess) {
+    AssetLoad::WillModelLoadComplete complete{};
+    while (assetLoadManager->TryDequeueModelComplete(complete)) {
+        if (complete.bSuccess) {
             stagingFrameBuffer.bufferAcquireOperations.insert(stagingFrameBuffer.bufferAcquireOperations.end(),
-                                                              modelComplete.model->bufferAcquireOps.begin(),
-                                                              modelComplete.model->bufferAcquireOps.end());
+                                                              complete.model->bufferAcquireOps.begin(),
+                                                              complete.model->bufferAcquireOps.end());
 
             stagingFrameBuffer.imageAcquireOperations.insert(stagingFrameBuffer.imageAcquireOperations.end(),
-                                                             modelComplete.model->imageAcquireOps.begin(),
-                                                             modelComplete.model->imageAcquireOps.end());
+                                                             complete.model->imageAcquireOps.begin(),
+                                                             complete.model->imageAcquireOps.end());
 
-            modelComplete.model->bufferAcquireOps.clear();
-            modelComplete.model->imageAcquireOps.clear();
-            modelComplete.model->modelLoadState = Render::WillModel::ModelLoadState::Loaded;
-            SPDLOG_INFO("[AssetManager] Model load succeeded: {}", modelComplete.model->name);
+            complete.model->bufferAcquireOps.clear();
+            complete.model->imageAcquireOps.clear();
+            complete.model->modelLoadState = Render::WillModel::ModelLoadState::Loaded;
+            SPDLOG_INFO("[AssetManager] Model load succeeded: {}", complete.model->name);
         }
         else {
-            modelComplete.model->bufferAcquireOps.clear();
-            modelComplete.model->imageAcquireOps.clear();
-            modelComplete.model->modelLoadState = Render::WillModel::ModelLoadState::NotLoaded;
-            SPDLOG_ERROR("[AssetManager] Model load failed: {}", modelComplete.model->name);
+            complete.model->bufferAcquireOps.clear();
+            complete.model->imageAcquireOps.clear();
+            complete.model->modelLoadState = Render::WillModel::ModelLoadState::NotLoaded;
+            SPDLOG_ERROR("[AssetManager] Model load failed: {}", complete.model->name);
         }
     }
 
-    AssetLoad::TextureComplete textureComplete{};
+    /*AssetLoad::TextureComplete textureComplete{};
     while (assetLoadThread->ResolveTextureLoads(textureComplete)) {
         if (textureComplete.success) {
             stagingFrameBuffer.imageAcquireOperations.push_back(textureComplete.texture->acquireBarrier);
@@ -174,12 +176,12 @@ void AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuffer) const
             textureComplete.texture->loadState = Render::Texture::LoadState::NotLoaded;
             SPDLOG_ERROR("[AssetManager] Texture load failed: {}", textureComplete.texture->name);
         }
-    }
+    }*/
 }
 
 void AssetManager::ResolveUnloads()
 {
-    AssetLoad::WillModelComplete modelComplete{};
+    /*AssetLoad::WillModelComplete modelComplete{};
     while (assetLoadThread->ResolveModelUnload(modelComplete)) {
         SPDLOG_INFO("[AssetManager] Model unload succeeded: {}", modelComplete.model->name);
         modelComplete.model->modelData.Reset();
@@ -207,7 +209,7 @@ void AssetManager::ResolveUnloads()
         textureComplete.texture->bindlessHandle = Render::BindlessTextureHandle::INVALID;
 
         textureAllocator.Remove(textureComplete.textureHandle);
-    }
+    }*/
 }
 
 TextureHandle AssetManager::LoadTexture(const std::filesystem::path& path)
@@ -240,7 +242,7 @@ TextureHandle AssetManager::LoadTexture(const std::filesystem::path& path)
 
     pathToTextureHandle[path] = handle;
 
-    assetLoadThread->RequestTextureLoad(texture.selfHandle, &texture);
+    // assetLoadThread->RequestTextureLoad(texture.selfHandle, &texture);
 
     return handle;
 }
@@ -268,7 +270,7 @@ void AssetManager::UnloadTexture(TextureHandle handle)
 
     if (texture.refCount == 0) {
         texture.loadState = Render::Texture::LoadState::NotLoaded;
-        assetLoadThread->RequestTextureUnload(handle, &texture);
+        // assetLoadThread->RequestTextureUnload(handle, &texture);
         pathToTextureHandle.erase(texture.source);
     }
 }

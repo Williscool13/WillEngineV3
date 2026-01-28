@@ -17,7 +17,7 @@
 #include "core/include/game_interface.h"
 #include "core/input/input_manager.h"
 #include "core/time/time_manager.h"
-#include "asset-load/asset_load_thread.h"
+#include "asset-load/gpu_asset_load_thread.h"
 #include "asset-load/async_asset_load_manager.h"
 #include "audio/audio_manager.h"
 #include "physics/physics_system.h"
@@ -84,7 +84,9 @@ void WillEngine::Initialize()
         config.profilerCallbacks.waitForTaskCompleteStop = [](uint32_t) {};
         config.profilerCallbacks.waitForTaskCompleteSuspendStart = [](uint32_t) {};
         config.profilerCallbacks.waitForTaskCompleteSuspendStop = [](uint32_t) {};
-        config.numExternalTaskThreads = 1; // Async Asset Load Manager
+        // 1 Async Asset Load Manager
+        // 1 GPU Asset Load Thread
+        config.numExternalTaskThreads = 8;
 
         SPDLOG_INFO("Scheduler operating with {} threads.", config.numTaskThreadsToCreate + 1);
         scheduler = std::make_unique<enki::TaskScheduler>();
@@ -141,7 +143,11 @@ void WillEngine::Initialize()
     //
     {
         ZoneScopedN("CreateAssetLoadThread");
-        asyncAssetLoadManager = std::make_unique<AssetLoad::AsyncAssetLoadManager>(scheduler.get(), renderThread->GetVulkanContext(), renderThread->GetPipelineManager()->GetPipelineCache());
+        asyncAssetLoadManager = std::make_unique<AssetLoad::AsyncAssetLoadManager>(
+            scheduler.get(),
+            renderThread->GetVulkanContext(),
+            renderThread->GetResourceManager(),
+            renderThread->GetPipelineManager()->GetPipelineCache());
         assetLoadThread = std::make_unique<AssetLoad::GpuAssetUploadThread>(scheduler.get(), renderThread->GetVulkanContext(), renderThread->GetResourceManager(), renderThread->GetPipelineManager());
     }
 
@@ -161,7 +167,7 @@ void WillEngine::Initialize()
     //
     {
         ZoneScopedN("CreateAssetManager");
-        assetManager = std::make_unique<AssetManager>(assetLoadThread.get(), renderThread->GetResourceManager());
+        assetManager = std::make_unique<AssetManager>(asyncAssetLoadManager.get(), renderThread->GetResourceManager());
     }
 
     //

@@ -16,7 +16,7 @@ void AudioLoadSlot::Initialize(enki::TaskScheduler* _scheduler, std::function<vo
 {
 
     scheduler = _scheduler;
-    notifyCallback = _notifyCallback;
+    notifyCallback = std::move(_notifyCallback);
     task = std::make_unique<LoadAudioTask>();
 }
 

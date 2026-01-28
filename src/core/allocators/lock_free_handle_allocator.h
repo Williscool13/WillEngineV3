@@ -52,7 +52,7 @@ public:
             }
         }
 
-        return {INVALID, INVALID};
+        return Handle<T>::INVALID;
     }
 
     bool Remove(Handle<T> handle)
