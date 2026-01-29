@@ -208,6 +208,7 @@ void WillEngine::Initialize()
         engineContext->windowContext.windowHeight = h;
         engineContext->windowContext.bCursorHidden = bCursorHidden;
         engineContext->assetManager = assetManager.get();
+        engineContext->audioManager = audioManager.get();
         engineContext->physicsSystem = physicsSystem.get();
     }
     //
@@ -627,6 +628,7 @@ void WillEngine::Cleanup()
     asyncAssetLoadManager->Join();
     asyncAssetLoadManager.reset();
     renderThread->Join();
+    audioManager.reset();
 
 #if WILL_EDITOR
     modelGenerator->Join();

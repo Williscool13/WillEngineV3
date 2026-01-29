@@ -46,7 +46,6 @@ struct GameState
     // Loaded models debug
     WillModelHandle portalPlaneHandle{WillModelHandle::INVALID};
 
-
     // Debug
     bool bEnablePortal{true};
     std::string debugResourceName{};

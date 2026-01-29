@@ -8,6 +8,7 @@
 #include <spdlog/spdlog.h>
 
 #include "asset-load/asset_load_config.h"
+#include "audio/audio_manager.h"
 #include "Jolt/Physics/Body/BodyCreationSettings.h"
 #include "Jolt/Physics/Collision/Shape/BoxShape.h"
 
@@ -601,6 +602,18 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         }
 
         SPDLOG_INFO("[DebugSystem] Created PCSS test scene: 100x100 floor + vertical dragon column");
+    }
+
+    if (state->inputFrame->GetKey(Key::M).pressed) {
+        std::filesystem::path musicPath = Platform::GetAssetPath() / "audio/the_entertainer.ogg";
+        Core::Handle<Audio::WillAudio> testMusic = ctx->audioManager->LoadAudio("test_music", musicPath);
+        ctx->audioManager->PlayMusic(testMusic);
+    }
+    if (state->inputFrame->GetKey(Key::N).pressed) {
+        ctx->audioManager->SetMusicVolume(0.25f);
+    }
+    if (state->inputFrame->GetKey(Key::B).pressed) {
+        ctx->audioManager->SetMusicVolume(1.0f);
     }
 }
 

@@ -10,6 +10,11 @@
 
 #include "spdlog/logger.h"
 
+namespace Audio
+{
+class AudioManager;
+}
+
 namespace Physics
 {
 class PhysicsSystem;
@@ -48,6 +53,7 @@ struct EngineContext
     bool bImguiMouseCaptured = false;
     //Render::ResourceManager* resourceManager;
     Engine::AssetManager* assetManager;
+    Audio::AudioManager* audioManager;
     Physics::PhysicsSystem* physicsSystem;
 };
 } // Core

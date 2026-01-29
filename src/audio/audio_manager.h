@@ -10,6 +10,7 @@
 #include <unordered_map>
 
 #include "audio_asset.h"
+#include "audio_config.h"
 #include "core/allocators/handle.h"
 #include "core/allocators/handle_allocator.h"
 #include "SDL3_mixer/SDL_mixer.h"
@@ -28,7 +29,23 @@ public:
 
     ~AudioManager();
 
-    void Update();
+    void RegisterAudio();
+
+    void Update() const;
+
+    Core::Handle<WillAudio> LoadAudio(const std::string& name, const std::filesystem::path& path);
+
+    void UnloadAudio(Core::Handle<WillAudio> handle);
+
+    void PlayMusic(Core::Handle<WillAudio> handle, bool loop = true);
+    void PlaySfx(Core::Handle<WillAudio> handle);
+
+    void SetMusicVolume(float volume);
+
+    void StopMusic();
+
+    void SetMasterVolume(float volume);
+
 
     Core::Handle<WillAudio> GetAudio(const std::string& name)
     {
@@ -46,7 +63,10 @@ private:
 
     MIX_Mixer* mixer = nullptr;
     MIX_Track* musicMixerTrack = nullptr;
-    MIX_Audio* music = nullptr;
+    std::array<MIX_Track*, MAX_SFX_TRACKS> sfxTracks{};
+    uint32_t currentSfxIndex = 0;
+
+    SDL_PropertiesID infiniteMusicProp;
 
     Core::HandleAllocator<WillAudio, 256> audioHandleAllocator;
     std::array<WillAudio, 256> audioAssets;

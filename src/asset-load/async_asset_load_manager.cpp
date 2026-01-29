@@ -95,6 +95,7 @@ void AsyncAssetLoadManager::ThreadMain()
 
     assetLoadScheduler->RegisterExternalTaskThread();
 
+    // todo model, texture, audio, and pipeline unload (not all need to be queued)
     while (!bShouldExit.load(std::memory_order_acquire)) {
         {
             ZoneScopedN("Process Audio Requests");

@@ -11,6 +11,7 @@
 #include "physics/physics_system.h"
 #include "fwd_components.h"
 #include "imgui.h"
+#include "audio/audio_manager.h"
 #include "components/gameplay/anti_gravity_component.h"
 #include "components/gameplay/floor_component.h"
 #include "components/gameplay/portals/portal_component.h"
@@ -62,6 +63,7 @@ GAME_API void GameLoad(Core::EngineContext* ctx, Engine::GameState* state)
     ImGui::SetCurrentContext(ctx->imguiContext);
 
     ctx->physicsSystem->RegisterAllocator();
+    ctx->audioManager->RegisterAudio();
     state->registry.on_construct<Game::PhysicsBodyComponent>().connect<&Game::OnPhysicsBodyAdded>();
     state->registry.on_destroy<Game::PhysicsBodyComponent>().connect<&Game::OnPhysicsBodyRemoved>();
 }
