@@ -14,26 +14,43 @@
 
 namespace AssetLoad
 {
-AsyncAssetLoadManager::AsyncAssetLoadManager(enki::TaskScheduler* scheduler, Render::VulkanContext* context, Render::ResourceManager* resourceManager, VkPipelineCache pipelineCache)
-    : scheduler(scheduler), context(context), pipelineCache(pipelineCache)
+AsyncAssetLoadManager::AsyncAssetLoadManager(Render::VulkanContext* context, Render::ResourceManager* resourceManager, VkPipelineCache pipelineCache)
+    : context(context), pipelineCache(pipelineCache)
 {
-    // todo make a new scheduler w/ a smaller pool (and more importantly separate from the main scheduler
+    assetLoadScheduler = std::make_unique<enki::TaskScheduler>();
+
+    enki::TaskSchedulerConfig assetConfig;
+    assetConfig.numTaskThreadsToCreate = 4;
+    assetConfig.profilerCallbacks.threadStart = [](uint32_t threadNum_) {
+        static constexpr std::array<const char*, 8> names = {
+            "AssetLoad0", "AssetLoad1", "AssetLoad2", "AssetLoad3",
+            "AssetLoad4", "AssetLoad5", "AssetLoad6", "AssetLoad7" // just in case expand in future
+        };
+        if (threadNum_ < names.size()) {
+            tracy::SetThreadName(names[threadNum_]);
+            Platform::SetThreadName(names[threadNum_]);
+        }
+    };
+    assetConfig.numExternalTaskThreads = 2;
+    assetLoadScheduler->Initialize(assetConfig);
+
+    SPDLOG_INFO("Asset load scheduler operating with {} threads.", assetConfig.numTaskThreadsToCreate);
+
     for (uint32_t i = 0; i < AUDIO_JOB_COUNT; ++i) {
-        audioLoadSlots[i].Initialize(scheduler, [this](bool success, AudioSlotHandle slotHandle) {
+        audioLoadSlots[i].Initialize(assetLoadScheduler.get(), [this](bool success, AudioSlotHandle slotHandle) {
             OnAudioLoadComplete(success, slotHandle);
         });
     }
 
     for (uint32_t i = 0; i < PIPELINE_JOB_COUNT; ++i) {
-        pipelineLoadSlots[i].Initialize(scheduler, context, pipelineCache, [this](bool success, PipelineSlotHandle slotHandle) {
+        pipelineLoadSlots[i].Initialize(assetLoadScheduler.get(), context, pipelineCache, [this](bool success, PipelineSlotHandle slotHandle) {
             OnPipelineLoadComplete(success, slotHandle);
         });
     }
 
     for (uint32_t i = 0; i < MODEL_JOB_COUNT; ++i) {
-        // todo fix the queue submit callback that is straight up wrong. Need to add to queue
         modelLoadSlots[i].Initialize(
-            scheduler,
+            assetLoadScheduler.get(),
             context,
             resourceManager,
             [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
@@ -46,11 +63,11 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(enki::TaskScheduler* scheduler, Ren
     }
 
     for (uint32_t i = 0; i < 8; ++i) {
-        uploadStagings[i].Initialize(context, TEXTURE_LOAD_STAGING_SIZE); // todo new staging size
+        uploadStagings[i].Initialize(context, GPU_DISPATCH_STAGING_SIZE);
     }
 
     thisThread = std::jthread([this] { ThreadMain(); });
-    gpuDispatchThread = std::jthread([this] { DispatchThreadMain(); });
+    gpuDispatchThread = std::jthread([this] { GPUDispatchThreadMain(); });
 }
 
 AsyncAssetLoadManager::~AsyncAssetLoadManager() = default;
@@ -61,7 +78,7 @@ void AsyncAssetLoadManager::ThreadMain()
     tracy::SetThreadName("AsyncAssetLoadMain");
     Platform::SetThreadName("AsyncAssetLoadMain");
 
-    scheduler->RegisterExternalTaskThread();
+    assetLoadScheduler->RegisterExternalTaskThread();
 
     while (!bShouldExit.load(std::memory_order_acquire)) {
         {
@@ -88,7 +105,6 @@ void AsyncAssetLoadManager::ThreadMain()
             ZoneScopedN("Process Model Requests");
             WillModelLoadRequest modelReq{};
             if (modelRequestQueue.try_dequeue(modelReq)) {
-                // todo upload staging allocator is lock free (it spins) so this will spin infinitely until a slot frees up, which is not desirable
                 Core::Handle<WillModelLoadSlot> slotHandle = modelLoadAllocator.Add();
                 if (slotHandle.IsValid()) {
                     Core::Handle<UploadStaging> uploadHandle = uploadStagingAllocator.Add();
@@ -100,7 +116,7 @@ void AsyncAssetLoadManager::ThreadMain()
                     }
                     else {
                         modelRequestQueue.enqueue(modelReq);
-                        // modelLoadAllocator.Remove(slotHandle);
+                        modelLoadAllocator.Remove(slotHandle);
                     }
                 }
                 else {
@@ -138,11 +154,13 @@ void AsyncAssetLoadManager::Join()
     thisThread.join();
 }
 
-void AsyncAssetLoadManager::DispatchThreadMain()
+void AsyncAssetLoadManager::GPUDispatchThreadMain()
 {
     ZoneScoped;
     tracy::SetThreadName("AsyncGPUDispatcherMain");
     Platform::SetThreadName("AsyncGPUDispatcherMain");
+
+    assetLoadScheduler->RegisterExternalTaskThread();
 
     while (!bShouldExit.load(std::memory_order_acquire)) {
         {

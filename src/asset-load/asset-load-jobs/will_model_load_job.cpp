@@ -256,7 +256,7 @@ bool WillModelLoadSlot::LoadModelFromDisk()
 
             // Size check
             ktx_size_t mip0Size = ktxTexture_GetImageSize(ktxTexture(loadedTexture), 0);
-            if (mip0Size > WILL_MODEL_LOAD_STAGING_SIZE) {
+            if (mip0Size > GPU_DISPATCH_STAGING_SIZE) {
                 SPDLOG_WARN("Texture too big to fit in the staging buffer for texture {}, pruning", textureName);
                 pendingTextures.push_back(nullptr);
                 ktxTexture2_Destroy(loadedTexture);

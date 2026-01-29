@@ -12,6 +12,7 @@
 #include "render_pass.h"
 #include "render/resource_manager.h"
 #include "render/vulkan/vk_utils.h"
+#include "tracy/Tracy.hpp"
 
 namespace Render
 {
@@ -980,106 +981,122 @@ void RenderGraph::PrepareSwapchain(VkCommandBuffer cmd, const std::string& name)
 
 void RenderGraph::Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint64_t maxFramesUnused)
 {
+    ZoneScoped;
+
     currentFrameIndex = _currentFrameIndex;
     uploadArenas[currentFrameIndex].allocator.Reset();
 
-    for (TextureFrameCarryover& carryover : textureCarryovers) {
-        if (const TextureResource* tex = GetTexture(carryover.srcName)) {
-            const PhysicalResource& phys = physicalResources[tex->physicalIndex];
-            carryover.physicalImage = phys.image;
-            carryover.textInfo = tex->textureInfo;
-            carryover.layout = tex->layout;
-            carryover.accumulatedUsage = tex->accumulatedUsage;
-        }
-    }
-    for (BufferFrameCarryover& carryover : bufferCarryovers) {
-        if (const BufferResource* buf = GetBuffer(carryover.srcName)) {
-            const PhysicalResource& phys = physicalResources[buf->physicalIndex];
-            carryover.buffer = phys.buffer;
-            carryover.bufferInfo = buf->bufferInfo;
-            carryover.accumulatedUsage = buf->accumulatedUsage;
-        }
-    }
-
-    passes.clear();
-    textures.clear();
-    textureNameToIndex.clear();
-    buffers.clear();
-    bufferNameToIndex.clear();
-
-    for (auto& phys : physicalResources) {
-        phys.logicalResourceIndices.clear();
-        phys.bCanAlias = true;
-    }
-
-    // ====== This is the only time it is safe to reorder physical resource indices ======
-    for (int i = static_cast<int>(physicalResources.size()) - 1; i >= 0; --i) {
-        auto& phys = physicalResources[i];
-
-        if (phys.bIsImported) { continue; }
-        if (!phys.IsAllocated()) { continue; }
-
-        if (currentFrame - phys.lastUsedFrame > maxFramesUnused) {
-            DestroyPhysicalResource(phys);
-            physicalResources.erase(physicalResources.begin() + i);
-        }
-    }
-    // ============================================================================ ======
-
-    for (auto& carryover : textureCarryovers) {
-        uint32_t physicalIndex = UINT32_MAX;
-        for (uint32_t i = 0; i < physicalResources.size(); i++) {
-            if (physicalResources[i].image == carryover.physicalImage) {
-                physicalIndex = i;
-                break;
+    {
+        ZoneScopedN("CarryoverCapture");
+        for (TextureFrameCarryover& carryover : textureCarryovers) {
+            if (const TextureResource* tex = GetTexture(carryover.srcName)) {
+                const PhysicalResource& phys = physicalResources[tex->physicalIndex];
+                carryover.physicalImage = phys.image;
+                carryover.textInfo = tex->textureInfo;
+                carryover.layout = tex->layout;
+                carryover.accumulatedUsage = tex->accumulatedUsage;
             }
         }
-
-        if (physicalIndex == UINT32_MAX) {
-            SPDLOG_ERROR("Carryover texture '{}' physical resource not found", carryover.dstName);
-            continue;
-        }
-
-        TextureResource* newTex = GetOrCreateTexture(carryover.dstName);
-        newTex->textureInfo = carryover.textInfo;
-        newTex->layout = carryover.layout;
-        newTex->accumulatedUsage = carryover.accumulatedUsage;
-        newTex->physicalIndex = physicalIndex;
-
-        PhysicalResource& phys = physicalResources[physicalIndex];
-        phys.logicalResourceIndices.push_back(newTex->index);
-        phys.usageChain.clear();
-        AppendUsageChain(phys, newTex->name, newTex->bCanUseAliasedTexture, bDebugLogging);
-        phys.bCanAlias = false;
-    }
-    textureCarryovers.clear();
-
-    for (auto& carryover : bufferCarryovers) {
-        uint32_t physicalIndex = UINT32_MAX;
-        for (uint32_t i = 0; i < physicalResources.size(); i++) {
-            if (physicalResources[i].buffer == carryover.buffer) {
-                physicalIndex = i;
-                break;
+        for (BufferFrameCarryover& carryover : bufferCarryovers) {
+            if (const BufferResource* buf = GetBuffer(carryover.srcName)) {
+                const PhysicalResource& phys = physicalResources[buf->physicalIndex];
+                carryover.buffer = phys.buffer;
+                carryover.bufferInfo = buf->bufferInfo;
+                carryover.accumulatedUsage = buf->accumulatedUsage;
             }
         }
-
-        if (physicalIndex == UINT32_MAX) {
-            SPDLOG_ERROR("Carryover buffer '{}' physical resource not found", carryover.dstName);
-            continue;
-        }
-
-        BufferResource* newBuf = GetOrCreateBuffer(carryover.dstName);
-        newBuf->bufferInfo = carryover.bufferInfo;
-        newBuf->accumulatedUsage = carryover.accumulatedUsage;
-        newBuf->physicalIndex = physicalIndex;
-
-        PhysicalResource& phys = physicalResources[physicalIndex];
-        phys.logicalResourceIndices.push_back(newBuf->index);
-        phys.usageChain.clear();
-        AppendUsageChain(phys, newBuf->name, newBuf->bCanUseAliasedBuffer, bDebugLogging);
-        phys.bCanAlias = false;
     }
-    bufferCarryovers.clear();
+
+    {
+        // todo: seems string dealloc is causing heap contention when it happens when model loads at the same time.
+        ZoneScopedN("ClearContainers");
+        passes.clear();
+        textures.clear();
+        textureNameToIndex.clear();
+        buffers.clear();
+        bufferNameToIndex.clear();
+
+        for (auto& phys : physicalResources) {
+            phys.logicalResourceIndices.clear();
+            phys.bCanAlias = true;
+        }
+    }
+
+    {
+        ZoneScopedN("CleanupUnusedPhysicalResources");
+        for (int i = static_cast<int>(physicalResources.size()) - 1; i >= 0; --i) {
+            auto& phys = physicalResources[i];
+
+            if (phys.bIsImported) { continue; }
+            if (!phys.IsAllocated()) { continue; }
+
+            if (currentFrame - phys.lastUsedFrame > maxFramesUnused) {
+                DestroyPhysicalResource(phys);
+                physicalResources.erase(physicalResources.begin() + i);
+            }
+        }
+    }
+
+    {
+        ZoneScopedN("CarryoverTextureRestoration");
+        for (auto& carryover : textureCarryovers) {
+            uint32_t physicalIndex = UINT32_MAX;
+            for (uint32_t i = 0; i < physicalResources.size(); i++) {
+                if (physicalResources[i].image == carryover.physicalImage) {
+                    physicalIndex = i;
+                    break;
+                }
+            }
+
+            if (physicalIndex == UINT32_MAX) {
+                SPDLOG_ERROR("Carryover texture '{}' physical resource not found", carryover.dstName);
+                continue;
+            }
+
+            TextureResource* newTex = GetOrCreateTexture(carryover.dstName);
+            newTex->textureInfo = carryover.textInfo;
+            newTex->layout = carryover.layout;
+            newTex->accumulatedUsage = carryover.accumulatedUsage;
+            newTex->physicalIndex = physicalIndex;
+
+            PhysicalResource& phys = physicalResources[physicalIndex];
+            phys.logicalResourceIndices.push_back(newTex->index);
+            phys.usageChain.clear();
+            AppendUsageChain(phys, newTex->name, newTex->bCanUseAliasedTexture, bDebugLogging);
+            phys.bCanAlias = false;
+        }
+        textureCarryovers.clear();
+    }
+
+    {
+        ZoneScopedN("CarryoverBufferRestoration");
+        for (auto& carryover : bufferCarryovers) {
+            uint32_t physicalIndex = UINT32_MAX;
+            for (uint32_t i = 0; i < physicalResources.size(); i++) {
+                if (physicalResources[i].buffer == carryover.buffer) {
+                    physicalIndex = i;
+                    break;
+                }
+            }
+
+            if (physicalIndex == UINT32_MAX) {
+                SPDLOG_ERROR("Carryover buffer '{}' physical resource not found", carryover.dstName);
+                continue;
+            }
+
+            BufferResource* newBuf = GetOrCreateBuffer(carryover.dstName);
+            newBuf->bufferInfo = carryover.bufferInfo;
+            newBuf->accumulatedUsage = carryover.accumulatedUsage;
+            newBuf->physicalIndex = physicalIndex;
+
+            PhysicalResource& phys = physicalResources[physicalIndex];
+            phys.logicalResourceIndices.push_back(newBuf->index);
+            phys.usageChain.clear();
+            AppendUsageChain(phys, newBuf->name, newBuf->bCanUseAliasedBuffer, bDebugLogging);
+            phys.bCanAlias = false;
+        }
+        bufferCarryovers.clear();
+    }
 }
 
 void RenderGraph::InvalidateAll()

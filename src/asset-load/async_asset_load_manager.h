@@ -61,8 +61,7 @@ struct WillModelLoadComplete
 class AsyncAssetLoadManager
 {
 public:
-    AsyncAssetLoadManager(enki::TaskScheduler* scheduler,
-                          Render::VulkanContext* context,
+    AsyncAssetLoadManager(Render::VulkanContext* context,
                           Render::ResourceManager* resourceManager,
                           VkPipelineCache pipelineCache);
 
@@ -76,8 +75,7 @@ public:
     void ThreadMain();
     void Join();
 
-    void DispatchThreadMain();
-    void DispatchJoin();
+    void GPUDispatchThreadMain();
 
     // Audio Loading
     void RequestAudioLoad(Audio::WillAudio* audioEntry);
@@ -106,7 +104,7 @@ public:
     }
 
 private:
-    enki::TaskScheduler* scheduler;
+    std::unique_ptr<enki::TaskScheduler> assetLoadScheduler{};
     Render::VulkanContext* context;
     VkPipelineCache pipelineCache;
     std::atomic<bool> bShouldExit{false};

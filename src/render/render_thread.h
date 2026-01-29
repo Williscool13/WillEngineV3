@@ -79,7 +79,7 @@ public:
 
     void RequestShutdown();
 
-    void Join() const;
+    void Join();
 
     void ThreadMain();
 
@@ -144,7 +144,7 @@ private:
 
     // Threading
     std::atomic<bool> bShouldExit{false};
-    std::unique_ptr<enki::LambdaPinnedTask> pinnedTask{};
+    std::jthread thisThread;
 
     // Owning
     std::unique_ptr<VulkanContext> context{};

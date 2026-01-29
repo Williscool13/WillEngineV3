@@ -144,7 +144,6 @@ void WillEngine::Initialize()
     {
         ZoneScopedN("CreateAssetLoadThread");
         asyncAssetLoadManager = std::make_unique<AssetLoad::AsyncAssetLoadManager>(
-            scheduler.get(),
             renderThread->GetVulkanContext(),
             renderThread->GetResourceManager(),
             renderThread->GetPipelineManager()->GetPipelineCache());
@@ -388,38 +387,49 @@ void WillEngine::Run()
             ZoneScopedN("PrepareRenderFrameData");
             const bool canTransmit = engineRenderSynchronization->gameFrames.try_acquire();
             if (canTransmit) {
-                timeManager->UpdateRender();
+                {
+                    ZoneScopedN("UpdateRender");
+                    timeManager->UpdateRender();
+                }
 
                 Core::FrameBuffer& currentFrameBuffer = engineRenderSynchronization->frameBuffers[frameBufferIndex];
-                stagingFrameBuffer.currentFrameBuffer = frameBufferIndex;
-                stagingFrameBuffer.swapchainRecreateCommand.bIsMinimized = bMinimized;
-                if (bRequireSwapchainRecreate) {
-                    stagingFrameBuffer.swapchainRecreateCommand.bEngineCommandsRecreate = true;
+                stagingFrameBuffer.currentFrameBuffer = frameBufferIndex; {
+                    ZoneScopedN("SwapchainRecreate");
+                    stagingFrameBuffer.swapchainRecreateCommand.bIsMinimized = bMinimized;
+                    if (bRequireSwapchainRecreate) {
+                        stagingFrameBuffer.swapchainRecreateCommand.bEngineCommandsRecreate = true;
 
-                    int32_t w;
-                    int32_t h;
-                    SDL_GetWindowSize(window.get(), &w, &h);
-                    stagingFrameBuffer.swapchainRecreateCommand.width = w;
-                    stagingFrameBuffer.swapchainRecreateCommand.height = h;
-                    bRequireSwapchainRecreate = false;
-                }
-                else {
-                    stagingFrameBuffer.swapchainRecreateCommand.bEngineCommandsRecreate = false;
+                        int32_t w;
+                        int32_t h;
+                        SDL_GetWindowSize(window.get(), &w, &h);
+                        stagingFrameBuffer.swapchainRecreateCommand.width = w;
+                        stagingFrameBuffer.swapchainRecreateCommand.height = h;
+                        bRequireSwapchainRecreate = false;
+                    }
+                    else {
+                        stagingFrameBuffer.swapchainRecreateCommand.bEngineCommandsRecreate = false;
+                    }
+                } {
+                    ZoneScopedN("ImGuiNewFrame");
+                    ImGui_ImplVulkan_NewFrame();
+                    ImGui_ImplSDL3_NewFrame();
+                    ImGui::NewFrame();
+                } {
+                    ZoneScopedN("GamePrepareFrame");
+                    gameFunctions.gamePrepareFrame(engineContext.get(), gameState.get(), &stagingFrameBuffer);
                 }
 
-                ImGui_ImplVulkan_NewFrame();
-                ImGui_ImplSDL3_NewFrame();
-                ImGui::NewFrame();
-                gameFunctions.gamePrepareFrame(engineContext.get(), gameState.get(), &stagingFrameBuffer);
                 stagingFrameBuffer.bFreezeVisibility = bFreezeVisibility;
                 stagingFrameBuffer.bLogRDG = bLogRDG;
-                stagingFrameBuffer.bDrawImgui = bDrawImgui;
+                stagingFrameBuffer.bDrawImgui = bDrawImgui; {
+                    ZoneScopedN("SwapAndPrepare");
+                    std::swap(currentFrameBuffer, stagingFrameBuffer);
+                    stagingFrameBuffer.timeFrame = timeManager->GetTime();
+                    stagingFrameBuffer.bufferAcquireOperations.clear();
+                    stagingFrameBuffer.imageAcquireOperations.clear();
+                    PrepareImgui(frameBufferIndex);
+                }
 
-                std::swap(currentFrameBuffer, stagingFrameBuffer);
-                stagingFrameBuffer.timeFrame = timeManager->GetTime();
-                stagingFrameBuffer.bufferAcquireOperations.clear();
-                stagingFrameBuffer.imageAcquireOperations.clear();
-                PrepareImgui(frameBufferIndex);
                 frameBufferIndex = (frameBufferIndex + 1) % Core::FRAME_BUFFER_COUNT;
                 engineRenderSynchronization->renderFrames.release();
             }
@@ -539,7 +549,8 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
         if (hasCompleted) {
             if (lastSuccess) {
                 ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Completed: %s", lastCompletedAsset.c_str());
-            } else {
+            }
+            else {
                 ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Failed: %s", lastCompletedAsset.c_str());
             }
         }

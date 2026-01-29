@@ -75,13 +75,7 @@ void RenderThread::Start()
 {
     bShouldExit.store(false, std::memory_order_release);
 
-    uint32_t renderThreadNum = scheduler->GetNumTaskThreads() - 1;
-    pinnedTask = std::make_unique<enki::LambdaPinnedTask>(
-        renderThreadNum,
-        [this] { ThreadMain(); }
-    );
-
-    scheduler->AddPinnedTask(pinnedTask.get());
+    thisThread = std::jthread([this] { ThreadMain(); });
 }
 
 void RenderThread::RequestShutdown()
@@ -89,11 +83,9 @@ void RenderThread::RequestShutdown()
     bShouldExit.store(true, std::memory_order_release);
 }
 
-void RenderThread::Join() const
+void RenderThread::Join()
 {
-    if (pinnedTask) {
-        scheduler->WaitforTask(pinnedTask.get());
-    }
+    thisThread.join();
 }
 
 void RenderThread::ThreadMain()
@@ -156,16 +148,21 @@ void RenderThread::ThreadMain()
 
 RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, RenderSynchronization& renderSync, Core::FrameBuffer& frameBuffer)
 {
-    VK_CHECK(vkWaitForFences(context->device, 1, &renderSync.renderFence, true, UINT64_MAX));
-    VK_CHECK(vkResetFences(context->device, 1, &renderSync.renderFence));
-
-    VK_CHECK(vkResetCommandBuffer(renderSync.commandBuffer, 0));
-    VkCommandBufferBeginInfo beginInfo = VkHelpers::CommandBufferBeginInfo();
-    VK_CHECK(vkBeginCommandBuffer(renderSync.commandBuffer, &beginInfo));
-
-    ProcessAcquisitions(renderSync.commandBuffer, frameBuffer.bufferAcquireOperations, frameBuffer.imageAcquireOperations);
-    frameBuffer.bufferAcquireOperations.clear();
-    frameBuffer.imageAcquireOperations.clear();
+    ZoneScopedN("Render"); {
+        ZoneScopedN("WaitForFence");
+        VK_CHECK(vkWaitForFences(context->device, 1, &renderSync.renderFence, true, UINT64_MAX));
+        VK_CHECK(vkResetFences(context->device, 1, &renderSync.renderFence));
+    } {
+        ZoneScopedN("CommandBufferBegin");
+        VK_CHECK(vkResetCommandBuffer(renderSync.commandBuffer, 0));
+        VkCommandBufferBeginInfo beginInfo = VkHelpers::CommandBufferBeginInfo();
+        VK_CHECK(vkBeginCommandBuffer(renderSync.commandBuffer, &beginInfo));
+    } {
+        ZoneScopedN("ProcessAcquisitions");
+        ProcessAcquisitions(renderSync.commandBuffer, frameBuffer.bufferAcquireOperations, frameBuffer.imageAcquireOperations);
+        frameBuffer.bufferAcquireOperations.clear();
+        frameBuffer.imageAcquireOperations.clear();
+    }
 
     if (bRenderRequestsRecreate) {
         VK_CHECK(vkEndCommandBuffer(renderSync.commandBuffer));
@@ -176,7 +173,11 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     }
 
     uint32_t swapchainImageIndex;
-    VkResult e = vkAcquireNextImageKHR(context->device, swapchain->handle, UINT64_MAX, renderSync.swapchainSemaphore, nullptr, &swapchainImageIndex);
+    VkResult e; {
+        ZoneScopedN("AcquireSwapchainImage");
+        e = vkAcquireNextImageKHR(context->device, swapchain->handle, UINT64_MAX, renderSync.swapchainSemaphore, nullptr, &swapchainImageIndex);
+    }
+
     if (e == VK_ERROR_OUT_OF_DATE_KHR || e == VK_SUBOPTIMAL_KHR) {
         SPDLOG_TRACE("[RenderThread::Render] Swapchain acquire failed ({})", string_VkResult(e));
         VK_CHECK(vkEndCommandBuffer(renderSync.commandBuffer));
@@ -190,37 +191,38 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     std::array<uint32_t, 2> renderExtent = renderExtents->GetScaledExtent();
     VkImage currentSwapchainImage = swapchain->swapchainImages[swapchainImageIndex];
     VkImageView currentSwapchainImageView = swapchain->swapchainImageViews[swapchainImageIndex];
-    Core::ViewFamily& viewFamily = frameBuffer.mainViewFamily;
-
-
-    renderGraph->Reset(currentFrameIndex, frameNumber, RDG_PHYSICAL_RESOURCE_UNUSED_THRESHOLD);
-
-    std::array bindings{resourceManager->bindlessSamplerTextureDescriptorBuffer.GetBindingInfo(), resourceManager->bindlessRDGTransientDescriptorBuffer.GetBindingInfo()};
-    std::array indices{0u, 1u};
-    std::array<VkDeviceSize, 2> offsets{0, 0};
-    vkCmdBindDescriptorBuffersEXT(renderSync.commandBuffer, bindings.size(), bindings.data());
-    vkCmdSetDescriptorBufferOffsetsEXT(renderSync.commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, globalPipelineLayout.handle, 0, bindings.size(), indices.data(), offsets.data());
-    vkCmdSetDescriptorBufferOffsetsEXT(renderSync.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, globalPipelineLayout.handle, 0, bindings.size(), indices.data(), offsets.data());
-
-    SetupFrameUniforms(viewFamily, renderExtent, frameBuffer.timeFrame.renderDeltaTime);
-    SetupModelUniforms(viewFamily);
-
-
-    renderGraph->ImportBufferNoBarrier("vertex_buffer", resourceManager->megaVertexBuffer.handle, resourceManager->megaVertexBuffer.address,
-                                       {resourceManager->megaVertexBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
-    renderGraph->ImportBufferNoBarrier("skinned_vertex_buffer", resourceManager->megaSkinnedVertexBuffer.handle, resourceManager->megaSkinnedVertexBuffer.address,
-                                       {resourceManager->megaSkinnedVertexBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
-    renderGraph->ImportBufferNoBarrier("meshlet_vertex_buffer", resourceManager->megaMeshletVerticesBuffer.handle, resourceManager->megaMeshletVerticesBuffer.address,
-                                       {resourceManager->megaMeshletVerticesBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
-    renderGraph->ImportBufferNoBarrier("meshlet_triangle_buffer", resourceManager->megaMeshletTrianglesBuffer.handle, resourceManager->megaMeshletTrianglesBuffer.address,
-                                       {resourceManager->megaMeshletTrianglesBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
-    renderGraph->ImportBufferNoBarrier("meshlet_buffer", resourceManager->megaMeshletBuffer.handle, resourceManager->megaMeshletBuffer.address,
-                                       {resourceManager->megaMeshletBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
-    renderGraph->ImportBufferNoBarrier("primitive_buffer", resourceManager->primitiveBuffer.handle, resourceManager->primitiveBuffer.address,
-                                       {resourceManager->primitiveBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
-
-    renderGraph->ImportBuffer("debug_readback_buffer", resourceManager->debugReadbackBuffer.handle, resourceManager->debugReadbackBuffer.address,
-                              {resourceManager->debugReadbackBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT}, resourceManager->debugReadbackLastKnownState);
+    Core::ViewFamily& viewFamily = frameBuffer.mainViewFamily; {
+        ZoneScopedN("RenderGraphReset");
+        renderGraph->Reset(currentFrameIndex, frameNumber, RDG_PHYSICAL_RESOURCE_UNUSED_THRESHOLD);
+    } {
+        ZoneScopedN("BindDescriptorBuffers");
+        std::array bindings{resourceManager->bindlessSamplerTextureDescriptorBuffer.GetBindingInfo(), resourceManager->bindlessRDGTransientDescriptorBuffer.GetBindingInfo()};
+        std::array indices{0u, 1u};
+        std::array<VkDeviceSize, 2> offsets{0, 0};
+        vkCmdBindDescriptorBuffersEXT(renderSync.commandBuffer, bindings.size(), bindings.data());
+        vkCmdSetDescriptorBufferOffsetsEXT(renderSync.commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, globalPipelineLayout.handle, 0, bindings.size(), indices.data(), offsets.data());
+        vkCmdSetDescriptorBufferOffsetsEXT(renderSync.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, globalPipelineLayout.handle, 0, bindings.size(), indices.data(), offsets.data());
+    } {
+        ZoneScopedN("SetupUniforms");
+        SetupFrameUniforms(viewFamily, renderExtent, frameBuffer.timeFrame.renderDeltaTime);
+        SetupModelUniforms(viewFamily);
+    } {
+        ZoneScopedN("ImportBuffers");
+        renderGraph->ImportBufferNoBarrier("vertex_buffer", resourceManager->megaVertexBuffer.handle, resourceManager->megaVertexBuffer.address,
+                                           {resourceManager->megaVertexBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
+        renderGraph->ImportBufferNoBarrier("skinned_vertex_buffer", resourceManager->megaSkinnedVertexBuffer.handle, resourceManager->megaSkinnedVertexBuffer.address,
+                                           {resourceManager->megaSkinnedVertexBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
+        renderGraph->ImportBufferNoBarrier("meshlet_vertex_buffer", resourceManager->megaMeshletVerticesBuffer.handle, resourceManager->megaMeshletVerticesBuffer.address,
+                                           {resourceManager->megaMeshletVerticesBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
+        renderGraph->ImportBufferNoBarrier("meshlet_triangle_buffer", resourceManager->megaMeshletTrianglesBuffer.handle, resourceManager->megaMeshletTrianglesBuffer.address,
+                                           {resourceManager->megaMeshletTrianglesBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
+        renderGraph->ImportBufferNoBarrier("meshlet_buffer", resourceManager->megaMeshletBuffer.handle, resourceManager->megaMeshletBuffer.address,
+                                           {resourceManager->megaMeshletBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
+        renderGraph->ImportBufferNoBarrier("primitive_buffer", resourceManager->primitiveBuffer.handle, resourceManager->primitiveBuffer.address,
+                                           {resourceManager->primitiveBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
+        renderGraph->ImportBuffer("debug_readback_buffer", resourceManager->debugReadbackBuffer.handle, resourceManager->debugReadbackBuffer.address,
+                                  {resourceManager->debugReadbackBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT}, resourceManager->debugReadbackLastKnownState);
+    }
 
     // Main view G-buffer
     GBufferTargets targets{"albedo_target", "normal_target", "pbr_target", "emissive_target", "velocity_target", "depth_target", "deferred_resolve_target"};
@@ -228,305 +230,314 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
     GBufferTargets portalTargets{"portal_albedo", "portal_normal", "portal_pbr", "portal_emissive", "portal_velocity", "portal_depth", "portal_deferred_resolve"};
     renderGraph->CreateTexture("portal_deferred_resolve", TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
 
-    RenderPass& clearDeferredImagePass = renderGraph->AddPass("Clear Deferred Images", VK_PIPELINE_STAGE_2_CLEAR_BIT);
-    clearDeferredImagePass.WriteClearImage(targets.outFinalColor);
-    clearDeferredImagePass.WriteClearImage(portalTargets.outFinalColor);
-    clearDeferredImagePass.Execute([&](VkCommandBuffer cmd) {
-        constexpr VkClearColorValue clearColor = {0.0f, 0.1f, 0.2f, 1.0f};
-        VkImageSubresourceRange colorSubresource = VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 1, 1);
+    {
+        ZoneScopedN("SetupRenderGraph");
 
-        VkImage mainImg = renderGraph->GetImageHandle(targets.outFinalColor);
-        vkCmdClearColorImage(cmd, mainImg, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &colorSubresource);
+        RenderPass& clearDeferredImagePass = renderGraph->AddPass("Clear Deferred Images", VK_PIPELINE_STAGE_2_CLEAR_BIT);
+        clearDeferredImagePass.WriteClearImage(targets.outFinalColor);
+        clearDeferredImagePass.WriteClearImage(portalTargets.outFinalColor);
+        clearDeferredImagePass.Execute([&](VkCommandBuffer cmd) {
+            constexpr VkClearColorValue clearColor = {0.0f, 0.1f, 0.2f, 1.0f};
+            VkImageSubresourceRange colorSubresource = VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 1, 1);
 
-        VkImage portalImg = renderGraph->GetImageHandle(portalTargets.outFinalColor);
-        vkCmdClearColorImage(cmd, portalImg, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &colorSubresource);
-    });
+            VkImage mainImg = renderGraph->GetImageHandle(targets.outFinalColor);
+            vkCmdClearColorImage(cmd, mainImg, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &colorSubresource);
+
+            VkImage portalImg = renderGraph->GetImageHandle(portalTargets.outFinalColor);
+            vkCmdClearColorImage(cmd, portalImg, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &colorSubresource);
+        });
 
 
-    bool bHasMainGeometry = !viewFamily.mainInstances.empty() && pipelineManager->IsCategoryReady(PipelineCategory::Geometry | PipelineCategory::Instancing);
-    bool bHasDirectGeometry = !viewFamily.customStencilDraws.empty() && pipelineManager->IsCategoryReady(PipelineCategory::CustomStencilPass);
-    bool bHasAnyGeometry = bHasMainGeometry || bHasDirectGeometry;
-    bool bHasGTAO = viewFamily.gtaoConfig.bEnabled && pipelineManager->IsCategoryReady(PipelineCategory::GTAO);
-    bool bHasShadows = viewFamily.shadowConfig.enabled && pipelineManager->IsCategoryReady(PipelineCategory::ShadowPass);
-    bool bHasDeferred = pipelineManager->IsCategoryReady(PipelineCategory::DeferredShading);
+        bool bHasMainGeometry = !viewFamily.mainInstances.empty() && pipelineManager->IsCategoryReady(PipelineCategory::Geometry | PipelineCategory::Instancing);
+        bool bHasDirectGeometry = !viewFamily.customStencilDraws.empty() && pipelineManager->IsCategoryReady(PipelineCategory::CustomStencilPass);
+        bool bHasAnyGeometry = bHasMainGeometry || bHasDirectGeometry;
+        bool bHasGTAO = viewFamily.gtaoConfig.bEnabled && pipelineManager->IsCategoryReady(PipelineCategory::GTAO);
+        bool bHasShadows = viewFamily.shadowConfig.enabled && pipelineManager->IsCategoryReady(PipelineCategory::ShadowPass);
+        bool bHasDeferred = pipelineManager->IsCategoryReady(PipelineCategory::DeferredShading);
 
-    if (bHasAnyGeometry) {
-        if (bHasShadows) {
-            SetupCascadedShadows(*renderGraph, viewFamily);
+        if (bHasAnyGeometry) {
+            if (bHasShadows) {
+                SetupCascadedShadows(*renderGraph, viewFamily);
+            }
+
+            renderGraph->CreateTexture(targets.albedo, TextureInfo{GBUFFER_ALBEDO_FORMAT, renderExtent[0], renderExtent[1], 1});
+            renderGraph->CreateTexture(targets.normal, TextureInfo{GBUFFER_NORMAL_FORMAT, renderExtent[0], renderExtent[1], 1});
+            renderGraph->CreateTexture(targets.pbr, TextureInfo{GBUFFER_PBR_FORMAT, renderExtent[0], renderExtent[1], 1});
+            renderGraph->CreateTexture(targets.emissive, TextureInfo{GBUFFER_EMISSIVE_FORMAT, renderExtent[0], renderExtent[1], 1});
+            renderGraph->CreateTexture(targets.velocity, TextureInfo{GBUFFER_MOTION_FORMAT, renderExtent[0], renderExtent[1], 1});
+            renderGraph->CreateTexture(targets.depthStencil, TextureInfo{DEPTH_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
+
+            if (bHasMainGeometry) {
+                SetupMainGeometryPass(*renderGraph, viewFamily, renderExtent, targets, 0, true);
+            }
+
+            if (bHasDirectGeometry) {
+                SetupDirectGeometryPass(*renderGraph, viewFamily, renderExtent, targets, 0, !bHasMainGeometry);
+            }
+
+            if (bHasGTAO) {
+                SetupGroundTruthAmbientOcclusion(*renderGraph, viewFamily, renderExtent, targets, 0);
+            }
+
+            if (bHasShadows || bHasGTAO) {
+                SetupShadowsResolve(*renderGraph, viewFamily, renderExtent, targets, 0);
+            }
+
+            if (bHasDeferred) {
+                SetupDeferredLighting(*renderGraph, viewFamily, renderExtent, targets, 0);
+            }
         }
 
-        renderGraph->CreateTexture(targets.albedo, TextureInfo{GBUFFER_ALBEDO_FORMAT, renderExtent[0], renderExtent[1], 1});
-        renderGraph->CreateTexture(targets.normal, TextureInfo{GBUFFER_NORMAL_FORMAT, renderExtent[0], renderExtent[1], 1});
-        renderGraph->CreateTexture(targets.pbr, TextureInfo{GBUFFER_PBR_FORMAT, renderExtent[0], renderExtent[1], 1});
-        renderGraph->CreateTexture(targets.emissive, TextureInfo{GBUFFER_EMISSIVE_FORMAT, renderExtent[0], renderExtent[1], 1});
-        renderGraph->CreateTexture(targets.velocity, TextureInfo{GBUFFER_MOTION_FORMAT, renderExtent[0], renderExtent[1], 1});
-        renderGraph->CreateTexture(targets.depthStencil, TextureInfo{DEPTH_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
+        bool bHasPortalView = bHasAnyGeometry && !viewFamily.portalViews.empty();
+        if (bHasPortalView) {
+            renderGraph->CreateTexture(portalTargets.albedo, TextureInfo{GBUFFER_ALBEDO_FORMAT, renderExtent[0], renderExtent[1], 1});
+            renderGraph->CreateTexture(portalTargets.normal, TextureInfo{GBUFFER_NORMAL_FORMAT, renderExtent[0], renderExtent[1], 1});
+            renderGraph->CreateTexture(portalTargets.pbr, TextureInfo{GBUFFER_PBR_FORMAT, renderExtent[0], renderExtent[1], 1});
+            renderGraph->CreateTexture(portalTargets.emissive, TextureInfo{GBUFFER_EMISSIVE_FORMAT, renderExtent[0], renderExtent[1], 1});
+            renderGraph->CreateTexture(portalTargets.velocity, TextureInfo{GBUFFER_MOTION_FORMAT, renderExtent[0], renderExtent[1], 1});
+            renderGraph->CreateTexture(portalTargets.depthStencil, TextureInfo{DEPTH_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
 
-        if (bHasMainGeometry) {
-            SetupMainGeometryPass(*renderGraph, viewFamily, renderExtent, targets, 0, true);
+            if (bHasMainGeometry) {
+                SetupMainGeometryPass(*renderGraph, viewFamily, renderExtent, portalTargets, 1, true);
+            }
+
+            if (bHasDirectGeometry) {
+                SetupDirectGeometryPass(*renderGraph, viewFamily, renderExtent, portalTargets, 1, !bHasMainGeometry);
+            }
+
+            if (bHasGTAO) {
+                SetupGroundTruthAmbientOcclusion(*renderGraph, viewFamily, renderExtent, portalTargets, 1);
+            }
+
+            if (bHasShadows || bHasGTAO) {
+                SetupShadowsResolve(*renderGraph, viewFamily, renderExtent, portalTargets, 1);
+            }
+
+            if (bHasDeferred) {
+                SetupDeferredLighting(*renderGraph, viewFamily, renderExtent, portalTargets, 1);
+            }
         }
 
-        if (bHasDirectGeometry) {
-            SetupDirectGeometryPass(*renderGraph, viewFamily, renderExtent, targets, 0, !bHasMainGeometry);
+
+        // Portal Composite
+        if (bHasPortalView) {
+            SetupPortalComposite(*renderGraph, viewFamily, renderExtent, targets, portalTargets);
         }
 
-        if (bHasGTAO) {
-            SetupGroundTruthAmbientOcclusion(*renderGraph, viewFamily, renderExtent, targets, 0);
+        PostProcessTargets ppTargets{targets.outFinalColor, targets.velocity, targets.depthStencil};
+        PostProcessTargets taaTargets{targets.outFinalColor, targets.velocity, targets.depthStencil};
+        std::string finalOutput = targets.outFinalColor;
+        if (bHasAnyGeometry) {
+            bool bHasTAAPass = pipelineManager->IsCategoryReady(PipelineCategory::TAA) && viewFamily.postProcessConfig.bEnableTemporalAntialiasing;
+            if (bHasTAAPass) {
+                taaTargets.finalColor = SetupTemporalAntialiasing(*renderGraph, viewFamily, renderExtent, ppTargets);
+            }
+
+            bool bHasPostProcess = pipelineManager->IsCategoryReady(PipelineCategory::PostProcess);
+            if (bHasPostProcess) {
+                finalOutput = SetupPostProcessing(*renderGraph, viewFamily, renderExtent, taaTargets, frameBuffer.timeFrame.renderDeltaTime);
+            }
         }
-
-        if (bHasShadows || bHasGTAO) {
-            SetupShadowsResolve(*renderGraph, viewFamily, renderExtent, targets, 0);
-        }
-
-        if (bHasDeferred) {
-            SetupDeferredLighting(*renderGraph, viewFamily, renderExtent, targets, 0);
-        }
-    }
-
-    bool bHasPortalView = bHasAnyGeometry && !viewFamily.portalViews.empty();
-    if (bHasPortalView) {
-        renderGraph->CreateTexture(portalTargets.albedo, TextureInfo{GBUFFER_ALBEDO_FORMAT, renderExtent[0], renderExtent[1], 1});
-        renderGraph->CreateTexture(portalTargets.normal, TextureInfo{GBUFFER_NORMAL_FORMAT, renderExtent[0], renderExtent[1], 1});
-        renderGraph->CreateTexture(portalTargets.pbr, TextureInfo{GBUFFER_PBR_FORMAT, renderExtent[0], renderExtent[1], 1});
-        renderGraph->CreateTexture(portalTargets.emissive, TextureInfo{GBUFFER_EMISSIVE_FORMAT, renderExtent[0], renderExtent[1], 1});
-        renderGraph->CreateTexture(portalTargets.velocity, TextureInfo{GBUFFER_MOTION_FORMAT, renderExtent[0], renderExtent[1], 1});
-        renderGraph->CreateTexture(portalTargets.depthStencil, TextureInfo{DEPTH_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
-
-        if (bHasMainGeometry) {
-            SetupMainGeometryPass(*renderGraph, viewFamily, renderExtent, portalTargets, 1, true);
-        }
-
-        if (bHasDirectGeometry) {
-            SetupDirectGeometryPass(*renderGraph, viewFamily, renderExtent, portalTargets, 1, !bHasMainGeometry);
-        }
-
-        if (bHasGTAO) {
-            SetupGroundTruthAmbientOcclusion(*renderGraph, viewFamily, renderExtent, portalTargets, 1);
-        }
-
-        if (bHasShadows || bHasGTAO) {
-            SetupShadowsResolve(*renderGraph, viewFamily, renderExtent, portalTargets, 1);
-        }
-
-        if (bHasDeferred) {
-            SetupDeferredLighting(*renderGraph, viewFamily, renderExtent, portalTargets, 1);
-        }
-    }
-
-
-    // Portal Composite
-    if (bHasPortalView) {
-        SetupPortalComposite(*renderGraph, viewFamily, renderExtent, targets, portalTargets);
-    }
-
-    PostProcessTargets ppTargets{targets.outFinalColor, targets.velocity, targets.depthStencil};
-    PostProcessTargets taaTargets{targets.outFinalColor, targets.velocity, targets.depthStencil};
-    std::string finalOutput = targets.outFinalColor;
-    if (bHasAnyGeometry) {
-        bool bHasTAAPass = pipelineManager->IsCategoryReady(PipelineCategory::TAA) && viewFamily.postProcessConfig.bEnableTemporalAntialiasing;
-        if (bHasTAAPass) {
-            taaTargets.finalColor = SetupTemporalAntialiasing(*renderGraph, viewFamily, renderExtent, ppTargets);
-        }
-
-        bool bHasPostProcess = pipelineManager->IsCategoryReady(PipelineCategory::PostProcess);
-        if (bHasPostProcess) {
-            finalOutput = SetupPostProcessing(*renderGraph, viewFamily, renderExtent, taaTargets, frameBuffer.timeFrame.renderDeltaTime);
-        }
-    }
 
 
 #if WILL_EDITOR
-    RenderPass& readbackPass = renderGraph->AddPass("Debug Readback", VK_PIPELINE_STAGE_2_COPY_BIT);
-    if (renderGraph->HasBuffer("indirect_buffer") && renderGraph->HasBuffer("indirect_count_buffer")
-        && renderGraph->HasBuffer("luminance_histogram") && renderGraph->HasBuffer("luminance_buffer")) {
-        readbackPass.ReadTransferBuffer("indirect_buffer");
-        readbackPass.ReadTransferBuffer("indirect_count_buffer");
-        readbackPass.ReadTransferBuffer("luminance_histogram");
-        readbackPass.ReadTransferBuffer("luminance_buffer");
-        readbackPass.WriteTransferBuffer("debug_readback_buffer");
-        readbackPass.Execute([&](VkCommandBuffer cmd) {
-            size_t offsetSoFar = 0;
-            VkBufferCopy countCopy{};
-            countCopy.srcOffset = 0;
-            countCopy.dstOffset = 0;
-            countCopy.size = sizeof(uint32_t);
-            vkCmdCopyBuffer(cmd, renderGraph->GetBufferHandle("indirect_count_buffer"), renderGraph->GetBufferHandle("debug_readback_buffer"), 1, &countCopy);
-            offsetSoFar += sizeof(uint32_t);
+        RenderPass& readbackPass = renderGraph->AddPass("Debug Readback", VK_PIPELINE_STAGE_2_COPY_BIT);
+        if (renderGraph->HasBuffer("indirect_buffer") && renderGraph->HasBuffer("indirect_count_buffer")
+            && renderGraph->HasBuffer("luminance_histogram") && renderGraph->HasBuffer("luminance_buffer")) {
+            readbackPass.ReadTransferBuffer("indirect_buffer");
+            readbackPass.ReadTransferBuffer("indirect_count_buffer");
+            readbackPass.ReadTransferBuffer("luminance_histogram");
+            readbackPass.ReadTransferBuffer("luminance_buffer");
+            readbackPass.WriteTransferBuffer("debug_readback_buffer");
+            readbackPass.Execute([&](VkCommandBuffer cmd) {
+                size_t offsetSoFar = 0;
+                VkBufferCopy countCopy{};
+                countCopy.srcOffset = 0;
+                countCopy.dstOffset = 0;
+                countCopy.size = sizeof(uint32_t);
+                vkCmdCopyBuffer(cmd, renderGraph->GetBufferHandle("indirect_count_buffer"), renderGraph->GetBufferHandle("debug_readback_buffer"), 1, &countCopy);
+                offsetSoFar += sizeof(uint32_t);
 
-            VkBufferCopy indirectCopy{};
-            indirectCopy.srcOffset = 0;
-            indirectCopy.dstOffset = offsetSoFar;
-            indirectCopy.size = 10 * sizeof(InstancedMeshIndirectDrawParameters);
-            vkCmdCopyBuffer(cmd, renderGraph->GetBufferHandle("indirect_buffer"), renderGraph->GetBufferHandle("debug_readback_buffer"), 1, &indirectCopy);
-            offsetSoFar += 10 * sizeof(InstancedMeshIndirectDrawParameters);
+                VkBufferCopy indirectCopy{};
+                indirectCopy.srcOffset = 0;
+                indirectCopy.dstOffset = offsetSoFar;
+                indirectCopy.size = 10 * sizeof(InstancedMeshIndirectDrawParameters);
+                vkCmdCopyBuffer(cmd, renderGraph->GetBufferHandle("indirect_buffer"), renderGraph->GetBufferHandle("debug_readback_buffer"), 1, &indirectCopy);
+                offsetSoFar += 10 * sizeof(InstancedMeshIndirectDrawParameters);
 
-            VkBufferCopy histogramCopy{};
-            histogramCopy.srcOffset = 0;
-            histogramCopy.dstOffset = offsetSoFar;
-            histogramCopy.size = 256 * sizeof(uint32_t);
-            vkCmdCopyBuffer(cmd, renderGraph->GetBufferHandle("luminance_histogram"), renderGraph->GetBufferHandle("debug_readback_buffer"), 1, &histogramCopy);
-            offsetSoFar += 256 * sizeof(uint32_t);
+                VkBufferCopy histogramCopy{};
+                histogramCopy.srcOffset = 0;
+                histogramCopy.dstOffset = offsetSoFar;
+                histogramCopy.size = 256 * sizeof(uint32_t);
+                vkCmdCopyBuffer(cmd, renderGraph->GetBufferHandle("luminance_histogram"), renderGraph->GetBufferHandle("debug_readback_buffer"), 1, &histogramCopy);
+                offsetSoFar += 256 * sizeof(uint32_t);
 
-            VkBufferCopy averageExposureCopy{};
-            averageExposureCopy.srcOffset = 0;
-            averageExposureCopy.dstOffset = offsetSoFar;
-            averageExposureCopy.size = sizeof(uint32_t);
-            vkCmdCopyBuffer(cmd, renderGraph->GetBufferHandle("luminance_buffer"), renderGraph->GetBufferHandle("debug_readback_buffer"), 1, &averageExposureCopy);
-            offsetSoFar += sizeof(uint32_t);
-        });
-    }
+                VkBufferCopy averageExposureCopy{};
+                averageExposureCopy.srcOffset = 0;
+                averageExposureCopy.dstOffset = offsetSoFar;
+                averageExposureCopy.size = sizeof(uint32_t);
+                vkCmdCopyBuffer(cmd, renderGraph->GetBufferHandle("luminance_buffer"), renderGraph->GetBufferHandle("debug_readback_buffer"), 1, &averageExposureCopy);
+                offsetSoFar += sizeof(uint32_t);
+            });
+        }
 #endif
 
 
-    bool bHasDebugPass = !viewFamily.debugResourceName.empty() && pipelineManager->IsCategoryReady(PipelineCategory::Debug);
-    if (bHasDebugPass) {
-        const char* debugTargetName = viewFamily.debugResourceName.c_str();
+        bool bHasDebugPass = !viewFamily.debugResourceName.empty() && pipelineManager->IsCategoryReady(PipelineCategory::Debug);
+        if (bHasDebugPass) {
+            const char* debugTargetName = viewFamily.debugResourceName.c_str();
 
-        if (renderGraph->HasTexture(debugTargetName)) {
-            auto& debugVisPass = renderGraph->AddPass("Debug Visualize", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-            debugVisPass.ReadSampledImage(debugTargetName);
-            debugVisPass.WriteStorageImage(finalOutput);
-            debugVisPass.Execute([&, debugTargetName](VkCommandBuffer cmd) {
-                const ResourceDimensions& dims = renderGraph->GetImageDimensions(debugTargetName);
-                VkImageAspectFlags aspect = renderGraph->GetImageAspect(debugTargetName);
+            if (renderGraph->HasTexture(debugTargetName)) {
+                auto& debugVisPass = renderGraph->AddPass("Debug Visualize", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+                debugVisPass.ReadSampledImage(debugTargetName);
+                debugVisPass.WriteStorageImage(finalOutput);
+                debugVisPass.Execute([&, debugTargetName, finalOutput](VkCommandBuffer cmd) {
+                    const ResourceDimensions& dims = renderGraph->GetImageDimensions(debugTargetName);
+                    VkImageAspectFlags aspect = renderGraph->GetImageAspect(debugTargetName);
 
-                VkImageAspectFlags viewAspect = aspect;
-                if (viewFamily.debugViewAspect == Core::DebugViewAspect::Depth) {
-                    viewAspect = VK_IMAGE_ASPECT_DEPTH_BIT;
-                }
-                else if (viewFamily.debugViewAspect == Core::DebugViewAspect::Stencil) {
-                    viewAspect = VK_IMAGE_ASPECT_STENCIL_BIT;
-                }
+                    VkImageAspectFlags viewAspect = aspect;
+                    if (viewFamily.debugViewAspect == Core::DebugViewAspect::Depth) {
+                        viewAspect = VK_IMAGE_ASPECT_DEPTH_BIT;
+                    }
+                    else if (viewFamily.debugViewAspect == Core::DebugViewAspect::Stencil) {
+                        viewAspect = VK_IMAGE_ASPECT_STENCIL_BIT;
+                    }
 
-                StorageImageType storageType = GetStorageImageType(dims.format, viewAspect);
-                uint32_t textureArrayIndex{3};
-                switch (storageType) {
-                    case StorageImageType::Float4:
-                        textureArrayIndex = 0;
-                        break;
-                    case StorageImageType::Float2:
-                        textureArrayIndex = 1;
-                        break;
-                    case StorageImageType::Float:
-                        textureArrayIndex = 2;
-                        break;
-                    case StorageImageType::UInt4:
-                        textureArrayIndex = 0;
-                        break;
-                    case StorageImageType::UInt:
-                        textureArrayIndex = 2;
-                        break;
-                }
+                    StorageImageType storageType = GetStorageImageType(dims.format, viewAspect);
+                    uint32_t textureArrayIndex{3};
+                    switch (storageType) {
+                        case StorageImageType::Float4:
+                            textureArrayIndex = 0;
+                            break;
+                        case StorageImageType::Float2:
+                            textureArrayIndex = 1;
+                            break;
+                        case StorageImageType::Float:
+                            textureArrayIndex = 2;
+                            break;
+                        case StorageImageType::UInt4:
+                            textureArrayIndex = 0;
+                            break;
+                        case StorageImageType::UInt:
+                            textureArrayIndex = 2;
+                            break;
+                    }
 
-                uint32_t textureIndexInArray = renderGraph->GetSampledImageViewDescriptorIndex(debugTargetName);
-                if (viewFamily.debugViewAspect == Core::DebugViewAspect::Depth) {
-                    textureIndexInArray = renderGraph->GetDepthOnlySampledImageViewDescriptorIndex(debugTargetName);
-                }
-                else if (viewFamily.debugViewAspect == Core::DebugViewAspect::Stencil) {
-                    // uint storage descriptor array
-                    textureArrayIndex = 7;
-                    textureIndexInArray = renderGraph->GetStencilOnlyStorageImageViewDescriptorIndex(debugTargetName);
-                }
+                    uint32_t textureIndexInArray = renderGraph->GetSampledImageViewDescriptorIndex(debugTargetName);
+                    if (viewFamily.debugViewAspect == Core::DebugViewAspect::Depth) {
+                        textureIndexInArray = renderGraph->GetDepthOnlySampledImageViewDescriptorIndex(debugTargetName);
+                    }
+                    else if (viewFamily.debugViewAspect == Core::DebugViewAspect::Stencil) {
+                        // uint storage descriptor array
+                        textureArrayIndex = 7;
+                        textureIndexInArray = renderGraph->GetStencilOnlyStorageImageViewDescriptorIndex(debugTargetName);
+                    }
 
-                uint32_t outputIndexIndex = renderGraph->GetStorageImageViewDescriptorIndex(finalOutput);
+                    uint32_t outputIndexIndex = renderGraph->GetStorageImageViewDescriptorIndex(finalOutput);
 
-                DebugVisualizePushConstant pc{
-                    .sceneData = renderGraph->GetBufferAddress("scene_data"),
-                    .srcExtent = {dims.width, dims.height},
-                    .dstExtent = {renderExtent[0], renderExtent[1]},
-                    .nearPlane = viewFamily.mainView.currentViewData.nearPlane,
-                    .farPlane = viewFamily.mainView.currentViewData.farPlane,
-                    .textureArrayIndex = textureArrayIndex,
-                    .textureIndexInArray = textureIndexInArray,
-                    .valueTransformationType = static_cast<uint32_t>(viewFamily.debugTransformationType),
-                    .outputImageIndex = outputIndexIndex,
-                };
-                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("debug_visualize");
-                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
-                vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-                uint32_t xDispatch = (renderExtent[0] + 15) / 16;
-                uint32_t yDispatch = (renderExtent[1] + 15) / 16;
-                vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
+                    DebugVisualizePushConstant pc{
+                        .sceneData = renderGraph->GetBufferAddress("scene_data"),
+                        .srcExtent = {dims.width, dims.height},
+                        .dstExtent = {renderExtent[0], renderExtent[1]},
+                        .nearPlane = viewFamily.mainView.currentViewData.nearPlane,
+                        .farPlane = viewFamily.mainView.currentViewData.farPlane,
+                        .textureArrayIndex = textureArrayIndex,
+                        .textureIndexInArray = textureIndexInArray,
+                        .valueTransformationType = static_cast<uint32_t>(viewFamily.debugTransformationType),
+                        .outputImageIndex = outputIndexIndex,
+                    };
+                    const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("debug_visualize");
+                    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+                    vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+                    uint32_t xDispatch = (renderExtent[0] + 15) / 16;
+                    uint32_t yDispatch = (renderExtent[1] + 15) / 16;
+                    vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
+                });
+            }
+        }
+
+        renderGraph->ImportTexture("swapchain_image", currentSwapchainImage, currentSwapchainImageView, TextureInfo{swapchain->format, swapchain->extent.width, swapchain->extent.height, 1},
+                                   swapchain->usages,
+                                   VK_IMAGE_LAYOUT_UNDEFINED, VK_PIPELINE_STAGE_2_BLIT_BIT, VK_IMAGE_LAYOUT_UNDEFINED);
+
+        auto& blitPass = renderGraph->AddPass("Blit To Swapchain", VK_PIPELINE_STAGE_2_BLIT_BIT);
+        blitPass.ReadBlitImage(finalOutput);
+        blitPass.WriteBlitImage("swapchain_image");
+        blitPass.Execute([&, finalOutput](VkCommandBuffer cmd) {
+            VkImage drawImage = renderGraph->GetImageHandle(finalOutput);
+
+            VkOffset3D renderOffset = {static_cast<int32_t>(renderExtent[0]), static_cast<int32_t>(renderExtent[1]), 1};
+            VkOffset3D swapchainOffset = {static_cast<int32_t>(swapchain->extent.width), static_cast<int32_t>(swapchain->extent.height), 1};
+
+            VkImageBlit2 blitRegion{};
+            blitRegion.sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2;
+            blitRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            blitRegion.srcSubresource.layerCount = 1;
+            blitRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            blitRegion.dstSubresource.layerCount = 1;
+            blitRegion.srcOffsets[0] = {0, 0, 0};
+            blitRegion.srcOffsets[1] = renderOffset;
+            blitRegion.dstOffsets[0] = {0, swapchainOffset.y, 0};
+            blitRegion.dstOffsets[1] = {swapchainOffset.x, 0, swapchainOffset.z};
+
+            VkBlitImageInfo2 blitInfo{};
+            blitInfo.sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2;
+            blitInfo.srcImage = drawImage;
+            blitInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            blitInfo.dstImage = currentSwapchainImage;
+            blitInfo.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            blitInfo.regionCount = 1;
+            blitInfo.pRegions = &blitRegion;
+            blitInfo.filter = VK_FILTER_LINEAR;
+
+            vkCmdBlitImage2(cmd, &blitInfo);
+        });
+
+        if (frameBuffer.bDrawImgui) {
+            auto& imguiEditorPass = renderGraph->AddPass("Imgui Draw", VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT);
+            imguiEditorPass.WriteColorAttachment("swapchain_image");
+            imguiEditorPass.Execute([&](VkCommandBuffer cmd) {
+                const VkRenderingAttachmentInfo imguiAttachment = VkHelpers::RenderingAttachmentInfo(renderGraph->GetImageViewHandle("swapchain_image"), nullptr,
+                                                                                                     VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+                const ResourceDimensions& dims = renderGraph->GetImageDimensions("swapchain_image");
+                const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({dims.width, dims.height}, &imguiAttachment, nullptr);
+                vkCmdBeginRendering(cmd, &renderInfo);
+                ImDrawDataSnapshot& imguiSnapshot = engineRenderSynchronization->imguiDataSnapshots[currentFrameIndex];
+                ImGui_ImplVulkan_RenderDrawData(&imguiSnapshot.DrawData, cmd);
+
+                vkCmdEndRendering(cmd);
             });
         }
+    } {
+        ZoneScopedN("RenderGraphCompile");
+        renderGraph->SetDebugLogging(frameBuffer.bLogRDG);
+        renderGraph->Compile(frameNumber);
+    } {
+        ZoneScopedN("RenderGraphExecute");
+        renderGraph->Execute(renderSync.commandBuffer);
+        renderGraph->PrepareSwapchain(renderSync.commandBuffer, "swapchain_image");
     }
-
-    renderGraph->ImportTexture("swapchain_image", currentSwapchainImage, currentSwapchainImageView, TextureInfo{swapchain->format, swapchain->extent.width, swapchain->extent.height, 1},
-                               swapchain->usages,
-                               VK_IMAGE_LAYOUT_UNDEFINED, VK_PIPELINE_STAGE_2_BLIT_BIT, VK_IMAGE_LAYOUT_UNDEFINED);
-
-    auto& blitPass = renderGraph->AddPass("Blit To Swapchain", VK_PIPELINE_STAGE_2_BLIT_BIT);
-    blitPass.ReadBlitImage(finalOutput);
-    blitPass.WriteBlitImage("swapchain_image");
-    blitPass.Execute([&](VkCommandBuffer cmd) {
-        VkImage drawImage = renderGraph->GetImageHandle(finalOutput);
-
-        VkOffset3D renderOffset = {static_cast<int32_t>(renderExtent[0]), static_cast<int32_t>(renderExtent[1]), 1};
-        VkOffset3D swapchainOffset = {static_cast<int32_t>(swapchain->extent.width), static_cast<int32_t>(swapchain->extent.height), 1};
-
-        VkImageBlit2 blitRegion{};
-        blitRegion.sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2;
-        blitRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        blitRegion.srcSubresource.layerCount = 1;
-        blitRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        blitRegion.dstSubresource.layerCount = 1;
-        blitRegion.srcOffsets[0] = {0, 0, 0};
-        blitRegion.srcOffsets[1] = renderOffset;
-        blitRegion.dstOffsets[0] = {0, swapchainOffset.y, 0};
-        blitRegion.dstOffsets[1] = {swapchainOffset.x, 0, swapchainOffset.z};
-
-        VkBlitImageInfo2 blitInfo{};
-        blitInfo.sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2;
-        blitInfo.srcImage = drawImage;
-        blitInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-        blitInfo.dstImage = currentSwapchainImage;
-        blitInfo.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        blitInfo.regionCount = 1;
-        blitInfo.pRegions = &blitRegion;
-        blitInfo.filter = VK_FILTER_LINEAR;
-
-        vkCmdBlitImage2(cmd, &blitInfo);
-    });
-
-    if (frameBuffer.bDrawImgui) {
-        auto& imguiEditorPass = renderGraph->AddPass("Imgui Draw", VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT);
-        imguiEditorPass.WriteColorAttachment("swapchain_image");
-        imguiEditorPass.Execute([&](VkCommandBuffer cmd) {
-            const VkRenderingAttachmentInfo imguiAttachment = VkHelpers::RenderingAttachmentInfo(renderGraph->GetImageViewHandle("swapchain_image"), nullptr,
-                                                                                                 VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-            const ResourceDimensions& dims = renderGraph->GetImageDimensions("swapchain_image");
-            const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({dims.width, dims.height}, &imguiAttachment, nullptr);
-            vkCmdBeginRendering(cmd, &renderInfo);
-            ImDrawDataSnapshot& imguiSnapshot = engineRenderSynchronization->imguiDataSnapshots[currentFrameIndex];
-            ImGui_ImplVulkan_RenderDrawData(&imguiSnapshot.DrawData, cmd);
-
-            vkCmdEndRendering(cmd);
-        });
-    }
-
-    renderGraph->SetDebugLogging(frameBuffer.bLogRDG);
-    renderGraph->Compile(frameNumber);
-    renderGraph->Execute(renderSync.commandBuffer);
-    renderGraph->PrepareSwapchain(renderSync.commandBuffer, "swapchain_image");
 
     resourceManager->debugReadbackLastKnownState = renderGraph->GetBufferState("debug_readback_buffer");
 
-    VK_CHECK(vkEndCommandBuffer(renderSync.commandBuffer));
+    VK_CHECK(vkEndCommandBuffer(renderSync.commandBuffer)); {
+        ZoneScopedN("QueueSubmit");
+        VkCommandBufferSubmitInfo commandBufferSubmitInfo = VkHelpers::CommandBufferSubmitInfo(renderSync.commandBuffer);
+        VkSemaphoreSubmitInfo swapchainSemaphoreWaitInfo = VkHelpers::SemaphoreSubmitInfo(renderSync.swapchainSemaphore, VK_PIPELINE_STAGE_2_BLIT_BIT);
+        VkSemaphoreSubmitInfo renderSemaphoreSignalInfo = VkHelpers::SemaphoreSubmitInfo(renderSync.renderSemaphore, VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT);
+        VkSubmitInfo2 submitInfo = VkHelpers::SubmitInfo(&commandBufferSubmitInfo, &swapchainSemaphoreWaitInfo, &renderSemaphoreSignalInfo);
+        VK_CHECK(vkResetFences(context->device, 1, &renderSync.renderFence));
+        VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, renderSync.renderFence));
+    } {
+        ZoneScopedN("QueuePresent");
+        VkPresentInfoKHR presentInfo = VkHelpers::PresentInfo(&swapchain->handle, nullptr, &swapchainImageIndex);
+        presentInfo.pWaitSemaphores = &renderSync.renderSemaphore;
+        const VkResult presentResult = vkQueuePresentKHR(context->graphicsQueue, &presentInfo);
 
-    VkCommandBufferSubmitInfo commandBufferSubmitInfo = VkHelpers::CommandBufferSubmitInfo(renderSync.commandBuffer);
-    VkSemaphoreSubmitInfo swapchainSemaphoreWaitInfo = VkHelpers::SemaphoreSubmitInfo(renderSync.swapchainSemaphore, VK_PIPELINE_STAGE_2_BLIT_BIT);
-    VkSemaphoreSubmitInfo renderSemaphoreSignalInfo = VkHelpers::SemaphoreSubmitInfo(renderSync.renderSemaphore, VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT);
-    VkSubmitInfo2 submitInfo = VkHelpers::SubmitInfo(&commandBufferSubmitInfo, &swapchainSemaphoreWaitInfo, &renderSemaphoreSignalInfo);
-    VK_CHECK(vkResetFences(context->device, 1, &renderSync.renderFence));
-    VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, renderSync.renderFence));
-
-    VkPresentInfoKHR presentInfo = VkHelpers::PresentInfo(&swapchain->handle, nullptr, &swapchainImageIndex);
-    presentInfo.pWaitSemaphores = &renderSync.renderSemaphore;
-    const VkResult presentResult = vkQueuePresentKHR(context->graphicsQueue, &presentInfo);
-
-    if (presentResult == VK_ERROR_OUT_OF_DATE_KHR || presentResult == VK_SUBOPTIMAL_KHR) {
-        SPDLOG_TRACE("[RenderThread::Render] Swapchain presentation failed ({})", string_VkResult(presentResult));
-        return SWAPCHAIN_OUTDATED;
+        if (presentResult == VK_ERROR_OUT_OF_DATE_KHR || presentResult == VK_SUBOPTIMAL_KHR) {
+            SPDLOG_TRACE("[RenderThread::Render] Swapchain presentation failed ({})", string_VkResult(presentResult));
+            return SWAPCHAIN_OUTDATED;
+        }
     }
 
     return SUCCESS;
@@ -1795,7 +1806,7 @@ std::string RenderThread::SetupTemporalAntialiasing(RenderGraph& graph, const Co
         RenderPass& taaPass = graph.AddPass("TAA Copy Deferred", VK_PIPELINE_STAGE_2_COPY_BIT);
         taaPass.ReadCopyImage(ppTargets.finalColor);
         taaPass.WriteCopyImage("taa_current");
-        taaPass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
+        taaPass.Execute([&, width = renderExtent[0], height = renderExtent[1], ppTargets](VkCommandBuffer cmd) {
             VkImage drawImage = graph.GetImageHandle(ppTargets.finalColor);
             VkImage taaImage = graph.GetImageHandle("taa_current");
 
@@ -1829,7 +1840,7 @@ std::string RenderThread::SetupTemporalAntialiasing(RenderGraph& graph, const Co
     taaPass.ReadSampledImage(ppTargets.velocity);
     taaPass.ReadSampledImage("velocity_history");
     taaPass.WriteStorageImage("taa_current");
-    taaPass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
+    taaPass.Execute([&, width = renderExtent[0], height = renderExtent[1], ppTargets](VkCommandBuffer cmd) {
         TemporalAntialiasingPushConstant pushData{
             .sceneData = graph.GetBufferAddress("scene_data"),
             .colorResolvedIndex = graph.GetSampledImageViewDescriptorIndex(ppTargets.finalColor),
@@ -1912,7 +1923,7 @@ std::string RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::Vi
         auto& histogramPass = graph.AddPass("Build Histogram", VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
         histogramPass.ReadSampledImage(ppTargets.finalColor);
         histogramPass.WriteBuffer("luminance_histogram");
-        histogramPass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
+        histogramPass.Execute([&, width = renderExtent[0], height = renderExtent[1], ppTargets](VkCommandBuffer cmd) {
             constexpr float minLogLuminance = -10.0;
             constexpr float maxLogLuminance = 2.0;
             constexpr float logLuminanceRange = maxLogLuminance - minLogLuminance;
@@ -1970,7 +1981,7 @@ std::string RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::Vi
         RenderPass& thresholdPass = graph.AddPass("Bloom Threshold", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
         thresholdPass.ReadSampledImage(ppTargets.finalColor);
         thresholdPass.ReadWriteImage("bloom_chain");
-        thresholdPass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
+        thresholdPass.Execute([&, width = renderExtent[0], height = renderExtent[1], ppTargets](VkCommandBuffer cmd) {
             BloomThresholdPushConstant pc{
                 .outputExtent = {width, height},
                 .inputColorIndex = graph.GetSampledImageViewDescriptorIndex(ppTargets.finalColor),
@@ -2044,7 +2055,7 @@ std::string RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::Vi
         sharpeningPass.ReadBuffer("scene_data");
         sharpeningPass.ReadSampledImage(ppTargets.finalColor);
         sharpeningPass.WriteStorageImage("sharpening_output");
-        sharpeningPass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
+        sharpeningPass.Execute([&, width = renderExtent[0], height = renderExtent[1], ppTargets](VkCommandBuffer cmd) {
             SharpeningPushConstant pc{
                 .outputExtent = {width, height},
                 .inputIndex = graph.GetSampledImageViewDescriptorIndex(ppTargets.finalColor),
@@ -2103,7 +2114,7 @@ std::string RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::Vi
         motionBlurTiledMaxPass.ReadBuffer("scene_data");
         motionBlurTiledMaxPass.ReadSampledImage(ppTargets.velocity);
         motionBlurTiledMaxPass.WriteStorageImage("motion_blur_tiled_max");
-        motionBlurTiledMaxPass.Execute([&, width = renderExtent[0], height = renderExtent[1], blurTiledX, blurTiledY](VkCommandBuffer cmd) {
+        motionBlurTiledMaxPass.Execute([&, width = renderExtent[0], height = renderExtent[1], blurTiledX, blurTiledY, ppTargets](VkCommandBuffer cmd) {
             MotionBlurTileVelocityPushConstant pc{
                 .velocityBufferSize = {width, height},
                 .tileBufferSize = {blurTiledX, blurTiledY},
@@ -2146,7 +2157,7 @@ std::string RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::Vi
         motionBlurReconstructionPass.ReadSampledImage(ppTargets.depthStencil);
         motionBlurReconstructionPass.ReadSampledImage("motion_blur_tiled_neighbor_max");
         motionBlurReconstructionPass.WriteStorageImage("motion_blur_output");
-        motionBlurReconstructionPass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
+        motionBlurReconstructionPass.Execute([&, width = renderExtent[0], height = renderExtent[1], ppTargets](VkCommandBuffer cmd) {
             MotionBlurReconstructionPushConstant pc{
                 .srcBufferSize = {width, height},
                 .sceneColorIndex = graph.GetSampledImageViewDescriptorIndex("tonemap_output"),
