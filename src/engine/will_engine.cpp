@@ -617,6 +617,8 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
 
 void WillEngine::Cleanup()
 {
+    asyncAssetLoadManager->Join();
+    asyncAssetLoadManager.reset();
     assetLoadThread->Join();
     renderThread->Join();
 

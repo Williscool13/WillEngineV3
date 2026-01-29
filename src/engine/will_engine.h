@@ -112,8 +112,8 @@ private: // Game DLL
 #ifndef GAME_STATIC
     Platform::DllLoader gameDll{};
     Platform::DirectoryWatcher gameDllWatcher{};
-    Platform::DirectoryWatcher shaderWatcher{};
 #endif
+    Platform::DirectoryWatcher shaderWatcher{};
     Core::GameAPI gameFunctions{};
     std::unique_ptr<Core::EngineContext> engineContext{};
     std::unique_ptr<GameState> gameState{};

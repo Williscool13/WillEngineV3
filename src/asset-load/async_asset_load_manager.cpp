@@ -56,15 +56,7 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(enki::TaskScheduler* scheduler, Ren
     thisThread = std::jthread([this] { ThreadMain(); });
 }
 
-AsyncAssetLoadManager::~AsyncAssetLoadManager()
-{
-    bShouldExit.store(true, std::memory_order_release);
-    workCounter.fetch_add(1);
-    wakeCV.notify_one();
-
-    thisThread.join();
-    // todo: loading a model causes an exception to happen on shutdown. Fix
-}
+AsyncAssetLoadManager::~AsyncAssetLoadManager() = default;
 
 void AsyncAssetLoadManager::ThreadMain()
 {
@@ -77,7 +69,7 @@ void AsyncAssetLoadManager::ThreadMain()
     while (!bShouldExit.load(std::memory_order_acquire)) {
         {
             ZoneScopedN("Process Audio Requests");
-            AudioLoadRequest audioReq;
+            AudioLoadRequest audioReq{};
             if (audioRequestQueue.try_dequeue(audioReq)) {
                 Core::Handle<AudioLoadSlot> slotHandle = audioLoadAllocator.Add();
                 if (slotHandle.IsValid()) {
@@ -87,7 +79,7 @@ void AsyncAssetLoadManager::ThreadMain()
             }
         } {
             ZoneScopedN("Process Pipeline Requests");
-            PipelineLoadRequest pipelineReq;
+            PipelineLoadRequest pipelineReq{};
             if (pipelineRequestQueue.try_dequeue(pipelineReq)) {
                 Core::Handle<PipelineLoadSlot> slotHandle = pipelineLoadAllocator.Add();
                 if (slotHandle.IsValid()) {
@@ -97,7 +89,7 @@ void AsyncAssetLoadManager::ThreadMain()
             }
         } {
             ZoneScopedN("Process Model Requests");
-            WillModelLoadRequest modelReq;
+            WillModelLoadRequest modelReq{};
             if (modelRequestQueue.try_dequeue(modelReq)) {
                 // todo upload staging allocator is lock free (it spins) so this will spin infinitely until a slot frees up, which is not desirable
                 Core::Handle<WillModelLoadSlot> slotHandle = modelLoadAllocator.Add();
@@ -134,6 +126,15 @@ void AsyncAssetLoadManager::ThreadMain()
             }
         }
     }
+}
+
+void AsyncAssetLoadManager::Join()
+{
+    bShouldExit.store(true, std::memory_order_release);
+    workCounter.fetch_add(1);
+    wakeCV.notify_one();
+
+    thisThread.join();
 }
 
 void AsyncAssetLoadManager::RequestAudioLoad(Audio::WillAudio* audioEntry)
@@ -249,15 +250,9 @@ void AsyncAssetLoadManager::OnModelLoadComplete(bool success, ModelSlotHandle mo
     }
 
     WillModelLoadSlot& slot = modelLoadSlots[modelSlotHandle.index];
+    modelLoadCompleteQueue.enqueue({slot.outputModel, success});
 
-    modelLoadCompleteQueue.enqueue({
-        slot.outputModel,
-        success
-    });
-
-    if (success) {
-        SPDLOG_INFO("Finished loading model: {}", slot.outputModel->name);
-    } else {
+    if (!success) {
         SPDLOG_ERROR("Failed to load model: {}", slot.outputModel->name);
     }
 

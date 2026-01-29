@@ -283,6 +283,11 @@ add_custom_command(TARGET will-engine POST_BUILD
 )
 add_custom_command(TARGET will-engine POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        $<TARGET_FILE:SDL3_mixer::SDL3_mixer>
+        $<TARGET_FILE_DIR:will-engine>
+)
+add_custom_command(TARGET will-engine POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
         $<TARGET_FILE:tracy>
         $<TARGET_FILE_DIR:will-engine>
 )

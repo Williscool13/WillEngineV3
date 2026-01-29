@@ -61,7 +61,13 @@ public:
 
     ~AsyncAssetLoadManager();
 
+    AsyncAssetLoadManager(const AsyncAssetLoadManager&) = delete;
+    AsyncAssetLoadManager& operator=(const AsyncAssetLoadManager&) = delete;
+    AsyncAssetLoadManager(AsyncAssetLoadManager&&) = delete;
+    AsyncAssetLoadManager& operator=(AsyncAssetLoadManager&&) = delete;
+
     void ThreadMain();
+    void Join();
 
     // Audio Loading
     void RequestAudioLoad(Audio::WillAudio* audioEntry);
@@ -96,6 +102,10 @@ private:
     std::mutex wakeMutex;
     std::condition_variable wakeCV;
 
+    enki::TaskScheduler* scheduler;
+    Render::VulkanContext* context;
+    VkPipelineCache pipelineCache;
+
     // Audio loading
     moodycamel::ConcurrentQueue<AudioLoadRequest> audioRequestQueue;
     Core::LockFreeHandleAllocator<AudioLoadSlot, AUDIO_JOB_COUNT> audioLoadAllocator;
@@ -117,11 +127,8 @@ private:
     std::array<WillModelLoadSlot, MODEL_JOB_COUNT> modelLoadSlots;
     moodycamel::ConcurrentQueue<WillModelLoadComplete> modelLoadCompleteQueue;
 
-    // todo: same for textures
 
-    enki::TaskScheduler* scheduler;
-    Render::VulkanContext* context;
-    VkPipelineCache pipelineCache;
+    // todo: same for textures
 
     void OnAudioLoadComplete(bool success, AudioSlotHandle slotHandle);
     void OnPipelineLoadComplete(bool success, PipelineSlotHandle slotHandle);
