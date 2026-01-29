@@ -24,7 +24,6 @@ void PipelineLoadSlot::Initialize(enki::TaskScheduler* _scheduler, Render::Vulka
     context = _context;
     pipelineCache = _pipelineCache;
     notifyCallback = _notifyCallback;
-    task = std::make_unique<LoadPipelineTask>();
 }
 
 void PipelineLoadSlot::Launch(PipelineSlotHandle _pipelineSlotHandle, Render::PipelineData* _pipelineData)
@@ -32,6 +31,10 @@ void PipelineLoadSlot::Launch(PipelineSlotHandle _pipelineSlotHandle, Render::Pi
     pipelineSlotHandle = _pipelineSlotHandle;
     pipelineData = _pipelineData;
 
+    if (task && !task->GetIsComplete()) {
+        scheduler->WaitforTask(task.get());
+    }
+    task = std::make_unique<LoadPipelineTask>();
     task->loadSlot = this;
     scheduler->AddTaskSetToPipe(task.get());
 }

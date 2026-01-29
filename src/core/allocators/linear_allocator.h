@@ -32,14 +32,16 @@ public:
         return expanded;
     }
 
-    size_t Allocate(size_t size)
+    size_t Allocate(size_t size, size_t alignment = 1)
     {
-        if (head + size > capacity) {
+        size_t alignedHead = (head + alignment - 1) & ~(alignment - 1);
+
+        if (alignedHead + size > capacity) {
             return SIZE_MAX;
         }
-        size_t offset = head;
-        head += size;
-        return offset;
+
+        head = alignedHead + size;
+        return alignedHead;
     }
 
     void Reset() { head = 0; }

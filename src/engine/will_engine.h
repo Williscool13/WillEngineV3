@@ -39,7 +39,6 @@ struct GameState;
 namespace AssetLoad
 {
 class AsyncAssetLoadManager;
-class GpuAssetUploadThread;
 }
 
 namespace Core
@@ -89,7 +88,6 @@ private: // Main Systems
     std::unique_ptr<Audio::AudioManager> audioManager{};
 
     std::unique_ptr<AssetLoad::AsyncAssetLoadManager> asyncAssetLoadManager{};
-    std::unique_ptr<AssetLoad::GpuAssetUploadThread> assetLoadThread{};
     std::unique_ptr<AssetManager> assetManager{};
     std::unique_ptr<Physics::PhysicsSystem> physicsSystem{};
 #if WILL_EDITOR

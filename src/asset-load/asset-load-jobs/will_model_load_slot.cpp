@@ -2,7 +2,7 @@
 // Created by William on 2025-12-23.
 //
 
-#include "will_model_load_job.h"
+#include "will_model_load_slot.h"
 
 #include <semaphore>
 
@@ -15,14 +15,9 @@
 
 namespace AssetLoad
 {
-WillModelLoadSlot::WillModelLoadSlot()
-{
-    task = std::make_unique<LoadModelTask>();
-    task->loadSlot = this;
-}
+WillModelLoadSlot::WillModelLoadSlot() = default;
 
-WillModelLoadSlot::~WillModelLoadSlot()
-{}
+WillModelLoadSlot::~WillModelLoadSlot() = default;
 
 void WillModelLoadSlot::Initialize(
     enki::TaskScheduler* _scheduler,
@@ -49,6 +44,12 @@ void WillModelLoadSlot::Launch(
     uploadStaging = _uploadStaging;
     outputModel = _outputModel;
 
+
+    if (task && !task->GetIsComplete()) {
+        scheduler->WaitforTask(task.get());
+    }
+    task = std::make_unique<LoadModelTask>();
+    task->loadSlot = this;
     scheduler->AddTaskSetToPipe(task.get());
 }
 
@@ -522,11 +523,11 @@ void WillModelLoadSlot::UploadTextures(VkCommandBuffer cmd, const std::function<
             uint32_t mipDepth = std::max(1u, currentTexture->baseDepth >> mipLevel);
             size_t mipSize = ktxTexture_GetImageSize(ktxTexture(currentTexture), mipLevel);
 
-            size_t allocation = stagingAllocator.Allocate(mipSize);
+            size_t allocation = stagingAllocator.Allocate(mipSize, 16);
             if (allocation == SIZE_MAX) {
                 submitAndWait(true);
                 stagingAllocator.Reset();
-                allocation = stagingAllocator.Allocate(mipSize);
+                allocation = stagingAllocator.Allocate(mipSize, 16);
                 assert(allocation != SIZE_MAX && "Mip level too large for staging buffer");
             }
 

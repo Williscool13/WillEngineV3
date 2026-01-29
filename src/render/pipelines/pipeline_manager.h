@@ -6,6 +6,7 @@
 #define WILL_ENGINE_PIPELINE_MANAGER_H
 
 
+#include <array>
 #include <filesystem>
 #include <string>
 #include <unordered_map>
@@ -14,7 +15,7 @@
 #include "pipeline_category.h"
 #include "pipeline_data.h"
 #include "graphics_pipeline_builder.h"
-#include "asset-load/gpu_asset_load_thread.h"
+#include "render/vulkan/vk_context.h"
 
 namespace AssetLoad
 {

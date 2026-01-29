@@ -18,11 +18,8 @@
 
 namespace AssetLoad
 {
+class TextureLoadSlot;
 class WillModelLoadSlot;
-}
-
-namespace AssetLoad
-{
 class AudioLoadSlot;
 class PipelineLoadSlot;
 }
@@ -100,24 +97,10 @@ struct UnpackedWillModel
     }
 };
 
-
-
-struct TextureLoadRequest
-{
-    Engine::TextureHandle textureHandle;
-    Render::Texture* texture;
-};
-
-struct TextureComplete
-{
-    Engine::TextureHandle textureHandle;
-    Render::Texture* texture;
-    bool success;
-};
-
 using AudioSlotHandle = Core::Handle<AudioLoadSlot>;
 using PipelineSlotHandle = Core::Handle<PipelineLoadSlot>;
 using ModelSlotHandle = Core::Handle<WillModelLoadSlot>;
+using TextureSlotHandle = Core::Handle<TextureLoadSlot>;
 using UploadStagingSlotHandle = Core::Handle<UploadStaging>;
 } // AssetLoad
 

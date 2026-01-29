@@ -17,7 +17,6 @@
 #include "core/include/game_interface.h"
 #include "core/input/input_manager.h"
 #include "core/time/time_manager.h"
-#include "asset-load/gpu_asset_load_thread.h"
 #include "asset-load/async_asset_load_manager.h"
 #include "audio/audio_manager.h"
 #include "physics/physics_system.h"
@@ -147,7 +146,6 @@ void WillEngine::Initialize()
             renderThread->GetVulkanContext(),
             renderThread->GetResourceManager(),
             renderThread->GetPipelineManager()->GetPipelineCache());
-        assetLoadThread = std::make_unique<AssetLoad::GpuAssetUploadThread>(scheduler.get(), renderThread->GetVulkanContext(), renderThread->GetResourceManager(), renderThread->GetPipelineManager());
     }
 
     //
@@ -289,7 +287,6 @@ void WillEngine::Initialize()
 void WillEngine::Run()
 {
     renderThread->Start();
-    assetLoadThread->Start();
     timeManager->Reset();
 
     SDL_Event e;
@@ -331,7 +328,6 @@ void WillEngine::Run()
         }
 
         if (exit) {
-            assetLoadThread->RequestShutdown();
             renderThread->RequestShutdown();
             break;
         }
@@ -630,7 +626,6 @@ void WillEngine::Cleanup()
 {
     asyncAssetLoadManager->Join();
     asyncAssetLoadManager.reset();
-    assetLoadThread->Join();
     renderThread->Join();
 
 #if WILL_EDITOR

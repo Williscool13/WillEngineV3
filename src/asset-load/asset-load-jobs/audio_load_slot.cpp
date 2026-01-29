@@ -17,7 +17,6 @@ void AudioLoadSlot::Initialize(enki::TaskScheduler* _scheduler, std::function<vo
 
     scheduler = _scheduler;
     notifyCallback = std::move(_notifyCallback);
-    task = std::make_unique<LoadAudioTask>();
 }
 
 void AudioLoadSlot::Launch(AudioSlotHandle _audioSlotHandle, Audio::WillAudio* _audioEntry)
@@ -25,6 +24,11 @@ void AudioLoadSlot::Launch(AudioSlotHandle _audioSlotHandle, Audio::WillAudio* _
     audioSlotHandle = _audioSlotHandle;
     audioEntry = _audioEntry;
 
+
+    if (task && !task->GetIsComplete()) {
+        scheduler->WaitforTask(task.get());
+    }
+    task = std::make_unique<LoadAudioTask>();
     task->loadSlot = this;
     scheduler->AddTaskSetToPipe(task.get());
 }

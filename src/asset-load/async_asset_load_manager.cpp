@@ -9,13 +9,14 @@
 
 #include "audio/audio_asset.h"
 #include "platform/thread_utils.h"
-#include "render/pipelines//pipeline_data.h"
+#include "render/texture_asset.h"
+#include "render/pipelines/pipeline_data.h"
 #include "render/vulkan/vk_utils.h"
 
 namespace AssetLoad
 {
 AsyncAssetLoadManager::AsyncAssetLoadManager(Render::VulkanContext* context, Render::ResourceManager* resourceManager, VkPipelineCache pipelineCache)
-    : context(context), pipelineCache(pipelineCache)
+    : context(context), resourceManager(resourceManager), pipelineCache(pipelineCache)
 {
     assetLoadScheduler = std::make_unique<enki::TaskScheduler>();
 
@@ -24,7 +25,7 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Render::VulkanContext* context, Ren
     assetConfig.profilerCallbacks.threadStart = [](uint32_t threadNum_) {
         static constexpr std::array<const char*, 8> names = {
             "AssetLoad0", "AssetLoad1", "AssetLoad2", "AssetLoad3",
-            "AssetLoad4", "AssetLoad5", "AssetLoad6", "AssetLoad7" // just in case expand in future
+            "AssetLoad4", "AssetLoad5", "AssetLoad6", "AssetLoad7"
         };
         if (threadNum_ < names.size()) {
             tracy::SetThreadName(names[threadNum_]);
@@ -62,8 +63,22 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Render::VulkanContext* context, Ren
         );
     }
 
-    for (uint32_t i = 0; i < 8; ++i) {
-        uploadStagings[i].Initialize(context, GPU_DISPATCH_STAGING_SIZE);
+    for (uint32_t i = 0; i < TEXTURE_JOB_COUNT; ++i) {
+        textureLoadSlots[i].Initialize(
+            assetLoadScheduler.get(),
+            context,
+            resourceManager,
+            [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
+                QueueGPUDispatch(cmd, fence, completionSignal);
+            },
+            [this](bool success, TextureSlotHandle textureSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle) {
+                OnTextureLoadComplete(success, textureSlotHandle, uploadStagingSlotHandle);
+            }
+        );
+    }
+
+    for (UploadStaging& uploadStaging : uploadStagings) {
+        uploadStaging.Initialize(context, GPU_DISPATCH_STAGING_SIZE);
     }
 
     thisThread = std::jthread([this] { ThreadMain(); });
@@ -121,6 +136,28 @@ void AsyncAssetLoadManager::ThreadMain()
                 }
                 else {
                     modelRequestQueue.enqueue(modelReq);
+                }
+            }
+        } {
+            ZoneScopedN("Process Texture Requests");
+            TextureLoadRequest textureReq{};
+            if (textureRequestQueue.try_dequeue(textureReq)) {
+                Core::Handle<TextureLoadSlot> slotHandle = textureLoadAllocator.Add();
+                if (slotHandle.IsValid()) {
+                    Core::Handle<UploadStaging> uploadHandle = uploadStagingAllocator.Add();
+                    if (uploadHandle.IsValid()) {
+                        TextureLoadSlot& slot = textureLoadSlots[slotHandle.index];
+                        UploadStaging* uploadStaging = &uploadStagings[uploadHandle.index];
+
+                        slot.Launch(slotHandle, uploadHandle, uploadStaging, textureReq.texture);
+                    }
+                    else {
+                        textureRequestQueue.enqueue(textureReq);
+                        textureLoadAllocator.Remove(slotHandle);
+                    }
+                }
+                else {
+                    textureRequestQueue.enqueue(textureReq);
                 }
             }
         }
@@ -183,7 +220,6 @@ void AsyncAssetLoadManager::GPUDispatchThreadMain()
                 for (size_t i = 0; i < count; ++i) {
                     dispatchBatch[i].completionSignal->release();
                 }
-
 
                 dispatchBatch.clear();
                 fences.clear();
@@ -263,6 +299,24 @@ bool AsyncAssetLoadManager::TryDequeueModelComplete(WillModelLoadComplete& outRe
     return modelLoadCompleteQueue.try_dequeue(outResult);
 }
 
+void AsyncAssetLoadManager::RequestTextureLoad(Render::Texture* texture)
+{
+    ZoneScoped;
+
+    if (!texture) {
+        SPDLOG_ERROR("RequestTextureLoad called with null texture");
+        return;
+    }
+
+    textureRequestQueue.enqueue({texture});
+    workCounter.fetch_add(1);
+    wakeCV.notify_one();
+}
+
+bool AsyncAssetLoadManager::TryDequeueTextureComplete(TextureLoadComplete& outResult)
+{
+    return textureLoadCompleteQueue.try_dequeue(outResult);
+}
 
 void AsyncAssetLoadManager::QueueGPUDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)
 {
@@ -294,7 +348,6 @@ void AsyncAssetLoadManager::OnAudioLoadComplete(bool success, AudioSlotHandle sl
     bool removed = audioLoadAllocator.Remove(slotHandle);
     assert(removed && "Failed to remove valid slot handle");
 
-    // Slot has freed up, need thread to check for new work
     workCounter.fetch_add(1);
     wakeCV.notify_one();
 }
@@ -319,7 +372,6 @@ void AsyncAssetLoadManager::OnPipelineLoadComplete(bool success, PipelineSlotHan
     bool removed = pipelineLoadAllocator.Remove(slotHandle);
     assert(removed && "Failed to remove valid slot handle");
 
-    // Slot has freed up, need thread to check for new work
     workCounter.fetch_add(1);
     wakeCV.notify_one();
 }
@@ -347,7 +399,36 @@ void AsyncAssetLoadManager::OnModelLoadComplete(bool success, ModelSlotHandle mo
         uploadStagingAllocator.Remove(uploadStagingSlotHandle);
     }
 
-    // Slot has freed up, need thread to check for new work
+    workCounter.fetch_add(1);
+    wakeCV.notify_one();
+}
+
+void AsyncAssetLoadManager::OnTextureLoadComplete(bool success, TextureSlotHandle textureSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle)
+{
+    ZoneScoped;
+
+    if (!textureLoadAllocator.IsValid(textureSlotHandle)) {
+        SPDLOG_ERROR("OnTextureLoadComplete called with invalid slot handle");
+        return;
+    }
+
+    TextureLoadSlot& slot = textureLoadSlots[textureSlotHandle.index];
+    textureLoadCompleteQueue.enqueue({slot.outputTexture, success});
+
+    if (success) {
+        SPDLOG_INFO("Finished loading texture: {}", slot.outputTexture->source.string());
+    }
+    else {
+        SPDLOG_ERROR("Failed to load texture: {}", slot.outputTexture->source.string());
+    }
+
+    slot.Clear();
+    textureLoadAllocator.Remove(textureSlotHandle);
+
+    if (uploadStagingAllocator.IsValid(uploadStagingSlotHandle)) {
+        uploadStagingAllocator.Remove(uploadStagingSlotHandle);
+    }
+
     workCounter.fetch_add(1);
     wakeCV.notify_one();
 }

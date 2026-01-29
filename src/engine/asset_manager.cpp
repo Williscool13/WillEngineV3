@@ -5,7 +5,6 @@
 #include "asset_manager.h"
 
 #include "asset-load/async_asset_load_manager.h"
-#include "asset-load/gpu_asset_load_thread.h"
 #include "platform/paths.h"
 
 namespace Engine
@@ -17,7 +16,7 @@ AssetManager::AssetManager(AssetLoad::AsyncAssetLoadManager* assetLoadManager, R
     auto whitePath = Platform::GetAssetPath() / "textures/white.ktx2";
 
 
-    /*whiteTextureHandle = textureAllocator.Add();
+    whiteTextureHandle = textureAllocator.Add();
     assert(whiteTextureHandle.IsValid());
     Render::Texture& whiteTexture = textures[whiteTextureHandle.index];
     whiteTexture.selfHandle = whiteTextureHandle;
@@ -28,7 +27,7 @@ AssetManager::AssetManager(AssetLoad::AsyncAssetLoadManager* assetLoadManager, R
     whiteTexture.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTexture();
     assert(whiteTexture.bindlessHandle.index == AssetLoad::WHITE_IMAGE_BINDLESS_INDEX);
     pathToTextureHandle[whitePath] = whiteTextureHandle;
-    assetLoadThread->RequestTextureLoad(whiteTexture.selfHandle, &whiteTexture);
+    assetLoadManager->RequestTextureLoad(&whiteTexture);
 
     errorTextureHandle = textureAllocator.Add();
     assert(errorTextureHandle.IsValid());
@@ -41,7 +40,7 @@ AssetManager::AssetManager(AssetLoad::AsyncAssetLoadManager* assetLoadManager, R
     errorTexture.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTexture();
     assert(errorTexture.bindlessHandle.index == AssetLoad::ERROR_IMAGE_BINDLESS_INDEX);
     pathToTextureHandle[errorPath] = errorTextureHandle;
-    assetLoadThread->RequestTextureLoad(errorTexture.selfHandle, &errorTexture);*/
+    assetLoadManager->RequestTextureLoad(&errorTexture);
 
     VkSamplerCreateInfo samplerCreateInfo = {
         .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
@@ -164,9 +163,9 @@ void AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuffer) const
         }
     }
 
-    /*AssetLoad::TextureComplete textureComplete{};
-    while (assetLoadThread->ResolveTextureLoads(textureComplete)) {
-        if (textureComplete.success) {
+    AssetLoad::TextureLoadComplete textureComplete{};
+    while (assetLoadManager->TryDequeueTextureComplete(textureComplete)) {
+        if (textureComplete.bSuccess) {
             stagingFrameBuffer.imageAcquireOperations.push_back(textureComplete.texture->acquireBarrier);
 
             textureComplete.texture->loadState = Render::Texture::LoadState::Loaded;
@@ -176,7 +175,7 @@ void AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuffer) const
             textureComplete.texture->loadState = Render::Texture::LoadState::NotLoaded;
             SPDLOG_ERROR("[AssetManager] Texture load failed: {}", textureComplete.texture->name);
         }
-    }*/
+    }
 }
 
 void AssetManager::ResolveUnloads()
