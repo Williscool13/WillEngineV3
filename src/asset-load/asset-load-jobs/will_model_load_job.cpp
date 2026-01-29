@@ -4,6 +4,8 @@
 
 #include "will_model_load_job.h"
 
+#include <semaphore>
+
 #include "asset-load/asset_load_config.h"
 #include "ktxvulkan.h"
 #include "render/model/model_serialization.h"
@@ -26,13 +28,13 @@ void WillModelLoadSlot::Initialize(
     enki::TaskScheduler* _scheduler,
     Render::VulkanContext* _context,
     Render::ResourceManager* _resourceManager,
-    std::function<void(VkCommandBuffer cmd, VkFence fence)> dispatchCallback,
+    std::function<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> dispatchCallback,
     std::function<void(bool success, ModelSlotHandle modelSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle)> notifyCallback)
 {
     scheduler = _scheduler;
     context = _context;
     resourceManager = _resourceManager;
-    _dispatchCommandBufferCallback = std::move(dispatchCallback);
+    _requestDispatchCallback = std::move(dispatchCallback);
     _notifyCallback = std::move(notifyCallback);
 }
 
@@ -98,9 +100,9 @@ void WillModelLoadSlot::LoadModelTask::ExecuteRange(enki::TaskSetPartition range
         ZoneScopedN("SubmitAndWait");
 
         VK_CHECK(vkEndCommandBuffer(cmd));
-        loadSlot->_dispatchCommandBufferCallback(cmd, fence);
-
-        VK_CHECK(vkWaitForFences(loadSlot->context->device, 1, &fence, VK_TRUE, UINT64_MAX));
+        std::binary_semaphore done(0);
+        loadSlot->_requestDispatchCallback(cmd, fence, &done);
+        done.acquire();
 
         if (reset) {
             VK_CHECK(vkResetFences(loadSlot->context->device, 1, &fence));
@@ -120,8 +122,9 @@ void WillModelLoadSlot::LoadModelTask::ExecuteRange(enki::TaskSetPartition range
     loadSlot->UploadGeometry(cmd, submitAndWait);
 
     VK_CHECK(vkEndCommandBuffer(cmd));
-    loadSlot->_dispatchCommandBufferCallback(cmd, fence);
-    VK_CHECK(vkWaitForFences(loadSlot->context->device, 1, &fence, VK_TRUE, UINT64_MAX));
+    std::binary_semaphore done(0);
+    loadSlot->_requestDispatchCallback(cmd, fence, &done);
+    done.acquire();
 
     loadSlot->PostUploadSetup();
 

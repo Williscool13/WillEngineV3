@@ -4,6 +4,7 @@
 
 #ifndef WILL_ENGINE_WILL_MODEL_LOAD_JOB_H
 #define WILL_ENGINE_WILL_MODEL_LOAD_JOB_H
+#include <semaphore>
 #include <span>
 
 #include "asset_load_job.h"
@@ -33,7 +34,7 @@ public:
     ~WillModelLoadSlot();
 
     void Initialize(enki::TaskScheduler* _scheduler, Render::VulkanContext* _context, Render::ResourceManager* _resourceManager,
-                    std::function<void(VkCommandBuffer cmd, VkFence fence)> _dispatchCommandBufferCallback,
+                    std::function<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> _requestDispatchCallback,
                     std::function<void(bool success, ModelSlotHandle modelSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle)> _notifyCallback);
 
     void Launch(ModelSlotHandle _modelSlotHandle, UploadStagingSlotHandle _uploadStagingSlotHandle, UploadStaging* _uploadStaging, Render::WillModel* _outputModel);
@@ -84,7 +85,7 @@ private:
      */
     std::vector<uint32_t> packedTriangles;
 
-    std::function<void(VkCommandBuffer cmd, VkFence fence)> _dispatchCommandBufferCallback;
+    std::function<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* doneSemaphore)> _requestDispatchCallback;
     std::function<void(bool success, ModelSlotHandle modelSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle)> _notifyCallback;
 };
 } // AssetLoad

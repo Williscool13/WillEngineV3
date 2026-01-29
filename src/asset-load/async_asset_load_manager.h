@@ -40,6 +40,13 @@ struct PipelineLoadComplete
     bool bSuccess;
 };
 
+struct GPUDispatchRequest
+{
+    VkCommandBuffer cmd;
+    VkFence fence;
+    std::binary_semaphore* completionSignal;
+};
+
 struct WillModelLoadRequest
 {
     Render::WillModel* model;
@@ -69,6 +76,9 @@ public:
     void ThreadMain();
     void Join();
 
+    void DispatchThreadMain();
+    void DispatchJoin();
+
     // Audio Loading
     void RequestAudioLoad(Audio::WillAudio* audioEntry);
     bool TryDequeueAudioComplete(AudioLoadComplete& outResult);
@@ -96,15 +106,20 @@ public:
     }
 
 private:
-    std::jthread thisThread;
+    enki::TaskScheduler* scheduler;
+    Render::VulkanContext* context;
+    VkPipelineCache pipelineCache;
     std::atomic<bool> bShouldExit{false};
+
+    std::jthread thisThread;
     std::atomic<uint32_t> workCounter{0};
     std::mutex wakeMutex;
     std::condition_variable wakeCV;
 
-    enki::TaskScheduler* scheduler;
-    Render::VulkanContext* context;
-    VkPipelineCache pipelineCache;
+    std::jthread gpuDispatchThread;
+    std::atomic<uint32_t> gpuDispatchWorkCounter{0};
+    std::mutex gpuDispatchWakeMutex;
+    std::condition_variable gpuDispatchWakeCV;
 
     // Audio loading
     moodycamel::ConcurrentQueue<AudioLoadRequest> audioRequestQueue;
@@ -119,6 +134,10 @@ private:
     moodycamel::ConcurrentQueue<PipelineLoadComplete> pipelineLoadCompleteQueue;
 
     // GPU Uploads
+    moodycamel::ConcurrentQueue<GPUDispatchRequest> gpuDispatchQueue;
+    std::vector<GPUDispatchRequest> dispatchBatch;
+    std::vector<VkFence> fences;
+
     Core::LockFreeHandleAllocator<UploadStaging, 8> uploadStagingAllocator{};
     std::array<UploadStaging, 8> uploadStagings{};
 
@@ -130,6 +149,7 @@ private:
 
     // todo: same for textures
 
+    void QueueGPUDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal);
     void OnAudioLoadComplete(bool success, AudioSlotHandle slotHandle);
     void OnPipelineLoadComplete(bool success, PipelineSlotHandle slotHandle);
     void OnModelLoadComplete(bool success, ModelSlotHandle modelSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle);
