@@ -15,7 +15,7 @@
 #include "components/gameplay/anti_gravity_component.h"
 #include "components/gameplay/floor_component.h"
 #include "components/gameplay/portals/portal_component.h"
-#include "components/physics/dynamic_physics_body_component.h"
+#include "components/physics/physics_components.h"
 #include "systems/gather_renderables_system.h"
 #include "components/render/portal_plane_component.h"
 #include "core/math/constants.h"
@@ -54,9 +54,9 @@ GAME_API void GameLoad(Core::EngineContext* ctx, Engine::GameState* state)
     SPDLOG_TRACE("  FreeCameraComponent: {}", entt::type_id<Game::PortalComponent>().hash());
     SPDLOG_TRACE("  FreeCameraComponent: {}", entt::type_id<Game::AntiGravityComponent>().hash());
     SPDLOG_TRACE("  FreeCameraComponent: {}", entt::type_id<Game::FloorComponent>().hash());
-    SPDLOG_TRACE("  FreeCameraComponent: {}", entt::type_id<Game::DynamicPhysicsBodyComponent>().hash());
-    SPDLOG_TRACE("  FreeCameraComponent: {}", entt::type_id<Game::PhysicsBodyComponent>().hash());
-    SPDLOG_TRACE("  FreeCameraComponent: {}", entt::type_id<Game::DirtyPhysicsTransformComponent>().hash());
+    SPDLOG_TRACE("  FreeCameraComponent: {}", entt::type_id<Game::Component::DynamicPhysicsBodyComponent>().hash());
+    SPDLOG_TRACE("  FreeCameraComponent: {}", entt::type_id<Game::Component::PhysicsBodyComponent>().hash());
+    SPDLOG_TRACE("  FreeCameraComponent: {}", entt::type_id<Game::Component::DirtyPhysicsTransformComponent>().hash());
     SPDLOG_TRACE("  FreeCameraComponent: {}", entt::type_id<Game::RenderableComponent>().hash());
     SPDLOG_TRACE("  FreeCameraComponent: {}", entt::type_id<Game::TransformComponent>().hash());
 
@@ -65,8 +65,6 @@ GAME_API void GameLoad(Core::EngineContext* ctx, Engine::GameState* state)
 
     ctx->physicsSystem->RegisterAllocator();
     ctx->audioManager->RegisterAudio();
-    state->registry.on_construct<Game::PhysicsBodyComponent>().connect<&Game::OnPhysicsBodyAdded>();
-    state->registry.on_destroy<Game::PhysicsBodyComponent>().connect<&Game::OnPhysicsBodyRemoved>();
 }
 
 GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::GameState* state)
@@ -119,103 +117,15 @@ GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* stat
     }
     Game::System::GatherRenderables(ctx, state, frameBuffer);
 
-#if WILL_EDITOR
+
     Game::System::DrawEditorInterface(ctx, state, frameBuffer);
-#endif
 
-#ifndef PACKAGED_BUILD
-    glm::vec3 debugOffset(-30, 0, 0);
-
-    // Coordinate axes
-    frameBuffer->mainViewFamily.debugLines.push_back({
-        .start = debugOffset + glm::vec3{0.1f, 0.1f, 0.1f},
-        .end = debugOffset + glm::vec3(5, 0, 0) + glm::vec3{0.1f, 0.1f, 0.1f},
-        .color = glm::vec4(1, 0, 0, 1)
-    });
-    frameBuffer->mainViewFamily.debugLines.push_back({
-        .start = debugOffset + glm::vec3{0.1f, 0.1f, 0.1f},
-        .end = debugOffset + glm::vec3(0, 5, 0) + glm::vec3{0.1f, 0.1f, 0.1f},
-        .color = glm::vec4(0, 1, 0, 1)
-    });
-    frameBuffer->mainViewFamily.debugLines.push_back({
-        .start = debugOffset + glm::vec3{0.1f, 0.1f, 0.1f},
-        .end = debugOffset + glm::vec3(0, 0, 5) + glm::vec3{0.1f, 0.1f, 0.1f},
-        .color = glm::vec4(0, 0, 1, 1)
-    });
-
-    // Grid on XZ plane
-    for (int i = -5; i <= 5; ++i) {
-        frameBuffer->mainViewFamily.debugLines.push_back({
-            .start = debugOffset + glm::vec3(i * 2.0f, 0, -10),
-            .end = debugOffset + glm::vec3(i * 2.0f, 0, 10),
-            .color = glm::vec4(0.3f, 0.3f, 0.3f, 1)
-        });
-        frameBuffer->mainViewFamily.debugLines.push_back({
-            .start = debugOffset + glm::vec3(-10, 0, i * 2.0f),
-            .end = debugOffset + glm::vec3(10, 0, i * 2.0f),
-            .color = glm::vec4(0.3f, 0.3f, 0.3f, 1)
-        });
-    }
-
-    // Rotated box
-    frameBuffer->mainViewFamily.debugBoxes.push_back({
-        .center = debugOffset + glm::vec3(10, 2, 0),
-        .extents = glm::vec3(1, 1, 1),
-        .rotation = glm::angleAxis(glm::radians(45.0f), glm::vec3(0, 1, 0)),
-        .color = glm::vec4(1, 1, 0, 0.5f)
-    });
-
-    // Stack of boxes
-    for (int i = 0; i < 3; ++i) {
-        frameBuffer->mainViewFamily.debugBoxes.push_back({
-            .center = debugOffset + glm::vec3(0, 1.0f + i * 2.5f, 5),
-            .extents = glm::vec3(0.8f, 1.0f, 0.8f),
-            .rotation = glm::angleAxis(glm::radians(i * 30.0f), glm::vec3(0, 1, 0)),
-            .color = glm::vec4(0.2f + i * 0.3f, 0.5f, 1.0f, 0.6f)
-        });
-    }
-
-    // Sphere at different heights
-    for (int i = 0; i < 4; ++i) {
-        frameBuffer->mainViewFamily.debugSpheres.push_back({
-            .center = debugOffset + glm::vec3(-10, 1.5f + i * 3.0f, 0),
-            .radius = 0.5f + i * 0.3f,
-            .color = glm::vec4(1, 0.2f * i, 1 - 0.2f * i, 0.5f)
-        });
-    }
-
-    // Orbital path visualization
-    constexpr int orbitSegments = 16;
-    glm::vec3 orbitCenter = debugOffset + glm::vec3(0, 5, -5);
-    float orbitRadius = 4.0f;
-    for (int i = 0; i < orbitSegments; ++i) {
-        float angle1 = (float) i / orbitSegments * 2.0f * glm::pi<float>();
-        float angle2 = (float) (i + 1) / orbitSegments * 2.0f * glm::pi<float>();
-
-        glm::vec3 p1 = orbitCenter + glm::vec3(glm::cos(angle1) * orbitRadius, 0, glm::sin(angle1) * orbitRadius);
-        glm::vec3 p2 = orbitCenter + glm::vec3(glm::cos(angle2) * orbitRadius, 0, glm::sin(angle2) * orbitRadius);
-
-        frameBuffer->mainViewFamily.debugLines.push_back({
-            .start = p1,
-            .end = p2,
-            .color = glm::vec4(0, 1, 1, 1)
-        });
-    }
-
-    // Bounding volume hierarchy visualization
-    frameBuffer->mainViewFamily.debugSpheres.push_back({
-        .center = orbitCenter,
-        .radius = orbitRadius + 0.5f,
-        .color = glm::vec4(1, 0.5f, 0, 0.3f)
-    });
-#endif
-    ImGui::End();
+    Game::System::DebugRender(ctx, state, frameBuffer);
+    Game::System::DebugRenderPhysics(ctx, state, frameBuffer);
 }
 
 GAME_API void GameUnload(Core::EngineContext* ctx, Engine::GameState* state)
 {
-    state->registry.on_construct<Game::PhysicsBodyComponent>().disconnect();
-    state->registry.on_destroy<Game::PhysicsBodyComponent>().disconnect();
 }
 
 GAME_API void GameShutdown(Core::EngineContext* ctx, Engine::GameState* state)

@@ -13,7 +13,8 @@ namespace Game::System
 {
 void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer)
 {
-         if (ImGui::Begin("Debug View")) {
+#if WILL_EDITOR
+    if (ImGui::Begin("Debug View")) {
         auto cameraView = state->registry.view<CameraComponent, MainViewportComponent, TransformComponent>();
         const auto& [cam, transform] = cameraView.get(cameraView.front());
         ImGui::Text("Camera Pos: (%.2f, %.2f, %.2f)",
@@ -322,6 +323,7 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
             ImGui::Checkbox("Enabled", &state->shadowConfig.enabled);
         }
     }
+    ImGui::End();
 
     frameBuffer->mainViewFamily.directionalLight = state->directionalLight;
     frameBuffer->mainViewFamily.shadowConfig = state->shadowConfig;
@@ -330,5 +332,6 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
     frameBuffer->mainViewFamily.debugResourceName = state->debugResourceName;
     frameBuffer->mainViewFamily.debugTransformationType = state->debugTransformationType;
     frameBuffer->mainViewFamily.debugViewAspect = state->debugViewAspect;
+#endif
 }
 }

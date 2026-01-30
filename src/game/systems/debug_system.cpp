@@ -7,7 +7,6 @@
 #include <Jolt/Jolt.h>
 #include <spdlog/spdlog.h>
 
-#include "asset-load/asset_load_config.h"
 #include "audio/audio_manager.h"
 #include "Jolt/Physics/Body/BodyCreationSettings.h"
 #include "Jolt/Physics/Collision/Shape/BoxShape.h"
@@ -21,8 +20,6 @@
 #include "game/components/gameplay/anti_gravity_component.h"
 #include "game/components/gameplay/floor_component.h"
 #include "game/components/gameplay/portals/portal_component.h"
-#include "game/components/physics/dynamic_physics_body_component.h"
-#include "game/components/render/portal_plane_component.h"
 #include "physics/physics_system.h"
 #include "platform/paths.h"
 
@@ -100,8 +97,9 @@ entt::entity CreateBox(Core::EngineContext* ctx, Engine::GameState* state, glm::
     state->registry.emplace<RenderableComponent>(boxEntity, renderable);
     TransformComponent transformComponent = state->registry.emplace<TransformComponent>(boxEntity, position, glm::quat(1.0f, 0.0f, 0.0f, 0.0f), glm::vec3(1.0f));
     if (bUsePhysics) {
-        state->registry.emplace<PhysicsBodyComponent>(boxEntity, bodyId);
-        state->registry.emplace<DynamicPhysicsBodyComponent>(boxEntity, transformComponent.translation, transformComponent.rotation);
+        state->registry.emplace<Component::PhysicsBodyComponent>(boxEntity, bodyId);
+        state->registry.emplace<Component::DynamicPhysicsBodyComponent>(boxEntity, transformComponent.translation, transformComponent.rotation);
+        state->registry.emplace<Component::DrawPhysicsDebugComponent>(boxEntity);
     }
 
     return boxEntity;
@@ -172,7 +170,7 @@ entt::entity CreateStaticBox(Core::EngineContext* ctx, Engine::GameState* state,
     transform.rotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
     transform.scale = renderScale;
     state->registry.emplace<TransformComponent>(entity, transform);
-    state->registry.emplace<PhysicsBodyComponent>(entity, bodyID);
+    state->registry.emplace<Component::PhysicsBodyComponent>(entity, bodyID);
 
     return entity;
 }
@@ -246,8 +244,8 @@ entt::entity CreateGlowingBox(Core::EngineContext* ctx, Engine::GameState* state
         boxEntity, position, glm::quat(1.0f, 0.0f, 0.0f, 0.0f), glm::vec3(1.0f));
 
     if (bUsePhysics) {
-        state->registry.emplace<PhysicsBodyComponent>(boxEntity, bodyId);
-        state->registry.emplace<DynamicPhysicsBodyComponent>(boxEntity, transformComponent.translation, transformComponent.rotation);
+        state->registry.emplace<Component::PhysicsBodyComponent>(boxEntity, bodyId);
+        state->registry.emplace<Component::DynamicPhysicsBodyComponent>(boxEntity, transformComponent.translation, transformComponent.rotation);
     }
 
     return boxEntity;
@@ -648,7 +646,7 @@ void DebugProcessPhysicsCollisions(Core::EngineContext* ctx, Engine::GameState* 
 
 void DebugApplyGroundForces(Core::EngineContext* ctx, Engine::GameState* state)
 {
-    auto view = state->registry.view<AntiGravityComponent, PhysicsBodyComponent>();
+    auto view = state->registry.view<AntiGravityComponent, Component::PhysicsBodyComponent>();
     auto& bodyInterface = ctx->physicsSystem->GetBodyInterface();
 
     for (auto [entity, physics] : view.each()) {
@@ -764,5 +762,95 @@ void DebugVisualizeCascadeCorners(Core::EngineContext* ctx, Engine::GameState* s
     }
 
     SPDLOG_INFO("[DebugSystem] Spawned cascade corner markers");
+}
+
+void DebugRender(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer)
+{
+#ifndef PACKAGED_BUILD
+    glm::vec3 debugOffset(-30, 0, 0);
+
+    // Coordinate axes
+    frameBuffer->mainViewFamily.debugLines.push_back({
+        .start = debugOffset + glm::vec3{0.1f, 0.1f, 0.1f},
+        .end = debugOffset + glm::vec3(5, 0, 0) + glm::vec3{0.1f, 0.1f, 0.1f},
+        .color = glm::vec4(1, 0, 0, 1)
+    });
+    frameBuffer->mainViewFamily.debugLines.push_back({
+        .start = debugOffset + glm::vec3{0.1f, 0.1f, 0.1f},
+        .end = debugOffset + glm::vec3(0, 5, 0) + glm::vec3{0.1f, 0.1f, 0.1f},
+        .color = glm::vec4(0, 1, 0, 1)
+    });
+    frameBuffer->mainViewFamily.debugLines.push_back({
+        .start = debugOffset + glm::vec3{0.1f, 0.1f, 0.1f},
+        .end = debugOffset + glm::vec3(0, 0, 5) + glm::vec3{0.1f, 0.1f, 0.1f},
+        .color = glm::vec4(0, 0, 1, 1)
+    });
+
+    // Grid on XZ plane
+    for (int i = -5; i <= 5; ++i) {
+        frameBuffer->mainViewFamily.debugLines.push_back({
+            .start = debugOffset + glm::vec3(i * 2.0f, 0, -10),
+            .end = debugOffset + glm::vec3(i * 2.0f, 0, 10),
+            .color = glm::vec4(0.3f, 0.3f, 0.3f, 1)
+        });
+        frameBuffer->mainViewFamily.debugLines.push_back({
+            .start = debugOffset + glm::vec3(-10, 0, i * 2.0f),
+            .end = debugOffset + glm::vec3(10, 0, i * 2.0f),
+            .color = glm::vec4(0.3f, 0.3f, 0.3f, 1)
+        });
+    }
+
+    // Rotated box
+    frameBuffer->mainViewFamily.debugBoxes.push_back({
+        .center = debugOffset + glm::vec3(10, 2, 0),
+        .extents = glm::vec3(1, 1, 1),
+        .rotation = glm::angleAxis(glm::radians(45.0f), glm::vec3(0, 1, 0)),
+        .color = glm::vec4(1, 1, 0, 0.5f)
+    });
+
+    // Stack of boxes
+    for (int i = 0; i < 3; ++i) {
+        frameBuffer->mainViewFamily.debugBoxes.push_back({
+            .center = debugOffset + glm::vec3(0, 1.0f + i * 2.5f, 5),
+            .extents = glm::vec3(0.8f, 1.0f, 0.8f),
+            .rotation = glm::angleAxis(glm::radians(i * 30.0f), glm::vec3(0, 1, 0)),
+            .color = glm::vec4(0.2f + i * 0.3f, 0.5f, 1.0f, 0.6f)
+        });
+    }
+
+    // Sphere at different heights
+    for (int i = 0; i < 4; ++i) {
+        frameBuffer->mainViewFamily.debugSpheres.push_back({
+            .center = debugOffset + glm::vec3(-10, 1.5f + i * 3.0f, 0),
+            .radius = 0.5f + i * 0.3f,
+            .color = glm::vec4(1, 0.2f * i, 1 - 0.2f * i, 0.5f)
+        });
+    }
+
+    // Orbital path visualization
+    constexpr int orbitSegments = 16;
+    glm::vec3 orbitCenter = debugOffset + glm::vec3(0, 5, -5);
+    float orbitRadius = 4.0f;
+    for (int i = 0; i < orbitSegments; ++i) {
+        float angle1 = (float) i / orbitSegments * 2.0f * glm::pi<float>();
+        float angle2 = (float) (i + 1) / orbitSegments * 2.0f * glm::pi<float>();
+
+        glm::vec3 p1 = orbitCenter + glm::vec3(glm::cos(angle1) * orbitRadius, 0, glm::sin(angle1) * orbitRadius);
+        glm::vec3 p2 = orbitCenter + glm::vec3(glm::cos(angle2) * orbitRadius, 0, glm::sin(angle2) * orbitRadius);
+
+        frameBuffer->mainViewFamily.debugLines.push_back({
+            .start = p1,
+            .end = p2,
+            .color = glm::vec4(0, 1, 1, 1)
+        });
+    }
+
+    // Bounding volume hierarchy visualization
+    frameBuffer->mainViewFamily.debugSpheres.push_back({
+        .center = orbitCenter,
+        .radius = orbitRadius + 0.5f,
+        .color = glm::vec4(1, 0.5f, 0, 0.3f)
+    });
+#endif
 }
 } // Game::System

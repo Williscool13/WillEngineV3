@@ -10,6 +10,6 @@
 #include "components/renderable_component.h"
 #include "components/camera/free_camera_component.h"
 #include "components/camera/camera_component.h"
-#include "components/physics/physics_body_component.h"
+#include "components/physics/physics_components.h"
 
 #endif //WILL_ENGINE_FWD_COMPONENTS_H

@@ -64,6 +64,11 @@ PhysicsSystem::PhysicsSystem(enki::TaskScheduler* scheduler)
 
     SPDLOG_INFO("Physics System initialized | Bodies: {} | Mutexes: {} | Body Pairs: {} | Contacts: {} | Jobs: {} | Barriers: 8",
                 MAX_PHYSICS_BODIES, PHYSICS_BODY_MUTEX_COUNT, MAX_BODY_PAIRS, MAX_CONTACT_CONSTRAINTS, MAX_PHYSICS_JOBS);
+
+#if JPH_DEBUG_RENDERER
+    debugRenderer = std::make_unique<DebugRenderer>();
+    debugDrawFilter = std::make_unique<DebugDrawFilter>();
+#endif
 }
 
 PhysicsSystem::~PhysicsSystem()
@@ -77,4 +82,23 @@ void PhysicsSystem::Step(float deltaTime)
 {
     physicsSystem.Update(deltaTime, PHYSICS_COLLISION_STEPS, tempAllocator.get(), jobSystem.get());
 }
+
+void PhysicsSystem::DrawDebug(Core::ViewFamily* viewFamily, bool bUseFilter)
+{
+#if JPH_DEBUG_RENDERER
+    debugRenderer->SetViewFamily(viewFamily);
+
+    JPH::BodyManager::DrawSettings settings;
+    settings.mDrawShape = true;
+    settings.mDrawShapeWireframe = true;
+    settings.mDrawShapeColor = JPH::BodyManager::EShapeColor::MotionTypeColor;
+
+    if (bUseFilter) {
+        physicsSystem.DrawBodies(settings, debugRenderer.get(), debugDrawFilter.get());
+    } else {
+        physicsSystem.DrawBodies(settings, debugRenderer.get(), nullptr);
+    }
+#endif
+}
+
 } // Physics

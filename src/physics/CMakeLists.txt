@@ -16,6 +16,12 @@ add_library(physics STATIC
         layers/object_vs_broad_phase_layer_filter.h
         layers/object_layer_pair_filter.cpp
         layers/object_layer_pair_filter.h
+        physics_debug_renderer.cpp
+        physics_debug_renderer.h
+        physics_helpers.cpp
+        physics_helpers.h
+        physics_debug_filter.cpp
+        physics_debug_filter.h
 
 )
 

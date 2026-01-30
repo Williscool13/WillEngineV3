@@ -60,6 +60,12 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state);
 void DebugProcessPhysicsCollisions(Core::EngineContext* ctx, Engine::GameState* state);
 void DebugApplyGroundForces(Core::EngineContext* ctx, Engine::GameState* state);
 void DebugVisualizeCascadeCorners(Core::EngineContext* ctx, Engine::GameState* state);
+
+
+
+#ifndef PACKAGED_BUILD
+void DebugRender(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer);
+#endif
 } // Game::System
 
 #endif //WILL_ENGINE_DEBUG_SYSTEM_H

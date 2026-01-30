@@ -10,6 +10,8 @@
 
 #include "body_activation_listener.h"
 #include "contact_listener.h"
+#include "physics_debug_filter.h"
+#include "physics_debug_renderer.h"
 #include "physics_job_system.h"
 #include "Jolt/Physics/PhysicsSystem.h"
 #include "layers/broad_phase_layer_interface.h"
@@ -19,6 +21,7 @@
 namespace Core
 {
 struct TimeFrame;
+struct ViewFamily;
 }
 
 namespace Physics
@@ -62,6 +65,11 @@ public:
     JPH::BodyInterface& GetBodyInterface() { return physicsSystem.GetBodyInterface(); }
     JPH::PhysicsSystem& GetPhysicsSystem() { return physicsSystem; }
 
+#if JPH_DEBUG_RENDERER
+    DebugDrawFilter& GetDebugDrawFilter() const { return *debugDrawFilter; }
+#endif
+    void DrawDebug(Core::ViewFamily* viewFamily, bool bUseFilter = true);
+
     static void RegisterAllocator()
     {
         JPH::RegisterDefaultAllocator();
@@ -80,6 +88,11 @@ private:
 
     BodyActivationListener bodyActivationListener;
     ContactListener contactListener;
+
+#if JPH_DEBUG_RENDERER
+    std::unique_ptr<DebugRenderer> debugRenderer;
+    std::unique_ptr<DebugDrawFilter> debugDrawFilter;
+#endif
 };
 } // Physics
 

@@ -7,8 +7,7 @@
 
 namespace Game
 {
-class DirtyPhysicsTransformComponent
-{};
+
 } // Game
 
 #endif //WILL_ENGINE_DIRTY_PHYSICS_TRANSFORM_COMPONENT_H

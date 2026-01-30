@@ -7,12 +7,9 @@ set(GAME_SOURCES
         components/camera/free_camera_component.cpp
         components/camera/free_camera_component.h
         components/camera/camera_component.h
-        components/physics/physics_body_component.h
         components/dirty_physics_transform_component.h
         components/gameplay/portals/portal_component.h
         components/gameplay/floor_component.h
-        components/physics/physics_body_component.cpp
-        components/physics/dynamic_physics_body_component.h
         components/gameplay/anti_gravity_component.h
         components/debug/motion_blur_movement_component.h
         components/render/portal_plane_component.h
@@ -27,6 +24,8 @@ set(GAME_SOURCES
         systems/gather_renderables_system.cpp
         systems/editor_systems.cpp
         systems/editor_systems.h
+        components/physics/physics_components.cpp
+        components/physics/physics_components.h
 )
 
 set(GAME_INCLUDE_DIRS

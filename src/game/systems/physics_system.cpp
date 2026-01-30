@@ -9,7 +9,6 @@
 #include "core/time/time_frame.h"
 #include "game/fwd_components.h"
 #include "engine/engine_api.h"
-#include "game/components/physics/dynamic_physics_body_component.h"
 
 namespace Game::System
 {
@@ -21,10 +20,10 @@ void UpdatePhysics(Core::EngineContext* ctx, Engine::GameState* state)
     while (state->physicsDeltaTimeAccumulator >= Physics::PHYSICS_TIMESTEP) {
         auto& bodyInterface = physics->GetBodyInterface();
 
-        auto view = state->registry.view<DynamicPhysicsBodyComponent, PhysicsBodyComponent, TransformComponent>();
+        auto view = state->registry.view<Component::DynamicPhysicsBodyComponent, Component::PhysicsBodyComponent, TransformComponent>();
 
         for (auto [entity, dynamic, physicsBody, transform] : view.each()) {
-            if (state->registry.all_of<DirtyPhysicsTransformComponent>(entity)) {
+            if (state->registry.all_of<Component::DirtyPhysicsTransformComponent>(entity)) {
                 bodyInterface.SetPositionAndRotation(
                     physicsBody.bodyID,
                     JPH::RVec3(transform.translation.x, transform.translation.y, transform.translation.z),
@@ -37,7 +36,7 @@ void UpdatePhysics(Core::EngineContext* ctx, Engine::GameState* state)
             dynamic.previousRotation = transform.rotation;
         }
 
-        state->registry.clear<DirtyPhysicsTransformComponent>();
+        state->registry.clear<Component::DirtyPhysicsTransformComponent>();
         physics->Step(Physics::PHYSICS_TIMESTEP);
 
         for (auto [entity, dynamic, physicsBody, transform] : view.each()) {
@@ -51,5 +50,18 @@ void UpdatePhysics(Core::EngineContext* ctx, Engine::GameState* state)
     }
 
     state->physicsInterpolationAlpha = state->physicsDeltaTimeAccumulator / Physics::PHYSICS_TIMESTEP;
+}
+
+void DebugRenderPhysics(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer)
+{
+    auto& filter = ctx->physicsSystem->GetDebugDrawFilter();
+    filter.Clear();
+
+    auto view = state->registry.view<Component::DrawPhysicsDebugComponent, Component::PhysicsBodyComponent>();
+    for (auto [entity, physicsBody] : view.each()) {
+        filter.AddBody(physicsBody.bodyID);
+    }
+
+    ctx->physicsSystem->DrawDebug(&frameBuffer->mainViewFamily);
 }
 } // Game
