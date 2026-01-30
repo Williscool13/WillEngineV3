@@ -25,6 +25,8 @@ set(GAME_SOURCES
         systems/physics_system.h
         systems/gather_renderables_system.h
         systems/gather_renderables_system.cpp
+        systems/editor_systems.cpp
+        systems/editor_systems.h
 )
 
 set(GAME_INCLUDE_DIRS

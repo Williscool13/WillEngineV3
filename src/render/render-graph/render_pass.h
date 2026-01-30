@@ -66,6 +66,8 @@ public:
 
     RenderPass& ReadBuffer(const std::string& name);
 
+    RenderPass& ReadIndexBuffer(const std::string& name);
+
     RenderPass& ReadTransferBuffer(const std::string& name);
 
     RenderPass& ReadIndirectBuffer(const std::string& name);
@@ -99,8 +101,9 @@ private:
     std::vector<uint32_t> bufferReads;
     std::vector<uint32_t> bufferWrites;
     std::vector<uint32_t> bufferReadWrite;
-    std::vector<uint32_t> bufferReadTransfer;
-    std::vector<uint32_t> bufferWriteTransfer;
+    std::vector<uint32_t> bufferTransferReads;
+    std::vector<uint32_t> bufferTransferWrites;
+    std::vector<uint32_t> bufferIndexRead;
     std::vector<uint32_t> bufferIndirectReads;
     std::vector<uint32_t> bufferIndirectCountReads;
 

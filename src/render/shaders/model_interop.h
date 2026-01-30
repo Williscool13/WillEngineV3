@@ -40,6 +40,12 @@ using float4x4 = glm::mat4;
 #define SHADER_ALIGN alignas(16)
 #endif // __SLANG__
 
+SHADER_PUBLIC struct DebugVertex
+{
+    SHADER_PUBLIC float3 position;
+    SHADER_PUBLIC float4 color;
+};
+
 
 SHADER_PUBLIC struct Vertex
 {

@@ -143,6 +143,29 @@ struct CustomStencilDrawBatch
     std::vector<InstanceData> instances;
 };
 
+#ifndef PACKAGED_BUILD
+struct DebugLine
+{
+    glm::vec3 start;
+    glm::vec3 end;
+    glm::vec4 color;
+};
+
+struct DebugBox
+{
+    glm::vec3 center;
+    glm::vec3 extents;
+    glm::vec4 color;
+};
+
+struct DebugSphere
+{
+    glm::vec3 center;
+    float radius;
+    glm::vec4 color;
+};
+#endif
+
 struct ViewFamily
 {
     RenderView mainView{};
@@ -167,6 +190,12 @@ struct ViewFamily
     std::string debugResourceName{};
     DebugTransformationType debugTransformationType{};
     DebugViewAspect debugViewAspect{};
+
+#ifndef PACKAGED_BUILD
+    std::vector<DebugLine> debugLines;
+    std::vector<DebugBox> debugBoxes;
+    std::vector<DebugSphere> debugSpheres;
+#endif
 };
 
 struct BufferAcquireOperation

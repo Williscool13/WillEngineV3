@@ -148,8 +148,9 @@ void RenderGraph::CalculateLifetimes()
         for (const uint32_t bufIndex : pass->bufferReads) { UpdateBufferLifetime(buffers[bufIndex]); }
         for (const uint32_t bufIndex : pass->bufferWrites) { UpdateBufferLifetime(buffers[bufIndex]); }
         for (const uint32_t bufIndex : pass->bufferReadWrite) { UpdateBufferLifetime(buffers[bufIndex]); }
-        for (const uint32_t bufIndex : pass->bufferReadTransfer) { UpdateBufferLifetime(buffers[bufIndex]); }
-        for (const uint32_t bufIndex : pass->bufferWriteTransfer) { UpdateBufferLifetime(buffers[bufIndex]); }
+        for (const uint32_t bufIndex : pass->bufferTransferReads) { UpdateBufferLifetime(buffers[bufIndex]); }
+        for (const uint32_t bufIndex : pass->bufferTransferWrites) { UpdateBufferLifetime(buffers[bufIndex]); }
+        for (const uint32_t bufIndex : pass->bufferIndexRead) { UpdateBufferLifetime(buffers[bufIndex]); }
         for (const uint32_t bufIndex : pass->bufferIndirectReads) { UpdateBufferLifetime(buffers[bufIndex]); }
         for (const uint32_t bufIndex : pass->bufferIndirectCountReads) { UpdateBufferLifetime(buffers[bufIndex]); }
     }
@@ -645,7 +646,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
             LogBufferBarrier(buf.name, desiredAccess);
         }
 
-        for (const uint32_t bufIndex : pass->bufferWriteTransfer) {
+        for (const uint32_t bufIndex : pass->bufferTransferWrites) {
             auto& buf = buffers[bufIndex];
             auto& phys = physicalResources[buf.physicalIndex];
             if (phys.bDisableBarriers) { continue; }
@@ -666,7 +667,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
             LogBufferBarrier(buf.name, desiredAccess);
         }
 
-        for (const uint32_t bufIndex : pass->bufferReadTransfer) {
+        for (const uint32_t bufIndex : pass->bufferTransferReads) {
             auto& buf = buffers[bufIndex];
             auto& phys = physicalResources[buf.physicalIndex];
             if (phys.bDisableBarriers) { continue; }
@@ -698,6 +699,26 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 .srcStageMask = phys.event.stages,
                 .srcAccessMask = phys.event.access,
                 .dstStageMask = pass->stages,
+                .dstAccessMask = desiredAccess,
+                .buffer = phys.buffer,
+                .offset = 0,
+                .size = VK_WHOLE_SIZE
+            };
+            bufferBarriers.push_back(barrier);
+            LogBufferBarrier(buf.name, desiredAccess);
+        }
+
+        for (const uint32_t bufIndex : pass->bufferIndexRead) {
+            auto& buf = buffers[bufIndex];
+            auto& phys = physicalResources[buf.physicalIndex];
+            if (phys.bDisableBarriers) { continue; }
+
+            VkAccessFlags2 desiredAccess = VK_ACCESS_2_INDEX_READ_BIT;
+            VkBufferMemoryBarrier2 barrier = {
+                .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+                .srcStageMask = phys.event.stages,
+                .srcAccessMask = phys.event.access,
+                .dstStageMask = VK_PIPELINE_STAGE_2_INDEX_INPUT_BIT,
                 .dstAccessMask = desiredAccess,
                 .buffer = phys.buffer,
                 .offset = 0,
@@ -896,18 +917,25 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
             phys.event.access = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT;
         }
 
-        for (const uint32_t bufIndex : pass->bufferWriteTransfer) {
+        for (const uint32_t bufIndex : pass->bufferTransferWrites) {
             auto& buf = buffers[bufIndex];
             auto& phys = physicalResources[buf.physicalIndex];
             phys.event.stages = pass->stages;
             phys.event.access = VK_ACCESS_2_TRANSFER_WRITE_BIT;
         }
 
-        for (const uint32_t bufIndex : pass->bufferReadTransfer) {
+        for (const uint32_t bufIndex : pass->bufferTransferReads) {
             auto& buf = buffers[bufIndex];
             auto& phys = physicalResources[buf.physicalIndex];
             phys.event.stages = pass->stages;
             phys.event.access = VK_ACCESS_2_TRANSFER_READ_BIT;
+        }
+
+        for (const uint32_t bufIndex : pass->bufferIndexRead) {
+            auto& buf = buffers[bufIndex];
+            auto& phys = physicalResources[buf.physicalIndex];
+            phys.event.stages = VK_PIPELINE_STAGE_2_INDEX_INPUT_BIT;
+            phys.event.access = VK_ACCESS_2_INDEX_READ_BIT;
         }
 
         for (const uint32_t bufIndex : pass->bufferIndirectReads) {
@@ -984,9 +1012,7 @@ void RenderGraph::Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint
     ZoneScoped;
 
     currentFrameIndex = _currentFrameIndex;
-    uploadArenas[currentFrameIndex].allocator.Reset();
-
-    {
+    uploadArenas[currentFrameIndex].allocator.Reset(); {
         ZoneScopedN("CarryoverCapture");
         for (TextureFrameCarryover& carryover : textureCarryovers) {
             if (const TextureResource* tex = GetTexture(carryover.srcName)) {
@@ -1005,9 +1031,7 @@ void RenderGraph::Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint
                 carryover.accumulatedUsage = buf->accumulatedUsage;
             }
         }
-    }
-
-    {
+    } {
         // todo: seems string dealloc is causing heap contention when it happens when model loads at the same time.
         ZoneScopedN("ClearContainers");
         passes.clear();
@@ -1020,9 +1044,7 @@ void RenderGraph::Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint
             phys.logicalResourceIndices.clear();
             phys.bCanAlias = true;
         }
-    }
-
-    {
+    } {
         ZoneScopedN("CleanupUnusedPhysicalResources");
         for (int i = static_cast<int>(physicalResources.size()) - 1; i >= 0; --i) {
             auto& phys = physicalResources[i];
@@ -1035,9 +1057,7 @@ void RenderGraph::Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint
                 physicalResources.erase(physicalResources.begin() + i);
             }
         }
-    }
-
-    {
+    } {
         ZoneScopedN("CarryoverTextureRestoration");
         for (auto& carryover : textureCarryovers) {
             uint32_t physicalIndex = UINT32_MAX;
@@ -1066,9 +1086,7 @@ void RenderGraph::Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint
             phys.bCanAlias = false;
         }
         textureCarryovers.clear();
-    }
-
-    {
+    } {
         ZoneScopedN("CarryoverBufferRestoration");
         for (auto& carryover : bufferCarryovers) {
             uint32_t physicalIndex = UINT32_MAX;
@@ -1397,7 +1415,6 @@ const ResourceDimensions& RenderGraph::GetImageDimensions(const std::string& nam
 
 const VkImageAspectFlags RenderGraph::GetImageAspect(const std::string& name)
 {
-
     auto it = textureNameToIndex.find(name);
     assert(it != textureNameToIndex.end() && "Texture not found");
 

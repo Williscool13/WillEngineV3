@@ -405,5 +405,11 @@ SHADER_PUBLIC struct PortalCompositePushConstant
     SHADER_PUBLIC uint32_t portalDepthIndex;
 };
 
+SHADER_PUBLIC struct DebugDrawPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC SHADER_PTR(DebugVertex) vertexBuffer;
+    SHADER_PUBLIC uint32_t sceneDataIndex;
+};
 
 #endif //WILL_ENGINE_PUSH_CONSTANT_INTEROP_H

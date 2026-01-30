@@ -128,7 +128,7 @@ RenderPass& RenderPass::WriteTransferBuffer(const std::string& name)
 {
     BufferResource* resource = graph.GetOrCreateBuffer(name);
     resource->accumulatedUsage |= VK_BUFFER_USAGE_2_TRANSFER_DST_BIT;
-    bufferWriteTransfer.push_back(resource->index);
+    bufferTransferWrites.push_back(resource->index);
     return *this;
 }
 
@@ -234,12 +234,21 @@ RenderPass& RenderPass::ReadBuffer(const std::string& name)
     return *this;
 }
 
+RenderPass& RenderPass::ReadIndexBuffer(const std::string& name)
+{
+    BufferResource* resource = graph.GetOrCreateBuffer(name);
+    assert(resource->bufferInfo.size > 0 && "Buffer not defined - import or create buffer first");
+    resource->accumulatedUsage |= VK_BUFFER_USAGE_2_INDEX_BUFFER_BIT;
+    bufferIndexRead.push_back(resource->index);
+    return *this;
+}
+
 RenderPass& RenderPass::ReadTransferBuffer(const std::string& name)
 {
     BufferResource* resource = graph.GetOrCreateBuffer(name);
     assert(resource->bufferInfo.size > 0 && "Buffer not defined - import or create buffer first");
     resource->accumulatedUsage |= VK_BUFFER_USAGE_2_TRANSFER_SRC_BIT;
-    bufferReadTransfer.push_back(resource->index);
+    bufferTransferReads.push_back(resource->index);
     return *this;
 }
 

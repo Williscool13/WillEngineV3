@@ -22,6 +22,11 @@ struct FrameResourceLimits
     size_t highestPackedVisibilityBuffer{64};
     size_t highestInstanceOffsetBuffer{64};
     size_t highestCompactedInstanceBuffer{64};
+
+#ifndef PACKAGED_BUILD
+    size_t highestDebugVertexBuffer{64};
+    size_t highestDebugIndexBuffer{64};
+#endif
 };
 
 } // Render
