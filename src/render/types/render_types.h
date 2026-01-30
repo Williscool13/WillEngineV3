@@ -15,6 +15,10 @@
 namespace Render
 {
 Frustum CreateFrustum(const glm::mat4& viewProj);
+bool IntersectsSphere(const Frustum& frustum, const glm::vec3& center, float radius);
+bool IntersectsAABB(const Frustum& frustum, const glm::vec3& min, const glm::vec3& max);
+bool IntersectsOBB(const Frustum& frustum, const glm::vec3& center, const glm::vec3& extents, const glm::mat3& rotation);
+int32_t GetSphereSegments(const glm::vec3& center, const glm::vec3& viewPos, float radius);
 
 struct TaskIndirectDrawParameters
 {

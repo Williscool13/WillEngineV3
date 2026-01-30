@@ -206,7 +206,6 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         ZoneScopedN("SetupUniforms");
         SetupFrameUniforms(viewFamily, renderExtent, frameBuffer.timeFrame.renderDeltaTime);
         SetupModelUniforms(viewFamily);
-        SetupDebugUniforms(*renderGraph, frameResourceLimits, viewFamily);
     } {
         ZoneScopedN("ImportBuffers");
         renderGraph->ImportBufferNoBarrier("vertex_buffer", resourceManager->megaVertexBuffer.handle, resourceManager->megaVertexBuffer.address,
@@ -344,7 +343,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
 
         bool bHasDebugRender = pipelineManager->IsCategoryReady(PipelineCategory::DebugRendering);
         if (bHasDebugRender) {
-            SetupDebugRender(*renderGraph, viewFamily, renderExtent, targets.depthStencil, finalOutput, frameBuffer.timeFrame.renderDeltaTime);
+            SetupDebugRender(*renderGraph, viewFamily, renderExtent, targets.depthStencil, finalOutput, frameResourceLimits);
         }
 
 
@@ -797,6 +796,19 @@ void RenderThread::CreatePipelines()
         builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_LINE_LIST);
         builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE);
         builder.SetupDepthState(VK_TRUE, VK_FALSE, VK_COMPARE_OP_GREATER_OR_EQUAL);
+        VkPipelineColorBlendAttachmentState blendState{
+            .blendEnable = VK_TRUE,
+            .srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
+            .dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+            .colorBlendOp = VK_BLEND_OP_ADD,
+            .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
+            .dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
+            .alphaBlendOp = VK_BLEND_OP_ADD,
+            .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                              VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT
+        };
+
+        builder.SetupBlending(&blendState, 1);
 
         VkFormat colorFormats[1] = {
             POST_PROCESS_OUTPUT_FORMAT,
@@ -1138,167 +1150,6 @@ void RenderThread::SetupModelUniforms(const Core::ViewFamily& viewFamily)
     renderGraph->CreateBuffer("indirect_count_buffer", INSTANCING_MESH_INDIRECT_COUNT_SIZE);
     renderGraph->CreateBuffer("primitive_count_buffer", INSTANCING_PRIMITIVE_COUNT_SIZE);
     renderGraph->CreateBuffer("indirect_buffer", INSTANCING_MESH_INDIRECT_PARAMETERS);
-}
-
-void RenderThread::SetupDebugUniforms(RenderGraph& graph, FrameResourceLimits& limits, const Core::ViewFamily& viewFamily)
-{
-#ifndef PACKAGED_BUILD
-    size_t totalDebugVertices = 0;
-    size_t totalDebugIndices = 0;
-
-    // Lines: 2 vertices per line
-    totalDebugVertices += viewFamily.debugLines.size() * 2;
-    totalDebugIndices += viewFamily.debugLines.size() * 2;
-
-    // Boxes: 8 vertices, 24 indices (12 lines * 2)
-    totalDebugVertices += viewFamily.debugBoxes.size() * 8;
-    totalDebugIndices += viewFamily.debugBoxes.size() * 24;
-
-    // Spheres: approximate with circles on 3 axes, say 32 segments each
-    // 3 circles * 32 segments = 96 vertices, 192 indices
-    totalDebugVertices += viewFamily.debugSpheres.size() * 96;
-    totalDebugIndices += viewFamily.debugSpheres.size() * 192;
-
-    if (totalDebugVertices == 0) {
-        return;
-    }
-
-    limits.highestDebugVertexBuffer = std::max(limits.highestDebugVertexBuffer, NextPowerOfTwo(totalDebugVertices));
-    limits.highestDebugIndexBuffer = std::max(limits.highestDebugIndexBuffer, NextPowerOfTwo(totalDebugIndices));
-
-    size_t debugVertexBufferSize = limits.highestDebugVertexBuffer * sizeof(DebugVertex);
-    size_t debugIndexBufferSize = limits.highestDebugIndexBuffer * sizeof(uint32_t);
-
-    graph.CreateBuffer("debug_vertex_buffer", debugVertexBufferSize);
-    graph.CreateBuffer("debug_index_buffer", debugIndexBufferSize);
-
-    UploadAllocation vertexUpload = graph.AllocateTransient(totalDebugVertices * sizeof(DebugVertex));
-    UploadAllocation indexUpload = graph.AllocateTransient(totalDebugIndices * sizeof(uint32_t));
-
-    auto* vertices = static_cast<DebugVertex*>(vertexUpload.ptr);
-    auto* indices = static_cast<uint32_t*>(indexUpload.ptr);
-
-    uint32_t vertexOffset = 0;
-    uint32_t indexOffset = 0;
-
-    for (const auto& line : viewFamily.debugLines) {
-        vertices[vertexOffset++] = {.position = line.start, .color = line.color};
-        vertices[vertexOffset++] = {.position = line.end, .color = line.color};
-        indices[indexOffset++] = vertexOffset - 2;
-        indices[indexOffset++] = vertexOffset - 1;
-    }
-
-    for (const auto& box : viewFamily.debugBoxes) {
-        glm::vec3 min = box.center - box.extents;
-        glm::vec3 max = box.center + box.extents;
-
-        uint32_t baseVertex = vertexOffset;
-        vertices[vertexOffset++] = {.position = glm::vec3(min.x, min.y, min.z), .color = box.color};
-        vertices[vertexOffset++] = {.position = glm::vec3(max.x, min.y, min.z), .color = box.color};
-        vertices[vertexOffset++] = {.position = glm::vec3(max.x, max.y, min.z), .color = box.color};
-        vertices[vertexOffset++] = {.position = glm::vec3(min.x, max.y, min.z), .color = box.color};
-        vertices[vertexOffset++] = {.position = glm::vec3(min.x, min.y, max.z), .color = box.color};
-        vertices[vertexOffset++] = {.position = glm::vec3(max.x, min.y, max.z), .color = box.color};
-        vertices[vertexOffset++] = {.position = glm::vec3(max.x, max.y, max.z), .color = box.color};
-        vertices[vertexOffset++] = {.position = glm::vec3(min.x, max.y, max.z), .color = box.color};
-
-        // 12 lines for box edges
-        uint32_t boxIndices[] = {
-            0, 1, 1, 2, 2, 3, 3, 0, // bottom face
-            4, 5, 5, 6, 6, 7, 7, 4, // top face
-            0, 4, 1, 5, 2, 6, 3, 7 // vertical edges
-        };
-        for (uint32_t idx : boxIndices) {
-            indices[indexOffset++] = baseVertex + idx;
-        }
-    }
-
-    for (const auto& sphere : viewFamily.debugSpheres) {
-        constexpr int segments = 32;
-        uint32_t baseVertex = vertexOffset;
-
-        // XY circle
-        for (int i = 0; i < segments; ++i) {
-            float angle = (float) i / segments * 2.0f * glm::pi<float>();
-            glm::vec3 pos = sphere.center + glm::vec3(
-                                glm::cos(angle) * sphere.radius,
-                                glm::sin(angle) * sphere.radius,
-                                0.0f
-                            );
-            vertices[vertexOffset++] = {.position = pos, .color = sphere.color};
-        }
-        // XZ circle
-        for (int i = 0; i < segments; ++i) {
-            float angle = (float) i / segments * 2.0f * glm::pi<float>();
-            glm::vec3 pos = sphere.center + glm::vec3(
-                                glm::cos(angle) * sphere.radius,
-                                0.0f,
-                                glm::sin(angle) * sphere.radius
-                            );
-            vertices[vertexOffset++] = {.position = pos, .color = sphere.color};
-        }
-        // YZ circle
-        for (int i = 0; i < segments; ++i) {
-            float angle = (float) i / segments * 2.0f * glm::pi<float>();
-            glm::vec3 pos = sphere.center + glm::vec3(
-                                0.0f,
-                                glm::cos(angle) * sphere.radius,
-                                glm::sin(angle) * sphere.radius
-                            );
-            vertices[vertexOffset++] = {.position = pos, .color = sphere.color};
-        }
-
-        // Indices for 3 circles
-        for (int circle = 0; circle < 3; ++circle) {
-            uint32_t circleBase = baseVertex + circle * segments;
-            for (int i = 0; i < segments; ++i) {
-                indices[indexOffset++] = circleBase + i;
-                indices[indexOffset++] = circleBase + (i + 1) % segments;
-            }
-        }
-    }
-
-    RenderPass& uploadDebugPass = graph.AddPass("Upload Debug Geometry", VK_PIPELINE_STAGE_2_TRANSFER_BIT);
-    uploadDebugPass.WriteTransferBuffer("debug_vertex_buffer");
-    uploadDebugPass.WriteTransferBuffer("debug_index_buffer");
-
-    VkBuffer srcBuffer = graph.GetTransientUploadBuffer();
-    uploadDebugPass.Execute([&, srcBuffer,
-            vertexOffset = vertexUpload.offset,
-            vertexSize = totalDebugVertices * sizeof(DebugVertex),
-            indexOffset = indexUpload.offset,
-            indexSize = totalDebugIndices * sizeof(uint32_t)](VkCommandBuffer cmd) {
-            VkBufferCopy2 vertexCopy{
-                .sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
-                .srcOffset = vertexOffset,
-                .dstOffset = 0,
-                .size = vertexSize
-            };
-            VkCopyBufferInfo2 vertexCopyInfo{
-                .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
-                .srcBuffer = srcBuffer,
-                .dstBuffer = graph.GetBufferHandle("debug_vertex_buffer"),
-                .regionCount = 1,
-                .pRegions = &vertexCopy
-            };
-            vkCmdCopyBuffer2(cmd, &vertexCopyInfo);
-
-            VkBufferCopy2 indexCopy{
-                .sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
-                .srcOffset = indexOffset,
-                .dstOffset = 0,
-                .size = indexSize
-            };
-            VkCopyBufferInfo2 indexCopyInfo{
-                .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
-                .srcBuffer = srcBuffer,
-                .dstBuffer = graph.GetBufferHandle("debug_index_buffer"),
-                .regionCount = 1,
-                .pRegions = &indexCopy
-            };
-            vkCmdCopyBuffer2(cmd, &indexCopyInfo);
-        });
-#endif
 }
 
 void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFamily& viewFamily) const
@@ -2455,13 +2306,182 @@ std::string RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::Vi
 }
 
 void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, const std::string& depthTarget, const std::string& targetImage,
-                                    float deltaTime) const
+                                    FrameResourceLimits& limits) const
 {
 #ifndef PACKAGED_BUILD
+size_t totalDebugVertices = 0;
     size_t totalDebugIndices = 0;
+
+    // Lines: 2 vertices per line
+    totalDebugVertices += viewFamily.debugLines.size() * 2;
     totalDebugIndices += viewFamily.debugLines.size() * 2;
+
+    // Boxes: 8 vertices, 24 indices (12 lines * 2)
+    totalDebugVertices += viewFamily.debugBoxes.size() * 8;
     totalDebugIndices += viewFamily.debugBoxes.size() * 24;
+
+    // Spheres: approximate with circles on 3 axes, say 32 segments each
+    // 3 circles * 32 segments = 96 vertices, 192 indices
+    totalDebugVertices += viewFamily.debugSpheres.size() * 96;
     totalDebugIndices += viewFamily.debugSpheres.size() * 192;
+
+    if (totalDebugVertices == 0) {
+        return;
+    }
+
+    limits.highestDebugVertexBuffer = std::max(limits.highestDebugVertexBuffer, NextPowerOfTwo(totalDebugVertices));
+    limits.highestDebugIndexBuffer = std::max(limits.highestDebugIndexBuffer, NextPowerOfTwo(totalDebugIndices));
+
+    size_t debugVertexBufferSize = limits.highestDebugVertexBuffer * sizeof(DebugVertex);
+    size_t debugIndexBufferSize = limits.highestDebugIndexBuffer * sizeof(uint32_t);
+
+    graph.CreateBuffer("debug_vertex_buffer", debugVertexBufferSize);
+    graph.CreateBuffer("debug_index_buffer", debugIndexBufferSize);
+
+    UploadAllocation vertexUpload = graph.AllocateTransient(totalDebugVertices * sizeof(DebugVertex));
+    UploadAllocation indexUpload = graph.AllocateTransient(totalDebugIndices * sizeof(uint32_t));
+
+    auto* vertices = static_cast<DebugVertex*>(vertexUpload.ptr);
+    auto* indices = static_cast<uint32_t*>(indexUpload.ptr);
+
+    uint32_t vertexOffset = 0;
+    uint32_t indexOffset = 0;
+
+    const glm::mat4 viewMatrix = glm::lookAt(viewFamily.mainView.currentViewData.cameraPos, viewFamily.mainView.currentViewData.cameraLookAt, viewFamily.mainView.currentViewData.cameraUp);
+    const glm::mat4 projMatrix = glm::perspective(viewFamily.mainView.currentViewData.fovRadians, viewFamily.mainView.currentViewData.aspectRatio, viewFamily.mainView.currentViewData.farPlane,
+                                                  viewFamily.mainView.currentViewData.nearPlane);
+    Frustum mainViewFrustum = CreateFrustum(projMatrix * viewMatrix);
+
+    for (const auto& line : viewFamily.debugLines) {
+        vertices[vertexOffset++] = {.position = line.start, .color = line.color};
+        vertices[vertexOffset++] = {.position = line.end, .color = line.color};
+        indices[indexOffset++] = vertexOffset - 2;
+        indices[indexOffset++] = vertexOffset - 1;
+    }
+
+    for (const auto& box : viewFamily.debugBoxes) {
+        glm::mat3 rot = glm::mat3_cast(box.rotation);
+
+        if (!IntersectsOBB(mainViewFrustum, box.center, box.extents, rot)) {
+            continue;
+        }
+
+        glm::vec3 corners[8] = {
+            glm::vec3(-1, -1, -1), glm::vec3(1, -1, -1),
+            glm::vec3(1, 1, -1), glm::vec3(-1, 1, -1),
+            glm::vec3(-1, -1, 1), glm::vec3(1, -1, 1),
+            glm::vec3(1, 1, 1), glm::vec3(-1, 1, 1),
+        };
+
+        uint32_t baseVertex = vertexOffset;
+        for (const auto& corner : corners) {
+            glm::vec3 pos = box.center + rot * (corner * box.extents);
+            vertices[vertexOffset++] = {.position = pos, .color = box.color};
+        }
+
+        // 12 lines for box edges
+        uint32_t boxIndices[] = {
+            0, 1, 1, 2, 2, 3, 3, 0, // bottom face
+            4, 5, 5, 6, 6, 7, 7, 4, // top face
+            0, 4, 1, 5, 2, 6, 3, 7 // vertical edges
+        };
+        for (uint32_t idx : boxIndices) {
+            indices[indexOffset++] = baseVertex + idx;
+        }
+    }
+
+    for (const auto& sphere : viewFamily.debugSpheres) {
+        if (!IntersectsSphere(mainViewFrustum, sphere.center, sphere.radius)) {
+            continue;
+        }
+
+        const int segments = GetSphereSegments(sphere.center, viewFamily.mainView.currentViewData.cameraPos, sphere.radius);
+        uint32_t baseVertex = vertexOffset;
+
+        // XY circle
+        for (int i = 0; i < segments; ++i) {
+            float angle = (float) i / segments * 2.0f * glm::pi<float>();
+            glm::vec3 pos = sphere.center + glm::vec3(
+                                glm::cos(angle) * sphere.radius,
+                                glm::sin(angle) * sphere.radius,
+                                0.0f
+                            );
+            vertices[vertexOffset++] = {.position = pos, .color = sphere.color};
+        }
+        // XZ circle
+        for (int i = 0; i < segments; ++i) {
+            float angle = (float) i / segments * 2.0f * glm::pi<float>();
+            glm::vec3 pos = sphere.center + glm::vec3(
+                                glm::cos(angle) * sphere.radius,
+                                0.0f,
+                                glm::sin(angle) * sphere.radius
+                            );
+            vertices[vertexOffset++] = {.position = pos, .color = sphere.color};
+        }
+        // YZ circle
+        for (int i = 0; i < segments; ++i) {
+            float angle = (float) i / segments * 2.0f * glm::pi<float>();
+            glm::vec3 pos = sphere.center + glm::vec3(
+                                0.0f,
+                                glm::cos(angle) * sphere.radius,
+                                glm::sin(angle) * sphere.radius
+                            );
+            vertices[vertexOffset++] = {.position = pos, .color = sphere.color};
+        }
+
+        // Indices for 3 circles
+        for (int circle = 0; circle < 3; ++circle) {
+            uint32_t circleBase = baseVertex + circle * segments;
+            for (int i = 0; i < segments; ++i) {
+                indices[indexOffset++] = circleBase + i;
+                indices[indexOffset++] = circleBase + (i + 1) % segments;
+            }
+        }
+    }
+
+    RenderPass& uploadDebugPass = graph.AddPass("Upload Debug Geometry", VK_PIPELINE_STAGE_2_TRANSFER_BIT);
+    uploadDebugPass.WriteTransferBuffer("debug_vertex_buffer");
+    uploadDebugPass.WriteTransferBuffer("debug_index_buffer");
+
+    VkBuffer srcBuffer = graph.GetTransientUploadBuffer();
+    uploadDebugPass.Execute([&, srcBuffer,
+            vertexOffset = vertexUpload.offset,
+            vertexSize = totalDebugVertices * sizeof(DebugVertex),
+            indexOffset = indexUpload.offset,
+            indexSize = totalDebugIndices * sizeof(uint32_t)](VkCommandBuffer cmd) {
+            VkBufferCopy2 vertexCopy{
+                .sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
+                .srcOffset = vertexOffset,
+                .dstOffset = 0,
+                .size = vertexSize
+            };
+            VkCopyBufferInfo2 vertexCopyInfo{
+                .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
+                .srcBuffer = srcBuffer,
+                .dstBuffer = graph.GetBufferHandle("debug_vertex_buffer"),
+                .regionCount = 1,
+                .pRegions = &vertexCopy
+            };
+            vkCmdCopyBuffer2(cmd, &vertexCopyInfo);
+
+            VkBufferCopy2 indexCopy{
+                .sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
+                .srcOffset = indexOffset,
+                .dstOffset = 0,
+                .size = indexSize
+            };
+            VkCopyBufferInfo2 indexCopyInfo{
+                .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
+                .srcBuffer = srcBuffer,
+                .dstBuffer = graph.GetBufferHandle("debug_index_buffer"),
+                .regionCount = 1,
+                .pRegions = &indexCopy
+            };
+            vkCmdCopyBuffer2(cmd, &indexCopyInfo);
+        });
+
+
+    totalDebugIndices = indexOffset;
 
     if (totalDebugIndices == 0) {
         return;
@@ -2487,7 +2507,8 @@ void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& 
         if (bHasDepth) {
             const VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(depthTarget), nullptr, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
             renderInfo = VkHelpers::RenderingInfo({width, height}, &colorAttachment, 1, &depthAttachment, nullptr);
-        } else {
+        }
+        else {
             renderInfo = VkHelpers::RenderingInfo({width, height}, &colorAttachment, 1, nullptr, nullptr);
         }
 

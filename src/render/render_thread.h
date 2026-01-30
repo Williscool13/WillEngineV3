@@ -99,8 +99,6 @@ private:
 
     void SetupModelUniforms(const Core::ViewFamily& viewFamily);
 
-    void SetupDebugUniforms(RenderGraph& graph, FrameResourceLimits& limits, const Core::ViewFamily& viewFamily);
-
     void SetupCascadedShadows(RenderGraph& graph, const Core::ViewFamily& viewFamily) const;
 
     struct GBufferTargets {
@@ -137,7 +135,7 @@ private:
 
     std::string SetupPostProcessing(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, const PostProcessTargets& ppTargets, float deltaTime) const;
 
-    void SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, const std::string& depthTarget, const std::string& targetImage, float deltaTime) const;
+    void SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, const std::string& depthTarget, const std::string& targetImage, FrameResourceLimits& limits) const;
 
 private:
     // Non-owning

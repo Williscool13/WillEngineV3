@@ -68,4 +68,59 @@ Frustum CreateFrustum(const glm::mat4& viewProj)
 
     return frustum;
 }
+
+bool IntersectsSphere(const Frustum& frustum, const glm::vec3& center, float radius)
+{
+    for (const auto& plane : frustum.planes) {
+        float dist = glm::dot(glm::vec3(plane), center) + plane.w;
+        if (dist < -radius) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool IntersectsAABB(const Frustum& frustum, const glm::vec3& min, const glm::vec3& max)
+{
+    for (const auto& plane : frustum.planes) {
+        glm::vec3 normal = glm::vec3(plane);
+
+        glm::vec3 pVertex;
+        pVertex.x = normal.x >= 0 ? max.x : min.x;
+        pVertex.y = normal.y >= 0 ? max.y : min.y;
+        pVertex.z = normal.z >= 0 ? max.z : min.z;
+
+        if (glm::dot(normal, pVertex) + plane.w < 0) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool IntersectsOBB(const Frustum& frustum, const glm::vec3& center, const glm::vec3& extents, const glm::mat3& rotation)
+{
+    for (const auto& plane : frustum.planes) {
+        glm::vec3 normal = glm::vec3(plane);
+
+        float r = extents.x * glm::abs(glm::dot(normal, rotation[0])) +
+                  extents.y * glm::abs(glm::dot(normal, rotation[1])) +
+                  extents.z * glm::abs(glm::dot(normal, rotation[2]));
+
+        float dist = glm::dot(normal, center) + plane.w;
+        if (dist < -r) {
+            return false;
+        }
+    }
+    return true;
+}
+
+int32_t GetSphereSegments(const glm::vec3& center, const glm::vec3& viewPos, float radius)
+{
+    float dist = glm::distance(center, viewPos);
+    float screenSize = radius / dist;
+
+    if (screenSize > 0.1f) return 32;
+    if (screenSize > 0.05f) return 16;
+    return 8;
+}
 } // Render

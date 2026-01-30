@@ -13,6 +13,7 @@
 #include "core/allocators/handle.h"
 #include "core/time/time_frame.h"
 #include "engine/material_manager.h"
+#include "glm/detail/type_quat.hpp"
 #include "render/render_config.h"
 #include "render/shaders/model_interop.h"
 
@@ -155,6 +156,7 @@ struct DebugBox
 {
     glm::vec3 center;
     glm::vec3 extents;
+    glm::quat rotation;
     glm::vec4 color;
 };
 
