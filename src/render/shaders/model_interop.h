@@ -43,6 +43,7 @@ using float4x4 = glm::mat4;
 SHADER_PUBLIC struct DebugVertex
 {
     SHADER_PUBLIC float3 position;
+    SHADER_PUBLIC float pad;
     SHADER_PUBLIC float4 color;
 };
 
