@@ -7,7 +7,7 @@
 
 #include "core/include/render_interface.h"
 
-namespace Game
+namespace Game::Component
 {
 struct CameraComponent
 {
@@ -17,6 +17,14 @@ struct CameraComponent
 
 struct MainViewportComponent
 {};
+
+struct FreeCameraComponent
+{
+    float moveSpeed = 5.0f;
+    float lookSpeed = 0.1f;
+    float yaw = 0.0f;
+    float pitch = 0.0f;
+};
 }
 
 

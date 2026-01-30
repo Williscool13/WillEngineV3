@@ -5,11 +5,10 @@
 #ifndef WILL_ENGINE_FWD_COMPONENTS_H
 #define WILL_ENGINE_FWD_COMPONENTS_H
 
-#include "components/transform_component.h"
-#include "components/dirty_physics_transform_component.h"
-#include "components/renderable_component.h"
-#include "components/camera/free_camera_component.h"
-#include "components/camera/camera_component.h"
+#include "components/gameplay/portal_components.h"
+#include "components/render/render_components.h"
+#include "components/camera/camera_components.h"
 #include "components/physics/physics_components.h"
+#include "components/debug/debug_components.h"
 
 #endif //WILL_ENGINE_FWD_COMPONENTS_H

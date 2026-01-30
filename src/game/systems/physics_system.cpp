@@ -20,7 +20,7 @@ void UpdatePhysics(Core::EngineContext* ctx, Engine::GameState* state)
     while (state->physicsDeltaTimeAccumulator >= Physics::PHYSICS_TIMESTEP) {
         auto& bodyInterface = physics->GetBodyInterface();
 
-        auto view = state->registry.view<Component::DynamicPhysicsBodyComponent, Component::PhysicsBodyComponent, TransformComponent>();
+        auto view = state->registry.view<Component::DynamicPhysicsBodyComponent, Component::PhysicsBodyComponent, Component::TransformComponent>();
 
         for (auto [entity, dynamic, physicsBody, transform] : view.each()) {
             if (state->registry.all_of<Component::DirtyPhysicsTransformComponent>(entity)) {

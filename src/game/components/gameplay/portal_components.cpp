@@ -1,36 +1,16 @@
 //
-// Created by William on 2026-01-25.
+// Created by William on 2026-01-30.
 //
 
-#ifndef WILL_ENGINE_PORTAL_COMPONENT_H
-#define WILL_ENGINE_PORTAL_COMPONENT_H
-#include <entt/entt.hpp>
+#include "portal_components.h"
 
 #include "core/include/engine_context.h"
-#include "engine/asset_manager.h"
 #include "engine/engine_api.h"
-#include "game/components/renderable_component.h"
-#include "game/components/transform_component.h"
-#include "game/components/render/portal_plane_component.h"
-#include "glm/detail/type_quat.hpp"
-#include "render/model/will_model_asset.h"
 #include "spdlog/spdlog.h"
 
-namespace Game
+namespace Game::Component
 {
-struct PortalComponent {
-    entt::entity linkedPortal = entt::null;
-    uint32_t stencilValue = 0;
-};
-
-struct PortalPair {
-    entt::entity portalA;
-    entt::entity portalB;
-};
-
-inline PortalPair CreatePortalPair(Core::EngineContext* ctx, Engine::GameState* state,
-                           glm::vec3 posA, glm::quat rotA,
-                           glm::vec3 posB, glm::quat rotB)
+PortalPair CreatePortalPair(Core::EngineContext* ctx, Engine::GameState* state, glm::vec3 posA, glm::quat rotA, glm::vec3 posB, glm::quat rotB)
 {
     if (!state->portalPlaneHandle.IsValid()) {
         SPDLOG_WARN("[DebugSystem] Portal plane model not loaded");
@@ -122,7 +102,7 @@ inline PortalPair CreatePortalPair(Core::EngineContext* ctx, Engine::GameState* 
     return {portalA, portalB};
 }
 
-inline void CreatePortalPlane(Core::EngineContext* ctx, Engine::GameState* state, glm::vec3 position, glm::quat rotation, glm::vec3 scale)
+void CreatePortalPlane(Core::EngineContext* ctx, Engine::GameState* state, glm::vec3 position, glm::quat rotation, glm::vec3 scale)
 {
     if (!state->portalPlaneHandle.IsValid()) {
         SPDLOG_WARN("[DebugSystem] Portal plane model not loaded, press F1 first");
@@ -171,6 +151,4 @@ inline void CreatePortalPlane(Core::EngineContext* ctx, Engine::GameState* state
     SPDLOG_INFO("[DebugSystem] Created portal plane at ({}, {}, {})",
                 position.x, position.y, position.z);
 }
-} // Game
-
-#endif //WILL_ENGINE_PORTAL_COMPONENT_H
+}

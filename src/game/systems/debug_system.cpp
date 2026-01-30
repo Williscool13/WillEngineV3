@@ -16,10 +16,6 @@
 #include "engine/asset_manager.h"
 #include "engine/engine_api.h"
 #include "game/fwd_components.h"
-#include "game/components/debug/motion_blur_movement_component.h"
-#include "game/components/gameplay/anti_gravity_component.h"
-#include "game/components/gameplay/floor_component.h"
-#include "game/components/gameplay/portals/portal_component.h"
 #include "physics/physics_system.h"
 #include "platform/paths.h"
 
@@ -68,7 +64,7 @@ entt::entity CreateBox(Core::EngineContext* ctx, Engine::GameState* state, glm::
         return entt::null;
     }
 
-    RenderableComponent renderable{};
+    Component::RenderableComponent renderable{};
     Engine::MaterialManager& materialManager = ctx->assetManager->GetMaterialManager();
     Render::MeshInformation& submesh = model->modelData.meshes[0];
 
@@ -94,8 +90,8 @@ entt::entity CreateBox(Core::EngineContext* ctx, Engine::GameState* state, glm::
     renderable.modelFlags = glm::vec4(0.0f);
 
     entt::entity boxEntity = state->registry.create();
-    state->registry.emplace<RenderableComponent>(boxEntity, renderable);
-    TransformComponent transformComponent = state->registry.emplace<TransformComponent>(boxEntity, position, glm::quat(1.0f, 0.0f, 0.0f, 0.0f), glm::vec3(1.0f));
+    state->registry.emplace<Component::RenderableComponent>(boxEntity, renderable);
+    Component::TransformComponent transformComponent = state->registry.emplace<Component::TransformComponent>(boxEntity, position, glm::quat(1.0f, 0.0f, 0.0f, 0.0f), glm::vec3(1.0f));
     if (bUsePhysics) {
         state->registry.emplace<Component::PhysicsBodyComponent>(boxEntity, bodyId);
         state->registry.emplace<Component::DynamicPhysicsBodyComponent>(boxEntity, transformComponent.translation, transformComponent.rotation);
@@ -135,7 +131,7 @@ entt::entity CreateStaticBox(Core::EngineContext* ctx, Engine::GameState* state,
         return entt::null;
     }
 
-    RenderableComponent renderable{};
+    Component::RenderableComponent renderable{};
     Engine::MaterialManager& materialManager = ctx->assetManager->GetMaterialManager();
     Render::MeshInformation& submesh = model->modelData.meshes[0];
 
@@ -163,13 +159,13 @@ entt::entity CreateStaticBox(Core::EngineContext* ctx, Engine::GameState* state,
 
     // Create entity
     entt::entity entity = state->registry.create();
-    state->registry.emplace<RenderableComponent>(entity, renderable);
+    state->registry.emplace<Component::RenderableComponent>(entity, renderable);
 
-    TransformComponent transform;
+    Component::TransformComponent transform;
     transform.translation = renderPos;
     transform.rotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
     transform.scale = renderScale;
-    state->registry.emplace<TransformComponent>(entity, transform);
+    state->registry.emplace<Component::TransformComponent>(entity, transform);
     state->registry.emplace<Component::PhysicsBodyComponent>(entity, bodyID);
 
     return entity;
@@ -211,7 +207,7 @@ entt::entity CreateGlowingBox(Core::EngineContext* ctx, Engine::GameState* state
         return entt::null;
     }
 
-    RenderableComponent renderable{};
+    Component::RenderableComponent renderable{};
     Engine::MaterialManager& materialManager = ctx->assetManager->GetMaterialManager();
     Render::MeshInformation& submesh = model->modelData.meshes[0];
 
@@ -239,8 +235,8 @@ entt::entity CreateGlowingBox(Core::EngineContext* ctx, Engine::GameState* state
     renderable.modelFlags = glm::vec4(0.0f);
 
     entt::entity boxEntity = state->registry.create();
-    state->registry.emplace<RenderableComponent>(boxEntity, renderable);
-    TransformComponent transformComponent = state->registry.emplace<TransformComponent>(
+    state->registry.emplace<Component::RenderableComponent>(boxEntity, renderable);
+    Component::TransformComponent transformComponent = state->registry.emplace<Component::TransformComponent>(
         boxEntity, position, glm::quat(1.0f, 0.0f, 0.0f, 0.0f), glm::vec3(1.0f));
 
     if (bUsePhysics) {
@@ -254,7 +250,7 @@ entt::entity CreateGlowingBox(Core::EngineContext* ctx, Engine::GameState* state
 void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
 {
     if (state->bEnablePhysics) {
-        auto view = state->registry.view<MotionBlurMovementComponent, TransformComponent>();
+        auto view = state->registry.view<Component::MotionBlurMovementComponent, Component::TransformComponent>();
         float time = state->timeFrame->totalTime;
         int index = 0;
         for (auto [entity, motionBlur, transform] : view.each()) {
@@ -300,7 +296,7 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
             glm::vec3(0.0f, -0.5f, 0.0f), glm::vec3(20.0f, 1.0f, 20.0f), // render
             glm::vec4(0.5f, 0.5f, 0.5f, 1.0f) // gray
         );
-        state->registry.emplace<FloorComponent>(floor);
+        state->registry.emplace<Component::FloorComponent>(floor);
 
         // Create walls
         CreateStaticBox(ctx, state, JPH::RVec3(0, 2.5, -10), JPH::Vec3(10, 2.5, 0.5),
@@ -324,7 +320,7 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
             glm::vec3 spawnPos = glm::vec3(8.0f, 10.0f + i * 1.2f, 0.0f);
             entt::entity motionBox = CreateBox(ctx, state, spawnPos, false);
             if (motionBox != entt::null) {
-                state->registry.emplace<MotionBlurMovementComponent>(motionBox, true);
+                state->registry.emplace<Component::MotionBlurMovementComponent>(motionBox, true);
             }
         }
 
@@ -332,7 +328,7 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
             glm::vec3 spawnPos = glm::vec3(-8.0f + i * 2.0f, 10.0f, 0);
             entt::entity motionBox = CreateBox(ctx, state, spawnPos, false);
             if (motionBox != entt::null) {
-                state->registry.emplace<MotionBlurMovementComponent>(motionBox, false);
+                state->registry.emplace<Component::MotionBlurMovementComponent>(motionBox, false);
             }
         }
 
@@ -391,7 +387,7 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         };
 
         for (const auto& pos : dragonPositions) {
-            RenderableComponent renderable{};
+            Component::RenderableComponent renderable{};
 
             for (size_t i = 0; i < submesh.primitiveProperties.size(); ++i) {
                 Render::PrimitiveProperty& primitive = submesh.primitiveProperties[i];
@@ -413,8 +409,8 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
             renderable.modelFlags = glm::vec4(0.0f);
 
             entt::entity dragonEntity = state->registry.create();
-            state->registry.emplace<RenderableComponent>(dragonEntity, renderable);
-            state->registry.emplace<TransformComponent>(dragonEntity, pos, meshRotation, meshScale * 1.5f);
+            state->registry.emplace<Component::RenderableComponent>(dragonEntity, renderable);
+            state->registry.emplace<Component::TransformComponent>(dragonEntity, pos, meshRotation, meshScale * 1.5f);
         }
 
         SPDLOG_INFO("[DebugSystem] Spawned dragons around arena");
@@ -462,7 +458,7 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
                 SPDLOG_WARN("[DebugSystem] Node {} has {} primitives, limiting to 128", i, mesh.primitiveProperties.size());
             }
 
-            RenderableComponent renderable{};
+            Component::RenderableComponent renderable{};
             size_t primCount = std::min(mesh.primitiveProperties.size(), static_cast<size_t>(128));
 
             for (size_t j = 0; j < primCount; ++j) {
@@ -485,8 +481,8 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
             renderable.modelFlags = glm::vec4(0.0f);
 
             entt::entity sponzaEntity = state->registry.create();
-            state->registry.emplace<RenderableComponent>(sponzaEntity, renderable);
-            state->registry.emplace<TransformComponent>(sponzaEntity, worldTranslations[i], worldRotations[i], worldScales[i]);
+            state->registry.emplace<Component::RenderableComponent>(sponzaEntity, renderable);
+            state->registry.emplace<Component::TransformComponent>(sponzaEntity, worldTranslations[i], worldRotations[i], worldScales[i]);
         }
 
         SPDLOG_INFO("[DebugSystem] Spawned sponza");
@@ -499,7 +495,7 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         glm::vec3 posB = glm::vec3(5.0f, 2.0f, 0.0f);
         glm::quat rotB = glm::angleAxis(glm::radians(-90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 
-        CreatePortalPair(ctx, state, posA, rotA, posB, rotB);
+        Component::CreatePortalPair(ctx, state, posA, rotA, posB, rotB);
     }
 
     if (state->inputFrame->GetKey(Key::F7).pressed) {
@@ -517,7 +513,7 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         glm::vec3 posB = glm::vec3(8.0f, 2.0f, 0.0f);
         glm::quat rotB = glm::angleAxis(glm::radians(-90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 
-        CreatePortalPair(ctx, state, posA, rotA, posB, rotB);
+        Component::CreatePortalPair(ctx, state, posA, rotA, posB, rotB);
 
         // Place colored boxes near each portal tosee through
         CreateGlowingBox(ctx, state, glm::vec3(-6.0f, 1.0f, 0.0f),
@@ -573,7 +569,7 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         for (int y = 0; y < 10; ++y) {
             glm::vec3 pos = glm::vec3(0.0f, 1.0f + y * 3.0f, 0.0f) + meshOffset;
 
-            RenderableComponent renderable{};
+            Component::RenderableComponent renderable{};
 
             for (size_t i = 0; i < submesh.primitiveProperties.size(); ++i) {
                 Render::PrimitiveProperty& primitive = submesh.primitiveProperties[i];
@@ -595,8 +591,8 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
             renderable.modelFlags = glm::vec4(0.0f);
 
             entt::entity dragonEntity = state->registry.create();
-            state->registry.emplace<RenderableComponent>(dragonEntity, renderable);
-            state->registry.emplace<TransformComponent>(dragonEntity, pos, meshRotation, meshScale * 1.5f);
+            state->registry.emplace<Component::RenderableComponent>(dragonEntity, renderable);
+            state->registry.emplace<Component::TransformComponent>(dragonEntity, pos, meshRotation, meshScale * 1.5f);
         }
 
         SPDLOG_INFO("[DebugSystem] Created PCSS test scene: 100x100 floor + vertical dragon column");
@@ -620,7 +616,7 @@ void DebugProcessPhysicsCollisions(Core::EngineContext* ctx, Engine::GameState* 
     std::span<const Physics::DeferredCollisionEvent> events = ctx->physicsSystem->GetCollisionEvents();
 
 
-    state->registry.clear<AntiGravityComponent>();
+    state->registry.clear<Component::AntiGravityComponent>();
 
     for (const auto& event : events) {
         entt::entity entity1 = state->bodyToEntity.contains(event.body1)
@@ -632,11 +628,11 @@ void DebugProcessPhysicsCollisions(Core::EngineContext* ctx, Engine::GameState* 
 
         if (entity1 == entt::null || entity2 == entt::null) continue;
 
-        if (state->registry.all_of<FloorComponent>(entity2)) {
-            state->registry.emplace_or_replace<AntiGravityComponent>(entity1);
+        if (state->registry.all_of<Component::FloorComponent>(entity2)) {
+            state->registry.emplace_or_replace<Component::AntiGravityComponent>(entity1);
         }
-        else if (state->registry.all_of<FloorComponent>(entity1)) {
-            state->registry.emplace_or_replace<AntiGravityComponent>(entity2);
+        else if (state->registry.all_of<Component::FloorComponent>(entity1)) {
+            state->registry.emplace_or_replace<Component::AntiGravityComponent>(entity2);
         }
     }
 
@@ -646,7 +642,7 @@ void DebugProcessPhysicsCollisions(Core::EngineContext* ctx, Engine::GameState* 
 
 void DebugApplyGroundForces(Core::EngineContext* ctx, Engine::GameState* state)
 {
-    auto view = state->registry.view<AntiGravityComponent, Component::PhysicsBodyComponent>();
+    auto view = state->registry.view<Component::AntiGravityComponent, Component::PhysicsBodyComponent>();
     auto& bodyInterface = ctx->physicsSystem->GetBodyInterface();
 
     for (auto [entity, physics] : view.each()) {
@@ -697,7 +693,7 @@ void DebugVisualizeCascadeCorners(Core::EngineContext* ctx, Engine::GameState* s
     }
 
 
-    auto cameraView = state->registry.view<CameraComponent, TransformComponent>();
+    auto cameraView = state->registry.view<Component::CameraComponent, Component::TransformComponent>();
     auto [cameraEntity, camera, transform] = *cameraView.each().begin();
     Core::ViewData viewData = camera.currentViewData;
     float nearPlane = camera.currentViewData.nearPlane;
@@ -739,7 +735,7 @@ void DebugVisualizeCascadeCorners(Core::EngineContext* ctx, Engine::GameState* s
         Engine::MaterialID matID = materialManager.GetOrCreate(material);
 
         for (int i = 0; i < 8; ++i) {
-            RenderableComponent renderable{};
+            Component::RenderableComponent renderable{};
 
             for (size_t j = 0; j < submesh.primitiveProperties.size(); ++j) {
                 renderable.primitives[j] = {
@@ -751,8 +747,8 @@ void DebugVisualizeCascadeCorners(Core::EngineContext* ctx, Engine::GameState* s
             renderable.modelFlags = glm::vec4(0.0f);
 
             entt::entity cornerEntity = state->registry.create();
-            state->registry.emplace<RenderableComponent>(cornerEntity, renderable);
-            state->registry.emplace<TransformComponent>(
+            state->registry.emplace<Component::RenderableComponent>(cornerEntity, renderable);
+            state->registry.emplace<Component::TransformComponent>(
                 cornerEntity,
                 corners[i],
                 glm::quat(1.0f, 0.0f, 0.0f, 0.0f),

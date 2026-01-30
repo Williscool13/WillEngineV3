@@ -1,18 +1,6 @@
 set(GAME_SOURCES
         game.cpp
-        fwd_components.h
-        components/component_include.h
-        components/transform_component.h
-        components/renderable_component.h
-        components/camera/free_camera_component.cpp
-        components/camera/free_camera_component.h
-        components/camera/camera_component.h
-        components/dirty_physics_transform_component.h
-        components/gameplay/portals/portal_component.h
-        components/gameplay/floor_component.h
-        components/gameplay/anti_gravity_component.h
-        components/debug/motion_blur_movement_component.h
-        components/render/portal_plane_component.h
+
 
         systems/camera_system.cpp
         systems/camera_system.h
@@ -24,8 +12,20 @@ set(GAME_SOURCES
         systems/gather_renderables_system.cpp
         systems/editor_systems.cpp
         systems/editor_systems.h
+
+        components/component_include.h
+        fwd_components.h
+
+        components/camera/camera_components.cpp
+        components/camera/camera_components.h
         components/physics/physics_components.cpp
         components/physics/physics_components.h
+        components/debug/debug_components.cpp
+        components/debug/debug_components.h
+        components/render/render_components.cpp
+        components/render/render_components.h
+        components/gameplay/portal_components.cpp
+        components/gameplay/portal_components.h
 )
 
 set(GAME_INCLUDE_DIRS

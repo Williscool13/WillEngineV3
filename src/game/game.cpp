@@ -9,16 +9,13 @@
 #include "core/input/input_frame.h"
 #include "engine/engine_api.h"
 #include "physics/physics_system.h"
-#include "fwd_components.h"
+
 #include "imgui.h"
 #include "audio/audio_manager.h"
-#include "components/gameplay/anti_gravity_component.h"
-#include "components/gameplay/floor_component.h"
-#include "components/gameplay/portals/portal_component.h"
-#include "components/physics/physics_components.h"
 #include "systems/gather_renderables_system.h"
-#include "components/render/portal_plane_component.h"
 #include "core/math/constants.h"
+
+#include "fwd_components.h"
 #include "systems/debug_system.h"
 #include "systems/camera_system.h"
 #include "systems/editor_systems.h"
@@ -32,12 +29,12 @@ GAME_API void GameStartup(Core::EngineContext* ctx, Engine::GameState* state)
     SPDLOG_TRACE("Game Start Up");
 
     const entt::entity camera = state->registry.create();
-    state->registry.emplace<Game::FreeCameraComponent>(camera);
-    state->registry.emplace<Game::CameraComponent>(camera);
-    Game::TransformComponent& cameraTransform = state->registry.emplace<Game::TransformComponent>(camera);
+    state->registry.emplace<Game::Component::FreeCameraComponent>(camera);
+    state->registry.emplace<Game::Component::CameraComponent>(camera);
+    Game::Component::TransformComponent& cameraTransform = state->registry.emplace<Game::Component::TransformComponent>(camera);
     cameraTransform.translation = glm::vec3(0.0f, 3.0f, 5.0f);
     cameraTransform.rotation = glm::quatLookAt(glm::normalize(glm::vec3(0.0f, 0.0f, 0.0f) - glm::vec3(0.0f, 3.0f, 5.0f)), WORLD_UP);
-    state->registry.emplace<Game::MainViewportComponent>(camera);
+    state->registry.emplace<Game::Component::MainViewportComponent>(camera);
     state->registry.ctx().emplace<Engine::GameState*>(state);
 
     spdlog::set_default_logger(ctx->logger);
@@ -46,19 +43,19 @@ GAME_API void GameStartup(Core::EngineContext* ctx, Engine::GameState* state)
 GAME_API void GameLoad(Core::EngineContext* ctx, Engine::GameState* state)
 {
     SPDLOG_TRACE("[Game] Registering engine component types:");
-    SPDLOG_TRACE("  TransformComponent: {}", entt::type_id<Game::TransformComponent>().hash());
-    SPDLOG_TRACE("  CameraComponent: {}", entt::type_id<Game::CameraComponent>().hash());
-    SPDLOG_TRACE("  MainViewportComponent: {}", entt::type_id<Game::MainViewportComponent>().hash());
-    SPDLOG_TRACE("  FreeCameraComponent: {}", entt::type_id<Game::FreeCameraComponent>().hash());
-    SPDLOG_TRACE("  FreeCameraComponent: {}", entt::type_id<Game::PortalPlaneComponent>().hash());
-    SPDLOG_TRACE("  FreeCameraComponent: {}", entt::type_id<Game::PortalComponent>().hash());
-    SPDLOG_TRACE("  FreeCameraComponent: {}", entt::type_id<Game::AntiGravityComponent>().hash());
-    SPDLOG_TRACE("  FreeCameraComponent: {}", entt::type_id<Game::FloorComponent>().hash());
+    SPDLOG_TRACE("  TransformComponent: {}", entt::type_id<Game::Component::TransformComponent>().hash());
+    SPDLOG_TRACE("  CameraComponent: {}", entt::type_id<Game::Component::CameraComponent>().hash());
+    SPDLOG_TRACE("  MainViewportComponent: {}", entt::type_id<Game::Component::MainViewportComponent>().hash());
+    SPDLOG_TRACE("  FreeCameraComponent: {}", entt::type_id<Game::Component::FreeCameraComponent>().hash());
+    SPDLOG_TRACE("  FreeCameraComponent: {}", entt::type_id<Game::Component::PortalPlaneComponent>().hash());
+    SPDLOG_TRACE("  FreeCameraComponent: {}", entt::type_id<Game::Component::PortalComponent>().hash());
+    SPDLOG_TRACE("  FreeCameraComponent: {}", entt::type_id<Game::Component::AntiGravityComponent>().hash());
+    SPDLOG_TRACE("  FreeCameraComponent: {}", entt::type_id<Game::Component::FloorComponent>().hash());
     SPDLOG_TRACE("  FreeCameraComponent: {}", entt::type_id<Game::Component::DynamicPhysicsBodyComponent>().hash());
     SPDLOG_TRACE("  FreeCameraComponent: {}", entt::type_id<Game::Component::PhysicsBodyComponent>().hash());
     SPDLOG_TRACE("  FreeCameraComponent: {}", entt::type_id<Game::Component::DirtyPhysicsTransformComponent>().hash());
-    SPDLOG_TRACE("  FreeCameraComponent: {}", entt::type_id<Game::RenderableComponent>().hash());
-    SPDLOG_TRACE("  FreeCameraComponent: {}", entt::type_id<Game::TransformComponent>().hash());
+    SPDLOG_TRACE("  FreeCameraComponent: {}", entt::type_id<Game::Component::RenderableComponent>().hash());
+    SPDLOG_TRACE("  FreeCameraComponent: {}", entt::type_id<Game::Component::TransformComponent>().hash());
 
     spdlog::set_default_logger(ctx->logger);
     ImGui::SetCurrentContext(ctx->imguiContext);

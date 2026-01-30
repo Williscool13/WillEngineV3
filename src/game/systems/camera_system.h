@@ -20,6 +20,7 @@ struct EngineContext;
 namespace Game::System
 {
 void UpdateCameras(Core::EngineContext* ctx, Engine::GameState* state);
+void UpdateFreeCamera(Core::EngineContext* ctx, Engine::GameState* state);
 void BuildViewFamily(Engine::GameState* state, Core::ViewFamily& mainViewFamily);
 void BuildPortalViewFamily(Engine::GameState* state, Core::ViewFamily& mainViewFamily);
 } // Game

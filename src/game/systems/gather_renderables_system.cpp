@@ -4,12 +4,10 @@
 
 #include "gather_renderables_system.h"
 
-#include "../components/render/portal_plane_component.h"
 #include "core/include/engine_context.h"
+#include "engine/asset_manager.h"
 #include "engine/engine_api.h"
-#include "game/components/renderable_component.h"
-#include "game/components/transform_component.h"
-#include "game/components/physics/physics_components.h"
+#include "game/fwd_components.h"
 
 
 namespace Game::System
@@ -20,7 +18,7 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
 
     // Gather regular renderables
     {
-        const auto view = state->registry.view<RenderableComponent, TransformComponent>(entt::exclude<PortalPlaneComponent>);
+        const auto view = state->registry.view<Component::RenderableComponent, Component::TransformComponent>(entt::exclude<Component::PortalPlaneComponent>);
 
         for (const auto& [entity, renderable, transform] : view.each()) {
             glm::mat4 currentMatrix;
@@ -53,7 +51,7 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
 
     // Gather portal planes (custom stencil draws with stencil=1)
     {
-        const auto portalView = state->registry.view<PortalPlaneComponent, RenderableComponent, TransformComponent>();
+        const auto portalView = state->registry.view<Component::PortalPlaneComponent, Component::RenderableComponent, Component::TransformComponent>();
 
         if (portalView.size_hint() > 0) {
             Core::CustomStencilDrawBatch* portalBatch = nullptr;

@@ -6,8 +6,7 @@
 
 #include "imgui.h"
 #include "engine/engine_api.h"
-#include "game/components/transform_component.h"
-#include "game/components/camera/camera_component.h"
+#include "game/fwd_components.h"
 
 namespace Game::System
 {
@@ -15,7 +14,7 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
 {
 #if WILL_EDITOR
     if (ImGui::Begin("Debug View")) {
-        auto cameraView = state->registry.view<CameraComponent, MainViewportComponent, TransformComponent>();
+        auto cameraView = state->registry.view<Component::CameraComponent, Component::MainViewportComponent, Component::TransformComponent>();
         const auto& [cam, transform] = cameraView.get(cameraView.front());
         ImGui::Text("Camera Pos: (%.2f, %.2f, %.2f)",
                     transform.translation.x, transform.translation.y, transform.translation.z);
@@ -42,13 +41,13 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
 
         ImGui::Separator();
 
-        auto setDebugTarget = [&](const char* name, DebugTransformationType transform, Core::DebugViewAspect aspect) {
+        auto setDebugTarget = [&](const char* name, DebugTransformationType _transform, Core::DebugViewAspect aspect) {
             if (state->debugResourceName == name && state->debugViewAspect == aspect) {
                 state->debugResourceName.clear();
             }
             else {
                 state->debugResourceName = name;
-                state->debugTransformationType = transform;
+                state->debugTransformationType = _transform;
                 state->debugViewAspect = aspect;
             }
         };
