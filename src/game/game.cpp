@@ -117,8 +117,10 @@ GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* stat
 
     Game::System::DrawEditorInterface(ctx, state, frameBuffer);
 
+#ifndef PACKAGED_BUILD
     Game::System::DebugRender(ctx, state, frameBuffer);
     Game::System::DebugRenderPhysics(ctx, state, frameBuffer);
+#endif
 }
 
 GAME_API void GameUnload(Core::EngineContext* ctx, Engine::GameState* state)

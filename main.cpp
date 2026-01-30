@@ -10,19 +10,21 @@
 
 int main(int argc, char* argv[])
 {
-    Platform::CrashHandler crashHandler(Platform::GetCrashPath() / "crashes");
+    Platform::CrashHandler crashHandler(Platform::GetCrashPath());
 
+#ifndef LOGGING_DISABLED
     Utils::Logger logger(Platform::GetLogPath() / "engine.log");
     SPDLOG_INFO("Engine starting...");
-
     crashHandler.SetLogPath(logger.GetLogPath());
+#endif
 
     Engine::WillEngine we{&crashHandler};
     we.Initialize();
     we.Run();
     we.Cleanup();
 
+#ifndef LOGGING_DISABLED
     logger.ArchiveLogs();
-
+#endif
     return 0;
 }

@@ -5,13 +5,16 @@
   </component>
   <component name="CMakeWorkspace" PROJECT_DIR="$PROJECT_DIR$" />
   <component name="CidrRootsConfiguration">
-    <libraryRoots>
+    <excludeRoots>
+      <file path="$PROJECT_DIR$/extern" />
       <file path="$PROJECT_DIR$/extern/Catch2" />
       <file path="$PROJECT_DIR$/extern/JoltPhysics" />
       <file path="$PROJECT_DIR$/extern/KTX-Software" />
-      <file path="$PROJECT_DIR$/extern/LockFreeQueue" />
       <file path="$PROJECT_DIR$/extern/OffsetAllocator" />
       <file path="$PROJECT_DIR$/extern/SDL" />
+      <file path="$PROJECT_DIR$/extern/SDL_mixer" />
+      <file path="$PROJECT_DIR$/extern/bc7enc_rdo" />
+      <file path="$PROJECT_DIR$/extern/concurrentqueue" />
       <file path="$PROJECT_DIR$/extern/enkiTS" />
       <file path="$PROJECT_DIR$/extern/entt" />
       <file path="$PROJECT_DIR$/extern/fastgltf" />
@@ -23,12 +26,10 @@
       <file path="$PROJECT_DIR$/extern/miniz" />
       <file path="$PROJECT_DIR$/extern/spdlog" />
       <file path="$PROJECT_DIR$/extern/stb" />
+      <file path="$PROJECT_DIR$/extern/tracy" />
       <file path="$PROJECT_DIR$/extern/vk-bootstrap" />
       <file path="$PROJECT_DIR$/extern/vma" />
       <file path="$PROJECT_DIR$/extern/volk" />
-    </libraryRoots>
-    <excludeRoots>
-      <file path="$PROJECT_DIR$/extern" />
     </excludeRoots>
   </component>
 </project>

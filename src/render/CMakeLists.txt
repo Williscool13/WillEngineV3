@@ -96,7 +96,7 @@ target_link_libraries(render PUBLIC
         ktx
         miniz
         imgui
-        tracy
+        tracy_interface
 )
 
 if(WILL_ENGINE_BUILD_EDITOR)

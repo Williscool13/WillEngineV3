@@ -57,7 +57,7 @@ std::filesystem::path GetCrashPath()
 #ifndef PACKAGED_BUILD
     return GetExecutablePath() / "crash";
 #else
-    return GetUserDataPath() / "crash";
+    return GetUserDataPath() / "crashes";
 #endif
 }
 

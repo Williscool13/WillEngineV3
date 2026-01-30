@@ -28,11 +28,9 @@ target_link_libraries(engine PUBLIC
         platform
         SDL3::SDL3
         enkiTS
-        tracy
+        tracy_interface
         imgui
 )
-
-target_compile_definitions(engine PRIVATE TRACY_IMPORTS)
 
 if(WILL_ENGINE_GAME_STATIC)
     target_link_libraries(engine PUBLIC game)

@@ -54,6 +54,7 @@ void UpdatePhysics(Core::EngineContext* ctx, Engine::GameState* state)
 
 void DebugRenderPhysics(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer)
 {
+#ifndef PACKAGED_BUILD
     auto& filter = ctx->physicsSystem->GetDebugDrawFilter();
     filter.Clear();
 
@@ -63,5 +64,6 @@ void DebugRenderPhysics(Core::EngineContext* ctx, Engine::GameState* state, Core
     }
 
     ctx->physicsSystem->DrawDebug(&frameBuffer->mainViewFamily);
+#endif
 }
 } // Game

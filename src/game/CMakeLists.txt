@@ -39,7 +39,7 @@ set(GAME_LIBRARIES
         render
         platform
         spdlog::spdlog
-        tracy
+        tracy_interface
 )
 
 
@@ -62,5 +62,4 @@ else()
 endif()
 
 target_include_directories(game PRIVATE ${GAME_INCLUDE_DIRS})
-target_compile_definitions(game PRIVATE TRACY_IMPORTS)
 target_link_libraries(game PUBLIC ${GAME_LIBRARIES})

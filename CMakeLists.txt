@@ -15,6 +15,7 @@ option(WILL_ENGINE_ENABLE_LOGGING "Enables logging" ON)
 # Configuration ==============================
 if (NOT WILL_ENGINE_ENABLE_LOGGING)
     add_compile_definitions(SPDLOG_ACTIVE_LEVEL=6)
+    add_compile_definitions(LOGGING_DISABLED)
 elseif (CMAKE_BUILD_TYPE STREQUAL "Debug")
     add_compile_definitions(SPDLOG_ACTIVE_LEVEL=0)
 elseif (CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
@@ -57,13 +58,10 @@ target_link_libraries(will-engine PUBLIC engine)
 add_dependencies(will-engine game)
 
 # Dependencies ================================
-add_compile_definitions(NOMINMAX)
-add_compile_definitions(GLM_FORCE_DEPTH_ZERO_TO_ONE)
-add_subdirectory(extern/fmt)
-set(SPDLOG_FMT_EXTERNAL ON)
-add_subdirectory(extern/spdlog)
+# For SDL and SDL_mixer
+set(BUILD_SHARED_LIBS ON CACHE BOOL "Build Shared Libraries" FORCE)
 add_subdirectory(extern/SDL EXCLUDE_FROM_ALL)
-set(SDLMIXER_MIDI_NATIVE OFF)     # disable formats we don't use to make the build faster and smaller. Also some of these don't work on all platforms so you'll need to do some experimentation.
+set(SDLMIXER_MIDI_NATIVE OFF)
 set(SDLMIXER_GME OFF)
 set(SDLMIXER_WAVPACK OFF)
 set(SDLMIXER_MOD OFF)
@@ -74,6 +72,13 @@ set(SDLMIXER_VORBIS_VORBISFILE OFF)
 set(SDLMIXER_FLAC_LIBFLAC OFF)
 set(SDLMIXER_VENDORED ON)
 add_subdirectory(extern/SDL_mixer EXCLUDE_FROM_ALL)
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build Shared Libraries" FORCE)
+
+add_compile_definitions(NOMINMAX)
+add_compile_definitions(GLM_FORCE_DEPTH_ZERO_TO_ONE)
+add_subdirectory(extern/fmt)
+set(SPDLOG_FMT_EXTERNAL ON)
+add_subdirectory(extern/spdlog)
 add_subdirectory(extern/volk)
 add_subdirectory(extern/vma)
 add_subdirectory(extern/vk-bootstrap)
@@ -174,18 +179,33 @@ add_library(bc7enc_rdo STATIC
 target_include_directories(bc7enc_rdo PUBLIC extern/bc7enc_rdo)
 
 # Tracy =======================================
-add_library(tracy SHARED
-        extern/tracy/public/TracyClient.cpp
-)
+if (WILL_ENGINE_ENABLE_PROFILER)
+    add_library(tracy SHARED
+            extern/tracy/public/TracyClient.cpp
+    )
+    target_compile_definitions(tracy PRIVATE
+            TRACY_ENABLE
+            TRACY_EXPORTS
+    )
+
+    add_library(tracy_interface INTERFACE)
+    target_link_libraries(tracy_interface INTERFACE tracy)
+    target_compile_definitions(tracy_interface INTERFACE
+            TRACY_ENABLE
+            TRACY_IMPORTS
+    )
+else()
+    add_library(tracy STATIC
+            extern/tracy/public/TracyClient.cpp
+    )
+
+    add_library(tracy_interface INTERFACE)
+    target_link_libraries(tracy_interface INTERFACE tracy)
+endif()
+
 target_include_directories(tracy PUBLIC
         extern/tracy/public
 )
-if (WILL_ENGINE_ENABLE_PROFILER)
-    target_compile_definitions(tracy PUBLIC
-            TRACY_ENABLE
-    )
-endif ()
-target_compile_definitions(tracy PRIVATE TRACY_EXPORTS)
 
 # Shaders =====================================
 preprocess_shader_interop(
