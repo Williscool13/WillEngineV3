@@ -35,10 +35,10 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL VulkanDebugCallback(
         SPDLOG_DEBUG("[Vulkan] {}", pCallbackData->pMessage);
     }
 
-// #ifdef _DEBUG
-//     if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
-//         __debugbreak();
-// #endif
+#ifdef _DEBUG
+    if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
+        __debugbreak();
+#endif
 
     return VK_FALSE;
 }
@@ -129,6 +129,9 @@ VulkanContext::VulkanContext(SDL_Window* window)
     // computeShaderDerivativesFeaturesKhr.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COMPUTE_SHADER_DERIVATIVES_FEATURES_KHR;
     // computeShaderDerivativesFeaturesKhr.computeDerivativeGroupQuads = VK_TRUE;
     // computeShaderDerivativesFeaturesKhr.computeDerivativeGroupLinear = VK_TRUE;
+#if PROFILER_ENABLED
+    features12.hostQueryReset = VK_TRUE;
+#endif
 
     vkb::PhysicalDeviceSelector selector{vkb_inst};
     vkb::PhysicalDevice targetDevice = selector
@@ -140,6 +143,9 @@ VulkanContext::VulkanContext(SDL_Window* window)
             .add_required_extension(VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME)
             .add_required_extension(VK_EXT_MESH_SHADER_EXTENSION_NAME)
             // .add_required_extension(VK_KHR_COMPUTE_SHADER_DERIVATIVES_EXTENSION_NAME)
+#if PROFILER_ENABLED
+            .add_required_extension(VK_EXT_CALIBRATED_TIMESTAMPS_EXTENSION_NAME)
+#endif
             .require_separate_transfer_queue()
             .set_surface(surface)
             .select()
@@ -256,6 +262,14 @@ VulkanContext::VulkanContext(SDL_Window* window)
     deviceInfo.descriptorBufferProps.pNext = &deviceInfo.meshShaderProps;
     vkGetPhysicalDeviceProperties2(physicalDevice, &deviceInfo.properties);
 
+    tracyContext = TracyVkContextHostCalibrated(
+        physicalDevice, device,
+        vkResetQueryPool,
+        vkGetPhysicalDeviceCalibrateableTimeDomainsEXT,
+        vkGetCalibratedTimestampsEXT
+    );
+    TracyVkContextName(tracyContext, "Graphics", 8);
+
     SPDLOG_INFO("=== Vulkan Context Initialized ===");
     SPDLOG_INFO("GPU: {}", deviceInfo.properties.properties.deviceName);
     SPDLOG_INFO("Vulkan API: {}.{}.{}",
@@ -273,6 +287,8 @@ VulkanContext::VulkanContext(SDL_Window* window)
 
 VulkanContext::~VulkanContext()
 {
+    TracyVkDestroy(tracyContext);
+
     vmaDestroyAllocator(allocator);
     vkDestroySurfaceKHR(instance, surface, nullptr);
     vkDestroyDevice(device, nullptr);

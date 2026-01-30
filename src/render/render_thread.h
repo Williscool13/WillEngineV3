@@ -60,11 +60,18 @@ namespace Render
  */
 class RenderThread
 {
-    enum RenderResponse
+    enum RenderResponseCode
     {
         SUCCESS,
+        RENDER_REQUESTED_RECREATE,
         SWAPCHAIN_OUTDATED
     };
+    struct RenderResponse
+    {
+        RenderResponseCode code;
+        uint32_t swapchainIndex; // meaningless if code is not success
+    };
+
 
 public:
     RenderThread();
@@ -83,7 +90,9 @@ public:
 
     void ThreadMain();
 
-    RenderResponse Render(uint32_t currentFrameIndex, RenderSynchronization& renderSync, Core::FrameBuffer& frameBuffer);
+    void RenderFrame(uint32_t currentFrameIndex, RenderSynchronization& renderSync, Core::FrameBuffer& frameBuffer);
+
+    RenderResponse RecordFrame(uint32_t frameIndex, VkCommandBuffer cmd, VkSemaphore swapchainSemaphore, Core::FrameBuffer& frameBuffer);
 
     void ProcessAcquisitions(VkCommandBuffer cmd, const std::vector<Core::BufferAcquireOperation>& bufferAcquireOperations, const std::vector<Core::ImageAcquireOperation>& imageAcquireOperations);
 

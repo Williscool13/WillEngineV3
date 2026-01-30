@@ -6,6 +6,8 @@
 
 #include <enkiTS/src/TaskScheduler.h>
 #include <spdlog/spdlog.h>
+#include <tracy/Tracy.hpp>
+#include <tracy/TracyVulkan.hpp>
 
 #include "render/vulkan/vk_context.h"
 #include "render/vulkan/vk_helpers.h"
@@ -19,7 +21,7 @@
 #include "render-graph/render_pass.h"
 #include "shaders/constants_interop.h"
 #include "shaders/push_constant_interop.h"
-#include "tracy/Tracy.hpp"
+
 #include "types/render_types.h"
 #include "render/vulkan/vk_imgui_wrapper.h"
 #include "backends/imgui_impl_vulkan.h"
@@ -103,20 +105,18 @@ void RenderThread::ThreadMain()
             }
         }
 
-
         if (bShouldExit.load()) { break; }
 
         // Render Frame
         {
-            ZoneScopedN("RenderFrame");
             currentFrameInFlight = frameNumber % Core::FRAME_BUFFER_COUNT;
             Core::FrameBuffer& frameBuffer = engineRenderSynchronization->frameBuffers[currentFrameInFlight];
             assert(frameBuffer.currentFrameBuffer == currentFrameInFlight);
 
 
             bEngineRequestsRecreate |= frameBuffer.swapchainRecreateCommand.bEngineCommandsRecreate;
-            bool bShouldRecreate = !frameBuffer.swapchainRecreateCommand.bIsMinimized && bEngineRequestsRecreate;
-            if (bShouldRecreate) {
+            if (!frameBuffer.swapchainRecreateCommand.bIsMinimized && bEngineRequestsRecreate) {
+                ZoneScopedN("SwapchainRecreate");
                 SPDLOG_INFO("[RenderThread::ThreadMain] Swapchain Recreated");
                 vkDeviceWaitIdle(context->device);
 
@@ -131,10 +131,7 @@ void RenderThread::ThreadMain()
 
             // Wait for the frame N - 3 to finish using resources
             RenderSynchronization& currentRenderSynchronization = frameSynchronization[currentFrameInFlight];
-            RenderResponse renderResponse = Render(currentFrameInFlight, currentRenderSynchronization, frameBuffer);
-            if (renderResponse == SWAPCHAIN_OUTDATED) {
-                bRenderRequestsRecreate = true;
-            }
+            RenderFrame(currentFrameInFlight, currentRenderSynchronization, frameBuffer);
 
             frameNumber++;
         }
@@ -146,62 +143,113 @@ void RenderThread::ThreadMain()
     vkDeviceWaitIdle(context->device);
 }
 
-RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, RenderSynchronization& renderSync, Core::FrameBuffer& frameBuffer)
+void RenderThread::RenderFrame(uint32_t currentFrameIndex, RenderSynchronization& renderSync, Core::FrameBuffer& frameBuffer)
 {
-    ZoneScopedN("Render"); {
+    ZoneScoped;
+
+    //
+    {
         ZoneScopedN("WaitForFence");
         VK_CHECK(vkWaitForFences(context->device, 1, &renderSync.renderFence, true, UINT64_MAX));
         VK_CHECK(vkResetFences(context->device, 1, &renderSync.renderFence));
-    } {
-        ZoneScopedN("CommandBufferBegin");
-        VK_CHECK(vkResetCommandBuffer(renderSync.commandBuffer, 0));
-        VkCommandBufferBeginInfo beginInfo = VkHelpers::CommandBufferBeginInfo();
-        VK_CHECK(vkBeginCommandBuffer(renderSync.commandBuffer, &beginInfo));
-    } {
-        ZoneScopedN("ProcessAcquisitions");
-        ProcessAcquisitions(renderSync.commandBuffer, frameBuffer.bufferAcquireOperations, frameBuffer.imageAcquireOperations);
-        frameBuffer.bufferAcquireOperations.clear();
-        frameBuffer.imageAcquireOperations.clear();
     }
 
+    VK_CHECK(vkResetCommandBuffer(renderSync.commandBuffer, 0));
+    VkCommandBufferBeginInfo beginInfo = VkHelpers::CommandBufferBeginInfo();
+    VK_CHECK(vkBeginCommandBuffer(renderSync.commandBuffer, &beginInfo));
+
+    RenderResponse res;
+    //
+    {
+        TracyVkZone(context->tracyContext, renderSync.commandBuffer, "Frame");
+        ProcessAcquisitions(renderSync.commandBuffer, frameBuffer.bufferAcquireOperations, frameBuffer.imageAcquireOperations);
+        res = RecordFrame(currentFrameIndex, renderSync.commandBuffer, renderSync.swapchainSemaphore, frameBuffer);
+    }
+    VK_CHECK(vkEndCommandBuffer(renderSync.commandBuffer));
+
+    switch (res.code) {
+        case RENDER_REQUESTED_RECREATE:
+        {
+            VkCommandBufferSubmitInfo commandBufferSubmitInfo = VkHelpers::CommandBufferSubmitInfo(renderSync.commandBuffer);
+            VkSubmitInfo2 submitInfo = VkHelpers::SubmitInfo(&commandBufferSubmitInfo, nullptr, nullptr);
+            VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, renderSync.renderFence));
+        }
+        break;
+        case SWAPCHAIN_OUTDATED:
+        {
+            VkCommandBufferSubmitInfo cmdInfo = VkHelpers::CommandBufferSubmitInfo(renderSync.commandBuffer);
+            VkSemaphoreSubmitInfo waitInfo = VkHelpers::SemaphoreSubmitInfo(renderSync.swapchainSemaphore, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT);
+            VkSubmitInfo2 submitInfo = VkHelpers::SubmitInfo(&cmdInfo, &waitInfo, nullptr);
+            VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, renderSync.renderFence));
+            bRenderRequestsRecreate = true;
+        }
+        break;
+        case SUCCESS:
+        {
+            //
+            {
+                ZoneScopedN("QueueSubmit");
+                VkCommandBufferSubmitInfo commandBufferSubmitInfo = VkHelpers::CommandBufferSubmitInfo(renderSync.commandBuffer);
+                VkSemaphoreSubmitInfo swapchainSemaphoreWaitInfo = VkHelpers::SemaphoreSubmitInfo(renderSync.swapchainSemaphore, VK_PIPELINE_STAGE_2_BLIT_BIT);
+                VkSemaphoreSubmitInfo renderSemaphoreSignalInfo = VkHelpers::SemaphoreSubmitInfo(renderSync.renderSemaphore, VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT);
+                VkSubmitInfo2 submitInfo = VkHelpers::SubmitInfo(&commandBufferSubmitInfo, &swapchainSemaphoreWaitInfo, &renderSemaphoreSignalInfo);
+                VK_CHECK(vkResetFences(context->device, 1, &renderSync.renderFence));
+                VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, renderSync.renderFence));
+                TracyVkCollectHost(context->tracyContext);
+            }
+            //
+            {
+                ZoneScopedN("QueuePresent");
+                VkPresentInfoKHR presentInfo = VkHelpers::PresentInfo(&swapchain->handle, nullptr, &res.swapchainIndex);
+                presentInfo.pWaitSemaphores = &renderSync.renderSemaphore;
+                const VkResult presentResult = vkQueuePresentKHR(context->graphicsQueue, &presentInfo);
+
+                if (presentResult == VK_ERROR_OUT_OF_DATE_KHR || presentResult == VK_SUBOPTIMAL_KHR) {
+                    SPDLOG_TRACE("[RenderThread::Render] Swapchain presentation failed ({})", string_VkResult(presentResult));
+                    bRenderRequestsRecreate = true;
+                }
+            }
+        }
+
+        break;
+    }
+}
+
+RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCommandBuffer cmd, VkSemaphore swapchainSemaphore, Core::FrameBuffer& frameBuffer)
+{
+    ZoneScoped;
+
     if (bRenderRequestsRecreate) {
-        VK_CHECK(vkEndCommandBuffer(renderSync.commandBuffer));
-        VkCommandBufferSubmitInfo commandBufferSubmitInfo = VkHelpers::CommandBufferSubmitInfo(renderSync.commandBuffer);
-        VkSubmitInfo2 submitInfo = VkHelpers::SubmitInfo(&commandBufferSubmitInfo, nullptr, nullptr);
-        VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, renderSync.renderFence));
-        return SWAPCHAIN_OUTDATED;
+        return {RENDER_REQUESTED_RECREATE, ~0u};
     }
 
     uint32_t swapchainImageIndex;
-    VkResult e; {
+    //
+    {
+        VkResult e;
         ZoneScopedN("AcquireSwapchainImage");
-        e = vkAcquireNextImageKHR(context->device, swapchain->handle, UINT64_MAX, renderSync.swapchainSemaphore, nullptr, &swapchainImageIndex);
+        e = vkAcquireNextImageKHR(context->device, swapchain->handle, UINT64_MAX, swapchainSemaphore, nullptr, &swapchainImageIndex);
+        if (e == VK_ERROR_OUT_OF_DATE_KHR || e == VK_SUBOPTIMAL_KHR) {
+            SPDLOG_TRACE("[RenderThread::Render] Swapchain acquire failed ({})", string_VkResult(e));
+            return {SWAPCHAIN_OUTDATED, ~0u};
+        }
     }
 
-    if (e == VK_ERROR_OUT_OF_DATE_KHR || e == VK_SUBOPTIMAL_KHR) {
-        SPDLOG_TRACE("[RenderThread::Render] Swapchain acquire failed ({})", string_VkResult(e));
-        VK_CHECK(vkEndCommandBuffer(renderSync.commandBuffer));
-        VkCommandBufferSubmitInfo cmdInfo = VkHelpers::CommandBufferSubmitInfo(renderSync.commandBuffer);
-        VkSemaphoreSubmitInfo waitInfo = VkHelpers::SemaphoreSubmitInfo(renderSync.swapchainSemaphore, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT);
-        VkSubmitInfo2 submitInfo = VkHelpers::SubmitInfo(&cmdInfo, &waitInfo, nullptr);
-        VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, renderSync.renderFence));
-        return SWAPCHAIN_OUTDATED;
-    }
 
     std::array<uint32_t, 2> renderExtent = renderExtents->GetScaledExtent();
     VkImage currentSwapchainImage = swapchain->swapchainImages[swapchainImageIndex];
     VkImageView currentSwapchainImageView = swapchain->swapchainImageViews[swapchainImageIndex];
     Core::ViewFamily& viewFamily = frameBuffer.mainViewFamily; {
         ZoneScopedN("RenderGraphReset");
-        renderGraph->Reset(currentFrameIndex, frameNumber, RDG_PHYSICAL_RESOURCE_UNUSED_THRESHOLD);
+        renderGraph->Reset(frameIndex, frameNumber, RDG_PHYSICAL_RESOURCE_UNUSED_THRESHOLD);
     } {
         ZoneScopedN("BindDescriptorBuffers");
         std::array bindings{resourceManager->bindlessSamplerTextureDescriptorBuffer.GetBindingInfo(), resourceManager->bindlessRDGTransientDescriptorBuffer.GetBindingInfo()};
         std::array indices{0u, 1u};
         std::array<VkDeviceSize, 2> offsets{0, 0};
-        vkCmdBindDescriptorBuffersEXT(renderSync.commandBuffer, bindings.size(), bindings.data());
-        vkCmdSetDescriptorBufferOffsetsEXT(renderSync.commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, globalPipelineLayout.handle, 0, bindings.size(), indices.data(), offsets.data());
-        vkCmdSetDescriptorBufferOffsetsEXT(renderSync.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, globalPipelineLayout.handle, 0, bindings.size(), indices.data(), offsets.data());
+        vkCmdBindDescriptorBuffersEXT(cmd, bindings.size(), bindings.data());
+        vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, globalPipelineLayout.handle, 0, bindings.size(), indices.data(), offsets.data());
+        vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, globalPipelineLayout.handle, 0, bindings.size(), indices.data(), offsets.data());
     } {
         ZoneScopedN("SetupUniforms");
         SetupFrameUniforms(viewFamily, renderExtent, frameBuffer.timeFrame.renderDeltaTime);
@@ -237,15 +285,15 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         RenderPass& clearDeferredImagePass = renderGraph->AddPass("Clear Deferred Images", VK_PIPELINE_STAGE_2_CLEAR_BIT);
         clearDeferredImagePass.WriteClearImage(targets.outFinalColor);
         clearDeferredImagePass.WriteClearImage(portalTargets.outFinalColor);
-        clearDeferredImagePass.Execute([&](VkCommandBuffer cmd) {
+        clearDeferredImagePass.Execute([&](VkCommandBuffer _cmd) {
             constexpr VkClearColorValue clearColor = {0.0f, 0.1f, 0.2f, 1.0f};
             VkImageSubresourceRange colorSubresource = VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 1, 1);
 
             VkImage mainImg = renderGraph->GetImageHandle(targets.outFinalColor);
-            vkCmdClearColorImage(cmd, mainImg, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &colorSubresource);
+            vkCmdClearColorImage(_cmd, mainImg, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &colorSubresource);
 
             VkImage portalImg = renderGraph->GetImageHandle(portalTargets.outFinalColor);
-            vkCmdClearColorImage(cmd, portalImg, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &colorSubresource);
+            vkCmdClearColorImage(_cmd, portalImg, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &colorSubresource);
         });
 
 
@@ -356,34 +404,34 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
             readbackPass.ReadTransferBuffer("luminance_histogram");
             readbackPass.ReadTransferBuffer("luminance_buffer");
             readbackPass.WriteTransferBuffer("debug_readback_buffer");
-            readbackPass.Execute([&](VkCommandBuffer cmd) {
+            readbackPass.Execute([&](VkCommandBuffer _cmd) {
                 size_t offsetSoFar = 0;
                 VkBufferCopy countCopy{};
                 countCopy.srcOffset = 0;
                 countCopy.dstOffset = 0;
                 countCopy.size = sizeof(uint32_t);
-                vkCmdCopyBuffer(cmd, renderGraph->GetBufferHandle("indirect_count_buffer"), renderGraph->GetBufferHandle("debug_readback_buffer"), 1, &countCopy);
+                vkCmdCopyBuffer(_cmd, renderGraph->GetBufferHandle("indirect_count_buffer"), renderGraph->GetBufferHandle("debug_readback_buffer"), 1, &countCopy);
                 offsetSoFar += sizeof(uint32_t);
 
                 VkBufferCopy indirectCopy{};
                 indirectCopy.srcOffset = 0;
                 indirectCopy.dstOffset = offsetSoFar;
                 indirectCopy.size = 10 * sizeof(InstancedMeshIndirectDrawParameters);
-                vkCmdCopyBuffer(cmd, renderGraph->GetBufferHandle("indirect_buffer"), renderGraph->GetBufferHandle("debug_readback_buffer"), 1, &indirectCopy);
+                vkCmdCopyBuffer(_cmd, renderGraph->GetBufferHandle("indirect_buffer"), renderGraph->GetBufferHandle("debug_readback_buffer"), 1, &indirectCopy);
                 offsetSoFar += 10 * sizeof(InstancedMeshIndirectDrawParameters);
 
                 VkBufferCopy histogramCopy{};
                 histogramCopy.srcOffset = 0;
                 histogramCopy.dstOffset = offsetSoFar;
                 histogramCopy.size = 256 * sizeof(uint32_t);
-                vkCmdCopyBuffer(cmd, renderGraph->GetBufferHandle("luminance_histogram"), renderGraph->GetBufferHandle("debug_readback_buffer"), 1, &histogramCopy);
+                vkCmdCopyBuffer(_cmd, renderGraph->GetBufferHandle("luminance_histogram"), renderGraph->GetBufferHandle("debug_readback_buffer"), 1, &histogramCopy);
                 offsetSoFar += 256 * sizeof(uint32_t);
 
                 VkBufferCopy averageExposureCopy{};
                 averageExposureCopy.srcOffset = 0;
                 averageExposureCopy.dstOffset = offsetSoFar;
                 averageExposureCopy.size = sizeof(uint32_t);
-                vkCmdCopyBuffer(cmd, renderGraph->GetBufferHandle("luminance_buffer"), renderGraph->GetBufferHandle("debug_readback_buffer"), 1, &averageExposureCopy);
+                vkCmdCopyBuffer(_cmd, renderGraph->GetBufferHandle("luminance_buffer"), renderGraph->GetBufferHandle("debug_readback_buffer"), 1, &averageExposureCopy);
                 offsetSoFar += sizeof(uint32_t);
             });
         }
@@ -398,7 +446,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
                 auto& debugVisPass = renderGraph->AddPass("Debug Visualize", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
                 debugVisPass.ReadSampledImage(debugTargetName);
                 debugVisPass.WriteStorageImage(finalOutput);
-                debugVisPass.Execute([&, debugTargetName, finalOutput](VkCommandBuffer cmd) {
+                debugVisPass.Execute([&, debugTargetName, finalOutput](VkCommandBuffer _cmd) {
                     const ResourceDimensions& dims = renderGraph->GetImageDimensions(debugTargetName);
                     VkImageAspectFlags aspect = renderGraph->GetImageAspect(debugTargetName);
 
@@ -454,11 +502,11 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
                         .outputImageIndex = outputIndexIndex,
                     };
                     const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("debug_visualize");
-                    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
-                    vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+                    vkCmdBindPipeline(_cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+                    vkCmdPushConstants(_cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                     uint32_t xDispatch = (renderExtent[0] + 15) / 16;
                     uint32_t yDispatch = (renderExtent[1] + 15) / 16;
-                    vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
+                    vkCmdDispatch(_cmd, xDispatch, yDispatch, 1);
                 });
             }
         }
@@ -470,7 +518,7 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         auto& blitPass = renderGraph->AddPass("Blit To Swapchain", VK_PIPELINE_STAGE_2_BLIT_BIT);
         blitPass.ReadBlitImage(finalOutput);
         blitPass.WriteBlitImage("swapchain_image");
-        blitPass.Execute([&, finalOutput](VkCommandBuffer cmd) {
+        blitPass.Execute([&, finalOutput](VkCommandBuffer _cmd) {
             VkImage drawImage = renderGraph->GetImageHandle(finalOutput);
 
             VkOffset3D renderOffset = {static_cast<int32_t>(renderExtent[0]), static_cast<int32_t>(renderExtent[1]), 1};
@@ -497,22 +545,22 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
             blitInfo.pRegions = &blitRegion;
             blitInfo.filter = VK_FILTER_LINEAR;
 
-            vkCmdBlitImage2(cmd, &blitInfo);
+            vkCmdBlitImage2(_cmd, &blitInfo);
         });
 
         if (frameBuffer.bDrawImgui) {
             auto& imguiEditorPass = renderGraph->AddPass("Imgui Draw", VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT);
             imguiEditorPass.WriteColorAttachment("swapchain_image");
-            imguiEditorPass.Execute([&](VkCommandBuffer cmd) {
+            imguiEditorPass.Execute([&](VkCommandBuffer _cmd) {
                 const VkRenderingAttachmentInfo imguiAttachment = VkHelpers::RenderingAttachmentInfo(renderGraph->GetImageViewHandle("swapchain_image"), nullptr,
                                                                                                      VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
                 const ResourceDimensions& dims = renderGraph->GetImageDimensions("swapchain_image");
                 const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({dims.width, dims.height}, &imguiAttachment, nullptr);
-                vkCmdBeginRendering(cmd, &renderInfo);
-                ImDrawDataSnapshot& imguiSnapshot = engineRenderSynchronization->imguiDataSnapshots[currentFrameIndex];
-                ImGui_ImplVulkan_RenderDrawData(&imguiSnapshot.DrawData, cmd);
+                vkCmdBeginRendering(_cmd, &renderInfo);
+                ImDrawDataSnapshot& imguiSnapshot = engineRenderSynchronization->imguiDataSnapshots[frameIndex];
+                ImGui_ImplVulkan_RenderDrawData(&imguiSnapshot.DrawData, _cmd);
 
-                vkCmdEndRendering(cmd);
+                vkCmdEndRendering(_cmd);
             });
         }
     } {
@@ -521,39 +569,19 @@ RenderThread::RenderResponse RenderThread::Render(uint32_t currentFrameIndex, Re
         renderGraph->Compile(frameNumber);
     } {
         ZoneScopedN("RenderGraphExecute");
-        renderGraph->Execute(renderSync.commandBuffer);
-        renderGraph->PrepareSwapchain(renderSync.commandBuffer, "swapchain_image");
+        renderGraph->Execute(cmd);
+        renderGraph->PrepareSwapchain(cmd, "swapchain_image");
     }
 
     resourceManager->debugReadbackLastKnownState = renderGraph->GetBufferState("debug_readback_buffer");
-
-    VK_CHECK(vkEndCommandBuffer(renderSync.commandBuffer)); {
-        ZoneScopedN("QueueSubmit");
-        VkCommandBufferSubmitInfo commandBufferSubmitInfo = VkHelpers::CommandBufferSubmitInfo(renderSync.commandBuffer);
-        VkSemaphoreSubmitInfo swapchainSemaphoreWaitInfo = VkHelpers::SemaphoreSubmitInfo(renderSync.swapchainSemaphore, VK_PIPELINE_STAGE_2_BLIT_BIT);
-        VkSemaphoreSubmitInfo renderSemaphoreSignalInfo = VkHelpers::SemaphoreSubmitInfo(renderSync.renderSemaphore, VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT);
-        VkSubmitInfo2 submitInfo = VkHelpers::SubmitInfo(&commandBufferSubmitInfo, &swapchainSemaphoreWaitInfo, &renderSemaphoreSignalInfo);
-        VK_CHECK(vkResetFences(context->device, 1, &renderSync.renderFence));
-        VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, renderSync.renderFence));
-    } {
-        ZoneScopedN("QueuePresent");
-        VkPresentInfoKHR presentInfo = VkHelpers::PresentInfo(&swapchain->handle, nullptr, &swapchainImageIndex);
-        presentInfo.pWaitSemaphores = &renderSync.renderSemaphore;
-        const VkResult presentResult = vkQueuePresentKHR(context->graphicsQueue, &presentInfo);
-
-        if (presentResult == VK_ERROR_OUT_OF_DATE_KHR || presentResult == VK_SUBOPTIMAL_KHR) {
-            SPDLOG_TRACE("[RenderThread::Render] Swapchain presentation failed ({})", string_VkResult(presentResult));
-            return SWAPCHAIN_OUTDATED;
-        }
-    }
-
-    return SUCCESS;
+    return {SUCCESS, swapchainImageIndex};
 }
 
 void RenderThread::ProcessAcquisitions(VkCommandBuffer cmd,
                                        const std::vector<Core::BufferAcquireOperation>& bufferAcquireOperations,
                                        const std::vector<Core::ImageAcquireOperation>& imageAcquireOperations)
 {
+    ZoneScoped;
     if (bufferAcquireOperations.empty() && imageAcquireOperations.empty()) {
         return;
     }
@@ -1995,7 +2023,7 @@ std::string RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::Vi
             constexpr float minLogLuminance = -10.0;
             constexpr float maxLogLuminance = 2.0;
             constexpr float logLuminanceRange = maxLogLuminance - minLogLuminance;
-            constexpr float oneOverLogLuminanceRange = 1.0 / logLuminanceRange;
+            // constexpr float oneOverLogLuminanceRange = 1.0 / logLuminanceRange;
             ExposureCalculatePushConstant pc{
                 .histogramBufferAddress = graph.GetBufferAddress("luminance_histogram"),
                 .luminanceBufferAddress = graph.GetBufferAddress("luminance_buffer"),
@@ -2309,7 +2337,7 @@ void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& 
                                     FrameResourceLimits& limits) const
 {
 #ifndef PACKAGED_BUILD
-size_t totalDebugVertices = 0;
+    size_t totalDebugVertices = 0;
     size_t totalDebugIndices = 0;
 
     // Lines: 2 vertices per line
@@ -2400,7 +2428,7 @@ size_t totalDebugVertices = 0;
 
         // XY circle
         for (int i = 0; i < segments; ++i) {
-            float angle = (float) i / segments * 2.0f * glm::pi<float>();
+            float angle = static_cast<float>(i) / segments * 2.0f * glm::pi<float>();
             glm::vec3 pos = sphere.center + glm::vec3(
                                 glm::cos(angle) * sphere.radius,
                                 glm::sin(angle) * sphere.radius,
@@ -2410,7 +2438,7 @@ size_t totalDebugVertices = 0;
         }
         // XZ circle
         for (int i = 0; i < segments; ++i) {
-            float angle = (float) i / segments * 2.0f * glm::pi<float>();
+            float angle = static_cast<float>(i) / segments * 2.0f * glm::pi<float>();
             glm::vec3 pos = sphere.center + glm::vec3(
                                 glm::cos(angle) * sphere.radius,
                                 0.0f,
@@ -2420,7 +2448,7 @@ size_t totalDebugVertices = 0;
         }
         // YZ circle
         for (int i = 0; i < segments; ++i) {
-            float angle = (float) i / segments * 2.0f * glm::pi<float>();
+            float angle = static_cast<float>(i) / segments * 2.0f * glm::pi<float>();
             glm::vec3 pos = sphere.center + glm::vec3(
                                 0.0f,
                                 glm::cos(angle) * sphere.radius,

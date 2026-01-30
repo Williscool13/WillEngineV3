@@ -418,7 +418,9 @@ void WillEngine::Run()
 
                 stagingFrameBuffer.bFreezeVisibility = bFreezeVisibility;
                 stagingFrameBuffer.bLogRDG = bLogRDG;
-                stagingFrameBuffer.bDrawImgui = bDrawImgui; {
+                stagingFrameBuffer.bDrawImgui = bDrawImgui;
+                //
+                {
                     ZoneScopedN("SwapAndPrepare");
                     std::swap(currentFrameBuffer, stagingFrameBuffer);
                     stagingFrameBuffer.timeFrame = timeManager->GetTime();

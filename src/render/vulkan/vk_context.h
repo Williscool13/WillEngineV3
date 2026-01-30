@@ -7,6 +7,7 @@
 
 #include <volk.h>
 #include <vk_mem_alloc.h>
+#include <tracy/TracyVulkan.hpp>
 
 struct SDL_Window;
 
@@ -46,6 +47,10 @@ struct VulkanContext
     VulkanContext(const VulkanContext&) = delete;
 
     VulkanContext(VulkanContext&&) = delete;
+
+#if PROFILER_ENABLED
+    TracyVkCtx tracyContext;
+#endif
 };
 } // Renderer
 

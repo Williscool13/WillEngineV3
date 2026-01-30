@@ -12,7 +12,7 @@ int main(int argc, char* argv[])
 {
     Platform::CrashHandler crashHandler(Platform::GetCrashPath());
 
-#ifndef LOGGING_DISABLED
+#if LOGGING_ENABLED
     Utils::Logger logger(Platform::GetLogPath() / "engine.log");
     SPDLOG_INFO("Engine starting...");
     crashHandler.SetLogPath(logger.GetLogPath());
@@ -23,7 +23,7 @@ int main(int argc, char* argv[])
     we.Run();
     we.Cleanup();
 
-#ifndef LOGGING_DISABLED
+#if LOGGING_ENABLED
     logger.ArchiveLogs();
 #endif
     return 0;

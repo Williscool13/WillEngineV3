@@ -18,7 +18,6 @@ target_link_libraries(engine-tests PRIVATE
         Catch2::Catch2WithMain
 )
 
-# Copy SDL3.dll to test output directory
 add_custom_command(TARGET engine-tests POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
         $<TARGET_FILE:SDL3::SDL3>
