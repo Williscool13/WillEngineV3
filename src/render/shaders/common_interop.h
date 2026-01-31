@@ -76,6 +76,7 @@ SHADER_PUBLIC struct SHADER_ALIGN SceneData
 
     SHADER_PUBLIC Frustum frustum;
 
+    SHADER_PUBLIC float4 clipPlane; // near clip plane to define clip distance
     SHADER_PUBLIC float4 cameraWorldPos;
 
     SHADER_PUBLIC float2 jitter;

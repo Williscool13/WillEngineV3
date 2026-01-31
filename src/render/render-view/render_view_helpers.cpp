@@ -85,6 +85,7 @@ SceneData GenerateSceneData(const Core::RenderView& view, const Core::PostProces
 
     sceneData.frustum = CreateFrustum(sceneData.viewProj);
     sceneData.deltaTime = deltaTime;
+    sceneData.clipPlane = {0.0f, 0.0f, 0.0f, 1.0f};
 
     return sceneData;
 }

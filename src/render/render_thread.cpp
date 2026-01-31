@@ -867,7 +867,8 @@ void RenderThread::SetupFrameUniforms(const Core::ViewFamily& viewFamily, const 
     UploadAllocation portalSceneDataUploadAllocation{};
     bool bHasPortal = !viewFamily.portalViews.empty();
     if (bHasPortal) {
-        SceneData portalSceneData = GenerateSceneData(viewFamily.portalViews[0], viewFamily.postProcessConfig, renderExtent, frameNumber, renderDeltaTime);
+        SceneData portalSceneData = GenerateSceneData(viewFamily.portalViews[0].view, viewFamily.postProcessConfig, renderExtent, frameNumber, renderDeltaTime);
+        portalSceneData.clipPlane = glm::vec4(viewFamily.portalViews[0].exitPortalNormal, -glm::dot(viewFamily.portalViews[0].exitPortalNormal, viewFamily.portalViews[0].exitPortalTransform.translation));
         portalSceneDataUploadAllocation = renderGraph->AllocateTransient(sizeof(SceneData));
         memcpy(portalSceneDataUploadAllocation.ptr, &portalSceneData, sizeof(SceneData));
     }

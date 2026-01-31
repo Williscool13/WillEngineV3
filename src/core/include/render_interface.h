@@ -11,6 +11,7 @@
 #include <glm/glm.hpp>
 
 #include "core/allocators/handle.h"
+#include "core/math/transform.h"
 #include "core/time/time_frame.h"
 #include "engine/material_manager.h"
 #include "glm/detail/type_quat.hpp"
@@ -48,6 +49,21 @@ struct RenderView
 
     // render target color
     // render target depth
+};
+
+struct PortalView
+{
+    RenderView view;
+
+    Transform entryPortalTransform;
+    glm::vec3 entryPortalNormal;
+    glm::vec3 entryPortalRight;
+    glm::vec3 entryPortalUp;
+
+    Transform exitPortalTransform;
+    glm::vec3 exitPortalNormal;
+    glm::vec3 exitPortalRight;
+    glm::vec3 exitPortalUp;
 };
 
 enum class ShadowQuality
@@ -169,7 +185,7 @@ struct DebugSphere
 struct ViewFamily
 {
     RenderView mainView{};
-    std::vector<RenderView> portalViews;
+    std::vector<PortalView> portalViews;
 
     std::vector<InstanceData> mainInstances;
     std::vector<CustomStencilDrawBatch> customStencilDraws;

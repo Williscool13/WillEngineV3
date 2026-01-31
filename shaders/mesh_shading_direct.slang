@@ -56,19 +56,6 @@ void ComputeMain(uniform BuildDirectIndirectPushConstant pc, uint3 gid : SV_Disp
 }
 
 // =============== Task Shader ===============
-struct VertexOutput
-{
-    float4 position : SV_Position;
-    float3 viewNormal : TEXCOORD2;
-    float4 tangent : TEXCOORD3;
-    float4 color : COLOR0;
-    float2 uv : TEXCOORD0;
-    nointerpolation uint32_t materialIndex : TEXCOORD4;
-    noperspective float4 currentClipPos : TEXCOORD5;
-    noperspective float4 previousClipPos : TEXCOORD6;
-    noperspective float4 objectOnlyPrevClipPos : TEXCOORD7;
-};
-
 struct MeshletPayload {
     uint32_t modelIndex;
     uint32_t materialIndex;
@@ -141,6 +128,20 @@ void TaskMain(uniform DirectMeshShadingPushConstant pc,
 }
 
 // ==================== Mesh Shader ====================
+struct VertexOutput
+{
+    float4 position : SV_Position;
+    float3 viewNormal : TEXCOORD2;
+    float4 tangent : TEXCOORD3;
+    float4 color : COLOR0;
+    float2 uv : TEXCOORD0;
+    nointerpolation uint32_t materialIndex : TEXCOORD4;
+    noperspective float4 currentClipPos : TEXCOORD5;
+    noperspective float4 previousClipPos : TEXCOORD6;
+    noperspective float4 objectOnlyPrevClipPos : TEXCOORD7;
+    float clipDistance : SV_ClipDistance0;
+};
+
 [shader("mesh")]
 [outputtopology("triangle")]
 [numthreads(MESH_SHADER_DISPATCH_X, 1, 1)]
@@ -167,7 +168,9 @@ void MeshMain(
     for (uint i = threadIndex; i < meshlet.meshletVertexCount; i += MESH_SHADER_DISPATCH_X) {
         uint localVertexIndex = pc.meshletVerticesBuffer[meshlet.meshletVertexOffset + i];
         Vertex v = pc.vertexBuffer[meshlet.vertexOffset + localVertexIndex];
-        float4 clipPos = mul(jitteredViewProj, mul(m.modelMatrix, float4(v.position, 1.0)));
+        float4 worldPos = mul(m.modelMatrix, float4(v.position, 1.0));
+        vertices[i].clipDistance = dot(worldPos.xyz, pc.sceneData[pc.sceneDataIndex].clipPlane.xyz) + pc.sceneData[pc.sceneDataIndex].clipPlane.w;
+        float4 clipPos =     mul(jitteredViewProj,      worldPos);
         vertices[i].position = clipPos;
         vertices[i].viewNormal = normalize(mul(viewRotation, mul(Adjugate((float3x3)m.modelMatrix), v.normal)));
         vertices[i].tangent = float4(normalize(mul(Adjugate((float3x3)m.modelMatrix), v.tangent.xyz)), v.tangent.w);

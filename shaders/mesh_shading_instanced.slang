@@ -20,19 +20,6 @@ import shader_functions;
 */
 
 // =============== Task Shader ===============
-struct VertexOutput
-{
-    float4 position : SV_Position;
-    float3 viewNormal : TEXCOORD2;
-    float4 tangent : TEXCOORD3;
-    float4 color : COLOR0;
-    float2 uv : TEXCOORD0;
-    nointerpolation uint32_t materialIndex : TEXCOORD4;
-    float4 currentClipPos : COLOR1;
-    float4 previousClipPos : COLOR2;
-    float4 objectOnlyPrevClipPos : COLOR3;
-};
-
 // Per https://developer.nvidia.com/blog/using-mesh-shaders-for-professional-graphics/
 // Task shader output should ideally be below 236/108. We can hit 108 if we turn uint32_t to uint8_t and store offsets in the payload.
 // 4 + 4 + 4 + 64 = 86
@@ -116,6 +103,20 @@ void TaskMain(uniform InstancedMeshShadingPushConstant pc,
 }
 
 // ==================== Mesh Shader ====================
+struct VertexOutput
+{
+    float4 position : SV_Position;
+    float3 viewNormal : TEXCOORD2;
+    float clipDistance : COLOR5;
+    float4 tangent : TEXCOORD3;
+    float4 color : COLOR0;
+    float2 uv : TEXCOORD0;
+    nointerpolation uint32_t materialIndex : TEXCOORD4;
+    float4 currentClipPos : COLOR1;
+    float4 previousClipPos : COLOR2;
+    float4 objectOnlyPrevClipPos : COLOR3;
+};
+
 [shader("mesh")]
 [outputtopology("triangle")]
 [numthreads(MESH_SHADER_DISPATCH_X, 1, 1)]
@@ -140,7 +141,9 @@ void MeshMain(
     for (uint i = threadIndex; i < meshlet.meshletVertexCount; i += MESH_SHADER_DISPATCH_X) {
         uint localVertexIndex = pc.meshletVerticesBuffer[meshlet.meshletVertexOffset + i];
         Vertex v = pc.vertexBuffer[meshlet.vertexOffset + localVertexIndex];
-        float4 clipPos =     mul(jitteredViewProj,      mul(m.modelMatrix,     float4(v.position, 1.0)));
+        float4 worldPos = mul(m.modelMatrix, float4(v.position, 1.0));
+        vertices[i].clipDistance = dot(worldPos.xyz, pc.sceneData[pc.sceneDataIndex].clipPlane.xyz) + pc.sceneData[pc.sceneDataIndex].clipPlane.w;
+        float4 clipPos =     mul(jitteredViewProj,      worldPos);
         float4 prevClipPos = mul(jitteredPrevViewProj,  mul(m.prevModelMatrix, float4(v.position, 1.0)));
         vertices[i].position = clipPos;
         vertices[i].viewNormal = normalize(mul(viewRotation, mul(Adjugate((float3x3)m.modelMatrix), v.normal)));

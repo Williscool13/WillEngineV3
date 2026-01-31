@@ -122,20 +122,22 @@ void BuildPortalViewFamily(Engine::GameState* state, Core::ViewFamily& mainViewF
     auto portalView = state->registry.view<Component::PortalComponent, Component::TransformComponent>();
 
     entt::entity entryPortal = entt::null;
-    float bestDot = -1.0f;
+    float closestDistance = std::numeric_limits<float>::max();
 
     for (const auto& [portalEntity, portal, portalTransform] : portalView.each()) {
         if (portal.linkedPortal == entt::null) continue;
 
-        glm::vec3 toPortal = glm::normalize(portalTransform.translation - cameraTransform.translation);
+        glm::vec3 toPortal = portalTransform.translation - cameraTransform.translation;
+        float distance = glm::length(toPortal);
 
+        glm::vec3 toPortalNorm = toPortal / distance;
         glm::vec3 portalForward = portalTransform.rotation * glm::vec3(0.0f, 0.0f, 1.0f);
 
-        float cameraDot = glm::dot(cam.currentViewData.cameraForward, toPortal);
-        float portalDot = glm::dot(portalForward, -toPortal);
+        float cameraDot = glm::dot(cam.currentViewData.cameraForward, toPortalNorm);
+        float portalDot = glm::dot(portalForward, -toPortalNorm);
 
-        if (cameraDot > 0.0f && portalDot > 0.0f && cameraDot > bestDot) {
-            bestDot = cameraDot;
+        if (cameraDot > 0.0f && portalDot > 0.0f && distance < closestDistance) {
+            closestDistance = distance;
             entryPortal = portalEntity;
         }
     }
@@ -160,17 +162,35 @@ void BuildPortalViewFamily(Engine::GameState* state, Core::ViewFamily& mainViewF
             glm::vec3 portalUp = glm::normalize(glm::vec3(portalCameraMatrix[1]));
             glm::vec3 portalLookAt = portalCameraPos + portalForward;
 
-            Core::RenderView portalRenderView{};
-            portalRenderView.currentViewData.fovRadians = cam.currentViewData.fovRadians;
-            portalRenderView.currentViewData.aspectRatio = cam.currentViewData.aspectRatio;
-            portalRenderView.currentViewData.nearPlane = cam.currentViewData.nearPlane;
-            portalRenderView.currentViewData.farPlane = cam.currentViewData.farPlane;
-            portalRenderView.currentViewData.cameraPos = portalCameraPos;
-            portalRenderView.currentViewData.cameraLookAt = portalLookAt;
-            portalRenderView.currentViewData.cameraForward = portalForward;
-            portalRenderView.currentViewData.cameraUp = portalUp;
+            Core::PortalView portalRenderView{};
+            portalRenderView.view.currentViewData.fovRadians = cam.currentViewData.fovRadians;
+            portalRenderView.view.currentViewData.aspectRatio = cam.currentViewData.aspectRatio;
+            portalRenderView.view.currentViewData.nearPlane = cam.currentViewData.nearPlane;
+            portalRenderView.view.currentViewData.farPlane = cam.currentViewData.farPlane;
+            portalRenderView.view.currentViewData.cameraPos = portalCameraPos;
+            portalRenderView.view.currentViewData.cameraLookAt = portalLookAt;
+            portalRenderView.view.currentViewData.cameraForward = portalForward;
+            portalRenderView.view.currentViewData.cameraUp = portalUp;
 
-            portalRenderView.previousViewData = portalRenderView.currentViewData;
+            glm::mat3 entryRotation = glm::mat3(sourceMatrix);
+            portalRenderView.entryPortalTransform = Transform(entryTransform.translation, entryTransform.rotation, entryTransform.scale);
+            portalRenderView.entryPortalNormal = glm::normalize(entryRotation * glm::vec3(0, 0, 1));
+            portalRenderView.entryPortalRight = glm::normalize(entryRotation * glm::vec3(1, 0, 0));
+            portalRenderView.entryPortalUp = glm::normalize(entryRotation * glm::vec3(0, 1, 0));
+            glm::mat3 exitRotation = glm::mat3(destMatrix);
+            portalRenderView.exitPortalTransform = Transform(exitTransform.translation, exitTransform.rotation, exitTransform.scale);
+            portalRenderView.exitPortalNormal = glm::normalize(exitRotation * glm::vec3(0, 0, 1));
+            portalRenderView.exitPortalRight = glm::normalize(exitRotation * glm::vec3(1, 0, 0));
+            portalRenderView.exitPortalUp = glm::normalize(exitRotation * glm::vec3(0, 1, 0));
+
+            DEBUG_ADD_LINE(mainViewFamily.debugLines, Core::DebugLine{
+                           .start = exitTransform.translation,
+                           .end = exitTransform.translation + portalRenderView.exitPortalNormal * 2.0f,
+                           .color = glm::vec4(0, 1, 0, 1)
+                           });
+
+            // todo fix this
+            portalRenderView.view.previousViewData = portalRenderView.view.currentViewData;
 
             mainViewFamily.portalViews.push_back(portalRenderView);
         }
