@@ -35,6 +35,7 @@ struct TransformComponent
     glm::vec3 translation{0.0f, 0.0f, 0.0f};
     glm::quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
     glm::vec3 scale{1.0f, 1.0f, 1.0f};
+    // todo: dirty tracking to reduce repeat calculations
 };
 
 inline glm::mat4 GetMatrix(const TransformComponent& transform)

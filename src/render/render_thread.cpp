@@ -165,6 +165,7 @@ void RenderThread::RenderFrame(uint32_t currentFrameIndex, RenderSynchronization
         ProcessAcquisitions(renderSync.commandBuffer, frameBuffer.bufferAcquireOperations, frameBuffer.imageAcquireOperations);
         res = RecordFrame(currentFrameIndex, renderSync.commandBuffer, renderSync.swapchainSemaphore, frameBuffer);
     }
+    TracyVkCollect(context->tracyContext, renderSync.commandBuffer);
     VK_CHECK(vkEndCommandBuffer(renderSync.commandBuffer));
 
     switch (res.code) {
@@ -195,7 +196,6 @@ void RenderThread::RenderFrame(uint32_t currentFrameIndex, RenderSynchronization
                 VkSubmitInfo2 submitInfo = VkHelpers::SubmitInfo(&commandBufferSubmitInfo, &swapchainSemaphoreWaitInfo, &renderSemaphoreSignalInfo);
                 VK_CHECK(vkResetFences(context->device, 1, &renderSync.renderFence));
                 VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, renderSync.renderFence));
-                TracyVkCollectHost(context->tracyContext);
             }
             //
             {
@@ -210,7 +210,6 @@ void RenderThread::RenderFrame(uint32_t currentFrameIndex, RenderSynchronization
                 }
             }
         }
-
         break;
     }
 }

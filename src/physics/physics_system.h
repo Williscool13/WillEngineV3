@@ -70,7 +70,7 @@ public:
 #endif
     void DrawDebug(Core::ViewFamily* viewFamily, bool bUseFilter = true);
 
-    static void RegisterAllocator()
+    static void RegisterPhysics()
     {
         JPH::RegisterDefaultAllocator();
     }

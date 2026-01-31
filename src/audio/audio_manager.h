@@ -29,7 +29,7 @@ public:
 
     ~AudioManager();
 
-    void RegisterAudio();
+    static void RegisterAudio();
 
     void Update() const;
 

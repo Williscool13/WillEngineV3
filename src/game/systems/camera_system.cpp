@@ -90,7 +90,7 @@ void UpdateFreeCamera(Core::EngineContext* ctx, Engine::GameState* state)
 
         camera.currentViewData.cameraPos = transform.translation;
         camera.currentViewData.cameraLookAt = transform.translation + forwardDir;
-        camera.currentViewData.cameraForward = forwardDir;
+        camera.currentViewData.cameraForward = normalize(forwardDir);
         camera.currentViewData.cameraUp = WORLD_UP;
         camera.currentViewData.aspectRatio = static_cast<float>(ctx->windowContext.windowWidth) / static_cast<float>(ctx->windowContext.windowHeight);
         camera.currentViewData.fovRadians = glm::radians(70.0f);
@@ -124,7 +124,7 @@ void BuildPortalViewFamily(Engine::GameState* state, Core::ViewFamily& mainViewF
     entt::entity entryPortal = entt::null;
     float bestDot = -1.0f;
 
-    for (auto [portalEntity, portal, portalTransform] : portalView.each()) {
+    for (const auto& [portalEntity, portal, portalTransform] : portalView.each()) {
         if (portal.linkedPortal == entt::null) continue;
 
         glm::vec3 toPortal = glm::normalize(portalTransform.translation - cameraTransform.translation);
@@ -151,7 +151,9 @@ void BuildPortalViewFamily(Engine::GameState* state, Core::ViewFamily& mainViewF
             glm::mat4 destMatrix = GetMatrix(exitTransform);
             glm::mat4 cameraMatrix = GetMatrix(cameraTransform);
 
-            glm::mat4 portalCameraMatrix = destMatrix * glm::inverse(sourceMatrix) * cameraMatrix;
+            glm::mat4 relativeToEntry = glm::inverse(sourceMatrix) * cameraMatrix;
+            glm::mat4 flip = glm::rotate(glm::mat4(1.0f), glm::pi<float>(), glm::vec3(0, 1, 0));
+            glm::mat4 portalCameraMatrix = destMatrix * flip * relativeToEntry;
 
             glm::vec3 portalCameraPos = glm::vec3(portalCameraMatrix[3]);
             glm::vec3 portalForward = -glm::normalize(glm::vec3(portalCameraMatrix[2]));

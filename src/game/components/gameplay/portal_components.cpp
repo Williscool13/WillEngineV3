@@ -50,7 +50,7 @@ PortalPair CreatePortalPair(Core::EngineContext* ctx, Engine::GameState* state, 
         renderable.primitiveCount = submesh.primitiveProperties.size();
         renderable.modelFlags = glm::vec4(0.0f);
 
-        TransformComponent transform{posA, rotA, glm::vec3(0.02f, 0.02f, 0.01f)};
+        TransformComponent transform{posA, rotA, glm::vec3(1.0f, 1.0f, 1.0f)};
         renderable.previousModelMatrix = GetMatrix(transform);
 
         state->registry.emplace<TransformComponent>(portalA, transform);
@@ -83,7 +83,7 @@ PortalPair CreatePortalPair(Core::EngineContext* ctx, Engine::GameState* state, 
         renderable.primitiveCount = submesh.primitiveProperties.size();
         renderable.modelFlags = glm::vec4(0.0f);
 
-        TransformComponent transform{posB, rotB, glm::vec3(0.02f, 0.02f, 0.01f)};
+        TransformComponent transform{posB, rotB, glm::vec3(1.0f)};
         renderable.previousModelMatrix = GetMatrix(transform);
 
         state->registry.emplace<TransformComponent>(portalB, transform);

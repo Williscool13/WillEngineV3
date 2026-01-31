@@ -57,6 +57,25 @@ namespace Engine
 {
 using SDLWindowPtr = std::unique_ptr<SDL_Window, decltype(&SDL_DestroyWindow)>;
 
+static constexpr std::array<const char*, 64> TASK_THREAD_NAMES = {
+    "TaskThread0", "TaskThread1", "TaskThread2", "TaskThread3",
+    "TaskThread4", "TaskThread5", "TaskThread6", "TaskThread7",
+    "TaskThread8", "TaskThread9", "TaskThread10", "TaskThread11",
+    "TaskThread12", "TaskThread13", "TaskThread14", "TaskThread15",
+    "TaskThread16", "TaskThread17", "TaskThread18", "TaskThread19",
+    "TaskThread20", "TaskThread21", "TaskThread22", "TaskThread23",
+    "TaskThread24", "TaskThread25", "TaskThread26", "TaskThread27",
+    "TaskThread28", "TaskThread29", "TaskThread30", "TaskThread31",
+    "TaskThread32", "TaskThread33", "TaskThread34", "TaskThread35",
+    "TaskThread36", "TaskThread37", "TaskThread38", "TaskThread39",
+    "TaskThread40", "TaskThread41", "TaskThread42", "TaskThread43",
+    "TaskThread44", "TaskThread45", "TaskThread46", "TaskThread47",
+    "TaskThread48", "TaskThread49", "TaskThread50", "TaskThread51",
+    "TaskThread52", "TaskThread53", "TaskThread54", "TaskThread55",
+    "TaskThread56", "TaskThread57", "TaskThread58", "TaskThread59",
+    "TaskThread60", "TaskThread61", "TaskThread62", "TaskThread63"
+};
+
 class WillEngine
 {
 public:

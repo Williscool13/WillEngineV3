@@ -47,25 +47,26 @@ GAME_API void GameLoad(Core::EngineContext* ctx, Engine::GameState* state)
     SPDLOG_TRACE("  CameraComponent: {}", entt::type_id<Game::Component::CameraComponent>().hash());
     SPDLOG_TRACE("  MainViewportComponent: {}", entt::type_id<Game::Component::MainViewportComponent>().hash());
     SPDLOG_TRACE("  FreeCameraComponent: {}", entt::type_id<Game::Component::FreeCameraComponent>().hash());
-    SPDLOG_TRACE("  FreeCameraComponent: {}", entt::type_id<Game::Component::PortalPlaneComponent>().hash());
-    SPDLOG_TRACE("  FreeCameraComponent: {}", entt::type_id<Game::Component::PortalComponent>().hash());
-    SPDLOG_TRACE("  FreeCameraComponent: {}", entt::type_id<Game::Component::AntiGravityComponent>().hash());
-    SPDLOG_TRACE("  FreeCameraComponent: {}", entt::type_id<Game::Component::FloorComponent>().hash());
-    SPDLOG_TRACE("  FreeCameraComponent: {}", entt::type_id<Game::Component::DynamicPhysicsBodyComponent>().hash());
-    SPDLOG_TRACE("  FreeCameraComponent: {}", entt::type_id<Game::Component::PhysicsBodyComponent>().hash());
-    SPDLOG_TRACE("  FreeCameraComponent: {}", entt::type_id<Game::Component::DirtyPhysicsTransformComponent>().hash());
-    SPDLOG_TRACE("  FreeCameraComponent: {}", entt::type_id<Game::Component::RenderableComponent>().hash());
-    SPDLOG_TRACE("  FreeCameraComponent: {}", entt::type_id<Game::Component::TransformComponent>().hash());
+    SPDLOG_TRACE("  PortalPlaneComponent: {}", entt::type_id<Game::Component::PortalPlaneComponent>().hash());
+    SPDLOG_TRACE("  PortalComponent: {}", entt::type_id<Game::Component::PortalComponent>().hash());
+    SPDLOG_TRACE("  AntiGravityComponent: {}", entt::type_id<Game::Component::AntiGravityComponent>().hash());
+    SPDLOG_TRACE("  FloorComponent: {}", entt::type_id<Game::Component::FloorComponent>().hash());
+    SPDLOG_TRACE("  DynamicPhysicsBodyComponent: {}", entt::type_id<Game::Component::DynamicPhysicsBodyComponent>().hash());
+    SPDLOG_TRACE("  PhysicsBodyComponent: {}", entt::type_id<Game::Component::PhysicsBodyComponent>().hash());
+    SPDLOG_TRACE("  DirtyPhysicsTransformComponent: {}", entt::type_id<Game::Component::DirtyPhysicsTransformComponent>().hash());
+    SPDLOG_TRACE("  RenderableComponent: {}", entt::type_id<Game::Component::RenderableComponent>().hash());
+    SPDLOG_TRACE("  TransformComponent: {}", entt::type_id<Game::Component::TransformComponent>().hash());
 
     spdlog::set_default_logger(ctx->logger);
     ImGui::SetCurrentContext(ctx->imguiContext);
-
-    ctx->physicsSystem->RegisterAllocator();
-    ctx->audioManager->RegisterAudio();
+    Physics::PhysicsSystem::RegisterPhysics();
+    Audio::AudioManager::RegisterAudio();
 }
 
 GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::GameState* state)
 {
+    const auto frameStart = std::chrono::high_resolution_clock::now();
+
     Game::System::UpdateCameras(ctx, state);
     Game::System::DebugUpdate(ctx, state);
 
@@ -89,8 +90,13 @@ GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         Game::System::UpdatePhysics(ctx, state);
     }
 
-    Core::InputFrame gameInputCopy = *state->inputFrame;
-    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    const auto frameEnd = std::chrono::high_resolution_clock::now();
+    const auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(frameEnd - frameStart);
+    constexpr auto targetFrameTime = std::chrono::microseconds(1000);
+
+    if (elapsed < targetFrameTime) {
+        std::this_thread::sleep_for(targetFrameTime - elapsed);
+    }
 }
 
 GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer)
