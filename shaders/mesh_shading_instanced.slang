@@ -107,7 +107,6 @@ struct VertexOutput
 {
     float4 position : SV_Position;
     float3 viewNormal : TEXCOORD2;
-    float clipDistance : COLOR5;
     float4 tangent : TEXCOORD3;
     float4 color : COLOR0;
     float2 uv : TEXCOORD0;
@@ -115,6 +114,7 @@ struct VertexOutput
     float4 currentClipPos : COLOR1;
     float4 previousClipPos : COLOR2;
     float4 objectOnlyPrevClipPos : COLOR3;
+    float clipDistance[1] : SV_ClipDistance;
 };
 
 [shader("mesh")]
@@ -142,7 +142,7 @@ void MeshMain(
         uint localVertexIndex = pc.meshletVerticesBuffer[meshlet.meshletVertexOffset + i];
         Vertex v = pc.vertexBuffer[meshlet.vertexOffset + localVertexIndex];
         float4 worldPos = mul(m.modelMatrix, float4(v.position, 1.0));
-        vertices[i].clipDistance = dot(worldPos.xyz, pc.sceneData[pc.sceneDataIndex].clipPlane.xyz) + pc.sceneData[pc.sceneDataIndex].clipPlane.w;
+        vertices[i].clipDistance[0] = dot(worldPos.xyz, pc.sceneData[pc.sceneDataIndex].clipPlane.xyz) + pc.sceneData[pc.sceneDataIndex].clipPlane.w;
         float4 clipPos =     mul(jitteredViewProj,      worldPos);
         float4 prevClipPos = mul(jitteredPrevViewProj,  mul(m.prevModelMatrix, float4(v.position, 1.0)));
         vertices[i].position = clipPos;

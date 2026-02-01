@@ -156,12 +156,11 @@ VulkanContext::VulkanContext(SDL_Window* window)
 
 
     // Maintenance9
-    bool supportsMaintenance9 = false; {
-        for (const auto& ext : targetDevice.get_available_extensions()) {
-            if (strcmp(ext.c_str(), VK_KHR_MAINTENANCE_9_EXTENSION_NAME) == 0) {
-                supportsMaintenance9 = true;
-                break;
-            }
+    bool supportsMaintenance9 = false;
+    for (const auto& ext : targetDevice.get_available_extensions()) {
+        if (strcmp(ext.c_str(), VK_KHR_MAINTENANCE_9_EXTENSION_NAME) == 0) {
+            supportsMaintenance9 = true;
+            break;
         }
     }
 
