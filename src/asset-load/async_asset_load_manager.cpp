@@ -243,6 +243,13 @@ void AsyncAssetLoadManager::GPUDispatchThreadMain()
     }
 }
 
+void AsyncAssetLoadManager::QueueGPUDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)
+{
+    gpuDispatchQueue.enqueue({cmd, fence, completionSignal});
+    gpuDispatchWorkCounter.fetch_add(1);
+    gpuDispatchWakeCV.notify_one();
+}
+
 void AsyncAssetLoadManager::RequestAudioLoad(Audio::WillAudio* audioEntry)
 {
     ZoneScoped;
@@ -317,13 +324,6 @@ void AsyncAssetLoadManager::RequestTextureLoad(Render::Texture* texture)
 bool AsyncAssetLoadManager::TryDequeueTextureComplete(TextureLoadComplete& outResult)
 {
     return textureLoadCompleteQueue.try_dequeue(outResult);
-}
-
-void AsyncAssetLoadManager::QueueGPUDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)
-{
-    gpuDispatchQueue.enqueue({cmd, fence, completionSignal});
-    gpuDispatchWorkCounter.fetch_add(1);
-    gpuDispatchWakeCV.notify_one();
 }
 
 void AsyncAssetLoadManager::OnAudioLoadComplete(bool success, AudioSlotHandle slotHandle)

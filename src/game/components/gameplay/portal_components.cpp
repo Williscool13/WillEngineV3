@@ -33,7 +33,7 @@ PortalPair CreatePortalPair(Core::EngineContext* ctx, Engine::GameState* state, 
         for (size_t i = 0; i < submesh.primitiveProperties.size(); ++i) {
             Render::PrimitiveProperty& primitive = submesh.primitiveProperties[i];
 
-            MaterialProperties material;
+            MaterialProperties material{};
             if (primitive.materialIndex != -1) {
                 material = plane->modelData.materials[primitive.materialIndex];
             } else {
@@ -66,7 +66,7 @@ PortalPair CreatePortalPair(Core::EngineContext* ctx, Engine::GameState* state, 
         for (size_t i = 0; i < submesh.primitiveProperties.size(); ++i) {
             Render::PrimitiveProperty& primitive = submesh.primitiveProperties[i];
 
-            MaterialProperties material;
+            MaterialProperties material{};
             if (primitive.materialIndex != -1) {
                 material = plane->modelData.materials[primitive.materialIndex];
             } else {

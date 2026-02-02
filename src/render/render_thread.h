@@ -45,7 +45,6 @@ class WillEngine;
 
 namespace Render
 {
-class AssetGenerator;
 struct ResourceManager;
 struct RenderExtents;
 struct Swapchain;
@@ -145,6 +144,11 @@ private:
     std::string SetupPostProcessing(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, const PostProcessTargets& ppTargets, float deltaTime) const;
 
     void SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, const std::string& depthTarget, const std::string& targetImage, FrameResourceLimits& limits) const;
+
+public:
+#if WILL_EDITOR
+    moodycamel::ConcurrentQueue<AssetLoad::GPUDispatchRequest> editorGPUDispatchQueue;
+#endif
 
 private:
     // Non-owning

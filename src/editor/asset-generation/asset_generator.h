@@ -1,17 +1,29 @@
-//
-// Created by William on 2025-12-15.
-//
-
 #ifndef WILL_ENGINE_ASSET_GENERATOR_H
 #define WILL_ENGINE_ASSET_GENERATOR_H
+
 #include <filesystem>
+#include <atomic>
+#include <mutex>
+#include <condition_variable>
+#include <semaphore>
+#include <thread>
+#include <concurrentqueue/concurrentqueue.h>
 
 #include "asset_generation_types.h"
-#include "offsetAllocator.hpp"
+#include "model_generate_slot.h"
 #include "TaskScheduler.h"
-#include "fastgltf/types.hpp"
 
 namespace Render
+{
+class RenderThread;
+}
+
+namespace AssetLoad
+{
+class AsyncAssetLoadManager;
+}
+
+namespace Editor
 {
 struct WillModelGenerationProgress
 {
@@ -25,105 +37,64 @@ struct WillModelGenerationProgress
     };
 
     std::atomic<LoadingProgress> loadingState{NONE};
-    std::atomic<int32_t> value{0}; // out of 100
+    std::atomic<int32_t> value{0};
 };
 
-constexpr uint32_t MODEL_GENERATION_STAGING_BUFFER_SIZE = 2 * 64 * 1024 * 1024; // 2 x 64 MB (1x uncompressed 4k rgba8, or 4x 4k BC7)
-struct AssetGeneratorImmediateParameters
+struct ModelGenerateRequest
 {
-    VkFence immFence{VK_NULL_HANDLE};
-    VkCommandPool immCommandPool{VK_NULL_HANDLE};
-    VkCommandBuffer immCommandBuffer{VK_NULL_HANDLE};
-
-    OffsetAllocator::Allocator imageStagingAllocator{MODEL_GENERATION_STAGING_BUFFER_SIZE};
-    AllocatedBuffer imageStagingBuffer{};
-    AllocatedBuffer imageReceivingBuffer{};
+    std::filesystem::path gltfPath;
+    std::filesystem::path outputPath;
 };
 
-enum class GenerateResponse
+struct ModelGenerateComplete
 {
-    UNABLE_TO_START = 0,
-    STARTED,
-    FINISHED
+    std::filesystem::path outputPath;
+    bool success;
 };
+
+using ModelGenerateSlotHandle = Core::Handle<ModelGenerateSlot>;
 
 class AssetGenerator
 {
 public:
-    AssetGenerator(VulkanContext* context, enki::TaskScheduler* taskscheduler);
-
+    AssetGenerator(Render::VulkanContext* context, Render::RenderThread* renderThread, AssetLoad::AsyncAssetLoadManager* asyncAssetLoadManager);
     ~AssetGenerator();
 
-    void WaitForAsyncModelGeneration() const;
-
-    GenerateResponse GenerateWillModelAsync(const std::filesystem::path& gltfPath, const std::filesystem::path& outputPath);
-
-    GenerateResponse GenerateWillModel(const std::filesystem::path& gltfPath, const std::filesystem::path& outputPath);
+    void RequestModelGenerate(const std::filesystem::path& gltfPath, const std::filesystem::path& outputPath);
+    bool TryDequeueModelGenerateComplete(ModelGenerateComplete& outResult);
 
     const WillModelGenerationProgress& GetModelGenerationProgress() const { return modelGenerationProgress; }
-
-    GenerateResponse GenerateKtxTexture(const std::filesystem::path& imageSource, const std::filesystem::path& outputPath, bool mipmapped);
 
     void Join();
 
 private:
-    struct GenerateTask : enki::ITaskSet
-    {
-        AssetGenerator* generator;
-        std::filesystem::path gltfPath;
-        std::filesystem::path outputPath;
+    friend class ModelGenerateSlot;
 
-        explicit GenerateTask(AssetGenerator* gen)
-            : ITaskSet(1), generator(gen)
-        {}
+    void ThreadMain();
+    void OnModelGenerateComplete(bool success, ModelGenerateSlotHandle slotHandle);
+    void TransferQueueGPUDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) const;
+    void GraphicsQueueGPUDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) const;
 
-        void ExecuteRange(enki::TaskSetPartition range, uint32_t threadnum) override
-        {
-            generator->GenerateWillModel_Internal(gltfPath, outputPath);
-            generator->bIsGenerating.store(false, std::memory_order::release);
-        }
-    };
+    Render::VulkanContext* context;
+    Render::RenderThread* renderThread;
+    AssetLoad::AsyncAssetLoadManager* asyncAssetLoadManager;
+    std::unique_ptr<enki::TaskScheduler> assetGeneratorScheduler;
 
-    RawGltfModel LoadGltf(const std::filesystem::path& source);
+    std::array<ModelGenerateSlot, MODEL_GENERATION_JOB_COUNT> modelGenerateTasks;
+    Core::HandleAllocator<ModelGenerateSlot, MODEL_GENERATION_JOB_COUNT> modelGenerateAllocator;
 
-    bool WriteWillModel(RawGltfModel& rawModel, const std::filesystem::path& outputPath);
+    moodycamel::ConcurrentQueue<ModelGenerateRequest> modelGenerateRequestQueue;
+    moodycamel::ConcurrentQueue<ModelGenerateComplete> modelGenerateCompleteQueue;
 
-    void GenerateWillModel_Internal(const std::filesystem::path& gltfPath, const std::filesystem::path& outputPath);
+    std::atomic<bool> bShouldExit{false};
+    std::atomic<uint32_t> workCounter{0};
+    std::mutex wakeMutex;
+    std::condition_variable wakeCV;
+    std::jthread thisThread;
 
-private:
-    static VkFilter ExtractFilter(fastgltf::Filter filter);
-
-    static VkSamplerMipmapMode ExtractMipmapMode(fastgltf::Filter filter);
-
-    static MaterialProperties ExtractMaterial(fastgltf::Asset& gltf, const fastgltf::Material& gltfMaterial);
-
-    static void LoadTextureIndicesAndUV(const fastgltf::TextureInfo& texture, const fastgltf::Asset& gltf, int& imageIndex, int& samplerIndex, glm::vec4& uvTransform);
-
-    static glm::vec4 GenerateBoundingSphere(const std::vector<Vertex>& vertices);
-
-    static glm::vec4 GenerateBoundingSphere(const std::vector<SkinnedVertex>& vertices);
-
-    void TopologicalSortNodes(std::vector<Node>& nodes, std::vector<uint32_t>& oldToNew);
-
-    AllocatedImage RecordCreateImageFromData(VkCommandBuffer cmd, size_t offset, unsigned char* data, size_t size, VkExtent3D imageExtent, VkFormat format, VkImageUsageFlagBits usage, bool mipmapped);
-
-private:
-    VulkanContext* context{};
-    enki::TaskScheduler* taskscheduler{};
-
-    GenerateTask generateTask;
-
-    std::atomic<bool> bIsGenerating{false};
     WillModelGenerationProgress modelGenerationProgress{};
-
-    AssetGeneratorImmediateParameters immediateParameters;
-
-private: // Cache
-    std::vector<Node> sortedNodes;
-    std::vector<bool> visited;
 };
 
-void WriteModelBinary(std::ofstream& file, const RawGltfModel& model);
 } // Render
 
-#endif //WILL_ENGINE_MODEL_GENERATOR_H
+#endif //WILL_ENGINE_ASSET_GENERATOR_H

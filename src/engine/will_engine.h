@@ -16,6 +16,11 @@
 #include "platform/directory_watcher.h"
 #include "platform/dll_loader.h"
 
+namespace Editor
+{
+class AssetGenerator;
+}
+
 namespace Audio
 {
 class AudioManager;
@@ -49,7 +54,6 @@ class InputManager;
 
 namespace Render
 {
-class AssetGenerator;
 class RenderThread;
 }
 
@@ -110,12 +114,7 @@ private: // Main Systems
     std::unique_ptr<AssetManager> assetManager{};
     std::unique_ptr<Physics::PhysicsSystem> physicsSystem{};
 #if WILL_EDITOR
-    std::unique_ptr<Render::AssetGenerator> modelGenerator{};
-    bool isGenerating = false;
-    std::string currentAssetName;
-    std::string lastCompletedAsset;
-    bool lastSuccess = false;
-    bool hasCompleted = false;
+    std::unique_ptr<Editor::AssetGenerator> modelGenerator{};
 #endif
     Core::FrameBuffer stagingFrameBuffer{};
 

@@ -212,6 +212,20 @@ void RenderThread::RenderFrame(uint32_t currentFrameIndex, RenderSynchronization
         }
         break;
     }
+
+#ifdef WILL_EDITOR
+    {
+        AssetLoad::GPUDispatchRequest req;
+        while (editorGPUDispatchQueue.try_dequeue(req)) {
+            VkSubmitInfo submitInfo{.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO};
+            submitInfo.commandBufferCount = 1;
+            submitInfo.pCommandBuffers = &req.cmd;
+            VK_CHECK(vkQueueSubmit(context->graphicsQueue, 1, &submitInfo, req.fence));
+            VK_CHECK(vkWaitForFences(context->device, 1, &req.fence, VK_TRUE, UINT64_MAX));
+            req.completionSignal->release();
+        }
+    }
+#endif
 }
 
 RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCommandBuffer cmd, VkSemaphore swapchainSemaphore, Core::FrameBuffer& frameBuffer)

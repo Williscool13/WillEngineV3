@@ -153,7 +153,7 @@ void WillEngine::Initialize()
     //
     {
         ZoneScopedN("CreateModelGenerator");
-        modelGenerator = std::make_unique<Render::AssetGenerator>(renderThread->GetVulkanContext(), scheduler.get());
+        modelGenerator = std::make_unique<Editor::AssetGenerator>(renderThread->GetVulkanContext(), renderThread.get(), asyncAssetLoadManager.get());
     }
 
 #endif
@@ -487,52 +487,13 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
 
     if (ImGui::CollapsingHeader("Asset Generation")) {
         auto startGeneration = [&](const std::string& name, const std::filesystem::path& gltfPath, const std::filesystem::path& outPath) {
-            if (!isGenerating) {
-                modelGenerator->GenerateWillModelAsync(gltfPath, outPath);
-                isGenerating = true;
-                currentAssetName = name;
-            }
+            modelGenerator->RequestModelGenerate(gltfPath, outPath);
         };
 
-
-        if (isGenerating) {
-            auto progress = modelGenerator->GetModelGenerationProgress().value.load(std::memory_order::relaxed);
-            auto state = modelGenerator->GetModelGenerationProgress().loadingState.load(std::memory_order::relaxed);
-
-            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "Generating: %s", currentAssetName.c_str());
-            ImGui::ProgressBar(progress / 100.0f, ImVec2(-1.0f, 0.0f), std::to_string(progress).append("%").c_str());
-
-            if (state == Render::WillModelGenerationProgress::LoadingProgress::SUCCESS) {
-                SPDLOG_INFO("Generation finished: {}", currentAssetName);
-                lastCompletedAsset = currentAssetName;
-                lastSuccess = true;
-                hasCompleted = true;
-                isGenerating = false;
-                currentAssetName.clear();
-            }
-            else if (state == Render::WillModelGenerationProgress::LoadingProgress::FAILED) {
-                SPDLOG_ERROR("Generation failed: {}", currentAssetName);
-                lastCompletedAsset = currentAssetName;
-                lastSuccess = false;
-                hasCompleted = true;
-                isGenerating = false;
-                currentAssetName.clear();
-            }
-        }
-
-        if (hasCompleted) {
-            if (lastSuccess) {
-                ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Completed: %s", lastCompletedAsset.c_str());
-            }
-            else {
-                ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Failed: %s", lastCompletedAsset.c_str());
-            }
-        }
 
         ImGui::Separator();
         ImGui::Text("Generate Models:");
 
-        ImGui::BeginDisabled(isGenerating);
         if (ImGui::Button("dragon.willmodel")) {
             startGeneration("dragon",
                             Platform::GetAssetPath() / "dragon/dragon.gltf",
@@ -562,8 +523,8 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
                             Platform::GetAssetPath() / "Plane.willmodel");
         }
 
-        ImGui::Separator();
-        ImGui::Text("Generate Textures:");
+        // ImGui::Separator();
+        /*ImGui::Text("Generate Textures:");
 
         if (ImGui::Button("white.ktx2")) {
             modelGenerator->GenerateKtxTexture(
@@ -584,8 +545,8 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
                 Platform::GetAssetPath() / "textures/smiling_friend.jpg",
                 Platform::GetAssetPath() / "textures/smiling_friend.ktx2",
                 false);
-        }
-        ImGui::EndDisabled();
+        }*/
+        // ImGui::EndDisabled();
     }
     ImGui::End();
 #endif
@@ -607,8 +568,10 @@ void WillEngine::Cleanup()
     renderThread->Join();
     audioManager.reset();
 
+
 #if WILL_EDITOR
     modelGenerator->Join();
+    modelGenerator.reset();
 #endif
     scheduler->ShutdownNow();
 

@@ -13,8 +13,16 @@
 #include "render/shaders/model_interop.h"
 #include "render/vulkan/vk_resources.h"
 
-namespace Render
+namespace Editor
 {
+constexpr uint32_t ASSET_GENERATOR_WORKER_COUNT = 4;
+constexpr uint32_t MODEL_GENERATION_JOB_COUNT = 4;
+constexpr uint32_t MODEL_GENERATION_STAGING_BUFFER_SIZE = 64 * 1024 * 1024; // 64MB exactly 1x uncompressed 4k image
+
+static constexpr std::array<const char*, ASSET_GENERATOR_WORKER_COUNT> ASSET_GENERATOR_WORKER_NAMES = {
+    "AssetGenerator0", "AssetGenerator1", "AssetGenerator2", "AssetGenerator3"
+};
+
 struct RawGltfModel
 {
     std::string name{};
@@ -22,7 +30,7 @@ struct RawGltfModel
     bool bIsSkeletalModel{false};
 
     std::vector<VkSamplerCreateInfo> samplerInfos{};
-    std::vector<AllocatedImage> images{};
+    std::vector<Render::AllocatedImage> images{};
     // ktx_transcode_fmt_e
     std::vector<uint32_t> preferredImageFormats{};
 
@@ -35,10 +43,10 @@ struct RawGltfModel
     std::vector<MeshletPrimitive> primitives{};
     std::vector<MaterialProperties> materials{};
 
-    std::vector<MeshInformation> allMeshes{};
-    std::vector<Node> nodes{};
+    std::vector<Render::MeshInformation> allMeshes{};
+    std::vector<Render::Node> nodes{};
 
-    std::vector<Animation> animations;
+    std::vector<Render::Animation> animations;
     std::vector<glm::mat4> inverseBindMatrices{};
 };
 

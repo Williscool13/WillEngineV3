@@ -86,9 +86,8 @@ public:
     AsyncAssetLoadManager& operator=(AsyncAssetLoadManager&&) = delete;
 
     void ThreadMain();
-    void Join();
-
     void GPUDispatchThreadMain();
+    void Join();
 
     // Audio Loading
     void RequestAudioLoad(Audio::WillAudio* audioEntry);
@@ -125,6 +124,8 @@ public:
     {
         return textureLoadAllocator.GetCount();
     }
+
+    void QueueGPUDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal);
 
 private:
     std::unique_ptr<enki::TaskScheduler> assetLoadScheduler{};
@@ -174,7 +175,6 @@ private:
     Core::LockFreeHandleAllocator<UploadStaging, GPU_DISPATCH_COUNT> uploadStagingAllocator{};
     std::array<UploadStaging, GPU_DISPATCH_COUNT> uploadStagings{};
 
-    void QueueGPUDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal);
     void OnAudioLoadComplete(bool success, AudioSlotHandle slotHandle);
     void OnPipelineLoadComplete(bool success, PipelineSlotHandle slotHandle);
     void OnModelLoadComplete(bool success, ModelSlotHandle modelSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle);
