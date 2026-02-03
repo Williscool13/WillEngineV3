@@ -138,7 +138,7 @@ void ComputeCompactAndGenerateIndirect(uniform IndirectWritePushConstant pc, uin
 
     if (instanceOffset == 0) {
         MeshletPrimitive prim = pc.primitiveBuffer[inst.primitiveIndex];
-        uint totalMeshlets = prim.meshletCount;
+        uint totalMeshlets = prim.meshletCount.x;
         uint numChunks = (totalMeshlets + (TASK_SHADER_DISPATCH_X - 1)) / TASK_SHADER_DISPATCH_X;
         uint32_t count = pc.primitiveCountBuffer[inst.primitiveIndex].count.load();
 
@@ -148,8 +148,8 @@ void ComputeCompactAndGenerateIndirect(uniform IndirectWritePushConstant pc, uin
         parameters.groupCountZ = 1;
         parameters.compactedInstanceStart = primitiveOffset;
 
-        parameters.meshletOffset = prim.meshletOffset;
-        parameters.meshletCount = prim.meshletCount;
+        parameters.meshletOffset = prim.meshletOffset.x;
+        parameters.meshletCount = prim.meshletCount.x;
 
         // todo: can optimize by removing indirect index here. Can specify/calculate in prefix sum pass
         uint32_t indirectIndex = pc.indirectCountBuffer->meshIndirectCount.add(1);

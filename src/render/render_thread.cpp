@@ -1050,6 +1050,7 @@ void RenderThread::SetupModelUniforms(const Core::ViewFamily& viewFamily)
     renderGraph->CreateBuffer("material_buffer", materialBufferSize);
 
     UploadAllocation instanceUpload{};
+    // todo: sort instances by primitive index to improve atomic coalesce in the instancing generation shader
     if (bHasMainInstances) {
         instanceUpload = renderGraph->AllocateTransient(viewFamily.mainInstances.size() * sizeof(Instance));
         auto* instanceBuffer = static_cast<Instance*>(instanceUpload.ptr);

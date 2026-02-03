@@ -89,11 +89,13 @@ SHADER_PUBLIC struct Meshlet
 
 SHADER_PUBLIC struct MeshletPrimitive
 {
-    SHADER_PUBLIC uint32_t meshletOffset;
-    SHADER_PUBLIC uint32_t meshletCount;
-    uint32_t padding;
-    SHADER_PUBLIC uint32_t bHasTransparent;
+    SHADER_PUBLIC int4 meshletOffset;
+    SHADER_PUBLIC int4 meshletCount;
     SHADER_PUBLIC float4 boundingSphere; // {3} center, {1} radius
+    SHADER_PUBLIC uint32_t bHasTransparent;
+    uint32_t padding;
+    uint32_t padding1;
+    uint32_t padding2;
 };
 
 SHADER_PUBLIC struct SHADER_ALIGN MaterialProperties

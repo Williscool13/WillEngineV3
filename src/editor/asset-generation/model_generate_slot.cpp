@@ -293,149 +293,171 @@ bool ModelGenerateSlot::LoadGltf(VkCommandBuffer cmd, const std::function<void()
             MeshletPrimitive primitiveData{};
             int32_t materialIndex{-1};
 
-            if (p.materialIndex.has_value()) {
-                materialIndex = p.materialIndex.value();
-                primitiveData.bHasTransparent = (static_cast<Render::MaterialType>(rawModel.materials[materialIndex].alphaProperties.y) == Render::MaterialType::BLEND);
-            }
-
-
-            // INDICES
-            const fastgltf::Accessor& indexAccessor = gltf.accessors[p.indicesAccessor.value()];
             primitiveIndices.clear();
-            primitiveIndices.reserve(indexAccessor.count);
-
-            fastgltf::iterateAccessor<std::uint32_t>(gltf, indexAccessor, [&](const std::uint32_t idx) {
-                primitiveIndices.push_back(idx);
-            });
-
-            // POSITION (REQUIRED)
-            const fastgltf::Attribute* positionIt = p.findAttribute("POSITION");
-            const fastgltf::Accessor& posAccessor = gltf.accessors[positionIt->accessorIndex];
             primitiveVertices.clear();
-            primitiveVertices.resize(posAccessor.count);
 
-            fastgltf::iterateAccessorWithIndex<fastgltf::math::fvec3>(gltf, posAccessor, [&](fastgltf::math::fvec3 v, const size_t index) {
-                primitiveVertices[index] = {};
-                primitiveVertices[index].position = {v.x(), v.y(), v.z()};
-                primitiveVertices[index].color = {1.0f, 1.0f, 1.0f, 1.0f};
-                primitiveVertices[index].normal = {0.0f, 0.0f, 1.0f};
-                primitiveVertices[index].tangent = {1.0f, 0.0f, 0.0f, 1.0f};
-            });
+            // Extract accessor data
+            {
+                if (p.materialIndex.has_value()) {
+                    materialIndex = static_cast<int32_t>(p.materialIndex.value());
+                    primitiveData.bHasTransparent = (static_cast<Render::MaterialType>(rawModel.materials[materialIndex].alphaProperties.y) == Render::MaterialType::BLEND);
+                }
 
 
-            // NORMALS
-            const fastgltf::Attribute* normals = p.findAttribute("NORMAL");
-            if (normals != p.attributes.end()) {
-                fastgltf::iterateAccessorWithIndex<fastgltf::math::fvec3>(gltf, gltf.accessors[normals->accessorIndex], [&](fastgltf::math::fvec3 n, const size_t index) {
-                    primitiveVertices[index].normal = {n.x(), n.y(), n.z()};
+                // INDICES
+                const fastgltf::Accessor& indexAccessor = gltf.accessors[p.indicesAccessor.value()];
+                primitiveIndices.reserve(indexAccessor.count);
+
+                fastgltf::iterateAccessor<std::uint32_t>(gltf, indexAccessor, [&](const std::uint32_t idx) {
+                    primitiveIndices.push_back(idx);
                 });
-            }
 
-            // TANGENTS
-            const fastgltf::Attribute* tangents = p.findAttribute("TANGENT");
-            if (tangents != p.attributes.end()) {
-                fastgltf::iterateAccessorWithIndex<fastgltf::math::fvec4>(gltf, gltf.accessors[tangents->accessorIndex], [&](fastgltf::math::fvec4 t, const size_t index) {
-                    primitiveVertices[index].tangent = {t.x(), t.y(), t.z(), t.w()};
+                // POSITION (REQUIRED)
+                const fastgltf::Attribute* positionIt = p.findAttribute("POSITION");
+                const fastgltf::Accessor& posAccessor = gltf.accessors[positionIt->accessorIndex];
+                primitiveVertices.resize(posAccessor.count);
+
+                fastgltf::iterateAccessorWithIndex<fastgltf::math::fvec3>(gltf, posAccessor, [&](fastgltf::math::fvec3 v, const size_t index) {
+                    primitiveVertices[index] = {};
+                    primitiveVertices[index].position = {v.x(), v.y(), v.z()};
+                    primitiveVertices[index].color = {1.0f, 1.0f, 1.0f, 1.0f};
+                    primitiveVertices[index].normal = {0.0f, 0.0f, 1.0f};
+                    primitiveVertices[index].tangent = {1.0f, 0.0f, 0.0f, 1.0f};
                 });
-            }
 
-            // JOINTS_0
-            const fastgltf::Attribute* joints0 = p.findAttribute("JOINTS_0");
-            if (joints0 != p.attributes.end()) {
-                fastgltf::iterateAccessorWithIndex<fastgltf::math::uvec4>(gltf, gltf.accessors[joints0->accessorIndex], [&](fastgltf::math::uvec4 j, const size_t index) {
-                    primitiveVertices[index].joints = {j.x(), j.y(), j.z(), j.w()};
-                });
-            }
 
-            // WEIGHTS_0
-            const fastgltf::Attribute* weights0 = p.findAttribute("WEIGHTS_0");
-            if (weights0 != p.attributes.end()) {
-                fastgltf::iterateAccessorWithIndex<fastgltf::math::fvec4>(gltf, gltf.accessors[weights0->accessorIndex], [&](fastgltf::math::fvec4 w, const size_t index) {
-                    primitiveVertices[index].weights = {w.x(), w.y(), w.z(), w.w()};
-                });
-            }
+                // NORMALS
+                const fastgltf::Attribute* normals = p.findAttribute("NORMAL");
+                if (normals != p.attributes.end()) {
+                    fastgltf::iterateAccessorWithIndex<fastgltf::math::fvec3>(gltf, gltf.accessors[normals->accessorIndex], [&](fastgltf::math::fvec3 n, const size_t index) {
+                        primitiveVertices[index].normal = {n.x(), n.y(), n.z()};
+                    });
+                }
 
-            if (joints0 != p.attributes.end() && weights0 != p.attributes.end()) {
-                hasSkinned = true;
-            }
-            else {
-                hasStatic = true;
-            }
+                // TANGENTS
+                const fastgltf::Attribute* tangents = p.findAttribute("TANGENT");
+                if (tangents != p.attributes.end()) {
+                    fastgltf::iterateAccessorWithIndex<fastgltf::math::fvec4>(gltf, gltf.accessors[tangents->accessorIndex], [&](fastgltf::math::fvec4 t, const size_t index) {
+                        primitiveVertices[index].tangent = {t.x(), t.y(), t.z(), t.w()};
+                    });
+                }
 
-            if (hasSkinned && hasStatic) {
-                SPDLOG_ERROR("Model contains mixed skinned and static meshes. Split into separate files.");
-                return false;
-            }
+                // JOINTS_0
+                const fastgltf::Attribute* joints0 = p.findAttribute("JOINTS_0");
+                if (joints0 != p.attributes.end()) {
+                    fastgltf::iterateAccessorWithIndex<fastgltf::math::uvec4>(gltf, gltf.accessors[joints0->accessorIndex], [&](fastgltf::math::uvec4 j, const size_t index) {
+                        primitiveVertices[index].joints = {j.x(), j.y(), j.z(), j.w()};
+                    });
+                }
 
-            // UV
-            const fastgltf::Attribute* uvs = p.findAttribute("TEXCOORD_0");
-            if (uvs != p.attributes.end()) {
-                const fastgltf::Accessor& uvAccessor = gltf.accessors[uvs->accessorIndex];
-                switch (uvAccessor.componentType) {
-                    case fastgltf::ComponentType::Byte:
-                        fastgltf::iterateAccessorWithIndex<fastgltf::math::s8vec2>(gltf, uvAccessor, [&](fastgltf::math::s8vec2 uv, const size_t index) {
-                            // f = max(c / 127.0, -1.0)
-                            float u = std::max(static_cast<float>(uv.x()) / 127.0f, -1.0f);
-                            float v = std::max(static_cast<float>(uv.y()) / 127.0f, -1.0f);
-                            primitiveVertices[index].texcoordU = u;
-                            primitiveVertices[index].texcoordV = v;
-                        });
-                        break;
-                    case fastgltf::ComponentType::UnsignedByte:
-                        fastgltf::iterateAccessorWithIndex<fastgltf::math::u8vec2>(gltf, uvAccessor, [&](fastgltf::math::u8vec2 uv, const size_t index) {
-                            // f = c / 255.0
-                            float u = static_cast<float>(uv.x()) / 255.0f;
-                            float v = static_cast<float>(uv.y()) / 255.0f;
-                            primitiveVertices[index].texcoordU = u;
-                            primitiveVertices[index].texcoordV = v;
-                        });
-                        break;
-                    case fastgltf::ComponentType::Short:
-                        fastgltf::iterateAccessorWithIndex<fastgltf::math::s16vec2>(gltf, uvAccessor, [&](fastgltf::math::s16vec2 uv, const size_t index) {
-                            // f = max(c / 32767.0, -1.0)
-                            float u = std::max(
-                                static_cast<float>(uv.x()) / 32767.0f, -1.0f);
-                            float v = std::max(
-                                static_cast<float>(uv.y()) / 32767.0f, -1.0f);
-                            primitiveVertices[index].texcoordU = u;
-                            primitiveVertices[index].texcoordV = v;
-                        });
-                        break;
-                    case fastgltf::ComponentType::UnsignedShort:
-                        fastgltf::iterateAccessorWithIndex<fastgltf::math::u16vec2>(gltf, uvAccessor, [&](fastgltf::math::u16vec2 uv, const size_t index) {
-                            // f = c / 65535.0
-                            float u = static_cast<float>(uv.x()) / 65535.0f;
-                            float v = static_cast<float>(uv.y()) / 65535.0f;
-                            primitiveVertices[index].texcoordU = u;
-                            primitiveVertices[index].texcoordV = v;
-                        });
-                        break;
-                    case fastgltf::ComponentType::Float:
-                        fastgltf::iterateAccessorWithIndex<fastgltf::math::fvec2>(gltf, uvAccessor, [&](fastgltf::math::fvec2 uv, const size_t index) {
-                            primitiveVertices[index].texcoordU = uv.x();
-                            primitiveVertices[index].texcoordV = uv.y();
-                        });
-                        break;
-                    default:
-                        fmt::print("Unsupported UV component type: {}\n", static_cast<int>(uvAccessor.componentType));
-                        break;
+                // WEIGHTS_0
+                const fastgltf::Attribute* weights0 = p.findAttribute("WEIGHTS_0");
+                if (weights0 != p.attributes.end()) {
+                    fastgltf::iterateAccessorWithIndex<fastgltf::math::fvec4>(gltf, gltf.accessors[weights0->accessorIndex], [&](fastgltf::math::fvec4 w, const size_t index) {
+                        primitiveVertices[index].weights = {w.x(), w.y(), w.z(), w.w()};
+                    });
+                }
+
+                if (joints0 != p.attributes.end() && weights0 != p.attributes.end()) {
+                    hasSkinned = true;
+                }
+                else {
+                    hasStatic = true;
+                }
+
+                if (hasSkinned && hasStatic) {
+                    SPDLOG_ERROR("Model contains mixed skinned and static meshes. Split into separate files.");
+                    return false;
+                }
+
+                // UV
+                const fastgltf::Attribute* uvs = p.findAttribute("TEXCOORD_0");
+                if (uvs != p.attributes.end()) {
+                    const fastgltf::Accessor& uvAccessor = gltf.accessors[uvs->accessorIndex];
+                    switch (uvAccessor.componentType) {
+                        case fastgltf::ComponentType::Byte:
+                            fastgltf::iterateAccessorWithIndex<fastgltf::math::s8vec2>(gltf, uvAccessor, [&](fastgltf::math::s8vec2 uv, const size_t index) {
+                                // f = max(c / 127.0, -1.0)
+                                float u = std::max(static_cast<float>(uv.x()) / 127.0f, -1.0f);
+                                float v = std::max(static_cast<float>(uv.y()) / 127.0f, -1.0f);
+                                primitiveVertices[index].texcoordU = u;
+                                primitiveVertices[index].texcoordV = v;
+                            });
+                            break;
+                        case fastgltf::ComponentType::UnsignedByte:
+                            fastgltf::iterateAccessorWithIndex<fastgltf::math::u8vec2>(gltf, uvAccessor, [&](fastgltf::math::u8vec2 uv, const size_t index) {
+                                // f = c / 255.0
+                                float u = static_cast<float>(uv.x()) / 255.0f;
+                                float v = static_cast<float>(uv.y()) / 255.0f;
+                                primitiveVertices[index].texcoordU = u;
+                                primitiveVertices[index].texcoordV = v;
+                            });
+                            break;
+                        case fastgltf::ComponentType::Short:
+                            fastgltf::iterateAccessorWithIndex<fastgltf::math::s16vec2>(gltf, uvAccessor, [&](fastgltf::math::s16vec2 uv, const size_t index) {
+                                // f = max(c / 32767.0, -1.0)
+                                float u = std::max(
+                                    static_cast<float>(uv.x()) / 32767.0f, -1.0f);
+                                float v = std::max(
+                                    static_cast<float>(uv.y()) / 32767.0f, -1.0f);
+                                primitiveVertices[index].texcoordU = u;
+                                primitiveVertices[index].texcoordV = v;
+                            });
+                            break;
+                        case fastgltf::ComponentType::UnsignedShort:
+                            fastgltf::iterateAccessorWithIndex<fastgltf::math::u16vec2>(gltf, uvAccessor, [&](fastgltf::math::u16vec2 uv, const size_t index) {
+                                // f = c / 65535.0
+                                float u = static_cast<float>(uv.x()) / 65535.0f;
+                                float v = static_cast<float>(uv.y()) / 65535.0f;
+                                primitiveVertices[index].texcoordU = u;
+                                primitiveVertices[index].texcoordV = v;
+                            });
+                            break;
+                        case fastgltf::ComponentType::Float:
+                            fastgltf::iterateAccessorWithIndex<fastgltf::math::fvec2>(gltf, uvAccessor, [&](fastgltf::math::fvec2 uv, const size_t index) {
+                                primitiveVertices[index].texcoordU = uv.x();
+                                primitiveVertices[index].texcoordV = uv.y();
+                            });
+                            break;
+                        default:
+                            fmt::print("Unsupported UV component type: {}\n", static_cast<int>(uvAccessor.componentType));
+                            break;
+                    }
+                }
+
+                // VERTEX COLOR
+                const fastgltf::Attribute* colors = p.findAttribute("COLOR_0");
+                if (colors != p.attributes.end()) {
+                    fastgltf::iterateAccessorWithIndex<fastgltf::math::fvec4>(gltf, gltf.accessors[colors->accessorIndex], [&](const fastgltf::math::fvec4& color, const size_t index) {
+                        primitiveVertices[index].color = {
+                            color.x(), color.y(), color.z(), color.w()
+                        };
+                    });
                 }
             }
 
-            // VERTEX COLOR
-            const fastgltf::Attribute* colors = p.findAttribute("COLOR_0");
-            if (colors != p.attributes.end()) {
-                fastgltf::iterateAccessorWithIndex<fastgltf::math::fvec4>(gltf, gltf.accessors[colors->accessorIndex], [&](const fastgltf::math::fvec4& color, const size_t index) {
-                    primitiveVertices[index].color = {
-                        color.x(), color.y(), color.z(), color.w()
-                    };
-                });
+            // Optimize Vertex and Index Buffer. Generate Meshlets and optimize.
+            {
+                // meshopt_generateVertexRemap
+
+                // meshopt_remapIndexBuffer
+                // meshopt_remapVertexBuffer
+
+                // meshopt_optimizeVertexCache
+
+                // meshopt_optimizeOverdraw
+
+                // meshopt_optimizeVertexFetch
+
+                // meshopt_generateShadowIndexBuffer later for shadow pass/depth prepass
             }
 
             size_t max_meshlets = meshopt_buildMeshletsBound(primitiveIndices.size(), MESHLET_MAX_VERTICES, MESHLET_MAX_TRIANGLES);
             std::vector<meshopt_Meshlet> meshlets(max_meshlets);
             std::vector<unsigned int> meshletVertices(primitiveIndices.size());
-            std::vector<unsigned char> meshletTriangles(primitiveIndices.size()); {
+            std::vector<unsigned char> meshletTriangles(primitiveIndices.size());
+
+            {
                 ZoneScopedN("BuildMeshlets");
                 // build clusters (meshlets) out of the mesh
                 std::vector<uint32_t> primitiveVertexPositions;
@@ -457,8 +479,8 @@ bool ModelGenerateSlot::LoadGltf(VkCommandBuffer cmd, const std::function<void()
             meshletVertices.resize(last.vertex_offset + last.vertex_count);
             meshletTriangles.resize(last.triangle_offset + last.triangle_count * 3);
 
-            primitiveData.meshletOffset = rawModel.meshlets.size();
-            primitiveData.meshletCount = meshlets.size();
+            primitiveData.meshletOffset = glm::ivec4(rawModel.meshlets.size());
+            primitiveData.meshletCount = glm::ivec4(meshlets.size());
             primitiveData.boundingSphere = GenerateBoundingSphere(primitiveVertices);
 
             meshData.primitiveProperties.emplace_back(static_cast<uint32_t>(rawModel.primitives.size()), materialIndex);

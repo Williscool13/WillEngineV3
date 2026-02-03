@@ -48,7 +48,7 @@ void ComputeMain(uniform BuildDirectIndirectPushConstant pc, uint3 gid : SV_Disp
     Instance inst = pc.instanceBuffer[instanceIndex];
     MeshletPrimitive prim = pc.primitiveBuffer[inst.primitiveIndex];
 
-    uint32_t taskGroupCount = (prim.meshletCount + TASK_SHADER_DISPATCH_X - 1) / TASK_SHADER_DISPATCH_X;
+    uint32_t taskGroupCount = (prim.meshletCount.x + TASK_SHADER_DISPATCH_X - 1) / TASK_SHADER_DISPATCH_X;
 
     pc.indirectCommandBuffer[instanceIndex].groupCountX = taskGroupCount;
     pc.indirectCommandBuffer[instanceIndex].groupCountY = 1;
@@ -74,8 +74,8 @@ void TaskMain(uniform DirectMeshShadingPushConstant pc,
     Instance inst = pc.instanceBuffer[drawIndex];
     MeshletPrimitive prim = pc.primitiveBuffer[inst.primitiveIndex];
 
-    uint32_t groupMeshletOffset = prim.meshletOffset + (gid.x * TASK_SHADER_DISPATCH_X);
-    uint32_t totalMeshlets = prim.meshletCount;
+    uint32_t groupMeshletOffset = prim.meshletOffset.x + (gid.x * TASK_SHADER_DISPATCH_X);
+    uint32_t totalMeshlets = prim.meshletCount.x;
 
     if (gtid.x == 0) {
         visibleMeshletCount = 0;
