@@ -31,6 +31,7 @@ public:
     ~ModelGenerateSlot();;
 
     void Initialize(
+        int32_t slotIndex,
         enki::TaskScheduler* _scheduler,
         Render::VulkanContext* _context,
         WillModelGenerationProgress* _progress,

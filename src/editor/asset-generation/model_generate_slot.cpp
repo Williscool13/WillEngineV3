@@ -30,6 +30,7 @@ ModelGenerateSlot::ModelGenerateSlot() = default;
 ModelGenerateSlot::~ModelGenerateSlot() = default;
 
 void ModelGenerateSlot::Initialize(
+    int32_t slotIndex,
     enki::TaskScheduler* _scheduler,
     Render::VulkanContext* _context,
     WillModelGenerationProgress* _progress,
@@ -40,7 +41,7 @@ void ModelGenerateSlot::Initialize(
     scheduler = _scheduler;
     context = _context;
     progress = _progress;
-    temporaryPath = Platform::GetExecutablePath() / "temp";
+    temporaryPath = Platform::GetExecutablePath() / "temp" / ("model_gen_" + std::to_string(slotIndex));
     _transferDispatchCallback = std::move(transferDispatchCallback);
     _graphicsDispatchCallback = std::move(graphicsDispatchCallback);
     _notifyCallback = std::move(notifyCallback);
@@ -774,10 +775,10 @@ bool ModelGenerateSlot::WriteWillModel(VkCommandBuffer cmd, const std::function<
     for (const auto& material : rawModel.materials) {
         // Color/emissive textures -> BC7 SRGB
         if (material.textureImageIndices.x >= 0) {
-            preferredImageFormats[material.textureImageIndices.x] = DXGI_FORMAT_BC7_UNORM; // _SRGB
+            preferredImageFormats[material.textureImageIndices.x] = DXGI_FORMAT_BC7_UNORM_SRGB;
         }
         if (material.textureImageIndices.w >= 0) {
-            preferredImageFormats[material.textureImageIndices.w] = DXGI_FORMAT_BC7_UNORM; // _SRGB
+            preferredImageFormats[material.textureImageIndices.w] = DXGI_FORMAT_BC7_UNORM_SRGB;
         }
 
         // Normal map -> BC5
@@ -952,38 +953,69 @@ bool ModelGenerateSlot::WriteWillModel(VkCommandBuffer cmd, const std::function<
             {
                 ZoneScopedN("EncodeBC");
                 rdo_bc::rdo_bc_params encodeParams;
-                encodeParams.m_bc7_uber_level = 4;
+                encodeParams.m_bc7_uber_level = 1;
                 encodeParams.m_rdo_lambda = 0.0f;
                 encodeParams.m_dxgi_format = preferredImageFormats[i];
+                if (encodeParams.m_dxgi_format == DXGI_FORMAT_BC7_UNORM_SRGB) {
+                    // _SRGB doesn't encode any differently, as long as the KTX texture is created w/ the right format, should be correct.
+                    encodeParams.m_dxgi_format = DXGI_FORMAT_BC7_UNORM;
+                }
 
-                for (uint32_t mip = 0; mip < mipLevels; mip++) {
-                    ZoneScopedN("EncodeMip");
+                struct EncodeMipTask : enki::ITaskSet
+                {
+                    rdo_bc::rdo_bc_params* params;
+                    std::vector<std::vector<uint8_t> >* mipData;
+                    VkExtent3D imageExtent;
+                    ktxTexture2* texture;
 
-                    uint32_t mipWidth = std::max(1u, image.extent.width >> mip);
-                    uint32_t mipHeight = std::max(1u, image.extent.height >> mip);
+                    void ExecuteRange(enki::TaskSetPartition range, uint32_t threadNum) override
+                    {
+                        for (uint32_t mip = range.start; mip < range.end; ++mip) {
+                            uint32_t mipWidth = std::max(1u, imageExtent.width >> mip);
+                            uint32_t mipHeight = std::max(1u, imageExtent.height >> mip);
 
-                    utils::image_u8 srcImage(mipWidth, mipHeight);
-                    const uint8_t* rgbaData = mipData[mip].data();
-                    for (uint32_t y = 0; y < mipHeight; ++y) {
-                        for (uint32_t x = 0; x < mipWidth; ++x) {
-                            const uint8_t* pixel = &rgbaData[(y * mipWidth + x) * 4];
-                            srcImage(x, y).set(pixel[0], pixel[1], pixel[2], pixel[3]);
+                            utils::image_u8 srcImage(mipWidth, mipHeight);
+                            const uint8_t* rgbaData = (*mipData)[mip].data();
+                            for (uint32_t y = 0; y < mipHeight; ++y) {
+                                for (uint32_t x = 0; x < mipWidth; ++x) {
+                                    const uint8_t* pixel = &rgbaData[(y * mipWidth + x) * 4];
+                                    srcImage(x, y).set(pixel[0], pixel[1], pixel[2], pixel[3]);
+                                }
+                            }
+
+                            rdo_bc::rdo_bc_encoder encoder;
+                            bool initRes = encoder.init(srcImage, *params);
+                            if (!initRes) {
+                                SPDLOG_ERROR("[ModelGenerator] GPU texture compression init failed");
+                            }
+                            bool encodeRes = encoder.encode();
+                            if (!encodeRes) {
+                                SPDLOG_ERROR("[ModelGenerator] GPU texture compression encoding failed");
+                            }
+
+                            const void* compressedBlocks = encoder.get_blocks();
+                            uint32_t blocksSizeInBytes = encoder.get_total_blocks_size_in_bytes();
+
+                            ktxTexture_SetImageFromMemory(ktxTexture(texture), mip, 0, 0,
+                                                          static_cast<const ktx_uint8_t*>(compressedBlocks), blocksSizeInBytes);
                         }
                     }
+                };
 
-                    rdo_bc::rdo_bc_encoder encoder;
-                    encoder.init(srcImage, encodeParams);
-                    encoder.encode();
+                EncodeMipTask _task{};
+                _task.params = &encodeParams;
+                _task.mipData = &mipData;
+                _task.imageExtent = image.extent;
+                _task.texture = texture;
+                _task.m_SetSize = mipLevels;
 
-                    const void* compressedBlocks = encoder.get_blocks();
-                    uint32_t blocksSizeInBytes = encoder.get_total_blocks_size_in_bytes();
-
-                    ktxTexture_SetImageFromMemory(ktxTexture(texture), mip, 0, 0,
-                                                  static_cast<const ktx_uint8_t*>(compressedBlocks), blocksSizeInBytes);
-                }
+                scheduler->AddTaskSetToPipe(&_task);
+                scheduler->WaitforTask(&_task);
             }
 
-            std::filesystem::path ktxPath = temporaryPath / ("texture_" + std::to_string(i) + ".ktx2"); {
+            std::filesystem::path ktxPath = temporaryPath / ("texture_" + std::to_string(i) + ".ktx2");
+            //
+            {
                 ZoneScopedN("WriteKTXFile");
                 ktxTexture_WriteToNamedFile(ktxTexture(texture), ktxPath.string().c_str());
             }

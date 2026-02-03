@@ -34,6 +34,7 @@ AssetGenerator::AssetGenerator(Render::VulkanContext* context, Render::RenderThr
 
     for (uint32_t i = 0; i < MODEL_GENERATION_JOB_COUNT; ++i) {
         modelGenerateTasks[i].Initialize(
+            i,
             assetGeneratorScheduler.get(),
             context,
             &modelGenerationProgress,
