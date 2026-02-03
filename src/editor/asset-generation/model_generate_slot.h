@@ -35,7 +35,6 @@ public:
         enki::TaskScheduler* _scheduler,
         Render::VulkanContext* _context,
         WillModelGenerationProgress* _progress,
-        std::function<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> transferDispatchCallback,
         std::function<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> graphicsDispatchCallback, std::function<void(bool success, ModelGenerateSlotHandle slotHandle)>
         notifyCallback
     );
@@ -63,7 +62,8 @@ private:
 
     void TopologicalSortNodes(std::vector<Render::Node>& nodes, std::vector<uint32_t>& oldToNew);
 
-    static Render::AllocatedImage RecordCreateImageFromData(Render::VulkanContext* context, VkCommandBuffer cmd, Render::AllocatedBuffer& stagingBuffer, size_t offset, unsigned char* data, size_t size,
+    static Render::AllocatedImage RecordCreateImageFromData(Render::VulkanContext* context, VkCommandBuffer cmd, Render::AllocatedBuffer& stagingBuffer, size_t offset, unsigned char* data,
+                                                            size_t size,
                                                             VkExtent3D imageExtent, VkFormat format, VkImageUsageFlagBits usage);
 
     static VkFilter ExtractFilter(fastgltf::Filter filter);
@@ -89,7 +89,6 @@ private:
     Render::AllocatedBuffer imageReceivingBuffer{};
     Core::LinearAllocator imageReceivingAllocator{MODEL_GENERATION_STAGING_BUFFER_SIZE};
 
-    std::function<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> _transferDispatchCallback;
     std::function<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> _graphicsDispatchCallback;
     std::function<void(bool success, ModelGenerateSlotHandle slotHandle)> _notifyCallback;
 

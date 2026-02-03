@@ -6,6 +6,8 @@ add_library(editor STATIC
         asset-generation/stb_impl.cpp
         asset-generation/model_generate_slot.cpp
         asset-generation/model_generate_slot.h
+        asset-generation/texture_generate_slot.cpp
+        asset-generation/texture_generate_slot.h
 )
 
 target_include_directories(editor PUBLIC

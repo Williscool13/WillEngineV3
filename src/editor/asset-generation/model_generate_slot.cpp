@@ -34,7 +34,6 @@ void ModelGenerateSlot::Initialize(
     enki::TaskScheduler* _scheduler,
     Render::VulkanContext* _context,
     WillModelGenerationProgress* _progress,
-    std::function<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> transferDispatchCallback,
     std::function<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> graphicsDispatchCallback,
     std::function<void(bool success, ModelGenerateSlotHandle slotHandle)> notifyCallback)
 {
@@ -42,7 +41,6 @@ void ModelGenerateSlot::Initialize(
     context = _context;
     progress = _progress;
     temporaryPath = Platform::GetExecutablePath() / "temp" / ("model_gen_" + std::to_string(slotIndex));
-    _transferDispatchCallback = std::move(transferDispatchCallback);
     _graphicsDispatchCallback = std::move(graphicsDispatchCallback);
     _notifyCallback = std::move(notifyCallback);
 
@@ -81,18 +79,6 @@ void ModelGenerateSlot::GenerateTask::ExecuteRange(enki::TaskSetPartition range,
     taskSlot->progress->loadingState.store(WillModelGenerationProgress::LOADING_GLTF, std::memory_order_release);
     taskSlot->progress->value.store(0, std::memory_order_release);
 
-    VkCommandPoolCreateInfo transferPoolInfo = Render::VkHelpers::CommandPoolCreateInfo(taskSlot->context->transferQueueFamily);
-    VkCommandPool transferCommandPool;
-    VK_CHECK(vkCreateCommandPool(taskSlot->context->device, &transferPoolInfo, nullptr, &transferCommandPool));
-
-    VkCommandBufferAllocateInfo transferCmdInfo = Render::VkHelpers::CommandBufferAllocateInfo(1, transferCommandPool);
-    VkCommandBuffer transferCmd;
-    VK_CHECK(vkAllocateCommandBuffers(taskSlot->context->device, &transferCmdInfo, &transferCmd));
-
-    VkFenceCreateInfo transferFenceInfo = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
-    VkFence transferFence;
-    VK_CHECK(vkCreateFence(taskSlot->context->device, &transferFenceInfo, nullptr, &transferFence));
-
     VkCommandPoolCreateInfo graphicsPoolInfo = Render::VkHelpers::CommandPoolCreateInfo(taskSlot->context->graphicsQueueFamily);
     VkCommandPool graphicsCommandPool;
     VK_CHECK(vkCreateCommandPool(taskSlot->context->device, &graphicsPoolInfo, nullptr, &graphicsCommandPool));
@@ -105,30 +91,9 @@ void ModelGenerateSlot::GenerateTask::ExecuteRange(enki::TaskSetPartition range,
     VkFence graphicsFence;
     VK_CHECK(vkCreateFence(taskSlot->context->device, &graphicsFenceInfo, nullptr, &graphicsFence));
 
-    auto startTransferRecording = [&] {
-        VkCommandBufferBeginInfo beginInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
-        VK_CHECK(vkBeginCommandBuffer(transferCmd, &beginInfo));
-    };
-
     auto startGraphicsRecording = [&] {
         VkCommandBufferBeginInfo beginInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
         VK_CHECK(vkBeginCommandBuffer(graphicsCmd, &beginInfo));
-    };
-
-    auto transferSubmitAndWait = [&](bool restart) {
-        ZoneScopedN("TransferSubmitAndWait");
-
-        VK_CHECK(vkEndCommandBuffer(transferCmd));
-        std::binary_semaphore done(0);
-        taskSlot->_transferDispatchCallback(transferCmd, transferFence, &done);
-        done.acquire();
-        VK_CHECK(vkResetFences(taskSlot->context->device, 1, &transferFence));
-        VK_CHECK(vkResetCommandBuffer(transferCmd, 0));
-
-        if (restart) {
-            VkCommandBufferBeginInfo beginInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
-            VK_CHECK(vkBeginCommandBuffer(transferCmd, &beginInfo));
-        }
     };
 
     auto graphicsSubmitAndWait = [&](bool restart) {
@@ -170,8 +135,6 @@ void ModelGenerateSlot::GenerateTask::ExecuteRange(enki::TaskSetPartition range,
     taskSlot->progress->value.store(100, std::memory_order_release);
     taskSlot->_notifyCallback(true, taskSlot->slotHandle);
 
-    vkDestroyFence(taskSlot->context->device, transferFence, nullptr);
-    vkDestroyCommandPool(taskSlot->context->device, transferCommandPool, nullptr);
     vkDestroyFence(taskSlot->context->device, graphicsFence, nullptr);
     vkDestroyCommandPool(taskSlot->context->device, graphicsCommandPool, nullptr);
 }
@@ -880,15 +843,14 @@ bool ModelGenerateSlot::WriteWillModel(VkCommandBuffer cmd, const std::function<
             }
 
             // Copy image to CPU - 1 by 1 for the 4k texture, but practically this can be batched/grouped
-            std::vector<std::vector<uint8_t> > mipData(mipLevels); {
+            std::vector<std::vector<uint8_t> > mipData(mipLevels);
+            //
+            {
                 ZoneScopedN("CopyImageToCPU");
-
-                uint32_t bytesPerPixel = 4;
-
                 for (uint32_t mip = 0; mip < mipLevels; mip++) {
                     uint32_t mipWidth = std::max(1u, image.extent.width >> mip);
                     uint32_t mipHeight = std::max(1u, image.extent.height >> mip);
-                    size_t mipSize = mipWidth * mipHeight * bytesPerPixel;
+                    size_t mipSize = mipWidth * mipHeight * 4;
 
                     if (mipSize > imageReceivingBuffer.allocationInfo.size) {
                         SPDLOG_ERROR("Mip level {} too large for receiving buffer", mip);
@@ -903,8 +865,7 @@ bool ModelGenerateSlot::WriteWillModel(VkCommandBuffer cmd, const std::function<
                     copyRegion.imageSubresource.layerCount = 1;
                     copyRegion.imageExtent = {mipWidth, mipHeight, 1};
 
-                    vkCmdCopyImageToBuffer(cmd, image.handle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                                           imageReceivingBuffer.handle, 1, &copyRegion);
+                    vkCmdCopyImageToBuffer(cmd, image.handle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, imageReceivingBuffer.handle, 1, &copyRegion);
                     submitAndWait(mip < mipLevels - 1);
 
                     mipData[mip].resize(mipSize);

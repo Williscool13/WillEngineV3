@@ -32,20 +32,31 @@ AssetGenerator::AssetGenerator(Render::VulkanContext* context, Render::RenderThr
 
     SPDLOG_INFO("Asset generator scheduler operating with {} threads.", generatorConfig.numTaskThreadsToCreate);
 
-    for (uint32_t i = 0; i < MODEL_GENERATION_JOB_COUNT; ++i) {
+    for (int32_t i = 0; i < MODEL_GENERATION_JOB_COUNT; ++i) {
         modelGenerateTasks[i].Initialize(
             i,
             assetGeneratorScheduler.get(),
             context,
             &modelGenerationProgress,
             [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
-                TransferQueueGPUDispatch(cmd, fence, completionSignal);
-            },
-            [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
                 GraphicsQueueGPUDispatch(cmd, fence, completionSignal);
             },
             [this](bool success, ModelGenerateSlotHandle slotHandle) {
                 OnModelGenerateComplete(success, slotHandle);
+            }
+        );
+    }
+
+    for (int32_t i = 0; i < TEXTURE_GENERATION_JOB_COUNT; ++i) {
+        textureGenerateTasks[i].Initialize(
+            i,
+            assetGeneratorScheduler.get(),
+            context,
+            [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
+                GraphicsQueueGPUDispatch(cmd, fence, completionSignal);
+            },
+            [this](bool success, TextureGenerateSlotHandle slotHandle) {
+                OnTextureGenerateComplete(success, slotHandle);
             }
         );
     }
@@ -75,6 +86,21 @@ void AssetGenerator::ThreadMain()
                 }
                 else {
                     modelGenerateRequestQueue.enqueue(req);
+                }
+            }
+        }
+
+        {
+            ZoneScopedN("Process Texture Generation Requests");
+            TextureGenerateRequest req{};
+            if (textureGenerateRequestQueue.try_dequeue(req)) {
+                Core::Handle<TextureGenerateSlot> slotHandle = textureGenerateAllocator.Add();
+                if (slotHandle.IsValid()) {
+                    TextureGenerateSlot& task = textureGenerateTasks[slotHandle.index];
+                    task.Launch(slotHandle, req.imagePath, req.outputPath, req.mipmapped, req.targetFormat);
+                }
+                else {
+                    textureGenerateRequestQueue.enqueue(req);
                 }
             }
         }
@@ -124,9 +150,23 @@ void AssetGenerator::RequestModelGenerate(const std::filesystem::path& gltfPath,
     wakeCV.notify_one();
 }
 
+void AssetGenerator::RequestTextureGenerate(const std::filesystem::path& imagePath, const std::filesystem::path& outputPath, bool mipmapped, DXGI_FORMAT targetFormat)
+{
+    ZoneScoped;
+
+    textureGenerateRequestQueue.enqueue({imagePath, outputPath, mipmapped, targetFormat});
+    workCounter.fetch_add(1);
+    wakeCV.notify_one();
+}
+
 bool AssetGenerator::TryDequeueModelGenerateComplete(ModelGenerateComplete& outResult)
 {
     return modelGenerateCompleteQueue.try_dequeue(outResult);
+}
+
+bool AssetGenerator::TryDequeueTextureGenerateComplete(TextureGenerateComplete& outResult)
+{
+    return textureGenerateCompleteQueue.try_dequeue(outResult);
 }
 
 void AssetGenerator::OnModelGenerateComplete(bool success, ModelGenerateSlotHandle slotHandle)
@@ -155,4 +195,31 @@ void AssetGenerator::OnModelGenerateComplete(bool success, ModelGenerateSlotHand
     workCounter.fetch_add(1);
     wakeCV.notify_one();
 }
-} // Render
+
+void AssetGenerator::OnTextureGenerateComplete(bool success, TextureGenerateSlotHandle slotHandle)
+{
+    ZoneScoped;
+
+    if (!textureGenerateAllocator.IsValid(slotHandle)) {
+        SPDLOG_ERROR("OnTextureGenerateComplete called with invalid slot handle");
+        return;
+    }
+
+    TextureGenerateSlot& task = textureGenerateTasks[slotHandle.index];
+    textureGenerateCompleteQueue.enqueue({task.outputPath, success});
+
+    if (success) {
+        SPDLOG_INFO("Successfully generated texture: {}", task.outputPath.string());
+    }
+    else {
+        SPDLOG_ERROR("Failed to generate texture: {}", task.outputPath.string());
+    }
+
+    task.Clear();
+    bool removed = textureGenerateAllocator.Remove(slotHandle);
+    assert(removed && "Failed to remove valid slot handle");
+
+    workCounter.fetch_add(1);
+    wakeCV.notify_one();
+}
+} // namespace Editor

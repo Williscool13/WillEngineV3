@@ -17,7 +17,9 @@ namespace Editor
 {
 constexpr uint32_t ASSET_GENERATOR_WORKER_COUNT = 4;
 constexpr uint32_t MODEL_GENERATION_JOB_COUNT = 4;
+constexpr uint32_t TEXTURE_GENERATION_JOB_COUNT = 4;
 constexpr uint32_t MODEL_GENERATION_STAGING_BUFFER_SIZE = 64 * 1024 * 1024; // 64MB exactly 1x uncompressed 4k image
+constexpr uint32_t TEXTURE_GENERATION_STAGING_BUFFER_SIZE = 64 * 1024 * 1024; // 64MB
 
 static constexpr std::array<const char*, 32> ASSET_GENERATOR_WORKER_NAMES = {
     "AssetGenerator0", "AssetGenerator1", "AssetGenerator2", "AssetGenerator3"

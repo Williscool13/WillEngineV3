@@ -523,30 +523,32 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
                             Platform::GetAssetPath() / "Plane.willmodel");
         }
 
-        // ImGui::Separator();
-        /*ImGui::Text("Generate Textures:");
+        ImGui::Separator();
+        ImGui::Text("Generate Textures:");
 
         if (ImGui::Button("white.ktx2")) {
-            modelGenerator->GenerateKtxTexture(
+            modelGenerator->RequestTextureGenerate(
                 Platform::GetAssetPath() / "textures/white.png",
                 Platform::GetAssetPath() / "textures/white.ktx2",
-                false);
+                false,
+                DXGI_FORMAT_BC7_UNORM_SRGB);
         }
 
         if (ImGui::Button("error.ktx2")) {
-            modelGenerator->GenerateKtxTexture(
+            modelGenerator->RequestTextureGenerate(
                 Platform::GetAssetPath() / "textures/error.png",
                 Platform::GetAssetPath() / "textures/error.ktx2",
-                false);
+                false,
+                DXGI_FORMAT_BC7_UNORM_SRGB);
         }
 
         if (ImGui::Button("smiling_friend.ktx2")) {
-            modelGenerator->GenerateKtxTexture(
+            modelGenerator->RequestTextureGenerate(
                 Platform::GetAssetPath() / "textures/smiling_friend.jpg",
                 Platform::GetAssetPath() / "textures/smiling_friend.ktx2",
-                false);
-        }*/
-        // ImGui::EndDisabled();
+                false,
+                DXGI_FORMAT_BC7_UNORM_SRGB);
+        }
     }
     ImGui::End();
 #endif
