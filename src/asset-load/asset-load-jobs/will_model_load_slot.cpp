@@ -62,7 +62,6 @@ void WillModelLoadSlot::Clear()
 
     rawData.Reset();
     pendingTextures.clear();
-    convertedVertices.clear();
     packedTriangles.clear();
 }
 
@@ -171,9 +170,10 @@ bool WillModelLoadSlot::LoadModelFromDisk()
         }
     };
 
-    const uint8_t* dataPtr = modelBinData.data() + offset; {
+    const uint8_t* dataPtr = modelBinData.data() + offset;
+
+    {
         ZoneScopedN("ParseGeometryData");
-        rawData.bIsSkeletalModel = header->bIsSkeletalModel;
         readArray(rawData.vertices, header->vertexCount);
         readArray(rawData.meshletVertices, header->meshletVertexCount);
         readArray(rawData.meshletTriangles, header->meshletTriangleCount);
@@ -295,22 +295,13 @@ bool WillModelLoadSlot::LoadModelFromDisk()
 
 bool WillModelLoadSlot::AllocateGPUResources() const
 {
-    OffsetAllocator::Allocator* selectedAllocator;
-    size_t sizeVertices;
-    if (rawData.bIsSkeletalModel) {
-        sizeVertices = rawData.vertices.size() * sizeof(SkinnedVertex);
-        selectedAllocator = &resourceManager->skinnedVertexBufferAllocator;
-    }
-    else {
-        sizeVertices = rawData.vertices.size() * sizeof(Vertex);
-        selectedAllocator = &resourceManager->vertexBufferAllocator;
-    }
+    OffsetAllocator::Allocator* selectedAllocator = &resourceManager->vertexBufferAllocator;
+    size_t sizeVertices = rawData.vertices.size() * sizeof(Vertex);
 
-    outputModel->modelData.bIsSkinned = rawData.bIsSkeletalModel;
 
     // Thread-safe allocation
     {
-        std::lock_guard lock(rawData.bIsSkeletalModel ? resourceManager->skinnedVertexBufferAllocatorMutex : resourceManager->vertexBufferAllocatorMutex);
+        std::lock_guard lock(resourceManager->vertexBufferAllocatorMutex);
         outputModel->modelData.vertexAllocation = selectedAllocator->allocate(sizeVertices);
         if (outputModel->modelData.vertexAllocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
             SPDLOG_ERROR("[WillModelLoadSlot] Not enough space in mega vertex buffer");
@@ -322,7 +313,7 @@ bool WillModelLoadSlot::AllocateGPUResources() const
         std::lock_guard lock(resourceManager->meshletVertexBufferAllocatorMutex);
         outputModel->modelData.meshletVertexAllocation = resourceManager->meshletVertexBufferAllocator.allocate(sizeMeshletVertices);
         if (outputModel->modelData.meshletVertexAllocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
-            std::lock_guard cleanupLock(rawData.bIsSkeletalModel ? resourceManager->skinnedVertexBufferAllocatorMutex : resourceManager->vertexBufferAllocatorMutex);
+            std::lock_guard cleanupLock(resourceManager->vertexBufferAllocatorMutex);
             selectedAllocator->free(outputModel->modelData.vertexAllocation);
             SPDLOG_ERROR("[WillModelLoadSlot] Not enough space in mega meshlet vertex buffer");
             return false;
@@ -335,7 +326,7 @@ bool WillModelLoadSlot::AllocateGPUResources() const
         if (outputModel->modelData.meshletTriangleAllocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
             // Cleanup previous allocations
             {
-                std::lock_guard cleanupLock(rawData.bIsSkeletalModel ? resourceManager->skinnedVertexBufferAllocatorMutex : resourceManager->vertexBufferAllocatorMutex);
+                std::lock_guard cleanupLock(resourceManager->vertexBufferAllocatorMutex);
                 selectedAllocator->free(outputModel->modelData.vertexAllocation);
             } {
                 std::lock_guard cleanupLock(resourceManager->meshletVertexBufferAllocatorMutex);
@@ -352,7 +343,7 @@ bool WillModelLoadSlot::AllocateGPUResources() const
         if (outputModel->modelData.meshletAllocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
             // Cleanup all previous allocations
             {
-                std::lock_guard cleanupLock(rawData.bIsSkeletalModel ? resourceManager->skinnedVertexBufferAllocatorMutex : resourceManager->vertexBufferAllocatorMutex);
+                std::lock_guard cleanupLock(resourceManager->vertexBufferAllocatorMutex);
                 selectedAllocator->free(outputModel->modelData.vertexAllocation);
             } {
                 std::lock_guard cleanupLock(resourceManager->meshletVertexBufferAllocatorMutex);
@@ -372,7 +363,7 @@ bool WillModelLoadSlot::AllocateGPUResources() const
         if (outputModel->modelData.primitiveAllocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
             // Cleanup all previous allocations
             {
-                std::lock_guard cleanupLock(rawData.bIsSkeletalModel ? resourceManager->skinnedVertexBufferAllocatorMutex : resourceManager->vertexBufferAllocatorMutex);
+                std::lock_guard cleanupLock(resourceManager->vertexBufferAllocatorMutex);
                 selectedAllocator->free(outputModel->modelData.vertexAllocation);
             } {
                 std::lock_guard cleanupLock(resourceManager->meshletVertexBufferAllocatorMutex);
@@ -395,8 +386,7 @@ bool WillModelLoadSlot::AllocateGPUResources() const
 void WillModelLoadSlot::PrepareUploadData()
 {
     // Adjust offsets
-    uint32_t vertexOffset = outputModel->modelData.vertexAllocation.offset /
-                            (rawData.bIsSkeletalModel ? sizeof(SkinnedVertex) : sizeof(Vertex));
+    uint32_t vertexOffset = outputModel->modelData.vertexAllocation.offset / sizeof(Vertex);
     uint32_t meshletVerticesOffset = outputModel->modelData.meshletVertexAllocation.offset / sizeof(uint32_t);
     uint32_t meshletTriangleOffset = outputModel->modelData.meshletTriangleAllocation.offset / sizeof(uint32_t);
 
@@ -424,21 +414,6 @@ void WillModelLoadSlot::PrepareUploadData()
     outputModel->modelData.inverseBindMatrices = std::move(rawData.inverseBindMatrices);
     outputModel->modelData.animations = std::move(rawData.animations);
     outputModel->modelData.materials = std::move(rawData.materials);
-
-    // Convert vertices if needed
-    if (!rawData.bIsSkeletalModel) {
-        convertedVertices.reserve(rawData.vertices.size());
-        for (const auto& skinnedVert : rawData.vertices) {
-            Vertex v{};
-            v.position = skinnedVert.position;
-            v.normal = skinnedVert.normal;
-            v.tangent = skinnedVert.tangent;
-            v.texcoordU = skinnedVert.texcoordU;
-            v.texcoordV = skinnedVert.texcoordV;
-            v.color = skinnedVert.color;
-            convertedVertices.push_back(v);
-        }
-    }
 
     // Pack triangles
     packedTriangles.reserve(rawData.meshletTriangles.size() / 3);
@@ -618,15 +593,8 @@ void WillModelLoadSlot::UploadGeometry(VkCommandBuffer cmd, const std::function<
         }
     };
 
-    // Upload vertices
-    size_t vertexSize = rawData.bIsSkeletalModel ? sizeof(SkinnedVertex) : sizeof(Vertex);
-    VkBuffer targetVertexBuffer = rawData.bIsSkeletalModel ?
-        resourceManager->megaSkinnedVertexBuffer.handle : resourceManager->megaVertexBuffer.handle;
-    const void* vertexData = rawData.bIsSkeletalModel ?
-        static_cast<const void*>(rawData.vertices.data()) : static_cast<const void*>(convertedVertices.data());
-
-    uploadBuffer(vertexData, rawData.vertices.size(), vertexSize,
-                targetVertexBuffer, outputModel->modelData.vertexAllocation.offset);
+    uploadBuffer(rawData.vertices.data(), rawData.vertices.size(), sizeof(Vertex),
+                resourceManager->megaVertexBuffer.handle, outputModel->modelData.vertexAllocation.offset);
 
     uploadBuffer(rawData.meshletVertices.data(), rawData.meshletVertices.size(), sizeof(uint32_t),
                 resourceManager->megaMeshletVerticesBuffer.handle, outputModel->modelData.meshletVertexAllocation.offset);
@@ -663,8 +631,8 @@ void WillModelLoadSlot::UploadGeometry(VkCommandBuffer cmd, const std::function<
         return barrier;
     };
 
-    releaseBarriers.push_back(createBufferBarrier(targetVertexBuffer,
-        outputModel->modelData.vertexAllocation.offset, rawData.vertices.size() * vertexSize));
+    releaseBarriers.push_back(createBufferBarrier(resourceManager->megaVertexBuffer.handle,
+        outputModel->modelData.vertexAllocation.offset, rawData.vertices.size() * sizeof(Vertex)));
     releaseBarriers.push_back(createBufferBarrier(resourceManager->megaMeshletVerticesBuffer.handle,
         outputModel->modelData.meshletVertexAllocation.offset, rawData.meshletVertices.size() * sizeof(uint32_t)));
     releaseBarriers.push_back(createBufferBarrier(resourceManager->megaMeshletTrianglesBuffer.handle,

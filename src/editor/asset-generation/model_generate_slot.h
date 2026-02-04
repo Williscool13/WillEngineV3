@@ -76,8 +76,6 @@ private:
 
     static glm::vec4 GenerateBoundingSphere(const std::vector<Vertex>& vertices);
 
-    static glm::vec4 GenerateBoundingSphere(const std::vector<SkinnedVertex>& vertices);
-
     enki::TaskScheduler* scheduler{};
     Render::VulkanContext* context{};
     WillModelGenerationProgress* progress{};

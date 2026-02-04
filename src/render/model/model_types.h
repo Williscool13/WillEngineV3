@@ -89,7 +89,6 @@ struct Animation
 
 struct ModelData
 {
-    bool bIsSkinned{};
     std::vector<MeshInformation> meshes{};
     std::vector<Node> nodes{};
     std::vector<Animation> animations{};

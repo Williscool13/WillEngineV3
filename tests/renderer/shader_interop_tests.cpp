@@ -51,29 +51,6 @@ TEST_CASE("Vertex structure size and alignment", "[renderer][shader-interop]") {
     }
 }
 
-TEST_CASE("SkinnedVertex structure size and alignment", "[renderer][shader-interop]") {
-    SECTION("SkinnedVertex size is as expected") {
-        // SkinnedVertex = Vertex (64) + uint4 joints (16) + float4 weights (16)
-        // Total: 96 bytes
-        REQUIRE(sizeof(SkinnedVertex) == 96);
-    }
-
-    SECTION("SkinnedVertex alignment") {
-        REQUIRE(alignof(SkinnedVertex) >= 4);
-    }
-
-    SECTION("SkinnedVertex skinning data offsets") {
-        SkinnedVertex v{};
-        const char* base = reinterpret_cast<const char*>(&v);
-
-        // Joints should be at offset 64
-        REQUIRE(reinterpret_cast<const char*>(&v.joints) - base == 64);
-
-        // Weights should be at offset 80
-        REQUIRE(reinterpret_cast<const char*>(&v.weights) - base == 80);
-    }
-}
-
 TEST_CASE("Meshlet structure size and alignment", "[renderer][shader-interop]") {
     SECTION("Meshlet size is as expected") {
         // float4 boundingSphere (16)

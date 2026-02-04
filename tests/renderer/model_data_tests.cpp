@@ -60,50 +60,6 @@ TEST_CASE("Vertex initialization and data packing", "[renderer][model-data]")
     }
 }
 
-TEST_CASE("SkinnedVertex joint and weight data", "[renderer][model-data]") {
-    SECTION("Default initialization") {
-        SkinnedVertex v{};
-
-        REQUIRE(v.joints.x == 0);
-        REQUIRE(v.joints.y == 0);
-        REQUIRE(v.joints.z == 0);
-        REQUIRE(v.joints.w == 0);
-
-        REQUIRE(v.weights.x == 0.0f);
-        REQUIRE(v.weights.y == 0.0f);
-        REQUIRE(v.weights.z == 0.0f);
-        REQUIRE(v.weights.w == 0.0f);
-    }
-
-    SECTION("Joint indices") {
-        SkinnedVertex v{};
-        v.joints = uint4{0, 1, 2, 3};
-
-        REQUIRE(v.joints.x == 0);
-        REQUIRE(v.joints.y == 1);
-        REQUIRE(v.joints.z == 2);
-        REQUIRE(v.joints.w == 3);
-    }
-
-    SECTION("Blend weights") {
-        SkinnedVertex v{};
-        v.weights = float4{0.4f, 0.3f, 0.2f, 0.1f};
-
-        REQUIRE_THAT(v.weights.x, Catch::Matchers::WithinRel(0.4f, 0.0001f));
-        REQUIRE_THAT(v.weights.y, Catch::Matchers::WithinRel(0.3f, 0.0001f));
-        REQUIRE_THAT(v.weights.z, Catch::Matchers::WithinRel(0.2f, 0.0001f));
-        REQUIRE_THAT(v.weights.w, Catch::Matchers::WithinRel(0.1f, 0.0001f));
-    }
-
-    SECTION("Weights should sum to 1.0 (validation)") {
-        SkinnedVertex v{};
-        v.weights = float4{0.25f, 0.25f, 0.25f, 0.25f};
-
-        float sum = v.weights.x + v.weights.y + v.weights.z + v.weights.w;
-        REQUIRE_THAT(sum, Catch::Matchers::WithinRel(1.0f, 0.0001f));
-    }
-}
-
 TEST_CASE("Meshlet bounding and culling data", "[renderer][model-data]") {
     SECTION("Default initialization") {
         Meshlet m{};

@@ -278,10 +278,8 @@ bool ModelGenerateSlot::LoadGltf(VkCommandBuffer cmd, const std::function<void()
 
     // Meshes
     // WillModel stores as SkinnedVertex, when loading, the vertices will be loaded to different buffers depending on whether the model is a skeletal mesh.
-    std::vector<SkinnedVertex> primitiveVertices{};
+    std::vector<Vertex> primitiveVertices{};
     std::vector<uint32_t> primitiveIndices{};
-    bool hasSkinned = false;
-    bool hasStatic = false;
     rawModel.allMeshes.reserve(gltf.meshes.size());
     for (fastgltf::Mesh& mesh : gltf.meshes) {
         Render::MeshInformation meshData{};
@@ -342,33 +340,22 @@ bool ModelGenerateSlot::LoadGltf(VkCommandBuffer cmd, const std::function<void()
                     });
                 }
 
-                // JOINTS_0
-                const fastgltf::Attribute* joints0 = p.findAttribute("JOINTS_0");
-                if (joints0 != p.attributes.end()) {
-                    fastgltf::iterateAccessorWithIndex<fastgltf::math::uvec4>(gltf, gltf.accessors[joints0->accessorIndex], [&](fastgltf::math::uvec4 j, const size_t index) {
-                        primitiveVertices[index].joints = {j.x(), j.y(), j.z(), j.w()};
-                    });
-                }
-
-                // WEIGHTS_0
-                const fastgltf::Attribute* weights0 = p.findAttribute("WEIGHTS_0");
-                if (weights0 != p.attributes.end()) {
-                    fastgltf::iterateAccessorWithIndex<fastgltf::math::fvec4>(gltf, gltf.accessors[weights0->accessorIndex], [&](fastgltf::math::fvec4 w, const size_t index) {
-                        primitiveVertices[index].weights = {w.x(), w.y(), w.z(), w.w()};
-                    });
-                }
-
-                if (joints0 != p.attributes.end() && weights0 != p.attributes.end()) {
-                    hasSkinned = true;
-                }
-                else {
-                    hasStatic = true;
-                }
-
-                if (hasSkinned && hasStatic) {
-                    SPDLOG_ERROR("Model contains mixed skinned and static meshes. Split into separate files.");
-                    return false;
-                }
+                // Skinned Rendering will be done in another model format
+                // // JOINTS_0
+                // const fastgltf::Attribute* joints0 = p.findAttribute("JOINTS_0");
+                // if (joints0 != p.attributes.end()) {
+                //     fastgltf::iterateAccessorWithIndex<fastgltf::math::uvec4>(gltf, gltf.accessors[joints0->accessorIndex], [&](fastgltf::math::uvec4 j, const size_t index) {
+                //         primitiveVertices[index].joints = {j.x(), j.y(), j.z(), j.w()};
+                //     });
+                // }
+                //
+                // // WEIGHTS_0
+                // const fastgltf::Attribute* weights0 = p.findAttribute("WEIGHTS_0");
+                // if (weights0 != p.attributes.end()) {
+                //     fastgltf::iterateAccessorWithIndex<fastgltf::math::fvec4>(gltf, gltf.accessors[weights0->accessorIndex], [&](fastgltf::math::fvec4 w, const size_t index) {
+                //         primitiveVertices[index].weights = {w.x(), w.y(), w.z(), w.w()};
+                //     });
+                // }
 
                 // UV
                 const fastgltf::Attribute* uvs = p.findAttribute("TEXCOORD_0");
@@ -438,6 +425,16 @@ bool ModelGenerateSlot::LoadGltf(VkCommandBuffer cmd, const std::function<void()
 
             // Optimize Vertex and Index Buffer. Generate Meshlets and optimize.
             {
+                size_t indexCount = primitiveIndices.size();
+                size_t vertexCount = primitiveVertices.size();
+                std::vector<uint32_t> remap(vertexCount);
+                size_t uniqueVertices = meshopt_generateVertexRemap(
+                    &remap[0],
+                    primitiveIndices.data(),
+                    indexCount,
+                    primitiveVertices.data(),
+                    vertexCount,
+                    sizeof(Vertex));
                 // meshopt_generateVertexRemap
 
                 // meshopt_remapIndexBuffer
@@ -455,15 +452,13 @@ bool ModelGenerateSlot::LoadGltf(VkCommandBuffer cmd, const std::function<void()
             size_t max_meshlets = meshopt_buildMeshletsBound(primitiveIndices.size(), MESHLET_MAX_VERTICES, MESHLET_MAX_TRIANGLES);
             std::vector<meshopt_Meshlet> meshlets(max_meshlets);
             std::vector<unsigned int> meshletVertices(primitiveIndices.size());
-            std::vector<unsigned char> meshletTriangles(primitiveIndices.size());
-
-            {
+            std::vector<unsigned char> meshletTriangles(primitiveIndices.size()); {
                 ZoneScopedN("BuildMeshlets");
                 // build clusters (meshlets) out of the mesh
                 std::vector<uint32_t> primitiveVertexPositions;
                 meshlets.resize(meshopt_buildMeshlets(&meshlets[0], &meshletVertices[0], &meshletTriangles[0],
                                                       primitiveIndices.data(), primitiveIndices.size(),
-                                                      reinterpret_cast<const float*>(primitiveVertices.data()), primitiveVertices.size(), sizeof(SkinnedVertex),
+                                                      reinterpret_cast<const float*>(primitiveVertices.data()), primitiveVertices.size(), sizeof(Vertex),
                                                       MESHLET_MAX_VERTICES, MESHLET_MAX_TRIANGLES, 0.f));
             }
 
@@ -505,7 +500,7 @@ bool ModelGenerateSlot::LoadGltf(VkCommandBuffer cmd, const std::function<void()
                         meshlet.triangle_count,
                         reinterpret_cast<const float*>(primitiveVertices.data()),
                         primitiveVertices.size(),
-                        sizeof(SkinnedVertex)
+                        sizeof(Vertex)
                     );
 
                     rawModel.meshlets.push_back({
@@ -719,8 +714,6 @@ bool ModelGenerateSlot::LoadGltf(VkCommandBuffer cmd, const std::function<void()
     }
     _progress += stepDiff;
     progress->value.store(_progress, std::memory_order::release);
-
-    rawModel.bIsSkeletalModel = hasSkinned;
 
     rawModel.bSuccessfullyLoaded = true;
     return true;
@@ -953,34 +946,46 @@ bool ModelGenerateSlot::WriteWillModel(VkCommandBuffer cmd, const std::function<
 
                     void ExecuteRange(enki::TaskSetPartition range, uint32_t threadNum) override
                     {
+                        ZoneScopedN("EncodeMipTask");
+
                         for (uint32_t mip = range.start; mip < range.end; ++mip) {
+                            ZoneScopedN("EncodeSingleMip");
+                            TracyMessageL(fmt::format("Encoding mip level {}", mip).c_str());
+
                             uint32_t mipWidth = std::max(1u, imageExtent.width >> mip);
                             uint32_t mipHeight = std::max(1u, imageExtent.height >> mip);
 
-                            utils::image_u8 srcImage(mipWidth, mipHeight);
-                            const uint8_t* rgbaData = (*mipData)[mip].data();
-                            for (uint32_t y = 0; y < mipHeight; ++y) {
-                                for (uint32_t x = 0; x < mipWidth; ++x) {
-                                    const uint8_t* pixel = &rgbaData[(y * mipWidth + x) * 4];
-                                    srcImage(x, y).set(pixel[0], pixel[1], pixel[2], pixel[3]);
+                            utils::image_u8 srcImage(mipWidth, mipHeight); {
+                                ZoneScopedN("CopyToImageU8");
+                                const uint8_t* rgbaData = (*mipData)[mip].data();
+                                for (uint32_t y = 0; y < mipHeight; ++y) {
+                                    for (uint32_t x = 0; x < mipWidth; ++x) {
+                                        const uint8_t* pixel = &rgbaData[(y * mipWidth + x) * 4];
+                                        srcImage(x, y).set(pixel[0], pixel[1], pixel[2], pixel[3]);
+                                    }
                                 }
                             }
 
-                            rdo_bc::rdo_bc_encoder encoder;
-                            bool initRes = encoder.init(srcImage, *params);
-                            if (!initRes) {
-                                SPDLOG_ERROR("[ModelGenerator] GPU texture compression init failed");
-                            }
-                            bool encodeRes = encoder.encode();
-                            if (!encodeRes) {
-                                SPDLOG_ERROR("[ModelGenerator] GPU texture compression encoding failed");
+                            rdo_bc::rdo_bc_encoder encoder; {
+                                ZoneScopedN("EncoderInit");
+                                bool initRes = encoder.init(srcImage, *params);
+                                if (!initRes) {
+                                    SPDLOG_ERROR("[ModelGenerator] GPU texture compression init failed");
+                                }
+                            } {
+                                ZoneScopedN("EncoderEncode");
+                                bool encodeRes = encoder.encode();
+                                if (!encodeRes) {
+                                    SPDLOG_ERROR("[ModelGenerator] GPU texture compression encoding failed");
+                                }
                             }
 
                             const void* compressedBlocks = encoder.get_blocks();
-                            uint32_t blocksSizeInBytes = encoder.get_total_blocks_size_in_bytes();
-
-                            ktxTexture_SetImageFromMemory(ktxTexture(texture), mip, 0, 0,
-                                                          static_cast<const ktx_uint8_t*>(compressedBlocks), blocksSizeInBytes);
+                            uint32_t blocksSizeInBytes = encoder.get_total_blocks_size_in_bytes(); {
+                                ZoneScopedN("KTXSetImage");
+                                ktxTexture_SetImageFromMemory(ktxTexture(texture), mip, 0, 0,
+                                                              static_cast<const ktx_uint8_t*>(compressedBlocks), blocksSizeInBytes);
+                            }
                         }
                     }
                 };
@@ -1240,25 +1245,6 @@ glm::vec4 ModelGenerateSlot::GenerateBoundingSphere(const std::vector<Vertex>& v
     return {center, radius};
 }
 
-glm::vec4 ModelGenerateSlot::GenerateBoundingSphere(const std::vector<SkinnedVertex>& vertices)
-{
-    glm::vec3 center = {0, 0, 0};
-
-    for (auto&& vertex : vertices) {
-        center += vertex.position;
-    }
-    center /= static_cast<float>(vertices.size());
-
-
-    float radius = glm::dot(vertices[0].position - center, vertices[0].position - center);
-    for (size_t i = 1; i < vertices.size(); ++i) {
-        radius = std::max(radius, glm::dot(vertices[i].position - center, vertices[i].position - center));
-    }
-    radius = std::nextafter(sqrtf(radius), std::numeric_limits<float>::max());
-
-    return {center, radius};
-}
-
 void WriteModelBinary(std::ofstream& file, const RawGltfModel& model)
 {
     Render::ModelBinaryHeader header{};
@@ -1274,7 +1260,6 @@ void WriteModelBinary(std::ofstream& file, const RawGltfModel& model)
     header.inverseBindMatrixCount = static_cast<uint32_t>(model.inverseBindMatrices.size());
     header.samplerCount = static_cast<uint32_t>(model.samplerInfos.size());
     header.textureCount = static_cast<uint32_t>(model.images.size());
-    header.bIsSkeletalModel = model.bIsSkeletalModel ? 1u : 0u;
 
     file.write(reinterpret_cast<const char*>(&header), sizeof(Render::ModelBinaryHeader));
 

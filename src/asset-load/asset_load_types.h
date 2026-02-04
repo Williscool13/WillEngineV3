@@ -55,9 +55,7 @@ private:
 
 struct UnpackedWillModel
 {
-    bool bIsSkeletalModel{false};
-
-    std::vector<SkinnedVertex> vertices{};
+    std::vector<Vertex> vertices{};
     std::vector<uint32_t> meshletVertices{};
     std::vector<uint8_t> meshletTriangles{};
     std::vector<Meshlet> meshlets{};
@@ -83,8 +81,6 @@ struct UnpackedWillModel
 
     void Reset()
     {
-        bIsSkeletalModel = false;
-
         vertices.clear();
         meshletVertices.clear();
         meshletTriangles.clear();

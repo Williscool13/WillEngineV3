@@ -36,15 +36,13 @@ struct RawGltfModel
 {
     std::string name{};
     bool bSuccessfullyLoaded{false};
-    bool bIsSkeletalModel{false};
 
     std::vector<VkSamplerCreateInfo> samplerInfos{};
     std::vector<Render::AllocatedImage> images{};
     // ktx_transcode_fmt_e
     std::vector<uint32_t> preferredImageFormats{};
 
-    // todo: decouple skinned and non-skinned vertex properties. Make a new vector below this one w/ skinned stuff
-    std::vector<SkinnedVertex> vertices{};
+    std::vector<Vertex> vertices{};
     std::vector<uint32_t> meshletVertices{};
     std::vector<uint8_t> meshletTriangles{};
     std::vector<Meshlet> meshlets{};

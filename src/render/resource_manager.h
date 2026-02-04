@@ -27,8 +27,6 @@ struct ResourceManager
     // Only managed by Asset Load Thread
     std::mutex vertexBufferAllocatorMutex;
     OffsetAllocator::Allocator vertexBufferAllocator{MEGA_VERTEX_BUFFER_SIZE};
-    std::mutex skinnedVertexBufferAllocatorMutex;
-    OffsetAllocator::Allocator skinnedVertexBufferAllocator{MEGA_SKINNED_VERTEX_BUFFER_SIZE};
     std::mutex meshletVertexBufferAllocatorMutex;
     OffsetAllocator::Allocator meshletVertexBufferAllocator{MEGA_MESHLET_VERTEX_BUFFER_SIZE};
     std::mutex meshletTriangleBufferAllocatorMutex;
@@ -40,7 +38,6 @@ struct ResourceManager
 
     // Managed by Asset Load, bound in the Render Threads. Synchronized by engine.
     AllocatedBuffer megaVertexBuffer;
-    AllocatedBuffer megaSkinnedVertexBuffer;
     AllocatedBuffer megaMeshletVerticesBuffer;
     AllocatedBuffer megaMeshletTrianglesBuffer;
     AllocatedBuffer megaMeshletBuffer;
