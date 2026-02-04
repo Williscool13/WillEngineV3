@@ -12,7 +12,7 @@ namespace Render
 {
 constexpr char WILL_MODEL_MAGIC[8] = "WILLMDL";
 constexpr uint32_t MODEL_MAJOR_VERSION = 0;
-constexpr uint32_t MODEL_MINOR_VERSION = 5;
+constexpr uint32_t MODEL_MINOR_VERSION = 6;
 constexpr uint32_t MODEL_PATCH_VERSION = 1;
 
 struct ModelBinaryHeader

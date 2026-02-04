@@ -423,104 +423,208 @@ bool ModelGenerateSlot::LoadGltf(VkCommandBuffer cmd, const std::function<void()
                 }
             }
 
-            // Optimize Vertex and Index Buffer. Generate Meshlets and optimize.
+            // Optimize Vertex and Index Buffer.
             {
+                ZoneScopedN("Optimize Mesh");
+
                 size_t indexCount = primitiveIndices.size();
                 size_t vertexCount = primitiveVertices.size();
                 std::vector<uint32_t> remap(vertexCount);
-                size_t uniqueVertices = meshopt_generateVertexRemap(
-                    &remap[0],
-                    primitiveIndices.data(),
-                    indexCount,
-                    primitiveVertices.data(),
-                    vertexCount,
-                    sizeof(Vertex));
-                // meshopt_generateVertexRemap
 
-                // meshopt_remapIndexBuffer
-                // meshopt_remapVertexBuffer
+                size_t uniqueVertices; {
+                    ZoneScopedN("Generate Vertex Remap");
+                    uniqueVertices = meshopt_generateVertexRemap(
+                        &remap[0],
+                        primitiveIndices.data(),
+                        indexCount,
+                        primitiveVertices.data(),
+                        vertexCount,
+                        sizeof(Vertex));
+                } {
+                    ZoneScopedN("Remap Buffers");
+                    std::vector<uint32_t> remappedIndices(primitiveIndices.size());
+                    meshopt_remapIndexBuffer(
+                        remappedIndices.data(),
+                        primitiveIndices.data(),
+                        primitiveIndices.size(),
+                        remap.data());
 
-                // meshopt_optimizeVertexCache
+                    std::vector<Vertex> remappedVertices(uniqueVertices);
+                    meshopt_remapVertexBuffer(
+                        remappedVertices.data(),
+                        primitiveVertices.data(),
+                        primitiveVertices.size(),
+                        sizeof(Vertex),
+                        remap.data()
+                    );
 
-                // meshopt_optimizeOverdraw
-
-                // meshopt_optimizeVertexFetch
-
-                // meshopt_generateShadowIndexBuffer later for shadow pass/depth prepass
-            }
-
-            size_t max_meshlets = meshopt_buildMeshletsBound(primitiveIndices.size(), MESHLET_MAX_VERTICES, MESHLET_MAX_TRIANGLES);
-            std::vector<meshopt_Meshlet> meshlets(max_meshlets);
-            std::vector<unsigned int> meshletVertices(primitiveIndices.size());
-            std::vector<unsigned char> meshletTriangles(primitiveIndices.size()); {
-                ZoneScopedN("BuildMeshlets");
-                // build clusters (meshlets) out of the mesh
-                std::vector<uint32_t> primitiveVertexPositions;
-                meshlets.resize(meshopt_buildMeshlets(&meshlets[0], &meshletVertices[0], &meshletTriangles[0],
-                                                      primitiveIndices.data(), primitiveIndices.size(),
-                                                      reinterpret_cast<const float*>(primitiveVertices.data()), primitiveVertices.size(), sizeof(Vertex),
-                                                      MESHLET_MAX_VERTICES, MESHLET_MAX_TRIANGLES, 0.f));
-            }
-
-            // Optimize each meshlet's micro index buffer/vertex layout individually
-            {
-                ZoneScopedN("OptimizeMeshlets");
-                for (auto& meshlet : meshlets) {
-                    meshopt_optimizeMeshlet(&meshletVertices[meshlet.vertex_offset], &meshletTriangles[meshlet.triangle_offset], meshlet.triangle_count, meshlet.vertex_count);
-                }
-            }
-            // Trim the meshlet data to minimize waste for meshletVertices/meshletTriangles
-            const meshopt_Meshlet& last = meshlets.back();
-            meshletVertices.resize(last.vertex_offset + last.vertex_count);
-            meshletTriangles.resize(last.triangle_offset + last.triangle_count * 3);
-
-            primitiveData.meshletOffset = glm::ivec4(rawModel.meshlets.size());
-            primitiveData.meshletCount = glm::ivec4(meshlets.size());
-            primitiveData.boundingSphere = GenerateBoundingSphere(primitiveVertices);
-
-            meshData.primitiveProperties.emplace_back(static_cast<uint32_t>(rawModel.primitives.size()), materialIndex);
-            rawModel.primitives.push_back(primitiveData);
-
-            uint32_t vertexOffset = rawModel.vertices.size();
-            uint32_t meshletVertexOffset = rawModel.meshletVertices.size();
-            uint32_t meshletTrianglesOffset = rawModel.meshletTriangles.size();
-
-            rawModel.vertices.insert(rawModel.vertices.end(), primitiveVertices.begin(), primitiveVertices.end());
-            rawModel.meshletVertices.insert(rawModel.meshletVertices.end(), meshletVertices.begin(), meshletVertices.end());
-
-            rawModel.meshletTriangles.insert(rawModel.meshletTriangles.end(), meshletTriangles.begin(), meshletTriangles.end());
-
-            //
-            {
-                ZoneScopedN("ComputeMeshletBounds");
-                for (meshopt_Meshlet& meshlet : meshlets) {
-                    meshopt_Bounds bounds = meshopt_computeMeshletBounds(
-                        &meshletVertices[meshlet.vertex_offset],
-                        &meshletTriangles[meshlet.triangle_offset],
-                        meshlet.triangle_count,
-                        reinterpret_cast<const float*>(primitiveVertices.data()),
+                    primitiveIndices = std::move(remappedIndices);
+                    primitiveVertices = std::move(remappedVertices);
+                } {
+                    ZoneScopedN("Optimize Vertex Cache");
+                    meshopt_optimizeVertexCache(
+                        primitiveIndices.data(),
+                        primitiveIndices.data(),
+                        primitiveIndices.size(),
+                        primitiveVertices.size()
+                    );
+                } {
+                    ZoneScopedN("Optimize Overdraw");
+                    meshopt_optimizeOverdraw(
+                        primitiveIndices.data(),
+                        primitiveIndices.data(),
+                        primitiveIndices.size(),
+                        &primitiveVertices[0].position.x,
+                        primitiveVertices.size(),
+                        sizeof(Vertex),
+                        1.05f
+                    );
+                } {
+                    ZoneScopedN("Optimize Vertex Fetch");
+                    meshopt_optimizeVertexFetch(
+                        primitiveVertices.data(),
+                        primitiveIndices.data(),
+                        primitiveIndices.size(),
+                        primitiveVertices.data(),
                         primitiveVertices.size(),
                         sizeof(Vertex)
                     );
-
-                    rawModel.meshlets.push_back({
-                        .meshletBoundingSphere = glm::vec4(
-                            bounds.center[0], bounds.center[1], bounds.center[2],
-                            bounds.radius
-                        ),
-                        .coneApex = glm::vec3(bounds.cone_apex[0], bounds.cone_apex[1], bounds.cone_apex[2]),
-                        .coneCutoff = bounds.cone_cutoff,
-
-                        .coneAxis = glm::vec3(bounds.cone_axis[0], bounds.cone_axis[1], bounds.cone_axis[2]),
-                        .vertexOffset = vertexOffset,
-
-                        .meshletVertexOffset = meshletVertexOffset + meshlet.vertex_offset,
-                        .meshletTriangleOffset = meshletTrianglesOffset + meshlet.triangle_offset,
-                        .meshletVertexCount = meshlet.vertex_count,
-                        .meshletTriangleCount = meshlet.triangle_count,
-                    });
                 }
             }
+
+            std::array<std::vector<uint32_t>, LOD_COUNT> lodIndices{};
+            std::array<std::vector<meshopt_Meshlet>, LOD_COUNT> lodMeshlets{};
+            std::array<std::vector<uint32_t>, LOD_COUNT> lodMeshletVertices{};
+            std::array<std::vector<uint8_t>, LOD_COUNT> lodMeshletTriangles{};
+
+            //
+            {
+                lodIndices[0] = primitiveIndices;
+
+                for (uint32_t lod = 1; lod < LOD_COUNT; ++lod) {
+                    ZoneScopedN("Generate LOD");
+                    TracyMessageL(std::to_string(lod).c_str());
+
+                    constexpr float thresholds[LOD_COUNT-1]{0.5f, 0.5f, 0.3f};
+                    size_t target_index_count = size_t(lodIndices[lod - 1].size() * thresholds[lod - 1]);
+                    target_index_count = target_index_count / 3 * 3;
+
+                    lodIndices[lod].resize(lodIndices[lod - 1].size());
+
+                    size_t simplified_index_count = meshopt_simplify(
+                        lodIndices[lod].data(),
+                        lodIndices[lod - 1].data(),
+                        lodIndices[lod - 1].size(),
+                        &primitiveVertices[0].position.x,
+                        primitiveVertices.size(),
+                        sizeof(Vertex),
+                        target_index_count,
+                        0.01f
+                    );
+                    lodIndices[lod].resize(simplified_index_count);
+                }
+
+                for (uint32_t lod = 0; lod < LOD_COUNT; ++lod) {
+                    ZoneScopedN("Build Meshlets LOD");
+                    TracyMessageL(std::to_string(lod).c_str());
+
+                    size_t max_meshlets = meshopt_buildMeshletsBound(
+                        lodIndices[lod].size(),
+                        MESHLET_MAX_VERTICES,
+                        MESHLET_MAX_TRIANGLES
+                    );
+
+                    lodMeshlets[lod].resize(max_meshlets);
+                    lodMeshletVertices[lod].resize(max_meshlets * MESHLET_MAX_VERTICES);
+                    lodMeshletTriangles[lod].resize(max_meshlets * MESHLET_MAX_TRIANGLES * 3);
+
+                    size_t meshlet_count = meshopt_buildMeshlets(
+                        lodMeshlets[lod].data(),
+                        lodMeshletVertices[lod].data(),
+                        lodMeshletTriangles[lod].data(),
+                        lodIndices[lod].data(),
+                        lodIndices[lod].size(),
+                        &primitiveVertices[0].position.x,
+                        primitiveVertices.size(),
+                        sizeof(Vertex),
+                        MESHLET_MAX_VERTICES,
+                        MESHLET_MAX_TRIANGLES,
+                        0.0f
+                    );
+
+                    lodMeshlets[lod].resize(meshlet_count);
+
+                    // Optimize each meshlet
+                    {
+                        ZoneScopedN("Optimize Meshlets");
+                        for (auto& meshlet : lodMeshlets[lod]) {
+                            meshopt_optimizeMeshlet(
+                                &lodMeshletVertices[lod][meshlet.vertex_offset],
+                                &lodMeshletTriangles[lod][meshlet.triangle_offset],
+                                meshlet.triangle_count,
+                                meshlet.vertex_count
+                            );
+                        }
+                    }
+
+                    // Trim
+                    const meshopt_Meshlet& last = lodMeshlets[lod].back();
+                    lodMeshletVertices[lod].resize(last.vertex_offset + last.vertex_count);
+                    lodMeshletTriangles[lod].resize(last.triangle_offset + last.triangle_count * 3);
+                }
+            }
+
+            primitiveData.boundingSphere = GenerateBoundingSphere(primitiveVertices);
+
+            // Same for all LODs (without LOD streaming anyway)
+            uint32_t vertexOffset = rawModel.vertices.size();
+            rawModel.vertices.insert(rawModel.vertices.end(), primitiveVertices.begin(), primitiveVertices.end());
+
+
+            for (uint32_t lod = 0; lod < LOD_COUNT; ++lod) {
+                primitiveData.meshletOffset[lod] = rawModel.meshlets.size();
+                primitiveData.meshletCount[lod] = lodMeshlets[lod].size();
+
+                uint32_t meshletVertexOffset = rawModel.meshletVertices.size();
+                uint32_t meshletTrianglesOffset = rawModel.meshletTriangles.size();
+                rawModel.meshletVertices.insert(rawModel.meshletVertices.end(), lodMeshletVertices[lod].begin(), lodMeshletVertices[lod].end());
+                rawModel.meshletTriangles.insert(rawModel.meshletTriangles.end(), lodMeshletTriangles[lod].begin(), lodMeshletTriangles[lod].end());
+
+                //
+                {
+                    ZoneScopedN("ComputeMeshletBounds");
+                    for (meshopt_Meshlet& meshlet : lodMeshlets[lod]) {
+                        meshopt_Bounds bounds = meshopt_computeMeshletBounds(
+                            &lodMeshletVertices[lod][meshlet.vertex_offset],
+                            &lodMeshletTriangles[lod][meshlet.triangle_offset],
+                            meshlet.triangle_count,
+                            reinterpret_cast<const float*>(primitiveVertices.data()),
+                            primitiveVertices.size(),
+                            sizeof(Vertex)
+                        );
+
+                        rawModel.meshlets.push_back({
+                            .meshletBoundingSphere = glm::vec4(
+                                bounds.center[0], bounds.center[1], bounds.center[2],
+                                bounds.radius
+                            ),
+                            .coneApex = glm::vec3(bounds.cone_apex[0], bounds.cone_apex[1], bounds.cone_apex[2]),
+                            .coneCutoff = bounds.cone_cutoff,
+
+                            .coneAxis = glm::vec3(bounds.cone_axis[0], bounds.cone_axis[1], bounds.cone_axis[2]),
+                            .vertexOffset = vertexOffset,
+
+                            .meshletVertexOffset = meshletVertexOffset + meshlet.vertex_offset,
+                            .meshletTriangleOffset = meshletTrianglesOffset + meshlet.triangle_offset,
+                            .meshletVertexCount = meshlet.vertex_count,
+                            .meshletTriangleCount = meshlet.triangle_count,
+                        });
+                    }
+                }
+            }
+
+            meshData.primitiveProperties.emplace_back(static_cast<uint32_t>(rawModel.primitives.size()), materialIndex);
+            rawModel.primitives.push_back(primitiveData);
         }
 
         rawModel.allMeshes.push_back(meshData);
