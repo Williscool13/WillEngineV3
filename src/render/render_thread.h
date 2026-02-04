@@ -105,7 +105,7 @@ private:
 
     void SetupFrameUniforms(const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, float renderDeltaTime) const;
 
-    void SetupModelUniforms(const Core::ViewFamily& viewFamily);
+    void SetupModelUniforms(Core::ViewFamily& viewFamily);
 
     void SetupCascadedShadows(RenderGraph& graph, const Core::ViewFamily& viewFamily) const;
 

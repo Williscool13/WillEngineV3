@@ -880,7 +880,8 @@ void RenderThread::SetupFrameUniforms(const Core::ViewFamily& viewFamily, const 
     bool bHasPortal = !viewFamily.portalViews.empty();
     if (bHasPortal) {
         SceneData portalSceneData = GenerateSceneData(viewFamily.portalViews[0].view, viewFamily.postProcessConfig, renderExtent, frameNumber, renderDeltaTime);
-        portalSceneData.clipPlane = glm::vec4(viewFamily.portalViews[0].exitPortalNormal, -glm::dot(viewFamily.portalViews[0].exitPortalNormal, viewFamily.portalViews[0].exitPortalTransform.translation));
+        portalSceneData.clipPlane = glm::vec4(viewFamily.portalViews[0].exitPortalNormal,
+                                              -glm::dot(viewFamily.portalViews[0].exitPortalNormal, viewFamily.portalViews[0].exitPortalTransform.translation));
         portalSceneDataUploadAllocation = renderGraph->AllocateTransient(sizeof(SceneData));
         memcpy(portalSceneDataUploadAllocation.ptr, &portalSceneData, sizeof(SceneData));
     }
@@ -1002,7 +1003,7 @@ void RenderThread::SetupFrameUniforms(const Core::ViewFamily& viewFamily, const 
         });
 }
 
-void RenderThread::SetupModelUniforms(const Core::ViewFamily& viewFamily)
+void RenderThread::SetupModelUniforms(Core::ViewFamily& viewFamily)
 {
     bool bHasMainInstances = !viewFamily.mainInstances.empty();
     bool bHasCustomInstances = false;
@@ -1048,10 +1049,12 @@ void RenderThread::SetupModelUniforms(const Core::ViewFamily& viewFamily)
     renderGraph->CreateBuffer("material_buffer", materialBufferSize);
 
     UploadAllocation instanceUpload{};
-    // todo: sort instances by primitive index to improve atomic coalesce in the instancing generation shader
     if (bHasMainInstances) {
         instanceUpload = renderGraph->AllocateTransient(viewFamily.mainInstances.size() * sizeof(Instance));
         auto* instanceBuffer = static_cast<Instance*>(instanceUpload.ptr);
+        std::ranges::sort(viewFamily.mainInstances, [](const Core::InstanceData& a, const Core::InstanceData& b) {
+            return a.primitiveIndex < b.primitiveIndex;
+        });
         for (size_t i = 0; i < viewFamily.mainInstances.size(); ++i) {
             auto& inst = viewFamily.mainInstances[i];
             instanceBuffer[i] = {
