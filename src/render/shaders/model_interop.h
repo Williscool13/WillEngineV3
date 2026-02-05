@@ -122,6 +122,8 @@ SHADER_PUBLIC struct Instance
 
     SHADER_PUBLIC uint32_t bIsVisible;
     SHADER_PUBLIC uint32_t lod; // not useful if bIsVisible is false
+    uint32_t padding1;
+    uint32_t padding2;
 };
 
 SHADER_PUBLIC struct PrimitiveInstanceRange {
@@ -137,7 +139,7 @@ SHADER_PUBLIC struct CompactedPrimitiveData {
     SHADER_PUBLIC uint32_t lodCounts[LOD_COUNT];
     SHADER_PUBLIC uint32_t indirectCommandIndices[LOD_COUNT];
     SHADER_PUBLIC uint32_t lodIndirectionOffsets[LOD_COUNT];
-    SHADER_PUBLIC uint32_t primitiveIndex;
+    SHADER_PUBLIC uint32_t indexInPrimitiveRanges;
     uint32_t padding0;
     uint32_t padding1;
     uint32_t padding2;

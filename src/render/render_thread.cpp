@@ -409,18 +409,15 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
 
 #if WILL_EDITOR
-        RenderPass& readbackPass = renderGraph->AddPass("Debug Readback", VK_PIPELINE_STAGE_2_COPY_BIT);
-        if (renderGraph->HasBuffer("indirect_buffer") && renderGraph->HasBuffer("indirect_count_buffer")
-            && renderGraph->HasBuffer("luminance_histogram") && renderGraph->HasBuffer("luminance_buffer")) {
-            readbackPass.ReadTransferBuffer("indirect_buffer");
+        /*RenderPass& readbackPass = renderGraph->AddPass("Debug Readback", VK_PIPELINE_STAGE_2_COPY_BIT);
+        if (renderGraph->HasBuffer("indirect_command_buffer") && renderGraph->HasBuffer("indirect_count_buffer")) {
             readbackPass.ReadTransferBuffer("indirect_count_buffer");
-            readbackPass.ReadTransferBuffer("luminance_histogram");
-            readbackPass.ReadTransferBuffer("luminance_buffer");
+            readbackPass.ReadTransferBuffer("indirect_command_buffer");
             readbackPass.WriteTransferBuffer("debug_readback_buffer");
             readbackPass.Execute([&](VkCommandBuffer _cmd) {
                 size_t offsetSoFar = 0;
                 VkBufferCopy countCopy{};
-                countCopy.srcOffset = 0;
+                countCopy.srcOffset = offsetof(InstancedMeshIndirectCountBuffer, indirectCount);
                 countCopy.dstOffset = 0;
                 countCopy.size = sizeof(uint32_t);
                 vkCmdCopyBuffer(_cmd, renderGraph->GetBufferHandle("indirect_count_buffer"), renderGraph->GetBufferHandle("debug_readback_buffer"), 1, &countCopy);
@@ -430,24 +427,181 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 indirectCopy.srcOffset = 0;
                 indirectCopy.dstOffset = offsetSoFar;
                 indirectCopy.size = 10 * sizeof(InstancedMeshIndirectDrawParameters);
-                vkCmdCopyBuffer(_cmd, renderGraph->GetBufferHandle("indirect_buffer"), renderGraph->GetBufferHandle("debug_readback_buffer"), 1, &indirectCopy);
+                vkCmdCopyBuffer(_cmd, renderGraph->GetBufferHandle("indirect_command_buffer"), renderGraph->GetBufferHandle("debug_readback_buffer"), 1, &indirectCopy);
                 offsetSoFar += 10 * sizeof(InstancedMeshIndirectDrawParameters);
+            });
+        }*/
 
-                VkBufferCopy histogramCopy{};
-                histogramCopy.srcOffset = 0;
-                histogramCopy.dstOffset = offsetSoFar;
-                histogramCopy.size = 256 * sizeof(uint32_t);
-                vkCmdCopyBuffer(_cmd, renderGraph->GetBufferHandle("luminance_histogram"), renderGraph->GetBufferHandle("debug_readback_buffer"), 1, &histogramCopy);
-                offsetSoFar += 256 * sizeof(uint32_t);
+        if (renderGraph->HasBuffer("instance_buffer")) {
+            RenderPass& instanceReadbackPass = renderGraph->AddPass(
+                "Debug Readback Instance Buffer",
+                VK_PIPELINE_STAGE_2_COPY_BIT
+            );
 
-                VkBufferCopy averageExposureCopy{};
-                averageExposureCopy.srcOffset = 0;
-                averageExposureCopy.dstOffset = offsetSoFar;
-                averageExposureCopy.size = sizeof(uint32_t);
-                vkCmdCopyBuffer(_cmd, renderGraph->GetBufferHandle("luminance_buffer"), renderGraph->GetBufferHandle("debug_readback_buffer"), 1, &averageExposureCopy);
-                offsetSoFar += sizeof(uint32_t);
+            instanceReadbackPass.ReadTransferBuffer("instance_buffer");
+            instanceReadbackPass.WriteTransferBuffer("debug_readback_buffer");
+
+            instanceReadbackPass.Execute([&](VkCommandBuffer cmd) {
+                VkBufferCopy copy{};
+                copy.srcOffset = 0;
+                copy.dstOffset = 0;
+                copy.size = 25 * sizeof(Instance);
+
+                vkCmdCopyBuffer(
+                    cmd,
+                    renderGraph->GetBufferHandle("instance_buffer"),
+                    renderGraph->GetBufferHandle("debug_readback_buffer"),
+                    1,
+                    &copy
+                );
             });
         }
+
+        // ===== Debug Readback: Primitive Range Buffer =====
+        if (renderGraph->HasBuffer("primitive_range_buffer")) {
+            RenderPass& primitiveRangeReadbackPass = renderGraph->AddPass(
+                "Debug Readback Primitive Range Buffer",
+                VK_PIPELINE_STAGE_2_COPY_BIT
+            );
+
+            primitiveRangeReadbackPass.ReadTransferBuffer("primitive_range_buffer");
+            primitiveRangeReadbackPass.WriteTransferBuffer("debug_readback_buffer");
+
+            primitiveRangeReadbackPass.Execute([&](VkCommandBuffer cmd) {
+                VkBufferCopy copy{};
+                copy.srcOffset = 0;
+                copy.dstOffset = 25 * sizeof(Instance);
+                copy.size = 25 * sizeof(PrimitiveInstanceRange); // assume max 25 ranges
+
+                vkCmdCopyBuffer(
+                    cmd,
+                    renderGraph->GetBufferHandle("primitive_range_buffer"),
+                    renderGraph->GetBufferHandle("debug_readback_buffer"),
+                    1,
+                    &copy
+                );
+            });
+        }
+
+        // ===== Debug Readback: Compacted Primitive Buffer =====
+        if (renderGraph->HasBuffer("compacted_primitive_buffer")) {
+            RenderPass& compactedPrimitiveReadbackPass = renderGraph->AddPass(
+                "Debug Readback Compacted Primitive Buffer",
+                VK_PIPELINE_STAGE_2_COPY_BIT
+            );
+
+            compactedPrimitiveReadbackPass.ReadTransferBuffer("compacted_primitive_buffer");
+            compactedPrimitiveReadbackPass.WriteTransferBuffer("debug_readback_buffer");
+
+            compactedPrimitiveReadbackPass.Execute([&](VkCommandBuffer cmd) {
+                VkBufferCopy copy{};
+                copy.srcOffset = 0;
+                copy.dstOffset =
+                        25 * sizeof(Instance) +
+                        25 * sizeof(PrimitiveInstanceRange);
+                copy.size = 25 * sizeof(CompactedPrimitiveData); // assume max 25
+
+                vkCmdCopyBuffer(
+                    cmd,
+                    renderGraph->GetBufferHandle("compacted_primitive_buffer"),
+                    renderGraph->GetBufferHandle("debug_readback_buffer"),
+                    1,
+                    &copy
+                );
+            });
+        }
+
+        // ===== Debug Readback: Indirect Count Buffer =====
+        if (renderGraph->HasBuffer("indirect_count_buffer")) {
+            RenderPass& indirectCountReadbackPass = renderGraph->AddPass(
+                "Debug Readback Indirect Count Buffer",
+                VK_PIPELINE_STAGE_2_COPY_BIT
+            );
+
+            indirectCountReadbackPass.ReadTransferBuffer("indirect_count_buffer");
+            indirectCountReadbackPass.WriteTransferBuffer("debug_readback_buffer");
+
+            indirectCountReadbackPass.Execute([&](VkCommandBuffer cmd) {
+                VkBufferCopy copy{};
+                copy.srcOffset = 0;
+                copy.dstOffset =
+                        25 * sizeof(Instance) +
+                        25 * sizeof(PrimitiveInstanceRange) +
+                        25 * sizeof(CompactedPrimitiveData);
+                copy.size = sizeof(InstancedMeshIndirectCountBuffer);
+
+                vkCmdCopyBuffer(
+                    cmd,
+                    renderGraph->GetBufferHandle("indirect_count_buffer"),
+                    renderGraph->GetBufferHandle("debug_readback_buffer"),
+                    1,
+                    &copy
+                );
+            });
+        }
+
+        // ===== Debug Readback: Instance Indirection Buffer =====
+        if (renderGraph->HasBuffer("instance_indirection_buffer")) {
+            RenderPass& indirectionReadbackPass = renderGraph->AddPass(
+                "Debug Readback Instance Indirection Buffer",
+                VK_PIPELINE_STAGE_2_COPY_BIT
+            );
+
+            indirectionReadbackPass.ReadTransferBuffer("instance_indirection_buffer");
+            indirectionReadbackPass.WriteTransferBuffer("debug_readback_buffer");
+
+            indirectionReadbackPass.Execute([&](VkCommandBuffer cmd) {
+                VkBufferCopy copy{};
+                copy.srcOffset = 0;
+                copy.dstOffset =
+                        25 * sizeof(Instance) +
+                        25 * sizeof(PrimitiveInstanceRange) +
+                        25 * sizeof(CompactedPrimitiveData) +
+                        sizeof(InstancedMeshIndirectCountBuffer);
+                copy.size = 64 * sizeof(uint32_t); // instance indirection entries
+
+                vkCmdCopyBuffer(
+                    cmd,
+                    renderGraph->GetBufferHandle("instance_indirection_buffer"),
+                    renderGraph->GetBufferHandle("debug_readback_buffer"),
+                    1,
+                    &copy
+                );
+            });
+        }
+
+        // ===== Debug Readback: Indirect Command Buffer =====
+        if (renderGraph->HasBuffer("indirect_command_buffer")) {
+            RenderPass& indirectCmdReadbackPass = renderGraph->AddPass(
+                "Debug Readback Indirect Command Buffer",
+                VK_PIPELINE_STAGE_2_COPY_BIT
+            );
+
+            indirectCmdReadbackPass.ReadTransferBuffer("indirect_command_buffer");
+            indirectCmdReadbackPass.WriteTransferBuffer("debug_readback_buffer");
+
+            indirectCmdReadbackPass.Execute([&](VkCommandBuffer cmd) {
+                VkBufferCopy copy{};
+                copy.srcOffset = 0;
+                copy.dstOffset =
+                        25 * sizeof(Instance) +
+                        25 * sizeof(PrimitiveInstanceRange) +
+                        25 * sizeof(CompactedPrimitiveData) +
+                        sizeof(InstancedMeshIndirectCountBuffer) +
+                        64 * sizeof(uint32_t);
+                copy.size = 64 * sizeof(InstancedMeshIndirectDrawParameters);
+
+                vkCmdCopyBuffer(
+                    cmd,
+                    renderGraph->GetBufferHandle("indirect_command_buffer"),
+                    renderGraph->GetBufferHandle("debug_readback_buffer"),
+                    1,
+                    &copy
+                );
+            });
+        }
+
+
 #endif
 
 
@@ -1327,6 +1481,12 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFami
 void RenderThread::SetupMainGeometryPass(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneIndex,
                                          bool bClearTargets) const
 {
+    RenderPass& clearPass = graph.AddPass("Clear Instancing Buffers", VK_PIPELINE_STAGE_2_TRANSFER_BIT);
+    clearPass.WriteTransferBuffer("instance_indirection_buffer");
+    clearPass.Execute([&](VkCommandBuffer cmd) {
+        vkCmdFillBuffer(cmd, graph.GetBufferHandle("instance_indirection_buffer"), 0, VK_WHOLE_SIZE, 0);
+    });
+
     RenderPass& visibilityPass = graph.AddPass("Compute Visibility", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
     visibilityPass.ReadBuffer("scene_data");
     visibilityPass.ReadBuffer("primitive_buffer");

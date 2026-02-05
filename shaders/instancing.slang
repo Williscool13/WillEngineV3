@@ -105,7 +105,7 @@ void ComputePrefixSum(uniform InstancingPrefixSumPushConstant pc) {
         if (totalVisible == 0) { continue; }
 
         CompactedPrimitiveData compacted;
-        compacted.primitiveIndex = range.primitiveIndex;
+        compacted.indexInPrimitiveRanges = i;
 
         compacted.lodIndirectionOffsets[0] = indirectionOffset;
         compacted.lodIndirectionOffsets[1] = indirectionOffset + range.visibleCountPerLOD[0];
@@ -174,9 +174,11 @@ void ComputeCompactAndGenerateIndirect(uniform CompactAndIndirectPushConstant pc
         return;
     }
 
-    PrimitiveInstanceRange range = pc.primitiveInstanceRangeBuffer[compacted.primitiveIndex];
+    PrimitiveInstanceRange range = pc.primitiveInstanceRangeBuffer[compacted.indexInPrimitiveRanges];
     uint writeOffset = compacted.lodIndirectionOffsets[lod];
     for (uint i = 0; i < range.count; i++) {
+    pc.instanceIndirectionBuffer[lod]= lod;
+
         uint instanceID = range.start + i;
         Instance inst = pc.instanceBuffer[instanceID];
 
@@ -185,7 +187,7 @@ void ComputeCompactAndGenerateIndirect(uniform CompactAndIndirectPushConstant pc
         }
     }
 
-    MeshletPrimitive prim = pc.primitiveBuffer[compacted.primitiveIndex];
+    MeshletPrimitive prim = pc.primitiveBuffer[range.primitiveIndex];
     uint totalMeshlets = prim.meshletCount[lod];
     uint numChunks = (totalMeshlets + (TASK_SHADER_DISPATCH_X - 1)) / TASK_SHADER_DISPATCH_X;
 
@@ -194,6 +196,7 @@ void ComputeCompactAndGenerateIndirect(uniform CompactAndIndirectPushConstant pc
     pc.indirectBuffer[indirectIdx].groupCountY = compacted.lodCounts[lod];
     pc.indirectBuffer[indirectIdx].groupCountZ = 1;
     pc.indirectBuffer[indirectIdx].compactedInstanceStart = compacted.lodIndirectionOffsets[lod];
+    pc.indirectBuffer[indirectIdx].compactedInstanceCount = compacted.lodCounts[lod];
     pc.indirectBuffer[indirectIdx].meshletOffset = prim.meshletOffset[lod];
     pc.indirectBuffer[indirectIdx].meshletCount = prim.meshletCount[lod];
 }

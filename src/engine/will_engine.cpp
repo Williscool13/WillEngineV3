@@ -52,7 +52,6 @@ void WillEngine::Initialize()
             const char* name = TASK_THREAD_NAMES[threadNum_];
             tracy::SetThreadName(name);
             Platform::SetThreadName(name);
-
         };
         config.profilerCallbacks.waitForNewTaskSuspendStart = [](uint32_t) {};
         config.profilerCallbacks.waitForNewTaskSuspendStop = [](uint32_t) {};
@@ -444,44 +443,126 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
         }
 
         if (ImGui::CollapsingHeader("Visibility Debug")) {
-            uint8_t* data = static_cast<uint8_t*>(renderThread->GetResourceManager()->debugReadbackBuffer.allocationInfo.pMappedData);
+            uint8_t* base = static_cast<uint8_t*>(renderThread->GetResourceManager()->debugReadbackBuffer.allocationInfo.pMappedData);
+            uint8_t* ptr = base;
 
-            uint32_t indirectCount = *reinterpret_cast<uint32_t*>(data);
-            ImGui::Text("Indirect Draw Count: %u", indirectCount);
+            auto* instances = reinterpret_cast<Instance*>(ptr);
+            ptr += 25 * sizeof(Instance);
 
-            auto* params = reinterpret_cast<InstancedMeshIndirectDrawParameters*>(data + sizeof(uint32_t));
+            auto* ranges = reinterpret_cast<PrimitiveInstanceRange*>(ptr);
+            ptr += 25 * sizeof(PrimitiveInstanceRange);
 
-            for (uint32_t i = 0; i < std::min(indirectCount, 10u); i++) {
-                if (ImGui::TreeNode((void*) (intptr_t) i, "Draw %u", i)) {
-                    ImGui::Text("Dispatch: (%u, %u, %u)", params[i].groupCountX, params[i].groupCountY, params[i].groupCountZ);
-                    ImGui::Text("Instance Start: %u", params[i].compactedInstanceStart);
-                    ImGui::Text("Meshlet Offset: %u, Count: %u", params[i].meshletOffset, params[i].meshletCount);
-                    ImGui::TreePop();
+            auto* compacted = reinterpret_cast<CompactedPrimitiveData*>(ptr);
+            ptr += 25 * sizeof(CompactedPrimitiveData);
+
+            auto* indirectCount =
+                    reinterpret_cast<InstancedMeshIndirectCountBuffer*>(ptr);
+            ptr += sizeof(InstancedMeshIndirectCountBuffer);
+
+            auto* instanceIndirection = reinterpret_cast<uint32_t*>(ptr);
+            ptr += 64 * sizeof(uint32_t);
+
+            auto* indirectCmds =
+                    reinterpret_cast<InstancedMeshIndirectDrawParameters*>(ptr);
+
+            if (ImGui::TreeNode("Instances")) {
+                for (uint32_t i = 0; i < 25; ++i) {
+                    if (ImGui::TreeNode((void*) (intptr_t) i, "Instance %u", i)) {
+                        ImGui::Text("Visible: %u", instances[i].bIsVisible);
+                        ImGui::Text("LOD: %u", instances[i].lod);
+                        ImGui::Text("Primitive Index: %u", instances[i].primitiveIndex);
+                        ImGui::Text("Model Index: %u", instances[i].modelIndex);
+                        ImGui::TreePop();
+                    }
                 }
+                ImGui::TreePop();
             }
-        }
 
-        if (ImGui::CollapsingHeader("Luminance Histogram")) {
-            auto data = static_cast<uint8_t*>(renderThread->GetResourceManager()->debugReadbackBuffer.allocationInfo.pMappedData);
-            size_t histogramOffset = sizeof(uint32_t) + 10 * sizeof(InstancedMeshIndirectDrawParameters);
-            auto histogram = reinterpret_cast<uint32_t*>(data + histogramOffset);
-
-            ImGui::Text("First 64 bins (8x8):");
-            for (int row = 0; row < 8; row++) {
-                for (int col = 0; col < 8; col++) {
-                    int bin = row * 8 + col;
-                    ImGui::Text("%5u", histogram[bin]);
-                    if (col < 7) ImGui::SameLine();
+            if (ImGui::TreeNode("Primitive Ranges")) {
+                for (uint32_t i = 0; i < 25; ++i) {
+                    if (ImGui::TreeNode((void*) (intptr_t) (i + 1000), "Range %u", i)) {
+                        ImGui::Text("Primitive Index: %u", ranges[i].primitiveIndex);
+                        ImGui::Text("Start: %u", ranges[i].start);
+                        ImGui::Text("Count: %u", ranges[i].count);
+                        ImGui::Text(
+                            "Visible LODs: [%u, %u, %u, %u]",
+                            ranges[i].visibleCountPerLOD[0],
+                            ranges[i].visibleCountPerLOD[1],
+                            ranges[i].visibleCountPerLOD[2],
+                            ranges[i].visibleCountPerLOD[3]
+                        );
+                        ImGui::TreePop();
+                    }
                 }
+                ImGui::TreePop();
             }
-        }
 
-        if (ImGui::CollapsingHeader("Auto Exposure")) {
-            uint8_t* data = static_cast<uint8_t*>(renderThread->GetResourceManager()->debugReadbackBuffer.allocationInfo.pMappedData);
-            size_t exposureOffset = sizeof(uint32_t) + 10 * sizeof(InstancedMeshIndirectDrawParameters) + 256 * sizeof(uint32_t);
-            float exposure = *reinterpret_cast<float*>(data + exposureOffset);
 
-            ImGui::Text("Current Exposure: %.4f", exposure);
+            if (ImGui::TreeNode("Compacted Primitives")) {
+                for (uint32_t i = 0; i < indirectCount->packedPrimitiveCount; ++i) {
+                    if (ImGui::TreeNode((void*) (intptr_t) i, "Compacted %u", i)) {
+                        ImGui::Text("Primitive Index: %u", compacted[i].indexInPrimitiveRanges);
+                        ImGui::Text(
+                            "LOD Counts: [%u, %u, %u, %u]",
+                            compacted[i].lodCounts[0],
+                            compacted[i].lodCounts[1],
+                            compacted[i].lodCounts[2],
+                            compacted[i].lodCounts[3]
+                        );
+                        ImGui::Text(
+                            "LOD Offsets: [%u, %u, %u, %u]",
+                            compacted[i].lodIndirectionOffsets[0],
+                            compacted[i].lodIndirectionOffsets[1],
+                            compacted[i].lodIndirectionOffsets[2],
+                            compacted[i].lodIndirectionOffsets[3]
+                        );
+                        ImGui::Text(
+                            "Indirect Cmd Indices: [%u, %u, %u, %u]",
+                            compacted[i].indirectCommandIndices[0],
+                            compacted[i].indirectCommandIndices[1],
+                            compacted[i].indirectCommandIndices[2],
+                            compacted[i].indirectCommandIndices[3]
+                        );
+                        ImGui::TreePop();
+                    }
+                }
+                ImGui::TreePop();
+            }
+
+            if (ImGui::TreeNode("Indirect Counts")) {
+                ImGui::Text("Packed Primitive Count: %u", indirectCount->packedPrimitiveCount);
+                ImGui::Text("Indirect Draw Count: %u", indirectCount->indirectCount);
+                ImGui::Text(
+                    "Dispatch XYZ: (%u, %u, %u)",
+                    indirectCount->packedPrimitiveCountDispatchX,
+                    indirectCount->packedPrimitiveCountDispatchY,
+                    indirectCount->packedPrimitiveCountDispatchZ
+                );
+                ImGui::TreePop();
+            }
+
+            if (ImGui::TreeNode("Instance Indirection")) {
+                for (uint32_t i = 0; i < 32; ++i) {
+                    ImGui::Text("[%u] -> Instance %u", i, instanceIndirection[i]);
+                }
+                ImGui::TreePop();
+            }
+
+            // ===== ImGui: Correct Indirect Parameter View =====
+            if (ImGui::TreeNode("Indirect Commands")) {
+                for (uint32_t i = 0; i < indirectCount->indirectCount; ++i) {
+                    if (ImGui::TreeNode((void*)(intptr_t)i, "Cmd %u", i)) {
+                        ImGui::Text("GroupCount X: %u", indirectCmds[i].groupCountX);
+                        ImGui::Text("GroupCount Y: %u", indirectCmds[i].groupCountY);
+                        ImGui::Text("GroupCount Z: %u", indirectCmds[i].groupCountZ);
+                        ImGui::Text("Compacted Instance Start: %u", indirectCmds[i].compactedInstanceStart);
+                        ImGui::Text("Meshlet Offset: %u", indirectCmds[i].meshletOffset);
+                        ImGui::Text("Meshlet Count: %u", indirectCmds[i].meshletCount);
+                        ImGui::TreePop();
+                    }
+                }
+                ImGui::TreePop();
+            }
         }
     }
 
