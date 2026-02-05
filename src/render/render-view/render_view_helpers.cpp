@@ -85,6 +85,8 @@ SceneData GenerateSceneData(const Core::RenderView& view, const Core::PostProces
 
     sceneData.frustum = CreateFrustum(sceneData.viewProj);
     sceneData.deltaTime = deltaTime;
+    float verticalFOV = view.currentViewData.fovRadians;
+    sceneData.lodScreenSizeScale = (renderExtent[1] * 0.5f) / tanf(verticalFOV * 0.5f);
     sceneData.clipPlane = {0.0f, 0.0f, 0.0f, 1.0f};
 
     return sceneData;

@@ -263,7 +263,7 @@ RenderPass& RenderPass::ReadIndirectBuffer(const std::string& name)
 RenderPass& RenderPass::ReadIndirectCountBuffer(const std::string& name)
 {
     BufferResource* resource = graph.GetOrCreateBuffer(name);
-    resource->accumulatedUsage |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
+    resource->accumulatedUsage |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;;
     bufferIndirectCountReads.push_back(resource->index);
     return *this;
 }

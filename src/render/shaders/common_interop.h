@@ -95,7 +95,7 @@ SHADER_PUBLIC struct SHADER_ALIGN SceneData
     SHADER_PUBLIC float depthLinearizeMult;
     SHADER_PUBLIC float depthLinearizeAdd;
     SHADER_PUBLIC float deltaTime;
-    SHADER_PUBLIC float _pad1;
+    SHADER_PUBLIC float lodScreenSizeScale;
 };
 
 SHADER_PUBLIC struct DrawMeshTasksIndirectCommand

@@ -48,32 +48,28 @@ using float4x4 = glm::mat4;
 #define SHADER_ATOMIC(T) T
 #endif // __SLANG__
 
-SHADER_PUBLIC struct PrimitiveCount
-{
-    SHADER_PUBLIC SHADER_ATOMIC(uint32_t) count;
-    SHADER_PUBLIC uint32_t offset;
-};
-
 SHADER_PUBLIC struct InstancedMeshIndirectDrawParameters
 {
     // indirect parameters
-    SHADER_PUBLIC uint32_t groupCountX;
-    SHADER_PUBLIC uint32_t groupCountY; // offset
+    SHADER_PUBLIC uint32_t groupCountX; // meshlet count / group size
+    SHADER_PUBLIC uint32_t groupCountY; // instance offset
     SHADER_PUBLIC uint32_t groupCountZ;
+
     SHADER_PUBLIC uint32_t compactedInstanceStart;
 
     SHADER_PUBLIC uint32_t meshletOffset;
     SHADER_PUBLIC uint32_t meshletCount;
-    SHADER_PUBLIC uint32_t padding1;
-    SHADER_PUBLIC uint32_t padding2;
+    uint32_t padding1;
+    uint32_t padding2;
 };
 
 SHADER_PUBLIC struct InstancedMeshIndirectCountBuffer
 {
-    SHADER_PUBLIC SHADER_ATOMIC(uint32_t) meshIndirectCount;
-    SHADER_PUBLIC uint32_t padding0;
-    SHADER_PUBLIC uint32_t padding1;
-    SHADER_PUBLIC uint32_t padding2;
+    SHADER_PUBLIC uint32_t packedPrimitiveCountDispatchX;
+    SHADER_PUBLIC uint32_t packedPrimitiveCountDispatchY;
+    SHADER_PUBLIC uint32_t packedPrimitiveCountDispatchZ;
+    SHADER_PUBLIC uint32_t packedPrimitiveCount;
+    SHADER_PUBLIC uint32_t indirectCount;
 };
 
 #endif //WILL_ENGINE_INSTANCING_INTEROP_H

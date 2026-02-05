@@ -51,13 +51,6 @@ inline constexpr int32_t BINDLESS_STORAGE_IMAGE_COUNT = 128;
 inline constexpr int32_t BINDLESS_SAMPLER_COUNT = 128;
 inline constexpr int32_t BINDLESS_SAMPLED_IMAGE_COUNT = 4096;
 
-inline constexpr int32_t INSTANCING_PACKED_VISIBILITY_SIZE = sizeof(uint32_t) * (BINDLESS_INSTANCE_BUFFER_COUNT + 31) / 32;
-inline constexpr int32_t INSTANCING_INSTANCE_OFFSET_SIZE = sizeof(uint32_t) * BINDLESS_INSTANCE_BUFFER_COUNT;
-inline constexpr int32_t INSTANCING_PRIMITIVE_COUNT_SIZE = sizeof(PrimitiveCount) * MEGA_PRIMITIVE_BUFFER_COUNT;
-inline constexpr int32_t INSTANCING_COMPACTED_INSTANCE_BUFFER_SIZE = sizeof(Instance) * BINDLESS_INSTANCE_BUFFER_COUNT;
-inline constexpr int32_t INSTANCING_MESH_INDIRECT_COUNT_SIZE = sizeof(InstancedMeshIndirectCountBuffer);
-inline constexpr int32_t INSTANCING_MESH_INDIRECT_PARAMETERS = sizeof(InstancedMeshIndirectDrawParameters) * MEGA_PRIMITIVE_BUFFER_COUNT;
-
 inline constexpr int32_t POST_PROCESS_LUMINANCE_BUFFER_SIZE = sizeof(uint32_t) * POST_PROCESS_LUMINANCE_DISPATCH_X * POST_PROCESS_LUMINANCE_DISPATCH_Y;
 
 inline constexpr uint32_t HALTON_SEQUENCE_COUNT = 16;

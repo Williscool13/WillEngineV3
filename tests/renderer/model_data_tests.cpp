@@ -108,23 +108,6 @@ TEST_CASE("Meshlet bounding and culling data", "[renderer][model-data]") {
 }
 
 TEST_CASE("MeshletPrimitive data", "[renderer][model-data]") {
-    SECTION("Default initialization") {
-        MeshletPrimitive p{};
-
-        REQUIRE(p.meshletOffset == 0);
-        REQUIRE(p.meshletCount == 0);
-        REQUIRE(p.bHasTransparent == 0);
-    }
-
-    SECTION("Meshlet range") {
-        MeshletPrimitive p{};
-        p.meshletOffset = 10;
-        p.meshletCount = 5;
-
-        REQUIRE(p.meshletOffset == 10);
-        REQUIRE(p.meshletCount == 5);
-    }
-
     SECTION("Transparency flag") {
         MeshletPrimitive p{};
         p.bHasTransparent = 1;
@@ -232,7 +215,6 @@ TEST_CASE("Instance data", "[renderer][model-data]") {
         REQUIRE(inst.primitiveIndex == 0);
         REQUIRE(inst.modelIndex == 0);
         REQUIRE(inst.materialIndex == 0);
-        REQUIRE(inst.jointMatrixOffset == 0);
     }
 
     SECTION("Valid instance data") {
@@ -240,12 +222,10 @@ TEST_CASE("Instance data", "[renderer][model-data]") {
         inst.primitiveIndex = 5;
         inst.modelIndex = 10;
         inst.materialIndex = 2;
-        inst.jointMatrixOffset = 100;
 
         REQUIRE(inst.primitiveIndex == 5);
         REQUIRE(inst.modelIndex == 10);
         REQUIRE(inst.materialIndex == 2);
-        REQUIRE(inst.jointMatrixOffset == 100);
     }
 }
 

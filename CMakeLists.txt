@@ -264,9 +264,10 @@ add_shader_include("${CMAKE_SOURCE_DIR}/shaders/bindless_declarations.slang")
 compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/debug_visualize.slang compute ComputeMain debug_visualize
         ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputeVisibility instancing_visibility
-        ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputeVisibilityShadows instancing_shadows_visibility
+        # ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputeVisibilityShadows instancing_shadows_visibility
+        ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputeVisiblePrimitiveCounter instancing_visible_primitive_counter
         ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputePrefixSum instancing_prefix_sum
-        ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputeCompactAndGenerateIndirect instancing_indirect_construction
+        ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputeCompactAndGenerateIndirect instancing_compact_and_indirect
         ${CMAKE_SOURCE_DIR}/shaders/mesh_shading_instanced.slang task TaskMain mesh_shading_instanced
         ${CMAKE_SOURCE_DIR}/shaders/mesh_shading_instanced.slang mesh MeshMain mesh_shading_instanced
         ${CMAKE_SOURCE_DIR}/shaders/mesh_shading_instanced.slang fragment FragmentMain mesh_shading_instanced

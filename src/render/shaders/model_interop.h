@@ -8,12 +8,14 @@
 
 #ifdef __SLANG__
 module model_interop;
+import constants_interop;
 #define SHADER_PUBLIC public
 #define SHADER_CONST const static
 #define SHADER_ALIGN
 #else
 #include <glm/glm.hpp>
 #include <cstdint>
+#include "constants_interop.h"
 
 using uint = uint32_t;
 using int32 = int32_t;
@@ -113,10 +115,33 @@ SHADER_PUBLIC struct SHADER_ALIGN MaterialProperties
 
 SHADER_PUBLIC struct Instance
 {
+    SHADER_PUBLIC uint32_t primitiveIndex;  // Written by CPU
+    SHADER_PUBLIC uint32_t modelIndex;      // Written by CPU
+    SHADER_PUBLIC uint32_t materialIndex;   // Written by CPU
+    uint32_t padding;
+
+    SHADER_PUBLIC uint32_t bIsVisible;
+    SHADER_PUBLIC uint32_t lod; // not useful if bIsVisible is false
+};
+
+SHADER_PUBLIC struct PrimitiveInstanceRange {
+    SHADER_PUBLIC uint32_t start;           // Written by CPU
+    SHADER_PUBLIC uint32_t count;           // Written by CPU
+    SHADER_PUBLIC uint32_t primitiveIndex;  // Written by CPU
+    uint32_t padding;
+
+    SHADER_PUBLIC uint32_t visibleCountPerLOD[LOD_COUNT];
+};
+
+SHADER_PUBLIC struct CompactedPrimitiveData {
+    SHADER_PUBLIC uint32_t lodCounts[LOD_COUNT];
+    SHADER_PUBLIC uint32_t indirectCommandIndices[LOD_COUNT];
+    SHADER_PUBLIC uint32_t lodIndirectionOffsets[LOD_COUNT];
     SHADER_PUBLIC uint32_t primitiveIndex;
-    SHADER_PUBLIC uint32_t modelIndex;
-    SHADER_PUBLIC uint32_t materialIndex;
-    SHADER_PUBLIC uint32_t jointMatrixOffset;
+    uint32_t padding0;
+    uint32_t padding1;
+    uint32_t padding2;
+
 };
 
 SHADER_PUBLIC struct SHADER_ALIGN Model

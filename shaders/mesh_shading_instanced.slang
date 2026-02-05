@@ -41,8 +41,9 @@ void TaskMain(uniform InstancedMeshShadingPushConstant pc,
 {
     InstancedMeshIndirectDrawParameters indirectParameters = pc.indirectBuffer[drawIndex];
 
-    uint32_t instanceIndex = indirectParameters.compactedInstanceStart + gid.y;
-    Instance inst = pc.compactedInstanceBuffer[instanceIndex];
+    uint32_t instanceIndirectIndex = indirectParameters.compactedInstanceStart + gid.y;
+    uint32_t instanceIndex = pc.instanceIndirectionBuffer[instanceIndirectIndex];
+    Instance inst = pc.instanceBuffer[instanceIndex];
 
     uint32_t groupMeshletOffset = indirectParameters.meshletOffset + (gid.x * TASK_SHADER_DISPATCH_X);
     uint32_t totalMeshlets = indirectParameters.meshletCount;
