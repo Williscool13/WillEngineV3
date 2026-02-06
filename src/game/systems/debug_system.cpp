@@ -525,6 +525,44 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
     }
 
 
+    if (state->inputFrame->GetKey(Key::F8).pressed) {
+        Render::WillModel* box = ctx->assetManager->GetModel(boxHandle);
+        if (!box || box->modelLoadState != Render::WillModel::ModelLoadState::Loaded) {
+            SPDLOG_WARN("[DebugSystem] Box model not ready yet");
+            return;
+        }
+
+        // const int totalBoxes = 100000;
+        const int totalBoxes = 10000;
+        const float boxSpacing = 1.5f;
+        const int boxesPerSide = static_cast<int>(cbrt(totalBoxes)) + 1;
+        const float gridExtent = static_cast<float>(boxesPerSide) * boxSpacing * 0.5f;
+        const float exclusionRadius = 5.0f; // nothing in center area
+
+        int boxesCreated = 0;
+        for (int x = 0; x < boxesPerSide && boxesCreated < totalBoxes; x++) {
+            for (int y = 0; y < boxesPerSide && boxesCreated < totalBoxes; y++) {
+                for (int z = 0; z < boxesPerSide && boxesCreated < totalBoxes; z++) {
+                    glm::vec3 spawnPos = glm::vec3(
+                        x * boxSpacing - gridExtent,
+                        y * boxSpacing - gridExtent,
+                        z * boxSpacing - gridExtent
+                    );
+
+                    if (abs(spawnPos.x) < exclusionRadius &&
+                        abs(spawnPos.y) < exclusionRadius &&
+                        abs(spawnPos.z) < exclusionRadius) {
+                        continue;
+                        }
+
+                    CreateBox(ctx, state, spawnPos, false);
+                    boxesCreated++;
+                }
+            }
+        }
+
+        SPDLOG_INFO("Created {} boxes", boxesCreated);
+    }
     if (state->inputFrame->GetKey(Key::F6).pressed) {
         Render::WillModel* dragon = ctx->assetManager->GetModel(dragonHandle);
         if (!dragon || dragon->modelLoadState != Render::WillModel::ModelLoadState::Loaded) {

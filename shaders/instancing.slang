@@ -151,7 +151,6 @@ void ComputePrefixSum(uniform InstancingPrefixSumPushConstant pc) {
     pc.indirectCountBuffer[0].packedPrimitiveCountDispatchZ = 1;
     pc.indirectCountBuffer[0].packedPrimitiveCount = compactedPrimitiveCount;
     pc.indirectCountBuffer[0].indirectCount = indirectCommandCount;
-
 }
 
 // =============== Compute Shader (Compact Instances and Generate Indirect Commands) ===============

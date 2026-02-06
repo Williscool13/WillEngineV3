@@ -1101,8 +1101,7 @@ void RenderThread::SetupFrameUniforms(const Core::ViewFamily& viewFamily, const 
     uploadUniformsPass.WriteTransferBuffer("scene_data");
     uploadUniformsPass.WriteTransferBuffer("shadow_data");
     uploadUniformsPass.WriteTransferBuffer("light_data");
-    VkBuffer srcBuffer = renderGraph->GetTransientUploadBuffer();
-    uploadUniformsPass.Execute([&, srcBuffer,
+    uploadUniformsPass.Execute([&,
             sceneOffset = sceneDataUploadAllocation.offset,
             portalOffset = portalSceneDataUploadAllocation.offset, bHasPortal,
             shadowOffset = shadowDataUploadAllocation.offset,
@@ -1123,7 +1122,7 @@ void RenderThread::SetupFrameUniforms(const Core::ViewFamily& viewFamily, const 
 
             const VkCopyBufferInfo2 sceneDataCopyInfo{
                 .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
-                .srcBuffer = srcBuffer,
+                .srcBuffer = renderGraph->GetTransientUploadBuffer(),
                 .dstBuffer = renderGraph->GetBufferHandle("scene_data"),
                 .regionCount = sceneDataCount,
                 .pRegions = sceneDataRegions.data()
@@ -1137,7 +1136,7 @@ void RenderThread::SetupFrameUniforms(const Core::ViewFamily& viewFamily, const 
             shadowDataRegions[0].size = sizeof(ShadowData);
             const VkCopyBufferInfo2 shadowDataCopyInfo{
                 .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
-                .srcBuffer = srcBuffer,
+                .srcBuffer = renderGraph->GetTransientUploadBuffer(),
                 .dstBuffer = renderGraph->GetBufferHandle("shadow_data"),
                 .regionCount = shadowDataRegions.size(),
                 .pRegions = shadowDataRegions.data()
@@ -1151,7 +1150,7 @@ void RenderThread::SetupFrameUniforms(const Core::ViewFamily& viewFamily, const 
             lightDataRegions[0].size = sizeof(LightData);
             const VkCopyBufferInfo2 lightDataCopyInfo{
                 .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
-                .srcBuffer = srcBuffer,
+                .srcBuffer = renderGraph->GetTransientUploadBuffer(),
                 .dstBuffer = renderGraph->GetBufferHandle("light_data"),
                 .regionCount = lightDataRegions.size(),
                 .pRegions = lightDataRegions.data()
@@ -1240,8 +1239,7 @@ void RenderThread::SetupModelUniforms(Core::ViewFamily& viewFamily)
     uploadModelsPass.WriteTransferBuffer("model_buffer");
     uploadModelsPass.WriteTransferBuffer("material_buffer");
 
-    VkBuffer srcBuffer = renderGraph->GetTransientUploadBuffer();
-    uploadModelsPass.Execute([&, srcBuffer,
+    uploadModelsPass.Execute([&,
             instanceOffset = instanceUpload.offset,
             instanceSize = viewFamily.mainInstances.size() * sizeof(Instance),
             primitiveRangeOffset = primitiveRangeUpload.offset,
@@ -1262,7 +1260,7 @@ void RenderThread::SetupModelUniforms(Core::ViewFamily& viewFamily)
 
             VkCopyBufferInfo2 instanceCopyInfo{
                 .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
-                .srcBuffer = srcBuffer,
+                .srcBuffer = renderGraph->GetTransientUploadBuffer(),
                 .dstBuffer = renderGraph->GetBufferHandle("instance_buffer"),
                 .regionCount = 1,
                 .pRegions = &copies[0]
@@ -1271,7 +1269,7 @@ void RenderThread::SetupModelUniforms(Core::ViewFamily& viewFamily)
 
             VkCopyBufferInfo2 primitiveRangeCopyInfo{
                 .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
-                .srcBuffer = srcBuffer,
+                .srcBuffer = renderGraph->GetTransientUploadBuffer(),
                 .dstBuffer = renderGraph->GetBufferHandle("primitive_range_buffer"),
                 .regionCount = 1,
                 .pRegions = &copies[1]
@@ -1285,7 +1283,7 @@ void RenderThread::SetupModelUniforms(Core::ViewFamily& viewFamily)
             modelCopy.size = modelSize;
             VkCopyBufferInfo2 modelCopyInfo{
                 .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
-                .srcBuffer = srcBuffer,
+                .srcBuffer = renderGraph->GetTransientUploadBuffer(),
                 .dstBuffer = renderGraph->GetBufferHandle("model_buffer"),
                 .regionCount = 1,
                 .pRegions = &modelCopy
@@ -1299,7 +1297,7 @@ void RenderThread::SetupModelUniforms(Core::ViewFamily& viewFamily)
             materialCopy.size = materialSize;
             VkCopyBufferInfo2 materialCopyInfo{
                 .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
-                .srcBuffer = srcBuffer,
+                .srcBuffer = renderGraph->GetTransientUploadBuffer(),
                 .dstBuffer = renderGraph->GetBufferHandle("material_buffer"),
                 .regionCount = 1,
                 .pRegions = &materialCopy
