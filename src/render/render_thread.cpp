@@ -867,6 +867,8 @@ void RenderThread::CreatePipelines()
                                              sizeof(PrefixSumLocalPushConstant), PipelineCategory::Instancing);
     pipelineManager->RegisterComputePipeline("instancing_prefix_sum_blocks", Platform::GetShaderPath() / "instancing_prefix_sum_blocks_compute.spv",
                                              sizeof(PrefixSumBlocksPushConstant), PipelineCategory::Instancing);
+    pipelineManager->RegisterComputePipeline("instancing_prefix_sum_scatter", Platform::GetShaderPath() / "instancing_prefix_sum_scatter_compute.spv",
+                                             sizeof(PrefixSumScatterPushConstant), PipelineCategory::Instancing);
     pipelineManager->RegisterComputePipeline("instancing_compact_and_indirect", Platform::GetShaderPath() / "instancing_compact_and_indirect_compute.spv",
                                              sizeof(CompactAndIndirectPushConstant), PipelineCategory::Instancing);
 
@@ -1635,6 +1637,24 @@ void RenderThread::SetupMainGeometryPass(RenderGraph& graph, const Core::ViewFam
         vkCmdDispatch(cmd, 1, 1, 1);
     });
 
+    RenderPass& prefixSumScatterPass = graph.AddPass("Prefix Sum Scatter", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+    prefixSumScatterPass.ReadBuffer("scanned_block_offsets_buffer");
+    prefixSumScatterPass.ReadWriteBuffer("primitive_range_prefix_sum_buffer");
+    prefixSumScatterPass.Execute([&](VkCommandBuffer cmd) {
+        PrefixSumScatterPushConstant pc{
+            .prefixSums = graph.GetBufferAddress("primitive_range_prefix_sum_buffer"),
+            .scannedBlockOffsets = graph.GetBufferAddress("scanned_block_offsets_buffer"),
+            .primitiveRangeCount = static_cast<uint32_t>(viewFamily.mainInstancesPrimitiveRanges.size()),
+        };
+
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_prefix_sum_scatter");
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+
+        uint32_t numWorkgroups = (viewFamily.mainInstancesPrimitiveRanges.size() + INSTANCING_PREFIX_SUM_SCATTER_DISPATCH_X - 1) / INSTANCING_PREFIX_SUM_SCATTER_DISPATCH_X;
+        vkCmdDispatch(cmd, numWorkgroups, 1, 1);
+    });
+
 
     RenderPass& prefixSumPass = graph.AddPass("Prefix Sum", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
     prefixSumPass.ReadBuffer("primitive_range_buffer");
@@ -1662,6 +1682,7 @@ void RenderThread::SetupMainGeometryPass(RenderGraph& graph, const Core::ViewFam
     indirectConstructionPass.ReadBuffer("primitive_buffer");
     indirectConstructionPass.ReadIndirectCountBuffer("indirect_count_buffer");
     indirectConstructionPass.WriteBuffer("instance_indirection_buffer");
+    indirectConstructionPass.WriteBuffer("indirect_command_buffer");
     indirectConstructionPass.WriteBuffer("indirect_command_buffer");
     indirectConstructionPass.Execute([&](VkCommandBuffer cmd) {
         CompactAndIndirectPushConstant pc{

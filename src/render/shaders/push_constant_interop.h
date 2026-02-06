@@ -114,6 +114,14 @@ SHADER_PUBLIC struct PrefixSumBlocksPushConstant
     SHADER_PUBLIC SHADER_PTR(uint32_t) scannedBlockOffsets; // Out: 256
 };
 
+SHADER_PUBLIC struct PrefixSumScatterPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(uint32_t) prefixSums;          // In/Out: local prefix sums -> global
+    SHADER_PUBLIC SHADER_PTR(uint32_t) scannedBlockOffsets; // In: 256 scanned block offsets
+    SHADER_PUBLIC uint32_t primitiveRangeCount;
+};
+
+
 SHADER_PUBLIC struct InstancingPrefixSumPushConstant
 {
     // Read-Only

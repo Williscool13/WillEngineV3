@@ -157,6 +157,25 @@ void ComputePrefixSumBlocks(uniform PrefixSumBlocksPushConstant pc, uint3 gtid :
     pc.scannedBlockOffsets[threadIdx] = scannedValue;
 }
 
+
+// =============== Compute Shader (Prefix Sum Add Block Offsets) ===============
+// Adds scanned block offsets to local prefix sums to produce final global prefix sums
+
+[shader("compute")]
+[numthreads(INSTANCING_PREFIX_SUM_SCATTER_DISPATCH_X, 1, 1)]
+void ComputePrefixSumScatter(uniform PrefixSumScatterPushConstant pc, uint3 gid : SV_GroupID, uint3 dtid : SV_DispatchThreadID)
+{
+    uint blockIdx = gid.x;
+    uint globalIdx = dtid.x;
+
+    if (globalIdx >= pc.primitiveRangeCount) {
+        return;
+    }
+
+    uint blockOffset = pc.scannedBlockOffsets[blockIdx];
+    pc.prefixSums[globalIdx] += blockOffset;
+}
+
 // =============== Compute Shader (Prefix Sum for Compacted Instance Offsets) ===============
 // Single-threaded prefix sum that:
 // 1. Culls primitives with no visible instances
