@@ -434,6 +434,33 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
             ImGui::Text("Shaders: >60s since reload");
         }
 
+        // Get readback pointers
+        uint8_t* base = static_cast<uint8_t*>(renderThread->GetResourceManager()->debugReadbackBuffer.allocationInfo.pMappedData);
+        uint8_t* ptr = base;
+
+        auto* instances = reinterpret_cast<Instance*>(ptr);
+        ptr += 25 * sizeof(Instance);
+
+        auto* ranges = reinterpret_cast<PrimitiveInstanceRange*>(ptr);
+        ptr += 25 * sizeof(PrimitiveInstanceRange);
+
+        auto* compacted = reinterpret_cast<CompactedPrimitiveData*>(ptr);
+        ptr += 25 * sizeof(CompactedPrimitiveData);
+
+        auto* indirectCount = reinterpret_cast<InstancedMeshIndirectCountBuffer*>(ptr);
+        ptr += sizeof(InstancedMeshIndirectCountBuffer);
+
+        // Calculate LOD totals
+        uint32_t totalLOD[4] = {0, 0, 0, 0};
+        for (uint32_t i = 0; i < indirectCount->packedPrimitiveCount; ++i) {
+            totalLOD[0] += compacted[i].lodCounts[0];
+            totalLOD[1] += compacted[i].lodCounts[1];
+            totalLOD[2] += compacted[i].lodCounts[2];
+            totalLOD[3] += compacted[i].lodCounts[3];
+        }
+
+        ImGui::Text("LOD Counts: [%u, %u, %u, %u]", totalLOD[0], totalLOD[1], totalLOD[2], totalLOD[3]);
+
         ImGui::Checkbox("Freeze Visibility Calculations", &bFreezeVisibility);
         if (ImGui::Button("Log RDG")) {
             bLogRDG = true;
@@ -443,27 +470,12 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
         }
 
         if (ImGui::CollapsingHeader("Visibility Debug")) {
-            uint8_t* base = static_cast<uint8_t*>(renderThread->GetResourceManager()->debugReadbackBuffer.allocationInfo.pMappedData);
-            uint8_t* ptr = base;
-
-            auto* instances = reinterpret_cast<Instance*>(ptr);
-            ptr += 25 * sizeof(Instance);
-
-            auto* ranges = reinterpret_cast<PrimitiveInstanceRange*>(ptr);
-            ptr += 25 * sizeof(PrimitiveInstanceRange);
-
-            auto* compacted = reinterpret_cast<CompactedPrimitiveData*>(ptr);
-            ptr += 25 * sizeof(CompactedPrimitiveData);
-
-            auto* indirectCount =
-                    reinterpret_cast<InstancedMeshIndirectCountBuffer*>(ptr);
             ptr += sizeof(InstancedMeshIndirectCountBuffer);
 
             auto* instanceIndirection = reinterpret_cast<uint32_t*>(ptr);
             ptr += 64 * sizeof(uint32_t);
 
-            auto* indirectCmds =
-                    reinterpret_cast<InstancedMeshIndirectDrawParameters*>(ptr);
+            auto* indirectCmds = reinterpret_cast<InstancedMeshIndirectDrawParameters*>(ptr);
 
             if (ImGui::TreeNode("Instances")) {
                 for (uint32_t i = 0; i < 25; ++i) {
@@ -499,7 +511,14 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
 
 
             if (ImGui::TreeNode("Compacted Primitives")) {
+                uint32_t totalLOD[4] = {0, 0, 0, 0};
+
                 for (uint32_t i = 0; i < indirectCount->packedPrimitiveCount; ++i) {
+                    totalLOD[0] += compacted[i].lodCounts[0];
+                    totalLOD[1] += compacted[i].lodCounts[1];
+                    totalLOD[2] += compacted[i].lodCounts[2];
+                    totalLOD[3] += compacted[i].lodCounts[3];
+
                     if (ImGui::TreeNode((void*) (intptr_t) i, "Compacted %u", i)) {
                         ImGui::Text("Primitive Index: %u", compacted[i].indexInPrimitiveRanges);
                         ImGui::Text(
@@ -526,6 +545,10 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
                         ImGui::TreePop();
                     }
                 }
+
+                ImGui::Separator();
+                ImGui::Text("Total LOD Counts: [%u, %u, %u, %u]", totalLOD[0], totalLOD[1], totalLOD[2], totalLOD[3]);
+
                 ImGui::TreePop();
             }
 
@@ -551,7 +574,7 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
             // ===== ImGui: Correct Indirect Parameter View =====
             if (ImGui::TreeNode("Indirect Commands")) {
                 for (uint32_t i = 0; i < indirectCount->indirectCount; ++i) {
-                    if (ImGui::TreeNode((void*)(intptr_t)i, "Cmd %u", i)) {
+                    if (ImGui::TreeNode((void*) (intptr_t) i, "Cmd %u", i)) {
                         ImGui::Text("GroupCount X: %u", indirectCmds[i].groupCountX);
                         ImGui::Text("GroupCount Y: %u", indirectCmds[i].groupCountY);
                         ImGui::Text("GroupCount Z: %u", indirectCmds[i].groupCountZ);

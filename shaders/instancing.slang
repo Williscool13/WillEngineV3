@@ -39,8 +39,9 @@ void ComputeVisibility(uniform VisibilityPushConstant pc, uint3 dtid : SV_Dispat
     if (bVisible) {
         // Calculate LOD based on screen space size
         float3 cameraPos = pc.sceneData[pc.sceneDataIndex].cameraWorldPos.xyz;
-        float distance = length(worldCenter - cameraPos);
+        float distance = max(length(worldCenter - cameraPos), worldRadius);
         float screenSize = (worldRadius / distance) * pc.sceneData[pc.sceneDataIndex].lodScreenSizeScale;
+
 
         // LOD thresholds (adjust as needed)
         if (screenSize < 10.0) lod = 3;
@@ -177,8 +178,6 @@ void ComputeCompactAndGenerateIndirect(uniform CompactAndIndirectPushConstant pc
     PrimitiveInstanceRange range = pc.primitiveInstanceRangeBuffer[compacted.indexInPrimitiveRanges];
     uint writeOffset = compacted.lodIndirectionOffsets[lod];
     for (uint i = 0; i < range.count; i++) {
-    pc.instanceIndirectionBuffer[lod]= lod;
-
         uint instanceID = range.start + i;
         Instance inst = pc.instanceBuffer[instanceID];
 
