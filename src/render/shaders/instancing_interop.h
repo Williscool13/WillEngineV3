@@ -63,6 +63,12 @@ SHADER_PUBLIC struct InstancedMeshIndirectDrawParameters
     uint32_t padding0;
 };
 
+SHADER_PUBLIC struct PrimitiveOffsets
+{
+    SHADER_PUBLIC uint32_t instanceOffset;
+    SHADER_PUBLIC uint32_t commandOffset;
+};
+
 SHADER_PUBLIC struct InstancedMeshIndirectCountBuffer
 {
     SHADER_PUBLIC uint32_t packedPrimitiveCountDispatchX;

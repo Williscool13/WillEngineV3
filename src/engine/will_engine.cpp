@@ -475,14 +475,14 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
             auto* indirectCmds = reinterpret_cast<InstancedMeshIndirectDrawParameters*>(ptr);
             ptr += 64 * sizeof(InstancedMeshIndirectDrawParameters);
 
-            auto* prefixSums = reinterpret_cast<uint32_t*>(ptr);
-            ptr += 128 * sizeof(uint32_t);
+            auto* prefixSums = reinterpret_cast<PrimitiveOffsets*>(ptr);
+            ptr += 128 * sizeof(PrimitiveOffsets);
 
-            auto* blockSums = reinterpret_cast<uint32_t*>(ptr);
-            ptr += 4 * sizeof(uint32_t);
+            auto* blockSums = reinterpret_cast<PrimitiveOffsets*>(ptr);
+            ptr += 4 * sizeof(PrimitiveOffsets);
 
-            auto* scannedBlockSums = reinterpret_cast<uint32_t*>(ptr);
-            ptr += 4 * sizeof(uint32_t);
+            auto* scannedBlockSums = reinterpret_cast<PrimitiveOffsets*>(ptr);
+            ptr += 4 * sizeof(PrimitiveOffsets);
 
 
             if (ImGui::TreeNode("Instances")) {
@@ -599,21 +599,21 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
             if (ImGui::TreeNode("Prefix Sum Debug")) {
                 if (ImGui::TreeNode("Primitive Range Prefix Sums")) {
                     for (uint32_t i = 0; i < 128; ++i) {
-                        ImGui::Text("Range %u: %u", i, prefixSums[i]);
+                        ImGui::Text("Range %u: instances=%u, commands=%u", i, prefixSums[i].instanceOffset, prefixSums[i].commandOffset);
                     }
                     ImGui::TreePop();
                 }
 
                 if (ImGui::TreeNode("Block Sums")) {
                     for (uint32_t i = 0; i < 4; ++i) {
-                        ImGui::Text("Block %u: %u", i, blockSums[i]);
+                        ImGui::Text("Block %u: instances=%u, commands=%u", i, blockSums[i].instanceOffset, blockSums[i].commandOffset);
                     }
                     ImGui::TreePop();
                 }
 
                 if (ImGui::TreeNode("Scanned Block Sums")) {
                     for (uint32_t i = 0; i < 4; ++i) {
-                        ImGui::Text("Scanned Block %u: %u", i, scannedBlockSums[i]);
+                        ImGui::Text("Scanned Block %u: instances=%u, commands=%u", i, scannedBlockSums[i].instanceOffset, scannedBlockSums[i].commandOffset);
                     }
                     ImGui::TreePop();
                 }

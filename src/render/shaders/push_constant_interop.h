@@ -103,21 +103,21 @@ SHADER_PUBLIC struct VisibilityPushConstant
 SHADER_PUBLIC struct PrefixSumLocalPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(PrimitiveInstanceRange) primitiveInstanceRangeBuffer;
-    SHADER_PUBLIC SHADER_PTR(uint32_t) prefixSums; // Out: 65536
-    SHADER_PUBLIC SHADER_PTR(uint32_t) blockSums;  // Out: 256
+    SHADER_PUBLIC SHADER_PTR(PrimitiveOffsets) prefixSums; // Out: 65536
+    SHADER_PUBLIC SHADER_PTR(PrimitiveOffsets) blockSums;  // Out: 256
     SHADER_PUBLIC uint32_t primitiveRangeCount;
 };
 
 SHADER_PUBLIC struct PrefixSumBlocksPushConstant
 {
-    SHADER_PUBLIC SHADER_PTR(uint32_t) blockSums;           // In: 256
-    SHADER_PUBLIC SHADER_PTR(uint32_t) scannedBlockOffsets; // Out: 256
+    SHADER_PUBLIC SHADER_PTR(PrimitiveOffsets) blockSums;           // In: 256
+    SHADER_PUBLIC SHADER_PTR(PrimitiveOffsets) scannedBlockOffsets; // Out: 256
 };
 
 SHADER_PUBLIC struct PrefixSumScatterPushConstant
 {
-    SHADER_PUBLIC SHADER_PTR(uint32_t) prefixSums;          // In/Out: local prefix sums -> global
-    SHADER_PUBLIC SHADER_PTR(uint32_t) scannedBlockOffsets; // In: 256 scanned block offsets
+    SHADER_PUBLIC SHADER_PTR(PrimitiveOffsets) prefixSums;          // In/Out: local prefix sums -> global
+    SHADER_PUBLIC SHADER_PTR(PrimitiveOffsets) scannedBlockOffsets; // In: 256 scanned block offsets
     SHADER_PUBLIC uint32_t primitiveRangeCount;
 };
 

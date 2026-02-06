@@ -605,7 +605,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 VkBufferCopy prefixCopy{};
                 prefixCopy.srcOffset = 0;
                 prefixCopy.dstOffset = currentOffset;
-                prefixCopy.size = 128 * sizeof(uint32_t);
+                prefixCopy.size = 128 * sizeof(PrimitiveOffsets);
                 vkCmdCopyBuffer(
                     cmd,
                     renderGraph->GetBufferHandle("primitive_range_prefix_sum_buffer"),
@@ -613,12 +613,12 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                     1,
                     &prefixCopy
                 );
-                currentOffset += 128 * sizeof(uint32_t);
+                currentOffset += 128 * sizeof(PrimitiveOffsets);
 
                 VkBufferCopy blockSumsCopy{};
                 blockSumsCopy.srcOffset = 0;
                 blockSumsCopy.dstOffset = currentOffset;
-                blockSumsCopy.size = 4 * sizeof(uint32_t);
+                blockSumsCopy.size = 4 * sizeof(PrimitiveOffsets);
                 vkCmdCopyBuffer(
                     cmd,
                     renderGraph->GetBufferHandle("block_sums_buffer"),
@@ -626,12 +626,12 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                     1,
                     &blockSumsCopy
                 );
-                currentOffset += 4 * sizeof(uint32_t);
+                currentOffset += 4 * sizeof(PrimitiveOffsets);
 
                 VkBufferCopy blockOffsetsCopy{};
                 blockOffsetsCopy.srcOffset = 0;
                 blockOffsetsCopy.dstOffset = currentOffset;
-                blockOffsetsCopy.size = 4 * sizeof(uint32_t);
+                blockOffsetsCopy.size = 4 * sizeof(PrimitiveOffsets);
                 vkCmdCopyBuffer(
                     cmd,
                     renderGraph->GetBufferHandle("scanned_block_offsets_buffer"),
@@ -1252,8 +1252,8 @@ void RenderThread::SetupModelUniforms(Core::ViewFamily& viewFamily)
     size_t compactedPrimitiveBufferSize = frameResourceLimits.highestCompactedPrimitiveBuffer * sizeof(CompactedPrimitiveData);
     size_t instanceIndirectionBufferSize = frameResourceLimits.highestInstanceIndirectionBuffer * sizeof(uint32_t);
     size_t indirectCommandBufferSize = frameResourceLimits.highestIndirectCommandBuffer * sizeof(InstancedMeshIndirectDrawParameters);
-    size_t primitiveRangePrefixSumBufferSize = frameResourceLimits.highestPrimitiveRangePrefixSumBuffer * sizeof(uint32_t);
-    size_t blockSumsBufferSize = frameResourceLimits.highestBlockSumsBuffer * sizeof(uint32_t);
+    size_t primitiveRangePrefixSumBufferSize = frameResourceLimits.highestPrimitiveRangePrefixSumBuffer * sizeof(PrimitiveOffsets);
+    size_t blockSumsBufferSize = frameResourceLimits.highestBlockSumsBuffer * sizeof(PrimitiveOffsets);
 
 
     renderGraph->CreateBuffer("instance_buffer", instanceBufferSize);

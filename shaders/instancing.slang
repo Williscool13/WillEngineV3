@@ -67,8 +67,8 @@ void ComputeVisibility(uniform VisibilityPushConstant pc, uint3 dtid : SV_Dispat
 //  Input-Rate: Per-Primitive
 
 // Supports WaveLaneCount >= 32 (assuming dispatch x is 256)
-groupshared uint32_t subgroupTotals[8];
-groupshared uint32_t scannedOffsets[8];
+groupshared PrimitiveOffsets subgroupTotals[8];
+groupshared PrimitiveOffsets scannedOffsets[8];
 
 [shader("compute")]
 [numthreads(INSTANCING_PREFIX_SUM_LOCAL_DISPATCH_X, 1, 1)]
@@ -78,42 +78,52 @@ void ComputePrefixSumLocal(uniform PrefixSumLocalPushConstant pc, uint3 gid : SV
     uint threadIdx = gtid.x;
     uint primitiveRangeIndex = dtid.x;
 
-    uint value = 0;
+    PrimitiveOffsets primitiveOffsets = PrimitiveOffsets(0, 0);
     if (primitiveRangeIndex < pc.primitiveRangeCount) {
         PrimitiveInstanceRange range = pc.primitiveInstanceRangeBuffer[primitiveRangeIndex];
-        value = range.visibleCountPerLOD[0] + range.visibleCountPerLOD[1] + range.visibleCountPerLOD[2] + range.visibleCountPerLOD[3];
+        primitiveOffsets.instanceOffset = range.visibleCountPerLOD[0] + range.visibleCountPerLOD[1] + range.visibleCountPerLOD[2] + range.visibleCountPerLOD[3];
+        primitiveOffsets.commandOffset = min(range.visibleCountPerLOD[0], 1) + min(range.visibleCountPerLOD[1], 1) + min(range.visibleCountPerLOD[2], 1) + min(range.visibleCountPerLOD[3], 1);
     }
 
     // All-Wave Up-Sweep
-    uint localScan = WavePrefixSum(value);
+    uint instanceLocalScan = WavePrefixSum(primitiveOffsets.instanceOffset);
+    uint commandLocalScan = WavePrefixSum(primitiveOffsets.commandOffset);
     uint waveIdx = WaveGetLaneIndex();
     uint waveID = threadIdx / WaveGetLaneCount();
     uint numWaves = (INSTANCING_PREFIX_SUM_LOCAL_DISPATCH_X + WaveGetLaneCount() - 1) / WaveGetLaneCount();
 
-    // Final wave writes postfix to groupshared
+    // Last lane in wave writes both postfix totals
     if (waveIdx == WaveGetLaneCount() - 1) {
-        subgroupTotals[waveID] = localScan + value;
+        subgroupTotals[waveID].instanceOffset = instanceLocalScan + primitiveOffsets.instanceOffset;
+        subgroupTotals[waveID].commandOffset = commandLocalScan + primitiveOffsets.commandOffset;
     }
 
     GroupMemoryBarrierWithGroupSync();
-    // Thread 0 does prefix sum of the wave upsweep
+    // Thread 0 does single-threaded prefix sum of the wave upsweep
     if (threadIdx == 0) {
-        scannedOffsets[0] = 0;
+        scannedOffsets[0].instanceOffset = 0;
+        scannedOffsets[0].commandOffset = 0;
         for (uint i = 1; i < numWaves; i++) {
-            scannedOffsets[i] = scannedOffsets[i-1] + subgroupTotals[i-1];
+            scannedOffsets[i].instanceOffset = scannedOffsets[i-1].instanceOffset + subgroupTotals[i-1].instanceOffset;
+            scannedOffsets[i].commandOffset = scannedOffsets[i-1].commandOffset + subgroupTotals[i-1].commandOffset;
         }
     }
     GroupMemoryBarrierWithGroupSync();
 
     // Each thread writes prefix sum
-    uint blockLocalScan = localScan + scannedOffsets[waveID];
+    PrimitiveOffsets blockLocalScan;
+    blockLocalScan.instanceOffset = instanceLocalScan + scannedOffsets[waveID].instanceOffset;
+    blockLocalScan.commandOffset = commandLocalScan + scannedOffsets[waveID].commandOffset;
     if (primitiveRangeIndex < pc.primitiveRangeCount) {
         pc.prefixSums[primitiveRangeIndex] = blockLocalScan;
     }
 
-    // Last thread writes block total
+    // Last thread writes block postfix total
     if (threadIdx == (INSTANCING_PREFIX_SUM_LOCAL_DISPATCH_X - 1)) {
-        pc.blockSums[blockIdx] = blockLocalScan + value;
+        PrimitiveOffsets blockTotal;
+        blockTotal.instanceOffset = blockLocalScan.instanceOffset + primitiveOffsets.instanceOffset;
+        blockTotal.commandOffset = blockLocalScan.commandOffset + primitiveOffsets.commandOffset;
+        pc.blockSums[blockIdx] = blockTotal;
     }
 }
 
@@ -121,39 +131,45 @@ void ComputePrefixSumLocal(uniform PrefixSumLocalPushConstant pc, uint3 gid : SV
 // Scans the 256 block totals from Sum Local
 // Single workgroup, 256 threads
 
-groupshared uint sumBlockSubgroupTotals[8];
-groupshared uint sumBlockScannedOffsets[8];
+groupshared PrimitiveOffsets sumBlockSubgroupTotals[8];
+groupshared PrimitiveOffsets sumBlockScannedOffsets[8];
 
 [shader("compute")]
 [numthreads(INSTANCING_PREFIX_SUM_SUM_BLOCK_DISPATCH_X, 1, 1)]
 void ComputePrefixSumBlocks(uniform PrefixSumBlocksPushConstant pc, uint3 gtid : SV_GroupThreadID)
 {
     uint threadIdx = gtid.x;
-    uint value = pc.blockSums[threadIdx];
+    PrimitiveOffsets value = pc.blockSums[threadIdx];
 
     // All-Wave Up-Sweep
-    uint localScan = WavePrefixSum(value);
+    uint instanceLocalScan = WavePrefixSum(value.instanceOffset);
+    uint commandLocalScan = WavePrefixSum(value.commandOffset);
     uint waveIdx = WaveGetLaneIndex();
     uint waveID = threadIdx / WaveGetLaneCount();
     uint numWaves = (INSTANCING_PREFIX_SUM_SUM_BLOCK_DISPATCH_X + WaveGetLaneCount() - 1) / WaveGetLaneCount();
 
-    // Final wave writes postfix to groupshared
+    // Last lane in wave writes both postfix totals
     if (waveIdx == WaveGetLaneCount() - 1) {
-        sumBlockSubgroupTotals[waveID] = localScan + value;
+        sumBlockSubgroupTotals[waveID].instanceOffset = instanceLocalScan + value.instanceOffset;
+        sumBlockSubgroupTotals[waveID].commandOffset = commandLocalScan + value.commandOffset;
     }
 
     GroupMemoryBarrierWithGroupSync();
-    // Thread 0 does prefix sum of the wave upsweep
+    // Thread 0 does single-threaded prefix sum of the wave upsweep
     if (threadIdx == 0) {
-        sumBlockScannedOffsets[0] = 0;
+        sumBlockScannedOffsets[0].instanceOffset = 0;
+        sumBlockScannedOffsets[0].commandOffset = 0;
         for (uint i = 1; i < numWaves; i++) {
-            sumBlockScannedOffsets[i] = sumBlockScannedOffsets[i-1] + sumBlockSubgroupTotals[i-1];
+            sumBlockScannedOffsets[i].instanceOffset = sumBlockScannedOffsets[i-1].instanceOffset + sumBlockSubgroupTotals[i-1].instanceOffset;
+            sumBlockScannedOffsets[i].commandOffset = sumBlockScannedOffsets[i-1].commandOffset + sumBlockSubgroupTotals[i-1].commandOffset;
         }
     }
     GroupMemoryBarrierWithGroupSync();
 
     // Final scanned value
-    uint scannedValue = localScan + sumBlockScannedOffsets[waveID];
+    PrimitiveOffsets scannedValue;
+    scannedValue.instanceOffset = instanceLocalScan + sumBlockScannedOffsets[waveID].instanceOffset;
+    scannedValue.commandOffset = commandLocalScan + sumBlockScannedOffsets[waveID].commandOffset;
     pc.scannedBlockOffsets[threadIdx] = scannedValue;
 }
 
@@ -172,8 +188,9 @@ void ComputePrefixSumScatter(uniform PrefixSumScatterPushConstant pc, uint3 gid 
         return;
     }
 
-    uint blockOffset = pc.scannedBlockOffsets[blockIdx];
-    pc.prefixSums[globalIdx] += blockOffset;
+    PrimitiveOffsets blockOffset = pc.scannedBlockOffsets[blockIdx];
+    pc.prefixSums[globalIdx].instanceOffset += blockOffset.instanceOffset;
+    pc.prefixSums[globalIdx].commandOffset += blockOffset.commandOffset;
 }
 
 // =============== Compute Shader (Prefix Sum for Compacted Instance Offsets) ===============
