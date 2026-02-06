@@ -108,13 +108,53 @@ void ComputePrefixSumLocal(uniform PrefixSumLocalPushConstant pc, uint3 gid : SV
     // Each thread writes prefix sum
     uint blockLocalScan = localScan + scannedOffsets[waveID];
     if (primitiveRangeIndex < pc.primitiveRangeCount) {
-        //pc.prefixSums[primitiveRangeIndex] = blockLocalScan;
+        pc.prefixSums[primitiveRangeIndex] = blockLocalScan;
     }
 
     // Last thread writes block total
-    if (threadIdx == 255) {
+    if (threadIdx == (INSTANCING_PREFIX_SUM_LOCAL_DISPATCH_X - 1)) {
         pc.blockSums[blockIdx] = blockLocalScan + value;
     }
+}
+
+// =============== Compute Shader (Prefix Sum Block Totals) ===============
+// Scans the 256 block totals from Sum Local
+// Single workgroup, 256 threads
+
+groupshared uint sumBlockSubgroupTotals[8];
+groupshared uint sumBlockScannedOffsets[8];
+
+[shader("compute")]
+[numthreads(INSTANCING_PREFIX_SUM_SUM_BLOCK_DISPATCH_X, 1, 1)]
+void ComputePrefixSumBlocks(uniform PrefixSumBlocksPushConstant pc, uint3 gtid : SV_GroupThreadID)
+{
+    uint threadIdx = gtid.x;
+    uint value = pc.blockSums[threadIdx];
+
+    // All-Wave Up-Sweep
+    uint localScan = WavePrefixSum(value);
+    uint waveIdx = WaveGetLaneIndex();
+    uint waveID = threadIdx / WaveGetLaneCount();
+    uint numWaves = (INSTANCING_PREFIX_SUM_SUM_BLOCK_DISPATCH_X + WaveGetLaneCount() - 1) / WaveGetLaneCount();
+
+    // Final wave writes postfix to groupshared
+    if (waveIdx == WaveGetLaneCount() - 1) {
+        sumBlockSubgroupTotals[waveID] = localScan + value;
+    }
+
+    GroupMemoryBarrierWithGroupSync();
+    // Thread 0 does prefix sum of the wave upsweep
+    if (threadIdx == 0) {
+        sumBlockScannedOffsets[0] = 0;
+        for (uint i = 1; i < numWaves; i++) {
+            sumBlockScannedOffsets[i] = sumBlockScannedOffsets[i-1] + sumBlockSubgroupTotals[i-1];
+        }
+    }
+    GroupMemoryBarrierWithGroupSync();
+
+    // Final scanned value
+    uint scannedValue = localScan + sumBlockScannedOffsets[waveID];
+    pc.scannedBlockOffsets[threadIdx] = scannedValue;
 }
 
 // =============== Compute Shader (Prefix Sum for Compacted Instance Offsets) ===============

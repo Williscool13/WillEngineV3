@@ -581,7 +581,8 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
         // ===== Debug Readback: Prefix Sum Buffers =====
         if (renderGraph->HasBuffer("primitive_range_prefix_sum_buffer") &&
-            renderGraph->HasBuffer("block_sums_buffer")) {
+            renderGraph->HasBuffer("block_sums_buffer") &&
+            renderGraph->HasBuffer("scanned_block_offsets_buffer")) {
             RenderPass& prefixSumReadbackPass = renderGraph->AddPass(
                 "Debug Readback Prefix Sum",
                 VK_PIPELINE_STAGE_2_COPY_BIT
@@ -589,20 +590,22 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
             prefixSumReadbackPass.ReadTransferBuffer("primitive_range_prefix_sum_buffer");
             prefixSumReadbackPass.ReadTransferBuffer("block_sums_buffer");
+            prefixSumReadbackPass.ReadTransferBuffer("scanned_block_offsets_buffer");
             prefixSumReadbackPass.WriteTransferBuffer("debug_readback_buffer");
 
             prefixSumReadbackPass.Execute([&](VkCommandBuffer cmd) {
-                VkBufferCopy prefixCopy{};
-                prefixCopy.srcOffset = 0;
-                prefixCopy.dstOffset =
+                size_t currentOffset =
                         25 * sizeof(Instance) +
                         25 * sizeof(PrimitiveInstanceRange) +
                         25 * sizeof(CompactedPrimitiveData) +
                         sizeof(InstancedMeshIndirectCountBuffer) +
                         64 * sizeof(uint32_t) +
                         64 * sizeof(InstancedMeshIndirectDrawParameters);
-                prefixCopy.size = 128 * sizeof(uint32_t);
 
+                VkBufferCopy prefixCopy{};
+                prefixCopy.srcOffset = 0;
+                prefixCopy.dstOffset = currentOffset;
+                prefixCopy.size = 128 * sizeof(uint32_t);
                 vkCmdCopyBuffer(
                     cmd,
                     renderGraph->GetBufferHandle("primitive_range_prefix_sum_buffer"),
@@ -610,25 +613,31 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                     1,
                     &prefixCopy
                 );
+                currentOffset += 128 * sizeof(uint32_t);
 
-                VkBufferCopy blockCopy{};
-                blockCopy.srcOffset = 0;
-                blockCopy.dstOffset =
-                        25 * sizeof(Instance) +
-                        25 * sizeof(PrimitiveInstanceRange) +
-                        25 * sizeof(CompactedPrimitiveData) +
-                        sizeof(InstancedMeshIndirectCountBuffer) +
-                        64 * sizeof(uint32_t) +
-                        64 * sizeof(InstancedMeshIndirectDrawParameters) +
-                        128 * sizeof(uint32_t);
-                blockCopy.size = 1 * sizeof(uint32_t);
-
+                VkBufferCopy blockSumsCopy{};
+                blockSumsCopy.srcOffset = 0;
+                blockSumsCopy.dstOffset = currentOffset;
+                blockSumsCopy.size = 4 * sizeof(uint32_t);
                 vkCmdCopyBuffer(
                     cmd,
                     renderGraph->GetBufferHandle("block_sums_buffer"),
                     renderGraph->GetBufferHandle("debug_readback_buffer"),
                     1,
-                    &blockCopy
+                    &blockSumsCopy
+                );
+                currentOffset += 4 * sizeof(uint32_t);
+
+                VkBufferCopy blockOffsetsCopy{};
+                blockOffsetsCopy.srcOffset = 0;
+                blockOffsetsCopy.dstOffset = currentOffset;
+                blockOffsetsCopy.size = 4 * sizeof(uint32_t);
+                vkCmdCopyBuffer(
+                    cmd,
+                    renderGraph->GetBufferHandle("scanned_block_offsets_buffer"),
+                    renderGraph->GetBufferHandle("debug_readback_buffer"),
+                    1,
+                    &blockOffsetsCopy
                 );
             });
         }
@@ -856,6 +865,8 @@ void RenderThread::CreatePipelines()
                                              sizeof(InstancingPrefixSumPushConstant), PipelineCategory::Instancing);
     pipelineManager->RegisterComputePipeline("instancing_prefix_sum_local", Platform::GetShaderPath() / "instancing_prefix_sum_local_compute.spv",
                                              sizeof(PrefixSumLocalPushConstant), PipelineCategory::Instancing);
+    pipelineManager->RegisterComputePipeline("instancing_prefix_sum_blocks", Platform::GetShaderPath() / "instancing_prefix_sum_blocks_compute.spv",
+                                             sizeof(PrefixSumBlocksPushConstant), PipelineCategory::Instancing);
     pipelineManager->RegisterComputePipeline("instancing_compact_and_indirect", Platform::GetShaderPath() / "instancing_compact_and_indirect_compute.spv",
                                              sizeof(CompactAndIndirectPushConstant), PipelineCategory::Instancing);
 
@@ -1253,6 +1264,7 @@ void RenderThread::SetupModelUniforms(Core::ViewFamily& viewFamily)
     renderGraph->CreateBuffer("primitive_to_range_map_buffer", highestPrimitiveToPrimitiveRangeMapBufferSize);
     renderGraph->CreateBuffer("primitive_range_prefix_sum_buffer", primitiveRangePrefixSumBufferSize);
     renderGraph->CreateBuffer("block_sums_buffer", blockSumsBufferSize);
+    renderGraph->CreateBuffer("scanned_block_offsets_buffer", blockSumsBufferSize);
 
     // Prepare the copies
     UploadAllocation instanceUpload{};
@@ -1283,9 +1295,6 @@ void RenderThread::SetupModelUniforms(Core::ViewFamily& viewFamily)
         uint32_t primitiveIndex = viewFamily.mainInstancesPrimitiveRanges[rangeIdx].primitiveIndex;
         primitiveIndexToRangeBuffer[primitiveIndex] = rangeIdx;
     }
-
-    uint32_t debugCopy[128];
-    memcpy(debugCopy, primitiveIndexToRangeBuffer, std::min(128u, maxPrimitiveIndex + 1) * sizeof(uint32_t));
 
     UploadAllocation modelUpload = renderGraph->AllocateTransient(viewFamily.modelMatrices.size() * sizeof(Model));
     auto* modelBuffer = static_cast<Model*>(modelUpload.ptr);
@@ -1607,8 +1616,25 @@ void RenderThread::SetupMainGeometryPass(RenderGraph& graph, const Core::ViewFam
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
         uint32_t numWorkgroups = (viewFamily.mainInstancesPrimitiveRanges.size() + INSTANCING_PREFIX_SUM_LOCAL_DISPATCH_X - 1) / INSTANCING_PREFIX_SUM_LOCAL_DISPATCH_X;
+        static_assert(MEGA_PRIMITIVE_BUFFER_COUNT <= 256 * 256, "Prefix sum only supports up to 65536 primitives (256 blocks of 256)");
         vkCmdDispatch(cmd, numWorkgroups, 1, 1);
     });
+
+    RenderPass& prefixSumBlocksPass = graph.AddPass("Prefix Sum Blocks", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+    prefixSumBlocksPass.ReadBuffer("block_sums_buffer");
+    prefixSumBlocksPass.WriteBuffer("scanned_block_offsets_buffer");
+    prefixSumBlocksPass.Execute([&](VkCommandBuffer cmd) {
+        PrefixSumBlocksPushConstant pc{
+            .blockSums = graph.GetBufferAddress("block_sums_buffer"),
+            .scannedBlockOffsets = graph.GetBufferAddress("scanned_block_offsets_buffer"),
+        };
+
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_prefix_sum_blocks");
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+        vkCmdDispatch(cmd, 1, 1, 1);
+    });
+
 
     RenderPass& prefixSumPass = graph.AddPass("Prefix Sum", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
     prefixSumPass.ReadBuffer("primitive_range_buffer");
@@ -1627,6 +1653,7 @@ void RenderThread::SetupMainGeometryPass(RenderGraph& graph, const Core::ViewFam
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         vkCmdDispatch(cmd, 1, 1, 1);
     });
+
 
     RenderPass& indirectConstructionPass = graph.AddPass("Compact and Indirect Construction", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
     indirectConstructionPass.ReadBuffer("instance_buffer");

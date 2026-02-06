@@ -479,7 +479,10 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
             ptr += 128 * sizeof(uint32_t);
 
             auto* blockSums = reinterpret_cast<uint32_t*>(ptr);
-            ptr += 1 * sizeof(uint32_t);
+            ptr += 4 * sizeof(uint32_t);
+
+            auto* scannedBlockSums = reinterpret_cast<uint32_t*>(ptr);
+            ptr += 4 * sizeof(uint32_t);
 
 
             if (ImGui::TreeNode("Instances")) {
@@ -602,8 +605,15 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
                 }
 
                 if (ImGui::TreeNode("Block Sums")) {
-                    for (uint32_t i = 0; i < 1; ++i) {
+                    for (uint32_t i = 0; i < 4; ++i) {
                         ImGui::Text("Block %u: %u", i, blockSums[i]);
+                    }
+                    ImGui::TreePop();
+                }
+
+                if (ImGui::TreeNode("Scanned Block Sums")) {
+                    for (uint32_t i = 0; i < 4; ++i) {
+                        ImGui::Text("Scanned Block %u: %u", i, scannedBlockSums[i]);
                     }
                     ImGui::TreePop();
                 }

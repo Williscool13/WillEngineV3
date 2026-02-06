@@ -262,6 +262,7 @@ VulkanContext::VulkanContext(SDL_Window* window)
 
     deviceInfo.properties.pNext = &deviceInfo.descriptorBufferProps;
     deviceInfo.descriptorBufferProps.pNext = &deviceInfo.meshShaderProps;
+    deviceInfo.meshShaderProps.pNext = &deviceInfo.subgroupProps;
     vkGetPhysicalDeviceProperties2(physicalDevice, &deviceInfo.properties);
 
     tracyContext = TracyVkContextHostCalibrated(
@@ -285,6 +286,10 @@ VulkanContext::VulkanContext(SDL_Window* window)
     SPDLOG_INFO("Queue Families - Graphics: {} | Transfer: {}", graphicsQueueFamily, transferQueueFamily);
     SPDLOG_INFO("Max Descriptor Buffer Bindings: {}", deviceInfo.descriptorBufferProps.maxDescriptorBufferBindings);
     SPDLOG_INFO("Mesh Shader Support - Max Task Workgroups: {}", deviceInfo.meshShaderProps.maxTaskWorkGroupCount[0]);
+    SPDLOG_INFO("Subgroup Size: {}", deviceInfo.subgroupProps.subgroupSize);
+    if (deviceInfo.subgroupProps.supportedOperations & VK_SUBGROUP_FEATURE_ARITHMETIC_BIT) {
+        SPDLOG_INFO("Subgroup Arithmetic operations supported (WavePrefixSum)");
+    }
 }
 
 VulkanContext::~VulkanContext()
