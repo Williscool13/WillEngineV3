@@ -54,35 +54,12 @@ void ComputeVisibility(uniform VisibilityPushConstant pc, uint3 dtid : SV_Dispat
 
     pc.instanceBuffer[instanceID].bIsVisible = bVisible ? 1u : 0u;
     pc.instanceBuffer[instanceID].lod = lod;
-}
 
-// =============== Compute Shader (Visible Primitive Count Sum) ===============
-// Each thread processes one PrimitiveInstanceRange and counts how many instances are visible by iterating through its instance range
-// Writes the visible count back to the primitiveInstanceRangeBuffer's visibleCount field.
-
-[shader("compute")]
-[numthreads(INSTANCING_VISIBLE_PRIMITIVE_COUNTER_DISPATCH_X, 1, 1)]
-void ComputeVisiblePrimitiveCounter(uniform VisiblePrimitiveCounterPushConstant pc, uint3 dtid : SV_DispatchThreadID) {
-    uint primitiveRangeID = dtid.x;
-    if (primitiveRangeID >= pc.primitiveRangeCount) {
-        return;
-    }
-
-    PrimitiveInstanceRange range = pc.primitiveInstanceRangeBuffer[primitiveRangeID];
-
-    uint lodCounts[LOD_COUNT] = {0, 0, 0, 0};
-    for (uint i = 0; i < range.count; ++i) {
-        Instance inst = pc.instanceBuffer[range.start + i];
-        if (inst.bIsVisible != 0) {
-            lodCounts[inst.lod]++;
-        }
-    }
-
-    for (uint lod = 0; lod < LOD_COUNT; lod++) {
-        pc.primitiveInstanceRangeBuffer[primitiveRangeID].visibleCountPerLOD[lod] = lodCounts[lod];
+    if (bVisible) {
+        uint32_t primitiveRangeIndex = pc.primitiveToPrimitiveRangeMapBuffer[inst.primitiveIndex];
+        InterlockedAdd(pc.primitiveInstanceRangeBuffer[primitiveRangeIndex].visibleCountPerLOD[lod], 1);
     }
 }
-
 
 // =============== Compute Shader (Prefix Sum for Compacted Instance Offsets) ===============
 // Single-threaded prefix sum that:

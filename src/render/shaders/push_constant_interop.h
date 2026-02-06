@@ -75,6 +75,8 @@ SHADER_PUBLIC struct VisibilityPushConstant
 
     // Read-Write
     SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
+    SHADER_PUBLIC SHADER_PTR(uint32_t) primitiveToPrimitiveRangeMapBuffer;
+    SHADER_PUBLIC SHADER_PTR(PrimitiveInstanceRange) primitiveInstanceRangeBuffer;
 
     // Read-Only
     SHADER_PUBLIC uint32_t instanceCount;
