@@ -105,6 +105,7 @@ SHADER_PUBLIC struct PrefixSumLocalPushConstant
     SHADER_PUBLIC SHADER_PTR(PrimitiveInstanceRange) primitiveInstanceRangeBuffer;
     SHADER_PUBLIC SHADER_PTR(PrimitiveOffsets) prefixSums; // Out: 65536
     SHADER_PUBLIC SHADER_PTR(PrimitiveOffsets) blockSums;  // Out: 256
+    SHADER_PUBLIC SHADER_PTR(InstancedMeshIndirectCountBuffer) indirectCountBuffer; // Out
     SHADER_PUBLIC uint32_t primitiveRangeCount;
 };
 
@@ -121,31 +122,20 @@ SHADER_PUBLIC struct PrefixSumScatterPushConstant
     SHADER_PUBLIC uint32_t primitiveRangeCount;
 };
 
-
-SHADER_PUBLIC struct InstancingPrefixSumPushConstant
-{
-    // Read-Only
-    SHADER_PUBLIC SHADER_PTR(PrimitiveInstanceRange) primitiveInstanceRangeBuffer;
-
-    // Write-Only
-    SHADER_PUBLIC SHADER_PTR(CompactedPrimitiveData) compactedPrimitiveDataBuffer;
-    SHADER_PUBLIC SHADER_PTR(InstancedMeshIndirectCountBuffer) indirectCountBuffer;
-
-    SHADER_PUBLIC uint32_t primitiveRangeCount;
-};
-
 SHADER_PUBLIC struct CompactAndIndirectPushConstant
 {
     // Read-Only
-    SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
-    SHADER_PUBLIC SHADER_PTR(PrimitiveInstanceRange) primitiveInstanceRangeBuffer;
-    SHADER_PUBLIC SHADER_PTR(CompactedPrimitiveData) compactedPrimitiveDataBuffer;
     SHADER_PUBLIC SHADER_PTR(MeshletPrimitive) primitiveBuffer;
-    SHADER_PUBLIC SHADER_PTR(InstancedMeshIndirectCountBuffer) indirectCountBuffer;
+    SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
+    SHADER_PUBLIC SHADER_PTR(uint32_t) primitiveToPrimitiveRangeMapBuffer;
+    SHADER_PUBLIC SHADER_PTR(PrimitiveOffsets) prefixSums;
+    SHADER_PUBLIC SHADER_PTR(PrimitiveInstanceRange) primitiveInstanceRangeBuffer;
+    SHADER_PUBLIC uint32_t instanceCount;
 
     // Write-Only
     SHADER_PUBLIC SHADER_PTR(uint32_t) instanceIndirectionBuffer; // The "packed" buffer, w/ indirection indices to the original instance buffer
     SHADER_PUBLIC SHADER_PTR(InstancedMeshIndirectDrawParameters) indirectBuffer;
+    SHADER_PUBLIC SHADER_PTR(InstanceOffsetCounter) instanceOffsetCounterBuffer;
 };
 
 SHADER_PUBLIC struct InstancedMeshShadingPushConstant

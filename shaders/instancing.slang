@@ -124,6 +124,12 @@ void ComputePrefixSumLocal(uniform PrefixSumLocalPushConstant pc, uint3 gid : SV
         blockTotal.instanceOffset = blockLocalScan.instanceOffset + primitiveOffsets.instanceOffset;
         blockTotal.commandOffset = blockLocalScan.commandOffset + primitiveOffsets.commandOffset;
         pc.blockSums[blockIdx] = blockTotal;
+
+        uint32_t totalCommandCount = blockTotal.commandOffset;
+        uint32_t totalInstanceCount = blockTotal.instanceOffset;
+
+        pc.indirectCountBuffer.indirectCount = totalCommandCount;
+        pc.indirectCountBuffer.totalInstanceCount = totalInstanceCount;
     }
 }
 
@@ -176,6 +182,7 @@ void ComputePrefixSumBlocks(uniform PrefixSumBlocksPushConstant pc, uint3 gtid :
 
 // =============== Compute Shader (Prefix Sum Add Block Offsets) ===============
 // Adds scanned block offsets to local prefix sums to produce final global prefix sums
+//  Input-Rate: Per-Primitive
 
 [shader("compute")]
 [numthreads(INSTANCING_PREFIX_SUM_SCATTER_DISPATCH_X, 1, 1)]
@@ -193,117 +200,61 @@ void ComputePrefixSumScatter(uniform PrefixSumScatterPushConstant pc, uint3 gid 
     pc.prefixSums[globalIdx].commandOffset += blockOffset.commandOffset;
 }
 
-// =============== Compute Shader (Prefix Sum for Compacted Instance Offsets) ===============
-// Single-threaded prefix sum that:
-// 1. Culls primitives with no visible instances
-// 2. Assigns per-LOD offsets in the instance indirection buffer
-// 3. Assigns indices for indirect commands (one per non-empty LOD)
-// Input: primitiveInstanceRangeBuffer with visibleCountPerLOD filled by Pass 1.5
-// Output: compactedPrimitiveDataBuffer with only non-empty primitives
-
-[shader("compute")]
-[numthreads(1, 1, 1)]
-void ComputePrefixSum(uniform InstancingPrefixSumPushConstant pc) {
-    uint indirectionOffset = 0;
-    uint indirectCommandCount = 0;
-    uint compactedPrimitiveCount = 0;
-
-    for (uint i = 0; i < pc.primitiveRangeCount; i++) {
-        PrimitiveInstanceRange range = pc.primitiveInstanceRangeBuffer[i];
-
-        uint totalVisible = range.visibleCountPerLOD[0] + range.visibleCountPerLOD[1] +range.visibleCountPerLOD[2] + range.visibleCountPerLOD[3];
-        if (totalVisible == 0) { continue; }
-
-        CompactedPrimitiveData compacted;
-        compacted.indexInPrimitiveRanges = i;
-
-        compacted.lodIndirectionOffsets[0] = indirectionOffset;
-        compacted.lodIndirectionOffsets[1] = indirectionOffset + range.visibleCountPerLOD[0];
-        compacted.lodIndirectionOffsets[2] = indirectionOffset + range.visibleCountPerLOD[0] + range.visibleCountPerLOD[1];
-        compacted.lodIndirectionOffsets[3] = indirectionOffset + range.visibleCountPerLOD[0] + range.visibleCountPerLOD[1] + range.visibleCountPerLOD[2];
-
-        compacted.lodCounts[0] = range.visibleCountPerLOD[0];
-        compacted.lodCounts[1] = range.visibleCountPerLOD[1];
-        compacted.lodCounts[2] = range.visibleCountPerLOD[2];
-        compacted.lodCounts[3] = range.visibleCountPerLOD[3];
-
-        if (range.visibleCountPerLOD[0] > 0) {
-            compacted.indirectCommandIndices[0] = indirectCommandCount++;
-        } else {
-            compacted.indirectCommandIndices[0] = 0xFFFFFFFF;
-        }
-
-        if (range.visibleCountPerLOD[1] > 0) {
-            compacted.indirectCommandIndices[1] = indirectCommandCount++;
-        } else {
-            compacted.indirectCommandIndices[1] = 0xFFFFFFFF;
-        }
-
-        if (range.visibleCountPerLOD[2] > 0) {
-            compacted.indirectCommandIndices[2] = indirectCommandCount++;
-        } else {
-            compacted.indirectCommandIndices[2] = 0xFFFFFFFF;
-        }
-
-        if (range.visibleCountPerLOD[3] > 0) {
-            compacted.indirectCommandIndices[3] = indirectCommandCount++;
-        } else {
-            compacted.indirectCommandIndices[3] = 0xFFFFFFFF;
-        }
-
-        pc.compactedPrimitiveDataBuffer[compactedPrimitiveCount++] = compacted;
-        indirectionOffset += totalVisible;
-    }
-
-    pc.indirectCountBuffer[0].packedPrimitiveCountDispatchX = (compactedPrimitiveCount * LOD_COUNT + INSTANCING_CONSTRUCTION_DISPATCH_X - 1) / INSTANCING_CONSTRUCTION_DISPATCH_X;
-    pc.indirectCountBuffer[0].packedPrimitiveCountDispatchY = 1;
-    pc.indirectCountBuffer[0].packedPrimitiveCountDispatchZ = 1;
-    pc.indirectCountBuffer[0].packedPrimitiveCount = compactedPrimitiveCount;
-    pc.indirectCountBuffer[0].indirectCount = indirectCommandCount;
-}
-
 // =============== Compute Shader (Compact Instances and Generate Indirect Commands) ===============
-// Each thread processes one (primitive, LOD) pair
 // - Writes visible instances for that LOD to the instance indirection buffer
 // - Generates the indirect draw command for that LOD
+//  Input Rate: Per-Instance
 
 [shader("compute")]
 [numthreads(INSTANCING_CONSTRUCTION_DISPATCH_X, 1, 1)]
 void ComputeCompactAndGenerateIndirect(uniform CompactAndIndirectPushConstant pc, uint3 dtid : SV_DispatchThreadID) {
-    uint flatID = dtid.x;
-    uint compactedPrimitiveID = flatID / LOD_COUNT;
-    uint lod = flatID % LOD_COUNT;
-
-    if (compactedPrimitiveID >= pc.indirectCountBuffer.packedPrimitiveCount) {
+    uint instanceID = dtid.x;
+    if (instanceID >= pc.instanceCount) {
         return;
     }
 
-    CompactedPrimitiveData compacted = pc.compactedPrimitiveDataBuffer[compactedPrimitiveID];
-    if (compacted.lodCounts[lod] == 0) {
+    Instance inst = pc.instanceBuffer[instanceID];
+    if (inst.bIsVisible == 0) {
         return;
     }
 
-    PrimitiveInstanceRange range = pc.primitiveInstanceRangeBuffer[compacted.indexInPrimitiveRanges];
-    uint writeOffset = compacted.lodIndirectionOffsets[lod];
-    for (uint i = 0; i < range.count; i++) {
-        uint instanceID = range.start + i;
-        Instance inst = pc.instanceBuffer[instanceID];
+    uint primitiveRangeIndex = pc.primitiveToPrimitiveRangeMapBuffer[inst.primitiveIndex];
+    PrimitiveOffsets primitiveOffsets = pc.prefixSums[primitiveRangeIndex];
+    PrimitiveInstanceRange range = pc.primitiveInstanceRangeBuffer[primitiveRangeIndex];
+    uint lod = inst.lod;
 
-        if (inst.bIsVisible != 0 && inst.lod == lod) {
-            pc.instanceIndirectionBuffer[writeOffset++] = instanceID;
-        }
+    pc.instanceIndirectionBuffer[instanceID] = range.visibleCountPerLOD[0] + range.visibleCountPerLOD[1] + range.visibleCountPerLOD[2] + range.visibleCountPerLOD[3];
+
+    // Calculate LOD offset within this primitive's instances
+    uint lodOffset = 0;
+    for (uint i = 0; i < lod; i++) {
+        lodOffset += range.visibleCountPerLOD[i];
     }
 
-    MeshletPrimitive prim = pc.primitiveBuffer[range.primitiveIndex];
-    uint totalMeshlets = prim.meshletCount[lod];
-    uint numChunks = (totalMeshlets + (TASK_SHADER_DISPATCH_X - 1)) / TASK_SHADER_DISPATCH_X;
+    // Atomically get local index within this LOD
+    uint localInstanceIdx = 0;
+    uint commandIdx = primitiveOffsets.commandOffset;
+    for (uint i = 0; i < lod; i++) {
+        commandIdx += (range.visibleCountPerLOD[i] > 0) ? 1 : 0;
+    }
 
-    uint indirectIdx = compacted.indirectCommandIndices[lod];
-    pc.indirectBuffer[indirectIdx].groupCountX = numChunks;
-    pc.indirectBuffer[indirectIdx].groupCountY = compacted.lodCounts[lod];
-    pc.indirectBuffer[indirectIdx].groupCountZ = 1;
-    pc.indirectBuffer[indirectIdx].compactedInstanceStart = compacted.lodIndirectionOffsets[lod];
-    pc.indirectBuffer[indirectIdx].compactedInstanceCount = compacted.lodCounts[lod];
-    pc.indirectBuffer[indirectIdx].meshletOffset = prim.meshletOffset[lod];
-    pc.indirectBuffer[indirectIdx].meshletCount = prim.meshletCount[lod];
+    InterlockedAdd(pc.instanceOffsetCounterBuffer[primitiveRangeIndex].lodInstanceOffset[lod], 1, localInstanceIdx);
+
+    // Write compacted instance
+    uint globalInstanceIdx = primitiveOffsets.instanceOffset + lodOffset + localInstanceIdx;
+    pc.instanceIndirectionBuffer[globalInstanceIdx] = instanceID;
+
+    // First thread for this command initializes indirect draw params
+    if (localInstanceIdx == 0) {
+        MeshletPrimitive prim = pc.primitiveBuffer[inst.primitiveIndex];
+        uint totalMeshlets = prim.meshletCount[lod];
+        uint numChunks = (totalMeshlets + (TASK_SHADER_DISPATCH_X - 1)) / TASK_SHADER_DISPATCH_X;
+        pc.indirectBuffer[commandIdx].groupCountX = numChunks;
+        pc.indirectBuffer[commandIdx].groupCountY = range.visibleCountPerLOD[lod];
+        pc.indirectBuffer[commandIdx].groupCountZ = 1;
+        pc.indirectBuffer[commandIdx].compactedInstanceStart = primitiveOffsets.instanceOffset + lodOffset;
+        // compactedInstanceCount already set by atomics, should equal range.visibleCountPerLOD[lod]
+        pc.indirectBuffer[commandIdx].meshletOffset = prim.meshletOffset[lod];
+        pc.indirectBuffer[commandIdx].meshletCount = prim.meshletCount[lod];
+    }
 }

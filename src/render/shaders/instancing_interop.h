@@ -56,11 +56,16 @@ SHADER_PUBLIC struct InstancedMeshIndirectDrawParameters
     SHADER_PUBLIC uint32_t groupCountZ;
 
     SHADER_PUBLIC uint32_t compactedInstanceStart;
-    SHADER_PUBLIC uint32_t compactedInstanceCount;
+    uint32_t padding1;
 
     SHADER_PUBLIC uint32_t meshletOffset;
     SHADER_PUBLIC uint32_t meshletCount;
     uint32_t padding0;
+};
+
+SHADER_PUBLIC struct InstanceOffsetCounter
+{
+    SHADER_PUBLIC uint32_t lodInstanceOffset[LOD_COUNT];
 };
 
 SHADER_PUBLIC struct PrimitiveOffsets
@@ -71,12 +76,8 @@ SHADER_PUBLIC struct PrimitiveOffsets
 
 SHADER_PUBLIC struct InstancedMeshIndirectCountBuffer
 {
-    SHADER_PUBLIC uint32_t packedPrimitiveCountDispatchX;
-    SHADER_PUBLIC uint32_t packedPrimitiveCountDispatchY;
-    SHADER_PUBLIC uint32_t packedPrimitiveCountDispatchZ;
-    SHADER_PUBLIC uint32_t packedPrimitiveCount;
     SHADER_PUBLIC uint32_t indirectCount;
-    uint32_t padding0;
+    SHADER_PUBLIC uint32_t totalInstanceCount;
     uint32_t padding1;
     uint32_t padding2;
 };

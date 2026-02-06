@@ -135,17 +135,6 @@ SHADER_PUBLIC struct PrimitiveInstanceRange {
     SHADER_PUBLIC uint32_t visibleCountPerLOD[LOD_COUNT];
 };
 
-SHADER_PUBLIC struct CompactedPrimitiveData {
-    SHADER_PUBLIC uint32_t lodCounts[LOD_COUNT];
-    SHADER_PUBLIC uint32_t indirectCommandIndices[LOD_COUNT];
-    SHADER_PUBLIC uint32_t lodIndirectionOffsets[LOD_COUNT];
-    SHADER_PUBLIC uint32_t indexInPrimitiveRanges;
-    uint32_t padding0;
-    uint32_t padding1;
-    uint32_t padding2;
-
-};
-
 SHADER_PUBLIC struct SHADER_ALIGN Model
 {
     SHADER_PUBLIC float4x4 modelMatrix;

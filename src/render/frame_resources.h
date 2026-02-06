@@ -17,9 +17,7 @@ struct FrameResourceLimits
 
     size_t highestPrimitiveRangePrefixSumBuffer{128};
     size_t highestBlockSumsBuffer{128};
-    size_t highestPrimitiveToPrimitiveRangeMapBuffer{128};
 
-    size_t highestCompactedPrimitiveBuffer{128};
     size_t highestInstanceIndirectionBuffer{128};
     size_t highestIndirectCommandBuffer{128};
 

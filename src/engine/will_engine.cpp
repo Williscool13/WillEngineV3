@@ -444,21 +444,8 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
         auto* ranges = reinterpret_cast<PrimitiveInstanceRange*>(ptr);
         ptr += 25 * sizeof(PrimitiveInstanceRange);
 
-        auto* compacted = reinterpret_cast<CompactedPrimitiveData*>(ptr);
-        ptr += 25 * sizeof(CompactedPrimitiveData);
-
         auto* indirectCount = reinterpret_cast<InstancedMeshIndirectCountBuffer*>(ptr);
         ptr += sizeof(InstancedMeshIndirectCountBuffer);
-
-        uint32_t totalLOD[4] = {0, 0, 0, 0};
-        for (uint32_t i = 0; i < indirectCount->packedPrimitiveCount; ++i) {
-            totalLOD[0] += compacted[i].lodCounts[0];
-            totalLOD[1] += compacted[i].lodCounts[1];
-            totalLOD[2] += compacted[i].lodCounts[2];
-            totalLOD[3] += compacted[i].lodCounts[3];
-        }
-
-        ImGui::Text("LOD Counts: [%u, %u, %u, %u]", totalLOD[0], totalLOD[1], totalLOD[2], totalLOD[3]);
 
         ImGui::Checkbox("Freeze Visibility Calculations", &bFreezeVisibility);
         if (ImGui::Button("Log RDG")) {
@@ -482,7 +469,7 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
             ptr += 4 * sizeof(PrimitiveOffsets);
 
             auto* scannedBlockSums = reinterpret_cast<PrimitiveOffsets*>(ptr);
-            ptr += 4 * sizeof(PrimitiveOffsets);
+            ptr += 128 * sizeof(PrimitiveOffsets);
 
 
             if (ImGui::TreeNode("Instances")) {
@@ -517,58 +504,10 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
                 ImGui::TreePop();
             }
 
-
-            if (ImGui::TreeNode("Compacted Primitives")) {
-                uint32_t totalLOD[4] = {0, 0, 0, 0};
-
-                for (uint32_t i = 0; i < indirectCount->packedPrimitiveCount; ++i) {
-                    totalLOD[0] += compacted[i].lodCounts[0];
-                    totalLOD[1] += compacted[i].lodCounts[1];
-                    totalLOD[2] += compacted[i].lodCounts[2];
-                    totalLOD[3] += compacted[i].lodCounts[3];
-
-                    if (ImGui::TreeNode((void*) (intptr_t) i, "Compacted %u", i)) {
-                        ImGui::Text("Primitive Index: %u", compacted[i].indexInPrimitiveRanges);
-                        ImGui::Text(
-                            "LOD Counts: [%u, %u, %u, %u]",
-                            compacted[i].lodCounts[0],
-                            compacted[i].lodCounts[1],
-                            compacted[i].lodCounts[2],
-                            compacted[i].lodCounts[3]
-                        );
-                        ImGui::Text(
-                            "LOD Offsets: [%u, %u, %u, %u]",
-                            compacted[i].lodIndirectionOffsets[0],
-                            compacted[i].lodIndirectionOffsets[1],
-                            compacted[i].lodIndirectionOffsets[2],
-                            compacted[i].lodIndirectionOffsets[3]
-                        );
-                        ImGui::Text(
-                            "Indirect Cmd Indices: [%u, %u, %u, %u]",
-                            compacted[i].indirectCommandIndices[0],
-                            compacted[i].indirectCommandIndices[1],
-                            compacted[i].indirectCommandIndices[2],
-                            compacted[i].indirectCommandIndices[3]
-                        );
-                        ImGui::TreePop();
-                    }
-                }
-
-                ImGui::Separator();
-                ImGui::Text("Total LOD Counts: [%u, %u, %u, %u]", totalLOD[0], totalLOD[1], totalLOD[2], totalLOD[3]);
-
-                ImGui::TreePop();
-            }
-
             if (ImGui::TreeNode("Indirect Counts")) {
-                ImGui::Text("Packed Primitive Count: %u", indirectCount->packedPrimitiveCount);
                 ImGui::Text("Indirect Draw Count: %u", indirectCount->indirectCount);
-                ImGui::Text(
-                    "Dispatch XYZ: (%u, %u, %u)",
-                    indirectCount->packedPrimitiveCountDispatchX,
-                    indirectCount->packedPrimitiveCountDispatchY,
-                    indirectCount->packedPrimitiveCountDispatchZ
-                );
+                ImGui::Text("Total Instances Drawn: %u", indirectCount->totalInstanceCount);
+
                 ImGui::TreePop();
             }
 
@@ -612,7 +551,7 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
                 }
 
                 if (ImGui::TreeNode("Scanned Block Sums")) {
-                    for (uint32_t i = 0; i < 4; ++i) {
+                    for (uint32_t i = 0; i < 128; ++i) {
                         ImGui::Text("Scanned Block %u: instances=%u, commands=%u", i, scannedBlockSums[i].instanceOffset, scannedBlockSums[i].commandOffset);
                     }
                     ImGui::TreePop();
