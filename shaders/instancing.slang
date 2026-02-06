@@ -8,7 +8,8 @@ import constants_interop;
 import bindless_declarations;
 
 // =============== Compute Shader (Instance Visibility and LOD calculation) ===============
-// Evaluates the visibility of each instance and outputs to a packed visibility buffer
+// Evaluates the visibility and LOD of each instance and outputs to a packed visibility buffer
+//  Input-Rate: Per-Instance
 [shader("compute")]
 [numthreads(INSTANCING_VISIBILITY_DISPATCH_X, 1, 1)]
 void ComputeVisibility(uniform VisibilityPushConstant pc, uint3 dtid : SV_DispatchThreadID)
@@ -58,6 +59,61 @@ void ComputeVisibility(uniform VisibilityPushConstant pc, uint3 dtid : SV_Dispat
     if (bVisible) {
         uint32_t primitiveRangeIndex = pc.primitiveToPrimitiveRangeMapBuffer[inst.primitiveIndex];
         InterlockedAdd(pc.primitiveInstanceRangeBuffer[primitiveRangeIndex].visibleCountPerLOD[lod], 1);
+    }
+}
+
+// =============== Compute Shader (Prefix Sum Local) ===============
+//
+//  Input-Rate: Per-Primitive
+
+// Supports WaveLaneCount >= 32 (assuming dispatch x is 256)
+groupshared uint32_t subgroupTotals[8];
+groupshared uint32_t scannedOffsets[8];
+
+[shader("compute")]
+[numthreads(INSTANCING_PREFIX_SUM_LOCAL_DISPATCH_X, 1, 1)]
+void ComputePrefixSumLocal(uniform PrefixSumLocalPushConstant pc, uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID, uint3 dtid : SV_DispatchThreadID)
+{
+    uint blockIdx = gid.x;
+    uint threadIdx = gtid.x;
+    uint primitiveRangeIndex = dtid.x;
+
+    uint value = 0;
+    if (primitiveRangeIndex < pc.primitiveRangeCount) {
+        PrimitiveInstanceRange range = pc.primitiveInstanceRangeBuffer[primitiveRangeIndex];
+        value = range.visibleCountPerLOD[0] + range.visibleCountPerLOD[1] + range.visibleCountPerLOD[2] + range.visibleCountPerLOD[3];
+    }
+
+    // All-Wave Up-Sweep
+    uint localScan = WavePrefixSum(value);
+    uint waveIdx = WaveGetLaneIndex();
+    uint waveID = threadIdx / WaveGetLaneCount();
+    uint numWaves = (INSTANCING_PREFIX_SUM_LOCAL_DISPATCH_X + WaveGetLaneCount() - 1) / WaveGetLaneCount();
+
+    // Final wave writes postfix to groupshared
+    if (waveIdx == WaveGetLaneCount() - 1) {
+        subgroupTotals[waveID] = localScan + value;
+    }
+
+    GroupMemoryBarrierWithGroupSync();
+    // Thread 0 does prefix sum of the wave upsweep
+    if (threadIdx == 0) {
+        scannedOffsets[0] = 0;
+        for (uint i = 1; i < numWaves; i++) {
+            scannedOffsets[i] = scannedOffsets[i-1] + subgroupTotals[i-1];
+        }
+    }
+    GroupMemoryBarrierWithGroupSync();
+
+    // Each thread writes prefix sum
+    uint blockLocalScan = localScan + scannedOffsets[waveID];
+    if (primitiveRangeIndex < pc.primitiveRangeCount) {
+        //pc.prefixSums[primitiveRangeIndex] = blockLocalScan;
+    }
+
+    // Last thread writes block total
+    if (threadIdx == 255) {
+        pc.blockSums[blockIdx] = blockLocalScan + value;
     }
 }
 

@@ -12,26 +12,29 @@ namespace Render
 {
 struct FrameResourceLimits
 {
-    size_t highestInstanceBuffer{64};
-    size_t highestPrimitiveRangeBuffer{64};
-    size_t highestPrimitiveToPrimitiveRangeMapBuffer{64};
-    size_t highestCompactedPrimitiveBuffer{64};
-    size_t highestInstanceIndirectionBuffer{64};
-    size_t highestIndirectCommandBuffer{64};
+    size_t highestInstanceBuffer{128};
+    size_t highestPrimitiveRangeBuffer{128};
 
-    size_t highestDirectInstanceBuffer{64};
-    size_t highestModelBuffer{64};
-    size_t highestJointMatrixBuffer{64};
-    size_t highestMaterialBuffer{64};
+    size_t highestPrimitiveRangePrefixSumBuffer{128};
+    size_t highestBlockSumsBuffer{128};
+    size_t highestPrimitiveToPrimitiveRangeMapBuffer{128};
 
-    size_t highestDirectIndirectCommandBuffer{64};
-    size_t highestPackedVisibilityBuffer{64};
-    size_t highestInstanceOffsetBuffer{64};
-    size_t highestCompactedInstanceBuffer{64};
+    size_t highestCompactedPrimitiveBuffer{128};
+    size_t highestInstanceIndirectionBuffer{128};
+    size_t highestIndirectCommandBuffer{128};
+
+    size_t highestDirectInstanceBuffer{128};
+    size_t highestModelBuffer{128};
+    size_t highestMaterialBuffer{128};
+
+    size_t highestDirectIndirectCommandBuffer{128};
+    size_t highestPackedVisibilityBuffer{128};
+    size_t highestInstanceOffsetBuffer{128};
+    size_t highestCompactedInstanceBuffer{128};
 
 #ifndef PACKAGED_BUILD
-    size_t highestDebugVertexBuffer{64};
-    size_t highestDebugIndexBuffer{64};
+    size_t highestDebugVertexBuffer{128};
+    size_t highestDebugIndexBuffer{128};
 #endif
 };
 

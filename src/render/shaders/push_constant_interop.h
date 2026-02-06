@@ -100,14 +100,11 @@ SHADER_PUBLIC struct VisibilityPushConstant
     SHADER_PUBLIC uint32_t cascadeLevel;
 };*/
 
-SHADER_PUBLIC struct VisiblePrimitiveCounterPushConstant
+SHADER_PUBLIC struct PrefixSumLocalPushConstant
 {
-    // Read-Only
-    SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
-
-    // Read-Write
     SHADER_PUBLIC SHADER_PTR(PrimitiveInstanceRange) primitiveInstanceRangeBuffer;
-
+    SHADER_PUBLIC SHADER_PTR(uint32_t) prefixSums; // 65536
+    SHADER_PUBLIC SHADER_PTR(uint32_t) blockSums;  // 256
     SHADER_PUBLIC uint32_t primitiveRangeCount;
 };
 

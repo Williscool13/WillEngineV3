@@ -450,7 +450,6 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
         auto* indirectCount = reinterpret_cast<InstancedMeshIndirectCountBuffer*>(ptr);
         ptr += sizeof(InstancedMeshIndirectCountBuffer);
 
-        // Calculate LOD totals
         uint32_t totalLOD[4] = {0, 0, 0, 0};
         for (uint32_t i = 0; i < indirectCount->packedPrimitiveCount; ++i) {
             totalLOD[0] += compacted[i].lodCounts[0];
@@ -470,12 +469,18 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
         }
 
         if (ImGui::CollapsingHeader("Visibility Debug")) {
-            ptr += sizeof(InstancedMeshIndirectCountBuffer);
-
             auto* instanceIndirection = reinterpret_cast<uint32_t*>(ptr);
             ptr += 64 * sizeof(uint32_t);
 
             auto* indirectCmds = reinterpret_cast<InstancedMeshIndirectDrawParameters*>(ptr);
+            ptr += 64 * sizeof(InstancedMeshIndirectDrawParameters);
+
+            auto* prefixSums = reinterpret_cast<uint32_t*>(ptr);
+            ptr += 128 * sizeof(uint32_t);
+
+            auto* blockSums = reinterpret_cast<uint32_t*>(ptr);
+            ptr += 1 * sizeof(uint32_t);
+
 
             if (ImGui::TreeNode("Instances")) {
                 for (uint32_t i = 0; i < 25; ++i) {
@@ -584,6 +589,25 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
                         ImGui::TreePop();
                     }
                 }
+                ImGui::TreePop();
+            }
+
+            // ===== ImGui: Prefix Sum Debug View =====
+            if (ImGui::TreeNode("Prefix Sum Debug")) {
+                if (ImGui::TreeNode("Primitive Range Prefix Sums")) {
+                    for (uint32_t i = 0; i < 128; ++i) {
+                        ImGui::Text("Range %u: %u", i, prefixSums[i]);
+                    }
+                    ImGui::TreePop();
+                }
+
+                if (ImGui::TreeNode("Block Sums")) {
+                    for (uint32_t i = 0; i < 1; ++i) {
+                        ImGui::Text("Block %u: %u", i, blockSums[i]);
+                    }
+                    ImGui::TreePop();
+                }
+
                 ImGui::TreePop();
             }
         }
