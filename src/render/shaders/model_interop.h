@@ -126,13 +126,11 @@ SHADER_PUBLIC struct Instance
     uint32_t padding2;
 };
 
-SHADER_PUBLIC struct PrimitiveInstanceRange {
+SHADER_PUBLIC struct PrimitiveRange {
     SHADER_PUBLIC uint32_t start;           // Written by CPU
     SHADER_PUBLIC uint32_t count;           // Written by CPU
     SHADER_PUBLIC uint32_t primitiveIndex;  // Written by CPU
     uint32_t padding;
-
-    SHADER_PUBLIC uint32_t visibleCountPerLOD[LOD_COUNT];
 };
 
 SHADER_PUBLIC struct SHADER_ALIGN Model

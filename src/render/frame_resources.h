@@ -13,7 +13,7 @@ namespace Render
 struct FrameResourceLimits
 {
     size_t highestInstanceBuffer{128};
-    size_t highestPrimitiveRangeBuffer{128};
+    size_t highestFilteredPrimitiveCount{128};
 
     size_t highestPrimitiveRangePrefixSumBuffer{128};
 

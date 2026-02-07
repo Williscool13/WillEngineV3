@@ -59,12 +59,12 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
             for (size_t i = 0; i < frameBuffer->mainViewFamily.mainPassInstances.size(); ++i) {
                 uint32_t primIndex = frameBuffer->mainViewFamily.mainPassInstances[i].primitiveIndex;
                 if (primIndex != currentPrimitive) {
-                    frameBuffer->mainViewFamily.mainInstancesPrimitiveRanges.push_back({rangeStart, static_cast<uint32_t>(i - rangeStart), currentPrimitive, 0, {0, 0, 0, 0}});
+                    frameBuffer->mainViewFamily.mainInstancesPrimitiveRanges.push_back({rangeStart, static_cast<uint32_t>(i - rangeStart), currentPrimitive});
                     currentPrimitive = primIndex;
                     rangeStart = i;
                 }
             }
-            frameBuffer->mainViewFamily.mainInstancesPrimitiveRanges.push_back({rangeStart, static_cast<uint32_t>(frameBuffer->mainViewFamily.mainPassInstances.size() - rangeStart), currentPrimitive, 0, {0, 0, 0, 0}});
+            frameBuffer->mainViewFamily.mainInstancesPrimitiveRanges.push_back({rangeStart, static_cast<uint32_t>(frameBuffer->mainViewFamily.mainPassInstances.size() - rangeStart), currentPrimitive});
         }
     }
 

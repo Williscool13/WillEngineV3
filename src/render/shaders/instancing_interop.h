@@ -63,9 +63,10 @@ SHADER_PUBLIC struct InstancedMeshIndirectDrawParameters
     uint32_t padding0;
 };
 
-SHADER_PUBLIC struct InstanceOffsetCounter
+SHADER_PUBLIC struct PrimitiveCounters
 {
-    SHADER_PUBLIC uint32_t lodInstanceOffset[LOD_COUNT];
+    SHADER_PUBLIC uint32_t visibleCountPerLOD[LOD_COUNT];
+    SHADER_PUBLIC uint32_t lodInstanceOffset[LOD_COUNT]; // After final instancing setup pass, should be equal to visibleCountPerLOD
 };
 
 SHADER_PUBLIC struct PrimitiveOffsets

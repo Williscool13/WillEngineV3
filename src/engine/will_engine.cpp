@@ -444,8 +444,8 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
         auto* instances = reinterpret_cast<Instance*>(ptr);
         ptr += 25 * sizeof(Instance);
 
-        auto* ranges = reinterpret_cast<PrimitiveInstanceRange*>(ptr);
-        ptr += 25 * sizeof(PrimitiveInstanceRange);
+        auto* ranges = reinterpret_cast<PrimitiveRange*>(ptr);
+        ptr += 25 * sizeof(PrimitiveRange);
 
         auto* indirectCount = reinterpret_cast<InstancedMeshIndirectCountBuffer*>(ptr);
         ptr += sizeof(InstancedMeshIndirectCountBuffer);
@@ -489,7 +489,7 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
             }
 
             if (ImGui::TreeNode("Primitive Ranges")) {
-                for (uint32_t i = 0; i < 25; ++i) {
+                /*for (uint32_t i = 0; i < 25; ++i) {
                     if (ImGui::TreeNode((void*) (intptr_t) (i + 1000), "Range %u", i)) {
                         ImGui::Text("Primitive Index: %u", ranges[i].primitiveIndex);
                         ImGui::Text("Start: %u", ranges[i].start);
@@ -503,7 +503,7 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
                         );
                         ImGui::TreePop();
                     }
-                }
+                }*/
                 ImGui::TreePop();
             }
 

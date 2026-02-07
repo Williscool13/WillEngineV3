@@ -20,12 +20,15 @@ groupshared uint32_t visibleMeshletCount;
 
 [shader("task")]
 [numthreads(TASK_SHADER_DISPATCH_X, 1, 1)]
-void TaskMain(uniform ShadowMeshShadingPushConstant pushConstant,
+void TaskMain(uniform ShadowMeshShadingPushConstant pc,
     uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID, uint drawIndex : SV_DrawIndex)
 {
-    InstancedMeshIndirectDrawParameters indirectParameters = pushConstant.indirectBuffer[drawIndex];
-    uint32_t instanceIndex = indirectParameters.compactedInstanceStart + gid.y;
-    Instance inst = pushConstant.compactedInstanceBuffer[instanceIndex];
+    InstancedMeshIndirectDrawParameters indirectParameters = pc.indirectBuffer[drawIndex];
+
+    uint32_t instanceIndirectIndex = indirectParameters.compactedInstanceStart + gid.y;
+    uint32_t instanceIndex = pc.instanceIndirectionBuffer[instanceIndirectIndex];
+    Instance inst = pc.instanceBuffer[instanceIndex];
+
     uint32_t groupMeshletOffset = indirectParameters.meshletOffset + (gid.x * TASK_SHADER_DISPATCH_X);
     uint32_t totalMeshlets = indirectParameters.meshletCount;
 
@@ -36,12 +39,12 @@ void TaskMain(uniform ShadowMeshShadingPushConstant pushConstant,
     }
     GroupMemoryBarrierWithGroupSync();
 
-    Model model = pushConstant.modelBuffer[sharedPayload.modelIndex];
+    Model model = pc.modelBuffer[sharedPayload.modelIndex];
     uint8_t meshletID = (uint8_t)gtid.x;
     uint localMeshletCount = min(TASK_SHADER_DISPATCH_X, totalMeshlets - (gid.x * TASK_SHADER_DISPATCH_X));
 
     if (meshletID < localMeshletCount) {
-        Meshlet mlet = pushConstant.meshletBuffer[groupMeshletOffset + meshletID];
+        Meshlet mlet = pc.meshletBuffer[groupMeshletOffset + meshletID];
 
         float3 scale = float3(length(model.modelMatrix[0].xyz), length(model.modelMatrix[1].xyz), length(model.modelMatrix[2].xyz));
         float maxScale = max(max(scale.x, scale.y), scale.z);
@@ -49,7 +52,7 @@ void TaskMain(uniform ShadowMeshShadingPushConstant pushConstant,
         float3 worldCenter = mul(model.modelMatrix, float4(mlet.meshletBoundingSphere.xyz, 1.0)).xyz;
         float4 worldBounds = float4(worldCenter, worldRadius);
 
-        bool visible = FrustumCullSphere(pushConstant.shadowData->lightFrustums[pushConstant.cascadeIndex], worldBounds);
+        bool visible = FrustumCullSphere(pc.shadowData->lightFrustums[pc.cascadeIndex], worldBounds);
 
         if (visible) {
             uint index;
@@ -72,23 +75,23 @@ void MeshMain(
     out indices uint3 triangles[MESHLET_MAX_TRIANGLES],
     out vertices float4 positions[MESHLET_MAX_VERTICES] : SV_Position,
     uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID,
-    uniform ShadowMeshShadingPushConstant pushConstant)
+    uniform ShadowMeshShadingPushConstant pc)
 {
     uint32_t meshletIndex = inPayload.groupMeshletOffset + inPayload.meshletIndices[gid.x];
-    Meshlet meshlet = pushConstant.meshletBuffer[meshletIndex];
-    Model m = pushConstant.modelBuffer[inPayload.modelIndex];
-    float4x4 lightViewProj = pushConstant.shadowData->lightSpaceMatrices[pushConstant.cascadeIndex];
+    Meshlet meshlet = pc.meshletBuffer[meshletIndex];
+    Model m = pc.modelBuffer[inPayload.modelIndex];
+    float4x4 lightViewProj = pc.shadowData->lightSpaceMatrices[pc.cascadeIndex];
 
     SetMeshOutputCounts(meshlet.meshletVertexCount, meshlet.meshletTriangleCount);
 
     for (uint i = gtid.x; i < meshlet.meshletVertexCount; i += MESH_SHADER_DISPATCH_X) {
-        uint localVertexIndex = pushConstant.meshletVerticesBuffer[meshlet.meshletVertexOffset + i];
-        Vertex v = pushConstant.vertexBuffer[meshlet.vertexOffset + localVertexIndex];
+        uint localVertexIndex = pc.meshletVerticesBuffer[meshlet.meshletVertexOffset + i];
+        Vertex v = pc.vertexBuffer[meshlet.vertexOffset + localVertexIndex];
         positions[i] = mul(lightViewProj, mul(m.modelMatrix, float4(v.position, 1.0)));
     }
 
     for (uint i = gtid.x; i < meshlet.meshletTriangleCount; i += MESH_SHADER_DISPATCH_X) {
-        uint packed = pushConstant.meshletTrianglesBuffer[meshlet.meshletTriangleOffset + i];
+        uint packed = pc.meshletTrianglesBuffer[meshlet.meshletTriangleOffset + i];
         triangles[i] = uint3((packed >> 0) & 0xFF, (packed >> 8) & 0xFF, (packed >> 16) & 0xFF);
     }
 }

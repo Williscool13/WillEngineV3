@@ -51,15 +51,14 @@ using float4x4 = glm::mat4;
 
 SHADER_PUBLIC struct SHADER_ALIGN ShadowData
 {
-    SHADER_PUBLIC float nearSplits[SHADOW_CASCADE_COUNT];
-    SHADER_PUBLIC float farSplits[SHADOW_CASCADE_COUNT];
     SHADER_PUBLIC float4x4 lightSpaceMatrices[SHADOW_CASCADE_COUNT];
     SHADER_PUBLIC Frustum lightFrustums[SHADOW_CASCADE_COUNT];
+    SHADER_PUBLIC float nearSplits[SHADOW_CASCADE_COUNT];
+    SHADER_PUBLIC float farSplits[SHADOW_CASCADE_COUNT];
     SHADER_PUBLIC float shadowIntensity;
     SHADER_PUBLIC float lightSizes[SHADOW_CASCADE_COUNT];
     SHADER_PUBLIC uint32_t blockerSearchSamples[SHADOW_CASCADE_COUNT];
     SHADER_PUBLIC uint32_t pcfSamples[SHADOW_CASCADE_COUNT];
-    float padding[3];
 };
 
 

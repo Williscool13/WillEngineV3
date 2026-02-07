@@ -76,7 +76,7 @@ SHADER_PUBLIC struct VisibilityPushConstant
     // Read-Write
     SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
     SHADER_PUBLIC SHADER_PTR(uint32_t) primitiveToPrimitiveRangeMapBuffer;
-    SHADER_PUBLIC SHADER_PTR(PrimitiveInstanceRange) primitiveInstanceRangeBuffer;
+    SHADER_PUBLIC SHADER_PTR(PrimitiveCounters) primitiveCountersBuffer;
 
     // Read-Only
     SHADER_PUBLIC uint32_t instanceCount;
@@ -84,25 +84,26 @@ SHADER_PUBLIC struct VisibilityPushConstant
     SHADER_PUBLIC uint32_t lodBias;
 };
 
-/*SHADER_PUBLIC struct VisibilityShadowsPushConstant
+SHADER_PUBLIC struct VisibilityShadowsPushConstant
 {
     // Read-Only
     SHADER_PUBLIC SHADER_PTR(ShadowData) shadowData;
     SHADER_PUBLIC SHADER_PTR(MeshletPrimitive) primitiveBuffer;
     SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
-    SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
 
     // Read-Write
-    SHADER_PUBLIC SHADER_PTR(uint32_t) packedVisibilityBuffer;
-    SHADER_PUBLIC SHADER_PTR(uint32_t) instanceOffsetBuffer;
-    SHADER_PUBLIC SHADER_PTR(PrimitiveCount) primitiveCountBuffer;
+    SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
+    SHADER_PUBLIC SHADER_PTR(uint32_t) primitiveToPrimitiveRangeMapBuffer;
+    SHADER_PUBLIC SHADER_PTR(PrimitiveCounters) primitiveCountersBuffer;
+
+    // Read-Only
     SHADER_PUBLIC uint32_t instanceCount;
     SHADER_PUBLIC uint32_t cascadeLevel;
-};*/
+};
 
 SHADER_PUBLIC struct PrefixSumLocalPushConstant
 {
-    SHADER_PUBLIC SHADER_PTR(PrimitiveInstanceRange) primitiveInstanceRangeBuffer;
+    SHADER_PUBLIC SHADER_PTR(PrimitiveCounters) primitiveCountersBuffer;
     SHADER_PUBLIC SHADER_PTR(PrimitiveOffsets) prefixSums; // Out: 65536
     SHADER_PUBLIC SHADER_PTR(PrimitiveOffsets) blockSums;  // Out: 256
     SHADER_PUBLIC SHADER_PTR(InstancedMeshIndirectCountBuffer) indirectCountBuffer; // Out
@@ -129,13 +130,12 @@ SHADER_PUBLIC struct CompactAndIndirectPushConstant
     SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
     SHADER_PUBLIC SHADER_PTR(uint32_t) primitiveToPrimitiveRangeMapBuffer;
     SHADER_PUBLIC SHADER_PTR(PrimitiveOffsets) prefixSums;
-    SHADER_PUBLIC SHADER_PTR(PrimitiveInstanceRange) primitiveInstanceRangeBuffer;
     SHADER_PUBLIC uint32_t instanceCount;
 
     // Write-Only
     SHADER_PUBLIC SHADER_PTR(uint32_t) instanceIndirectionBuffer; // The "packed" buffer, w/ indirection indices to the original instance buffer
     SHADER_PUBLIC SHADER_PTR(InstancedMeshIndirectDrawParameters) indirectBuffer;
-    SHADER_PUBLIC SHADER_PTR(InstanceOffsetCounter) instanceOffsetCounterBuffer;
+    SHADER_PUBLIC SHADER_PTR(PrimitiveCounters) primitiveCountersBuffer;
 };
 
 SHADER_PUBLIC struct InstancedMeshShadingPushConstant
@@ -204,10 +204,11 @@ SHADER_PUBLIC struct ShadowMeshShadingPushConstant
     SHADER_PUBLIC SHADER_PTR(uint32_t) meshletVerticesBuffer;
     SHADER_PUBLIC SHADER_PTR(uint32_t) meshletTrianglesBuffer;
     SHADER_PUBLIC SHADER_PTR(Meshlet) meshletBuffer;
+    SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
 
+    SHADER_PUBLIC SHADER_PTR(uint32_t) instanceIndirectionBuffer;
     SHADER_PUBLIC SHADER_PTR(InstancedMeshIndirectDrawParameters) indirectBuffer;
 
-    SHADER_PUBLIC SHADER_PTR(Instance) compactedInstanceBuffer;
     SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
 
     SHADER_PUBLIC uint32_t cascadeIndex;

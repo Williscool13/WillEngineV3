@@ -264,7 +264,7 @@ add_shader_include("${CMAKE_SOURCE_DIR}/shaders/bindless_declarations.slang")
 compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/debug_visualize.slang compute ComputeMain debug_visualize
         ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputeVisibility instancing_visibility
-        # ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputeVisibilityShadows instancing_shadows_visibility
+        ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputeVisibilityShadows instancing_shadows_visibility
         ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputePrefixSumLocal instancing_prefix_sum_local
         ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputePrefixSumBlocks instancing_prefix_sum_blocks
         ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputePrefixSumScatter instancing_prefix_sum_scatter

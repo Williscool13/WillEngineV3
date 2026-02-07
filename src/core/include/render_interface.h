@@ -187,13 +187,13 @@ struct ViewFamily
     RenderView mainView{};
     std::vector<PortalView> portalViews;
 
-    std::vector<InstanceData> mainPassInstances;
-    std::vector<PrimitiveInstanceRange> mainInstancesPrimitiveRanges;
+    std::vector<InstanceData> mainPassInstances{256};
+    std::vector<PrimitiveRange> mainInstancesPrimitiveRanges{256};
 
     std::vector<CustomStencilDrawBatch> customStencilDraws;
 
-    std::vector<Model> modelMatrices;
-    std::vector<MaterialProperties> materials;
+    std::vector<Model> modelMatrices{256};
+    std::vector<MaterialProperties> materials{256};
 
     ShadowConfiguration shadowConfig{};
 

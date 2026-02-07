@@ -58,7 +58,48 @@ void ComputeVisibility(uniform VisibilityPushConstant pc, uint3 dtid : SV_Dispat
 
     if (bVisible) {
         uint32_t primitiveRangeIndex = pc.primitiveToPrimitiveRangeMapBuffer[inst.primitiveIndex];
-        InterlockedAdd(pc.primitiveInstanceRangeBuffer[primitiveRangeIndex].visibleCountPerLOD[lod], 1);
+        InterlockedAdd(pc.primitiveCountersBuffer[primitiveRangeIndex].visibleCountPerLOD[lod], 1);
+    }
+}
+
+[shader("compute")]
+[numthreads(INSTANCING_VISIBILITY_DISPATCH_X, 1, 1)]
+void ComputeVisibilityShadows(uniform VisibilityShadowsPushConstant pc, uint3 dtid : SV_DispatchThreadID)
+{
+    uint instanceID = dtid.x;
+    if (instanceID >= pc.instanceCount) {
+        return;
+    }
+    Instance inst = pc.instanceBuffer[instanceID];
+    MeshletPrimitive prim = pc.primitiveBuffer[inst.primitiveIndex];
+    Model model = pc.modelBuffer[inst.modelIndex];
+
+    float4 boundingSphere = prim.boundingSphere;
+    float3 scale = float3(
+        length(model.modelMatrix[0].xyz),
+        length(model.modelMatrix[1].xyz),
+        length(model.modelMatrix[2].xyz)
+    );
+    float maxScale = max(max(scale.x, scale.y), scale.z);
+    float worldRadius = boundingSphere.w * maxScale;
+    float3 worldCenter = mul(model.modelMatrix, float4(boundingSphere.xyz, 1.0)).xyz;
+    float4 worldBounds = float4(worldCenter, worldRadius);
+
+    bool bVisible = FrustumCullSphere(pc.shadowData.lightFrustums[pc.cascadeLevel], worldBounds);
+    // todo: hiz occlusion culling
+
+    uint lod = 0;
+    if (bVisible) {
+        // Shadow specific geometry is preferred, but for now use cascade level directly as LOD
+        lod = pc.cascadeLevel;
+    }
+
+    pc.instanceBuffer[instanceID].bIsVisible = bVisible ? 1u : 0u;
+    pc.instanceBuffer[instanceID].lod = lod;
+
+    if (bVisible) {
+        uint32_t primitiveRangeIndex = pc.primitiveToPrimitiveRangeMapBuffer[inst.primitiveIndex];
+        InterlockedAdd(pc.primitiveCountersBuffer[primitiveRangeIndex].visibleCountPerLOD[lod], 1);
     }
 }
 
@@ -80,9 +121,9 @@ void ComputePrefixSumLocal(uniform PrefixSumLocalPushConstant pc, uint3 gid : SV
 
     PrimitiveOffsets primitiveOffsets = PrimitiveOffsets(0, 0);
     if (primitiveRangeIndex < pc.primitiveRangeCount) {
-        PrimitiveInstanceRange range = pc.primitiveInstanceRangeBuffer[primitiveRangeIndex];
-        primitiveOffsets.instanceOffset = range.visibleCountPerLOD[0] + range.visibleCountPerLOD[1] + range.visibleCountPerLOD[2] + range.visibleCountPerLOD[3];
-        primitiveOffsets.commandOffset = min(range.visibleCountPerLOD[0], 1) + min(range.visibleCountPerLOD[1], 1) + min(range.visibleCountPerLOD[2], 1) + min(range.visibleCountPerLOD[3], 1);
+        PrimitiveCounters counter = pc.primitiveCountersBuffer[primitiveRangeIndex];
+        primitiveOffsets.instanceOffset = counter.visibleCountPerLOD[0] + counter.visibleCountPerLOD[1] + counter.visibleCountPerLOD[2] + counter.visibleCountPerLOD[3];
+        primitiveOffsets.commandOffset = min(counter.visibleCountPerLOD[0], 1) + min(counter.visibleCountPerLOD[1], 1) + min(counter.visibleCountPerLOD[2], 1) + min(counter.visibleCountPerLOD[3], 1);
     }
 
     // All-Wave Up-Sweep
@@ -220,25 +261,25 @@ void ComputeCompactAndGenerateIndirect(uniform CompactAndIndirectPushConstant pc
 
     uint primitiveRangeIndex = pc.primitiveToPrimitiveRangeMapBuffer[inst.primitiveIndex];
     PrimitiveOffsets primitiveOffsets = pc.prefixSums[primitiveRangeIndex];
-    PrimitiveInstanceRange range = pc.primitiveInstanceRangeBuffer[primitiveRangeIndex];
+    PrimitiveCounters counter = pc.primitiveCountersBuffer[primitiveRangeIndex];
     uint lod = inst.lod;
 
-    pc.instanceIndirectionBuffer[instanceID] = range.visibleCountPerLOD[0] + range.visibleCountPerLOD[1] + range.visibleCountPerLOD[2] + range.visibleCountPerLOD[3];
+    pc.instanceIndirectionBuffer[instanceID] = counter.visibleCountPerLOD[0] + counter.visibleCountPerLOD[1] + counter.visibleCountPerLOD[2] + counter.visibleCountPerLOD[3];
 
     // Calculate LOD offset within this primitive's instances
     uint lodOffset = 0;
     for (uint i = 0; i < lod; i++) {
-        lodOffset += range.visibleCountPerLOD[i];
+        lodOffset += counter.visibleCountPerLOD[i];
     }
 
     // Atomically get local index within this LOD
     uint localInstanceIdx = 0;
     uint commandIdx = primitiveOffsets.commandOffset;
     for (uint i = 0; i < lod; i++) {
-        commandIdx += (range.visibleCountPerLOD[i] > 0) ? 1 : 0;
+        commandIdx += (counter.visibleCountPerLOD[i] > 0) ? 1 : 0;
     }
 
-    InterlockedAdd(pc.instanceOffsetCounterBuffer[primitiveRangeIndex].lodInstanceOffset[lod], 1, localInstanceIdx);
+    InterlockedAdd(pc.primitiveCountersBuffer[primitiveRangeIndex].lodInstanceOffset[lod], 1, localInstanceIdx);
 
     // Write compacted instance
     uint globalInstanceIdx = primitiveOffsets.instanceOffset + lodOffset + localInstanceIdx;
@@ -250,7 +291,7 @@ void ComputeCompactAndGenerateIndirect(uniform CompactAndIndirectPushConstant pc
         uint totalMeshlets = prim.meshletCount[lod];
         uint numChunks = (totalMeshlets + (TASK_SHADER_DISPATCH_X - 1)) / TASK_SHADER_DISPATCH_X;
         pc.indirectBuffer[commandIdx].groupCountX = numChunks;
-        pc.indirectBuffer[commandIdx].groupCountY = range.visibleCountPerLOD[lod];
+        pc.indirectBuffer[commandIdx].groupCountY = counter.visibleCountPerLOD[lod];
         pc.indirectBuffer[commandIdx].groupCountZ = 1;
         pc.indirectBuffer[commandIdx].compactedInstanceStart = primitiveOffsets.instanceOffset + lodOffset;
         // compactedInstanceCount already set by atomics, should equal range.visibleCountPerLOD[lod]
