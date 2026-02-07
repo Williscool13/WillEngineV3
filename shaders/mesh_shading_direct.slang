@@ -37,22 +37,49 @@ struct VkDrawMeshTasksIndirectCommandEXT
 };
 
 [shader("compute")]
-[numthreads(64, 1, 1)]
+[numthreads(DIRECT_RENDERING_DISPATCH_X, 1, 1)]
 void ComputeMain(uniform BuildDirectIndirectPushConstant pc, uint3 gid : SV_DispatchThreadID)
 {
-    uint32_t instanceIndex = gid.x;
-    if (instanceIndex >= pc.instanceCount) {
+    uint32_t instanceID = gid.x;
+    if (instanceID >= pc.instanceCount) {
         return;
     }
 
-    Instance inst = pc.instanceBuffer[instanceIndex];
+
+    Instance inst = pc.instanceBuffer[instanceID];
     MeshletPrimitive prim = pc.primitiveBuffer[inst.primitiveIndex];
+    Model model = pc.modelBuffer[inst.modelIndex];
+
+    float4 boundingSphere = prim.boundingSphere;
+    float3 scale = float3(
+        length(model.modelMatrix[0].xyz),
+        length(model.modelMatrix[1].xyz),
+        length(model.modelMatrix[2].xyz)
+    );
+    float maxScale = max(max(scale.x, scale.y), scale.z);
+    float worldRadius = boundingSphere.w * maxScale;
+    float3 worldCenter = mul(model.modelMatrix, float4(boundingSphere.xyz, 1.0)).xyz;
+    float4 worldBounds = float4(worldCenter, worldRadius);
+
+    float3 cameraPos = pc.sceneData[pc.sceneDataIndex].cameraWorldPos.xyz;
+    float distance = max(length(worldCenter - cameraPos), worldRadius);
+    float screenSize = (worldRadius / distance) * pc.sceneData[pc.sceneDataIndex].lodScreenSizeScale;
+
+    uint lod = 0;
+    if (screenSize < 10.0) lod = 3;
+    else if (screenSize < 50.0) lod = 2;
+    else if (screenSize < 150.0) lod = 1;
+    else lod = 0;
+
+    lod = min(lod + pc.lodBias, LOD_COUNT - 1);
+    inst.lod = lod;
+
 
     uint32_t taskGroupCount = (prim.meshletCount.x + TASK_SHADER_DISPATCH_X - 1) / TASK_SHADER_DISPATCH_X;
 
-    pc.indirectCommandBuffer[instanceIndex].groupCountX = taskGroupCount;
-    pc.indirectCommandBuffer[instanceIndex].groupCountY = 1;
-    pc.indirectCommandBuffer[instanceIndex].groupCountZ = 1;
+    pc.indirectCommandBuffer[instanceID].groupCountX = taskGroupCount;
+    pc.indirectCommandBuffer[instanceID].groupCountY = 1;
+    pc.indirectCommandBuffer[instanceID].groupCountZ = 1;
 }
 
 // =============== Task Shader ===============

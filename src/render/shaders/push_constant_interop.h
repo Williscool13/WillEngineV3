@@ -233,7 +233,11 @@ SHADER_PUBLIC struct BuildDirectIndirectPushConstant
     SHADER_PUBLIC SHADER_PTR(MeshletPrimitive) primitiveBuffer;
     SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
     SHADER_PUBLIC SHADER_PTR(DrawMeshTasksIndirectCommand) indirectCommandBuffer;
+    SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC uint32_t sceneDataIndex;
     SHADER_PUBLIC uint32_t instanceCount;
+    SHADER_PUBLIC uint32_t lodBias;
 };
 
 SHADER_PUBLIC struct DirectMeshShadingPushConstant

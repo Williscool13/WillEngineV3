@@ -55,6 +55,8 @@ inline constexpr int32_t POST_PROCESS_LUMINANCE_BUFFER_SIZE = sizeof(uint32_t) *
 
 inline constexpr uint32_t HALTON_SEQUENCE_COUNT = 16;
 
+inline constexpr uint32_t LOD_BIAS = 4;
+
 struct HaltonSample
 {
     float x, y;

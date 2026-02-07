@@ -1240,7 +1240,7 @@ void RenderThread::SetupFrameUniforms(const Core::ViewFamily& viewFamily, const 
         });
 }
 
-void RenderThread::SetupModelUniforms(const Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties)
+void RenderThread::SetupModelUniforms(const Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties) const
 {
     if (!viewFamily.modelMatrices.empty()) {
         renderGraph->CreateBuffer("model_buffer", renderFamilyProperties.modelBufferSize);
@@ -1659,7 +1659,7 @@ void RenderThread::SetupMainGeometryPass(RenderGraph& graph, const Core::ViewFam
             .primitiveCountersBuffer = graph.GetBufferAddress("primitive_counters_buffer"),
             .instanceCount = renderFamilyProperties.instanceCount,
             .sceneDataIndex = sceneIndex,
-            .lodBias = 0, // todo add debug
+            .lodBias = LOD_BIAS, // todo add debug
         };
 
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_visibility");
@@ -1833,14 +1833,18 @@ void RenderThread::SetupDirectGeometryPass(RenderGraph& graph, const Core::ViewF
 
     RenderPass& buildIndirectPass = graph.AddPass("Build Direct Indirect Commands", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
     buildIndirectPass.ReadBuffer("primitive_buffer");
-    buildIndirectPass.ReadBuffer("direct_instance_buffer");
+    buildIndirectPass.ReadWriteBuffer("direct_instance_buffer");
     buildIndirectPass.WriteBuffer("direct_indirect_command_buffer");
     buildIndirectPass.Execute([&, totalInstances](VkCommandBuffer cmd) {
         BuildDirectIndirectPushConstant pushConstant{
             .primitiveBuffer = graph.GetBufferAddress("primitive_buffer"),
             .instanceBuffer = graph.GetBufferAddress("direct_instance_buffer"),
             .indirectCommandBuffer = graph.GetBufferAddress("direct_indirect_command_buffer"),
+            .modelBuffer = graph.GetBufferAddress("model_buffer"),
+            .sceneData = graph.GetBufferAddress("scene_data"),
+            .sceneDataIndex = sceneIndex,
             .instanceCount = static_cast<uint32_t>(totalInstances),
+            .lodBias = LOD_BIAS,
         };
 
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("direct_mesh_shading_build_indirect");
