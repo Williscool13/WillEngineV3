@@ -188,7 +188,6 @@ struct ViewFamily
     std::vector<PortalView> portalViews;
 
     std::vector<InstanceData> mainPassInstances{256};
-    std::vector<PrimitiveRange> mainInstancesPrimitiveRanges{256};
 
     std::vector<CustomStencilDrawBatch> customStencilDraws;
 

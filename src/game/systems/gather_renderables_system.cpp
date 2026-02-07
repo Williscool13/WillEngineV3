@@ -47,25 +47,6 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
 
             renderable.previousModelMatrix = currentMatrix;
         }
-
-        // Prepare the data
-        if (!frameBuffer->mainViewFamily.mainPassInstances.empty()) {
-            std::ranges::sort(frameBuffer->mainViewFamily.mainPassInstances, [](const Core::InstanceData& a, const Core::InstanceData& b) {
-                return a.primitiveIndex < b.primitiveIndex;
-            });
-
-            uint32_t currentPrimitive = frameBuffer->mainViewFamily.mainPassInstances[0].primitiveIndex;
-            uint32_t rangeStart = 0;
-            for (size_t i = 0; i < frameBuffer->mainViewFamily.mainPassInstances.size(); ++i) {
-                uint32_t primIndex = frameBuffer->mainViewFamily.mainPassInstances[i].primitiveIndex;
-                if (primIndex != currentPrimitive) {
-                    frameBuffer->mainViewFamily.mainInstancesPrimitiveRanges.push_back({rangeStart, static_cast<uint32_t>(i - rangeStart), currentPrimitive});
-                    currentPrimitive = primIndex;
-                    rangeStart = i;
-                }
-            }
-            frameBuffer->mainViewFamily.mainInstancesPrimitiveRanges.push_back({rangeStart, static_cast<uint32_t>(frameBuffer->mainViewFamily.mainPassInstances.size() - rangeStart), currentPrimitive});
-        }
     }
 
     // Gather portal planes (custom stencil draws with stencil=1)

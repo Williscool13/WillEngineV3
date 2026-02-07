@@ -13,6 +13,7 @@
 #include "asset-load/async_asset_load_manager.h"
 #include "core/include/render_interface.h"
 #include "render/vulkan/vk_synchronization.h"
+#include "types/render_types.h"
 
 namespace AssetLoad
 {
@@ -103,11 +104,13 @@ public:
 private:
     void CreatePipelines();
 
+    void PrepareRenderFamilyProperties(Core::ViewFamily& viewFamily, RenderFamilyProperties& renderFamilyProperties, PipelineManager* _pipelineManager, FrameResourceLimits& _limits);
+
     void SetupFrameUniforms(const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, float renderDeltaTime) const;
 
-    void SetupModelUniforms(Core::ViewFamily& viewFamily);
+    void SetupModelUniforms(const Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties);
 
-    void SetupCascadedShadows(RenderGraph& graph, const Core::ViewFamily& viewFamily) const;
+    void SetupCascadedShadows(RenderGraph& graph, const Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties) const;
 
     struct GBufferTargets {
         std::string albedo;
@@ -127,17 +130,18 @@ private:
         std::string depthStencil; // stencil should be disregarded
     };
 
-    void SetupMainGeometryPass(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneIndex, bool bClearTargets) const;
+    void SetupMainGeometryPass(RenderGraph& graph, const Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties, std::array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneIndex, bool
+                               bClearTargets) const;
 
-    void SetupDirectGeometryPass(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneIndex, bool bClearTargets) const;
+    void SetupDirectGeometryPass(RenderGraph& graph, const Core::ViewFamily& renderViewFamily, std::array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneIndex, bool bClearTargets) const;
 
-    void SetupGroundTruthAmbientOcclusion(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneDataIndex) const;
+    void SetupGroundTruthAmbientOcclusion(RenderGraph& graph, const Core::ViewFamily& renderViewFamily, std::array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneDataIndex) const;
 
-    void SetupShadowsResolve(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneDataIndex) const;
+    void SetupShadowsResolve(RenderGraph& graph, const Core::ViewFamily& renderViewFamily, std::array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneDataIndex) const;
 
-    void SetupDeferredLighting(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneDataIndex) const;
+    void SetupDeferredLighting(RenderGraph& graph, const Core::ViewFamily& renderViewFamily, std::array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneDataIndex) const;
 
-    void SetupPortalComposite(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, const GBufferTargets& targets, const GBufferTargets& portalTargets) const;
+    void SetupPortalComposite(RenderGraph& graph, const Core::ViewFamily& renderViewFamily, std::array<uint32_t, 2> renderExtent, const GBufferTargets& targets, const GBufferTargets& portalTargets) const;
 
     std::string SetupTemporalAntialiasing(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, const PostProcessTargets& ppTargets) const;
 
@@ -176,6 +180,7 @@ private:
 
     uint32_t currentFrameInFlight{0};
     uint64_t frameNumber{0};
+    RenderFamilyProperties persistentRenderFamilyProperties{}; // so vector can be reused
     FrameResourceLimits frameResourceLimits{};
     bool bEngineRequestsRecreate{false};
     bool bRenderRequestsRecreate{false};
