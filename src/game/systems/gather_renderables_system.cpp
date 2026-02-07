@@ -38,7 +38,7 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
 
             for (uint8_t i = 0; i < renderable.primitiveCount; ++i) {
                 auto& prim = renderable.primitives[i];
-                frameBuffer->mainViewFamily.mainInstances.push_back({
+                frameBuffer->mainViewFamily.mainPassInstances.push_back({
                     .primitiveIndex = prim.primitiveIndex,
                     .materialID = prim.materialID,
                     .modelIndex = modelIndex
@@ -49,22 +49,22 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
         }
 
         // Prepare the data
-        if (!frameBuffer->mainViewFamily.mainInstances.empty()) {
-            std::ranges::sort(frameBuffer->mainViewFamily.mainInstances, [](const Core::InstanceData& a, const Core::InstanceData& b) {
+        if (!frameBuffer->mainViewFamily.mainPassInstances.empty()) {
+            std::ranges::sort(frameBuffer->mainViewFamily.mainPassInstances, [](const Core::InstanceData& a, const Core::InstanceData& b) {
                 return a.primitiveIndex < b.primitiveIndex;
             });
 
-            uint32_t currentPrimitive = frameBuffer->mainViewFamily.mainInstances[0].primitiveIndex;
+            uint32_t currentPrimitive = frameBuffer->mainViewFamily.mainPassInstances[0].primitiveIndex;
             uint32_t rangeStart = 0;
-            for (size_t i = 0; i < frameBuffer->mainViewFamily.mainInstances.size(); ++i) {
-                uint32_t primIndex = frameBuffer->mainViewFamily.mainInstances[i].primitiveIndex;
+            for (size_t i = 0; i < frameBuffer->mainViewFamily.mainPassInstances.size(); ++i) {
+                uint32_t primIndex = frameBuffer->mainViewFamily.mainPassInstances[i].primitiveIndex;
                 if (primIndex != currentPrimitive) {
                     frameBuffer->mainViewFamily.mainInstancesPrimitiveRanges.push_back({rangeStart, static_cast<uint32_t>(i - rangeStart), currentPrimitive, 0, {0, 0, 0, 0}});
                     currentPrimitive = primIndex;
                     rangeStart = i;
                 }
             }
-            frameBuffer->mainViewFamily.mainInstancesPrimitiveRanges.push_back({rangeStart, static_cast<uint32_t>(frameBuffer->mainViewFamily.mainInstances.size() - rangeStart), currentPrimitive, 0, {0, 0, 0, 0}});
+            frameBuffer->mainViewFamily.mainInstancesPrimitiveRanges.push_back({rangeStart, static_cast<uint32_t>(frameBuffer->mainViewFamily.mainPassInstances.size() - rangeStart), currentPrimitive, 0, {0, 0, 0, 0}});
         }
     }
 
@@ -107,7 +107,7 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
     }
 
     std::unordered_map<Engine::MaterialID, uint32_t> materialRemap;
-    for (auto& instance : frameBuffer->mainViewFamily.mainInstances) {
+    for (auto& instance : frameBuffer->mainViewFamily.mainPassInstances) {
         if (!materialRemap.contains(instance.materialID)) {
             uint32_t gpuIndex = frameBuffer->mainViewFamily.materials.size();
             materialRemap[instance.materialID] = gpuIndex;

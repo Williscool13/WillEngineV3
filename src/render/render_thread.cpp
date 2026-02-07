@@ -310,9 +310,8 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         });
 
 
-        bool bHasMainGeometry = !viewFamily.mainInstances.empty() && pipelineManager->IsCategoryReady(PipelineCategory::Geometry | PipelineCategory::Instancing);
-        // bool bHasDirectGeometry = !viewFamily.customStencilDraws.empty() && pipelineManager->IsCategoryReady(PipelineCategory::CustomStencilPass);
-        bool bHasDirectGeometry = false;
+        bool bHasMainGeometry = !viewFamily.mainPassInstances.empty() && pipelineManager->IsCategoryReady(PipelineCategory::Geometry | PipelineCategory::Instancing);
+        bool bHasDirectGeometry = !viewFamily.customStencilDraws.empty() && pipelineManager->IsCategoryReady(PipelineCategory::CustomStencilPass);
         bool bHasAnyGeometry = bHasMainGeometry || bHasDirectGeometry;
         bool bHasGTAO = viewFamily.gtaoConfig.bEnabled && pipelineManager->IsCategoryReady(PipelineCategory::GTAO);
         // bool bHasShadows = viewFamily.shadowConfig.enabled && pipelineManager->IsCategoryReady(PipelineCategory::ShadowPass);
@@ -1173,192 +1172,235 @@ void RenderThread::SetupFrameUniforms(const Core::ViewFamily& viewFamily, const 
 
 void RenderThread::SetupModelUniforms(Core::ViewFamily& viewFamily)
 {
-    bool bHasMainInstances = !viewFamily.mainInstances.empty();
-    bool bHasCustomInstances = false; // Disabled
+    if (!viewFamily.modelMatrices.empty()) {
+        frameResourceLimits.highestModelBuffer = std::max(frameResourceLimits.highestModelBuffer, NextPowerOfTwo(viewFamily.modelMatrices.size()));
+        size_t modelBufferSize = frameResourceLimits.highestModelBuffer * sizeof(Model);
+        renderGraph->CreateBuffer("model_buffer", modelBufferSize);
+        UploadAllocation modelUpload = renderGraph->AllocateTransient(viewFamily.modelMatrices.size() * sizeof(Model));
+        memcpy(modelUpload.ptr, viewFamily.modelMatrices.data(), viewFamily.modelMatrices.size() * sizeof(Model));
 
-    if (!bHasMainInstances) {
-        return;
+        RenderPass& uploadModelMatricesPass = renderGraph->AddPass("Upload Model Matrices", VK_PIPELINE_STAGE_2_COPY_BIT);
+        uploadModelMatricesPass.WriteTransferBuffer("model_buffer");
+        uploadModelMatricesPass.Execute([&,
+                modelOffset = modelUpload.offset,
+                modelSize = viewFamily.modelMatrices.size() * sizeof(Model)](VkCommandBuffer cmd) {
+                VkBufferCopy2 copy{
+                    .sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
+                    .srcOffset = modelOffset,
+                    .dstOffset = 0,
+                    .size = modelSize
+                };
+
+                VkCopyBufferInfo2 copyInfo{
+                    .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
+                    .srcBuffer = renderGraph->GetTransientUploadBuffer(),
+                    .dstBuffer = renderGraph->GetBufferHandle("model_buffer"),
+                    .regionCount = 1,
+                    .pRegions = &copy
+                };
+                vkCmdCopyBuffer2(cmd, &copyInfo);
+            });
     }
 
-    if (viewFamily.modelMatrices.empty() || viewFamily.materials.empty()) {
-        return;
+    if (!viewFamily.materials.empty()) {
+        frameResourceLimits.highestMaterialBuffer = std::max(frameResourceLimits.highestMaterialBuffer, NextPowerOfTwo(viewFamily.materials.size()));
+        size_t materialBufferSize = frameResourceLimits.highestMaterialBuffer * sizeof(MaterialProperties);
+        renderGraph->CreateBuffer("material_buffer", materialBufferSize);
+        UploadAllocation materialUpload = renderGraph->AllocateTransient(viewFamily.materials.size() * sizeof(MaterialProperties));
+        memcpy(materialUpload.ptr, viewFamily.materials.data(), viewFamily.materials.size() * sizeof(MaterialProperties));
+
+        RenderPass& uploadMaterialsPass = renderGraph->AddPass("Upload Materials", VK_PIPELINE_STAGE_2_COPY_BIT);
+        uploadMaterialsPass.WriteTransferBuffer("material_buffer");
+        uploadMaterialsPass.Execute([&,
+                materialOffset = materialUpload.offset,
+                materialSize = viewFamily.materials.size() * sizeof(MaterialProperties)](VkCommandBuffer cmd) {
+                VkBufferCopy2 copy{
+                    .sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
+                    .srcOffset = materialOffset,
+                    .dstOffset = 0,
+                    .size = materialSize
+                };
+
+                VkCopyBufferInfo2 copyInfo{
+                    .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
+                    .srcBuffer = renderGraph->GetTransientUploadBuffer(),
+                    .dstBuffer = renderGraph->GetBufferHandle("material_buffer"),
+                    .regionCount = 1,
+                    .pRegions = &copy
+                };
+                vkCmdCopyBuffer2(cmd, &copyInfo);
+            });
     }
 
-    frameResourceLimits.highestModelBuffer = std::max(frameResourceLimits.highestModelBuffer, NextPowerOfTwo(viewFamily.modelMatrices.size()));
-    frameResourceLimits.highestMaterialBuffer = std::max(frameResourceLimits.highestMaterialBuffer, NextPowerOfTwo(viewFamily.materials.size()));
+    bool bHasMainInstances = !viewFamily.mainPassInstances.empty();
+    bool bHasCustomInstances = !viewFamily.customStencilDraws.empty();
 
-    size_t modelBufferSize = frameResourceLimits.highestModelBuffer * sizeof(Model);
-    size_t jointMatrixBufferSize = frameResourceLimits.highestModelBuffer * sizeof(glm::mat4);
-    size_t materialBufferSize = frameResourceLimits.highestMaterialBuffer * sizeof(MaterialProperties);
+    if (bHasMainInstances) {
+        assert(!viewFamily.modelMatrices.empty() & !viewFamily.materials.empty());
 
-    renderGraph->CreateBuffer("model_buffer", modelBufferSize);
-    renderGraph->CreateBuffer("joint_matrix_buffer", jointMatrixBufferSize);
-    renderGraph->CreateBuffer("material_buffer", materialBufferSize);
+        frameResourceLimits.highestInstanceBuffer = std::max(frameResourceLimits.highestInstanceBuffer, NextPowerOfTwo(viewFamily.mainPassInstances.size()));
+        frameResourceLimits.highestPrimitiveRangeBuffer = std::max(frameResourceLimits.highestPrimitiveRangeBuffer, NextPowerOfTwo(viewFamily.mainInstancesPrimitiveRanges.size()));
+        uint32_t primitiveRangeCount = viewFamily.mainInstancesPrimitiveRanges.size();
+        frameResourceLimits.highestPrimitiveRangePrefixSumBuffer = std::max(frameResourceLimits.highestPrimitiveRangePrefixSumBuffer, NextPowerOfTwo(primitiveRangeCount));
+        frameResourceLimits.highestIndirectCommandBuffer = std::max(frameResourceLimits.highestIndirectCommandBuffer, NextPowerOfTwo(viewFamily.mainInstancesPrimitiveRanges.size() * LOD_COUNT));
 
-    // Update watermarks
-    frameResourceLimits.highestInstanceBuffer = std::max(frameResourceLimits.highestInstanceBuffer, NextPowerOfTwo(viewFamily.mainInstances.size()));
-    frameResourceLimits.highestPrimitiveRangeBuffer = std::max(frameResourceLimits.highestPrimitiveRangeBuffer, NextPowerOfTwo(viewFamily.mainInstancesPrimitiveRanges.size()));
-    frameResourceLimits.highestInstanceIndirectionBuffer = std::max(frameResourceLimits.highestInstanceIndirectionBuffer, NextPowerOfTwo(viewFamily.mainInstances.size()));
-    frameResourceLimits.highestIndirectCommandBuffer = std::max(frameResourceLimits.highestIndirectCommandBuffer, NextPowerOfTwo(viewFamily.mainInstancesPrimitiveRanges.size() * LOD_COUNT));
+        size_t instanceBufferSize = frameResourceLimits.highestInstanceBuffer * sizeof(Instance);
+        size_t instanceIndirectionBufferSize = frameResourceLimits.highestInstanceBuffer * sizeof(uint32_t);
+        size_t primitiveRangeBufferSize = frameResourceLimits.highestPrimitiveRangeBuffer * sizeof(PrimitiveInstanceRange);
+        size_t primitiveRangePrefixSumBufferSize = frameResourceLimits.highestPrimitiveRangePrefixSumBuffer * sizeof(PrimitiveOffsets);
+        size_t indirectCommandBufferSize = frameResourceLimits.highestIndirectCommandBuffer * sizeof(InstancedMeshIndirectDrawParameters);
+        size_t indirectInstanceOffsetCounterBufferSize = frameResourceLimits.highestIndirectCommandBuffer * sizeof(InstanceOffsetCounter);
 
-    uint32_t primitiveRangeCount = viewFamily.mainInstancesPrimitiveRanges.size();
-    uint32_t blockCount = (primitiveRangeCount + INSTANCING_PREFIX_SUM_LOCAL_DISPATCH_X - 1) / INSTANCING_PREFIX_SUM_LOCAL_DISPATCH_X;
-    frameResourceLimits.highestPrimitiveRangePrefixSumBuffer = std::max(frameResourceLimits.highestPrimitiveRangePrefixSumBuffer, NextPowerOfTwo(primitiveRangeCount));
-    frameResourceLimits.highestBlockSumsBuffer = std::max(frameResourceLimits.highestBlockSumsBuffer, NextPowerOfTwo(blockCount));
+        constexpr size_t primitiveToPrimitiveRangeMapBufferSize = MEGA_PRIMITIVE_BUFFER_COUNT * sizeof(uint32_t);
+        constexpr uint32_t blockSumCount = MEGA_PRIMITIVE_BUFFER_COUNT / INSTANCING_PREFIX_SUM_LOCAL_DISPATCH_X;
+        static_assert(blockSumCount == 256);
+        constexpr size_t blockSumsBufferSize = blockSumCount * sizeof(PrimitiveOffsets);
 
-    // Create buffers
-    size_t highestPrimitiveToPrimitiveRangeMapBufferSize = MEGA_PRIMITIVE_BUFFER_COUNT * sizeof(uint32_t);
+        renderGraph->CreateBuffer("instance_buffer", instanceBufferSize);
+        renderGraph->CreateBuffer("instance_indirection_buffer", instanceIndirectionBufferSize);
 
-    size_t instanceBufferSize = frameResourceLimits.highestInstanceBuffer * sizeof(Instance);
-    size_t primitiveRangeBufferSize = frameResourceLimits.highestPrimitiveRangeBuffer * sizeof(PrimitiveInstanceRange);
-    size_t primitiveRangePrefixSumBufferSize = frameResourceLimits.highestPrimitiveRangePrefixSumBuffer * sizeof(PrimitiveOffsets);
-    size_t blockSumsBufferSize = frameResourceLimits.highestBlockSumsBuffer * sizeof(PrimitiveOffsets);
+        renderGraph->CreateBuffer("primitive_range_buffer", primitiveRangeBufferSize);
+        renderGraph->CreateBuffer("primitive_to_range_map_buffer", primitiveToPrimitiveRangeMapBufferSize);
+        renderGraph->CreateBuffer("primitive_range_prefix_sum_buffer", primitiveRangePrefixSumBufferSize);
 
-    size_t instanceIndirectionBufferSize = frameResourceLimits.highestInstanceIndirectionBuffer * sizeof(uint32_t);
-    size_t indirectCommandBufferSize = frameResourceLimits.highestIndirectCommandBuffer * sizeof(InstancedMeshIndirectDrawParameters);
-    size_t indirectInstanceOffsetCounterBufferSize = frameResourceLimits.highestIndirectCommandBuffer * sizeof(InstanceOffsetCounter);
+        renderGraph->CreateBuffer("block_sums_buffer", blockSumsBufferSize);
+        renderGraph->CreateBuffer("scanned_block_offsets_buffer", blockSumsBufferSize);
 
-    renderGraph->CreateBuffer("instance_buffer", instanceBufferSize);
-    renderGraph->CreateBuffer("primitive_range_buffer", primitiveRangeBufferSize);
-    renderGraph->CreateBuffer("instance_indirection_buffer", instanceIndirectionBufferSize);
-    renderGraph->CreateBuffer("indirect_command_buffer", indirectCommandBufferSize);
-    renderGraph->CreateBuffer("indirect_instance_offset_counter", indirectInstanceOffsetCounterBufferSize);
+        renderGraph->CreateBuffer("indirect_instance_offset_counter", indirectInstanceOffsetCounterBufferSize);
+        renderGraph->CreateBuffer("indirect_command_buffer", indirectCommandBufferSize);
+        renderGraph->CreateBuffer("indirect_count_buffer", sizeof(InstancedMeshIndirectCountBuffer));
 
-    renderGraph->CreateBuffer("indirect_count_buffer", sizeof(InstancedMeshIndirectCountBuffer));
+        // Prepare the copies
+        UploadAllocation instanceUpload = renderGraph->AllocateTransient(viewFamily.mainPassInstances.size() * sizeof(Instance));
+        auto* instanceBuffer = static_cast<Instance*>(instanceUpload.ptr);
+        for (size_t i = 0; i < viewFamily.mainPassInstances.size(); ++i) {
+            auto& inst = viewFamily.mainPassInstances[i];
+            instanceBuffer[i] = {
+                .primitiveIndex = inst.primitiveIndex,
+                .modelIndex = inst.modelIndex,
+                .materialIndex = inst.gpuMaterialIndex,
+                .bIsVisible = 0,
+                .lod = 0,
+            };
+        }
 
-    renderGraph->CreateBuffer("primitive_to_range_map_buffer", highestPrimitiveToPrimitiveRangeMapBufferSize);
-    renderGraph->CreateBuffer("primitive_range_prefix_sum_buffer", primitiveRangePrefixSumBufferSize);
-    renderGraph->CreateBuffer("block_sums_buffer", blockSumsBufferSize);
-    renderGraph->CreateBuffer("scanned_block_offsets_buffer", blockSumsBufferSize);
+        UploadAllocation primitiveRangeUpload = renderGraph->AllocateTransient(viewFamily.mainInstancesPrimitiveRanges.size() * sizeof(PrimitiveInstanceRange));
+        memcpy(primitiveRangeUpload.ptr, viewFamily.mainInstancesPrimitiveRanges.data(), viewFamily.mainInstancesPrimitiveRanges.size() * sizeof(PrimitiveInstanceRange));
 
-    // Prepare the copies
-    UploadAllocation instanceUpload{};
-    UploadAllocation primitiveRangeUpload{};
-    UploadAllocation primitiveIndexToRangeUpload{};
-    instanceUpload = renderGraph->AllocateTransient(viewFamily.mainInstances.size() * sizeof(Instance));
-    auto* instanceBuffer = static_cast<Instance*>(instanceUpload.ptr);
-    for (size_t i = 0; i < viewFamily.mainInstances.size(); ++i) {
-        auto& inst = viewFamily.mainInstances[i];
-        instanceBuffer[i] = {
-            .primitiveIndex = inst.primitiveIndex,
-            .modelIndex = inst.modelIndex,
-            .materialIndex = inst.gpuMaterialIndex,
-            .bIsVisible = 0,
-            .lod = 0,
-        };
+        UploadAllocation primitiveIndexToRangeUpload = renderGraph->AllocateTransient(MEGA_PRIMITIVE_BUFFER_COUNT * sizeof(uint32_t));
+        auto* primitiveIndexToRangeBuffer = static_cast<uint32_t*>(primitiveIndexToRangeUpload.ptr);
+        for (uint32_t rangeIdx = 0; rangeIdx < viewFamily.mainInstancesPrimitiveRanges.size(); ++rangeIdx) {
+            uint32_t primitiveIndex = viewFamily.mainInstancesPrimitiveRanges[rangeIdx].primitiveIndex;
+            primitiveIndexToRangeBuffer[primitiveIndex] = rangeIdx;
+        }
+
+
+        RenderPass& uploadModelsPass = renderGraph->AddPass("Upload Model Uniforms", VK_PIPELINE_STAGE_2_COPY_BIT);
+        uploadModelsPass.WriteTransferBuffer("instance_buffer");
+        uploadModelsPass.WriteTransferBuffer("primitive_range_buffer");
+        uploadModelsPass.WriteTransferBuffer("primitive_to_range_map_buffer");
+        uploadModelsPass.WriteTransferBuffer("model_buffer");
+        uploadModelsPass.WriteTransferBuffer("material_buffer");
+        uploadModelsPass.Execute([&,
+                instanceOffset = instanceUpload.offset,
+                instanceSize = viewFamily.mainPassInstances.size() * sizeof(Instance),
+                primitiveRangeOffset = primitiveRangeUpload.offset,
+                primitiveRangeSize = viewFamily.mainInstancesPrimitiveRanges.size() * sizeof(PrimitiveInstanceRange),
+                primitiveMapOffset = primitiveIndexToRangeUpload.offset,
+                primitiveMapSize = MEGA_PRIMITIVE_BUFFER_COUNT * sizeof(uint32_t)](VkCommandBuffer cmd) {
+                VkBufferCopy2 copies[3]{};
+                copies[0].sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2;
+                copies[0].srcOffset = instanceOffset;
+                copies[0].dstOffset = 0;
+                copies[0].size = instanceSize;
+                copies[1].sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2;
+                copies[1].srcOffset = primitiveRangeOffset;
+                copies[1].dstOffset = 0;
+                copies[1].size = primitiveRangeSize;
+                copies[2].sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2;
+                copies[2].srcOffset = primitiveMapOffset;
+                copies[2].dstOffset = 0;
+                copies[2].size = primitiveMapSize;
+
+                VkCopyBufferInfo2 instanceCopyInfo{
+                    .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
+                    .srcBuffer = renderGraph->GetTransientUploadBuffer(),
+                    .dstBuffer = renderGraph->GetBufferHandle("instance_buffer"),
+                    .regionCount = 1,
+                    .pRegions = &copies[0]
+                };
+                vkCmdCopyBuffer2(cmd, &instanceCopyInfo);
+
+                VkCopyBufferInfo2 primitiveRangeCopyInfo{
+                    .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
+                    .srcBuffer = renderGraph->GetTransientUploadBuffer(),
+                    .dstBuffer = renderGraph->GetBufferHandle("primitive_range_buffer"),
+                    .regionCount = 1,
+                    .pRegions = &copies[1]
+                };
+                vkCmdCopyBuffer2(cmd, &primitiveRangeCopyInfo);
+
+                VkCopyBufferInfo2 primitiveMapCopyInfo{
+                    .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
+                    .srcBuffer = renderGraph->GetTransientUploadBuffer(),
+                    .dstBuffer = renderGraph->GetBufferHandle("primitive_to_range_map_buffer"),
+                    .regionCount = 1,
+                    .pRegions = &copies[2]
+                };
+                vkCmdCopyBuffer2(cmd, &primitiveMapCopyInfo);
+            });
     }
 
-    // Allocate full size and zero-initialize
-    primitiveRangeUpload = renderGraph->AllocateTransient(primitiveRangeBufferSize);
-    auto* primitiveRangeBuffer = static_cast<PrimitiveInstanceRange*>(primitiveRangeUpload.ptr);
-    std::memset(primitiveRangeBuffer, 0, primitiveRangeBufferSize);
+    if (bHasCustomInstances) {
+        size_t totalCustomInstances = 0;
+        for (const auto& customDraw : viewFamily.customStencilDraws) {
+            totalCustomInstances += customDraw.instances.size();
+        }
 
-    // Copy actual data
-    std::memcpy(primitiveRangeBuffer, viewFamily.mainInstancesPrimitiveRanges.data(), viewFamily.mainInstancesPrimitiveRanges.size() * sizeof(PrimitiveInstanceRange));
+        frameResourceLimits.highestDirectInstanceBuffer = std::max(frameResourceLimits.highestDirectInstanceBuffer, NextPowerOfTwo(totalCustomInstances));
+        frameResourceLimits.highestDirectIndirectCommandBuffer = std::max(frameResourceLimits.highestDirectIndirectCommandBuffer, NextPowerOfTwo(totalCustomInstances));
+        size_t directInstanceBufferSize = frameResourceLimits.highestDirectInstanceBuffer * sizeof(Instance);
+        size_t indirectCommandBufferSize = frameResourceLimits.highestDirectIndirectCommandBuffer * sizeof(DrawMeshTasksIndirectCommand);
+        renderGraph->CreateBuffer("direct_instance_buffer", directInstanceBufferSize);
+        renderGraph->CreateBuffer("direct_indirect_command_buffer", indirectCommandBufferSize);
 
-    primitiveIndexToRangeUpload = renderGraph->AllocateTransient(MEGA_PRIMITIVE_BUFFER_COUNT * sizeof(uint32_t));
-    auto* primitiveIndexToRangeBuffer = static_cast<uint32_t*>(primitiveIndexToRangeUpload.ptr);
+        UploadAllocation directInstanceUpload = renderGraph->AllocateTransient(totalCustomInstances * sizeof(Instance));
+        auto* directInstanceBuffer = static_cast<Instance*>(directInstanceUpload.ptr);
+        size_t directInstanceOffset = 0;
+        for (const auto& customDraw : viewFamily.customStencilDraws) {
+            for (const auto& inst : customDraw.instances) {
+                directInstanceBuffer[directInstanceOffset++] = {
+                    .primitiveIndex = inst.primitiveIndex,
+                    .modelIndex = inst.modelIndex,
+                    .materialIndex = inst.gpuMaterialIndex,
+                    .bIsVisible = 0,
+                    .lod = 0,
+                };
+            }
+        }
 
-    for (uint32_t rangeIdx = 0; rangeIdx < viewFamily.mainInstancesPrimitiveRanges.size(); ++rangeIdx) {
-        uint32_t primitiveIndex = viewFamily.mainInstancesPrimitiveRanges[rangeIdx].primitiveIndex;
-        primitiveIndexToRangeBuffer[primitiveIndex] = rangeIdx;
+        RenderPass& uploadDirectInstancesPass = renderGraph->AddPass("Upload Direct Instances", VK_PIPELINE_STAGE_2_COPY_BIT);
+        uploadDirectInstancesPass.WriteTransferBuffer("direct_instance_buffer");
+        uploadDirectInstancesPass.Execute([&,
+                uploadOffset = directInstanceUpload.offset,
+                uploadSize = totalCustomInstances * sizeof(Instance)](VkCommandBuffer cmd) {
+                VkBufferCopy2 copy{
+                    .sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
+                    .srcOffset = uploadOffset,
+                    .dstOffset = 0,
+                    .size = uploadSize
+                };
+
+                VkCopyBufferInfo2 copyInfo{
+                    .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
+                    .srcBuffer = renderGraph->GetTransientUploadBuffer(),
+                    .dstBuffer = renderGraph->GetBufferHandle("direct_instance_buffer"),
+                    .regionCount = 1,
+                    .pRegions = &copy
+                };
+                vkCmdCopyBuffer2(cmd, &copyInfo);
+            });
     }
-
-    UploadAllocation modelUpload = renderGraph->AllocateTransient(viewFamily.modelMatrices.size() * sizeof(Model));
-    auto* modelBuffer = static_cast<Model*>(modelUpload.ptr);
-    for (size_t i = 0; i < viewFamily.modelMatrices.size(); ++i) {
-        modelBuffer[i] = viewFamily.modelMatrices[i];
-    }
-
-    UploadAllocation materialUpload = renderGraph->AllocateTransient(viewFamily.materials.size() * sizeof(MaterialProperties));
-    memcpy(materialUpload.ptr, viewFamily.materials.data(), viewFamily.materials.size() * sizeof(MaterialProperties));
-
-    RenderPass& uploadModelsPass = renderGraph->AddPass("Upload Model Uniforms", VK_PIPELINE_STAGE_2_COPY_BIT);
-    uploadModelsPass.WriteTransferBuffer("instance_buffer");
-    uploadModelsPass.WriteTransferBuffer("primitive_range_buffer");
-    uploadModelsPass.WriteTransferBuffer("primitive_to_range_map_buffer");
-    uploadModelsPass.WriteTransferBuffer("model_buffer");
-    uploadModelsPass.WriteTransferBuffer("material_buffer");
-    uploadModelsPass.Execute([&,
-            instanceOffset = instanceUpload.offset,
-            instanceSize = viewFamily.mainInstances.size() * sizeof(Instance),
-            primitiveRangeOffset = primitiveRangeUpload.offset,
-            primitiveRangeSize = viewFamily.mainInstancesPrimitiveRanges.size() * sizeof(PrimitiveInstanceRange),
-            primitiveMapOffset = primitiveIndexToRangeUpload.offset,
-            primitiveMapSize = MEGA_PRIMITIVE_BUFFER_COUNT * sizeof(uint32_t),
-            modelOffset = modelUpload.offset,
-            modelSize = viewFamily.modelMatrices.size() * sizeof(Model),
-            materialOffset = materialUpload.offset,
-            materialSize = viewFamily.materials.size() * sizeof(MaterialProperties)](VkCommandBuffer cmd) {
-            VkBufferCopy2 copies[3]{};
-            copies[0].sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2;
-            copies[0].srcOffset = instanceOffset;
-            copies[0].dstOffset = 0;
-            copies[0].size = instanceSize;
-            copies[1].sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2;
-            copies[1].srcOffset = primitiveRangeOffset;
-            copies[1].dstOffset = 0;
-            copies[1].size = primitiveRangeSize;
-            copies[2].sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2;
-            copies[2].srcOffset = primitiveMapOffset;
-            copies[2].dstOffset = 0;
-            copies[2].size = primitiveMapSize;
-
-            VkCopyBufferInfo2 instanceCopyInfo{
-                .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
-                .srcBuffer = renderGraph->GetTransientUploadBuffer(),
-                .dstBuffer = renderGraph->GetBufferHandle("instance_buffer"),
-                .regionCount = 1,
-                .pRegions = &copies[0]
-            };
-            vkCmdCopyBuffer2(cmd, &instanceCopyInfo);
-
-            VkCopyBufferInfo2 primitiveRangeCopyInfo{
-                .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
-                .srcBuffer = renderGraph->GetTransientUploadBuffer(),
-                .dstBuffer = renderGraph->GetBufferHandle("primitive_range_buffer"),
-                .regionCount = 1,
-                .pRegions = &copies[1]
-            };
-            vkCmdCopyBuffer2(cmd, &primitiveRangeCopyInfo);
-
-            VkCopyBufferInfo2 primitiveMapCopyInfo{
-                .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
-                .srcBuffer = renderGraph->GetTransientUploadBuffer(),
-                .dstBuffer = renderGraph->GetBufferHandle("primitive_to_range_map_buffer"),
-                .regionCount = 1,
-                .pRegions = &copies[2]
-            };
-            vkCmdCopyBuffer2(cmd, &primitiveMapCopyInfo);
-
-            VkBufferCopy2 modelCopy{};
-            modelCopy.sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2;
-            modelCopy.srcOffset = modelOffset;
-            modelCopy.dstOffset = 0;
-            modelCopy.size = modelSize;
-            VkCopyBufferInfo2 modelCopyInfo{
-                .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
-                .srcBuffer = renderGraph->GetTransientUploadBuffer(),
-                .dstBuffer = renderGraph->GetBufferHandle("model_buffer"),
-                .regionCount = 1,
-                .pRegions = &modelCopy
-            };
-            vkCmdCopyBuffer2(cmd, &modelCopyInfo);
-
-            VkBufferCopy2 materialCopy{};
-            materialCopy.sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2;
-            materialCopy.srcOffset = materialOffset;
-            materialCopy.dstOffset = 0;
-            materialCopy.size = materialSize;
-            VkCopyBufferInfo2 materialCopyInfo{
-                .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
-                .srcBuffer = renderGraph->GetTransientUploadBuffer(),
-                .dstBuffer = renderGraph->GetBufferHandle("material_buffer"),
-                .regionCount = 1,
-                .pRegions = &materialCopy
-            };
-            vkCmdCopyBuffer2(cmd, &materialCopyInfo);
-        });
 }
 
 void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFamily& viewFamily) const
@@ -1557,7 +1599,7 @@ void RenderThread::SetupMainGeometryPass(RenderGraph& graph, const Core::ViewFam
             .instanceBuffer = graph.GetBufferAddress("instance_buffer"),
             .primitiveToPrimitiveRangeMapBuffer = graph.GetBufferAddress("primitive_to_range_map_buffer"),
             .primitiveInstanceRangeBuffer = graph.GetBufferAddress("primitive_range_buffer"),
-            .instanceCount = static_cast<uint32_t>(viewFamily.mainInstances.size()),
+            .instanceCount = static_cast<uint32_t>(viewFamily.mainPassInstances.size()),
             .sceneDataIndex = sceneIndex,
             .lodBias = 0, // todo add debug
         };
@@ -1565,7 +1607,7 @@ void RenderThread::SetupMainGeometryPass(RenderGraph& graph, const Core::ViewFam
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_visibility");
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(VisibilityPushConstant), &visibilityPushData);
-        uint32_t xDispatch = (viewFamily.mainInstances.size() + (INSTANCING_VISIBILITY_DISPATCH_X - 1)) / INSTANCING_VISIBILITY_DISPATCH_X;
+        uint32_t xDispatch = (viewFamily.mainPassInstances.size() + (INSTANCING_VISIBILITY_DISPATCH_X - 1)) / INSTANCING_VISIBILITY_DISPATCH_X;
         vkCmdDispatch(cmd, xDispatch, 1, 1);
     });
 
@@ -1641,7 +1683,7 @@ void RenderThread::SetupMainGeometryPass(RenderGraph& graph, const Core::ViewFam
             .primitiveToPrimitiveRangeMapBuffer = graph.GetBufferAddress("primitive_to_range_map_buffer"),
             .prefixSums = graph.GetBufferAddress("primitive_range_prefix_sum_buffer"),
             .primitiveInstanceRangeBuffer = graph.GetBufferAddress("primitive_range_buffer"),
-            .instanceCount = static_cast<uint32_t>(viewFamily.mainInstances.size()),
+            .instanceCount = static_cast<uint32_t>(viewFamily.mainPassInstances.size()),
 
             .instanceIndirectionBuffer = graph.GetBufferAddress("instance_indirection_buffer"),
             .indirectBuffer = graph.GetBufferAddress("indirect_command_buffer"),
@@ -1651,7 +1693,7 @@ void RenderThread::SetupMainGeometryPass(RenderGraph& graph, const Core::ViewFam
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_compact_and_indirect");
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-        uint32_t xDispatch = (viewFamily.mainInstances.size() + (INSTANCING_CONSTRUCTION_DISPATCH_X - 1)) / INSTANCING_CONSTRUCTION_DISPATCH_X;
+        uint32_t xDispatch = (viewFamily.mainPassInstances.size() + (INSTANCING_CONSTRUCTION_DISPATCH_X - 1)) / INSTANCING_CONSTRUCTION_DISPATCH_X;
         vkCmdDispatch(cmd, xDispatch, 1, 1);
     });
 

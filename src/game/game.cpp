@@ -102,7 +102,7 @@ GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::GameState* state)
 GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer)
 {
     frameBuffer->mainViewFamily.modelMatrices.clear();
-    frameBuffer->mainViewFamily.mainInstances.clear();
+    frameBuffer->mainViewFamily.mainPassInstances.clear();
     frameBuffer->mainViewFamily.mainInstancesPrimitiveRanges.clear();
     for (Core::CustomStencilDrawBatch& customStencilBatch : frameBuffer->mainViewFamily.customStencilDraws) {
         customStencilBatch.instances.clear();

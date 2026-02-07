@@ -187,7 +187,7 @@ struct ViewFamily
     RenderView mainView{};
     std::vector<PortalView> portalViews;
 
-    std::vector<InstanceData> mainInstances;
+    std::vector<InstanceData> mainPassInstances;
     std::vector<PrimitiveInstanceRange> mainInstancesPrimitiveRanges;
 
     std::vector<CustomStencilDrawBatch> customStencilDraws;
