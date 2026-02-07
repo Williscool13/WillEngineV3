@@ -99,11 +99,12 @@ void RenderThread::ThreadMain()
         pipelineManager->Update(frameNumber);
         // Wait for frame
         {
-            ZoneScopedN("WaitForFrame");
-            // todo replace counting semaphore w/ CV
-            if (!engineRenderSynchronization->renderFrames.try_acquire_for(std::chrono::milliseconds(10))) {
-                continue;
-            }
+            ZoneScopedN("Idle - WaitForFrame");
+            std::unique_lock lock(engineRenderSynchronization->renderMutex);
+            engineRenderSynchronization->renderCV.wait(lock, [&] {
+                return engineRenderSynchronization->renderFrames.load(std::memory_order_acquire) > 0 || bShouldExit.load(std::memory_order_acquire);
+            });
+            engineRenderSynchronization->renderFrames.fetch_sub(1);
         }
 
         if (bShouldExit.load()) { break; }
@@ -138,7 +139,7 @@ void RenderThread::ThreadMain()
         }
 
         FrameMark;
-        engineRenderSynchronization->gameFrames.release();
+        engineRenderSynchronization->gameFrames.fetch_add(1, std::memory_order_release);
     }
 
     vkDeviceWaitIdle(context->device);

@@ -356,8 +356,10 @@ void WillEngine::Run()
         //
         {
             ZoneScopedN("PrepareRenderFrameData");
-            const bool canTransmit = engineRenderSynchronization->gameFrames.try_acquire();
-            if (canTransmit) {
+            const bool bRenderReadyToReceive = engineRenderSynchronization->gameFrames.load(std::memory_order_acquire) > 0;
+            if (bRenderReadyToReceive) {
+                engineRenderSynchronization->gameFrames.fetch_sub(1, std::memory_order_release);
+
                 {
                     ZoneScopedN("UpdateRender");
                     timeManager->UpdateRender();
@@ -404,7 +406,8 @@ void WillEngine::Run()
                 }
 
                 frameBufferIndex = (frameBufferIndex + 1) % Core::FRAME_BUFFER_COUNT;
-                engineRenderSynchronization->renderFrames.release();
+                engineRenderSynchronization->renderFrames.fetch_add(1, std::memory_order_release);
+                engineRenderSynchronization->renderCV.notify_one();
             }
         }
     }

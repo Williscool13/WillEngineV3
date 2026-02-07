@@ -5,6 +5,7 @@
 #ifndef WILL_ENGINE_FRAME_SYNC_H
 #define WILL_ENGINE_FRAME_SYNC_H
 #include <array>
+#include <mutex>
 #include <semaphore>
 
 #include <imgui/imgui_threaded_rendering.h>
@@ -17,8 +18,11 @@ struct FrameSync
 {
     std::array<FrameBuffer, FRAME_BUFFER_COUNT> frameBuffers{};
     std::array<ImDrawDataSnapshot, FRAME_BUFFER_COUNT> imguiDataSnapshots{};
-    std::counting_semaphore<FRAME_BUFFER_COUNT> gameFrames{FRAME_BUFFER_COUNT};
-    std::counting_semaphore<FRAME_BUFFER_COUNT> renderFrames{0};
+
+    std::atomic<uint32_t> gameFrames{3};
+    std::mutex renderMutex;
+    std::condition_variable renderCV;
+    std::atomic<uint32_t> renderFrames{0};
 };
 } // Core
 
