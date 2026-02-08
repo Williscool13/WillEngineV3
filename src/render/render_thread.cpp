@@ -408,7 +408,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         }
 
 
-#if WILL_EDITOR && false
+#if WILL_EDITOR
         if (renderGraph->HasBuffer("instance_buffer")) {
             RenderPass& instanceReadbackPass = renderGraph->AddPass(
                 "Debug Readback Instance Buffer",
@@ -1041,7 +1041,8 @@ void RenderThread::PrepareRenderFamilyProperties(Core::ViewFamily& viewFamily, R
     renderFamilyProperties.bHasDirectGeometry = !viewFamily.customStencilDraws.empty() && _pipelineManager->IsCategoryReady(PipelineCategory::CustomStencilPass);
     renderFamilyProperties.bHasAnyGeometry = renderFamilyProperties.bHasMainGeometry || renderFamilyProperties.bHasDirectGeometry;
     renderFamilyProperties.bHasGTAO = viewFamily.gtaoConfig.bEnabled && _pipelineManager->IsCategoryReady(PipelineCategory::GTAO);
-    renderFamilyProperties.bHasShadows = viewFamily.shadowConfig.enabled && _pipelineManager->IsCategoryReady(PipelineCategory::ShadowPass);
+    // renderFamilyProperties.bHasShadows = viewFamily.shadowConfig.enabled && _pipelineManager->IsCategoryReady(PipelineCategory::ShadowPass);
+    renderFamilyProperties.bHasShadows = false;
     renderFamilyProperties.bHasDeferred = _pipelineManager->IsCategoryReady(PipelineCategory::DeferredShading);
 
 
@@ -1451,9 +1452,13 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFami
         RenderPass& clearPass = graph.AddPass(clearPassName, VK_PIPELINE_STAGE_2_TRANSFER_BIT);
         clearPass.WriteTransferBuffer(instanceIndirectionName);
         clearPass.WriteTransferBuffer(primitiveCountersName);
-        clearPass.Execute([&, instanceIndirectionName, primitiveCountersName](VkCommandBuffer cmd) {
+        clearPass.WriteTransferBuffer(indirectCommandName);
+        clearPass.WriteTransferBuffer(indirectCountName);
+        clearPass.Execute([&, instanceIndirectionName, primitiveCountersName, indirectCommandName, indirectCountName](VkCommandBuffer cmd) {
             vkCmdFillBuffer(cmd, graph.GetBufferHandle(instanceIndirectionName), 0, VK_WHOLE_SIZE, 0);
             vkCmdFillBuffer(cmd, graph.GetBufferHandle(primitiveCountersName), 0, VK_WHOLE_SIZE, 0);
+            vkCmdFillBuffer(cmd, graph.GetBufferHandle(indirectCommandName), 0, VK_WHOLE_SIZE, 0);
+            vkCmdFillBuffer(cmd, graph.GetBufferHandle(indirectCountName), 0, VK_WHOLE_SIZE, 0);
         });
 
         RenderPass& visibilityPass = graph.AddPass(visPassName, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
@@ -1632,9 +1637,13 @@ void RenderThread::SetupMainGeometryPass(RenderGraph& graph, const Core::ViewFam
     RenderPass& clearPass = graph.AddPass("Clear Instancing Buffers", VK_PIPELINE_STAGE_2_TRANSFER_BIT);
     clearPass.WriteTransferBuffer("instance_indirection_buffer");
     clearPass.WriteTransferBuffer("primitive_counters_buffer");
+    clearPass.WriteTransferBuffer("indirect_command_buffer");
+    clearPass.WriteTransferBuffer("indirect_count_buffer");
     clearPass.Execute([&](VkCommandBuffer cmd) {
         vkCmdFillBuffer(cmd, graph.GetBufferHandle("instance_indirection_buffer"), 0, VK_WHOLE_SIZE, 0);
         vkCmdFillBuffer(cmd, graph.GetBufferHandle("primitive_counters_buffer"), 0, VK_WHOLE_SIZE, 0);
+        vkCmdFillBuffer(cmd, graph.GetBufferHandle("indirect_command_buffer"), 0, VK_WHOLE_SIZE, 0);
+        vkCmdFillBuffer(cmd, graph.GetBufferHandle("indirect_count_buffer"), 0, VK_WHOLE_SIZE, 0);
     });
 
     RenderPass& visibilityPass = graph.AddPass("Compute Visibility", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
