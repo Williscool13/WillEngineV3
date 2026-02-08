@@ -119,7 +119,7 @@ RenderPass& RenderPass::WriteDepthAttachment(const std::string& name, const Text
 RenderPass& RenderPass::WriteBuffer(const std::string& name)
 {
     BufferResource* resource = graph.GetOrCreateBuffer(name);
-    resource->accumulatedUsage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+    resource->accumulatedUsage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
     bufferWrites.push_back(resource->index);
     return *this;
 }
@@ -155,7 +155,7 @@ RenderPass& RenderPass::ReadWriteDepthAttachment(const std::string& name, const 
 RenderPass& RenderPass::ReadWriteBuffer(const std::string& name)
 {
     BufferResource* resource = graph.GetOrCreateBuffer(name);
-    resource->accumulatedUsage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+    resource->accumulatedUsage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
     bufferReadWrite.push_back(resource->index);
     return *this;
 }
@@ -229,7 +229,7 @@ RenderPass& RenderPass::ReadBuffer(const std::string& name)
 {
     BufferResource* resource = graph.GetOrCreateBuffer(name);
     assert(resource->bufferInfo.size > 0 && "Buffer not defined - import or create buffer first");
-    resource->accumulatedUsage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+    resource->accumulatedUsage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
     bufferReads.push_back(resource->index);
     return *this;
 }
@@ -255,7 +255,7 @@ RenderPass& RenderPass::ReadTransferBuffer(const std::string& name)
 RenderPass& RenderPass::ReadIndirectBuffer(const std::string& name)
 {
     BufferResource* resource = graph.GetOrCreateBuffer(name);
-    resource->accumulatedUsage |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+    resource->accumulatedUsage |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
     bufferIndirectReads.push_back(resource->index);
     return *this;
 }
@@ -263,7 +263,7 @@ RenderPass& RenderPass::ReadIndirectBuffer(const std::string& name)
 RenderPass& RenderPass::ReadIndirectCountBuffer(const std::string& name)
 {
     BufferResource* resource = graph.GetOrCreateBuffer(name);
-    resource->accumulatedUsage |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;;
+    resource->accumulatedUsage |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
     bufferIndirectCountReads.push_back(resource->index);
     return *this;
 }

@@ -408,7 +408,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         }
 
 
-#if WILL_EDITOR
+#if WILL_EDITOR && false
         if (renderGraph->HasBuffer("instance_buffer")) {
             RenderPass& instanceReadbackPass = renderGraph->AddPass(
                 "Debug Readback Instance Buffer",
@@ -1367,18 +1367,6 @@ void RenderThread::SetupModelUniforms(const Core::ViewFamily& viewFamily, const 
             vkCmdCopyBuffer2(cmd, &primitiveMapCopyInfo);
         });
 
-
-    if (renderFamilyProperties.bHasAnyGeometry) {
-        renderGraph->CreateBuffer("instance_indirection_buffer", renderFamilyProperties.instanceIndirectionBufferSize);
-        renderGraph->CreateBuffer("primitive_offset_prefix_sum_buffer", renderFamilyProperties.primitivePrefixSumBufferSize);
-        renderGraph->CreateBuffer("block_sums_buffer", renderFamilyProperties.primitivePrefixBlockSumBufferSize);
-        renderGraph->CreateBuffer("scanned_block_offsets_buffer", renderFamilyProperties.primitivePrefixBlockSumBufferSize);
-        renderGraph->CreateBuffer("primitive_counters_buffer", renderFamilyProperties.primitiveCountersBufferSize);
-        renderGraph->CreateBuffer("indirect_command_buffer", renderFamilyProperties.mainCommandBufferSize);
-        renderGraph->CreateBuffer("indirect_count_buffer", sizeof(InstancedMeshIndirectCountBuffer));
-    }
-
-
     if (!viewFamily.customStencilDraws.empty()) {
         size_t totalCustomInstances = 0;
         for (const auto& customDraw : viewFamily.customStencilDraws) {
@@ -1469,7 +1457,6 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFami
         });
 
         RenderPass& visibilityPass = graph.AddPass(visPassName, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-        visibilityPass.ReadBuffer("scene_data");
         visibilityPass.ReadBuffer("shadow_data");
         visibilityPass.ReadBuffer("primitive_buffer");
         visibilityPass.ReadBuffer("model_buffer");
@@ -1634,6 +1621,14 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFami
 void RenderThread::SetupMainGeometryPass(RenderGraph& graph, const Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties,
                                          std::array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneIndex, bool bClearTargets) const
 {
+    graph.CreateBuffer("instance_indirection_buffer", renderFamilyProperties.instanceIndirectionBufferSize);
+    graph.CreateBuffer("primitive_offset_prefix_sum_buffer", renderFamilyProperties.primitivePrefixSumBufferSize);
+    graph.CreateBuffer("block_sums_buffer", renderFamilyProperties.primitivePrefixBlockSumBufferSize);
+    graph.CreateBuffer("scanned_block_offsets_buffer", renderFamilyProperties.primitivePrefixBlockSumBufferSize);
+    graph.CreateBuffer("primitive_counters_buffer", renderFamilyProperties.primitiveCountersBufferSize);
+    graph.CreateBuffer("indirect_command_buffer", renderFamilyProperties.mainCommandBufferSize);
+    graph.CreateBuffer("indirect_count_buffer", sizeof(InstancedMeshIndirectCountBuffer));
+
     RenderPass& clearPass = graph.AddPass("Clear Instancing Buffers", VK_PIPELINE_STAGE_2_TRANSFER_BIT);
     clearPass.WriteTransferBuffer("instance_indirection_buffer");
     clearPass.WriteTransferBuffer("primitive_counters_buffer");
@@ -1732,7 +1727,7 @@ void RenderThread::SetupMainGeometryPass(RenderGraph& graph, const Core::ViewFam
     indirectConstructionPass.ReadBuffer("primitive_offset_prefix_sum_buffer");
     indirectConstructionPass.WriteBuffer("instance_indirection_buffer");
     indirectConstructionPass.WriteBuffer("indirect_command_buffer");
-    indirectConstructionPass.WriteBuffer("primitive_counters_buffer");
+    indirectConstructionPass.ReadWriteBuffer("primitive_counters_buffer");
     indirectConstructionPass.Execute([&](VkCommandBuffer cmd) {
         CompactAndIndirectPushConstant pc{
             .primitiveBuffer = graph.GetBufferAddress("primitive_buffer"),
