@@ -2,6 +2,8 @@
 // Created by William on 2025-12-14.
 //
 
+#include <tracy/Tracy.hpp>
+
 #include "spdlog/spdlog.h"
 
 #include "core/include/game_interface.h"
@@ -61,10 +63,12 @@ GAME_API void GameLoad(Core::EngineContext* ctx, Engine::GameState* state)
     ImGui::SetCurrentContext(ctx->imguiContext);
     Physics::PhysicsSystem::RegisterPhysics();
     Audio::AudioManager::RegisterAudio();
+    ctx->scheduler->RegisterExternalTaskThread();
 }
 
 GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::GameState* state)
 {
+    ZoneScoped;
     const auto frameStart = std::chrono::high_resolution_clock::now();
 
     Game::System::UpdateCameras(ctx, state);
@@ -95,6 +99,7 @@ GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::GameState* state)
     constexpr auto targetFrameTime = std::chrono::microseconds(1000);
 
     if (elapsed < targetFrameTime) {
+        ZoneScopedN("WaitForTargetFrameTime");
         std::this_thread::sleep_for(targetFrameTime - elapsed);
     }
 }
@@ -118,6 +123,8 @@ GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* stat
     if (state->bEnablePortal) {
         Game::System::BuildPortalViewFamily(state, frameBuffer->mainViewFamily);
     }
+
+    Game::System::UpdateRenderTransforms(ctx, state, frameBuffer);
     Game::System::GatherRenderables(ctx, state, frameBuffer);
 
 
@@ -131,6 +138,9 @@ GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* stat
 
 GAME_API void GameUnload(Core::EngineContext* ctx, Engine::GameState* state)
 {
+    if (ctx->scheduler) {
+        ctx->scheduler->DeRegisterExternalTaskThread();
+    }
 }
 
 GAME_API void GameShutdown(Core::EngineContext* ctx, Engine::GameState* state)

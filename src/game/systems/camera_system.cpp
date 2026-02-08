@@ -4,6 +4,8 @@
 
 #include "camera_system.h"
 
+#include <tracy/Tracy.hpp>
+
 #include "debug_system.h"
 #include "core/include/engine_context.h"
 #include "core/math/constants.h"
@@ -14,11 +16,13 @@ namespace Game::System
 {
 void UpdateCameras(Core::EngineContext* ctx, Engine::GameState* state)
 {
+    ZoneScoped;
     UpdateFreeCamera(ctx, state);
 }
 
 void UpdateFreeCamera(Core::EngineContext* ctx, Engine::GameState* state)
 {
+    ZoneScoped;
     auto view = state->registry.view<Component::FreeCameraComponent, Component::CameraComponent, Component::TransformComponent>();
     for (entt::entity entity : view) {
         const auto& [freeCam, camera, transform] = view.get(entity);
@@ -101,6 +105,7 @@ void UpdateFreeCamera(Core::EngineContext* ctx, Engine::GameState* state)
 
 void BuildViewFamily(Engine::GameState* state, Core::ViewFamily& mainViewFamily)
 {
+    ZoneScoped;
     auto cameraView = state->registry.view<Component::CameraComponent, Component::MainViewportComponent, Component::TransformComponent>();
     entt::entity mainCamera = cameraView.front();
 
@@ -115,6 +120,7 @@ void BuildViewFamily(Engine::GameState* state, Core::ViewFamily& mainViewFamily)
 
 void BuildPortalViewFamily(Engine::GameState* state, Core::ViewFamily& mainViewFamily)
 {
+    ZoneScoped;
     auto cameraView = state->registry.view<Component::CameraComponent, Component::MainViewportComponent, Component::TransformComponent>();
     entt::entity mainCamera = cameraView.front();
     const auto& [cam, cameraTransform] = cameraView.get(mainCamera);

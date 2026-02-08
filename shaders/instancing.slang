@@ -264,8 +264,6 @@ void ComputeCompactAndGenerateIndirect(uniform CompactAndIndirectPushConstant pc
     PrimitiveCounters counter = pc.primitiveCountersBuffer[primitiveRangeIndex];
     uint lod = inst.lod;
 
-    pc.instanceIndirectionBuffer[instanceID] = counter.visibleCountPerLOD[0] + counter.visibleCountPerLOD[1] + counter.visibleCountPerLOD[2] + counter.visibleCountPerLOD[3];
-
     // Calculate LOD offset within this primitive's instances
     uint lodOffset = 0;
     for (uint i = 0; i < lod; i++) {

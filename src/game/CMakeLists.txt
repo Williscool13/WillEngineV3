@@ -26,6 +26,10 @@ set(GAME_SOURCES
         components/render/render_components.h
         components/gameplay/portal_components.cpp
         components/gameplay/portal_components.h
+        components/core_components.cpp
+        components/core_components.h
+        systems/core_systems.cpp
+        systems/core_systems.h
 )
 
 set(GAME_INCLUDE_DIRS

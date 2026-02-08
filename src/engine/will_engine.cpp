@@ -184,6 +184,7 @@ void WillEngine::Initialize()
         engineContext->assetManager = assetManager.get();
         engineContext->audioManager = audioManager.get();
         engineContext->physicsSystem = physicsSystem.get();
+        engineContext->scheduler = scheduler.get();
     }
     //
     {
@@ -656,6 +657,7 @@ void WillEngine::Cleanup()
     modelGenerator.reset();
 #endif
     scheduler->ShutdownNow();
+    engineContext->scheduler = nullptr;
 
     gameFunctions.gameUnload(engineContext.get(), gameState.get());
     gameFunctions.gameShutdown(engineContext.get(), gameState.get());

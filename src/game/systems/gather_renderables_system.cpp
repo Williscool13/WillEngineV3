@@ -4,6 +4,8 @@
 
 #include "gather_renderables_system.h"
 
+#include <tracy/Tracy.hpp>
+
 #include "core/include/engine_context.h"
 #include "engine/asset_manager.h"
 #include "engine/engine_api.h"
@@ -12,29 +14,55 @@
 
 namespace Game::System
 {
+void UpdateRenderTransforms(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer)
+{
+    ZoneScoped;
+
+    auto view = state->registry.view<Component::TransformComponent, Component::RenderTransformComponent, Component::DirtyRenderTransformTag>();
+
+    constexpr size_t TASK_THRESHOLD = 1000;
+    if (view.size_hint() < TASK_THRESHOLD) {
+        ZoneScopedN("Serial");
+        for (auto [entity, transform, renderTransform] : view.each()) {
+            renderTransform.previousMatrix = renderTransform.modelMatrix;
+            renderTransform.modelMatrix = GetMatrix(transform);
+        }
+    }
+    else {
+        ZoneScopedN("Parallel");
+        std::vector entities(view.begin(), view.end());
+
+        enki::TaskSet task(entities.size(), [&](enki::TaskSetPartition range, uint32_t) {
+            for (uint32_t i = range.start; i < range.end; ++i) {
+                auto entity = entities[i];
+                auto& transform = view.get<Component::TransformComponent>(entity);
+                auto& renderTransform = view.get<Component::RenderTransformComponent>(entity);
+
+                renderTransform.previousMatrix = renderTransform.modelMatrix;
+                renderTransform.modelMatrix = GetMatrix(transform);
+            }
+        });
+        ctx->scheduler->AddTaskSetToPipe(&task);
+        ctx->scheduler->WaitforTask(&task);
+    }
+
+    state->registry.clear<Component::DirtyRenderTransformTag>();
+}
+
 void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer)
 {
+    ZoneScoped;
     auto& materialManager = ctx->assetManager->GetMaterialManager();
 
     // Gather regular renderables
     {
-        const auto view = state->registry.view<Component::RenderableComponent, Component::TransformComponent>(entt::exclude<Component::PortalPlaneComponent>);
+        ZoneScopedN("MainSceneRenderables");
+        auto view = state->registry.view<Component::RenderableComponent, Component::RenderTransformComponent>(
+            entt::exclude<Component::PortalPlaneComponent>);
 
-        for (const auto& [entity, renderable, transform] : view.each()) {
-            glm::mat4 currentMatrix;
-
-            if (auto* physics = state->registry.try_get<Component::DynamicPhysicsBodyComponent>(entity)) {
-                float alpha = state->physicsInterpolationAlpha;
-                glm::vec3 interpPos = glm::mix(physics->previousPosition, transform.translation, alpha);
-                glm::quat interpRot = glm::slerp(physics->previousRotation, transform.rotation, alpha);
-                currentMatrix = glm::translate(glm::mat4(1.0f), interpPos) * glm::mat4_cast(interpRot);
-            }
-            else {
-                currentMatrix = GetMatrix(transform);
-            }
-
-            uint32_t modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.size());
-            frameBuffer->mainViewFamily.modelMatrices.push_back({currentMatrix, renderable.previousModelMatrix});
+        for (auto [entity, renderable, renderTransform] : view.each()) {
+            auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.size());
+            frameBuffer->mainViewFamily.modelMatrices.push_back({renderTransform.modelMatrix, renderTransform.previousMatrix});
 
             for (uint8_t i = 0; i < renderable.primitiveCount; ++i) {
                 auto& prim = renderable.primitives[i];
@@ -44,14 +72,13 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
                     .modelIndex = modelIndex
                 });
             }
-
-            renderable.previousModelMatrix = currentMatrix;
         }
     }
 
-    // Gather portal planes (custom stencil draws with stencil=1)
+    // Gather portal planes
     {
-        const auto portalView = state->registry.view<Component::PortalPlaneComponent, Component::RenderableComponent, Component::TransformComponent>();
+        ZoneScopedN("PortalRenderables");
+        auto portalView = state->registry.view<Component::PortalPlaneComponent, Component::RenderableComponent, Component::RenderTransformComponent>();
 
         if (portalView.size_hint() > 0) {
             Core::CustomStencilDrawBatch* portalBatch = nullptr;
@@ -67,11 +94,9 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
                 portalBatch = &frameBuffer->mainViewFamily.customStencilDraws.back();
             }
 
-            for (const auto& [entity, renderable, transform] : portalView.each()) {
-                glm::mat4 currentMatrix = GetMatrix(transform);
-
-                frameBuffer->mainViewFamily.modelMatrices.push_back({currentMatrix, renderable.previousModelMatrix});
-                uint32_t modelIndex = frameBuffer->mainViewFamily.modelMatrices.size() - 1;
+            for (auto [entity, renderable, renderTransform] : portalView.each()) {
+                auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.size());
+                frameBuffer->mainViewFamily.modelMatrices.push_back({renderTransform.modelMatrix, renderTransform.previousMatrix});
 
                 for (uint8_t i = 0; i < renderable.primitiveCount; ++i) {
                     auto& prim = renderable.primitives[i];
@@ -81,30 +106,32 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
                         .modelIndex = modelIndex
                     });
                 }
-
-                renderable.previousModelMatrix = currentMatrix;
             }
         }
     }
 
-    std::unordered_map<Engine::MaterialID, uint32_t> materialRemap;
-    for (auto& instance : frameBuffer->mainViewFamily.mainPassInstances) {
-        if (!materialRemap.contains(instance.materialID)) {
-            uint32_t gpuIndex = frameBuffer->mainViewFamily.materials.size();
-            materialRemap[instance.materialID] = gpuIndex;
-            frameBuffer->mainViewFamily.materials.push_back(materialManager.Get(instance.materialID));
-        }
-        instance.gpuMaterialIndex = materialRemap[instance.materialID];
-    }
-
-    for (auto& customDraw : frameBuffer->mainViewFamily.customStencilDraws) {
-        for (auto& instance : customDraw.instances) {
+    // Material remap
+    {
+        ZoneScopedN("Material Remap");
+        std::unordered_map<Engine::MaterialID, uint32_t> materialRemap;
+        for (auto& instance : frameBuffer->mainViewFamily.mainPassInstances) {
             if (!materialRemap.contains(instance.materialID)) {
                 uint32_t gpuIndex = frameBuffer->mainViewFamily.materials.size();
                 materialRemap[instance.materialID] = gpuIndex;
                 frameBuffer->mainViewFamily.materials.push_back(materialManager.Get(instance.materialID));
             }
             instance.gpuMaterialIndex = materialRemap[instance.materialID];
+        }
+
+        for (auto& customDraw : frameBuffer->mainViewFamily.customStencilDraws) {
+            for (auto& instance : customDraw.instances) {
+                if (!materialRemap.contains(instance.materialID)) {
+                    uint32_t gpuIndex = frameBuffer->mainViewFamily.materials.size();
+                    materialRemap[instance.materialID] = gpuIndex;
+                    frameBuffer->mainViewFamily.materials.push_back(materialManager.Get(instance.materialID));
+                }
+                instance.gpuMaterialIndex = materialRemap[instance.materialID];
+            }
         }
     }
 }

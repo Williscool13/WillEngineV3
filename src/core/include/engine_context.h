@@ -10,6 +10,11 @@
 
 #include "spdlog/logger.h"
 
+namespace enki
+{
+class TaskScheduler;
+}
+
 namespace Audio
 {
 class AudioManager;
@@ -51,6 +56,9 @@ struct EngineContext
     ImGuiContext* imguiContext;
     bool bImguiKeyboardCaptured = false;
     bool bImguiMouseCaptured = false;
+
+    enki::TaskScheduler* scheduler;
+
     //Render::ResourceManager* resourceManager;
     Engine::AssetManager* assetManager;
     Audio::AudioManager* audioManager;

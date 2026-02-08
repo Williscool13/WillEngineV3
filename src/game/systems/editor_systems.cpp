@@ -4,6 +4,8 @@
 
 #include "editor_systems.h"
 
+#include <tracy/Tracy.hpp>
+
 #include "imgui.h"
 #include "engine/engine_api.h"
 #include "game/fwd_components.h"
@@ -12,6 +14,7 @@ namespace Game::System
 {
 void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer)
 {
+    ZoneScoped;
 #if WILL_EDITOR
     if (ImGui::Begin("Debug View")) {
         auto cameraView = state->registry.view<Component::CameraComponent, Component::MainViewportComponent, Component::TransformComponent>();

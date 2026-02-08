@@ -23,6 +23,7 @@ struct EngineContext;
 
 namespace Game::System
 {
+void UpdateRenderTransforms(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer);
 void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer);
 } // Game
 

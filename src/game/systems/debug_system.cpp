@@ -6,6 +6,7 @@
 
 #include <Jolt/Jolt.h>
 #include <spdlog/spdlog.h>
+#include <tracy/Tracy.hpp>
 
 #include "audio/audio_manager.h"
 #include "Jolt/Physics/Body/BodyCreationSettings.h"
@@ -31,6 +32,7 @@ static Engine::MaterialID boxMatID;
 
 entt::entity CreateBox(Core::EngineContext* ctx, Engine::GameState* state, glm::vec3 position, bool bUsePhysics)
 {
+    ZoneScoped;
     if (!boxHandle.IsValid()) {
         SPDLOG_WARN("[DebugSystem] No box model loaded, press F1 first");
         return entt::null;
@@ -92,6 +94,9 @@ entt::entity CreateBox(Core::EngineContext* ctx, Engine::GameState* state, glm::
     entt::entity boxEntity = state->registry.create();
     state->registry.emplace<Component::RenderableComponent>(boxEntity, renderable);
     Component::TransformComponent transformComponent = state->registry.emplace<Component::TransformComponent>(boxEntity, position, glm::quat(1.0f, 0.0f, 0.0f, 0.0f), glm::vec3(1.0f));
+    glm::mat4 initialMatrix = GetMatrix(transformComponent);
+    state->registry.emplace<Component::RenderTransformComponent>(boxEntity, initialMatrix, initialMatrix);
+    state->registry.emplace<Component::DirtyRenderTransformTag>(boxEntity);
     if (bUsePhysics) {
         state->registry.emplace<Component::PhysicsBodyComponent>(boxEntity, bodyId);
         state->registry.emplace<Component::DynamicPhysicsBodyComponent>(boxEntity, transformComponent.translation, transformComponent.rotation);
@@ -106,6 +111,7 @@ entt::entity CreateStaticBox(Core::EngineContext* ctx, Engine::GameState* state,
                              glm::vec3 renderPos, glm::vec3 renderScale,
                              glm::vec4 color = glm::vec4(0.5f, 0.5f, 0.5f, 1.0f))
 {
+    ZoneScoped;
     auto& bodyInterface = ctx->physicsSystem->GetBodyInterface();
 
     // Create physics body
@@ -165,8 +171,11 @@ entt::entity CreateStaticBox(Core::EngineContext* ctx, Engine::GameState* state,
     transform.translation = renderPos;
     transform.rotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
     transform.scale = renderScale;
-    state->registry.emplace<Component::TransformComponent>(entity, transform);
+    Component::TransformComponent transformComponent = state->registry.emplace<Component::TransformComponent>(entity, transform);
     state->registry.emplace<Component::PhysicsBodyComponent>(entity, bodyID);
+    glm::mat4 initialMatrix = Component::GetMatrix(transformComponent);
+    state->registry.emplace<Component::RenderTransformComponent>(entity, initialMatrix, initialMatrix);
+    state->registry.emplace<Component::DirtyRenderTransformTag>(entity);
 
     return entity;
 }
@@ -175,6 +184,7 @@ entt::entity CreateStaticBox(Core::EngineContext* ctx, Engine::GameState* state,
 entt::entity CreateGlowingBox(Core::EngineContext* ctx, Engine::GameState* state, glm::vec3 position,
                               glm::vec4 emissive = glm::vec4(1.0f, 0.8f, 0.3f, 10.0f), bool bUsePhysics = true)
 {
+    ZoneScoped;
     if (!boxHandle.IsValid()) {
         SPDLOG_WARN("[DebugSystem] No box model loaded, press F1 first");
         return entt::null;
@@ -236,8 +246,10 @@ entt::entity CreateGlowingBox(Core::EngineContext* ctx, Engine::GameState* state
 
     entt::entity boxEntity = state->registry.create();
     state->registry.emplace<Component::RenderableComponent>(boxEntity, renderable);
-    Component::TransformComponent transformComponent = state->registry.emplace<Component::TransformComponent>(
-        boxEntity, position, glm::quat(1.0f, 0.0f, 0.0f, 0.0f), glm::vec3(1.0f));
+    Component::TransformComponent& transformComponent = state->registry.emplace<Component::TransformComponent>(boxEntity, position, glm::quat(1.0f, 0.0f, 0.0f, 0.0f), glm::vec3(1.0f));
+    glm::mat4 initialMatrix = GetMatrix(transformComponent);
+    state->registry.emplace<Component::RenderTransformComponent>(boxEntity, initialMatrix, initialMatrix);
+    state->registry.emplace<Component::DirtyRenderTransformTag>(boxEntity);
 
     if (bUsePhysics) {
         state->registry.emplace<Component::PhysicsBodyComponent>(boxEntity, bodyId);
@@ -264,6 +276,7 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
                 transform.translation.y = 10.0f + offset;
             }
             ++index;
+            state->registry.emplace_or_replace<Component::DirtyRenderTransformTag>(entity);
         }
     }
 
@@ -410,7 +423,10 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
 
             entt::entity dragonEntity = state->registry.create();
             state->registry.emplace<Component::RenderableComponent>(dragonEntity, renderable);
-            state->registry.emplace<Component::TransformComponent>(dragonEntity, pos, meshRotation, meshScale * 1.5f);
+            auto& transformComponent = state->registry.emplace<Component::TransformComponent>(dragonEntity, pos, meshRotation, meshScale * 1.5f);
+            glm::mat4 initialMatrix = GetMatrix(transformComponent);
+            state->registry.emplace<Component::RenderTransformComponent>(dragonEntity, initialMatrix, initialMatrix);
+            state->registry.emplace<Component::DirtyRenderTransformTag>(dragonEntity);
         }
 
         SPDLOG_INFO("[DebugSystem] Spawned dragons around arena");
@@ -482,7 +498,10 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
 
             entt::entity sponzaEntity = state->registry.create();
             state->registry.emplace<Component::RenderableComponent>(sponzaEntity, renderable);
-            state->registry.emplace<Component::TransformComponent>(sponzaEntity, worldTranslations[i], worldRotations[i], worldScales[i]);
+            auto& transformComponent = state->registry.emplace<Component::TransformComponent>(sponzaEntity, worldTranslations[i], worldRotations[i], worldScales[i]);
+            glm::mat4 initialMatrix = GetMatrix(transformComponent);
+            state->registry.emplace<Component::RenderTransformComponent>(sponzaEntity, initialMatrix, initialMatrix);
+            state->registry.emplace<Component::DirtyRenderTransformTag>(sponzaEntity);
         }
 
         SPDLOG_INFO("[DebugSystem] Spawned sponza");
@@ -630,7 +649,10 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
 
             entt::entity dragonEntity = state->registry.create();
             state->registry.emplace<Component::RenderableComponent>(dragonEntity, renderable);
-            state->registry.emplace<Component::TransformComponent>(dragonEntity, pos, meshRotation, meshScale * 1.5f);
+            Component::TransformComponent& transformComponent = state->registry.emplace<Component::TransformComponent>(dragonEntity, pos, meshRotation, meshScale * 1.5f);
+            glm::mat4 initialMatrix = GetMatrix(transformComponent);
+            state->registry.emplace<Component::RenderTransformComponent>(dragonEntity, initialMatrix, initialMatrix);
+            state->registry.emplace<Component::DirtyRenderTransformTag>(dragonEntity);
         }
 
         SPDLOG_INFO("[DebugSystem] Created PCSS test scene: 100x100 floor + vertical dragon column");
@@ -651,6 +673,7 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
 
 void DebugProcessPhysicsCollisions(Core::EngineContext* ctx, Engine::GameState* state)
 {
+    ZoneScoped;
     std::span<const Physics::DeferredCollisionEvent> events = ctx->physicsSystem->GetCollisionEvents();
 
 
@@ -680,6 +703,7 @@ void DebugProcessPhysicsCollisions(Core::EngineContext* ctx, Engine::GameState* 
 
 void DebugApplyGroundForces(Core::EngineContext* ctx, Engine::GameState* state)
 {
+    ZoneScoped;
     auto view = state->registry.view<Component::AntiGravityComponent, Component::PhysicsBodyComponent>();
     auto& bodyInterface = ctx->physicsSystem->GetBodyInterface();
 
@@ -690,6 +714,7 @@ void DebugApplyGroundForces(Core::EngineContext* ctx, Engine::GameState* state)
 
 void DebugRender(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer)
 {
+    ZoneScoped;
 #ifndef PACKAGED_BUILD
     glm::vec3 debugOffset(-30, 0, 0);
 
