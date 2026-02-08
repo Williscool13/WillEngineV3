@@ -288,9 +288,6 @@ void ComputeCompactAndGenerateIndirect(uniform CompactAndIndirectPushConstant pc
         MeshletPrimitive prim = pc.primitiveBuffer[inst.primitiveIndex];
         uint totalMeshlets = prim.meshletCount[lod];
         uint numChunks = (totalMeshlets + (TASK_SHADER_DISPATCH_X - 1)) / TASK_SHADER_DISPATCH_X;
-        if (numChunks == 0 || counter.visibleCountPerLOD[lod] == 0) {
-            return;
-        }
         pc.indirectBuffer[commandIdx].groupCountX = numChunks;
         pc.indirectBuffer[commandIdx].groupCountY = counter.visibleCountPerLOD[lod];
         pc.indirectBuffer[commandIdx].groupCountZ = 1;

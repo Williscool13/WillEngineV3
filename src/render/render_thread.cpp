@@ -435,29 +435,29 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         }
 
         // ===== Debug Readback: Primitive Range Buffer =====
-        if (renderGraph->HasBuffer("primitive_offset_buffer")) {
-            /*RenderPass& primitiveRangeReadbackPass = renderGraph->AddPass(
+        if (renderGraph->HasBuffer("primitive_counters_buffer")) {
+            RenderPass& primitiveRangeReadbackPass = renderGraph->AddPass(
                 "Debug Readback Primitive Range Buffer",
                 VK_PIPELINE_STAGE_2_COPY_BIT
             );
 
-            primitiveRangeReadbackPass.ReadTransferBuffer("primitive_offset_buffer");
+            primitiveRangeReadbackPass.ReadTransferBuffer("primitive_counters_buffer");
             primitiveRangeReadbackPass.WriteTransferBuffer("debug_readback_buffer");
 
             primitiveRangeReadbackPass.Execute([&](VkCommandBuffer cmd) {
                 VkBufferCopy copy{};
                 copy.srcOffset = 0;
                 copy.dstOffset = 25 * sizeof(Instance);
-                copy.size = 25 * sizeof(PrimitiveRange); // assume max 25 ranges
+                copy.size = 25 * sizeof(PrimitiveCounters);
 
                 vkCmdCopyBuffer(
                     cmd,
-                    renderGraph->GetBufferHandle("primitive_offset_buffer"),
+                    renderGraph->GetBufferHandle("primitive_counters_buffer"),
                     renderGraph->GetBufferHandle("debug_readback_buffer"),
                     1,
                     &copy
                 );
-            });*/
+            });
         }
 
         // ===== Debug Readback: Indirect Count Buffer =====
@@ -475,7 +475,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 copy.srcOffset = 0;
                 copy.dstOffset =
                         25 * sizeof(Instance) +
-                        25 * sizeof(PrimitiveRange);
+                        25 * sizeof(PrimitiveCounters);
                 copy.size = sizeof(InstancedMeshIndirectCountBuffer);
 
                 vkCmdCopyBuffer(
@@ -503,7 +503,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 copy.srcOffset = 0;
                 copy.dstOffset =
                         25 * sizeof(Instance) +
-                        25 * sizeof(PrimitiveRange) +
+                        25 * sizeof(PrimitiveCounters) +
                         sizeof(InstancedMeshIndirectCountBuffer);
                 copy.size = 64 * sizeof(uint32_t); // instance indirection entries
 
@@ -532,7 +532,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 copy.srcOffset = 0;
                 copy.dstOffset =
                         25 * sizeof(Instance) +
-                        25 * sizeof(PrimitiveRange) +
+                        25 * sizeof(PrimitiveCounters) +
                         sizeof(InstancedMeshIndirectCountBuffer) +
                         64 * sizeof(uint32_t);
                 copy.size = 64 * sizeof(InstancedMeshIndirectDrawParameters);
@@ -564,7 +564,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             prefixSumReadbackPass.Execute([&](VkCommandBuffer cmd) {
                 size_t currentOffset =
                         25 * sizeof(Instance) +
-                        25 * sizeof(PrimitiveRange) +
+                        25 * sizeof(PrimitiveCounters) +
                         sizeof(InstancedMeshIndirectCountBuffer) +
                         64 * sizeof(uint32_t) +
                         64 * sizeof(InstancedMeshIndirectDrawParameters);
@@ -1635,11 +1635,17 @@ void RenderThread::SetupMainGeometryPass(RenderGraph& graph, const Core::ViewFam
     graph.CreateBuffer("indirect_count_buffer", sizeof(InstancedMeshIndirectCountBuffer));
 
     RenderPass& clearPass = graph.AddPass("Clear Instancing Buffers", VK_PIPELINE_STAGE_2_TRANSFER_BIT);
+    clearPass.WriteTransferBuffer("primitive_offset_prefix_sum_buffer");
+    clearPass.WriteTransferBuffer("block_sums_buffer");
+    clearPass.WriteTransferBuffer("scanned_block_offsets_buffer");
     clearPass.WriteTransferBuffer("instance_indirection_buffer");
     clearPass.WriteTransferBuffer("primitive_counters_buffer");
     clearPass.WriteTransferBuffer("indirect_command_buffer");
     clearPass.WriteTransferBuffer("indirect_count_buffer");
     clearPass.Execute([&](VkCommandBuffer cmd) {
+        vkCmdFillBuffer(cmd, graph.GetBufferHandle("primitive_offset_prefix_sum_buffer"), 0, VK_WHOLE_SIZE, 0);
+        vkCmdFillBuffer(cmd, graph.GetBufferHandle("block_sums_buffer"), 0, VK_WHOLE_SIZE, 0);
+        vkCmdFillBuffer(cmd, graph.GetBufferHandle("scanned_block_offsets_buffer"), 0, VK_WHOLE_SIZE, 0);
         vkCmdFillBuffer(cmd, graph.GetBufferHandle("instance_indirection_buffer"), 0, VK_WHOLE_SIZE, 0);
         vkCmdFillBuffer(cmd, graph.GetBufferHandle("primitive_counters_buffer"), 0, VK_WHOLE_SIZE, 0);
         vkCmdFillBuffer(cmd, graph.GetBufferHandle("indirect_command_buffer"), 0, VK_WHOLE_SIZE, 0);

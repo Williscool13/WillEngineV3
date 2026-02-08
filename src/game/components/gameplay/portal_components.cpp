@@ -52,10 +52,10 @@ PortalPair CreatePortalPair(Core::EngineContext* ctx, Engine::GameState* state, 
         renderable.modelFlags = glm::vec4(0.0f);
 
         TransformComponent transform{posA, rotA, glm::vec3(1.0f, 1.0f, 1.0f)};
-        renderable.previousModelMatrix = GetMatrix(transform);
 
         state->registry.emplace<TransformComponent>(portalA, transform);
         state->registry.emplace<RenderableComponent>(portalA, renderable);
+        state->registry.emplace<RenderTransformComponent>(portalA, GetMatrix(transform), GetMatrix(transform));
         state->registry.emplace<PortalPlaneComponent>(portalA);
         state->registry.emplace<PortalComponent>(portalA, entt::null, 1u);
     }
@@ -85,10 +85,9 @@ PortalPair CreatePortalPair(Core::EngineContext* ctx, Engine::GameState* state, 
         renderable.modelFlags = glm::vec4(0.0f);
 
         TransformComponent transform{posB, rotB, glm::vec3(1.0f)};
-        renderable.previousModelMatrix = GetMatrix(transform);
-
         state->registry.emplace<TransformComponent>(portalB, transform);
         state->registry.emplace<RenderableComponent>(portalB, renderable);
+        state->registry.emplace<RenderTransformComponent>(portalB, GetMatrix(transform), GetMatrix(transform));
         state->registry.emplace<PortalPlaneComponent>(portalB);
         state->registry.emplace<PortalComponent>(portalB, entt::null, 2u);
     }
@@ -145,8 +144,8 @@ void CreatePortalPlane(Core::EngineContext* ctx, Engine::GameState* state, glm::
 
     entt::entity planeEntity = state->registry.create();
     TransformComponent transformComp = state->registry.emplace<TransformComponent>(planeEntity, position, rotation, scale);
-    renderable.previousModelMatrix = GetMatrix(transformComp);
     state->registry.emplace<RenderableComponent>(planeEntity, renderable);
+    state->registry.emplace<RenderTransformComponent>(planeEntity, GetMatrix(transformComp), GetMatrix(transformComp));
     state->registry.emplace<PortalPlaneComponent>(planeEntity);
 
     SPDLOG_INFO("[DebugSystem] Created portal plane at ({}, {}, {})",

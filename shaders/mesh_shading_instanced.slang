@@ -99,9 +99,7 @@ void TaskMain(uniform InstancedMeshShadingPushConstant pc,
 
     if (gtid.x == 0) {
         uint count = visibleMeshletCount;
-        if (count > 0) {
-            DispatchMesh(count, 1, 1, sharedPayload);
-        }
+        DispatchMesh(count, 1, 1, sharedPayload);
     }
 }
 

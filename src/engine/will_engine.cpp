@@ -445,8 +445,8 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
         auto* instances = reinterpret_cast<Instance*>(ptr);
         ptr += 25 * sizeof(Instance);
 
-        auto* ranges = reinterpret_cast<PrimitiveRange*>(ptr);
-        ptr += 25 * sizeof(PrimitiveRange);
+        auto* ranges = reinterpret_cast<PrimitiveCounters*>(ptr);
+        ptr += 25 * sizeof(PrimitiveCounters);
 
         auto* indirectCount = reinterpret_cast<InstancedMeshIndirectCountBuffer*>(ptr);
         ptr += sizeof(InstancedMeshIndirectCountBuffer);
@@ -490,13 +490,17 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
             }
 
             if (ImGui::TreeNode("Primitive Ranges")) {
-                /*for (uint32_t i = 0; i < 25; ++i) {
+                for (uint32_t i = 0; i < 25; ++i) {
                     if (ImGui::TreeNode((void*) (intptr_t) (i + 1000), "Range %u", i)) {
-                        ImGui::Text("Primitive Index: %u", ranges[i].primitiveIndex);
-                        ImGui::Text("Start: %u", ranges[i].start);
-                        ImGui::Text("Count: %u", ranges[i].count);
                         ImGui::Text(
                             "Visible LODs: [%u, %u, %u, %u]",
+                            ranges[i].lodInstanceOffset[0],
+                            ranges[i].lodInstanceOffset[1],
+                            ranges[i].lodInstanceOffset[2],
+                            ranges[i].lodInstanceOffset[3]
+                        );
+                        ImGui::Text(
+                            "Supposed Totals Per LODs: [%u, %u, %u, %u]",
                             ranges[i].visibleCountPerLOD[0],
                             ranges[i].visibleCountPerLOD[1],
                             ranges[i].visibleCountPerLOD[2],
@@ -504,7 +508,7 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
                         );
                         ImGui::TreePop();
                     }
-                }*/
+                }
                 ImGui::TreePop();
             }
 

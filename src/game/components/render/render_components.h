@@ -36,8 +36,6 @@ struct RenderableComponent
 
     std::array<PrimitiveData, 128> primitives;
     uint8_t primitiveCount = 0;
-
-    glm::mat4 previousModelMatrix{1.0f};
 };
 
 }
