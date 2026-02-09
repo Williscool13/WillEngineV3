@@ -21,8 +21,12 @@ struct BindlessSampler
 struct BindlessTexture
 {};
 
+struct BindlessCubemap
+{};
+
 using BindlessSamplerHandle = Core::Handle<BindlessSampler>;
 using BindlessTextureHandle = Core::Handle<BindlessTexture>;
+using BindlessCubemapHandle = Core::Handle<BindlessCubemap>;
 
 /**
  * Bindless descriptor buffer for samplers and sampled images.
@@ -94,6 +98,30 @@ public:
     bool ReleaseTextureBinding(BindlessTextureHandle handle);
 
     /**
+     * Allocate a cubemap in the bindless array.
+     * @param imageInfo Descriptor info for the sampled cubemap
+     * @return Handle for the cubemap, or Invalid if full
+     */
+    BindlessCubemapHandle AllocateCubemap(const VkDescriptorImageInfo& imageInfo);
+
+    BindlessCubemapHandle ReserveAllocateCubemap();
+
+    /**
+     * Updates a cubemap descriptor at a given index based on the cubemap handle passed.
+     * @param cubemapHandle Target handle in the cubemap array
+     * @param imageInfo New descriptor info
+     * @return true if handle was valid and updated
+     */
+    bool UpdateCubemap(BindlessCubemapHandle cubemapHandle, const VkDescriptorImageInfo& imageInfo);
+
+    /**
+     * Release a cubemap binding, returning it to the free pool.
+     * @param handle Handle returned from AllocateCubemap
+     * @return true if successfully released
+     */
+    bool ReleaseCubemapBinding(BindlessCubemapHandle handle);
+
+    /**
      * Get binding info for vkCmdBindDescriptorBuffersEXT.
      * @return Descriptor buffer binding info
      */
@@ -106,6 +134,7 @@ private:
 
     Core::HandleAllocator<BindlessSampler, BINDLESS_SAMPLER_COUNT> samplerAllocator;
     Core::HandleAllocator<BindlessTexture, BINDLESS_SAMPLED_IMAGE_COUNT> textureAllocator;
+    Core::HandleAllocator<BindlessCubemap, BINDLESS_SAMPLED_CUBEMAP_COUNT> cubemapAllocator;
 };
 } // Render
 

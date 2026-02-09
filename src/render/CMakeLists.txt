@@ -75,6 +75,8 @@ add_library(render STATIC
         render-view/render_view_helpers.h
         pipelines/pipeline_data.cpp
         pipelines/pipeline_data.h
+        cubemap_asset.cpp
+        cubemap_asset.h
 )
 
 target_include_directories(render PRIVATE

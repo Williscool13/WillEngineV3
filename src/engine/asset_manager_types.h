@@ -13,6 +13,7 @@ struct WillAudio;
 
 namespace Render
 {
+struct Cubemap;
 struct WillModel;
 struct Texture;
 }
@@ -21,6 +22,7 @@ namespace Engine
 {
 using WillModelHandle = Core::Handle<Render::WillModel>;
 using TextureHandle = Core::Handle<Render::Texture>;
+using CubemapHandle = Core::Handle<Render::Cubemap>;
 using AudioHandle = Core::Handle<Audio::WillAudio>;
 }
 

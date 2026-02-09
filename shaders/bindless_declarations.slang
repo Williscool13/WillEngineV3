@@ -6,6 +6,8 @@ module bindless_declarations;
 public SamplerState assetSamplers[];
 [[vk::binding(1, 0)]]
 public Texture2D assetTextures[];
+[[vk::binding(2, 0)]]
+public TextureCube assetCubemaps[];
 
 // Descriptor buffer for RDG
 [[vk::binding(0, 1)]] public SamplerState rdgSamplers[];

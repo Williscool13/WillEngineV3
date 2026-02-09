@@ -17,9 +17,10 @@ BindlessResourcesSamplerImages::BindlessResourcesSamplerImages() = default;
 BindlessResourcesSamplerImages::BindlessResourcesSamplerImages(VulkanContext* context)
     : context(context)
 {
-    DescriptorLayoutBuilder layoutBuilder{2};
+    DescriptorLayoutBuilder layoutBuilder{3}; // Changed from 2 to 3
     layoutBuilder.AddBinding(0, VK_DESCRIPTOR_TYPE_SAMPLER, BINDLESS_SAMPLER_COUNT);
     layoutBuilder.AddBinding(1, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, BINDLESS_SAMPLED_IMAGE_COUNT);
+    layoutBuilder.AddBinding(2, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, BINDLESS_SAMPLED_CUBEMAP_COUNT);
 
     VkDescriptorSetLayoutCreateInfo layoutCreateInfo = layoutBuilder.Build(
         static_cast<VkShaderStageFlagBits>(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT),
@@ -48,6 +49,7 @@ BindlessResourcesSamplerImages::BindlessResourcesSamplerImages(BindlessResources
       , descriptorSetSize(other.descriptorSetSize)
       , samplerAllocator(std::move(other.samplerAllocator))
       , textureAllocator(std::move(other.textureAllocator))
+      , cubemapAllocator(std::move(other.cubemapAllocator))
 {
     other.context = nullptr;
 }
@@ -61,6 +63,7 @@ BindlessResourcesSamplerImages& BindlessResourcesSamplerImages::operator=(Bindle
         descriptorSetSize = other.descriptorSetSize;
         samplerAllocator = std::move(other.samplerAllocator);
         textureAllocator = std::move(other.textureAllocator);
+        cubemapAllocator = std::move(other.cubemapAllocator);
 
         other.context = nullptr;
     }
@@ -157,6 +160,69 @@ bool BindlessResourcesSamplerImages::ReleaseSamplerBinding(BindlessSamplerHandle
 bool BindlessResourcesSamplerImages::ReleaseTextureBinding(BindlessTextureHandle handle)
 {
     return textureAllocator.Remove(handle);
+}
+
+BindlessCubemapHandle BindlessResourcesSamplerImages::AllocateCubemap(const VkDescriptorImageInfo& imageInfo)
+{
+    BindlessCubemapHandle handle = cubemapAllocator.Add();
+    if (!handle.IsValid()) {
+        SPDLOG_WARN("No more cubemap indices available");
+        return BindlessCubemapHandle::INVALID;
+    }
+
+    size_t bindingOffset;
+    vkGetDescriptorSetLayoutBindingOffsetEXT(context->device, descriptorSetLayout.handle, 2, &bindingOffset);
+    char* basePtr = static_cast<char*>(buffer.allocationInfo.pMappedData) + bindingOffset;
+
+    VkDescriptorGetInfoEXT descriptorGetInfo{};
+    descriptorGetInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT;
+    descriptorGetInfo.type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+    descriptorGetInfo.data.pSampledImage = &imageInfo;
+
+    const size_t sampledImageDescriptorSize = VulkanContext::deviceInfo.descriptorBufferProps.sampledImageDescriptorSize;
+    char* bufferPtr = basePtr + handle.index * sampledImageDescriptorSize;
+    vkGetDescriptorEXT(context->device, &descriptorGetInfo, sampledImageDescriptorSize, bufferPtr);
+
+    return handle;
+}
+
+BindlessCubemapHandle BindlessResourcesSamplerImages::ReserveAllocateCubemap()
+{
+    BindlessCubemapHandle handle = cubemapAllocator.Add();
+    if (!handle.IsValid()) {
+        SPDLOG_WARN("No more cubemap indices available");
+        return BindlessCubemapHandle::INVALID;
+    }
+
+    return handle;
+}
+
+bool BindlessResourcesSamplerImages::UpdateCubemap(BindlessCubemapHandle cubemapHandle, const VkDescriptorImageInfo& imageInfo)
+{
+    if (!cubemapAllocator.IsValid(cubemapHandle)) {
+        SPDLOG_ERROR("Invalid cubemap handle for UpdateCubemap");
+        return false;
+    }
+
+    size_t bindingOffset;
+    vkGetDescriptorSetLayoutBindingOffsetEXT(context->device, descriptorSetLayout.handle, 2, &bindingOffset);
+    char* basePtr = static_cast<char*>(buffer.allocationInfo.pMappedData) + bindingOffset;
+
+    VkDescriptorGetInfoEXT descriptorGetInfo{};
+    descriptorGetInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT;
+    descriptorGetInfo.type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+    descriptorGetInfo.data.pSampledImage = &imageInfo;
+
+    const size_t sampledImageDescriptorSize = VulkanContext::deviceInfo.descriptorBufferProps.sampledImageDescriptorSize;
+    char* bufferPtr = basePtr + cubemapHandle.index * sampledImageDescriptorSize;
+    vkGetDescriptorEXT(context->device, &descriptorGetInfo, sampledImageDescriptorSize, bufferPtr);
+
+    return true;
+}
+
+bool BindlessResourcesSamplerImages::ReleaseCubemapBinding(BindlessCubemapHandle handle)
+{
+    return cubemapAllocator.Remove(handle);
 }
 
 VkDescriptorBufferBindingInfoEXT BindlessResourcesSamplerImages::GetBindingInfo() const

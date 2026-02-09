@@ -1041,8 +1041,7 @@ void RenderThread::PrepareRenderFamilyProperties(Core::ViewFamily& viewFamily, R
     renderFamilyProperties.bHasDirectGeometry = !viewFamily.customStencilDraws.empty() && _pipelineManager->IsCategoryReady(PipelineCategory::CustomStencilPass);
     renderFamilyProperties.bHasAnyGeometry = renderFamilyProperties.bHasMainGeometry || renderFamilyProperties.bHasDirectGeometry;
     renderFamilyProperties.bHasGTAO = viewFamily.gtaoConfig.bEnabled && _pipelineManager->IsCategoryReady(PipelineCategory::GTAO);
-    // renderFamilyProperties.bHasShadows = viewFamily.shadowConfig.enabled && _pipelineManager->IsCategoryReady(PipelineCategory::ShadowPass);
-    renderFamilyProperties.bHasShadows = false;
+    renderFamilyProperties.bHasShadows = viewFamily.shadowConfig.enabled && _pipelineManager->IsCategoryReady(PipelineCategory::ShadowPass);
     renderFamilyProperties.bHasDeferred = _pipelineManager->IsCategoryReady(PipelineCategory::DeferredShading);
 
 

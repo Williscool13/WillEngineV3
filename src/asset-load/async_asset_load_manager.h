@@ -71,6 +71,17 @@ struct TextureLoadComplete
     bool bSuccess;
 };
 
+struct CubemapLoadRequest
+{
+    Render::Cubemap* texture;
+};
+
+struct CubemapLoadComplete
+{
+    Render::Cubemap* texture;
+    bool bSuccess;
+};
+
 class AsyncAssetLoadManager
 {
 public:
@@ -81,28 +92,37 @@ public:
     ~AsyncAssetLoadManager();
 
     AsyncAssetLoadManager(const AsyncAssetLoadManager&) = delete;
+
     AsyncAssetLoadManager& operator=(const AsyncAssetLoadManager&) = delete;
+
     AsyncAssetLoadManager(AsyncAssetLoadManager&&) = delete;
+
     AsyncAssetLoadManager& operator=(AsyncAssetLoadManager&&) = delete;
 
     void ThreadMain();
+
     void GPUDispatchThreadMain();
+
     void Join();
 
     // Audio Loading
     void RequestAudioLoad(Audio::WillAudio* audioEntry);
+
     bool TryDequeueAudioComplete(AudioLoadComplete& outResult);
 
     // Pipeline loading
     void RequestPipelineLoad(Render::PipelineData* pipelineData);
+
     bool TryDequeuePipelineComplete(PipelineLoadComplete& outResult);
 
     // Model loading
     void RequestModelLoad(Render::WillModel* model);
+
     bool TryDequeueModelComplete(WillModelLoadComplete& outResult);
 
     // Texture loading
     void RequestTextureLoad(Render::Texture* texture);
+
     bool TryDequeueTextureComplete(TextureLoadComplete& outResult);
 
     [[nodiscard]] uint32_t GetActiveAudioLoadCount() const
@@ -176,8 +196,11 @@ private:
     std::array<UploadStaging, GPU_DISPATCH_COUNT> uploadStagings{};
 
     void OnAudioLoadComplete(bool success, AudioSlotHandle slotHandle);
+
     void OnPipelineLoadComplete(bool success, PipelineSlotHandle slotHandle);
+
     void OnModelLoadComplete(bool success, ModelSlotHandle modelSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle);
+
     void OnTextureLoadComplete(bool success, TextureSlotHandle textureSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle);
 };
 } // AssetLoad
