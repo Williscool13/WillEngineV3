@@ -18,25 +18,24 @@ void UpdateRenderTransforms(Core::EngineContext* ctx, Engine::GameState* state, 
 {
     ZoneScoped;
 
-    auto view = state->registry.view<Component::TransformComponent, Component::RenderTransformComponent, Component::DirtyRenderTransformTag>();
-
+    auto dirtyView = state->registry.view<Component::TransformComponent, Component::RenderTransformComponent, Component::DirtyRenderTransformTag>(entt::exclude<Component::DynamicPhysicsBodyComponent>);
     constexpr size_t TASK_THRESHOLD = 1000;
-    if (view.size_hint() < TASK_THRESHOLD) {
+    if (dirtyView.size_hint() < TASK_THRESHOLD) {
         ZoneScopedN("Serial");
-        for (auto [entity, transform, renderTransform] : view.each()) {
+        for (auto [entity, transform, renderTransform] : dirtyView.each()) {
             renderTransform.previousMatrix = renderTransform.modelMatrix;
             renderTransform.modelMatrix = GetMatrix(transform);
         }
     }
     else {
         ZoneScopedN("Parallel");
-        std::vector entities(view.begin(), view.end());
+        std::vector entities(dirtyView.begin(), dirtyView.end());
 
         enki::TaskSet task(entities.size(), [&](enki::TaskSetPartition range, uint32_t) {
             for (uint32_t i = range.start; i < range.end; ++i) {
                 auto entity = entities[i];
-                auto& transform = view.get<Component::TransformComponent>(entity);
-                auto& renderTransform = view.get<Component::RenderTransformComponent>(entity);
+                auto& transform = dirtyView.get<Component::TransformComponent>(entity);
+                auto& renderTransform = dirtyView.get<Component::RenderTransformComponent>(entity);
 
                 renderTransform.previousMatrix = renderTransform.modelMatrix;
                 renderTransform.modelMatrix = GetMatrix(transform);
@@ -47,6 +46,17 @@ void UpdateRenderTransforms(Core::EngineContext* ctx, Engine::GameState* state, 
     }
 
     state->registry.clear<Component::DirtyRenderTransformTag>();
+
+    // Physics always dirty until I find a better way
+    auto physicsView = state->registry.view<Component::DynamicPhysicsBodyComponent, Component::TransformComponent, Component::RenderTransformComponent>();
+    for (auto [entity, physics, transform, renderTransform] : physicsView.each()) {
+        renderTransform.previousMatrix = renderTransform.modelMatrix;
+
+        float alpha = state->physicsInterpolationAlpha;
+        glm::vec3 interpPos = glm::mix(physics.previousPosition, transform.translation, alpha);
+        glm::quat interpRot = glm::slerp(physics.previousRotation, transform.rotation, alpha);
+        renderTransform.modelMatrix = glm::translate(glm::mat4(1.0f), interpPos) * glm::mat4_cast(interpRot);
+    }
 }
 
 void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer)
