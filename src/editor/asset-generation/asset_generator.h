@@ -15,6 +15,11 @@
 #include "texture_generate_slot.h"
 #include "core/allocators/lock_free_handle_allocator.h"
 
+namespace Editor
+{
+struct EnvironmentMapGenerateSlot;
+}
+
 namespace Render
 {
 class RenderThread;
@@ -66,6 +71,16 @@ struct TextureGenerateComplete {
     bool success;
 };
 
+struct EnvironmentMapGenerateRequest {
+    std::filesystem::path imagePath;
+    std::filesystem::path outputPath;
+};
+
+struct EnvironmentMapGenerateComplete {
+    std::filesystem::path outputPath;
+    bool success;
+};
+
 using ModelGenerateSlotHandle = Core::Handle<ModelGenerateSlot>;
 
 class AssetGenerator
@@ -78,6 +93,8 @@ public:
     bool TryDequeueModelGenerateComplete(ModelGenerateComplete& outResult);
     void RequestTextureGenerate(const std::filesystem::path& imagePath, const std::filesystem::path& outputPath, bool mipmapped = true, DXGI_FORMAT targetFormat = DXGI_FORMAT_BC7_UNORM);
     bool TryDequeueTextureGenerateComplete(TextureGenerateComplete& outResult);
+    void RequestEnvironmentMapGenerate(const std::filesystem::path& hdriPath, const std::filesystem::path& outputPath);
+    bool TryDequeueCubemapGenerateComplete(EnvironmentMapGenerateComplete& outResult);
 
     const WillModelGenerationProgress& GetModelGenerationProgress() const { return modelGenerationProgress; }
 
@@ -103,11 +120,17 @@ private:
     std::array<TextureGenerateSlot, TEXTURE_GENERATION_JOB_COUNT> textureGenerateTasks;
     Core::LockFreeHandleAllocator<TextureGenerateSlot, TEXTURE_GENERATION_JOB_COUNT> textureGenerateAllocator;
 
+    std::array<TextureGenerateSlot, ENVIRONMENT_MAP_GENERATION_JOB_COUNT> environmentMapeGenerateTasks;
+    Core::LockFreeHandleAllocator<EnvironmentMapGenerateSlot, ENVIRONMENT_MAP_GENERATION_JOB_COUNT> environmentMapGenerateAllocator;
+
     moodycamel::ConcurrentQueue<ModelGenerateRequest> modelGenerateRequestQueue;
     moodycamel::ConcurrentQueue<ModelGenerateComplete> modelGenerateCompleteQueue;
 
     moodycamel::ConcurrentQueue<TextureGenerateRequest> textureGenerateRequestQueue;
     moodycamel::ConcurrentQueue<TextureGenerateComplete> textureGenerateCompleteQueue;
+
+    moodycamel::ConcurrentQueue<EnvironmentMapGenerateRequest> environmentMapGenerateRequestQueue;
+    moodycamel::ConcurrentQueue<EnvironmentMapGenerateComplete> environmentMapGenerateCompleteQueue;
 
     std::atomic<bool> bShouldExit{false};
     std::atomic<uint32_t> workCounter{0};

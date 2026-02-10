@@ -159,6 +159,16 @@ void AssetGenerator::RequestTextureGenerate(const std::filesystem::path& imagePa
     wakeCV.notify_one();
 }
 
+void AssetGenerator::RequestEnvironmentMapGenerate(const std::filesystem::path& hdriPath, const std::filesystem::path& outputPath)
+{
+    ZoneScoped;
+
+    environmentMapGenerateRequestQueue.enqueue({hdriPath, outputPath});
+    workCounter.fetch_add(1);
+    wakeCV.notify_one();
+}
+
+
 bool AssetGenerator::TryDequeueModelGenerateComplete(ModelGenerateComplete& outResult)
 {
     return modelGenerateCompleteQueue.try_dequeue(outResult);
@@ -167,6 +177,11 @@ bool AssetGenerator::TryDequeueModelGenerateComplete(ModelGenerateComplete& outR
 bool AssetGenerator::TryDequeueTextureGenerateComplete(TextureGenerateComplete& outResult)
 {
     return textureGenerateCompleteQueue.try_dequeue(outResult);
+}
+
+bool AssetGenerator::TryDequeueCubemapGenerateComplete(EnvironmentMapGenerateComplete& outResult)
+{
+    return environmentMapGenerateCompleteQueue.try_dequeue(outResult);
 }
 
 void AssetGenerator::OnModelGenerateComplete(bool success, ModelGenerateSlotHandle slotHandle)

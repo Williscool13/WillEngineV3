@@ -8,6 +8,8 @@ add_library(editor STATIC
         asset-generation/model_generate_slot.h
         asset-generation/texture_generate_slot.cpp
         asset-generation/texture_generate_slot.h
+        asset-generation/environment_map_generate_slot.cpp
+        asset-generation/environment_map_generate_slot.h
 )
 
 target_include_directories(editor PUBLIC

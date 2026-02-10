@@ -551,8 +551,8 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
             return;
         }
 
-        // const int totalBoxes = 100000;
         const int totalBoxes = 10000;
+        // const int totalBoxes = 10000;
         const float boxSpacing = 1.5f;
         const int boxesPerSide = static_cast<int>(cbrt(totalBoxes)) + 1;
         const float gridExtent = static_cast<float>(boxesPerSide) * boxSpacing * 0.5f;

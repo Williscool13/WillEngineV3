@@ -9,6 +9,7 @@
 
 #include <volk.h>
 
+#include "dds_defs.h"
 #include "shaders/instancing_interop.h"
 #include "shaders/lights_interop.h"
 #include "shaders/model_interop.h"
@@ -51,6 +52,11 @@ inline constexpr int32_t BINDLESS_STORAGE_IMAGE_COUNT = 128;
 inline constexpr int32_t BINDLESS_SAMPLER_COUNT = 128;
 inline constexpr int32_t BINDLESS_SAMPLED_IMAGE_COUNT = 4096;
 inline constexpr int32_t BINDLESS_SAMPLED_CUBEMAP_COUNT = 128;
+
+inline constexpr int32_t ENVIRONMENT_MAP_RESOLUTION = 1024;
+inline constexpr int32_t ENVIRONMENT_MAP_DIFFUSE_RESOLUTION = 64;
+// inline constexpr DXGI_FORMAT ENVIRONMENT_MAP_TARGET_FORMAT = DXGI_FORMAT_BC6H_UF16;
+
 
 inline constexpr int32_t POST_PROCESS_LUMINANCE_BUFFER_SIZE = sizeof(uint32_t) * POST_PROCESS_LUMINANCE_DISPATCH_X * POST_PROCESS_LUMINANCE_DISPATCH_Y;
 
