@@ -27,6 +27,29 @@ bool ComputePipelineData::CreatePipeline(VulkanContext* context, VkPipelineCache
 
 
     VkPipelineShaderStageCreateInfo shaderStage = VkHelpers::PipelineShaderStageCreateInfo(shaderModule, VK_SHADER_STAGE_COMPUTE_BIT);
+    uint32_t specConstantData[] = {
+        VulkanContext::deviceInfo.meshShaderProps.maxTaskWorkGroupCount[0],
+        VulkanContext::deviceInfo.meshShaderProps.maxTaskWorkGroupCount[1],
+        VulkanContext::deviceInfo.meshShaderProps.maxTaskWorkGroupCount[2],
+        VulkanContext::deviceInfo.meshShaderProps.maxMeshWorkGroupCount[0],
+        VulkanContext::deviceInfo.meshShaderProps.maxMeshWorkGroupCount[1],
+        VulkanContext::deviceInfo.meshShaderProps.maxMeshWorkGroupCount[2],
+    };
+
+    VkSpecializationMapEntry entries[6];
+    for (uint32_t i = 0; i < 6; i++) {
+        entries[i].constantID = i;
+        entries[i].offset = i * sizeof(uint32_t);
+        entries[i].size = sizeof(uint32_t);
+    }
+
+    VkSpecializationInfo specInfo{};
+    specInfo.mapEntryCount = 6;
+    specInfo.pMapEntries = entries;
+    specInfo.dataSize = sizeof(specConstantData);
+    specInfo.pData = specConstantData;
+    shaderStage.pSpecializationInfo = &specInfo;
+
     VkComputePipelineCreateInfo pipelineInfo = VkHelpers::ComputePipelineCreateInfo(loadingEntry.layout, shaderStage);
     VkResult pipelineResult = vkCreateComputePipelines(context->device, pipelineCache, 1, &pipelineInfo, nullptr, &loadingEntry.pipeline);
 
@@ -116,6 +139,31 @@ bool GraphicsPipelineData::CreatePipeline(VulkanContext* context, VkPipelineCach
         .pDynamicState = &dynamicInfo,
         .layout = loadingEntry.layout,
     };
+
+    uint32_t specConstantData[] = {
+        VulkanContext::deviceInfo.meshShaderProps.maxTaskWorkGroupCount[0],
+        VulkanContext::deviceInfo.meshShaderProps.maxTaskWorkGroupCount[1],
+        VulkanContext::deviceInfo.meshShaderProps.maxTaskWorkGroupCount[2],
+        VulkanContext::deviceInfo.meshShaderProps.maxMeshWorkGroupCount[0],
+        VulkanContext::deviceInfo.meshShaderProps.maxMeshWorkGroupCount[1],
+        VulkanContext::deviceInfo.meshShaderProps.maxMeshWorkGroupCount[2],
+    };
+
+    VkSpecializationMapEntry entries[6];
+    for (uint32_t i = 0; i < 6; i++) {
+        entries[i].constantID = i;
+        entries[i].offset = i * sizeof(uint32_t);
+        entries[i].size = sizeof(uint32_t);
+    }
+
+    VkSpecializationInfo specInfo{};
+    specInfo.mapEntryCount = 6;
+    specInfo.pMapEntries = entries;
+    specInfo.dataSize = sizeof(specConstantData);
+    specInfo.pData = specConstantData;
+    for (VkPipelineShaderStageCreateInfo& stage : shaderStages) {
+        stage.pSpecializationInfo = &specInfo;
+    }
 
     VkResult pipelineResult = vkCreateGraphicsPipelines(context->device, pipelineCache, 1, &pipelineInfo, nullptr, &loadingEntry.pipeline);
 

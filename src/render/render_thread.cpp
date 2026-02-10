@@ -217,7 +217,7 @@ void RenderThread::RenderFrame(uint32_t currentFrameIndex, RenderSynchronization
 
 #ifdef WILL_EDITOR
     {
-        AssetLoad::GPUDispatchRequest req;
+        AssetLoad::GPUDispatchRequest req{};
         while (editorGPUDispatchQueue.try_dequeue(req)) {
             VkSubmitInfo submitInfo{.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO};
             submitInfo.commandBufferCount = 1;

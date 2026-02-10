@@ -4,6 +4,7 @@ import model_interop;
 import instancing_interop;
 import push_constant_interop;
 
+import limits_declarations;
 import bindless_declarations;
 
 import shader_functions;
@@ -41,7 +42,14 @@ void TaskMain(uniform InstancedMeshShadingPushConstant pc,
 {
     InstancedMeshIndirectDrawParameters indirectParameters = pc.indirectBuffer[drawIndex];
 
-    uint32_t instanceIndirectIndex = indirectParameters.compactedInstanceStart + gid.y;
+    uint32_t instanceLocalIndex = gid.z * MAX_TASK_WORK_GROUP_COUNT_Y + gid.y;
+    if (instanceLocalIndex >= indirectParameters.compactedInstanceCount) {
+        if (gtid.x == 0) {
+            DispatchMesh(0, 1, 1, sharedPayload);
+        }
+        return;
+    }
+    uint32_t instanceIndirectIndex = indirectParameters.compactedInstanceStart + instanceLocalIndex;
     uint32_t instanceIndex = pc.instanceIndirectionBuffer[instanceIndirectIndex];
     Instance inst = pc.instanceBuffer[instanceIndex];
 

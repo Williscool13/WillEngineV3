@@ -265,6 +265,7 @@ VulkanContext::VulkanContext(SDL_Window* window)
     deviceInfo.meshShaderProps.pNext = &deviceInfo.subgroupProps;
     vkGetPhysicalDeviceProperties2(physicalDevice, &deviceInfo.properties);
 
+#if PROFILER_ENABLED
     tracyContext = TracyVkContextHostCalibrated(
         physicalDevice, device,
         vkResetQueryPool,
@@ -272,6 +273,7 @@ VulkanContext::VulkanContext(SDL_Window* window)
         vkGetCalibratedTimestampsEXT
     );
     TracyVkContextName(tracyContext, "Graphics", 8);
+#endif
 
     SPDLOG_INFO("=== Vulkan Context Initialized ===");
     SPDLOG_INFO("GPU: {}", deviceInfo.properties.properties.deviceName);
@@ -286,6 +288,16 @@ VulkanContext::VulkanContext(SDL_Window* window)
     SPDLOG_INFO("Queue Families - Graphics: {} | Transfer: {}", graphicsQueueFamily, transferQueueFamily);
     SPDLOG_INFO("Max Descriptor Buffer Bindings: {}", deviceInfo.descriptorBufferProps.maxDescriptorBufferBindings);
     SPDLOG_INFO("Mesh Shader Support - Max Task Workgroups: {}", deviceInfo.meshShaderProps.maxTaskWorkGroupCount[0]);
+    SPDLOG_INFO("Mesh Shader Support - Max Task Workgroups: {}", deviceInfo.meshShaderProps.maxTaskWorkGroupCount[0]);
+    SPDLOG_INFO("Mesh Shader - Max Task Work Group Count: [{}, {}, {}]",
+                deviceInfo.meshShaderProps.maxTaskWorkGroupCount[0],
+                deviceInfo.meshShaderProps.maxTaskWorkGroupCount[1],
+                deviceInfo.meshShaderProps.maxTaskWorkGroupCount[2]);
+    SPDLOG_INFO("Mesh Shader - Max Mesh Work Group Count: [{}, {}, {}]",
+                deviceInfo.meshShaderProps.maxMeshWorkGroupCount[0],
+                deviceInfo.meshShaderProps.maxMeshWorkGroupCount[1],
+                deviceInfo.meshShaderProps.maxMeshWorkGroupCount[2]);
+    SPDLOG_INFO("Max Draw Indirect Count: {}", deviceInfo.properties.properties.limits.maxDrawIndirectCount);
     SPDLOG_INFO("Subgroup Size: {}", deviceInfo.subgroupProps.subgroupSize);
     if (deviceInfo.subgroupProps.supportedOperations & VK_SUBGROUP_FEATURE_ARITHMETIC_BIT) {
         SPDLOG_INFO("Subgroup Arithmetic operations supported (WavePrefixSum)");

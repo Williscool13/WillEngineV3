@@ -56,7 +56,7 @@ SHADER_PUBLIC struct InstancedMeshIndirectDrawParameters
     SHADER_PUBLIC uint32_t groupCountZ;
 
     SHADER_PUBLIC uint32_t compactedInstanceStart;
-    uint32_t padding1;
+    SHADER_PUBLIC uint32_t compactedInstanceCount;
 
     SHADER_PUBLIC uint32_t meshletOffset;
     SHADER_PUBLIC uint32_t meshletCount;

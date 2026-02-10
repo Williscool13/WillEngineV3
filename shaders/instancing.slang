@@ -5,6 +5,7 @@ import instancing_interop;
 import push_constant_interop;
 import constants_interop;
 
+import limits_declarations;
 import bindless_declarations;
 
 // =============== Compute Shader (Instance Visibility and LOD calculation) ===============
@@ -288,11 +289,16 @@ void ComputeCompactAndGenerateIndirect(uniform CompactAndIndirectPushConstant pc
         MeshletPrimitive prim = pc.primitiveBuffer[inst.primitiveIndex];
         uint totalMeshlets = prim.meshletCount[lod];
         uint numChunks = (totalMeshlets + (TASK_SHADER_DISPATCH_X - 1)) / TASK_SHADER_DISPATCH_X;
+
+        uint instanceCount = counter.visibleCountPerLOD[lod];
+        uint yDispatches = min(instanceCount, MAX_TASK_WORK_GROUP_COUNT_Y);
+        uint zDispatches = (instanceCount + MAX_TASK_WORK_GROUP_COUNT_Y - 1) / MAX_TASK_WORK_GROUP_COUNT_Y;
+
         pc.indirectBuffer[commandIdx].groupCountX = numChunks;
-        pc.indirectBuffer[commandIdx].groupCountY = counter.visibleCountPerLOD[lod];
-        pc.indirectBuffer[commandIdx].groupCountZ = 1;
+        pc.indirectBuffer[commandIdx].groupCountY = yDispatches;
+        pc.indirectBuffer[commandIdx].groupCountZ = zDispatches;
         pc.indirectBuffer[commandIdx].compactedInstanceStart = primitiveOffsets.instanceOffset + lodOffset;
-        // compactedInstanceCount already set by atomics, should equal range.visibleCountPerLOD[lod]
+        pc.indirectBuffer[commandIdx].compactedInstanceCount = instanceCount;
         pc.indirectBuffer[commandIdx].meshletOffset = prim.meshletOffset[lod];
         pc.indirectBuffer[commandIdx].meshletCount = prim.meshletCount[lod];
     }

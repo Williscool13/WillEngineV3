@@ -50,7 +50,6 @@ public:
     bool CreatePipeline(VulkanContext* context, VkPipelineCache pipelineCache) override;
 
     std::filesystem::path shaderPath{};
-    VkPipelineShaderStageCreateInfo shaderStage{};
 };
 
 class GraphicsPipelineData : public PipelineData
