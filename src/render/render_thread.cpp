@@ -888,6 +888,20 @@ void RenderThread::CreatePipelines()
     pipelineManager->RegisterComputePipeline("debug_visualize", Platform::GetShaderPath() / "debug_visualize_compute.spv",
                                              sizeof(DebugVisualizePushConstant), PipelineCategory::Debug);
 
+#if WILL_EDITOR
+    std::array emapLayout{
+        resourceManager->environmentMapGenerateResources.descriptorSetLayout.handle,
+    };
+    pipelineManager->RegisterComputePipelineCustomLayout("ibl_equirect_to_cubemap", Platform::GetShaderPath() / "ibl_equirect_to_cubemap_compute.spv",
+                                             sizeof(EquirectToCubemapPushConstant), PipelineCategory::AssetGeneration, emapLayout.data(), emapLayout.size());
+
+    pipelineManager->RegisterComputePipelineCustomLayout("ibl_convolve_diffuse", Platform::GetShaderPath() / "ibl_convolve_diffuse_compute.spv",
+                                             sizeof(ConvolveDiffusePushConstant), PipelineCategory::AssetGeneration, emapLayout.data(), emapLayout.size());
+
+    pipelineManager->RegisterComputePipelineCustomLayout("ibl_prefilter_specular", Platform::GetShaderPath() / "ibl_prefilter_specular_compute.spv",
+                                             sizeof(PrefilterSpecularPushConstant), PipelineCategory::AssetGeneration, emapLayout.data(), emapLayout.size());
+#endif
+
     GraphicsPipelineBuilder builder;
 
     // Shadow cascade pipeline

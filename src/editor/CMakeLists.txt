@@ -10,6 +10,8 @@ add_library(editor STATIC
         asset-generation/texture_generate_slot.h
         asset-generation/environment_map_generate_slot.cpp
         asset-generation/environment_map_generate_slot.h
+        asset-generation/environment_map_generate_resources.cpp
+        asset-generation/environment_map_generate_resources.h
 )
 
 target_include_directories(editor PUBLIC

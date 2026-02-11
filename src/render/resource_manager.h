@@ -13,6 +13,10 @@
 #include "render/descriptors/vk_bindless_resources_storage.h"
 #include "render-graph/render_graph_resources.h"
 
+#if WILL_EDITOR
+#include "editor/asset-generation/environment_map_generate_resources.h"
+#endif
+
 
 namespace Render
 {
@@ -43,6 +47,10 @@ struct ResourceManager
     AllocatedBuffer megaMeshletBuffer;
     AllocatedBuffer primitiveBuffer;
     BindlessResourcesSamplerImages bindlessSamplerTextureDescriptorBuffer{};
+
+#if WILL_EDITOR
+    Editor::EnvironmentMapGenerateResources environmentMapGenerateResources{};
+#endif
 
     VkSampler pointSampler;
     VkSampler linearSampler;

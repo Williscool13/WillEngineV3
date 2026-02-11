@@ -30,6 +30,7 @@ enum class PipelineCategory : uint32_t
     FilmGrain           = 1 << 16,
     Sharpening          = 1 << 17,
     Debug               = 1 << 18,
+    AssetGeneration     = 1 << 19,
 
     MainGeometry = Instancing | Geometry,
     ShadowPass = Instancing | Shadow,
