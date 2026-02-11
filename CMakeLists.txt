@@ -305,6 +305,10 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeColorGrading color_grading
 
         ${CMAKE_SOURCE_DIR}/shaders/common_shaders.slang vertex FullscreenPassVertexMain fullscreen_pass
+
+        ${CMAKE_SOURCE_DIR}/shaders/environment_map.slang compute ComputeEquirectToCubemap ibl_equirect_to_cubemap
+        ${CMAKE_SOURCE_DIR}/shaders/environment_map.slang compute ComputeConvolveDiffuse ibl_convolve_diffuse
+        ${CMAKE_SOURCE_DIR}/shaders/environment_map.slang compute ComputePrefilterSpecular ibl_prefilter_specular
 )
 
 # Post-Build Commands =========================

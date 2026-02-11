@@ -431,4 +431,30 @@ SHADER_PUBLIC struct DebugDrawPushConstant
     SHADER_PUBLIC uint32_t sceneDataIndex;
 };
 
+SHADER_PUBLIC struct EquirectToCubemapPushConstant
+{
+    SHADER_PUBLIC uint32_t samplerIndex;
+    SHADER_PUBLIC uint32_t sourceIndex;
+    SHADER_PUBLIC uint32_t targetIndex;
+};
+
+SHADER_PUBLIC struct ConvolveDiffusePushConstant
+{
+    SHADER_PUBLIC uint32_t samplerIndex;
+    SHADER_PUBLIC uint32_t sourceIndex;
+    SHADER_PUBLIC uint32_t targetIndex;
+    SHADER_PUBLIC float sampleDelta;
+};
+
+SHADER_PUBLIC struct PrefilterSpecularPushConstant
+{
+    SHADER_PUBLIC uint32_t samplerIndex;
+    SHADER_PUBLIC uint32_t sourceIndex;
+    SHADER_PUBLIC uint32_t targetIndex;
+    SHADER_PUBLIC float roughness;
+    SHADER_PUBLIC uint32_t width;
+    SHADER_PUBLIC uint32_t height;
+    SHADER_PUBLIC uint32_t sampleCount;
+};
+
 #endif //WILL_ENGINE_PUSH_CONSTANT_INTEROP_H
