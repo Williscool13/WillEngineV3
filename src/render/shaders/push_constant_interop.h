@@ -12,6 +12,22 @@ module push_constant_interop;
 #define SHADER_ALIGN
 #define SHADER_PTR(T) T*
 #define SHADER_ATOMIC(T) Atomic<T>
+
+#define PUSH_CONSTANT_INHERIT_BASE
+#define PUSH_CONSTANT_BASE_BODY \
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData; \
+    SHADER_PUBLIC SHADER_PTR(Vertex) vertexBuffer; \
+    SHADER_PUBLIC SHADER_PTR(uint32_t) meshletVerticesBuffer; \
+    SHADER_PUBLIC SHADER_PTR(uint32_t) meshletTrianglesBuffer; \
+    SHADER_PUBLIC SHADER_PTR(Meshlet) meshletBuffer; \
+    SHADER_PUBLIC SHADER_PTR(MeshletPrimitive) primitiveBuffer; \
+    SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer; \
+    SHADER_PUBLIC SHADER_PTR(MaterialProperties) materialBuffer; \
+    SHADER_PUBLIC SHADER_PTR(Model) modelBuffer; \
+    SHADER_PUBLIC uint32_t sceneDataIndex;
+#define PUSH_CONSTANT_DERIVED_BODY PUSH_CONSTANT_BASE_BODY
+
+
 import common_interop;
 import model_interop;
 import constants_interop;
@@ -51,6 +67,21 @@ using float4x4 = glm::mat4;
 #define SHADER_ALIGN alignas(16)
 #define SHADER_PTR(T) VkDeviceAddress
 #define SHADER_ATOMIC(T) T
+
+
+#define PUSH_CONSTANT_INHERIT_BASE : BaseMeshShadingPushConstant
+#define PUSH_CONSTANT_BASE_BODY \
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData; \
+    SHADER_PUBLIC SHADER_PTR(Vertex) vertexBuffer; \
+    SHADER_PUBLIC SHADER_PTR(uint32_t) meshletVerticesBuffer; \
+    SHADER_PUBLIC SHADER_PTR(uint32_t) meshletTrianglesBuffer; \
+    SHADER_PUBLIC SHADER_PTR(Meshlet) meshletBuffer; \
+    SHADER_PUBLIC SHADER_PTR(MeshletPrimitive) primitiveBuffer; \
+    SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer; \
+    SHADER_PUBLIC SHADER_PTR(MaterialProperties) materialBuffer; \
+    SHADER_PUBLIC SHADER_PTR(Model) modelBuffer; \
+    SHADER_PUBLIC uint32_t sceneDataIndex;
+#define PUSH_CONSTANT_DERIVED_BODY  // Empty - inherits from base
 #endif // __SLANG__
 
 SHADER_PUBLIC struct DebugVisualizePushConstant
@@ -105,20 +136,20 @@ SHADER_PUBLIC struct PrefixSumLocalPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(PrimitiveCounters) primitiveCountersBuffer;
     SHADER_PUBLIC SHADER_PTR(PrimitiveOffsets) prefixSums; // Out: 65536
-    SHADER_PUBLIC SHADER_PTR(PrimitiveOffsets) blockSums;  // Out: 256
+    SHADER_PUBLIC SHADER_PTR(PrimitiveOffsets) blockSums; // Out: 256
     SHADER_PUBLIC SHADER_PTR(InstancedMeshIndirectCountBuffer) indirectCountBuffer; // Out
     SHADER_PUBLIC uint32_t primitiveRangeCount;
 };
 
 SHADER_PUBLIC struct PrefixSumBlocksPushConstant
 {
-    SHADER_PUBLIC SHADER_PTR(PrimitiveOffsets) blockSums;           // In: 256
+    SHADER_PUBLIC SHADER_PTR(PrimitiveOffsets) blockSums; // In: 256
     SHADER_PUBLIC SHADER_PTR(PrimitiveOffsets) scannedBlockOffsets; // Out: 256
 };
 
 SHADER_PUBLIC struct PrefixSumScatterPushConstant
 {
-    SHADER_PUBLIC SHADER_PTR(PrimitiveOffsets) prefixSums;          // In/Out: local prefix sums -> global
+    SHADER_PUBLIC SHADER_PTR(PrimitiveOffsets) prefixSums; // In/Out: local prefix sums -> global
     SHADER_PUBLIC SHADER_PTR(PrimitiveOffsets) scannedBlockOffsets; // In: 256 scanned block offsets
     SHADER_PUBLIC uint32_t primitiveRangeCount;
 };
@@ -238,6 +269,23 @@ SHADER_PUBLIC struct BuildDirectIndirectPushConstant
     SHADER_PUBLIC uint32_t sceneDataIndex;
     SHADER_PUBLIC uint32_t instanceCount;
     SHADER_PUBLIC uint32_t lodBias;
+};
+
+SHADER_PUBLIC struct BaseMeshShadingPushConstant
+{
+    PUSH_CONSTANT_BASE_BODY
+};
+
+SHADER_PUBLIC struct PortalRenderingMeshShadingPushConstant PUSH_CONSTANT_INHERIT_BASE
+{
+    PUSH_CONSTANT_DERIVED_BODY
+    // Portal-specific fields
+};
+
+SHADER_PUBLIC struct CubemapRenderingMeshShadingPushConstant PUSH_CONSTANT_INHERIT_BASE
+{
+    PUSH_CONSTANT_DERIVED_BODY
+    uint32_t cubemapIndex;
 };
 
 SHADER_PUBLIC struct DirectMeshShadingPushConstant
@@ -387,7 +435,8 @@ SHADER_PUBLIC struct GTAODepthPrepassPushConstant
     SHADER_PUBLIC uint32_t sceneDataIndex;
 };
 
-SHADER_PUBLIC struct GTAOMainPushConstant {
+SHADER_PUBLIC struct GTAOMainPushConstant
+{
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC uint32_t prefilteredDepthIndex;
     SHADER_PUBLIC uint32_t normalBufferIndex;
@@ -407,7 +456,8 @@ SHADER_PUBLIC struct GTAOMainPushConstant {
     SHADER_PUBLIC uint32_t sceneDataIndex;
 };
 
-SHADER_PUBLIC struct GTAODenoisePushConstant {
+SHADER_PUBLIC struct GTAODenoisePushConstant
+{
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC uint32_t rawAOIndex;
     SHADER_PUBLIC uint32_t edgeDataIndex;

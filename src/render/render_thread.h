@@ -133,7 +133,7 @@ private:
     void SetupMainGeometryPass(RenderGraph& graph, const Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties, std::array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneIndex, bool
                                bClearTargets) const;
 
-    void SetupDirectGeometryPass(RenderGraph& graph, const Core::ViewFamily& renderViewFamily, std::array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneIndex, bool bClearTargets) const;
+    void SetupDirectGeometryPass(RenderGraph& graph, const Core::ViewFamily& renderViewFamily, const RenderFamilyProperties& renderFamilyProperties, std::array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneIndex, bool bClearTargets) const;
 
     void SetupGroundTruthAmbientOcclusion(RenderGraph& graph, const Core::ViewFamily& renderViewFamily, std::array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneDataIndex) const;
 

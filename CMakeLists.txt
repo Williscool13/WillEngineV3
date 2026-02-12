@@ -273,11 +273,10 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/mesh_shading_instanced.slang mesh MeshMain mesh_shading_instanced
         ${CMAKE_SOURCE_DIR}/shaders/mesh_shading_instanced.slang fragment FragmentMain mesh_shading_instanced
         ${CMAKE_SOURCE_DIR}/shaders/mesh_shading_direct.slang compute ComputeMain mesh_shading_direct_build_indirect
-        ${CMAKE_SOURCE_DIR}/shaders/mesh_shading_direct.slang task TaskMain mesh_shading_direct
-        ${CMAKE_SOURCE_DIR}/shaders/mesh_shading_direct.slang mesh MeshMain mesh_shading_direct
-        ${CMAKE_SOURCE_DIR}/shaders/mesh_shading_direct.slang fragment FragmentMain mesh_shading_direct
 
-        ${CMAKE_SOURCE_DIR}/shaders/portal_rendering.slang fragment FragmentMain portal_composite
+        ${CMAKE_SOURCE_DIR}/shaders/portal_rendering.slang mesh MeshPortalRender portal_rendering
+        ${CMAKE_SOURCE_DIR}/shaders/portal_rendering.slang fragment FragmentPortalRender portal_rendering
+        ${CMAKE_SOURCE_DIR}/shaders/portal_rendering.slang fragment FragmentPortalComposite portal_composite
 
         ${CMAKE_SOURCE_DIR}/shaders/debug_render.slang vertex VertexMain debug_render
         ${CMAKE_SOURCE_DIR}/shaders/debug_render.slang fragment FragmentMain debug_render

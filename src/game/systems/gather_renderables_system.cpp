@@ -18,7 +18,8 @@ void UpdateRenderTransforms(Core::EngineContext* ctx, Engine::GameState* state, 
 {
     ZoneScoped;
 
-    auto dirtyView = state->registry.view<Component::TransformComponent, Component::RenderTransformComponent, Component::DirtyRenderTransformTag>(entt::exclude<Component::DynamicPhysicsBodyComponent>);
+    auto dirtyView = state->registry.view<Component::TransformComponent, Component::RenderTransformComponent,
+        Component::DirtyRenderTransformTag>(entt::exclude<Component::DynamicPhysicsBodyComponent>);
     constexpr size_t TASK_THRESHOLD = 1000;
     if (dirtyView.size_hint() < TASK_THRESHOLD) {
         ZoneScopedN("Serial");
@@ -91,17 +92,12 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
         auto portalView = state->registry.view<Component::PortalPlaneComponent, Component::RenderableComponent, Component::RenderTransformComponent>();
 
         if (portalView.size_hint() > 0) {
-            Core::CustomStencilDrawBatch* portalBatch = nullptr;
-            for (auto& draw : frameBuffer->mainViewFamily.customStencilDraws) {
-                if (draw.stencilValue == 1) {
-                    portalBatch = &draw;
-                    break;
-                }
-            }
-
-            if (!portalBatch) {
-                frameBuffer->mainViewFamily.customStencilDraws.push_back({.stencilValue = 1});
-                portalBatch = &frameBuffer->mainViewFamily.customStencilDraws.back();
+            auto& portalDraw = frameBuffer->mainViewFamily.customShaderDraws["portal_rendering"];
+            if (portalDraw.instances.empty()) {
+                portalDraw.pipelineName = "portal_rendering";
+                portalDraw.pushConstantData = std::make_unique<PortalRenderingMeshShadingPushConstant>();
+                portalDraw.pushConstantSize = sizeof(PortalRenderingMeshShadingPushConstant);
+                portalDraw.stencilValue = 1;
             }
 
             for (auto [entity, renderable, renderTransform] : portalView.each()) {
@@ -110,7 +106,7 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
 
                 for (uint8_t i = 0; i < renderable.primitiveCount; ++i) {
                     auto& prim = renderable.primitives[i];
-                    portalBatch->instances.push_back({
+                    portalDraw.instances.push_back({
                         .primitiveIndex = prim.primitiveIndex,
                         .materialID = prim.materialID,
                         .modelIndex = modelIndex
@@ -133,8 +129,8 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
             instance.gpuMaterialIndex = materialRemap[instance.materialID];
         }
 
-        for (auto& customDraw : frameBuffer->mainViewFamily.customStencilDraws) {
-            for (auto& instance : customDraw.instances) {
+        for (auto& customDraw : frameBuffer->mainViewFamily.customShaderDraws) {
+            for (auto& instance : customDraw.second.instances) {
                 if (!materialRemap.contains(instance.materialID)) {
                     uint32_t gpuIndex = frameBuffer->mainViewFamily.materials.size();
                     materialRemap[instance.materialID] = gpuIndex;

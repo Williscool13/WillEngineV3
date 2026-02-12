@@ -108,8 +108,8 @@ GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* stat
 {
     frameBuffer->mainViewFamily.modelMatrices.clear();
     frameBuffer->mainViewFamily.mainPassInstances.clear();
-    for (Core::CustomStencilDrawBatch& customStencilBatch : frameBuffer->mainViewFamily.customStencilDraws) {
-        customStencilBatch.instances.clear();
+    for (Core::CustomShaderDraw& draw : frameBuffer->mainViewFamily.customShaderDraws | std::views::values) {
+        draw.instances.clear();
     }
     frameBuffer->mainViewFamily.materials.clear();
     frameBuffer->mainViewFamily.portalViews.clear();

@@ -334,7 +334,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             }
 
             if (renderFamilyProperties.bHasDirectGeometry) {
-                SetupDirectGeometryPass(*renderGraph, viewFamily, renderExtent, targets, 0, !renderFamilyProperties.bHasMainGeometry);
+                SetupDirectGeometryPass(*renderGraph, viewFamily, renderFamilyProperties, renderExtent, targets, 0, !renderFamilyProperties.bHasMainGeometry);
             }
 
             if (renderFamilyProperties.bHasGTAO) {
@@ -364,7 +364,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             }
 
             if (renderFamilyProperties.bHasDirectGeometry) {
-                SetupDirectGeometryPass(*renderGraph, viewFamily, renderExtent, portalTargets, 1, !renderFamilyProperties.bHasMainGeometry);
+                SetupDirectGeometryPass(*renderGraph, viewFamily, renderFamilyProperties, renderExtent, portalTargets, 1, !renderFamilyProperties.bHasMainGeometry);
             }
 
             if (renderFamilyProperties.bHasGTAO) {
@@ -838,7 +838,7 @@ void RenderThread::CreatePipelines()
                                              sizeof(CompactAndIndirectPushConstant), PipelineCategory::Instancing);
 
     pipelineManager->RegisterComputePipeline("direct_mesh_shading_build_indirect", Platform::GetShaderPath() / "mesh_shading_direct_build_indirect_compute.spv",
-                                             sizeof(BuildDirectIndirectPushConstant), PipelineCategory::CustomStencilPass);
+                                             sizeof(BuildDirectIndirectPushConstant), PipelineCategory::CustomRendering);
 
     pipelineManager->RegisterComputePipeline("instancing_shadows_visibility", Platform::GetShaderPath() / "instancing_shadows_visibility_compute.spv",
                                              sizeof(VisibilityShadowsPushConstant), PipelineCategory::Instancing | PipelineCategory::Shadow);
@@ -893,13 +893,13 @@ void RenderThread::CreatePipelines()
         resourceManager->environmentMapGenerateResources.descriptorSetLayout.handle,
     };
     pipelineManager->RegisterComputePipelineCustomLayout("ibl_equirect_to_cubemap", Platform::GetShaderPath() / "ibl_equirect_to_cubemap_compute.spv",
-                                             sizeof(EquirectToCubemapPushConstant), PipelineCategory::AssetGeneration, emapLayout.data(), emapLayout.size());
+                                                         sizeof(EquirectToCubemapPushConstant), PipelineCategory::AssetGeneration, emapLayout.data(), emapLayout.size());
 
     pipelineManager->RegisterComputePipelineCustomLayout("ibl_convolve_diffuse", Platform::GetShaderPath() / "ibl_convolve_diffuse_compute.spv",
-                                             sizeof(ConvolveDiffusePushConstant), PipelineCategory::AssetGeneration, emapLayout.data(), emapLayout.size());
+                                                         sizeof(ConvolveDiffusePushConstant), PipelineCategory::AssetGeneration, emapLayout.data(), emapLayout.size());
 
     pipelineManager->RegisterComputePipelineCustomLayout("ibl_prefilter_specular", Platform::GetShaderPath() / "ibl_prefilter_specular_compute.spv",
-                                             sizeof(PrefilterSpecularPushConstant), PipelineCategory::AssetGeneration, emapLayout.data(), emapLayout.size());
+                                                         sizeof(PrefilterSpecularPushConstant), PipelineCategory::AssetGeneration, emapLayout.data(), emapLayout.size());
 #endif
 
     GraphicsPipelineBuilder builder;
@@ -953,11 +953,10 @@ void RenderThread::CreatePipelines()
         builder.Clear();
     }
 
-    // Direct mesh shading pipeline
+    // Portal Graphics Pipeline
     {
-        builder.AddShaderStage("shaders/mesh_shading_direct_task.spv", VK_SHADER_STAGE_TASK_BIT_EXT);
-        builder.AddShaderStage("shaders/mesh_shading_direct_mesh.spv", VK_SHADER_STAGE_MESH_BIT_EXT);
-        builder.AddShaderStage("shaders/mesh_shading_direct_fragment.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
+        builder.AddShaderStage("shaders/portal_rendering_mesh.spv", VK_SHADER_STAGE_MESH_BIT_EXT);
+        builder.AddShaderStage("shaders/portal_rendering_fragment.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
         builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
         builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE);
         builder.SetupDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_GREATER_OR_EQUAL);
@@ -974,11 +973,11 @@ void RenderThread::CreatePipelines()
         builder.AddDynamicState(VK_DYNAMIC_STATE_STENCIL_REFERENCE);
 
         pipelineManager->RegisterGraphicsPipeline(
-            "mesh_shading_direct",
+            "portal_rendering",
             builder,
-            sizeof(DirectMeshShadingPushConstant),
-            VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT,
-            PipelineCategory::CustomStencilPass
+            sizeof(PortalRenderingMeshShadingPushConstant),
+            VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT,
+            PipelineCategory::CustomRendering
         );
         builder.Clear();
     }
@@ -1004,7 +1003,7 @@ void RenderThread::CreatePipelines()
             builder,
             sizeof(PortalCompositePushConstant),
             VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-            PipelineCategory::PortalRendering
+            PipelineCategory::CustomRendering
         );
         builder.Clear();
     }
@@ -1052,7 +1051,7 @@ void RenderThread::PrepareRenderFamilyProperties(Core::ViewFamily& viewFamily, R
     renderFamilyProperties.primitiveIndexToRangeBufferMap.resize(MEGA_PRIMITIVE_BUFFER_COUNT);
     renderFamilyProperties.viewFamily = &viewFamily;
     renderFamilyProperties.bHasMainGeometry = !viewFamily.mainPassInstances.empty() && _pipelineManager->IsCategoryReady(PipelineCategory::Geometry | PipelineCategory::Instancing);
-    renderFamilyProperties.bHasDirectGeometry = !viewFamily.customStencilDraws.empty() && _pipelineManager->IsCategoryReady(PipelineCategory::CustomStencilPass);
+    renderFamilyProperties.bHasDirectGeometry = !viewFamily.customShaderDraws.empty() && _pipelineManager->IsCategoryReady(PipelineCategory::CustomRendering);
     renderFamilyProperties.bHasAnyGeometry = renderFamilyProperties.bHasMainGeometry || renderFamilyProperties.bHasDirectGeometry;
     renderFamilyProperties.bHasGTAO = viewFamily.gtaoConfig.bEnabled && _pipelineManager->IsCategoryReady(PipelineCategory::GTAO);
     renderFamilyProperties.bHasShadows = viewFamily.shadowConfig.enabled && _pipelineManager->IsCategoryReady(PipelineCategory::ShadowPass);
@@ -1085,7 +1084,7 @@ void RenderThread::PrepareRenderFamilyProperties(Core::ViewFamily& viewFamily, R
         _limits.highestFilteredPrimitiveCount = std::max(_limits.highestFilteredPrimitiveCount, NextPowerOfTwo(filteredPrimtiveCount));
     }
 
-    if (!viewFamily.customStencilDraws.empty()) {
+    /*if (!viewFamily. customStencilDraws.empty()) {
         size_t totalCustomInstances = 0;
         for (const auto& customDraw : viewFamily.customStencilDraws) {
             totalCustomInstances += customDraw.instances.size();
@@ -1093,7 +1092,7 @@ void RenderThread::PrepareRenderFamilyProperties(Core::ViewFamily& viewFamily, R
 
         _limits.highestDirectInstanceBuffer = std::max(_limits.highestDirectInstanceBuffer, NextPowerOfTwo(totalCustomInstances));
         _limits.highestDirectIndirectCommandBuffer = std::max(_limits.highestDirectIndirectCommandBuffer, NextPowerOfTwo(totalCustomInstances));
-    }
+    }*/
 
 
     renderFamilyProperties.modelBufferSize = _limits.highestModelBuffer * sizeof(Model);
@@ -1381,7 +1380,7 @@ void RenderThread::SetupModelUniforms(const Core::ViewFamily& viewFamily, const 
             vkCmdCopyBuffer2(cmd, &primitiveMapCopyInfo);
         });
 
-    if (!viewFamily.customStencilDraws.empty()) {
+    /*if (!viewFamily.customStencilDraws.empty()) {
         size_t totalCustomInstances = 0;
         for (const auto& customDraw : viewFamily.customStencilDraws) {
             totalCustomInstances += customDraw.instances.size();
@@ -1426,7 +1425,7 @@ void RenderThread::SetupModelUniforms(const Core::ViewFamily& viewFamily, const 
                 };
                 vkCmdCopyBuffer2(cmd, &copyInfo);
             });
-    }
+    }*/
 }
 
 void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties) const
@@ -1843,10 +1842,11 @@ void RenderThread::SetupMainGeometryPass(RenderGraph& graph, const Core::ViewFam
     });
 }
 
-void RenderThread::SetupDirectGeometryPass(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneIndex,
-                                           bool bClearTargets) const
+void RenderThread::SetupDirectGeometryPass(RenderGraph& graph, const Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties, std::array<uint32_t, 2> renderExtent,
+                                           const GBufferTargets& targets,
+                                           uint32_t sceneIndex, bool bClearTargets) const
 {
-    if (viewFamily.customStencilDraws.empty()) { return; }
+    /*if (viewFamily.customStencilDraws.empty()) { return; }
 
     size_t totalInstances = 0;
     for (const auto& customDraw : viewFamily.customStencilDraws) {
@@ -1927,7 +1927,7 @@ void RenderThread::SetupDirectGeometryPass(RenderGraph& graph, const Core::ViewF
             .sceneDataIndex = sceneIndex,
         };
 
-        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("mesh_shading_direct");
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("portal_rendering");
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineEntry->pipeline);
         vkCmdPushConstants(cmd, pipelineEntry->layout,
                            VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(DirectMeshShadingPushConstant), &pushConstants);
@@ -1946,7 +1946,7 @@ void RenderThread::SetupDirectGeometryPass(RenderGraph& graph, const Core::ViewF
         }
 
         vkCmdEndRendering(cmd);
-    });
+    });*/
 }
 
 void RenderThread::SetupGroundTruthAmbientOcclusion(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, const GBufferTargets& targets,

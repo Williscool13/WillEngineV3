@@ -33,11 +33,11 @@ public:
 
     bool SetSampler(VkSampler sampler, uint32_t index) const;
 
-    bool SetTexture2D(const VkDescriptorImageInfo& imageInfo, uint32_t index) const;
+    [[nodiscard]] bool SetTexture2D(const VkDescriptorImageInfo& imageInfo, uint32_t index) const;
 
-    bool SetCubemap(const VkDescriptorImageInfo& imageInfo, uint32_t index) const;
+    [[nodiscard]] bool SetCubemap(const VkDescriptorImageInfo& imageInfo, uint32_t index) const;
 
-    bool SetRWCubemapArray(const VkDescriptorImageInfo& imageInfo, uint32_t index) const;
+    [[nodiscard]] bool SetRWCubemapArray(const VkDescriptorImageInfo& imageInfo, uint32_t index) const;
 
     [[nodiscard]] VkDescriptorBufferBindingInfoEXT GetBindingInfo() const;
 

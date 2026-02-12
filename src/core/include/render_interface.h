@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <string>
+#include <memory>
 
 #include <glm/glm.hpp>
 
@@ -17,6 +18,7 @@
 #include "glm/detail/type_quat.hpp"
 #include "render/render_config.h"
 #include "render/shaders/model_interop.h"
+#include "render/shaders/push_constant_interop.h"
 
 
 namespace Core
@@ -154,6 +156,16 @@ struct InstanceData
     uint32_t gpuMaterialIndex;
 };
 
+struct CustomShaderDraw
+{
+    std::string pipelineName;
+    std::unique_ptr<BaseMeshShadingPushConstant> pushConstantData;
+    size_t pushConstantSize;
+    std::vector<InstanceData> instances;
+
+    int32_t stencilValue{-1}; // if >=0 will be set with dynamic state
+};
+
 struct CustomStencilDrawBatch
 {
     uint32_t stencilValue{0};
@@ -188,14 +200,14 @@ struct ViewFamily
     std::vector<PortalView> portalViews;
 
     std::vector<InstanceData> mainPassInstances{256};
-
-    std::vector<CustomStencilDrawBatch> customStencilDraws;
+    std::unordered_map<std::string, CustomShaderDraw> customShaderDraws{};
 
     std::vector<Model> modelMatrices{256};
     std::vector<MaterialProperties> materials{256};
 
-    ShadowConfiguration shadowConfig{};
 
+
+    ShadowConfiguration shadowConfig{};
     DirectionalLight directionalLight{};
     // std::vector<LightInstance> allLights;
 
