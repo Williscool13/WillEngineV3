@@ -261,12 +261,90 @@ void ComputeExpandInstancesToMeshlets(uniform ExpandMeshletsPushConstant pc, uin
         }
     }
 
+    // Meshlet Visibility
     uint meshletOffset = pc.instanceMeshletOffsets[instanceIndex].offset;
     uint localMeshletIndex = globalMeshletIndex - meshletOffset;
+    Instance inst = pc.instanceBuffer[instanceIndex];
+    MeshletPrimitive prim = pc.primitiveBuffer[inst.primitiveIndex];
+    Model model = pc.modelBuffer[inst.modelIndex];
 
-    pc.intermediateMeshlets[globalMeshletIndex].instanceIndex = instanceIndex;
-    pc.intermediateMeshlets[globalMeshletIndex].localMeshletIndex = localMeshletIndex;
+    uint lod = pc.instanceMeshletOffsets[instanceIndex].lod;
+    Meshlet mlet = pc.meshletBuffer[prim.meshletOffset[lod] + localMeshletIndex];
+
+    float3 scale = float3(
+        length(model.modelMatrix[0].xyz),
+        length(model.modelMatrix[1].xyz),
+        length(model.modelMatrix[2].xyz)
+    );
+    float maxScale = max(max(scale.x, scale.y), scale.z);
+    float worldRadius = mlet.meshletBoundingSphere.w * maxScale;
+    float3 worldCenter = mul(model.modelMatrix, float4(mlet.meshletBoundingSphere.xyz, 1.0)).xyz;
+    float4 worldBounds = float4(worldCenter, worldRadius);
+
+    bool bVisible = true;
+    if (!FrustumCullSphere(pc.sceneData[pc.sceneDataIndex].frustum, worldBounds)) {
+        bVisible = false;
+    }
+    if (bVisible && !BackfaceCullCone(mlet.coneAxis, mlet.coneCutoff, worldCenter, worldRadius, pc.sceneData[pc.sceneDataIndex].cameraWorldPos.xyz, (float3x3)model.modelMatrix)) {
+        bVisible = false;
+    }
+
+    // Instance greatest bit is visibility,
+    uint packedInstanceIndex = (instanceIndex & 0x7FFFFFFF) | (bVisible ? 0x80000000 : 0);
+    // Meshlet 2 greatest bit indicates which LOD to use,
+    uint packedLocalMeshlet = (localMeshletIndex & 0x3FFFFFFF) | (lod << 30);
+
+    pc.intermediateMeshlets[globalMeshletIndex].instanceIndex = packedInstanceIndex;
+    pc.intermediateMeshlets[globalMeshletIndex].localMeshletIndex = packedLocalMeshlet;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

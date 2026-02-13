@@ -490,20 +490,34 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
         if (ImGui::CollapsingHeader("Intermediate Meshlets")) {
             auto* intermediateMeshlets = reinterpret_cast<IntermediateMeshlet*>(ptr);
 
-            if (ImGui::BeginTable("IntermediateMeshletsTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+            if (ImGui::BeginTable("IntermediateMeshletsTable", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
                 ImGui::TableSetupColumn("Global Meshlet Index");
                 ImGui::TableSetupColumn("Instance Index");
+                ImGui::TableSetupColumn("Visible");
                 ImGui::TableSetupColumn("Local Meshlet Index");
+                ImGui::TableSetupColumn("LOD");
                 ImGui::TableHeadersRow();
 
                 for (uint32_t i = 0; i < 128; ++i) {
+                    uint32_t packedInstance = intermediateMeshlets[i].instanceIndex;
+                    uint32_t packedLocal = intermediateMeshlets[i].localMeshletIndex;
+
+                    uint32_t instanceIndex = packedInstance & 0x7FFFFFFF;
+                    bool visible = (packedInstance >> 31) & 1;
+                    uint32_t localMeshletIndex = packedLocal & 0x3FFFFFFF;
+                    uint32_t lod = packedLocal >> 30;
+
                     ImGui::TableNextRow();
                     ImGui::TableNextColumn();
                     ImGui::Text("%u", i);
                     ImGui::TableNextColumn();
-                    ImGui::Text("%u", intermediateMeshlets[i].instanceIndex);
+                    ImGui::Text("%u", instanceIndex);
                     ImGui::TableNextColumn();
-                    ImGui::Text("%u", intermediateMeshlets[i].localMeshletIndex);
+                    ImGui::Text("%s", visible ? "Yes" : "No");
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", localMeshletIndex);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", lod);
                 }
 
                 ImGui::EndTable();

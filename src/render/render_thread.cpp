@@ -727,7 +727,7 @@ void RenderThread::CreatePipelines()
                                              sizeof(PrefixSumDownsweep2PushConstant), PipelineCategory::Instancing);
     pipelineManager->RegisterComputePipeline("instancing_total_meshlet_count", Platform::GetShaderPath() / "instancing_total_meshlet_count_compute.spv",
                                              sizeof(TotalMeshletCountPushConstant), PipelineCategory::Instancing);
-pipelineManager->RegisterComputePipeline("instancing_expand_instance_to_meshlet", Platform::GetShaderPath() / "instancing_expand_instance_to_meshlet_compute.spv",
+    pipelineManager->RegisterComputePipeline("instancing_expand_instance_to_meshlet", Platform::GetShaderPath() / "instancing_expand_instance_to_meshlet_compute.spv",
                                              sizeof(ExpandMeshletsPushConstant), PipelineCategory::Instancing);
 
     pipelineManager->RegisterComputePipeline("direct_mesh_shading_build_indirect", Platform::GetShaderPath() / "mesh_shading_direct_build_indirect_compute.spv",
@@ -938,7 +938,8 @@ pipelineManager->RegisterComputePipeline("instancing_expand_instance_to_meshlet"
     }
 }
 
-void RenderThread::PrepareRenderFamilyProperties(Core::ViewFamily& viewFamily, ReadbackStruct* readbackData, RenderFamilyProperties& renderFamilyProperties, PipelineManager* _pipelineManager, FrameResourceLimits& _limits)
+void RenderThread::PrepareRenderFamilyProperties(Core::ViewFamily& viewFamily, ReadbackStruct* readbackData, RenderFamilyProperties& renderFamilyProperties, PipelineManager* _pipelineManager,
+                                                 FrameResourceLimits& _limits)
 {
     renderFamilyProperties.Reset();
     renderFamilyProperties.primitiveIndexToRangeBufferMap.resize(MEGA_PRIMITIVE_BUFFER_COUNT);
@@ -3041,15 +3042,21 @@ void RenderThread::TemporaryRenderTests(RenderGraph& graph, const Core::ViewFami
     expandInstancesToMeshlets.Execute([&, instanceCount](VkCommandBuffer cmd) {
         ExpandMeshletsPushConstant pc{
             .indirectDispatchBuffer = graph.GetBufferAddress("temp_meshlet_count_dispatch_args"),
-           .instanceMeshletOffsets = graph.GetBufferAddress("temp_instance_meshlet_offsets"),
-           .intermediateMeshlets = graph.GetBufferAddress("temp_intermediate_meshlets"),
-           .instanceCount = instanceCount,
-       };
+            .instanceMeshletOffsets = graph.GetBufferAddress("temp_instance_meshlet_offsets"),
+            .intermediateMeshlets = graph.GetBufferAddress("temp_intermediate_meshlets"),
+            .instanceBuffer = graph.GetBufferAddress("instance_buffer"),
+            .primitiveBuffer = graph.GetBufferAddress("primitive_buffer"),
+            .modelBuffer = graph.GetBufferAddress("model_buffer"),
+            .meshletBuffer = graph.GetBufferAddress("meshlet_buffer"),
+            .sceneData = graph.GetBufferAddress("scene_data"),
+            .sceneDataIndex = 0,
+            .instanceCount = instanceCount,
+        };
 
-       const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_expand_instance_to_meshlet");
-       vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
-       vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-       vkCmdDispatchIndirect(cmd, graph.GetBufferHandle("temp_meshlet_count_dispatch_args"), offsetof(InstancingMeshletDispatchIndirectCommand, x));
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_expand_instance_to_meshlet");
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+        vkCmdDispatchIndirect(cmd, graph.GetBufferHandle("temp_meshlet_count_dispatch_args"), offsetof(InstancingMeshletDispatchIndirectCommand, x));
     });
 }
 } // Render

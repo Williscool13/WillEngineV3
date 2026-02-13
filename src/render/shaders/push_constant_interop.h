@@ -193,6 +193,13 @@ SHADER_PUBLIC struct ExpandMeshletsPushConstant
     SHADER_PUBLIC SHADER_PTR(InstanceMeshletOffsetPrefixSum) instanceMeshletOffsets;
     SHADER_PUBLIC SHADER_PTR(IntermediateMeshlet) intermediateMeshlets;
 
+    SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
+    SHADER_PUBLIC SHADER_PTR(MeshletPrimitive) primitiveBuffer;
+    SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
+    SHADER_PUBLIC SHADER_PTR(Meshlet) meshletBuffer;
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+
+    SHADER_PUBLIC uint32_t sceneDataIndex;
     SHADER_PUBLIC uint32_t instanceCount;
 };
 
