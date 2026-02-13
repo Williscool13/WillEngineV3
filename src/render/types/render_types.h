@@ -55,6 +55,16 @@ struct RenderFamilyProperties
 
     std::vector<uint32_t> primitiveIndexToRangeBufferMap{};
 
+    // New meshlet instancing buffers
+    size_t instanceMeshletOffsetsBufferSize{128};
+    size_t level1SumsBufferSize{128};
+    size_t level1BlockSumsBufferSize{128};
+    size_t level2SumsBufferSize{128};
+    size_t level2BlockSumsBufferSize{128};
+    size_t scannedLevel2BlockSumsBufferSize{128};
+    size_t intermediateMeshletBufferSize{MAX_MESHLET_COUNT_PER_FRAME * sizeof(uint32_t)};
+    size_t visibleMeshletsBufferSize{128};       // Final compacted output
+
     void Reset()
     {
         viewFamily = nullptr;

@@ -149,6 +149,8 @@ private:
 
     void SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, const std::string& depthTarget, const std::string& targetImage, FrameResourceLimits& limits) const;
 
+    void TemporaryRenderTests(RenderGraph& graph, const Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties, std::array<uint32_t, 2> renderExtent);
+
 public:
 #if WILL_EDITOR
     moodycamel::ConcurrentQueue<AssetLoad::GPUDispatchRequest> editorGPUDispatchQueue;

@@ -125,7 +125,7 @@ void PipelineManager::RegisterComputePipeline(const std::string& name, const std
 }
 
 void PipelineManager::RegisterComputePipelineCustomLayout(const std::string& name, const std::filesystem::path& shaderPath, uint32_t pushConstantSize, PipelineCategory category,
-                                                          const VkDescriptorSetLayout* customLayouts, uint32_t layoutCount)
+                                                          std::vector<VkDescriptorSetLayout> customLayouts)
 {
     if (computePipelines.contains(name)) {
         SPDLOG_WARN("Pipeline '{}' already registered, skipping", name);
@@ -141,9 +141,10 @@ void PipelineManager::RegisterComputePipelineCustomLayout(const std::string& nam
     data.pushConstantRange.size = pushConstantSize;
     data.pushConstantRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 
+    data.customLayout = std::move(customLayouts);
     data.layoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    data.layoutCreateInfo.pSetLayouts = customLayouts;
-    data.layoutCreateInfo.setLayoutCount = layoutCount;
+    data.layoutCreateInfo.pSetLayouts = data.customLayout.data();
+    data.layoutCreateInfo.setLayoutCount = data.customLayout.size();
     data.layoutCreateInfo.pPushConstantRanges = &data.pushConstantRange;
     data.layoutCreateInfo.pushConstantRangeCount = pushConstantSize > 0 ? 1 : 0;
 

@@ -38,6 +38,8 @@ inline constexpr int32_t BINDLESS_MATERIAL_BUFFER_SIZE = sizeof(MaterialProperti
 inline constexpr int32_t MEGA_VERTEX_BUFFER_SIZE = sizeof(Vertex) * 2097152; // 2M verts (~100MB)
 inline constexpr int32_t MEGA_PRIMITIVE_BUFFER_COUNT = 65536; // Important for instancing - it's 256x256
 inline constexpr int32_t MEGA_PRIMITIVE_BUFFER_SIZE = sizeof(MeshletPrimitive) * MEGA_PRIMITIVE_BUFFER_COUNT;
+inline constexpr int32_t MAX_MESHLET_COUNT_PER_FRAME = 4194304;
+
 inline constexpr int32_t VIEW_COUNT = 4; // Up to 4 views per frame, 0 is main view. 1 is portal. Idk what 2/3 are (maybe remove)
 inline constexpr int32_t SCENE_DATA_BUFFER_SIZE = sizeof(SceneData) * VIEW_COUNT;
 inline constexpr int32_t SHADOW_DATA_BUFFER_SIZE = sizeof(ShadowData) * SHADOW_CASCADE_COUNT * VIEW_COUNT;

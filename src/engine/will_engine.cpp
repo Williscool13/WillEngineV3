@@ -438,19 +438,6 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
             ImGui::Text("Shaders: >60s since reload");
         }
 
-        // Get readback pointers
-        uint8_t* base = static_cast<uint8_t*>(renderThread->GetResourceManager()->debugReadbackBuffer.allocationInfo.pMappedData);
-        uint8_t* ptr = base;
-
-        auto* instances = reinterpret_cast<Instance*>(ptr);
-        ptr += 25 * sizeof(Instance);
-
-        auto* ranges = reinterpret_cast<PrimitiveCounters*>(ptr);
-        ptr += 25 * sizeof(PrimitiveCounters);
-
-        auto* indirectCount = reinterpret_cast<InstancedMeshIndirectCountBuffer*>(ptr);
-        ptr += sizeof(InstancedMeshIndirectCountBuffer);
-
         ImGui::Checkbox("Freeze Visibility Calculations", &bFreezeVisibility);
         if (ImGui::Button("Log RDG")) {
             bLogRDG = true;
@@ -459,113 +446,35 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
             bLogRDG = false;
         }
 
-        if (ImGui::CollapsingHeader("Visibility Debug")) {
-            auto* instanceIndirection = reinterpret_cast<uint32_t*>(ptr);
-            ptr += 64 * sizeof(uint32_t);
+        uint8_t* base = static_cast<uint8_t*>(renderThread->GetResourceManager()->debugReadbackBuffer.allocationInfo.pMappedData);
+        uint8_t* ptr = base;
+        if (ImGui::CollapsingHeader("Meshlet Instancing Debug")) {
+            auto* instanceMeshletOffsets = reinterpret_cast<InstanceMeshletOffsetPrefixSum*>(ptr);
+            ptr += 640 * sizeof(InstanceMeshletOffsetPrefixSum);
 
-            auto* indirectCmds = reinterpret_cast<InstancedMeshIndirectDrawParameters*>(ptr);
-            ptr += 64 * sizeof(InstancedMeshIndirectDrawParameters);
+            if (ImGui::BeginTable("InstanceMeshletOffsetsTable", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+                ImGui::TableSetupColumn("Instance");
+                ImGui::TableSetupColumn("Offset");
+                ImGui::TableSetupColumn("Count");
+                ImGui::TableSetupColumn("LOD");
+                ImGui::TableSetupColumn("Primitive Index");
+                ImGui::TableHeadersRow();
 
-            auto* prefixSums = reinterpret_cast<PrimitiveOffsets*>(ptr);
-            ptr += 128 * sizeof(PrimitiveOffsets);
-
-            auto* blockSums = reinterpret_cast<PrimitiveOffsets*>(ptr);
-            ptr += 4 * sizeof(PrimitiveOffsets);
-
-            auto* scannedBlockSums = reinterpret_cast<PrimitiveOffsets*>(ptr);
-            ptr += 128 * sizeof(PrimitiveOffsets);
-
-
-            if (ImGui::TreeNode("Instances")) {
-                for (uint32_t i = 0; i < 25; ++i) {
-                    if (ImGui::TreeNode((void*) (intptr_t) i, "Instance %u", i)) {
-                        ImGui::Text("Visible: %u", instances[i].bIsVisible);
-                        ImGui::Text("LOD: %u", instances[i].lod);
-                        ImGui::Text("Primitive Index: %u", instances[i].primitiveIndex);
-                        ImGui::Text("Model Index: %u", instances[i].modelIndex);
-                        ImGui::TreePop();
-                    }
-                }
-                ImGui::TreePop();
-            }
-
-            if (ImGui::TreeNode("Primitive Ranges")) {
-                for (uint32_t i = 0; i < 25; ++i) {
-                    if (ImGui::TreeNode((void*) (intptr_t) (i + 1000), "Range %u", i)) {
-                        ImGui::Text(
-                            "Visible LODs: [%u, %u, %u, %u]",
-                            ranges[i].lodInstanceOffset[0],
-                            ranges[i].lodInstanceOffset[1],
-                            ranges[i].lodInstanceOffset[2],
-                            ranges[i].lodInstanceOffset[3]
-                        );
-                        ImGui::Text(
-                            "Supposed Totals Per LODs: [%u, %u, %u, %u]",
-                            ranges[i].visibleCountPerLOD[0],
-                            ranges[i].visibleCountPerLOD[1],
-                            ranges[i].visibleCountPerLOD[2],
-                            ranges[i].visibleCountPerLOD[3]
-                        );
-                        ImGui::TreePop();
-                    }
-                }
-                ImGui::TreePop();
-            }
-
-            if (ImGui::TreeNode("Indirect Counts")) {
-                ImGui::Text("Indirect Draw Count: %u", indirectCount->indirectCount);
-                ImGui::Text("Total Instances Drawn: %u", indirectCount->totalInstanceCount);
-
-                ImGui::TreePop();
-            }
-
-            if (ImGui::TreeNode("Instance Indirection")) {
-                for (uint32_t i = 0; i < 32; ++i) {
-                    ImGui::Text("[%u] -> Instance %u", i, instanceIndirection[i]);
-                }
-                ImGui::TreePop();
-            }
-
-            // ===== ImGui: Correct Indirect Parameter View =====
-            if (ImGui::TreeNode("Indirect Commands")) {
-                for (uint32_t i = 0; i < indirectCount->indirectCount; ++i) {
-                    if (ImGui::TreeNode((void*) (intptr_t) i, "Cmd %u", i)) {
-                        ImGui::Text("GroupCount X: %u", indirectCmds[i].groupCountX);
-                        ImGui::Text("GroupCount Y: %u", indirectCmds[i].groupCountY);
-                        ImGui::Text("GroupCount Z: %u", indirectCmds[i].groupCountZ);
-                        ImGui::Text("Compacted Instance Start: %u", indirectCmds[i].compactedInstanceStart);
-                        ImGui::Text("Meshlet Offset: %u", indirectCmds[i].meshletOffset);
-                        ImGui::Text("Meshlet Count: %u", indirectCmds[i].meshletCount);
-                        ImGui::TreePop();
-                    }
-                }
-                ImGui::TreePop();
-            }
-
-            // ===== ImGui: Prefix Sum Debug View =====
-            if (ImGui::TreeNode("Prefix Sum Debug")) {
-                if (ImGui::TreeNode("Primitive Range Prefix Sums")) {
-                    for (uint32_t i = 0; i < 128; ++i) {
-                        ImGui::Text("Range %u: instances=%u, commands=%u", i, prefixSums[i].instanceOffset, prefixSums[i].commandOffset);
-                    }
-                    ImGui::TreePop();
+                for (uint32_t i = 0; i < 640; ++i) {
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", i);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", instanceMeshletOffsets[i].offset);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", instanceMeshletOffsets[i].count);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", instanceMeshletOffsets[i].lod);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", instanceMeshletOffsets[i].primitiveIndex);
                 }
 
-                if (ImGui::TreeNode("Block Sums")) {
-                    for (uint32_t i = 0; i < 4; ++i) {
-                        ImGui::Text("Block %u: instances=%u, commands=%u", i, blockSums[i].instanceOffset, blockSums[i].commandOffset);
-                    }
-                    ImGui::TreePop();
-                }
-
-                if (ImGui::TreeNode("Scanned Block Sums")) {
-                    for (uint32_t i = 0; i < 128; ++i) {
-                        ImGui::Text("Scanned Block %u: instances=%u, commands=%u", i, scannedBlockSums[i].instanceOffset, scannedBlockSums[i].commandOffset);
-                    }
-                    ImGui::TreePop();
-                }
-
-                ImGui::TreePop();
+                ImGui::EndTable();
             }
         }
     }

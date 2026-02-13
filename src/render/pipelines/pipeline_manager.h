@@ -43,7 +43,7 @@ public:
     void RegisterComputePipeline(const std::string& name, const std::filesystem::path& shaderPath, uint32_t pushConstantSize, PipelineCategory category);
 
     void RegisterComputePipelineCustomLayout(const std::string& name, const std::filesystem::path& shaderPath, uint32_t pushConstantSize, PipelineCategory category,
-                                             const VkDescriptorSetLayout* customLayouts, uint32_t layoutCount);
+                                             std::vector<VkDescriptorSetLayout> customLayouts);
 
     void RegisterGraphicsPipeline(const std::string& name, GraphicsPipelineBuilder& builder, uint32_t pushConstantSize, VkShaderStageFlags pushConstantStages, PipelineCategory category);
 

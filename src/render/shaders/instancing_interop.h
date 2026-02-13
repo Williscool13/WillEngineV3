@@ -78,6 +78,15 @@ SHADER_PUBLIC struct CustomMeshRenderingDrawParameters
     uint32_t padding0;
 };
 
+
+SHADER_PUBLIC struct InstanceMeshletOffsetPrefixSum
+{
+    SHADER_PUBLIC uint32_t offset;
+    SHADER_PUBLIC uint32_t count;
+    SHADER_PUBLIC uint32_t lod;
+    SHADER_PUBLIC uint32_t primitiveIndex; // debug only
+};
+
 SHADER_PUBLIC struct PrimitiveCounters
 {
     SHADER_PUBLIC uint32_t visibleCountPerLOD[LOD_COUNT];

@@ -30,6 +30,8 @@ public:
     std::string name{};
     PipelineCategory category{PipelineCategory::None};
     VkPipelineLayoutCreateInfo layoutCreateInfo{};
+    std::vector<VkDescriptorSetLayout> customLayout{};
+
     VkPushConstantRange pushConstantRange{};
 
     // If true, loadingEntry is managed by asset load thead, do not touch.

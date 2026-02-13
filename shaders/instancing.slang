@@ -8,6 +8,213 @@ import constants_interop;
 import limits_declarations;
 import bindless_declarations;
 
+[shader("compute")]
+[numthreads(256, 1, 1)]
+void ComputeInstanceLOD(uniform InstanceLODPushConstant pc, uint3 dtid : SV_DispatchThreadID)
+{
+    uint instanceID = dtid.x;
+    if (instanceID >= pc.instanceCount) {
+        return;
+    }
+
+    Instance inst = pc.instanceBuffer[instanceID];
+    MeshletPrimitive prim = pc.primitiveBuffer[inst.primitiveIndex];
+    Model model = pc.modelBuffer[inst.modelIndex];
+
+    float4 boundingSphere = prim.boundingSphere;
+    float3 scale = float3(
+        length(model.modelMatrix[0].xyz),
+        length(model.modelMatrix[1].xyz),
+        length(model.modelMatrix[2].xyz)
+    );
+    float maxScale = max(max(scale.x, scale.y), scale.z);
+    float worldRadius = boundingSphere.w * maxScale;
+    float3 worldCenter = mul(model.modelMatrix, float4(boundingSphere.xyz, 1.0)).xyz;
+
+    float3 cameraPos = pc.sceneData[pc.sceneDataIndex].cameraWorldPos.xyz;
+    float distance = max(length(worldCenter - cameraPos), worldRadius);
+    float screenSize = (worldRadius / distance) * pc.sceneData[pc.sceneDataIndex].lodScreenSizeScale;
+
+    uint lod = 0;
+    if (screenSize < 10.0) lod = 3;
+    else if (screenSize < 50.0) lod = 2;
+    else if (screenSize < 150.0) lod = 1;
+    else lod = 0;
+
+    lod = min(lod + pc.lodBias, LOD_COUNT - 1);
+
+    pc.instanceMeshletOffsets[instanceID].count = prim.meshletCount[lod];
+    pc.instanceMeshletOffsets[instanceID].lod = lod;
+    pc.instanceMeshletOffsets[instanceID].primitiveIndex = inst.primitiveIndex;
+}
+
+// =============== Pass 1: Upsweep Level 1 ===============
+groupshared uint blockSums1[8];
+
+
+[shader("compute")]
+[numthreads(256, 1, 1)]
+void ComputePrefixSumUpsweep1(uniform PrefixSumUpsweep1PushConstant pc, uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID, uint3 dtid : SV_DispatchThreadID)
+{
+    uint globalIdx = dtid.x;
+    uint threadIdx = gtid.x;
+
+    uint value = 0;
+    if (globalIdx < pc.elementCount) {
+        value = pc.instanceMeshletOffsets[globalIdx].count;
+    }
+
+    // Wave prefix sum
+    uint localScan = WavePrefixSum(value);
+    uint waveIdx = WaveGetLaneIndex();
+    uint waveID = threadIdx / WaveGetLaneCount();
+    uint numWaves = (256 + WaveGetLaneCount() - 1) / WaveGetLaneCount();
+
+    // Last lane writes wave total
+    if (waveIdx == WaveGetLaneCount() - 1) {
+        blockSums1[waveID] = localScan + value;
+    }
+
+    GroupMemoryBarrierWithGroupSync();
+
+    // Thread 0 scans wave totals
+    if (threadIdx == 0) {
+        uint runningSum = 0;
+        for (uint i = 0; i < numWaves; i++) {
+            uint temp = blockSums1[i];
+            blockSums1[i] = runningSum;
+            runningSum += temp;
+        }
+    }
+
+    GroupMemoryBarrierWithGroupSync();
+
+    // Write local prefix sum
+    uint blockLocalScan = localScan + blockSums1[waveID];
+    if (globalIdx < pc.elementCount) {
+        pc.level1Sums[globalIdx] = blockLocalScan;
+    }
+
+    // Last thread writes block total
+    if (threadIdx == 255 && gid.x < pc.blockCount) {
+        pc.level1BlockSums[gid.x] = blockLocalScan + value;
+    }
+}
+
+// =============== Pass 2: Upsweep Level 2 ===============
+groupshared uint blockSums2[8];
+
+[shader("compute")]
+[numthreads(256, 1, 1)]
+void ComputePrefixSumUpsweep2(uniform PrefixSumUpsweep2PushConstant pc, uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID, uint3 dtid : SV_DispatchThreadID)
+{
+    uint globalIdx = dtid.x;
+    uint threadIdx = gtid.x;
+
+    uint value = 0;
+    if (globalIdx < pc.elementCount) {
+        value = pc.level1BlockSums[globalIdx];
+    }
+
+    uint localScan = WavePrefixSum(value);
+    uint waveIdx = WaveGetLaneIndex();
+    uint waveID = threadIdx / WaveGetLaneCount();
+    uint numWaves = (256 + WaveGetLaneCount() - 1) / WaveGetLaneCount();
+
+    if (waveIdx == WaveGetLaneCount() - 1) {
+        blockSums2[waveID] = localScan + value;
+    }
+
+    GroupMemoryBarrierWithGroupSync();
+
+    if (threadIdx == 0) {
+        uint runningSum = 0;
+        for (uint i = 0; i < numWaves; i++) {
+            uint temp = blockSums2[i];
+            blockSums2[i] = runningSum;
+            runningSum += temp;
+        }
+    }
+
+    GroupMemoryBarrierWithGroupSync();
+
+    uint blockLocalScan = localScan + blockSums2[waveID];
+    if (globalIdx < pc.elementCount) {
+        pc.level2Sums[globalIdx] = blockLocalScan;
+    }
+
+    if (threadIdx == 255 && gid.x < pc.blockCount) {
+        pc.level2BlockSums[gid.x] = blockLocalScan + value;
+    }
+}
+
+// =============== Pass 3: Scan Block Sums ===============
+[shader("compute")]
+[numthreads(256, 1, 1)]
+void ComputePrefixSumScanBlocks(uniform PrefixSumScanBlocksPushConstant pc, uint3 gtid : SV_GroupThreadID)
+{
+    uint threadIdx = gtid.x;
+
+    uint value = 0;
+    if (threadIdx < pc.blockCount) {
+        value = pc.level2BlockSums[threadIdx];
+    }
+
+    uint localScan = WavePrefixSum(value);
+
+    if (threadIdx < pc.blockCount) {
+        pc.scannedLevel2BlockSums[threadIdx] = localScan;
+    }
+}
+
+
+// =============== Pass 4: Downsweep Level 1 ===============
+[shader("compute")]
+[numthreads(256, 1, 1)]
+void ComputePrefixSumDownsweep1(uniform PrefixSumDownsweep1PushConstant pc, uint3 gid : SV_GroupID, uint3 dtid : SV_DispatchThreadID)
+{
+    uint globalIdx = dtid.x;
+
+    if (globalIdx >= pc.elementCount) {
+        return;
+    }
+
+    uint blockOffset = pc.scannedLevel2BlockSums[gid.x];
+    pc.level2Sums[globalIdx] += blockOffset;
+}
+
+
+// =============== Pass 5: Downsweep Level 2 ===============
+[shader("compute")]
+[numthreads(256, 1, 1)]
+void ComputePrefixSumDownsweep2(uniform PrefixSumDownsweep2PushConstant pc, uint3 gid : SV_GroupID, uint3 dtid : SV_DispatchThreadID)
+{
+    uint globalIdx = dtid.x;
+
+    if (globalIdx >= pc.elementCount) {
+        return;
+    }
+
+    uint blockIdx = globalIdx / 256;
+    uint blockOffset = pc.level2Sums[blockIdx];
+    pc.instanceMeshletOffsets[globalIdx].offset = pc.level1Sums[globalIdx] + blockOffset;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 // =============== Compute Shader (Instance Visibility and LOD calculation) ===============
 // Evaluates the visibility and LOD of each instance and outputs to a packed visibility buffer
 //  Input-Rate: Per-Instance

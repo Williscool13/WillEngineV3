@@ -97,6 +97,89 @@ SHADER_PUBLIC struct DebugVisualizePushConstant
     SHADER_PUBLIC uint outputImageIndex;
 };
 
+SHADER_PUBLIC struct InstanceLODPushConstant
+{
+    // Read-Only
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC SHADER_PTR(MeshletPrimitive) primitiveBuffer;
+    SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
+    SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
+
+    // Write
+    SHADER_PUBLIC SHADER_PTR(InstanceMeshletOffsetPrefixSum) instanceMeshletOffsets;
+
+    // Read-Only
+    SHADER_PUBLIC uint32_t instanceCount;
+    SHADER_PUBLIC uint32_t sceneDataIndex;
+    SHADER_PUBLIC uint32_t lodBias;
+};
+
+SHADER_PUBLIC struct PrefixSumUpsweep1PushConstant
+{
+    // Read
+    SHADER_PUBLIC SHADER_PTR(InstanceMeshletOffsetPrefixSum) instanceMeshletOffsets;
+
+    // Write
+    SHADER_PUBLIC SHADER_PTR(uint32_t) level1Sums;
+    SHADER_PUBLIC SHADER_PTR(uint32_t) level1BlockSums;
+
+    // Read-Only
+    SHADER_PUBLIC uint32_t elementCount;
+    SHADER_PUBLIC uint32_t blockCount;
+};
+
+SHADER_PUBLIC struct PrefixSumUpsweep2PushConstant
+{
+    // Read
+    SHADER_PUBLIC SHADER_PTR(uint32_t) level1BlockSums;
+
+    // Write
+    SHADER_PUBLIC SHADER_PTR(uint32_t) level2Sums;
+    SHADER_PUBLIC SHADER_PTR(uint32_t) level2BlockSums;
+
+    // Read-Only
+    SHADER_PUBLIC uint32_t elementCount;
+    SHADER_PUBLIC uint32_t blockCount;
+};
+
+SHADER_PUBLIC struct PrefixSumScanBlocksPushConstant
+{
+    // Read
+    SHADER_PUBLIC SHADER_PTR(uint32_t) level2BlockSums;
+
+    // Write
+    SHADER_PUBLIC SHADER_PTR(uint32_t) scannedLevel2BlockSums;
+
+    // Read-Only
+    SHADER_PUBLIC uint32_t blockCount;
+};
+
+SHADER_PUBLIC struct PrefixSumDownsweep1PushConstant
+{
+    // Read
+    SHADER_PUBLIC SHADER_PTR(uint32_t) scannedLevel2BlockSums;
+
+    // Read-Write
+    SHADER_PUBLIC SHADER_PTR(uint32_t) level2Sums;
+
+    // Read-Only
+    SHADER_PUBLIC uint32_t elementCount;
+};
+
+SHADER_PUBLIC struct PrefixSumDownsweep2PushConstant
+{
+    // Read
+    SHADER_PUBLIC SHADER_PTR(uint32_t) level1Sums;
+    SHADER_PUBLIC SHADER_PTR(uint32_t) level2Sums;
+
+    // Write
+    SHADER_PUBLIC SHADER_PTR(InstanceMeshletOffsetPrefixSum) instanceMeshletOffsets;
+
+    // Read-Only
+    SHADER_PUBLIC uint32_t elementCount;
+};
+
+
 SHADER_PUBLIC struct VisibilityPushConstant
 {
     // Read-Only

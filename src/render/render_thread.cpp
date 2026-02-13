@@ -409,207 +409,36 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
 
 #if WILL_EDITOR
-        if (renderGraph->HasBuffer("instance_buffer")) {
-            RenderPass& instanceReadbackPass = renderGraph->AddPass(
-                "Debug Readback Instance Buffer",
+        if (renderFamilyProperties.bHasAnyGeometry) {
+            TemporaryRenderTests(*renderGraph, viewFamily, renderFamilyProperties, renderExtent);
+        }
+
+        if (viewFamily.mainPassInstances.size() >= 640 && renderGraph->HasBuffer("temp_instance_meshlet_offsets")) {
+            RenderPass& debugReadbackPass = renderGraph->AddPass(
+                "Debug Readback Meshlet Instancing",
                 VK_PIPELINE_STAGE_2_COPY_BIT
             );
 
-            instanceReadbackPass.ReadTransferBuffer("instance_buffer");
-            instanceReadbackPass.WriteTransferBuffer("debug_readback_buffer");
+            debugReadbackPass.ReadTransferBuffer("temp_instance_meshlet_offsets");
+            debugReadbackPass.WriteTransferBuffer("debug_readback_buffer");
 
-            instanceReadbackPass.Execute([&](VkCommandBuffer cmd) {
-                VkBufferCopy copy{};
-                copy.srcOffset = 0;
-                copy.dstOffset = 0;
-                copy.size = 25 * sizeof(Instance);
+            debugReadbackPass.Execute([&](VkCommandBuffer cmd) {
+                VkBufferCopy copies[1];
+
+                // Instance meshlet offsets
+                copies[0].srcOffset = 0;
+                copies[0].dstOffset = 0;
+                copies[0].size = 640 * sizeof(InstanceMeshletOffsetPrefixSum);
 
                 vkCmdCopyBuffer(
                     cmd,
-                    renderGraph->GetBufferHandle("instance_buffer"),
+                    renderGraph->GetBufferHandle("temp_instance_meshlet_offsets"),
                     renderGraph->GetBufferHandle("debug_readback_buffer"),
                     1,
-                    &copy
+                    &copies[0]
                 );
             });
         }
-
-        // ===== Debug Readback: Primitive Range Buffer =====
-        if (renderGraph->HasBuffer("primitive_counters_buffer")) {
-            RenderPass& primitiveRangeReadbackPass = renderGraph->AddPass(
-                "Debug Readback Primitive Range Buffer",
-                VK_PIPELINE_STAGE_2_COPY_BIT
-            );
-
-            primitiveRangeReadbackPass.ReadTransferBuffer("primitive_counters_buffer");
-            primitiveRangeReadbackPass.WriteTransferBuffer("debug_readback_buffer");
-
-            primitiveRangeReadbackPass.Execute([&](VkCommandBuffer cmd) {
-                VkBufferCopy copy{};
-                copy.srcOffset = 0;
-                copy.dstOffset = 25 * sizeof(Instance);
-                copy.size = 25 * sizeof(PrimitiveCounters);
-
-                vkCmdCopyBuffer(
-                    cmd,
-                    renderGraph->GetBufferHandle("primitive_counters_buffer"),
-                    renderGraph->GetBufferHandle("debug_readback_buffer"),
-                    1,
-                    &copy
-                );
-            });
-        }
-
-        // ===== Debug Readback: Indirect Count Buffer =====
-        if (renderGraph->HasBuffer("indirect_count_buffer")) {
-            RenderPass& indirectCountReadbackPass = renderGraph->AddPass(
-                "Debug Readback Indirect Count Buffer",
-                VK_PIPELINE_STAGE_2_COPY_BIT
-            );
-
-            indirectCountReadbackPass.ReadTransferBuffer("indirect_count_buffer");
-            indirectCountReadbackPass.WriteTransferBuffer("debug_readback_buffer");
-
-            indirectCountReadbackPass.Execute([&](VkCommandBuffer cmd) {
-                VkBufferCopy copy{};
-                copy.srcOffset = 0;
-                copy.dstOffset =
-                        25 * sizeof(Instance) +
-                        25 * sizeof(PrimitiveCounters);
-                copy.size = sizeof(InstancedMeshIndirectCountBuffer);
-
-                vkCmdCopyBuffer(
-                    cmd,
-                    renderGraph->GetBufferHandle("indirect_count_buffer"),
-                    renderGraph->GetBufferHandle("debug_readback_buffer"),
-                    1,
-                    &copy
-                );
-            });
-        }
-
-        // ===== Debug Readback: Instance Indirection Buffer =====
-        if (renderGraph->HasBuffer("instance_indirection_buffer")) {
-            RenderPass& indirectionReadbackPass = renderGraph->AddPass(
-                "Debug Readback Instance Indirection Buffer",
-                VK_PIPELINE_STAGE_2_COPY_BIT
-            );
-
-            indirectionReadbackPass.ReadTransferBuffer("instance_indirection_buffer");
-            indirectionReadbackPass.WriteTransferBuffer("debug_readback_buffer");
-
-            indirectionReadbackPass.Execute([&](VkCommandBuffer cmd) {
-                VkBufferCopy copy{};
-                copy.srcOffset = 0;
-                copy.dstOffset =
-                        25 * sizeof(Instance) +
-                        25 * sizeof(PrimitiveCounters) +
-                        sizeof(InstancedMeshIndirectCountBuffer);
-                copy.size = 64 * sizeof(uint32_t); // instance indirection entries
-
-                vkCmdCopyBuffer(
-                    cmd,
-                    renderGraph->GetBufferHandle("instance_indirection_buffer"),
-                    renderGraph->GetBufferHandle("debug_readback_buffer"),
-                    1,
-                    &copy
-                );
-            });
-        }
-
-        // ===== Debug Readback: Indirect Command Buffer =====
-        if (renderGraph->HasBuffer("indirect_command_buffer")) {
-            RenderPass& indirectCmdReadbackPass = renderGraph->AddPass(
-                "Debug Readback Indirect Command Buffer",
-                VK_PIPELINE_STAGE_2_COPY_BIT
-            );
-
-            indirectCmdReadbackPass.ReadTransferBuffer("indirect_command_buffer");
-            indirectCmdReadbackPass.WriteTransferBuffer("debug_readback_buffer");
-
-            indirectCmdReadbackPass.Execute([&](VkCommandBuffer cmd) {
-                VkBufferCopy copy{};
-                copy.srcOffset = 0;
-                copy.dstOffset =
-                        25 * sizeof(Instance) +
-                        25 * sizeof(PrimitiveCounters) +
-                        sizeof(InstancedMeshIndirectCountBuffer) +
-                        64 * sizeof(uint32_t);
-                copy.size = 64 * sizeof(InstancedMeshIndirectDrawParameters);
-
-                vkCmdCopyBuffer(
-                    cmd,
-                    renderGraph->GetBufferHandle("indirect_command_buffer"),
-                    renderGraph->GetBufferHandle("debug_readback_buffer"),
-                    1,
-                    &copy
-                );
-            });
-        }
-
-        // ===== Debug Readback: Prefix Sum Buffers =====
-        if (renderGraph->HasBuffer("primitive_offset_prefix_sum_buffer") &&
-            renderGraph->HasBuffer("block_sums_buffer") &&
-            renderGraph->HasBuffer("scanned_block_offsets_buffer")) {
-            RenderPass& prefixSumReadbackPass = renderGraph->AddPass(
-                "Debug Readback Prefix Sum",
-                VK_PIPELINE_STAGE_2_COPY_BIT
-            );
-
-            prefixSumReadbackPass.ReadTransferBuffer("primitive_offset_prefix_sum_buffer");
-            prefixSumReadbackPass.ReadTransferBuffer("block_sums_buffer");
-            prefixSumReadbackPass.ReadTransferBuffer("scanned_block_offsets_buffer");
-            prefixSumReadbackPass.WriteTransferBuffer("debug_readback_buffer");
-
-            prefixSumReadbackPass.Execute([&](VkCommandBuffer cmd) {
-                size_t currentOffset =
-                        25 * sizeof(Instance) +
-                        25 * sizeof(PrimitiveCounters) +
-                        sizeof(InstancedMeshIndirectCountBuffer) +
-                        64 * sizeof(uint32_t) +
-                        64 * sizeof(InstancedMeshIndirectDrawParameters);
-
-                VkBufferCopy prefixCopy{};
-                prefixCopy.srcOffset = 0;
-                prefixCopy.dstOffset = currentOffset;
-                prefixCopy.size = 128 * sizeof(PrimitiveOffsets);
-                vkCmdCopyBuffer(
-                    cmd,
-                    renderGraph->GetBufferHandle("primitive_offset_prefix_sum_buffer"),
-                    renderGraph->GetBufferHandle("debug_readback_buffer"),
-                    1,
-                    &prefixCopy
-                );
-                currentOffset += 128 * sizeof(PrimitiveOffsets);
-
-                VkBufferCopy blockSumsCopy{};
-                blockSumsCopy.srcOffset = 0;
-                blockSumsCopy.dstOffset = currentOffset;
-                blockSumsCopy.size = 4 * sizeof(PrimitiveOffsets);
-                vkCmdCopyBuffer(
-                    cmd,
-                    renderGraph->GetBufferHandle("block_sums_buffer"),
-                    renderGraph->GetBufferHandle("debug_readback_buffer"),
-                    1,
-                    &blockSumsCopy
-                );
-                currentOffset += 4 * sizeof(PrimitiveOffsets);
-
-                VkBufferCopy blockOffsetsCopy{};
-                blockOffsetsCopy.srcOffset = 0;
-                blockOffsetsCopy.dstOffset = currentOffset;
-                blockOffsetsCopy.size = 128 * sizeof(PrimitiveOffsets);
-                vkCmdCopyBuffer(
-                    cmd,
-                    renderGraph->GetBufferHandle("scanned_block_offsets_buffer"),
-                    renderGraph->GetBufferHandle("debug_readback_buffer"),
-                    1,
-                    &blockOffsetsCopy
-                );
-            });
-        }
-
-
 #endif
 
 
@@ -837,6 +666,19 @@ void RenderThread::CreatePipelines()
     pipelineManager->RegisterComputePipeline("instancing_compact_and_indirect", Platform::GetShaderPath() / "instancing_compact_and_indirect_compute.spv",
                                              sizeof(CompactAndIndirectPushConstant), PipelineCategory::Instancing);
 
+    pipelineManager->RegisterComputePipeline("instancing_instance_lod", Platform::GetShaderPath() / "instancing_instance_lod_compute.spv",
+                                             sizeof(InstanceLODPushConstant), PipelineCategory::Instancing);
+    pipelineManager->RegisterComputePipeline("instancing_prefix_sum_up_1", Platform::GetShaderPath() / "instancing_prefix_sum_up_1_compute.spv",
+                                             sizeof(PrefixSumUpsweep1PushConstant), PipelineCategory::Instancing);
+    pipelineManager->RegisterComputePipeline("instancing_prefix_sum_up_2", Platform::GetShaderPath() / "instancing_prefix_sum_up_2_compute.spv",
+                                             sizeof(PrefixSumUpsweep2PushConstant), PipelineCategory::Instancing);
+    pipelineManager->RegisterComputePipeline("instancing_scan_blocks", Platform::GetShaderPath() / "instancing_scan_blocks_compute.spv",
+                                             sizeof(PrefixSumScanBlocksPushConstant), PipelineCategory::Instancing);
+    pipelineManager->RegisterComputePipeline("instancing_prefix_sum_down_1", Platform::GetShaderPath() / "instancing_prefix_sum_down_1_compute.spv",
+                                             sizeof(PrefixSumDownsweep1PushConstant), PipelineCategory::Instancing);
+    pipelineManager->RegisterComputePipeline("instancing_prefix_sum_down_2", Platform::GetShaderPath() / "instancing_prefix_sum_down_2_compute.spv",
+                                             sizeof(PrefixSumDownsweep2PushConstant), PipelineCategory::Instancing);
+
     pipelineManager->RegisterComputePipeline("direct_mesh_shading_build_indirect", Platform::GetShaderPath() / "mesh_shading_direct_build_indirect_compute.spv",
                                              sizeof(BuildDirectIndirectPushConstant), PipelineCategory::CustomRendering);
 
@@ -889,17 +731,17 @@ void RenderThread::CreatePipelines()
                                              sizeof(DebugVisualizePushConstant), PipelineCategory::Debug);
 
 #if WILL_EDITOR
-    std::array emapLayout{
+    std::vector emapLayout{
         resourceManager->environmentMapGenerateResources.descriptorSetLayout.handle,
     };
     pipelineManager->RegisterComputePipelineCustomLayout("ibl_equirect_to_cubemap", Platform::GetShaderPath() / "ibl_equirect_to_cubemap_compute.spv",
-                                                         sizeof(EquirectToCubemapPushConstant), PipelineCategory::AssetGeneration, emapLayout.data(), emapLayout.size());
+                                                         sizeof(EquirectToCubemapPushConstant), PipelineCategory::AssetGeneration, emapLayout);
 
     pipelineManager->RegisterComputePipelineCustomLayout("ibl_convolve_diffuse", Platform::GetShaderPath() / "ibl_convolve_diffuse_compute.spv",
-                                                         sizeof(ConvolveDiffusePushConstant), PipelineCategory::AssetGeneration, emapLayout.data(), emapLayout.size());
+                                                         sizeof(ConvolveDiffusePushConstant), PipelineCategory::AssetGeneration, emapLayout);
 
     pipelineManager->RegisterComputePipelineCustomLayout("ibl_prefilter_specular", Platform::GetShaderPath() / "ibl_prefilter_specular_compute.spv",
-                                                         sizeof(PrefilterSpecularPushConstant), PipelineCategory::AssetGeneration, emapLayout.data(), emapLayout.size());
+                                                         sizeof(PrefilterSpecularPushConstant), PipelineCategory::AssetGeneration, emapLayout);
 #endif
 
     GraphicsPipelineBuilder builder;
@@ -1055,6 +897,7 @@ void RenderThread::PrepareRenderFamilyProperties(Core::ViewFamily& viewFamily, R
     renderFamilyProperties.bHasAnyGeometry = renderFamilyProperties.bHasMainGeometry || renderFamilyProperties.bHasDirectGeometry;
     renderFamilyProperties.bHasGTAO = viewFamily.gtaoConfig.bEnabled && _pipelineManager->IsCategoryReady(PipelineCategory::GTAO);
     renderFamilyProperties.bHasShadows = viewFamily.shadowConfig.enabled && _pipelineManager->IsCategoryReady(PipelineCategory::ShadowPass);
+    renderFamilyProperties.bHasShadows = false;
     renderFamilyProperties.bHasDeferred = _pipelineManager->IsCategoryReady(PipelineCategory::DeferredShading);
 
 
@@ -1109,6 +952,21 @@ void RenderThread::PrepareRenderFamilyProperties(Core::ViewFamily& viewFamily, R
 
     renderFamilyProperties.directInstanceBufferSize = _limits.highestDirectInstanceBuffer * sizeof(Instance);
     renderFamilyProperties.directIndirectCommandBufferSize = _limits.highestDirectIndirectCommandBuffer * sizeof(InstancedMeshIndirectDrawParameters);
+
+
+    renderFamilyProperties.instanceMeshletOffsetsBufferSize = _limits.highestInstanceBuffer * sizeof(InstanceMeshletOffsetPrefixSum);
+
+    uint32_t level1BlockCount = (_limits.highestInstanceBuffer + 255) / 256;
+    uint32_t level2BlockCount = (level1BlockCount + 255) / 256;
+
+    renderFamilyProperties.level1SumsBufferSize = _limits.highestInstanceBuffer * sizeof(uint32_t);
+    renderFamilyProperties.level1BlockSumsBufferSize = level1BlockCount * sizeof(uint32_t);
+    renderFamilyProperties.level2SumsBufferSize = level1BlockCount * sizeof(uint32_t);
+    renderFamilyProperties.level2BlockSumsBufferSize = level2BlockCount * sizeof(uint32_t);
+    renderFamilyProperties.scannedLevel2BlockSumsBufferSize = level2BlockCount * sizeof(uint32_t);
+
+    renderFamilyProperties.intermediateMeshletBufferSize = MAX_MESHLET_COUNT_PER_FRAME * sizeof(uint32_t);
+    renderFamilyProperties.visibleMeshletsBufferSize = MAX_MESHLET_COUNT_PER_FRAME * sizeof(uint32_t);
 
 
     renderFamilyProperties.instanceCount = viewFamily.mainPassInstances.size();
@@ -2909,5 +2767,182 @@ void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& 
 #else
     return;
 #endif
+}
+
+void RenderThread::TemporaryRenderTests(RenderGraph& graph, const Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties, std::array<uint32_t, 2> renderExtent)
+{
+    graph.CreateBuffer("temp_instance_meshlet_offsets", renderFamilyProperties.instanceMeshletOffsetsBufferSize);
+    graph.CreateBuffer("temp_level1_sums", renderFamilyProperties.level1SumsBufferSize);
+    graph.CreateBuffer("temp_level1_block_sums", renderFamilyProperties.level1BlockSumsBufferSize);
+    graph.CreateBuffer("temp_level2_sums", renderFamilyProperties.level2SumsBufferSize);
+    graph.CreateBuffer("temp_level2_block_sums", renderFamilyProperties.level2BlockSumsBufferSize);
+    graph.CreateBuffer("temp_scanned_level2_block_sums", renderFamilyProperties.scannedLevel2BlockSumsBufferSize);
+    graph.CreateBuffer("temp_intermediate_meshlets", renderFamilyProperties.intermediateMeshletBufferSize);
+    graph.CreateBuffer("temp_visible_meshlets", renderFamilyProperties.visibleMeshletsBufferSize);
+
+    RenderPass& clearPass = graph.AddPass("Clear Temp Instancing Buffers", VK_PIPELINE_STAGE_2_TRANSFER_BIT);
+    clearPass.WriteTransferBuffer("temp_instance_meshlet_offsets");
+    clearPass.WriteTransferBuffer("temp_level1_sums");
+    clearPass.WriteTransferBuffer("temp_level1_block_sums");
+    clearPass.WriteTransferBuffer("temp_level2_sums");
+    clearPass.WriteTransferBuffer("temp_level2_block_sums");
+    clearPass.WriteTransferBuffer("temp_scanned_level2_block_sums");
+    clearPass.WriteTransferBuffer("temp_intermediate_meshlets");
+    clearPass.WriteTransferBuffer("temp_visible_meshlets");
+    clearPass.Execute([&](VkCommandBuffer cmd) {
+        vkCmdFillBuffer(cmd, graph.GetBufferHandle("temp_instance_meshlet_offsets"), 0, VK_WHOLE_SIZE, 0);
+        vkCmdFillBuffer(cmd, graph.GetBufferHandle("temp_level1_sums"), 0, VK_WHOLE_SIZE, 0);
+        vkCmdFillBuffer(cmd, graph.GetBufferHandle("temp_level1_block_sums"), 0, VK_WHOLE_SIZE, 0);
+        vkCmdFillBuffer(cmd, graph.GetBufferHandle("temp_level2_sums"), 0, VK_WHOLE_SIZE, 0);
+        vkCmdFillBuffer(cmd, graph.GetBufferHandle("temp_level2_block_sums"), 0, VK_WHOLE_SIZE, 0);
+        vkCmdFillBuffer(cmd, graph.GetBufferHandle("temp_scanned_level2_block_sums"), 0, VK_WHOLE_SIZE, 0);
+        vkCmdFillBuffer(cmd, graph.GetBufferHandle("temp_intermediate_meshlets"), 0, VK_WHOLE_SIZE, 0);
+        vkCmdFillBuffer(cmd, graph.GetBufferHandle("temp_visible_meshlets"), 0, VK_WHOLE_SIZE, 0);
+    });
+
+    RenderPass& instanceLODPass = graph.AddPass("Instance LOD Selection", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+    instanceLODPass.ReadBuffer("scene_data");
+    instanceLODPass.ReadBuffer("primitive_buffer");
+    instanceLODPass.ReadBuffer("model_buffer");
+    instanceLODPass.ReadBuffer("instance_buffer");
+    instanceLODPass.WriteBuffer("temp_instance_meshlet_offsets");
+    instanceLODPass.Execute([&](VkCommandBuffer cmd) {
+        InstanceLODPushConstant pc{
+            .sceneData = graph.GetBufferAddress("scene_data"),
+            .primitiveBuffer = graph.GetBufferAddress("primitive_buffer"),
+            .modelBuffer = graph.GetBufferAddress("model_buffer"),
+            .instanceBuffer = graph.GetBufferAddress("instance_buffer"),
+            .instanceMeshletOffsets = graph.GetBufferAddress("temp_instance_meshlet_offsets"),
+            .instanceCount = renderFamilyProperties.instanceCount,
+            .sceneDataIndex = 0,
+            .lodBias = LOD_BIAS,
+        };
+
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_instance_lod");
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+
+        uint32_t xDispatch = (renderFamilyProperties.instanceCount + 255) / 256;
+        vkCmdDispatch(cmd, xDispatch, 1, 1);
+    });
+
+    uint32_t instanceCount = renderFamilyProperties.instanceCount;
+    uint32_t level1BlockCount = (instanceCount + 255) / 256;
+
+    RenderPass& upsweep1Pass = graph.AddPass("Prefix Sum Upsweep 1", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+    upsweep1Pass.ReadBuffer("temp_instance_meshlet_offsets");
+    upsweep1Pass.WriteBuffer("temp_level1_sums");
+    upsweep1Pass.WriteBuffer("temp_level1_block_sums");
+    upsweep1Pass.Execute([&, instanceCount, level1BlockCount](VkCommandBuffer cmd) {
+        PrefixSumUpsweep1PushConstant pc{
+            .instanceMeshletOffsets = graph.GetBufferAddress("temp_instance_meshlet_offsets"),
+            .level1Sums = graph.GetBufferAddress("temp_level1_sums"),
+            .level1BlockSums = graph.GetBufferAddress("temp_level1_block_sums"),
+            .elementCount = instanceCount,
+            .blockCount = level1BlockCount,
+        };
+
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_prefix_sum_up_1");
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+        vkCmdDispatch(cmd, level1BlockCount, 1, 1);
+    });
+
+    uint32_t level2BlockCount = (level1BlockCount + 255) / 256;
+
+
+    if (level2BlockCount > 1) {
+        RenderPass& upsweep2Pass = graph.AddPass("Prefix Sum Upsweep 2", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+        upsweep2Pass.ReadBuffer("temp_level1_block_sums");
+        upsweep2Pass.WriteBuffer("temp_level2_sums");
+        upsweep2Pass.WriteBuffer("temp_level2_block_sums");
+        upsweep2Pass.Execute([&](VkCommandBuffer cmd) {
+            PrefixSumUpsweep2PushConstant pc{
+                .level1BlockSums = graph.GetBufferAddress("temp_level1_block_sums"),
+                .level2Sums = graph.GetBufferAddress("temp_level2_sums"),
+                .level2BlockSums = graph.GetBufferAddress("temp_level2_block_sums"),
+                .elementCount = level1BlockCount,
+                .blockCount = level2BlockCount,
+            };
+
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_prefix_sum_up_2");
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+            vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            vkCmdDispatch(cmd, level2BlockCount, 1, 1);
+        });
+
+        RenderPass& scanBlocksPass = graph.AddPass("Prefix Sum Scan Blocks", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+        scanBlocksPass.ReadBuffer("temp_level2_block_sums");
+        scanBlocksPass.WriteBuffer("temp_scanned_level2_block_sums");
+        scanBlocksPass.Execute([&](VkCommandBuffer cmd) {
+            PrefixSumScanBlocksPushConstant pc{
+                .level2BlockSums = graph.GetBufferAddress("temp_level2_block_sums"),
+                .scannedLevel2BlockSums = graph.GetBufferAddress("temp_scanned_level2_block_sums"),
+                .blockCount = level2BlockCount,
+            };
+
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_scan_blocks");
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+            vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            vkCmdDispatch(cmd, 1, 1, 1);
+        });
+
+        RenderPass& downsweep1Pass = graph.AddPass("Prefix Sum Downsweep 1", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+        downsweep1Pass.ReadBuffer("temp_scanned_level2_block_sums");
+        downsweep1Pass.ReadWriteBuffer("temp_level2_sums");
+        downsweep1Pass.Execute([&](VkCommandBuffer cmd) {
+            PrefixSumDownsweep1PushConstant pc{
+                .scannedLevel2BlockSums = graph.GetBufferAddress("temp_scanned_level2_block_sums"),
+                .level2Sums = graph.GetBufferAddress("temp_level2_sums"),
+                .elementCount = level1BlockCount,
+            };
+
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_prefix_sum_down_1");
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+            vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            vkCmdDispatch(cmd, level2BlockCount, 1, 1);
+        });
+    }
+    else {
+        RenderPass& scanBlocksPass = graph.AddPass("Prefix Sum Scan Blocks", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+        scanBlocksPass.ReadBuffer("temp_level1_block_sums");
+        scanBlocksPass.WriteBuffer("temp_scanned_level2_block_sums");
+        scanBlocksPass.Execute([&](VkCommandBuffer cmd) {
+            PrefixSumScanBlocksPushConstant pc{
+                .level2BlockSums = graph.GetBufferAddress("temp_level1_block_sums"),
+                .scannedLevel2BlockSums = graph.GetBufferAddress("temp_scanned_level2_block_sums"),
+                .blockCount = level1BlockCount,
+            };
+
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_scan_blocks");
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+            vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            vkCmdDispatch(cmd, 1, 1, 1);
+        });
+    }
+
+    RenderPass& downsweep2Pass = graph.AddPass("Prefix Sum Downsweep 2", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+    downsweep2Pass.ReadBuffer("temp_level1_sums");
+    if (level2BlockCount > 1) {
+        downsweep2Pass.ReadBuffer("temp_level2_sums");
+    }
+    else {
+        downsweep2Pass.ReadBuffer("temp_scanned_level2_block_sums");
+    }
+    downsweep2Pass.WriteBuffer("temp_instance_meshlet_offsets");
+    downsweep2Pass.Execute([&, level2BlockCount, instanceCount, level1BlockCount](VkCommandBuffer cmd) {
+        PrefixSumDownsweep2PushConstant pc{
+            .level1Sums = graph.GetBufferAddress("temp_level1_sums"),
+            .level2Sums = level2BlockCount > 1 ? graph.GetBufferAddress("temp_level2_sums") : graph.GetBufferAddress("temp_scanned_level2_block_sums"),
+            .instanceMeshletOffsets = graph.GetBufferAddress("temp_instance_meshlet_offsets"),
+            .elementCount = instanceCount,
+        };
+
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_prefix_sum_down_2");
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+
+        vkCmdDispatch(cmd, level1BlockCount, 1, 1);
+    });
 }
 } // Render

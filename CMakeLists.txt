@@ -269,6 +269,17 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputePrefixSumBlocks instancing_prefix_sum_blocks
         ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputePrefixSumScatter instancing_prefix_sum_scatter
         ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputeCompactAndGenerateIndirect instancing_compact_and_indirect
+
+
+        ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputeInstanceLOD instancing_instance_lod
+        # Either 1->2->scan->1->2 or 1->scan->2 or nothing at all
+        ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputePrefixSumUpsweep1 instancing_prefix_sum_up_1
+        ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputePrefixSumUpsweep2 instancing_prefix_sum_up_2
+        ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputePrefixSumScanBlocks instancing_scan_blocks
+        ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputePrefixSumDownsweep1 instancing_prefix_sum_down_1
+        ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputePrefixSumDownsweep2 instancing_prefix_sum_down_2
+
+
         ${CMAKE_SOURCE_DIR}/shaders/mesh_shading_instanced.slang task TaskMain mesh_shading_instanced
         ${CMAKE_SOURCE_DIR}/shaders/mesh_shading_instanced.slang mesh MeshMain mesh_shading_instanced
         ${CMAKE_SOURCE_DIR}/shaders/mesh_shading_instanced.slang fragment FragmentMain mesh_shading_instanced
