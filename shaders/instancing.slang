@@ -8,6 +8,7 @@ import constants_interop;
 import limits_declarations;
 import bindless_declarations;
 
+// =============== Pass 0: Determine Instance LOD ===============
 [shader("compute")]
 [numthreads(256, 1, 1)]
 void ComputeInstanceLOD(uniform InstanceLODPushConstant pc, uint3 dtid : SV_DispatchThreadID)
@@ -112,7 +113,7 @@ void ComputePrefixSumUpsweep1(uniform PrefixSumUpsweep1PushConstant pc, uint3 gi
     }
 }
 
-// =============== Pass 2: Upsweep Level 2 ===============
+// =============== Pass 2: Upsweep Level 2 (optional) ===============
 groupshared uint blockSums2[8];
 
 [shader("compute")]
@@ -179,7 +180,7 @@ void ComputePrefixSumScanBlocks(uniform PrefixSumScanBlocksPushConstant pc, uint
 }
 
 
-// =============== Pass 4: Downsweep Level 1 ===============
+// =============== Pass 4: Downsweep Level 1 (Optional) ===============
 [shader("compute")]
 [numthreads(256, 1, 1)]
 void ComputePrefixSumDownsweep1(uniform PrefixSumDownsweep1PushConstant pc, uint3 gid : SV_GroupID, uint3 dtid : SV_DispatchThreadID)
@@ -212,8 +213,60 @@ void ComputePrefixSumDownsweep2(uniform PrefixSumDownsweep2PushConstant pc, uint
 }
 
 
+// =============== Pass 6: Expand Instance -> Meshlet w/ Prefix Sum Values ===============
+[shader("compute")]
+[numthreads(1, 1, 1)]
+void ComputeTotalMeshletCount(uniform TotalMeshletCountPushConstant pc)
+{
+    uint lastInstanceIndex = pc.instanceCount - 1;
+    uint offset = pc.instanceMeshletOffsets[lastInstanceIndex].offset;
+    uint count = pc.instanceMeshletOffsets[lastInstanceIndex].count;
+    uint totalMeshlets = offset + count;
 
+    pc.indirectDispatchBuffer.x = (totalMeshlets + 255) / 256;
+    pc.indirectDispatchBuffer.y = 1;
+    pc.indirectDispatchBuffer.z = 1;
+    pc.indirectDispatchBuffer.totalMeshlets = totalMeshlets;
+}
 
+[shader("compute")]
+[numthreads(256, 1, 1)]
+void ExpandInstancesToMeshlets(uniform ExpandMeshletsPushConstant pc, uint3 dtid : SV_DispatchThreadID)
+{
+    uint globalMeshletIndex = dtid.x;
+    if (globalMeshletIndex >= pc.indirectDispatchBuffer->totalMeshlets) {
+        return;
+    }
+
+    // Binary search to find which instance owns this meshlet
+    uint left = 0;
+    uint right = pc.instanceCount - 1;
+    uint instanceIndex = 0;
+
+    while (left <= right) {
+        uint mid = (left + right) / 2;
+        uint offset = pc.instanceMeshletOffsets[mid].offset;
+        uint count = pc.instanceMeshletOffsets[mid].count;
+        uint endOffset = offset + count;
+
+        if (globalMeshletIndex >= offset && globalMeshletIndex < endOffset) {
+            instanceIndex = mid;
+            break;
+        }
+        else if (globalMeshletIndex < offset) {
+            right = mid - 1;
+        }
+        else {
+            left = mid + 1;
+        }
+    }
+
+    uint meshletOffset = pc.instanceMeshletOffsets[instanceIndex].offset;
+    uint localMeshletIndex = globalMeshletIndex - meshletOffset;
+
+    pc.intermediateMeshlets[globalMeshletIndex].instanceIndex = instanceIndex;
+    pc.intermediateMeshlets[globalMeshletIndex].localMeshletIndex = localMeshletIndex;
+}
 
 
 

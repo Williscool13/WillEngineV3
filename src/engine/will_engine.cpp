@@ -477,7 +477,16 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
                 ImGui::EndTable();
             }
         }
+
+        if (ImGui::CollapsingHeader("Meshlet Dispatch Args")) {
+            ptr = base + 640 * sizeof(InstanceMeshletOffsetPrefixSum);
+            auto* dispatchArgs = reinterpret_cast<InstancingMeshletDispatchIndirectCommand*>(ptr);
+
+            ImGui::Text("Total Meshlets: %u", dispatchArgs->totalMeshlets);
+            ImGui::Text("Dispatch Groups: (%u, %u, %u)", dispatchArgs->x, dispatchArgs->y, dispatchArgs->z);
+        }
     }
+
 
     if (ImGui::CollapsingHeader("Asset Generation")) {
         auto startGeneration = [&](const std::string& name, const std::filesystem::path& gltfPath, const std::filesystem::path& outPath) {

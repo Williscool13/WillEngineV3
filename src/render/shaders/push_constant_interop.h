@@ -179,6 +179,23 @@ SHADER_PUBLIC struct PrefixSumDownsweep2PushConstant
     SHADER_PUBLIC uint32_t elementCount;
 };
 
+SHADER_PUBLIC struct TotalMeshletCountPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(InstancingMeshletDispatchIndirectCommand) indirectDispatchBuffer;
+    SHADER_PUBLIC SHADER_PTR(InstanceMeshletOffsetPrefixSum) instanceMeshletOffsets;
+
+    SHADER_PUBLIC uint32_t instanceCount;
+};
+
+SHADER_PUBLIC struct ExpandMeshletsPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(InstancingMeshletDispatchIndirectCommand) indirectDispatchBuffer; // for totalMeshletCount
+    SHADER_PUBLIC SHADER_PTR(InstanceMeshletOffsetPrefixSum) instanceMeshletOffsets;
+    SHADER_PUBLIC SHADER_PTR(IntermediateMeshlet) intermediateMeshlets;
+
+    SHADER_PUBLIC uint32_t instanceCount;
+};
+
 
 SHADER_PUBLIC struct VisibilityPushConstant
 {
