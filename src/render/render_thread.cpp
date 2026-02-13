@@ -249,6 +249,11 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             return {SWAPCHAIN_OUTDATED, ~0u};
         }
     }
+    //
+    {
+        ZoneScopedN("RenderGraphReset");
+        renderGraph->Reset(frameIndex, frameNumber, RDG_PHYSICAL_RESOURCE_UNUSED_THRESHOLD);
+    }
 
 
     std::array<uint32_t, 2> renderExtent = renderExtents->GetScaledExtent();
@@ -256,14 +261,10 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
     VkImageView currentSwapchainImageView = swapchain->swapchainImageViews[swapchainImageIndex];
 
     Core::ViewFamily& viewFamily = frameBuffer.mainViewFamily;
-    PrepareRenderFamilyProperties(viewFamily, persistentRenderFamilyProperties, pipelineManager.get(), frameResourceLimits);
+    ReadbackStruct* readbackData = renderGraph->GetReadbackData();
+    PrepareRenderFamilyProperties(viewFamily, readbackData, persistentRenderFamilyProperties, pipelineManager.get(), frameResourceLimits);
     RenderFamilyProperties& renderFamilyProperties = persistentRenderFamilyProperties;
 
-    //
-    {
-        ZoneScopedN("RenderGraphReset");
-        renderGraph->Reset(frameIndex, frameNumber, RDG_PHYSICAL_RESOURCE_UNUSED_THRESHOLD);
-    }
     //
     {
         ZoneScopedN("BindDescriptorBuffers");
@@ -456,6 +457,29 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 vkCmdCopyBuffer(
                     cmd,
                     renderGraph->GetBufferHandle("temp_meshlet_count_dispatch_args"),
+                    renderGraph->GetBufferHandle("debug_readback_buffer"),
+                    1,
+                    &copies[0]
+                );
+            });
+        }
+
+        if (renderGraph->HasBuffer("temp_intermediate_meshlets")) {
+            RenderPass& debugReadbackPass = renderGraph->AddPass("Debug Readback intermediate meshlets", VK_PIPELINE_STAGE_2_COPY_BIT);
+
+            debugReadbackPass.ReadTransferBuffer("temp_intermediate_meshlets");
+            debugReadbackPass.WriteTransferBuffer("debug_readback_buffer");
+
+            debugReadbackPass.Execute([&](VkCommandBuffer cmd) {
+                VkBufferCopy copies[1];
+
+                copies[0].srcOffset = 0;
+                copies[0].dstOffset = 640 * sizeof(InstanceMeshletOffsetPrefixSum) + sizeof(InstancingMeshletDispatchIndirectCommand);
+                copies[0].size = sizeof(IntermediateMeshlet) * 128;
+
+                vkCmdCopyBuffer(
+                    cmd,
+                    renderGraph->GetBufferHandle("temp_intermediate_meshlets"),
                     renderGraph->GetBufferHandle("debug_readback_buffer"),
                     1,
                     &copies[0]
@@ -703,6 +727,8 @@ void RenderThread::CreatePipelines()
                                              sizeof(PrefixSumDownsweep2PushConstant), PipelineCategory::Instancing);
     pipelineManager->RegisterComputePipeline("instancing_total_meshlet_count", Platform::GetShaderPath() / "instancing_total_meshlet_count_compute.spv",
                                              sizeof(TotalMeshletCountPushConstant), PipelineCategory::Instancing);
+pipelineManager->RegisterComputePipeline("instancing_expand_instance_to_meshlet", Platform::GetShaderPath() / "instancing_expand_instance_to_meshlet_compute.spv",
+                                             sizeof(ExpandMeshletsPushConstant), PipelineCategory::Instancing);
 
     pipelineManager->RegisterComputePipeline("direct_mesh_shading_build_indirect", Platform::GetShaderPath() / "mesh_shading_direct_build_indirect_compute.spv",
                                              sizeof(BuildDirectIndirectPushConstant), PipelineCategory::CustomRendering);
@@ -912,7 +938,7 @@ void RenderThread::CreatePipelines()
     }
 }
 
-void RenderThread::PrepareRenderFamilyProperties(Core::ViewFamily& viewFamily, RenderFamilyProperties& renderFamilyProperties, PipelineManager* _pipelineManager, FrameResourceLimits& _limits)
+void RenderThread::PrepareRenderFamilyProperties(Core::ViewFamily& viewFamily, ReadbackStruct* readbackData, RenderFamilyProperties& renderFamilyProperties, PipelineManager* _pipelineManager, FrameResourceLimits& _limits)
 {
     renderFamilyProperties.Reset();
     renderFamilyProperties.primitiveIndexToRangeBufferMap.resize(MEGA_PRIMITIVE_BUFFER_COUNT);
@@ -950,6 +976,7 @@ void RenderThread::PrepareRenderFamilyProperties(Core::ViewFamily& viewFamily, R
         _limits.highestMaterialBuffer = std::max(_limits.highestMaterialBuffer, NextPowerOfTwo(viewFamily.materials.size()));
         _limits.highestInstanceBuffer = std::max(_limits.highestInstanceBuffer, NextPowerOfTwo(viewFamily.mainPassInstances.size()));
         _limits.highestFilteredPrimitiveCount = std::max(_limits.highestFilteredPrimitiveCount, NextPowerOfTwo(filteredPrimtiveCount));
+        _limits.highestMeshletCount = std::max(_limits.highestMeshletCount, NextPowerOfTwo(readbackData->meshletCount));
     }
 
     /*if (!viewFamily. customStencilDraws.empty()) {
@@ -990,8 +1017,8 @@ void RenderThread::PrepareRenderFamilyProperties(Core::ViewFamily& viewFamily, R
     renderFamilyProperties.level2BlockSumsBufferSize = level2BlockCount * sizeof(uint32_t);
     renderFamilyProperties.scannedLevel2BlockSumsBufferSize = level2BlockCount * sizeof(uint32_t);
 
-    renderFamilyProperties.intermediateMeshletBufferSize = MAX_MESHLET_COUNT_PER_FRAME * sizeof(uint32_t);
-    renderFamilyProperties.visibleMeshletsBufferSize = MAX_MESHLET_COUNT_PER_FRAME * sizeof(uint32_t);
+    renderFamilyProperties.intermediateMeshletBufferSize = _limits.highestMeshletCount * sizeof(IntermediateMeshlet);
+    renderFamilyProperties.visibleMeshletsBufferSize = _limits.highestMeshletCount * sizeof(IntermediateMeshlet);
 
 
     renderFamilyProperties.instanceCount = viewFamily.mainPassInstances.size();
@@ -2987,6 +3014,42 @@ void RenderThread::TemporaryRenderTests(RenderGraph& graph, const Core::ViewFami
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
         vkCmdDispatch(cmd, 1, 1, 1);
+    });
+
+
+    RenderPass& readbackMeshletCount = graph.AddPass("Readback Meshlet Count", VK_PIPELINE_STAGE_2_COPY_BIT);
+    readbackMeshletCount.ReadTransferBuffer("temp_meshlet_count_dispatch_args");
+    readbackMeshletCount.Execute([&](VkCommandBuffer cmd) {
+        VkBufferCopy copy;
+        copy.srcOffset = offsetof(InstancingMeshletDispatchIndirectCommand, totalMeshlets);
+        copy.dstOffset = offsetof(ReadbackStruct, meshletCount);
+        copy.size = sizeof(uint32_t);
+
+        vkCmdCopyBuffer(
+            cmd,
+            renderGraph->GetBufferHandle("temp_meshlet_count_dispatch_args"),
+            graph.GetReadback(),
+            1,
+            &copy
+        );
+    });
+
+    RenderPass& expandInstancesToMeshlets = graph.AddPass("Expand Instance To Meshlet", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+    expandInstancesToMeshlets.ReadBuffer("temp_instance_meshlet_offsets");
+    expandInstancesToMeshlets.ReadIndirectBuffer("temp_meshlet_count_dispatch_args");
+    expandInstancesToMeshlets.WriteBuffer("temp_intermediate_meshlets");
+    expandInstancesToMeshlets.Execute([&, instanceCount](VkCommandBuffer cmd) {
+        ExpandMeshletsPushConstant pc{
+            .indirectDispatchBuffer = graph.GetBufferAddress("temp_meshlet_count_dispatch_args"),
+           .instanceMeshletOffsets = graph.GetBufferAddress("temp_instance_meshlet_offsets"),
+           .intermediateMeshlets = graph.GetBufferAddress("temp_intermediate_meshlets"),
+           .instanceCount = instanceCount,
+       };
+
+       const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_expand_instance_to_meshlet");
+       vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+       vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+       vkCmdDispatchIndirect(cmd, graph.GetBufferHandle("temp_meshlet_count_dispatch_args"), offsetof(InstancingMeshletDispatchIndirectCommand, x));
     });
 }
 } // Render

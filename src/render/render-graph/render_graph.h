@@ -128,6 +128,11 @@ public: // Transient Uploader
 
     VkBuffer GetTransientUploadBuffer() const { return uploadArenas[currentFrameIndex].buffer.handle; }
 
+public: // Readback
+    VkBuffer GetReadback() const { return meshletCountReadbacks[currentFrameIndex].buffer.handle; }
+
+    ReadbackStruct* GetReadbackData() const { return static_cast<ReadbackStruct*>(meshletCountReadbacks[currentFrameIndex].buffer.allocationInfo.pMappedData); }
+
 private:
     friend class RenderPass;
     VulkanContext* context;
@@ -158,6 +163,7 @@ private:
 
     uint32_t currentFrameIndex{0};
     std::array<TransientUploadArena, Core::FRAME_BUFFER_COUNT> uploadArenas{};
+    std::array<TransientReadback, Core::FRAME_BUFFER_COUNT> meshletCountReadbacks{};
 
     bool bDebugLogging = false;
     uint32_t debugNameCounter{0};

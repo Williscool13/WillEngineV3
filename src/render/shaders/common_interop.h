@@ -98,6 +98,11 @@ SHADER_PUBLIC struct SHADER_ALIGN SceneData
     SHADER_PUBLIC float lodScreenSizeScale;
 };
 
+SHADER_PUBLIC struct ReadbackStruct
+{
+    SHADER_PUBLIC uint32_t meshletCount;
+};
+
 SHADER_PUBLIC struct DrawMeshTasksIndirectCommand
 {
     SHADER_PUBLIC uint32_t groupCountX;

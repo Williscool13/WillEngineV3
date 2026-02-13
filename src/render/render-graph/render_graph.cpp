@@ -34,9 +34,15 @@ RenderGraph::RenderGraph(VulkanContext* context, ResourceManager* resourceManage
         bufferInfo.size = RDG_DEFAULT_UPLOAD_LINEAR_ALLOCATOR_SIZE;
 
         uploadArenas[i].buffer = std::move(AllocatedBuffer::CreateAllocatedBuffer(context, bufferInfo, vmaAllocInfo));
-        uploadArenas[i].buffer.SetDebugName(("frameBufferUploader_" + std::to_string(i)).c_str());
+        uploadArenas[i].buffer.SetDebugName(("rdgFrameBufferUploader_" + std::to_string(i)).c_str());
         uploadArenas[i].allocator = Core::LinearAllocator(RDG_DEFAULT_UPLOAD_LINEAR_ALLOCATOR_SIZE);
         uploadArenas[i].size = RDG_DEFAULT_UPLOAD_LINEAR_ALLOCATOR_SIZE;
+
+        bufferInfo.usage = VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_2_TRANSFER_DST_BIT;
+        vmaAllocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
+        vmaAllocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+        meshletCountReadbacks[i].buffer = std::move(AllocatedBuffer::CreateAllocatedBuffer(context, bufferInfo, vmaAllocInfo));
+        meshletCountReadbacks[i].buffer.SetDebugName(("rdgReadbackBuffer_" + std::to_string(i)).c_str());
     }
 }
 

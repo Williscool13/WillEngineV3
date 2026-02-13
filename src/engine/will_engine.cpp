@@ -450,7 +450,6 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
         uint8_t* ptr = base;
         if (ImGui::CollapsingHeader("Meshlet Instancing Debug")) {
             auto* instanceMeshletOffsets = reinterpret_cast<InstanceMeshletOffsetPrefixSum*>(ptr);
-            ptr += 640 * sizeof(InstanceMeshletOffsetPrefixSum);
 
             if (ImGui::BeginTable("InstanceMeshletOffsetsTable", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
                 ImGui::TableSetupColumn("Instance");
@@ -477,13 +476,38 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
                 ImGui::EndTable();
             }
         }
+        ptr += 640 * sizeof(InstanceMeshletOffsetPrefixSum);
 
         if (ImGui::CollapsingHeader("Meshlet Dispatch Args")) {
-            ptr = base + 640 * sizeof(InstanceMeshletOffsetPrefixSum);
             auto* dispatchArgs = reinterpret_cast<InstancingMeshletDispatchIndirectCommand*>(ptr);
 
             ImGui::Text("Total Meshlets: %u", dispatchArgs->totalMeshlets);
             ImGui::Text("Dispatch Groups: (%u, %u, %u)", dispatchArgs->x, dispatchArgs->y, dispatchArgs->z);
+        }
+        ptr += sizeof(InstancingMeshletDispatchIndirectCommand);
+
+
+        if (ImGui::CollapsingHeader("Intermediate Meshlets")) {
+            auto* intermediateMeshlets = reinterpret_cast<IntermediateMeshlet*>(ptr);
+
+            if (ImGui::BeginTable("IntermediateMeshletsTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+                ImGui::TableSetupColumn("Global Meshlet Index");
+                ImGui::TableSetupColumn("Instance Index");
+                ImGui::TableSetupColumn("Local Meshlet Index");
+                ImGui::TableHeadersRow();
+
+                for (uint32_t i = 0; i < 128; ++i) {
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", i);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", intermediateMeshlets[i].instanceIndex);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", intermediateMeshlets[i].localMeshletIndex);
+                }
+
+                ImGui::EndTable();
+            }
         }
     }
 

@@ -245,6 +245,10 @@ struct TransientUploadArena
     Core::LinearAllocator allocator{RDG_DEFAULT_UPLOAD_LINEAR_ALLOCATOR_SIZE};
     size_t size;
 };
+
+struct TransientReadback {
+    AllocatedBuffer buffer;
+};
 } // Render
 
 #endif //WILL_ENGINE_RENDER_GRAPH_RESOURCES_H

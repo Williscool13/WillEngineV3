@@ -231,7 +231,7 @@ void ComputeTotalMeshletCount(uniform TotalMeshletCountPushConstant pc)
 
 [shader("compute")]
 [numthreads(256, 1, 1)]
-void ExpandInstancesToMeshlets(uniform ExpandMeshletsPushConstant pc, uint3 dtid : SV_DispatchThreadID)
+void ComputeExpandInstancesToMeshlets(uniform ExpandMeshletsPushConstant pc, uint3 dtid : SV_DispatchThreadID)
 {
     uint globalMeshletIndex = dtid.x;
     if (globalMeshletIndex >= pc.indirectDispatchBuffer->totalMeshlets) {
