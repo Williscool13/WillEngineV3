@@ -280,7 +280,8 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputePrefixSumDownsweep2 instancing_prefix_sum_down_2
         ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputeTotalMeshletCount instancing_total_meshlet_count
         ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputeExpandInstancesToMeshlets instancing_expand_instance_to_meshlet
-
+        ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputeMeshletVisibilityPrefixSumUpsweep1 instancing_meshlet_visibility_prefix_sum_up_1
+        ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputeMeshletVisibilityPrefixSumDownsweep2 instancing_meshlet_visibility_prefix_sum_down_2
 
         ${CMAKE_SOURCE_DIR}/shaders/mesh_shading_instanced.slang task TaskMain mesh_shading_instanced
         ${CMAKE_SOURCE_DIR}/shaders/mesh_shading_instanced.slang mesh MeshMain mesh_shading_instanced

@@ -486,6 +486,29 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 );
             });
         }
+
+        if (renderGraph->HasBuffer("temp_visible_meshlets")) {
+            RenderPass& debugReadbackPass = renderGraph->AddPass("Debug Readback visible meshlets", VK_PIPELINE_STAGE_2_COPY_BIT);
+
+            debugReadbackPass.ReadTransferBuffer("temp_visible_meshlets");
+            debugReadbackPass.WriteTransferBuffer("debug_readback_buffer");
+
+            debugReadbackPass.Execute([&](VkCommandBuffer cmd) {
+                VkBufferCopy copies[1];
+
+                copies[0].srcOffset = 0;
+                copies[0].dstOffset = 640 * sizeof(InstanceMeshletOffsetPrefixSum) + sizeof(InstancingMeshletDispatchIndirectCommand) + sizeof(IntermediateMeshlet) * 128;
+                copies[0].size = sizeof(CompactedMeshlet) * 128;
+
+                vkCmdCopyBuffer(
+                    cmd,
+                    renderGraph->GetBufferHandle("temp_visible_meshlets"),
+                    renderGraph->GetBufferHandle("debug_readback_buffer"),
+                    1,
+                    &copies[0]
+                );
+            });
+        }
 #endif
 
 
@@ -729,6 +752,10 @@ void RenderThread::CreatePipelines()
                                              sizeof(TotalMeshletCountPushConstant), PipelineCategory::Instancing);
     pipelineManager->RegisterComputePipeline("instancing_expand_instance_to_meshlet", Platform::GetShaderPath() / "instancing_expand_instance_to_meshlet_compute.spv",
                                              sizeof(ExpandMeshletsPushConstant), PipelineCategory::Instancing);
+    pipelineManager->RegisterComputePipeline("instancing_meshlet_visibility_prefix_sum_up_1", Platform::GetShaderPath() / "instancing_meshlet_visibility_prefix_sum_up_1_compute.spv",
+                                             sizeof(MeshletVisibilityPrefixSumUpsweep1PushConstant), PipelineCategory::Instancing);
+    pipelineManager->RegisterComputePipeline("instancing_meshlet_visibility_prefix_sum_down_2", Platform::GetShaderPath() / "instancing_meshlet_visibility_prefix_sum_down_2_compute.spv",
+                                             sizeof(MeshletVisibilityPrefixSumDownsweep2PushConstant), PipelineCategory::Instancing);
 
     pipelineManager->RegisterComputePipeline("direct_mesh_shading_build_indirect", Platform::GetShaderPath() / "mesh_shading_direct_build_indirect_compute.spv",
                                              sizeof(BuildDirectIndirectPushConstant), PipelineCategory::CustomRendering);
@@ -1019,10 +1046,20 @@ void RenderThread::PrepareRenderFamilyProperties(Core::ViewFamily& viewFamily, R
     renderFamilyProperties.scannedLevel2BlockSumsBufferSize = level2BlockCount * sizeof(uint32_t);
 
     renderFamilyProperties.intermediateMeshletBufferSize = _limits.highestMeshletCount * sizeof(IntermediateMeshlet);
-    renderFamilyProperties.visibleMeshletsBufferSize = _limits.highestMeshletCount * sizeof(IntermediateMeshlet);
+    uint32_t meshletLevel1BlockCount = (_limits.highestMeshletCount + 255) / 256;
+    uint32_t meshletLevel2BlockCount = (meshletLevel1BlockCount + 255) / 256;
+
+    renderFamilyProperties.meshletLevel1SumsBufferSize = _limits.highestMeshletCount * sizeof(uint32_t);
+    renderFamilyProperties.meshletLevel1BlockSumsBufferSize = meshletLevel1BlockCount * sizeof(uint32_t);
+    renderFamilyProperties.meshletLevel2SumsBufferSize = meshletLevel1BlockCount * sizeof(uint32_t);
+    renderFamilyProperties.meshletLevel2BlockSumsBufferSize = meshletLevel2BlockCount * sizeof(uint32_t);
+    renderFamilyProperties.meshletScannedLevel2BlockSumsBufferSize = meshletLevel2BlockCount * sizeof(uint32_t);
+
+    renderFamilyProperties.visibleMeshletsBufferSize = _limits.highestMeshletCount * sizeof(CompactedMeshlet);
 
 
     renderFamilyProperties.instanceCount = viewFamily.mainPassInstances.size();
+    renderFamilyProperties.visibleMeshletUpperBound = _limits.highestMeshletCount;
     renderFamilyProperties.filteredPrimitiveCount = filteredPrimtiveCount;
 }
 
@@ -2831,6 +2868,11 @@ void RenderThread::TemporaryRenderTests(RenderGraph& graph, const Core::ViewFami
     graph.CreateBuffer("temp_level2_block_sums", renderFamilyProperties.level2BlockSumsBufferSize);
     graph.CreateBuffer("temp_scanned_level2_block_sums", renderFamilyProperties.scannedLevel2BlockSumsBufferSize);
     graph.CreateBuffer("temp_intermediate_meshlets", renderFamilyProperties.intermediateMeshletBufferSize);
+    graph.CreateBuffer("temp_meshlet_level1_sums", renderFamilyProperties.meshletLevel1SumsBufferSize);
+    graph.CreateBuffer("temp_meshlet_level1_block_sums", renderFamilyProperties.meshletLevel1BlockSumsBufferSize);
+    graph.CreateBuffer("temp_meshlet_level2_sums", renderFamilyProperties.meshletLevel2SumsBufferSize);
+    graph.CreateBuffer("temp_meshlet_level2_block_sums", renderFamilyProperties.meshletLevel2BlockSumsBufferSize);
+    graph.CreateBuffer("temp_meshlet_scanned_level2_block_sums", renderFamilyProperties.meshletScannedLevel2BlockSumsBufferSize);
     graph.CreateBuffer("temp_visible_meshlets", renderFamilyProperties.visibleMeshletsBufferSize);
 
     graph.CreateBuffer("temp_meshlet_count_dispatch_args", sizeof(InstancingMeshletDispatchIndirectCommand));
@@ -2843,6 +2885,11 @@ void RenderThread::TemporaryRenderTests(RenderGraph& graph, const Core::ViewFami
     clearPass.WriteTransferBuffer("temp_level2_block_sums");
     clearPass.WriteTransferBuffer("temp_scanned_level2_block_sums");
     clearPass.WriteTransferBuffer("temp_intermediate_meshlets");
+    clearPass.WriteTransferBuffer("temp_meshlet_level1_sums");
+    clearPass.WriteTransferBuffer("temp_meshlet_level1_block_sums");
+    clearPass.WriteTransferBuffer("temp_meshlet_level2_sums");
+    clearPass.WriteTransferBuffer("temp_meshlet_level2_block_sums");
+    clearPass.WriteTransferBuffer("temp_meshlet_scanned_level2_block_sums");
     clearPass.WriteTransferBuffer("temp_visible_meshlets");
     clearPass.Execute([&](VkCommandBuffer cmd) {
         vkCmdFillBuffer(cmd, graph.GetBufferHandle("temp_instance_meshlet_offsets"), 0, VK_WHOLE_SIZE, 0);
@@ -2852,6 +2899,11 @@ void RenderThread::TemporaryRenderTests(RenderGraph& graph, const Core::ViewFami
         vkCmdFillBuffer(cmd, graph.GetBufferHandle("temp_level2_block_sums"), 0, VK_WHOLE_SIZE, 0);
         vkCmdFillBuffer(cmd, graph.GetBufferHandle("temp_scanned_level2_block_sums"), 0, VK_WHOLE_SIZE, 0);
         vkCmdFillBuffer(cmd, graph.GetBufferHandle("temp_intermediate_meshlets"), 0, VK_WHOLE_SIZE, 0);
+        vkCmdFillBuffer(cmd, graph.GetBufferHandle("temp_meshlet_level1_sums"), 0, VK_WHOLE_SIZE, 0);
+        vkCmdFillBuffer(cmd, graph.GetBufferHandle("temp_meshlet_level1_block_sums"), 0, VK_WHOLE_SIZE, 0);
+        vkCmdFillBuffer(cmd, graph.GetBufferHandle("temp_meshlet_level2_sums"), 0, VK_WHOLE_SIZE, 0);
+        vkCmdFillBuffer(cmd, graph.GetBufferHandle("temp_meshlet_level2_block_sums"), 0, VK_WHOLE_SIZE, 0);
+        vkCmdFillBuffer(cmd, graph.GetBufferHandle("temp_meshlet_scanned_level2_block_sums"), 0, VK_WHOLE_SIZE, 0);
         vkCmdFillBuffer(cmd, graph.GetBufferHandle("temp_visible_meshlets"), 0, VK_WHOLE_SIZE, 0);
     });
 
@@ -3054,6 +3106,128 @@ void RenderThread::TemporaryRenderTests(RenderGraph& graph, const Core::ViewFami
         };
 
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_expand_instance_to_meshlet");
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+        vkCmdDispatchIndirect(cmd, graph.GetBufferHandle("temp_meshlet_count_dispatch_args"), offsetof(InstancingMeshletDispatchIndirectCommand, x));
+    });
+
+    uint32_t highestMeshletCount = renderFamilyProperties.visibleMeshletUpperBound;
+    uint32_t meshletLevel1BlockCount = (highestMeshletCount + 255) / 256;
+    uint32_t meshletLevel2BlockCount = (meshletLevel1BlockCount + 255) / 256;
+
+    RenderPass& meshletUpsweep1Pass = graph.AddPass("Meshlet Visibility Prefix Sum Upsweep 1", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+    meshletUpsweep1Pass.ReadBuffer("temp_intermediate_meshlets");
+    meshletUpsweep1Pass.WriteBuffer("temp_meshlet_level1_sums");
+    meshletUpsweep1Pass.WriteBuffer("temp_meshlet_level1_block_sums");
+    meshletUpsweep1Pass.ReadIndirectBuffer("temp_meshlet_count_dispatch_args");
+    meshletUpsweep1Pass.Execute([&, meshletLevel1BlockCount](VkCommandBuffer cmd) {
+        MeshletVisibilityPrefixSumUpsweep1PushConstant pc{
+            .intermediateMeshlets = graph.GetBufferAddress("temp_intermediate_meshlets"),
+
+            .indirectDispatchBuffer = graph.GetBufferAddress("temp_meshlet_count_dispatch_args"),
+            .meshletLevel1Sums = graph.GetBufferAddress("temp_meshlet_level1_sums"),
+            .meshletLevel1BlockSums = graph.GetBufferAddress("temp_meshlet_level1_block_sums"),
+            .blockCount = meshletLevel1BlockCount,
+        };
+
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_meshlet_visibility_prefix_sum_up_1");
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+        vkCmdDispatchIndirect(cmd, graph.GetBufferHandle("temp_meshlet_count_dispatch_args"), offsetof(InstancingMeshletDispatchIndirectCommand, x));
+    });
+
+    if (meshletLevel2BlockCount > 1) {
+        RenderPass& meshletUpsweep2Pass = graph.AddPass("Meshlet Visibility Prefix Sum Upsweep 2", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+        meshletUpsweep2Pass.ReadBuffer("temp_meshlet_level1_block_sums");
+        meshletUpsweep2Pass.WriteBuffer("temp_meshlet_level2_sums");
+        meshletUpsweep2Pass.WriteBuffer("temp_meshlet_level2_block_sums");
+        meshletUpsweep2Pass.Execute([&, meshletLevel1BlockCount, meshletLevel2BlockCount](VkCommandBuffer cmd) {
+            PrefixSumUpsweep2PushConstant pc{
+                .level1BlockSums = graph.GetBufferAddress("temp_meshlet_level1_block_sums"),
+                .level2Sums = graph.GetBufferAddress("temp_meshlet_level2_sums"),
+                .level2BlockSums = graph.GetBufferAddress("temp_meshlet_level2_block_sums"),
+                .elementCount = meshletLevel1BlockCount,
+                .blockCount = meshletLevel2BlockCount,
+            };
+
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_prefix_sum_up_2");
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+            vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            vkCmdDispatch(cmd, meshletLevel2BlockCount, 1, 1);
+        });
+
+        RenderPass& meshletScanBlocksPass = graph.AddPass("Meshlet Visibility Prefix Sum Scan Blocks", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+        meshletScanBlocksPass.ReadBuffer("temp_meshlet_level2_block_sums");
+        meshletScanBlocksPass.WriteBuffer("temp_meshlet_scanned_level2_block_sums");
+        meshletScanBlocksPass.Execute([&, meshletLevel2BlockCount](VkCommandBuffer cmd) {
+            PrefixSumScanBlocksPushConstant pc{
+                .level2BlockSums = graph.GetBufferAddress("temp_meshlet_level2_block_sums"),
+                .scannedLevel2BlockSums = graph.GetBufferAddress("temp_meshlet_scanned_level2_block_sums"),
+                .blockCount = meshletLevel2BlockCount,
+            };
+
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_scan_blocks");
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+            vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            vkCmdDispatch(cmd, 1, 1, 1);
+        });
+
+        RenderPass& meshletDownsweep1Pass = graph.AddPass("Meshlet Visibility Prefix Sum Downsweep 1", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+        meshletDownsweep1Pass.ReadBuffer("temp_meshlet_scanned_level2_block_sums");
+        meshletDownsweep1Pass.ReadWriteBuffer("temp_meshlet_level2_sums");
+        meshletDownsweep1Pass.Execute([&, meshletLevel1BlockCount, meshletLevel2BlockCount](VkCommandBuffer cmd) {
+            PrefixSumDownsweep1PushConstant pc{
+                .scannedLevel2BlockSums = graph.GetBufferAddress("temp_meshlet_scanned_level2_block_sums"),
+                .level2Sums = graph.GetBufferAddress("temp_meshlet_level2_sums"),
+                .elementCount = meshletLevel1BlockCount,
+            };
+
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_prefix_sum_down_1");
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+            vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            vkCmdDispatch(cmd, meshletLevel2BlockCount, 1, 1);
+        });
+    }
+    else {
+        RenderPass& meshletScanBlocksPass = graph.AddPass("Meshlet Visibility Prefix Sum Scan Blocks", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+        meshletScanBlocksPass.ReadBuffer("temp_meshlet_level1_block_sums");
+        meshletScanBlocksPass.WriteBuffer("temp_meshlet_scanned_level2_block_sums");
+        meshletScanBlocksPass.Execute([&, meshletLevel1BlockCount](VkCommandBuffer cmd) {
+            PrefixSumScanBlocksPushConstant pc{
+                .level2BlockSums = graph.GetBufferAddress("temp_meshlet_level1_block_sums"),
+                .scannedLevel2BlockSums = graph.GetBufferAddress("temp_meshlet_scanned_level2_block_sums"),
+                .blockCount = meshletLevel1BlockCount,
+            };
+
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_scan_blocks");
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+            vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            vkCmdDispatch(cmd, 1, 1, 1);
+        });
+    }
+
+    RenderPass& meshletDownsweep2Pass = graph.AddPass("Meshlet Visibility Prefix Sum Downsweep 2", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+    meshletDownsweep2Pass.ReadBuffer("temp_meshlet_level1_sums");
+    meshletDownsweep2Pass.ReadBuffer("temp_intermediate_meshlets");
+    if (meshletLevel2BlockCount > 1) {
+        meshletDownsweep2Pass.ReadBuffer("temp_meshlet_level2_sums");
+    }
+    else {
+        meshletDownsweep2Pass.ReadBuffer("temp_meshlet_scanned_level2_block_sums");
+    }
+    meshletDownsweep2Pass.WriteBuffer("temp_visible_meshlets");
+    meshletDownsweep2Pass.ReadIndirectBuffer("temp_meshlet_count_dispatch_args");
+    meshletDownsweep2Pass.Execute([&, meshletLevel2BlockCount](VkCommandBuffer cmd) {
+        MeshletVisibilityPrefixSumDownsweep2PushConstant pc{
+            .meshletLevel1Sums = graph.GetBufferAddress("temp_meshlet_level1_sums"),
+            .meshletLevel2Sums = meshletLevel2BlockCount > 1 ? graph.GetBufferAddress("temp_meshlet_level2_sums") : graph.GetBufferAddress("temp_meshlet_scanned_level2_block_sums"),
+            .intermediateMeshlets = graph.GetBufferAddress("temp_intermediate_meshlets"),
+            .indirectDispatchBuffer = graph.GetBufferAddress("temp_meshlet_count_dispatch_args"),
+
+            .visibleMeshlets = graph.GetBufferAddress("temp_visible_meshlets"),
+        };
+
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_meshlet_visibility_prefix_sum_down_2");
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         vkCmdDispatchIndirect(cmd, graph.GetBufferHandle("temp_meshlet_count_dispatch_args"), offsetof(InstancingMeshletDispatchIndirectCommand, x));

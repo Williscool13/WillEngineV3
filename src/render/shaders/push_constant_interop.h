@@ -203,6 +203,32 @@ SHADER_PUBLIC struct ExpandMeshletsPushConstant
     SHADER_PUBLIC uint32_t instanceCount;
 };
 
+SHADER_PUBLIC struct MeshletVisibilityPrefixSumUpsweep1PushConstant
+{
+    // Read
+    SHADER_PUBLIC SHADER_PTR(IntermediateMeshlet) intermediateMeshlets;
+    SHADER_PUBLIC SHADER_PTR(InstancingMeshletDispatchIndirectCommand) indirectDispatchBuffer; // for elementCount (totalMeshlets)
+
+    // Write
+    SHADER_PUBLIC SHADER_PTR(uint32_t) meshletLevel1Sums;
+    SHADER_PUBLIC SHADER_PTR(uint32_t) meshletLevel1BlockSums;
+
+    // Read-Only
+    SHADER_PUBLIC uint32_t blockCount;
+};
+
+SHADER_PUBLIC struct MeshletVisibilityPrefixSumDownsweep2PushConstant
+{
+    // Read
+    SHADER_PUBLIC SHADER_PTR(uint32_t) meshletLevel1Sums;
+    SHADER_PUBLIC SHADER_PTR(uint32_t) meshletLevel2Sums;
+    SHADER_PUBLIC SHADER_PTR(IntermediateMeshlet) intermediateMeshlets;
+    SHADER_PUBLIC SHADER_PTR(InstancingMeshletDispatchIndirectCommand) indirectDispatchBuffer; // for elementCount (totalMeshlets)
+
+    // Write
+    SHADER_PUBLIC SHADER_PTR(CompactedMeshlet) visibleMeshlets;
+};
+
 
 SHADER_PUBLIC struct VisibilityPushConstant
 {

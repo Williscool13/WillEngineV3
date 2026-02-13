@@ -51,6 +51,7 @@ struct RenderFamilyProperties
     size_t directIndirectCommandBufferSize{128};
 
     uint32_t instanceCount{0};
+    uint32_t visibleMeshletUpperBound{0};
     uint32_t filteredPrimitiveCount{0};
 
     std::vector<uint32_t> primitiveIndexToRangeBufferMap{};
@@ -62,7 +63,13 @@ struct RenderFamilyProperties
     size_t level2SumsBufferSize{128};
     size_t level2BlockSumsBufferSize{128};
     size_t scannedLevel2BlockSumsBufferSize{128};
+
     size_t intermediateMeshletBufferSize{128};
+    size_t meshletLevel1SumsBufferSize{128};
+    size_t meshletLevel1BlockSumsBufferSize{128};
+    size_t meshletLevel2SumsBufferSize{128};
+    size_t meshletLevel2BlockSumsBufferSize{128};
+    size_t meshletScannedLevel2BlockSumsBufferSize{128};
     size_t visibleMeshletsBufferSize{128};       // Final compacted output
 
     void Reset()

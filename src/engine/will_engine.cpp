@@ -359,9 +359,7 @@ void WillEngine::Run()
             ZoneScopedN("PrepareRenderFrameData");
             const bool bRenderReadyToReceive = engineRenderSynchronization->gameFrames.load(std::memory_order_acquire) > 0;
             if (bRenderReadyToReceive) {
-                engineRenderSynchronization->gameFrames.fetch_sub(1, std::memory_order_release);
-
-                {
+                engineRenderSynchronization->gameFrames.fetch_sub(1, std::memory_order_release); {
                     ZoneScopedN("UpdateRender");
                     timeManager->UpdateRender();
                 }
@@ -514,6 +512,37 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
                     ImGui::Text("%u", instanceIndex);
                     ImGui::TableNextColumn();
                     ImGui::Text("%s", visible ? "Yes" : "No");
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", localMeshletIndex);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", lod);
+                }
+
+                ImGui::EndTable();
+            }
+        }
+        ptr += sizeof(IntermediateMeshlet) * 128;
+
+        if (ImGui::CollapsingHeader("Visible Meshlets (Compacted)")) {
+            auto* visibleMeshlets = reinterpret_cast<CompactedMeshlet*>(ptr);
+
+            if (ImGui::BeginTable("VisibleMeshletsTable", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+                ImGui::TableSetupColumn("Compact Index");
+                ImGui::TableSetupColumn("Instance Index");
+                ImGui::TableSetupColumn("Local Meshlet Index");
+                ImGui::TableSetupColumn("LOD");
+                ImGui::TableHeadersRow();
+
+                for (uint32_t i = 0; i < 128; ++i) {
+                    uint32_t packedLocal = visibleMeshlets[i].localMeshletIndex;
+                    uint32_t localMeshletIndex = packedLocal & 0x3FFFFFFF;
+                    uint32_t lod = packedLocal >> 30;
+
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", i);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", visibleMeshlets[i].instanceIndex);
                     ImGui::TableNextColumn();
                     ImGui::Text("%u", localMeshletIndex);
                     ImGui::TableNextColumn();

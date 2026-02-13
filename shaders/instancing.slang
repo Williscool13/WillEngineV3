@@ -298,10 +298,81 @@ void ComputeExpandInstancesToMeshlets(uniform ExpandMeshletsPushConstant pc, uin
     pc.intermediateMeshlets[globalMeshletIndex].localMeshletIndex = packedLocalMeshlet;
 }
 
+// =============== Meshlet Visibility Pass 1: Upsweep Level 1 ===============
+groupshared uint meshletBlockSums1[8];
 
+[shader("compute")]
+[numthreads(256, 1, 1)]
+void ComputeMeshletVisibilityPrefixSumUpsweep1(uniform MeshletVisibilityPrefixSumUpsweep1PushConstant pc, uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID, uint3 dtid : SV_DispatchThreadID)
+{
+    uint globalIdx = dtid.x;
+    uint threadIdx = gtid.x;
 
+    uint value = 0;
+    if (globalIdx < pc.indirectDispatchBuffer->totalMeshlets) {
+        value = bool((pc.intermediateMeshlets[globalIdx].instanceIndex >> 31) & 1);
+    }
 
+    // Wave prefix sum
+    uint localScan = WavePrefixSum(value);
+    uint waveIdx = WaveGetLaneIndex();
+    uint waveID = threadIdx / WaveGetLaneCount();
+    uint numWaves = (256 + WaveGetLaneCount() - 1) / WaveGetLaneCount();
 
+    // Last lane writes wave total
+    if (waveIdx == WaveGetLaneCount() - 1) {
+        meshletBlockSums1[waveID] = localScan + value;
+    }
+
+    GroupMemoryBarrierWithGroupSync();
+
+    // Thread 0 scans wave totals
+    if (threadIdx == 0) {
+        uint runningSum = 0;
+        for (uint i = 0; i < numWaves; i++) {
+            uint temp = meshletBlockSums1[i];
+            meshletBlockSums1[i] = runningSum;
+            runningSum += temp;
+        }
+    }
+
+    GroupMemoryBarrierWithGroupSync();
+
+    // Write local prefix sum
+    uint blockLocalScan = localScan + meshletBlockSums1[waveID];
+    if (globalIdx < pc.indirectDispatchBuffer->totalMeshlets) {
+        pc.meshletLevel1Sums[globalIdx] = blockLocalScan;
+    }
+
+    // Last thread writes block total
+    if (threadIdx == 255 && gid.x < pc.blockCount) {
+        pc.meshletLevel1BlockSums[gid.x] = blockLocalScan + value;
+    }
+}
+
+// =============== Meshlet Visibility Pass 5: Downsweep Level 2 ===============
+[shader("compute")]
+[numthreads(256, 1, 1)]
+void ComputeMeshletVisibilityPrefixSumDownsweep2(uniform MeshletVisibilityPrefixSumDownsweep2PushConstant pc, uint3 gid : SV_GroupID, uint3 dtid : SV_DispatchThreadID)
+{
+    uint globalIdx = dtid.x;
+
+    if (globalIdx >= pc.indirectDispatchBuffer->totalMeshlets) {
+        return;
+    }
+
+    uint blockIdx = globalIdx / 256;
+    uint blockOffset = pc.meshletLevel2Sums[blockIdx];
+    uint compactOffset = pc.meshletLevel1Sums[globalIdx] + blockOffset;
+
+    uint packedInstance = pc.intermediateMeshlets[globalIdx].instanceIndex;
+    bool visible = bool((packedInstance >> 31) & 1);
+
+    if (visible) {
+        pc.visibleMeshlets[compactOffset].instanceIndex = packedInstance & 0x7FFFFFFF;
+        pc.visibleMeshlets[compactOffset].localMeshletIndex = pc.intermediateMeshlets[globalIdx].localMeshletIndex;
+    }
+}
 
 
 
