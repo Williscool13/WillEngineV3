@@ -30,10 +30,21 @@ void ComputeInstanceLOD(uniform InstanceLODPushConstant pc, uint3 dtid : SV_Disp
     float maxScale = max(max(scale.x, scale.y), scale.z);
     float worldRadius = boundingSphere.w * maxScale;
     float3 worldCenter = mul(model.modelMatrix, float4(boundingSphere.xyz, 1.0)).xyz;
+    float4 worldBounds = float4(worldCenter, worldRadius);
+
+    bool bVisible = FrustumCullSphere(pc.sceneData[pc.sceneDataIndex].frustum, worldBounds);
+    // todo: hiz occlusion culling
+    if (!bVisible) {
+        pc.instanceMeshletOffsets[instanceID].count = 0;
+        pc.instanceMeshletOffsets[instanceID].lod = LOD_CULLED;
+        pc.instanceMeshletOffsets[instanceID].primitiveIndex = inst.primitiveIndex;
+        return;
+    }
 
     float3 cameraPos = pc.sceneData[pc.sceneDataIndex].cameraWorldPos.xyz;
     float distance = max(length(worldCenter - cameraPos), worldRadius);
     float screenSize = (worldRadius / distance) * pc.sceneData[pc.sceneDataIndex].lodScreenSizeScale;
+
 
     uint lod = 0;
     if (screenSize < 10.0) lod = 3;
