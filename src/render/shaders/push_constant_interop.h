@@ -181,7 +181,7 @@ SHADER_PUBLIC struct PrefixSumDownsweep2PushConstant
 
 SHADER_PUBLIC struct TotalMeshletCountPushConstant
 {
-    SHADER_PUBLIC SHADER_PTR(InstancingMeshletDispatchIndirectCommand) indirectDispatchBuffer;
+    SHADER_PUBLIC SHADER_PTR(InstancingMeshletDispatchIndirect) indirectDispatchBuffer;
     SHADER_PUBLIC SHADER_PTR(InstanceMeshletOffsetPrefixSum) instanceMeshletOffsets;
 
     SHADER_PUBLIC uint32_t instanceCount;
@@ -189,7 +189,7 @@ SHADER_PUBLIC struct TotalMeshletCountPushConstant
 
 SHADER_PUBLIC struct ExpandMeshletsPushConstant
 {
-    SHADER_PUBLIC SHADER_PTR(InstancingMeshletDispatchIndirectCommand) indirectDispatchBuffer; // for totalMeshletCount
+    SHADER_PUBLIC SHADER_PTR(InstancingMeshletDispatchIndirect) indirectDispatchBuffer; // for totalMeshletCount
     SHADER_PUBLIC SHADER_PTR(InstanceMeshletOffsetPrefixSum) instanceMeshletOffsets;
     SHADER_PUBLIC SHADER_PTR(IntermediateMeshlet) intermediateMeshlets;
 
@@ -207,7 +207,7 @@ SHADER_PUBLIC struct MeshletVisibilityPrefixSumUpsweep1PushConstant
 {
     // Read
     SHADER_PUBLIC SHADER_PTR(IntermediateMeshlet) intermediateMeshlets;
-    SHADER_PUBLIC SHADER_PTR(InstancingMeshletDispatchIndirectCommand) indirectDispatchBuffer; // for elementCount (totalMeshlets)
+    SHADER_PUBLIC SHADER_PTR(InstancingMeshletDispatchIndirect) indirectDispatchBuffer; // for totalMeshlets
 
     // Write
     SHADER_PUBLIC SHADER_PTR(uint32_t) meshletLevel1Sums;
@@ -223,10 +223,16 @@ SHADER_PUBLIC struct MeshletVisibilityPrefixSumDownsweep2PushConstant
     SHADER_PUBLIC SHADER_PTR(uint32_t) meshletLevel1Sums;
     SHADER_PUBLIC SHADER_PTR(uint32_t) meshletLevel2Sums;
     SHADER_PUBLIC SHADER_PTR(IntermediateMeshlet) intermediateMeshlets;
-    SHADER_PUBLIC SHADER_PTR(InstancingMeshletDispatchIndirectCommand) indirectDispatchBuffer; // for elementCount (totalMeshlets)
+    SHADER_PUBLIC SHADER_PTR(InstancingMeshletDispatchIndirect) indirectDispatchBuffer; // for elementCount (totalMeshlets)
 
     // Write
     SHADER_PUBLIC SHADER_PTR(CompactedMeshlet) visibleMeshlets;
+    SHADER_PUBLIC SHADER_PTR(InstancingCompactedMeshletDispatchIndirect) compactedDispatchBuffer;
+};
+
+SHADER_PUBLIC struct CompactedMeshletDispatchPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(InstancingCompactedMeshletDispatchIndirect) compactedDispatchBuffer;
 };
 
 

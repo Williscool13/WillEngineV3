@@ -87,7 +87,7 @@ SHADER_PUBLIC struct InstanceMeshletOffsetPrefixSum
     SHADER_PUBLIC uint32_t primitiveIndex; // debug only
 };
 
-SHADER_PUBLIC struct InstancingMeshletDispatchIndirectCommand
+SHADER_PUBLIC struct InstancingMeshletDispatchIndirect
 {
     SHADER_PUBLIC uint32_t x;
     SHADER_PUBLIC uint32_t y;
@@ -105,6 +105,14 @@ SHADER_PUBLIC struct CompactedMeshlet
 {
     SHADER_PUBLIC uint32_t instanceIndex; // 32 for instanceIndex
     SHADER_PUBLIC uint32_t localMeshletIndex; // 2/30, greatest 2 bits are LOD
+};
+
+SHADER_PUBLIC struct InstancingCompactedMeshletDispatchIndirect
+{
+    SHADER_PUBLIC uint32_t x;
+    SHADER_PUBLIC uint32_t y;
+    SHADER_PUBLIC uint32_t z;
+    SHADER_PUBLIC uint32_t totalVisibleMeshlets;
 };
 
 SHADER_PUBLIC struct PrimitiveCounters

@@ -477,12 +477,12 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
         ptr += 640 * sizeof(InstanceMeshletOffsetPrefixSum);
 
         if (ImGui::CollapsingHeader("Meshlet Dispatch Args")) {
-            auto* dispatchArgs = reinterpret_cast<InstancingMeshletDispatchIndirectCommand*>(ptr);
+            auto* dispatchArgs = reinterpret_cast<InstancingMeshletDispatchIndirect*>(ptr);
 
             ImGui::Text("Total Meshlets: %u", dispatchArgs->totalMeshlets);
             ImGui::Text("Dispatch Groups: (%u, %u, %u)", dispatchArgs->x, dispatchArgs->y, dispatchArgs->z);
         }
-        ptr += sizeof(InstancingMeshletDispatchIndirectCommand);
+        ptr += sizeof(InstancingMeshletDispatchIndirect);
 
 
         if (ImGui::CollapsingHeader("Intermediate Meshlets")) {
@@ -551,6 +551,35 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
 
                 ImGui::EndTable();
             }
+        }
+        ptr += sizeof(CompactedMeshlet) * 128;
+
+        if (ImGui::CollapsingHeader("Meshlet Scanned Level2 Block Sums")) {
+            auto* scannedBlockSums = reinterpret_cast<uint32_t*>(ptr);
+
+            if (ImGui::BeginTable("ScannedBlockSumsTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+                ImGui::TableSetupColumn("Block Index");
+                ImGui::TableSetupColumn("Scanned Sum");
+                ImGui::TableHeadersRow();
+
+                for (uint32_t i = 0; i < 256; ++i) {
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", i);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", scannedBlockSums[i]);
+                }
+
+                ImGui::EndTable();
+            }
+        }
+        ptr += sizeof(uint32_t) * 256;
+
+        if (ImGui::CollapsingHeader("Compacted Meshlet Dispatch Args")) {
+            auto* compactedDispatchArgs = reinterpret_cast<InstancingCompactedMeshletDispatchIndirect*>(ptr);
+
+            ImGui::Text("Total Visible Meshlets: %u", compactedDispatchArgs->totalVisibleMeshlets);
+            ImGui::Text("Dispatch Groups: (%u, %u, %u)", compactedDispatchArgs->x, compactedDispatchArgs->y, compactedDispatchArgs->z);
         }
     }
 

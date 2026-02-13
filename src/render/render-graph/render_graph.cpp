@@ -410,7 +410,7 @@ void RenderGraph::Compile(int64_t currentFrame)
                                 phys.storageMipDescriptorHandles[mip].index,
                                 {nullptr, phys.mipViews[mip], VK_IMAGE_LAYOUT_GENERAL}
                             );
-                            break;
+                            break;\
                         }
                     }
                 }

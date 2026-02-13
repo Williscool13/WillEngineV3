@@ -161,6 +161,8 @@ void ComputePrefixSumUpsweep2(uniform PrefixSumUpsweep2PushConstant pc, uint3 gi
 }
 
 // =============== Pass 3: Scan Block Sums ===============
+groupshared uint scanBlockSums[8];
+
 [shader("compute")]
 [numthreads(256, 1, 1)]
 void ComputePrefixSumScanBlocks(uniform PrefixSumScanBlocksPushConstant pc, uint3 gtid : SV_GroupThreadID)
@@ -172,10 +174,35 @@ void ComputePrefixSumScanBlocks(uniform PrefixSumScanBlocksPushConstant pc, uint
         value = pc.level2BlockSums[threadIdx];
     }
 
+    // Wave prefix sum
     uint localScan = WavePrefixSum(value);
+    uint waveIdx = WaveGetLaneIndex();
+    uint waveID = threadIdx / WaveGetLaneCount();
+    uint numWaves = (256 + WaveGetLaneCount() - 1) / WaveGetLaneCount();
 
+    // Last lane writes wave total
+    if (waveIdx == WaveGetLaneCount() - 1) {
+        scanBlockSums[waveID] = localScan + value;
+    }
+
+    GroupMemoryBarrierWithGroupSync();
+
+    // Thread 0 scans wave totals
+    if (threadIdx == 0) {
+        uint runningSum = 0;
+        for (uint i = 0; i < numWaves; i++) {
+            uint temp = scanBlockSums[i];
+            scanBlockSums[i] = runningSum;
+            runningSum += temp;
+        }
+    }
+
+    GroupMemoryBarrierWithGroupSync();
+
+    // Write final scanned value
+    uint blockLocalScan = localScan + scanBlockSums[waveID];
     if (threadIdx < pc.blockCount) {
-        pc.scannedLevel2BlockSums[threadIdx] = localScan;
+        pc.scannedLevel2BlockSums[threadIdx] = blockLocalScan;
     }
 }
 
@@ -372,9 +399,29 @@ void ComputeMeshletVisibilityPrefixSumDownsweep2(uniform MeshletVisibilityPrefix
         pc.visibleMeshlets[compactOffset].instanceIndex = packedInstance & 0x7FFFFFFF;
         pc.visibleMeshlets[compactOffset].localMeshletIndex = pc.intermediateMeshlets[globalIdx].localMeshletIndex;
     }
+
+    // Final thread does a postfix sum so we can get total visible meshlets
+    if (globalIdx == pc.indirectDispatchBuffer->totalMeshlets - 1) {
+        pc.compactedDispatchBuffer->totalVisibleMeshlets = compactOffset + (visible ? 1 : 0);
+    }
 }
 
+[shader("compute")]
+[numthreads(1, 1, 1)]
+void ComputeCompactedMeshletDispatch(uniform CompactedMeshletDispatchPushConstant pc)
+{
+    uint totalVisible = pc.compactedDispatchBuffer->totalVisibleMeshlets;
 
+    uint x = min(totalVisible, MAX_MESH_WORK_GROUP_COUNT_X + 1);
+    uint y = 1;
+    if (totalVisible > MAX_MESH_WORK_GROUP_COUNT_X + 1) {
+        y = (totalVisible + MAX_MESH_WORK_GROUP_COUNT_X) / (MAX_MESH_WORK_GROUP_COUNT_X + 1);
+    }
+
+    pc.compactedDispatchBuffer->x = x;
+    pc.compactedDispatchBuffer->y = y;
+    pc.compactedDispatchBuffer->z = 1;
+}
 
 
 
