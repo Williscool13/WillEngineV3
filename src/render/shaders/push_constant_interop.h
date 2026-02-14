@@ -201,6 +201,7 @@ SHADER_PUBLIC struct ExpandMeshletsPushConstant
 
     SHADER_PUBLIC uint32_t sceneDataIndex;
     SHADER_PUBLIC uint32_t instanceCount;
+    SHADER_PUBLIC uint32_t currentFrameBufferMeshletLimit;
 };
 
 SHADER_PUBLIC struct MeshletVisibilityPrefixSumUpsweep1PushConstant
@@ -228,101 +229,31 @@ SHADER_PUBLIC struct MeshletVisibilityPrefixSumDownsweep2PushConstant
     // Write
     SHADER_PUBLIC SHADER_PTR(CompactedMeshlet) visibleMeshlets;
     SHADER_PUBLIC SHADER_PTR(InstancingCompactedMeshletDispatchIndirect) compactedDispatchBuffer;
+
+    SHADER_PUBLIC uint32_t currentFrameBufferMeshletLimit;
 };
 
 SHADER_PUBLIC struct CompactedMeshletDispatchPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(InstancingCompactedMeshletDispatchIndirect) compactedDispatchBuffer;
-};
 
-
-SHADER_PUBLIC struct VisibilityPushConstant
-{
-    // Read-Only
-    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
-    SHADER_PUBLIC SHADER_PTR(MeshletPrimitive) primitiveBuffer;
-    SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
-
-    // Read-Write
-    SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
-    SHADER_PUBLIC SHADER_PTR(uint32_t) primitiveToPrimitiveRangeMapBuffer;
-    SHADER_PUBLIC SHADER_PTR(PrimitiveCounters) primitiveCountersBuffer;
-
-    // Read-Only
-    SHADER_PUBLIC uint32_t instanceCount;
-    SHADER_PUBLIC uint32_t sceneDataIndex;
-    SHADER_PUBLIC uint32_t lodBias;
-};
-
-SHADER_PUBLIC struct VisibilityShadowsPushConstant
-{
-    // Read-Only
-    SHADER_PUBLIC SHADER_PTR(ShadowData) shadowData;
-    SHADER_PUBLIC SHADER_PTR(MeshletPrimitive) primitiveBuffer;
-    SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
-
-    // Read-Write
-    SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
-    SHADER_PUBLIC SHADER_PTR(uint32_t) primitiveToPrimitiveRangeMapBuffer;
-    SHADER_PUBLIC SHADER_PTR(PrimitiveCounters) primitiveCountersBuffer;
-
-    // Read-Only
-    SHADER_PUBLIC uint32_t instanceCount;
-    SHADER_PUBLIC uint32_t cascadeLevel;
-};
-
-SHADER_PUBLIC struct PrefixSumLocalPushConstant
-{
-    SHADER_PUBLIC SHADER_PTR(PrimitiveCounters) primitiveCountersBuffer;
-    SHADER_PUBLIC SHADER_PTR(PrimitiveOffsets) prefixSums; // Out: 65536
-    SHADER_PUBLIC SHADER_PTR(PrimitiveOffsets) blockSums; // Out: 256
-    SHADER_PUBLIC SHADER_PTR(InstancedMeshIndirectCountBuffer) indirectCountBuffer; // Out
-    SHADER_PUBLIC uint32_t primitiveRangeCount;
-};
-
-SHADER_PUBLIC struct PrefixSumBlocksPushConstant
-{
-    SHADER_PUBLIC SHADER_PTR(PrimitiveOffsets) blockSums; // In: 256
-    SHADER_PUBLIC SHADER_PTR(PrimitiveOffsets) scannedBlockOffsets; // Out: 256
-};
-
-SHADER_PUBLIC struct PrefixSumScatterPushConstant
-{
-    SHADER_PUBLIC SHADER_PTR(PrimitiveOffsets) prefixSums; // In/Out: local prefix sums -> global
-    SHADER_PUBLIC SHADER_PTR(PrimitiveOffsets) scannedBlockOffsets; // In: 256 scanned block offsets
-    SHADER_PUBLIC uint32_t primitiveRangeCount;
-};
-
-SHADER_PUBLIC struct CompactAndIndirectPushConstant
-{
-    // Read-Only
-    SHADER_PUBLIC SHADER_PTR(MeshletPrimitive) primitiveBuffer;
-    SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
-    SHADER_PUBLIC SHADER_PTR(uint32_t) primitiveToPrimitiveRangeMapBuffer;
-    SHADER_PUBLIC SHADER_PTR(PrimitiveOffsets) prefixSums;
-    SHADER_PUBLIC uint32_t instanceCount;
-
-    // Write-Only
-    SHADER_PUBLIC SHADER_PTR(uint32_t) instanceIndirectionBuffer; // The "packed" buffer, w/ indirection indices to the original instance buffer
-    SHADER_PUBLIC SHADER_PTR(InstancedMeshIndirectDrawParameters) indirectBuffer;
-    SHADER_PUBLIC SHADER_PTR(PrimitiveCounters) primitiveCountersBuffer;
+    // We do a readback that updates the meshlet intermediate/final buffer, so there is a 3-frame delay for expansion
+    SHADER_PUBLIC uint32_t currentFrameBufferMeshletLimit;
 };
 
 SHADER_PUBLIC struct InstancedMeshShadingPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
-
     SHADER_PUBLIC SHADER_PTR(Vertex) vertexBuffer;
     SHADER_PUBLIC SHADER_PTR(uint32_t) meshletVerticesBuffer;
     SHADER_PUBLIC SHADER_PTR(uint32_t) meshletTrianglesBuffer;
     SHADER_PUBLIC SHADER_PTR(Meshlet) meshletBuffer;
+    SHADER_PUBLIC SHADER_PTR(MeshletPrimitive) primitiveBuffer;
     SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
-
-    SHADER_PUBLIC SHADER_PTR(uint32_t) instanceIndirectionBuffer;
-    SHADER_PUBLIC SHADER_PTR(InstancedMeshIndirectDrawParameters) indirectBuffer;
-
     SHADER_PUBLIC SHADER_PTR(MaterialProperties) materialBuffer;
     SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
+    SHADER_PUBLIC SHADER_PTR(CompactedMeshlet) visibleMeshlets;
+    SHADER_PUBLIC SHADER_PTR(InstancingCompactedMeshletDispatchIndirect) compactedDispatchBuffer; // for "total visible meshlets"
 
     SHADER_PUBLIC uint32_t sceneDataIndex;
 };

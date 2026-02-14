@@ -13,103 +13,9 @@ import shader_functions;
 /*  This shader is the main geometry pass for the majority of objects in this engine.
 *   It is executed through indirect commands generated from instancing compute shaders in `instancing.slang`
 *
-*   The instancing pass determines instance visibility by culling and does a prefix sum and indirect generation pass.
-*   The resulting indirect buffer will have X, Y, 1 task dispatches. Where X is meshletCount / TASK_SHADER_DISPATCH_X and Y is the number of instances for that gltf primitive.
-*
-*   Task shader executes culling on a meshlet level and dispatches only meshlets that are visible.
-*   Mesh shader is straightforward and acts as the vertex shader. It does no culling at the moment.
+*   The instancing pass determines instance and meshlet visibility by culling and does a prefix sum and indirect generation pass.
+*   The resulting indirect buffer will have X, Y, 1 task dispatches. Where: TotalMeshlets = Y * MeshHardwareLimit + X
 */
-
-// =============== Task Shader ===============
-// Per https://developer.nvidia.com/blog/using-mesh-shaders-for-professional-graphics/
-// Task shader output should ideally be below 236/108. We can hit 108 if we turn uint32_t to uint8_t and store offsets in the payload.
-// 4 + 4 + 4 + 64 = 86
-struct MeshletPayload {
-    uint32_t modelIndex;
-    uint32_t materialIndex;
-    uint32_t groupMeshletOffset;
-
-    uint8_t meshletIndices[TASK_SHADER_DISPATCH_X];
-};
-
-groupshared MeshletPayload sharedPayload;
-groupshared uint32_t visibleMeshletCount;
-
-[shader("task")]
-[numthreads(TASK_SHADER_DISPATCH_X, 1, 1)]
-void TaskMain(uniform InstancedMeshShadingPushConstant pc,
-    uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID, uint drawIndex : SV_DrawIndex)
-{
-    InstancedMeshIndirectDrawParameters indirectParameters = pc.indirectBuffer[drawIndex];
-
-    uint32_t instanceLocalIndex = gid.z * MAX_TASK_WORK_GROUP_COUNT_Y + gid.y;
-    if (instanceLocalIndex >= indirectParameters.compactedInstanceCount) {
-        if (gtid.x == 0) {
-            DispatchMesh(0, 1, 1, sharedPayload);
-        }
-        return;
-    }
-    uint32_t instanceIndirectIndex = indirectParameters.compactedInstanceStart + instanceLocalIndex;
-    uint32_t instanceIndex = pc.instanceIndirectionBuffer[instanceIndirectIndex];
-    Instance inst = pc.instanceBuffer[instanceIndex];
-
-    uint32_t groupMeshletOffset = indirectParameters.meshletOffset + (gid.x * TASK_SHADER_DISPATCH_X);
-    uint32_t totalMeshlets = indirectParameters.meshletCount;
-
-    // thread 0 populates shared information for mesh shader
-    if (gtid.x == 0) {
-        visibleMeshletCount = 0;
-
-        sharedPayload.modelIndex = inst.modelIndex;
-        sharedPayload.materialIndex = inst.materialIndex;
-        sharedPayload.groupMeshletOffset = groupMeshletOffset;
-    }
-
-    GroupMemoryBarrierWithGroupSync();
-
-
-    Model model = pc.modelBuffer[inst.modelIndex];
-
-    // group thread count is only 64, will never exceed uint8
-    uint8_t meshletID = (uint8_t)gtid.x;
-    uint localMeshletCount = min(TASK_SHADER_DISPATCH_X, totalMeshlets - (gid.x * TASK_SHADER_DISPATCH_X));
-
-    if (meshletID < localMeshletCount) {
-        Meshlet mlet = pc.meshletBuffer[groupMeshletOffset + meshletID];
-
-        // Transform to world space
-        float3 scale = float3(
-            length(model.modelMatrix[0].xyz),
-            length(model.modelMatrix[1].xyz),
-            length(model.modelMatrix[2].xyz)
-        );
-        float maxScale = max(max(scale.x, scale.y), scale.z);
-        float worldRadius = mlet.meshletBoundingSphere.w * maxScale;
-        float3 worldCenter = mul(model.modelMatrix, float4(mlet.meshletBoundingSphere.xyz, 1.0)).xyz;
-        float4 worldBounds = float4(worldCenter, worldRadius);
-
-        bool visible = true;
-        if (!FrustumCullSphere(pc.sceneData[pc.sceneDataIndex].frustum, worldBounds)) {
-            visible = false;
-        }
-        if (visible && !BackfaceCullCone(mlet.coneAxis, mlet.coneCutoff, worldCenter, worldRadius, pc.sceneData[pc.sceneDataIndex].cameraWorldPos.xyz, (float3x3)model.modelMatrix)) {
-            visible = false;
-        }
-
-        if (visible) {
-            uint index;
-            InterlockedAdd(visibleMeshletCount, 1, index);
-            sharedPayload.meshletIndices[index] = meshletID;
-        }
-    }
-
-    GroupMemoryBarrierWithGroupSync();
-
-    if (gtid.x == 0) {
-        uint count = visibleMeshletCount;
-        DispatchMesh(count, 1, 1, sharedPayload);
-    }
-}
 
 // ==================== Mesh Shader ====================
 struct VertexOutput
@@ -130,44 +36,50 @@ struct VertexOutput
 [outputtopology("triangle")]
 [numthreads(MESH_SHADER_DISPATCH_X, 1, 1)]
 void MeshMain(
-    in payload MeshletPayload inPayload, out indices uint3 triangles[MESHLET_MAX_TRIANGLES], out vertices VertexOutput vertices[MESHLET_MAX_VERTICES],
+    out indices uint3 triangles[MESHLET_MAX_TRIANGLES], out vertices VertexOutput vertices[MESHLET_MAX_VERTICES],
     uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID,
     uniform InstancedMeshShadingPushConstant pc)
 {
-    uint32_t payloadMeshletIndex = gid.x;
-    uint32_t meshletIndex = inPayload.groupMeshletOffset + inPayload.meshletIndices[payloadMeshletIndex];
-    Meshlet meshlet = pc.meshletBuffer[meshletIndex];
+    uint globalMeshletIndex = gid.x + gid.y * (MAX_MESH_WORK_GROUP_COUNT_X / 2);
 
-    Model m = pc.modelBuffer[inPayload.modelIndex];
+    if (globalMeshletIndex >= pc.compactedDispatchBuffer->totalVisibleMeshlets) {
+        SetMeshOutputCounts(0, 0);
+        return;
+    }
+
+    CompactedMeshlet compacted = pc.visibleMeshlets[globalMeshletIndex];
+    uint instanceIndex = compacted.instanceIndex;
+    uint packedLocal = compacted.localMeshletIndex;
+    uint localMeshletIndex = packedLocal & 0x3FFFFFFF;
+    uint lod = packedLocal >> 30;
+
+    Instance inst = pc.instanceBuffer[instanceIndex];
+    MeshletPrimitive prim = pc.primitiveBuffer[inst.primitiveIndex];
+    Model m = pc.modelBuffer[inst.modelIndex];
+
+    uint meshletIndex = prim.meshletOffset[lod] + localMeshletIndex;
+    Meshlet meshlet = pc.meshletBuffer[meshletIndex];
 
     float4x4 jitteredViewProj = pc.sceneData[pc.sceneDataIndex].viewProj;
     float4x4 jitteredPrevViewProj = pc.sceneData[pc.sceneDataIndex].prevViewProj;
-
     float3x3 viewRotation = (float3x3)pc.sceneData[pc.sceneDataIndex].view;
 
     SetMeshOutputCounts(meshlet.meshletVertexCount, meshlet.meshletTriangleCount);
+
     uint32_t threadIndex = gtid.x;
     for (uint i = threadIndex; i < meshlet.meshletVertexCount; i += MESH_SHADER_DISPATCH_X) {
         uint localVertexIndex = pc.meshletVerticesBuffer[meshlet.meshletVertexOffset + i];
         Vertex v = pc.vertexBuffer[meshlet.vertexOffset + localVertexIndex];
         float4 worldPos = mul(m.modelMatrix, float4(v.position, 1.0));
         vertices[i].clipDistance[0] = dot(worldPos.xyz, pc.sceneData[pc.sceneDataIndex].clipPlane.xyz) + pc.sceneData[pc.sceneDataIndex].clipPlane.w;
-        float4 clipPos =     mul(jitteredViewProj,      worldPos);
-        float4 prevClipPos = mul(jitteredPrevViewProj,  mul(m.prevModelMatrix, float4(v.position, 1.0)));
+        float4 clipPos = mul(jitteredViewProj, worldPos);
+        float4 prevClipPos = mul(jitteredPrevViewProj, mul(m.prevModelMatrix, float4(v.position, 1.0)));
         vertices[i].position = clipPos;
         vertices[i].viewNormal = normalize(mul(viewRotation, mul(Adjugate((float3x3)m.modelMatrix), v.normal)));
         vertices[i].tangent = float4(normalize(mul(Adjugate((float3x3)m.modelMatrix), v.tangent.xyz)), v.tangent.w);
         vertices[i].uv = float2(v.texcoordU, v.texcoordV);
-        /*uint meshletID = gid.x;
-        uint hash = meshletID * 747796405u + 2891336453u;
-        float3 color = float3(
-            (hash & 0xFF) / 255.0,
-            ((hash >> 8) & 0xFF) / 255.0,
-            ((hash >> 16) & 0xFF) / 255.0
-        );
-        vertices[i].color = float4(color * v.color.xyz, 1.0);*/
         vertices[i].color = v.color;
-        vertices[i].materialIndex = inPayload.materialIndex;
+        vertices[i].materialIndex = inst.materialIndex;
         vertices[i].currentClipPos = clipPos;
         vertices[i].previousClipPos = prevClipPos;
         vertices[i].objectOnlyPrevClipPos = mul(jitteredViewProj, mul(m.prevModelMatrix, float4(v.position, 1.0)));
@@ -199,7 +111,7 @@ FragmentOutput FragmentMain(VertexOutput vertexInput, uniform InstancedMeshShadi
 {
     MaterialProperties material = pc.materialBuffer[vertexInput.materialIndex];
 
-    float4 albedoSample = assetTextures[material.textureImageIndices[0]].SampleBias(assetSamplers[material.textureSamplerIndices[0]], vertexInput.uv, -1.0);
+    float4 albedoSample = assetTextures[NonUniformResourceIndex(material.textureImageIndices[0])].SampleBias(assetSamplers[NonUniformResourceIndex(material.textureSamplerIndices[0])], vertexInput.uv, -1.0);
     float4 albedo = vertexInput.color * albedoSample * material.colorFactor;
 
     float3 viewNormal = normalize(vertexInput.viewNormal);

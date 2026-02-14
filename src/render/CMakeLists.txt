@@ -99,6 +99,7 @@ target_link_libraries(render PUBLIC
         miniz
         imgui
         tracy_interface
+        bc7enc_rdo
 )
 
 if(WILL_ENGINE_BUILD_EDITOR)

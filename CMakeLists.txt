@@ -263,12 +263,7 @@ add_shader_include("${CMAKE_SOURCE_DIR}/shaders/bindless_declarations.slang")
 
 compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/debug_visualize.slang compute ComputeMain debug_visualize
-        ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputeVisibility instancing_visibility
-        ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputeVisibilityShadows instancing_shadows_visibility
-        ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputePrefixSumLocal instancing_prefix_sum_local
-        ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputePrefixSumBlocks instancing_prefix_sum_blocks
-        ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputePrefixSumScatter instancing_prefix_sum_scatter
-        ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputeCompactAndGenerateIndirect instancing_compact_and_indirect
+
 
 
         ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputeInstanceLOD instancing_instance_lod
@@ -284,7 +279,6 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputeMeshletVisibilityPrefixSumDownsweep2 instancing_meshlet_visibility_prefix_sum_down_2
         ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputeCompactedMeshletDispatch instancing_compacted_meshlet_dispatch
 
-        ${CMAKE_SOURCE_DIR}/shaders/mesh_shading_instanced.slang task TaskMain mesh_shading_instanced
         ${CMAKE_SOURCE_DIR}/shaders/mesh_shading_instanced.slang mesh MeshMain mesh_shading_instanced
         ${CMAKE_SOURCE_DIR}/shaders/mesh_shading_instanced.slang fragment FragmentMain mesh_shading_instanced
         ${CMAKE_SOURCE_DIR}/shaders/mesh_shading_direct.slang compute ComputeMain mesh_shading_direct_build_indirect

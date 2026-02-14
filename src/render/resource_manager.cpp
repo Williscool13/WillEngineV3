@@ -49,7 +49,9 @@ ResourceManager::ResourceManager(VulkanContext* context)
     primitiveBuffer.SetDebugName("Mega Primitive Buffer");
 
     bindlessSamplerTextureDescriptorBuffer = BindlessResourcesSamplerImages(context);
-    environmentMapGenerateResources  = Editor::EnvironmentMapGenerateResources(context);
+#if WILL_EDITOR
+    environmentMapGenerateResources = Editor::EnvironmentMapGenerateResources(context);
+#endif
     bindlessRDGTransientDescriptorBuffer = BindlessTransientRDGResourcesDescriptorBuffer<
         4,
         4,
