@@ -38,7 +38,7 @@ struct VertexOutput
 void MeshMain(
     out indices uint3 triangles[MESHLET_MAX_TRIANGLES], out vertices VertexOutput vertices[MESHLET_MAX_VERTICES],
     uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID,
-    uniform InstancedMeshShadingPushConstant pc)
+    uniform BaseMeshShadingPushConstant pc)
 {
     uint globalMeshletIndex = gid.x + gid.y * (MAX_MESH_WORK_GROUP_COUNT_X / 2);
 
@@ -107,7 +107,7 @@ struct FragmentOutput {
 };
 
 [shader("fragment")]
-FragmentOutput FragmentMain(VertexOutput vertexInput, uniform InstancedMeshShadingPushConstant pc)
+FragmentOutput FragmentMain(VertexOutput vertexInput, uniform BaseMeshShadingPushConstant pc)
 {
     MaterialProperties material = pc.materialBuffer[vertexInput.materialIndex];
 

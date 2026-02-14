@@ -159,7 +159,7 @@ struct InstanceData
 struct CustomShaderDraw
 {
     std::string pipelineName;
-    std::unique_ptr<BaseMeshShadingPushConstant> pushConstantData;
+    BaseMeshShadingPushConstant pushConstantData;
     size_t pushConstantSize;
     std::vector<InstanceData> instances;
 

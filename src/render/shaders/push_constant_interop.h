@@ -13,21 +13,6 @@ module push_constant_interop;
 #define SHADER_PTR(T) T*
 #define SHADER_ATOMIC(T) Atomic<T>
 
-#define PUSH_CONSTANT_INHERIT_BASE
-#define PUSH_CONSTANT_BASE_BODY \
-    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData; \
-    SHADER_PUBLIC SHADER_PTR(Vertex) vertexBuffer; \
-    SHADER_PUBLIC SHADER_PTR(uint32_t) meshletVerticesBuffer; \
-    SHADER_PUBLIC SHADER_PTR(uint32_t) meshletTrianglesBuffer; \
-    SHADER_PUBLIC SHADER_PTR(Meshlet) meshletBuffer; \
-    SHADER_PUBLIC SHADER_PTR(MeshletPrimitive) primitiveBuffer; \
-    SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer; \
-    SHADER_PUBLIC SHADER_PTR(MaterialProperties) materialBuffer; \
-    SHADER_PUBLIC SHADER_PTR(Model) modelBuffer; \
-    SHADER_PUBLIC uint32_t sceneDataIndex;
-#define PUSH_CONSTANT_DERIVED_BODY PUSH_CONSTANT_BASE_BODY
-
-
 import common_interop;
 import model_interop;
 import constants_interop;
@@ -67,21 +52,6 @@ using float4x4 = glm::mat4;
 #define SHADER_ALIGN alignas(16)
 #define SHADER_PTR(T) VkDeviceAddress
 #define SHADER_ATOMIC(T) T
-
-
-#define PUSH_CONSTANT_INHERIT_BASE : BaseMeshShadingPushConstant
-#define PUSH_CONSTANT_BASE_BODY \
-    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData; \
-    SHADER_PUBLIC SHADER_PTR(Vertex) vertexBuffer; \
-    SHADER_PUBLIC SHADER_PTR(uint32_t) meshletVerticesBuffer; \
-    SHADER_PUBLIC SHADER_PTR(uint32_t) meshletTrianglesBuffer; \
-    SHADER_PUBLIC SHADER_PTR(Meshlet) meshletBuffer; \
-    SHADER_PUBLIC SHADER_PTR(MeshletPrimitive) primitiveBuffer; \
-    SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer; \
-    SHADER_PUBLIC SHADER_PTR(MaterialProperties) materialBuffer; \
-    SHADER_PUBLIC SHADER_PTR(Model) modelBuffer; \
-    SHADER_PUBLIC uint32_t sceneDataIndex;
-#define PUSH_CONSTANT_DERIVED_BODY  // Empty - inherits from base
 #endif // __SLANG__
 
 SHADER_PUBLIC struct DebugVisualizePushConstant
@@ -111,7 +81,7 @@ SHADER_PUBLIC struct InstanceLODPushConstant
     // Read-Only
     SHADER_PUBLIC uint32_t instanceCount;
     SHADER_PUBLIC uint32_t sceneDataIndex;
-    SHADER_PUBLIC uint32_t lodBias;
+    SHADER_PUBLIC int32_t lodBias;
 };
 
 SHADER_PUBLIC struct PrefixSumUpsweep1PushConstant
@@ -242,7 +212,7 @@ SHADER_PUBLIC struct CompactedMeshletDispatchPushConstant
     SHADER_PUBLIC uint32_t currentFrameBufferMeshletLimit;
 };
 
-SHADER_PUBLIC struct InstancedMeshShadingPushConstant
+SHADER_PUBLIC struct BaseMeshShadingPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC SHADER_PTR(Vertex) vertexBuffer;
@@ -255,8 +225,8 @@ SHADER_PUBLIC struct InstancedMeshShadingPushConstant
     SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
     SHADER_PUBLIC SHADER_PTR(CompactedMeshlet) visibleMeshlets;
     SHADER_PUBLIC SHADER_PTR(InstancingCompactedMeshletDispatchIndirect) compactedDispatchBuffer; // for "total visible meshlets"
-
     SHADER_PUBLIC uint32_t sceneDataIndex;
+    SHADER_PUBLIC uint32_t customData[41]; // vk1.4 target, custom PC space that can be filled by anything needed
 };
 
 SHADER_PUBLIC struct ShadowsResolvePushConstant
@@ -340,23 +310,6 @@ SHADER_PUBLIC struct BuildDirectIndirectPushConstant
     SHADER_PUBLIC uint32_t sceneDataIndex;
     SHADER_PUBLIC uint32_t instanceCount;
     SHADER_PUBLIC uint32_t lodBias;
-};
-
-SHADER_PUBLIC struct BaseMeshShadingPushConstant
-{
-    PUSH_CONSTANT_BASE_BODY
-};
-
-SHADER_PUBLIC struct PortalRenderingMeshShadingPushConstant PUSH_CONSTANT_INHERIT_BASE
-{
-    PUSH_CONSTANT_DERIVED_BODY
-    // Portal-specific fields
-};
-
-SHADER_PUBLIC struct CubemapRenderingMeshShadingPushConstant PUSH_CONSTANT_INHERIT_BASE
-{
-    PUSH_CONSTANT_DERIVED_BODY
-    uint32_t cubemapIndex;
 };
 
 SHADER_PUBLIC struct DirectMeshShadingPushConstant

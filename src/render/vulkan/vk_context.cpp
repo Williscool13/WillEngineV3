@@ -286,6 +286,7 @@ VulkanContext::VulkanContext(SDL_Window* window)
                 VK_VERSION_MINOR(deviceInfo.properties.properties.driverVersion),
                 VK_VERSION_PATCH(deviceInfo.properties.properties.driverVersion));
     SPDLOG_INFO("Queue Families - Graphics: {} | Transfer: {}", graphicsQueueFamily, transferQueueFamily);
+    SPDLOG_INFO("Max Push Constant Size: {}", deviceInfo.properties.properties.limits.maxPushConstantsSize);
     SPDLOG_INFO("Max Descriptor Buffer Bindings: {}", deviceInfo.descriptorBufferProps.maxDescriptorBufferBindings);
     SPDLOG_INFO("Mesh Shader Support - Max Task Workgroups: {}", deviceInfo.meshShaderProps.maxTaskWorkGroupCount[0]);
     SPDLOG_INFO("Mesh Shader Support - Max Task Workgroups: {}", deviceInfo.meshShaderProps.maxTaskWorkGroupCount[0]);

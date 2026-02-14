@@ -25,6 +25,16 @@ inline constexpr int32_t RDG_MAX_STORAGE_FLOAT  = 256;
 inline constexpr int32_t RDG_MAX_STORAGE_UINT4   = 64;
 inline constexpr int32_t RDG_MAX_STORAGE_UINT   = 64;
 
+inline constexpr const char* GEOMETRY_BUFFER_SCENE_DATA = "scene_data";
+inline constexpr const char* GEOMETRY_BUFFER_PRIMITIVE = "primitive_buffer";
+inline constexpr const char* GEOMETRY_BUFFER_MODEL = "model_buffer";
+inline constexpr const char* GEOMETRY_BUFFER_INSTANCE = "instance_buffer";
+inline constexpr const char* GEOMETRY_BUFFER_VERTEX = "vertex_buffer";
+inline constexpr const char* GEOMETRY_BUFFER_MESHLET_VERTEX = "meshlet_vertex_buffer";
+inline constexpr const char* GEOMETRY_BUFFER_MESHLET_TRIANGLE = "meshlet_triangle_buffer";
+inline constexpr const char* GEOMETRY_BUFFER_MESHLET = "meshlet_buffer";
+inline constexpr const char* GEOMETRY_BUFFER_MATERIAL = "material_buffer";
+
 inline constexpr int32_t RDG_MAX_MIP_LEVELS = 12;
 inline constexpr int32_t RDG_DEFAULT_UPLOAD_LINEAR_ALLOCATOR_SIZE = 1 * 1024 * 1024; // 1MB base (doubles as needed)
 

@@ -77,6 +77,8 @@ add_library(render STATIC
         pipelines/pipeline_data.h
         cubemap_asset.cpp
         cubemap_asset.h
+        instanced_geometry_pass.cpp
+        instanced_geometry_pass.h
 )
 
 target_include_directories(render PRIVATE

@@ -95,8 +95,8 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
             auto& portalDraw = frameBuffer->mainViewFamily.customShaderDraws["portal_rendering"];
             if (portalDraw.instances.empty()) {
                 portalDraw.pipelineName = "portal_rendering";
-                portalDraw.pushConstantData = std::make_unique<PortalRenderingMeshShadingPushConstant>();
-                portalDraw.pushConstantSize = sizeof(PortalRenderingMeshShadingPushConstant);
+                portalDraw.pushConstantData = {}; // no custom data
+                portalDraw.pushConstantSize = sizeof(BaseMeshShadingPushConstant);
                 portalDraw.stencilValue = 1;
             }
 
