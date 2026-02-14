@@ -72,7 +72,7 @@ void ComputeMain(uniform BuildDirectIndirectPushConstant pc, uint3 gid : SV_Disp
     else lod = 0;
 
     lod = min(lod + pc.lodBias, LOD_COUNT - 1);
-    inst.lod = lod;
+    // inst.lod = lod;
 
 
     uint32_t taskGroupCount = (prim.meshletCount.x + TASK_SHADER_DISPATCH_X - 1) / TASK_SHADER_DISPATCH_X;

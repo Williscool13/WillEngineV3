@@ -39,22 +39,8 @@ struct RenderFamilyProperties
     size_t materialBufferSize{128};
     size_t instanceBufferSize{128};
 
-    size_t primitiveIndexToPrimitiveCounterBufferSize{MEGA_PRIMITIVE_BUFFER_COUNT * sizeof(uint32_t)};
-
-    size_t instanceIndirectionBufferSize{128};
-    size_t primitivePrefixSumBufferSize{128};
-    size_t primitivePrefixBlockSumBufferSize{128};
-    size_t primitiveCountersBufferSize{128};
-    size_t mainCommandBufferSize{128};
-
-    size_t directInstanceBufferSize{128};
-    size_t directIndirectCommandBufferSize{128};
-
     uint32_t instanceCount{0};
     uint32_t visibleMeshletUpperBound{0};
-    uint32_t filteredPrimitiveCount{0};
-
-    std::vector<uint32_t> primitiveIndexToRangeBufferMap{};
 
     // New meshlet instancing buffers
     size_t instanceMeshletOffsetsBufferSize{128};
@@ -86,21 +72,7 @@ struct RenderFamilyProperties
         materialBufferSize = 128;
         instanceBufferSize = 128;
 
-        primitiveIndexToPrimitiveCounterBufferSize = MEGA_PRIMITIVE_BUFFER_COUNT * sizeof(uint32_t);
-
-        instanceIndirectionBufferSize = 128;
-        primitivePrefixSumBufferSize = 128;
-        primitivePrefixBlockSumBufferSize = 128;
-        primitiveCountersBufferSize = 128;
-        mainCommandBufferSize = 128;
-
-        directInstanceBufferSize = 128;
-        directIndirectCommandBufferSize = 128;
-
         instanceCount = 0;
-        filteredPrimitiveCount = 0;
-
-        primitiveIndexToRangeBufferMap.clear();
     }
 };
 } // Render

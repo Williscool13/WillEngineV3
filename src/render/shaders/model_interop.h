@@ -119,18 +119,6 @@ SHADER_PUBLIC struct Instance
     SHADER_PUBLIC uint32_t modelIndex;      // Written by CPU
     SHADER_PUBLIC uint32_t materialIndex;   // Written by CPU
     uint32_t padding;
-
-    SHADER_PUBLIC uint32_t bIsVisible;
-    SHADER_PUBLIC uint32_t lod; // not useful if bIsVisible is false
-    uint32_t padding1;
-    uint32_t padding2;
-};
-
-SHADER_PUBLIC struct PrimitiveRange {
-    SHADER_PUBLIC uint32_t start;           // Written by CPU
-    SHADER_PUBLIC uint32_t count;           // Written by CPU
-    SHADER_PUBLIC uint32_t primitiveIndex;  // Written by CPU
-    uint32_t padding;
 };
 
 SHADER_PUBLIC struct SHADER_ALIGN Model

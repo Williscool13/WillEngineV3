@@ -1031,7 +1031,6 @@ void RenderThread::PrepareRenderFamilyProperties(Core::ViewFamily& viewFamily, R
                                                  FrameResourceLimits& _limits)
 {
     renderFamilyProperties.Reset();
-    renderFamilyProperties.primitiveIndexToRangeBufferMap.resize(MEGA_PRIMITIVE_BUFFER_COUNT);
     renderFamilyProperties.viewFamily = &viewFamily;
     renderFamilyProperties.bHasMainGeometry = !viewFamily.mainPassInstances.empty() && _pipelineManager->IsCategoryReady(PipelineCategory::Geometry | PipelineCategory::Instancing);
     renderFamilyProperties.bHasDirectGeometry = !viewFamily.customShaderDraws.empty() && _pipelineManager->IsCategoryReady(PipelineCategory::CustomRendering);
@@ -1048,24 +1047,9 @@ void RenderThread::PrepareRenderFamilyProperties(Core::ViewFamily& viewFamily, R
             return a.primitiveIndex < b.primitiveIndex;
         });
 
-        uint32_t currentPrimitive = viewFamily.mainPassInstances[0].primitiveIndex;
-        uint32_t rangeIdx = 0;
-        renderFamilyProperties.primitiveIndexToRangeBufferMap[currentPrimitive] = rangeIdx;
-
-        for (size_t i = 1; i < viewFamily.mainPassInstances.size(); ++i) {
-            uint32_t primIndex = viewFamily.mainPassInstances[i].primitiveIndex;
-            if (primIndex != currentPrimitive) {
-                currentPrimitive = primIndex;
-                ++rangeIdx;
-                renderFamilyProperties.primitiveIndexToRangeBufferMap[currentPrimitive] = rangeIdx;
-            }
-        }
-        filteredPrimtiveCount = rangeIdx + 1;
-
         _limits.highestModelBuffer = std::max(_limits.highestModelBuffer, NextPowerOfTwo(viewFamily.modelMatrices.size()));
         _limits.highestMaterialBuffer = std::max(_limits.highestMaterialBuffer, NextPowerOfTwo(viewFamily.materials.size()));
         _limits.highestInstanceBuffer = std::max(_limits.highestInstanceBuffer, NextPowerOfTwo(viewFamily.mainPassInstances.size()));
-        _limits.highestFilteredPrimitiveCount = std::max(_limits.highestFilteredPrimitiveCount, NextPowerOfTwo(filteredPrimtiveCount));
         _limits.highestMeshletCount = std::max(_limits.highestMeshletCount, NextPowerOfTwo(readbackData->meshletCount));
     }
 
@@ -1084,23 +1068,10 @@ void RenderThread::PrepareRenderFamilyProperties(Core::ViewFamily& viewFamily, R
     renderFamilyProperties.materialBufferSize = _limits.highestMaterialBuffer * sizeof(MaterialProperties);
     renderFamilyProperties.instanceBufferSize = _limits.highestInstanceBuffer * sizeof(Instance);
 
-    renderFamilyProperties.instanceIndirectionBufferSize = _limits.highestInstanceBuffer * sizeof(uint32_t);
-    renderFamilyProperties.primitivePrefixSumBufferSize = _limits.highestFilteredPrimitiveCount * sizeof(PrimitiveOffsets);
-    constexpr uint32_t blockSumCount = MEGA_PRIMITIVE_BUFFER_COUNT / INSTANCING_PREFIX_SUM_LOCAL_DISPATCH_X;
-    static_assert(blockSumCount == 256);
-    renderFamilyProperties.primitivePrefixBlockSumBufferSize = blockSumCount * sizeof(PrimitiveOffsets);
-    renderFamilyProperties.primitiveCountersBufferSize = _limits.highestFilteredPrimitiveCount * sizeof(PrimitiveCounters);
-    renderFamilyProperties.mainCommandBufferSize = _limits.highestFilteredPrimitiveCount * LOD_COUNT * sizeof(InstancedMeshIndirectDrawParameters);
-
-    renderFamilyProperties.directInstanceBufferSize = _limits.highestDirectInstanceBuffer * sizeof(Instance);
-    renderFamilyProperties.directIndirectCommandBufferSize = _limits.highestDirectIndirectCommandBuffer * sizeof(InstancedMeshIndirectDrawParameters);
-
 
     renderFamilyProperties.instanceMeshletOffsetsBufferSize = _limits.highestInstanceBuffer * sizeof(InstanceMeshletOffsetPrefixSum);
-
     uint32_t level1BlockCount = (_limits.highestInstanceBuffer + 255) / 256;
     uint32_t level2BlockCount = (level1BlockCount + 255) / 256;
-
     renderFamilyProperties.level1SumsBufferSize = _limits.highestInstanceBuffer * sizeof(uint32_t);
     renderFamilyProperties.level1BlockSumsBufferSize = level1BlockCount * sizeof(uint32_t);
     renderFamilyProperties.level2SumsBufferSize = level1BlockCount * sizeof(uint32_t);
@@ -1122,7 +1093,6 @@ void RenderThread::PrepareRenderFamilyProperties(Core::ViewFamily& viewFamily, R
 
     renderFamilyProperties.instanceCount = viewFamily.mainPassInstances.size();
     renderFamilyProperties.visibleMeshletUpperBound = _limits.highestMeshletCount;
-    renderFamilyProperties.filteredPrimitiveCount = filteredPrimtiveCount;
 }
 
 void RenderThread::SetupFrameUniforms(const Core::ViewFamily& viewFamily, const std::array<uint32_t, 2> renderExtent, float renderDeltaTime) const
@@ -1333,8 +1303,6 @@ void RenderThread::SetupModelUniforms(const Core::ViewFamily& viewFamily, const 
                 .primitiveIndex = inst.primitiveIndex,
                 .modelIndex = inst.modelIndex,
                 .materialIndex = inst.gpuMaterialIndex,
-                .bIsVisible = 0,
-                .lod = 0,
             };
         }
 
@@ -1360,35 +1328,6 @@ void RenderThread::SetupModelUniforms(const Core::ViewFamily& viewFamily, const 
                 vkCmdCopyBuffer2(cmd, &instanceCopyInfo);
             });
     }
-
-
-    renderGraph->CreateBuffer("primitive_to_range_map_buffer", renderFamilyProperties.primitiveIndexToPrimitiveCounterBufferSize);
-
-    UploadAllocation primitiveIndexToRangeUpload = renderGraph->AllocateTransient(MEGA_PRIMITIVE_BUFFER_COUNT * sizeof(uint32_t));
-    auto* primitiveIndexToRangeBuffer = static_cast<uint32_t*>(primitiveIndexToRangeUpload.ptr);
-    memcpy(primitiveIndexToRangeBuffer, renderFamilyProperties.primitiveIndexToRangeBufferMap.data(), renderFamilyProperties.primitiveIndexToRangeBufferMap.size() * sizeof(uint32_t));
-
-    RenderPass& uploadModelsPass = renderGraph->AddPass("Upload Model Uniforms", VK_PIPELINE_STAGE_2_COPY_BIT);
-    uploadModelsPass.WriteTransferBuffer("primitive_to_range_map_buffer");
-    uploadModelsPass.Execute([&,
-            primitiveMapOffset = primitiveIndexToRangeUpload.offset,
-            primitiveMapSize = MEGA_PRIMITIVE_BUFFER_COUNT * sizeof(uint32_t)](VkCommandBuffer cmd) {
-            VkBufferCopy2 copy{
-                .sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
-                .srcOffset = primitiveMapOffset,
-                .dstOffset = 0,
-                .size = primitiveMapSize,
-            };
-
-            VkCopyBufferInfo2 primitiveMapCopyInfo{
-                .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
-                .srcBuffer = renderGraph->GetTransientUploadBuffer(),
-                .dstBuffer = renderGraph->GetBufferHandle("primitive_to_range_map_buffer"),
-                .regionCount = 1,
-                .pRegions = &copy
-            };
-            vkCmdCopyBuffer2(cmd, &primitiveMapCopyInfo);
-        });
 
     /*if (!viewFamily.customStencilDraws.empty()) {
         size_t totalCustomInstances = 0;

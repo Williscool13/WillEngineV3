@@ -18,8 +18,6 @@ struct FrameResourceLimits
     size_t highestMaterialBuffer{128};
 
     size_t highestInstanceBuffer{128};
-    size_t highestFilteredPrimitiveCount{128};
-    // new stuff
     size_t highestMeshletCount{128};
 
     size_t highestDirectInstanceBuffer{128};
