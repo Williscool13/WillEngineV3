@@ -338,7 +338,8 @@ void ComputeMeshletVisibilityPrefixSumUpsweep1(uniform MeshletVisibilityPrefixSu
     uint threadIdx = gtid.x;
 
     uint value = 0;
-    if (globalIdx < pc.indirectDispatchBuffer->totalMeshlets) {
+    uint limit = min(pc.currentFrameBufferMeshletLimit, pc.indirectDispatchBuffer->totalMeshlets);
+    if (globalIdx < limit) {
         value = bool((pc.intermediateMeshlets[globalIdx].instanceIndex >> 31) & 1);
     }
 
@@ -369,7 +370,7 @@ void ComputeMeshletVisibilityPrefixSumUpsweep1(uniform MeshletVisibilityPrefixSu
 
     // Write local prefix sum
     uint blockLocalScan = localScan + meshletBlockSums1[waveID];
-    if (globalIdx < pc.indirectDispatchBuffer->totalMeshlets) {
+    if (globalIdx < limit) {
         pc.meshletLevel1Sums[globalIdx] = blockLocalScan;
     }
 
@@ -386,7 +387,8 @@ void ComputeMeshletVisibilityPrefixSumDownsweep2(uniform MeshletVisibilityPrefix
 {
     uint globalIdx = dtid.x;
 
-    if (globalIdx >= pc.indirectDispatchBuffer->totalMeshlets) {
+    uint limit = min(pc.currentFrameBufferMeshletLimit, pc.indirectDispatchBuffer->totalMeshlets);
+    if (globalIdx >= limit) {
         return;
     }
 
@@ -397,13 +399,13 @@ void ComputeMeshletVisibilityPrefixSumDownsweep2(uniform MeshletVisibilityPrefix
     uint packedInstance = pc.intermediateMeshlets[globalIdx].instanceIndex;
     bool visible = bool((packedInstance >> 31) & 1);
 
-    if (visible && compactOffset < pc.currentFrameBufferMeshletLimit) {
+    if (visible && compactOffset < limit) {
         pc.visibleMeshlets[compactOffset].instanceIndex = packedInstance & 0x7FFFFFFF;
         pc.visibleMeshlets[compactOffset].localMeshletIndex = pc.intermediateMeshlets[globalIdx].localMeshletIndex;
     }
 
     // Final thread does a postfix sum so we can get total visible meshlets
-    if (globalIdx == pc.indirectDispatchBuffer->totalMeshlets - 1) {
+    if (globalIdx == limit - 1) {
         pc.compactedDispatchBuffer->totalVisibleMeshlets = compactOffset + (visible ? 1 : 0);
     }
 }

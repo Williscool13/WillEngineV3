@@ -556,7 +556,7 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         const float boxSpacing = 1.5f;
         const int boxesPerSide = static_cast<int>(cbrt(totalBoxes)) + 1;
         const float gridExtent = static_cast<float>(boxesPerSide) * boxSpacing * 0.5f;
-        const float exclusionRadius = 5.0f; // nothing in center area
+        const float exclusionRadius = 30.0f; // nothing in center area
 
         int boxesCreated = 0;
         for (int x = 0; x < boxesPerSide && boxesCreated < totalBoxes; x++) {

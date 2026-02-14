@@ -216,6 +216,7 @@ SHADER_PUBLIC struct MeshletVisibilityPrefixSumUpsweep1PushConstant
 
     // Read-Only
     SHADER_PUBLIC uint32_t blockCount;
+    SHADER_PUBLIC uint32_t currentFrameBufferMeshletLimit;
 };
 
 SHADER_PUBLIC struct MeshletVisibilityPrefixSumDownsweep2PushConstant

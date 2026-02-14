@@ -1927,7 +1927,7 @@ void RenderThread::SetupMainGeometryPass(RenderGraph& graph, const Core::ViewFam
         meshletUpsweep1Pass.WriteBuffer("meshlet_level1_sums");
         meshletUpsweep1Pass.WriteBuffer("meshlet_level1_block_sums");
         meshletUpsweep1Pass.ReadIndirectBuffer("meshlet_count_dispatch_args");
-        meshletUpsweep1Pass.Execute([&, meshletLevel1BlockCount](VkCommandBuffer cmd) {
+        meshletUpsweep1Pass.Execute([&, meshletLevel1BlockCount, highestMeshletCount](VkCommandBuffer cmd) {
             MeshletVisibilityPrefixSumUpsweep1PushConstant pc{
                 .intermediateMeshlets = graph.GetBufferAddress("intermediate_meshlets"),
 
@@ -1935,6 +1935,7 @@ void RenderThread::SetupMainGeometryPass(RenderGraph& graph, const Core::ViewFam
                 .meshletLevel1Sums = graph.GetBufferAddress("meshlet_level1_sums"),
                 .meshletLevel1BlockSums = graph.GetBufferAddress("meshlet_level1_block_sums"),
                 .blockCount = meshletLevel1BlockCount,
+                .currentFrameBufferMeshletLimit = highestMeshletCount,
             };
 
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_meshlet_visibility_prefix_sum_up_1");
