@@ -76,14 +76,14 @@ private:
     Render::AllocatedImage mipmappedCubemapImage;
     Render::ImageView mipmappedCubemapImageView;
     Render::AllocatedImage finalCubemapImage;
-    Render::ImageView finalCubemapImageView;
+    Render::ImageView finalCubemapMipViews[ENVIRONMENT_MAP_MIPS];
 
     static constexpr uint32_t EQUI_IMAGE_SAMPLER_INDEX = 0;
     static constexpr uint32_t CUBEMAP_IMAGE_SAMPLER_INDEX = 1;
     Render::Sampler equiSampler;
     Render::Sampler cubemapSampler;
 
-    std::vector<std::array<std::vector<uint8_t>, TOTAL_MIPS>> mipData; // [mip][face]
+    std::vector<std::array<std::vector<uint8_t>, ENVIRONMENT_MAP_MIPS>> mipData; // [mip][face]
 
     Render::AllocatedBuffer imageStagingBuffer;
     Render::AllocatedBuffer imageReceivingBuffer;
