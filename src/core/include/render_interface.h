@@ -159,8 +159,10 @@ struct InstanceData
 struct CustomShaderDraw
 {
     std::string pipelineName;
+
     BaseMeshShadingPushConstant pushConstantData;
-    size_t pushConstantSize;
+
+    std::string instanceBufferName; // Needs to be unique per custom draw
     std::vector<InstanceData> instances;
 
     int32_t stencilValue{-1}; // if >=0 will be set with dynamic state
@@ -204,7 +206,6 @@ struct ViewFamily
 
     std::vector<Model> modelMatrices{256};
     std::vector<MaterialProperties> materials{256};
-
 
 
     ShadowConfiguration shadowConfig{};

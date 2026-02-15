@@ -96,7 +96,7 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
             if (portalDraw.instances.empty()) {
                 portalDraw.pipelineName = "portal_rendering";
                 portalDraw.pushConstantData = {}; // no custom data
-                portalDraw.pushConstantSize = sizeof(BaseMeshShadingPushConstant);
+                portalDraw.instanceBufferName = "portal_instance_buffer";
                 portalDraw.stencilValue = 1;
             }
 

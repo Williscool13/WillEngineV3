@@ -33,6 +33,8 @@ struct InstancedGeometryPassConfig
     size_t meshletScannedLevel2BlockSumsBufferSize;
     size_t visibleMeshletsBufferSize;
 
+    std::string instanceBufferName;
+
     int32_t lodBias = 0;
 };
 

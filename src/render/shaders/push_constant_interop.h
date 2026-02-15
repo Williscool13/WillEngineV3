@@ -212,6 +212,12 @@ SHADER_PUBLIC struct CompactedMeshletDispatchPushConstant
     SHADER_PUBLIC uint32_t currentFrameBufferMeshletLimit;
 };
 
+SHADER_PUBLIC struct MaxMeshletCountPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(InstancingMeshletDispatchIndirect) indirectDispatchBuffer;
+    SHADER_PUBLIC SHADER_PTR(uint32_t) currentHighest;
+};
+
 SHADER_PUBLIC struct BaseMeshShadingPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;

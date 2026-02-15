@@ -93,17 +93,18 @@ InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, cons
         RenderPass& instanceLODPass = graph.AddPass(config.prefix + "Instance LOD Selection", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
         instanceLODPass.ReadBuffer(GEOMETRY_BUFFER_SCENE_DATA);
         instanceLODPass.ReadBuffer(GEOMETRY_BUFFER_MODEL);
-        instanceLODPass.ReadBuffer(GEOMETRY_BUFFER_INSTANCE);
+        instanceLODPass.ReadBuffer(config.instanceBufferName);
         instanceLODPass.WriteBuffer(instance_meshlet_offsets);
         instanceLODPass.Execute([instance_meshlet_offsets,
                 instanceCount = config.instanceCount,
                 lodBias = config.lodBias,
+                instanceBufferName = config.instanceBufferName,
                 &graph, pipelineManager](VkCommandBuffer cmd) {
                 InstanceLODPushConstant pc{
                     .sceneData = graph.GetBufferAddress(GEOMETRY_BUFFER_SCENE_DATA),
                     .primitiveBuffer = graph.GetBufferAddress(GEOMETRY_BUFFER_PRIMITIVE),
                     .modelBuffer = graph.GetBufferAddress(GEOMETRY_BUFFER_MODEL),
-                    .instanceBuffer = graph.GetBufferAddress(GEOMETRY_BUFFER_INSTANCE),
+                    .instanceBuffer = graph.GetBufferAddress(instanceBufferName),
                     .instanceMeshletOffsets = graph.GetBufferAddress(instance_meshlet_offsets),
                     .instanceCount = instanceCount,
                     .sceneDataIndex = 0,
@@ -266,13 +267,13 @@ InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, cons
         expandInstancesToMeshlets.ReadBuffer(instance_meshlet_offsets);
         expandInstancesToMeshlets.ReadIndirectBuffer(meshlet_count_dispatch_args);
         expandInstancesToMeshlets.WriteBuffer(intermediate_meshlets);
-        expandInstancesToMeshlets.Execute([instance_meshlet_offsets, meshlet_count_dispatch_args, intermediate_meshlets,
+        expandInstancesToMeshlets.Execute([instance_meshlet_offsets, meshlet_count_dispatch_args, intermediate_meshlets, instanceBufferName = config.instanceBufferName,
                 &graph, pipelineManager, instanceCount, highestMeshletCount](VkCommandBuffer cmd) {
                 ExpandMeshletsPushConstant pc{
                     .indirectDispatchBuffer = graph.GetBufferAddress(meshlet_count_dispatch_args),
                     .instanceMeshletOffsets = graph.GetBufferAddress(instance_meshlet_offsets),
                     .intermediateMeshlets = graph.GetBufferAddress(intermediate_meshlets),
-                    .instanceBuffer = graph.GetBufferAddress(GEOMETRY_BUFFER_INSTANCE),
+                    .instanceBuffer = graph.GetBufferAddress(instanceBufferName),
                     .primitiveBuffer = graph.GetBufferAddress(GEOMETRY_BUFFER_PRIMITIVE),
                     .modelBuffer = graph.GetBufferAddress(GEOMETRY_BUFFER_MODEL),
                     .meshletBuffer = graph.GetBufferAddress(GEOMETRY_BUFFER_MESHLET),
@@ -433,6 +434,21 @@ InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, cons
             vkCmdDispatch(cmd, 1, 1, 1);
         });
     }
+
+    RenderPass& maxMeshletCount = graph.AddPass("Max Meshlet Count", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+    maxMeshletCount.ReadBuffer(meshlet_count_dispatch_args);
+    maxMeshletCount.ReadWriteBuffer("readback_buffer");
+    maxMeshletCount.Execute([&, pipelineManager, bufferSrc = meshlet_count_dispatch_args](VkCommandBuffer cmd) {
+        MaxMeshletCountPushConstant pc{
+            .indirectDispatchBuffer = graph.GetBufferAddress(bufferSrc),
+            .currentHighest = graph.GetBufferAddress("readback_buffer") + offsetof(ReadbackStruct, meshletCount),
+        };
+
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_max_meshlet_count");
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+        vkCmdDispatch(cmd, 1, 1, 1);
+    });
 
     return InstancedGeometryPassOutputs{
         .visibleMeshlets = visible_meshlets,

@@ -39,7 +39,6 @@ struct RenderFamilyProperties
     size_t materialBufferSize{128};
     size_t instanceBufferSize{128};
 
-    uint32_t instanceCount{0};
     uint32_t visibleMeshletUpperBound{0};
 
     // New meshlet instancing buffers
@@ -71,8 +70,6 @@ struct RenderFamilyProperties
         modelBufferSize = 128;
         materialBufferSize = 128;
         instanceBufferSize = 128;
-
-        instanceCount = 0;
     }
 };
 } // Render

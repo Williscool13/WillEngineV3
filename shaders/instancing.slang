@@ -427,8 +427,12 @@ void ComputeCompactedMeshletDispatch(uniform CompactedMeshletDispatchPushConstan
     pc.compactedDispatchBuffer->z = 1;
 }
 
-
-
+[shader("compute")]
+[numthreads(1, 1, 1)]
+void ComputeMaxMeshletCount(uniform MaxMeshletCountPushConstant pc)
+{
+    pc.currentHighest[0] = max(pc.currentHighest[0], pc.indirectDispatchBuffer->totalMeshlets);
+}
 
 
 

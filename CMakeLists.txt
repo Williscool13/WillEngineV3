@@ -278,10 +278,10 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputeMeshletVisibilityPrefixSumUpsweep1 instancing_meshlet_visibility_prefix_sum_up_1
         ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputeMeshletVisibilityPrefixSumDownsweep2 instancing_meshlet_visibility_prefix_sum_down_2
         ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputeCompactedMeshletDispatch instancing_compacted_meshlet_dispatch
+        ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputeMaxMeshletCount instancing_max_meshlet_count
 
         ${CMAKE_SOURCE_DIR}/shaders/mesh_shading_instanced.slang mesh MeshMain mesh_shading_instanced
         ${CMAKE_SOURCE_DIR}/shaders/mesh_shading_instanced.slang fragment FragmentMain mesh_shading_instanced
-        ${CMAKE_SOURCE_DIR}/shaders/mesh_shading_direct.slang compute ComputeMain mesh_shading_direct_build_indirect
 
         ${CMAKE_SOURCE_DIR}/shaders/portal_rendering.slang mesh MeshPortalRender portal_rendering
         ${CMAKE_SOURCE_DIR}/shaders/portal_rendering.slang fragment FragmentPortalRender portal_rendering

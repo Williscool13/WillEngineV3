@@ -295,6 +295,9 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                                   {resourceManager->debugReadbackBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT}, resourceManager->debugReadbackLastKnownState);
     }
 
+    // Readback that will be copied into the FIF host memory at the end of the frame (to be read in N+3 frames)
+    renderGraph->CreateBuffer("readback_buffer", sizeof(ReadbackStruct));
+
     // Main view G-buffer
     GBufferTargets targets{"albedo_target", "normal_target", "pbr_target", "emissive_target", "velocity_target", "depth_target", "deferred_resolve_target"};
     renderGraph->CreateTexture("deferred_resolve_target", TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
@@ -331,8 +334,8 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             renderGraph->CreateTexture(targets.velocity, TextureInfo{GBUFFER_MOTION_FORMAT, renderExtent[0], renderExtent[1], 1});
             renderGraph->CreateTexture(targets.depthStencil, TextureInfo{DEPTH_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
 
-            if (renderFamilyProperties.bHasMainGeometry) {
-                SetupMainGeometryPass(*renderGraph, viewFamily, renderFamilyProperties, renderExtent, targets, 0, true);
+            if (renderFamilyProperties.bHasAnyGeometry) {
+                SetupGeometryPasses(*renderGraph, viewFamily, renderFamilyProperties, renderExtent, targets, 0, true);
             }
 
             if (renderFamilyProperties.bHasDirectGeometry) {
@@ -353,6 +356,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         }
 
         bool bHasPortalView = (renderFamilyProperties.bHasMainGeometry || renderFamilyProperties.bHasDirectGeometry) && !viewFamily.portalViews.empty();
+        bHasPortalView = false;
         if (bHasPortalView) {
             renderGraph->CreateTexture(portalTargets.albedo, TextureInfo{GBUFFER_ALBEDO_FORMAT, renderExtent[0], renderExtent[1], 1});
             renderGraph->CreateTexture(portalTargets.normal, TextureInfo{GBUFFER_NORMAL_FORMAT, renderExtent[0], renderExtent[1], 1});
@@ -362,7 +366,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             renderGraph->CreateTexture(portalTargets.depthStencil, TextureInfo{DEPTH_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
 
             if (renderFamilyProperties.bHasMainGeometry) {
-                SetupMainGeometryPass(*renderGraph, viewFamily, renderFamilyProperties, renderExtent, portalTargets, 1, true);
+                SetupGeometryPasses(*renderGraph, viewFamily, renderFamilyProperties, renderExtent, portalTargets, 1, true);
             }
 
             if (renderFamilyProperties.bHasDirectGeometry) {
@@ -416,13 +420,13 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         }
 
         size_t offset = 0;
-        if (viewFamily.mainPassInstances.size() >= 640 && renderGraph->HasBuffer("instance_meshlet_offsets")) {
+        if (renderGraph->HasBuffer("portal_rendering_instance_meshlet_offsets")) {
             RenderPass& debugReadbackPass = renderGraph->AddPass(
                 "Debug Readback Meshlet Instancing",
                 VK_PIPELINE_STAGE_2_COPY_BIT
             );
 
-            debugReadbackPass.ReadTransferBuffer("instance_meshlet_offsets");
+            debugReadbackPass.ReadTransferBuffer("portal_rendering_instance_meshlet_offsets");
             debugReadbackPass.WriteTransferBuffer("debug_readback_buffer");
 
             debugReadbackPass.Execute([&, offset](VkCommandBuffer cmd) {
@@ -435,7 +439,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
                 vkCmdCopyBuffer(
                     cmd,
-                    renderGraph->GetBufferHandle("instance_meshlet_offsets"),
+                    renderGraph->GetBufferHandle("portal_rendering_instance_meshlet_offsets"),
                     renderGraph->GetBufferHandle("debug_readback_buffer"),
                     1,
                     &copies[0]
@@ -444,10 +448,10 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         }
         offset += 640 * sizeof(InstanceMeshletOffsetPrefixSum);
 
-        if (renderGraph->HasBuffer("meshlet_count_dispatch_args")) {
+        if (renderGraph->HasBuffer("portal_rendering_meshlet_count_dispatch_args")) {
             RenderPass& debugReadbackPass = renderGraph->AddPass("Debug Readback meshlet dispatch args", VK_PIPELINE_STAGE_2_COPY_BIT);
 
-            debugReadbackPass.ReadTransferBuffer("meshlet_count_dispatch_args");
+            debugReadbackPass.ReadTransferBuffer("portal_rendering_meshlet_count_dispatch_args");
             debugReadbackPass.WriteTransferBuffer("debug_readback_buffer");
 
             debugReadbackPass.Execute([&, offset](VkCommandBuffer cmd) {
@@ -459,7 +463,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
                 vkCmdCopyBuffer(
                     cmd,
-                    renderGraph->GetBufferHandle("meshlet_count_dispatch_args"),
+                    renderGraph->GetBufferHandle("portal_rendering_meshlet_count_dispatch_args"),
                     renderGraph->GetBufferHandle("debug_readback_buffer"),
                     1,
                     &copies[0]
@@ -468,10 +472,10 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         }
         offset += sizeof(InstancingMeshletDispatchIndirect);
 
-        if (renderGraph->HasBuffer("intermediate_meshlets")) {
+        if (renderGraph->HasBuffer("portal_rendering_intermediate_meshlets")) {
             RenderPass& debugReadbackPass = renderGraph->AddPass("Debug Readback intermediate meshlets", VK_PIPELINE_STAGE_2_COPY_BIT);
 
-            debugReadbackPass.ReadTransferBuffer("intermediate_meshlets");
+            debugReadbackPass.ReadTransferBuffer("portal_rendering_intermediate_meshlets");
             debugReadbackPass.WriteTransferBuffer("debug_readback_buffer");
 
             debugReadbackPass.Execute([&, offset](VkCommandBuffer cmd) {
@@ -483,7 +487,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
                 vkCmdCopyBuffer(
                     cmd,
-                    renderGraph->GetBufferHandle("intermediate_meshlets"),
+                    renderGraph->GetBufferHandle("portal_rendering_intermediate_meshlets"),
                     renderGraph->GetBufferHandle("debug_readback_buffer"),
                     1,
                     &copies[0]
@@ -492,10 +496,10 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         }
         offset += sizeof(IntermediateMeshlet) * 128;
 
-        if (renderGraph->HasBuffer("visible_meshlets")) {
+        if (renderGraph->HasBuffer("portal_rendering_visible_meshlets")) {
             RenderPass& debugReadbackPass = renderGraph->AddPass("Debug Readback visible meshlets", VK_PIPELINE_STAGE_2_COPY_BIT);
 
-            debugReadbackPass.ReadTransferBuffer("visible_meshlets");
+            debugReadbackPass.ReadTransferBuffer("portal_rendering_visible_meshlets");
             debugReadbackPass.WriteTransferBuffer("debug_readback_buffer");
 
             debugReadbackPass.Execute([&, offset](VkCommandBuffer cmd) {
@@ -507,7 +511,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
                 vkCmdCopyBuffer(
                     cmd,
-                    renderGraph->GetBufferHandle("visible_meshlets"),
+                    renderGraph->GetBufferHandle("portal_rendering_visible_meshlets"),
                     renderGraph->GetBufferHandle("debug_readback_buffer"),
                     1,
                     &copies[0]
@@ -516,10 +520,10 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         }
         offset += sizeof(CompactedMeshlet) * 128;
 
-        if (renderGraph->HasBuffer("meshlet_scanned_level2_block_sums")) {
+        if (renderGraph->HasBuffer("portal_rendering_meshlet_scanned_level2_block_sums")) {
             RenderPass& debugReadbackPass = renderGraph->AddPass("Debug Readback meshlet scanned level2 block sums", VK_PIPELINE_STAGE_2_COPY_BIT);
 
-            debugReadbackPass.ReadTransferBuffer("meshlet_scanned_level2_block_sums");
+            debugReadbackPass.ReadTransferBuffer("portal_rendering_meshlet_scanned_level2_block_sums");
             debugReadbackPass.WriteTransferBuffer("debug_readback_buffer");
 
             debugReadbackPass.Execute([&, offset](VkCommandBuffer cmd) {
@@ -531,7 +535,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
                 vkCmdCopyBuffer(
                     cmd,
-                    renderGraph->GetBufferHandle("meshlet_scanned_level2_block_sums"),
+                    renderGraph->GetBufferHandle("portal_rendering_meshlet_scanned_level2_block_sums"),
                     renderGraph->GetBufferHandle("debug_readback_buffer"),
                     1,
                     &copies[0]
@@ -540,10 +544,10 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         }
         offset += sizeof(uint32_t) * 256;
 
-        if (renderGraph->HasBuffer("compacted_meshlet_dispatch_args")) {
+        if (renderGraph->HasBuffer("portal_rendering_compacted_meshlet_dispatch_args")) {
             RenderPass& debugReadbackPass = renderGraph->AddPass("Debug Readback compacted dispatch args", VK_PIPELINE_STAGE_2_COPY_BIT);
 
-            debugReadbackPass.ReadTransferBuffer("compacted_meshlet_dispatch_args");
+            debugReadbackPass.ReadTransferBuffer("portal_rendering_compacted_meshlet_dispatch_args");
             debugReadbackPass.WriteTransferBuffer("debug_readback_buffer");
 
             debugReadbackPass.Execute([&, offset](VkCommandBuffer cmd) {
@@ -555,7 +559,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
                 vkCmdCopyBuffer(
                     cmd,
-                    renderGraph->GetBufferHandle("compacted_meshlet_dispatch_args"),
+                    renderGraph->GetBufferHandle("portal_rendering_compacted_meshlet_dispatch_args"),
                     renderGraph->GetBufferHandle("debug_readback_buffer"),
                     1,
                     &copies[0]
@@ -564,9 +568,9 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         }
         offset += sizeof(InstancingCompactedMeshletDispatchIndirect);
 
-        if (renderGraph->HasBuffer("visible_meshlets")) {
+        if (renderGraph->HasBuffer("portal_rendering_visible_meshlets")) {
             RenderPass& readbackVisibleMeshlets = renderGraph->AddPass("Readback Visible Meshlets", VK_PIPELINE_STAGE_2_COPY_BIT);
-            readbackVisibleMeshlets.ReadTransferBuffer("visible_meshlets");
+            readbackVisibleMeshlets.ReadTransferBuffer("portal_rendering_visible_meshlets");
             readbackVisibleMeshlets.Execute([&, offset](VkCommandBuffer cmd) {
                 VkBufferCopy copy;
                 copy.srcOffset = 0;
@@ -575,7 +579,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
                 vkCmdCopyBuffer(
                     cmd,
-                    renderGraph->GetBufferHandle("visible_meshlets"),
+                    renderGraph->GetBufferHandle("portal_rendering_visible_meshlets"),
                     renderGraph->GetBufferHandle("debug_readback_buffer"),
                     1,
                     &copy
@@ -711,7 +715,26 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 vkCmdEndRendering(_cmd);
             });
         }
-    } {
+    }
+
+    RenderPass& readbackMeshletCount = renderGraph->AddPass("Readback Copy", VK_PIPELINE_STAGE_2_COPY_BIT);
+    readbackMeshletCount.ReadTransferBuffer("readback_buffer");
+    readbackMeshletCount.Execute([&](VkCommandBuffer cmd) {
+        VkBufferCopy copy;
+        copy.srcOffset = 0;
+        copy.dstOffset = 0;
+        copy.size = sizeof(ReadbackStruct);
+
+        vkCmdCopyBuffer(
+            cmd,
+            renderGraph->GetBufferHandle("readback_buffer"),
+            renderGraph->GetReadback(),
+            1,
+            &copy
+        );
+    });
+
+    {
         ZoneScopedN("RenderGraphCompile");
         renderGraph->SetDebugLogging(frameBuffer.bLogRDG);
         renderGraph->Compile(frameNumber);
@@ -820,10 +843,9 @@ void RenderThread::CreatePipelines()
     pipelineManager->RegisterComputePipeline("instancing_meshlet_visibility_prefix_sum_down_2", Platform::GetShaderPath() / "instancing_meshlet_visibility_prefix_sum_down_2_compute.spv",
                                              sizeof(MeshletVisibilityPrefixSumDownsweep2PushConstant), PipelineCategory::Instancing);
     pipelineManager->RegisterComputePipeline("instancing_compacted_meshlet_dispatch", Platform::GetShaderPath() / "instancing_compacted_meshlet_dispatch_compute.spv",
-                                             sizeof(MeshletVisibilityPrefixSumDownsweep2PushConstant), PipelineCategory::Instancing);
-
-    pipelineManager->RegisterComputePipeline("direct_mesh_shading_build_indirect", Platform::GetShaderPath() / "mesh_shading_direct_build_indirect_compute.spv",
-                                             sizeof(BuildDirectIndirectPushConstant), PipelineCategory::CustomRendering);
+                                             sizeof(CompactedMeshletDispatchPushConstant), PipelineCategory::Instancing);
+    pipelineManager->RegisterComputePipeline("instancing_max_meshlet_count", Platform::GetShaderPath() / "instancing_max_meshlet_count_compute.spv",
+                                             sizeof(MaxMeshletCountPushConstant), PipelineCategory::Instancing);
 
     pipelineManager->RegisterComputePipeline("shadows_resolve", Platform::GetShaderPath() / "shadows_resolve_compute.spv",
                                              sizeof(ShadowsResolvePushConstant), PipelineCategory::ShadowCombine);
@@ -1041,27 +1063,24 @@ void RenderThread::PrepareRenderFamilyProperties(Core::ViewFamily& viewFamily, R
     renderFamilyProperties.bHasDeferred = _pipelineManager->IsCategoryReady(PipelineCategory::DeferredShading);
 
 
-    uint32_t filteredPrimtiveCount = 0;
     if (!viewFamily.mainPassInstances.empty()) {
         std::ranges::sort(viewFamily.mainPassInstances, [](const Core::InstanceData& a, const Core::InstanceData& b) {
             return a.primitiveIndex < b.primitiveIndex;
         });
-
-        _limits.highestModelBuffer = std::max(_limits.highestModelBuffer, NextPowerOfTwo(viewFamily.modelMatrices.size()));
-        _limits.highestMaterialBuffer = std::max(_limits.highestMaterialBuffer, NextPowerOfTwo(viewFamily.materials.size()));
-        _limits.highestInstanceBuffer = std::max(_limits.highestInstanceBuffer, NextPowerOfTwo(viewFamily.mainPassInstances.size()));
-        _limits.highestMeshletCount = std::max(_limits.highestMeshletCount, NextPowerOfTwo(readbackData->meshletCount));
     }
 
-    /*if (!viewFamily. customStencilDraws.empty()) {
-        size_t totalCustomInstances = 0;
-        for (const auto& customDraw : viewFamily.customStencilDraws) {
-            totalCustomInstances += customDraw.instances.size();
-        }
 
-        _limits.highestDirectInstanceBuffer = std::max(_limits.highestDirectInstanceBuffer, NextPowerOfTwo(totalCustomInstances));
-        _limits.highestDirectIndirectCommandBuffer = std::max(_limits.highestDirectIndirectCommandBuffer, NextPowerOfTwo(totalCustomInstances));
-    }*/
+    _limits.highestModelBuffer = std::max(_limits.highestModelBuffer, NextPowerOfTwo(viewFamily.modelMatrices.size()));
+    _limits.highestMaterialBuffer = std::max(_limits.highestMaterialBuffer, NextPowerOfTwo(viewFamily.materials.size()));
+
+
+    uint32_t highestInstanceCountThisFrame = viewFamily.mainPassInstances.size();
+    for (const auto& customDraw : viewFamily.customShaderDraws) {
+        highestInstanceCountThisFrame = glm::max(static_cast<uint32_t>(customDraw.second.instances.size()), highestInstanceCountThisFrame);
+    }
+    _limits.highestInstanceBuffer = std::max(_limits.highestInstanceBuffer, NextPowerOfTwo(highestInstanceCountThisFrame));
+
+    _limits.highestMeshletCount = std::max(_limits.highestMeshletCount, NextPowerOfTwo(readbackData->meshletCount));
 
 
     renderFamilyProperties.modelBufferSize = _limits.highestModelBuffer * sizeof(Model);
@@ -1091,7 +1110,6 @@ void RenderThread::PrepareRenderFamilyProperties(Core::ViewFamily& viewFamily, R
     renderFamilyProperties.visibleMeshletsBufferSize = _limits.highestMeshletCount * sizeof(CompactedMeshlet);
 
 
-    renderFamilyProperties.instanceCount = viewFamily.mainPassInstances.size();
     renderFamilyProperties.visibleMeshletUpperBound = _limits.highestMeshletCount;
 }
 
@@ -1288,44 +1306,6 @@ void RenderThread::SetupModelUniforms(const Core::ViewFamily& viewFamily, const 
                     .pRegions = &copy
                 };
                 vkCmdCopyBuffer2(cmd, &copyInfo);
-            });
-    }
-
-    if (!viewFamily.mainPassInstances.empty()) {
-        assert(!viewFamily.modelMatrices.empty() && !viewFamily.materials.empty());
-
-        renderGraph->CreateBuffer("instance_buffer", renderFamilyProperties.instanceBufferSize);
-        UploadAllocation instanceUpload = renderGraph->AllocateTransient(viewFamily.mainPassInstances.size() * sizeof(Instance));
-        auto* instanceBuffer = static_cast<Instance*>(instanceUpload.ptr);
-        for (size_t i = 0; i < viewFamily.mainPassInstances.size(); ++i) {
-            auto& inst = viewFamily.mainPassInstances[i];
-            instanceBuffer[i] = {
-                .primitiveIndex = inst.primitiveIndex,
-                .modelIndex = inst.modelIndex,
-                .materialIndex = inst.gpuMaterialIndex,
-            };
-        }
-
-        RenderPass& uploadModelsPass = renderGraph->AddPass("Upload Instances", VK_PIPELINE_STAGE_2_COPY_BIT);
-        uploadModelsPass.WriteTransferBuffer("instance_buffer");
-        uploadModelsPass.Execute([&,
-                instanceOffset = instanceUpload.offset,
-                instanceSize = viewFamily.mainPassInstances.size() * sizeof(Instance)](VkCommandBuffer cmd) {
-                VkBufferCopy2 copy{
-                    .sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
-                    .srcOffset = instanceOffset,
-                    .dstOffset = 0,
-                    .size = instanceSize,
-                };
-
-                VkCopyBufferInfo2 instanceCopyInfo{
-                    .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
-                    .srcBuffer = renderGraph->GetTransientUploadBuffer(),
-                    .dstBuffer = renderGraph->GetBufferHandle("instance_buffer"),
-                    .regionCount = 1,
-                    .pRegions = &copy
-                };
-                vkCmdCopyBuffer2(cmd, &instanceCopyInfo);
             });
     }
 
@@ -1584,121 +1564,295 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFami
     }*/
 }
 
-void RenderThread::SetupMainGeometryPass(RenderGraph& graph, const Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties,
-                                         std::array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneIndex, bool bClearTargets) const
+void RenderThread::SetupGeometryPasses(RenderGraph& graph, const Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties,
+                                       std::array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneIndex, bool bClearTargets) const
 {
-    InstancedGeometryPassConfig mainConfig{
-        .prefix = "main_",
-        .instanceCount = renderFamilyProperties.instanceCount,
-        .visibleMeshletUpperBound = renderFamilyProperties.visibleMeshletUpperBound,
-        .bClearTargets = true,
+    if (bClearTargets) {
+        RenderPass& clearPass = graph.AddPass("Clear GBuffer", VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
+        clearPass.WriteColorAttachment(targets.albedo);
+        clearPass.WriteColorAttachment(targets.normal);
+        clearPass.WriteColorAttachment(targets.pbr);
+        clearPass.WriteColorAttachment(targets.emissive);
+        clearPass.WriteColorAttachment(targets.velocity);
+        clearPass.WriteDepthAttachment(targets.depthStencil);
+        clearPass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
+            constexpr VkClearValue colorClear = {.color = {{0.0f, 0.0f, 0.0f, 0.0f}}};
+            constexpr VkClearValue depthClear = {.depthStencil = {0.0f, 0u}};
 
-        // Buffer sizes from RenderFamilyProperties
-        .instanceMeshletOffsetsBufferSize = renderFamilyProperties.instanceMeshletOffsetsBufferSize,
-        .level1SumsBufferSize = renderFamilyProperties.level1SumsBufferSize,
-        .level1BlockSumsBufferSize = renderFamilyProperties.level1BlockSumsBufferSize,
-        .level2SumsBufferSize = renderFamilyProperties.level2SumsBufferSize,
-        .level2BlockSumsBufferSize = renderFamilyProperties.level2BlockSumsBufferSize,
-        .scannedLevel2BlockSumsBufferSize = renderFamilyProperties.scannedLevel2BlockSumsBufferSize,
-        .intermediateMeshletBufferSize = renderFamilyProperties.intermediateMeshletBufferSize,
-        .meshletLevel1SumsBufferSize = renderFamilyProperties.meshletLevel1SumsBufferSize,
-        .meshletLevel1BlockSumsBufferSize = renderFamilyProperties.meshletLevel1BlockSumsBufferSize,
-        .meshletLevel2SumsBufferSize = renderFamilyProperties.meshletLevel2SumsBufferSize,
-        .meshletLevel2BlockSumsBufferSize = renderFamilyProperties.meshletLevel2BlockSumsBufferSize,
-        .meshletScannedLevel2BlockSumsBufferSize = renderFamilyProperties.meshletScannedLevel2BlockSumsBufferSize,
-        .visibleMeshletsBufferSize = renderFamilyProperties.visibleMeshletsBufferSize,
+            const VkRenderingAttachmentInfo albedoAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.albedo), &colorClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+            const VkRenderingAttachmentInfo normalAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.normal), &colorClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+            const VkRenderingAttachmentInfo pbrAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.pbr), &colorClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+            const VkRenderingAttachmentInfo emissiveTarget = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.emissive), &colorClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+            const VkRenderingAttachmentInfo velocityAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.velocity), &colorClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+            const VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), &depthClear,
+                                                                                                 VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+            const VkRenderingAttachmentInfo stencilAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), &depthClear,
+                                                                                                   VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
-        .lodBias = LOD_BIAS,
-    };
+            const VkRenderingAttachmentInfo colorAttachments[] = {albedoAttachment, normalAttachment, pbrAttachment, emissiveTarget, velocityAttachment};
+            const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, colorAttachments, 5, &depthAttachment, &stencilAttachment);
 
-    InstancedGeometryPassOutputs mainOutputs = SetupInstancedGeometryPass(graph, mainConfig, pipelineManager.get());
-
-    RenderPass& readbackMeshletCount = graph.AddPass("Readback Meshlet Count", VK_PIPELINE_STAGE_2_COPY_BIT);
-    readbackMeshletCount.ReadTransferBuffer(mainOutputs.meshletCountDispatchArgs);
-    readbackMeshletCount.Execute([&, bufferSrc = mainOutputs.meshletCountDispatchArgs](VkCommandBuffer cmd) {
-        VkBufferCopy copy;
-        copy.srcOffset = offsetof(InstancingMeshletDispatchIndirect, totalMeshlets);
-        copy.dstOffset = offsetof(ReadbackStruct, meshletCount);
-        copy.size = sizeof(uint32_t);
-
-        vkCmdCopyBuffer(
-            cmd,
-            renderGraph->GetBufferHandle(bufferSrc),
-            graph.GetReadback(),
-            1,
-            &copy
-        );
-    });
+            vkCmdBeginRendering(cmd, &renderInfo);
+            vkCmdEndRendering(cmd);
+        });
+    }
 
 
-    RenderPass& instancedMeshShading = graph.AddPass("Instanced Mesh Shading", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
-    instancedMeshShading.WriteColorAttachment(targets.albedo);
-    instancedMeshShading.WriteColorAttachment(targets.normal);
-    instancedMeshShading.WriteColorAttachment(targets.pbr);
-    instancedMeshShading.WriteColorAttachment(targets.emissive);
-    instancedMeshShading.WriteColorAttachment(targets.velocity);
-    instancedMeshShading.ReadWriteDepthAttachment(targets.depthStencil);
-    instancedMeshShading.ReadBuffer("scene_data");
-    instancedMeshShading.ReadBuffer("model_buffer");
-    instancedMeshShading.ReadBuffer("material_buffer");
-    instancedMeshShading.ReadBuffer("instance_buffer");
-    instancedMeshShading.ReadBuffer(mainOutputs.visibleMeshlets);
-    instancedMeshShading.ReadIndirectBuffer(mainOutputs.compactedDispatchArgs);
-    instancedMeshShading.Execute([&, mainOutputs, sceneIndex, width = renderExtent[0], height = renderExtent[1], bClearTargets](VkCommandBuffer cmd) {
-        VkViewport viewport = VkHelpers::GenerateViewport(width, height);
-        vkCmdSetViewport(cmd, 0, 1, &viewport);
-        VkRect2D scissor = VkHelpers::GenerateScissor(width, height);
-        vkCmdSetScissor(cmd, 0, 1, &scissor);
+    // Main Draw
+    if (!viewFamily.mainPassInstances.empty()) {
+        renderGraph->CreateBuffer("main_instance_buffer", renderFamilyProperties.instanceBufferSize);
+        UploadAllocation instanceUpload = renderGraph->AllocateTransient(viewFamily.mainPassInstances.size() * sizeof(Instance));
+        auto* instanceBuffer = static_cast<Instance*>(instanceUpload.ptr);
+        for (size_t i = 0; i < viewFamily.mainPassInstances.size(); ++i) {
+            auto& inst = viewFamily.mainPassInstances[i];
+            instanceBuffer[i] = {
+                .primitiveIndex = inst.primitiveIndex,
+                .modelIndex = inst.modelIndex,
+                .materialIndex = inst.gpuMaterialIndex,
+            };
+        }
 
-        constexpr VkClearValue colorClear = {.color = {{0.0f, 0.0f, 0.0f, 0.0f}}};
-        constexpr VkClearValue depthClear = {.depthStencil = {0.0f, 0u}};
-        const VkClearValue* _colorClear = bClearTargets ? &colorClear : nullptr;
-        const VkClearValue* _depthClear = bClearTargets ? &depthClear : nullptr;
+        RenderPass& uploadModelsPass = renderGraph->AddPass("Upload Instances", VK_PIPELINE_STAGE_2_COPY_BIT);
+        uploadModelsPass.WriteTransferBuffer("main_instance_buffer");
+        uploadModelsPass.Execute([&,
+                instanceOffset = instanceUpload.offset,
+                instanceSize = viewFamily.mainPassInstances.size() * sizeof(Instance)](VkCommandBuffer cmd) {
+                VkBufferCopy2 copy{
+                    .sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
+                    .srcOffset = instanceOffset,
+                    .dstOffset = 0,
+                    .size = instanceSize,
+                };
 
-        const VkRenderingAttachmentInfo albedoAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.albedo), _colorClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-        const VkRenderingAttachmentInfo normalAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.normal), _colorClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-        const VkRenderingAttachmentInfo pbrAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.pbr), _colorClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-        const VkRenderingAttachmentInfo emissiveTarget = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.emissive), _colorClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-        const VkRenderingAttachmentInfo velocityAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.velocity), _colorClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-        const VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), _depthClear,
-                                                                                             VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
-        const VkRenderingAttachmentInfo stencilAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), _depthClear,
-                                                                                               VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+                VkCopyBufferInfo2 instanceCopyInfo{
+                    .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
+                    .srcBuffer = renderGraph->GetTransientUploadBuffer(),
+                    .dstBuffer = renderGraph->GetBufferHandle("main_instance_buffer"),
+                    .regionCount = 1,
+                    .pRegions = &copy
+                };
+                vkCmdCopyBuffer2(cmd, &instanceCopyInfo);
+            });
 
-        const VkRenderingAttachmentInfo colorAttachments[] = {albedoAttachment, normalAttachment, pbrAttachment, emissiveTarget, velocityAttachment};
-        const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, colorAttachments, 5, &depthAttachment, &stencilAttachment);
+        InstancedGeometryPassConfig mainConfig{
+            .prefix = "main_",
+            .instanceCount = static_cast<uint32_t>(viewFamily.mainPassInstances.size()),
+            .visibleMeshletUpperBound = renderFamilyProperties.visibleMeshletUpperBound,
+            .bClearTargets = true,
 
-        vkCmdBeginRendering(cmd, &renderInfo);
+            // Buffer sizes from RenderFamilyProperties
+            .instanceMeshletOffsetsBufferSize = renderFamilyProperties.instanceMeshletOffsetsBufferSize,
+            .level1SumsBufferSize = renderFamilyProperties.level1SumsBufferSize,
+            .level1BlockSumsBufferSize = renderFamilyProperties.level1BlockSumsBufferSize,
+            .level2SumsBufferSize = renderFamilyProperties.level2SumsBufferSize,
+            .level2BlockSumsBufferSize = renderFamilyProperties.level2BlockSumsBufferSize,
+            .scannedLevel2BlockSumsBufferSize = renderFamilyProperties.scannedLevel2BlockSumsBufferSize,
+            .intermediateMeshletBufferSize = renderFamilyProperties.intermediateMeshletBufferSize,
+            .meshletLevel1SumsBufferSize = renderFamilyProperties.meshletLevel1SumsBufferSize,
+            .meshletLevel1BlockSumsBufferSize = renderFamilyProperties.meshletLevel1BlockSumsBufferSize,
+            .meshletLevel2SumsBufferSize = renderFamilyProperties.meshletLevel2SumsBufferSize,
+            .meshletLevel2BlockSumsBufferSize = renderFamilyProperties.meshletLevel2BlockSumsBufferSize,
+            .meshletScannedLevel2BlockSumsBufferSize = renderFamilyProperties.meshletScannedLevel2BlockSumsBufferSize,
+            .visibleMeshletsBufferSize = renderFamilyProperties.visibleMeshletsBufferSize,
 
-        BaseMeshShadingPushConstant pushConstants{
-            .sceneData = graph.GetBufferAddress("scene_data"),
-            .vertexBuffer = graph.GetBufferAddress("vertex_buffer"),
-            .meshletVerticesBuffer = graph.GetBufferAddress("meshlet_vertex_buffer"),
-            .meshletTrianglesBuffer = graph.GetBufferAddress("meshlet_triangle_buffer"),
-            .meshletBuffer = graph.GetBufferAddress("meshlet_buffer"),
-            .primitiveBuffer = graph.GetBufferAddress("primitive_buffer"),
-            .instanceBuffer = graph.GetBufferAddress("instance_buffer"),
-            .materialBuffer = graph.GetBufferAddress("material_buffer"),
-            .modelBuffer = graph.GetBufferAddress("model_buffer"),
-            .visibleMeshlets = graph.GetBufferAddress(mainOutputs.visibleMeshlets),
-            .compactedDispatchBuffer = graph.GetBufferAddress(mainOutputs.compactedDispatchArgs),
-            .sceneDataIndex = sceneIndex,
+            .instanceBufferName = "main_instance_buffer",
+
+            .lodBias = LOD_BIAS,
         };
 
-        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("mesh_shading_instanced");
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineEntry->pipeline);
-        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT,
-                           0, sizeof(BaseMeshShadingPushConstant), &pushConstants);
+        InstancedGeometryPassOutputs mainOutputs = SetupInstancedGeometryPass(graph, mainConfig, pipelineManager.get());
 
-        vkCmdDrawMeshTasksIndirectEXT(
-            cmd,
-            graph.GetBufferHandle(mainOutputs.compactedDispatchArgs),
-            offsetof(InstancingCompactedMeshletDispatchIndirect, x),
-            1,
-            sizeof(InstancingCompactedMeshletDispatchIndirect));
+        RenderPass& instancedMeshShading = graph.AddPass("Instanced Mesh Shading", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
+        instancedMeshShading.WriteColorAttachment(targets.albedo);
+        instancedMeshShading.WriteColorAttachment(targets.normal);
+        instancedMeshShading.WriteColorAttachment(targets.pbr);
+        instancedMeshShading.WriteColorAttachment(targets.emissive);
+        instancedMeshShading.WriteColorAttachment(targets.velocity);
+        instancedMeshShading.ReadWriteDepthAttachment(targets.depthStencil);
+        instancedMeshShading.ReadBuffer("scene_data");
+        instancedMeshShading.ReadBuffer("model_buffer");
+        instancedMeshShading.ReadBuffer("material_buffer");
+        instancedMeshShading.ReadBuffer("main_instance_buffer");
+        instancedMeshShading.ReadBuffer(mainOutputs.visibleMeshlets);
+        instancedMeshShading.ReadIndirectBuffer(mainOutputs.compactedDispatchArgs);
+        instancedMeshShading.Execute([&, mainOutputs, sceneIndex, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
+            VkViewport viewport = VkHelpers::GenerateViewport(width, height);
+            vkCmdSetViewport(cmd, 0, 1, &viewport);
+            VkRect2D scissor = VkHelpers::GenerateScissor(width, height);
+            vkCmdSetScissor(cmd, 0, 1, &scissor);
 
-        vkCmdEndRendering(cmd);
-    });
+            const VkRenderingAttachmentInfo albedoAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.albedo), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+            const VkRenderingAttachmentInfo normalAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.normal), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+            const VkRenderingAttachmentInfo pbrAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.pbr), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+            const VkRenderingAttachmentInfo emissiveTarget = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.emissive), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+            const VkRenderingAttachmentInfo velocityAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.velocity), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+            const VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), nullptr,
+                                                                                                 VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+            const VkRenderingAttachmentInfo stencilAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), nullptr,
+                                                                                                   VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+
+            const VkRenderingAttachmentInfo colorAttachments[] = {albedoAttachment, normalAttachment, pbrAttachment, emissiveTarget, velocityAttachment};
+            const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, colorAttachments, 5, &depthAttachment, &stencilAttachment);
+
+            vkCmdBeginRendering(cmd, &renderInfo);
+
+            BaseMeshShadingPushConstant pushConstants{
+                .sceneData = graph.GetBufferAddress("scene_data"),
+                .vertexBuffer = graph.GetBufferAddress("vertex_buffer"),
+                .meshletVerticesBuffer = graph.GetBufferAddress("meshlet_vertex_buffer"),
+                .meshletTrianglesBuffer = graph.GetBufferAddress("meshlet_triangle_buffer"),
+                .meshletBuffer = graph.GetBufferAddress("meshlet_buffer"),
+                .primitiveBuffer = graph.GetBufferAddress("primitive_buffer"),
+                .instanceBuffer = graph.GetBufferAddress("main_instance_buffer"),
+                .materialBuffer = graph.GetBufferAddress("material_buffer"),
+                .modelBuffer = graph.GetBufferAddress("model_buffer"),
+                .visibleMeshlets = graph.GetBufferAddress(mainOutputs.visibleMeshlets),
+                .compactedDispatchBuffer = graph.GetBufferAddress(mainOutputs.compactedDispatchArgs),
+                .sceneDataIndex = sceneIndex,
+            };
+
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("mesh_shading_instanced");
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineEntry->pipeline);
+            vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                               0, sizeof(BaseMeshShadingPushConstant), &pushConstants);
+
+            vkCmdDrawMeshTasksIndirectEXT(
+                cmd,
+                graph.GetBufferHandle(mainOutputs.compactedDispatchArgs),
+                offsetof(InstancingCompactedMeshletDispatchIndirect, x),
+                1,
+                sizeof(InstancingCompactedMeshletDispatchIndirect));
+
+            vkCmdEndRendering(cmd);
+        });
+    }
+
+    for (const auto& customDraw : viewFamily.customShaderDraws) {
+        const std::string instanceBufferName = customDraw.second.instanceBufferName;
+        renderGraph->CreateBuffer(instanceBufferName, customDraw.second.instances.size() * sizeof(Instance));
+
+        UploadAllocation instanceUpload = renderGraph->AllocateTransient(customDraw.second.instances.size() * sizeof(Instance));
+        auto* instanceBuffer = static_cast<Instance*>(instanceUpload.ptr);
+        for (size_t i = 0; i < customDraw.second.instances.size(); ++i) {
+            auto& inst = customDraw.second.instances[i];
+            instanceBuffer[i] = {
+                .primitiveIndex = inst.primitiveIndex,
+                .modelIndex = inst.modelIndex,
+                .materialIndex = inst.gpuMaterialIndex,
+            };
+        }
+
+        RenderPass& uploadPass = renderGraph->AddPass("Upload Instances " + instanceBufferName, VK_PIPELINE_STAGE_2_COPY_BIT);
+        uploadPass.WriteTransferBuffer(instanceBufferName);
+        uploadPass.Execute([&,
+                instanceOffset = instanceUpload.offset,
+                instanceSize = customDraw.second.instances.size() * sizeof(Instance),
+                bufferName = instanceBufferName](VkCommandBuffer cmd) {
+                VkBufferCopy2 copy{
+                    .sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
+                    .srcOffset = instanceOffset,
+                    .dstOffset = 0,
+                    .size = instanceSize,
+                };
+
+                VkCopyBufferInfo2 instanceCopyInfo{
+                    .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
+                    .srcBuffer = renderGraph->GetTransientUploadBuffer(),
+                    .dstBuffer = renderGraph->GetBufferHandle(bufferName),
+                    .regionCount = 1,
+                    .pRegions = &copy
+                };
+                vkCmdCopyBuffer2(cmd, &instanceCopyInfo);
+            });
+
+        InstancedGeometryPassConfig customConfig{
+            .prefix = customDraw.first + "_",
+            .instanceCount = static_cast<uint32_t>(customDraw.second.instances.size()),
+            .visibleMeshletUpperBound = renderFamilyProperties.visibleMeshletUpperBound,
+            .bClearTargets = false,
+            .instanceMeshletOffsetsBufferSize = renderFamilyProperties.instanceMeshletOffsetsBufferSize,
+            .level1SumsBufferSize = renderFamilyProperties.level1SumsBufferSize,
+            .level1BlockSumsBufferSize = renderFamilyProperties.level1BlockSumsBufferSize,
+            .level2SumsBufferSize = renderFamilyProperties.level2SumsBufferSize,
+            .level2BlockSumsBufferSize = renderFamilyProperties.level2BlockSumsBufferSize,
+            .scannedLevel2BlockSumsBufferSize = renderFamilyProperties.scannedLevel2BlockSumsBufferSize,
+            .intermediateMeshletBufferSize = renderFamilyProperties.intermediateMeshletBufferSize,
+            .meshletLevel1SumsBufferSize = renderFamilyProperties.meshletLevel1SumsBufferSize,
+            .meshletLevel1BlockSumsBufferSize = renderFamilyProperties.meshletLevel1BlockSumsBufferSize,
+            .meshletLevel2SumsBufferSize = renderFamilyProperties.meshletLevel2SumsBufferSize,
+            .meshletLevel2BlockSumsBufferSize = renderFamilyProperties.meshletLevel2BlockSumsBufferSize,
+            .meshletScannedLevel2BlockSumsBufferSize = renderFamilyProperties.meshletScannedLevel2BlockSumsBufferSize,
+            .visibleMeshletsBufferSize = renderFamilyProperties.visibleMeshletsBufferSize,
+            .instanceBufferName = customDraw.second.instanceBufferName,
+            .lodBias = LOD_BIAS,
+        };
+
+        InstancedGeometryPassOutputs customOutputs = SetupInstancedGeometryPass(graph, customConfig, pipelineManager.get());
+
+        RenderPass& customDrawPass = graph.AddPass("Custom Draw " + instanceBufferName, VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
+        customDrawPass.WriteColorAttachment(targets.albedo);
+        customDrawPass.WriteColorAttachment(targets.normal);
+        customDrawPass.WriteColorAttachment(targets.pbr);
+        customDrawPass.WriteColorAttachment(targets.emissive);
+        customDrawPass.WriteColorAttachment(targets.velocity);
+        customDrawPass.ReadWriteDepthAttachment(targets.depthStencil);
+        customDrawPass.ReadBuffer("scene_data");
+        customDrawPass.ReadBuffer("model_buffer");
+        customDrawPass.ReadBuffer("material_buffer");
+        customDrawPass.ReadBuffer(instanceBufferName);
+        customDrawPass.ReadBuffer(customOutputs.visibleMeshlets);
+        customDrawPass.ReadIndirectBuffer(customOutputs.compactedDispatchArgs);
+        customDrawPass.Execute([&, customOutputs, customDraw, sceneIndex, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
+            VkViewport viewport = VkHelpers::GenerateViewport(width, height);
+            vkCmdSetViewport(cmd, 0, 1, &viewport);
+            VkRect2D scissor = VkHelpers::GenerateScissor(width, height);
+            vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+            const VkRenderingAttachmentInfo albedoAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.albedo), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+            const VkRenderingAttachmentInfo normalAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.normal), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+            const VkRenderingAttachmentInfo pbrAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.pbr), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+            const VkRenderingAttachmentInfo emissiveTarget = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.emissive), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+            const VkRenderingAttachmentInfo velocityAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.velocity), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+            const VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), nullptr,
+                                                                                                 VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+            const VkRenderingAttachmentInfo stencilAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), nullptr,
+                                                                                                   VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+
+            const VkRenderingAttachmentInfo colorAttachments[] = {albedoAttachment, normalAttachment, pbrAttachment, emissiveTarget, velocityAttachment};
+            const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, colorAttachments, 5, &depthAttachment, &stencilAttachment);
+
+            vkCmdBeginRendering(cmd, &renderInfo);
+
+            BaseMeshShadingPushConstant pushConstants = customDraw.second.pushConstantData;
+            pushConstants.sceneData = graph.GetBufferAddress("scene_data");
+            pushConstants.vertexBuffer = graph.GetBufferAddress("vertex_buffer");
+            pushConstants.meshletVerticesBuffer = graph.GetBufferAddress("meshlet_vertex_buffer");
+            pushConstants.meshletTrianglesBuffer = graph.GetBufferAddress("meshlet_triangle_buffer");
+            pushConstants.meshletBuffer = graph.GetBufferAddress("meshlet_buffer");
+            pushConstants.primitiveBuffer = graph.GetBufferAddress("primitive_buffer");
+            pushConstants.instanceBuffer = graph.GetBufferAddress(customDraw.second.instanceBufferName);
+            pushConstants.materialBuffer = graph.GetBufferAddress("material_buffer");
+            pushConstants.modelBuffer = graph.GetBufferAddress("model_buffer");
+            pushConstants.visibleMeshlets = graph.GetBufferAddress(customOutputs.visibleMeshlets);
+            pushConstants.compactedDispatchBuffer = graph.GetBufferAddress(customOutputs.compactedDispatchArgs);
+            pushConstants.sceneDataIndex = sceneIndex;
+
+
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(customDraw.second.pipelineName);
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineEntry->pipeline);
+            vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                               0, sizeof(pushConstants), &pushConstants);
+            vkCmdSetStencilReference(cmd, VK_STENCIL_FACE_FRONT_AND_BACK, customDraw.second.stencilValue);
+            vkCmdDrawMeshTasksIndirectEXT(
+                cmd,
+                graph.GetBufferHandle(customOutputs.compactedDispatchArgs),
+                offsetof(InstancingCompactedMeshletDispatchIndirect, x),
+                1,
+                sizeof(InstancingCompactedMeshletDispatchIndirect));
+
+            vkCmdEndRendering(cmd);
+        });
+    }
 }
 
 void RenderThread::SetupDirectGeometryPass(RenderGraph& graph, const Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties, std::array<uint32_t, 2> renderExtent,
@@ -2041,6 +2195,11 @@ void RenderThread::SetupPortalComposite(RenderGraph& graph, const Core::ViewFami
     portalCompositePass.WriteColorAttachment(targets.velocity);
     portalCompositePass.ReadWriteDepthAttachment(targets.depthStencil);
     portalCompositePass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
+        VkViewport viewport = VkHelpers::GenerateViewport(width, height);
+        vkCmdSetViewport(cmd, 0, 1, &viewport);
+        VkRect2D scissor = VkHelpers::GenerateScissor(width, height);
+        vkCmdSetScissor(cmd, 0, 1, &scissor);
+
         VkRenderingAttachmentInfo colorAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.outFinalColor), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
         VkRenderingAttachmentInfo velocityAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.velocity), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
         VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), nullptr, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
