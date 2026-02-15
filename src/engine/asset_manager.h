@@ -11,7 +11,7 @@
 #include "asset_manager_types.h"
 #include "material_manager.h"
 #include "core/allocators/handle_allocator.h"
-#include "render/texture_asset.h"
+#include "../render/types/texture_asset.h"
 #include "render/model/will_model_asset.h"
 #include "audio/audio_asset.h"
 

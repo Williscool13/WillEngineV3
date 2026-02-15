@@ -28,9 +28,7 @@ int32_t GetSphereSegments(const glm::vec3& center, const glm::vec3& viewPos, flo
 struct RenderFamilyProperties
 {
     Core::ViewFamily* viewFamily{nullptr};
-    bool bHasMainGeometry{false};
-    bool bHasDirectGeometry{false};
-    bool bHasAnyGeometry{false};
+    bool bHasGeometry{false};
     bool bHasGTAO{false};
     bool bHasShadows{false};
     bool bHasDeferred{false};
@@ -60,9 +58,7 @@ struct RenderFamilyProperties
     void Reset()
     {
         viewFamily = nullptr;
-        bHasMainGeometry = false;
-        bHasDirectGeometry = false;
-        bHasAnyGeometry = false;
+        bHasGeometry = false;
         bHasGTAO = false;
         bHasShadows = false;
         bHasDeferred = false;

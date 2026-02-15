@@ -6,14 +6,14 @@
 
 #include <vulkan/vulkan_core.h>
 
-#include "pipelines/pipeline_data.h"
-#include "pipelines/pipeline_manager.h"
-#include "render-graph/render_graph.h"
-#include "render-graph/render_pass.h"
+#include "../../pipelines/pipeline_data.h"
+#include "../../pipelines/pipeline_manager.h"
+#include "../render_graph.h"
+#include "../render_pass.h"
 
 namespace Render
 {
-InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, const InstancedGeometryPassConfig& config, PipelineManager* pipelineManager)
+InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, const InstancedGeometryPassConfig& config, PipelineManager* pipelineManager, uint32_t sceneDataIndex)
 {
     // Pre-build all buffer names
     const std::string instance_meshlet_offsets = config.prefix + "instance_meshlet_offsets";
@@ -99,7 +99,9 @@ InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, cons
                 instanceCount = config.instanceCount,
                 lodBias = config.lodBias,
                 instanceBufferName = config.instanceBufferName,
-                &graph, pipelineManager](VkCommandBuffer cmd) {
+                &graph,
+                pipelineManager,
+                sceneDataIndex](VkCommandBuffer cmd) {
                 InstanceLODPushConstant pc{
                     .sceneData = graph.GetBufferAddress(GEOMETRY_BUFFER_SCENE_DATA),
                     .primitiveBuffer = graph.GetBufferAddress(GEOMETRY_BUFFER_PRIMITIVE),
@@ -107,7 +109,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, cons
                     .instanceBuffer = graph.GetBufferAddress(instanceBufferName),
                     .instanceMeshletOffsets = graph.GetBufferAddress(instance_meshlet_offsets),
                     .instanceCount = instanceCount,
-                    .sceneDataIndex = 0,
+                    .sceneDataIndex = sceneDataIndex,
                     .lodBias = lodBias,
                 };
 
@@ -268,7 +270,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, cons
         expandInstancesToMeshlets.ReadIndirectBuffer(meshlet_count_dispatch_args);
         expandInstancesToMeshlets.WriteBuffer(intermediate_meshlets);
         expandInstancesToMeshlets.Execute([instance_meshlet_offsets, meshlet_count_dispatch_args, intermediate_meshlets, instanceBufferName = config.instanceBufferName,
-                &graph, pipelineManager, instanceCount, highestMeshletCount](VkCommandBuffer cmd) {
+                &graph, pipelineManager, instanceCount, highestMeshletCount, sceneDataIndex](VkCommandBuffer cmd) {
                 ExpandMeshletsPushConstant pc{
                     .indirectDispatchBuffer = graph.GetBufferAddress(meshlet_count_dispatch_args),
                     .instanceMeshletOffsets = graph.GetBufferAddress(instance_meshlet_offsets),
@@ -278,7 +280,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, cons
                     .modelBuffer = graph.GetBufferAddress(GEOMETRY_BUFFER_MODEL),
                     .meshletBuffer = graph.GetBufferAddress(GEOMETRY_BUFFER_MESHLET),
                     .sceneData = graph.GetBufferAddress(GEOMETRY_BUFFER_SCENE_DATA),
-                    .sceneDataIndex = 0,
+                    .sceneDataIndex = sceneDataIndex,
                     .instanceCount = instanceCount,
                     .currentFrameBufferMeshletLimit = highestMeshletCount,
                 };

@@ -50,8 +50,10 @@ add_library(render STATIC
         model/will_model_asset.cpp
         model/will_model_asset.h
         shaders/constants_interop.h
-        texture_asset.cpp
-        texture_asset.h
+        types/cubemap_asset.cpp
+        types/cubemap_asset.h
+        types/texture_asset.cpp
+        types/texture_asset.h
         render-graph/render_graph.cpp
         render-graph/render_graph.h
         render-graph/render_graph_resources.cpp
@@ -75,10 +77,9 @@ add_library(render STATIC
         render-view/render_view_helpers.h
         pipelines/pipeline_data.cpp
         pipelines/pipeline_data.h
-        cubemap_asset.cpp
-        cubemap_asset.h
-        instanced_geometry_pass.cpp
-        instanced_geometry_pass.h
+
+        render-graph/passes/instanced_geometry_pass.cpp
+        render-graph/passes/instanced_geometry_pass.h
 )
 
 target_include_directories(render PRIVATE

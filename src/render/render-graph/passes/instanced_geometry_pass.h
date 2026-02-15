@@ -47,7 +47,7 @@ struct InstancedGeometryPassOutputs
     std::string meshletCountDispatchArgs;
 };
 
-InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, const InstancedGeometryPassConfig& config, PipelineManager* pipelineManager);
+InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, const InstancedGeometryPassConfig& config, PipelineManager* pipelineManager, uint32_t sceneDataIndex);
 } // Render
 
 #endif //WILL_ENGINE_INSTANCED_GEOMETRY_PASS_H

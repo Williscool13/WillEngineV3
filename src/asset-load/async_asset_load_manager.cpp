@@ -9,7 +9,7 @@
 
 #include "audio/audio_asset.h"
 #include "platform/thread_utils.h"
-#include "render/texture_asset.h"
+#include "../render/types/texture_asset.h"
 #include "render/pipelines/pipeline_data.h"
 #include "render/vulkan/vk_utils.h"
 

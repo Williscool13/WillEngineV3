@@ -5,10 +5,10 @@
 #ifndef WILL_ENGINE_TEXTURE_ASSET_H
 #define WILL_ENGINE_TEXTURE_ASSET_H
 #include "core/include/render_interface.h"
-#include "descriptors/vk_bindless_resources_sampler_images.h"
+#include "../descriptors/vk_bindless_resources_sampler_images.h"
 #include "engine/asset_manager_types.h"
-#include "model/will_model_asset.h"
-#include "vulkan/vk_resources.h"
+#include "../model/will_model_asset.h"
+#include "../vulkan/vk_resources.h"
 
 namespace Render
 {

@@ -9,7 +9,7 @@
 #include <tracy/Tracy.hpp>
 #include <tracy/TracyVulkan.hpp>
 
-#include "instanced_geometry_pass.h"
+#include "render-graph/passes/instanced_geometry_pass.h"
 #include "render/vulkan/vk_context.h"
 #include "render/vulkan/vk_helpers.h"
 #include "render/vulkan/vk_render_extents.h"
@@ -322,7 +322,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             vkCmdClearColorImage(_cmd, portalImg, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &colorSubresource);
         });
 
-        if (renderFamilyProperties.bHasAnyGeometry) {
+        if (renderFamilyProperties.bHasGeometry) {
             if (renderFamilyProperties.bHasShadows) {
                 SetupCascadedShadows(*renderGraph, viewFamily, renderFamilyProperties);
             }
@@ -334,13 +334,8 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             renderGraph->CreateTexture(targets.velocity, TextureInfo{GBUFFER_MOTION_FORMAT, renderExtent[0], renderExtent[1], 1});
             renderGraph->CreateTexture(targets.depthStencil, TextureInfo{DEPTH_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
 
-            if (renderFamilyProperties.bHasAnyGeometry) {
-                SetupGeometryPasses(*renderGraph, viewFamily, renderFamilyProperties, renderExtent, targets, 0, true);
-            }
+            SetupGeometryPasses(*renderGraph, viewFamily, renderFamilyProperties, renderExtent, targets, 0, true);
 
-            if (renderFamilyProperties.bHasDirectGeometry) {
-                SetupDirectGeometryPass(*renderGraph, viewFamily, renderFamilyProperties, renderExtent, targets, 0, !renderFamilyProperties.bHasMainGeometry);
-            }
 
             if (renderFamilyProperties.bHasGTAO) {
                 SetupGroundTruthAmbientOcclusion(*renderGraph, viewFamily, renderExtent, targets, 0);
@@ -353,49 +348,38 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             if (renderFamilyProperties.bHasDeferred) {
                 SetupDeferredLighting(*renderGraph, viewFamily, renderExtent, targets, 0);
             }
-        }
 
-        bool bHasPortalView = (renderFamilyProperties.bHasMainGeometry || renderFamilyProperties.bHasDirectGeometry) && !viewFamily.portalViews.empty();
-        bHasPortalView = false;
-        if (bHasPortalView) {
-            renderGraph->CreateTexture(portalTargets.albedo, TextureInfo{GBUFFER_ALBEDO_FORMAT, renderExtent[0], renderExtent[1], 1});
-            renderGraph->CreateTexture(portalTargets.normal, TextureInfo{GBUFFER_NORMAL_FORMAT, renderExtent[0], renderExtent[1], 1});
-            renderGraph->CreateTexture(portalTargets.pbr, TextureInfo{GBUFFER_PBR_FORMAT, renderExtent[0], renderExtent[1], 1});
-            renderGraph->CreateTexture(portalTargets.emissive, TextureInfo{GBUFFER_EMISSIVE_FORMAT, renderExtent[0], renderExtent[1], 1});
-            renderGraph->CreateTexture(portalTargets.velocity, TextureInfo{GBUFFER_MOTION_FORMAT, renderExtent[0], renderExtent[1], 1});
-            renderGraph->CreateTexture(portalTargets.depthStencil, TextureInfo{DEPTH_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
+            bool bHasPortalView = !viewFamily.portalViews.empty();
+            if (bHasPortalView) {
+                renderGraph->CreateTexture(portalTargets.albedo, TextureInfo{GBUFFER_ALBEDO_FORMAT, renderExtent[0], renderExtent[1], 1});
+                renderGraph->CreateTexture(portalTargets.normal, TextureInfo{GBUFFER_NORMAL_FORMAT, renderExtent[0], renderExtent[1], 1});
+                renderGraph->CreateTexture(portalTargets.pbr, TextureInfo{GBUFFER_PBR_FORMAT, renderExtent[0], renderExtent[1], 1});
+                renderGraph->CreateTexture(portalTargets.emissive, TextureInfo{GBUFFER_EMISSIVE_FORMAT, renderExtent[0], renderExtent[1], 1});
+                renderGraph->CreateTexture(portalTargets.velocity, TextureInfo{GBUFFER_MOTION_FORMAT, renderExtent[0], renderExtent[1], 1});
+                renderGraph->CreateTexture(portalTargets.depthStencil, TextureInfo{DEPTH_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
 
-            if (renderFamilyProperties.bHasMainGeometry) {
                 SetupGeometryPasses(*renderGraph, viewFamily, renderFamilyProperties, renderExtent, portalTargets, 1, true);
+
+                if (renderFamilyProperties.bHasGTAO) {
+                    SetupGroundTruthAmbientOcclusion(*renderGraph, viewFamily, renderExtent, portalTargets, 1);
+                }
+
+                if (renderFamilyProperties.bHasShadows || renderFamilyProperties.bHasGTAO) {
+                    SetupShadowsResolve(*renderGraph, viewFamily, renderExtent, portalTargets, 1);
+                }
+
+                if (renderFamilyProperties.bHasDeferred) {
+                    SetupDeferredLighting(*renderGraph, viewFamily, renderExtent, portalTargets, 1);
+                }
+
+                SetupPortalComposite(*renderGraph, viewFamily, renderExtent, targets, portalTargets);
             }
-
-            if (renderFamilyProperties.bHasDirectGeometry) {
-                SetupDirectGeometryPass(*renderGraph, viewFamily, renderFamilyProperties, renderExtent, portalTargets, 1, !renderFamilyProperties.bHasMainGeometry);
-            }
-
-            if (renderFamilyProperties.bHasGTAO) {
-                SetupGroundTruthAmbientOcclusion(*renderGraph, viewFamily, renderExtent, portalTargets, 1);
-            }
-
-            if (renderFamilyProperties.bHasShadows || renderFamilyProperties.bHasGTAO) {
-                SetupShadowsResolve(*renderGraph, viewFamily, renderExtent, portalTargets, 1);
-            }
-
-            if (renderFamilyProperties.bHasDeferred) {
-                SetupDeferredLighting(*renderGraph, viewFamily, renderExtent, portalTargets, 1);
-            }
-        }
-
-
-        // Portal Composite
-        if (bHasPortalView) {
-            SetupPortalComposite(*renderGraph, viewFamily, renderExtent, targets, portalTargets);
         }
 
         PostProcessTargets ppTargets{targets.outFinalColor, targets.velocity, targets.depthStencil};
         PostProcessTargets taaTargets{targets.outFinalColor, targets.velocity, targets.depthStencil};
         std::string finalOutput = targets.outFinalColor;
-        if (renderFamilyProperties.bHasMainGeometry || renderFamilyProperties.bHasDirectGeometry) {
+        if (renderFamilyProperties.bHasGeometry) {
             bool bHasTAAPass = pipelineManager->IsCategoryReady(PipelineCategory::TAA) && viewFamily.postProcessConfig.bEnableTemporalAntialiasing;
             if (bHasTAAPass) {
                 taaTargets.finalColor = SetupTemporalAntialiasing(*renderGraph, viewFamily, renderExtent, ppTargets);
@@ -415,10 +399,6 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
 
 #if WILL_EDITOR
-        if (renderFamilyProperties.bHasAnyGeometry) {
-            TemporaryRenderTests(*renderGraph, viewFamily, renderFamilyProperties, renderExtent);
-        }
-
         size_t offset = 0;
         if (renderGraph->HasBuffer("portal_rendering_instance_meshlet_offsets")) {
             RenderPass& debugReadbackPass = renderGraph->AddPass(
@@ -732,9 +712,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             1,
             &copy
         );
-    });
-
-    {
+    }); {
         ZoneScopedN("RenderGraphCompile");
         renderGraph->SetDebugLogging(frameBuffer.bLogRDG);
         renderGraph->Compile(frameNumber);
@@ -1054,9 +1032,16 @@ void RenderThread::PrepareRenderFamilyProperties(Core::ViewFamily& viewFamily, R
 {
     renderFamilyProperties.Reset();
     renderFamilyProperties.viewFamily = &viewFamily;
-    renderFamilyProperties.bHasMainGeometry = !viewFamily.mainPassInstances.empty() && _pipelineManager->IsCategoryReady(PipelineCategory::Geometry | PipelineCategory::Instancing);
-    renderFamilyProperties.bHasDirectGeometry = !viewFamily.customShaderDraws.empty() && _pipelineManager->IsCategoryReady(PipelineCategory::CustomRendering);
-    renderFamilyProperties.bHasAnyGeometry = renderFamilyProperties.bHasMainGeometry || renderFamilyProperties.bHasDirectGeometry;
+    bool bHasGeometry = !viewFamily.mainPassInstances.empty();
+    if (!bHasGeometry) {
+        for (const auto& [key, customDraw] : viewFamily.customShaderDraws) {
+            if (!customDraw.instances.empty()) {
+                bHasGeometry = true;
+                break;
+            }
+        }
+    }
+    renderFamilyProperties.bHasGeometry = bHasGeometry && _pipelineManager->IsCategoryReady(PipelineCategory::Geometry | PipelineCategory::Instancing | PipelineCategory::CustomRendering);
     renderFamilyProperties.bHasGTAO = viewFamily.gtaoConfig.bEnabled && _pipelineManager->IsCategoryReady(PipelineCategory::GTAO);
     renderFamilyProperties.bHasShadows = viewFamily.shadowConfig.enabled && _pipelineManager->IsCategoryReady(PipelineCategory::ShadowPass);
     renderFamilyProperties.bHasShadows = false;
@@ -1660,7 +1645,7 @@ void RenderThread::SetupGeometryPasses(RenderGraph& graph, const Core::ViewFamil
             .lodBias = LOD_BIAS,
         };
 
-        InstancedGeometryPassOutputs mainOutputs = SetupInstancedGeometryPass(graph, mainConfig, pipelineManager.get());
+        InstancedGeometryPassOutputs mainOutputs = SetupInstancedGeometryPass(graph, mainConfig, pipelineManager.get(), sceneIndex);
 
         RenderPass& instancedMeshShading = graph.AddPass("Instanced Mesh Shading", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
         instancedMeshShading.WriteColorAttachment(targets.albedo);
@@ -1787,7 +1772,7 @@ void RenderThread::SetupGeometryPasses(RenderGraph& graph, const Core::ViewFamil
             .lodBias = LOD_BIAS,
         };
 
-        InstancedGeometryPassOutputs customOutputs = SetupInstancedGeometryPass(graph, customConfig, pipelineManager.get());
+        InstancedGeometryPassOutputs customOutputs = SetupInstancedGeometryPass(graph, customConfig, pipelineManager.get(), sceneIndex);
 
         RenderPass& customDrawPass = graph.AddPass("Custom Draw " + instanceBufferName, VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
         customDrawPass.WriteColorAttachment(targets.albedo);
@@ -1853,113 +1838,6 @@ void RenderThread::SetupGeometryPasses(RenderGraph& graph, const Core::ViewFamil
             vkCmdEndRendering(cmd);
         });
     }
-}
-
-void RenderThread::SetupDirectGeometryPass(RenderGraph& graph, const Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties, std::array<uint32_t, 2> renderExtent,
-                                           const GBufferTargets& targets,
-                                           uint32_t sceneIndex, bool bClearTargets) const
-{
-    /*if (viewFamily.customStencilDraws.empty()) { return; }
-
-    size_t totalInstances = 0;
-    for (const auto& customDraw : viewFamily.customStencilDraws) {
-        totalInstances += customDraw.instances.size();
-    }
-    if (totalInstances == 0) { return; }
-
-    RenderPass& buildIndirectPass = graph.AddPass("Build Direct Indirect Commands", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-    buildIndirectPass.ReadBuffer("primitive_buffer");
-    buildIndirectPass.ReadWriteBuffer("direct_instance_buffer");
-    buildIndirectPass.WriteBuffer("direct_indirect_command_buffer");
-    buildIndirectPass.Execute([&, totalInstances](VkCommandBuffer cmd) {
-        BuildDirectIndirectPushConstant pushConstant{
-            .primitiveBuffer = graph.GetBufferAddress("primitive_buffer"),
-            .instanceBuffer = graph.GetBufferAddress("direct_instance_buffer"),
-            .indirectCommandBuffer = graph.GetBufferAddress("direct_indirect_command_buffer"),
-            .modelBuffer = graph.GetBufferAddress("model_buffer"),
-            .sceneData = graph.GetBufferAddress("scene_data"),
-            .sceneDataIndex = sceneIndex,
-            .instanceCount = static_cast<uint32_t>(totalInstances),
-            .lodBias = LOD_BIAS,
-        };
-
-        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("direct_mesh_shading_build_indirect");
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
-        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(BuildDirectIndirectPushConstant), &pushConstant);
-        uint32_t xDispatch = (totalInstances + 63) / 64;
-        vkCmdDispatch(cmd, xDispatch, 1, 1);
-    });
-
-    RenderPass& directMeshShading = graph.AddPass("Direct Mesh Shading", VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
-    directMeshShading.WriteColorAttachment(targets.albedo);
-    directMeshShading.WriteColorAttachment(targets.normal);
-    directMeshShading.WriteColorAttachment(targets.pbr);
-    directMeshShading.WriteColorAttachment(targets.emissive);
-    directMeshShading.WriteColorAttachment(targets.velocity);
-    directMeshShading.ReadWriteDepthAttachment(targets.depthStencil);
-    directMeshShading.ReadBuffer("scene_data");
-    directMeshShading.ReadBuffer("model_buffer");
-    directMeshShading.ReadBuffer("material_buffer");
-    directMeshShading.ReadBuffer("direct_instance_buffer");
-    directMeshShading.ReadIndirectBuffer("direct_indirect_command_buffer");
-    directMeshShading.Execute([&, sceneIndex, width = renderExtent[0], height = renderExtent[1], bClearTargets](VkCommandBuffer cmd) {
-        VkViewport viewport = VkHelpers::GenerateViewport(width, height);
-        vkCmdSetViewport(cmd, 0, 1, &viewport);
-        VkRect2D scissor = VkHelpers::GenerateScissor(width, height);
-        vkCmdSetScissor(cmd, 0, 1, &scissor);
-
-        constexpr VkClearValue colorClear = {.color = {{0.0f, 0.0f, 0.0f, 0.0f}}};
-        constexpr VkClearValue depthClear = {.depthStencil = {0.0f, 0u}};
-        const VkClearValue* _colorClear = bClearTargets ? &colorClear : nullptr;
-        const VkClearValue* _depthClear = bClearTargets ? &depthClear : nullptr;
-        const VkRenderingAttachmentInfo albedoAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.albedo), _colorClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-        const VkRenderingAttachmentInfo normalAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.normal), _colorClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-        const VkRenderingAttachmentInfo pbrAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.pbr), _colorClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-        const VkRenderingAttachmentInfo emissiveTarget = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.emissive), _colorClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-        const VkRenderingAttachmentInfo velocityAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.velocity), _colorClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-        const VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), _depthClear,
-                                                                                             VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
-        const VkRenderingAttachmentInfo stencilAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), _depthClear,
-                                                                                               VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
-
-        const VkRenderingAttachmentInfo colorAttachments[] = {albedoAttachment, normalAttachment, pbrAttachment, emissiveTarget, velocityAttachment};
-        const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, colorAttachments, 5, &depthAttachment, &stencilAttachment);
-
-        vkCmdBeginRendering(cmd, &renderInfo);
-
-        DirectMeshShadingPushConstant pushConstants{
-            .sceneData = graph.GetBufferAddress("scene_data"),
-            .vertexBuffer = graph.GetBufferAddress("vertex_buffer"),
-            .meshletVerticesBuffer = graph.GetBufferAddress("meshlet_vertex_buffer"),
-            .meshletTrianglesBuffer = graph.GetBufferAddress("meshlet_triangle_buffer"),
-            .meshletBuffer = graph.GetBufferAddress("meshlet_buffer"),
-            .primitiveBuffer = graph.GetBufferAddress("primitive_buffer"),
-            .instanceBuffer = graph.GetBufferAddress("direct_instance_buffer"),
-            .materialBuffer = graph.GetBufferAddress("material_buffer"),
-            .modelBuffer = graph.GetBufferAddress("model_buffer"),
-            .sceneDataIndex = sceneIndex,
-        };
-
-        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("portal_rendering");
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineEntry->pipeline);
-        vkCmdPushConstants(cmd, pipelineEntry->layout,
-                           VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(DirectMeshShadingPushConstant), &pushConstants);
-
-        uint32_t instanceOffset = 0;
-        for (const auto& customDraw : viewFamily.customStencilDraws) {
-            if (customDraw.instances.empty()) continue;
-
-            vkCmdSetStencilReference(cmd, VK_STENCIL_FACE_FRONT_AND_BACK, customDraw.stencilValue);
-            vkCmdDrawMeshTasksIndirectEXT(cmd, graph.GetBufferHandle("direct_indirect_command_buffer"),
-                                          instanceOffset * sizeof(DrawMeshTasksIndirectCommand),
-                                          static_cast<uint32_t>(customDraw.instances.size()),
-                                          sizeof(DrawMeshTasksIndirectCommand));
-
-            instanceOffset += customDraw.instances.size();
-        }
-
-        vkCmdEndRendering(cmd);
-    });*/
 }
 
 void RenderThread::SetupGroundTruthAmbientOcclusion(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, const GBufferTargets& targets,
@@ -2928,7 +2806,4 @@ void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& 
     return;
 #endif
 }
-
-void RenderThread::TemporaryRenderTests(RenderGraph& graph, const Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties, std::array<uint32_t, 2> renderExtent)
-{}
 } // Render
