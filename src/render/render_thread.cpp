@@ -84,6 +84,8 @@ void RenderThread::Start()
 void RenderThread::RequestShutdown()
 {
     bShouldExit.store(true, std::memory_order_release);
+    engineRenderSynchronization->renderFrames.fetch_add(1);
+    engineRenderSynchronization->renderCV.notify_one();
 }
 
 void RenderThread::Join()
@@ -108,7 +110,9 @@ void RenderThread::ThreadMain()
             engineRenderSynchronization->renderFrames.fetch_sub(1);
         }
 
-        if (bShouldExit.load()) { break; }
+        if (bShouldExit.load()) {
+            break;
+        }
 
         // Render Frame
         {
