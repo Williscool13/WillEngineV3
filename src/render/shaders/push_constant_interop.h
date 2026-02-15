@@ -514,8 +514,10 @@ SHADER_PUBLIC struct DebugDrawPushConstant
 SHADER_PUBLIC struct EquirectToCubemapPushConstant
 {
     SHADER_PUBLIC uint32_t samplerIndex;
-    SHADER_PUBLIC uint32_t sourceIndex;
-    SHADER_PUBLIC uint32_t targetIndex;
+    SHADER_PUBLIC uint32_t sourceEquiIndex;
+    SHADER_PUBLIC uint32_t targetCubeIndex;
+    SHADER_PUBLIC uint32_t cubemapWidth;
+    SHADER_PUBLIC uint32_t cubemapHeight;
 };
 
 SHADER_PUBLIC struct ConvolveDiffusePushConstant

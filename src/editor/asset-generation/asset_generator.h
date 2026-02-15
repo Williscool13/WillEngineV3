@@ -10,15 +10,11 @@
 #include <concurrentqueue/concurrentqueue.h>
 
 #include "asset_generation_types.h"
+#include "environment_map_generate_slot.h"
 #include "model_generate_slot.h"
 #include "TaskScheduler.h"
 #include "texture_generate_slot.h"
 #include "core/allocators/lock_free_handle_allocator.h"
-
-namespace Editor
-{
-struct EnvironmentMapGenerateSlot;
-}
 
 namespace Render
 {
@@ -106,6 +102,8 @@ private:
     void ThreadMain();
     void OnModelGenerateComplete(bool success, ModelGenerateSlotHandle slotHandle);
     void OnTextureGenerateComplete(bool success, TextureGenerateSlotHandle slotHandle);
+    void OnEnvironmentGenerateComplete(bool success, EnvironmentMapGenerateSlotHandle slotHandle);
+
     void TransferQueueGPUDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) const;
     void GraphicsQueueGPUDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) const;
 
@@ -120,7 +118,7 @@ private:
     std::array<TextureGenerateSlot, TEXTURE_GENERATION_JOB_COUNT> textureGenerateTasks;
     Core::LockFreeHandleAllocator<TextureGenerateSlot, TEXTURE_GENERATION_JOB_COUNT> textureGenerateAllocator;
 
-    std::array<TextureGenerateSlot, ENVIRONMENT_MAP_GENERATION_JOB_COUNT> environmentMapeGenerateTasks;
+    std::array<EnvironmentMapGenerateSlot, ENVIRONMENT_MAP_GENERATION_JOB_COUNT> environmentMapeGenerateTasks;
     Core::LockFreeHandleAllocator<EnvironmentMapGenerateSlot, ENVIRONMENT_MAP_GENERATION_JOB_COUNT> environmentMapGenerateAllocator;
 
     moodycamel::ConcurrentQueue<ModelGenerateRequest> modelGenerateRequestQueue;

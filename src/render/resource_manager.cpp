@@ -49,9 +49,6 @@ ResourceManager::ResourceManager(VulkanContext* context)
     primitiveBuffer.SetDebugName("Mega Primitive Buffer");
 
     bindlessSamplerTextureDescriptorBuffer = BindlessResourcesSamplerImages(context);
-#if WILL_EDITOR
-    environmentMapGenerateResources = Editor::EnvironmentMapGenerateResources(context);
-#endif
     bindlessRDGTransientDescriptorBuffer = BindlessTransientRDGResourcesDescriptorBuffer<
         4,
         4,
@@ -136,5 +133,7 @@ ResourceManager::ResourceManager(VulkanContext* context)
 
     VK_CHECK(vkCreateSampler(context->device, &depthCompareSamplerInfo, nullptr, &depthCompareSampler));
     bindlessRDGTransientDescriptorBuffer.WriteCompareSamplerDescriptor(RDG_LINEAR_DEPTH_SAMPLER_INDEX, {depthCompareSampler, nullptr, {}});
+
+    environmentMapGenerateResources = Editor::EnvironmentMapGenerateResources(context);
 }
 } // Render

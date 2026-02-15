@@ -937,8 +937,8 @@ void RenderThread::CreatePipelines()
 
     // Portal Graphics Pipeline
     {
-        builder.AddShaderStage("shaders/portal_rendering_mesh.spv", VK_SHADER_STAGE_MESH_BIT_EXT);
-        builder.AddShaderStage("shaders/portal_rendering_fragment.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
+        builder.AddShaderStage("shaders/mesh_shading_instanced_mesh.spv", VK_SHADER_STAGE_MESH_BIT_EXT);
+        builder.AddShaderStage("shaders/mesh_shading_instanced_fragment.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
         builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
         builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE);
         builder.SetupDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_GREATER_OR_EQUAL);
@@ -990,6 +990,33 @@ void RenderThread::CreatePipelines()
         builder.Clear();
     }
 
+    // Instanced mesh shading pipeline
+    {
+        builder.AddShaderStage("shaders/cubemap_visualizer_mesh.spv", VK_SHADER_STAGE_MESH_BIT_EXT);
+        builder.AddShaderStage("shaders/cubemap_visualizer_fragment.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
+        builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+        builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE);
+        builder.SetupDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_GREATER_OR_EQUAL);
+
+        VkFormat colorFormats[5] = {
+            GBUFFER_ALBEDO_FORMAT,
+            GBUFFER_NORMAL_FORMAT,
+            GBUFFER_PBR_FORMAT,
+            GBUFFER_EMISSIVE_FORMAT,
+            GBUFFER_MOTION_FORMAT
+        };
+        builder.SetupRenderer(colorFormats, 5, DEPTH_ATTACHMENT_FORMAT, DEPTH_ATTACHMENT_FORMAT);
+
+        pipelineManager->RegisterGraphicsPipeline(
+            "cubemap_visualize",
+            builder,
+            sizeof(BaseMeshShadingPushConstant),
+            VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT,
+            PipelineCategory::DebugRendering
+        );
+        builder.Clear();
+    }
+
     // Debug Render
     {
         builder.AddShaderStage("shaders/debug_render_vertex.spv", VK_SHADER_STAGE_VERTEX_BIT);
@@ -1025,6 +1052,7 @@ void RenderThread::CreatePipelines()
         );
         builder.Clear();
     }
+
 }
 
 void RenderThread::PrepareRenderFamilyProperties(Core::ViewFamily& viewFamily, ReadbackStruct* readbackData, RenderFamilyProperties& renderFamilyProperties, PipelineManager* _pipelineManager,
@@ -1293,53 +1321,6 @@ void RenderThread::SetupModelUniforms(const Core::ViewFamily& viewFamily, const 
                 vkCmdCopyBuffer2(cmd, &copyInfo);
             });
     }
-
-    /*if (!viewFamily.customStencilDraws.empty()) {
-        size_t totalCustomInstances = 0;
-        for (const auto& customDraw : viewFamily.customStencilDraws) {
-            totalCustomInstances += customDraw.instances.size();
-        }
-
-        renderGraph->CreateBuffer("direct_instance_buffer", renderFamilyProperties.directInstanceBufferSize);
-        renderGraph->CreateBuffer("direct_indirect_command_buffer", renderFamilyProperties.directIndirectCommandBufferSize);
-
-        UploadAllocation directInstanceUpload = renderGraph->AllocateTransient(totalCustomInstances * sizeof(Instance));
-        auto* directInstanceBuffer = static_cast<Instance*>(directInstanceUpload.ptr);
-        size_t directInstanceOffset = 0;
-        for (const auto& customDraw : viewFamily.customStencilDraws) {
-            for (const auto& inst : customDraw.instances) {
-                directInstanceBuffer[directInstanceOffset++] = {
-                    .primitiveIndex = inst.primitiveIndex,
-                    .modelIndex = inst.modelIndex,
-                    .materialIndex = inst.gpuMaterialIndex,
-                    .bIsVisible = 0,
-                    .lod = 0,
-                };
-            }
-        }
-
-        RenderPass& uploadDirectInstancesPass = renderGraph->AddPass("Upload Direct Instances", VK_PIPELINE_STAGE_2_COPY_BIT);
-        uploadDirectInstancesPass.WriteTransferBuffer("direct_instance_buffer");
-        uploadDirectInstancesPass.Execute([&,
-                uploadOffset = directInstanceUpload.offset,
-                uploadSize = totalCustomInstances * sizeof(Instance)](VkCommandBuffer cmd) {
-                VkBufferCopy2 copy{
-                    .sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
-                    .srcOffset = uploadOffset,
-                    .dstOffset = 0,
-                    .size = uploadSize
-                };
-
-                VkCopyBufferInfo2 copyInfo{
-                    .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
-                    .srcBuffer = renderGraph->GetTransientUploadBuffer(),
-                    .dstBuffer = renderGraph->GetBufferHandle("direct_instance_buffer"),
-                    .regionCount = 1,
-                    .pRegions = &copy
-                };
-                vkCmdCopyBuffer2(cmd, &copyInfo);
-            });
-    }*/
 }
 
 void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties) const

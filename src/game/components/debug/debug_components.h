@@ -17,6 +17,8 @@ struct AntiGravityComponent
 {};
 struct FloorComponent
 {};
+
+struct CubemapVisualizeTag{};
 }
 
 #endif //WILL_ENGINE_DEBUG_COMPONENTS_H

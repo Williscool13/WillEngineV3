@@ -13,10 +13,7 @@
 
 namespace Game::Component
 {
-
-
 struct DirtyRenderTransformTag{};
-
 
 struct RenderTransformComponent
 {
@@ -37,6 +34,8 @@ struct RenderableComponent
     std::array<PrimitiveData, 128> primitives;
     uint8_t primitiveCount = 0;
 };
+
+
 
 }
 

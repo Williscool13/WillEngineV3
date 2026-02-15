@@ -24,15 +24,10 @@ float2 SampleSphericalMap(float3 v) {
 
 [numthreads(16, 16, 1)]
 void ComputeEquirectToCubemap(uniform EquirectToCubemapPushConstant pc, uint3 tid : SV_DispatchThreadID) {
-    RWTexture2DArray<float4> targetCubemap = targetCubemaps[pc.targetIndex];
-
-    uint3 dims;
-    targetCubemap.GetDimensions(dims.x, dims.y, dims.z);
-
-    if (tid.x >= dims.x || tid.y >= dims.y) return;
+    if (tid.x >= pc.cubemapWidth || tid.y >= pc.cubemapHeight) return;
 
     int3 storePos = int3(tid.xy, tid.z);
-    float2 uv = (float2(storePos.xy) + 0.5) / float2(dims.xy);
+    float2 uv = (float2(storePos.xy) + 0.5) / float2(pc.cubemapWidth, pc.cubemapHeight);
     uv = uv * 2.0 - 1.0;
 
     float3 direction;
@@ -49,8 +44,8 @@ void ComputeEquirectToCubemap(uniform EquirectToCubemapPushConstant pc, uint3 ti
     float2 sphericalUV = SampleSphericalMap(direction);
     sphericalUV = saturate(sphericalUV);
 
-    float4 color = sourceTextures[pc.sourceIndex].SampleLevel(samplers[pc.samplerIndex], sphericalUV, 0);
-    targetCubemap[storePos] = color;
+    float4 color = sourceTextures[pc.sourceEquiIndex].SampleLevel(samplers[pc.samplerIndex], sphericalUV, 0);
+    targetCubemaps[pc.targetCubeIndex][storePos] = color;
 }
 
 // ==================== Irradiance Convolution ====================

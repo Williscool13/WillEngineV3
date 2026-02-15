@@ -679,6 +679,12 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
                 false,
                 DXGI_FORMAT_BC7_UNORM_SRGB);
         }
+
+        if (ImGui::Button("kloofendal_environment.ktx2")) {
+            modelGenerator->RequestEnvironmentMapGenerate(
+                Platform::GetAssetPath() / "environment-map/kloofendal_48d_partly_cloudy_puresky_4k.hdr",
+                Platform::GetAssetPath() / "environment-map/kloofendal_48d_partly_cloudy_puresky_4k.ktx2");
+        }
     }
     ImGui::End();
 #endif
@@ -697,14 +703,16 @@ void WillEngine::Cleanup()
 {
     asyncAssetLoadManager->Join();
     asyncAssetLoadManager.reset();
-    renderThread->Join();
-    audioManager.reset();
-
 
 #if WILL_EDITOR
     modelGenerator->Join();
     modelGenerator.reset();
 #endif
+
+    renderThread->Join();
+    audioManager.reset();
+
+
     scheduler->ShutdownNow();
     engineContext->scheduler = nullptr;
 

@@ -11,6 +11,8 @@
 
 #include "asset_generation_types.h"
 #include "platform/paths.h"
+#include "render/resource_manager.h"
+#include "render/pipelines/pipeline_manager.h"
 #include "render/vulkan/vk_context.h"
 #include "render/vulkan/vk_helpers.h"
 #include "render/vulkan/vk_utils.h"
@@ -25,17 +27,66 @@ void EnvironmentMapGenerateSlot::Initialize(
     int32_t slotIndex,
     enki::TaskScheduler* _scheduler,
     Render::VulkanContext* _context,
+    Render::PipelineManager* _pipelineManager,
+    Render::ResourceManager* _resourceManager,
     std::function<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> graphicsDispatchCallback,
     std::function<void(bool success, EnvironmentMapGenerateSlotHandle slotHandle)> notifyCallback)
 {
     scheduler = _scheduler;
     context = _context;
+    pipelineManager = _pipelineManager;
+    resourceManager = _resourceManager;
     temporaryPath = Platform::GetExecutablePath() / "temp" / ("envmap_gen_" + std::to_string(slotIndex));
     _graphicsDispatchCallback = std::move(graphicsDispatchCallback);
     _notifyCallback = std::move(notifyCallback);
 
-    imageStagingBuffer = Render::AllocatedBuffer::CreateAllocatedStagingBuffer(context, TEXTURE_GENERATION_STAGING_BUFFER_SIZE);
-    imageReceivingBuffer = Render::AllocatedBuffer::CreateAllocatedReceivingBuffer(context, TEXTURE_GENERATION_STAGING_BUFFER_SIZE);
+    imageStagingBuffer = Render::AllocatedBuffer::CreateAllocatedStagingBuffer(context, ENVIRONMENT_MAP_GENERATION_STAGING_BUFFER_SIZE);
+    imageReceivingBuffer = Render::AllocatedBuffer::CreateAllocatedReceivingBuffer(context, ENVIRONMENT_MAP_GENERATION_STAGING_BUFFER_SIZE);
+
+    VkSamplerCreateInfo equiSamplerInfo = {
+        .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+        .magFilter = VK_FILTER_LINEAR,
+        .minFilter = VK_FILTER_LINEAR,
+        .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+        .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        .mipLodBias = 0.0f,
+        .anisotropyEnable = VK_FALSE,
+        .maxAnisotropy = 1.0f,
+        .compareEnable = VK_FALSE,
+        .compareOp = VK_COMPARE_OP_ALWAYS,
+        .minLod = 0.0f,
+        .maxLod = VK_LOD_CLAMP_NONE,
+        .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK,
+        .unnormalizedCoordinates = VK_FALSE
+    };
+
+    equiSampler = Render::Sampler::CreateSampler(context, equiSamplerInfo);
+
+    VkSamplerCreateInfo cubemapSamplerInfo = {
+        .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+        .magFilter = VK_FILTER_LINEAR,
+        .minFilter = VK_FILTER_LINEAR,
+        .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+        .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        .mipLodBias = 0.0f,
+        .anisotropyEnable = VK_FALSE,
+        .maxAnisotropy = 1.0f,
+        .compareEnable = VK_FALSE,
+        .compareOp = VK_COMPARE_OP_ALWAYS,
+        .minLod = 0.0f,
+        .maxLod = VK_LOD_CLAMP_NONE,
+        .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK,
+        .unnormalizedCoordinates = VK_FALSE
+    };
+    cubemapSampler = Render::Sampler::CreateSampler(context, cubemapSamplerInfo);
+
+
+    resourceManager->environmentMapGenerateResources.SetSampler(equiSampler.handle, EQUI_IMAGE_SAMPLER_INDEX);
+    resourceManager->environmentMapGenerateResources.SetSampler(cubemapSampler.handle, CUBEMAP_IMAGE_SAMPLER_INDEX);
 }
 
 void EnvironmentMapGenerateSlot::Launch(
@@ -61,6 +112,7 @@ void EnvironmentMapGenerateSlot::Clear()
     imagePath.clear();
     outputPath.clear();
     cubemapImage = {};
+    equiImage = {};
     mipData.clear();
     imageStagingAllocator.Reset();
     imageReceivingAllocator.Reset();
@@ -158,10 +210,10 @@ bool EnvironmentMapGenerateSlot::LoadEquirectangularAndGenerate(
         equirectSize,
         VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT
     );
-    Render::AllocatedImage equirectImage = Render::AllocatedImage::CreateAllocatedImage(context, equirectCreateInfo);
+    equiImage = Render::AllocatedImage::CreateAllocatedImage(context, equirectCreateInfo);
 
     VkImageMemoryBarrier2 barrier = Render::VkHelpers::ImageMemoryBarrier(
-        equirectImage.handle,
+        equiImage.handle,
         Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1),
         VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_UNDEFINED,
         VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
@@ -177,19 +229,29 @@ bool EnvironmentMapGenerateSlot::LoadEquirectangularAndGenerate(
     copyRegion.imageSubresource.layerCount = 1;
     copyRegion.imageExtent = equirectSize;
 
-    vkCmdCopyBufferToImage(cmd, imageStagingBuffer.handle, equirectImage.handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
+    vkCmdCopyBufferToImage(cmd, imageStagingBuffer.handle, equiImage.handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
 
     barrier = Render::VkHelpers::ImageMemoryBarrier(
-        equirectImage.handle,
+        equiImage.handle,
         Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1),
         VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
         VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
     );
     vkCmdPipelineBarrier2(cmd, &depInfo);
 
+    VkImageViewCreateInfo equiViewInfo = Render::VkHelpers::ImageViewCreateInfo(
+        equiImage.handle,
+        VK_FORMAT_R32G32B32A32_SFLOAT,
+        VK_IMAGE_ASPECT_COLOR_BIT
+    );
+    equiViewInfo.subresourceRange = Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1);
+    equiImageView = std::move(Render::ImageView::CreateImageView(context, equiViewInfo));
+    bool success = resourceManager->environmentMapGenerateResources.SetTexture2D({nullptr, equiImageView.handle, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}, 0);
+    assert(success);
+
     // Create cubemap image with 6 mips (5 specular + 1 diffuse)
     VkImageCreateInfo cubemapCreateInfo = Render::VkHelpers::ImageCreateInfo(
-        VK_FORMAT_R16G16B16A16_SFLOAT,
+        VK_FORMAT_R32G32B32A32_SFLOAT,
         {Render::ENVIRONMENT_MAP_RESOLUTION, Render::ENVIRONMENT_MAP_RESOLUTION, 1},
         VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT
     );
@@ -198,6 +260,17 @@ bool EnvironmentMapGenerateSlot::LoadEquirectangularAndGenerate(
     cubemapCreateInfo.mipLevels = TOTAL_MIPS;
 
     cubemapImage = Render::AllocatedImage::CreateAllocatedImage(context, cubemapCreateInfo);
+    VkImageViewCreateInfo cubemapViewInfo = Render::VkHelpers::ImageViewCreateInfo(
+        cubemapImage.handle,
+        VK_FORMAT_R32G32B32A32_SFLOAT,
+        VK_IMAGE_ASPECT_COLOR_BIT
+    );
+    cubemapViewInfo.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
+    cubemapViewInfo.subresourceRange = Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, TOTAL_MIPS, 0, 6);
+    cubemapImageView = Render::ImageView::CreateImageView(context, cubemapViewInfo);
+
+    success = resourceManager->environmentMapGenerateResources.SetRWCubemapArray({nullptr, cubemapImageView.handle, VK_IMAGE_LAYOUT_GENERAL}, 0);
+    assert(success);
 
     // Transition all mips to GENERAL for compute writes
     barrier = Render::VkHelpers::ImageMemoryBarrier(
@@ -208,9 +281,25 @@ bool EnvironmentMapGenerateSlot::LoadEquirectangularAndGenerate(
     );
     vkCmdPipelineBarrier2(cmd, &depInfo);
 
-    // todo: generate specular and diffuse
+    EquirectToCubemapPushConstant eqPc;
+    eqPc.samplerIndex = EQUI_IMAGE_SAMPLER_INDEX;
+    eqPc.sourceEquiIndex = 0;
+    eqPc.targetCubeIndex = 0;
+    eqPc.cubemapWidth = 1024;
+    eqPc.cubemapHeight = 1024;
 
+    std::array bindings{resourceManager->environmentMapGenerateResources.GetBindingInfo()};
+    uint32_t bindingIndex{0u};
+    VkDeviceSize bindingOffset{0};
+    vkCmdBindDescriptorBuffersEXT(cmd, bindings.size(), bindings.data());
+
+    const Render::PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("ibl_equirect_to_cubemap");
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+    vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(eqPc), &eqPc);
+    vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->layout, 0, bindings.size(), &bindingIndex, &bindingOffset);
+    vkCmdDispatch(cmd, Render::ENVIRONMENT_MAP_RESOLUTION / 16, Render::ENVIRONMENT_MAP_RESOLUTION / 16, 6);
     submitAndWait(true);
+    // todo: generate specular and diffuse
 
     // Copy all mip faces back to CPU for KTX generation
     {
@@ -251,6 +340,8 @@ bool EnvironmentMapGenerateSlot::LoadEquirectangularAndGenerate(
             }
         }
     }
+
+    //todo: Add an additional final step that converts 32bit->16bit and save that 16 bit (half4 in slang)
 
     return true;
 }

@@ -13,12 +13,15 @@
 
 #include "asset_generation_types.h"
 #include "dds_defs.h"
+#include "environment_map_generate_resources.h"
 #include "core/allocators/handle.h"
 #include "core/allocators/linear_allocator.h"
 #include "render/vulkan/vk_resources.h"
 
 namespace Render
 {
+struct ResourceManager;
+class PipelineManager;
 struct VulkanContext;
 }
 
@@ -35,6 +38,8 @@ struct EnvironmentMapGenerateSlot
         int32_t slotIndex,
         enki::TaskScheduler* _scheduler,
         Render::VulkanContext* _context,
+        Render::PipelineManager* _pipelineManager,
+        Render::ResourceManager* _resourceManager,
         std::function<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> graphicsDispatchCallback,
         std::function<void(bool success, EnvironmentMapGenerateSlotHandle slotHandle)> notifyCallback
     );
@@ -57,13 +62,24 @@ private:
 
     enki::TaskScheduler* scheduler{nullptr};
     Render::VulkanContext* context{nullptr};
+    Render::PipelineManager* pipelineManager{nullptr};
+    Render::ResourceManager* resourceManager{nullptr};
     std::filesystem::path temporaryPath;
     std::function<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> _graphicsDispatchCallback;
     std::function<void(bool success, EnvironmentMapGenerateSlotHandle slotHandle)> _notifyCallback;
 
     EnvironmentMapGenerateSlotHandle slotHandle{EnvironmentMapGenerateSlotHandle::INVALID};
 
+
+    Render::AllocatedImage equiImage;
+    Render::ImageView equiImageView;
     Render::AllocatedImage cubemapImage;
+    Render::ImageView cubemapImageView;
+
+    static constexpr uint32_t EQUI_IMAGE_SAMPLER_INDEX = 0;
+    static constexpr uint32_t CUBEMAP_IMAGE_SAMPLER_INDEX = 1;
+    Render::Sampler equiSampler;
+    Render::Sampler cubemapSampler;
 
     std::vector<std::array<std::vector<uint8_t>, TOTAL_MIPS>> mipData; // [mip][face]
 

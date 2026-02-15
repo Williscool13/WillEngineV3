@@ -60,6 +60,21 @@ AssetGenerator::AssetGenerator(Render::VulkanContext* context, Render::RenderThr
             }
         );
     }
+    for (int32_t i = 0; i < ENVIRONMENT_MAP_GENERATION_JOB_COUNT; ++i) {
+        environmentMapeGenerateTasks[i].Initialize(
+            i,
+            assetGeneratorScheduler.get(),
+            context,
+            renderThread->GetPipelineManager(),
+            renderThread->GetResourceManager(),
+            [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
+                GraphicsQueueGPUDispatch(cmd, fence, completionSignal);
+            },
+            [this](bool success, EnvironmentMapGenerateSlotHandle slotHandle) {
+                OnEnvironmentGenerateComplete(success, slotHandle);
+            }
+        );
+    }
 
     thisThread = std::jthread([this] { ThreadMain(); });
 }
@@ -101,6 +116,21 @@ void AssetGenerator::ThreadMain()
                 }
                 else {
                     textureGenerateRequestQueue.enqueue(req);
+                }
+            }
+        }
+
+        {
+            ZoneScopedN("Process Environment Map Generation Requests")
+            EnvironmentMapGenerateRequest req{};
+            if (environmentMapGenerateRequestQueue.try_dequeue(req)) {
+                Core::Handle<EnvironmentMapGenerateSlot> slotHandle = environmentMapGenerateAllocator.Add();
+                if (slotHandle.IsValid()) {
+                    EnvironmentMapGenerateSlot& task = environmentMapeGenerateTasks[slotHandle.index];
+                    task.Launch(slotHandle, req.imagePath, req.outputPath);
+                }
+                else {
+                    environmentMapGenerateRequestQueue.enqueue(req);
                 }
             }
         }
@@ -232,6 +262,33 @@ void AssetGenerator::OnTextureGenerateComplete(bool success, TextureGenerateSlot
 
     task.Clear();
     bool removed = textureGenerateAllocator.Remove(slotHandle);
+    assert(removed && "Failed to remove valid slot handle");
+
+    workCounter.fetch_add(1);
+    wakeCV.notify_one();
+}
+
+void AssetGenerator::OnEnvironmentGenerateComplete(bool success, EnvironmentMapGenerateSlotHandle slotHandle)
+{
+    ZoneScoped;
+
+    if (!environmentMapGenerateAllocator.IsValid(slotHandle)) {
+        SPDLOG_ERROR("OnEnvironmentGenerateComplete called with invalid slot handle");
+        return;
+    }
+
+    EnvironmentMapGenerateSlot& task = environmentMapeGenerateTasks[slotHandle.index];
+    environmentMapGenerateCompleteQueue.enqueue({task.outputPath, success});
+
+    if (success) {
+        SPDLOG_INFO("Successfully generated environment map: {}", task.outputPath.string());
+    }
+    else {
+        SPDLOG_ERROR("Failed to generate environment map: {}", task.outputPath.string());
+    }
+
+    task.Clear();
+    bool removed = environmentMapGenerateAllocator.Remove(slotHandle);
     assert(removed && "Failed to remove valid slot handle");
 
     workCounter.fetch_add(1);

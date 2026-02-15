@@ -69,7 +69,7 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
     {
         ZoneScopedN("MainSceneRenderables");
         auto view = state->registry.view<Component::RenderableComponent, Component::RenderTransformComponent>(
-            entt::exclude<Component::PortalPlaneComponent>);
+            entt::exclude<Component::PortalPlaneComponent, Component::CubemapVisualizeTag>);
 
         for (auto [entity, renderable, renderTransform] : view.each()) {
             auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.size());
@@ -107,6 +107,35 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
                 for (uint8_t i = 0; i < renderable.primitiveCount; ++i) {
                     auto& prim = renderable.primitives[i];
                     portalDraw.instances.push_back({
+                        .primitiveIndex = prim.primitiveIndex,
+                        .materialID = prim.materialID,
+                        .modelIndex = modelIndex
+                    });
+                }
+            }
+        }
+    }
+
+    // Gather cubemap visualizations
+    {
+        ZoneScopedN("CubemapVisualizations");
+        auto portalView = state->registry.view<Component::CubemapVisualizeTag, Component::RenderableComponent, Component::RenderTransformComponent>();
+
+        if (portalView.size_hint() > 0) {
+            auto& cubemapVis = frameBuffer->mainViewFamily.customShaderDraws["cubemap_visualize"];
+            if (cubemapVis.instances.empty()) {
+                cubemapVis.pipelineName = "cubemap_visualize";
+                cubemapVis.pushConstantData = {}; // no custom data
+                cubemapVis.instanceBufferName = "cubemap_visualize_instance_buffer";
+            }
+
+            for (auto [entity, renderable, renderTransform] : portalView.each()) {
+                auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.size());
+                frameBuffer->mainViewFamily.modelMatrices.push_back({renderTransform.modelMatrix, renderTransform.previousMatrix});
+
+                for (uint8_t i = 0; i < renderable.primitiveCount; ++i) {
+                    auto& prim = renderable.primitives[i];
+                    cubemapVis.instances.push_back({
                         .primitiveIndex = prim.primitiveIndex,
                         .materialID = prim.materialID,
                         .modelIndex = modelIndex
