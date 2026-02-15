@@ -21,7 +21,8 @@ EnvironmentMapGenerateResources::EnvironmentMapGenerateResources(Render::VulkanC
     layoutBuilder.AddBinding(0, VK_DESCRIPTOR_TYPE_SAMPLER, MAX_SAMPLERS);
     layoutBuilder.AddBinding(1, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, MAX_TEXTURES_2D);
     layoutBuilder.AddBinding(2, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, MAX_CUBEMAPS);
-    layoutBuilder.AddBinding(3, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, MAX_RW_CUBEMAP_ARRAYS);
+    layoutBuilder.AddBinding(3, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, MAX_RW_CUBEMAP_FLOAT_ARRAYS);
+    layoutBuilder.AddBinding(4, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, MAX_RW_CUBEMAP_HALF_ARRAYS);
 
     VkDescriptorSetLayoutCreateInfo layoutCreateInfo = layoutBuilder.Build(
         VK_SHADER_STAGE_COMPUTE_BIT,
@@ -134,15 +135,38 @@ bool EnvironmentMapGenerateResources::SetCubemap(const VkDescriptorImageInfo& im
     return true;
 }
 
-bool EnvironmentMapGenerateResources::SetRWCubemapArray(const VkDescriptorImageInfo& imageInfo, uint32_t index) const
+bool EnvironmentMapGenerateResources::SetRWCubemapFloatArray(const VkDescriptorImageInfo& imageInfo, uint32_t index) const
 {
-    if (index >= MAX_RW_CUBEMAP_ARRAYS) {
-        SPDLOG_ERROR("RW Cubemap Array index {} out of range", index);
+    if (index >= MAX_RW_CUBEMAP_FLOAT_ARRAYS) {
+        SPDLOG_ERROR("RW Float Cubemap Array index {} out of range", index);
         return false;
     }
 
     size_t bindingOffset;
     vkGetDescriptorSetLayoutBindingOffsetEXT(context->device, descriptorSetLayout.handle, 3, &bindingOffset);
+    char* basePtr = static_cast<char*>(buffer.allocationInfo.pMappedData) + bindingOffset;
+
+    VkDescriptorGetInfoEXT descriptorGetInfo{};
+    descriptorGetInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT;
+    descriptorGetInfo.type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    descriptorGetInfo.data.pStorageImage = &imageInfo;
+
+    const size_t storageImageDescriptorSize = Render::VulkanContext::deviceInfo.descriptorBufferProps.storageImageDescriptorSize;
+    char* bufferPtr = basePtr + index * storageImageDescriptorSize;
+    vkGetDescriptorEXT(context->device, &descriptorGetInfo, storageImageDescriptorSize, bufferPtr);
+
+    return true;
+}
+
+bool EnvironmentMapGenerateResources::SetRWCubemapHalfArray(const VkDescriptorImageInfo& imageInfo, uint32_t index) const
+{
+    if (index >= MAX_RW_CUBEMAP_HALF_ARRAYS) {
+        SPDLOG_ERROR("RW Half Cubemap Array index {} out of range", index);
+        return false;
+    }
+
+    size_t bindingOffset;
+    vkGetDescriptorSetLayoutBindingOffsetEXT(context->device, descriptorSetLayout.handle, 4, &bindingOffset);
     char* basePtr = static_cast<char*>(buffer.allocationInfo.pMappedData) + bindingOffset;
 
     VkDescriptorGetInfoEXT descriptorGetInfo{};

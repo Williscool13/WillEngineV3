@@ -54,6 +54,8 @@ public static const float2 POISSON_DISK_64[64] = {
 	float2(0.2771143,0.3817498)
 };
 
+public static const float PI = 3.14159265359;
+
 public struct FullscreenPassVertexOutput {
     public float4 position : SV_Position;
     public float2 uv : TEXCOORD0;

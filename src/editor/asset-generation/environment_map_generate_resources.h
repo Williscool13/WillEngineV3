@@ -37,7 +37,9 @@ public:
 
     [[nodiscard]] bool SetCubemap(const VkDescriptorImageInfo& imageInfo, uint32_t index) const;
 
-    [[nodiscard]] bool SetRWCubemapArray(const VkDescriptorImageInfo& imageInfo, uint32_t index) const;
+    [[nodiscard]] bool SetRWCubemapFloatArray(const VkDescriptorImageInfo& imageInfo, uint32_t index) const;
+
+    [[nodiscard]] bool SetRWCubemapHalfArray(const VkDescriptorImageInfo& imageInfo, uint32_t index) const;
 
     [[nodiscard]] VkDescriptorBufferBindingInfoEXT GetBindingInfo() const;
 
@@ -49,7 +51,8 @@ private:
     static constexpr uint32_t MAX_SAMPLERS = 8;
     static constexpr uint32_t MAX_TEXTURES_2D = 8;
     static constexpr uint32_t MAX_CUBEMAPS = 8;
-    static constexpr uint32_t MAX_RW_CUBEMAP_ARRAYS = 8;
+    static constexpr uint32_t MAX_RW_CUBEMAP_FLOAT_ARRAYS = 8;
+    static constexpr uint32_t MAX_RW_CUBEMAP_HALF_ARRAYS = 8;
 };
 
 } // Editor

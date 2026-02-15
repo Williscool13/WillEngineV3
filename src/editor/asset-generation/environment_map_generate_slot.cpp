@@ -111,8 +111,12 @@ void EnvironmentMapGenerateSlot::Clear()
 {
     imagePath.clear();
     outputPath.clear();
-    cubemapImage = {};
     equiImage = {};
+    equiImageView = {};
+    mipmappedCubemapImage = {};
+    mipmappedCubemapImageView = {};
+    finalCubemapImage = {};
+    finalCubemapImageView = {};
     mipData.clear();
     imageStagingAllocator.Reset();
     imageReceivingAllocator.Reset();
@@ -252,29 +256,29 @@ bool EnvironmentMapGenerateSlot::LoadEquirectangularAndGenerate(
     // Create cubemap image with 6 mips (5 specular + 1 diffuse)
     VkImageCreateInfo cubemapCreateInfo = Render::VkHelpers::ImageCreateInfo(
         VK_FORMAT_R32G32B32A32_SFLOAT,
-        {Render::ENVIRONMENT_MAP_RESOLUTION, Render::ENVIRONMENT_MAP_RESOLUTION, 1},
+        {ENVIRONMENT_MAP_RESOLUTION, ENVIRONMENT_MAP_RESOLUTION, 1},
         VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT
     );
     cubemapCreateInfo.arrayLayers = 6;
     cubemapCreateInfo.flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
     cubemapCreateInfo.mipLevels = TOTAL_MIPS;
 
-    cubemapImage = Render::AllocatedImage::CreateAllocatedImage(context, cubemapCreateInfo);
+    mipmappedCubemapImage = Render::AllocatedImage::CreateAllocatedImage(context, cubemapCreateInfo);
     VkImageViewCreateInfo cubemapViewInfo = Render::VkHelpers::ImageViewCreateInfo(
-        cubemapImage.handle,
+        mipmappedCubemapImage.handle,
         VK_FORMAT_R32G32B32A32_SFLOAT,
         VK_IMAGE_ASPECT_COLOR_BIT
     );
     cubemapViewInfo.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
     cubemapViewInfo.subresourceRange = Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, TOTAL_MIPS, 0, 6);
-    cubemapImageView = Render::ImageView::CreateImageView(context, cubemapViewInfo);
+    mipmappedCubemapImageView = Render::ImageView::CreateImageView(context, cubemapViewInfo);
 
-    success = resourceManager->environmentMapGenerateResources.SetRWCubemapArray({nullptr, cubemapImageView.handle, VK_IMAGE_LAYOUT_GENERAL}, 0);
+    success = resourceManager->environmentMapGenerateResources.SetRWCubemapFloatArray({nullptr, mipmappedCubemapImageView.handle, VK_IMAGE_LAYOUT_GENERAL}, 0);
     assert(success);
 
     // Transition all mips to GENERAL for compute writes
     barrier = Render::VkHelpers::ImageMemoryBarrier(
-        cubemapImage.handle,
+        mipmappedCubemapImage.handle,
         Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, TOTAL_MIPS, 0, 6),
         VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_UNDEFINED,
         VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL
@@ -297,7 +301,7 @@ bool EnvironmentMapGenerateSlot::LoadEquirectangularAndGenerate(
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
     vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(eqPc), &eqPc);
     vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->layout, 0, bindings.size(), &bindingIndex, &bindingOffset);
-    vkCmdDispatch(cmd, Render::ENVIRONMENT_MAP_RESOLUTION / 16, Render::ENVIRONMENT_MAP_RESOLUTION / 16, 6);
+    vkCmdDispatch(cmd, ENVIRONMENT_MAP_RESOLUTION / 16, ENVIRONMENT_MAP_RESOLUTION / 16, 6);
     submitAndWait(true);
     // todo: generate specular and diffuse
 
@@ -307,7 +311,7 @@ bool EnvironmentMapGenerateSlot::LoadEquirectangularAndGenerate(
         mipData.resize(TOTAL_MIPS);
 
         barrier = Render::VkHelpers::ImageMemoryBarrier(
-            cubemapImage.handle,
+            mipmappedCubemapImage.handle, // todo replace w/ final
             Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, TOTAL_MIPS, 0, 6),
             VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL,
             VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
@@ -315,7 +319,7 @@ bool EnvironmentMapGenerateSlot::LoadEquirectangularAndGenerate(
         vkCmdPipelineBarrier2(cmd, &depInfo);
 
         for (uint32_t mip = 0; mip < TOTAL_MIPS; mip++) {
-            uint32_t mipResolution = (mip < DIFFUSE_MIP) ? (Render::ENVIRONMENT_MAP_RESOLUTION >> mip) : Render::ENVIRONMENT_MAP_DIFFUSE_RESOLUTION;
+            uint32_t mipResolution = (mip < DIFFUSE_MIP) ? (ENVIRONMENT_MAP_RESOLUTION >> mip) : ENVIRONMENT_MAP_DIFFUSE_RESOLUTION;
             size_t faceSize = mipResolution * mipResolution * 4 * sizeof(float);
 
             if (faceSize > imageReceivingBuffer.allocationInfo.size) {
@@ -332,7 +336,7 @@ bool EnvironmentMapGenerateSlot::LoadEquirectangularAndGenerate(
                 _copyRegion.imageSubresource.layerCount = 1;
                 _copyRegion.imageExtent = {mipResolution, mipResolution, 1};
 
-                vkCmdCopyImageToBuffer(cmd, cubemapImage.handle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, imageReceivingBuffer.handle, 1, &_copyRegion);
+                vkCmdCopyImageToBuffer(cmd, mipmappedCubemapImage.handle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, imageReceivingBuffer.handle, 1, &_copyRegion); // todo replace w/ final
                 submitAndWait(!(mip == TOTAL_MIPS - 1 && face == 5));
 
                 mipData[mip][face].resize(faceSize);
@@ -353,8 +357,8 @@ bool EnvironmentMapGenerateSlot::WriteKTXFile()
     ktxTexture2* texture;
     ktxTextureCreateInfo createInfo{};
     createInfo.vkFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
-    createInfo.baseWidth = Render::ENVIRONMENT_MAP_RESOLUTION;
-    createInfo.baseHeight = Render::ENVIRONMENT_MAP_RESOLUTION;
+    createInfo.baseWidth = ENVIRONMENT_MAP_RESOLUTION;
+    createInfo.baseHeight = ENVIRONMENT_MAP_RESOLUTION;
     createInfo.baseDepth = 1;
     createInfo.numDimensions = 2;
     createInfo.numLevels = TOTAL_MIPS;

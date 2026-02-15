@@ -1,4 +1,7 @@
 import push_constant_interop;
+import constants_interop;
+
+import shader_constants;
 
 [[vk::binding(0, 0)]]
 SamplerState samplers[];
@@ -10,7 +13,10 @@ Texture2D sourceTextures[];
 TextureCube sourceCubemaps[];
 
 [[vk::binding(3, 0)]]
-RWTexture2DArray<float4> targetCubemaps[];
+RWTexture2DArray<float4> intermediateCubemaps[];
+
+[[vk::binding(4, 0)]]
+RWTexture2DArray<half4> finalCubemaps[];
 
 // ==================== Equirectangular to Cubemap ====================
 float2 SampleSphericalMap(float3 v) {
@@ -45,23 +51,16 @@ void ComputeEquirectToCubemap(uniform EquirectToCubemapPushConstant pc, uint3 ti
     sphericalUV = saturate(sphericalUV);
 
     float4 color = sourceTextures[pc.sourceEquiIndex].SampleLevel(samplers[pc.samplerIndex], sphericalUV, 0);
-    targetCubemaps[pc.targetCubeIndex][storePos] = color;
+    intermediateCubemaps[pc.targetCubeIndex][storePos] = color;
 }
 
 // ==================== Irradiance Convolution ====================
-static const float PI = 3.14159265359;
-
 [numthreads(8, 8, 1)]
 void ComputeConvolveDiffuse(uniform ConvolveDiffusePushConstant pc, uint3 tid : SV_DispatchThreadID) {
-    RWTexture2DArray<float4> diffuseMap = targetCubemaps[pc.targetIndex];
-
-    uint3 dims;
-    diffuseMap.GetDimensions(dims.x, dims.y, dims.z);
-
-    if (tid.x >= dims.x || tid.y >= dims.y) return;
+    if (tid.x >= pc.targetWidth || tid.y >= pc.targetHeight) return;
 
     int3 storePos = int3(tid.xy, tid.z);
-    float2 uv = (float2(storePos.xy) + 0.5) / float2(dims.xy);
+    float2 uv = (float2(storePos.xy) + 0.5) / float2(pc.targetWidth, pc.targetHeight);
     uv = uv * 2.0 - 1.0;
 
     float3 direction;
@@ -97,12 +96,10 @@ void ComputeConvolveDiffuse(uniform ConvolveDiffusePushConstant pc, uint3 tid : 
     }
 
     irradiance = PI * irradiance * (1.0 / nrSamples);
-    diffuseMap[storePos] = float4(irradiance, 1.0);
+    finalCubemaps[pc.targetIndex][storePos] = half4(half(irradiance.x), half(irradiance.y), half(irradiance.z), 1.0h);
 }
 
 // ==================== Specular Prefilter ====================
-static const float RESOLUTION = 1024.0;
-
 float RadicalInverse_VdC(uint bits) {
     bits = (bits << 16u) | (bits >> 16u);
     bits = ((bits & 0x55555555u) << 1u) | ((bits & 0xAAAAAAAAu) >> 1u);
@@ -151,8 +148,6 @@ float DistributionGGX(float NdotH, float roughness) {
 void ComputePrefilterSpecular(uniform PrefilterSpecularPushConstant pc, uint3 tid : SV_DispatchThreadID) {
     if (tid.x >= pc.width || tid.y >= pc.height) return;
 
-    RWTexture2DArray<float4> prefilteredMap = targetCubemaps[pc.targetIndex];
-
     int3 storePos = int3(tid.xy, tid.z);
     float2 uv = (float2(storePos.xy) + 0.5) / float2(pc.width, pc.height);
     uv = uv * 2.0 - 1.0;
@@ -189,7 +184,7 @@ void ComputePrefilterSpecular(uniform PrefilterSpecularPushConstant pc, uint3 ti
             float D = DistributionGGX(NdotH, roughness);
             float pdf = (D * NdotH / (4.0 * HdotV)) + 0.0001;
 
-            float saTexel = 4.0 * PI / (6.0 * RESOLUTION * RESOLUTION);
+            float saTexel = 4.0 * PI / (6.0 * ENVIRONMENT_MAP_RESOLUTION * ENVIRONMENT_MAP_RESOLUTION);
             float saSample = 1.0 / (float(SAMPLE_COUNT) * pdf + 0.0001);
 
             float mipLevel = roughness == 0.0 ? 0.0 : 0.5 * log2(saSample / saTexel);
@@ -200,5 +195,5 @@ void ComputePrefilterSpecular(uniform PrefilterSpecularPushConstant pc, uint3 ti
     }
     prefilteredColor = prefilteredColor / totalWeight;
 
-    prefilteredMap[storePos] = float4(prefilteredColor, 1.0);
+    finalCubemaps[pc.targetIndex][storePos] = half4(half(prefilteredColor.x), half(prefilteredColor.y), half(prefilteredColor.z), 1.0h);
 }

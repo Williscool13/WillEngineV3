@@ -73,8 +73,10 @@ private:
 
     Render::AllocatedImage equiImage;
     Render::ImageView equiImageView;
-    Render::AllocatedImage cubemapImage;
-    Render::ImageView cubemapImageView;
+    Render::AllocatedImage mipmappedCubemapImage;
+    Render::ImageView mipmappedCubemapImageView;
+    Render::AllocatedImage finalCubemapImage;
+    Render::ImageView finalCubemapImageView;
 
     static constexpr uint32_t EQUI_IMAGE_SAMPLER_INDEX = 0;
     static constexpr uint32_t CUBEMAP_IMAGE_SAMPLER_INDEX = 1;

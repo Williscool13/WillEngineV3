@@ -128,6 +128,9 @@ VulkanContext::VulkanContext(SDL_Window* window)
     // SV_ClipDistance
     features10.shaderClipDistance = VK_TRUE;
 
+    // Half support
+    features12.shaderFloat16 = VK_TRUE;
+
     // VkPhysicalDeviceComputeShaderDerivativesFeaturesKHR computeShaderDerivativesFeaturesKhr{};
     // computeShaderDerivativesFeaturesKhr.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COMPUTE_SHADER_DERIVATIVES_FEATURES_KHR;
     // computeShaderDerivativesFeaturesKhr.computeDerivativeGroupQuads = VK_TRUE;

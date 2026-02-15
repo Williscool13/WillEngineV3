@@ -525,6 +525,8 @@ SHADER_PUBLIC struct ConvolveDiffusePushConstant
     SHADER_PUBLIC uint32_t samplerIndex;
     SHADER_PUBLIC uint32_t sourceIndex;
     SHADER_PUBLIC uint32_t targetIndex;
+    SHADER_PUBLIC uint32_t targetWidth;
+    SHADER_PUBLIC uint32_t targetHeight;
     SHADER_PUBLIC float sampleDelta;
 };
 
