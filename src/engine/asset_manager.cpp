@@ -46,12 +46,12 @@ AssetManager::AssetManager(AssetLoad::AsyncAssetLoadManager* assetLoadManager, R
         .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
         .pNext = nullptr,
         .flags = 0,
-        .magFilter = VK_FILTER_NEAREST,
-        .minFilter = VK_FILTER_NEAREST,
-        .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
-        .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-        .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-        .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        .magFilter = VK_FILTER_LINEAR,
+        .minFilter = VK_FILTER_LINEAR,
+        .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+        .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
         .mipLodBias = 0.0f,
         .anisotropyEnable = VK_FALSE,
         .maxAnisotropy = 1.0f,
@@ -176,6 +176,20 @@ void AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuffer) const
             SPDLOG_ERROR("[AssetManager] Texture load failed: {}", textureComplete.texture->name);
         }
     }
+
+    AssetLoad::CubemapLoadComplete cubemapComplete{};
+    while (assetLoadManager->TryDequeueCubemapComplete(cubemapComplete)) {
+        if (cubemapComplete.bSuccess) {
+            stagingFrameBuffer.imageAcquireOperations.push_back(cubemapComplete.cubemap->acquireBarrier);
+
+            cubemapComplete.cubemap->loadState = Render::Cubemap::LoadState::Loaded;
+            SPDLOG_INFO("[AssetManager] Cubemap load succeeded: {} (bindless index: {})", cubemapComplete.cubemap->name, static_cast<uint32_t>(cubemapComplete.cubemap->bindlessHandle.index));
+        }
+        else {
+            textureComplete.texture->loadState = Render::Texture::LoadState::NotLoaded;
+            SPDLOG_ERROR("[AssetManager] Cubemap load failed: {}", cubemapComplete.cubemap->name);
+        }
+    }
 }
 
 void AssetManager::ResolveUnloads()
@@ -235,7 +249,7 @@ TextureHandle AssetManager::LoadTexture(const std::filesystem::path& path)
     texture.selfHandle = handle;
     texture.source = path;
     texture.name = path.stem().string();
-    texture.loadState = Render::Texture::LoadState::NotLoaded;
+    texture.loadState = Render::Texture::LoadState::Loading;
     texture.refCount = 1;
     texture.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTexture();
 
@@ -296,7 +310,7 @@ CubemapHandle AssetManager::LoadCubemap(const std::filesystem::path& path)
     cubemap.source = path;
     cubemap.name = path.filename().string();
     cubemap.refCount = 1;
-    cubemap.loadState = Render::Cubemap::LoadState::NotLoaded;
+    cubemap.loadState = Render::Cubemap::LoadState::Loading;
     cubemap.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateCubemap();
 
     pathToCubemapHandle[path] = handle;

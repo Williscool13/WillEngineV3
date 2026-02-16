@@ -21,6 +21,7 @@ public:
     enum class LoadState
     {
         NotLoaded,
+        Loading,
         Loaded,
         FailedToLoad
     };

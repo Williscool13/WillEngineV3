@@ -96,7 +96,8 @@ void ComputeConvolveDiffuse(uniform ConvolveDiffusePushConstant pc, uint3 tid : 
     }
 
     irradiance = PI * irradiance * (1.0 / nrSamples);
-    finalCubemaps[pc.targetIndex][storePos] = half4(half(irradiance.x), half(irradiance.y), half(irradiance.z), 1.0h);
+    // finalCubemaps[pc.targetIndex][storePos] = half4(half(irradiance.x), half(irradiance.y), half(irradiance.z), 1.0h);
+    finalCubemaps[pc.targetIndex][storePos] = half4(1.0h, 1.0h, 0.0h, 0.0h);
 }
 
 // ==================== Specular Prefilter ====================
@@ -195,5 +196,6 @@ void ComputePrefilterSpecular(uniform PrefilterSpecularPushConstant pc, uint3 ti
     }
     prefilteredColor = prefilteredColor / totalWeight;
 
-    finalCubemaps[pc.targetIndex][storePos] = half4(half(prefilteredColor.x), half(prefilteredColor.y), half(prefilteredColor.z), 1.0h);
+    // finalCubemaps[pc.targetIndex][storePos] = half4(half(prefilteredColor.x), half(prefilteredColor.y), half(prefilteredColor.z), 1.0h);
+    finalCubemaps[pc.targetIndex][storePos] = half4(1.0h, 1.0h, 0.0h, 0.0h);
 }

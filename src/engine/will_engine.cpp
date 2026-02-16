@@ -641,6 +641,11 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
                             Platform::GetAssetPath() / "BoxTextured4k.glb",
                             Platform::GetAssetPath() / "BoxTextured4k.willmodel");
         }
+        if (ImGui::Button("Sphere.willmodel")) {
+            startGeneration("Sphere",
+                            Platform::GetAssetPath() / "Sphere.glb",
+                            Platform::GetAssetPath() / "Sphere.willmodel");
+        }
 
         if (ImGui::Button("sponza.willmodel")) {
             startGeneration("sponza",

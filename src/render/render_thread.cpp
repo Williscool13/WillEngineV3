@@ -994,7 +994,7 @@ void RenderThread::CreatePipelines()
         builder.Clear();
     }
 
-    // Instanced mesh shading pipeline
+    // Cubemap Visualizer
     {
         builder.AddShaderStage("shaders/cubemap_visualizer_mesh.spv", VK_SHADER_STAGE_MESH_BIT_EXT);
         builder.AddShaderStage("shaders/cubemap_visualizer_fragment.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
@@ -1812,7 +1812,9 @@ void RenderThread::SetupGeometryPasses(RenderGraph& graph, const Core::ViewFamil
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineEntry->pipeline);
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT,
                                0, sizeof(pushConstants), &pushConstants);
-            vkCmdSetStencilReference(cmd, VK_STENCIL_FACE_FRONT_AND_BACK, customDraw.second.stencilValue);
+            if (customDraw.second.stencilValue != -1) {
+                vkCmdSetStencilReference(cmd, VK_STENCIL_FACE_FRONT_AND_BACK, customDraw.second.stencilValue);
+            }
             vkCmdDrawMeshTasksIndirectEXT(
                 cmd,
                 graph.GetBufferHandle(customOutputs.compactedDispatchArgs),

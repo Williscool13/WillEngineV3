@@ -25,7 +25,7 @@ namespace Game::System
 {
 static Engine::WillModelHandle dragonHandle = Engine::WillModelHandle::INVALID;
 static Engine::WillModelHandle boxHandle = Engine::WillModelHandle::INVALID;
-static Engine::WillModelHandle box4kHandle = Engine::WillModelHandle::INVALID;
+static Engine::WillModelHandle sphereHandle = Engine::WillModelHandle::INVALID;
 static Engine::WillModelHandle sponzaHandle = Engine::WillModelHandle::INVALID;
 static Engine::TextureHandle textureHandle = Engine::TextureHandle::INVALID;
 static Engine::CubemapHandle cubemapHandle = Engine::CubemapHandle::INVALID;
@@ -286,7 +286,7 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
             dragonHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "dragon/dragon.willmodel");
             //boxHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "BoxTextured.willmodel");
             boxHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "BoxTextured4k.willmodel");
-            // box4kHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "BoxTextured4k.willmodel");
+            sphereHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "Sphere.willmodel");
             sponzaHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "sponza2/sponza.willmodel");
             textureHandle = ctx->assetManager->LoadTexture(Platform::GetAssetPath() / "textures/smiling_friend.ktx2");
             cubemapHandle = ctx->assetManager->LoadCubemap(Platform::GetAssetPath() / "environment-map/kloofendal_48d_partly_cloudy_puresky_4k.ktx2");
@@ -583,6 +583,45 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
 
         SPDLOG_INFO("Created {} boxes", boxesCreated);
     }
+    if (state->inputFrame->GetKey(Key::F9).pressed) {
+        Render::WillModel* sphere = ctx->assetManager->GetModel(sphereHandle);
+        Render::Cubemap* cubemap = ctx->assetManager->GetCubemap(cubemapHandle);
+
+        if (sphere && sphere->modelLoadState == Render::WillModel::ModelLoadState::Loaded && cubemap && cubemap->loadState == Render::Cubemap::LoadState::Loaded) {
+            Component::RenderableComponent renderable{};
+            Engine::MaterialManager& materialManager = ctx->assetManager->GetMaterialManager();
+            Render::MeshInformation& submesh = sphere->modelData.meshes[0];
+
+            for (size_t i = 0; i < submesh.primitiveProperties.size(); ++i) {
+                Render::PrimitiveProperty& primitive = submesh.primitiveProperties[i];
+                Engine::MaterialID matID = materialManager.GetDefaultMaterial();
+
+                renderable.primitives[i] = {
+                    .primitiveIndex = primitive.index,
+                    .materialID = matID
+                };
+            }
+            renderable.primitiveCount = submesh.primitiveProperties.size();
+            renderable.modelFlags = glm::vec4(0.0f);
+
+            glm::vec3 spherePos = glm::vec3(0.0f, 5.0f, -5.0f);
+
+            entt::entity sphereEntity = state->registry.create();
+            state->registry.emplace<Component::RenderableComponent>(sphereEntity, renderable);
+            Component::TransformComponent& transform = state->registry.emplace<Component::TransformComponent>(
+                sphereEntity, spherePos, glm::quat(1.0f, 0.0f, 0.0f, 0.0f), glm::vec3(2.0f));
+            glm::mat4 initialMatrix = GetMatrix(transform);
+            state->registry.emplace<Component::RenderTransformComponent>(sphereEntity, initialMatrix, initialMatrix);
+            state->registry.emplace<Component::DirtyRenderTransformTag>(sphereEntity);
+            state->registry.emplace<Component::CubemapVisualizeTag>(sphereEntity, cubemap->bindlessHandle);
+
+            SPDLOG_INFO("[DebugSystem] Created cubemap visualization sphere");
+        }
+        else {
+            SPDLOG_WARN("[DebugSystem] Sphere model or cubemap not ready yet");
+        }
+    }
+
     if (state->inputFrame->GetKey(Key::F6).pressed) {
         Render::WillModel* dragon = ctx->assetManager->GetModel(dragonHandle);
         if (!dragon || dragon->modelLoadState != Render::WillModel::ModelLoadState::Loaded) {

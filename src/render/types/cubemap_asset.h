@@ -20,6 +20,7 @@ struct Cubemap
     enum class LoadState
     {
         NotLoaded,
+        Loading,
         Loaded,
         FailedToLoad
     };

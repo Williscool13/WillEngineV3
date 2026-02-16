@@ -119,28 +119,30 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
     // Gather cubemap visualizations
     {
         ZoneScopedN("CubemapVisualizations");
-        auto portalView = state->registry.view<Component::CubemapVisualizeTag, Component::RenderableComponent, Component::RenderTransformComponent>();
+        auto cubemapView = state->registry.view<Component::CubemapVisualizeTag, Component::RenderableComponent, Component::RenderTransformComponent>();
 
-        if (portalView.size_hint() > 0) {
+        for (auto [entity, renderable, renderTransform] : cubemapView.each()) {
             auto& cubemapVis = frameBuffer->mainViewFamily.customShaderDraws["cubemap_visualize"];
             if (cubemapVis.instances.empty()) {
                 cubemapVis.pipelineName = "cubemap_visualize";
-                cubemapVis.pushConstantData = {}; // no custom data
+                cubemapVis.pushConstantData = {
+                    0,
+                    AssetLoad::DEFAULT_SAMPLER_BINDLESS_INDEX,
+                    0
+                };
                 cubemapVis.instanceBufferName = "cubemap_visualize_instance_buffer";
             }
 
-            for (auto [entity, renderable, renderTransform] : portalView.each()) {
-                auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.size());
-                frameBuffer->mainViewFamily.modelMatrices.push_back({renderTransform.modelMatrix, renderTransform.previousMatrix});
+            auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.size());
+            frameBuffer->mainViewFamily.modelMatrices.push_back({renderTransform.modelMatrix, renderTransform.previousMatrix});
 
-                for (uint8_t i = 0; i < renderable.primitiveCount; ++i) {
-                    auto& prim = renderable.primitives[i];
-                    cubemapVis.instances.push_back({
-                        .primitiveIndex = prim.primitiveIndex,
-                        .materialID = prim.materialID,
-                        .modelIndex = modelIndex
-                    });
-                }
+            for (uint8_t i = 0; i < renderable.primitiveCount; ++i) {
+                auto& prim = renderable.primitives[i];
+                cubemapVis.instances.push_back({
+                    .primitiveIndex = prim.primitiveIndex,
+                    .materialID = prim.materialID,
+                    .modelIndex = modelIndex
+                });
             }
         }
     }
