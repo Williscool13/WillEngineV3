@@ -18,6 +18,7 @@
 
 namespace AssetLoad
 {
+class CubemapLoadSlot;
 class TextureLoadSlot;
 class WillModelLoadSlot;
 class AudioLoadSlot;
@@ -97,6 +98,7 @@ using AudioSlotHandle = Core::Handle<AudioLoadSlot>;
 using PipelineSlotHandle = Core::Handle<PipelineLoadSlot>;
 using ModelSlotHandle = Core::Handle<WillModelLoadSlot>;
 using TextureSlotHandle = Core::Handle<TextureLoadSlot>;
+using CubemapSlotHandle = Core::Handle<CubemapLoadSlot>;
 using UploadStagingSlotHandle = Core::Handle<UploadStaging>;
 } // AssetLoad
 

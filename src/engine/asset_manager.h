@@ -11,7 +11,8 @@
 #include "asset_manager_types.h"
 #include "material_manager.h"
 #include "core/allocators/handle_allocator.h"
-#include "../render/types/texture_asset.h"
+#include "render/types/texture_asset.h"
+#include "render/types/cubemap_asset.h"
 #include "render/model/will_model_asset.h"
 #include "audio/audio_asset.h"
 
@@ -59,12 +60,12 @@ public: // Textures
 
     void UnloadTexture(TextureHandle handle);
 
-public: // Audio
-    AudioHandle LoadAudio(const std::filesystem::path& path);
+public: // Cubemaps
+    CubemapHandle LoadCubemap(const std::filesystem::path& path);
 
-    Audio::WillAudio* GetAudio(AudioHandle handle);
+    Render::Cubemap* GetCubemap(CubemapHandle handle);
 
-    void UnloadAudio(AudioHandle handle);
+    void UnloadCubemap(CubemapHandle handle);
 
 public: // Called by engine to process loads
     void ResolveLoads(Core::FrameBuffer& stagingFrameBuffer) const;
@@ -100,9 +101,9 @@ private:
     std::array<Render::Texture, MAX_LOADED_TEXTURES> textures{};
     std::unordered_map<std::filesystem::path, TextureHandle> pathToTextureHandle;
 
-    Core::HandleAllocator<Audio::WillAudio, MAX_LOADED_AUDIO> audioAllocator;
-    std::array<Audio::WillAudio, MAX_LOADED_AUDIO> audios{};
-    std::unordered_map<std::filesystem::path, AudioHandle> pathToAudioHandle;
+    Core::HandleAllocator<Render::Cubemap, MAX_LOADED_CUBEMAPS> cubemapAllocator;
+    std::array<Render::Cubemap, MAX_LOADED_CUBEMAPS> cubemaps{};
+    std::unordered_map<std::filesystem::path, CubemapHandle> pathToCubemapHandle;
 
 private: // Default Resources
     TextureHandle whiteTextureHandle = TextureHandle::INVALID;

@@ -241,7 +241,7 @@ TextureHandle AssetManager::LoadTexture(const std::filesystem::path& path)
 
     pathToTextureHandle[path] = handle;
 
-    // assetLoadThread->RequestTextureLoad(texture.selfHandle, &texture);
+    assetLoadManager->RequestTextureLoad(&texture);
 
     return handle;
 }
@@ -274,70 +274,62 @@ void AssetManager::UnloadTexture(TextureHandle handle)
     }
 }
 
-AudioHandle AssetManager::LoadAudio(const std::filesystem::path& path)
+CubemapHandle AssetManager::LoadCubemap(const std::filesystem::path& path)
 {
-    auto it = pathToAudioHandle.find(path);
-    if (it != pathToAudioHandle.end()) {
-        AudioHandle existingHandle = it->second;
-        if (audioAllocator.IsValid(existingHandle)) {
-            Audio::WillAudio& audio = audios[existingHandle.index];
-            audio.refCount++;
-            return existingHandle;
+    auto it = pathToCubemapHandle.find(path);
+    if (it != pathToCubemapHandle.end()) {
+        CubemapHandle handle = it->second;
+        if (cubemapAllocator.IsValid(handle)) {
+            cubemaps[handle.index].refCount++;
+            SPDLOG_TRACE("[AssetManager] Cubemap already loaded, incrementing refCount: {}", path.string());
+            return handle;
         }
-        pathToAudioHandle.erase(it);
     }
 
-    AudioHandle handle = audioAllocator.Add();
-    if (!handle.IsValid()) {
-        SPDLOG_ERROR("[AssetManager] Failed to allocate audio slot for: {}", path.string());
-        return AudioHandle{};
+    CubemapHandle handle = cubemapAllocator.Add();
+    if (!cubemapAllocator.IsValid(handle)) {
+        SPDLOG_ERROR("[AssetManager] Failed to allocate cubemap handle for: {}", path.string());
+        return {};
     }
 
-    Audio::WillAudio& audio = audios[handle.index];
-    audio.selfHandle = handle;
-    audio.source = path;
-    audio.name = path.stem().string();
-    audio.refCount = 1;
-    audio.loadState = Audio::WillAudio::AudioLoadState::NotLoaded;
+    Render::Cubemap& cubemap = cubemaps[handle.index];
+    cubemap.source = path;
+    cubemap.name = path.filename().string();
+    cubemap.refCount = 1;
+    cubemap.loadState = Render::Cubemap::LoadState::NotLoaded;
+    cubemap.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateCubemap();
 
-    pathToAudioHandle[path] = handle;
+    pathToCubemapHandle[path] = handle;
 
-    // assetLoadThread->RequestAudioLoad(audio.selfHandle, &audio);
+    assetLoadManager->RequestCubemapLoad(&cubemap);
 
     return handle;
 }
 
-Audio::WillAudio* AssetManager::GetAudio(AudioHandle handle)
+Render::Cubemap* AssetManager::GetCubemap(CubemapHandle handle)
 {
-    if (!audioAllocator.IsValid(handle)) {
+    if (!cubemapAllocator.IsValid(handle)) {
         return nullptr;
     }
-    return &audios[handle.index];
+    return &cubemaps[handle.index];
 }
 
-void AssetManager::UnloadAudio(AudioHandle handle)
+void AssetManager::UnloadCubemap(CubemapHandle handle)
 {
-    if (!audioAllocator.IsValid(handle)) {
-        SPDLOG_WARN("[AssetManager] Attempted to unload invalid audio handle");
+    if (!cubemapAllocator.IsValid(handle)) {
+        SPDLOG_WARN("[AssetManager] Attempted to unload invalid cubemap handle");
         return;
     }
 
-    Audio::WillAudio& audio = audios[handle.index];
-    audio.refCount--;
+    Render::Cubemap& cubemap = cubemaps[handle.index];
+    cubemap.refCount--;
 
-    SPDLOG_TRACE("[AssetManager] Audio refCount decremented: {}, refCount: {}", audio.name, audio.refCount);
+    SPDLOG_TRACE("[AssetManager] Cubemap refCount decremented: {}, refCount: {}", cubemap.name, cubemap.refCount);
 
-    if (audio.refCount == 0) {
-        if (audio.mixAudio != nullptr) {
-            // SDL_mixer is thread-safe. No need to async unload
-            MIX_DestroyAudio(audio.mixAudio);
-            audio.mixAudio = nullptr;
-        }
-
-        pathToAudioHandle.erase(audio.source);
-        audioAllocator.Remove(handle);
-
-        SPDLOG_INFO("[AssetManager] Audio unloaded: {}", audio.name);
+    if (cubemap.refCount == 0) {
+        cubemap.loadState = Render::Cubemap::LoadState::NotLoaded;
+        // assetLoadThread->RequestCubemapUnload(handle, &cubemap);
+        pathToCubemapHandle.erase(cubemap.source);
     }
 }
 } // Engine

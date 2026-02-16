@@ -28,6 +28,7 @@ static Engine::WillModelHandle boxHandle = Engine::WillModelHandle::INVALID;
 static Engine::WillModelHandle box4kHandle = Engine::WillModelHandle::INVALID;
 static Engine::WillModelHandle sponzaHandle = Engine::WillModelHandle::INVALID;
 static Engine::TextureHandle textureHandle = Engine::TextureHandle::INVALID;
+static Engine::CubemapHandle cubemapHandle = Engine::CubemapHandle::INVALID;
 static Engine::MaterialID boxMatID;
 
 entt::entity CreateBox(Core::EngineContext* ctx, Engine::GameState* state, glm::vec3 position, bool bUsePhysics)
@@ -287,6 +288,8 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
             boxHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "BoxTextured4k.willmodel");
             // box4kHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "BoxTextured4k.willmodel");
             sponzaHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "sponza2/sponza.willmodel");
+            textureHandle = ctx->assetManager->LoadTexture(Platform::GetAssetPath() / "textures/smiling_friend.ktx2");
+            cubemapHandle = ctx->assetManager->LoadCubemap(Platform::GetAssetPath() / "environment-map/kloofendal_48d_partly_cloudy_puresky_4k.ktx2");
         }
 
         if (!state->portalPlaneHandle.IsValid()) {
@@ -300,8 +303,6 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
             SPDLOG_WARN("[DebugSystem] Box model not ready yet");
             return;
         }
-
-        textureHandle = ctx->assetManager->LoadTexture(Platform::GetAssetPath() / "textures/smiling_friend.ktx2");
 
         entt::entity floor = CreateStaticBox(
             ctx, state,

@@ -14,6 +14,8 @@ add_library(asset-load STATIC
         asset-load-jobs/audio_load_slot.h
         async_asset_load_manager.cpp
         async_asset_load_manager.h
+        asset-load-jobs/cubemap_load_slot.cpp
+        asset-load-jobs/cubemap_load_slot.h
 
 
 )

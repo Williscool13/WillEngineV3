@@ -10,7 +10,9 @@
 #include "audio/audio_asset.h"
 #include "platform/thread_utils.h"
 #include "../render/types/texture_asset.h"
+#include "asset-load-jobs/cubemap_load_slot.h"
 #include "render/pipelines/pipeline_data.h"
+#include "render/types/cubemap_asset.h"
 #include "render/vulkan/vk_utils.h"
 
 namespace AssetLoad
@@ -73,6 +75,20 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Render::VulkanContext* context, Ren
             },
             [this](bool success, TextureSlotHandle textureSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle) {
                 OnTextureLoadComplete(success, textureSlotHandle, uploadStagingSlotHandle);
+            }
+        );
+    }
+
+    for (uint32_t i = 0; i < CUBEMAP_JOB_COUNT; ++i) {
+        cubemapLoadSlots[i].Initialize(
+            assetLoadScheduler.get(),
+            context,
+            resourceManager,
+            [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
+                QueueGPUDispatch(cmd, fence, completionSignal);
+            },
+            [this](bool success, CubemapSlotHandle cubemapSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle) {
+                OnCubemapComplete(success, cubemapSlotHandle, uploadStagingSlotHandle);
             }
         );
     }
@@ -159,6 +175,28 @@ void AsyncAssetLoadManager::ThreadMain()
                 }
                 else {
                     textureRequestQueue.enqueue(textureReq);
+                }
+            }
+        } {
+            ZoneScopedN("Process Cubemap Requests");
+            CubemapLoadRequest cubemapReq{};
+            if (cubemapRequestQueue.try_dequeue(cubemapReq)) {
+                Core::Handle<CubemapLoadSlot> slotHandle = cubemapLoadAllocator.Add();
+                if (slotHandle.IsValid()) {
+                    Core::Handle<UploadStaging> uploadHandle = uploadStagingAllocator.Add();
+                    if (uploadHandle.IsValid()) {
+                        CubemapLoadSlot& slot = cubemapLoadSlots[slotHandle.index];
+                        UploadStaging* uploadStaging = &uploadStagings[uploadHandle.index];
+
+                        slot.Launch(slotHandle, uploadHandle, uploadStaging, cubemapReq.cubemap);
+                    }
+                    else {
+                        cubemapRequestQueue.enqueue(cubemapReq);
+                        cubemapLoadAllocator.Remove(slotHandle);
+                    }
+                }
+                else {
+                    cubemapRequestQueue.enqueue(cubemapReq);
                 }
             }
         }
@@ -326,6 +364,23 @@ bool AsyncAssetLoadManager::TryDequeueTextureComplete(TextureLoadComplete& outRe
     return textureLoadCompleteQueue.try_dequeue(outResult);
 }
 
+void AsyncAssetLoadManager::RequestCubemapLoad(Render::Cubemap* cubemap)
+{
+    ZoneScoped;
+    if (!cubemap) {
+        SPDLOG_ERROR("RequestCubemapLoad called with null cubemap");
+        return;
+    }
+    cubemapRequestQueue.enqueue({cubemap});
+    workCounter.fetch_add(1);
+    wakeCV.notify_one();
+}
+
+bool AsyncAssetLoadManager::TryDequeueCubemapComplete(CubemapLoadComplete& outResult)
+{
+    return cubemapLoadCompleteQueue.try_dequeue(outResult);
+}
+
 void AsyncAssetLoadManager::OnAudioLoadComplete(bool success, AudioSlotHandle slotHandle)
 {
     ZoneScoped;
@@ -425,6 +480,36 @@ void AsyncAssetLoadManager::OnTextureLoadComplete(bool success, TextureSlotHandl
 
     slot.Clear();
     textureLoadAllocator.Remove(textureSlotHandle);
+
+    if (uploadStagingAllocator.IsValid(uploadStagingSlotHandle)) {
+        uploadStagingAllocator.Remove(uploadStagingSlotHandle);
+    }
+
+    workCounter.fetch_add(1);
+    wakeCV.notify_one();
+}
+
+void AsyncAssetLoadManager::OnCubemapComplete(bool success, CubemapSlotHandle cubemapSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle)
+{
+    ZoneScoped;
+
+    if (!cubemapLoadAllocator.IsValid(cubemapSlotHandle)) {
+        SPDLOG_ERROR("OnCubemapComplete called with invalid slot handle");
+        return;
+    }
+
+    CubemapLoadSlot& slot = cubemapLoadSlots[cubemapSlotHandle.index];
+    cubemapLoadCompleteQueue.enqueue({slot.outputCubemap, success});
+
+    if (success) {
+        SPDLOG_INFO("Finished loading cubemap: {}", slot.outputCubemap->source.string());
+    }
+    else {
+        SPDLOG_ERROR("Failed to load cubemap: {}", slot.outputCubemap->source.string());
+    }
+
+    slot.Clear();
+    cubemapLoadAllocator.Remove(cubemapSlotHandle);
 
     if (uploadStagingAllocator.IsValid(uploadStagingSlotHandle)) {
         uploadStagingAllocator.Remove(uploadStagingSlotHandle);

@@ -16,6 +16,7 @@
 #include "asset-load-jobs/pipeline_load_slot.h"
 #include "asset-load-jobs/will_model_load_slot.h"
 #include "asset-load-jobs/texture_load_slot.h"
+#include "asset-load-jobs/cubemap_load_slot.h"
 #include "core/allocators/lock_free_handle_allocator.h"
 
 namespace AssetLoad
@@ -73,12 +74,12 @@ struct TextureLoadComplete
 
 struct CubemapLoadRequest
 {
-    Render::Cubemap* texture;
+    Render::Cubemap* cubemap;
 };
 
 struct CubemapLoadComplete
 {
-    Render::Cubemap* texture;
+    Render::Cubemap* cubemap;
     bool bSuccess;
 };
 
@@ -124,6 +125,12 @@ public:
     void RequestTextureLoad(Render::Texture* texture);
 
     bool TryDequeueTextureComplete(TextureLoadComplete& outResult);
+
+    // Cubemap loading
+    void RequestCubemapLoad(Render::Cubemap* cubemap);
+
+    bool TryDequeueCubemapComplete(CubemapLoadComplete& outResult);
+
 
     [[nodiscard]] uint32_t GetActiveAudioLoadCount() const
     {
@@ -188,6 +195,12 @@ private:
     std::array<TextureLoadSlot, TEXTURE_JOB_COUNT> textureLoadSlots;
     moodycamel::ConcurrentQueue<TextureLoadComplete> textureLoadCompleteQueue;
 
+    // Cubemap Loading
+    moodycamel::ConcurrentQueue<CubemapLoadRequest> cubemapRequestQueue;
+    Core::LockFreeHandleAllocator<CubemapLoadSlot, CUBEMAP_JOB_COUNT> cubemapLoadAllocator;
+    std::array<CubemapLoadSlot, CUBEMAP_JOB_COUNT> cubemapLoadSlots;
+    moodycamel::ConcurrentQueue<CubemapLoadComplete> cubemapLoadCompleteQueue;
+
     // GPU Uploads
     moodycamel::ConcurrentQueue<GPUDispatchRequest> gpuDispatchQueue;
     std::vector<GPUDispatchRequest> dispatchBatch;
@@ -202,6 +215,8 @@ private:
     void OnModelLoadComplete(bool success, ModelSlotHandle modelSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle);
 
     void OnTextureLoadComplete(bool success, TextureSlotHandle textureSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle);
+
+    void OnCubemapComplete(bool success, CubemapSlotHandle cubemapSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle);
 };
 } // AssetLoad
 #endif //WILL_ENGINE_ASYNC_ASSET_LOAD_THREAD_H
