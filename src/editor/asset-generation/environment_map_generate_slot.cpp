@@ -307,7 +307,9 @@ bool EnvironmentMapGenerateSlot::LoadEquirectangularAndGenerate(
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(eqPc), &eqPc);
         vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->layout, 0, bindings.size(), &bindingIndex, &bindingOffset);
-        vkCmdDispatch(cmd, ENVIRONMENT_MAP_RESOLUTION / 16, ENVIRONMENT_MAP_RESOLUTION / 16, 6);
+        uint32_t dispatchX = (ENVIRONMENT_MAP_RESOLUTION + ENVIRONMENT_MAP_GENERATION_DISPATCH_X - 1) / ENVIRONMENT_MAP_GENERATION_DISPATCH_X;
+        uint32_t dispatchY = (ENVIRONMENT_MAP_RESOLUTION + ENVIRONMENT_MAP_GENERATION_DISPATCH_Y - 1) / ENVIRONMENT_MAP_GENERATION_DISPATCH_Y;
+        vkCmdDispatch(cmd, dispatchX, dispatchY, 6);
         submitAndWait(true);
     }
 
@@ -460,7 +462,10 @@ bool EnvironmentMapGenerateSlot::LoadEquirectangularAndGenerate(
             };
 
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-            vkCmdDispatch(cmd, (mipResolution + 15) / 16, (mipResolution + 15) / 16, 6);
+
+            uint32_t dispatchX = (mipResolution + ENVIRONMENT_MAP_GENERATION_DISPATCH_X - 1) / ENVIRONMENT_MAP_GENERATION_DISPATCH_X;
+            uint32_t dispatchY = (mipResolution + ENVIRONMENT_MAP_GENERATION_DISPATCH_Y - 1) / ENVIRONMENT_MAP_GENERATION_DISPATCH_Y;
+            vkCmdDispatch(cmd, dispatchX, dispatchY, 6);
         }
     }
 
@@ -481,7 +486,9 @@ bool EnvironmentMapGenerateSlot::LoadEquirectangularAndGenerate(
         };
 
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-        vkCmdDispatch(cmd, (ENVIRONMENT_MAP_DIFFUSE_RESOLUTION + 15) / 16, (ENVIRONMENT_MAP_DIFFUSE_RESOLUTION + 15) / 16, 6);
+        uint32_t dispatchX = (ENVIRONMENT_MAP_DIFFUSE_RESOLUTION + ENVIRONMENT_MAP_GENERATION_DISPATCH_X - 1) / ENVIRONMENT_MAP_GENERATION_DISPATCH_X;
+        uint32_t dispatchY = (ENVIRONMENT_MAP_DIFFUSE_RESOLUTION + ENVIRONMENT_MAP_GENERATION_DISPATCH_Y - 1) / ENVIRONMENT_MAP_GENERATION_DISPATCH_Y;
+        vkCmdDispatch(cmd, dispatchX, dispatchY, 6);
     }
 
     barrier = Render::VkHelpers::ImageMemoryBarrier(

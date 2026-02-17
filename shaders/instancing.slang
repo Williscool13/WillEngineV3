@@ -10,7 +10,7 @@ import bindless_declarations;
 
 // =============== Pass 0: Determine Instance LOD ===============
 [shader("compute")]
-[numthreads(256, 1, 1)]
+[numthreads(INSTANCING_VISIBILITY_DISPATCH_X, 1, 1)]
 void ComputeInstanceLOD(uniform InstanceLODPushConstant pc, uint3 dtid : SV_DispatchThreadID)
 {
     uint instanceID = dtid.x;
@@ -65,7 +65,7 @@ groupshared uint blockSums1[8];
 
 
 [shader("compute")]
-[numthreads(256, 1, 1)]
+[numthreads(INSTANCING_PREFIX_SUM_DISPATCH_X, 1, 1)]
 void ComputePrefixSumUpsweep1(uniform PrefixSumUpsweep1PushConstant pc, uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID, uint3 dtid : SV_DispatchThreadID)
 {
     uint globalIdx = dtid.x;
@@ -80,7 +80,7 @@ void ComputePrefixSumUpsweep1(uniform PrefixSumUpsweep1PushConstant pc, uint3 gi
     uint localScan = WavePrefixSum(value);
     uint waveIdx = WaveGetLaneIndex();
     uint waveID = threadIdx / WaveGetLaneCount();
-    uint numWaves = (256 + WaveGetLaneCount() - 1) / WaveGetLaneCount();
+    uint numWaves = (INSTANCING_PREFIX_SUM_DISPATCH_X + WaveGetLaneCount() - 1) / WaveGetLaneCount();
 
     // Last lane writes wave total
     if (waveIdx == WaveGetLaneCount() - 1) {
@@ -117,7 +117,7 @@ void ComputePrefixSumUpsweep1(uniform PrefixSumUpsweep1PushConstant pc, uint3 gi
 groupshared uint blockSums2[8];
 
 [shader("compute")]
-[numthreads(256, 1, 1)]
+[numthreads(INSTANCING_PREFIX_SUM_DISPATCH_X, 1, 1)]
 void ComputePrefixSumUpsweep2(uniform PrefixSumUpsweep2PushConstant pc, uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID, uint3 dtid : SV_DispatchThreadID)
 {
     uint globalIdx = dtid.x;
@@ -131,7 +131,7 @@ void ComputePrefixSumUpsweep2(uniform PrefixSumUpsweep2PushConstant pc, uint3 gi
     uint localScan = WavePrefixSum(value);
     uint waveIdx = WaveGetLaneIndex();
     uint waveID = threadIdx / WaveGetLaneCount();
-    uint numWaves = (256 + WaveGetLaneCount() - 1) / WaveGetLaneCount();
+    uint numWaves = (INSTANCING_PREFIX_SUM_DISPATCH_X + WaveGetLaneCount() - 1) / WaveGetLaneCount();
 
     if (waveIdx == WaveGetLaneCount() - 1) {
         blockSums2[waveID] = localScan + value;
@@ -164,7 +164,7 @@ void ComputePrefixSumUpsweep2(uniform PrefixSumUpsweep2PushConstant pc, uint3 gi
 groupshared uint scanBlockSums[8];
 
 [shader("compute")]
-[numthreads(256, 1, 1)]
+[numthreads(INSTANCING_PREFIX_SUM_DISPATCH_X, 1, 1)]
 void ComputePrefixSumScanBlocks(uniform PrefixSumScanBlocksPushConstant pc, uint3 gtid : SV_GroupThreadID)
 {
     uint threadIdx = gtid.x;
@@ -178,7 +178,7 @@ void ComputePrefixSumScanBlocks(uniform PrefixSumScanBlocksPushConstant pc, uint
     uint localScan = WavePrefixSum(value);
     uint waveIdx = WaveGetLaneIndex();
     uint waveID = threadIdx / WaveGetLaneCount();
-    uint numWaves = (256 + WaveGetLaneCount() - 1) / WaveGetLaneCount();
+    uint numWaves = (INSTANCING_PREFIX_SUM_DISPATCH_X + WaveGetLaneCount() - 1) / WaveGetLaneCount();
 
     // Last lane writes wave total
     if (waveIdx == WaveGetLaneCount() - 1) {
@@ -209,7 +209,7 @@ void ComputePrefixSumScanBlocks(uniform PrefixSumScanBlocksPushConstant pc, uint
 
 // =============== Pass 4: Downsweep Level 1 (Optional) ===============
 [shader("compute")]
-[numthreads(256, 1, 1)]
+[numthreads(INSTANCING_PREFIX_SUM_DISPATCH_X, 1, 1)]
 void ComputePrefixSumDownsweep1(uniform PrefixSumDownsweep1PushConstant pc, uint3 gid : SV_GroupID, uint3 dtid : SV_DispatchThreadID)
 {
     uint globalIdx = dtid.x;
@@ -225,7 +225,7 @@ void ComputePrefixSumDownsweep1(uniform PrefixSumDownsweep1PushConstant pc, uint
 
 // =============== Pass 5: Downsweep Level 2 ===============
 [shader("compute")]
-[numthreads(256, 1, 1)]
+[numthreads(INSTANCING_PREFIX_SUM_DISPATCH_X, 1, 1)]
 void ComputePrefixSumDownsweep2(uniform PrefixSumDownsweep2PushConstant pc, uint3 gid : SV_GroupID, uint3 dtid : SV_DispatchThreadID)
 {
     uint globalIdx = dtid.x;
@@ -234,7 +234,7 @@ void ComputePrefixSumDownsweep2(uniform PrefixSumDownsweep2PushConstant pc, uint
         return;
     }
 
-    uint blockIdx = globalIdx / 256;
+    uint blockIdx = globalIdx / INSTANCING_PREFIX_SUM_DISPATCH_X;
     uint blockOffset = pc.level2Sums[blockIdx];
     pc.instanceMeshletOffsets[globalIdx].offset = pc.level1Sums[globalIdx] + blockOffset;
 }
@@ -250,14 +250,14 @@ void ComputeTotalMeshletCount(uniform TotalMeshletCountPushConstant pc)
     uint count = pc.instanceMeshletOffsets[lastInstanceIndex].count;
     uint totalMeshlets = offset + count;
 
-    pc.indirectDispatchBuffer.x = (totalMeshlets + 255) / 256;
+    pc.indirectDispatchBuffer.x = (totalMeshlets + 255) / INSTANCING_PREFIX_SUM_DISPATCH_X;
     pc.indirectDispatchBuffer.y = 1;
     pc.indirectDispatchBuffer.z = 1;
     pc.indirectDispatchBuffer.totalMeshlets = totalMeshlets;
 }
 
 [shader("compute")]
-[numthreads(256, 1, 1)]
+[numthreads(INSTANCING_EXPAND_DISPATCH_X, 1, 1)]
 void ComputeExpandInstancesToMeshlets(uniform ExpandMeshletsPushConstant pc, uint3 dtid : SV_DispatchThreadID)
 {
     uint globalMeshletIndex = dtid.x;
@@ -331,7 +331,7 @@ void ComputeExpandInstancesToMeshlets(uniform ExpandMeshletsPushConstant pc, uin
 groupshared uint meshletBlockSums1[8];
 
 [shader("compute")]
-[numthreads(256, 1, 1)]
+[numthreads(INSTANCING_PREFIX_SUM_DISPATCH_X, 1, 1)]
 void ComputeMeshletVisibilityPrefixSumUpsweep1(uniform MeshletVisibilityPrefixSumUpsweep1PushConstant pc, uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID, uint3 dtid : SV_DispatchThreadID)
 {
     uint globalIdx = dtid.x;
@@ -347,7 +347,7 @@ void ComputeMeshletVisibilityPrefixSumUpsweep1(uniform MeshletVisibilityPrefixSu
     uint localScan = WavePrefixSum(value);
     uint waveIdx = WaveGetLaneIndex();
     uint waveID = threadIdx / WaveGetLaneCount();
-    uint numWaves = (256 + WaveGetLaneCount() - 1) / WaveGetLaneCount();
+    uint numWaves = (INSTANCING_PREFIX_SUM_DISPATCH_X + WaveGetLaneCount() - 1) / WaveGetLaneCount();
 
     // Last lane writes wave total
     if (waveIdx == WaveGetLaneCount() - 1) {
@@ -382,7 +382,7 @@ void ComputeMeshletVisibilityPrefixSumUpsweep1(uniform MeshletVisibilityPrefixSu
 
 // =============== Meshlet Visibility Pass 5: Downsweep Level 2 ===============
 [shader("compute")]
-[numthreads(256, 1, 1)]
+[numthreads(INSTANCING_PREFIX_SUM_DISPATCH_X, 1, 1)]
 void ComputeMeshletVisibilityPrefixSumDownsweep2(uniform MeshletVisibilityPrefixSumDownsweep2PushConstant pc, uint3 gid : SV_GroupID, uint3 dtid : SV_DispatchThreadID)
 {
     uint globalIdx = dtid.x;
@@ -392,7 +392,7 @@ void ComputeMeshletVisibilityPrefixSumDownsweep2(uniform MeshletVisibilityPrefix
         return;
     }
 
-    uint blockIdx = globalIdx / 256;
+    uint blockIdx = globalIdx / INSTANCING_PREFIX_SUM_DISPATCH_X;
     uint blockOffset = pc.meshletLevel2Sums[blockIdx];
     uint compactOffset = pc.meshletLevel1Sums[globalIdx] + blockOffset;
 

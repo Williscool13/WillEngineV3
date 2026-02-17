@@ -88,9 +88,9 @@ InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, cons
             });
     }
 
-    // Instance LOD
+    // Instance Visibility/LOD
     {
-        RenderPass& instanceLODPass = graph.AddPass(config.prefix + "Instance LOD Selection", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+        RenderPass& instanceLODPass = graph.AddPass(config.prefix + "Instance Visibility/LOD Selection", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
         instanceLODPass.ReadBuffer(GEOMETRY_BUFFER_SCENE_DATA);
         instanceLODPass.ReadBuffer(GEOMETRY_BUFFER_MODEL);
         instanceLODPass.ReadBuffer(config.instanceBufferName);
@@ -117,7 +117,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, cons
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
-                uint32_t xDispatch = (instanceCount + 255) / 256;
+                uint32_t xDispatch = (instanceCount + INSTANCING_VISIBILITY_DISPATCH_X - 1) / INSTANCING_VISIBILITY_DISPATCH_X;
                 vkCmdDispatch(cmd, xDispatch, 1, 1);
             });
     }
@@ -126,7 +126,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, cons
 
     // Prefix Sum for Expansion
     {
-        uint32_t level1BlockCount = (instanceCount + 255) / 256;
+        uint32_t level1BlockCount = (instanceCount + INSTANCING_PREFIX_SUM_DISPATCH_X - 1) / INSTANCING_PREFIX_SUM_DISPATCH_X;
 
         RenderPass& upsweep1Pass = graph.AddPass(config.prefix + "Prefix Sum Upsweep 1", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
         upsweep1Pass.ReadBuffer(instance_meshlet_offsets);
@@ -147,7 +147,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, cons
             vkCmdDispatch(cmd, level1BlockCount, 1, 1);
         });
 
-        uint32_t level2BlockCount = (level1BlockCount + 255) / 256;
+        uint32_t level2BlockCount = (level1BlockCount + INSTANCING_PREFIX_SUM_DISPATCH_X - 1) / INSTANCING_PREFIX_SUM_DISPATCH_X;
 
         if (level2BlockCount > 1) {
             RenderPass& upsweep2Pass = graph.AddPass(config.prefix + "Prefix Sum Upsweep 2", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
@@ -294,8 +294,8 @@ InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, cons
 
     // Prefix Sum for Compaction
     {
-        uint32_t meshletLevel1BlockCount = (highestMeshletCount + 255) / 256;
-        uint32_t meshletLevel2BlockCount = (meshletLevel1BlockCount + 255) / 256;
+        uint32_t meshletLevel1BlockCount = (highestMeshletCount + INSTANCING_PREFIX_SUM_DISPATCH_X - 1) / INSTANCING_PREFIX_SUM_DISPATCH_X;
+        uint32_t meshletLevel2BlockCount = (meshletLevel1BlockCount + INSTANCING_PREFIX_SUM_DISPATCH_X - 1) / INSTANCING_PREFIX_SUM_DISPATCH_X;
 
         RenderPass& meshletUpsweep1Pass = graph.AddPass(config.prefix + "Meshlet Visibility Prefix Sum Upsweep 1", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
         meshletUpsweep1Pass.ReadBuffer(intermediate_meshlets);

@@ -68,7 +68,8 @@ void MeshMain(
         float4 prevClipPos = mul(jitteredPrevViewProj, mul(m.prevModelMatrix, float4(v.position, 1.0)));
 
         vertices[i].position = clipPos;
-        vertices[i].worldNormal = normalize(mul((float3x3)m.modelMatrix, v.normal));
+        vertices[i].worldNormal = normalize(v.position);
+        // vertices[i].worldNormal = normalize(mul((float3x3)m.modelMatrix, v.normal));
         vertices[i].currentClipPos = clipPos;
         vertices[i].previousClipPos = prevClipPos;
     }
@@ -103,7 +104,7 @@ FragmentOutput FragmentMain(VertexOutput vertexInput, uniform BaseMeshShadingPus
 
     // Sample cubemap using world-space normal as direction at specified LOD
     float3 sampleDir = normalize(vertexInput.worldNormal);
-    float4 cubemapColor = assetCubemaps[NonUniformResourceIndex(cubemapIndex)].SampleLevel(assetSamplers[NonUniformResourceIndex(samplerIndex)],sampleDir, 1);
+    float4 cubemapColor = assetCubemaps[NonUniformResourceIndex(cubemapIndex)].SampleLevel(assetSamplers[NonUniformResourceIndex(samplerIndex)],sampleDir, 0);
 
     FragmentOutput output;
     output.albedo = cubemapColor;

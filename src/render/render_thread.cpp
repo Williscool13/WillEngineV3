@@ -1106,23 +1106,23 @@ void RenderThread::PrepareRenderFamilyProperties(Core::ViewFamily& viewFamily, R
 
 
     renderFamilyProperties.instanceMeshletOffsetsBufferSize = _limits.highestInstanceBuffer * sizeof(InstanceMeshletOffsetPrefixSum);
-    uint32_t level1BlockCount = (_limits.highestInstanceBuffer + 255) / 256;
-    uint32_t level2BlockCount = (level1BlockCount + 255) / 256;
+    uint32_t level1BlockCount = (_limits.highestInstanceBuffer + INSTANCING_PREFIX_SUM_DISPATCH_X - 1) / INSTANCING_PREFIX_SUM_DISPATCH_X;
+    uint32_t level2BlockCount = (level1BlockCount + INSTANCING_PREFIX_SUM_DISPATCH_X - 1) / INSTANCING_PREFIX_SUM_DISPATCH_X;
     renderFamilyProperties.level1SumsBufferSize = _limits.highestInstanceBuffer * sizeof(uint32_t);
     renderFamilyProperties.level1BlockSumsBufferSize = level1BlockCount * sizeof(uint32_t);
     renderFamilyProperties.level2SumsBufferSize = level1BlockCount * sizeof(uint32_t);
     renderFamilyProperties.level2BlockSumsBufferSize = level2BlockCount * sizeof(uint32_t);
-    renderFamilyProperties.scannedLevel2BlockSumsBufferSize = glm::max(level2BlockCount, 256u) * sizeof(uint32_t);
+    renderFamilyProperties.scannedLevel2BlockSumsBufferSize = glm::max(level2BlockCount, INSTANCING_PREFIX_SUM_DISPATCH_X) * sizeof(uint32_t);
 
     renderFamilyProperties.intermediateMeshletBufferSize = _limits.highestMeshletCount * sizeof(IntermediateMeshlet);
-    uint32_t meshletLevel1BlockCount = (_limits.highestMeshletCount + 255) / 256;
-    uint32_t meshletLevel2BlockCount = (meshletLevel1BlockCount + 255) / 256;
+    uint32_t meshletLevel1BlockCount = (_limits.highestMeshletCount + INSTANCING_PREFIX_SUM_DISPATCH_X - 1) / INSTANCING_PREFIX_SUM_DISPATCH_X;
+    uint32_t meshletLevel2BlockCount = (meshletLevel1BlockCount + INSTANCING_PREFIX_SUM_DISPATCH_X - 1) / INSTANCING_PREFIX_SUM_DISPATCH_X;
 
     renderFamilyProperties.meshletLevel1SumsBufferSize = _limits.highestMeshletCount * sizeof(uint32_t);
     renderFamilyProperties.meshletLevel1BlockSumsBufferSize = meshletLevel1BlockCount * sizeof(uint32_t);
     renderFamilyProperties.meshletLevel2SumsBufferSize = meshletLevel1BlockCount * sizeof(uint32_t);
     renderFamilyProperties.meshletLevel2BlockSumsBufferSize = meshletLevel2BlockCount * sizeof(uint32_t);
-    renderFamilyProperties.meshletScannedLevel2BlockSumsBufferSize = glm::max(meshletLevel2BlockCount, 256u) * sizeof(uint32_t);
+    renderFamilyProperties.meshletScannedLevel2BlockSumsBufferSize = glm::max(meshletLevel2BlockCount, INSTANCING_PREFIX_SUM_DISPATCH_X) * sizeof(uint32_t);
 
     renderFamilyProperties.visibleMeshletsBufferSize = _limits.highestMeshletCount * sizeof(CompactedMeshlet);
 

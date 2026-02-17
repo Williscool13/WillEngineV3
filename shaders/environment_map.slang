@@ -28,7 +28,7 @@ float2 SampleSphericalMap(float3 v) {
 }
 
 
-[numthreads(16, 16, 1)]
+[numthreads(ENVIRONMENT_MAP_GENERATION_DISPATCH_X, ENVIRONMENT_MAP_GENERATION_DISPATCH_Y, 1)]
 void ComputeEquirectToCubemap(uniform EquirectToCubemapPushConstant pc, uint3 tid : SV_DispatchThreadID) {
     if (tid.x >= pc.cubemapWidth || tid.y >= pc.cubemapHeight) return;
 
@@ -55,7 +55,7 @@ void ComputeEquirectToCubemap(uniform EquirectToCubemapPushConstant pc, uint3 ti
 }
 
 // ==================== Irradiance Convolution ====================
-[numthreads(8, 8, 1)]
+[numthreads(ENVIRONMENT_MAP_GENERATION_DISPATCH_X, ENVIRONMENT_MAP_GENERATION_DISPATCH_Y, 1)]
 void ComputeConvolveDiffuse(uniform ConvolveDiffusePushConstant pc, uint3 tid : SV_DispatchThreadID) {
     if (tid.x >= pc.targetWidth || tid.y >= pc.targetHeight) return;
 
@@ -90,14 +90,13 @@ void ComputeConvolveDiffuse(uniform ConvolveDiffusePushConstant pc, uint3 tid : 
             float3 tangentSample = float3(sin(theta) * cos(phi), sin(theta) * sin(phi), cos(theta));
             float3 sampleVec = tangentSample.x * right + tangentSample.y * up + tangentSample.z * direction;
 
-            irradiance += sourceCubemaps[pc.sourceIndex].SampleLevel(samplers[pc.samplerIndex], sampleVec, 0).rgb * cos(theta) * sin(theta);
+            irradiance += sourceCubemaps[pc.sourceIndex].SampleLevel(samplers[pc.samplerIndex], sampleVec, ENVIRONMENT_MAP_DIFFUSE_MIP).rgb * cos(theta) * sin(theta);
             nrSamples++;
         }
     }
 
     irradiance = PI * irradiance * (1.0 / nrSamples);
-    // finalCubemaps[pc.targetIndex][storePos] = half4(half(irradiance.x), half(irradiance.y), half(irradiance.z), 1.0h);
-    finalCubemaps[pc.targetIndex][storePos] = half4(1.0h, 1.0h, 0.0h, 0.0h);
+    finalCubemaps[pc.targetIndex][storePos] = half4(half(irradiance.x), half(irradiance.y), half(irradiance.z), 1.0h);
 }
 
 // ==================== Specular Prefilter ====================
@@ -145,7 +144,7 @@ float DistributionGGX(float NdotH, float roughness) {
     return nom / denom;
 }
 
-[numthreads(8, 8, 1)]
+[numthreads(ENVIRONMENT_MAP_GENERATION_DISPATCH_X, ENVIRONMENT_MAP_GENERATION_DISPATCH_Y, 1)]
 void ComputePrefilterSpecular(uniform PrefilterSpecularPushConstant pc, uint3 tid : SV_DispatchThreadID) {
     if (tid.x >= pc.width || tid.y >= pc.height) return;
 
@@ -196,6 +195,5 @@ void ComputePrefilterSpecular(uniform PrefilterSpecularPushConstant pc, uint3 ti
     }
     prefilteredColor = prefilteredColor / totalWeight;
 
-    // finalCubemaps[pc.targetIndex][storePos] = half4(half(prefilteredColor.x), half(prefilteredColor.y), half(prefilteredColor.z), 1.0h);
-    finalCubemaps[pc.targetIndex][storePos] = half4(1.0h, 1.0h, 0.0h, 0.0h);
+    finalCubemaps[pc.targetIndex][storePos] = half4(half(prefilteredColor.x), half(prefilteredColor.y), half(prefilteredColor.z), 1.0h);
 }
