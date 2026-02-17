@@ -656,10 +656,10 @@ void WillModelLoadSlot::PostUploadSetup()
 {
     // Remap samplers
     auto remapSamplers = [](auto& indices, const std::vector<Render::BindlessSamplerHandle>& map) {
-        indices.x = indices.x >= 0 ? map[indices.x].index : DEFAULT_SAMPLER_BINDLESS_INDEX;
-        indices.y = indices.y >= 0 ? map[indices.y].index : DEFAULT_SAMPLER_BINDLESS_INDEX;
-        indices.z = indices.z >= 0 ? map[indices.z].index : DEFAULT_SAMPLER_BINDLESS_INDEX;
-        indices.w = indices.w >= 0 ? map[indices.w].index : DEFAULT_SAMPLER_BINDLESS_INDEX;
+        indices.x = indices.x >= 0 ? map[indices.x].index : ASSET_SAMPLER_BINDLESS_INDEX;
+        indices.y = indices.y >= 0 ? map[indices.y].index : ASSET_SAMPLER_BINDLESS_INDEX;
+        indices.z = indices.z >= 0 ? map[indices.z].index : ASSET_SAMPLER_BINDLESS_INDEX;
+        indices.w = indices.w >= 0 ? map[indices.w].index : ASSET_SAMPLER_BINDLESS_INDEX;
     };
 
     outputModel->modelData.samplerIndexToDescriptorBufferIndexMap.resize(outputModel->modelData.samplers.size());

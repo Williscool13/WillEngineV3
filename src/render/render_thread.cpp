@@ -353,6 +353,8 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 SetupDeferredLighting(*renderGraph, viewFamily, renderExtent, targets, 0);
             }
 
+            SetupSkyboxRendering(*renderGraph, viewFamily, renderExtent, targets, 0);
+
             bool bHasPortalView = !viewFamily.portalViews.empty();
             if (bHasPortalView) {
                 renderGraph->CreateTexture(portalTargets.albedo, TextureInfo{GBUFFER_ALBEDO_FORMAT, renderExtent[0], renderExtent[1], 1});
@@ -1017,6 +1019,30 @@ void RenderThread::CreatePipelines()
             sizeof(BaseMeshShadingPushConstant),
             VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT,
             PipelineCategory::DebugRendering
+        );
+        builder.Clear();
+    }
+
+
+    // Skybox Rendering
+    {
+        builder.AddShaderStage("shaders/fullscreen_pass_vertex.spv", VK_SHADER_STAGE_VERTEX_BIT);
+        builder.AddShaderStage("shaders/environment_map_skybox_fragment.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
+        builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+        builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
+        builder.SetupDepthState(VK_TRUE, VK_FALSE, VK_COMPARE_OP_EQUAL);
+
+        VkFormat colorFormats[1] = {
+            COLOR_ATTACHMENT_FORMAT,
+        };
+        builder.SetupRenderer(colorFormats, 1, DEPTH_ATTACHMENT_FORMAT, VK_FORMAT_UNDEFINED);
+
+        pipelineManager->RegisterGraphicsPipeline(
+            "environment_skybox",
+            builder,
+            sizeof(EnvironmentSkyboxPushConstant),
+            VK_SHADER_STAGE_FRAGMENT_BIT,
+            PipelineCategory::CustomRendering
         );
         builder.Clear();
     }
@@ -2092,6 +2118,39 @@ void RenderThread::SetupPortalComposite(RenderGraph& graph, const Core::ViewFami
     });
 }
 
+void RenderThread::SetupSkyboxRendering(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneDataIndex) const
+{
+    RenderPass& skyboxPass = graph.AddPass("Skybox", VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT);
+    skyboxPass.WriteColorAttachment(targets.outFinalColor);
+    skyboxPass.ReadWriteDepthAttachment(targets.depthStencil);
+    skyboxPass.Execute([&, width = renderExtent[0], height = renderExtent[1], sceneDataIndex](VkCommandBuffer cmd) {
+        VkViewport viewport = VkHelpers::GenerateViewport(width, height);
+        vkCmdSetViewport(cmd, 0, 1, &viewport);
+        VkRect2D scissor = VkHelpers::GenerateScissor(width, height);
+        vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+        VkRenderingAttachmentInfo colorAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.outFinalColor), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), nullptr, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+
+        std::array colorAttachments = {colorAttachment};
+        VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, colorAttachments.data(), 1, &depthAttachment, nullptr);
+        vkCmdBeginRendering(cmd, &renderInfo);
+
+        EnvironmentSkyboxPushConstant pc{
+            .sceneData = graph.GetBufferAddress("scene_data"),
+            .sceneDataIndex = sceneDataIndex,
+            .cubemapIndex = viewFamily.skyboxIndex,
+        };
+
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("environment_skybox");
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineEntry->pipeline);
+        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pc), &pc);
+
+        vkCmdDraw(cmd, 3, 1, 0, 0);
+
+        vkCmdEndRendering(cmd);
+    });
+}
 
 std::string RenderThread::SetupTemporalAntialiasing(RenderGraph& graph, const Core::ViewFamily& viewFamily, const std::array<uint32_t, 2> renderExtent, const PostProcessTargets& ppTargets) const
 {

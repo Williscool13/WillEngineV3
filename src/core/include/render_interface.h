@@ -208,6 +208,8 @@ struct ViewFamily
     std::vector<MaterialProperties> materials{256};
 
 
+    uint32_t skyboxIndex{0};
+
     ShadowConfiguration shadowConfig{};
     DirectionalLight directionalLight{};
     // std::vector<LightInstance> allLights;

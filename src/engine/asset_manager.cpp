@@ -65,7 +65,7 @@ AssetManager::AssetManager(AssetLoad::AsyncAssetLoadManager* assetLoadManager, R
 
     defaultSampler = Render::Sampler::CreateSampler(resourceManager->context, samplerCreateInfo);
     Render::BindlessSamplerHandle defaultSamplerHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.AllocateSampler(defaultSampler.handle);
-    assert(defaultSamplerHandle.index == AssetLoad::DEFAULT_SAMPLER_BINDLESS_INDEX);
+    assert(defaultSamplerHandle.index == ASSET_SAMPLER_BINDLESS_INDEX);
 }
 
 AssetManager::~AssetManager()

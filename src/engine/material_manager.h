@@ -23,9 +23,9 @@ public:
             .colorFactor = {1.0f, 1.0f, 1.0f, 1.0f}, // white
             .metalRoughFactors = {0.0f, 1.0f, 0.0f, 0.0f}, // non-metallic, rough
             .textureImageIndices = {AssetLoad::WHITE_IMAGE_BINDLESS_INDEX, AssetLoad::WHITE_IMAGE_BINDLESS_INDEX, AssetLoad::WHITE_IMAGE_BINDLESS_INDEX, AssetLoad::WHITE_IMAGE_BINDLESS_INDEX},
-            .textureSamplerIndices = {AssetLoad::DEFAULT_SAMPLER_BINDLESS_INDEX, AssetLoad::DEFAULT_SAMPLER_BINDLESS_INDEX, AssetLoad::DEFAULT_SAMPLER_BINDLESS_INDEX, AssetLoad::DEFAULT_SAMPLER_BINDLESS_INDEX},
+            .textureSamplerIndices = {ASSET_SAMPLER_BINDLESS_INDEX, ASSET_SAMPLER_BINDLESS_INDEX, ASSET_SAMPLER_BINDLESS_INDEX, ASSET_SAMPLER_BINDLESS_INDEX},
             .textureImageIndices2 = {AssetLoad::WHITE_IMAGE_BINDLESS_INDEX, AssetLoad::WHITE_IMAGE_BINDLESS_INDEX, AssetLoad::WHITE_IMAGE_BINDLESS_INDEX, AssetLoad::WHITE_IMAGE_BINDLESS_INDEX},
-            .textureSamplerIndices2 = {AssetLoad::DEFAULT_SAMPLER_BINDLESS_INDEX, AssetLoad::DEFAULT_SAMPLER_BINDLESS_INDEX, AssetLoad::DEFAULT_SAMPLER_BINDLESS_INDEX, AssetLoad::DEFAULT_SAMPLER_BINDLESS_INDEX},
+            .textureSamplerIndices2 = {ASSET_SAMPLER_BINDLESS_INDEX, ASSET_SAMPLER_BINDLESS_INDEX, ASSET_SAMPLER_BINDLESS_INDEX, ASSET_SAMPLER_BINDLESS_INDEX},
             .colorUvTransform = {1.0f, 1.0f, 0.0f, 0.0f}, // identity
             .metalRoughUvTransform = {1.0f, 1.0f, 0.0f, 0.0f},
             .normalUvTransform = {1.0f, 1.0f, 0.0f, 0.0f},

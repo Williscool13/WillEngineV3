@@ -127,7 +127,7 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
                 cubemapVis.pipelineName = "cubemap_visualize";
                 cubemapVis.pushConstantData = {
                     0,
-                    AssetLoad::DEFAULT_SAMPLER_BINDLESS_INDEX,
+                    ASSET_SAMPLER_BINDLESS_INDEX,
                     0
                 };
                 cubemapVis.instanceBufferName = "cubemap_visualize_instance_buffer";

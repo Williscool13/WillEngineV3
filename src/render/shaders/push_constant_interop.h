@@ -541,4 +541,11 @@ SHADER_PUBLIC struct PrefilterSpecularPushConstant
     SHADER_PUBLIC uint32_t sampleCount;
 };
 
+SHADER_PUBLIC struct EnvironmentSkyboxPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC uint32_t sceneDataIndex;
+    SHADER_PUBLIC uint32_t cubemapIndex;
+};
+
 #endif //WILL_ENGINE_PUSH_CONSTANT_INTEROP_H

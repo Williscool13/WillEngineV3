@@ -315,9 +315,10 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/cubemap_visualizer.slang mesh MeshMain cubemap_visualizer
         ${CMAKE_SOURCE_DIR}/shaders/cubemap_visualizer.slang fragment FragmentMain cubemap_visualizer
 
-        ${CMAKE_SOURCE_DIR}/shaders/environment_map.slang compute ComputeEquirectToCubemap ibl_equirect_to_cubemap
-        ${CMAKE_SOURCE_DIR}/shaders/environment_map.slang compute ComputeConvolveDiffuse ibl_convolve_diffuse
-        ${CMAKE_SOURCE_DIR}/shaders/environment_map.slang compute ComputePrefilterSpecular ibl_prefilter_specular
+        ${CMAKE_SOURCE_DIR}/shaders/environment_map_generation.slang compute ComputeEquirectToCubemap ibl_equirect_to_cubemap
+        ${CMAKE_SOURCE_DIR}/shaders/environment_map_generation.slang compute ComputeConvolveDiffuse ibl_convolve_diffuse
+        ${CMAKE_SOURCE_DIR}/shaders/environment_map_generation.slang compute ComputePrefilterSpecular ibl_prefilter_specular
+        ${CMAKE_SOURCE_DIR}/shaders/environment_map.slang fragment FragmentSkybox environment_map_skybox
 )
 
 # Post-Build Commands =========================
