@@ -1,3 +1,5 @@
+import constants_interop;
+
 module pbr_functions;
 
 
@@ -49,4 +51,26 @@ public float3 F_SCHLICK(float3 V, float3 H, float3 F0){
 
     // unreal optimized
     return F0 + (1 - F0) * pow(2, FRESNEL_POWER_UNREAL(V, H));
+}
+
+public float3 DiffuseIrradiance(TextureCube envMap, SamplerState linearSampler, float3 worldNormal)
+{
+    float3 N = worldNormal;
+    N.y = -N.y;
+    return envMap.SampleLevel(linearSampler, N, ENVIRONMENT_MAP_DIFFUSE_MIP).rgb;
+}
+
+public float3 SpecularReflection(TextureCube envMap, Texture2D lut, SamplerState linearSampler,
+                          float3 viewV, float3 viewN, float4x4 invView, float roughness, float3 F)
+{
+    float3 R = reflect(-viewV, viewN);
+    float3 worldR = normalize(mul((float3x3)invView, R));
+    worldR.y = -worldR.y;
+
+    float3 prefilteredColor = envMap.SampleLevel(linearSampler, worldR, roughness * float(ENVIRONMENT_MAP_SPECULAR_MIPS - 1)).rgb;
+    float2 brdfUV = float2(max(dot(viewN, viewV), 0.0), roughness);
+    brdfUV.y = 1 - brdfUV.y;
+    float2 envBRDF = lut.SampleLevel(linearSampler, brdfUV, 0).rg;
+
+    return prefilteredColor * (F * envBRDF.x + envBRDF.y);
 }

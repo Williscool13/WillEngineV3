@@ -79,7 +79,6 @@ void MeshMain(
         vertices[i].tangent = float4(normalize(mul(Adjugate((float3x3)m.modelMatrix), v.tangent.xyz)), v.tangent.w);
         vertices[i].uv = float2(v.texcoordU, v.texcoordV);
         vertices[i].color = v.color;
-        vertices[i].color = float4(v.texcoordU, v.texcoordV, 0.0f, 0.0f);
         vertices[i].materialIndex = inst.materialIndex;
         vertices[i].currentClipPos = clipPos;
         vertices[i].previousClipPos = prevClipPos;

@@ -102,13 +102,11 @@ FragmentOutput FragmentMain(VertexOutput vertexInput, uniform BaseMeshShadingPus
     uint samplerIndex = pc.customData[1];
     float lodLevel = asfloat(pc.customData[2]);
 
-    // Sample cubemap using world-space normal as direction at specified LOD
     float3 sampleDir = normalize(vertexInput.worldNormal);
     float4 cubemapColor = assetCubemaps[NonUniformResourceIndex(cubemapIndex)].SampleLevel(assetSamplers[NonUniformResourceIndex(samplerIndex)],sampleDir, 0);
 
     FragmentOutput output;
     output.albedo = cubemapColor;
-    // output.albedo = float4(vertexInput.worldNormal);
     output.normal = float4(0.5, 0.5, 1.0, 1.0); // Flat normal
     output.pbr = float4(0.0, 1.0, 0.0, 0.0); // Non-metallic, rough
     output.emissive = float4(0.0, 0.0, 0.0, 0.0);

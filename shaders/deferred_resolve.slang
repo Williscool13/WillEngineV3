@@ -57,9 +57,18 @@ void ComputeMain(uniform DeferredResolvePushConstant pc, uint3 threadID : SV_Dis
     const float3 lightColor = pc.lightData->mainLightColor.rgb;
     float3 directLight = (diffuse + specular) * nDotL * shadowFactor * lightIntensity * lightColor;
 
-    // Ambient
-    float3 ambient = albedo.xyz * 0.03 * gtao;
+    // IBL
+    float3 ibl = 0.0;
+    if (pc.skyboxIndex >= 0)
+    {
+        float3 worldN = normalize(mul((float3x3)pc.sceneData[pc.sceneDataIndex].invView, N));
+        float3 irradiance = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_BINDLESS_INDEX], worldN);
+        float3 reflectionDiffuse = irradiance * albedo.xyz;
+        float3 reflectionSpecular = SpecularReflection(assetCubemaps[pc.skyboxIndex], assetTextures[BRDF_LUT_BINDLESS_INDEX], assetSamplers[ASSET_SAMPLER_BINDLESS_INDEX], V, N, pc.sceneData[pc.sceneDataIndex].invView, roughness, F);
+        ibl = (kD * reflectionDiffuse + reflectionSpecular) * gtao;
+    }
+
     float3 emissive = emissiveData.rgb * emissiveData.a;
-    float3 finalColor = directLight + ambient + emissive;
+    float3 finalColor = directLight + ibl + emissive;
     rdgStorageFloat4[pc.outputImageIndex][threadID.xy] = float4(finalColor, 1.0);
 }
