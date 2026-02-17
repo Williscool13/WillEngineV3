@@ -31,6 +31,49 @@ static Engine::TextureHandle textureHandle = Engine::TextureHandle::INVALID;
 static Engine::CubemapHandle cubemapHandle = Engine::CubemapHandle::INVALID;
 static Engine::MaterialID boxMatID;
 
+entt::entity CreateTextureVisualizer(Core::EngineContext* ctx, Engine::GameState* state,
+                                     glm::vec3 renderPos, glm::vec3 renderScale)
+{
+    ZoneScoped;
+
+    Render::WillModel* model = ctx->assetManager->GetModel(state->portalPlaneHandle);
+    if (!model || model->modelLoadState != Render::WillModel::ModelLoadState::Loaded) {
+        SPDLOG_WARN("[CreateTextureVisualizer] Model not ready yet");
+        return entt::null;
+    }
+
+    Component::RenderableComponent renderable{};
+    Engine::MaterialManager& materialManager = ctx->assetManager->GetMaterialManager();
+    Render::MeshInformation& submesh = model->modelData.meshes[0];
+
+    for (size_t i = 0; i < submesh.primitiveProperties.size(); ++i) {
+        MaterialProperties material = Engine::CreateDefaultMaterial();
+        material.textureImageIndices.x = BRDF_LUT_BINDLESS_INDEX;
+        Engine::MaterialID matID = materialManager.GetOrCreate(material);
+
+        renderable.primitives[i] = {
+            .primitiveIndex = submesh.primitiveProperties[i].index,
+            .materialID = matID
+        };
+    }
+    renderable.primitiveCount = submesh.primitiveProperties.size();
+    renderable.modelFlags = glm::vec4(0.0f);
+
+    entt::entity entity = state->registry.create();
+    state->registry.emplace<Component::RenderableComponent>(entity, renderable);
+
+    Component::TransformComponent transform;
+    transform.translation = renderPos;
+    transform.rotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+    transform.scale = renderScale;
+    Component::TransformComponent transformComponent = state->registry.emplace<Component::TransformComponent>(entity, transform);
+    glm::mat4 initialMatrix = Component::GetMatrix(transformComponent);
+    state->registry.emplace<Component::RenderTransformComponent>(entity, initialMatrix, initialMatrix);
+    state->registry.emplace<Component::DirtyRenderTransformTag>(entity);
+
+    return entity;
+}
+
 entt::entity CreateBox(Core::EngineContext* ctx, Engine::GameState* state, glm::vec3 position, bool bUsePhysics)
 {
     ZoneScoped;
@@ -360,6 +403,9 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         }
 
         SPDLOG_INFO("[DebugSystem] Created glowing boxes for bloom testing");
+
+        CreateTextureVisualizer(ctx, state, glm::vec3(0.0f, 5.0f, -15.0f), glm::vec3(5.0f, 5.0f, 1.0f));
+        SPDLOG_INFO("[DebugSystem] Created texture visualizer for BRDF LUT");
     }
 
     if (state->inputFrame->GetKey(Key::F3).pressed) {
@@ -841,5 +887,9 @@ void DebugRender(Core::EngineContext* ctx, Engine::GameState* state, Core::Frame
         .color = glm::vec4(1, 0.5f, 0, 0.3f)
     });
 #endif
+
+    if (cubemapHandle.IsValid()) {
+        frameBuffer->mainViewFamily.skyboxIndex = cubemapHandle.index;
+    }
 }
 } // Game::System

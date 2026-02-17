@@ -353,7 +353,9 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 SetupDeferredLighting(*renderGraph, viewFamily, renderExtent, targets, 0);
             }
 
-            SetupSkyboxRendering(*renderGraph, viewFamily, renderExtent, targets, 0);
+            if (renderFamilyProperties.bHasSkybox) {
+                SetupSkyboxRendering(*renderGraph, viewFamily, renderExtent, targets, 0);
+            }
 
             bool bHasPortalView = !viewFamily.portalViews.empty();
             if (bHasPortalView) {
@@ -889,6 +891,12 @@ void RenderThread::CreatePipelines()
 
     pipelineManager->RegisterComputePipelineCustomLayout("ibl_prefilter_specular", Platform::GetShaderPath() / "ibl_prefilter_specular_compute.spv",
                                                          sizeof(PrefilterSpecularPushConstant), PipelineCategory::AssetGeneration, emapLayout);
+
+    std::vector brdfLutLayout{
+        resourceManager->brdfLutGenerateResources.descriptorSetLayout.handle,
+    };
+    pipelineManager->RegisterComputePipelineCustomLayout("ibl_brdf_lut", Platform::GetShaderPath() / "brdf_lut_generate_compute.spv",
+                                                         sizeof(BRDFLUTPushConstant), PipelineCategory::AssetGeneration, brdfLutLayout);
 #endif
 
     GraphicsPipelineBuilder builder;
@@ -1042,7 +1050,7 @@ void RenderThread::CreatePipelines()
             builder,
             sizeof(EnvironmentSkyboxPushConstant),
             VK_SHADER_STAGE_FRAGMENT_BIT,
-            PipelineCategory::CustomRendering
+            PipelineCategory::EnvironmentMap
         );
         builder.Clear();
     }
@@ -1104,7 +1112,7 @@ void RenderThread::PrepareRenderFamilyProperties(Core::ViewFamily& viewFamily, R
     renderFamilyProperties.bHasShadows = viewFamily.shadowConfig.enabled && _pipelineManager->IsCategoryReady(PipelineCategory::ShadowPass);
     renderFamilyProperties.bHasShadows = false;
     renderFamilyProperties.bHasDeferred = _pipelineManager->IsCategoryReady(PipelineCategory::DeferredShading);
-
+    renderFamilyProperties.bHasSkybox = viewFamily.skyboxIndex != -1 && _pipelineManager->IsCategoryReady(PipelineCategory::EnvironmentMap);
 
     if (!viewFamily.mainPassInstances.empty()) {
         std::ranges::sort(viewFamily.mainPassInstances, [](const Core::InstanceData& a, const Core::InstanceData& b) {
@@ -2062,6 +2070,7 @@ void RenderThread::SetupDeferredLighting(RenderGraph& graph, const Core::ViewFam
             .emissiveIndex = graph.GetSampledImageViewDescriptorIndex(targets.emissive),
             .depthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(targets.depthStencil),
             .shadowsIndex = graph.GetSampledImageViewDescriptorIndex("shadows_resolve_target"),
+            .skyboxIndex = viewFamily.skyboxIndex,
             .outputImageIndex = graph.GetStorageImageViewDescriptorIndex(targets.outFinalColor),
             .sceneDataIndex = sceneDataIndex,
         };

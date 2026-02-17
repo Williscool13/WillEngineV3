@@ -32,6 +32,7 @@ struct RenderFamilyProperties
     bool bHasGTAO{false};
     bool bHasShadows{false};
     bool bHasDeferred{false};
+    bool bHasSkybox{false};
 
     size_t modelBufferSize{128};
     size_t materialBufferSize{128};

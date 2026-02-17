@@ -7,6 +7,7 @@
 #include <spdlog/spdlog.h>
 #include <tracy/Tracy.hpp>
 
+#include "miscellaneous_asset_generate.h"
 #include "asset-load/async_asset_load_manager.h"
 #include "platform/thread_utils.h"
 #include "render/render_thread.h"
@@ -103,9 +104,7 @@ void AssetGenerator::ThreadMain()
                     modelGenerateRequestQueue.enqueue(req);
                 }
             }
-        }
-
-        {
+        } {
             ZoneScopedN("Process Texture Generation Requests");
             TextureGenerateRequest req{};
             if (textureGenerateRequestQueue.try_dequeue(req)) {
@@ -118,9 +117,7 @@ void AssetGenerator::ThreadMain()
                     textureGenerateRequestQueue.enqueue(req);
                 }
             }
-        }
-
-        {
+        } {
             ZoneScopedN("Process Environment Map Generation Requests")
             EnvironmentMapGenerateRequest req{};
             if (environmentMapGenerateRequestQueue.try_dequeue(req)) {
@@ -212,6 +209,13 @@ bool AssetGenerator::TryDequeueTextureGenerateComplete(TextureGenerateComplete& 
 bool AssetGenerator::TryDequeueCubemapGenerateComplete(EnvironmentMapGenerateComplete& outResult)
 {
     return environmentMapGenerateCompleteQueue.try_dequeue(outResult);
+}
+
+void AssetGenerator::GenerateBRDFLUT(std::filesystem::path outputFile) const
+{
+    CreateBRDFLookupTable(outputFile, context, renderThread->GetResourceManager(), renderThread->GetPipelineManager(), [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
+        GraphicsQueueGPUDispatch(cmd, fence, completionSignal);
+    });
 }
 
 void AssetGenerator::OnModelGenerateComplete(bool success, ModelGenerateSlotHandle slotHandle)

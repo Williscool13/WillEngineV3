@@ -12,6 +12,8 @@ add_library(editor STATIC
         asset-generation/environment_map_generate_slot.h
         asset-generation/environment_map_generate_resources.cpp
         asset-generation/environment_map_generate_resources.h
+        asset-generation/miscellaneous_asset_generate.cpp
+        asset-generation/miscellaneous_asset_generate.h
 )
 
 target_include_directories(editor PUBLIC

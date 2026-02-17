@@ -79,6 +79,7 @@ void MeshMain(
         vertices[i].tangent = float4(normalize(mul(Adjugate((float3x3)m.modelMatrix), v.tangent.xyz)), v.tangent.w);
         vertices[i].uv = float2(v.texcoordU, v.texcoordV);
         vertices[i].color = v.color;
+        vertices[i].color = float4(v.texcoordU, v.texcoordV, 0.0f, 0.0f);
         vertices[i].materialIndex = inst.materialIndex;
         vertices[i].currentClipPos = clipPos;
         vertices[i].previousClipPos = prevClipPos;
@@ -117,7 +118,7 @@ FragmentOutput FragmentMain(VertexOutput vertexInput, uniform BaseMeshShadingPus
     float3 viewNormal = normalize(vertexInput.viewNormal);
 
     FragmentOutput output;
-    output.albedo = albedo;
+    output.albedo = albedoSample;
     output.normal = float4(viewNormal * 0.5 + 0.5, 1.0); // add normal texture
     output.pbr = float4(material.metalRoughFactors.x, material.metalRoughFactors.y, 0.0, 0.0); // add pbr texture
     output.emissive = material.emissiveFactor; // add emissive texture

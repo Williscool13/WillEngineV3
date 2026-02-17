@@ -259,6 +259,7 @@ SHADER_PUBLIC struct SHADER_ALIGN DeferredResolvePushConstant
     SHADER_PUBLIC uint32_t emissiveIndex;
     SHADER_PUBLIC uint32_t depthIndex;
     SHADER_PUBLIC uint32_t shadowsIndex;
+    SHADER_PUBLIC int32_t skyboxIndex;
     SHADER_PUBLIC uint32_t outputImageIndex;
     SHADER_PUBLIC uint32_t sceneDataIndex;
 };
@@ -545,7 +546,12 @@ SHADER_PUBLIC struct EnvironmentSkyboxPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC uint32_t sceneDataIndex;
-    SHADER_PUBLIC uint32_t cubemapIndex;
+    SHADER_PUBLIC int32_t cubemapIndex;
+};
+
+SHADER_PUBLIC struct BRDFLUTPushConstant
+{
+    SHADER_PUBLIC uint32_t targetIndex;
 };
 
 #endif //WILL_ENGINE_PUSH_CONSTANT_INTEROP_H

@@ -23,9 +23,6 @@ inline constexpr uint32_t TEXTURE_LOAD_QUEUE_COUNT = 128;
 static constexpr uint32_t GPU_DISPATCH_COUNT = 4;
 inline constexpr uint32_t GPU_DISPATCH_STAGING_SIZE = 16 * 1024 * 1024; // 16MB
 inline constexpr uint32_t TEXTURE_LOAD_STAGING_SIZE    = 16 * 1024 * 1024; // 16MB, Mip0 BC7 == 16777217, which is exactly 16MB
-
-inline constexpr uint32_t WHITE_IMAGE_BINDLESS_INDEX = 0;
-inline constexpr uint32_t ERROR_IMAGE_BINDLESS_INDEX = 1;
 }
 
 #endif //WILL_ENGINE_ASSET_LOAD_CONFIG_H

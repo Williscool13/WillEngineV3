@@ -22,9 +22,9 @@ public:
         MaterialProperties defaultMat{
             .colorFactor = {1.0f, 1.0f, 1.0f, 1.0f}, // white
             .metalRoughFactors = {0.0f, 1.0f, 0.0f, 0.0f}, // non-metallic, rough
-            .textureImageIndices = {AssetLoad::WHITE_IMAGE_BINDLESS_INDEX, AssetLoad::WHITE_IMAGE_BINDLESS_INDEX, AssetLoad::WHITE_IMAGE_BINDLESS_INDEX, AssetLoad::WHITE_IMAGE_BINDLESS_INDEX},
+            .textureImageIndices = {WHITE_IMAGE_BINDLESS_INDEX, WHITE_IMAGE_BINDLESS_INDEX, WHITE_IMAGE_BINDLESS_INDEX, WHITE_IMAGE_BINDLESS_INDEX},
             .textureSamplerIndices = {ASSET_SAMPLER_BINDLESS_INDEX, ASSET_SAMPLER_BINDLESS_INDEX, ASSET_SAMPLER_BINDLESS_INDEX, ASSET_SAMPLER_BINDLESS_INDEX},
-            .textureImageIndices2 = {AssetLoad::WHITE_IMAGE_BINDLESS_INDEX, AssetLoad::WHITE_IMAGE_BINDLESS_INDEX, AssetLoad::WHITE_IMAGE_BINDLESS_INDEX, AssetLoad::WHITE_IMAGE_BINDLESS_INDEX},
+            .textureImageIndices2 = {WHITE_IMAGE_BINDLESS_INDEX, WHITE_IMAGE_BINDLESS_INDEX, WHITE_IMAGE_BINDLESS_INDEX, WHITE_IMAGE_BINDLESS_INDEX},
             .textureSamplerIndices2 = {ASSET_SAMPLER_BINDLESS_INDEX, ASSET_SAMPLER_BINDLESS_INDEX, ASSET_SAMPLER_BINDLESS_INDEX, ASSET_SAMPLER_BINDLESS_INDEX},
             .colorUvTransform = {1.0f, 1.0f, 0.0f, 0.0f}, // identity
             .metalRoughUvTransform = {1.0f, 1.0f, 0.0f, 0.0f},
@@ -94,6 +94,30 @@ private:
         return hash;
     }
 };
+
+static MaterialProperties CreateDefaultMaterial()
+{
+    MaterialProperties mat{};
+    mat.colorFactor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+    mat.metalRoughFactors = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
+
+    mat.textureImageIndices = glm::ivec4(WHITE_IMAGE_BINDLESS_INDEX);
+    mat.textureSamplerIndices = glm::ivec4(ASSET_SAMPLER_BINDLESS_INDEX);
+    mat.textureImageIndices2 = glm::ivec4(WHITE_IMAGE_BINDLESS_INDEX);
+    mat.textureSamplerIndices2 = glm::ivec4(ASSET_SAMPLER_BINDLESS_INDEX);
+
+    mat.colorUvTransform = glm::vec4(1.0f, 1.0f, 0.0f, 0.0f);
+    mat.metalRoughUvTransform = glm::vec4(1.0f, 1.0f, 0.0f, 0.0f);
+    mat.normalUvTransform = glm::vec4(1.0f, 1.0f, 0.0f, 0.0f);
+    mat.emissiveUvTransform = glm::vec4(1.0f, 1.0f, 0.0f, 0.0f);
+    mat.occlusionUvTransform = glm::vec4(1.0f, 1.0f, 0.0f, 0.0f);
+
+    mat.emissiveFactor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+    mat.alphaProperties = glm::vec4(0.5f, 0.0f, 0.0f, 0.0f);
+    mat.physicalProperties = glm::vec4(1.5f, 0.0f, 1.0f, 1.0f);
+    return mat;
+}
+
 }
 
 #endif //WILL_ENGINE_MATERIAL_MANAGER_H

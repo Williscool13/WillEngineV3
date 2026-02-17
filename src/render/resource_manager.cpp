@@ -134,6 +134,9 @@ ResourceManager::ResourceManager(VulkanContext* context)
     VK_CHECK(vkCreateSampler(context->device, &depthCompareSamplerInfo, nullptr, &depthCompareSampler));
     bindlessRDGTransientDescriptorBuffer.WriteCompareSamplerDescriptor(RDG_LINEAR_DEPTH_SAMPLER_INDEX, {depthCompareSampler, nullptr, {}});
 
+#if WILL_EDITOR
     environmentMapGenerateResources = Editor::EnvironmentMapGenerateResources(context);
+    brdfLutGenerateResources = Render::BindlessResourcesStorage<1>(context);
+#endif
 }
 } // Render

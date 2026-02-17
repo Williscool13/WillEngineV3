@@ -414,6 +414,7 @@ AllocatedBuffer AllocatedBuffer::CreateAllocatedStagingBuffer(const VulkanContex
     // buffer.address = VkHelpers::GetDeviceAddress(context->device, buffer.handle);
     return buffer;
 }
+
 AllocatedBuffer AllocatedBuffer::CreateAllocatedReceivingBuffer(const VulkanContext* context, size_t bufferSize, VkBufferUsageFlags additionalUsages)
 {
     const VkBufferCreateInfo bufferInfo{

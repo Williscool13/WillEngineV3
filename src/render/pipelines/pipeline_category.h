@@ -30,6 +30,7 @@ enum class PipelineCategory : uint32_t
     Sharpening          = 1 << 16,
     Debug               = 1 << 17,
     AssetGeneration     = 1 << 18,
+    EnvironmentMap      = 1 << 19,
 
     MainGeometry = Instancing | Geometry,
     ShadowPass = Instancing | Shadow,

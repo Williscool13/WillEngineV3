@@ -207,8 +207,7 @@ struct ViewFamily
     std::vector<Model> modelMatrices{256};
     std::vector<MaterialProperties> materials{256};
 
-
-    uint32_t skyboxIndex{0};
+    int32_t skyboxIndex{-1};
 
     ShadowConfiguration shadowConfig{};
     DirectionalLight directionalLight{};

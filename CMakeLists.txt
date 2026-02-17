@@ -319,6 +319,8 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/environment_map_generation.slang compute ComputeConvolveDiffuse ibl_convolve_diffuse
         ${CMAKE_SOURCE_DIR}/shaders/environment_map_generation.slang compute ComputePrefilterSpecular ibl_prefilter_specular
         ${CMAKE_SOURCE_DIR}/shaders/environment_map.slang fragment FragmentSkybox environment_map_skybox
+
+        ${CMAKE_SOURCE_DIR}/shaders/brdf_lut.slang compute ComputeBRDFLUT brdf_lut_generate
 )
 
 # Post-Build Commands =========================

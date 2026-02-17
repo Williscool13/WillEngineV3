@@ -690,6 +690,9 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
                 Platform::GetAssetPath() / "environment-map/kloofendal_48d_partly_cloudy_puresky_4k.hdr",
                 Platform::GetAssetPath() / "environment-map/kloofendal_48d_partly_cloudy_puresky_4k.ktx2");
         }
+        if (ImGui::Button("brdf_lut.ktx2")) {
+            modelGenerator->GenerateBRDFLUT(Platform::GetAssetPath() / "textures/brdf_lut.ktx2");
+        }
     }
     ImGui::End();
 #endif

@@ -91,6 +91,7 @@ public:
     bool TryDequeueTextureGenerateComplete(TextureGenerateComplete& outResult);
     void RequestEnvironmentMapGenerate(const std::filesystem::path& hdriPath, const std::filesystem::path& outputPath);
     bool TryDequeueCubemapGenerateComplete(EnvironmentMapGenerateComplete& outResult);
+    void GenerateBRDFLUT(std::filesystem::path outputFile) const;
 
     const WillModelGenerationProgress& GetModelGenerationProgress() const { return modelGenerationProgress; }
 

@@ -14,6 +14,7 @@ AssetManager::AssetManager(AssetLoad::AsyncAssetLoadManager* assetLoadManager, R
 {
     auto errorPath = Platform::GetAssetPath() / "textures/error.ktx2";
     auto whitePath = Platform::GetAssetPath() / "textures/white.ktx2";
+    auto brdfLutPath = Platform::GetAssetPath() / "textures/brdf_lut.ktx2";
 
 
     whiteTextureHandle = textureAllocator.Add();
@@ -25,7 +26,7 @@ AssetManager::AssetManager(AssetLoad::AsyncAssetLoadManager* assetLoadManager, R
     whiteTexture.loadState = Render::Texture::LoadState::NotLoaded;
     whiteTexture.refCount = 1;
     whiteTexture.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTexture();
-    assert(whiteTexture.bindlessHandle.index == AssetLoad::WHITE_IMAGE_BINDLESS_INDEX);
+    assert(whiteTexture.bindlessHandle.index == WHITE_IMAGE_BINDLESS_INDEX);
     pathToTextureHandle[whitePath] = whiteTextureHandle;
     assetLoadManager->RequestTextureLoad(&whiteTexture);
 
@@ -38,9 +39,22 @@ AssetManager::AssetManager(AssetLoad::AsyncAssetLoadManager* assetLoadManager, R
     errorTexture.loadState = Render::Texture::LoadState::NotLoaded;
     errorTexture.refCount = 1;
     errorTexture.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTexture();
-    assert(errorTexture.bindlessHandle.index == AssetLoad::ERROR_IMAGE_BINDLESS_INDEX);
+    assert(errorTexture.bindlessHandle.index == ERROR_IMAGE_BINDLESS_INDEX);
     pathToTextureHandle[errorPath] = errorTextureHandle;
     assetLoadManager->RequestTextureLoad(&errorTexture);
+
+    brdfLutTextureHandle = textureAllocator.Add();
+    assert(brdfLutTextureHandle.IsValid());
+    Render::Texture& brdfLutTexture = textures[brdfLutTextureHandle.index];
+    brdfLutTexture.selfHandle = brdfLutTextureHandle;
+    brdfLutTexture.source = brdfLutPath;
+    brdfLutTexture.name = brdfLutPath.stem().string();
+    brdfLutTexture.loadState = Render::Texture::LoadState::NotLoaded;
+    brdfLutTexture.refCount = 1;
+    brdfLutTexture.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTexture();
+    assert(brdfLutTexture.bindlessHandle.index == BRDF_LUT_BINDLESS_INDEX);
+    pathToTextureHandle[brdfLutPath] = brdfLutTextureHandle;
+    assetLoadManager->RequestTextureLoad(&brdfLutTexture);
 
     VkSamplerCreateInfo samplerCreateInfo = {
         .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
