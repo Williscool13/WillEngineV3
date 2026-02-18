@@ -624,6 +624,11 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
         ImGui::Separator();
         ImGui::Text("Generate Models:");
 
+        if (ImGui::Button("Intel Sponza")) {
+            modelGenerator->RequestModelGenerate(Platform::GetAssetPath() / "IntelSponza.glb",
+                            Platform::GetAssetPath() / "IntelSponza.willmodel");
+
+        }
         if (ImGui::Button("dragon.willmodel")) {
             startGeneration("dragon",
                             Platform::GetAssetPath() / "dragon/dragon.gltf",

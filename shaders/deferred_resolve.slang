@@ -61,11 +61,17 @@ void ComputeMain(uniform DeferredResolvePushConstant pc, uint3 threadID : SV_Dis
     float3 ibl = 0.0;
     if (pc.skyboxIndex >= 0)
     {
+        float NdotV = max(dot(N, V), 0.0);
+        float3 F0 = lerp(float3(0.04, 0.04, 0.04), albedo.xyz, metallic);
+        float3 F_ibl = F_SCHLICK_ROUGHNESS(NdotV, F0, roughness);
+        float3 kS_ibl = F_ibl;
+        float3 kD_ibl = (1.0 - kS_ibl) * (1.0 - metallic);
+
         float3 worldN = normalize(mul((float3x3)pc.sceneData[pc.sceneDataIndex].invView, N));
         float3 irradiance = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_BINDLESS_INDEX], worldN);
         float3 reflectionDiffuse = irradiance * albedo.xyz;
-        float3 reflectionSpecular = SpecularReflection(assetCubemaps[pc.skyboxIndex], assetTextures[BRDF_LUT_BINDLESS_INDEX], assetSamplers[ASSET_SAMPLER_BINDLESS_INDEX], V, N, pc.sceneData[pc.sceneDataIndex].invView, roughness, F);
-        ibl = (kD * reflectionDiffuse + reflectionSpecular) * gtao;
+        float3 reflectionSpecular = SpecularReflection(assetCubemaps[pc.skyboxIndex], assetTextures[BRDF_LUT_BINDLESS_INDEX], assetSamplers[ASSET_SAMPLER_BINDLESS_INDEX], V, N, pc.sceneData[pc.sceneDataIndex].invView, roughness, F_ibl);
+        ibl = (kD_ibl * reflectionDiffuse + reflectionSpecular) * gtao;
     }
 
     float3 emissive = emissiveData.rgb * emissiveData.a;

@@ -415,11 +415,21 @@ bool ModelGenerateSlot::LoadGltf(VkCommandBuffer cmd, const std::function<void()
                 // VERTEX COLOR
                 const fastgltf::Attribute* colors = p.findAttribute("COLOR_0");
                 if (colors != p.attributes.end()) {
-                    fastgltf::iterateAccessorWithIndex<fastgltf::math::fvec4>(gltf, gltf.accessors[colors->accessorIndex], [&](const fastgltf::math::fvec4& color, const size_t index) {
-                        primitiveVertices[index].color = {
-                            color.x(), color.y(), color.z(), color.w()
-                        };
-                    });
+                    auto& accessor = gltf.accessors[colors->accessorIndex];
+                    switch (accessor.type) {
+                        case fastgltf::AccessorType::Vec3:
+                            fastgltf::iterateAccessorWithIndex<fastgltf::math::fvec3>(gltf, accessor, [&](const fastgltf::math::fvec3& color, const size_t index) {
+                                primitiveVertices[index].color = { color.x(), color.y(), color.z(), 1.0f };
+                            });
+                            break;
+                        case fastgltf::AccessorType::Vec4:
+                            fastgltf::iterateAccessorWithIndex<fastgltf::math::fvec4>(gltf, accessor, [&](const fastgltf::math::fvec4& color, const size_t index) {
+                                primitiveVertices[index].color = { color.x(), color.y(), color.z(), color.w() };
+                            });
+                            break;
+                        default:
+                            break;
+                    }
                 }
             }
 
