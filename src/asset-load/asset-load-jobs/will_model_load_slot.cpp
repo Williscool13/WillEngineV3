@@ -636,7 +636,7 @@ void WillModelLoadSlot::UploadGeometry(VkCommandBuffer cmd, const std::function<
     releaseBarriers.push_back(createBufferBarrier(resourceManager->megaMeshletVerticesBuffer.handle,
         outputModel->modelData.meshletVertexAllocation.offset, rawData.meshletVertices.size() * sizeof(uint32_t)));
     releaseBarriers.push_back(createBufferBarrier(resourceManager->megaMeshletTrianglesBuffer.handle,
-        outputModel->modelData.meshletTriangleAllocation.offset, rawData.meshletTriangles.size() * sizeof(uint32_t)));
+        outputModel->modelData.meshletTriangleAllocation.offset, rawData.meshletTriangles.size() / 3 * sizeof(uint32_t)));
     releaseBarriers.push_back(createBufferBarrier(resourceManager->megaMeshletBuffer.handle,
         outputModel->modelData.meshletAllocation.offset, rawData.meshlets.size() * sizeof(Meshlet)));
     releaseBarriers.push_back(createBufferBarrier(resourceManager->primitiveBuffer.handle,

@@ -330,7 +330,8 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
             //boxHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "BoxTextured.willmodel");
             boxHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "BoxTextured4k.willmodel");
             sphereHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "Sphere.willmodel");
-            sponzaHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "sponza2/sponza.willmodel");
+            // sponzaHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "sponza2/sponza.willmodel");
+            sponzaHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "IntelSponza.willmodel");
             textureHandle = ctx->assetManager->LoadTexture(Platform::GetAssetPath() / "textures/smiling_friend.ktx2");
             cubemapHandle = ctx->assetManager->LoadCubemap(Platform::GetAssetPath() / "environment-map/kloofendal_48d_partly_cloudy_puresky_4k.ktx2");
         }
