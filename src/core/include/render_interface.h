@@ -160,12 +160,14 @@ struct CustomShaderDraw
 {
     std::string pipelineName;
 
-    BaseMeshShadingPushConstant pushConstantData;
-
-    std::string instanceBufferName; // Needs to be unique per custom draw
+    std::array<uint32_t, 38> pushConstantCustomData;
     std::vector<InstanceData> instances;
 
     int32_t stencilValue{-1}; // if >=0 will be set with dynamic state
+
+
+    // Transient data read/written by the render thread during render graph construction
+    uint32_t instanceBufferOffset{0};
 };
 
 struct CustomStencilDrawBatch

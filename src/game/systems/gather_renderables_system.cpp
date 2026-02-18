@@ -95,8 +95,6 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
             auto& portalDraw = frameBuffer->mainViewFamily.customShaderDraws["portal_rendering"];
             if (portalDraw.instances.empty()) {
                 portalDraw.pipelineName = "portal_rendering";
-                portalDraw.pushConstantData = {}; // no custom data
-                portalDraw.instanceBufferName = "portal_instance_buffer";
                 portalDraw.stencilValue = 1;
             }
 
@@ -125,12 +123,9 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
             auto& cubemapVis = frameBuffer->mainViewFamily.customShaderDraws["cubemap_visualize"];
             if (cubemapVis.instances.empty()) {
                 cubemapVis.pipelineName = "cubemap_visualize";
-                cubemapVis.pushConstantData = {
-                    0,
-                    ASSET_SAMPLER_BINDLESS_INDEX,
-                    0
-                };
-                cubemapVis.instanceBufferName = "cubemap_visualize_instance_buffer";
+                cubemapVis.pushConstantCustomData[0] = 0;
+                cubemapVis.pushConstantCustomData[1] = ASSET_SAMPLER_BINDLESS_INDEX;
+                cubemapVis.pushConstantCustomData[2] = 0;
             }
 
             auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.size());

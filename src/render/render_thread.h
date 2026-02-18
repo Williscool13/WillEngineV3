@@ -106,11 +106,11 @@ private:
 
     void PrepareRenderFamilyProperties(Core::ViewFamily& viewFamily, ReadbackStruct* readbackData, RenderFamilyProperties& renderFamilyProperties, PipelineManager* _pipelineManager, FrameResourceLimits& _limits);
 
-    void SetupFrameUniforms(const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, float renderDeltaTime) const;
+    void UploadFrameUniforms(const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, float renderDeltaTime) const;
 
-    void SetupModelUniforms(const Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties) const;
+    void UploadModelUniforms(Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties) const;
 
-    void SetupCascadedShadows(RenderGraph& graph, const Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties) const;
+    void SetupCascadedShadows(RenderGraph& graph, const Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties, uint32_t sceneIndex) const;
 
     struct GBufferTargets {
         std::string albedo;

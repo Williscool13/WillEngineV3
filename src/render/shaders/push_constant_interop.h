@@ -84,6 +84,25 @@ SHADER_PUBLIC struct InstanceLODPushConstant
     SHADER_PUBLIC int32_t lodBias;
 };
 
+SHADER_PUBLIC struct InstanceLODShadowsPushConstant
+{
+    // Read-Only
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC SHADER_PTR(ShadowData) shadowData;
+    SHADER_PUBLIC SHADER_PTR(MeshletPrimitive) primitiveBuffer;
+    SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
+    SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
+
+    // Write
+    SHADER_PUBLIC SHADER_PTR(InstanceMeshletOffsetPrefixSum) instanceMeshletOffsets;
+
+    // Read-Only
+    SHADER_PUBLIC uint32_t instanceCount;
+    SHADER_PUBLIC uint32_t sceneDataIndex;
+    SHADER_PUBLIC uint32_t cascadeIndex;
+    SHADER_PUBLIC int32_t lodBias;
+};
+
 SHADER_PUBLIC struct PrefixSumUpsweep1PushConstant
 {
     // Read
@@ -174,6 +193,25 @@ SHADER_PUBLIC struct ExpandMeshletsPushConstant
     SHADER_PUBLIC uint32_t currentFrameBufferMeshletLimit;
 };
 
+SHADER_PUBLIC struct ExpandMeshletsShadowsPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(InstancingMeshletDispatchIndirect) indirectDispatchBuffer; // for totalMeshletCount
+    SHADER_PUBLIC SHADER_PTR(InstanceMeshletOffsetPrefixSum) instanceMeshletOffsets;
+    SHADER_PUBLIC SHADER_PTR(IntermediateMeshlet) intermediateMeshlets;
+
+    SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
+    SHADER_PUBLIC SHADER_PTR(MeshletPrimitive) primitiveBuffer;
+    SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
+    SHADER_PUBLIC SHADER_PTR(Meshlet) meshletBuffer;
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC SHADER_PTR(ShadowData) shadowData;
+
+    SHADER_PUBLIC uint32_t sceneDataIndex;
+    SHADER_PUBLIC uint32_t cascadeIndex;
+    SHADER_PUBLIC uint32_t instanceCount;
+    SHADER_PUBLIC uint32_t currentFrameBufferMeshletLimit;
+};
+
 SHADER_PUBLIC struct MeshletVisibilityPrefixSumUpsweep1PushConstant
 {
     // Read
@@ -235,6 +273,25 @@ SHADER_PUBLIC struct BaseMeshShadingPushConstant
     SHADER_PUBLIC uint32_t customData[41]; // vk1.4 target, custom PC space that can be filled by anything needed
 };
 
+SHADER_PUBLIC struct ShadowMeshShadingPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC SHADER_PTR(ShadowData) shadowData;
+    SHADER_PUBLIC SHADER_PTR(Vertex) vertexBuffer;
+    SHADER_PUBLIC SHADER_PTR(uint32_t) meshletVerticesBuffer;
+    SHADER_PUBLIC SHADER_PTR(uint32_t) meshletTrianglesBuffer;
+    SHADER_PUBLIC SHADER_PTR(Meshlet) meshletBuffer;
+    SHADER_PUBLIC SHADER_PTR(MeshletPrimitive) primitiveBuffer;
+    SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
+    SHADER_PUBLIC SHADER_PTR(MaterialProperties) materialBuffer;
+    SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
+    SHADER_PUBLIC SHADER_PTR(CompactedMeshlet) visibleMeshlets;
+    SHADER_PUBLIC SHADER_PTR(InstancingCompactedMeshletDispatchIndirect) compactedDispatchBuffer; // for "total visible meshlets"
+    SHADER_PUBLIC uint32_t sceneDataIndex;
+    SHADER_PUBLIC uint32_t cascadeIndex;
+    SHADER_PUBLIC uint32_t customData[38]; // vk1.4 target, custom PC space that can be filled by anything needed
+};
+
 SHADER_PUBLIC struct ShadowsResolvePushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
@@ -273,24 +330,6 @@ SHADER_PUBLIC struct TemporalAntialiasingPushConstant
     SHADER_PUBLIC uint32_t velocityIndex;
     SHADER_PUBLIC uint32_t velocityHistoryIndex;
     SHADER_PUBLIC uint32_t outputImageIndex;
-};
-
-SHADER_PUBLIC struct ShadowMeshShadingPushConstant
-{
-    SHADER_PUBLIC SHADER_PTR(ShadowData) shadowData;
-
-    SHADER_PUBLIC SHADER_PTR(Vertex) vertexBuffer;
-    SHADER_PUBLIC SHADER_PTR(uint32_t) meshletVerticesBuffer;
-    SHADER_PUBLIC SHADER_PTR(uint32_t) meshletTrianglesBuffer;
-    SHADER_PUBLIC SHADER_PTR(Meshlet) meshletBuffer;
-    SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
-
-    SHADER_PUBLIC SHADER_PTR(uint32_t) instanceIndirectionBuffer;
-    SHADER_PUBLIC SHADER_PTR(InstancedMeshIndirectDrawParameters) indirectBuffer;
-
-    SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
-
-    SHADER_PUBLIC uint32_t cascadeIndex;
 };
 
 SHADER_PUBLIC struct TonemapSDRPushConstant

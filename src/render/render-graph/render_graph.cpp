@@ -1168,7 +1168,7 @@ void RenderGraph::AliasTexture(const std::string& aliasName, const std::string& 
     textureNameToIndex[aliasName] = it->second;
 }
 
-void RenderGraph::CreateBuffer(const std::string& name, VkDeviceSize size)
+void RenderGraph::CreateBuffer(const std::string& name, VkDeviceSize size, bool bCanAlias)
 {
     BufferResource* buf = GetOrCreateBuffer(name);
 
@@ -1177,6 +1177,7 @@ void RenderGraph::CreateBuffer(const std::string& name, VkDeviceSize size)
     }
 
     buf->bufferInfo.size = size;
+    buf->bCanUseAliasedBuffer = bCanAlias;
 }
 
 void RenderGraph::ImportTexture(const std::string& name,

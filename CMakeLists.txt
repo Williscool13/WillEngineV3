@@ -280,16 +280,21 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputeCompactedMeshletDispatch instancing_compacted_meshlet_dispatch
         ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputeMaxMeshletCount instancing_max_meshlet_count
 
+        ${CMAKE_SOURCE_DIR}/shaders/instancing_shadows.slang compute ComputeInstanceLODShadows instancing_instance_lod_shadows
+        ${CMAKE_SOURCE_DIR}/shaders/instancing_shadows.slang compute ComputeExpandInstancesToMeshletsShadows instancing_expand_instance_to_meshlet_shadows
+
         ${CMAKE_SOURCE_DIR}/shaders/mesh_shading_instanced.slang mesh MeshMain mesh_shading_instanced
         ${CMAKE_SOURCE_DIR}/shaders/mesh_shading_instanced.slang fragment FragmentMain mesh_shading_instanced
+
+        ${CMAKE_SOURCE_DIR}/shaders/shadow_mesh_shading_instanced.slang mesh MeshMain shadow_mesh_shading_instanced
+
 
         ${CMAKE_SOURCE_DIR}/shaders/portal_rendering.slang fragment FragmentPortalComposite portal_composite
 
         ${CMAKE_SOURCE_DIR}/shaders/debug_render.slang vertex VertexMain debug_render
         ${CMAKE_SOURCE_DIR}/shaders/debug_render.slang fragment FragmentMain debug_render
 
-        ${CMAKE_SOURCE_DIR}/shaders/shadow_mesh_shading_instanced.slang task TaskMain shadow_mesh_shading_instanced
-        ${CMAKE_SOURCE_DIR}/shaders/shadow_mesh_shading_instanced.slang mesh MeshMain shadow_mesh_shading_instanced
+
         ${CMAKE_SOURCE_DIR}/shaders/shadows_resolve.slang compute ComputeMain shadows_resolve
         ${CMAKE_SOURCE_DIR}/shaders/deferred_resolve.slang compute ComputeMain deferred_resolve
         ${CMAKE_SOURCE_DIR}/shaders/temporal_antialiasing.slang compute ComputeMain temporal_antialiasing

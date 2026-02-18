@@ -26,8 +26,10 @@ inline constexpr int32_t RDG_MAX_STORAGE_UINT4   = 64;
 inline constexpr int32_t RDG_MAX_STORAGE_UINT   = 64;
 
 inline constexpr const char* GEOMETRY_BUFFER_SCENE_DATA = "scene_data";
+inline constexpr const char* GEOMETRY_BUFFER_SHADOW_DATA = "shadow_data";
 inline constexpr const char* GEOMETRY_BUFFER_PRIMITIVE = "primitive_buffer";
 inline constexpr const char* GEOMETRY_BUFFER_MODEL = "model_buffer";
+inline constexpr const char* GEOMETRY_BUFFER_INSTANCE = "main_instance_buffer";
 inline constexpr const char* GEOMETRY_BUFFER_VERTEX = "vertex_buffer";
 inline constexpr const char* GEOMETRY_BUFFER_MESHLET_VERTEX = "meshlet_vertex_buffer";
 inline constexpr const char* GEOMETRY_BUFFER_MESHLET_TRIANGLE = "meshlet_triangle_buffer";

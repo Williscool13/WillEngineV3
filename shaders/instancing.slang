@@ -8,7 +8,7 @@ import constants_interop;
 import limits_declarations;
 import bindless_declarations;
 
-// =============== Pass 0: Determine Instance LOD ===============
+// =============== Step 1: Determine Instance Visibility and LOD ===============
 [shader("compute")]
 [numthreads(INSTANCING_VISIBILITY_DISPATCH_X, 1, 1)]
 void ComputeInstanceLOD(uniform InstanceLODPushConstant pc, uint3 dtid : SV_DispatchThreadID)
@@ -60,7 +60,7 @@ void ComputeInstanceLOD(uniform InstanceLODPushConstant pc, uint3 dtid : SV_Disp
     pc.instanceMeshletOffsets[instanceID].primitiveIndex = inst.primitiveIndex;
 }
 
-// =============== Pass 1: Upsweep Level 1 ===============
+// =============== Step 2a: Upsweep Level 1 ===============
 groupshared uint blockSums1[8];
 
 
@@ -113,7 +113,7 @@ void ComputePrefixSumUpsweep1(uniform PrefixSumUpsweep1PushConstant pc, uint3 gi
     }
 }
 
-// =============== Pass 2: Upsweep Level 2 (optional) ===============
+// =============== Step 2b: Upsweep Level 2 (optional) ===============
 groupshared uint blockSums2[8];
 
 [shader("compute")]
@@ -160,7 +160,7 @@ void ComputePrefixSumUpsweep2(uniform PrefixSumUpsweep2PushConstant pc, uint3 gi
     }
 }
 
-// =============== Pass 3: Scan Block Sums ===============
+// =============== Step 2c: Scan Block Sums ===============
 groupshared uint scanBlockSums[8];
 
 [shader("compute")]
@@ -207,7 +207,7 @@ void ComputePrefixSumScanBlocks(uniform PrefixSumScanBlocksPushConstant pc, uint
 }
 
 
-// =============== Pass 4: Downsweep Level 1 (Optional) ===============
+// =============== Step 2d: Downsweep Level 1 (Optional) ===============
 [shader("compute")]
 [numthreads(INSTANCING_PREFIX_SUM_DISPATCH_X, 1, 1)]
 void ComputePrefixSumDownsweep1(uniform PrefixSumDownsweep1PushConstant pc, uint3 gid : SV_GroupID, uint3 dtid : SV_DispatchThreadID)
@@ -223,7 +223,7 @@ void ComputePrefixSumDownsweep1(uniform PrefixSumDownsweep1PushConstant pc, uint
 }
 
 
-// =============== Pass 5: Downsweep Level 2 ===============
+// =============== Step 2e: Downsweep Level 2 ===============
 [shader("compute")]
 [numthreads(INSTANCING_PREFIX_SUM_DISPATCH_X, 1, 1)]
 void ComputePrefixSumDownsweep2(uniform PrefixSumDownsweep2PushConstant pc, uint3 gid : SV_GroupID, uint3 dtid : SV_DispatchThreadID)
@@ -240,7 +240,7 @@ void ComputePrefixSumDownsweep2(uniform PrefixSumDownsweep2PushConstant pc, uint
 }
 
 
-// =============== Pass 6: Expand Instance -> Meshlet w/ Prefix Sum Values ===============
+// =============== Step 2f: Gather total number of meshlets from final instance postfix sum ===============
 [shader("compute")]
 [numthreads(1, 1, 1)]
 void ComputeTotalMeshletCount(uniform TotalMeshletCountPushConstant pc)
@@ -256,6 +256,7 @@ void ComputeTotalMeshletCount(uniform TotalMeshletCountPushConstant pc)
     pc.indirectDispatchBuffer.totalMeshlets = totalMeshlets;
 }
 
+// =============== Step 3: Expand Instance -> Meshlet through Binary Search. Also determine meshlet visibility. ===============
 [shader("compute")]
 [numthreads(INSTANCING_EXPAND_DISPATCH_X, 1, 1)]
 void ComputeExpandInstancesToMeshlets(uniform ExpandMeshletsPushConstant pc, uint3 dtid : SV_DispatchThreadID)
@@ -327,7 +328,7 @@ void ComputeExpandInstancesToMeshlets(uniform ExpandMeshletsPushConstant pc, uin
     }
 }
 
-// =============== Meshlet Visibility Pass 1: Upsweep Level 1 ===============
+// =============== Step 4a: Upsweep Level 1 ===============
 groupshared uint meshletBlockSums1[8];
 
 [shader("compute")]
@@ -380,7 +381,8 @@ void ComputeMeshletVisibilityPrefixSumUpsweep1(uniform MeshletVisibilityPrefixSu
     }
 }
 
-// =============== Meshlet Visibility Pass 5: Downsweep Level 2 ===============
+// Note: Reuse b, c, d; from the other prefix sum because the code is exactly the same.
+// =============== Step 4e: Downsweep Level 2 ===============
 [shader("compute")]
 [numthreads(INSTANCING_PREFIX_SUM_DISPATCH_X, 1, 1)]
 void ComputeMeshletVisibilityPrefixSumDownsweep2(uniform MeshletVisibilityPrefixSumDownsweep2PushConstant pc, uint3 gid : SV_GroupID, uint3 dtid : SV_DispatchThreadID)
@@ -410,6 +412,7 @@ void ComputeMeshletVisibilityPrefixSumDownsweep2(uniform MeshletVisibilityPrefix
     }
 }
 
+// =============== Step 4f: Generate an indirect command to draw all visible meshlets ===============
 [shader("compute")]
 [numthreads(1, 1, 1)]
 void ComputeCompactedMeshletDispatch(uniform CompactedMeshletDispatchPushConstant pc)
@@ -427,26 +430,10 @@ void ComputeCompactedMeshletDispatch(uniform CompactedMeshletDispatchPushConstan
     pc.compactedDispatchBuffer->z = 1;
 }
 
+// =============== Step 4g: Gather total number of visible meshlets from final meshlet postfix sum ===============
 [shader("compute")]
 [numthreads(1, 1, 1)]
 void ComputeMaxMeshletCount(uniform MaxMeshletCountPushConstant pc)
 {
     pc.currentHighest[0] = max(pc.currentHighest[0], pc.indirectDispatchBuffer->totalMeshlets);
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

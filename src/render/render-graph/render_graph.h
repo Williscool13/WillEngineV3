@@ -76,7 +76,7 @@ public:
 
     void AliasTexture(const std::string& aliasName, const std::string& existingName);
 
-    void CreateBuffer(const std::string& name, VkDeviceSize size);
+    void CreateBuffer(const std::string& name, VkDeviceSize size, bool bCanAlias = true);
 
     void ImportTexture(const std::string& name, VkImage image, VkImageView view, const TextureInfo& info, VkImageUsageFlags usage, VkImageLayout initialLayout, VkPipelineStageFlags2 initialStage,
                        VkImageLayout finalLayout);
