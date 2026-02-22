@@ -185,6 +185,10 @@ void WillEngine::Initialize()
         engineContext->audioManager = audioManager.get();
         engineContext->physicsSystem = physicsSystem.get();
         engineContext->scheduler = scheduler.get();
+#if DEBUG
+        engineContext->internStringFn  = [](uint64_t hash, const char* str) { DBG_InternString(hash, str); };
+        engineContext->resolveStringIdFn = [](uint64_t hash) { return DBG_ResolveStringId(hash); };
+#endif
     }
     //
     {

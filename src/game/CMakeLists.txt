@@ -30,6 +30,7 @@ set(GAME_SOURCES
         components/core_components.h
         systems/core_systems.cpp
         systems/core_systems.h
+        core/string_id_game.cpp
 )
 
 set(GAME_INCLUDE_DIRS

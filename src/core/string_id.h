@@ -4,11 +4,12 @@
 
 #ifndef WILL_ENGINE_STRING_ID_H
 #define WILL_ENGINE_STRING_ID_H
+
 #include <cstdint>
 #include <functional>
 
 constexpr uint64_t FNV_OFFSET = 14695981039346656037ULL;
-constexpr uint64_t FNV_PRIME = 1099511628211ULL;
+constexpr uint64_t FNV_PRIME  = 1099511628211ULL;
 
 constexpr uint64_t fnv1a64(const char* str, size_t len)
 {
@@ -20,23 +21,36 @@ constexpr uint64_t fnv1a64(const char* str, size_t len)
     return hash;
 }
 
+#ifdef DEBUG
+void DBG_InternString(uint64_t hash, const char* str);
+const char* DBG_ResolveStringId(uint64_t hash);
+
+extern void (*gInternStringFn)(uint64_t, const char*);
+extern const char* (*gResolveStringIdFn)(uint64_t);
+
+#endif // DEBUG
+
 struct StringId
 {
     uint64_t id = 0;
 
     constexpr StringId() = default;
-
     constexpr explicit StringId(uint64_t hash) : id(hash) {}
 
+#ifdef DEBUG
+    StringId(const char* str, size_t len);
+#else
     constexpr StringId(const char* str, size_t len)
-        : id(fnv1a64(str, len))
-    {}
+        : id(fnv1a64(str, len)) {}
+#endif
 
     constexpr bool operator==(StringId other) const { return id == other.id; }
     constexpr bool operator!=(StringId other) const { return id != other.id; }
-    constexpr bool operator<(StringId other) const { return id < other.id; }
+    constexpr bool operator<(StringId other)  const { return id < other.id;  }
 
     [[nodiscard]] constexpr bool IsValid() const { return id != 0; }
+
+    const char* ToString() const;
 
     static const StringId Invalid;
 };
@@ -61,7 +75,7 @@ inline StringId MakeConcatStringId(const char* a, size_t aLen,
                                    const char* b, size_t bLen)
 {
     char buf[256];
-    aLen = aLen < 255 ? aLen : 255;
+    aLen = aLen < 255       ? aLen : 255;
     bLen = bLen < 255 - aLen ? bLen : 255 - aLen;
     memcpy(buf, a, aLen);
     memcpy(buf + aLen, b, bLen);
@@ -69,4 +83,4 @@ inline StringId MakeConcatStringId(const char* a, size_t aLen,
     return {buf, aLen + bLen};
 }
 
-#endif //WILL_ENGINE_STRING_ID_H
+#endif // WILL_ENGINE_STRING_ID_H

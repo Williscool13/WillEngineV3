@@ -100,7 +100,7 @@ PipelineManager::~PipelineManager()
 void PipelineManager::RegisterComputePipeline(StringId pipelineId, const std::filesystem::path& shaderPath, uint32_t pushConstantSize, PipelineCategory category)
 {
     if (computePipelines.contains(pipelineId)) {
-        SPDLOG_WARN("Pipeline '{}' already registered, skipping", pipelineId.id);
+        SPDLOG_WARN("Pipeline '{}' already registered, skipping", pipelineId.ToString());
         return;
     }
 
@@ -121,14 +121,14 @@ void PipelineManager::RegisterComputePipeline(StringId pipelineId, const std::fi
 
     SubmitPipelineLoad(&data);
 
-    SPDLOG_INFO("Registered compute pipeline: {}", pipelineId.id);
+    SPDLOG_INFO("Registered compute pipeline: {}", pipelineId.ToString());
 }
 
 void PipelineManager::RegisterComputePipelineCustomLayout(StringId pipelineId, const std::filesystem::path& shaderPath, uint32_t pushConstantSize, PipelineCategory category,
                                                           std::vector<VkDescriptorSetLayout> customLayouts)
 {
     if (computePipelines.contains(pipelineId)) {
-        SPDLOG_WARN("Pipeline '{}' already registered, skipping", pipelineId.id);
+        SPDLOG_WARN("Pipeline '{}' already registered, skipping", pipelineId.ToString());
         return;
     }
 
@@ -150,13 +150,13 @@ void PipelineManager::RegisterComputePipelineCustomLayout(StringId pipelineId, c
 
     SubmitPipelineLoad(&data);
 
-    SPDLOG_INFO("Registered compute pipeline (custom layout): {}", pipelineId.id);
+    SPDLOG_INFO("Registered compute pipeline (custom layout): {}", pipelineId.ToString());
 }
 
 void PipelineManager::RegisterGraphicsPipeline(StringId pipelineId, GraphicsPipelineBuilder& builder, uint32_t pushConstantSize, VkShaderStageFlags pushConstantStages, PipelineCategory category)
 {
     if (graphicsPipelines.contains(pipelineId)) {
-        SPDLOG_WARN("Pipeline '{}' already registered, skipping", pipelineId.id);
+        SPDLOG_WARN("Pipeline '{}' already registered, skipping", pipelineId.ToString());
         return;
     }
 
@@ -221,7 +221,7 @@ void PipelineManager::RegisterGraphicsPipeline(StringId pipelineId, GraphicsPipe
 
     SubmitPipelineLoad(&data);
 
-    SPDLOG_INFO("Registered graphics pipeline: {}", pipelineId.id);
+    SPDLOG_INFO("Registered graphics pipeline: {}", pipelineId.ToString());
 }
 
 const PipelineEntry* PipelineManager::GetPipelineEntry(StringId pipelineId)
@@ -234,7 +234,7 @@ const PipelineEntry* PipelineManager::GetPipelineEntry(StringId pipelineId)
         return &it->second.activeEntry;
     }
 
-    SPDLOG_ERROR("Pipeline '{}' not found", pipelineId.id);
+    SPDLOG_ERROR("Pipeline '{}' not found", pipelineId.ToString());
     return nullptr;
 }
 
@@ -253,7 +253,7 @@ void PipelineManager::HandlePipelineCompletion(PipelineData& pipeline, bool bSuc
         pipeline.bLoading = false;
     }
     else {
-        SPDLOG_ERROR("Pipeline '{}' async load failed", pipeline.pipelineId.id);
+        SPDLOG_ERROR("Pipeline '{}' async load failed", pipeline.pipelineId.ToString());
         pipeline.loadingEntry = {};
         pipeline.bLoading = false;
     }
@@ -267,18 +267,18 @@ void PipelineManager::Update(uint32_t frameNumber)
     while (asyncAssetLoadManager->TryDequeuePipelineComplete(complete)) {
         if (auto it = computePipelines.find(complete.pipelineData->pipelineId); it != computePipelines.end()) {
             if (complete.bSuccess) {
-                SPDLOG_INFO("Compute pipeline '{}' loaded", complete.pipelineData->pipelineId.id);
+                SPDLOG_INFO("Compute pipeline '{}' loaded", complete.pipelineData->pipelineId.ToString());
             }
             HandlePipelineCompletion(it->second, complete.bSuccess);
         }
         else if (auto it2 = graphicsPipelines.find(complete.pipelineData->pipelineId); it2 != graphicsPipelines.end()) {
             if (complete.bSuccess) {
-                SPDLOG_INFO("Graphics pipeline '{}' loaded", complete.pipelineData->pipelineId.id);
+                SPDLOG_INFO("Graphics pipeline '{}' loaded", complete.pipelineData->pipelineId.ToString());
             }
             HandlePipelineCompletion(it2->second, complete.bSuccess);
         }
         else {
-            SPDLOG_ERROR("Pipeline '{}' not found", complete.pipelineData->pipelineId.id);
+            SPDLOG_ERROR("Pipeline '{}' not found", complete.pipelineData->pipelineId.ToString());
         }
     }
 
@@ -323,7 +323,7 @@ void PipelineManager::ReloadModified()
 
         auto currentTime = std::filesystem::last_write_time(data.shaderPath);
         if (currentTime != data.lastModified) {
-            SPDLOG_INFO("Compute shader modified, rebuilding pipeline: {}", pipelineId.id);
+            SPDLOG_INFO("Compute shader modified, rebuilding pipeline: {}", pipelineId.ToString());
             data.bLoading = true;
             SubmitPipelineLoad(&data);
         }
@@ -341,7 +341,7 @@ void PipelineManager::ReloadModified()
         }
 
         if (currentTime != data.lastModified) {
-            SPDLOG_INFO("Graphics shader modified, rebuilding pipeline: {}", pipelineId.id);
+            SPDLOG_INFO("Graphics shader modified, rebuilding pipeline: {}", pipelineId.ToString());
             data.bLoading = true;
             SubmitPipelineLoad(&data);
         }

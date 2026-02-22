@@ -64,6 +64,11 @@ GAME_API void GameLoad(Core::EngineContext* ctx, Engine::GameState* state)
     Physics::PhysicsSystem::RegisterPhysics();
     Audio::AudioManager::RegisterAudio();
     ctx->scheduler->RegisterExternalTaskThread();
+
+#if DEBUG
+    gInternStringFn = ctx->internStringFn;
+    gResolveStringIdFn = ctx->resolveStringIdFn;
+#endif
 }
 
 GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::GameState* state)
@@ -102,6 +107,8 @@ GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         ZoneScopedN("WaitForTargetFrameTime");
         std::this_thread::sleep_for(targetFrameTime - elapsed);
     }
+
+    StringId s = SID("Game Based String ID");
 }
 
 GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer)

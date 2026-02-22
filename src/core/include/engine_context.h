@@ -63,6 +63,12 @@ struct EngineContext
     Engine::AssetManager* assetManager;
     Audio::AudioManager* audioManager;
     Physics::PhysicsSystem* physicsSystem;
+
+
+
+    // Global Fn
+    void (*internStringFn)(uint64_t, const char*);
+    const char* (*resolveStringIdFn)(uint64_t);
 };
 } // Core
 
