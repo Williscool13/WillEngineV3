@@ -16,68 +16,72 @@ struct TextureResource;
 class RenderPass
 {
 public:
-    RenderPass(RenderGraph& renderGraph, std::string name, VkPipelineStageFlags2 stages);
+    RenderPass(RenderGraph& renderGraph, StringID passId, VkPipelineStageFlags2 stages);
 
     // Write
-    RenderPass& WriteStorageImage(const std::string& name, TextureInfo texInfo = {});
+    RenderPass& WriteStorageImage(StringID textureId, TextureInfo texInfo = {});
 
-    RenderPass& WriteClearImage(const std::string& name, const TextureInfo& texInfo = {});
+    RenderPass& WriteClearImage(StringID textureId, const TextureInfo& texInfo = {});
 
-    RenderPass& WriteBlitImage(const std::string& name, const TextureInfo& texInfo = {});
+    RenderPass& WriteBlitImage(StringID textureId, const TextureInfo& texInfo = {});
 
-    RenderPass& WriteCopyImage(const std::string& name, const TextureInfo& texInfo = {});
+    RenderPass& WriteCopyImage(StringID textureId, const TextureInfo& texInfo = {});
 
     /**
      * Color attachments have hard coded stage masks, so the pass does not need to specify stages for it.
-     * @param name
+     * @param textureId
      * @param texInfo
      * @return
      */
-    RenderPass& WriteColorAttachment(const std::string& name, const TextureInfo& texInfo = {});
+    RenderPass& WriteColorAttachment(StringID textureId, const TextureInfo& texInfo = {});
 
     /**
      * Depth attachments have hard coded stage masks, so the pass does not need to specify stages for it.
-     * @param name
+     * @param textureId
      * @param texInfo
      * @return
      */
-    RenderPass& WriteDepthAttachment(const std::string& name, const TextureInfo& texInfo = {});
+    RenderPass& WriteDepthAttachment(StringID textureId, const TextureInfo& texInfo = {});
 
-    RenderPass& WriteBuffer(const std::string& name);
+    RenderPass& ReadWriteImage(StringID name, const TextureInfo& texInfo = {});
 
-    RenderPass& WriteTransferBuffer(const std::string& name);
+    RenderPass& ReadDepthAttachment(StringID textureId);
 
-    RenderPass& ReadWriteDepthAttachment(const std::string& name, const TextureInfo& texInfo = {});
+    RenderPass& ReadStorageImage(StringID textureId);
 
-    RenderPass& ReadWriteBuffer(const std::string& name);
+    RenderPass& ReadSampledImage(StringID textureId);
 
-    RenderPass& ReadWriteImage(const std::string& name, const TextureInfo& texInfo = {});
+    RenderPass& ReadBlitImage(StringID textureId);
 
-    // Read
-    RenderPass& ReadDepthAttachment(const std::string& name);
+    RenderPass& ReadCopyImage(StringID textureId);
 
-    RenderPass& ReadStorageImage(const std::string& name);
 
-    RenderPass& ReadSampledImage(const std::string& name);
 
-    RenderPass& ReadBlitImage(const std::string& name);
 
-    RenderPass& ReadCopyImage(const std::string& name);
+    // Buffers
+    RenderPass& WriteBuffer(StringID bufferId);
 
-    RenderPass& ReadBuffer(const std::string& name);
+    RenderPass& WriteTransferBuffer(StringID bufferId);
 
-    RenderPass& ReadIndexBuffer(const std::string& name);
+    RenderPass& ReadWriteDepthAttachment(StringID bufferId, const TextureInfo& texInfo = {});
 
-    RenderPass& ReadTransferBuffer(const std::string& name);
+    RenderPass& ReadWriteBuffer(StringID bufferId);
 
-    RenderPass& ReadIndirectBuffer(const std::string& name);
+    RenderPass& ReadBuffer(StringID bufferId);
 
-    RenderPass& ReadIndirectCountBuffer(const std::string& name);
+    RenderPass& ReadIndexBuffer(StringID bufferId);
+
+    RenderPass& ReadTransferBuffer(StringID bufferId);
+
+    RenderPass& ReadIndirectBuffer(StringID bufferId);
+
+    RenderPass& ReadIndirectCountBuffer(StringID bufferId);
+
 
     RenderPass& Execute(std::function<void(VkCommandBuffer)> func);
 
     RenderGraph& graph;
-    std::string renderPassName;
+    StringID renderPassId;
     VkPipelineStageFlags2 stages;
 
 private:

@@ -159,7 +159,7 @@ struct InstanceData
 
 struct CustomShaderDraw
 {
-    StringId pipelineId;
+    StringID pipelineId;
 
     std::array<uint32_t, 38> pushConstantCustomData;
     std::vector<InstanceData> instances;

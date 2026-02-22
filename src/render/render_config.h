@@ -10,6 +10,7 @@
 #include <volk.h>
 
 #include "dds_defs.h"
+#include "core/string_id.h"
 #include "shaders/instancing_interop.h"
 #include "shaders/lights_interop.h"
 #include "shaders/model_interop.h"
@@ -25,16 +26,16 @@ inline constexpr int32_t RDG_MAX_STORAGE_FLOAT  = 256;
 inline constexpr int32_t RDG_MAX_STORAGE_UINT4   = 64;
 inline constexpr int32_t RDG_MAX_STORAGE_UINT   = 64;
 
-inline constexpr const char* GEOMETRY_BUFFER_SCENE_DATA = "scene_data";
-inline constexpr const char* GEOMETRY_BUFFER_SHADOW_DATA = "shadow_data";
-inline constexpr const char* GEOMETRY_BUFFER_PRIMITIVE = "primitive_buffer";
-inline constexpr const char* GEOMETRY_BUFFER_MODEL = "model_buffer";
-inline constexpr const char* GEOMETRY_BUFFER_INSTANCE = "main_instance_buffer";
-inline constexpr const char* GEOMETRY_BUFFER_VERTEX = "vertex_buffer";
-inline constexpr const char* GEOMETRY_BUFFER_MESHLET_VERTEX = "meshlet_vertex_buffer";
-inline constexpr const char* GEOMETRY_BUFFER_MESHLET_TRIANGLE = "meshlet_triangle_buffer";
-inline constexpr const char* GEOMETRY_BUFFER_MESHLET = "meshlet_buffer";
-inline constexpr const char* GEOMETRY_BUFFER_MATERIAL = "material_buffer";
+inline const StringID SCENE_DATA_BUFFER = SID("scene_data");
+inline const StringID SHADOW_DATA_BUFFER = SID("shadow_data");
+inline const StringID GEOMETRY_PRIMITIVE_BUFFER = SID("primitive_buffer");
+inline const StringID GEOMETRY_MODEL_BUFFER = SID("model_buffer");
+inline const StringID GEOMETRY_INSTANCE_BUFFER = SID("main_instance_buffer");
+inline const StringID GEOMETRY_VERTEX_BUFFER = SID("vertex_buffer");
+inline const StringID GEOMETRY_MESHLET_VERTEX_BUFFER = SID("meshlet_vertex_buffer");
+inline const StringID GEOMETRY_MESHLET_TRIANGLE_BUFFER = SID("meshlet_triangle_buffer");
+inline const StringID GEOMETRY_MESHLET_BUFFER = SID("meshlet_buffer");
+inline const StringID GEOMETRY_MATERIAL_BUFFER = SID("material_buffer");
 
 inline constexpr int32_t RDG_MAX_MIP_LEVELS = 12;
 inline constexpr int32_t RDG_DEFAULT_UPLOAD_LINEAR_ALLOCATOR_SIZE = 1 * 1024 * 1024; // 1MB base (doubles as needed)

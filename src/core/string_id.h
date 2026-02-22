@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <string>
 
 constexpr uint64_t FNV_OFFSET = 14695981039346656037ULL;
 constexpr uint64_t FNV_PRIME  = 1099511628211ULL;
@@ -25,53 +26,60 @@ constexpr uint64_t fnv1a64(const char* str, size_t len)
 void DBG_InternString(uint64_t hash, const char* str);
 const char* DBG_ResolveStringId(uint64_t hash);
 
+// String interning uses function pointers instead of direct calls to cross the
+// engine/game DLL boundary. Set these during game DLL load before using SID().
 extern void (*gInternStringFn)(uint64_t, const char*);
 extern const char* (*gResolveStringIdFn)(uint64_t);
 
 #endif // DEBUG
 
-struct StringId
+struct StringID
 {
     uint64_t id = 0;
 
-    constexpr StringId() = default;
-    constexpr explicit StringId(uint64_t hash) : id(hash) {}
+    constexpr StringID() = default;
+    constexpr explicit StringID(uint64_t hash) : id(hash) {}
 
 #ifdef DEBUG
-    StringId(const char* str, size_t len);
+    StringID(const char* str, size_t len);
 #else
-    constexpr StringId(const char* str, size_t len)
+    constexpr StringID(const char* str, size_t len)
         : id(fnv1a64(str, len)) {}
 #endif
 
-    constexpr bool operator==(StringId other) const { return id == other.id; }
-    constexpr bool operator!=(StringId other) const { return id != other.id; }
-    constexpr bool operator<(StringId other)  const { return id < other.id;  }
+    constexpr bool operator==(StringID other) const { return id == other.id; }
+    constexpr bool operator!=(StringID other) const { return id != other.id; }
+    constexpr bool operator<(StringID other)  const { return id < other.id;  }
 
     [[nodiscard]] constexpr bool IsValid() const { return id != 0; }
 
     const char* ToString() const;
 
-    static const StringId Invalid;
+    static const StringID Invalid;
 };
 
-inline const StringId StringId::Invalid{};
+inline const StringID StringID::Invalid{};
 
-#define SID(str) StringId(str, sizeof(str) - 1)
+
+/**
+ * Only works with string literals, use carefully
+ * @param str
+ */
+#define SID(str) StringID(str, sizeof(str) - 1)
 
 namespace std
 {
 template<>
-struct hash<StringId>
+struct hash<StringID>
 {
-    size_t operator()(StringId s) const noexcept
+    size_t operator()(StringID s) const noexcept
     {
         return static_cast<size_t>(s.id);
     }
 };
 }
 
-inline StringId MakeConcatStringId(const char* a, size_t aLen,
+inline StringID MakeConcatStringId(const char* a, size_t aLen,
                                    const char* b, size_t bLen)
 {
     char buf[256];
@@ -82,5 +90,11 @@ inline StringId MakeConcatStringId(const char* a, size_t aLen,
     buf[aLen + bLen] = '\0';
     return {buf, aLen + bLen};
 }
+
+inline StringID MakeConcatStringId(const std::string& a, const char* b, size_t bLen)
+{
+    return MakeConcatStringId(a.c_str(), a.size(), b, bLen);
+}
+#define SID_CONCAT(str, lit) MakeConcatStringId(str, lit, sizeof(lit) - 1)
 
 #endif // WILL_ENGINE_STRING_ID_H

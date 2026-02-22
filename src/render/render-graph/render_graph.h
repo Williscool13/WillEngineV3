@@ -26,8 +26,8 @@ using TransientImageHandle = Core::Handle<TextureResource>;
 
 struct TextureFrameCarryover
 {
-    std::string srcName;
-    std::string dstName;
+    StringID srcName;
+    StringID dstName;
 
     VkImage physicalImage;
     TextureInfo textInfo;
@@ -37,8 +37,8 @@ struct TextureFrameCarryover
 
 struct BufferFrameCarryover
 {
-    std::string srcName;
-    std::string dstName;
+    StringID srcName;
+    StringID dstName;
 
     VkBuffer buffer;
     BufferInfo bufferInfo;
@@ -52,7 +52,7 @@ public:
 
     ~RenderGraph();
 
-    RenderPass& AddPass(const std::string& name, VkPipelineStageFlags2 stages);
+    RenderPass& AddPass(StringID passId, VkPipelineStageFlags2 stages);
 
     void PrunePasses();
 
@@ -64,7 +64,7 @@ public:
 
     void Execute(VkCommandBuffer cmd);
 
-    void PrepareSwapchain(VkCommandBuffer cmd, const std::string& name);
+    void PrepareSwapchain(VkCommandBuffer cmd, StringID textureId);
 
     void Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint64_t maxFramesUnused);
 
@@ -72,56 +72,56 @@ public:
 
     void InvalidateAll();
 
-    void CreateTexture(const std::string& name, const TextureInfo& texInfo);
+    void CreateTexture(StringID textureId, const TextureInfo& texInfo);
 
-    void AliasTexture(const std::string& aliasName, const std::string& existingName);
+    void AliasTexture(StringID aliasId, StringID existingId);
 
-    void CreateBuffer(const std::string& name, VkDeviceSize size, bool bCanAlias = true);
+    void CreateBuffer(StringID bufferId, VkDeviceSize size, bool bCanAlias = true);
 
-    void ImportTexture(const std::string& name, VkImage image, VkImageView view, const TextureInfo& info, VkImageUsageFlags usage, VkImageLayout initialLayout, VkPipelineStageFlags2 initialStage,
+    void ImportTexture(StringID textureId, VkImage image, VkImageView view, const TextureInfo& info, VkImageUsageFlags usage, VkImageLayout initialLayout, VkPipelineStageFlags2 initialStage,
                        VkImageLayout finalLayout);
 
-    void ImportBufferNoBarrier(const std::string& name, VkBuffer buffer, VkDeviceAddress address, const BufferInfo& info);
+    void ImportBufferNoBarrier(StringID bufferId, VkBuffer buffer, VkDeviceAddress address, const BufferInfo& info);
 
-    void ImportBuffer(const std::string& name, VkBuffer buffer, VkDeviceAddress address, const BufferInfo& info, PipelineEvent initialState);
+    void ImportBuffer(StringID bufferId, VkBuffer buffer, VkDeviceAddress address, const BufferInfo& info, PipelineEvent initialState);
 
-    bool HasTexture(const std::string& name);
+    bool HasTexture(StringID textureId);
 
-    bool HasBuffer(const std::string& name);
+    bool HasBuffer(StringID bufferId);
 
-    VkImage GetImageHandle(const std::string& name);
+    VkImage GetImageHandle(StringID textureId);
 
-    VkImageView GetImageViewHandle(const std::string& name);
+    VkImageView GetImageViewHandle(StringID textureId);
 
-    VkImageView GetImageViewMipHandle(const std::string& name, uint32_t mipLevel);
+    VkImageView GetImageViewMipHandle(StringID textureId, uint32_t mipLevel);
 
-    VkImageView GetDepthOnlyImageViewHandle(const std::string& name);
+    VkImageView GetDepthOnlyImageViewHandle(StringID textureId);
 
-    VkImageView GetStencilOnlyImageViewHandle(const std::string& name);
+    VkImageView GetStencilOnlyImageViewHandle(StringID textureId);
 
-    const ResourceDimensions& GetImageDimensions(const std::string& name);
+    const ResourceDimensions& GetImageDimensions(StringID textureId);
 
-    const VkImageAspectFlags GetImageAspect(const std::string& name);
+    const VkImageAspectFlags GetImageAspect(StringID textureId);
 
-    uint32_t GetSampledImageViewDescriptorIndex(const std::string& name);
+    uint32_t GetSampledImageViewDescriptorIndex(StringID textureId);
 
-    uint32_t GetStorageImageViewDescriptorIndex(const std::string& name, uint32_t mipLevel = 0);
+    uint32_t GetStorageImageViewDescriptorIndex(StringID textureId, uint32_t mipLevel = 0);
 
-    uint32_t GetDepthOnlySampledImageViewDescriptorIndex(const std::string& name);
+    uint32_t GetDepthOnlySampledImageViewDescriptorIndex(StringID textureId);
 
-    uint32_t GetStencilOnlyStorageImageViewDescriptorIndex(const std::string& name);
+    uint32_t GetStencilOnlyStorageImageViewDescriptorIndex(StringID textureId);
 
-    VkBuffer GetBufferHandle(const std::string& name);
+    VkBuffer GetBufferHandle(StringID bufferId);
 
-    VkDeviceAddress GetBufferAddress(const std::string& name);
+    VkDeviceAddress GetBufferAddress(StringID bufferId);
 
     [[nodiscard]] ResourceManager* GetResourceManager() const { return resourceManager; }
 
-    PipelineEvent GetBufferState(const std::string& name);
+    PipelineEvent GetBufferState(StringID bufferId);
 
-    void CarryTextureToNextFrame(const std::string& name, const std::string& newName, VkImageUsageFlags additionalUsage);
+    void CarryTextureToNextFrame(StringID textureId, StringID newTextureId, VkImageUsageFlags additionalUsage);
 
-    void CarryBufferToNextFrame(const std::string& name, const std::string& newName, VkBufferUsageFlags additionalUsage);
+    void CarryBufferToNextFrame(StringID bufferId, StringID newBufferId, VkBufferUsageFlags additionalUsage);
 
 public: // Transient Uploader
     UploadAllocation AllocateTransient(size_t size);
@@ -140,7 +140,7 @@ private:
 
     // Logical resources
     std::vector<TextureResource> textures;
-    std::unordered_map<std::string, uint32_t> textureNameToIndex;
+    std::unordered_map<StringID, uint32_t> textureNameToIndex;
 
     Core::HandleAllocator<TextureResource, RDG_MAX_SAMPLED_TEXTURES> transientSampledImageHandleAllocator;
     Core::HandleAllocator<TextureResource, RDG_MAX_STORAGE_FLOAT4> transientStorageFloat4HandleAllocator;
@@ -150,7 +150,7 @@ private:
     Core::HandleAllocator<TextureResource, RDG_MAX_STORAGE_UINT> transientStorageUIntHandleAllocator;
 
     std::vector<BufferResource> buffers;
-    std::unordered_map<std::string, uint32_t> bufferNameToIndex;
+    std::unordered_map<StringID, uint32_t> bufferNameToIndex;
 
     // Physical resources
     std::vector<PhysicalResource> physicalResources;
@@ -169,13 +169,13 @@ private:
     uint32_t debugNameCounter{0};
 
 private:
-    TextureResource* GetTexture(const std::string& name);
+    TextureResource* GetTexture(StringID imageId);
 
-    TextureResource* GetOrCreateTexture(const std::string& name);
+    TextureResource* GetOrCreateTexture(StringID textureId);
 
-    BufferResource* GetBuffer(const std::string& name);
+    BufferResource* GetBuffer(StringID bufferId);
 
-    BufferResource* GetOrCreateBuffer(const std::string& name);
+      BufferResource* GetOrCreateBuffer(StringID textureId);
 
     void DestroyPhysicalResource(PhysicalResource& resource);
 
@@ -185,21 +185,11 @@ private:
 
     void RecreateTransientArena(uint32_t frameIndex, size_t newSize);
 
-    void LogImageBarrier(const VkImageMemoryBarrier2& barrier, const std::string& resourceName, uint32_t physicalIndex) const;
+    void LogImageBarrier(StringID textureId, const VkImageMemoryBarrier2& barrier, uint32_t physicalIndex) const;
 
-    void LogBufferBarrier(const std::string& resourceName, VkAccessFlags2 access) const;
+    void LogBufferBarrier(StringID bufferId, VkAccessFlags2 access) const;
 
-    static void AppendUsageChain(PhysicalResource& phys, const std::string& logicalName, bool canAlias, bool debugLogging)
-    {
-        if (!debugLogging) return;
-
-        if (phys.usageChain.empty()) {
-            phys.usageChain = canAlias ? logicalName : "[noalias]" + logicalName;
-        }
-        else {
-            phys.usageChain += "->" + logicalName;
-        }
-    }
+    static void AppendUsageChain(PhysicalResource& phys, StringID resourceId, bool canAlias, bool debugLogging);
 };
 } // Render
 

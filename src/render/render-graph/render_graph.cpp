@@ -53,9 +53,9 @@ RenderGraph::~RenderGraph()
     }
 }
 
-RenderPass& RenderGraph::AddPass(const std::string& name, VkPipelineStageFlags2 stages)
+RenderPass& RenderGraph::AddPass(StringID passId, VkPipelineStageFlags2 stages)
 {
-    passes.push_back(std::make_unique<RenderPass>(*this, name, stages));
+    passes.push_back(std::make_unique<RenderPass>(*this, passId, stages));
     return *passes.back();
 }
 
@@ -183,7 +183,7 @@ void RenderGraph::Compile(int64_t currentFrame)
             desiredDim.layers = 1;
             desiredDim.samples = 1;
             desiredDim.imageUsage = tex.accumulatedUsage;
-            desiredDim.name = tex.name;
+            desiredDim.resourceId = tex.textureId;
 
             // Try to find existing physical resource with matching dimensions
             bool foundAlias = false;
@@ -225,7 +225,7 @@ void RenderGraph::Compile(int64_t currentFrame)
                     }
                     phys.logicalResourceIndices.push_back(tex.index);
                     phys.bCanAlias = tex.bCanUseAliasedTexture;
-                    AppendUsageChain(phys, tex.name, tex.bCanUseAliasedTexture, bDebugLogging);
+                    AppendUsageChain(phys, tex.textureId, tex.bCanUseAliasedTexture, bDebugLogging);
                     foundAlias = true;
                     break;
                 }
@@ -239,7 +239,7 @@ void RenderGraph::Compile(int64_t currentFrame)
                 newPhys.dimensions = desiredDim;
                 newPhys.logicalResourceIndices.push_back(tex.index);
                 newPhys.bCanAlias = tex.bCanUseAliasedTexture;
-                AppendUsageChain(newPhys, tex.name, tex.bCanUseAliasedTexture, bDebugLogging);
+                AppendUsageChain(newPhys, tex.textureId, tex.bCanUseAliasedTexture, bDebugLogging);
             }
         }
     }
@@ -255,7 +255,7 @@ void RenderGraph::Compile(int64_t currentFrame)
     for (auto& buf : buffers) {
         if (buf.accumulatedUsage == 0) {
             if (bDebugLogging) {
-                SPDLOG_WARN("Buffer '{}' created but never used", buf.name);
+                SPDLOG_WARN("Buffer '{}' created but never used", buf.bufferId.ToString());
             }
             continue;
         }
@@ -265,7 +265,7 @@ void RenderGraph::Compile(int64_t currentFrame)
             desiredDim.type = ResourceDimensions::Type::Buffer;
             desiredDim.bufferSize = buf.bufferInfo.size;
             desiredDim.bufferUsage = buf.accumulatedUsage;
-            desiredDim.name = buf.name;
+            desiredDim.resourceId = buf.bufferId;
 
             bool foundAlias = false;
             for (uint32_t i = 0; i < physicalResources.size(); i++) {
@@ -305,7 +305,7 @@ void RenderGraph::Compile(int64_t currentFrame)
                         phys.dimensions.bufferUsage |= buf.accumulatedUsage;
                     }
                     phys.bCanAlias = buf.bCanUseAliasedBuffer;
-                    AppendUsageChain(phys, buf.name, buf.bCanUseAliasedBuffer, bDebugLogging);
+                    AppendUsageChain(phys, buf.bufferId, buf.bCanUseAliasedBuffer, bDebugLogging);
                     foundAlias = true;
                     break;
                 }
@@ -318,7 +318,7 @@ void RenderGraph::Compile(int64_t currentFrame)
                 newPhys.dimensions = desiredDim;
                 newPhys.logicalResourceIndices.push_back(buf.index);
                 newPhys.bCanAlias = buf.bCanUseAliasedBuffer;
-                AppendUsageChain(newPhys, buf.name, buf.bCanUseAliasedBuffer, bDebugLogging);
+                AppendUsageChain(newPhys, buf.bufferId, buf.bCanUseAliasedBuffer, bDebugLogging);
             }
         }
     }
@@ -446,7 +446,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
 
     for (auto& pass : passes) {
         if (bDebugLogging) {
-            SPDLOG_INFO("[PASS] {}", pass->renderPassName);
+            SPDLOG_INFO("[PASS] {}", pass->renderPassId.ToString());
         }
         std::vector<VkImageMemoryBarrier2> barriers;
 
@@ -465,7 +465,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT,
                 VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
             );
-            LogImageBarrier(barrier, tex.name, tex.physicalIndex);
+            LogImageBarrier(tex.textureId, barrier, tex.physicalIndex);
             barriers.push_back(barrier);
         }
 
@@ -487,7 +487,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 VkHelpers::SubresourceRange(phys.aspect),
                 phys.event.stages, phys.event.access, tex.layout, dstStages, dstAccess, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
             );
-            LogImageBarrier(barrier, tex.name, tex.physicalIndex);
+            LogImageBarrier(tex.textureId, barrier, tex.physicalIndex);
             barriers.push_back(barrier);
         }
 
@@ -500,7 +500,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 phys.event.stages, phys.event.access, tex.layout,
                 pass->stages, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL
             );
-            LogImageBarrier(barrier, tex.name, tex.physicalIndex);
+            LogImageBarrier(tex.textureId, barrier, tex.physicalIndex);
             barriers.push_back(barrier);
         }
 
@@ -513,7 +513,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 phys.event.stages, phys.event.access, tex.layout,
                 pass->stages, VK_ACCESS_2_SHADER_STORAGE_READ_BIT, VK_IMAGE_LAYOUT_GENERAL
             );
-            LogImageBarrier(barrier, tex.name, tex.physicalIndex);
+            LogImageBarrier(tex.textureId, barrier, tex.physicalIndex);
             barriers.push_back(barrier);
         }
 
@@ -526,7 +526,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 phys.event.stages, phys.event.access, tex.layout,
                 pass->stages, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
             );
-            LogImageBarrier(barrier, tex.name, tex.physicalIndex);
+            LogImageBarrier(tex.textureId, barrier, tex.physicalIndex);
             barriers.push_back(barrier);
         }
 
@@ -539,7 +539,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 phys.event.stages, phys.event.access, tex.layout,
                 pass->stages, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL
             );
-            LogImageBarrier(barrier, tex.name, tex.physicalIndex);
+            LogImageBarrier(tex.textureId, barrier, tex.physicalIndex);
             barriers.push_back(barrier);
         }
 
@@ -552,7 +552,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 phys.event.stages, phys.event.access, tex.layout,
                 VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
             );
-            LogImageBarrier(barrier, tex.name, tex.physicalIndex);
+            LogImageBarrier(tex.textureId, barrier, tex.physicalIndex);
             barriers.push_back(barrier);
         }
 
@@ -565,7 +565,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 phys.event.stages, phys.event.access, tex.layout,
                 VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
             );
-            LogImageBarrier(barrier, tex.name, tex.physicalIndex);
+            LogImageBarrier(tex.textureId, barrier, tex.physicalIndex);
             barriers.push_back(barrier);
         }
 
@@ -578,7 +578,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 phys.event.stages, phys.event.access, tex.layout,
                 VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
             );
-            LogImageBarrier(barrier, tex.name, tex.physicalIndex);
+            LogImageBarrier(tex.textureId, barrier, tex.physicalIndex);
             barriers.push_back(barrier);
         }
 
@@ -591,7 +591,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 phys.event.stages, phys.event.access, tex.layout,
                 VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
             );
-            LogImageBarrier(barrier, tex.name, tex.physicalIndex);
+            LogImageBarrier(tex.textureId, barrier, tex.physicalIndex);
             barriers.push_back(barrier);
         }
 
@@ -604,7 +604,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 phys.event.stages, phys.event.access, tex.layout,
                 VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
             );
-            LogImageBarrier(barrier, tex.name, tex.physicalIndex);
+            LogImageBarrier(tex.textureId, barrier, tex.physicalIndex);
             barriers.push_back(barrier);
         }
 
@@ -628,7 +628,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 .size = VK_WHOLE_SIZE
             };
             bufferBarriers.push_back(barrier);
-            LogBufferBarrier(buf.name, desiredAccess);
+            LogBufferBarrier(buf.bufferId, desiredAccess);
         }
 
         for (const uint32_t bufIndex : pass->bufferReadWrite) {
@@ -649,7 +649,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 .size = VK_WHOLE_SIZE
             };
             bufferBarriers.push_back(barrier);
-            LogBufferBarrier(buf.name, desiredAccess);
+            LogBufferBarrier(buf.bufferId, desiredAccess);
         }
 
         for (const uint32_t bufIndex : pass->bufferTransferWrites) {
@@ -670,7 +670,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 .size = VK_WHOLE_SIZE
             };
             bufferBarriers.push_back(barrier);
-            LogBufferBarrier(buf.name, desiredAccess);
+            LogBufferBarrier(buf.bufferId, desiredAccess);
         }
 
         for (const uint32_t bufIndex : pass->bufferTransferReads) {
@@ -691,7 +691,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 .size = VK_WHOLE_SIZE
             };
             bufferBarriers.push_back(barrier);
-            LogBufferBarrier(buf.name, desiredAccess);
+            LogBufferBarrier(buf.bufferId, desiredAccess);
         }
 
         for (const uint32_t bufIndex : pass->bufferReads) {
@@ -711,7 +711,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 .size = VK_WHOLE_SIZE
             };
             bufferBarriers.push_back(barrier);
-            LogBufferBarrier(buf.name, desiredAccess);
+            LogBufferBarrier(buf.bufferId, desiredAccess);
         }
 
         for (const uint32_t bufIndex : pass->bufferIndexRead) {
@@ -731,7 +731,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 .size = VK_WHOLE_SIZE
             };
             bufferBarriers.push_back(barrier);
-            LogBufferBarrier(buf.name, desiredAccess);
+            LogBufferBarrier(buf.bufferId, desiredAccess);
         }
 
         for (const uint32_t bufIndex : pass->bufferIndirectReads) {
@@ -751,7 +751,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 .size = VK_WHOLE_SIZE
             };
             bufferBarriers.push_back(barrier);
-            LogBufferBarrier(buf.name, desiredAccess);
+            LogBufferBarrier(buf.bufferId, desiredAccess);
         }
 
         for (const uint32_t bufIndex : pass->bufferIndirectCountReads) {
@@ -771,7 +771,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 .size = VK_WHOLE_SIZE
             };
             bufferBarriers.push_back(barrier);
-            LogBufferBarrier(buf.name, desiredAccess);
+            LogBufferBarrier(buf.bufferId, desiredAccess);
         }
 
         if (!barriers.empty() || !bufferBarriers.empty()) {
@@ -798,7 +798,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
         if (pass->executeFunc) {
             VkDebugUtilsLabelEXT label = {};
             label.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT;
-            label.pLabelName = pass->renderPassName.c_str();
+            label.pLabelName = pass->renderPassId.ToString();
             vkCmdBeginDebugUtilsLabelEXT(cmd, &label);
             pass->executeFunc(cmd);
             vkCmdEndDebugUtilsLabelEXT(cmd);
@@ -974,7 +974,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                     phys.event.stages, phys.event.access, tex.layout,
                     VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT, VK_ACCESS_2_NONE, tex.finalLayout
                 );
-                LogImageBarrier(finalBarrier, tex.name, tex.physicalIndex);
+                LogImageBarrier(tex.textureId, finalBarrier, tex.physicalIndex);
                 finalBarriers.push_back(finalBarrier);
                 tex.layout = tex.finalLayout;
             }
@@ -989,9 +989,9 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
     }
 }
 
-void RenderGraph::PrepareSwapchain(VkCommandBuffer cmd, const std::string& name)
+void RenderGraph::PrepareSwapchain(VkCommandBuffer cmd, StringID textureId)
 {
-    auto it = textureNameToIndex.find(name);
+    auto it = textureNameToIndex.find(textureId);
     if (it == textureNameToIndex.end()) {
         SPDLOG_ERROR("[RenderGraph::PrepareSwapchain] Prepare swapchain failed.");
         return;
@@ -1075,7 +1075,7 @@ void RenderGraph::Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint
             }
 
             if (physicalIndex == UINT32_MAX) {
-                SPDLOG_ERROR("Carryover texture '{}' physical resource not found", carryover.dstName);
+                SPDLOG_ERROR("Carryover texture '{}' physical resource not found", carryover.dstName.ToString());
                 continue;
             }
 
@@ -1088,7 +1088,7 @@ void RenderGraph::Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint
             PhysicalResource& phys = physicalResources[physicalIndex];
             phys.logicalResourceIndices.push_back(newTex->index);
             phys.usageChain.clear();
-            AppendUsageChain(phys, newTex->name, newTex->bCanUseAliasedTexture, bDebugLogging);
+            AppendUsageChain(phys, newTex->textureId, newTex->bCanUseAliasedTexture, bDebugLogging);
             phys.bCanAlias = false;
         }
         textureCarryovers.clear();
@@ -1104,7 +1104,7 @@ void RenderGraph::Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint
             }
 
             if (physicalIndex == UINT32_MAX) {
-                SPDLOG_ERROR("Carryover buffer '{}' physical resource not found", carryover.dstName);
+                SPDLOG_ERROR("Carryover buffer '{}' physical resource not found", carryover.dstName.ToString());
                 continue;
             }
 
@@ -1116,7 +1116,7 @@ void RenderGraph::Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint
             PhysicalResource& phys = physicalResources[physicalIndex];
             phys.logicalResourceIndices.push_back(newBuf->index);
             phys.usageChain.clear();
-            AppendUsageChain(phys, newBuf->name, newBuf->bCanUseAliasedBuffer, bDebugLogging);
+            AppendUsageChain(phys, newBuf->bufferId, newBuf->bCanUseAliasedBuffer, bDebugLogging);
             phys.bCanAlias = false;
         }
         bufferCarryovers.clear();
@@ -1146,9 +1146,9 @@ void RenderGraph::InvalidateAll()
     bufferCarryovers.clear();
 }
 
-void RenderGraph::CreateTexture(const std::string& name, const TextureInfo& texInfo)
+void RenderGraph::CreateTexture(const StringID textureId, const TextureInfo& texInfo)
 {
-    TextureResource* resource = GetOrCreateTexture(name);
+    TextureResource* resource = GetOrCreateTexture(textureId);
 
     if (resource->textureInfo.format != VK_FORMAT_UNDEFINED) {
         assert(resource->textureInfo.format == texInfo.format && "Texture format mismatch");
@@ -1161,16 +1161,16 @@ void RenderGraph::CreateTexture(const std::string& name, const TextureInfo& texI
     resource->textureInfo = texInfo;
 }
 
-void RenderGraph::AliasTexture(const std::string& aliasName, const std::string& existingName)
+void RenderGraph::AliasTexture(const StringID aliasId, const StringID existingId)
 {
-    auto it = textureNameToIndex.find(existingName);
+    auto it = textureNameToIndex.find(existingId);
     assert(it != textureNameToIndex.end() && "Aliasing texture failed because existing texture doesn't exist");
-    textureNameToIndex[aliasName] = it->second;
+    textureNameToIndex[aliasId] = it->second;
 }
 
-void RenderGraph::CreateBuffer(const std::string& name, VkDeviceSize size, bool bCanAlias)
+void RenderGraph::CreateBuffer(StringID bufferId, VkDeviceSize size, bool bCanAlias)
 {
-    BufferResource* buf = GetOrCreateBuffer(name);
+    BufferResource* buf = GetOrCreateBuffer(bufferId);
 
     if (buf->bufferInfo.size != 0) {
         assert(buf->bufferInfo.size == size && "Buffer size mismatch");
@@ -1180,7 +1180,7 @@ void RenderGraph::CreateBuffer(const std::string& name, VkDeviceSize size, bool 
     buf->bCanUseAliasedBuffer = bCanAlias;
 }
 
-void RenderGraph::ImportTexture(const std::string& name,
+void RenderGraph::ImportTexture(StringID textureId,
                                 VkImage image,
                                 VkImageView view,
                                 const TextureInfo& info,
@@ -1189,7 +1189,7 @@ void RenderGraph::ImportTexture(const std::string& name,
                                 VkPipelineStageFlags2 initialStage,
                                 VkImageLayout finalLayout)
 {
-    TextureResource* tex = GetOrCreateTexture(name);
+    TextureResource* tex = GetOrCreateTexture(textureId);
     tex->textureInfo = info;
     tex->accumulatedUsage = usage;
 
@@ -1236,14 +1236,14 @@ void RenderGraph::ImportTexture(const std::string& name,
     phys.event.access = VK_ACCESS_2_NONE;
 
     phys.aspect = VkHelpers::GetImageAspect(info.format);
-    phys.dimensions.name = name;
+    phys.dimensions.resourceId = textureId;
     phys.usageChain.clear();
     tex->finalLayout = finalLayout;
 }
 
-void RenderGraph::ImportBufferNoBarrier(const std::string& name, VkBuffer buffer, VkDeviceAddress address, const BufferInfo& info)
+void RenderGraph::ImportBufferNoBarrier(StringID bufferId, VkBuffer buffer, VkDeviceAddress address, const BufferInfo& info)
 {
-    BufferResource* buf = GetOrCreateBuffer(name);
+    BufferResource* buf = GetOrCreateBuffer(bufferId);
     buf->bufferInfo = info;
     buf->accumulatedUsage = info.usage;
     if (!buf->HasPhysical()) {
@@ -1278,14 +1278,14 @@ void RenderGraph::ImportBufferNoBarrier(const std::string& name, VkBuffer buffer
     }
 
     auto& phys = physicalResources[buf->physicalIndex];
-    phys.dimensions.name = name;
+    phys.dimensions.resourceId = bufferId;
     phys.usageChain.clear();
     phys.bDisableBarriers = true;
 }
 
-void RenderGraph::ImportBuffer(const std::string& name, VkBuffer buffer, VkDeviceAddress address, const BufferInfo& info, PipelineEvent initialState)
+void RenderGraph::ImportBuffer(StringID bufferId, VkBuffer buffer, VkDeviceAddress address, const BufferInfo& info, PipelineEvent initialState)
 {
-    BufferResource* buf = GetOrCreateBuffer(name);
+    BufferResource* buf = GetOrCreateBuffer(bufferId);
     buf->bufferInfo = info;
     buf->accumulatedUsage = info.usage;
     if (!buf->HasPhysical()) {
@@ -1322,26 +1322,26 @@ void RenderGraph::ImportBuffer(const std::string& name, VkBuffer buffer, VkDevic
     auto& phys = physicalResources[buf->physicalIndex];
     phys.event.stages = initialState.stages;
     phys.event.access = initialState.access;
-    phys.dimensions.name = name;
+    phys.dimensions.resourceId = bufferId;
     phys.usageChain.clear();
     phys.bDisableBarriers = false;
 }
 
-bool RenderGraph::HasTexture(const std::string& name)
+bool RenderGraph::HasTexture(StringID textureId)
 {
-    auto it = textureNameToIndex.find(name);
+    auto it = textureNameToIndex.find(textureId);
     return it != textureNameToIndex.end();
 }
 
-bool RenderGraph::HasBuffer(const std::string& name)
+bool RenderGraph::HasBuffer(StringID bufferId)
 {
-    auto it = bufferNameToIndex.find(name);
+    auto it = bufferNameToIndex.find(bufferId);
     return it != bufferNameToIndex.end();
 }
 
-VkImage RenderGraph::GetImageHandle(const std::string& name)
+VkImage RenderGraph::GetImageHandle(StringID textureId)
 {
-    auto it = textureNameToIndex.find(name);
+    auto it = textureNameToIndex.find(textureId);
     assert(it != textureNameToIndex.end() && "Texture not found");
 
     auto& tex = textures[it->second];
@@ -1350,9 +1350,9 @@ VkImage RenderGraph::GetImageHandle(const std::string& name)
     return physicalResources[tex.physicalIndex].image;
 }
 
-VkImageView RenderGraph::GetImageViewHandle(const std::string& name)
+VkImageView RenderGraph::GetImageViewHandle(StringID textureId)
 {
-    auto it = textureNameToIndex.find(name);
+    auto it = textureNameToIndex.find(textureId);
     assert(it != textureNameToIndex.end() && "Texture not found");
 
     auto& tex = textures[it->second];
@@ -1361,9 +1361,9 @@ VkImageView RenderGraph::GetImageViewHandle(const std::string& name)
     return physicalResources[tex.physicalIndex].imageView;
 }
 
-VkImageView RenderGraph::GetImageViewMipHandle(const std::string& name, uint32_t mipLevel)
+VkImageView RenderGraph::GetImageViewMipHandle(StringID textureId, uint32_t mipLevel)
 {
-    auto it = textureNameToIndex.find(name);
+    auto it = textureNameToIndex.find(textureId);
     assert(it != textureNameToIndex.end() && "Texture not found");
     assert(mipLevel < RDG_MAX_MIP_LEVELS);
 
@@ -1373,9 +1373,9 @@ VkImageView RenderGraph::GetImageViewMipHandle(const std::string& name, uint32_t
     return physicalResources[tex.physicalIndex].mipViews[mipLevel];
 }
 
-VkImageView RenderGraph::GetDepthOnlyImageViewHandle(const std::string& name)
+VkImageView RenderGraph::GetDepthOnlyImageViewHandle(StringID textureId)
 {
-    auto it = textureNameToIndex.find(name);
+    auto it = textureNameToIndex.find(textureId);
     assert(it != textureNameToIndex.end() && "Texture not found");
 
     auto& tex = textures[it->second];
@@ -1391,9 +1391,9 @@ VkImageView RenderGraph::GetDepthOnlyImageViewHandle(const std::string& name)
     return phys.depthOnlyView;
 }
 
-VkImageView RenderGraph::GetStencilOnlyImageViewHandle(const std::string& name)
+VkImageView RenderGraph::GetStencilOnlyImageViewHandle(StringID textureId)
 {
-    auto it = textureNameToIndex.find(name);
+    auto it = textureNameToIndex.find(textureId);
     assert(it != textureNameToIndex.end() && "Texture not found");
 
     auto& tex = textures[it->second];
@@ -1409,9 +1409,9 @@ VkImageView RenderGraph::GetStencilOnlyImageViewHandle(const std::string& name)
     return phys.stencilOnlyView;
 }
 
-const ResourceDimensions& RenderGraph::GetImageDimensions(const std::string& name)
+const ResourceDimensions& RenderGraph::GetImageDimensions(StringID textureId)
 {
-    auto it = textureNameToIndex.find(name);
+    auto it = textureNameToIndex.find(textureId);
     assert(it != textureNameToIndex.end() && "Texture not found");
 
     auto& tex = textures[it->second];
@@ -1420,9 +1420,9 @@ const ResourceDimensions& RenderGraph::GetImageDimensions(const std::string& nam
     return physicalResources[tex.physicalIndex].dimensions;
 }
 
-const VkImageAspectFlags RenderGraph::GetImageAspect(const std::string& name)
+const VkImageAspectFlags RenderGraph::GetImageAspect(StringID textureId)
 {
-    auto it = textureNameToIndex.find(name);
+    auto it = textureNameToIndex.find(textureId);
     assert(it != textureNameToIndex.end() && "Texture not found");
 
     auto& tex = textures[it->second];
@@ -1431,9 +1431,9 @@ const VkImageAspectFlags RenderGraph::GetImageAspect(const std::string& name)
     return physicalResources[tex.physicalIndex].aspect;
 }
 
-uint32_t RenderGraph::GetSampledImageViewDescriptorIndex(const std::string& name)
+uint32_t RenderGraph::GetSampledImageViewDescriptorIndex(StringID textureId)
 {
-    auto it = textureNameToIndex.find(name);
+    auto it = textureNameToIndex.find(textureId);
     assert(it != textureNameToIndex.end() && "Texture not found");
 
     auto& tex = textures[it->second];
@@ -1442,9 +1442,9 @@ uint32_t RenderGraph::GetSampledImageViewDescriptorIndex(const std::string& name
     return physicalResources[tex.physicalIndex].sampledDescriptorHandle.index;
 }
 
-uint32_t RenderGraph::GetStorageImageViewDescriptorIndex(const std::string& name, uint32_t mipLevel)
+uint32_t RenderGraph::GetStorageImageViewDescriptorIndex(StringID textureId, uint32_t mipLevel)
 {
-    auto it = textureNameToIndex.find(name);
+    auto it = textureNameToIndex.find(textureId);
     assert(it != textureNameToIndex.end() && "Texture not found");
 
     auto& tex = textures[it->second];
@@ -1453,9 +1453,9 @@ uint32_t RenderGraph::GetStorageImageViewDescriptorIndex(const std::string& name
     return physicalResources[tex.physicalIndex].storageMipDescriptorHandles[mipLevel].index;
 }
 
-uint32_t RenderGraph::GetDepthOnlySampledImageViewDescriptorIndex(const std::string& name)
+uint32_t RenderGraph::GetDepthOnlySampledImageViewDescriptorIndex(StringID textureId)
 {
-    auto it = textureNameToIndex.find(name);
+    auto it = textureNameToIndex.find(textureId);
     assert(it != textureNameToIndex.end() && "Texture not found");
 
     auto& tex = textures[it->second];
@@ -1470,9 +1470,9 @@ uint32_t RenderGraph::GetDepthOnlySampledImageViewDescriptorIndex(const std::str
     return phys.depthOnlyDescriptorHandle.index;
 }
 
-uint32_t RenderGraph::GetStencilOnlyStorageImageViewDescriptorIndex(const std::string& name)
+uint32_t RenderGraph::GetStencilOnlyStorageImageViewDescriptorIndex(StringID textureId)
 {
-    auto it = textureNameToIndex.find(name);
+    auto it = textureNameToIndex.find(textureId);
     assert(it != textureNameToIndex.end() && "Texture not found");
 
     auto& tex = textures[it->second];
@@ -1487,9 +1487,9 @@ uint32_t RenderGraph::GetStencilOnlyStorageImageViewDescriptorIndex(const std::s
     return phys.stencilOnlyDescriptorHandle.index;
 }
 
-VkBuffer RenderGraph::GetBufferHandle(const std::string& name)
+VkBuffer RenderGraph::GetBufferHandle(StringID bufferId)
 {
-    auto it = bufferNameToIndex.find(name);
+    auto it = bufferNameToIndex.find(bufferId);
     assert(it != bufferNameToIndex.end() && "Buffer not found");
 
     auto& buf = buffers[it->second];
@@ -1498,9 +1498,9 @@ VkBuffer RenderGraph::GetBufferHandle(const std::string& name)
     return physicalResources[buf.physicalIndex].buffer;
 }
 
-VkDeviceAddress RenderGraph::GetBufferAddress(const std::string& name)
+VkDeviceAddress RenderGraph::GetBufferAddress(StringID bufferId)
 {
-    auto it = bufferNameToIndex.find(name);
+    auto it = bufferNameToIndex.find(bufferId);
     assert(it != bufferNameToIndex.end() && "Buffer not found");
 
     auto& buf = buffers[it->second];
@@ -1518,9 +1518,9 @@ VkDeviceAddress RenderGraph::GetBufferAddress(const std::string& name)
     return phys.bufferAddress;
 }
 
-PipelineEvent RenderGraph::GetBufferState(const std::string& name)
+PipelineEvent RenderGraph::GetBufferState(StringID bufferId)
 {
-    auto it = bufferNameToIndex.find(name);
+    auto it = bufferNameToIndex.find(bufferId);
     assert(it != bufferNameToIndex.end() && "Buffer not found");
 
     auto& buf = buffers[it->second];
@@ -1529,9 +1529,9 @@ PipelineEvent RenderGraph::GetBufferState(const std::string& name)
     return physicalResources[buf.physicalIndex].event;
 }
 
-void RenderGraph::CarryTextureToNextFrame(const std::string& name, const std::string& newName, VkImageUsageFlags additionalUsage)
+void RenderGraph::CarryTextureToNextFrame(StringID textureId, StringID newTextureId, VkImageUsageFlags additionalUsage)
 {
-    TextureResource* tex = GetOrCreateTexture(name);
+    TextureResource* tex = GetOrCreateTexture(textureId);
     tex->bCanUseAliasedTexture = false;
     tex->accumulatedUsage |= additionalUsage;
 
@@ -1543,19 +1543,19 @@ void RenderGraph::CarryTextureToNextFrame(const std::string& name, const std::st
     }
 
     for (const auto& c : textureCarryovers) {
-        assert(c.srcName != name && "Source texture already designated for carryover");
-        assert(c.dstName != newName && "Destination texture name already used in another carryover");
+        assert(c.srcName != textureId && "Source texture already designated for carryover");
+        assert(c.dstName != newTextureId && "Destination texture name already used in another carryover");
         if (const TextureResource* otherTex = GetTexture(c.srcName)) {
             assert(otherTex->index != tex->index && "Cannot carry over texture already marked to be carried over");
         }
     }
 
-    textureCarryovers.emplace_back(name, newName);
+    textureCarryovers.emplace_back(textureId, newTextureId);
 }
 
-void RenderGraph::CarryBufferToNextFrame(const std::string& name, const std::string& newName, VkBufferUsageFlags additionalUsage)
+void RenderGraph::CarryBufferToNextFrame(StringID bufferId, StringID newBufferId, VkBufferUsageFlags additionalUsage)
 {
-    BufferResource* buf = GetOrCreateBuffer(name);
+    BufferResource* buf = GetOrCreateBuffer(bufferId);
     buf->bCanUseAliasedBuffer = false;
     buf->accumulatedUsage |= additionalUsage;
 
@@ -1567,11 +1567,11 @@ void RenderGraph::CarryBufferToNextFrame(const std::string& name, const std::str
     }
 
     for (const auto& c : bufferCarryovers) {
-        assert(c.srcName != name && "Source buffer already designated for carryover");
-        assert(c.dstName != newName && "Destination buffer name already used in another carryover");
+        assert(c.srcName != bufferId && "Source buffer already designated for carryover");
+        assert(c.dstName != newBufferId && "Destination buffer name already used in another carryover");
     }
 
-    bufferCarryovers.emplace_back(name, newName);
+    bufferCarryovers.emplace_back(bufferId, newBufferId);
 }
 
 UploadAllocation RenderGraph::AllocateTransient(size_t size)
@@ -1616,7 +1616,7 @@ void RenderGraph::RecreateTransientArena(uint32_t frameIndex, size_t newSize)
     arena.size = newSize;
 }
 
-void RenderGraph::LogImageBarrier(const VkImageMemoryBarrier2& barrier, const std::string& resourceName, uint32_t physicalIndex) const
+void RenderGraph::LogImageBarrier(StringID textureId, const VkImageMemoryBarrier2& barrier, uint32_t physicalIndex) const
 {
     if (!bDebugLogging) return;
 
@@ -1638,10 +1638,10 @@ void RenderGraph::LogImageBarrier(const VkImageMemoryBarrier2& barrier, const st
         }
     };
 
-    SPDLOG_INFO("  [BARRIER] {} ({}): {} -> {}", resourceName, physicalIndex, LayoutToString(barrier.oldLayout), LayoutToString(barrier.newLayout));
+    SPDLOG_INFO("  [BARRIER] {} ({}): {} -> {}", textureId.ToString(), physicalIndex, LayoutToString(barrier.oldLayout), LayoutToString(barrier.newLayout));
 }
 
-void RenderGraph::LogBufferBarrier(const std::string& resourceName, VkAccessFlags2 access) const
+void RenderGraph::LogBufferBarrier(StringID bufferId, VkAccessFlags2 access) const
 {
     if (!bDebugLogging) return;
 
@@ -1650,13 +1650,13 @@ void RenderGraph::LogBufferBarrier(const std::string& resourceName, VkAccessFlag
         accessType = "write";
     }
 
-    SPDLOG_INFO("  [BUFFER BARRIER] {} ({})", resourceName, accessType);
+    SPDLOG_INFO("  [BUFFER BARRIER] {} ({})", bufferId.ToString(), accessType);
 }
 
 
-TextureResource* RenderGraph::GetTexture(const std::string& name)
+TextureResource* RenderGraph::GetTexture(StringID imageId)
 {
-    auto it = textureNameToIndex.find(name);
+    auto it = textureNameToIndex.find(imageId);
     if (it != textureNameToIndex.end()) {
         return &textures[it->second];
     }
@@ -1664,26 +1664,26 @@ TextureResource* RenderGraph::GetTexture(const std::string& name)
     return nullptr;
 }
 
-TextureResource* RenderGraph::GetOrCreateTexture(const std::string& name)
+TextureResource* RenderGraph::GetOrCreateTexture(StringID textureId)
 {
-    auto it = textureNameToIndex.find(name);
+    auto it = textureNameToIndex.find(textureId);
     if (it != textureNameToIndex.end()) {
         return &textures[it->second];
     }
 
     uint32_t index = textures.size();
     textures.push_back(TextureResource{
-        .name = name,
+        . textureId = textureId,
         .index = index,
     });
-    textureNameToIndex[name] = index;
+    textureNameToIndex[textureId] = index;
 
     return &textures[index];
 }
 
-BufferResource* RenderGraph::GetBuffer(const std::string& name)
+BufferResource* RenderGraph::GetBuffer(const StringID bufferId)
 {
-    auto it = bufferNameToIndex.find(name);
+    auto it = bufferNameToIndex.find(bufferId);
     if (it != bufferNameToIndex.end()) {
         return &buffers[it->second];
     }
@@ -1691,19 +1691,19 @@ BufferResource* RenderGraph::GetBuffer(const std::string& name)
     return nullptr;
 }
 
-BufferResource* RenderGraph::GetOrCreateBuffer(const std::string& name)
+BufferResource* RenderGraph::GetOrCreateBuffer(StringID bufferId)
 {
-    auto it = bufferNameToIndex.find(name);
+    auto it = bufferNameToIndex.find(bufferId);
     if (it != bufferNameToIndex.end()) {
         return &buffers[it->second];
     }
 
     uint32_t index = buffers.size();
     buffers.push_back(BufferResource{
-        .name = name,
+        .bufferId = bufferId,
         .index = index,
     });
-    bufferNameToIndex[name] = index;
+    bufferNameToIndex[bufferId] = index;
 
     return &buffers[index];
 }
@@ -1895,6 +1895,23 @@ void RenderGraph::CreatePhysicalBuffer(PhysicalResource& resource, const Resourc
     nameInfo.objectHandle = reinterpret_cast<uint64_t>(resource.buffer);
     nameInfo.pObjectName = resource.debugName.c_str();
     vkSetDebugUtilsObjectNameEXT(context->device, &nameInfo);
+#endif
+}
+
+void RenderGraph::AppendUsageChain(PhysicalResource& phys, StringID resourceId, bool canAlias, bool debugLogging)
+{
+#ifdef DEBUG
+    if (!debugLogging) return;
+
+    const char* name = resourceId.ToString();
+    const std::string nameStr = name ? name : "<unresolved>";
+
+    if (phys.usageChain.empty()) {
+        phys.usageChain = canAlias ? nameStr : "[noalias]" + nameStr;
+    }
+    else {
+        phys.usageChain += "->" + nameStr;
+    }
 #endif
 }
 } // Render

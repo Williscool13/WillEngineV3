@@ -9,22 +9,28 @@
 void (*gInternStringFn)(uint64_t, const char*) = nullptr;
 const char* (*gResolveStringIdFn)(uint64_t) = nullptr;
 
-static std::unordered_map<uint64_t, const char*> gInternTable;
+static std::unordered_map<uint64_t, const char*>& GetInternTable()
+{
+    static std::unordered_map<uint64_t, const char*> table;
+    return table;
+}
 
 void DBG_InternString(uint64_t hash, const char* str)
 {
-    if (!gInternTable.contains(hash)) {
-        gInternTable[hash] = _strdup(str);
+    auto& table = GetInternTable();
+    if (!table.contains(hash)) {
+        table[hash] = str;
     }
 }
 
 const char* DBG_ResolveStringId(uint64_t hash)
 {
-    const auto it = gInternTable.find(hash);
-    return it != gInternTable.end() ? it->second : "<unknown>";
+    auto& table = GetInternTable();
+    auto it = table.find(hash);
+    return it != table.end() ? it->second : nullptr;
 }
 
-StringId::StringId(const char* str, size_t len)
+StringID::StringID(const char* str, size_t len)
     : id(fnv1a64(str, len))
 {
     if (gInternStringFn) {
@@ -34,7 +40,7 @@ StringId::StringId(const char* str, size_t len)
     DBG_InternString(id, str);
 }
 
-const char* StringId::ToString() const
+const char* StringID::ToString() const
 {
     if (gResolveStringIdFn) {
         return gResolveStringIdFn(id);
@@ -44,7 +50,7 @@ const char* StringId::ToString() const
 
 #else // !DEBUG
 
-const char* StringId::ToString() const
+const char* StringID::ToString() const
 {
     return "<release>";
 }

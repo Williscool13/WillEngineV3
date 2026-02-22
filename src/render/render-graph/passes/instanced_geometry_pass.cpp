@@ -16,21 +16,22 @@ namespace Render
 InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, const InstancedGeometryPassConfig& config, PipelineManager* pipelineManager, uint32_t sceneDataIndex)
 {
     // Pre-build all buffer names
-    const std::string instance_meshlet_offsets = config.prefix + "_instance_meshlet_offsets";
-    const std::string level1_sums = config.prefix + "_level1_sums";
-    const std::string level1_block_sums = config.prefix + "_level1_block_sums";
-    const std::string level2_sums = config.prefix + "_level2_sums";
-    const std::string level2_block_sums = config.prefix + "_level2_block_sums";
-    const std::string scanned_level2_block_sums = config.prefix + "_scanned_level2_block_sums";
-    const std::string intermediate_meshlets = config.prefix + "_intermediate_meshlets";
-    const std::string meshlet_level1_sums = config.prefix + "_meshlet_level1_sums";
-    const std::string meshlet_level1_block_sums = config.prefix + "_meshlet_level1_block_sums";
-    const std::string meshlet_level2_sums = config.prefix + "_meshlet_level2_sums";
-    const std::string meshlet_level2_block_sums = config.prefix + "_meshlet_level2_block_sums";
-    const std::string meshlet_scanned_level2_block_sums = config.prefix + "_meshlet_scanned_level2_block_sums";
-    const std::string visible_meshlets = config.prefix + "_visible_meshlets";
-    const std::string meshlet_count_dispatch_args = config.prefix + "_meshlet_count_dispatch_args";
-    const std::string compacted_meshlet_dispatch_args = config.prefix + "_compacted_meshlet_dispatch_args";
+    // todo: make the passes create and cache these, this is wildly expensive
+    const StringID instance_meshlet_offsets = SID_CONCAT(config.prefix, "_instance_meshlet_offsets");
+    const StringID level1_sums = SID_CONCAT(config.prefix, "_level1_sums");
+    const StringID level1_block_sums = SID_CONCAT(config.prefix, "_level1_block_sums");
+    const StringID level2_sums = SID_CONCAT(config.prefix, "_level2_sums");
+    const StringID level2_block_sums = SID_CONCAT(config.prefix, "_level2_block_sums");
+    const StringID scanned_level2_block_sums = SID_CONCAT(config.prefix, "_scanned_level2_block_sums");
+    const StringID intermediate_meshlets = SID_CONCAT(config.prefix, "_intermediate_meshlets");
+    const StringID meshlet_level1_sums = SID_CONCAT(config.prefix, "_meshlet_level1_sums");
+    const StringID meshlet_level1_block_sums = SID_CONCAT(config.prefix, "_meshlet_level1_block_sums");
+    const StringID meshlet_level2_sums = SID_CONCAT(config.prefix, "_meshlet_level2_sums");
+    const StringID meshlet_level2_block_sums = SID_CONCAT(config.prefix, "_meshlet_level2_block_sums");
+    const StringID meshlet_scanned_level2_block_sums = SID_CONCAT(config.prefix, "_meshlet_scanned_level2_block_sums");
+    const StringID visible_meshlets = SID_CONCAT(config.prefix, "_visible_meshlets");
+    const StringID meshlet_count_dispatch_args = SID_CONCAT(config.prefix, "_meshlet_count_dispatch_args");
+    const StringID compacted_meshlet_dispatch_args = SID_CONCAT(config.prefix, "_compacted_meshlet_dispatch_args");
 
     // Create and Clear
     {
@@ -50,7 +51,8 @@ InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, cons
         graph.CreateBuffer(meshlet_count_dispatch_args, sizeof(InstancingMeshletDispatchIndirect));
         graph.CreateBuffer(compacted_meshlet_dispatch_args, sizeof(InstancingCompactedMeshletDispatchIndirect));
 
-        RenderPass& clearPass = graph.AddPass(config.prefix + "Clear Temp Instancing Buffers", VK_PIPELINE_STAGE_2_TRANSFER_BIT);
+        RenderPass& clearPass = graph.AddPass(
+            SID_CONCAT(config.prefix.c_str(), "Clear Temp Instancing Buffers"), VK_PIPELINE_STAGE_2_TRANSFER_BIT);
         clearPass.WriteTransferBuffer(instance_meshlet_offsets);
         clearPass.WriteTransferBuffer(level1_sums);
         clearPass.WriteTransferBuffer(level1_block_sums);
@@ -90,10 +92,11 @@ InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, cons
 
     // Instance Visibility/LOD
     {
-        RenderPass& instanceLODPass = graph.AddPass(config.prefix + "Instance Visibility/LOD Selection", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-        instanceLODPass.ReadBuffer(GEOMETRY_BUFFER_SCENE_DATA);
-        instanceLODPass.ReadBuffer(GEOMETRY_BUFFER_MODEL);
-        instanceLODPass.ReadBuffer(GEOMETRY_BUFFER_INSTANCE);
+        RenderPass& instanceLODPass = graph.AddPass(
+            SID_CONCAT(config.prefix, "Instance Visibility/LOD Selection"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+        instanceLODPass.ReadBuffer(SCENE_DATA_BUFFER);
+        instanceLODPass.ReadBuffer(GEOMETRY_MODEL_BUFFER);
+        instanceLODPass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
         instanceLODPass.WriteBuffer(instance_meshlet_offsets);
         instanceLODPass.Execute([instance_meshlet_offsets,
                 instanceCount = config.instanceCount,
@@ -103,10 +106,10 @@ InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, cons
                 pipelineManager,
                 sceneDataIndex](VkCommandBuffer cmd) {
                 InstanceLODPushConstant pc{
-                    .sceneData = graph.GetBufferAddress(GEOMETRY_BUFFER_SCENE_DATA),
-                    .primitiveBuffer = graph.GetBufferAddress(GEOMETRY_BUFFER_PRIMITIVE),
-                    .modelBuffer = graph.GetBufferAddress(GEOMETRY_BUFFER_MODEL),
-                    .instanceBuffer = graph.GetBufferAddress(GEOMETRY_BUFFER_INSTANCE) + instanceBufferOffset,
+                    .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
+                    .primitiveBuffer = graph.GetBufferAddress(GEOMETRY_PRIMITIVE_BUFFER),
+                    .modelBuffer = graph.GetBufferAddress(GEOMETRY_MODEL_BUFFER),
+                    .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER) + instanceBufferOffset,
                     .instanceMeshletOffsets = graph.GetBufferAddress(instance_meshlet_offsets),
                     .instanceCount = instanceCount,
                     .sceneDataIndex = sceneDataIndex,
@@ -128,7 +131,8 @@ InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, cons
     {
         uint32_t level1BlockCount = (instanceCount + INSTANCING_PREFIX_SUM_DISPATCH_X - 1) / INSTANCING_PREFIX_SUM_DISPATCH_X;
 
-        RenderPass& upsweep1Pass = graph.AddPass(config.prefix + "Prefix Sum Upsweep 1", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+        RenderPass& upsweep1Pass = graph.AddPass(
+            SID_CONCAT(config.prefix, "Prefix Sum Upsweep 1"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
         upsweep1Pass.ReadBuffer(instance_meshlet_offsets);
         upsweep1Pass.WriteBuffer(level1_sums);
         upsweep1Pass.WriteBuffer(level1_block_sums);
@@ -150,7 +154,8 @@ InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, cons
         uint32_t level2BlockCount = (level1BlockCount + INSTANCING_PREFIX_SUM_DISPATCH_X - 1) / INSTANCING_PREFIX_SUM_DISPATCH_X;
 
         if (level2BlockCount > 1) {
-            RenderPass& upsweep2Pass = graph.AddPass(config.prefix + "Prefix Sum Upsweep 2", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+            RenderPass& upsweep2Pass = graph.AddPass(
+                SID_CONCAT(config.prefix, "Prefix Sum Upsweep 2"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
             upsweep2Pass.ReadBuffer(level1_block_sums);
             upsweep2Pass.WriteBuffer(level2_sums);
             upsweep2Pass.WriteBuffer(level2_block_sums);
@@ -169,7 +174,8 @@ InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, cons
                 vkCmdDispatch(cmd, level2BlockCount, 1, 1);
             });
 
-            RenderPass& scanBlocksPass = graph.AddPass(config.prefix + "Prefix Sum Scan Blocks", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+            RenderPass& scanBlocksPass = graph.AddPass(
+                SID_CONCAT(config.prefix, "Prefix Sum Scan Blocks"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
             scanBlocksPass.ReadBuffer(level2_block_sums);
             scanBlocksPass.WriteBuffer(scanned_level2_block_sums);
             scanBlocksPass.Execute([level2_block_sums, scanned_level2_block_sums, &graph, pipelineManager, level2BlockCount](VkCommandBuffer cmd) {
@@ -185,7 +191,8 @@ InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, cons
                 vkCmdDispatch(cmd, 1, 1, 1);
             });
 
-            RenderPass& downsweep1Pass = graph.AddPass(config.prefix + "Prefix Sum Downsweep 1", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+            RenderPass& downsweep1Pass = graph.AddPass(
+                SID_CONCAT(config.prefix, "Prefix Sum Downsweep 1"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
             downsweep1Pass.ReadBuffer(scanned_level2_block_sums);
             downsweep1Pass.ReadWriteBuffer(level2_sums);
             downsweep1Pass.Execute([scanned_level2_block_sums, level2_sums, &graph, pipelineManager, level1BlockCount, level2BlockCount](VkCommandBuffer cmd) {
@@ -202,7 +209,8 @@ InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, cons
             });
         }
         else {
-            RenderPass& scanBlocksPass = graph.AddPass(config.prefix + "Prefix Sum Scan Blocks", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+            RenderPass& scanBlocksPass = graph.AddPass(
+                SID_CONCAT(config.prefix, "Prefix Sum Scan Blocks"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
             scanBlocksPass.ReadBuffer(level1_block_sums);
             scanBlocksPass.WriteBuffer(scanned_level2_block_sums);
             scanBlocksPass.Execute([level1_block_sums, scanned_level2_block_sums, &graph, pipelineManager, level1BlockCount](VkCommandBuffer cmd) {
@@ -219,7 +227,8 @@ InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, cons
             });
         }
 
-        RenderPass& downsweep2Pass = graph.AddPass(config.prefix + "Prefix Sum Downsweep 2", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+        RenderPass& downsweep2Pass = graph.AddPass(
+            SID_CONCAT(config.prefix, "Prefix Sum Downsweep 2"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
         downsweep2Pass.ReadBuffer(level1_sums);
         if (level2BlockCount > 1) {
             downsweep2Pass.ReadBuffer(level2_sums);
@@ -243,7 +252,8 @@ InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, cons
                 vkCmdDispatch(cmd, level1BlockCount, 1, 1);
             });
 
-        RenderPass& totalMeshletCalculator = graph.AddPass(config.prefix + "Total Meshlet Count", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+        RenderPass& totalMeshletCalculator = graph.AddPass(
+            SID_CONCAT(config.prefix, "Total Meshlet Count"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
         totalMeshletCalculator.ReadBuffer(instance_meshlet_offsets);
         totalMeshletCalculator.WriteBuffer(meshlet_count_dispatch_args);
         totalMeshletCalculator.Execute([instance_meshlet_offsets, meshlet_count_dispatch_args, &graph, pipelineManager, instanceCount](VkCommandBuffer cmd) {
@@ -264,9 +274,10 @@ InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, cons
 
     // Expand Instance to Meshlet
     {
-        RenderPass& expandInstancesToMeshlets = graph.AddPass(config.prefix + "Expand Instance To Meshlet", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-        expandInstancesToMeshlets.ReadBuffer(GEOMETRY_BUFFER_SCENE_DATA);
-        expandInstancesToMeshlets.ReadBuffer(GEOMETRY_BUFFER_INSTANCE);
+        RenderPass& expandInstancesToMeshlets = graph.AddPass(
+            SID_CONCAT(config.prefix, "Expand Instance To Meshlet"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+        expandInstancesToMeshlets.ReadBuffer(SCENE_DATA_BUFFER);
+        expandInstancesToMeshlets.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
         expandInstancesToMeshlets.ReadBuffer(instance_meshlet_offsets);
         expandInstancesToMeshlets.ReadIndirectBuffer(meshlet_count_dispatch_args);
         expandInstancesToMeshlets.WriteBuffer(intermediate_meshlets);
@@ -276,11 +287,11 @@ InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, cons
                     .indirectDispatchBuffer = graph.GetBufferAddress(meshlet_count_dispatch_args),
                     .instanceMeshletOffsets = graph.GetBufferAddress(instance_meshlet_offsets),
                     .intermediateMeshlets = graph.GetBufferAddress(intermediate_meshlets),
-                    .instanceBuffer = graph.GetBufferAddress(GEOMETRY_BUFFER_INSTANCE) + instanceBufferOffset,
-                    .primitiveBuffer = graph.GetBufferAddress(GEOMETRY_BUFFER_PRIMITIVE),
-                    .modelBuffer = graph.GetBufferAddress(GEOMETRY_BUFFER_MODEL),
-                    .meshletBuffer = graph.GetBufferAddress(GEOMETRY_BUFFER_MESHLET),
-                    .sceneData = graph.GetBufferAddress(GEOMETRY_BUFFER_SCENE_DATA),
+                    .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER) + instanceBufferOffset,
+                    .primitiveBuffer = graph.GetBufferAddress(GEOMETRY_PRIMITIVE_BUFFER),
+                    .modelBuffer = graph.GetBufferAddress(GEOMETRY_MODEL_BUFFER),
+                    .meshletBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_BUFFER),
+                    .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
                     .sceneDataIndex = sceneDataIndex,
                     .instanceCount = instanceCount,
                     .currentFrameBufferMeshletLimit = highestMeshletCount,
@@ -298,7 +309,9 @@ InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, cons
         uint32_t meshletLevel1BlockCount = (highestMeshletCount + INSTANCING_PREFIX_SUM_DISPATCH_X - 1) / INSTANCING_PREFIX_SUM_DISPATCH_X;
         uint32_t meshletLevel2BlockCount = (meshletLevel1BlockCount + INSTANCING_PREFIX_SUM_DISPATCH_X - 1) / INSTANCING_PREFIX_SUM_DISPATCH_X;
 
-        RenderPass& meshletUpsweep1Pass = graph.AddPass(config.prefix + "Meshlet Visibility Prefix Sum Upsweep 1", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+        RenderPass& meshletUpsweep1Pass = graph.AddPass(
+            SID_CONCAT(config.prefix, "Meshlet Visibility Prefix Sum Upsweep 1"),
+            VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
         meshletUpsweep1Pass.ReadBuffer(intermediate_meshlets);
         meshletUpsweep1Pass.WriteBuffer(meshlet_level1_sums);
         meshletUpsweep1Pass.WriteBuffer(meshlet_level1_block_sums);
@@ -322,7 +335,9 @@ InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, cons
             });
 
         if (meshletLevel2BlockCount > 1) {
-            RenderPass& meshletUpsweep2Pass = graph.AddPass(config.prefix + "Meshlet Visibility Prefix Sum Upsweep 2", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+            RenderPass& meshletUpsweep2Pass = graph.AddPass(
+                SID_CONCAT(config.prefix, "Meshlet Visibility Prefix Sum Upsweep 2"),
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
             meshletUpsweep2Pass.ReadBuffer(meshlet_level1_block_sums);
             meshletUpsweep2Pass.WriteBuffer(meshlet_level2_sums);
             meshletUpsweep2Pass.WriteBuffer(meshlet_level2_block_sums);
@@ -342,7 +357,9 @@ InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, cons
                     vkCmdDispatch(cmd, meshletLevel2BlockCount, 1, 1);
                 });
 
-            RenderPass& meshletScanBlocksPass = graph.AddPass(config.prefix + "Meshlet Visibility Prefix Sum Scan Blocks", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+            RenderPass& meshletScanBlocksPass = graph.AddPass(
+                SID_CONCAT(config.prefix, "Meshlet Visibility Prefix Sum Scan Blocks"),
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
             meshletScanBlocksPass.ReadBuffer(meshlet_level2_block_sums);
             meshletScanBlocksPass.WriteBuffer(meshlet_scanned_level2_block_sums);
             meshletScanBlocksPass.Execute([meshlet_level2_block_sums, meshlet_scanned_level2_block_sums, &graph, pipelineManager, meshletLevel2BlockCount](VkCommandBuffer cmd) {
@@ -358,7 +375,9 @@ InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, cons
                 vkCmdDispatch(cmd, 1, 1, 1);
             });
 
-            RenderPass& meshletDownsweep1Pass = graph.AddPass(config.prefix + "Meshlet Visibility Prefix Sum Downsweep 1", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+            RenderPass& meshletDownsweep1Pass = graph.AddPass(
+                SID_CONCAT(config.prefix, "Meshlet Visibility Prefix Sum Downsweep 1"),
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
             meshletDownsweep1Pass.ReadBuffer(meshlet_scanned_level2_block_sums);
             meshletDownsweep1Pass.ReadWriteBuffer(meshlet_level2_sums);
             meshletDownsweep1Pass.Execute([meshlet_scanned_level2_block_sums, meshlet_level2_sums, &graph, pipelineManager, meshletLevel1BlockCount, meshletLevel2BlockCount](VkCommandBuffer cmd) {
@@ -375,7 +394,9 @@ InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, cons
             });
         }
         else {
-            RenderPass& meshletScanBlocksPass = graph.AddPass(config.prefix + "Meshlet Visibility Prefix Sum Scan Blocks", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+            RenderPass& meshletScanBlocksPass = graph.AddPass(
+                SID_CONCAT(config.prefix, "Meshlet Visibility Prefix Sum Scan Blocks"),
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
             meshletScanBlocksPass.ReadBuffer(meshlet_level1_block_sums);
             meshletScanBlocksPass.WriteBuffer(meshlet_scanned_level2_block_sums);
             meshletScanBlocksPass.Execute([meshlet_level1_block_sums, meshlet_scanned_level2_block_sums, &graph, pipelineManager, meshletLevel1BlockCount](VkCommandBuffer cmd) {
@@ -392,7 +413,9 @@ InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, cons
             });
         }
 
-        RenderPass& meshletDownsweep2Pass = graph.AddPass(config.prefix + "Meshlet Visibility Prefix Sum Downsweep 2", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+        RenderPass& meshletDownsweep2Pass = graph.AddPass(
+            SID_CONCAT(config.prefix, "Meshlet Visibility Prefix Sum Downsweep 2"),
+            VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
         meshletDownsweep2Pass.ReadBuffer(meshlet_level1_sums);
         meshletDownsweep2Pass.ReadBuffer(intermediate_meshlets);
         if (meshletLevel2BlockCount > 1) {
@@ -423,7 +446,9 @@ InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, cons
                 vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(meshlet_count_dispatch_args), offsetof(InstancingMeshletDispatchIndirect, x));
             });
 
-        RenderPass& compactedDispatchCalc = graph.AddPass(config.prefix + "Compacted Meshlet Dispatch Calculation", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+        RenderPass& compactedDispatchCalc = graph.AddPass(
+            SID_CONCAT(config.prefix, "Compacted Meshlet Dispatch Calculation"),
+            VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
         compactedDispatchCalc.ReadWriteBuffer(compacted_meshlet_dispatch_args);
         compactedDispatchCalc.Execute([compacted_meshlet_dispatch_args, &graph, pipelineManager, highestMeshletCount](VkCommandBuffer cmd) {
             CompactedMeshletDispatchPushConstant pc{
@@ -438,13 +463,13 @@ InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, cons
         });
     }
 
-    RenderPass& maxMeshletCount = graph.AddPass("Max Meshlet Count", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+    RenderPass& maxMeshletCount = graph.AddPass(SID("Max Meshlet Count"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
     maxMeshletCount.ReadBuffer(meshlet_count_dispatch_args);
-    maxMeshletCount.ReadWriteBuffer("readback_buffer");
+    maxMeshletCount.ReadWriteBuffer(SID("readback_buffer"));
     maxMeshletCount.Execute([&, pipelineManager, bufferSrc = meshlet_count_dispatch_args](VkCommandBuffer cmd) {
         MaxMeshletCountPushConstant pc{
             .indirectDispatchBuffer = graph.GetBufferAddress(bufferSrc),
-            .currentHighest = graph.GetBufferAddress("readback_buffer") + offsetof(ReadbackStruct, meshletCount),
+            .currentHighest = graph.GetBufferAddress(SID("readback_buffer")) + offsetof(ReadbackStruct, meshletCount),
         };
 
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_max_meshlet_count"));
@@ -461,24 +486,24 @@ InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, cons
 }
 
 InstancedGeometryPassOutputs SetupInstancedGeometryShadowPass(RenderGraph& graph, const InstancedGeometryPassConfig& config, PipelineManager* pipelineManager, uint32_t sceneDataIndex,
-    uint32_t cascadeIndex, bool bAllowBufferAliasing)
+                                                              uint32_t cascadeIndex, bool bAllowBufferAliasing)
 {
     // Pre-build all buffer names
-    const std::string instance_meshlet_offsets = config.prefix + "_instance_meshlet_offsets";
-    const std::string level1_sums = config.prefix + "_level1_sums";
-    const std::string level1_block_sums = config.prefix + "_level1_block_sums";
-    const std::string level2_sums = config.prefix + "_level2_sums";
-    const std::string level2_block_sums = config.prefix + "_level2_block_sums";
-    const std::string scanned_level2_block_sums = config.prefix + "_scanned_level2_block_sums";
-    const std::string intermediate_meshlets = config.prefix + "_intermediate_meshlets";
-    const std::string meshlet_level1_sums = config.prefix + "_meshlet_level1_sums";
-    const std::string meshlet_level1_block_sums = config.prefix + "_meshlet_level1_block_sums";
-    const std::string meshlet_level2_sums = config.prefix + "_meshlet_level2_sums";
-    const std::string meshlet_level2_block_sums = config.prefix + "_meshlet_level2_block_sums";
-    const std::string meshlet_scanned_level2_block_sums = config.prefix + "_meshlet_scanned_level2_block_sums";
-    const std::string visible_meshlets = config.prefix + "_visible_meshlets";
-    const std::string meshlet_count_dispatch_args = config.prefix + "_meshlet_count_dispatch_args";
-    const std::string compacted_meshlet_dispatch_args = config.prefix + "_compacted_meshlet_dispatch_args";
+    const StringID instance_meshlet_offsets = SID_CONCAT(config.prefix, "_instance_meshlet_offsets");
+    const StringID level1_sums = SID_CONCAT(config.prefix, "_level1_sums");
+    const StringID level1_block_sums = SID_CONCAT(config.prefix, "_level1_block_sums");
+    const StringID level2_sums = SID_CONCAT(config.prefix, "_level2_sums");
+    const StringID level2_block_sums = SID_CONCAT(config.prefix, "_level2_block_sums");
+    const StringID scanned_level2_block_sums = SID_CONCAT(config.prefix, "_scanned_level2_block_sums");
+    const StringID intermediate_meshlets = SID_CONCAT(config.prefix, "_intermediate_meshlets");
+    const StringID meshlet_level1_sums = SID_CONCAT(config.prefix, "_meshlet_level1_sums");
+    const StringID meshlet_level1_block_sums = SID_CONCAT(config.prefix, "_meshlet_level1_block_sums");
+    const StringID meshlet_level2_sums = SID_CONCAT(config.prefix, "_meshlet_level2_sums");
+    const StringID meshlet_level2_block_sums = SID_CONCAT(config.prefix, "_meshlet_level2_block_sums");
+    const StringID meshlet_scanned_level2_block_sums = SID_CONCAT(config.prefix, "_meshlet_scanned_level2_block_sums");
+    const StringID visible_meshlets = SID_CONCAT(config.prefix, "_visible_meshlets");
+    const StringID meshlet_count_dispatch_args = SID_CONCAT(config.prefix, "_meshlet_count_dispatch_args");
+    const StringID compacted_meshlet_dispatch_args = SID_CONCAT(config.prefix, "_compacted_meshlet_dispatch_args");
 
     // Create and Clear
     {
@@ -498,7 +523,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryShadowPass(RenderGraph& graph
         graph.CreateBuffer(meshlet_count_dispatch_args, sizeof(InstancingMeshletDispatchIndirect), bAllowBufferAliasing);
         graph.CreateBuffer(compacted_meshlet_dispatch_args, sizeof(InstancingCompactedMeshletDispatchIndirect), bAllowBufferAliasing);
 
-        RenderPass& clearPass = graph.AddPass(config.prefix + "Clear Temp Instancing Buffers", VK_PIPELINE_STAGE_2_TRANSFER_BIT);
+        RenderPass& clearPass = graph.AddPass(SID_CONCAT(config.prefix, "Clear Temp Instancing Buffers"), VK_PIPELINE_STAGE_2_TRANSFER_BIT);
         clearPass.WriteTransferBuffer(instance_meshlet_offsets);
         clearPass.WriteTransferBuffer(level1_sums);
         clearPass.WriteTransferBuffer(level1_block_sums);
@@ -538,11 +563,11 @@ InstancedGeometryPassOutputs SetupInstancedGeometryShadowPass(RenderGraph& graph
 
     // Instance Visibility/LOD
     {
-        RenderPass& instanceLODPass = graph.AddPass(config.prefix + "Instance Visibility/LOD Selection", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-        instanceLODPass.ReadBuffer(GEOMETRY_BUFFER_SCENE_DATA);
-        instanceLODPass.ReadBuffer(GEOMETRY_BUFFER_SHADOW_DATA);
-        instanceLODPass.ReadBuffer(GEOMETRY_BUFFER_MODEL);
-        instanceLODPass.ReadBuffer(GEOMETRY_BUFFER_INSTANCE);
+        RenderPass& instanceLODPass = graph.AddPass(SID_CONCAT(config.prefix, "Instance Visibility/LOD Selection"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+        instanceLODPass.ReadBuffer(SCENE_DATA_BUFFER);
+        instanceLODPass.ReadBuffer(SHADOW_DATA_BUFFER);
+        instanceLODPass.ReadBuffer(GEOMETRY_MODEL_BUFFER);
+        instanceLODPass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
         instanceLODPass.WriteBuffer(instance_meshlet_offsets);
         instanceLODPass.Execute([instance_meshlet_offsets,
                 instanceCount = config.instanceCount,
@@ -552,11 +577,11 @@ InstancedGeometryPassOutputs SetupInstancedGeometryShadowPass(RenderGraph& graph
                 pipelineManager,
                 sceneDataIndex, cascadeIndex](VkCommandBuffer cmd) {
                 InstanceLODShadowsPushConstant pc{
-                    .sceneData = graph.GetBufferAddress(GEOMETRY_BUFFER_SCENE_DATA),
-                    .shadowData = graph.GetBufferAddress(GEOMETRY_BUFFER_SHADOW_DATA),
-                    .primitiveBuffer = graph.GetBufferAddress(GEOMETRY_BUFFER_PRIMITIVE),
-                    .modelBuffer = graph.GetBufferAddress(GEOMETRY_BUFFER_MODEL),
-                    .instanceBuffer = graph.GetBufferAddress(GEOMETRY_BUFFER_INSTANCE) + instanceBufferOffset,
+                    .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
+                    .shadowData = graph.GetBufferAddress(SHADOW_DATA_BUFFER),
+                    .primitiveBuffer = graph.GetBufferAddress(GEOMETRY_PRIMITIVE_BUFFER),
+                    .modelBuffer = graph.GetBufferAddress(GEOMETRY_MODEL_BUFFER),
+                    .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER) + instanceBufferOffset,
                     .instanceMeshletOffsets = graph.GetBufferAddress(instance_meshlet_offsets),
                     .instanceCount = instanceCount,
                     .sceneDataIndex = sceneDataIndex,
@@ -579,7 +604,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryShadowPass(RenderGraph& graph
     {
         uint32_t level1BlockCount = (instanceCount + INSTANCING_PREFIX_SUM_DISPATCH_X - 1) / INSTANCING_PREFIX_SUM_DISPATCH_X;
 
-        RenderPass& upsweep1Pass = graph.AddPass(config.prefix + "Prefix Sum Upsweep 1", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+        RenderPass& upsweep1Pass = graph.AddPass(SID_CONCAT(config.prefix, "Prefix Sum Upsweep 1"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
         upsweep1Pass.ReadBuffer(instance_meshlet_offsets);
         upsweep1Pass.WriteBuffer(level1_sums);
         upsweep1Pass.WriteBuffer(level1_block_sums);
@@ -601,7 +626,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryShadowPass(RenderGraph& graph
         uint32_t level2BlockCount = (level1BlockCount + INSTANCING_PREFIX_SUM_DISPATCH_X - 1) / INSTANCING_PREFIX_SUM_DISPATCH_X;
 
         if (level2BlockCount > 1) {
-            RenderPass& upsweep2Pass = graph.AddPass(config.prefix + "Prefix Sum Upsweep 2", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+            RenderPass& upsweep2Pass = graph.AddPass(SID_CONCAT(config.prefix, "Prefix Sum Upsweep 2"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
             upsweep2Pass.ReadBuffer(level1_block_sums);
             upsweep2Pass.WriteBuffer(level2_sums);
             upsweep2Pass.WriteBuffer(level2_block_sums);
@@ -620,7 +645,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryShadowPass(RenderGraph& graph
                 vkCmdDispatch(cmd, level2BlockCount, 1, 1);
             });
 
-            RenderPass& scanBlocksPass = graph.AddPass(config.prefix + "Prefix Sum Scan Blocks", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+            RenderPass& scanBlocksPass = graph.AddPass(SID_CONCAT(config.prefix, "Prefix Sum Scan Blocks"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
             scanBlocksPass.ReadBuffer(level2_block_sums);
             scanBlocksPass.WriteBuffer(scanned_level2_block_sums);
             scanBlocksPass.Execute([level2_block_sums, scanned_level2_block_sums, &graph, pipelineManager, level2BlockCount](VkCommandBuffer cmd) {
@@ -636,7 +661,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryShadowPass(RenderGraph& graph
                 vkCmdDispatch(cmd, 1, 1, 1);
             });
 
-            RenderPass& downsweep1Pass = graph.AddPass(config.prefix + "Prefix Sum Downsweep 1", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+            RenderPass& downsweep1Pass = graph.AddPass(SID_CONCAT(config.prefix, "Prefix Sum Downsweep 1"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
             downsweep1Pass.ReadBuffer(scanned_level2_block_sums);
             downsweep1Pass.ReadWriteBuffer(level2_sums);
             downsweep1Pass.Execute([scanned_level2_block_sums, level2_sums, &graph, pipelineManager, level1BlockCount, level2BlockCount](VkCommandBuffer cmd) {
@@ -653,7 +678,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryShadowPass(RenderGraph& graph
             });
         }
         else {
-            RenderPass& scanBlocksPass = graph.AddPass(config.prefix + "Prefix Sum Scan Blocks", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+            RenderPass& scanBlocksPass = graph.AddPass(SID_CONCAT(config.prefix, "Prefix Sum Scan Blocks"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
             scanBlocksPass.ReadBuffer(level1_block_sums);
             scanBlocksPass.WriteBuffer(scanned_level2_block_sums);
             scanBlocksPass.Execute([level1_block_sums, scanned_level2_block_sums, &graph, pipelineManager, level1BlockCount](VkCommandBuffer cmd) {
@@ -670,7 +695,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryShadowPass(RenderGraph& graph
             });
         }
 
-        RenderPass& downsweep2Pass = graph.AddPass(config.prefix + "Prefix Sum Downsweep 2", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+        RenderPass& downsweep2Pass = graph.AddPass(SID_CONCAT(config.prefix, "Prefix Sum Downsweep 2"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
         downsweep2Pass.ReadBuffer(level1_sums);
         if (level2BlockCount > 1) {
             downsweep2Pass.ReadBuffer(level2_sums);
@@ -694,7 +719,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryShadowPass(RenderGraph& graph
                 vkCmdDispatch(cmd, level1BlockCount, 1, 1);
             });
 
-        RenderPass& totalMeshletCalculator = graph.AddPass(config.prefix + "Total Meshlet Count", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+        RenderPass& totalMeshletCalculator = graph.AddPass(SID_CONCAT(config.prefix, "Total Meshlet Count"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
         totalMeshletCalculator.ReadBuffer(instance_meshlet_offsets);
         totalMeshletCalculator.WriteBuffer(meshlet_count_dispatch_args);
         totalMeshletCalculator.Execute([instance_meshlet_offsets, meshlet_count_dispatch_args, &graph, pipelineManager, instanceCount](VkCommandBuffer cmd) {
@@ -715,10 +740,10 @@ InstancedGeometryPassOutputs SetupInstancedGeometryShadowPass(RenderGraph& graph
 
     // Expand Instance to Meshlet
     {
-        RenderPass& expandInstancesToMeshlets = graph.AddPass(config.prefix + "Expand Instance To Meshlet", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-        expandInstancesToMeshlets.ReadBuffer(GEOMETRY_BUFFER_SCENE_DATA);
-        expandInstancesToMeshlets.ReadBuffer(GEOMETRY_BUFFER_SHADOW_DATA);
-        expandInstancesToMeshlets.ReadBuffer(GEOMETRY_BUFFER_INSTANCE);
+        RenderPass& expandInstancesToMeshlets = graph.AddPass(SID_CONCAT(config.prefix, "Expand Instance To Meshlet"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+        expandInstancesToMeshlets.ReadBuffer(SCENE_DATA_BUFFER);
+        expandInstancesToMeshlets.ReadBuffer(SHADOW_DATA_BUFFER);
+        expandInstancesToMeshlets.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
         expandInstancesToMeshlets.ReadBuffer(instance_meshlet_offsets);
         expandInstancesToMeshlets.ReadIndirectBuffer(meshlet_count_dispatch_args);
         expandInstancesToMeshlets.WriteBuffer(intermediate_meshlets);
@@ -728,12 +753,12 @@ InstancedGeometryPassOutputs SetupInstancedGeometryShadowPass(RenderGraph& graph
                     .indirectDispatchBuffer = graph.GetBufferAddress(meshlet_count_dispatch_args),
                     .instanceMeshletOffsets = graph.GetBufferAddress(instance_meshlet_offsets),
                     .intermediateMeshlets = graph.GetBufferAddress(intermediate_meshlets),
-                    .instanceBuffer = graph.GetBufferAddress(GEOMETRY_BUFFER_INSTANCE) + instanceBufferOffset,
-                    .primitiveBuffer = graph.GetBufferAddress(GEOMETRY_BUFFER_PRIMITIVE),
-                    .modelBuffer = graph.GetBufferAddress(GEOMETRY_BUFFER_MODEL),
-                    .meshletBuffer = graph.GetBufferAddress(GEOMETRY_BUFFER_MESHLET),
-                    .sceneData = graph.GetBufferAddress(GEOMETRY_BUFFER_SCENE_DATA),
-                    .shadowData = graph.GetBufferAddress(GEOMETRY_BUFFER_SHADOW_DATA),
+                    .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER) + instanceBufferOffset,
+                    .primitiveBuffer = graph.GetBufferAddress(GEOMETRY_PRIMITIVE_BUFFER),
+                    .modelBuffer = graph.GetBufferAddress(GEOMETRY_MODEL_BUFFER),
+                    .meshletBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_BUFFER),
+                    .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
+                    .shadowData = graph.GetBufferAddress(SHADOW_DATA_BUFFER),
                     .sceneDataIndex = sceneDataIndex,
                     .cascadeIndex = cascadeIndex,
                     .instanceCount = instanceCount,
@@ -752,7 +777,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryShadowPass(RenderGraph& graph
         uint32_t meshletLevel1BlockCount = (highestMeshletCount + INSTANCING_PREFIX_SUM_DISPATCH_X - 1) / INSTANCING_PREFIX_SUM_DISPATCH_X;
         uint32_t meshletLevel2BlockCount = (meshletLevel1BlockCount + INSTANCING_PREFIX_SUM_DISPATCH_X - 1) / INSTANCING_PREFIX_SUM_DISPATCH_X;
 
-        RenderPass& meshletUpsweep1Pass = graph.AddPass(config.prefix + "Meshlet Visibility Prefix Sum Upsweep 1", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+        RenderPass& meshletUpsweep1Pass = graph.AddPass(SID_CONCAT(config.prefix, "Meshlet Visibility Prefix Sum Upsweep 1"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
         meshletUpsweep1Pass.ReadBuffer(intermediate_meshlets);
         meshletUpsweep1Pass.WriteBuffer(meshlet_level1_sums);
         meshletUpsweep1Pass.WriteBuffer(meshlet_level1_block_sums);
@@ -776,7 +801,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryShadowPass(RenderGraph& graph
             });
 
         if (meshletLevel2BlockCount > 1) {
-            RenderPass& meshletUpsweep2Pass = graph.AddPass(config.prefix + "Meshlet Visibility Prefix Sum Upsweep 2", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+            RenderPass& meshletUpsweep2Pass = graph.AddPass(SID_CONCAT(config.prefix, "Meshlet Visibility Prefix Sum Upsweep 2"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
             meshletUpsweep2Pass.ReadBuffer(meshlet_level1_block_sums);
             meshletUpsweep2Pass.WriteBuffer(meshlet_level2_sums);
             meshletUpsweep2Pass.WriteBuffer(meshlet_level2_block_sums);
@@ -796,7 +821,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryShadowPass(RenderGraph& graph
                     vkCmdDispatch(cmd, meshletLevel2BlockCount, 1, 1);
                 });
 
-            RenderPass& meshletScanBlocksPass = graph.AddPass(config.prefix + "Meshlet Visibility Prefix Sum Scan Blocks", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+            RenderPass& meshletScanBlocksPass = graph.AddPass(SID_CONCAT(config.prefix, "Meshlet Visibility Prefix Sum Scan Blocks"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
             meshletScanBlocksPass.ReadBuffer(meshlet_level2_block_sums);
             meshletScanBlocksPass.WriteBuffer(meshlet_scanned_level2_block_sums);
             meshletScanBlocksPass.Execute([meshlet_level2_block_sums, meshlet_scanned_level2_block_sums, &graph, pipelineManager, meshletLevel2BlockCount](VkCommandBuffer cmd) {
@@ -812,7 +837,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryShadowPass(RenderGraph& graph
                 vkCmdDispatch(cmd, 1, 1, 1);
             });
 
-            RenderPass& meshletDownsweep1Pass = graph.AddPass(config.prefix + "Meshlet Visibility Prefix Sum Downsweep 1", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+            RenderPass& meshletDownsweep1Pass = graph.AddPass(SID_CONCAT(config.prefix, "Meshlet Visibility Prefix Sum Downsweep 1"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
             meshletDownsweep1Pass.ReadBuffer(meshlet_scanned_level2_block_sums);
             meshletDownsweep1Pass.ReadWriteBuffer(meshlet_level2_sums);
             meshletDownsweep1Pass.Execute([meshlet_scanned_level2_block_sums, meshlet_level2_sums, &graph, pipelineManager, meshletLevel1BlockCount, meshletLevel2BlockCount](VkCommandBuffer cmd) {
@@ -829,7 +854,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryShadowPass(RenderGraph& graph
             });
         }
         else {
-            RenderPass& meshletScanBlocksPass = graph.AddPass(config.prefix + "Meshlet Visibility Prefix Sum Scan Blocks", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+            RenderPass& meshletScanBlocksPass = graph.AddPass(SID_CONCAT(config.prefix, "Meshlet Visibility Prefix Sum Scan Blocks"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
             meshletScanBlocksPass.ReadBuffer(meshlet_level1_block_sums);
             meshletScanBlocksPass.WriteBuffer(meshlet_scanned_level2_block_sums);
             meshletScanBlocksPass.Execute([meshlet_level1_block_sums, meshlet_scanned_level2_block_sums, &graph, pipelineManager, meshletLevel1BlockCount](VkCommandBuffer cmd) {
@@ -846,7 +871,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryShadowPass(RenderGraph& graph
             });
         }
 
-        RenderPass& meshletDownsweep2Pass = graph.AddPass(config.prefix + "Meshlet Visibility Prefix Sum Downsweep 2", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+        RenderPass& meshletDownsweep2Pass = graph.AddPass(SID_CONCAT(config.prefix, "Meshlet Visibility Prefix Sum Downsweep 2"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
         meshletDownsweep2Pass.ReadBuffer(meshlet_level1_sums);
         meshletDownsweep2Pass.ReadBuffer(intermediate_meshlets);
         if (meshletLevel2BlockCount > 1) {
@@ -877,7 +902,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryShadowPass(RenderGraph& graph
                 vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(meshlet_count_dispatch_args), offsetof(InstancingMeshletDispatchIndirect, x));
             });
 
-        RenderPass& compactedDispatchCalc = graph.AddPass(config.prefix + "Compacted Meshlet Dispatch Calculation", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+        RenderPass& compactedDispatchCalc = graph.AddPass(SID_CONCAT(config.prefix, "Compacted Meshlet Dispatch Calculation"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
         compactedDispatchCalc.ReadWriteBuffer(compacted_meshlet_dispatch_args);
         compactedDispatchCalc.Execute([compacted_meshlet_dispatch_args, &graph, pipelineManager, highestMeshletCount](VkCommandBuffer cmd) {
             CompactedMeshletDispatchPushConstant pc{
@@ -892,13 +917,13 @@ InstancedGeometryPassOutputs SetupInstancedGeometryShadowPass(RenderGraph& graph
         });
     }
 
-    RenderPass& maxMeshletCount = graph.AddPass("Max Meshlet Count", VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+    RenderPass& maxMeshletCount = graph.AddPass(SID("Max Meshlet Count"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
     maxMeshletCount.ReadBuffer(meshlet_count_dispatch_args);
-    maxMeshletCount.ReadWriteBuffer("readback_buffer");
+    maxMeshletCount.ReadWriteBuffer(SID("readback_buffer"));
     maxMeshletCount.Execute([&, pipelineManager, bufferSrc = meshlet_count_dispatch_args](VkCommandBuffer cmd) {
         MaxMeshletCountPushConstant pc{
             .indirectDispatchBuffer = graph.GetBufferAddress(bufferSrc),
-            .currentHighest = graph.GetBufferAddress("readback_buffer") + offsetof(ReadbackStruct, meshletCount),
+            .currentHighest = graph.GetBufferAddress(SID("readback_buffer")) + offsetof(ReadbackStruct, meshletCount),
         };
 
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_max_meshlet_count"));

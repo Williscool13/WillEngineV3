@@ -6,6 +6,8 @@
 #define WILL_ENGINE_INSTANCED_GEOMETRY_PASS_H
 #include <string>
 
+#include "core/string_id.h"
+
 namespace Render
 {
 class PipelineManager;
@@ -38,11 +40,11 @@ struct InstancedGeometryPassConfig
 
 struct InstancedGeometryPassOutputs
 {
-    std::string visibleMeshlets;
-    std::string compactedDispatchArgs;
+    StringID visibleMeshlets;
+    StringID compactedDispatchArgs;
 
     // For readback
-    std::string meshletCountDispatchArgs;
+    StringID meshletCountDispatchArgs;
 };
 
 InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, const InstancedGeometryPassConfig& config, PipelineManager* pipelineManager, uint32_t sceneDataIndex);

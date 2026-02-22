@@ -113,21 +113,21 @@ private:
     void SetupCascadedShadows(RenderGraph& graph, const Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties, uint32_t sceneIndex) const;
 
     struct GBufferTargets {
-        std::string albedo;
-        std::string normal;
-        std::string pbr;
-        std::string emissive;
-        std::string velocity;
-        std::string depthStencil;
+        StringID albedo;
+        StringID normal;
+        StringID pbr;
+        StringID emissive;
+        StringID velocity;
+        StringID depthStencil;
 
-        std::string outFinalColor;
+        StringID outFinalColor;
     };
 
     struct PostProcessTargets
     {
-        std::string finalColor;
-        std::string velocity;
-        std::string depthStencil; // stencil should be disregarded
+        StringID finalColor;
+        StringID velocity;
+        StringID depthStencil; // stencil should be disregarded
     };
 
     void SetupGeometryPasses(RenderGraph& graph, const Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties, std::array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneIndex, bool
@@ -143,11 +143,11 @@ private:
 
     void SetupSkyboxRendering(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneDataIndex) const;
 
-    std::string SetupTemporalAntialiasing(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, const PostProcessTargets& ppTargets) const;
+    StringID SetupTemporalAntialiasing(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, const PostProcessTargets& ppTargets) const;
 
-    std::string SetupPostProcessing(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, const PostProcessTargets& ppTargets, float deltaTime) const;
+    StringID SetupPostProcessing(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, const PostProcessTargets& ppTargets, float deltaTime) const;
 
-    void SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, const std::string& depthTarget, const std::string& targetImage, FrameResourceLimits& limits) const;
+    void SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, StringID depthTarget, StringID targetImage, FrameResourceLimits& limits) const;
 
 public:
 #if WILL_EDITOR

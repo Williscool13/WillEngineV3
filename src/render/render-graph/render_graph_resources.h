@@ -114,7 +114,7 @@ struct ResourceDimensions
     VkBufferUsageFlags bufferUsage = 0;
 
     // Shared
-    std::string name;
+    StringID resourceId;
 
     [[nodiscard]] bool IsBuffer() const { return type == Type::Buffer; }
     [[nodiscard]] bool IsImage() const { return type == Type::Image; }
@@ -192,7 +192,7 @@ struct TextureInfo
 
 struct TextureResource
 {
-    std::string name;
+    StringID textureId;
     uint32_t index;
     uint32_t physicalIndex = UINT32_MAX;
     bool bCanUseAliasedTexture = true;
@@ -219,7 +219,7 @@ struct BufferInfo
 
 struct BufferResource
 {
-    std::string name;
+    StringID bufferId;
     uint32_t index = UINT32_MAX;
     uint32_t physicalIndex = UINT32_MAX;
     bool bCanUseAliasedBuffer = true;

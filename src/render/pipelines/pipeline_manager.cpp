@@ -97,7 +97,7 @@ PipelineManager::~PipelineManager()
     }
 }
 
-void PipelineManager::RegisterComputePipeline(StringId pipelineId, const std::filesystem::path& shaderPath, uint32_t pushConstantSize, PipelineCategory category)
+void PipelineManager::RegisterComputePipeline(StringID pipelineId, const std::filesystem::path& shaderPath, uint32_t pushConstantSize, PipelineCategory category)
 {
     if (computePipelines.contains(pipelineId)) {
         SPDLOG_WARN("Pipeline '{}' already registered, skipping", pipelineId.ToString());
@@ -124,7 +124,7 @@ void PipelineManager::RegisterComputePipeline(StringId pipelineId, const std::fi
     SPDLOG_INFO("Registered compute pipeline: {}", pipelineId.ToString());
 }
 
-void PipelineManager::RegisterComputePipelineCustomLayout(StringId pipelineId, const std::filesystem::path& shaderPath, uint32_t pushConstantSize, PipelineCategory category,
+void PipelineManager::RegisterComputePipelineCustomLayout(StringID pipelineId, const std::filesystem::path& shaderPath, uint32_t pushConstantSize, PipelineCategory category,
                                                           std::vector<VkDescriptorSetLayout> customLayouts)
 {
     if (computePipelines.contains(pipelineId)) {
@@ -153,7 +153,7 @@ void PipelineManager::RegisterComputePipelineCustomLayout(StringId pipelineId, c
     SPDLOG_INFO("Registered compute pipeline (custom layout): {}", pipelineId.ToString());
 }
 
-void PipelineManager::RegisterGraphicsPipeline(StringId pipelineId, GraphicsPipelineBuilder& builder, uint32_t pushConstantSize, VkShaderStageFlags pushConstantStages, PipelineCategory category)
+void PipelineManager::RegisterGraphicsPipeline(StringID pipelineId, GraphicsPipelineBuilder& builder, uint32_t pushConstantSize, VkShaderStageFlags pushConstantStages, PipelineCategory category)
 {
     if (graphicsPipelines.contains(pipelineId)) {
         SPDLOG_WARN("Pipeline '{}' already registered, skipping", pipelineId.ToString());
@@ -224,7 +224,7 @@ void PipelineManager::RegisterGraphicsPipeline(StringId pipelineId, GraphicsPipe
     SPDLOG_INFO("Registered graphics pipeline: {}", pipelineId.ToString());
 }
 
-const PipelineEntry* PipelineManager::GetPipelineEntry(StringId pipelineId)
+const PipelineEntry* PipelineManager::GetPipelineEntry(StringID pipelineId)
 {
     if (auto it = computePipelines.find(pipelineId); it != computePipelines.end()) {
         return &it->second.activeEntry;

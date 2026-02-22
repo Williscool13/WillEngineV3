@@ -108,7 +108,7 @@ GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         std::this_thread::sleep_for(targetFrameTime - elapsed);
     }
 
-    StringId s = SID("Game Based String ID");
+    StringID s = SID("Game Based String ID");
 }
 
 GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer)

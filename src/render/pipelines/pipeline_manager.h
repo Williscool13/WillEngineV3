@@ -41,14 +41,14 @@ public:
 
     PipelineManager& operator=(const PipelineManager&) = delete;
 
-    void RegisterComputePipeline(StringId pipelineId, const std::filesystem::path& shaderPath, uint32_t pushConstantSize, PipelineCategory category);
+    void RegisterComputePipeline(StringID pipelineId, const std::filesystem::path& shaderPath, uint32_t pushConstantSize, PipelineCategory category);
 
-    void RegisterComputePipelineCustomLayout(StringId pipelineId, const std::filesystem::path& shaderPath, uint32_t pushConstantSize, PipelineCategory category,
+    void RegisterComputePipelineCustomLayout(StringID pipelineId, const std::filesystem::path& shaderPath, uint32_t pushConstantSize, PipelineCategory category,
                                              std::vector<VkDescriptorSetLayout> customLayouts);
 
-    void RegisterGraphicsPipeline(StringId pipelineId, GraphicsPipelineBuilder& builder, uint32_t pushConstantSize, VkShaderStageFlags pushConstantStages, PipelineCategory category);
+    void RegisterGraphicsPipeline(StringID pipelineId, GraphicsPipelineBuilder& builder, uint32_t pushConstantSize, VkShaderStageFlags pushConstantStages, PipelineCategory category);
 
-    const PipelineEntry* GetPipelineEntry(StringId pipelineId);
+    const PipelineEntry* GetPipelineEntry(StringID pipelineId);
 
     void ReloadModified();
 
@@ -86,8 +86,8 @@ private:
 private:
     VulkanContext* context;
     AssetLoad::AsyncAssetLoadManager* asyncAssetLoadManager{nullptr};
-    std::unordered_map<StringId, GraphicsPipelineData> graphicsPipelines;
-    std::unordered_map<StringId, ComputePipelineData> computePipelines;
+    std::unordered_map<StringID, GraphicsPipelineData> graphicsPipelines;
+    std::unordered_map<StringID, ComputePipelineData> computePipelines;
 
     uint32_t currentFrame;
     std::array<VkDescriptorSetLayout, 2> globalDescriptorSetLayouts;

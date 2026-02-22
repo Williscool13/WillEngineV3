@@ -8,13 +8,13 @@
 
 namespace Render
 {
-RenderPass::RenderPass(RenderGraph& renderGraph, std::string name, VkPipelineStageFlags2 stages)
-    : graph(renderGraph), renderPassName(std::move(name)), stages(stages)
+RenderPass::RenderPass(RenderGraph& renderGraph, StringID passId, VkPipelineStageFlags2 stages)
+    : graph(renderGraph), renderPassId(std::move(passId)), stages(stages)
 {}
 
-RenderPass& RenderPass::WriteStorageImage(const std::string& name, const TextureInfo texInfo)
+RenderPass& RenderPass::WriteStorageImage(const StringID textureId, const TextureInfo texInfo)
 {
-    TextureResource* resource = graph.GetOrCreateTexture(name);
+    TextureResource* resource = graph.GetOrCreateTexture(textureId);
 
     if (texInfo.format != VK_FORMAT_UNDEFINED) {
         if (resource->textureInfo.format == VK_FORMAT_UNDEFINED) {
@@ -34,9 +34,9 @@ RenderPass& RenderPass::WriteStorageImage(const std::string& name, const Texture
     return *this;
 }
 
-RenderPass& RenderPass::WriteClearImage(const std::string& name, const TextureInfo& texInfo)
+RenderPass& RenderPass::WriteClearImage(const StringID textureId, const TextureInfo& texInfo)
 {
-    TextureResource* resource = graph.GetOrCreateTexture(name);
+    TextureResource* resource = graph.GetOrCreateTexture(textureId);
     if (texInfo.format != VK_FORMAT_UNDEFINED) {
         if (resource->textureInfo.format == VK_FORMAT_UNDEFINED) {
             resource->textureInfo = texInfo;
@@ -49,9 +49,9 @@ RenderPass& RenderPass::WriteClearImage(const std::string& name, const TextureIn
     return *this;
 }
 
-RenderPass& RenderPass::WriteBlitImage(const std::string& name, const TextureInfo& texInfo)
+RenderPass& RenderPass::WriteBlitImage(const StringID textureId, const TextureInfo& texInfo)
 {
-    TextureResource* resource = graph.GetOrCreateTexture(name);
+    TextureResource* resource = graph.GetOrCreateTexture(textureId);
     if (texInfo.format != VK_FORMAT_UNDEFINED) {
         if (resource->textureInfo.format == VK_FORMAT_UNDEFINED) {
             resource->textureInfo = texInfo;
@@ -64,9 +64,9 @@ RenderPass& RenderPass::WriteBlitImage(const std::string& name, const TextureInf
     return *this;
 }
 
-RenderPass& RenderPass::WriteCopyImage(const std::string& name, const TextureInfo& texInfo)
+RenderPass& RenderPass::WriteCopyImage(const StringID textureId, const TextureInfo& texInfo)
 {
-    TextureResource* resource = graph.GetOrCreateTexture(name);
+    TextureResource* resource = graph.GetOrCreateTexture(textureId);
     if (texInfo.format != VK_FORMAT_UNDEFINED) {
         if (resource->textureInfo.format == VK_FORMAT_UNDEFINED) {
             resource->textureInfo = texInfo;
@@ -79,9 +79,9 @@ RenderPass& RenderPass::WriteCopyImage(const std::string& name, const TextureInf
     return *this;
 }
 
-RenderPass& RenderPass::WriteColorAttachment(const std::string& name, const TextureInfo& texInfo)
+RenderPass& RenderPass::WriteColorAttachment(const StringID textureId, const TextureInfo& texInfo)
 {
-    TextureResource* resource = graph.GetOrCreateTexture(name);
+    TextureResource* resource = graph.GetOrCreateTexture(textureId);
 
     if (texInfo.format != VK_FORMAT_UNDEFINED) {
         if (resource->textureInfo.format == VK_FORMAT_UNDEFINED) {
@@ -96,9 +96,9 @@ RenderPass& RenderPass::WriteColorAttachment(const std::string& name, const Text
     return *this;
 }
 
-RenderPass& RenderPass::WriteDepthAttachment(const std::string& name, const TextureInfo& texInfo)
+RenderPass& RenderPass::WriteDepthAttachment(const StringID textureId, const TextureInfo& texInfo)
 {
-    TextureResource* resource = graph.GetOrCreateTexture(name);
+    TextureResource* resource = graph.GetOrCreateTexture(textureId);
 
     if (texInfo.format != VK_FORMAT_UNDEFINED) {
         if (resource->textureInfo.format == VK_FORMAT_UNDEFINED) {
@@ -116,53 +116,9 @@ RenderPass& RenderPass::WriteDepthAttachment(const std::string& name, const Text
     return *this;
 }
 
-RenderPass& RenderPass::WriteBuffer(const std::string& name)
+RenderPass& RenderPass::ReadWriteImage(const StringID textureId, const TextureInfo& texInfo)
 {
-    BufferResource* resource = graph.GetOrCreateBuffer(name);
-    resource->accumulatedUsage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-    bufferWrites.push_back(resource->index);
-    return *this;
-}
-
-RenderPass& RenderPass::WriteTransferBuffer(const std::string& name)
-{
-    BufferResource* resource = graph.GetOrCreateBuffer(name);
-    resource->accumulatedUsage |= VK_BUFFER_USAGE_2_TRANSFER_DST_BIT;
-    bufferTransferWrites.push_back(resource->index);
-    return *this;
-}
-
-RenderPass& RenderPass::ReadWriteDepthAttachment(const std::string& name, const TextureInfo& texInfo)
-{
-    TextureResource* resource = graph.GetOrCreateTexture(name);
-
-    if (texInfo.format != VK_FORMAT_UNDEFINED) {
-        if (resource->textureInfo.format == VK_FORMAT_UNDEFINED) {
-            resource->textureInfo = texInfo;
-        }
-    }
-    else {
-        assert(resource->textureInfo.format != VK_FORMAT_UNDEFINED && "Texture not defined - provide TextureInfo on first use");
-    }
-
-    assert(depthStencilAttachment == UINT_MAX && "Only one depth attachment per pass");
-
-    depthStencilAttachment = resource->index;
-    depthAccessType = DepthAccessType::Read | DepthAccessType::Write;
-    return *this;
-}
-
-RenderPass& RenderPass::ReadWriteBuffer(const std::string& name)
-{
-    BufferResource* resource = graph.GetOrCreateBuffer(name);
-    resource->accumulatedUsage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-    bufferReadWrite.push_back(resource->index);
-    return *this;
-}
-
-RenderPass& RenderPass::ReadWriteImage(const std::string& name, const TextureInfo& texInfo)
-{
-    TextureResource* resource = graph.GetOrCreateTexture(name);
+    TextureResource* resource = graph.GetOrCreateTexture(textureId);
 
     if (texInfo.format != VK_FORMAT_UNDEFINED) {
         if (resource->textureInfo.format == VK_FORMAT_UNDEFINED) {
@@ -182,9 +138,9 @@ RenderPass& RenderPass::ReadWriteImage(const std::string& name, const TextureInf
     return *this;
 }
 
-RenderPass& RenderPass::ReadDepthAttachment(const std::string& name)
+RenderPass& RenderPass::ReadDepthAttachment(const StringID textureId)
 {
-    TextureResource* resource = graph.GetOrCreateTexture(name);
+    TextureResource* resource = graph.GetOrCreateTexture(textureId);
 
     if (resource->textureInfo.format != VK_FORMAT_UNDEFINED) {
         assert(resource->textureInfo.format != VK_FORMAT_UNDEFINED && "Texture not defined - provide TextureInfo on first use");
@@ -197,72 +153,117 @@ RenderPass& RenderPass::ReadDepthAttachment(const std::string& name)
     return *this;
 }
 
-RenderPass& RenderPass::ReadStorageImage(const std::string& name)
+RenderPass& RenderPass::ReadStorageImage(const StringID textureId)
 {
-    TextureResource* resource = graph.GetOrCreateTexture(name);
+    TextureResource* resource = graph.GetOrCreateTexture(textureId);
     storageImageReads.push_back(resource->index);
     return *this;
 }
 
-RenderPass& RenderPass::ReadSampledImage(const std::string& name)
+RenderPass& RenderPass::ReadSampledImage(const StringID textureId)
 {
-    TextureResource* resource = graph.GetOrCreateTexture(name);
+    TextureResource* resource = graph.GetOrCreateTexture(textureId);
     sampledImageReads.push_back(resource->index);
     return *this;
 }
 
-RenderPass& RenderPass::ReadBlitImage(const std::string& name)
+RenderPass& RenderPass::ReadBlitImage(const StringID textureId)
 {
-    TextureResource* resource = graph.GetOrCreateTexture(name);
+    TextureResource* resource = graph.GetOrCreateTexture(textureId);
     blitImageReads.push_back(resource->index);
     return *this;
 }
 
-RenderPass& RenderPass::ReadCopyImage(const std::string& name)
+RenderPass& RenderPass::ReadCopyImage(const StringID textureId)
 {
-    TextureResource* resource = graph.GetOrCreateTexture(name);
+    TextureResource* resource = graph.GetOrCreateTexture(textureId);
     copyImageReads.push_back(resource->index);
     return *this;
 }
 
-RenderPass& RenderPass::ReadBuffer(const std::string& name)
+RenderPass& RenderPass::WriteBuffer(const StringID bufferId)
 {
-    BufferResource* resource = graph.GetOrCreateBuffer(name);
+    BufferResource* resource = graph.GetOrCreateBuffer(bufferId);
+    resource->accumulatedUsage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+    bufferWrites.push_back(resource->index);
+    return *this;
+}
+
+RenderPass& RenderPass::WriteTransferBuffer(const StringID bufferId)
+{
+    BufferResource* resource = graph.GetOrCreateBuffer(bufferId);
+    resource->accumulatedUsage |= VK_BUFFER_USAGE_2_TRANSFER_DST_BIT;
+    bufferTransferWrites.push_back(resource->index);
+    return *this;
+}
+
+RenderPass& RenderPass::ReadWriteDepthAttachment(const StringID bufferId, const TextureInfo& texInfo)
+{
+    TextureResource* resource = graph.GetOrCreateTexture(bufferId);
+
+    if (texInfo.format != VK_FORMAT_UNDEFINED) {
+        if (resource->textureInfo.format == VK_FORMAT_UNDEFINED) {
+            resource->textureInfo = texInfo;
+        }
+    }
+    else {
+        assert(resource->textureInfo.format != VK_FORMAT_UNDEFINED && "Texture not defined - provide TextureInfo on first use");
+    }
+
+    assert(depthStencilAttachment == UINT_MAX && "Only one depth attachment per pass");
+
+    depthStencilAttachment = resource->index;
+    depthAccessType = DepthAccessType::Read | DepthAccessType::Write;
+    return *this;
+}
+
+RenderPass& RenderPass::ReadWriteBuffer(const StringID bufferId)
+{
+    BufferResource* resource = graph.GetOrCreateBuffer(bufferId);
+    resource->accumulatedUsage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+    bufferReadWrite.push_back(resource->index);
+    return *this;
+}
+
+
+RenderPass& RenderPass::ReadBuffer(const StringID bufferId)
+{
+    BufferResource* resource = graph.GetOrCreateBuffer(bufferId);
     assert(resource->bufferInfo.size > 0 && "Buffer not defined - import or create buffer first");
     resource->accumulatedUsage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
     bufferReads.push_back(resource->index);
     return *this;
 }
 
-RenderPass& RenderPass::ReadIndexBuffer(const std::string& name)
+RenderPass& RenderPass::ReadIndexBuffer(const StringID bufferId)
 {
-    BufferResource* resource = graph.GetOrCreateBuffer(name);
+    BufferResource* resource = graph.GetOrCreateBuffer(bufferId);
     assert(resource->bufferInfo.size > 0 && "Buffer not defined - import or create buffer first");
     resource->accumulatedUsage |= VK_BUFFER_USAGE_2_INDEX_BUFFER_BIT;
     bufferIndexRead.push_back(resource->index);
     return *this;
 }
 
-RenderPass& RenderPass::ReadTransferBuffer(const std::string& name)
+RenderPass& RenderPass::ReadTransferBuffer(const StringID bufferId)
 {
-    BufferResource* resource = graph.GetOrCreateBuffer(name);
+    BufferResource* resource = graph.GetOrCreateBuffer(bufferId);
     assert(resource->bufferInfo.size > 0 && "Buffer not defined - import or create buffer first");
     resource->accumulatedUsage |= VK_BUFFER_USAGE_2_TRANSFER_SRC_BIT;
     bufferTransferReads.push_back(resource->index);
     return *this;
 }
 
-RenderPass& RenderPass::ReadIndirectBuffer(const std::string& name)
+RenderPass& RenderPass::ReadIndirectBuffer(const StringID bufferId)
 {
-    BufferResource* resource = graph.GetOrCreateBuffer(name);
+    BufferResource* resource = graph.GetOrCreateBuffer(bufferId);
     resource->accumulatedUsage |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
     bufferIndirectReads.push_back(resource->index);
     return *this;
 }
 
-RenderPass& RenderPass::ReadIndirectCountBuffer(const std::string& name)
+RenderPass& RenderPass::ReadIndirectCountBuffer(const StringID bufferId)
 {
-    BufferResource* resource = graph.GetOrCreateBuffer(name);
+    BufferResource* resource = graph.GetOrCreateBuffer(bufferId);
     resource->accumulatedUsage |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
     bufferIndirectCountReads.push_back(resource->index);
     return *this;
