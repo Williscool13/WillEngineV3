@@ -15,6 +15,7 @@
 #include "pipeline_category.h"
 #include "pipeline_data.h"
 #include "graphics_pipeline_builder.h"
+#include "core/string_id.h"
 #include "render/vulkan/vk_context.h"
 
 namespace AssetLoad
@@ -40,14 +41,14 @@ public:
 
     PipelineManager& operator=(const PipelineManager&) = delete;
 
-    void RegisterComputePipeline(const std::string& name, const std::filesystem::path& shaderPath, uint32_t pushConstantSize, PipelineCategory category);
+    void RegisterComputePipeline(StringId pipelineId, const std::filesystem::path& shaderPath, uint32_t pushConstantSize, PipelineCategory category);
 
-    void RegisterComputePipelineCustomLayout(const std::string& name, const std::filesystem::path& shaderPath, uint32_t pushConstantSize, PipelineCategory category,
+    void RegisterComputePipelineCustomLayout(StringId pipelineId, const std::filesystem::path& shaderPath, uint32_t pushConstantSize, PipelineCategory category,
                                              std::vector<VkDescriptorSetLayout> customLayouts);
 
-    void RegisterGraphicsPipeline(const std::string& name, GraphicsPipelineBuilder& builder, uint32_t pushConstantSize, VkShaderStageFlags pushConstantStages, PipelineCategory category);
+    void RegisterGraphicsPipeline(StringId pipelineId, GraphicsPipelineBuilder& builder, uint32_t pushConstantSize, VkShaderStageFlags pushConstantStages, PipelineCategory category);
 
-    const PipelineEntry* GetPipelineEntry(const std::string& name);
+    const PipelineEntry* GetPipelineEntry(StringId pipelineId);
 
     void ReloadModified();
 
@@ -85,8 +86,8 @@ private:
 private:
     VulkanContext* context;
     AssetLoad::AsyncAssetLoadManager* asyncAssetLoadManager{nullptr};
-    std::unordered_map<std::string, GraphicsPipelineData> graphicsPipelines;
-    std::unordered_map<std::string, ComputePipelineData> computePipelines;
+    std::unordered_map<StringId, GraphicsPipelineData> graphicsPipelines;
+    std::unordered_map<StringId, ComputePipelineData> computePipelines;
 
     uint32_t currentFrame;
     std::array<VkDescriptorSetLayout, 2> globalDescriptorSetLayouts;

@@ -26,6 +26,7 @@
 #include "types/render_types.h"
 #include "render/vulkan/vk_imgui_wrapper.h"
 #include "backends/imgui_impl_vulkan.h"
+#include "core/string_id.h"
 #include "core/math/math_helpers.h"
 #include "pipelines/pipeline_manager.h"
 #include "pipelines/graphics_pipeline_builder.h"
@@ -641,7 +642,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                         .valueTransformationType = static_cast<uint32_t>(viewFamily.debugTransformationType),
                         .outputImageIndex = outputIndexIndex,
                     };
-                    const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("debug_visualize");
+                    const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("debug_visualize"));
                     vkCmdBindPipeline(_cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                     vkCmdPushConstants(_cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                     uint32_t xDispatch = (renderExtent[0] + 15) / 16;
@@ -808,100 +809,100 @@ void RenderThread::CreatePipelines()
     layoutInfo.setLayoutCount = layouts.size();
     globalPipelineLayout = PipelineLayout::CreatePipelineLayout(context.get(), layoutInfo);
 
-    pipelineManager->RegisterComputePipeline("instancing_instance_lod", Platform::GetShaderPath() / "instancing_instance_lod_compute.spv",
+    pipelineManager->RegisterComputePipeline(SID("instancing_instance_lod"), Platform::GetShaderPath() / "instancing_instance_lod_compute.spv",
                                              sizeof(InstanceLODPushConstant), PipelineCategory::Instancing);
-    pipelineManager->RegisterComputePipeline("instancing_prefix_sum_up_1", Platform::GetShaderPath() / "instancing_prefix_sum_up_1_compute.spv",
+    pipelineManager->RegisterComputePipeline(SID("instancing_prefix_sum_up_1"), Platform::GetShaderPath() / "instancing_prefix_sum_up_1_compute.spv",
                                              sizeof(PrefixSumUpsweep1PushConstant), PipelineCategory::Instancing);
-    pipelineManager->RegisterComputePipeline("instancing_prefix_sum_up_2", Platform::GetShaderPath() / "instancing_prefix_sum_up_2_compute.spv",
+    pipelineManager->RegisterComputePipeline(SID("instancing_prefix_sum_up_2"), Platform::GetShaderPath() / "instancing_prefix_sum_up_2_compute.spv",
                                              sizeof(PrefixSumUpsweep2PushConstant), PipelineCategory::Instancing);
-    pipelineManager->RegisterComputePipeline("instancing_scan_blocks", Platform::GetShaderPath() / "instancing_scan_blocks_compute.spv",
+    pipelineManager->RegisterComputePipeline(SID("instancing_scan_blocks"), Platform::GetShaderPath() / "instancing_scan_blocks_compute.spv",
                                              sizeof(PrefixSumScanBlocksPushConstant), PipelineCategory::Instancing);
-    pipelineManager->RegisterComputePipeline("instancing_prefix_sum_down_1", Platform::GetShaderPath() / "instancing_prefix_sum_down_1_compute.spv",
+    pipelineManager->RegisterComputePipeline(SID("instancing_prefix_sum_down_1"), Platform::GetShaderPath() / "instancing_prefix_sum_down_1_compute.spv",
                                              sizeof(PrefixSumDownsweep1PushConstant), PipelineCategory::Instancing);
-    pipelineManager->RegisterComputePipeline("instancing_prefix_sum_down_2", Platform::GetShaderPath() / "instancing_prefix_sum_down_2_compute.spv",
+    pipelineManager->RegisterComputePipeline(SID("instancing_prefix_sum_down_2"), Platform::GetShaderPath() / "instancing_prefix_sum_down_2_compute.spv",
                                              sizeof(PrefixSumDownsweep2PushConstant), PipelineCategory::Instancing);
-    pipelineManager->RegisterComputePipeline("instancing_total_meshlet_count", Platform::GetShaderPath() / "instancing_total_meshlet_count_compute.spv",
+    pipelineManager->RegisterComputePipeline(SID("instancing_total_meshlet_count"), Platform::GetShaderPath() / "instancing_total_meshlet_count_compute.spv",
                                              sizeof(TotalMeshletCountPushConstant), PipelineCategory::Instancing);
-    pipelineManager->RegisterComputePipeline("instancing_expand_instance_to_meshlet", Platform::GetShaderPath() / "instancing_expand_instance_to_meshlet_compute.spv",
+    pipelineManager->RegisterComputePipeline(SID("instancing_expand_instance_to_meshlet"), Platform::GetShaderPath() / "instancing_expand_instance_to_meshlet_compute.spv",
                                              sizeof(ExpandMeshletsPushConstant), PipelineCategory::Instancing);
-    pipelineManager->RegisterComputePipeline("instancing_meshlet_visibility_prefix_sum_up_1", Platform::GetShaderPath() / "instancing_meshlet_visibility_prefix_sum_up_1_compute.spv",
+    pipelineManager->RegisterComputePipeline(SID("instancing_meshlet_visibility_prefix_sum_up_1"), Platform::GetShaderPath() / "instancing_meshlet_visibility_prefix_sum_up_1_compute.spv",
                                              sizeof(MeshletVisibilityPrefixSumUpsweep1PushConstant), PipelineCategory::Instancing);
-    pipelineManager->RegisterComputePipeline("instancing_meshlet_visibility_prefix_sum_down_2", Platform::GetShaderPath() / "instancing_meshlet_visibility_prefix_sum_down_2_compute.spv",
+    pipelineManager->RegisterComputePipeline(SID("instancing_meshlet_visibility_prefix_sum_down_2"), Platform::GetShaderPath() / "instancing_meshlet_visibility_prefix_sum_down_2_compute.spv",
                                              sizeof(MeshletVisibilityPrefixSumDownsweep2PushConstant), PipelineCategory::Instancing);
-    pipelineManager->RegisterComputePipeline("instancing_compacted_meshlet_dispatch", Platform::GetShaderPath() / "instancing_compacted_meshlet_dispatch_compute.spv",
+    pipelineManager->RegisterComputePipeline(SID("instancing_compacted_meshlet_dispatch"), Platform::GetShaderPath() / "instancing_compacted_meshlet_dispatch_compute.spv",
                                              sizeof(CompactedMeshletDispatchPushConstant), PipelineCategory::Instancing);
-    pipelineManager->RegisterComputePipeline("instancing_max_meshlet_count", Platform::GetShaderPath() / "instancing_max_meshlet_count_compute.spv",
+    pipelineManager->RegisterComputePipeline(SID("instancing_max_meshlet_count"), Platform::GetShaderPath() / "instancing_max_meshlet_count_compute.spv",
                                              sizeof(MaxMeshletCountPushConstant), PipelineCategory::Instancing);
 
 
-    pipelineManager->RegisterComputePipeline("instancing_instance_lod_shadows", Platform::GetShaderPath() / "instancing_instance_lod_shadows_compute.spv",
+    pipelineManager->RegisterComputePipeline(SID("instancing_instance_lod_shadows"), Platform::GetShaderPath() / "instancing_instance_lod_shadows_compute.spv",
                                              sizeof(InstanceLODShadowsPushConstant), PipelineCategory::Instancing);
-    pipelineManager->RegisterComputePipeline("instancing_expand_instance_to_meshlet_shadows", Platform::GetShaderPath() / "instancing_expand_instance_to_meshlet_shadows_compute.spv",
+    pipelineManager->RegisterComputePipeline(SID("instancing_expand_instance_to_meshlet_shadows"), Platform::GetShaderPath() / "instancing_expand_instance_to_meshlet_shadows_compute.spv",
                                              sizeof(ExpandMeshletsShadowsPushConstant), PipelineCategory::Instancing);
 
-    pipelineManager->RegisterComputePipeline("shadows_resolve", Platform::GetShaderPath() / "shadows_resolve_compute.spv",
+    pipelineManager->RegisterComputePipeline(SID("shadows_resolve"), Platform::GetShaderPath() / "shadows_resolve_compute.spv",
                                              sizeof(ShadowsResolvePushConstant), PipelineCategory::ShadowCombine);
-    pipelineManager->RegisterComputePipeline("deferred_resolve", Platform::GetShaderPath() / "deferred_resolve_compute.spv",
+    pipelineManager->RegisterComputePipeline(SID("deferred_resolve"), Platform::GetShaderPath() / "deferred_resolve_compute.spv",
                                              sizeof(DeferredResolvePushConstant), PipelineCategory::DeferredShading);
 
-    pipelineManager->RegisterComputePipeline("temporal_antialiasing", Platform::GetShaderPath() / "temporal_antialiasing_compute.spv",
+    pipelineManager->RegisterComputePipeline(SID("temporal_antialiasing"), Platform::GetShaderPath() / "temporal_antialiasing_compute.spv",
                                              sizeof(TemporalAntialiasingPushConstant), PipelineCategory::TAA);
 
-    pipelineManager->RegisterComputePipeline("gtao_depth_prepass", Platform::GetShaderPath() / "gtao_depth_prepass_compute.spv",
+    pipelineManager->RegisterComputePipeline(SID("gtao_depth_prepass"), Platform::GetShaderPath() / "gtao_depth_prepass_compute.spv",
                                              sizeof(GTAODepthPrepassPushConstant), PipelineCategory::GTAO);
-    pipelineManager->RegisterComputePipeline("gtao_main", Platform::GetShaderPath() / "gtao_main_compute.spv",
+    pipelineManager->RegisterComputePipeline(SID("gtao_main"), Platform::GetShaderPath() / "gtao_main_compute.spv",
                                              sizeof(GTAOMainPushConstant), PipelineCategory::GTAO);
-    pipelineManager->RegisterComputePipeline("gtao_denoise", Platform::GetShaderPath() / "gtao_denoise_compute.spv",
+    pipelineManager->RegisterComputePipeline(SID("gtao_denoise"), Platform::GetShaderPath() / "gtao_denoise_compute.spv",
                                              sizeof(GTAODenoisePushConstant), PipelineCategory::GTAO);
 
 
-    pipelineManager->RegisterComputePipeline("exposure_build_histogram", Platform::GetShaderPath() / "exposure_build_histogram_compute.spv",
+    pipelineManager->RegisterComputePipeline(SID("exposure_build_histogram"), Platform::GetShaderPath() / "exposure_build_histogram_compute.spv",
                                              sizeof(HistogramBuildPushConstant), PipelineCategory::Exposure);
-    pipelineManager->RegisterComputePipeline("exposure_calculate_average", Platform::GetShaderPath() / "exposure_calculate_average_compute.spv",
+    pipelineManager->RegisterComputePipeline(SID("exposure_calculate_average"), Platform::GetShaderPath() / "exposure_calculate_average_compute.spv",
                                              sizeof(ExposureCalculatePushConstant), PipelineCategory::Exposure);
-    pipelineManager->RegisterComputePipeline("tonemap_sdr", Platform::GetShaderPath() / "tonemap_sdr_compute.spv",
+    pipelineManager->RegisterComputePipeline(SID("tonemap_sdr"), Platform::GetShaderPath() / "tonemap_sdr_compute.spv",
                                              sizeof(TonemapSDRPushConstant), PipelineCategory::Tonemap);
-    pipelineManager->RegisterComputePipeline("motion_blur_tile_max", Platform::GetShaderPath() / "motion_blur_tile_max_compute.spv",
+    pipelineManager->RegisterComputePipeline(SID("motion_blur_tile_max"), Platform::GetShaderPath() / "motion_blur_tile_max_compute.spv",
                                              sizeof(MotionBlurTileVelocityPushConstant), PipelineCategory::MotionBlur);
-    pipelineManager->RegisterComputePipeline("motion_blur_neighbor_max", Platform::GetShaderPath() / "motion_blur_neighbor_max_compute.spv",
+    pipelineManager->RegisterComputePipeline(SID("motion_blur_neighbor_max"), Platform::GetShaderPath() / "motion_blur_neighbor_max_compute.spv",
                                              sizeof(MotionBlurNeighborMaxPushConstant), PipelineCategory::MotionBlur);
-    pipelineManager->RegisterComputePipeline("motion_blur_reconstruction", Platform::GetShaderPath() / "motion_blur_reconstruction_compute.spv",
+    pipelineManager->RegisterComputePipeline(SID("motion_blur_reconstruction"), Platform::GetShaderPath() / "motion_blur_reconstruction_compute.spv",
                                              sizeof(MotionBlurReconstructionPushConstant), PipelineCategory::MotionBlur);
-    pipelineManager->RegisterComputePipeline("bloom_threshold", Platform::GetShaderPath() / "bloom_threshold_compute.spv",
+    pipelineManager->RegisterComputePipeline(SID("bloom_threshold"), Platform::GetShaderPath() / "bloom_threshold_compute.spv",
                                              sizeof(BloomThresholdPushConstant), PipelineCategory::Bloom);
-    pipelineManager->RegisterComputePipeline("bloom_downsample", Platform::GetShaderPath() / "bloom_downsample_compute.spv",
+    pipelineManager->RegisterComputePipeline(SID("bloom_downsample"), Platform::GetShaderPath() / "bloom_downsample_compute.spv",
                                              sizeof(BloomDownsamplePushConstant), PipelineCategory::Bloom);
-    pipelineManager->RegisterComputePipeline("bloom_upsample", Platform::GetShaderPath() / "bloom_upsample_compute.spv",
+    pipelineManager->RegisterComputePipeline(SID("bloom_upsample"), Platform::GetShaderPath() / "bloom_upsample_compute.spv",
                                              sizeof(BloomUpsamplePushConstant), PipelineCategory::Bloom);
-    pipelineManager->RegisterComputePipeline("vignette_aberration", Platform::GetShaderPath() / "vignette_aberration_compute.spv",
+    pipelineManager->RegisterComputePipeline(SID("vignette_aberration"), Platform::GetShaderPath() / "vignette_aberration_compute.spv",
                                              sizeof(VignetteChromaticAberrationPushConstant), PipelineCategory::Vignette);
-    pipelineManager->RegisterComputePipeline("film_grain", Platform::GetShaderPath() / "film_grain_compute.spv",
+    pipelineManager->RegisterComputePipeline(SID("film_grain"), Platform::GetShaderPath() / "film_grain_compute.spv",
                                              sizeof(FilmGrainPushConstant), PipelineCategory::FilmGrain);
-    pipelineManager->RegisterComputePipeline("sharpening", Platform::GetShaderPath() / "sharpening_compute.spv",
+    pipelineManager->RegisterComputePipeline(SID("sharpening"), Platform::GetShaderPath() / "sharpening_compute.spv",
                                              sizeof(SharpeningPushConstant), PipelineCategory::Sharpening);
-    pipelineManager->RegisterComputePipeline("color_grading", Platform::GetShaderPath() / "color_grading_compute.spv",
+    pipelineManager->RegisterComputePipeline(SID("color_grading"), Platform::GetShaderPath() / "color_grading_compute.spv",
                                              sizeof(ColorGradingPushConstant), PipelineCategory::ColorGrade);
 
-    pipelineManager->RegisterComputePipeline("debug_visualize", Platform::GetShaderPath() / "debug_visualize_compute.spv",
+    pipelineManager->RegisterComputePipeline(SID("debug_visualize"), Platform::GetShaderPath() / "debug_visualize_compute.spv",
                                              sizeof(DebugVisualizePushConstant), PipelineCategory::Debug);
 
 #if WILL_EDITOR
     std::vector emapLayout{
         resourceManager->environmentMapGenerateResources.descriptorSetLayout.handle,
     };
-    pipelineManager->RegisterComputePipelineCustomLayout("ibl_equirect_to_cubemap", Platform::GetShaderPath() / "ibl_equirect_to_cubemap_compute.spv",
+    pipelineManager->RegisterComputePipelineCustomLayout(SID("ibl_equirect_to_cubemap"), Platform::GetShaderPath() / "ibl_equirect_to_cubemap_compute.spv",
                                                          sizeof(EquirectToCubemapPushConstant), PipelineCategory::AssetGeneration, emapLayout);
 
-    pipelineManager->RegisterComputePipelineCustomLayout("ibl_convolve_diffuse", Platform::GetShaderPath() / "ibl_convolve_diffuse_compute.spv",
+    pipelineManager->RegisterComputePipelineCustomLayout(SID("ibl_convolve_diffuse"), Platform::GetShaderPath() / "ibl_convolve_diffuse_compute.spv",
                                                          sizeof(ConvolveDiffusePushConstant), PipelineCategory::AssetGeneration, emapLayout);
 
-    pipelineManager->RegisterComputePipelineCustomLayout("ibl_prefilter_specular", Platform::GetShaderPath() / "ibl_prefilter_specular_compute.spv",
+    pipelineManager->RegisterComputePipelineCustomLayout(SID("ibl_prefilter_specular"), Platform::GetShaderPath() / "ibl_prefilter_specular_compute.spv",
                                                          sizeof(PrefilterSpecularPushConstant), PipelineCategory::AssetGeneration, emapLayout);
 
     std::vector brdfLutLayout{
         resourceManager->brdfLutGenerateResources.descriptorSetLayout.handle,
     };
-    pipelineManager->RegisterComputePipelineCustomLayout("ibl_brdf_lut", Platform::GetShaderPath() / "brdf_lut_generate_compute.spv",
+    pipelineManager->RegisterComputePipelineCustomLayout(SID("ibl_brdf_lut"), Platform::GetShaderPath() / "brdf_lut_generate_compute.spv",
                                                          sizeof(BRDFLUTPushConstant), PipelineCategory::AssetGeneration, brdfLutLayout);
 #endif
 
@@ -918,7 +919,7 @@ void RenderThread::CreatePipelines()
         builder.AddDynamicState(VK_DYNAMIC_STATE_DEPTH_BIAS);
 
         pipelineManager->RegisterGraphicsPipeline(
-            "shadow_cascade_instanced",
+            SID("shadow_cascade_instanced"),
             builder,
             sizeof(ShadowMeshShadingPushConstant),
             VK_SHADER_STAGE_MESH_BIT_EXT,
@@ -945,7 +946,7 @@ void RenderThread::CreatePipelines()
         builder.SetupRenderer(colorFormats, 5, DEPTH_ATTACHMENT_FORMAT, DEPTH_ATTACHMENT_FORMAT);
 
         pipelineManager->RegisterGraphicsPipeline(
-            "mesh_shading_instanced",
+            SID("mesh_shading_instanced"),
             builder,
             sizeof(BaseMeshShadingPushConstant),
             VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT,
@@ -974,7 +975,7 @@ void RenderThread::CreatePipelines()
         builder.AddDynamicState(VK_DYNAMIC_STATE_STENCIL_REFERENCE);
 
         pipelineManager->RegisterGraphicsPipeline(
-            "portal_rendering",
+            SID("portal_rendering"),
             builder,
             sizeof(BaseMeshShadingPushConstant),
             VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT,
@@ -1000,7 +1001,7 @@ void RenderThread::CreatePipelines()
         builder.AddDynamicState(VK_DYNAMIC_STATE_STENCIL_REFERENCE);
 
         pipelineManager->RegisterGraphicsPipeline(
-            "portal_composite",
+            SID("portal_composite"),
             builder,
             sizeof(PortalCompositePushConstant),
             VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
@@ -1027,7 +1028,7 @@ void RenderThread::CreatePipelines()
         builder.SetupRenderer(colorFormats, 5, DEPTH_ATTACHMENT_FORMAT, DEPTH_ATTACHMENT_FORMAT);
 
         pipelineManager->RegisterGraphicsPipeline(
-            "cubemap_visualize",
+            SID("cubemap_visualize"),
             builder,
             sizeof(BaseMeshShadingPushConstant),
             VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT,
@@ -1051,7 +1052,7 @@ void RenderThread::CreatePipelines()
         builder.SetupRenderer(colorFormats, 1, DEPTH_ATTACHMENT_FORMAT, VK_FORMAT_UNDEFINED);
 
         pipelineManager->RegisterGraphicsPipeline(
-            "environment_skybox",
+            SID("environment_skybox"),
             builder,
             sizeof(EnvironmentSkyboxPushConstant),
             VK_SHADER_STAGE_FRAGMENT_BIT,
@@ -1087,7 +1088,7 @@ void RenderThread::CreatePipelines()
         builder.SetupRenderer(colorFormats, 1, DEPTH_ATTACHMENT_FORMAT);
 
         pipelineManager->RegisterGraphicsPipeline(
-            "debug_render",
+            SID("debug_render"),
             builder,
             sizeof(DebugDrawPushConstant),
             VK_SHADER_STAGE_VERTEX_BIT,
@@ -1496,7 +1497,7 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFami
                     .cascadeIndex = static_cast<uint32_t>(cascadeLevel)
                 };
 
-                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("shadow_cascade_instanced");
+                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("shadow_cascade_instanced"));
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineEntry->pipeline);
                 vkCmdSetDepthBias(cmd, -linearBias, 0.0f, -slopedBias);
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_MESH_BIT_EXT,
@@ -1711,7 +1712,7 @@ void RenderThread::SetupGeometryPasses(RenderGraph& graph, const Core::ViewFamil
                 .sceneDataIndex = sceneIndex,
             };
 
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("mesh_shading_instanced");
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("mesh_shading_instanced"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineEntry->pipeline);
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT,
                                0, sizeof(BaseMeshShadingPushConstant), &pushConstants);
@@ -1802,7 +1803,7 @@ void RenderThread::SetupGeometryPasses(RenderGraph& graph, const Core::ViewFamil
                 };
                 memcpy(pushConstants.customData, customDraw.second.pushConstantCustomData.data(), sizeof(pushConstants.customData));
 
-                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(customDraw.second.pipelineName);
+                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(customDraw.second.pipelineId);
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineEntry->pipeline);
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT,
                                    0, sizeof(pushConstants), &pushConstants);
@@ -1852,7 +1853,7 @@ void RenderThread::SetupGroundTruthAmbientOcclusion(RenderGraph& graph, const Co
             .sceneDataIndex = sceneDataIndex,
         };
 
-        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("gtao_depth_prepass");
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("gtao_depth_prepass"));
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
@@ -1888,7 +1889,7 @@ void RenderThread::SetupGroundTruthAmbientOcclusion(RenderGraph& graph, const Co
             .sceneDataIndex = sceneDataIndex,
         };
 
-        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("gtao_main");
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("gtao_main"));
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
@@ -1912,7 +1913,7 @@ void RenderThread::SetupGroundTruthAmbientOcclusion(RenderGraph& graph, const Co
             .sceneDataIndex = sceneDataIndex,
         };
 
-        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("gtao_denoise");
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("gtao_denoise"));
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
@@ -1936,7 +1937,7 @@ void RenderThread::SetupGroundTruthAmbientOcclusion(RenderGraph& graph, const Co
             .sceneDataIndex = sceneDataIndex,
         };
 
-        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("gtao_denoise");
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("gtao_denoise"));
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
@@ -1972,7 +1973,7 @@ void RenderThread::SetupShadowsResolve(RenderGraph& graph, const Core::ViewFamil
     shadowsResolvePass.ReadBuffer("light_data");
     shadowsResolvePass.WriteStorageImage("shadows_resolve_target");
     shadowsResolvePass.Execute([&, bHasShadows, bHasGTAO, width = renderExtent[0], height = renderExtent[1], sceneDataIndex](VkCommandBuffer cmd) {
-        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("shadows_resolve");
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("shadows_resolve"));
 
         glm::ivec4 csmIndices{-1, -1, -1, -1};
         if (bHasShadows) {
@@ -2019,7 +2020,7 @@ void RenderThread::SetupDeferredLighting(RenderGraph& graph, const Core::ViewFam
     deferredResolvePass.ReadSampledImage("shadows_resolve_target");
     deferredResolvePass.WriteStorageImage(targets.outFinalColor);
     deferredResolvePass.Execute([&, width = renderExtent[0], height = renderExtent[1], sceneDataIndex](VkCommandBuffer cmd) {
-        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("deferred_resolve");
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("deferred_resolve"));
 
         DeferredResolvePushConstant pushData{
             .sceneData = graph.GetBufferAddress("scene_data"),
@@ -2075,7 +2076,7 @@ void RenderThread::SetupPortalComposite(RenderGraph& graph, const Core::ViewFami
             .portalDepthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(portalTargets.depthStencil),
         };
 
-        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("portal_composite");
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("portal_composite"));
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineEntry->pipeline);
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pc), &pc);
         vkCmdSetStencilReference(cmd, VK_STENCIL_FACE_FRONT_AND_BACK, 1);
@@ -2111,7 +2112,7 @@ void RenderThread::SetupSkyboxRendering(RenderGraph& graph, const Core::ViewFami
             .cubemapIndex = viewFamily.skyboxIndex,
         };
 
-        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("environment_skybox");
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("environment_skybox"));
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineEntry->pipeline);
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pc), &pc);
 
@@ -2179,7 +2180,7 @@ std::string RenderThread::SetupTemporalAntialiasing(RenderGraph& graph, const Co
             .outputImageIndex = graph.GetStorageImageViewDescriptorIndex("taa_current"),
         };
 
-        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("temporal_antialiasing");
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("temporal_antialiasing"));
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(TemporalAntialiasingPushConstant), &pushData);
 
@@ -2265,7 +2266,7 @@ std::string RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::Vi
                 .oneOverLogLuminanceRange = oneOverLogLuminanceRange,
             };
 
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("exposure_build_histogram");
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("exposure_build_histogram"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(HistogramBuildPushConstant), &pc);
             uint32_t xDispatch = (width + POST_PROCESS_LUMINANCE_DISPATCH_X - 1) / POST_PROCESS_LUMINANCE_DISPATCH_X;
@@ -2290,7 +2291,7 @@ std::string RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::Vi
                 .totalPixels = width * height,
             };
 
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("exposure_calculate_average");
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("exposure_calculate_average"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, 1, 1, 1);
@@ -2318,7 +2319,7 @@ std::string RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::Vi
                 .softThreshold = ppConfig.bloomSoftThreshold,
             };
 
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("bloom_threshold");
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("bloom_threshold"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             uint32_t xDispatch = (width + POST_PROCESS_BLOOM_DISPATCH_X - 1) / POST_PROCESS_BLOOM_DISPATCH_X;
@@ -2341,7 +2342,7 @@ std::string RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::Vi
                     .srcMipLevel = srcMip,
                 };
 
-                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("bloom_downsample");
+                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("bloom_downsample"));
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 uint32_t xDispatch = (mipWidth + POST_PROCESS_BLOOM_DISPATCH_X - 1) / POST_PROCESS_BLOOM_DISPATCH_X;
@@ -2366,7 +2367,7 @@ std::string RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::Vi
                     .radius = ppConfig.bloomRadius,
                 };
 
-                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("bloom_upsample");
+                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("bloom_upsample"));
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 uint32_t xDispatch = (mipWidth + POST_PROCESS_BLOOM_DISPATCH_X - 1) / POST_PROCESS_BLOOM_DISPATCH_X;
@@ -2391,7 +2392,7 @@ std::string RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::Vi
                 .sharpness = ppConfig.sharpeningStrength,
             };
 
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("sharpening");
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("sharpening"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             uint32_t xDispatch = (width + POST_PROCESS_SHARPENING_DISPATCH_X - 1) / POST_PROCESS_SHARPENING_DISPATCH_X;
@@ -2421,7 +2422,7 @@ std::string RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::Vi
                 .dstImageIndex = graph.GetStorageImageViewDescriptorIndex("tonemap_output"),
             };
 
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("tonemap_sdr");
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("tonemap_sdr"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(TonemapSDRPushConstant), &pushData);
             uint32_t xDispatch = (width + 15) / 16;
@@ -2450,7 +2451,7 @@ std::string RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::Vi
                 .tileMaxIndex = graph.GetStorageImageViewDescriptorIndex("motion_blur_tiled_max"),
             };
 
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("motion_blur_tile_max");
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("motion_blur_tile_max"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             uint32_t xDispatch = (blurTiledX + POST_PROCESS_MOTION_BLUR_TILE_DISPATCH_X - 1) / POST_PROCESS_MOTION_BLUR_TILE_DISPATCH_X;
@@ -2469,7 +2470,7 @@ std::string RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::Vi
                 .neighborMaxIndex = graph.GetStorageImageViewDescriptorIndex("motion_blur_tiled_neighbor_max"),
             };
 
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("motion_blur_neighbor_max");
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("motion_blur_neighbor_max"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             uint32_t xDispatch = (blurTiledX + POST_PROCESS_MOTION_BLUR_CONVOLUTION_DISPATCH_X - 1) / POST_PROCESS_MOTION_BLUR_CONVOLUTION_DISPATCH_X;
@@ -2497,7 +2498,7 @@ std::string RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::Vi
                 .depthScale = ppConfig.motionBlurDepthScale,
             };
 
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("motion_blur_reconstruction");
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("motion_blur_reconstruction"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             uint32_t xDispatch = (width + POST_PROCESS_MOTION_BLUR_DISPATCH_X - 1) / POST_PROCESS_MOTION_BLUR_DISPATCH_X;
@@ -2525,7 +2526,7 @@ std::string RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::Vi
                 .tint = ppConfig.colorGradingTint,
             };
 
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("color_grading");
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("color_grading"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             uint32_t xDispatch = (width + POST_PROCESS_COLOR_GRADING_DISPATCH_X - 1) / POST_PROCESS_COLOR_GRADING_DISPATCH_X;
@@ -2552,7 +2553,7 @@ std::string RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::Vi
                 .vignetteSmoothness = ppConfig.vignetteSmoothness,
             };
 
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("vignette_aberration");
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("vignette_aberration"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             uint32_t xDispatch = (width + POST_PROCESS_VIGNETTE_ABERRATION_DISPATCH_X - 1) / POST_PROCESS_VIGNETTE_ABERRATION_DISPATCH_X;
@@ -2578,7 +2579,7 @@ std::string RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::Vi
                 .frameIndex = static_cast<uint32_t>(frameNumber),
             };
 
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("film_grain");
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("film_grain"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             uint32_t xDispatch = (width + POST_PROCESS_FILM_GRAIN_DISPATCH_X - 1) / POST_PROCESS_FILM_GRAIN_DISPATCH_X;
@@ -2806,7 +2807,7 @@ void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& 
             .sceneDataIndex = 0,
         };
 
-        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("debug_render");
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("debug_render"));
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineEntry->pipeline);
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(DebugDrawPushConstant), &pushConstants);
 

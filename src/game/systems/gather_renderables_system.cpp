@@ -94,7 +94,7 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
         if (portalView.size_hint() > 0) {
             auto& portalDraw = frameBuffer->mainViewFamily.customShaderDraws["portal_rendering"];
             if (portalDraw.instances.empty()) {
-                portalDraw.pipelineName = "portal_rendering";
+                portalDraw.pipelineId = SID("portal_rendering");
                 portalDraw.stencilValue = 1;
             }
 
@@ -122,7 +122,7 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
         for (auto [entity, renderable, renderTransform] : cubemapView.each()) {
             auto& cubemapVis = frameBuffer->mainViewFamily.customShaderDraws["cubemap_visualize"];
             if (cubemapVis.instances.empty()) {
-                cubemapVis.pipelineName = "cubemap_visualize";
+                cubemapVis.pipelineId = SID("cubemap_visualize");
                 cubemapVis.pushConstantCustomData[0] = 0;
                 cubemapVis.pushConstantCustomData[1] = ASSET_SAMPLER_BINDLESS_INDEX;
                 cubemapVis.pushConstantCustomData[2] = 0;

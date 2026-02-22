@@ -113,7 +113,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, cons
                     .lodBias = lodBias,
                 };
 
-                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_instance_lod");
+                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_instance_lod"));
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
@@ -141,7 +141,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, cons
                 .blockCount = level1BlockCount,
             };
 
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_prefix_sum_up_1");
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_prefix_sum_up_1"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, level1BlockCount, 1, 1);
@@ -163,7 +163,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, cons
                     .blockCount = level2BlockCount,
                 };
 
-                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_prefix_sum_up_2");
+                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_prefix_sum_up_2"));
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 vkCmdDispatch(cmd, level2BlockCount, 1, 1);
@@ -179,7 +179,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, cons
                     .blockCount = level2BlockCount,
                 };
 
-                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_scan_blocks");
+                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_scan_blocks"));
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 vkCmdDispatch(cmd, 1, 1, 1);
@@ -195,7 +195,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, cons
                     .elementCount = level1BlockCount,
                 };
 
-                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_prefix_sum_down_1");
+                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_prefix_sum_down_1"));
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 vkCmdDispatch(cmd, level2BlockCount, 1, 1);
@@ -212,7 +212,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, cons
                     .blockCount = level1BlockCount,
                 };
 
-                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_scan_blocks");
+                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_scan_blocks"));
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 vkCmdDispatch(cmd, 1, 1, 1);
@@ -237,7 +237,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, cons
                     .elementCount = instanceCount,
                 };
 
-                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_prefix_sum_down_2");
+                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_prefix_sum_down_2"));
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 vkCmdDispatch(cmd, level1BlockCount, 1, 1);
@@ -253,7 +253,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, cons
                 .instanceCount = instanceCount,
             };
 
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_total_meshlet_count");
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_total_meshlet_count"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, 1, 1, 1);
@@ -286,7 +286,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, cons
                     .currentFrameBufferMeshletLimit = highestMeshletCount,
                 };
 
-                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_expand_instance_to_meshlet");
+                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_expand_instance_to_meshlet"));
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(meshlet_count_dispatch_args), offsetof(InstancingMeshletDispatchIndirect, x));
@@ -315,7 +315,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, cons
                     .currentFrameBufferMeshletLimit = highestMeshletCount,
                 };
 
-                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_meshlet_visibility_prefix_sum_up_1");
+                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_meshlet_visibility_prefix_sum_up_1"));
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(meshlet_count_dispatch_args), offsetof(InstancingMeshletDispatchIndirect, x));
@@ -336,7 +336,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, cons
                         .blockCount = meshletLevel2BlockCount,
                     };
 
-                    const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_prefix_sum_up_2");
+                    const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_prefix_sum_up_2"));
                     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                     vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                     vkCmdDispatch(cmd, meshletLevel2BlockCount, 1, 1);
@@ -352,7 +352,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, cons
                     .blockCount = meshletLevel2BlockCount,
                 };
 
-                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_scan_blocks");
+                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_scan_blocks"));
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 vkCmdDispatch(cmd, 1, 1, 1);
@@ -368,7 +368,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, cons
                     .elementCount = meshletLevel1BlockCount,
                 };
 
-                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_prefix_sum_down_1");
+                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_prefix_sum_down_1"));
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 vkCmdDispatch(cmd, meshletLevel2BlockCount, 1, 1);
@@ -385,7 +385,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, cons
                     .blockCount = meshletLevel1BlockCount,
                 };
 
-                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_scan_blocks");
+                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_scan_blocks"));
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 vkCmdDispatch(cmd, 1, 1, 1);
@@ -417,7 +417,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, cons
                     .currentFrameBufferMeshletLimit = highestMeshletCount,
                 };
 
-                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_meshlet_visibility_prefix_sum_down_2");
+                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_meshlet_visibility_prefix_sum_down_2"));
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(meshlet_count_dispatch_args), offsetof(InstancingMeshletDispatchIndirect, x));
@@ -431,7 +431,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, cons
                 .currentFrameBufferMeshletLimit = highestMeshletCount,
             };
 
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_compacted_meshlet_dispatch");
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_compacted_meshlet_dispatch"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, 1, 1, 1);
@@ -447,7 +447,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, cons
             .currentHighest = graph.GetBufferAddress("readback_buffer") + offsetof(ReadbackStruct, meshletCount),
         };
 
-        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_max_meshlet_count");
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_max_meshlet_count"));
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         vkCmdDispatch(cmd, 1, 1, 1);
@@ -564,7 +564,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryShadowPass(RenderGraph& graph
                     .lodBias = lodBias,
                 };
 
-                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_instance_lod_shadows");
+                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_instance_lod_shadows"));
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
@@ -592,7 +592,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryShadowPass(RenderGraph& graph
                 .blockCount = level1BlockCount,
             };
 
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_prefix_sum_up_1");
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_prefix_sum_up_1"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, level1BlockCount, 1, 1);
@@ -614,7 +614,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryShadowPass(RenderGraph& graph
                     .blockCount = level2BlockCount,
                 };
 
-                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_prefix_sum_up_2");
+                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_prefix_sum_up_2"));
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 vkCmdDispatch(cmd, level2BlockCount, 1, 1);
@@ -630,7 +630,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryShadowPass(RenderGraph& graph
                     .blockCount = level2BlockCount,
                 };
 
-                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_scan_blocks");
+                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_scan_blocks"));
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 vkCmdDispatch(cmd, 1, 1, 1);
@@ -646,7 +646,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryShadowPass(RenderGraph& graph
                     .elementCount = level1BlockCount,
                 };
 
-                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_prefix_sum_down_1");
+                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_prefix_sum_down_1"));
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 vkCmdDispatch(cmd, level2BlockCount, 1, 1);
@@ -663,7 +663,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryShadowPass(RenderGraph& graph
                     .blockCount = level1BlockCount,
                 };
 
-                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_scan_blocks");
+                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_scan_blocks"));
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 vkCmdDispatch(cmd, 1, 1, 1);
@@ -688,7 +688,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryShadowPass(RenderGraph& graph
                     .elementCount = instanceCount,
                 };
 
-                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_prefix_sum_down_2");
+                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_prefix_sum_down_2"));
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 vkCmdDispatch(cmd, level1BlockCount, 1, 1);
@@ -704,7 +704,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryShadowPass(RenderGraph& graph
                 .instanceCount = instanceCount,
             };
 
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_total_meshlet_count");
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_total_meshlet_count"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, 1, 1, 1);
@@ -740,7 +740,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryShadowPass(RenderGraph& graph
                     .currentFrameBufferMeshletLimit = highestMeshletCount,
                 };
 
-                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_expand_instance_to_meshlet_shadows");
+                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_expand_instance_to_meshlet_shadows"));
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(meshlet_count_dispatch_args), offsetof(InstancingMeshletDispatchIndirect, x));
@@ -769,7 +769,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryShadowPass(RenderGraph& graph
                     .currentFrameBufferMeshletLimit = highestMeshletCount,
                 };
 
-                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_meshlet_visibility_prefix_sum_up_1");
+                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_meshlet_visibility_prefix_sum_up_1"));
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(meshlet_count_dispatch_args), offsetof(InstancingMeshletDispatchIndirect, x));
@@ -790,7 +790,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryShadowPass(RenderGraph& graph
                         .blockCount = meshletLevel2BlockCount,
                     };
 
-                    const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_prefix_sum_up_2");
+                    const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_prefix_sum_up_2"));
                     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                     vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                     vkCmdDispatch(cmd, meshletLevel2BlockCount, 1, 1);
@@ -806,7 +806,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryShadowPass(RenderGraph& graph
                     .blockCount = meshletLevel2BlockCount,
                 };
 
-                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_scan_blocks");
+                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_scan_blocks"));
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 vkCmdDispatch(cmd, 1, 1, 1);
@@ -822,7 +822,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryShadowPass(RenderGraph& graph
                     .elementCount = meshletLevel1BlockCount,
                 };
 
-                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_prefix_sum_down_1");
+                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_prefix_sum_down_1"));
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 vkCmdDispatch(cmd, meshletLevel2BlockCount, 1, 1);
@@ -839,7 +839,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryShadowPass(RenderGraph& graph
                     .blockCount = meshletLevel1BlockCount,
                 };
 
-                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_scan_blocks");
+                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_scan_blocks"));
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 vkCmdDispatch(cmd, 1, 1, 1);
@@ -871,7 +871,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryShadowPass(RenderGraph& graph
                     .currentFrameBufferMeshletLimit = highestMeshletCount,
                 };
 
-                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_meshlet_visibility_prefix_sum_down_2");
+                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_meshlet_visibility_prefix_sum_down_2"));
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(meshlet_count_dispatch_args), offsetof(InstancingMeshletDispatchIndirect, x));
@@ -885,7 +885,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryShadowPass(RenderGraph& graph
                 .currentFrameBufferMeshletLimit = highestMeshletCount,
             };
 
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_compacted_meshlet_dispatch");
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_compacted_meshlet_dispatch"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, 1, 1, 1);
@@ -901,7 +901,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryShadowPass(RenderGraph& graph
             .currentHighest = graph.GetBufferAddress("readback_buffer") + offsetof(ReadbackStruct, meshletCount),
         };
 
-        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_max_meshlet_count");
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_max_meshlet_count"));
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         vkCmdDispatch(cmd, 1, 1, 1);

@@ -11,6 +11,7 @@
 
 #include <glm/glm.hpp>
 
+#include "core/string_id.h"
 #include "core/allocators/handle.h"
 #include "core/math/transform.h"
 #include "core/time/time_frame.h"
@@ -158,7 +159,7 @@ struct InstanceData
 
 struct CustomShaderDraw
 {
-    std::string pipelineName;
+    StringId pipelineId;
 
     std::array<uint32_t, 38> pushConstantCustomData;
     std::vector<InstanceData> instances;

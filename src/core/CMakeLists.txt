@@ -35,6 +35,8 @@ add_library(core STATIC
         math/math_helpers.h
         allocators/lock_free_handle_allocator.cpp
         allocators/lock_free_handle_allocator.h
+        string_id.cpp
+        string_id.h
 )
 
 

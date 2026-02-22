@@ -303,7 +303,7 @@ bool EnvironmentMapGenerateSlot::LoadEquirectangularAndGenerate(
         VkDeviceSize bindingOffset{0};
         vkCmdBindDescriptorBuffersEXT(cmd, bindings.size(), bindings.data());
 
-        const Render::PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("ibl_equirect_to_cubemap");
+        const Render::PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("ibl_equirect_to_cubemap"));
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(eqPc), &eqPc);
         vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->layout, 0, bindings.size(), &bindingIndex, &bindingOffset);
@@ -443,7 +443,7 @@ bool EnvironmentMapGenerateSlot::LoadEquirectangularAndGenerate(
     // Generate specular prefilter for mips 0-4
     {
         ZoneScopedN("PrefilterSpecular");
-        const Render::PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("ibl_prefilter_specular");
+        const Render::PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("ibl_prefilter_specular"));
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
         vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->layout, 0, bindings.size(), &bindingIndex, &bindingOffset);
 
@@ -472,7 +472,7 @@ bool EnvironmentMapGenerateSlot::LoadEquirectangularAndGenerate(
     // Generate diffuse irradiance for mip 5
     {
         ZoneScopedN("ConvolveDiffuse");
-        const Render::PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("ibl_convolve_diffuse");
+        const Render::PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("ibl_convolve_diffuse"));
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
         vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->layout, 0, bindings.size(), &bindingIndex, &bindingOffset);
 

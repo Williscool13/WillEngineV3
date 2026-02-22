@@ -95,7 +95,7 @@ void CreateBRDFLookupTable(
         VkDeviceSize bindingOffset{0};
         vkCmdBindDescriptorBuffersEXT(graphicsCmd, bindings.size(), bindings.data());
 
-        const Render::PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("ibl_brdf_lut");
+        const Render::PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("ibl_brdf_lut"));
         if (!pipelineEntry) {
             SPDLOG_ERROR("[CreateBRDFLookupTable] \"ibl_brdf_lut\" Pipeline doesn't exist");
             return;

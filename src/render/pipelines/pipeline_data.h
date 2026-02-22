@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <volk.h>
 
+#include "core/string_id.h"
 #include "pipeline_category.h"
 
 namespace Render
@@ -27,7 +28,7 @@ public:
     virtual bool CreatePipeline(VulkanContext* ctx, VkPipelineCache pipelineCache) = 0;
 
     // Initialized once, never modified again
-    std::string name{};
+    StringId pipelineId{};
     PipelineCategory category{PipelineCategory::None};
     VkPipelineLayoutCreateInfo layoutCreateInfo{};
     std::vector<VkDescriptorSetLayout> customLayout{};
