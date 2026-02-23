@@ -228,6 +228,8 @@ void AsyncAssetLoadManager::Join()
     workCounter.fetch_add(1);
     wakeCV.notify_one();
     thisThread.join();
+
+    assetLoadScheduler->WaitforAllAndShutdown();
 }
 
 void AsyncAssetLoadManager::GPUDispatchThreadMain()

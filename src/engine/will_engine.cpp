@@ -29,6 +29,21 @@
 #include "editor/asset-generation/asset_generator.h"
 #endif
 
+#if PROFILER_ENABLED
+void* operator new(std::size_t count)
+{
+    auto ptr = malloc(count);
+    TracyAlloc(ptr, count);
+    return ptr;
+}
+
+void operator delete(void* ptr) noexcept
+{
+    TracyFree(ptr);
+    free(ptr);
+}
+
+#endif
 namespace Engine
 {
 WillEngine::WillEngine(Platform::CrashHandler* crashHandler_)
@@ -186,7 +201,7 @@ void WillEngine::Initialize()
         engineContext->physicsSystem = physicsSystem.get();
         engineContext->scheduler = scheduler.get();
 #if DEBUG
-        engineContext->internStringFn  = [](uint64_t hash, const char* str) { DBG_InternString(hash, str); };
+        engineContext->internStringFn = [](uint64_t hash, const char* str) { DBG_InternString(hash, str); };
         engineContext->resolveStringIdFn = [](uint64_t hash) { return DBG_ResolveStringId(hash); };
 #endif
     }
@@ -630,8 +645,7 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
 
         if (ImGui::Button("Intel Sponza")) {
             modelGenerator->RequestModelGenerate(Platform::GetAssetPath() / "IntelSponza.glb",
-                            Platform::GetAssetPath() / "IntelSponza.willmodel");
-
+                                                 Platform::GetAssetPath() / "IntelSponza.willmodel");
         }
         if (ImGui::Button("dragon.willmodel")) {
             startGeneration("dragon",
