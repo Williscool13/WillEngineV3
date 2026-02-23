@@ -18,19 +18,19 @@ class RingBuffer
 
 public:
     RingBuffer()
-        : head(0)
-        , tail(0)
+        : head(0), tail(0)
     {}
 
     void Push(const T& item)
     {
+        if (IsFull()) { head++; }
         buffer[tail & Mask] = item;
         tail++;
     }
 
     bool Pop(T& item)
     {
-        if (IsEmpty()) return false;
+        if (IsEmpty()) { return false; }
 
         item = buffer[head & Mask];
         head++;
@@ -47,6 +47,15 @@ public:
     constexpr size_t GetCapacity() const { return Capacity; }
     bool IsEmpty() const { return head == tail; }
     bool IsFull() const { return (tail - head) >= Capacity; }
+
+    template<typename Func>
+    void ForEach(Func&& fn) const
+    {
+        for (size_t i = head; i != tail; i++)
+            fn(buffer[i & Mask]);
+    }
+
+    const T& GetAt(size_t i) const { return buffer[(head + i) & Mask]; }
 
 private:
     static constexpr size_t Mask = Capacity - 1;

@@ -32,6 +32,7 @@ struct ResourceManager;
 
 namespace Engine
 {
+class EngineLogger;
 class AssetManager;
 }
 
@@ -50,7 +51,8 @@ struct WindowContext
 struct EngineContext
 {
     WindowContext windowContext;
-    std::shared_ptr<spdlog::logger> logger;
+
+    Engine::EngineLogger* engineLogger;
 
     // Imgui
     ImGuiContext* imguiContext;

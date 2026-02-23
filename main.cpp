@@ -12,16 +12,21 @@ int main(int argc, char* argv[])
 {
     Platform::CrashHandler crashHandler(Platform::GetCrashPath());
 
+    Utils::Logger* _logger = nullptr;
 #if LOGGING_ENABLED
     Utils::Logger logger(Platform::GetLogPath() / "engine.log");
     SPDLOG_INFO("Engine starting...");
     crashHandler.SetLogPath(logger.GetLogPath());
+
+    _logger = &logger;
 #endif
 
-    Engine::WillEngine we{&crashHandler};
-    we.Initialize();
-    we.Run();
-    we.Cleanup();
+    {
+        Engine::WillEngine we{&crashHandler};
+        we.Initialize(_logger);
+        we.Run();
+        we.Cleanup();
+    }
 
 #if LOGGING_ENABLED
     logger.ArchiveLogs();

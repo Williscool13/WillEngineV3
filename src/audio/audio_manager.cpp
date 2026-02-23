@@ -6,6 +6,7 @@
 
 #include "audio_asset.h"
 #include "asset-load/async_asset_load_manager.h"
+#include "engine/logging/engine_log.h"
 #include "platform/paths.h"
 #include "SDL_mixer/include/SDL3_mixer/SDL_mixer.h"
 #include "spdlog/spdlog.h"
@@ -25,14 +26,14 @@ AudioManager::AudioManager(AssetLoad::AsyncAssetLoadManager* asyncAssetLoadManag
 
     musicMixerTrack = MIX_CreateTrack(mixer);
     if (musicMixerTrack == nullptr) {
-        SPDLOG_ERROR("Failed to create music track: {}", SDL_GetError());
+        LOG_ERROR(Audio, "Failed to create music track: {}", SDL_GetError());
         return;
     }
 
     for (size_t i = 0; i < MAX_SFX_TRACKS; ++i) {
         sfxTracks[i] = MIX_CreateTrack(mixer);
         if (!sfxTracks[i]) {
-            SPDLOG_ERROR("Failed to create SFX track {}: {}", i, SDL_GetError());
+            LOG_ERROR(Audio, "Failed to create SFX track {}: {}", i, SDL_GetError());
         }
     }
 
@@ -42,7 +43,7 @@ AudioManager::AudioManager(AssetLoad::AsyncAssetLoadManager* asyncAssetLoadManag
 
     std::filesystem::path musicPath = Platform::GetAssetPath() / "audio/the_entertainer.ogg";
     Core::Handle<WillAudio> audioHandle = LoadAudio("test_music", musicPath);
-    SPDLOG_INFO("Requesting async load for: {} (handle: {}/{})", musicPath.string(), audioHandle.index, audioHandle.generation);
+    LOG_INFO(Audio, "Requesting async load for: {} (handle: {}/{})", musicPath.string(), audioHandle.index, audioHandle.generation);
 }
 
 AudioManager::~AudioManager()
@@ -88,11 +89,11 @@ void AudioManager::Update() const
     while (asyncAssetLoadManager->TryDequeueAudioComplete(complete)) {
         if (complete.bSuccess) {
             complete.audioEntry->loadState = WillAudio::AudioLoadState::Loaded;
-            SPDLOG_INFO("Audio loaded: {}", complete.audioEntry->name);
+            LOG_INFO(Audio, "Audio loaded: {}", complete.audioEntry->name);
         }
         else {
             complete.audioEntry->loadState = WillAudio::AudioLoadState::FailedToLoad;
-            SPDLOG_ERROR("Audio load failed: {}", complete.audioEntry->name);
+            LOG_ERROR(Audio, "Audio load failed: {}", complete.audioEntry->name);
         }
     }
 }
@@ -104,14 +105,14 @@ Core::Handle<WillAudio> AudioManager::LoadAudio(const std::string& name, const s
         WillAudio* audio = GetAudioPtr(it->second);
         if (audio) {
             audio->refCount++;
-            SPDLOG_INFO("Incremented ref count for audio '{}' to {}", name, audio->refCount);
+            LOG_INFO(Audio, "Incremented ref count for audio '{}' to {}", name, audio->refCount);
         }
         return it->second;
     }
 
     Core::Handle<WillAudio> handle = audioHandleAllocator.Add();
     if (!handle.IsValid()) {
-        SPDLOG_ERROR("Failed to allocate handle for audio: {}", name);
+        LOG_ERROR(Audio, "Failed to allocate handle for audio: {}", name);
         return Core::Handle<WillAudio>::INVALID;
     }
 
@@ -126,7 +127,7 @@ Core::Handle<WillAudio> AudioManager::LoadAudio(const std::string& name, const s
     namedAudio[name] = handle;
     asyncAssetLoadManager->RequestAudioLoad(&audio);
 
-    SPDLOG_INFO("Loading new audio '{}' with ref count 1", name);
+    LOG_INFO(Audio, "Loading new audio '{}' with ref count 1", name);
 
     return handle;
 }
@@ -135,18 +136,18 @@ void AudioManager::UnloadAudio(Core::Handle<WillAudio> handle)
 {
     WillAudio* audio = GetAudioPtr(handle);
     if (!audio) {
-        SPDLOG_ERROR("Invalid audio handle for unload");
+        LOG_ERROR(Audio, "Invalid audio handle for unload");
         return;
     }
 
     if (audio->refCount > 0) {
         audio->refCount--;
-        SPDLOG_INFO("Decremented ref count for audio '{}' to {}", audio->name, audio->refCount);
+        LOG_INFO(Audio, "Decremented ref count for audio '{}' to {}", audio->name, audio->refCount);
     }
 
     if (audio->refCount == 0) {
         // TODO: Actually unload audio when needed
-        SPDLOG_INFO("Audio '{}' ref count reached 0 (unload not implemented yet)", audio->name);
+        LOG_INFO(Audio, "Audio '{}' ref count reached 0 (unload not implemented yet)", audio->name);
     }
 }
 
@@ -154,17 +155,17 @@ void AudioManager::PlayMusic(Core::Handle<WillAudio> handle, bool loop)
 {
     WillAudio* audio = GetAudioPtr(handle);
     if (!audio) {
-        SPDLOG_ERROR("Invalid audio handle for music playback");
+        LOG_ERROR(Audio, "Invalid audio handle for music playback");
         return;
     }
 
     if (audio->loadState != WillAudio::AudioLoadState::Loaded) {
-        SPDLOG_WARN("Audio not loaded yet: {}", audio->name);
+        LOG_WARN(Audio, "Audio not loaded yet: {}", audio->name);
         return;
     }
 
     if (!audio->mixAudio) {
-        SPDLOG_ERROR("Audio data is null for: {}", audio->name);
+        LOG_ERROR(Audio, "Audio data is null for: {}", audio->name);
         return;
     }
 
@@ -174,7 +175,7 @@ void AudioManager::PlayMusic(Core::Handle<WillAudio> handle, bool loop)
     else {
         musicMixerTrack = MIX_CreateTrack(mixer);
         if (!musicMixerTrack) {
-            SPDLOG_ERROR("Failed to create music track: {}", SDL_GetError());
+            LOG_ERROR(Audio, "Failed to create music track: {}", SDL_GetError());
             return;
         }
     }
@@ -183,7 +184,7 @@ void AudioManager::PlayMusic(Core::Handle<WillAudio> handle, bool loop)
 
     bool res = MIX_PlayTrack(musicMixerTrack, loop ? infiniteMusicProp : 0);
     if (!res) {
-        SPDLOG_INFO("Failed to play track");
+        LOG_INFO(Audio, "Failed to play track");
     }
 }
 
@@ -191,7 +192,7 @@ void AudioManager::PlaySfx(Core::Handle<WillAudio> handle)
 {
     WillAudio* audio = GetAudioPtr(handle);
     if (!audio || audio->loadState != WillAudio::AudioLoadState::Loaded || !audio->mixAudio) {
-        SPDLOG_ERROR("Cannot play SFX: invalid audio state");
+        LOG_ERROR(Audio, "Cannot play SFX: invalid audio state");
         return;
     }
 

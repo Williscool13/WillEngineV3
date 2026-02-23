@@ -5,6 +5,7 @@
 #include "asset_manager.h"
 
 #include "asset-load/async_asset_load_manager.h"
+#include "logging/engine_log.h"
 #include "platform/paths.h"
 
 namespace Engine
@@ -100,7 +101,7 @@ WillModelHandle AssetManager::LoadModel(const std::filesystem::path& path)
         if (modelAllocator.IsValid(existingHandle)) {
             Render::WillModel& model = models[existingHandle.index];
             model.refCount++;
-            SPDLOG_TRACE("[AssetManager] Model already loaded: {}, refCount: {}", path.string(), model.refCount);
+            LOG_TRACE(Asset, "Model already loaded: {}, refCount: {}", path.string(), model.refCount);
             return existingHandle;
         }
         pathToHandle.erase(it);
@@ -108,7 +109,7 @@ WillModelHandle AssetManager::LoadModel(const std::filesystem::path& path)
 
     WillModelHandle handle = modelAllocator.Add();
     if (!handle.IsValid()) {
-        SPDLOG_ERROR("[AssetManager] Failed to allocate model slot for: {}", path.string());
+        LOG_ERROR(Asset, "Failed to allocate model slot for: {}", path.string());
         return WillModelHandle{};
     }
 
@@ -137,7 +138,7 @@ Render::WillModel* AssetManager::GetModel(WillModelHandle handle)
 void AssetManager::UnloadModel(WillModelHandle handle)
 {
     if (!modelAllocator.IsValid(handle)) {
-        SPDLOG_WARN("[AssetManager] Attempted to unload invalid model handle");
+        LOG_WARN(Asset, "Attempted to unload invalid model handle");
         return;
     }
 
@@ -167,13 +168,13 @@ void AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuffer) const
             complete.model->bufferAcquireOps.clear();
             complete.model->imageAcquireOps.clear();
             complete.model->modelLoadState = Render::WillModel::ModelLoadState::Loaded;
-            SPDLOG_INFO("[AssetManager] Model load succeeded: {}", complete.model->name);
+            LOG_INFO(Asset, "Model load succeeded: {}", complete.model->name);
         }
         else {
             complete.model->bufferAcquireOps.clear();
             complete.model->imageAcquireOps.clear();
             complete.model->modelLoadState = Render::WillModel::ModelLoadState::NotLoaded;
-            SPDLOG_ERROR("[AssetManager] Model load failed: {}", complete.model->name);
+            LOG_ERROR(Asset,"Model load failed: {}", complete.model->name);
         }
     }
 
@@ -183,11 +184,11 @@ void AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuffer) const
             stagingFrameBuffer.imageAcquireOperations.push_back(textureComplete.texture->acquireBarrier);
 
             textureComplete.texture->loadState = Render::Texture::LoadState::Loaded;
-            SPDLOG_INFO("[AssetManager] Texture load succeeded: {} (bindless index: {})", textureComplete.texture->name, static_cast<uint32_t>(textureComplete.texture->bindlessHandle.index));
+            LOG_INFO(Asset, "Texture load succeeded: {} (bindless index: {})", textureComplete.texture->name, static_cast<uint32_t>(textureComplete.texture->bindlessHandle.index));
         }
         else {
             textureComplete.texture->loadState = Render::Texture::LoadState::NotLoaded;
-            SPDLOG_ERROR("[AssetManager] Texture load failed: {}", textureComplete.texture->name);
+            LOG_ERROR(Asset, "Texture load failed: {}", textureComplete.texture->name);
         }
     }
 
@@ -197,11 +198,11 @@ void AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuffer) const
             stagingFrameBuffer.imageAcquireOperations.push_back(cubemapComplete.cubemap->acquireBarrier);
 
             cubemapComplete.cubemap->loadState = Render::Cubemap::LoadState::Loaded;
-            SPDLOG_INFO("[AssetManager] Cubemap load succeeded: {} (bindless index: {})", cubemapComplete.cubemap->name, static_cast<uint32_t>(cubemapComplete.cubemap->bindlessHandle.index));
+            LOG_INFO(Asset, "Cubemap load succeeded: {} (bindless index: {})", cubemapComplete.cubemap->name, static_cast<uint32_t>(cubemapComplete.cubemap->bindlessHandle.index));
         }
         else {
             textureComplete.texture->loadState = Render::Texture::LoadState::NotLoaded;
-            SPDLOG_ERROR("[AssetManager] Cubemap load failed: {}", cubemapComplete.cubemap->name);
+            LOG_ERROR(Asset, "Cubemap load failed: {}", cubemapComplete.cubemap->name);
         }
     }
 }
@@ -247,7 +248,7 @@ TextureHandle AssetManager::LoadTexture(const std::filesystem::path& path)
         if (textureAllocator.IsValid(existingHandle)) {
             Render::Texture& texture = textures[existingHandle.index];
             texture.refCount++;
-            SPDLOG_TRACE("[AssetManager] Texture already loaded: {}, refCount: {}", texture.name, texture.refCount);
+            LOG_TRACE(Asset, "Texture already loaded: {}, refCount: {}", texture.name, texture.refCount);
             return existingHandle;
         }
         pathToTextureHandle.erase(it);
@@ -255,7 +256,7 @@ TextureHandle AssetManager::LoadTexture(const std::filesystem::path& path)
 
     TextureHandle handle = textureAllocator.Add();
     if (!handle.IsValid()) {
-        SPDLOG_ERROR("[AssetManager] Failed to allocate texture slot for: {}", path.filename().string());
+        LOG_ERROR(Asset, "Failed to allocate texture slot for: {}", path.filename().string());
         return TextureHandle{};
     }
 
@@ -286,14 +287,14 @@ void AssetManager::UnloadTexture(TextureHandle handle)
 {
     // todo: add to a queue that only pops after 3 FIF
     if (!textureAllocator.IsValid(handle)) {
-        SPDLOG_WARN("[AssetManager] Attempted to unload invalid texture handle");
+        LOG_WARN(Asset, "Attempted to unload invalid texture handle");
         return;
     }
 
     Render::Texture& texture = textures[handle.index];
     texture.refCount--;
 
-    SPDLOG_TRACE("[AssetManager] Texture refCount decremented: {}, refCount: {}", texture.name, texture.refCount);
+    LOG_TRACE(Asset, "Texture refCount decremented: {}, refCount: {}", texture.name, texture.refCount);
 
     if (texture.refCount == 0) {
         texture.loadState = Render::Texture::LoadState::NotLoaded;
@@ -309,14 +310,14 @@ CubemapHandle AssetManager::LoadCubemap(const std::filesystem::path& path)
         CubemapHandle handle = it->second;
         if (cubemapAllocator.IsValid(handle)) {
             cubemaps[handle.index].refCount++;
-            SPDLOG_TRACE("[AssetManager] Cubemap already loaded, incrementing refCount: {}", path.string());
+            LOG_TRACE(Asset, "Cubemap already loaded, incrementing refCount: {}", path.string());
             return handle;
         }
     }
 
     CubemapHandle handle = cubemapAllocator.Add();
     if (!cubemapAllocator.IsValid(handle)) {
-        SPDLOG_ERROR("[AssetManager] Failed to allocate cubemap handle for: {}", path.string());
+        LOG_ERROR(Asset, "Failed to allocate cubemap handle for: {}", path.string());
         return {};
     }
 
@@ -345,14 +346,14 @@ Render::Cubemap* AssetManager::GetCubemap(CubemapHandle handle)
 void AssetManager::UnloadCubemap(CubemapHandle handle)
 {
     if (!cubemapAllocator.IsValid(handle)) {
-        SPDLOG_WARN("[AssetManager] Attempted to unload invalid cubemap handle");
+        LOG_WARN(Asset, "Attempted to unload invalid cubemap handle");
         return;
     }
 
     Render::Cubemap& cubemap = cubemaps[handle.index];
     cubemap.refCount--;
 
-    SPDLOG_TRACE("[AssetManager] Cubemap refCount decremented: {}, refCount: {}", cubemap.name, cubemap.refCount);
+    LOG_TRACE(Asset, "Cubemap refCount decremented: {}, refCount: {}", cubemap.name, cubemap.refCount);
 
     if (cubemap.refCount == 0) {
         cubemap.loadState = Render::Cubemap::LoadState::NotLoaded;

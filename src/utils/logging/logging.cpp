@@ -22,22 +22,17 @@ Logger::Logger(const std::filesystem::path& _logPath)
         auto fileSink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(_logPath.string(), true);
         auto consoleSink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
 
-        fileSink->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] [%t] %v");
-        consoleSink->set_pattern("[%^%l%$] %v");
+        fileSink->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] [%t] [%n] [%!] %v");
+        consoleSink->set_pattern("[%^%l%$] [%n] %v");
 
-        std::vector<spdlog::sink_ptr> sinks{fileSink, consoleSink};
-        logger = std::make_shared<spdlog::logger>("engine", sinks.begin(), sinks.end());
-        logger->set_level(spdlog::level::trace);
-        logger->flush_on(spdlog::level::warn);
-
-        spdlog::register_logger(logger);
-        spdlog::set_default_logger(logger);
-
-        logger->info("Logger initialized: {}", logPath.string());
+        sinks.push_back(fileSink);
+        sinks.push_back(consoleSink);
     } catch (const std::exception& ex) {
         fmt::print(stderr, "Failed to initialize logger: {}\n", ex.what());
     }
 }
+
+Logger::~Logger() = default;
 
 void Logger::ArchiveLogs()
 {
@@ -59,23 +54,11 @@ void Logger::ArchiveLogs()
     std::strftime(timestamp, sizeof(timestamp), "%Y%m%d_%H%M%S", &tm);
     std::filesystem::path archivePath = logPath.parent_path() / (std::string("engine_") + timestamp + ".log");
 
-    Flush();
-
     std::filesystem::copy_file(logPath, archivePath, std::filesystem::copy_options::overwrite_existing);
 }
 
-Logger::~Logger()
+void Logger::AddSink(spdlog::sink_ptr sink)
 {
-    if (logger) {
-        logger->flush();
-        spdlog::drop_all();
-    }
-}
-
-void Logger::Flush()
-{
-    if (logger) {
-        logger->flush();
-    }
+    sinks.push_back(sink);
 }
 } // Utils

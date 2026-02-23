@@ -16,6 +16,11 @@
 #include "platform/directory_watcher.h"
 #include "platform/dll_loader.h"
 
+namespace Utils
+{
+class Logger;
+}
+
 namespace Editor
 {
 class AssetGenerator;
@@ -33,6 +38,7 @@ class PhysicsSystem;
 
 namespace Engine
 {
+class EngineLogger;
 class AssetManager;
 }
 
@@ -89,7 +95,7 @@ public:
 
     ~WillEngine();
 
-    void Initialize();
+    void Initialize(Utils::Logger* logger);
 
     void Run();
 
@@ -105,6 +111,10 @@ private: // Windowing
     bool bMinimized{false};
 
 private: // Main Systems
+#if LOGGING_ENABLED
+    // Unload last so destructor logs go through
+    std::unique_ptr<EngineLogger> engineLogger;
+#endif
     std::unique_ptr<enki::TaskScheduler> scheduler{};
     std::unique_ptr<Render::RenderThread> renderThread{};
     std::unique_ptr<Core::FrameSync> engineRenderSynchronization{};

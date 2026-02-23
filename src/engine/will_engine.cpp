@@ -19,11 +19,13 @@
 #include "core/time/time_manager.h"
 #include "asset-load/async_asset_load_manager.h"
 #include "audio/audio_manager.h"
+#include "logging/engine_logger.h"
 #include "physics/physics_system.h"
 #include "platform/paths.h"
 #include "platform/thread_utils.h"
 #include "render/render_thread.h"
 #include "render/pipelines/pipeline_manager.h"
+#include "utils/logging/logging.h"
 
 #if WILL_EDITOR
 #include "editor/asset-generation/asset_generator.h"
@@ -52,9 +54,15 @@ WillEngine::WillEngine(Platform::CrashHandler* crashHandler_)
 
 WillEngine::~WillEngine() = default;
 
-void WillEngine::Initialize()
+void WillEngine::Initialize(Utils::Logger* logger)
 {
     ZoneScoped;
+
+#if LOGGING_ENABLED
+    engineLogger = std::make_unique<EngineLogger>();
+    engineLogger->Init(logger);
+#endif
+
     tracy::SetThreadName("EngineThread");
     Platform::SetThreadName("EngineThread");
 
@@ -191,7 +199,7 @@ void WillEngine::Initialize()
         gameState = std::make_unique<GameState>();
 
         engineContext = std::make_unique<Core::EngineContext>();
-        engineContext->logger = spdlog::default_logger();
+        engineContext->engineLogger = engineLogger.get();
         engineContext->imguiContext = ImGui::GetCurrentContext();
         engineContext->windowContext.windowWidth = w;
         engineContext->windowContext.windowHeight = h;
@@ -718,6 +726,51 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
         }
     }
     ImGui::End();
+
+#if LOGGING_ENABLED
+    if (ImGui::Begin("Log")) {
+        const auto& entries = engineLogger->GetImGuiSink().GetEntries();
+
+        // Category filter
+        static bool categoryFilter[static_cast<int>(LogCategory::Count)];
+        static bool init = false;
+        if (!init) {
+            memset(categoryFilter, 1, sizeof(categoryFilter));
+            init = true;
+        }
+        for (int i = 0; i < static_cast<int>(LogCategory::Count); i++) {
+            ImGui::SameLine();
+            ImGui::Checkbox(kCategoryNames[i], &categoryFilter[i]);
+        }
+
+        ImGui::Separator();
+
+        if (ImGui::BeginChild("LogScrollRegion", ImVec2(0, 0), false, ImGuiWindowFlags_HorizontalScrollbar)) {
+            ImGuiListClipper clipper;
+            const int32_t count = static_cast<int>(entries.GetSize());
+            static std::vector<int> filtered;
+            filtered.clear();
+            for (int i = 0; i < count; i++) {
+                const auto& entry = entries.GetAt(i);
+                if (categoryFilter[static_cast<int>(entry.category)])
+                    filtered.push_back(i);
+            }
+
+            clipper.Begin(static_cast<int>(filtered.size()));
+            while (clipper.Step()) {
+                for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++) {
+                    ImGui::TextUnformatted(entries.GetAt(filtered[i]).message.c_str());
+                }
+            }
+
+            if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) {
+                ImGui::SetScrollHereY(1.0f);
+            }
+        }
+        ImGui::EndChild();
+    }
+    ImGui::End();
+#endif
 #endif
 
     ImGui::Render();

@@ -11,6 +11,14 @@ add_library(engine STATIC
         asset_manager_types.h
         material_manager.cpp
         material_manager.h
+        logging/engine_logger.cpp
+        logging/engine_logger.h
+        logging/imgui_sink.cpp
+        logging/imgui_sink.h
+        logging/engine_log.cpp
+        logging/engine_log.h
+        logging/log_category.cpp
+        logging/log_category.h
 )
 
 target_include_directories(engine PRIVATE

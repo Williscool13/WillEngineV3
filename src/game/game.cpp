@@ -18,6 +18,7 @@
 #include "core/math/constants.h"
 
 #include "fwd_components.h"
+#include "engine/logging/engine_logger.h"
 #include "systems/debug_system.h"
 #include "systems/camera_system.h"
 #include "systems/editor_systems.h"
@@ -38,12 +39,12 @@ GAME_API void GameStartup(Core::EngineContext* ctx, Engine::GameState* state)
     cameraTransform.rotation = glm::quatLookAt(glm::normalize(glm::vec3(0.0f, 0.0f, 0.0f) - glm::vec3(0.0f, 3.0f, 5.0f)), WORLD_UP);
     state->registry.emplace<Game::Component::MainViewportComponent>(camera);
     state->registry.ctx().emplace<Engine::GameState*>(state);
-
-    spdlog::set_default_logger(ctx->logger);
 }
 
 GAME_API void GameLoad(Core::EngineContext* ctx, Engine::GameState* state)
 {
+    ctx->engineLogger->RegisterLoggersForDLL(Engine::LogCategory::Game);
+
     SPDLOG_TRACE("[Game] Registering engine component types:");
     SPDLOG_TRACE("  TransformComponent: {}", entt::type_id<Game::Component::TransformComponent>().hash());
     SPDLOG_TRACE("  CameraComponent: {}", entt::type_id<Game::Component::CameraComponent>().hash());
@@ -59,7 +60,6 @@ GAME_API void GameLoad(Core::EngineContext* ctx, Engine::GameState* state)
     SPDLOG_TRACE("  RenderableComponent: {}", entt::type_id<Game::Component::RenderableComponent>().hash());
     SPDLOG_TRACE("  TransformComponent: {}", entt::type_id<Game::Component::TransformComponent>().hash());
 
-    spdlog::set_default_logger(ctx->logger);
     ImGui::SetCurrentContext(ctx->imguiContext);
     Physics::PhysicsSystem::RegisterPhysics();
     Audio::AudioManager::RegisterAudio();

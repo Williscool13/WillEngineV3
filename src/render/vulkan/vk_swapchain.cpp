@@ -9,6 +9,7 @@
 
 #include "vk_context.h"
 #include "vk_utils.h"
+#include "engine/logging/engine_log.h"
 
 namespace Render
 {
@@ -46,8 +47,8 @@ void Swapchain::Create(uint32_t width, uint32_t height)
             .build();
 
     if (!swapchainResult) {
-        SPDLOG_ERROR("Failed to create swapchain: {}", swapchainResult.error().message());
-        SPDLOG_ERROR("Your GPU may not support the required features");
+        LOG_ERROR(Renderer, "Failed to create swapchain: {}", swapchainResult.error().message());
+        LOG_ERROR(Renderer, "Your GPU may not support the required features");
         std::abort();
     }
 
@@ -57,8 +58,8 @@ void Swapchain::Create(uint32_t width, uint32_t height)
     auto viewsResult = vkbSwapchain.get_image_views();
 
     if (!imagesResult || !viewsResult) {
-        SPDLOG_ERROR("Failed to get swapchain images/views");
-        SPDLOG_ERROR("Your GPU may not support the required features");
+        LOG_ERROR(Renderer, "Failed to get swapchain images/views");
+        LOG_ERROR(Renderer, "Your GPU may not support the required features");
         std::abort();
     }
 
@@ -86,12 +87,12 @@ void Swapchain::Recreate(uint32_t width, uint32_t height)
 
 void Swapchain::Dump()
 {
-    SPDLOG_INFO("=== Swapchain Info ===");
-    SPDLOG_INFO("Image Count: {}", imageCount);
-    SPDLOG_INFO("Format: {}", string_VkFormat(format));
-    SPDLOG_INFO("Color Space: {}", string_VkColorSpaceKHR(colorSpace));
-    SPDLOG_INFO("Extent: {}x{}", extent.width, extent.height);
-    SPDLOG_INFO("Images: {}", swapchainImages.size());
-    SPDLOG_INFO("Image Views: {}", swapchainImageViews.size());
+    LOG_INFO(Renderer, "=== Swapchain Info ===");
+    LOG_INFO(Renderer, "Image Count: {}", imageCount);
+    LOG_INFO(Renderer, "Format: {}", string_VkFormat(format));
+    LOG_INFO(Renderer, "Color Space: {}", string_VkColorSpaceKHR(colorSpace));
+    LOG_INFO(Renderer, "Extent: {}x{}", extent.width, extent.height);
+    LOG_INFO(Renderer, "Images: {}", swapchainImages.size());
+    LOG_INFO(Renderer, "Image Views: {}", swapchainImageViews.size());
 }
 } // Renderer

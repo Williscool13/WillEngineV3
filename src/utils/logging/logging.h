@@ -24,14 +24,15 @@ public:
 
     Logger& operator=(const Logger&) = delete;
 
-    [[nodiscard]] std::shared_ptr<spdlog::logger> Get() const { return logger; }
+    void AddSink(spdlog::sink_ptr sink);
+
     [[nodiscard]] const std::filesystem::path& GetLogPath() const { return logPath; }
 
-    void Flush();
+    const std::vector<spdlog::sink_ptr>& GetSinks() const { return sinks; }
 
 private:
-    std::shared_ptr<spdlog::logger> logger;
     std::filesystem::path logPath;
+    std::vector<spdlog::sink_ptr> sinks;
 };
 } // Utils
 
