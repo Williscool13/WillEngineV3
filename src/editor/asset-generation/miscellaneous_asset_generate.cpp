@@ -6,6 +6,7 @@
 
 #include <ktx.h>
 #include <semaphore>
+#include <tracy/Tracy.hpp>
 
 #include "render/resource_manager.h"
 #include "render/descriptors/vk_bindless_resources_storage.h"

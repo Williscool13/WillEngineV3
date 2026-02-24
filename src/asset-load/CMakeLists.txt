@@ -31,7 +31,5 @@ target_link_libraries(asset-load PUBLIC
         audio
         platform
         enkiTS
-        tracy
+        tracy_interface
 )
-
-target_compile_definitions(asset-load PRIVATE TRACY_IMPORTS)
