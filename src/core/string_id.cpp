@@ -27,7 +27,7 @@ const char* DBG_ResolveStringId(uint64_t hash)
 {
     auto& table = GetInternTable();
     auto it = table.find(hash);
-    return it != table.end() ? it->second : nullptr;
+    return it != table.end() ? it->second : "unknown";
 }
 
 StringID::StringID(const char* str, size_t len)

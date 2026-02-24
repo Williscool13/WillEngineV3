@@ -51,8 +51,7 @@ InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, cons
         graph.CreateBuffer(meshlet_count_dispatch_args, sizeof(InstancingMeshletDispatchIndirect));
         graph.CreateBuffer(compacted_meshlet_dispatch_args, sizeof(InstancingCompactedMeshletDispatchIndirect));
 
-        RenderPass& clearPass = graph.AddPass(
-            SID_CONCAT(config.prefix.c_str(), "Clear Temp Instancing Buffers"), VK_PIPELINE_STAGE_2_TRANSFER_BIT);
+        RenderPass& clearPass = graph.AddPass(SID_CONCAT(config.prefix.c_str(), "Clear Temp Instancing Buffers"), VK_PIPELINE_STAGE_2_TRANSFER_BIT);
         clearPass.WriteTransferBuffer(instance_meshlet_offsets);
         clearPass.WriteTransferBuffer(level1_sums);
         clearPass.WriteTransferBuffer(level1_block_sums);

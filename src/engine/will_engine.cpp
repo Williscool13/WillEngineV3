@@ -199,10 +199,16 @@ void WillEngine::Initialize(Utils::Logger* logger)
         gameState = std::make_unique<GameState>();
 
         engineContext = std::make_unique<Core::EngineContext>();
+#if LOGGING_ENABLED
         engineContext->engineLogger = engineLogger.get();
+#endif
         engineContext->imguiContext = ImGui::GetCurrentContext();
         engineContext->windowContext.windowWidth = w;
         engineContext->windowContext.windowHeight = h;
+        engineContext->windowContext.viewportWidth = w;
+        engineContext->windowContext.viewportHeight = h;
+        engineContext->windowContext.viewportOffsetX = 0;
+        engineContext->windowContext.viewportOffsetY = 0;
         engineContext->windowContext.bCursorHidden = bCursorHidden;
         engineContext->assetManager = assetManager.get();
         engineContext->audioManager = audioManager.get();
@@ -287,160 +293,51 @@ void WillEngine::Initialize(Utils::Logger* logger)
 #endif
 }
 
-void WillEngine::Run()
+void WillEngine::EditorImgui()
 {
-    renderThread->Start();
-    timeManager->Reset();
+    ImGuiID dockspaceID = ImGui::GetID("My Dockspace");
+    ImGuiViewport* viewport = ImGui::GetMainViewport();
 
-    SDL_Event e;
-    bool exit = false;
-    while (true) {
-        while (SDL_PollEvent(&e) != 0) {
-            ImGui_ImplSDL3_ProcessEvent(&e);
-            switch (e.type) {
-                case SDL_EVENT_QUIT:
-                    exit = true;
-                    break;
-                case SDL_EVENT_KEY_DOWN:
-                    if (e.key.key == SDLK_ESCAPE) { exit = true; }
-                    break;
-                case SDL_EVENT_WINDOW_MINIMIZED:
-                    bMinimized = true;
-                    bRequireSwapchainRecreate = true;
-                    break;
-                case SDL_EVENT_WINDOW_RESTORED:
-                    bMinimized = false;
-                    bRequireSwapchainRecreate = true;
-                    break;
-                case SDL_EVENT_WINDOW_RESIZED:
-                    // case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
-                {
-                    bRequireSwapchainRecreate = true;
-                    uint32_t w = e.window.data1;
-                    uint32_t h = e.window.data2;
-                    inputManager->UpdateWindowExtent(w, h);
-                    engineContext->windowContext.windowWidth = w;
-                    engineContext->windowContext.windowHeight = h;
-                }
-                break;
-                default:
-                    break;
-            }
+    if (ImGui::DockBuilderGetNode(dockspaceID) == nullptr) {
+        ImGui::DockBuilderAddNode(dockspaceID, ImGuiDockNodeFlags_DockSpace);
+        ImGui::DockBuilderSetNodeSize(dockspaceID, viewport->Size);
 
-            inputManager->ProcessEvent(e);
-        }
+        ImGuiID dockMain = dockspaceID;
+        ImGuiID dockLeft = 0;
+        // ImGuiID dockCenter;
+        ImGui::DockBuilderSplitNode(dockspaceID, ImGuiDir_Left, 0.25f, &dockLeft, &dockMain);
 
-        if (exit) {
-            renderThread->RequestShutdown();
-            break;
-        }
+        ImGui::DockBuilderDockWindow("Editor", dockLeft);
+        ImGui::DockBuilderDockWindow("Log", dockLeft);
 
-        audioManager->Update();
+        ImGui::DockBuilderFinish(dockspaceID);
+    }
 
-        inputManager->UpdateFocus(SDL_GetWindowFlags(window.get()));
-        timeManager->UpdateGame();
+    ImGui::DockSpaceOverViewport(dockspaceID, viewport, ImGuiDockNodeFlags_PassthruCentralNode);
 
+    ImGuiDockNode* centralNode = ImGui::DockBuilderGetCentralNode(dockspaceID);
+    if (centralNode) {
+        uint32_t newOffsetX = static_cast<uint32_t>(centralNode->Pos.x);
+        uint32_t newOffsetY = static_cast<uint32_t>(centralNode->Pos.y);
+        uint32_t newWidth   = static_cast<uint32_t>(centralNode->Size.x);
+        uint32_t newHeight  = static_cast<uint32_t>(centralNode->Size.y);
 
-#if WILL_EDITOR
-        InputFrame editorInput = inputManager->GetCurrentInput();
-        TimeFrame editorTime = timeManager->GetTime();
-#if !GAME_STATIC
-        gameDllWatcher.Poll();
-#endif
-        shaderWatcher.Poll();
-
-        if (editorInput.isWindowInputFocus && !ImGui::GetIO().WantCaptureKeyboard && editorInput.GetKey(Key::PERIOD).pressed) {
-            bCursorHidden = !bCursorHidden;
-            if (bCursorHidden) {
-                ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NoMouse;
-                SDL_SetWindowRelativeMouseMode(window.get(), true);
-                ImGui::SetWindowFocus(nullptr);
-            }
-            else {
-                ImGui::GetIO().ConfigFlags &= ~ImGuiConfigFlags_NoMouse;
-                SDL_SetWindowRelativeMouseMode(window.get(), false);
-            }
-
-            engineContext->windowContext.bCursorHidden = bCursorHidden;
-        }
-#endif
-
-        assetManager->ResolveLoads(stagingFrameBuffer);
-        assetManager->ResolveUnloads();
-
-        engineContext->bImguiKeyboardCaptured = ImGui::GetIO().WantCaptureKeyboard;
-        engineContext->bImguiMouseCaptured = ImGui::GetIO().WantCaptureMouse;
-
-        //
+        Core::WindowContext& wc = engineContext->windowContext;
+        if (newOffsetX != wc.viewportOffsetX || newOffsetY != wc.viewportOffsetY ||
+            newWidth   != wc.viewportWidth   || newHeight  != wc.viewportHeight)
         {
-            ZoneScopedN("GameFrame");
-            gameState->inputFrame = &inputManager->GetCurrentInput();
-            gameState->timeFrame = &timeManager->GetTime();
-            gameFunctions.gameUpdate(engineContext.get(), gameState.get());
-            inputManager->FrameReset();
-        }
+            wc.viewportOffsetX = newOffsetX;
+            wc.viewportOffsetY = newOffsetY;
+            wc.viewportWidth   = newWidth;
+            wc.viewportHeight  = newHeight;
 
-
-        //
-        {
-            ZoneScopedN("PrepareRenderFrameData");
-            const bool bRenderReadyToReceive = engineRenderSynchronization->gameFrames.load(std::memory_order_acquire) > 0;
-            if (bRenderReadyToReceive) {
-                engineRenderSynchronization->gameFrames.fetch_sub(1, std::memory_order_release); {
-                    ZoneScopedN("UpdateRender");
-                    timeManager->UpdateRender();
-                }
-
-                Core::FrameBuffer& currentFrameBuffer = engineRenderSynchronization->frameBuffers[frameBufferIndex];
-                stagingFrameBuffer.currentFrameBuffer = frameBufferIndex; {
-                    ZoneScopedN("SwapchainRecreate");
-                    stagingFrameBuffer.swapchainRecreateCommand.bIsMinimized = bMinimized;
-                    if (bRequireSwapchainRecreate) {
-                        stagingFrameBuffer.swapchainRecreateCommand.bEngineCommandsRecreate = true;
-
-                        int32_t w;
-                        int32_t h;
-                        SDL_GetWindowSize(window.get(), &w, &h);
-                        stagingFrameBuffer.swapchainRecreateCommand.windowWidth = w;
-                        stagingFrameBuffer.swapchainRecreateCommand.windowHeight = h;
-                        bRequireSwapchainRecreate = false;
-                    }
-                    else {
-                        stagingFrameBuffer.swapchainRecreateCommand.bEngineCommandsRecreate = false;
-                    }
-                } {
-                    ZoneScopedN("ImGuiNewFrame");
-                    ImGui_ImplVulkan_NewFrame();
-                    ImGui_ImplSDL3_NewFrame();
-                    ImGui::NewFrame();
-                } {
-                    ZoneScopedN("GamePrepareFrame");
-                    gameFunctions.gamePrepareFrame(engineContext.get(), gameState.get(), &stagingFrameBuffer);
-                }
-
-                stagingFrameBuffer.bFreezeVisibility = bFreezeVisibility;
-                stagingFrameBuffer.bLogRDG = bLogRDG;
-                stagingFrameBuffer.bDrawImgui = bDrawImgui;
-                //
-                {
-                    ZoneScopedN("SwapAndPrepare");
-                    std::swap(currentFrameBuffer, stagingFrameBuffer);
-                    stagingFrameBuffer.timeFrame = timeManager->GetTime();
-                    stagingFrameBuffer.bufferAcquireOperations.clear();
-                    stagingFrameBuffer.imageAcquireOperations.clear();
-                    PrepareImgui(frameBufferIndex);
-                }
-
-                frameBufferIndex = (frameBufferIndex + 1) % Core::FRAME_BUFFER_COUNT;
-                engineRenderSynchronization->renderFrames.fetch_add(1, std::memory_order_release);
-                engineRenderSynchronization->renderCV.notify_one();
-            }
+            stagingFrameBuffer.viewportResizeCommand = {
+                true, newOffsetX, newOffsetY, newWidth, newHeight
+            };
         }
     }
-}
 
-void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
-{
+
 #if WILL_EDITOR
     if (ImGui::Begin("Editor")) {
 #if !GAME_STATIC
@@ -772,7 +669,173 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
     ImGui::End();
 #endif
 #endif
+}
 
+void WillEngine::Run()
+{
+    renderThread->Start();
+    timeManager->Reset();
+
+    SDL_Event e;
+    bool exit = false;
+    while (true) {
+        while (SDL_PollEvent(&e) != 0) {
+            ImGui_ImplSDL3_ProcessEvent(&e);
+            switch (e.type) {
+                case SDL_EVENT_QUIT:
+                    exit = true;
+                    break;
+                case SDL_EVENT_KEY_DOWN:
+                    if (e.key.key == SDLK_ESCAPE) { exit = true; }
+                    break;
+                case SDL_EVENT_WINDOW_MINIMIZED:
+                    bMinimized = true;
+                    bRequireSwapchainRecreate = true;
+                    break;
+                case SDL_EVENT_WINDOW_RESTORED:
+                    bMinimized = false;
+                    bRequireSwapchainRecreate = true;
+                    break;
+                case SDL_EVENT_WINDOW_RESIZED:
+                    // case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
+                {
+                    bRequireSwapchainRecreate = true;
+                    uint32_t w = e.window.data1;
+                    uint32_t h = e.window.data2;
+                    inputManager->UpdateWindowExtent(w, h);
+                    engineContext->windowContext.windowWidth = w;
+                    engineContext->windowContext.windowHeight = h;
+                }
+                break;
+                default:
+                    break;
+            }
+
+            inputManager->ProcessEvent(e);
+        }
+
+        if (exit) {
+            renderThread->RequestShutdown();
+            break;
+        }
+
+        audioManager->Update();
+
+        inputManager->UpdateFocus(SDL_GetWindowFlags(window.get()));
+        timeManager->UpdateGame();
+
+
+#if WILL_EDITOR
+        InputFrame editorInput = inputManager->GetCurrentInput();
+        TimeFrame editorTime = timeManager->GetTime();
+#if !GAME_STATIC
+        gameDllWatcher.Poll();
+#endif
+        shaderWatcher.Poll();
+
+        if (editorInput.isWindowInputFocus && !ImGui::GetIO().WantCaptureKeyboard && editorInput.GetKey(Key::PERIOD).pressed) {
+            bCursorHidden = !bCursorHidden;
+            if (bCursorHidden) {
+                ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NoMouse;
+                SDL_SetWindowRelativeMouseMode(window.get(), true);
+                ImGui::SetWindowFocus(nullptr);
+            }
+            else {
+                ImGui::GetIO().ConfigFlags &= ~ImGuiConfigFlags_NoMouse;
+                SDL_SetWindowRelativeMouseMode(window.get(), false);
+            }
+
+            engineContext->windowContext.bCursorHidden = bCursorHidden;
+        }
+#endif
+
+        assetManager->ResolveLoads(stagingFrameBuffer);
+        assetManager->ResolveUnloads();
+
+        engineContext->bImguiKeyboardCaptured = ImGui::GetIO().WantCaptureKeyboard;
+        engineContext->bImguiMouseCaptured = ImGui::GetIO().WantCaptureMouse;
+
+        //
+        {
+            ZoneScopedN("GameFrame");
+            gameState->inputFrame = &inputManager->GetCurrentInput();
+            gameState->timeFrame = &timeManager->GetTime();
+            gameFunctions.gameUpdate(engineContext.get(), gameState.get());
+            inputManager->FrameReset();
+        }
+
+
+        //
+        {
+            ZoneScopedN("PrepareRenderFrameData");
+            const bool bRenderReadyToReceive = engineRenderSynchronization->gameFrames.load(std::memory_order_acquire) > 0;
+            if (bRenderReadyToReceive) {
+                engineRenderSynchronization->gameFrames.fetch_sub(1, std::memory_order_release); {
+                    ZoneScopedN("UpdateRender");
+                    timeManager->UpdateRender();
+                }
+
+                Core::FrameBuffer& currentFrameBuffer = engineRenderSynchronization->frameBuffers[frameBufferIndex];
+                stagingFrameBuffer.currentFrameBuffer = frameBufferIndex;
+                stagingFrameBuffer.bFreezeVisibility = bFreezeVisibility;
+                stagingFrameBuffer.bLogRDG = bLogRDG;
+                stagingFrameBuffer.bDrawImgui = bDrawImgui;
+
+                //
+                {
+                    ZoneScopedN("SwapchainRecreate");
+                    stagingFrameBuffer.swapchainRecreateCommand.bIsMinimized = bMinimized;
+                    if (bRequireSwapchainRecreate) {
+                        stagingFrameBuffer.swapchainRecreateCommand.bEngineCommandsRecreate = true;
+
+                        int32_t w;
+                        int32_t h;
+                        SDL_GetWindowSize(window.get(), &w, &h);
+                        stagingFrameBuffer.swapchainRecreateCommand.windowWidth = w;
+                        stagingFrameBuffer.swapchainRecreateCommand.windowHeight = h;
+                        bRequireSwapchainRecreate = false;
+                    }
+                    else {
+                        stagingFrameBuffer.swapchainRecreateCommand.bEngineCommandsRecreate = false;
+                    }
+                }
+
+                //
+                {
+                    ZoneScopedN("ImGui");
+                    ImGui_ImplVulkan_NewFrame();
+                    ImGui_ImplSDL3_NewFrame();
+                    ImGui::NewFrame();
+
+                    EditorImgui();
+                }
+
+                //
+                {
+                    ZoneScopedN("GamePrepareFrame");
+                    gameFunctions.gamePrepareFrame(engineContext.get(), gameState.get(), &stagingFrameBuffer);
+                }
+
+                //
+                {
+                    ZoneScopedN("SwapAndPrepare");
+                    std::swap(currentFrameBuffer, stagingFrameBuffer);
+                    stagingFrameBuffer.timeFrame = timeManager->GetTime();
+                    stagingFrameBuffer.bufferAcquireOperations.clear();
+                    stagingFrameBuffer.imageAcquireOperations.clear();
+                    PrepareImgui(frameBufferIndex);
+                }
+
+                frameBufferIndex = (frameBufferIndex + 1) % Core::FRAME_BUFFER_COUNT;
+                engineRenderSynchronization->renderFrames.fetch_add(1, std::memory_order_release);
+                engineRenderSynchronization->renderCV.notify_one();
+            }
+        }
+    }
+}
+
+void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
+{
     ImGui::Render();
     ImDrawDataSnapshot& imguiSnapshot = engineRenderSynchronization->imguiDataSnapshots[currentFrameBufferIndex];
     imguiSnapshot.SnapUsingSwap(ImGui::GetDrawData(), ImGui::GetTime());

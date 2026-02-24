@@ -43,7 +43,9 @@ GAME_API void GameStartup(Core::EngineContext* ctx, Engine::GameState* state)
 
 GAME_API void GameLoad(Core::EngineContext* ctx, Engine::GameState* state)
 {
+#ifndef GAME_STATIC
     ctx->engineLogger->RegisterLoggersForDLL(Engine::LogCategory::Game);
+#endif
 
     SPDLOG_TRACE("[Game] Registering engine component types:");
     SPDLOG_TRACE("  TransformComponent: {}", entt::type_id<Game::Component::TransformComponent>().hash());

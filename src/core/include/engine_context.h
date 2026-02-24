@@ -45,6 +45,11 @@ struct WindowContext
     uint32_t windowWidth;
     uint32_t windowHeight;
 
+    uint32_t viewportWidth;
+    uint32_t viewportHeight;
+    uint32_t viewportOffsetX;
+    uint32_t viewportOffsetY;
+
     bool bCursorHidden;
 };
 

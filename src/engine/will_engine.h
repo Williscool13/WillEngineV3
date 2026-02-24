@@ -105,6 +105,9 @@ public:
 
     [[nodiscard]] Core::FrameBuffer& GetStagingFrameBuffer() { return stagingFrameBuffer; }
 
+private:
+    void EditorImgui();
+
 private: // Windowing
     SDLWindowPtr window{nullptr, nullptr};
     bool bRequireSwapchainRecreate{false};

@@ -28,6 +28,7 @@
 #include "backends/imgui_impl_vulkan.h"
 #include "core/string_id.h"
 #include "core/math/math_helpers.h"
+#include "engine/logging/engine_log.h"
 #include "pipelines/pipeline_manager.h"
 #include "pipelines/graphics_pipeline_builder.h"
 #include "render-view/render_view_helpers.h"
@@ -125,7 +126,7 @@ void RenderThread::ThreadMain()
             bEngineRequestsRecreate |= frameBuffer.swapchainRecreateCommand.bEngineCommandsRecreate;
             if (!frameBuffer.swapchainRecreateCommand.bIsMinimized && bEngineRequestsRecreate) {
                 ZoneScopedN("SwapchainRecreate");
-                SPDLOG_INFO("[RenderThread::ThreadMain] Swapchain Recreated");
+                LOG_INFO(Renderer, "Swapchain Recreated");
                 vkDeviceWaitIdle(context->device);
 
                 swapchain->Recreate(frameBuffer.swapchainRecreateCommand.windowWidth, frameBuffer.swapchainRecreateCommand.windowHeight);
@@ -139,7 +140,10 @@ void RenderThread::ThreadMain()
             }
 
             if (frameBuffer.viewportResizeCommand.bEngineCommandsResize) {
-                renderExtents->ApplyViewportResize(frameBuffer.viewportResizeCommand.offsetX, frameBuffer.viewportResizeCommand.offsetY, frameBuffer.viewportResizeCommand.sizeX, frameBuffer.viewportResizeCommand.sizeY);
+                vkDeviceWaitIdle(context->device);
+
+                renderExtents->ApplyViewportResize(frameBuffer.viewportResizeCommand.offsetX, frameBuffer.viewportResizeCommand.offsetY, frameBuffer.viewportResizeCommand.sizeX,
+                                                   frameBuffer.viewportResizeCommand.sizeY);
                 frameBuffer.viewportResizeCommand.bEngineCommandsResize = false;
                 renderGraph->InvalidateAll();
             }
@@ -309,6 +313,11 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
     // Readback that will be copied into the FIF host memory at the end of the frame (to be read in N+3 frames)
     renderGraph->CreateBuffer(SID("readback_buffer"), sizeof(ReadbackStruct));
+    RenderPass& clearReadbackBuffer = renderGraph->AddPass(SID("Clear Readback Buffer"), VK_PIPELINE_STAGE_2_TRANSFER_BIT);
+    clearReadbackBuffer.WriteTransferBuffer(SID("readback_buffer"));
+    clearReadbackBuffer.Execute([&](VkCommandBuffer cmd) {
+        vkCmdFillBuffer(cmd, renderGraph->GetBufferHandle(SID("readback_buffer")), 0, VK_WHOLE_SIZE, 0);
+    });
 
     // Main view G-buffer
     GBufferTargets targets{
@@ -685,8 +694,9 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         blitPass.Execute([&, finalOutput](VkCommandBuffer _cmd) {
             VkImage drawImage = renderGraph->GetImageHandle(finalOutput);
 
-            VkOffset3D renderOffset = {static_cast<int32_t>(renderExtent[0]), static_cast<int32_t>(renderExtent[1]), 1};
-            VkOffset3D swapchainOffset = {static_cast<int32_t>(swapchain->extent.width), static_cast<int32_t>(swapchain->extent.height), 1};
+            std::array<uint32_t, 2> scaledExtent = renderExtents->GetScaledExtent();
+            std::array<uint32_t, 2> vpOffset = renderExtents->GetViewportOffset();
+            std::array<uint32_t, 2> vpExtent = renderExtents->GetViewportExtent();
 
             VkImageBlit2 blitRegion{};
             blitRegion.sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2;
@@ -695,9 +705,9 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             blitRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
             blitRegion.dstSubresource.layerCount = 1;
             blitRegion.srcOffsets[0] = {0, 0, 0};
-            blitRegion.srcOffsets[1] = renderOffset;
-            blitRegion.dstOffsets[0] = {0, swapchainOffset.y, 0};
-            blitRegion.dstOffsets[1] = {swapchainOffset.x, 0, swapchainOffset.z};
+            blitRegion.srcOffsets[1] = {static_cast<int32_t>(renderExtent[0]), static_cast<int32_t>(renderExtent[1]), 1};
+            blitRegion.dstOffsets[0] = {static_cast<int32_t>(vpOffset[0]), static_cast<int32_t>(vpOffset[1] + vpExtent[1]), 0};
+            blitRegion.dstOffsets[1] = {static_cast<int32_t>(vpOffset[0] + vpExtent[0]), static_cast<int32_t>(vpOffset[1]), 1};
 
             VkBlitImageInfo2 blitInfo{};
             blitInfo.sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2;
@@ -1450,7 +1460,7 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFami
         std::string shadowMapName = "shadow_cascade_" + std::to_string(cascadeLevel);
         std::string shadowPassName = "Shadow Cascade Pass " + std::to_string(cascadeLevel);
 
-        StringID shadowMapId  = StringID(shadowMapName.c_str(),  shadowMapName.size());
+        StringID shadowMapId = StringID(shadowMapName.c_str(), shadowMapName.size());
         StringID shadowPassId = StringID(shadowPassName.c_str(), shadowPassName.size());
 
 
@@ -1780,7 +1790,7 @@ void RenderThread::SetupGeometryPasses(RenderGraph& graph, const Core::ViewFamil
         InstancedGeometryPassOutputs customOutputs = SetupInstancedGeometryPass(graph, customConfig, pipelineManager.get(), sceneIndex);
 
         std::string customDrawName = "Custom Draw " + customDraw.first;
-        StringID customDrawId  = StringID(customDrawName.c_str(), customDrawName.size());
+        StringID customDrawId = StringID(customDrawName.c_str(), customDrawName.size());
         RenderPass& customDrawPass = graph.AddPass(customDrawId, VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
         customDrawPass.WriteColorAttachment(targets.albedo);
         customDrawPass.WriteColorAttachment(targets.normal);
