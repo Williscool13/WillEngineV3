@@ -128,12 +128,19 @@ void RenderThread::ThreadMain()
                 SPDLOG_INFO("[RenderThread::ThreadMain] Swapchain Recreated");
                 vkDeviceWaitIdle(context->device);
 
-                swapchain->Recreate(frameBuffer.swapchainRecreateCommand.width, frameBuffer.swapchainRecreateCommand.height);
-                renderExtents->ApplyResize(frameBuffer.swapchainRecreateCommand.width, frameBuffer.swapchainRecreateCommand.height);
+                swapchain->Recreate(frameBuffer.swapchainRecreateCommand.windowWidth, frameBuffer.swapchainRecreateCommand.windowHeight);
+                renderExtents->ApplyResize(frameBuffer.swapchainRecreateCommand.windowWidth, frameBuffer.swapchainRecreateCommand.windowHeight);
 
                 bRenderRequestsRecreate = false;
                 bEngineRequestsRecreate = false;
+                frameBuffer.swapchainRecreateCommand.bEngineCommandsRecreate = false;
 
+                renderGraph->InvalidateAll();
+            }
+
+            if (frameBuffer.viewportResizeCommand.bEngineCommandsResize) {
+                renderExtents->ApplyViewportResize(frameBuffer.viewportResizeCommand.offsetX, frameBuffer.viewportResizeCommand.offsetY, frameBuffer.viewportResizeCommand.sizeX, frameBuffer.viewportResizeCommand.sizeY);
+                frameBuffer.viewportResizeCommand.bEngineCommandsResize = false;
                 renderGraph->InvalidateAll();
             }
 

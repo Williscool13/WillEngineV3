@@ -14,45 +14,70 @@ namespace Render
 struct RenderExtents
 {
     RenderExtents(uint32_t width, uint32_t height, float scale)
-        : renderExtents{width, height}, scaledRenderExtents{
-              static_cast<uint32_t>(width * scale + 0.5f),
-              static_cast<uint32_t>(height * scale + 0.5f)
-          }, renderScale(scale)
+        : renderExtents{width, height}
+        , viewportExtents{width, height}
+        , viewportOffset{0, 0}
+        , renderScale(scale)
+        , scaledViewportExtent{
+              static_cast<uint32_t>(std::lround(static_cast<float>(width) * scale)),
+              static_cast<uint32_t>(std::lround(static_cast<float>(height) * scale))
+          }
     {}
 
     void ApplyResize(uint32_t width, uint32_t height)
     {
         renderExtents[0] = width;
         renderExtents[1] = height;
-        scaledRenderExtents[0] = static_cast<uint32_t>(renderExtents[0] * renderScale + 0.5f);
-        scaledRenderExtents[1] = static_cast<uint32_t>(renderExtents[1] * renderScale + 0.5f);
+    }
+
+    void ApplyViewportResize(uint32_t offsetX, uint32_t offsetY, uint32_t width, uint32_t height)
+    {
+        viewportOffset[0] = offsetX;
+        viewportOffset[1] = offsetY;
+        viewportExtents[0] = width;
+        viewportExtents[1] = height;
+        recomputeScaled();
     }
 
     void UpdateScale(float newScale)
     {
         renderScale = newScale;
-        scaledRenderExtents[0] = static_cast<uint32_t>(renderExtents[0] * renderScale + 0.5f);
-        scaledRenderExtents[1] = static_cast<uint32_t>(renderExtents[1] * renderScale + 0.5f);
+        recomputeScaled();
     }
 
+    // Swapchain size
     [[nodiscard]] std::array<uint32_t, 2> GetExtent() const { return renderExtents; }
-    [[nodiscard]] std::array<uint32_t, 2> GetScaledExtent() const { return scaledRenderExtents; }
+
+    // Viewport panel size (blit destination)
+    [[nodiscard]] std::array<uint32_t, 2> GetViewportExtent() const { return viewportExtents; }
+    [[nodiscard]] std::array<uint32_t, 2> GetViewportOffset() const { return viewportOffset; }
+
+    // Actual render target size
+    [[nodiscard]] std::array<uint32_t, 2> GetScaledExtent() const { return scaledViewportExtent; }
 
     [[nodiscard]] float GetAspectRatio() const
     {
-        return renderExtents[0] / static_cast<float>(renderExtents[1]);
+        return static_cast<float>(viewportExtents[0]) / static_cast<float>(viewportExtents[1]);
     }
 
     [[nodiscard]] glm::vec2 GetTexelSize() const
     {
-        return {1.0f / renderExtents[0], 1.0f / renderExtents[1]};
+        return {1.0f / static_cast<float>(scaledViewportExtent[0]),
+                1.0f / static_cast<float>(scaledViewportExtent[1])};
     }
 
 private:
-    std::array<uint32_t, 2> renderExtents;
-    std::array<uint32_t, 2> scaledRenderExtents;
-    float renderScale;
+    void recomputeScaled()
+    {
+        scaledViewportExtent[0] = static_cast<uint32_t>(std::lround(static_cast<float>(viewportExtents[0]) * renderScale));
+        scaledViewportExtent[1] = static_cast<uint32_t>(std::lround(static_cast<float>(viewportExtents[1]) * renderScale));
+    }
 
+    std::array<uint32_t, 2> renderExtents;
+    std::array<uint32_t, 2> viewportExtents;
+    std::array<uint32_t, 2> viewportOffset;
+    float renderScale;
+    std::array<uint32_t, 2> scaledViewportExtent;
 };
 } // Render
 

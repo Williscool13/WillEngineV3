@@ -401,8 +401,8 @@ void WillEngine::Run()
                         int32_t w;
                         int32_t h;
                         SDL_GetWindowSize(window.get(), &w, &h);
-                        stagingFrameBuffer.swapchainRecreateCommand.width = w;
-                        stagingFrameBuffer.swapchainRecreateCommand.height = h;
+                        stagingFrameBuffer.swapchainRecreateCommand.windowWidth = w;
+                        stagingFrameBuffer.swapchainRecreateCommand.windowHeight = h;
                         bRequireSwapchainRecreate = false;
                     }
                     else {

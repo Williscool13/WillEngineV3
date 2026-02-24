@@ -275,9 +275,18 @@ struct ImageAcquireOperation
 struct SwapchainRecreateCommand
 {
     bool bEngineCommandsRecreate{};
-    uint32_t width{0};
-    uint32_t height{0};
+    uint32_t windowWidth{0};
+    uint32_t windowHeight{0};
     bool bIsMinimized{false};
+};
+
+struct ViewportResizeCommand
+{
+    bool bEngineCommandsResize{false};
+    uint32_t offsetX{0};
+    uint32_t offsetY{0};
+    uint32_t sizeX{0};
+    uint32_t sizeY{0};
 };
 
 struct FrameBuffer
@@ -287,6 +296,7 @@ struct FrameBuffer
     TimeFrame timeFrame;
     uint32_t currentFrameBuffer{};
     SwapchainRecreateCommand swapchainRecreateCommand{};
+    ViewportResizeCommand viewportResizeCommand{};
 
     std::vector<BufferAcquireOperation> bufferAcquireOperations;
     std::vector<ImageAcquireOperation> imageAcquireOperations;
