@@ -11,6 +11,7 @@ option(WILL_ENGINE_PACKAGED_BUILD "Enable the use UserDataPath for log and crash
 option(WILL_ENGINE_BUILD_TESTS "Build test suite" OFF)
 option(WILL_ENGINE_ENABLE_PROFILER "Enables tracy profiler" OFF)
 option(WILL_ENGINE_ENABLE_LOGGING "Enables logging" ON)
+option(WILL_ENGINE_ENABLE_VALIDATION "Enables Vulkan validation error" ON)
 
 # Configuration ==============================
 if (NOT WILL_ENGINE_ENABLE_LOGGING)
@@ -36,6 +37,10 @@ endif ()
 if (WILL_ENGINE_GAME_STATIC)
     add_compile_definitions(GAME_STATIC)
 endif ()
+
+if (WILL_ENGINE_ENABLE_VALIDATION)
+    add_compile_definitions(ENABLE_VULKAN_VALIDATION)
+endif()
 
 if (WILL_ENGINE_PACKAGED_BUILD)
     add_compile_definitions(PACKAGED_BUILD)

@@ -55,10 +55,9 @@ VulkanContext::VulkanContext(SDL_Window* window)
     vkb::InstanceBuilder builder;
     std::vector<const char*> enabledInstanceExtensions;
 
-#ifdef NDEBUG
     bool bUseValidation = false;
-#else
-    bool bUseValidation = true;
+#ifdef ENABLE_VULKAN_VALIDATION
+    bUseValidation = true;
     enabledInstanceExtensions.push_back("VK_EXT_debug_utils");
 #endif
 
