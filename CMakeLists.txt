@@ -159,6 +159,18 @@ target_link_libraries(imgui PUBLIC
         SDL3::SDL3
 )
 
+# ImGuizmo =======================================
+set(IMGUIZMO_DIR ${CMAKE_SOURCE_DIR}/extern/imguizmo)
+add_library(imguizmo STATIC
+        ${IMGUIZMO_DIR}/ImGuizmo.cpp
+)
+target_include_directories(imguizmo PUBLIC
+        ${IMGUIZMO_DIR}
+)
+target_link_libraries(imguizmo PUBLIC
+        imgui
+)
+
 # Miniz =======================================
 add_library(miniz STATIC
         extern/miniz/miniz.c

@@ -317,10 +317,10 @@ void WillEngine::EditorImgui()
 
     ImGuiDockNode* centralNode = ImGui::DockBuilderGetCentralNode(dockspaceID);
     if (centralNode) {
-        uint32_t newOffsetX = static_cast<uint32_t>(centralNode->Pos.x);
-        uint32_t newOffsetY = static_cast<uint32_t>(centralNode->Pos.y);
-        uint32_t newWidth   = static_cast<uint32_t>(centralNode->Size.x);
-        uint32_t newHeight  = static_cast<uint32_t>(centralNode->Size.y);
+        auto newOffsetX = static_cast<uint32_t>(centralNode->Pos.x);
+        auto newOffsetY = static_cast<uint32_t>(centralNode->Pos.y);
+        auto newWidth   = static_cast<uint32_t>(centralNode->Size.x);
+        auto newHeight  = static_cast<uint32_t>(centralNode->Size.y);
 
         Core::WindowContext& wc = engineContext->windowContext;
         if (newOffsetX != wc.viewportOffsetX || newOffsetY != wc.viewportOffsetY ||

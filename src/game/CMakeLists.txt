@@ -45,6 +45,8 @@ set(GAME_LIBRARIES
         platform
         spdlog::spdlog
         tracy_interface
+        imgui
+        imguizmo
 )
 
 

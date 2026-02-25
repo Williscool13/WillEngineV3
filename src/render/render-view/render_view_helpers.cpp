@@ -16,11 +16,11 @@ namespace Render
 {
 SceneData GenerateSceneData(const Core::RenderView& view, const Core::PostProcessConfiguration& ppConfig, std::array<uint32_t, 2> renderExtent, uint64_t frameNumber, float deltaTime)
 {
-    const glm::mat4 viewMatrix = glm::lookAt(view.currentViewData.cameraPos, view.currentViewData.cameraLookAt, view.currentViewData.cameraUp);
-    const glm::mat4 projMatrix = glm::perspective(view.currentViewData.fovRadians, view.currentViewData.aspectRatio, view.currentViewData.farPlane, view.currentViewData.nearPlane);
+    const glm::mat4 viewMatrix = view.currentViewData.view;
+    const glm::mat4 projMatrix = view.currentViewData.proj;
 
-    const glm::mat4 prevViewMatrix = glm::lookAt(view.previousViewData.cameraPos, view.previousViewData.cameraLookAt, view.previousViewData.cameraUp);
-    const glm::mat4 prevProjMatrix = glm::perspective(view.previousViewData.fovRadians, view.previousViewData.aspectRatio, view.previousViewData.farPlane, view.previousViewData.nearPlane);
+    const glm::mat4 prevViewMatrix = view.previousViewData.view;
+    const glm::mat4 prevProjMatrix = view.previousViewData.proj;
 
     SceneData sceneData{};
     sceneData.view = viewMatrix;

@@ -8,6 +8,8 @@
 #include <entt/entt.hpp>
 #include <Jolt/Jolt.h>
 #include <Jolt/Physics/Body/BodyID.h>
+#include <imgui.h>
+#include <ImGuizmo.h>
 
 #include "game/systems/debug_system.h"
 #include "core/include/render_interface.h"
@@ -51,6 +53,11 @@ struct GameState
     std::string debugResourceName{};
     DebugTransformationType debugTransformationType{};
     Core::DebugViewAspect debugViewAspect{};
+
+    std::mt19937 rng{std::random_device{}()};
+    ImGuizmo::OPERATION currentGizmoOperation{ImGuizmo::TRANSLATE};
+    ImGuizmo::MODE currentGizmoMode{ImGuizmo::WORLD};
+    entt::entity selectedEntity{entt::null};
 };
 
 class EngineAPI

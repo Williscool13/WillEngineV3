@@ -5,17 +5,31 @@
 #include "editor_systems.h"
 
 #include <tracy/Tracy.hpp>
+#include <glm/gtc/type_ptr.hpp>
 
 #include "imgui.h"
+#include "core/include/engine_context.h"
 #include "engine/engine_api.h"
 #include "game/fwd_components.h"
 
 namespace Game::System
 {
+void EditorUpdate(Core::EngineContext* ctx, Engine::GameState* state)
+{
+    if (state->inputFrame->GetKey(Key::W).pressed) {
+        state->currentGizmoOperation = ImGuizmo::TRANSLATE;
+    }
+    else if (state->inputFrame->GetKey(Key::E).pressed) {
+        state->currentGizmoOperation = ImGuizmo::ROTATE;
+    }
+    else if (state->inputFrame->GetKey(Key::R).pressed) {
+        state->currentGizmoOperation = ImGuizmo::SCALE;
+    }
+}
+
 void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
-#if WILL_EDITOR
     if (ImGui::Begin("Debug View")) {
         auto cameraView = state->registry.view<Component::CameraComponent, Component::MainViewportComponent, Component::TransformComponent>();
         const auto& [cam, transform] = cameraView.get(cameraView.front());
@@ -105,6 +119,91 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
             if (ImGui::Button("Color Grading Output")) setDebugTarget("color_grading_output", DebugTransformationType::None, Core::DebugViewAspect::None);
             if (ImGui::Button("Vignette Aberration Output")) setDebugTarget("vignette_aberration_output", DebugTransformationType::None, Core::DebugViewAspect::None);
             if (ImGui::Button("Post Process Output")) setDebugTarget("post_process_output", DebugTransformationType::None, Core::DebugViewAspect::None);
+        }
+    }
+    ImGui::End();
+
+
+    ImGuizmo::SetOrthographic(false);
+    ImGuizmo::BeginFrame();
+    ImGuizmo::SetDrawlist(ImGui::GetBackgroundDrawList());
+    ImGuizmo::SetRect(
+        static_cast<float>(ctx->windowContext.viewportOffsetX),
+        static_cast<float>(ctx->windowContext.viewportOffsetY),
+        static_cast<float>(ctx->windowContext.viewportWidth),
+        static_cast<float>(ctx->windowContext.viewportHeight)
+    );
+
+    if (ImGui::Begin("Details")) {
+        if (ImGui::RadioButton("Translate", state->currentGizmoOperation == ImGuizmo::TRANSLATE)) state->currentGizmoOperation = ImGuizmo::TRANSLATE;
+        ImGui::SameLine();
+        if (ImGui::RadioButton("Rotate", state->currentGizmoOperation == ImGuizmo::ROTATE)) state->currentGizmoOperation = ImGuizmo::ROTATE;
+        ImGui::SameLine();
+        if (ImGui::RadioButton("Scale", state->currentGizmoOperation == ImGuizmo::SCALE)) state->currentGizmoOperation = ImGuizmo::SCALE;
+
+        ImGui::BeginDisabled(state->currentGizmoOperation == ImGuizmo::SCALE);
+        if (ImGui::RadioButton("Local", state->currentGizmoMode == ImGuizmo::LOCAL))state->currentGizmoMode = ImGuizmo::LOCAL;
+        ImGui::SameLine();
+        if (ImGui::RadioButton("World", state->currentGizmoMode == ImGuizmo::WORLD))state->currentGizmoMode = ImGuizmo::WORLD;
+        ImGui::EndDisabled();
+
+        ImGui::Separator();
+        if (ImGui::Button("Select Random Entity")) {
+            auto view = state->registry.view<Component::TransformComponent>();
+            auto size = view.size();
+            if (size > 0) {
+                std::uniform_int_distribution<size_t> dist(0, size - 1);
+                auto it = view.begin();
+                std::advance(it, dist(state->rng));
+                state->selectedEntity = *it;
+            }
+        }
+
+        if (state->selectedEntity != entt::null) {
+            auto* transform = state->registry.try_get<Component::TransformComponent>(state->selectedEntity);
+            if (transform) {
+                ImGui::Text("Entity: %u", static_cast<uint32_t>(state->selectedEntity));
+                ImGui::Separator();
+
+                bool dirty = false;
+                dirty |= ImGui::DragFloat3("Translation", &transform->translation.x, 0.1f);
+                glm::vec3 eulerDegrees = glm::degrees(glm::eulerAngles(transform->rotation));
+                if (ImGui::DragFloat3("Rotation", &eulerDegrees.x, 0.5f)) {
+                    transform->rotation = glm::quat(glm::radians(eulerDegrees));
+                    dirty = true;
+                }
+                dirty |= ImGui::DragFloat3("Scale", &transform->scale.x, 0.01f);
+
+                // Gizmo
+                glm::mat4 model = GetMatrix(*transform);
+                glm::mat4 view = frameBuffer->mainViewFamily.mainView.currentViewData.view;
+                glm::mat4 proj = frameBuffer->mainViewFamily.mainView.currentViewData.proj;
+                ImGuizmo::Manipulate(
+                    glm::value_ptr(view),
+                    glm::value_ptr(proj),
+                    state->currentGizmoOperation,
+                    state->currentGizmoMode,
+                    glm::value_ptr(model)
+                );
+
+                if (ImGuizmo::IsUsing()) {
+                    float translation[3];
+                    float rotation[3];
+                    float scale[3];
+                    ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(model), translation, rotation, scale);
+                    transform->translation = glm::vec3(translation[0], translation[1], translation[2]);
+                    transform->rotation = glm::quat(glm::radians(glm::vec3(rotation[0], rotation[1], rotation[2])));
+                    transform->scale = glm::vec3(scale[0], scale[1], scale[2]);
+                    dirty = true;
+                }
+
+                if (dirty) {
+                    state->registry.emplace_or_replace<Component::DirtyRenderTransformTag>(state->selectedEntity);
+                    if (state->registry.any_of<Component::DynamicPhysicsBodyComponent>(state->selectedEntity)) {
+                        state->registry.emplace_or_replace<Component::DirtyPhysicsTransformComponent>(state->selectedEntity);
+                    }
+                }
+            }
         }
     }
     ImGui::End();
@@ -334,6 +433,5 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
     frameBuffer->mainViewFamily.debugResourceName = state->debugResourceName;
     frameBuffer->mainViewFamily.debugTransformationType = state->debugTransformationType;
     frameBuffer->mainViewFamily.debugViewAspect = state->debugViewAspect;
-#endif
 }
 }

@@ -2675,9 +2675,9 @@ void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& 
     uint32_t vertexOffset = 0;
     uint32_t indexOffset = 0;
 
-    const glm::mat4 viewMatrix = glm::lookAt(viewFamily.mainView.currentViewData.cameraPos, viewFamily.mainView.currentViewData.cameraLookAt, viewFamily.mainView.currentViewData.cameraUp);
-    const glm::mat4 projMatrix = glm::perspective(viewFamily.mainView.currentViewData.fovRadians, viewFamily.mainView.currentViewData.aspectRatio, viewFamily.mainView.currentViewData.farPlane,
-                                                  viewFamily.mainView.currentViewData.nearPlane);
+    const glm::mat4 viewMatrix = viewFamily.mainView.currentViewData.view;
+    const glm::mat4 projMatrix = viewFamily.mainView.currentViewData.proj;
+
     Frustum mainViewFrustum = CreateFrustum(projMatrix * viewMatrix);
 
     for (const auto& line : viewFamily.debugLines) {

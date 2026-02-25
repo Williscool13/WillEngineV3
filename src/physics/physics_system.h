@@ -31,7 +31,7 @@ class PhysicsSystem
 public:
     PhysicsSystem();
 
-    PhysicsSystem(enki::TaskScheduler* scheduler);
+    explicit PhysicsSystem(enki::TaskScheduler* scheduler);
 
     ~PhysicsSystem();
 

@@ -18,6 +18,7 @@ struct EngineContext;
 
 namespace Game::System
 {
+void EditorUpdate(Core::EngineContext* ctx, Engine::GameState* state);
 void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer);
 }
 

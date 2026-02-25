@@ -101,6 +101,10 @@ GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         Game::System::UpdatePhysics(ctx, state);
     }
 
+#if WILL_EDITOR
+    Game::System::EditorUpdate(ctx, state);
+#endif
+
     const auto frameEnd = std::chrono::high_resolution_clock::now();
     const auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(frameEnd - frameStart);
     constexpr auto targetFrameTime = std::chrono::microseconds(1000);
@@ -138,7 +142,9 @@ GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* stat
     Game::System::GatherRenderables(ctx, state, frameBuffer);
 
 
+#if WILL_EDITOR
     Game::System::DrawEditorInterface(ctx, state, frameBuffer);
+#endif
 
 #ifndef PACKAGED_BUILD
     Game::System::DebugRender(ctx, state, frameBuffer);

@@ -38,6 +38,7 @@ target_link_libraries(engine PUBLIC
         enkiTS
         tracy_interface
         imgui
+        imguizmo
 )
 
 if(WILL_ENGINE_GAME_STATIC)

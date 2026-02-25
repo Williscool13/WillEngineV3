@@ -36,6 +36,9 @@ struct ViewData
     glm::vec3 cameraLookAt;
     glm::vec3 cameraForward;
     glm::vec3 cameraUp;
+
+    glm::mat4 view;
+    glm::mat4 proj;
 };
 
 enum class DebugViewAspect

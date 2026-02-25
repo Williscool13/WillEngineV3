@@ -100,6 +100,9 @@ void UpdateFreeCamera(Core::EngineContext* ctx, Engine::GameState* state)
         camera.currentViewData.fovRadians = glm::radians(70.0f);
         camera.currentViewData.nearPlane = 0.1f;
         camera.currentViewData.farPlane = 100.0f;
+
+        camera.currentViewData.view = glm::lookAt(camera.currentViewData.cameraPos, camera.currentViewData.cameraLookAt, camera.currentViewData.cameraUp);
+        camera.currentViewData.proj = glm::perspective(camera.currentViewData.fovRadians, camera.currentViewData.aspectRatio, camera.currentViewData.farPlane, camera.currentViewData.nearPlane);
     }
 }
 
@@ -177,6 +180,10 @@ void BuildPortalViewFamily(Engine::GameState* state, Core::ViewFamily& mainViewF
             portalRenderView.view.currentViewData.cameraLookAt = portalLookAt;
             portalRenderView.view.currentViewData.cameraForward = portalForward;
             portalRenderView.view.currentViewData.cameraUp = portalUp;
+            portalRenderView.view.currentViewData.view = glm::lookAt(portalRenderView.view.currentViewData.cameraPos, portalRenderView.view.currentViewData.cameraLookAt,
+                                                                     portalRenderView.view.currentViewData.cameraUp);
+            portalRenderView.view.currentViewData.proj = glm::perspective(portalRenderView.view.currentViewData.fovRadians, portalRenderView.view.currentViewData.aspectRatio,
+                                                                          portalRenderView.view.currentViewData.farPlane, portalRenderView.view.currentViewData.nearPlane);
 
             glm::mat3 entryRotation = glm::mat3(sourceMatrix);
             portalRenderView.entryPortalTransform = Transform(entryTransform.translation, entryTransform.rotation, entryTransform.scale);
