@@ -6,11 +6,13 @@
 #define WILL_ENGINE_SCENE_SYSTEM_H
 #include <entt/entt.hpp>
 
-#include "scene.h"
+#include "../core/scene.h"
+#include "core/component_registry.h"
+#include "core/string_id.h"
 
 namespace Game::System
 {
-Scene SaveScene(entt::registry registry);
+Scene SaveScene(Core::ComponentRegistry& componentRegistry, entt::registry& registry, StringID sceneId);
 void LoadScene(Scene& scene);
 } // Game
 

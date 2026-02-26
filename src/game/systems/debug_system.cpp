@@ -4,10 +4,12 @@
 
 #include "debug_system.h"
 
+#include <fstream>
 #include <Jolt/Jolt.h>
 #include <spdlog/spdlog.h>
 #include <tracy/Tracy.hpp>
 
+#include "scene_system.h"
 #include "audio/audio_manager.h"
 #include "Jolt/Physics/Body/BodyCreationSettings.h"
 #include "Jolt/Physics/Collision/Shape/BoxShape.h"
@@ -16,7 +18,9 @@
 #include "core/input/input_frame.h"
 #include "engine/asset_manager.h"
 #include "engine/engine_api.h"
+#include "engine/logging/engine_log.h"
 #include "game/fwd_components.h"
+#include "game/components/scene_components.h"
 #include "physics/physics_system.h"
 #include "platform/paths.h"
 
@@ -146,6 +150,7 @@ entt::entity CreateBox(Core::EngineContext* ctx, Engine::GameState* state, glm::
         state->registry.emplace<Component::DynamicPhysicsBodyComponent>(boxEntity, transformComponent.translation, transformComponent.rotation);
         state->registry.emplace<Component::DrawPhysicsDebugComponent>(boxEntity);
     }
+    state->registry.emplace<Component::SceneSerializedTag>(boxEntity, state->currentSceneId);
 
     return boxEntity;
 }
@@ -667,6 +672,16 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         else {
             SPDLOG_WARN("[DebugSystem] Sphere model or cubemap not ready yet");
         }
+    }
+
+    if (state->inputFrame->GetKey(Key::F10).pressed) {
+        Scene s = SaveScene(state->componentRegistry, state->registry, state->currentSceneId);
+        std::filesystem::path outputPath = Platform::GetAssetPath() / "Scene/Scene.wscene";
+        std::filesystem::create_directories(outputPath.parent_path());
+        std::ofstream file(outputPath);
+        file << s.content.dump(2);
+
+        LOG_INFO(Game, "Saved scene to 'Scene/Scene.wscene'");
     }
 
     if (state->inputFrame->GetKey(Key::F6).pressed) {

@@ -4,11 +4,14 @@
 
 #ifndef WILL_ENGINE_SCENE_H
 #define WILL_ENGINE_SCENE_H
+#include <json/nlohmann/json.hpp>
 
 namespace Game
 {
-class Scene
-{};
+struct Scene
+{
+    nlohmann::json content;
+};
 } // Game
 
 #endif //WILL_ENGINE_SCENE_H

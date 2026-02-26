@@ -10,6 +10,7 @@
 #include "engine/asset_manager.h"
 #include "engine/engine_api.h"
 #include "game/fwd_components.h"
+#include "game/components/debug_components.h"
 
 
 namespace Game::System

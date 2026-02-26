@@ -16,25 +16,31 @@ set(GAME_SOURCES
         components/component_include.h
         fwd_components.h
 
-        components/camera/camera_components.cpp
-        components/camera/camera_components.h
-        components/physics/physics_components.cpp
-        components/physics/physics_components.h
-        components/debug/debug_components.cpp
-        components/debug/debug_components.h
-        components/render/render_components.cpp
-        components/render/render_components.h
-        components/gameplay/portal_components.cpp
-        components/gameplay/portal_components.h
+        components/camera_components.cpp
+        components/camera_components.h
+        components/physics_components.cpp
+        components/physics_components.h
+        components/debug_components.cpp
+        components/debug_components.h
+        components/render_components.cpp
+        components/render_components.h
+        components/portal_components.cpp
+        components/portal_components.h
         components/core_components.cpp
         components/core_components.h
+        components/scene_components.cpp
+        components/scene_components.h
         systems/core_systems.cpp
         systems/core_systems.h
         core/string_id_game.cpp
-        scene/scene.cpp
-        scene/scene.h
-        scene/scene_system.cpp
-        scene/scene_system.h
+        core/scene.cpp
+        core/scene.h
+        systems/scene_system.cpp
+        systems/scene_system.h
+        components/components.cpp
+        components/components.h
+
+
 )
 
 set(GAME_INCLUDE_DIRS

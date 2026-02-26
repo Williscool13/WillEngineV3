@@ -8,7 +8,7 @@
 #include <entt/entt.hpp>
 
 #include "engine/asset_manager.h"
-#include "game/components/render/render_components.h"
+#include "render_components.h"
 
 namespace Engine
 {

@@ -11,6 +11,7 @@
 #include <imgui.h>
 #include <ImGuizmo.h>
 
+#include "core/component_registry.h"
 #include "game/systems/debug_system.h"
 #include "core/include/render_interface.h"
 #include "render/model/will_model_asset.h"
@@ -28,6 +29,7 @@ struct GameState
     const Core::InputFrame* inputFrame{nullptr};
     const Core::TimeFrame* timeFrame{nullptr};
     entt::registry registry;
+    Core::ComponentRegistry componentRegistry{};
 
     // Physics
     float physicsDeltaTimeAccumulator = 0.0f;
@@ -57,7 +59,10 @@ struct GameState
     std::mt19937 rng{std::random_device{}()};
     ImGuizmo::OPERATION currentGizmoOperation{ImGuizmo::TRANSLATE};
     ImGuizmo::MODE currentGizmoMode{ImGuizmo::WORLD};
+
+    StringID currentSceneId{"main_scene"_sid};
     entt::entity selectedEntity{entt::null};
+
 };
 
 class EngineAPI
