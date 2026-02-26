@@ -141,7 +141,7 @@ bool WillModelLoadSlot::LoadModelFromDisk()
     {
         ZoneScopedN("FileExistsCheck");
         if (!std::filesystem::exists(outputModel->source)) {
-            SPDLOG_ERROR("Failed to find path to willmodel - {}", outputModel->name);
+            SPDLOG_ERROR("Failed to find path to willmodel - {}", outputModel->modelId.ToString());
             return false;
         }
     }
@@ -149,7 +149,7 @@ bool WillModelLoadSlot::LoadModelFromDisk()
     Render::ModelReader reader = Render::ModelReader(outputModel->source);
 
     if (!reader.GetSuccessfullyLoaded()) {
-        SPDLOG_ERROR("Failed to load willmodel - {}", outputModel->name);
+        SPDLOG_ERROR("Failed to load willmodel - {}", outputModel->modelId.ToString());
         return false;
     }
 

@@ -447,7 +447,7 @@ void AsyncAssetLoadManager::OnModelLoadComplete(bool success, ModelSlotHandle mo
     modelLoadCompleteQueue.enqueue({slot.outputModel, success});
 
     if (!success) {
-        SPDLOG_ERROR("Failed to load model: {}", slot.outputModel->name);
+        SPDLOG_ERROR("Failed to load model: {}", slot.outputModel->modelId.ToString());
     }
 
     slot.Clear();

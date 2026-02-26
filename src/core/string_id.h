@@ -67,6 +67,16 @@ inline const StringID StringID::Invalid{};
  */
 #define SID(str) StringID(str, sizeof(str) - 1)
 
+#ifdef DEBUG
+inline StringID operator""_sid(const char* str, size_t len) {
+    return StringID(str, len);
+}
+#else
+constexpr StringID operator""_sid(const char* str, size_t len) {
+    return StringID(str, len);
+}
+#endif
+
 namespace std
 {
 template<>

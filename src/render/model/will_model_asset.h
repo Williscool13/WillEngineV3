@@ -47,7 +47,7 @@ public:
 
     // Populated by AssetManager, never changed
     std::filesystem::path source{};
-    std::string name{};
+    StringID modelId{};
     Engine::WillModelHandle selfHandle;
     ModelLoadState modelLoadState{ModelLoadState::NotLoaded};
 

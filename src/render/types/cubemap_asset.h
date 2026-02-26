@@ -27,6 +27,7 @@ struct Cubemap
 
     std::filesystem::path source{};
     std::string name{};
+    StringID cubemapId{};
     Engine::CubemapHandle selfHandle{Engine::CubemapHandle::INVALID};
     LoadState loadState{LoadState::NotLoaded};
     uint32_t refCount = 0;

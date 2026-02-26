@@ -28,6 +28,7 @@ public:
 
     std::filesystem::path source{};
     std::string name{};
+    StringID textureId{};
     Engine::TextureHandle selfHandle{Engine::TextureHandle::INVALID};
     LoadState loadState{LoadState::NotLoaded};
     uint32_t refCount = 0;

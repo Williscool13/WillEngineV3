@@ -47,21 +47,21 @@ public:
     AssetManager& operator=(AssetManager&&) = delete;
 
 public: // Models
-    WillModelHandle LoadModel(const std::filesystem::path& path);
+    WillModelHandle LoadModel(StringID modelId);
 
     Render::WillModel* GetModel(WillModelHandle handle);
 
     void UnloadModel(WillModelHandle handle);
 
 public: // Textures
-    TextureHandle LoadTexture(const std::filesystem::path& path);
+    TextureHandle LoadTexture(StringID textureId);
 
     Render::Texture* GetTexture(TextureHandle handle);
 
     void UnloadTexture(TextureHandle handle);
 
 public: // Cubemaps
-    CubemapHandle LoadCubemap(const std::filesystem::path& path);
+    CubemapHandle LoadCubemap(StringID cubemapId);
 
     Render::Cubemap* GetCubemap(CubemapHandle handle);
 
@@ -93,23 +93,28 @@ private:
     // OffsetAllocator because it's always contiguous
     OffsetAllocator::Allocator jointMatrixAllocator{Render::BINDLESS_MODEL_BUFFER_SIZE};
 
-    std::unordered_map<std::filesystem::path, WillModelHandle> pathToHandle;
+    std::unordered_map<StringID, WillModelHandle> modelIdToHandle;
     Core::HandleAllocator<Render::WillModel, MAX_LOADED_MODELS> modelAllocator;
     std::array<Render::WillModel, MAX_LOADED_MODELS> models;
 
     Core::HandleAllocator<Render::Texture, MAX_LOADED_TEXTURES> textureAllocator;
     std::array<Render::Texture, MAX_LOADED_TEXTURES> textures{};
-    std::unordered_map<std::filesystem::path, TextureHandle> pathToTextureHandle;
+    std::unordered_map<StringID, TextureHandle> textureIdToHandle;
 
     Core::HandleAllocator<Render::Cubemap, MAX_LOADED_CUBEMAPS> cubemapAllocator;
     std::array<Render::Cubemap, MAX_LOADED_CUBEMAPS> cubemaps{};
-    std::unordered_map<std::filesystem::path, CubemapHandle> pathToCubemapHandle;
+    std::unordered_map<StringID, CubemapHandle> cubemapIdToHandle;
 
 private: // Default Resources
     TextureHandle whiteTextureHandle = TextureHandle::INVALID;
     TextureHandle errorTextureHandle = TextureHandle::INVALID;
     TextureHandle brdfLutTextureHandle = TextureHandle::INVALID;
     Render::Sampler defaultSampler;
+
+private: // Temporary Asset Registry
+    std::unordered_map<StringID, std::filesystem::path> modelRegistry;
+    std::unordered_map<StringID, std::filesystem::path> textureRegistry;
+    std::unordered_map<StringID, std::filesystem::path> cubemapRegistry;
 };
 } // Engine
 

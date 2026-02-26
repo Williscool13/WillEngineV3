@@ -326,18 +326,18 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
 
     if (state->inputFrame->GetKey(Key::F1).pressed) {
         if (!dragonHandle.IsValid()) {
-            dragonHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "dragon/dragon.willmodel");
-            //boxHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "BoxTextured.willmodel");
-            boxHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "BoxTextured4k.willmodel");
-            sphereHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "Sphere.willmodel");
-            sponzaHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "sponza2/sponza.willmodel");
-            //sponzaHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "IntelSponza.willmodel");
-            textureHandle = ctx->assetManager->LoadTexture(Platform::GetAssetPath() / "textures/smiling_friend.ktx2");
-            cubemapHandle = ctx->assetManager->LoadCubemap(Platform::GetAssetPath() / "environment-map/kloofendal_48d_partly_cloudy_puresky_4k.ktx2");
+            dragonHandle = ctx->assetManager->LoadModel("stanford_dragon"_sid);
+            //boxHandle = ctx->assetManager->LoadModel("box"_sid);
+            boxHandle = ctx->assetManager->LoadModel("4k_box"_sid);
+            sphereHandle = ctx->assetManager->LoadModel("sphere"_sid);
+            sponzaHandle = ctx->assetManager->LoadModel("sponza"_sid);
+            //sponzaHandle = ctx->assetManager->LoadModel("intel_sponza"_sid);
+            textureHandle = ctx->assetManager->LoadTexture("smiling_friend"_sid);
+            cubemapHandle = ctx->assetManager->LoadCubemap("kloofendal"_sid);
         }
 
         if (!state->portalPlaneHandle.IsValid()) {
-            state->portalPlaneHandle = ctx->assetManager->LoadModel(Platform::GetAssetPath() / "Plane.willmodel");
+            state->portalPlaneHandle = ctx->assetManager->LoadModel("portal_plane"_sid);
         }
     }
 

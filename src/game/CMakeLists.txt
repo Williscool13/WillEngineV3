@@ -31,6 +31,10 @@ set(GAME_SOURCES
         systems/core_systems.cpp
         systems/core_systems.h
         core/string_id_game.cpp
+        scene/scene.cpp
+        scene/scene.h
+        scene/scene_system.cpp
+        scene/scene_system.h
 )
 
 set(GAME_INCLUDE_DIRS
