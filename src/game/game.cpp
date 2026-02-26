@@ -18,6 +18,7 @@
 #include "core/math/constants.h"
 
 #include "fwd_components.h"
+#include "engine/logging/engine_log.h"
 #include "engine/logging/engine_logger.h"
 #include "systems/debug_system.h"
 #include "systems/camera_system.h"
@@ -71,6 +72,8 @@ GAME_API void GameLoad(Core::EngineContext* ctx, Engine::GameState* state)
     gInternStringFn = ctx->internStringFn;
     gResolveStringIdFn = ctx->resolveStringIdFn;
 #endif
+
+    LOG_INFO(Game, "Testing game reload4");
 }
 
 GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::GameState* state)

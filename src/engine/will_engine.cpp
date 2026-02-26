@@ -679,6 +679,7 @@ void WillEngine::Run()
     SDL_Event e;
     bool exit = false;
     while (true) {
+        ZoneScopedN("EngineFrame");
         while (SDL_PollEvent(&e) != 0) {
             ImGui_ImplSDL3_ProcessEvent(&e);
             switch (e.type) {
@@ -836,6 +837,7 @@ void WillEngine::Run()
 
 void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
 {
+    ZoneScopedN("PreparingImGui")
     ImGui::Render();
     ImDrawDataSnapshot& imguiSnapshot = engineRenderSynchronization->imguiDataSnapshots[currentFrameBufferIndex];
     imguiSnapshot.SnapUsingSwap(ImGui::GetDrawData(), ImGui::GetTime());

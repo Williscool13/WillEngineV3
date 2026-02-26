@@ -51,7 +51,7 @@ void EngineLogger::Shutdown() const
 void EngineLogger::RegisterLoggersForDLL(LogCategory defaultCategory) const
 {
     for (auto& cat : categoryLoggers) {
-        if (cat) spdlog::register_logger(cat);
+        if (cat) spdlog::register_or_replace(cat);
     }
     spdlog::set_default_logger(categoryLoggers[(int)defaultCategory]);
 }

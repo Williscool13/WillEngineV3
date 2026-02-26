@@ -85,15 +85,15 @@ float2 IntegrateBRDF(float NdotV, float roughness)
     return float2(A, B) / float(SAMPLE_COUNT);
 }
 
-[[vk::binding(0, 0)]] public RWTexture2D<float2> storageBuffer[];
+[[vk::binding(0, 0)]] public RWTexture2D<half2> storageBuffer[];
 
 [numthreads(BRDF_LUT_GENERATION_DISPATCH_X, BRDF_LUT_GENERATION_DISPATCH_Y, 1)]
 void ComputeBRDFLUT(uniform BRDFLUTPushConstant pc, uint3 tid : SV_DispatchThreadID)
 {
-    uint width, height;
-    storageBuffer[pc.targetIndex].GetDimensions(width, height);
-    if (tid.x >= width || tid.y >= height) return;
+    const uint32_t LUT_SIZE = 512;
+    if (tid.x >= LUT_SIZE || tid.y >= LUT_SIZE) return;
 
-    float2 uv = (float2(tid.xy) + 0.5) / float2(width, height);
-    storageBuffer[pc.targetIndex][tid.xy] = IntegrateBRDF(uv.x, uv.y);
+    float2 uv = (float2(tid.xy) + 0.5) / float2(LUT_SIZE);
+    float2 floatOutput = IntegrateBRDF(uv.x, uv.y);
+    storageBuffer[pc.targetIndex][tid.xy] = half2(floatOutput);
 }
