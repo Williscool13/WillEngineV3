@@ -10,6 +10,7 @@
 #include <entt/entt.hpp>
 #include <glm/glm.hpp>
 #include <glm/detail/type_quat.hpp>
+#include <json/nlohmann/json_fwd.hpp>
 
 
 namespace Game::Component
@@ -22,6 +23,39 @@ struct PhysicsBodyComponent
     static void on_destroy(entt::registry& registry, entt::entity entity);
 };
 
+enum class PhysicsShapeType : uint8_t {
+    Box,
+    Sphere,
+    Capsule,
+};
+
+enum class PhysicsMotionType : uint8_t {
+    Static,
+    Dynamic,
+    Kinematic,
+};
+
+struct PhysicsShapeDesc {
+    PhysicsShapeType type;
+    glm::vec3 offset{0.0f};
+    glm::quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
+
+    union {
+        struct { glm::vec3 halfExtents; } box;
+        struct { float radius; } sphere;
+        struct { float radius; float halfHeight; } capsule;
+    };
+};
+
+struct PhysicsBodyDesc {
+    PhysicsMotionType motionType{PhysicsMotionType::Static};
+    float mass{1.0f};
+    std::vector<PhysicsShapeDesc> shapes;
+
+    static void Serialize(const PhysicsBodyDesc& comp, nlohmann::json& json);
+    static void Deserialize(PhysicsBodyDesc& comp, const nlohmann::json& json);
+};
+
 struct DynamicPhysicsBodyComponent
 {
     glm::vec3 previousPosition{};
@@ -31,7 +65,7 @@ struct DynamicPhysicsBodyComponent
 class DirtyPhysicsTransformComponent
 {};
 
-struct DrawPhysicsDebugComponent
+struct DrawPhysicsDebugTag
 {};
 }
 

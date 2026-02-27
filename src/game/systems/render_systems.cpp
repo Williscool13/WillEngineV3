@@ -18,7 +18,7 @@ namespace Game::System
 {
 void ResolveStaticMeshLoads(Core::EngineContext* ctx, Engine::GameState* state)
 {
-    // todO: ew
+    // todo: ew
     std::vector<entt::entity> resolved;
 
     for (auto [entity, meshComponent] : state->registry.view<Component::StaticMeshComponent, Component::StaticMeshLoadingTag>().each()) {
@@ -110,7 +110,7 @@ void UpdateRenderTransforms(Core::EngineContext* ctx, Engine::GameState* state, 
         float alpha = state->physicsInterpolationAlpha;
         glm::vec3 interpPos = glm::mix(physics.previousPosition, transform.translation, alpha);
         glm::quat interpRot = glm::slerp(physics.previousRotation, transform.rotation, alpha);
-        renderTransform.modelMatrix = glm::translate(glm::mat4(1.0f), interpPos) * glm::mat4_cast(interpRot);
+        renderTransform.modelMatrix = glm::translate(glm::mat4(1.0f), interpPos) * glm::mat4_cast(interpRot) * glm::scale(glm::mat4(1.0f), transform.scale);
     }
 }
 

@@ -11,6 +11,8 @@
 #include "core/time/time_frame.h"
 #include "game/fwd_components.h"
 #include "engine/engine_api.h"
+#include "Jolt/Physics/Body/BodyCreationSettings.h"
+#include "Jolt/Physics/Collision/Shape/StaticCompoundShape.h"
 
 namespace Game::System
 {
@@ -83,12 +85,74 @@ void DebugRenderPhysics(Core::EngineContext* ctx, Engine::GameState* state, Core
     auto& filter = ctx->physicsSystem->GetDebugDrawFilter();
     filter.Clear();
 
-    auto view = state->registry.view<Component::DrawPhysicsDebugComponent, Component::PhysicsBodyComponent>();
+    auto view = state->registry.view<Component::DrawPhysicsDebugTag, Component::PhysicsBodyComponent>();
     for (auto [entity, physicsBody] : view.each()) {
         filter.AddBody(physicsBody.bodyID);
     }
 
     ctx->physicsSystem->DrawDebug(&frameBuffer->mainViewFamily);
 #endif
+}
+
+JPH::BodyID CreateBodyFromDesc(JPH::BodyInterface& bodyInterface, const Component::PhysicsBodyDesc& desc, JPH::RVec3 position, JPH::Quat rotation)
+{
+    JPH::ShapeRefC shape;
+
+    if (desc.shapes.size() == 1 && desc.shapes[0].offset == glm::vec3(0.0f)) {
+        shape = CreateShapeFromDesc(desc.shapes[0]);
+    }
+    else {
+        JPH::StaticCompoundShapeSettings compound;
+        for (const auto& shapeDesc : desc.shapes) {
+            compound.AddShape(
+                JPH::Vec3(shapeDesc.offset.x, shapeDesc.offset.y, shapeDesc.offset.z),
+                JPH::Quat(shapeDesc.rotation.x, shapeDesc.rotation.y, shapeDesc.rotation.z, shapeDesc.rotation.w),
+                CreateShapeFromDesc(shapeDesc)
+            );
+        }
+        shape = compound.Create().Get();
+    }
+
+    JPH::EMotionType motionType = desc.motionType == Component::PhysicsMotionType::Static
+                                      ? JPH::EMotionType::Static
+                                      : desc.motionType == Component::PhysicsMotionType::Dynamic
+                                            ? JPH::EMotionType::Dynamic
+                                            : JPH::EMotionType::Kinematic;
+
+    JPH::ObjectLayer layer = desc.motionType == Component::PhysicsMotionType::Static ? Physics::Layers::NON_MOVING : Physics::Layers::MOVING;
+
+    JPH::BodyCreationSettings settings(shape, position, rotation, motionType, layer);
+    if (desc.motionType == Component::PhysicsMotionType::Dynamic) {
+        settings.mMassPropertiesOverride.mMass = desc.mass;
+        settings.mOverrideMassProperties = JPH::EOverrideMassProperties::CalculateInertia;
+    }
+
+    return bodyInterface.CreateAndAddBody(settings,
+                                          desc.motionType == Component::PhysicsMotionType::Static ? JPH::EActivation::DontActivate : JPH::EActivation::Activate);
+}
+
+JPH::ShapeRefC CreateShapeFromDesc(const Component::PhysicsShapeDesc& desc)
+{
+    switch (desc.type) {
+        case Component::PhysicsShapeType::Box:
+        {
+            JPH::BoxShapeSettings s(JPH::Vec3(desc.box.halfExtents.x, desc.box.halfExtents.y, desc.box.halfExtents.z));
+            s.SetEmbedded();
+            return s.Create().Get();
+        }
+        case Component::PhysicsShapeType::Sphere:
+        {
+            JPH::SphereShapeSettings s(desc.sphere.radius);
+            s.SetEmbedded();
+            return s.Create().Get();
+        }
+        case Component::PhysicsShapeType::Capsule:
+        {
+            JPH::CapsuleShapeSettings s(desc.capsule.halfHeight, desc.capsule.radius);
+            s.SetEmbedded();
+            return s.Create().Get();
+        }
+    }
+    return nullptr;
 }
 } // Game

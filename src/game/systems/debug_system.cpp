@@ -9,6 +9,7 @@
 #include <spdlog/spdlog.h>
 #include <tracy/Tracy.hpp>
 
+#include "physics_system.h"
 #include "scene_system.h"
 #include "audio/audio_manager.h"
 #include "Jolt/Physics/Body/BodyCreationSettings.h"
@@ -20,6 +21,7 @@
 #include "engine/engine_api.h"
 #include "engine/logging/engine_log.h"
 #include "game/fwd_components.h"
+#include "game/components/components.h"
 #include "game/components/scene_components.h"
 #include "physics/physics_system.h"
 #include "platform/paths.h"
@@ -86,27 +88,6 @@ entt::entity CreateBox(Core::EngineContext* ctx, Engine::GameState* state, glm::
         return entt::null;
     }
 
-    JPH::BodyID bodyId;
-    if (bUsePhysics) {
-        auto& bodyInterface = ctx->physicsSystem->GetBodyInterface();
-
-        JPH::BoxShapeSettings boxShapeSettings(JPH::Vec3(0.5f, 0.5f, 0.5f));
-        boxShapeSettings.SetDensity(12.5f);
-        boxShapeSettings.SetEmbedded();
-        JPH::ShapeSettings::ShapeResult boxShapeResult = boxShapeSettings.Create();
-        JPH::ShapeRefC boxShape = boxShapeResult.Get();
-
-        JPH::BodyCreationSettings boxSettings(
-            boxShape,
-            JPH::RVec3(position.x, position.y, position.z),
-            JPH::Quat::sIdentity(),
-            JPH::EMotionType::Dynamic,
-            Physics::Layers::MOVING
-        );
-
-        bodyId = bodyInterface.CreateAndAddBody(boxSettings, JPH::EActivation::Activate);
-    }
-
 
     Render::WillModel* model = ctx->assetManager->GetModel(boxHandle);
     if (!model || model->modelLoadState != Render::WillModel::ModelLoadState::Loaded) {
@@ -147,12 +128,30 @@ entt::entity CreateBox(Core::EngineContext* ctx, Engine::GameState* state, glm::
     glm::mat4 initialMatrix = GetMatrix(transformComponent);
     state->registry.emplace<Component::RenderTransformComponent>(boxEntity, initialMatrix, initialMatrix);
     state->registry.emplace<Component::DirtyRenderTransformTag>(boxEntity);
-    if (bUsePhysics) {
-        state->registry.emplace<Component::PhysicsBodyComponent>(boxEntity, bodyId);
-        state->registry.emplace<Component::DynamicPhysicsBodyComponent>(boxEntity, transformComponent.translation, transformComponent.rotation);
-        state->registry.emplace<Component::DrawPhysicsDebugComponent>(boxEntity);
-    }
     state->registry.emplace<Component::SceneComponent>(boxEntity, state->currentSceneId);
+
+    if (bUsePhysics) {
+        auto& bodyInterface = ctx->physicsSystem->GetBodyInterface();
+
+        JPH::BodyID bodyId;
+        Component::PhysicsShapeDesc shapeDesc{};
+        shapeDesc.type = Component::PhysicsShapeType::Box;
+        shapeDesc.box.halfExtents = glm::vec3(0.5f);
+
+        Component::PhysicsBodyDesc bodyDesc{};
+        bodyDesc.motionType = Component::PhysicsMotionType::Dynamic;
+        bodyDesc.mass = 12.5f;
+        bodyDesc.shapes.push_back(shapeDesc);
+
+        bodyId = CreateBodyFromDesc(bodyInterface, bodyDesc, JPH::RVec3(position.x, position.y, position.z), JPH::Quat::sIdentity());
+        state->registry.emplace<Component::PhysicsBodyDesc>(boxEntity, bodyDesc);
+        state->registry.emplace<Component::PhysicsBodyComponent>(boxEntity, bodyId);
+
+        // Transient
+        state->registry.emplace<Component::DynamicPhysicsBodyComponent>(boxEntity, transformComponent.translation, transformComponent.rotation);
+
+        state->registry.emplace<Component::DrawPhysicsDebugTag>(boxEntity);
+    }
 
     return boxEntity;
 }
@@ -163,25 +162,7 @@ entt::entity CreateStaticBox(Core::EngineContext* ctx, Engine::GameState* state,
                              glm::vec4 color = glm::vec4(0.5f, 0.5f, 0.5f, 1.0f))
 {
     ZoneScoped;
-    auto& bodyInterface = ctx->physicsSystem->GetBodyInterface();
 
-    // Create physics body
-    JPH::BoxShapeSettings shapeSettings(halfExtents);
-    shapeSettings.SetEmbedded();
-    JPH::ShapeSettings::ShapeResult shapeResult = shapeSettings.Create();
-    JPH::ShapeRefC shape = shapeResult.Get();
-
-    JPH::BodyCreationSettings bodySettings(
-        shape,
-        physicsPos,
-        JPH::Quat::sIdentity(),
-        JPH::EMotionType::Static,
-        Physics::Layers::NON_MOVING
-    );
-
-    JPH::BodyID bodyID = bodyInterface.CreateAndAddBody(bodySettings, JPH::EActivation::DontActivate);
-
-    // Create renderable
     Render::WillModel* model = ctx->assetManager->GetModel(boxHandle);
     if (!model || model->modelLoadState != Render::WillModel::ModelLoadState::Loaded) {
         SPDLOG_WARN("[CreateStaticBox] Model not ready yet");
@@ -198,14 +179,10 @@ entt::entity CreateStaticBox(Core::EngineContext* ctx, Engine::GameState* state,
         MaterialProperties material;
         if (primitive.materialIndex != -1) {
             material = model->modelData.materials[primitive.materialIndex];
-        }
-        else {
+        } else {
             material = materialManager.Get(materialManager.GetDefaultMaterial());
         }
-        // material.textureImageIndices.x = AssetLoad::ERROR_IMAGE_BINDLESS_INDEX;
-        // material.textureSamplerIndices.x = AssetLoad::DEFAULT_SAMPLER_BINDLESS_INDEX;
         Engine::MaterialID matID = materialManager.GetOrCreate(material);
-
         renderable.primitives[i] = {
             .primitiveIndex = primitive.index,
             .materialID = matID
@@ -213,20 +190,31 @@ entt::entity CreateStaticBox(Core::EngineContext* ctx, Engine::GameState* state,
     }
     renderable.primitiveCount = submesh.primitiveProperties.size();
     renderable.modelFlags = glm::vec4(0.0f);
+    renderable.meshIndex = 0;
+    renderable.modelId = model->modelId;
 
-    // Create entity
+    auto& bodyInterface = ctx->physicsSystem->GetBodyInterface();
+
+    Component::PhysicsShapeDesc shapeDesc{};
+    shapeDesc.type = Component::PhysicsShapeType::Box;
+    shapeDesc.box.halfExtents = glm::vec3(halfExtents.GetX(), halfExtents.GetY(), halfExtents.GetZ());
+
+    Component::PhysicsBodyDesc bodyDesc{};
+    bodyDesc.motionType = Component::PhysicsMotionType::Static;
+    bodyDesc.shapes.push_back(shapeDesc);
+
+    JPH::BodyID bodyID = CreateBodyFromDesc(bodyInterface, bodyDesc, physicsPos, JPH::Quat::sIdentity());
+
     entt::entity entity = state->registry.create();
     state->registry.emplace<Component::StaticMeshComponent>(entity, renderable);
-
-    Component::TransformComponent transform;
-    transform.translation = renderPos;
-    transform.rotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
-    transform.scale = renderScale;
+    Component::TransformComponent transform{renderPos, glm::quat(1.0f, 0.0f, 0.0f, 0.0f), renderScale};
     Component::TransformComponent transformComponent = state->registry.emplace<Component::TransformComponent>(entity, transform);
-    state->registry.emplace<Component::PhysicsBodyComponent>(entity, bodyID);
     glm::mat4 initialMatrix = Component::GetMatrix(transformComponent);
     state->registry.emplace<Component::RenderTransformComponent>(entity, initialMatrix, initialMatrix);
     state->registry.emplace<Component::DirtyRenderTransformTag>(entity);
+    state->registry.emplace<Component::PhysicsBodyDesc>(entity, bodyDesc);
+    state->registry.emplace<Component::PhysicsBodyComponent>(entity, bodyID);
+    state->registry.emplace<Component::SceneComponent>(entity, state->currentSceneId);
 
     return entity;
 }
@@ -560,6 +548,7 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
             state->registry.emplace<Component::RenderTransformComponent>(sponzaEntity, initialMatrix, initialMatrix);
             state->registry.emplace<Component::DirtyRenderTransformTag>(sponzaEntity);
             state->registry.emplace<Component::SceneComponent>(sponzaEntity, state->currentSceneId);
+            state->registry.emplace<Component::StableIdComponent>(sponzaEntity, Component::StableIdComponent::Generate(state->rng));
         }
 
         SPDLOG_INFO("[DebugSystem] Spawned sponza");
@@ -771,7 +760,7 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         Scene s;
         s.content = nlohmann::json::parse(file);
 
-        LoadSceneResult result = LoadScene(ctx->assetManager, state->componentRegistry, state->registry, s);
+        LoadSceneResult result = LoadScene(ctx, state->componentRegistry, state->registry, s);
         state->sceneModelHandles[result.sceneId] = std::move(result.loadedModelHandles);
         state->bPendingModelResolve |= result.bHasPendingModelLoads;
 

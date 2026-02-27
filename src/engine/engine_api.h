@@ -28,8 +28,11 @@ struct GameState
 {
     const Core::InputFrame* inputFrame{nullptr};
     const Core::TimeFrame* timeFrame{nullptr};
+
     entt::registry registry;
     Core::ComponentRegistry componentRegistry{};
+
+    std::mt19937_64 rng{std::random_device{}()};
 
     // Physics
     float physicsDeltaTimeAccumulator = 0.0f;
@@ -60,7 +63,6 @@ struct GameState
     DebugTransformationType debugTransformationType{};
     Core::DebugViewAspect debugViewAspect{};
 
-    std::mt19937 rng{std::random_device{}()};
     ImGuizmo::OPERATION currentGizmoOperation{ImGuizmo::TRANSLATE};
     ImGuizmo::MODE currentGizmoMode{ImGuizmo::WORLD};
 

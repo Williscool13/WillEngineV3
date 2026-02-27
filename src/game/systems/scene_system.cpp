@@ -6,11 +6,16 @@
 
 #include <json/nlohmann/json.hpp>
 
+#include "physics_system.h"
 #include "core/component_registry.h"
+#include "core/include/engine_context.h"
 #include "engine/asset_manager.h"
+#include "engine/logging/engine_log.h"
 #include "game/components/core_components.h"
+#include "game/components/physics_components.h"
 #include "game/components/render_components.h"
 #include "game/components/scene_components.h"
+#include "physics/physics_system.h"
 #include "platform/paths.h"
 
 namespace Game::System
@@ -44,7 +49,7 @@ Scene SaveScene(Core::ComponentRegistry& componentRegistry, entt::registry& regi
     return outScene;
 }
 
-LoadSceneResult LoadScene(Engine::AssetManager* assetManager, Core::ComponentRegistry& componentRegistry, entt::registry& registry, Scene& scene)
+LoadSceneResult LoadScene(Core::EngineContext* ctx, Core::ComponentRegistry& componentRegistry, entt::registry& registry, Scene& scene)
 {
     StringID sceneId = StringID(scene.content["scene_id"].get<uint64_t>());
 
@@ -72,19 +77,37 @@ LoadSceneResult LoadScene(Engine::AssetManager* assetManager, Core::ComponentReg
     std::unordered_map<StringID, Engine::WillModelHandle> modelIdToHandle;
 
     for (auto entity : sceneEntities) {
+        // Transform Cache
         if (auto* transform = registry.try_get<Component::TransformComponent>(entity)) {
             glm::mat4 m = Component::GetMatrix(*transform);
             registry.emplace_or_replace<Component::RenderTransformComponent>(entity, m, m);
             registry.emplace_or_replace<Component::DirtyRenderTransformTag>(entity);
         }
 
+        // Static Mesh Loading
         if (auto* mesh = registry.try_get<Component::StaticMeshComponent>(entity)) {
             if (!modelIdToHandle.contains(mesh->modelId)) {
-                modelIdToHandle[mesh->modelId] = assetManager->LoadModel(mesh->modelId);
+                modelIdToHandle[mesh->modelId] = ctx->assetManager->LoadModel(mesh->modelId);
             }
             mesh->modelHandle = modelIdToHandle[mesh->modelId];
             registry.emplace_or_replace<Component::StaticMeshLoadingTag>(entity);
             bHasPendingModelLoads = true;
+        }
+
+        // Physics Loading
+        if (auto* bodyDesc = registry.try_get<Component::PhysicsBodyDesc>(entity)) {
+            if (auto* transform = registry.try_get<Component::TransformComponent>(entity)) {
+                JPH::BodyInterface& bodyInterface = ctx->physicsSystem->GetBodyInterface();
+                JPH::RVec3 pos(transform->translation.x, transform->translation.y, transform->translation.z);
+                JPH::Quat rot(transform->rotation.x, transform->rotation.y, transform->rotation.z, transform->rotation.w);
+                auto bodyId = CreateBodyFromDesc(bodyInterface, *bodyDesc, pos, rot);
+                registry.emplace<Component::PhysicsBodyComponent>(entity, bodyId);
+                if (bodyDesc->motionType == Component::PhysicsMotionType::Dynamic) {
+                    registry.emplace<Component::DynamicPhysicsBodyComponent>(entity, transform->translation, transform->rotation);
+                }
+            } else {
+                LOG_WARN(Game, "PhysicsBodyDesc on entity without TransformComponent, skipping");
+            }
         }
     }
 
