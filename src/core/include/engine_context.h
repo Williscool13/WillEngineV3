@@ -67,7 +67,10 @@ struct EngineContext
     enki::TaskScheduler* scheduler;
 
     //Render::ResourceManager* resourceManager;
-    Engine::AssetManager* assetManager;
+    Engine::AssetManager* assetManager{nullptr};
+    bool bModelLoadedThisFrame{false};
+
+
     Audio::AudioManager* audioManager;
     Physics::PhysicsSystem* physicsSystem;
 

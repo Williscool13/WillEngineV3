@@ -31,6 +31,13 @@ struct WillModel;
 namespace Engine
 {
 
+struct ResolveLoadResult
+{
+    int32_t modelLoadedCount{0};
+    int32_t textureLoadedCount{0};
+    int32_t cubeLoadedCount{0};
+};
+
 class AssetManager
 {
 public:
@@ -68,7 +75,7 @@ public: // Cubemaps
     void UnloadCubemap(CubemapHandle handle);
 
 public: // Called by engine to process loads
-    void ResolveLoads(Core::FrameBuffer& stagingFrameBuffer) const;
+    ResolveLoadResult ResolveLoads(Core::FrameBuffer& stagingFrameBuffer) const;
 
     void ResolveUnloads();
 

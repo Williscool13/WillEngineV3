@@ -750,11 +750,12 @@ void WillEngine::Run()
         }
 #endif
 
-        assetManager->ResolveLoads(stagingFrameBuffer);
+        ResolveLoadResult loadCounts = assetManager->ResolveLoads(stagingFrameBuffer);
         assetManager->ResolveUnloads();
 
         engineContext->bImguiKeyboardCaptured = ImGui::GetIO().WantCaptureKeyboard;
         engineContext->bImguiMouseCaptured = ImGui::GetIO().WantCaptureMouse;
+        engineContext->bModelLoadedThisFrame = loadCounts.modelLoadedCount > 0;
 
         //
         {

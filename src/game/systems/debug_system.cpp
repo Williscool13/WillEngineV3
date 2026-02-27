@@ -46,7 +46,7 @@ entt::entity CreateTextureVisualizer(Core::EngineContext* ctx, Engine::GameState
         return entt::null;
     }
 
-    Component::RenderableComponent renderable{};
+    Component::StaticMeshComponent renderable{};
     Engine::MaterialManager& materialManager = ctx->assetManager->GetMaterialManager();
     Render::MeshInformation& submesh = model->modelData.meshes[0];
 
@@ -64,7 +64,7 @@ entt::entity CreateTextureVisualizer(Core::EngineContext* ctx, Engine::GameState
     renderable.modelFlags = glm::vec4(0.0f);
 
     entt::entity entity = state->registry.create();
-    state->registry.emplace<Component::RenderableComponent>(entity, renderable);
+    state->registry.emplace<Component::StaticMeshComponent>(entity, renderable);
 
     Component::TransformComponent transform;
     transform.translation = renderPos;
@@ -114,7 +114,7 @@ entt::entity CreateBox(Core::EngineContext* ctx, Engine::GameState* state, glm::
         return entt::null;
     }
 
-    Component::RenderableComponent renderable{};
+    Component::StaticMeshComponent renderable{};
     Engine::MaterialManager& materialManager = ctx->assetManager->GetMaterialManager();
     Render::MeshInformation& submesh = model->modelData.meshes[0];
 
@@ -138,9 +138,11 @@ entt::entity CreateBox(Core::EngineContext* ctx, Engine::GameState* state, glm::
     }
     renderable.primitiveCount = submesh.primitiveProperties.size();
     renderable.modelFlags = glm::vec4(0.0f);
+    renderable.meshIndex = 0;
+    renderable.modelId = model->modelId;
 
     entt::entity boxEntity = state->registry.create();
-    state->registry.emplace<Component::RenderableComponent>(boxEntity, renderable);
+    state->registry.emplace<Component::StaticMeshComponent>(boxEntity, renderable);
     Component::TransformComponent transformComponent = state->registry.emplace<Component::TransformComponent>(boxEntity, position, glm::quat(1.0f, 0.0f, 0.0f, 0.0f), glm::vec3(1.0f));
     glm::mat4 initialMatrix = GetMatrix(transformComponent);
     state->registry.emplace<Component::RenderTransformComponent>(boxEntity, initialMatrix, initialMatrix);
@@ -150,7 +152,7 @@ entt::entity CreateBox(Core::EngineContext* ctx, Engine::GameState* state, glm::
         state->registry.emplace<Component::DynamicPhysicsBodyComponent>(boxEntity, transformComponent.translation, transformComponent.rotation);
         state->registry.emplace<Component::DrawPhysicsDebugComponent>(boxEntity);
     }
-    state->registry.emplace<Component::SceneSerializedTag>(boxEntity, state->currentSceneId);
+    state->registry.emplace<Component::SceneComponent>(boxEntity, state->currentSceneId);
 
     return boxEntity;
 }
@@ -186,7 +188,7 @@ entt::entity CreateStaticBox(Core::EngineContext* ctx, Engine::GameState* state,
         return entt::null;
     }
 
-    Component::RenderableComponent renderable{};
+    Component::StaticMeshComponent renderable{};
     Engine::MaterialManager& materialManager = ctx->assetManager->GetMaterialManager();
     Render::MeshInformation& submesh = model->modelData.meshes[0];
 
@@ -214,7 +216,7 @@ entt::entity CreateStaticBox(Core::EngineContext* ctx, Engine::GameState* state,
 
     // Create entity
     entt::entity entity = state->registry.create();
-    state->registry.emplace<Component::RenderableComponent>(entity, renderable);
+    state->registry.emplace<Component::StaticMeshComponent>(entity, renderable);
 
     Component::TransformComponent transform;
     transform.translation = renderPos;
@@ -266,7 +268,7 @@ entt::entity CreateGlowingBox(Core::EngineContext* ctx, Engine::GameState* state
         return entt::null;
     }
 
-    Component::RenderableComponent renderable{};
+    Component::StaticMeshComponent renderable{};
     Engine::MaterialManager& materialManager = ctx->assetManager->GetMaterialManager();
     Render::MeshInformation& submesh = model->modelData.meshes[0];
 
@@ -294,7 +296,7 @@ entt::entity CreateGlowingBox(Core::EngineContext* ctx, Engine::GameState* state
     renderable.modelFlags = glm::vec4(0.0f);
 
     entt::entity boxEntity = state->registry.create();
-    state->registry.emplace<Component::RenderableComponent>(boxEntity, renderable);
+    state->registry.emplace<Component::StaticMeshComponent>(boxEntity, renderable);
     Component::TransformComponent& transformComponent = state->registry.emplace<Component::TransformComponent>(boxEntity, position, glm::quat(1.0f, 0.0f, 0.0f, 0.0f), glm::vec3(1.0f));
     glm::mat4 initialMatrix = GetMatrix(transformComponent);
     state->registry.emplace<Component::RenderTransformComponent>(boxEntity, initialMatrix, initialMatrix);
@@ -453,7 +455,7 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         };
 
         for (const auto& pos : dragonPositions) {
-            Component::RenderableComponent renderable{};
+            Component::StaticMeshComponent renderable{};
 
             for (size_t i = 0; i < submesh.primitiveProperties.size(); ++i) {
                 Render::PrimitiveProperty& primitive = submesh.primitiveProperties[i];
@@ -475,7 +477,7 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
             renderable.modelFlags = glm::vec4(0.0f);
 
             entt::entity dragonEntity = state->registry.create();
-            state->registry.emplace<Component::RenderableComponent>(dragonEntity, renderable);
+            state->registry.emplace<Component::StaticMeshComponent>(dragonEntity, renderable);
             auto& transformComponent = state->registry.emplace<Component::TransformComponent>(dragonEntity, pos, meshRotation, meshScale * 1.5f);
             glm::mat4 initialMatrix = GetMatrix(transformComponent);
             state->registry.emplace<Component::RenderTransformComponent>(dragonEntity, initialMatrix, initialMatrix);
@@ -527,7 +529,7 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
                 SPDLOG_WARN("[DebugSystem] Node {} has {} primitives, limiting to 128", i, mesh.primitiveProperties.size());
             }
 
-            Component::RenderableComponent renderable{};
+            Component::StaticMeshComponent renderable{};
             size_t primCount = std::min(mesh.primitiveProperties.size(), static_cast<size_t>(128));
 
             for (size_t j = 0; j < primCount; ++j) {
@@ -548,13 +550,16 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
             }
             renderable.primitiveCount = primCount;
             renderable.modelFlags = glm::vec4(0.0f);
+            renderable.meshIndex = node.meshIndex;
+            renderable.modelId = sponza->modelId;
 
             entt::entity sponzaEntity = state->registry.create();
-            state->registry.emplace<Component::RenderableComponent>(sponzaEntity, renderable);
+            state->registry.emplace<Component::StaticMeshComponent>(sponzaEntity, renderable);
             auto& transformComponent = state->registry.emplace<Component::TransformComponent>(sponzaEntity, worldTranslations[i], worldRotations[i], worldScales[i]);
             glm::mat4 initialMatrix = GetMatrix(transformComponent);
             state->registry.emplace<Component::RenderTransformComponent>(sponzaEntity, initialMatrix, initialMatrix);
             state->registry.emplace<Component::DirtyRenderTransformTag>(sponzaEntity);
+            state->registry.emplace<Component::SceneComponent>(sponzaEntity, state->currentSceneId);
         }
 
         SPDLOG_INFO("[DebugSystem] Spawned sponza");
@@ -640,7 +645,7 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         Render::Cubemap* cubemap = ctx->assetManager->GetCubemap(cubemapHandle);
 
         if (sphere && sphere->modelLoadState == Render::WillModel::ModelLoadState::Loaded && cubemap && cubemap->loadState == Render::Cubemap::LoadState::Loaded) {
-            Component::RenderableComponent renderable{};
+            Component::StaticMeshComponent renderable{};
             Engine::MaterialManager& materialManager = ctx->assetManager->GetMaterialManager();
             Render::MeshInformation& submesh = sphere->modelData.meshes[0];
 
@@ -659,7 +664,7 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
             glm::vec3 spherePos = glm::vec3(0.0f, 5.0f, -5.0f);
 
             entt::entity sphereEntity = state->registry.create();
-            state->registry.emplace<Component::RenderableComponent>(sphereEntity, renderable);
+            state->registry.emplace<Component::StaticMeshComponent>(sphereEntity, renderable);
             Component::TransformComponent& transform = state->registry.emplace<Component::TransformComponent>(
                 sphereEntity, spherePos, glm::quat(1.0f, 0.0f, 0.0f, 0.0f), glm::vec3(2.0f));
             glm::mat4 initialMatrix = GetMatrix(transform);
@@ -672,16 +677,6 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         else {
             SPDLOG_WARN("[DebugSystem] Sphere model or cubemap not ready yet");
         }
-    }
-
-    if (state->inputFrame->GetKey(Key::F10).pressed) {
-        Scene s = SaveScene(state->componentRegistry, state->registry, state->currentSceneId);
-        std::filesystem::path outputPath = Platform::GetAssetPath() / "Scene/Scene.wscene";
-        std::filesystem::create_directories(outputPath.parent_path());
-        std::ofstream file(outputPath);
-        file << s.content.dump(2);
-
-        LOG_INFO(Game, "Saved scene to 'Scene/Scene.wscene'");
     }
 
     if (state->inputFrame->GetKey(Key::F6).pressed) {
@@ -728,7 +723,7 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         for (int y = 0; y < 10; ++y) {
             glm::vec3 pos = glm::vec3(0.0f, 1.0f + y * 3.0f, 0.0f) + meshOffset;
 
-            Component::RenderableComponent renderable{};
+            Component::StaticMeshComponent renderable{};
 
             for (size_t i = 0; i < submesh.primitiveProperties.size(); ++i) {
                 Render::PrimitiveProperty& primitive = submesh.primitiveProperties[i];
@@ -750,7 +745,7 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
             renderable.modelFlags = glm::vec4(0.0f);
 
             entt::entity dragonEntity = state->registry.create();
-            state->registry.emplace<Component::RenderableComponent>(dragonEntity, renderable);
+            state->registry.emplace<Component::StaticMeshComponent>(dragonEntity, renderable);
             Component::TransformComponent& transformComponent = state->registry.emplace<Component::TransformComponent>(dragonEntity, pos, meshRotation, meshScale * 1.5f);
             glm::mat4 initialMatrix = GetMatrix(transformComponent);
             state->registry.emplace<Component::RenderTransformComponent>(dragonEntity, initialMatrix, initialMatrix);
@@ -758,6 +753,29 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         }
 
         SPDLOG_INFO("[DebugSystem] Created PCSS test scene: 100x100 floor + vertical dragon column");
+    }
+
+    if (state->inputFrame->GetKey(Key::F10).pressed) {
+        Scene s = SaveScene(state->componentRegistry, state->registry, state->currentSceneId);
+        std::filesystem::path outputPath = Platform::GetAssetPath() / "scenes/main_scene.wscene";
+        std::filesystem::create_directories(outputPath.parent_path());
+        std::ofstream file(outputPath);
+        file << s.content.dump(2);
+
+        LOG_INFO(Game, "Saved scene to 'scenes/main_scene.wscene'");
+    }
+
+    if (state->inputFrame->GetKey(Key::F11).pressed) {
+        std::filesystem::path outputPath = Platform::GetAssetPath() / "scenes/main_scene.wscene";
+        std::ifstream file(outputPath);
+        Scene s;
+        s.content = nlohmann::json::parse(file);
+
+        LoadSceneResult result = LoadScene(ctx->assetManager, state->componentRegistry, state->registry, s);
+        state->sceneModelHandles[result.sceneId] = std::move(result.loadedModelHandles);
+        state->bPendingModelResolve |= result.bHasPendingModelLoads;
+
+        LOG_INFO(Game, "Loaded scene from 'scenes/main_scene.wscene'");
     }
 
     if (state->inputFrame->GetKey(Key::M).pressed) {

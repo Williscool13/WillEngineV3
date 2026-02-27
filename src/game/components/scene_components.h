@@ -8,7 +8,7 @@
 
 namespace Game::Component
 {
-struct SceneSerializedTag
+struct SceneComponent
 {
     StringID sceneId;
 };

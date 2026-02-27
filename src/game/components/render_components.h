@@ -8,8 +8,11 @@
 #include <array>
 #include <cstdint>
 #include <glm/glm.hpp>
+#include <json/nlohmann/json_fwd.hpp>
 
+#include "core/string_id.h"
 #include "engine/material_manager.h"
+#include "render/model/will_model_asset.h"
 
 namespace Game::Component
 {
@@ -27,13 +30,26 @@ struct PrimitiveData
     Engine::MaterialID materialID;
 };
 
-struct RenderableComponent
+struct StaticMeshComponent
 {
-    glm::vec4 modelFlags;// x: visible, y: shadow-caster, zw: reserved
+    glm::vec4 modelFlags{0.0f};// x: visible, y: shadow-caster, zw: reserved
 
-    std::array<PrimitiveData, 128> primitives;
-    uint8_t primitiveCount = 0;
+    std::array<PrimitiveData, 128> primitives{};
+    uint8_t primitiveCount{0};
+
+
+    StringID modelId{StringID::Invalid};
+    int32_t meshIndex{-1};
+
+    // Transient
+    Engine::WillModelHandle modelHandle{};
+
+    static void Serialize(const StaticMeshComponent& comp, nlohmann::json& json);
+    static void Deserialize(StaticMeshComponent& comp, const nlohmann::json& json);
 };
+
+struct StaticMeshLoadingTag
+{};
 
 
 

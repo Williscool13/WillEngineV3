@@ -30,7 +30,7 @@ PortalPair CreatePortalPair(Core::EngineContext* ctx, Engine::GameState* state, 
     // Create Portal A (blue)
     entt::entity portalA = state->registry.create();
     {
-        RenderableComponent renderable{};
+        StaticMeshComponent renderable{};
         for (size_t i = 0; i < submesh.primitiveProperties.size(); ++i) {
             Render::PrimitiveProperty& primitive = submesh.primitiveProperties[i];
 
@@ -54,7 +54,7 @@ PortalPair CreatePortalPair(Core::EngineContext* ctx, Engine::GameState* state, 
         TransformComponent transform{posA, rotA, glm::vec3(1.0f, 1.0f, 1.0f)};
 
         state->registry.emplace<TransformComponent>(portalA, transform);
-        state->registry.emplace<RenderableComponent>(portalA, renderable);
+        state->registry.emplace<StaticMeshComponent>(portalA, renderable);
         state->registry.emplace<RenderTransformComponent>(portalA, GetMatrix(transform), GetMatrix(transform));
         state->registry.emplace<PortalPlaneComponent>(portalA);
         state->registry.emplace<PortalComponent>(portalA, entt::null, 1u);
@@ -63,7 +63,7 @@ PortalPair CreatePortalPair(Core::EngineContext* ctx, Engine::GameState* state, 
     // Create Portal B (orange)
     entt::entity portalB = state->registry.create();
     {
-        RenderableComponent renderable{};
+        StaticMeshComponent renderable{};
         for (size_t i = 0; i < submesh.primitiveProperties.size(); ++i) {
             Render::PrimitiveProperty& primitive = submesh.primitiveProperties[i];
 
@@ -86,7 +86,7 @@ PortalPair CreatePortalPair(Core::EngineContext* ctx, Engine::GameState* state, 
 
         TransformComponent transform{posB, rotB, glm::vec3(1.0f)};
         state->registry.emplace<TransformComponent>(portalB, transform);
-        state->registry.emplace<RenderableComponent>(portalB, renderable);
+        state->registry.emplace<StaticMeshComponent>(portalB, renderable);
         state->registry.emplace<RenderTransformComponent>(portalB, GetMatrix(transform), GetMatrix(transform));
         state->registry.emplace<PortalPlaneComponent>(portalB);
         state->registry.emplace<PortalComponent>(portalB, entt::null, 2u);
@@ -115,7 +115,7 @@ void CreatePortalPlane(Core::EngineContext* ctx, Engine::GameState* state, glm::
         return;
     }
 
-    RenderableComponent renderable{};
+    StaticMeshComponent renderable{};
     Engine::MaterialManager& materialManager = ctx->assetManager->GetMaterialManager();
     Render::MeshInformation& submesh = plane->modelData.meshes[0];
 
@@ -144,7 +144,7 @@ void CreatePortalPlane(Core::EngineContext* ctx, Engine::GameState* state, glm::
 
     entt::entity planeEntity = state->registry.create();
     TransformComponent transformComp = state->registry.emplace<TransformComponent>(planeEntity, position, rotation, scale);
-    state->registry.emplace<RenderableComponent>(planeEntity, renderable);
+    state->registry.emplace<StaticMeshComponent>(planeEntity, renderable);
     state->registry.emplace<RenderTransformComponent>(planeEntity, GetMatrix(transformComp), GetMatrix(transformComp));
     state->registry.emplace<PortalPlaneComponent>(planeEntity);
 

@@ -14,7 +14,7 @@
 
 #include "imgui.h"
 #include "audio/audio_manager.h"
-#include "systems/gather_renderables_system.h"
+#include "systems/render_systems.h"
 #include "core/math/constants.h"
 
 #include "fwd_components.h"
@@ -61,7 +61,7 @@ GAME_API void GameLoad(Core::EngineContext* ctx, Engine::GameState* state)
     SPDLOG_TRACE("  DynamicPhysicsBodyComponent: {}", entt::type_id<Game::Component::DynamicPhysicsBodyComponent>().hash());
     SPDLOG_TRACE("  PhysicsBodyComponent: {}", entt::type_id<Game::Component::PhysicsBodyComponent>().hash());
     SPDLOG_TRACE("  DirtyPhysicsTransformComponent: {}", entt::type_id<Game::Component::DirtyPhysicsTransformComponent>().hash());
-    SPDLOG_TRACE("  RenderableComponent: {}", entt::type_id<Game::Component::RenderableComponent>().hash());
+    SPDLOG_TRACE("  RenderableComponent: {}", entt::type_id<Game::Component::StaticMeshComponent>().hash());
     SPDLOG_TRACE("  TransformComponent: {}", entt::type_id<Game::Component::TransformComponent>().hash());
 
     ImGui::SetCurrentContext(ctx->imguiContext);
@@ -106,6 +106,11 @@ GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         Game::System::UpdatePhysics(ctx, state);
     }
 
+    if (ctx->bModelLoadedThisFrame || state->bPendingModelResolve) {
+        Game::System::ResolveStaticMeshLoads(ctx, state);
+        state->bPendingModelResolve = false;
+    }
+
 #if WILL_EDITOR
     Game::System::EditorUpdate(ctx, state);
 #endif
@@ -118,8 +123,6 @@ GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         ZoneScopedN("WaitForTargetFrameTime");
         std::this_thread::sleep_for(targetFrameTime - elapsed);
     }
-
-    StringID s = SID("Game Based String ID");
 }
 
 GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer)

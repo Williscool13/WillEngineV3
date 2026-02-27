@@ -47,6 +47,10 @@ struct GameState
     // Post-Process
     Core::PostProcessConfiguration postProcess{};
 
+    // Asset Loading
+    std::unordered_map<StringID, std::vector<WillModelHandle>> sceneModelHandles;
+    bool bPendingModelResolve{false};
+
     // Loaded models debug
     WillModelHandle portalPlaneHandle{WillModelHandle::INVALID};
 

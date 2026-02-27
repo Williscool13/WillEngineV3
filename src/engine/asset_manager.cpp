@@ -171,8 +171,9 @@ void AssetManager::UnloadModel(WillModelHandle handle)
     }
 }
 
-void AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuffer) const
+ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuffer) const
 {
+    ResolveLoadResult loadCounts{};
     AssetLoad::WillModelLoadComplete complete{};
     while (assetLoadManager->TryDequeueModelComplete(complete)) {
         if (complete.bSuccess) {
@@ -188,6 +189,7 @@ void AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuffer) const
             complete.model->imageAcquireOps.clear();
             complete.model->modelLoadState = Render::WillModel::ModelLoadState::Loaded;
             LOG_INFO(Asset, "Model load succeeded: {}", complete.model->modelId.ToString());
+            loadCounts.modelLoadedCount++;
         }
         else {
             complete.model->bufferAcquireOps.clear();
@@ -204,6 +206,7 @@ void AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuffer) const
 
             textureComplete.texture->loadState = Render::Texture::LoadState::Loaded;
             LOG_INFO(Asset, "Texture load succeeded: {} (bindless index: {})", textureComplete.texture->name, static_cast<uint32_t>(textureComplete.texture->bindlessHandle.index));
+            loadCounts.textureLoadedCount++;
         }
         else {
             textureComplete.texture->loadState = Render::Texture::LoadState::NotLoaded;
@@ -218,12 +221,15 @@ void AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuffer) const
 
             cubemapComplete.cubemap->loadState = Render::Cubemap::LoadState::Loaded;
             LOG_INFO(Asset, "Cubemap load succeeded: {} (bindless index: {})", cubemapComplete.cubemap->name, static_cast<uint32_t>(cubemapComplete.cubemap->bindlessHandle.index));
+            loadCounts.cubeLoadedCount++;
         }
         else {
             cubemapComplete.cubemap->loadState = Render::Cubemap::LoadState::NotLoaded;
             LOG_ERROR(Asset, "Cubemap load failed: {}", cubemapComplete.cubemap->name);
         }
     }
+
+    return loadCounts;
 }
 
 void AssetManager::ResolveUnloads()

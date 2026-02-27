@@ -2,19 +2,72 @@
 // Created by William on 2025-12-26.
 //
 
-#include "gather_renderables_system.h"
+#include "render_systems.h"
 
 #include <tracy/Tracy.hpp>
 
 #include "core/include/engine_context.h"
 #include "engine/asset_manager.h"
 #include "engine/engine_api.h"
+#include "engine/logging/engine_log.h"
 #include "game/fwd_components.h"
 #include "game/components/debug_components.h"
 
 
 namespace Game::System
 {
+void ResolveStaticMeshLoads(Core::EngineContext* ctx, Engine::GameState* state)
+{
+    // todO: ew
+    std::vector<entt::entity> resolved;
+
+    for (auto [entity, meshComponent] : state->registry.view<Component::StaticMeshComponent, Component::StaticMeshLoadingTag>().each()) {
+        auto model = ctx->assetManager->GetModel(meshComponent.modelHandle);
+        if (!model) {
+            LOG_ERROR(Game, "Model ({}) is not in the asset manager, it should have been requested to load during scene load.", model->modelId.ToString());
+            continue;
+        }
+        if (model->modelLoadState != Render::WillModel::ModelLoadState::Loaded) {
+            LOG_TRACE(Game, "Model ({}) not yet done loading", model->modelId.ToString());
+            continue;
+        }
+
+        Engine::MaterialManager& materialManager = ctx->assetManager->GetMaterialManager();
+        Render::MeshInformation& mesh = model->modelData.meshes[meshComponent.meshIndex];
+
+        if (mesh.primitiveProperties.size() > 128) {
+            LOG_WARN(Game, "Model ({}) has {} primitives, limiting to 128", model->modelId.ToString(), mesh.primitiveProperties.size());
+        }
+
+        size_t primCount = std::min(mesh.primitiveProperties.size(), static_cast<size_t>(128));
+
+        for (size_t j = 0; j < primCount; ++j) {
+            Render::PrimitiveProperty& primitive = mesh.primitiveProperties[j];
+
+            Engine::MaterialID matID;
+            if (primitive.materialIndex == -1) {
+                matID = materialManager.GetDefaultMaterial();
+            }
+            else {
+                matID = materialManager.GetOrCreate(model->modelData.materials[primitive.materialIndex]);
+            }
+
+            meshComponent.primitives[j] = {
+                .primitiveIndex = primitive.index,
+                .materialID = matID
+            };
+        }
+        meshComponent.primitiveCount = primCount;
+        meshComponent.modelFlags = glm::vec4(0.0f);
+
+        resolved.push_back(entity);
+    }
+
+    for (const auto entity : resolved) {
+        state->registry.remove<Component::StaticMeshLoadingTag>(entity);
+    }
+}
+
 void UpdateRenderTransforms(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
@@ -68,9 +121,13 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
 
     // Gather regular renderables
     {
-        ZoneScopedN("MainSceneRenderables");
-        auto view = state->registry.view<Component::RenderableComponent, Component::RenderTransformComponent>(
-            entt::exclude<Component::PortalPlaneComponent, Component::CubemapVisualizeTag>);
+        ZoneScopedN("MainSceneStaticMeshes");
+        auto view = state->registry.view<Component::StaticMeshComponent, Component::RenderTransformComponent>(
+            entt::exclude<
+            Component::PortalPlaneComponent,
+            Component::CubemapVisualizeTag,
+            Component::StaticMeshLoadingTag
+            >);
 
         for (auto [entity, renderable, renderTransform] : view.each()) {
             auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.size());
@@ -90,7 +147,7 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
     // Gather portal planes
     {
         ZoneScopedN("PortalRenderables");
-        auto portalView = state->registry.view<Component::PortalPlaneComponent, Component::RenderableComponent, Component::RenderTransformComponent>();
+        auto portalView = state->registry.view<Component::PortalPlaneComponent, Component::StaticMeshComponent, Component::RenderTransformComponent>();
 
         if (portalView.size_hint() > 0) {
             auto& portalDraw = frameBuffer->mainViewFamily.customShaderDraws["portal_rendering"];
@@ -118,7 +175,7 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
     // Gather cubemap visualizations
     {
         ZoneScopedN("CubemapVisualizations");
-        auto cubemapView = state->registry.view<Component::CubemapVisualizeTag, Component::RenderableComponent, Component::RenderTransformComponent>();
+        auto cubemapView = state->registry.view<Component::CubemapVisualizeTag, Component::StaticMeshComponent, Component::RenderTransformComponent>();
 
         for (auto [entity, renderable, renderTransform] : cubemapView.each()) {
             auto& cubemapVis = frameBuffer->mainViewFamily.customShaderDraws["cubemap_visualize"];

@@ -8,8 +8,8 @@ set(GAME_SOURCES
         systems/debug_system.h
         systems/physics_system.cpp
         systems/physics_system.h
-        systems/gather_renderables_system.h
-        systems/gather_renderables_system.cpp
+        systems/render_systems.h
+        systems/render_systems.cpp
         systems/editor_systems.cpp
         systems/editor_systems.h
 
