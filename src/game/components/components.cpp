@@ -6,6 +6,7 @@
 
 #include "camera_components.h"
 #include "core_components.h"
+#include "debug_components.h"
 #include "physics_components.h"
 #include "render_components.h"
 
@@ -31,5 +32,9 @@ void RegisterComponents(Core::ComponentRegistry& componentRegistry)
     Core::RegisterComponent<StableIdComponent>(componentRegistry, "StableIdComponent"_sid);
 
     Core::RegisterComponent<PhysicsBodyDesc>(componentRegistry, "PhysicsBodyDesc"_sid);
+
+    Core::RegisterComponent<MotionBlurMovementComponent>(componentRegistry, "MotionBlurMovementComponent"_sid);
+    Core::RegisterComponent<AntiGravityComponent>(componentRegistry, "AntiGravityComponent"_sid);
+    Core::RegisterComponent<FloorComponent>(componentRegistry, "FloorComponent"_sid);
 }
 } // Game::Components

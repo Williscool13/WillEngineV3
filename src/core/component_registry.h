@@ -30,6 +30,12 @@ struct ComponentRegistry
 };
 
 template<typename T>
+concept TagComponent = std::is_empty_v<T>;
+
+template<typename T>
+concept DataComponent = !std::is_empty_v<T>;
+
+template<DataComponent T>
 void RegisterComponent(ComponentRegistry& componentRegistry, StringID typeId)
 {
     componentRegistry.registry.PushBack({
@@ -39,6 +45,26 @@ void RegisterComponent(ComponentRegistry& componentRegistry, StringID typeId)
         },
         [](entt::registry& reg, entt::entity e, const nlohmann::json& json) {
             T::Deserialize(reg.get_or_emplace<T>(e), json);
+        },
+        [](const entt::registry& reg, entt::entity e) -> bool {
+            return reg.all_of<T>(e);
+        }
+    });
+}
+
+template<TagComponent T>
+void RegisterComponent(ComponentRegistry& componentRegistry, StringID typeId)
+{
+    componentRegistry.registry.PushBack({
+        typeId,
+        [](const entt::registry& reg, entt::entity e, nlohmann::json& json) {
+            T dummy{};
+            T::Serialize(dummy, json);
+        },
+        [](entt::registry& reg, entt::entity e, const nlohmann::json& json) {
+            (void)reg.get_or_emplace<T>(e);
+            T dummy{};
+            T::Deserialize(dummy, json);
         },
         [](const entt::registry& reg, entt::entity e) -> bool {
             return reg.all_of<T>(e);

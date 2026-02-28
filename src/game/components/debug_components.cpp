@@ -4,8 +4,22 @@
 
 #include "debug_components.h"
 
-namespace Game
+#include <json/nlohmann/json.hpp>
+
+namespace Game::Component
 {
-namespace Component
-{} // Component
-} // Game
+void MotionBlurMovementComponent::Serialize(const MotionBlurMovementComponent& comp, nlohmann::json& json)
+{
+    json["bIsHorizontal"] = comp.bIsHorizontal;
+}
+
+void MotionBlurMovementComponent::Deserialize(MotionBlurMovementComponent& comp, const nlohmann::json& json)
+{
+    comp.bIsHorizontal = json["bIsHorizontal"].get<bool>();
+}
+
+void AntiGravityComponent::Serialize(const AntiGravityComponent& comp, nlohmann::json& json) {}
+void AntiGravityComponent::Deserialize(AntiGravityComponent& comp, const nlohmann::json& json) {}
+void FloorComponent::Serialize(const FloorComponent& comp, nlohmann::json& json) {}
+void FloorComponent::Deserialize(FloorComponent& comp, const nlohmann::json& json) {}
+}
