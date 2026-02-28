@@ -21,7 +21,7 @@
 #include "engine/engine_api.h"
 #include "engine/logging/engine_log.h"
 #include "game/fwd_components.h"
-#include "game/components/components.h"
+#include "game/components/common_components.h"
 #include "game/components/scene_components.h"
 #include "physics/physics_system.h"
 #include "platform/paths.h"

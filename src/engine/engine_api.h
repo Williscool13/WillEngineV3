@@ -13,7 +13,7 @@
 #include <imgui.h>
 #include <ImGuizmo.h>
 
-#include "core/component_registry.h"
+#include "game/components/component_registry.h"
 #include "game/systems/debug_system.h"
 #include "core/include/render_interface.h"
 #include "render/model/will_model_asset.h"

@@ -6,8 +6,8 @@
 #define WILL_ENGINE_SCENE_SYSTEM_H
 #include <entt/entt.hpp>
 
-#include "../core/scene.h"
-#include "core/component_registry.h"
+#include "../scene/scene.h"
+#include "game/components/component_registry.h"
 #include "core/string_id.h"
 #include "render/model/will_model_asset.h"
 

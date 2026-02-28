@@ -13,7 +13,7 @@
 #include "core/include/engine_context.h"
 #include "engine/engine_api.h"
 #include "game/fwd_components.h"
-#include "game/components/components.h"
+#include "game/components/common_components.h"
 
 namespace Game::System
 {
@@ -192,10 +192,12 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
             entt::entity entity = state->selectedEntities[0];
             ImGui::Text("Entity: %u", static_cast<uint32_t>(entity));
 
-            if (auto* stableIdComponent = state->registry.try_get<Component::StableIdComponent>(entity)) {
-                ImGui::Separator();
-                ImGui::Text("StableID: %llu", stableIdComponent->id.id);
+            for (Core::ComponentEntry& entry : state->componentRegistry.registry) {
+                if (entry.has(state->registry, entity)) {
+                    entry.drawEditor(state->registry, entity);
+                }
             }
+            if (auto* stableIdComponent = state->registry.try_get<Component::StableIdComponent>(entity)) {}
 
             if (auto* transform = state->registry.try_get<Component::TransformComponent>(entity)) {
                 ImGui::Separator();
@@ -272,8 +274,8 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
                     const glm::vec3 newS = glm::vec3(s[0], s[1], s[2]);
 
                     const glm::vec3 deltaTranslation = newT - averagePos;
-                    const glm::quat deltaRotation    = newR * glm::conjugate(s_prevRotation);
-                    const glm::vec3 deltaScale       = newS / s_prevScale;
+                    const glm::quat deltaRotation = newR * glm::conjugate(s_prevRotation);
+                    const glm::vec3 deltaScale = newS / s_prevScale;
 
                     for (auto entity : state->selectedEntities) {
                         auto* transform = state->registry.try_get<Component::TransformComponent>(entity);
@@ -283,22 +285,23 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
 
                         glm::vec3 rel = transform->translation - averagePos;
                         transform->translation = averagePos + deltaRotation * rel;
-                        transform->rotation    = deltaRotation * transform->rotation;
+                        transform->rotation = deltaRotation * transform->rotation;
 
                         rel = transform->translation - averagePos;
                         transform->translation = averagePos + rel * deltaScale;
-                        transform->scale      *= deltaScale;
+                        transform->scale *= deltaScale;
 
                         state->registry.emplace_or_replace<Component::DirtyRenderTransformTag>(entity);
                         state->registry.emplace_or_replace<Component::TeleportPhysicsTransformTag>(entity);
                     }
 
                     s_prevRotation = newR;
-                    s_prevScale    = newS;
-                } else {
+                    s_prevScale = newS;
+                }
+                else {
                     // Reset each frame we're not dragging so the next drag starts from identity
                     s_prevRotation = {1.0f, 0.0f, 0.0f, 0.0f};
-                    s_prevScale    = {1.0f, 1.0f, 1.0f};
+                    s_prevScale = {1.0f, 1.0f, 1.0f};
                 }
             }
         }
@@ -530,5 +533,19 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
     frameBuffer->mainViewFamily.debugResourceName = state->debugResourceName;
     frameBuffer->mainViewFamily.debugTransformationType = state->debugTransformationType;
     frameBuffer->mainViewFamily.debugViewAspect = state->debugViewAspect;
+}
+
+template<>
+void DrawComponentEditor<Component::TransformComponent>(Component::TransformComponent& component, entt::registry& registry, entt::entity entity)
+{}
+
+template<>
+void DrawComponentEditor<Component::StaticMeshComponent>(Component::StaticMeshComponent& component, entt::registry& registry, entt::entity entity) {}
+
+template<>
+void DrawComponentEditor<Component::StableIdComponent>(Component::StableIdComponent& component, entt::registry& registry, entt::entity entity)
+{
+    ImGui::Separator();
+    ImGui::Text("StableID: %llu", component.id.id);
 }
 }

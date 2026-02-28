@@ -7,12 +7,11 @@
 #include <json/nlohmann/json.hpp>
 
 #include "physics_system.h"
-#include "core/component_registry.h"
 #include "core/include/engine_context.h"
 #include "engine/asset_manager.h"
 #include "engine/engine_api.h"
 #include "engine/logging/engine_log.h"
-#include "game/components/components.h"
+#include "game/components/common_components.h"
 #include "game/components/core_components.h"
 #include "game/components/physics_components.h"
 #include "game/components/render_components.h"

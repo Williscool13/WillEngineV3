@@ -2,12 +2,13 @@
 // Created by William on 2026-02-26.
 //
 
-#ifndef WILL_ENGINE_COMPONENTS_H
-#define WILL_ENGINE_COMPONENTS_H
+#ifndef WILL_ENGINE_COMMON_COMPONENTS_H
+#define WILL_ENGINE_COMMON_COMPONENTS_H
 
 #include <random>
+#include <json/nlohmann/json_fwd.hpp>
 
-#include "core/component_registry.h"
+#include "core/string_id.h"
 
 namespace Game::Component
 {
@@ -24,7 +25,13 @@ struct StableIdComponent
     }
 };
 
-void RegisterComponents(Core::ComponentRegistry& componentRegistry);
+struct NameComponent
+{
+    std::string name;
+
+    static void Serialize(const NameComponent& comp, nlohmann::json& json);
+    static void Deserialize(NameComponent& comp, const nlohmann::json& json);
+};
 }
 
-#endif //WILL_ENGINE_COMPONENTS_H
+#endif //WILL_ENGINE_COMMON_COMPONENTS_H

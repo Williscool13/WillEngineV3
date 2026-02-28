@@ -18,7 +18,7 @@
 #include "core/math/constants.h"
 
 #include "fwd_components.h"
-#include "components/components.h"
+#include "components/common_components.h"
 #include "engine/logging/engine_log.h"
 #include "engine/logging/engine_logger.h"
 #include "systems/debug_system.h"
@@ -68,7 +68,7 @@ GAME_API void GameLoad(Core::EngineContext* ctx, Engine::GameState* state)
     Physics::PhysicsSystem::RegisterPhysics();
     Audio::AudioManager::RegisterAudio();
     ctx->scheduler->RegisterExternalTaskThread();
-    Game::Component::RegisterComponents(state->componentRegistry);
+    RegisterComponents(state->componentRegistry);
 
 #if DEBUG
     gInternStringFn = ctx->internStringFn;

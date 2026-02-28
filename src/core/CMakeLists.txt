@@ -37,8 +37,6 @@ add_library(core STATIC
         allocators/lock_free_handle_allocator.h
         string_id.cpp
         string_id.h
-        component_registry.cpp
-        component_registry.h
         allocators/inline_vector.cpp
         allocators/inline_vector.h
 )

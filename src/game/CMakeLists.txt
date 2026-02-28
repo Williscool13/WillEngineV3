@@ -32,15 +32,16 @@ set(GAME_SOURCES
         components/scene_components.h
         systems/core_systems.cpp
         systems/core_systems.h
-        core/string_id_game.cpp
-        core/scene.cpp
-        core/scene.h
+        scene/scene.cpp
+        scene/scene.h
         systems/scene_system.cpp
         systems/scene_system.h
-        components/components.cpp
-        components/components.h
-
-
+        components/common_components.cpp
+        components/common_components.h
+        systems/component_editor.cpp
+        systems/component_editor.h
+        components/component_registry.cpp
+        components/component_registry.h
 )
 
 set(GAME_INCLUDE_DIRS
