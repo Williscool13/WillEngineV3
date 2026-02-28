@@ -299,11 +299,15 @@ struct FrameBuffer
 
     TimeFrame timeFrame;
     uint32_t currentFrameBuffer{};
+    std::array<uint32_t, 2> currentMousePosition{};
     SwapchainRecreateCommand swapchainRecreateCommand{};
     ViewportResizeCommand viewportResizeCommand{};
 
     std::vector<BufferAcquireOperation> bufferAcquireOperations;
     std::vector<ImageAcquireOperation> imageAcquireOperations;
+
+    // Readback
+    uint64_t stableIdUnderCursor{0};
 
     // Debug
     bool bDrawImgui = false;

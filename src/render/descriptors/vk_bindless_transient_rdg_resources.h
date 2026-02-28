@@ -13,7 +13,7 @@
 namespace Render
 {
 template<size_t SamplerCount, size_t CompareSamplerCount, size_t SampledImageCount,
-    size_t StorageFloat4Count, size_t StorageFloat2Count, size_t StorageFloatCount, size_t StorageUInt4Count, size_t StorageUIntCount>
+    size_t StorageFloat4Count, size_t StorageFloat2Count, size_t StorageFloatCount, size_t StorageUInt4Count, size_t StorageUInt2Count, size_t StorageUIntCount>
 class BindlessTransientRDGResourcesDescriptorBuffer
 {
 public:
@@ -42,7 +42,8 @@ public:
         layoutBuilder.AddBinding(4, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, StorageFloat2Count);
         layoutBuilder.AddBinding(5, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, StorageFloatCount);
         layoutBuilder.AddBinding(6, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, StorageUInt4Count);
-        layoutBuilder.AddBinding(7, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, StorageUIntCount);
+        layoutBuilder.AddBinding(7, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, StorageUInt2Count);
+        layoutBuilder.AddBinding(8, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, StorageUIntCount);
 
         VkDescriptorSetLayoutCreateInfo layoutCreateInfo = layoutBuilder.Build(
             static_cast<VkShaderStageFlagBits>(VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT),
@@ -151,10 +152,19 @@ public:
     bool WriteStorageUInt4Descriptor(uint32_t index, const VkDescriptorImageInfo& imageInfo)
     {
         if (index >= StorageUIntCount) {
-            SPDLOG_ERROR("Invalid storage uint index: {}", index);
+            SPDLOG_ERROR("Invalid storage uint4 index: {}", index);
             return false;
         }
         return WriteStorageImageHelper(6, index, imageInfo);
+    }
+
+    bool WriteStorageUInt2Descriptor(uint32_t index, const VkDescriptorImageInfo& imageInfo)
+    {
+        if (index >= StorageUIntCount) {
+            SPDLOG_ERROR("Invalid storage uint2 index: {}", index);
+            return false;
+        }
+        return WriteStorageImageHelper(7, index, imageInfo);
     }
 
     bool WriteStorageUIntDescriptor(uint32_t index, const VkDescriptorImageInfo& imageInfo)
@@ -163,7 +173,7 @@ public:
             SPDLOG_ERROR("Invalid storage uint index: {}", index);
             return false;
         }
-        return WriteStorageImageHelper(7, index, imageInfo);
+        return WriteStorageImageHelper(8, index, imageInfo);
     }
 
     [[nodiscard]] VkDescriptorBufferBindingInfoEXT GetBindingInfo() const

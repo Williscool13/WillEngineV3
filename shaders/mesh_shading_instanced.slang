@@ -29,6 +29,7 @@ struct VertexOutput
     float4 currentClipPos : COLOR1;
     float4 previousClipPos : COLOR2;
     float4 objectOnlyPrevClipPos : COLOR3;
+    nointerpolation uint64_t stableId : COLOR4;
     float clipDistance[1] : SV_ClipDistance;
 };
 
@@ -83,6 +84,7 @@ void MeshMain(
         vertices[i].currentClipPos = clipPos;
         vertices[i].previousClipPos = prevClipPos;
         vertices[i].objectOnlyPrevClipPos = mul(jitteredViewProj, mul(m.prevModelMatrix, float4(v.position, 1.0)));
+        vertices[i].stableId = inst.stableId;
     }
 
     for (uint i = threadIndex; i < meshlet.meshletTriangleCount; i += MESH_SHADER_DISPATCH_X) {
@@ -104,6 +106,7 @@ struct FragmentOutput {
     float4 pbr : SV_Target2;
     float4 emissive : SV_Target3;
     float4 velocity : SV_Target4;
+    uint2 stableId : SV_Target5;
 };
 
 [shader("fragment")]
@@ -132,6 +135,6 @@ FragmentOutput FragmentMain(VertexOutput vertexInput, uniform BaseMeshShadingPus
     // float2 objectVelocity = (currNdc + currJitter) - (objectOnlyPrevNdc + currJitter);
     float2 objectVelocity = currNdc - objectOnlyPrevNdc;
     output.velocity = float4(totalVelocity, objectVelocity);
-
+    output.stableId = uint2(uint(vertexInput.stableId & 0xFFFFFFFF), uint(vertexInput.stableId >> 32));
     return output;
 }

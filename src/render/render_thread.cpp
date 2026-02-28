@@ -145,7 +145,6 @@ void RenderThread::ThreadMain()
                                                    frameBuffer.viewportResizeCommand.sizeY);
                 frameBuffer.viewportResizeCommand.bEngineCommandsResize = false;
                 renderGraph->InvalidateAllViewportAssociated();
-
             }
 
             // Wait for the frame N - 3 to finish using resources
@@ -279,6 +278,8 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
     Core::ViewFamily& viewFamily = frameBuffer.mainViewFamily;
     ReadbackStruct* readbackData = renderGraph->GetReadbackData();
+    frameBuffer.stableIdUnderCursor = readbackData->selectedStableId;
+
     PrepareRenderFamilyProperties(viewFamily, readbackData, persistentRenderFamilyProperties, pipelineManager.get(), frameResourceLimits);
     RenderFamilyProperties& renderFamilyProperties = persistentRenderFamilyProperties;
 
@@ -311,6 +312,15 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                                   {resourceManager->debugReadbackBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT}, resourceManager->debugReadbackLastKnownState);
     }
 
+    renderGraph->ImportTexture(SID("dummy_black_rg32"),
+                               resourceManager->blackDummyRG32Image.handle,
+                               resourceManager->blackDummyRG32ImageView.handle,
+                               TextureInfo{GBUFFER_STABLE_ID_FORMAT, 1, 1, 1},
+                               VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+                               VK_IMAGE_LAYOUT_GENERAL,
+                               VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                               VK_IMAGE_LAYOUT_GENERAL);
+
     // Readback that will be copied into the FIF host memory at the end of the frame (to be read in N+3 frames)
     renderGraph->CreateBuffer(SID("readback_buffer"), sizeof(ReadbackStruct), false);
     RenderPass& clearReadbackBuffer = renderGraph->AddPass(SID("Clear Readback Buffer"), VK_PIPELINE_STAGE_2_TRANSFER_BIT);
@@ -318,6 +328,8 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
     clearReadbackBuffer.Execute([&](VkCommandBuffer cmd) {
         vkCmdFillBuffer(cmd, renderGraph->GetBufferHandle(SID("readback_buffer")), 0, VK_WHOLE_SIZE, 0);
     });
+
+    renderGraph->CreateTexture(SID("stable_id"), TextureInfo{GBUFFER_STABLE_ID_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
 
     // Main view G-buffer
     GBufferTargets targets{
@@ -327,6 +339,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         SID("emissive_target"),
         SID("velocity_target"),
         SID("depth_target"),
+        SID("stable_id"),
         SID("deferred_resolve_target")
     };
     renderGraph->CreateTexture(SID("deferred_resolve_target"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
@@ -337,6 +350,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         SID("portal_emissive"),
         SID("portal_velocity"),
         SID("portal_depth"),
+        SID("dummy_black_rg32"),
         SID("portal_deferred_resolve")
     };
     renderGraph->CreateTexture(SID("portal_deferred_resolve"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
@@ -739,6 +753,31 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         }
     }
 
+    RenderPass& copyStableId = renderGraph->AddPass(SID("Copy Stable ID"), VK_PIPELINE_STAGE_2_COPY_BIT);
+    copyStableId.ReadCopyImage(SID("stable_id"));
+    copyStableId.WriteTransferBuffer(SID("readback_buffer"));
+    copyStableId.Execute([&, mouseX = frameBuffer.currentMousePosition[0], mouseY = frameBuffer.currentMousePosition[1]](VkCommandBuffer cmd) {
+        VkBufferImageCopy region{};
+        region.bufferOffset = offsetof(ReadbackStruct, selectedStableId);
+        region.bufferRowLength = 0;
+        region.bufferImageHeight = 0;
+        region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        region.imageSubresource.mipLevel = 0;
+        region.imageSubresource.baseArrayLayer = 0;
+        region.imageSubresource.layerCount = 1;
+        region.imageOffset = {static_cast<int32_t>(mouseX), static_cast<int32_t>(mouseY), 0};
+        region.imageExtent = {1, 1, 1};
+
+        vkCmdCopyImageToBuffer(
+            cmd,
+            renderGraph->GetTextureHandle(SID("stable_id")),
+            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            renderGraph->GetBufferHandle(SID("readback_buffer")),
+            1,
+            &region
+        );
+    });
+
     RenderPass& readbackMeshletCount = renderGraph->AddPass(SID("Readback Copy"), VK_PIPELINE_STAGE_2_COPY_BIT);
     readbackMeshletCount.ReadTransferBuffer(SID("readback_buffer"));
     readbackMeshletCount.Execute([&](VkCommandBuffer cmd) {
@@ -754,7 +793,9 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             1,
             &copy
         );
-    }); {
+    });
+
+    {
         ZoneScopedN("RenderGraphCompile");
         renderGraph->SetDebugLogging(frameBuffer.bLogRDG);
         renderGraph->Compile(frameNumber);
@@ -961,6 +1002,15 @@ void RenderThread::CreatePipelines()
         builder.Clear();
     }
 
+    constexpr std::array graphicsColorFormats{
+        GBUFFER_ALBEDO_FORMAT,
+        GBUFFER_NORMAL_FORMAT,
+        GBUFFER_PBR_FORMAT,
+        GBUFFER_EMISSIVE_FORMAT,
+        GBUFFER_MOTION_FORMAT,
+        GBUFFER_STABLE_ID_FORMAT
+    };
+
     // Instanced mesh shading pipeline
     {
         builder.AddShaderStage("shaders/mesh_shading_instanced_mesh.spv", VK_SHADER_STAGE_MESH_BIT_EXT);
@@ -969,14 +1019,8 @@ void RenderThread::CreatePipelines()
         builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE);
         builder.SetupDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_GREATER_OR_EQUAL);
 
-        VkFormat colorFormats[5] = {
-            GBUFFER_ALBEDO_FORMAT,
-            GBUFFER_NORMAL_FORMAT,
-            GBUFFER_PBR_FORMAT,
-            GBUFFER_EMISSIVE_FORMAT,
-            GBUFFER_MOTION_FORMAT
-        };
-        builder.SetupRenderer(colorFormats, 5, DEPTH_ATTACHMENT_FORMAT, DEPTH_ATTACHMENT_FORMAT);
+
+        builder.SetupRenderer(graphicsColorFormats.data(), graphicsColorFormats.size(), DEPTH_ATTACHMENT_FORMAT, DEPTH_ATTACHMENT_FORMAT);
 
         pipelineManager->RegisterGraphicsPipeline(
             SID("mesh_shading_instanced"),
@@ -996,15 +1040,7 @@ void RenderThread::CreatePipelines()
         builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE);
         builder.SetupDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_GREATER_OR_EQUAL);
         builder.SetupStencilState(VK_TRUE, VK_STENCIL_OP_KEEP, VK_STENCIL_OP_REPLACE, VK_STENCIL_OP_KEEP, VK_COMPARE_OP_ALWAYS);
-
-        VkFormat colorFormats[5] = {
-            GBUFFER_ALBEDO_FORMAT,
-            GBUFFER_NORMAL_FORMAT,
-            GBUFFER_PBR_FORMAT,
-            GBUFFER_EMISSIVE_FORMAT,
-            GBUFFER_MOTION_FORMAT
-        };
-        builder.SetupRenderer(colorFormats, 5, DEPTH_ATTACHMENT_FORMAT, DEPTH_ATTACHMENT_FORMAT);
+        builder.SetupRenderer(graphicsColorFormats.data(), graphicsColorFormats.size(), DEPTH_ATTACHMENT_FORMAT, DEPTH_ATTACHMENT_FORMAT);
         builder.AddDynamicState(VK_DYNAMIC_STATE_STENCIL_REFERENCE);
 
         pipelineManager->RegisterGraphicsPipeline(
@@ -1050,15 +1086,7 @@ void RenderThread::CreatePipelines()
         builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
         builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE);
         builder.SetupDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_GREATER_OR_EQUAL);
-
-        VkFormat colorFormats[5] = {
-            GBUFFER_ALBEDO_FORMAT,
-            GBUFFER_NORMAL_FORMAT,
-            GBUFFER_PBR_FORMAT,
-            GBUFFER_EMISSIVE_FORMAT,
-            GBUFFER_MOTION_FORMAT
-        };
-        builder.SetupRenderer(colorFormats, 5, DEPTH_ATTACHMENT_FORMAT, DEPTH_ATTACHMENT_FORMAT);
+        builder.SetupRenderer(graphicsColorFormats.data(), graphicsColorFormats.size(), DEPTH_ATTACHMENT_FORMAT, DEPTH_ATTACHMENT_FORMAT);
 
         pipelineManager->RegisterGraphicsPipeline(
             SID("cubemap_visualize"),
@@ -1650,6 +1678,7 @@ void RenderThread::SetupGeometryPasses(RenderGraph& graph, const Core::ViewFamil
         clearPass.WriteColorAttachment(targets.pbr);
         clearPass.WriteColorAttachment(targets.emissive);
         clearPass.WriteColorAttachment(targets.velocity);
+        clearPass.WriteColorAttachment(targets.stableId);
         clearPass.WriteDepthAttachment(targets.depthStencil);
         clearPass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
             constexpr VkClearValue colorClear = {.color = {{0.0f, 0.0f, 0.0f, 0.0f}}};
@@ -1660,13 +1689,14 @@ void RenderThread::SetupGeometryPasses(RenderGraph& graph, const Core::ViewFamil
             const VkRenderingAttachmentInfo pbrAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.pbr), &colorClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
             const VkRenderingAttachmentInfo emissiveTarget = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.emissive), &colorClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
             const VkRenderingAttachmentInfo velocityAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.velocity), &colorClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+            const VkRenderingAttachmentInfo stableIdAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.stableId), &colorClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
             const VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), &depthClear,
                                                                                                  VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
             const VkRenderingAttachmentInfo stencilAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), &depthClear,
                                                                                                    VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
-            const VkRenderingAttachmentInfo colorAttachments[] = {albedoAttachment, normalAttachment, pbrAttachment, emissiveTarget, velocityAttachment};
-            const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, colorAttachments, 5, &depthAttachment, &stencilAttachment);
+            const VkRenderingAttachmentInfo colorAttachments[] = {albedoAttachment, normalAttachment, pbrAttachment, emissiveTarget, velocityAttachment, stableIdAttachment};
+            const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, colorAttachments, 6, &depthAttachment, &stencilAttachment);
 
             vkCmdBeginRendering(cmd, &renderInfo);
             vkCmdEndRendering(cmd);
@@ -1708,6 +1738,7 @@ void RenderThread::SetupGeometryPasses(RenderGraph& graph, const Core::ViewFamil
         instancedMeshShading.WriteColorAttachment(targets.pbr);
         instancedMeshShading.WriteColorAttachment(targets.emissive);
         instancedMeshShading.WriteColorAttachment(targets.velocity);
+        instancedMeshShading.WriteColorAttachment(targets.stableId);
         instancedMeshShading.ReadWriteDepthAttachment(targets.depthStencil);
         instancedMeshShading.ReadBuffer(SCENE_DATA_BUFFER);
         instancedMeshShading.ReadBuffer(GEOMETRY_MODEL_BUFFER);
@@ -1726,13 +1757,14 @@ void RenderThread::SetupGeometryPasses(RenderGraph& graph, const Core::ViewFamil
             const VkRenderingAttachmentInfo pbrAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.pbr), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
             const VkRenderingAttachmentInfo emissiveTarget = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.emissive), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
             const VkRenderingAttachmentInfo velocityAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.velocity), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+            const VkRenderingAttachmentInfo stableIdAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.stableId), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
             const VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), nullptr,
                                                                                                  VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
             const VkRenderingAttachmentInfo stencilAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), nullptr,
                                                                                                    VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
-            const VkRenderingAttachmentInfo colorAttachments[] = {albedoAttachment, normalAttachment, pbrAttachment, emissiveTarget, velocityAttachment};
-            const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, colorAttachments, 5, &depthAttachment, &stencilAttachment);
+            const VkRenderingAttachmentInfo colorAttachments[] = {albedoAttachment, normalAttachment, pbrAttachment, emissiveTarget, velocityAttachment, stableIdAttachment};
+            const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, colorAttachments, 6, &depthAttachment, &stencilAttachment);
 
             vkCmdBeginRendering(cmd, &renderInfo);
 
@@ -1799,6 +1831,7 @@ void RenderThread::SetupGeometryPasses(RenderGraph& graph, const Core::ViewFamil
         customDrawPass.WriteColorAttachment(targets.pbr);
         customDrawPass.WriteColorAttachment(targets.emissive);
         customDrawPass.WriteColorAttachment(targets.velocity);
+        customDrawPass.WriteColorAttachment(targets.stableId);
         customDrawPass.ReadWriteDepthAttachment(targets.depthStencil);
         customDrawPass.ReadBuffer(SCENE_DATA_BUFFER);
         customDrawPass.ReadBuffer(GEOMETRY_MODEL_BUFFER);
@@ -1818,13 +1851,14 @@ void RenderThread::SetupGeometryPasses(RenderGraph& graph, const Core::ViewFamil
                 const VkRenderingAttachmentInfo pbrAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.pbr), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
                 const VkRenderingAttachmentInfo emissiveTarget = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.emissive), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
                 const VkRenderingAttachmentInfo velocityAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.velocity), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+                const VkRenderingAttachmentInfo stableIdAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.stableId), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
                 const VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), nullptr,
                                                                                                      VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
                 const VkRenderingAttachmentInfo stencilAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), nullptr,
                                                                                                        VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
-                const VkRenderingAttachmentInfo colorAttachments[] = {albedoAttachment, normalAttachment, pbrAttachment, emissiveTarget, velocityAttachment};
-                const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, colorAttachments, 5, &depthAttachment, &stencilAttachment);
+                const VkRenderingAttachmentInfo colorAttachments[] = {albedoAttachment, normalAttachment, pbrAttachment, emissiveTarget, velocityAttachment, stableIdAttachment};
+                const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, colorAttachments, 6, &depthAttachment, &stencilAttachment);
 
                 vkCmdBeginRendering(cmd, &renderInfo);
 

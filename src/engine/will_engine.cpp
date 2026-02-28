@@ -777,12 +777,16 @@ void WillEngine::Run()
             ZoneScopedN("PrepareRenderFrameData");
             const bool bRenderReadyToReceive = engineRenderSynchronization->gameFrames.load(std::memory_order_acquire) > 0;
             if (bRenderReadyToReceive) {
-                engineRenderSynchronization->gameFrames.fetch_sub(1, std::memory_order_release); {
+                engineRenderSynchronization->gameFrames.fetch_sub(1, std::memory_order_release);
+
+                //
+                {
                     ZoneScopedN("UpdateRender");
                     timeManager->UpdateRender();
                 }
 
                 Core::FrameBuffer& currentFrameBuffer = engineRenderSynchronization->frameBuffers[frameBufferIndex];
+                engineContext->lastKnownStableIdUnderCursor = currentFrameBuffer.stableIdUnderCursor;
                 stagingFrameBuffer.currentFrameBuffer = frameBufferIndex;
                 stagingFrameBuffer.bFreezeVisibility = bFreezeVisibility;
                 stagingFrameBuffer.bLogRDG = bLogRDG;
@@ -833,6 +837,13 @@ void WillEngine::Run()
                     }
                 }
 
+
+                glm::uvec2 mousePos = {
+                    editorInput.mousePositionAbsolute.x - engineContext->windowContext.viewportOffsetX,
+                    editorInput.mousePositionAbsolute.y - engineContext->windowContext.viewportOffsetY
+                };
+                mousePos.y = engineContext->windowContext.viewportHeight - 1 - mousePos.y;
+                stagingFrameBuffer.currentMousePosition = {(mousePos.x), (mousePos.y)};
                 //
                 {
                     ZoneScopedN("GamePrepareFrame");

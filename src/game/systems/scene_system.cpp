@@ -10,7 +10,9 @@
 #include "core/component_registry.h"
 #include "core/include/engine_context.h"
 #include "engine/asset_manager.h"
+#include "engine/engine_api.h"
 #include "engine/logging/engine_log.h"
+#include "game/components/components.h"
 #include "game/components/core_components.h"
 #include "game/components/physics_components.h"
 #include "game/components/render_components.h"
@@ -49,7 +51,7 @@ Scene SaveScene(Core::ComponentRegistry& componentRegistry, entt::registry& regi
     return outScene;
 }
 
-LoadSceneResult LoadScene(Core::EngineContext* ctx, Core::ComponentRegistry& componentRegistry, entt::registry& registry, Scene& scene)
+LoadSceneResult LoadScene(Core::EngineContext* ctx, Engine::GameState* gameState, Core::ComponentRegistry& componentRegistry, entt::registry& registry, Scene& scene)
 {
     StringID sceneId = StringID(scene.content["scene_id"].get<uint64_t>());
 
@@ -108,6 +110,11 @@ LoadSceneResult LoadScene(Core::EngineContext* ctx, Core::ComponentRegistry& com
             } else {
                 LOG_WARN(Game, "PhysicsBodyDesc on entity without TransformComponent, skipping");
             }
+        }
+
+        if (auto* stable = registry.try_get<Component::StableIdComponent>(entity)) {
+            assert(!gameState->stableIdToEntityMap.contains(stable->id) && "Duplicate stable ID detected");
+            gameState->stableIdToEntityMap[stable->id] = entity;
         }
     }
 

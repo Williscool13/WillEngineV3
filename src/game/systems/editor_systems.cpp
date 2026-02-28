@@ -11,6 +11,7 @@
 #include "core/include/engine_context.h"
 #include "engine/engine_api.h"
 #include "game/fwd_components.h"
+#include "game/components/components.h"
 
 namespace Game::System
 {
@@ -24,6 +25,14 @@ void EditorUpdate(Core::EngineContext* ctx, Engine::GameState* state)
     }
     else if (state->inputFrame->GetKey(Key::R).pressed) {
         state->currentGizmoOperation = ImGuizmo::SCALE;
+    }
+    if (!ctx->bImguiMouseCaptured && !ctx->bImguiKeyboardCaptured) {
+        if (state->inputFrame->GetMouse(MouseButton::LMB).pressed) {
+            auto it = state->stableIdToEntityMap.find(StringID{ctx->lastKnownStableIdUnderCursor});
+            if (it != state->stableIdToEntityMap.end()) {
+                state->selectedEntity = it->second;
+            }
+        }
     }
 }
 
@@ -148,21 +157,19 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
         ImGui::EndDisabled();
 
         ImGui::Separator();
-        if (ImGui::Button("Select Random Entity")) {
-            auto view = state->registry.view<Component::TransformComponent>();
-            auto size = view.size();
-            if (size > 0) {
-                std::uniform_int_distribution<size_t> dist(0, size - 1);
-                auto it = view.begin();
-                std::advance(it, dist(state->rng));
-                state->selectedEntity = *it;
-            }
-        }
 
         if (state->selectedEntity != entt::null) {
+            ImGui::Text("Entity: %u", static_cast<uint32_t>(state->selectedEntity));
+
+            auto* stableIdComponent = state->registry.try_get<Component::StableIdComponent>(state->selectedEntity);
+            if (stableIdComponent) {
+                ImGui::Separator();
+
+                ImGui::Text("StableID: %llu", stableIdComponent->id.id);
+            }
+
             auto* transform = state->registry.try_get<Component::TransformComponent>(state->selectedEntity);
             if (transform) {
-                ImGui::Text("Entity: %u", static_cast<uint32_t>(state->selectedEntity));
                 ImGui::Separator();
 
                 bool dirty = false;

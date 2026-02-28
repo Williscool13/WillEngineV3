@@ -63,6 +63,7 @@ struct EngineContext
     ImGuiContext* imguiContext;
     bool bImguiKeyboardCaptured = false;
     bool bImguiMouseCaptured = false;
+    uint64_t lastKnownStableIdUnderCursor{0};
 
     enki::TaskScheduler* scheduler;
 
@@ -73,8 +74,6 @@ struct EngineContext
 
     Audio::AudioManager* audioManager;
     Physics::PhysicsSystem* physicsSystem;
-
-
 
     // Global Fn
     void (*internStringFn)(uint64_t, const char*);

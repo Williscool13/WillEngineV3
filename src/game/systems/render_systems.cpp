@@ -134,7 +134,7 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
             auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.size());
             frameBuffer->mainViewFamily.modelMatrices.push_back({renderTransform.modelMatrix, renderTransform.previousMatrix});
 
-            uint64_t stableId = 0;
+            uint64_t stableId = 1234567890;
             if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
                 stableId = stable->id.id;
             }

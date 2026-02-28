@@ -48,6 +48,10 @@ struct ResourceManager
     AllocatedBuffer primitiveBuffer;
     BindlessResourcesSamplerImages bindlessSamplerTextureDescriptorBuffer{};
 
+    // 1x1 black texture
+    AllocatedImage blackDummyRG32Image;
+    ImageView blackDummyRG32ImageView;
+
 #if WILL_EDITOR
     Editor::EnvironmentMapGenerateResources environmentMapGenerateResources{};
     BindlessResourcesStorage<1> brdfLutGenerateResources{};
@@ -64,6 +68,7 @@ struct ResourceManager
         RDG_MAX_STORAGE_FLOAT2,
         RDG_MAX_STORAGE_FLOAT,
         RDG_MAX_STORAGE_UINT4,
+        RDG_MAX_STORAGE_UINT2,
         RDG_MAX_STORAGE_UINT
     > bindlessRDGTransientDescriptorBuffer{};
 

@@ -51,6 +51,7 @@ enum class StorageImageType {
     Float2,
     Float,
     UInt4,
+    UInt2,
     UInt
 };
 
@@ -79,6 +80,8 @@ inline StorageImageType GetStorageImageType(VkFormat format, VkImageAspectFlags 
         case VK_FORMAT_R16_SFLOAT:
         case VK_FORMAT_R8_UNORM:
             return StorageImageType::Float;
+        case VK_FORMAT_R32G32_UINT:
+            return StorageImageType::UInt2;
         case VK_FORMAT_R32_UINT:
         case VK_FORMAT_R16_UINT:
         case VK_FORMAT_R8_UINT:

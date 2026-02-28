@@ -14,4 +14,5 @@ module bindless_declarations;
 [[vk::binding(4, 1)]] public RWTexture2D<float2> rdgStorageFloat2[];
 [[vk::binding(5, 1)]] public RWTexture2D<float>  rdgStorageFloat[];
 [[vk::binding(6, 1)]] public RWTexture2D<uint4>  rdgStorageUInt4[];
-[[vk::binding(7, 1)]] public RWTexture2D<uint>   rdgStorageUInt[];
+[[vk::binding(7, 1)]] public RWTexture2D<uint2>  rdgStorageUInt2[];
+[[vk::binding(8, 1)]] public RWTexture2D<uint>   rdgStorageUInt[];

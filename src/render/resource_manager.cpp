@@ -4,6 +4,7 @@
 
 #include "resource_manager.h"
 
+#include "vulkan/vk_config.h"
 #include "vulkan/vk_utils.h"
 
 namespace Render
@@ -57,6 +58,7 @@ ResourceManager::ResourceManager(VulkanContext* context)
         RDG_MAX_STORAGE_FLOAT2,
         RDG_MAX_STORAGE_FLOAT,
         RDG_MAX_STORAGE_UINT4,
+        RDG_MAX_STORAGE_UINT2,
         RDG_MAX_STORAGE_UINT
     >(context);
 
@@ -133,6 +135,30 @@ ResourceManager::ResourceManager(VulkanContext* context)
 
     VK_CHECK(vkCreateSampler(context->device, &depthCompareSamplerInfo, nullptr, &depthCompareSampler));
     bindlessRDGTransientDescriptorBuffer.WriteCompareSamplerDescriptor(RDG_LINEAR_DEPTH_SAMPLER_INDEX, {depthCompareSampler, nullptr, {}});
+
+    VkExtent3D extent{
+        .width = 1,
+        .height = 1,
+        .depth = 1
+    };
+
+    VkFormat imageFormat = GBUFFER_STABLE_ID_FORMAT;
+    VkImageCreateInfo imageCreateInfo = VkHelpers::ImageCreateInfo(
+        imageFormat,
+        extent,
+        VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT
+    );
+    imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+    blackDummyRG32Image = AllocatedImage::CreateAllocatedImage(context, imageCreateInfo);
+
+    VkImageViewCreateInfo viewInfo = VkHelpers::ImageViewCreateInfo(
+        blackDummyRG32Image.handle,
+        blackDummyRG32Image.format,
+        VK_IMAGE_ASPECT_COLOR_BIT
+    );
+
+    blackDummyRG32ImageView = ImageView::CreateImageView(context, viewInfo);
 
 #if WILL_EDITOR
     environmentMapGenerateResources = Editor::EnvironmentMapGenerateResources(context);

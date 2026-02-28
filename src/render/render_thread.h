@@ -120,6 +120,8 @@ private:
         StringID velocity;
         StringID depthStencil;
 
+        StringID stableId;
+
         StringID outFinalColor;
     };
 

@@ -93,6 +93,7 @@ struct FragmentOutput {
     float4 pbr : SV_Target2;
     float4 emissive : SV_Target3;
     float4 velocity : SV_Target4;
+    uint2 stableId : SV_Target5;
 };
 
 [shader("fragment")]

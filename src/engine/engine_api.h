@@ -68,6 +68,7 @@ struct GameState
 
     StringID currentSceneId{"main_scene"_sid};
     entt::entity selectedEntity{entt::null};
+    std::unordered_map<StringID, entt::entity> stableIdToEntityMap;
 
 };
 

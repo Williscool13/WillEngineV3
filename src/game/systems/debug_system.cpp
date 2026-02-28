@@ -129,6 +129,8 @@ entt::entity CreateBox(Core::EngineContext* ctx, Engine::GameState* state, glm::
     state->registry.emplace<Component::RenderTransformComponent>(boxEntity, initialMatrix, initialMatrix);
     state->registry.emplace<Component::DirtyRenderTransformTag>(boxEntity);
     state->registry.emplace<Component::SceneComponent>(boxEntity, state->currentSceneId);
+    Component::StableIdComponent stableIdComponent = state->registry.emplace<Component::StableIdComponent>(boxEntity, Component::StableIdComponent::Generate(state->rng));
+    state->stableIdToEntityMap[stableIdComponent.id] = boxEntity;
 
     if (bUsePhysics) {
         auto& bodyInterface = ctx->physicsSystem->GetBodyInterface();
@@ -215,6 +217,8 @@ entt::entity CreateStaticBox(Core::EngineContext* ctx, Engine::GameState* state,
     state->registry.emplace<Component::PhysicsBodyDesc>(entity, bodyDesc);
     state->registry.emplace<Component::PhysicsBodyComponent>(entity, bodyID);
     state->registry.emplace<Component::SceneComponent>(entity, state->currentSceneId);
+    Component::StableIdComponent stableIdComponent = state->registry.emplace<Component::StableIdComponent>(entity, Component::StableIdComponent::Generate(state->rng));
+    state->stableIdToEntityMap[stableIdComponent.id] = entity;
 
     return entity;
 }
@@ -548,7 +552,8 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
             state->registry.emplace<Component::RenderTransformComponent>(sponzaEntity, initialMatrix, initialMatrix);
             state->registry.emplace<Component::DirtyRenderTransformTag>(sponzaEntity);
             state->registry.emplace<Component::SceneComponent>(sponzaEntity, state->currentSceneId);
-            state->registry.emplace<Component::StableIdComponent>(sponzaEntity, Component::StableIdComponent::Generate(state->rng));
+            Component::StableIdComponent stableIdComponent = state->registry.emplace<Component::StableIdComponent>(sponzaEntity, Component::StableIdComponent::Generate(state->rng));
+            state->stableIdToEntityMap[stableIdComponent.id] = sponzaEntity;
         }
 
         SPDLOG_INFO("[DebugSystem] Spawned sponza");
@@ -760,7 +765,7 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         Scene s;
         s.content = nlohmann::json::parse(file);
 
-        LoadSceneResult result = LoadScene(ctx, state->componentRegistry, state->registry, s);
+        LoadSceneResult result = LoadScene(ctx, state, state->componentRegistry, state->registry, s);
         state->sceneModelHandles[result.sceneId] = std::move(result.loadedModelHandles);
         state->bPendingModelResolve |= result.bHasPendingModelLoads;
 

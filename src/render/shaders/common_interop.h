@@ -101,6 +101,7 @@ SHADER_PUBLIC struct SHADER_ALIGN SceneData
 SHADER_PUBLIC struct ReadbackStruct
 {
     SHADER_PUBLIC uint32_t meshletCount;
+    SHADER_PUBLIC uint64_t selectedStableId;
 };
 
 SHADER_PUBLIC struct DrawMeshTasksIndirectCommand

@@ -10,6 +10,7 @@
 
 #include "render_graph_config.h"
 #include "render_pass.h"
+#include "engine/logging/engine_log.h"
 #include "render/resource_manager.h"
 #include "render/vulkan/vk_utils.h"
 #include "tracy/Tracy.hpp"
@@ -171,6 +172,12 @@ void RenderGraph::Compile(int64_t currentFrame)
     CalculateLifetimes();
 
     for (auto& tex : textures) {
+        if (tex.accumulatedUsage == 0) {
+            if (bDebugLogging) {
+                LOG_WARN(Renderer, "Texture '{}' created but never used", tex.textureId.ToString());
+            }
+            continue;
+        }
         if (!tex.HasPhysical()) {
             // Build desired dimensions for this texture
             ResourceDimensions desiredDim;
@@ -247,6 +254,8 @@ void RenderGraph::Compile(int64_t currentFrame)
     }
 
     for (auto& tex : textures) {
+        if (tex.accumulatedUsage == 0) { continue; }
+
         auto& phys = physicalResources[tex.physicalIndex];
         if (!phys.IsAllocated() && tex.textureInfo.format != VK_FORMAT_UNDEFINED) {
             CreatePhysicalImage(phys, phys.dimensions);
@@ -257,7 +266,7 @@ void RenderGraph::Compile(int64_t currentFrame)
     for (auto& buf : buffers) {
         if (buf.accumulatedUsage == 0) {
             if (bDebugLogging) {
-                SPDLOG_WARN("Buffer '{}' created but never used", buf.bufferId.ToString());
+                LOG_WARN(Renderer, "Buffer '{}' created but never used", buf.bufferId.ToString());
             }
             continue;
         }
@@ -400,7 +409,17 @@ void RenderGraph::Compile(int64_t currentFrame)
                         {
                             phys.storageMipDescriptorHandles[mip] = transientStorageUInt4HandleAllocator.Add();
                             assert(phys.storageMipDescriptorHandles[mip].IsValid());
-                            resourceManager->bindlessRDGTransientDescriptorBuffer.WriteStorageUIntDescriptor(
+                            resourceManager->bindlessRDGTransientDescriptorBuffer.WriteStorageUInt4Descriptor(
+                                phys.storageMipDescriptorHandles[mip].index,
+                                {nullptr, phys.mipViews[mip], VK_IMAGE_LAYOUT_GENERAL}
+                            );
+                            break;
+                        }
+                        case StorageImageType::UInt2:
+                        {
+                            phys.storageMipDescriptorHandles[mip] = transientStorageUInt2HandleAllocator.Add();
+                            assert(phys.storageMipDescriptorHandles[mip].IsValid());
+                            resourceManager->bindlessRDGTransientDescriptorBuffer.WriteStorageUInt2Descriptor(
                                 phys.storageMipDescriptorHandles[mip].index,
                                 {nullptr, phys.mipViews[mip], VK_IMAGE_LAYOUT_GENERAL}
                             );
@@ -414,7 +433,7 @@ void RenderGraph::Compile(int64_t currentFrame)
                                 phys.storageMipDescriptorHandles[mip].index,
                                 {nullptr, phys.mipViews[mip], VK_IMAGE_LAYOUT_GENERAL}
                             );
-                            break;\
+                            break;
                         }
                     }
                 }
@@ -1545,6 +1564,17 @@ PipelineEvent RenderGraph::GetBufferState(StringID bufferId)
     return physicalResources[buf.physicalIndex].event;
 }
 
+VkImage RenderGraph::GetTextureHandle(StringID textureId)
+{
+    auto it = textureNameToIndex.find(textureId);
+    assert(it != textureNameToIndex.end() && "Texture not found");
+
+    auto& tex = textures[it->second];
+    assert(tex.HasPhysical() && "Texture has no physical resource");
+
+    return physicalResources[tex.physicalIndex].image;
+}
+
 void RenderGraph::CarryTextureToNextFrame(StringID textureId, StringID newTextureId, VkImageUsageFlags additionalUsage)
 {
     TextureResource* tex = GetOrCreateTexture(textureId);
@@ -1750,6 +1780,9 @@ void RenderGraph::DestroyPhysicalResource(PhysicalResource& resource)
                         break;
                     case StorageImageType::UInt4:
                         transientStorageUInt4HandleAllocator.Remove(resource.storageMipDescriptorHandles[mip]);
+                        break;
+                    case StorageImageType::UInt2:
+                        transientStorageUInt2HandleAllocator.Remove(resource.storageMipDescriptorHandles[mip]);
                         break;
                     case StorageImageType::UInt:
                         transientStorageUIntHandleAllocator.Remove(resource.storageMipDescriptorHandles[mip]);
