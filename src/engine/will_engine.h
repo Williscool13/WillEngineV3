@@ -111,6 +111,7 @@ private:
 private: // Windowing
     SDLWindowPtr window{nullptr, nullptr};
     bool bRequireSwapchainRecreate{false};
+    bool bRequireViewportRecreate{false};
     bool bMinimized{false};
 
 private: // Main Systems

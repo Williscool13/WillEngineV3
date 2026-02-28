@@ -11,6 +11,7 @@
 #include "engine/engine_api.h"
 #include "engine/logging/engine_log.h"
 #include "game/fwd_components.h"
+#include "game/components/components.h"
 #include "game/components/debug_components.h"
 
 
@@ -133,12 +134,18 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
             auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.size());
             frameBuffer->mainViewFamily.modelMatrices.push_back({renderTransform.modelMatrix, renderTransform.previousMatrix});
 
+            uint64_t stableId = 0;
+            if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
+                stableId = stable->id.id;
+            }
+
             for (uint8_t i = 0; i < renderable.primitiveCount; ++i) {
                 auto& prim = renderable.primitives[i];
                 frameBuffer->mainViewFamily.mainPassInstances.push_back({
                     .primitiveIndex = prim.primitiveIndex,
                     .materialID = prim.materialID,
-                    .modelIndex = modelIndex
+                    .modelIndex = modelIndex,
+                    .stableId = stableId,
                 });
             }
         }

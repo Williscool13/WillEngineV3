@@ -158,6 +158,7 @@ struct InstanceData
     Engine::MaterialID materialID;
     uint32_t modelIndex;
     uint32_t gpuMaterialIndex;
+    uint64_t stableId;
 };
 
 struct CustomShaderDraw

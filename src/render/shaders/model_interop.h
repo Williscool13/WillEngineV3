@@ -115,10 +115,13 @@ SHADER_PUBLIC struct SHADER_ALIGN MaterialProperties
 
 SHADER_PUBLIC struct Instance
 {
-    SHADER_PUBLIC uint32_t primitiveIndex;  // Written by CPU
-    SHADER_PUBLIC uint32_t modelIndex;      // Written by CPU
-    SHADER_PUBLIC uint32_t materialIndex;   // Written by CPU
+    SHADER_PUBLIC uint32_t primitiveIndex;
+    SHADER_PUBLIC uint32_t modelIndex;
+    SHADER_PUBLIC uint32_t materialIndex;
     uint32_t padding;
+    SHADER_PUBLIC uint64_t stableId;
+    uint32_t padding1;
+    uint32_t padding2;
 };
 
 SHADER_PUBLIC struct SHADER_ALIGN Model

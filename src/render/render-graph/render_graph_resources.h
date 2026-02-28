@@ -144,6 +144,7 @@ struct PhysicalResource
     bool bDisableBarriers = false;
 
     bool bCanAlias = true;
+    bool bIsViewportScaled = false;
 
     uint64_t lastUsedFrame = 0;
 
@@ -196,6 +197,7 @@ struct TextureResource
     uint32_t index;
     uint32_t physicalIndex = UINT32_MAX;
     bool bCanUseAliasedTexture = true;
+    bool bIsViewportScaled = false;
 
     TextureInfo textureInfo;
     VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -223,6 +225,7 @@ struct BufferResource
     uint32_t index = UINT32_MAX;
     uint32_t physicalIndex = UINT32_MAX;
     bool bCanUseAliasedBuffer = true;
+    bool bIsViewportScaled = false;
 
     BufferInfo bufferInfo = {};
     VkBufferUsageFlags accumulatedUsage = 0;

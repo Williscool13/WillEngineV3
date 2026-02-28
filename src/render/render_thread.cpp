@@ -126,8 +126,8 @@ void RenderThread::ThreadMain()
             bEngineRequestsRecreate |= frameBuffer.swapchainRecreateCommand.bEngineCommandsRecreate;
             if (!frameBuffer.swapchainRecreateCommand.bIsMinimized && bEngineRequestsRecreate) {
                 ZoneScopedN("SwapchainRecreate");
-                LOG_INFO(Renderer, "Swapchain Recreated");
                 vkDeviceWaitIdle(context->device);
+                LOG_INFO(Renderer, "Swapchain Recreated");
 
                 swapchain->Recreate(frameBuffer.swapchainRecreateCommand.windowWidth, frameBuffer.swapchainRecreateCommand.windowHeight);
                 renderExtents->ApplyResize(frameBuffer.swapchainRecreateCommand.windowWidth, frameBuffer.swapchainRecreateCommand.windowHeight);
@@ -135,17 +135,17 @@ void RenderThread::ThreadMain()
                 bRenderRequestsRecreate = false;
                 bEngineRequestsRecreate = false;
                 frameBuffer.swapchainRecreateCommand.bEngineCommandsRecreate = false;
-
-                renderGraph->InvalidateAll();
             }
 
             if (frameBuffer.viewportResizeCommand.bEngineCommandsResize) {
                 vkDeviceWaitIdle(context->device);
+                LOG_INFO(Renderer, "Viewport remade");
 
                 renderExtents->ApplyViewportResize(frameBuffer.viewportResizeCommand.offsetX, frameBuffer.viewportResizeCommand.offsetY, frameBuffer.viewportResizeCommand.sizeX,
                                                    frameBuffer.viewportResizeCommand.sizeY);
                 frameBuffer.viewportResizeCommand.bEngineCommandsResize = false;
-                renderGraph->InvalidateAll();
+                renderGraph->InvalidateAllViewportAssociated();
+
             }
 
             // Wait for the frame N - 3 to finish using resources
@@ -312,7 +312,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
     }
 
     // Readback that will be copied into the FIF host memory at the end of the frame (to be read in N+3 frames)
-    renderGraph->CreateBuffer(SID("readback_buffer"), sizeof(ReadbackStruct));
+    renderGraph->CreateBuffer(SID("readback_buffer"), sizeof(ReadbackStruct), false);
     RenderPass& clearReadbackBuffer = renderGraph->AddPass(SID("Clear Readback Buffer"), VK_PIPELINE_STAGE_2_TRANSFER_BIT);
     clearReadbackBuffer.WriteTransferBuffer(SID("readback_buffer"));
     clearReadbackBuffer.Execute([&](VkCommandBuffer cmd) {
@@ -329,7 +329,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         SID("depth_target"),
         SID("deferred_resolve_target")
     };
-    renderGraph->CreateTexture(SID("deferred_resolve_target"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
+    renderGraph->CreateTexture(SID("deferred_resolve_target"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
     GBufferTargets portalTargets{
         SID("portal_albedo"),
         SID("portal_normal"),
@@ -339,7 +339,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         SID("portal_depth"),
         SID("portal_deferred_resolve")
     };
-    renderGraph->CreateTexture(SID("portal_deferred_resolve"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
+    renderGraph->CreateTexture(SID("portal_deferred_resolve"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
 
     //
     {
@@ -364,12 +364,12 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 SetupCascadedShadows(*renderGraph, viewFamily, renderFamilyProperties, 0);
             }
 
-            renderGraph->CreateTexture(targets.albedo, TextureInfo{GBUFFER_ALBEDO_FORMAT, renderExtent[0], renderExtent[1], 1});
-            renderGraph->CreateTexture(targets.normal, TextureInfo{GBUFFER_NORMAL_FORMAT, renderExtent[0], renderExtent[1], 1});
-            renderGraph->CreateTexture(targets.pbr, TextureInfo{GBUFFER_PBR_FORMAT, renderExtent[0], renderExtent[1], 1});
-            renderGraph->CreateTexture(targets.emissive, TextureInfo{GBUFFER_EMISSIVE_FORMAT, renderExtent[0], renderExtent[1], 1});
-            renderGraph->CreateTexture(targets.velocity, TextureInfo{GBUFFER_MOTION_FORMAT, renderExtent[0], renderExtent[1], 1});
-            renderGraph->CreateTexture(targets.depthStencil, TextureInfo{DEPTH_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
+            renderGraph->CreateTexture(targets.albedo, TextureInfo{GBUFFER_ALBEDO_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
+            renderGraph->CreateTexture(targets.normal, TextureInfo{GBUFFER_NORMAL_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
+            renderGraph->CreateTexture(targets.pbr, TextureInfo{GBUFFER_PBR_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
+            renderGraph->CreateTexture(targets.emissive, TextureInfo{GBUFFER_EMISSIVE_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
+            renderGraph->CreateTexture(targets.velocity, TextureInfo{GBUFFER_MOTION_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
+            renderGraph->CreateTexture(targets.depthStencil, TextureInfo{DEPTH_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
 
             SetupGeometryPasses(*renderGraph, viewFamily, renderFamilyProperties, renderExtent, targets, 0, true);
 
@@ -392,12 +392,12 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
             bool bHasPortalView = !viewFamily.portalViews.empty();
             if (bHasPortalView) {
-                renderGraph->CreateTexture(portalTargets.albedo, TextureInfo{GBUFFER_ALBEDO_FORMAT, renderExtent[0], renderExtent[1], 1});
-                renderGraph->CreateTexture(portalTargets.normal, TextureInfo{GBUFFER_NORMAL_FORMAT, renderExtent[0], renderExtent[1], 1});
-                renderGraph->CreateTexture(portalTargets.pbr, TextureInfo{GBUFFER_PBR_FORMAT, renderExtent[0], renderExtent[1], 1});
-                renderGraph->CreateTexture(portalTargets.emissive, TextureInfo{GBUFFER_EMISSIVE_FORMAT, renderExtent[0], renderExtent[1], 1});
-                renderGraph->CreateTexture(portalTargets.velocity, TextureInfo{GBUFFER_MOTION_FORMAT, renderExtent[0], renderExtent[1], 1});
-                renderGraph->CreateTexture(portalTargets.depthStencil, TextureInfo{DEPTH_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
+                renderGraph->CreateTexture(portalTargets.albedo, TextureInfo{GBUFFER_ALBEDO_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
+                renderGraph->CreateTexture(portalTargets.normal, TextureInfo{GBUFFER_NORMAL_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
+                renderGraph->CreateTexture(portalTargets.pbr, TextureInfo{GBUFFER_PBR_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
+                renderGraph->CreateTexture(portalTargets.emissive, TextureInfo{GBUFFER_EMISSIVE_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
+                renderGraph->CreateTexture(portalTargets.velocity, TextureInfo{GBUFFER_MOTION_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
+                renderGraph->CreateTexture(portalTargets.depthStencil, TextureInfo{DEPTH_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
 
                 SetupGeometryPasses(*renderGraph, viewFamily, renderFamilyProperties, renderExtent, portalTargets, 1, true);
 
@@ -1202,9 +1202,9 @@ void RenderThread::PrepareRenderFamilyProperties(Core::ViewFamily& viewFamily, R
 
 void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const std::array<uint32_t, 2> renderExtent, float renderDeltaTime) const
 {
-    renderGraph->CreateBuffer(SID("scene_data"), SCENE_DATA_BUFFER_SIZE);
-    renderGraph->CreateBuffer(SID("shadow_data"), SHADOW_DATA_BUFFER_SIZE);
-    renderGraph->CreateBuffer(SID("light_data"), LIGHT_DATA_BUFFER_SIZE);
+    renderGraph->CreateBuffer(SID("scene_data"), SCENE_DATA_BUFFER_SIZE, false);
+    renderGraph->CreateBuffer(SID("shadow_data"), SHADOW_DATA_BUFFER_SIZE, false);
+    renderGraph->CreateBuffer(SID("light_data"), LIGHT_DATA_BUFFER_SIZE, false);
 
     // Scene Data
     SceneData sceneData = GenerateSceneData(viewFamily.mainView, viewFamily.postProcessConfig, renderExtent, frameNumber, renderDeltaTime);
@@ -1356,6 +1356,7 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
             .primitiveIndex = inst.primitiveIndex,
             .modelIndex = inst.modelIndex,
             .materialIndex = inst.gpuMaterialIndex,
+            .stableId = inst.stableId,
         };
     }
 
@@ -1367,12 +1368,13 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
                 .primitiveIndex = inst.primitiveIndex,
                 .modelIndex = inst.modelIndex,
                 .materialIndex = inst.gpuMaterialIndex,
+                .stableId = inst.stableId,
             };
         }
     }
 
     if (totalInstanceCount > 0) {
-        renderGraph->CreateBuffer(GEOMETRY_INSTANCE_BUFFER, totalInstanceCount * sizeof(Instance));
+        renderGraph->CreateBuffer(GEOMETRY_INSTANCE_BUFFER, totalInstanceCount * sizeof(Instance), false);
 
         RenderPass& uploadPass = renderGraph->AddPass(SID("Upload Instances"), VK_PIPELINE_STAGE_2_COPY_BIT);
         uploadPass.WriteTransferBuffer(GEOMETRY_INSTANCE_BUFFER);
@@ -1396,7 +1398,7 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
 
 
     if (!viewFamily.modelMatrices.empty()) {
-        renderGraph->CreateBuffer(SID("model_buffer"), renderFamilyProperties.modelBufferSize);
+        renderGraph->CreateBuffer(SID("model_buffer"), renderFamilyProperties.modelBufferSize, false);
         UploadAllocation modelUpload = renderGraph->AllocateTransient(viewFamily.modelMatrices.size() * sizeof(Model));
         memcpy(modelUpload.ptr, viewFamily.modelMatrices.data(), viewFamily.modelMatrices.size() * sizeof(Model));
 
@@ -1424,7 +1426,7 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
     }
 
     if (!viewFamily.materials.empty()) {
-        renderGraph->CreateBuffer(SID("material_buffer"), renderFamilyProperties.materialBufferSize);
+        renderGraph->CreateBuffer(SID("material_buffer"), renderFamilyProperties.materialBufferSize, false);
         UploadAllocation materialUpload = renderGraph->AllocateTransient(viewFamily.materials.size() * sizeof(MaterialProperties));
         memcpy(materialUpload.ptr, viewFamily.materials.data(), viewFamily.materials.size() * sizeof(MaterialProperties));
 
@@ -1468,7 +1470,7 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFami
         uint32_t cascadeHeight = shadowConfig.cascadePreset.extents[cascadeLevel].height;
         float linearBias = shadowConfig.cascadePreset.biases[cascadeLevel].linear;
         float slopedBias = shadowConfig.cascadePreset.biases[cascadeLevel].sloped;
-        graph.CreateTexture(shadowMapId, TextureInfo{SHADOW_CASCADE_FORMAT, shadowConfig.cascadePreset.extents[cascadeLevel].width, shadowConfig.cascadePreset.extents[cascadeLevel].height, 1});
+        graph.CreateTexture(shadowMapId, TextureInfo{SHADOW_CASCADE_FORMAT, shadowConfig.cascadePreset.extents[cascadeLevel].width, shadowConfig.cascadePreset.extents[cascadeLevel].height, 1}, false);
 
         // Main Draw
         if (!viewFamily.mainPassInstances.empty()) {
@@ -1866,12 +1868,12 @@ void RenderThread::SetupGroundTruthAmbientOcclusion(RenderGraph& graph, const Co
 {
     const Core::GTAOConfiguration& gtaoConfig = viewFamily.gtaoConfig;
 
-    graph.CreateTexture(SID("gtao_depth"), TextureInfo{VK_FORMAT_R16_SFLOAT, renderExtent[0], renderExtent[1], 5});
-    graph.CreateTexture(SID("gtao_ao"), TextureInfo{VK_FORMAT_R8_UNORM, renderExtent[0], renderExtent[1], 1});
-    graph.CreateTexture(SID("gtao_edges"), TextureInfo{VK_FORMAT_R8_UNORM, renderExtent[0], renderExtent[1], 1});
+    graph.CreateTexture(SID("gtao_depth"), TextureInfo{VK_FORMAT_R16_SFLOAT, renderExtent[0], renderExtent[1], 5}, true);
+    graph.CreateTexture(SID("gtao_ao"), TextureInfo{VK_FORMAT_R8_UNORM, renderExtent[0], renderExtent[1], 1}, true);
+    graph.CreateTexture(SID("gtao_edges"), TextureInfo{VK_FORMAT_R8_UNORM, renderExtent[0], renderExtent[1], 1}, true);
     // Denoise pass(es) - typically run 2-3 times for better quality
-    graph.CreateTexture(SID("gtao_temp"), TextureInfo{VK_FORMAT_R8_UNORM, renderExtent[0], renderExtent[1], 1});
-    graph.CreateTexture(SID("gtao_filtered"), TextureInfo{VK_FORMAT_R8_UNORM, renderExtent[0], renderExtent[1], 1});
+    graph.CreateTexture(SID("gtao_temp"), TextureInfo{VK_FORMAT_R8_UNORM, renderExtent[0], renderExtent[1], 1}, true);
+    graph.CreateTexture(SID("gtao_filtered"), TextureInfo{VK_FORMAT_R8_UNORM, renderExtent[0], renderExtent[1], 1}, true);
 
     RenderPass& depthPrepass = graph.AddPass(SID("GTAO Depth Prepass"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
     depthPrepass.ReadBuffer(SID("scene_data"));
@@ -1989,7 +1991,7 @@ void RenderThread::SetupGroundTruthAmbientOcclusion(RenderGraph& graph, const Co
 
 void RenderThread::SetupShadowsResolve(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneDataIndex) const
 {
-    renderGraph->CreateTexture(SID("shadows_resolve_target"), TextureInfo{VK_FORMAT_R8G8_UNORM, renderExtent[0], renderExtent[1], 1});
+    renderGraph->CreateTexture(SID("shadows_resolve_target"), TextureInfo{VK_FORMAT_R8G8_UNORM, renderExtent[0], renderExtent[1], 1}, true);
     RenderPass& shadowsResolvePass = graph.AddPass(SID("Shadows Resolve"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
     shadowsResolvePass.ReadSampledImage(targets.normal);
     shadowsResolvePass.ReadSampledImage(targets.depthStencil);
@@ -2163,7 +2165,7 @@ void RenderThread::SetupSkyboxRendering(RenderGraph& graph, const Core::ViewFami
 
 StringID RenderThread::SetupTemporalAntialiasing(RenderGraph& graph, const Core::ViewFamily& viewFamily, const std::array<uint32_t, 2> renderExtent, const PostProcessTargets& ppTargets) const
 {
-    graph.CreateTexture(SID("taa_current"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
+    graph.CreateTexture(SID("taa_current"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
     renderGraph->CarryTextureToNextFrame(SID("taa_current"), SID("taa_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
 
     if (renderGraph->HasTexture(SID("velocity_target"))) {
@@ -2229,7 +2231,7 @@ StringID RenderThread::SetupTemporalAntialiasing(RenderGraph& graph, const Core:
     });
 
 
-    graph.CreateTexture(SID("taa_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
+    graph.CreateTexture(SID("taa_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
 
     RenderPass& finalCopyPass = graph.AddPass(SID("TAA Final Copy"), VK_PIPELINE_STAGE_2_BLIT_BIT);
     finalCopyPass.ReadBlitImage(SID("taa_current"));
@@ -2270,15 +2272,15 @@ StringID RenderThread::SetupTemporalAntialiasing(RenderGraph& graph, const Core:
 StringID RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamily& viewFamily, const std::array<uint32_t, 2> renderExtent, const PostProcessTargets& ppTargets,
                                            float deltaTime) const
 {
-    renderGraph->CreateTexture(SID("post_process_output"), TextureInfo{POST_PROCESS_OUTPUT_FORMAT, renderExtent[0], renderExtent[1], 1});
+    renderGraph->CreateTexture(SID("post_process_output"), TextureInfo{POST_PROCESS_OUTPUT_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
     const Core::PostProcessConfiguration& ppConfig = viewFamily.postProcessConfig;
 
     // Exposure
     {
-        renderGraph->CreateBuffer(SID("luminance_histogram"), POST_PROCESS_LUMINANCE_BUFFER_SIZE);
+        renderGraph->CreateBuffer(SID("luminance_histogram"), POST_PROCESS_LUMINANCE_BUFFER_SIZE, false);
 
         if (!graph.HasBuffer(SID("luminance_buffer"))) {
-            renderGraph->CreateBuffer(SID("luminance_buffer"), sizeof(float));
+            renderGraph->CreateBuffer(SID("luminance_buffer"), sizeof(float), false);
         }
         renderGraph->CarryBufferToNextFrame(SID("luminance_buffer"), SID("luminance_buffer"), VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
 
@@ -2343,7 +2345,7 @@ StringID RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewF
 
         // Create mipmapped bloom chain
         uint32_t numMips = numDownsamples + 1;
-        graph.CreateTexture(SID("bloom_chain"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], numMips});
+        graph.CreateTexture(SID("bloom_chain"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], numMips}, true);
 
         // Threshold pass - write directly to mip 0
         RenderPass& thresholdPass = graph.AddPass(SID("Bloom Threshold"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
@@ -2421,7 +2423,7 @@ StringID RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewF
 
     // Sharpening
     {
-        graph.CreateTexture(SID("sharpening_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
+        graph.CreateTexture(SID("sharpening_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
         RenderPass& sharpeningPass = graph.AddPass(SID("Sharpening"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
         sharpeningPass.ReadBuffer(SID("scene_data"));
         sharpeningPass.ReadSampledImage(ppTargets.finalColor);
@@ -2446,7 +2448,7 @@ StringID RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewF
     // Tonemap
     {
         // todo: add support for HDR swapchain
-        graph.CreateTexture(SID("tonemap_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
+        graph.CreateTexture(SID("tonemap_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
         RenderPass& tonemapPass = graph.AddPass(SID("Tonemap SDR"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
         tonemapPass.ReadSampledImage(SID("sharpening_output"));
         tonemapPass.ReadSampledImage(SID("bloom_chain"));
@@ -2477,9 +2479,9 @@ StringID RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewF
     {
         uint32_t blurTiledX = (renderExtent[0] + POST_PROCESS_MOTION_BLUR_TILE_SIZE - 1) / POST_PROCESS_MOTION_BLUR_TILE_SIZE;
         uint32_t blurTiledY = (renderExtent[1] + POST_PROCESS_MOTION_BLUR_TILE_SIZE - 1) / POST_PROCESS_MOTION_BLUR_TILE_SIZE;
-        graph.CreateTexture(SID("motion_blur_tiled_max"), TextureInfo{VK_FORMAT_R16G16_SFLOAT, blurTiledX, blurTiledY, 1});
-        graph.CreateTexture(SID("motion_blur_tiled_neighbor_max"), TextureInfo{VK_FORMAT_R16G16_SFLOAT, blurTiledX, blurTiledY, 1});
-        graph.CreateTexture(SID("motion_blur_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
+        graph.CreateTexture(SID("motion_blur_tiled_max"), TextureInfo{VK_FORMAT_R16G16_SFLOAT, blurTiledX, blurTiledY, 1}, true);
+        graph.CreateTexture(SID("motion_blur_tiled_neighbor_max"), TextureInfo{VK_FORMAT_R16G16_SFLOAT, blurTiledX, blurTiledY, 1}, true);
+        graph.CreateTexture(SID("motion_blur_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
 
         RenderPass& motionBlurTiledMaxPass = graph.AddPass(SID("Motion Blur Tiled Max"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
         motionBlurTiledMaxPass.ReadBuffer(SID("scene_data"));
@@ -2551,7 +2553,7 @@ StringID RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewF
 
     // Color Grading
     {
-        graph.CreateTexture(SID("color_grading_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
+        graph.CreateTexture(SID("color_grading_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
         RenderPass& colorGradingPass = graph.AddPass(SID("Color Grading"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
         colorGradingPass.ReadBuffer(SID("scene_data"));
         colorGradingPass.ReadSampledImage(SID("motion_blur_output"));
@@ -2579,7 +2581,7 @@ StringID RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewF
 
     // Vignette + Chromatic Aberration
     {
-        graph.CreateTexture(SID("vignette_aberration_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
+        graph.CreateTexture(SID("vignette_aberration_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
         RenderPass& vignetteAberrationPass = graph.AddPass(SID("Vignette and Aberration"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
         vignetteAberrationPass.ReadBuffer(SID("scene_data"));
         vignetteAberrationPass.ReadSampledImage(SID("color_grading_output"));
@@ -2663,8 +2665,8 @@ void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& 
     size_t debugVertexBufferSize = limits.highestDebugVertexBuffer * sizeof(DebugVertex);
     size_t debugIndexBufferSize = limits.highestDebugIndexBuffer * sizeof(uint32_t);
 
-    graph.CreateBuffer(SID("debug_vertex_buffer"), debugVertexBufferSize);
-    graph.CreateBuffer(SID("debug_index_buffer"), debugIndexBufferSize);
+    graph.CreateBuffer(SID("debug_vertex_buffer"), debugVertexBufferSize, false);
+    graph.CreateBuffer(SID("debug_index_buffer"), debugIndexBufferSize, false);
 
     UploadAllocation vertexUpload = graph.AllocateTransient(totalDebugVertices * sizeof(DebugVertex));
     UploadAllocation indexUpload = graph.AllocateTransient(totalDebugIndices * sizeof(uint32_t));

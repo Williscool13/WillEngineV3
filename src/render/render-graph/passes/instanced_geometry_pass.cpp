@@ -35,21 +35,21 @@ InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, cons
 
     // Create and Clear
     {
-        graph.CreateBuffer(instance_meshlet_offsets, config.instanceMeshletOffsetsBufferSize);
-        graph.CreateBuffer(level1_sums, config.level1SumsBufferSize);
-        graph.CreateBuffer(level1_block_sums, config.level1BlockSumsBufferSize);
-        graph.CreateBuffer(level2_sums, config.level2SumsBufferSize);
-        graph.CreateBuffer(level2_block_sums, config.level2BlockSumsBufferSize);
-        graph.CreateBuffer(scanned_level2_block_sums, config.scannedLevel2BlockSumsBufferSize);
-        graph.CreateBuffer(intermediate_meshlets, config.intermediateMeshletBufferSize);
-        graph.CreateBuffer(meshlet_level1_sums, config.meshletLevel1SumsBufferSize);
-        graph.CreateBuffer(meshlet_level1_block_sums, config.meshletLevel1BlockSumsBufferSize);
-        graph.CreateBuffer(meshlet_level2_sums, config.meshletLevel2SumsBufferSize);
-        graph.CreateBuffer(meshlet_level2_block_sums, config.meshletLevel2BlockSumsBufferSize);
-        graph.CreateBuffer(meshlet_scanned_level2_block_sums, config.meshletScannedLevel2BlockSumsBufferSize);
-        graph.CreateBuffer(visible_meshlets, config.visibleMeshletsBufferSize);
-        graph.CreateBuffer(meshlet_count_dispatch_args, sizeof(InstancingMeshletDispatchIndirect));
-        graph.CreateBuffer(compacted_meshlet_dispatch_args, sizeof(InstancingCompactedMeshletDispatchIndirect));
+        graph.CreateBuffer(instance_meshlet_offsets, config.instanceMeshletOffsetsBufferSize, false);
+        graph.CreateBuffer(level1_sums, config.level1SumsBufferSize, false);
+        graph.CreateBuffer(level1_block_sums, config.level1BlockSumsBufferSize, false);
+        graph.CreateBuffer(level2_sums, config.level2SumsBufferSize, false);
+        graph.CreateBuffer(level2_block_sums, config.level2BlockSumsBufferSize, false);
+        graph.CreateBuffer(scanned_level2_block_sums, config.scannedLevel2BlockSumsBufferSize, false);
+        graph.CreateBuffer(intermediate_meshlets, config.intermediateMeshletBufferSize, false);
+        graph.CreateBuffer(meshlet_level1_sums, config.meshletLevel1SumsBufferSize, false);
+        graph.CreateBuffer(meshlet_level1_block_sums, config.meshletLevel1BlockSumsBufferSize, false);
+        graph.CreateBuffer(meshlet_level2_sums, config.meshletLevel2SumsBufferSize, false);
+        graph.CreateBuffer(meshlet_level2_block_sums, config.meshletLevel2BlockSumsBufferSize, false);
+        graph.CreateBuffer(meshlet_scanned_level2_block_sums, config.meshletScannedLevel2BlockSumsBufferSize, false);
+        graph.CreateBuffer(visible_meshlets, config.visibleMeshletsBufferSize, false);
+        graph.CreateBuffer(meshlet_count_dispatch_args, sizeof(InstancingMeshletDispatchIndirect), false);
+        graph.CreateBuffer(compacted_meshlet_dispatch_args, sizeof(InstancingCompactedMeshletDispatchIndirect), false);
 
         RenderPass& clearPass = graph.AddPass(SID_CONCAT(config.prefix.c_str(), "Clear Temp Instancing Buffers"), VK_PIPELINE_STAGE_2_TRANSFER_BIT);
         clearPass.WriteTransferBuffer(instance_meshlet_offsets);
@@ -506,21 +506,21 @@ InstancedGeometryPassOutputs SetupInstancedGeometryShadowPass(RenderGraph& graph
 
     // Create and Clear
     {
-        graph.CreateBuffer(instance_meshlet_offsets, config.instanceMeshletOffsetsBufferSize, bAllowBufferAliasing);
-        graph.CreateBuffer(level1_sums, config.level1SumsBufferSize, bAllowBufferAliasing);
-        graph.CreateBuffer(level1_block_sums, config.level1BlockSumsBufferSize, bAllowBufferAliasing);
-        graph.CreateBuffer(level2_sums, config.level2SumsBufferSize, bAllowBufferAliasing);
-        graph.CreateBuffer(level2_block_sums, config.level2BlockSumsBufferSize, bAllowBufferAliasing);
-        graph.CreateBuffer(scanned_level2_block_sums, config.scannedLevel2BlockSumsBufferSize, bAllowBufferAliasing);
-        graph.CreateBuffer(intermediate_meshlets, config.intermediateMeshletBufferSize, bAllowBufferAliasing);
-        graph.CreateBuffer(meshlet_level1_sums, config.meshletLevel1SumsBufferSize, bAllowBufferAliasing);
-        graph.CreateBuffer(meshlet_level1_block_sums, config.meshletLevel1BlockSumsBufferSize, bAllowBufferAliasing);
-        graph.CreateBuffer(meshlet_level2_sums, config.meshletLevel2SumsBufferSize, bAllowBufferAliasing);
-        graph.CreateBuffer(meshlet_level2_block_sums, config.meshletLevel2BlockSumsBufferSize, bAllowBufferAliasing);
-        graph.CreateBuffer(meshlet_scanned_level2_block_sums, config.meshletScannedLevel2BlockSumsBufferSize, bAllowBufferAliasing);
-        graph.CreateBuffer(visible_meshlets, config.visibleMeshletsBufferSize, bAllowBufferAliasing);
-        graph.CreateBuffer(meshlet_count_dispatch_args, sizeof(InstancingMeshletDispatchIndirect), bAllowBufferAliasing);
-        graph.CreateBuffer(compacted_meshlet_dispatch_args, sizeof(InstancingCompactedMeshletDispatchIndirect), bAllowBufferAliasing);
+        graph.CreateBuffer(instance_meshlet_offsets, config.instanceMeshletOffsetsBufferSize, false, bAllowBufferAliasing);
+        graph.CreateBuffer(level1_sums, config.level1SumsBufferSize, false, bAllowBufferAliasing);
+        graph.CreateBuffer(level1_block_sums, config.level1BlockSumsBufferSize, false, bAllowBufferAliasing);
+        graph.CreateBuffer(level2_sums, config.level2SumsBufferSize, false, bAllowBufferAliasing);
+        graph.CreateBuffer(level2_block_sums, config.level2BlockSumsBufferSize, false, bAllowBufferAliasing);
+        graph.CreateBuffer(scanned_level2_block_sums, config.scannedLevel2BlockSumsBufferSize, false, bAllowBufferAliasing);
+        graph.CreateBuffer(intermediate_meshlets, config.intermediateMeshletBufferSize, false, bAllowBufferAliasing);
+        graph.CreateBuffer(meshlet_level1_sums, config.meshletLevel1SumsBufferSize, false, bAllowBufferAliasing);
+        graph.CreateBuffer(meshlet_level1_block_sums, config.meshletLevel1BlockSumsBufferSize, false, bAllowBufferAliasing);
+        graph.CreateBuffer(meshlet_level2_sums, config.meshletLevel2SumsBufferSize, false, bAllowBufferAliasing);
+        graph.CreateBuffer(meshlet_level2_block_sums, config.meshletLevel2BlockSumsBufferSize, false, bAllowBufferAliasing);
+        graph.CreateBuffer(meshlet_scanned_level2_block_sums, config.meshletScannedLevel2BlockSumsBufferSize, false, bAllowBufferAliasing);
+        graph.CreateBuffer(visible_meshlets, config.visibleMeshletsBufferSize, false, bAllowBufferAliasing);
+        graph.CreateBuffer(meshlet_count_dispatch_args, sizeof(InstancingMeshletDispatchIndirect), false, bAllowBufferAliasing);
+        graph.CreateBuffer(compacted_meshlet_dispatch_args, sizeof(InstancingCompactedMeshletDispatchIndirect), false, bAllowBufferAliasing);
 
         RenderPass& clearPass = graph.AddPass(SID_CONCAT(config.prefix, "Clear Temp Instancing Buffers"), VK_PIPELINE_STAGE_2_TRANSFER_BIT);
         clearPass.WriteTransferBuffer(instance_meshlet_offsets);

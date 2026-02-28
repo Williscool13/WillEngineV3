@@ -295,6 +295,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
 
 void WillEngine::EditorImgui()
 {
+#if WILL_EDITOR
     ImGuiID dockspaceID = ImGui::GetID("My Dockspace");
     ImGuiViewport* viewport = ImGui::GetMainViewport();
 
@@ -319,26 +320,22 @@ void WillEngine::EditorImgui()
     if (centralNode) {
         auto newOffsetX = static_cast<uint32_t>(centralNode->Pos.x);
         auto newOffsetY = static_cast<uint32_t>(centralNode->Pos.y);
-        auto newWidth   = static_cast<uint32_t>(centralNode->Size.x);
-        auto newHeight  = static_cast<uint32_t>(centralNode->Size.y);
+        auto newWidth = static_cast<uint32_t>(centralNode->Size.x);
+        auto newHeight = static_cast<uint32_t>(centralNode->Size.y);
 
         Core::WindowContext& wc = engineContext->windowContext;
         if (newOffsetX != wc.viewportOffsetX || newOffsetY != wc.viewportOffsetY ||
-            newWidth   != wc.viewportWidth   || newHeight  != wc.viewportHeight)
-        {
+            newWidth != wc.viewportWidth || newHeight != wc.viewportHeight) {
             wc.viewportOffsetX = newOffsetX;
             wc.viewportOffsetY = newOffsetY;
-            wc.viewportWidth   = newWidth;
-            wc.viewportHeight  = newHeight;
+            wc.viewportWidth = newWidth;
+            wc.viewportHeight = newHeight;
 
-            stagingFrameBuffer.viewportResizeCommand = {
-                true, newOffsetX, newOffsetY, newWidth, newHeight
-            };
+            bRequireViewportRecreate = true;
         }
     }
 
 
-#if WILL_EDITOR
     if (ImGui::Begin("Editor")) {
 #if !GAME_STATIC
         float gameDllTimeSinceReload = gameDllWatcher.GetTimeSinceLastTrigger();
@@ -706,6 +703,14 @@ void WillEngine::Run()
                     inputManager->UpdateWindowExtent(w, h);
                     engineContext->windowContext.windowWidth = w;
                     engineContext->windowContext.windowHeight = h;
+#ifndef WILL_EDITOR
+                    // Viewport always equal window outside of editor
+                    bRequireViewportRecreate = true;
+                    engineContext->windowContext.viewportWidth = w;
+                    engineContext->windowContext.viewportHeight = h;
+                    engineContext->windowContext.viewportOffsetX = 0;
+                    engineContext->windowContext.viewportOffsetY = 0;
+#endif
                 }
                 break;
                 default:
@@ -810,6 +815,22 @@ void WillEngine::Run()
                     ImGui::NewFrame();
 
                     EditorImgui();
+                }
+
+                // Viewport
+                {
+                    if (bRequireViewportRecreate) {
+                        stagingFrameBuffer.viewportResizeCommand = {
+                            true,
+                            engineContext->windowContext.viewportOffsetX,
+                            engineContext->windowContext.viewportOffsetY,
+                            engineContext->windowContext.viewportWidth,
+                            engineContext->windowContext.viewportHeight,
+                        };
+                        bRequireViewportRecreate = false;
+                    } else {
+                        stagingFrameBuffer.viewportResizeCommand.bEngineCommandsResize = false;
+                    }
                 }
 
                 //

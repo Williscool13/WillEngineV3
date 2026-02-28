@@ -225,6 +225,7 @@ void RenderGraph::Compile(int64_t currentFrame)
                     }
                     phys.logicalResourceIndices.push_back(tex.index);
                     phys.bCanAlias = tex.bCanUseAliasedTexture;
+                    phys.bIsViewportScaled |= tex.bIsViewportScaled;
                     AppendUsageChain(phys, tex.textureId, tex.bCanUseAliasedTexture, bDebugLogging);
                     foundAlias = true;
                     break;
@@ -239,6 +240,7 @@ void RenderGraph::Compile(int64_t currentFrame)
                 newPhys.dimensions = desiredDim;
                 newPhys.logicalResourceIndices.push_back(tex.index);
                 newPhys.bCanAlias = tex.bCanUseAliasedTexture;
+                newPhys.bIsViewportScaled = tex.bIsViewportScaled;
                 AppendUsageChain(newPhys, tex.textureId, tex.bCanUseAliasedTexture, bDebugLogging);
             }
         }
@@ -305,6 +307,7 @@ void RenderGraph::Compile(int64_t currentFrame)
                         phys.dimensions.bufferUsage |= buf.accumulatedUsage;
                     }
                     phys.bCanAlias = buf.bCanUseAliasedBuffer;
+                    phys.bIsViewportScaled |= buf.bIsViewportScaled;
                     AppendUsageChain(phys, buf.bufferId, buf.bCanUseAliasedBuffer, bDebugLogging);
                     foundAlias = true;
                     break;
@@ -318,6 +321,7 @@ void RenderGraph::Compile(int64_t currentFrame)
                 newPhys.dimensions = desiredDim;
                 newPhys.logicalResourceIndices.push_back(buf.index);
                 newPhys.bCanAlias = buf.bCanUseAliasedBuffer;
+                newPhys.bIsViewportScaled = buf.bIsViewportScaled;
                 AppendUsageChain(newPhys, buf.bufferId, buf.bCanUseAliasedBuffer, bDebugLogging);
             }
         }
@@ -1019,7 +1023,26 @@ void RenderGraph::Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint
     ZoneScoped;
 
     currentFrameIndex = _currentFrameIndex;
-    uploadArenas[currentFrameIndex].allocator.Reset(); {
+    uploadArenas[currentFrameIndex].allocator.Reset();
+
+    //
+    if (bDestroyViewportAssociated) {
+        ZoneScopedN("DestroyViewportScaledResources");
+
+        // Drop carryovers whose src physical is viewport-scaled
+        std::erase_if(textureCarryovers, [this](const TextureFrameCarryover& carryover) {
+            const TextureResource* tex = GetTexture(carryover.srcName);
+            return tex && tex->HasPhysical() && physicalResources[tex->physicalIndex].bIsViewportScaled;
+        });
+
+        std::erase_if(bufferCarryovers, [this](const BufferFrameCarryover& carryover) {
+            const BufferResource* buf = GetBuffer(carryover.srcName);
+            return buf && buf->HasPhysical() && physicalResources[buf->physicalIndex].bIsViewportScaled;
+        });
+    }
+
+    //
+    {
         ZoneScopedN("CarryoverCapture");
         for (TextureFrameCarryover& carryover : textureCarryovers) {
             if (const TextureResource* tex = GetTexture(carryover.srcName)) {
@@ -1038,8 +1061,10 @@ void RenderGraph::Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint
                 carryover.accumulatedUsage = buf->accumulatedUsage;
             }
         }
-    } {
-        // todo: seems string dealloc is causing heap contention when it happens when model loads at the same time.
+    }
+
+    //
+    {
         ZoneScopedN("ClearContainers");
         passes.clear();
         textures.clear();
@@ -1051,7 +1076,10 @@ void RenderGraph::Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint
             phys.logicalResourceIndices.clear();
             phys.bCanAlias = true;
         }
-    } {
+    }
+
+    //
+    {
         ZoneScopedN("CleanupUnusedPhysicalResources");
         for (int i = static_cast<int>(physicalResources.size()) - 1; i >= 0; --i) {
             auto& phys = physicalResources[i];
@@ -1059,12 +1087,18 @@ void RenderGraph::Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint
             if (phys.bIsImported) { continue; }
             if (!phys.IsAllocated()) { continue; }
 
-            if (currentFrame - phys.lastUsedFrame > maxFramesUnused) {
+            if (bDestroyViewportAssociated && phys.bIsViewportScaled) {
+                DestroyPhysicalResource(phys);
+                physicalResources.erase(physicalResources.begin() + i);
+            } else if (currentFrame - phys.lastUsedFrame > maxFramesUnused) {
                 DestroyPhysicalResource(phys);
                 physicalResources.erase(physicalResources.begin() + i);
             }
         }
-    } {
+    }
+
+    //
+    {
         ZoneScopedN("CarryoverTextureRestoration");
         for (auto& carryover : textureCarryovers) {
             uint32_t physicalIndex = UINT32_MAX;
@@ -1122,44 +1156,24 @@ void RenderGraph::Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint
         }
         bufferCarryovers.clear();
     }
+
+    bDestroyViewportAssociated = false;
 }
 
-void RenderGraph::InvalidateAll()
+void RenderGraph::CreateTexture(const StringID textureId, const TextureInfo& texInfo, bool bIsViewportScaled)
 {
-    textures.clear();
-    textureNameToIndex.clear();
-    buffers.clear();
-    bufferNameToIndex.clear();
+    TextureResource* tex = GetOrCreateTexture(textureId);
 
-    passes.clear();
-
-    for (PhysicalResource& physicalResource : physicalResources) {
-        DestroyPhysicalResource(physicalResource);
-    }
-    physicalResources.clear();
-    transientSampledImageHandleAllocator.Clear();
-    transientStorageFloat4HandleAllocator.Clear();
-    transientStorageFloat2HandleAllocator.Clear();
-    transientStorageFloatHandleAllocator.Clear();
-    transientStorageUInt4HandleAllocator.Clear();
-    transientStorageUIntHandleAllocator.Clear();
-    textureCarryovers.clear();
-    bufferCarryovers.clear();
-}
-
-void RenderGraph::CreateTexture(const StringID textureId, const TextureInfo& texInfo)
-{
-    TextureResource* resource = GetOrCreateTexture(textureId);
-
-    if (resource->textureInfo.format != VK_FORMAT_UNDEFINED) {
-        assert(resource->textureInfo.format == texInfo.format && "Texture format mismatch");
-        assert(resource->textureInfo.width == texInfo.width && "Texture width mismatch");
-        assert(resource->textureInfo.height == texInfo.height && "Texture height mismatch");
-        assert(resource->textureInfo.mipLevels == texInfo.mipLevels && "Texture mip level mismatch");
+    if (tex->textureInfo.format != VK_FORMAT_UNDEFINED) {
+        assert(tex->textureInfo.format == texInfo.format && "Texture format mismatch");
+        assert(tex->textureInfo.width == texInfo.width && "Texture width mismatch");
+        assert(tex->textureInfo.height == texInfo.height && "Texture height mismatch");
+        assert(tex->textureInfo.mipLevels == texInfo.mipLevels && "Texture mip level mismatch");
     }
 
     assert(texInfo.format != VK_FORMAT_UNDEFINED && "Texture info uses undefined format");
-    resource->textureInfo = texInfo;
+    tex->textureInfo = texInfo;
+    tex->bIsViewportScaled = bIsViewportScaled;
 }
 
 void RenderGraph::AliasTexture(const StringID aliasId, const StringID existingId)
@@ -1169,7 +1183,7 @@ void RenderGraph::AliasTexture(const StringID aliasId, const StringID existingId
     textureNameToIndex[aliasId] = it->second;
 }
 
-void RenderGraph::CreateBuffer(StringID bufferId, VkDeviceSize size, bool bCanAlias)
+void RenderGraph::CreateBuffer(StringID bufferId, VkDeviceSize size, bool bIsViewportScaled, bool bCanAlias)
 {
     BufferResource* buf = GetOrCreateBuffer(bufferId);
 
@@ -1179,6 +1193,7 @@ void RenderGraph::CreateBuffer(StringID bufferId, VkDeviceSize size, bool bCanAl
 
     buf->bufferInfo.size = size;
     buf->bCanUseAliasedBuffer = bCanAlias;
+    buf->bIsViewportScaled = bIsViewportScaled;
 }
 
 void RenderGraph::ImportTexture(StringID textureId,

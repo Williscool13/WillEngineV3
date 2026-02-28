@@ -70,13 +70,13 @@ public:
 
     void SetDebugLogging(bool enable) { bDebugLogging = enable; }
 
-    void InvalidateAll();
+    void InvalidateAllViewportAssociated() { bDestroyViewportAssociated = true; }
 
-    void CreateTexture(StringID textureId, const TextureInfo& texInfo);
+    void CreateTexture(StringID textureId, const TextureInfo& texInfo, bool bIsViewportScaled = false);
 
     void AliasTexture(StringID aliasId, StringID existingId);
 
-    void CreateBuffer(StringID bufferId, VkDeviceSize size, bool bCanAlias = true);
+    void CreateBuffer(StringID bufferId, VkDeviceSize size, bool bIsViewportScaled = false, bool bCanAlias = true);
 
     void ImportTexture(StringID textureId, VkImage image, VkImageView view, const TextureInfo& info, VkImageUsageFlags usage, VkImageLayout initialLayout, VkPipelineStageFlags2 initialStage,
                        VkImageLayout finalLayout);
@@ -165,6 +165,8 @@ private:
     std::array<TransientUploadArena, Core::FRAME_BUFFER_COUNT> uploadArenas{};
     std::array<TransientReadback, Core::FRAME_BUFFER_COUNT> meshletCountReadbacks{};
 
+    bool bDestroyViewportAssociated{false};
+
     bool bDebugLogging = false;
     uint32_t debugNameCounter{0};
 
@@ -175,7 +177,7 @@ private:
 
     BufferResource* GetBuffer(StringID bufferId);
 
-      BufferResource* GetOrCreateBuffer(StringID textureId);
+    BufferResource* GetOrCreateBuffer(StringID textureId);
 
     void DestroyPhysicalResource(PhysicalResource& resource);
 
