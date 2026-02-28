@@ -12,6 +12,8 @@
 #include <glm/detail/type_quat.hpp>
 #include <json/nlohmann/json_fwd.hpp>
 
+#include "Jolt/Physics/Body/MotionQuality.h"
+
 
 namespace Game::Component
 {
@@ -50,6 +52,9 @@ struct PhysicsShapeDesc {
 struct PhysicsBodyDesc {
     PhysicsMotionType motionType{PhysicsMotionType::Static};
     float mass{1.0f};
+    JPH::EMotionQuality motionQuality{JPH::EMotionQuality::Discrete};
+
+
     std::vector<PhysicsShapeDesc> shapes;
 
     static void Serialize(const PhysicsBodyDesc& comp, nlohmann::json& json);
@@ -62,7 +67,10 @@ struct DynamicPhysicsBodyComponent
     glm::quat previousRotation{};
 };
 
-class DirtyPhysicsTransformComponent
+struct TeleportPhysicsTransformTag
+{};
+
+struct DirtyKinematicPhysicsTransformTag
 {};
 
 struct DrawPhysicsDebugTag

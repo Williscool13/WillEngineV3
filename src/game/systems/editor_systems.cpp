@@ -4,6 +4,8 @@
 
 #include "editor_systems.h"
 
+#include <algorithm>
+
 #include <tracy/Tracy.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
@@ -28,9 +30,27 @@ void EditorUpdate(Core::EngineContext* ctx, Engine::GameState* state)
     }
     if (!ctx->bImguiMouseCaptured && !ctx->bImguiKeyboardCaptured) {
         if (state->inputFrame->GetMouse(MouseButton::LMB).pressed) {
+            const bool ctrlHeld = state->inputFrame->GetKey(Key::LCTRL).down
+                                  || state->inputFrame->GetKey(Key::RCTRL).down;
+
             auto it = state->stableIdToEntityMap.find(StringID{ctx->lastKnownStableIdUnderCursor});
             if (it != state->stableIdToEntityMap.end()) {
-                state->selectedEntity = it->second;
+                entt::entity clicked = it->second;
+                if (ctrlHeld) {
+                    auto pos = std::find(state->selectedEntities.begin(), state->selectedEntities.end(), clicked);
+                    if (pos != state->selectedEntities.end()) {
+                        state->selectedEntities.erase(pos);
+                    }
+                    else {
+                        state->selectedEntities.push_back(clicked);
+                    }
+                }
+                else {
+                    state->selectedEntities = {clicked};
+                }
+            }
+            else if (!ctrlHeld) {
+                state->selectedEntities.clear();
             }
         }
     }
@@ -150,26 +170,34 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
         ImGui::SameLine();
         if (ImGui::RadioButton("Scale", state->currentGizmoOperation == ImGuizmo::SCALE)) state->currentGizmoOperation = ImGuizmo::SCALE;
 
-        ImGui::BeginDisabled(state->currentGizmoOperation == ImGuizmo::SCALE);
-        if (ImGui::RadioButton("Local", state->currentGizmoMode == ImGuizmo::LOCAL))state->currentGizmoMode = ImGuizmo::LOCAL;
+        const bool multiSelected = state->selectedEntities.size() > 1;
+
+        // Only world space for multi-select.
+        ImGui::BeginDisabled(state->currentGizmoOperation == ImGuizmo::SCALE || multiSelected);
+        if (ImGui::RadioButton("Local", state->currentGizmoMode == ImGuizmo::LOCAL)) state->currentGizmoMode = ImGuizmo::LOCAL;
         ImGui::SameLine();
-        if (ImGui::RadioButton("World", state->currentGizmoMode == ImGuizmo::WORLD))state->currentGizmoMode = ImGuizmo::WORLD;
+        if (ImGui::RadioButton("World", state->currentGizmoMode == ImGuizmo::WORLD)) state->currentGizmoMode = ImGuizmo::WORLD;
         ImGui::EndDisabled();
+
+        if (multiSelected) {
+            state->currentGizmoMode = ImGuizmo::WORLD;
+        }
 
         ImGui::Separator();
 
-        if (state->selectedEntity != entt::null) {
-            ImGui::Text("Entity: %u", static_cast<uint32_t>(state->selectedEntity));
+        glm::mat4 view = frameBuffer->mainViewFamily.mainView.currentViewData.view;
+        glm::mat4 proj = frameBuffer->mainViewFamily.mainView.currentViewData.proj;
 
-            auto* stableIdComponent = state->registry.try_get<Component::StableIdComponent>(state->selectedEntity);
-            if (stableIdComponent) {
+        if (state->selectedEntities.size() == 1) {
+            entt::entity entity = state->selectedEntities[0];
+            ImGui::Text("Entity: %u", static_cast<uint32_t>(entity));
+
+            if (auto* stableIdComponent = state->registry.try_get<Component::StableIdComponent>(entity)) {
                 ImGui::Separator();
-
                 ImGui::Text("StableID: %llu", stableIdComponent->id.id);
             }
 
-            auto* transform = state->registry.try_get<Component::TransformComponent>(state->selectedEntity);
-            if (transform) {
+            if (auto* transform = state->registry.try_get<Component::TransformComponent>(entity)) {
                 ImGui::Separator();
 
                 bool dirty = false;
@@ -181,10 +209,7 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
                 }
                 dirty |= ImGui::DragFloat3("Scale", &transform->scale.x, 0.01f);
 
-                // Gizmo
                 glm::mat4 model = GetMatrix(*transform);
-                glm::mat4 view = frameBuffer->mainViewFamily.mainView.currentViewData.view;
-                glm::mat4 proj = frameBuffer->mainViewFamily.mainView.currentViewData.proj;
                 ImGuizmo::Manipulate(
                     glm::value_ptr(view),
                     glm::value_ptr(proj),
@@ -194,9 +219,7 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
                 );
 
                 if (ImGuizmo::IsUsing()) {
-                    float translation[3];
-                    float rotation[3];
-                    float scale[3];
+                    float translation[3], rotation[3], scale[3];
                     ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(model), translation, rotation, scale);
                     transform->translation = glm::vec3(translation[0], translation[1], translation[2]);
                     transform->rotation = glm::quat(glm::radians(glm::vec3(rotation[0], rotation[1], rotation[2])));
@@ -205,10 +228,77 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
                 }
 
                 if (dirty) {
-                    state->registry.emplace_or_replace<Component::DirtyRenderTransformTag>(state->selectedEntity);
-                    if (state->registry.any_of<Component::DynamicPhysicsBodyComponent>(state->selectedEntity)) {
-                        state->registry.emplace_or_replace<Component::DirtyPhysicsTransformComponent>(state->selectedEntity);
+                    state->registry.emplace_or_replace<Component::DirtyRenderTransformTag>(entity);
+                    state->registry.emplace_or_replace<Component::TeleportPhysicsTransformTag>(entity);
+                }
+            }
+        }
+        else if (multiSelected) {
+            ImGui::Text("%zu entities selected", state->selectedEntities.size());
+            ImGui::Text("Ctrl+Click to add/remove entities");
+
+            // Compute centroid of all selected entities that have a transform
+            glm::vec3 averagePos{0.0f};
+            int transformCount = 0;
+            for (auto entity : state->selectedEntities) {
+                if (auto* tf = state->registry.try_get<Component::TransformComponent>(entity)) {
+                    averagePos += tf->translation;
+                    ++transformCount;
+                }
+            }
+
+            if (transformCount > 0) {
+                averagePos /= static_cast<float>(transformCount);
+                ImGui::Text("Centroid: (%.2f, %.2f, %.2f)", averagePos.x, averagePos.y, averagePos.z);
+
+                static glm::quat s_prevRotation{1.0f, 0.0f, 0.0f, 0.0f};
+                static glm::vec3 s_prevScale{1.0f, 1.0f, 1.0f};
+
+                glm::mat4 gizmoMatrix = glm::translate(glm::mat4(1.0f), averagePos);
+                ImGuizmo::Manipulate(
+                    glm::value_ptr(view),
+                    glm::value_ptr(proj),
+                    state->currentGizmoOperation,
+                    ImGuizmo::WORLD,
+                    glm::value_ptr(gizmoMatrix)
+                );
+
+                if (ImGuizmo::IsUsing()) {
+                    float t[3], r[3], s[3];
+                    ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(gizmoMatrix), t, r, s);
+
+                    const glm::vec3 newT = glm::vec3(t[0], t[1], t[2]);
+                    const glm::quat newR = glm::quat(glm::radians(glm::vec3(r[0], r[1], r[2])));
+                    const glm::vec3 newS = glm::vec3(s[0], s[1], s[2]);
+
+                    const glm::vec3 deltaTranslation = newT - averagePos;
+                    const glm::quat deltaRotation    = newR * glm::conjugate(s_prevRotation);
+                    const glm::vec3 deltaScale       = newS / s_prevScale;
+
+                    for (auto entity : state->selectedEntities) {
+                        auto* transform = state->registry.try_get<Component::TransformComponent>(entity);
+                        if (!transform) continue;
+
+                        transform->translation += deltaTranslation;
+
+                        glm::vec3 rel = transform->translation - averagePos;
+                        transform->translation = averagePos + deltaRotation * rel;
+                        transform->rotation    = deltaRotation * transform->rotation;
+
+                        rel = transform->translation - averagePos;
+                        transform->translation = averagePos + rel * deltaScale;
+                        transform->scale      *= deltaScale;
+
+                        state->registry.emplace_or_replace<Component::DirtyRenderTransformTag>(entity);
+                        state->registry.emplace_or_replace<Component::TeleportPhysicsTransformTag>(entity);
                     }
+
+                    s_prevRotation = newR;
+                    s_prevScale    = newS;
+                } else {
+                    // Reset each frame we're not dragging so the next drag starts from identity
+                    s_prevRotation = {1.0f, 0.0f, 0.0f, 0.0f};
+                    s_prevScale    = {1.0f, 1.0f, 1.0f};
                 }
             }
         }

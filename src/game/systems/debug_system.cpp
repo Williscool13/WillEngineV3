@@ -143,6 +143,7 @@ entt::entity CreateBox(Core::EngineContext* ctx, Engine::GameState* state, glm::
         Component::PhysicsBodyDesc bodyDesc{};
         bodyDesc.motionType = Component::PhysicsMotionType::Dynamic;
         bodyDesc.mass = 12.5f;
+        bodyDesc.motionQuality = JPH::EMotionQuality::LinearCast;
         bodyDesc.shapes.push_back(shapeDesc);
 
         bodyId = CreateBodyFromDesc(bodyInterface, bodyDesc, JPH::RVec3(position.x, position.y, position.z), JPH::Quat::sIdentity());

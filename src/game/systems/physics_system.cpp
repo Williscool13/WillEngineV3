@@ -25,26 +25,40 @@ void UpdatePhysics(Core::EngineContext* ctx, Engine::GameState* state)
     while (state->physicsDeltaTimeAccumulator >= Physics::PHYSICS_TIMESTEP) {
         auto& bodyInterface = physics->GetBodyInterface();
 
-        auto view = state->registry.view<Component::DynamicPhysicsBodyComponent, Component::PhysicsBodyComponent, Component::TransformComponent>();
+        // Teleport
+        auto teleportView = state->registry.view<Component::PhysicsBodyComponent, Component::TransformComponent, Component::TeleportPhysicsTransformTag>();
+        for (auto [entity, physicsBody, transform] : teleportView.each()) {
+            bodyInterface.SetPositionAndRotation(
+                physicsBody.bodyID,
+                JPH::RVec3(transform.translation.x, transform.translation.y, transform.translation.z),
+                JPH::Quat(transform.rotation.x, transform.rotation.y, transform.rotation.z, transform.rotation.w),
+                JPH::EActivation::Activate
+            );
+        }
+        state->registry.clear<Component::TeleportPhysicsTransformTag>();
 
-        for (auto [entity, dynamic, physicsBody, transform] : view.each()) {
-            if (state->registry.all_of<Component::DirtyPhysicsTransformComponent>(entity)) {
-                bodyInterface.SetPositionAndRotation(
-                    physicsBody.bodyID,
-                    JPH::RVec3(transform.translation.x, transform.translation.y, transform.translation.z),
-                    JPH::Quat(transform.rotation.x, transform.rotation.y, transform.rotation.z, transform.rotation.w),
-                    JPH::EActivation::Activate
-                );
-            }
+        // Kinematic
+        auto kinematicView = state->registry.view<Component::PhysicsBodyComponent, Component::TransformComponent, Component::DirtyKinematicPhysicsTransformTag>();
+        for (auto [entity, physicsBody, transform] : kinematicView.each()) {
+            bodyInterface.MoveKinematic(
+                physicsBody.bodyID,
+                JPH::RVec3(transform.translation.x, transform.translation.y, transform.translation.z),
+                JPH::Quat(transform.rotation.x, transform.rotation.y, transform.rotation.z, transform.rotation.w),
+                Physics::PHYSICS_TIMESTEP
+            );
+        }
+        state->registry.clear<Component::DirtyKinematicPhysicsTransformTag>();
 
+        auto saveView = state->registry.view<Component::DynamicPhysicsBodyComponent, Component::TransformComponent>();
+        for (auto [entity, dynamic, transform] : saveView.each()) {
             dynamic.previousPosition = transform.translation;
             dynamic.previousRotation = transform.rotation;
         }
 
-        state->registry.clear<Component::DirtyPhysicsTransformComponent>();
         physics->Step(Physics::PHYSICS_TIMESTEP);
 
-        for (auto [entity, dynamic, physicsBody, transform] : view.each()) {
+        auto dynamicView = state->registry.view<Component::DynamicPhysicsBodyComponent, Component::PhysicsBodyComponent, Component::TransformComponent>();
+        for (auto [entity, dynamic, physicsBody, transform] : dynamicView.each()) {
             JPH::RVec3 pos = bodyInterface.GetPosition(physicsBody.bodyID);
             JPH::Quat rot = bodyInterface.GetRotation(physicsBody.bodyID);
 
@@ -126,6 +140,7 @@ JPH::BodyID CreateBodyFromDesc(JPH::BodyInterface& bodyInterface, const Componen
         settings.mMassPropertiesOverride.mMass = desc.mass;
         settings.mOverrideMassProperties = JPH::EOverrideMassProperties::CalculateInertia;
     }
+    settings.mMotionQuality = desc.motionQuality;
 
     return bodyInterface.CreateAndAddBody(settings,
                                           desc.motionType == Component::PhysicsMotionType::Static ? JPH::EActivation::DontActivate : JPH::EActivation::Activate);

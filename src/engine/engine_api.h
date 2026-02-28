@@ -5,6 +5,8 @@
 #ifndef WILL_ENGINE_ENGINE_API_H
 #define WILL_ENGINE_ENGINE_API_H
 
+#include <vector>
+
 #include <entt/entt.hpp>
 #include <Jolt/Jolt.h>
 #include <Jolt/Physics/Body/BodyID.h>
@@ -67,7 +69,7 @@ struct GameState
     ImGuizmo::MODE currentGizmoMode{ImGuizmo::WORLD};
 
     StringID currentSceneId{"main_scene"_sid};
-    entt::entity selectedEntity{entt::null};
+    std::vector<entt::entity> selectedEntities{};
     std::unordered_map<StringID, entt::entity> stableIdToEntityMap;
 
 };

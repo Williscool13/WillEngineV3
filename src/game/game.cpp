@@ -60,7 +60,7 @@ GAME_API void GameLoad(Core::EngineContext* ctx, Engine::GameState* state)
     SPDLOG_TRACE("  FloorComponent: {}", entt::type_id<Game::Component::FloorComponent>().hash());
     SPDLOG_TRACE("  DynamicPhysicsBodyComponent: {}", entt::type_id<Game::Component::DynamicPhysicsBodyComponent>().hash());
     SPDLOG_TRACE("  PhysicsBodyComponent: {}", entt::type_id<Game::Component::PhysicsBodyComponent>().hash());
-    SPDLOG_TRACE("  DirtyPhysicsTransformComponent: {}", entt::type_id<Game::Component::DirtyPhysicsTransformComponent>().hash());
+    SPDLOG_TRACE("  DirtyPhysicsTransformComponent: {}", entt::type_id<Game::Component::TeleportPhysicsTransformTag>().hash());
     SPDLOG_TRACE("  RenderableComponent: {}", entt::type_id<Game::Component::StaticMeshComponent>().hash());
     SPDLOG_TRACE("  TransformComponent: {}", entt::type_id<Game::Component::TransformComponent>().hash());
 
