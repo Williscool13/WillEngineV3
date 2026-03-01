@@ -29,8 +29,8 @@ struct LoadSceneResult {
     bool bHasPendingModelLoads;
     std::vector<Engine::WillModelHandle> loadedModelHandles;
 };
-Scene SaveScene(Core::ComponentRegistry& componentRegistry, entt::registry& registry, StringID sceneId);
-LoadSceneResult LoadScene(Core::EngineContext* ctx, Engine::GameState* gameState, Core::ComponentRegistry& componentRegistry, entt::registry& registry, Scene& scene);
+Scene SaveScene(ComponentRegistry& componentRegistry, entt::registry& registry, StringID sceneId);
+LoadSceneResult LoadScene(Core::EngineContext* ctx, Engine::GameState* gameState, ComponentRegistry& componentRegistry, entt::registry& registry, Scene& scene);
 } // Game
 
 #endif //WILL_ENGINE_SCENE_SYSTEM_H

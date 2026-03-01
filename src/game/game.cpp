@@ -41,6 +41,7 @@ GAME_API void GameStartup(Core::EngineContext* ctx, Engine::GameState* state)
     cameraTransform.rotation = glm::quatLookAt(glm::normalize(glm::vec3(0.0f, 0.0f, 0.0f) - glm::vec3(0.0f, 3.0f, 5.0f)), WORLD_UP);
     state->registry.emplace<Game::Component::MainViewportComponent>(camera);
     state->registry.ctx().emplace<Engine::GameState*>(state);
+    state->registry.ctx().emplace<Core::EngineContext*>(ctx);
 }
 
 GAME_API void GameLoad(Core::EngineContext* ctx, Engine::GameState* state)
@@ -112,7 +113,7 @@ GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::GameState* state)
     }
 
 #if WILL_EDITOR
-    Game::System::EditorUpdate(ctx, state);
+    Game::EditorUpdate(ctx, state);
 #endif
 
     const auto frameEnd = std::chrono::high_resolution_clock::now();
@@ -151,7 +152,7 @@ GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* stat
 
 
 #if WILL_EDITOR
-    Game::System::DrawEditorInterface(ctx, state, frameBuffer);
+    Game::DrawEditorInterface(ctx, state, frameBuffer);
 #endif
 
 #ifndef PACKAGED_BUILD

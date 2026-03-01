@@ -73,8 +73,8 @@ void UpdateRenderTransforms(Core::EngineContext* ctx, Engine::GameState* state, 
 {
     ZoneScoped;
 
-    auto dirtyView = state->registry.view<Component::TransformComponent, Component::RenderTransformComponent,
-        Component::DirtyRenderTransformTag>(entt::exclude<Component::DynamicPhysicsBodyComponent>);
+    auto dirtyView = state->registry.view<Component::TransformComponent, Component::RenderTransformComponent, Component::DirtyRenderTransformTag>(
+        entt::exclude<Component::DynamicPhysicsBodyComponent>);
     constexpr size_t TASK_THRESHOLD = 1000;
     if (dirtyView.size_hint() < TASK_THRESHOLD) {
         ZoneScopedN("Serial");
@@ -125,9 +125,9 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
         ZoneScopedN("MainSceneStaticMeshes");
         auto view = state->registry.view<Component::StaticMeshComponent, Component::RenderTransformComponent>(
             entt::exclude<
-            Component::PortalPlaneComponent,
-            Component::CubemapVisualizeTag,
-            Component::StaticMeshLoadingTag
+                Component::PortalPlaneComponent,
+                Component::CubemapVisualizeTag,
+                Component::StaticMeshLoadingTag
             >);
 
         for (auto [entity, renderable, renderTransform] : view.each()) {

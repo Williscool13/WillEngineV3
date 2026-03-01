@@ -21,17 +21,18 @@ struct FrameBuffer;
 struct EngineContext;
 }
 
-namespace Game::System
+namespace Game
 {
 void EditorUpdate(Core::EngineContext* ctx, Engine::GameState* state);
 void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer);
 
 template<typename T>
-void DrawComponentEditor(T& component, entt::registry& registry, entt::entity entity) {}
+void DrawComponentEditor(T& component, const Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity) {}
 
-template<> void DrawComponentEditor<Component::TransformComponent>(Component::TransformComponent& component, entt::registry& registry, entt::entity entity);
-template<> void DrawComponentEditor<Component::StaticMeshComponent>(Component::StaticMeshComponent& component, entt::registry& registry, entt::entity entity);
-template<> void DrawComponentEditor<Component::StableIdComponent>(Component::StableIdComponent& component, entt::registry& registry, entt::entity entity);
+template<> void DrawComponentEditor<Component::TransformComponent>(Component::TransformComponent& component, const Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity);
+template<> void DrawComponentEditor<Component::StaticMeshComponent>(Component::StaticMeshComponent& component, const Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity);
+template<> void DrawComponentEditor<Component::StableIdComponent>(Component::StableIdComponent& component, const Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity);
+template<> void DrawComponentEditor<Component::NameComponent>(Component::NameComponent& component, const Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity);
 }
 
 #endif //WILL_ENGINE_EDITOR_SYSTEMS_H

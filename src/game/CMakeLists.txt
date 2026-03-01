@@ -42,6 +42,8 @@ set(GAME_SOURCES
         systems/component_editor.h
         components/component_registry.cpp
         components/component_registry.h
+        components/component_initialization.cpp
+        components/component_initialization.h
 )
 
 set(GAME_INCLUDE_DIRS

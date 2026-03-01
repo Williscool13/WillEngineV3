@@ -21,7 +21,7 @@
 
 namespace Game::System
 {
-Scene SaveScene(Core::ComponentRegistry& componentRegistry, entt::registry& registry, StringID sceneId)
+Scene SaveScene(ComponentRegistry& componentRegistry, entt::registry& registry, StringID sceneId)
 {
     Scene outScene{};
     nlohmann::json& scene = outScene.content;
@@ -36,7 +36,7 @@ Scene SaveScene(Core::ComponentRegistry& componentRegistry, entt::registry& regi
 
         nlohmann::json entityJson;
 
-        for (Core::ComponentEntry& entry : componentRegistry.registry) {
+        for (ComponentEntry& entry : componentRegistry.registry) {
             if (entry.has(registry, entity)) {
                 nlohmann::json compJson;
                 entry.serialize(registry, entity, compJson);
@@ -50,7 +50,7 @@ Scene SaveScene(Core::ComponentRegistry& componentRegistry, entt::registry& regi
     return outScene;
 }
 
-LoadSceneResult LoadScene(Core::EngineContext* ctx, Engine::GameState* gameState, Core::ComponentRegistry& componentRegistry, entt::registry& registry, Scene& scene)
+LoadSceneResult LoadScene(Core::EngineContext* ctx, Engine::GameState* gameState, ComponentRegistry& componentRegistry, entt::registry& registry, Scene& scene)
 {
     StringID sceneId = StringID(scene.content["scene_id"].get<uint64_t>());
 
@@ -62,7 +62,7 @@ LoadSceneResult LoadScene(Core::EngineContext* ctx, Engine::GameState* gameState
         auto entity = registry.create();
         for (auto& [key, compJson] : entityJson.items()) {
             uint64_t typeId = std::stoull(key);
-            for (Core::ComponentEntry& entry : componentRegistry.registry) {
+            for (ComponentEntry& entry : componentRegistry.registry) {
                 if (entry.typeId.id == typeId) {
                     entry.deserialize(registry, entity, compJson);
                     break;
@@ -78,13 +78,6 @@ LoadSceneResult LoadScene(Core::EngineContext* ctx, Engine::GameState* gameState
     std::unordered_map<StringID, Engine::WillModelHandle> modelIdToHandle;
 
     for (auto entity : sceneEntities) {
-        // Transform Cache
-        if (auto* transform = registry.try_get<Component::TransformComponent>(entity)) {
-            glm::mat4 m = Component::GetMatrix(*transform);
-            registry.emplace_or_replace<Component::RenderTransformComponent>(entity, m, m);
-            registry.emplace_or_replace<Component::DirtyRenderTransformTag>(entity);
-        }
-
         // Static Mesh Loading
         if (auto* mesh = registry.try_get<Component::StaticMeshComponent>(entity)) {
             if (!modelIdToHandle.contains(mesh->modelId)) {
@@ -93,6 +86,11 @@ LoadSceneResult LoadScene(Core::EngineContext* ctx, Engine::GameState* gameState
             mesh->modelHandle = modelIdToHandle[mesh->modelId];
             registry.emplace_or_replace<Component::StaticMeshLoadingTag>(entity);
             bHasPendingModelLoads = true;
+
+            auto* transform = registry.try_get<Component::TransformComponent>(entity);
+            glm::mat4 m = transform ? Component::GetMatrix(*transform) : glm::mat4(1.0f);
+            registry.emplace_or_replace<Component::RenderTransformComponent>(entity, m, m);
+            registry.emplace_or_replace<Component::DirtyRenderTransformTag>(entity);
         }
 
         // Physics Loading
@@ -106,7 +104,8 @@ LoadSceneResult LoadScene(Core::EngineContext* ctx, Engine::GameState* gameState
                 if (bodyDesc->motionType == Component::PhysicsMotionType::Dynamic) {
                     registry.emplace<Component::DynamicPhysicsBodyComponent>(entity, transform->translation, transform->rotation);
                 }
-            } else {
+            }
+            else {
                 LOG_WARN(Game, "PhysicsBodyDesc on entity without TransformComponent, skipping");
             }
         }

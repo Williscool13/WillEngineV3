@@ -9,13 +9,15 @@
 #include <tracy/Tracy.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
+#include "debug_system.h"
 #include "imgui.h"
 #include "core/include/engine_context.h"
+#include "core/input/input_frame.h"
 #include "engine/engine_api.h"
 #include "game/fwd_components.h"
 #include "game/components/common_components.h"
 
-namespace Game::System
+namespace Game
 {
 void EditorUpdate(Core::EngineContext* ctx, Engine::GameState* state)
 {
@@ -185,53 +187,13 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
 
         ImGui::Separator();
 
-        glm::mat4 view = frameBuffer->mainViewFamily.mainView.currentViewData.view;
-        glm::mat4 proj = frameBuffer->mainViewFamily.mainView.currentViewData.proj;
-
         if (state->selectedEntities.size() == 1) {
             entt::entity entity = state->selectedEntities[0];
             ImGui::Text("Entity: %u", static_cast<uint32_t>(entity));
 
-            for (Core::ComponentEntry& entry : state->componentRegistry.registry) {
+            for (ComponentEntry& entry : state->componentRegistry.registry) {
                 if (entry.has(state->registry, entity)) {
-                    entry.drawEditor(state->registry, entity);
-                }
-            }
-            if (auto* stableIdComponent = state->registry.try_get<Component::StableIdComponent>(entity)) {}
-
-            if (auto* transform = state->registry.try_get<Component::TransformComponent>(entity)) {
-                ImGui::Separator();
-
-                bool dirty = false;
-                dirty |= ImGui::DragFloat3("Translation", &transform->translation.x, 0.1f);
-                glm::vec3 eulerDegrees = glm::degrees(glm::eulerAngles(transform->rotation));
-                if (ImGui::DragFloat3("Rotation", &eulerDegrees.x, 0.5f)) {
-                    transform->rotation = glm::quat(glm::radians(eulerDegrees));
-                    dirty = true;
-                }
-                dirty |= ImGui::DragFloat3("Scale", &transform->scale.x, 0.01f);
-
-                glm::mat4 model = GetMatrix(*transform);
-                ImGuizmo::Manipulate(
-                    glm::value_ptr(view),
-                    glm::value_ptr(proj),
-                    state->currentGizmoOperation,
-                    state->currentGizmoMode,
-                    glm::value_ptr(model)
-                );
-
-                if (ImGuizmo::IsUsing()) {
-                    float translation[3], rotation[3], scale[3];
-                    ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(model), translation, rotation, scale);
-                    transform->translation = glm::vec3(translation[0], translation[1], translation[2]);
-                    transform->rotation = glm::quat(glm::radians(glm::vec3(rotation[0], rotation[1], rotation[2])));
-                    transform->scale = glm::vec3(scale[0], scale[1], scale[2]);
-                    dirty = true;
-                }
-
-                if (dirty) {
-                    state->registry.emplace_or_replace<Component::DirtyRenderTransformTag>(entity);
-                    state->registry.emplace_or_replace<Component::TeleportPhysicsTransformTag>(entity);
+                    entry.drawEditor(frameBuffer->mainViewFamily, state->registry, entity);
                 }
             }
         }
@@ -256,6 +218,8 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
                 static glm::quat s_prevRotation{1.0f, 0.0f, 0.0f, 0.0f};
                 static glm::vec3 s_prevScale{1.0f, 1.0f, 1.0f};
 
+                glm::mat4 view = frameBuffer->mainViewFamily.mainView.currentViewData.view;
+                glm::mat4 proj = frameBuffer->mainViewFamily.mainView.currentViewData.proj;
                 glm::mat4 gizmoMatrix = glm::translate(glm::mat4(1.0f), averagePos);
                 ImGuizmo::Manipulate(
                     glm::value_ptr(view),
@@ -536,16 +500,99 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
 }
 
 template<>
-void DrawComponentEditor<Component::TransformComponent>(Component::TransformComponent& component, entt::registry& registry, entt::entity entity)
-{}
+void DrawComponentEditor<Component::TransformComponent>(Component::TransformComponent& component, const Core::ViewFamily& viewFamily, entt::registry& registry,
+                                                        entt::entity entity)
+{
+    ImGui::Separator();
+
+    bool dirty = false;
+    dirty |= ImGui::DragFloat3("Translation", &component.translation.x, 0.1f);
+    glm::vec3 eulerDegrees = glm::degrees(glm::eulerAngles(component.rotation));
+    if (ImGui::DragFloat3("Rotation", &eulerDegrees.x, 0.5f)) {
+        component.rotation = glm::quat(glm::radians(eulerDegrees));
+        dirty = true;
+    }
+    dirty |= ImGui::DragFloat3("Scale", &component.scale.x, 0.01f);
+
+    Engine::GameState* state = registry.ctx().get<Engine::GameState*>();
+    if (!state) { return; }
+    glm::mat4 view = viewFamily.mainView.currentViewData.view;
+    glm::mat4 proj = viewFamily.mainView.currentViewData.proj;
+    glm::mat4 model = Component::GetMatrix(component);
+    ImGuizmo::Manipulate(
+        glm::value_ptr(view),
+        glm::value_ptr(proj),
+        state->currentGizmoOperation,
+        state->currentGizmoMode,
+        glm::value_ptr(model)
+    );
+
+    if (ImGuizmo::IsUsing()) {
+        float translation[3], rotation[3], scale[3];
+        ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(model), translation, rotation, scale);
+        component.translation = glm::vec3(translation[0], translation[1], translation[2]);
+        component.rotation = glm::quat(glm::radians(glm::vec3(rotation[0], rotation[1], rotation[2])));
+        component.scale = glm::vec3(scale[0], scale[1], scale[2]);
+        dirty = true;
+    }
+
+    if (dirty) {
+        registry.emplace_or_replace<Component::DirtyRenderTransformTag>(entity);
+        registry.emplace_or_replace<Component::TeleportPhysicsTransformTag>(entity);
+    }
+}
 
 template<>
-void DrawComponentEditor<Component::StaticMeshComponent>(Component::StaticMeshComponent& component, entt::registry& registry, entt::entity entity) {}
+void DrawComponentEditor<Component::StaticMeshComponent>(Component::StaticMeshComponent& component, const Core::ViewFamily& viewFamily, entt::registry& registry,
+                                                         entt::entity entity)
+{
+    ImGui::Separator();
+
+    bool visible = component.modelFlags.x != 0.0f;
+    bool shadowCaster = component.modelFlags.y != 0.0f;
+    if (ImGui::Checkbox("Visible", &visible))
+        component.modelFlags.x = visible ? 1.0f : 0.0f;
+    ImGui::SameLine();
+    if (ImGui::Checkbox("Shadow Caster", &shadowCaster))
+        component.modelFlags.y = shadowCaster ? 1.0f : 0.0f;
+
+    ImGui::Text("Model ID: %s", component.modelId.ToString());
+    ImGui::Text("Mesh Index: %d", component.meshIndex);
+    ImGui::Text("Primitive Count: %u", component.primitiveCount);
+
+    if (component.primitiveCount > 0 && ImGui::TreeNode("Primitives")) {
+        for (uint8_t i = 0; i < component.primitiveCount; ++i) {
+            ImGui::PushID(i);
+            if (ImGui::TreeNode("", "Primitive %u", i)) {
+                const auto& prim = component.primitives[i];
+                ImGui::Text("Primitive Index: %u", prim.primitiveIndex);
+                ImGui::Text("Material ID: %u", prim.materialID);
+                ImGui::TreePop();
+            }
+            ImGui::PopID();
+        }
+        ImGui::TreeNode("Primitives");
+        ImGui::TreePop();
+    }
+}
 
 template<>
-void DrawComponentEditor<Component::StableIdComponent>(Component::StableIdComponent& component, entt::registry& registry, entt::entity entity)
+void DrawComponentEditor<Component::StableIdComponent>(Component::StableIdComponent& component, const Core::ViewFamily& viewFamily, entt::registry& registry,
+                                                       entt::entity entity)
 {
     ImGui::Separator();
     ImGui::Text("StableID: %llu", component.id.id);
+}
+
+template<>
+void DrawComponentEditor<Component::NameComponent>(Component::NameComponent& component, const Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity)
+{
+    ImGui::Separator();
+    char buf[256];
+    strncpy_s(buf, component.name.c_str(), sizeof(buf) - 1);
+    buf[sizeof(buf) - 1] = '\0';
+    if (ImGui::InputText("Name", buf, sizeof(buf))) {
+        component.name = buf;
+    }
 }
 }

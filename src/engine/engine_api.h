@@ -14,9 +14,7 @@
 #include <ImGuizmo.h>
 
 #include "game/components/component_registry.h"
-#include "game/systems/debug_system.h"
 #include "core/include/render_interface.h"
-#include "render/model/will_model_asset.h"
 
 namespace Core
 {
@@ -32,7 +30,7 @@ struct GameState
     const Core::TimeFrame* timeFrame{nullptr};
 
     entt::registry registry;
-    Core::ComponentRegistry componentRegistry{};
+    Game::ComponentRegistry componentRegistry{};
 
     std::mt19937_64 rng{std::random_device{}()};
 
