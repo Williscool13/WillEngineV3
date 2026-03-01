@@ -16,6 +16,7 @@
 #include "engine/engine_api.h"
 #include "game/fwd_components.h"
 #include "game/components/common_components.h"
+#include "game/components/scene_components.h"
 
 namespace Game
 {
@@ -165,6 +166,66 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
         static_cast<float>(ctx->windowContext.viewportHeight)
     );
 
+    if (ImGui::Begin("Scene Browser")) {
+        // Scene selection
+        ImGui::SeparatorText("Scene");
+
+        static const StringID knownScenes[] = {
+            "main_scene"_sid,
+            "scene2"_sid,
+            "scene3"_sid,
+        };
+
+        ImGui::BeginDisabled(true);
+        ImGui::Text("Unique Scene ID: %llu", state->currentSceneId.id);
+        ImGui::EndDisabled();
+        char sceneName[128];
+        strncpy_s(sceneName, state->currentSceneName.c_str(), sizeof(sceneName) - 1);
+        sceneName[sizeof(sceneName) - 1] = '\0';
+        if (ImGui::InputText("Name", sceneName, sizeof(sceneName))) {
+            state->currentSceneName = sceneName;
+        }
+
+        ImGui::NewLine();
+
+        ImGui::SeparatorText("Entities");
+        static char search[64] = {};
+        ImGui::SetNextItemWidth(-1);
+        ImGui::InputText("##search", search, sizeof(search));
+
+        auto view = state->registry.view<Component::SceneComponent>();
+        for (auto entity : view) {
+            auto& scene = view.get<Component::SceneComponent>(entity);
+            if (scene.sceneId != state->currentSceneId) continue;
+
+            const char* label = "Unnamed";
+            if (auto* name = state->registry.try_get<Component::NameComponent>(entity))
+                label = name->name.c_str();
+
+            if (search[0] && !strstr(label, search)) continue;
+
+            auto* stable = state->registry.try_get<Component::StableIdComponent>(entity);
+            uint64_t stableId = stable ? stable->id.id : static_cast<uint64_t>(entity);
+
+            char uniqueLabel[256];
+            snprintf(uniqueLabel, sizeof(uniqueLabel), "%s##%llu", label, stableId);
+
+            bool selected = std::find(state->selectedEntities.begin(), state->selectedEntities.end(), entity) != state->selectedEntities.end();
+            if (ImGui::Selectable(uniqueLabel, selected)) {
+                if (ImGui::GetIO().KeyCtrl) {
+                    auto pos = std::find(state->selectedEntities.begin(), state->selectedEntities.end(), entity);
+                    if (pos != state->selectedEntities.end())
+                        state->selectedEntities.erase(pos);
+                    else
+                        state->selectedEntities.push_back(entity);
+                } else {
+                    state->selectedEntities = {entity};
+                }
+            }
+        }
+    }
+    ImGui::End();
+
     if (ImGui::Begin("Details")) {
         if (ImGui::RadioButton("Translate", state->currentGizmoOperation == ImGuizmo::TRANSLATE)) state->currentGizmoOperation = ImGuizmo::TRANSLATE;
         ImGui::SameLine();
@@ -195,6 +256,31 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
                 if (entry.has(state->registry, entity)) {
                     entry.drawEditor(frameBuffer->mainViewFamily, state->registry, entity);
                 }
+            }
+
+            ImGui::Spacing();
+            ImGui::SetNextWindowSize(ImVec2(250, 0));
+            if (ImGui::Button("Add Component"))
+                ImGui::OpenPopup("add_component_popup");
+
+            if (ImGui::BeginPopup("add_component_popup")) {
+                static char compSearch[64] = {};
+                ImGui::SetNextItemWidth(-1);
+                ImGui::InputText("##compsearch", compSearch, sizeof(compSearch));
+
+                for (auto& entry : state->componentRegistry.registry) {
+                    if (compSearch[0] && !strstr(entry.name, compSearch)) continue;
+                    if (entry.has(state->registry, entity)) {
+                        ImGui::BeginDisabled(true);
+                        ImGui::MenuItem(entry.name);
+                        ImGui::EndDisabled();
+                    } else {
+                        if (ImGui::MenuItem(entry.name)) {
+                            entry.onAddComponent(state->registry, entity);
+                        }
+                    }
+                }
+                ImGui::EndPopup();
             }
         }
         else if (multiSelected) {

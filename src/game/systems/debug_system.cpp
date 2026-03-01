@@ -751,7 +751,7 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
     }
 
     if (state->inputFrame->GetKey(Key::F10).pressed) {
-        Scene s = SaveScene(state->componentRegistry, state->registry, state->currentSceneId);
+        Scene s = SaveScene(state->componentRegistry, state->registry, state->currentSceneId, state->currentSceneName);
         std::filesystem::path outputPath = Platform::GetAssetPath() / "scenes/main_scene.wscene";
         std::filesystem::create_directories(outputPath.parent_path());
         std::ofstream file(outputPath);
@@ -766,7 +766,7 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         Scene s;
         s.content = nlohmann::json::parse(file);
 
-        LoadScene(state->componentRegistry, state->registry, s);
+        state->currentSceneName = LoadScene(state->componentRegistry, state->registry, s);
 
         LOG_INFO(Game, "Loaded scene from 'scenes/main_scene.wscene'");
     }

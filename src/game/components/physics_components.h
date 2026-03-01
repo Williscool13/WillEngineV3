@@ -53,7 +53,7 @@ struct PhysicsBodyDesc {
     PhysicsMotionType motionType{PhysicsMotionType::Static};
     float mass{1.0f};
     JPH::EMotionQuality motionQuality{JPH::EMotionQuality::Discrete};
-
+    bool active{true};
 
     std::vector<PhysicsShapeDesc> shapes;
 

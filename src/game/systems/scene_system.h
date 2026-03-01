@@ -23,8 +23,9 @@ class AssetManager;
 
 namespace Game::System
 {
-Scene SaveScene(ComponentRegistry& componentRegistry, entt::registry& registry, StringID sceneId);
-void LoadScene(ComponentRegistry& componentRegistry, entt::registry& registry, Scene& scene);
+Scene SaveScene(ComponentRegistry& componentRegistry, entt::registry& registry, StringID sceneId, std::string_view sceneName);
+
+std::string LoadScene(ComponentRegistry& componentRegistry, entt::registry& registry, Scene& scene);
 } // Game
 
 #endif //WILL_ENGINE_SCENE_SYSTEM_H

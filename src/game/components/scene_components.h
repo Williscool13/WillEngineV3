@@ -8,6 +8,9 @@
 
 namespace Game::Component
 {
+/**
+ * Basically all entities should have this
+ */
 struct SceneComponent
 {
     StringID sceneId;

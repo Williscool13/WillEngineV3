@@ -67,6 +67,7 @@ struct GameState
     ImGuizmo::MODE currentGizmoMode{ImGuizmo::WORLD};
 
     StringID currentSceneId{"main_scene"_sid};
+    std::string currentSceneName{"Main Scene"};
     std::vector<entt::entity> selectedEntities{};
     std::unordered_map<StringID, entt::entity> stableIdToEntityMap;
 

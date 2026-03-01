@@ -13,12 +13,13 @@
 
 namespace Game::System
 {
-Scene SaveScene(ComponentRegistry& componentRegistry, entt::registry& registry, StringID sceneId)
+Scene SaveScene(ComponentRegistry& componentRegistry, entt::registry& registry, StringID sceneId, std::string_view sceneName)
 {
     Scene outScene{};
     nlohmann::json& scene = outScene.content;
 
     scene["scene_id"] = sceneId.id;
+    scene["scene_name"] = sceneName;
     scene["entities"] = nlohmann::json::array();
 
     auto view = registry.view<Component::SceneComponent>();
@@ -42,7 +43,7 @@ Scene SaveScene(ComponentRegistry& componentRegistry, entt::registry& registry, 
     return outScene;
 }
 
-void LoadScene(ComponentRegistry& componentRegistry, entt::registry& registry, Scene& scene)
+std::string LoadScene(ComponentRegistry& componentRegistry, entt::registry& registry, Scene& scene)
 {
     StringID sceneId = StringID(scene.content["scene_id"].get<uint64_t>());
 
@@ -73,5 +74,7 @@ void LoadScene(ComponentRegistry& componentRegistry, entt::registry& registry, S
             }
         }
     }
+
+    return scene.content["scene_name"];
 }
 } // Game
