@@ -28,4 +28,5 @@ inline glm::mat4 GetMatrix(const TransformComponent& transform)
 }
 }
 
+
 #endif //WILL_ENGINE_CORE_COMPONENTS_H

@@ -33,8 +33,8 @@ enum class PhysicsShapeType : uint8_t {
 
 enum class PhysicsMotionType : uint8_t {
     Static,
-    Dynamic,
     Kinematic,
+    Dynamic,
 };
 
 struct PhysicsShapeDesc {

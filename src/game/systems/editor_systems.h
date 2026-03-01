@@ -8,6 +8,7 @@
 
 #include "game/components/common_components.h"
 #include "game/components/core_components.h"
+#include "game/components/physics_components.h"
 #include "game/components/render_components.h"
 
 namespace Engine
@@ -33,6 +34,7 @@ template<> void DrawComponentEditor<Component::TransformComponent>(Component::Tr
 template<> void DrawComponentEditor<Component::StaticMeshComponent>(Component::StaticMeshComponent& component, const Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity);
 template<> void DrawComponentEditor<Component::StableIdComponent>(Component::StableIdComponent& component, const Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity);
 template<> void DrawComponentEditor<Component::NameComponent>(Component::NameComponent& component, const Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity);
+template<> void DrawComponentEditor<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc& component, const Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity);
 }
 
 #endif //WILL_ENGINE_EDITOR_SYSTEMS_H

@@ -766,9 +766,7 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         Scene s;
         s.content = nlohmann::json::parse(file);
 
-        LoadSceneResult result = LoadScene(ctx, state, state->componentRegistry, state->registry, s);
-        state->sceneModelHandles[result.sceneId] = std::move(result.loadedModelHandles);
-        state->bPendingModelResolve |= result.bHasPendingModelLoads;
+        LoadScene(state->componentRegistry, state->registry, s);
 
         LOG_INFO(Game, "Loaded scene from 'scenes/main_scene.wscene'");
     }

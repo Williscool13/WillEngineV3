@@ -17,7 +17,7 @@ namespace Game
 using SerializeFn = void(*)(const entt::registry&, entt::entity, nlohmann::json&);
 using DeserializeFn = void(*)(entt::registry&, entt::entity, const nlohmann::json&);
 using HasComponentFn = bool(*)(const entt::registry&, entt::entity);
-using AddComponentFn = void(*)(entt::registry&, entt::entity);
+using OnAddComponentFn = void(*)(entt::registry&, entt::entity);
 using DrawEditorFn = void(*)(const Core::ViewFamily&, entt::registry&, entt::entity);
 
 struct ComponentEntry
@@ -26,7 +26,7 @@ struct ComponentEntry
     const char* name;
     SerializeFn serialize;
     DeserializeFn deserialize;
-    AddComponentFn addComponent;
+    OnAddComponentFn onAddComponent;
     DrawEditorFn drawEditor;
     HasComponentFn has;
 };

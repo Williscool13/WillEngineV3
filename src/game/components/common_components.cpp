@@ -6,9 +6,10 @@
 
 #include <json/nlohmann/json.hpp>
 
-#include "camera_components.h"
-#include "physics_components.h"
-#include "render_components.h"
+#include "imgui.h"
+#include "engine/engine_api.h"
+#include "game/systems/editor_systems.h"
+#include "game/components/component_initialization.h"
 
 namespace Game::Component
 {
@@ -31,3 +32,34 @@ void NameComponent::Deserialize(NameComponent& comp, const nlohmann::json& json)
     comp.name = json["name"].get<std::string>();
 }
 } // Game::Components
+
+namespace Game
+{
+template<>
+void DrawComponentEditor<Component::StableIdComponent>(Component::StableIdComponent& component, const Core::ViewFamily& viewFamily, entt::registry& registry,
+                                                       entt::entity entity)
+{
+    ImGui::Separator();
+    ImGui::Text("StableID: %llu", component.id.id);
+}
+
+template<>
+void OnComponentAdded<Component::StableIdComponent>(Component::StableIdComponent& component, entt::registry& registry, entt::entity entity)
+{
+    auto* state = registry.ctx().get<Engine::GameState*>();
+    assert(!state->stableIdToEntityMap.contains(component.id) && "Duplicate stable ID detected");
+    state->stableIdToEntityMap[component.id] = entity;
+}
+
+template<>
+void DrawComponentEditor<Component::NameComponent>(Component::NameComponent& component, const Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity)
+{
+    ImGui::Separator();
+    char buf[256];
+    strncpy_s(buf, component.name.c_str(), sizeof(buf) - 1);
+    buf[sizeof(buf) - 1] = '\0';
+    if (ImGui::InputText("Name", buf, sizeof(buf))) {
+        component.name = buf;
+    }
+}
+}

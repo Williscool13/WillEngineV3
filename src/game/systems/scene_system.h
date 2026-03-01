@@ -6,10 +6,9 @@
 #define WILL_ENGINE_SCENE_SYSTEM_H
 #include <entt/entt.hpp>
 
-#include "../scene/scene.h"
+#include "game/scene/scene.h"
 #include "game/components/component_registry.h"
 #include "core/string_id.h"
-#include "render/model/will_model_asset.h"
 
 namespace Core
 {
@@ -24,13 +23,8 @@ class AssetManager;
 
 namespace Game::System
 {
-struct LoadSceneResult {
-    StringID sceneId;
-    bool bHasPendingModelLoads;
-    std::vector<Engine::WillModelHandle> loadedModelHandles;
-};
 Scene SaveScene(ComponentRegistry& componentRegistry, entt::registry& registry, StringID sceneId);
-LoadSceneResult LoadScene(Core::EngineContext* ctx, Engine::GameState* gameState, ComponentRegistry& componentRegistry, entt::registry& registry, Scene& scene);
+void LoadScene(ComponentRegistry& componentRegistry, entt::registry& registry, Scene& scene);
 } // Game
 
 #endif //WILL_ENGINE_SCENE_SYSTEM_H

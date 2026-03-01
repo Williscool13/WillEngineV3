@@ -4,7 +4,17 @@
 
 #include "core_components.h"
 
+#include <glm/gtc/type_ptr.hpp>
 #include <json/nlohmann/json.hpp>
+#include <imgui.h>
+#include <ImGuizmo.h>
+
+#include "component_registry.h"
+#include "physics_components.h"
+
+#include "core/include/render_interface.h"
+#include "engine/engine_api.h"
+#include "game/systems/editor_systems.h"
 
 namespace Game::Component
 {
@@ -28,3 +38,49 @@ void TransformComponent::Deserialize(TransformComponent& comp, const nlohmann::j
     comp.scale = glm::vec3(s[0].get<float>(), s[1].get<float>(), s[2].get<float>());
 }
 } // Game::Component
+
+namespace Game
+{
+template<>
+void DrawComponentEditor<Component::TransformComponent>(Component::TransformComponent& component, const Core::ViewFamily& viewFamily, entt::registry& registry,
+                                                        entt::entity entity)
+{
+    ImGui::Separator();
+
+    bool dirty = false;
+    dirty |= ImGui::DragFloat3("Translation", &component.translation.x, 0.1f);
+    glm::vec3 eulerDegrees = glm::degrees(glm::eulerAngles(component.rotation));
+    if (ImGui::DragFloat3("Rotation", &eulerDegrees.x, 0.5f)) {
+        component.rotation = glm::quat(glm::radians(eulerDegrees));
+        dirty = true;
+    }
+    dirty |= ImGui::DragFloat3("Scale", &component.scale.x, 0.01f);
+
+    Engine::GameState* state = registry.ctx().get<Engine::GameState*>();
+    if (!state) { return; }
+    glm::mat4 view = viewFamily.mainView.currentViewData.view;
+    glm::mat4 proj = viewFamily.mainView.currentViewData.proj;
+    glm::mat4 model = Component::GetMatrix(component);
+    ImGuizmo::Manipulate(
+        glm::value_ptr(view),
+        glm::value_ptr(proj),
+        state->currentGizmoOperation,
+        state->currentGizmoMode,
+        glm::value_ptr(model)
+    );
+
+    if (ImGuizmo::IsUsing()) {
+        float translation[3], rotation[3], scale[3];
+        ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(model), translation, rotation, scale);
+        component.translation = glm::vec3(translation[0], translation[1], translation[2]);
+        component.rotation = glm::quat(glm::radians(glm::vec3(rotation[0], rotation[1], rotation[2])));
+        component.scale = glm::vec3(scale[0], scale[1], scale[2]);
+        dirty = true;
+    }
+
+    if (dirty) {
+        registry.emplace_or_replace<Component::DirtyRenderTransformTag>(entity);
+        registry.emplace_or_replace<Component::TeleportPhysicsTransformTag>(entity);
+    }
+}
+}

@@ -51,7 +51,7 @@ struct GameState
     Core::PostProcessConfiguration postProcess{};
 
     // Asset Loading
-    std::unordered_map<StringID, std::vector<WillModelHandle>> sceneModelHandles;
+    std::unordered_map<StringID, std::unordered_map<StringID, WillModelHandle>> sceneModelHandles;
     bool bPendingModelResolve{false};
 
     // Loaded models debug

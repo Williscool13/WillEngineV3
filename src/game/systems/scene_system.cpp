@@ -6,18 +6,10 @@
 
 #include <json/nlohmann/json.hpp>
 
-#include "physics_system.h"
-#include "core/include/engine_context.h"
 #include "engine/asset_manager.h"
 #include "engine/engine_api.h"
 #include "engine/logging/engine_log.h"
-#include "game/components/common_components.h"
-#include "game/components/core_components.h"
-#include "game/components/physics_components.h"
-#include "game/components/render_components.h"
 #include "game/components/scene_components.h"
-#include "physics/physics_system.h"
-#include "platform/paths.h"
 
 namespace Game::System
 {
@@ -50,7 +42,7 @@ Scene SaveScene(ComponentRegistry& componentRegistry, entt::registry& registry, 
     return outScene;
 }
 
-LoadSceneResult LoadScene(Core::EngineContext* ctx, Engine::GameState* gameState, ComponentRegistry& componentRegistry, entt::registry& registry, Scene& scene)
+void LoadScene(ComponentRegistry& componentRegistry, entt::registry& registry, Scene& scene)
 {
     StringID sceneId = StringID(scene.content["scene_id"].get<uint64_t>());
 
@@ -73,57 +65,13 @@ LoadSceneResult LoadScene(Core::EngineContext* ctx, Engine::GameState* gameState
         sceneEntities.push_back(entity);
     }
 
-    // Add transient components
-    bool bHasPendingModelLoads = false;
-    std::unordered_map<StringID, Engine::WillModelHandle> modelIdToHandle;
-
+    // Post-Deserialize Effects
     for (auto entity : sceneEntities) {
-        // Static Mesh Loading
-        if (auto* mesh = registry.try_get<Component::StaticMeshComponent>(entity)) {
-            if (!modelIdToHandle.contains(mesh->modelId)) {
-                modelIdToHandle[mesh->modelId] = ctx->assetManager->LoadModel(mesh->modelId);
+        for (auto& entry : componentRegistry.registry) {
+            if (entry.has(registry, entity)) {
+                entry.onAddComponent(registry, entity);
             }
-            mesh->modelHandle = modelIdToHandle[mesh->modelId];
-            registry.emplace_or_replace<Component::StaticMeshLoadingTag>(entity);
-            bHasPendingModelLoads = true;
-
-            auto* transform = registry.try_get<Component::TransformComponent>(entity);
-            glm::mat4 m = transform ? Component::GetMatrix(*transform) : glm::mat4(1.0f);
-            registry.emplace_or_replace<Component::RenderTransformComponent>(entity, m, m);
-            registry.emplace_or_replace<Component::DirtyRenderTransformTag>(entity);
-        }
-
-        // Physics Loading
-        if (auto* bodyDesc = registry.try_get<Component::PhysicsBodyDesc>(entity)) {
-            if (auto* transform = registry.try_get<Component::TransformComponent>(entity)) {
-                JPH::BodyInterface& bodyInterface = ctx->physicsSystem->GetBodyInterface();
-                JPH::RVec3 pos(transform->translation.x, transform->translation.y, transform->translation.z);
-                JPH::Quat rot(transform->rotation.x, transform->rotation.y, transform->rotation.z, transform->rotation.w);
-                auto bodyId = CreateBodyFromDesc(bodyInterface, *bodyDesc, pos, rot);
-                registry.emplace<Component::PhysicsBodyComponent>(entity, bodyId);
-                if (bodyDesc->motionType == Component::PhysicsMotionType::Dynamic) {
-                    registry.emplace<Component::DynamicPhysicsBodyComponent>(entity, transform->translation, transform->rotation);
-                }
-            }
-            else {
-                LOG_WARN(Game, "PhysicsBodyDesc on entity without TransformComponent, skipping");
-            }
-        }
-
-        if (auto* stable = registry.try_get<Component::StableIdComponent>(entity)) {
-            assert(!gameState->stableIdToEntityMap.contains(stable->id) && "Duplicate stable ID detected");
-            gameState->stableIdToEntityMap[stable->id] = entity;
         }
     }
-
-    LoadSceneResult loadSceneResult{};
-    loadSceneResult.sceneId = sceneId;
-    loadSceneResult.bHasPendingModelLoads = bHasPendingModelLoads;
-    loadSceneResult.loadedModelHandles.reserve(modelIdToHandle.size());
-    for (auto& val : modelIdToHandle | std::views::values) {
-        loadSceneResult.loadedModelHandles.push_back(val);
-    }
-
-    return loadSceneResult;
 }
 } // Game
