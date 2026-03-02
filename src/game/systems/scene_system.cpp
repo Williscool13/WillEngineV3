@@ -11,7 +11,7 @@
 #include "engine/logging/engine_log.h"
 #include "game/components/scene_components.h"
 
-namespace Game::System
+namespace Game
 {
 Scene SaveScene(ComponentRegistry& componentRegistry, entt::registry& registry, StringID sceneId, std::string_view sceneName)
 {
@@ -76,5 +76,18 @@ std::string LoadScene(ComponentRegistry& componentRegistry, entt::registry& regi
     }
 
     return scene.content["scene_name"];
+}
+
+entt::entity CreateSceneEntity(Engine::GameState* state)
+{
+    entt::entity newEntity = state->registry.create();
+    state->registry.emplace<Component::TransformComponent>(newEntity);
+    state->registry.emplace<Component::SceneComponent>(newEntity, state->currentSceneId);
+    Component::StableIdComponent stableIdComponent = state->registry.emplace<Component::StableIdComponent>(newEntity, Component::StableIdComponent::Generate(state->rng));
+    state->stableIdToEntityMap[stableIdComponent.id] = newEntity;
+    static int32_t runningNameTally = 0;
+    auto newName = fmt::format("New Entity {}", runningNameTally++);
+    state->registry.emplace<Component::NameComponent>(newEntity, newName);
+    return newEntity;
 }
 } // Game

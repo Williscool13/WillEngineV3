@@ -44,13 +44,59 @@ void DrawComponentEditor<Component::StaticMeshComponent>(Component::StaticMeshCo
 
     bool visible = component.modelFlags.x != 0.0f;
     bool shadowCaster = component.modelFlags.y != 0.0f;
-    if (ImGui::Checkbox("Visible", &visible))
+    if (ImGui::Checkbox("Visible", &visible)) {
         component.modelFlags.x = visible ? 1.0f : 0.0f;
+    }
     ImGui::SameLine();
-    if (ImGui::Checkbox("Shadow Caster", &shadowCaster))
+    if (ImGui::Checkbox("Shadow Caster", &shadowCaster)) {
         component.modelFlags.y = shadowCaster ? 1.0f : 0.0f;
+    }
+
+    auto* ctx = registry.ctx().get<Core::EngineContext*>();
+    auto* state = registry.ctx().get<Engine::GameState*>();
+
+    // todo unload model (to change target)
+    if (component.modelId == StringID::Invalid) {
+        if (ImGui::BeginCombo("Select Model", "")) {
+            const std::unordered_map<StringID, std::filesystem::path>& modelReg = ctx->assetManager->GetModelRegistry();
+            for (const auto& key : modelReg | std::views::keys) {
+                if (ImGui::Selectable(key.ToString(), false)) {
+                    component.modelId = key;
+                    component.modelHandle = ctx->assetManager->LoadModel(component.modelId);
+                }
+            }
+            ImGui::EndCombo();
+        }
+        return;
+    }
 
     ImGui::Text("Model ID: %s", component.modelId.ToString());
+
+    assert(component.modelHandle.IsValid() && "modelId specified but model handle is still invalid");
+    Render::WillModel* model = ctx->assetManager->GetModel(component.modelHandle);
+    if (component.meshIndex == -1) {
+        if (ImGui::BeginCombo("Select Mesh", "")) {
+            for (int32_t i = 0; i < model->modelData.meshes.size(); i++) {
+                auto name = model->modelData.meshes[i].name;
+                if (name.empty()) {
+                    name = fmt::format("Mesh {}", i);
+                }
+                if (ImGui::Selectable(name.c_str(), false)) {
+                    component.meshIndex = i;
+                    registry.emplace_or_replace<Component::StaticMeshLoadingTag>(entity);
+                    auto* transform = registry.try_get<Component::TransformComponent>(entity);
+                    glm::mat4 m = transform ? Component::GetMatrix(*transform) : glm::mat4(1.0f);
+                    registry.emplace_or_replace<Component::RenderTransformComponent>(entity, m, m);
+                    registry.emplace_or_replace<Component::DirtyRenderTransformTag>(entity);
+                    state->bPendingModelResolve |= true;
+                }
+            }
+            ImGui::EndCombo();
+        }
+        return;
+    }
+
+    // todo: remove mesh
     ImGui::Text("Mesh Index: %d", component.meshIndex);
     ImGui::Text("Primitive Count: %u", component.primitiveCount);
 
@@ -65,25 +111,20 @@ void DrawComponentEditor<Component::StaticMeshComponent>(Component::StaticMeshCo
             }
             ImGui::PopID();
         }
-        ImGui::TreeNode("Primitives");
         ImGui::TreePop();
     }
 }
 
-
 template<>
 void OnComponentAdded<Component::StaticMeshComponent>(Component::StaticMeshComponent& component, entt::registry& registry, entt::entity entity)
 {
-    auto* scene = registry.try_get<Component::SceneComponent>(entity);
-    StringID sceneId = scene ? scene->sceneId : GLOBAL_SCENE_ID;
+    if (component.meshIndex == -1) {
+        return;
+    }
 
     auto* ctx = registry.ctx().get<Core::EngineContext*>();
     auto* state = registry.ctx().get<Engine::GameState*>();
-    std::unordered_map<StringID, Engine::WillModelHandle>& sceneModelHandles = state->sceneModelHandles[sceneId];
-    if (!sceneModelHandles.contains(component.modelId)) {
-        sceneModelHandles[component.modelId] = ctx->assetManager->LoadModel(component.modelId);
-    }
-    component.modelHandle = sceneModelHandles[component.modelId];
+    component.modelHandle = ctx->assetManager->LoadModel(component.modelId);
     registry.emplace_or_replace<Component::StaticMeshLoadingTag>(entity);
     state->bPendingModelResolve |= true;
 

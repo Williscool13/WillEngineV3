@@ -16,7 +16,6 @@ struct Scene
 };
 
 static inline StringID GLOBAL_SCENE_ID = SID("global_scene");
-
 } // Game
 
 #endif //WILL_ENGINE_SCENE_H

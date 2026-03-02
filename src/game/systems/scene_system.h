@@ -21,11 +21,13 @@ struct GameState;
 class AssetManager;
 }
 
-namespace Game::System
+namespace Game
 {
 Scene SaveScene(ComponentRegistry& componentRegistry, entt::registry& registry, StringID sceneId, std::string_view sceneName);
 
 std::string LoadScene(ComponentRegistry& componentRegistry, entt::registry& registry, Scene& scene);
+
+entt::entity CreateSceneEntity(Engine::GameState* state);
 } // Game
 
 #endif //WILL_ENGINE_SCENE_SYSTEM_H

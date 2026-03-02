@@ -108,7 +108,6 @@ AssetManager::~AssetManager()
 
 WillModelHandle AssetManager::LoadModel(StringID modelId)
 {
-
     if (!modelRegistry.contains(modelId)) {
         LOG_ERROR(Asset, "Model '{}' not found in registry", modelId.ToString());
         return WillModelHandle::INVALID;

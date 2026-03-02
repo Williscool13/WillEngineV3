@@ -30,7 +30,6 @@ struct WillModel;
 
 namespace Engine
 {
-
 struct ResolveLoadResult
 {
     int32_t modelLoadedCount{0};
@@ -59,6 +58,8 @@ public: // Models
     Render::WillModel* GetModel(WillModelHandle handle);
 
     void UnloadModel(WillModelHandle handle);
+
+    const std::unordered_map<StringID, std::filesystem::path>& GetModelRegistry() { return modelRegistry; }
 
 public: // Textures
     TextureHandle LoadTexture(StringID textureId);

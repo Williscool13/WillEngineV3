@@ -11,6 +11,7 @@
 
 #include "debug_system.h"
 #include "imgui.h"
+#include "scene_system.h"
 #include "core/include/engine_context.h"
 #include "core/input/input_frame.h"
 #include "engine/engine_api.h"
@@ -189,6 +190,10 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
         ImGui::NewLine();
 
         ImGui::SeparatorText("Entities");
+        if (ImGui::Button("Create Entity")) {
+            auto newEntity = CreateSceneEntity(state);
+            state->selectedEntities = {newEntity};
+        }
         static char search[64] = {};
         ImGui::SetNextItemWidth(-1);
         ImGui::InputText("##search", search, sizeof(search));
