@@ -16,7 +16,11 @@
 
 namespace Game::Component
 {
-struct DirtyRenderTransformTag{};
+struct DirtyRenderTransformComponent
+{
+    // 2 to update Prev next frame.
+    int32_t counter{2};
+};
 
 struct RenderTransformComponent
 {

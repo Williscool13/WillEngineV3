@@ -346,7 +346,7 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
                         transform->translation = averagePos + rel * deltaScale;
                         transform->scale *= deltaScale;
 
-                        state->registry.emplace_or_replace<Component::DirtyRenderTransformTag>(entity);
+                        state->registry.emplace_or_replace<Component::DirtyRenderTransformComponent>(entity);
                         state->registry.emplace_or_replace<Component::TeleportPhysicsTransformTag>(entity);
                     }
 

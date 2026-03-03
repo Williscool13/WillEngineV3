@@ -87,7 +87,7 @@ void DrawComponentEditor<Component::StaticMeshComponent>(Component::StaticMeshCo
                     auto* transform = registry.try_get<Component::TransformComponent>(entity);
                     glm::mat4 m = transform ? Component::GetMatrix(*transform) : glm::mat4(1.0f);
                     registry.emplace_or_replace<Component::RenderTransformComponent>(entity, m, m);
-                    registry.emplace_or_replace<Component::DirtyRenderTransformTag>(entity);
+                    registry.emplace_or_replace<Component::DirtyRenderTransformComponent>(entity);
                     state->bPendingModelResolve |= true;
                 }
             }
@@ -131,6 +131,6 @@ void OnComponentAdded<Component::StaticMeshComponent>(Component::StaticMeshCompo
     auto* transform = registry.try_get<Component::TransformComponent>(entity);
     glm::mat4 m = transform ? Component::GetMatrix(*transform) : glm::mat4(1.0f);
     registry.emplace_or_replace<Component::RenderTransformComponent>(entity, m, m);
-    registry.emplace_or_replace<Component::DirtyRenderTransformTag>(entity);
+    registry.emplace_or_replace<Component::DirtyRenderTransformComponent>(entity);
 }
 }

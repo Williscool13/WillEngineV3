@@ -75,7 +75,7 @@ entt::entity CreateTextureVisualizer(Core::EngineContext* ctx, Engine::GameState
     Component::TransformComponent transformComponent = state->registry.emplace<Component::TransformComponent>(entity, transform);
     glm::mat4 initialMatrix = Component::GetMatrix(transformComponent);
     state->registry.emplace<Component::RenderTransformComponent>(entity, initialMatrix, initialMatrix);
-    state->registry.emplace<Component::DirtyRenderTransformTag>(entity);
+    state->registry.emplace<Component::DirtyRenderTransformComponent>(entity);
 
     return entity;
 }
@@ -127,7 +127,7 @@ entt::entity CreateBox(Core::EngineContext* ctx, Engine::GameState* state, glm::
     Component::TransformComponent transformComponent = state->registry.emplace<Component::TransformComponent>(boxEntity, position, glm::quat(1.0f, 0.0f, 0.0f, 0.0f), glm::vec3(1.0f));
     glm::mat4 initialMatrix = GetMatrix(transformComponent);
     state->registry.emplace<Component::RenderTransformComponent>(boxEntity, initialMatrix, initialMatrix);
-    state->registry.emplace<Component::DirtyRenderTransformTag>(boxEntity);
+    state->registry.emplace<Component::DirtyRenderTransformComponent>(boxEntity);
     state->registry.emplace<Component::SceneComponent>(boxEntity, state->currentSceneId);
     Component::StableIdComponent stableIdComponent = state->registry.emplace<Component::StableIdComponent>(boxEntity, Component::StableIdComponent::Generate(state->rng));
     state->stableIdToEntityMap[stableIdComponent.id] = boxEntity;
@@ -214,7 +214,7 @@ entt::entity CreateStaticBox(Core::EngineContext* ctx, Engine::GameState* state,
     Component::TransformComponent transformComponent = state->registry.emplace<Component::TransformComponent>(entity, transform);
     glm::mat4 initialMatrix = Component::GetMatrix(transformComponent);
     state->registry.emplace<Component::RenderTransformComponent>(entity, initialMatrix, initialMatrix);
-    state->registry.emplace<Component::DirtyRenderTransformTag>(entity);
+    state->registry.emplace<Component::DirtyRenderTransformComponent>(entity);
     state->registry.emplace<Component::PhysicsBodyDesc>(entity, bodyDesc);
     state->registry.emplace<Component::PhysicsBodyComponent>(entity, bodyID);
     state->registry.emplace<Component::SceneComponent>(entity, state->currentSceneId);
@@ -293,7 +293,7 @@ entt::entity CreateGlowingBox(Core::EngineContext* ctx, Engine::GameState* state
     Component::TransformComponent& transformComponent = state->registry.emplace<Component::TransformComponent>(boxEntity, position, glm::quat(1.0f, 0.0f, 0.0f, 0.0f), glm::vec3(1.0f));
     glm::mat4 initialMatrix = GetMatrix(transformComponent);
     state->registry.emplace<Component::RenderTransformComponent>(boxEntity, initialMatrix, initialMatrix);
-    state->registry.emplace<Component::DirtyRenderTransformTag>(boxEntity);
+    state->registry.emplace<Component::DirtyRenderTransformComponent>(boxEntity);
 
     if (bUsePhysics) {
         state->registry.emplace<Component::PhysicsBodyComponent>(boxEntity, bodyId);
@@ -320,7 +320,7 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
                 transform.translation.y = 10.0f + offset;
             }
             ++index;
-            state->registry.emplace_or_replace<Component::DirtyRenderTransformTag>(entity);
+            state->registry.emplace_or_replace<Component::DirtyRenderTransformComponent>(entity);
         }
     }
 
@@ -474,7 +474,7 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
             auto& transformComponent = state->registry.emplace<Component::TransformComponent>(dragonEntity, pos, meshRotation, meshScale * 1.5f);
             glm::mat4 initialMatrix = GetMatrix(transformComponent);
             state->registry.emplace<Component::RenderTransformComponent>(dragonEntity, initialMatrix, initialMatrix);
-            state->registry.emplace<Component::DirtyRenderTransformTag>(dragonEntity);
+            state->registry.emplace<Component::DirtyRenderTransformComponent>(dragonEntity);
         }
 
         SPDLOG_INFO("[DebugSystem] Spawned dragons around arena");
@@ -551,7 +551,7 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
             auto& transformComponent = state->registry.emplace<Component::TransformComponent>(sponzaEntity, worldTranslations[i], worldRotations[i], worldScales[i]);
             glm::mat4 initialMatrix = GetMatrix(transformComponent);
             state->registry.emplace<Component::RenderTransformComponent>(sponzaEntity, initialMatrix, initialMatrix);
-            state->registry.emplace<Component::DirtyRenderTransformTag>(sponzaEntity);
+            state->registry.emplace<Component::DirtyRenderTransformComponent>(sponzaEntity);
             state->registry.emplace<Component::SceneComponent>(sponzaEntity, state->currentSceneId);
             Component::StableIdComponent stableIdComponent = state->registry.emplace<Component::StableIdComponent>(sponzaEntity, Component::StableIdComponent::Generate(state->rng));
             state->stableIdToEntityMap[stableIdComponent.id] = sponzaEntity;
@@ -664,7 +664,7 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
                 sphereEntity, spherePos, glm::quat(1.0f, 0.0f, 0.0f, 0.0f), glm::vec3(2.0f));
             glm::mat4 initialMatrix = GetMatrix(transform);
             state->registry.emplace<Component::RenderTransformComponent>(sphereEntity, initialMatrix, initialMatrix);
-            state->registry.emplace<Component::DirtyRenderTransformTag>(sphereEntity);
+            state->registry.emplace<Component::DirtyRenderTransformComponent>(sphereEntity);
             state->registry.emplace<Component::CubemapVisualizeTag>(sphereEntity, cubemap->bindlessHandle);
 
             SPDLOG_INFO("[DebugSystem] Created cubemap visualization sphere");
@@ -744,7 +744,7 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
             Component::TransformComponent& transformComponent = state->registry.emplace<Component::TransformComponent>(dragonEntity, pos, meshRotation, meshScale * 1.5f);
             glm::mat4 initialMatrix = GetMatrix(transformComponent);
             state->registry.emplace<Component::RenderTransformComponent>(dragonEntity, initialMatrix, initialMatrix);
-            state->registry.emplace<Component::DirtyRenderTransformTag>(dragonEntity);
+            state->registry.emplace<Component::DirtyRenderTransformComponent>(dragonEntity);
         }
 
         SPDLOG_INFO("[DebugSystem] Created PCSS test scene: 100x100 floor + vertical dragon column");

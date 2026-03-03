@@ -79,7 +79,7 @@ void DrawComponentEditor<Component::TransformComponent>(Component::TransformComp
     }
 
     if (dirty) {
-        registry.emplace_or_replace<Component::DirtyRenderTransformTag>(entity);
+        registry.emplace_or_replace<Component::DirtyRenderTransformComponent>(entity);
         registry.emplace_or_replace<Component::TeleportPhysicsTransformTag>(entity);
     }
 }

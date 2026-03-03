@@ -73,14 +73,15 @@ void UpdateRenderTransforms(Core::EngineContext* ctx, Engine::GameState* state, 
 {
     ZoneScoped;
 
-    auto dirtyView = state->registry.view<Component::TransformComponent, Component::RenderTransformComponent, Component::DirtyRenderTransformTag>(
+    auto dirtyView = state->registry.view<Component::TransformComponent, Component::RenderTransformComponent, Component::DirtyRenderTransformComponent>(
         entt::exclude<Component::DynamicPhysicsBodyComponent>);
     constexpr size_t TASK_THRESHOLD = 1000;
     if (dirtyView.size_hint() < TASK_THRESHOLD) {
         ZoneScopedN("Serial");
-        for (auto [entity, transform, renderTransform] : dirtyView.each()) {
+        for (auto [entity, transform, renderTransform, dirtyRender] : dirtyView.each()) {
             renderTransform.previousMatrix = renderTransform.modelMatrix;
             renderTransform.modelMatrix = GetMatrix(transform);
+            dirtyRender.counter--;
         }
     }
     else {
@@ -95,13 +96,21 @@ void UpdateRenderTransforms(Core::EngineContext* ctx, Engine::GameState* state, 
 
                 renderTransform.previousMatrix = renderTransform.modelMatrix;
                 renderTransform.modelMatrix = GetMatrix(transform);
+
+                auto& dirty = dirtyView.get<Component::DirtyRenderTransformComponent>(entity);
+                dirty.counter--;
             }
         });
         ctx->scheduler->AddTaskSetToPipe(&task);
         ctx->scheduler->WaitforTask(&task);
     }
 
-    state->registry.clear<Component::DirtyRenderTransformTag>();
+    auto cleanupView = state->registry.view<Component::DirtyRenderTransformComponent>();
+    for (auto [entity, dirty] : cleanupView.each()) {
+        if (dirty.counter <= 0) {
+            state->registry.remove<Component::DirtyRenderTransformComponent>(entity);
+        }
+    }
 
     // Physics always dirty until I find a better way
     auto physicsView = state->registry.view<Component::DynamicPhysicsBodyComponent, Component::TransformComponent, Component::RenderTransformComponent>();
