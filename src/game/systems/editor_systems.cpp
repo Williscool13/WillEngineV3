@@ -198,6 +198,7 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
         ImGui::SetNextItemWidth(-1);
         ImGui::InputText("##search", search, sizeof(search));
 
+        entt::entity entityToDelete = entt::null;
         auto view = state->registry.view<Component::SceneComponent>();
         for (auto entity : view) {
             auto& scene = view.get<Component::SceneComponent>(entity);
@@ -216,6 +217,15 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
             snprintf(uniqueLabel, sizeof(uniqueLabel), "%s##%llu", label, stableId);
 
             bool selected = std::find(state->selectedEntities.begin(), state->selectedEntities.end(), entity) != state->selectedEntities.end();
+
+            if (ImGui::SmallButton(fmt::format("X##{}", stableId).c_str())) {
+                entityToDelete = entity;
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton(fmt::format("C##{}", stableId).c_str())) {
+                // todo: copy entity
+            }
+            ImGui::SameLine();
             if (ImGui::Selectable(uniqueLabel, selected)) {
                 if (ImGui::GetIO().KeyCtrl) {
                     auto pos = std::find(state->selectedEntities.begin(), state->selectedEntities.end(), entity);
@@ -223,10 +233,25 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
                         state->selectedEntities.erase(pos);
                     else
                         state->selectedEntities.push_back(entity);
-                } else {
+                }
+                else {
                     state->selectedEntities = {entity};
                 }
             }
+        }
+        if (entityToDelete != entt::null) {
+            Component::StableIdComponent stableId = state->registry.get<Component::StableIdComponent>(entityToDelete);
+            for (auto& entry : state->componentRegistry.registry) {
+                if (entry.has(state->registry, entityToDelete)) {
+                    entry.onRemoveComponent(state->registry, entityToDelete);
+                }
+            }
+            auto it = std::ranges::find(state->selectedEntities, entityToDelete);
+            if (it != state->selectedEntities.end()) {
+                state->selectedEntities.erase(it);
+            }
+            state->stableIdToEntityMap.erase(stableId.id);
+            state->registry.destroy(entityToDelete);
         }
     }
     ImGui::End();
@@ -258,13 +283,20 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
         ImGui::Separator();
 
         if (state->selectedEntities.size() == 1) {
+            ComponentEntry* entryToRemove = nullptr;
             entt::entity entity = state->selectedEntities[0];
             ImGui::Text("Entity: %u", static_cast<uint32_t>(entity));
 
             for (ComponentEntry& entry : state->componentRegistry.registry) {
                 if (entry.has(state->registry, entity)) {
-                    entry.drawEditor(frameBuffer->mainViewFamily, state->registry, entity);
+                    ComponentEditorResult result = entry.drawEditor(frameBuffer->mainViewFamily, state->registry, entity);
+                    if (result.requestRemoval) {
+                        entryToRemove = &entry;
+                    }
                 }
+            }
+            if (entryToRemove) {
+                entryToRemove->onRemoveComponent(state->registry, entity);
             }
 
             ImGui::Spacing();
@@ -283,7 +315,8 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
                         ImGui::BeginDisabled(true);
                         ImGui::MenuItem(entry.name);
                         ImGui::EndDisabled();
-                    } else {
+                    }
+                    else {
                         if (ImGui::MenuItem(entry.name)) {
                             CreateComponent(state, entity, entry.typeId);
                             entry.onAddComponent(state->registry, entity);

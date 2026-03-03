@@ -21,6 +21,7 @@ template<> void OnComponentAdded<Component::StableIdComponent>(Component::Stable
 
 template<typename T>
 void OnComponentRemoved(T& component, entt::registry& registry, entt::entity entity) {}
+template<> void OnComponentRemoved<Component::StaticMeshComponent>(Component::StaticMeshComponent& component, entt::registry& registry, entt::entity entity);
 
 } // Game
 

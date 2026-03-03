@@ -30,6 +30,7 @@ struct GameState
     const Core::TimeFrame* timeFrame{nullptr};
 
     entt::registry registry;
+    std::unordered_map<StringID, entt::entity> stableIdToEntityMap;
     Game::ComponentRegistry componentRegistry{};
 
     std::mt19937_64 rng{std::random_device{}()};
@@ -69,7 +70,6 @@ struct GameState
     StringID currentSceneId{"main_scene"_sid};
     std::string currentSceneName{"Main Scene"};
     std::vector<entt::entity> selectedEntities{};
-    std::unordered_map<StringID, entt::entity> stableIdToEntityMap;
 
 };
 

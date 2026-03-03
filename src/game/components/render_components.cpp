@@ -57,7 +57,6 @@ ComponentEditorResult DrawComponentEditor<Component::StaticMeshComponent>(Compon
     auto* ctx = registry.ctx().get<Core::EngineContext*>();
     auto* state = registry.ctx().get<Engine::GameState*>();
 
-    // todo unload model (to change target)
     if (component.modelId == StringID::Invalid) {
         if (ImGui::BeginCombo("Select Model", "")) {
             const std::unordered_map<StringID, std::filesystem::path>& modelReg = ctx->assetManager->GetModelRegistry();
@@ -169,5 +168,18 @@ void OnComponentAdded<Component::StaticMeshComponent>(Component::StaticMeshCompo
     glm::mat4 m = transform ? Component::GetMatrix(*transform) : glm::mat4(1.0f);
     registry.emplace_or_replace<Component::RenderTransformComponent>(entity, m, m);
     registry.emplace_or_replace<Component::DirtyRenderTransformComponent>(entity);
+}
+
+template<>
+void OnComponentRemoved<Component::StaticMeshComponent>(Component::StaticMeshComponent& component, entt::registry& registry, entt::entity entity)
+{
+    if (component.modelHandle.IsValid()) {
+        auto* ctx = registry.ctx().get<Core::EngineContext*>();
+        ctx->assetManager->UnloadModel(component.modelHandle);
+    }
+
+    registry.remove<Component::StaticMeshLoadingTag>(entity);
+    registry.remove<Component::RenderTransformComponent>(entity);
+    registry.remove<Component::DirtyRenderTransformComponent>(entity);
 }
 }
