@@ -148,6 +148,7 @@ struct PhysicalResource
 
     bool bCanAlias = true;
     bool bIsViewportScaled = false;
+    bool bIsSwapchain = false;
 
     uint64_t lastUsedFrame = 0;
 

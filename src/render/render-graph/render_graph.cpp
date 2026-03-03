@@ -1103,6 +1103,11 @@ void RenderGraph::Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint
         for (int i = static_cast<int>(physicalResources.size()) - 1; i >= 0; --i) {
             auto& phys = physicalResources[i];
 
+            if (bRemoveSwapchainPhysicals && phys.bIsSwapchain) {
+                physicalResources.erase(physicalResources.begin() + i);
+                continue;
+            }
+
             if (phys.bIsImported) { continue; }
             if (!phys.IsAllocated()) { continue; }
 
@@ -1177,6 +1182,7 @@ void RenderGraph::Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint
     }
 
     bDestroyViewportAssociated = false;
+    bRemoveSwapchainPhysicals = false;
 }
 
 void RenderGraph::CreateTexture(const StringID textureId, const TextureInfo& texInfo, bool bIsViewportScaled)
@@ -1222,7 +1228,8 @@ void RenderGraph::ImportTexture(StringID textureId,
                                 VkImageUsageFlags usage,
                                 VkImageLayout initialLayout,
                                 VkPipelineStageFlags2 initialStage,
-                                VkImageLayout finalLayout)
+                                VkImageLayout finalLayout,
+                                bool bIsSwapchain)
 {
     TextureResource* tex = GetOrCreateTexture(textureId);
     tex->textureInfo = info;
@@ -1253,6 +1260,7 @@ void RenderGraph::ImportTexture(StringID textureId,
             phys.imageView = view;
             phys.mipViews[0] = view;
             phys.bIsImported = true;
+            phys.bIsSwapchain = bIsSwapchain;
 
             phys.dimensions.type = ResourceDimensions::Type::Image;
             phys.dimensions.format = info.format;

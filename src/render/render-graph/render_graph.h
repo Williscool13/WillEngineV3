@@ -72,6 +72,8 @@ public:
 
     void InvalidateAllViewportAssociated() { bDestroyViewportAssociated = true; }
 
+    void InvalidateAllSwapchainAssociated() { bRemoveSwapchainPhysicals = true; }
+
     void CreateTexture(StringID textureId, const TextureInfo& texInfo, bool bIsViewportScaled = false);
 
     void AliasTexture(StringID aliasId, StringID existingId);
@@ -79,7 +81,7 @@ public:
     void CreateBuffer(StringID bufferId, VkDeviceSize size, bool bIsViewportScaled = false, bool bCanAlias = true);
 
     void ImportTexture(StringID textureId, VkImage image, VkImageView view, const TextureInfo& info, VkImageUsageFlags usage, VkImageLayout initialLayout, VkPipelineStageFlags2 initialStage,
-                       VkImageLayout finalLayout);
+                       VkImageLayout finalLayout, bool bIsSwapchain = false);
 
     void ImportBufferNoBarrier(StringID bufferId, VkBuffer buffer, VkDeviceAddress address, const BufferInfo& info);
 
@@ -168,6 +170,7 @@ private:
     std::array<TransientUploadArena, Core::FRAME_BUFFER_COUNT> uploadArenas{};
     std::array<TransientReadback, Core::FRAME_BUFFER_COUNT> meshletCountReadbacks{};
 
+    bool bRemoveSwapchainPhysicals{false};
     bool bDestroyViewportAssociated{false};
 
     bool bDebugLogging = false;
