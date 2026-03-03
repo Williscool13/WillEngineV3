@@ -64,6 +64,7 @@ struct GameState
 
     ImGuizmo::OPERATION currentGizmoOperation{ImGuizmo::TRANSLATE};
     ImGuizmo::MODE currentGizmoMode{ImGuizmo::WORLD};
+    bool bUniformScaleMode{true};
 
     StringID currentSceneId{"main_scene"_sid};
     std::string currentSceneName{"Main Scene"};

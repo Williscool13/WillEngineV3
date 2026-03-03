@@ -56,7 +56,7 @@ PortalPair CreatePortalPair(Core::EngineContext* ctx, Engine::GameState* state, 
         state->registry.emplace<TransformComponent>(portalA, transform);
         state->registry.emplace<StaticMeshComponent>(portalA, renderable);
         state->registry.emplace<RenderTransformComponent>(portalA, GetMatrix(transform), GetMatrix(transform));
-        state->registry.emplace<PortalPlaneComponent>(portalA);
+        state->registry.emplace<PortalPlaneTag>(portalA);
         state->registry.emplace<PortalComponent>(portalA, entt::null, 1u);
     }
 
@@ -88,7 +88,7 @@ PortalPair CreatePortalPair(Core::EngineContext* ctx, Engine::GameState* state, 
         state->registry.emplace<TransformComponent>(portalB, transform);
         state->registry.emplace<StaticMeshComponent>(portalB, renderable);
         state->registry.emplace<RenderTransformComponent>(portalB, GetMatrix(transform), GetMatrix(transform));
-        state->registry.emplace<PortalPlaneComponent>(portalB);
+        state->registry.emplace<PortalPlaneTag>(portalB);
         state->registry.emplace<PortalComponent>(portalB, entt::null, 2u);
     }
 
@@ -146,7 +146,7 @@ void CreatePortalPlane(Core::EngineContext* ctx, Engine::GameState* state, glm::
     TransformComponent transformComp = state->registry.emplace<TransformComponent>(planeEntity, position, rotation, scale);
     state->registry.emplace<StaticMeshComponent>(planeEntity, renderable);
     state->registry.emplace<RenderTransformComponent>(planeEntity, GetMatrix(transformComp), GetMatrix(transformComp));
-    state->registry.emplace<PortalPlaneComponent>(planeEntity);
+    state->registry.emplace<PortalPlaneTag>(planeEntity);
 
     SPDLOG_INFO("[DebugSystem] Created portal plane at ({}, {}, {})",
                 position.x, position.y, position.z);

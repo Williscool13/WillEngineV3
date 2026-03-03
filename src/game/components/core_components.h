@@ -8,7 +8,6 @@
 #include <glm/glm.hpp>
 #include <glm/detail/type_quat.hpp>
 #include <glm/gtc/quaternion.hpp>
-#include <json/nlohmann/json_fwd.hpp>
 
 namespace Game::Component
 {
@@ -17,9 +16,6 @@ struct TransformComponent
     glm::vec3 translation{0.0f, 0.0f, 0.0f};
     glm::quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
     glm::vec3 scale{1.0f, 1.0f, 1.0f};;
-
-    static void Serialize(const TransformComponent& comp, nlohmann::json& json);
-    static void Deserialize(TransformComponent& comp, const nlohmann::json& json);
 };
 
 inline glm::mat4 GetMatrix(const TransformComponent& transform)

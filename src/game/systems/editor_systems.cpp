@@ -64,7 +64,7 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
 {
     ZoneScoped;
     if (ImGui::Begin("Debug View")) {
-        auto cameraView = state->registry.view<Component::CameraComponent, Component::MainViewportComponent, Component::TransformComponent>();
+        auto cameraView = state->registry.view<Component::CameraComponent, Component::MainViewportTag, Component::TransformComponent>();
         const auto& [cam, transform] = cameraView.get(cameraView.front());
         ImGui::Text("Camera Pos: (%.2f, %.2f, %.2f)",
                     transform.translation.x, transform.translation.y, transform.translation.z);
@@ -237,6 +237,10 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
         if (ImGui::RadioButton("Rotate", state->currentGizmoOperation == ImGuizmo::ROTATE)) state->currentGizmoOperation = ImGuizmo::ROTATE;
         ImGui::SameLine();
         if (ImGui::RadioButton("Scale", state->currentGizmoOperation == ImGuizmo::SCALE)) state->currentGizmoOperation = ImGuizmo::SCALE;
+        if (state->currentGizmoOperation == ImGuizmo::SCALE) {
+            ImGui::SameLine();
+            ImGui::Checkbox("Uniform", &state->bUniformScaleMode);
+        }
 
         const bool multiSelected = state->selectedEntities.size() > 1;
 
@@ -281,6 +285,7 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
                         ImGui::EndDisabled();
                     } else {
                         if (ImGui::MenuItem(entry.name)) {
+                            CreateComponent(state, entity, entry.typeId);
                             entry.onAddComponent(state->registry, entity);
                         }
                     }

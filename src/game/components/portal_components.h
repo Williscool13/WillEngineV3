@@ -34,7 +34,7 @@ struct PortalPair
     entt::entity portalB;
 };
 
-struct PortalPlaneComponent
+struct PortalPlaneTag
 {};
 
 PortalPair CreatePortalPair(Core::EngineContext* ctx, Engine::GameState* state, glm::vec3 posA, glm::quat rotA, glm::vec3 posB, glm::quat rotB);

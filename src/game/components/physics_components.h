@@ -10,7 +10,6 @@
 #include <entt/entt.hpp>
 #include <glm/glm.hpp>
 #include <glm/detail/type_quat.hpp>
-#include <json/nlohmann/json_fwd.hpp>
 
 #include "Jolt/Physics/Body/MotionQuality.h"
 
@@ -74,10 +73,6 @@ struct PhysicsBodyDesc
     bool active{true};
 
     std::vector<PhysicsShapeDesc> shapes;
-
-    static void Serialize(const PhysicsBodyDesc& comp, nlohmann::json& json);
-
-    static void Deserialize(PhysicsBodyDesc& comp, const nlohmann::json& json);
 };
 
 struct DynamicPhysicsBodyComponent
@@ -93,11 +88,7 @@ struct DirtyKinematicPhysicsTransformTag
 {};
 
 struct DrawPhysicsDebugTag
-{
-    static void Serialize(const DrawPhysicsDebugTag& comp, nlohmann::json& json);
-
-    static void Deserialize(DrawPhysicsDebugTag& comp, const nlohmann::json& json);
-};
+{};
 }
 
 #endif //WILL_ENGINE_PHYSICS_COMPONENTS_H

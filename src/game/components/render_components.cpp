@@ -8,6 +8,7 @@
 #include <json/nlohmann/json.hpp>
 
 #include "imgui.h"
+#include "component_serialization.h"
 #include "scene_components.h"
 #include "core/include/engine_context.h"
 #include "engine/asset_manager.h"
@@ -15,15 +16,17 @@
 #include "game/systems/editor_systems.h"
 #include "game/components/component_initialization.h"
 
-namespace Game::Component
+namespace Game
 {
-void StaticMeshComponent::Serialize(const StaticMeshComponent& comp, nlohmann::json& json)
+template<>
+void SerializeComponent<Component::StaticMeshComponent>(const Component::StaticMeshComponent& comp, nlohmann::json& json)
 {
     json["meshIndex"] = comp.meshIndex;
     json["modelId"] = comp.modelId.id;
 }
 
-void StaticMeshComponent::Deserialize(StaticMeshComponent& comp, const nlohmann::json& json)
+template<>
+void DeserializeComponent<Component::StaticMeshComponent>(Component::StaticMeshComponent& comp, const nlohmann::json& json)
 {
     const auto& mi = json["meshIndex"];
     comp.meshIndex = mi.get<int32_t>();

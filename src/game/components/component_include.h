@@ -11,7 +11,7 @@ namespace Game
 // SPDLOG_TRACE("[Game] Registering engine component types:");
 // SPDLOG_TRACE("  TransformComponent: {}", entt::type_id<Game::TransformComponent>().hash());
 // SPDLOG_TRACE("  CameraComponent: {}", entt::type_id<Game::CameraComponent>().hash());
-// SPDLOG_TRACE("  MainViewportComponent: {}", entt::type_id<Game::MainViewportComponent>().hash());
+// SPDLOG_TRACE("  MainViewportTag: {}", entt::type_id<Game::MainViewportTag>().hash());
 // SPDLOG_TRACE("  FreeCameraComponent: {}", entt::type_id<Game::FreeCameraComponent>().hash());
 #define REGISTER_COMPONENT() \
     static inline const auto _entt_type_registration = entt::type_id<std::remove_cvref_t<decltype(*this)>>().hash()

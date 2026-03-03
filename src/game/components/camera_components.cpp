@@ -6,9 +6,12 @@
 
 #include <json/nlohmann/json.hpp>
 
-namespace Game::Component
+#include "component_serialization.h"
+
+namespace Game
 {
-void FreeCameraComponent::Serialize(const FreeCameraComponent& comp, nlohmann::json& json)
+template<>
+void SerializeComponent<Component::FreeCameraComponent>(const Component::FreeCameraComponent& comp, nlohmann::json& json)
 {
     json["moveSpeed"] = comp.moveSpeed;
     json["lookSpeed"] = comp.lookSpeed;
@@ -16,11 +19,12 @@ void FreeCameraComponent::Serialize(const FreeCameraComponent& comp, nlohmann::j
     json["pitch"]     = comp.pitch;
 }
 
-void FreeCameraComponent::Deserialize(FreeCameraComponent& comp, const nlohmann::json& json)
+template<>
+void DeserializeComponent<Component::FreeCameraComponent>(Component::FreeCameraComponent& comp, const nlohmann::json& json)
 {
     comp.moveSpeed = json["moveSpeed"].get<float>();
     comp.lookSpeed = json["lookSpeed"].get<float>();
     comp.yaw       = json["yaw"].get<float>();
     comp.pitch     = json["pitch"].get<float>();
 }
-} // Game::Component
+}

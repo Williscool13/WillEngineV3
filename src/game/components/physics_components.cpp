@@ -4,6 +4,7 @@
 
 #include "physics_components.h"
 
+#include "component_serialization.h"
 #include "core/include/engine_context.h"
 #include "engine/engine_api.h"
 #include "engine/logging/engine_log.h"
@@ -27,7 +28,12 @@ void PhysicsBodyComponent::on_destroy(entt::registry& registry, entt::entity ent
     state->bodyToEntity.erase(physics.bodyID);
 }
 
-void PhysicsBodyDesc::Serialize(const PhysicsBodyDesc& comp, nlohmann::json& json)
+}
+
+namespace Game
+{
+template<>
+void SerializeComponent<Component::PhysicsBodyDesc>(const Component::PhysicsBodyDesc& comp, nlohmann::json& json)
 {
     json["motionType"] = comp.motionType;
     json["mass"] = comp.mass;
@@ -40,13 +46,13 @@ void PhysicsBodyDesc::Serialize(const PhysicsBodyDesc& comp, nlohmann::json& jso
         shapeJson["rotation"] = {shape.rotation.w, shape.rotation.x, shape.rotation.y, shape.rotation.z};
 
         switch (shape.type) {
-            case PhysicsShapeType::Box:
+            case Component::PhysicsShapeType::Box:
                 shapeJson["halfExtents"] = {shape.box.halfExtents.x, shape.box.halfExtents.y, shape.box.halfExtents.z};
                 break;
-            case PhysicsShapeType::Sphere:
+            case Component::PhysicsShapeType::Sphere:
                 shapeJson["radius"] = shape.sphere.radius;
                 break;
-            case PhysicsShapeType::Capsule:
+            case Component::PhysicsShapeType::Capsule:
                 shapeJson["radius"] = shape.capsule.radius;
                 shapeJson["halfHeight"] = shape.capsule.halfHeight;
                 break;
@@ -56,14 +62,15 @@ void PhysicsBodyDesc::Serialize(const PhysicsBodyDesc& comp, nlohmann::json& jso
     }
 }
 
-void PhysicsBodyDesc::Deserialize(PhysicsBodyDesc& comp, const nlohmann::json& json)
+template<>
+void DeserializeComponent<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc& comp, const nlohmann::json& json)
 {
-    comp.motionType = static_cast<PhysicsMotionType>(json["motionType"].get<uint8_t>());
+    comp.motionType = static_cast<Component::PhysicsMotionType>(json["motionType"].get<uint8_t>());
     comp.mass = json["mass"].get<float>();
 
     for (const auto& shapeJson : json["shapes"]) {
-        PhysicsShapeDesc shape{};
-        shape.type = static_cast<PhysicsShapeType>(shapeJson["type"].get<uint8_t>());
+        Component::PhysicsShapeDesc shape{};
+        shape.type = static_cast<Component::PhysicsShapeType>(shapeJson["type"].get<uint8_t>());
 
         auto& o = shapeJson["offset"];
         shape.offset = {o[0].get<float>(), o[1].get<float>(), o[2].get<float>()};
@@ -72,16 +79,16 @@ void PhysicsBodyDesc::Deserialize(PhysicsBodyDesc& comp, const nlohmann::json& j
         shape.rotation = {r[0].get<float>(), r[1].get<float>(), r[2].get<float>(), r[3].get<float>()};
 
         switch (shape.type) {
-            case PhysicsShapeType::Box:
+            case Component::PhysicsShapeType::Box:
             {
                 auto& h = shapeJson["halfExtents"];
                 shape.box.halfExtents = {h[0].get<float>(), h[1].get<float>(), h[2].get<float>()};
                 break;
             }
-            case PhysicsShapeType::Sphere:
+            case Component::PhysicsShapeType::Sphere:
                 shape.sphere.radius = shapeJson["radius"].get<float>();
                 break;
-            case PhysicsShapeType::Capsule:
+            case Component::PhysicsShapeType::Capsule:
                 shape.capsule.radius = shapeJson["radius"].get<float>();
                 shape.capsule.halfHeight = shapeJson["halfHeight"].get<float>();
                 break;
@@ -91,12 +98,6 @@ void PhysicsBodyDesc::Deserialize(PhysicsBodyDesc& comp, const nlohmann::json& j
     }
 }
 
-void DrawPhysicsDebugTag::Serialize(const DrawPhysicsDebugTag& comp, nlohmann::json& json) {}
-void DrawPhysicsDebugTag::Deserialize(DrawPhysicsDebugTag& comp, const nlohmann::json& json) {}
-}
-
-namespace Game
-{
 template<>
 ComponentEditorResult DrawComponentEditor<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc& component, const Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity)
 {

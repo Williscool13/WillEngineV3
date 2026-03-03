@@ -39,7 +39,7 @@ GAME_API void GameStartup(Core::EngineContext* ctx, Engine::GameState* state)
     Game::Component::TransformComponent& cameraTransform = state->registry.emplace<Game::Component::TransformComponent>(camera);
     cameraTransform.translation = glm::vec3(0.0f, 3.0f, 5.0f);
     cameraTransform.rotation = glm::quatLookAt(glm::normalize(glm::vec3(0.0f, 0.0f, 0.0f) - glm::vec3(0.0f, 3.0f, 5.0f)), WORLD_UP);
-    state->registry.emplace<Game::Component::MainViewportComponent>(camera);
+    state->registry.emplace<Game::Component::MainViewportTag>(camera);
     state->registry.ctx().emplace<Engine::GameState*>(state);
     state->registry.ctx().emplace<Core::EngineContext*>(ctx);
 }
@@ -53,12 +53,12 @@ GAME_API void GameLoad(Core::EngineContext* ctx, Engine::GameState* state)
     SPDLOG_TRACE("[Game] Registering engine component types:");
     SPDLOG_TRACE("  TransformComponent: {}", entt::type_id<Game::Component::TransformComponent>().hash());
     SPDLOG_TRACE("  CameraComponent: {}", entt::type_id<Game::Component::CameraComponent>().hash());
-    SPDLOG_TRACE("  MainViewportComponent: {}", entt::type_id<Game::Component::MainViewportComponent>().hash());
+    SPDLOG_TRACE("  MainViewportTag: {}", entt::type_id<Game::Component::MainViewportTag>().hash());
     SPDLOG_TRACE("  FreeCameraComponent: {}", entt::type_id<Game::Component::FreeCameraComponent>().hash());
-    SPDLOG_TRACE("  PortalPlaneComponent: {}", entt::type_id<Game::Component::PortalPlaneComponent>().hash());
+    SPDLOG_TRACE("  PortalPlaneTag: {}", entt::type_id<Game::Component::PortalPlaneTag>().hash());
     SPDLOG_TRACE("  PortalComponent: {}", entt::type_id<Game::Component::PortalComponent>().hash());
-    SPDLOG_TRACE("  AntiGravityComponent: {}", entt::type_id<Game::Component::AntiGravityComponent>().hash());
-    SPDLOG_TRACE("  FloorComponent: {}", entt::type_id<Game::Component::FloorComponent>().hash());
+    SPDLOG_TRACE("  AntiGravityTag: {}", entt::type_id<Game::Component::AntiGravityTag>().hash());
+    SPDLOG_TRACE("  FloorTag: {}", entt::type_id<Game::Component::FloorTag>().hash());
     SPDLOG_TRACE("  DynamicPhysicsBodyComponent: {}", entt::type_id<Game::Component::DynamicPhysicsBodyComponent>().hash());
     SPDLOG_TRACE("  PhysicsBodyComponent: {}", entt::type_id<Game::Component::PhysicsBodyComponent>().hash());
     SPDLOG_TRACE("  DirtyPhysicsTransformComponent: {}", entt::type_id<Game::Component::TeleportPhysicsTransformTag>().hash());

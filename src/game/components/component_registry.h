@@ -8,6 +8,7 @@
 #include <json/nlohmann/json.hpp>
 
 #include "component_initialization.h"
+#include "component_serialization.h"
 #include "component_types.h"
 #include "core/string_id.h"
 #include "core/allocators/inline_vector.h"
@@ -19,6 +20,7 @@ using SerializeFn = void(*)(const entt::registry&, entt::entity, nlohmann::json&
 using DeserializeFn = void(*)(entt::registry&, entt::entity, const nlohmann::json&);
 using HasComponentFn = bool(*)(const entt::registry&, entt::entity);
 using OnAddComponentFn = void(*)(entt::registry&, entt::entity);
+using OnRemoveComponentFn = void(*)(entt::registry&, entt::entity);
 using DrawEditorFn = ComponentEditorResult(*)(const Core::ViewFamily&, entt::registry&, entt::entity);
 
 struct ComponentEntry
@@ -28,6 +30,7 @@ struct ComponentEntry
     SerializeFn serialize;
     DeserializeFn deserialize;
     OnAddComponentFn onAddComponent;
+    OnRemoveComponentFn onRemoveComponent;
     DrawEditorFn drawEditor;
     HasComponentFn has;
 };
@@ -35,6 +38,7 @@ struct ComponentEntry
 struct ComponentRegistry
 {
     Core::InlineVector<ComponentEntry, 1024> registry{};
+    std::unordered_map<StringID, size_t> registryMapping;
 };
 
 template<typename T>
@@ -44,19 +48,24 @@ template<typename T>
 concept DataComponent = !std::is_empty_v<T>;
 
 template<DataComponent T>
-void RegisterComponent(ComponentRegistry& componentRegistry, StringID typeId, const char* name)
+void RegisterComponent(ComponentRegistry& componentRegistry, const char* name)
 {
+    auto typeId = TypeSID<T>();
+    auto index = componentRegistry.registry.Size();
     componentRegistry.registry.PushBack({
         typeId,
         name,
         [](const entt::registry& reg, entt::entity e, nlohmann::json& json) {
-            T::Serialize(reg.get<T>(e), json);
+            SerializeComponent<T>(reg.get<T>(e), json);
         },
         [](entt::registry& reg, entt::entity e, const nlohmann::json& json) {
-            T::Deserialize(reg.get_or_emplace<T>(e), json);
+            DeserializeComponent<T>(reg.get_or_emplace<T>(e), json);
         },
         [](entt::registry& reg, entt::entity e) {
             OnComponentAdded<T>(reg.get_or_emplace<T>(e), reg, e);
+        },
+        [](entt::registry& reg, entt::entity e) {
+            OnComponentRemoved<T>(reg.get<T>(e), reg, e);
         },
         [](const Core::ViewFamily& viewFamily, entt::registry& reg, entt::entity e) {
             return DrawComponentEditor<T>(reg.get<T>(e), viewFamily, reg, e);
@@ -65,27 +74,35 @@ void RegisterComponent(ComponentRegistry& componentRegistry, StringID typeId, co
             return reg.all_of<T>(e);
         }
     });
+
+    componentRegistry.registryMapping[typeId] = index;
 }
 
 template<TagComponent T>
-void RegisterComponent(ComponentRegistry& componentRegistry, StringID typeId, const char* name)
+void RegisterComponent(ComponentRegistry& componentRegistry, const char* name)
 {
+    auto typeId = TypeSID<T>();
+    auto index = componentRegistry.registry.Size();
     componentRegistry.registry.PushBack({
         typeId,
         name,
         [](const entt::registry& reg, entt::entity e, nlohmann::json& json) {
             T dummy{};
-            T::Serialize(dummy, json);
+            SerializeComponent<T>(dummy, json);
         },
         [](entt::registry& reg, entt::entity e, const nlohmann::json& json) {
             (void)reg.get_or_emplace<T>(e);
             T dummy{};
-            T::Deserialize(dummy, json);
+            DeserializeComponent<T>(dummy, json);
         },
         [](entt::registry& reg, entt::entity e) {
             (void)reg.get_or_emplace<T>(e);
             T dummy{};
             OnComponentAdded<T>(dummy, reg, e);
+        },
+        [](entt::registry& reg, entt::entity e) {
+            T dummy{};
+            OnComponentRemoved<T>(dummy, reg, e);
         },
         [](const Core::ViewFamily& viewFamily, entt::registry& reg, entt::entity e) {
             T dummy{};
@@ -95,6 +112,7 @@ void RegisterComponent(ComponentRegistry& componentRegistry, StringID typeId, co
             return reg.all_of<T>(e);
         }
     });
+    componentRegistry.registryMapping[typeId] = index;
 }
 
 void RegisterComponents(ComponentRegistry& componentRegistry);

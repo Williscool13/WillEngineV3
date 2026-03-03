@@ -109,7 +109,7 @@ void UpdateFreeCamera(Core::EngineContext* ctx, Engine::GameState* state)
 void BuildViewFamily(Engine::GameState* state, Core::ViewFamily& mainViewFamily)
 {
     ZoneScoped;
-    auto cameraView = state->registry.view<Component::CameraComponent, Component::MainViewportComponent, Component::TransformComponent>();
+    auto cameraView = state->registry.view<Component::CameraComponent, Component::MainViewportTag, Component::TransformComponent>();
     entt::entity mainCamera = cameraView.front();
 
     const auto& [cam, transform] = cameraView.get(mainCamera);
@@ -124,7 +124,7 @@ void BuildViewFamily(Engine::GameState* state, Core::ViewFamily& mainViewFamily)
 void BuildPortalViewFamily(Engine::GameState* state, Core::ViewFamily& mainViewFamily)
 {
     ZoneScoped;
-    auto cameraView = state->registry.view<Component::CameraComponent, Component::MainViewportComponent, Component::TransformComponent>();
+    auto cameraView = state->registry.view<Component::CameraComponent, Component::MainViewportTag, Component::TransformComponent>();
     entt::entity mainCamera = cameraView.front();
     const auto& [cam, cameraTransform] = cameraView.get(mainCamera);
 

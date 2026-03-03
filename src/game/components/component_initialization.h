@@ -19,6 +19,9 @@ template<> void OnComponentAdded<Component::StaticMeshComponent>(Component::Stat
 template<> void OnComponentAdded<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc& component, entt::registry& registry, entt::entity entity);
 template<> void OnComponentAdded<Component::StableIdComponent>(Component::StableIdComponent& component, entt::registry& registry, entt::entity entity);
 
+template<typename T>
+void OnComponentRemoved(T& component, entt::registry& registry, entt::entity entity) {}
+
 } // Game
 
 #endif //WILL_ENGINE_COMPONENT_INITIALIZATION_H

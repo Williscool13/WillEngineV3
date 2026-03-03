@@ -354,7 +354,7 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
             glm::vec3(0.0f, -0.5f, 0.0f), glm::vec3(20.0f, 1.0f, 20.0f), // render
             glm::vec4(0.5f, 0.5f, 0.5f, 1.0f) // gray
         );
-        state->registry.emplace<Component::FloorComponent>(floor);
+        state->registry.emplace<Component::FloorTag>(floor);
 
         // Create walls
         CreateStaticBox(ctx, state, JPH::RVec3(0, 2.5, -10), JPH::Vec3(10, 2.5, 0.5),
@@ -790,7 +790,7 @@ void DebugProcessPhysicsCollisions(Core::EngineContext* ctx, Engine::GameState* 
     std::span<const Physics::DeferredCollisionEvent> events = ctx->physicsSystem->GetCollisionEvents();
 
 
-    state->registry.clear<Component::AntiGravityComponent>();
+    state->registry.clear<Component::AntiGravityTag>();
 
     for (const auto& event : events) {
         entt::entity entity1 = state->bodyToEntity.contains(event.body1)
@@ -802,11 +802,11 @@ void DebugProcessPhysicsCollisions(Core::EngineContext* ctx, Engine::GameState* 
 
         if (entity1 == entt::null || entity2 == entt::null) continue;
 
-        if (state->registry.all_of<Component::FloorComponent>(entity2)) {
-            state->registry.emplace_or_replace<Component::AntiGravityComponent>(entity1);
+        if (state->registry.all_of<Component::FloorTag>(entity2)) {
+            state->registry.emplace_or_replace<Component::AntiGravityTag>(entity1);
         }
-        else if (state->registry.all_of<Component::FloorComponent>(entity1)) {
-            state->registry.emplace_or_replace<Component::AntiGravityComponent>(entity2);
+        else if (state->registry.all_of<Component::FloorTag>(entity1)) {
+            state->registry.emplace_or_replace<Component::AntiGravityTag>(entity2);
         }
     }
 
@@ -817,7 +817,7 @@ void DebugProcessPhysicsCollisions(Core::EngineContext* ctx, Engine::GameState* 
 void DebugApplyGroundForces(Core::EngineContext* ctx, Engine::GameState* state)
 {
     ZoneScoped;
-    auto view = state->registry.view<Component::AntiGravityComponent, Component::PhysicsBodyComponent>();
+    auto view = state->registry.view<Component::AntiGravityTag, Component::PhysicsBodyComponent>();
     auto& bodyInterface = ctx->physicsSystem->GetBodyInterface();
 
     for (auto [entity, physics] : view.each()) {

@@ -7,31 +7,37 @@
 #include <json/nlohmann/json.hpp>
 
 #include "imgui.h"
+#include "component_serialization.h"
 #include "engine/engine_api.h"
 #include "game/systems/editor_systems.h"
 #include "game/components/component_initialization.h"
 
-namespace Game::Component
+namespace Game
 {
-void StableIdComponent::Serialize(const StableIdComponent& comp, nlohmann::json& json)
+template<>
+void SerializeComponent<Component::StableIdComponent>(const Component::StableIdComponent& comp, nlohmann::json& json)
 {
     json["id"] = comp.id.id;
 }
 
-void StableIdComponent::Deserialize(StableIdComponent& comp, const nlohmann::json& json)
+template<>
+void DeserializeComponent<Component::StableIdComponent>(Component::StableIdComponent& comp, const nlohmann::json& json)
 {
     comp.id = StringID(json["id"].get<uint64_t>());
 }
 
-void NameComponent::Serialize(const NameComponent& comp, nlohmann::json& json)
+template<>
+void SerializeComponent<Component::NameComponent>(const Component::NameComponent& comp, nlohmann::json& json)
 {
     json["name"] = comp.name;
 }
-void NameComponent::Deserialize(NameComponent& comp, const nlohmann::json& json)
+
+template<>
+void DeserializeComponent<Component::NameComponent>(Component::NameComponent& comp, const nlohmann::json& json)
 {
     comp.name = json["name"].get<std::string>();
 }
-} // Game::Components
+}
 
 namespace Game
 {

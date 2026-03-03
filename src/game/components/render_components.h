@@ -8,7 +8,6 @@
 #include <array>
 #include <cstdint>
 #include <glm/glm.hpp>
-#include <json/nlohmann/json_fwd.hpp>
 
 #include "core/string_id.h"
 #include "engine/material_manager.h"
@@ -47,9 +46,6 @@ struct StaticMeshComponent
 
     // Transient
     Engine::WillModelHandle modelHandle{};
-
-    static void Serialize(const StaticMeshComponent& comp, nlohmann::json& json);
-    static void Deserialize(StaticMeshComponent& comp, const nlohmann::json& json);
 };
 
 struct StaticMeshLoadingTag

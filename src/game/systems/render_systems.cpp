@@ -142,7 +142,7 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
         ZoneScopedN("MainSceneStaticMeshes");
         auto view = state->registry.view<Component::StaticMeshComponent, Component::RenderTransformComponent>(
             entt::exclude<
-                Component::PortalPlaneComponent,
+                Component::PortalPlaneTag,
                 Component::CubemapVisualizeTag,
                 Component::StaticMeshLoadingTag
             >);
@@ -171,7 +171,7 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
     // Gather portal planes
     {
         ZoneScopedN("PortalRenderables");
-        auto portalView = state->registry.view<Component::PortalPlaneComponent, Component::StaticMeshComponent, Component::RenderTransformComponent>();
+        auto portalView = state->registry.view<Component::PortalPlaneTag, Component::StaticMeshComponent, Component::RenderTransformComponent>();
 
         if (portalView.size_hint() > 0) {
             auto& portalDraw = frameBuffer->mainViewFamily.customShaderDraws["portal_rendering"];

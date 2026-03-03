@@ -9,19 +9,22 @@
 #include <imgui.h>
 #include <ImGuizmo.h>
 
+#include "component_serialization.h"
 #include "engine/engine_api.h"
 #include "game/systems/editor_systems.h"
 
-namespace Game::Component
+namespace Game
 {
-void TransformComponent::Serialize(const TransformComponent& comp, nlohmann::json& json)
+template<>
+void SerializeComponent<Component::TransformComponent>(const Component::TransformComponent& comp, nlohmann::json& json)
 {
     json["translation"] = {comp.translation.x, comp.translation.y, comp.translation.z};
     json["rotation"]    = {comp.rotation.w, comp.rotation.x, comp.rotation.y, comp.rotation.z};
     json["scale"]       = {comp.scale.x, comp.scale.y, comp.scale.z};
 }
 
-void TransformComponent::Deserialize(TransformComponent& comp, const nlohmann::json& json)
+template<>
+void DeserializeComponent<Component::TransformComponent>(Component::TransformComponent& comp, const nlohmann::json& json)
 {
     const auto& t = json["translation"];
     comp.translation = glm::vec3(t[0].get<float>(), t[1].get<float>(), t[2].get<float>());
@@ -33,7 +36,7 @@ void TransformComponent::Deserialize(TransformComponent& comp, const nlohmann::j
     const auto& s = json["scale"];
     comp.scale = glm::vec3(s[0].get<float>(), s[1].get<float>(), s[2].get<float>());
 }
-} // Game::Component
+}
 
 namespace Game
 {
@@ -50,14 +53,14 @@ ComponentEditorResult DrawComponentEditor<Component::TransformComponent>(Compone
         component.rotation = glm::quat(glm::radians(eulerDegrees));
         dirty = true;
     }
-    static bool uniformScale = true;
+    Engine::GameState* state = registry.ctx().get<Engine::GameState*>();
     glm::vec3 prevScale = component.scale;
 
-    ImGui::Checkbox("##uniform", &uniformScale);
+    ImGui::Checkbox("##uniform", &state->bUniformScaleMode);
     ImGui::SameLine();
     dirty |= ImGui::DragFloat3("Scale", &component.scale.x, 0.01f);
 
-    if (dirty && uniformScale) {
+    if (dirty && state->bUniformScaleMode) {
         if (component.scale.x != prevScale.x)
             component.scale = glm::vec3(component.scale.x);
         else if (component.scale.y != prevScale.y)
@@ -66,7 +69,6 @@ ComponentEditorResult DrawComponentEditor<Component::TransformComponent>(Compone
             component.scale = glm::vec3(component.scale.z);
     }
 
-    Engine::GameState* state = registry.ctx().get<Engine::GameState*>();
     glm::mat4 view = viewFamily.mainView.currentViewData.view;
     glm::mat4 proj = viewFamily.mainView.currentViewData.proj;
     glm::mat4 model = Component::GetMatrix(component);
@@ -83,7 +85,7 @@ ComponentEditorResult DrawComponentEditor<Component::TransformComponent>(Compone
         ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(model), translation, rotation, scale);
         component.translation = glm::vec3(translation[0], translation[1], translation[2]);
         component.rotation = glm::quat(glm::radians(glm::vec3(rotation[0], rotation[1], rotation[2])));
-        if (uniformScale) {
+        if (state->bUniformScaleMode) {
             float uniformValue = (scale[0] + scale[1] + scale[2]) / 3.0f;
             component.scale = glm::vec3(uniformValue);
         } else {
