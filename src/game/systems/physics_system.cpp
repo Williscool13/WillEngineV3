@@ -14,7 +14,7 @@
 #include "Jolt/Physics/Body/BodyCreationSettings.h"
 #include "Jolt/Physics/Collision/Shape/StaticCompoundShape.h"
 
-namespace Game::System
+namespace Game
 {
 void UpdatePhysics(Core::EngineContext* ctx, Engine::GameState* state)
 {
@@ -112,6 +112,9 @@ JPH::BodyID CreateBodyFromDesc(JPH::BodyInterface& bodyInterface, const Componen
 {
     JPH::ShapeRefC shape;
 
+    if (desc.shapes.empty()) {
+        return JPH::BodyID(JPH::BodyID::cInvalidBodyID);
+    }
     if (desc.shapes.size() == 1 && desc.shapes[0].offset == glm::vec3(0.0f)) {
         shape = CreateShapeFromDesc(desc.shapes[0]);
     }

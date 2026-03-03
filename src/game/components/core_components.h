@@ -26,6 +26,8 @@ inline glm::mat4 GetMatrix(const TransformComponent& transform)
 {
     return glm::translate(glm::mat4(1.0f), transform.translation) * mat4_cast(transform.rotation) * glm::scale(glm::mat4(1.0f), transform.scale);
 }
+
+struct DirtyTransformTag{};
 }
 
 

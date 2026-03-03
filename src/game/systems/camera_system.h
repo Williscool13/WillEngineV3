@@ -17,7 +17,7 @@ struct FrameBuffer;
 struct EngineContext;
 }
 
-namespace Game::System
+namespace Game
 {
 void UpdateCameras(Core::EngineContext* ctx, Engine::GameState* state);
 void UpdateFreeCamera(Core::EngineContext* ctx, Engine::GameState* state);

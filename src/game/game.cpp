@@ -84,11 +84,11 @@ GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::GameState* state)
     ZoneScoped;
     const auto frameStart = std::chrono::high_resolution_clock::now();
 
-    Game::System::UpdateCameras(ctx, state);
-    Game::System::DebugUpdate(ctx, state);
+    Game::UpdateCameras(ctx, state);
+    Game::DebugUpdate(ctx, state);
 
-    Game::System::DebugProcessPhysicsCollisions(ctx, state);
-    Game::System::DebugApplyGroundForces(ctx, state);
+    Game::DebugProcessPhysicsCollisions(ctx, state);
+    Game::DebugApplyGroundForces(ctx, state);
 
     for (const auto& hotkey : Game::DEBUG_HOTKEYS) {
         if (state->inputFrame->GetKey(hotkey.key).pressed) {
@@ -104,11 +104,14 @@ GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::GameState* state)
     }
 
     if (state->bEnablePhysics) {
-        Game::System::UpdatePhysics(ctx, state);
+        Game::UpdatePhysics(ctx, state);
     }
 
+    Game::RenderUpdate(ctx, state);
+    state->registry.clear<Game::Component::DirtyTransformTag>();
+
     if (ctx->bModelLoadedThisFrame || state->bPendingModelResolve) {
-        Game::System::ResolveStaticMeshLoads(ctx, state);
+        Game::ResolveStaticMeshLoads(ctx, state);
         state->bPendingModelResolve = false;
     }
 
@@ -142,13 +145,13 @@ GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* stat
     frameBuffer->mainViewFamily.debugSpheres.clear();
 #endif
 
-    Game::System::BuildViewFamily(state, frameBuffer->mainViewFamily);
+    Game::BuildViewFamily(state, frameBuffer->mainViewFamily);
     if (state->bEnablePortal) {
-        Game::System::BuildPortalViewFamily(state, frameBuffer->mainViewFamily);
+        Game::BuildPortalViewFamily(state, frameBuffer->mainViewFamily);
     }
 
-    Game::System::UpdateRenderTransforms(ctx, state, frameBuffer);
-    Game::System::GatherRenderables(ctx, state, frameBuffer);
+    Game::RenderPrepareTransforms(ctx, state, frameBuffer);
+    Game::GatherRenderables(ctx, state, frameBuffer);
 
 
 #if WILL_EDITOR
@@ -156,8 +159,8 @@ GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* stat
 #endif
 
 #ifndef PACKAGED_BUILD
-    Game::System::DebugRender(ctx, state, frameBuffer);
-    Game::System::DebugRenderPhysics(ctx, state, frameBuffer);
+    Game::DebugRender(ctx, state, frameBuffer);
+    Game::DebugRenderPhysics(ctx, state, frameBuffer);
 #endif
 }
 

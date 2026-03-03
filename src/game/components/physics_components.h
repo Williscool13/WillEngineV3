@@ -22,34 +22,52 @@ struct PhysicsBodyComponent
     JPH::BodyID bodyID;
 
     static void on_construct(entt::registry& registry, entt::entity entity);
+
     static void on_destroy(entt::registry& registry, entt::entity entity);
 };
 
-enum class PhysicsShapeType : uint8_t {
+enum class PhysicsShapeType : uint8_t
+{
     Box,
     Sphere,
     Capsule,
 };
 
-enum class PhysicsMotionType : uint8_t {
+enum class PhysicsMotionType : uint8_t
+{
     Static,
     Kinematic,
     Dynamic,
 };
 
-struct PhysicsShapeDesc {
+struct PhysicsShapeDesc
+{
     PhysicsShapeType type;
     glm::vec3 offset{0.0f};
     glm::quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
 
-    union {
-        struct { glm::vec3 halfExtents; } box;
-        struct { float radius; } sphere;
-        struct { float radius; float halfHeight; } capsule;
+    union
+    {
+        struct
+        {
+            glm::vec3 halfExtents;
+        } box;
+
+        struct
+        {
+            float radius;
+        } sphere;
+
+        struct
+        {
+            float radius;
+            float halfHeight;
+        } capsule;
     };
 };
 
-struct PhysicsBodyDesc {
+struct PhysicsBodyDesc
+{
     PhysicsMotionType motionType{PhysicsMotionType::Static};
     float mass{1.0f};
     JPH::EMotionQuality motionQuality{JPH::EMotionQuality::Discrete};
@@ -58,6 +76,7 @@ struct PhysicsBodyDesc {
     std::vector<PhysicsShapeDesc> shapes;
 
     static void Serialize(const PhysicsBodyDesc& comp, nlohmann::json& json);
+
     static void Deserialize(PhysicsBodyDesc& comp, const nlohmann::json& json);
 };
 
@@ -74,7 +93,11 @@ struct DirtyKinematicPhysicsTransformTag
 {};
 
 struct DrawPhysicsDebugTag
-{};
+{
+    static void Serialize(const DrawPhysicsDebugTag& comp, nlohmann::json& json);
+
+    static void Deserialize(DrawPhysicsDebugTag& comp, const nlohmann::json& json);
+};
 }
 
 #endif //WILL_ENGINE_PHYSICS_COMPONENTS_H

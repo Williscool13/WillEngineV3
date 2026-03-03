@@ -31,7 +31,7 @@ namespace Core
 struct EngineContext;
 }
 
-namespace Game::System
+namespace Game
 {
 void UpdatePhysics(Core::EngineContext* ctx, Engine::GameState* state);
 void DebugRenderPhysics(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer);

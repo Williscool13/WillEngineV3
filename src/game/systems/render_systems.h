@@ -21,11 +21,13 @@ struct FrameBuffer;
 struct EngineContext;
 }
 
-namespace Game::System
+namespace Game
 {
 void ResolveStaticMeshLoads(Core::EngineContext* ctx, Engine::GameState* state);
 
-void UpdateRenderTransforms(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer);
+void RenderUpdate(Core::EngineContext* ctx, Engine::GameState* state);
+
+void RenderPrepareTransforms(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer);
 void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer);
 } // Game
 

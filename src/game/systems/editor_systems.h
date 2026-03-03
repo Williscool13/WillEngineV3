@@ -7,6 +7,7 @@
 #include <entt/entt.hpp>
 
 #include "game/components/common_components.h"
+#include "game/components/component_types.h"
 #include "game/components/core_components.h"
 #include "game/components/physics_components.h"
 #include "game/components/render_components.h"
@@ -25,16 +26,29 @@ struct EngineContext;
 namespace Game
 {
 void EditorUpdate(Core::EngineContext* ctx, Engine::GameState* state);
+
 void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer);
 
 template<typename T>
-void DrawComponentEditor(T& component, const Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity) {}
+ComponentEditorResult DrawComponentEditor(T& component, const Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity) { return {}; }
 
-template<> void DrawComponentEditor<Component::TransformComponent>(Component::TransformComponent& component, const Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity);
-template<> void DrawComponentEditor<Component::StaticMeshComponent>(Component::StaticMeshComponent& component, const Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity);
-template<> void DrawComponentEditor<Component::StableIdComponent>(Component::StableIdComponent& component, const Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity);
-template<> void DrawComponentEditor<Component::NameComponent>(Component::NameComponent& component, const Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity);
-template<> void DrawComponentEditor<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc& component, const Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity);
+template<>
+ComponentEditorResult DrawComponentEditor<Component::TransformComponent>(Component::TransformComponent& component, const Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity);
+
+template<>
+ComponentEditorResult DrawComponentEditor<Component::StaticMeshComponent>(Component::StaticMeshComponent& component, const Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity);
+
+template<>
+ComponentEditorResult DrawComponentEditor<Component::StableIdComponent>(Component::StableIdComponent& component, const Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity);
+
+template<>
+ComponentEditorResult DrawComponentEditor<Component::NameComponent>(Component::NameComponent& component, const Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity);
+
+template<>
+ComponentEditorResult DrawComponentEditor<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc& component, const Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity);
+
+template<>
+ComponentEditorResult DrawComponentEditor<Component::DrawPhysicsDebugTag>(Component::DrawPhysicsDebugTag& component, const Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity);
 }
 
 #endif //WILL_ENGINE_EDITOR_SYSTEMS_H

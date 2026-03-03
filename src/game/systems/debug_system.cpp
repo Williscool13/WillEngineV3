@@ -27,7 +27,7 @@
 #include "platform/paths.h"
 
 
-namespace Game::System
+namespace Game
 {
 static Engine::WillModelHandle dragonHandle = Engine::WillModelHandle::INVALID;
 static Engine::WillModelHandle boxHandle = Engine::WillModelHandle::INVALID;

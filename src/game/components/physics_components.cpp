@@ -90,79 +90,90 @@ void PhysicsBodyDesc::Deserialize(PhysicsBodyDesc& comp, const nlohmann::json& j
         comp.shapes.push_back(shape);
     }
 }
+
+void DrawPhysicsDebugTag::Serialize(const DrawPhysicsDebugTag& comp, nlohmann::json& json) {}
+void DrawPhysicsDebugTag::Deserialize(DrawPhysicsDebugTag& comp, const nlohmann::json& json) {}
 }
 
 namespace Game
 {
 template<>
-void DrawComponentEditor<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc& component, const Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity)
+ComponentEditorResult DrawComponentEditor<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc& component, const Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity)
 {
-    ImGui::Separator();
-    ImGui::SeparatorText("Physics Body");
+    bool open = ImGui::CollapsingHeader("Physics Body", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
+    ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+    bool remove = ImGui::SmallButton("X");
+    ImGui::PopStyleColor();
 
-    const char* motionTypes[] = {"Static", "Kinematic", "Dynamic"};
-    int currentMotion = static_cast<int>(component.motionType);
-    if (ImGui::Combo("Motion Type", &currentMotion, motionTypes, IM_ARRAYSIZE(motionTypes)))
-        component.motionType = static_cast<Component::PhysicsMotionType>(currentMotion);
+    if (open) {
+        const char* motionTypes[] = {"Static", "Kinematic", "Dynamic"};
+        int currentMotion = static_cast<int>(component.motionType);
+        if (ImGui::Combo("Motion Type", &currentMotion, motionTypes, IM_ARRAYSIZE(motionTypes)))
+            component.motionType = static_cast<Component::PhysicsMotionType>(currentMotion);
 
-    ImGui::DragFloat("Mass", &component.mass, 0.1f, 0.001f, 10000.0f);
+        ImGui::DragFloat("Mass", &component.mass, 0.1f, 0.001f, 10000.0f);
 
-    const char* qualityTypes[] = {"Discrete", "LinearCast"};
-    int currentQuality = static_cast<int>(component.motionQuality);
-    if (ImGui::Combo("Motion Quality", &currentQuality, qualityTypes, IM_ARRAYSIZE(qualityTypes)))
-        component.motionQuality = static_cast<JPH::EMotionQuality>(currentQuality);
+        const char* qualityTypes[] = {"Discrete", "LinearCast"};
+        int currentQuality = static_cast<int>(component.motionQuality);
+        if (ImGui::Combo("Motion Quality", &currentQuality, qualityTypes, IM_ARRAYSIZE(qualityTypes)))
+            component.motionQuality = static_cast<JPH::EMotionQuality>(currentQuality);
 
-    ImGui::SeparatorText("Shapes");
-    for (size_t i = 0; i < component.shapes.size(); ++i) {
-        ImGui::PushID(static_cast<int>(i));
-        auto& shape = component.shapes[i];
+        ImGui::SeparatorText("Shapes");
+        for (size_t i = 0; i < component.shapes.size(); ++i) {
+            ImGui::PushID(static_cast<int>(i));
+            auto& shape = component.shapes[i];
 
-        if (ImGui::TreeNode("", "Shape %zu", i)) {
-            const char* shapeTypes[] = {"Box", "Sphere", "Capsule"};
-            int currentShape = static_cast<int>(shape.type);
-            if (ImGui::Combo("Shape", &currentShape, shapeTypes, IM_ARRAYSIZE(shapeTypes)))
-                shape.type = static_cast<Component::PhysicsShapeType>(currentShape);
+            if (ImGui::TreeNode("", "Shape %zu", i)) {
+                const char* shapeTypes[] = {"Box", "Sphere", "Capsule"};
+                int currentShape = static_cast<int>(shape.type);
+                if (ImGui::Combo("Shape", &currentShape, shapeTypes, IM_ARRAYSIZE(shapeTypes)))
+                    shape.type = static_cast<Component::PhysicsShapeType>(currentShape);
 
-            ImGui::DragFloat3("Offset", &shape.offset.x, 0.01f);
+                ImGui::DragFloat3("Offset", &shape.offset.x, 0.01f);
 
-            switch (shape.type) {
-                case Component::PhysicsShapeType::Box:
-                    ImGui::DragFloat3("Half Extents", &shape.box.halfExtents.x, 0.01f, 0.001f, 100.0f);
-                    break;
-                case Component::PhysicsShapeType::Sphere:
-                    ImGui::DragFloat("Radius", &shape.sphere.radius, 0.01f, 0.001f, 100.0f);
-                    break;
-                case Component::PhysicsShapeType::Capsule:
-                    ImGui::DragFloat("Radius", &shape.capsule.radius, 0.01f, 0.001f, 100.0f);
-                    ImGui::DragFloat("Half Height", &shape.capsule.halfHeight, 0.01f, 0.001f, 100.0f);
-                    break;
+                switch (shape.type) {
+                    case Component::PhysicsShapeType::Box:
+                        ImGui::DragFloat3("Half Extents", &shape.box.halfExtents.x, 0.01f, 0.001f, 100.0f);
+                        break;
+                    case Component::PhysicsShapeType::Sphere:
+                        ImGui::DragFloat("Radius", &shape.sphere.radius, 0.01f, 0.001f, 100.0f);
+                        break;
+                    case Component::PhysicsShapeType::Capsule:
+                        ImGui::DragFloat("Radius", &shape.capsule.radius, 0.01f, 0.001f, 100.0f);
+                        ImGui::DragFloat("Half Height", &shape.capsule.halfHeight, 0.01f, 0.001f, 100.0f);
+                        break;
+                }
+                ImGui::TreePop();
             }
-            ImGui::TreePop();
-        }
-        ImGui::PopID();
-    }
-
-    if (ImGui::Button("Add Shape")) {
-        Component::PhysicsShapeDesc desc{};
-        desc.type = Component::PhysicsShapeType::Box;
-        desc.box.halfExtents = glm::vec3(0.5f);
-        component.shapes.push_back(desc);
-    }
-
-    ImGui::SeparatorText("Actions");
-    if (ImGui::Button("Apply (Recreate Body)")) {
-        auto* ctx = registry.ctx().get<Core::EngineContext*>();
-        JPH::BodyInterface& bodyInterface = ctx->physicsSystem->GetBodyInterface();
-
-        if (auto* body = registry.try_get<Component::PhysicsBodyComponent>(entity)) {
-            bodyInterface.RemoveBody(body->bodyID);
-            bodyInterface.DestroyBody(body->bodyID);
-            registry.remove<Component::PhysicsBodyComponent>(entity);
-            registry.remove<Component::DynamicPhysicsBodyComponent>(entity);
+            ImGui::PopID();
         }
 
-        OnComponentAdded<Component::PhysicsBodyDesc>(component, registry, entity);
+        if (ImGui::Button("Add Shape")) {
+            Component::PhysicsShapeDesc desc{};
+            desc.type = Component::PhysicsShapeType::Box;
+            desc.box.halfExtents = glm::vec3(0.5f);
+            component.shapes.push_back(desc);
+        }
+
+        ImGui::SeparatorText("Actions");
+        if (ImGui::Button("Apply (Recreate Body)")) {
+            auto* ctx = registry.ctx().get<Core::EngineContext*>();
+            JPH::BodyInterface& bodyInterface = ctx->physicsSystem->GetBodyInterface();
+
+            if (auto* body = registry.try_get<Component::PhysicsBodyComponent>(entity)) {
+                bodyInterface.RemoveBody(body->bodyID);
+                bodyInterface.DestroyBody(body->bodyID);
+                registry.remove<Component::PhysicsBodyComponent>(entity);
+                registry.remove<Component::DynamicPhysicsBodyComponent>(entity);
+            }
+
+            OnComponentAdded<Component::PhysicsBodyDesc>(component, registry, entity);
+        }
     }
+
+
+    return {.requestRemoval = remove};
 }
 
 template<>
@@ -173,14 +184,28 @@ void OnComponentAdded<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc& co
         JPH::BodyInterface& bodyInterface = ctx->physicsSystem->GetBodyInterface();
         JPH::RVec3 pos(transform->translation.x, transform->translation.y, transform->translation.z);
         JPH::Quat rot(transform->rotation.x, transform->rotation.y, transform->rotation.z, transform->rotation.w);
-        auto bodyId = System::CreateBodyFromDesc(bodyInterface, component, pos, rot);
-        registry.emplace<Component::PhysicsBodyComponent>(entity, bodyId);
-        if (component.motionType == Component::PhysicsMotionType::Dynamic) {
-            registry.emplace<Component::DynamicPhysicsBodyComponent>(entity, transform->translation, transform->rotation);
+        auto bodyId = CreateBodyFromDesc(bodyInterface, component, pos, rot);
+        if (!bodyId.IsInvalid()) {
+            registry.emplace<Component::PhysicsBodyComponent>(entity, bodyId);
+            if (component.motionType == Component::PhysicsMotionType::Dynamic) {
+                registry.emplace<Component::DynamicPhysicsBodyComponent>(entity, transform->translation, transform->rotation);
+            }
         }
     }
     else {
         LOG_WARN(Game, "PhysicsBodyDesc on entity without TransformComponent, skipping");
     }
+}
+
+template<>
+ComponentEditorResult DrawComponentEditor<Component::DrawPhysicsDebugTag>(Component::DrawPhysicsDebugTag& component, const Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity)
+{
+    ImGui::CollapsingHeader("Physics Debug Draw", ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_AllowOverlap);
+    ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+    bool remove = ImGui::SmallButton("X");
+    ImGui::PopStyleColor();
+
+    return {.requestRemoval = remove};
 }
 }

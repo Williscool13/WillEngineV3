@@ -36,11 +36,11 @@ void NameComponent::Deserialize(NameComponent& comp, const nlohmann::json& json)
 namespace Game
 {
 template<>
-void DrawComponentEditor<Component::StableIdComponent>(Component::StableIdComponent& component, const Core::ViewFamily& viewFamily, entt::registry& registry,
+ComponentEditorResult DrawComponentEditor<Component::StableIdComponent>(Component::StableIdComponent& component, const Core::ViewFamily& viewFamily, entt::registry& registry,
                                                        entt::entity entity)
 {
-    ImGui::Separator();
     ImGui::Text("StableID: %llu", component.id.id);
+    return {};
 }
 
 template<>
@@ -52,14 +52,14 @@ void OnComponentAdded<Component::StableIdComponent>(Component::StableIdComponent
 }
 
 template<>
-void DrawComponentEditor<Component::NameComponent>(Component::NameComponent& component, const Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity)
+ComponentEditorResult DrawComponentEditor<Component::NameComponent>(Component::NameComponent& component, const Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity)
 {
-    ImGui::Separator();
     char buf[256];
     strncpy_s(buf, component.name.c_str(), sizeof(buf) - 1);
     buf[sizeof(buf) - 1] = '\0';
     if (ImGui::InputText("Name", buf, sizeof(buf))) {
         component.name = buf;
     }
+    return {};
 }
 }

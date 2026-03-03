@@ -14,13 +14,15 @@ void RegisterComponents(ComponentRegistry& componentRegistry)
 {
     componentRegistry.registry.Clear();
 
+    RegisterComponent<Component::NameComponent>(componentRegistry, "NameComponent"_sid, "NameComponent");
+    RegisterComponent<Component::StableIdComponent>(componentRegistry, "StableIdComponent"_sid, "StableIdComponent");
+
     RegisterComponent<Component::TransformComponent>(componentRegistry, "TransformComponent"_sid, "TransformComponent");
     RegisterComponent<Component::FreeCameraComponent>(componentRegistry, "FreeCameraComponent"_sid, "FreeCameraComponent");
     RegisterComponent<Component::StaticMeshComponent>(componentRegistry, "StaticMeshComponent"_sid, "StaticMeshComponent");
-    RegisterComponent<Component::StableIdComponent>(componentRegistry, "StableIdComponent"_sid, "StableIdComponent");
-    RegisterComponent<Component::NameComponent>(componentRegistry, "NameComponent"_sid, "NameComponent");
 
     RegisterComponent<Component::PhysicsBodyDesc>(componentRegistry, "PhysicsBodyDesc"_sid, "PhysicsBodyDesc");
+    RegisterComponent<Component::DrawPhysicsDebugTag>(componentRegistry, "DrawPhysicsDebugTag"_sid, "DrawPhysicsDebugTag");
 
     RegisterComponent<Component::MotionBlurMovementComponent>(componentRegistry, "MotionBlurMovementComponent"_sid, "MotionBlurMovementComponent");
     RegisterComponent<Component::AntiGravityComponent>(componentRegistry, "AntiGravityComponent"_sid, "AntiGravityComponent");

@@ -14,7 +14,6 @@
 #include "engine/engine_api.h"
 #include "game/systems/editor_systems.h"
 #include "game/components/component_initialization.h"
-#include "game/scene/scene.h"
 
 namespace Game::Component
 {
@@ -37,8 +36,8 @@ void StaticMeshComponent::Deserialize(StaticMeshComponent& comp, const nlohmann:
 namespace Game
 {
 template<>
-void DrawComponentEditor<Component::StaticMeshComponent>(Component::StaticMeshComponent& component, const Core::ViewFamily& viewFamily, entt::registry& registry,
-                                                         entt::entity entity)
+ComponentEditorResult DrawComponentEditor<Component::StaticMeshComponent>(Component::StaticMeshComponent& component, const Core::ViewFamily& viewFamily, entt::registry& registry,
+                                                                          entt::entity entity)
 {
     ImGui::Separator();
 
@@ -67,7 +66,7 @@ void DrawComponentEditor<Component::StaticMeshComponent>(Component::StaticMeshCo
             }
             ImGui::EndCombo();
         }
-        return;
+        return {};
     }
 
     ImGui::Text("Model ID: %s", component.modelId.ToString());
@@ -75,25 +74,36 @@ void DrawComponentEditor<Component::StaticMeshComponent>(Component::StaticMeshCo
     assert(component.modelHandle.IsValid() && "modelId specified but model handle is still invalid");
     Render::WillModel* model = ctx->assetManager->GetModel(component.modelHandle);
     if (component.meshIndex == -1) {
-        if (ImGui::BeginCombo("Select Mesh", "")) {
-            for (int32_t i = 0; i < model->modelData.meshes.size(); i++) {
-                auto name = model->modelData.meshes[i].name;
-                if (name.empty()) {
-                    name = fmt::format("Mesh {}", i);
-                }
-                if (ImGui::Selectable(name.c_str(), false)) {
-                    component.meshIndex = i;
-                    registry.emplace_or_replace<Component::StaticMeshLoadingTag>(entity);
-                    auto* transform = registry.try_get<Component::TransformComponent>(entity);
-                    glm::mat4 m = transform ? Component::GetMatrix(*transform) : glm::mat4(1.0f);
-                    registry.emplace_or_replace<Component::RenderTransformComponent>(entity, m, m);
-                    registry.emplace_or_replace<Component::DirtyRenderTransformComponent>(entity);
-                    state->bPendingModelResolve |= true;
-                }
-            }
-            ImGui::EndCombo();
+        if (model->modelData.meshes.size() == 1) {
+            component.meshIndex = 0;
+            registry.emplace_or_replace<Component::StaticMeshLoadingTag>(entity);
+            auto* transform = registry.try_get<Component::TransformComponent>(entity);
+            glm::mat4 m = transform ? Component::GetMatrix(*transform) : glm::mat4(1.0f);
+            registry.emplace_or_replace<Component::RenderTransformComponent>(entity, m, m);
+            registry.emplace_or_replace<Component::DirtyRenderTransformComponent>(entity);
+            state->bPendingModelResolve |= true;
         }
-        return;
+        else {
+            if (ImGui::BeginCombo("Select Mesh", "")) {
+                for (int32_t i = 0; i < model->modelData.meshes.size(); i++) {
+                    auto name = model->modelData.meshes[i].name;
+                    if (name.empty()) {
+                        name = fmt::format("Mesh {}", i);
+                    }
+                    if (ImGui::Selectable(name.c_str(), false)) {
+                        component.meshIndex = i;
+                        registry.emplace_or_replace<Component::StaticMeshLoadingTag>(entity);
+                        auto* transform = registry.try_get<Component::TransformComponent>(entity);
+                        glm::mat4 m = transform ? Component::GetMatrix(*transform) : glm::mat4(1.0f);
+                        registry.emplace_or_replace<Component::RenderTransformComponent>(entity, m, m);
+                        registry.emplace_or_replace<Component::DirtyRenderTransformComponent>(entity);
+                        state->bPendingModelResolve |= true;
+                    }
+                }
+                ImGui::EndCombo();
+            }
+            return {};
+        }
     }
 
     // todo: remove mesh
@@ -113,6 +123,8 @@ void DrawComponentEditor<Component::StaticMeshComponent>(Component::StaticMeshCo
         }
         ImGui::TreePop();
     }
+
+    return {};
 }
 
 template<>

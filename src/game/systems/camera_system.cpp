@@ -12,7 +12,7 @@
 #include "engine/engine_api.h"
 #include "game/fwd_components.h"
 
-namespace Game::System
+namespace Game
 {
 void UpdateCameras(Core::EngineContext* ctx, Engine::GameState* state)
 {

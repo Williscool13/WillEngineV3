@@ -54,7 +54,7 @@ static const DebugHotkey DEBUG_HOTKEYS[] = {
 
 }
 
-namespace Game::System
+namespace Game
 {
 void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state);
 void DebugProcessPhysicsCollisions(Core::EngineContext* ctx, Engine::GameState* state);

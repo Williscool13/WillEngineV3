@@ -15,7 +15,7 @@
 #include "game/components/debug_components.h"
 
 
-namespace Game::System
+namespace Game
 {
 void ResolveStaticMeshLoads(Core::EngineContext* ctx, Engine::GameState* state)
 {
@@ -69,7 +69,15 @@ void ResolveStaticMeshLoads(Core::EngineContext* ctx, Engine::GameState* state)
     }
 }
 
-void UpdateRenderTransforms(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer)
+void RenderUpdate(Core::EngineContext* ctx, Engine::GameState* state)
+{
+    auto transformDirtyView = state->registry.view<Component::RenderTransformComponent, Component::DirtyTransformTag>();
+    for (auto entity : transformDirtyView) {
+        state->registry.emplace_or_replace<Component::DirtyRenderTransformComponent>(entity);
+    }
+}
+
+void RenderPrepareTransforms(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
 
