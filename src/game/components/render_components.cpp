@@ -73,6 +73,18 @@ ComponentEditorResult DrawComponentEditor<Component::StaticMeshComponent>(Compon
     }
 
     ImGui::Text("Model ID: %s", component.modelId.ToString());
+    ImGui::SameLine();
+    if (ImGui::SmallButton("X##deselect_model")) {
+        ctx->assetManager->UnloadModel(component.modelHandle);
+        component.modelId = StringID::Invalid;
+        component.modelHandle = {};
+        component.meshIndex = -1;
+        component.primitiveCount = 0;
+        registry.remove<Component::StaticMeshLoadingTag>(entity);
+        registry.remove<Component::RenderTransformComponent>(entity);
+        registry.remove<Component::DirtyRenderTransformComponent>(entity);
+        return {};
+    }
 
     assert(component.modelHandle.IsValid() && "modelId specified but model handle is still invalid");
     Render::WillModel* model = ctx->assetManager->GetModel(component.modelHandle);
@@ -109,8 +121,18 @@ ComponentEditorResult DrawComponentEditor<Component::StaticMeshComponent>(Compon
         }
     }
 
-    // todo: remove mesh
     ImGui::Text("Mesh Index: %d", component.meshIndex);
+    if (model->modelData.meshes.size() > 1) {
+        if (ImGui::SmallButton("X##deselect_mesh")) {
+            component.meshIndex = -1;
+            component.primitiveCount = 0;
+            registry.remove<Component::StaticMeshLoadingTag>(entity);
+            registry.remove<Component::RenderTransformComponent>(entity);
+            registry.remove<Component::DirtyRenderTransformComponent>(entity);
+            return {};
+        }
+    }
+
     ImGui::Text("Primitive Count: %u", component.primitiveCount);
 
     if (component.primitiveCount > 0 && ImGui::TreeNode("Primitives")) {
