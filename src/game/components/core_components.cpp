@@ -44,7 +44,13 @@ template<>
 ComponentEditorResult DrawComponentEditor<Component::TransformComponent>(Component::TransformComponent& component, const Core::ViewFamily& viewFamily, entt::registry& registry,
                                                         entt::entity entity)
 {
-    ImGui::Separator();
+    bool open = ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
+    ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+    bool remove = ImGui::SmallButton("X##deletetransform");
+    ImGui::PopStyleColor();
+
+    if (!open) { return {.requestRemoval = remove}; }
 
     bool dirty = false;
     dirty |= ImGui::DragFloat3("Translation", &component.translation.x, 0.1f);
@@ -111,6 +117,6 @@ ComponentEditorResult DrawComponentEditor<Component::TransformComponent>(Compone
         registry.emplace_or_replace<Component::DirtyTransformTag>(entity);
     }
 
-    return {};
+    return {.requestRemoval = remove};
 }
 }

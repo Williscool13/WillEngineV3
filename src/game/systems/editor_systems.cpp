@@ -26,14 +26,26 @@ void EditorUpdate(Core::EngineContext* ctx, Engine::GameState* state)
 {
     if (ctx->bImguiMouseCaptured || ctx->bImguiKeyboardCaptured) { return; }
 
-    if (state->inputFrame->GetKey(Key::W).pressed) {
-        state->currentGizmoOperation = ImGuizmo::TRANSLATE;
+    const bool ctrlHeld = state->inputFrame->GetKey(Key::LCTRL).down || state->inputFrame->GetKey(Key::RCTRL).down;
+
+    if (!ctrlHeld) {
+        if (state->inputFrame->GetKey(Key::W).pressed) {
+            state->currentGizmoOperation = ImGuizmo::TRANSLATE;
+        }
+        else if (state->inputFrame->GetKey(Key::E).pressed) {
+            state->currentGizmoOperation = ImGuizmo::ROTATE;
+        }
+        else if (state->inputFrame->GetKey(Key::R).pressed) {
+            state->currentGizmoOperation = ImGuizmo::SCALE;
+        }
     }
-    else if (state->inputFrame->GetKey(Key::E).pressed) {
-        state->currentGizmoOperation = ImGuizmo::ROTATE;
+
+    if (ctrlHeld && state->inputFrame->GetKey(Key::W).pressed) {
+        state->bWantCopyEntities = true;
     }
-    else if (state->inputFrame->GetKey(Key::R).pressed) {
-        state->currentGizmoOperation = ImGuizmo::SCALE;
+
+    if (state->inputFrame->GetKey(Key::DEL).pressed) {
+        state->bWantDeleteEntities = true;
     }
 
     if (state->inputFrame->GetKey(Key::ESCAPE).pressed) {
@@ -69,6 +81,35 @@ void EditorUpdate(Core::EngineContext* ctx, Engine::GameState* state)
 void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
+
+    if (state->bWantDeleteEntities) {
+        state->bWantDeleteEntities = false;
+        for (entt::entity entity : state->selectedEntities) {
+            if (!state->registry.valid(entity)) continue;
+            for (auto& entry : state->componentRegistry.registry) {
+                if (entry.has(state->registry, entity)) {
+                    entry.onRemoveComponent(state->registry, entity);
+                }
+            }
+            if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
+                state->stableIdToEntityMap.erase(stable->id);
+            }
+            state->registry.destroy(entity);
+        }
+        state->selectedEntities.clear();
+    }
+
+    if (state->bWantCopyEntities) {
+        state->bWantCopyEntities = false;
+        std::vector<entt::entity> copies;
+        copies.reserve(state->selectedEntities.size());
+        for (entt::entity entity : state->selectedEntities) {
+            if (!state->registry.valid(entity)) continue;
+            copies.push_back(CopySceneEntity(state, entity));
+        }
+        state->selectedEntities = copies;
+    }
+
     if (ImGui::Begin("Debug View")) {
         auto cameraView = state->registry.view<Component::CameraComponent, Component::MainViewportTag, Component::TransformComponent>();
         const auto& [cam, transform] = cameraView.get(cameraView.front());

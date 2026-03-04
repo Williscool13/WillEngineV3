@@ -178,6 +178,24 @@ ComponentEditorResult DrawComponentEditor<Component::PhysicsBodyDesc>(Component:
 }
 
 template<>
+void OnComponentRemoved<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc& component, entt::registry& registry, entt::entity entity)
+{
+    auto* ctx = registry.ctx().get<Core::EngineContext*>();
+    JPH::BodyInterface& bodyInterface = ctx->physicsSystem->GetBodyInterface();
+
+    if (auto* body = registry.try_get<Component::PhysicsBodyComponent>(entity)) {
+        if (!body->bodyID.IsInvalid()) {
+            bodyInterface.RemoveBody(body->bodyID);
+            bodyInterface.DestroyBody(body->bodyID);
+            registry.remove<Component::PhysicsBodyComponent>(entity);
+            registry.remove<Component::DynamicPhysicsBodyComponent>(entity);
+        }
+    }
+
+    registry.remove<Component::PhysicsBodyDesc>(entity);
+}
+
+template<>
 void OnComponentAdded<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc& component, entt::registry& registry, entt::entity entity)
 {
     auto* ctx = registry.ctx().get<Core::EngineContext*>();
@@ -204,7 +222,7 @@ ComponentEditorResult DrawComponentEditor<Component::DrawPhysicsDebugTag>(Compon
     ImGui::CollapsingHeader("Physics Debug Draw", ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_AllowOverlap);
     ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
-    bool remove = ImGui::SmallButton("X");
+    bool remove = ImGui::SmallButton("X##deletephysicscomponent");
     ImGui::PopStyleColor();
 
     return {.requestRemoval = remove};

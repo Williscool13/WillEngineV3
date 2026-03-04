@@ -77,6 +77,8 @@ struct GameState
     StringID currentSceneId{"main_scene"_sid};
     std::string currentSceneName{"Main Scene"};
     std::vector<entt::entity> selectedEntities{};
+    bool bWantCopyEntities{false};
+    bool bWantDeleteEntities{false};
 
 };
 

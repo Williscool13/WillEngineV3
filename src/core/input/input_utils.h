@@ -85,6 +85,7 @@ inline Key SDLKeyToKey(SDL_Keycode sdl)
         case SDLK_PAGEUP:   return Key::PAGEUP;
         case SDLK_PAGEDOWN: return Key::PAGEDOWN;
         case SDLK_INSERT:   return Key::INSERT;
+        case SDLK_DELETE:   return Key::DEL;
 
         case SDLK_ESCAPE:        return Key::ESCAPE;
         case SDLK_RETURN:        return Key::RETURN;

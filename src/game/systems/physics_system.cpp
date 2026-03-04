@@ -22,6 +22,11 @@ void UpdatePhysics(Core::EngineContext* ctx, Engine::GameState* state)
     auto* physics = ctx->physicsSystem;
     state->physicsDeltaTimeAccumulator += state->timeFrame->deltaTime;
 
+    auto transformDirtyView = state->registry.view<Component::PhysicsBodyComponent, Component::DirtyTransformTag>();
+    for (auto entity : transformDirtyView) {
+        state->registry.emplace_or_replace<Component::TeleportPhysicsTransformTag>(entity);
+    }
+
     while (state->physicsDeltaTimeAccumulator >= Physics::PHYSICS_TIMESTEP) {
         auto& bodyInterface = physics->GetBodyInterface();
 

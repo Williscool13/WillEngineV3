@@ -20,8 +20,10 @@ template<> void OnComponentAdded<Component::PhysicsBodyDesc>(Component::PhysicsB
 template<> void OnComponentAdded<Component::StableIdComponent>(Component::StableIdComponent& component, entt::registry& registry, entt::entity entity);
 
 template<typename T>
-void OnComponentRemoved(T& component, entt::registry& registry, entt::entity entity) {}
+void OnComponentRemoved(T& component, entt::registry& registry, entt::entity entity) { registry.remove<T>(entity); }
+template<> void OnComponentRemoved<Component::StableIdComponent>(Component::StableIdComponent& component, entt::registry& registry, entt::entity entity);
 template<> void OnComponentRemoved<Component::StaticMeshComponent>(Component::StaticMeshComponent& component, entt::registry& registry, entt::entity entity);
+template<> void OnComponentRemoved<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc& component, entt::registry& registry, entt::entity entity);
 
 } // Game
 

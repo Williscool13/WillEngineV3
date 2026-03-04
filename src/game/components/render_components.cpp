@@ -53,118 +53,124 @@ template<>
 ComponentEditorResult DrawComponentEditor<Component::StaticMeshComponent>(Component::StaticMeshComponent& component, const Core::ViewFamily& viewFamily, entt::registry& registry,
                                                                           entt::entity entity)
 {
-    ImGui::Separator();
+    bool open = ImGui::CollapsingHeader("Static Mesh", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
+    ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+    bool remove = ImGui::SmallButton("X##deletestaticmesh");
+    ImGui::PopStyleColor();
 
-    bool visible = component.modelFlags.x != 0.0f;
-    bool shadowCaster = component.modelFlags.y != 0.0f;
-    if (ImGui::Checkbox("Visible", &visible)) {
-        component.modelFlags.x = visible ? 1.0f : 0.0f;
-    }
-    ImGui::SameLine();
-    if (ImGui::Checkbox("Shadow Caster", &shadowCaster)) {
-        component.modelFlags.y = shadowCaster ? 1.0f : 0.0f;
-    }
-
-    auto* ctx = registry.ctx().get<Core::EngineContext*>();
-    auto* state = registry.ctx().get<Engine::GameState*>();
-
-    if (component.modelId == StringID::Invalid) {
-        if (ImGui::BeginCombo("Select Model", "")) {
-            const std::unordered_map<StringID, std::filesystem::path>& modelReg = ctx->assetManager->GetModelRegistry();
-            for (const auto& key : modelReg | std::views::keys) {
-                if (ImGui::Selectable(key.ToString(), false)) {
-                    component.modelId = key;
-                    component.modelHandle = ctx->assetManager->LoadModel(component.modelId);
-                }
-            }
-            ImGui::EndCombo();
+    if (open) {
+        bool visible = component.modelFlags.x != 0.0f;
+        bool shadowCaster = component.modelFlags.y != 0.0f;
+        if (ImGui::Checkbox("Visible", &visible)) {
+            component.modelFlags.x = visible ? 1.0f : 0.0f;
         }
-        return {};
-    }
-
-    ImGui::Text("Model ID: %s", component.modelId.ToString());
-    ImGui::SameLine();
-    if (ImGui::SmallButton("X##deselect_model")) {
-        ctx->assetManager->UnloadModel(component.modelHandle);
-        component.modelId = StringID::Invalid;
-        component.modelHandle = {};
-        component.meshIndex = -1;
-        component.primitiveCount = 0;
-        registry.remove<Component::StaticMeshLoadingTag>(entity);
-        registry.remove<Component::RenderTransformComponent>(entity);
-        registry.remove<Component::DirtyRenderTransformComponent>(entity);
-        return {};
-    }
-
-    assert(component.modelHandle.IsValid() && "modelId specified but model handle is still invalid");
-    Render::WillModel* model = ctx->assetManager->GetModel(component.modelHandle);
-    if (model->modelLoadState != Render::WillModel::ModelLoadState::Loaded) {
-        ImGui::Text("Loading Model...");
-        return {};
-    }
-
-    if (component.meshIndex == -1) {
-        if (model->modelData.meshes.size() == 1) {
-            component.meshIndex = 0;
-            registry.emplace_or_replace<Component::StaticMeshLoadingTag>(entity);
-            auto* transform = registry.try_get<Component::TransformComponent>(entity);
-            glm::mat4 m = transform ? Component::GetMatrix(*transform) : glm::mat4(1.0f);
-            registry.emplace_or_replace<Component::RenderTransformComponent>(entity, m, m);
-            registry.emplace_or_replace<Component::DirtyRenderTransformComponent>(entity);
-            state->bPendingModelResolve |= true;
+        ImGui::SameLine();
+        if (ImGui::Checkbox("Shadow Caster", &shadowCaster)) {
+            component.modelFlags.y = shadowCaster ? 1.0f : 0.0f;
         }
-        else {
-            if (ImGui::BeginCombo("Select Mesh", "")) {
-                for (int32_t i = 0; i < model->modelData.meshes.size(); i++) {
-                    auto name = model->modelData.meshes[i].name;
-                    if (name.empty()) {
-                        name = fmt::format("Mesh {}", i);
-                    }
-                    if (ImGui::Selectable(name.c_str(), false)) {
-                        component.meshIndex = i;
-                        registry.emplace_or_replace<Component::StaticMeshLoadingTag>(entity);
-                        auto* transform = registry.try_get<Component::TransformComponent>(entity);
-                        glm::mat4 m = transform ? Component::GetMatrix(*transform) : glm::mat4(1.0f);
-                        registry.emplace_or_replace<Component::RenderTransformComponent>(entity, m, m);
-                        registry.emplace_or_replace<Component::DirtyRenderTransformComponent>(entity);
-                        state->bPendingModelResolve |= true;
+
+        auto* ctx = registry.ctx().get<Core::EngineContext*>();
+        auto* state = registry.ctx().get<Engine::GameState*>();
+
+        if (component.modelId == StringID::Invalid) {
+            if (ImGui::BeginCombo("Select Model", "")) {
+                const std::unordered_map<StringID, std::filesystem::path>& modelReg = ctx->assetManager->GetModelRegistry();
+                for (const auto& key : modelReg | std::views::keys) {
+                    if (ImGui::Selectable(key.ToString(), false)) {
+                        component.modelId = key;
+                        component.modelHandle = ctx->assetManager->LoadModel(component.modelId);
                     }
                 }
                 ImGui::EndCombo();
             }
-            return {};
+            return {.requestRemoval = remove};
         }
-    }
 
-    ImGui::Text("Mesh Index: %d", component.meshIndex);
-    if (model->modelData.meshes.size() > 1) {
-        if (ImGui::SmallButton("X##deselect_mesh")) {
+        ImGui::Text("Model ID: %s", component.modelId.ToString());
+        ImGui::SameLine();
+        if (ImGui::SmallButton("X##deselect_model")) {
+            ctx->assetManager->UnloadModel(component.modelHandle);
+            component.modelId = StringID::Invalid;
+            component.modelHandle = {};
             component.meshIndex = -1;
             component.primitiveCount = 0;
             registry.remove<Component::StaticMeshLoadingTag>(entity);
             registry.remove<Component::RenderTransformComponent>(entity);
             registry.remove<Component::DirtyRenderTransformComponent>(entity);
-            return {};
+            return {.requestRemoval = remove};
         }
-    }
 
-    ImGui::Text("Primitive Count: %u", component.primitiveCount);
+        assert(component.modelHandle.IsValid() && "modelId specified but model handle is still invalid");
+        Render::WillModel* model = ctx->assetManager->GetModel(component.modelHandle);
+        if (model->modelLoadState != Render::WillModel::ModelLoadState::Loaded) {
+            ImGui::Text("Loading Model...");
+            return {.requestRemoval = remove};
+        }
 
-    if (component.primitiveCount > 0 && ImGui::TreeNode("Primitives")) {
-        for (uint8_t i = 0; i < component.primitiveCount; ++i) {
-            ImGui::PushID(i);
-            if (ImGui::TreeNode("", "Primitive %u", i)) {
-                const auto& prim = component.primitives[i];
-                ImGui::Text("Primitive Index: %u", prim.primitiveIndex);
-                ImGui::Text("Material ID: %u", prim.materialID);
-                ImGui::TreePop();
+        if (component.meshIndex == -1) {
+            if (model->modelData.meshes.size() == 1) {
+                component.meshIndex = 0;
+                registry.emplace_or_replace<Component::StaticMeshLoadingTag>(entity);
+                auto* transform = registry.try_get<Component::TransformComponent>(entity);
+                glm::mat4 m = transform ? Component::GetMatrix(*transform) : glm::mat4(1.0f);
+                registry.emplace_or_replace<Component::RenderTransformComponent>(entity, m, m);
+                registry.emplace_or_replace<Component::DirtyRenderTransformComponent>(entity);
+                state->bPendingModelResolve |= true;
             }
-            ImGui::PopID();
+            else {
+                if (ImGui::BeginCombo("Select Mesh", "")) {
+                    for (int32_t i = 0; i < model->modelData.meshes.size(); i++) {
+                        auto name = model->modelData.meshes[i].name;
+                        if (name.empty()) {
+                            name = fmt::format("Mesh {}", i);
+                        }
+                        if (ImGui::Selectable(name.c_str(), false)) {
+                            component.meshIndex = i;
+                            registry.emplace_or_replace<Component::StaticMeshLoadingTag>(entity);
+                            auto* transform = registry.try_get<Component::TransformComponent>(entity);
+                            glm::mat4 m = transform ? Component::GetMatrix(*transform) : glm::mat4(1.0f);
+                            registry.emplace_or_replace<Component::RenderTransformComponent>(entity, m, m);
+                            registry.emplace_or_replace<Component::DirtyRenderTransformComponent>(entity);
+                            state->bPendingModelResolve |= true;
+                        }
+                    }
+                    ImGui::EndCombo();
+                }
+                return {.requestRemoval = remove};
+            }
         }
-        ImGui::TreePop();
+
+        ImGui::Text("Mesh Index: %d", component.meshIndex);
+        if (model->modelData.meshes.size() > 1) {
+            if (ImGui::SmallButton("X##deselect_mesh")) {
+                component.meshIndex = -1;
+                component.primitiveCount = 0;
+                registry.remove<Component::StaticMeshLoadingTag>(entity);
+                registry.remove<Component::RenderTransformComponent>(entity);
+                registry.remove<Component::DirtyRenderTransformComponent>(entity);
+                return {.requestRemoval = remove};
+            }
+        }
+
+        ImGui::Text("Primitive Count: %u", component.primitiveCount);
+
+        if (component.primitiveCount > 0 && ImGui::TreeNode("Primitives")) {
+            for (uint8_t i = 0; i < component.primitiveCount; ++i) {
+                ImGui::PushID(i);
+                if (ImGui::TreeNode("", "Primitive %u", i)) {
+                    const auto& prim = component.primitives[i];
+                    ImGui::Text("Primitive Index: %u", prim.primitiveIndex);
+                    ImGui::Text("Material ID: %u", prim.materialID);
+                    ImGui::TreePop();
+                }
+                ImGui::PopID();
+            }
+            ImGui::TreePop();
+        }
     }
 
-    return {};
+    return {.requestRemoval = remove};
 }
 
 template<>
@@ -197,5 +203,6 @@ void OnComponentRemoved<Component::StaticMeshComponent>(Component::StaticMeshCom
     registry.remove<Component::StaticMeshLoadingTag>(entity);
     registry.remove<Component::RenderTransformComponent>(entity);
     registry.remove<Component::DirtyRenderTransformComponent>(entity);
+    registry.remove<Component::StaticMeshComponent>(entity);
 }
 }
