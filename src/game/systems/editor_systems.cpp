@@ -11,6 +11,7 @@
 
 #include "debug_system.h"
 #include "imgui.h"
+#include "imgui_internal.h"
 #include "scene_system.h"
 #include "core/include/engine_context.h"
 #include "core/input/input_frame.h"
@@ -167,6 +168,68 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
         static_cast<float>(ctx->windowContext.viewportHeight)
     );
 
+    const glm::mat4 view = frameBuffer->mainViewFamily.mainView.currentViewData.view;
+    const glm::mat4 proj = frameBuffer->mainViewFamily.mainView.currentViewData.proj;
+    const glm::vec3 cameraPos = frameBuffer->mainViewFamily.mainView.currentViewData.cameraPos;
+
+    const bool multiSelected = state->selectedEntities.size() > 1;
+    if (multiSelected) {
+        state->currentGizmoMode = ImGuizmo::WORLD;
+    }
+
+    if (ImGui::Begin("Toolbar", nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse)) {
+        if (ImGui::RadioButton("T##gizmo_op", state->currentGizmoOperation == ImGuizmo::TRANSLATE)) { state->currentGizmoOperation = ImGuizmo::TRANSLATE; }
+        if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Translate (W)"); }
+        ImGui::SameLine();
+        if (ImGui::RadioButton("R##gizmo_op", state->currentGizmoOperation == ImGuizmo::ROTATE)) { state->currentGizmoOperation = ImGuizmo::ROTATE; }
+        if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Rotate (E)"); }
+        ImGui::SameLine();
+        if (ImGui::RadioButton("S##gizmo_op", state->currentGizmoOperation == ImGuizmo::SCALE)) { state->currentGizmoOperation = ImGuizmo::SCALE; }
+        if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Scale (R)"); }
+
+        ImGui::SameLine();
+        ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+        ImGui::SameLine();
+
+        ImGui::BeginDisabled(state->currentGizmoOperation == ImGuizmo::SCALE || multiSelected);
+        if (ImGui::RadioButton("L##gizmo_mode", state->currentGizmoMode == ImGuizmo::LOCAL)) { state->currentGizmoMode = ImGuizmo::LOCAL; }
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) { ImGui::SetTooltip("Local space"); }
+        ImGui::SameLine();
+        if (ImGui::RadioButton("W##gizmo_mode", state->currentGizmoMode == ImGuizmo::WORLD)) { state->currentGizmoMode = ImGuizmo::WORLD; }
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) { ImGui::SetTooltip("World space"); }
+        ImGui::EndDisabled();
+
+        if (state->currentGizmoOperation == ImGuizmo::SCALE) {
+            ImGui::SameLine();
+            ImGui::Checkbox("Uni##gizmo_uni", &state->bUniformScaleMode);
+            if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Uniform scale"); }
+        }
+
+        ImGui::SameLine();
+        ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+        ImGui::SameLine();
+
+        // --- Snap ---
+        ImGui::Checkbox("Snap##gizmo_snap", &state->bSnapEnabled);
+        if (state->bSnapEnabled) {
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(55.0f);
+            if (state->currentGizmoOperation == ImGuizmo::TRANSLATE) {
+                ImGui::DragFloat("##snap_val", &state->snapTranslation, 0.05f, 0.01f, 10.0f, "%.2f");
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Translation snap (world units)");
+            }
+            else if (state->currentGizmoOperation == ImGuizmo::ROTATE) {
+                ImGui::DragFloat("##snap_val", &state->snapRotation, 1.0f, 1.0f, 180.0f, "%.0f deg");
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Rotation snap (degrees)");
+            }
+            else {
+                ImGui::DragFloat("##snap_val", &state->snapScale, 0.05f, 0.01f, 2.0f, "%.2f");
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Scale snap");
+            }
+        }
+    }
+    ImGui::End();
+
     if (ImGui::Begin("Scene Browser")) {
         // Scene selection
         ImGui::SeparatorText("Scene");
@@ -199,9 +262,9 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
         ImGui::InputText("##search", search, sizeof(search));
 
         entt::entity entityToDelete = entt::null;
-        auto view = state->registry.view<Component::SceneComponent>();
-        for (auto entity : view) {
-            auto& scene = view.get<Component::SceneComponent>(entity);
+        auto view2 = state->registry.view<Component::SceneComponent>();
+        for (auto entity : view2) {
+            auto& scene = view2.get<Component::SceneComponent>(entity);
             if (scene.sceneId != state->currentSceneId) continue;
 
             const char* label = "Unnamed";
@@ -257,31 +320,6 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
     ImGui::End();
 
     if (ImGui::Begin("Details")) {
-        if (ImGui::RadioButton("Translate", state->currentGizmoOperation == ImGuizmo::TRANSLATE)) state->currentGizmoOperation = ImGuizmo::TRANSLATE;
-        ImGui::SameLine();
-        if (ImGui::RadioButton("Rotate", state->currentGizmoOperation == ImGuizmo::ROTATE)) state->currentGizmoOperation = ImGuizmo::ROTATE;
-        ImGui::SameLine();
-        if (ImGui::RadioButton("Scale", state->currentGizmoOperation == ImGuizmo::SCALE)) state->currentGizmoOperation = ImGuizmo::SCALE;
-        if (state->currentGizmoOperation == ImGuizmo::SCALE) {
-            ImGui::SameLine();
-            ImGui::Checkbox("Uniform", &state->bUniformScaleMode);
-        }
-
-        const bool multiSelected = state->selectedEntities.size() > 1;
-
-        // Only world space for multi-select.
-        ImGui::BeginDisabled(state->currentGizmoOperation == ImGuizmo::SCALE || multiSelected);
-        if (ImGui::RadioButton("Local", state->currentGizmoMode == ImGuizmo::LOCAL)) state->currentGizmoMode = ImGuizmo::LOCAL;
-        ImGui::SameLine();
-        if (ImGui::RadioButton("World", state->currentGizmoMode == ImGuizmo::WORLD)) state->currentGizmoMode = ImGuizmo::WORLD;
-        ImGui::EndDisabled();
-
-        if (multiSelected) {
-            state->currentGizmoMode = ImGuizmo::WORLD;
-        }
-
-        ImGui::Separator();
-
         if (state->selectedEntities.size() == 1) {
             ComponentEntry* entryToRemove = nullptr;
             entt::entity entity = state->selectedEntities[0];
@@ -347,15 +385,26 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
                 static glm::quat s_prevRotation{1.0f, 0.0f, 0.0f, 0.0f};
                 static glm::vec3 s_prevScale{1.0f, 1.0f, 1.0f};
 
-                glm::mat4 view = frameBuffer->mainViewFamily.mainView.currentViewData.view;
-                glm::mat4 proj = frameBuffer->mainViewFamily.mainView.currentViewData.proj;
+                float snapArr[3] = {};
+                float* snap = nullptr;
+                if (state->bSnapEnabled) {
+                    if (state->currentGizmoOperation == ImGuizmo::TRANSLATE)
+                        snapArr[0] = snapArr[1] = snapArr[2] = state->snapTranslation;
+                    else if (state->currentGizmoOperation == ImGuizmo::ROTATE)
+                        snapArr[0] = snapArr[1] = snapArr[2] = state->snapRotation;
+                    else
+                        snapArr[0] = snapArr[1] = snapArr[2] = state->snapScale;
+                    snap = snapArr;
+                }
                 glm::mat4 gizmoMatrix = glm::translate(glm::mat4(1.0f), averagePos);
                 ImGuizmo::Manipulate(
                     glm::value_ptr(view),
                     glm::value_ptr(proj),
                     state->currentGizmoOperation,
                     ImGuizmo::WORLD,
-                    glm::value_ptr(gizmoMatrix)
+                    glm::value_ptr(gizmoMatrix),
+                    nullptr,
+                    snap
                 );
 
                 if (ImGuizmo::IsUsing()) {

@@ -87,6 +87,11 @@ ComponentEditorResult DrawComponentEditor<Component::StaticMeshComponent>(Compon
 
     assert(component.modelHandle.IsValid() && "modelId specified but model handle is still invalid");
     Render::WillModel* model = ctx->assetManager->GetModel(component.modelHandle);
+    if (model->modelLoadState != Render::WillModel::ModelLoadState::Loaded) {
+        ImGui::Text("Loading Model...");
+        return {};
+    }
+
     if (component.meshIndex == -1) {
         if (model->modelData.meshes.size() == 1) {
             component.meshIndex = 0;

@@ -674,18 +674,11 @@ void WillEngine::Run()
     timeManager->Reset();
 
     SDL_Event e;
-    bool exit = false;
     while (true) {
         ZoneScopedN("EngineFrame");
         while (SDL_PollEvent(&e) != 0) {
             ImGui_ImplSDL3_ProcessEvent(&e);
             switch (e.type) {
-                case SDL_EVENT_QUIT:
-                    exit = true;
-                    break;
-                case SDL_EVENT_KEY_DOWN:
-                    if (e.key.key == SDLK_ESCAPE) { exit = true; }
-                    break;
                 case SDL_EVENT_WINDOW_MINIMIZED:
                     bMinimized = true;
                     bRequireSwapchainRecreate = true;
@@ -720,7 +713,7 @@ void WillEngine::Run()
             inputManager->ProcessEvent(e);
         }
 
-        if (exit) {
+        if (inputManager->IsQuitRequested()) {
             renderThread->RequestShutdown();
             break;
         }

@@ -47,6 +47,11 @@ void InputManager::ProcessEvent(const SDL_Event& event)
             currentInput.mouseWheelDelta += event.wheel.mouse_y;
             break;
         }
+        case SDL_EVENT_QUIT:
+        {
+            bRequestedQuit = true;
+            break;
+        }
 
         default:
             break;

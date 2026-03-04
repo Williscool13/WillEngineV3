@@ -72,12 +72,25 @@ ComponentEditorResult DrawComponentEditor<Component::TransformComponent>(Compone
     glm::mat4 view = viewFamily.mainView.currentViewData.view;
     glm::mat4 proj = viewFamily.mainView.currentViewData.proj;
     glm::mat4 model = Component::GetMatrix(component);
+    float snapArr[3] = {};
+    float* snap = nullptr;
+    if (state->bSnapEnabled) {
+        if (state->currentGizmoOperation == ImGuizmo::TRANSLATE)
+            snapArr[0] = snapArr[1] = snapArr[2] = state->snapTranslation;
+        else if (state->currentGizmoOperation == ImGuizmo::ROTATE)
+            snapArr[0] = snapArr[1] = snapArr[2] = state->snapRotation;
+        else
+            snapArr[0] = snapArr[1] = snapArr[2] = state->snapScale;
+        snap = snapArr;
+    }
     ImGuizmo::Manipulate(
         glm::value_ptr(view),
         glm::value_ptr(proj),
         state->currentGizmoOperation,
         state->currentGizmoMode,
-        glm::value_ptr(model)
+        glm::value_ptr(model),
+        nullptr,
+        snap
     );
 
     if (ImGuizmo::IsUsing()) {

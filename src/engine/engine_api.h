@@ -67,6 +67,13 @@ struct GameState
     ImGuizmo::MODE currentGizmoMode{ImGuizmo::WORLD};
     bool bUniformScaleMode{true};
 
+    // Gizmo snapping
+    bool bSnapEnabled{false};
+    float snapTranslation{0.5f};
+    float snapRotation{15.0f};
+    float snapScale{0.1f};
+
+    // Scene stuff
     StringID currentSceneId{"main_scene"_sid};
     std::string currentSceneName{"Main Scene"};
     std::vector<entt::entity> selectedEntities{};

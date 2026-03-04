@@ -9,7 +9,6 @@
 
 #include "core/include/render_interface.h"
 #include "core/input/input_frame.h"
-#include "engine/material_manager.h"
 #include "render/shaders/common_interop.h"
 
 namespace Render

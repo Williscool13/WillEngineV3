@@ -27,13 +27,15 @@ public:
 
     void UpdateWindowExtent(uint32_t w, uint32_t h);
 
-    const InputFrame& GetCurrentInput() const { return currentInput; }
+    [[nodiscard]] const InputFrame& GetCurrentInput() const { return currentInput; }
+
+    bool IsQuitRequested() const { return bRequestedQuit; }
 
 private:
     InputFrame currentInput{};
+    bool bRequestedQuit{false};
     glm::vec2 windowExtents{1700, 900};
 };
-
 } // Core
 
 #endif //WILL_ENGINE_INPUT_MANAGER_H
