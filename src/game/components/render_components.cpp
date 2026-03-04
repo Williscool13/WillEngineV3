@@ -8,6 +8,7 @@
 #include <json/nlohmann/json.hpp>
 
 #include "imgui.h"
+#include "component_copy.h"
 #include "component_serialization.h"
 #include "scene_components.h"
 #include "core/include/engine_context.h"
@@ -18,6 +19,16 @@
 
 namespace Game
 {
+template<>
+Component::StaticMeshComponent CopyComponent(const Component::StaticMeshComponent& src, entt::registry& dstReg)
+{
+    Component::StaticMeshComponent copy{};
+    copy.modelFlags = src.modelFlags;
+    copy.modelId = src.modelId;
+    copy.meshIndex = src.meshIndex;
+    return copy;
+}
+
 template<>
 void SerializeComponent<Component::StaticMeshComponent>(const Component::StaticMeshComponent& comp, nlohmann::json& json)
 {

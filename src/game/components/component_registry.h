@@ -7,6 +7,7 @@
 #include <entt/entt.hpp>
 #include <json/nlohmann/json.hpp>
 
+#include "component_copy.h"
 #include "component_initialization.h"
 #include "component_serialization.h"
 #include "component_types.h"
@@ -21,6 +22,7 @@ using DeserializeFn = void(*)(entt::registry&, entt::entity, const nlohmann::jso
 using HasComponentFn = bool(*)(const entt::registry&, entt::entity);
 using OnAddComponentFn = void(*)(entt::registry&, entt::entity);
 using OnRemoveComponentFn = void(*)(entt::registry&, entt::entity);
+using CopyComponentFn = void(*)(const entt::registry&, entt::entity, entt::registry&, entt::entity);
 using DrawEditorFn = ComponentEditorResult(*)(const Core::ViewFamily&, entt::registry&, entt::entity);
 
 struct ComponentEntry
@@ -31,6 +33,7 @@ struct ComponentEntry
     DeserializeFn deserialize;
     OnAddComponentFn onAddComponent;
     OnRemoveComponentFn onRemoveComponent;
+    CopyComponentFn copy;
     DrawEditorFn drawEditor;
     HasComponentFn has;
 };
@@ -66,6 +69,9 @@ void RegisterComponent(ComponentRegistry& componentRegistry, const char* name)
         },
         [](entt::registry& reg, entt::entity e) {
             OnComponentRemoved<T>(reg.get<T>(e), reg, e);
+        },
+        [](const entt::registry& srcReg, entt::entity srcEntity, entt::registry& dstReg, entt::entity dstEntity) {
+            dstReg.emplace_or_replace<T>(dstEntity, CopyComponent<T>(srcReg.get<T>(srcEntity), dstReg));
         },
         [](const Core::ViewFamily& viewFamily, entt::registry& reg, entt::entity e) {
             return DrawComponentEditor<T>(reg.get<T>(e), viewFamily, reg, e);
@@ -103,6 +109,9 @@ void RegisterComponent(ComponentRegistry& componentRegistry, const char* name)
         [](entt::registry& reg, entt::entity e) {
             T dummy{};
             OnComponentRemoved<T>(dummy, reg, e);
+        },
+        [](const entt::registry&, entt::entity, entt::registry& dstReg, entt::entity dstEntity) {
+            (void)dstReg.get_or_emplace<T>(dstEntity);
         },
         [](const Core::ViewFamily& viewFamily, entt::registry& reg, entt::entity e) {
             T dummy{};

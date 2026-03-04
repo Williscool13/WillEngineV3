@@ -24,6 +24,8 @@ namespace Game
 {
 void EditorUpdate(Core::EngineContext* ctx, Engine::GameState* state)
 {
+    if (ctx->bImguiMouseCaptured || ctx->bImguiKeyboardCaptured) { return; }
+
     if (state->inputFrame->GetKey(Key::W).pressed) {
         state->currentGizmoOperation = ImGuizmo::TRANSLATE;
     }
@@ -33,30 +35,33 @@ void EditorUpdate(Core::EngineContext* ctx, Engine::GameState* state)
     else if (state->inputFrame->GetKey(Key::R).pressed) {
         state->currentGizmoOperation = ImGuizmo::SCALE;
     }
-    if (!ctx->bImguiMouseCaptured && !ctx->bImguiKeyboardCaptured) {
-        if (state->inputFrame->GetMouse(MouseButton::LMB).pressed) {
-            const bool ctrlHeld = state->inputFrame->GetKey(Key::LCTRL).down
-                                  || state->inputFrame->GetKey(Key::RCTRL).down;
 
-            auto it = state->stableIdToEntityMap.find(StringID{ctx->lastKnownStableIdUnderCursor});
-            if (it != state->stableIdToEntityMap.end()) {
-                entt::entity clicked = it->second;
-                if (ctrlHeld) {
-                    auto pos = std::find(state->selectedEntities.begin(), state->selectedEntities.end(), clicked);
-                    if (pos != state->selectedEntities.end()) {
-                        state->selectedEntities.erase(pos);
-                    }
-                    else {
-                        state->selectedEntities.push_back(clicked);
-                    }
+    if (state->inputFrame->GetKey(Key::ESCAPE).pressed) {
+        state->selectedEntities.clear();
+    }
+
+    if (state->inputFrame->GetMouse(MouseButton::LMB).pressed) {
+        const bool ctrlHeld = state->inputFrame->GetKey(Key::LCTRL).down
+                              || state->inputFrame->GetKey(Key::RCTRL).down;
+
+        auto it = state->stableIdToEntityMap.find(StringID{ctx->lastKnownStableIdUnderCursor});
+        if (it != state->stableIdToEntityMap.end()) {
+            entt::entity clicked = it->second;
+            if (ctrlHeld) {
+                auto pos = std::find(state->selectedEntities.begin(), state->selectedEntities.end(), clicked);
+                if (pos != state->selectedEntities.end()) {
+                    state->selectedEntities.erase(pos);
                 }
                 else {
-                    state->selectedEntities = {clicked};
+                    state->selectedEntities.push_back(clicked);
                 }
             }
-            else if (!ctrlHeld) {
-                state->selectedEntities.clear();
+            else {
+                state->selectedEntities = {clicked};
             }
+        }
+        else if (!ctrlHeld) {
+            state->selectedEntities.clear();
         }
     }
 }
@@ -286,7 +291,8 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
             }
             ImGui::SameLine();
             if (ImGui::SmallButton(fmt::format("C##{}", stableId).c_str())) {
-                // todo: copy entity
+                entt::entity copied = CopySceneEntity(state, entity);
+                state->selectedEntities = {copied};
             }
             ImGui::SameLine();
             if (ImGui::Selectable(uniqueLabel, selected)) {

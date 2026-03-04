@@ -7,6 +7,7 @@
 #include <json/nlohmann/json.hpp>
 
 #include "imgui.h"
+#include "component_copy.h"
 #include "component_serialization.h"
 #include "engine/engine_api.h"
 #include "game/systems/editor_systems.h"
@@ -14,6 +15,13 @@
 
 namespace Game
 {
+template<>
+Component::StableIdComponent CopyComponent(const Component::StableIdComponent& src, entt::registry& dstReg)
+{
+    auto* state = dstReg.ctx().get<Engine::GameState*>();
+    return Component::StableIdComponent{Component::StableIdComponent::Generate(state->rng)};
+}
+
 template<>
 void SerializeComponent<Component::StableIdComponent>(const Component::StableIdComponent& comp, nlohmann::json& json)
 {

@@ -8,6 +8,7 @@
 
 #include "game/scene/scene.h"
 #include "game/components/component_registry.h"
+#include "game/components/scene_components.h"
 #include "core/string_id.h"
 #include "engine/engine_api.h"
 
@@ -29,6 +30,54 @@ Scene SaveScene(ComponentRegistry& componentRegistry, entt::registry& registry, 
 std::string LoadScene(ComponentRegistry& componentRegistry, entt::registry& registry, Scene& scene);
 
 entt::entity CreateSceneEntity(Engine::GameState* state);
+
+/**
+ * Copies all registered components from src to a new entity.
+ * Phase 1: CopyComponent<T> strips transients and emplaces data.
+ * Phase 2: OnComponentAdded re-initializes (mirrors LoadScene).
+ * No SceneComponent handling so it's suitable for runtime spawning.
+ * @param state
+ * @param src
+ * @return
+ */
+inline entt::entity CopyEntity(Engine::GameState* state, entt::entity src)
+{
+    entt::entity dst = state->registry.create();
+
+    for (auto& entry : state->componentRegistry.registry) {
+        if (entry.has(state->registry, src)) {
+            entry.copy(state->registry, src, state->registry, dst);
+        }
+    }
+
+    for (auto& entry : state->componentRegistry.registry) {
+        if (entry.has(state->registry, dst)) {
+            entry.onAddComponent(state->registry, dst);
+        }
+    }
+
+    return dst;
+}
+
+/**
+ * Wraps CopyEntity and assigns SceneComponent. Editor use.
+ * Pass a targetScene to copy into a different scene, otherwise inherits src's scene.
+ * @param state
+ * @param src
+ * @param targetScene
+ * @return
+ */
+inline entt::entity CopySceneEntity(Engine::GameState* state, entt::entity src, StringID targetScene = {})
+{
+    entt::entity dst = CopyEntity(state, src);
+
+    if (const auto* scene = state->registry.try_get<Component::SceneComponent>(src)) {
+        const StringID sceneId = targetScene ? targetScene : scene->sceneId;
+        state->registry.emplace<Component::SceneComponent>(dst, sceneId);
+    }
+
+    return dst;
+}
 template<typename T>
 T& CreateComponent(Engine::GameState* state, entt::entity entity)
 {

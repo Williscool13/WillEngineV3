@@ -47,6 +47,7 @@ struct StringID
         : id(fnv1a64(str, len)) {}
 #endif
 
+    constexpr explicit operator bool() const { return id != 0; }
     constexpr bool operator==(StringID other) const { return id == other.id; }
     constexpr bool operator!=(StringID other) const { return id != other.id; }
     constexpr bool operator<(StringID other)  const { return id < other.id;  }
