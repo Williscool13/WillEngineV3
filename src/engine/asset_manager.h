@@ -119,10 +119,15 @@ private: // Default Resources
     TextureHandle brdfLutTextureHandle = TextureHandle::INVALID;
     Render::Sampler defaultSampler;
 
+public: // Scenes
+    const std::unordered_map<StringID, std::filesystem::path>& GetSceneRegistry() { return sceneRegistry; }
+    void RegisterScene(const std::filesystem::path& path);
+
 private: // Temporary Asset Registry
     std::unordered_map<StringID, std::filesystem::path> modelRegistry;
     std::unordered_map<StringID, std::filesystem::path> textureRegistry;
     std::unordered_map<StringID, std::filesystem::path> cubemapRegistry;
+    std::unordered_map<StringID, std::filesystem::path> sceneRegistry;
 };
 } // Engine
 

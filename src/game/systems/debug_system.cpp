@@ -750,27 +750,6 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         SPDLOG_INFO("[DebugSystem] Created PCSS test scene: 100x100 floor + vertical dragon column");
     }
 
-    if (state->inputFrame->GetKey(Key::F10).pressed) {
-        Scene s = SaveScene(state->componentRegistry, state->registry, state->currentSceneId, state->currentSceneName);
-        std::filesystem::path outputPath = Platform::GetAssetPath() / "scenes/main_scene.wscene";
-        std::filesystem::create_directories(outputPath.parent_path());
-        std::ofstream file(outputPath);
-        file << s.content.dump(2);
-
-        LOG_INFO(Game, "Saved scene to 'scenes/main_scene.wscene'");
-    }
-
-    if (state->inputFrame->GetKey(Key::F11).pressed) {
-        std::filesystem::path outputPath = Platform::GetAssetPath() / "scenes/main_scene.wscene";
-        std::ifstream file(outputPath);
-        Scene s;
-        s.content = nlohmann::json::parse(file);
-
-        state->currentSceneName = LoadScene(state->componentRegistry, state->registry, s);
-
-        LOG_INFO(Game, "Loaded scene from 'scenes/main_scene.wscene'");
-    }
-
     if (state->inputFrame->GetKey(Key::M).pressed) {
         std::filesystem::path musicPath = Platform::GetAssetPath() / "audio/the_entertainer.ogg";
         Core::Handle<Audio::WillAudio> testMusic = ctx->audioManager->LoadAudio("test_music", musicPath);

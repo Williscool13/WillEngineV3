@@ -277,23 +277,59 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
     ImGui::End();
 
     if (ImGui::Begin("Scene Browser")) {
-        // Scene selection
-        ImGui::SeparatorText("Scene");
-
-        static const StringID knownScenes[] = {
-            "main_scene"_sid,
-            "scene2"_sid,
-            "scene3"_sid,
-        };
+        ImGui::SeparatorText("Current Scene");
 
         ImGui::BeginDisabled(true);
-        ImGui::Text("Unique Scene ID: %llu", state->currentSceneId.id);
+        ImGui::Text("Scene ID: %llu", state->currentSceneId.id);
         ImGui::EndDisabled();
+
         char sceneName[128];
         strncpy_s(sceneName, state->currentSceneName.c_str(), sizeof(sceneName) - 1);
         sceneName[sizeof(sceneName) - 1] = '\0';
         if (ImGui::InputText("Name", sceneName, sizeof(sceneName))) {
             state->currentSceneName = sceneName;
+        }
+
+        if (ImGui::Button("Save")) {
+            SaveSceneToFile(state, ctx->assetManager);
+        }
+
+        ImGui::SeparatorText("Scenes");
+
+        const auto& sceneReg = ctx->assetManager->GetSceneRegistry();
+        static int selectedScene = 0;
+        std::vector<std::pair<std::string, StringID>> sceneList;
+        sceneList.reserve(sceneReg.size());
+        for (const auto& [id, path] : sceneReg) {
+            sceneList.push_back({path.stem().string(), id});
+        }
+        std::ranges::sort(sceneList, {}, &std::pair<std::string, StringID>::first);
+        selectedScene = std::clamp(selectedScene, 0, static_cast<int>(sceneList.size()) - 1);
+
+        const char* previewLabel = sceneList.empty() ? "" : sceneList[selectedScene].first.c_str();
+        ImGui::SetNextItemWidth(-1);
+        if (ImGui::BeginCombo("##scene_list", previewLabel)) {
+            for (int i = 0; i < static_cast<int>(sceneList.size()); ++i) {
+                bool sel = (i == selectedScene);
+                if (ImGui::Selectable(sceneList[i].first.c_str(), sel)) {
+                    selectedScene = i;
+                }
+            }
+            ImGui::EndCombo();
+        }
+
+        ImGui::BeginDisabled(sceneList.empty());
+        if (ImGui::Button("Load")) {
+            UnloadScene(state, state->currentSceneId);
+            LoadSceneFromFile(state, ctx->assetManager, sceneList[selectedScene].second);
+        }
+        ImGui::EndDisabled();
+
+        ImGui::SameLine();
+        if (ImGui::Button("New Scene")) {
+            UnloadScene(state, state->currentSceneId);
+            state->currentSceneId = StringID{state->rng()};
+            state->currentSceneName = "New Scene";
         }
 
         ImGui::NewLine();

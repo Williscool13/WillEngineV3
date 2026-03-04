@@ -94,6 +94,21 @@ AssetManager::AssetManager(AssetLoad::AsyncAssetLoadManager* assetLoadManager, R
     textureRegistry["smiling_friend"_sid] = assetPath / "textures/smiling_friend.ktx2";
 
     cubemapRegistry["kloofendal"_sid] = assetPath / "environment-map/kloofendal_48d_partly_cloudy_puresky_4k.ktx2";
+
+    std::filesystem::path scenesPath = assetPath / "scenes";
+    if (std::filesystem::exists(scenesPath)) {
+        for (const auto& entry : std::filesystem::directory_iterator(scenesPath)) {
+            if (entry.path().extension() == ".wscene") {
+                RegisterScene(entry.path());
+            }
+        }
+    }
+}
+
+void AssetManager::RegisterScene(const std::filesystem::path& path)
+{
+    std::string stem = path.stem().string();
+    sceneRegistry[StringID(stem.c_str(), stem.size())] = path;
 }
 
 AssetManager::~AssetManager()

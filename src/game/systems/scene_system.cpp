@@ -4,12 +4,16 @@
 
 #include "scene_system.h"
 
+#include <algorithm>
+#include <fstream>
+
 #include <json/nlohmann/json.hpp>
 
 #include "engine/asset_manager.h"
 #include "engine/engine_api.h"
 #include "engine/logging/engine_log.h"
 #include "game/components/scene_components.h"
+#include "platform/paths.h"
 
 namespace Game
 {
@@ -76,6 +80,80 @@ std::string LoadScene(ComponentRegistry& componentRegistry, entt::registry& regi
     }
 
     return scene.content["scene_name"];
+}
+
+void UnloadScene(Engine::GameState* state, StringID sceneId)
+{
+    auto view = state->registry.view<Component::SceneComponent>();
+    std::vector<entt::entity> toDestroy;
+    for (auto entity : view) {
+        if (view.get<Component::SceneComponent>(entity).sceneId == sceneId) {
+            toDestroy.push_back(entity);
+        }
+    }
+
+    for (entt::entity entity : toDestroy) {
+        for (auto& entry : state->componentRegistry.registry) {
+            if (entry.has(state->registry, entity)) {
+                entry.onRemoveComponent(state->registry, entity);
+            }
+        }
+        state->registry.destroy(entity);
+    }
+
+    std::erase_if(state->selectedEntities, [&](entt::entity e) {
+        return std::ranges::find(toDestroy, e) != toDestroy.end();
+    });
+}
+
+void SaveSceneToFile(Engine::GameState* state, Engine::AssetManager* assetManager)
+{
+    const auto& sceneReg = assetManager->GetSceneRegistry();
+    std::filesystem::path path;
+
+    auto it = sceneReg.find(state->currentSceneId);
+    if (it != sceneReg.end()) {
+        path = it->second;
+    }
+    else {
+        std::string stem = state->currentSceneName;
+        std::ranges::transform(stem, stem.begin(), ::tolower);
+        std::ranges::replace(stem, ' ', '_');
+        path = Platform::GetAssetPath() / "scenes" / (stem + ".wscene");
+        assetManager->RegisterScene(path);
+    }
+
+    Scene s = SaveScene(state->componentRegistry, state->registry, state->currentSceneId, state->currentSceneName);
+    std::filesystem::create_directories(path.parent_path());
+    std::ofstream file(path);
+    file << s.content.dump(2);
+
+    LOG_INFO(Game, "Saved scene '{}' to '{}'", state->currentSceneName, path.string());
+}
+
+bool LoadSceneFromFile(Engine::GameState* state, Engine::AssetManager* assetManager, StringID sceneId)
+{
+    const auto& sceneReg = assetManager->GetSceneRegistry();
+    auto it = sceneReg.find(sceneId);
+    if (it == sceneReg.end()) {
+        LOG_ERROR(Game, "Scene ID not found in registry");
+        return false;
+    }
+
+    const std::filesystem::path& path = it->second;
+    std::ifstream file(path);
+    if (!file.is_open()) {
+        LOG_ERROR(Game, "Failed to open scene file '{}'", path.string());
+        return false;
+    }
+
+    Scene s;
+    s.content = nlohmann::json::parse(file);
+    state->currentSceneName = LoadScene(state->componentRegistry, state->registry, s);
+    state->currentSceneId = StringID(s.content["scene_id"].get<uint64_t>());
+
+    LOG_INFO(Game, "Loaded scene '{}' from '{}'", state->currentSceneName, path.string());
+    return true;
 }
 
 entt::entity CreateSceneEntity(Engine::GameState* state)

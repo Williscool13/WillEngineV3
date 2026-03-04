@@ -10,6 +10,7 @@
 #include "game/components/component_registry.h"
 #include "game/components/scene_components.h"
 #include "core/string_id.h"
+#include "engine/asset_manager.h"
 #include "engine/engine_api.h"
 
 namespace Core
@@ -20,7 +21,6 @@ struct EngineContext;
 namespace Engine
 {
 struct GameState;
-class AssetManager;
 }
 
 namespace Game
@@ -28,6 +28,12 @@ namespace Game
 Scene SaveScene(ComponentRegistry& componentRegistry, entt::registry& registry, StringID sceneId, std::string_view sceneName);
 
 std::string LoadScene(ComponentRegistry& componentRegistry, entt::registry& registry, Scene& scene);
+
+void UnloadScene(Engine::GameState* state, StringID sceneId);
+
+void SaveSceneToFile(Engine::GameState* state, Engine::AssetManager* assetManager);
+
+bool LoadSceneFromFile(Engine::GameState* state, Engine::AssetManager* assetManager, StringID sceneId);
 
 entt::entity CreateSceneEntity(Engine::GameState* state);
 
@@ -94,7 +100,6 @@ void DestroyComponent(Engine::GameState* state, entt::entity entity)
     if (it == state->componentRegistry.registryMapping.end()) return;
     ComponentEntry& entry = state->componentRegistry.registry[it->second];
     entry.onRemoveComponent(state->registry, entity);
-    state->registry.remove<T>(entity);
 }
 
 inline void CreateComponent(Engine::GameState* state, entt::entity entity, StringID typeId)
