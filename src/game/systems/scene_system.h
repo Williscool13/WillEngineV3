@@ -35,6 +35,8 @@ void SaveSceneToFile(Engine::GameState* state, Engine::AssetManager* assetManage
 
 bool LoadSceneFromFile(Engine::GameState* state, Engine::AssetManager* assetManager, StringID sceneId);
 
+std::vector<entt::entity> SpawnModel(Engine::GameState* state, Engine::AssetManager* assetManager, StringID modelId, const glm::vec3& offset = {});
+
 entt::entity CreateSceneEntity(Engine::GameState* state);
 
 /**

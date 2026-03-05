@@ -301,7 +301,7 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
         std::vector<std::pair<std::string, StringID>> sceneList;
         sceneList.reserve(sceneReg.size());
         for (const auto& [id, path] : sceneReg) {
-            sceneList.push_back({path.stem().string(), id});
+            sceneList.emplace_back(path.stem().string(), id);
         }
         std::ranges::sort(sceneList, {}, &std::pair<std::string, StringID>::first);
         selectedScene = std::clamp(selectedScene, 0, static_cast<int>(sceneList.size()) - 1);
@@ -331,6 +331,38 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
             state->currentSceneId = StringID{state->rng()};
             state->currentSceneName = "New Scene";
         }
+
+        ImGui::SeparatorText("Spawn Model");
+
+        const auto& modelReg = ctx->assetManager->GetModelRegistry();
+        static int selectedModel = 0;
+        std::vector<std::pair<std::string, StringID>> modelList;
+        modelList.reserve(modelReg.size());
+        for (const auto& [id, path] : modelReg) {
+            modelList.emplace_back(path.stem().string(), id);
+        }
+        std::ranges::sort(modelList, {}, &std::pair<std::string, StringID>::first);
+        selectedModel = std::clamp(selectedModel, 0, static_cast<int>(modelList.size()) - 1);
+
+        ImGui::SetNextItemWidth(-1);
+        if (ImGui::BeginCombo("##model_list", modelList.empty() ? "" : modelList[selectedModel].first.c_str())) {
+            for (int i = 0; i < static_cast<int>(modelList.size()); ++i) {
+                bool sel = (i == selectedModel);
+                if (ImGui::Selectable(modelList[i].first.c_str(), sel)) {
+                    selectedModel = i;
+                }
+            }
+            ImGui::EndCombo();
+        }
+
+        ImGui::BeginDisabled(modelList.empty());
+        if (ImGui::Button("Spawn")) {
+            auto spawned = SpawnModel(state, ctx->assetManager, modelList[selectedModel].second, cameraPos);
+            if (!spawned.empty()) {
+                state->selectedEntities = spawned;
+            }
+        }
+        ImGui::EndDisabled();
 
         ImGui::NewLine();
 

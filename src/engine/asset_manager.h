@@ -13,8 +13,9 @@
 #include "core/allocators/handle_allocator.h"
 #include "render/types/texture_asset.h"
 #include "render/types/cubemap_asset.h"
+#include "render/model/model_format.h"
+#include "render/model/model_types.h"
 #include "render/model/will_model_asset.h"
-#include "audio/audio_asset.h"
 
 
 namespace AssetLoad
@@ -60,6 +61,15 @@ public: // Models
     void UnloadModel(WillModelHandle handle);
 
     const std::unordered_map<StringID, std::filesystem::path>& GetModelRegistry() { return modelRegistry; }
+
+    struct CachedModelMetadata
+    {
+        Render::ModelMetadata counts;
+        std::vector<Render::Node> nodes;
+    };
+
+    [[nodiscard]] const CachedModelMetadata* GetModelMetadata(StringID modelId) const;
+
 
 public: // Textures
     TextureHandle LoadTexture(StringID textureId);
@@ -125,6 +135,7 @@ public: // Scenes
 
 private: // Temporary Asset Registry
     std::unordered_map<StringID, std::filesystem::path> modelRegistry;
+    std::unordered_map<StringID, CachedModelMetadata> modelMetadataCache;
     std::unordered_map<StringID, std::filesystem::path> textureRegistry;
     std::unordered_map<StringID, std::filesystem::path> cubemapRegistry;
     std::unordered_map<StringID, std::filesystem::path> sceneRegistry;

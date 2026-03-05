@@ -104,6 +104,7 @@ bool ModelWriter::Finalize()
     header.patchVersion = MODEL_PATCH_VERSION;
     header.numFiles = static_cast<uint32_t>(fileEntries.size());
     header.fileTableOffset = fileTableOffset;
+    header.metadata = metadata;
     file.write(reinterpret_cast<const char*>(&header), sizeof(WillModelHeader));
 
     for (const auto& data : fileData) {
@@ -186,15 +187,24 @@ bool ModelReader::ReadHeader()
     }
 
     if (header.majorVersion != MODEL_MAJOR_VERSION) {
-        SPDLOG_ERROR("Loading {}: Major version difference ({} vs current {})", archiveFileName, header.majorVersion, MODEL_MAJOR_VERSION);
+        SPDLOG_ERROR("Loading {}: major version mismatch ({}.{}.{} vs expected {}.{}.{})",
+            archiveFileName,
+            header.majorVersion, header.minorVersion, header.patchVersion,
+            MODEL_MAJOR_VERSION, MODEL_MINOR_VERSION, MODEL_PATCH_VERSION);
         return false;
     }
     if (header.minorVersion != MODEL_MINOR_VERSION) {
-        SPDLOG_WARN("Loading {}: Minor file version difference ({} vs current {})", archiveFileName, header.minorVersion, MODEL_MINOR_VERSION);
+        SPDLOG_WARN("Loading {}: minor version mismatch ({}.{}.{} vs expected {}.{}.{})",
+            archiveFileName,
+            header.majorVersion, header.minorVersion, header.patchVersion,
+            MODEL_MAJOR_VERSION, MODEL_MINOR_VERSION, MODEL_PATCH_VERSION);
         return false;
     }
     if (header.patchVersion != MODEL_PATCH_VERSION) {
-        SPDLOG_TRACE("Loading {}: patch version difference ({} vs current {})", archiveFileName, header.patchVersion, MODEL_PATCH_VERSION);
+        SPDLOG_TRACE("Loading {}: patch version mismatch ({}.{}.{} vs expected {}.{}.{})",
+            archiveFileName,
+            header.majorVersion, header.minorVersion, header.patchVersion,
+            MODEL_MAJOR_VERSION, MODEL_MINOR_VERSION, MODEL_PATCH_VERSION);
     }
 
     return true;
@@ -251,6 +261,19 @@ std::vector<uint8_t> ModelReader::ReadFile(const std::string& filename) const
     }
 
     return compressedData;
+}
+
+void ModelReader::ReadNodes(std::vector<Node>& nodes) const
+{
+    std::vector<uint8_t> data = ReadFile("nodes.bin");
+    const uint8_t* ptr = data.data();
+    uint32_t count;
+    std::memcpy(&count, ptr, sizeof(count));
+    ptr += sizeof(count);
+    nodes.resize(count);
+    for (uint32_t i = 0; i < count; i++) {
+        ReadNode(ptr, nodes[i]);
+    }
 }
 
 bool ModelReader::ReadFile(const std::string& filename, void* buffer, size_t bufferSize) const

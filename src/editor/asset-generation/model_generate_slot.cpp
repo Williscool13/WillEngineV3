@@ -1134,8 +1134,17 @@ bool ModelGenerateSlot::WriteWillModel(VkCommandBuffer cmd, const std::function<
         ZoneScopedN("CreateArchive");
 
         Render::ModelWriter writer{outputPath};
-        std::filesystem::path srcBinPath = temporaryPath / "model.bin";
-        writer.AddFileFromDisk("model.bin", srcBinPath.string(), true);
+        writer.AddFileFromDisk("model.bin", (temporaryPath / "model.bin").string(), true);
+
+        {
+            std::ofstream nodesBinFile(temporaryPath / "nodes.bin", std::ios::binary);
+            auto nodeCount = static_cast<uint32_t>(rawModel.nodes.size());
+            nodesBinFile.write(reinterpret_cast<const char*>(&nodeCount), sizeof(nodeCount));
+            for (const auto& node : rawModel.nodes) {
+                WriteNode(nodesBinFile, node);
+            }
+        }
+        writer.AddFileFromDisk("nodes.bin", (temporaryPath / "nodes.bin").string(), false);
 
         for (uint32_t i = 0; i < rawModel.images.size(); ++i) {
             std::filesystem::path sourcePath = temporaryPath / fmt::format("texture_{}.ktx2", i);
@@ -1144,6 +1153,12 @@ bool ModelGenerateSlot::WriteWillModel(VkCommandBuffer cmd, const std::function<
                 return false;
             }
         }
+
+        uint32_t meshNodeCount = 0;
+        for (const auto& node : rawModel.nodes) {
+            if (node.meshIndex != ~0u) ++meshNodeCount;
+        }
+        writer.SetMetadata({static_cast<uint32_t>(rawModel.nodes.size()), meshNodeCount});
 
         if (!writer.Finalize()) {
             return false;
@@ -1369,7 +1384,6 @@ void WriteModelBinary(std::ofstream& file, const RawGltfModel& model)
     header.primitiveCount = static_cast<uint32_t>(model.primitives.size());
     header.materialCount = static_cast<uint32_t>(model.materials.size());
     header.meshCount = static_cast<uint32_t>(model.allMeshes.size());
-    header.nodeCount = static_cast<uint32_t>(model.nodes.size());
     header.animationCount = static_cast<uint32_t>(model.animations.size());
     header.inverseBindMatrixCount = static_cast<uint32_t>(model.inverseBindMatrices.size());
     header.samplerCount = static_cast<uint32_t>(model.samplerInfos.size());
@@ -1386,9 +1400,6 @@ void WriteModelBinary(std::ofstream& file, const RawGltfModel& model)
 
     for (const auto& mesh : model.allMeshes) {
         WriteMeshInformation(file, mesh);
-    }
-    for (const auto& node : model.nodes) {
-        WriteNode(file, node);
     }
 
     for (const auto& anim : model.animations) {

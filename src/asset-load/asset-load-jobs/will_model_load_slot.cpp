@@ -189,12 +189,6 @@ bool WillModelLoadSlot::LoadModelFromDisk()
             Render::ReadMeshInformation(dataPtr, rawData.allMeshes[i]);
         }
     } {
-        ZoneScopedN("ParseNodes");
-        rawData.nodes.resize(header->nodeCount);
-        for (uint32_t i = 0; i < header->nodeCount; i++) {
-            Render::ReadNode(dataPtr, rawData.nodes[i]);
-        }
-    } {
         ZoneScopedN("ParseAnimations");
         rawData.animations.resize(header->animationCount);
         for (uint32_t i = 0; i < header->animationCount; i++) {
@@ -205,6 +199,12 @@ bool WillModelLoadSlot::LoadModelFromDisk()
     offset = dataPtr - modelBinData.data(); {
         ZoneScopedN("ParseSkeletalData");
         readArray(rawData.inverseBindMatrices, header->inverseBindMatrixCount);
+    }
+
+    {
+        // Technically we can get nodes from metadata, but I don't think it matters.
+        ZoneScopedN("ParseNodes");
+        reader.ReadNodes(rawData.nodes);
     }
 
     //

@@ -12,8 +12,8 @@ namespace Render
 {
 constexpr char WILL_MODEL_MAGIC[8] = "WILLMDL";
 constexpr uint32_t MODEL_MAJOR_VERSION = 0;
-constexpr uint32_t MODEL_MINOR_VERSION = 6;
-constexpr uint32_t MODEL_PATCH_VERSION = 1;
+constexpr uint32_t MODEL_MINOR_VERSION = 7;
+constexpr uint32_t MODEL_PATCH_VERSION = 0;
 
 struct ModelBinaryHeader
 {
@@ -24,7 +24,6 @@ struct ModelBinaryHeader
     uint32_t primitiveCount;
     uint32_t materialCount;
     uint32_t meshCount;
-    uint32_t nodeCount;
     uint32_t animationCount;
     uint32_t inverseBindMatrixCount;
     uint32_t samplerCount;
@@ -42,6 +41,12 @@ struct FileEntry
     uint32_t compressionType; // 0 = none, 1 = zlib
 };
 
+struct ModelMetadata
+{
+    uint32_t nodeCount{0};
+    uint32_t meshNodeCount{0};
+};
+
 struct WillModelHeader
 {
     char magic[8];
@@ -50,6 +55,7 @@ struct WillModelHeader
     uint32_t patchVersion;
     uint32_t numFiles;
     uint64_t fileTableOffset;
+    ModelMetadata metadata;
 };
 } // Render
 

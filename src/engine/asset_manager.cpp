@@ -7,6 +7,7 @@
 #include "asset-load/async_asset_load_manager.h"
 #include "logging/engine_log.h"
 #include "platform/paths.h"
+#include "render/model/model_serialization.h"
 
 namespace Engine
 {
@@ -91,6 +92,18 @@ AssetManager::AssetManager(AssetLoad::AsyncAssetLoadManager* assetLoadManager, R
     modelRegistry["intel_sponza"_sid] = assetPath / "IntelSponza.willmodel";
     modelRegistry["portal_plane"_sid] = assetPath / "Plane.willmodel";
 
+    for (const auto& [id, path] : modelRegistry) {
+        Render::ModelReader reader(path);
+        if (reader.GetSuccessfullyLoaded()) {
+            CachedModelMetadata& cached = modelMetadataCache[id];
+            cached.counts = reader.GetMetadata();
+            reader.ReadNodes(cached.nodes);
+        }
+        else {
+            LOG_WARN(Asset, "Failed to read metadata for model '{}'", id.ToString());
+        }
+    }
+
     textureRegistry["smiling_friend"_sid] = assetPath / "textures/smiling_friend.ktx2";
 
     cubemapRegistry["kloofendal"_sid] = assetPath / "environment-map/kloofendal_48d_partly_cloudy_puresky_4k.ktx2";
@@ -119,6 +132,12 @@ AssetManager::~AssetManager()
             UnloadModel(model.selfHandle);
         }
     }
+}
+
+const AssetManager::CachedModelMetadata* AssetManager::GetModelMetadata(StringID modelId) const
+{
+    auto it = modelMetadataCache.find(modelId);
+    return it != modelMetadataCache.end() ? &it->second : nullptr;
 }
 
 WillModelHandle AssetManager::LoadModel(StringID modelId)

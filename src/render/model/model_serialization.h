@@ -173,12 +173,15 @@ public:
 
     bool AddFileFromDisk(const std::string& filename, const std::string& sourcePath, bool compress);
 
+    void SetMetadata(ModelMetadata m) { metadata = m; }
+
     bool Finalize();
 
 private:
     std::filesystem::path outputPath;
     std::vector<FileEntry> fileEntries;
     std::vector<std::vector<uint8_t> > fileData;
+    ModelMetadata metadata{};
     bool finalized = false;
 };
 
@@ -192,6 +195,10 @@ public:
     ~ModelReader();
 
     uint32_t GetFileCount() const { return header.numFiles; }
+
+    const ModelMetadata& GetMetadata() const { return header.metadata; }
+
+    void ReadNodes(std::vector<Node>& nodes) const;
 
     std::vector<std::string> ListFiles() const;
 

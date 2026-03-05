@@ -12,6 +12,9 @@
 #include "engine/asset_manager.h"
 #include "engine/engine_api.h"
 #include "engine/logging/engine_log.h"
+#include "game/components/common_components.h"
+#include "game/components/core_components.h"
+#include "game/components/render_components.h"
 #include "game/components/scene_components.h"
 #include "platform/paths.h"
 
@@ -154,6 +157,68 @@ bool LoadSceneFromFile(Engine::GameState* state, Engine::AssetManager* assetMana
 
     LOG_INFO(Game, "Loaded scene '{}' from '{}'", state->currentSceneName, path.string());
     return true;
+}
+
+std::vector<entt::entity> SpawnModel(Engine::GameState* state, Engine::AssetManager* assetManager, StringID modelId, const glm::vec3& offset)
+{
+    const Engine::AssetManager::CachedModelMetadata* cached = assetManager->GetModelMetadata(modelId);
+    if (!cached) {
+        LOG_ERROR(Game, "SpawnModel: '{}' not in asset registry", modelId.ToString());
+        return {};
+    }
+
+    const auto& nodes = cached->nodes;
+
+    std::vector<glm::vec3> worldT(nodes.size());
+    std::vector<glm::quat> worldR(nodes.size());
+    std::vector<glm::vec3> worldS(nodes.size());
+
+    for (size_t i = 0; i < nodes.size(); ++i) {
+        const auto& node = nodes[i];
+        if (node.parent == ~0u) {
+            worldT[i] = node.localTranslation;
+            worldR[i] = node.localRotation;
+            worldS[i] = node.localScale;
+        }
+        else {
+            worldT[i] = worldR[node.parent] * (worldS[node.parent] * node.localTranslation) + worldT[node.parent];
+            worldR[i] = worldR[node.parent] * node.localRotation;
+            worldS[i] = worldS[node.parent] * node.localScale;
+        }
+    }
+
+    auto meshEntryIt = state->componentRegistry.registryMapping.find(TypeSID<Component::StaticMeshComponent>());
+    assert(meshEntryIt != state->componentRegistry.registryMapping.end());
+    ComponentEntry& meshEntry = state->componentRegistry.registry[meshEntryIt->second];
+
+    std::vector<entt::entity> spawned;
+
+    for (size_t i = 0; i < nodes.size(); ++i) {
+        const auto& node = nodes[i];
+        if (node.meshIndex == ~0u) continue;
+
+        entt::entity entity = CreateSceneEntity(state);
+
+        if (!node.name.empty()) {
+            state->registry.get<Component::NameComponent>(entity).name = node.name;
+        }
+
+        auto& transform = state->registry.get<Component::TransformComponent>(entity);
+        transform.translation = worldT[i] + offset;
+        transform.rotation = worldR[i];
+        transform.scale = worldS[i];
+
+        auto& meshComp = state->registry.emplace<Component::StaticMeshComponent>(entity);
+        meshComp.modelId = modelId;
+        meshComp.meshIndex = static_cast<int32_t>(node.meshIndex);
+        meshComp.modelFlags = {1.0f, 1.0f, 0.0f, 0.0f};
+
+        meshEntry.onAddComponent(state->registry, entity);
+
+        spawned.push_back(entity);
+    }
+
+    return spawned;
 }
 
 entt::entity CreateSceneEntity(Engine::GameState* state)

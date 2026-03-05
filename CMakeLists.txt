@@ -200,6 +200,8 @@ add_library(bc7enc_rdo STATIC
 )
 
 target_include_directories(bc7enc_rdo PUBLIC extern/bc7enc_rdo)
+target_compile_definitions(bc7enc_rdo PRIVATE MINIZ_HEADER_FILE_ONLY)
+target_link_libraries(bc7enc_rdo PUBLIC miniz)
 
 # Tracy =======================================
 if (WILL_ENGINE_ENABLE_PROFILER)
