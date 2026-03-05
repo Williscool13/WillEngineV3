@@ -321,6 +321,7 @@ compile_shaders(will-engine
 
         ${CMAKE_SOURCE_DIR}/shaders/debug_render.slang vertex VertexMain debug_render
         ${CMAKE_SOURCE_DIR}/shaders/debug_render.slang fragment FragmentMain debug_render
+        ${CMAKE_SOURCE_DIR}/shaders/debug_render.slang mesh MeshMain debug_render
 
 
         ${CMAKE_SOURCE_DIR}/shaders/shadows_resolve.slang compute ComputeMain shadows_resolve

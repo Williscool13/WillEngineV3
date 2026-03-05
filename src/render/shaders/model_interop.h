@@ -49,6 +49,14 @@ SHADER_PUBLIC struct DebugVertex
     SHADER_PUBLIC float4 color;
 };
 
+SHADER_PUBLIC struct DebugLineSegment {
+    SHADER_PUBLIC float3 a;
+    SHADER_PUBLIC float width;
+    SHADER_PUBLIC float3 b;
+    SHADER_PUBLIC float pad;
+    SHADER_PUBLIC float4 color;
+};
+
 
 SHADER_PUBLIC struct Vertex
 {
