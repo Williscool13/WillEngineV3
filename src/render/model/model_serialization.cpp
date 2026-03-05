@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "miniz/miniz.h"
+#include "lz4/lz4hc.h"
 #include "spdlog/spdlog.h"
 
 namespace Render
@@ -22,7 +23,7 @@ ModelWriter::~ModelWriter()
     }
 }
 
-bool ModelWriter::AddFile(const std::string& filename, const void* data, size_t size, bool compress)
+bool ModelWriter::AddFile(const std::string& filename, const void* data, size_t size, CompressionType compression)
 {
     if (finalized) {
         SPDLOG_WARN("Cannot add files after finalization");
@@ -39,27 +40,31 @@ bool ModelWriter::AddFile(const std::string& filename, const void* data, size_t 
     entry.filename[filename.size()] = '\0';
     entry.uncompressedSize = size;
     entry.offset = 0;
+    entry.compressionType = compression;
 
     std::vector<uint8_t> buffer;
 
-    if (compress) {
-        buffer = CompressZlib(data, size);
-        entry.compressedSize = buffer.size();
-        entry.compressionType = 1; // zlib
-    }
-    else {
-        buffer.resize(size);
-        std::memcpy(buffer.data(), data, size);
-        entry.compressedSize = size;
-        entry.compressionType = 0; // none
+    switch (compression) {
+        case CompressionType::LZ4:
+            buffer = CompressLZ4(data, size);
+            break;
+        case CompressionType::Zlib:
+            buffer = CompressZlib(data, size);
+            break;
+        case CompressionType::None:
+        default:
+            buffer.resize(size);
+            std::memcpy(buffer.data(), data, size);
+            break;
     }
 
+    entry.compressedSize = buffer.size();
     fileEntries.push_back(entry);
     fileData.push_back(std::move(buffer));
     return true;
 }
 
-bool ModelWriter::AddFileFromDisk(const std::string& filename, const std::string& sourcePath, bool compress)
+bool ModelWriter::AddFileFromDisk(const std::string& filename, const std::string& sourcePath, CompressionType compression)
 {
     std::ifstream file(sourcePath, std::ios::binary | std::ios::ate);
     if (!file) {
@@ -72,7 +77,7 @@ bool ModelWriter::AddFileFromDisk(const std::string& filename, const std::string
     std::vector<uint8_t> buffer(fileSize);
     file.read(reinterpret_cast<char*>(buffer.data()), fileSize);
 
-    return AddFile(filename, buffer.data(), buffer.size(), compress);
+    return AddFile(filename, buffer.data(), buffer.size(), compression);
 }
 
 bool ModelWriter::Finalize()
@@ -145,6 +150,32 @@ std::vector<uint8_t> DecompressZlib(const void* data, size_t compressedSize, siz
         throw std::runtime_error("Decompression failed");
     }
 
+    return decompressed;
+}
+
+std::vector<uint8_t> CompressLZ4(const void* data, size_t size)
+{
+    const int maxCompressedSize = LZ4_compressBound(static_cast<int>(size));
+    std::vector<uint8_t> compressed(maxCompressedSize);
+    const int compressedSize = LZ4_compress_HC(
+        static_cast<const char*>(data), reinterpret_cast<char*>(compressed.data()),
+        static_cast<int>(size), maxCompressedSize, LZ4HC_CLEVEL_DEFAULT);
+    if (compressedSize <= 0) {
+        throw std::runtime_error("LZ4 compression failed");
+    }
+    compressed.resize(compressedSize);
+    return compressed;
+}
+
+std::vector<uint8_t> DecompressLZ4(const void* data, size_t compressedSize, size_t uncompressedSize)
+{
+    std::vector<uint8_t> decompressed(uncompressedSize);
+    const int result = LZ4_decompress_safe(
+        static_cast<const char*>(data), reinterpret_cast<char*>(decompressed.data()),
+        static_cast<int>(compressedSize), static_cast<int>(uncompressedSize));
+    if (result < 0) {
+        throw std::runtime_error("LZ4 decompression failed");
+    }
     return decompressed;
 }
 
@@ -256,11 +287,15 @@ std::vector<uint8_t> ModelReader::ReadFile(const std::string& filename) const
     file.seekg(entry->offset, std::ios::beg);
     file.read(reinterpret_cast<char*>(compressedData.data()), entry->compressedSize);
 
-    if (entry->compressionType == 1) {
-        return DecompressZlib(compressedData.data(), entry->compressedSize, entry->uncompressedSize);
+    switch (entry->compressionType) {
+        case CompressionType::LZ4:
+            return DecompressLZ4(compressedData.data(), entry->compressedSize, entry->uncompressedSize);
+        case CompressionType::Zlib:
+            return DecompressZlib(compressedData.data(), entry->compressedSize, entry->uncompressedSize);
+        case CompressionType::None:
+        default:
+            return compressedData;
     }
-
-    return compressedData;
 }
 
 void ModelReader::ReadNodes(std::vector<Node>& nodes) const
@@ -291,13 +326,22 @@ bool ModelReader::ReadFile(const std::string& filename, void* buffer, size_t buf
     file.seekg(entry->offset, std::ios::beg);
     file.read(reinterpret_cast<char*>(compressedData.data()), entry->compressedSize);
 
-    if (entry->compressionType == 1) {
-        // zlib
-        std::vector<uint8_t> decompressed = DecompressZlib(compressedData.data(), entry->compressedSize, entry->uncompressedSize);
-        std::memcpy(buffer, decompressed.data(), entry->uncompressedSize);
-    }
-    else {
-        std::memcpy(buffer, compressedData.data(), entry->compressedSize);
+    switch (entry->compressionType) {
+        case CompressionType::LZ4: {
+            std::vector<uint8_t> decompressed = DecompressLZ4(compressedData.data(), entry->compressedSize, entry->uncompressedSize);
+            std::memcpy(buffer, decompressed.data(), entry->uncompressedSize);
+            break;
+        }
+        case CompressionType::Zlib: {
+            std::vector<uint8_t> decompressed = DecompressZlib(compressedData.data(), entry->compressedSize, entry->uncompressedSize);
+            std::memcpy(buffer, decompressed.data(), entry->uncompressedSize);
+            break;
+        }
+        case CompressionType::None:
+        default: {
+            std::memcpy(buffer, compressedData.data(), entry->compressedSize);
+            break;
+        }
     }
 
     return true;

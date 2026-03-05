@@ -32,13 +32,20 @@ struct ModelBinaryHeader
 
 constexpr size_t MAX_FILENAME_LENGTH = 128;
 
+enum class CompressionType : uint32_t
+{
+    None = 0,
+    Zlib = 1,
+    LZ4  = 2,
+};
+
 struct FileEntry
 {
     char filename[MAX_FILENAME_LENGTH];
     uint64_t offset;
     uint64_t compressedSize;
     uint64_t uncompressedSize;
-    uint32_t compressionType; // 0 = none, 1 = zlib
+    CompressionType compressionType;
 };
 
 struct ModelMetadata

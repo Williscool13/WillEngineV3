@@ -15,7 +15,7 @@
 
 namespace Editor
 {
-constexpr uint32_t ASSET_GENERATOR_WORKER_COUNT = 4;
+constexpr uint32_t ASSET_GENERATOR_WORKER_COUNT = 16;
 constexpr uint32_t MODEL_GENERATION_JOB_COUNT = 4;
 constexpr uint32_t TEXTURE_GENERATION_JOB_COUNT = 4;
 constexpr uint32_t ENVIRONMENT_MAP_GENERATION_JOB_COUNT = 1;

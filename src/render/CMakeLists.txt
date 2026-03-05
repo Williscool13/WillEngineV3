@@ -100,6 +100,7 @@ target_link_libraries(render PUBLIC
         offsetAllocator
         ktx
         miniz
+        lz4
         imgui
         tracy_interface
         bc7enc_rdo

@@ -28,7 +28,7 @@ public:
 
     ModelGenerateSlot();
 
-    ~ModelGenerateSlot();;
+    ~ModelGenerateSlot();
 
     void Initialize(
         int32_t slotIndex,

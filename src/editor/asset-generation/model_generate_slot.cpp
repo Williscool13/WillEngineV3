@@ -50,6 +50,7 @@ void ModelGenerateSlot::Initialize(
 
 void ModelGenerateSlot::Launch(ModelGenerateSlotHandle _slotHandle, const std::filesystem::path& _gltfPath, const std::filesystem::path& _outputPath)
 {
+    gltfPath.clear();
     slotHandle = _slotHandle;
     gltfPath = _gltfPath;
     outputPath = _outputPath;
@@ -65,7 +66,6 @@ void ModelGenerateSlot::Launch(ModelGenerateSlotHandle _slotHandle, const std::f
 
 void ModelGenerateSlot::Clear()
 {
-    gltfPath.clear();
     outputPath.clear();
     rawModel = {};
     sortedNodes.clear();
@@ -144,7 +144,7 @@ bool ModelGenerateSlot::LoadGltf(VkCommandBuffer cmd, const std::function<void()
     ZoneScopedN("LoadGltf");
 
     int32_t _progress = 0;
-    int32_t stepDiff = (5000) / 9;
+    int32_t stepDiff = 50 / 9;
 
     fastgltf::Parser parser{fastgltf::Extensions::KHR_texture_basisu | fastgltf::Extensions::KHR_mesh_quantization | fastgltf::Extensions::KHR_texture_transform};
     constexpr auto gltfOptions = fastgltf::Options::DontRequireValidAssetMember
@@ -419,12 +419,12 @@ bool ModelGenerateSlot::LoadGltf(VkCommandBuffer cmd, const std::function<void()
                     switch (accessor.type) {
                         case fastgltf::AccessorType::Vec3:
                             fastgltf::iterateAccessorWithIndex<fastgltf::math::fvec3>(gltf, accessor, [&](const fastgltf::math::fvec3& color, const size_t index) {
-                                primitiveVertices[index].color = { color.x(), color.y(), color.z(), 1.0f };
+                                primitiveVertices[index].color = {color.x(), color.y(), color.z(), 1.0f};
                             });
                             break;
                         case fastgltf::AccessorType::Vec4:
                             fastgltf::iterateAccessorWithIndex<fastgltf::math::fvec4>(gltf, accessor, [&](const fastgltf::math::fvec4& color, const size_t index) {
-                                primitiveVertices[index].color = { color.x(), color.y(), color.z(), color.w() };
+                                primitiveVertices[index].color = {color.x(), color.y(), color.z(), color.w()};
                             });
                             break;
                         default:
@@ -515,7 +515,7 @@ bool ModelGenerateSlot::LoadGltf(VkCommandBuffer cmd, const std::function<void()
                     ZoneScopedN("Generate LOD");
                     TracyMessageL(std::to_string(lod).c_str());
 
-                    constexpr float thresholds[LOD_COUNT-1]{0.5f, 0.5f, 0.3f};
+                    constexpr float thresholds[LOD_COUNT - 1]{0.5f, 0.5f, 0.3f};
                     size_t target_index_count = size_t(lodIndices[lod - 1].size() * thresholds[lod - 1]);
                     target_index_count = target_index_count / 3 * 3;
 
@@ -856,9 +856,10 @@ bool ModelGenerateSlot::WriteWillModel(VkCommandBuffer cmd, const std::function<
         WriteModelBinary(binFile, rawModel);
         binFile.close();
     }
+    progress->value.store(60, std::memory_order_release);
 
-    float _progress = 70.0f;
-    constexpr float textureProgressTotal = 30.0f;
+    float _progress = 60.0f;
+    constexpr float textureProgressTotal = 40.0f;
     const float progressPerTexture = rawModel.images.empty() ? 0.0f : textureProgressTotal / static_cast<float>(rawModel.images.size());
 
     std::vector<DXGI_FORMAT> preferredImageFormats;
@@ -1110,6 +1111,7 @@ bool ModelGenerateSlot::WriteWillModel(VkCommandBuffer cmd, const std::function<
                 _task.imageExtent = image.extent;
                 _task.texture = texture;
                 _task.m_SetSize = mipLevels;
+                _task.m_Priority = enki::TASK_PRIORITY_LOW;
 
                 scheduler->AddTaskSetToPipe(&_task);
                 scheduler->WaitforTask(&_task);
@@ -1124,7 +1126,7 @@ bool ModelGenerateSlot::WriteWillModel(VkCommandBuffer cmd, const std::function<
 
             ktxTexture_Destroy(ktxTexture(texture));
 
-            _progress = 70 + static_cast<int32_t>((i + 1) * progressPerTexture);
+            _progress = 60.0f + static_cast<float>(i + 1) * progressPerTexture;
             progress->value.store(_progress, std::memory_order_release);
         }
     }
@@ -1134,9 +1136,7 @@ bool ModelGenerateSlot::WriteWillModel(VkCommandBuffer cmd, const std::function<
         ZoneScopedN("CreateArchive");
 
         Render::ModelWriter writer{outputPath};
-        writer.AddFileFromDisk("model.bin", (temporaryPath / "model.bin").string(), true);
-
-        {
+        writer.AddFileFromDisk("model.bin", (temporaryPath / "model.bin").string(), Render::CompressionType::LZ4); {
             std::ofstream nodesBinFile(temporaryPath / "nodes.bin", std::ios::binary);
             auto nodeCount = static_cast<uint32_t>(rawModel.nodes.size());
             nodesBinFile.write(reinterpret_cast<const char*>(&nodeCount), sizeof(nodeCount));
@@ -1144,12 +1144,12 @@ bool ModelGenerateSlot::WriteWillModel(VkCommandBuffer cmd, const std::function<
                 WriteNode(nodesBinFile, node);
             }
         }
-        writer.AddFileFromDisk("nodes.bin", (temporaryPath / "nodes.bin").string(), false);
+        writer.AddFileFromDisk("nodes.bin", (temporaryPath / "nodes.bin").string(), Render::CompressionType::LZ4);
 
         for (uint32_t i = 0; i < rawModel.images.size(); ++i) {
             std::filesystem::path sourcePath = temporaryPath / fmt::format("texture_{}.ktx2", i);
             std::filesystem::path archiveName = fmt::format("textures/texture_{}.ktx2", i);
-            if (!writer.AddFileFromDisk(archiveName.string(), sourcePath.string(), true)) {
+            if (!writer.AddFileFromDisk(archiveName.string(), sourcePath.string(), Render::CompressionType::LZ4)) {
                 return false;
             }
         }

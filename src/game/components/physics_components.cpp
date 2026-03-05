@@ -121,11 +121,20 @@ ComponentEditorResult DrawComponentEditor<Component::PhysicsBodyDesc>(Component:
             component.motionQuality = static_cast<JPH::EMotionQuality>(currentQuality);
 
         ImGui::SeparatorText("Shapes");
+        int shapeToRemove = -1;
         for (size_t i = 0; i < component.shapes.size(); ++i) {
             ImGui::PushID(static_cast<int>(i));
             auto& shape = component.shapes[i];
 
-            if (ImGui::TreeNode("", "Shape %zu", i)) {
+            bool shapeOpen = ImGui::TreeNodeEx("", ImGuiTreeNodeFlags_AllowOverlap, "Shape %zu", i);
+            ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+            if (ImGui::SmallButton("X##shape")) {
+                shapeToRemove = static_cast<int>(i);
+            }
+            ImGui::PopStyleColor();
+
+            if (shapeOpen) {
                 const char* shapeTypes[] = {"Box", "Sphere", "Capsule"};
                 int currentShape = static_cast<int>(shape.type);
                 if (ImGui::Combo("Shape", &currentShape, shapeTypes, IM_ARRAYSIZE(shapeTypes)))
@@ -148,6 +157,9 @@ ComponentEditorResult DrawComponentEditor<Component::PhysicsBodyDesc>(Component:
                 ImGui::TreePop();
             }
             ImGui::PopID();
+        }
+        if (shapeToRemove >= 0) {
+            component.shapes.erase(component.shapes.begin() + shapeToRemove);
         }
 
         if (ImGui::Button("Add Shape")) {

@@ -618,6 +618,37 @@ void WillEngine::EditorImgui()
         if (ImGui::Button("brdf_lut.ktx2")) {
             modelGenerator->GenerateBRDFLUT(Platform::GetAssetPath() / "textures/brdf_lut.ktx2");
         }
+
+        ImGui::Separator();
+        ImGui::Text("Generation Progress:");
+        const auto& genProgresses = modelGenerator->GetModelGenerationProgresses();
+        for (uint32_t i = 0; i < genProgresses.size(); ++i) {
+            const auto& genProgress = genProgresses[i];
+            const auto genState = genProgress.loadingState.load(std::memory_order_acquire);
+            const int32_t genValue = genProgress.value.load(std::memory_order_acquire);
+
+            const char* stateLabel = "None";
+            switch (genState) {
+                case Editor::WillModelGenerationProgress::LOADING_GLTF:       stateLabel = "Loading GLTF";  break;
+                case Editor::WillModelGenerationProgress::WRITING_WILL_MODEL: stateLabel = "Writing Model"; break;
+                case Editor::WillModelGenerationProgress::FAILED:             stateLabel = "Failed";        break;
+                case Editor::WillModelGenerationProgress::SUCCESS:            stateLabel = "Done";          break;
+                default: break;
+            }
+
+            const std::string modelName = modelGenerator->GetModelGenerateSlotPath(i).stem().string();
+            ImGui::Text("Slot %u: %s", i, modelName.empty() ? "-" : modelName.c_str());
+            char overlay[32];
+            snprintf(overlay, sizeof(overlay), "%s (%d%%)", stateLabel, genValue);
+            ImGui::ProgressBar(static_cast<float>(genValue) / 100.0f, ImVec2(-1.0f, 0.0f), overlay);
+        }
+
+        ImGui::Separator();
+        ImGui::Text("Active Generates:");
+        ImGui::Text("  Models: %u", modelGenerator->GetActiveModelGenerateCount());
+        ImGui::Text("Active Loads:");
+        ImGui::Text("  Models: %u", asyncAssetLoadManager->GetActiveModelLoadCount());
+        ImGui::Text("  Textures: %u", asyncAssetLoadManager->GetActiveTextureLoadCount());
     }
     ImGui::End();
 

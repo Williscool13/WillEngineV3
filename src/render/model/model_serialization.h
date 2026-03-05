@@ -169,9 +169,9 @@ public:
 
     ~ModelWriter();
 
-    bool AddFile(const std::string& filename, const void* data, size_t size, bool compress);
+    bool AddFile(const std::string& filename, const void* data, size_t size, CompressionType compression);
 
-    bool AddFileFromDisk(const std::string& filename, const std::string& sourcePath, bool compress);
+    bool AddFileFromDisk(const std::string& filename, const std::string& sourcePath, CompressionType compression);
 
     void SetMetadata(ModelMetadata m) { metadata = m; }
 
@@ -227,8 +227,10 @@ private:
 };
 
 std::vector<uint8_t> CompressZlib(const void* data, size_t size);
-
 std::vector<uint8_t> DecompressZlib(const void* data, size_t compressedSize, size_t uncompressedSize);
+
+std::vector<uint8_t> CompressLZ4(const void* data, size_t size);
+std::vector<uint8_t> DecompressLZ4(const void* data, size_t compressedSize, size_t uncompressedSize);
 } // Render
 
 #endif //WILL_ENGINE_MODEL_SERIALIZATION_H

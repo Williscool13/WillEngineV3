@@ -178,6 +178,15 @@ add_library(miniz STATIC
 )
 target_include_directories(miniz PUBLIC extern/miniz)
 
+# lz4 =========================================
+add_library(lz4 STATIC
+        extern/lz4/lz4.c
+        extern/lz4/lz4.h
+        extern/lz4/lz4hc.c
+        extern/lz4/lz4hc.h
+)
+target_include_directories(lz4 PUBLIC extern/lz4)
+
 # bc7enc_rdo ==================================
 add_library(bc7enc_rdo STATIC
         extern/bc7enc_rdo/bc7enc.cpp

@@ -55,24 +55,28 @@ struct ModelGenerateComplete
     bool success;
 };
 
-struct TextureGenerateRequest {
+struct TextureGenerateRequest
+{
     std::filesystem::path imagePath;
     std::filesystem::path outputPath;
     bool mipmapped;
     DXGI_FORMAT targetFormat;
 };
 
-struct TextureGenerateComplete {
+struct TextureGenerateComplete
+{
     std::filesystem::path outputPath;
     bool success;
 };
 
-struct EnvironmentMapGenerateRequest {
+struct EnvironmentMapGenerateRequest
+{
     std::filesystem::path imagePath;
     std::filesystem::path outputPath;
 };
 
-struct EnvironmentMapGenerateComplete {
+struct EnvironmentMapGenerateComplete
+{
     std::filesystem::path outputPath;
     bool success;
 };
@@ -83,17 +87,27 @@ class AssetGenerator
 {
 public:
     AssetGenerator(Render::VulkanContext* context, Render::RenderThread* renderThread, AssetLoad::AsyncAssetLoadManager* asyncAssetLoadManager);
+
     ~AssetGenerator();
 
     void RequestModelGenerate(const std::filesystem::path& gltfPath, const std::filesystem::path& outputPath);
+
     bool TryDequeueModelGenerateComplete(ModelGenerateComplete& outResult);
+
     void RequestTextureGenerate(const std::filesystem::path& imagePath, const std::filesystem::path& outputPath, bool mipmapped = true, DXGI_FORMAT targetFormat = DXGI_FORMAT_BC7_UNORM);
+
     bool TryDequeueTextureGenerateComplete(TextureGenerateComplete& outResult);
+
     void RequestEnvironmentMapGenerate(const std::filesystem::path& hdriPath, const std::filesystem::path& outputPath);
+
     bool TryDequeueCubemapGenerateComplete(EnvironmentMapGenerateComplete& outResult);
+
     void GenerateBRDFLUT(std::filesystem::path outputFile) const;
 
-    const WillModelGenerationProgress& GetModelGenerationProgress() const { return modelGenerationProgress; }
+    const std::array<WillModelGenerationProgress, MODEL_GENERATION_JOB_COUNT>& GetModelGenerationProgresses() const { return modelGenerationProgress; }
+    const std::filesystem::path& GetModelGenerateSlotPath(uint32_t index) const { return modelGenerateTasks[index].gltfPath; }
+
+    [[nodiscard]] uint32_t GetActiveModelGenerateCount() const { return modelGenerateAllocator.GetCount(); }
 
     void Join();
 
@@ -101,11 +115,15 @@ private:
     friend class ModelGenerateSlot;
 
     void ThreadMain();
+
     void OnModelGenerateComplete(bool success, ModelGenerateSlotHandle slotHandle);
+
     void OnTextureGenerateComplete(bool success, TextureGenerateSlotHandle slotHandle);
+
     void OnEnvironmentGenerateComplete(bool success, EnvironmentMapGenerateSlotHandle slotHandle);
 
     void TransferQueueGPUDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) const;
+
     void GraphicsQueueGPUDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) const;
 
     Render::VulkanContext* context;
@@ -137,9 +155,8 @@ private:
     std::condition_variable wakeCV;
     std::jthread thisThread;
 
-    WillModelGenerationProgress modelGenerationProgress{};
+    std::array<WillModelGenerationProgress, MODEL_GENERATION_JOB_COUNT> modelGenerationProgress{};
 };
-
 } // Render
 
 #endif //WILL_ENGINE_ASSET_GENERATOR_H

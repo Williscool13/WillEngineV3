@@ -38,7 +38,7 @@ AssetGenerator::AssetGenerator(Render::VulkanContext* context, Render::RenderThr
             i,
             assetGeneratorScheduler.get(),
             context,
-            &modelGenerationProgress,
+            &modelGenerationProgress[i],
             [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
                 GraphicsQueueGPUDispatch(cmd, fence, completionSignal);
             },
