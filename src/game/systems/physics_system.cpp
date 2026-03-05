@@ -69,7 +69,7 @@ void UpdatePhysics(Core::EngineContext* ctx, Engine::GameState* state)
 
             transform.translation = glm::vec3(pos.GetX(), pos.GetY(), pos.GetZ());
             transform.rotation = glm::quat(rot.GetW(), rot.GetX(), rot.GetY(), rot.GetZ());
-            state->registry.emplace_or_replace<Component::DirtyRenderTransformComponent>(entity);
+            state->registry.emplace_or_replace<Component::DirtyTransformTag>(entity);
 
             /*glm::vec3 newPos(pos.GetX(), pos.GetY(), pos.GetZ());
             glm::quat newRot(rot.GetW(), rot.GetX(), rot.GetY(), rot.GetZ());

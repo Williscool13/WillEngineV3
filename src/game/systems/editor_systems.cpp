@@ -217,6 +217,7 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
     const glm::mat4 view = frameBuffer->mainViewFamily.mainView.currentViewData.view;
     const glm::mat4 proj = frameBuffer->mainViewFamily.mainView.currentViewData.proj;
     const glm::vec3 cameraPos = frameBuffer->mainViewFamily.mainView.currentViewData.cameraPos;
+    const glm::vec3 cameraFwd = frameBuffer->mainViewFamily.mainView.currentViewData.cameraForward;
 
     const bool multiSelected = state->selectedEntities.size() > 1;
     if (multiSelected) {
@@ -357,7 +358,8 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
 
         ImGui::BeginDisabled(modelList.empty());
         if (ImGui::Button("Spawn")) {
-            auto spawned = SpawnModel(state, ctx->assetManager, modelList[selectedModel].second, cameraPos);
+            glm::vec3 offset = cameraPos + normalize(cameraFwd) * 5.0f;
+            auto spawned = SpawnModel(state, ctx->assetManager, modelList[selectedModel].second, offset);
             if (!spawned.empty()) {
                 state->selectedEntities = spawned;
             }
