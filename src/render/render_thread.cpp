@@ -794,9 +794,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             1,
             &copy
         );
-    });
-
-    {
+    }); {
         ZoneScopedN("RenderGraphCompile");
         renderGraph->SetDebugLogging(frameBuffer.bLogRDG);
         renderGraph->Compile(frameNumber);
@@ -1125,10 +1123,10 @@ void RenderThread::CreatePipelines()
 
     // Debug Render
     {
-        builder.AddShaderStage("shaders/debug_render_vertex.spv", VK_SHADER_STAGE_VERTEX_BIT);
+        builder.AddShaderStage("shaders/debug_render_mesh.spv", VK_SHADER_STAGE_MESH_BIT_EXT);
         builder.AddShaderStage("shaders/debug_render_fragment.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
-        builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_LINE_LIST);
-        builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE);
+        builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+        builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
         builder.SetupDepthState(VK_TRUE, VK_FALSE, VK_COMPARE_OP_GREATER_OR_EQUAL);
         VkPipelineColorBlendAttachmentState blendState{
             .blendEnable = VK_TRUE,
@@ -1153,7 +1151,7 @@ void RenderThread::CreatePipelines()
             SID("debug_render"),
             builder,
             sizeof(DebugDrawPushConstant),
-            VK_SHADER_STAGE_VERTEX_BIT,
+            VK_SHADER_STAGE_MESH_BIT_EXT,
             PipelineCategory::DebugRendering
         );
         builder.Clear();
@@ -2674,194 +2672,121 @@ void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& 
                                     FrameResourceLimits& limits) const
 {
 #ifndef PACKAGED_BUILD
-    size_t totalDebugVertices = 0;
-    size_t totalDebugIndices = 0;
+    // Worst-case segment counts for buffer allocation
+    size_t totalSegments = 0;
+    totalSegments += viewFamily.debugLines.size(); // 1 segment per line
+    totalSegments += viewFamily.debugBoxes.size() * 12; // 12 edges per box
+    totalSegments += viewFamily.debugSpheres.size() * 96; // 32 segs * 3 circles (max LOD)
 
-    // Lines: 2 vertices per line
-    totalDebugVertices += viewFamily.debugLines.size() * 2;
-    totalDebugIndices += viewFamily.debugLines.size() * 2;
-
-    // Boxes: 8 vertices, 24 indices (12 lines * 2)
-    totalDebugVertices += viewFamily.debugBoxes.size() * 8;
-    totalDebugIndices += viewFamily.debugBoxes.size() * 24;
-
-    // Spheres: approximate with circles on 3 axes, say 32 segments each
-    // 3 circles * 32 segments = 96 vertices, 192 indices
-    totalDebugVertices += viewFamily.debugSpheres.size() * 96;
-    totalDebugIndices += viewFamily.debugSpheres.size() * 192;
-
-    if (totalDebugVertices == 0) {
+    if (totalSegments == 0) {
         return;
     }
 
-    limits.highestDebugVertexBuffer = std::max(limits.highestDebugVertexBuffer, NextPowerOfTwo(totalDebugVertices));
-    limits.highestDebugIndexBuffer = std::max(limits.highestDebugIndexBuffer, NextPowerOfTwo(totalDebugIndices));
+    limits.highestDebugSegmentBuffer = std::max(limits.highestDebugSegmentBuffer, NextPowerOfTwo(totalSegments));
 
-    size_t debugVertexBufferSize = limits.highestDebugVertexBuffer * sizeof(DebugVertex);
-    size_t debugIndexBufferSize = limits.highestDebugIndexBuffer * sizeof(uint32_t);
+    graph.CreateBuffer(SID("debug_segment_buffer"), limits.highestDebugSegmentBuffer * sizeof(DebugLineSegment), false);
 
-    graph.CreateBuffer(SID("debug_vertex_buffer"), debugVertexBufferSize, false);
-    graph.CreateBuffer(SID("debug_index_buffer"), debugIndexBufferSize, false);
+    UploadAllocation segmentUpload = graph.AllocateTransient(totalSegments * sizeof(DebugLineSegment));
+    auto* segments = static_cast<DebugLineSegment*>(segmentUpload.ptr);
 
-    UploadAllocation vertexUpload = graph.AllocateTransient(totalDebugVertices * sizeof(DebugVertex));
-    UploadAllocation indexUpload = graph.AllocateTransient(totalDebugIndices * sizeof(uint32_t));
-
-    auto* vertices = static_cast<DebugVertex*>(vertexUpload.ptr);
-    auto* indices = static_cast<uint32_t*>(indexUpload.ptr);
-
-    uint32_t vertexOffset = 0;
-    uint32_t indexOffset = 0;
+    uint32_t segmentOffset = 0;
 
     const glm::mat4 viewMatrix = viewFamily.mainView.currentViewData.view;
     const glm::mat4 projMatrix = viewFamily.mainView.currentViewData.proj;
-
     Frustum mainViewFrustum = CreateFrustum(projMatrix * viewMatrix);
-
-    for (const auto& line : viewFamily.debugLines) {
-        vertices[vertexOffset++] = {.position = line.start, .color = line.color};
-        vertices[vertexOffset++] = {.position = line.end, .color = line.color};
-        indices[indexOffset++] = vertexOffset - 2;
-        indices[indexOffset++] = vertexOffset - 1;
-    }
-
-    for (const auto& box : viewFamily.debugBoxes) {
-        glm::mat3 rot = glm::mat3_cast(box.rotation);
-
-        if (!IntersectsOBB(mainViewFrustum, box.center, box.extents, rot)) {
-            continue;
-        }
-
-        glm::vec3 corners[8] = {
-            glm::vec3(-1, -1, -1), glm::vec3(1, -1, -1),
-            glm::vec3(1, 1, -1), glm::vec3(-1, 1, -1),
-            glm::vec3(-1, -1, 1), glm::vec3(1, -1, 1),
-            glm::vec3(1, 1, 1), glm::vec3(-1, 1, 1),
-        };
-
-        uint32_t baseVertex = vertexOffset;
-        for (const auto& corner : corners) {
-            glm::vec3 pos = box.center + rot * (corner * box.extents);
-            vertices[vertexOffset++] = {.position = pos, .color = box.color};
-        }
-
-        // 12 lines for box edges
-        uint32_t boxIndices[] = {
-            0, 1, 1, 2, 2, 3, 3, 0, // bottom face
-            4, 5, 5, 6, 6, 7, 7, 4, // top face
-            0, 4, 1, 5, 2, 6, 3, 7 // vertical edges
-        };
-        for (uint32_t idx : boxIndices) {
-            indices[indexOffset++] = baseVertex + idx;
-        }
-    }
 
     for (const auto& sphere : viewFamily.debugSpheres) {
         if (!IntersectsSphere(mainViewFrustum, sphere.center, sphere.radius)) {
             continue;
         }
 
-        const int segments = GetSphereSegments(sphere.center, viewFamily.mainView.currentViewData.cameraPos, sphere.radius);
-        uint32_t baseVertex = vertexOffset;
-
-        // XY circle
-        for (int i = 0; i < segments; ++i) {
-            float angle = static_cast<float>(i) / segments * 2.0f * glm::pi<float>();
-            glm::vec3 pos = sphere.center + glm::vec3(
-                                glm::cos(angle) * sphere.radius,
-                                glm::sin(angle) * sphere.radius,
-                                0.0f
-                            );
-            vertices[vertexOffset++] = {.position = pos, .color = sphere.color};
-        }
-        // XZ circle
-        for (int i = 0; i < segments; ++i) {
-            float angle = static_cast<float>(i) / segments * 2.0f * glm::pi<float>();
-            glm::vec3 pos = sphere.center + glm::vec3(
-                                glm::cos(angle) * sphere.radius,
-                                0.0f,
-                                glm::sin(angle) * sphere.radius
-                            );
-            vertices[vertexOffset++] = {.position = pos, .color = sphere.color};
-        }
-        // YZ circle
-        for (int i = 0; i < segments; ++i) {
-            float angle = static_cast<float>(i) / segments * 2.0f * glm::pi<float>();
-            glm::vec3 pos = sphere.center + glm::vec3(
-                                0.0f,
-                                glm::cos(angle) * sphere.radius,
-                                glm::sin(angle) * sphere.radius
-                            );
-            vertices[vertexOffset++] = {.position = pos, .color = sphere.color};
-        }
-
-        // Indices for 3 circles
-        for (int circle = 0; circle < 3; ++circle) {
-            uint32_t circleBase = baseVertex + circle * segments;
-            for (int i = 0; i < segments; ++i) {
-                indices[indexOffset++] = circleBase + i;
-                indices[indexOffset++] = circleBase + (i + 1) % segments;
-            }
+        const int segs = GetSphereSegments(sphere.center, viewFamily.mainView.currentViewData.cameraPos, sphere.radius);
+        for (int i = 0; i < segs; ++i) {
+            float a0 = static_cast<float>(i) / segs * 2.0f * glm::pi<float>();
+            float a1 = static_cast<float>(i + 1) / segs * 2.0f * glm::pi<float>();
+            glm::vec3 s = sphere.center;
+            float r = sphere.radius;
+            // XY
+            segments[segmentOffset++] = {
+                .a = s + glm::vec3(glm::cos(a0), glm::sin(a0), 0.0f) * r, .width = sphere.width, .b = s + glm::vec3(glm::cos(a1), glm::sin(a1), 0.0f) * r, .pad = 0.0f, .color = sphere.color
+            };
+            // XZ
+            segments[segmentOffset++] = {
+                .a = s + glm::vec3(glm::cos(a0), 0.0f, glm::sin(a0)) * r, .width = sphere.width, .b = s + glm::vec3(glm::cos(a1), 0.0f, glm::sin(a1)) * r, .pad = 0.0f, .color = sphere.color
+            };
+            // YZ
+            segments[segmentOffset++] = {
+                .a = s + glm::vec3(0.0f, glm::cos(a0), glm::sin(a0)) * r, .width = sphere.width, .b = s + glm::vec3(0.0f, glm::cos(a1), glm::sin(a1)) * r, .pad = 0.0f, .color = sphere.color
+            };
         }
     }
 
-    RenderPass& uploadDebugPass = graph.AddPass(SID("Upload Debug Geometry"), VK_PIPELINE_STAGE_2_TRANSFER_BIT);
-    uploadDebugPass.WriteTransferBuffer(SID("debug_vertex_buffer"));
-    uploadDebugPass.WriteTransferBuffer(SID("debug_index_buffer"));
+    for (const auto& line : viewFamily.debugLines) {
+        segments[segmentOffset++] = {.a = line.start, .width = line.width, .b = line.end, .pad = 0.0f, .color = line.color};
+    }
 
-    VkBuffer srcBuffer = graph.GetTransientUploadBuffer();
-    uploadDebugPass.Execute([&, srcBuffer,
-            vertexOffset = vertexUpload.offset,
-            vertexSize = totalDebugVertices * sizeof(DebugVertex),
-            indexOffset = indexUpload.offset,
-            indexSize = totalDebugIndices * sizeof(uint32_t)](VkCommandBuffer cmd) {
-            VkBufferCopy2 vertexCopy{
-                .sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
-                .srcOffset = vertexOffset,
-                .dstOffset = 0,
-                .size = vertexSize
-            };
-            VkCopyBufferInfo2 vertexCopyInfo{
-                .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
-                .srcBuffer = srcBuffer,
-                .dstBuffer = graph.GetBufferHandle(SID("debug_vertex_buffer")),
-                .regionCount = 1,
-                .pRegions = &vertexCopy
-            };
-            vkCmdCopyBuffer2(cmd, &vertexCopyInfo);
+    for (const auto& box : viewFamily.debugBoxes) {
+        glm::mat3 rot = glm::mat3_cast(box.rotation);
+        if (!IntersectsOBB(mainViewFrustum, box.center, box.extents, rot)) {
+            continue;
+        }
 
-            VkBufferCopy2 indexCopy{
-                .sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
-                .srcOffset = indexOffset,
-                .dstOffset = 0,
-                .size = indexSize
-            };
-            VkCopyBufferInfo2 indexCopyInfo{
-                .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
-                .srcBuffer = srcBuffer,
-                .dstBuffer = graph.GetBufferHandle(SID("debug_index_buffer")),
-                .regionCount = 1,
-                .pRegions = &indexCopy
-            };
-            vkCmdCopyBuffer2(cmd, &indexCopyInfo);
-        });
+        glm::vec3 c[8] = {
+            box.center + rot * glm::vec3(-box.extents.x, -box.extents.y, -box.extents.z),
+            box.center + rot * glm::vec3(box.extents.x, -box.extents.y, -box.extents.z),
+            box.center + rot * glm::vec3(box.extents.x, box.extents.y, -box.extents.z),
+            box.center + rot * glm::vec3(-box.extents.x, box.extents.y, -box.extents.z),
+            box.center + rot * glm::vec3(-box.extents.x, -box.extents.y, box.extents.z),
+            box.center + rot * glm::vec3(box.extents.x, -box.extents.y, box.extents.z),
+            box.center + rot * glm::vec3(box.extents.x, box.extents.y, box.extents.z),
+            box.center + rot * glm::vec3(-box.extents.x, box.extents.y, box.extents.z),
+        };
+        static constexpr uint32_t edges[24] = {0, 1, 1, 2, 2, 3, 3, 0, 4, 5, 5, 6, 6, 7, 7, 4, 0, 4, 1, 5, 2, 6, 3, 7};
+        for (int i = 0; i < 12; ++i) {
+            segments[segmentOffset++] = {.a = c[edges[i * 2]], .width = box.width, .b = c[edges[i * 2 + 1]], .pad = 0.0f, .color = box.color};
+        }
+    }
 
 
-    totalDebugIndices = indexOffset;
 
-    if (totalDebugIndices == 0) {
+    if (segmentOffset == 0) {
         return;
     }
 
-    RenderPass& debugDrawPass = graph.AddPass(SID("Debug Draw"), VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT);
+    const uint32_t totalLineSegments = segmentOffset;
+
+    RenderPass& uploadDebugPass = graph.AddPass(SID("Upload Debug Geometry"), VK_PIPELINE_STAGE_2_TRANSFER_BIT);
+    uploadDebugPass.WriteTransferBuffer(SID("debug_segment_buffer"));
+
+    VkBuffer srcBuffer = graph.GetTransientUploadBuffer();
+    uploadDebugPass.Execute([&, srcBuffer,
+            uploadOffset = segmentUpload.offset,
+            uploadSize = totalLineSegments * sizeof(DebugLineSegment)](VkCommandBuffer cmd) {
+            VkBufferCopy2 copy{
+                .sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
+                .srcOffset = uploadOffset,
+                .dstOffset = 0,
+                .size = uploadSize
+            };
+            VkCopyBufferInfo2 copyInfo{
+                .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
+                .srcBuffer = srcBuffer,
+                .dstBuffer = graph.GetBufferHandle(SID("debug_segment_buffer")),
+                .regionCount = 1,
+                .pRegions = &copy
+            };
+            vkCmdCopyBuffer2(cmd, &copyInfo);
+        });
+
+    RenderPass& debugDrawPass = graph.AddPass(SID("Debug Draw"), VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT);
     debugDrawPass.WriteColorAttachment(targetImage);
     bool bHasDepth = graph.HasTexture(depthTarget);
     if (bHasDepth) {
         debugDrawPass.ReadWriteDepthAttachment(depthTarget);
     }
     debugDrawPass.ReadBuffer(SID("scene_data"));
-    debugDrawPass.ReadBuffer(SID("debug_vertex_buffer"));
-    debugDrawPass.ReadIndexBuffer(SID("debug_index_buffer"));
-    debugDrawPass.Execute([&, width = renderExtent[0], height = renderExtent[1], totalDebugIndices, bHasDepth, depthTarget, targetImage](VkCommandBuffer cmd) {
+    debugDrawPass.ReadBuffer(SID("debug_segment_buffer"));
+    debugDrawPass.Execute([&, width = renderExtent[0], height = renderExtent[1], totalLineSegments, bHasDepth, depthTarget, targetImage](VkCommandBuffer cmd) {
         VkViewport viewport = VkHelpers::GenerateViewport(width, height);
         vkCmdSetViewport(cmd, 0, 1, &viewport);
         VkRect2D scissor = VkHelpers::GenerateScissor(width, height);
@@ -2877,21 +2802,21 @@ void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& 
             renderInfo = VkHelpers::RenderingInfo({width, height}, &colorAttachment, 1, nullptr, nullptr);
         }
 
-
         vkCmdBeginRendering(cmd, &renderInfo);
 
         DebugDrawPushConstant pushConstants{
             .sceneData = graph.GetBufferAddress(SID("scene_data")),
-            .vertexBuffer = graph.GetBufferAddress(SID("debug_vertex_buffer")),
+            .segmentBuffer = graph.GetBufferAddress(SID("debug_segment_buffer")),
             .sceneDataIndex = 0,
+            .totalLineSegments = totalLineSegments,
         };
 
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("debug_render"));
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineEntry->pipeline);
-        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(DebugDrawPushConstant), &pushConstants);
+        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_MESH_BIT_EXT, 0, sizeof(DebugDrawPushConstant), &pushConstants);
 
-        vkCmdBindIndexBuffer(cmd, graph.GetBufferHandle(SID("debug_index_buffer")), 0, VK_INDEX_TYPE_UINT32);
-        vkCmdDrawIndexed(cmd, static_cast<uint32_t>(totalDebugIndices), 1, 0, 0, 0);
+        const uint32_t groupCount = (totalLineSegments + 31) / 32;
+        vkCmdDrawMeshTasksEXT(cmd, groupCount, 1, 1);
 
         vkCmdEndRendering(cmd);
     });

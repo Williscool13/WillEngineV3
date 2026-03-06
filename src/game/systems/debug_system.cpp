@@ -716,7 +716,7 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
 
         // Create vertical column of dragons
         for (int y = 0; y < 10; ++y) {
-            glm::vec3 pos = glm::vec3(0.0f, 1.0f + y * 3.0f, 0.0f) + meshOffset;
+            glm::vec3 pos = glm::vec3(0.0f, 1.0f + static_cast<float>(y) * 3.0f, 0.0f) + meshOffset;
 
             Component::StaticMeshComponent renderable{};
 
@@ -799,7 +799,7 @@ void DebugApplyGroundForces(Core::EngineContext* ctx, Engine::GameState* state)
     auto view = state->registry.view<Component::AntiGravityTag, Component::PhysicsBodyComponent>();
     auto& bodyInterface = ctx->physicsSystem->GetBodyInterface();
 
-    for (auto [entity, physics] : view.each()) {
+    for (const auto& [entity, physics] : view.each()) {
         bodyInterface.AddImpulse(physics.bodyID, JPH::Vec3(0, 100.0f, 0));
     }
 }

@@ -5,8 +5,8 @@ import push_constant_interop;
 import bindless_declarations;
 
 // =============== Shader Summary ============
-/* Simple debug line renderer using vertex shader.
- * Draws lines and boxes with alpha blending for visualization.
+/* Debug line renderer using mesh shader.
+ * Generates quads from DebugLineSegments with variable width in view space.
  * No culling - assumes CPU has already culled primitives.
  */
 
@@ -15,21 +15,6 @@ struct VertexOutput
     float4 position : SV_Position;
     float4 color : COLOR0;
 };
-
-// =============== Vertex Shader ===============
-[shader("vertex")]
-VertexOutput VertexMain(
-    uint vertexID : SV_VertexID,
-    uniform DebugDrawPushConstant pc)
-{
-    DebugVertex v = pc.vertexBuffer[vertexID];
-
-    VertexOutput output;
-    output.position = mul(pc.sceneData[pc.sceneDataIndex].unjitteredViewProj, float4(v.position, 1.0));
-    output.color = v.color;
-
-    return output;
-}
 
 // =============== Fragment Shader ===============
 [shader("fragment")]
@@ -53,7 +38,7 @@ void MeshMain(
 
     if (gtid.x >= validThreads) { return; }
 
-    int32_t segmentIndex = gtid.x;
+    int32_t segmentIndex = gid.x * 32 + gtid.x;
     DebugLineSegment seg = pc.segmentBuffer[segmentIndex];
 
     SceneData scene = pc.sceneData[pc.sceneDataIndex];

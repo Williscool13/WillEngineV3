@@ -21,8 +21,7 @@ struct FrameResourceLimits
     size_t highestMeshletCount{128};
 
 #ifndef PACKAGED_BUILD
-    size_t highestDebugVertexBuffer{128};
-    size_t highestDebugIndexBuffer{128};
+    size_t highestDebugSegmentBuffer{128};
 #endif
 };
 

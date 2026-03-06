@@ -185,7 +185,8 @@ struct DebugLine
 {
     glm::vec3 start;
     glm::vec3 end;
-    glm::vec4 color;
+    glm::vec4 color{0.0f, 1.0f, 0.0f, 1.0f};
+    float width{0.05f};
 };
 
 struct DebugBox
@@ -193,14 +194,16 @@ struct DebugBox
     glm::vec3 center;
     glm::vec3 extents;
     glm::quat rotation;
-    glm::vec4 color;
+    glm::vec4 color{0.0f, 1.0f, 0.0f, 1.0f};
+    float width{0.05f};
 };
 
 struct DebugSphere
 {
     glm::vec3 center;
     float radius;
-    glm::vec4 color;
+    glm::vec4 color{0.0f, 1.0f, 0.0f, 1.0f};
+    float width{0.05f};
 };
 
 struct ViewFamily

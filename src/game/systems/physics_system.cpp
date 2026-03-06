@@ -32,7 +32,7 @@ void UpdatePhysics(Core::EngineContext* ctx, Engine::GameState* state)
 
         // Teleport
         auto teleportView = state->registry.view<Component::PhysicsBodyComponent, Component::TransformComponent, Component::TeleportPhysicsTransformTag>();
-        for (auto [entity, physicsBody, transform] : teleportView.each()) {
+        for (const auto& [entity, physicsBody, transform] : teleportView.each()) {
             bodyInterface.SetPositionAndRotation(
                 physicsBody.bodyID,
                 JPH::RVec3(transform.translation.x, transform.translation.y, transform.translation.z),
@@ -44,7 +44,7 @@ void UpdatePhysics(Core::EngineContext* ctx, Engine::GameState* state)
 
         // Kinematic
         auto kinematicView = state->registry.view<Component::PhysicsBodyComponent, Component::TransformComponent, Component::DirtyKinematicPhysicsTransformTag>();
-        for (auto [entity, physicsBody, transform] : kinematicView.each()) {
+        for (const auto& [entity, physicsBody, transform] : kinematicView.each()) {
             bodyInterface.MoveKinematic(
                 physicsBody.bodyID,
                 JPH::RVec3(transform.translation.x, transform.translation.y, transform.translation.z),
@@ -105,7 +105,7 @@ void DebugRenderPhysics(Core::EngineContext* ctx, Engine::GameState* state, Core
     filter.Clear();
 
     auto view = state->registry.view<Component::DrawPhysicsDebugTag, Component::PhysicsBodyComponent>();
-    for (auto [entity, physicsBody] : view.each()) {
+    for (const auto& [entity, physicsBody] : view.each()) {
         filter.AddBody(physicsBody.bodyID);
     }
 
