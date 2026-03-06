@@ -23,7 +23,7 @@ using HasComponentFn = bool(*)(const entt::registry&, entt::entity);
 using OnAddComponentFn = void(*)(entt::registry&, entt::entity);
 using OnRemoveComponentFn = void(*)(entt::registry&, entt::entity);
 using CopyComponentFn = void(*)(const entt::registry&, entt::entity, entt::registry&, entt::entity);
-using DrawEditorFn = ComponentEditorResult(*)(const Core::ViewFamily&, entt::registry&, entt::entity);
+using DrawEditorFn = ComponentEditorResult(*)(Core::ViewFamily&, entt::registry&, entt::entity);
 
 struct ComponentEntry
 {
@@ -73,7 +73,7 @@ void RegisterComponent(ComponentRegistry& componentRegistry, const char* name)
         [](const entt::registry& srcReg, entt::entity srcEntity, entt::registry& dstReg, entt::entity dstEntity) {
             dstReg.emplace_or_replace<T>(dstEntity, CopyComponent<T>(srcReg.get<T>(srcEntity), dstReg));
         },
-        [](const Core::ViewFamily& viewFamily, entt::registry& reg, entt::entity e) {
+        [](Core::ViewFamily& viewFamily, entt::registry& reg, entt::entity e) {
             return DrawComponentEditor<T>(reg.get<T>(e), viewFamily, reg, e);
         },
         [](const entt::registry& reg, entt::entity e) -> bool {
@@ -113,7 +113,7 @@ void RegisterComponent(ComponentRegistry& componentRegistry, const char* name)
         [](const entt::registry&, entt::entity, entt::registry& dstReg, entt::entity dstEntity) {
             (void)dstReg.get_or_emplace<T>(dstEntity);
         },
-        [](const Core::ViewFamily& viewFamily, entt::registry& reg, entt::entity e) {
+        [](Core::ViewFamily& viewFamily, entt::registry& reg, entt::entity e) {
             T dummy{};
             return DrawComponentEditor<T>(dummy, viewFamily, reg, e);
         },

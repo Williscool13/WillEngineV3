@@ -784,6 +784,7 @@ void WillEngine::Run()
 
         engineContext->bImguiKeyboardCaptured = ImGui::GetIO().WantCaptureKeyboard;
         engineContext->bImguiMouseCaptured = ImGui::GetIO().WantCaptureMouse;
+        engineContext->bImGuiWantsTextInput = ImGui::GetIO().WantTextInput;
         engineContext->bModelLoadedThisFrame = loadCounts.modelLoadedCount > 0;
 
         //

@@ -50,7 +50,7 @@ void DeserializeComponent<Component::NameComponent>(Component::NameComponent& co
 namespace Game
 {
 template<>
-ComponentEditorResult DrawComponentEditor<Component::StableIdComponent>(Component::StableIdComponent& component, const Core::ViewFamily& viewFamily, entt::registry& registry,
+ComponentEditorResult DrawComponentEditor<Component::StableIdComponent>(Component::StableIdComponent& component, Core::ViewFamily& viewFamily, entt::registry& registry,
                                                        entt::entity entity)
 {
     char headerLabel[64];
@@ -80,7 +80,7 @@ void OnComponentRemoved<Component::StableIdComponent>(Component::StableIdCompone
 }
 
 template<>
-ComponentEditorResult DrawComponentEditor<Component::NameComponent>(Component::NameComponent& component, const Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity)
+ComponentEditorResult DrawComponentEditor<Component::NameComponent>(Component::NameComponent& component, Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity)
 {
     bool open = ImGui::CollapsingHeader("Name##componentname", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
     ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);

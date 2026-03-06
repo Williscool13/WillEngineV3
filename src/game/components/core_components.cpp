@@ -41,7 +41,7 @@ void DeserializeComponent<Component::TransformComponent>(Component::TransformCom
 namespace Game
 {
 template<>
-ComponentEditorResult DrawComponentEditor<Component::TransformComponent>(Component::TransformComponent& component, const Core::ViewFamily& viewFamily, entt::registry& registry,
+ComponentEditorResult DrawComponentEditor<Component::TransformComponent>(Component::TransformComponent& component, Core::ViewFamily& viewFamily, entt::registry& registry,
                                                         entt::entity entity)
 {
     bool open = ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
@@ -73,44 +73,6 @@ ComponentEditorResult DrawComponentEditor<Component::TransformComponent>(Compone
             component.scale = glm::vec3(component.scale.y);
         else if (component.scale.z != prevScale.z)
             component.scale = glm::vec3(component.scale.z);
-    }
-
-    glm::mat4 view = viewFamily.mainView.currentViewData.view;
-    glm::mat4 proj = viewFamily.mainView.currentViewData.proj;
-    glm::mat4 model = Component::GetMatrix(component);
-    float snapArr[3] = {};
-    float* snap = nullptr;
-    if (state->bSnapEnabled) {
-        if (state->currentGizmoOperation == ImGuizmo::TRANSLATE)
-            snapArr[0] = snapArr[1] = snapArr[2] = state->snapTranslation;
-        else if (state->currentGizmoOperation == ImGuizmo::ROTATE)
-            snapArr[0] = snapArr[1] = snapArr[2] = state->snapRotation;
-        else
-            snapArr[0] = snapArr[1] = snapArr[2] = state->snapScale;
-        snap = snapArr;
-    }
-    ImGuizmo::Manipulate(
-        glm::value_ptr(view),
-        glm::value_ptr(proj),
-        state->currentGizmoOperation,
-        state->currentGizmoMode,
-        glm::value_ptr(model),
-        nullptr,
-        snap
-    );
-
-    if (ImGuizmo::IsUsing()) {
-        float translation[3], rotation[3], scale[3];
-        ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(model), translation, rotation, scale);
-        component.translation = glm::vec3(translation[0], translation[1], translation[2]);
-        component.rotation = glm::quat(glm::radians(glm::vec3(rotation[0], rotation[1], rotation[2])));
-        if (state->bUniformScaleMode) {
-            float uniformValue = (scale[0] + scale[1] + scale[2]) / 3.0f;
-            component.scale = glm::vec3(uniformValue);
-        } else {
-            component.scale = glm::vec3(scale[0], scale[1], scale[2]);
-        }
-        dirty = true;
     }
 
     if (dirty) {

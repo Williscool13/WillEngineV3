@@ -24,7 +24,7 @@ namespace Game
 {
 void EditorUpdate(Core::EngineContext* ctx, Engine::GameState* state)
 {
-    if (ctx->bImguiMouseCaptured || ctx->bImguiKeyboardCaptured) { return; }
+    if (ctx->bImguiMouseCaptured || ctx->bImGuiWantsTextInput) { return; }
 
     const bool ctrlHeld = state->inputFrame->GetKey(Key::LCTRL).down || state->inputFrame->GetKey(Key::RCTRL).down;
 
@@ -53,9 +53,6 @@ void EditorUpdate(Core::EngineContext* ctx, Engine::GameState* state)
     }
 
     if (state->inputFrame->GetMouse(MouseButton::LMB).pressed) {
-        const bool ctrlHeld = state->inputFrame->GetKey(Key::LCTRL).down
-                              || state->inputFrame->GetKey(Key::RCTRL).down;
-
         auto it = state->stableIdToEntityMap.find(StringID{ctx->lastKnownStableIdUnderCursor});
         if (it != state->stableIdToEntityMap.end()) {
             entt::entity clicked = it->second;
@@ -442,6 +439,8 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
             entt::entity entity = state->selectedEntities[0];
             ImGui::Text("Entity: %u", static_cast<uint32_t>(entity));
 
+            state->bCustomGizmoActivePrev = state->bCustomGizmoActive;
+            state->bCustomGizmoActive = false;
             for (ComponentEntry& entry : state->componentRegistry.registry) {
                 if (entry.has(state->registry, entity)) {
                     ComponentEditorResult result = entry.drawEditor(frameBuffer->mainViewFamily, state->registry, entity);
@@ -452,6 +451,43 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
             }
             if (entryToRemove) {
                 entryToRemove->onRemoveComponent(state->registry, entity);
+            }
+
+            if (!state->bCustomGizmoActive) {
+                if (auto* transform = state->registry.try_get<Component::TransformComponent>(entity)) {
+                    glm::mat4 model = Component::GetMatrix(*transform);
+                    float snapArr[3] = {};
+                    float* snap = nullptr;
+                    if (state->bSnapEnabled) {
+                        if (state->currentGizmoOperation == ImGuizmo::TRANSLATE)
+                            snapArr[0] = snapArr[1] = snapArr[2] = state->snapTranslation;
+                        else if (state->currentGizmoOperation == ImGuizmo::ROTATE)
+                            snapArr[0] = snapArr[1] = snapArr[2] = state->snapRotation;
+                        else
+                            snapArr[0] = snapArr[1] = snapArr[2] = state->snapScale;
+                        snap = snapArr;
+                    }
+                    ImGuizmo::Manipulate(
+                        glm::value_ptr(view),
+                        glm::value_ptr(proj),
+                        state->currentGizmoOperation,
+                        state->currentGizmoMode,
+                        glm::value_ptr(model),
+                        nullptr,
+                        snap
+                    );
+                    if (ImGuizmo::IsUsing()) {
+                        float t[3], r[3], s[3];
+                        ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(model), t, r, s);
+                        transform->translation = glm::vec3(t[0], t[1], t[2]);
+                        transform->rotation = glm::quat(glm::radians(glm::vec3(r[0], r[1], r[2])));
+                        if (state->bUniformScaleMode)
+                            transform->scale = glm::vec3((s[0] + s[1] + s[2]) / 3.0f);
+                        else
+                            transform->scale = glm::vec3(s[0], s[1], s[2]);
+                        state->registry.emplace_or_replace<Component::DirtyTransformTag>(entity);
+                    }
+                }
             }
 
             ImGui::Spacing();

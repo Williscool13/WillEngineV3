@@ -63,6 +63,10 @@ struct GameState
     DebugTransformationType debugTransformationType{};
     Core::DebugViewAspect debugViewAspect{};
 
+    // If true transform imguizmo will not be drawn
+    bool bCustomGizmoActive{false};
+    bool bCustomGizmoActivePrev{false};
+
     ImGuizmo::OPERATION currentGizmoOperation{ImGuizmo::TRANSLATE};
     ImGuizmo::MODE currentGizmoMode{ImGuizmo::WORLD};
     bool bUniformScaleMode{true};

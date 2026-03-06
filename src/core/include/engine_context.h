@@ -63,6 +63,7 @@ struct EngineContext
     ImGuiContext* imguiContext;
     bool bImguiKeyboardCaptured = false;
     bool bImguiMouseCaptured = false;
+    bool bImGuiWantsTextInput = false;
     uint64_t lastKnownStableIdUnderCursor{0};
 
     enki::TaskScheduler* scheduler;

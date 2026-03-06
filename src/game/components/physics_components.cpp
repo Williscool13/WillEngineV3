@@ -4,6 +4,8 @@
 
 #include "physics_components.h"
 
+#include <glm/gtc/type_ptr.hpp>
+
 #include "component_serialization.h"
 #include "core/include/engine_context.h"
 #include "engine/engine_api.h"
@@ -27,7 +29,6 @@ void PhysicsBodyComponent::on_destroy(entt::registry& registry, entt::entity ent
     auto& physics = registry.get<PhysicsBodyComponent>(entity);
     state->bodyToEntity.erase(physics.bodyID);
 }
-
 }
 
 namespace Game
@@ -99,8 +100,23 @@ void DeserializeComponent<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc
 }
 
 template<>
-ComponentEditorResult DrawComponentEditor<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc& component, const Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity)
+ComponentEditorResult DrawComponentEditor<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc& component, Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity)
 {
+    static int editShapeIdx = -1;
+    static entt::entity editEntity = entt::null;
+    static bool wantApply = false;
+
+    Engine::GameState* state = registry.ctx().get<Engine::GameState*>();
+
+    if (editEntity != entity) {
+        editShapeIdx = -1;
+        editEntity = entity;
+        wantApply = false;
+    }
+
+    const bool hasGizmoClaim = editShapeIdx != -1 && !state->bCustomGizmoActive;
+    if (hasGizmoClaim) state->bCustomGizmoActive = true;
+
     bool open = ImGui::CollapsingHeader("Physics Body", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
     ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
@@ -120,17 +136,43 @@ ComponentEditorResult DrawComponentEditor<Component::PhysicsBodyDesc>(Component:
         if (ImGui::Combo("Motion Quality", &currentQuality, qualityTypes, IM_ARRAYSIZE(qualityTypes)))
             component.motionQuality = static_cast<JPH::EMotionQuality>(currentQuality);
 
+        const glm::mat4 view = viewFamily.mainView.currentViewData.view;
+        const glm::mat4 proj = viewFamily.mainView.currentViewData.proj;
+        auto* transform = registry.try_get<Component::TransformComponent>(entity);
+
         ImGui::SeparatorText("Shapes");
         int shapeToRemove = -1;
-        for (size_t i = 0; i < component.shapes.size(); ++i) {
-            ImGui::PushID(static_cast<int>(i));
+        for (int i = 0; i < static_cast<int>(component.shapes.size()); ++i) {
+            ImGui::PushID(i);
             auto& shape = component.shapes[i];
+            const bool isEditing = (editShapeIdx == i);
 
-            bool shapeOpen = ImGui::TreeNodeEx("", ImGuiTreeNodeFlags_AllowOverlap, "Shape %zu", i);
-            ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
+            bool shapeOpen = ImGui::TreeNodeEx("", ImGuiTreeNodeFlags_AllowOverlap, "Shape %d", i);
+            const float avail = ImGui::GetContentRegionAvail().x;
+            const float xBtnW = ImGui::CalcTextSize("X").x + ImGui::GetStyle().FramePadding.x * 2.0f;
+            const float editBtnW = ImGui::CalcTextSize("Done").x + ImGui::GetStyle().FramePadding.x * 2.0f;
+            const float spacing = ImGui::GetStyle().ItemSpacing.x;
+
+            ImGui::SameLine(avail - xBtnW - spacing - editBtnW);
+            ImGui::PushStyleColor(ImGuiCol_Button, isEditing ? ImVec4(0.15f, 0.65f, 0.15f, 1.0f) : ImVec4(0.15f, 0.35f, 0.65f, 1.0f));
+            ImGui::BeginDisabled((state->bCustomGizmoActive || state->bCustomGizmoActivePrev) && !isEditing);
+            if (ImGui::SmallButton(isEditing ? "Done##edit" : "Edit##edit")) {
+                if (isEditing) {
+                    editShapeIdx = -1;
+                    wantApply = true;
+                }
+                else {
+                    editShapeIdx = i;
+                }
+            }
+            ImGui::EndDisabled();
+            ImGui::PopStyleColor();
+
+            ImGui::SameLine(avail - xBtnW);
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
             if (ImGui::SmallButton("X##shape")) {
-                shapeToRemove = static_cast<int>(i);
+                shapeToRemove = i;
+                if (editShapeIdx == i) { editShapeIdx = -1; }
             }
             ImGui::PopStyleColor();
 
@@ -156,8 +198,104 @@ ComponentEditorResult DrawComponentEditor<Component::PhysicsBodyDesc>(Component:
                 }
                 ImGui::TreePop();
             }
+
+            if (isEditing && transform && hasGizmoClaim) {
+                const glm::mat4 entityMat = glm::translate(glm::mat4(1.0f), transform->translation) * glm::mat4_cast(transform->rotation);
+                const glm::mat4 entityMatInv = glm::inverse(entityMat);
+                const glm::vec3 shapeCenter = glm::vec3(entityMat * glm::vec4(shape.offset, 1.0f));
+
+                ImGuizmo::Style savedStyle = ImGuizmo::GetStyle();
+
+                auto applyStyle = [](ImVec4 full, ImVec4 select, float size) {
+                    ImGuizmo::Style& s = ImGuizmo::GetStyle();
+                    s.Colors[ImGuizmo::DIRECTION_X]      = full;
+                    s.Colors[ImGuizmo::DIRECTION_Y]      = full;
+                    s.Colors[ImGuizmo::DIRECTION_Z]      = full;
+                    s.Colors[ImGuizmo::PLANE_X]          = {full.x, full.y, full.z, 0.38f};
+                    s.Colors[ImGuizmo::PLANE_Y]          = {full.x, full.y, full.z, 0.38f};
+                    s.Colors[ImGuizmo::PLANE_Z]          = {full.x, full.y, full.z, 0.38f};
+                    s.Colors[ImGuizmo::TRANSLATION_LINE] = full;
+                    s.Colors[ImGuizmo::SELECTION]        = select;
+                    ImGuizmo::SetGizmoSizeClipSpace(size);
+                };
+
+                int gizmoId = 0;
+                auto gizmo = [&](glm::vec3 worldPos, auto onMoved) {
+                    glm::mat4 mat = glm::translate(glm::mat4(1.0f), worldPos);
+                    ImGuizmo::PushID(gizmoId++);
+                    if (ImGuizmo::Manipulate(
+                        glm::value_ptr(view), glm::value_ptr(proj),
+                        ImGuizmo::TRANSLATE, ImGuizmo::WORLD,
+                        glm::value_ptr(mat))) {
+                        onMoved(glm::vec3(mat[3]));
+                    }
+                    ImGuizmo::PopID();
+                };
+
+                // Offset
+                applyStyle({1.0f, 0.55f, 0.05f, 1.0f}, {1.0f, 0.85f, 0.35f, 1.0f}, 0.10f);
+                gizmo(shapeCenter, [&](glm::vec3 newCenter) {
+                    shape.offset = glm::vec3(entityMatInv * glm::vec4(newCenter, 1.0f));
+                });
+
+                // Control Points
+                applyStyle({1.0f, 0.85f, 0.20f, 1.0f}, {1.0f, 1.00f, 0.60f, 1.0f}, 0.07f);
+                switch (shape.type) {
+                    case Component::PhysicsShapeType::Sphere:
+                        gizmo(shapeCenter + glm::vec3(shape.sphere.radius, 0.0f, 0.0f), [&](glm::vec3 newPt) {
+                            shape.sphere.radius = glm::max(0.001f, glm::length(newPt - shapeCenter));
+                        });
+                        break;
+                    case Component::PhysicsShapeType::Capsule:
+                        gizmo(shapeCenter + glm::vec3(0.0f, shape.capsule.halfHeight, 0.0f), [&](glm::vec3 newPt) {
+                            shape.capsule.halfHeight = glm::max(0.001f, newPt.y - shapeCenter.y);
+                        });
+                        gizmo(shapeCenter + glm::vec3(shape.capsule.radius, 0.0f, 0.0f), [&](glm::vec3 newPt) {
+                            shape.capsule.radius = glm::max(0.001f, glm::length(newPt - shapeCenter));
+                        });
+                        break;
+                    case Component::PhysicsShapeType::Box:
+                        gizmo(shapeCenter + glm::vec3(shape.box.halfExtents.x, 0.0f, 0.0f), [&](glm::vec3 newPt) {
+                            shape.box.halfExtents.x = glm::max(0.001f, glm::abs(newPt.x - shapeCenter.x));
+                        });
+                        gizmo(shapeCenter + glm::vec3(0.0f, shape.box.halfExtents.y, 0.0f), [&](glm::vec3 newPt) {
+                            shape.box.halfExtents.y = glm::max(0.001f, glm::abs(newPt.y - shapeCenter.y));
+                        });
+                        gizmo(shapeCenter + glm::vec3(0.0f, 0.0f, shape.box.halfExtents.z), [&](glm::vec3 newPt) {
+                            shape.box.halfExtents.z = glm::max(0.001f, glm::abs(newPt.z - shapeCenter.z));
+                        });
+                        break;
+                }
+
+                ImGuizmo::GetStyle() = savedStyle;
+                ImGuizmo::SetGizmoSizeClipSpace(0.1f);
+
+                // Debug shape preview
+                constexpr glm::vec4 kEditColor{1.0f, 0.6f, 0.1f, 1.0f};
+                switch (shape.type) {
+                    case Component::PhysicsShapeType::Sphere:
+                        DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {shapeCenter, shape.sphere.radius, kEditColor});
+                        break;
+                    case Component::PhysicsShapeType::Capsule: {
+                        const glm::vec3 top = shapeCenter + glm::vec3(0.0f, shape.capsule.halfHeight, 0.0f);
+                        const glm::vec3 bot = shapeCenter - glm::vec3(0.0f, shape.capsule.halfHeight, 0.0f);
+                        DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {top, shape.capsule.radius, kEditColor});
+                        DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {bot, shape.capsule.radius, kEditColor});
+                        DEBUG_ADD_LINE(viewFamily.debugLines, {top + glm::vec3( shape.capsule.radius, 0, 0), bot + glm::vec3( shape.capsule.radius, 0, 0), kEditColor});
+                        DEBUG_ADD_LINE(viewFamily.debugLines, {top + glm::vec3(-shape.capsule.radius, 0, 0), bot + glm::vec3(-shape.capsule.radius, 0, 0), kEditColor});
+                        DEBUG_ADD_LINE(viewFamily.debugLines, {top + glm::vec3(0, 0,  shape.capsule.radius), bot + glm::vec3(0, 0,  shape.capsule.radius), kEditColor});
+                        DEBUG_ADD_LINE(viewFamily.debugLines, {top + glm::vec3(0, 0, -shape.capsule.radius), bot + glm::vec3(0, 0, -shape.capsule.radius), kEditColor});
+                        break;
+                    }
+                    case Component::PhysicsShapeType::Box:
+                        DEBUG_ADD_BOX(viewFamily.debugBoxes, {shapeCenter, shape.box.halfExtents, transform->rotation * shape.rotation, kEditColor});
+                        break;
+                }
+            }
+
             ImGui::PopID();
         }
+
         if (shapeToRemove >= 0) {
             component.shapes.erase(component.shapes.begin() + shapeToRemove);
         }
@@ -170,7 +308,8 @@ ComponentEditorResult DrawComponentEditor<Component::PhysicsBodyDesc>(Component:
         }
 
         ImGui::SeparatorText("Actions");
-        if (ImGui::Button("Apply (Recreate Body)")) {
+        if (wantApply || ImGui::Button("Apply (Recreate Body)")) {
+            wantApply = false;
             auto* ctx = registry.ctx().get<Core::EngineContext*>();
             JPH::BodyInterface& bodyInterface = ctx->physicsSystem->GetBodyInterface();
 
@@ -184,7 +323,6 @@ ComponentEditorResult DrawComponentEditor<Component::PhysicsBodyDesc>(Component:
             OnComponentAdded<Component::PhysicsBodyDesc>(component, registry, entity);
         }
     }
-
 
     return {.requestRemoval = remove};
 }
@@ -229,7 +367,7 @@ void OnComponentAdded<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc& co
 }
 
 template<>
-ComponentEditorResult DrawComponentEditor<Component::DrawPhysicsDebugTag>(Component::DrawPhysicsDebugTag& component, const Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity)
+ComponentEditorResult DrawComponentEditor<Component::DrawPhysicsDebugTag>(Component::DrawPhysicsDebugTag& component, Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity)
 {
     ImGui::CollapsingHeader("Physics Debug Draw", ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_AllowOverlap);
     ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
