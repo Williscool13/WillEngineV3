@@ -108,14 +108,14 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
     }
 
     if (ImGui::Begin("Debug View")) {
-        auto cameraView = state->registry.view<Component::CameraComponent, Component::MainViewportTag, Component::TransformComponent>();
+        /*auto cameraView = state->registry.view<Component::CameraComponent, Component::GameCameraTag, Component::TransformComponent>();
         const auto& [cam, transform] = cameraView.get(cameraView.front());
         ImGui::Text("Camera Pos: (%.2f, %.2f, %.2f)",
                     transform.translation.x, transform.translation.y, transform.translation.z);
         ImGui::Text("Camera Forward: (%.2f, %.2f, %.2f)",
                     cam.currentViewData.cameraForward.x,
                     cam.currentViewData.cameraForward.y,
-                    cam.currentViewData.cameraForward.z);
+                    cam.currentViewData.cameraForward.z);*/
 
         ImGui::Text("Current Debug View: %s", state->debugResourceName.empty() ? "None" : state->debugResourceName.c_str());
         ImGui::Checkbox("Enable Portals", &state->bEnablePortal);
@@ -253,7 +253,6 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
         ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
         ImGui::SameLine();
 
-        // --- Snap ---
         ImGui::Checkbox("Snap##gizmo_snap", &state->bSnapEnabled);
         if (state->bSnapEnabled) {
             ImGui::SameLine();

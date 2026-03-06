@@ -26,14 +26,15 @@ namespace Engine
 {
 struct GameState
 {
+    bool bIsPlaying{false};
+
     const Core::InputFrame* inputFrame{nullptr};
     const Core::TimeFrame* timeFrame{nullptr};
+    std::mt19937_64 rng{std::random_device{}()};
 
     entt::registry registry;
     std::unordered_map<StringID, entt::entity> stableIdToEntityMap;
     Game::ComponentRegistry componentRegistry{};
-
-    std::mt19937_64 rng{std::random_device{}()};
 
     // Physics
     float physicsDeltaTimeAccumulator = 0.0f;

@@ -82,7 +82,7 @@ nlohmann::json CrashContext::GetBuildConfiguration()
 #ifdef BUILD_CONFIG_NAME
     return BUILD_CONFIG_NAME;
 #else
-    #ifdef NDEBUG
+    #ifdef PACKAGED_BUILD
         return "Release";
     #else
         return "Debug";

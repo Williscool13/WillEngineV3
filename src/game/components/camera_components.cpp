@@ -15,8 +15,6 @@ void SerializeComponent<Component::FreeCameraComponent>(const Component::FreeCam
 {
     json["moveSpeed"] = comp.moveSpeed;
     json["lookSpeed"] = comp.lookSpeed;
-    json["yaw"]       = comp.yaw;
-    json["pitch"]     = comp.pitch;
 }
 
 template<>
@@ -24,7 +22,5 @@ void DeserializeComponent<Component::FreeCameraComponent>(Component::FreeCameraC
 {
     comp.moveSpeed = json["moveSpeed"].get<float>();
     comp.lookSpeed = json["lookSpeed"].get<float>();
-    comp.yaw       = json["yaw"].get<float>();
-    comp.pitch     = json["pitch"].get<float>();
 }
 }

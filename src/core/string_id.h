@@ -22,7 +22,7 @@ constexpr uint64_t fnv1a64(const char* str, size_t len)
     return hash;
 }
 
-#ifdef DEBUG
+#ifndef PACKAGED_BUILD
 void DBG_InternString(uint64_t hash, const char* str);
 const char* DBG_ResolveStringId(uint64_t hash);
 
@@ -31,7 +31,7 @@ const char* DBG_ResolveStringId(uint64_t hash);
 extern void (*gInternStringFn)(uint64_t, const char*);
 extern const char* (*gResolveStringIdFn)(uint64_t);
 
-#endif // DEBUG
+#endif // !PACKAGED_BUILD
 
 struct StringID
 {
@@ -40,7 +40,7 @@ struct StringID
     constexpr StringID() = default;
     constexpr explicit StringID(uint64_t hash) : id(hash) {}
 
-#ifdef DEBUG
+#ifndef PACKAGED_BUILD
     StringID(const char* str, size_t len);
 #else
     constexpr StringID(const char* str, size_t len)
@@ -68,7 +68,7 @@ inline const StringID StringID::Invalid{};
  */
 #define SID(str) StringID(str, sizeof(str) - 1)
 
-#ifdef DEBUG
+#ifndef PACKAGED_BUILD
 inline StringID operator""_sid(const char* str, size_t len) {
     return StringID(str, len);
 }

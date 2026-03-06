@@ -39,7 +39,7 @@ GAME_API void GameStartup(Core::EngineContext* ctx, Engine::GameState* state)
     Game::Component::TransformComponent& cameraTransform = state->registry.emplace<Game::Component::TransformComponent>(camera);
     cameraTransform.translation = glm::vec3(0.0f, 3.0f, 5.0f);
     cameraTransform.rotation = glm::quatLookAt(glm::normalize(glm::vec3(0.0f, 0.0f, 0.0f) - glm::vec3(0.0f, 3.0f, 5.0f)), WORLD_UP);
-    state->registry.emplace<Game::Component::MainViewportTag>(camera);
+    state->registry.emplace<Game::Component::EditorCameraTag>(camera);
     state->registry.ctx().emplace<Engine::GameState*>(state);
     state->registry.ctx().emplace<Core::EngineContext*>(ctx);
 }
@@ -49,22 +49,6 @@ GAME_API void GameLoad(Core::EngineContext* ctx, Engine::GameState* state)
 #ifndef GAME_STATIC
     ctx->engineLogger->RegisterLoggersForDLL(Engine::LogCategory::Game);
 #endif
-
-    SPDLOG_TRACE("[Game] Registering engine component types:");
-    SPDLOG_TRACE("  TransformComponent: {}", entt::type_id<Game::Component::TransformComponent>().hash());
-    SPDLOG_TRACE("  CameraComponent: {}", entt::type_id<Game::Component::CameraComponent>().hash());
-    SPDLOG_TRACE("  MainViewportTag: {}", entt::type_id<Game::Component::MainViewportTag>().hash());
-    SPDLOG_TRACE("  FreeCameraComponent: {}", entt::type_id<Game::Component::FreeCameraComponent>().hash());
-    SPDLOG_TRACE("  PortalPlaneTag: {}", entt::type_id<Game::Component::PortalPlaneTag>().hash());
-    SPDLOG_TRACE("  PortalComponent: {}", entt::type_id<Game::Component::PortalComponent>().hash());
-    SPDLOG_TRACE("  AntiGravityTag: {}", entt::type_id<Game::Component::AntiGravityTag>().hash());
-    SPDLOG_TRACE("  FloorTag: {}", entt::type_id<Game::Component::FloorTag>().hash());
-    SPDLOG_TRACE("  DynamicPhysicsBodyComponent: {}", entt::type_id<Game::Component::DynamicPhysicsBodyComponent>().hash());
-    SPDLOG_TRACE("  PhysicsBodyComponent: {}", entt::type_id<Game::Component::PhysicsBodyComponent>().hash());
-    SPDLOG_TRACE("  DirtyPhysicsTransformComponent: {}", entt::type_id<Game::Component::TeleportPhysicsTransformTag>().hash());
-    SPDLOG_TRACE("  RenderableComponent: {}", entt::type_id<Game::Component::StaticMeshComponent>().hash());
-    SPDLOG_TRACE("  TransformComponent: {}", entt::type_id<Game::Component::TransformComponent>().hash());
-
     ImGui::SetCurrentContext(ctx->imguiContext);
     Physics::PhysicsSystem::RegisterPhysics();
     Audio::AudioManager::RegisterAudio();
@@ -156,6 +140,7 @@ GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* stat
 
 #if WILL_EDITOR
     Game::DrawEditorInterface(ctx, state, frameBuffer);
+    Game::RenderEditorCamera(ctx, state, frameBuffer);
 #endif
 
 #ifndef PACKAGED_BUILD

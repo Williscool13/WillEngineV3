@@ -44,7 +44,7 @@ void InputManager::ProcessEvent(const SDL_Event& event)
 
         case SDL_EVENT_MOUSE_WHEEL:
         {
-            currentInput.mouseWheelDelta += event.wheel.mouse_y;
+            currentInput.mouseWheelDelta += event.wheel.y;
             break;
         }
         case SDL_EVENT_QUIT:

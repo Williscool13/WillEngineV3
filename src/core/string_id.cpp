@@ -4,7 +4,7 @@
 
 #include "string_id.h"
 
-#ifdef DEBUG
+#ifndef PACKAGED_BUILD
 
 void (*gInternStringFn)(uint64_t, const char*) = nullptr;
 const char* (*gResolveStringIdFn)(uint64_t) = nullptr;
@@ -48,11 +48,11 @@ const char* StringID::ToString() const
     return DBG_ResolveStringId(id);
 }
 
-#else // !DEBUG
+#else // PACKAGED_BUILD
 
 const char* StringID::ToString() const
 {
     return "<release>";
 }
 
-#endif // DEBUG
+#endif // PACKAGED_BUILD

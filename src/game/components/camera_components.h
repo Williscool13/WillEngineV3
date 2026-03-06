@@ -15,15 +15,18 @@ struct CameraComponent
     Core::ViewData previousViewData;
 };
 
-struct MainViewportTag
+struct GameCameraTag
+{};
+
+struct EditorCameraTag
 {};
 
 struct FreeCameraComponent
 {
     float moveSpeed = 5.0f;
     float lookSpeed = 0.1f;
-    float yaw = 0.0f;
-    float pitch = 0.0f;
+    bool bOrtho = false;
+    float orthoSize = 10.0f;
 };
 }
 

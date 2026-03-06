@@ -6,6 +6,7 @@
 #define WILL_ENGINE_ENGINE_CONTEXT_H
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 
 #include "spdlog/logger.h"
@@ -49,8 +50,6 @@ struct WindowContext
     uint32_t viewportHeight;
     uint32_t viewportOffsetX;
     uint32_t viewportOffsetY;
-
-    bool bCursorHidden;
 };
 
 struct EngineContext
@@ -79,6 +78,7 @@ struct EngineContext
     // Global Fn
     void (*internStringFn)(uint64_t, const char*);
     const char* (*resolveStringIdFn)(uint64_t);
+    std::function<void(bool)> setCursorHiddenFn;
 };
 } // Core
 

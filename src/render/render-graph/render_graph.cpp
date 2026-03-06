@@ -1957,7 +1957,7 @@ void RenderGraph::CreatePhysicalBuffer(PhysicalResource& resource, const Resourc
 
 void RenderGraph::AppendUsageChain(PhysicalResource& phys, StringID resourceId, bool canAlias, bool debugLogging)
 {
-#ifdef DEBUG
+#ifndef PACKAGED_BUILD
     if (!debugLogging) return;
 
     const char* name = resourceId.ToString();
