@@ -22,6 +22,8 @@ using DeserializeFn = void(*)(entt::registry&, entt::entity, const nlohmann::jso
 using HasComponentFn = bool(*)(const entt::registry&, entt::entity);
 using OnAddComponentFn = void(*)(entt::registry&, entt::entity);
 using OnRemoveComponentFn = void(*)(entt::registry&, entt::entity);
+using OnPlayStartFn = void(*)(entt::registry&, entt::entity);
+using OnPlayStopFn = void(*)(entt::registry&, entt::entity);
 using CopyComponentFn = void(*)(const entt::registry&, entt::entity, entt::registry&, entt::entity);
 using DrawEditorFn = ComponentEditorResult(*)(Core::ViewFamily&, entt::registry&, entt::entity);
 
@@ -33,6 +35,8 @@ struct ComponentEntry
     DeserializeFn deserialize;
     OnAddComponentFn onAddComponent;
     OnRemoveComponentFn onRemoveComponent;
+    OnPlayStartFn onPlayStart;
+    OnPlayStopFn onPlayStop;
     CopyComponentFn copy;
     DrawEditorFn drawEditor;
     HasComponentFn has;
@@ -69,6 +73,12 @@ void RegisterComponent(ComponentRegistry& componentRegistry, const char* name)
         },
         [](entt::registry& reg, entt::entity e) {
             OnComponentRemoved<T>(reg.get<T>(e), reg, e);
+        },
+        [](entt::registry& reg, entt::entity e) {
+            OnPlayStart<T>(reg.get<T>(e), reg, e);
+        },
+        [](entt::registry& reg, entt::entity e) {
+            OnPlayStop<T>(reg.get<T>(e), reg, e);
         },
         [](const entt::registry& srcReg, entt::entity srcEntity, entt::registry& dstReg, entt::entity dstEntity) {
             dstReg.emplace_or_replace<T>(dstEntity, CopyComponent<T>(srcReg.get<T>(srcEntity), dstReg));
@@ -109,6 +119,14 @@ void RegisterComponent(ComponentRegistry& componentRegistry, const char* name)
         [](entt::registry& reg, entt::entity e) {
             T dummy{};
             OnComponentRemoved<T>(dummy, reg, e);
+        },
+        [](entt::registry& reg, entt::entity e) {
+            T dummy{};
+            OnPlayStart<T>(dummy, reg, e);
+        },
+        [](entt::registry& reg, entt::entity e) {
+            T dummy{};
+            OnPlayStop<T>(dummy, reg, e);
         },
         [](const entt::registry&, entt::entity, entt::registry& dstReg, entt::entity dstEntity) {
             (void)dstReg.get_or_emplace<T>(dstEntity);

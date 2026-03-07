@@ -25,6 +25,14 @@ template<> void OnComponentRemoved<Component::StableIdComponent>(Component::Stab
 template<> void OnComponentRemoved<Component::StaticMeshComponent>(Component::StaticMeshComponent& component, entt::registry& registry, entt::entity entity);
 template<> void OnComponentRemoved<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc& component, entt::registry& registry, entt::entity entity);
 
+template<typename T>
+void OnPlayStart(T& component, entt::registry& registry, entt::entity entity) {}
+template<> void OnPlayStart<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc& component, entt::registry& registry, entt::entity entity);
+
+template<typename T>
+void OnPlayStop(T& component, entt::registry& registry, entt::entity entity) {}
+template<> void OnPlayStop<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc& component, entt::registry& registry, entt::entity entity);
+
 } // Game
 
 #endif //WILL_ENGINE_COMPONENT_INITIALIZATION_H

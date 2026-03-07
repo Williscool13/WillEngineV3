@@ -214,12 +214,14 @@ void WillEngine::Initialize(Utils::Logger* logger)
         engineContext->physicsSystem = physicsSystem.get();
         engineContext->scheduler = scheduler.get();
         engineContext->setCursorHiddenFn = [this](bool hidden) {
+            if (bCursorHidden == hidden) { return; }
             bCursorHidden = hidden;
             if (bCursorHidden) {
                 ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NoMouse;
                 SDL_SetWindowRelativeMouseMode(window.get(), true);
                 ImGui::SetWindowFocus(nullptr);
-            } else {
+            }
+            else {
                 ImGui::GetIO().ConfigFlags &= ~ImGuiConfigFlags_NoMouse;
                 SDL_SetWindowRelativeMouseMode(window.get(), false);
             }
@@ -348,201 +350,201 @@ void WillEngine::EditorImgui()
 
     if (ImGui::Begin("Editor")) {
 #if !GAME_STATIC
-    float gameDllTimeSinceReload = gameDllWatcher.GetTimeSinceLastTrigger();
-    int gameDllSeconds = static_cast<int>(gameDllTimeSinceReload);
-    if (gameDllSeconds < 60) {
-        ImGui::Text("Game DLL: %ds since reload", gameDllSeconds);
-    }
-    else {
-        ImGui::Text("Game DLL: >60s since reload");
-    }
+        float gameDllTimeSinceReload = gameDllWatcher.GetTimeSinceLastTrigger();
+        int gameDllSeconds = static_cast<int>(gameDllTimeSinceReload);
+        if (gameDllSeconds < 60) {
+            ImGui::Text("Game DLL: %ds since reload", gameDllSeconds);
+        }
+        else {
+            ImGui::Text("Game DLL: >60s since reload");
+        }
 #endif
 
-    float shaderTimeSinceReload = shaderWatcher.GetTimeSinceLastTrigger();
-    int shaderSeconds = static_cast<int>(shaderTimeSinceReload);
-    if (shaderSeconds < 60) {
-        ImGui::Text("Shaders: %ds since reload", shaderSeconds);
-    }
-    else {
-        ImGui::Text("Shaders: >60s since reload");
-    }
-
-    ImGui::Checkbox("Freeze Visibility Calculations", &bFreezeVisibility);
-    if (ImGui::Button("Log RDG")) {
-        bLogRDG = true;
-    }
-    else {
-        bLogRDG = false;
-    }
-
-    uint8_t* base = static_cast<uint8_t*>(renderThread->GetResourceManager()->debugReadbackBuffer.allocationInfo.pMappedData);
-    uint8_t* ptr = base;
-    if (ImGui::CollapsingHeader("Meshlet Instancing Debug")) {
-        auto* instanceMeshletOffsets = reinterpret_cast<InstanceMeshletOffsetPrefixSum*>(ptr);
-
-        if (ImGui::BeginTable("InstanceMeshletOffsetsTable", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
-            ImGui::TableSetupColumn("Instance");
-            ImGui::TableSetupColumn("Offset");
-            ImGui::TableSetupColumn("Count");
-            ImGui::TableSetupColumn("LOD");
-            ImGui::TableSetupColumn("Primitive Index");
-            ImGui::TableHeadersRow();
-
-            for (uint32_t i = 0; i < 640; ++i) {
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn();
-                ImGui::Text("%u", i);
-                ImGui::TableNextColumn();
-                ImGui::Text("%u", instanceMeshletOffsets[i].offset);
-                ImGui::TableNextColumn();
-                ImGui::Text("%u", instanceMeshletOffsets[i].count);
-                ImGui::TableNextColumn();
-                ImGui::Text("%u", instanceMeshletOffsets[i].lod);
-                ImGui::TableNextColumn();
-                ImGui::Text("%u", instanceMeshletOffsets[i].primitiveIndex);
-            }
-
-            ImGui::EndTable();
+        float shaderTimeSinceReload = shaderWatcher.GetTimeSinceLastTrigger();
+        int shaderSeconds = static_cast<int>(shaderTimeSinceReload);
+        if (shaderSeconds < 60) {
+            ImGui::Text("Shaders: %ds since reload", shaderSeconds);
         }
-    }
-    ptr += 640 * sizeof(InstanceMeshletOffsetPrefixSum);
-
-    if (ImGui::CollapsingHeader("Meshlet Dispatch Args")) {
-        auto* dispatchArgs = reinterpret_cast<InstancingMeshletDispatchIndirect*>(ptr);
-
-        ImGui::Text("Total Meshlets: %u", dispatchArgs->totalMeshlets);
-        ImGui::Text("Dispatch Groups: (%u, %u, %u)", dispatchArgs->x, dispatchArgs->y, dispatchArgs->z);
-    }
-    ptr += sizeof(InstancingMeshletDispatchIndirect);
-
-
-    if (ImGui::CollapsingHeader("Intermediate Meshlets")) {
-        auto* intermediateMeshlets = reinterpret_cast<IntermediateMeshlet*>(ptr);
-
-        if (ImGui::BeginTable("IntermediateMeshletsTable", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
-            ImGui::TableSetupColumn("Global Meshlet Index");
-            ImGui::TableSetupColumn("Instance Index");
-            ImGui::TableSetupColumn("Visible");
-            ImGui::TableSetupColumn("Local Meshlet Index");
-            ImGui::TableSetupColumn("LOD");
-            ImGui::TableHeadersRow();
-
-            for (uint32_t i = 0; i < 128; ++i) {
-                uint32_t packedInstance = intermediateMeshlets[i].instanceIndex;
-                uint32_t packedLocal = intermediateMeshlets[i].localMeshletIndex;
-
-                uint32_t instanceIndex = packedInstance & 0x7FFFFFFF;
-                bool visible = (packedInstance >> 31) & 1;
-                uint32_t localMeshletIndex = packedLocal & 0x3FFFFFFF;
-                uint32_t lod = packedLocal >> 30;
-
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn();
-                ImGui::Text("%u", i);
-                ImGui::TableNextColumn();
-                ImGui::Text("%u", instanceIndex);
-                ImGui::TableNextColumn();
-                ImGui::Text("%s", visible ? "Yes" : "No");
-                ImGui::TableNextColumn();
-                ImGui::Text("%u", localMeshletIndex);
-                ImGui::TableNextColumn();
-                ImGui::Text("%u", lod);
-            }
-
-            ImGui::EndTable();
+        else {
+            ImGui::Text("Shaders: >60s since reload");
         }
-    }
-    ptr += sizeof(IntermediateMeshlet) * 128;
 
-    if (ImGui::CollapsingHeader("Visible Meshlets (Compacted)")) {
-        auto* visibleMeshlets = reinterpret_cast<CompactedMeshlet*>(ptr);
-
-        if (ImGui::BeginTable("VisibleMeshletsTable", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
-            ImGui::TableSetupColumn("Compact Index");
-            ImGui::TableSetupColumn("Instance Index");
-            ImGui::TableSetupColumn("Local Meshlet Index");
-            ImGui::TableSetupColumn("LOD");
-            ImGui::TableHeadersRow();
-
-            for (uint32_t i = 0; i < 128; ++i) {
-                uint32_t packedLocal = visibleMeshlets[i].localMeshletIndex;
-                uint32_t localMeshletIndex = packedLocal & 0x3FFFFFFF;
-                uint32_t lod = packedLocal >> 30;
-
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn();
-                ImGui::Text("%u", i);
-                ImGui::TableNextColumn();
-                ImGui::Text("%u", visibleMeshlets[i].instanceIndex);
-                ImGui::TableNextColumn();
-                ImGui::Text("%u", localMeshletIndex);
-                ImGui::TableNextColumn();
-                ImGui::Text("%u", lod);
-            }
-
-            ImGui::EndTable();
+        ImGui::Checkbox("Freeze Visibility Calculations", &bFreezeVisibility);
+        if (ImGui::Button("Log RDG")) {
+            bLogRDG = true;
         }
-    }
-    ptr += sizeof(CompactedMeshlet) * 128;
-
-    if (ImGui::CollapsingHeader("Meshlet Scanned Level2 Block Sums")) {
-        auto* scannedBlockSums = reinterpret_cast<uint32_t*>(ptr);
-
-        if (ImGui::BeginTable("ScannedBlockSumsTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
-            ImGui::TableSetupColumn("Block Index");
-            ImGui::TableSetupColumn("Scanned Sum");
-            ImGui::TableHeadersRow();
-
-            for (uint32_t i = 0; i < 256; ++i) {
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn();
-                ImGui::Text("%u", i);
-                ImGui::TableNextColumn();
-                ImGui::Text("%u", scannedBlockSums[i]);
-            }
-
-            ImGui::EndTable();
+        else {
+            bLogRDG = false;
         }
-    }
-    ptr += sizeof(uint32_t) * 256;
 
-    if (ImGui::CollapsingHeader("Compacted Meshlet Dispatch Args")) {
-        auto* compactedDispatchArgs = reinterpret_cast<InstancingCompactedMeshletDispatchIndirect*>(ptr);
+        uint8_t* base = static_cast<uint8_t*>(renderThread->GetResourceManager()->debugReadbackBuffer.allocationInfo.pMappedData);
+        uint8_t* ptr = base;
+        if (ImGui::CollapsingHeader("Meshlet Instancing Debug")) {
+            auto* instanceMeshletOffsets = reinterpret_cast<InstanceMeshletOffsetPrefixSum*>(ptr);
 
-        ImGui::Text("Total Visible Meshlets: %u", compactedDispatchArgs->totalVisibleMeshlets);
-        ImGui::Text("Dispatch Groups: (%u, %u, %u)", compactedDispatchArgs->x, compactedDispatchArgs->y, compactedDispatchArgs->z);
-    }
-    ptr += sizeof(InstancingCompactedMeshletDispatchIndirect);
+            if (ImGui::BeginTable("InstanceMeshletOffsetsTable", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+                ImGui::TableSetupColumn("Instance");
+                ImGui::TableSetupColumn("Offset");
+                ImGui::TableSetupColumn("Count");
+                ImGui::TableSetupColumn("LOD");
+                ImGui::TableSetupColumn("Primitive Index");
+                ImGui::TableHeadersRow();
 
-    if (ImGui::CollapsingHeader("Visible Meshlets")) {
-        auto* visibleMeshlets = reinterpret_cast<CompactedMeshlet*>(ptr);
+                for (uint32_t i = 0; i < 640; ++i) {
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", i);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", instanceMeshletOffsets[i].offset);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", instanceMeshletOffsets[i].count);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", instanceMeshletOffsets[i].lod);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", instanceMeshletOffsets[i].primitiveIndex);
+                }
 
-        if (ImGui::BeginTable("VisibleMeshletsTable", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
-            ImGui::TableSetupColumn("Index");
-            ImGui::TableSetupColumn("Instance Index");
-            ImGui::TableSetupColumn("Local Meshlet Index");
-            ImGui::TableSetupColumn("LOD");
-            ImGui::TableHeadersRow();
-
-            for (uint32_t i = 0; i < 128; ++i) {
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn();
-                ImGui::Text("%u", i);
-                ImGui::TableNextColumn();
-                ImGui::Text("%u", visibleMeshlets[i].instanceIndex);
-                uint32_t packedLocal = visibleMeshlets[i].localMeshletIndex;
-                uint32_t localMeshletIndex = packedLocal & 0x3FFFFFFF;
-                uint32_t lod = packedLocal >> 30;
-                ImGui::TableNextColumn();
-                ImGui::Text("%u", localMeshletIndex);
-                ImGui::TableNextColumn();
-                ImGui::Text("%u", lod);
+                ImGui::EndTable();
             }
-
-            ImGui::EndTable();
         }
-    }
-    ptr += sizeof(CompactedMeshlet) * 128;
+        ptr += 640 * sizeof(InstanceMeshletOffsetPrefixSum);
+
+        if (ImGui::CollapsingHeader("Meshlet Dispatch Args")) {
+            auto* dispatchArgs = reinterpret_cast<InstancingMeshletDispatchIndirect*>(ptr);
+
+            ImGui::Text("Total Meshlets: %u", dispatchArgs->totalMeshlets);
+            ImGui::Text("Dispatch Groups: (%u, %u, %u)", dispatchArgs->x, dispatchArgs->y, dispatchArgs->z);
+        }
+        ptr += sizeof(InstancingMeshletDispatchIndirect);
+
+
+        if (ImGui::CollapsingHeader("Intermediate Meshlets")) {
+            auto* intermediateMeshlets = reinterpret_cast<IntermediateMeshlet*>(ptr);
+
+            if (ImGui::BeginTable("IntermediateMeshletsTable", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+                ImGui::TableSetupColumn("Global Meshlet Index");
+                ImGui::TableSetupColumn("Instance Index");
+                ImGui::TableSetupColumn("Visible");
+                ImGui::TableSetupColumn("Local Meshlet Index");
+                ImGui::TableSetupColumn("LOD");
+                ImGui::TableHeadersRow();
+
+                for (uint32_t i = 0; i < 128; ++i) {
+                    uint32_t packedInstance = intermediateMeshlets[i].instanceIndex;
+                    uint32_t packedLocal = intermediateMeshlets[i].localMeshletIndex;
+
+                    uint32_t instanceIndex = packedInstance & 0x7FFFFFFF;
+                    bool visible = (packedInstance >> 31) & 1;
+                    uint32_t localMeshletIndex = packedLocal & 0x3FFFFFFF;
+                    uint32_t lod = packedLocal >> 30;
+
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", i);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", instanceIndex);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%s", visible ? "Yes" : "No");
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", localMeshletIndex);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", lod);
+                }
+
+                ImGui::EndTable();
+            }
+        }
+        ptr += sizeof(IntermediateMeshlet) * 128;
+
+        if (ImGui::CollapsingHeader("Visible Meshlets (Compacted)")) {
+            auto* visibleMeshlets = reinterpret_cast<CompactedMeshlet*>(ptr);
+
+            if (ImGui::BeginTable("VisibleMeshletsTable", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+                ImGui::TableSetupColumn("Compact Index");
+                ImGui::TableSetupColumn("Instance Index");
+                ImGui::TableSetupColumn("Local Meshlet Index");
+                ImGui::TableSetupColumn("LOD");
+                ImGui::TableHeadersRow();
+
+                for (uint32_t i = 0; i < 128; ++i) {
+                    uint32_t packedLocal = visibleMeshlets[i].localMeshletIndex;
+                    uint32_t localMeshletIndex = packedLocal & 0x3FFFFFFF;
+                    uint32_t lod = packedLocal >> 30;
+
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", i);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", visibleMeshlets[i].instanceIndex);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", localMeshletIndex);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", lod);
+                }
+
+                ImGui::EndTable();
+            }
+        }
+        ptr += sizeof(CompactedMeshlet) * 128;
+
+        if (ImGui::CollapsingHeader("Meshlet Scanned Level2 Block Sums")) {
+            auto* scannedBlockSums = reinterpret_cast<uint32_t*>(ptr);
+
+            if (ImGui::BeginTable("ScannedBlockSumsTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+                ImGui::TableSetupColumn("Block Index");
+                ImGui::TableSetupColumn("Scanned Sum");
+                ImGui::TableHeadersRow();
+
+                for (uint32_t i = 0; i < 256; ++i) {
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", i);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", scannedBlockSums[i]);
+                }
+
+                ImGui::EndTable();
+            }
+        }
+        ptr += sizeof(uint32_t) * 256;
+
+        if (ImGui::CollapsingHeader("Compacted Meshlet Dispatch Args")) {
+            auto* compactedDispatchArgs = reinterpret_cast<InstancingCompactedMeshletDispatchIndirect*>(ptr);
+
+            ImGui::Text("Total Visible Meshlets: %u", compactedDispatchArgs->totalVisibleMeshlets);
+            ImGui::Text("Dispatch Groups: (%u, %u, %u)", compactedDispatchArgs->x, compactedDispatchArgs->y, compactedDispatchArgs->z);
+        }
+        ptr += sizeof(InstancingCompactedMeshletDispatchIndirect);
+
+        if (ImGui::CollapsingHeader("Visible Meshlets")) {
+            auto* visibleMeshlets = reinterpret_cast<CompactedMeshlet*>(ptr);
+
+            if (ImGui::BeginTable("VisibleMeshletsTable", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+                ImGui::TableSetupColumn("Index");
+                ImGui::TableSetupColumn("Instance Index");
+                ImGui::TableSetupColumn("Local Meshlet Index");
+                ImGui::TableSetupColumn("LOD");
+                ImGui::TableHeadersRow();
+
+                for (uint32_t i = 0; i < 128; ++i) {
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", i);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", visibleMeshlets[i].instanceIndex);
+                    uint32_t packedLocal = visibleMeshlets[i].localMeshletIndex;
+                    uint32_t localMeshletIndex = packedLocal & 0x3FFFFFFF;
+                    uint32_t lod = packedLocal >> 30;
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", localMeshletIndex);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", lod);
+                }
+
+                ImGui::EndTable();
+            }
+        }
+        ptr += sizeof(CompactedMeshlet) * 128;
     }
 
 

@@ -19,10 +19,8 @@ struct EngineContext;
 
 namespace Game
 {
-void UpdateCameras(Core::EngineContext* ctx, Engine::GameState* state);
-void UpdateFreeCamera(Core::EngineContext* ctx, Engine::GameState* state);
+void UpdateGameCamera(Core::EngineContext* ctx, Engine::GameState* state);
 void UpdateEditorCamera(Core::EngineContext* ctx, Engine::GameState* state);
-void RenderEditorCamera(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer);
 
 void BuildViewFamily(Engine::GameState* state, Core::ViewFamily& mainViewFamily);
 void BuildPortalViewFamily(Engine::GameState* state, Core::ViewFamily& mainViewFamily);

@@ -17,18 +17,7 @@
 
 namespace Game
 {
-void UpdateCameras(Core::EngineContext* ctx, Engine::GameState* state)
-{
-    ZoneScoped;
-
-    if (state->bIsPlaying) {
-        UpdateFreeCamera(ctx, state);
-    } else {
-        UpdateEditorCamera(ctx, state);
-    }
-}
-
-void UpdateFreeCamera(Core::EngineContext* ctx, Engine::GameState* state)
+void UpdateGameCamera(Core::EngineContext* ctx, Engine::GameState* state)
 {
     ZoneScoped;
     auto view = state->registry.view<Component::FreeCameraComponent, Component::CameraComponent, Component::TransformComponent>();
@@ -112,6 +101,8 @@ void UpdateFreeCamera(Core::EngineContext* ctx, Engine::GameState* state)
         camera.currentViewData.view = glm::lookAt(camera.currentViewData.cameraPos, camera.currentViewData.cameraLookAt, camera.currentViewData.cameraUp);
         camera.currentViewData.proj = glm::perspective(camera.currentViewData.fovRadians, camera.currentViewData.aspectRatio, camera.currentViewData.farPlane, camera.currentViewData.nearPlane);
     }
+
+    ctx->setCursorHiddenFn(true);
 }
 
 void UpdateEditorCamera(Core::EngineContext* ctx, Engine::GameState* state)
@@ -195,43 +186,6 @@ void UpdateEditorCamera(Core::EngineContext* ctx, Engine::GameState* state)
             camera.currentViewData.proj = glm::perspective(camera.currentViewData.fovRadians, camera.currentViewData.aspectRatio, camera.currentViewData.farPlane, camera.currentViewData.nearPlane);
         }
     }
-}
-
-void RenderEditorCamera(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer)
-{
-    auto view = state->registry.view<Component::FreeCameraComponent, Component::CameraComponent, Component::TransformComponent, Component::EditorCameraTag>();
-    if (view.size_hint() == 0) return;
-    auto [freeCam, camera, transform] = view.get<Component::FreeCameraComponent, Component::CameraComponent, Component::TransformComponent>(view.front());
-
-    const float gizmoSize = 128.0f;
-    const float vpRight = static_cast<float>(ctx->windowContext.viewportOffsetX + ctx->windowContext.viewportWidth);
-    const float vpTop = static_cast<float>(ctx->windowContext.viewportOffsetY);
-
-    glm::mat4 viewCopy = frameBuffer->mainViewFamily.mainView.currentViewData.view;
-    ImGuizmo::ViewManipulate(glm::value_ptr(viewCopy), 8.0f, ImVec2(vpRight - gizmoSize, vpTop), ImVec2(gizmoSize, gizmoSize), 0x10101080);
-
-    if (viewCopy != frameBuffer->mainViewFamily.mainView.currentViewData.view) {
-        const glm::mat4 invView = glm::inverse(viewCopy);
-        transform.translation = glm::vec3(invView[3]);
-        const glm::vec3 newForward = -glm::normalize(glm::vec3(invView[2]));
-        transform.rotation = glm::normalize(glm::quatLookAt(newForward, WORLD_UP));
-        frameBuffer->mainViewFamily.mainView.currentViewData.view = viewCopy;
-        frameBuffer->mainViewFamily.mainView.currentViewData.cameraPos = transform.translation;
-        frameBuffer->mainViewFamily.mainView.currentViewData.cameraForward = newForward;
-        frameBuffer->mainViewFamily.mainView.currentViewData.cameraLookAt = transform.translation + newForward;
-    }
-
-    constexpr ImGuiWindowFlags overlayFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus |
-                                              ImGuiWindowFlags_NoFocusOnAppearing;
-    ImGui::SetNextWindowPos(ImVec2(vpRight - gizmoSize, vpTop + gizmoSize), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(gizmoSize, 0), ImGuiCond_Always);
-    ImGui::SetNextWindowBgAlpha(0.5f);
-    if (ImGui::Begin("##cam_overlay", nullptr, overlayFlags)) {
-        if (ImGui::Button(freeCam.bOrtho ? "Ortho" : "Persp", ImVec2(-1, 0))) {
-            freeCam.bOrtho = !freeCam.bOrtho;
-        }
-    }
-    ImGui::End();
 }
 
 void BuildViewFamily(Engine::GameState* state, Core::ViewFamily& mainViewFamily)

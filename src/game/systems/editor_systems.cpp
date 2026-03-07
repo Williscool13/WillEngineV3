@@ -15,6 +15,7 @@
 #include "scene_system.h"
 #include "core/include/engine_context.h"
 #include "core/input/input_frame.h"
+#include "core/math/constants.h"
 #include "engine/engine_api.h"
 #include "game/fwd_components.h"
 #include "game/components/common_components.h"
@@ -24,6 +25,13 @@ namespace Game
 {
 void EditorUpdate(Core::EngineContext* ctx, Engine::GameState* state)
 {
+    if (state->bIsPlaying) {
+        if (state->inputFrame->GetKey(Key::ESCAPE).pressed) {
+            PlayStop(ctx, state);
+        }
+        return;
+    }
+
     if (ctx->bImguiMouseCaptured || ctx->bImGuiWantsTextInput) { return; }
 
     const bool ctrlHeld = state->inputFrame->GetKey(Key::LCTRL).down || state->inputFrame->GetKey(Key::RCTRL).down;
@@ -71,6 +79,19 @@ void EditorUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         }
         else if (!ctrlHeld) {
             state->selectedEntities.clear();
+        }
+    }
+
+    for (const auto& hotkey : DEBUG_HOTKEYS) {
+        if (state->inputFrame->GetKey(hotkey.key).pressed) {
+            if (state->debugResourceName == hotkey.resourceName && state->debugViewAspect == hotkey.aspect) {
+                state->debugResourceName.clear();
+            }
+            else {
+                state->debugResourceName = hotkey.resourceName;
+                state->debugTransformationType = hotkey.transform;
+                state->debugViewAspect = hotkey.aspect;
+            }
         }
     }
 }
@@ -200,8 +221,11 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
     }
     ImGui::End();
 
+    auto editorCameraView = state->registry.view<Component::FreeCameraComponent, Component::TransformComponent, Component::EditorCameraTag>();
+    assert(editorCameraView.size_hint() > 0);
+    auto [freeCam, editorCameraTransform] = editorCameraView.get<Component::FreeCameraComponent, Component::TransformComponent>(editorCameraView.front());
 
-    ImGuizmo::SetOrthographic(false);
+    ImGuizmo::SetOrthographic(freeCam.bOrtho);
     ImGuizmo::BeginFrame();
     ImGuizmo::SetDrawlist(ImGui::GetBackgroundDrawList());
     ImGuizmo::SetRect(
@@ -210,6 +234,40 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
         static_cast<float>(ctx->windowContext.viewportWidth),
         static_cast<float>(ctx->windowContext.viewportHeight)
     );
+
+    // View Manipulator Gizmo
+    {
+        const float gizmoSize = 128.0f;
+        const auto vpRight = static_cast<float>(ctx->windowContext.viewportOffsetX + ctx->windowContext.viewportWidth);
+        const auto vpTop = static_cast<float>(ctx->windowContext.viewportOffsetY);
+
+        glm::mat4 viewCopy = frameBuffer->mainViewFamily.mainView.currentViewData.view;
+        ImGuizmo::ViewManipulate(glm::value_ptr(viewCopy), 8.0f, ImVec2(vpRight - gizmoSize, vpTop), ImVec2(gizmoSize, gizmoSize), 0x10101080);
+
+        if (viewCopy != frameBuffer->mainViewFamily.mainView.currentViewData.view) {
+            const glm::mat4 invView = glm::inverse(viewCopy);
+            const glm::vec3 newForward = -glm::normalize(glm::vec3(invView[2]));
+            const glm::vec3 newUp = glm::normalize(glm::vec3(invView[1]));
+
+            editorCameraTransform.rotation = glm::normalize(glm::quat_cast(glm::mat3(invView)));
+
+            frameBuffer->mainViewFamily.mainView.currentViewData.cameraForward = newForward;
+            frameBuffer->mainViewFamily.mainView.currentViewData.cameraLookAt = editorCameraTransform.translation + newForward;
+            frameBuffer->mainViewFamily.mainView.currentViewData.view = glm::lookAt(editorCameraTransform.translation, editorCameraTransform.translation + newForward, newUp);
+        }
+
+        constexpr ImGuiWindowFlags overlayFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus |
+                                                  ImGuiWindowFlags_NoFocusOnAppearing;
+        ImGui::SetNextWindowPos(ImVec2(vpRight - gizmoSize, vpTop + gizmoSize), ImGuiCond_Always);
+        ImGui::SetNextWindowSize(ImVec2(gizmoSize, 0), ImGuiCond_Always);
+        ImGui::SetNextWindowBgAlpha(0.5f);
+        if (ImGui::Begin("##cam_overlay", nullptr, overlayFlags)) {
+            if (ImGui::Button(freeCam.bOrtho ? "Ortho" : "Persp", ImVec2(-1, 0))) {
+                freeCam.bOrtho = !freeCam.bOrtho;
+            }
+        }
+        ImGui::End();
+    }
 
     const glm::mat4 view = frameBuffer->mainViewFamily.mainView.currentViewData.view;
     const glm::mat4 proj = frameBuffer->mainViewFamily.mainView.currentViewData.proj;
@@ -270,6 +328,31 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
                 if (ImGui::IsItemHovered()) ImGui::SetTooltip("Scale snap");
             }
         }
+
+        if (state->prevSelectedEntities != state->selectedEntities) {
+            if (state->selectedEntities.size() == 1) {
+                if (auto* tf = state->registry.try_get<Component::TransformComponent>(state->selectedEntities[0])) {
+                    const bool scaleIsUniform = glm::epsilonEqual(tf->scale.x, tf->scale.y, 1e-5f) && glm::epsilonEqual(tf->scale.y, tf->scale.z, 1e-5f);
+                    state->bUniformScaleMode = scaleIsUniform;
+                }
+            }
+        }
+        state->prevSelectedEntities = state->selectedEntities;
+
+        ImGui::SameLine();
+        ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+        ImGui::SameLine();
+
+        if (state->bIsPlaying) {
+            if (ImGui::Button("Stop")) {
+                PlayStop(ctx, state);
+            }
+        }
+        else {
+            if (ImGui::Button("Play")) {
+                PlayStart(ctx, state);
+            }
+        }
     }
     ImGui::End();
 
@@ -295,7 +378,7 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
 
         const auto& sceneReg = ctx->assetManager->GetSceneRegistry();
         static int selectedScene = 0;
-        std::vector<std::pair<std::string, StringID>> sceneList;
+        std::vector<std::pair<std::string, StringID> > sceneList;
         sceneList.reserve(sceneReg.size());
         for (const auto& [id, path] : sceneReg) {
             sceneList.emplace_back(path.stem().string(), id);
@@ -333,7 +416,7 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
 
         const auto& modelReg = ctx->assetManager->GetModelRegistry();
         static int selectedModel = 0;
-        std::vector<std::pair<std::string, StringID>> modelList;
+        std::vector<std::pair<std::string, StringID> > modelList;
         modelList.reserve(modelReg.size());
         for (const auto& [id, path] : modelReg) {
             modelList.emplace_back(path.stem().string(), id);
@@ -458,12 +541,15 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
                     float snapArr[3] = {};
                     float* snap = nullptr;
                     if (state->bSnapEnabled) {
-                        if (state->currentGizmoOperation == ImGuizmo::TRANSLATE)
+                        if (state->currentGizmoOperation == ImGuizmo::TRANSLATE) {
                             snapArr[0] = snapArr[1] = snapArr[2] = state->snapTranslation;
-                        else if (state->currentGizmoOperation == ImGuizmo::ROTATE)
+                        }
+                        else if (state->currentGizmoOperation == ImGuizmo::ROTATE) {
                             snapArr[0] = snapArr[1] = snapArr[2] = state->snapRotation;
-                        else
+                        }
+                        else {
                             snapArr[0] = snapArr[1] = snapArr[2] = state->snapScale;
+                        }
                         snap = snapArr;
                     }
                     ImGuizmo::Manipulate(
@@ -480,10 +566,12 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
                         ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(model), t, r, s);
                         transform->translation = glm::vec3(t[0], t[1], t[2]);
                         transform->rotation = glm::quat(glm::radians(glm::vec3(r[0], r[1], r[2])));
-                        if (state->bUniformScaleMode)
+                        if (state->bUniformScaleMode) {
                             transform->scale = glm::vec3((s[0] + s[1] + s[2]) / 3.0f);
-                        else
+                        }
+                        else {
                             transform->scale = glm::vec3(s[0], s[1], s[2]);
+                        }
                         state->registry.emplace_or_replace<Component::DirtyTransformTag>(entity);
                     }
                 }

@@ -33,13 +33,23 @@ GAME_API void GameStartup(Core::EngineContext* ctx, Engine::GameState* state)
 {
     SPDLOG_TRACE("Game Start Up");
 
-    const entt::entity camera = state->registry.create();
-    state->registry.emplace<Game::Component::FreeCameraComponent>(camera);
-    state->registry.emplace<Game::Component::CameraComponent>(camera);
-    Game::Component::TransformComponent& cameraTransform = state->registry.emplace<Game::Component::TransformComponent>(camera);
-    cameraTransform.translation = glm::vec3(0.0f, 3.0f, 5.0f);
-    cameraTransform.rotation = glm::quatLookAt(glm::normalize(glm::vec3(0.0f, 0.0f, 0.0f) - glm::vec3(0.0f, 3.0f, 5.0f)), WORLD_UP);
-    state->registry.emplace<Game::Component::EditorCameraTag>(camera);
+    const entt::entity editorCamera = state->registry.create();
+    state->registry.emplace<Game::Component::FreeCameraComponent>(editorCamera);
+    state->registry.emplace<Game::Component::CameraComponent>(editorCamera);
+    state->registry.emplace<Game::Component::EditorCameraTag>(editorCamera);
+    Game::Component::TransformComponent& editorCameraTransform = state->registry.emplace<Game::Component::TransformComponent>(editorCamera);
+    editorCameraTransform.translation = glm::vec3(0.0f, 3.0f, 5.0f);
+    editorCameraTransform.rotation = glm::quatLookAt(glm::normalize(glm::vec3(0.0f, 0.0f, 0.0f) - glm::vec3(0.0f, 3.0f, 5.0f)), WORLD_UP);
+
+    const entt::entity gameCamera = state->registry.create();
+    state->registry.emplace<Game::Component::FreeCameraComponent>(gameCamera);
+    state->registry.emplace<Game::Component::CameraComponent>(gameCamera);
+    state->registry.emplace<Game::Component::GameCameraTag>(gameCamera);
+    Game::Component::TransformComponent& gameCameraTransform = state->registry.emplace<Game::Component::TransformComponent>(gameCamera);
+    gameCameraTransform.translation = glm::vec3(0.0f, 3.0f, 5.0f);
+    gameCameraTransform.rotation = glm::quatLookAt(glm::normalize(glm::vec3(0.0f, 0.0f, 0.0f) - glm::vec3(0.0f, 3.0f, 5.0f)), WORLD_UP);
+
+
     state->registry.ctx().emplace<Engine::GameState*>(state);
     state->registry.ctx().emplace<Core::EngineContext*>(ctx);
 }
@@ -68,36 +78,29 @@ GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::GameState* state)
     ZoneScoped;
     const auto frameStart = std::chrono::high_resolution_clock::now();
 
-    Game::UpdateCameras(ctx, state);
-    Game::DebugUpdate(ctx, state);
+    if (state->bIsPlaying) {
+        Game::UpdateGameCamera(ctx, state);
 
-    Game::DebugProcessPhysicsCollisions(ctx, state);
-    Game::DebugApplyGroundForces(ctx, state);
+        Game::DebugProcessPhysicsCollisions(ctx, state);
+        Game::DebugApplyGroundForces(ctx, state);
 
-    for (const auto& hotkey : Game::DEBUG_HOTKEYS) {
-        if (state->inputFrame->GetKey(hotkey.key).pressed) {
-            if (state->debugResourceName == hotkey.resourceName && state->debugViewAspect == hotkey.aspect) {
-                state->debugResourceName.clear();
-            }
-            else {
-                state->debugResourceName = hotkey.resourceName;
-                state->debugTransformationType = hotkey.transform;
-                state->debugViewAspect = hotkey.aspect;
-            }
+        if (state->bEnablePhysics) {
+            Game::UpdatePhysics(ctx, state);
         }
     }
-
-    if (state->bEnablePhysics) {
-        Game::UpdatePhysics(ctx, state);
+    else {
+        Game::UpdateEditorCamera(ctx, state);
     }
 
-    Game::RenderUpdate(ctx, state);
-    state->registry.clear<Game::Component::DirtyTransformTag>();
+    Game::DebugUpdate(ctx, state);
 
     if (ctx->bModelLoadedThisFrame || state->bPendingModelResolve) {
         Game::ResolveStaticMeshLoads(ctx, state);
         state->bPendingModelResolve = false;
     }
+
+    Game::RenderUpdate(ctx, state);
+    state->registry.clear<Game::Component::DirtyTransformTag>();
 
 #if WILL_EDITOR
     Game::EditorUpdate(ctx, state);
@@ -137,10 +140,10 @@ GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* stat
     Game::RenderPrepareTransforms(ctx, state, frameBuffer);
     Game::GatherRenderables(ctx, state, frameBuffer);
 
-
 #if WILL_EDITOR
-    Game::DrawEditorInterface(ctx, state, frameBuffer);
-    Game::RenderEditorCamera(ctx, state, frameBuffer);
+    if (!state->bIsPlaying) {
+        Game::DrawEditorInterface(ctx, state, frameBuffer);
+    }
 #endif
 
 #ifndef PACKAGED_BUILD

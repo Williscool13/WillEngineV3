@@ -208,14 +208,14 @@ ComponentEditorResult DrawComponentEditor<Component::PhysicsBodyDesc>(Component:
 
                 auto applyStyle = [](ImVec4 full, ImVec4 select, float size) {
                     ImGuizmo::Style& s = ImGuizmo::GetStyle();
-                    s.Colors[ImGuizmo::DIRECTION_X]      = full;
-                    s.Colors[ImGuizmo::DIRECTION_Y]      = full;
-                    s.Colors[ImGuizmo::DIRECTION_Z]      = full;
-                    s.Colors[ImGuizmo::PLANE_X]          = {full.x, full.y, full.z, 0.38f};
-                    s.Colors[ImGuizmo::PLANE_Y]          = {full.x, full.y, full.z, 0.38f};
-                    s.Colors[ImGuizmo::PLANE_Z]          = {full.x, full.y, full.z, 0.38f};
+                    s.Colors[ImGuizmo::DIRECTION_X] = full;
+                    s.Colors[ImGuizmo::DIRECTION_Y] = full;
+                    s.Colors[ImGuizmo::DIRECTION_Z] = full;
+                    s.Colors[ImGuizmo::PLANE_X] = {full.x, full.y, full.z, 0.38f};
+                    s.Colors[ImGuizmo::PLANE_Y] = {full.x, full.y, full.z, 0.38f};
+                    s.Colors[ImGuizmo::PLANE_Z] = {full.x, full.y, full.z, 0.38f};
                     s.Colors[ImGuizmo::TRANSLATION_LINE] = full;
-                    s.Colors[ImGuizmo::SELECTION]        = select;
+                    s.Colors[ImGuizmo::SELECTION] = select;
                     ImGuizmo::SetGizmoSizeClipSpace(size);
                 };
 
@@ -276,14 +276,15 @@ ComponentEditorResult DrawComponentEditor<Component::PhysicsBodyDesc>(Component:
                     case Component::PhysicsShapeType::Sphere:
                         DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {shapeCenter, shape.sphere.radius, kEditColor});
                         break;
-                    case Component::PhysicsShapeType::Capsule: {
+                    case Component::PhysicsShapeType::Capsule:
+                    {
                         const glm::vec3 top = shapeCenter + glm::vec3(0.0f, shape.capsule.halfHeight, 0.0f);
                         const glm::vec3 bot = shapeCenter - glm::vec3(0.0f, shape.capsule.halfHeight, 0.0f);
                         DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {top, shape.capsule.radius, kEditColor});
                         DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {bot, shape.capsule.radius, kEditColor});
                         DEBUG_ADD_LINE(viewFamily.debugLines, {top + glm::vec3( shape.capsule.radius, 0, 0), bot + glm::vec3( shape.capsule.radius, 0, 0), kEditColor});
                         DEBUG_ADD_LINE(viewFamily.debugLines, {top + glm::vec3(-shape.capsule.radius, 0, 0), bot + glm::vec3(-shape.capsule.radius, 0, 0), kEditColor});
-                        DEBUG_ADD_LINE(viewFamily.debugLines, {top + glm::vec3(0, 0,  shape.capsule.radius), bot + glm::vec3(0, 0,  shape.capsule.radius), kEditColor});
+                        DEBUG_ADD_LINE(viewFamily.debugLines, {top + glm::vec3(0, 0, shape.capsule.radius), bot + glm::vec3(0, 0, shape.capsule.radius), kEditColor});
                         DEBUG_ADD_LINE(viewFamily.debugLines, {top + glm::vec3(0, 0, -shape.capsule.radius), bot + glm::vec3(0, 0, -shape.capsule.radius), kEditColor});
                         break;
                     }
@@ -328,7 +329,32 @@ ComponentEditorResult DrawComponentEditor<Component::PhysicsBodyDesc>(Component:
 }
 
 template<>
-void OnComponentRemoved<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc& component, entt::registry& registry, entt::entity entity)
+void OnPlayStart<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc& component, entt::registry& registry, entt::entity entity)
+{
+    auto* ctx = registry.ctx().get<Core::EngineContext*>();
+    if (auto* transform = registry.try_get<Component::TransformComponent>(entity)) {
+        JPH::BodyInterface& bodyInterface = ctx->physicsSystem->GetBodyInterface();
+        JPH::RVec3 startPos(transform->translation.x, transform->translation.y, transform->translation.z);
+        JPH::Quat startRot(transform->rotation.x, transform->rotation.y, transform->rotation.z, transform->rotation.w);
+        auto bodyId = CreateBodyFromDesc(bodyInterface, component, startPos, startRot);
+        if (!bodyId.IsInvalid()) {
+            registry.emplace<Component::PhysicsBodyComponent>(entity, bodyId);
+            if (component.motionType == Component::PhysicsMotionType::Dynamic) {
+                registry.emplace<Component::DynamicPhysicsBodyComponent>(entity, transform->translation, transform->rotation);
+            }
+        }
+    }
+    else {
+        LOG_WARN(Game, "PhysicsBodyDesc on entity without TransformComponent, skipping");
+    }
+}
+
+template<>
+void OnComponentAdded<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc& component, entt::registry& registry, entt::entity entity)
+{}
+
+template<>
+void OnPlayStop<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc& component, entt::registry& registry, entt::entity entity)
 {
     auto* ctx = registry.ctx().get<Core::EngineContext*>();
     JPH::BodyInterface& bodyInterface = ctx->physicsSystem->GetBodyInterface();
@@ -341,29 +367,12 @@ void OnComponentRemoved<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc& 
             registry.remove<Component::DynamicPhysicsBodyComponent>(entity);
         }
     }
-
-    registry.remove<Component::PhysicsBodyDesc>(entity);
 }
 
 template<>
-void OnComponentAdded<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc& component, entt::registry& registry, entt::entity entity)
+void OnComponentRemoved<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc& component, entt::registry& registry, entt::entity entity)
 {
-    auto* ctx = registry.ctx().get<Core::EngineContext*>();
-    if (auto* transform = registry.try_get<Component::TransformComponent>(entity)) {
-        JPH::BodyInterface& bodyInterface = ctx->physicsSystem->GetBodyInterface();
-        JPH::RVec3 pos(transform->translation.x, transform->translation.y, transform->translation.z);
-        JPH::Quat rot(transform->rotation.x, transform->rotation.y, transform->rotation.z, transform->rotation.w);
-        auto bodyId = CreateBodyFromDesc(bodyInterface, component, pos, rot);
-        if (!bodyId.IsInvalid()) {
-            registry.emplace<Component::PhysicsBodyComponent>(entity, bodyId);
-            if (component.motionType == Component::PhysicsMotionType::Dynamic) {
-                registry.emplace<Component::DynamicPhysicsBodyComponent>(entity, transform->translation, transform->rotation);
-            }
-        }
-    }
-    else {
-        LOG_WARN(Game, "PhysicsBodyDesc on entity without TransformComponent, skipping");
-    }
+    registry.remove<Component::PhysicsBodyDesc>(entity);
 }
 
 template<>

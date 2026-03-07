@@ -62,17 +62,26 @@ ComponentEditorResult DrawComponentEditor<Component::TransformComponent>(Compone
     Engine::GameState* state = registry.ctx().get<Engine::GameState*>();
     glm::vec3 prevScale = component.scale;
 
-    ImGui::Checkbox("##uniform", &state->bUniformScaleMode);
+    if (ImGui::Checkbox("##uniform", &state->bUniformScaleMode)) {
+        if (state->bUniformScaleMode) {
+            float uniform = glm::max(glm::max(component.scale.x, component.scale.y), component.scale.z);
+            component.scale = glm::vec3(uniform);
+        }
+        dirty = true;
+    }
     ImGui::SameLine();
     dirty |= ImGui::DragFloat3("Scale", &component.scale.x, 0.01f);
 
     if (dirty && state->bUniformScaleMode) {
-        if (component.scale.x != prevScale.x)
+        if (component.scale.x != prevScale.x) {
             component.scale = glm::vec3(component.scale.x);
-        else if (component.scale.y != prevScale.y)
+        }
+        else if (component.scale.y != prevScale.y) {
             component.scale = glm::vec3(component.scale.y);
-        else if (component.scale.z != prevScale.z)
+        }
+        else if (component.scale.z != prevScale.z) {
             component.scale = glm::vec3(component.scale.z);
+        }
     }
 
     if (dirty) {

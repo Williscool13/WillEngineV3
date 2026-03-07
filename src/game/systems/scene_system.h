@@ -10,6 +10,7 @@
 #include "game/components/component_registry.h"
 #include "game/components/scene_components.h"
 #include "core/string_id.h"
+#include "core/include/engine_context.h"
 #include "engine/asset_manager.h"
 #include "engine/engine_api.h"
 
@@ -118,6 +119,33 @@ inline void DestroyComponent(Engine::GameState* state, entt::entity entity, Stri
     assert(it != state->componentRegistry.registryMapping.end() && "Component type not registered");
     ComponentEntry& entry = state->componentRegistry.registry[it->second];
     entry.onRemoveComponent(state->registry, entity);
+}
+
+inline void PlayStart(Core::EngineContext* ctx, Engine::GameState* state)
+{
+    auto view = state->registry.view<Component::SceneComponent>();
+    for (auto entity : view) {
+        for (auto& entry : state->componentRegistry.registry) {
+            if (entry.has(state->registry, entity)) {
+                entry.onPlayStart(state->registry, entity);
+            }
+        }
+    }
+    state->bIsPlaying = true;
+}
+
+inline void PlayStop(Core::EngineContext* ctx, Engine::GameState* state)
+{
+    auto view = state->registry.view<Component::SceneComponent>();
+    for (auto entity : view) {
+        for (auto& entry : state->componentRegistry.registry) {
+            if (entry.has(state->registry, entity)) {
+                entry.onPlayStop(state->registry, entity);
+            }
+        }
+    }
+    state->bIsPlaying = false;
+    ctx->setCursorHiddenFn(false);
 }
 } // Game
 

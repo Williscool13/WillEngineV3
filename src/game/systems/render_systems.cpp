@@ -114,7 +114,7 @@ void RenderPrepareTransforms(Core::EngineContext* ctx, Engine::GameState* state,
     }
 
     auto cleanupView = state->registry.view<Component::DirtyRenderTransformComponent>();
-    for (auto [entity, dirty] : cleanupView.each()) {
+    for (const auto& [entity, dirty] : cleanupView.each()) {
         if (dirty.counter <= 0) {
             state->registry.remove<Component::DirtyRenderTransformComponent>(entity);
         }
