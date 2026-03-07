@@ -28,11 +28,13 @@ namespace Game
 {
 Scene SaveScene(ComponentRegistry& componentRegistry, entt::registry& registry, StringID sceneId, std::string_view sceneName);
 
-std::string LoadScene(ComponentRegistry& componentRegistry, entt::registry& registry, Scene& scene);
+SceneMetadata LoadScene(ComponentRegistry& componentRegistry, entt::registry& registry, Scene& scene);
+
+Scene SerializeAll(ComponentRegistry& componentRegistry, entt::registry& registry);
 
 void UnloadScene(Engine::GameState* state, StringID sceneId);
 
-void SaveSceneToFile(Engine::GameState* state, Engine::AssetManager* assetManager);
+void SaveSceneToFile(StringID sceneID, std::string_view sceneName, Engine::GameState* state, Engine::AssetManager* assetManager);
 
 bool LoadSceneFromFile(Engine::GameState* state, Engine::AssetManager* assetManager, StringID sceneId);
 
@@ -121,32 +123,9 @@ inline void DestroyComponent(Engine::GameState* state, entt::entity entity, Stri
     entry.onRemoveComponent(state->registry, entity);
 }
 
-inline void PlayStart(Core::EngineContext* ctx, Engine::GameState* state)
-{
-    auto view = state->registry.view<Component::SceneComponent>();
-    for (auto entity : view) {
-        for (auto& entry : state->componentRegistry.registry) {
-            if (entry.has(state->registry, entity)) {
-                entry.onPlayStart(state->registry, entity);
-            }
-        }
-    }
-    state->bIsPlaying = true;
-}
+void PlayStart(Core::EngineContext* ctx, Engine::GameState* state);
 
-inline void PlayStop(Core::EngineContext* ctx, Engine::GameState* state)
-{
-    auto view = state->registry.view<Component::SceneComponent>();
-    for (auto entity : view) {
-        for (auto& entry : state->componentRegistry.registry) {
-            if (entry.has(state->registry, entity)) {
-                entry.onPlayStop(state->registry, entity);
-            }
-        }
-    }
-    state->bIsPlaying = false;
-    ctx->setCursorHiddenFn(false);
-}
+void PlayStop(Core::EngineContext* ctx, Engine::GameState* state);
 } // Game
 
 #endif //WILL_ENGINE_SCENE_SYSTEM_H

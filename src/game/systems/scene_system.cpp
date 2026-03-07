@@ -50,9 +50,9 @@ Scene SaveScene(ComponentRegistry& componentRegistry, entt::registry& registry, 
     return outScene;
 }
 
-std::string LoadScene(ComponentRegistry& componentRegistry, entt::registry& registry, Scene& scene)
+SceneMetadata LoadScene(ComponentRegistry& componentRegistry, entt::registry& registry, Scene& scene)
 {
-    StringID sceneId = StringID(scene.content["scene_id"].get<uint64_t>());
+    auto sceneId = StringID(scene.content["scene_id"].get<uint64_t>());
 
     std::vector<entt::entity> sceneEntities;
     sceneEntities.reserve(scene.content["entities"].size());
@@ -81,8 +81,10 @@ std::string LoadScene(ComponentRegistry& componentRegistry, entt::registry& regi
             }
         }
     }
-
-    return scene.content["scene_name"];
+    SceneMetadata sm{};
+    sm.name = scene.content["scene_name"];
+    sm.id = sceneId;
+    return sm;
 }
 
 void UnloadScene(Engine::GameState* state, StringID sceneId)
@@ -107,35 +109,46 @@ void UnloadScene(Engine::GameState* state, StringID sceneId)
     std::erase_if(state->selectedEntities, [&](entt::entity e) {
         return std::ranges::find(toDestroy, e) != toDestroy.end();
     });
+
+    auto [first, last] = std::ranges::remove(state->loadedScenes, sceneId, &SceneMetadata::id);
+    state->loadedScenes.erase(first, last);
 }
 
-void SaveSceneToFile(Engine::GameState* state, Engine::AssetManager* assetManager)
+void SaveSceneToFile(StringID sceneID, std::string_view sceneName, Engine::GameState* state, Engine::AssetManager* assetManager)
 {
     const auto& sceneReg = assetManager->GetSceneRegistry();
     std::filesystem::path path;
 
-    auto it = sceneReg.find(state->currentSceneId);
+    auto it = sceneReg.find(sceneID);
     if (it != sceneReg.end()) {
         path = it->second;
     }
     else {
-        std::string stem = state->currentSceneName;
+        std::string stem = sceneName.data();
         std::ranges::transform(stem, stem.begin(), ::tolower);
         std::ranges::replace(stem, ' ', '_');
         path = Platform::GetAssetPath() / "scenes" / (stem + ".wscene");
         assetManager->RegisterScene(path);
+        // Derive the ID from the normalized stem so the registry key and JSON scene_id always agree
+        sceneID = StringID(stem.c_str(), stem.size());
+        state->currentSceneId = sceneID;
     }
 
-    Scene s = SaveScene(state->componentRegistry, state->registry, state->currentSceneId, state->currentSceneName);
+    Scene s = SaveScene(state->componentRegistry, state->registry, sceneID, sceneName);
     std::filesystem::create_directories(path.parent_path());
     std::ofstream file(path);
     file << s.content.dump(2);
 
-    LOG_INFO(Game, "Saved scene '{}' to '{}'", state->currentSceneName, path.string());
+    LOG_INFO(Game, "Saved scene '{}' to '{}'", sceneName, path.string());
 }
 
 bool LoadSceneFromFile(Engine::GameState* state, Engine::AssetManager* assetManager, StringID sceneId)
 {
+    if (std::ranges::find(state->loadedScenes, sceneId, &SceneMetadata::id) != state->loadedScenes.end()) {
+        LOG_WARN(Game, "Scene '{}' is already loaded", sceneId.ToString());
+        return false;
+    }
+
     const auto& sceneReg = assetManager->GetSceneRegistry();
     auto it = sceneReg.find(sceneId);
     if (it == sceneReg.end()) {
@@ -152,10 +165,11 @@ bool LoadSceneFromFile(Engine::GameState* state, Engine::AssetManager* assetMana
 
     Scene s;
     s.content = nlohmann::json::parse(file);
-    state->currentSceneName = LoadScene(state->componentRegistry, state->registry, s);
-    state->currentSceneId = StringID(s.content["scene_id"].get<uint64_t>());
+    SceneMetadata sm = LoadScene(state->componentRegistry, state->registry, s);
+    assert(sm.id == sceneId && "Scene ID in file does not match registry key, file was likely saved with a mismatched ID");
+    state->loadedScenes.push_back(sm);
 
-    LOG_INFO(Game, "Loaded scene '{}' from '{}'", state->currentSceneName, path.string());
+    LOG_INFO(Game, "Loaded scene '{}' from '{}'", sm.name, path.string());
     return true;
 }
 
@@ -232,5 +246,32 @@ entt::entity CreateSceneEntity(Engine::GameState* state)
     auto newName = fmt::format("New Entity {}", runningNameTally++);
     state->registry.emplace<Component::NameComponent>(newEntity, newName);
     return newEntity;
+}
+
+void PlayStart(Core::EngineContext* ctx, Engine::GameState* state)
+{
+    auto view = state->registry.view<Component::SceneComponent>();
+    for (auto entity : view) {
+        for (auto& entry : state->componentRegistry.registry) {
+            if (entry.has(state->registry, entity)) {
+                entry.onPlayStart(state->registry, entity);
+            }
+        }
+    }
+    state->bIsPlaying = true;
+}
+
+void PlayStop(Core::EngineContext* ctx, Engine::GameState* state)
+{
+    auto view = state->registry.view<Component::SceneComponent>();
+    for (auto entity : view) {
+        for (auto& entry : state->componentRegistry.registry) {
+            if (entry.has(state->registry, entity)) {
+                entry.onPlayStop(state->registry, entity);
+            }
+        }
+    }
+    state->bIsPlaying = false;
+    ctx->setCursorHiddenFn(false);
 }
 } // Game

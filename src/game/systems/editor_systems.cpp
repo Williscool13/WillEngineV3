@@ -123,7 +123,7 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
         copies.reserve(state->selectedEntities.size());
         for (entt::entity entity : state->selectedEntities) {
             if (!state->registry.valid(entity)) continue;
-            copies.push_back(CopySceneEntity(state, entity));
+            copies.push_back(CopySceneEntity(state, entity, state->currentSceneId));
         }
         state->selectedEntities = copies;
     }
@@ -357,28 +357,9 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
     ImGui::End();
 
     if (ImGui::Begin("Scene Browser")) {
-        ImGui::SeparatorText("Current Scene");
-
-        ImGui::BeginDisabled(true);
-        ImGui::Text("Scene ID: %llu", state->currentSceneId.id);
-        ImGui::EndDisabled();
-
-        char sceneName[128];
-        strncpy_s(sceneName, state->currentSceneName.c_str(), sizeof(sceneName) - 1);
-        sceneName[sizeof(sceneName) - 1] = '\0';
-        if (ImGui::InputText("Name", sceneName, sizeof(sceneName))) {
-            state->currentSceneName = sceneName;
-        }
-
-        if (ImGui::Button("Save")) {
-            SaveSceneToFile(state, ctx->assetManager);
-        }
-
-        ImGui::SeparatorText("Scenes");
-
         const auto& sceneReg = ctx->assetManager->GetSceneRegistry();
         static int selectedScene = 0;
-        std::vector<std::pair<std::string, StringID> > sceneList;
+        std::vector<std::pair<std::string, StringID>> sceneList;
         sceneList.reserve(sceneReg.size());
         for (const auto& [id, path] : sceneReg) {
             sceneList.emplace_back(path.stem().string(), id);
@@ -390,27 +371,50 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
         ImGui::SetNextItemWidth(-1);
         if (ImGui::BeginCombo("##scene_list", previewLabel)) {
             for (int i = 0; i < static_cast<int>(sceneList.size()); ++i) {
-                bool sel = (i == selectedScene);
-                if (ImGui::Selectable(sceneList[i].first.c_str(), sel)) {
+                const bool loaded = std::ranges::find(state->loadedScenes, sceneList[i].second, &SceneMetadata::id) != state->loadedScenes.end();
+                if (ImGui::Selectable(sceneList[i].first.c_str(), i == selectedScene)) {
                     selectedScene = i;
+                    state->currentSceneId = sceneList[i].second;
+                    state->currentSceneName = sceneList[i].first;
+                }
+                if (loaded) {
+                    ImGui::SameLine();
+                    ImGui::TextDisabled("(loaded)");
                 }
             }
             ImGui::EndCombo();
         }
 
-        ImGui::BeginDisabled(sceneList.empty());
-        if (ImGui::Button("Load")) {
-            UnloadScene(state, state->currentSceneId);
-            LoadSceneFromFile(state, ctx->assetManager, sceneList[selectedScene].second);
-        }
+        const bool selectedIsLoaded = !sceneList.empty() && std::ranges::find(state->loadedScenes, sceneList[selectedScene].second, &SceneMetadata::id) != state->loadedScenes.end();
+
+        ImGui::BeginDisabled(sceneList.empty() || selectedIsLoaded);
+        if (ImGui::Button("Load")) { LoadSceneFromFile(state, ctx->assetManager, sceneList[selectedScene].second); }
         ImGui::EndDisabled();
 
         ImGui::SameLine();
-        if (ImGui::Button("New Scene")) {
-            UnloadScene(state, state->currentSceneId);
+        ImGui::BeginDisabled(!selectedIsLoaded);
+        if (ImGui::Button("Unload")) { UnloadScene(state, sceneList[selectedScene].second); }
+        ImGui::EndDisabled();
+
+        ImGui::SameLine();
+        if (ImGui::Button("Save")) { SaveSceneToFile(state->currentSceneId, state->currentSceneName, state, ctx->assetManager); }
+
+        ImGui::SameLine();
+        if (ImGui::Button("New")) {
             state->currentSceneId = StringID{state->rng()};
             state->currentSceneName = "New Scene";
         }
+
+        char sceneName[128];
+        strncpy_s(sceneName, state->currentSceneName.c_str(), sizeof(sceneName) - 1);
+        sceneName[sizeof(sceneName) - 1] = '\0';
+        if (ImGui::InputText("Name", sceneName, sizeof(sceneName))) {
+            state->currentSceneName = sceneName;
+        }
+
+        ImGui::BeginDisabled(true);
+        ImGui::Text("ID: %llu", state->currentSceneId.id);
+        ImGui::EndDisabled();
 
         ImGui::SeparatorText("Spawn Model");
 
@@ -481,7 +485,7 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
             }
             ImGui::SameLine();
             if (ImGui::SmallButton(fmt::format("C##{}", stableId).c_str())) {
-                entt::entity copied = CopySceneEntity(state, entity);
+                entt::entity copied = CopySceneEntity(state, entity, state->currentSceneId);
                 state->selectedEntities = {copied};
             }
             ImGui::SameLine();

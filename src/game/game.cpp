@@ -141,9 +141,7 @@ GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* stat
     Game::GatherRenderables(ctx, state, frameBuffer);
 
 #if WILL_EDITOR
-    if (!state->bIsPlaying) {
-        Game::DrawEditorInterface(ctx, state, frameBuffer);
-    }
+    Game::DrawEditorInterface(ctx, state, frameBuffer);
 #endif
 
 #ifndef PACKAGED_BUILD

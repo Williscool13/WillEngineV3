@@ -15,6 +15,7 @@
 
 #include "game/components/component_registry.h"
 #include "core/include/render_interface.h"
+#include "game/scene/scene.h"
 
 namespace Core
 {
@@ -81,11 +82,13 @@ struct GameState
     // Scene stuff
     StringID currentSceneId{"main_scene"_sid};
     std::string currentSceneName{"Main Scene"};
+
+    std::vector<Game::SceneMetadata> loadedScenes{};
+
     std::vector<entt::entity> selectedEntities{};
     std::vector<entt::entity> prevSelectedEntities{};
     bool bWantCopyEntities{false};
     bool bWantDeleteEntities{false};
-
 };
 
 class EngineAPI
