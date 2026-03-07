@@ -100,7 +100,7 @@ void DeserializeComponent<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc
 }
 
 template<>
-ComponentEditorResult DrawComponentEditor<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc& component, Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity)
+ComponentEditorResult DrawComponentEditor<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc& component, Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)
 {
     static int editShapeIdx = -1;
     static entt::entity editEntity = entt::null;
@@ -376,7 +376,7 @@ void OnComponentRemoved<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc& 
 }
 
 template<>
-ComponentEditorResult DrawComponentEditor<Component::DrawPhysicsDebugTag>(Component::DrawPhysicsDebugTag& component, Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity)
+ComponentEditorResult DrawComponentEditor<Component::DrawPhysicsDebugTag>(Component::DrawPhysicsDebugTag& component, Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)
 {
     ImGui::CollapsingHeader("Physics Debug Draw", ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_AllowOverlap);
     ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);

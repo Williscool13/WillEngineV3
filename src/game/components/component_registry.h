@@ -25,7 +25,7 @@ using OnRemoveComponentFn = void(*)(entt::registry&, entt::entity);
 using OnPlayStartFn = void(*)(entt::registry&, entt::entity);
 using OnPlayStopFn = void(*)(entt::registry&, entt::entity);
 using CopyComponentFn = void(*)(const entt::registry&, entt::entity, entt::registry&, entt::entity);
-using DrawEditorFn = ComponentEditorResult(*)(Core::ViewFamily&, entt::registry&, entt::entity);
+using DrawEditorFn = ComponentEditorResult(*)(Core::ViewFamily&, entt::registry&, entt::entity, const char*);
 
 struct ComponentEntry
 {
@@ -83,8 +83,8 @@ void RegisterComponent(ComponentRegistry& componentRegistry, const char* name)
         [](const entt::registry& srcReg, entt::entity srcEntity, entt::registry& dstReg, entt::entity dstEntity) {
             dstReg.emplace_or_replace<T>(dstEntity, CopyComponent<T>(srcReg.get<T>(srcEntity), dstReg));
         },
-        [](Core::ViewFamily& viewFamily, entt::registry& reg, entt::entity e) {
-            return DrawComponentEditor<T>(reg.get<T>(e), viewFamily, reg, e);
+        [](Core::ViewFamily& viewFamily, entt::registry& reg, entt::entity e, const char* n) {
+            return DrawComponentEditor<T>(reg.get<T>(e), viewFamily, reg, e, n);
         },
         [](const entt::registry& reg, entt::entity e) -> bool {
             return reg.all_of<T>(e);
@@ -131,9 +131,9 @@ void RegisterComponent(ComponentRegistry& componentRegistry, const char* name)
         [](const entt::registry&, entt::entity, entt::registry& dstReg, entt::entity dstEntity) {
             (void)dstReg.get_or_emplace<T>(dstEntity);
         },
-        [](Core::ViewFamily& viewFamily, entt::registry& reg, entt::entity e) {
+        [](Core::ViewFamily& viewFamily, entt::registry& reg, entt::entity e, const char* n) {
             T dummy{};
-            return DrawComponentEditor<T>(dummy, viewFamily, reg, e);
+            return DrawComponentEditor<T>(dummy, viewFamily, reg, e, n);
         },
         [](const entt::registry& reg, entt::entity e) -> bool {
             return reg.all_of<T>(e);

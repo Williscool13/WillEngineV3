@@ -60,7 +60,7 @@ void EditorUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         state->selectedEntities.clear();
     }
 
-    if (state->inputFrame->GetMouse(MouseButton::LMB).pressed) {
+    if (!ctx->bImguiMouseCaptured && state->inputFrame->GetMouse(MouseButton::LMB).pressed) {
         auto it = state->stableIdToEntityMap.find(StringID{ctx->lastKnownStableIdUnderCursor});
         if (it != state->stableIdToEntityMap.end()) {
             entt::entity clicked = it->second;
@@ -529,7 +529,7 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
             state->bCustomGizmoActive = false;
             for (ComponentEntry& entry : state->componentRegistry.registry) {
                 if (entry.has(state->registry, entity)) {
-                    ComponentEditorResult result = entry.drawEditor(frameBuffer->mainViewFamily, state->registry, entity);
+                    ComponentEditorResult result = entry.drawEditor(frameBuffer->mainViewFamily, state->registry, entity, entry.name);
                     if (result.requestRemoval) {
                         entryToRemove = &entry;
                     }

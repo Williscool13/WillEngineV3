@@ -683,6 +683,7 @@ void WillEngine::EditorImgui()
         static bool levelInit = false;
         if (!levelInit) {
             memset(levelFilter, 1, sizeof(levelFilter));
+            levelFilter[0] = false; // Trace off by default
             levelInit = true;
         }
 

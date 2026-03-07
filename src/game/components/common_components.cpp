@@ -51,7 +51,7 @@ namespace Game
 {
 template<>
 ComponentEditorResult DrawComponentEditor<Component::StableIdComponent>(Component::StableIdComponent& component, Core::ViewFamily& viewFamily, entt::registry& registry,
-                                                       entt::entity entity)
+                                                       entt::entity entity, const char* name)
 {
     char headerLabel[64];
     snprintf(headerLabel, sizeof(headerLabel), "Stable ID: %llu", component.id.id);
@@ -80,7 +80,7 @@ void OnComponentRemoved<Component::StableIdComponent>(Component::StableIdCompone
 }
 
 template<>
-ComponentEditorResult DrawComponentEditor<Component::NameComponent>(Component::NameComponent& component, Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity)
+ComponentEditorResult DrawComponentEditor<Component::NameComponent>(Component::NameComponent& component, Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)
 {
     bool open = ImGui::CollapsingHeader("Name##componentname", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
     ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);

@@ -42,7 +42,7 @@ namespace Game
 {
 template<>
 ComponentEditorResult DrawComponentEditor<Component::TransformComponent>(Component::TransformComponent& component, Core::ViewFamily& viewFamily, entt::registry& registry,
-                                                        entt::entity entity)
+                                                        entt::entity entity, const char* name)
 {
     bool open = ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
     ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
