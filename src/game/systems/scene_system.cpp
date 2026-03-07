@@ -50,14 +50,13 @@ Scene SaveScene(ComponentRegistry& componentRegistry, entt::registry& registry, 
     return outScene;
 }
 
-SceneMetadata LoadScene(ComponentRegistry& componentRegistry, entt::registry& registry, Scene& scene)
+StringID LoadScene(ComponentRegistry& componentRegistry, entt::registry& registry, Scene& scene)
 {
     auto sceneId = StringID(scene.content["scene_id"].get<uint64_t>());
 
     std::vector<entt::entity> sceneEntities;
     sceneEntities.reserve(scene.content["entities"].size());
 
-    // Deserialize
     for (auto& entityJson : scene.content["entities"]) {
         auto entity = registry.create();
         for (auto& [key, compJson] : entityJson.items()) {
@@ -73,7 +72,6 @@ SceneMetadata LoadScene(ComponentRegistry& componentRegistry, entt::registry& re
         sceneEntities.push_back(entity);
     }
 
-    // Post-Deserialize Effects
     for (auto entity : sceneEntities) {
         for (auto& entry : componentRegistry.registry) {
             if (entry.has(registry, entity)) {
@@ -81,10 +79,8 @@ SceneMetadata LoadScene(ComponentRegistry& componentRegistry, entt::registry& re
             }
         }
     }
-    SceneMetadata sm{};
-    sm.name = scene.content["scene_name"];
-    sm.id = sceneId;
-    return sm;
+
+    return sceneId;
 }
 
 void UnloadScene(Engine::GameState* state, StringID sceneId)
@@ -110,8 +106,7 @@ void UnloadScene(Engine::GameState* state, StringID sceneId)
         return std::ranges::find(toDestroy, e) != toDestroy.end();
     });
 
-    auto [first, last] = std::ranges::remove(state->loadedScenes, sceneId, &SceneMetadata::id);
-    state->loadedScenes.erase(first, last);
+    std::erase(state->loadedScenes, sceneId);
 }
 
 void SaveSceneToFile(StringID sceneID, std::string_view sceneName, Engine::GameState* state, Engine::AssetManager* assetManager)
@@ -144,7 +139,7 @@ void SaveSceneToFile(StringID sceneID, std::string_view sceneName, Engine::GameS
 
 bool LoadSceneFromFile(Engine::GameState* state, Engine::AssetManager* assetManager, StringID sceneId)
 {
-    if (std::ranges::find(state->loadedScenes, sceneId, &SceneMetadata::id) != state->loadedScenes.end()) {
+    if (std::ranges::find(state->loadedScenes, sceneId) != state->loadedScenes.end()) {
         LOG_WARN(Game, "Scene '{}' is already loaded", sceneId.ToString());
         return false;
     }
@@ -165,11 +160,11 @@ bool LoadSceneFromFile(Engine::GameState* state, Engine::AssetManager* assetMana
 
     Scene s;
     s.content = nlohmann::json::parse(file);
-    SceneMetadata sm = LoadScene(state->componentRegistry, state->registry, s);
-    assert(sm.id == sceneId && "Scene ID in file does not match registry key, file was likely saved with a mismatched ID");
-    state->loadedScenes.push_back(sm);
+    StringID loadedId = LoadScene(state->componentRegistry, state->registry, s);
+    assert(loadedId == sceneId && "Scene ID in file does not match registry key, file was likely saved with a mismatched ID");
+    state->loadedScenes.push_back(loadedId);
 
-    LOG_INFO(Game, "Loaded scene '{}' from '{}'", sm.name, path.string());
+    LOG_INFO(Game, "Loaded scene '{}' from '{}'", sceneId.ToString(), path.string());
     return true;
 }
 

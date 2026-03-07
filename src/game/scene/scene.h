@@ -15,12 +15,6 @@ struct Scene
     nlohmann::json content;
 };
 
-struct SceneMetadata
-{
-    std::string name;
-    StringID id;
-};
-
 static inline StringID GLOBAL_SCENE_ID = SID("global_scene");
 } // Game
 

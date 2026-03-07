@@ -4,10 +4,17 @@
 
 #include "string_id.h"
 
+#include <cstring>
+#include "allocators/linear_allocator.h"
+
 #ifndef PACKAGED_BUILD
 
 void (*gInternStringFn)(uint64_t, const char*) = nullptr;
 const char* (*gResolveStringIdFn)(uint64_t) = nullptr;
+
+static constexpr size_t INTERN_BUFFER_SIZE = 1024 * 1024; // 1MB
+static char gInternBuffer[INTERN_BUFFER_SIZE];
+static Core::LinearAllocator gInternAllocator{INTERN_BUFFER_SIZE};
 
 static std::unordered_map<uint64_t, const char*>& GetInternTable()
 {
@@ -18,14 +25,19 @@ static std::unordered_map<uint64_t, const char*>& GetInternTable()
 void DBG_InternString(uint64_t hash, const char* str)
 {
     auto& table = GetInternTable();
-    if (!table.contains(hash)) {
-        table[hash] = str;
-    }
+    if (table.contains(hash)) { return; }
+
+    const size_t len = strlen(str) + 1;
+    const size_t offset = gInternAllocator.Allocate(len);
+    if (offset == SIZE_MAX) { return; }
+
+    memcpy(gInternBuffer + offset, str, len);
+    table[hash] = gInternBuffer + offset;
 }
 
 const char* DBG_ResolveStringId(uint64_t hash)
 {
-    auto& table = GetInternTable();
+    const auto& table = GetInternTable();
     auto it = table.find(hash);
     return it != table.end() ? it->second : "unknown";
 }

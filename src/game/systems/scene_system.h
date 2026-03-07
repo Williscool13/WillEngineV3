@@ -28,7 +28,7 @@ namespace Game
 {
 Scene SaveScene(ComponentRegistry& componentRegistry, entt::registry& registry, StringID sceneId, std::string_view sceneName);
 
-SceneMetadata LoadScene(ComponentRegistry& componentRegistry, entt::registry& registry, Scene& scene);
+StringID LoadScene(ComponentRegistry& componentRegistry, entt::registry& registry, Scene& scene);
 
 Scene SerializeAll(ComponentRegistry& componentRegistry, entt::registry& registry);
 

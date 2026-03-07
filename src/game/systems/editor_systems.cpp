@@ -371,7 +371,7 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
         ImGui::SetNextItemWidth(-1);
         if (ImGui::BeginCombo("##scene_list", previewLabel)) {
             for (int i = 0; i < static_cast<int>(sceneList.size()); ++i) {
-                const bool loaded = std::ranges::find(state->loadedScenes, sceneList[i].second, &SceneMetadata::id) != state->loadedScenes.end();
+                const bool loaded = std::ranges::find(state->loadedScenes, sceneList[i].second) != state->loadedScenes.end();
                 if (ImGui::Selectable(sceneList[i].first.c_str(), i == selectedScene)) {
                     selectedScene = i;
                     state->currentSceneId = sceneList[i].second;
@@ -385,7 +385,7 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
             ImGui::EndCombo();
         }
 
-        const bool selectedIsLoaded = !sceneList.empty() && std::ranges::find(state->loadedScenes, sceneList[selectedScene].second, &SceneMetadata::id) != state->loadedScenes.end();
+        const bool selectedIsLoaded = !sceneList.empty() && std::ranges::find(state->loadedScenes, sceneList[selectedScene].second) != state->loadedScenes.end();
 
         ImGui::BeginDisabled(sceneList.empty() || selectedIsLoaded);
         if (ImGui::Button("Load")) { LoadSceneFromFile(state, ctx->assetManager, sceneList[selectedScene].second); }
