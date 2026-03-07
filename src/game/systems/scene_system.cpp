@@ -83,6 +83,32 @@ StringID LoadScene(ComponentRegistry& componentRegistry, entt::registry& registr
     return sceneId;
 }
 
+std::vector<Scene> SerializeAll(ComponentRegistry& componentRegistry, entt::registry& registry, const std::vector<StringID>& loadedScenes)
+{
+    std::vector<Scene> snapshots;
+    snapshots.reserve(loadedScenes.size());
+    for (StringID sceneId : loadedScenes) {
+        snapshots.push_back(SaveScene(componentRegistry, registry, sceneId, sceneId.ToString()));
+        LOG_INFO(Game, "PIE snapshot: serialized scene '{}'", sceneId.ToString());
+    }
+    return snapshots;
+}
+
+void DeserializeAll(Engine::GameState* state, std::vector<Scene>& snapshots)
+{
+    std::vector<StringID> toUnload = state->loadedScenes;
+    for (StringID sceneId : toUnload) {
+        UnloadScene(state, sceneId);
+        LOG_INFO(Game, "PIE restore: unloaded scene '{}'", sceneId.ToString());
+    }
+
+    for (Scene& scene : snapshots) {
+        StringID loadedId = LoadScene(state->componentRegistry, state->registry, scene);
+        state->loadedScenes.push_back(loadedId);
+        LOG_INFO(Game, "PIE restore: reloaded scene '{}'", loadedId.ToString());
+    }
+}
+
 void UnloadScene(Engine::GameState* state, StringID sceneId)
 {
     auto view = state->registry.view<Component::SceneComponent>();
@@ -245,6 +271,8 @@ entt::entity CreateSceneEntity(Engine::GameState* state)
 
 void PlayStart(Core::EngineContext* ctx, Engine::GameState* state)
 {
+    state->pieSnapshot = SerializeAll(state->componentRegistry, state->registry, state->loadedScenes);
+
     auto view = state->registry.view<Component::SceneComponent>();
     for (auto entity : view) {
         for (auto& entry : state->componentRegistry.registry) {
@@ -266,6 +294,10 @@ void PlayStop(Core::EngineContext* ctx, Engine::GameState* state)
             }
         }
     }
+
+    DeserializeAll(state, state->pieSnapshot);
+    state->pieSnapshot.clear();
+
     state->bIsPlaying = false;
     ctx->setCursorHiddenFn(false);
 }

@@ -30,7 +30,9 @@ Scene SaveScene(ComponentRegistry& componentRegistry, entt::registry& registry, 
 
 StringID LoadScene(ComponentRegistry& componentRegistry, entt::registry& registry, Scene& scene);
 
-Scene SerializeAll(ComponentRegistry& componentRegistry, entt::registry& registry);
+std::vector<Scene> SerializeAll(ComponentRegistry& componentRegistry, entt::registry& registry, const std::vector<StringID>& loadedScenes);
+
+void DeserializeAll(Engine::GameState* state, std::vector<Scene>& snapshots);
 
 void UnloadScene(Engine::GameState* state, StringID sceneId);
 
