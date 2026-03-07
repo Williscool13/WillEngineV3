@@ -32,7 +32,7 @@ void EditorUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         return;
     }
 
-    if (ctx->bImguiMouseCaptured || ctx->bImGuiWantsTextInput) { return; }
+    if (ctx->bImGuiWantsTextInput) { return; }
 
     const bool ctrlHeld = state->inputFrame->GetKey(Key::LCTRL).down || state->inputFrame->GetKey(Key::RCTRL).down;
 

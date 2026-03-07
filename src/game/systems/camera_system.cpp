@@ -8,8 +8,6 @@
 #include <glm/gtc/type_ptr.hpp>
 
 #include "debug_system.h"
-#include "imgui.h"
-#include "ImGuizmo.h"
 #include "core/include/engine_context.h"
 #include "core/math/constants.h"
 #include "engine/engine_api.h"
@@ -20,7 +18,7 @@ namespace Game
 void UpdateGameCamera(Core::EngineContext* ctx, Engine::GameState* state)
 {
     ZoneScoped;
-    auto view = state->registry.view<Component::FreeCameraComponent, Component::CameraComponent, Component::TransformComponent>();
+    auto view = state->registry.view<Component::GameCameraTag, Component::FreeCameraComponent, Component::CameraComponent, Component::TransformComponent>();
     for (entt::entity entity : view) {
         const auto& [freeCam, camera, transform] = view.get(entity);
 

@@ -672,15 +672,46 @@ void WillEngine::EditorImgui()
     if (ImGui::Begin("Log")) {
         const auto& entries = engineLogger->GetImGuiSink().GetEntries();
 
+        // Level filter
+        static constexpr spdlog::level::level_enum kLevels[] = {
+            spdlog::level::trace, spdlog::level::debug, spdlog::level::info,
+            spdlog::level::warn, spdlog::level::err, spdlog::level::critical
+        };
+        static constexpr const char* kLevelNames[] = {"Trace", "Debug", "Info", "Warn", "Error", "Critical"};
+        static constexpr int kLevelCount = 6;
+        static bool levelFilter[kLevelCount];
+        static bool levelInit = false;
+        if (!levelInit) {
+            memset(levelFilter, 1, sizeof(levelFilter));
+            levelInit = true;
+        }
+
+        static constexpr bool levelPresent[kLevelCount] = {
+            SPDLOG_LEVEL_TRACE    >= SPDLOG_ACTIVE_LEVEL,
+            SPDLOG_LEVEL_DEBUG    >= SPDLOG_ACTIVE_LEVEL,
+            SPDLOG_LEVEL_INFO     >= SPDLOG_ACTIVE_LEVEL,
+            SPDLOG_LEVEL_WARN     >= SPDLOG_ACTIVE_LEVEL,
+            SPDLOG_LEVEL_ERROR    >= SPDLOG_ACTIVE_LEVEL,
+            SPDLOG_LEVEL_CRITICAL >= SPDLOG_ACTIVE_LEVEL,
+        };
+        const auto entryCount = static_cast<int32_t>(entries.GetSize());
+
+        for (int l = 0; l < kLevelCount; l++) {
+            if (l > 0) ImGui::SameLine();
+            ImGui::BeginDisabled(!levelPresent[l]);
+            ImGui::Checkbox(kLevelNames[l], &levelFilter[l]);
+            ImGui::EndDisabled();
+        }
+
         // Category filter
         static bool categoryFilter[static_cast<int>(LogCategory::Count)];
-        static bool init = false;
-        if (!init) {
+        static bool catInit = false;
+        if (!catInit) {
             memset(categoryFilter, 1, sizeof(categoryFilter));
-            init = true;
+            catInit = true;
         }
         for (int i = 0; i < static_cast<int>(LogCategory::Count); i++) {
-            ImGui::SameLine();
+            if (i > 0) { ImGui::SameLine(); }
             ImGui::Checkbox(kCategoryNames[i], &categoryFilter[i]);
         }
 
@@ -688,12 +719,18 @@ void WillEngine::EditorImgui()
 
         if (ImGui::BeginChild("LogScrollRegion", ImVec2(0, 0), false, ImGuiWindowFlags_HorizontalScrollbar)) {
             ImGuiListClipper clipper;
-            const int32_t count = static_cast<int>(entries.GetSize());
             static std::vector<int> filtered;
             filtered.clear();
-            for (int i = 0; i < count; i++) {
+            for (int i = 0; i < entryCount; i++) {
                 const auto& entry = entries.GetAt(i);
-                if (categoryFilter[static_cast<int>(entry.category)])
+                bool levelPass = false;
+                for (int l = 0; l < kLevelCount; l++) {
+                    if (entry.level == kLevels[l] && levelFilter[l]) {
+                        levelPass = true;
+                        break;
+                    }
+                }
+                if (levelPass && categoryFilter[static_cast<int>(entry.category)])
                     filtered.push_back(i);
             }
 
