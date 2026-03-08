@@ -5,6 +5,8 @@
 #ifndef WILL_ENGINE_MATERIAL_MANAGER_H
 #define WILL_ENGINE_MATERIAL_MANAGER_H
 #include <cstdint>
+#include <random>
+#include <string>
 #include <unordered_map>
 
 #include "core/material_id.h"
@@ -34,6 +36,17 @@ struct MaterialEntry
     uint64_t retireFrame{INT64_MAX};
 };
 
+struct ImmutableMaterial
+{
+    MaterialProperties props;
+};
+
+struct MutableMaterial
+{
+    std::string name;
+    MaterialProperties props;
+};
+
 class MaterialManager
 {
 public:
@@ -41,38 +54,31 @@ public:
 
     MaterialID CreateImmutableMaterial(const MaterialProperties& mat);
 
+    // Named mutable materials — globally addressable, properties can be changed at runtime.
+    // Caller must AcquireMaterial/ReleaseMaterial as usual.
+    MaterialID CreateMutableMaterial(std::string_view name, const MaterialProperties& props);
+
+    void UpdateMutableMaterial(MaterialID id, const MaterialProperties& props);
+
+    MaterialID FindMutableMaterial(StringID name) const;
+
     void AcquireMaterial(MaterialID materialID);
 
     void ReleaseMaterial(MaterialID materialID);
 
     void ProcessRetirements();
 
-    // const MaterialProperties& Get(MaterialID id) const
-    // {
-    //     return materials.at(id);
-    // }
-    //
-    // MaterialProperties& Get(MaterialID id)
-    // {
-    //     return materials.at(id);
-    // }
-    //
-    // void Update(MaterialID id, const MaterialProperties& props)
-    // {
-    //     materials[id] = props;
-    // }
+    void Save() const;
+
+    void Load();
 
     MaterialID GetDefaultMaterial() const { return defaultMaterial; }
 
     const std::unordered_map<MaterialID, uint32_t>& GetIdToEntryMap() const { return idToEntryMap; }
-    MaterialProperties GetImmutableProperties(MaterialID id) const
-    {
-        if (immutableMaterials.contains(id)) {
-            return immutableMaterials.at(id);
-        }
+    const std::unordered_map<MaterialID, MutableMaterial>& GetMutableMaterials() const { return mutableMaterials; }
 
-        return {};
-    }
+    MaterialProperties GetProperties(MaterialID id) const;
+
     const std::array<MaterialEntry, Render::BINDLESS_MATERIAL_BUFFER_COUNT>& GetActiveMaterials() const { return activeMaterialBuffer; }
 
     uint32_t GetMaterialIndex(MaterialID id)
@@ -87,16 +93,16 @@ public:
 private:
     Core::EngineContext* ctx;
 
-    std::unordered_map<MaterialID, MaterialProperties> immutableMaterials;
+    std::unordered_map<MaterialID, ImmutableMaterial> immutableMaterials;
     MaterialID defaultMaterial{MaterialID::INVALID};
 
     std::array<MaterialEntry, Render::BINDLESS_MATERIAL_BUFFER_COUNT> activeMaterialBuffer;
     Core::HandleAllocator<MaterialProperties, Render::BINDLESS_MATERIAL_BUFFER_COUNT> activeMaterialAllocator;
     std::unordered_map<MaterialID, uint32_t> idToEntryMap;
 
-    // Serialized (user defined custom materials)
-    std::unordered_map<StringID, MaterialProperties> mutableMaterialMap;
-
+    std::unordered_map<MaterialID, MutableMaterial> mutableMaterials;
+    std::unordered_map<StringID, MaterialID> mutableMaterialIndex;
+    std::mt19937_64 mutableIdRng{std::random_device{}()};
 
     static MaterialID HashMaterial(const MaterialProperties& m);
 };

@@ -17,6 +17,7 @@
 #include "core/input/input_frame.h"
 #include "core/math/constants.h"
 #include "engine/engine_api.h"
+#include "engine/material_manager.h"
 #include "game/fwd_components.h"
 #include "game/components/common_components.h"
 #include "game/components/scene_components.h"
@@ -359,7 +360,7 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
     if (ImGui::Begin("Scene Browser")) {
         const auto& sceneReg = ctx->assetManager->GetSceneRegistry();
         static int selectedScene = 0;
-        std::vector<std::pair<std::string, StringID>> sceneList;
+        std::vector<std::pair<std::string, StringID> > sceneList;
         sceneList.reserve(sceneReg.size());
         for (const auto& [id, path] : sceneReg) {
             sceneList.emplace_back(path.stem().string(), id);
@@ -908,6 +909,29 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
             ImGui::SliderFloat("Split Lambda", &state->shadowConfig.splitLambda, 0.0f, 1.0f);
             ImGui::SliderFloat("Split Overlap", &state->shadowConfig.splitOverlap, 1.0f, 1.2f);
             ImGui::Checkbox("Enabled", &state->shadowConfig.enabled);
+        }
+    }
+    ImGui::End();
+
+    if (ImGui::Begin("Materials")) {
+        Engine::MaterialManager* materialManager = ctx->materialManager;
+        const auto& mutableMaterials = materialManager->GetMutableMaterials();
+
+        if (ImGui::Button("New Material")) {
+            // todo
+        }
+
+        ImGui::SeparatorText(fmt::format("Materials ({})", mutableMaterials.size()).c_str());
+
+        for (auto& [id, mat] : mutableMaterials) {
+            ImGui::PushID(static_cast<int>(id.id));
+            if (ImGui::CollapsingHeader(mat.name.c_str())) {
+                ImGui::BeginDisabled(true);
+                ImGui::Text("ID: %llu", id.id);
+                ImGui::EndDisabled();
+                // todo: material property editors
+            }
+            ImGui::PopID();
         }
     }
     ImGui::End();

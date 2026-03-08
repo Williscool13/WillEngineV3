@@ -35,14 +35,14 @@ struct PrimitiveData
 
 struct StaticMeshComponent
 {
-    glm::vec4 modelFlags{0.0f};// x: visible, y: shadow-caster, zw: reserved
+    glm::vec4 modelFlags{0.0f}; // x: visible, y: shadow-caster, zw: reserved
 
     std::array<PrimitiveData, 128> primitives{};
     uint8_t primitiveCount{0};
 
-
     StringID modelId{StringID::Invalid};
     int32_t meshIndex{-1};
+    std::array<Engine::MaterialID, 128> primitiveMaterialOverrides{};
 
     // Transient
     Engine::WillModelHandle modelHandle{};
@@ -50,9 +50,6 @@ struct StaticMeshComponent
 
 struct StaticMeshLoadingTag
 {};
-
-
-
 }
 
 #endif //WILL_ENGINE_RENDER_COMPONENTS_H

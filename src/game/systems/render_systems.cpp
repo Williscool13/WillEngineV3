@@ -234,7 +234,6 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
         }
 
         for (auto& customDraw : frameBuffer->mainViewFamily.customShaderDraws) {
-
             for (auto& instance : customDraw.second.instances) {
                 instance.gpuMaterialIndex = materialManager->GetMaterialIndex(instance.materialID);
             }
@@ -243,7 +242,7 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
 
     frameBuffer->mainViewFamily.materials.resize(Render::BINDLESS_MATERIAL_BUFFER_COUNT);
     for (auto& [matID, slotIndex] : materialManager->GetIdToEntryMap()) {
-        frameBuffer->mainViewFamily.materials[slotIndex] = materialManager->GetImmutableProperties(matID);
+        frameBuffer->mainViewFamily.materials[slotIndex] = materialManager->GetProperties(matID);
     }
 }
 }
