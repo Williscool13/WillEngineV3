@@ -49,13 +49,14 @@ entt::entity CreateTextureVisualizer(Core::EngineContext* ctx, Engine::GameState
     }
 
     Component::StaticMeshComponent renderable{};
-    Engine::MaterialManager& materialManager = ctx->assetManager->GetMaterialManager();
+    Engine::MaterialManager* materialManager = ctx->materialManager;
     Render::MeshInformation& submesh = model->modelData.meshes[0];
 
     for (size_t i = 0; i < submesh.primitiveProperties.size(); ++i) {
         MaterialProperties material = Engine::CreateDefaultMaterial();
         material.textureImageIndices.x = BRDF_LUT_BINDLESS_INDEX;
-        Engine::MaterialID matID = materialManager.GetOrCreate(material);
+        Engine::MaterialID matID = materialManager->CreateImmutableMaterial(material);
+        materialManager->AcquireMaterial(matID);
 
         renderable.primitives[i] = {
             .primitiveIndex = submesh.primitiveProperties[i].index,
@@ -96,25 +97,25 @@ entt::entity CreateBox(Core::EngineContext* ctx, Engine::GameState* state, glm::
     }
 
     Component::StaticMeshComponent renderable{};
-    Engine::MaterialManager& materialManager = ctx->assetManager->GetMaterialManager();
+    Engine::MaterialManager* materialManager = ctx->materialManager;
     Render::MeshInformation& submesh = model->modelData.meshes[0];
 
     for (size_t i = 0; i < submesh.primitiveProperties.size(); ++i) {
         Render::PrimitiveProperty& primitive = submesh.primitiveProperties[i];
 
-        MaterialProperties material;
-        if (primitive.materialIndex != -1) {
-            material = model->modelData.materials[primitive.materialIndex];
+        Engine::MaterialID matID;
+        if (primitive.materialIndex == -1) {
+            matID = materialManager->GetDefaultMaterial();
         }
         else {
-            material = materialManager.Get(materialManager.GetDefaultMaterial());
+            matID = materialManager->CreateImmutableMaterial(model->modelData.materials[primitive.materialIndex]);
         }
-        // material.textureImageIndices.x = 3;
-        boxMatID = materialManager.GetOrCreate(material);
+        materialManager->AcquireMaterial(matID);
+        boxMatID = matID;
 
         renderable.primitives[i] = {
             .primitiveIndex = primitive.index,
-            .materialID = boxMatID
+            .materialID = matID
         };
     }
     renderable.primitiveCount = submesh.primitiveProperties.size();
@@ -173,19 +174,20 @@ entt::entity CreateStaticBox(Core::EngineContext* ctx, Engine::GameState* state,
     }
 
     Component::StaticMeshComponent renderable{};
-    Engine::MaterialManager& materialManager = ctx->assetManager->GetMaterialManager();
+    Engine::MaterialManager* materialManager = ctx->materialManager;
     Render::MeshInformation& submesh = model->modelData.meshes[0];
 
     for (size_t i = 0; i < submesh.primitiveProperties.size(); ++i) {
         Render::PrimitiveProperty& primitive = submesh.primitiveProperties[i];
 
-        MaterialProperties material;
-        if (primitive.materialIndex != -1) {
-            material = model->modelData.materials[primitive.materialIndex];
-        } else {
-            material = materialManager.Get(materialManager.GetDefaultMaterial());
+        Engine::MaterialID matID;
+        if (primitive.materialIndex == -1) {
+            matID = materialManager->GetDefaultMaterial();
         }
-        Engine::MaterialID matID = materialManager.GetOrCreate(material);
+        else {
+            matID = materialManager->CreateImmutableMaterial(model->modelData.materials[primitive.materialIndex]);
+        }
+        materialManager->AcquireMaterial(matID);
         renderable.primitives[i] = {
             .primitiveIndex = primitive.index,
             .materialID = matID
@@ -262,23 +264,24 @@ entt::entity CreateGlowingBox(Core::EngineContext* ctx, Engine::GameState* state
     }
 
     Component::StaticMeshComponent renderable{};
-    Engine::MaterialManager& materialManager = ctx->assetManager->GetMaterialManager();
+    Engine::MaterialManager* materialManager = ctx->materialManager;
     Render::MeshInformation& submesh = model->modelData.meshes[0];
 
     for (size_t i = 0; i < submesh.primitiveProperties.size(); ++i) {
         Render::PrimitiveProperty& primitive = submesh.primitiveProperties[i];
 
         MaterialProperties material;
-        if (primitive.materialIndex != -1) {
-            material = model->modelData.materials[primitive.materialIndex];
+        if (primitive.materialIndex == -1) {
+            material = Engine::CreateDefaultMaterial();
         }
         else {
-            material = materialManager.Get(materialManager.GetDefaultMaterial());
+            material = model->modelData.materials[primitive.materialIndex];
         }
 
         material.emissiveFactor = emissive;
 
-        Engine::MaterialID matID = materialManager.GetOrCreate(material);
+        Engine::MaterialID matID = materialManager->CreateImmutableMaterial(material);
+        materialManager->AcquireMaterial(matID);
 
         renderable.primitives[i] = {
             .primitiveIndex = primitive.index,
@@ -416,7 +419,7 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
             return;
         }
 
-        Engine::MaterialManager& materialManager = ctx->assetManager->GetMaterialManager();
+        Engine::MaterialManager* materialManager = ctx->materialManager;
         Render::MeshInformation& submesh = dragon->modelData.meshes[0];
         glm::vec3 meshOffset = glm::vec3(0.0f);
         glm::quat meshRotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
@@ -455,11 +458,12 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
 
                 Engine::MaterialID matID;
                 if (primitive.materialIndex == -1) {
-                    matID = materialManager.GetDefaultMaterial();
+                    matID = materialManager->GetDefaultMaterial();
                 }
                 else {
-                    matID = materialManager.GetOrCreate(dragon->modelData.materials[primitive.materialIndex]);
+                    matID = materialManager->CreateImmutableMaterial(dragon->modelData.materials[primitive.materialIndex]);
                 }
+                materialManager->AcquireMaterial(matID);
 
                 renderable.primitives[i] = {
                     .primitiveIndex = primitive.index,
@@ -487,7 +491,7 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
             return;
         }
 
-        Engine::MaterialManager& materialManager = ctx->assetManager->GetMaterialManager();
+        Engine::MaterialManager* materialManager = ctx->materialManager;
 
         std::vector<glm::vec3> worldTranslations(sponza->modelData.nodes.size());
         std::vector<glm::quat> worldRotations(sponza->modelData.nodes.size());
@@ -530,11 +534,12 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
 
                 Engine::MaterialID matID;
                 if (primitive.materialIndex == -1) {
-                    matID = materialManager.GetDefaultMaterial();
+                    matID = materialManager->GetDefaultMaterial();
                 }
                 else {
-                    matID = materialManager.GetOrCreate(sponza->modelData.materials[primitive.materialIndex]);
+                    matID = materialManager->CreateImmutableMaterial(sponza->modelData.materials[primitive.materialIndex]);
                 }
+                materialManager->AcquireMaterial(matID);
 
                 renderable.primitives[j] = {
                     .primitiveIndex = primitive.index,
@@ -641,12 +646,13 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
 
         if (sphere && sphere->modelLoadState == Render::WillModel::ModelLoadState::Loaded && cubemap && cubemap->loadState == Render::Cubemap::LoadState::Loaded) {
             Component::StaticMeshComponent renderable{};
-            Engine::MaterialManager& materialManager = ctx->assetManager->GetMaterialManager();
+            Engine::MaterialManager* materialManager = ctx->materialManager;
             Render::MeshInformation& submesh = sphere->modelData.meshes[0];
 
             for (size_t i = 0; i < submesh.primitiveProperties.size(); ++i) {
                 Render::PrimitiveProperty& primitive = submesh.primitiveProperties[i];
-                Engine::MaterialID matID = materialManager.GetDefaultMaterial();
+                Engine::MaterialID matID = materialManager->GetDefaultMaterial();
+                materialManager->AcquireMaterial(matID);
 
                 renderable.primitives[i] = {
                     .primitiveIndex = primitive.index,
@@ -681,7 +687,7 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
             return;
         }
 
-        Engine::MaterialManager& materialManager = ctx->assetManager->GetMaterialManager();
+        Engine::MaterialManager* materialManager = ctx->materialManager;
         Render::MeshInformation& submesh = dragon->modelData.meshes[0];
         glm::vec3 meshOffset = glm::vec3(0.0f);
         glm::quat meshRotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
@@ -725,11 +731,12 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
 
                 Engine::MaterialID matID;
                 if (primitive.materialIndex == -1) {
-                    matID = materialManager.GetDefaultMaterial();
+                    matID = materialManager->GetDefaultMaterial();
                 }
                 else {
-                    matID = materialManager.GetOrCreate(dragon->modelData.materials[primitive.materialIndex]);
+                    matID = materialManager->CreateImmutableMaterial(dragon->modelData.materials[primitive.materialIndex]);
                 }
+                materialManager->AcquireMaterial(matID);
 
                 renderable.primitives[i] = {
                     .primitiveIndex = primitive.index,

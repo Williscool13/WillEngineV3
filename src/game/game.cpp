@@ -102,6 +102,8 @@ GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::GameState* state)
     Game::RenderUpdate(ctx, state);
     state->registry.clear<Game::Component::DirtyTransformTag>();
 
+    ctx->materialManager->ProcessRetirements();
+
 #if WILL_EDITOR
     Game::EditorUpdate(ctx, state);
 #endif

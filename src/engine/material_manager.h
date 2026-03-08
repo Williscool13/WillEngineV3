@@ -7,92 +7,98 @@
 #include <cstdint>
 #include <unordered_map>
 
-#include "asset-load/asset_load_config.h"
+#include "core/material_id.h"
+#include "core/string_id.h"
+#include "core/allocators/free_list.h"
+#include "core/allocators/handle_allocator.h"
+#include "core/allocators/inline_vector.h"
+#include "render/render_config.h"
 #include "render/shaders/model_interop.h"
+
+namespace Core
+{
+struct EngineContext;
+}
 
 namespace Engine
 {
-using MaterialID = uint32_t;
+using MaterialEntryHandle = Core::Handle<MaterialProperties>;
+
+struct MaterialEntry
+{
+    MaterialID id{MaterialID::INVALID};
+    MaterialEntryHandle handle{MaterialEntryHandle::INVALID};
+    int32_t refCounter{0};
+
+    // When ref counter is 0, if retireFrame >= renderFrame, then this will be deleted.
+    uint64_t retireFrame{INT64_MAX};
+};
 
 class MaterialManager
 {
 public:
-    MaterialManager()
-    {
-        MaterialProperties defaultMat{
-            .colorFactor = {1.0f, 1.0f, 1.0f, 1.0f}, // white
-            .metalRoughFactors = {0.0f, 1.0f, 0.0f, 0.0f}, // non-metallic, rough
-            .textureImageIndices = {WHITE_IMAGE_BINDLESS_INDEX, WHITE_IMAGE_BINDLESS_INDEX, WHITE_IMAGE_BINDLESS_INDEX, WHITE_IMAGE_BINDLESS_INDEX},
-            .textureSamplerIndices = {ASSET_SAMPLER_BINDLESS_INDEX, ASSET_SAMPLER_BINDLESS_INDEX, ASSET_SAMPLER_BINDLESS_INDEX, ASSET_SAMPLER_BINDLESS_INDEX},
-            .textureImageIndices2 = {WHITE_IMAGE_BINDLESS_INDEX, WHITE_IMAGE_BINDLESS_INDEX, WHITE_IMAGE_BINDLESS_INDEX, WHITE_IMAGE_BINDLESS_INDEX},
-            .textureSamplerIndices2 = {ASSET_SAMPLER_BINDLESS_INDEX, ASSET_SAMPLER_BINDLESS_INDEX, ASSET_SAMPLER_BINDLESS_INDEX, ASSET_SAMPLER_BINDLESS_INDEX},
-            .colorUvTransform = {1.0f, 1.0f, 0.0f, 0.0f}, // identity
-            .metalRoughUvTransform = {1.0f, 1.0f, 0.0f, 0.0f},
-            .normalUvTransform = {1.0f, 1.0f, 0.0f, 0.0f},
-            .emissiveUvTransform = {1.0f, 1.0f, 0.0f, 0.0f},
-            .occlusionUvTransform = {1.0f, 1.0f, 0.0f, 0.0f},
-            .emissiveFactor = {0.0f, 0.0f, 0.0f, 0.0f}, // no emission
-            .alphaProperties = {0.5f, 0.0f, 0.0f, 0.0f}, // alpha cutoff, opaque, single-sided, lit
-            .physicalProperties = {1.5f, 0.0f, 1.0f, 1.0f} // IOR 1.5, no dispersion, normal scale 1.0, full occlusion
-        };
+    explicit MaterialManager(Core::EngineContext* ctx);
 
-        defaultMaterial = Create(defaultMat);
-    }
+    MaterialID CreateImmutableMaterial(const MaterialProperties& mat);
 
-    MaterialID Create(const MaterialProperties& props)
-    {
-        MaterialID id = nextID++;
-        materials[id] = props;
-        return id;
-    }
+    void AcquireMaterial(MaterialID materialID);
 
-    MaterialID GetOrCreate(const MaterialProperties& props)
-    {
-        size_t hash = HashMaterial(props);
+    void ReleaseMaterial(MaterialID materialID);
 
-        if (auto it = hashToID.find(hash); it != hashToID.end()) {
-            return it->second; // Reuse existing
-        }
+    void ProcessRetirements();
 
-        MaterialID id = nextID++;
-        materials[id] = props;
-        hashToID[hash] = id;
-        return id;
-    }
-
-    const MaterialProperties& Get(MaterialID id) const
-    {
-        return materials.at(id);
-    }
-
-    MaterialProperties& Get(MaterialID id)
-    {
-        return materials.at(id);
-    }
-
-    void Update(MaterialID id, const MaterialProperties& props)
-    {
-        materials[id] = props;
-    }
+    // const MaterialProperties& Get(MaterialID id) const
+    // {
+    //     return materials.at(id);
+    // }
+    //
+    // MaterialProperties& Get(MaterialID id)
+    // {
+    //     return materials.at(id);
+    // }
+    //
+    // void Update(MaterialID id, const MaterialProperties& props)
+    // {
+    //     materials[id] = props;
+    // }
 
     MaterialID GetDefaultMaterial() const { return defaultMaterial; }
 
-private:
-    std::unordered_map<MaterialID, MaterialProperties> materials;
-    std::unordered_map<size_t, MaterialID> hashToID;
-    MaterialID nextID = 0;
-
-    MaterialID defaultMaterial{};
-
-    static size_t HashMaterial(const MaterialProperties& props)
+    const std::unordered_map<MaterialID, uint32_t>& GetIdToEntryMap() const { return idToEntryMap; }
+    MaterialProperties GetImmutableProperties(MaterialID id) const
     {
-        size_t hash = 0;
-        const char* data = reinterpret_cast<const char*>(&props);
-        for (size_t i = 0; i < sizeof(MaterialProperties); ++i) {
-            hash = hash * 31 + data[i];
+        if (immutableMaterials.contains(id)) {
+            return immutableMaterials.at(id);
         }
-        return hash;
+
+        return {};
     }
+    const std::array<MaterialEntry, Render::BINDLESS_MATERIAL_BUFFER_COUNT>& GetActiveMaterials() const { return activeMaterialBuffer; }
+
+    uint32_t GetMaterialIndex(MaterialID id)
+    {
+        if (idToEntryMap.contains(id)) {
+            return idToEntryMap[id];
+        }
+
+        return UINT32_MAX;
+    }
+
+private:
+    Core::EngineContext* ctx;
+
+    std::unordered_map<MaterialID, MaterialProperties> immutableMaterials;
+    MaterialID defaultMaterial{MaterialID::INVALID};
+
+    std::array<MaterialEntry, Render::BINDLESS_MATERIAL_BUFFER_COUNT> activeMaterialBuffer;
+    Core::HandleAllocator<MaterialProperties, Render::BINDLESS_MATERIAL_BUFFER_COUNT> activeMaterialAllocator;
+    std::unordered_map<MaterialID, uint32_t> idToEntryMap;
+
+    // Serialized (user defined custom materials)
+    std::unordered_map<StringID, MaterialProperties> mutableMaterialMap;
+
+
+    static MaterialID HashMaterial(const MaterialProperties& m);
 };
 
 static MaterialProperties CreateDefaultMaterial()
@@ -117,7 +123,6 @@ static MaterialProperties CreateDefaultMaterial()
     mat.physicalProperties = glm::vec4(1.5f, 0.0f, 1.0f, 1.0f);
     return mat;
 }
-
 }
 
 #endif //WILL_ENGINE_MATERIAL_MANAGER_H

@@ -39,6 +39,8 @@ add_library(core STATIC
         string_id.h
         allocators/inline_vector.cpp
         allocators/inline_vector.h
+        hash/fnv_1_a.cpp
+        hash/fnv_1_a.h
 )
 
 

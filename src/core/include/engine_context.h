@@ -33,6 +33,7 @@ struct ResourceManager;
 
 namespace Engine
 {
+class MaterialManager;
 class EngineLogger;
 class AssetManager;
 }
@@ -69,6 +70,9 @@ struct EngineContext
 
     //Render::ResourceManager* resourceManager;
     Engine::AssetManager* assetManager{nullptr};
+    Engine::MaterialManager* materialManager{nullptr};
+
+    uint64_t currentFrame{0};
     bool bModelLoadedThisFrame{false};
 
 

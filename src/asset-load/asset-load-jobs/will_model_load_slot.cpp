@@ -295,39 +295,40 @@ bool WillModelLoadSlot::LoadModelFromDisk()
 
 bool WillModelLoadSlot::AllocateGPUResources() const
 {
-    OffsetAllocator::Allocator* selectedAllocator = &resourceManager->vertexBufferAllocator;
+    // Thread-safe allocation (mutexes are expensive but this is rather infrequent)
     size_t sizeVertices = rawData.vertices.size() * sizeof(Vertex);
-
-
-    // Thread-safe allocation
     {
         std::lock_guard lock(resourceManager->vertexBufferAllocatorMutex);
-        outputModel->modelData.vertexAllocation = selectedAllocator->allocate(sizeVertices);
+        outputModel->modelData.vertexAllocation = resourceManager->vertexBufferAllocator.allocate(sizeVertices);
         if (outputModel->modelData.vertexAllocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
             SPDLOG_ERROR("[WillModelLoadSlot] Not enough space in mega vertex buffer");
             return false;
         }
     }
 
-    size_t sizeMeshletVertices = rawData.meshletVertices.size() * sizeof(uint32_t); {
+    size_t sizeMeshletVertices = rawData.meshletVertices.size() * sizeof(uint32_t);
+    //
+    {
         std::lock_guard lock(resourceManager->meshletVertexBufferAllocatorMutex);
         outputModel->modelData.meshletVertexAllocation = resourceManager->meshletVertexBufferAllocator.allocate(sizeMeshletVertices);
         if (outputModel->modelData.meshletVertexAllocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
             std::lock_guard cleanupLock(resourceManager->vertexBufferAllocatorMutex);
-            selectedAllocator->free(outputModel->modelData.vertexAllocation);
+            resourceManager->vertexBufferAllocator.free(outputModel->modelData.vertexAllocation);
             SPDLOG_ERROR("[WillModelLoadSlot] Not enough space in mega meshlet vertex buffer");
             return false;
         }
     }
 
-    size_t sizeMeshletTriangles = rawData.meshletTriangles.size() / 3 * sizeof(uint32_t); {
+    size_t sizeMeshletTriangles = rawData.meshletTriangles.size() / 3 * sizeof(uint32_t);
+    //
+    {
         std::lock_guard lock(resourceManager->meshletTriangleBufferAllocatorMutex);
         outputModel->modelData.meshletTriangleAllocation = resourceManager->meshletTriangleBufferAllocator.allocate(sizeMeshletTriangles);
         if (outputModel->modelData.meshletTriangleAllocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
             // Cleanup previous allocations
             {
                 std::lock_guard cleanupLock(resourceManager->vertexBufferAllocatorMutex);
-                selectedAllocator->free(outputModel->modelData.vertexAllocation);
+                resourceManager->vertexBufferAllocator.free(outputModel->modelData.vertexAllocation);
             } {
                 std::lock_guard cleanupLock(resourceManager->meshletVertexBufferAllocatorMutex);
                 resourceManager->meshletVertexBufferAllocator.free(outputModel->modelData.meshletVertexAllocation);
@@ -337,14 +338,16 @@ bool WillModelLoadSlot::AllocateGPUResources() const
         }
     }
 
-    size_t sizeMeshlets = rawData.meshlets.size() * sizeof(Meshlet); {
+    size_t sizeMeshlets = rawData.meshlets.size() * sizeof(Meshlet);
+    //
+    {
         std::lock_guard lock(resourceManager->meshletBufferAllocatorMutex);
         outputModel->modelData.meshletAllocation = resourceManager->meshletBufferAllocator.allocate(sizeMeshlets);
         if (outputModel->modelData.meshletAllocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
             // Cleanup all previous allocations
             {
                 std::lock_guard cleanupLock(resourceManager->vertexBufferAllocatorMutex);
-                selectedAllocator->free(outputModel->modelData.vertexAllocation);
+                resourceManager->vertexBufferAllocator.free(outputModel->modelData.vertexAllocation);
             } {
                 std::lock_guard cleanupLock(resourceManager->meshletVertexBufferAllocatorMutex);
                 resourceManager->meshletVertexBufferAllocator.free(outputModel->modelData.meshletVertexAllocation);
@@ -357,14 +360,16 @@ bool WillModelLoadSlot::AllocateGPUResources() const
         }
     }
 
-    size_t sizePrimitives = rawData.primitives.size() * sizeof(MeshletPrimitive); {
+    size_t sizePrimitives = rawData.primitives.size() * sizeof(MeshletPrimitive);
+    //
+    {
         std::lock_guard lock(resourceManager->primitiveBufferAllocatorMutex);
         outputModel->modelData.primitiveAllocation = resourceManager->primitiveBufferAllocator.allocate(sizePrimitives);
         if (outputModel->modelData.primitiveAllocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
             // Cleanup all previous allocations
             {
                 std::lock_guard cleanupLock(resourceManager->vertexBufferAllocatorMutex);
-                selectedAllocator->free(outputModel->modelData.vertexAllocation);
+                resourceManager->vertexBufferAllocator.free(outputModel->modelData.vertexAllocation);
             } {
                 std::lock_guard cleanupLock(resourceManager->meshletVertexBufferAllocatorMutex);
                 resourceManager->meshletVertexBufferAllocator.free(outputModel->modelData.meshletVertexAllocation);

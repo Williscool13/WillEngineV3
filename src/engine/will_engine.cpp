@@ -117,6 +117,8 @@ void WillEngine::Initialize(Utils::Logger* logger)
         SDL_GetWindowSize(window.get(), &w, &h);
     }
 
+    engineContext = std::make_unique<Core::EngineContext>();
+
     //
     {
         ZoneScopedN("CreateInputManager");
@@ -162,6 +164,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
     {
         ZoneScopedN("CreateAssetManager");
         assetManager = std::make_unique<AssetManager>(asyncAssetLoadManager.get(), renderThread->GetResourceManager());
+        materialManager = std::make_unique<MaterialManager>(engineContext.get());
     }
 
     //
@@ -198,7 +201,6 @@ void WillEngine::Initialize(Utils::Logger* logger)
 
         gameState = std::make_unique<GameState>();
 
-        engineContext = std::make_unique<Core::EngineContext>();
 #if LOGGING_ENABLED
         engineContext->engineLogger = engineLogger.get();
 #endif
@@ -210,6 +212,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
         engineContext->windowContext.viewportOffsetX = 0;
         engineContext->windowContext.viewportOffsetY = 0;
         engineContext->assetManager = assetManager.get();
+        engineContext->materialManager = materialManager.get();
         engineContext->audioManager = audioManager.get();
         engineContext->physicsSystem = physicsSystem.get();
         engineContext->scheduler = scheduler.get();
@@ -922,6 +925,7 @@ void WillEngine::Run()
                 }
 
                 frameBufferIndex = (frameBufferIndex + 1) % Core::FRAME_BUFFER_COUNT;
+                engineContext->currentFrame++;
                 engineRenderSynchronization->renderFrames.fetch_add(1, std::memory_order_release);
                 engineRenderSynchronization->renderCV.notify_one();
             }

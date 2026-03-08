@@ -96,16 +96,9 @@ public:
         return jointMatrixAllocator;
     }
 
-    MaterialManager& GetMaterialManager()
-    {
-        return materialManager;
-    }
-
 private:
     AssetLoad::AsyncAssetLoadManager* assetLoadManager;
     Render::ResourceManager* resourceManager;
-
-    MaterialManager materialManager;
 
     // todo: figure out whats happening to this guy
     // OffsetAllocator because it's always contiguous

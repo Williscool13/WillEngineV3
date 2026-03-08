@@ -9,18 +9,7 @@
 #include <functional>
 #include <string>
 
-constexpr uint64_t FNV_OFFSET = 14695981039346656037ULL;
-constexpr uint64_t FNV_PRIME  = 1099511628211ULL;
-
-constexpr uint64_t fnv1a64(const char* str, size_t len)
-{
-    uint64_t hash = FNV_OFFSET;
-    for (size_t i = 0; i < len; ++i) {
-        hash ^= static_cast<uint64_t>(str[i]);
-        hash *= FNV_PRIME;
-    }
-    return hash;
-}
+#include "hash/fnv_1_a.h"
 
 #ifndef PACKAGED_BUILD
 void DBG_InternString(uint64_t hash, const char* str);

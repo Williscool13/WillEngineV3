@@ -33,7 +33,7 @@ void ResolveStaticMeshLoads(Core::EngineContext* ctx, Engine::GameState* state)
             continue;
         }
 
-        Engine::MaterialManager& materialManager = ctx->assetManager->GetMaterialManager();
+        Engine::MaterialManager* materialManager = ctx->materialManager;
         Render::MeshInformation& mesh = model->modelData.meshes[meshComponent.meshIndex];
 
         if (mesh.primitiveProperties.size() > 128) {
@@ -47,16 +47,17 @@ void ResolveStaticMeshLoads(Core::EngineContext* ctx, Engine::GameState* state)
 
             Engine::MaterialID matID;
             if (primitive.materialIndex == -1) {
-                matID = materialManager.GetDefaultMaterial();
+                matID = materialManager->GetDefaultMaterial();
             }
             else {
-                matID = materialManager.GetOrCreate(model->modelData.materials[primitive.materialIndex]);
+                matID = materialManager->CreateImmutableMaterial(model->modelData.materials[primitive.materialIndex]);
             }
 
             meshComponent.primitives[j] = {
                 .primitiveIndex = primitive.index,
                 .materialID = matID
             };
+            materialManager->AcquireMaterial(matID);
         }
         meshComponent.primitiveCount = primCount;
         meshComponent.modelFlags = glm::vec4(0.0f);
@@ -135,7 +136,7 @@ void RenderPrepareTransforms(Core::EngineContext* ctx, Engine::GameState* state,
 void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
-    auto& materialManager = ctx->assetManager->GetMaterialManager();
+    auto& materialManager = ctx->materialManager;
 
     // Gather regular renderables
     {
@@ -227,26 +228,22 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
     // Material remap
     {
         ZoneScopedN("Material Remap");
-        std::unordered_map<Engine::MaterialID, uint32_t> materialRemap;
+        // todo revisit this, dont need this much indirection
         for (auto& instance : frameBuffer->mainViewFamily.mainPassInstances) {
-            if (!materialRemap.contains(instance.materialID)) {
-                uint32_t gpuIndex = frameBuffer->mainViewFamily.materials.size();
-                materialRemap[instance.materialID] = gpuIndex;
-                frameBuffer->mainViewFamily.materials.push_back(materialManager.Get(instance.materialID));
-            }
-            instance.gpuMaterialIndex = materialRemap[instance.materialID];
+            instance.gpuMaterialIndex = materialManager->GetMaterialIndex(instance.materialID);
         }
 
         for (auto& customDraw : frameBuffer->mainViewFamily.customShaderDraws) {
+
             for (auto& instance : customDraw.second.instances) {
-                if (!materialRemap.contains(instance.materialID)) {
-                    uint32_t gpuIndex = frameBuffer->mainViewFamily.materials.size();
-                    materialRemap[instance.materialID] = gpuIndex;
-                    frameBuffer->mainViewFamily.materials.push_back(materialManager.Get(instance.materialID));
-                }
-                instance.gpuMaterialIndex = materialRemap[instance.materialID];
+                instance.gpuMaterialIndex = materialManager->GetMaterialIndex(instance.materialID);
             }
         }
+    }
+
+    frameBuffer->mainViewFamily.materials.resize(Render::BINDLESS_MATERIAL_BUFFER_COUNT);
+    for (auto& [matID, slotIndex] : materialManager->GetIdToEntryMap()) {
+        frameBuffer->mainViewFamily.materials[slotIndex] = materialManager->GetImmutableProperties(matID);
     }
 }
 }

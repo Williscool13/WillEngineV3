@@ -19,6 +19,8 @@ add_library(engine STATIC
         logging/engine_log.h
         logging/log_category.cpp
         logging/log_category.h
+        core/material_id.cpp
+        core/material_id.h
 )
 
 target_include_directories(engine PRIVATE

@@ -12,6 +12,7 @@
 #include <TaskScheduler.h>
 #include <concurrentqueue/concurrentqueue.h>
 
+#include "asset_load_config.h"
 #include "asset-load-jobs/audio_load_slot.h"
 #include "asset-load-jobs/pipeline_load_slot.h"
 #include "asset-load-jobs/will_model_load_slot.h"

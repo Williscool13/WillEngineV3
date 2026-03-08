@@ -126,6 +126,7 @@ private: // Main Systems
 
     std::unique_ptr<AssetLoad::AsyncAssetLoadManager> asyncAssetLoadManager{};
     std::unique_ptr<AssetManager> assetManager{};
+    std::unique_ptr<MaterialManager> materialManager{};
     std::unique_ptr<Physics::PhysicsSystem> physicsSystem{};
 #if WILL_EDITOR
     std::unique_ptr<Editor::AssetGenerator> modelGenerator{};

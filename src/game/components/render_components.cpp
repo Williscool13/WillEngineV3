@@ -121,11 +121,11 @@ ComponentEditorResult DrawComponentEditor<Component::StaticMeshComponent>(Compon
             else {
                 if (ImGui::BeginCombo("Select Mesh", "")) {
                     for (int32_t i = 0; i < model->modelData.meshes.size(); i++) {
-                        auto name = model->modelData.meshes[i].name;
-                        if (name.empty()) {
-                            name = fmt::format("Mesh {}", i);
+                        auto _name = model->modelData.meshes[i].name;
+                        if (_name.empty()) {
+                            _name = fmt::format("Mesh {}", i);
                         }
-                        if (ImGui::Selectable(name.c_str(), false)) {
+                        if (ImGui::Selectable(_name.c_str(), false)) {
                             component.meshIndex = i;
                             registry.emplace_or_replace<Component::StaticMeshLoadingTag>(entity);
                             auto* transform = registry.try_get<Component::TransformComponent>(entity);
@@ -161,7 +161,7 @@ ComponentEditorResult DrawComponentEditor<Component::StaticMeshComponent>(Compon
                 if (ImGui::TreeNode("", "Primitive %u", i)) {
                     const auto& prim = component.primitives[i];
                     ImGui::Text("Primitive Index: %u", prim.primitiveIndex);
-                    ImGui::Text("Material ID: %u", prim.materialID);
+                    ImGui::Text("Material ID: %llu", prim.materialID.id);
                     ImGui::TreePop();
                 }
                 ImGui::PopID();
@@ -195,8 +195,11 @@ void OnComponentAdded<Component::StaticMeshComponent>(Component::StaticMeshCompo
 template<>
 void OnComponentRemoved<Component::StaticMeshComponent>(Component::StaticMeshComponent& component, entt::registry& registry, entt::entity entity)
 {
+    auto* ctx = registry.ctx().get<Core::EngineContext*>();
+    for (size_t i = 0; i < component.primitiveCount; ++i) {
+        ctx->materialManager->ReleaseMaterial(component.primitives[i].materialID);
+    }
     if (component.modelHandle.IsValid()) {
-        auto* ctx = registry.ctx().get<Core::EngineContext*>();
         ctx->assetManager->UnloadModel(component.modelHandle);
     }
 
