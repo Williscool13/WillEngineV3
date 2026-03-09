@@ -9,7 +9,7 @@
 
 #include "audio/audio_asset.h"
 #include "platform/thread_utils.h"
-#include "../render/types/texture_asset.h"
+#include "engine/textures/texture.h"
 #include "asset-load-jobs/cubemap_load_slot.h"
 #include "render/pipelines/pipeline_data.h"
 #include "render/types/cubemap_asset.h"
@@ -347,7 +347,7 @@ bool AsyncAssetLoadManager::TryDequeueModelComplete(WillModelLoadComplete& outRe
     return modelLoadCompleteQueue.try_dequeue(outResult);
 }
 
-void AsyncAssetLoadManager::RequestTextureLoad(Render::Texture* texture)
+void AsyncAssetLoadManager::RequestTextureLoad(Engine::Texture* texture)
 {
     ZoneScoped;
 

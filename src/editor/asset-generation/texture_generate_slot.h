@@ -16,6 +16,7 @@
 #include "dds_defs.h"
 #include "core/allocators/handle.h"
 #include "core/allocators/linear_allocator.h"
+#include "engine/core/texture_id.h"
 #include "render/vulkan/vk_resources.h"
 
 namespace Render
@@ -40,7 +41,7 @@ struct TextureGenerateSlot
         std::function<void(bool success, TextureGenerateSlotHandle slotHandle)> notifyCallback
     );
 
-    void Launch(TextureGenerateSlotHandle _slotHandle, const std::filesystem::path& _imagePath, const std::filesystem::path& _outputPath, bool _mipmapped, DXGI_FORMAT _targetFormat);
+    void Launch(TextureGenerateSlotHandle _slotHandle, const std::filesystem::path& _imagePath, const std::filesystem::path& _outputPath, Engine::TextureID _textureId, bool _mipmapped, DXGI_FORMAT _targetFormat);
     void Clear();
 
     struct GenerateTask : enki::ITaskSet
@@ -51,10 +52,11 @@ struct TextureGenerateSlot
 
     std::filesystem::path imagePath;
     std::filesystem::path outputPath;
+    Engine::TextureID textureId{};
 
 private:
     bool LoadImageAndGenerate(VkCommandBuffer cmd, const std::function<void()>& startRecording, const std::function<void(bool)>& submitAndWait);
-    bool WriteKTXFile();
+    bool WriteWTextureFile();
 
     enki::TaskScheduler* scheduler{nullptr};
     Render::VulkanContext* context{nullptr};

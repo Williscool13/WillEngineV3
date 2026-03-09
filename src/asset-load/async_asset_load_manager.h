@@ -64,12 +64,12 @@ struct WillModelLoadComplete
 
 struct TextureLoadRequest
 {
-    Render::Texture* texture;
+    Engine::Texture* texture;
 };
 
 struct TextureLoadComplete
 {
-    Render::Texture* texture;
+    Engine::Texture* texture;
     bool bSuccess;
 };
 
@@ -123,7 +123,7 @@ public:
     bool TryDequeueModelComplete(WillModelLoadComplete& outResult);
 
     // Texture loading
-    void RequestTextureLoad(Render::Texture* texture);
+    void RequestTextureLoad(Engine::Texture* texture);
 
     bool TryDequeueTextureComplete(TextureLoadComplete& outResult);
 

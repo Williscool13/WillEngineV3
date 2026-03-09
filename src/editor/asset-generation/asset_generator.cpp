@@ -111,7 +111,7 @@ void AssetGenerator::ThreadMain()
                 Core::Handle<TextureGenerateSlot> slotHandle = textureGenerateAllocator.Add();
                 if (slotHandle.IsValid()) {
                     TextureGenerateSlot& task = textureGenerateTasks[slotHandle.index];
-                    task.Launch(slotHandle, req.imagePath, req.outputPath, req.mipmapped, req.targetFormat);
+                    task.Launch(slotHandle, req.imagePath, req.outputPath, req.textureId, req.mipmapped, req.targetFormat);
                 }
                 else {
                     textureGenerateRequestQueue.enqueue(req);
@@ -181,7 +181,7 @@ void AssetGenerator::RequestTextureGenerate(const std::filesystem::path& imagePa
 {
     ZoneScoped;
 
-    textureGenerateRequestQueue.enqueue({imagePath, outputPath, mipmapped, targetFormat});
+    textureGenerateRequestQueue.enqueue({imagePath, outputPath, Engine::TextureID(textureIdRng()), mipmapped, targetFormat});
     workCounter.fetch_add(1);
     wakeCV.notify_one();
 }
@@ -255,7 +255,7 @@ void AssetGenerator::OnTextureGenerateComplete(bool success, TextureGenerateSlot
     }
 
     TextureGenerateSlot& task = textureGenerateTasks[slotHandle.index];
-    textureGenerateCompleteQueue.enqueue({task.outputPath, success});
+    textureGenerateCompleteQueue.enqueue({task.outputPath, task.textureId, success});
 
     if (success) {
         SPDLOG_INFO("Successfully generated texture: {}", task.outputPath.string());

@@ -17,9 +17,13 @@ namespace enki
 class TaskScheduler;
 }
 
-namespace Render
+namespace Engine
 {
 struct Texture;
+}
+
+namespace Render
+{
 struct ResourceManager;
 struct VulkanContext;
 }
@@ -44,7 +48,7 @@ public:
         TextureSlotHandle _textureSlotHandle,
         UploadStagingSlotHandle _uploadStagingSlotHandle,
         UploadStaging* _uploadStaging,
-        Render::Texture* _outputTexture);
+        Engine::Texture* _outputTexture);
 
     void Clear();
 
@@ -59,7 +63,7 @@ public:
     TextureSlotHandle textureSlotHandle{};
     UploadStagingSlotHandle uploadStagingSlotHandle{};
 
-    Render::Texture* outputTexture{nullptr};
+    Engine::Texture* outputTexture{nullptr};
     UploadStaging* uploadStaging{nullptr};
 
 private:

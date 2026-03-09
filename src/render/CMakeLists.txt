@@ -52,8 +52,6 @@ add_library(render STATIC
         shaders/constants_interop.h
         types/cubemap_asset.cpp
         types/cubemap_asset.h
-        types/texture_asset.cpp
-        types/texture_asset.h
         render-graph/render_graph.cpp
         render-graph/render_graph.h
         render-graph/render_graph_resources.cpp

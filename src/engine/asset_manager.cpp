@@ -4,7 +4,11 @@
 
 #include "asset_manager.h"
 
+#include <fstream>
+
 #include "asset-load/async_asset_load_manager.h"
+#include "core/hash/fnv_1_a.h"
+#include "engine/textures/texture_format.h"
 #include "logging/engine_log.h"
 #include "platform/paths.h"
 #include "render/model/model_serialization.h"
@@ -21,12 +25,12 @@ AssetManager::AssetManager(AssetLoad::AsyncAssetLoadManager* assetLoadManager, R
 
     whiteTextureHandle = textureAllocator.Add();
     assert(whiteTextureHandle.IsValid());
-    Render::Texture& whiteTexture = textures[whiteTextureHandle.index];
+    Texture& whiteTexture = textures[whiteTextureHandle.index];
     whiteTexture.selfHandle = whiteTextureHandle;
     whiteTexture.source = whitePath;
     whiteTexture.name = whitePath.stem().string();
-    whiteTexture.textureId = SID("white");
-    whiteTexture.loadState = Render::Texture::LoadState::NotLoaded;
+    whiteTexture.textureId = TextureID(fnv1a64("white", 5));
+    whiteTexture.loadState = Texture::LoadState::NotLoaded;
     whiteTexture.refCount = 1;
     whiteTexture.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTexture();
     assert(whiteTexture.bindlessHandle.index == WHITE_IMAGE_BINDLESS_INDEX);
@@ -34,12 +38,12 @@ AssetManager::AssetManager(AssetLoad::AsyncAssetLoadManager* assetLoadManager, R
 
     errorTextureHandle = textureAllocator.Add();
     assert(errorTextureHandle.IsValid());
-    Render::Texture& errorTexture = textures[errorTextureHandle.index];
+    Texture& errorTexture = textures[errorTextureHandle.index];
     errorTexture.selfHandle = errorTextureHandle;
     errorTexture.source = errorPath;
     errorTexture.name = errorPath.stem().string();
-    errorTexture.textureId = SID("error");
-    errorTexture.loadState = Render::Texture::LoadState::NotLoaded;
+    errorTexture.textureId = TextureID(fnv1a64("error", 5));
+    errorTexture.loadState = Texture::LoadState::NotLoaded;
     errorTexture.refCount = 1;
     errorTexture.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTexture();
     assert(errorTexture.bindlessHandle.index == ERROR_IMAGE_BINDLESS_INDEX);
@@ -47,12 +51,12 @@ AssetManager::AssetManager(AssetLoad::AsyncAssetLoadManager* assetLoadManager, R
 
     brdfLutTextureHandle = textureAllocator.Add();
     assert(brdfLutTextureHandle.IsValid());
-    Render::Texture& brdfLutTexture = textures[brdfLutTextureHandle.index];
+    Texture& brdfLutTexture = textures[brdfLutTextureHandle.index];
     brdfLutTexture.selfHandle = brdfLutTextureHandle;
     brdfLutTexture.source = brdfLutPath;
     brdfLutTexture.name = brdfLutPath.stem().string();
-    brdfLutTexture.textureId = SID("brdf_lut");
-    brdfLutTexture.loadState = Render::Texture::LoadState::NotLoaded;
+    brdfLutTexture.textureId = TextureID(fnv1a64("brdf_lut", 8));
+    brdfLutTexture.loadState = Texture::LoadState::NotLoaded;
     brdfLutTexture.refCount = 1;
     brdfLutTexture.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTexture();
     assert(brdfLutTexture.bindlessHandle.index == BRDF_LUT_BINDLESS_INDEX);
@@ -104,7 +108,22 @@ AssetManager::AssetManager(AssetLoad::AsyncAssetLoadManager* assetLoadManager, R
         }
     }
 
-    textureRegistry["smiling_friend"_sid] = assetPath / "textures/smiling_friend.ktx2";
+    std::filesystem::path texturesPath = assetPath / "textures";
+    if (std::filesystem::exists(texturesPath)) {
+        for (const auto& entry : std::filesystem::recursive_directory_iterator(texturesPath)) {
+            if (entry.path().extension() != ".wtexture") { continue; }
+            std::ifstream f(entry.path(), std::ios::binary);
+            WTextureHeader header{};
+            f.read(reinterpret_cast<char*>(&header), sizeof(header));
+            if (!f || memcmp(header.magic, WILL_TEXTURE_MAGIC, sizeof(header.magic)) != 0) { continue; }
+            if (header.majorVersion != TEXTURE_MAJOR_VERSION) { continue; }
+            TextureID id{header.textureId};
+            const std::string name{header.name};
+            assert(!textureNameToId.contains(name) && "Duplicate .wtexture name detected");
+            textureRegistry[id] = entry.path();
+            textureNameToId[name] = id;
+        }
+    }
 
     cubemapRegistry["kloofendal"_sid] = assetPath / "environment-map/kloofendal_48d_partly_cloudy_puresky_4k.ktx2";
 
@@ -237,12 +256,12 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
         if (textureComplete.bSuccess) {
             stagingFrameBuffer.imageAcquireOperations.push_back(textureComplete.texture->acquireBarrier);
 
-            textureComplete.texture->loadState = Render::Texture::LoadState::Loaded;
+            textureComplete.texture->loadState = Engine::Texture::LoadState::Loaded;
             LOG_INFO(Asset, "Texture load succeeded: {} (bindless index: {})", textureComplete.texture->name, static_cast<uint32_t>(textureComplete.texture->bindlessHandle.index));
             loadCounts.textureLoadedCount++;
         }
         else {
-            textureComplete.texture->loadState = Render::Texture::LoadState::NotLoaded;
+            textureComplete.texture->loadState = Engine::Texture::LoadState::NotLoaded;
             LOG_ERROR(Asset, "Texture load failed: {}", textureComplete.texture->name);
         }
     }
@@ -287,7 +306,7 @@ void AssetManager::ResolveUnloads()
 
         textureComplete.texture->source.clear();
         textureComplete.texture->name.clear();
-        textureComplete.texture->loadState = Render::Texture::LoadState::NotLoaded;
+        textureComplete.texture->loadState = Engine::Texture::LoadState::NotLoaded;
         textureComplete.texture->selfHandle = TextureHandle::INVALID;
         if (textureComplete.texture->bindlessHandle.index != 0) {
             resourceManager->bindlessSamplerTextureDescriptorBuffer.ReleaseTextureBinding(textureComplete.texture->bindlessHandle);
@@ -298,10 +317,10 @@ void AssetManager::ResolveUnloads()
     }*/
 }
 
-TextureHandle AssetManager::LoadTexture(StringID textureId)
+TextureHandle AssetManager::LoadTexture(TextureID textureId)
 {
     if (!textureRegistry.contains(textureId)) {
-        LOG_ERROR(Asset, "Texture '{}' not found in registry", textureId.ToString());
+        LOG_ERROR(Asset, "Texture {:x} not found in registry", textureId.id);
         return TextureHandle::INVALID;
     }
 
@@ -309,7 +328,7 @@ TextureHandle AssetManager::LoadTexture(StringID textureId)
     if (it != textureIdToHandle.end()) {
         TextureHandle existingHandle = it->second;
         if (textureAllocator.IsValid(existingHandle)) {
-            Render::Texture& texture = textures[existingHandle.index];
+            Engine::Texture& texture = textures[existingHandle.index];
             texture.refCount++;
             LOG_TRACE(Asset, "Texture already loaded: {}, refCount: {}", texture.name, texture.refCount);
             return existingHandle;
@@ -319,17 +338,17 @@ TextureHandle AssetManager::LoadTexture(StringID textureId)
 
     TextureHandle handle = textureAllocator.Add();
     if (!handle.IsValid()) {
-        LOG_ERROR(Asset, "Failed to allocate texture slot for: {}", textureId.ToString());
+        LOG_ERROR(Asset, "Failed to allocate texture slot for {:x}", textureId.id);
         return TextureHandle::INVALID;
     }
 
     const std::filesystem::path& path = textureRegistry[textureId];
-    Render::Texture& texture = textures[handle.index];
+    Engine::Texture& texture = textures[handle.index];
     texture.selfHandle = handle;
     texture.source = path;
     texture.name = path.stem().string();
     texture.textureId = textureId;
-    texture.loadState = Render::Texture::LoadState::Loading;
+    texture.loadState = Engine::Texture::LoadState::Loading;
     texture.refCount = 1;
     texture.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTexture();
 
@@ -340,7 +359,7 @@ TextureHandle AssetManager::LoadTexture(StringID textureId)
     return handle;
 }
 
-Render::Texture* AssetManager::GetTexture(TextureHandle handle)
+Engine::Texture* AssetManager::GetTexture(TextureHandle handle)
 {
     if (!textureAllocator.IsValid(handle)) {
         return nullptr;
@@ -356,13 +375,13 @@ void AssetManager::UnloadTexture(TextureHandle handle)
         return;
     }
 
-    Render::Texture& texture = textures[handle.index];
+    Engine::Texture& texture = textures[handle.index];
     texture.refCount--;
 
     LOG_TRACE(Asset, "Texture refCount decremented: {}, refCount: {}", texture.name, texture.refCount);
 
     if (texture.refCount == 0) {
-        texture.loadState = Render::Texture::LoadState::NotLoaded;
+        texture.loadState = Engine::Texture::LoadState::NotLoaded;
         // assetLoadThread->RequestTextureUnload(handle, &texture);
         textureIdToHandle.erase(texture.textureId);
     }
@@ -433,5 +452,10 @@ void AssetManager::UnloadCubemap(CubemapHandle handle)
         // assetLoadThread->RequestCubemapUnload(handle, &cubemap);
         cubemapIdToHandle.erase(cubemap.cubemapId);
     }
+}
+TextureID AssetManager::FindTextureByName(std::string_view name) const
+{
+    auto it = textureNameToId.find(std::string(name));
+    return it != textureNameToId.end() ? it->second : TextureID::INVALID;
 }
 } // Engine

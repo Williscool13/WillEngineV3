@@ -11,7 +11,7 @@
 #include "asset_manager_types.h"
 #include "materials/material_manager.h"
 #include "core/allocators/handle_allocator.h"
-#include "render/types/texture_asset.h"
+#include "engine/textures/texture.h"
 #include "render/types/cubemap_asset.h"
 #include "render/model/model_format.h"
 #include "render/model/model_types.h"
@@ -72,11 +72,13 @@ public: // Models
 
 
 public: // Textures
-    TextureHandle LoadTexture(StringID textureId);
+    TextureHandle LoadTexture(TextureID textureId);
 
-    Render::Texture* GetTexture(TextureHandle handle);
+    Texture* GetTexture(TextureHandle handle);
 
     void UnloadTexture(TextureHandle handle);
+
+    [[nodiscard]] TextureID FindTextureByName(std::string_view name) const;
 
 public: // Cubemaps
     CubemapHandle LoadCubemap(StringID cubemapId);
@@ -108,9 +110,9 @@ private:
     Core::HandleAllocator<Render::WillModel, MAX_LOADED_MODELS> modelAllocator;
     std::array<Render::WillModel, MAX_LOADED_MODELS> models;
 
-    Core::HandleAllocator<Render::Texture, MAX_LOADED_TEXTURES> textureAllocator;
-    std::array<Render::Texture, MAX_LOADED_TEXTURES> textures{};
-    std::unordered_map<StringID, TextureHandle> textureIdToHandle;
+    Core::HandleAllocator<Texture, MAX_LOADED_TEXTURES> textureAllocator;
+    std::array<Texture, MAX_LOADED_TEXTURES> textures{};
+    std::unordered_map<TextureID, TextureHandle> textureIdToHandle;
 
     Core::HandleAllocator<Render::Cubemap, MAX_LOADED_CUBEMAPS> cubemapAllocator;
     std::array<Render::Cubemap, MAX_LOADED_CUBEMAPS> cubemaps{};
@@ -129,7 +131,8 @@ public: // Scenes
 private: // Temporary Asset Registry
     std::unordered_map<StringID, std::filesystem::path> modelRegistry;
     std::unordered_map<StringID, CachedModelMetadata> modelMetadataCache;
-    std::unordered_map<StringID, std::filesystem::path> textureRegistry;
+    std::unordered_map<TextureID, std::filesystem::path> textureRegistry;
+    std::unordered_map<std::string, TextureID> textureNameToId;
     std::unordered_map<StringID, std::filesystem::path> cubemapRegistry;
     std::unordered_map<StringID, std::filesystem::path> sceneRegistry;
 };

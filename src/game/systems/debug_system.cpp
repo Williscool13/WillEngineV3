@@ -335,7 +335,7 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
             sphereHandle = ctx->assetManager->LoadModel("sphere"_sid);
             sponzaHandle = ctx->assetManager->LoadModel("sponza"_sid);
             //sponzaHandle = ctx->assetManager->LoadModel("intel_sponza"_sid);
-            textureHandle = ctx->assetManager->LoadTexture("smiling_friend"_sid);
+            textureHandle = ctx->assetManager->LoadTexture(ctx->assetManager->FindTextureByName("smiling_friend"));
             cubemapHandle = ctx->assetManager->LoadCubemap("kloofendal"_sid);
         }
 

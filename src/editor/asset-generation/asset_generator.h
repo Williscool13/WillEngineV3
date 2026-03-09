@@ -5,9 +5,12 @@
 #include <atomic>
 #include <mutex>
 #include <condition_variable>
+#include <random>
 #include <semaphore>
 #include <thread>
 #include <concurrentqueue/concurrentqueue.h>
+
+#include "engine/core/texture_id.h"
 
 #include "asset_generation_types.h"
 #include "environment_map_generate_slot.h"
@@ -59,6 +62,7 @@ struct TextureGenerateRequest
 {
     std::filesystem::path imagePath;
     std::filesystem::path outputPath;
+    Engine::TextureID textureId;
     bool mipmapped;
     DXGI_FORMAT targetFormat;
 };
@@ -66,6 +70,7 @@ struct TextureGenerateRequest
 struct TextureGenerateComplete
 {
     std::filesystem::path outputPath;
+    Engine::TextureID textureId;
     bool success;
 };
 
@@ -130,6 +135,8 @@ private:
     Render::RenderThread* renderThread;
     AssetLoad::AsyncAssetLoadManager* asyncAssetLoadManager;
     std::unique_ptr<enki::TaskScheduler> assetGeneratorScheduler;
+
+    std::mt19937_64 textureIdRng{std::random_device{}()};
 
     std::array<ModelGenerateSlot, MODEL_GENERATION_JOB_COUNT> modelGenerateTasks;
     Core::LockFreeHandleAllocator<ModelGenerateSlot, MODEL_GENERATION_JOB_COUNT> modelGenerateAllocator;

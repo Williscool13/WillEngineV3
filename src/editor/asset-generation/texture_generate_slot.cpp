@@ -4,6 +4,7 @@
 
 #include "texture_generate_slot.h"
 
+#include <fstream>
 #include <spdlog/spdlog.h>
 #include <stb/stb_image.h>
 #include <ktx.h>
@@ -11,6 +12,7 @@
 
 #include "asset_generation_types.h"
 #include "bc7enc_rdo/rdo_bc_encoder.h"
+#include "engine/textures/texture_format.h"
 #include "platform/paths.h"
 #include "render/vulkan/vk_context.h"
 #include "render/vulkan/vk_helpers.h"
@@ -39,11 +41,12 @@ void TextureGenerateSlot::Initialize(
     imageReceivingBuffer = Render::AllocatedBuffer::CreateAllocatedReceivingBuffer(context, TEXTURE_GENERATION_STAGING_BUFFER_SIZE);
 }
 
-void TextureGenerateSlot::Launch(TextureGenerateSlotHandle _slotHandle, const std::filesystem::path& _imagePath, const std::filesystem::path& _outputPath, bool _mipmapped, DXGI_FORMAT _targetFormat)
+void TextureGenerateSlot::Launch(TextureGenerateSlotHandle _slotHandle, const std::filesystem::path& _imagePath, const std::filesystem::path& _outputPath, Engine::TextureID _textureId, bool _mipmapped, DXGI_FORMAT _targetFormat)
 {
     slotHandle = _slotHandle;
     imagePath = _imagePath;
     outputPath = _outputPath;
+    textureId = _textureId;
     mipmapped = _mipmapped;
     targetFormat = _targetFormat;
 
@@ -108,7 +111,7 @@ void TextureGenerateSlot::GenerateTask::ExecuteRange(enki::TaskSetPartition rang
         return;
     }
 
-    if (!taskSlot->WriteKTXFile()) {
+    if (!taskSlot->WriteWTextureFile()) {
         taskSlot->_notifyCallback(false, taskSlot->slotHandle);
         vkDestroyFence(taskSlot->context->device, graphicsFence, nullptr);
         vkDestroyCommandPool(taskSlot->context->device, graphicsCommandPool, nullptr);
@@ -277,9 +280,9 @@ bool TextureGenerateSlot::LoadImageAndGenerate(VkCommandBuffer cmd, const std::f
     return true;
 }
 
-bool TextureGenerateSlot::WriteKTXFile()
+bool TextureGenerateSlot::WriteWTextureFile()
 {
-    ZoneScopedN("WriteKTXFile");
+    ZoneScopedN("WriteWTextureFile");
 
     VkFormat targetVkFormat;
     switch (targetFormat) {
@@ -369,13 +372,46 @@ bool TextureGenerateSlot::WriteKTXFile()
         scheduler->WaitforTask(&_task);
     }
 
-    result = ktxTexture_WriteToNamedFile(ktxTexture(texture), outputPath.string().c_str());
+    const char writer[] = "WillEngine";
+    ktxHashList_AddKVPair(&texture->kvDataHead, KTX_WRITER_KEY, sizeof(writer), writer);
+
+    ktx_uint8_t* ktxBytes{nullptr};
+    ktx_size_t ktxSize{0};
+    result = ktxTexture2_WriteToMemory(texture, &ktxBytes, &ktxSize);
     ktxTexture_Destroy(ktxTexture(texture));
 
     if (result != KTX_SUCCESS) {
-        SPDLOG_ERROR("[TextureGenerateSlot] Failed to write KTX file");
+        SPDLOG_ERROR("[TextureGenerateSlot] Failed to serialise KTX texture to memory");
         return false;
     }
+
+    Engine::WTextureHeader header{};
+    memcpy(header.magic, Engine::WILL_TEXTURE_MAGIC, sizeof(header.magic));
+    header.majorVersion = Engine::TEXTURE_MAJOR_VERSION;
+    header.minorVersion = Engine::TEXTURE_MINOR_VERSION;
+    header.textureId    = textureId.id;
+    header.width        = sourceImage.extent.width;
+    header.height       = sourceImage.extent.height;
+    header.mipCount     = mipLevels;
+    header.dataOffset   = static_cast<uint32_t>(sizeof(Engine::WTextureHeader));
+    header.dataSize     = static_cast<uint64_t>(ktxSize);
+
+    const std::string stem = imagePath.stem().string();
+    const size_t copyLen = std::min(stem.size(), Engine::WTEXTURE_NAME_LENGTH - 1);
+    memcpy(header.name, stem.c_str(), copyLen);
+    header.name[copyLen] = '\0';
+
+    std::filesystem::create_directories(outputPath.parent_path());
+    std::ofstream f(outputPath, std::ios::binary);
+    if (!f) {
+        free(ktxBytes);
+        SPDLOG_ERROR("[TextureGenerateSlot] Failed to open output file: {}", outputPath.string());
+        return false;
+    }
+
+    f.write(reinterpret_cast<const char*>(&header), sizeof(header));
+    f.write(reinterpret_cast<const char*>(ktxBytes), static_cast<std::streamsize>(ktxSize));
+    free(ktxBytes);
 
     SPDLOG_INFO("[TextureGenerateSlot] Wrote {}", outputPath.string());
     return true;

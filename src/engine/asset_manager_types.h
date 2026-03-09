@@ -15,13 +15,14 @@ namespace Render
 {
 struct Cubemap;
 struct WillModel;
-struct Texture;
 }
 
 namespace Engine
 {
+struct Texture;
+
 using WillModelHandle = Core::Handle<Render::WillModel>;
-using TextureHandle = Core::Handle<Render::Texture>;
+using TextureHandle = Core::Handle<Texture>;
 using CubemapHandle = Core::Handle<Render::Cubemap>;
 using AudioHandle = Core::Handle<Audio::WillAudio>;
 }

@@ -8,7 +8,7 @@
 
 #include "asset-load/asset_load_config.h"
 #include "ktxvulkan.h"
-#include "../../render/types/texture_asset.h"
+#include "engine/textures/texture.h"
 #include "render/vulkan/vk_utils.h"
 #include "tracy/Tracy.hpp"
 
@@ -36,7 +36,7 @@ void TextureLoadSlot::Launch(
     TextureSlotHandle _textureSlotHandle,
     UploadStagingSlotHandle _uploadStagingSlotHandle,
     UploadStaging* _uploadStaging,
-    Render::Texture* _outputTexture)
+    Engine::Texture* _outputTexture)
 {
     textureSlotHandle = _textureSlotHandle;
     uploadStagingSlotHandle = _uploadStagingSlotHandle;

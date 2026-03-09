@@ -156,9 +156,6 @@ MaterialProperties MaterialManager::GetProperties(MaterialID id) const
     if (auto it = materials.find(id); it != materials.end()) {
         return it->second.props;
     }
-    if (auto it = materials.find(id); it != materials.end()) {
-        return it->second.props;
-    }
     return {};
 }
 

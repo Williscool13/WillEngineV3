@@ -617,10 +617,10 @@ void WillEngine::EditorImgui()
                 DXGI_FORMAT_BC7_UNORM_SRGB);
         }
 
-        if (ImGui::Button("smiling_friend.ktx2")) {
+        if (ImGui::Button("smiling_friend.wtexture")) {
             modelGenerator->RequestTextureGenerate(
                 Platform::GetAssetPath() / "textures/smiling_friend.jpg",
-                Platform::GetAssetPath() / "textures/smiling_friend.ktx2",
+                Platform::GetAssetPath() / "textures/smiling_friend.wtexture",
                 false,
                 DXGI_FORMAT_BC7_UNORM_SRGB);
         }
