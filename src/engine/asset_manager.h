@@ -9,7 +9,7 @@
 
 #include "asset_manager_config.h"
 #include "asset_manager_types.h"
-#include "material_manager.h"
+#include "materials/material_manager.h"
 #include "core/allocators/handle_allocator.h"
 #include "render/types/texture_asset.h"
 #include "render/types/cubemap_asset.h"

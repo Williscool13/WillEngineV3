@@ -53,7 +53,7 @@ entt::entity CreateTextureVisualizer(Core::EngineContext* ctx, Engine::GameState
     Render::MeshInformation& submesh = model->modelData.meshes[0];
 
     for (size_t i = 0; i < submesh.primitiveProperties.size(); ++i) {
-        MaterialProperties material = Engine::CreateDefaultMaterial();
+        MaterialProperties material = ctx->materialManager->GetDefaultMaterialProperties();
         material.textureImageIndices.x = BRDF_LUT_BINDLESS_INDEX;
         Engine::MaterialID matID = materialManager->CreateImmutableMaterial(material);
         materialManager->AcquireMaterial(matID);
@@ -272,7 +272,7 @@ entt::entity CreateGlowingBox(Core::EngineContext* ctx, Engine::GameState* state
 
         MaterialProperties material;
         if (primitive.materialIndex == -1) {
-            material = Engine::CreateDefaultMaterial();
+            material = ctx->materialManager->GetDefaultMaterialProperties();
         }
         else {
             material = model->modelData.materials[primitive.materialIndex];

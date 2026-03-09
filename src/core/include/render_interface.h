@@ -15,7 +15,7 @@
 #include "core/allocators/handle.h"
 #include "core/math/transform.h"
 #include "core/time/time_frame.h"
-#include "engine/material_manager.h"
+#include "../../engine/materials/material_manager.h"
 #include "glm/detail/type_quat.hpp"
 #include "render/render_config.h"
 #include "render/shaders/model_interop.h"

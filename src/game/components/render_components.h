@@ -10,7 +10,7 @@
 #include <glm/glm.hpp>
 
 #include "core/string_id.h"
-#include "engine/material_manager.h"
+#include "../../engine/materials/material_manager.h"
 #include "render/model/will_model_asset.h"
 
 namespace Game::Component

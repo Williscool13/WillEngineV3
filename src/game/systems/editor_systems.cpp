@@ -17,7 +17,7 @@
 #include "core/input/input_frame.h"
 #include "core/math/constants.h"
 #include "engine/engine_api.h"
-#include "engine/material_manager.h"
+#include "engine/materials/material_manager.h"
 #include "game/fwd_components.h"
 #include "game/components/common_components.h"
 #include "game/components/scene_components.h"
@@ -520,6 +520,17 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
     }
     ImGui::End();
 
+    glm::vec3 multiGizmoCentroid{0.0f};
+    int transformCount = 0;
+    for (auto entity : state->selectedEntities) {
+        if (auto* tf = state->registry.try_get<Component::TransformComponent>(entity)) {
+            multiGizmoCentroid += tf->translation;
+            ++transformCount;
+        }
+    }
+    if (transformCount > 0)
+        multiGizmoCentroid /= static_cast<float>(transformCount);
+
     if (ImGui::Begin("Details")) {
         if (state->selectedEntities.size() == 1) {
             ComponentEntry* entryToRemove = nullptr;
@@ -540,48 +551,6 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
                 entryToRemove->onRemoveComponent(state->registry, entity);
             }
 
-            if (!state->bCustomGizmoActive) {
-                if (auto* transform = state->registry.try_get<Component::TransformComponent>(entity)) {
-                    glm::mat4 model = Component::GetMatrix(*transform);
-                    float snapArr[3] = {};
-                    float* snap = nullptr;
-                    if (state->bSnapEnabled) {
-                        if (state->currentGizmoOperation == ImGuizmo::TRANSLATE) {
-                            snapArr[0] = snapArr[1] = snapArr[2] = state->snapTranslation;
-                        }
-                        else if (state->currentGizmoOperation == ImGuizmo::ROTATE) {
-                            snapArr[0] = snapArr[1] = snapArr[2] = state->snapRotation;
-                        }
-                        else {
-                            snapArr[0] = snapArr[1] = snapArr[2] = state->snapScale;
-                        }
-                        snap = snapArr;
-                    }
-                    ImGuizmo::Manipulate(
-                        glm::value_ptr(view),
-                        glm::value_ptr(proj),
-                        state->currentGizmoOperation,
-                        state->currentGizmoMode,
-                        glm::value_ptr(model),
-                        nullptr,
-                        snap
-                    );
-                    if (ImGuizmo::IsUsing()) {
-                        float t[3], r[3], s[3];
-                        ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(model), t, r, s);
-                        transform->translation = glm::vec3(t[0], t[1], t[2]);
-                        transform->rotation = glm::quat(glm::radians(glm::vec3(r[0], r[1], r[2])));
-                        if (state->bUniformScaleMode) {
-                            transform->scale = glm::vec3((s[0] + s[1] + s[2]) / 3.0f);
-                        }
-                        else {
-                            transform->scale = glm::vec3(s[0], s[1], s[2]);
-                        }
-                        state->registry.emplace_or_replace<Component::DirtyTransformTag>(entity);
-                    }
-                }
-            }
-
             ImGui::Spacing();
             ImGui::SetNextWindowSize(ImVec2(250, 0));
             if (ImGui::Button("Add Component"))
@@ -593,7 +562,7 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
                 ImGui::InputText("##compsearch", compSearch, sizeof(compSearch));
 
                 for (auto& entry : state->componentRegistry.registry) {
-                    if (compSearch[0] && !strstr(entry.name, compSearch)) continue;
+                    if (compSearch[0] && !strstr(entry.name, compSearch)) { continue; }
                     if (entry.has(state->registry, entity)) {
                         ImGui::BeginDisabled(true);
                         ImGui::MenuItem(entry.name);
@@ -612,24 +581,17 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
         else if (multiSelected) {
             ImGui::Text("%zu entities selected", state->selectedEntities.size());
             ImGui::Text("Ctrl+Click to add/remove entities");
+            if (transformCount > 0)
+                ImGui::Text("Centroid: (%.2f, %.2f, %.2f)", multiGizmoCentroid.x, multiGizmoCentroid.y, multiGizmoCentroid.z);
+        }
+    }
+    ImGui::End();
 
-            // Compute centroid of all selected entities that have a transform
-            glm::vec3 averagePos{0.0f};
-            int transformCount = 0;
-            for (auto entity : state->selectedEntities) {
-                if (auto* tf = state->registry.try_get<Component::TransformComponent>(entity)) {
-                    averagePos += tf->translation;
-                    ++transformCount;
-                }
-            }
-
-            if (transformCount > 0) {
-                averagePos /= static_cast<float>(transformCount);
-                ImGui::Text("Centroid: (%.2f, %.2f, %.2f)", averagePos.x, averagePos.y, averagePos.z);
-
-                static glm::quat s_prevRotation{1.0f, 0.0f, 0.0f, 0.0f};
-                static glm::vec3 s_prevScale{1.0f, 1.0f, 1.0f};
-
+    if (!state->bCustomGizmoActive && !state->selectedEntities.empty()) {
+        if (state->selectedEntities.size() == 1) {
+            entt::entity entity = state->selectedEntities[0];
+            if (auto* transform = state->registry.try_get<Component::TransformComponent>(entity)) {
+                auto model = Component::GetMatrix(*transform);
                 float snapArr[3] = {};
                 float* snap = nullptr;
                 if (state->bSnapEnabled) {
@@ -641,59 +603,108 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
                         snapArr[0] = snapArr[1] = snapArr[2] = state->snapScale;
                     snap = snapArr;
                 }
-                glm::mat4 gizmoMatrix = glm::translate(glm::mat4(1.0f), averagePos);
+
                 ImGuizmo::Manipulate(
                     glm::value_ptr(view),
                     glm::value_ptr(proj),
                     state->currentGizmoOperation,
-                    ImGuizmo::WORLD,
-                    glm::value_ptr(gizmoMatrix),
+                    state->currentGizmoMode,
+                    glm::value_ptr(model),
                     nullptr,
                     snap
                 );
-
                 if (ImGuizmo::IsUsing()) {
                     float t[3], r[3], s[3];
-                    ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(gizmoMatrix), t, r, s);
-
-                    const glm::vec3 newT = glm::vec3(t[0], t[1], t[2]);
-                    const glm::quat newR = glm::quat(glm::radians(glm::vec3(r[0], r[1], r[2])));
-                    const glm::vec3 newS = glm::vec3(s[0], s[1], s[2]);
-
-                    const glm::vec3 deltaTranslation = newT - averagePos;
-                    const glm::quat deltaRotation = newR * glm::conjugate(s_prevRotation);
-                    const glm::vec3 deltaScale = newS / s_prevScale;
-
-                    for (auto entity : state->selectedEntities) {
-                        auto* transform = state->registry.try_get<Component::TransformComponent>(entity);
-                        if (!transform) continue;
-
-                        transform->translation += deltaTranslation;
-
-                        glm::vec3 rel = transform->translation - averagePos;
-                        transform->translation = averagePos + deltaRotation * rel;
-                        transform->rotation = deltaRotation * transform->rotation;
-
-                        rel = transform->translation - averagePos;
-                        transform->translation = averagePos + rel * deltaScale;
-                        transform->scale *= deltaScale;
-
-                        state->registry.emplace_or_replace<Component::DirtyRenderTransformComponent>(entity);
-                        state->registry.emplace_or_replace<Component::TeleportPhysicsTransformTag>(entity);
-                    }
-
-                    s_prevRotation = newR;
-                    s_prevScale = newS;
-                }
-                else {
-                    // Reset each frame we're not dragging so the next drag starts from identity
-                    s_prevRotation = {1.0f, 0.0f, 0.0f, 0.0f};
-                    s_prevScale = {1.0f, 1.0f, 1.0f};
+                    ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(model), t, r, s);
+                    transform->translation = glm::vec3(t[0], t[1], t[2]);
+                    transform->rotation = glm::quat(glm::radians(glm::vec3(r[0], r[1], r[2])));
+                    if (state->bUniformScaleMode)
+                        transform->scale = glm::vec3((s[0] + s[1] + s[2]) / 3.0f);
+                    else
+                        transform->scale = glm::vec3(s[0], s[1], s[2]);
+                    state->registry.emplace_or_replace<Component::DirtyTransformTag>(entity);
                 }
             }
         }
+        else {
+            static glm::vec3 s_prevTranslation{};
+            static glm::quat s_prevRotation{1.0f, 0.0f, 0.0f, 0.0f};
+            static glm::vec3 s_prevScale{1.0f, 1.0f, 1.0f};
+            static glm::vec3 s_dragStartCentroid{};
+            static bool s_wasDragging = false;
+
+            float snapArr[3] = {};
+            float* snap = nullptr;
+            if (state->bSnapEnabled) {
+                if (state->currentGizmoOperation == ImGuizmo::TRANSLATE)
+                    snapArr[0] = snapArr[1] = snapArr[2] = state->snapTranslation;
+                else if (state->currentGizmoOperation == ImGuizmo::ROTATE)
+                    snapArr[0] = snapArr[1] = snapArr[2] = state->snapRotation;
+                else
+                    snapArr[0] = snapArr[1] = snapArr[2] = state->snapScale;
+                snap = snapArr;
+            }
+
+            glm::mat4 gizmoMatrix = glm::translate(glm::mat4(1.0f), multiGizmoCentroid);
+            ImGuizmo::Manipulate(
+                glm::value_ptr(view),
+                glm::value_ptr(proj),
+                state->currentGizmoOperation,
+                ImGuizmo::WORLD,
+                glm::value_ptr(gizmoMatrix),
+                nullptr,
+                snap
+            );
+
+            if (ImGuizmo::IsUsing()) {
+                if (!s_wasDragging) {
+                    s_dragStartCentroid = multiGizmoCentroid;
+                    s_prevTranslation = multiGizmoCentroid;
+                    s_wasDragging = true;
+                }
+
+                float t[3], r[3], s[3];
+                ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(gizmoMatrix), t, r, s);
+
+                const glm::vec3 newT = glm::vec3(t[0], t[1], t[2]);
+                const glm::quat newR = glm::quat(glm::radians(glm::vec3(r[0], r[1], r[2])));
+                const glm::vec3 newS = glm::vec3(s[0], s[1], s[2]);
+
+                const glm::vec3 deltaTranslation = newT - s_prevTranslation;
+                const glm::quat deltaRotation = newR * glm::conjugate(s_prevRotation);
+                const glm::vec3 deltaScale = newS / s_prevScale;
+
+                for (auto entity : state->selectedEntities) {
+                    auto* transform = state->registry.try_get<Component::TransformComponent>(entity);
+                    if (!transform) continue;
+
+                    transform->translation += deltaTranslation;
+
+                    glm::vec3 rel = transform->translation - s_dragStartCentroid;
+                    transform->translation = s_dragStartCentroid + deltaRotation * rel;
+                    transform->rotation = deltaRotation * transform->rotation;
+
+                    rel = transform->translation - s_dragStartCentroid;
+                    transform->translation = s_dragStartCentroid + rel * deltaScale;
+                    transform->scale *= deltaScale;
+
+                    state->registry.emplace_or_replace<Component::DirtyRenderTransformComponent>(entity);
+                    state->registry.emplace_or_replace<Component::TeleportPhysicsTransformTag>(entity);
+                }
+
+                s_prevTranslation = newT;
+                s_prevRotation = newR;
+                s_prevScale = newS;
+            }
+            else {
+                s_wasDragging = false;
+                s_dragStartCentroid = {};
+                s_prevTranslation = {};
+                s_prevRotation = {1.0f, 0.0f, 0.0f, 0.0f};
+                s_prevScale = {1.0f, 1.0f, 1.0f};
+            }
+        }
     }
-    ImGui::End();
 
 
     if (ImGui::Begin("Post-Processing")) {
@@ -914,8 +925,8 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
     ImGui::End();
 
     if (ImGui::Begin("Materials")) {
-        Engine::MaterialManager* materialManager = ctx->materialManager;
-        const auto& mutableMaterials = materialManager->GetMutableMaterials();
+        /*Engine::MaterialManager* materialManager = ctx->materialManager;
+        const auto& mutableMaterials = materialManager->GetActiveMaterials();
 
         if (ImGui::Button("New Material")) {
             // todo
@@ -932,7 +943,7 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
                 // todo: material property editors
             }
             ImGui::PopID();
-        }
+        }*/
     }
     ImGui::End();
 

@@ -35,7 +35,7 @@ PortalPair CreatePortalPair(Core::EngineContext* ctx, Engine::GameState* state, 
             Render::PrimitiveProperty& primitive = submesh.primitiveProperties[i];
 
             MaterialProperties material = primitive.materialIndex == -1
-                ? Engine::CreateDefaultMaterial()
+                ? ctx->materialManager->GetDefaultMaterialProperties()
                 : plane->modelData.materials[primitive.materialIndex];
             material.colorFactor = glm::vec4(0.3f, 0.6f, 1.0f, 0.5f); // Blue portal
 
@@ -66,7 +66,7 @@ PortalPair CreatePortalPair(Core::EngineContext* ctx, Engine::GameState* state, 
             Render::PrimitiveProperty& primitive = submesh.primitiveProperties[i];
 
             MaterialProperties material = primitive.materialIndex == -1
-                ? Engine::CreateDefaultMaterial()
+                ? ctx->materialManager->GetDefaultMaterialProperties()
                 : plane->modelData.materials[primitive.materialIndex];
             material.colorFactor = glm::vec4(1.0f, 0.6f, 0.2f, 0.5f); // Orange portal
 
@@ -119,7 +119,7 @@ void CreatePortalPlane(Core::EngineContext* ctx, Engine::GameState* state, glm::
         Render::PrimitiveProperty& primitive = submesh.primitiveProperties[i];
 
         MaterialProperties material = primitive.materialIndex == -1
-            ? Engine::CreateDefaultMaterial()
+            ? ctx->materialManager->GetDefaultMaterialProperties()
             : plane->modelData.materials[primitive.materialIndex];
         material.colorFactor = glm::vec4(0.3f, 0.6f, 1.0f, 1.0f);
 
