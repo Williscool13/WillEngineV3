@@ -4,11 +4,13 @@
 
 #include "texture_load_slot.h"
 
+#include <fstream>
 #include <semaphore>
 
 #include "asset-load/asset_load_config.h"
-#include "ktxvulkan.h"
+#include "engine/logging/engine_log.h"
 #include "engine/textures/texture.h"
+#include "ktxvulkan.h"
 #include "render/vulkan/vk_utils.h"
 #include "tracy/Tracy.hpp"
 
@@ -134,7 +136,7 @@ bool TextureLoadSlot::LoadTextureFromDisk()
     ZoneScopedN("LoadTextureFromDisk");
 
     if (!outputTexture) {
-        SPDLOG_ERROR("Output texture is null");
+        LOG_ERROR(Asset, "Output texture is null");
         return false;
     }
 
@@ -143,47 +145,53 @@ bool TextureLoadSlot::LoadTextureFromDisk()
     {
         ZoneScopedN("FileExistsCheck");
         if (!std::filesystem::exists(texturePath)) {
-            SPDLOG_ERROR("Failed to find texture: {}", texturePath.string());
+            LOG_ERROR(Asset, "Failed to find texture: {}", texturePath.string());
             return false;
         }
     }
 
     {
         ZoneScopedN("KTXCreateFromFile");
-        ktx_error_code_e result = ktxTexture2_CreateFromNamedFile(
-            texturePath.string().c_str(),
-            KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT,
-            &texture
-        );
+        ktx_error_code_e result;
+
+        std::ifstream f(texturePath, std::ios::binary);
+        std::vector<uint8_t> blob(outputTexture->dataSize);
+        f.seekg(outputTexture->dataOffset);
+        f.read(reinterpret_cast<char*>(blob.data()), static_cast<std::streamsize>(outputTexture->dataSize));
+        if (!f) {
+            LOG_ERROR(Asset, "Failed to read .wtexture data: {}", texturePath.string());
+            return false;
+        }
+
+        result = ktxTexture2_CreateFromMemory(blob.data(), blob.size(),
+                                              KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, &texture);
 
         if (result != KTX_SUCCESS) {
-            SPDLOG_ERROR("Failed to load KTX texture: {}", texturePath.string());
+            LOG_ERROR(Asset, "Failed to load KTX texture: {}", texturePath.string());
             return false;
         }
     }
 
     assert(!ktxTexture2_NeedsTranscoding(texture) && "This engine no longer supports UASTC/ETC1S compressed textures");
 
-    // Size check
     ktx_size_t mip0Size = ktxTexture_GetImageSize(ktxTexture(texture), 0);
     if (mip0Size > TEXTURE_LOAD_STAGING_SIZE) {
-        SPDLOG_ERROR("Texture too large for staging buffer: {}", texturePath.string());
+        LOG_ERROR(Asset, "Texture too large for staging buffer: {}", texturePath.string());
         return false;
     }
 
-    // Validate 2D, not array, not cubemap
     if (texture->numDimensions != 2) {
-        SPDLOG_ERROR("Only 2D textures supported: {}", texturePath.string());
+        LOG_ERROR(Asset, "Only 2D textures supported: {}", texturePath.string());
         return false;
     }
 
     if (texture->isArray) {
-        SPDLOG_ERROR("Texture arrays not supported: {}", texturePath.string());
+        LOG_ERROR(Asset, "Texture arrays not supported: {}", texturePath.string());
         return false;
     }
 
     if (texture->isCubemap) {
-        SPDLOG_ERROR("Cubemaps not supported: {}", texturePath.string());
+        LOG_ERROR(Asset, "Cubemaps not supported: {}", texturePath.string());
         return false;
     }
 
@@ -316,7 +324,7 @@ void TextureLoadSlot::PostUploadSetup()
         });
 
     if (!updateRes) {
-        SPDLOG_ERROR("Failed to update bindless texture descriptor");
+        LOG_ERROR(Asset, "Failed to update bindless texture descriptor");
     }
 }
 } // AssetLoad

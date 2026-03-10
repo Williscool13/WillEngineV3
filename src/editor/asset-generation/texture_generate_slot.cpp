@@ -5,7 +5,7 @@
 #include "texture_generate_slot.h"
 
 #include <fstream>
-#include <spdlog/spdlog.h>
+#include "engine/logging/engine_log.h"
 #include <stb/stb_image.h>
 #include <ktx.h>
 #include <tracy/Tracy.hpp>
@@ -131,7 +131,7 @@ bool TextureGenerateSlot::LoadImageAndGenerate(VkCommandBuffer cmd, const std::f
     int32_t width, height, nrChannels;
     stbi_uc* stbiData = stbi_load(imagePath.string().c_str(), &width, &height, &nrChannels, 4);
     if (!stbiData) {
-        SPDLOG_ERROR("[TextureGenerateSlot] Failed to load image: {}", imagePath.string());
+        LOG_ERROR(Asset, "Failed to load image: {}", imagePath.string());
         return false;
     }
 
@@ -141,7 +141,7 @@ bool TextureGenerateSlot::LoadImageAndGenerate(VkCommandBuffer cmd, const std::f
     imageStagingAllocator.Reset();
     auto allocation = imageStagingAllocator.Allocate(size);
     if (allocation == SIZE_MAX) {
-        SPDLOG_ERROR("[TextureGenerateSlot] Texture too large for staging buffer");
+        LOG_ERROR(Asset, "Texture too large for staging buffer");
         stbi_image_free(stbiData);
         return false;
     }
@@ -257,7 +257,7 @@ bool TextureGenerateSlot::LoadImageAndGenerate(VkCommandBuffer cmd, const std::f
             size_t mipSize = mipWidth * mipHeight * 4;
 
             if (mipSize > imageReceivingBuffer.allocationInfo.size) {
-                SPDLOG_ERROR("Mip level {} too large for receiving buffer", mip);
+                LOG_ERROR(Asset, "Mip level {} too large for receiving buffer", mip);
                 return false;
             }
 
@@ -308,7 +308,7 @@ bool TextureGenerateSlot::WriteWTextureFile()
 
     ktx_error_code_e result = ktxTexture2_Create(&createInfo, KTX_TEXTURE_CREATE_ALLOC_STORAGE, &texture);
     if (result != KTX_SUCCESS) {
-        SPDLOG_ERROR("[TextureGenerateSlot] Failed to create KTX texture");
+        LOG_ERROR(Asset, "Failed to create KTX texture");
         return false;
     }
 
@@ -346,10 +346,10 @@ bool TextureGenerateSlot::WriteWTextureFile()
 
                     rdo_bc::rdo_bc_encoder encoder;
                     if (!encoder.init(srcImage, *params)) {
-                        SPDLOG_ERROR("[TextureGenerateSlot] GPU texture compression init failed");
+                        LOG_ERROR(Asset, "GPU texture compression init failed");
                     }
                     if (!encoder.encode()) {
-                        SPDLOG_ERROR("[TextureGenerateSlot] GPU texture compression encoding failed");
+                        LOG_ERROR(Asset, "GPU texture compression encoding failed");
                     }
 
                     const void* compressedBlocks = encoder.get_blocks();
@@ -381,20 +381,16 @@ bool TextureGenerateSlot::WriteWTextureFile()
     ktxTexture_Destroy(ktxTexture(texture));
 
     if (result != KTX_SUCCESS) {
-        SPDLOG_ERROR("[TextureGenerateSlot] Failed to serialise KTX texture to memory");
+        LOG_ERROR(Asset, "Failed to serialise KTX texture to memory");
         return false;
     }
 
     Engine::WTextureHeader header{};
-    memcpy(header.magic, Engine::WILL_TEXTURE_MAGIC, sizeof(header.magic));
-    header.majorVersion = Engine::TEXTURE_MAJOR_VERSION;
-    header.minorVersion = Engine::TEXTURE_MINOR_VERSION;
-    header.textureId    = textureId.id;
-    header.width        = sourceImage.extent.width;
-    header.height       = sourceImage.extent.height;
-    header.mipCount     = mipLevels;
-    header.dataOffset   = static_cast<uint32_t>(sizeof(Engine::WTextureHeader));
-    header.dataSize     = static_cast<uint64_t>(ktxSize);
+    header.textureId = textureId.id;
+    header.width     = sourceImage.extent.width;
+    header.height    = sourceImage.extent.height;
+    header.mipCount  = mipLevels;
+    header.dataSize  = static_cast<uint64_t>(ktxSize);
 
     const std::string stem = imagePath.stem().string();
     const size_t copyLen = std::min(stem.size(), Engine::WTEXTURE_NAME_LENGTH - 1);
@@ -405,15 +401,19 @@ bool TextureGenerateSlot::WriteWTextureFile()
     std::ofstream f(outputPath, std::ios::binary);
     if (!f) {
         free(ktxBytes);
-        SPDLOG_ERROR("[TextureGenerateSlot] Failed to open output file: {}", outputPath.string());
+        LOG_ERROR(Asset, "Failed to open output file: {}", outputPath.string());
         return false;
     }
 
-    f.write(reinterpret_cast<const char*>(&header), sizeof(header));
+    if (!Engine::WriteWTextureHeader(f, header)) {
+        free(ktxBytes);
+        LOG_ERROR(Asset, "Failed to write header: {}", outputPath.string());
+        return false;
+    }
     f.write(reinterpret_cast<const char*>(ktxBytes), static_cast<std::streamsize>(ktxSize));
     free(ktxBytes);
 
-    SPDLOG_INFO("[TextureGenerateSlot] Wrote {}", outputPath.string());
+    LOG_INFO(Asset, "Wrote {}", outputPath.string());
     return true;
 }
 

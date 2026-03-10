@@ -6,28 +6,29 @@
 #define WILL_ENGINE_TEXTURE_FORMAT_H
 
 #include <cstdint>
+#include <iosfwd>
+#include <optional>
 
 namespace Engine
 {
-constexpr char WILL_TEXTURE_MAGIC[8] = "WILLTEX";
 constexpr uint32_t TEXTURE_MAJOR_VERSION = 0;
-constexpr uint32_t TEXTURE_MINOR_VERSION = 1;
-
+constexpr uint32_t TEXTURE_MINOR_VERSION = 2;
 constexpr size_t WTEXTURE_NAME_LENGTH = 128;
 
 struct WTextureHeader
 {
-    char     magic[8];
-    uint32_t majorVersion;
-    uint32_t minorVersion;
-    uint64_t textureId;
-    char     name[WTEXTURE_NAME_LENGTH];
-    uint32_t width;
-    uint32_t height;
-    uint32_t mipCount;
-    uint32_t dataOffset;  // Byte offset to the KTX2 blob (always sizeof(WTextureHeader)).
-    uint64_t dataSize;    // Size of the KTX2 blob in bytes.
+    uint64_t textureId{0};
+    char name[WTEXTURE_NAME_LENGTH]{};
+    uint32_t width{0};
+    uint32_t height{0};
+    uint32_t mipCount{0};
+    uint64_t dataOffset{0};
+    uint64_t dataSize{0};
 };
+
+bool WriteWTextureHeader(std::ostream& out, const WTextureHeader& header);
+
+std::optional<WTextureHeader> ReadWTextureHeader(std::istream& in);
 } // Engine
 
 #endif //WILL_ENGINE_TEXTURE_FORMAT_H

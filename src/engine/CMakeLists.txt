@@ -26,6 +26,8 @@ add_library(engine STATIC
         materials/material.cpp
         materials/material.h
         textures/texture.h
+        textures/texture_format.cpp
+        textures/texture_format.h
 )
 
 target_include_directories(engine PRIVATE

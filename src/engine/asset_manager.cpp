@@ -28,7 +28,7 @@ AssetManager::AssetManager(AssetLoad::AsyncAssetLoadManager* assetLoadManager, R
     Texture& whiteTexture = textures[whiteTextureHandle.index];
     whiteTexture.selfHandle = whiteTextureHandle;
     whiteTexture.source = whitePath;
-    whiteTexture.name = whitePath.stem().string();
+    strncpy_s(whiteTexture.name, whitePath.stem().string().c_str(), WTEXTURE_NAME_LENGTH - 1);
     whiteTexture.textureId = TextureID(fnv1a64("white", 5));
     whiteTexture.loadState = Texture::LoadState::NotLoaded;
     whiteTexture.refCount = 1;
@@ -41,7 +41,7 @@ AssetManager::AssetManager(AssetLoad::AsyncAssetLoadManager* assetLoadManager, R
     Texture& errorTexture = textures[errorTextureHandle.index];
     errorTexture.selfHandle = errorTextureHandle;
     errorTexture.source = errorPath;
-    errorTexture.name = errorPath.stem().string();
+    strncpy_s(errorTexture.name, errorPath.stem().string().c_str(), WTEXTURE_NAME_LENGTH - 1);
     errorTexture.textureId = TextureID(fnv1a64("error", 5));
     errorTexture.loadState = Texture::LoadState::NotLoaded;
     errorTexture.refCount = 1;
@@ -54,7 +54,7 @@ AssetManager::AssetManager(AssetLoad::AsyncAssetLoadManager* assetLoadManager, R
     Texture& brdfLutTexture = textures[brdfLutTextureHandle.index];
     brdfLutTexture.selfHandle = brdfLutTextureHandle;
     brdfLutTexture.source = brdfLutPath;
-    brdfLutTexture.name = brdfLutPath.stem().string();
+    strncpy_s(brdfLutTexture.name, brdfLutPath.stem().string().c_str(), WTEXTURE_NAME_LENGTH - 1);
     brdfLutTexture.textureId = TextureID(fnv1a64("brdf_lut", 8));
     brdfLutTexture.loadState = Texture::LoadState::NotLoaded;
     brdfLutTexture.refCount = 1;
@@ -113,12 +113,10 @@ AssetManager::AssetManager(AssetLoad::AsyncAssetLoadManager* assetLoadManager, R
         for (const auto& entry : std::filesystem::recursive_directory_iterator(texturesPath)) {
             if (entry.path().extension() != ".wtexture") { continue; }
             std::ifstream f(entry.path(), std::ios::binary);
-            WTextureHeader header{};
-            f.read(reinterpret_cast<char*>(&header), sizeof(header));
-            if (!f || memcmp(header.magic, WILL_TEXTURE_MAGIC, sizeof(header.magic)) != 0) { continue; }
-            if (header.majorVersion != TEXTURE_MAJOR_VERSION) { continue; }
-            TextureID id{header.textureId};
-            const std::string name{header.name};
+            std::optional<WTextureHeader> header = ReadWTextureHeader(f);
+            if (!header) { continue; }
+            TextureID id{header->textureId};
+            const std::string name{header->name};
             assert(!textureNameToId.contains(name) && "Duplicate .wtexture name detected");
             textureRegistry[id] = entry.path();
             textureNameToId[name] = id;
@@ -256,12 +254,12 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
         if (textureComplete.bSuccess) {
             stagingFrameBuffer.imageAcquireOperations.push_back(textureComplete.texture->acquireBarrier);
 
-            textureComplete.texture->loadState = Engine::Texture::LoadState::Loaded;
+            textureComplete.texture->loadState = Texture::LoadState::Loaded;
             LOG_INFO(Asset, "Texture load succeeded: {} (bindless index: {})", textureComplete.texture->name, static_cast<uint32_t>(textureComplete.texture->bindlessHandle.index));
             loadCounts.textureLoadedCount++;
         }
         else {
-            textureComplete.texture->loadState = Engine::Texture::LoadState::NotLoaded;
+            textureComplete.texture->loadState = Texture::LoadState::NotLoaded;
             LOG_ERROR(Asset, "Texture load failed: {}", textureComplete.texture->name);
         }
     }
@@ -328,7 +326,7 @@ TextureHandle AssetManager::LoadTexture(TextureID textureId)
     if (it != textureIdToHandle.end()) {
         TextureHandle existingHandle = it->second;
         if (textureAllocator.IsValid(existingHandle)) {
-            Engine::Texture& texture = textures[existingHandle.index];
+            Texture& texture = textures[existingHandle.index];
             texture.refCount++;
             LOG_TRACE(Asset, "Texture already loaded: {}, refCount: {}", texture.name, texture.refCount);
             return existingHandle;
@@ -343,13 +341,28 @@ TextureHandle AssetManager::LoadTexture(TextureID textureId)
     }
 
     const std::filesystem::path& path = textureRegistry[textureId];
-    Engine::Texture& texture = textures[handle.index];
+    assert(path.extension() == ".wtexture");
+
+    std::ifstream f(path, std::ios::binary);
+    auto header = ReadWTextureHeader(f);
+    if (!header) {
+        LOG_ERROR(Asset, "Failed to read header for texture {:x}", textureId.id);
+        textureAllocator.Remove(handle);
+        return TextureHandle::INVALID;
+    }
+
+    Texture& texture = textures[handle.index];
     texture.selfHandle = handle;
-    texture.source = path;
-    texture.name = path.stem().string();
-    texture.textureId = textureId;
-    texture.loadState = Engine::Texture::LoadState::Loading;
-    texture.refCount = 1;
+    texture.source     = path;
+    texture.textureId  = textureId;
+    memcpy(texture.name, header->name, WTEXTURE_NAME_LENGTH);
+    texture.width      = header->width;
+    texture.height     = header->height;
+    texture.mipCount   = header->mipCount;
+    texture.dataOffset = header->dataOffset;
+    texture.dataSize   = header->dataSize;
+    texture.loadState  = Texture::LoadState::Loading;
+    texture.refCount   = 1;
     texture.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTexture();
 
     textureIdToHandle[textureId] = handle;
@@ -359,7 +372,7 @@ TextureHandle AssetManager::LoadTexture(TextureID textureId)
     return handle;
 }
 
-Engine::Texture* AssetManager::GetTexture(TextureHandle handle)
+Texture* AssetManager::GetTexture(TextureHandle handle)
 {
     if (!textureAllocator.IsValid(handle)) {
         return nullptr;
@@ -375,13 +388,13 @@ void AssetManager::UnloadTexture(TextureHandle handle)
         return;
     }
 
-    Engine::Texture& texture = textures[handle.index];
+    Texture& texture = textures[handle.index];
     texture.refCount--;
 
     LOG_TRACE(Asset, "Texture refCount decremented: {}, refCount: {}", texture.name, texture.refCount);
 
     if (texture.refCount == 0) {
-        texture.loadState = Engine::Texture::LoadState::NotLoaded;
+        texture.loadState = Texture::LoadState::NotLoaded;
         // assetLoadThread->RequestTextureUnload(handle, &texture);
         textureIdToHandle.erase(texture.textureId);
     }

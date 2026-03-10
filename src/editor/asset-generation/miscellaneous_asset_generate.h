@@ -10,6 +10,8 @@
 #include <semaphore>
 #include <vulkan/vulkan_core.h>
 
+#include "engine/core/texture_id.h"
+
 namespace Render
 {
 struct ResourceManager;
@@ -20,6 +22,7 @@ class PipelineManager;
 namespace Editor
 {
 void CreateBRDFLookupTable(std::filesystem::path outputPath,
+                           Engine::TextureID textureId,
                            Render::VulkanContext* context,
                            Render::ResourceManager* resourceManager,
                            Render::PipelineManager* pipelineManager,

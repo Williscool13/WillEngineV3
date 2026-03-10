@@ -601,18 +601,18 @@ void WillEngine::EditorImgui()
         ImGui::Separator();
         ImGui::Text("Generate Textures:");
 
-        if (ImGui::Button("white.ktx2")) {
+        if (ImGui::Button("white.wtexture")) {
             modelGenerator->RequestTextureGenerate(
                 Platform::GetAssetPath() / "textures/white.png",
-                Platform::GetAssetPath() / "textures/white.ktx2",
+                Platform::GetAssetPath() / "textures/white.wtexture",
                 false,
                 DXGI_FORMAT_BC7_UNORM_SRGB);
         }
 
-        if (ImGui::Button("error.ktx2")) {
+        if (ImGui::Button("error.wtexture")) {
             modelGenerator->RequestTextureGenerate(
                 Platform::GetAssetPath() / "textures/error.png",
-                Platform::GetAssetPath() / "textures/error.ktx2",
+                Platform::GetAssetPath() / "textures/error.wtexture",
                 false,
                 DXGI_FORMAT_BC7_UNORM_SRGB);
         }
@@ -630,8 +630,8 @@ void WillEngine::EditorImgui()
                 Platform::GetAssetPath() / "environment-map/kloofendal_48d_partly_cloudy_puresky_4k.hdr",
                 Platform::GetAssetPath() / "environment-map/kloofendal_48d_partly_cloudy_puresky_4k.ktx2");
         }
-        if (ImGui::Button("brdf_lut.ktx2")) {
-            modelGenerator->GenerateBRDFLUT(Platform::GetAssetPath() / "textures/brdf_lut.ktx2");
+        if (ImGui::Button("brdf_lut.wmodel")) {
+            modelGenerator->GenerateBRDFLUT(Platform::GetAssetPath() / "textures/brdf_lut.wmodel");
         }
 
         ImGui::Separator();

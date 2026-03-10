@@ -4,10 +4,13 @@
 
 #include "miscellaneous_asset_generate.h"
 
+#include <fstream>
 #include <ktx.h>
 #include <semaphore>
 #include <tracy/Tracy.hpp>
 
+#include "engine/logging/engine_log.h"
+#include "engine/textures/texture_format.h"
 #include "render/resource_manager.h"
 #include "render/descriptors/vk_bindless_resources_storage.h"
 #include "render/pipelines/pipeline_data.h"
@@ -18,6 +21,7 @@ namespace Editor
 {
 void CreateBRDFLookupTable(
     std::filesystem::path outputPath,
+    Engine::TextureID textureId,
     Render::VulkanContext* context,
     Render::ResourceManager* resourceManager,
     Render::PipelineManager* pipelineManager,
@@ -98,7 +102,7 @@ void CreateBRDFLookupTable(
 
         const Render::PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("ibl_brdf_lut"));
         if (!pipelineEntry) {
-            SPDLOG_ERROR("[CreateBRDFLookupTable] \"ibl_brdf_lut\" Pipeline doesn't exist");
+            LOG_ERROR(Asset, "\"ibl_brdf_lut\" pipeline doesn't exist");
             return;
         }
         vkCmdBindPipeline(graphicsCmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
@@ -153,18 +157,43 @@ void CreateBRDFLookupTable(
 
     ktx_error_code_e result = ktxTexture2_Create(&createInfo, KTX_TEXTURE_CREATE_ALLOC_STORAGE, &texture);
     if (result != KTX_SUCCESS) {
-        SPDLOG_ERROR("[CreateBRDFLookupTable] Failed to create KTX texture");
+        LOG_ERROR(Asset, "Failed to create KTX texture for BRDF LUT");
         return;
     }
 
     ktxTexture_SetImageFromMemory(ktxTexture(texture), 0, 0, 0, lutData.data(), lutData.size());
-    result = ktxTexture_WriteToNamedFile(ktxTexture(texture), outputPath.string().c_str());
+
+    const char writer[] = "WillEngine";
+    ktxHashList_AddKVPair(&texture->kvDataHead, KTX_WRITER_KEY, sizeof(writer), writer);
+
+    ktx_uint8_t* ktxBytes{nullptr};
+    ktx_size_t   ktxSize{0};
+    result = ktxTexture2_WriteToMemory(texture, &ktxBytes, &ktxSize);
     ktxTexture_Destroy(ktxTexture(texture));
     if (result != KTX_SUCCESS) {
-        SPDLOG_ERROR("[CreateBRDFLookupTable] Failed to write KTX file: {}", outputPath.string());
+        LOG_ERROR(Asset, "Failed to serialise BRDF LUT to memory");
         return;
     }
-    SPDLOG_INFO("[CreateBRDFLookupTable] Wrote {}", outputPath.string());
+
+    Engine::WTextureHeader header{};
+    header.textureId = textureId.id;
+    header.width     = LUT_SIZE;
+    header.height    = LUT_SIZE;
+    header.mipCount  = 1;
+    header.dataSize  = static_cast<uint64_t>(ktxSize);
+    strncpy(header.name, outputPath.stem().string().c_str(), Engine::WTEXTURE_NAME_LENGTH - 1);
+
+    std::filesystem::create_directories(outputPath.parent_path());
+    std::ofstream f(outputPath, std::ios::binary);
+    if (!f || !Engine::WriteWTextureHeader(f, header)) {
+        free(ktxBytes);
+        LOG_ERROR(Asset, "Failed to write .wtexture: {}", outputPath.string());
+        return;
+    }
+    f.write(reinterpret_cast<const char*>(ktxBytes), static_cast<std::streamsize>(ktxSize));
+    free(ktxBytes);
+
+    LOG_INFO(Asset, "Wrote {}", outputPath.string());
 
     vkDestroyFence(context->device, graphicsFence, nullptr);
     vkDestroyCommandPool(context->device, graphicsCommandPool, nullptr);
