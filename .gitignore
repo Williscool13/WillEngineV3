@@ -10,3 +10,9 @@ assets/**
 # Allow BoxTextured files back in
 !assets/BoxTextured.glb
 !assets/BoxTextured.willmodel
+
+# Engine-critical textures
+!assets/textures/white.wtexture
+!assets/textures/error.wtexture
+!assets/textures/brdf_lut.wtexture
+!assets/textures/smiling_friend.wtexture

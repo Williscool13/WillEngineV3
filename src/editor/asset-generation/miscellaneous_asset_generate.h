@@ -21,6 +21,7 @@ class PipelineManager;
 
 namespace Editor
 {
+void CreateCriticalEngineResources();
 void CreateBRDFLookupTable(std::filesystem::path outputPath,
                            Engine::TextureID textureId,
                            Render::VulkanContext* context,

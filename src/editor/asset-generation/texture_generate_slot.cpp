@@ -390,7 +390,7 @@ bool TextureGenerateSlot::WriteWTextureFile()
     header.width     = sourceImage.extent.width;
     header.height    = sourceImage.extent.height;
     header.mipCount  = mipLevels;
-    header.dataSize  = static_cast<uint64_t>(ktxSize);
+    header.dataSize  = ktxSize;
 
     const std::string stem = imagePath.stem().string();
     const size_t copyLen = std::min(stem.size(), Engine::WTEXTURE_NAME_LENGTH - 1);

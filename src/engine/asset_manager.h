@@ -119,9 +119,6 @@ private:
     std::unordered_map<StringID, CubemapHandle> cubemapIdToHandle;
 
 private: // Default Resources
-    TextureHandle whiteTextureHandle = TextureHandle::INVALID;
-    TextureHandle errorTextureHandle = TextureHandle::INVALID;
-    TextureHandle brdfLutTextureHandle = TextureHandle::INVALID;
     Render::Sampler defaultSampler;
 
 public: // Scenes

@@ -601,37 +601,19 @@ void WillEngine::EditorImgui()
         ImGui::Separator();
         ImGui::Text("Generate Textures:");
 
-        if (ImGui::Button("white.wtexture")) {
-            modelGenerator->RequestTextureGenerate(
-                Platform::GetAssetPath() / "textures/white.png",
-                Platform::GetAssetPath() / "textures/white.wtexture",
-                false,
-                DXGI_FORMAT_BC7_UNORM_SRGB);
-        }
-
-        if (ImGui::Button("error.wtexture")) {
-            modelGenerator->RequestTextureGenerate(
-                Platform::GetAssetPath() / "textures/error.png",
-                Platform::GetAssetPath() / "textures/error.wtexture",
-                false,
-                DXGI_FORMAT_BC7_UNORM_SRGB);
-        }
-
-        if (ImGui::Button("smiling_friend.wtexture")) {
-            modelGenerator->RequestTextureGenerate(
-                Platform::GetAssetPath() / "textures/smiling_friend.jpg",
-                Platform::GetAssetPath() / "textures/smiling_friend.wtexture",
-                false,
-                DXGI_FORMAT_BC7_UNORM_SRGB);
-        }
-
         if (ImGui::Button("kloofendal_environment.ktx2")) {
             modelGenerator->RequestEnvironmentMapGenerate(
                 Platform::GetAssetPath() / "environment-map/kloofendal_48d_partly_cloudy_puresky_4k.hdr",
                 Platform::GetAssetPath() / "environment-map/kloofendal_48d_partly_cloudy_puresky_4k.ktx2");
         }
-        if (ImGui::Button("brdf_lut.wmodel")) {
-            modelGenerator->GenerateBRDFLUT(Platform::GetAssetPath() / "textures/brdf_lut.wmodel");
+
+        if (ImGui::Button("Generate BRDF LUT and Smiling Friend")) {
+            modelGenerator->RequestTextureGenerate(
+                Platform::GetAssetPath() / "textures/smiling_friend.jpg",
+                Platform::GetAssetPath() / "textures/smiling_friend.wtexture",
+                false,
+                DXGI_FORMAT_BC7_UNORM_SRGB);
+            modelGenerator->GenerateBRDFLUT(Platform::GetAssetPath() / "textures/brdf_lut.wtexture");
         }
 
         ImGui::Separator();
@@ -691,11 +673,11 @@ void WillEngine::EditorImgui()
         }
 
         static constexpr bool levelPresent[kLevelCount] = {
-            SPDLOG_LEVEL_TRACE    >= SPDLOG_ACTIVE_LEVEL,
-            SPDLOG_LEVEL_DEBUG    >= SPDLOG_ACTIVE_LEVEL,
-            SPDLOG_LEVEL_INFO     >= SPDLOG_ACTIVE_LEVEL,
-            SPDLOG_LEVEL_WARN     >= SPDLOG_ACTIVE_LEVEL,
-            SPDLOG_LEVEL_ERROR    >= SPDLOG_ACTIVE_LEVEL,
+            SPDLOG_LEVEL_TRACE >= SPDLOG_ACTIVE_LEVEL,
+            SPDLOG_LEVEL_DEBUG >= SPDLOG_ACTIVE_LEVEL,
+            SPDLOG_LEVEL_INFO >= SPDLOG_ACTIVE_LEVEL,
+            SPDLOG_LEVEL_WARN >= SPDLOG_ACTIVE_LEVEL,
+            SPDLOG_LEVEL_ERROR >= SPDLOG_ACTIVE_LEVEL,
             SPDLOG_LEVEL_CRITICAL >= SPDLOG_ACTIVE_LEVEL,
         };
         const auto entryCount = static_cast<int32_t>(entries.GetSize());

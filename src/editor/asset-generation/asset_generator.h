@@ -107,7 +107,7 @@ public:
 
     bool TryDequeueCubemapGenerateComplete(EnvironmentMapGenerateComplete& outResult);
 
-    void GenerateBRDFLUT(std::filesystem::path outputFile);
+    void GenerateBRDFLUT(const std::filesystem::path& outputFile);
 
     const std::array<WillModelGenerationProgress, MODEL_GENERATION_JOB_COUNT>& GetModelGenerationProgresses() const { return modelGenerationProgress; }
     const std::filesystem::path& GetModelGenerateSlotPath(uint32_t index) const { return modelGenerateTasks[index].gltfPath; }

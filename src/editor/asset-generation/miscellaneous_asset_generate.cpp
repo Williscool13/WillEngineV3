@@ -4,13 +4,16 @@
 
 #include "miscellaneous_asset_generate.h"
 
+#include <cstring>
 #include <fstream>
 #include <ktx.h>
 #include <semaphore>
 #include <tracy/Tracy.hpp>
 
+#include "core/hash/fnv_1_a.h"
 #include "engine/logging/engine_log.h"
 #include "engine/textures/texture_format.h"
+#include "platform/paths.h"
 #include "render/resource_manager.h"
 #include "render/descriptors/vk_bindless_resources_storage.h"
 #include "render/pipelines/pipeline_data.h"
@@ -19,6 +22,99 @@
 
 namespace Editor
 {
+bool WriteSimpleRGBA8WTexture(const std::filesystem::path& outputPath, Engine::TextureID id, const char* name, uint32_t w, uint32_t h, const uint8_t* rgba)
+{
+    ktxTexture2* texture;
+    ktxTextureCreateInfo createInfo{};
+    createInfo.vkFormat        = VK_FORMAT_R8G8B8A8_SRGB;
+    createInfo.baseWidth       = w;
+    createInfo.baseHeight      = h;
+    createInfo.baseDepth       = 1;
+    createInfo.numDimensions   = 2;
+    createInfo.numLevels       = 1;
+    createInfo.numLayers       = 1;
+    createInfo.numFaces        = 1;
+    createInfo.isArray         = KTX_FALSE;
+    createInfo.generateMipmaps = KTX_FALSE;
+
+    ktx_error_code_e result = ktxTexture2_Create(&createInfo, KTX_TEXTURE_CREATE_ALLOC_STORAGE, &texture);
+    if (result != KTX_SUCCESS) {
+        LOG_ERROR(Asset, "Failed to create KTX texture for {}", name);
+        return false;
+    }
+
+    ktxTexture_SetImageFromMemory(ktxTexture(texture), 0, 0, 0, rgba, w * h * 4);
+
+    constexpr char writer[] = "WillEngine";
+    ktxHashList_AddKVPair(&texture->kvDataHead, KTX_WRITER_KEY, sizeof(writer), writer);
+
+    ktx_uint8_t* ktxBytes{nullptr};
+    ktx_size_t   ktxSize{0};
+    result = ktxTexture2_WriteToMemory(texture, &ktxBytes, &ktxSize);
+    ktxTexture_Destroy(ktxTexture(texture));
+    if (result != KTX_SUCCESS) {
+        LOG_ERROR(Asset, "Failed to serialise {} to memory", name);
+        return false;
+    }
+
+    Engine::WTextureHeader header{};
+    header.textureId = id.id;
+    header.width     = w;
+    header.height    = h;
+    header.mipCount  = 1;
+    header.dataSize  = static_cast<uint64_t>(ktxSize);
+    strncpy_s(header.name, name, Engine::WTEXTURE_NAME_LENGTH - 1);
+
+    std::filesystem::create_directories(outputPath.parent_path());
+    std::ofstream f(outputPath, std::ios::binary);
+    if (!f || !Engine::WriteWTextureHeader(f, header)) {
+        free(ktxBytes);
+        LOG_ERROR(Asset, "Failed to write .wtexture: {}", outputPath.string());
+        return false;
+    }
+    f.write(reinterpret_cast<const char*>(ktxBytes), static_cast<std::streamsize>(ktxSize));
+    free(ktxBytes);
+
+    LOG_INFO(Asset, "Wrote {}", outputPath.string());
+    return true;
+}
+
+void CreateCriticalEngineResources()
+{
+    const std::filesystem::path texturesPath = Platform::GetAssetPath() / "textures";
+
+    std::filesystem::path whitePath = texturesPath / "white.wtexture";
+    if (!exists(whitePath)) {
+        // White: 1x1 opaque white
+        {
+            constexpr uint8_t pixels[4] = {255, 255, 255, 255};
+            WriteSimpleRGBA8WTexture(
+                whitePath,
+                Engine::TextureID(fnv1a64("white", 5)),
+                "white", 1, 1, pixels
+            );
+        }
+    }
+
+    std::filesystem::path errorPath = texturesPath / "error.wtexture";
+    if (!exists(errorPath)) {
+        // Error: 4x4 alternating magenta/black checkerboard
+        constexpr uint8_t magenta[4] = {255, 0, 255, 255};
+        constexpr uint8_t black[4]   = {0,   0, 0,   255};
+        uint8_t pixels[4 * 4 * 4];
+        for (uint32_t y = 0; y < 4; ++y) {
+            for (uint32_t x = 0; x < 4; ++x) {
+                memcpy(&pixels[(y * 4 + x) * 4], ((x + y) % 2 == 0) ? magenta : black, 4);
+            }
+        }
+        WriteSimpleRGBA8WTexture(
+            errorPath,
+            Engine::TextureID(fnv1a64("error", 5)),
+            "error", 4, 4, pixels
+        );
+    }
+}
+
 void CreateBRDFLookupTable(
     std::filesystem::path outputPath,
     Engine::TextureID textureId,
@@ -181,7 +277,7 @@ void CreateBRDFLookupTable(
     header.height    = LUT_SIZE;
     header.mipCount  = 1;
     header.dataSize  = static_cast<uint64_t>(ktxSize);
-    strncpy(header.name, outputPath.stem().string().c_str(), Engine::WTEXTURE_NAME_LENGTH - 1);
+    strncpy_s(header.name, outputPath.stem().string().c_str(), Engine::WTEXTURE_NAME_LENGTH - 1);
 
     std::filesystem::create_directories(outputPath.parent_path());
     std::ofstream f(outputPath, std::ios::binary);
