@@ -158,7 +158,7 @@ void MaterialManager::ReleaseMaterial(MaterialID materialID)
     entry->refCounter--;
 
     if (entry->refCounter == 0) {
-        entry->retireFrame = ctx->currentFrame + Core::FRAME_BUFFER_COUNT;
+        entry->retireFrame = ctx->currentFrame + Core::FRAME_BUFFER_COUNT + 1;
         LOG_TRACE(Engine, "Material {} has hit ref 0, deleting in {} FIF", materials[materialID].name, Core::FRAME_BUFFER_COUNT);
     }
 }

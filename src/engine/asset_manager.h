@@ -10,6 +10,7 @@
 #include "asset_manager_config.h"
 #include "asset_manager_types.h"
 #include "core/sampler_id.h"
+#include "core/include/engine_context.h"
 #include "core/allocators/handle_allocator.h"
 #include "engine/textures/texture.h"
 #include "engine/resources/samplers/sampler.h"
@@ -42,7 +43,7 @@ struct ResolveLoadResult
 class AssetManager
 {
 public:
-    AssetManager(AssetLoad::AsyncAssetLoadManager* assetLoadManager, Render::ResourceManager* resourceManager);
+    AssetManager(Core::EngineContext* ctx, AssetLoad::AsyncAssetLoadManager* assetLoadManager, Render::ResourceManager* resourceManager);
 
     ~AssetManager();
 
@@ -103,6 +104,7 @@ public:
     }
 
 private:
+    Core::EngineContext* ctx;
     AssetLoad::AsyncAssetLoadManager* assetLoadManager;
     Render::ResourceManager* resourceManager;
 
@@ -125,9 +127,6 @@ private:
     Core::HandleAllocator<Render::Cubemap, MAX_LOADED_CUBEMAPS> cubemapAllocator;
     std::array<Render::Cubemap, MAX_LOADED_CUBEMAPS> cubemaps{};
     std::unordered_map<StringID, CubemapHandle> cubemapIdToHandle;
-
-private: // Default Resources
-    Render::Sampler defaultSampler;
 
 public: // Scenes
     const std::unordered_map<StringID, std::filesystem::path>& GetSceneRegistry() { return sceneRegistry; }

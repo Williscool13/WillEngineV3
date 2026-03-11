@@ -164,7 +164,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
     //
     {
         ZoneScopedN("CreateAssetManager");
-        assetManager = std::make_unique<AssetManager>(asyncAssetLoadManager.get(), renderThread->GetResourceManager());
+        assetManager = std::make_unique<AssetManager>(engineContext.get(), asyncAssetLoadManager.get(), renderThread->GetResourceManager());
         materialManager = std::make_unique<MaterialManager>(engineContext.get(), assetManager.get());
     }
 

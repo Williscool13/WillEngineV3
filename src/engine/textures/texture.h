@@ -32,6 +32,7 @@ struct Texture
     TextureHandle selfHandle{TextureHandle::INVALID};
     LoadState loadState{LoadState::NotLoaded};
     uint32_t refCount = 0;
+    uint64_t retireFrame = 0;
 
     uint32_t width{0};
     uint32_t height{0};

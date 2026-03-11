@@ -16,8 +16,8 @@
 
 namespace Engine
 {
-AssetManager::AssetManager(AssetLoad::AsyncAssetLoadManager* assetLoadManager, Render::ResourceManager* resourceManager)
-    : assetLoadManager(assetLoadManager), resourceManager(resourceManager)
+AssetManager::AssetManager(Core::EngineContext* ctx, AssetLoad::AsyncAssetLoadManager* assetLoadManager, Render::ResourceManager* resourceManager)
+    : ctx(ctx), assetLoadManager(assetLoadManager), resourceManager(resourceManager)
 {
     // Creates white/error if they don't exist.
     Editor::CreateCriticalEngineResources();
@@ -66,30 +66,12 @@ AssetManager::AssetManager(AssetLoad::AsyncAssetLoadManager* assetLoadManager, R
     }
 
 
-    VkSamplerCreateInfo samplerCreateInfo = {
-        .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-        .pNext = nullptr,
-        .flags = 0,
-        .magFilter = VK_FILTER_LINEAR,
-        .minFilter = VK_FILTER_LINEAR,
-        .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
-        .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-        .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-        .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-        .mipLodBias = 0.0f,
-        .anisotropyEnable = VK_FALSE,
-        .maxAnisotropy = 1.0f,
-        .compareEnable = VK_FALSE,
-        .compareOp = VK_COMPARE_OP_ALWAYS,
-        .minLod = 0.0f,
-        .maxLod = VK_LOD_CLAMP_NONE,
-        .borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK,
-        .unnormalizedCoordinates = VK_FALSE,
-    };
-
-    defaultSampler = Render::Sampler::CreateSampler(resourceManager->context, samplerCreateInfo);
-    Render::BindlessSamplerHandle defaultSamplerHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.AllocateSampler(defaultSampler.handle);
-    assert(defaultSamplerHandle.index == ASSET_SAMPLER_BINDLESS_INDEX);
+    SamplerDesc defaultSamplerDesc{};
+    defaultSamplerDesc.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    defaultSamplerDesc.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    defaultSamplerDesc.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    Sampler* defaultSampler = LoadSampler(defaultSamplerDesc);
+    assert(defaultSampler && defaultSampler->bindlessHandle.index == ASSET_SAMPLER_BINDLESS_INDEX);
 
 
     modelRegistry["stanford_dragon"_sid] = assetPath / "dragon/dragon.willmodel";
@@ -278,35 +260,27 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
 
 void AssetManager::ResolveUnloads()
 {
-    /*AssetLoad::WillModelComplete modelComplete{};
-    while (assetLoadThread->ResolveModelUnload(modelComplete)) {
-        SPDLOG_INFO("[AssetManager] Model unload succeeded: {}", modelComplete.model->name);
-        modelComplete.model->modelData.Reset();
-        modelComplete.model->bufferAcquireOps.clear();
-        modelComplete.model->imageAcquireOps.clear();
-        modelComplete.model->source.clear();
-        modelComplete.model->name.clear();
-        modelComplete.model->modelLoadState = Render::WillModel::ModelLoadState::NotLoaded;
-        modelComplete.model->selfHandle = WillModelHandle::INVALID;
+    const uint64_t currentFrame = ctx->currentFrame;
 
-        modelAllocator.Remove(modelComplete.willModelHandle);
+    for (auto& texture : textures) {
+        if (!textureAllocator.IsValid(texture.selfHandle)) { continue; }
+        if (texture.refCount > 0 || texture.retireFrame == 0 || currentFrame < texture.retireFrame) { continue; }
+
+        resourceManager->bindlessSamplerTextureDescriptorBuffer.ReleaseTextureBinding(texture.bindlessHandle);
+        textureIdToHandle.erase(texture.textureId);
+        textureAllocator.Remove(texture.selfHandle);
+        texture = {};
     }
 
-    AssetLoad::TextureComplete textureComplete{};
-    while (assetLoadThread->ResolveTextureUnload(textureComplete)) {
-        SPDLOG_INFO("[AssetManager] Texture unload succeeded: {}", textureComplete.texture->name);
+    for (auto& sampler : samplers) {
+        if (!samplerAllocator.IsValid(sampler.selfHandle)) { continue; }
+        if (sampler.refCount > 0 || sampler.retireFrame == 0 || currentFrame < sampler.retireFrame) { continue; }
 
-        textureComplete.texture->source.clear();
-        textureComplete.texture->name.clear();
-        textureComplete.texture->loadState = Engine::Texture::LoadState::NotLoaded;
-        textureComplete.texture->selfHandle = TextureHandle::INVALID;
-        if (textureComplete.texture->bindlessHandle.index != 0) {
-            resourceManager->bindlessSamplerTextureDescriptorBuffer.ReleaseTextureBinding(textureComplete.texture->bindlessHandle);
-        }
-        textureComplete.texture->bindlessHandle = Render::BindlessTextureHandle::INVALID;
-
-        textureAllocator.Remove(textureComplete.textureHandle);
-    }*/
+        resourceManager->bindlessSamplerTextureDescriptorBuffer.ReleaseSamplerBinding(sampler.bindlessHandle);
+        samplerIdToHandle.erase(sampler.id);
+        samplerAllocator.Remove(sampler.selfHandle);
+        sampler = {};
+    }
 }
 
 Texture* AssetManager::LoadTexture(TextureID textureId)
@@ -322,6 +296,7 @@ Texture* AssetManager::LoadTexture(TextureID textureId)
         if (textureAllocator.IsValid(existingHandle)) {
             Texture& texture = textures[existingHandle.index];
             texture.refCount++;
+            texture.retireFrame = 0;
             LOG_TRACE(Asset, "Texture already loaded: {}, refCount: {}", texture.name, texture.refCount);
             return &texture;
         }
@@ -386,9 +361,7 @@ void AssetManager::UnloadTexture(TextureID id)
     LOG_TRACE(Asset, "Texture refCount decremented: {}, refCount: {}", texture.name, texture.refCount);
 
     if (texture.refCount == 0) {
-        texture.loadState = Texture::LoadState::NotLoaded;
-        // todo: add to a queue that only pops after 3 FIF
-        textureIdToHandle.erase(it);
+        texture.retireFrame = ctx->currentFrame + Core::FRAME_BUFFER_COUNT + 1;
     }
 }
 
@@ -402,6 +375,7 @@ Sampler* AssetManager::LoadSampler(SamplerDesc& samplerDesc)
         if (samplerAllocator.IsValid(existingHandle)) {
             Sampler& existing = samplers[existingHandle.index];
             existing.refCount++;
+            existing.retireFrame = 0;
             return &existing;
         }
         samplerIdToHandle.erase(it);
@@ -445,8 +419,7 @@ void AssetManager::UnloadSampler(SamplerDesc& desc)
     sampler.refCount--;
 
     if (sampler.refCount == 0) {
-        // todo: defer GPU release by 3 FIF
-        samplerIdToHandle.erase(it);
+        sampler.retireFrame = ctx->currentFrame + Core::FRAME_BUFFER_COUNT + 1;
     }
 }
 
