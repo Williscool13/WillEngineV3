@@ -13,6 +13,7 @@
 
 #include "model_format.h"
 #include "model_types.h"
+#include "engine/materials/material.h"
 
 namespace Render
 {
@@ -69,6 +70,23 @@ void ReadDynamicVector(const uint8_t*& data, std::vector<T>& vec)
         std::memcpy(vec.data(), data, count * sizeof(T));
         data += count * sizeof(T);
     }
+}
+
+inline void WriteMaterial(std::ofstream& file, const Engine::Material& mat)
+{
+    file.write(reinterpret_cast<const char*>(&mat.props), sizeof(MaterialProperties));
+    file.write(reinterpret_cast<const char*>(mat.textureRefs), sizeof(mat.textureRefs));
+    file.write(reinterpret_cast<const char*>(mat.samplerDesc), sizeof(mat.samplerDesc));
+}
+
+inline void ReadMaterial(const uint8_t*& data, Engine::Material& mat)
+{
+    std::memcpy(&mat.props, data, sizeof(MaterialProperties));
+    data += sizeof(MaterialProperties);
+    std::memcpy(mat.textureRefs, data, sizeof(mat.textureRefs));
+    data += sizeof(mat.textureRefs);
+    std::memcpy(mat.samplerDesc, data, sizeof(mat.samplerDesc));
+    data += sizeof(mat.samplerDesc);
 }
 
 inline void WriteMeshInformation(std::ofstream& file, const MeshInformation& mesh)

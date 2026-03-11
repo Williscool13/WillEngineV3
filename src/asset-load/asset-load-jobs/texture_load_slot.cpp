@@ -11,6 +11,9 @@
 #include "engine/logging/engine_log.h"
 #include "engine/textures/texture.h"
 #include "ktxvulkan.h"
+#include "render/resource_manager.h"
+#include "render/vulkan/vk_context.h"
+#include "render/vulkan/vk_helpers.h"
 #include "render/vulkan/vk_utils.h"
 #include "tracy/Tracy.hpp"
 

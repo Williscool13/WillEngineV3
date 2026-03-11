@@ -24,6 +24,7 @@
 #include "platform/paths.h"
 #include "platform/thread_utils.h"
 #include "render/render_thread.h"
+#include "render/resource_manager.h"
 #include "render/pipelines/pipeline_manager.h"
 #include "utils/logging/logging.h"
 
@@ -164,7 +165,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
     {
         ZoneScopedN("CreateAssetManager");
         assetManager = std::make_unique<AssetManager>(asyncAssetLoadManager.get(), renderThread->GetResourceManager());
-        materialManager = std::make_unique<MaterialManager>(engineContext.get());
+        materialManager = std::make_unique<MaterialManager>(engineContext.get(), assetManager.get());
     }
 
     //
@@ -608,7 +609,7 @@ void WillEngine::EditorImgui()
         }
 
         if (ImGui::Button("Generate BRDF LUT and Smiling Friend")) {
-            modelGenerator->RequestTextureGenerate(
+            modelGenerator->RequestTextureGenerateFromFile(
                 Platform::GetAssetPath() / "textures/smiling_friend.jpg",
                 Platform::GetAssetPath() / "textures/smiling_friend.wtexture",
                 false,
@@ -646,7 +647,8 @@ void WillEngine::EditorImgui()
 
         ImGui::Separator();
         ImGui::Text("Active Generates:");
-        ImGui::Text("  Models: %u", modelGenerator->GetActiveModelGenerateCount());
+        ImGui::Text("  Models: %u (%u active)", modelGenerator->GetTotalModelGenerateCount(), modelGenerator->GetActiveModelGenerateCount());
+        ImGui::Text("  Textures: %u (%u active)", modelGenerator->GetTotalTextureGenerateCount(), modelGenerator->GetActiveTextureGenerateCount());
         ImGui::Text("Active Loads:");
         ImGui::Text("  Models: %u", asyncAssetLoadManager->GetActiveModelLoadCount());
         ImGui::Text("  Textures: %u", asyncAssetLoadManager->GetActiveTextureLoadCount());

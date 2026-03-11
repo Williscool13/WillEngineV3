@@ -7,9 +7,9 @@
 #include <semaphore>
 
 #include "asset-load/asset_load_config.h"
-#include "ktxvulkan.h"
 #include "render/model/model_serialization.h"
 #include "render/model/will_model_asset.h"
+#include "render/resource_manager.h"
 #include "render/vulkan/vk_utils.h"
 #include "tracy/Tracy.hpp"
 
@@ -61,7 +61,6 @@ void WillModelLoadSlot::Clear()
     uploadStaging = nullptr;
 
     rawData.Reset();
-    pendingTextures.clear();
     packedTriangles.clear();
 }
 
@@ -118,15 +117,12 @@ void WillModelLoadSlot::LoadModelTask::ExecuteRange(enki::TaskSetPartition range
     VkCommandBufferBeginInfo beginInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,};
     VK_CHECK(vkBeginCommandBuffer(cmd, &beginInfo));
 
-    loadSlot->UploadTextures(cmd, submitAndWait);
     loadSlot->UploadGeometry(cmd, submitAndWait);
 
     VK_CHECK(vkEndCommandBuffer(cmd));
     std::binary_semaphore done(0);
     loadSlot->_requestDispatchCallback(cmd, fence, &done);
     done.acquire();
-
-    loadSlot->PostUploadSetup();
 
     vkDestroyFence(loadSlot->context->device, fence, nullptr);
     vkDestroyCommandPool(loadSlot->context->device, commandPool, nullptr);
@@ -179,7 +175,16 @@ bool WillModelLoadSlot::LoadModelFromDisk()
         readArray(rawData.meshletTriangles, header->meshletTriangleCount);
         readArray(rawData.meshlets, header->meshletCount);
         readArray(rawData.primitives, header->primitiveCount);
-        readArray(rawData.materials, header->materialCount);
+    }
+
+    {
+        ZoneScopedN("ParseMaterials");
+        const uint8_t* matPtr = modelBinData.data() + offset;
+        rawData.materials.resize(header->materialCount);
+        for (uint32_t i = 0; i < header->materialCount; ++i) {
+            Render::ReadMaterial(matPtr, rawData.materials[i]);
+        }
+        offset = matPtr - modelBinData.data();
     }
 
     dataPtr = modelBinData.data() + offset; {
@@ -205,89 +210,6 @@ bool WillModelLoadSlot::LoadModelFromDisk()
         // Technically we can get nodes from metadata, but I don't think it matters.
         ZoneScopedN("ParseNodes");
         reader.ReadNodes(rawData.nodes);
-    }
-
-    //
-    {
-        ZoneScopedN("CreateSamplers");
-        std::vector<VkSamplerCreateInfo> samplerInfos{};
-        readArray(samplerInfos, header->samplerCount);
-        for (VkSamplerCreateInfo& sampler : samplerInfos) {
-            outputModel->modelData.samplers.push_back(Render::Sampler::CreateSampler(context, sampler));
-        }
-    }
-
-    //
-    {
-        ZoneScopedN("LoadTextures");
-        for (int i = 0; i < header->textureCount; ++i) {
-            ZoneScopedN("LoadSingleTexture");
-
-            std::string textureName = fmt::format("textures/texture_{}.ktx2", i);
-            if (!reader.HasFile(textureName)) {
-                SPDLOG_ERROR("[WillModelLoader::TaskImplementation] Failed to find texture {}", textureName);
-                pendingTextures.push_back(nullptr);
-                continue;
-            }
-
-            ktxTexture2* loadedTexture = nullptr;
-            ktx_error_code_e result;
-            std::vector<uint8_t> ktxData;
-
-            //
-            {
-                ZoneScopedN("CreateKtxTexture")
-                //
-                {
-                    ZoneScopedN("ReadKTXFile");
-                    ktxData = reader.ReadFile(textureName);
-                }
-                //
-                {
-                    ZoneScopedN("KTXCreateFromMemory");
-                    result = ktxTexture2_CreateFromMemory(ktxData.data(), ktxData.size(), KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, &loadedTexture);
-                    if (result != KTX_SUCCESS) {
-                        SPDLOG_ERROR("[TextureLoadJob] Failed to load KTX texture: {}", textureName);
-                        return false;
-                    }
-                }
-            }
-
-            assert(!ktxTexture2_NeedsTranscoding(loadedTexture) && "This engine no longer supports UASTC/ETC1S compressed textures");
-
-            // Size check
-            ktx_size_t mip0Size = ktxTexture_GetImageSize(ktxTexture(loadedTexture), 0);
-            if (mip0Size > GPU_DISPATCH_STAGING_SIZE) {
-                SPDLOG_WARN("Texture too big to fit in the staging buffer for texture {}, pruning", textureName);
-                pendingTextures.push_back(nullptr);
-                ktxTexture2_Destroy(loadedTexture);
-                continue;
-            }
-
-            // Texture dimension and array check
-            if (loadedTexture->numDimensions != 2) {
-                SPDLOG_WARN("Engine does not support non 2D image textures {}, pruning", textureName);
-                pendingTextures.push_back(nullptr);
-                ktxTexture2_Destroy(loadedTexture);
-                continue;
-            }
-
-            if (loadedTexture->isArray) {
-                SPDLOG_WARN("Engine does not support texture arrays {}, pruning", textureName);
-                pendingTextures.push_back(nullptr);
-                ktxTexture2_Destroy(loadedTexture);
-                continue;
-            }
-
-            if (loadedTexture->isCubemap) {
-                SPDLOG_WARN("Texture does not support cubemaps {}, pruning", textureName);
-                pendingTextures.push_back(nullptr);
-                ktxTexture2_Destroy(loadedTexture);
-                continue;
-            }
-
-            pendingTextures.push_back(loadedTexture);
-        }
     }
 
     return true;
@@ -428,132 +350,6 @@ void WillModelLoadSlot::PrepareUploadData()
                           (rawData.meshletTriangles[i + 2] << 16);
         packedTriangles.push_back(packed);
     }
-
-    // Create images for textures
-    for (auto currentTexture : pendingTextures) {
-        if (currentTexture == nullptr) {
-            outputModel->modelData.images.emplace_back();
-            outputModel->modelData.imageViews.emplace_back();
-        }
-        else {
-            VkExtent3D extent{
-                .width = currentTexture->baseWidth,
-                .height = currentTexture->baseHeight,
-                .depth = currentTexture->baseDepth
-            };
-
-            VkFormat imageFormat = ktxTexture2_GetVkFormat(currentTexture);
-            VkImageCreateInfo imageCreateInfo = Render::VkHelpers::ImageCreateInfo(
-                imageFormat, extent, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
-            imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
-            imageCreateInfo.mipLevels = currentTexture->numLevels;
-            imageCreateInfo.arrayLayers = currentTexture->numLayers;
-            imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-            Render::AllocatedImage allocatedImage = Render::AllocatedImage::CreateAllocatedImage(context, imageCreateInfo);
-
-            VkImageViewCreateInfo viewInfo = Render::VkHelpers::ImageViewCreateInfo(
-                allocatedImage.handle, allocatedImage.format, VK_IMAGE_ASPECT_COLOR_BIT);
-            viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-            viewInfo.subresourceRange.layerCount = currentTexture->numLayers;
-            viewInfo.subresourceRange.levelCount = currentTexture->numLevels;
-            Render::ImageView imageView = Render::ImageView::CreateImageView(context, viewInfo);
-
-            outputModel->modelData.images.push_back(std::move(allocatedImage));
-            outputModel->modelData.imageViews.push_back(std::move(imageView));
-        }
-    }
-}
-
-void WillModelLoadSlot::UploadTextures(VkCommandBuffer cmd, const std::function<void(bool)>& submitAndWait)
-{
-    ZoneScopedN("UploadTextures");
-
-    Core::LinearAllocator& stagingAllocator = uploadStaging->GetStagingAllocator();
-    Render::AllocatedBuffer& stagingBuffer = uploadStaging->GetStagingBuffer();
-
-    for (size_t textureIdx = 0; textureIdx < pendingTextures.size(); textureIdx++) {
-        ktxTexture2* currentTexture = pendingTextures[textureIdx];
-        if (currentTexture == nullptr) {
-            continue;
-        }
-
-        Render::AllocatedImage& image = outputModel->modelData.images[textureIdx];
-
-        // Pre-copy barrier: UNDEFINED -> TRANSFER_DST_OPTIMAL
-        VkImageMemoryBarrier2 preCopyBarrier = Render::VkHelpers::ImageMemoryBarrier(
-            image.handle,
-            Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, currentTexture->numLevels, 0, currentTexture->numLayers),
-            VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_UNDEFINED,
-            VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
-        );
-
-        VkDependencyInfo depInfo{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
-        depInfo.imageMemoryBarrierCount = 1;
-        depInfo.pImageMemoryBarriers = &preCopyBarrier;
-        vkCmdPipelineBarrier2(cmd, &depInfo);
-
-        // Upload all mip levels
-        for (uint32_t mipLevel = 0; mipLevel < currentTexture->numLevels; mipLevel++) {
-            ZoneScopedN("Upload Mip");
-
-            size_t mipOffset;
-            ktxTexture_GetImageOffset(ktxTexture(currentTexture), mipLevel, 0, 0, &mipOffset);
-            uint32_t mipWidth = std::max(1u, currentTexture->baseWidth >> mipLevel);
-            uint32_t mipHeight = std::max(1u, currentTexture->baseHeight >> mipLevel);
-            uint32_t mipDepth = std::max(1u, currentTexture->baseDepth >> mipLevel);
-            size_t mipSize = ktxTexture_GetImageSize(ktxTexture(currentTexture), mipLevel);
-
-            size_t allocation = stagingAllocator.Allocate(mipSize, 16);
-            if (allocation == SIZE_MAX) {
-                submitAndWait(true);
-                stagingAllocator.Reset();
-                allocation = stagingAllocator.Allocate(mipSize, 16);
-                assert(allocation != SIZE_MAX && "Mip level too large for staging buffer");
-            }
-
-            char* stagingPtr = static_cast<char*>(stagingBuffer.allocationInfo.pMappedData) + allocation;
-            memcpy(stagingPtr, currentTexture->pData + mipOffset, mipSize);
-
-            VkBufferImageCopy copyRegion{};
-            copyRegion.bufferOffset = allocation;
-            copyRegion.bufferRowLength = 0;
-            copyRegion.bufferImageHeight = 0;
-            copyRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            copyRegion.imageSubresource.mipLevel = mipLevel;
-            copyRegion.imageSubresource.baseArrayLayer = 0;
-            copyRegion.imageSubresource.layerCount = currentTexture->numLayers;
-            copyRegion.imageOffset = {0, 0, 0};
-            copyRegion.imageExtent = {mipWidth, mipHeight, mipDepth};
-
-            vkCmdCopyBufferToImage(
-                cmd,
-                stagingBuffer.handle,
-                image.handle,
-                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                1,
-                &copyRegion
-            );
-        }
-
-        // Final barrier: TRANSFER_DST_OPTIMAL -> SHADER_READ_ONLY_OPTIMAL with queue family transfer
-        VkImageMemoryBarrier2 finalBarrier = Render::VkHelpers::ImageMemoryBarrier(
-            image.handle,
-            Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, currentTexture->numLevels, 0, currentTexture->numLayers),
-            VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-        );
-        finalBarrier.srcQueueFamilyIndex = context->transferQueueFamily;
-        finalBarrier.dstQueueFamilyIndex = context->graphicsQueueFamily;
-
-        depInfo.pImageMemoryBarriers = &finalBarrier;
-        vkCmdPipelineBarrier2(cmd, &depInfo);
-
-        outputModel->imageAcquireOps.push_back(Render::VkHelpers::FromVkBarrier(finalBarrier));
-
-        ktxTexture2_Destroy(currentTexture);
-    }
-
-    pendingTextures.clear();
 }
 
 void WillModelLoadSlot::UploadGeometry(VkCommandBuffer cmd, const std::function<void(bool)>& submitAndWait)
@@ -654,55 +450,6 @@ void WillModelLoadSlot::UploadGeometry(VkCommandBuffer cmd, const std::function<
 
     for (auto& barrier : releaseBarriers) {
         outputModel->bufferAcquireOps.push_back(Render::VkHelpers::FromVkBarrier(barrier));
-    }
-}
-
-void WillModelLoadSlot::PostUploadSetup()
-{
-    // Remap samplers
-    auto remapSamplers = [](auto& indices, const std::vector<Render::BindlessSamplerHandle>& map) {
-        indices.x = indices.x >= 0 ? map[indices.x].index : ASSET_SAMPLER_BINDLESS_INDEX;
-        indices.y = indices.y >= 0 ? map[indices.y].index : ASSET_SAMPLER_BINDLESS_INDEX;
-        indices.z = indices.z >= 0 ? map[indices.z].index : ASSET_SAMPLER_BINDLESS_INDEX;
-        indices.w = indices.w >= 0 ? map[indices.w].index : ASSET_SAMPLER_BINDLESS_INDEX;
-    };
-
-    outputModel->modelData.samplerIndexToDescriptorBufferIndexMap.resize(outputModel->modelData.samplers.size());
-    for (int32_t i = 0; i < outputModel->modelData.samplers.size(); ++i) {
-        outputModel->modelData.samplerIndexToDescriptorBufferIndexMap[i] =
-            resourceManager->bindlessSamplerTextureDescriptorBuffer.AllocateSampler(outputModel->modelData.samplers[i].handle);
-    }
-
-    for (MaterialProperties& material : outputModel->modelData.materials) {
-        remapSamplers(material.textureSamplerIndices, outputModel->modelData.samplerIndexToDescriptorBufferIndexMap);
-        remapSamplers(material.textureSamplerIndices2, outputModel->modelData.samplerIndexToDescriptorBufferIndexMap);
-    }
-
-    // Remap textures
-    auto remapTextures = [](auto& indices, const std::vector<Render::BindlessTextureHandle>& map) {
-        indices.x = indices.x >= 0 ? map[indices.x].index : WHITE_IMAGE_BINDLESS_INDEX;
-        indices.y = indices.y >= 0 ? map[indices.y].index : WHITE_IMAGE_BINDLESS_INDEX;
-        indices.z = indices.z >= 0 ? map[indices.z].index : WHITE_IMAGE_BINDLESS_INDEX;
-        indices.w = indices.w >= 0 ? map[indices.w].index : WHITE_IMAGE_BINDLESS_INDEX;
-    };
-
-    outputModel->modelData.textureIndexToDescriptorBufferIndexMap.resize(outputModel->modelData.imageViews.size());
-    for (int32_t i = 0; i < outputModel->modelData.imageViews.size(); ++i) {
-        if (outputModel->modelData.imageViews[i].handle == VK_NULL_HANDLE) {
-            outputModel->modelData.textureIndexToDescriptorBufferIndexMap[i] = {ERROR_IMAGE_BINDLESS_INDEX, 0};
-            continue;
-        }
-
-        outputModel->modelData.textureIndexToDescriptorBufferIndexMap[i] =
-            resourceManager->bindlessSamplerTextureDescriptorBuffer.AllocateTexture({
-                .imageView = outputModel->modelData.imageViews[i].handle,
-                .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-            });
-    }
-
-    for (MaterialProperties& material : outputModel->modelData.materials) {
-        remapTextures(material.textureImageIndices, outputModel->modelData.textureIndexToDescriptorBufferIndexMap);
-        remapTextures(material.textureImageIndices2, outputModel->modelData.textureIndexToDescriptorBufferIndexMap);
     }
 }
 } // AssetLoad

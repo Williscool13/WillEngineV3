@@ -426,11 +426,15 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
         for (const auto& [id, path] : modelReg) {
             modelList.emplace_back(path.stem().string(), id);
         }
-        std::ranges::sort(modelList, {}, &std::pair<std::string, StringID>::first);
-        selectedModel = std::clamp(selectedModel, 0, static_cast<int>(modelList.size()) - 1);
+
+        if (!modelList.empty()) {
+            std::ranges::sort(modelList, {}, &std::pair<std::string, StringID>::first);
+            selectedModel = std::clamp(selectedModel, 0, static_cast<int>(modelList.size()) - 1);
+        }
 
         ImGui::SetNextItemWidth(-1);
-        if (ImGui::BeginCombo("##model_list", modelList.empty() ? "" : modelList[selectedModel].first.c_str())) {
+        ImGui::BeginDisabled(modelList.empty());
+        if (ImGui::BeginCombo("##model_list", modelList.empty() ? "No models" : modelList[selectedModel].first.c_str())) {
             for (int i = 0; i < static_cast<int>(modelList.size()); ++i) {
                 bool sel = (i == selectedModel);
                 if (ImGui::Selectable(modelList[i].first.c_str(), sel)) {
@@ -439,6 +443,7 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
             }
             ImGui::EndCombo();
         }
+        ImGui::EndDisabled();
 
         ImGui::BeginDisabled(modelList.empty());
         if (ImGui::Button("Spawn")) {

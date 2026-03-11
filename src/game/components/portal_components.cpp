@@ -34,10 +34,13 @@ PortalPair CreatePortalPair(Core::EngineContext* ctx, Engine::GameState* state, 
         for (size_t i = 0; i < submesh.primitiveProperties.size(); ++i) {
             Render::PrimitiveProperty& primitive = submesh.primitiveProperties[i];
 
-            MaterialProperties material = primitive.materialIndex == -1
-                ? ctx->materialManager->GetDefaultMaterialProperties()
-                : plane->modelData.materials[primitive.materialIndex];
-            material.colorFactor = glm::vec4(0.3f, 0.6f, 1.0f, 0.5f); // Blue portal
+            Engine::Material material;
+            if (primitive.materialIndex == -1) {
+                material.props = ctx->materialManager->GetDefaultMaterialProperties();
+            } else {
+                material = plane->modelData.materials[primitive.materialIndex];
+            }
+            material.props.colorFactor = glm::vec4(0.3f, 0.6f, 1.0f, 0.5f); // Blue portal
 
             Engine::MaterialID matID = materialManager->CreateImmutableMaterial(material);
             materialManager->AcquireMaterial(matID);
@@ -65,10 +68,14 @@ PortalPair CreatePortalPair(Core::EngineContext* ctx, Engine::GameState* state, 
         for (size_t i = 0; i < submesh.primitiveProperties.size(); ++i) {
             Render::PrimitiveProperty& primitive = submesh.primitiveProperties[i];
 
-            MaterialProperties material = primitive.materialIndex == -1
-                ? ctx->materialManager->GetDefaultMaterialProperties()
-                : plane->modelData.materials[primitive.materialIndex];
-            material.colorFactor = glm::vec4(1.0f, 0.6f, 0.2f, 0.5f); // Orange portal
+
+            Engine::Material material;
+            if (primitive.materialIndex == -1) {
+                material.props = ctx->materialManager->GetDefaultMaterialProperties();
+            } else {
+                material = plane->modelData.materials[primitive.materialIndex];
+            }
+            material.props.colorFactor = glm::vec4(1.0f, 0.6f, 0.2f, 0.5f); // Orange portal
 
             Engine::MaterialID matID = materialManager->CreateImmutableMaterial(material);
             materialManager->AcquireMaterial(matID);
@@ -118,10 +125,14 @@ void CreatePortalPlane(Core::EngineContext* ctx, Engine::GameState* state, glm::
     for (size_t i = 0; i < submesh.primitiveProperties.size(); ++i) {
         Render::PrimitiveProperty& primitive = submesh.primitiveProperties[i];
 
-        MaterialProperties material = primitive.materialIndex == -1
-            ? ctx->materialManager->GetDefaultMaterialProperties()
-            : plane->modelData.materials[primitive.materialIndex];
-        material.colorFactor = glm::vec4(0.3f, 0.6f, 1.0f, 1.0f);
+
+        Engine::Material material;
+        if (primitive.materialIndex == -1) {
+            material.props = ctx->materialManager->GetDefaultMaterialProperties();
+        } else {
+            material = plane->modelData.materials[primitive.materialIndex];
+        }
+        material.props.colorFactor = glm::vec4(0.3f, 0.6f, 1.0f, 1.0f);
 
         Engine::MaterialID matID = materialManager->CreateImmutableMaterial(material);
         materialManager->AcquireMaterial(matID);

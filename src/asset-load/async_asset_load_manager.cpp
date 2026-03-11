@@ -13,6 +13,7 @@
 #include "asset-load-jobs/cubemap_load_slot.h"
 #include "render/pipelines/pipeline_data.h"
 #include "render/types/cubemap_asset.h"
+#include "render/vulkan/vk_context.h"
 #include "render/vulkan/vk_utils.h"
 
 namespace AssetLoad

@@ -42,6 +42,7 @@ struct TextureGenerateSlot
     );
 
     void Launch(TextureGenerateSlotHandle _slotHandle, const std::filesystem::path& _imagePath, const std::filesystem::path& _outputPath, Engine::TextureID _textureId, bool _mipmapped, DXGI_FORMAT _targetFormat);
+    void LaunchFromMemory(TextureGenerateSlotHandle _slotHandle, std::unique_ptr<uint8_t[]> pixels, uint32_t w, uint32_t h, uint32_t bytesPerPixel, const std::filesystem::path& _outputPath, Engine::TextureID _textureId, bool _mipmapped, DXGI_FORMAT _targetFormat);
     void Clear();
 
     struct GenerateTask : enki::ITaskSet
@@ -67,6 +68,11 @@ private:
     TextureGenerateSlotHandle slotHandle{TextureGenerateSlotHandle::INVALID};
     bool mipmapped = true;
     DXGI_FORMAT targetFormat = DXGI_FORMAT_BC7_UNORM;
+
+    std::unique_ptr<uint8_t[]> preloadedPixels;
+    uint32_t preloadedWidth{0};
+    uint32_t preloadedHeight{0};
+    uint32_t preloadedBytesPerPixel{0};
 
     Render::AllocatedImage sourceImage;
     std::vector<std::vector<uint8_t>> mipData;

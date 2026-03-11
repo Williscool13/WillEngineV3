@@ -37,11 +37,8 @@ AssetGenerator::AssetGenerator(Render::VulkanContext* context, Render::RenderThr
         modelGenerateTasks[i].Initialize(
             i,
             assetGeneratorScheduler.get(),
-            context,
+            this,
             &modelGenerationProgress[i],
-            [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
-                GraphicsQueueGPUDispatch(cmd, fence, completionSignal);
-            },
             [this](bool success, ModelGenerateSlotHandle slotHandle) {
                 OnModelGenerateComplete(success, slotHandle);
             }
@@ -111,10 +108,16 @@ void AssetGenerator::ThreadMain()
                 Core::Handle<TextureGenerateSlot> slotHandle = textureGenerateAllocator.Add();
                 if (slotHandle.IsValid()) {
                     TextureGenerateSlot& task = textureGenerateTasks[slotHandle.index];
-                    task.Launch(slotHandle, req.imagePath, req.outputPath, req.textureId, req.mipmapped, req.targetFormat);
+                    if (req.sourcePixels) {
+                        task.LaunchFromMemory(slotHandle, std::move(req.sourcePixels), req.sourceWidth, req.sourceHeight, req.sourceBytesPerPixel, req.outputPath, req.textureId, req.mipmapped,
+                                              req.targetFormat);
+                    }
+                    else {
+                        task.Launch(slotHandle, req.imagePath, req.outputPath, req.textureId, req.mipmapped, req.targetFormat);
+                    }
                 }
                 else {
-                    textureGenerateRequestQueue.enqueue(req);
+                    textureGenerateRequestQueue.enqueue(std::move(req));
                 }
             }
         } {
@@ -177,13 +180,34 @@ void AssetGenerator::RequestModelGenerate(const std::filesystem::path& gltfPath,
     wakeCV.notify_one();
 }
 
-void AssetGenerator::RequestTextureGenerate(const std::filesystem::path& imagePath, const std::filesystem::path& outputPath, bool mipmapped, DXGI_FORMAT targetFormat)
+Engine::TextureID AssetGenerator::RequestTextureGenerateFromFile(const std::filesystem::path& imagePath, const std::filesystem::path& outputPath, bool mipmapped, DXGI_FORMAT targetFormat)
 {
     ZoneScoped;
-
-    textureGenerateRequestQueue.enqueue({imagePath, outputPath, Engine::TextureID(textureIdRng()), mipmapped, targetFormat});
+    Engine::TextureID id{textureIdRng()};
+    textureGenerateRequestQueue.enqueue({outputPath, id, mipmapped, targetFormat, imagePath});
     workCounter.fetch_add(1);
     wakeCV.notify_one();
+    return id;
+}
+
+Engine::TextureID AssetGenerator::RequestTextureGenerateFromMemory(std::unique_ptr<uint8_t[]> pixels, uint32_t w, uint32_t h, uint32_t bytesPerPixel, const std::filesystem::path& outputPath,
+                                                                   bool mipmapped, DXGI_FORMAT targetFormat)
+{
+    ZoneScoped;
+    Engine::TextureID id{textureIdRng()};
+    TextureGenerateRequest req{};
+    req.outputPath = outputPath;
+    req.textureId = id;
+    req.mipmapped = mipmapped;
+    req.targetFormat = targetFormat;
+    req.sourcePixels = std::move(pixels);
+    req.sourceWidth = w;
+    req.sourceHeight = h;
+    req.sourceBytesPerPixel = bytesPerPixel;
+    textureGenerateRequestQueue.enqueue(std::move(req));
+    workCounter.fetch_add(1);
+    wakeCV.notify_one();
+    return id;
 }
 
 void AssetGenerator::RequestEnvironmentMapGenerate(const std::filesystem::path& hdriPath, const std::filesystem::path& outputPath)
@@ -213,9 +237,10 @@ bool AssetGenerator::TryDequeueCubemapGenerateComplete(EnvironmentMapGenerateCom
 
 void AssetGenerator::GenerateBRDFLUT(const std::filesystem::path& outputFile)
 {
-    CreateBRDFLookupTable(outputFile, Engine::TextureID(textureIdRng()), context, renderThread->GetResourceManager(), renderThread->GetPipelineManager(), [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
-        GraphicsQueueGPUDispatch(cmd, fence, completionSignal);
-    });
+    CreateBRDFLookupTable(outputFile, Engine::TextureID(textureIdRng()), context, renderThread->GetResourceManager(), renderThread->GetPipelineManager(),
+                          [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
+                              GraphicsQueueGPUDispatch(cmd, fence, completionSignal);
+                          });
 }
 
 void AssetGenerator::OnModelGenerateComplete(bool success, ModelGenerateSlotHandle slotHandle)

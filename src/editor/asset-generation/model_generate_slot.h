@@ -33,10 +33,9 @@ public:
     void Initialize(
         int32_t slotIndex,
         enki::TaskScheduler* _scheduler,
-        Render::VulkanContext* _context,
+        AssetGenerator* _generator,
         WillModelGenerationProgress* _progress,
-        std::function<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> graphicsDispatchCallback, std::function<void(bool success, ModelGenerateSlotHandle slotHandle)>
-        notifyCallback
+        std::function<void(bool success, ModelGenerateSlotHandle slotHandle)> notifyCallback
     );
 
     void Launch(ModelGenerateSlotHandle slotHandle, const std::filesystem::path& gltfPath, const std::filesystem::path& outputPath);
@@ -56,15 +55,11 @@ private:
         void ExecuteRange(enki::TaskSetPartition range, uint32_t threadNum) override;
     };
 
-    bool LoadGltf(VkCommandBuffer cmd, const std::function<void()>& startRecording, const std::function<void(bool)>& submitAndWait);
+    bool LoadGltf();
 
-    bool WriteWillModel(VkCommandBuffer cmd, const std::function<void()>& startRecording, const std::function<void(bool)>& submitAndWait);
+    bool WriteWillModel();
 
     void TopologicalSortNodes(std::vector<Render::Node>& nodes, std::vector<uint32_t>& oldToNew);
-
-    static Render::AllocatedImage RecordCreateImageFromData(Render::VulkanContext* context, VkCommandBuffer cmd, Render::AllocatedBuffer& stagingBuffer, size_t offset, unsigned char* data,
-                                                            size_t size,
-                                                            VkExtent3D imageExtent, VkFormat format, VkImageUsageFlagBits usage);
 
     static VkFilter ExtractFilter(fastgltf::Filter filter);
 
@@ -77,17 +72,11 @@ private:
     static glm::vec4 GenerateBoundingSphere(const std::vector<Vertex>& vertices);
 
     enki::TaskScheduler* scheduler{};
-    Render::VulkanContext* context{};
+    AssetGenerator* generator{};
     WillModelGenerationProgress* progress{};
 
     std::filesystem::path temporaryPath{};
 
-    Render::AllocatedBuffer imageStagingBuffer{};
-    Core::LinearAllocator imageStagingAllocator{MODEL_GENERATION_STAGING_BUFFER_SIZE};
-    Render::AllocatedBuffer imageReceivingBuffer{};
-    Core::LinearAllocator imageReceivingAllocator{MODEL_GENERATION_STAGING_BUFFER_SIZE};
-
-    std::function<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> _graphicsDispatchCallback;
     std::function<void(bool success, ModelGenerateSlotHandle slotHandle)> _notifyCallback;
 
     ModelGenerateSlotHandle slotHandle = ModelGenerateSlotHandle::INVALID;

@@ -19,10 +19,12 @@ struct WillModel;
 
 namespace Engine
 {
+struct Sampler;
 struct Texture;
 
 using WillModelHandle = Core::Handle<Render::WillModel>;
 using TextureHandle = Core::Handle<Texture>;
+using SamplerHandle = Core::Handle<Sampler>;
 using CubemapHandle = Core::Handle<Render::Cubemap>;
 using AudioHandle = Core::Handle<Audio::WillAudio>;
 }

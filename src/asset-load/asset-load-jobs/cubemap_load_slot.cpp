@@ -8,7 +8,10 @@
 
 #include "asset-load/asset_load_config.h"
 #include "ktxvulkan.h"
+#include "render/resource_manager.h"
 #include "render/types/cubemap_asset.h"
+#include "render/vulkan/vk_context.h"
+#include "render/vulkan/vk_helpers.h"
 #include "render/vulkan/vk_utils.h"
 #include "tracy/Tracy.hpp"
 

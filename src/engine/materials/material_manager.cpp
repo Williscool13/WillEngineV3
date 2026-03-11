@@ -8,19 +8,20 @@
 
 #include <json/nlohmann/json.hpp>
 
-#include "core/hash/fnv_1_a.h"
 #include "core/include/engine_context.h"
 #include "core/include/render_interface.h"
-#include "../logging/engine_log.h"
+#include "engine/logging/engine_log.h"
+#include "engine/asset_manager.h"
 #include "platform/paths.h"
 
 
 namespace Engine
 {
-MaterialManager::MaterialManager(Core::EngineContext* ctx)
-    : ctx(ctx)
+MaterialManager::MaterialManager(Core::EngineContext* ctx, AssetManager* assetManager)
+    : ctx(ctx), assetManager(assetManager)
 {
-    MaterialProperties defaultMat{
+    Material defaultMat{};
+    defaultMat.props = {
         .colorFactor = {1.0f, 1.0f, 1.0f, 1.0f}, // white
         .metalRoughFactors = {0.0f, 1.0f, 0.0f, 0.0f}, // non-metallic, rough
         .textureImageIndices = {WHITE_IMAGE_BINDLESS_INDEX, WHITE_IMAGE_BINDLESS_INDEX, WHITE_IMAGE_BINDLESS_INDEX, WHITE_IMAGE_BINDLESS_INDEX},
@@ -37,26 +38,67 @@ MaterialManager::MaterialManager(Core::EngineContext* ctx)
         .physicalProperties = {1.5f, 0.0f, 1.0f, 1.0f} // IOR 1.5, no dispersion, normal scale 1.0, full occlusion
     };
 
+    TextureID whiteTexture = assetManager->FindTextureByName("white");
+    defaultMat.textureRefs[0] = whiteTexture;
+    defaultMat.textureRefs[1] = whiteTexture;
+    defaultMat.textureRefs[2] = whiteTexture;
+    defaultMat.textureRefs[3] = whiteTexture;
+    defaultMat.textureRefs[4] = whiteTexture;
+    defaultMat.textureRefs[5] = whiteTexture;
+    defaultMat.samplerDesc[0] = SamplerDesc{};
+    defaultMat.samplerDesc[1] = SamplerDesc{};
+    defaultMat.samplerDesc[2] = SamplerDesc{};
+    defaultMat.samplerDesc[3] = SamplerDesc{};
+    defaultMat.samplerDesc[4] = SamplerDesc{};
+    defaultMat.samplerDesc[5] = SamplerDesc{};
     defaultMaterial = CreateImmutableMaterial(defaultMat);
 
     // Default material is always resident
     AcquireMaterial(defaultMaterial);
 
-    Load();
+    LoadMutableMaterials();
 }
 
-MaterialID MaterialManager::CreateImmutableMaterial(const MaterialProperties& props)
+MaterialID MaterialManager::CreateImmutableMaterial(const Material& mat)
 {
-    MaterialID matId = HashMaterial(props);
+    MaterialID matId = HashMaterial(mat);
     if (materials.contains(matId)) {
         return matId;
     }
 
-    Material m{};
+    Material m = mat;
     m.name = "__immutable__";
     m.id = matId;
-    m.props = props;
     m.immutable = true;
+
+    auto resolveTexture = [&](TextureID id) -> int32_t {
+        if (!id.IsValid()) return WHITE_IMAGE_BINDLESS_INDEX;
+        TextureHandle handle = assetManager->LoadTexture(id);
+        if (!handle.IsValid()) return WHITE_IMAGE_BINDLESS_INDEX;
+        Texture* tex = assetManager->GetTexture(handle);
+        return tex ? static_cast<int32_t>(tex->bindlessHandle.index) : WHITE_IMAGE_BINDLESS_INDEX;
+    };
+
+    m.props.textureImageIndices.x  = resolveTexture(m.textureRefs[0]);
+    m.props.textureImageIndices.y  = resolveTexture(m.textureRefs[1]);
+    m.props.textureImageIndices.z  = resolveTexture(m.textureRefs[2]);
+    m.props.textureImageIndices.w  = resolveTexture(m.textureRefs[3]);
+    m.props.textureImageIndices2.x = resolveTexture(m.textureRefs[4]);
+    m.props.textureImageIndices2.y = resolveTexture(m.textureRefs[5]);
+
+    auto resolveSampler = [&](SamplerDesc& desc) -> int32_t {
+        SamplerHandle handle = assetManager->LoadSampler(desc);
+        if (!handle.IsValid()) return ASSET_SAMPLER_BINDLESS_INDEX;
+        Sampler* s = assetManager->GetSampler(handle);
+        return s ? static_cast<int32_t>(s->bindlessHandle.index) : ASSET_SAMPLER_BINDLESS_INDEX;
+    };
+
+    m.props.textureSamplerIndices.x  = resolveSampler(m.samplerDesc[0]);
+    m.props.textureSamplerIndices.y  = resolveSampler(m.samplerDesc[1]);
+    m.props.textureSamplerIndices.z  = resolveSampler(m.samplerDesc[2]);
+    m.props.textureSamplerIndices.w  = resolveSampler(m.samplerDesc[3]);
+    m.props.textureSamplerIndices2.x = resolveSampler(m.samplerDesc[4]);
+    m.props.textureSamplerIndices2.y = resolveSampler(m.samplerDesc[5]);
 
     materials[matId] = m;
     return matId;
@@ -100,6 +142,9 @@ void MaterialManager::AcquireMaterial(MaterialID materialID)
 
 void MaterialManager::ReleaseMaterial(MaterialID materialID)
 {
+    // Default material is always resident
+    if (materialID == defaultMaterial) { return; }
+
     MaterialEntry* entry{nullptr};
     if (idToEntryMap.contains(materialID)) {
         entry = &activeMaterialBuffer[idToEntryMap[materialID]];
@@ -141,6 +186,8 @@ void MaterialManager::UpdateMutableMaterial(MaterialID id, const MaterialPropert
     if (auto it = materials.find(id); it != materials.end()) {
         it->second.props = props;
     }
+    // todo: need to unref textures/samplers
+    // todo: then add refs to new textures/samplers
 }
 
 MaterialID MaterialManager::FindMutableMaterial(StringID name) const
@@ -151,6 +198,14 @@ MaterialID MaterialManager::FindMutableMaterial(StringID name) const
     return MaterialID::INVALID;
 }
 
+const Material* MaterialManager::GetMaterial(MaterialID id) const
+{
+    if (auto it = materials.find(id); it != materials.end()) {
+        return &it->second;
+    }
+    return nullptr;
+}
+
 MaterialProperties MaterialManager::GetProperties(MaterialID id) const
 {
     if (auto it = materials.find(id); it != materials.end()) {
@@ -159,7 +214,7 @@ MaterialProperties MaterialManager::GetProperties(MaterialID id) const
     return {};
 }
 
-void MaterialManager::Save() const
+void MaterialManager::SaveMutableMaterials() const
 {
     for (const auto& [id, mat] : materials) {
         if (mat.immutable) { continue; }
@@ -170,7 +225,7 @@ void MaterialManager::Save() const
     }
 }
 
-void MaterialManager::Load()
+void MaterialManager::LoadMutableMaterials()
 {
     std::filesystem::path assetPath = Platform::GetAssetPath();
     for (const auto& entry : std::filesystem::recursive_directory_iterator(assetPath)) {

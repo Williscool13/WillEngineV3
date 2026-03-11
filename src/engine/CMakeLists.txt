@@ -23,11 +23,14 @@ add_library(engine STATIC
         core/material_id.h
         core/texture_id.cpp
         core/texture_id.h
+        core/sampler_id.h
         materials/material.cpp
         materials/material.h
         textures/texture.h
         textures/texture_format.cpp
         textures/texture_format.h
+        resources/samplers/sampler.cpp
+        resources/samplers/sampler.h
 )
 
 target_include_directories(engine PRIVATE

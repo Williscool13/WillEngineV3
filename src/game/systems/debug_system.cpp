@@ -53,9 +53,9 @@ entt::entity CreateTextureVisualizer(Core::EngineContext* ctx, Engine::GameState
     Render::MeshInformation& submesh = model->modelData.meshes[0];
 
     for (size_t i = 0; i < submesh.primitiveProperties.size(); ++i) {
-        MaterialProperties material = ctx->materialManager->GetDefaultMaterialProperties();
-        material.textureImageIndices.x = BRDF_LUT_BINDLESS_INDEX;
-        Engine::MaterialID matID = materialManager->CreateImmutableMaterial(material);
+        /*MaterialProperties material = ctx->materialManager->GetDefaultMaterialProperties();
+        material.textureImageIndices.x = BRDF_LUT_BINDLESS_INDEX;*/
+        Engine::MaterialID matID = materialManager->GetDefaultMaterial();
         materialManager->AcquireMaterial(matID);
 
         renderable.primitives[i] = {
@@ -270,15 +270,15 @@ entt::entity CreateGlowingBox(Core::EngineContext* ctx, Engine::GameState* state
     for (size_t i = 0; i < submesh.primitiveProperties.size(); ++i) {
         Render::PrimitiveProperty& primitive = submesh.primitiveProperties[i];
 
-        MaterialProperties material;
+        Engine::Material material;
         if (primitive.materialIndex == -1) {
-            material = ctx->materialManager->GetDefaultMaterialProperties();
+            material.props = ctx->materialManager->GetDefaultMaterialProperties();
         }
         else {
             material = model->modelData.materials[primitive.materialIndex];
         }
 
-        material.emissiveFactor = emissive;
+        material.props.emissiveFactor = emissive;
 
         Engine::MaterialID matID = materialManager->CreateImmutableMaterial(material);
         materialManager->AcquireMaterial(matID);

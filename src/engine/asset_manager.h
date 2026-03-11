@@ -9,9 +9,10 @@
 
 #include "asset_manager_config.h"
 #include "asset_manager_types.h"
-#include "materials/material_manager.h"
+#include "core/sampler_id.h"
 #include "core/allocators/handle_allocator.h"
 #include "engine/textures/texture.h"
+#include "engine/resources/samplers/sampler.h"
 #include "render/types/cubemap_asset.h"
 #include "render/model/model_format.h"
 #include "render/model/model_types.h"
@@ -80,6 +81,13 @@ public: // Textures
 
     [[nodiscard]] TextureID FindTextureByName(std::string_view name) const;
 
+public: // Samplers
+    SamplerHandle LoadSampler(SamplerDesc& samplerDesc);
+
+    Sampler* GetSampler(SamplerHandle handle);
+
+    void UnloadSampler(SamplerHandle handle);
+
 public: // Cubemaps
     CubemapHandle LoadCubemap(StringID cubemapId);
 
@@ -114,6 +122,10 @@ private:
     std::array<Texture, MAX_LOADED_TEXTURES> textures{};
     std::unordered_map<TextureID, TextureHandle> textureIdToHandle;
 
+    Core::HandleAllocator<Sampler, MAX_LOADED_SAMPLERS> samplerAllocator;
+    std::array<Sampler, MAX_LOADED_SAMPLERS> samplers{};
+    std::unordered_map<SamplerID, SamplerHandle> samplerIdToHandle;
+
     Core::HandleAllocator<Render::Cubemap, MAX_LOADED_CUBEMAPS> cubemapAllocator;
     std::array<Render::Cubemap, MAX_LOADED_CUBEMAPS> cubemaps{};
     std::unordered_map<StringID, CubemapHandle> cubemapIdToHandle;
@@ -128,9 +140,12 @@ public: // Scenes
 private: // Temporary Asset Registry
     std::unordered_map<StringID, std::filesystem::path> modelRegistry;
     std::unordered_map<StringID, CachedModelMetadata> modelMetadataCache;
+
     std::unordered_map<TextureID, std::filesystem::path> textureRegistry;
     std::unordered_map<std::string, TextureID> textureNameToId;
+
     std::unordered_map<StringID, std::filesystem::path> cubemapRegistry;
+
     std::unordered_map<StringID, std::filesystem::path> sceneRegistry;
 };
 } // Engine

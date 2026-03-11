@@ -10,9 +10,7 @@
 #include "render/model/model_types.h"
 #include "render/shaders/model_interop.h"
 #include "render/vulkan/vk_resources.h"
-#include "../render/resource_manager.h"
 #include "core/allocators/linear_allocator.h"
-#include "engine/asset_manager_types.h"
 #include "render/model/will_model_asset.h"
 
 
@@ -62,7 +60,7 @@ struct UnpackedWillModel
     std::vector<Meshlet> meshlets{};
 
     std::vector<MeshletPrimitive> primitives{};
-    std::vector<MaterialProperties> materials{};
+    std::vector<Engine::Material> materials{};
 
     std::vector<Render::MeshInformation> allMeshes{};
     std::vector<Render::Node> nodes{};

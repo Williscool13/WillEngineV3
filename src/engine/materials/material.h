@@ -11,6 +11,8 @@
 #include "core/string_id.h"
 #include "core/allocators/handle.h"
 #include "engine/core/material_id.h"
+#include "engine/core/texture_id.h"
+#include "engine/resources/samplers/sampler.h"
 #include "render/shaders/model_interop.h"
 
 namespace Engine
@@ -30,17 +32,27 @@ struct MaterialEntry
 
 struct Material
 {
+    // .wmaterial related properties. Only relevant for user defined materials
     std::string name;
     MaterialID id;
+    std::filesystem::path sourcePath;
+
+    // The MEAT of the material
     MaterialProperties props;
+    TextureID textureRefs[6];
+    SamplerDesc samplerDesc[6];
 
+
+    /**
+     * Expected pipeline to draw this material with (not used at the moment)
+     */
     StringID pipelineID;
-    std::filesystem::path sourcePath; // useless if mutable
 
+    // Runtime specific fields
     bool immutable{false};
 };
 
-MaterialID HashMaterial(const MaterialProperties& m);
+MaterialID HashMaterial(const Material& m);
 
 nlohmann::json SerializeMaterial(const Material& mat);
 

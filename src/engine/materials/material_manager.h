@@ -23,12 +23,14 @@ struct EngineContext;
 
 namespace Engine
 {
+class AssetManager;
+
 class MaterialManager
 {
 public:
-    explicit MaterialManager(Core::EngineContext* ctx);
+    MaterialManager(Core::EngineContext* ctx, AssetManager* assetManager);
 
-    MaterialID CreateImmutableMaterial(const MaterialProperties& props);
+    MaterialID CreateImmutableMaterial(const Material& mat);
 
     MaterialID CreateMutableMaterial(const std::filesystem::path& src, std::string_view name, StringID materialID, const MaterialProperties& props);
 
@@ -42,15 +44,17 @@ public:
 
     void ProcessRetirements();
 
-    void Save() const;
+    void SaveMutableMaterials() const;
 
-    void Load();
+    void LoadMutableMaterials();
 
     [[nodiscard]] MaterialID GetDefaultMaterial() const { return defaultMaterial; }
     [[nodiscard]] const MaterialProperties& GetDefaultMaterialProperties() const { return materials.at(defaultMaterial).props; }
     [[nodiscard]] const std::unordered_map<MaterialID, uint32_t>& GetIdToEntryMap() const { return idToEntryMap; }
 
     [[nodiscard]] MaterialProperties GetProperties(MaterialID id) const;
+
+    [[nodiscard]] const Material* GetMaterial(MaterialID id) const;
 
     [[nodiscard]] const std::array<MaterialEntry, Render::BINDLESS_MATERIAL_BUFFER_COUNT>& GetActiveMaterials() const { return activeMaterialBuffer; }
 
@@ -65,6 +69,7 @@ public:
 
 private:
     Core::EngineContext* ctx;
+    AssetManager* assetManager;
 
     MaterialID defaultMaterial{MaterialID::INVALID};
 

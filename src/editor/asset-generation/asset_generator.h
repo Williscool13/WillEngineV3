@@ -60,11 +60,18 @@ struct ModelGenerateComplete
 
 struct TextureGenerateRequest
 {
-    std::filesystem::path imagePath;
     std::filesystem::path outputPath;
     Engine::TextureID textureId;
     bool mipmapped;
     DXGI_FORMAT targetFormat;
+
+    std::filesystem::path imagePath;
+
+    // Optional: pre-loaded pixel data (takes priority over imagePath)
+    std::unique_ptr<uint8_t[]> sourcePixels;
+    uint32_t sourceWidth{0};
+    uint32_t sourceHeight{0};
+    uint32_t sourceBytesPerPixel{0};
 };
 
 struct TextureGenerateComplete
@@ -99,7 +106,11 @@ public:
 
     bool TryDequeueModelGenerateComplete(ModelGenerateComplete& outResult);
 
-    void RequestTextureGenerate(const std::filesystem::path& imagePath, const std::filesystem::path& outputPath, bool mipmapped = true, DXGI_FORMAT targetFormat = DXGI_FORMAT_BC7_UNORM);
+    Engine::TextureID RequestTextureGenerateFromFile(const std::filesystem::path& imagePath, const std::filesystem::path& outputPath, bool mipmapped = true,
+                                                     DXGI_FORMAT targetFormat = DXGI_FORMAT_BC7_UNORM);
+
+    Engine::TextureID RequestTextureGenerateFromMemory(std::unique_ptr<uint8_t[]> pixels, uint32_t w, uint32_t h, uint32_t bytesPerPixel, const std::filesystem::path& outputPath,
+                                                       bool mipmapped = false, DXGI_FORMAT targetFormat = DXGI_FORMAT_BC7_UNORM);
 
     bool TryDequeueTextureGenerateComplete(TextureGenerateComplete& outResult);
 
@@ -112,7 +123,25 @@ public:
     const std::array<WillModelGenerationProgress, MODEL_GENERATION_JOB_COUNT>& GetModelGenerationProgresses() const { return modelGenerationProgress; }
     const std::filesystem::path& GetModelGenerateSlotPath(uint32_t index) const { return modelGenerateTasks[index].gltfPath; }
 
-    [[nodiscard]] uint32_t GetActiveModelGenerateCount() const { return modelGenerateAllocator.GetCount(); }
+    [[nodiscard]] uint32_t GetTotalModelGenerateCount() const
+    {
+        return modelGenerateAllocator.GetCount() + modelGenerateRequestQueue.size_approx();
+    }
+
+    [[nodiscard]] uint32_t GetTotalTextureGenerateCount() const
+    {
+        return textureGenerateAllocator.GetCount() + textureGenerateRequestQueue.size_approx();
+    }
+
+    [[nodiscard]] uint32_t GetActiveModelGenerateCount() const
+    {
+        return modelGenerateAllocator.GetCount();
+    }
+
+    [[nodiscard]] uint32_t GetActiveTextureGenerateCount() const
+    {
+        return textureGenerateAllocator.GetCount();
+    }
 
     void Join();
 

@@ -5,11 +5,9 @@
 #ifndef WILL_ENGINE_WILL_MODEL_LOAD_JOB_H
 #define WILL_ENGINE_WILL_MODEL_LOAD_JOB_H
 #include <semaphore>
-#include <span>
 
 #include "asset-load/asset_load_types.h"
-#include "ktx.h"
-#include "engine/asset_manager_types.h"
+#include "engine/asset_manager.h"
 
 namespace enki
 {
@@ -46,11 +44,7 @@ public:
 
     void PrepareUploadData();
 
-    void UploadTextures(VkCommandBuffer cmd, const std::function<void(bool)>& submitAndWait);
-
     void UploadGeometry(VkCommandBuffer cmd, const std::function<void(bool)>& submitAndWait);
-
-    void PostUploadSetup();
 
     ModelSlotHandle modelSlotHandle{};
     UploadStagingSlotHandle uploadStagingSlotHandle{};
@@ -72,9 +66,9 @@ private:
     enki::TaskScheduler* scheduler{nullptr};
     Render::VulkanContext* context{nullptr};
     Render::ResourceManager* resourceManager{nullptr};
+    Engine::AssetManager* assetManager{nullptr};
 
     UnpackedWillModel rawData{};
-    std::vector<ktxTexture2*> pendingTextures;
     /**
      * Cached vector to store 3x uint8_t->1x uint32_t for meshlet triangles.
      */

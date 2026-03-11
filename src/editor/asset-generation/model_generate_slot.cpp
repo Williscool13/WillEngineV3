@@ -9,18 +9,13 @@
 #include <fastgltf/tools.hpp>
 #include <spdlog/spdlog.h>
 #include <stb/stb_image.h>
-#include <ktx.h>
 #include <meshoptimizer/src/meshoptimizer.h>
 
 #include "asset_generator.h"
-#include "bc7enc_rdo/rdo_bc_encoder.h"
 #include "platform/paths.h"
 #include "render/model/model_format.h"
 #include "render/model/model_serialization.h"
 #include "render/shaders/constants_interop.h"
-#include "render/vulkan/vk_context.h"
-#include "render/vulkan/vk_helpers.h"
-#include "render/vulkan/vk_utils.h"
 #include "tracy/Tracy.hpp"
 
 namespace Editor
@@ -32,20 +27,15 @@ ModelGenerateSlot::~ModelGenerateSlot() = default;
 void ModelGenerateSlot::Initialize(
     int32_t slotIndex,
     enki::TaskScheduler* _scheduler,
-    Render::VulkanContext* _context,
+    AssetGenerator* _generator,
     WillModelGenerationProgress* _progress,
-    std::function<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> graphicsDispatchCallback,
     std::function<void(bool success, ModelGenerateSlotHandle slotHandle)> notifyCallback)
 {
     scheduler = _scheduler;
-    context = _context;
+    generator = _generator;
     progress = _progress;
     temporaryPath = Platform::GetExecutablePath() / "temp" / ("model_gen_" + std::to_string(slotIndex));
-    _graphicsDispatchCallback = std::move(graphicsDispatchCallback);
     _notifyCallback = std::move(notifyCallback);
-
-    imageStagingBuffer = Render::AllocatedBuffer::CreateAllocatedStagingBuffer(context, MODEL_GENERATION_STAGING_BUFFER_SIZE);
-    imageReceivingBuffer = Render::AllocatedBuffer::CreateAllocatedReceivingBuffer(context, MODEL_GENERATION_STAGING_BUFFER_SIZE);
 }
 
 void ModelGenerateSlot::Launch(ModelGenerateSlotHandle _slotHandle, const std::filesystem::path& _gltfPath, const std::filesystem::path& _outputPath)
@@ -70,8 +60,6 @@ void ModelGenerateSlot::Clear()
     rawModel = {};
     sortedNodes.clear();
     visited.clear();
-    imageStagingAllocator.Reset();
-    imageReceivingAllocator.Reset();
 }
 
 void ModelGenerateSlot::GenerateTask::ExecuteRange(enki::TaskSetPartition range, uint32_t threadNum)
@@ -79,42 +67,7 @@ void ModelGenerateSlot::GenerateTask::ExecuteRange(enki::TaskSetPartition range,
     taskSlot->progress->loadingState.store(WillModelGenerationProgress::LOADING_GLTF, std::memory_order_release);
     taskSlot->progress->value.store(0, std::memory_order_release);
 
-    VkCommandPoolCreateInfo graphicsPoolInfo = Render::VkHelpers::CommandPoolCreateInfo(taskSlot->context->graphicsQueueFamily);
-    VkCommandPool graphicsCommandPool;
-    VK_CHECK(vkCreateCommandPool(taskSlot->context->device, &graphicsPoolInfo, nullptr, &graphicsCommandPool));
-
-    VkCommandBufferAllocateInfo graphicsCmdInfo = Render::VkHelpers::CommandBufferAllocateInfo(1, graphicsCommandPool);
-    VkCommandBuffer graphicsCmd;
-    VK_CHECK(vkAllocateCommandBuffers(taskSlot->context->device, &graphicsCmdInfo, &graphicsCmd));
-
-    VkFenceCreateInfo graphicsFenceInfo = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
-    VkFence graphicsFence;
-    VK_CHECK(vkCreateFence(taskSlot->context->device, &graphicsFenceInfo, nullptr, &graphicsFence));
-
-    auto startGraphicsRecording = [&] {
-        VkCommandBufferBeginInfo beginInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
-        VK_CHECK(vkBeginCommandBuffer(graphicsCmd, &beginInfo));
-    };
-
-    auto graphicsSubmitAndWait = [&](bool restart) {
-        ZoneScopedN("GraphicsSubmitAndWait");
-
-        VK_CHECK(vkEndCommandBuffer(graphicsCmd));
-        std::binary_semaphore done(0);
-        taskSlot->_graphicsDispatchCallback(graphicsCmd, graphicsFence, &done);
-        done.acquire();
-        VK_CHECK(vkResetFences(taskSlot->context->device, 1, &graphicsFence));
-        VK_CHECK(vkResetCommandBuffer(graphicsCmd, 0));
-
-        if (restart) {
-            VkCommandBufferBeginInfo beginInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
-            VK_CHECK(vkBeginCommandBuffer(graphicsCmd, &beginInfo));
-        }
-    };
-
-
-    bool loadRes = taskSlot->LoadGltf(graphicsCmd, startGraphicsRecording, graphicsSubmitAndWait);
-    if (!loadRes) {
+    if (!taskSlot->LoadGltf()) {
         taskSlot->progress->loadingState.store(WillModelGenerationProgress::FAILED, std::memory_order_release);
         taskSlot->progress->value.store(0, std::memory_order_release);
         taskSlot->_notifyCallback(false, taskSlot->slotHandle);
@@ -124,7 +77,7 @@ void ModelGenerateSlot::GenerateTask::ExecuteRange(enki::TaskSetPartition range,
     taskSlot->progress->loadingState.store(WillModelGenerationProgress::WRITING_WILL_MODEL, std::memory_order_release);
     taskSlot->progress->value.store(50, std::memory_order_release);
 
-    if (!taskSlot->WriteWillModel(graphicsCmd, startGraphicsRecording, graphicsSubmitAndWait)) {
+    if (!taskSlot->WriteWillModel()) {
         taskSlot->progress->loadingState.store(WillModelGenerationProgress::FAILED, std::memory_order_release);
         taskSlot->progress->value.store(0, std::memory_order_release);
         taskSlot->_notifyCallback(false, taskSlot->slotHandle);
@@ -134,12 +87,9 @@ void ModelGenerateSlot::GenerateTask::ExecuteRange(enki::TaskSetPartition range,
     taskSlot->progress->loadingState.store(WillModelGenerationProgress::SUCCESS, std::memory_order_release);
     taskSlot->progress->value.store(100, std::memory_order_release);
     taskSlot->_notifyCallback(true, taskSlot->slotHandle);
-
-    vkDestroyFence(taskSlot->context->device, graphicsFence, nullptr);
-    vkDestroyCommandPool(taskSlot->context->device, graphicsCommandPool, nullptr);
 }
 
-bool ModelGenerateSlot::LoadGltf(VkCommandBuffer cmd, const std::function<void()>& startRecording, const std::function<void(bool)>& submitAndWait)
+bool ModelGenerateSlot::LoadGltf()
 {
     ZoneScopedN("LoadGltf");
 
@@ -172,28 +122,25 @@ bool ModelGenerateSlot::LoadGltf(VkCommandBuffer cmd, const std::function<void()
     rawModel.name = gltfPath.filename().string();
     rawModel.samplerInfos.reserve(gltf.samplers.size());
     for (const fastgltf::Sampler& gltfSampler : gltf.samplers) {
-        VkSamplerCreateInfo samplerInfo = {.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
-        samplerInfo.maxLod = VK_LOD_CLAMP_NONE;
-        samplerInfo.minLod = 0;
-        samplerInfo.magFilter = ExtractFilter(gltfSampler.magFilter.value_or(fastgltf::Filter::Nearest));
-        samplerInfo.minFilter = ExtractFilter(gltfSampler.minFilter.value_or(fastgltf::Filter::Nearest));
-        samplerInfo.mipmapMode = ExtractMipmapMode(gltfSampler.minFilter.value_or(fastgltf::Filter::Linear));
-        rawModel.samplerInfos.push_back(samplerInfo);
+        Engine::SamplerDesc desc{};
+        desc.maxLod = VK_LOD_CLAMP_NONE;
+        desc.minLod = 0;
+        desc.magFilter = ExtractFilter(gltfSampler.magFilter.value_or(fastgltf::Filter::Nearest));
+        desc.minFilter = ExtractFilter(gltfSampler.minFilter.value_or(fastgltf::Filter::Nearest));
+        desc.mipmapMode = ExtractMipmapMode(gltfSampler.minFilter.value_or(fastgltf::Filter::Linear));
+        rawModel.samplerInfos.push_back(desc);
     }
     _progress += stepDiff;
     progress->value.store(_progress, std::memory_order_release);
 
     rawModel.images.reserve(gltf.images.size());
     if (!gltf.images.empty()) {
-        imageStagingAllocator.Reset();
-        startRecording();
 
         unsigned char* stbiData = nullptr;
         int32_t width, height, nrChannels;
 
         std::filesystem::path parentPath = gltfPath.parent_path();
         for (const fastgltf::Image& gltfImage : gltf.images) {
-            Render::AllocatedImage newImage{};
             std::visit(
                 fastgltf::visitor{
                     [&](auto& arg) {},
@@ -237,21 +184,18 @@ bool ModelGenerateSlot::LoadGltf(VkCommandBuffer cmd, const std::function<void()
 
             if (!stbiData) { break; }
 
-            VkExtent3D imagesize{static_cast<uint32_t>(width), static_cast<uint32_t>(height), 1};
-            const size_t size = width * height * 4;
-            size_t allocation = imageStagingAllocator.Allocate(size);
-            if (allocation == SIZE_MAX) {
-                submitAndWait(true);
-                imageStagingAllocator.Reset();
-                allocation = imageStagingAllocator.Allocate(size);
-                assert(allocation != SIZE_MAX && "Mip level too large for staging buffer");
-            }
+            RawImage image{};
+            image.w = width;
+            image.h = height;
+            image.bpp = 4;
+            size_t size = image.w * image.h * 4;
+            image.imageData = std::make_unique<uint8_t[]>(size);
 
-            newImage = RecordCreateImageFromData(context, cmd, imageStagingBuffer, allocation, stbiData, size, imagesize, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
+            memcpy(image.imageData.get(), stbiData, size);
             stbi_image_free(stbiData);
             stbiData = nullptr;
 
-            rawModel.images.push_back(std::move(newImage));
+            rawModel.images.push_back(std::move(image));
         }
 
         if (rawModel.images.size() != gltf.images.size()) {
@@ -259,8 +203,6 @@ bool ModelGenerateSlot::LoadGltf(VkCommandBuffer cmd, const std::function<void()
             SPDLOG_ERROR("Mismatch of loaded images and expected images in the gltf");
             return false;
         }
-
-        submitAndWait(false);
     }
 
 
@@ -269,10 +211,17 @@ bool ModelGenerateSlot::LoadGltf(VkCommandBuffer cmd, const std::function<void()
 
     // Materials
     rawModel.materials.reserve(gltf.materials.size());
-    for (const fastgltf::Material& gltfMaterial : gltf.materials) {
-        MaterialProperties material = ExtractMaterial(gltf, gltfMaterial);
-        rawModel.materials.push_back(material);
+    for (int32_t i = 0; i < gltf.materials.size(); ++i) {
+        Engine::Material mat{};
+        mat.name = rawModel.name + "_material_" + std::to_string(i);
+        // mat.id             not relevant for model-based materials
+        // mat.sourcePath     not relevant for model-based materials
+        // mat.pipelineID = ; not yet used
+        mat.immutable = true;
+        mat.props = ExtractMaterial(gltf, gltf.materials[i]);
+        rawModel.materials.emplace_back(mat);
     }
+    for (const fastgltf::Material& gltfMaterial : gltf.materials) {}
     _progress += stepDiff;
     progress->value.store(_progress, std::memory_order::release);
 
@@ -298,7 +247,7 @@ bool ModelGenerateSlot::LoadGltf(VkCommandBuffer cmd, const std::function<void()
             {
                 if (p.materialIndex.has_value()) {
                     materialIndex = static_cast<int32_t>(p.materialIndex.value());
-                    primitiveData.bHasTransparent = (static_cast<Render::MaterialType>(rawModel.materials[materialIndex].alphaProperties.y) == Render::MaterialType::BLEND);
+                    primitiveData.bHasTransparent = (static_cast<Render::MaterialType>(rawModel.materials[materialIndex].props.alphaProperties.y) == Render::MaterialType::BLEND);
                 }
 
 
@@ -833,7 +782,7 @@ bool ModelGenerateSlot::LoadGltf(VkCommandBuffer cmd, const std::function<void()
     return true;
 }
 
-bool ModelGenerateSlot::WriteWillModel(VkCommandBuffer cmd, const std::function<void()>& startRecording, const std::function<void(bool)>& submitAndWait)
+bool ModelGenerateSlot::WriteWillModel()
 {
     ZoneScopedN("WriteWillModel");
 
@@ -842,7 +791,6 @@ bool ModelGenerateSlot::WriteWillModel(VkCommandBuffer cmd, const std::function<
         return false;
     }
 
-
     //
     {
         ZoneScopedN("CleanupTempDirectory");
@@ -850,293 +798,96 @@ bool ModelGenerateSlot::WriteWillModel(VkCommandBuffer cmd, const std::function<
             std::filesystem::remove_all(temporaryPath);
         }
         std::filesystem::create_directories(temporaryPath);
-    } {
-        ZoneScopedN("WriteModelBinary");
-        std::ofstream binFile(temporaryPath / "model.bin", std::ios::binary);
-        WriteModelBinary(binFile, rawModel);
-        binFile.close();
     }
-    progress->value.store(60, std::memory_order_release);
-
-    float _progress = 60.0f;
-    constexpr float textureProgressTotal = 40.0f;
-    const float progressPerTexture = rawModel.images.empty() ? 0.0f : textureProgressTotal / static_cast<float>(rawModel.images.size());
 
     std::vector<DXGI_FORMAT> preferredImageFormats;
     preferredImageFormats.resize(rawModel.images.size(), DXGI_FORMAT_BC7_UNORM);
 
     for (const auto& material : rawModel.materials) {
         // Color/emissive textures -> BC7 SRGB
-        if (material.textureImageIndices.x >= 0) {
-            preferredImageFormats[material.textureImageIndices.x] = DXGI_FORMAT_BC7_UNORM_SRGB;
+        if (material.props.textureImageIndices.x >= 0) {
+            preferredImageFormats[material.props.textureImageIndices.x] = DXGI_FORMAT_BC7_UNORM_SRGB;
         }
-        if (material.textureImageIndices.w >= 0) {
-            preferredImageFormats[material.textureImageIndices.w] = DXGI_FORMAT_BC7_UNORM_SRGB;
+        if (material.props.textureImageIndices.w >= 0) {
+            preferredImageFormats[material.props.textureImageIndices.w] = DXGI_FORMAT_BC7_UNORM_SRGB;
         }
 
         // Normal map -> BC5
-        if (material.textureImageIndices.z >= 0) {
-            preferredImageFormats[material.textureImageIndices.z] = DXGI_FORMAT_BC5_UNORM;
+        if (material.props.textureImageIndices.z >= 0) {
+            preferredImageFormats[material.props.textureImageIndices.z] = DXGI_FORMAT_BC5_UNORM;
         }
 
         // Metallic-roughness -> BC7 (linear)
-        if (material.textureImageIndices.y >= 0) {
-            preferredImageFormats[material.textureImageIndices.y] = DXGI_FORMAT_BC7_UNORM;
+        if (material.props.textureImageIndices.y >= 0) {
+            preferredImageFormats[material.props.textureImageIndices.y] = DXGI_FORMAT_BC7_UNORM;
         }
 
         // Occlusion -> BC4
-        if (material.textureImageIndices2.x >= 0) {
-            preferredImageFormats[material.textureImageIndices2.x] = DXGI_FORMAT_BC4_UNORM;
+        if (material.props.textureImageIndices2.x >= 0) {
+            preferredImageFormats[material.props.textureImageIndices2.x] = DXGI_FORMAT_BC4_UNORM;
         }
 
         // Packed NRM (if used) -> BC7
-        if (material.textureImageIndices2.y >= 0) {
-            preferredImageFormats[material.textureImageIndices2.y] = DXGI_FORMAT_BC7_UNORM;
+        if (material.props.textureImageIndices2.y >= 0) {
+            preferredImageFormats[material.props.textureImageIndices2.y] = DXGI_FORMAT_BC7_UNORM;
         }
     }
 
-    if (!rawModel.images.empty()) {
-        for (size_t i = 0; i < rawModel.images.size(); i++) {
-            ZoneScopedN("ProcessTexture");
-            auto& image = rawModel.images[i];
-            uint32_t mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(image.extent.width, image.extent.height)))) + 1;
+    std::vector<Engine::TextureID> textureIDs;
+    textureIDs.reserve(rawModel.images.size());
 
-            // Generate mipmaps
-            {
-                ZoneScopedN("GenerateMipmaps");
-                startRecording();
-
-                VkImageMemoryBarrier2 firstBarrier = Render::VkHelpers::ImageMemoryBarrier(
-                    image.handle,
-                    Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1),
-                    VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, image.layout,
-                    VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
-                );
-                VkDependencyInfo firstDepInfo{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
-                firstDepInfo.imageMemoryBarrierCount = 1;
-                firstDepInfo.pImageMemoryBarriers = &firstBarrier;
-                vkCmdPipelineBarrier2(cmd, &firstDepInfo);
-
-                for (uint32_t mip = 1; mip < mipLevels; mip++) {
-                    VkImageMemoryBarrier2 barriers[2];
-                    barriers[0] = Render::VkHelpers::ImageMemoryBarrier(
-                        image.handle,
-                        Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, mip - 1, 1, 0, 1),
-                        VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                        VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
-                    );
-                    barriers[1] = Render::VkHelpers::ImageMemoryBarrier(
-                        image.handle,
-                        Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, mip, 1, 0, 1),
-                        VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_UNDEFINED,
-                        VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
-                    );
-
-                    VkDependencyInfo depInfo{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
-                    depInfo.imageMemoryBarrierCount = 2;
-                    depInfo.pImageMemoryBarriers = barriers;
-                    vkCmdPipelineBarrier2(cmd, &depInfo);
-
-                    VkImageBlit blit{};
-                    blit.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, mip - 1, 0, 1};
-                    blit.srcOffsets[0] = {0, 0, 0};
-                    blit.srcOffsets[1] = {
-                        static_cast<int32_t>(image.extent.width >> (mip - 1)),
-                        static_cast<int32_t>(image.extent.height >> (mip - 1)),
-                        1
-                    };
-                    blit.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, mip, 0, 1};
-                    blit.dstOffsets[0] = {0, 0, 0};
-                    blit.dstOffsets[1] = {
-                        static_cast<int32_t>(image.extent.width >> mip),
-                        static_cast<int32_t>(image.extent.height >> mip),
-                        1
-                    };
-
-                    vkCmdBlitImage(cmd, image.handle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                                   image.handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
-                }
-
-                VkImageMemoryBarrier2 finalBarrier = Render::VkHelpers::ImageMemoryBarrier(
-                    image.handle,
-                    Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, mipLevels - 1, 1, 0, 1),
-                    VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                    VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
-                );
-                VkDependencyInfo depInfo{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
-                depInfo.imageMemoryBarrierCount = 1;
-                depInfo.pImageMemoryBarriers = &finalBarrier;
-                vkCmdPipelineBarrier2(cmd, &depInfo);
-                image.layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-
-                submitAndWait(true);
-            }
-
-            // Copy image to CPU - 1 by 1 for the 4k texture, but practically this can be batched/grouped
-            std::vector<std::vector<uint8_t> > mipData(mipLevels);
-            //
-            {
-                ZoneScopedN("CopyImageToCPU");
-                for (uint32_t mip = 0; mip < mipLevels; mip++) {
-                    uint32_t mipWidth = std::max(1u, image.extent.width >> mip);
-                    uint32_t mipHeight = std::max(1u, image.extent.height >> mip);
-                    size_t mipSize = mipWidth * mipHeight * 4;
-
-                    if (mipSize > imageReceivingBuffer.allocationInfo.size) {
-                        SPDLOG_ERROR("Mip level {} too large for receiving buffer", mip);
-                        return false;
-                    }
-
-                    VkBufferImageCopy copyRegion{};
-                    copyRegion.bufferOffset = 0;
-                    copyRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-                    copyRegion.imageSubresource.mipLevel = mip;
-                    copyRegion.imageSubresource.baseArrayLayer = 0;
-                    copyRegion.imageSubresource.layerCount = 1;
-                    copyRegion.imageExtent = {mipWidth, mipHeight, 1};
-
-                    vkCmdCopyImageToBuffer(cmd, image.handle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, imageReceivingBuffer.handle, 1, &copyRegion);
-                    submitAndWait(mip < mipLevels - 1);
-
-                    mipData[mip].resize(mipSize);
-                    memcpy(mipData[mip].data(), imageReceivingBuffer.allocationInfo.pMappedData, mipSize);
-                }
-            }
-
-            // Compress and write KTX
-            ktxTexture2* texture;
-            VkFormat targetVkFormat;
-
-            switch (preferredImageFormats[i]) {
-                case DXGI_FORMAT_BC7_UNORM: targetVkFormat = VK_FORMAT_BC7_UNORM_BLOCK;
-                    break;
-                case DXGI_FORMAT_BC7_UNORM_SRGB: targetVkFormat = VK_FORMAT_BC7_SRGB_BLOCK;
-                    break;
-                case DXGI_FORMAT_BC5_UNORM: targetVkFormat = VK_FORMAT_BC5_UNORM_BLOCK;
-                    break;
-                case DXGI_FORMAT_BC4_UNORM: targetVkFormat = VK_FORMAT_BC4_UNORM_BLOCK;
-                    break;
-                default: targetVkFormat = VK_FORMAT_BC7_UNORM_BLOCK;
-                    break;
-            }
-
-            ktxTextureCreateInfo createInfo{};
-            createInfo.vkFormat = targetVkFormat;
-            createInfo.baseWidth = image.extent.width;
-            createInfo.baseHeight = image.extent.height;
-            createInfo.baseDepth = 1;
-            createInfo.numDimensions = 2;
-            createInfo.numLevels = mipLevels;
-            createInfo.numLayers = 1;
-            createInfo.numFaces = 1;
-            createInfo.isArray = KTX_FALSE;
-            createInfo.generateMipmaps = KTX_FALSE;
-            //
-            {
-                ZoneScopedN("KTXCreate");
-                ktx_error_code_e result = ktxTexture2_Create(&createInfo, KTX_TEXTURE_CREATE_ALLOC_STORAGE, &texture);
-                if (result != KTX_SUCCESS) {
-                    SPDLOG_ERROR("Failed to create ktx texture for texture {}", i);
-                    return false;
-                }
-            }
-            //
-            {
-                ZoneScopedN("EncodeBC");
-                rdo_bc::rdo_bc_params encodeParams;
-                encodeParams.m_bc7_uber_level = 1;
-                encodeParams.m_rdo_lambda = 0.0f;
-                encodeParams.m_dxgi_format = preferredImageFormats[i];
-                if (encodeParams.m_dxgi_format == DXGI_FORMAT_BC7_UNORM_SRGB) {
-                    // _SRGB doesn't encode any differently, as long as the KTX texture is created w/ the right format, should be correct.
-                    encodeParams.m_dxgi_format = DXGI_FORMAT_BC7_UNORM;
-                }
-
-                struct EncodeMipTask : enki::ITaskSet
-                {
-                    rdo_bc::rdo_bc_params* params;
-                    std::vector<std::vector<uint8_t> >* mipData;
-                    VkExtent3D imageExtent;
-                    ktxTexture2* texture;
-
-                    void ExecuteRange(enki::TaskSetPartition range, uint32_t threadNum) override
-                    {
-                        ZoneScopedN("EncodeMipTask");
-
-                        for (uint32_t mip = range.start; mip < range.end; ++mip) {
-                            ZoneScopedN("EncodeSingleMip");
-                            TracyMessageL(fmt::format("Encoding mip level {}", mip).c_str());
-
-                            uint32_t mipWidth = std::max(1u, imageExtent.width >> mip);
-                            uint32_t mipHeight = std::max(1u, imageExtent.height >> mip);
-
-                            utils::image_u8 srcImage(mipWidth, mipHeight); {
-                                ZoneScopedN("CopyToImageU8");
-                                const uint8_t* rgbaData = (*mipData)[mip].data();
-                                for (uint32_t y = 0; y < mipHeight; ++y) {
-                                    for (uint32_t x = 0; x < mipWidth; ++x) {
-                                        const uint8_t* pixel = &rgbaData[(y * mipWidth + x) * 4];
-                                        srcImage(x, y).set(pixel[0], pixel[1], pixel[2], pixel[3]);
-                                    }
-                                }
-                            }
-
-                            rdo_bc::rdo_bc_encoder encoder; {
-                                ZoneScopedN("EncoderInit");
-                                bool initRes = encoder.init(srcImage, *params);
-                                if (!initRes) {
-                                    SPDLOG_ERROR("[ModelGenerator] GPU texture compression init failed");
-                                }
-                            } {
-                                ZoneScopedN("EncoderEncode");
-                                bool encodeRes = encoder.encode();
-                                if (!encodeRes) {
-                                    SPDLOG_ERROR("[ModelGenerator] GPU texture compression encoding failed");
-                                }
-                            }
-
-                            const void* compressedBlocks = encoder.get_blocks();
-                            uint32_t blocksSizeInBytes = encoder.get_total_blocks_size_in_bytes(); {
-                                ZoneScopedN("KTXSetImage");
-                                ktxTexture_SetImageFromMemory(ktxTexture(texture), mip, 0, 0,
-                                                              static_cast<const ktx_uint8_t*>(compressedBlocks), blocksSizeInBytes);
-                            }
-                        }
-                    }
-                };
-
-                EncodeMipTask _task{};
-                _task.params = &encodeParams;
-                _task.mipData = &mipData;
-                _task.imageExtent = image.extent;
-                _task.texture = texture;
-                _task.m_SetSize = mipLevels;
-                _task.m_Priority = enki::TASK_PRIORITY_LOW;
-
-                scheduler->AddTaskSetToPipe(&_task);
-                scheduler->WaitforTask(&_task);
-            }
-
-            std::filesystem::path ktxPath = temporaryPath / ("texture_" + std::to_string(i) + ".ktx2");
-            //
-            {
-                ZoneScopedN("WriteKTXFile");
-                ktxTexture_WriteToNamedFile(ktxTexture(texture), ktxPath.string().c_str());
-            }
-
-            ktxTexture_Destroy(ktxTexture(texture));
-
-            _progress = 60.0f + static_cast<float>(i + 1) * progressPerTexture;
-            progress->value.store(_progress, std::memory_order_release);
-        }
+    for (int32_t i = 0; i < rawModel.images.size(); ++i) {
+        RawImage& image = rawModel.images[i];
+        std::filesystem::path textureOutPath = gltfPath.parent_path() / "textures" / (gltfPath.stem().string() + "_texture_" + std::to_string(i) + ".wtexture");
+        textureIDs.push_back(generator->RequestTextureGenerateFromMemory(std::move(image.imageData), image.w, image.h, image.bpp, textureOutPath, true, preferredImageFormats[i]));
     }
+
+    auto texRef = [&](int idx) -> Engine::TextureID {
+        return idx >= 0 && idx < static_cast<int>(textureIDs.size()) ? textureIDs[idx] : Engine::TextureID::INVALID;
+    };
+    auto sampDesc = [&](int idx) -> Engine::SamplerDesc {
+        return idx >= 0 && idx < static_cast<int>(rawModel.samplerInfos.size()) ? rawModel.samplerInfos[idx] : Engine::SamplerDesc{};
+    };
+
+    for (auto& mat : rawModel.materials) {
+        mat.textureRefs[0] = texRef(mat.props.textureImageIndices.x);
+        mat.textureRefs[1] = texRef(mat.props.textureImageIndices.y);
+        mat.textureRefs[2] = texRef(mat.props.textureImageIndices.z);
+        mat.textureRefs[3] = texRef(mat.props.textureImageIndices.w);
+        mat.textureRefs[4] = texRef(mat.props.textureImageIndices2.x);
+        mat.textureRefs[5] = texRef(mat.props.textureImageIndices2.y);
+
+        mat.samplerDesc[0] = sampDesc(mat.props.textureSamplerIndices.x);
+        mat.samplerDesc[1] = sampDesc(mat.props.textureSamplerIndices.y);
+        mat.samplerDesc[2] = sampDesc(mat.props.textureSamplerIndices.z);
+        mat.samplerDesc[3] = sampDesc(mat.props.textureSamplerIndices.w);
+        mat.samplerDesc[4] = sampDesc(mat.props.textureSamplerIndices2.x);
+        mat.samplerDesc[5] = sampDesc(mat.props.textureSamplerIndices2.y);
+
+        // Clear GLTF-local indices — bindless indices are resolved at load time from textureRefs
+        mat.props.textureImageIndices = glm::ivec4(-1);
+        mat.props.textureSamplerIndices = glm::ivec4(-1);
+        mat.props.textureImageIndices2 = glm::ivec4(-1);
+        mat.props.textureSamplerIndices2 = glm::ivec4(-1);
+    }
+
+    {
+        ZoneScopedN("WriteModelBinary");
+        std::ofstream binFile(temporaryPath / "model.bin", std::ios::binary);
+        WriteModelBinary(binFile, rawModel);
+        binFile.close();
+    }
+
 
     // Create archive
     {
         ZoneScopedN("CreateArchive");
 
         Render::ModelWriter writer{outputPath};
-        writer.AddFileFromDisk("model.bin", (temporaryPath / "model.bin").string(), Render::CompressionType::LZ4); {
+        writer.AddFileFromDisk("model.bin", (temporaryPath / "model.bin").string(), Render::CompressionType::LZ4);
+
+        // Nodes separate
+        {
             std::ofstream nodesBinFile(temporaryPath / "nodes.bin", std::ios::binary);
             auto nodeCount = static_cast<uint32_t>(rawModel.nodes.size());
             nodesBinFile.write(reinterpret_cast<const char*>(&nodeCount), sizeof(nodeCount));
@@ -1145,14 +896,6 @@ bool ModelGenerateSlot::WriteWillModel(VkCommandBuffer cmd, const std::function<
             }
         }
         writer.AddFileFromDisk("nodes.bin", (temporaryPath / "nodes.bin").string(), Render::CompressionType::LZ4);
-
-        for (uint32_t i = 0; i < rawModel.images.size(); ++i) {
-            std::filesystem::path sourcePath = temporaryPath / fmt::format("texture_{}.ktx2", i);
-            std::filesystem::path archiveName = fmt::format("textures/texture_{}.ktx2", i);
-            if (!writer.AddFileFromDisk(archiveName.string(), sourcePath.string(), Render::CompressionType::LZ4)) {
-                return false;
-            }
-        }
 
         uint32_t meshNodeCount = 0;
         for (const auto& node : rawModel.nodes) {
@@ -1169,41 +912,6 @@ bool ModelGenerateSlot::WriteWillModel(VkCommandBuffer cmd, const std::function<
     return true;
 }
 
-Render::AllocatedImage ModelGenerateSlot::RecordCreateImageFromData(Render::VulkanContext* context, VkCommandBuffer cmd, Render::AllocatedBuffer& stagingBuffer, size_t offset, unsigned char* data,
-                                                                    size_t size,
-                                                                    VkExtent3D imageExtent, VkFormat format, VkImageUsageFlagBits usage)
-{
-    char* bufferOffset = static_cast<char*>(stagingBuffer.allocationInfo.pMappedData) + offset;
-    memcpy(bufferOffset, data, size);
-
-    VkImageCreateInfo imageCreateInfo = Render::VkHelpers::ImageCreateInfo(format, imageExtent, usage | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
-    imageCreateInfo.mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(imageExtent.width, imageExtent.height)))) + 1;
-    Render::AllocatedImage newImage = Render::AllocatedImage::CreateAllocatedImage(context, imageCreateInfo);
-
-    VkImageMemoryBarrier2 barrier = Render::VkHelpers::ImageMemoryBarrier(
-        newImage.handle,
-        Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1),
-        VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_UNDEFINED,
-        VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
-    );
-    VkDependencyInfo depInfo{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
-    depInfo.imageMemoryBarrierCount = 1;
-    depInfo.pImageMemoryBarriers = &barrier;
-    vkCmdPipelineBarrier2(cmd, &depInfo);
-
-    VkBufferImageCopy copyRegion = {};
-    copyRegion.bufferOffset = offset;
-    copyRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    copyRegion.imageSubresource.mipLevel = 0;
-    copyRegion.imageSubresource.baseArrayLayer = 0;
-    copyRegion.imageSubresource.layerCount = 1;
-    copyRegion.imageExtent = imageExtent;
-
-    vkCmdCopyBufferToImage(cmd, stagingBuffer.handle, newImage.handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
-    newImage.layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-
-    return newImage;
-}
 
 VkFilter ModelGenerateSlot::ExtractFilter(fastgltf::Filter filter)
 {
@@ -1386,8 +1094,6 @@ void WriteModelBinary(std::ofstream& file, const RawGltfModel& model)
     header.meshCount = static_cast<uint32_t>(model.allMeshes.size());
     header.animationCount = static_cast<uint32_t>(model.animations.size());
     header.inverseBindMatrixCount = static_cast<uint32_t>(model.inverseBindMatrices.size());
-    header.samplerCount = static_cast<uint32_t>(model.samplerInfos.size());
-    header.textureCount = static_cast<uint32_t>(model.images.size());
 
     file.write(reinterpret_cast<const char*>(&header), sizeof(Render::ModelBinaryHeader));
 
@@ -1396,7 +1102,10 @@ void WriteModelBinary(std::ofstream& file, const RawGltfModel& model)
     Render::WriteVector(file, model.meshletTriangles);
     Render::WriteVector(file, model.meshlets);
     Render::WriteVector(file, model.primitives);
-    Render::WriteVector(file, model.materials);
+
+    for (const auto& mat : model.materials) {
+        Render::WriteMaterial(file, mat);
+    }
 
     for (const auto& mesh : model.allMeshes) {
         WriteMeshInformation(file, mesh);
@@ -1407,7 +1116,6 @@ void WriteModelBinary(std::ofstream& file, const RawGltfModel& model)
     }
 
     Render::WriteVector(file, model.inverseBindMatrices);
-    Render::WriteVector(file, model.samplerInfos);
 }
 
 void ModelGenerateSlot::TopologicalSortNodes(std::vector<Render::Node>& nodes, std::vector<uint32_t>& oldToNew)

@@ -20,8 +20,8 @@
 
 namespace Editor
 {
-
 TextureGenerateSlot::TextureGenerateSlot() = default;
+
 TextureGenerateSlot::~TextureGenerateSlot() = default;
 
 void TextureGenerateSlot::Initialize(
@@ -41,7 +41,8 @@ void TextureGenerateSlot::Initialize(
     imageReceivingBuffer = Render::AllocatedBuffer::CreateAllocatedReceivingBuffer(context, TEXTURE_GENERATION_STAGING_BUFFER_SIZE);
 }
 
-void TextureGenerateSlot::Launch(TextureGenerateSlotHandle _slotHandle, const std::filesystem::path& _imagePath, const std::filesystem::path& _outputPath, Engine::TextureID _textureId, bool _mipmapped, DXGI_FORMAT _targetFormat)
+void TextureGenerateSlot::Launch(TextureGenerateSlotHandle _slotHandle, const std::filesystem::path& _imagePath, const std::filesystem::path& _outputPath, Engine::TextureID _textureId,
+                                 bool _mipmapped, DXGI_FORMAT _targetFormat)
 {
     slotHandle = _slotHandle;
     imagePath = _imagePath;
@@ -49,6 +50,29 @@ void TextureGenerateSlot::Launch(TextureGenerateSlotHandle _slotHandle, const st
     textureId = _textureId;
     mipmapped = _mipmapped;
     targetFormat = _targetFormat;
+
+    if (task && !task->GetIsComplete()) {
+        scheduler->WaitforTask(task.get());
+    }
+
+    task = std::make_unique<GenerateTask>();
+    task->taskSlot = this;
+    scheduler->AddTaskSetToPipe(task.get());
+}
+
+void TextureGenerateSlot::LaunchFromMemory(TextureGenerateSlotHandle _slotHandle, std::unique_ptr<uint8_t[]> pixels, uint32_t w, uint32_t h, uint32_t bytesPerPixel,
+                                           const std::filesystem::path& _outputPath, Engine::TextureID _textureId, bool _mipmapped, DXGI_FORMAT _targetFormat)
+{
+    slotHandle = _slotHandle;
+    outputPath = _outputPath;
+    textureId = _textureId;
+    mipmapped = _mipmapped;
+    targetFormat = _targetFormat;
+    preloadedPixels = std::move(pixels);
+    preloadedWidth = w;
+    preloadedHeight = h;
+    preloadedBytesPerPixel = bytesPerPixel;
+    imagePath.clear();
 
     if (task && !task->GetIsComplete()) {
         scheduler->WaitforTask(task.get());
@@ -67,6 +91,10 @@ void TextureGenerateSlot::Clear()
     mipData.clear();
     imageStagingAllocator.Reset();
     imageReceivingAllocator.Reset();
+    preloadedPixels.reset();
+    preloadedWidth = 0;
+    preloadedHeight = 0;
+    preloadedBytesPerPixel = 0;
 }
 
 void TextureGenerateSlot::GenerateTask::ExecuteRange(enki::TaskSetPartition range, uint32_t threadNum)
@@ -128,32 +156,52 @@ bool TextureGenerateSlot::LoadImageAndGenerate(VkCommandBuffer cmd, const std::f
 {
     ZoneScopedN("LoadImageAndGenerate");
 
-    int32_t width, height, nrChannels;
-    stbi_uc* stbiData = stbi_load(imagePath.string().c_str(), &width, &height, &nrChannels, 4);
-    if (!stbiData) {
-        LOG_ERROR(Asset, "Failed to load image: {}", imagePath.string());
-        return false;
+    int32_t imgWidth, imgHeight;
+    size_t pixelSize;
+    stbi_uc* stbiData = nullptr;
+    const void* pixelData = nullptr;
+
+    if (preloadedPixels) {
+        imgWidth = preloadedWidth;
+        imgHeight = preloadedHeight;
+        pixelSize = static_cast<size_t>(preloadedWidth) * preloadedHeight * preloadedBytesPerPixel;
+        pixelData = preloadedPixels.get();
+    }
+    else {
+        int32_t w, h, nrChannels;
+        stbiData = stbi_load(imagePath.string().c_str(), &w, &h, &nrChannels, 4);
+        if (!stbiData) {
+            LOG_ERROR(Asset, "Failed to load image: {}", imagePath.string());
+            return false;
+        }
+        imgWidth = w;
+        imgHeight = h;
+        pixelSize = static_cast<size_t>(imgWidth) * imgHeight * 4;
+        pixelData = stbiData;
     }
 
-    VkExtent3D imagesize = {static_cast<uint32_t>(width), static_cast<uint32_t>(height), 1};
-    const size_t size = width * height * 4;
+    VkExtent3D imagesize = {static_cast<uint32_t>(imgWidth), static_cast<uint32_t>(imgHeight), 1};
 
     imageStagingAllocator.Reset();
-    auto allocation = imageStagingAllocator.Allocate(size);
+    auto allocation = imageStagingAllocator.Allocate(pixelSize);
     if (allocation == SIZE_MAX) {
         LOG_ERROR(Asset, "Texture too large for staging buffer");
-        stbi_image_free(stbiData);
+        if (stbiData) { stbi_image_free(stbiData); }
         return false;
     }
 
     startRecording();
 
     char* bufferOffset = static_cast<char*>(imageStagingBuffer.allocationInfo.pMappedData) + allocation;
-    memcpy(bufferOffset, stbiData, size);
-    stbi_image_free(stbiData);
+    memcpy(bufferOffset, pixelData, pixelSize);
+    if (stbiData) {
+        stbi_image_free(stbiData);
+    }
+    preloadedPixels.reset();
 
-    VkImageCreateInfo imageCreateInfo = Render::VkHelpers::ImageCreateInfo(VK_FORMAT_R8G8B8A8_UNORM, imagesize, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
-    mipLevels = mipmapped ? static_cast<uint32_t>(std::floor(std::log2(std::max(width, height)))) + 1 : 1;
+    VkImageCreateInfo imageCreateInfo = Render::VkHelpers::ImageCreateInfo(VK_FORMAT_R8G8B8A8_UNORM, imagesize,
+                                                                           VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+    mipLevels = mipmapped ? static_cast<uint32_t>(std::floor(std::log2(std::max(imgWidth, imgHeight)))) + 1 : 1;
     imageCreateInfo.mipLevels = mipLevels;
 
     sourceImage = Render::AllocatedImage::CreateAllocatedImage(context, imageCreateInfo);
@@ -213,10 +261,10 @@ bool TextureGenerateSlot::LoadImageAndGenerate(VkCommandBuffer cmd, const std::f
             VkImageBlit blit{};
             blit.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, mip - 1, 0, 1};
             blit.srcOffsets[0] = {0, 0, 0};
-            blit.srcOffsets[1] = {(width >> (mip - 1)), (height >> (mip - 1)), 1};
+            blit.srcOffsets[1] = {(imgWidth >> (mip - 1)), (imgHeight >> (mip - 1)), 1};
             blit.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, mip, 0, 1};
             blit.dstOffsets[0] = {0, 0, 0};
-            blit.dstOffsets[1] = {(width >> mip), (height >> mip), 1};
+            blit.dstOffsets[1] = {(imgWidth >> mip), (imgHeight >> mip), 1};
 
             vkCmdBlitImage(cmd, sourceImage.handle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                            sourceImage.handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
@@ -232,7 +280,8 @@ bool TextureGenerateSlot::LoadImageAndGenerate(VkCommandBuffer cmd, const std::f
         depInfo.pImageMemoryBarriers = &finalBarrier;
         vkCmdPipelineBarrier2(cmd, &depInfo);
         sourceImage.layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-    } else {
+    }
+    else {
         barrier = Render::VkHelpers::ImageMemoryBarrier(
             sourceImage.handle,
             Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1),
@@ -269,7 +318,7 @@ bool TextureGenerateSlot::LoadImageAndGenerate(VkCommandBuffer cmd, const std::f
             _copyRegion.imageSubresource.layerCount = 1;
             _copyRegion.imageExtent = {mipWidth, mipHeight, 1};
 
-            vkCmdCopyImageToBuffer(cmd, sourceImage.handle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,imageReceivingBuffer.handle, 1, &_copyRegion);
+            vkCmdCopyImageToBuffer(cmd, sourceImage.handle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, imageReceivingBuffer.handle, 1, &_copyRegion);
             submitAndWait(mip < mipLevels - 1);
 
             mipData[mip].resize(mipSize);
@@ -286,11 +335,16 @@ bool TextureGenerateSlot::WriteWTextureFile()
 
     VkFormat targetVkFormat;
     switch (targetFormat) {
-        case DXGI_FORMAT_BC7_UNORM: targetVkFormat = VK_FORMAT_BC7_UNORM_BLOCK; break;
-        case DXGI_FORMAT_BC7_UNORM_SRGB: targetVkFormat = VK_FORMAT_BC7_SRGB_BLOCK; break;
-        case DXGI_FORMAT_BC5_UNORM: targetVkFormat = VK_FORMAT_BC5_UNORM_BLOCK; break;
-        case DXGI_FORMAT_BC4_UNORM: targetVkFormat = VK_FORMAT_BC4_UNORM_BLOCK; break;
-        default: targetVkFormat = VK_FORMAT_BC7_UNORM_BLOCK; break;
+        case DXGI_FORMAT_BC7_UNORM: targetVkFormat = VK_FORMAT_BC7_UNORM_BLOCK;
+            break;
+        case DXGI_FORMAT_BC7_UNORM_SRGB: targetVkFormat = VK_FORMAT_BC7_SRGB_BLOCK;
+            break;
+        case DXGI_FORMAT_BC5_UNORM: targetVkFormat = VK_FORMAT_BC5_UNORM_BLOCK;
+            break;
+        case DXGI_FORMAT_BC4_UNORM: targetVkFormat = VK_FORMAT_BC4_UNORM_BLOCK;
+            break;
+        default: targetVkFormat = VK_FORMAT_BC7_UNORM_BLOCK;
+            break;
     }
 
     ktxTexture2* texture;
@@ -310,9 +364,7 @@ bool TextureGenerateSlot::WriteWTextureFile()
     if (result != KTX_SUCCESS) {
         LOG_ERROR(Asset, "Failed to create KTX texture");
         return false;
-    }
-
-    {
+    } {
         ZoneScopedN("EncodeBC");
         rdo_bc::rdo_bc_params encodeParams;
         encodeParams.m_bc7_uber_level = 1;
@@ -325,7 +377,7 @@ bool TextureGenerateSlot::WriteWTextureFile()
         struct EncodeMipTask : enki::ITaskSet
         {
             rdo_bc::rdo_bc_params* params;
-            std::vector<std::vector<uint8_t>>* mipData;
+            std::vector<std::vector<uint8_t> >* mipData;
             VkExtent3D imageExtent;
             ktxTexture2* texture;
 
@@ -387,12 +439,12 @@ bool TextureGenerateSlot::WriteWTextureFile()
 
     Engine::WTextureHeader header{};
     header.textureId = textureId.id;
-    header.width     = sourceImage.extent.width;
-    header.height    = sourceImage.extent.height;
-    header.mipCount  = mipLevels;
-    header.dataSize  = ktxSize;
+    header.width = sourceImage.extent.width;
+    header.height = sourceImage.extent.height;
+    header.mipCount = mipLevels;
+    header.dataSize = ktxSize;
 
-    const std::string stem = imagePath.stem().string();
+    const std::string stem = imagePath.empty() ? outputPath.stem().string() : imagePath.stem().string();
     const size_t copyLen = std::min(stem.size(), Engine::WTEXTURE_NAME_LENGTH - 1);
     memcpy(header.name, stem.c_str(), copyLen);
     header.name[copyLen] = '\0';
@@ -416,5 +468,4 @@ bool TextureGenerateSlot::WriteWTextureFile()
     LOG_INFO(Asset, "Wrote {}", outputPath.string());
     return true;
 }
-
 } // Editor

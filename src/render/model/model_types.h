@@ -12,8 +12,7 @@
 #include <glm/gtc/quaternion.hpp>
 
 #include "offsetAllocator.hpp"
-#include "render/descriptors/vk_bindless_resources_sampler_images.h"
-#include "render/vulkan/vk_resources.h"
+#include "engine/materials/material.h"
 
 namespace Render
 {
@@ -95,13 +94,7 @@ struct ModelData
 
     std::vector<glm::mat4> inverseBindMatrices{};
 
-    std::vector<Sampler> samplers{};
-    std::vector<AllocatedImage> images{};
-    std::vector<ImageView> imageViews{};
-    std::vector<MaterialProperties> materials{};
-
-    std::vector<BindlessSamplerHandle> samplerIndexToDescriptorBufferIndexMap{};
-    std::vector<BindlessTextureHandle> textureIndexToDescriptorBufferIndexMap{};
+    std::vector<Engine::Material> materials{};
 
     OffsetAllocator::Allocation vertexAllocation{};
     OffsetAllocator::Allocation meshletVertexAllocation{};
@@ -124,11 +117,6 @@ struct ModelData
         meshes.clear();
         animations.clear();
         inverseBindMatrices.clear();
-        samplers.clear();
-        images.clear();
-        imageViews.clear();
-        samplerIndexToDescriptorBufferIndexMap.clear();
-        textureIndexToDescriptorBufferIndexMap.clear();
 
         assert(vertexAllocation.metadata == OffsetAllocator::Allocation::NO_SPACE && "Vertex allocation should be freed before reset");
         assert(meshletVertexAllocation.metadata == OffsetAllocator::Allocation::NO_SPACE && "Meshlet vertex allocation should be freed before reset");

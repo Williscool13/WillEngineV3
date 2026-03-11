@@ -80,6 +80,10 @@ public:
         return nodes[handle.index].generation.load(std::memory_order_acquire) == handle.generation;
     }
 
+    /**
+     * Thread safe (atomic)
+     * @return
+     */
     uint32_t GetCount() const { return count.load(std::memory_order_relaxed); }
     constexpr uint32_t GetCapacity() const { return MaxSize; }
 };

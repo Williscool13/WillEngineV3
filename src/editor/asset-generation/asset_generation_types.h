@@ -9,6 +9,7 @@
 
 #include <volk.h>
 
+#include "engine/materials/material.h"
 #include "render/model/model_types.h"
 #include "render/shaders/model_interop.h"
 #include "render/vulkan/vk_resources.h"
@@ -19,7 +20,6 @@ constexpr uint32_t ASSET_GENERATOR_WORKER_COUNT = 16;
 constexpr uint32_t MODEL_GENERATION_JOB_COUNT = 4;
 constexpr uint32_t TEXTURE_GENERATION_JOB_COUNT = 4;
 constexpr uint32_t ENVIRONMENT_MAP_GENERATION_JOB_COUNT = 1;
-constexpr uint32_t MODEL_GENERATION_STAGING_BUFFER_SIZE = 64 * 1024 * 1024; // 64MB exactly 1x uncompressed 4k image
 constexpr uint32_t TEXTURE_GENERATION_STAGING_BUFFER_SIZE = 64 * 1024 * 1024; // 64MB
 constexpr uint32_t ENVIRONMENT_MAP_GENERATION_STAGING_BUFFER_SIZE = 128 * 1024 * 1024; // 128MB
 
@@ -34,15 +34,21 @@ static constexpr std::array<const char*, 32> ASSET_GENERATOR_WORKER_NAMES = {
     "AssetGenerator28", "AssetGenerator29", "AssetGenerator30", "AssetGenerator31",
 };
 
+struct RawImage
+{
+    int32_t w;
+    int32_t h;
+    int32_t bpp;
+    std::unique_ptr<uint8_t[]> imageData;
+};
+
 struct RawGltfModel
 {
     std::string name{};
     bool bSuccessfullyLoaded{false};
 
-    std::vector<VkSamplerCreateInfo> samplerInfos{};
-    std::vector<Render::AllocatedImage> images{};
-    // ktx_transcode_fmt_e
-    std::vector<uint32_t> preferredImageFormats{};
+    std::vector<Engine::SamplerDesc> samplerInfos{};
+    std::vector<RawImage> images{};
 
     std::vector<Vertex> vertices{};
     std::vector<uint32_t> meshletVertices{};
@@ -50,7 +56,7 @@ struct RawGltfModel
     std::vector<Meshlet> meshlets{};
 
     std::vector<MeshletPrimitive> primitives{};
-    std::vector<MaterialProperties> materials{};
+    std::vector<Engine::Material> materials{};
 
     std::vector<Render::MeshInformation> allMeshes{};
     std::vector<Render::Node> nodes{};

@@ -11,6 +11,7 @@
 #include "engine/textures/texture_format.h"
 #include "logging/engine_log.h"
 #include "platform/paths.h"
+#include "render/resource_manager.h"
 #include "render/model/model_serialization.h"
 
 namespace Engine
@@ -22,9 +23,8 @@ AssetManager::AssetManager(AssetLoad::AsyncAssetLoadManager* assetLoadManager, R
     Editor::CreateCriticalEngineResources();
 
     std::filesystem::path assetPath = Platform::GetAssetPath();
-    std::filesystem::path texturesPath = assetPath / "textures";
-    if (std::filesystem::exists(texturesPath)) {
-        for (const auto& entry : std::filesystem::recursive_directory_iterator(texturesPath)) {
+    if (std::filesystem::exists(assetPath)) {
+        for (const auto& entry : std::filesystem::recursive_directory_iterator(assetPath)) {
             if (entry.path().extension() != ".wtexture") { continue; }
             std::ifstream f(entry.path(), std::ios::binary);
             std::optional<WTextureHeader> header = ReadWTextureHeader(f);
@@ -103,6 +103,7 @@ AssetManager::AssetManager(AssetLoad::AsyncAssetLoadManager* assetLoadManager, R
     modelRegistry["intel_sponza"_sid] = assetPath / "IntelSponza.willmodel";
     modelRegistry["portal_plane"_sid] = assetPath / "Plane.willmodel";
 
+    std::vector<StringID> modelsToRemove{};
     for (const auto& [id, path] : modelRegistry) {
         Render::ModelReader reader(path);
         if (reader.GetSuccessfullyLoaded()) {
@@ -112,7 +113,12 @@ AssetManager::AssetManager(AssetLoad::AsyncAssetLoadManager* assetLoadManager, R
         }
         else {
             LOG_WARN(Asset, "Failed to read metadata for model '{}'", id.ToString());
+            modelsToRemove.push_back(id);
         }
+    }
+
+    for (auto id : modelsToRemove) {
+        modelRegistry.erase(id);
     }
 
     cubemapRegistry["kloofendal"_sid] = assetPath / "environment-map/kloofendal_48d_partly_cloudy_puresky_4k.ktx2";
@@ -389,6 +395,62 @@ void AssetManager::UnloadTexture(TextureHandle handle)
         texture.loadState = Texture::LoadState::NotLoaded;
         // assetLoadThread->RequestTextureUnload(handle, &texture);
         textureIdToHandle.erase(texture.textureId);
+    }
+}
+
+SamplerHandle AssetManager::LoadSampler(SamplerDesc& samplerDesc)
+{
+    SamplerID id{fnv1a64(reinterpret_cast<uint8_t*>(&samplerDesc), sizeof(samplerDesc))};
+
+    auto it = samplerIdToHandle.find(id);
+    if (it != samplerIdToHandle.end()) {
+        SamplerHandle existingHandle = it->second;
+        if (samplerAllocator.IsValid(existingHandle)) {
+            samplers[existingHandle.index].refCount++;
+            return existingHandle;
+        }
+        samplerIdToHandle.erase(it);
+    }
+
+    SamplerHandle handle = samplerAllocator.Add();
+    if (!handle.IsValid()) {
+        LOG_ERROR(Asset, "Failed to allocate sampler slot");
+        return SamplerHandle::INVALID;
+    }
+
+    Sampler& sampler = samplers[handle.index];
+    sampler.desc = samplerDesc;
+    sampler.id = id;
+    sampler.selfHandle = handle;
+    sampler.refCount = 1;
+    sampler.sampler = Render::Sampler::CreateSampler(resourceManager->context, samplerDesc.ToVkSamplerCreateInfo());
+    sampler.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.AllocateSampler(sampler.sampler.handle);
+
+    samplerIdToHandle[id] = handle;
+    return handle;
+}
+
+Sampler* AssetManager::GetSampler(SamplerHandle handle)
+{
+    if (!samplerAllocator.IsValid(handle)) {
+        return nullptr;
+    }
+    return &samplers[handle.index];
+}
+
+void AssetManager::UnloadSampler(SamplerHandle handle)
+{
+    if (!samplerAllocator.IsValid(handle)) {
+        LOG_WARN(Asset, "Attempted to unload invalid sampler handle");
+        return;
+    }
+
+    Sampler& sampler = samplers[handle.index];
+    sampler.refCount--;
+
+    if (sampler.refCount == 0) {
+        // todo: defer GPU release by 3 FIF
+        samplerIdToHandle.erase(sampler.id);
     }
 }
 

@@ -6,9 +6,39 @@
 
 namespace Engine
 {
-MaterialID HashMaterial(const MaterialProperties& m)
+MaterialID HashMaterial(const Material& m)
 {
-    return MaterialID(fnv1a64(reinterpret_cast<const uint8_t*>(&m), sizeof(MaterialProperties)));
+    struct StableKey
+    {
+        glm::vec4 colorFactor;
+        glm::vec4 metalRoughFactors;
+        glm::vec4 colorUvTransform;
+        glm::vec4 metalRoughUvTransform;
+        glm::vec4 normalUvTransform;
+        glm::vec4 emissiveUvTransform;
+        glm::vec4 occlusionUvTransform;
+        glm::vec4 emissiveFactor;
+        glm::vec4 alphaProperties;
+        glm::vec4 physicalProperties;
+        TextureID textureRefs[6];
+        SamplerDesc samplerDesc[6];
+    };
+
+    StableKey key{};
+    key.colorFactor = m.props.colorFactor;
+    key.metalRoughFactors = m.props.metalRoughFactors;
+    key.colorUvTransform = m.props.colorUvTransform;
+    key.metalRoughUvTransform = m.props.metalRoughUvTransform;
+    key.normalUvTransform = m.props.normalUvTransform;
+    key.emissiveUvTransform = m.props.emissiveUvTransform;
+    key.occlusionUvTransform = m.props.occlusionUvTransform;
+    key.emissiveFactor = m.props.emissiveFactor;
+    key.alphaProperties = m.props.alphaProperties;
+    key.physicalProperties = m.props.physicalProperties;
+    for (int i = 0; i < 6; ++i) key.textureRefs[i] = m.textureRefs[i];
+    for (int i = 0; i < 6; ++i) key.samplerDesc[i] = m.samplerDesc[i];
+
+    return MaterialID(fnv1a64(reinterpret_cast<const uint8_t*>(&key), sizeof(StableKey)));
 }
 
 nlohmann::json SerializeMaterial(const Material& mat)
