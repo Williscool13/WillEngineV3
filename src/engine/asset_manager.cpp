@@ -37,19 +37,16 @@ AssetManager::AssetManager(AssetLoad::AsyncAssetLoadManager* assetLoadManager, R
         }
     }
 
-    TextureHandle whiteTextureHandle = LoadTexture(FindTextureByName("white"));
-    assert(whiteTextureHandle.IsValid());
-    assert(textures[whiteTextureHandle.index].bindlessHandle.index == WHITE_IMAGE_BINDLESS_INDEX);
+    Texture* whiteTex = LoadTexture(FindTextureByName("engine_default_white"));
+    assert(whiteTex && whiteTex->bindlessHandle.index == WHITE_IMAGE_BINDLESS_INDEX);
 
-    TextureHandle errorTextureHandle = LoadTexture(FindTextureByName("error"));
-    assert(errorTextureHandle.IsValid());
-    assert(textures[errorTextureHandle.index].bindlessHandle.index == ERROR_IMAGE_BINDLESS_INDEX);
+    Texture* errorTex = LoadTexture(FindTextureByName("engine_default_error"));
+    assert(errorTex && errorTex->bindlessHandle.index == ERROR_IMAGE_BINDLESS_INDEX);
 
     TextureID brdfLutID = FindTextureByName("brdf_lut");
     if (brdfLutID.IsValid()) {
-        TextureHandle brdfLutTextureHandle = LoadTexture(brdfLutID);
-        assert(brdfLutTextureHandle.IsValid());
-        assert(textures[brdfLutTextureHandle.index].bindlessHandle.index == BRDF_LUT_BINDLESS_INDEX);
+        Texture* brdfTex = LoadTexture(brdfLutID);
+        assert(brdfTex && brdfTex->bindlessHandle.index == BRDF_LUT_BINDLESS_INDEX);
     }
     else {
         // reserve, unused. Requires Engine restart
@@ -59,9 +56,8 @@ AssetManager::AssetManager(AssetLoad::AsyncAssetLoadManager* assetLoadManager, R
 
     TextureID smilingFriendID = FindTextureByName("smiling_friend");
     if (smilingFriendID.IsValid()) {
-        TextureHandle smilingFriendsTextureHandle = LoadTexture(smilingFriendID);
-        assert(smilingFriendsTextureHandle.IsValid());
-        assert(textures[smilingFriendsTextureHandle.index].bindlessHandle.index == SMILING_FRIENDS_BINDLESS_INDEX);
+        Texture* smilingTex = LoadTexture(smilingFriendID);
+        assert(smilingTex && smilingTex->bindlessHandle.index == SMILING_FRIENDS_BINDLESS_INDEX);
     }
     else {
         // reserve, unused. Requires Engine restart
@@ -236,7 +232,7 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
             complete.model->bufferAcquireOps.clear();
             complete.model->imageAcquireOps.clear();
             complete.model->modelLoadState = Render::WillModel::ModelLoadState::Loaded;
-            LOG_INFO(Asset, "Model load succeeded: {}", complete.model->modelId.ToString());
+            LOG_TRACE(Asset, "Model load succeeded: {}", complete.model->modelId.ToString());
             loadCounts.modelLoadedCount++;
         }
         else {
@@ -253,7 +249,7 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
             stagingFrameBuffer.imageAcquireOperations.push_back(textureComplete.texture->acquireBarrier);
 
             textureComplete.texture->loadState = Texture::LoadState::Loaded;
-            LOG_INFO(Asset, "Texture load succeeded: {} (bindless index: {})", textureComplete.texture->name, static_cast<uint32_t>(textureComplete.texture->bindlessHandle.index));
+            LOG_TRACE(Asset, "Texture load succeeded: {} (bindless index: {})", textureComplete.texture->name, static_cast<uint32_t>(textureComplete.texture->bindlessHandle.index));
             loadCounts.textureLoadedCount++;
         }
         else {
@@ -268,7 +264,7 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
             stagingFrameBuffer.imageAcquireOperations.push_back(cubemapComplete.cubemap->acquireBarrier);
 
             cubemapComplete.cubemap->loadState = Render::Cubemap::LoadState::Loaded;
-            LOG_INFO(Asset, "Cubemap load succeeded: {} (bindless index: {})", cubemapComplete.cubemap->name, static_cast<uint32_t>(cubemapComplete.cubemap->bindlessHandle.index));
+            LOG_TRACE(Asset, "Cubemap load succeeded: {} (bindless index: {})", cubemapComplete.cubemap->name, static_cast<uint32_t>(cubemapComplete.cubemap->bindlessHandle.index));
             loadCounts.cubeLoadedCount++;
         }
         else {
@@ -313,11 +309,11 @@ void AssetManager::ResolveUnloads()
     }*/
 }
 
-TextureHandle AssetManager::LoadTexture(TextureID textureId)
+Texture* AssetManager::LoadTexture(TextureID textureId)
 {
     if (!textureRegistry.contains(textureId)) {
         LOG_ERROR(Asset, "Texture {:x} not found in registry", textureId.id);
-        return TextureHandle::INVALID;
+        return nullptr;
     }
 
     auto it = textureIdToHandle.find(textureId);
@@ -327,7 +323,7 @@ TextureHandle AssetManager::LoadTexture(TextureID textureId)
             Texture& texture = textures[existingHandle.index];
             texture.refCount++;
             LOG_TRACE(Asset, "Texture already loaded: {}, refCount: {}", texture.name, texture.refCount);
-            return existingHandle;
+            return &texture;
         }
         textureIdToHandle.erase(it);
     }
@@ -335,7 +331,7 @@ TextureHandle AssetManager::LoadTexture(TextureID textureId)
     TextureHandle handle = textureAllocator.Add();
     if (!handle.IsValid()) {
         LOG_ERROR(Asset, "Failed to allocate texture slot for {:x}", textureId.id);
-        return TextureHandle::INVALID;
+        return nullptr;
     }
 
     const std::filesystem::path& path = textureRegistry[textureId];
@@ -346,7 +342,7 @@ TextureHandle AssetManager::LoadTexture(TextureID textureId)
     if (!header) {
         LOG_ERROR(Asset, "Failed to read header for texture {:x}", textureId.id);
         textureAllocator.Remove(handle);
-        return TextureHandle::INVALID;
+        return nullptr;
     }
 
     Texture& texture = textures[handle.index];
@@ -367,20 +363,18 @@ TextureHandle AssetManager::LoadTexture(TextureID textureId)
 
     assetLoadManager->RequestTextureLoad(&texture);
 
-    return handle;
+    return &texture;
 }
 
-Texture* AssetManager::GetTexture(TextureHandle handle)
+void AssetManager::UnloadTexture(TextureID id)
 {
-    if (!textureAllocator.IsValid(handle)) {
-        return nullptr;
+    auto it = textureIdToHandle.find(id);
+    if (it == textureIdToHandle.end()) {
+        LOG_WARN(Asset, "Attempted to unload texture not in registry");
+        return;
     }
-    return &textures[handle.index];
-}
 
-void AssetManager::UnloadTexture(TextureHandle handle)
-{
-    // todo: add to a queue that only pops after 3 FIF
+    TextureHandle handle = it->second;
     if (!textureAllocator.IsValid(handle)) {
         LOG_WARN(Asset, "Attempted to unload invalid texture handle");
         return;
@@ -393,12 +387,12 @@ void AssetManager::UnloadTexture(TextureHandle handle)
 
     if (texture.refCount == 0) {
         texture.loadState = Texture::LoadState::NotLoaded;
-        // assetLoadThread->RequestTextureUnload(handle, &texture);
-        textureIdToHandle.erase(texture.textureId);
+        // todo: add to a queue that only pops after 3 FIF
+        textureIdToHandle.erase(it);
     }
 }
 
-SamplerHandle AssetManager::LoadSampler(SamplerDesc& samplerDesc)
+Sampler* AssetManager::LoadSampler(SamplerDesc& samplerDesc)
 {
     SamplerID id{fnv1a64(reinterpret_cast<uint8_t*>(&samplerDesc), sizeof(samplerDesc))};
 
@@ -406,8 +400,9 @@ SamplerHandle AssetManager::LoadSampler(SamplerDesc& samplerDesc)
     if (it != samplerIdToHandle.end()) {
         SamplerHandle existingHandle = it->second;
         if (samplerAllocator.IsValid(existingHandle)) {
-            samplers[existingHandle.index].refCount++;
-            return existingHandle;
+            Sampler& existing = samplers[existingHandle.index];
+            existing.refCount++;
+            return &existing;
         }
         samplerIdToHandle.erase(it);
     }
@@ -415,7 +410,7 @@ SamplerHandle AssetManager::LoadSampler(SamplerDesc& samplerDesc)
     SamplerHandle handle = samplerAllocator.Add();
     if (!handle.IsValid()) {
         LOG_ERROR(Asset, "Failed to allocate sampler slot");
-        return SamplerHandle::INVALID;
+        return nullptr;
     }
 
     Sampler& sampler = samplers[handle.index];
@@ -427,19 +422,20 @@ SamplerHandle AssetManager::LoadSampler(SamplerDesc& samplerDesc)
     sampler.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.AllocateSampler(sampler.sampler.handle);
 
     samplerIdToHandle[id] = handle;
-    return handle;
+    return &sampler;
 }
 
-Sampler* AssetManager::GetSampler(SamplerHandle handle)
+void AssetManager::UnloadSampler(SamplerDesc& desc)
 {
-    if (!samplerAllocator.IsValid(handle)) {
-        return nullptr;
+    SamplerID id{fnv1a64(reinterpret_cast<uint8_t*>(&desc), sizeof(desc))};
+
+    auto it = samplerIdToHandle.find(id);
+    if (it == samplerIdToHandle.end()) {
+        LOG_WARN(Asset, "Attempted to unload sampler not in registry");
+        return;
     }
-    return &samplers[handle.index];
-}
 
-void AssetManager::UnloadSampler(SamplerHandle handle)
-{
+    SamplerHandle handle = it->second;
     if (!samplerAllocator.IsValid(handle)) {
         LOG_WARN(Asset, "Attempted to unload invalid sampler handle");
         return;
@@ -450,7 +446,7 @@ void AssetManager::UnloadSampler(SamplerHandle handle)
 
     if (sampler.refCount == 0) {
         // todo: defer GPU release by 3 FIF
-        samplerIdToHandle.erase(sampler.id);
+        samplerIdToHandle.erase(it);
     }
 }
 

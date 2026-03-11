@@ -91,7 +91,7 @@ void CreateCriticalEngineResources()
             WriteSimpleRGBA8WTexture(
                 whitePath,
                 Engine::TextureID(fnv1a64("white", 5)),
-                "white", 1, 1, pixels
+                "engine_default_white", 1, 1, pixels
             );
         }
     }
@@ -110,7 +110,7 @@ void CreateCriticalEngineResources()
         WriteSimpleRGBA8WTexture(
             errorPath,
             Engine::TextureID(fnv1a64("error", 5)),
-            "error", 4, 4, pixels
+            "engine_default_error", 4, 4, pixels
         );
     }
 }

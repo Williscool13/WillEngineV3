@@ -33,7 +33,7 @@ static Engine::WillModelHandle dragonHandle = Engine::WillModelHandle::INVALID;
 static Engine::WillModelHandle boxHandle = Engine::WillModelHandle::INVALID;
 static Engine::WillModelHandle sphereHandle = Engine::WillModelHandle::INVALID;
 static Engine::WillModelHandle sponzaHandle = Engine::WillModelHandle::INVALID;
-static Engine::TextureHandle textureHandle = Engine::TextureHandle::INVALID;
+static Engine::Texture* textureHandle = nullptr;
 static Engine::CubemapHandle cubemapHandle = Engine::CubemapHandle::INVALID;
 static Engine::MaterialID boxMatID;
 

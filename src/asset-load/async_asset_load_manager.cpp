@@ -11,6 +11,7 @@
 #include "platform/thread_utils.h"
 #include "engine/textures/texture.h"
 #include "asset-load-jobs/cubemap_load_slot.h"
+#include "engine/logging/engine_log.h"
 #include "render/pipelines/pipeline_data.h"
 #include "render/types/cubemap_asset.h"
 #include "render/vulkan/vk_context.h"
@@ -38,7 +39,7 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Render::VulkanContext* context, Ren
     assetConfig.numExternalTaskThreads = 2;
     assetLoadScheduler->Initialize(assetConfig);
 
-    SPDLOG_INFO("Asset load scheduler operating with {} threads.", assetConfig.numTaskThreadsToCreate);
+    LOG_INFO(Asset, "Asset load scheduler operating with {} threads.", assetConfig.numTaskThreadsToCreate);
 
     for (uint32_t i = 0; i < AUDIO_JOB_COUNT; ++i) {
         audioLoadSlots[i].Initialize(assetLoadScheduler.get(), [this](bool success, AudioSlotHandle slotHandle) {
@@ -296,7 +297,7 @@ void AsyncAssetLoadManager::RequestAudioLoad(Audio::WillAudio* audioEntry)
     ZoneScoped;
 
     if (!audioEntry) {
-        SPDLOG_ERROR("RequestAudioLoad called with null audioEntry");
+        LOG_ERROR(Asset, "RequestAudioLoad called with null audioEntry");
         return;
     }
 
@@ -315,7 +316,7 @@ void AsyncAssetLoadManager::RequestPipelineLoad(Render::PipelineData* pipelineDa
     ZoneScoped;
 
     if (!pipelineData) {
-        SPDLOG_ERROR("RequestPipelineLoad called with null pipelineData");
+        LOG_ERROR(Asset, "RequestPipelineLoad called with null pipelineData");
         return;
     }
 
@@ -334,7 +335,7 @@ void AsyncAssetLoadManager::RequestModelLoad(Render::WillModel* model)
     ZoneScoped;
 
     if (!model) {
-        SPDLOG_ERROR("RequestModelLoad called with null model");
+        LOG_ERROR(Asset, "RequestModelLoad called with null model");
         return;
     }
 
@@ -353,7 +354,7 @@ void AsyncAssetLoadManager::RequestTextureLoad(Engine::Texture* texture)
     ZoneScoped;
 
     if (!texture) {
-        SPDLOG_ERROR("RequestTextureLoad called with null texture");
+        LOG_ERROR(Asset, "RequestTextureLoad called with null texture");
         return;
     }
 
@@ -371,7 +372,7 @@ void AsyncAssetLoadManager::RequestCubemapLoad(Render::Cubemap* cubemap)
 {
     ZoneScoped;
     if (!cubemap) {
-        SPDLOG_ERROR("RequestCubemapLoad called with null cubemap");
+        LOG_ERROR(Asset, "RequestCubemapLoad called with null cubemap");
         return;
     }
     cubemapRequestQueue.enqueue({cubemap});
@@ -389,7 +390,7 @@ void AsyncAssetLoadManager::OnAudioLoadComplete(bool success, AudioSlotHandle sl
     ZoneScoped;
 
     if (!audioLoadAllocator.IsValid(slotHandle)) {
-        SPDLOG_ERROR("OnAudioLoadComplete called with invalid slot handle");
+        LOG_ERROR(Asset, "OnAudioLoadComplete called with invalid slot handle");
         return;
     }
 
@@ -397,10 +398,10 @@ void AsyncAssetLoadManager::OnAudioLoadComplete(bool success, AudioSlotHandle sl
     audioLoadCompleteQueue.enqueue({slot.audioEntry, success});
 
     if (success) {
-        SPDLOG_INFO("Finished loading audio file: {}", slot.audioEntry->source.string());
+        LOG_TRACE(Asset, "Finished loading audio file: {}", slot.audioEntry->source.string());
     }
     else {
-        SPDLOG_ERROR("Failed to load audio file: {}", slot.audioEntry->source.string());
+        LOG_ERROR(Asset, "Failed to load audio file: {}", slot.audioEntry->source.string());
     }
 
     slot.Clear();
@@ -416,7 +417,7 @@ void AsyncAssetLoadManager::OnPipelineLoadComplete(bool success, PipelineSlotHan
     ZoneScoped;
 
     if (!pipelineLoadAllocator.IsValid(slotHandle)) {
-        SPDLOG_ERROR("OnPipelineLoadComplete called with invalid slot handle");
+        LOG_ERROR(Asset, "OnPipelineLoadComplete called with invalid slot handle");
         return;
     }
 
@@ -424,7 +425,7 @@ void AsyncAssetLoadManager::OnPipelineLoadComplete(bool success, PipelineSlotHan
     pipelineLoadCompleteQueue.enqueue({slot.pipelineData, success});
 
     if (!success) {
-        SPDLOG_WARN("Failed to load pipeline");
+        LOG_ERROR(Asset, "Failed to load pipeline");
     }
 
     slot.Clear();
@@ -440,7 +441,7 @@ void AsyncAssetLoadManager::OnModelLoadComplete(bool success, ModelSlotHandle mo
     ZoneScoped;
 
     if (!modelLoadAllocator.IsValid(modelSlotHandle)) {
-        SPDLOG_ERROR("OnModelLoadComplete called with invalid slot handle");
+        LOG_ERROR(Asset, "OnModelLoadComplete called with invalid slot handle");
         return;
     }
 
@@ -448,7 +449,7 @@ void AsyncAssetLoadManager::OnModelLoadComplete(bool success, ModelSlotHandle mo
     modelLoadCompleteQueue.enqueue({slot.outputModel, success});
 
     if (!success) {
-        SPDLOG_ERROR("Failed to load model: {}", slot.outputModel->modelId.ToString());
+        LOG_ERROR(Asset, "Failed to load model: {}", slot.outputModel->modelId.ToString());
     }
 
     slot.Clear();
@@ -467,7 +468,7 @@ void AsyncAssetLoadManager::OnTextureLoadComplete(bool success, TextureSlotHandl
     ZoneScoped;
 
     if (!textureLoadAllocator.IsValid(textureSlotHandle)) {
-        SPDLOG_ERROR("OnTextureLoadComplete called with invalid slot handle");
+        LOG_ERROR(Asset, "OnTextureLoadComplete called with invalid slot handle");
         return;
     }
 
@@ -475,10 +476,10 @@ void AsyncAssetLoadManager::OnTextureLoadComplete(bool success, TextureSlotHandl
     textureLoadCompleteQueue.enqueue({slot.outputTexture, success});
 
     if (success) {
-        SPDLOG_INFO("Finished loading texture: {}", slot.outputTexture->source.string());
+        LOG_TRACE(Asset, "Finished loading texture: {}", slot.outputTexture->source.string());
     }
     else {
-        SPDLOG_ERROR("Failed to load texture: {}", slot.outputTexture->source.string());
+        LOG_ERROR(Asset, "Failed to load texture: {}", slot.outputTexture->source.string());
     }
 
     slot.Clear();
@@ -497,7 +498,7 @@ void AsyncAssetLoadManager::OnCubemapComplete(bool success, CubemapSlotHandle cu
     ZoneScoped;
 
     if (!cubemapLoadAllocator.IsValid(cubemapSlotHandle)) {
-        SPDLOG_ERROR("OnCubemapComplete called with invalid slot handle");
+        LOG_ERROR(Asset, "OnCubemapComplete called with invalid slot handle");
         return;
     }
 
@@ -505,10 +506,10 @@ void AsyncAssetLoadManager::OnCubemapComplete(bool success, CubemapSlotHandle cu
     cubemapLoadCompleteQueue.enqueue({slot.outputCubemap, success});
 
     if (success) {
-        SPDLOG_INFO("Finished loading cubemap: {}", slot.outputCubemap->source.string());
+        LOG_TRACE(Asset, "Finished loading cubemap: {}", slot.outputCubemap->source.string());
     }
     else {
-        SPDLOG_ERROR("Failed to load cubemap: {}", slot.outputCubemap->source.string());
+        LOG_ERROR(Asset, "Failed to load cubemap: {}", slot.outputCubemap->source.string());
     }
 
     slot.Clear();

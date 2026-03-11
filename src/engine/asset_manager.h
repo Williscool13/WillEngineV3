@@ -73,20 +73,16 @@ public: // Models
 
 
 public: // Textures
-    TextureHandle LoadTexture(TextureID textureId);
+    Texture* LoadTexture(TextureID textureId);
 
-    Texture* GetTexture(TextureHandle handle);
-
-    void UnloadTexture(TextureHandle handle);
+    void UnloadTexture(TextureID id);
 
     [[nodiscard]] TextureID FindTextureByName(std::string_view name) const;
 
 public: // Samplers
-    SamplerHandle LoadSampler(SamplerDesc& samplerDesc);
+    Sampler* LoadSampler(SamplerDesc& samplerDesc);
 
-    Sampler* GetSampler(SamplerHandle handle);
-
-    void UnloadSampler(SamplerHandle handle);
+    void UnloadSampler(SamplerDesc& desc);
 
 public: // Cubemaps
     CubemapHandle LoadCubemap(StringID cubemapId);

@@ -71,35 +71,6 @@ MaterialID MaterialManager::CreateImmutableMaterial(const Material& mat)
     m.id = matId;
     m.immutable = true;
 
-    auto resolveTexture = [&](TextureID id) -> int32_t {
-        if (!id.IsValid()) return WHITE_IMAGE_BINDLESS_INDEX;
-        TextureHandle handle = assetManager->LoadTexture(id);
-        if (!handle.IsValid()) return WHITE_IMAGE_BINDLESS_INDEX;
-        Texture* tex = assetManager->GetTexture(handle);
-        return tex ? static_cast<int32_t>(tex->bindlessHandle.index) : WHITE_IMAGE_BINDLESS_INDEX;
-    };
-
-    m.props.textureImageIndices.x  = resolveTexture(m.textureRefs[0]);
-    m.props.textureImageIndices.y  = resolveTexture(m.textureRefs[1]);
-    m.props.textureImageIndices.z  = resolveTexture(m.textureRefs[2]);
-    m.props.textureImageIndices.w  = resolveTexture(m.textureRefs[3]);
-    m.props.textureImageIndices2.x = resolveTexture(m.textureRefs[4]);
-    m.props.textureImageIndices2.y = resolveTexture(m.textureRefs[5]);
-
-    auto resolveSampler = [&](SamplerDesc& desc) -> int32_t {
-        SamplerHandle handle = assetManager->LoadSampler(desc);
-        if (!handle.IsValid()) return ASSET_SAMPLER_BINDLESS_INDEX;
-        Sampler* s = assetManager->GetSampler(handle);
-        return s ? static_cast<int32_t>(s->bindlessHandle.index) : ASSET_SAMPLER_BINDLESS_INDEX;
-    };
-
-    m.props.textureSamplerIndices.x  = resolveSampler(m.samplerDesc[0]);
-    m.props.textureSamplerIndices.y  = resolveSampler(m.samplerDesc[1]);
-    m.props.textureSamplerIndices.z  = resolveSampler(m.samplerDesc[2]);
-    m.props.textureSamplerIndices.w  = resolveSampler(m.samplerDesc[3]);
-    m.props.textureSamplerIndices2.x = resolveSampler(m.samplerDesc[4]);
-    m.props.textureSamplerIndices2.y = resolveSampler(m.samplerDesc[5]);
-
     materials[matId] = m;
     return matId;
 }
@@ -138,6 +109,35 @@ void MaterialManager::AcquireMaterial(MaterialID materialID)
     }
 
     entry->refCounter++;
+
+    if (auto it = materials.find(materialID); it != materials.end()) {
+        Material& mat = it->second;
+
+        auto resolveTexture = [&](TextureID id) -> int32_t {
+            if (!id.IsValid()) return WHITE_IMAGE_BINDLESS_INDEX;
+            Texture* tex = assetManager->LoadTexture(id);
+            return tex ? static_cast<int32_t>(tex->bindlessHandle.index) : WHITE_IMAGE_BINDLESS_INDEX;
+        };
+
+        auto resolveSampler = [&](SamplerDesc& desc) -> int32_t {
+            Sampler* s = assetManager->LoadSampler(desc);
+            return s ? static_cast<int32_t>(s->bindlessHandle.index) : ASSET_SAMPLER_BINDLESS_INDEX;
+        };
+
+        mat.props.textureImageIndices.x  = resolveTexture(mat.textureRefs[0]);
+        mat.props.textureImageIndices.y  = resolveTexture(mat.textureRefs[1]);
+        mat.props.textureImageIndices.z  = resolveTexture(mat.textureRefs[2]);
+        mat.props.textureImageIndices.w  = resolveTexture(mat.textureRefs[3]);
+        mat.props.textureImageIndices2.x = resolveTexture(mat.textureRefs[4]);
+        mat.props.textureImageIndices2.y = resolveTexture(mat.textureRefs[5]);
+
+        mat.props.textureSamplerIndices.x  = resolveSampler(mat.samplerDesc[0]);
+        mat.props.textureSamplerIndices.y  = resolveSampler(mat.samplerDesc[1]);
+        mat.props.textureSamplerIndices.z  = resolveSampler(mat.samplerDesc[2]);
+        mat.props.textureSamplerIndices.w  = resolveSampler(mat.samplerDesc[3]);
+        mat.props.textureSamplerIndices2.x = resolveSampler(mat.samplerDesc[4]);
+        mat.props.textureSamplerIndices2.y = resolveSampler(mat.samplerDesc[5]);
+    }
 }
 
 void MaterialManager::ReleaseMaterial(MaterialID materialID)
@@ -159,6 +159,7 @@ void MaterialManager::ReleaseMaterial(MaterialID materialID)
 
     if (entry->refCounter == 0) {
         entry->retireFrame = ctx->currentFrame + Core::FRAME_BUFFER_COUNT;
+        LOG_TRACE(Engine, "Material {} has hit ref 0, deleting in {} FIF", materials[materialID].name, Core::FRAME_BUFFER_COUNT);
     }
 }
 
@@ -172,6 +173,20 @@ void MaterialManager::ProcessRetirements()
 
         if (entry.refCounter == 0) {
             if (ctx->currentFrame >= entry.retireFrame) {
+                if (auto it = materials.find(entry.id); it != materials.end()) {
+                    const Material& mat = it->second;
+                    for (TextureID texID : mat.textureRefs) {
+                        if (texID.IsValid()) {
+                            assetManager->UnloadTexture(texID);
+                        }
+                    }
+                    for (SamplerDesc desc : mat.samplerDesc) {
+                        assetManager->UnloadSampler(desc);
+                    }
+                    if (mat.immutable) {
+                        materials.erase(it);
+                    }
+                }
                 activeMaterialAllocator.Remove(entry.handle);
                 idToEntryMap.erase(entry.id);
                 entry = {};
