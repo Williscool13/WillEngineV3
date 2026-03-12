@@ -51,43 +51,56 @@ private:
 };
 
 
-struct UnpackedStaticModel
+struct RawImage
 {
+    int32_t w;
+    int32_t h;
+    int32_t bpp;
+    std::unique_ptr<uint8_t[]> imageData;
+};
+
+struct RawStaticModel
+{
+    std::string name{};
+
+    // Only used when writing model, during read-time it's already embedded in materials
+    std::vector<Engine::SamplerDesc> samplerInfos{};
+    std::vector<RawImage> images{};
+
     std::vector<Vertex> vertices{};
+    std::vector<uint32_t> indices{};
     std::vector<uint32_t> meshletVertices{};
     std::vector<uint8_t> meshletTriangles{};
     std::vector<Meshlet> meshlets{};
 
-    std::vector<MeshletPrimitive> primitives{};
+    std::vector<Primitive> primitives{};
     std::vector<Engine::Material> materials{};
 
     std::vector<Engine::MeshInformation> allMeshes{};
     std::vector<Engine::Node> nodes{};
 
-    std::vector<Engine::Animation> animations;
-    std::vector<glm::mat4> inverseBindMatrices{};
 
-    UnpackedStaticModel() = default;
+    RawStaticModel() = default;
 
-    UnpackedStaticModel(const UnpackedStaticModel&) = delete;
+    RawStaticModel(const RawStaticModel&) = delete;
 
-    UnpackedStaticModel& operator=(const UnpackedStaticModel&) = delete;
+    RawStaticModel& operator=(const RawStaticModel&) = delete;
 
-    UnpackedStaticModel(UnpackedStaticModel&&) noexcept = default;
+    RawStaticModel(RawStaticModel&&) noexcept = default;
 
-    UnpackedStaticModel& operator=(UnpackedStaticModel&&) noexcept = default;
+    RawStaticModel& operator=(RawStaticModel&&) noexcept = default;
 
     void Reset()
     {
         vertices.clear();
+        indices.clear();
         meshletVertices.clear();
         meshletTriangles.clear();
         meshlets.clear();
         primitives.clear();
         materials.clear();
         allMeshes.clear();
-        animations.clear();
-        inverseBindMatrices.clear();
+        nodes.clear();
     }
 };
 

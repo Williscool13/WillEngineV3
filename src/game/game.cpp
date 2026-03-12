@@ -21,6 +21,7 @@
 #include "components/common_components.h"
 #include "engine/logging/engine_log.h"
 #include "engine/logging/engine_logger.h"
+#include "render/vulkan/vk_context.h"
 #include "systems/debug_system.h"
 #include "systems/camera_system.h"
 #include "systems/editor_systems.h"

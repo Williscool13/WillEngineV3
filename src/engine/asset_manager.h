@@ -64,7 +64,8 @@ public: // Models
 
     struct CachedModelMetadata
     {
-        ModelMetadata counts;
+        uint32_t nodeCount{};
+        uint32_t meshNodesCount{};
         std::vector<Node> nodes;
     };
 

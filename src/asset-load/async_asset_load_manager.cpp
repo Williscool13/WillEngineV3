@@ -11,6 +11,8 @@
 #include "platform/thread_utils.h"
 #include "asset-load-jobs/cubemap_load_slot.h"
 #include "engine/logging/engine_log.h"
+#include "engine/resources/model/static_model.h"
+#include "engine/resources/texture/texture.h"
 #include "render/pipelines/pipeline_data.h"
 #include "render/types/cubemap_asset.h"
 #include "render/vulkan/vk_context.h"

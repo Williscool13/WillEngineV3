@@ -43,8 +43,6 @@ add_library(render STATIC
         shaders/model_interop.h
         ../engine/resources/model/model_format.h
         ../engine/resources/model/model_types.h
-        ../engine/resources/model/model_serialization.cpp
-        ../engine/resources/model/model_serialization.h
         ../engine/resources/model/static_model.cpp
         ../engine/resources/model/static_model.h
         shaders/constants_interop.h
@@ -76,6 +74,7 @@ add_library(render STATIC
 
         render-graph/passes/instanced_geometry_pass.cpp
         render-graph/passes/instanced_geometry_pass.h
+        ../engine/resources/model/model_format.cpp
 )
 
 target_include_directories(render PRIVATE

@@ -107,25 +107,6 @@ TEST_CASE("Meshlet bounding and culling data", "[renderer][model-data]") {
     }
 }
 
-TEST_CASE("MeshletPrimitive data", "[renderer][model-data]") {
-    SECTION("Transparency flag") {
-        MeshletPrimitive p{};
-        p.bHasTransparent = 1;
-
-        REQUIRE(p.bHasTransparent == 1);
-    }
-
-    SECTION("Bounding sphere") {
-        MeshletPrimitive p{};
-        p.boundingSphere = float4{5.0f, 10.0f, 15.0f, 20.0f};
-
-        REQUIRE(p.boundingSphere.x == 5.0f);
-        REQUIRE(p.boundingSphere.y == 10.0f);
-        REQUIRE(p.boundingSphere.z == 15.0f);
-        REQUIRE(p.boundingSphere.w == 20.0f); // radius
-    }
-}
-
 TEST_CASE("MaterialProperties default values", "[renderer][model-data]") {
     SECTION("Default initialization") {
         MaterialProperties mat{};

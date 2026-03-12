@@ -4,8 +4,8 @@ add_library(editor STATIC
         asset-generation/asset_generation_types.cpp
         asset-generation/asset_generation_types.h
         asset-generation/stb_impl.cpp
-        asset-generation/model_generate_slot.cpp
-        asset-generation/model_generate_slot.h
+        asset-generation/static_model_generate_slot.cpp
+        asset-generation/static_model_generate_slot.h
         asset-generation/texture_generate_slot.cpp
         asset-generation/texture_generate_slot.h
         asset-generation/environment_map_generate_slot.cpp

@@ -16,6 +16,7 @@
 #include "environment_map_generate_resources.h"
 #include "core/allocators/handle.h"
 #include "core/allocators/linear_allocator.h"
+#include "render/shaders/constants_interop.h"
 #include "render/vulkan/vk_resources.h"
 
 namespace Render

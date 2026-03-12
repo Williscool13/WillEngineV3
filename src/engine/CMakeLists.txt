@@ -33,6 +33,8 @@ add_library(engine STATIC
         resources/sampler/sampler.h
         serialization/serialization.cpp
         serialization/serialization.h
+        compression/compression.cpp
+        compression/compression.h
 )
 
 target_include_directories(engine PRIVATE

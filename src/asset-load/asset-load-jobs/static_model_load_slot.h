@@ -5,9 +5,9 @@
 #ifndef WILL_ENGINE_STATIC_MODEL_LOAD_JOB_H
 #define WILL_ENGINE_STATIC_MODEL_LOAD_JOB_H
 #include <semaphore>
+#include <TaskScheduler.h>
 
 #include "asset-load/asset_load_types.h"
-#include "engine/asset_manager.h"
 
 namespace enki
 {
@@ -65,9 +65,8 @@ private:
     enki::TaskScheduler* scheduler{nullptr};
     Render::VulkanContext* context{nullptr};
     Render::ResourceManager* resourceManager{nullptr};
-    Engine::AssetManager* assetManager{nullptr};
 
-    UnpackedStaticModel rawData{};
+    RawStaticModel rawData{};
     /**
      * Cached vector to store 3x uint8_t->1x uint32_t for meshlet triangles.
      */

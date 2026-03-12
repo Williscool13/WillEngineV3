@@ -69,22 +69,6 @@ TEST_CASE("Meshlet structure size and alignment", "[renderer][shader-interop]") 
     }
 }
 
-TEST_CASE("MeshletPrimitive structure size and alignment", "[renderer][shader-interop]") {
-    SECTION("MeshletPrimitive size") {
-        // uint32 meshletOffset (4)
-        // uint32 meshletCount (4)
-        // uint32 padding (4)
-        // uint32 bHasTransparent (4)
-        // float4 boundingSphere (16)
-        // Total: 32 bytes
-        REQUIRE(sizeof(MeshletPrimitive) == 32);
-    }
-
-    SECTION("MeshletPrimitive alignment") {
-        REQUIRE(alignof(MeshletPrimitive) >= 4);
-    }
-}
-
 TEST_CASE("MaterialProperties structure size and alignment", "[renderer][shader-interop]") {
     SECTION("MaterialProperties size") {
         // This is a complex structure with many fields
@@ -231,7 +215,7 @@ TEST_CASE("Structure padding ensures GPU compatibility", "[renderer][shader-inte
         REQUIRE(sizeof(Vertex) == 64);
         REQUIRE(sizeof(SkinnedVertex) == 96);
         REQUIRE(sizeof(Meshlet) == 64);
-        REQUIRE(sizeof(MeshletPrimitive) == 32);
+        REQUIRE(sizeof(Primitive) == 32);
         REQUIRE(sizeof(MaterialProperties) == 224);
         REQUIRE(sizeof(Instance) == 16);
         REQUIRE(sizeof(Model) == 128);

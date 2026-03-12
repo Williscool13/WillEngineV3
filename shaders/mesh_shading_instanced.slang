@@ -55,7 +55,7 @@ void MeshMain(
     uint lod = packedLocal >> 30;
 
     Instance inst = pc.instanceBuffer[instanceIndex];
-    MeshletPrimitive prim = pc.primitiveBuffer[inst.primitiveIndex];
+    Primitive prim = pc.primitiveBuffer[inst.primitiveIndex];
     Model m = pc.modelBuffer[inst.modelIndex];
 
     uint meshletIndex = prim.meshletOffset[lod] + localMeshletIndex;

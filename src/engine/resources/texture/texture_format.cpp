@@ -4,6 +4,7 @@
 
 #include "texture_format.h"
 
+#include <fstream>
 #include <istream>
 #include <ostream>
 #include <string>
@@ -13,7 +14,7 @@ namespace Engine
 bool WriteWTextureHeader(std::ostream& out, const WTextureHeader& header)
 {
     out << "wtexture\n";
-    out << "version " << TEXTURE_MAJOR_VERSION << " " << TEXTURE_MINOR_VERSION << "\n";
+    out << "version " << header.major << " " << header.minor << "\n";
     out << "id " << header.textureId << "\n";
     out << "name " << header.name << "\n";
     out << "width " << header.width << "\n";
@@ -63,5 +64,11 @@ std::optional<WTextureHeader> ReadWTextureHeader(std::istream& in)
         else if (line.starts_with("data_size ")) { header.dataSize = std::stoull(line.substr(10)); }
     }
     return std::nullopt;
+}
+
+std::optional<WTextureHeader> ReadWTextureHeader(const std::filesystem::path& path)
+{
+    std::ifstream f(path, std::ios::binary);
+    return ReadWTextureHeader(f);
 }
 } // Engine

@@ -71,7 +71,7 @@ SHADER_PUBLIC struct InstanceLODPushConstant
 {
     // Read-Only
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
-    SHADER_PUBLIC SHADER_PTR(MeshletPrimitive) primitiveBuffer;
+    SHADER_PUBLIC SHADER_PTR(Primitive) primitiveBuffer;
     SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
     SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
 
@@ -89,7 +89,7 @@ SHADER_PUBLIC struct InstanceLODShadowsPushConstant
     // Read-Only
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC SHADER_PTR(ShadowData) shadowData;
-    SHADER_PUBLIC SHADER_PTR(MeshletPrimitive) primitiveBuffer;
+    SHADER_PUBLIC SHADER_PTR(Primitive) primitiveBuffer;
     SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
     SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
 
@@ -183,7 +183,7 @@ SHADER_PUBLIC struct ExpandMeshletsPushConstant
     SHADER_PUBLIC SHADER_PTR(IntermediateMeshlet) intermediateMeshlets;
 
     SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
-    SHADER_PUBLIC SHADER_PTR(MeshletPrimitive) primitiveBuffer;
+    SHADER_PUBLIC SHADER_PTR(Primitive) primitiveBuffer;
     SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
     SHADER_PUBLIC SHADER_PTR(Meshlet) meshletBuffer;
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
@@ -200,7 +200,7 @@ SHADER_PUBLIC struct ExpandMeshletsShadowsPushConstant
     SHADER_PUBLIC SHADER_PTR(IntermediateMeshlet) intermediateMeshlets;
 
     SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
-    SHADER_PUBLIC SHADER_PTR(MeshletPrimitive) primitiveBuffer;
+    SHADER_PUBLIC SHADER_PTR(Primitive) primitiveBuffer;
     SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
     SHADER_PUBLIC SHADER_PTR(Meshlet) meshletBuffer;
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
@@ -263,7 +263,7 @@ SHADER_PUBLIC struct BaseMeshShadingPushConstant
     SHADER_PUBLIC SHADER_PTR(uint32_t) meshletVerticesBuffer;
     SHADER_PUBLIC SHADER_PTR(uint32_t) meshletTrianglesBuffer;
     SHADER_PUBLIC SHADER_PTR(Meshlet) meshletBuffer;
-    SHADER_PUBLIC SHADER_PTR(MeshletPrimitive) primitiveBuffer;
+    SHADER_PUBLIC SHADER_PTR(Primitive) primitiveBuffer;
     SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
     SHADER_PUBLIC SHADER_PTR(MaterialProperties) materialBuffer;
     SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
@@ -281,7 +281,7 @@ SHADER_PUBLIC struct ShadowMeshShadingPushConstant
     SHADER_PUBLIC SHADER_PTR(uint32_t) meshletVerticesBuffer;
     SHADER_PUBLIC SHADER_PTR(uint32_t) meshletTrianglesBuffer;
     SHADER_PUBLIC SHADER_PTR(Meshlet) meshletBuffer;
-    SHADER_PUBLIC SHADER_PTR(MeshletPrimitive) primitiveBuffer;
+    SHADER_PUBLIC SHADER_PTR(Primitive) primitiveBuffer;
     SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
     SHADER_PUBLIC SHADER_PTR(MaterialProperties) materialBuffer;
     SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
@@ -348,7 +348,7 @@ SHADER_PUBLIC struct TonemapSDRPushConstant
 
 SHADER_PUBLIC struct BuildDirectIndirectPushConstant
 {
-    SHADER_PUBLIC SHADER_PTR(MeshletPrimitive) primitiveBuffer;
+    SHADER_PUBLIC SHADER_PTR(Primitive) primitiveBuffer;
     SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
     SHADER_PUBLIC SHADER_PTR(DrawMeshTasksIndirectCommand) indirectCommandBuffer;
     SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
@@ -366,7 +366,7 @@ SHADER_PUBLIC struct DirectMeshShadingPushConstant
     SHADER_PUBLIC SHADER_PTR(uint32_t) meshletVerticesBuffer;
     SHADER_PUBLIC SHADER_PTR(uint32_t) meshletTrianglesBuffer;
     SHADER_PUBLIC SHADER_PTR(Meshlet) meshletBuffer;
-    SHADER_PUBLIC SHADER_PTR(MeshletPrimitive) primitiveBuffer;
+    SHADER_PUBLIC SHADER_PTR(Primitive) primitiveBuffer;
 
     SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
     SHADER_PUBLIC SHADER_PTR(MaterialProperties) materialBuffer;

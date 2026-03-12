@@ -261,23 +261,30 @@ bool TextureGenerateSlot::LoadImageAndGenerate(VkCommandBuffer cmd, const std::f
             VkImageBlit blit{};
             blit.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, mip - 1, 0, 1};
             blit.srcOffsets[0] = {0, 0, 0};
-            blit.srcOffsets[1] = {(imgWidth >> (mip - 1)), (imgHeight >> (mip - 1)), 1};
+            blit.srcOffsets[1] = {std::max(1, imgWidth >> (mip - 1)), std::max(1, imgHeight >> (mip - 1)), 1};
             blit.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, mip, 0, 1};
             blit.dstOffsets[0] = {0, 0, 0};
-            blit.dstOffsets[1] = {(imgWidth >> mip), (imgHeight >> mip), 1};
+            blit.dstOffsets[1] = {std::max(1, imgWidth >> mip), std::max(1, imgHeight >> mip), 1};
 
             vkCmdBlitImage(cmd, sourceImage.handle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                            sourceImage.handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
         }
 
-        VkImageMemoryBarrier2 finalBarrier = Render::VkHelpers::ImageMemoryBarrier(
+        VkImageMemoryBarrier2 finalBarriers[2];
+        finalBarriers[0] = Render::VkHelpers::ImageMemoryBarrier(
             sourceImage.handle,
-            Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, mipLevels, 0, 1),
+            Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, mipLevels - 1, 0, 1),
+            VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
+        );
+        finalBarriers[1] = Render::VkHelpers::ImageMemoryBarrier(
+            sourceImage.handle,
+            Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, mipLevels - 1, 1, 0, 1),
             VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
             VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
         );
-        depInfo.imageMemoryBarrierCount = 1;
-        depInfo.pImageMemoryBarriers = &finalBarrier;
+        depInfo.imageMemoryBarrierCount = 2;
+        depInfo.pImageMemoryBarriers = finalBarriers;
         vkCmdPipelineBarrier2(cmd, &depInfo);
         sourceImage.layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
     }

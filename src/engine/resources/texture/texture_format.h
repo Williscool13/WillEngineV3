@@ -6,19 +6,24 @@
 #define WILL_ENGINE_TEXTURE_FORMAT_H
 
 #include <cstdint>
+#include <filesystem>
 #include <iosfwd>
 #include <optional>
 
 namespace Engine
 {
 constexpr uint32_t TEXTURE_MAJOR_VERSION = 0;
-constexpr uint32_t TEXTURE_MINOR_VERSION = 2;
+constexpr uint32_t TEXTURE_MINOR_VERSION = 3;
 constexpr size_t WTEXTURE_NAME_LENGTH = 128;
 
 struct WTextureHeader
 {
     uint64_t textureId{0};
     char name[WTEXTURE_NAME_LENGTH]{};
+
+    uint32_t major{TEXTURE_MAJOR_VERSION};
+    uint32_t minor{TEXTURE_MINOR_VERSION};
+
     uint32_t width{0};
     uint32_t height{0};
     uint32_t mipCount{0};
@@ -29,6 +34,8 @@ struct WTextureHeader
 bool WriteWTextureHeader(std::ostream& out, const WTextureHeader& header);
 
 std::optional<WTextureHeader> ReadWTextureHeader(std::istream& in);
+
+std::optional<WTextureHeader> ReadWTextureHeader(const std::filesystem::path& path);
 } // Engine
 
 #endif //WILL_ENGINE_TEXTURE_FORMAT_H

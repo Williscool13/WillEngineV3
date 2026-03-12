@@ -86,37 +86,34 @@ struct Animation
     float duration;
 };
 
-struct ModelData
+struct StaticModelData
 {
     std::vector<MeshInformation> meshes{};
     std::vector<Node> nodes{};
-    std::vector<Animation> animations{};
-
-    std::vector<glm::mat4> inverseBindMatrices{};
-
-    std::vector<Engine::Material> materials{};
+    std::vector<Material> materials{};
 
     OffsetAllocator::Allocation vertexAllocation{};
+    // todo index allocation for RT
     OffsetAllocator::Allocation meshletVertexAllocation{};
     OffsetAllocator::Allocation meshletTriangleAllocation{};
     OffsetAllocator::Allocation meshletAllocation{};
     OffsetAllocator::Allocation primitiveAllocation{};
 
-    ModelData() = default;
+    StaticModelData() = default;
 
-    ModelData(const ModelData&) = delete;
+    StaticModelData(const StaticModelData&) = delete;
 
-    ModelData& operator=(const ModelData&) = delete;
+    StaticModelData& operator=(const StaticModelData&) = delete;
 
-    ModelData(ModelData&&) noexcept = default;
+    StaticModelData(StaticModelData&&) noexcept = default;
 
-    ModelData& operator=(ModelData&&) noexcept = default;
+    StaticModelData& operator=(StaticModelData&&) noexcept = default;
 
     void Reset()
     {
         meshes.clear();
-        animations.clear();
-        inverseBindMatrices.clear();
+        nodes.clear();
+        materials.clear();
 
         assert(vertexAllocation.metadata == OffsetAllocator::Allocation::NO_SPACE && "Vertex allocation should be freed before reset");
         assert(meshletVertexAllocation.metadata == OffsetAllocator::Allocation::NO_SPACE && "Meshlet vertex allocation should be freed before reset");
@@ -131,7 +128,6 @@ struct ModelData
         primitiveAllocation = {};
     }
 };
-
 } // Render
 
 #endif //WILL_ENGINE_MODEL_TYPES_H

@@ -5,31 +5,37 @@
 #ifndef WILL_ENGINE_SERIALIZATION_H
 #define WILL_ENGINE_SERIALIZATION_H
 
-#include <fstream>
-#include <memory>
+#include <cstddef>
+#include <string>
 #include <vector>
 
-#include "../resources/material/material.h"
+#include "engine/resources/material/material.h"
 #include "engine/resources/model/model_types.h"
 
 namespace Engine
 {
-template<typename T>
-void WriteVector(std::ofstream& file, const std::vector<T>& vec)
+inline size_t AppendRaw(std::vector<std::byte>& buf, const void* data, size_t size)
 {
-    if (!vec.empty()) {
-        file.write(reinterpret_cast<const char*>(vec.data()), vec.size() * sizeof(T));
-    }
+    const auto* ptr = reinterpret_cast<const std::byte*>(data);
+    buf.insert(buf.end(), ptr, ptr + size);
+    return size;
 }
 
-// String serialization
-inline void WriteString(std::ofstream& file, const std::string& str)
+template<typename T>
+size_t WriteVector(std::vector<std::byte>& buf, const std::vector<T>& vec)
+{
+    if (vec.empty()) return 0;
+    return AppendRaw(buf, vec.data(), vec.size() * sizeof(T));
+}
+
+inline size_t WriteString(std::vector<std::byte>& buf, const std::string& str)
 {
     uint32_t length = static_cast<uint32_t>(str.size());
-    file.write(reinterpret_cast<const char*>(&length), sizeof(length));
+    size_t written = AppendRaw(buf, &length, sizeof(length));
     if (length > 0) {
-        file.write(str.data(), length);
+        written += AppendRaw(buf, str.data(), length);
     }
+    return written;
 }
 
 inline void ReadString(const uint8_t*& data, std::string& str)
@@ -46,13 +52,14 @@ inline void ReadString(const uint8_t*& data, std::string& str)
 }
 
 template<typename T>
-void WriteDynamicVector(std::ofstream& file, const std::vector<T>& vec)
+size_t WriteDynamicVector(std::vector<std::byte>& buf, const std::vector<T>& vec)
 {
     auto count = static_cast<uint32_t>(vec.size());
-    file.write(reinterpret_cast<const char*>(&count), sizeof(count));
+    size_t written = AppendRaw(buf, &count, sizeof(count));
     if (count > 0) {
-        file.write(reinterpret_cast<const char*>(vec.data()), count * sizeof(T));
+        written += AppendRaw(buf, vec.data(), count * sizeof(T));
     }
+    return written;
 }
 
 template<typename T>
@@ -69,11 +76,13 @@ void ReadDynamicVector(const uint8_t*& data, std::vector<T>& vec)
     }
 }
 
-inline void WriteMaterial(std::ofstream& file, const Material& mat)
+inline size_t WriteMaterial(std::vector<std::byte>& buf, const Material& mat)
 {
-    file.write(reinterpret_cast<const char*>(&mat.props), sizeof(MaterialProperties));
-    file.write(reinterpret_cast<const char*>(mat.textureRefs), sizeof(mat.textureRefs));
-    file.write(reinterpret_cast<const char*>(mat.samplerDesc), sizeof(mat.samplerDesc));
+    size_t written = 0;
+    written += AppendRaw(buf, &mat.props, sizeof(mat.props));
+    written += AppendRaw(buf, mat.textureRefs, sizeof(mat.textureRefs));
+    written += AppendRaw(buf, mat.samplerDesc, sizeof(mat.samplerDesc));
+    return written;
 }
 
 inline void ReadMaterial(const uint8_t*& data, Material& mat)
@@ -86,10 +95,12 @@ inline void ReadMaterial(const uint8_t*& data, Material& mat)
     data += sizeof(mat.samplerDesc);
 }
 
-inline void WriteMeshInformation(std::ofstream& file, const MeshInformation& mesh)
+inline size_t WriteMeshInformation(std::vector<std::byte>& buf, const MeshInformation& mesh)
 {
-    WriteString(file, mesh.name);
-    WriteDynamicVector(file, mesh.primitiveProperties);
+    size_t written = 0;
+    written += WriteString(buf, mesh.name);
+    written += WriteDynamicVector(buf, mesh.primitiveProperties);
+    return written;
 }
 
 inline void ReadMeshInformation(const uint8_t*& data, MeshInformation& mesh)
@@ -98,16 +109,18 @@ inline void ReadMeshInformation(const uint8_t*& data, MeshInformation& mesh)
     ReadDynamicVector(data, mesh.primitiveProperties);
 }
 
-inline void WriteNode(std::ofstream& file, const Node& node)
+inline size_t WriteNode(std::vector<std::byte>& buf, const Node& node)
 {
-    WriteString(file, node.name);
-    file.write(reinterpret_cast<const char*>(&node.parent), sizeof(node.parent));
-    file.write(reinterpret_cast<const char*>(&node.meshIndex), sizeof(node.meshIndex));
-    file.write(reinterpret_cast<const char*>(&node.depth), sizeof(node.depth));
-    file.write(reinterpret_cast<const char*>(&node.inverseBindIndex), sizeof(node.inverseBindIndex));
-    file.write(reinterpret_cast<const char*>(&node.localTranslation), sizeof(node.localTranslation));
-    file.write(reinterpret_cast<const char*>(&node.localRotation), sizeof(node.localRotation));
-    file.write(reinterpret_cast<const char*>(&node.localScale), sizeof(node.localScale));
+    size_t written = 0;
+    written += WriteString(buf, node.name);
+    written += AppendRaw(buf, &node.parent, sizeof(node.parent));
+    written += AppendRaw(buf, &node.meshIndex, sizeof(node.meshIndex));
+    written += AppendRaw(buf, &node.depth, sizeof(node.depth));
+    written += AppendRaw(buf, &node.inverseBindIndex, sizeof(node.inverseBindIndex));
+    written += AppendRaw(buf, &node.localTranslation, sizeof(node.localTranslation));
+    written += AppendRaw(buf, &node.localRotation, sizeof(node.localRotation));
+    written += AppendRaw(buf, &node.localScale, sizeof(node.localScale));
+    return written;
 }
 
 inline void ReadNode(const uint8_t*& data, Node& node)
@@ -129,11 +142,13 @@ inline void ReadNode(const uint8_t*& data, Node& node)
     data += sizeof(node.localScale);
 }
 
-inline void WriteAnimationSampler(std::ofstream& file, const AnimationSampler& sampler)
+inline size_t WriteAnimationSampler(std::vector<std::byte>& buf, const AnimationSampler& sampler)
 {
-    WriteDynamicVector(file, sampler.timestamps);
-    WriteDynamicVector(file, sampler.values);
-    file.write(reinterpret_cast<const char*>(&sampler.interpolation), sizeof(sampler.interpolation));
+    size_t written = 0;
+    written += WriteDynamicVector(buf, sampler.timestamps);
+    written += WriteDynamicVector(buf, sampler.values);
+    written += AppendRaw(buf, &sampler.interpolation, sizeof(sampler.interpolation));
+    return written;
 }
 
 inline void ReadAnimationSampler(const uint8_t*& data, AnimationSampler& sampler)
@@ -144,18 +159,20 @@ inline void ReadAnimationSampler(const uint8_t*& data, AnimationSampler& sampler
     data += sizeof(sampler.interpolation);
 }
 
-inline void WriteAnimation(std::ofstream& file, const Animation& anim)
+inline size_t WriteAnimation(std::vector<std::byte>& buf, const Animation& anim)
 {
-    WriteString(file, anim.name);
+    size_t written = 0;
+    written += WriteString(buf, anim.name);
 
     auto samplerCount = static_cast<uint32_t>(anim.samplers.size());
-    file.write(reinterpret_cast<const char*>(&samplerCount), sizeof(samplerCount));
+    written += AppendRaw(buf, &samplerCount, sizeof(samplerCount));
     for (const auto& sampler : anim.samplers) {
-        WriteAnimationSampler(file, sampler);
+        written += WriteAnimationSampler(buf, sampler);
     }
 
-    WriteDynamicVector(file, anim.channels);
-    file.write(reinterpret_cast<const char*>(&anim.duration), sizeof(anim.duration));
+    written += WriteDynamicVector(buf, anim.channels);
+    written += AppendRaw(buf, &anim.duration, sizeof(anim.duration));
+    return written;
 }
 
 inline void ReadAnimation(const uint8_t*& data, Animation& anim)

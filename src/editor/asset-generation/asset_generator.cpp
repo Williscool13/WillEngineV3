@@ -9,6 +9,7 @@
 
 #include "miscellaneous_asset_generate.h"
 #include "asset-load/async_asset_load_manager.h"
+#include "core/include/engine_context.h"
 #include "platform/thread_utils.h"
 #include "render/render_thread.h"
 
@@ -92,10 +93,10 @@ void AssetGenerator::ThreadMain()
             ZoneScopedN("Process Model Generation Requests");
             ModelGenerateRequest req{};
             if (modelGenerateRequestQueue.try_dequeue(req)) {
-                Core::Handle<ModelGenerateSlot> slotHandle = modelGenerateAllocator.Add();
+                Core::Handle<StaticModelGenerateSlot> slotHandle = modelGenerateAllocator.Add();
                 if (slotHandle.IsValid()) {
-                    ModelGenerateSlot& task = modelGenerateTasks[slotHandle.index];
-                    task.Launch(slotHandle, req.gltfPath, req.outputPath);
+                    StaticModelGenerateSlot& task = modelGenerateTasks[slotHandle.index];
+                    task.Launch(slotHandle, req.gltfPath, req.outputPath, req.modelId);
                 }
                 else {
                     modelGenerateRequestQueue.enqueue(req);
@@ -175,7 +176,7 @@ void AssetGenerator::RequestModelGenerate(const std::filesystem::path& gltfPath,
 {
     ZoneScoped;
 
-    modelGenerateRequestQueue.enqueue({gltfPath, outputPath});
+    modelGenerateRequestQueue.enqueue({gltfPath, outputPath, modelIdRng()});
     workCounter.fetch_add(1);
     wakeCV.notify_one();
 }
@@ -252,7 +253,7 @@ void AssetGenerator::OnModelGenerateComplete(bool success, ModelGenerateSlotHand
         return;
     }
 
-    ModelGenerateSlot& task = modelGenerateTasks[slotHandle.index];
+    StaticModelGenerateSlot& task = modelGenerateTasks[slotHandle.index];
     modelGenerateCompleteQueue.enqueue({task.outputPath, success});
 
     if (success) {

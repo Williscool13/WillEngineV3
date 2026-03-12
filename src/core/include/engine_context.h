@@ -28,6 +28,7 @@ class PhysicsSystem;
 
 namespace Render
 {
+struct VulkanContext;
 struct ResourceManager;
 }
 

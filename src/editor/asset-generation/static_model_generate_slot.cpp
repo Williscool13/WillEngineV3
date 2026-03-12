@@ -2,7 +2,7 @@
 // Created by William on 2026-02-02.
 //
 
-#include "model_generate_slot.h"
+#include "static_model_generate_slot.h"
 
 #include <fastgltf/core.hpp>
 #include <fastgltf/types.hpp>
@@ -12,7 +12,8 @@
 #include <meshoptimizer/src/meshoptimizer.h>
 
 #include "asset_generator.h"
-#include "engine/resources/model/model_serialization.h"
+#include "engine/compression/compression.h"
+#include "engine/resources/model/model_format.h"
 #include "engine/serialization/serialization.h"
 #include "platform/paths.h"
 #include "render/shaders/constants_interop.h"
@@ -20,11 +21,11 @@
 
 namespace Editor
 {
-ModelGenerateSlot::ModelGenerateSlot() = default;
+StaticModelGenerateSlot::StaticModelGenerateSlot() = default;
 
-ModelGenerateSlot::~ModelGenerateSlot() = default;
+StaticModelGenerateSlot::~StaticModelGenerateSlot() = default;
 
-void ModelGenerateSlot::Initialize(
+void StaticModelGenerateSlot::Initialize(
     int32_t slotIndex,
     enki::TaskScheduler* _scheduler,
     AssetGenerator* _generator,
@@ -34,16 +35,16 @@ void ModelGenerateSlot::Initialize(
     scheduler = _scheduler;
     generator = _generator;
     progress = _progress;
-    temporaryPath = Platform::GetExecutablePath() / "temp" / ("model_gen_" + std::to_string(slotIndex));
     _notifyCallback = std::move(notifyCallback);
 }
 
-void ModelGenerateSlot::Launch(ModelGenerateSlotHandle _slotHandle, const std::filesystem::path& _gltfPath, const std::filesystem::path& _outputPath)
+void StaticModelGenerateSlot::Launch(ModelGenerateSlotHandle _slotHandle, const std::filesystem::path& _gltfPath, const std::filesystem::path& _outputPath, uint64_t _modelId)
 {
     gltfPath.clear();
     slotHandle = _slotHandle;
     gltfPath = _gltfPath;
     outputPath = _outputPath;
+    modelId = _modelId;
 
     if (task && !task->GetIsComplete()) {
         scheduler->WaitforTask(task.get());
@@ -54,7 +55,7 @@ void ModelGenerateSlot::Launch(ModelGenerateSlotHandle _slotHandle, const std::f
     scheduler->AddTaskSetToPipe(task.get());
 }
 
-void ModelGenerateSlot::Clear()
+void StaticModelGenerateSlot::Clear()
 {
     outputPath.clear();
     rawModel = {};
@@ -62,7 +63,7 @@ void ModelGenerateSlot::Clear()
     visited.clear();
 }
 
-void ModelGenerateSlot::GenerateTask::ExecuteRange(enki::TaskSetPartition range, uint32_t threadNum)
+void StaticModelGenerateSlot::GenerateTask::ExecuteRange(enki::TaskSetPartition range, uint32_t threadNum)
 {
     taskSlot->progress->loadingState.store(StaticModelGenerationProgress::LOADING_GLTF, std::memory_order_release);
     taskSlot->progress->value.store(0, std::memory_order_release);
@@ -89,7 +90,7 @@ void ModelGenerateSlot::GenerateTask::ExecuteRange(enki::TaskSetPartition range,
     taskSlot->_notifyCallback(true, taskSlot->slotHandle);
 }
 
-bool ModelGenerateSlot::LoadGltf()
+bool StaticModelGenerateSlot::LoadGltf()
 {
     ZoneScopedN("LoadGltf");
 
@@ -135,7 +136,6 @@ bool ModelGenerateSlot::LoadGltf()
 
     rawModel.images.reserve(gltf.images.size());
     if (!gltf.images.empty()) {
-
         unsigned char* stbiData = nullptr;
         int32_t width, height, nrChannels;
 
@@ -184,7 +184,7 @@ bool ModelGenerateSlot::LoadGltf()
 
             if (!stbiData) { break; }
 
-            RawImage image{};
+            AssetLoad::RawImage image{};
             image.w = width;
             image.h = height;
             image.bpp = 4;
@@ -237,7 +237,7 @@ bool ModelGenerateSlot::LoadGltf()
         rawModel.primitives.reserve(rawModel.primitives.size() + mesh.primitives.size());
 
         for (fastgltf::Primitive& p : mesh.primitives) {
-            MeshletPrimitive primitiveData{};
+            Primitive primitiveData{};
             int32_t materialIndex{-1};
 
             primitiveIndices.clear();
@@ -539,6 +539,11 @@ bool ModelGenerateSlot::LoadGltf()
             uint32_t vertexOffset = rawModel.vertices.size();
             rawModel.vertices.insert(rawModel.vertices.end(), primitiveVertices.begin(), primitiveVertices.end());
 
+            primitiveData.indexOffset = static_cast<uint32_t>(rawModel.indices.size());
+            for (uint32_t idx : primitiveIndices) {
+                rawModel.indices.push_back(idx + vertexOffset);
+            }
+
 
             for (uint32_t lod = 0; lod < LOD_COUNT; ++lod) {
                 primitiveData.meshletOffset[lod] = rawModel.meshlets.size();
@@ -637,9 +642,9 @@ bool ModelGenerateSlot::LoadGltf()
     _progress += stepDiff;
     progress->value.store(_progress, std::memory_order::release);
 
-    // Skins
+    // Skins - Will move to skinned mesh generate
     // Only import first skin
-    if (!gltf.skins.empty()) {
+    /*if (!gltf.skins.empty()) {
         fastgltf::Skin& skins = gltf.skins[0];
 
         if (gltf.skins.size() > 1) {
@@ -663,7 +668,7 @@ bool ModelGenerateSlot::LoadGltf()
                 rawModel.nodes[skins.joints[i]].inverseBindIndex = i;
             }
         }
-    }
+    }*/
     _progress += stepDiff;
     progress->value.store(_progress, std::memory_order::release);
 
@@ -684,8 +689,8 @@ bool ModelGenerateSlot::LoadGltf()
     _progress += stepDiff;
     progress->value.store(_progress, std::memory_order::release);
 
-    // Animations
-    rawModel.animations.reserve(gltf.animations.size());
+    // Animations - Will move to skinned mesh generate
+    /*rawModel.animations.reserve(gltf.animations.size());
     for (fastgltf::Animation& gltfAnim : gltf.animations) {
         Engine::Animation anim{};
         anim.name = gltfAnim.name;
@@ -774,31 +779,15 @@ bool ModelGenerateSlot::LoadGltf()
         }
 
         rawModel.animations.push_back(std::move(anim));
-    }
+    }*/
     _progress += stepDiff;
     progress->value.store(_progress, std::memory_order::release);
-
-    rawModel.bSuccessfullyLoaded = true;
     return true;
 }
 
-bool ModelGenerateSlot::WriteStaticModel()
+bool StaticModelGenerateSlot::WriteStaticModel()
 {
     ZoneScopedN("WriteStaticModel");
-
-    if (temporaryPath.empty()) {
-        SPDLOG_ERROR("Failed to write static model because temporary directory is not set.");
-        return false;
-    }
-
-    //
-    {
-        ZoneScopedN("CleanupTempDirectory");
-        if (std::filesystem::exists(temporaryPath)) {
-            std::filesystem::remove_all(temporaryPath);
-        }
-        std::filesystem::create_directories(temporaryPath);
-    }
 
     std::vector<DXGI_FORMAT> preferredImageFormats;
     preferredImageFormats.resize(rawModel.images.size(), DXGI_FORMAT_BC7_UNORM);
@@ -837,7 +826,7 @@ bool ModelGenerateSlot::WriteStaticModel()
     textureIDs.reserve(rawModel.images.size());
 
     for (int32_t i = 0; i < rawModel.images.size(); ++i) {
-        RawImage& image = rawModel.images[i];
+        AssetLoad::RawImage& image = rawModel.images[i];
         std::filesystem::path textureOutPath = gltfPath.parent_path() / "textures" / (gltfPath.stem().string() + "_texture_" + std::to_string(i) + ".wtexture");
         textureIDs.push_back(generator->RequestTextureGenerateFromMemory(std::move(image.imageData), image.w, image.h, image.bpp, textureOutPath, true, preferredImageFormats[i]));
     }
@@ -871,41 +860,69 @@ bool ModelGenerateSlot::WriteStaticModel()
         mat.props.textureSamplerIndices2 = glm::ivec4(-1);
     }
 
+
+    // Write Output
     {
-        ZoneScopedN("WriteModelBinary");
-        std::ofstream binFile(temporaryPath / "model.bin", std::ios::binary);
-        WriteModelBinary(binFile, rawModel);
-        binFile.close();
-    }
-
-
-    // Create archive
-    {
-        ZoneScopedN("CreateArchive");
-
-        Engine::ModelWriter writer{outputPath};
-        writer.AddFileFromDisk("model.bin", (temporaryPath / "model.bin").string(), Engine::CompressionType::LZ4);
-
-        // Nodes separate
-        {
-            std::ofstream nodesBinFile(temporaryPath / "nodes.bin", std::ios::binary);
-            auto nodeCount = static_cast<uint32_t>(rawModel.nodes.size());
-            nodesBinFile.write(reinterpret_cast<const char*>(&nodeCount), sizeof(nodeCount));
-            for (const auto& node : rawModel.nodes) {
-                WriteNode(nodesBinFile, node);
-            }
-        }
-        writer.AddFileFromDisk("nodes.bin", (temporaryPath / "nodes.bin").string(), Engine::CompressionType::LZ4);
+        ZoneScopedN("WriteStaticModelFile");
+        std::ofstream file(outputPath, std::ios::binary);
+        Engine::WStaticModelHeader header{};
+        header.modelId = modelId;
+        const size_t copyLen = std::min(rawModel.name.size(), Engine::WSTATICMODEL_NAME_LENGTH - 1);
+        memcpy(header.name, rawModel.name.c_str(), copyLen);
+        header.name[copyLen] = '\0';
 
         uint32_t meshNodeCount = 0;
         for (const auto& node : rawModel.nodes) {
-            if (node.meshIndex != ~0u) ++meshNodeCount;
+            if (node.meshIndex != ~0u) { ++meshNodeCount; }
         }
-        writer.SetMetadata({static_cast<uint32_t>(rawModel.nodes.size()), meshNodeCount});
+        header.nodeCount = static_cast<uint32_t>(rawModel.nodes.size());
+        header.meshNodeCount = meshNodeCount;
 
-        if (!writer.Finalize()) {
-            return false;
+        std::vector<std::byte> body;
+
+        header.vertexOffset = static_cast<uint32_t>(sizeof(Engine::WStaticModelHeader) + body.size());
+        header.vertexCount = static_cast<uint32_t>(rawModel.vertices.size());
+        Engine::WriteVector(body, rawModel.vertices);
+
+        header.indexOffset = static_cast<uint32_t>(sizeof(Engine::WStaticModelHeader) + body.size());
+        header.indexCount = static_cast<uint32_t>(rawModel.indices.size());
+        Engine::WriteVector(body, rawModel.indices);
+
+        header.meshletVertexOffset = static_cast<uint32_t>(sizeof(Engine::WStaticModelHeader) + body.size());
+        header.meshletVertexCount = static_cast<uint32_t>(rawModel.meshletVertices.size());
+        Engine::WriteVector(body, rawModel.meshletVertices);
+
+        header.meshletTriangleOffset = static_cast<uint32_t>(sizeof(Engine::WStaticModelHeader) + body.size());
+        header.meshletTriangleCount = static_cast<uint32_t>(rawModel.meshletTriangles.size());
+        Engine::WriteVector(body, rawModel.meshletTriangles);
+
+        header.meshletOffset = static_cast<uint32_t>(sizeof(Engine::WStaticModelHeader) + body.size());
+        header.meshletCount = static_cast<uint32_t>(rawModel.meshlets.size());
+        Engine::WriteVector(body, rawModel.meshlets);
+
+        header.primitiveOffset = static_cast<uint32_t>(sizeof(Engine::WStaticModelHeader) + body.size());
+        header.primitiveCount = static_cast<uint32_t>(rawModel.primitives.size());
+        Engine::WriteVector(body, rawModel.primitives);
+
+        header.materialOffset = static_cast<uint32_t>(sizeof(Engine::WStaticModelHeader) + body.size());
+        header.materialCount = static_cast<uint32_t>(rawModel.materials.size());
+        for (const auto& mat : rawModel.materials) {
+            Engine::WriteMaterial(body, mat);
         }
+
+        header.meshOffset = static_cast<uint32_t>(sizeof(Engine::WStaticModelHeader) + body.size());
+        header.meshCount = static_cast<uint32_t>(rawModel.allMeshes.size());
+        for (const auto& mesh : rawModel.allMeshes) {
+            Engine::WriteMeshInformation(body, mesh);
+        }
+
+        header.nodeOffset = static_cast<uint32_t>(sizeof(Engine::WStaticModelHeader) + body.size());
+        for (const auto& node : rawModel.nodes) {
+            Engine::WriteNode(body, node);
+        }
+
+        file.write(reinterpret_cast<const char*>(&header), sizeof(Engine::WStaticModelHeader));
+        file.write(reinterpret_cast<const char*>(body.data()), body.size());
     }
 
     progress->value.store(100, std::memory_order_release);
@@ -913,7 +930,7 @@ bool ModelGenerateSlot::WriteStaticModel()
 }
 
 
-VkFilter ModelGenerateSlot::ExtractFilter(fastgltf::Filter filter)
+VkFilter StaticModelGenerateSlot::ExtractFilter(fastgltf::Filter filter)
 {
     switch (filter) {
         // nearest samplers
@@ -930,7 +947,7 @@ VkFilter ModelGenerateSlot::ExtractFilter(fastgltf::Filter filter)
     }
 }
 
-VkSamplerMipmapMode ModelGenerateSlot::ExtractMipmapMode(fastgltf::Filter filter)
+VkSamplerMipmapMode StaticModelGenerateSlot::ExtractMipmapMode(fastgltf::Filter filter)
 {
     switch (filter) {
         case fastgltf::Filter::Nearest:
@@ -945,7 +962,7 @@ VkSamplerMipmapMode ModelGenerateSlot::ExtractMipmapMode(fastgltf::Filter filter
     }
 }
 
-MaterialProperties ModelGenerateSlot::ExtractMaterial(fastgltf::Asset& gltf, const fastgltf::Material& gltfMaterial)
+MaterialProperties StaticModelGenerateSlot::ExtractMaterial(fastgltf::Asset& gltf, const fastgltf::Material& gltfMaterial)
 {
     MaterialProperties material{};
     material.colorFactor = glm::vec4(1.0f);
@@ -1039,7 +1056,7 @@ MaterialProperties ModelGenerateSlot::ExtractMaterial(fastgltf::Asset& gltf, con
     return material;
 }
 
-void ModelGenerateSlot::LoadTextureIndicesAndUV(const fastgltf::TextureInfo& texture, const fastgltf::Asset& gltf, int& imageIndex, int& samplerIndex, glm::vec4& uvTransform)
+void StaticModelGenerateSlot::LoadTextureIndicesAndUV(const fastgltf::TextureInfo& texture, const fastgltf::Asset& gltf, int& imageIndex, int& samplerIndex, glm::vec4& uvTransform)
 {
     const size_t textureIndex = texture.textureIndex;
 
@@ -1063,7 +1080,7 @@ void ModelGenerateSlot::LoadTextureIndicesAndUV(const fastgltf::TextureInfo& tex
     }
 }
 
-glm::vec4 ModelGenerateSlot::GenerateBoundingSphere(const std::vector<Vertex>& vertices)
+glm::vec4 StaticModelGenerateSlot::GenerateBoundingSphere(const std::vector<Vertex>& vertices)
 {
     glm::vec3 center = {0, 0, 0};
 
@@ -1082,43 +1099,7 @@ glm::vec4 ModelGenerateSlot::GenerateBoundingSphere(const std::vector<Vertex>& v
     return {center, radius};
 }
 
-void WriteModelBinary(std::ofstream& file, const RawGltfModel& model)
-{
-    Engine::ModelBinaryHeader header{};
-    header.vertexCount = static_cast<uint32_t>(model.vertices.size());
-    header.meshletVertexCount = static_cast<uint32_t>(model.meshletVertices.size());
-    header.meshletTriangleCount = static_cast<uint32_t>(model.meshletTriangles.size());
-    header.meshletCount = static_cast<uint32_t>(model.meshlets.size());
-    header.primitiveCount = static_cast<uint32_t>(model.primitives.size());
-    header.materialCount = static_cast<uint32_t>(model.materials.size());
-    header.meshCount = static_cast<uint32_t>(model.allMeshes.size());
-    header.animationCount = static_cast<uint32_t>(model.animations.size());
-    header.inverseBindMatrixCount = static_cast<uint32_t>(model.inverseBindMatrices.size());
-
-    file.write(reinterpret_cast<const char*>(&header), sizeof(Engine::ModelBinaryHeader));
-
-    Engine::WriteVector(file, model.vertices);
-    Engine::WriteVector(file, model.meshletVertices);
-    Engine::WriteVector(file, model.meshletTriangles);
-    Engine::WriteVector(file, model.meshlets);
-    Engine::WriteVector(file, model.primitives);
-
-    for (const auto& mat : model.materials) {
-        Engine::WriteMaterial(file, mat);
-    }
-
-    for (const auto& mesh : model.allMeshes) {
-        WriteMeshInformation(file, mesh);
-    }
-
-    for (const auto& anim : model.animations) {
-        WriteAnimation(file, anim);
-    }
-
-    Engine::WriteVector(file, model.inverseBindMatrices);
-}
-
-void ModelGenerateSlot::TopologicalSortNodes(std::vector<Engine::Node>& nodes, std::vector<uint32_t>& oldToNew)
+void StaticModelGenerateSlot::TopologicalSortNodes(std::vector<Engine::Node>& nodes, std::vector<uint32_t>& oldToNew)
 {
     oldToNew.resize(nodes.size());
 

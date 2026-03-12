@@ -754,30 +754,33 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         }
     }
 
-    RenderPass& copyStableId = renderGraph->AddPass(SID("Copy Stable ID"), VK_PIPELINE_STAGE_2_COPY_BIT);
-    copyStableId.ReadCopyImage(SID("stable_id"));
-    copyStableId.WriteTransferBuffer(SID("readback_buffer"));
-    copyStableId.Execute([&, mouseX = frameBuffer.currentMousePosition[0], mouseY = frameBuffer.currentMousePosition[1]](VkCommandBuffer cmd) {
-        VkBufferImageCopy region{};
-        region.bufferOffset = offsetof(ReadbackStruct, selectedStableId);
-        region.bufferRowLength = 0;
-        region.bufferImageHeight = 0;
-        region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        region.imageSubresource.mipLevel = 0;
-        region.imageSubresource.baseArrayLayer = 0;
-        region.imageSubresource.layerCount = 1;
-        region.imageOffset = {static_cast<int32_t>(mouseX), static_cast<int32_t>(mouseY), 0};
-        region.imageExtent = {1, 1, 1};
+    if (frameBuffer.currentMousePosition[0] > 0 && frameBuffer.currentMousePosition[0] < renderExtent[0] &&
+    frameBuffer.currentMousePosition[1] > 0 && frameBuffer.currentMousePosition[1] < renderExtent[1]) {
+        RenderPass& copyStableId = renderGraph->AddPass(SID("Copy Stable ID"), VK_PIPELINE_STAGE_2_COPY_BIT);
+        copyStableId.ReadCopyImage(SID("stable_id"));
+        copyStableId.WriteTransferBuffer(SID("readback_buffer"));
+        copyStableId.Execute([&, mouseX = frameBuffer.currentMousePosition[0], mouseY = frameBuffer.currentMousePosition[1]](VkCommandBuffer cmd) {
+            VkBufferImageCopy region{};
+            region.bufferOffset = offsetof(ReadbackStruct, selectedStableId);
+            region.bufferRowLength = 0;
+            region.bufferImageHeight = 0;
+            region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            region.imageSubresource.mipLevel = 0;
+            region.imageSubresource.baseArrayLayer = 0;
+            region.imageSubresource.layerCount = 1;
+            region.imageOffset = {static_cast<int32_t>(mouseX), static_cast<int32_t>(mouseY), 0};
+            region.imageExtent = {1, 1, 1};
 
-        vkCmdCopyImageToBuffer(
-            cmd,
-            renderGraph->GetTextureHandle(SID("stable_id")),
-            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-            renderGraph->GetBufferHandle(SID("readback_buffer")),
-            1,
-            &region
-        );
-    });
+            vkCmdCopyImageToBuffer(
+                cmd,
+                renderGraph->GetTextureHandle(SID("stable_id")),
+                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                renderGraph->GetBufferHandle(SID("readback_buffer")),
+                1,
+                &region
+            );
+        });
+    }
 
     RenderPass& readbackMeshletCount = renderGraph->AddPass(SID("Readback Copy"), VK_PIPELINE_STAGE_2_COPY_BIT);
     readbackMeshletCount.ReadTransferBuffer(SID("readback_buffer"));

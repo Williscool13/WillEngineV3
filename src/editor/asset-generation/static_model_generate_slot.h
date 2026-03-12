@@ -12,8 +12,10 @@
 #include <TaskScheduler.h>
 
 #include "asset_generation_types.h"
+#include "asset-load/asset_load_types.h"
 
 #include "core/allocators/linear_allocator.h"
+#include "engine/resources/model/model_types.h"
 
 namespace Editor
 {
@@ -21,14 +23,14 @@ class AssetGenerator;
 struct StaticModelGenerationProgress;
 struct AssetGeneratorImmediateParameters;
 
-class ModelGenerateSlot
+class StaticModelGenerateSlot
 {
 public:
-    using ModelGenerateSlotHandle = Core::Handle<ModelGenerateSlot>;
+    using ModelGenerateSlotHandle = Core::Handle<StaticModelGenerateSlot>;
 
-    ModelGenerateSlot();
+    StaticModelGenerateSlot();
 
-    ~ModelGenerateSlot();
+    ~StaticModelGenerateSlot();
 
     void Initialize(
         int32_t slotIndex,
@@ -38,17 +40,18 @@ public:
         std::function<void(bool success, ModelGenerateSlotHandle slotHandle)> notifyCallback
     );
 
-    void Launch(ModelGenerateSlotHandle slotHandle, const std::filesystem::path& gltfPath, const std::filesystem::path& outputPath);
+    void Launch(ModelGenerateSlotHandle slotHandle, const std::filesystem::path& gltfPath, const std::filesystem::path& outputPath, uint64_t modelId);
 
     void Clear();
 
     std::filesystem::path gltfPath;
     std::filesystem::path outputPath;
+    uint64_t modelId{0};
 
 private:
     struct GenerateTask : enki::ITaskSet
     {
-        ModelGenerateSlot* taskSlot{nullptr};
+        StaticModelGenerateSlot* taskSlot{nullptr};
 
         explicit GenerateTask() : ITaskSet(1) {}
 
@@ -75,19 +78,15 @@ private:
     AssetGenerator* generator{};
     StaticModelGenerationProgress* progress{};
 
-    std::filesystem::path temporaryPath{};
-
     std::function<void(bool success, ModelGenerateSlotHandle slotHandle)> _notifyCallback;
 
     ModelGenerateSlotHandle slotHandle = ModelGenerateSlotHandle::INVALID;
     std::unique_ptr<GenerateTask> task;
 
-    RawGltfModel rawModel;
+    AssetLoad::RawStaticModel rawModel;
     std::vector<Engine::Node> sortedNodes;
     std::vector<bool> visited;
 };
-
-void WriteModelBinary(std::ofstream& file, const RawGltfModel& model);
 } // Render
 
 #endif //WILL_ENGINE_MODEL_GENERATE_TASK_H

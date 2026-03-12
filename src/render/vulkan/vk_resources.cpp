@@ -391,6 +391,7 @@ AllocatedBuffer AllocatedBuffer::CreateAllocatedBuffer(const VulkanContext* cont
     }
     return buffer;
 }
+
 AllocatedBuffer AllocatedBuffer::CreateAllocatedStagingBuffer(const VulkanContext* context, size_t bufferSize, VkBufferUsageFlags additionalUsages)
 {
     const VkBufferCreateInfo bufferInfo{

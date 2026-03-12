@@ -14,7 +14,7 @@
 
 #include "asset_generation_types.h"
 #include "environment_map_generate_slot.h"
-#include "model_generate_slot.h"
+#include "static_model_generate_slot.h"
 #include "TaskScheduler.h"
 #include "texture_generate_slot.h"
 #include "core/allocators/lock_free_handle_allocator.h"
@@ -55,6 +55,7 @@ struct ModelGenerateRequest
 {
     std::filesystem::path gltfPath;
     std::filesystem::path outputPath;
+    uint64_t modelId{0};
 };
 
 struct ModelGenerateComplete
@@ -98,7 +99,7 @@ struct EnvironmentMapGenerateComplete
     bool success;
 };
 
-using ModelGenerateSlotHandle = Core::Handle<ModelGenerateSlot>;
+using ModelGenerateSlotHandle = Core::Handle<StaticModelGenerateSlot>;
 
 class AssetGenerator
 {
@@ -151,7 +152,7 @@ public:
     void Join();
 
 private:
-    friend class ModelGenerateSlot;
+    friend class StaticModelGenerateSlot;
 
     void ThreadMain();
 
@@ -171,10 +172,11 @@ private:
     AssetLoad::AsyncAssetLoadManager* asyncAssetLoadManager;
     std::unique_ptr<enki::TaskScheduler> assetGeneratorScheduler;
 
+    std::mt19937_64 modelIdRng{std::random_device{}()};
     std::mt19937_64 textureIdRng{std::random_device{}()};
 
-    std::array<ModelGenerateSlot, MODEL_GENERATION_JOB_COUNT> modelGenerateTasks;
-    Core::LockFreeHandleAllocator<ModelGenerateSlot, MODEL_GENERATION_JOB_COUNT> modelGenerateAllocator;
+    std::array<StaticModelGenerateSlot, MODEL_GENERATION_JOB_COUNT> modelGenerateTasks;
+    Core::LockFreeHandleAllocator<StaticModelGenerateSlot, MODEL_GENERATION_JOB_COUNT> modelGenerateAllocator;
 
     std::array<TextureGenerateSlot, TEXTURE_GENERATION_JOB_COUNT> textureGenerateTasks;
     Core::LockFreeHandleAllocator<TextureGenerateSlot, TEXTURE_GENERATION_JOB_COUNT> textureGenerateAllocator;

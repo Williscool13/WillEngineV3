@@ -5,63 +5,62 @@
 #ifndef WILL_ENGINE_MODEL_FORMAT_H
 #define WILL_ENGINE_MODEL_FORMAT_H
 
-#include "render/shaders/model_interop.h"
-#include "render/vulkan/vk_resources.h"
+#include <filesystem>
+#include <iosfwd>
+#include <optional>
+#include <vector>
+
+#include "model_types.h"
 
 namespace Engine
 {
-constexpr char STATIC_MODEL_MAGIC[8] = "WSCMESH";
-constexpr uint32_t MODEL_MAJOR_VERSION = 0;
-constexpr uint32_t MODEL_MINOR_VERSION = 8;
-constexpr uint32_t MODEL_PATCH_VERSION = 0;
+constexpr char STATIC_MODEL_MAGIC[8] = "WSTCMDL";
+constexpr uint32_t STATICMODEL_MAJOR_VERSION = 1;
+constexpr uint32_t STATICMODEL_MINOR_VERSION = 0;
+constexpr size_t WSTATICMODEL_NAME_LENGTH = 128;
 
-struct ModelBinaryHeader
+struct WStaticModelHeader
 {
-    uint32_t vertexCount;
-    uint32_t meshletVertexCount;
-    uint32_t meshletTriangleCount;
-    uint32_t meshletCount;
-    uint32_t primitiveCount;
-    uint32_t materialCount;
-    uint32_t meshCount;
-    uint32_t animationCount;
-    uint32_t inverseBindMatrixCount;
-};
+    uint64_t modelId{0};
+    char name[WSTATICMODEL_NAME_LENGTH]{};
 
-constexpr size_t MAX_FILENAME_LENGTH = 128;
+    uint32_t major{STATICMODEL_MAJOR_VERSION};
+    uint32_t minor{STATICMODEL_MINOR_VERSION};
 
-enum class CompressionType : uint32_t
-{
-    None = 0,
-    Zlib = 1,
-    LZ4  = 2,
-};
-
-struct FileEntry
-{
-    char filename[MAX_FILENAME_LENGTH];
-    uint64_t offset;
-    uint64_t compressedSize;
-    uint64_t uncompressedSize;
-    CompressionType compressionType;
-};
-
-struct ModelMetadata
-{
     uint32_t nodeCount{0};
     uint32_t meshNodeCount{0};
+
+    uint32_t vertexOffset{0};
+    uint32_t vertexCount{0};
+    uint32_t indexOffset{0};
+    uint32_t indexCount{0};
+    uint32_t meshletVertexOffset{0};
+    uint32_t meshletVertexCount{0};
+    uint32_t meshletTriangleOffset{0};
+    uint32_t meshletTriangleCount{0};
+    uint32_t meshletOffset{0};
+    uint32_t meshletCount{0};
+    uint32_t primitiveOffset{0};
+    uint32_t primitiveCount{0};
+    uint32_t materialOffset{0};
+    uint32_t materialCount{0};
+    uint32_t meshOffset{0};
+    uint32_t meshCount{0};
+    uint32_t nodeOffset{0};
+    uint64_t dataOffset{0};
 };
 
-struct StaticModelHeader
+struct WStaticModelInfo
 {
-    char magic[8];
-    uint32_t majorVersion;
-    uint32_t minorVersion;
-    uint32_t patchVersion;
-    uint32_t numFiles;
-    uint64_t fileTableOffset;
-    ModelMetadata metadata;
+    WStaticModelHeader header;
+    std::vector<Node> nodes;
 };
-} // Render
+
+bool WriteWStaticModelHeader(std::ostream& out, const WStaticModelHeader& header);
+
+std::optional<WStaticModelHeader> ReadWStaticModelHeader(std::istream& in);
+
+std::optional<WStaticModelInfo> ReadWStaticModelInfo(const std::filesystem::path& path);
+} // Engine
 
 #endif //WILL_ENGINE_MODEL_FORMAT_H

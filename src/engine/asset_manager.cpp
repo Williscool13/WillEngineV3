@@ -4,14 +4,11 @@
 
 #include "asset_manager.h"
 
-#include <fstream>
-
 #include "asset-load/async_asset_load_manager.h"
 #include "editor/asset-generation/miscellaneous_asset_generate.h"
 #include "logging/engine_log.h"
 #include "platform/paths.h"
 #include "render/resource_manager.h"
-#include "resources/model/model_serialization.h"
 
 namespace Engine
 {
@@ -24,15 +21,32 @@ AssetManager::AssetManager(Core::EngineContext* ctx, AssetLoad::AsyncAssetLoadMa
     std::filesystem::path assetPath = Platform::GetAssetPath();
     if (std::filesystem::exists(assetPath)) {
         for (const auto& entry : std::filesystem::recursive_directory_iterator(assetPath)) {
-            if (entry.path().extension() != ".wtexture") { continue; }
-            std::ifstream f(entry.path(), std::ios::binary);
-            std::optional<WTextureHeader> header = ReadWTextureHeader(f);
-            if (!header) { continue; }
-            TextureID id{header->textureId};
-            const std::string name{header->name};
-            assert(!textureNameToId.contains(name) && "Duplicate .wtexture name detected");
-            textureRegistry[id] = entry.path();
-            textureNameToId[name] = id;
+            const auto& path = entry.path();
+            const auto ext = path.extension();
+
+            if (ext == ".wtexture") {
+                auto header = ReadWTextureHeader(path);
+                if (!header) { continue; }
+                TextureID id{header->textureId};
+                const std::string name{header->name};
+                assert(!textureNameToId.contains(name) && "Duplicate .wtexture name detected");
+                textureRegistry[id] = path;
+                textureNameToId[name] = id;
+            }
+            else if (ext == ".wsmesh") {
+                auto info = ReadWStaticModelInfo(path);
+                if (!info) { continue; }
+                const std::string stem = path.stem().string();
+                StringID id{stem.c_str(), stem.size()};
+                modelRegistry[id] = path;
+                CachedModelMetadata& cached = modelMetadataCache[id];
+                cached.nodeCount = info->header.nodeCount;
+                cached.meshNodesCount = info->header.meshNodeCount;
+                cached.nodes = std::move(info->nodes);
+            }
+            else if (ext == ".wscene") {
+                RegisterScene(path);
+            }
         }
     }
 
@@ -64,7 +78,6 @@ AssetManager::AssetManager(Core::EngineContext* ctx, AssetLoad::AsyncAssetLoadMa
         LOG_CRITICAL(Asset, "Default smiling friend logo does not exist, please regenerate and restart the engine");
     }
 
-
     SamplerDesc defaultSamplerDesc{};
     defaultSamplerDesc.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
     defaultSamplerDesc.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
@@ -72,47 +85,7 @@ AssetManager::AssetManager(Core::EngineContext* ctx, AssetLoad::AsyncAssetLoadMa
     Sampler* defaultSampler = LoadSampler(defaultSamplerDesc);
     assert(defaultSampler && defaultSampler->bindlessHandle.index == ASSET_SAMPLER_BINDLESS_INDEX);
 
-
-    modelRegistry["stanford_dragon"_sid] = assetPath / "dragon/dragon.wsmesh";
-    modelRegistry["4k_box"_sid] = assetPath / "BoxTextured4k.wsmesh";
-    modelRegistry["sphere"_sid] = assetPath / "Sphere.wsmesh";
-    modelRegistry["sponza"_sid] = assetPath / "sponza2/sponza.wsmesh";
-    modelRegistry["intel_sponza"_sid] = assetPath / "IntelSponza.wsmesh";
-    modelRegistry["portal_plane"_sid] = assetPath / "Plane.wsmesh";
-
-    std::vector<StringID> modelsToRemove{};
-    for (const auto& [id, path] : modelRegistry) {
-        if (!exists(path)) {
-            modelsToRemove.push_back(id);
-            continue;
-        }
-
-        ModelReader reader(path);
-        if (reader.GetSuccessfullyLoaded()) {
-            CachedModelMetadata& cached = modelMetadataCache[id];
-            cached.counts = reader.GetMetadata();
-            reader.ReadNodes(cached.nodes);
-        }
-        else {
-            LOG_WARN(Asset, "Failed to read metadata for model '{}'", id.ToString());
-            modelsToRemove.push_back(id);
-        }
-    }
-
-    for (auto id : modelsToRemove) {
-        modelRegistry.erase(id);
-    }
-
     cubemapRegistry["kloofendal"_sid] = assetPath / "environment-map/kloofendal_48d_partly_cloudy_puresky_4k.ktx2";
-
-    std::filesystem::path scenesPath = assetPath / "scenes";
-    if (std::filesystem::exists(scenesPath)) {
-        for (const auto& entry : std::filesystem::directory_iterator(scenesPath)) {
-            if (entry.path().extension() == ".wscene") {
-                RegisterScene(entry.path());
-            }
-        }
-    }
 }
 
 void AssetManager::RegisterScene(const std::filesystem::path& path)
@@ -289,14 +262,36 @@ void AssetManager::ResolveUnloads()
 
 void AssetManager::Scan()
 {
+    bool expectedModels = true;
+    if (ctx->bShouldRescanModels.compare_exchange_strong(expectedModels, false, std::memory_order::acq_rel, std::memory_order::relaxed)) {
+        std::filesystem::path assetPath = Platform::GetAssetPath();
+        if (std::filesystem::exists(assetPath)) {
+            for (const auto& entry : std::filesystem::recursive_directory_iterator(assetPath)) {
+                if (entry.path().extension() != ".wsmesh") { continue; }
+                const std::filesystem::path& path = entry.path();
+                const std::string stem = path.stem().string();
+                StringID id{stem.c_str(), stem.size()};
+                if (modelRegistry.contains(id)) { continue; }
+
+                auto info = ReadWStaticModelInfo(path);
+                if (!info) { continue; }
+
+                modelRegistry[id] = path;
+                CachedModelMetadata& cached = modelMetadataCache[id];
+                cached.nodeCount = info->header.nodeCount;
+                cached.meshNodesCount = info->header.meshNodeCount;
+                cached.nodes = std::move(info->nodes);
+            }
+        }
+    }
+
     bool expected = true;
     if (ctx->bShouldRescanTextures.compare_exchange_strong(expected, false, std::memory_order::acq_rel, std::memory_order::relaxed)) {
         std::filesystem::path assetPath = Platform::GetAssetPath();
         if (std::filesystem::exists(assetPath)) {
             for (const auto& entry : std::filesystem::recursive_directory_iterator(assetPath)) {
                 if (entry.path().extension() != ".wtexture") { continue; }
-                std::ifstream f(entry.path(), std::ios::binary);
-                std::optional<WTextureHeader> header = ReadWTextureHeader(f);
+                auto header = ReadWTextureHeader(entry.path());
                 if (!header) { continue; }
                 TextureID id{header->textureId};
                 const std::string name{header->name};
@@ -340,8 +335,7 @@ Texture* AssetManager::LoadTexture(TextureID textureId)
     const std::filesystem::path& path = textureRegistry[textureId];
     assert(path.extension() == ".wtexture");
 
-    std::ifstream f(path, std::ios::binary);
-    auto header = ReadWTextureHeader(f);
+    auto header = ReadWTextureHeader(path);
     if (!header) {
         LOG_ERROR(Asset, "Failed to read header for texture {:x}", textureId.id);
         textureAllocator.Remove(handle);

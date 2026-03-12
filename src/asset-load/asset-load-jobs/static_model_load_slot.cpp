@@ -4,10 +4,12 @@
 
 #include "static_model_load_slot.h"
 
+#include <fstream>
 #include <semaphore>
 
 #include "asset-load/asset_load_config.h"
-#include "engine/resources/model/model_serialization.h"
+#include "engine/resources/model/model_format.h"
+#include "engine/resources/model/static_model.h"
 #include "engine/serialization/serialization.h"
 #include "render/resource_manager.h"
 #include "render/vulkan/vk_utils.h"
@@ -132,84 +134,74 @@ void StaticModelLoadSlot::LoadModelTask::ExecuteRange(enki::TaskSetPartition ran
 
 bool StaticModelLoadSlot::LoadModelFromDisk()
 {
-    ZoneScopedN("LoadModelTask");
-    //
-    {
-        ZoneScopedN("FileExistsCheck");
-        if (!std::filesystem::exists(outputModel->source)) {
-            SPDLOG_ERROR("Failed to find path to static model - {}", outputModel->modelId.ToString());
-            return false;
-        }
-    }
+    ZoneScopedN("LoadModelFromDisk");
 
-    Engine::ModelReader reader = Engine::ModelReader(outputModel->source);
-
-    if (!reader.GetSuccessfullyLoaded()) {
-        SPDLOG_ERROR("Failed to load static model - {}", outputModel->modelId.ToString());
+    if (!std::filesystem::exists(outputModel->source)) {
+        SPDLOG_ERROR("Failed to find path to static model - {}", outputModel->modelId.ToString());
         return false;
     }
 
-    std::vector<uint8_t> modelBinData; {
-        ZoneScopedN("ReadModelBin");
-        modelBinData = reader.ReadFile("model.bin");
+    std::vector<uint8_t> fileData; {
+        ZoneScopedN("ReadFile");
+        std::ifstream file(outputModel->source, std::ios::binary | std::ios::ate);
+        if (!file) {
+            SPDLOG_ERROR("Failed to open static model - {}", outputModel->modelId.ToString());
+            return false;
+        }
+        const size_t fileSize = static_cast<size_t>(file.tellg());
+        if (fileSize < sizeof(Engine::WStaticModelHeader)) {
+            SPDLOG_ERROR("Static model file too small - {}", outputModel->modelId.ToString());
+            return false;
+        }
+        file.seekg(0);
+        fileData.resize(fileSize);
+        file.read(reinterpret_cast<char*>(fileData.data()), fileSize);
     }
 
-    size_t offset = 0;
-    const auto* header = reinterpret_cast<Engine::ModelBinaryHeader*>(modelBinData.data());
-    offset += sizeof(Engine::ModelBinaryHeader);
+    const auto& header = *reinterpret_cast<const Engine::WStaticModelHeader*>(fileData.data());
 
-    auto readArray = [&]<typename T>(std::vector<T>& vec, uint32_t count) {
+    auto readArray = [&]<typename T>(std::vector<T>& vec, uint32_t offset, uint32_t count) {
         vec.resize(count);
         if (count > 0) {
-            std::memcpy(vec.data(), modelBinData.data() + offset, count * sizeof(T));
-            offset += count * sizeof(T);
+            std::memcpy(vec.data(), fileData.data() + offset, count * sizeof(T));
         }
     };
 
-    const uint8_t* dataPtr = modelBinData.data() + offset;
-
     {
         ZoneScopedN("ParseGeometryData");
-        readArray(rawData.vertices, header->vertexCount);
-        readArray(rawData.meshletVertices, header->meshletVertexCount);
-        readArray(rawData.meshletTriangles, header->meshletTriangleCount);
-        readArray(rawData.meshlets, header->meshletCount);
-        readArray(rawData.primitives, header->primitiveCount);
+        readArray(rawData.vertices,          header.vertexOffset,          header.vertexCount);
+        readArray(rawData.indices,           header.indexOffset,           header.indexCount);
+        readArray(rawData.meshletVertices,   header.meshletVertexOffset,   header.meshletVertexCount);
+        readArray(rawData.meshletTriangles,  header.meshletTriangleOffset, header.meshletTriangleCount);
+        readArray(rawData.meshlets,          header.meshletOffset,         header.meshletCount);
+        readArray(rawData.primitives,        header.primitiveOffset,       header.primitiveCount);
     }
 
     {
         ZoneScopedN("ParseMaterials");
-        const uint8_t* matPtr = modelBinData.data() + offset;
-        rawData.materials.resize(header->materialCount);
-        for (uint32_t i = 0; i < header->materialCount; ++i) {
-            Engine::ReadMaterial(matPtr, rawData.materials[i]);
+        const uint8_t* ptr = fileData.data() + header.materialOffset;
+        rawData.materials.resize(header.materialCount);
+        for (uint32_t i = 0; i < header.materialCount; ++i) {
+            Engine::ReadMaterial(ptr, rawData.materials[i]);
         }
-        offset = matPtr - modelBinData.data();
-    }
-
-    dataPtr = modelBinData.data() + offset; {
-        ZoneScopedN("ParseMeshes");
-        rawData.allMeshes.resize(header->meshCount);
-        for (uint32_t i = 0; i < header->meshCount; i++) {
-            Engine::ReadMeshInformation(dataPtr, rawData.allMeshes[i]);
-        }
-    } {
-        ZoneScopedN("ParseAnimations");
-        rawData.animations.resize(header->animationCount);
-        for (uint32_t i = 0; i < header->animationCount; i++) {
-            Engine::ReadAnimation(dataPtr, rawData.animations[i]);
-        }
-    }
-
-    offset = dataPtr - modelBinData.data(); {
-        ZoneScopedN("ParseSkeletalData");
-        readArray(rawData.inverseBindMatrices, header->inverseBindMatrixCount);
     }
 
     {
-        // Technically we can get nodes from metadata, but I don't think it matters.
+        ZoneScopedN("ParseMeshes");
+        const uint8_t* ptr = fileData.data() + header.meshOffset;
+        rawData.allMeshes.resize(header.meshCount);
+        for (uint32_t i = 0; i < header.meshCount; ++i) {
+            Engine::ReadMeshInformation(ptr, rawData.allMeshes[i]);
+        }
+    }
+
+    {
         ZoneScopedN("ParseNodes");
-        reader.ReadNodes(rawData.nodes);
+        const uint8_t* ptr = fileData.data() + header.nodeOffset;
+        rawData.nodes.resize(header.nodeCount);
+        for (uint32_t i = 0; i < header.nodeCount; ++i) {
+            Engine::ReadNode(ptr, rawData.nodes[i]);
+        }
     }
 
     return true;
@@ -282,7 +274,7 @@ bool StaticModelLoadSlot::AllocateGPUResources() const
         }
     }
 
-    size_t sizePrimitives = rawData.primitives.size() * sizeof(MeshletPrimitive);
+    size_t sizePrimitives = rawData.primitives.size() * sizeof(Primitive);
     //
     {
         std::lock_guard lock(resourceManager->primitiveBufferAllocatorMutex);
@@ -328,7 +320,7 @@ void StaticModelLoadSlot::PrepareUploadData()
         primitive.meshletOffset += meshletOffset;
     }
 
-    uint32_t primitiveOffsetCount = outputModel->modelData.primitiveAllocation.offset / sizeof(MeshletPrimitive);
+    uint32_t primitiveOffsetCount = outputModel->modelData.primitiveAllocation.offset / sizeof(Primitive);
     for (auto& mesh : rawData.allMeshes) {
         for (auto& primitiveIndex : mesh.primitiveProperties) {
             primitiveIndex.index += primitiveOffsetCount;
@@ -338,8 +330,6 @@ void StaticModelLoadSlot::PrepareUploadData()
     // Move data to outputModel
     outputModel->modelData.meshes = std::move(rawData.allMeshes);
     outputModel->modelData.nodes = std::move(rawData.nodes);
-    outputModel->modelData.inverseBindMatrices = std::move(rawData.inverseBindMatrices);
-    outputModel->modelData.animations = std::move(rawData.animations);
     outputModel->modelData.materials = std::move(rawData.materials);
 
     // Pack triangles
@@ -406,7 +396,7 @@ void StaticModelLoadSlot::UploadGeometry(VkCommandBuffer cmd, const std::functio
     uploadBuffer(rawData.meshlets.data(), rawData.meshlets.size(), sizeof(Meshlet),
                 resourceManager->megaMeshletBuffer.handle, outputModel->modelData.meshletAllocation.offset);
 
-    uploadBuffer(rawData.primitives.data(), rawData.primitives.size(), sizeof(MeshletPrimitive),
+    uploadBuffer(rawData.primitives.data(), rawData.primitives.size(), sizeof(Primitive),
                 resourceManager->primitiveBuffer.handle, outputModel->modelData.primitiveAllocation.offset);
 
     // Queue family transfer barriers
@@ -441,7 +431,7 @@ void StaticModelLoadSlot::UploadGeometry(VkCommandBuffer cmd, const std::functio
     releaseBarriers.push_back(createBufferBarrier(resourceManager->megaMeshletBuffer.handle,
         outputModel->modelData.meshletAllocation.offset, rawData.meshlets.size() * sizeof(Meshlet)));
     releaseBarriers.push_back(createBufferBarrier(resourceManager->primitiveBuffer.handle,
-        outputModel->modelData.primitiveAllocation.offset, rawData.primitives.size() * sizeof(MeshletPrimitive)));
+        outputModel->modelData.primitiveAllocation.offset, rawData.primitives.size() * sizeof(Primitive)));
 
     VkDependencyInfo depInfo{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
     depInfo.bufferMemoryBarrierCount = releaseBarriers.size();

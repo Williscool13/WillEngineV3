@@ -19,7 +19,7 @@ void ComputeInstanceLOD(uniform InstanceLODPushConstant pc, uint3 dtid : SV_Disp
     }
 
     Instance inst = pc.instanceBuffer[instanceID];
-    MeshletPrimitive prim = pc.primitiveBuffer[inst.primitiveIndex];
+    Primitive prim = pc.primitiveBuffer[inst.primitiveIndex];
     Model model = pc.modelBuffer[inst.modelIndex];
 
     float4 boundingSphere = prim.boundingSphere;
@@ -293,7 +293,7 @@ void ComputeExpandInstancesToMeshlets(uniform ExpandMeshletsPushConstant pc, uin
     uint meshletOffset = pc.instanceMeshletOffsets[instanceIndex].offset;
     uint localMeshletIndex = globalMeshletIndex - meshletOffset;
     Instance inst = pc.instanceBuffer[instanceIndex];
-    MeshletPrimitive prim = pc.primitiveBuffer[inst.primitiveIndex];
+    Primitive prim = pc.primitiveBuffer[inst.primitiveIndex];
     Model model = pc.modelBuffer[inst.modelIndex];
 
     uint lod = pc.instanceMeshletOffsets[instanceIndex].lod;

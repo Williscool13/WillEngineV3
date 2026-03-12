@@ -19,7 +19,7 @@ void ComputeInstanceLODShadows(uniform InstanceLODShadowsPushConstant pc, uint3 
     }
 
     Instance inst = pc.instanceBuffer[instanceID];
-    MeshletPrimitive prim = pc.primitiveBuffer[inst.primitiveIndex];
+    Primitive prim = pc.primitiveBuffer[inst.primitiveIndex];
     Model model = pc.modelBuffer[inst.modelIndex];
 
     float4 boundingSphere = prim.boundingSphere;
@@ -86,7 +86,7 @@ void ComputeExpandInstancesToMeshletsShadows(uniform ExpandMeshletsShadowsPushCo
     uint meshletOffset = pc.instanceMeshletOffsets[instanceIndex].offset;
     uint localMeshletIndex = globalMeshletIndex - meshletOffset;
     Instance inst = pc.instanceBuffer[instanceIndex];
-    MeshletPrimitive prim = pc.primitiveBuffer[inst.primitiveIndex];
+    Primitive prim = pc.primitiveBuffer[inst.primitiveIndex];
     Model model = pc.modelBuffer[inst.modelIndex];
 
     uint lod = pc.instanceMeshletOffsets[instanceIndex].lod;

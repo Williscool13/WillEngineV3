@@ -4,15 +4,9 @@
 
 #ifndef WILL_ENGINE_MODEL_GENERATION_TYPES_H
 #define WILL_ENGINE_MODEL_GENERATION_TYPES_H
-#include <string>
-#include <vector>
 
-#include <volk.h>
-
-#include "engine/resources/material/material.h"
-#include "engine/resources/model/model_types.h"
-#include "render/shaders/model_interop.h"
-#include "render/vulkan/vk_resources.h"
+#include <cstdint>
+#include <array>
 
 namespace Editor
 {
@@ -32,37 +26,6 @@ static constexpr std::array<const char*, 32> ASSET_GENERATOR_WORKER_NAMES = {
     "AssetGenerator20", "AssetGenerator21", "AssetGenerator22", "AssetGenerator23",
     "AssetGenerator24", "AssetGenerator25", "AssetGenerator26", "AssetGenerator27",
     "AssetGenerator28", "AssetGenerator29", "AssetGenerator30", "AssetGenerator31",
-};
-
-struct RawImage
-{
-    int32_t w;
-    int32_t h;
-    int32_t bpp;
-    std::unique_ptr<uint8_t[]> imageData;
-};
-
-struct RawGltfModel
-{
-    std::string name{};
-    bool bSuccessfullyLoaded{false};
-
-    std::vector<Engine::SamplerDesc> samplerInfos{};
-    std::vector<RawImage> images{};
-
-    std::vector<Vertex> vertices{};
-    std::vector<uint32_t> meshletVertices{};
-    std::vector<uint8_t> meshletTriangles{};
-    std::vector<Meshlet> meshlets{};
-
-    std::vector<MeshletPrimitive> primitives{};
-    std::vector<Engine::Material> materials{};
-
-    std::vector<Engine::MeshInformation> allMeshes{};
-    std::vector<Engine::Node> nodes{};
-
-    std::vector<Engine::Animation> animations;
-    std::vector<glm::mat4> inverseBindMatrices{};
 };
 
 } // Render

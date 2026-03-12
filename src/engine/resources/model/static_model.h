@@ -46,7 +46,7 @@ public:
     uint32_t refCount = 0;
 
     // Populated in AssetLoadThread
-    ModelData modelData{};
+    StaticModelData modelData{};
     std::vector<Core::BufferAcquireOperation> bufferAcquireOps{};
     std::vector<Core::ImageAcquireOperation> imageAcquireOps{};
 };
