@@ -9,8 +9,8 @@
 
 #include <volk.h>
 
-#include "engine/materials/material.h"
-#include "render/model/model_types.h"
+#include "engine/resources/material/material.h"
+#include "engine/resources/model/model_types.h"
 #include "render/shaders/model_interop.h"
 #include "render/vulkan/vk_resources.h"
 
@@ -58,10 +58,10 @@ struct RawGltfModel
     std::vector<MeshletPrimitive> primitives{};
     std::vector<Engine::Material> materials{};
 
-    std::vector<Render::MeshInformation> allMeshes{};
-    std::vector<Render::Node> nodes{};
+    std::vector<Engine::MeshInformation> allMeshes{};
+    std::vector<Engine::Node> nodes{};
 
-    std::vector<Render::Animation> animations;
+    std::vector<Engine::Animation> animations;
     std::vector<glm::mat4> inverseBindMatrices{};
 };
 

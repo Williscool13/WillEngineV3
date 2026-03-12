@@ -12,9 +12,9 @@
 #include <glm/gtc/quaternion.hpp>
 
 #include "offsetAllocator.hpp"
-#include "engine/materials/material.h"
+#include "../material/material.h"
 
-namespace Render
+namespace Engine
 {
 enum class MaterialType
 {

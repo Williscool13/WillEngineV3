@@ -28,13 +28,13 @@ void ResolveStaticMeshLoads(Core::EngineContext* ctx, Engine::GameState* state)
             LOG_ERROR(Game, "Model ({}) is not in the asset manager, it should have been requested to load during scene load.", model->modelId.ToString());
             continue;
         }
-        if (model->modelLoadState != Render::WillModel::ModelLoadState::Loaded) {
+        if (model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
             LOG_TRACE(Game, "Model ({}) not yet done loading", model->modelId.ToString());
             continue;
         }
 
         Engine::MaterialManager* materialManager = ctx->materialManager;
-        Render::MeshInformation& mesh = model->modelData.meshes[meshComponent.meshIndex];
+        Engine::MeshInformation& mesh = model->modelData.meshes[meshComponent.meshIndex];
 
         if (mesh.primitiveProperties.size() > 128) {
             LOG_WARN(Game, "Model ({}) has {} primitives, limiting to 128", model->modelId.ToString(), mesh.primitiveProperties.size());
@@ -43,7 +43,7 @@ void ResolveStaticMeshLoads(Core::EngineContext* ctx, Engine::GameState* state)
         size_t primCount = std::min(mesh.primitiveProperties.size(), static_cast<size_t>(128));
 
         for (size_t j = 0; j < primCount; ++j) {
-            Render::PrimitiveProperty& primitive = mesh.primitiveProperties[j];
+            Engine::PrimitiveProperty& primitive = mesh.primitiveProperties[j];
 
             Engine::MaterialID matID;
             if (primitive.materialIndex == -1) {

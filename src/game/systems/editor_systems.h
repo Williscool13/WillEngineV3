@@ -23,6 +23,7 @@ namespace Core
 {
 struct FrameBuffer;
 struct EngineContext;
+struct ViewFamily;
 }
 
 namespace Game

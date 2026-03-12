@@ -17,7 +17,7 @@
 #include "core/input/input_frame.h"
 #include "core/math/constants.h"
 #include "engine/engine_api.h"
-#include "engine/materials/material_manager.h"
+#include "../../engine/resources/material/material_manager.h"
 #include "game/fwd_components.h"
 #include "game/components/common_components.h"
 #include "game/components/scene_components.h"

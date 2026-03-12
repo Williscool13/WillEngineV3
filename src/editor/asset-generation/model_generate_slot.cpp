@@ -12,9 +12,9 @@
 #include <meshoptimizer/src/meshoptimizer.h>
 
 #include "asset_generator.h"
+#include "engine/resources/model/model_serialization.h"
+#include "engine/serialization/serialization.h"
 #include "platform/paths.h"
-#include "render/model/model_format.h"
-#include "render/model/model_serialization.h"
 #include "render/shaders/constants_interop.h"
 #include "tracy/Tracy.hpp"
 
@@ -28,7 +28,7 @@ void ModelGenerateSlot::Initialize(
     int32_t slotIndex,
     enki::TaskScheduler* _scheduler,
     AssetGenerator* _generator,
-    WillModelGenerationProgress* _progress,
+    StaticModelGenerationProgress* _progress,
     std::function<void(bool success, ModelGenerateSlotHandle slotHandle)> notifyCallback)
 {
     scheduler = _scheduler;
@@ -64,27 +64,27 @@ void ModelGenerateSlot::Clear()
 
 void ModelGenerateSlot::GenerateTask::ExecuteRange(enki::TaskSetPartition range, uint32_t threadNum)
 {
-    taskSlot->progress->loadingState.store(WillModelGenerationProgress::LOADING_GLTF, std::memory_order_release);
+    taskSlot->progress->loadingState.store(StaticModelGenerationProgress::LOADING_GLTF, std::memory_order_release);
     taskSlot->progress->value.store(0, std::memory_order_release);
 
     if (!taskSlot->LoadGltf()) {
-        taskSlot->progress->loadingState.store(WillModelGenerationProgress::FAILED, std::memory_order_release);
+        taskSlot->progress->loadingState.store(StaticModelGenerationProgress::FAILED, std::memory_order_release);
         taskSlot->progress->value.store(0, std::memory_order_release);
         taskSlot->_notifyCallback(false, taskSlot->slotHandle);
         return;
     }
 
-    taskSlot->progress->loadingState.store(WillModelGenerationProgress::WRITING_WILL_MODEL, std::memory_order_release);
+    taskSlot->progress->loadingState.store(StaticModelGenerationProgress::WRITING_STATIC_MODEL, std::memory_order_release);
     taskSlot->progress->value.store(50, std::memory_order_release);
 
-    if (!taskSlot->WriteWillModel()) {
-        taskSlot->progress->loadingState.store(WillModelGenerationProgress::FAILED, std::memory_order_release);
+    if (!taskSlot->WriteStaticModel()) {
+        taskSlot->progress->loadingState.store(StaticModelGenerationProgress::FAILED, std::memory_order_release);
         taskSlot->progress->value.store(0, std::memory_order_release);
         taskSlot->_notifyCallback(false, taskSlot->slotHandle);
         return;
     }
 
-    taskSlot->progress->loadingState.store(WillModelGenerationProgress::SUCCESS, std::memory_order_release);
+    taskSlot->progress->loadingState.store(StaticModelGenerationProgress::SUCCESS, std::memory_order_release);
     taskSlot->progress->value.store(100, std::memory_order_release);
     taskSlot->_notifyCallback(true, taskSlot->slotHandle);
 }
@@ -226,12 +226,12 @@ bool ModelGenerateSlot::LoadGltf()
     progress->value.store(_progress, std::memory_order::release);
 
     // Meshes
-    // WillModel stores as SkinnedVertex, when loading, the vertices will be loaded to different buffers depending on whether the model is a skeletal mesh.
+    // StaticModel stores as SkinnedVertex, when loading, the vertices will be loaded to different buffers depending on whether the model is a skeletal mesh.
     std::vector<Vertex> primitiveVertices{};
     std::vector<uint32_t> primitiveIndices{};
     rawModel.allMeshes.reserve(gltf.meshes.size());
     for (fastgltf::Mesh& mesh : gltf.meshes) {
-        Render::MeshInformation meshData{};
+        Engine::MeshInformation meshData{};
         meshData.name = mesh.name;
         meshData.primitiveProperties.reserve(mesh.primitives.size());
         rawModel.primitives.reserve(rawModel.primitives.size() + mesh.primitives.size());
@@ -247,7 +247,7 @@ bool ModelGenerateSlot::LoadGltf()
             {
                 if (p.materialIndex.has_value()) {
                     materialIndex = static_cast<int32_t>(p.materialIndex.value());
-                    primitiveData.bHasTransparent = (static_cast<Render::MaterialType>(rawModel.materials[materialIndex].props.alphaProperties.y) == Render::MaterialType::BLEND);
+                    primitiveData.bHasTransparent = (static_cast<Engine::MaterialType>(rawModel.materials[materialIndex].props.alphaProperties.y) == Engine::MaterialType::BLEND);
                 }
 
 
@@ -594,7 +594,7 @@ bool ModelGenerateSlot::LoadGltf()
     // Nodes
     rawModel.nodes.reserve(gltf.nodes.size());
     for (const fastgltf::Node& node : gltf.nodes) {
-        Render::Node _node{};
+        Engine::Node _node{};
         _node.name = node.name;
 
         if (node.meshIndex.has_value()) {
@@ -687,11 +687,11 @@ bool ModelGenerateSlot::LoadGltf()
     // Animations
     rawModel.animations.reserve(gltf.animations.size());
     for (fastgltf::Animation& gltfAnim : gltf.animations) {
-        Render::Animation anim{};
+        Engine::Animation anim{};
         anim.name = gltfAnim.name;
 
         for (fastgltf::AnimationSampler& animSampler : gltfAnim.samplers) {
-            Render::AnimationSampler sampler;
+            Engine::AnimationSampler sampler;
 
             const fastgltf::Accessor& inputAccessor = gltf.accessors[animSampler.inputAccessor];
             sampler.timestamps.resize(inputAccessor.count);
@@ -729,13 +729,13 @@ bool ModelGenerateSlot::LoadGltf()
 
             switch (animSampler.interpolation) {
                 case fastgltf::AnimationInterpolation::Linear:
-                    sampler.interpolation = Render::AnimationSampler::Interpolation::Linear;
+                    sampler.interpolation = Engine::AnimationSampler::Interpolation::Linear;
                     break;
                 case fastgltf::AnimationInterpolation::Step:
-                    sampler.interpolation = Render::AnimationSampler::Interpolation::Step;
+                    sampler.interpolation = Engine::AnimationSampler::Interpolation::Step;
                     break;
                 case fastgltf::AnimationInterpolation::CubicSpline:
-                    sampler.interpolation = Render::AnimationSampler::Interpolation::CubicSpline;
+                    sampler.interpolation = Engine::AnimationSampler::Interpolation::CubicSpline;
                     break;
             }
 
@@ -744,22 +744,22 @@ bool ModelGenerateSlot::LoadGltf()
 
         anim.channels.reserve(gltfAnim.channels.size());
         for (auto& gltfChannel : gltfAnim.channels) {
-            Render::AnimationChannel channel{};
+            Engine::AnimationChannel channel{};
             channel.samplerIndex = gltfChannel.samplerIndex;
             channel.targetNodeIndex = nodeRemap[gltfChannel.nodeIndex.value()];
 
             switch (gltfChannel.path) {
                 case fastgltf::AnimationPath::Translation:
-                    channel.targetPath = Render::AnimationChannel::TargetPath::Translation;
+                    channel.targetPath = Engine::AnimationChannel::TargetPath::Translation;
                     break;
                 case fastgltf::AnimationPath::Rotation:
-                    channel.targetPath = Render::AnimationChannel::TargetPath::Rotation;
+                    channel.targetPath = Engine::AnimationChannel::TargetPath::Rotation;
                     break;
                 case fastgltf::AnimationPath::Scale:
-                    channel.targetPath = Render::AnimationChannel::TargetPath::Scale;
+                    channel.targetPath = Engine::AnimationChannel::TargetPath::Scale;
                     break;
                 case fastgltf::AnimationPath::Weights:
-                    channel.targetPath = Render::AnimationChannel::TargetPath::Weights;
+                    channel.targetPath = Engine::AnimationChannel::TargetPath::Weights;
                     break;
             }
 
@@ -782,12 +782,12 @@ bool ModelGenerateSlot::LoadGltf()
     return true;
 }
 
-bool ModelGenerateSlot::WriteWillModel()
+bool ModelGenerateSlot::WriteStaticModel()
 {
-    ZoneScopedN("WriteWillModel");
+    ZoneScopedN("WriteStaticModel");
 
     if (temporaryPath.empty()) {
-        SPDLOG_ERROR("Failed to write willmodel because temporary directory is not set.");
+        SPDLOG_ERROR("Failed to write static model because temporary directory is not set.");
         return false;
     }
 
@@ -883,8 +883,8 @@ bool ModelGenerateSlot::WriteWillModel()
     {
         ZoneScopedN("CreateArchive");
 
-        Render::ModelWriter writer{outputPath};
-        writer.AddFileFromDisk("model.bin", (temporaryPath / "model.bin").string(), Render::CompressionType::LZ4);
+        Engine::ModelWriter writer{outputPath};
+        writer.AddFileFromDisk("model.bin", (temporaryPath / "model.bin").string(), Engine::CompressionType::LZ4);
 
         // Nodes separate
         {
@@ -895,7 +895,7 @@ bool ModelGenerateSlot::WriteWillModel()
                 WriteNode(nodesBinFile, node);
             }
         }
-        writer.AddFileFromDisk("nodes.bin", (temporaryPath / "nodes.bin").string(), Render::CompressionType::LZ4);
+        writer.AddFileFromDisk("nodes.bin", (temporaryPath / "nodes.bin").string(), Engine::CompressionType::LZ4);
 
         uint32_t meshNodeCount = 0;
         for (const auto& node : rawModel.nodes) {
@@ -978,13 +978,13 @@ MaterialProperties ModelGenerateSlot::ExtractMaterial(fastgltf::Asset& gltf, con
 
     switch (gltfMaterial.alphaMode) {
         case fastgltf::AlphaMode::Opaque:
-            material.alphaProperties.y = static_cast<float>(Render::MaterialType::SOLID);
+            material.alphaProperties.y = static_cast<float>(Engine::MaterialType::SOLID);
             break;
         case fastgltf::AlphaMode::Blend:
-            material.alphaProperties.y = static_cast<float>(Render::MaterialType::BLEND);
+            material.alphaProperties.y = static_cast<float>(Engine::MaterialType::BLEND);
             break;
         case fastgltf::AlphaMode::Mask:
-            material.alphaProperties.y = static_cast<float>(Render::MaterialType::CUTOUT);
+            material.alphaProperties.y = static_cast<float>(Engine::MaterialType::CUTOUT);
             break;
     }
 
@@ -1084,7 +1084,7 @@ glm::vec4 ModelGenerateSlot::GenerateBoundingSphere(const std::vector<Vertex>& v
 
 void WriteModelBinary(std::ofstream& file, const RawGltfModel& model)
 {
-    Render::ModelBinaryHeader header{};
+    Engine::ModelBinaryHeader header{};
     header.vertexCount = static_cast<uint32_t>(model.vertices.size());
     header.meshletVertexCount = static_cast<uint32_t>(model.meshletVertices.size());
     header.meshletTriangleCount = static_cast<uint32_t>(model.meshletTriangles.size());
@@ -1095,16 +1095,16 @@ void WriteModelBinary(std::ofstream& file, const RawGltfModel& model)
     header.animationCount = static_cast<uint32_t>(model.animations.size());
     header.inverseBindMatrixCount = static_cast<uint32_t>(model.inverseBindMatrices.size());
 
-    file.write(reinterpret_cast<const char*>(&header), sizeof(Render::ModelBinaryHeader));
+    file.write(reinterpret_cast<const char*>(&header), sizeof(Engine::ModelBinaryHeader));
 
-    Render::WriteVector(file, model.vertices);
-    Render::WriteVector(file, model.meshletVertices);
-    Render::WriteVector(file, model.meshletTriangles);
-    Render::WriteVector(file, model.meshlets);
-    Render::WriteVector(file, model.primitives);
+    Engine::WriteVector(file, model.vertices);
+    Engine::WriteVector(file, model.meshletVertices);
+    Engine::WriteVector(file, model.meshletTriangles);
+    Engine::WriteVector(file, model.meshlets);
+    Engine::WriteVector(file, model.primitives);
 
     for (const auto& mat : model.materials) {
-        Render::WriteMaterial(file, mat);
+        Engine::WriteMaterial(file, mat);
     }
 
     for (const auto& mesh : model.allMeshes) {
@@ -1115,10 +1115,10 @@ void WriteModelBinary(std::ofstream& file, const RawGltfModel& model)
         WriteAnimation(file, anim);
     }
 
-    Render::WriteVector(file, model.inverseBindMatrices);
+    Engine::WriteVector(file, model.inverseBindMatrices);
 }
 
-void ModelGenerateSlot::TopologicalSortNodes(std::vector<Render::Node>& nodes, std::vector<uint32_t>& oldToNew)
+void ModelGenerateSlot::TopologicalSortNodes(std::vector<Engine::Node>& nodes, std::vector<uint32_t>& oldToNew)
 {
     oldToNew.resize(nodes.size());
 

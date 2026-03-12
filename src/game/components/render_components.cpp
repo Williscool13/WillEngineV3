@@ -102,8 +102,8 @@ ComponentEditorResult DrawComponentEditor<Component::StaticMeshComponent>(Compon
         }
 
         assert(component.modelHandle.IsValid() && "modelId specified but model handle is still invalid");
-        Render::WillModel* model = ctx->assetManager->GetModel(component.modelHandle);
-        if (model->modelLoadState != Render::WillModel::ModelLoadState::Loaded) {
+        Engine::StaticModel* model = ctx->assetManager->GetModel(component.modelHandle);
+        if (model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
             ImGui::Text("Loading Model...");
             return {.requestRemoval = remove};
         }

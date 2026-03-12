@@ -6,11 +6,12 @@
 
 #include <utility>
 
+#include "engine/serialization/serialization.h"
 #include "miniz/miniz.h"
 #include "lz4/lz4hc.h"
 #include "spdlog/spdlog.h"
 
-namespace Render
+namespace Engine
 {
 ModelWriter::ModelWriter(std::filesystem::path  path)
     : outputPath(std::move(path))
@@ -83,7 +84,7 @@ bool ModelWriter::AddFileFromDisk(const std::string& filename, const std::string
 bool ModelWriter::Finalize()
 {
     if (finalized) {
-        SPDLOG_WARN("Already finalized willmodel was finalized again");
+        SPDLOG_WARN("Already finalized static model was finalized again");
         return false;
     }
 
@@ -93,7 +94,7 @@ bool ModelWriter::Finalize()
         return false;
     }
 
-    uint64_t currentOffset = sizeof(WillModelHeader);
+    uint64_t currentOffset = sizeof(StaticModelHeader);
 
     for (FileEntry& fileEntry : fileEntries) {
         fileEntry.offset = currentOffset;
@@ -102,15 +103,15 @@ bool ModelWriter::Finalize()
 
     uint64_t fileTableOffset = currentOffset;
 
-    WillModelHeader header{};
-    std::memcpy(header.magic, WILL_MODEL_MAGIC, 8);
+    StaticModelHeader header{};
+    std::memcpy(header.magic, STATIC_MODEL_MAGIC, 8);
     header.majorVersion = MODEL_MAJOR_VERSION;
     header.minorVersion = MODEL_MINOR_VERSION;
     header.patchVersion = MODEL_PATCH_VERSION;
     header.numFiles = static_cast<uint32_t>(fileEntries.size());
     header.fileTableOffset = fileTableOffset;
     header.metadata = metadata;
-    file.write(reinterpret_cast<const char*>(&header), sizeof(WillModelHeader));
+    file.write(reinterpret_cast<const char*>(&header), sizeof(StaticModelHeader));
 
     for (const auto& data : fileData) {
         file.write(reinterpret_cast<const char*>(data.data()), data.size());
@@ -210,9 +211,9 @@ ModelReader::~ModelReader()
 bool ModelReader::ReadHeader()
 {
     file.seekg(0, std::ios::beg);
-    file.read(reinterpret_cast<char*>(&header), sizeof(WillModelHeader));
+    file.read(reinterpret_cast<char*>(&header), sizeof(StaticModelHeader));
 
-    if (std::strncmp(header.magic, WILL_MODEL_MAGIC, 8) != 0) {
+    if (std::strncmp(header.magic, STATIC_MODEL_MAGIC, 8) != 0) {
         SPDLOG_ERROR("Invalid file format - magic number mismatch");
         return false;
     }

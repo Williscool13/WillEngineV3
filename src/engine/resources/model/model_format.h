@@ -8,9 +8,9 @@
 #include "render/shaders/model_interop.h"
 #include "render/vulkan/vk_resources.h"
 
-namespace Render
+namespace Engine
 {
-constexpr char WILL_MODEL_MAGIC[8] = "WILLMDL";
+constexpr char STATIC_MODEL_MAGIC[8] = "WSCMESH";
 constexpr uint32_t MODEL_MAJOR_VERSION = 0;
 constexpr uint32_t MODEL_MINOR_VERSION = 8;
 constexpr uint32_t MODEL_PATCH_VERSION = 0;
@@ -52,7 +52,7 @@ struct ModelMetadata
     uint32_t meshNodeCount{0};
 };
 
-struct WillModelHeader
+struct StaticModelHeader
 {
     char magic[8];
     uint32_t majorVersion;

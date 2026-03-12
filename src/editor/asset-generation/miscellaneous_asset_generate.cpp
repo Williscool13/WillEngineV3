@@ -12,7 +12,7 @@
 
 #include "core/hash/fnv_1_a.h"
 #include "engine/logging/engine_log.h"
-#include "engine/textures/texture_format.h"
+#include "engine/resources/texture/texture_format.h"
 #include "platform/paths.h"
 #include "render/resource_manager.h"
 #include "render/descriptors/vk_bindless_resources_storage.h"

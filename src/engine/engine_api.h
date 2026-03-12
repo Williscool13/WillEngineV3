@@ -57,7 +57,7 @@ struct GameState
     bool bPendingModelResolve{false};
 
     // Loaded models debug
-    WillModelHandle portalPlaneHandle{WillModelHandle::INVALID};
+    StaticModelHandle portalPlaneHandle{StaticModelHandle::INVALID};
 
     // Debug
     bool bEnablePortal{true};

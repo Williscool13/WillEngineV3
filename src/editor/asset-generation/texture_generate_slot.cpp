@@ -12,7 +12,7 @@
 
 #include "asset_generation_types.h"
 #include "bc7enc_rdo/rdo_bc_encoder.h"
-#include "engine/textures/texture_format.h"
+#include "engine/resources/texture/texture_format.h"
 #include "platform/paths.h"
 #include "render/vulkan/vk_context.h"
 #include "render/vulkan/vk_helpers.h"

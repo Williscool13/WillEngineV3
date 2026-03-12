@@ -9,13 +9,11 @@
 #include <volk.h>
 #include <ktx.h>
 
+#include <enkiTS/src/TaskScheduler.h>
+
 #include "asset-load/asset_load_types.h"
 #include "engine/asset_manager_types.h"
 
-namespace enki
-{
-class TaskScheduler;
-}
 
 namespace Render
 {

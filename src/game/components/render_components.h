@@ -10,8 +10,7 @@
 #include <glm/glm.hpp>
 
 #include "core/string_id.h"
-#include "../../engine/materials/material_manager.h"
-#include "render/model/will_model_asset.h"
+#include "../../engine/resources/material/material_manager.h"
 
 namespace Game::Component
 {
@@ -45,7 +44,7 @@ struct StaticMeshComponent
     std::array<Engine::MaterialID, 128> primitiveMaterialOverrides{};
 
     // Transient
-    Engine::WillModelHandle modelHandle{};
+    Engine::StaticModelHandle modelHandle{};
 };
 
 struct StaticMeshLoadingTag

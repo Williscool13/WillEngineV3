@@ -12,7 +12,7 @@
 #include "core/allocators/handle.h"
 #include "engine/core/material_id.h"
 #include "engine/core/texture_id.h"
-#include "engine/resources/samplers/sampler.h"
+#include "engine/resources/sampler/sampler.h"
 #include "render/shaders/model_interop.h"
 
 namespace Engine

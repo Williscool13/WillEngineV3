@@ -4,7 +4,6 @@
 
 #include "asset_load_types.h"
 
-#include "render/model/model_serialization.h"
 #include "render/vulkan/vk_utils.h"
 
 namespace AssetLoad

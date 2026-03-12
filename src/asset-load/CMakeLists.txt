@@ -3,8 +3,8 @@ add_library(asset-load STATIC
         asset_load_types.h
         asset_load_config.h
 
-        asset-load-jobs/will_model_load_slot.cpp
-        asset-load-jobs/will_model_load_slot.h
+        asset-load-jobs/static_model_load_slot.cpp
+        asset-load-jobs/static_model_load_slot.h
         asset-load-jobs/texture_load_slot.cpp
         asset-load-jobs/texture_load_slot.h
 

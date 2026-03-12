@@ -18,21 +18,21 @@ PortalPair CreatePortalPair(Core::EngineContext* ctx, Engine::GameState* state, 
         return {entt::null, entt::null};
     }
 
-    Render::WillModel* plane = ctx->assetManager->GetModel(state->portalPlaneHandle);
-    if (!plane || plane->modelLoadState != Render::WillModel::ModelLoadState::Loaded) {
+    Engine::StaticModel* plane = ctx->assetManager->GetModel(state->portalPlaneHandle);
+    if (!plane || plane->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
         SPDLOG_WARN("[DebugSystem] Portal plane model not ready");
         return {entt::null, entt::null};
     }
 
     Engine::MaterialManager* materialManager = ctx->materialManager;
-    Render::MeshInformation& submesh = plane->modelData.meshes[0];
+    Engine::MeshInformation& submesh = plane->modelData.meshes[0];
 
     // Create Portal A (blue)
     entt::entity portalA = state->registry.create();
     {
         StaticMeshComponent renderable{};
         for (size_t i = 0; i < submesh.primitiveProperties.size(); ++i) {
-            Render::PrimitiveProperty& primitive = submesh.primitiveProperties[i];
+            Engine::PrimitiveProperty& primitive = submesh.primitiveProperties[i];
 
             Engine::Material material;
             if (primitive.materialIndex == -1) {
@@ -66,7 +66,7 @@ PortalPair CreatePortalPair(Core::EngineContext* ctx, Engine::GameState* state, 
     {
         StaticMeshComponent renderable{};
         for (size_t i = 0; i < submesh.primitiveProperties.size(); ++i) {
-            Render::PrimitiveProperty& primitive = submesh.primitiveProperties[i];
+            Engine::PrimitiveProperty& primitive = submesh.primitiveProperties[i];
 
 
             Engine::Material material;
@@ -112,18 +112,18 @@ void CreatePortalPlane(Core::EngineContext* ctx, Engine::GameState* state, glm::
         return;
     }
 
-    Render::WillModel* plane = ctx->assetManager->GetModel(state->portalPlaneHandle);
-    if (!plane || plane->modelLoadState != Render::WillModel::ModelLoadState::Loaded) {
+    Engine::StaticModel* plane = ctx->assetManager->GetModel(state->portalPlaneHandle);
+    if (!plane || plane->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
         SPDLOG_WARN("[DebugSystem] Portal plane model not ready yet");
         return;
     }
 
     StaticMeshComponent renderable{};
     Engine::MaterialManager* materialManager = ctx->materialManager;
-    Render::MeshInformation& submesh = plane->modelData.meshes[0];
+    Engine::MeshInformation& submesh = plane->modelData.meshes[0];
 
     for (size_t i = 0; i < submesh.primitiveProperties.size(); ++i) {
-        Render::PrimitiveProperty& primitive = submesh.primitiveProperties[i];
+        Engine::PrimitiveProperty& primitive = submesh.primitiveProperties[i];
 
 
         Engine::Material material;

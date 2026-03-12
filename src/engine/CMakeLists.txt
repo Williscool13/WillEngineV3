@@ -9,8 +9,8 @@ add_library(engine STATIC
         asset_manager.h
         asset_manager_config.h
         asset_manager_types.h
-        materials/material_manager.cpp
-        materials/material_manager.h
+        resources/material/material_manager.cpp
+        resources/material/material_manager.h
         logging/engine_logger.cpp
         logging/engine_logger.h
         logging/imgui_sink.cpp
@@ -24,13 +24,15 @@ add_library(engine STATIC
         core/texture_id.cpp
         core/texture_id.h
         core/sampler_id.h
-        materials/material.cpp
-        materials/material.h
-        textures/texture.h
-        textures/texture_format.cpp
-        textures/texture_format.h
-        resources/samplers/sampler.cpp
-        resources/samplers/sampler.h
+        resources/material/material.cpp
+        resources/material/material.h
+        resources/texture/texture.h
+        resources/texture/texture_format.cpp
+        resources/texture/texture_format.h
+        resources/sampler/sampler.cpp
+        resources/sampler/sampler.h
+        serialization/serialization.cpp
+        serialization/serialization.h
 )
 
 target_include_directories(engine PRIVATE

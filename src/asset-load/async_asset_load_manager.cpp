@@ -9,7 +9,6 @@
 
 #include "audio/audio_asset.h"
 #include "platform/thread_utils.h"
-#include "engine/textures/texture.h"
 #include "asset-load-jobs/cubemap_load_slot.h"
 #include "engine/logging/engine_log.h"
 #include "render/pipelines/pipeline_data.h"
@@ -137,13 +136,13 @@ void AsyncAssetLoadManager::ThreadMain()
             }
         } {
             ZoneScopedN("Process Model Requests");
-            WillModelLoadRequest modelReq{};
+            StaticModelLoadRequest modelReq{};
             if (modelRequestQueue.try_dequeue(modelReq)) {
-                Core::Handle<WillModelLoadSlot> slotHandle = modelLoadAllocator.Add();
+                Core::Handle<StaticModelLoadSlot> slotHandle = modelLoadAllocator.Add();
                 if (slotHandle.IsValid()) {
                     Core::Handle<UploadStaging> uploadHandle = uploadStagingAllocator.Add();
                     if (uploadHandle.IsValid()) {
-                        WillModelLoadSlot& slot = modelLoadSlots[slotHandle.index];
+                        StaticModelLoadSlot& slot = modelLoadSlots[slotHandle.index];
                         UploadStaging* uploadStaging = &uploadStagings[uploadHandle.index];
 
                         slot.Launch(slotHandle, uploadHandle, uploadStaging, modelReq.model);
@@ -330,7 +329,7 @@ bool AsyncAssetLoadManager::TryDequeuePipelineComplete(PipelineLoadComplete& out
     return pipelineLoadCompleteQueue.try_dequeue(outResult);
 }
 
-void AsyncAssetLoadManager::RequestModelLoad(Render::WillModel* model)
+void AsyncAssetLoadManager::RequestModelLoad(Engine::StaticModel* model)
 {
     ZoneScoped;
 
@@ -344,7 +343,7 @@ void AsyncAssetLoadManager::RequestModelLoad(Render::WillModel* model)
     wakeCV.notify_one();
 }
 
-bool AsyncAssetLoadManager::TryDequeueModelComplete(WillModelLoadComplete& outResult)
+bool AsyncAssetLoadManager::TryDequeueModelComplete(StaticModelLoadComplete& outResult)
 {
     return modelLoadCompleteQueue.try_dequeue(outResult);
 }
@@ -445,7 +444,7 @@ void AsyncAssetLoadManager::OnModelLoadComplete(bool success, ModelSlotHandle mo
         return;
     }
 
-    WillModelLoadSlot& slot = modelLoadSlots[modelSlotHandle.index];
+    StaticModelLoadSlot& slot = modelLoadSlots[modelSlotHandle.index];
     modelLoadCompleteQueue.enqueue({slot.outputModel, success});
 
     if (!success) {

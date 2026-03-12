@@ -15,7 +15,7 @@
 #include "asset_load_config.h"
 #include "asset-load-jobs/audio_load_slot.h"
 #include "asset-load-jobs/pipeline_load_slot.h"
-#include "asset-load-jobs/will_model_load_slot.h"
+#include "asset-load-jobs/static_model_load_slot.h"
 #include "asset-load-jobs/texture_load_slot.h"
 #include "asset-load-jobs/cubemap_load_slot.h"
 #include "core/allocators/lock_free_handle_allocator.h"
@@ -51,14 +51,14 @@ struct GPUDispatchRequest
     std::binary_semaphore* completionSignal;
 };
 
-struct WillModelLoadRequest
+struct StaticModelLoadRequest
 {
-    Render::WillModel* model;
+    Engine::StaticModel* model;
 };
 
-struct WillModelLoadComplete
+struct StaticModelLoadComplete
 {
-    Render::WillModel* model;
+    Engine::StaticModel* model;
     bool bSuccess;
 };
 
@@ -118,9 +118,9 @@ public:
     bool TryDequeuePipelineComplete(PipelineLoadComplete& outResult);
 
     // Model loading
-    void RequestModelLoad(Render::WillModel* model);
+    void RequestModelLoad(Engine::StaticModel* model);
 
-    bool TryDequeueModelComplete(WillModelLoadComplete& outResult);
+    bool TryDequeueModelComplete(StaticModelLoadComplete& outResult);
 
     // Texture loading
     void RequestTextureLoad(Engine::Texture* texture);
@@ -185,10 +185,10 @@ private:
     moodycamel::ConcurrentQueue<PipelineLoadComplete> pipelineLoadCompleteQueue;
 
     // Model Loading
-    moodycamel::ConcurrentQueue<WillModelLoadRequest> modelRequestQueue;
-    Core::LockFreeHandleAllocator<WillModelLoadSlot, MODEL_JOB_COUNT> modelLoadAllocator;
-    std::array<WillModelLoadSlot, MODEL_JOB_COUNT> modelLoadSlots;
-    moodycamel::ConcurrentQueue<WillModelLoadComplete> modelLoadCompleteQueue;
+    moodycamel::ConcurrentQueue<StaticModelLoadRequest> modelRequestQueue;
+    Core::LockFreeHandleAllocator<StaticModelLoadSlot, MODEL_JOB_COUNT> modelLoadAllocator;
+    std::array<StaticModelLoadSlot, MODEL_JOB_COUNT> modelLoadSlots;
+    moodycamel::ConcurrentQueue<StaticModelLoadComplete> modelLoadCompleteQueue;
 
     // Texture Loading
     moodycamel::ConcurrentQueue<TextureLoadRequest> textureRequestQueue;

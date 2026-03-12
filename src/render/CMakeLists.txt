@@ -41,14 +41,12 @@ add_library(render STATIC
         pipelines/graphics_pipeline_builder.cpp
         pipelines/graphics_pipeline_builder.h
         shaders/model_interop.h
-        model/model_format.cpp
-        model/model_format.h
-        model/model_types.cpp
-        model/model_types.h
-        model/model_serialization.cpp
-        model/model_serialization.h
-        model/will_model_asset.cpp
-        model/will_model_asset.h
+        ../engine/resources/model/model_format.h
+        ../engine/resources/model/model_types.h
+        ../engine/resources/model/model_serialization.cpp
+        ../engine/resources/model/model_serialization.h
+        ../engine/resources/model/static_model.cpp
+        ../engine/resources/model/static_model.h
         shaders/constants_interop.h
         types/cubemap_asset.cpp
         types/cubemap_asset.h

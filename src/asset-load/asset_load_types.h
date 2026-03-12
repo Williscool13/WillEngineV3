@@ -7,18 +7,18 @@
 
 #include <vector>
 
-#include "render/model/model_types.h"
 #include "render/shaders/model_interop.h"
 #include "render/vulkan/vk_resources.h"
 #include "core/allocators/linear_allocator.h"
-#include "render/model/will_model_asset.h"
+#include "../engine/resources/material/material.h"
+#include "engine/resources/model/model_types.h"
 
 
 namespace AssetLoad
 {
 class CubemapLoadSlot;
 class TextureLoadSlot;
-class WillModelLoadSlot;
+class StaticModelLoadSlot;
 class AudioLoadSlot;
 class PipelineLoadSlot;
 }
@@ -26,7 +26,6 @@ class PipelineLoadSlot;
 namespace Render
 {
 struct PipelineData;
-struct WillModel;
 struct VulkanContext;
 }
 
@@ -52,7 +51,7 @@ private:
 };
 
 
-struct UnpackedWillModel
+struct UnpackedStaticModel
 {
     std::vector<Vertex> vertices{};
     std::vector<uint32_t> meshletVertices{};
@@ -62,21 +61,21 @@ struct UnpackedWillModel
     std::vector<MeshletPrimitive> primitives{};
     std::vector<Engine::Material> materials{};
 
-    std::vector<Render::MeshInformation> allMeshes{};
-    std::vector<Render::Node> nodes{};
+    std::vector<Engine::MeshInformation> allMeshes{};
+    std::vector<Engine::Node> nodes{};
 
-    std::vector<Render::Animation> animations;
+    std::vector<Engine::Animation> animations;
     std::vector<glm::mat4> inverseBindMatrices{};
 
-    UnpackedWillModel() = default;
+    UnpackedStaticModel() = default;
 
-    UnpackedWillModel(const UnpackedWillModel&) = delete;
+    UnpackedStaticModel(const UnpackedStaticModel&) = delete;
 
-    UnpackedWillModel& operator=(const UnpackedWillModel&) = delete;
+    UnpackedStaticModel& operator=(const UnpackedStaticModel&) = delete;
 
-    UnpackedWillModel(UnpackedWillModel&&) noexcept = default;
+    UnpackedStaticModel(UnpackedStaticModel&&) noexcept = default;
 
-    UnpackedWillModel& operator=(UnpackedWillModel&&) noexcept = default;
+    UnpackedStaticModel& operator=(UnpackedStaticModel&&) noexcept = default;
 
     void Reset()
     {
@@ -94,7 +93,7 @@ struct UnpackedWillModel
 
 using AudioSlotHandle = Core::Handle<AudioLoadSlot>;
 using PipelineSlotHandle = Core::Handle<PipelineLoadSlot>;
-using ModelSlotHandle = Core::Handle<WillModelLoadSlot>;
+using ModelSlotHandle = Core::Handle<StaticModelLoadSlot>;
 using TextureSlotHandle = Core::Handle<TextureLoadSlot>;
 using CubemapSlotHandle = Core::Handle<CubemapLoadSlot>;
 using UploadStagingSlotHandle = Core::Handle<UploadStaging>;

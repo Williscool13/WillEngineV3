@@ -12,13 +12,12 @@
 #include "core/sampler_id.h"
 #include "core/include/engine_context.h"
 #include "core/allocators/handle_allocator.h"
-#include "engine/textures/texture.h"
-#include "engine/resources/samplers/sampler.h"
+#include "engine/resources/sampler/sampler.h"
 #include "render/types/cubemap_asset.h"
-#include "render/model/model_format.h"
-#include "render/model/model_types.h"
-#include "render/model/will_model_asset.h"
-
+#include "resources/model/model_format.h"
+#include "resources/model/model_types.h"
+#include "engine/resources/texture/texture.h"
+#include "engine/resources/model/static_model.h"
 
 namespace AssetLoad
 {
@@ -28,7 +27,6 @@ class AsyncAssetLoadManager;
 namespace Render
 {
 struct ResourceManager;
-struct WillModel;
 }
 
 namespace Engine
@@ -56,18 +54,18 @@ public:
     AssetManager& operator=(AssetManager&&) = delete;
 
 public: // Models
-    WillModelHandle LoadModel(StringID modelId);
+    StaticModelHandle LoadModel(StringID modelId);
 
-    Render::WillModel* GetModel(WillModelHandle handle);
+    StaticModel* GetModel(StaticModelHandle handle);
 
-    void UnloadModel(WillModelHandle handle);
+    void UnloadModel(StaticModelHandle handle);
 
     const std::unordered_map<StringID, std::filesystem::path>& GetModelRegistry() { return modelRegistry; }
 
     struct CachedModelMetadata
     {
-        Render::ModelMetadata counts;
-        std::vector<Render::Node> nodes;
+        ModelMetadata counts;
+        std::vector<Node> nodes;
     };
 
     [[nodiscard]] const CachedModelMetadata* GetModelMetadata(StringID modelId) const;
@@ -92,10 +90,12 @@ public: // Cubemaps
 
     void UnloadCubemap(CubemapHandle handle);
 
-public: // Called by engine to process loads
+public: // Per-Tick calls
     ResolveLoadResult ResolveLoads(Core::FrameBuffer& stagingFrameBuffer) const;
 
     void ResolveUnloads();
+
+    void Scan();
 
 public:
     OffsetAllocator::Allocator& GetJointMatrixAllocator()
@@ -112,9 +112,9 @@ private:
     // OffsetAllocator because it's always contiguous
     OffsetAllocator::Allocator jointMatrixAllocator{Render::BINDLESS_MODEL_BUFFER_SIZE};
 
-    std::unordered_map<StringID, WillModelHandle> modelIdToHandle;
-    Core::HandleAllocator<Render::WillModel, MAX_LOADED_MODELS> modelAllocator;
-    std::array<Render::WillModel, MAX_LOADED_MODELS> models;
+    std::unordered_map<StringID, StaticModelHandle> modelIdToHandle;
+    Core::HandleAllocator<StaticModel, MAX_LOADED_MODELS> modelAllocator;
+    std::array<StaticModel, MAX_LOADED_MODELS> models;
 
     Core::HandleAllocator<Texture, MAX_LOADED_TEXTURES> textureAllocator;
     std::array<Texture, MAX_LOADED_TEXTURES> textures{};

@@ -179,7 +179,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
     //
     {
         ZoneScopedN("CreateModelGenerator");
-        modelGenerator = std::make_unique<Editor::AssetGenerator>(renderThread->GetVulkanContext(), renderThread.get(), asyncAssetLoadManager.get());
+        modelGenerator = std::make_unique<Editor::AssetGenerator>(engineContext.get(), renderThread->GetVulkanContext(), renderThread.get(), asyncAssetLoadManager.get());
     }
 
 #endif
@@ -563,40 +563,40 @@ void WillEngine::EditorImgui()
 
         if (ImGui::Button("Intel Sponza")) {
             modelGenerator->RequestModelGenerate(Platform::GetAssetPath() / "IntelSponza.glb",
-                                                 Platform::GetAssetPath() / "IntelSponza.willmodel");
+                                                 Platform::GetAssetPath() / "IntelSponza.wsmesh");
         }
-        if (ImGui::Button("dragon.willmodel")) {
+        if (ImGui::Button("dragon.wsmesh")) {
             startGeneration("dragon",
                             Platform::GetAssetPath() / "dragon/dragon.gltf",
-                            Platform::GetAssetPath() / "dragon/dragon.willmodel");
+                            Platform::GetAssetPath() / "dragon/dragon.wsmesh");
         }
 
-        if (ImGui::Button("BoxTextured.willmodel")) {
+        if (ImGui::Button("BoxTextured.wsmesh")) {
             startGeneration("BoxTextured",
                             Platform::GetAssetPath() / "BoxTextured.glb",
-                            Platform::GetAssetPath() / "BoxTextured.willmodel");
+                            Platform::GetAssetPath() / "BoxTextured.wsmesh");
         }
 
-        if (ImGui::Button("BoxTextured4k.willmodel")) {
+        if (ImGui::Button("BoxTextured4k.wsmesh")) {
             startGeneration("BoxTextured4k",
                             Platform::GetAssetPath() / "BoxTextured4k.glb",
-                            Platform::GetAssetPath() / "BoxTextured4k.willmodel");
+                            Platform::GetAssetPath() / "BoxTextured4k.wsmesh");
         }
-        if (ImGui::Button("Sphere.willmodel")) {
+        if (ImGui::Button("Sphere.wsmesh")) {
             startGeneration("Sphere",
                             Platform::GetAssetPath() / "Sphere.glb",
-                            Platform::GetAssetPath() / "Sphere.willmodel");
+                            Platform::GetAssetPath() / "Sphere.wsmesh");
         }
 
-        if (ImGui::Button("sponza.willmodel")) {
+        if (ImGui::Button("sponza.wsmesh")) {
             startGeneration("sponza",
                             Platform::GetAssetPath() / "sponza2/sponza.gltf",
-                            Platform::GetAssetPath() / "sponza2/sponza.willmodel");
+                            Platform::GetAssetPath() / "sponza2/sponza.wsmesh");
         }
-        if (ImGui::Button("plane.willmodel")) {
+        if (ImGui::Button("plane.wsmesh")) {
             startGeneration("plane",
                             Platform::GetAssetPath() / "Plane.glb",
-                            Platform::GetAssetPath() / "Plane.willmodel");
+                            Platform::GetAssetPath() / "Plane.wsmesh");
         }
 
         ImGui::Separator();
@@ -627,13 +627,13 @@ void WillEngine::EditorImgui()
 
             const char* stateLabel = "None";
             switch (genState) {
-                case Editor::WillModelGenerationProgress::LOADING_GLTF: stateLabel = "Loading GLTF";
+                case Editor::StaticModelGenerationProgress::LOADING_GLTF: stateLabel = "Loading GLTF";
                     break;
-                case Editor::WillModelGenerationProgress::WRITING_WILL_MODEL: stateLabel = "Writing Model";
+                case Editor::StaticModelGenerationProgress::WRITING_STATIC_MODEL: stateLabel = "Writing Model";
                     break;
-                case Editor::WillModelGenerationProgress::FAILED: stateLabel = "Failed";
+                case Editor::StaticModelGenerationProgress::FAILED: stateLabel = "Failed";
                     break;
-                case Editor::WillModelGenerationProgress::SUCCESS: stateLabel = "Done";
+                case Editor::StaticModelGenerationProgress::SUCCESS: stateLabel = "Done";
                     break;
                 default: break;
             }
@@ -803,6 +803,9 @@ void WillEngine::Run()
 
         ResolveLoadResult loadCounts = assetManager->ResolveLoads(stagingFrameBuffer);
         assetManager->ResolveUnloads();
+#if WILL_EDITOR
+        assetManager->Scan();
+#endif
 
         engineContext->bImguiKeyboardCaptured = ImGui::GetIO().WantCaptureKeyboard;
         engineContext->bImguiMouseCaptured = ImGui::GetIO().WantCaptureMouse;

@@ -15,8 +15,8 @@
 
 namespace Editor
 {
-AssetGenerator::AssetGenerator(Render::VulkanContext* context, Render::RenderThread* renderThread, AssetLoad::AsyncAssetLoadManager* asyncAssetLoadManager)
-    : context(context), renderThread(renderThread), asyncAssetLoadManager(asyncAssetLoadManager)
+AssetGenerator::AssetGenerator(Core::EngineContext* ctx,Render::VulkanContext* vk, Render::RenderThread* renderThread, AssetLoad::AsyncAssetLoadManager* asyncAssetLoadManager)
+    : ctx(ctx), vk(vk), renderThread(renderThread), asyncAssetLoadManager(asyncAssetLoadManager)
 {
     assetGeneratorScheduler = std::make_unique<enki::TaskScheduler>();
 
@@ -49,7 +49,7 @@ AssetGenerator::AssetGenerator(Render::VulkanContext* context, Render::RenderThr
         textureGenerateTasks[i].Initialize(
             i,
             assetGeneratorScheduler.get(),
-            context,
+            vk,
             [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
                 GraphicsQueueGPUDispatch(cmd, fence, completionSignal);
             },
@@ -62,7 +62,7 @@ AssetGenerator::AssetGenerator(Render::VulkanContext* context, Render::RenderThr
         environmentMapeGenerateTasks[i].Initialize(
             i,
             assetGeneratorScheduler.get(),
-            context,
+            vk,
             renderThread->GetPipelineManager(),
             renderThread->GetResourceManager(),
             [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
@@ -237,7 +237,7 @@ bool AssetGenerator::TryDequeueCubemapGenerateComplete(EnvironmentMapGenerateCom
 
 void AssetGenerator::GenerateBRDFLUT(const std::filesystem::path& outputFile)
 {
-    CreateBRDFLookupTable(outputFile, Engine::TextureID(textureIdRng()), context, renderThread->GetResourceManager(), renderThread->GetPipelineManager(),
+    CreateBRDFLookupTable(outputFile, Engine::TextureID(textureIdRng()), vk, renderThread->GetResourceManager(), renderThread->GetPipelineManager(),
                           [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
                               GraphicsQueueGPUDispatch(cmd, fence, completionSignal);
                           });
@@ -266,6 +266,8 @@ void AssetGenerator::OnModelGenerateComplete(bool success, ModelGenerateSlotHand
     bool removed = modelGenerateAllocator.Remove(slotHandle);
     assert(removed && "Failed to remove valid slot handle");
 
+    ctx->bShouldRescanModels.store(true, std::memory_order_release);
+
     workCounter.fetch_add(1);
     wakeCV.notify_one();
 }
@@ -292,6 +294,8 @@ void AssetGenerator::OnTextureGenerateComplete(bool success, TextureGenerateSlot
     task.Clear();
     bool removed = textureGenerateAllocator.Remove(slotHandle);
     assert(removed && "Failed to remove valid slot handle");
+
+    ctx->bShouldRescanTextures.store(true, std::memory_order_release);
 
     workCounter.fetch_add(1);
     wakeCV.notify_one();

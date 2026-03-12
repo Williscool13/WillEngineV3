@@ -1,21 +1,18 @@
 //
-// Created by William on 2025-12-16.
+// Created by William on 2026-03-12.
 //
 
-#ifndef WILL_ENGINE_MODEL_SERIALIZATION_H
-#define WILL_ENGINE_MODEL_SERIALIZATION_H
-#include <cstdint>
-#include <filesystem>
+#ifndef WILL_ENGINE_SERIALIZATION_H
+#define WILL_ENGINE_SERIALIZATION_H
+
 #include <fstream>
-#include <iosfwd>
-#include <string>
+#include <memory>
 #include <vector>
 
-#include "model_format.h"
-#include "model_types.h"
-#include "engine/materials/material.h"
+#include "../resources/material/material.h"
+#include "engine/resources/model/model_types.h"
 
-namespace Render
+namespace Engine
 {
 template<typename T>
 void WriteVector(std::ofstream& file, const std::vector<T>& vec)
@@ -72,14 +69,14 @@ void ReadDynamicVector(const uint8_t*& data, std::vector<T>& vec)
     }
 }
 
-inline void WriteMaterial(std::ofstream& file, const Engine::Material& mat)
+inline void WriteMaterial(std::ofstream& file, const Material& mat)
 {
     file.write(reinterpret_cast<const char*>(&mat.props), sizeof(MaterialProperties));
     file.write(reinterpret_cast<const char*>(mat.textureRefs), sizeof(mat.textureRefs));
     file.write(reinterpret_cast<const char*>(mat.samplerDesc), sizeof(mat.samplerDesc));
 }
 
-inline void ReadMaterial(const uint8_t*& data, Engine::Material& mat)
+inline void ReadMaterial(const uint8_t*& data, Material& mat)
 {
     std::memcpy(&mat.props, data, sizeof(MaterialProperties));
     data += sizeof(MaterialProperties);
@@ -179,76 +176,6 @@ inline void ReadAnimation(const uint8_t*& data, Animation& anim)
     data += sizeof(anim.duration);
 }
 
+} // Engine
 
-class ModelWriter
-{
-public:
-    explicit ModelWriter(std::filesystem::path path);
-
-    ~ModelWriter();
-
-    bool AddFile(const std::string& filename, const void* data, size_t size, CompressionType compression);
-
-    bool AddFileFromDisk(const std::string& filename, const std::string& sourcePath, CompressionType compression);
-
-    void SetMetadata(ModelMetadata m) { metadata = m; }
-
-    bool Finalize();
-
-private:
-    std::filesystem::path outputPath;
-    std::vector<FileEntry> fileEntries;
-    std::vector<std::vector<uint8_t> > fileData;
-    ModelMetadata metadata{};
-    bool finalized = false;
-};
-
-class ModelReader
-{
-public:
-    ModelReader();
-
-    explicit ModelReader(std::filesystem::path path);
-
-    ~ModelReader();
-
-    uint32_t GetFileCount() const { return header.numFiles; }
-
-    const ModelMetadata& GetMetadata() const { return header.metadata; }
-
-    void ReadNodes(std::vector<Node>& nodes) const;
-
-    std::vector<std::string> ListFiles() const;
-
-    bool HasFile(const std::string& filename) const;
-
-    std::vector<uint8_t> ReadFile(const std::string& filename) const;
-
-    bool ReadFile(const std::string& filename, void* buffer, size_t bufferSize) const;
-
-    const FileEntry* GetFileEntry(const std::string& filename) const;
-
-    bool GetSuccessfullyLoaded() const { return successfullyLoaded; }
-
-private:
-    bool ReadHeader();
-
-    void ReadFileTable();
-
-    std::filesystem::path archivePath;
-    std::string archiveFileName;
-    mutable std::ifstream file;
-    WillModelHeader header{};
-    std::vector<FileEntry> fileEntries;
-
-    bool successfullyLoaded{};
-};
-
-std::vector<uint8_t> CompressZlib(const void* data, size_t size);
-std::vector<uint8_t> DecompressZlib(const void* data, size_t compressedSize, size_t uncompressedSize);
-
-std::vector<uint8_t> CompressLZ4(const void* data, size_t size);
-std::vector<uint8_t> DecompressLZ4(const void* data, size_t compressedSize, size_t uncompressedSize);
-} // Render
-
-#endif //WILL_ENGINE_MODEL_SERIALIZATION_H
+#endif //WILL_ENGINE_SERIALIZATION_H

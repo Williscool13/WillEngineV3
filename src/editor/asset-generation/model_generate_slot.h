@@ -18,7 +18,7 @@
 namespace Editor
 {
 class AssetGenerator;
-struct WillModelGenerationProgress;
+struct StaticModelGenerationProgress;
 struct AssetGeneratorImmediateParameters;
 
 class ModelGenerateSlot
@@ -34,7 +34,7 @@ public:
         int32_t slotIndex,
         enki::TaskScheduler* _scheduler,
         AssetGenerator* _generator,
-        WillModelGenerationProgress* _progress,
+        StaticModelGenerationProgress* _progress,
         std::function<void(bool success, ModelGenerateSlotHandle slotHandle)> notifyCallback
     );
 
@@ -57,9 +57,9 @@ private:
 
     bool LoadGltf();
 
-    bool WriteWillModel();
+    bool WriteStaticModel();
 
-    void TopologicalSortNodes(std::vector<Render::Node>& nodes, std::vector<uint32_t>& oldToNew);
+    void TopologicalSortNodes(std::vector<Engine::Node>& nodes, std::vector<uint32_t>& oldToNew);
 
     static VkFilter ExtractFilter(fastgltf::Filter filter);
 
@@ -73,7 +73,7 @@ private:
 
     enki::TaskScheduler* scheduler{};
     AssetGenerator* generator{};
-    WillModelGenerationProgress* progress{};
+    StaticModelGenerationProgress* progress{};
 
     std::filesystem::path temporaryPath{};
 
@@ -83,7 +83,7 @@ private:
     std::unique_ptr<GenerateTask> task;
 
     RawGltfModel rawModel;
-    std::vector<Render::Node> sortedNodes;
+    std::vector<Engine::Node> sortedNodes;
     std::vector<bool> visited;
 };
 

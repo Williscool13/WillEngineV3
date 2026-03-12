@@ -29,10 +29,10 @@
 
 namespace Game
 {
-static Engine::WillModelHandle dragonHandle = Engine::WillModelHandle::INVALID;
-static Engine::WillModelHandle boxHandle = Engine::WillModelHandle::INVALID;
-static Engine::WillModelHandle sphereHandle = Engine::WillModelHandle::INVALID;
-static Engine::WillModelHandle sponzaHandle = Engine::WillModelHandle::INVALID;
+static Engine::StaticModelHandle dragonHandle = Engine::StaticModelHandle::INVALID;
+static Engine::StaticModelHandle boxHandle = Engine::StaticModelHandle::INVALID;
+static Engine::StaticModelHandle sphereHandle = Engine::StaticModelHandle::INVALID;
+static Engine::StaticModelHandle sponzaHandle = Engine::StaticModelHandle::INVALID;
 static Engine::Texture* textureHandle = nullptr;
 static Engine::CubemapHandle cubemapHandle = Engine::CubemapHandle::INVALID;
 static Engine::MaterialID boxMatID;
@@ -42,15 +42,15 @@ entt::entity CreateTextureVisualizer(Core::EngineContext* ctx, Engine::GameState
 {
     ZoneScoped;
 
-    Render::WillModel* model = ctx->assetManager->GetModel(state->portalPlaneHandle);
-    if (!model || model->modelLoadState != Render::WillModel::ModelLoadState::Loaded) {
+    Engine::StaticModel* model = ctx->assetManager->GetModel(state->portalPlaneHandle);
+    if (!model || model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
         SPDLOG_WARN("[CreateTextureVisualizer] Model not ready yet");
         return entt::null;
     }
 
     Component::StaticMeshComponent renderable{};
     Engine::MaterialManager* materialManager = ctx->materialManager;
-    Render::MeshInformation& submesh = model->modelData.meshes[0];
+    Engine::MeshInformation& submesh = model->modelData.meshes[0];
 
     for (size_t i = 0; i < submesh.primitiveProperties.size(); ++i) {
         /*MaterialProperties material = ctx->materialManager->GetDefaultMaterialProperties();
@@ -90,18 +90,18 @@ entt::entity CreateBox(Core::EngineContext* ctx, Engine::GameState* state, glm::
     }
 
 
-    Render::WillModel* model = ctx->assetManager->GetModel(boxHandle);
-    if (!model || model->modelLoadState != Render::WillModel::ModelLoadState::Loaded) {
+    Engine::StaticModel* model = ctx->assetManager->GetModel(boxHandle);
+    if (!model || model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
         SPDLOG_WARN("[DebugSystem] Model not ready yet");
         return entt::null;
     }
 
     Component::StaticMeshComponent renderable{};
     Engine::MaterialManager* materialManager = ctx->materialManager;
-    Render::MeshInformation& submesh = model->modelData.meshes[0];
+    Engine::MeshInformation& submesh = model->modelData.meshes[0];
 
     for (size_t i = 0; i < submesh.primitiveProperties.size(); ++i) {
-        Render::PrimitiveProperty& primitive = submesh.primitiveProperties[i];
+        Engine::PrimitiveProperty& primitive = submesh.primitiveProperties[i];
 
         Engine::MaterialID matID;
         if (primitive.materialIndex == -1) {
@@ -167,18 +167,18 @@ entt::entity CreateStaticBox(Core::EngineContext* ctx, Engine::GameState* state,
 {
     ZoneScoped;
 
-    Render::WillModel* model = ctx->assetManager->GetModel(boxHandle);
-    if (!model || model->modelLoadState != Render::WillModel::ModelLoadState::Loaded) {
+    Engine::StaticModel* model = ctx->assetManager->GetModel(boxHandle);
+    if (!model || model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
         SPDLOG_WARN("[CreateStaticBox] Model not ready yet");
         return entt::null;
     }
 
     Component::StaticMeshComponent renderable{};
     Engine::MaterialManager* materialManager = ctx->materialManager;
-    Render::MeshInformation& submesh = model->modelData.meshes[0];
+    Engine::MeshInformation& submesh = model->modelData.meshes[0];
 
     for (size_t i = 0; i < submesh.primitiveProperties.size(); ++i) {
-        Render::PrimitiveProperty& primitive = submesh.primitiveProperties[i];
+        Engine::PrimitiveProperty& primitive = submesh.primitiveProperties[i];
 
         Engine::MaterialID matID;
         if (primitive.materialIndex == -1) {
@@ -257,18 +257,18 @@ entt::entity CreateGlowingBox(Core::EngineContext* ctx, Engine::GameState* state
         bodyId = bodyInterface.CreateAndAddBody(boxSettings, JPH::EActivation::Activate);
     }
 
-    Render::WillModel* model = ctx->assetManager->GetModel(boxHandle);
-    if (!model || model->modelLoadState != Render::WillModel::ModelLoadState::Loaded) {
+    Engine::StaticModel* model = ctx->assetManager->GetModel(boxHandle);
+    if (!model || model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
         SPDLOG_WARN("[DebugSystem] Model not ready yet");
         return entt::null;
     }
 
     Component::StaticMeshComponent renderable{};
     Engine::MaterialManager* materialManager = ctx->materialManager;
-    Render::MeshInformation& submesh = model->modelData.meshes[0];
+    Engine::MeshInformation& submesh = model->modelData.meshes[0];
 
     for (size_t i = 0; i < submesh.primitiveProperties.size(); ++i) {
-        Render::PrimitiveProperty& primitive = submesh.primitiveProperties[i];
+        Engine::PrimitiveProperty& primitive = submesh.primitiveProperties[i];
 
         Engine::Material material;
         if (primitive.materialIndex == -1) {
@@ -345,8 +345,8 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
     }
 
     if (state->inputFrame->GetKey(Key::F2).pressed) {
-        Render::WillModel* box = ctx->assetManager->GetModel(boxHandle);
-        if (!box || box->modelLoadState != Render::WillModel::ModelLoadState::Loaded) {
+        Engine::StaticModel* box = ctx->assetManager->GetModel(boxHandle);
+        if (!box || box->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
             SPDLOG_WARN("[DebugSystem] Box model not ready yet");
             return;
         }
@@ -413,14 +413,14 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
     }
 
     if (state->inputFrame->GetKey(Key::F3).pressed) {
-        Render::WillModel* dragon = ctx->assetManager->GetModel(dragonHandle);
-        if (!dragon || dragon->modelLoadState != Render::WillModel::ModelLoadState::Loaded) {
+        Engine::StaticModel* dragon = ctx->assetManager->GetModel(dragonHandle);
+        if (!dragon || dragon->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
             SPDLOG_WARN("[DebugSystem] Dragon model not ready yet");
             return;
         }
 
         Engine::MaterialManager* materialManager = ctx->materialManager;
-        Render::MeshInformation& submesh = dragon->modelData.meshes[0];
+        Engine::MeshInformation& submesh = dragon->modelData.meshes[0];
         glm::vec3 meshOffset = glm::vec3(0.0f);
         glm::quat meshRotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
         glm::vec3 meshScale = glm::vec3(1.0f);
@@ -454,7 +454,7 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
             Component::StaticMeshComponent renderable{};
 
             for (size_t i = 0; i < submesh.primitiveProperties.size(); ++i) {
-                Render::PrimitiveProperty& primitive = submesh.primitiveProperties[i];
+                Engine::PrimitiveProperty& primitive = submesh.primitiveProperties[i];
 
                 Engine::MaterialID matID;
                 if (primitive.materialIndex == -1) {
@@ -485,8 +485,8 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
     }
 
     if (state->inputFrame->GetKey(Key::F4).pressed) {
-        Render::WillModel* sponza = ctx->assetManager->GetModel(sponzaHandle);
-        if (!sponza || sponza->modelLoadState != Render::WillModel::ModelLoadState::Loaded) {
+        Engine::StaticModel* sponza = ctx->assetManager->GetModel(sponzaHandle);
+        if (!sponza || sponza->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
             SPDLOG_WARN("[DebugSystem] Sponza model not ready yet");
             return;
         }
@@ -520,7 +520,7 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
             const auto& node = sponza->modelData.nodes[i];
             if (node.meshIndex == ~0u) continue;
 
-            Render::MeshInformation& mesh = sponza->modelData.meshes[node.meshIndex];
+            Engine::MeshInformation& mesh = sponza->modelData.meshes[node.meshIndex];
 
             if (mesh.primitiveProperties.size() > 128) {
                 SPDLOG_WARN("[DebugSystem] Node {} has {} primitives, limiting to 128", i, mesh.primitiveProperties.size());
@@ -530,7 +530,7 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
             size_t primCount = std::min(mesh.primitiveProperties.size(), static_cast<size_t>(128));
 
             for (size_t j = 0; j < primCount; ++j) {
-                Render::PrimitiveProperty& primitive = mesh.primitiveProperties[j];
+                Engine::PrimitiveProperty& primitive = mesh.primitiveProperties[j];
 
                 Engine::MaterialID matID;
                 if (primitive.materialIndex == -1) {
@@ -603,8 +603,8 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
 
 
     if (state->inputFrame->GetKey(Key::F8).pressed) {
-        Render::WillModel* box = ctx->assetManager->GetModel(boxHandle);
-        if (!box || box->modelLoadState != Render::WillModel::ModelLoadState::Loaded) {
+        Engine::StaticModel* box = ctx->assetManager->GetModel(boxHandle);
+        if (!box || box->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
             SPDLOG_WARN("[DebugSystem] Box model not ready yet");
             return;
         }
@@ -641,16 +641,16 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         SPDLOG_INFO("Created {} boxes", boxesCreated);
     }
     if (state->inputFrame->GetKey(Key::F9).pressed) {
-        Render::WillModel* sphere = ctx->assetManager->GetModel(sphereHandle);
+        Engine::StaticModel* sphere = ctx->assetManager->GetModel(sphereHandle);
         Render::Cubemap* cubemap = ctx->assetManager->GetCubemap(cubemapHandle);
 
-        if (sphere && sphere->modelLoadState == Render::WillModel::ModelLoadState::Loaded && cubemap && cubemap->loadState == Render::Cubemap::LoadState::Loaded) {
+        if (sphere && sphere->modelLoadState == Engine::StaticModel::ModelLoadState::Loaded && cubemap && cubemap->loadState == Render::Cubemap::LoadState::Loaded) {
             Component::StaticMeshComponent renderable{};
             Engine::MaterialManager* materialManager = ctx->materialManager;
-            Render::MeshInformation& submesh = sphere->modelData.meshes[0];
+            Engine::MeshInformation& submesh = sphere->modelData.meshes[0];
 
             for (size_t i = 0; i < submesh.primitiveProperties.size(); ++i) {
-                Render::PrimitiveProperty& primitive = submesh.primitiveProperties[i];
+                Engine::PrimitiveProperty& primitive = submesh.primitiveProperties[i];
                 Engine::MaterialID matID = materialManager->GetDefaultMaterial();
                 materialManager->AcquireMaterial(matID);
 
@@ -681,14 +681,14 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
     }
 
     if (state->inputFrame->GetKey(Key::F6).pressed) {
-        Render::WillModel* dragon = ctx->assetManager->GetModel(dragonHandle);
-        if (!dragon || dragon->modelLoadState != Render::WillModel::ModelLoadState::Loaded) {
+        Engine::StaticModel* dragon = ctx->assetManager->GetModel(dragonHandle);
+        if (!dragon || dragon->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
             SPDLOG_WARN("[DebugSystem] Dragon model not ready yet");
             return;
         }
 
         Engine::MaterialManager* materialManager = ctx->materialManager;
-        Render::MeshInformation& submesh = dragon->modelData.meshes[0];
+        Engine::MeshInformation& submesh = dragon->modelData.meshes[0];
         glm::vec3 meshOffset = glm::vec3(0.0f);
         glm::quat meshRotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
         glm::vec3 meshScale = glm::vec3(1.0f);
@@ -727,7 +727,7 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
             Component::StaticMeshComponent renderable{};
 
             for (size_t i = 0; i < submesh.primitiveProperties.size(); ++i) {
-                Render::PrimitiveProperty& primitive = submesh.primitiveProperties[i];
+                Engine::PrimitiveProperty& primitive = submesh.primitiveProperties[i];
 
                 Engine::MaterialID matID;
                 if (primitive.materialIndex == -1) {

@@ -8,11 +8,10 @@
 
 #include "asset-load/async_asset_load_manager.h"
 #include "editor/asset-generation/miscellaneous_asset_generate.h"
-#include "engine/textures/texture_format.h"
 #include "logging/engine_log.h"
 #include "platform/paths.h"
 #include "render/resource_manager.h"
-#include "render/model/model_serialization.h"
+#include "resources/model/model_serialization.h"
 
 namespace Engine
 {
@@ -51,7 +50,7 @@ AssetManager::AssetManager(Core::EngineContext* ctx, AssetLoad::AsyncAssetLoadMa
     else {
         // reserve, unused. Requires Engine restart
         resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTexture();
-        LOG_ERROR(Asset, "Default brdf_lut does not exist, please regenerate and restart the engine");
+        LOG_CRITICAL(Asset, "Default brdf_lut does not exist, please regenerate and restart the engine");
     }
 
     TextureID smilingFriendID = FindTextureByName("smiling_friend");
@@ -62,7 +61,7 @@ AssetManager::AssetManager(Core::EngineContext* ctx, AssetLoad::AsyncAssetLoadMa
     else {
         // reserve, unused. Requires Engine restart
         resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTexture();
-        LOG_ERROR(Asset, "Default smiling friend logo does not exist, please regenerate and restart the engine");
+        LOG_CRITICAL(Asset, "Default smiling friend logo does not exist, please regenerate and restart the engine");
     }
 
 
@@ -74,16 +73,21 @@ AssetManager::AssetManager(Core::EngineContext* ctx, AssetLoad::AsyncAssetLoadMa
     assert(defaultSampler && defaultSampler->bindlessHandle.index == ASSET_SAMPLER_BINDLESS_INDEX);
 
 
-    modelRegistry["stanford_dragon"_sid] = assetPath / "dragon/dragon.willmodel";
-    modelRegistry["4k_box"_sid] = assetPath / "BoxTextured4k.willmodel";
-    modelRegistry["sphere"_sid] = assetPath / "Sphere.willmodel";
-    modelRegistry["sponza"_sid] = assetPath / "sponza2/sponza.willmodel";
-    modelRegistry["intel_sponza"_sid] = assetPath / "IntelSponza.willmodel";
-    modelRegistry["portal_plane"_sid] = assetPath / "Plane.willmodel";
+    modelRegistry["stanford_dragon"_sid] = assetPath / "dragon/dragon.wsmesh";
+    modelRegistry["4k_box"_sid] = assetPath / "BoxTextured4k.wsmesh";
+    modelRegistry["sphere"_sid] = assetPath / "Sphere.wsmesh";
+    modelRegistry["sponza"_sid] = assetPath / "sponza2/sponza.wsmesh";
+    modelRegistry["intel_sponza"_sid] = assetPath / "IntelSponza.wsmesh";
+    modelRegistry["portal_plane"_sid] = assetPath / "Plane.wsmesh";
 
     std::vector<StringID> modelsToRemove{};
     for (const auto& [id, path] : modelRegistry) {
-        Render::ModelReader reader(path);
+        if (!exists(path)) {
+            modelsToRemove.push_back(id);
+            continue;
+        }
+
+        ModelReader reader(path);
         if (reader.GetSuccessfullyLoaded()) {
             CachedModelMetadata& cached = modelMetadataCache[id];
             cached.counts = reader.GetMetadata();
@@ -133,18 +137,18 @@ const AssetManager::CachedModelMetadata* AssetManager::GetModelMetadata(StringID
     return it != modelMetadataCache.end() ? &it->second : nullptr;
 }
 
-WillModelHandle AssetManager::LoadModel(StringID modelId)
+StaticModelHandle AssetManager::LoadModel(StringID modelId)
 {
     if (!modelRegistry.contains(modelId)) {
         LOG_ERROR(Asset, "Model '{}' not found in registry", modelId.ToString());
-        return WillModelHandle::INVALID;
+        return StaticModelHandle::INVALID;
     }
 
     auto it = modelIdToHandle.find(modelId);
     if (it != modelIdToHandle.end()) {
-        WillModelHandle existingHandle = it->second;
+        StaticModelHandle existingHandle = it->second;
         if (modelAllocator.IsValid(existingHandle)) {
-            Render::WillModel& model = models[existingHandle.index];
+            StaticModel& model = models[existingHandle.index];
             model.refCount++;
             LOG_TRACE(Asset, "Model already loaded: {}, refCount: {}", modelId.ToString(), model.refCount);
             return existingHandle;
@@ -152,18 +156,18 @@ WillModelHandle AssetManager::LoadModel(StringID modelId)
         modelIdToHandle.erase(it);
     }
 
-    WillModelHandle handle = modelAllocator.Add();
+    StaticModelHandle handle = modelAllocator.Add();
     if (!handle.IsValid()) {
         LOG_ERROR(Asset, "Failed to allocate model slot for: {}", modelId.ToString());
-        return WillModelHandle::INVALID;
+        return StaticModelHandle::INVALID;
     }
 
-    Render::WillModel& model = models[handle.index];
+    StaticModel& model = models[handle.index];
     model.selfHandle = handle;
     model.source = modelRegistry[modelId];
     model.modelId = modelId;
     model.refCount = 1;
-    model.modelLoadState = Render::WillModel::ModelLoadState::NotLoaded;
+    model.modelLoadState = StaticModel::ModelLoadState::NotLoaded;
 
     modelIdToHandle[modelId] = handle;
 
@@ -172,7 +176,7 @@ WillModelHandle AssetManager::LoadModel(StringID modelId)
     return handle;
 }
 
-Render::WillModel* AssetManager::GetModel(WillModelHandle handle)
+StaticModel* AssetManager::GetModel(StaticModelHandle handle)
 {
     if (!modelAllocator.IsValid(handle)) {
         return nullptr;
@@ -180,18 +184,18 @@ Render::WillModel* AssetManager::GetModel(WillModelHandle handle)
     return &models[handle.index];
 }
 
-void AssetManager::UnloadModel(WillModelHandle handle)
+void AssetManager::UnloadModel(StaticModelHandle handle)
 {
     if (!modelAllocator.IsValid(handle)) {
         LOG_WARN(Asset, "Attempted to unload invalid model handle");
         return;
     }
 
-    Render::WillModel& model = models[handle.index];
+    StaticModel& model = models[handle.index];
     model.refCount--;
 
     if (model.refCount == 0) {
-        model.modelLoadState = Render::WillModel::ModelLoadState::NotLoaded;
+        model.modelLoadState = StaticModel::ModelLoadState::NotLoaded;
         // assetLoadThread->RequestModelUnload(handle, &model);
         modelIdToHandle.erase(model.modelId);
     }
@@ -200,7 +204,7 @@ void AssetManager::UnloadModel(WillModelHandle handle)
 ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuffer) const
 {
     ResolveLoadResult loadCounts{};
-    AssetLoad::WillModelLoadComplete complete{};
+    AssetLoad::StaticModelLoadComplete complete{};
     while (assetLoadManager->TryDequeueModelComplete(complete)) {
         if (complete.bSuccess) {
             stagingFrameBuffer.bufferAcquireOperations.insert(stagingFrameBuffer.bufferAcquireOperations.end(),
@@ -213,14 +217,14 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
 
             complete.model->bufferAcquireOps.clear();
             complete.model->imageAcquireOps.clear();
-            complete.model->modelLoadState = Render::WillModel::ModelLoadState::Loaded;
+            complete.model->modelLoadState = StaticModel::ModelLoadState::Loaded;
             LOG_TRACE(Asset, "Model load succeeded: {}", complete.model->modelId.ToString());
             loadCounts.modelLoadedCount++;
         }
         else {
             complete.model->bufferAcquireOps.clear();
             complete.model->imageAcquireOps.clear();
-            complete.model->modelLoadState = Render::WillModel::ModelLoadState::NotLoaded;
+            complete.model->modelLoadState = StaticModel::ModelLoadState::NotLoaded;
             LOG_ERROR(Asset, "Model load failed: {}", complete.model->modelId.ToString());
         }
     }
@@ -280,6 +284,30 @@ void AssetManager::ResolveUnloads()
         samplerIdToHandle.erase(sampler.id);
         samplerAllocator.Remove(sampler.selfHandle);
         sampler = {};
+    }
+}
+
+void AssetManager::Scan()
+{
+    bool expected = true;
+    if (ctx->bShouldRescanTextures.compare_exchange_strong(expected, false, std::memory_order::acq_rel, std::memory_order::relaxed)) {
+        std::filesystem::path assetPath = Platform::GetAssetPath();
+        if (std::filesystem::exists(assetPath)) {
+            for (const auto& entry : std::filesystem::recursive_directory_iterator(assetPath)) {
+                if (entry.path().extension() != ".wtexture") { continue; }
+                std::ifstream f(entry.path(), std::ios::binary);
+                std::optional<WTextureHeader> header = ReadWTextureHeader(f);
+                if (!header) { continue; }
+                TextureID id{header->textureId};
+                const std::string name{header->name};
+
+                if (textureRegistry.contains(id) || textureNameToId.contains(name)) { continue; }
+
+                assert(!textureNameToId.contains(name) && "Duplicate .wtexture name detected");
+                textureRegistry[id] = entry.path();
+                textureNameToId[name] = id;
+            }
+        }
     }
 }
 

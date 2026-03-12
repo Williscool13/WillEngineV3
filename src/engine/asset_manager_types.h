@@ -14,15 +14,15 @@ struct WillAudio;
 namespace Render
 {
 struct Cubemap;
-struct WillModel;
 }
 
 namespace Engine
 {
+struct StaticModel;
 struct Sampler;
 struct Texture;
 
-using WillModelHandle = Core::Handle<Render::WillModel>;
+using StaticModelHandle = Core::Handle<StaticModel>;
 using TextureHandle = Core::Handle<Texture>;
 using SamplerHandle = Core::Handle<Sampler>;
 using CubemapHandle = Core::Handle<Render::Cubemap>;

@@ -12,7 +12,7 @@
 #include "render/vulkan/vk_resources.h"
 #include "engine/asset_manager_types.h"
 #include "engine/core/texture_id.h"
-#include "engine/textures/texture_format.h"
+#include "texture_format.h"
 
 namespace Engine
 {

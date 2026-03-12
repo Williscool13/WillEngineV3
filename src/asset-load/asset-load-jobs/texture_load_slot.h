@@ -8,6 +8,7 @@
 #include <semaphore>
 #include <volk.h>
 #include <ktx.h>
+#include <TaskScheduler.h>
 
 #include "asset-load/asset_load_types.h"
 #include "engine/asset_manager_types.h"

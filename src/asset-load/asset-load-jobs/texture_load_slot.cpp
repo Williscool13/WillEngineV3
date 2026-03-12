@@ -9,8 +9,8 @@
 
 #include "asset-load/asset_load_config.h"
 #include "engine/logging/engine_log.h"
-#include "engine/textures/texture.h"
 #include "ktxvulkan.h"
+#include "engine/resources/texture/texture.h"
 #include "render/resource_manager.h"
 #include "render/vulkan/vk_context.h"
 #include "render/vulkan/vk_helpers.h"

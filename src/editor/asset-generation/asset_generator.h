@@ -19,6 +19,11 @@
 #include "texture_generate_slot.h"
 #include "core/allocators/lock_free_handle_allocator.h"
 
+namespace Core
+{
+struct EngineContext;
+}
+
 namespace Render
 {
 class RenderThread;
@@ -31,13 +36,13 @@ class AsyncAssetLoadManager;
 
 namespace Editor
 {
-struct WillModelGenerationProgress
+struct StaticModelGenerationProgress
 {
     enum LoadingProgress : uint32_t
     {
         NONE = 0,
         LOADING_GLTF,
-        WRITING_WILL_MODEL,
+        WRITING_STATIC_MODEL,
         FAILED,
         SUCCESS,
     };
@@ -98,7 +103,7 @@ using ModelGenerateSlotHandle = Core::Handle<ModelGenerateSlot>;
 class AssetGenerator
 {
 public:
-    AssetGenerator(Render::VulkanContext* context, Render::RenderThread* renderThread, AssetLoad::AsyncAssetLoadManager* asyncAssetLoadManager);
+    AssetGenerator(Core::EngineContext* ctx, Render::VulkanContext* vk, Render::RenderThread* renderThread, AssetLoad::AsyncAssetLoadManager* asyncAssetLoadManager);
 
     ~AssetGenerator();
 
@@ -120,7 +125,7 @@ public:
 
     void GenerateBRDFLUT(const std::filesystem::path& outputFile);
 
-    const std::array<WillModelGenerationProgress, MODEL_GENERATION_JOB_COUNT>& GetModelGenerationProgresses() const { return modelGenerationProgress; }
+    const std::array<StaticModelGenerationProgress, MODEL_GENERATION_JOB_COUNT>& GetModelGenerationProgresses() const { return modelGenerationProgress; }
     const std::filesystem::path& GetModelGenerateSlotPath(uint32_t index) const { return modelGenerateTasks[index].gltfPath; }
 
     [[nodiscard]] uint32_t GetTotalModelGenerateCount() const
@@ -160,7 +165,8 @@ private:
 
     void GraphicsQueueGPUDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) const;
 
-    Render::VulkanContext* context;
+    Core::EngineContext* ctx;
+    Render::VulkanContext* vk;
     Render::RenderThread* renderThread;
     AssetLoad::AsyncAssetLoadManager* asyncAssetLoadManager;
     std::unique_ptr<enki::TaskScheduler> assetGeneratorScheduler;
@@ -191,7 +197,7 @@ private:
     std::condition_variable wakeCV;
     std::jthread thisThread;
 
-    std::array<WillModelGenerationProgress, MODEL_GENERATION_JOB_COUNT> modelGenerationProgress{};
+    std::array<StaticModelGenerationProgress, MODEL_GENERATION_JOB_COUNT> modelGenerationProgress{};
 };
 } // Render
 

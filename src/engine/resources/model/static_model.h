@@ -11,19 +11,10 @@
 #include "TaskScheduler.h"
 #include "core/include/render_interface.h"
 
-namespace Render
-{
-struct WillModel;
-}
 
 namespace Engine
 {
-using WillModelHandle = Core::Handle<Render::WillModel>;
-}
-
-namespace Render
-{
-struct WillModel
+struct StaticModel
 {
 public:
     enum class ModelLoadState
@@ -33,22 +24,22 @@ public:
         FailedToLoad
     };
 public:
-    WillModel();
+    StaticModel();
 
-    ~WillModel();
+    ~StaticModel();
 
-    WillModel(const WillModel&) = delete;
+    StaticModel(const StaticModel&) = delete;
 
-    WillModel& operator=(const WillModel&) = delete;
+    StaticModel& operator=(const StaticModel&) = delete;
 
-    WillModel(WillModel&&) noexcept = default;
+    StaticModel(StaticModel&&) noexcept = default;
 
-    WillModel& operator=(WillModel&&) noexcept = default;
+    StaticModel& operator=(StaticModel&&) noexcept = default;
 
     // Populated by AssetManager, never changed
     std::filesystem::path source{};
     StringID modelId{};
-    Engine::WillModelHandle selfHandle;
+    StaticModelHandle selfHandle;
     ModelLoadState modelLoadState{ModelLoadState::NotLoaded};
 
     // Populated by AssetManager, sometimes changed

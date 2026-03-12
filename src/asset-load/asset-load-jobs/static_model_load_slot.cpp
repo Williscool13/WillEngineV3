@@ -2,24 +2,24 @@
 // Created by William on 2025-12-23.
 //
 
-#include "will_model_load_slot.h"
+#include "static_model_load_slot.h"
 
 #include <semaphore>
 
 #include "asset-load/asset_load_config.h"
-#include "render/model/model_serialization.h"
-#include "render/model/will_model_asset.h"
+#include "engine/resources/model/model_serialization.h"
+#include "engine/serialization/serialization.h"
 #include "render/resource_manager.h"
 #include "render/vulkan/vk_utils.h"
 #include "tracy/Tracy.hpp"
 
 namespace AssetLoad
 {
-WillModelLoadSlot::WillModelLoadSlot() = default;
+StaticModelLoadSlot::StaticModelLoadSlot() = default;
 
-WillModelLoadSlot::~WillModelLoadSlot() = default;
+StaticModelLoadSlot::~StaticModelLoadSlot() = default;
 
-void WillModelLoadSlot::Initialize(
+void StaticModelLoadSlot::Initialize(
     enki::TaskScheduler* _scheduler,
     Render::VulkanContext* _context,
     Render::ResourceManager* _resourceManager,
@@ -33,11 +33,11 @@ void WillModelLoadSlot::Initialize(
     _notifyCallback = std::move(notifyCallback);
 }
 
-void WillModelLoadSlot::Launch(
+void StaticModelLoadSlot::Launch(
     ModelSlotHandle _modelSlotHandle,
     UploadStagingSlotHandle _uploadStagingSlotHandle,
     UploadStaging* _uploadStaging,
-    Render::WillModel* _outputModel)
+    Engine::StaticModel* _outputModel)
 {
     modelSlotHandle = _modelSlotHandle;
     uploadStagingSlotHandle = _uploadStagingSlotHandle;
@@ -53,7 +53,7 @@ void WillModelLoadSlot::Launch(
     scheduler->AddTaskSetToPipe(task.get());
 }
 
-void WillModelLoadSlot::Clear()
+void StaticModelLoadSlot::Clear()
 {
     modelSlotHandle = {};
     uploadStagingSlotHandle = {};
@@ -64,7 +64,7 @@ void WillModelLoadSlot::Clear()
     packedTriangles.clear();
 }
 
-void WillModelLoadSlot::LoadModelTask::ExecuteRange(enki::TaskSetPartition range, uint32_t threadNum)
+void StaticModelLoadSlot::LoadModelTask::ExecuteRange(enki::TaskSetPartition range, uint32_t threadNum)
 {
     if (!loadSlot->LoadModelFromDisk()) {
         loadSlot->_notifyCallback(false, loadSlot->modelSlotHandle, loadSlot->uploadStagingSlotHandle);
@@ -130,22 +130,22 @@ void WillModelLoadSlot::LoadModelTask::ExecuteRange(enki::TaskSetPartition range
     loadSlot->_notifyCallback(true, loadSlot->modelSlotHandle, loadSlot->uploadStagingSlotHandle);
 }
 
-bool WillModelLoadSlot::LoadModelFromDisk()
+bool StaticModelLoadSlot::LoadModelFromDisk()
 {
     ZoneScopedN("LoadModelTask");
     //
     {
         ZoneScopedN("FileExistsCheck");
         if (!std::filesystem::exists(outputModel->source)) {
-            SPDLOG_ERROR("Failed to find path to willmodel - {}", outputModel->modelId.ToString());
+            SPDLOG_ERROR("Failed to find path to static model - {}", outputModel->modelId.ToString());
             return false;
         }
     }
 
-    Render::ModelReader reader = Render::ModelReader(outputModel->source);
+    Engine::ModelReader reader = Engine::ModelReader(outputModel->source);
 
     if (!reader.GetSuccessfullyLoaded()) {
-        SPDLOG_ERROR("Failed to load willmodel - {}", outputModel->modelId.ToString());
+        SPDLOG_ERROR("Failed to load static model - {}", outputModel->modelId.ToString());
         return false;
     }
 
@@ -155,8 +155,8 @@ bool WillModelLoadSlot::LoadModelFromDisk()
     }
 
     size_t offset = 0;
-    const auto* header = reinterpret_cast<Render::ModelBinaryHeader*>(modelBinData.data());
-    offset += sizeof(Render::ModelBinaryHeader);
+    const auto* header = reinterpret_cast<Engine::ModelBinaryHeader*>(modelBinData.data());
+    offset += sizeof(Engine::ModelBinaryHeader);
 
     auto readArray = [&]<typename T>(std::vector<T>& vec, uint32_t count) {
         vec.resize(count);
@@ -182,7 +182,7 @@ bool WillModelLoadSlot::LoadModelFromDisk()
         const uint8_t* matPtr = modelBinData.data() + offset;
         rawData.materials.resize(header->materialCount);
         for (uint32_t i = 0; i < header->materialCount; ++i) {
-            Render::ReadMaterial(matPtr, rawData.materials[i]);
+            Engine::ReadMaterial(matPtr, rawData.materials[i]);
         }
         offset = matPtr - modelBinData.data();
     }
@@ -191,13 +191,13 @@ bool WillModelLoadSlot::LoadModelFromDisk()
         ZoneScopedN("ParseMeshes");
         rawData.allMeshes.resize(header->meshCount);
         for (uint32_t i = 0; i < header->meshCount; i++) {
-            Render::ReadMeshInformation(dataPtr, rawData.allMeshes[i]);
+            Engine::ReadMeshInformation(dataPtr, rawData.allMeshes[i]);
         }
     } {
         ZoneScopedN("ParseAnimations");
         rawData.animations.resize(header->animationCount);
         for (uint32_t i = 0; i < header->animationCount; i++) {
-            Render::ReadAnimation(dataPtr, rawData.animations[i]);
+            Engine::ReadAnimation(dataPtr, rawData.animations[i]);
         }
     }
 
@@ -215,7 +215,7 @@ bool WillModelLoadSlot::LoadModelFromDisk()
     return true;
 }
 
-bool WillModelLoadSlot::AllocateGPUResources() const
+bool StaticModelLoadSlot::AllocateGPUResources() const
 {
     // Thread-safe allocation (mutexes are expensive but this is rather infrequent)
     size_t sizeVertices = rawData.vertices.size() * sizeof(Vertex);
@@ -223,7 +223,7 @@ bool WillModelLoadSlot::AllocateGPUResources() const
         std::lock_guard lock(resourceManager->vertexBufferAllocatorMutex);
         outputModel->modelData.vertexAllocation = resourceManager->vertexBufferAllocator.allocate(sizeVertices);
         if (outputModel->modelData.vertexAllocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
-            SPDLOG_ERROR("[WillModelLoadSlot] Not enough space in mega vertex buffer");
+            SPDLOG_ERROR("[StaticModelLoadSlot] Not enough space in mega vertex buffer");
             return false;
         }
     }
@@ -236,7 +236,7 @@ bool WillModelLoadSlot::AllocateGPUResources() const
         if (outputModel->modelData.meshletVertexAllocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
             std::lock_guard cleanupLock(resourceManager->vertexBufferAllocatorMutex);
             resourceManager->vertexBufferAllocator.free(outputModel->modelData.vertexAllocation);
-            SPDLOG_ERROR("[WillModelLoadSlot] Not enough space in mega meshlet vertex buffer");
+            SPDLOG_ERROR("[StaticModelLoadSlot] Not enough space in mega meshlet vertex buffer");
             return false;
         }
     }
@@ -255,7 +255,7 @@ bool WillModelLoadSlot::AllocateGPUResources() const
                 std::lock_guard cleanupLock(resourceManager->meshletVertexBufferAllocatorMutex);
                 resourceManager->meshletVertexBufferAllocator.free(outputModel->modelData.meshletVertexAllocation);
             }
-            SPDLOG_ERROR("[WillModelLoadSlot] Not enough space in mega meshlet triangle buffer");
+            SPDLOG_ERROR("[StaticModelLoadSlot] Not enough space in mega meshlet triangle buffer");
             return false;
         }
     }
@@ -277,7 +277,7 @@ bool WillModelLoadSlot::AllocateGPUResources() const
                 std::lock_guard cleanupLock(resourceManager->meshletTriangleBufferAllocatorMutex);
                 resourceManager->meshletTriangleBufferAllocator.free(outputModel->modelData.meshletTriangleAllocation);
             }
-            SPDLOG_ERROR("[WillModelLoadSlot] Not enough space in mega meshlet buffer");
+            SPDLOG_ERROR("[StaticModelLoadSlot] Not enough space in mega meshlet buffer");
             return false;
         }
     }
@@ -302,7 +302,7 @@ bool WillModelLoadSlot::AllocateGPUResources() const
                 std::lock_guard cleanupLock(resourceManager->meshletBufferAllocatorMutex);
                 resourceManager->meshletBufferAllocator.free(outputModel->modelData.meshletAllocation);
             }
-            SPDLOG_ERROR("[WillModelLoadSlot] Not enough space in mega primitive buffer");
+            SPDLOG_ERROR("[StaticModelLoadSlot] Not enough space in mega primitive buffer");
             return false;
         }
     }
@@ -310,7 +310,7 @@ bool WillModelLoadSlot::AllocateGPUResources() const
     return true;
 }
 
-void WillModelLoadSlot::PrepareUploadData()
+void StaticModelLoadSlot::PrepareUploadData()
 {
     // Adjust offsets
     uint32_t vertexOffset = outputModel->modelData.vertexAllocation.offset / sizeof(Vertex);
@@ -352,7 +352,7 @@ void WillModelLoadSlot::PrepareUploadData()
     }
 }
 
-void WillModelLoadSlot::UploadGeometry(VkCommandBuffer cmd, const std::function<void(bool)>& submitAndWait)
+void StaticModelLoadSlot::UploadGeometry(VkCommandBuffer cmd, const std::function<void(bool)>& submitAndWait)
 {
     ZoneScopedN("UploadGeometry");
 

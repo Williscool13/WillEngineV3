@@ -7,9 +7,8 @@
 # Exclude everything in assets/ including subdirectories
 assets/**
 
-# Allow BoxTextured files back in
+# Allow BoxTextured (basic model)
 !assets/BoxTextured.glb
-!assets/BoxTextured.willmodel
 
 # Engine-critical textures
 !assets/textures/white.wtexture
