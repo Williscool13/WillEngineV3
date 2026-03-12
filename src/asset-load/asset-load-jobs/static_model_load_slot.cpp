@@ -141,29 +141,36 @@ bool StaticModelLoadSlot::LoadModelFromDisk()
         return false;
     }
 
-    std::vector<uint8_t> fileData; {
+    Engine::WStaticModelHeader header{};
+    std::vector<uint8_t> body; {
         ZoneScopedN("ReadFile");
-        std::ifstream file(outputModel->source, std::ios::binary | std::ios::ate);
+        std::ifstream file(outputModel->source, std::ios::binary);
         if (!file) {
             SPDLOG_ERROR("Failed to open static model - {}", outputModel->modelId.ToString());
             return false;
         }
+        auto optHeader = Engine::ReadWStaticModelHeader(file);
+        if (!optHeader) {
+            SPDLOG_ERROR("Failed to read static model header - {}", outputModel->modelId.ToString());
+            return false;
+        }
+        header = *optHeader;
+
+        file.seekg(0, std::ios::end);
         const size_t fileSize = static_cast<size_t>(file.tellg());
-        if (fileSize < sizeof(Engine::WStaticModelHeader)) {
+        if (fileSize < header.dataOffset) {
             SPDLOG_ERROR("Static model file too small - {}", outputModel->modelId.ToString());
             return false;
         }
-        file.seekg(0);
-        fileData.resize(fileSize);
-        file.read(reinterpret_cast<char*>(fileData.data()), fileSize);
+        body.resize(fileSize - header.dataOffset);
+        file.seekg(static_cast<std::streamoff>(header.dataOffset));
+        file.read(reinterpret_cast<char*>(body.data()), static_cast<std::streamsize>(body.size()));
     }
-
-    const auto& header = *reinterpret_cast<const Engine::WStaticModelHeader*>(fileData.data());
 
     auto readArray = [&]<typename T>(std::vector<T>& vec, uint32_t offset, uint32_t count) {
         vec.resize(count);
         if (count > 0) {
-            std::memcpy(vec.data(), fileData.data() + offset, count * sizeof(T));
+            std::memcpy(vec.data(), body.data() + offset, count * sizeof(T));
         }
     };
 
@@ -179,7 +186,7 @@ bool StaticModelLoadSlot::LoadModelFromDisk()
 
     {
         ZoneScopedN("ParseMaterials");
-        const uint8_t* ptr = fileData.data() + header.materialOffset;
+        const uint8_t* ptr = body.data() + header.materialOffset;
         rawData.materials.resize(header.materialCount);
         for (uint32_t i = 0; i < header.materialCount; ++i) {
             Engine::ReadMaterial(ptr, rawData.materials[i]);
@@ -188,7 +195,7 @@ bool StaticModelLoadSlot::LoadModelFromDisk()
 
     {
         ZoneScopedN("ParseMeshes");
-        const uint8_t* ptr = fileData.data() + header.meshOffset;
+        const uint8_t* ptr = body.data() + header.meshOffset;
         rawData.allMeshes.resize(header.meshCount);
         for (uint32_t i = 0; i < header.meshCount; ++i) {
             Engine::ReadMeshInformation(ptr, rawData.allMeshes[i]);
@@ -197,7 +204,7 @@ bool StaticModelLoadSlot::LoadModelFromDisk()
 
     {
         ZoneScopedN("ParseNodes");
-        const uint8_t* ptr = fileData.data() + header.nodeOffset;
+        const uint8_t* ptr = body.data() + header.nodeOffset;
         rawData.nodes.resize(header.nodeCount);
         for (uint32_t i = 0; i < header.nodeCount; ++i) {
             Engine::ReadNode(ptr, rawData.nodes[i]);

@@ -254,6 +254,7 @@ void AssetManager::ResolveUnloads()
         if (!textureAllocator.IsValid(texture.selfHandle)) { continue; }
         if (texture.refCount > 0 || texture.retireFrame == 0 || currentFrame < texture.retireFrame) { continue; }
 
+        LOG_TRACE(Asset, "Texture unloaded: {} (bindless index: {})", texture.name, static_cast<uint32_t>(texture.bindlessHandle.index));
         resourceManager->bindlessSamplerTextureDescriptorBuffer.ReleaseTextureBinding(texture.bindlessHandle);
         textureIdToHandle.erase(texture.textureId);
         textureAllocator.Remove(texture.selfHandle);
@@ -264,6 +265,7 @@ void AssetManager::ResolveUnloads()
         if (!samplerAllocator.IsValid(sampler.selfHandle)) { continue; }
         if (sampler.refCount > 0 || sampler.retireFrame == 0 || currentFrame < sampler.retireFrame) { continue; }
 
+        LOG_TRACE(Asset, "Sampler unloaded (bindless index: {})", static_cast<uint32_t>(sampler.bindlessHandle.index));
         resourceManager->bindlessSamplerTextureDescriptorBuffer.ReleaseSamplerBinding(sampler.bindlessHandle);
         samplerIdToHandle.erase(sampler.id);
         samplerAllocator.Remove(sampler.selfHandle);

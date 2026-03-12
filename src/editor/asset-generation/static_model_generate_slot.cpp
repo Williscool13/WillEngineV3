@@ -880,48 +880,48 @@ bool StaticModelGenerateSlot::WriteStaticModel()
 
         std::vector<std::byte> body;
 
-        header.vertexOffset = static_cast<uint32_t>(sizeof(Engine::WStaticModelHeader) + body.size());
+        header.vertexOffset = static_cast<uint32_t>(body.size());
         header.vertexCount = static_cast<uint32_t>(rawModel.vertices.size());
         Engine::WriteVector(body, rawModel.vertices);
 
-        header.indexOffset = static_cast<uint32_t>(sizeof(Engine::WStaticModelHeader) + body.size());
+        header.indexOffset = static_cast<uint32_t>(body.size());
         header.indexCount = static_cast<uint32_t>(rawModel.indices.size());
         Engine::WriteVector(body, rawModel.indices);
 
-        header.meshletVertexOffset = static_cast<uint32_t>(sizeof(Engine::WStaticModelHeader) + body.size());
+        header.meshletVertexOffset = static_cast<uint32_t>(body.size());
         header.meshletVertexCount = static_cast<uint32_t>(rawModel.meshletVertices.size());
         Engine::WriteVector(body, rawModel.meshletVertices);
 
-        header.meshletTriangleOffset = static_cast<uint32_t>(sizeof(Engine::WStaticModelHeader) + body.size());
+        header.meshletTriangleOffset = static_cast<uint32_t>(body.size());
         header.meshletTriangleCount = static_cast<uint32_t>(rawModel.meshletTriangles.size());
         Engine::WriteVector(body, rawModel.meshletTriangles);
 
-        header.meshletOffset = static_cast<uint32_t>(sizeof(Engine::WStaticModelHeader) + body.size());
+        header.meshletOffset = static_cast<uint32_t>(body.size());
         header.meshletCount = static_cast<uint32_t>(rawModel.meshlets.size());
         Engine::WriteVector(body, rawModel.meshlets);
 
-        header.primitiveOffset = static_cast<uint32_t>(sizeof(Engine::WStaticModelHeader) + body.size());
+        header.primitiveOffset = static_cast<uint32_t>(body.size());
         header.primitiveCount = static_cast<uint32_t>(rawModel.primitives.size());
         Engine::WriteVector(body, rawModel.primitives);
 
-        header.materialOffset = static_cast<uint32_t>(sizeof(Engine::WStaticModelHeader) + body.size());
+        header.materialOffset = static_cast<uint32_t>(body.size());
         header.materialCount = static_cast<uint32_t>(rawModel.materials.size());
         for (const auto& mat : rawModel.materials) {
             Engine::WriteMaterial(body, mat);
         }
 
-        header.meshOffset = static_cast<uint32_t>(sizeof(Engine::WStaticModelHeader) + body.size());
+        header.meshOffset = static_cast<uint32_t>(body.size());
         header.meshCount = static_cast<uint32_t>(rawModel.allMeshes.size());
         for (const auto& mesh : rawModel.allMeshes) {
             Engine::WriteMeshInformation(body, mesh);
         }
 
-        header.nodeOffset = static_cast<uint32_t>(sizeof(Engine::WStaticModelHeader) + body.size());
+        header.nodeOffset = static_cast<uint32_t>(body.size());
         for (const auto& node : rawModel.nodes) {
             Engine::WriteNode(body, node);
         }
 
-        file.write(reinterpret_cast<const char*>(&header), sizeof(Engine::WStaticModelHeader));
+        Engine::WriteWStaticModelHeader(file, header);
         file.write(reinterpret_cast<const char*>(body.data()), body.size());
     }
 

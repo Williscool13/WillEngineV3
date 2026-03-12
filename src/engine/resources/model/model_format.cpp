@@ -101,19 +101,20 @@ std::optional<WStaticModelInfo> ReadWStaticModelInfo(const std::filesystem::path
     std::ifstream file(path, std::ios::binary);
     if (!file) { return std::nullopt; }
 
-    WStaticModelHeader header{};
-    file.read(reinterpret_cast<char*>(&header), sizeof(header));
-    if (!file) { return std::nullopt; }
+    auto optHeader = ReadWStaticModelHeader(file);
+    if (!optHeader) { return std::nullopt; }
+
+    const WStaticModelHeader& header = *optHeader;
 
     file.seekg(0, std::ios::end);
     const size_t fileSize = static_cast<size_t>(file.tellg());
-    if (fileSize < header.nodeOffset) { return std::nullopt; }
+    const size_t nodeDataStart = header.dataOffset + header.nodeOffset;
+    if (fileSize < nodeDataStart) { return std::nullopt; }
 
-    file.seekg(header.nodeOffset);
-    const size_t nodesSize = fileSize - header.nodeOffset;
-
+    const size_t nodesSize = fileSize - nodeDataStart;
     std::vector<uint8_t> buf(nodesSize);
-    file.read(reinterpret_cast<char*>(buf.data()), nodesSize);
+    file.seekg(static_cast<std::streamoff>(nodeDataStart));
+    file.read(reinterpret_cast<char*>(buf.data()), static_cast<std::streamsize>(nodesSize));
     if (!file) { return std::nullopt; }
 
     WStaticModelInfo info{};
