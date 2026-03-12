@@ -19,6 +19,7 @@
 #include "asset-load-jobs/texture_load_slot.h"
 #include "asset-load-jobs/cubemap_load_slot.h"
 #include "core/allocators/lock_free_handle_allocator.h"
+#include "engine/resources/sampler/sampler.h"
 
 namespace AssetLoad
 {
@@ -84,6 +85,17 @@ struct CubemapLoadComplete
     bool bSuccess;
 };
 
+struct SamplerLoadRequest
+{
+    Engine::Sampler* sampler;
+};
+
+struct SamplerLoadComplete
+{
+    Engine::Sampler* sampler;
+    bool bSuccess;
+};
+
 class AsyncAssetLoadManager
 {
 public:
@@ -131,6 +143,11 @@ public:
     void RequestCubemapLoad(Render::Cubemap* cubemap);
 
     bool TryDequeueCubemapComplete(CubemapLoadComplete& outResult);
+
+    // Sampler loading
+    void RequestSamplerLoad(Engine::Sampler* sampler);
+
+    bool TryDequeueSamplerComplete(SamplerLoadComplete& outResult);
 
 
     [[nodiscard]] uint32_t GetActiveAudioLoadCount() const
@@ -201,6 +218,10 @@ private:
     Core::LockFreeHandleAllocator<CubemapLoadSlot, CUBEMAP_JOB_COUNT> cubemapLoadAllocator;
     std::array<CubemapLoadSlot, CUBEMAP_JOB_COUNT> cubemapLoadSlots;
     moodycamel::ConcurrentQueue<CubemapLoadComplete> cubemapLoadCompleteQueue;
+
+    // Sampler loading (processed inline in ThreadMain, no task slot needed)
+    moodycamel::ConcurrentQueue<SamplerLoadRequest> samplerRequestQueue;
+    moodycamel::ConcurrentQueue<SamplerLoadComplete> samplerLoadCompleteQueue;
 
     // GPU Uploads
     moodycamel::ConcurrentQueue<GPUDispatchRequest> gpuDispatchQueue;

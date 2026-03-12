@@ -12,7 +12,9 @@
 #include "asset-load-jobs/cubemap_load_slot.h"
 #include "engine/logging/engine_log.h"
 #include "engine/resources/model/static_model.h"
+#include "engine/resources/sampler/sampler.h"
 #include "engine/resources/texture/texture.h"
+#include "render/resource_manager.h"
 #include "render/pipelines/pipeline_data.h"
 #include "render/types/cubemap_asset.h"
 #include "render/vulkan/vk_context.h"
@@ -204,6 +206,20 @@ void AsyncAssetLoadManager::ThreadMain()
             }
         }
 
+        {
+            ZoneScopedN("Process Sampler Requests");
+            SamplerLoadRequest samplerReq{};
+            if (samplerRequestQueue.try_dequeue(samplerReq)) {
+                Engine::Sampler* s = samplerReq.sampler;
+                s->sampler = Render::Sampler::CreateSampler(context, s->desc.ToVkSamplerCreateInfo());
+                bool success = s->sampler.handle != VK_NULL_HANDLE;
+                if (success) {
+                    resourceManager->bindlessSamplerTextureDescriptorBuffer.UpdateSampler(s->bindlessHandle, s->sampler.handle);
+                }
+                samplerLoadCompleteQueue.enqueue({s, success});
+            }
+        }
+
         if (workCounter.load(std::memory_order_acquire) > 0) {
             workCounter.fetch_sub(1);
         }
@@ -384,6 +400,25 @@ void AsyncAssetLoadManager::RequestCubemapLoad(Render::Cubemap* cubemap)
 bool AsyncAssetLoadManager::TryDequeueCubemapComplete(CubemapLoadComplete& outResult)
 {
     return cubemapLoadCompleteQueue.try_dequeue(outResult);
+}
+
+void AsyncAssetLoadManager::RequestSamplerLoad(Engine::Sampler* sampler)
+{
+    ZoneScoped;
+
+    if (!sampler) {
+        LOG_ERROR(Asset, "RequestSamplerLoad called with null sampler");
+        return;
+    }
+
+    samplerRequestQueue.enqueue({sampler});
+    workCounter.fetch_add(1);
+    wakeCV.notify_one();
+}
+
+bool AsyncAssetLoadManager::TryDequeueSamplerComplete(SamplerLoadComplete& outResult)
+{
+    return samplerLoadCompleteQueue.try_dequeue(outResult);
 }
 
 void AsyncAssetLoadManager::OnAudioLoadComplete(bool success, AudioSlotHandle slotHandle)

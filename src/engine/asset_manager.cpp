@@ -232,6 +232,17 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
         }
     }
 
+    AssetLoad::SamplerLoadComplete samplerComplete{};
+    while (assetLoadManager->TryDequeueSamplerComplete(samplerComplete)) {
+        if (samplerComplete.bSuccess) {
+            LOG_TRACE(Asset, "Sampler load succeeded (bindless index: {})", static_cast<uint32_t>(samplerComplete.sampler->bindlessHandle.index));
+            loadCounts.samplerLoadedCount++;
+        }
+        else {
+            LOG_ERROR(Asset, "Sampler load failed");
+        }
+    }
+
     return loadCounts;
 }
 
@@ -414,10 +425,12 @@ Sampler* AssetManager::LoadSampler(SamplerDesc& samplerDesc)
     sampler.id = id;
     sampler.selfHandle = handle;
     sampler.refCount = 1;
-    sampler.sampler = Render::Sampler::CreateSampler(resourceManager->context, samplerDesc.ToVkSamplerCreateInfo());
-    sampler.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.AllocateSampler(sampler.sampler.handle);
+    sampler.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateSampler();
 
     samplerIdToHandle[id] = handle;
+
+    assetLoadManager->RequestSamplerLoad(&sampler);
+
     return &sampler;
 }
 

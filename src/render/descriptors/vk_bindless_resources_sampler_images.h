@@ -66,6 +66,10 @@ public:
      */
     BindlessSamplerHandle AllocateSampler(VkSampler sampler);
 
+    BindlessSamplerHandle ReserveAllocateSampler();
+
+    bool UpdateSampler(BindlessSamplerHandle handle, VkSampler sampler);
+
     /**
      * Allocate a texture in the bindless array.
      * @param imageInfo Descriptor info for the sampled image

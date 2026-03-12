@@ -36,6 +36,7 @@ struct ResolveLoadResult
     int32_t modelLoadedCount{0};
     int32_t textureLoadedCount{0};
     int32_t cubeLoadedCount{0};
+    int32_t samplerLoadedCount{0};
 };
 
 class AssetManager

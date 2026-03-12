@@ -94,6 +94,38 @@ BindlessSamplerHandle BindlessResourcesSamplerImages::AllocateSampler(VkSampler 
     return handle;
 }
 
+BindlessSamplerHandle BindlessResourcesSamplerImages::ReserveAllocateSampler()
+{
+    BindlessSamplerHandle handle = samplerAllocator.Add();
+    if (!handle.IsValid()) {
+        SPDLOG_WARN("No more sampler indices available");
+        return BindlessSamplerHandle::INVALID;
+    }
+    return handle;
+}
+
+bool BindlessResourcesSamplerImages::UpdateSampler(BindlessSamplerHandle handle, VkSampler sampler)
+{
+    if (!samplerAllocator.IsValid(handle)) {
+        return false;
+    }
+
+    size_t bindingOffset;
+    vkGetDescriptorSetLayoutBindingOffsetEXT(context->device, descriptorSetLayout.handle, 0, &bindingOffset);
+    char* basePtr = static_cast<char*>(buffer.allocationInfo.pMappedData) + bindingOffset;
+
+    VkDescriptorGetInfoEXT descriptorGetInfo{};
+    descriptorGetInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT;
+    descriptorGetInfo.type = VK_DESCRIPTOR_TYPE_SAMPLER;
+    descriptorGetInfo.data.pSampler = &sampler;
+
+    const size_t samplerDescriptorSize = VulkanContext::deviceInfo.descriptorBufferProps.samplerDescriptorSize;
+    char* bufferPtr = basePtr + handle.index * samplerDescriptorSize;
+    vkGetDescriptorEXT(context->device, &descriptorGetInfo, samplerDescriptorSize, bufferPtr);
+
+    return true;
+}
+
 BindlessTextureHandle BindlessResourcesSamplerImages::AllocateTexture(const VkDescriptorImageInfo& imageInfo)
 {
     BindlessTextureHandle handle = textureAllocator.Add();
