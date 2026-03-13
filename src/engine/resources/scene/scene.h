@@ -8,7 +8,7 @@
 
 #include "core/string_id.h"
 
-namespace Game
+namespace Engine
 {
 struct Scene
 {
@@ -16,6 +16,6 @@ struct Scene
 };
 
 static inline StringID GLOBAL_SCENE_ID = SID("global_scene");
-} // Game
+} // Engine
 
 #endif //WILL_ENGINE_SCENE_H

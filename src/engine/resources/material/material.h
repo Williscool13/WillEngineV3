@@ -41,6 +41,7 @@ struct Material
     MaterialProperties props;
     TextureID textureRefs[6];
     SamplerDesc samplerDesc[6];
+    bool bIsRuntimeLoaded{false};
 
 
     /**

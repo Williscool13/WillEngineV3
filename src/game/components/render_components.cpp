@@ -75,9 +75,9 @@ ComponentEditorResult DrawComponentEditor<Component::StaticMeshComponent>(Compon
 
         if (component.modelId == StringID::Invalid) {
             if (ImGui::BeginCombo("Select Model", "")) {
-                const std::unordered_map<StringID, std::filesystem::path>& modelReg = ctx->assetManager->GetModelRegistry();
-                for (const auto& key : modelReg | std::views::keys) {
-                    if (ImGui::Selectable(key.ToString(), false)) {
+                const auto& modelCache = ctx->assetManager->GetModelCache();
+                for (const auto& [key, meta] : modelCache) {
+                    if (ImGui::Selectable(meta.name.c_str(), false)) {
                         component.modelId = key;
                         component.modelHandle = ctx->assetManager->LoadModel(component.modelId);
                     }

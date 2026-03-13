@@ -4,5 +4,5 @@
 
 #include "scene.h"
 
-namespace Game
-{} // Game
+namespace Engine
+{} // Engine

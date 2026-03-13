@@ -358,15 +358,17 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
     ImGui::End();
 
     if (ImGui::Begin("Scene Browser")) {
-        const auto& sceneReg = ctx->assetManager->GetSceneRegistry();
+        const auto& sceneCache = ctx->assetManager->GetSceneCache();
         static int selectedScene = 0;
         std::vector<std::pair<std::string, StringID> > sceneList;
-        sceneList.reserve(sceneReg.size());
-        for (const auto& [id, path] : sceneReg) {
-            sceneList.emplace_back(path.stem().string(), id);
+        sceneList.reserve(sceneCache.size());
+        for (const auto& [id, meta] : sceneCache) {
+            sceneList.emplace_back(meta.sceneName, id);
         }
-        std::ranges::sort(sceneList, {}, &std::pair<std::string, StringID>::first);
-        selectedScene = std::clamp(selectedScene, 0, static_cast<int>(sceneList.size()) - 1);
+        if (!sceneList.empty()) {
+            std::ranges::sort(sceneList, {}, &std::pair<std::string, StringID>::first);
+            selectedScene = std::clamp(selectedScene, 0, static_cast<int>(sceneList.size()) - 1);
+        }
 
         const char* previewLabel = sceneList.empty() ? "" : sceneList[selectedScene].first.c_str();
         ImGui::SetNextItemWidth(-1);
@@ -398,7 +400,7 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
         ImGui::EndDisabled();
 
         ImGui::SameLine();
-        if (ImGui::Button("Save")) { SaveSceneToFile(state->currentSceneId, state->currentSceneName, state, ctx->assetManager); }
+        if (ImGui::Button("Save")) { SaveSceneToFile(state->currentSceneId, state->currentSceneName, state, ctx->assetManager, ctx); }
 
         ImGui::SameLine();
         if (ImGui::Button("New")) {
@@ -419,12 +421,12 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
 
         ImGui::SeparatorText("Spawn Model");
 
-        const auto& modelReg = ctx->assetManager->GetModelRegistry();
+        const auto& modelCache = ctx->assetManager->GetModelCache();
         static int selectedModel = 0;
         std::vector<std::pair<std::string, StringID> > modelList;
-        modelList.reserve(modelReg.size());
-        for (const auto& [id, path] : modelReg) {
-            modelList.emplace_back(path.stem().string(), id);
+        modelList.reserve(modelCache.size());
+        for (const auto& [id, meta] : modelCache) {
+            modelList.emplace_back(meta.name, id);
         }
 
         if (!modelList.empty()) {

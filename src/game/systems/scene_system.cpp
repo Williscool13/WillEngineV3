@@ -12,6 +12,8 @@
 #include "engine/asset_manager.h"
 #include "engine/engine_api.h"
 #include "engine/logging/engine_log.h"
+#include "engine/resources/scene/scene.h"
+#include "engine/resources/scene/scene_format.h"
 #include "game/components/common_components.h"
 #include "game/components/core_components.h"
 #include "game/components/render_components.h"
@@ -20,9 +22,9 @@
 
 namespace Game
 {
-Scene SaveScene(ComponentRegistry& componentRegistry, entt::registry& registry, StringID sceneId, std::string_view sceneName)
+Engine::Scene SaveScene(ComponentRegistry& componentRegistry, entt::registry& registry, StringID sceneId, std::string_view sceneName)
 {
-    Scene outScene{};
+    Engine::Scene outScene{};
     nlohmann::json& scene = outScene.content;
 
     scene["scene_id"] = sceneId.id;
@@ -50,7 +52,7 @@ Scene SaveScene(ComponentRegistry& componentRegistry, entt::registry& registry, 
     return outScene;
 }
 
-StringID LoadScene(ComponentRegistry& componentRegistry, entt::registry& registry, Scene& scene)
+StringID LoadScene(ComponentRegistry& componentRegistry, entt::registry& registry, Engine::Scene& scene)
 {
     auto sceneId = StringID(scene.content["scene_id"].get<uint64_t>());
 
@@ -83,9 +85,9 @@ StringID LoadScene(ComponentRegistry& componentRegistry, entt::registry& registr
     return sceneId;
 }
 
-std::vector<Scene> SerializeAll(ComponentRegistry& componentRegistry, entt::registry& registry, const std::vector<StringID>& loadedScenes)
+std::vector<Engine::Scene> SerializeAll(ComponentRegistry& componentRegistry, entt::registry& registry, const std::vector<StringID>& loadedScenes)
 {
-    std::vector<Scene> snapshots;
+    std::vector<Engine::Scene> snapshots;
     snapshots.reserve(loadedScenes.size());
     for (StringID sceneId : loadedScenes) {
         snapshots.push_back(SaveScene(componentRegistry, registry, sceneId, sceneId.ToString()));
@@ -94,7 +96,7 @@ std::vector<Scene> SerializeAll(ComponentRegistry& componentRegistry, entt::regi
     return snapshots;
 }
 
-void DeserializeAll(Engine::GameState* state, std::vector<Scene>& snapshots)
+void DeserializeAll(Engine::GameState* state, std::vector<Engine::Scene>& snapshots)
 {
     std::vector<StringID> toUnload = state->loadedScenes;
     for (StringID sceneId : toUnload) {
@@ -102,7 +104,7 @@ void DeserializeAll(Engine::GameState* state, std::vector<Scene>& snapshots)
         LOG_INFO(Game, "PIE restore: unloaded scene '{}'", sceneId.ToString());
     }
 
-    for (Scene& scene : snapshots) {
+    for (Engine::Scene& scene : snapshots) {
         StringID loadedId = LoadScene(state->componentRegistry, state->registry, scene);
         state->loadedScenes.push_back(loadedId);
         LOG_INFO(Game, "PIE restore: reloaded scene '{}'", loadedId.ToString());
@@ -135,30 +137,44 @@ void UnloadScene(Engine::GameState* state, StringID sceneId)
     std::erase(state->loadedScenes, sceneId);
 }
 
-void SaveSceneToFile(StringID sceneID, std::string_view sceneName, Engine::GameState* state, Engine::AssetManager* assetManager)
+void SaveSceneToFile(StringID sceneID, std::string_view sceneName, Engine::GameState* state, Engine::AssetManager* assetManager, Core::EngineContext* ctx)
 {
-    const auto& sceneReg = assetManager->GetSceneRegistry();
+    const auto& sceneCache = assetManager->GetSceneCache();
     std::filesystem::path path;
+    bool isNewScene = false;
 
-    auto it = sceneReg.find(sceneID);
-    if (it != sceneReg.end()) {
-        path = it->second;
+    auto it = sceneCache.find(sceneID);
+    if (it != sceneCache.end()) {
+        path = it->second.source;
     }
     else {
+        isNewScene = true;
         std::string stem = sceneName.data();
         std::ranges::transform(stem, stem.begin(), ::tolower);
         std::ranges::replace(stem, ' ', '_');
         path = Platform::GetAssetPath() / "scenes" / (stem + ".wscene");
-        assetManager->RegisterScene(path);
         // Derive the ID from the normalized stem so the registry key and JSON scene_id always agree
         sceneID = StringID(stem.c_str(), stem.size());
         state->currentSceneId = sceneID;
     }
 
-    Scene s = SaveScene(state->componentRegistry, state->registry, sceneID, sceneName);
+    Engine::Scene s = SaveScene(state->componentRegistry, state->registry, sceneID, sceneName);
     std::filesystem::create_directories(path.parent_path());
     std::ofstream file(path);
+
+    Engine::WSceneHeader sceneHeader{};
+    sceneHeader.sceneId = sceneID.id;
+    const auto nameLen = std::min(sceneName.size(), Engine::WSCENE_NAME_LENGTH - 1);
+    memcpy(sceneHeader.name, sceneName.data(), nameLen);
+    sceneHeader.name[nameLen] = '\0';
+    sceneHeader.entityCount = static_cast<uint32_t>(s.content["entities"].size());
+    Engine::WriteWSceneHeader(file, sceneHeader);
+
     file << s.content.dump(2);
+
+    if (isNewScene) {
+        ctx->bShouldRescanResources.store(true, std::memory_order_release);
+    }
 
     LOG_INFO(Game, "Saved scene '{}' to '{}'", sceneName, path.string());
 }
@@ -170,21 +186,27 @@ bool LoadSceneFromFile(Engine::GameState* state, Engine::AssetManager* assetMana
         return false;
     }
 
-    const auto& sceneReg = assetManager->GetSceneRegistry();
-    auto it = sceneReg.find(sceneId);
-    if (it == sceneReg.end()) {
+    const auto& sceneCache = assetManager->GetSceneCache();
+    auto it = sceneCache.find(sceneId);
+    if (it == sceneCache.end()) {
         LOG_ERROR(Game, "Scene ID not found in registry");
         return false;
     }
 
-    const std::filesystem::path& path = it->second;
+    const std::filesystem::path& path = it->second.source;
     std::ifstream file(path);
     if (!file.is_open()) {
         LOG_ERROR(Game, "Failed to open scene file '{}'", path.string());
         return false;
     }
 
-    Scene s;
+    auto header = Engine::ReadWSceneHeader(file);
+    if (!header) {
+        LOG_ERROR(Game, "Failed to read scene header from '{}'", path.string());
+        return false;
+    }
+
+    Engine::Scene s;
     s.content = nlohmann::json::parse(file);
     StringID loadedId = LoadScene(state->componentRegistry, state->registry, s);
     assert(loadedId == sceneId && "Scene ID in file does not match registry key, file was likely saved with a mismatched ID");

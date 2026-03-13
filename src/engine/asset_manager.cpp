@@ -5,6 +5,7 @@
 #include "asset_manager.h"
 
 #include "asset-load/async_asset_load_manager.h"
+#include "resources/scene/scene_format.h"
 #include "editor/asset-generation/miscellaneous_asset_generate.h"
 #include "logging/engine_log.h"
 #include "platform/paths.h"
@@ -59,14 +60,9 @@ AssetManager::AssetManager(Core::EngineContext* ctx, AssetLoad::AsyncAssetLoadMa
     assert(defaultSampler && defaultSampler->bindlessHandle.index == ASSET_SAMPLER_BINDLESS_INDEX);
 
     std::filesystem::path assetPath = Platform::GetAssetPath();
-    cubemapRegistry["kloofendal"_sid] = assetPath / "environment-map/kloofendal_48d_partly_cloudy_puresky_4k.ktx2";
+    cubemapCache["kloofendal"_sid].source = assetPath / "environment-map/kloofendal_48d_partly_cloudy_puresky_4k.ktx2";
 }
 
-void AssetManager::RegisterScene(const std::filesystem::path& path)
-{
-    std::string stem = path.stem().string();
-    sceneRegistry[StringID(stem.c_str(), stem.size())] = path;
-}
 
 AssetManager::~AssetManager()
 {
@@ -80,13 +76,19 @@ AssetManager::~AssetManager()
 
 const AssetManager::CachedModelMetadata* AssetManager::GetModelMetadata(StringID modelId) const
 {
-    auto it = modelMetadataCache.find(modelId);
-    return it != modelMetadataCache.end() ? &it->second : nullptr;
+    auto it = modelCache.find(modelId);
+    return it != modelCache.end() ? &it->second : nullptr;
+}
+
+const AssetManager::CachedSceneMetadata* AssetManager::GetSceneMetadata(StringID sceneId) const
+{
+    auto it = sceneCache.find(sceneId);
+    return it != sceneCache.end() ? &it->second : nullptr;
 }
 
 StaticModelHandle AssetManager::LoadModel(StringID modelId)
 {
-    if (!modelRegistry.contains(modelId)) {
+    if (!modelCache.contains(modelId)) {
         LOG_ERROR(Asset, "Model '{}' not found in registry", modelId.ToString());
         return StaticModelHandle::INVALID;
     }
@@ -111,7 +113,8 @@ StaticModelHandle AssetManager::LoadModel(StringID modelId)
 
     StaticModel& model = models[handle.index];
     model.selfHandle = handle;
-    model.source = modelRegistry[modelId];
+    model.name = modelCache[modelId].name;
+    model.source = modelCache[modelId].source;
     model.modelId = modelId;
     model.refCount = 1;
     model.modelLoadState = StaticModel::ModelLoadState::NotLoaded;
@@ -140,6 +143,8 @@ void AssetManager::UnloadModel(StaticModelHandle handle)
 
     StaticModel& model = models[handle.index];
     model.refCount--;
+
+    LOG_TRACE(Asset, "Model refCount decremented: {}, refCount: {}", model.name, model.refCount);
 
     if (model.refCount == 0) {
         model.modelLoadState = StaticModel::ModelLoadState::NotLoaded;
@@ -266,7 +271,14 @@ void AssetManager::Scan()
                         auto pathName = path.string();
                         LOG_CRITICAL(Asset, "2 Textures were mounted that contain the same name. This will cause issues for texture lookups by name. ({})", pathName);
                     }
-                    textureRegistry[id] = path;
+                    CachedTextureMetadata& cached = textureCache[id];
+                    cached.source = path;
+                    memcpy(cached.name, header->name, WTEXTURE_NAME_LENGTH);
+                    cached.width = header->width;
+                    cached.height = header->height;
+                    cached.mipCount = header->mipCount;
+                    cached.dataOffset = header->dataOffset;
+                    cached.dataSize = header->dataSize;
                     textureNameToId[name] = id;
                 }
                 else if (ext == ".wsmesh") {
@@ -281,15 +293,23 @@ void AssetManager::Scan()
                         LOG_CRITICAL(Asset, "2 Models were mounted that contain the same name. This will cause issues for model lookups by name. ({})", pathName);
                     }
 
-                    modelRegistry[id] = path;
-                    modelNameToId[name] = id;
-                    CachedModelMetadata& cached = modelMetadataCache[id];
+                    CachedModelMetadata& cached = modelCache[id];
+                    cached.source = path;
+                    cached.name = std::move(name);
                     cached.nodeCount = info->header.nodeCount;
                     cached.meshNodesCount = info->header.meshNodeCount;
                     cached.nodes = std::move(info->nodes);
+                    modelNameToId[cached.name] = id;
                 }
                 else if (ext == ".wscene") {
-                    RegisterScene(path);
+                    auto header = ReadWSceneHeader(path);
+                    if (!header) { continue; }
+                    const std::string stem = path.stem().string();
+                    StringID id{stem.c_str(), stem.size()};
+                    CachedSceneMetadata& cached = sceneCache[id];
+                    cached.source = path;
+                    cached.sceneName = header->name;
+                    cached.entityCount = header->entityCount;
                 }
             }
         }
@@ -298,7 +318,7 @@ void AssetManager::Scan()
 
 Texture* AssetManager::LoadTexture(TextureID textureId)
 {
-    if (!textureRegistry.contains(textureId)) {
+    if (!textureCache.contains(textureId)) {
         LOG_ERROR(Asset, "Texture {:x} not found in registry", textureId.id);
         return nullptr;
     }
@@ -322,26 +342,18 @@ Texture* AssetManager::LoadTexture(TextureID textureId)
         return nullptr;
     }
 
-    const std::filesystem::path& path = textureRegistry[textureId];
-    assert(path.extension() == ".wtexture");
-
-    auto header = ReadWTextureHeader(path);
-    if (!header) {
-        LOG_ERROR(Asset, "Failed to read header for texture {:x}", textureId.id);
-        textureAllocator.Remove(handle);
-        return nullptr;
-    }
+    const CachedTextureMetadata& meta = textureCache[textureId];
 
     Texture& texture = textures[handle.index];
     texture.selfHandle = handle;
-    texture.source = path;
+    texture.source = meta.source;
     texture.textureId = textureId;
-    memcpy(texture.name, header->name, WTEXTURE_NAME_LENGTH);
-    texture.width = header->width;
-    texture.height = header->height;
-    texture.mipCount = header->mipCount;
-    texture.dataOffset = header->dataOffset;
-    texture.dataSize = header->dataSize;
+    memcpy(texture.name, meta.name, WTEXTURE_NAME_LENGTH);
+    texture.width = meta.width;
+    texture.height = meta.height;
+    texture.mipCount = meta.mipCount;
+    texture.dataOffset = meta.dataOffset;
+    texture.dataSize = meta.dataSize;
     texture.loadState = Texture::LoadState::Loading;
     texture.refCount = 1;
     texture.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTexture();
@@ -439,7 +451,7 @@ void AssetManager::UnloadSampler(SamplerDesc& desc)
 
 CubemapHandle AssetManager::LoadCubemap(StringID cubemapId)
 {
-    if (!cubemapRegistry.contains(cubemapId)) {
+    if (!cubemapCache.contains(cubemapId)) {
         LOG_ERROR(Asset, "Cubemap '{}' not found in registry", cubemapId.ToString());
         return CubemapHandle::INVALID;
     }
@@ -461,7 +473,7 @@ CubemapHandle AssetManager::LoadCubemap(StringID cubemapId)
         return CubemapHandle::INVALID;
     }
 
-    const std::filesystem::path& path = cubemapRegistry[cubemapId];
+    const std::filesystem::path& path = cubemapCache[cubemapId].source;
     Render::Cubemap& cubemap = cubemaps[handle.index];
     cubemap.source = path;
     cubemap.name = path.stem().string();

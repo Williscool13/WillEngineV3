@@ -61,14 +61,16 @@ public: // Models
 
     void UnloadModel(StaticModelHandle handle);
 
-    const std::unordered_map<StringID, std::filesystem::path>& GetModelRegistry() { return modelRegistry; }
-
     struct CachedModelMetadata
     {
+        std::filesystem::path source;
+        std::string name;
         uint32_t nodeCount{};
         uint32_t meshNodesCount{};
         std::vector<Node> nodes;
     };
+
+    const std::unordered_map<StringID, CachedModelMetadata>& GetModelCache() { return modelCache; }
 
     [[nodiscard]] const CachedModelMetadata* GetModelMetadata(StringID modelId) const;
 
@@ -131,20 +133,43 @@ private:
     std::unordered_map<StringID, CubemapHandle> cubemapIdToHandle;
 
 public: // Scenes
-    const std::unordered_map<StringID, std::filesystem::path>& GetSceneRegistry() { return sceneRegistry; }
-    void RegisterScene(const std::filesystem::path& path);
+    struct CachedSceneMetadata
+    {
+        std::filesystem::path source;
+        std::string sceneName;
+        uint32_t entityCount{};
+    };
 
-private: // Temporary Asset Registry
+    const std::unordered_map<StringID, CachedSceneMetadata>& GetSceneCache() { return sceneCache; }
+
+    [[nodiscard]] const CachedSceneMetadata* GetSceneMetadata(StringID sceneId) const;
+
+private: // Asset Registry
+    struct CachedTextureMetadata
+    {
+        std::filesystem::path source;
+        char name[WTEXTURE_NAME_LENGTH]{};
+        uint32_t width{};
+        uint32_t height{};
+        uint32_t mipCount{};
+        uint64_t dataOffset{};
+        uint64_t dataSize{};
+    };
+
+    struct CachedCubemapMetadata
+    {
+        std::filesystem::path source;
+    };
+
     std::unordered_map<std::string, StringID> modelNameToId;
-    std::unordered_map<StringID, std::filesystem::path> modelRegistry;
-    std::unordered_map<StringID, CachedModelMetadata> modelMetadataCache;
+    std::unordered_map<StringID, CachedModelMetadata> modelCache;
 
-    std::unordered_map<TextureID, std::filesystem::path> textureRegistry;
     std::unordered_map<std::string, TextureID> textureNameToId;
+    std::unordered_map<TextureID, CachedTextureMetadata> textureCache;
 
-    std::unordered_map<StringID, std::filesystem::path> cubemapRegistry;
+    std::unordered_map<StringID, CachedCubemapMetadata> cubemapCache;
 
-    std::unordered_map<StringID, std::filesystem::path> sceneRegistry;
+    std::unordered_map<StringID, CachedSceneMetadata> sceneCache;
 };
 } // Engine
 

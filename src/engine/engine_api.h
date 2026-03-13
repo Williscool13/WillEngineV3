@@ -14,8 +14,8 @@
 #include <ImGuizmo.h>
 
 #include "game/components/component_registry.h"
-#include "game/scene/scene.h"
 #include "core/include/render_interface.h"
+#include "resources/scene/scene.h"
 
 namespace Core
 {
@@ -84,7 +84,7 @@ struct GameState
     std::string currentSceneName{"Main Scene"};
 
     std::vector<StringID> loadedScenes{};
-    std::vector<Game::Scene> pieSnapshot{};
+    std::vector<Scene> pieSnapshot{};
 
     std::vector<entt::entity> selectedEntities{};
     std::vector<entt::entity> prevSelectedEntities{};

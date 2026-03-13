@@ -110,9 +110,12 @@ void MaterialManager::AcquireMaterial(MaterialID materialID)
 
     entry->refCounter++;
 
-    if (auto it = materials.find(materialID); it != materials.end()) {
-        Material& mat = it->second;
+    auto it = materials.find(materialID);
+    assert(it != materials.end() && "Material acquired but does not exist in the materials map");
 
+    Material& mat = it->second;
+
+    if (!mat.bIsRuntimeLoaded) {
         auto resolveTexture = [&](TextureID id) -> int32_t {
             if (!id.IsValid()) return WHITE_IMAGE_BINDLESS_INDEX;
             Texture* tex = assetManager->LoadTexture(id);
@@ -124,19 +127,21 @@ void MaterialManager::AcquireMaterial(MaterialID materialID)
             return s ? static_cast<int32_t>(s->bindlessHandle.index) : ASSET_SAMPLER_BINDLESS_INDEX;
         };
 
-        mat.props.textureImageIndices.x  = resolveTexture(mat.textureRefs[0]);
-        mat.props.textureImageIndices.y  = resolveTexture(mat.textureRefs[1]);
-        mat.props.textureImageIndices.z  = resolveTexture(mat.textureRefs[2]);
-        mat.props.textureImageIndices.w  = resolveTexture(mat.textureRefs[3]);
+        mat.props.textureImageIndices.x = resolveTexture(mat.textureRefs[0]);
+        mat.props.textureImageIndices.y = resolveTexture(mat.textureRefs[1]);
+        mat.props.textureImageIndices.z = resolveTexture(mat.textureRefs[2]);
+        mat.props.textureImageIndices.w = resolveTexture(mat.textureRefs[3]);
         mat.props.textureImageIndices2.x = resolveTexture(mat.textureRefs[4]);
         mat.props.textureImageIndices2.y = resolveTexture(mat.textureRefs[5]);
 
-        mat.props.textureSamplerIndices.x  = resolveSampler(mat.samplerDesc[0]);
-        mat.props.textureSamplerIndices.y  = resolveSampler(mat.samplerDesc[1]);
-        mat.props.textureSamplerIndices.z  = resolveSampler(mat.samplerDesc[2]);
-        mat.props.textureSamplerIndices.w  = resolveSampler(mat.samplerDesc[3]);
+        mat.props.textureSamplerIndices.x = resolveSampler(mat.samplerDesc[0]);
+        mat.props.textureSamplerIndices.y = resolveSampler(mat.samplerDesc[1]);
+        mat.props.textureSamplerIndices.z = resolveSampler(mat.samplerDesc[2]);
+        mat.props.textureSamplerIndices.w = resolveSampler(mat.samplerDesc[3]);
         mat.props.textureSamplerIndices2.x = resolveSampler(mat.samplerDesc[4]);
         mat.props.textureSamplerIndices2.y = resolveSampler(mat.samplerDesc[5]);
+
+        mat.bIsRuntimeLoaded = true;
     }
 }
 
@@ -173,20 +178,22 @@ void MaterialManager::ProcessRetirements()
 
         if (entry.refCounter == 0) {
             if (ctx->currentFrame >= entry.retireFrame) {
-                if (auto it = materials.find(entry.id); it != materials.end()) {
-                    const Material& mat = it->second;
-                    for (TextureID texID : mat.textureRefs) {
-                        if (texID.IsValid()) {
-                            assetManager->UnloadTexture(texID);
-                        }
-                    }
-                    for (SamplerDesc desc : mat.samplerDesc) {
-                        assetManager->UnloadSampler(desc);
-                    }
-                    if (mat.immutable) {
-                        materials.erase(it);
+                auto it = materials.find(entry.id);
+                assert(it != materials.end() && "Material released but does not exist in the materials map");
+
+                const Material& mat = it->second;
+                for (TextureID texID : mat.textureRefs) {
+                    if (texID.IsValid()) {
+                        assetManager->UnloadTexture(texID);
                     }
                 }
+                for (SamplerDesc desc : mat.samplerDesc) {
+                    assetManager->UnloadSampler(desc);
+                }
+
+                assert(it->second.bIsRuntimeLoaded && "Material released but it was never runtime loaded to begin with");
+                it->second.bIsRuntimeLoaded = false;
+
                 activeMaterialAllocator.Remove(entry.handle);
                 idToEntryMap.erase(entry.id);
                 entry = {};

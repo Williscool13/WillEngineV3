@@ -6,13 +6,13 @@
 #define WILL_ENGINE_SCENE_SYSTEM_H
 #include <entt/entt.hpp>
 
-#include "game/scene/scene.h"
 #include "game/components/component_registry.h"
 #include "game/components/scene_components.h"
 #include "core/string_id.h"
 #include "core/include/engine_context.h"
 #include "engine/asset_manager.h"
 #include "engine/engine_api.h"
+#include "engine/resources/scene/scene.h"
 
 namespace Core
 {
@@ -26,17 +26,17 @@ struct GameState;
 
 namespace Game
 {
-Scene SaveScene(ComponentRegistry& componentRegistry, entt::registry& registry, StringID sceneId, std::string_view sceneName);
+Engine::Scene SaveScene(ComponentRegistry& componentRegistry, entt::registry& registry, StringID sceneId, std::string_view sceneName);
 
-StringID LoadScene(ComponentRegistry& componentRegistry, entt::registry& registry, Scene& scene);
+StringID LoadScene(ComponentRegistry& componentRegistry, entt::registry& registry, Engine::Scene& scene);
 
-std::vector<Scene> SerializeAll(ComponentRegistry& componentRegistry, entt::registry& registry, const std::vector<StringID>& loadedScenes);
+std::vector<Engine::Scene> SerializeAll(ComponentRegistry& componentRegistry, entt::registry& registry, const std::vector<StringID>& loadedScenes);
 
-void DeserializeAll(Engine::GameState* state, std::vector<Scene>& snapshots);
+void DeserializeAll(Engine::GameState* state, std::vector<Engine::Scene>& snapshots);
 
 void UnloadScene(Engine::GameState* state, StringID sceneId);
 
-void SaveSceneToFile(StringID sceneID, std::string_view sceneName, Engine::GameState* state, Engine::AssetManager* assetManager);
+void SaveSceneToFile(StringID sceneID, std::string_view sceneName, Engine::GameState* state, Engine::AssetManager* assetManager, Core::EngineContext* ctx);
 
 bool LoadSceneFromFile(Engine::GameState* state, Engine::AssetManager* assetManager, StringID sceneId);
 

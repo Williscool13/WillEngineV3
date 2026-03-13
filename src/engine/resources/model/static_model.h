@@ -37,6 +37,7 @@ public:
     StaticModel& operator=(StaticModel&&) noexcept = default;
 
     // Populated by AssetManager, never changed
+    std::string name{};
     std::filesystem::path source{};
     StringID modelId{};
     StaticModelHandle selfHandle;

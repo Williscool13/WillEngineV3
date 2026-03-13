@@ -32,8 +32,8 @@ set(GAME_SOURCES
         components/scene_components.h
         systems/core_systems.cpp
         systems/core_systems.h
-        scene/scene.cpp
-        scene/scene.h
+        ../engine/resources/scene/scene.cpp
+        ../engine/resources/scene/scene.h
         systems/scene_system.cpp
         systems/scene_system.h
         components/common_components.cpp
