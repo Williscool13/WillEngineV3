@@ -8,6 +8,7 @@
 #include <semaphore>
 
 #include "asset-load/asset_load_config.h"
+#include "engine/compression/compression.h"
 #include "engine/logging/engine_log.h"
 #include "ktxvulkan.h"
 #include "engine/resources/texture/texture.h"
@@ -158,14 +159,15 @@ bool TextureLoadSlot::LoadTextureFromDisk()
         ktx_error_code_e result;
 
         std::ifstream f(texturePath, std::ios::binary);
-        std::vector<uint8_t> blob(outputTexture->dataSize);
+        std::vector<uint8_t> compressed(outputTexture->dataSize);
         f.seekg(outputTexture->dataOffset);
-        f.read(reinterpret_cast<char*>(blob.data()), static_cast<std::streamsize>(outputTexture->dataSize));
+        f.read(reinterpret_cast<char*>(compressed.data()), static_cast<std::streamsize>(outputTexture->dataSize));
         if (!f) {
             LOG_ERROR(Asset, "Failed to read .wtexture data: {}", texturePath.string());
             return false;
         }
 
+        std::vector<uint8_t> blob = Engine::DecompressLZ4(compressed.data(), compressed.size(), outputTexture->uncompressedSize);
         result = ktxTexture2_CreateFromMemory(blob.data(), blob.size(),
                                               KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, &texture);
 

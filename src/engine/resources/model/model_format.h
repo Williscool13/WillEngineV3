@@ -16,7 +16,7 @@ namespace Engine
 {
 constexpr char STATIC_MODEL_MAGIC[8] = "WSTCMDL";
 constexpr uint32_t STATICMODEL_MAJOR_VERSION = 1;
-constexpr uint32_t STATICMODEL_MINOR_VERSION = 0;
+constexpr uint32_t STATICMODEL_MINOR_VERSION = 1;
 constexpr size_t WSTATICMODEL_NAME_LENGTH = 128;
 
 struct WStaticModelHeader
@@ -46,7 +46,8 @@ struct WStaticModelHeader
     uint32_t materialCount{0};
     uint32_t meshOffset{0};
     uint32_t meshCount{0};
-    uint32_t nodeOffset{0};
+    uint64_t compressedBodySize{0};
+    uint64_t uncompressedBodySize{0};
     uint64_t dataOffset{0};
 };
 

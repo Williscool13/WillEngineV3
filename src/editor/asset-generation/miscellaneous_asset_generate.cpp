@@ -11,6 +11,7 @@
 #include <tracy/Tracy.hpp>
 
 #include "core/hash/fnv_1_a.h"
+#include "engine/compression/compression.h"
 #include "engine/logging/engine_log.h"
 #include "engine/resources/texture/texture_format.h"
 #include "platform/paths.h"
@@ -57,23 +58,25 @@ bool WriteSimpleRGBA8WTexture(const std::filesystem::path& outputPath, Engine::T
         return false;
     }
 
+    std::vector<uint8_t> compressed = Engine::CompressLZ4(ktxBytes, ktxSize);
+    free(ktxBytes);
+
     Engine::WTextureHeader header{};
     header.textureId = id.id;
     header.width     = w;
     header.height    = h;
     header.mipCount  = 1;
-    header.dataSize  = static_cast<uint64_t>(ktxSize);
+    header.uncompressedSize = static_cast<uint64_t>(ktxSize);
+    header.dataSize  = static_cast<uint64_t>(compressed.size());
     strncpy_s(header.name, name, Engine::WTEXTURE_NAME_LENGTH - 1);
 
     std::filesystem::create_directories(outputPath.parent_path());
     std::ofstream f(outputPath, std::ios::binary);
     if (!f || !Engine::WriteWTextureHeader(f, header)) {
-        free(ktxBytes);
         LOG_ERROR(Asset, "Failed to write .wtexture: {}", outputPath.string());
         return false;
     }
-    f.write(reinterpret_cast<const char*>(ktxBytes), static_cast<std::streamsize>(ktxSize));
-    free(ktxBytes);
+    f.write(reinterpret_cast<const char*>(compressed.data()), static_cast<std::streamsize>(compressed.size()));
 
     LOG_INFO(Asset, "Wrote {}", outputPath.string());
     return true;
@@ -271,23 +274,25 @@ void CreateBRDFLookupTable(
         return;
     }
 
+    std::vector<uint8_t> compressed = Engine::CompressLZ4(ktxBytes, ktxSize);
+    free(ktxBytes);
+
     Engine::WTextureHeader header{};
     header.textureId = textureId.id;
     header.width     = LUT_SIZE;
     header.height    = LUT_SIZE;
     header.mipCount  = 1;
-    header.dataSize  = static_cast<uint64_t>(ktxSize);
+    header.uncompressedSize = static_cast<uint64_t>(ktxSize);
+    header.dataSize  = static_cast<uint64_t>(compressed.size());
     strncpy_s(header.name, outputPath.stem().string().c_str(), Engine::WTEXTURE_NAME_LENGTH - 1);
 
     std::filesystem::create_directories(outputPath.parent_path());
     std::ofstream f(outputPath, std::ios::binary);
     if (!f || !Engine::WriteWTextureHeader(f, header)) {
-        free(ktxBytes);
         LOG_ERROR(Asset, "Failed to write .wtexture: {}", outputPath.string());
         return;
     }
-    f.write(reinterpret_cast<const char*>(ktxBytes), static_cast<std::streamsize>(ktxSize));
-    free(ktxBytes);
+    f.write(reinterpret_cast<const char*>(compressed.data()), static_cast<std::streamsize>(compressed.size()));
 
     LOG_INFO(Asset, "Wrote {}", outputPath.string());
 

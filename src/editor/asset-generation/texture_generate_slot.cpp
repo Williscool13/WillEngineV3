@@ -12,6 +12,7 @@
 
 #include "asset_generation_types.h"
 #include "bc7enc_rdo/rdo_bc_encoder.h"
+#include "engine/compression/compression.h"
 #include "engine/resources/texture/texture_format.h"
 #include "platform/paths.h"
 #include "render/vulkan/vk_context.h"
@@ -444,12 +445,16 @@ bool TextureGenerateSlot::WriteWTextureFile()
         return false;
     }
 
+    std::vector<uint8_t> compressed = Engine::CompressLZ4(ktxBytes, ktxSize);
+    free(ktxBytes);
+
     Engine::WTextureHeader header{};
     header.textureId = textureId.id;
     header.width = sourceImage.extent.width;
     header.height = sourceImage.extent.height;
     header.mipCount = mipLevels;
-    header.dataSize = ktxSize;
+    header.uncompressedSize = static_cast<uint64_t>(ktxSize);
+    header.dataSize = static_cast<uint64_t>(compressed.size());
 
     const std::string stem = imagePath.empty() ? outputPath.stem().string() : imagePath.stem().string();
     const size_t copyLen = std::min(stem.size(), Engine::WTEXTURE_NAME_LENGTH - 1);
@@ -459,18 +464,15 @@ bool TextureGenerateSlot::WriteWTextureFile()
     std::filesystem::create_directories(outputPath.parent_path());
     std::ofstream f(outputPath, std::ios::binary);
     if (!f) {
-        free(ktxBytes);
         LOG_ERROR(Asset, "Failed to open output file: {}", outputPath.string());
         return false;
     }
 
     if (!Engine::WriteWTextureHeader(f, header)) {
-        free(ktxBytes);
         LOG_ERROR(Asset, "Failed to write header: {}", outputPath.string());
         return false;
     }
-    f.write(reinterpret_cast<const char*>(ktxBytes), static_cast<std::streamsize>(ktxSize));
-    free(ktxBytes);
+    f.write(reinterpret_cast<const char*>(compressed.data()), static_cast<std::streamsize>(compressed.size()));
 
     LOG_INFO(Asset, "Wrote {}", outputPath.string());
     return true;

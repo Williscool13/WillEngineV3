@@ -963,6 +963,8 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
                 ImGui::BeginDisabled(true);
                 ImGui::Text("ID: %llu", id.id);
                 ImGui::EndDisabled();
+
+                // todo: add modifying material
             }
             ImGui::PopID();
         }

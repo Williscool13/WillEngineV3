@@ -154,6 +154,7 @@ private: // Asset Registry
         uint32_t mipCount{};
         uint64_t dataOffset{};
         uint64_t dataSize{};
+        uint64_t uncompressedSize{};
     };
 
     struct CachedCubemapMetadata

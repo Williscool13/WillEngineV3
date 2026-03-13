@@ -37,7 +37,8 @@ bool WriteWStaticModelHeader(std::ostream& out, const WStaticModelHeader& header
     out << "material_count " << header.materialCount << "\n";
     out << "mesh_offset " << header.meshOffset << "\n";
     out << "mesh_count " << header.meshCount << "\n";
-    out << "node_offset " << header.nodeOffset << "\n";
+    out << "compressed_body_size " << header.compressedBodySize << "\n";
+    out << "uncompressed_body_size " << header.uncompressedBodySize << "\n";
     out << "end_header\n";
     return out.good();
 }
@@ -91,7 +92,8 @@ std::optional<WStaticModelHeader> ReadWStaticModelHeader(std::istream& in)
         else if (line.starts_with("material_count ")) { header.materialCount = std::stoul(line.substr(15)); }
         else if (line.starts_with("mesh_offset ")) { header.meshOffset = std::stoul(line.substr(12)); }
         else if (line.starts_with("mesh_count ")) { header.meshCount = std::stoul(line.substr(11)); }
-        else if (line.starts_with("node_offset ")) { header.nodeOffset = std::stoul(line.substr(12)); }
+        else if (line.starts_with("compressed_body_size ")) { header.compressedBodySize = std::stoull(line.substr(21)); }
+        else if (line.starts_with("uncompressed_body_size ")) { header.uncompressedBodySize = std::stoull(line.substr(23)); }
     }
     return std::nullopt;
 }
@@ -108,7 +110,7 @@ std::optional<WStaticModelInfo> ReadWStaticModelInfo(const std::filesystem::path
 
     file.seekg(0, std::ios::end);
     const size_t fileSize = static_cast<size_t>(file.tellg());
-    const size_t nodeDataStart = header.dataOffset + header.nodeOffset;
+    const size_t nodeDataStart = header.dataOffset + header.compressedBodySize;
     if (fileSize < nodeDataStart) { return std::nullopt; }
 
     const size_t nodesSize = fileSize - nodeDataStart;

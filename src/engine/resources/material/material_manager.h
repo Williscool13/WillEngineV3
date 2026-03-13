@@ -32,7 +32,14 @@ public:
 
     MaterialID CreateImmutableMaterial(const Material& mat);
 
-    void UpdateMutableMaterial(MaterialID id, const Material& material);
+    /**
+     * Update a mutable material's contents. Textures and Samplers will resolve changes with the asset manager.
+     * \n
+     * @param id
+     * @param material
+     * @param bSerialize Should be false if called at runtime
+     */
+    void UpdateMutableMaterial(MaterialID id, const Material& material, bool bSerialize = false);
 
     MaterialID FindMutableMaterial(StringID name) const;
 

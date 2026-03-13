@@ -187,7 +187,7 @@ void MaterialManager::ProcessRetirements()
 }
 
 
-void MaterialManager::UpdateMutableMaterial(MaterialID id, const Material& newMat)
+void MaterialManager::UpdateMutableMaterial(MaterialID id, const Material& newMat, bool bSerialize)
 {
     // todo if this is done at runtime, this needs to NOT serialize. For PIE, mutables should be loaded from disk (update still dont serialize, but with the data from the .wmaterials on disk)
     auto it = materials.find(id);
@@ -256,15 +256,17 @@ void MaterialManager::UpdateMutableMaterial(MaterialID id, const Material& newMa
         }
     }
 
-    WMaterialHeader header{};
-    header.materialId = mat.id.id;
-    const auto nameLen = std::min(mat.name.size(), WMATERIAL_NAME_LENGTH - 1);
-    memcpy(header.name, mat.name.c_str(), nameLen);
-    header.name[nameLen] = '\0';
+    if (bSerialize) {
+        WMaterialHeader header{};
+        header.materialId = mat.id.id;
+        const auto nameLen = std::min(mat.name.size(), WMATERIAL_NAME_LENGTH - 1);
+        memcpy(header.name, mat.name.c_str(), nameLen);
+        header.name[nameLen] = '\0';
 
-    std::ofstream file(mat.sourcePath);
-    WriteWMaterialHeader(file, header);
-    file << SerializeMaterial(mat).dump(4);
+        std::ofstream file(mat.sourcePath);
+        WriteWMaterialHeader(file, header);
+        file << SerializeMaterial(mat).dump(4);
+    }
 }
 
 MaterialID MaterialManager::FindMutableMaterial(StringID name) const

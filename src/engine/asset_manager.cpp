@@ -279,6 +279,7 @@ void AssetManager::Scan()
                     cached.mipCount = header->mipCount;
                     cached.dataOffset = header->dataOffset;
                     cached.dataSize = header->dataSize;
+                    cached.uncompressedSize = header->uncompressedSize;
                     textureNameToId[name] = id;
                 }
                 else if (ext == ".wsmesh") {
@@ -354,6 +355,7 @@ Texture* AssetManager::LoadTexture(TextureID textureId)
     texture.mipCount = meta.mipCount;
     texture.dataOffset = meta.dataOffset;
     texture.dataSize = meta.dataSize;
+    texture.uncompressedSize = meta.uncompressedSize;
     texture.loadState = Texture::LoadState::Loading;
     texture.refCount = 1;
     texture.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTexture();

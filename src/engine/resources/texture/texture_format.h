@@ -13,7 +13,7 @@
 namespace Engine
 {
 constexpr uint32_t TEXTURE_MAJOR_VERSION = 0;
-constexpr uint32_t TEXTURE_MINOR_VERSION = 3;
+constexpr uint32_t TEXTURE_MINOR_VERSION = 4;
 constexpr size_t WTEXTURE_NAME_LENGTH = 128;
 
 struct WTextureHeader
@@ -29,6 +29,7 @@ struct WTextureHeader
     uint32_t mipCount{0};
     uint64_t dataOffset{0};
     uint64_t dataSize{0};
+    uint64_t uncompressedSize{0};
 };
 
 bool WriteWTextureHeader(std::ostream& out, const WTextureHeader& header);

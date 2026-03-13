@@ -916,13 +916,18 @@ bool StaticModelGenerateSlot::WriteStaticModel()
             Engine::WriteMeshInformation(body, mesh);
         }
 
-        header.nodeOffset = static_cast<uint32_t>(body.size());
+        std::vector<uint8_t> compressedBody = Engine::CompressLZ4(body.data(), body.size());
+        header.compressedBodySize = static_cast<uint64_t>(compressedBody.size());
+        header.uncompressedBodySize = static_cast<uint64_t>(body.size());
+
+        std::vector<std::byte> nodeSection;
         for (const auto& node : rawModel.nodes) {
-            Engine::WriteNode(body, node);
+            Engine::WriteNode(nodeSection, node);
         }
 
         Engine::WriteWStaticModelHeader(file, header);
-        file.write(reinterpret_cast<const char*>(body.data()), body.size());
+        file.write(reinterpret_cast<const char*>(compressedBody.data()), static_cast<std::streamsize>(compressedBody.size()));
+        file.write(reinterpret_cast<const char*>(nodeSection.data()), static_cast<std::streamsize>(nodeSection.size()));
     }
 
     progress->value.store(100, std::memory_order_release);

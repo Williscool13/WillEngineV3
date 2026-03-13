@@ -39,6 +39,7 @@ struct Texture
     uint32_t mipCount{0};
     uint32_t dataOffset{0};
     uint64_t dataSize{0};
+    uint64_t uncompressedSize{0};
 
     // Transient (Runtime)
     Render::BindlessTextureHandle bindlessHandle{};

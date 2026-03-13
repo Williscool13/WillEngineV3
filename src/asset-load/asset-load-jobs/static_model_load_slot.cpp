@@ -8,6 +8,7 @@
 #include <semaphore>
 
 #include "asset-load/asset_load_config.h"
+#include "engine/compression/compression.h"
 #include "engine/resources/model/model_format.h"
 #include "engine/resources/model/static_model.h"
 #include "engine/serialization/serialization.h"
@@ -142,7 +143,8 @@ bool StaticModelLoadSlot::LoadModelFromDisk()
     }
 
     Engine::WStaticModelHeader header{};
-    std::vector<uint8_t> body; {
+    std::vector<uint8_t> body;
+    std::vector<uint8_t> nodeData; {
         ZoneScopedN("ReadFile");
         std::ifstream file(outputModel->source, std::ios::binary);
         if (!file) {
@@ -156,15 +158,18 @@ bool StaticModelLoadSlot::LoadModelFromDisk()
         }
         header = *optHeader;
 
+        std::vector<uint8_t> compressedBody(header.compressedBodySize);
+        file.seekg(static_cast<std::streamoff>(header.dataOffset));
+        file.read(reinterpret_cast<char*>(compressedBody.data()), static_cast<std::streamsize>(header.compressedBodySize));
+
+        body = Engine::DecompressLZ4(compressedBody.data(), compressedBody.size(), header.uncompressedBodySize);
+
         file.seekg(0, std::ios::end);
         const size_t fileSize = static_cast<size_t>(file.tellg());
-        if (fileSize < header.dataOffset) {
-            SPDLOG_ERROR("Static model file too small - {}", outputModel->modelId.ToString());
-            return false;
-        }
-        body.resize(fileSize - header.dataOffset);
-        file.seekg(static_cast<std::streamoff>(header.dataOffset));
-        file.read(reinterpret_cast<char*>(body.data()), static_cast<std::streamsize>(body.size()));
+        const size_t nodeDataStart = header.dataOffset + header.compressedBodySize;
+        nodeData.resize(fileSize - nodeDataStart);
+        file.seekg(static_cast<std::streamoff>(nodeDataStart));
+        file.read(reinterpret_cast<char*>(nodeData.data()), static_cast<std::streamsize>(nodeData.size()));
     }
 
     auto readArray = [&]<typename T>(std::vector<T>& vec, uint32_t offset, uint32_t count) {
@@ -204,7 +209,7 @@ bool StaticModelLoadSlot::LoadModelFromDisk()
 
     {
         ZoneScopedN("ParseNodes");
-        const uint8_t* ptr = body.data() + header.nodeOffset;
+        const uint8_t* ptr = nodeData.data();
         rawData.nodes.resize(header.nodeCount);
         for (uint32_t i = 0; i < header.nodeCount; ++i) {
             Engine::ReadNode(ptr, rawData.nodes[i]);

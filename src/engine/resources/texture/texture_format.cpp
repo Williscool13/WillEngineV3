@@ -21,6 +21,7 @@ bool WriteWTextureHeader(std::ostream& out, const WTextureHeader& header)
     out << "height " << header.height << "\n";
     out << "mips " << header.mipCount << "\n";
     out << "data_size " << header.dataSize << "\n";
+    out << "uncompressed_size " << header.uncompressedSize << "\n";
     out << "end_header\n";
     return out.good();
 }
@@ -62,6 +63,7 @@ std::optional<WTextureHeader> ReadWTextureHeader(std::istream& in)
         else if (line.starts_with("height ")) { header.height = std::stoul(line.substr(7)); }
         else if (line.starts_with("mips ")) { header.mipCount = std::stoul(line.substr(5)); }
         else if (line.starts_with("data_size ")) { header.dataSize = std::stoull(line.substr(10)); }
+        else if (line.starts_with("uncompressed_size ")) { header.uncompressedSize = std::stoull(line.substr(18)); }
     }
     return std::nullopt;
 }
