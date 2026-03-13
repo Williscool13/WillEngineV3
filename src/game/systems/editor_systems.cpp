@@ -964,7 +964,179 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
                 ImGui::Text("ID: %llu", id.id);
                 ImGui::EndDisabled();
 
-                // todo: add modifying material
+                Engine::Material editMat = mat;
+                MaterialProperties& props = editMat.props;
+                bool changed = false;
+
+                ImGui::SeparatorText("Base");
+                changed |= ImGui::ColorEdit4("Color Factor", &props.colorFactor.x);
+                changed |= ImGui::SliderFloat("Metallic", &props.metalRoughFactors.x, 0.0f, 1.0f);
+                changed |= ImGui::SliderFloat("Roughness", &props.metalRoughFactors.y, 0.0f, 1.0f);
+
+                ImGui::SeparatorText("Emissive");
+                changed |= ImGui::ColorEdit3("Emissive Color", &props.emissiveFactor.x);
+                changed |= ImGui::DragFloat("Emissive Strength", &props.emissiveFactor.w, 0.01f, 0.0f, 100.0f);
+
+                ImGui::SeparatorText("Alpha");
+                const char* alphaModes[] = {"Opaque", "Mask", "Blend"};
+                int alphaMode = static_cast<int>(props.alphaProperties.y);
+                if (ImGui::Combo("Alpha Mode", &alphaMode, alphaModes, 3)) {
+                    props.alphaProperties.y = static_cast<float>(alphaMode);
+                    changed = true;
+                }
+                if (alphaMode == 1) {
+                    changed |= ImGui::SliderFloat("Alpha Cutoff", &props.alphaProperties.x, 0.0f, 1.0f);
+                }
+                bool doubleSided = props.alphaProperties.z > 0.5f;
+                if (ImGui::Checkbox("Double Sided", &doubleSided)) {
+                    props.alphaProperties.z = doubleSided ? 1.0f : 0.0f;
+                    changed = true;
+                }
+                bool unlit = props.alphaProperties.w > 0.5f;
+                if (ImGui::Checkbox("Unlit", &unlit)) {
+                    props.alphaProperties.w = unlit ? 1.0f : 0.0f;
+                    changed = true;
+                }
+
+                ImGui::SeparatorText("Physical");
+                changed |= ImGui::SliderFloat("IOR", &props.physicalProperties.x, 1.0f, 3.0f);
+                changed |= ImGui::SliderFloat("Normal Intensity", &props.physicalProperties.z, 0.0f, 2.0f);
+                changed |= ImGui::SliderFloat("Occlusion Strength", &props.physicalProperties.w, 0.0f, 1.0f);
+
+                if (ImGui::TreeNode("UV Transforms")) {
+                    ImGui::SeparatorText("Color");
+                    changed |= ImGui::DragFloat2("Scale##color_uv", &props.colorUvTransform.x, 0.01f);
+                    changed |= ImGui::DragFloat2("Offset##color_uv", &props.colorUvTransform.z, 0.01f);
+                    ImGui::SeparatorText("Metal/Rough");
+                    changed |= ImGui::DragFloat2("Scale##mr_uv", &props.metalRoughUvTransform.x, 0.01f);
+                    changed |= ImGui::DragFloat2("Offset##mr_uv", &props.metalRoughUvTransform.z, 0.01f);
+                    ImGui::SeparatorText("Normal");
+                    changed |= ImGui::DragFloat2("Scale##normal_uv", &props.normalUvTransform.x, 0.01f);
+                    changed |= ImGui::DragFloat2("Offset##normal_uv", &props.normalUvTransform.z, 0.01f);
+                    ImGui::SeparatorText("Emissive");
+                    changed |= ImGui::DragFloat2("Scale##emissive_uv", &props.emissiveUvTransform.x, 0.01f);
+                    changed |= ImGui::DragFloat2("Offset##emissive_uv", &props.emissiveUvTransform.z, 0.01f);
+                    ImGui::SeparatorText("Occlusion");
+                    changed |= ImGui::DragFloat2("Scale##occlusion_uv", &props.occlusionUvTransform.x, 0.01f);
+                    changed |= ImGui::DragFloat2("Offset##occlusion_uv", &props.occlusionUvTransform.z, 0.01f);
+                    ImGui::TreePop();
+                }
+
+                ImGui::SeparatorText("Textures");
+                static const char* slotNames[] = {"Color", "Metal/Rough", "Normal", "Emissive", "Occlusion", "Packed NRM"};
+                static Engine::TextureID texEditPending = Engine::TextureID::INVALID;
+                static Engine::SamplerDesc samplerEditPending{};
+
+                const auto& texNameToId = ctx->assetManager->GetTextureNameToId();
+                const auto& texCache = ctx->assetManager->GetTextureCache();
+
+                for (int32_t slot = 0; slot < 6; ++slot) {
+                    ImGui::PushID(slot);
+
+                    const Engine::TextureID& texId = mat.textureRefs[slot];
+                    const char* currentTexName = "None";
+                    if (texId.IsValid()) {
+                        auto it = texCache.find(texId);
+                        if (it != texCache.end()) currentTexName = it->second.name;
+                    }
+
+                    ImGui::Text("%-13s", slotNames[slot]);
+                    ImGui::SameLine();
+                    ImGui::Text("%-32s", currentTexName);
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton("Tex")) {
+                        texEditPending = texId;
+                        ImGui::OpenPopup("TextureSelect");
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton("Smp")) {
+                        samplerEditPending = mat.samplerDesc[slot];
+                        ImGui::OpenPopup("SamplerEdit");
+                    }
+
+                    if (ImGui::BeginPopupModal("TextureSelect", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+                        ImGui::Text("Slot: %s", slotNames[slot]);
+                        ImGui::Separator();
+
+                        if (ImGui::BeginChild("##texlist", {400.0f, 300.0f}, ImGuiChildFlags_Borders)) {
+                            bool noneSelected = !texEditPending.IsValid();
+                            if (ImGui::Selectable("(None)", noneSelected)) {
+                                texEditPending = Engine::TextureID::INVALID;
+                            }
+                            std::vector<std::pair<std::string, Engine::TextureID>> sorted(texNameToId.begin(), texNameToId.end());
+                            std::sort(sorted.begin(), sorted.end());
+                            for (const auto& [name, tid] : sorted) {
+                                bool selected = texEditPending == tid;
+                                if (ImGui::Selectable(name.c_str(), selected)) {
+                                    texEditPending = tid;
+                                }
+                                // todo: texture preview on hover
+                            }
+                        }
+                        ImGui::EndChild();
+
+                        if (ImGui::Button("OK")) {
+                            Engine::Material editMat = mat;
+                            editMat.textureRefs[slot] = texEditPending;
+                            materialManager->UpdateMutableMaterial(id, editMat, true);
+                            ImGui::CloseCurrentPopup();
+                        }
+                        ImGui::SameLine();
+                        if (ImGui::Button("Cancel")) {
+                            ImGui::CloseCurrentPopup();
+                        }
+                        ImGui::EndPopup();
+                    }
+
+                    if (ImGui::BeginPopupModal("SamplerEdit", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+                        ImGui::Text("Slot: %s", slotNames[slot]);
+                        ImGui::Separator();
+
+                        static const char* filterNames[] = {"Nearest", "Linear"};
+                        int magF = static_cast<int>(samplerEditPending.magFilter);
+                        int minF = static_cast<int>(samplerEditPending.minFilter);
+                        if (ImGui::Combo("Mag Filter", &magF, filterNames, 2)) samplerEditPending.magFilter = static_cast<VkFilter>(magF);
+                        if (ImGui::Combo("Min Filter", &minF, filterNames, 2)) samplerEditPending.minFilter = static_cast<VkFilter>(minF);
+
+                        static const char* mipmapModeNames[] = {"Nearest", "Linear"};
+                        int mipMode = static_cast<int>(samplerEditPending.mipmapMode);
+                        if (ImGui::Combo("Mip Mode", &mipMode, mipmapModeNames, 2)) samplerEditPending.mipmapMode = static_cast<VkSamplerMipmapMode>(mipMode);
+
+                        static const char* addressModeNames[] = {"Repeat", "Mirrored Repeat", "Clamp To Edge", "Clamp To Border", "Mirror Clamp"};
+                        int addrU = static_cast<int>(samplerEditPending.addressModeU);
+                        int addrV = static_cast<int>(samplerEditPending.addressModeV);
+                        int addrW = static_cast<int>(samplerEditPending.addressModeW);
+                        if (ImGui::Combo("Address U", &addrU, addressModeNames, 5)) samplerEditPending.addressModeU = static_cast<VkSamplerAddressMode>(addrU);
+                        if (ImGui::Combo("Address V", &addrV, addressModeNames, 5)) samplerEditPending.addressModeV = static_cast<VkSamplerAddressMode>(addrV);
+                        if (ImGui::Combo("Address W", &addrW, addressModeNames, 5)) samplerEditPending.addressModeW = static_cast<VkSamplerAddressMode>(addrW);
+
+                        bool aniso = samplerEditPending.anisotropyEnable == VK_TRUE;
+                        if (ImGui::Checkbox("Anisotropy", &aniso)) samplerEditPending.anisotropyEnable = aniso ? VK_TRUE : VK_FALSE;
+                        if (aniso) ImGui::SliderFloat("Max Anisotropy", &samplerEditPending.maxAnisotropy, 1.0f, 16.0f);
+
+                        ImGui::DragFloat("Mip LOD Bias", &samplerEditPending.mipLodBias, 0.1f);
+                        ImGui::DragFloat("Min LOD", &samplerEditPending.minLod, 0.1f, 0.0f, 100.0f);
+                        ImGui::DragFloat("Max LOD", &samplerEditPending.maxLod, 0.1f, 0.0f, 1000.0f);
+
+                        if (ImGui::Button("OK")) {
+                            Engine::Material editMat = mat;
+                            editMat.samplerDesc[slot] = samplerEditPending;
+                            materialManager->UpdateMutableMaterial(id, editMat, true);
+                            ImGui::CloseCurrentPopup();
+                        }
+                        ImGui::SameLine();
+                        if (ImGui::Button("Cancel")) {
+                            ImGui::CloseCurrentPopup();
+                        }
+                        ImGui::EndPopup();
+                    }
+
+                    ImGui::PopID();
+                }
+
+                if (changed) {
+                    materialManager->UpdateMutableMaterial(id, editMat, true);
+                }
             }
             ImGui::PopID();
         }

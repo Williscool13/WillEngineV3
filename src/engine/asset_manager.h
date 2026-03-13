@@ -82,6 +82,21 @@ public: // Textures
 
     [[nodiscard]] TextureID FindTextureByName(std::string_view name) const;
 
+    struct CachedTextureMetadata
+    {
+        std::filesystem::path source;
+        char name[WTEXTURE_NAME_LENGTH]{};
+        uint32_t width{};
+        uint32_t height{};
+        uint32_t mipCount{};
+        uint64_t dataOffset{};
+        uint64_t dataSize{};
+        uint64_t uncompressedSize{};
+    };
+
+    [[nodiscard]] const std::unordered_map<std::string, TextureID>& GetTextureNameToId() const { return textureNameToId; }
+    [[nodiscard]] const std::unordered_map<TextureID, CachedTextureMetadata>& GetTextureCache() const { return textureCache; }
+
 public: // Samplers
     Sampler* LoadSampler(SamplerDesc& samplerDesc);
 
@@ -145,18 +160,6 @@ public: // Scenes
     [[nodiscard]] const CachedSceneMetadata* GetSceneMetadata(StringID sceneId) const;
 
 private: // Asset Registry
-    struct CachedTextureMetadata
-    {
-        std::filesystem::path source;
-        char name[WTEXTURE_NAME_LENGTH]{};
-        uint32_t width{};
-        uint32_t height{};
-        uint32_t mipCount{};
-        uint64_t dataOffset{};
-        uint64_t dataSize{};
-        uint64_t uncompressedSize{};
-    };
-
     struct CachedCubemapMetadata
     {
         std::filesystem::path source;

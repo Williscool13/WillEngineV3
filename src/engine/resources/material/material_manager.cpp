@@ -189,11 +189,24 @@ void MaterialManager::ProcessRetirements()
 
 void MaterialManager::UpdateMutableMaterial(MaterialID id, const Material& newMat, bool bSerialize)
 {
-    // todo if this is done at runtime, this needs to NOT serialize. For PIE, mutables should be loaded from disk (update still dont serialize, but with the data from the .wmaterials on disk)
+    // todo: snapshot and restore for PIE materials
+
     auto it = materials.find(id);
     if (it == materials.end()) return;
 
     Material& mat = it->second;
+
+    auto serialize = [&]() {
+        WMaterialHeader header{};
+        header.materialId = mat.id.id;
+        const auto nameLen = std::min(mat.name.size(), WMATERIAL_NAME_LENGTH - 1);
+        memcpy(header.name, mat.name.c_str(), nameLen);
+        header.name[nameLen] = '\0';
+
+        std::ofstream file(mat.sourcePath);
+        WriteWMaterialHeader(file, header);
+        file << SerializeMaterial(mat).dump(4);
+    };
 
     // Save old resolved indices before overwriting props (caller doesn't know bindless indices)
     const glm::ivec4 oldTexIdx = mat.props.textureImageIndices;
@@ -208,6 +221,7 @@ void MaterialManager::UpdateMutableMaterial(MaterialID id, const Material& newMa
             mat.textureRefs[i] = newMat.textureRefs[i];
             mat.samplerDesc[i] = newMat.samplerDesc[i];
         }
+        if (bSerialize) { serialize(); }
         return;
     }
 
@@ -256,17 +270,7 @@ void MaterialManager::UpdateMutableMaterial(MaterialID id, const Material& newMa
         }
     }
 
-    if (bSerialize) {
-        WMaterialHeader header{};
-        header.materialId = mat.id.id;
-        const auto nameLen = std::min(mat.name.size(), WMATERIAL_NAME_LENGTH - 1);
-        memcpy(header.name, mat.name.c_str(), nameLen);
-        header.name[nameLen] = '\0';
-
-        std::ofstream file(mat.sourcePath);
-        WriteWMaterialHeader(file, header);
-        file << SerializeMaterial(mat).dump(4);
-    }
+    if (bSerialize) { serialize(); }
 }
 
 MaterialID MaterialManager::FindMutableMaterial(StringID name) const

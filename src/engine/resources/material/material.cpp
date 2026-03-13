@@ -66,6 +66,24 @@ nlohmann::json SerializeMaterial(const Material& mat)
     j["alphaProperties"] = {mat.props.alphaProperties.x, mat.props.alphaProperties.y, mat.props.alphaProperties.z, mat.props.alphaProperties.w};
     j["physicalProperties"] = {mat.props.physicalProperties.x, mat.props.physicalProperties.y, mat.props.physicalProperties.z, mat.props.physicalProperties.w};
 
+    for (int i = 0; i < 6; ++i) {
+        j["textureRefs"][i] = mat.textureRefs[i].id;
+        const SamplerDesc& s = mat.samplerDesc[i];
+        j["samplerDesc"][i] = {
+            {"magFilter",      static_cast<int>(s.magFilter)},
+            {"minFilter",      static_cast<int>(s.minFilter)},
+            {"mipmapMode",     static_cast<int>(s.mipmapMode)},
+            {"addressModeU",   static_cast<int>(s.addressModeU)},
+            {"addressModeV",   static_cast<int>(s.addressModeV)},
+            {"addressModeW",   static_cast<int>(s.addressModeW)},
+            {"mipLodBias",     s.mipLodBias},
+            {"minLod",         s.minLod},
+            {"maxLod",         s.maxLod},
+            {"anisotropyEnable", s.anisotropyEnable},
+            {"maxAnisotropy",  s.maxAnisotropy},
+        };
+    }
+
     return j;
 }
 
@@ -101,6 +119,27 @@ Material DeserializeMaterial(const nlohmann::json& j, const std::filesystem::pat
     readF4("alphaProperties", p.alphaProperties);
     readF4("physicalProperties", p.physicalProperties);
 
+    if (j.contains("textureRefs")) {
+        for (int i = 0; i < 6; ++i) {
+            mat.textureRefs[i] = TextureID(j["textureRefs"][i].get<uint64_t>());
+        }
+    }
+    if (j.contains("samplerDesc")) {
+        for (int i = 0; i < 6; ++i) {
+            const auto& s = j["samplerDesc"][i];
+            mat.samplerDesc[i].magFilter      = static_cast<VkFilter>(s["magFilter"].get<int>());
+            mat.samplerDesc[i].minFilter      = static_cast<VkFilter>(s["minFilter"].get<int>());
+            mat.samplerDesc[i].mipmapMode     = static_cast<VkSamplerMipmapMode>(s["mipmapMode"].get<int>());
+            mat.samplerDesc[i].addressModeU   = static_cast<VkSamplerAddressMode>(s["addressModeU"].get<int>());
+            mat.samplerDesc[i].addressModeV   = static_cast<VkSamplerAddressMode>(s["addressModeV"].get<int>());
+            mat.samplerDesc[i].addressModeW   = static_cast<VkSamplerAddressMode>(s["addressModeW"].get<int>());
+            mat.samplerDesc[i].mipLodBias     = s["mipLodBias"].get<float>();
+            mat.samplerDesc[i].minLod         = s["minLod"].get<float>();
+            mat.samplerDesc[i].maxLod         = s["maxLod"].get<float>();
+            mat.samplerDesc[i].anisotropyEnable = s["anisotropyEnable"].get<uint32_t>();
+            mat.samplerDesc[i].maxAnisotropy  = s["maxAnisotropy"].get<float>();
+        }
+    }
 
     mat.immutable = false;
     mat.sourcePath = sourcePath;
