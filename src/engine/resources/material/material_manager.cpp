@@ -189,7 +189,8 @@ void MaterialManager::ProcessRetirements()
 
 void MaterialManager::UpdateMutableMaterial(MaterialID id, const Material& newMat, bool bSerialize)
 {
-    // todo if this is done at runtime, this needs to NOT serialize. For PIE, mutables should be loaded from disk (update still dont serialize, but with the data from the .wmaterials on disk)
+    // todo: snapshot and restore for PIE materials
+    // todo if this is done at runtime, this needs to NOT serialize.
     auto it = materials.find(id);
     if (it == materials.end()) return;
 

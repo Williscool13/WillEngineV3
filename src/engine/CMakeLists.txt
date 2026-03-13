@@ -19,9 +19,7 @@ add_library(engine STATIC
         logging/engine_log.h
         logging/log_category.cpp
         logging/log_category.h
-        core/material_id.cpp
         core/material_id.h
-        core/texture_id.cpp
         core/texture_id.h
         core/sampler_id.h
         resources/material/material.cpp

@@ -964,7 +964,70 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
                 ImGui::Text("ID: %llu", id.id);
                 ImGui::EndDisabled();
 
-                // todo: add modifying material
+                Engine::Material editMat = mat;
+                MaterialProperties& props = editMat.props;
+                bool changed = false;
+
+                ImGui::SeparatorText("Base");
+                changed |= ImGui::ColorEdit4("Color Factor", &props.colorFactor.x);
+                changed |= ImGui::SliderFloat("Metallic", &props.metalRoughFactors.x, 0.0f, 1.0f);
+                changed |= ImGui::SliderFloat("Roughness", &props.metalRoughFactors.y, 0.0f, 1.0f);
+
+                ImGui::SeparatorText("Emissive");
+                changed |= ImGui::ColorEdit3("Emissive Color", &props.emissiveFactor.x);
+                changed |= ImGui::DragFloat("Emissive Strength", &props.emissiveFactor.w, 0.01f, 0.0f, 100.0f);
+
+                ImGui::SeparatorText("Alpha");
+                const char* alphaModes[] = {"Opaque", "Mask", "Blend"};
+                int alphaMode = static_cast<int>(props.alphaProperties.y);
+                if (ImGui::Combo("Alpha Mode", &alphaMode, alphaModes, 3)) {
+                    props.alphaProperties.y = static_cast<float>(alphaMode);
+                    changed = true;
+                }
+                if (alphaMode == 1) {
+                    changed |= ImGui::SliderFloat("Alpha Cutoff", &props.alphaProperties.x, 0.0f, 1.0f);
+                }
+                bool doubleSided = props.alphaProperties.z > 0.5f;
+                if (ImGui::Checkbox("Double Sided", &doubleSided)) {
+                    props.alphaProperties.z = doubleSided ? 1.0f : 0.0f;
+                    changed = true;
+                }
+                bool unlit = props.alphaProperties.w > 0.5f;
+                if (ImGui::Checkbox("Unlit", &unlit)) {
+                    props.alphaProperties.w = unlit ? 1.0f : 0.0f;
+                    changed = true;
+                }
+
+                ImGui::SeparatorText("Physical");
+                changed |= ImGui::SliderFloat("IOR", &props.physicalProperties.x, 1.0f, 3.0f);
+                changed |= ImGui::SliderFloat("Normal Intensity", &props.physicalProperties.z, 0.0f, 2.0f);
+                changed |= ImGui::SliderFloat("Occlusion Strength", &props.physicalProperties.w, 0.0f, 1.0f);
+
+                if (ImGui::TreeNode("UV Transforms")) {
+                    ImGui::SeparatorText("Color");
+                    changed |= ImGui::DragFloat2("Scale##color_uv", &props.colorUvTransform.x, 0.01f);
+                    changed |= ImGui::DragFloat2("Offset##color_uv", &props.colorUvTransform.z, 0.01f);
+                    ImGui::SeparatorText("Metal/Rough");
+                    changed |= ImGui::DragFloat2("Scale##mr_uv", &props.metalRoughUvTransform.x, 0.01f);
+                    changed |= ImGui::DragFloat2("Offset##mr_uv", &props.metalRoughUvTransform.z, 0.01f);
+                    ImGui::SeparatorText("Normal");
+                    changed |= ImGui::DragFloat2("Scale##normal_uv", &props.normalUvTransform.x, 0.01f);
+                    changed |= ImGui::DragFloat2("Offset##normal_uv", &props.normalUvTransform.z, 0.01f);
+                    ImGui::SeparatorText("Emissive");
+                    changed |= ImGui::DragFloat2("Scale##emissive_uv", &props.emissiveUvTransform.x, 0.01f);
+                    changed |= ImGui::DragFloat2("Offset##emissive_uv", &props.emissiveUvTransform.z, 0.01f);
+                    ImGui::SeparatorText("Occlusion");
+                    changed |= ImGui::DragFloat2("Scale##occlusion_uv", &props.occlusionUvTransform.x, 0.01f);
+                    changed |= ImGui::DragFloat2("Offset##occlusion_uv", &props.occlusionUvTransform.z, 0.01f);
+                    ImGui::TreePop();
+                }
+
+                ImGui::SeparatorText("Textures");
+                ImGui::TextDisabled("(todo)");
+
+                if (changed) {
+                    materialManager->UpdateMutableMaterial(id, editMat, true);
+                }
             }
             ImGui::PopID();
         }
