@@ -29,6 +29,7 @@ struct RenderTransformComponent
 struct PrimitiveData
 {
     uint32_t primitiveIndex;
+    int32_t originalMaterialIndex;
     Engine::MaterialID materialID;
 };
 
@@ -41,7 +42,7 @@ struct StaticMeshComponent
 
     StringID modelId{StringID::Invalid};
     int32_t meshIndex{-1};
-    std::array<Engine::MaterialID, 128> primitiveMaterialOverrides{};
+    std::array<Engine::MaterialID, 128> materialOverrides{};
 
     // Transient
     Engine::StaticModelHandle modelHandle{};

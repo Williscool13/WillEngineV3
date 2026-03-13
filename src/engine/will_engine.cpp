@@ -804,6 +804,7 @@ void WillEngine::Run()
         ResolveLoadResult loadCounts = assetManager->ResolveLoads(stagingFrameBuffer);
         assetManager->ResolveUnloads();
 #if WILL_EDITOR
+        materialManager->Scan();
         assetManager->Scan();
 #endif
 

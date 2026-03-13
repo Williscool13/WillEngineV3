@@ -120,7 +120,7 @@ FragmentOutput FragmentMain(VertexOutput vertexInput, uniform BaseMeshShadingPus
     float3 viewNormal = normalize(vertexInput.viewNormal);
 
     FragmentOutput output;
-    output.albedo = albedoSample;
+    output.albedo = albedo;
     output.normal = float4(viewNormal * 0.5 + 0.5, 1.0); // add normal texture
     // output.pbr = float4(material.metalRoughFactors.x, material.metalRoughFactors.y, 0.0, 0.0); // add pbr texture
     output.pbr = float4(0.0f, material.metalRoughFactors.y, 0.0, 0.0); // add pbr texture. For proper metallic response please

@@ -32,9 +32,7 @@ public:
 
     MaterialID CreateImmutableMaterial(const Material& mat);
 
-    MaterialID CreateMutableMaterial(const std::filesystem::path& src, std::string_view name, StringID materialID, const MaterialProperties& props);
-
-    void UpdateMutableMaterial(MaterialID id, const MaterialProperties& props);
+    void UpdateMutableMaterial(MaterialID id, const Material& material);
 
     MaterialID FindMutableMaterial(StringID name) const;
 
@@ -44,17 +42,22 @@ public:
 
     void ProcessRetirements();
 
-    void SaveMutableMaterials() const;
+    void CreateMaterial(std::string_view name);
+
+    void Scan();
 
     void LoadMutableMaterials();
 
     [[nodiscard]] MaterialID GetDefaultMaterial() const { return defaultMaterial; }
+    [[nodiscard]] bool DoesMutableMaterialExist(MaterialID materialID) const { return materials.contains(materialID); }
     [[nodiscard]] const MaterialProperties& GetDefaultMaterialProperties() const { return materials.at(defaultMaterial).props; }
     [[nodiscard]] const std::unordered_map<MaterialID, uint32_t>& GetIdToEntryMap() const { return idToEntryMap; }
 
     [[nodiscard]] MaterialProperties GetProperties(MaterialID id) const;
 
     [[nodiscard]] const Material* GetMaterial(MaterialID id) const;
+
+    [[nodiscard]] const std::unordered_map<MaterialID, Material>& GetMaterials() const { return materials; }
 
     [[nodiscard]] const std::array<MaterialEntry, Render::BINDLESS_MATERIAL_BUFFER_COUNT>& GetActiveMaterials() const { return activeMaterialBuffer; }
 

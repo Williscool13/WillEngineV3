@@ -1,5 +1,5 @@
 @echo off
-cmake --build cmake-build-development-visual-studio --target will-engine_shaders
+REM cmake --build cmake-build-development-visual-studio --target will-engine_shaders
 cmake --build cmake-build-debug-visual-studio --target will-engine_shaders
 
 REM COMPILE SHADER INTEROP FILES

@@ -34,16 +34,32 @@ void SerializeComponent<Component::StaticMeshComponent>(const Component::StaticM
 {
     json["meshIndex"] = comp.meshIndex;
     json["modelId"] = comp.modelId.id;
+
+    nlohmann::json overrides = nlohmann::json::object();
+    for (int32_t i = 0; i < 128; ++i) {
+        if (comp.materialOverrides[i].IsValid()) {
+            overrides[std::to_string(i)] = comp.materialOverrides[i].id;
+        }
+    }
+    if (!overrides.empty()) {
+        json["materialOverrides"] = std::move(overrides);
+    }
 }
 
 template<>
 void DeserializeComponent<Component::StaticMeshComponent>(Component::StaticMeshComponent& comp, const nlohmann::json& json)
 {
-    const auto& mi = json["meshIndex"];
-    comp.meshIndex = mi.get<int32_t>();
+    comp.meshIndex = json["meshIndex"].get<int32_t>();
+    comp.modelId = StringID(json["modelId"].get<uint64_t>());
 
-    const auto& mdi = json["modelId"];
-    comp.modelId = StringID(mdi.get<uint64_t>());
+    if (json.contains("materialOverrides")) {
+        for (const auto& [key, val] : json["materialOverrides"].items()) {
+            int32_t idx = std::stoi(key);
+            if (idx >= 0 && idx < 128) {
+                comp.materialOverrides[idx] = Engine::MaterialID(val.get<uint64_t>());
+            }
+        }
+    }
 }
 }
 
@@ -142,7 +158,7 @@ ComponentEditorResult DrawComponentEditor<Component::StaticMeshComponent>(Compon
         }
 
         ImGui::Text("Mesh Index: %d", component.meshIndex);
-        if (model->modelData.meshes.size() > 1) {
+            if (model->modelData.meshes.size() > 1) {
             if (ImGui::SmallButton("X##deselect_mesh")) {
                 component.meshIndex = -1;
                 component.primitiveCount = 0;
@@ -167,6 +183,79 @@ ComponentEditorResult DrawComponentEditor<Component::StaticMeshComponent>(Compon
                 ImGui::PopID();
             }
             ImGui::TreePop();
+        }
+
+        if (component.primitiveCount > 0) {
+            struct SlotInfo { int32_t origIdx; std::string name; };
+            std::vector<SlotInfo> slots;
+            bool seen[128] = {};
+            for (uint8_t i = 0; i < component.primitiveCount; ++i) {
+                int32_t idx = component.primitives[i].originalMaterialIndex;
+                if (idx < 0 || idx >= 128 || seen[idx]) continue;
+                seen[idx] = true;
+                std::string slotName;
+                if (idx < static_cast<int32_t>(model->modelData.materials.size()) &&
+                    !model->modelData.materials[idx].name.empty()) {
+                    slotName = model->modelData.materials[idx].name;
+                } else {
+                    slotName = fmt::format("Material {}", idx);
+                }
+                slots.push_back({idx, std::move(slotName)});
+            }
+
+            if (!slots.empty() && ImGui::TreeNode("Material Overrides")) {
+                const auto& allMaterials = ctx->materialManager->GetMaterials();
+                int32_t pendingChangeIdx = -1;
+                Engine::MaterialID pendingChangeMat{};
+
+                for (const auto& slot : slots) {
+                    ImGui::PushID(slot.origIdx);
+
+                    Engine::MaterialID current = component.materialOverrides[slot.origIdx];
+                    const char* currentLabel = "(original)";
+                    if (current.IsValid()) {
+                        if (const Engine::Material* m = ctx->materialManager->GetMaterial(current)) {
+                            currentLabel = m->name.c_str();
+                        }
+                    }
+
+                    ImGui::Text("%s", slot.name.c_str());
+                    ImGui::SameLine();
+
+                    if (ImGui::BeginCombo("##override", currentLabel)) {
+                        if (ImGui::Selectable("(original)", !current.IsValid())) {
+                            if (current.IsValid()) {
+                                pendingChangeIdx = slot.origIdx;
+                                pendingChangeMat = Engine::MaterialID::INVALID;
+                            }
+                        }
+                        for (const auto& [matId, mat] : allMaterials) {
+                            if (mat.immutable) continue;
+                            if (ImGui::Selectable(mat.name.c_str(), matId == current)) {
+                                if (matId != current) {
+                                    pendingChangeIdx = slot.origIdx;
+                                    pendingChangeMat = matId;
+                                }
+                            }
+                        }
+                        ImGui::EndCombo();
+                    }
+
+                    ImGui::PopID();
+                }
+
+                if (pendingChangeIdx >= 0) {
+                    for (uint8_t k = 0; k < component.primitiveCount; ++k) {
+                        ctx->materialManager->ReleaseMaterial(component.primitives[k].materialID);
+                    }
+                    component.primitiveCount = 0;
+                    component.materialOverrides[pendingChangeIdx] = pendingChangeMat;
+                    registry.emplace_or_replace<Component::StaticMeshLoadingTag>(entity);
+                    state->bPendingModelResolve |= true;
+                }
+
+                ImGui::TreePop();
+            }
         }
     }
 

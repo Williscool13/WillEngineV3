@@ -25,7 +25,7 @@ void ResolveStaticMeshLoads(Core::EngineContext* ctx, Engine::GameState* state)
     for (auto [entity, meshComponent] : state->registry.view<Component::StaticMeshComponent, Component::StaticMeshLoadingTag>().each()) {
         auto model = ctx->assetManager->GetModel(meshComponent.modelHandle);
         if (!model) {
-            LOG_ERROR(Game, "Model ({}) is not in the asset manager, it should have been requested to load during scene load.", model->modelId.ToString());
+            LOG_ERROR(Game, "Model ({}) is not in the asset manager, it should have been requested to load during scene load.", meshComponent.modelHandle.index);
             continue;
         }
         if (model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
@@ -50,11 +50,23 @@ void ResolveStaticMeshLoads(Core::EngineContext* ctx, Engine::GameState* state)
                 matID = materialManager->GetDefaultMaterial();
             }
             else {
-                matID = materialManager->CreateImmutableMaterial(model->modelData.materials[primitive.materialIndex]);
+                Engine::MaterialID materialOverride = meshComponent.materialOverrides[primitive.materialIndex];
+                if (materialOverride.IsValid()) {
+                    if (materialManager->DoesMutableMaterialExist(materialOverride)) {
+                        matID = materialOverride;
+                    } else {
+                        matID = materialManager->CreateImmutableMaterial(model->modelData.materials[primitive.materialIndex]);
+                        LOG_WARN(Engine, "Mesh was resolved with a material override that does not exist in the registry.");
+                    }
+                }
+                 else {
+                    matID = materialManager->CreateImmutableMaterial(model->modelData.materials[primitive.materialIndex]);
+                }
             }
 
             meshComponent.primitives[j] = {
                 .primitiveIndex = primitive.index,
+                .originalMaterialIndex = primitive.materialIndex,
                 .materialID = matID
             };
             materialManager->AcquireMaterial(matID);

@@ -713,7 +713,6 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
         }
     }
 
-
     if (ImGui::Begin("Post-Processing")) {
         constexpr Core::PostProcessConfiguration defaultPP{};
         if (ImGui::Button("Reset All to Defaults")) {
@@ -932,25 +931,35 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
     ImGui::End();
 
     if (ImGui::Begin("Materials")) {
-        /*Engine::MaterialManager* materialManager = ctx->materialManager;
-        const auto& mutableMaterials = materialManager->GetActiveMaterials();
+        Engine::MaterialManager* materialManager = ctx->materialManager;
 
-        if (ImGui::Button("New Material")) {
-            // todo
+        static char newMatName[128] = "new_material";
+        ImGui::SetNextItemWidth(200.0f);
+        ImGui::InputText("##matname", newMatName, sizeof(newMatName));
+        ImGui::SameLine();
+        ImGui::BeginDisabled(newMatName[0] == '\0');
+        if (ImGui::Button("Create Material")) {
+            materialManager->CreateMaterial(newMatName);
         }
+        ImGui::EndDisabled();
 
-        ImGui::SeparatorText(fmt::format("Materials ({})", mutableMaterials.size()).c_str());
+        const auto& allMaterials = materialManager->GetMaterials();
+        int32_t mutableCount = 0;
+        for (const auto& [id, mat] : allMaterials) {
+            if (!mat.immutable) ++mutableCount;
+        }
+        ImGui::SeparatorText(fmt::format("Materials ({})", mutableCount).c_str());
 
-        for (auto& [id, mat] : mutableMaterials) {
+        for (const auto& [id, mat] : allMaterials) {
+            if (mat.immutable) continue;
             ImGui::PushID(static_cast<int>(id.id));
             if (ImGui::CollapsingHeader(mat.name.c_str())) {
                 ImGui::BeginDisabled(true);
                 ImGui::Text("ID: %llu", id.id);
                 ImGui::EndDisabled();
-                // todo: material property editors
             }
             ImGui::PopID();
-        }*/
+        }
     }
     ImGui::End();
 

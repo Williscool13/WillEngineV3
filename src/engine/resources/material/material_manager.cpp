@@ -75,23 +75,6 @@ MaterialID MaterialManager::CreateImmutableMaterial(const Material& mat)
     return matId;
 }
 
-MaterialID MaterialManager::CreateMutableMaterial(const std::filesystem::path& src, std::string_view name, StringID pipelineID, const MaterialProperties& props)
-{
-    auto id = MaterialID(mutableIdRng());
-    Material m{};
-    m.name = name;
-    m.id = id;
-    m.props = props;
-    m.sourcePath = src;
-    m.pipelineID = pipelineID;
-    m.immutable = false;
-
-    StringID sid(name.data(), name.size());
-    materials[id] = m;
-    nameToMaterialMap[sid] = id;
-    return id;
-}
-
 
 void MaterialManager::AcquireMaterial(MaterialID materialID)
 {
@@ -203,13 +186,79 @@ void MaterialManager::ProcessRetirements()
 }
 
 
-void MaterialManager::UpdateMutableMaterial(MaterialID id, const MaterialProperties& props)
+void MaterialManager::UpdateMutableMaterial(MaterialID id, const Material& newMat)
 {
-    if (auto it = materials.find(id); it != materials.end()) {
-        it->second.props = props;
+    // todo if this is done at runtime, this needs to NOT serialize. For PIE, mutables should be loaded from disk (update still dont serialize, but with the data from the .wmaterials on disk)
+    auto it = materials.find(id);
+    if (it == materials.end()) return;
+
+    Material& mat = it->second;
+
+    // Save old resolved indices before overwriting props (caller doesn't know bindless indices)
+    const glm::ivec4 oldTexIdx = mat.props.textureImageIndices;
+    const glm::ivec4 oldTexIdx2 = mat.props.textureImageIndices2;
+    const glm::ivec4 oldSamplerIdx = mat.props.textureSamplerIndices;
+    const glm::ivec4 oldSamplerIdx2 = mat.props.textureSamplerIndices2;
+
+    mat.props = newMat.props;
+
+    if (!mat.bIsRuntimeLoaded) {
+        for (int32_t i = 0; i < 6; ++i) {
+            mat.textureRefs[i] = newMat.textureRefs[i];
+            mat.samplerDesc[i] = newMat.samplerDesc[i];
+        }
+        return;
     }
-    // todo: need to unref textures/samplers
-    // todo: then add refs to new textures/samplers
+
+    // Restore old resolved indices as baseline; changed slots will be overwritten below
+    mat.props.textureImageIndices = oldTexIdx;
+    mat.props.textureImageIndices2 = oldTexIdx2;
+    mat.props.textureSamplerIndices = oldSamplerIdx;
+    mat.props.textureSamplerIndices2 = oldSamplerIdx2;
+
+    auto texIdxRef = [&](int32_t slot) -> int32_t& {
+        switch (slot) {
+            case 0: return mat.props.textureImageIndices.x;
+            case 1: return mat.props.textureImageIndices.y;
+            case 2: return mat.props.textureImageIndices.z;
+            case 3: return mat.props.textureImageIndices.w;
+            case 4: return mat.props.textureImageIndices2.x;
+            default: return mat.props.textureImageIndices2.y;
+        }
+    };
+    auto samplerIdxRef = [&](int32_t slot) -> int32_t& {
+        switch (slot) {
+            case 0: return mat.props.textureSamplerIndices.x;
+            case 1: return mat.props.textureSamplerIndices.y;
+            case 2: return mat.props.textureSamplerIndices.z;
+            case 3: return mat.props.textureSamplerIndices.w;
+            case 4: return mat.props.textureSamplerIndices2.x;
+            default: return mat.props.textureSamplerIndices2.y;
+        }
+    };
+
+    for (int32_t i = 0; i < 6; ++i) {
+        if (mat.textureRefs[i] != newMat.textureRefs[i]) {
+            if (mat.textureRefs[i].IsValid()) {
+                assetManager->UnloadTexture(mat.textureRefs[i]);
+            }
+            mat.textureRefs[i] = newMat.textureRefs[i];
+            Texture* tex = newMat.textureRefs[i].IsValid() ? assetManager->LoadTexture(newMat.textureRefs[i]) : nullptr;
+            texIdxRef(i) = tex ? static_cast<int32_t>(tex->bindlessHandle.index) : WHITE_IMAGE_BINDLESS_INDEX;
+        }
+
+        if (mat.samplerDesc[i] != newMat.samplerDesc[i]) {
+            assetManager->UnloadSampler(mat.samplerDesc[i]);
+            mat.samplerDesc[i] = newMat.samplerDesc[i];
+            Sampler* s = assetManager->LoadSampler(mat.samplerDesc[i]);
+            samplerIdxRef(i) = s ? static_cast<int32_t>(s->bindlessHandle.index) : ASSET_SAMPLER_BINDLESS_INDEX;
+        }
+    }
+
+    nlohmann::json j = SerializeMaterial(mat);
+    j["version"] = WMATERIAL_VERSION;
+    std::ofstream file(mat.sourcePath);
+    file << j.dump(4);
 }
 
 MaterialID MaterialManager::FindMutableMaterial(StringID name) const
@@ -236,14 +285,47 @@ MaterialProperties MaterialManager::GetProperties(MaterialID id) const
     return {};
 }
 
-void MaterialManager::SaveMutableMaterials() const
+void MaterialManager::CreateMaterial(std::string_view name)
 {
-    for (const auto& [id, mat] : materials) {
-        if (mat.immutable) { continue; }
-        nlohmann::json j = SerializeMaterial(mat);
-        j["version"] = WMATERIAL_VERSION;
-        std::ofstream file(mat.sourcePath);
-        file << j.dump(4);
+    std::filesystem::path matDir = Platform::GetAssetPath() / "materials";
+    std::filesystem::create_directories(matDir);
+    std::filesystem::path matPath = matDir / (std::string(name) + ".wmaterial");
+
+    Material mat{};
+    mat.name = std::string(name);
+    mat.id = MaterialID{mutableIdRng()};
+    mat.props = GetDefaultMaterialProperties();
+    mat.props.colorFactor = {1.0f, 0.0f, 0.0f, 1.0f};
+    mat.sourcePath = matPath;
+
+    nlohmann::json j = SerializeMaterial(mat);
+    j["version"] = WMATERIAL_VERSION;
+    std::ofstream file(matPath);
+    file << j.dump(4);
+
+    ctx->bShouldRescanResources.store(true, std::memory_order_release);
+}
+
+void MaterialManager::Scan()
+{
+    if (!ctx->bShouldRescanResources.load(std::memory_order_acquire)) { return; }
+
+    std::filesystem::path assetPath = Platform::GetAssetPath();
+    for (const auto& entry : std::filesystem::recursive_directory_iterator(assetPath)) {
+        if (entry.path().extension() != ".wmaterial") { continue; }
+
+        std::ifstream file(entry.path());
+        nlohmann::json j = nlohmann::json::parse(file);
+
+        int32_t version = j.value("version", 0);
+        if (version != WMATERIAL_VERSION) { continue; }
+
+        Material mat = DeserializeMaterial(j, entry.path());
+        StringID sid(mat.name.data(), mat.name.size());
+        if (nameToMaterialMap.contains(sid)) { continue; }
+
+        materials[mat.id] = mat;
+        nameToMaterialMap[sid] = mat.id;
     }
 }
 

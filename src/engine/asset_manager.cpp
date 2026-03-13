@@ -444,6 +444,8 @@ void AssetManager::UnloadSampler(SamplerDesc& desc)
     Sampler& sampler = samplers[handle.index];
     sampler.refCount--;
 
+    LOG_TRACE(Asset, "Sampler refCount decremented: {}, refCount: {}", sampler.id.id, sampler.refCount);
+
     if (sampler.refCount == 0) {
         sampler.retireFrame = ctx->currentFrame + Core::FRAME_BUFFER_COUNT + 1;
     }
