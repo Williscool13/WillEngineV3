@@ -85,10 +85,7 @@ struct EngineContext
     const char* (*resolveStringIdFn)(uint64_t);
     std::function<void(bool)> setCursorHiddenFn;
 
-    std::atomic<bool> bShouldRescanTextures{false};
-    std::atomic<bool> bShouldRescanMaterials{false};
-    std::atomic<bool> bShouldRescanModels{false};
-
+    std::atomic<bool> bShouldRescanResources{false};
 };
 } // Core
 

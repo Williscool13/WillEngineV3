@@ -267,7 +267,7 @@ void AssetGenerator::OnModelGenerateComplete(bool success, ModelGenerateSlotHand
     bool removed = modelGenerateAllocator.Remove(slotHandle);
     assert(removed && "Failed to remove valid slot handle");
 
-    ctx->bShouldRescanModels.store(true, std::memory_order_release);
+    ctx->bShouldRescanResources.store(true, std::memory_order_release);
 
     workCounter.fetch_add(1);
     wakeCV.notify_one();
@@ -296,7 +296,7 @@ void AssetGenerator::OnTextureGenerateComplete(bool success, TextureGenerateSlot
     bool removed = textureGenerateAllocator.Remove(slotHandle);
     assert(removed && "Failed to remove valid slot handle");
 
-    ctx->bShouldRescanTextures.store(true, std::memory_order_release);
+    ctx->bShouldRescanResources.store(true, std::memory_order_release);
 
     workCounter.fetch_add(1);
     wakeCV.notify_one();

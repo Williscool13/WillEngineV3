@@ -135,6 +135,7 @@ public: // Scenes
     void RegisterScene(const std::filesystem::path& path);
 
 private: // Temporary Asset Registry
+    std::unordered_map<std::string, StringID> modelNameToId;
     std::unordered_map<StringID, std::filesystem::path> modelRegistry;
     std::unordered_map<StringID, CachedModelMetadata> modelMetadataCache;
 

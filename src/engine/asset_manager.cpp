@@ -15,40 +15,13 @@ namespace Engine
 AssetManager::AssetManager(Core::EngineContext* ctx, AssetLoad::AsyncAssetLoadManager* assetLoadManager, Render::ResourceManager* resourceManager)
     : ctx(ctx), assetLoadManager(assetLoadManager), resourceManager(resourceManager)
 {
+#if WILL_EDITOR
     // Creates white/error if they don't exist.
     Editor::CreateCriticalEngineResources();
+#endif
 
-    std::filesystem::path assetPath = Platform::GetAssetPath();
-    if (std::filesystem::exists(assetPath)) {
-        for (const auto& entry : std::filesystem::recursive_directory_iterator(assetPath)) {
-            const auto& path = entry.path();
-            const auto ext = path.extension();
-
-            if (ext == ".wtexture") {
-                auto header = ReadWTextureHeader(path);
-                if (!header) { continue; }
-                TextureID id{header->textureId};
-                const std::string name{header->name};
-                assert(!textureNameToId.contains(name) && "Duplicate .wtexture name detected");
-                textureRegistry[id] = path;
-                textureNameToId[name] = id;
-            }
-            else if (ext == ".wsmesh") {
-                auto info = ReadWStaticModelInfo(path);
-                if (!info) { continue; }
-                const std::string stem = path.stem().string();
-                StringID id{stem.c_str(), stem.size()};
-                modelRegistry[id] = path;
-                CachedModelMetadata& cached = modelMetadataCache[id];
-                cached.nodeCount = info->header.nodeCount;
-                cached.meshNodesCount = info->header.meshNodeCount;
-                cached.nodes = std::move(info->nodes);
-            }
-            else if (ext == ".wscene") {
-                RegisterScene(path);
-            }
-        }
-    }
+    ctx->bShouldRescanResources = true;
+    Scan();
 
     Texture* whiteTex = LoadTexture(FindTextureByName("engine_default_white"));
     assert(whiteTex && whiteTex->bindlessHandle.index == WHITE_IMAGE_BINDLESS_INDEX);
@@ -85,6 +58,7 @@ AssetManager::AssetManager(Core::EngineContext* ctx, AssetLoad::AsyncAssetLoadMa
     Sampler* defaultSampler = LoadSampler(defaultSamplerDesc);
     assert(defaultSampler && defaultSampler->bindlessHandle.index == ASSET_SAMPLER_BINDLESS_INDEX);
 
+    std::filesystem::path assetPath = Platform::GetAssetPath();
     cubemapRegistry["kloofendal"_sid] = assetPath / "environment-map/kloofendal_48d_partly_cloudy_puresky_4k.ktx2";
 }
 
@@ -275,45 +249,48 @@ void AssetManager::ResolveUnloads()
 
 void AssetManager::Scan()
 {
-    bool expectedModels = true;
-    if (ctx->bShouldRescanModels.compare_exchange_strong(expectedModels, false, std::memory_order::acq_rel, std::memory_order::relaxed)) {
+    bool expectedRescan = true;
+    if (ctx->bShouldRescanResources.compare_exchange_strong(expectedRescan, false, std::memory_order::acq_rel, std::memory_order::relaxed)) {
         std::filesystem::path assetPath = Platform::GetAssetPath();
         if (std::filesystem::exists(assetPath)) {
             for (const auto& entry : std::filesystem::recursive_directory_iterator(assetPath)) {
-                if (entry.path().extension() != ".wsmesh") { continue; }
-                const std::filesystem::path& path = entry.path();
-                const std::string stem = path.stem().string();
-                StringID id{stem.c_str(), stem.size()};
-                if (modelRegistry.contains(id)) { continue; }
+                const auto& path = entry.path();
+                const auto ext = path.extension();
 
-                auto info = ReadWStaticModelInfo(path);
-                if (!info) { continue; }
+                if (ext == ".wtexture") {
+                    auto header = ReadWTextureHeader(path);
+                    if (!header) { continue; }
+                    TextureID id{header->textureId};
+                    const std::string name{header->name};
+                    if (textureNameToId.contains(name)) {
+                        auto pathName = path.string();
+                        LOG_CRITICAL(Asset, "2 Textures were mounted that contain the same name. This will cause issues for texture lookups by name. ({})", pathName);
+                    }
+                    textureRegistry[id] = path;
+                    textureNameToId[name] = id;
+                }
+                else if (ext == ".wsmesh") {
+                    auto info = ReadWStaticModelInfo(path);
+                    if (!info) { continue; }
+                    const std::string stem = path.stem().string();
+                    StringID id{stem.c_str(), stem.size()};
 
-                modelRegistry[id] = path;
-                CachedModelMetadata& cached = modelMetadataCache[id];
-                cached.nodeCount = info->header.nodeCount;
-                cached.meshNodesCount = info->header.meshNodeCount;
-                cached.nodes = std::move(info->nodes);
-            }
-        }
-    }
+                    std::string name{info->header.name};
+                    if (modelNameToId.contains(name)) {
+                        auto pathName = path.string();
+                        LOG_CRITICAL(Asset, "2 Models were mounted that contain the same name. This will cause issues for model lookups by name. ({})", pathName);
+                    }
 
-    bool expected = true;
-    if (ctx->bShouldRescanTextures.compare_exchange_strong(expected, false, std::memory_order::acq_rel, std::memory_order::relaxed)) {
-        std::filesystem::path assetPath = Platform::GetAssetPath();
-        if (std::filesystem::exists(assetPath)) {
-            for (const auto& entry : std::filesystem::recursive_directory_iterator(assetPath)) {
-                if (entry.path().extension() != ".wtexture") { continue; }
-                auto header = ReadWTextureHeader(entry.path());
-                if (!header) { continue; }
-                TextureID id{header->textureId};
-                const std::string name{header->name};
-
-                if (textureRegistry.contains(id) || textureNameToId.contains(name)) { continue; }
-
-                assert(!textureNameToId.contains(name) && "Duplicate .wtexture name detected");
-                textureRegistry[id] = entry.path();
-                textureNameToId[name] = id;
+                    modelRegistry[id] = path;
+                    modelNameToId[name] = id;
+                    CachedModelMetadata& cached = modelMetadataCache[id];
+                    cached.nodeCount = info->header.nodeCount;
+                    cached.meshNodesCount = info->header.meshNodeCount;
+                    cached.nodes = std::move(info->nodes);
+                }
+                else if (ext == ".wscene") {
+                    RegisterScene(path);
+                }
             }
         }
     }
