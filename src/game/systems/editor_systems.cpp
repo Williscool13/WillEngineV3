@@ -937,11 +937,17 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
         ImGui::SetNextItemWidth(200.0f);
         ImGui::InputText("##matname", newMatName, sizeof(newMatName));
         ImGui::SameLine();
-        ImGui::BeginDisabled(newMatName[0] == '\0');
+        const bool nameEmpty = newMatName[0] == '\0';
+        const bool nameExists = !nameEmpty && materialManager->FindMutableMaterial(StringID{newMatName, strlen(newMatName)}).IsValid();
+        ImGui::BeginDisabled(nameEmpty || nameExists);
         if (ImGui::Button("Create Material")) {
             materialManager->CreateMaterial(newMatName);
         }
         ImGui::EndDisabled();
+        if (nameExists) {
+            ImGui::SameLine();
+            ImGui::TextColored({1.0f, 0.3f, 0.3f, 1.0f}, "already exists");
+        }
 
         const auto& allMaterials = materialManager->GetMaterials();
         int32_t mutableCount = 0;

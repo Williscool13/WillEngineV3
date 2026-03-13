@@ -8,6 +8,7 @@
 
 #include <json/nlohmann/json.hpp>
 
+#include "material_format.h"
 #include "core/include/engine_context.h"
 #include "core/include/render_interface.h"
 #include "engine/logging/engine_log.h"
@@ -255,10 +256,15 @@ void MaterialManager::UpdateMutableMaterial(MaterialID id, const Material& newMa
         }
     }
 
-    nlohmann::json j = SerializeMaterial(mat);
-    j["version"] = WMATERIAL_VERSION;
+    WMaterialHeader header{};
+    header.materialId = mat.id.id;
+    const auto nameLen = std::min(mat.name.size(), WMATERIAL_NAME_LENGTH - 1);
+    memcpy(header.name, mat.name.c_str(), nameLen);
+    header.name[nameLen] = '\0';
+
     std::ofstream file(mat.sourcePath);
-    file << j.dump(4);
+    WriteWMaterialHeader(file, header);
+    file << SerializeMaterial(mat).dump(4);
 }
 
 MaterialID MaterialManager::FindMutableMaterial(StringID name) const
@@ -295,37 +301,42 @@ void MaterialManager::CreateMaterial(std::string_view name)
     mat.name = std::string(name);
     mat.id = MaterialID{mutableIdRng()};
     mat.props = GetDefaultMaterialProperties();
-    mat.props.colorFactor = {1.0f, 0.0f, 0.0f, 1.0f};
+    std::uniform_real_distribution dist(0.0f, 1.0f);
+    mat.props.colorFactor = {dist(mutableIdRng), dist(mutableIdRng), dist(mutableIdRng), 1.0f}; // todo
     mat.sourcePath = matPath;
 
-    nlohmann::json j = SerializeMaterial(mat);
-    j["version"] = WMATERIAL_VERSION;
-    std::ofstream file(matPath);
-    file << j.dump(4);
+    WMaterialHeader header{};
+    header.materialId = mat.id.id;
+    const auto nameLen = std::min(name.size(), WMATERIAL_NAME_LENGTH - 1);
+    memcpy(header.name, name.data(), nameLen);
+    header.name[nameLen] = '\0';
 
-    ctx->bShouldRescanResources.store(true, std::memory_order_release);
+    std::ofstream file(matPath);
+    WriteWMaterialHeader(file, header);
+    file << SerializeMaterial(mat).dump(4);
+
+    ctx->bShouldRescanMaterials.store(true, std::memory_order_release);
 }
 
 void MaterialManager::Scan()
 {
-    if (!ctx->bShouldRescanResources.load(std::memory_order_acquire)) { return; }
+    bool expectedRescan = true;
+    if (ctx->bShouldRescanMaterials.compare_exchange_strong(expectedRescan, false, std::memory_order::acq_rel, std::memory_order::relaxed)) {
+        std::filesystem::path assetPath = Platform::GetAssetPath();
+        for (const auto& entry : std::filesystem::recursive_directory_iterator(assetPath)) {
+            if (entry.path().extension() != ".wmaterial") { continue; }
 
-    std::filesystem::path assetPath = Platform::GetAssetPath();
-    for (const auto& entry : std::filesystem::recursive_directory_iterator(assetPath)) {
-        if (entry.path().extension() != ".wmaterial") { continue; }
+            std::ifstream file(entry.path());
+            auto header = ReadWMaterialHeader(file);
+            if (!header) { continue; }
 
-        std::ifstream file(entry.path());
-        nlohmann::json j = nlohmann::json::parse(file);
+            StringID sid(header->name, strnlen(header->name, WMATERIAL_NAME_LENGTH));
+            if (nameToMaterialMap.contains(sid)) { continue; }
 
-        int32_t version = j.value("version", 0);
-        if (version != WMATERIAL_VERSION) { continue; }
-
-        Material mat = DeserializeMaterial(j, entry.path());
-        StringID sid(mat.name.data(), mat.name.size());
-        if (nameToMaterialMap.contains(sid)) { continue; }
-
-        materials[mat.id] = mat;
-        nameToMaterialMap[sid] = mat.id;
+            Material mat = DeserializeMaterial(nlohmann::json::parse(file), entry.path());
+            materials[mat.id] = mat;
+            nameToMaterialMap[sid] = mat.id;
+        }
     }
 }
 
@@ -336,15 +347,13 @@ void MaterialManager::LoadMutableMaterials()
         if (entry.path().extension() != ".wmaterial") { continue; }
 
         std::ifstream file(entry.path());
-        nlohmann::json j = nlohmann::json::parse(file);
-
-        int32_t version = j.value("version", 0);
-        if (version != WMATERIAL_VERSION) {
-            spdlog::warn("Skipping {} — version mismatch (got {}, expected {})", entry.path().string(), version, WMATERIAL_VERSION);
+        auto header = ReadWMaterialHeader(file);
+        if (!header) {
+            spdlog::warn("Skipping {} — missing or invalid wmaterial header", entry.path().string());
             continue;
         }
 
-        Material mat = DeserializeMaterial(j, entry.path());
+        Material mat = DeserializeMaterial(nlohmann::json::parse(file), entry.path());
         StringID sid(mat.name.data(), mat.name.size());
         materials[mat.id] = mat;
         nameToMaterialMap[sid] = mat.id;

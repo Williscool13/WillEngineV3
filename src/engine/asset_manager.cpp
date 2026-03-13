@@ -267,7 +267,7 @@ void AssetManager::Scan()
                     if (!header) { continue; }
                     TextureID id{header->textureId};
                     const std::string name{header->name};
-                    if (textureNameToId.contains(name)) {
+                    if (textureNameToId.contains(name) && textureNameToId.at(name) != id) {
                         auto pathName = path.string();
                         LOG_CRITICAL(Asset, "2 Textures were mounted that contain the same name. This will cause issues for texture lookups by name. ({})", pathName);
                     }
@@ -288,7 +288,7 @@ void AssetManager::Scan()
                     StringID id{stem.c_str(), stem.size()};
 
                     std::string name{info->header.name};
-                    if (modelNameToId.contains(name)) {
+                    if (modelNameToId.contains(name) && modelNameToId.at(name) != id) {
                         auto pathName = path.string();
                         LOG_CRITICAL(Asset, "2 Models were mounted that contain the same name. This will cause issues for model lookups by name. ({})", pathName);
                     }

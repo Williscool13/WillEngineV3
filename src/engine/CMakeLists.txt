@@ -26,6 +26,8 @@ add_library(engine STATIC
         core/sampler_id.h
         resources/material/material.cpp
         resources/material/material.h
+        resources/material/material_format.cpp
+        resources/material/material_format.h
         resources/texture/texture.h
         resources/texture/texture_format.cpp
         resources/texture/texture_format.h

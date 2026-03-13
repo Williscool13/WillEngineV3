@@ -17,7 +17,6 @@
 
 namespace Engine
 {
-static constexpr int32_t WMATERIAL_VERSION = 1;
 using MaterialEntryHandle = Core::Handle<MaterialProperties>;
 
 struct MaterialEntry

@@ -86,6 +86,7 @@ struct EngineContext
     std::function<void(bool)> setCursorHiddenFn;
 
     std::atomic<bool> bShouldRescanResources{false};
+    std::atomic<bool> bShouldRescanMaterials{false};
 };
 } // Core
 
