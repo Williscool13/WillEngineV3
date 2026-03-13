@@ -17,7 +17,9 @@
 #include "core/input/input_frame.h"
 #include "core/math/constants.h"
 #include "engine/engine_api.h"
-#include "../../engine/resources/material/material_manager.h"
+#include "engine/resources/material/material_manager.h"
+#include "engine/asset_manager.h"
+#include "engine/resources/texture/texture.h"
 #include "game/fwd_components.h"
 #include "game/components/common_components.h"
 #include "game/components/scene_components.h"
@@ -26,8 +28,9 @@ namespace Game
 {
 void EditorUpdate(Core::EngineContext* ctx, Engine::GameState* state)
 {
+    bool popupOpen = ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
     if (state->bIsPlaying) {
-        if (state->inputFrame->GetKey(Key::ESCAPE).pressed) {
+        if (!popupOpen && state->inputFrame->GetKey(Key::ESCAPE).pressed) {
             PlayStop(ctx, state);
         }
         return;
@@ -49,15 +52,15 @@ void EditorUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         }
     }
 
-    if (ctrlHeld && state->inputFrame->GetKey(Key::W).pressed) {
+    if (!popupOpen && ctrlHeld && state->inputFrame->GetKey(Key::W).pressed) {
         state->bWantCopyEntities = true;
     }
 
-    if (state->inputFrame->GetKey(Key::DEL).pressed) {
+    if (!popupOpen && state->inputFrame->GetKey(Key::DEL).pressed) {
         state->bWantDeleteEntities = true;
     }
 
-    if (state->inputFrame->GetKey(Key::ESCAPE).pressed) {
+    if (!popupOpen && state->inputFrame->GetKey(Key::ESCAPE).pressed) {
         state->selectedEntities.clear();
     }
 
@@ -100,6 +103,7 @@ void EditorUpdate(Core::EngineContext* ctx, Engine::GameState* state)
 void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
+    state->texResidency.Tick(ctx);
 
     if (state->bWantDeleteEntities) {
         state->bWantDeleteEntities = false;
@@ -1055,6 +1059,8 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
                     }
 
                     if (ImGui::BeginPopupModal("TextureSelect", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+                        static Engine::TextureID previewId = Engine::TextureID::INVALID;
+
                         ImGui::Text("Slot: %s", slotNames[slot]);
                         ImGui::Separator();
 
@@ -1063,14 +1069,30 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
                             if (ImGui::Selectable("(None)", noneSelected)) {
                                 texEditPending = Engine::TextureID::INVALID;
                             }
-                            std::vector<std::pair<std::string, Engine::TextureID>> sorted(texNameToId.begin(), texNameToId.end());
+                            std::vector<std::pair<std::string, Engine::TextureID> > sorted(texNameToId.begin(), texNameToId.end());
                             std::sort(sorted.begin(), sorted.end());
                             for (const auto& [name, tid] : sorted) {
                                 bool selected = texEditPending == tid;
                                 if (ImGui::Selectable(name.c_str(), selected)) {
                                     texEditPending = tid;
                                 }
-                                // todo: texture preview on hover
+                                if (ImGui::IsItemHovered()) {
+                                    if (previewId != tid) {
+                                        if (previewId.IsValid()) state->texResidency.Release(previewId, ctx);
+                                        previewId = tid;
+                                        // todo: ideally only load the lowest mip for preview
+                                        state->texResidency.Acquire(tid, ctx);
+                                    }
+                                    ImGui::BeginTooltip();
+                                    uint64_t ds = state->texResidency.GetDescSet(tid, ctx);
+                                    if (ds) {
+                                        ImGui::Image(ds, {128.0f, 128.0f});
+                                    }
+                                    else {
+                                        ImGui::Text("Loading...");
+                                    }
+                                    ImGui::EndTooltip();
+                                }
                             }
                         }
                         ImGui::EndChild();
@@ -1079,10 +1101,18 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
                             Engine::Material editMat = mat;
                             editMat.textureRefs[slot] = texEditPending;
                             materialManager->UpdateMutableMaterial(id, editMat, true);
+                            if (previewId.IsValid()) {
+                                state->texResidency.Release(previewId, ctx);
+                                previewId = Engine::TextureID::INVALID;
+                            }
                             ImGui::CloseCurrentPopup();
                         }
                         ImGui::SameLine();
                         if (ImGui::Button("Cancel")) {
+                            if (previewId.IsValid()) {
+                                state->texResidency.Release(previewId, ctx);
+                                previewId = Engine::TextureID::INVALID;
+                            }
                             ImGui::CloseCurrentPopup();
                         }
                         ImGui::EndPopup();

@@ -328,6 +328,20 @@ void TextureLoadSlot::PostUploadSetup()
             .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
         });
 
+#ifdef ENABLE_VULKAN_VALIDATION
+    VkDebugUtilsObjectNameInfoEXT nameInfo{VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT};
+    nameInfo.objectType = VK_OBJECT_TYPE_IMAGE_VIEW;
+    nameInfo.objectHandle = reinterpret_cast<uint64_t>(outputTexture->imageView.handle);
+    nameInfo.pObjectName = outputTexture->name;
+    vkSetDebugUtilsObjectNameEXT(context->device, &nameInfo);
+
+    VkDebugUtilsObjectNameInfoEXT viewNameInfo{VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT};
+    viewNameInfo.objectType = VK_OBJECT_TYPE_IMAGE;
+    viewNameInfo.objectHandle = reinterpret_cast<uint64_t>(outputTexture->image.handle);
+    viewNameInfo.pObjectName = outputTexture->name;
+    vkSetDebugUtilsObjectNameEXT(context->device, &viewNameInfo);
+#endif
+
     if (!updateRes) {
         LOG_ERROR(Asset, "Failed to update bindless texture descriptor");
     }

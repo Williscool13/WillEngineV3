@@ -177,6 +177,15 @@ void RenderThread::RenderFrame(uint32_t currentFrameIndex, RenderSynchronization
     VkCommandBufferBeginInfo beginInfo = VkHelpers::CommandBufferBeginInfo();
     VK_CHECK(vkBeginCommandBuffer(renderSync.commandBuffer, &beginInfo));
 
+#ifdef ENABLE_VULKAN_VALIDATION
+    VkDebugUtilsObjectNameInfoEXT nameInfo{VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT};
+    nameInfo.objectType = VK_OBJECT_TYPE_COMMAND_BUFFER;
+    nameInfo.objectHandle = reinterpret_cast<uint64_t>(renderSync.commandBuffer);
+    std::string cmdBufferName = fmt::format("CommandBuffer {}", frameNumber);
+    nameInfo.pObjectName = cmdBufferName.c_str();
+    vkSetDebugUtilsObjectNameEXT(context->device, &nameInfo);
+#endif
+
     RenderResponse res;
     //
     {
@@ -830,8 +839,8 @@ void RenderThread::ProcessAcquisitions(VkCommandBuffer cmd,
         barrier.srcAccessMask = op.srcAccessMask;
         barrier.dstStageMask = op.dstStageMask;
         barrier.dstAccessMask = op.dstAccessMask;
-        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.srcQueueFamilyIndex = op.srcQueueFamilyIndex;
+        barrier.dstQueueFamilyIndex = op.dstQueueFamilyIndex;
         barrier.buffer = reinterpret_cast<VkBuffer>(op.buffer);
         barrier.offset = op.offset;
         barrier.size = op.size;
@@ -850,8 +859,8 @@ void RenderThread::ProcessAcquisitions(VkCommandBuffer cmd,
         barrier.dstAccessMask = op.dstAccessMask;
         barrier.oldLayout = static_cast<VkImageLayout>(op.oldLayout);
         barrier.newLayout = static_cast<VkImageLayout>(op.newLayout);
-        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.srcQueueFamilyIndex = op.srcQueueFamilyIndex;
+        barrier.dstQueueFamilyIndex = op.dstQueueFamilyIndex;
         barrier.image = reinterpret_cast<VkImage>(op.image);
         barrier.subresourceRange.aspectMask = op.aspectMask;
         barrier.subresourceRange.baseMipLevel = op.baseMipLevel;

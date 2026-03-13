@@ -85,6 +85,11 @@ struct EngineContext
     const char* (*resolveStringIdFn)(uint64_t);
     std::function<void(bool)> setCursorHiddenFn;
 
+    // ImGui texture preview (routed through engine DLL where Vulkan fn ptrs are loaded)
+    // handles are opaque uint64_t (VkSampler, VkImageView, VkDescriptorSet)
+    std::function<uint64_t(uint64_t sampler, uint64_t imageView)> addImguiTextureFn;
+    std::function<void(uint64_t descriptorSet)> removeImguiTextureFn;
+
     std::atomic<bool> bShouldRescanResources{false};
     std::atomic<bool> bShouldRescanMaterials{false};
 };

@@ -26,11 +26,19 @@ struct Texture
         FailedToLoad
     };
 
+    // Transient (Runtime)
+    Render::BindlessTextureHandle bindlessHandle{};
+
+    Render::AllocatedImage image{};
+    Render::ImageView imageView{};
+    Core::ImageAcquireOperation acquireBarrier{};
+
     std::filesystem::path source{};
     char name[WTEXTURE_NAME_LENGTH]{};
     TextureID textureId{};
     TextureHandle selfHandle{TextureHandle::INVALID};
     LoadState loadState{LoadState::NotLoaded};
+    uint64_t acquireFrame{UINT64_MAX};
     uint32_t refCount = 0;
     uint64_t retireFrame = 0;
 
@@ -40,13 +48,6 @@ struct Texture
     uint32_t dataOffset{0};
     uint64_t dataSize{0};
     uint64_t uncompressedSize{0};
-
-    // Transient (Runtime)
-    Render::BindlessTextureHandle bindlessHandle{};
-
-    Render::AllocatedImage image;
-    Render::ImageView imageView;
-    Core::ImageAcquireOperation acquireBarrier{};
 };
 } // Engine
 

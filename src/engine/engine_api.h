@@ -21,10 +21,33 @@ namespace Core
 {
 struct TimeFrame;
 struct InputFrame;
+struct EngineContext;
 }
 
 namespace Engine
 {
+struct Texture;
+struct Sampler;
+
+struct EditorTextureResidency
+{
+    struct Entry
+    {
+        Texture* texture{nullptr};
+        uint64_t descSet{0};
+    };
+
+    Sampler* sampler{nullptr};
+    std::unordered_map<TextureID, Entry> entries;
+    std::vector<std::pair<Entry, uint64_t>> pendingRemoval; // {descSet, freeOnFrame}
+
+    void Tick(Core::EngineContext* ctx);
+    void Acquire(TextureID id, Core::EngineContext* ctx);
+    uint64_t GetDescSet(TextureID id, Core::EngineContext* ctx);
+    void Release(TextureID id, Core::EngineContext* ctx);
+    void ReleaseAll(Core::EngineContext* ctx);
+};
+
 struct GameState
 {
     bool bIsPlaying{false};
@@ -90,6 +113,8 @@ struct GameState
     std::vector<entt::entity> prevSelectedEntities{};
     bool bWantCopyEntities{false};
     bool bWantDeleteEntities{false};
+
+    EditorTextureResidency texResidency{};
 };
 
 class EngineAPI

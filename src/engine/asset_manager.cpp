@@ -170,6 +170,7 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
             complete.model->bufferAcquireOps.clear();
             complete.model->imageAcquireOps.clear();
             complete.model->modelLoadState = StaticModel::ModelLoadState::Loaded;
+            complete.model->acquireFrame = ctx->currentFrame;
             LOG_TRACE(Asset, "Model load succeeded: {}", complete.model->modelId.ToString());
             loadCounts.modelLoadedCount++;
         }
@@ -187,6 +188,7 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
             stagingFrameBuffer.imageAcquireOperations.push_back(textureComplete.texture->acquireBarrier);
 
             textureComplete.texture->loadState = Texture::LoadState::Loaded;
+            textureComplete.texture->acquireFrame = ctx->currentFrame;
             LOG_TRACE(Asset, "Texture load succeeded: {} (bindless index: {})", textureComplete.texture->name, static_cast<uint32_t>(textureComplete.texture->bindlessHandle.index));
             loadCounts.textureLoadedCount++;
         }
@@ -232,6 +234,7 @@ void AssetManager::ResolveUnloads()
     for (auto& texture : textures) {
         if (!textureAllocator.IsValid(texture.selfHandle)) { continue; }
         if (texture.refCount > 0 || texture.retireFrame == 0 || currentFrame < texture.retireFrame) { continue; }
+        if (texture.loadState != Texture::LoadState::Loaded) { continue; }
 
         LOG_TRACE(Asset, "Texture unloaded: {} (bindless index: {})", texture.name, static_cast<uint32_t>(texture.bindlessHandle.index));
         resourceManager->bindlessSamplerTextureDescriptorBuffer.ReleaseTextureBinding(texture.bindlessHandle);
@@ -387,7 +390,7 @@ void AssetManager::UnloadTexture(TextureID id)
     LOG_TRACE(Asset, "Texture refCount decremented: {}, refCount: {}", texture.name, texture.refCount);
 
     if (texture.refCount == 0) {
-        texture.retireFrame = ctx->currentFrame + Core::FRAME_BUFFER_COUNT + 1;
+        texture.retireFrame = ctx->currentFrame + Core::FRAME_BUFFER_COUNT * 4;
     }
 }
 
@@ -449,7 +452,7 @@ void AssetManager::UnloadSampler(SamplerDesc& desc)
     LOG_TRACE(Asset, "Sampler refCount decremented: {}, refCount: {}", sampler.id.id, sampler.refCount);
 
     if (sampler.refCount == 0) {
-        sampler.retireFrame = ctx->currentFrame + Core::FRAME_BUFFER_COUNT + 1;
+        sampler.retireFrame = ctx->currentFrame + Core::FRAME_BUFFER_COUNT * 4;
     }
 }
 

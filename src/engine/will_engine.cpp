@@ -234,6 +234,16 @@ void WillEngine::Initialize(Utils::Logger* logger)
         engineContext->internStringFn = [](uint64_t hash, const char* str) { DBG_InternString(hash, str); };
         engineContext->resolveStringIdFn = [](uint64_t hash) { return DBG_ResolveStringId(hash); };
 #endif
+        engineContext->addImguiTextureFn = [](uint64_t sampler, uint64_t imageView) -> uint64_t {
+            VkDescriptorSet ds = ImGui_ImplVulkan_AddTexture(
+                reinterpret_cast<VkSampler>(sampler),
+                reinterpret_cast<VkImageView>(imageView),
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+            return reinterpret_cast<uint64_t>(ds);
+        };
+        engineContext->removeImguiTextureFn = [](uint64_t descriptorSet) {
+            ImGui_ImplVulkan_RemoveTexture(reinterpret_cast<VkDescriptorSet>(descriptorSet));
+        };
     }
     //
     {

@@ -128,6 +128,7 @@ AllocatedImage& AllocatedImage::operator=(AllocatedImage&& other) noexcept
             handle = VK_NULL_HANDLE;
             allocation = VK_NULL_HANDLE;
         }
+
         extent = {};
         format = VK_FORMAT_UNDEFINED;
         layout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -140,6 +141,7 @@ AllocatedImage& AllocatedImage::operator=(AllocatedImage&& other) noexcept
         layout = other.layout;
         mipLevels = other.mipLevels;
         allocation = other.allocation;
+
 
         other.context = nullptr;
         other.handle = VK_NULL_HANDLE;

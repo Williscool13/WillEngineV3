@@ -42,6 +42,7 @@ public:
     StringID modelId{};
     StaticModelHandle selfHandle;
     ModelLoadState modelLoadState{ModelLoadState::NotLoaded};
+    uint64_t acquireFrame{UINT64_MAX};
 
     // Populated by AssetManager, sometimes changed
     uint32_t refCount = 0;
