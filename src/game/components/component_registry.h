@@ -20,6 +20,7 @@ namespace Game
 using SerializeFn = void(*)(const entt::registry&, entt::entity, nlohmann::json&);
 using DeserializeFn = void(*)(entt::registry&, entt::entity, const nlohmann::json&);
 using HasComponentFn = bool(*)(const entt::registry&, entt::entity);
+using CanAddComponentFn = bool(*)(const entt::registry&, entt::entity);
 using OnAddComponentFn = void(*)(entt::registry&, entt::entity);
 using OnRemoveComponentFn = void(*)(entt::registry&, entt::entity);
 using OnPlayStartFn = void(*)(entt::registry&, entt::entity);
@@ -33,6 +34,7 @@ struct ComponentEntry
     const char* name;
     SerializeFn serialize;
     DeserializeFn deserialize;
+    CanAddComponentFn canAdd;
     OnAddComponentFn onAddComponent;
     OnRemoveComponentFn onRemoveComponent;
     OnPlayStartFn onPlayStart;
@@ -67,6 +69,9 @@ void RegisterComponent(ComponentRegistry& componentRegistry, const char* name)
         },
         [](entt::registry& reg, entt::entity e, const nlohmann::json& json) {
             DeserializeComponent<T>(reg.get_or_emplace<T>(e), json);
+        },
+        [](const entt::registry& reg, entt::entity e) -> bool {
+            return CanAddComponent<T>(reg, e);
         },
         [](entt::registry& reg, entt::entity e) {
             OnComponentAdded<T>(reg.get_or_emplace<T>(e), reg, e);
@@ -110,6 +115,9 @@ void RegisterComponent(ComponentRegistry& componentRegistry, const char* name)
             (void)reg.get_or_emplace<T>(e);
             T dummy{};
             DeserializeComponent<T>(dummy, json);
+        },
+        [](const entt::registry& reg, entt::entity e) -> bool {
+            return CanAddComponent<T>(reg, e);
         },
         [](entt::registry& reg, entt::entity e) {
             (void)reg.get_or_emplace<T>(e);

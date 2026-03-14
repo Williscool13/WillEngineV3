@@ -34,6 +34,11 @@ void ResolveStaticMeshLoads(Core::EngineContext* ctx, Engine::GameState* state)
         }
 
         Engine::MaterialManager* materialManager = ctx->materialManager;
+        for (size_t i = 0; i < meshComponent.primitiveCount; ++i) {
+            materialManager->ReleaseMaterial(meshComponent.primitives[i].materialID);
+        }
+        meshComponent.primitiveCount = 0;
+
         Engine::MeshInformation& mesh = model->modelData.meshes[meshComponent.meshIndex];
 
         if (mesh.primitiveProperties.size() > 128) {
@@ -54,12 +59,13 @@ void ResolveStaticMeshLoads(Core::EngineContext* ctx, Engine::GameState* state)
                 if (materialOverride.IsValid()) {
                     if (materialManager->DoesMutableMaterialExist(materialOverride)) {
                         matID = materialOverride;
-                    } else {
+                    }
+                    else {
                         matID = materialManager->CreateImmutableMaterial(model->modelData.materials[primitive.materialIndex]);
                         LOG_WARN(Engine, "Mesh was resolved with a material override that does not exist in the registry.");
                     }
                 }
-                 else {
+                else {
                     matID = materialManager->CreateImmutableMaterial(model->modelData.materials[primitive.materialIndex]);
                 }
             }
@@ -79,6 +85,31 @@ void ResolveStaticMeshLoads(Core::EngineContext* ctx, Engine::GameState* state)
 
     for (const auto entity : resolved) {
         state->registry.remove<Component::StaticMeshLoadingTag>(entity);
+    }
+}
+
+void ResolveProceduralMeshLoads(Core::EngineContext* ctx, Engine::GameState* state)
+{
+    std::vector<entt::entity> resolved;
+
+    for (auto [entity, meshComponent] : state->registry.view<Component::ProceduralMeshComponent, Component::ProceduralMeshLoadingTag>().each()) {
+        // Release previous primitive's material ref if we're rebuilding
+        if (meshComponent.bPrimitiveReady) {
+            ctx->materialManager->ReleaseMaterial(meshComponent.primitive.materialID);
+            meshComponent.bPrimitiveReady = false;
+        }
+        if (meshComponent.modelHandle.IsValid()) {
+            ctx->assetManager->UnloadModel(meshComponent.modelHandle);
+            meshComponent.modelHandle = {};
+        }
+
+        // TODO: generate geometry from meshComponent.params, upload to GPU, populate meshComponent.primitive
+
+        resolved.push_back(entity);
+    }
+
+    for (const auto entity : resolved) {
+        state->registry.remove<Component::ProceduralMeshLoadingTag>(entity);
     }
 }
 
@@ -234,6 +265,32 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
                     .modelIndex = modelIndex
                 });
             }
+        }
+    }
+
+    // Gather procedural meshes
+    {
+        ZoneScopedN("ProceduralMeshes");
+        auto view = state->registry.view<Component::ProceduralMeshComponent, Component::RenderTransformComponent>(
+            entt::exclude<Component::ProceduralMeshLoadingTag>);
+
+        for (const auto& [entity, renderable, renderTransform] : view.each()) {
+            if (!renderable.bPrimitiveReady) { continue; }
+
+            auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.size());
+            frameBuffer->mainViewFamily.modelMatrices.push_back({renderTransform.modelMatrix, renderTransform.previousMatrix});
+
+            uint64_t stableId = 1234567890;
+            if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
+                stableId = stable->id.id;
+            }
+
+            frameBuffer->mainViewFamily.mainPassInstances.push_back({
+                .primitiveIndex = renderable.primitive.primitiveIndex,
+                .materialID = renderable.primitive.materialID,
+                .modelIndex = modelIndex,
+                .stableId = stableId,
+            });
         }
     }
 

@@ -24,6 +24,7 @@ struct EngineContext;
 namespace Game
 {
 void ResolveStaticMeshLoads(Core::EngineContext* ctx, Engine::GameState* state);
+void ResolveProceduralMeshLoads(Core::EngineContext* ctx, Engine::GameState* state);
 
 void RenderUpdate(Core::EngineContext* ctx, Engine::GameState* state);
 

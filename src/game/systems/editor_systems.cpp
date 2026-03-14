@@ -574,7 +574,8 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
 
                 for (auto& entry : state->componentRegistry.registry) {
                     if (compSearch[0] && !strstr(entry.name, compSearch)) { continue; }
-                    if (entry.has(state->registry, entity)) {
+                    bool disabled = entry.has(state->registry, entity) || !entry.canAdd(state->registry, entity);
+                    if (disabled) {
                         ImGui::BeginDisabled(true);
                         ImGui::MenuItem(entry.name);
                         ImGui::EndDisabled();
@@ -582,7 +583,6 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
                     else {
                         if (ImGui::MenuItem(entry.name)) {
                             CreateComponent(state, entity, entry.typeId);
-                            entry.onAddComponent(state->registry, entity);
                         }
                     }
                 }

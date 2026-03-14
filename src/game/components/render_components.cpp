@@ -20,6 +20,18 @@
 namespace Game
 {
 template<>
+bool CanAddComponent<Component::StaticMeshComponent>(const entt::registry& registry, entt::entity entity)
+{
+    return !registry.all_of<Component::ProceduralMeshComponent>(entity);
+}
+
+template<>
+bool CanAddComponent<Component::ProceduralMeshComponent>(const entt::registry& registry, entt::entity entity)
+{
+    return !registry.all_of<Component::StaticMeshComponent>(entity);
+}
+
+template<>
 Component::StaticMeshComponent CopyComponent(const Component::StaticMeshComponent& src, entt::registry& dstReg)
 {
     Component::StaticMeshComponent copy{};
@@ -245,10 +257,6 @@ ComponentEditorResult DrawComponentEditor<Component::StaticMeshComponent>(Compon
                 }
 
                 if (pendingChangeIdx >= 0) {
-                    for (uint8_t k = 0; k < component.primitiveCount; ++k) {
-                        ctx->materialManager->ReleaseMaterial(component.primitives[k].materialID);
-                    }
-                    component.primitiveCount = 0;
                     component.materialOverrides[pendingChangeIdx] = pendingChangeMat;
                     registry.emplace_or_replace<Component::StaticMeshLoadingTag>(entity);
                     state->bPendingModelResolve |= true;
@@ -296,5 +304,223 @@ void OnComponentRemoved<Component::StaticMeshComponent>(Component::StaticMeshCom
     registry.remove<Component::RenderTransformComponent>(entity);
     registry.remove<Component::DirtyRenderTransformComponent>(entity);
     registry.remove<Component::StaticMeshComponent>(entity);
+}
+
+template<>
+Component::ProceduralMeshComponent CopyComponent(const Component::ProceduralMeshComponent& src, entt::registry& dstReg)
+{
+    Component::ProceduralMeshComponent copy{};
+    copy.params = src.params;
+    copy.material = src.material;
+    copy.modelFlags = src.modelFlags;
+    return copy;
+}
+
+template<>
+void SerializeComponent<Component::ProceduralMeshComponent>(const Component::ProceduralMeshComponent& comp, nlohmann::json& json)
+{
+    json["type"] = comp.params.index();
+    json["material"] = comp.material.id;
+
+    std::visit([&json](const auto& p) {
+        using T = std::decay_t<decltype(p)>;
+        if constexpr (std::is_same_v<T, Component::StaircaseParams>) {
+            json["stepCount"] = p.stepCount;
+            json["stepHeight"] = p.stepHeight;
+            json["stepDepth"] = p.stepDepth;
+            json["width"] = p.width;
+            json["closed"] = p.closed;
+        }
+        else if constexpr (std::is_same_v<T, Component::BoxParams>) {
+            json["sizeX"] = p.sizeX;
+            json["sizeY"] = p.sizeY;
+            json["sizeZ"] = p.sizeZ;
+        }
+    }, comp.params);
+}
+
+template<>
+void DeserializeComponent<Component::ProceduralMeshComponent>(Component::ProceduralMeshComponent& comp, const nlohmann::json& json)
+{
+    comp.material = Engine::MaterialID(json["material"].get<uint64_t>());
+
+    int32_t type = json["type"].get<int32_t>();
+    if (type == 1) {
+        Component::StaircaseParams p{};
+        p.stepCount = json["stepCount"].get<int32_t>();
+        p.stepHeight = json["stepHeight"].get<float>();
+        p.stepDepth = json["stepDepth"].get<float>();
+        p.width = json["width"].get<float>();
+        p.closed = json["closed"].get<bool>();
+        comp.params = p;
+    }
+    else if (type == 2) {
+        Component::BoxParams p{};
+        p.sizeX = json["sizeX"].get<float>();
+        p.sizeY = json["sizeY"].get<float>();
+        p.sizeZ = json["sizeZ"].get<float>();
+        comp.params = p;
+    }
+}
+
+template<>
+ComponentEditorResult DrawComponentEditor<Component::ProceduralMeshComponent>(Component::ProceduralMeshComponent& component, Core::ViewFamily& viewFamily, entt::registry& registry,
+                                                                              entt::entity entity, const char* name)
+{
+    bool open = ImGui::CollapsingHeader("Procedural Mesh", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
+    ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+    bool remove = ImGui::SmallButton("X##deleteproceduralmesh");
+    ImGui::PopStyleColor();
+
+    if (open) {
+        bool visible = component.modelFlags.x != 0.0f;
+        bool shadowCaster = component.modelFlags.y != 0.0f;
+        if (ImGui::Checkbox("Visible##proceduralmesh", &visible)) {
+            component.modelFlags.x = visible ? 1.0f : 0.0f;
+        }
+        ImGui::SameLine();
+        if (ImGui::Checkbox("Shadow Caster##proceduralmesh", &shadowCaster)) {
+            component.modelFlags.y = shadowCaster ? 1.0f : 0.0f;
+        }
+
+        auto* ctx = registry.ctx().get<Core::EngineContext*>();
+        auto* state = registry.ctx().get<Engine::GameState*>();
+
+        if (std::holds_alternative<std::monostate>(component.params)) {
+            if (ImGui::BeginCombo("Shape", "")) {
+                if (ImGui::Selectable("Staircase")) {
+                    component.params = Component::StaircaseParams{};
+                    // TODO: LoadModel equivalent (generate procedural geometry)
+                    registry.emplace_or_replace<Component::ProceduralMeshLoadingTag>(entity);
+                    state->bPendingModelResolve |= true;
+                }
+                if (ImGui::Selectable("Box")) {
+                    component.params = Component::BoxParams{};
+                    // TODO: LoadModel equivalent (generate procedural geometry)
+                    registry.emplace_or_replace<Component::ProceduralMeshLoadingTag>(entity);
+                    state->bPendingModelResolve |= true;
+                }
+                ImGui::EndCombo();
+            }
+        } else {
+            static constexpr const char* shapeNames[] = {"", "Staircase", "Box"};
+            ImGui::Text("Shape: %s", shapeNames[component.params.index()]);
+
+            bool dirty = false;
+            std::visit([&dirty](auto& p) {
+                using T = std::decay_t<decltype(p)>;
+                if constexpr (std::is_same_v<T, Component::StaircaseParams>) {
+                    ImGui::DragInt("Step Count", &p.stepCount, 1, 1, 256);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Step Height", &p.stepHeight, 0.01f, 0.01f, 10.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Step Depth", &p.stepDepth, 0.01f, 0.01f, 10.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Width", &p.width, 0.01f, 0.01f, 100.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::Checkbox("Closed", &p.closed);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                }
+                else if constexpr (std::is_same_v<T, Component::BoxParams>) {
+                    ImGui::DragFloat("Size X", &p.sizeX, 0.01f, 0.01f, 100.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Size Y", &p.sizeY, 0.01f, 0.01f, 100.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Size Z", &p.sizeZ, 0.01f, 0.01f, 100.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                }
+            }, component.params);
+
+            if (dirty) {
+                if (component.modelHandle.IsValid()) {
+                    ctx->assetManager->UnloadModel(component.modelHandle);
+                    component.modelHandle = {};
+                }
+                if (component.bPrimitiveReady) {
+                    ctx->materialManager->ReleaseMaterial(component.primitive.materialID);
+                    component.bPrimitiveReady = false;
+                }
+                // TODO: LoadModel equivalent (generate procedural geometry)
+                registry.emplace_or_replace<Component::ProceduralMeshLoadingTag>(entity);
+                state->bPendingModelResolve |= true;
+            }
+        }
+
+        // Material selector
+        {
+            const char* currentLabel = "(none)";
+            if (component.material.IsValid()) {
+                if (const Engine::Material* m = ctx->materialManager->GetMaterial(component.material)) {
+                    currentLabel = m->name.c_str();
+                }
+            }
+            if (ImGui::BeginCombo("Material", currentLabel)) {
+                if (ImGui::Selectable("(none)", !component.material.IsValid())) {
+                    if (component.material.IsValid()) {
+                        if (component.bPrimitiveReady) {
+                            ctx->materialManager->ReleaseMaterial(component.primitive.materialID);
+                            component.bPrimitiveReady = false;
+                        }
+                        component.material = Engine::MaterialID{};
+                        registry.emplace_or_replace<Component::ProceduralMeshLoadingTag>(entity);
+                        state->bPendingModelResolve |= true;
+                    }
+                }
+                for (const auto& [matId, mat] : ctx->materialManager->GetMaterials()) {
+                    if (mat.immutable) continue;
+                    if (ImGui::Selectable(mat.name.c_str(), matId == component.material)) {
+                        if (matId != component.material) {
+                            if (component.bPrimitiveReady) {
+                                ctx->materialManager->ReleaseMaterial(component.primitive.materialID);
+                                component.bPrimitiveReady = false;
+                            }
+                            component.material = matId;
+                            registry.emplace_or_replace<Component::ProceduralMeshLoadingTag>(entity);
+                            state->bPendingModelResolve |= true;
+                        }
+                    }
+                }
+                ImGui::EndCombo();
+            }
+        }
+    }
+
+    return {.requestRemoval = remove};
+}
+
+template<>
+void OnComponentAdded<Component::ProceduralMeshComponent>(Component::ProceduralMeshComponent& component, entt::registry& registry, entt::entity entity)
+{
+    auto* transform = registry.try_get<Component::TransformComponent>(entity);
+    glm::mat4 m = transform ? Component::GetMatrix(*transform) : glm::mat4(1.0f);
+    registry.emplace_or_replace<Component::RenderTransformComponent>(entity, m, m);
+    registry.emplace_or_replace<Component::DirtyRenderTransformComponent>(entity);
+
+    if (std::holds_alternative<std::monostate>(component.params)) {
+        return;
+    }
+
+    auto* state = registry.ctx().get<Engine::GameState*>();
+    // todo: we will procedurally load here (mirror modelHandle = ctx->assetManager->LoadModel(component.modelId);)
+    registry.emplace_or_replace<Component::ProceduralMeshLoadingTag>(entity);
+    state->bPendingModelResolve |= true;
+}
+
+template<>
+void OnComponentRemoved<Component::ProceduralMeshComponent>(Component::ProceduralMeshComponent& component, entt::registry& registry, entt::entity entity)
+{
+    auto* ctx = registry.ctx().get<Core::EngineContext*>();
+    if (component.bPrimitiveReady) {
+        ctx->materialManager->ReleaseMaterial(component.primitive.materialID);
+    }
+    if (component.modelHandle.IsValid()) {
+        ctx->assetManager->UnloadModel(component.modelHandle);
+    }
+
+    registry.remove<Component::ProceduralMeshLoadingTag>(entity);
+    registry.remove<Component::RenderTransformComponent>(entity);
+    registry.remove<Component::DirtyRenderTransformComponent>(entity);
+    registry.remove<Component::ProceduralMeshComponent>(entity);
 }
 }

@@ -33,6 +33,9 @@ template<> void DeserializeComponent<Component::NameComponent>(Component::NameCo
 template<> void SerializeComponent<Component::StaticMeshComponent>(const Component::StaticMeshComponent& comp, nlohmann::json& json);
 template<> void DeserializeComponent<Component::StaticMeshComponent>(Component::StaticMeshComponent& comp, const nlohmann::json& json);
 
+template<> void SerializeComponent<Component::ProceduralMeshComponent>(const Component::ProceduralMeshComponent& comp, nlohmann::json& json);
+template<> void DeserializeComponent<Component::ProceduralMeshComponent>(Component::ProceduralMeshComponent& comp, const nlohmann::json& json);
+
 template<> void SerializeComponent<Component::FreeCameraComponent>(const Component::FreeCameraComponent& comp, nlohmann::json& json);
 template<> void DeserializeComponent<Component::FreeCameraComponent>(Component::FreeCameraComponent& comp, const nlohmann::json& json);
 

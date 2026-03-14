@@ -91,15 +91,18 @@ inline entt::entity CopySceneEntity(Engine::GameState* state, entt::entity src, 
 
     return dst;
 }
+
 template<typename T>
-T& CreateComponent(Engine::GameState* state, entt::entity entity)
+bool CreateComponent(Engine::GameState* state, entt::entity entity)
 {
     auto it = state->componentRegistry.registryMapping.find(TypeSID<T>());
     assert(it != state->componentRegistry.registryMapping.end() && "Component type not registered");
     ComponentEntry& entry = state->componentRegistry.registry[it->second];
+    if (!entry.canAdd(state->registry, entity)) { return false; }
     entry.onAddComponent(state->registry, entity);
-    return state->registry.get<T>(entity);
+    return true;
 }
+
 template<typename T>
 void DestroyComponent(Engine::GameState* state, entt::entity entity)
 {
@@ -109,12 +112,14 @@ void DestroyComponent(Engine::GameState* state, entt::entity entity)
     entry.onRemoveComponent(state->registry, entity);
 }
 
-inline void CreateComponent(Engine::GameState* state, entt::entity entity, StringID typeId)
+inline bool CreateComponent(Engine::GameState* state, entt::entity entity, StringID typeId)
 {
     auto it = state->componentRegistry.registryMapping.find(typeId);
     assert(it != state->componentRegistry.registryMapping.end() && "Component type not registered");
     ComponentEntry& entry = state->componentRegistry.registry[it->second];
+    if (!entry.canAdd(state->registry, entity)) { return false; }
     entry.onAddComponent(state->registry, entity);
+    return true;
 }
 
 inline void DestroyComponent(Engine::GameState* state, entt::entity entity, StringID typeId)

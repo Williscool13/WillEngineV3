@@ -19,6 +19,7 @@ T CopyComponent(const T& src, entt::registry& dstReg) { return src; }
 
 template<> Component::StableIdComponent CopyComponent(const Component::StableIdComponent& src, entt::registry& dstReg);
 template<> Component::StaticMeshComponent CopyComponent(const Component::StaticMeshComponent& src, entt::registry& dstReg);
+template<> Component::ProceduralMeshComponent CopyComponent(const Component::ProceduralMeshComponent& src, entt::registry& dstReg);
 } // Game
 
 #endif //WILL_ENGINE_COMPONENT_COPY_H
