@@ -133,10 +133,12 @@ struct StaticModelData
 struct StaircaseParams
 {
     int32_t stepCount{10};
-    float stepHeight{0.2f};
-    float stepDepth{0.3f};
     float width{1.0f};
-    bool closed{true};
+    float totalDepth{3.0f};
+    float totalHeight{2.0f};
+    bool bSpecifyStepHeight{false};
+    float stepHeight{0.2f};
+    bool bIsClosed{true};
 };
 
 struct BoxParams

@@ -13,6 +13,7 @@
 #include "tracy/Tracy.hpp"
 
 #include "par/par_shapes.h"
+#include "par/par_shapes_ext.h"
 #include "meshoptimizer/src/meshoptimizer.h"
 
 namespace AssetLoad
@@ -152,23 +153,11 @@ bool ProceduralModelLoadSlot::GenerateStaircase(const Engine::StaircaseParams& p
 
     if (p.stepCount <= 0) return false;
 
-    // Build each step as a scaled cube, merge into one mesh.
-    // Step i occupies: X[-width/2, width/2], Y[0, (i+1)*stepHeight], Z[i*stepDepth, (i+1)*stepDepth]
-    par_shapes_mesh* merged = nullptr;
-    for (int32_t i = 0; i < p.stepCount; ++i) {
-        par_shapes_mesh* step = par_shapes_create_cube();
-        par_shapes_scale(step, p.width, static_cast<float>(i + 1) * p.stepHeight, p.stepDepth);
-        par_shapes_translate(step, -p.width * 0.5f, 0.0f, static_cast<float>(i) * p.stepDepth);
-        if (!merged) {
-            merged = step;
-        }
-        else {
-            par_shapes_merge_and_free(merged, step);
-        }
-    }
+    par_shapes_mesh* merged = par_shapes_create_staircase(p.stepCount, p.width, p.totalDepth, p.totalHeight, p.bSpecifyStepHeight ? p.stepHeight : 0.0f, p.bIsClosed ? 1 : 0);
 
     if (!merged) { return false; }
 
+    par_shapes_unweld(merged, true);
     par_shapes_compute_normals(merged);
 
     // Convert to engine vertex format

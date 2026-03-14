@@ -402,9 +402,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 SetupGroundTruthAmbientOcclusion(*renderGraph, viewFamily, renderExtent, targets, 0);
             }
 
-            if (renderFamilyProperties.bHasShadows || renderFamilyProperties.bHasGTAO) {
-                SetupShadowsResolve(*renderGraph, viewFamily, renderExtent, targets, 0);
-            }
+            SetupShadowsResolve(*renderGraph, viewFamily, renderExtent, targets, 0);
 
             if (renderFamilyProperties.bHasDeferred) {
                 SetupDeferredLighting(*renderGraph, viewFamily, renderExtent, targets, 0);
@@ -429,9 +427,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                     SetupGroundTruthAmbientOcclusion(*renderGraph, viewFamily, renderExtent, portalTargets, 1);
                 }
 
-                if (renderFamilyProperties.bHasShadows || renderFamilyProperties.bHasGTAO) {
-                    SetupShadowsResolve(*renderGraph, viewFamily, renderExtent, portalTargets, 1);
-                }
+                SetupShadowsResolve(*renderGraph, viewFamily, renderExtent, portalTargets, 1);
 
                 if (renderFamilyProperties.bHasDeferred) {
                     SetupDeferredLighting(*renderGraph, viewFamily, renderExtent, portalTargets, 1);
@@ -764,7 +760,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
     }
 
     if (frameBuffer.currentMousePosition[0] > 0 && frameBuffer.currentMousePosition[0] < renderExtent[0] &&
-    frameBuffer.currentMousePosition[1] > 0 && frameBuffer.currentMousePosition[1] < renderExtent[1]) {
+        frameBuffer.currentMousePosition[1] > 0 && frameBuffer.currentMousePosition[1] < renderExtent[1]) {
         RenderPass& copyStableId = renderGraph->AddPass(SID("Copy Stable ID"), VK_PIPELINE_STAGE_2_COPY_BIT);
         copyStableId.ReadCopyImage(SID("stable_id"));
         copyStableId.WriteTransferBuffer(SID("readback_buffer"));
@@ -2758,7 +2754,6 @@ void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& 
             segments[segmentOffset++] = {.a = c[edges[i * 2]], .width = box.width, .b = c[edges[i * 2 + 1]], .pad = 0.0f, .color = box.color};
         }
     }
-
 
 
     if (segmentOffset == 0) {

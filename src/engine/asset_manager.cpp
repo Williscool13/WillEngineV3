@@ -162,6 +162,7 @@ StaticModelHandle AssetManager::LoadProceduralMesh(ProceduralParams& params)
     StaticModel& model = models[handle.index];
     model.selfHandle = handle;
     model.name = fmt::format("Procedural Mesh {}", proceduralCounter++);
+    model.modelId = proceduralModelId;
     model.proceduralParams = params;
     model.refCount = 1;
     model.modelLoadState = StaticModel::ModelLoadState::NotLoaded;

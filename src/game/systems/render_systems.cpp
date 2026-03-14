@@ -109,7 +109,7 @@ void ResolveProceduralMeshLoads(Core::EngineContext* ctx, Engine::GameState* sta
             continue;
         }
         if (model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
-            LOG_TRACE(Game, "Procedural model ({}) not yet done loading", model->modelId.id);
+            LOG_TRACE(Game, "Procedural model ({}) not yet done loading", model->name);
             continue;
         }
 
@@ -298,10 +298,11 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
     // Gather procedural meshes
     {
         ZoneScopedN("ProceduralMeshes");
-        auto view = state->registry.view<Component::ProceduralMeshComponent, Component::RenderTransformComponent>(
-            entt::exclude<Component::ProceduralMeshLoadingTag>);
+        auto view = state->registry.view<Component::ProceduralMeshComponent, Component::RenderTransformComponent>(entt::exclude<Component::ProceduralMeshLoadingTag>);
 
         for (const auto& [entity, renderable, renderTransform] : view.each()) {
+            if (!renderable.bPrimitiveReady) { continue; }
+
             auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.size());
             frameBuffer->mainViewFamily.modelMatrices.push_back({renderTransform.modelMatrix, renderTransform.previousMatrix});
 

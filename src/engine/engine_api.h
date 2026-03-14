@@ -107,6 +107,10 @@ struct GameState
     std::string currentSceneName{"Main Scene"};
 
     std::vector<StringID> loadedScenes{};
+    std::vector<StringID> modifiedScenes{};
+    bool bAutoSave{false};
+    float autoSaveInterval{60.0f};
+    float autoSaveTimer{0.0f};
     std::vector<Scene> pieSnapshot{};
 
     std::vector<entt::entity> selectedEntities{};

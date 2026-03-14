@@ -40,12 +40,15 @@ public:
     // Populated by AssetManager, never changed
     std::string name{};
     StaticModelHandle selfHandle;
+    /**
+     * RNG for gltf models. Hash for procedural.
+     */
+    StringID modelId{};
     ModelLoadState modelLoadState{ModelLoadState::NotLoaded};
     uint64_t acquireFrame{UINT64_MAX};
 
     // Populated by AssetManager, Only for normal models
     std::filesystem::path source{};
-    StringID modelId{};
 
     // Populated by AssetManager, Only for (simple) procedural models
     ProceduralParams proceduralParams{};

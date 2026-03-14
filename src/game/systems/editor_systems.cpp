@@ -26,8 +26,29 @@
 
 namespace Game
 {
+static void MarkSceneModified(Engine::GameState* state, StringID sceneId)
+{
+    if (std::ranges::find(state->modifiedScenes, sceneId) == state->modifiedScenes.end()) {
+        state->modifiedScenes.push_back(sceneId);
+    }
+}
+
 void EditorUpdate(Core::EngineContext* ctx, Engine::GameState* state)
 {
+    if (state->bAutoSave && !state->modifiedScenes.empty()) {
+        state->autoSaveTimer += state->timeFrame->deltaTime;
+        if (state->autoSaveTimer >= state->autoSaveInterval) {
+            state->autoSaveTimer = 0.0f;
+            for (StringID sceneId : state->modifiedScenes) {
+                const auto& sceneCache = ctx->assetManager->GetSceneCache();
+                if (auto it = sceneCache.find(sceneId); it != sceneCache.end()) {
+                    SaveSceneToFile(sceneId, it->second.sceneName, state, ctx->assetManager, ctx);
+                }
+            }
+            state->modifiedScenes.clear();
+        }
+    }
+
     bool popupOpen = ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
     if (state->bIsPlaying) {
         if (!popupOpen && state->inputFrame->GetKey(Key::ESCAPE).pressed) {
@@ -404,7 +425,22 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
         ImGui::EndDisabled();
 
         ImGui::SameLine();
-        if (ImGui::Button("Save")) { SaveSceneToFile(state->currentSceneId, state->currentSceneName, state, ctx->assetManager, ctx); }
+        const bool currentSceneModified = std::ranges::find(state->modifiedScenes, state->currentSceneId) != state->modifiedScenes.end();
+        if (currentSceneModified) { ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.5f, 0.1f, 1.0f)); }
+        if (ImGui::Button(currentSceneModified ? "Save*" : "Save")) {
+            SaveSceneToFile(state->currentSceneId, state->currentSceneName, state, ctx->assetManager, ctx);
+            std::erase(state->modifiedScenes, state->currentSceneId);
+        }
+        if (currentSceneModified) { ImGui::PopStyleColor(); }
+
+        ImGui::SameLine();
+        if (ImGui::Checkbox("Auto", &state->bAutoSave)) {
+            state->autoSaveTimer = 0.0f;
+        }
+        if (state->bAutoSave && ImGui::IsItemHovered()) {
+            float remaining = state->autoSaveInterval - state->autoSaveTimer;
+            ImGui::SetTooltip("Auto-save in %.0fs", remaining);
+        }
 
         ImGui::SameLine();
         if (ImGui::Button("New")) {
@@ -457,6 +493,7 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
             auto spawned = SpawnModel(state, ctx->assetManager, modelList[selectedModel].second, offset);
             if (!spawned.empty()) {
                 state->selectedEntities = spawned;
+                MarkSceneModified(state, state->currentSceneId);
             }
         }
         ImGui::EndDisabled();
@@ -467,6 +504,7 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
         if (ImGui::Button("Create Entity")) {
             auto newEntity = CreateSceneEntity(state);
             state->selectedEntities = {newEntity};
+            MarkSceneModified(state, state->currentSceneId);
         }
         static char search[64] = {};
         ImGui::SetNextItemWidth(-1);
@@ -499,6 +537,7 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
             if (ImGui::SmallButton(fmt::format("C##{}", stableId).c_str())) {
                 entt::entity copied = CopySceneEntity(state, entity, state->currentSceneId);
                 state->selectedEntities = {copied};
+                MarkSceneModified(state, state->currentSceneId);
             }
             ImGui::SameLine();
             if (ImGui::Selectable(uniqueLabel, selected)) {
@@ -527,6 +566,7 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
             }
             state->stableIdToEntityMap.erase(stableId.id);
             state->registry.destroy(entityToDelete);
+            MarkSceneModified(state, state->currentSceneId);
         }
     }
     ImGui::End();
@@ -550,11 +590,21 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
 
             state->bCustomGizmoActivePrev = state->bCustomGizmoActive;
             state->bCustomGizmoActive = false;
+            auto* entityScene = state->registry.try_get<Component::SceneComponent>(entity);
             for (ComponentEntry& entry : state->componentRegistry.registry) {
                 if (entry.has(state->registry, entity)) {
+                    nlohmann::json before;
+                    entry.serialize(state->registry, entity, before);
+
                     ComponentEditorResult result = entry.drawEditor(frameBuffer->mainViewFamily, state->registry, entity, entry.name);
+
                     if (result.requestRemoval) {
                         entryToRemove = &entry;
+                        if (entityScene) MarkSceneModified(state, entityScene->sceneId);
+                    } else {
+                        nlohmann::json after;
+                        entry.serialize(state->registry, entity, after);
+                        if (before != after && entityScene) MarkSceneModified(state, entityScene->sceneId);
                     }
                 }
             }
@@ -583,6 +633,7 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
                     else {
                         if (ImGui::MenuItem(entry.name)) {
                             CreateComponent(state, entity, entry.typeId);
+                            MarkSceneModified(state, state->currentSceneId);
                         }
                     }
                 }
@@ -634,6 +685,9 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
                     else
                         transform->scale = glm::vec3(s[0], s[1], s[2]);
                     state->registry.emplace_or_replace<Component::DirtyTransformTag>(entity);
+                    if (auto* sc = state->registry.try_get<Component::SceneComponent>(entity)) {
+                        MarkSceneModified(state, sc->sceneId);
+                    }
                 }
             }
         }
@@ -672,6 +726,11 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
                     s_dragStartCentroid = multiGizmoCentroid;
                     s_prevTranslation = multiGizmoCentroid;
                     s_wasDragging = true;
+                    for (auto e : state->selectedEntities) {
+                        if (auto* sc = state->registry.try_get<Component::SceneComponent>(e)) {
+                            MarkSceneModified(state, sc->sceneId);
+                        }
+                    }
                 }
 
                 float t[3], r[3], s[3];
@@ -1098,9 +1157,9 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
                         ImGui::EndChild();
 
                         if (ImGui::Button("OK")) {
-                            Engine::Material editMat = mat;
-                            editMat.textureRefs[slot] = texEditPending;
-                            materialManager->UpdateMutableMaterial(id, editMat, true);
+                            Engine::Material _editMat = mat;
+                            _editMat.textureRefs[slot] = texEditPending;
+                            materialManager->UpdateMutableMaterial(id, _editMat, true);
                             if (previewId.IsValid()) {
                                 state->texResidency.Release(previewId, ctx);
                                 previewId = Engine::TextureID::INVALID;
@@ -1108,7 +1167,7 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
                             ImGui::CloseCurrentPopup();
                         }
                         ImGui::SameLine();
-                        if (ImGui::Button("Cancel")) {
+                        if (ImGui::Button("Cancel") || state->inputFrame->GetKey(Key::ESCAPE).pressed) {
                             if (previewId.IsValid()) {
                                 state->texResidency.Release(previewId, ctx);
                                 previewId = Engine::TextureID::INVALID;
@@ -1149,13 +1208,13 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
                         ImGui::DragFloat("Max LOD", &samplerEditPending.maxLod, 0.1f, 0.0f, 1000.0f);
 
                         if (ImGui::Button("OK")) {
-                            Engine::Material editMat = mat;
-                            editMat.samplerDesc[slot] = samplerEditPending;
-                            materialManager->UpdateMutableMaterial(id, editMat, true);
+                            Engine::Material _editMat = mat;
+                            _editMat.samplerDesc[slot] = samplerEditPending;
+                            materialManager->UpdateMutableMaterial(id, _editMat, true);
                             ImGui::CloseCurrentPopup();
                         }
                         ImGui::SameLine();
-                        if (ImGui::Button("Cancel")) {
+                        if (ImGui::Button("Cancel") || state->inputFrame->GetKey(Key::ESCAPE).pressed) {
                             ImGui::CloseCurrentPopup();
                         }
                         ImGui::EndPopup();

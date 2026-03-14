@@ -326,10 +326,12 @@ void SerializeComponent<Component::ProceduralMeshComponent>(const Component::Pro
         using T = std::decay_t<decltype(p)>;
         if constexpr (std::is_same_v<T, Engine::StaircaseParams>) {
             json["stepCount"] = p.stepCount;
-            json["stepHeight"] = p.stepHeight;
-            json["stepDepth"] = p.stepDepth;
             json["width"] = p.width;
-            json["closed"] = p.closed;
+            json["totalDepth"] = p.totalDepth;
+            json["totalHeight"] = p.totalHeight;
+            json["bSpecifyStepHeight"] = p.bSpecifyStepHeight;
+            json["stepHeight"] = p.stepHeight;
+            json["bIsClosed"] = p.bIsClosed;
         }
         else if constexpr (std::is_same_v<T, Engine::BoxParams>) {
             json["sizeX"] = p.sizeX;
@@ -347,11 +349,13 @@ void DeserializeComponent<Component::ProceduralMeshComponent>(Component::Procedu
     int32_t type = json["type"].get<int32_t>();
     if (type == 1) {
         Engine::StaircaseParams p{};
-        p.stepCount = json["stepCount"].get<int32_t>();
-        p.stepHeight = json["stepHeight"].get<float>();
-        p.stepDepth = json["stepDepth"].get<float>();
-        p.width = json["width"].get<float>();
-        p.closed = json["closed"].get<bool>();
+        p.stepCount          = json["stepCount"].get<int32_t>();
+        p.width              = json["width"].get<float>();
+        p.totalDepth         = json["totalDepth"].get<float>();
+        p.totalHeight        = json["totalHeight"].get<float>();
+        p.bSpecifyStepHeight = json.value("bSpecifyStepHeight", false);
+        p.stepHeight         = json.value("stepHeight", p.totalHeight / static_cast<float>(std::max(p.stepCount, 1)));
+        p.bIsClosed          = json.value("bIsClosed", true);
         comp.params = p;
     }
     else if (type == 2) {
@@ -411,16 +415,52 @@ ComponentEditorResult DrawComponentEditor<Component::ProceduralMeshComponent>(Co
             std::visit([&dirty](auto& p) {
                 using T = std::decay_t<decltype(p)>;
                 if constexpr (std::is_same_v<T, Engine::StaircaseParams>) {
-                    ImGui::DragInt("Step Count", &p.stepCount, 1, 1, 256);
-                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
-                    ImGui::DragFloat("Step Height", &p.stepHeight, 0.01f, 0.01f, 10.0f);
-                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
-                    ImGui::DragFloat("Step Depth", &p.stepDepth, 0.01f, 0.01f, 10.0f);
-                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
                     ImGui::DragFloat("Width", &p.width, 0.01f, 0.01f, 100.0f);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
-                    ImGui::Checkbox("Closed", &p.closed);
+                    ImGui::DragFloat("Total Depth", &p.totalDepth, 0.01f, 0.01f, 100.0f);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
+
+                    // Total Height — always editable; drives stepCount when bSpecifyStepHeight
+                    ImGui::DragFloat("Total Height", &p.totalHeight, 0.01f, 0.01f, 100.0f);
+                    if (ImGui::IsItemDeactivatedAfterEdit()) {
+                        if (p.bSpecifyStepHeight) {
+                            p.stepCount = std::max(1, (int32_t)std::ceil(p.totalHeight / std::max(p.stepHeight, 0.001f)));
+                        }
+                        dirty = true;
+                    }
+
+                    if (ImGui::Checkbox("Specify Step Height", &p.bSpecifyStepHeight)) {
+                        if (p.bSpecifyStepHeight) {
+                            p.stepHeight = p.totalHeight / static_cast<float>(std::max(p.stepCount, 1));
+                        }
+                    }
+
+                    // Step Count — editable when !bSpecifyStepHeight, greyed float when derived
+                    if (p.bSpecifyStepHeight) {
+                        float derivedCount = p.totalHeight / std::max(p.stepHeight, 0.001f);
+                        ImGui::BeginDisabled(true);
+                        ImGui::DragFloat("Step Count", &derivedCount, 1.0f, 1.0f, 256.0f, "%.2f");
+                        ImGui::EndDisabled();
+                    } else {
+                        ImGui::DragInt("Step Count", &p.stepCount, 1, 1, 256);
+                        dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    }
+
+                    // Step Height — editable when bSpecifyStepHeight, greyed derived otherwise
+                    if (p.bSpecifyStepHeight) {
+                        ImGui::DragFloat("Step Height", &p.stepHeight, 0.001f, 0.001f, 10.0f);
+                        if (ImGui::IsItemDeactivatedAfterEdit()) {
+                            p.stepCount = std::max(1, (int32_t)std::ceil(p.totalHeight / std::max(p.stepHeight, 0.001f)));
+                            dirty = true;
+                        }
+                    } else {
+                        float derivedHeight = p.totalHeight / static_cast<float>(std::max(p.stepCount, 1));
+                        ImGui::BeginDisabled(true);
+                        ImGui::DragFloat("Step Height", &derivedHeight, 0.001f, 0.001f, 10.0f);
+                        ImGui::EndDisabled();
+                    }
+
+                    if (ImGui::Checkbox("Closed", &p.bIsClosed)) { dirty = true; }
                 }
                 else if constexpr (std::is_same_v<T, Engine::BoxParams>) {
                     ImGui::DragFloat("Size X", &p.sizeX, 0.01f, 0.01f, 100.0f);
