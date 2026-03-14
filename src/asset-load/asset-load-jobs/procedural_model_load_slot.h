@@ -8,6 +8,7 @@
 #include <TaskScheduler.h>
 
 #include "asset-load/asset_load_types.h"
+#include "render/shaders/model_interop.h"
 
 namespace enki
 {
@@ -73,7 +74,16 @@ private:
     std::function<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* doneSemaphore)> _requestDispatchCallback;
     std::function<void(bool success, ProceduralModelSlotHandle slotHandle, UploadStagingSlotHandle uploadStagingSlotHandle)> _notifyCallback;
 
+    bool FinalizeGeometry(std::vector<Vertex>& vertices, std::vector<uint32_t>& indices);
+
     bool GenerateStaircase(const Engine::StaircaseParams& p);
+    bool GenerateBox(const Engine::BoxParams& p);
+    bool GenerateCylinder(const Engine::CylinderParams& p);
+    bool GenerateCapsule(const Engine::CapsuleParams& p);
+    bool GenerateTorus(const Engine::TorusParams& p);
+    bool GenerateArch(const Engine::ArchParams& p);
+    bool GenerateWedge(const Engine::WedgeParams& p);
+    bool GenerateCone(const Engine::ConeParams& p);
 };
 } // AssetLoad
 

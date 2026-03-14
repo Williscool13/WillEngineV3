@@ -146,7 +146,55 @@ struct BoxParams
     float sizeX{1.0f}, sizeY{1.0f}, sizeZ{1.0f};
 };
 
-using ProceduralParams = std::variant<std::monostate, StaircaseParams, BoxParams>;
+struct CylinderParams
+{
+    float radius{0.5f};
+    float height{2.0f};
+    int32_t slices{16};
+    bool bCapped{true};
+};
+
+struct CapsuleParams
+{
+    float radius{0.5f};
+    float height{2.0f};
+    int32_t slices{16};
+    int32_t rings{8};
+};
+
+struct TorusParams
+{
+    float ringRadius{1.0f};
+    float tubeRadius{0.25f};
+    int32_t slices{16};
+    int32_t stacks{16};
+};
+
+struct ArchParams
+{
+    float width{2.0f};
+    float height{2.5f};
+    float depth{0.5f};
+    float thickness{0.3f};
+    int32_t sides{8};
+};
+
+struct WedgeParams
+{
+    float sizeX{1.0f};
+    float sizeY{1.0f};
+    float sizeZ{1.0f};
+};
+
+struct ConeParams
+{
+    float radius{0.5f};
+    float height{2.0f};
+    int32_t slices{16};
+    bool bCapped{true};
+};
+
+using ProceduralParams = std::variant<std::monostate, StaircaseParams, BoxParams, CylinderParams, CapsuleParams, TorusParams, ArchParams, WedgeParams, ConeParams>;
 } // Render
 
 #endif //WILL_ENGINE_MODEL_TYPES_H

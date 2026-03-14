@@ -338,6 +338,42 @@ void SerializeComponent<Component::ProceduralMeshComponent>(const Component::Pro
             json["sizeY"] = p.sizeY;
             json["sizeZ"] = p.sizeZ;
         }
+        else if constexpr (std::is_same_v<T, Engine::CylinderParams>) {
+            json["radius"] = p.radius;
+            json["height"] = p.height;
+            json["slices"] = p.slices;
+            json["bCapped"] = p.bCapped;
+        }
+        else if constexpr (std::is_same_v<T, Engine::CapsuleParams>) {
+            json["radius"] = p.radius;
+            json["height"] = p.height;
+            json["slices"] = p.slices;
+            json["rings"]  = p.rings;
+        }
+        else if constexpr (std::is_same_v<T, Engine::TorusParams>) {
+            json["ringRadius"] = p.ringRadius;
+            json["tubeRadius"] = p.tubeRadius;
+            json["slices"]     = p.slices;
+            json["stacks"]     = p.stacks;
+        }
+        else if constexpr (std::is_same_v<T, Engine::ArchParams>) {
+            json["width"]     = p.width;
+            json["height"]    = p.height;
+            json["depth"]     = p.depth;
+            json["thickness"] = p.thickness;
+            json["sides"]     = p.sides;
+        }
+        else if constexpr (std::is_same_v<T, Engine::WedgeParams>) {
+            json["sizeX"] = p.sizeX;
+            json["sizeY"] = p.sizeY;
+            json["sizeZ"] = p.sizeZ;
+        }
+        else if constexpr (std::is_same_v<T, Engine::ConeParams>) {
+            json["radius"] = p.radius;
+            json["height"] = p.height;
+            json["slices"] = p.slices;
+            json["bCapped"] = p.bCapped;
+        }
     }, comp.params);
 }
 
@@ -363,6 +399,54 @@ void DeserializeComponent<Component::ProceduralMeshComponent>(Component::Procedu
         p.sizeX = json["sizeX"].get<float>();
         p.sizeY = json["sizeY"].get<float>();
         p.sizeZ = json["sizeZ"].get<float>();
+        comp.params = p;
+    }
+    else if (type == 3) {
+        Engine::CylinderParams p{};
+        p.radius = json["radius"].get<float>();
+        p.height = json["height"].get<float>();
+        p.slices = json["slices"].get<int32_t>();
+        p.bCapped = json["bCapped"].get<bool>();
+        comp.params = p;
+    }
+    else if (type == 4) {
+        Engine::CapsuleParams p{};
+        p.radius = json["radius"].get<float>();
+        p.height = json["height"].get<float>();
+        p.slices = json["slices"].get<int32_t>();
+        p.rings  = json["rings"].get<int32_t>();
+        comp.params = p;
+    }
+    else if (type == 5) {
+        Engine::TorusParams p{};
+        p.ringRadius = json["ringRadius"].get<float>();
+        p.tubeRadius = json["tubeRadius"].get<float>();
+        p.slices     = json["slices"].get<int32_t>();
+        p.stacks     = json["stacks"].get<int32_t>();
+        comp.params = p;
+    }
+    else if (type == 6) {
+        Engine::ArchParams p{};
+        p.width     = json["width"].get<float>();
+        p.height    = json["height"].get<float>();
+        p.depth     = json["depth"].get<float>();
+        p.thickness = json["thickness"].get<float>();
+        p.sides     = json["sides"].get<int32_t>();
+        comp.params = p;
+    }
+    else if (type == 7) {
+        Engine::WedgeParams p{};
+        p.sizeX = json["sizeX"].get<float>();
+        p.sizeY = json["sizeY"].get<float>();
+        p.sizeZ = json["sizeZ"].get<float>();
+        comp.params = p;
+    }
+    else if (type == 8) {
+        Engine::ConeParams p{};
+        p.radius = json["radius"].get<float>();
+        p.height = json["height"].get<float>();
+        p.slices = json["slices"].get<int32_t>();
+        p.bCapped = json["bCapped"].get<bool>();
         comp.params = p;
     }
 }
@@ -393,22 +477,24 @@ ComponentEditorResult DrawComponentEditor<Component::ProceduralMeshComponent>(Co
 
         if (std::holds_alternative<std::monostate>(component.params)) {
             if (ImGui::BeginCombo("Shape", "")) {
-                if (ImGui::Selectable("Staircase")) {
-                    component.params = Engine::StaircaseParams{};
+                auto selectShape = [&](auto&& params) {
+                    component.params = std::move(params);
                     component.modelHandle = ctx->assetManager->LoadProceduralMesh(component.params);
                     registry.emplace_or_replace<Component::ProceduralMeshLoadingTag>(entity);
                     state->bPendingModelResolve |= true;
-                }
-                if (ImGui::Selectable("Box")) {
-                    component.params = Engine::BoxParams{};
-                    component.modelHandle = ctx->assetManager->LoadProceduralMesh(component.params);
-                    registry.emplace_or_replace<Component::ProceduralMeshLoadingTag>(entity);
-                    state->bPendingModelResolve |= true;
-                }
+                };
+                if (ImGui::Selectable("Staircase")) selectShape(Engine::StaircaseParams{});
+                if (ImGui::Selectable("Box"))       selectShape(Engine::BoxParams{});
+                if (ImGui::Selectable("Cylinder"))  selectShape(Engine::CylinderParams{});
+                if (ImGui::Selectable("Capsule"))   selectShape(Engine::CapsuleParams{});
+                if (ImGui::Selectable("Torus"))     selectShape(Engine::TorusParams{});
+                if (ImGui::Selectable("Arch"))      selectShape(Engine::ArchParams{});
+                if (ImGui::Selectable("Wedge"))     selectShape(Engine::WedgeParams{});
+                if (ImGui::Selectable("Cone"))      selectShape(Engine::ConeParams{});
                 ImGui::EndCombo();
             }
         } else {
-            static constexpr const char* shapeNames[] = {"", "Staircase", "Box"};
+            static constexpr const char* shapeNames[] = {"", "Staircase", "Box", "Cylinder", "Capsule", "Torus", "Arch", "Wedge", "Cone"};
             ImGui::Text("Shape: %s", shapeNames[component.params.index()]);
 
             bool dirty = false;
@@ -469,6 +555,64 @@ ComponentEditorResult DrawComponentEditor<Component::ProceduralMeshComponent>(Co
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
                     ImGui::DragFloat("Size Z", &p.sizeZ, 0.01f, 0.01f, 100.0f);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                }
+                else if constexpr (std::is_same_v<T, Engine::CylinderParams>) {
+                    ImGui::DragFloat("Radius", &p.radius, 0.01f, 0.01f, 50.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Height", &p.height, 0.01f, 0.01f, 100.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragInt("Slices", &p.slices, 1, 3, 64);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    if (ImGui::Checkbox("Capped", &p.bCapped)) { dirty = true; }
+                }
+                else if constexpr (std::is_same_v<T, Engine::CapsuleParams>) {
+                    ImGui::DragFloat("Radius", &p.radius, 0.01f, 0.01f, 50.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Height", &p.height, 0.01f, 0.01f, 100.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragInt("Slices", &p.slices, 1, 3, 64);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragInt("Rings", &p.rings, 1, 2, 32);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                }
+                else if constexpr (std::is_same_v<T, Engine::TorusParams>) {
+                    ImGui::DragFloat("Ring Radius", &p.ringRadius, 0.01f, 0.01f, 50.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Tube Radius", &p.tubeRadius, 0.01f, 0.001f, 50.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragInt("Slices", &p.slices, 1, 3, 64);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragInt("Stacks", &p.stacks, 1, 3, 64);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                }
+                else if constexpr (std::is_same_v<T, Engine::ArchParams>) {
+                    ImGui::DragFloat("Width", &p.width, 0.01f, 0.01f, 100.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Height", &p.height, 0.01f, 0.01f, 100.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Depth", &p.depth, 0.01f, 0.01f, 100.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Thickness", &p.thickness, 0.01f, 0.01f, 50.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragInt("Sides", &p.sides, 1, 2, 32);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                }
+                else if constexpr (std::is_same_v<T, Engine::WedgeParams>) {
+                    ImGui::DragFloat("Size X", &p.sizeX, 0.01f, 0.01f, 100.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Size Y", &p.sizeY, 0.01f, 0.01f, 100.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Size Z", &p.sizeZ, 0.01f, 0.01f, 100.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                }
+                else if constexpr (std::is_same_v<T, Engine::ConeParams>) {
+                    ImGui::DragFloat("Radius", &p.radius, 0.01f, 0.01f, 50.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Height", &p.height, 0.01f, 0.01f, 100.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragInt("Slices", &p.slices, 1, 3, 64);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    if (ImGui::Checkbox("Capped", &p.bCapped)) { dirty = true; }
                 }
             }, component.params);
 
