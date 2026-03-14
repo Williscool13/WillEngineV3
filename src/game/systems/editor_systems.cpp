@@ -73,17 +73,21 @@ void EditorUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         }
     }
 
-    if (!popupOpen && ctrlHeld && state->inputFrame->GetKey(Key::W).pressed) {
-        state->bWantCopyEntities = true;
+    const bool rmbHeld = state->inputFrame->GetMouse(MouseButton::RMB).down;
+    if (!rmbHeld) {
+        if (!popupOpen && ctrlHeld && state->inputFrame->GetKey(Key::W).pressed) {
+            state->bWantCopyEntities = true;
+        }
+
+        if (!popupOpen && state->inputFrame->GetKey(Key::DEL).pressed) {
+            state->bWantDeleteEntities = true;
+        }
+
+        if (!popupOpen && state->inputFrame->GetKey(Key::ESCAPE).pressed) {
+            state->selectedEntities.clear();
+        }
     }
 
-    if (!popupOpen && state->inputFrame->GetKey(Key::DEL).pressed) {
-        state->bWantDeleteEntities = true;
-    }
-
-    if (!popupOpen && state->inputFrame->GetKey(Key::ESCAPE).pressed) {
-        state->selectedEntities.clear();
-    }
 
     if (!ctx->bImguiMouseCaptured && state->inputFrame->GetMouse(MouseButton::LMB).pressed) {
         auto it = state->stableIdToEntityMap.find(StringID{ctx->lastKnownStableIdUnderCursor});

@@ -194,7 +194,58 @@ struct ConeParams
     bool bCapped{true};
 };
 
-using ProceduralParams = std::variant<std::monostate, StaircaseParams, BoxParams, CylinderParams, CapsuleParams, TorusParams, ArchParams, WedgeParams, ConeParams>;
+/**
+ * archHeight=0 → flat-topped rectangle. archHeight=width/2 → full semicircle. archHeight>width/2 → Gothic pointed arch.
+ */
+struct DoorParams
+{
+    float width{1.0f};
+    float height{2.0f};
+    float depth{0.05f};
+    float archHeight{0.5f};
+    float gap{0.0f};
+    int32_t sides{8};
+    bool bHalf{false};
+    bool bFlip{false};
+};
+
+struct PlaneParams
+{
+    float sizeX{2.0f};
+    float sizeZ{2.0f};
+    int32_t tilesX{1};
+    int32_t tilesZ{1};
+};
+
+struct SphereParams
+{
+    float radius{0.5f};
+    int32_t slices{16};
+    int32_t stacks{8};
+};
+
+struct SubdividedSphereParams
+{
+    float radius{0.5f};
+    int32_t subdivisions{3};
+};
+
+struct HemisphereParams
+{
+    float radius{0.5f};
+    int32_t slices{16};
+    int32_t stacks{8};
+};
+
+struct PipeParams
+{
+    float outerRadius{0.5f};
+    float innerRadius{0.3f};
+    float height{2.0f};
+    int32_t slices{16};
+};
+
+using ProceduralParams = std::variant<std::monostate, StaircaseParams, BoxParams, CylinderParams, CapsuleParams, TorusParams, ArchParams, WedgeParams, ConeParams, DoorParams, PlaneParams, SphereParams, SubdividedSphereParams, HemisphereParams, PipeParams>;
 } // Render
 
 #endif //WILL_ENGINE_MODEL_TYPES_H

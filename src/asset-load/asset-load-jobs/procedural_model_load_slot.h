@@ -84,6 +84,12 @@ private:
     bool GenerateArch(const Engine::ArchParams& p);
     bool GenerateWedge(const Engine::WedgeParams& p);
     bool GenerateCone(const Engine::ConeParams& p);
+    bool GenerateDoor(const Engine::DoorParams& p);
+    bool GeneratePlane(const Engine::PlaneParams& p);
+    bool GenerateSphere(const Engine::SphereParams& p);
+    bool GenerateSubdividedSphere(const Engine::SubdividedSphereParams& p);
+    bool GenerateHemisphere(const Engine::HemisphereParams& p);
+    bool GeneratePipe(const Engine::PipeParams& p);
 };
 } // AssetLoad
 

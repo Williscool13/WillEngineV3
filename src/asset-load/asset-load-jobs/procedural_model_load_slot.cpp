@@ -146,6 +146,12 @@ bool ProceduralModelLoadSlot::GenerateGeometry()
                    [&](const Engine::ArchParams& p) { bSuccess = GenerateArch(p); },
                    [&](const Engine::WedgeParams& p) { bSuccess = GenerateWedge(p); },
                    [&](const Engine::ConeParams& p) { bSuccess = GenerateCone(p); },
+                   [&](const Engine::DoorParams& p) { bSuccess = GenerateDoor(p); },
+                   [&](const Engine::PlaneParams& p) { bSuccess = GeneratePlane(p); },
+                   [&](const Engine::SphereParams& p) { bSuccess = GenerateSphere(p); },
+                   [&](const Engine::SubdividedSphereParams& p) { bSuccess = GenerateSubdividedSphere(p); },
+                   [&](const Engine::HemisphereParams& p) { bSuccess = GenerateHemisphere(p); },
+                   [&](const Engine::PipeParams& p) { bSuccess = GeneratePipe(p); },
                }, params);
     return bSuccess;
 }
@@ -345,18 +351,18 @@ bool ProceduralModelLoadSlot::GenerateBox(const Engine::BoxParams& p)
     // Vertex order per face is chosen so (v1-v0)×(v2-v0) points outward (CCW from outside).
     // UV: world-space (1 UV unit = 1 world unit).
 
-    // +X: normal=(1,0,0), U=Z, V=Y
-    addFace({1, 0, 0}, {0, 0, 1},
+    // +X: normal=(1,0,0), U=Z(flipped), V=Y
+    addFace({1, 0, 0}, {0, 0, -1},
             {sx, 0, 0}, {sx, sy, 0}, {sx, sy, sz}, {sx, 0, sz},
-            {0, 0}, {0, sy}, {sz, sy}, {sz, 0});
+            {sz, 0}, {sz, sy}, {0, sy}, {0, 0});
     // -X: normal=(-1,0,0), U=Z(mirrored), V=Y
     addFace({-1, 0, 0}, {0, 0, -1},
             {0, 0, sz}, {0, sy, sz}, {0, sy, 0}, {0, 0, 0},
             {sz, 0}, {sz, sy}, {0, sy}, {0, 0});
-    // +Y: normal=(0,1,0), U=X, V=Z
-    addFace({0, 1, 0}, {1, 0, 0},
+    // +Y: normal=(0,1,0), U=X(flipped), V=Z
+    addFace({0, 1, 0}, {-1, 0, 0},
             {0, sy, 0}, {0, sy, sz}, {sx, sy, sz}, {sx, sy, 0},
-            {0, 0}, {0, sz}, {sx, sz}, {sx, 0});
+            {sx, 0}, {sx, sz}, {0, sz}, {0, 0});
     // -Y: normal=(0,-1,0), U=X, V=Z
     addFace({0, -1, 0}, {1, 0, 0},
             {0, 0, 0}, {sx, 0, 0}, {sx, 0, sz}, {0, 0, sz},
@@ -365,10 +371,10 @@ bool ProceduralModelLoadSlot::GenerateBox(const Engine::BoxParams& p)
     addFace({0, 0, 1}, {1, 0, 0},
             {0, 0, sz}, {sx, 0, sz}, {sx, sy, sz}, {0, sy, sz},
             {0, 0}, {sx, 0}, {sx, sy}, {0, sy});
-    // -Z: normal=(0,0,-1), U=X(mirrored), V=Y
-    addFace({0, 0, -1}, {-1, 0, 0},
+    // -Z: normal=(0,0,-1), U=X, V=Y
+    addFace({0, 0, -1}, {1, 0, 0},
             {0, 0, 0}, {0, sy, 0}, {sx, sy, 0}, {sx, 0, 0},
-            {0, 0}, {0, sy}, {sx, sy}, {sx, 0});
+            {sx, 0}, {sx, sy}, {0, sy}, {0, 0});
 
     return FinalizeGeometry(vertices, indices);
 }
@@ -564,7 +570,9 @@ bool ProceduralModelLoadSlot::GenerateTorus(const Engine::TorusParams& p)
     const float rr = std::max(0.01f, p.ringRadius);
     const float tr = std::max(0.001f, p.tubeRadius);
 
-    par_shapes_mesh* m = par_shapes_create_torus(slices, stacks, tr / rr);
+    // par_shapes asserts ratio in [0.1, 1.0] — clamp as safety net
+    const float ratio = glm::clamp(tr / rr, 0.1f, 0.99f);
+    par_shapes_mesh* m = par_shapes_create_torus(slices, stacks, ratio);
     if (!m) return false;
 
     // Scale by ring radius
@@ -599,7 +607,7 @@ bool ProceduralModelLoadSlot::GenerateArch(const Engine::ArchParams& p)
 {
     ZoneScopedN("GenerateArch");
 
-    const int N = std::max(2, p.sides);
+    const int N = std::max(1, p.sides);
     const float outerR = p.width * 0.5f;
     const float innerR = std::max(0.01f, outerR - p.thickness);
     const float legH = std::max(0.0f, p.height - outerR);
@@ -609,17 +617,25 @@ bool ProceduralModelLoadSlot::GenerateArch(const Engine::ArchParams& p)
     std::vector<Vertex> vertices;
     std::vector<uint32_t> indices;
 
-    // Build outer and inner arc contour points (in XY, N+1 points each)
-    // θ from 0→π: arc goes from right (+X) over top to left (-X)
-    std::vector<glm::vec2> outerArc(N + 1), innerArc(N + 1);
-    for (int i = 0; i <= N; i++) {
-        const float theta = pi * static_cast<float>(i) / N;
-        outerArc[i] = {outerR * cosf(theta), legH + outerR * sinf(theta)};
-        innerArc[i] = {innerR * cosf(theta), legH + innerR * sinf(theta)};
+    // Build outer and inner arc contour points (in XY)
+    // N=1 special case: rectangular top (3 segments) instead of degenerate zero-height arc.
+    // The rectangle extends up by outerR to match the visual "depth" of the arch sides.
+    std::vector<glm::vec2> outerArc, innerArc;
+    if (N == 1) {
+        outerArc = {{outerR, legH}, {outerR, legH + outerR}, {-outerR, legH + outerR}, {-outerR, legH}};
+        innerArc = {{innerR, legH}, {innerR, legH + innerR}, {-innerR, legH + innerR}, {-innerR, legH}};
+    } else {
+        outerArc.resize(N + 1);
+        innerArc.resize(N + 1);
+        for (int i = 0; i <= N; i++) {
+            const float theta = pi * static_cast<float>(i) / N;
+            outerArc[i] = {outerR * cosf(theta), legH + outerR * sinf(theta)};
+            innerArc[i] = {innerR * cosf(theta), legH + innerR * sinf(theta)};
+        }
     }
 
-    // Outer contour (N+3 points: bottom-right, arc[0..N], bottom-left)
-    // Inner contour same
+    // Outer contour: bottom-right, arc points, bottom-left
+    // Inner contour: same structure
     std::vector<glm::vec2> outerC, innerC;
     outerC.push_back({outerR, 0});
     for (auto& pt : outerArc) outerC.push_back(pt);
@@ -629,7 +645,7 @@ bool ProceduralModelLoadSlot::GenerateArch(const Engine::ArchParams& p)
     for (auto& pt : innerArc) innerC.push_back(pt);
     innerC.push_back({-innerR, 0});
 
-    const int M = static_cast<int>(outerC.size()); // N+3
+    const int M = static_cast<int>(outerC.size());
 
     // Helper: add a flat quad with given normal and basic UV
     auto addQuad = [&](glm::vec3 v0, glm::vec3 v1, glm::vec3 v2, glm::vec3 v3, glm::vec3 n) {
@@ -671,52 +687,62 @@ bool ProceduralModelLoadSlot::GenerateArch(const Engine::ArchParams& p)
             {0, 0, 1});
     }
 
-    // Outer side walls: extrude each outer contour edge along Z
-    // Segment 0 = right leg (outerC[0]→outerC[1]): normal (+1,0,0)
-    // Segments 1..N = arc: normal outward from arc center (0, legH)
-    // Segment N+1 = left leg: normal (-1,0,0)
+    // Smooth-normal quad: per-vertex normals at each end (nA at A, nB at B)
+    auto addSmoothWallQuad = [&](glm::vec2 A, glm::vec2 B, glm::vec3 nA, glm::vec3 nB, bool reversed) {
+        uint32_t base = static_cast<uint32_t>(vertices.size());
+        auto push = [&](glm::vec3 pos, glm::vec3 n) {
+            Vertex v{};
+            v.position = pos;
+            v.normal = n;
+            v.texcoordU = pos.x;
+            v.texcoordV = pos.y;
+            v.tangent = {1, 0, 0, 1};
+            v.color = {1, 1, 1, 1};
+            vertices.push_back(v);
+        };
+        if (!reversed) {
+            push({A.x, A.y, 0}, nA);
+            push({B.x, B.y, 0}, nB);
+            push({B.x, B.y, depth}, nB);
+            push({A.x, A.y, depth}, nA);
+        } else {
+            push({B.x, B.y, 0}, nB);
+            push({A.x, A.y, 0}, nA);
+            push({A.x, A.y, depth}, nA);
+            push({B.x, B.y, depth}, nB);
+        }
+        indices.insert(indices.end(), {base, base + 1, base + 2, base, base + 2, base + 3});
+    };
+
+    // Outer side walls: arc segments use smooth radial normals from (0, legH);
+    // legs and rectangular top use flat edge-perpendicular normals.
     for (int i = 0; i < M - 1; i++) {
-        glm::vec3 n;
-        if (i == 0) {
-            n = {1, 0, 0};
+        const glm::vec2 A = outerC[i], B = outerC[i + 1];
+        const bool isArc = (N >= 2) && (i > 0) && (i < M - 2);
+        if (isArc) {
+            const glm::vec3 nA = glm::normalize(glm::vec3{A.x, A.y - legH, 0.0f});
+            const glm::vec3 nB = glm::normalize(glm::vec3{B.x, B.y - legH, 0.0f});
+            addSmoothWallQuad(A, B, nA, nB, false);
+        } else {
+            const glm::vec2 d = B - A;
+            addQuad({A.x, A.y, 0}, {B.x, B.y, 0}, {B.x, B.y, depth}, {A.x, A.y, depth},
+                    glm::normalize(glm::vec3{d.y, -d.x, 0.0f}));
         }
-        else if (i == M - 2) {
-            n = {-1, 0, 0};
-        }
-        else {
-            // Arc segment: normal points from arc center to midpoint
-            const glm::vec2 mid = (outerC[i] + outerC[i + 1]) * 0.5f;
-            const glm::vec2 dir = glm::normalize(mid - glm::vec2(0, legH));
-            n = {dir.x, dir.y, 0};
-        }
-        addQuad(
-            {outerC[i].x, outerC[i].y, 0},
-            {outerC[i + 1].x, outerC[i + 1].y, 0},
-            {outerC[i + 1].x, outerC[i + 1].y, depth},
-            {outerC[i].x, outerC[i].y, depth},
-            n);
     }
 
-    // Inner side walls: reversed winding (faces toward door opening)
+    // Inner side walls: same but inward normals, reversed winding
     for (int i = 0; i < M - 1; i++) {
-        glm::vec3 n;
-        if (i == 0) {
-            n = {-1, 0, 0};
+        const glm::vec2 A = innerC[i], B = innerC[i + 1];
+        const bool isArc = (N >= 2) && (i > 0) && (i < M - 2);
+        if (isArc) {
+            const glm::vec3 nA = glm::normalize(glm::vec3{-A.x, legH - A.y, 0.0f});
+            const glm::vec3 nB = glm::normalize(glm::vec3{-B.x, legH - B.y, 0.0f});
+            addSmoothWallQuad(A, B, nA, nB, true);
+        } else {
+            const glm::vec2 d = B - A;
+            addQuad({B.x, B.y, 0}, {A.x, A.y, 0}, {A.x, A.y, depth}, {B.x, B.y, depth},
+                    glm::normalize(glm::vec3{-d.y, d.x, 0.0f}));
         }
-        else if (i == M - 2) {
-            n = {1, 0, 0};
-        }
-        else {
-            const glm::vec2 mid = (innerC[i] + innerC[i + 1]) * 0.5f;
-            const glm::vec2 dir = glm::normalize(glm::vec2(0, legH) - mid);
-            n = {dir.x, dir.y, 0};
-        }
-        addQuad(
-            {innerC[i + 1].x, innerC[i + 1].y, 0},
-            {innerC[i].x, innerC[i].y, 0},
-            {innerC[i].x, innerC[i].y, depth},
-            {innerC[i + 1].x, innerC[i + 1].y, depth},
-            n);
     }
 
     // Bottom caps (y=0): right and left rectangles connecting outer to inner
@@ -819,23 +845,22 @@ bool ProceduralModelLoadSlot::GenerateCone(const Engine::ConeParams& p)
     const float h = p.height;
 
     // par_shapes cone: Z-up, Z=0 base (radius=1), Z=1 apex (radius=0), no cap.
-    // Unweld + compute_normals → flat normals (correct for pyramid at low slices).
-    // Note: par_shapes_unweld does not copy tcoords, so UV is computed from position.
+    // Smooth lateral normal: n = normalize(h*cx, r, h*cz) where (cx,cz) is the XZ unit direction.
     par_shapes_mesh* m = par_shapes_create_cone(N, 1);
     if (!m) return false;
 
-    par_shapes_unweld(m, true);
-    par_shapes_compute_normals(m);
-
-    // Remap to Y-up (proper rotation, winding preserved): engine = (par.x*r, par.z*h, -par.y*r)
+    // Remap to Y-up: engine = (par.x*r, par.z*h, -par.y*r)
     std::vector<Vertex> vertices(m->npoints);
     for (int i = 0; i < m->npoints; ++i) {
         const float px = m->points[i * 3 + 0], py = m->points[i * 3 + 1], pz = m->points[i * 3 + 2];
         const glm::vec3 pos = {px * r, pz * h, -py * r};
         vertices[i].position = pos;
-        const float nx = m->normals[i * 3 + 0], ny = m->normals[i * 3 + 1], nz = m->normals[i * 3 + 2];
-        vertices[i].normal = glm::normalize(glm::vec3{nx, nz, -ny});
-        // UV from position: u=angular 0→1, v=height 0→1
+        const float xzRadius = sqrtf(pos.x * pos.x + pos.z * pos.z);
+        if (xzRadius > 1e-6f) {
+            vertices[i].normal = glm::normalize(glm::vec3{h * pos.x / xzRadius, r, h * pos.z / xzRadius});
+        } else {
+            vertices[i].normal = {0.0f, 1.0f, 0.0f}; // apex
+        }
         vertices[i].texcoordU = atan2f(-pos.z, pos.x) / (2.0f * glm::pi<float>()) + 0.5f;
         vertices[i].texcoordV = pos.y / h;
         vertices[i].tangent = {1, 0, 0, 1};
@@ -870,6 +895,452 @@ bool ProceduralModelLoadSlot::GenerateCone(const Engine::ConeParams& p)
         }
         for (int j = 0; j < N; j++)
             indices.insert(indices.end(), {capBase, capBase + 1 + j, capBase + 1 + (j + 1) % N});
+    }
+
+    return FinalizeGeometry(vertices, indices);
+}
+
+bool ProceduralModelLoadSlot::GenerateDoor(const Engine::DoorParams& p)
+{
+    ZoneScopedN("GenerateDoor");
+
+    const float w = p.width;
+    const float h = p.height;
+    const float d = p.depth;
+    const float hA = p.archHeight;
+    const int sides = std::max(2, p.sides);
+
+    if (w <= 0.0f || h <= 0.0f || d <= 0.0f || hA < 0.0f || hA >= h) return false;
+
+    const float archStart = h - hA; // Y where the rectangular leg ends
+
+    std::vector<Vertex> vertices;
+    std::vector<uint32_t> indices;
+
+    // Compute arc parameters (general circular arc spanning width w with height hA).
+    // Circle: center = (w/2, archStart - c), radius = hA + c, where c = (w²/4 - hA²)/(2·hA).
+    // hA=0 → flat top (special-cased). hA=w/2 → semicircle (c=0). hA>w/2 → Gothic arch (c<0).
+    float arcC = 0.0f, arcR = 0.0f, thetaStart = 0.0f, thetaEnd = glm::pi<float>();
+    glm::vec2 arcCen{w * 0.5f, archStart};
+    if (hA > 0.0f) {
+        arcC = (w * w * 0.25f - hA * hA) / (2.0f * hA);
+        arcCen = {w * 0.5f, archStart - arcC};
+        arcR = hA + arcC;
+        thetaStart = atan2f(arcC, w * 0.5f); // angle from center to (w, archStart)
+        thetaEnd   = glm::pi<float>() - thetaStart; // angle to (0, archStart)
+    }
+
+    // Build 2D profile polygon, CCW in XY.
+    // Profile always closes: last vertex → (0,0) via the left (hinge) edge.
+    std::vector<glm::vec2> poly;
+    poly.push_back({0.0f, 0.0f}); // bottom-left (hinge)
+
+    const float seamX = p.bHalf ? w * 0.5f - p.gap : w;
+    poly.push_back({seamX, 0.0f}); // bottom-right / bottom-seam
+
+    if (hA > 0.0f) {
+        // Arc: full leaf θ=thetaStart→thetaEnd; half leaf θ from x=seamX→thetaEnd
+        // arcFrom = acos(-gap/arcR) keeps the seam edge vertical (gap=0 → π/2 as before)
+        const float arcFrom = p.bHalf ? acosf(glm::clamp(-p.gap / arcR, -1.0f, 1.0f)) : thetaStart;
+        for (int i = 0; i <= sides; i++) {
+            const float t = static_cast<float>(i) / sides;
+            const float theta = arcFrom + (thetaEnd - arcFrom) * t;
+            poly.push_back({arcCen.x + arcR * cosf(theta), arcCen.y + arcR * sinf(theta)});
+        }
+        // poly.back() = (0, archStart); closing edge returns to (0,0)
+    } else {
+        // Flat top
+        poly.push_back({seamX, h});
+        poly.push_back({0.0f, h});
+    }
+
+    // bFlip: mirror about x=0 (door extends to -X) and reverse poly[1..] to maintain CCW
+    if (p.bFlip) {
+        for (auto& pt : poly) pt.x = -pt.x;
+        std::reverse(poly.begin() + 1, poly.end());
+    }
+
+    const int M = static_cast<int>(poly.size());
+
+    // Front face (Z=0, normal (0,0,-1)): fan with reversed winding so cross product = -Z
+    {
+        uint32_t base = static_cast<uint32_t>(vertices.size());
+        for (const auto& pt : poly) {
+            Vertex v{};
+            v.position = {pt.x, pt.y, 0.0f};
+            v.normal = {0, 0, -1};
+            v.texcoordU = pt.x;
+            v.texcoordV = pt.y;
+            v.tangent = {1, 0, 0, 1};
+            v.color = {1, 1, 1, 1};
+            vertices.push_back(v);
+        }
+        for (int i = 1; i + 1 < M; i++)
+            indices.insert(indices.end(), {base, base + (uint32_t)(i + 1), base + (uint32_t)i});
+    }
+
+    // Back face (Z=d, normal (0,0,1)): forward winding so cross product = +Z
+    // Viewer faces -Z, right=-X → U=-pt.x so U=0 at high-X (viewer's left)
+    {
+        uint32_t base = static_cast<uint32_t>(vertices.size());
+        for (const auto& pt : poly) {
+            Vertex v{};
+            v.position = {pt.x, pt.y, d};
+            v.normal = {0, 0, 1};
+            v.texcoordU = -pt.x;
+            v.texcoordV = pt.y;
+            v.tangent = {-1, 0, 0, 1};
+            v.color = {1, 1, 1, 1};
+            vertices.push_back(v);
+        }
+        for (int i = 1; i + 1 < M; i++)
+            indices.insert(indices.end(), {base, base + (uint32_t)i, base + (uint32_t)(i + 1)});
+    }
+
+    // Arc center may be mirrored by bFlip
+    const glm::vec2 effectiveArcCen = p.bFlip ? glm::vec2{-arcCen.x, arcCen.y} : arcCen;
+
+    // Returns true if pt lies on the arc (within tolerance)
+    auto isOnArc = [&](glm::vec2 pt) -> bool {
+        if (hA <= 0.0f || arcR < 1e-6f) return false;
+        return fabsf(glm::length(pt - effectiveArcCen) - arcR) < 1e-4f;
+    };
+
+    // Perimeter walls: flat edges use edge-perpendicular normal; arc edges use smooth radial normals.
+    for (int i = 0; i < M; i++) {
+        const glm::vec2 A = poly[i];
+        const glm::vec2 B = poly[(i + 1) % M];
+        const float edgeLen = glm::length(B - A);
+        if (edgeLen < 1e-6f) continue;
+
+        glm::vec3 nA, nB;
+        if (isOnArc(A) && isOnArc(B)) {
+            nA = glm::normalize(glm::vec3{A.x - effectiveArcCen.x, A.y - effectiveArcCen.y, 0.0f});
+            nB = glm::normalize(glm::vec3{B.x - effectiveArcCen.x, B.y - effectiveArcCen.y, 0.0f});
+        } else {
+            nA = nB = glm::normalize(glm::vec3{B.y - A.y, A.x - B.x, 0.0f});
+        }
+
+        uint32_t base = static_cast<uint32_t>(vertices.size());
+        auto push = [&](glm::vec3 pos, glm::vec3 n, glm::vec2 uv) {
+            Vertex v{};
+            v.position = pos;
+            v.normal = n;
+            v.texcoordU = uv.x;
+            v.texcoordV = uv.y;
+            v.tangent = {1, 0, 0, 1};
+            v.color = {1, 1, 1, 1};
+            vertices.push_back(v);
+        };
+        push({A.x, A.y, 0.0f}, nA, {0.0f,    0.0f});
+        push({B.x, B.y, 0.0f}, nB, {edgeLen, 0.0f});
+        push({B.x, B.y, d},    nB, {edgeLen, d});
+        push({A.x, A.y, d},    nA, {0.0f,    d});
+        indices.insert(indices.end(), {base, base + 1, base + 2, base, base + 2, base + 3});
+    }
+
+    return FinalizeGeometry(vertices, indices);
+}
+
+bool ProceduralModelLoadSlot::GeneratePlane(const Engine::PlaneParams& p)
+{
+    ZoneScopedN("GeneratePlane");
+
+    const int tx = std::max(1, p.tilesX);
+    const int tz = std::max(1, p.tilesZ);
+    const float sx = p.sizeX;
+    const float sz = p.sizeZ;
+
+    // par_shapes plane: XY plane, (0,0)→(1,1), normal +Z.
+    // Remap to engine XZ plane (Y=0, normal +Y): engine = ((par.x-0.5)*sx, 0, (par.y-0.5)*sz)
+    par_shapes_mesh* m = par_shapes_create_plane(tx, tz);
+    if (!m) return false;
+
+    par_shapes_compute_normals(m);
+
+    std::vector<Vertex> vertices(m->npoints);
+    for (int i = 0; i < m->npoints; ++i) {
+        const float px = m->points[i * 3 + 0], py = m->points[i * 3 + 1];
+        vertices[i].position = {(px - 0.5f) * sx, 0.0f, (py - 0.5f) * sz};
+        vertices[i].normal = {0.0f, 1.0f, 0.0f};
+        vertices[i].texcoordU = m->tcoords ? m->tcoords[i * 2 + 0] * sx : px * sx;
+        vertices[i].texcoordV = m->tcoords ? m->tcoords[i * 2 + 1] * sz : py * sz;
+        vertices[i].tangent = {1, 0, 0, 1};
+        vertices[i].color = {1, 1, 1, 1};
+    }
+    // Flip each triangle: XY→XZ remap flips handedness, reversing winding.
+    std::vector<uint32_t> indices(m->ntriangles * 3);
+    for (int i = 0; i < m->ntriangles; ++i) {
+        indices[i * 3 + 0] = static_cast<uint32_t>(m->triangles[i * 3 + 0]);
+        indices[i * 3 + 1] = static_cast<uint32_t>(m->triangles[i * 3 + 2]);
+        indices[i * 3 + 2] = static_cast<uint32_t>(m->triangles[i * 3 + 1]);
+    }
+    par_shapes_free_mesh(m);
+
+    return FinalizeGeometry(vertices, indices);
+}
+
+bool ProceduralModelLoadSlot::GenerateSphere(const Engine::SphereParams& p)
+{
+    ZoneScopedN("GenerateSphere");
+
+    const int slices = std::max(3, p.slices);
+    const int stacks = std::max(3, p.stacks);
+    const float r = p.radius;
+    const float pi = glm::pi<float>();
+
+    // par_shapes sphere: Z-up. Remap to Y-up: engine = (par.x*r, par.z*r, -par.y*r)
+    par_shapes_mesh* m = par_shapes_create_parametric_sphere(slices, stacks);
+    if (!m) return false;
+
+    std::vector<Vertex> vertices(m->npoints);
+    for (int i = 0; i < m->npoints; ++i) {
+        const float px = m->points[i * 3 + 0], py = m->points[i * 3 + 1], pz = m->points[i * 3 + 2];
+        const glm::vec3 pos = {px * r, pz * r, -py * r};
+        vertices[i].position = pos;
+        const float nx = m->normals[i * 3 + 0], ny = m->normals[i * 3 + 1], nz = m->normals[i * 3 + 2];
+        vertices[i].normal = glm::normalize(glm::vec3{nx, nz, -ny});
+        // Spherical UV: u = longitude 0→1, v = latitude 0(south)→1(north)
+        vertices[i].texcoordU = atan2f(-pos.z, pos.x) / (2.0f * pi) + 0.5f;
+        vertices[i].texcoordV = pos.y / r * 0.5f + 0.5f;
+        vertices[i].tangent = {1, 0, 0, 1};
+        vertices[i].color = {1, 1, 1, 1};
+    }
+    std::vector<uint32_t> indices(m->ntriangles * 3);
+    for (int i = 0; i < m->ntriangles * 3; ++i)
+        indices[i] = static_cast<uint32_t>(m->triangles[i]);
+    par_shapes_free_mesh(m);
+
+    return FinalizeGeometry(vertices, indices);
+}
+
+bool ProceduralModelLoadSlot::GenerateSubdividedSphere(const Engine::SubdividedSphereParams& p)
+{
+    ZoneScopedN("GenerateSubdividedSphere");
+
+    // par_shapes uint16_t overflow: subdivision 6 → 245k unwelded points > 65535. Max is 5.
+    const int subd = glm::clamp(p.subdivisions, 0, 5);
+    const float r = p.radius;
+    const float pi = glm::pi<float>();
+
+    par_shapes_mesh* m = par_shapes_create_subdivided_sphere(subd);
+    if (!m) return false;
+
+    std::vector<Vertex> vertices(m->npoints);
+    for (int i = 0; i < m->npoints; ++i) {
+        const glm::vec3 pos = glm::normalize(glm::vec3{
+            m->points[i * 3 + 0], m->points[i * 3 + 1], m->points[i * 3 + 2]}) * r;
+        vertices[i].position = pos;
+        vertices[i].normal = glm::normalize(pos);
+        vertices[i].texcoordU = atan2f(pos.z, pos.x) / (2.0f * pi) + 0.5f;
+        vertices[i].texcoordV = asinf(glm::clamp(pos.y / r, -1.0f, 1.0f)) / pi + 0.5f;
+        vertices[i].tangent = {1, 0, 0, 1};
+        vertices[i].color = {1, 1, 1, 1};
+    }
+    std::vector<uint32_t> indices(m->ntriangles * 3);
+    for (int i = 0; i < m->ntriangles * 3; ++i)
+        indices[i] = static_cast<uint32_t>(m->triangles[i]);
+    par_shapes_free_mesh(m);
+
+    return FinalizeGeometry(vertices, indices);
+}
+
+bool ProceduralModelLoadSlot::GenerateHemisphere(const Engine::HemisphereParams& p)
+{
+    ZoneScopedN("GenerateHemisphere");
+
+    const int N = std::max(3, p.slices);
+    const int HR = std::max(2, p.stacks);
+    const float r = p.radius;
+    const float pi = glm::pi<float>();
+
+    std::vector<Vertex> vertices;
+    std::vector<uint32_t> indices;
+
+    // Top pole
+    {
+        Vertex v{};
+        v.position = {0, r, 0};
+        v.normal = {0, 1, 0};
+        v.texcoordU = 0.5f;
+        v.texcoordV = 1.0f;
+        v.tangent = {1, 0, 0, 1};
+        v.color = {1, 1, 1, 1};
+        vertices.push_back(v);
+    }
+    const uint32_t topPole = 0;
+
+    // Rings from top (phi=PI/2) down to equator (phi=0)
+    std::vector<uint32_t> ringBase(HR + 1);
+    for (int i = 1; i <= HR; i++) {
+        const float phi = pi * 0.5f * (1.0f - static_cast<float>(i) / HR);
+        ringBase[i] = static_cast<uint32_t>(vertices.size());
+        const float ringR = r * cosf(phi);
+        const float ringY = r * sinf(phi);
+        const float nY = sinf(phi), nXZ = cosf(phi);
+        for (int j = 0; j <= N; j++) {
+            const float angle = static_cast<float>(j) / N * 2.0f * pi;
+            Vertex v{};
+            v.position = {cosf(angle) * ringR, ringY, sinf(angle) * ringR};
+            v.normal = {cosf(angle) * nXZ, nY, sinf(angle) * nXZ};
+            v.texcoordU = static_cast<float>(j) / N;
+            v.texcoordV = static_cast<float>(HR - i) / HR;
+            v.tangent = {-sinf(angle), 0, cosf(angle), 1.0f};
+            v.color = {1, 1, 1, 1};
+            vertices.push_back(v);
+        }
+    }
+
+    // Top pole fan → first ring
+    for (int j = 0; j < N; j++)
+        indices.insert(indices.end(), {topPole, ringBase[1] + (uint32_t)j + 1, ringBase[1] + (uint32_t)j});
+
+    // Ring strips
+    for (int i = 1; i < HR; i++) {
+        for (int j = 0; j < N; j++) {
+            uint32_t a0 = ringBase[i] + j, a1 = ringBase[i] + j + 1;
+            uint32_t b0 = ringBase[i + 1] + j, b1 = ringBase[i + 1] + j + 1;
+            indices.insert(indices.end(), {a0, a1, b0, b0, a1, b1});
+        }
+    }
+
+    // Bottom cap (flat circle at y=0, normal -Y)
+    uint32_t capBase = static_cast<uint32_t>(vertices.size());
+    {
+        Vertex cv{};
+        cv.position = {0, 0, 0};
+        cv.normal = {0, -1, 0};
+        cv.texcoordU = 0.5f;
+        cv.texcoordV = 0.5f;
+        cv.tangent = {1, 0, 0, 1};
+        cv.color = {1, 1, 1, 1};
+        vertices.push_back(cv);
+    }
+    for (int j = 0; j < N; j++) {
+        const float angle = static_cast<float>(j) / N * 2.0f * pi;
+        Vertex v{};
+        v.position = {cosf(angle) * r, 0.0f, sinf(angle) * r};
+        v.normal = {0, -1, 0};
+        v.texcoordU = cosf(angle) * 0.5f + 0.5f;
+        v.texcoordV = sinf(angle) * 0.5f + 0.5f;
+        v.tangent = {1, 0, 0, 1};
+        v.color = {1, 1, 1, 1};
+        vertices.push_back(v);
+    }
+    for (int j = 0; j < N; j++)
+        indices.insert(indices.end(), {capBase, capBase + 1 + (uint32_t)j, capBase + 1 + (uint32_t)((j + 1) % N)});
+
+    return FinalizeGeometry(vertices, indices);
+}
+
+bool ProceduralModelLoadSlot::GeneratePipe(const Engine::PipeParams& p)
+{
+    ZoneScopedN("GeneratePipe");
+
+    const int N = std::max(3, p.slices);
+    const float ro = std::max(0.01f, p.outerRadius);
+    const float ri = std::max(0.001f, std::min(p.innerRadius, ro - 0.001f));
+    const float h = p.height;
+    const float hh = h * 0.5f;
+    const float pi = glm::pi<float>();
+
+    std::vector<Vertex> vertices;
+    std::vector<uint32_t> indices;
+
+    auto addRingQuads = [&](float radius, glm::vec3 normal_dir, bool outward) {
+        // Outer or inner side cylinder wall
+        uint32_t base = static_cast<uint32_t>(vertices.size());
+        for (int j = 0; j <= N; j++) {
+            const float angle = static_cast<float>(j) / N * 2.0f * pi;
+            const float cx = cosf(angle), cz = sinf(angle);
+            glm::vec3 n = outward ? glm::vec3{cx, 0, cz} : glm::vec3{-cx, 0, -cz};
+            for (int k = 0; k < 2; k++) {
+                Vertex v{};
+                v.position = {cx * radius, k == 0 ? -hh : hh, cz * radius};
+                v.normal = n;
+                v.texcoordU = static_cast<float>(j) / N;
+                v.texcoordV = k == 0 ? 0.0f : 1.0f;
+                v.tangent = {-cz, 0, cx, 1.0f};
+                v.color = {1, 1, 1, 1};
+                vertices.push_back(v);
+            }
+        }
+        for (int j = 0; j < N; j++) {
+            uint32_t a0 = base + j * 2, a1 = base + j * 2 + 1;
+            uint32_t b0 = base + (j + 1) * 2, b1 = base + (j + 1) * 2 + 1;
+            if (outward) {
+                // Outer: CCW from outside
+                indices.insert(indices.end(), {a0, a1, b0, a1, b1, b0});
+            } else {
+                // Inner: CCW from inside
+                indices.insert(indices.end(), {a0, b0, a1, a1, b0, b1});
+            }
+        }
+    };
+
+    addRingQuads(ro, {}, true);   // outer wall
+    addRingQuads(ri, {}, false);  // inner wall
+
+    // Top annular cap (+Y): fan from outer ring to inner ring
+    {
+        uint32_t base = static_cast<uint32_t>(vertices.size());
+        for (int j = 0; j <= N; j++) {
+            const float angle = static_cast<float>(j) / N * 2.0f * pi;
+            const float cx = cosf(angle), cz = sinf(angle);
+            // Outer edge vertex
+            Vertex vo{};
+            vo.position = {cx * ro, hh, cz * ro};
+            vo.normal = {0, 1, 0};
+            vo.texcoordU = cx * ro;
+            vo.texcoordV = cz * ro;
+            vo.tangent = {1, 0, 0, 1};
+            vo.color = {1, 1, 1, 1};
+            vertices.push_back(vo);
+            // Inner edge vertex
+            Vertex vi{};
+            vi.position = {cx * ri, hh, cz * ri};
+            vi.normal = {0, 1, 0};
+            vi.texcoordU = cx * ri;
+            vi.texcoordV = cz * ri;
+            vi.tangent = {1, 0, 0, 1};
+            vi.color = {1, 1, 1, 1};
+            vertices.push_back(vi);
+        }
+        for (int j = 0; j < N; j++) {
+            uint32_t oa = base + j * 2, oi = base + j * 2 + 1;
+            uint32_t na = base + (j + 1) * 2, ni = base + (j + 1) * 2 + 1;
+            indices.insert(indices.end(), {oa, oi, na, oi, ni, na});
+        }
+    }
+
+    // Bottom annular cap (-Y): reversed winding
+    {
+        uint32_t base = static_cast<uint32_t>(vertices.size());
+        for (int j = 0; j <= N; j++) {
+            const float angle = static_cast<float>(j) / N * 2.0f * pi;
+            const float cx = cosf(angle), cz = sinf(angle);
+            Vertex vo{};
+            vo.position = {cx * ro, -hh, cz * ro};
+            vo.normal = {0, -1, 0};
+            vo.texcoordU = cx * ro;
+            vo.texcoordV = cz * ro;
+            vo.tangent = {1, 0, 0, 1};
+            vo.color = {1, 1, 1, 1};
+            vertices.push_back(vo);
+            Vertex vi{};
+            vi.position = {cx * ri, -hh, cz * ri};
+            vi.normal = {0, -1, 0};
+            vi.texcoordU = cx * ri;
+            vi.texcoordV = cz * ri;
+            vi.tangent = {1, 0, 0, 1};
+            vi.color = {1, 1, 1, 1};
+            vertices.push_back(vi);
+        }
+        for (int j = 0; j < N; j++) {
+            uint32_t oa = base + j * 2, oi = base + j * 2 + 1;
+            uint32_t na = base + (j + 1) * 2, ni = base + (j + 1) * 2 + 1;
+            indices.insert(indices.end(), {oa, na, oi, oi, na, ni});
+        }
     }
 
     return FinalizeGeometry(vertices, indices);

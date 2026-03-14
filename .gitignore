@@ -15,3 +15,5 @@ assets/**
 !assets/textures/error.wtexture
 !assets/textures/brdf_lut.wtexture
 !assets/textures/smiling_friend.wtexture
+!assets/textures/prototype_texture_dark.wtexture
+!assets/textures/prototype_texture_dark_license.txt

@@ -618,11 +618,16 @@ void WillEngine::EditorImgui()
                 Platform::GetAssetPath() / "environment-map/kloofendal_48d_partly_cloudy_puresky_4k.ktx2");
         }
 
-        if (ImGui::Button("Generate BRDF LUT and Smiling Friend")) {
+        if (ImGui::Button("Generate BRDF LUT, Smiling Friend, and Prototype Texture")) {
             modelGenerator->RequestTextureGenerateFromFile(
                 Platform::GetAssetPath() / "textures/smiling_friend.jpg",
                 Platform::GetAssetPath() / "textures/smiling_friend.wtexture",
-                false,
+                true,
+                DXGI_FORMAT_BC7_UNORM_SRGB);
+            modelGenerator->RequestTextureGenerateFromFile(
+                Platform::GetAssetPath() / "textures/prototype_texture_dark.png",
+                Platform::GetAssetPath() / "textures/prototype_texture_dark.wtexture",
+                true,
                 DXGI_FORMAT_BC7_UNORM_SRGB);
             modelGenerator->GenerateBRDFLUT(Platform::GetAssetPath() / "textures/brdf_lut.wtexture");
         }

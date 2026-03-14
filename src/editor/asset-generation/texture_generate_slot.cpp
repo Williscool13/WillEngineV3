@@ -170,7 +170,9 @@ bool TextureGenerateSlot::LoadImageAndGenerate(VkCommandBuffer cmd, const std::f
     }
     else {
         int32_t w, h, nrChannels;
+        stbi_set_flip_vertically_on_load_thread(1);
         stbiData = stbi_load(imagePath.string().c_str(), &w, &h, &nrChannels, 4);
+        stbi_set_flip_vertically_on_load_thread(0);
         if (!stbiData) {
             LOG_ERROR(Asset, "Failed to load image: {}", imagePath.string());
             return false;

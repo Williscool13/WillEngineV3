@@ -39,6 +39,8 @@ void EditorTextureResidency::Acquire(TextureID id, Core::EngineContext* ctx)
 
     if (!sampler) {
         SamplerDesc desc{};
+        desc.minFilter = VK_FILTER_NEAREST;
+        desc.magFilter = VK_FILTER_NEAREST;
         sampler = ctx->assetManager->LoadSampler(desc);
     }
     entries[id].texture = ctx->assetManager->LoadTexture(id);

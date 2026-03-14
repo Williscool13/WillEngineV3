@@ -374,6 +374,42 @@ void SerializeComponent<Component::ProceduralMeshComponent>(const Component::Pro
             json["slices"] = p.slices;
             json["bCapped"] = p.bCapped;
         }
+        else if constexpr (std::is_same_v<T, Engine::DoorParams>) {
+            json["width"]      = p.width;
+            json["height"]     = p.height;
+            json["depth"]      = p.depth;
+            json["archHeight"] = p.archHeight;
+            json["gap"]        = p.gap;
+            json["sides"]      = p.sides;
+            json["bHalf"]      = p.bHalf;
+            json["bFlip"]      = p.bFlip;
+        }
+        else if constexpr (std::is_same_v<T, Engine::PlaneParams>) {
+            json["sizeX"]  = p.sizeX;
+            json["sizeZ"]  = p.sizeZ;
+            json["tilesX"] = p.tilesX;
+            json["tilesZ"] = p.tilesZ;
+        }
+        else if constexpr (std::is_same_v<T, Engine::SphereParams>) {
+            json["radius"] = p.radius;
+            json["slices"] = p.slices;
+            json["stacks"] = p.stacks;
+        }
+        else if constexpr (std::is_same_v<T, Engine::SubdividedSphereParams>) {
+            json["radius"]       = p.radius;
+            json["subdivisions"] = p.subdivisions;
+        }
+        else if constexpr (std::is_same_v<T, Engine::HemisphereParams>) {
+            json["radius"] = p.radius;
+            json["slices"] = p.slices;
+            json["stacks"] = p.stacks;
+        }
+        else if constexpr (std::is_same_v<T, Engine::PipeParams>) {
+            json["outerRadius"] = p.outerRadius;
+            json["innerRadius"] = p.innerRadius;
+            json["height"]      = p.height;
+            json["slices"]      = p.slices;
+        }
     }, comp.params);
 }
 
@@ -449,6 +485,54 @@ void DeserializeComponent<Component::ProceduralMeshComponent>(Component::Procedu
         p.bCapped = json["bCapped"].get<bool>();
         comp.params = p;
     }
+    else if (type == 9) {
+        Engine::DoorParams p{};
+        p.width      = json["width"].get<float>();
+        p.height     = json["height"].get<float>();
+        p.depth      = json["depth"].get<float>();
+        p.archHeight = json.value("archHeight", 0.5f);
+        p.gap        = json.value("gap", 0.0f);
+        p.sides      = json["sides"].get<int32_t>();
+        p.bHalf      = json["bHalf"].get<bool>();
+        p.bFlip      = json.value("bFlip", false);
+        comp.params = p;
+    }
+    else if (type == 10) {
+        Engine::PlaneParams p{};
+        p.sizeX  = json["sizeX"].get<float>();
+        p.sizeZ  = json["sizeZ"].get<float>();
+        p.tilesX = json["tilesX"].get<int32_t>();
+        p.tilesZ = json["tilesZ"].get<int32_t>();
+        comp.params = p;
+    }
+    else if (type == 11) {
+        Engine::SphereParams p{};
+        p.radius = json["radius"].get<float>();
+        p.slices = json["slices"].get<int32_t>();
+        p.stacks = json["stacks"].get<int32_t>();
+        comp.params = p;
+    }
+    else if (type == 12) {
+        Engine::SubdividedSphereParams p{};
+        p.radius       = json["radius"].get<float>();
+        p.subdivisions = json["subdivisions"].get<int32_t>();
+        comp.params = p;
+    }
+    else if (type == 13) {
+        Engine::HemisphereParams p{};
+        p.radius = json["radius"].get<float>();
+        p.slices = json["slices"].get<int32_t>();
+        p.stacks = json["stacks"].get<int32_t>();
+        comp.params = p;
+    }
+    else if (type == 14) {
+        Engine::PipeParams p{};
+        p.outerRadius = json["outerRadius"].get<float>();
+        p.innerRadius = json["innerRadius"].get<float>();
+        p.height      = json["height"].get<float>();
+        p.slices      = json["slices"].get<int32_t>();
+        comp.params = p;
+    }
 }
 
 template<>
@@ -483,18 +567,24 @@ ComponentEditorResult DrawComponentEditor<Component::ProceduralMeshComponent>(Co
                     registry.emplace_or_replace<Component::ProceduralMeshLoadingTag>(entity);
                     state->bPendingModelResolve |= true;
                 };
-                if (ImGui::Selectable("Staircase")) selectShape(Engine::StaircaseParams{});
-                if (ImGui::Selectable("Box"))       selectShape(Engine::BoxParams{});
-                if (ImGui::Selectable("Cylinder"))  selectShape(Engine::CylinderParams{});
-                if (ImGui::Selectable("Capsule"))   selectShape(Engine::CapsuleParams{});
-                if (ImGui::Selectable("Torus"))     selectShape(Engine::TorusParams{});
-                if (ImGui::Selectable("Arch"))      selectShape(Engine::ArchParams{});
-                if (ImGui::Selectable("Wedge"))     selectShape(Engine::WedgeParams{});
-                if (ImGui::Selectable("Cone"))      selectShape(Engine::ConeParams{});
+                if (ImGui::Selectable("Staircase"))         selectShape(Engine::StaircaseParams{});
+                if (ImGui::Selectable("Box"))               selectShape(Engine::BoxParams{});
+                if (ImGui::Selectable("Cylinder"))          selectShape(Engine::CylinderParams{});
+                if (ImGui::Selectable("Capsule"))           selectShape(Engine::CapsuleParams{});
+                if (ImGui::Selectable("Torus"))             selectShape(Engine::TorusParams{});
+                if (ImGui::Selectable("Arch"))              selectShape(Engine::ArchParams{});
+                if (ImGui::Selectable("Wedge"))             selectShape(Engine::WedgeParams{});
+                if (ImGui::Selectable("Cone"))              selectShape(Engine::ConeParams{});
+                if (ImGui::Selectable("Door"))              selectShape(Engine::DoorParams{});
+                if (ImGui::Selectable("Plane"))             selectShape(Engine::PlaneParams{});
+                if (ImGui::Selectable("Sphere"))            selectShape(Engine::SphereParams{});
+                if (ImGui::Selectable("Subdivided Sphere")) selectShape(Engine::SubdividedSphereParams{});
+                if (ImGui::Selectable("Hemisphere"))        selectShape(Engine::HemisphereParams{});
+                if (ImGui::Selectable("Pipe"))              selectShape(Engine::PipeParams{});
                 ImGui::EndCombo();
             }
         } else {
-            static constexpr const char* shapeNames[] = {"", "Staircase", "Box", "Cylinder", "Capsule", "Torus", "Arch", "Wedge", "Cone"};
+            static constexpr const char* shapeNames[] = {"", "Staircase", "Box", "Cylinder", "Capsule", "Torus", "Arch", "Wedge", "Cone", "Door", "Plane", "Sphere", "Subdivided Sphere", "Hemisphere", "Pipe"};
             ImGui::Text("Shape: %s", shapeNames[component.params.index()]);
 
             bool dirty = false;
@@ -561,7 +651,7 @@ ComponentEditorResult DrawComponentEditor<Component::ProceduralMeshComponent>(Co
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
                     ImGui::DragFloat("Height", &p.height, 0.01f, 0.01f, 100.0f);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
-                    ImGui::DragInt("Slices", &p.slices, 1, 3, 64);
+                    ImGui::DragInt("Slices", &p.slices, 1, 3, 128);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
                     if (ImGui::Checkbox("Capped", &p.bCapped)) { dirty = true; }
                 }
@@ -570,19 +660,25 @@ ComponentEditorResult DrawComponentEditor<Component::ProceduralMeshComponent>(Co
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
                     ImGui::DragFloat("Height", &p.height, 0.01f, 0.01f, 100.0f);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
-                    ImGui::DragInt("Slices", &p.slices, 1, 3, 64);
+                    ImGui::DragInt("Slices", &p.slices, 1, 3, 128);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
-                    ImGui::DragInt("Rings", &p.rings, 1, 2, 32);
+                    ImGui::DragInt("Rings", &p.rings, 1, 2, 64);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
                 }
                 else if constexpr (std::is_same_v<T, Engine::TorusParams>) {
                     ImGui::DragFloat("Ring Radius", &p.ringRadius, 0.01f, 0.01f, 50.0f);
+                    if (ImGui::IsItemDeactivatedAfterEdit()) {
+                        p.tubeRadius = glm::clamp(p.tubeRadius, p.ringRadius * 0.1f, p.ringRadius * 0.99f);
+                        dirty = true;
+                    }
+                    ImGui::DragFloat("Tube Radius", &p.tubeRadius, 0.01f, 0.001f, p.ringRadius * 0.99f);
+                    if (ImGui::IsItemDeactivatedAfterEdit()) {
+                        p.tubeRadius = glm::clamp(p.tubeRadius, p.ringRadius * 0.1f, p.ringRadius * 0.99f);
+                        dirty = true;
+                    }
+                    ImGui::DragInt("Slices", &p.slices, 1, 3, 128);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
-                    ImGui::DragFloat("Tube Radius", &p.tubeRadius, 0.01f, 0.001f, 50.0f);
-                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
-                    ImGui::DragInt("Slices", &p.slices, 1, 3, 64);
-                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
-                    ImGui::DragInt("Stacks", &p.stacks, 1, 3, 64);
+                    ImGui::DragInt("Stacks", &p.stacks, 1, 3, 128);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
                 }
                 else if constexpr (std::is_same_v<T, Engine::ArchParams>) {
@@ -594,7 +690,7 @@ ComponentEditorResult DrawComponentEditor<Component::ProceduralMeshComponent>(Co
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
                     ImGui::DragFloat("Thickness", &p.thickness, 0.01f, 0.01f, 50.0f);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
-                    ImGui::DragInt("Sides", &p.sides, 1, 2, 32);
+                    ImGui::DragInt("Sides", &p.sides, 1, 1, 64);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
                 }
                 else if constexpr (std::is_same_v<T, Engine::WedgeParams>) {
@@ -610,9 +706,68 @@ ComponentEditorResult DrawComponentEditor<Component::ProceduralMeshComponent>(Co
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
                     ImGui::DragFloat("Height", &p.height, 0.01f, 0.01f, 100.0f);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
-                    ImGui::DragInt("Slices", &p.slices, 1, 3, 64);
+                    ImGui::DragInt("Slices", &p.slices, 1, 3, 128);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
                     if (ImGui::Checkbox("Capped", &p.bCapped)) { dirty = true; }
+                }
+                else if constexpr (std::is_same_v<T, Engine::DoorParams>) {
+                    ImGui::DragFloat("Width", &p.width, 0.01f, 0.01f, 100.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Height", &p.height, 0.01f, 0.01f, 100.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Depth", &p.depth, 0.001f, 0.001f, 1.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Arch Height", &p.archHeight, 0.01f, 0.0f, 100.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Gap", &p.gap, 0.001f, 0.0f, 1.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragInt("Sides", &p.sides, 1, 2, 64);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    if (ImGui::Checkbox("Half", &p.bHalf)) { dirty = true; }
+                    ImGui::SameLine();
+                    if (ImGui::Checkbox("Flip (right-side hinge)", &p.bFlip)) { dirty = true; }
+                }
+                else if constexpr (std::is_same_v<T, Engine::PlaneParams>) {
+                    ImGui::DragFloat("Size X", &p.sizeX, 0.01f, 0.01f, 1000.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Size Z", &p.sizeZ, 0.01f, 0.01f, 1000.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragInt("Tiles X", &p.tilesX, 1, 1, 128);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragInt("Tiles Z", &p.tilesZ, 1, 1, 128);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                }
+                else if constexpr (std::is_same_v<T, Engine::SphereParams>) {
+                    ImGui::DragFloat("Radius", &p.radius, 0.01f, 0.01f, 50.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragInt("Slices", &p.slices, 1, 3, 64);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragInt("Stacks", &p.stacks, 1, 3, 64);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                }
+                else if constexpr (std::is_same_v<T, Engine::SubdividedSphereParams>) {
+                    ImGui::DragFloat("Radius", &p.radius, 0.01f, 0.01f, 50.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragInt("Subdivisions", &p.subdivisions, 1, 0, 5);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                }
+                else if constexpr (std::is_same_v<T, Engine::HemisphereParams>) {
+                    ImGui::DragFloat("Radius", &p.radius, 0.01f, 0.01f, 50.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragInt("Slices", &p.slices, 1, 3, 128);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragInt("Stacks", &p.stacks, 1, 2, 64);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                }
+                else if constexpr (std::is_same_v<T, Engine::PipeParams>) {
+                    ImGui::DragFloat("Outer Radius", &p.outerRadius, 0.01f, 0.01f, 50.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Inner Radius", &p.innerRadius, 0.01f, 0.001f, 50.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Height", &p.height, 0.01f, 0.01f, 100.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragInt("Slices", &p.slices, 1, 3, 128);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
                 }
             }, component.params);
 
