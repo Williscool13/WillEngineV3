@@ -324,14 +324,14 @@ void SerializeComponent<Component::ProceduralMeshComponent>(const Component::Pro
 
     std::visit([&json](const auto& p) {
         using T = std::decay_t<decltype(p)>;
-        if constexpr (std::is_same_v<T, Component::StaircaseParams>) {
+        if constexpr (std::is_same_v<T, Engine::StaircaseParams>) {
             json["stepCount"] = p.stepCount;
             json["stepHeight"] = p.stepHeight;
             json["stepDepth"] = p.stepDepth;
             json["width"] = p.width;
             json["closed"] = p.closed;
         }
-        else if constexpr (std::is_same_v<T, Component::BoxParams>) {
+        else if constexpr (std::is_same_v<T, Engine::BoxParams>) {
             json["sizeX"] = p.sizeX;
             json["sizeY"] = p.sizeY;
             json["sizeZ"] = p.sizeZ;
@@ -346,7 +346,7 @@ void DeserializeComponent<Component::ProceduralMeshComponent>(Component::Procedu
 
     int32_t type = json["type"].get<int32_t>();
     if (type == 1) {
-        Component::StaircaseParams p{};
+        Engine::StaircaseParams p{};
         p.stepCount = json["stepCount"].get<int32_t>();
         p.stepHeight = json["stepHeight"].get<float>();
         p.stepDepth = json["stepDepth"].get<float>();
@@ -355,7 +355,7 @@ void DeserializeComponent<Component::ProceduralMeshComponent>(Component::Procedu
         comp.params = p;
     }
     else if (type == 2) {
-        Component::BoxParams p{};
+        Engine::BoxParams p{};
         p.sizeX = json["sizeX"].get<float>();
         p.sizeY = json["sizeY"].get<float>();
         p.sizeZ = json["sizeZ"].get<float>();
@@ -390,14 +390,14 @@ ComponentEditorResult DrawComponentEditor<Component::ProceduralMeshComponent>(Co
         if (std::holds_alternative<std::monostate>(component.params)) {
             if (ImGui::BeginCombo("Shape", "")) {
                 if (ImGui::Selectable("Staircase")) {
-                    component.params = Component::StaircaseParams{};
-                    // TODO: LoadModel equivalent (generate procedural geometry)
+                    component.params = Engine::StaircaseParams{};
+                    component.modelHandle = ctx->assetManager->LoadProceduralMesh(component.params);
                     registry.emplace_or_replace<Component::ProceduralMeshLoadingTag>(entity);
                     state->bPendingModelResolve |= true;
                 }
                 if (ImGui::Selectable("Box")) {
-                    component.params = Component::BoxParams{};
-                    // TODO: LoadModel equivalent (generate procedural geometry)
+                    component.params = Engine::BoxParams{};
+                    component.modelHandle = ctx->assetManager->LoadProceduralMesh(component.params);
                     registry.emplace_or_replace<Component::ProceduralMeshLoadingTag>(entity);
                     state->bPendingModelResolve |= true;
                 }
@@ -410,7 +410,7 @@ ComponentEditorResult DrawComponentEditor<Component::ProceduralMeshComponent>(Co
             bool dirty = false;
             std::visit([&dirty](auto& p) {
                 using T = std::decay_t<decltype(p)>;
-                if constexpr (std::is_same_v<T, Component::StaircaseParams>) {
+                if constexpr (std::is_same_v<T, Engine::StaircaseParams>) {
                     ImGui::DragInt("Step Count", &p.stepCount, 1, 1, 256);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
                     ImGui::DragFloat("Step Height", &p.stepHeight, 0.01f, 0.01f, 10.0f);
@@ -422,7 +422,7 @@ ComponentEditorResult DrawComponentEditor<Component::ProceduralMeshComponent>(Co
                     ImGui::Checkbox("Closed", &p.closed);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
                 }
-                else if constexpr (std::is_same_v<T, Component::BoxParams>) {
+                else if constexpr (std::is_same_v<T, Engine::BoxParams>) {
                     ImGui::DragFloat("Size X", &p.sizeX, 0.01f, 0.01f, 100.0f);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
                     ImGui::DragFloat("Size Y", &p.sizeY, 0.01f, 0.01f, 100.0f);
@@ -441,7 +441,7 @@ ComponentEditorResult DrawComponentEditor<Component::ProceduralMeshComponent>(Co
                     ctx->materialManager->ReleaseMaterial(component.primitive.materialID);
                     component.bPrimitiveReady = false;
                 }
-                // TODO: LoadModel equivalent (generate procedural geometry)
+                component.modelHandle = ctx->assetManager->LoadProceduralMesh(component.params);
                 registry.emplace_or_replace<Component::ProceduralMeshLoadingTag>(entity);
                 state->bPendingModelResolve |= true;
             }
@@ -502,7 +502,9 @@ void OnComponentAdded<Component::ProceduralMeshComponent>(Component::ProceduralM
     }
 
     auto* state = registry.ctx().get<Engine::GameState*>();
-    // todo: we will procedurally load here (mirror modelHandle = ctx->assetManager->LoadModel(component.modelId);)
+    auto* ctx = registry.ctx().get<Core::EngineContext*>();
+
+    component.modelHandle = ctx->assetManager->LoadProceduralMesh(component.params);
     registry.emplace_or_replace<Component::ProceduralMeshLoadingTag>(entity);
     state->bPendingModelResolve |= true;
 }

@@ -7,11 +7,11 @@
 
 #include <array>
 #include <cstdint>
-#include <variant>
 #include <glm/glm.hpp>
 
 #include "core/string_id.h"
 #include "../../engine/resources/material/material_manager.h"
+#include "engine/resources/model/model_types.h"
 
 namespace Game::Component
 {
@@ -52,27 +52,9 @@ struct StaticMeshComponent
 struct StaticMeshLoadingTag
 {};
 
-
-struct StaircaseParams
-{
-    int32_t stepCount{10};
-    float stepHeight{0.2f};
-    float stepDepth{0.3f};
-    float width{1.0f};
-    bool closed{true};
-};
-
-struct BoxParams
-{
-    float sizeX{1.0f}, sizeY{1.0f}, sizeZ{1.0f};
-};
-
-using ProceduralParams = std::variant<std::monostate, StaircaseParams, BoxParams>;
-
-
 struct ProceduralMeshComponent
 {
-    ProceduralParams params;
+    Engine::ProceduralParams params;
     Engine::MaterialID material{};
     glm::vec4 modelFlags{0.0f};
 

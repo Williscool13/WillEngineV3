@@ -10,6 +10,7 @@
 #include "model_types.h"
 #include "TaskScheduler.h"
 #include "core/include/render_interface.h"
+#include "model_types.h"
 
 
 namespace Engine
@@ -38,11 +39,16 @@ public:
 
     // Populated by AssetManager, never changed
     std::string name{};
-    std::filesystem::path source{};
-    StringID modelId{};
     StaticModelHandle selfHandle;
     ModelLoadState modelLoadState{ModelLoadState::NotLoaded};
     uint64_t acquireFrame{UINT64_MAX};
+
+    // Populated by AssetManager, Only for normal models
+    std::filesystem::path source{};
+    StringID modelId{};
+
+    // Populated by AssetManager, Only for (simple) procedural models
+    ProceduralParams proceduralParams{};
 
     // Populated by AssetManager, sometimes changed
     uint32_t refCount = 0;

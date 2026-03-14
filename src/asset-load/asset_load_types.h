@@ -19,6 +19,7 @@ namespace AssetLoad
 class CubemapLoadSlot;
 class TextureLoadSlot;
 class StaticModelLoadSlot;
+class ProceduralModelLoadSlot;
 class AudioLoadSlot;
 class PipelineLoadSlot;
 }
@@ -107,6 +108,7 @@ struct RawStaticModel
 using AudioSlotHandle = Core::Handle<AudioLoadSlot>;
 using PipelineSlotHandle = Core::Handle<PipelineLoadSlot>;
 using ModelSlotHandle = Core::Handle<StaticModelLoadSlot>;
+using ProceduralModelSlotHandle = Core::Handle<ProceduralModelLoadSlot>;
 using TextureSlotHandle = Core::Handle<TextureLoadSlot>;
 using CubemapSlotHandle = Core::Handle<CubemapLoadSlot>;
 using UploadStagingSlotHandle = Core::Handle<UploadStaging>;

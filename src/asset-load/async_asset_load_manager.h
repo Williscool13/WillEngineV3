@@ -16,6 +16,7 @@
 #include "asset-load-jobs/audio_load_slot.h"
 #include "asset-load-jobs/pipeline_load_slot.h"
 #include "asset-load-jobs/static_model_load_slot.h"
+#include "asset-load-jobs/procedural_model_load_slot.h"
 #include "asset-load-jobs/texture_load_slot.h"
 #include "asset-load-jobs/cubemap_load_slot.h"
 #include "core/allocators/lock_free_handle_allocator.h"
@@ -134,6 +135,12 @@ public:
 
     bool TryDequeueModelComplete(StaticModelLoadComplete& outResult);
 
+    // Procedural model loading
+    void RequestProceduralModelLoad(Engine::StaticModel* model);
+
+    bool TryDequeueProceduralModelComplete(StaticModelLoadComplete& outResult);
+
+
     // Texture loading
     void RequestTextureLoad(Engine::Texture* texture);
 
@@ -207,6 +214,12 @@ private:
     std::array<StaticModelLoadSlot, MODEL_JOB_COUNT> modelLoadSlots;
     moodycamel::ConcurrentQueue<StaticModelLoadComplete> modelLoadCompleteQueue;
 
+    // Procedural Model Loading
+    moodycamel::ConcurrentQueue<StaticModelLoadRequest> proceduralModelRequestQueue;
+    Core::LockFreeHandleAllocator<ProceduralModelLoadSlot, PROCEDURAL_MODEL_JOB_COUNT> proceduralModelLoadAllocator;
+    std::array<ProceduralModelLoadSlot, PROCEDURAL_MODEL_JOB_COUNT> proceduralModelLoadSlots;
+    moodycamel::ConcurrentQueue<StaticModelLoadComplete> proceduralModelLoadCompleteQueue;
+
     // Texture Loading
     moodycamel::ConcurrentQueue<TextureLoadRequest> textureRequestQueue;
     Core::LockFreeHandleAllocator<TextureLoadSlot, TEXTURE_JOB_COUNT> textureLoadAllocator;
@@ -235,6 +248,8 @@ private:
     void OnPipelineLoadComplete(bool success, PipelineSlotHandle slotHandle);
 
     void OnModelLoadComplete(bool success, ModelSlotHandle modelSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle);
+
+    void OnProceduralModelLoadComplete(bool success, ProceduralModelSlotHandle slotHandle, UploadStagingSlotHandle uploadStagingSlotHandle);
 
     void OnTextureLoadComplete(bool success, TextureSlotHandle textureSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle);
 

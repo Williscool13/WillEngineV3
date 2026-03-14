@@ -70,6 +70,20 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Render::VulkanContext* context, Ren
         );
     }
 
+    for (uint32_t i = 0; i < PROCEDURAL_MODEL_JOB_COUNT; ++i) {
+        proceduralModelLoadSlots[i].Initialize(
+            assetLoadScheduler.get(),
+            context,
+            resourceManager,
+            [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
+                QueueGPUDispatch(cmd, fence, completionSignal);
+            },
+            [this](bool success, ProceduralModelSlotHandle slotHandle, UploadStagingSlotHandle uploadStagingSlotHandle) {
+                OnProceduralModelLoadComplete(success, slotHandle, uploadStagingSlotHandle);
+            }
+        );
+    }
+
     for (uint32_t i = 0; i < TEXTURE_JOB_COUNT; ++i) {
         textureLoadSlots[i].Initialize(
             assetLoadScheduler.get(),
@@ -158,6 +172,28 @@ void AsyncAssetLoadManager::ThreadMain()
                 }
                 else {
                     modelRequestQueue.enqueue(modelReq);
+                }
+            }
+        } {
+            ZoneScopedN("Process Procedural Model Requests");
+            StaticModelLoadRequest proceduralReq{};
+            if (proceduralModelRequestQueue.try_dequeue(proceduralReq)) {
+                Core::Handle<ProceduralModelLoadSlot> slotHandle = proceduralModelLoadAllocator.Add();
+                if (slotHandle.IsValid()) {
+                    Core::Handle<UploadStaging> uploadHandle = uploadStagingAllocator.Add();
+                    if (uploadHandle.IsValid()) {
+                        ProceduralModelLoadSlot& slot = proceduralModelLoadSlots[slotHandle.index];
+                        UploadStaging* uploadStaging = &uploadStagings[uploadHandle.index];
+
+                        slot.Launch(slotHandle, uploadHandle, uploadStaging, proceduralReq.model);
+                    }
+                    else {
+                        proceduralModelRequestQueue.enqueue(proceduralReq);
+                        proceduralModelLoadAllocator.Remove(slotHandle);
+                    }
+                }
+                else {
+                    proceduralModelRequestQueue.enqueue(proceduralReq);
                 }
             }
         } {
@@ -366,6 +402,25 @@ bool AsyncAssetLoadManager::TryDequeueModelComplete(StaticModelLoadComplete& out
     return modelLoadCompleteQueue.try_dequeue(outResult);
 }
 
+void AsyncAssetLoadManager::RequestProceduralModelLoad(Engine::StaticModel* model)
+{
+    ZoneScoped;
+
+    if (!model) {
+        LOG_ERROR(Asset, "RequestProceduralModelLoad called with null model");
+        return;
+    }
+
+    proceduralModelRequestQueue.enqueue({model});
+    workCounter.fetch_add(1);
+    wakeCV.notify_one();
+}
+
+bool AsyncAssetLoadManager::TryDequeueProceduralModelComplete(StaticModelLoadComplete& outResult)
+{
+    return proceduralModelLoadCompleteQueue.try_dequeue(outResult);
+}
+
 void AsyncAssetLoadManager::RequestTextureLoad(Engine::Texture* texture)
 {
     ZoneScoped;
@@ -490,6 +545,33 @@ void AsyncAssetLoadManager::OnModelLoadComplete(bool success, ModelSlotHandle mo
 
     slot.Clear();
     modelLoadAllocator.Remove(modelSlotHandle);
+
+    if (uploadStagingAllocator.IsValid(uploadStagingSlotHandle)) {
+        uploadStagingAllocator.Remove(uploadStagingSlotHandle);
+    }
+
+    workCounter.fetch_add(1);
+    wakeCV.notify_one();
+}
+
+void AsyncAssetLoadManager::OnProceduralModelLoadComplete(bool success, ProceduralModelSlotHandle slotHandle, UploadStagingSlotHandle uploadStagingSlotHandle)
+{
+    ZoneScoped;
+
+    if (!proceduralModelLoadAllocator.IsValid(slotHandle)) {
+        LOG_ERROR(Asset, "OnProceduralModelLoadComplete called with invalid slot handle");
+        return;
+    }
+
+    ProceduralModelLoadSlot& slot = proceduralModelLoadSlots[slotHandle.index];
+    proceduralModelLoadCompleteQueue.enqueue({slot.outputModel, success});
+
+    if (!success) {
+        LOG_ERROR(Asset, "Failed to generate procedural model: {}", slot.outputModel->modelId.ToString());
+    }
+
+    slot.Clear();
+    proceduralModelLoadAllocator.Remove(slotHandle);
 
     if (uploadStagingAllocator.IsValid(uploadStagingSlotHandle)) {
         uploadStagingAllocator.Remove(uploadStagingSlotHandle);

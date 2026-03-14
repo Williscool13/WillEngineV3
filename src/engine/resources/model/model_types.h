@@ -7,12 +7,13 @@
 #include <string>
 #include <vector>
 #include <cstdint>
+#include <variant>
 
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 
 #include "offsetAllocator.hpp"
-#include "../material/material.h"
+#include "engine/resources/material/material.h"
 
 namespace Engine
 {
@@ -128,6 +129,22 @@ struct StaticModelData
         primitiveAllocation = {};
     }
 };
+
+struct StaircaseParams
+{
+    int32_t stepCount{10};
+    float stepHeight{0.2f};
+    float stepDepth{0.3f};
+    float width{1.0f};
+    bool closed{true};
+};
+
+struct BoxParams
+{
+    float sizeX{1.0f}, sizeY{1.0f}, sizeZ{1.0f};
+};
+
+using ProceduralParams = std::variant<std::monostate, StaircaseParams, BoxParams>;
 } // Render
 
 #endif //WILL_ENGINE_MODEL_TYPES_H

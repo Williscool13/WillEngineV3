@@ -121,7 +121,55 @@ StaticModelHandle AssetManager::LoadModel(StringID modelId)
 
     modelIdToHandle[modelId] = handle;
 
+    LOG_TRACE(Asset, "Requesting model load: {}", model.name);
     assetLoadManager->RequestModelLoad(&model);
+
+    return handle;
+}
+
+StaticModelHandle AssetManager::LoadProceduralMesh(ProceduralParams& params)
+{
+    const size_t idx = params.index();
+    uint64_t hash = fnv1a64(reinterpret_cast<const uint8_t*>(&idx), sizeof(idx));
+    // The fuck is this shit what the fuck
+    std::visit([&hash](const auto& v) {
+       if constexpr (!std::is_same_v<std::decay_t<decltype(v)>, std::monostate>) {
+           hash = fnv1a64(reinterpret_cast<const uint8_t*>(&v), sizeof(v), hash);
+       }
+   }, params);
+
+    StringID proceduralModelId{hash};
+
+    auto it = modelIdToHandle.find(proceduralModelId);
+    if (it != modelIdToHandle.end()) {
+        StaticModelHandle existingHandle = it->second;
+        if (modelAllocator.IsValid(existingHandle)) {
+            StaticModel& model = models[existingHandle.index];
+            model.refCount++;
+            LOG_TRACE(Asset, "Procedural model already loaded: {}, refCount: {}", proceduralModelId.id, model.refCount);
+            return existingHandle;
+        }
+        modelIdToHandle.erase(it);
+    }
+
+    StaticModelHandle handle = modelAllocator.Add();
+    if (!handle.IsValid()) {
+        LOG_ERROR(Asset, "Failed to allocate model slot for: {}", proceduralModelId.id);
+        return StaticModelHandle::INVALID;
+    }
+
+    static int32_t proceduralCounter = 0;
+    StaticModel& model = models[handle.index];
+    model.selfHandle = handle;
+    model.name = fmt::format("Procedural Mesh {}", proceduralCounter++);
+    model.proceduralParams = params;
+    model.refCount = 1;
+    model.modelLoadState = StaticModel::ModelLoadState::NotLoaded;
+
+    modelIdToHandle[proceduralModelId] = handle;
+
+    LOG_TRACE(Asset, "Requesting procedural model load: {}", model.name);
+    assetLoadManager->RequestProceduralModelLoad(&model);
 
     return handle;
 }
@@ -148,6 +196,7 @@ void AssetManager::UnloadModel(StaticModelHandle handle)
 
     if (model.refCount == 0) {
         model.modelLoadState = StaticModel::ModelLoadState::NotLoaded;
+        // todo do this like we do with texture
         // assetLoadThread->RequestModelUnload(handle, &model);
         modelIdToHandle.erase(model.modelId);
     }
@@ -179,6 +228,28 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
             complete.model->imageAcquireOps.clear();
             complete.model->modelLoadState = StaticModel::ModelLoadState::NotLoaded;
             LOG_ERROR(Asset, "Model load failed: {}", complete.model->modelId.ToString());
+        }
+    }
+
+    AssetLoad::StaticModelLoadComplete proceduralComplete{};
+    while (assetLoadManager->TryDequeueProceduralModelComplete(proceduralComplete)) {
+        if (proceduralComplete.bSuccess) {
+            stagingFrameBuffer.bufferAcquireOperations.insert(stagingFrameBuffer.bufferAcquireOperations.end(),
+                                                              proceduralComplete.model->bufferAcquireOps.begin(),
+                                                              proceduralComplete.model->bufferAcquireOps.end());
+
+            proceduralComplete.model->bufferAcquireOps.clear();
+            proceduralComplete.model->imageAcquireOps.clear();
+            proceduralComplete.model->modelLoadState = StaticModel::ModelLoadState::Loaded;
+            proceduralComplete.model->acquireFrame = ctx->currentFrame;
+            LOG_TRACE(Asset, "Procedural model generation succeeded: {}", proceduralComplete.model->name);
+            loadCounts.modelLoadedCount++;
+        }
+        else {
+            proceduralComplete.model->bufferAcquireOps.clear();
+            proceduralComplete.model->imageAcquireOps.clear();
+            proceduralComplete.model->modelLoadState = StaticModel::ModelLoadState::NotLoaded;
+            LOG_ERROR(Asset, "Procedural model generation failed: {}", proceduralComplete.model->name);
         }
     }
 
@@ -365,6 +436,7 @@ Texture* AssetManager::LoadTexture(TextureID textureId)
 
     textureIdToHandle[textureId] = handle;
 
+    LOG_TRACE(Asset, "Requesting texture load: {}", texture.name);
     assetLoadManager->RequestTextureLoad(&texture);
 
     return &texture;
@@ -405,6 +477,7 @@ Sampler* AssetManager::LoadSampler(SamplerDesc& samplerDesc)
             Sampler& existing = samplers[existingHandle.index];
             existing.refCount++;
             existing.retireFrame = 0;
+            LOG_TRACE(Asset, "Sampler already loaded (bindless index: {}), refCount: {}", static_cast<uint32_t>(existing.bindlessHandle.index), existing.refCount);
             return &existing;
         }
         samplerIdToHandle.erase(it);
@@ -425,6 +498,7 @@ Sampler* AssetManager::LoadSampler(SamplerDesc& samplerDesc)
 
     samplerIdToHandle[id] = handle;
 
+    LOG_TRACE(Asset, "Requesting sampler load (bindless index: {})", static_cast<uint32_t>(sampler.bindlessHandle.index));
     assetLoadManager->RequestSamplerLoad(&sampler);
 
     return &sampler;
@@ -491,6 +565,7 @@ CubemapHandle AssetManager::LoadCubemap(StringID cubemapId)
 
     cubemapIdToHandle[cubemapId] = handle;
 
+    LOG_TRACE(Asset, "Requesting cubemap load: {}", cubemap.name);
     assetLoadManager->RequestCubemapLoad(&cubemap);
 
     return handle;

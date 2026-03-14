@@ -23,6 +23,15 @@ void ResolveStaticMeshLoads(Core::EngineContext* ctx, Engine::GameState* state)
     std::vector<entt::entity> resolved;
 
     for (auto [entity, meshComponent] : state->registry.view<Component::StaticMeshComponent, Component::StaticMeshLoadingTag>().each()) {
+        Engine::MaterialManager* materialManager = ctx->materialManager;
+        // Cleanup
+        {
+            for (size_t i = 0; i < meshComponent.primitiveCount; ++i) {
+                materialManager->ReleaseMaterial(meshComponent.primitives[i].materialID);
+            }
+            meshComponent.primitiveCount = 0;
+        }
+
         auto model = ctx->assetManager->GetModel(meshComponent.modelHandle);
         if (!model) {
             LOG_ERROR(Game, "Model ({}) is not in the asset manager, it should have been requested to load during scene load.", meshComponent.modelHandle.index);
@@ -32,12 +41,6 @@ void ResolveStaticMeshLoads(Core::EngineContext* ctx, Engine::GameState* state)
             LOG_TRACE(Game, "Model ({}) not yet done loading", model->modelId.ToString());
             continue;
         }
-
-        Engine::MaterialManager* materialManager = ctx->materialManager;
-        for (size_t i = 0; i < meshComponent.primitiveCount; ++i) {
-            materialManager->ReleaseMaterial(meshComponent.primitives[i].materialID);
-        }
-        meshComponent.primitiveCount = 0;
 
         Engine::MeshInformation& mesh = model->modelData.meshes[meshComponent.meshIndex];
 
@@ -78,7 +81,6 @@ void ResolveStaticMeshLoads(Core::EngineContext* ctx, Engine::GameState* state)
             materialManager->AcquireMaterial(matID);
         }
         meshComponent.primitiveCount = primCount;
-        meshComponent.modelFlags = glm::vec4(0.0f);
 
         resolved.push_back(entity);
     }
@@ -93,17 +95,42 @@ void ResolveProceduralMeshLoads(Core::EngineContext* ctx, Engine::GameState* sta
     std::vector<entt::entity> resolved;
 
     for (auto [entity, meshComponent] : state->registry.view<Component::ProceduralMeshComponent, Component::ProceduralMeshLoadingTag>().each()) {
-        // Release previous primitive's material ref if we're rebuilding
-        if (meshComponent.bPrimitiveReady) {
-            ctx->materialManager->ReleaseMaterial(meshComponent.primitive.materialID);
-            meshComponent.bPrimitiveReady = false;
-        }
-        if (meshComponent.modelHandle.IsValid()) {
-            ctx->assetManager->UnloadModel(meshComponent.modelHandle);
-            meshComponent.modelHandle = {};
+        // Cleanup
+        {
+            if (meshComponent.bPrimitiveReady) {
+                ctx->materialManager->ReleaseMaterial(meshComponent.primitive.materialID);
+                meshComponent.bPrimitiveReady = false;
+            }
         }
 
-        // TODO: generate geometry from meshComponent.params, upload to GPU, populate meshComponent.primitive
+        auto model = ctx->assetManager->GetModel(meshComponent.modelHandle);
+        if (!model) {
+            LOG_ERROR(Game, "Procedural model ({}) is not in the asset manager, it should have been requested to load during scene load.", meshComponent.modelHandle.index);
+            continue;
+        }
+        if (model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
+            LOG_TRACE(Game, "Procedural model ({}) not yet done loading", model->modelId.id);
+            continue;
+        }
+
+        Engine::MeshInformation& mesh = model->modelData.meshes[0];
+        Engine::PrimitiveProperty& primitive = mesh.primitiveProperties[0];
+
+        Engine::MaterialManager* materialManager = ctx->materialManager;
+        Engine::MaterialID matID = materialManager->GetDefaultMaterial();
+        if (meshComponent.material.IsValid()) {
+            if (materialManager->DoesMutableMaterialExist(meshComponent.material)) {
+                matID = meshComponent.material;
+            }
+        }
+
+        meshComponent.primitive = {
+            .primitiveIndex = primitive.index,
+            .originalMaterialIndex = -1,
+            .materialID = matID,
+        };
+        materialManager->AcquireMaterial(matID);
+        meshComponent.bPrimitiveReady = true;
 
         resolved.push_back(entity);
     }
@@ -275,8 +302,6 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
             entt::exclude<Component::ProceduralMeshLoadingTag>);
 
         for (const auto& [entity, renderable, renderTransform] : view.each()) {
-            if (!renderable.bPrimitiveReady) { continue; }
-
             auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.size());
             frameBuffer->mainViewFamily.modelMatrices.push_back({renderTransform.modelMatrix, renderTransform.previousMatrix});
 

@@ -288,6 +288,7 @@ entt::entity CreateSceneEntity(Engine::GameState* state)
     static int32_t runningNameTally = 0;
     auto newName = fmt::format("New Entity {}", runningNameTally++);
     state->registry.emplace<Component::NameComponent>(newEntity, newName);
+    LOG_TRACE(Game, "Created new entity {}", entt::to_integral(newEntity));
     return newEntity;
 }
 

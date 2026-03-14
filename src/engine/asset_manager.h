@@ -18,6 +18,7 @@
 #include "resources/model/model_types.h"
 #include "engine/resources/texture/texture.h"
 #include "engine/resources/model/static_model.h"
+#include "game/components/render_components.h"
 
 namespace AssetLoad
 {
@@ -56,6 +57,8 @@ public:
 
 public: // Models
     StaticModelHandle LoadModel(StringID modelId);
+
+    StaticModelHandle LoadProceduralMesh(ProceduralParams& params);
 
     StaticModel* GetModel(StaticModelHandle handle);
 

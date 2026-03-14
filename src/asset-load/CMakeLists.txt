@@ -16,8 +16,9 @@ add_library(asset-load STATIC
         async_asset_load_manager.h
         asset-load-jobs/cubemap_load_slot.cpp
         asset-load-jobs/cubemap_load_slot.h
-
-
+        asset-load-jobs/procedural_model_load_slot.cpp
+        asset-load-jobs/procedural_model_load_slot.h
+        asset-load-jobs/par_shapes_impl.cpp
 )
 
 target_include_directories(asset-load PUBLIC
@@ -32,4 +33,5 @@ target_link_libraries(asset-load PUBLIC
         platform
         enkiTS
         tracy_interface
+        meshoptimizer
 )
