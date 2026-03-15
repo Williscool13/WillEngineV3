@@ -326,12 +326,19 @@ bool ProceduralModelLoadSlot::FinalizeGeometry(std::vector<Vertex>& vertices, st
     rawData.primitives.push_back(primitiveData);
     rawData.allMeshes.push_back(std::move(meshInfo));
 
-    if (vertices.size() <= PHYSICS_CACHE_MAX_VERTICES) {
-        Engine::StaticModel::PhysicsCache cache;
-        cache.positions.reserve(vertices.size());
-        for (const auto& v : vertices) cache.positions.push_back(v.position);
-        cache.indices = indices;
-        outputModel->physicsCache = std::move(cache);
+    {
+        std::vector<glm::vec3> positions;
+        positions.reserve(vertices.size());
+        for (const auto& v : vertices) positions.push_back(v.position);
+
+        if (positions.size() <= PHYSICS_CACHE_MAX_VERTICES) {
+            Engine::StaticModel::PhysicsCache cache;
+            cache.positions = positions;
+            cache.indices = indices;
+            outputModel->physicsCache = std::move(cache);
+        }
+
+        outputModel->bounds = Engine::StaticModel::ComputeBounds(positions, &indices);
     }
 
     return true;

@@ -244,8 +244,9 @@ JPH::ShapeRefC CreateShapeFromDesc(const Component::PhysicsShapeDesc& desc, Engi
             if (!model || !model->physicsCache) { return nullptr; }
             JPH::Array<JPH::Vec3> pts;
             pts.reserve(model->physicsCache->positions.size());
-            for (const auto& p : model->physicsCache->positions)
+            for (const auto& p : model->physicsCache->positions) {
                 pts.push_back({p.x, p.y, p.z});
+            }
             JPH::ConvexHullShapeSettings s(pts);
             auto result = s.Create();
             if (result.HasError()) {

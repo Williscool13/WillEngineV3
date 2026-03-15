@@ -339,13 +339,20 @@ void StaticModelLoadSlot::PrepareUploadData()
         }
     }
 
-    if (rawData.vertices.size() <= AssetLoad::PHYSICS_CACHE_MAX_VERTICES) {
-        Engine::StaticModel::PhysicsCache cache;
-        cache.positions.reserve(rawData.vertices.size());
+    {
+        std::vector<glm::vec3> positions;
+        positions.reserve(rawData.vertices.size());
         for (const auto& v : rawData.vertices)
-            cache.positions.push_back(v.position);
-        cache.indices = rawData.indices;
-        outputModel->physicsCache = std::move(cache);
+            positions.push_back(v.position);
+
+        if (positions.size() <= AssetLoad::PHYSICS_CACHE_MAX_VERTICES) {
+            Engine::StaticModel::PhysicsCache cache;
+            cache.positions = positions;
+            cache.indices = rawData.indices;
+            outputModel->physicsCache = std::move(cache);
+        }
+
+        outputModel->bounds = Engine::StaticModel::ComputeBounds(positions, &rawData.indices);
     }
 
     // Move data to outputModel

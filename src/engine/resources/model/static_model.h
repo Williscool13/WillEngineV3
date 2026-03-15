@@ -5,21 +5,56 @@
 #ifndef WILL_ENGINE_WILL_MODEL_ASSET_H
 #define WILL_ENGINE_WILL_MODEL_ASSET_H
 
+#include <cfloat>
 #include <filesystem>
 #include <optional>
 #include <vector>
 
 #include <glm/vec3.hpp>
+#include <glm/gtc/quaternion.hpp>
 
 #include "model_types.h"
 #include "TaskScheduler.h"
 #include "core/include/render_interface.h"
 #include "engine/core/model_id.h"
-#include "model_types.h"
 
 
 namespace Engine
 {
+struct BoundingSphere
+{
+    glm::vec3 center{0.f};
+    float radius{0.f};
+};
+
+struct AABB
+{
+    glm::vec3 min{FLT_MAX, FLT_MAX, FLT_MAX};
+    glm::vec3 max{-FLT_MAX, -FLT_MAX, -FLT_MAX};
+
+    glm::vec3 Center() const { return (min + max) * 0.5f; }
+    glm::vec3 HalfExtents() const { return (max - min) * 0.5f; }
+    float SurfaceArea() const { glm::vec3 d = max - min; return 2.f * (d.x * d.y + d.y * d.z + d.z * d.x); }
+    float Volume() const { glm::vec3 d = max - min; return d.x * d.y * d.z; }
+};
+
+struct OBB
+{
+    glm::vec3 center{0.f};
+    glm::vec3 halfExtents{0.f};
+    glm::quat orientation{1.f, 0.f, 0.f, 0.f};
+};
+
+struct ModelBounds
+{
+    BoundingSphere sphere{};
+    AABB aabb{};
+    OBB obb{};
+    glm::vec3 centroid{0.f};
+    int dominantAxis{1};
+    float surfaceArea{0.f};
+};
+
 struct StaticModel
 {
 public:
@@ -72,7 +107,10 @@ public:
         std::vector<uint32_t>  indices;
     };
     std::optional<PhysicsCache> physicsCache;
-    // todo: add more proprties like bounding volumes that would come in handy
+
+    ModelBounds bounds{};
+
+    static ModelBounds ComputeBounds(const std::vector<glm::vec3>& positions, const std::vector<uint32_t>* indices = nullptr);
 };
 } // AssetLoad
 

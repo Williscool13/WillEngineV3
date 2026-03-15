@@ -511,68 +511,34 @@ ComponentEditorResult DrawComponentEditor<Component::PhysicsBodyDesc>(Component:
                         fitHandle = pm->modelHandle;
 
                     Engine::StaticModel* fitModel = fitHandle.IsValid() ? ctx->assetManager->GetModel(fitHandle) : nullptr;
-                    const Engine::StaticModel::PhysicsCache* cache = (fitModel && fitModel->modelLoadState == Engine::StaticModel::ModelLoadState::Loaded && fitModel->physicsCache)
-                                                                         ? &*fitModel->physicsCache
-                                                                         : nullptr;
+                    const bool bModelLoaded = fitModel && fitModel->modelLoadState == Engine::StaticModel::ModelLoadState::Loaded;
 
-                    if (isMeshType) {
-                        // Always allow auto-fit for mesh types. Warn if source is already set and loaded with no cache.
-                        if (shape.meshSourceHandle.IsValid()) {
-                            const Engine::StaticModel* srcModel = ctx->assetManager->GetModel(shape.meshSourceHandle);
-                            if (srcModel && srcModel->modelLoadState == Engine::StaticModel::ModelLoadState::Loaded
-                                && (!srcModel->physicsCache || srcModel->physicsCache->positions.empty())) {
-                                ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "Nothing will be generated at runtime (vertex count over threshold)");
-                            }
-                        }
-                    } else {
-                        // Basic shapes need the cache — disable if the loaded mesh has no cached positions.
-                        if (fitModel && fitModel->modelLoadState == Engine::StaticModel::ModelLoadState::Loaded
-                            && (!fitModel->physicsCache || fitModel->physicsCache->positions.empty())) {
-                            ImGui::TextColored(ImVec4(1, 0.6f, 0.2f, 1), "Auto-Fit unavailable (vertex count over threshold)");
+                    if (isMeshType && shape.meshSourceHandle.IsValid()) {
+                        const Engine::StaticModel* srcModel = ctx->assetManager->GetModel(shape.meshSourceHandle);
+                        if (srcModel && srcModel->modelLoadState == Engine::StaticModel::ModelLoadState::Loaded
+                            && (!srcModel->physicsCache || srcModel->physicsCache->positions.empty())) {
+                            ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "Nothing will be generated at runtime (vertex count over threshold)");
                         }
                     }
 
-                    const bool bCanAutoFit = isMeshType || (cache && !cache->positions.empty());
-                    ImGui::BeginDisabled(!bCanAutoFit);
+                    ImGui::BeginDisabled(!bModelLoaded && !isMeshType);
                     if (ImGui::Button("Auto-Fit")) {
                         switch (shape.type) {
                             case Component::PhysicsShapeType::Box:
-                            {
-                                glm::vec3 mn(FLT_MAX), mx(-FLT_MAX);
-                                for (const auto& p : cache->positions) {
-                                    mn = glm::min(mn, p);
-                                    mx = glm::max(mx, p);
-                                }
-                                shape.box.halfExtents = (mx - mn) * 0.5f;
-                                shape.offset = (mn + mx) * 0.5f;
+                                shape.box.halfExtents = fitModel->bounds.aabb.HalfExtents();
+                                shape.offset = fitModel->bounds.aabb.Center();
                                 break;
-                            }
                             case Component::PhysicsShapeType::Sphere:
-                            {
-                                glm::vec3 centroid(0);
-                                for (const auto& p : cache->positions) centroid += p;
-                                centroid /= static_cast<float>(cache->positions.size());
-                                float maxDist = 0.0f;
-                                for (const auto& p : cache->positions)
-                                    maxDist = glm::max(maxDist, glm::length(p - centroid));
-                                shape.sphere.radius = maxDist;
-                                shape.offset = centroid;
+                                shape.sphere.radius = fitModel->bounds.sphere.radius;
+                                shape.offset = fitModel->bounds.sphere.center;
                                 break;
-                            }
                             case Component::PhysicsShapeType::Capsule:
                             {
-                                glm::vec3 mn(FLT_MAX), mx(-FLT_MAX);
-                                for (const auto& p : cache->positions) {
-                                    mn = glm::min(mn, p);
-                                    mx = glm::max(mx, p);
-                                }
-                                glm::vec3 centroid = (mn + mx) * 0.5f;
-                                float radius = 0.0f;
-                                for (const auto& p : cache->positions)
-                                    radius = glm::max(radius, glm::length(glm::vec2(p.x - centroid.x, p.z - centroid.z)));
+                                const glm::vec3 he = fitModel->bounds.aabb.HalfExtents();
+                                const float radius = glm::max(he.x, he.z);
                                 shape.capsule.radius = radius;
-                                shape.capsule.halfHeight = glm::max(0.001f, (mx.y - mn.y) * 0.5f - radius);
-                                shape.offset = centroid;
+                                shape.capsule.halfHeight = glm::max(0.001f, he.y - radius);
+                                shape.offset = fitModel->bounds.aabb.Center();
                                 break;
                             }
                             case Component::PhysicsShapeType::ConvexHull:
@@ -583,6 +549,7 @@ ComponentEditorResult DrawComponentEditor<Component::PhysicsBodyDesc>(Component:
                                 }
                                 shape.meshSourceModelId = Engine::ModelID::INVALID;
                                 shape.proceduralParams = std::monostate{};
+                                shape.offset = {};
                                 if (auto* sm = registry.try_get<Component::StaticMeshComponent>(entity)) {
                                     shape.meshSourceModelId = sm->modelId;
                                     shape.meshSourceHandle = ctx->assetManager->LoadModel(shape.meshSourceModelId);
