@@ -47,8 +47,8 @@ extern "C" par_shapes_mesh* par_shapes_create_staircase(int steps, float width, 
     m->points = PAR_MALLOC(float, nverts * 3);
     m->triangles = PAR_MALLOC(PAR_SHAPES_T, ntris * 3);
 
-    const float xf = -width * 0.5f;
-    const float xb = width * 0.5f;
+    const float xf = 0.0f;
+    const float xb = width;
 
     for (int i = 0; i < npts; i++) {
         m->points[i * 3 + 0] = xf;

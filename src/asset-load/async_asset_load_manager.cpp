@@ -540,7 +540,7 @@ void AsyncAssetLoadManager::OnModelLoadComplete(bool success, ModelSlotHandle mo
     modelLoadCompleteQueue.enqueue({slot.outputModel, success});
 
     if (!success) {
-        LOG_ERROR(Asset, "Failed to load model: {}", slot.outputModel->modelId.ToString());
+        LOG_ERROR(Asset, "Failed to load model: {}", slot.outputModel->name);
     }
 
     slot.Clear();
@@ -567,7 +567,7 @@ void AsyncAssetLoadManager::OnProceduralModelLoadComplete(bool success, Procedur
     proceduralModelLoadCompleteQueue.enqueue({slot.outputModel, success});
 
     if (!success) {
-        LOG_ERROR(Asset, "Failed to generate procedural model: {}", slot.outputModel->modelId.ToString());
+        LOG_ERROR(Asset, "Failed to generate procedural model: {}", slot.outputModel->name);
     }
 
     slot.Clear();

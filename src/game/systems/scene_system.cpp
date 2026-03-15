@@ -216,11 +216,11 @@ bool LoadSceneFromFile(Engine::GameState* state, Engine::AssetManager* assetMana
     return true;
 }
 
-std::vector<entt::entity> SpawnModel(Engine::GameState* state, Engine::AssetManager* assetManager, StringID modelId, const glm::vec3& offset)
+std::vector<entt::entity> SpawnModel(Engine::GameState* state, Engine::AssetManager* assetManager, Engine::ModelID modelId, const glm::vec3& offset)
 {
     const Engine::AssetManager::CachedModelMetadata* cached = assetManager->GetModelMetadata(modelId);
     if (!cached) {
-        LOG_ERROR(Game, "SpawnModel: '{}' not in asset registry", modelId.ToString());
+        LOG_ERROR(Game, "SpawnModel: modelId {} not in asset registry", modelId.id);
         return {};
     }
 

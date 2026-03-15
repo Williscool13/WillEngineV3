@@ -98,8 +98,12 @@ GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::GameState* state)
     if (ctx->bModelLoadedThisFrame || state->bPendingModelResolve) {
         Game::ResolveStaticMeshLoads(ctx, state);
         Game::ResolveProceduralMeshLoads(ctx, state);
+
+        Game::ResolvePhysicsMeshLoads(ctx, state);
         state->bPendingModelResolve = false;
     }
+
+    Game::ResolvePhysicsBodyCreation(ctx, state);
 
     Game::RenderUpdate(ctx, state);
     state->registry.clear<Game::Component::DirtyTransformTag>();

@@ -11,6 +11,7 @@
 #include "core/string_id.h"
 #include "core/include/engine_context.h"
 #include "engine/asset_manager.h"
+#include "engine/core/model_id.h"
 #include "engine/engine_api.h"
 #include "engine/resources/scene/scene.h"
 
@@ -40,7 +41,7 @@ void SaveSceneToFile(StringID sceneID, std::string_view sceneName, Engine::GameS
 
 bool LoadSceneFromFile(Engine::GameState* state, Engine::AssetManager* assetManager, StringID sceneId);
 
-std::vector<entt::entity> SpawnModel(Engine::GameState* state, Engine::AssetManager* assetManager, StringID modelId, const glm::vec3& offset = {});
+std::vector<entt::entity> SpawnModel(Engine::GameState* state, Engine::AssetManager* assetManager, Engine::ModelID modelId, const glm::vec3& offset = {});
 
 entt::entity CreateSceneEntity(Engine::GameState* state);
 

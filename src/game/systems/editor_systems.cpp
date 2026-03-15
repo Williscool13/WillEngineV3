@@ -19,6 +19,7 @@
 #include "engine/engine_api.h"
 #include "engine/resources/material/material_manager.h"
 #include "engine/asset_manager.h"
+#include "engine/core/model_id.h"
 #include "engine/resources/texture/texture.h"
 #include "game/fwd_components.h"
 #include "game/components/common_components.h"
@@ -357,6 +358,11 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
                 ImGui::DragFloat("##snap_val", &state->snapScale, 0.05f, 0.01f, 2.0f, "%.2f");
                 if (ImGui::IsItemHovered()) ImGui::SetTooltip("Scale snap");
             }
+            if (state->currentGizmoOperation == ImGuizmo::TRANSLATE) {
+                ImGui::SameLine();
+                ImGui::Checkbox("World Grid##snap_world_grid", &state->bSnapWorldGrid);
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Snap to world-origin-aligned grid rather than drag-relative increments");
+            }
         }
 
         if (state->prevSelectedEntities != state->selectedEntities) {
@@ -382,6 +388,18 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
             if (ImGui::Button("Play")) {
                 PlayStart(ctx, state);
             }
+        }
+
+        // Right-aligned physics debug dropdown
+        {
+            static constexpr const char* kPhysicsDebugLabels[] = {"Off", "Tag Only", "On"};
+            int currentMode = static_cast<int>(state->physicsDebugMode);
+            const float comboW = 90.0f;
+            ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - comboW);
+            ImGui::SetNextItemWidth(comboW);
+            if (ImGui::Combo("##physics_debug", &currentMode, kPhysicsDebugLabels, IM_ARRAYSIZE(kPhysicsDebugLabels)))
+                state->physicsDebugMode = static_cast<Engine::GameState::PhysicsDebugMode>(currentMode);
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Physics debug draw: Off / Tag Only / On (all)");
         }
     }
     ImGui::End();
@@ -467,14 +485,14 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
 
         const auto& modelCache = ctx->assetManager->GetModelCache();
         static int selectedModel = 0;
-        std::vector<std::pair<std::string, StringID> > modelList;
+        std::vector<std::pair<std::string, Engine::ModelID>> modelList;
         modelList.reserve(modelCache.size());
         for (const auto& [id, meta] : modelCache) {
             modelList.emplace_back(meta.name, id);
         }
 
         if (!modelList.empty()) {
-            std::ranges::sort(modelList, {}, &std::pair<std::string, StringID>::first);
+            std::ranges::sort(modelList, {}, &std::pair<std::string, Engine::ModelID>::first);
             selectedModel = std::clamp(selectedModel, 0, static_cast<int>(modelList.size()) - 1);
         }
 
@@ -682,7 +700,12 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
                 if (ImGuizmo::IsUsing()) {
                     float t[3], r[3], s[3];
                     ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(model), t, r, s);
-                    transform->translation = glm::vec3(t[0], t[1], t[2]);
+                    glm::vec3 translation = glm::vec3(t[0], t[1], t[2]);
+                    if (state->bSnapEnabled && state->bSnapWorldGrid && state->currentGizmoOperation == ImGuizmo::TRANSLATE) {
+                        const float g = state->snapTranslation;
+                        translation = glm::round(translation / g) * g;
+                    }
+                    transform->translation = translation;
                     transform->rotation = glm::quat(glm::radians(glm::vec3(r[0], r[1], r[2])));
                     if (state->bUniformScaleMode)
                         transform->scale = glm::vec3((s[0] + s[1] + s[2]) / 3.0f);
@@ -740,7 +763,11 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
                 float t[3], r[3], s[3];
                 ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(gizmoMatrix), t, r, s);
 
-                const glm::vec3 newT = glm::vec3(t[0], t[1], t[2]);
+                glm::vec3 newT = glm::vec3(t[0], t[1], t[2]);
+                if (state->bSnapEnabled && state->bSnapWorldGrid && state->currentGizmoOperation == ImGuizmo::TRANSLATE) {
+                    const float g = state->snapTranslation;
+                    newT = glm::round(newT / g) * g;
+                }
                 const glm::quat newR = glm::quat(glm::radians(glm::vec3(r[0], r[1], r[2])));
                 const glm::vec3 newS = glm::vec3(s[0], s[1], s[2]);
 

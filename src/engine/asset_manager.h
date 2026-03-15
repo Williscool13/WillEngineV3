@@ -9,12 +9,12 @@
 
 #include "asset_manager_config.h"
 #include "asset_manager_types.h"
+#include "engine/core/model_id.h"
 #include "core/sampler_id.h"
 #include "core/include/engine_context.h"
 #include "core/allocators/handle_allocator.h"
 #include "engine/resources/sampler/sampler.h"
 #include "render/types/cubemap_asset.h"
-#include "resources/model/model_format.h"
 #include "resources/model/model_types.h"
 #include "engine/resources/texture/texture.h"
 #include "engine/resources/model/static_model.h"
@@ -56,9 +56,15 @@ public:
     AssetManager& operator=(AssetManager&&) = delete;
 
 public: // Models
-    StaticModelHandle LoadModel(StringID modelId);
+    [[nodiscard]] ModelID FindModelByName(std::string_view name) const
+    {
+        auto it = modelNameToId.find(std::string(name));
+        return it != modelNameToId.end() ? it->second : ModelID::INVALID;
+    }
 
-    StaticModelHandle LoadProceduralMesh(ProceduralParams& params);
+    StaticModelHandle LoadModel(ModelID modelId);
+
+    StaticModelHandle LoadProceduralModel(ProceduralParams& params);
 
     StaticModel* GetModel(StaticModelHandle handle);
 
@@ -73,17 +79,27 @@ public: // Models
         std::vector<Node> nodes;
     };
 
-    const std::unordered_map<StringID, CachedModelMetadata>& GetModelCache() { return modelCache; }
 
-    [[nodiscard]] const CachedModelMetadata* GetModelMetadata(StringID modelId) const;
+
+    const std::unordered_map<ModelID, CachedModelMetadata>& GetModelCache() { return modelCache; }
+
+    [[nodiscard]] const CachedModelMetadata* GetModelMetadata(ModelID modelID) const
+    {
+        auto it = modelCache.find(modelID);
+        return it != modelCache.end() ? &it->second : nullptr;
+    }
 
 
 public: // Textures
+    [[nodiscard]] TextureID FindTextureByName(std::string_view name) const
+    {
+        auto it = textureNameToId.find(std::string(name));
+        return it != textureNameToId.end() ? it->second : TextureID::INVALID;
+    }
+
     Texture* LoadTexture(TextureID textureId);
 
     void UnloadTexture(TextureID id);
-
-    [[nodiscard]] TextureID FindTextureByName(std::string_view name) const;
 
     struct CachedTextureMetadata
     {
@@ -99,6 +115,12 @@ public: // Textures
 
     [[nodiscard]] const std::unordered_map<std::string, TextureID>& GetTextureNameToId() const { return textureNameToId; }
     [[nodiscard]] const std::unordered_map<TextureID, CachedTextureMetadata>& GetTextureCache() const { return textureCache; }
+
+    [[nodiscard]] const CachedTextureMetadata* GetTextureMetadata(TextureID textureID) const
+    {
+        auto it = textureCache.find(textureID);
+        return it != textureCache.end() ? &it->second : nullptr;
+    }
 
 public: // Samplers
     Sampler* LoadSampler(SamplerDesc& samplerDesc);
@@ -134,7 +156,7 @@ private:
     // OffsetAllocator because it's always contiguous
     OffsetAllocator::Allocator jointMatrixAllocator{Render::BINDLESS_MODEL_BUFFER_SIZE};
 
-    std::unordered_map<StringID, StaticModelHandle> modelIdToHandle;
+    std::unordered_map<ModelID, StaticModelHandle> modelIdToHandle;
     Core::HandleAllocator<StaticModel, MAX_LOADED_MODELS> modelAllocator;
     std::array<StaticModel, MAX_LOADED_MODELS> models;
 
@@ -168,8 +190,8 @@ private: // Asset Registry
         std::filesystem::path source;
     };
 
-    std::unordered_map<std::string, StringID> modelNameToId;
-    std::unordered_map<StringID, CachedModelMetadata> modelCache;
+    std::unordered_map<std::string, ModelID> modelNameToId;
+    std::unordered_map<ModelID, CachedModelMetadata> modelCache;
 
     std::unordered_map<std::string, TextureID> textureNameToId;
     std::unordered_map<TextureID, CachedTextureMetadata> textureCache;

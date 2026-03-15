@@ -14,6 +14,7 @@
 #include "core/include/engine_context.h"
 #include "engine/asset_manager.h"
 #include "engine/engine_api.h"
+#include "engine/logging/engine_log.h"
 #include "game/systems/editor_systems.h"
 #include "game/components/component_initialization.h"
 
@@ -62,7 +63,7 @@ template<>
 void DeserializeComponent<Component::StaticMeshComponent>(Component::StaticMeshComponent& comp, const nlohmann::json& json)
 {
     comp.meshIndex = json["meshIndex"].get<int32_t>();
-    comp.modelId = StringID(json["modelId"].get<uint64_t>());
+    comp.modelId = Engine::ModelID(json["modelId"].get<uint64_t>());
 
     if (json.contains("materialOverrides")) {
         for (const auto& [key, val] : json["materialOverrides"].items()) {
@@ -101,7 +102,7 @@ ComponentEditorResult DrawComponentEditor<Component::StaticMeshComponent>(Compon
         auto* ctx = registry.ctx().get<Core::EngineContext*>();
         auto* state = registry.ctx().get<Engine::GameState*>();
 
-        if (component.modelId == StringID::Invalid) {
+        if (!component.modelId.IsValid()) {
             if (ImGui::BeginCombo("Select Model", "")) {
                 const auto& modelCache = ctx->assetManager->GetModelCache();
                 for (const auto& [key, meta] : modelCache) {
@@ -115,11 +116,12 @@ ComponentEditorResult DrawComponentEditor<Component::StaticMeshComponent>(Compon
             return {.requestRemoval = remove};
         }
 
-        ImGui::Text("Model ID: %s", component.modelId.ToString());
+        const auto* modelMeta = ctx->assetManager->GetModelMetadata(component.modelId);
+        ImGui::Text("Model: %s", modelMeta ? modelMeta->name.c_str() : "(invalid)");
         ImGui::SameLine();
         if (ImGui::SmallButton("X##deselect_model")) {
             ctx->assetManager->UnloadModel(component.modelHandle);
-            component.modelId = StringID::Invalid;
+            component.modelId = Engine::ModelID::INVALID;
             component.modelHandle = {};
             component.meshIndex = -1;
             component.primitiveCount = 0;
@@ -129,7 +131,11 @@ ComponentEditorResult DrawComponentEditor<Component::StaticMeshComponent>(Compon
             return {.requestRemoval = remove};
         }
 
-        assert(component.modelHandle.IsValid() && "modelId specified but model handle is still invalid");
+        if (!component.modelHandle.IsValid()) {
+            LOG_WARN(Game, "modelId specified but model handle is invalid, resetting to unset");
+            component.modelId = Engine::ModelID::INVALID;
+            return {.requestRemoval = remove};
+        }
         Engine::StaticModel* model = ctx->assetManager->GetModel(component.modelHandle);
         if (model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
             ImGui::Text("Loading Model...");
@@ -615,7 +621,7 @@ ComponentEditorResult DrawComponentEditor<Component::ProceduralMeshComponent>(Co
             if (ImGui::BeginCombo("Shape", "")) {
                 auto selectShape = [&](auto&& params) {
                     component.params = std::move(params);
-                    component.modelHandle = ctx->assetManager->LoadProceduralMesh(component.params);
+                    component.modelHandle = ctx->assetManager->LoadProceduralModel(component.params);
                     registry.emplace_or_replace<Component::ProceduralMeshLoadingTag>(entity);
                     state->bPendingModelResolve |= true;
                 };
@@ -879,7 +885,7 @@ ComponentEditorResult DrawComponentEditor<Component::ProceduralMeshComponent>(Co
                     ctx->materialManager->ReleaseMaterial(component.primitive.materialID);
                     component.bPrimitiveReady = false;
                 }
-                component.modelHandle = ctx->assetManager->LoadProceduralMesh(component.params);
+                component.modelHandle = ctx->assetManager->LoadProceduralModel(component.params);
                 registry.emplace_or_replace<Component::ProceduralMeshLoadingTag>(entity);
                 state->bPendingModelResolve |= true;
             }
@@ -942,7 +948,7 @@ void OnComponentAdded<Component::ProceduralMeshComponent>(Component::ProceduralM
     auto* state = registry.ctx().get<Engine::GameState*>();
     auto* ctx = registry.ctx().get<Core::EngineContext*>();
 
-    component.modelHandle = ctx->assetManager->LoadProceduralMesh(component.params);
+    component.modelHandle = ctx->assetManager->LoadProceduralModel(component.params);
     registry.emplace_or_replace<Component::ProceduralMeshLoadingTag>(entity);
     state->bPendingModelResolve |= true;
 }

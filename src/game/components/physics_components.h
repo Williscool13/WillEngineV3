@@ -12,6 +12,10 @@
 #include <glm/detail/type_quat.hpp>
 
 #include "Jolt/Physics/Body/MotionQuality.h"
+#include "core/string_id.h"
+#include "engine/core/model_id.h"
+#include "engine/asset_manager_types.h"
+#include "engine/resources/model/model_types.h"
 
 
 namespace Game::Component
@@ -30,6 +34,8 @@ enum class PhysicsShapeType : uint8_t
     Box,
     Sphere,
     Capsule,
+    ConvexHull,
+    TriangleMesh,
 };
 
 enum class PhysicsMotionType : uint8_t
@@ -41,9 +47,16 @@ enum class PhysicsMotionType : uint8_t
 
 struct PhysicsShapeDesc
 {
-    PhysicsShapeType type;
+    PhysicsShapeType type{PhysicsShapeType::Box};
     glm::vec3 offset{0.0f};
     glm::quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
+
+    // Only used for ConvexHull / TriangleMesh (Mutually exclusive, if modelID has priority).
+    Engine::ModelID meshSourceModelId{};
+    Engine::ProceduralParams proceduralParams{};
+
+    // Transient
+    Engine::StaticModelHandle meshSourceHandle{};
 
     union
     {
@@ -85,6 +98,12 @@ struct TeleportPhysicsTransformTag
 {};
 
 struct DirtyKinematicPhysicsTransformTag
+{};
+
+struct PendingPhysicsMeshTag
+{};
+
+struct PendingPhysicsBodyCreationTag
 {};
 
 struct DrawPhysicsDebugTag

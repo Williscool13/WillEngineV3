@@ -14,6 +14,8 @@
 #include "Jolt/Physics/Collision/Shape/BoxShape.h"
 #include "Jolt/Physics/Collision/Shape/CapsuleShape.h"
 #include "Jolt/Physics/Collision/Shape/SphereShape.h"
+#include "Jolt/Physics/Collision/Shape/ConvexHullShape.h"
+#include "Jolt/Physics/Collision/Shape/MeshShape.h"
 
 namespace Core
 {
@@ -24,6 +26,7 @@ struct ViewFamily;
 namespace Engine
 {
 struct GameState;
+class AssetManager;
 }
 
 namespace Core
@@ -35,9 +38,11 @@ namespace Game
 {
 void UpdatePhysics(Core::EngineContext* ctx, Engine::GameState* state);
 void DebugRenderPhysics(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer);
+void ResolvePhysicsMeshLoads(Core::EngineContext* ctx, Engine::GameState* state);
+void ResolvePhysicsBodyCreation(Core::EngineContext* ctx, Engine::GameState* state);
 
-JPH::BodyID CreateBodyFromDesc(JPH::BodyInterface& bodyInterface, const Component::PhysicsBodyDesc& desc, JPH::RVec3 position, JPH::Quat rotation);
-JPH::ShapeRefC CreateShapeFromDesc(const Component::PhysicsShapeDesc& desc);
+JPH::BodyID CreateBodyFromDesc(JPH::BodyInterface& bodyInterface, const Component::PhysicsBodyDesc& desc, JPH::RVec3 position, JPH::Quat rotation, Engine::AssetManager* assetManager);
+JPH::ShapeRefC CreateShapeFromDesc(const Component::PhysicsShapeDesc& desc, Engine::AssetManager* assetManager);
 } // Game
 
 #endif //WILL_ENGINE_PHYSICS_SYSTEM_H

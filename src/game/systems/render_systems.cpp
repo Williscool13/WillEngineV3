@@ -38,14 +38,14 @@ void ResolveStaticMeshLoads(Core::EngineContext* ctx, Engine::GameState* state)
             continue;
         }
         if (model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
-            LOG_TRACE(Game, "Model ({}) not yet done loading", model->modelId.ToString());
+            LOG_TRACE(Game, "Model ({}) not yet done loading", model->name);
             continue;
         }
 
         Engine::MeshInformation& mesh = model->modelData.meshes[meshComponent.meshIndex];
 
         if (mesh.primitiveProperties.size() > 128) {
-            LOG_WARN(Game, "Model ({}) has {} primitives, limiting to 128", model->modelId.ToString(), mesh.primitiveProperties.size());
+            LOG_WARN(Game, "Model ({}) has {} primitives, limiting to 128", model->name, mesh.primitiveProperties.size());
         }
 
         size_t primCount = std::min(mesh.primitiveProperties.size(), static_cast<size_t>(128));

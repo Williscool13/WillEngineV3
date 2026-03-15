@@ -138,7 +138,7 @@ bool StaticModelLoadSlot::LoadModelFromDisk()
     ZoneScopedN("LoadModelFromDisk");
 
     if (!std::filesystem::exists(outputModel->source)) {
-        SPDLOG_ERROR("Failed to find path to static model - {}", outputModel->modelId.ToString());
+        SPDLOG_ERROR("Failed to find path to static model - {}", outputModel->name);
         return false;
     }
 
@@ -148,12 +148,12 @@ bool StaticModelLoadSlot::LoadModelFromDisk()
         ZoneScopedN("ReadFile");
         std::ifstream file(outputModel->source, std::ios::binary);
         if (!file) {
-            SPDLOG_ERROR("Failed to open static model - {}", outputModel->modelId.ToString());
+            SPDLOG_ERROR("Failed to open static model - {}", outputModel->name);
             return false;
         }
         auto optHeader = Engine::ReadWStaticModelHeader(file);
         if (!optHeader) {
-            SPDLOG_ERROR("Failed to read static model header - {}", outputModel->modelId.ToString());
+            SPDLOG_ERROR("Failed to read static model header - {}", outputModel->name);
             return false;
         }
         header = *optHeader;
@@ -337,6 +337,15 @@ void StaticModelLoadSlot::PrepareUploadData()
         for (auto& primitiveIndex : mesh.primitiveProperties) {
             primitiveIndex.index += primitiveOffsetCount;
         }
+    }
+
+    if (rawData.vertices.size() <= AssetLoad::PHYSICS_CACHE_MAX_VERTICES) {
+        Engine::StaticModel::PhysicsCache cache;
+        cache.positions.reserve(rawData.vertices.size());
+        for (const auto& v : rawData.vertices)
+            cache.positions.push_back(v.position);
+        cache.indices = rawData.indices;
+        outputModel->physicsCache = std::move(cache);
     }
 
     // Move data to outputModel

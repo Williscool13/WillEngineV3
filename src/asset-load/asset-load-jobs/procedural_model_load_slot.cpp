@@ -13,6 +13,7 @@
 #include "tracy/Tracy.hpp"
 
 #include <glm/glm.hpp>
+#include <mutex>
 
 #include "par/par_shapes.h"
 #include "par/par_shapes_ext.h"
@@ -135,8 +136,14 @@ bool ProceduralModelLoadSlot::GenerateGeometry()
 
     Engine::ProceduralParams& params = outputModel->proceduralParams;
 
+    // par_shapes uses a global static in its qsort comparator not thread-safe
+    // todo: modify par shapes to be thread-safe
+    static std::mutex parShapesMutex;
+
     bool bSuccess = false;
-    std::visit(overloaded{
+    {
+        std::lock_guard lock(parShapesMutex);
+        std::visit(overloaded{
                    [](std::monostate) {},
                    [&](const Engine::StaircaseParams& p) { bSuccess = GenerateStaircase(p); },
                    [&](const Engine::BoxParams& p) { bSuccess = GenerateBox(p); },
@@ -152,13 +159,14 @@ bool ProceduralModelLoadSlot::GenerateGeometry()
                    [&](const Engine::SubdividedSphereParams& p) { bSuccess = GenerateSubdividedSphere(p); },
                    [&](const Engine::HemisphereParams& p) { bSuccess = GenerateHemisphere(p); },
                    [&](const Engine::PipeParams& p) { bSuccess = GeneratePipe(p); },
-8                   [&](const Engine::TetrahedronParams& p) { bSuccess = GenerateTetrahedron(p); },
+                   [&](const Engine::TetrahedronParams& p) { bSuccess = GenerateTetrahedron(p); },
                    [&](const Engine::OctahedronParams& p) { bSuccess = GenerateOctahedron(p); },
                    [&](const Engine::IcosahedronParams& p) { bSuccess = GenerateIcosahedron(p); },
                    [&](const Engine::DodecahedronParams& p) { bSuccess = GenerateDodecahedron(p); },
                    [&](const Engine::KleinBottleParams& p) { bSuccess = GenerateKleinBottle(p); },
                    [&](const Engine::TrefoilKnotParams& p) { bSuccess = GenerateTrefoilKnot(p); },
                }, params);
+    }
     return bSuccess;
 }
 
@@ -317,6 +325,14 @@ bool ProceduralModelLoadSlot::FinalizeGeometry(std::vector<Vertex>& vertices, st
 
     rawData.primitives.push_back(primitiveData);
     rawData.allMeshes.push_back(std::move(meshInfo));
+
+    if (vertices.size() <= PHYSICS_CACHE_MAX_VERTICES) {
+        Engine::StaticModel::PhysicsCache cache;
+        cache.positions.reserve(vertices.size());
+        for (const auto& v : vertices) cache.positions.push_back(v.position);
+        cache.indices = indices;
+        outputModel->physicsCache = std::move(cache);
+    }
 
     return true;
 }
@@ -831,7 +847,7 @@ bool ProceduralModelLoadSlot::GenerateWedge(const Engine::WedgeParams& p)
     const glm::vec3 slopeN = glm::normalize(glm::vec3(0.0f, sz, -sy));
     addQuad(slopeN, {1, 0, 0},
             {0, 0, 0}, {0, sy, sz}, {sx, sy, sz}, {sx, 0, 0},
-            {0, 0}, {0, slopeLen}, {sx, slopeLen}, {sx, 0});
+            {sx, 0}, {sx, slopeLen}, {0, slopeLen}, {0, 0});
 
     // Left cap (-X): (v1-v0)×(v2-v0) = (0,0,sz)×(0,sy,sz) → (-sz*sy,0,0) → -X ✓
     addTri({-1, 0, 0}, {0, 0, 1},

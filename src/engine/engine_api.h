@@ -96,8 +96,12 @@ struct GameState
     ImGuizmo::MODE currentGizmoMode{ImGuizmo::WORLD};
     bool bUniformScaleMode{true};
 
+    enum class PhysicsDebugMode : uint8_t { Off, TagOnly, On };
+    PhysicsDebugMode physicsDebugMode{PhysicsDebugMode::Off};
+
     // Gizmo snapping
-    bool bSnapEnabled{false};
+    bool bSnapEnabled{true};
+    bool bSnapWorldGrid{true};
     float snapTranslation{0.5f};
     float snapRotation{15.0f};
     float snapScale{0.1f};

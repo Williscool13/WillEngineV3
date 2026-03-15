@@ -10,7 +10,8 @@
 #include <glm/glm.hpp>
 
 #include "core/string_id.h"
-#include "../../engine/resources/material/material_manager.h"
+#include "engine/resources/material/material_manager.h"
+#include "engine/core/model_id.h"
 #include "engine/resources/model/model_types.h"
 
 namespace Game::Component
@@ -41,7 +42,7 @@ struct StaticMeshComponent
     std::array<PrimitiveData, 128> primitives{};
     uint8_t primitiveCount{0};
 
-    StringID modelId{StringID::Invalid};
+    Engine::ModelID modelId{};
     int32_t meshIndex{-1};
     std::array<Engine::MaterialID, 128> materialOverrides{};
 

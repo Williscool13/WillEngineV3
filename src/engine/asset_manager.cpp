@@ -10,6 +10,7 @@
 #include "logging/engine_log.h"
 #include "platform/paths.h"
 #include "render/resource_manager.h"
+#include "resources/model/model_format.h"
 
 namespace Engine
 {
@@ -74,22 +75,16 @@ AssetManager::~AssetManager()
     }
 }
 
-const AssetManager::CachedModelMetadata* AssetManager::GetModelMetadata(StringID modelId) const
-{
-    auto it = modelCache.find(modelId);
-    return it != modelCache.end() ? &it->second : nullptr;
-}
-
 const AssetManager::CachedSceneMetadata* AssetManager::GetSceneMetadata(StringID sceneId) const
 {
     auto it = sceneCache.find(sceneId);
     return it != sceneCache.end() ? &it->second : nullptr;
 }
 
-StaticModelHandle AssetManager::LoadModel(StringID modelId)
+StaticModelHandle AssetManager::LoadModel(ModelID modelId)
 {
     if (!modelCache.contains(modelId)) {
-        LOG_ERROR(Asset, "Model '{}' not found in registry", modelId.ToString());
+        LOG_ERROR(Asset, "Model '{}' not found in registry", modelId.id);
         return StaticModelHandle::INVALID;
     }
 
@@ -99,7 +94,7 @@ StaticModelHandle AssetManager::LoadModel(StringID modelId)
         if (modelAllocator.IsValid(existingHandle)) {
             StaticModel& model = models[existingHandle.index];
             model.refCount++;
-            LOG_TRACE(Asset, "Model already loaded: {}, refCount: {}", modelId.ToString(), model.refCount);
+            LOG_TRACE(Asset, "Model already loaded: {}, refCount: {}", model.name, model.refCount);
             return existingHandle;
         }
         modelIdToHandle.erase(it);
@@ -107,7 +102,7 @@ StaticModelHandle AssetManager::LoadModel(StringID modelId)
 
     StaticModelHandle handle = modelAllocator.Add();
     if (!handle.IsValid()) {
-        LOG_ERROR(Asset, "Failed to allocate model slot for: {}", modelId.ToString());
+        LOG_ERROR(Asset, "Failed to allocate model slot for: {}", modelCache[modelId].name);
         return StaticModelHandle::INVALID;
     }
 
@@ -127,7 +122,7 @@ StaticModelHandle AssetManager::LoadModel(StringID modelId)
     return handle;
 }
 
-StaticModelHandle AssetManager::LoadProceduralMesh(ProceduralParams& params)
+StaticModelHandle AssetManager::LoadProceduralModel(ProceduralParams& params)
 {
     const size_t idx = params.index();
     uint64_t hash = fnv1a64(reinterpret_cast<const uint8_t*>(&idx), sizeof(idx));
@@ -138,7 +133,7 @@ StaticModelHandle AssetManager::LoadProceduralMesh(ProceduralParams& params)
        }
    }, params);
 
-    StringID proceduralModelId{hash};
+    ModelID proceduralModelId{hash};
 
     auto it = modelIdToHandle.find(proceduralModelId);
     if (it != modelIdToHandle.end()) {
@@ -221,14 +216,14 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
             complete.model->imageAcquireOps.clear();
             complete.model->modelLoadState = StaticModel::ModelLoadState::Loaded;
             complete.model->acquireFrame = ctx->currentFrame;
-            LOG_TRACE(Asset, "Model load succeeded: {}", complete.model->modelId.ToString());
+            LOG_TRACE(Asset, "Model load succeeded: {}", complete.model->name);
             loadCounts.modelLoadedCount++;
         }
         else {
             complete.model->bufferAcquireOps.clear();
             complete.model->imageAcquireOps.clear();
             complete.model->modelLoadState = StaticModel::ModelLoadState::NotLoaded;
-            LOG_ERROR(Asset, "Model load failed: {}", complete.model->modelId.ToString());
+            LOG_ERROR(Asset, "Model load failed: {}", complete.model->name);
         }
     }
 
@@ -360,8 +355,11 @@ void AssetManager::Scan()
                 else if (ext == ".wsmesh") {
                     auto info = ReadWStaticModelInfo(path);
                     if (!info) { continue; }
-                    const std::string stem = path.stem().string();
-                    StringID id{stem.c_str(), stem.size()};
+                    if (info->header.modelId == 0) {
+                        LOG_WARN(Asset, "Model '{}' has no modelId. Reimport to fix", path.stem().string());
+                        continue;
+                    }
+                    ModelID id{info->header.modelId};
 
                     std::string name{info->header.name};
                     if (modelNameToId.contains(name) && modelNameToId.at(name) != id) {
@@ -597,11 +595,5 @@ void AssetManager::UnloadCubemap(CubemapHandle handle)
         // assetLoadThread->RequestCubemapUnload(handle, &cubemap);
         cubemapIdToHandle.erase(cubemap.cubemapId);
     }
-}
-
-TextureID AssetManager::FindTextureByName(std::string_view name) const
-{
-    auto it = textureNameToId.find(std::string(name));
-    return it != textureNameToId.end() ? it->second : TextureID::INVALID;
 }
 } // Engine

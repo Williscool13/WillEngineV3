@@ -6,10 +6,15 @@
 #define WILL_ENGINE_WILL_MODEL_ASSET_H
 
 #include <filesystem>
+#include <optional>
+#include <vector>
+
+#include <glm/vec3.hpp>
 
 #include "model_types.h"
 #include "TaskScheduler.h"
 #include "core/include/render_interface.h"
+#include "engine/core/model_id.h"
 #include "model_types.h"
 
 
@@ -43,7 +48,7 @@ public:
     /**
      * RNG for gltf models. Hash for procedural.
      */
-    StringID modelId{};
+    Engine::ModelID modelId{};
     ModelLoadState modelLoadState{ModelLoadState::NotLoaded};
     uint64_t acquireFrame{UINT64_MAX};
 
@@ -60,6 +65,14 @@ public:
     StaticModelData modelData{};
     std::vector<Core::BufferAcquireOperation> bufferAcquireOps{};
     std::vector<Core::ImageAcquireOperation> imageAcquireOps{};
+
+    struct PhysicsCache
+    {
+        std::vector<glm::vec3> positions;
+        std::vector<uint32_t>  indices;
+    };
+    std::optional<PhysicsCache> physicsCache;
+    // todo: add more proprties like bounding volumes that would come in handy
 };
 } // AssetLoad
 
