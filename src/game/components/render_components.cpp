@@ -410,6 +410,23 @@ void SerializeComponent<Component::ProceduralMeshComponent>(const Component::Pro
             json["height"]      = p.height;
             json["slices"]      = p.slices;
         }
+        else if constexpr (std::is_same_v<T, Engine::TetrahedronParams> ||
+                           std::is_same_v<T, Engine::OctahedronParams>  ||
+                           std::is_same_v<T, Engine::IcosahedronParams> ||
+                           std::is_same_v<T, Engine::DodecahedronParams>) {
+            json["radius"] = p.radius;
+        }
+        else if constexpr (std::is_same_v<T, Engine::KleinBottleParams>) {
+            json["scale"]  = p.scale;
+            json["slices"] = p.slices;
+            json["stacks"] = p.stacks;
+        }
+        else if constexpr (std::is_same_v<T, Engine::TrefoilKnotParams>) {
+            json["scale"]      = p.scale;
+            json["tubeRadius"] = p.tubeRadius;
+            json["slices"]     = p.slices;
+            json["stacks"]     = p.stacks;
+        }
     }, comp.params);
 }
 
@@ -515,7 +532,7 @@ void DeserializeComponent<Component::ProceduralMeshComponent>(Component::Procedu
     else if (type == 12) {
         Engine::SubdividedSphereParams p{};
         p.radius       = json["radius"].get<float>();
-        p.subdivisions = json["subdivisions"].get<int32_t>();
+        p.subdivisions = glm::clamp(json["subdivisions"].get<int32_t>(), 0, 4);
         comp.params = p;
     }
     else if (type == 13) {
@@ -531,6 +548,41 @@ void DeserializeComponent<Component::ProceduralMeshComponent>(Component::Procedu
         p.innerRadius = json["innerRadius"].get<float>();
         p.height      = json["height"].get<float>();
         p.slices      = json["slices"].get<int32_t>();
+        comp.params = p;
+    }
+    else if (type == 15) {
+        Engine::TetrahedronParams p{};
+        p.radius = json["radius"].get<float>();
+        comp.params = p;
+    }
+    else if (type == 16) {
+        Engine::OctahedronParams p{};
+        p.radius = json["radius"].get<float>();
+        comp.params = p;
+    }
+    else if (type == 17) {
+        Engine::IcosahedronParams p{};
+        p.radius = json["radius"].get<float>();
+        comp.params = p;
+    }
+    else if (type == 18) {
+        Engine::DodecahedronParams p{};
+        p.radius = json["radius"].get<float>();
+        comp.params = p;
+    }
+    else if (type == 19) {
+        Engine::KleinBottleParams p{};
+        p.scale  = json["scale"].get<float>();
+        p.slices = json["slices"].get<int32_t>();
+        p.stacks = json["stacks"].get<int32_t>();
+        comp.params = p;
+    }
+    else if (type == 20) {
+        Engine::TrefoilKnotParams p{};
+        p.scale      = json["scale"].get<float>();
+        p.tubeRadius = json["tubeRadius"].get<float>();
+        p.slices     = json["slices"].get<int32_t>();
+        p.stacks     = json["stacks"].get<int32_t>();
         comp.params = p;
     }
 }
@@ -581,11 +633,32 @@ ComponentEditorResult DrawComponentEditor<Component::ProceduralMeshComponent>(Co
                 if (ImGui::Selectable("Subdivided Sphere")) selectShape(Engine::SubdividedSphereParams{});
                 if (ImGui::Selectable("Hemisphere"))        selectShape(Engine::HemisphereParams{});
                 if (ImGui::Selectable("Pipe"))              selectShape(Engine::PipeParams{});
+                if (ImGui::Selectable("Tetrahedron"))       selectShape(Engine::TetrahedronParams{});
+                if (ImGui::Selectable("Octahedron"))        selectShape(Engine::OctahedronParams{});
+                if (ImGui::Selectable("Icosahedron"))       selectShape(Engine::IcosahedronParams{});
+                if (ImGui::Selectable("Dodecahedron"))      selectShape(Engine::DodecahedronParams{});
+                if (ImGui::Selectable("Klein Bottle"))      selectShape(Engine::KleinBottleParams{});
+                if (ImGui::Selectable("Trefoil Knot"))      selectShape(Engine::TrefoilKnotParams{});
                 ImGui::EndCombo();
             }
         } else {
-            static constexpr const char* shapeNames[] = {"", "Staircase", "Box", "Cylinder", "Capsule", "Torus", "Arch", "Wedge", "Cone", "Door", "Plane", "Sphere", "Subdivided Sphere", "Hemisphere", "Pipe"};
+            static constexpr const char* shapeNames[] = {"", "Staircase", "Box", "Cylinder", "Capsule", "Torus", "Arch", "Wedge", "Cone", "Door", "Plane", "Sphere", "Subdivided Sphere", "Hemisphere", "Pipe", "Tetrahedron", "Octahedron", "Icosahedron", "Dodecahedron", "Klein Bottle", "Trefoil Knot"};
             ImGui::Text("Shape: %s", shapeNames[component.params.index()]);
+            ImGui::SameLine();
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+            if (ImGui::SmallButton("X##deselect_shape")) {
+                if (component.modelHandle.IsValid()) {
+                    ctx->assetManager->UnloadModel(component.modelHandle);
+                    component.modelHandle = {};
+                }
+                if (component.bPrimitiveReady) {
+                    ctx->materialManager->ReleaseMaterial(component.primitive.materialID);
+                    component.bPrimitiveReady = false;
+                }
+                component.params = std::monostate{};
+                registry.remove<Component::ProceduralMeshLoadingTag>(entity);
+            }
+            ImGui::PopStyleColor();
 
             bool dirty = false;
             std::visit([&dirty](auto& p) {
@@ -748,7 +821,7 @@ ComponentEditorResult DrawComponentEditor<Component::ProceduralMeshComponent>(Co
                 else if constexpr (std::is_same_v<T, Engine::SubdividedSphereParams>) {
                     ImGui::DragFloat("Radius", &p.radius, 0.01f, 0.01f, 50.0f);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
-                    ImGui::DragInt("Subdivisions", &p.subdivisions, 1, 0, 5);
+                    ImGui::DragInt("Subdivisions", &p.subdivisions, 1, 0, 4);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
                 }
                 else if constexpr (std::is_same_v<T, Engine::HemisphereParams>) {
@@ -767,6 +840,32 @@ ComponentEditorResult DrawComponentEditor<Component::ProceduralMeshComponent>(Co
                     ImGui::DragFloat("Height", &p.height, 0.01f, 0.01f, 100.0f);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
                     ImGui::DragInt("Slices", &p.slices, 1, 3, 128);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                }
+                else if constexpr (std::is_same_v<T, Engine::TetrahedronParams> ||
+                                   std::is_same_v<T, Engine::OctahedronParams>  ||
+                                   std::is_same_v<T, Engine::IcosahedronParams> ||
+                                   std::is_same_v<T, Engine::DodecahedronParams>) {
+                    ImGui::DragFloat("Radius", &p.radius, 0.01f, 0.01f, 50.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                }
+                else if constexpr (std::is_same_v<T, Engine::KleinBottleParams>) {
+                    ImGui::TextDisabled("Requires double-sided material");
+                    ImGui::DragFloat("Scale", &p.scale, 0.01f, 0.001f, 100.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragInt("Slices", &p.slices, 1, 3, 64);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragInt("Stacks", &p.stacks, 1, 3, 64);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                }
+                else if constexpr (std::is_same_v<T, Engine::TrefoilKnotParams>) {
+                    ImGui::DragFloat("Scale", &p.scale, 0.01f, 0.001f, 100.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Tube Radius", &p.tubeRadius, 0.1f, 0.5f, 3.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragInt("Slices", &p.slices, 1, 3, 64);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragInt("Stacks", &p.stacks, 1, 3, 512);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
                 }
             }, component.params);

@@ -152,6 +152,12 @@ bool ProceduralModelLoadSlot::GenerateGeometry()
                    [&](const Engine::SubdividedSphereParams& p) { bSuccess = GenerateSubdividedSphere(p); },
                    [&](const Engine::HemisphereParams& p) { bSuccess = GenerateHemisphere(p); },
                    [&](const Engine::PipeParams& p) { bSuccess = GeneratePipe(p); },
+8                   [&](const Engine::TetrahedronParams& p) { bSuccess = GenerateTetrahedron(p); },
+                   [&](const Engine::OctahedronParams& p) { bSuccess = GenerateOctahedron(p); },
+                   [&](const Engine::IcosahedronParams& p) { bSuccess = GenerateIcosahedron(p); },
+                   [&](const Engine::DodecahedronParams& p) { bSuccess = GenerateDodecahedron(p); },
+                   [&](const Engine::KleinBottleParams& p) { bSuccess = GenerateKleinBottle(p); },
+                   [&](const Engine::TrefoilKnotParams& p) { bSuccess = GenerateTrefoilKnot(p); },
                }, params);
     return bSuccess;
 }
@@ -179,15 +185,15 @@ bool ProceduralModelLoadSlot::GenerateStaircase(const Engine::StaircaseParams& p
         const glm::vec3 absN = glm::abs(n);
         float u, v;
         if (absN.y >= absN.x && absN.y >= absN.z) {
-            u = pos.x;
+            u = (n.y > 0.0f) ? -pos.x : pos.x;
             v = pos.z;
         } // tread / bottom
         else if (absN.x >= absN.z) {
-            u = pos.z;
+            u = (n.x > 0.0f) ? -pos.z : pos.z;
             v = pos.y;
         } // cap faces
         else {
-            u = pos.x;
+            u = (n.z < 0.0f) ? -pos.x : pos.x;
             v = pos.y;
         } // riser / back wall
 
@@ -417,7 +423,7 @@ bool ProceduralModelLoadSlot::GenerateCylinder(const Engine::CylinderParams& p)
         cv.normal = {0, 1, 0};
         cv.texcoordU = 0.5f;
         cv.texcoordV = 0.5f;
-        cv.tangent = {1, 0, 0, 1};
+        cv.tangent = {-1, 0, 0, 1};
         cv.color = {1, 1, 1, 1};
         vertices.push_back(cv);
         for (int j = 0; j < N; j++) {
@@ -425,9 +431,9 @@ bool ProceduralModelLoadSlot::GenerateCylinder(const Engine::CylinderParams& p)
             Vertex v{};
             v.position = {cosf(angle) * r, hh, sinf(angle) * r};
             v.normal = {0, 1, 0};
-            v.texcoordU = cosf(angle) * 0.5f + 0.5f;
+            v.texcoordU = -cosf(angle) * 0.5f + 0.5f;
             v.texcoordV = sinf(angle) * 0.5f + 0.5f;
-            v.tangent = {1, 0, 0, 1};
+            v.tangent = {-1, 0, 0, 1};
             v.color = {1, 1, 1, 1};
             vertices.push_back(v);
         }
@@ -480,9 +486,9 @@ bool ProceduralModelLoadSlot::GenerateCapsule(const Engine::CapsuleParams& p)
             Vertex v{};
             v.position = {cx * ringR, ringY, cz * ringR};
             v.normal = {cx * nXZScale, nY, cz * nXZScale};
-            v.texcoordU = static_cast<float>(j) / N;
+            v.texcoordU = 1.0f - static_cast<float>(j) / N;
             v.texcoordV = (ringY + bhh + r) / (2.0f * (bhh + r)); // 0=bottom, 1=top
-            v.tangent = {-cz, 0, cx, 1.0f};
+            v.tangent = {cz, 0, -cx, 1.0f};
             v.color = {1, 1, 1, 1};
             vertices.push_back(v);
         }
@@ -650,11 +656,15 @@ bool ProceduralModelLoadSlot::GenerateArch(const Engine::ArchParams& p)
     // Helper: add a flat quad with given normal and basic UV
     auto addQuad = [&](glm::vec3 v0, glm::vec3 v1, glm::vec3 v2, glm::vec3 v3, glm::vec3 n) {
         uint32_t base = static_cast<uint32_t>(vertices.size());
+        const glm::vec3 absN = glm::abs(n);
+        const bool flipU = (absN.x >= absN.y && absN.x >= absN.z && n.x > 0.0f)
+                        || (absN.y >= absN.x && absN.y >= absN.z && n.y > 0.0f)
+                        || (absN.z >= absN.x && absN.z >= absN.y && n.z < 0.0f);
         auto push = [&](glm::vec3 pos) {
             Vertex v{};
             v.position = pos;
             v.normal = n;
-            v.texcoordU = pos.x;
+            v.texcoordU = flipU ? -pos.x : pos.x;
             v.texcoordV = pos.y;
             v.tangent = {1, 0, 0, 1};
             v.color = {1, 1, 1, 1};
@@ -831,7 +841,7 @@ bool ProceduralModelLoadSlot::GenerateWedge(const Engine::WedgeParams& p)
     // Right cap (+X): (v1-v0)×(v2-v0) = (0,sy,sz)×(0,0,sz) → (sy*sz,0,0) → +X ✓
     addTri({1, 0, 0}, {0, 0, 1},
            {sx, 0, 0}, {sx, sy, sz}, {sx, 0, sz},
-           {0, 0}, {sz, sy}, {sz, 0});
+           {sz, 0}, {0, sy}, {0, 0});
 
     return FinalizeGeometry(vertices, indices);
 }
@@ -969,9 +979,9 @@ bool ProceduralModelLoadSlot::GenerateDoor(const Engine::DoorParams& p)
             Vertex v{};
             v.position = {pt.x, pt.y, 0.0f};
             v.normal = {0, 0, -1};
-            v.texcoordU = pt.x;
+            v.texcoordU = -pt.x;
             v.texcoordV = pt.y;
-            v.tangent = {1, 0, 0, 1};
+            v.tangent = {-1, 0, 0, 1};
             v.color = {1, 1, 1, 1};
             vertices.push_back(v);
         }
@@ -980,16 +990,15 @@ bool ProceduralModelLoadSlot::GenerateDoor(const Engine::DoorParams& p)
     }
 
     // Back face (Z=d, normal (0,0,1)): forward winding so cross product = +Z
-    // Viewer faces -Z, right=-X → U=-pt.x so U=0 at high-X (viewer's left)
     {
         uint32_t base = static_cast<uint32_t>(vertices.size());
         for (const auto& pt : poly) {
             Vertex v{};
             v.position = {pt.x, pt.y, d};
             v.normal = {0, 0, 1};
-            v.texcoordU = -pt.x;
+            v.texcoordU = pt.x;
             v.texcoordV = pt.y;
-            v.tangent = {-1, 0, 0, 1};
+            v.tangent = {1, 0, 0, 1};
             v.color = {1, 1, 1, 1};
             vertices.push_back(v);
         }
@@ -1101,7 +1110,7 @@ bool ProceduralModelLoadSlot::GenerateSphere(const Engine::SphereParams& p)
         const float nx = m->normals[i * 3 + 0], ny = m->normals[i * 3 + 1], nz = m->normals[i * 3 + 2];
         vertices[i].normal = glm::normalize(glm::vec3{nx, nz, -ny});
         // Spherical UV: u = longitude 0→1, v = latitude 0(south)→1(north)
-        vertices[i].texcoordU = atan2f(-pos.z, pos.x) / (2.0f * pi) + 0.5f;
+        vertices[i].texcoordU = 0.5f - atan2f(-pos.z, pos.x) / (2.0f * pi);
         vertices[i].texcoordV = pos.y / r * 0.5f + 0.5f;
         vertices[i].tangent = {1, 0, 0, 1};
         vertices[i].color = {1, 1, 1, 1};
@@ -1118,8 +1127,7 @@ bool ProceduralModelLoadSlot::GenerateSubdividedSphere(const Engine::SubdividedS
 {
     ZoneScopedN("GenerateSubdividedSphere");
 
-    // par_shapes uint16_t overflow: subdivision 6 → 245k unwelded points > 65535. Max is 5.
-    const int subd = glm::clamp(p.subdivisions, 0, 5);
+    const int subd = glm::clamp(p.subdivisions, 0, 4);
     const float r = p.radius;
     const float pi = glm::pi<float>();
 
@@ -1132,7 +1140,7 @@ bool ProceduralModelLoadSlot::GenerateSubdividedSphere(const Engine::SubdividedS
             m->points[i * 3 + 0], m->points[i * 3 + 1], m->points[i * 3 + 2]}) * r;
         vertices[i].position = pos;
         vertices[i].normal = glm::normalize(pos);
-        vertices[i].texcoordU = atan2f(pos.z, pos.x) / (2.0f * pi) + 0.5f;
+        vertices[i].texcoordU = 0.5f - atan2f(pos.z, pos.x) / (2.0f * pi);
         vertices[i].texcoordV = asinf(glm::clamp(pos.y / r, -1.0f, 1.0f)) / pi + 0.5f;
         vertices[i].tangent = {1, 0, 0, 1};
         vertices[i].color = {1, 1, 1, 1};
@@ -1291,18 +1299,18 @@ bool ProceduralModelLoadSlot::GeneratePipe(const Engine::PipeParams& p)
             Vertex vo{};
             vo.position = {cx * ro, hh, cz * ro};
             vo.normal = {0, 1, 0};
-            vo.texcoordU = cx * ro;
+            vo.texcoordU = -cx * ro;
             vo.texcoordV = cz * ro;
-            vo.tangent = {1, 0, 0, 1};
+            vo.tangent = {-1, 0, 0, 1};
             vo.color = {1, 1, 1, 1};
             vertices.push_back(vo);
             // Inner edge vertex
             Vertex vi{};
             vi.position = {cx * ri, hh, cz * ri};
             vi.normal = {0, 1, 0};
-            vi.texcoordU = cx * ri;
+            vi.texcoordU = -cx * ri;
             vi.texcoordV = cz * ri;
-            vi.tangent = {1, 0, 0, 1};
+            vi.tangent = {-1, 0, 0, 1};
             vi.color = {1, 1, 1, 1};
             vertices.push_back(vi);
         }
@@ -1343,6 +1351,176 @@ bool ProceduralModelLoadSlot::GeneratePipe(const Engine::PipeParams& p)
         }
     }
 
+    return FinalizeGeometry(vertices, indices);
+}
+
+bool ProceduralModelLoadSlot::GenerateTetrahedron(const Engine::TetrahedronParams& p)
+{
+    ZoneScopedN("GenerateTetrahedron");
+
+    par_shapes_mesh* m = par_shapes_create_tetrahedron();
+    if (!m) return false;
+
+    par_shapes_unweld(m, true);
+    par_shapes_compute_normals(m);
+
+    const float r = p.radius;
+    std::vector<Vertex> vertices(m->npoints);
+    for (int i = 0; i < m->npoints; ++i) {
+        // Tetrahedron is already Y-up
+        const glm::vec3 pos = glm::vec3{m->points[i*3], m->points[i*3+1], m->points[i*3+2]} * r;
+        const glm::vec3 n = glm::normalize(glm::vec3{m->normals[i*3], m->normals[i*3+1], m->normals[i*3+2]});
+        const glm::vec3 absN = glm::abs(n);
+        float u, v;
+        if (absN.y >= absN.x && absN.y >= absN.z) { u = (n.y > 0.0f) ? -pos.x : pos.x; v = pos.z; }
+        else if (absN.x >= absN.z)                 { u = (n.x > 0.0f) ? -pos.z : pos.z; v = pos.y; }
+        else                                        { u = (n.z < 0.0f) ? -pos.x : pos.x; v = pos.y; }
+        vertices[i].position = pos; vertices[i].normal = n;
+        vertices[i].texcoordU = u;  vertices[i].texcoordV = v;
+        vertices[i].tangent = {1, 0, 0, 1}; vertices[i].color = {1, 1, 1, 1};
+    }
+    std::vector<uint32_t> indices(m->ntriangles * 3);
+    for (int i = 0; i < m->ntriangles * 3; ++i) indices[i] = static_cast<uint32_t>(m->triangles[i]);
+    par_shapes_free_mesh(m);
+    return FinalizeGeometry(vertices, indices);
+}
+
+bool ProceduralModelLoadSlot::GenerateOctahedron(const Engine::OctahedronParams& p)
+{
+    ZoneScopedN("GenerateOctahedron");
+
+    par_shapes_mesh* m = par_shapes_create_octahedron();
+    if (!m) return false;
+
+    par_shapes_unweld(m, true);
+    par_shapes_compute_normals(m);
+
+    const float r = p.radius;
+    std::vector<Vertex> vertices(m->npoints);
+    for (int i = 0; i < m->npoints; ++i) {
+        const float px = m->points[i*3], py = m->points[i*3+1], pz = m->points[i*3+2];
+        const glm::vec3 pos = glm::vec3{px, pz, -py} * r; // Z-up to Y-up
+        const float nx = m->normals[i*3], ny = m->normals[i*3+1], nz = m->normals[i*3+2];
+        const glm::vec3 n = glm::normalize(glm::vec3{nx, nz, -ny});
+        const glm::vec3 absN = glm::abs(n);
+        float u, v;
+        if (absN.y >= absN.x && absN.y >= absN.z) { u = (n.y > 0.0f) ? -pos.x : pos.x; v = pos.z; }
+        else if (absN.x >= absN.z)                 { u = (n.x > 0.0f) ? -pos.z : pos.z; v = pos.y; }
+        else                                        { u = (n.z < 0.0f) ? -pos.x : pos.x; v = pos.y; }
+        vertices[i].position = pos; vertices[i].normal = n;
+        vertices[i].texcoordU = u;  vertices[i].texcoordV = v;
+        vertices[i].tangent = {1, 0, 0, 1}; vertices[i].color = {1, 1, 1, 1};
+    }
+    std::vector<uint32_t> indices(m->ntriangles * 3);
+    for (int i = 0; i < m->ntriangles * 3; ++i) indices[i] = static_cast<uint32_t>(m->triangles[i]);
+    par_shapes_free_mesh(m);
+    return FinalizeGeometry(vertices, indices);
+}
+
+bool ProceduralModelLoadSlot::GenerateIcosahedron(const Engine::IcosahedronParams& p)
+{
+    ZoneScopedN("GenerateIcosahedron");
+
+    par_shapes_mesh* m = par_shapes_create_icosahedron();
+    if (!m) return false;
+
+    par_shapes_unweld(m, true);
+    par_shapes_compute_normals(m);
+
+    const float r = p.radius;
+    std::vector<Vertex> vertices(m->npoints);
+    for (int i = 0; i < m->npoints; ++i) {
+        const float px = m->points[i*3], py = m->points[i*3+1], pz = m->points[i*3+2];
+        const glm::vec3 pos = glm::vec3{px, pz, -py} * r; // Z-up to Y-up
+        const float nx = m->normals[i*3], ny = m->normals[i*3+1], nz = m->normals[i*3+2];
+        const glm::vec3 n = glm::normalize(glm::vec3{nx, nz, -ny});
+        const glm::vec3 absN = glm::abs(n);
+        float u, v;
+        if (absN.y >= absN.x && absN.y >= absN.z) { u = (n.y > 0.0f) ? -pos.x : pos.x; v = pos.z; }
+        else if (absN.x >= absN.z)                 { u = (n.x > 0.0f) ? -pos.z : pos.z; v = pos.y; }
+        else                                        { u = (n.z < 0.0f) ? -pos.x : pos.x; v = pos.y; }
+        vertices[i].position = pos; vertices[i].normal = n;
+        vertices[i].texcoordU = u;  vertices[i].texcoordV = v;
+        vertices[i].tangent = {1, 0, 0, 1}; vertices[i].color = {1, 1, 1, 1};
+    }
+    std::vector<uint32_t> indices(m->ntriangles * 3);
+    for (int i = 0; i < m->ntriangles * 3; ++i) indices[i] = static_cast<uint32_t>(m->triangles[i]);
+    par_shapes_free_mesh(m);
+    return FinalizeGeometry(vertices, indices);
+}
+
+bool ProceduralModelLoadSlot::GenerateDodecahedron(const Engine::DodecahedronParams& p)
+{
+    ZoneScopedN("GenerateDodecahedron");
+
+    par_shapes_mesh* m = par_shapes_create_dodecahedron();
+    if (!m) return false;
+
+    par_shapes_unweld(m, true);
+    par_shapes_compute_normals(m);
+
+    const float r = p.radius;
+    std::vector<Vertex> vertices(m->npoints);
+    for (int i = 0; i < m->npoints; ++i) {
+        const float px = m->points[i*3], py = m->points[i*3+1], pz = m->points[i*3+2];
+        const glm::vec3 pos = glm::vec3{px, pz, -py} * r; // Z-up to Y-up
+        const float nx = m->normals[i*3], ny = m->normals[i*3+1], nz = m->normals[i*3+2];
+        const glm::vec3 n = glm::normalize(glm::vec3{nx, nz, -ny});
+        const glm::vec3 absN = glm::abs(n);
+        float u, v;
+        if (absN.y >= absN.x && absN.y >= absN.z) { u = (n.y > 0.0f) ? -pos.x : pos.x; v = pos.z; }
+        else if (absN.x >= absN.z)                 { u = (n.x > 0.0f) ? -pos.z : pos.z; v = pos.y; }
+        else                                        { u = (n.z < 0.0f) ? -pos.x : pos.x; v = pos.y; }
+        vertices[i].position = pos; vertices[i].normal = n;
+        vertices[i].texcoordU = u;  vertices[i].texcoordV = v;
+        vertices[i].tangent = {1, 0, 0, 1}; vertices[i].color = {1, 1, 1, 1};
+    }
+    std::vector<uint32_t> indices(m->ntriangles * 3);
+    for (int i = 0; i < m->ntriangles * 3; ++i) indices[i] = static_cast<uint32_t>(m->triangles[i]);
+    par_shapes_free_mesh(m);
+    return FinalizeGeometry(vertices, indices);
+}
+
+bool ProceduralModelLoadSlot::GenerateKleinBottle(const Engine::KleinBottleParams& p)
+{
+    ZoneScopedN("GenerateKleinBottle");
+
+    par_shapes_mesh* m = par_shapes_create_klein_bottle(std::max(3, p.slices), std::max(3, p.stacks));
+    if (!m) return false;
+
+    std::vector<Vertex> vertices(m->npoints);
+    for (int i = 0; i < m->npoints; ++i) {
+        vertices[i].position = glm::vec3{m->points[i*3], m->points[i*3+1], m->points[i*3+2]} * p.scale;
+        vertices[i].normal   = m->normals ? glm::normalize(glm::vec3{m->normals[i*3], m->normals[i*3+1], m->normals[i*3+2]}) : glm::vec3{0, 1, 0};
+        vertices[i].texcoordU = m->tcoords ? m->tcoords[i*2]   : 0.0f;
+        vertices[i].texcoordV = m->tcoords ? m->tcoords[i*2+1] : 0.0f;
+        vertices[i].tangent = {1, 0, 0, 1}; vertices[i].color = {1, 1, 1, 1};
+    }
+    std::vector<uint32_t> indices(m->ntriangles * 3);
+    for (int i = 0; i < m->ntriangles * 3; ++i) indices[i] = static_cast<uint32_t>(m->triangles[i]);
+    par_shapes_free_mesh(m);
+    return FinalizeGeometry(vertices, indices);
+}
+
+bool ProceduralModelLoadSlot::GenerateTrefoilKnot(const Engine::TrefoilKnotParams& p)
+{
+    ZoneScopedN("GenerateTrefoilKnot");
+
+    const float tubeRadius = glm::clamp(p.tubeRadius, 0.5f, 3.0f);
+    par_shapes_mesh* m = par_shapes_create_trefoil_knot(std::max(3, p.slices), std::max(3, p.stacks), tubeRadius);
+    if (!m) return false;
+
+    std::vector<Vertex> vertices(m->npoints);
+    for (int i = 0; i < m->npoints; ++i) {
+        vertices[i].position = glm::vec3{m->points[i*3], m->points[i*3+1], m->points[i*3+2]} * p.scale;
+        vertices[i].normal   = m->normals ? glm::normalize(glm::vec3{m->normals[i*3], m->normals[i*3+1], m->normals[i*3+2]}) : glm::vec3{0, 1, 0};
+        vertices[i].texcoordU = m->tcoords ? m->tcoords[i*2]   : 0.0f;
+        vertices[i].texcoordV = m->tcoords ? m->tcoords[i*2+1] : 0.0f;
+        vertices[i].tangent = {1, 0, 0, 1}; vertices[i].color = {1, 1, 1, 1};
+    }
+    std::vector<uint32_t> indices(m->ntriangles * 3);
+    for (int i = 0; i < m->ntriangles * 3; ++i) indices[i] = static_cast<uint32_t>(m->triangles[i]);
+    par_shapes_free_mesh(m);
     return FinalizeGeometry(vertices, indices);
 }
 

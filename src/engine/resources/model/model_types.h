@@ -245,7 +245,42 @@ struct PipeParams
     int32_t slices{16};
 };
 
-using ProceduralParams = std::variant<std::monostate, StaircaseParams, BoxParams, CylinderParams, CapsuleParams, TorusParams, ArchParams, WedgeParams, ConeParams, DoorParams, PlaneParams, SphereParams, SubdividedSphereParams, HemisphereParams, PipeParams>;
+struct TetrahedronParams
+{
+    float radius{0.5f};
+};
+
+struct OctahedronParams
+{
+    float radius{0.5f};
+};
+
+struct IcosahedronParams
+{
+    float radius{0.5f};
+};
+
+struct DodecahedronParams
+{
+    float radius{0.5f};
+};
+
+struct KleinBottleParams
+{
+    float scale{1.0f};
+    int32_t slices{8};
+    int32_t stacks{8};
+};
+
+struct TrefoilKnotParams
+{
+    float scale{1.0f};
+    float tubeRadius{1.0f};
+    int32_t slices{16};
+    int32_t stacks{128};
+};
+
+using ProceduralParams = std::variant<std::monostate, StaircaseParams, BoxParams, CylinderParams, CapsuleParams, TorusParams, ArchParams, WedgeParams, ConeParams, DoorParams, PlaneParams, SphereParams, SubdividedSphereParams, HemisphereParams, PipeParams, TetrahedronParams, OctahedronParams, IcosahedronParams, DodecahedronParams, KleinBottleParams, TrefoilKnotParams>;
 } // Render
 
 #endif //WILL_ENGINE_MODEL_TYPES_H

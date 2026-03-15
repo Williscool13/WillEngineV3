@@ -90,6 +90,12 @@ private:
     bool GenerateSubdividedSphere(const Engine::SubdividedSphereParams& p);
     bool GenerateHemisphere(const Engine::HemisphereParams& p);
     bool GeneratePipe(const Engine::PipeParams& p);
+    bool GenerateTetrahedron(const Engine::TetrahedronParams& p);
+    bool GenerateOctahedron(const Engine::OctahedronParams& p);
+    bool GenerateIcosahedron(const Engine::IcosahedronParams& p);
+    bool GenerateDodecahedron(const Engine::DodecahedronParams& p);
+    bool GenerateKleinBottle(const Engine::KleinBottleParams& p);
+    bool GenerateTrefoilKnot(const Engine::TrefoilKnotParams& p);
 };
 } // AssetLoad
 

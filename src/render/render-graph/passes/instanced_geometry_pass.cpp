@@ -16,7 +16,6 @@ namespace Render
 InstancedGeometryPassOutputs SetupInstancedGeometryPass(RenderGraph& graph, const InstancedGeometryPassConfig& config, PipelineManager* pipelineManager, uint32_t sceneDataIndex)
 {
     // Pre-build all buffer names
-    // todo: make the passes create and cache these, this is wildly expensive
     const StringID instance_meshlet_offsets = SID_CONCAT(config.prefix, "_instance_meshlet_offsets");
     const StringID level1_sums = SID_CONCAT(config.prefix, "_level1_sums");
     const StringID level1_block_sums = SID_CONCAT(config.prefix, "_level1_block_sums");
