@@ -170,6 +170,54 @@ StaticModelHandle AssetManager::LoadProceduralModel(ProceduralParams& params)
     return handle;
 }
 
+StaticModelHandle AssetManager::LoadSplineModel(const SplineParams& params)
+{
+    uint64_t hash = fnv1a64(
+        reinterpret_cast<const uint8_t*>(params.controlPoints.data()),
+        params.controlPoints.size() * sizeof(glm::vec3));
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.radius),           sizeof(params.radius),           hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.rollAngle),        sizeof(params.rollAngle),        hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.sides),            sizeof(params.sides),            hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.segmentsPerSpan),  sizeof(params.segmentsPerSpan),  hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.bClosed),          sizeof(params.bClosed),          hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.bCaps),            sizeof(params.bCaps),            hash);
+
+    ModelID splineModelId{hash};
+
+    auto it = modelIdToHandle.find(splineModelId);
+    if (it != modelIdToHandle.end()) {
+        StaticModelHandle existingHandle = it->second;
+        if (modelAllocator.IsValid(existingHandle)) {
+            StaticModel& model = models[existingHandle.index];
+            model.refCount++;
+            LOG_TRACE(Asset, "Spline model already loaded: {}, refCount: {}", splineModelId.id, model.refCount);
+            return existingHandle;
+        }
+        modelIdToHandle.erase(it);
+    }
+
+    StaticModelHandle handle = modelAllocator.Add();
+    if (!handle.IsValid()) {
+        LOG_ERROR(Asset, "Failed to allocate model slot for spline");
+        return StaticModelHandle::INVALID;
+    }
+
+    static int32_t splineCounter = 0;
+    StaticModel& model = models[handle.index];
+    model.selfHandle = handle;
+    model.name = fmt::format("Spline Mesh {}", splineCounter++);
+    model.modelId = splineModelId;
+    model.splineParams = params;
+    model.refCount = 1;
+    model.modelLoadState = StaticModel::ModelLoadState::NotLoaded;
+
+    modelIdToHandle[splineModelId] = handle;
+
+    LOG_TRACE(Asset, "Requesting spline model load: {}", model.name);
+    assetLoadManager->RequestProceduralModelLoad(&model);
+    return handle;
+}
+
 StaticModel* AssetManager::GetModel(StaticModelHandle handle)
 {
     if (!modelAllocator.IsValid(handle)) {

@@ -62,6 +62,10 @@ void EditorUpdate(Core::EngineContext* ctx, Engine::GameState* state)
 
     const bool ctrlHeld = state->inputFrame->GetKey(Key::LCTRL).down || state->inputFrame->GetKey(Key::RCTRL).down;
 
+    const bool multiSelectActive = state->selectedEntities.size() > 1;
+    if (multiSelectActive && state->currentGizmoOperation == ImGuizmo::SCALE) {
+        state->currentGizmoOperation = ImGuizmo::TRANSLATE;
+    }
     if (!ctrlHeld) {
         if (state->inputFrame->GetKey(Key::W).pressed) {
             state->currentGizmoOperation = ImGuizmo::TRANSLATE;
@@ -69,7 +73,7 @@ void EditorUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         else if (state->inputFrame->GetKey(Key::E).pressed) {
             state->currentGizmoOperation = ImGuizmo::ROTATE;
         }
-        else if (state->inputFrame->GetKey(Key::R).pressed) {
+        else if (state->inputFrame->GetKey(Key::R).pressed && !multiSelectActive) {
             state->currentGizmoOperation = ImGuizmo::SCALE;
         }
     }
@@ -317,8 +321,12 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
         if (ImGui::RadioButton("R##gizmo_op", state->currentGizmoOperation == ImGuizmo::ROTATE)) { state->currentGizmoOperation = ImGuizmo::ROTATE; }
         if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Rotate (E)"); }
         ImGui::SameLine();
+        ImGui::BeginDisabled(multiSelected);
         if (ImGui::RadioButton("S##gizmo_op", state->currentGizmoOperation == ImGuizmo::SCALE)) { state->currentGizmoOperation = ImGuizmo::SCALE; }
-        if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Scale (R)"); }
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+            ImGui::SetTooltip(multiSelected ? "Scale (R) — unavailable for multi-selection" : "Scale (R)");
+        }
+        ImGui::EndDisabled();
 
         ImGui::SameLine();
         ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
@@ -718,11 +726,8 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
                 }
             }
         }
-        else {
+        else if (state->currentGizmoOperation != ImGuizmo::SCALE) {
             static glm::vec3 s_prevTranslation{};
-            static glm::quat s_prevRotation{1.0f, 0.0f, 0.0f, 0.0f};
-            static glm::vec3 s_prevScale{1.0f, 1.0f, 1.0f};
-            static glm::vec3 s_dragStartCentroid{};
             static bool s_wasDragging = false;
 
             float snapArr[3] = {};
@@ -730,27 +735,25 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
             if (state->bSnapEnabled) {
                 if (state->currentGizmoOperation == ImGuizmo::TRANSLATE)
                     snapArr[0] = snapArr[1] = snapArr[2] = state->snapTranslation;
-                else if (state->currentGizmoOperation == ImGuizmo::ROTATE)
-                    snapArr[0] = snapArr[1] = snapArr[2] = state->snapRotation;
                 else
-                    snapArr[0] = snapArr[1] = snapArr[2] = state->snapScale;
+                    snapArr[0] = snapArr[1] = snapArr[2] = state->snapRotation;
                 snap = snapArr;
             }
 
             glm::mat4 gizmoMatrix = glm::translate(glm::mat4(1.0f), multiGizmoCentroid);
+            glm::mat4 deltaMatrix(1.0f);
             ImGuizmo::Manipulate(
                 glm::value_ptr(view),
                 glm::value_ptr(proj),
                 state->currentGizmoOperation,
                 ImGuizmo::WORLD,
                 glm::value_ptr(gizmoMatrix),
-                nullptr,
+                glm::value_ptr(deltaMatrix),
                 snap
             );
 
             if (ImGuizmo::IsUsing()) {
                 if (!s_wasDragging) {
-                    s_dragStartCentroid = multiGizmoCentroid;
                     s_prevTranslation = multiGizmoCentroid;
                     s_wasDragging = true;
                     for (auto e : state->selectedEntities) {
@@ -760,20 +763,20 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
                     }
                 }
 
-                float t[3], r[3], s[3];
-                ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(gizmoMatrix), t, r, s);
-
-                glm::vec3 newT = glm::vec3(t[0], t[1], t[2]);
-                if (state->bSnapEnabled && state->bSnapWorldGrid && state->currentGizmoOperation == ImGuizmo::TRANSLATE) {
-                    const float g = state->snapTranslation;
-                    newT = glm::round(newT / g) * g;
+                glm::vec3 deltaTranslation{0.0f};
+                if (state->currentGizmoOperation == ImGuizmo::TRANSLATE) {
+                    float t[3], r[3], s[3];
+                    ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(gizmoMatrix), t, r, s);
+                    glm::vec3 newT = {t[0], t[1], t[2]};
+                    if (state->bSnapEnabled && state->bSnapWorldGrid) {
+                        const float g = state->snapTranslation;
+                        newT = glm::round(newT / g) * g;
+                    }
+                    deltaTranslation = newT - s_prevTranslation;
+                    s_prevTranslation = newT;
                 }
-                const glm::quat newR = glm::quat(glm::radians(glm::vec3(r[0], r[1], r[2])));
-                const glm::vec3 newS = glm::vec3(s[0], s[1], s[2]);
 
-                const glm::vec3 deltaTranslation = newT - s_prevTranslation;
-                const glm::quat deltaRotation = newR * glm::conjugate(s_prevRotation);
-                const glm::vec3 deltaScale = newS / s_prevScale;
+                const glm::quat deltaRotation = glm::normalize(glm::quat_cast(glm::mat3(deltaMatrix)));
 
                 for (auto entity : state->selectedEntities) {
                     auto* transform = state->registry.try_get<Component::TransformComponent>(entity);
@@ -781,28 +784,17 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
 
                     transform->translation += deltaTranslation;
 
-                    glm::vec3 rel = transform->translation - s_dragStartCentroid;
-                    transform->translation = s_dragStartCentroid + deltaRotation * rel;
+                    const glm::vec3 rel = transform->translation - multiGizmoCentroid;
+                    transform->translation = multiGizmoCentroid + deltaRotation * rel;
                     transform->rotation = deltaRotation * transform->rotation;
 
-                    rel = transform->translation - s_dragStartCentroid;
-                    transform->translation = s_dragStartCentroid + rel * deltaScale;
-                    transform->scale *= deltaScale;
-
-                    state->registry.emplace_or_replace<Component::DirtyRenderTransformComponent>(entity);
+                    state->registry.emplace_or_replace<Component::DirtyTransformTag>(entity);
                     state->registry.emplace_or_replace<Component::TeleportPhysicsTransformTag>(entity);
                 }
-
-                s_prevTranslation = newT;
-                s_prevRotation = newR;
-                s_prevScale = newS;
             }
             else {
                 s_wasDragging = false;
-                s_dragStartCentroid = {};
                 s_prevTranslation = {};
-                s_prevRotation = {1.0f, 0.0f, 0.0f, 0.0f};
-                s_prevScale = {1.0f, 1.0f, 1.0f};
             }
         }
     }

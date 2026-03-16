@@ -45,6 +45,9 @@ template<> void DeserializeComponent<Component::MotionBlurMovementComponent>(Com
 template<> void SerializeComponent<Component::PhysicsBodyDesc>(const Component::PhysicsBodyDesc& comp, nlohmann::json& json);
 template<> void DeserializeComponent<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc& comp, const nlohmann::json& json);
 
+template<> void SerializeComponent<Component::SplineMeshComponent>(const Component::SplineMeshComponent& comp, nlohmann::json& json);
+template<> void DeserializeComponent<Component::SplineMeshComponent>(Component::SplineMeshComponent& comp, const nlohmann::json& json);
+
 } // Game
 
 #endif //WILL_ENGINE_COMPONENT_SERIALIZATION_H

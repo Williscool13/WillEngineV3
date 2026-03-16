@@ -54,6 +54,7 @@ struct PhysicsShapeDesc
     // Only used for ConvexHull / TriangleMesh (Mutually exclusive, if modelID has priority).
     Engine::ModelID meshSourceModelId{};
     Engine::ProceduralParams proceduralParams{};
+    Engine::SplineParams splineParams{};
 
     // Transient
     Engine::StaticModelHandle meshSourceHandle{};

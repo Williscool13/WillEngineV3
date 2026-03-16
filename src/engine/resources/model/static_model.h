@@ -108,6 +108,9 @@ public:
     };
     std::optional<PhysicsCache> physicsCache;
 
+    // Populated by AssetManager, Only for spline models
+    std::optional<SplineParams> splineParams{};
+
     ModelBounds bounds{};
 
     static ModelBounds ComputeBounds(const std::vector<glm::vec3>& positions, const std::vector<uint32_t>* indices = nullptr);

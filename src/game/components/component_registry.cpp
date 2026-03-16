@@ -21,6 +21,7 @@ void RegisterComponents(ComponentRegistry& componentRegistry)
     RegisterComponent<Component::FreeCameraComponent>(componentRegistry, "FreeCameraComponent");
     RegisterComponent<Component::StaticMeshComponent>(componentRegistry, "StaticMeshComponent");
     RegisterComponent<Component::ProceduralMeshComponent>(componentRegistry, "ProceduralMeshComponent");
+    RegisterComponent<Component::SplineMeshComponent>(componentRegistry, "SplineMeshComponent");
 
     RegisterComponent<Component::PhysicsBodyDesc>(componentRegistry, "PhysicsBodyDesc");
     RegisterComponent<Component::DrawPhysicsDebugTag>(componentRegistry, "DrawPhysicsDebugTag");

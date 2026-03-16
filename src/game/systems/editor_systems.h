@@ -63,6 +63,9 @@ ComponentEditorResult DrawComponentEditor<Component::PhysicsBodyDesc>(Component:
 
 template<>
 ComponentEditorResult DrawComponentEditor<Component::DrawPhysicsDebugTag>(Component::DrawPhysicsDebugTag& component, Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
+
+template<>
+ComponentEditorResult DrawComponentEditor<Component::SplineMeshComponent>(Component::SplineMeshComponent& component, Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
 }
 
 #endif //WILL_ENGINE_EDITOR_SYSTEMS_H

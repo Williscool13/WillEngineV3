@@ -17,12 +17,14 @@ bool CanAddComponent(const entt::registry& registry, entt::entity entity) { retu
 
 template<> bool CanAddComponent<Component::StaticMeshComponent>(const entt::registry& registry, entt::entity entity);
 template<> bool CanAddComponent<Component::ProceduralMeshComponent>(const entt::registry& registry, entt::entity entity);
+template<> bool CanAddComponent<Component::SplineMeshComponent>(const entt::registry& registry, entt::entity entity);
 
 template<typename T>
 void OnComponentAdded(T& component, entt::registry& registry, entt::entity entity) {}
 
 template<> void OnComponentAdded<Component::StaticMeshComponent>(Component::StaticMeshComponent& component, entt::registry& registry, entt::entity entity);
 template<> void OnComponentAdded<Component::ProceduralMeshComponent>(Component::ProceduralMeshComponent& component, entt::registry& registry, entt::entity entity);
+template<> void OnComponentAdded<Component::SplineMeshComponent>(Component::SplineMeshComponent& component, entt::registry& registry, entt::entity entity);
 template<> void OnComponentAdded<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc& component, entt::registry& registry, entt::entity entity);
 template<> void OnComponentAdded<Component::StableIdComponent>(Component::StableIdComponent& component, entt::registry& registry, entt::entity entity);
 
@@ -31,6 +33,7 @@ void OnComponentRemoved(T& component, entt::registry& registry, entt::entity ent
 template<> void OnComponentRemoved<Component::StableIdComponent>(Component::StableIdComponent& component, entt::registry& registry, entt::entity entity);
 template<> void OnComponentRemoved<Component::StaticMeshComponent>(Component::StaticMeshComponent& component, entt::registry& registry, entt::entity entity);
 template<> void OnComponentRemoved<Component::ProceduralMeshComponent>(Component::ProceduralMeshComponent& component, entt::registry& registry, entt::entity entity);
+template<> void OnComponentRemoved<Component::SplineMeshComponent>(Component::SplineMeshComponent& component, entt::registry& registry, entt::entity entity);
 template<> void OnComponentRemoved<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc& component, entt::registry& registry, entt::entity entity);
 
 template<typename T>

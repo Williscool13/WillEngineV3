@@ -383,6 +383,14 @@ void WillEngine::EditorImgui()
             ImGui::Text("Shaders: >60s since reload");
         }
 
+        if (ImGui::CollapsingHeader("Asset Counts")) {
+            ImGui::Text("Models:    %u", assetManager->GetActiveModelCount());
+            ImGui::Text("Textures:  %u", assetManager->GetActiveTextureCount());
+            ImGui::Text("Samplers:  %u", assetManager->GetActiveSamplerCount());
+            ImGui::Text("Cubemaps:  %u", assetManager->GetActiveCubemapCount());
+            ImGui::Text("Materials: %zu", materialManager->GetMaterials().size());
+        }
+
         ImGui::Checkbox("Freeze Visibility Calculations", &bFreezeVisibility);
         if (ImGui::Button("Log RDG")) {
             bLogRDG = true;

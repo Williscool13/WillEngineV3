@@ -140,6 +140,52 @@ void ResolveProceduralMeshLoads(Core::EngineContext* ctx, Engine::GameState* sta
     }
 }
 
+void ResolveSplineMeshLoads(Core::EngineContext* ctx, Engine::GameState* state)
+{
+    std::vector<entt::entity> resolved;
+
+    for (auto [entity, meshComponent] : state->registry.view<Component::SplineMeshComponent, Component::SplineMeshLoadingTag>().each()) {
+        if (meshComponent.bPrimitiveReady) {
+            ctx->materialManager->ReleaseMaterial(meshComponent.primitive.materialID);
+            meshComponent.bPrimitiveReady = false;
+        }
+
+        auto model = ctx->assetManager->GetModel(meshComponent.modelHandle);
+        if (!model) {
+            LOG_ERROR(Game, "Spline model ({}) is not in the asset manager.", meshComponent.modelHandle.index);
+            continue;
+        }
+        if (model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
+            continue;
+        }
+
+        Engine::MeshInformation& mesh = model->modelData.meshes[0];
+        Engine::PrimitiveProperty& primitive = mesh.primitiveProperties[0];
+
+        Engine::MaterialManager* materialManager = ctx->materialManager;
+        Engine::MaterialID matID = materialManager->GetDefaultMaterial();
+        if (meshComponent.material.IsValid()) {
+            if (materialManager->DoesMutableMaterialExist(meshComponent.material)) {
+                matID = meshComponent.material;
+            }
+        }
+
+        meshComponent.primitive = {
+            .primitiveIndex = primitive.index,
+            .originalMaterialIndex = -1,
+            .materialID = matID,
+        };
+        materialManager->AcquireMaterial(matID);
+        meshComponent.bPrimitiveReady = true;
+
+        resolved.push_back(entity);
+    }
+
+    for (const auto entity : resolved) {
+        state->registry.remove<Component::SplineMeshLoadingTag>(entity);
+    }
+}
+
 void RenderUpdate(Core::EngineContext* ctx, Engine::GameState* state)
 {
     auto transformDirtyView = state->registry.view<Component::RenderTransformComponent, Component::DirtyTransformTag>();
@@ -300,6 +346,30 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
         ZoneScopedN("ProceduralMeshes");
         auto view = state->registry.view<Component::ProceduralMeshComponent, Component::RenderTransformComponent>(entt::exclude<Component::ProceduralMeshLoadingTag>);
 
+        for (const auto& [entity, renderable, renderTransform] : view.each()) {
+            if (!renderable.bPrimitiveReady) { continue; }
+
+            auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.size());
+            frameBuffer->mainViewFamily.modelMatrices.push_back({renderTransform.modelMatrix, renderTransform.previousMatrix});
+
+            uint64_t stableId = 1234567890;
+            if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
+                stableId = stable->id.id;
+            }
+
+            frameBuffer->mainViewFamily.mainPassInstances.push_back({
+                .primitiveIndex = renderable.primitive.primitiveIndex,
+                .materialID = renderable.primitive.materialID,
+                .modelIndex = modelIndex,
+                .stableId = stableId,
+            });
+        }
+    }
+
+    // Gather spline meshes
+    {
+        ZoneScopedN("SplineMeshes");
+        auto view = state->registry.view<Component::SplineMeshComponent, Component::RenderTransformComponent>(entt::exclude<Component::SplineMeshLoadingTag>);
         for (const auto& [entity, renderable, renderTransform] : view.each()) {
             if (!renderable.bPrimitiveReady) { continue; }
 

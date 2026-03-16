@@ -7,7 +7,9 @@
 
 #include <array>
 #include <cstdint>
+#include <vector>
 #include <glm/glm.hpp>
+#include <glm/vec3.hpp>
 
 #include "core/string_id.h"
 #include "engine/resources/material/material_manager.h"
@@ -66,6 +68,28 @@ struct ProceduralMeshComponent
 };
 
 struct ProceduralMeshLoadingTag
+{};
+
+struct SplineMeshComponent
+{
+    std::vector<glm::vec3> controlPoints{{0,0,0},{0,0,1},{0,0,2},{0,0,3}};
+    float radius{0.5f};
+    float rollAngle{0.0f};
+    int32_t sides{8};
+    int32_t segmentsPerSpan{8};
+    bool bClosed{false};
+    bool bCaps{true};
+
+    Engine::MaterialID material{};
+    glm::vec4 modelFlags{1.0f, 1.0f, 0.0f, 0.0f};
+
+    // Transient
+    Engine::StaticModelHandle modelHandle{};
+    PrimitiveData primitive{};
+    bool bPrimitiveReady{false};
+};
+
+struct SplineMeshLoadingTag
 {};
 }
 

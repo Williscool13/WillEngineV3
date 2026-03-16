@@ -98,6 +98,7 @@ GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::GameState* state)
     if (ctx->bModelLoadedThisFrame || state->bPendingModelResolve) {
         Game::ResolveStaticMeshLoads(ctx, state);
         Game::ResolveProceduralMeshLoads(ctx, state);
+        Game::ResolveSplineMeshLoads(ctx, state);
 
         Game::ResolvePhysicsMeshLoads(ctx, state);
         state->bPendingModelResolve = false;

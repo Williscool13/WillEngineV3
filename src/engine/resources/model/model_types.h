@@ -280,7 +280,19 @@ struct TrefoilKnotParams
     int32_t stacks{128};
 };
 
-using ProceduralParams = std::variant<std::monostate, StaircaseParams, BoxParams, CylinderParams, CapsuleParams, TorusParams, ArchParams, WedgeParams, ConeParams, DoorParams, PlaneParams, SphereParams, SubdividedSphereParams, HemisphereParams, PipeParams, TetrahedronParams, OctahedronParams, IcosahedronParams, DodecahedronParams, KleinBottleParams, TrefoilKnotParams>;
+struct SplineParams
+{
+    std::vector<glm::vec3> controlPoints{{0, 0, 0}, {0, 0, 1}, {0, 0, 2}, {0, 0, 3}};
+    float radius{0.5f};
+    float rollAngle{0.0f}; // degree; rotates around the path tangent
+    int32_t sides{8};
+    int32_t segmentsPerSpan{8};
+    bool bClosed{false};
+    bool bCaps{true};
+};
+
+using ProceduralParams = std::variant<std::monostate, StaircaseParams, BoxParams, CylinderParams, CapsuleParams, TorusParams, ArchParams, WedgeParams, ConeParams, DoorParams, PlaneParams, SphereParams
+    , SubdividedSphereParams, HemisphereParams, PipeParams, TetrahedronParams, OctahedronParams, IcosahedronParams, DodecahedronParams, KleinBottleParams, TrefoilKnotParams>;
 } // Render
 
 #endif //WILL_ENGINE_MODEL_TYPES_H

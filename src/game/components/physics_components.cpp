@@ -64,6 +64,20 @@ void SerializeComponent<Component::PhysicsBodyDesc>(const Component::PhysicsBody
             case Component::PhysicsShapeType::TriangleMesh:
                 shapeJson["meshSourceModelId"] = shape.meshSourceModelId.id;
                 shapeJson["proceduralType"] = shape.proceduralParams.index();
+                if (!shape.splineParams.controlPoints.empty()) {
+                    nlohmann::json sp;
+                    sp["radius"] = shape.splineParams.radius;
+                    sp["rollAngle"] = shape.splineParams.rollAngle;
+                    sp["sides"] = shape.splineParams.sides;
+                    sp["segmentsPerSpan"] = shape.splineParams.segmentsPerSpan;
+                    sp["bClosed"] = shape.splineParams.bClosed;
+                    sp["bCaps"] = shape.splineParams.bCaps;
+                    sp["controlPoints"] = nlohmann::json::array();
+                    for (const auto& cp : shape.splineParams.controlPoints) {
+                        sp["controlPoints"].push_back({cp.x, cp.y, cp.z});
+                    }
+                    shapeJson["splineParams"] = sp;
+                }
                 std::visit([&shapeJson](const auto& p) {
                     using T = std::decay_t<decltype(p)>;
                     if constexpr (std::is_same_v<T, Engine::StaircaseParams>) {
@@ -366,6 +380,21 @@ void DeserializeComponent<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc
                         shape.proceduralParams = p;
                     }
                 }
+                if (shapeJson.contains("splineParams")) {
+                    const auto& sp = shapeJson["splineParams"];
+                    Engine::SplineParams spline{};
+                    spline.radius = sp["radius"].get<float>();
+                    spline.rollAngle = sp["rollAngle"].get<float>();
+                    spline.sides = sp["sides"].get<int32_t>();
+                    spline.segmentsPerSpan = sp["segmentsPerSpan"].get<int32_t>();
+                    spline.bClosed = sp["bClosed"].get<bool>();
+                    spline.bCaps = sp["bCaps"].get<bool>();
+                    spline.controlPoints.clear();
+                    for (const auto& cp : sp["controlPoints"]) {
+                        spline.controlPoints.push_back({cp[0].get<float>(), cp[1].get<float>(), cp[2].get<float>()});
+                    }
+                    shape.splineParams = std::move(spline);
+                }
                 break;
         }
 
@@ -483,6 +512,8 @@ ComponentEditorResult DrawComponentEditor<Component::PhysicsBodyDesc>(Component:
                         const size_t idx = shape.proceduralParams.index();
                         if (idx > 0 && idx < std::size(kProceduralNames)) {
                             ImGui::Text("Mesh Source: Procedural %s", kProceduralNames[idx]);
+                        } else if (!shape.splineParams.controlPoints.empty()) {
+                            ImGui::Text("Mesh Source: Procedural Spline");
                         }
                         else {
                             ImGui::Text("Mesh Source: (none)");
@@ -548,6 +579,17 @@ ComponentEditorResult DrawComponentEditor<Component::PhysicsBodyDesc>(Component:
                             else if (auto* pm = registry.try_get<Component::ProceduralMeshComponent>(entity)) {
                                 shape.proceduralParams = pm->params;
                                 shape.meshSourceHandle = ctx->assetManager->LoadProceduralModel(shape.proceduralParams);
+                                registry.emplace_or_replace<Component::PendingPhysicsMeshTag>(entity);
+                                state->bPendingModelResolve = true;
+                            } else if (auto* splm = registry.try_get<Component::SplineMeshComponent>(entity)) {
+                                shape.splineParams.controlPoints = splm->controlPoints;
+                                shape.splineParams.radius = splm->radius;
+                                shape.splineParams.rollAngle = splm->rollAngle;
+                                shape.splineParams.sides = splm->sides;
+                                shape.splineParams.segmentsPerSpan = splm->segmentsPerSpan;
+                                shape.splineParams.bClosed = splm->bClosed;
+                                shape.splineParams.bCaps = splm->bCaps;
+                                shape.meshSourceHandle = ctx->assetManager->LoadSplineModel(shape.splineParams);
                                 registry.emplace_or_replace<Component::PendingPhysicsMeshTag>(entity);
                                 state->bPendingModelResolve = true;
                             }
@@ -745,6 +787,9 @@ void OnComponentAdded<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc& co
         }
         else if (!std::holds_alternative<std::monostate>(shape.proceduralParams)) {
             shape.meshSourceHandle = ctx->assetManager->LoadProceduralModel(shape.proceduralParams);
+            needsResolve = true;
+        } else if (!shape.splineParams.controlPoints.empty()) {
+            shape.meshSourceHandle = ctx->assetManager->LoadSplineModel(shape.splineParams);
             needsResolve = true;
         }
     }

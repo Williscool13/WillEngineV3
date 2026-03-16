@@ -344,8 +344,12 @@ void ResolvePhysicsBodyCreation(Core::EngineContext* ctx, Engine::GameState* sta
 
         bool bDegenerate = false;
         for (const auto& shape : bodyDesc.shapes) {
-            if (shape.type != Component::PhysicsShapeType::ConvexHull && shape.type != Component::PhysicsShapeType::TriangleMesh) { continue; }
-            if (!shape.meshSourceModelId.IsValid() && std::holds_alternative<std::monostate>(shape.proceduralParams)) {
+            // Only these 2 need to verify source mesh
+            if (shape.type != Component::PhysicsShapeType::ConvexHull && shape.type != Component::PhysicsShapeType::TriangleMesh) {
+                continue;
+            }
+
+            if (!shape.meshSourceModelId.IsValid() && std::holds_alternative<std::monostate>(shape.proceduralParams) && shape.splineParams.controlPoints.empty()) {
                 LOG_WARN(Game, "PhysicsBodyDesc has mesh shape with no mesh source, skipping body creation");
                 bDegenerate = true;
                 break;

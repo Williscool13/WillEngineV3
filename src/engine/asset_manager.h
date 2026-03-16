@@ -62,9 +62,16 @@ public: // Models
         return it != modelNameToId.end() ? it->second : ModelID::INVALID;
     }
 
+    [[nodiscard]] uint32_t GetActiveModelCount()   const { return modelAllocator.GetCount(); }
+    [[nodiscard]] uint32_t GetActiveTextureCount()  const { return textureAllocator.GetCount(); }
+    [[nodiscard]] uint32_t GetActiveSamplerCount()  const { return samplerAllocator.GetCount(); }
+    [[nodiscard]] uint32_t GetActiveCubemapCount()  const { return cubemapAllocator.GetCount(); }
+
     StaticModelHandle LoadModel(ModelID modelId);
 
     StaticModelHandle LoadProceduralModel(ProceduralParams& params);
+
+    StaticModelHandle LoadSplineModel(const SplineParams& params);
 
     StaticModel* GetModel(StaticModelHandle handle);
 
@@ -78,8 +85,6 @@ public: // Models
         uint32_t meshNodesCount{};
         std::vector<Node> nodes;
     };
-
-
 
     const std::unordered_map<ModelID, CachedModelMetadata>& GetModelCache() { return modelCache; }
 
@@ -199,6 +204,11 @@ private: // Asset Registry
     std::unordered_map<StringID, CachedCubemapMetadata> cubemapCache;
 
     std::unordered_map<StringID, CachedSceneMetadata> sceneCache;
+
+    /**
+     * For (almost 100% chance) unique procedural shapes
+     */
+    std::mt19937_64 proceduralModelIdRng{std::random_device{}()};
 };
 } // Engine
 
