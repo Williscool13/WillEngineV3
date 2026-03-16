@@ -136,14 +136,8 @@ bool ProceduralModelLoadSlot::GenerateGeometry()
 
     Engine::ProceduralParams& params = outputModel->proceduralParams;
 
-    // par_shapes uses a global static in its qsort comparator not thread-safe
-    // todo: modify par shapes to be thread-safe
-    static std::mutex parShapesMutex;
-
     bool bSuccess = false;
-    {
-        std::lock_guard lock(parShapesMutex);
-        std::visit(overloaded{
+    std::visit(overloaded{
                    [](std::monostate) {},
                    [&](const Engine::StaircaseParams& p) { bSuccess = GenerateStaircase(p); },
                    [&](const Engine::BoxParams& p) { bSuccess = GenerateBox(p); },
@@ -166,7 +160,6 @@ bool ProceduralModelLoadSlot::GenerateGeometry()
                    [&](const Engine::KleinBottleParams& p) { bSuccess = GenerateKleinBottle(p); },
                    [&](const Engine::TrefoilKnotParams& p) { bSuccess = GenerateTrefoilKnot(p); },
                }, params);
-    }
     return bSuccess;
 }
 

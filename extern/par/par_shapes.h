@@ -1576,18 +1576,24 @@ par_shapes_mesh* par_shapes_clone(par_shapes_mesh const* mesh,
     return clone;
 }
 
-static struct {
+// BEGIN LOCAL MODIFICATION: thread-safe sort context (replaces global static).
+// Original used a file-static struct written in par_shapes__sort_points and read
+// in par_shapes__cmp1 via qsort, which is not thread-safe. Replaced with a
+// stack-allocated context passed through qsort_s (Windows). For POSIX, swap to
+// qsort_r — note the comparator argument order differs between the two.
+typedef struct {
     float const* points;
     int gridsize;
 } par_shapes__sort_context;
 
-static int par_shapes__cmp1(const void *arg0, const void *arg1)
+static int par_shapes__cmp1(void* ctx, const void *arg0, const void *arg1)
 {
-    const int g = par_shapes__sort_context.gridsize;
+    par_shapes__sort_context const* c = (par_shapes__sort_context const*) ctx;
+    const int g = c->gridsize;
 
     // Convert arg0 into a flattened grid index.
     PAR_SHAPES_T d0 = *(const PAR_SHAPES_T*) arg0;
-    float const* p0 = par_shapes__sort_context.points + d0 * 3;
+    float const* p0 = c->points + d0 * 3;
     int i0 = (int) p0[0];
     int j0 = (int) p0[1];
     int k0 = (int) p0[2];
@@ -1595,7 +1601,7 @@ static int par_shapes__cmp1(const void *arg0, const void *arg1)
 
     // Convert arg1 into a flattened grid index.
     PAR_SHAPES_T d1 = *(const PAR_SHAPES_T*) arg1;
-    float const* p1 = par_shapes__sort_context.points + d1 * 3;
+    float const* p1 = c->points + d1 * 3;
     int i1 = (int) p1[0];
     int j1 = (int) p1[1];
     int k1 = (int) p1[2];
@@ -1606,6 +1612,7 @@ static int par_shapes__cmp1(const void *arg0, const void *arg1)
     if (index0 > index1) return 1;
     return 0;
 }
+// END LOCAL MODIFICATION
 
 static void par_shapes__sort_points(par_shapes_mesh* mesh, int gridsize,
     PAR_SHAPES_T* sortmap)
@@ -1615,9 +1622,8 @@ static void par_shapes__sort_points(par_shapes_mesh* mesh, int gridsize,
     for (int i = 0; i < mesh->npoints; i++) {
         sortmap[i] = i;
     }
-    par_shapes__sort_context.gridsize = gridsize;
-    par_shapes__sort_context.points = mesh->points;
-    qsort(sortmap, mesh->npoints, sizeof(PAR_SHAPES_T), par_shapes__cmp1);
+    par_shapes__sort_context ctx = { mesh->points, gridsize }; // LOCAL MODIFICATION: stack ctx passed to qsort_s
+    qsort_s(sortmap, mesh->npoints, sizeof(PAR_SHAPES_T), par_shapes__cmp1, &ctx);
 
     // Apply the reorder mapping to the XYZ coordinate data.
     float* newpts = PAR_MALLOC(float, mesh->npoints * 3);
