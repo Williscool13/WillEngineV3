@@ -10,15 +10,16 @@
 #include "imgui.h"
 #include <glm/gtc/type_ptr.hpp>
 #include <ImGuizmo.h>
-#include "component_copy.h"
-#include "component_serialization.h"
+
 #include "scene_components.h"
 #include "core/include/engine_context.h"
 #include "engine/asset_manager.h"
 #include "engine/engine_api.h"
 #include "engine/logging/engine_log.h"
 #include "game/systems/editor_systems.h"
-#include "game/components/component_initialization.h"
+#include "game/component-registry/component_copy.h"
+#include "game/component-registry/component_serialization.h"
+#include "game/component-registry/component_initialization.h"
 
 namespace Game
 {

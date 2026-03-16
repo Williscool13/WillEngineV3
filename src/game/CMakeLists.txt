@@ -13,7 +13,6 @@ set(GAME_SOURCES
         systems/editor_systems.cpp
         systems/editor_systems.h
 
-        components/component_include.h
         fwd_components.h
 
         components/camera_components.cpp
@@ -32,20 +31,19 @@ set(GAME_SOURCES
         components/scene_components.h
         systems/core_systems.cpp
         systems/core_systems.h
-        ../engine/resources/scene/scene.cpp
-        ../engine/resources/scene/scene.h
         systems/scene_system.cpp
         systems/scene_system.h
         components/common_components.cpp
         components/common_components.h
         systems/component_editor.cpp
         systems/component_editor.h
-        components/component_registry.cpp
-        components/component_registry.h
-        components/component_initialization.cpp
-        components/component_initialization.h
+        component-registry/component_registry.cpp
+        component-registry/component_registry.h
         components/component_types.cpp
         components/component_types.h
+        components/editor_components.cpp
+        components/editor_components.h
+        component-registry/component_editor.h
 )
 
 set(GAME_INCLUDE_DIRS

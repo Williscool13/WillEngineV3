@@ -7,8 +7,8 @@
 
 #include <entt/entt.hpp>
 
-#include "common_components.h"
-#include "render_components.h"
+#include "../components/common_components.h"
+#include "../components/render_components.h"
 
 namespace Game
 {

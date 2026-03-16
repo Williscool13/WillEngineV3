@@ -6,12 +6,13 @@
 #define WILL_ENGINE_COMPONENT_SERIALIZATION_H
 #include <json/nlohmann/json_fwd.hpp>
 
-#include "camera_components.h"
-#include "common_components.h"
-#include "core_components.h"
-#include "debug_components.h"
-#include "physics_components.h"
-#include "render_components.h"
+#include "game/components/camera_components.h"
+#include "game/components/common_components.h"
+#include "game/components/core_components.h"
+#include "game/components/debug_components.h"
+#include "game/components/physics_components.h"
+#include "game/components/render_components.h"
+#include "game/components/editor_components.h"
 
 namespace Game
 {
@@ -47,6 +48,9 @@ template<> void DeserializeComponent<Component::PhysicsBodyDesc>(Component::Phys
 
 template<> void SerializeComponent<Component::SplineMeshComponent>(const Component::SplineMeshComponent& comp, nlohmann::json& json);
 template<> void DeserializeComponent<Component::SplineMeshComponent>(Component::SplineMeshComponent& comp, const nlohmann::json& json);
+
+template<> void SerializeComponent<Component::EntityFolderComponent>(const Component::EntityFolderComponent& comp, nlohmann::json& json);
+template<> void DeserializeComponent<Component::EntityFolderComponent>(Component::EntityFolderComponent& comp, const nlohmann::json& json);
 
 } // Game
 

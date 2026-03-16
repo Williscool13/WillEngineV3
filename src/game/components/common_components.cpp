@@ -7,11 +7,12 @@
 #include <json/nlohmann/json.hpp>
 
 #include "imgui.h"
-#include "component_copy.h"
-#include "component_serialization.h"
+
 #include "engine/engine_api.h"
-#include "game/systems/editor_systems.h"
-#include "game/components/component_initialization.h"
+#include "game/component-registry/component_copy.h"
+#include "game/component-registry/component_serialization.h"
+#include "game/component-registry/component_initialization.h"
+#include "game/component-registry/component_editor.h"
 
 namespace Game
 {

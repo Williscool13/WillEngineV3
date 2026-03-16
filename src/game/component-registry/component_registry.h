@@ -10,10 +10,10 @@
 #include "component_copy.h"
 #include "component_initialization.h"
 #include "component_serialization.h"
-#include "component_types.h"
+#include "component_editor.h"
+#include "game/components/component_types.h"
 #include "core/string_id.h"
 #include "core/allocators/inline_vector.h"
-#include "game/systems/editor_systems.h"
 
 namespace Game
 {

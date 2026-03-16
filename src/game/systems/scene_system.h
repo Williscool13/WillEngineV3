@@ -6,7 +6,7 @@
 #define WILL_ENGINE_SCENE_SYSTEM_H
 #include <entt/entt.hpp>
 
-#include "game/components/component_registry.h"
+#include "../component-registry/component_registry.h"
 #include "game/components/scene_components.h"
 #include "core/string_id.h"
 #include "core/include/engine_context.h"

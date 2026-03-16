@@ -38,6 +38,8 @@ add_library(engine STATIC
         serialization/serialization.h
         compression/compression.cpp
         compression/compression.h
+        resources/scene/scene.cpp
+        resources/scene/scene.h
 )
 
 target_include_directories(engine PRIVATE

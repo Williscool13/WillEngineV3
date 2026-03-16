@@ -6,7 +6,7 @@
 
 #include <glm/gtc/type_ptr.hpp>
 
-#include "component_serialization.h"
+
 #include "core/include/engine_context.h"
 #include "engine/asset_manager.h"
 #include "engine/engine_api.h"
@@ -15,6 +15,9 @@
 #include "game/systems/physics_system.h"
 #include "Jolt/Physics/Body/BodyInterface.h"
 #include "physics/physics_system.h"
+
+#include "game/component-registry/component_serialization.h"
+#include "game/component-registry/component_editor.h"
 
 namespace Game::Component
 {

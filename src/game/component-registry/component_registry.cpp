@@ -4,9 +4,9 @@
 
 #include "component_registry.h"
 
-#include "camera_components.h"
-#include "debug_components.h"
-#include "physics_components.h"
+#include "../components/camera_components.h"
+#include "../components/debug_components.h"
+#include "../components/physics_components.h"
 
 namespace Game
 {
@@ -16,6 +16,7 @@ void RegisterComponents(ComponentRegistry& componentRegistry)
 
     RegisterComponent<Component::NameComponent>(componentRegistry, "NameComponent");
     RegisterComponent<Component::StableIdComponent>(componentRegistry, "StableIdComponent");
+    RegisterComponent<Component::EntityFolderComponent>(componentRegistry, "EntityFolderComponent");
 
     RegisterComponent<Component::TransformComponent>(componentRegistry, "TransformComponent");
     RegisterComponent<Component::FreeCameraComponent>(componentRegistry, "FreeCameraComponent");

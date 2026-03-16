@@ -6,7 +6,7 @@
 
 #include <json/nlohmann/json.hpp>
 
-#include "component_serialization.h"
+#include "../component-registry/component_serialization.h"
 
 namespace Game
 {
