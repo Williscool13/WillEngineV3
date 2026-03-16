@@ -210,6 +210,7 @@ JPH::BodyID CreateBodyFromDesc(JPH::BodyInterface& bodyInterface, const Componen
         settings.mMassPropertiesOverride.mMass = desc.mass;
         settings.mOverrideMassProperties = JPH::EOverrideMassProperties::CalculateInertia;
     }
+    settings.mFriction = desc.friction;
     settings.mMotionQuality = desc.motionQuality;
 
     return bodyInterface.CreateAndAddBody(settings,

@@ -40,6 +40,7 @@ void SerializeComponent<Component::PhysicsBodyDesc>(const Component::PhysicsBody
 {
     json["motionType"] = comp.motionType;
     json["mass"] = comp.mass;
+    json["friction"] = comp.friction;
     json["shapes"] = nlohmann::json::array();
 
     for (const auto& shape : comp.shapes) {
@@ -181,6 +182,7 @@ void DeserializeComponent<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc
 {
     comp.motionType = static_cast<Component::PhysicsMotionType>(json["motionType"].get<uint8_t>());
     comp.mass = json["mass"].get<float>();
+    comp.friction = json.value<float>("friction", 0.0f);
     comp.shapes.clear();
 
     for (const auto& shapeJson : json["shapes"]) {
@@ -417,6 +419,7 @@ ComponentEditorResult DrawComponentEditor<Component::PhysicsBodyDesc>(Component:
         }
 
         ImGui::DragFloat("Mass", &component.mass, 0.1f, 0.001f, 10000.0f);
+        ImGui::DragFloat("Friction", &component.friction, 0.001f, 0.001f, 1.0f);
 
         const char* qualityTypes[] = {"Discrete", "LinearCast"};
         int currentQuality = static_cast<int>(component.motionQuality);
