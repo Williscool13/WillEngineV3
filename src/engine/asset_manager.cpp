@@ -141,7 +141,7 @@ StaticModelHandle AssetManager::LoadProceduralModel(ProceduralParams& params)
         if (modelAllocator.IsValid(existingHandle)) {
             StaticModel& model = models[existingHandle.index];
             model.refCount++;
-            LOG_TRACE(Asset, "Procedural model already loaded: {}, refCount: {}", proceduralModelId.id, model.refCount);
+            LOG_TRACE(Asset, "Procedural model already loaded: {}, refCount: {}", model.name, model.refCount);
             return existingHandle;
         }
         modelIdToHandle.erase(it);

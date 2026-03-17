@@ -154,8 +154,24 @@ void DebugRenderPhysics(Core::EngineContext* ctx, Engine::GameState* state, Core
                     }
                     case Component::PhysicsShapeType::ConvexHull:
                     case Component::PhysicsShapeType::TriangleMesh:
-                        DEBUG_ADD_SPHERE(vf.debugSpheres, {shapeCenter, 0.25f, kDebugColor});
+                    {
+                        const Engine::StaticModel* model = ctx->assetManager->GetModel(shape.meshSourceHandle);
+                        if (model && model->modelLoadState == Engine::StaticModel::ModelLoadState::Loaded && model->physicsCache && !model->physicsCache->indices.empty()) {
+                            const auto& pos = model->physicsCache->positions;
+                            const auto& idx = model->physicsCache->indices;
+                            for (size_t i = 0; i + 2 < idx.size(); i += 3) {
+                                const glm::vec3 a = glm::vec3(entityMat * glm::vec4(pos[idx[i + 0]] + shape.offset, 1.0f));
+                                const glm::vec3 b = glm::vec3(entityMat * glm::vec4(pos[idx[i + 1]] + shape.offset, 1.0f));
+                                const glm::vec3 c = glm::vec3(entityMat * glm::vec4(pos[idx[i + 2]] + shape.offset, 1.0f));
+                                DEBUG_ADD_LINE(vf.debugLines, {a, b, kDebugColor});
+                                DEBUG_ADD_LINE(vf.debugLines, {b, c, kDebugColor});
+                                DEBUG_ADD_LINE(vf.debugLines, {c, a, kDebugColor});
+                            }
+                        } else {
+                            DEBUG_ADD_SPHERE(vf.debugSpheres, {shapeCenter, 0.25f, kDebugColor});
+                        }
                         break;
+                    }
                 }
             }
         };

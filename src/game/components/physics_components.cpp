@@ -443,6 +443,7 @@ ComponentEditorResult DrawComponentEditor<Component::PhysicsBodyDesc>(Component:
                         }
                         shape.meshSourceModelId = Engine::ModelID::INVALID;
                         shape.proceduralParams = std::monostate{};
+                        shape.splineParams.controlPoints.clear();
                         shape.type = Component::PhysicsShapeType::Box;
                     }
                 }
@@ -477,6 +478,7 @@ ComponentEditorResult DrawComponentEditor<Component::PhysicsBodyDesc>(Component:
                             ctx->assetManager->UnloadModel(shape.meshSourceHandle);
                             shape.meshSourceHandle = {};
                             shape.meshSourceModelId = Engine::ModelID::INVALID;
+                            shape.splineParams.controlPoints.clear();
                         }
                         shape.type = newType;
                     }
@@ -501,37 +503,63 @@ ComponentEditorResult DrawComponentEditor<Component::PhysicsBodyDesc>(Component:
                 case Component::PhysicsShapeType::ConvexHull:
                 case Component::PhysicsShapeType::TriangleMesh:
                 {
+                    bool bHasAny = false;
                     const auto* meta = ctx->assetManager->GetModelMetadata(shape.meshSourceModelId);
+                    static constexpr std::array<const char*, 21> kProceduralNames = {
+                        nullptr, "Staircase", "Box", "Cylinder", "Capsule", "Torus", "Arch",
+                        "Wedge", "Cone", "Door", "Plane", "Sphere", "Subdivided Sphere",
+                        "Hemisphere", "Pipe", "Tetrahedron", "Octahedron", "Icosahedron",
+                        "Dodecahedron", "Klein Bottle", "Trefoil Knot",
+                    };
+                    const size_t idx = shape.proceduralParams.index();
+
                     if (meta) {
                         ImGui::Text("Mesh Source: %s", meta->name.c_str());
+                        bHasAny = true;
+                    }
+                    else if (idx > 0 && idx < kProceduralNames.size()) {
+                        ImGui::Text("Mesh Source: Procedural %s", kProceduralNames[idx]);
+                        bHasAny = true;
+                    }
+                    else if (!shape.splineParams.controlPoints.empty()) {
+                        ImGui::Text("Mesh Source: Procedural Spline");
+                        bHasAny = true;
                     }
                     else {
-                        static constexpr const char* kProceduralNames[] = {
-                            nullptr, "Staircase", "Box", "Cylinder", "Capsule", "Torus", "Arch",
-                            "Wedge", "Cone", "Door", "Plane", "Sphere", "Subdivided Sphere",
-                            "Hemisphere", "Pipe", "Tetrahedron", "Octahedron", "Icosahedron",
-                            "Dodecahedron", "Klein Bottle", "Trefoil Knot",
-                        };
-                        const size_t idx = shape.proceduralParams.index();
-                        if (idx > 0 && idx < std::size(kProceduralNames)) {
-                            ImGui::Text("Mesh Source: Procedural %s", kProceduralNames[idx]);
-                        } else if (!shape.splineParams.controlPoints.empty()) {
-                            ImGui::Text("Mesh Source: Procedural Spline");
-                        }
-                        else {
-                            ImGui::Text("Mesh Source: (none)");
+                        ImGui::Text("Mesh Source: (none)");
+                    }
+
+
+                    if (bHasAny) {
+                        ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
+                        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+                        const bool bShouldClearMesh = ImGui::SmallButton("X");
+                        ImGui::PopStyleColor();
+                        if (bShouldClearMesh) {
+                            if (shape.meshSourceHandle.IsValid()) {
+                                ctx->assetManager->UnloadModel(shape.meshSourceHandle);
+                                shape.meshSourceHandle = {};
+                            }
+                            shape.meshSourceModelId = Engine::ModelID::INVALID;
+                            shape.proceduralParams = std::monostate{};
+                            shape.splineParams.controlPoints.clear();
                         }
                     }
                     break;
                 }
-            } {
+            }
+
+            //
+            {
                 const bool isMeshType = shape.type == Component::PhysicsShapeType::ConvexHull || shape.type == Component::PhysicsShapeType::TriangleMesh;
 
                 Engine::StaticModelHandle fitHandle{};
-                if (auto* sm = registry.try_get<Component::StaticMeshComponent>(entity))
+                if (auto* sm = registry.try_get<Component::StaticMeshComponent>(entity)) {
                     fitHandle = sm->modelHandle;
-                else if (auto* pm = registry.try_get<Component::ProceduralMeshComponent>(entity))
+                }
+                else if (auto* pm = registry.try_get<Component::ProceduralMeshComponent>(entity)) {
                     fitHandle = pm->modelHandle;
+                }
 
                 Engine::StaticModel* fitModel = fitHandle.IsValid() ? ctx->assetManager->GetModel(fitHandle) : nullptr;
                 const bool bModelLoaded = fitModel && fitModel->modelLoadState == Engine::StaticModel::ModelLoadState::Loaded;
@@ -572,6 +600,7 @@ ComponentEditorResult DrawComponentEditor<Component::PhysicsBodyDesc>(Component:
                             }
                             shape.meshSourceModelId = Engine::ModelID::INVALID;
                             shape.proceduralParams = std::monostate{};
+                            shape.splineParams.controlPoints.clear();
                             shape.offset = {};
                             if (auto* sm = registry.try_get<Component::StaticMeshComponent>(entity)) {
                                 shape.meshSourceModelId = sm->modelId;
@@ -584,7 +613,8 @@ ComponentEditorResult DrawComponentEditor<Component::PhysicsBodyDesc>(Component:
                                 shape.meshSourceHandle = ctx->assetManager->LoadProceduralModel(shape.proceduralParams);
                                 registry.emplace_or_replace<Component::PendingPhysicsMeshTag>(entity);
                                 state->bPendingModelResolve = true;
-                            } else if (auto* splm = registry.try_get<Component::SplineMeshComponent>(entity)) {
+                            }
+                            else if (auto* splm = registry.try_get<Component::SplineMeshComponent>(entity)) {
                                 shape.splineParams.controlPoints = splm->controlPoints;
                                 shape.splineParams.radius = splm->radius;
                                 shape.splineParams.rollAngle = splm->rollAngle;
@@ -791,7 +821,8 @@ void OnComponentAdded<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc& co
         else if (!std::holds_alternative<std::monostate>(shape.proceduralParams)) {
             shape.meshSourceHandle = ctx->assetManager->LoadProceduralModel(shape.proceduralParams);
             needsResolve = true;
-        } else if (!shape.splineParams.controlPoints.empty()) {
+        }
+        else if (!shape.splineParams.controlPoints.empty()) {
             shape.meshSourceHandle = ctx->assetManager->LoadSplineModel(shape.splineParams);
             needsResolve = true;
         }
