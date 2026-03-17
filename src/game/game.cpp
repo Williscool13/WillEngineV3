@@ -104,6 +104,7 @@ GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         state->bPendingModelResolve = false;
     }
 
+    Game::ResolvePhysicsShapeCreation(ctx, state);
     Game::ResolvePhysicsBodyCreation(ctx, state);
 
     Game::RenderUpdate(ctx, state);

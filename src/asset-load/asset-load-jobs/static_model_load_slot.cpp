@@ -8,6 +8,7 @@
 #include <semaphore>
 
 #include "asset-load/asset_load_config.h"
+#include "meshoptimizer/src/meshoptimizer.h"
 #include "engine/compression/compression.h"
 #include "engine/resources/model/model_format.h"
 #include "engine/resources/model/static_model.h"
@@ -177,37 +178,29 @@ bool StaticModelLoadSlot::LoadModelFromDisk()
         if (count > 0) {
             std::memcpy(vec.data(), body.data() + offset, count * sizeof(T));
         }
-    };
-
-    {
+    }; {
         ZoneScopedN("ParseGeometryData");
-        readArray(rawData.vertices,          header.vertexOffset,          header.vertexCount);
-        readArray(rawData.indices,           header.indexOffset,           header.indexCount);
-        readArray(rawData.meshletVertices,   header.meshletVertexOffset,   header.meshletVertexCount);
-        readArray(rawData.meshletTriangles,  header.meshletTriangleOffset, header.meshletTriangleCount);
-        readArray(rawData.meshlets,          header.meshletOffset,         header.meshletCount);
-        readArray(rawData.primitives,        header.primitiveOffset,       header.primitiveCount);
-    }
-
-    {
+        readArray(rawData.vertices, header.vertexOffset, header.vertexCount);
+        readArray(rawData.indices, header.indexOffset, header.indexCount);
+        readArray(rawData.meshletVertices, header.meshletVertexOffset, header.meshletVertexCount);
+        readArray(rawData.meshletTriangles, header.meshletTriangleOffset, header.meshletTriangleCount);
+        readArray(rawData.meshlets, header.meshletOffset, header.meshletCount);
+        readArray(rawData.primitives, header.primitiveOffset, header.primitiveCount);
+    } {
         ZoneScopedN("ParseMaterials");
         const uint8_t* ptr = body.data() + header.materialOffset;
         rawData.materials.resize(header.materialCount);
         for (uint32_t i = 0; i < header.materialCount; ++i) {
             Engine::ReadMaterial(ptr, rawData.materials[i]);
         }
-    }
-
-    {
+    } {
         ZoneScopedN("ParseMeshes");
         const uint8_t* ptr = body.data() + header.meshOffset;
         rawData.allMeshes.resize(header.meshCount);
         for (uint32_t i = 0; i < header.meshCount; ++i) {
             Engine::ReadMeshInformation(ptr, rawData.allMeshes[i]);
         }
-    }
-
-    {
+    } {
         ZoneScopedN("ParseNodes");
         const uint8_t* ptr = nodeData.data();
         rawData.nodes.resize(header.nodeCount);
@@ -222,8 +215,7 @@ bool StaticModelLoadSlot::LoadModelFromDisk()
 bool StaticModelLoadSlot::AllocateGPUResources() const
 {
     // Thread-safe allocation (mutexes are expensive but this is rather infrequent)
-    size_t sizeVertices = rawData.vertices.size() * sizeof(Vertex);
-    {
+    size_t sizeVertices = rawData.vertices.size() * sizeof(Vertex); {
         std::lock_guard lock(resourceManager->vertexBufferAllocatorMutex);
         outputModel->modelData.vertexAllocation = resourceManager->vertexBufferAllocator.allocate(sizeVertices);
         if (outputModel->modelData.vertexAllocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
@@ -337,18 +329,32 @@ void StaticModelLoadSlot::PrepareUploadData()
         for (auto& primitiveIndex : mesh.primitiveProperties) {
             primitiveIndex.index += primitiveOffsetCount;
         }
-    }
-
-    {
+    } {
         std::vector<glm::vec3> positions;
         positions.reserve(rawData.vertices.size());
         for (const auto& v : rawData.vertices)
-            positions.push_back(v.position);
-
-        if (positions.size() <= AssetLoad::PHYSICS_CACHE_MAX_VERTICES) {
+            positions.push_back(v.position); {
             Engine::StaticModel::PhysicsCache cache;
             cache.positions = positions;
             cache.indices = rawData.indices;
+
+            constexpr size_t kSimplifyThreshold = 1500;
+            constexpr size_t kSimplifyFloor = 1500;
+            constexpr float kSimplifyRatio = 0.15f;
+            constexpr float kSimplifyError = 0.01f;
+            if (cache.indices.size() > kSimplifyThreshold) {
+                const size_t target = std::max(kSimplifyFloor, static_cast<size_t>(cache.indices.size() * kSimplifyRatio));
+                std::vector<uint32_t> simplified(cache.indices.size());
+                const size_t result = meshopt_simplify(
+                    simplified.data(),
+                    cache.indices.data(), cache.indices.size(),
+                    &cache.positions[0].x, cache.positions.size(), sizeof(glm::vec3),
+                    target, kSimplifyError
+                );
+                simplified.resize(result);
+                cache.indices = std::move(simplified);
+            }
+
             outputModel->physicsCache = std::move(cache);
         }
 
@@ -378,7 +384,7 @@ void StaticModelLoadSlot::UploadGeometry(VkCommandBuffer cmd, const std::functio
     Render::AllocatedBuffer& stagingBuffer = uploadStaging->GetStagingBuffer();
 
     auto uploadBuffer = [&](const void* sourceData, size_t count, size_t elementSize,
-                           VkBuffer targetBuffer, VkDeviceSize targetOffset) {
+                            VkBuffer targetBuffer, VkDeviceSize targetOffset) {
         size_t totalSize = count * elementSize;
         size_t uploaded = 0;
 
@@ -413,19 +419,19 @@ void StaticModelLoadSlot::UploadGeometry(VkCommandBuffer cmd, const std::functio
     };
 
     uploadBuffer(rawData.vertices.data(), rawData.vertices.size(), sizeof(Vertex),
-                resourceManager->megaVertexBuffer.handle, outputModel->modelData.vertexAllocation.offset);
+                 resourceManager->megaVertexBuffer.handle, outputModel->modelData.vertexAllocation.offset);
 
     uploadBuffer(rawData.meshletVertices.data(), rawData.meshletVertices.size(), sizeof(uint32_t),
-                resourceManager->megaMeshletVerticesBuffer.handle, outputModel->modelData.meshletVertexAllocation.offset);
+                 resourceManager->megaMeshletVerticesBuffer.handle, outputModel->modelData.meshletVertexAllocation.offset);
 
     uploadBuffer(packedTriangles.data(), packedTriangles.size(), sizeof(uint32_t),
-                resourceManager->megaMeshletTrianglesBuffer.handle, outputModel->modelData.meshletTriangleAllocation.offset);
+                 resourceManager->megaMeshletTrianglesBuffer.handle, outputModel->modelData.meshletTriangleAllocation.offset);
 
     uploadBuffer(rawData.meshlets.data(), rawData.meshlets.size(), sizeof(Meshlet),
-                resourceManager->megaMeshletBuffer.handle, outputModel->modelData.meshletAllocation.offset);
+                 resourceManager->megaMeshletBuffer.handle, outputModel->modelData.meshletAllocation.offset);
 
     uploadBuffer(rawData.primitives.data(), rawData.primitives.size(), sizeof(Primitive),
-                resourceManager->primitiveBuffer.handle, outputModel->modelData.primitiveAllocation.offset);
+                 resourceManager->primitiveBuffer.handle, outputModel->modelData.primitiveAllocation.offset);
 
     // Queue family transfer barriers
     std::vector<VkBufferMemoryBarrier2> releaseBarriers;
@@ -451,15 +457,15 @@ void StaticModelLoadSlot::UploadGeometry(VkCommandBuffer cmd, const std::functio
     };
 
     releaseBarriers.push_back(createBufferBarrier(resourceManager->megaVertexBuffer.handle,
-        outputModel->modelData.vertexAllocation.offset, rawData.vertices.size() * sizeof(Vertex)));
+                                                  outputModel->modelData.vertexAllocation.offset, rawData.vertices.size() * sizeof(Vertex)));
     releaseBarriers.push_back(createBufferBarrier(resourceManager->megaMeshletVerticesBuffer.handle,
-        outputModel->modelData.meshletVertexAllocation.offset, rawData.meshletVertices.size() * sizeof(uint32_t)));
+                                                  outputModel->modelData.meshletVertexAllocation.offset, rawData.meshletVertices.size() * sizeof(uint32_t)));
     releaseBarriers.push_back(createBufferBarrier(resourceManager->megaMeshletTrianglesBuffer.handle,
-        outputModel->modelData.meshletTriangleAllocation.offset, rawData.meshletTriangles.size() / 3 * sizeof(uint32_t)));
+                                                  outputModel->modelData.meshletTriangleAllocation.offset, rawData.meshletTriangles.size() / 3 * sizeof(uint32_t)));
     releaseBarriers.push_back(createBufferBarrier(resourceManager->megaMeshletBuffer.handle,
-        outputModel->modelData.meshletAllocation.offset, rawData.meshlets.size() * sizeof(Meshlet)));
+                                                  outputModel->modelData.meshletAllocation.offset, rawData.meshlets.size() * sizeof(Meshlet)));
     releaseBarriers.push_back(createBufferBarrier(resourceManager->primitiveBuffer.handle,
-        outputModel->modelData.primitiveAllocation.offset, rawData.primitives.size() * sizeof(Primitive)));
+                                                  outputModel->modelData.primitiveAllocation.offset, rawData.primitives.size() * sizeof(Primitive)));
 
     VkDependencyInfo depInfo{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
     depInfo.bufferMemoryBarrierCount = releaseBarriers.size();

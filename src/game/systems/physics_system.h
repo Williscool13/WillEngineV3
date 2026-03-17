@@ -39,9 +39,10 @@ namespace Game
 void UpdatePhysics(Core::EngineContext* ctx, Engine::GameState* state);
 void DebugRenderPhysics(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer);
 void ResolvePhysicsMeshLoads(Core::EngineContext* ctx, Engine::GameState* state);
+void ResolvePhysicsShapeCreation(Core::EngineContext* ctx, Engine::GameState* state);
 void ResolvePhysicsBodyCreation(Core::EngineContext* ctx, Engine::GameState* state);
 
-JPH::BodyID CreateBodyFromDesc(JPH::BodyInterface& bodyInterface, const Component::PhysicsBodyDesc& desc, JPH::RVec3 position, JPH::Quat rotation, Engine::AssetManager* assetManager);
+JPH::BodyID CreateBodyFromShape(JPH::BodyInterface& bodyInterface, const Component::PhysicsBodyDesc& desc, JPH::RVec3 position, JPH::Quat rotation);
 JPH::ShapeRefC CreateShapeFromDesc(const Component::PhysicsShapeDesc& desc, Engine::AssetManager* assetManager);
 } // Game
 

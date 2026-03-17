@@ -167,7 +167,8 @@ void DebugRenderPhysics(Core::EngineContext* ctx, Engine::GameState* state, Core
                                 DEBUG_ADD_LINE(vf.debugLines, {b, c, kDebugColor});
                                 DEBUG_ADD_LINE(vf.debugLines, {c, a, kDebugColor});
                             }
-                        } else {
+                        }
+                        else {
                             DEBUG_ADD_SPHERE(vf.debugSpheres, {shapeCenter, 0.25f, kDebugColor});
                         }
                         break;
@@ -191,28 +192,9 @@ void DebugRenderPhysics(Core::EngineContext* ctx, Engine::GameState* state, Core
 #endif
 }
 
-JPH::BodyID CreateBodyFromDesc(JPH::BodyInterface& bodyInterface, const Component::PhysicsBodyDesc& desc, JPH::RVec3 position, JPH::Quat rotation, Engine::AssetManager* assetManager)
+
+JPH::BodyID CreateBodyFromShape(JPH::BodyInterface& bodyInterface, const Component::PhysicsBodyDesc& desc, JPH::RVec3 position, JPH::Quat rotation)
 {
-    JPH::ShapeRefC shape;
-
-    if (desc.shapes.empty()) {
-        return JPH::BodyID(JPH::BodyID::cInvalidBodyID);
-    }
-    if (desc.shapes.size() == 1 && desc.shapes[0].offset == glm::vec3(0.0f)) {
-        shape = CreateShapeFromDesc(desc.shapes[0], assetManager);
-    }
-    else {
-        JPH::StaticCompoundShapeSettings compound;
-        for (const auto& shapeDesc : desc.shapes) {
-            compound.AddShape(
-                JPH::Vec3(shapeDesc.offset.x, shapeDesc.offset.y, shapeDesc.offset.z),
-                JPH::Quat(shapeDesc.rotation.x, shapeDesc.rotation.y, shapeDesc.rotation.z, shapeDesc.rotation.w),
-                CreateShapeFromDesc(shapeDesc, assetManager)
-            );
-        }
-        shape = compound.Create().Get();
-    }
-
     JPH::EMotionType motionType = desc.motionType == Component::PhysicsMotionType::Static
                                       ? JPH::EMotionType::Static
                                       : desc.motionType == Component::PhysicsMotionType::Dynamic
@@ -221,7 +203,7 @@ JPH::BodyID CreateBodyFromDesc(JPH::BodyInterface& bodyInterface, const Componen
 
     JPH::ObjectLayer layer = desc.motionType == Component::PhysicsMotionType::Static ? Physics::Layers::NON_MOVING : Physics::Layers::MOVING;
 
-    JPH::BodyCreationSettings settings(shape, position, rotation, motionType, layer);
+    JPH::BodyCreationSettings settings(desc.shapeRef, position, rotation, motionType, layer);
     if (desc.motionType == Component::PhysicsMotionType::Dynamic) {
         settings.mMassPropertiesOverride.mMass = desc.mass;
         settings.mOverrideMassProperties = JPH::EOverrideMassProperties::CalculateInertia;
@@ -229,29 +211,26 @@ JPH::BodyID CreateBodyFromDesc(JPH::BodyInterface& bodyInterface, const Componen
     settings.mFriction = desc.friction;
     settings.mMotionQuality = desc.motionQuality;
 
-    return bodyInterface.CreateAndAddBody(settings,
-                                          desc.motionType == Component::PhysicsMotionType::Static ? JPH::EActivation::DontActivate : JPH::EActivation::Activate);
+    return bodyInterface.CreateAndAddBody(settings, desc.motionType == Component::PhysicsMotionType::Static ? JPH::EActivation::DontActivate : JPH::EActivation::Activate);
 }
 
 JPH::ShapeRefC CreateShapeFromDesc(const Component::PhysicsShapeDesc& desc, Engine::AssetManager* assetManager)
 {
+    // todo hash dedupe
     switch (desc.type) {
         case Component::PhysicsShapeType::Box:
         {
             JPH::BoxShapeSettings s(JPH::Vec3(desc.box.halfExtents.x, desc.box.halfExtents.y, desc.box.halfExtents.z));
-            s.SetEmbedded();
             return s.Create().Get();
         }
         case Component::PhysicsShapeType::Sphere:
         {
             JPH::SphereShapeSettings s(desc.sphere.radius);
-            s.SetEmbedded();
             return s.Create().Get();
         }
         case Component::PhysicsShapeType::Capsule:
         {
             JPH::CapsuleShapeSettings s(desc.capsule.halfHeight, desc.capsule.radius);
-            s.SetEmbedded();
             return s.Create().Get();
         }
         case Component::PhysicsShapeType::ConvexHull:
@@ -327,7 +306,7 @@ void ResolvePhysicsMeshLoads(Core::EngineContext* ctx, Engine::GameState* state)
                 break;
             }
             if (!model->physicsCache) {
-                LOG_WARN(Game, "Physics mesh cache unavailable (over vertex threshold). Removing pending tag.");
+                LOG_WARN(Game, "Physics mesh cache unavailable. Removing pending tag.");
                 shouldAbandon = true;
                 break;
             }
@@ -346,18 +325,16 @@ void ResolvePhysicsMeshLoads(Core::EngineContext* ctx, Engine::GameState* state)
     }
 }
 
-void ResolvePhysicsBodyCreation(Core::EngineContext* ctx, Engine::GameState* state)
+void ResolvePhysicsShapeCreation(Core::EngineContext* ctx, Engine::GameState* state)
 {
     ZoneScoped;
     std::vector<entt::entity> resolved;
 
-    auto view = state->registry.view<Component::PhysicsBodyDesc, Component::PendingPhysicsBodyCreationTag>();
-    for (const auto& [entity, bodyDesc] : view.each()) {
-        if (state->registry.all_of<Component::PendingPhysicsMeshTag>(entity)) {
-            state->bPendingModelResolve = true;
-            continue;
-        }
+    // Mesh based physics need to wait for its mesh to load
+    auto view = state->registry.view<Component::PhysicsBodyDesc, Component::PendingPhysicsShapeCreationTag>(
+        entt::exclude<Component::PendingPhysicsMeshTag>);
 
+    for (const auto& [entity, bodyDesc] : view.each()) {
         bool bDegenerate = false;
         for (const auto& shape : bodyDesc.shapes) {
             // Only these 2 need to verify source mesh
@@ -366,21 +343,66 @@ void ResolvePhysicsBodyCreation(Core::EngineContext* ctx, Engine::GameState* sta
             }
 
             if (!shape.meshSourceModelId.IsValid() && std::holds_alternative<std::monostate>(shape.proceduralParams) && shape.splineParams.controlPoints.empty()) {
-                LOG_WARN(Game, "PhysicsBodyDesc has mesh shape with no mesh source, skipping body creation");
+                LOG_WARN(Game, "PhysicsBodyDesc has mesh shape with no mesh source, skipping shape creation");
                 bDegenerate = true;
                 break;
             }
-            if (shape.meshSourceHandle.IsValid()) {
-                const Engine::StaticModel* srcModel = ctx->assetManager->GetModel(shape.meshSourceHandle);
-                if (srcModel && srcModel->modelLoadState == Engine::StaticModel::ModelLoadState::Loaded
-                    && (!srcModel->physicsCache || srcModel->physicsCache->positions.empty())) {
-                    LOG_WARN(Game, "PhysicsBodyDesc mesh shape source is loaded but has no cached geometry (vertex count over threshold), skipping body creation");
-                    bDegenerate = true;
-                    break;
-                }
-            }
         }
         if (bDegenerate) {
+            resolved.push_back(entity);
+            continue;
+        }
+
+        if (bodyDesc.shapes.empty()) {
+            LOG_WARN(Game, "PhysicsBodyDesc has no shapes, skipping shape creation");
+            resolved.push_back(entity);
+            continue;
+        }
+
+        JPH::ShapeRefC shape;
+        if (bodyDesc.shapes.size() == 1 && bodyDesc.shapes[0].offset == glm::vec3(0.0f)) {
+            shape = CreateShapeFromDesc(bodyDesc.shapes[0], ctx->assetManager);
+        }
+        else {
+            JPH::StaticCompoundShapeSettings compound;
+            bool bAnyNull = false;
+            for (const auto& shapeDesc : bodyDesc.shapes) {
+                JPH::ShapeRefC subShape = CreateShapeFromDesc(shapeDesc, ctx->assetManager);
+                if (!subShape) { bAnyNull = true; break; }
+                compound.AddShape(
+                    JPH::Vec3(shapeDesc.offset.x, shapeDesc.offset.y, shapeDesc.offset.z),
+                    JPH::Quat(shapeDesc.rotation.x, shapeDesc.rotation.y, shapeDesc.rotation.z, shapeDesc.rotation.w),
+                    subShape
+                );
+            }
+            if (!bAnyNull) { shape = compound.Create().Get(); }
+        }
+
+        if (!shape) {
+            LOG_WARN(Game, "Shape creation failed, skipping");
+            resolved.push_back(entity);
+            continue;
+        }
+
+        bodyDesc.shapeRef = shape;
+        resolved.push_back(entity);
+    }
+
+    for (const auto entity : resolved) {
+        state->registry.remove<Component::PendingPhysicsShapeCreationTag>(entity);
+    }
+}
+
+void ResolvePhysicsBodyCreation(Core::EngineContext* ctx, Engine::GameState* state)
+{
+    ZoneScoped;
+    std::vector<entt::entity> resolved;
+
+    auto view = state->registry.view<Component::PhysicsBodyDesc, Component::PendingPhysicsBodyCreationTag>(
+        entt::exclude<Component::PendingPhysicsShapeCreationTag>);
+    for (const auto& [entity, bodyDesc] : view.each()) {
+        if (!bodyDesc.shapeRef) {
+            LOG_WARN(Game, "PhysicsBodyDesc has no resolved shape, skipping body creation");
             resolved.push_back(entity);
             continue;
         }
@@ -403,7 +425,7 @@ void ResolvePhysicsBodyCreation(Core::EngineContext* ctx, Engine::GameState* sta
 
         JPH::Vec3 pos(transform->translation.x, transform->translation.y, transform->translation.z);
         JPH::Quat rot(transform->rotation.x, transform->rotation.y, transform->rotation.z, transform->rotation.w);
-        JPH::BodyID bodyId = CreateBodyFromDesc(bodyInterface, bodyDesc, pos, rot, ctx->assetManager);
+        JPH::BodyID bodyId = CreateBodyFromShape(bodyInterface, bodyDesc, pos, rot);
         if (!bodyId.IsInvalid()) {
             state->registry.emplace<Component::PhysicsBodyComponent>(entity, bodyId);
             if (bodyDesc.motionType == Component::PhysicsMotionType::Dynamic) {

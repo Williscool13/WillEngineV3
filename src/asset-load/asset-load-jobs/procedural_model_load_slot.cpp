@@ -323,17 +323,31 @@ bool ProceduralModelLoadSlot::FinalizeGeometry(std::vector<Vertex>& vertices, st
     meshInfo.primitiveProperties.push_back({static_cast<uint32_t>(rawData.primitives.size()), -1});
 
     rawData.primitives.push_back(primitiveData);
-    rawData.allMeshes.push_back(std::move(meshInfo));
-
-    {
+    rawData.allMeshes.push_back(std::move(meshInfo)); {
         std::vector<glm::vec3> positions;
         positions.reserve(vertices.size());
-        for (const auto& v : vertices) positions.push_back(v.position);
-
-        if (positions.size() <= PHYSICS_CACHE_MAX_VERTICES) {
+        for (const auto& v : vertices) positions.push_back(v.position); {
             Engine::StaticModel::PhysicsCache cache;
             cache.positions = positions;
             cache.indices = indices;
+
+            constexpr size_t kSimplifyThreshold = 1500;
+            constexpr size_t kSimplifyFloor = 1500;
+            constexpr float kSimplifyRatio = 0.15f;
+            constexpr float kSimplifyError = 0.01f;
+            if (cache.indices.size() > kSimplifyThreshold) {
+                const size_t target = std::max(kSimplifyFloor, static_cast<size_t>(cache.indices.size() * kSimplifyRatio));
+                std::vector<uint32_t> simplified(cache.indices.size());
+                const size_t result = meshopt_simplify(
+                    simplified.data(),
+                    cache.indices.data(), cache.indices.size(),
+                    &cache.positions[0].x, cache.positions.size(), sizeof(glm::vec3),
+                    target, kSimplifyError
+                );
+                simplified.resize(result);
+                cache.indices = std::move(simplified);
+            }
+
             outputModel->physicsCache = std::move(cache);
         }
 
@@ -652,7 +666,8 @@ bool ProceduralModelLoadSlot::GenerateArch(const Engine::ArchParams& p)
     if (N == 1) {
         outerArc = {{outerR, legH}, {outerR, legH + outerR}, {-outerR, legH + outerR}, {-outerR, legH}};
         innerArc = {{innerR, legH}, {innerR, legH + innerR}, {-innerR, legH + innerR}, {-innerR, legH}};
-    } else {
+    }
+    else {
         outerArc.resize(N + 1);
         innerArc.resize(N + 1);
         for (int i = 0; i <= N; i++) {
@@ -680,8 +695,8 @@ bool ProceduralModelLoadSlot::GenerateArch(const Engine::ArchParams& p)
         uint32_t base = static_cast<uint32_t>(vertices.size());
         const glm::vec3 absN = glm::abs(n);
         const bool flipU = (absN.x >= absN.y && absN.x >= absN.z && n.x > 0.0f)
-                        || (absN.y >= absN.x && absN.y >= absN.z && n.y > 0.0f)
-                        || (absN.z >= absN.x && absN.z >= absN.y && n.z < 0.0f);
+                           || (absN.y >= absN.x && absN.y >= absN.z && n.y > 0.0f)
+                           || (absN.z >= absN.x && absN.z >= absN.y && n.z < 0.0f);
         auto push = [&](glm::vec3 pos) {
             Vertex v{};
             v.position = pos;
@@ -737,7 +752,8 @@ bool ProceduralModelLoadSlot::GenerateArch(const Engine::ArchParams& p)
             push({B.x, B.y, 0}, nB);
             push({B.x, B.y, depth}, nB);
             push({A.x, A.y, depth}, nA);
-        } else {
+        }
+        else {
             push({B.x, B.y, 0}, nB);
             push({A.x, A.y, 0}, nA);
             push({A.x, A.y, depth}, nA);
@@ -755,7 +771,8 @@ bool ProceduralModelLoadSlot::GenerateArch(const Engine::ArchParams& p)
             const glm::vec3 nA = glm::normalize(glm::vec3{A.x, A.y - legH, 0.0f});
             const glm::vec3 nB = glm::normalize(glm::vec3{B.x, B.y - legH, 0.0f});
             addSmoothWallQuad(A, B, nA, nB, false);
-        } else {
+        }
+        else {
             const glm::vec2 d = B - A;
             addQuad({A.x, A.y, 0}, {B.x, B.y, 0}, {B.x, B.y, depth}, {A.x, A.y, depth},
                     glm::normalize(glm::vec3{d.y, -d.x, 0.0f}));
@@ -770,7 +787,8 @@ bool ProceduralModelLoadSlot::GenerateArch(const Engine::ArchParams& p)
             const glm::vec3 nA = glm::normalize(glm::vec3{-A.x, legH - A.y, 0.0f});
             const glm::vec3 nB = glm::normalize(glm::vec3{-B.x, legH - B.y, 0.0f});
             addSmoothWallQuad(A, B, nA, nB, true);
-        } else {
+        }
+        else {
             const glm::vec2 d = B - A;
             addQuad({B.x, B.y, 0}, {A.x, A.y, 0}, {A.x, A.y, depth}, {B.x, B.y, depth},
                     glm::normalize(glm::vec3{-d.y, d.x, 0.0f}));
@@ -812,7 +830,10 @@ bool ProceduralModelLoadSlot::GenerateWedge(const Engine::WedgeParams& p)
             v.color = {1, 1, 1, 1};
             vertices.push_back(v);
         };
-        push(v0, uv0); push(v1, uv1); push(v2, uv2); push(v3, uv3);
+        push(v0, uv0);
+        push(v1, uv1);
+        push(v2, uv2);
+        push(v3, uv3);
         indices.insert(indices.end(), {base, base + 1, base + 2, base, base + 2, base + 3});
     };
 
@@ -830,7 +851,9 @@ bool ProceduralModelLoadSlot::GenerateWedge(const Engine::WedgeParams& p)
             v.color = {1, 1, 1, 1};
             vertices.push_back(v);
         };
-        push(v0, uv0); push(v1, uv1); push(v2, uv2);
+        push(v0, uv0);
+        push(v1, uv1);
+        push(v2, uv2);
         indices.insert(indices.end(), {base, base + 1, base + 2});
     };
 
@@ -890,7 +913,8 @@ bool ProceduralModelLoadSlot::GenerateCone(const Engine::ConeParams& p)
         const float xzRadius = sqrtf(pos.x * pos.x + pos.z * pos.z);
         if (xzRadius > 1e-6f) {
             vertices[i].normal = glm::normalize(glm::vec3{h * pos.x / xzRadius, r, h * pos.z / xzRadius});
-        } else {
+        }
+        else {
             vertices[i].normal = {0.0f, 1.0f, 0.0f}; // apex
         }
         vertices[i].texcoordU = atan2f(-pos.z, pos.x) / (2.0f * glm::pi<float>()) + 0.5f;
@@ -959,7 +983,7 @@ bool ProceduralModelLoadSlot::GenerateDoor(const Engine::DoorParams& p)
         arcCen = {w * 0.5f, archStart - arcC};
         arcR = hA + arcC;
         thetaStart = atan2f(arcC, w * 0.5f); // angle from center to (w, archStart)
-        thetaEnd   = glm::pi<float>() - thetaStart; // angle to (0, archStart)
+        thetaEnd = glm::pi<float>() - thetaStart; // angle to (0, archStart)
     }
 
     // Build 2D profile polygon, CCW in XY.
@@ -980,7 +1004,8 @@ bool ProceduralModelLoadSlot::GenerateDoor(const Engine::DoorParams& p)
             poly.push_back({arcCen.x + arcR * cosf(theta), arcCen.y + arcR * sinf(theta)});
         }
         // poly.back() = (0, archStart); closing edge returns to (0,0)
-    } else {
+    }
+    else {
         // Flat top
         poly.push_back({seamX, h});
         poly.push_back({0.0f, h});
@@ -1008,7 +1033,7 @@ bool ProceduralModelLoadSlot::GenerateDoor(const Engine::DoorParams& p)
             vertices.push_back(v);
         }
         for (int i = 1; i + 1 < M; i++)
-            indices.insert(indices.end(), {base, base + (uint32_t)(i + 1), base + (uint32_t)i});
+            indices.insert(indices.end(), {base, base + (uint32_t) (i + 1), base + (uint32_t) i});
     }
 
     // Back face (Z=d, normal (0,0,1)): forward winding so cross product = +Z
@@ -1025,7 +1050,7 @@ bool ProceduralModelLoadSlot::GenerateDoor(const Engine::DoorParams& p)
             vertices.push_back(v);
         }
         for (int i = 1; i + 1 < M; i++)
-            indices.insert(indices.end(), {base, base + (uint32_t)i, base + (uint32_t)(i + 1)});
+            indices.insert(indices.end(), {base, base + (uint32_t) i, base + (uint32_t) (i + 1)});
     }
 
     // Arc center may be mirrored by bFlip
@@ -1048,7 +1073,8 @@ bool ProceduralModelLoadSlot::GenerateDoor(const Engine::DoorParams& p)
         if (isOnArc(A) && isOnArc(B)) {
             nA = glm::normalize(glm::vec3{A.x - effectiveArcCen.x, A.y - effectiveArcCen.y, 0.0f});
             nB = glm::normalize(glm::vec3{B.x - effectiveArcCen.x, B.y - effectiveArcCen.y, 0.0f});
-        } else {
+        }
+        else {
             nA = nB = glm::normalize(glm::vec3{B.y - A.y, A.x - B.x, 0.0f});
         }
 
@@ -1063,10 +1089,10 @@ bool ProceduralModelLoadSlot::GenerateDoor(const Engine::DoorParams& p)
             v.color = {1, 1, 1, 1};
             vertices.push_back(v);
         };
-        push({A.x, A.y, 0.0f}, nA, {0.0f,    0.0f});
+        push({A.x, A.y, 0.0f}, nA, {0.0f, 0.0f});
         push({B.x, B.y, 0.0f}, nB, {edgeLen, 0.0f});
-        push({B.x, B.y, d},    nB, {edgeLen, d});
-        push({A.x, A.y, d},    nA, {0.0f,    d});
+        push({B.x, B.y, d}, nB, {edgeLen, d});
+        push({A.x, A.y, d}, nA, {0.0f, d});
         indices.insert(indices.end(), {base, base + 1, base + 2, base, base + 2, base + 3});
     }
 
@@ -1159,7 +1185,8 @@ bool ProceduralModelLoadSlot::GenerateSubdividedSphere(const Engine::SubdividedS
     std::vector<Vertex> vertices(m->npoints);
     for (int i = 0; i < m->npoints; ++i) {
         const glm::vec3 pos = glm::normalize(glm::vec3{
-            m->points[i * 3 + 0], m->points[i * 3 + 1], m->points[i * 3 + 2]}) * r;
+                                  m->points[i * 3 + 0], m->points[i * 3 + 1], m->points[i * 3 + 2]
+                              }) * r;
         vertices[i].position = pos;
         vertices[i].normal = glm::normalize(pos);
         vertices[i].texcoordU = 0.5f - atan2f(pos.z, pos.x) / (2.0f * pi);
@@ -1223,7 +1250,7 @@ bool ProceduralModelLoadSlot::GenerateHemisphere(const Engine::HemisphereParams&
 
     // Top pole fan → first ring
     for (int j = 0; j < N; j++)
-        indices.insert(indices.end(), {topPole, ringBase[1] + (uint32_t)j + 1, ringBase[1] + (uint32_t)j});
+        indices.insert(indices.end(), {topPole, ringBase[1] + (uint32_t) j + 1, ringBase[1] + (uint32_t) j});
 
     // Ring strips
     for (int i = 1; i < HR; i++) {
@@ -1235,8 +1262,7 @@ bool ProceduralModelLoadSlot::GenerateHemisphere(const Engine::HemisphereParams&
     }
 
     // Bottom cap (flat circle at y=0, normal -Y)
-    uint32_t capBase = static_cast<uint32_t>(vertices.size());
-    {
+    uint32_t capBase = static_cast<uint32_t>(vertices.size()); {
         Vertex cv{};
         cv.position = {0, 0, 0};
         cv.normal = {0, -1, 0};
@@ -1258,7 +1284,7 @@ bool ProceduralModelLoadSlot::GenerateHemisphere(const Engine::HemisphereParams&
         vertices.push_back(v);
     }
     for (int j = 0; j < N; j++)
-        indices.insert(indices.end(), {capBase, capBase + 1 + (uint32_t)j, capBase + 1 + (uint32_t)((j + 1) % N)});
+        indices.insert(indices.end(), {capBase, capBase + 1 + (uint32_t) j, capBase + 1 + (uint32_t) ((j + 1) % N)});
 
     return FinalizeGeometry(vertices, indices);
 }
@@ -1301,15 +1327,16 @@ bool ProceduralModelLoadSlot::GeneratePipe(const Engine::PipeParams& p)
             if (outward) {
                 // Outer: CCW from outside
                 indices.insert(indices.end(), {a0, a1, b0, a1, b1, b0});
-            } else {
+            }
+            else {
                 // Inner: CCW from inside
                 indices.insert(indices.end(), {a0, b0, a1, a1, b0, b1});
             }
         }
     };
 
-    addRingQuads(ro, {}, true);   // outer wall
-    addRingQuads(ri, {}, false);  // inner wall
+    addRingQuads(ro, {}, true); // outer wall
+    addRingQuads(ri, {}, false); // inner wall
 
     // Top annular cap (+Y): fan from outer ring to inner ring
     {
@@ -1390,16 +1417,28 @@ bool ProceduralModelLoadSlot::GenerateTetrahedron(const Engine::TetrahedronParam
     std::vector<Vertex> vertices(m->npoints);
     for (int i = 0; i < m->npoints; ++i) {
         // Tetrahedron is already Y-up
-        const glm::vec3 pos = glm::vec3{m->points[i*3], m->points[i*3+1], m->points[i*3+2]} * r;
-        const glm::vec3 n = glm::normalize(glm::vec3{m->normals[i*3], m->normals[i*3+1], m->normals[i*3+2]});
+        const glm::vec3 pos = glm::vec3{m->points[i * 3], m->points[i * 3 + 1], m->points[i * 3 + 2]} * r;
+        const glm::vec3 n = glm::normalize(glm::vec3{m->normals[i * 3], m->normals[i * 3 + 1], m->normals[i * 3 + 2]});
         const glm::vec3 absN = glm::abs(n);
         float u, v;
-        if (absN.y >= absN.x && absN.y >= absN.z) { u = (n.y > 0.0f) ? -pos.x : pos.x; v = pos.z; }
-        else if (absN.x >= absN.z)                 { u = (n.x > 0.0f) ? -pos.z : pos.z; v = pos.y; }
-        else                                        { u = (n.z < 0.0f) ? -pos.x : pos.x; v = pos.y; }
-        vertices[i].position = pos; vertices[i].normal = n;
-        vertices[i].texcoordU = u;  vertices[i].texcoordV = v;
-        vertices[i].tangent = {1, 0, 0, 1}; vertices[i].color = {1, 1, 1, 1};
+        if (absN.y >= absN.x && absN.y >= absN.z) {
+            u = (n.y > 0.0f) ? -pos.x : pos.x;
+            v = pos.z;
+        }
+        else if (absN.x >= absN.z) {
+            u = (n.x > 0.0f) ? -pos.z : pos.z;
+            v = pos.y;
+        }
+        else {
+            u = (n.z < 0.0f) ? -pos.x : pos.x;
+            v = pos.y;
+        }
+        vertices[i].position = pos;
+        vertices[i].normal = n;
+        vertices[i].texcoordU = u;
+        vertices[i].texcoordV = v;
+        vertices[i].tangent = {1, 0, 0, 1};
+        vertices[i].color = {1, 1, 1, 1};
     }
     std::vector<uint32_t> indices(m->ntriangles * 3);
     for (int i = 0; i < m->ntriangles * 3; ++i) indices[i] = static_cast<uint32_t>(m->triangles[i]);
@@ -1420,18 +1459,30 @@ bool ProceduralModelLoadSlot::GenerateOctahedron(const Engine::OctahedronParams&
     const float r = p.radius;
     std::vector<Vertex> vertices(m->npoints);
     for (int i = 0; i < m->npoints; ++i) {
-        const float px = m->points[i*3], py = m->points[i*3+1], pz = m->points[i*3+2];
+        const float px = m->points[i * 3], py = m->points[i * 3 + 1], pz = m->points[i * 3 + 2];
         const glm::vec3 pos = glm::vec3{px, pz, -py} * r; // Z-up to Y-up
-        const float nx = m->normals[i*3], ny = m->normals[i*3+1], nz = m->normals[i*3+2];
+        const float nx = m->normals[i * 3], ny = m->normals[i * 3 + 1], nz = m->normals[i * 3 + 2];
         const glm::vec3 n = glm::normalize(glm::vec3{nx, nz, -ny});
         const glm::vec3 absN = glm::abs(n);
         float u, v;
-        if (absN.y >= absN.x && absN.y >= absN.z) { u = (n.y > 0.0f) ? -pos.x : pos.x; v = pos.z; }
-        else if (absN.x >= absN.z)                 { u = (n.x > 0.0f) ? -pos.z : pos.z; v = pos.y; }
-        else                                        { u = (n.z < 0.0f) ? -pos.x : pos.x; v = pos.y; }
-        vertices[i].position = pos; vertices[i].normal = n;
-        vertices[i].texcoordU = u;  vertices[i].texcoordV = v;
-        vertices[i].tangent = {1, 0, 0, 1}; vertices[i].color = {1, 1, 1, 1};
+        if (absN.y >= absN.x && absN.y >= absN.z) {
+            u = (n.y > 0.0f) ? -pos.x : pos.x;
+            v = pos.z;
+        }
+        else if (absN.x >= absN.z) {
+            u = (n.x > 0.0f) ? -pos.z : pos.z;
+            v = pos.y;
+        }
+        else {
+            u = (n.z < 0.0f) ? -pos.x : pos.x;
+            v = pos.y;
+        }
+        vertices[i].position = pos;
+        vertices[i].normal = n;
+        vertices[i].texcoordU = u;
+        vertices[i].texcoordV = v;
+        vertices[i].tangent = {1, 0, 0, 1};
+        vertices[i].color = {1, 1, 1, 1};
     }
     std::vector<uint32_t> indices(m->ntriangles * 3);
     for (int i = 0; i < m->ntriangles * 3; ++i) indices[i] = static_cast<uint32_t>(m->triangles[i]);
@@ -1452,18 +1503,30 @@ bool ProceduralModelLoadSlot::GenerateIcosahedron(const Engine::IcosahedronParam
     const float r = p.radius;
     std::vector<Vertex> vertices(m->npoints);
     for (int i = 0; i < m->npoints; ++i) {
-        const float px = m->points[i*3], py = m->points[i*3+1], pz = m->points[i*3+2];
+        const float px = m->points[i * 3], py = m->points[i * 3 + 1], pz = m->points[i * 3 + 2];
         const glm::vec3 pos = glm::vec3{px, pz, -py} * r; // Z-up to Y-up
-        const float nx = m->normals[i*3], ny = m->normals[i*3+1], nz = m->normals[i*3+2];
+        const float nx = m->normals[i * 3], ny = m->normals[i * 3 + 1], nz = m->normals[i * 3 + 2];
         const glm::vec3 n = glm::normalize(glm::vec3{nx, nz, -ny});
         const glm::vec3 absN = glm::abs(n);
         float u, v;
-        if (absN.y >= absN.x && absN.y >= absN.z) { u = (n.y > 0.0f) ? -pos.x : pos.x; v = pos.z; }
-        else if (absN.x >= absN.z)                 { u = (n.x > 0.0f) ? -pos.z : pos.z; v = pos.y; }
-        else                                        { u = (n.z < 0.0f) ? -pos.x : pos.x; v = pos.y; }
-        vertices[i].position = pos; vertices[i].normal = n;
-        vertices[i].texcoordU = u;  vertices[i].texcoordV = v;
-        vertices[i].tangent = {1, 0, 0, 1}; vertices[i].color = {1, 1, 1, 1};
+        if (absN.y >= absN.x && absN.y >= absN.z) {
+            u = (n.y > 0.0f) ? -pos.x : pos.x;
+            v = pos.z;
+        }
+        else if (absN.x >= absN.z) {
+            u = (n.x > 0.0f) ? -pos.z : pos.z;
+            v = pos.y;
+        }
+        else {
+            u = (n.z < 0.0f) ? -pos.x : pos.x;
+            v = pos.y;
+        }
+        vertices[i].position = pos;
+        vertices[i].normal = n;
+        vertices[i].texcoordU = u;
+        vertices[i].texcoordV = v;
+        vertices[i].tangent = {1, 0, 0, 1};
+        vertices[i].color = {1, 1, 1, 1};
     }
     std::vector<uint32_t> indices(m->ntriangles * 3);
     for (int i = 0; i < m->ntriangles * 3; ++i) indices[i] = static_cast<uint32_t>(m->triangles[i]);
@@ -1484,18 +1547,30 @@ bool ProceduralModelLoadSlot::GenerateDodecahedron(const Engine::DodecahedronPar
     const float r = p.radius;
     std::vector<Vertex> vertices(m->npoints);
     for (int i = 0; i < m->npoints; ++i) {
-        const float px = m->points[i*3], py = m->points[i*3+1], pz = m->points[i*3+2];
+        const float px = m->points[i * 3], py = m->points[i * 3 + 1], pz = m->points[i * 3 + 2];
         const glm::vec3 pos = glm::vec3{px, pz, -py} * r; // Z-up to Y-up
-        const float nx = m->normals[i*3], ny = m->normals[i*3+1], nz = m->normals[i*3+2];
+        const float nx = m->normals[i * 3], ny = m->normals[i * 3 + 1], nz = m->normals[i * 3 + 2];
         const glm::vec3 n = glm::normalize(glm::vec3{nx, nz, -ny});
         const glm::vec3 absN = glm::abs(n);
         float u, v;
-        if (absN.y >= absN.x && absN.y >= absN.z) { u = (n.y > 0.0f) ? -pos.x : pos.x; v = pos.z; }
-        else if (absN.x >= absN.z)                 { u = (n.x > 0.0f) ? -pos.z : pos.z; v = pos.y; }
-        else                                        { u = (n.z < 0.0f) ? -pos.x : pos.x; v = pos.y; }
-        vertices[i].position = pos; vertices[i].normal = n;
-        vertices[i].texcoordU = u;  vertices[i].texcoordV = v;
-        vertices[i].tangent = {1, 0, 0, 1}; vertices[i].color = {1, 1, 1, 1};
+        if (absN.y >= absN.x && absN.y >= absN.z) {
+            u = (n.y > 0.0f) ? -pos.x : pos.x;
+            v = pos.z;
+        }
+        else if (absN.x >= absN.z) {
+            u = (n.x > 0.0f) ? -pos.z : pos.z;
+            v = pos.y;
+        }
+        else {
+            u = (n.z < 0.0f) ? -pos.x : pos.x;
+            v = pos.y;
+        }
+        vertices[i].position = pos;
+        vertices[i].normal = n;
+        vertices[i].texcoordU = u;
+        vertices[i].texcoordV = v;
+        vertices[i].tangent = {1, 0, 0, 1};
+        vertices[i].color = {1, 1, 1, 1};
     }
     std::vector<uint32_t> indices(m->ntriangles * 3);
     for (int i = 0; i < m->ntriangles * 3; ++i) indices[i] = static_cast<uint32_t>(m->triangles[i]);
@@ -1512,11 +1587,12 @@ bool ProceduralModelLoadSlot::GenerateKleinBottle(const Engine::KleinBottleParam
 
     std::vector<Vertex> vertices(m->npoints);
     for (int i = 0; i < m->npoints; ++i) {
-        vertices[i].position = glm::vec3{m->points[i*3], m->points[i*3+1], m->points[i*3+2]} * p.scale;
-        vertices[i].normal   = m->normals ? glm::normalize(glm::vec3{m->normals[i*3], m->normals[i*3+1], m->normals[i*3+2]}) : glm::vec3{0, 1, 0};
-        vertices[i].texcoordU = m->tcoords ? m->tcoords[i*2]   : 0.0f;
-        vertices[i].texcoordV = m->tcoords ? m->tcoords[i*2+1] : 0.0f;
-        vertices[i].tangent = {1, 0, 0, 1}; vertices[i].color = {1, 1, 1, 1};
+        vertices[i].position = glm::vec3{m->points[i * 3], m->points[i * 3 + 1], m->points[i * 3 + 2]} * p.scale;
+        vertices[i].normal = m->normals ? glm::normalize(glm::vec3{m->normals[i * 3], m->normals[i * 3 + 1], m->normals[i * 3 + 2]}) : glm::vec3{0, 1, 0};
+        vertices[i].texcoordU = m->tcoords ? m->tcoords[i * 2] : 0.0f;
+        vertices[i].texcoordV = m->tcoords ? m->tcoords[i * 2 + 1] : 0.0f;
+        vertices[i].tangent = {1, 0, 0, 1};
+        vertices[i].color = {1, 1, 1, 1};
     }
     std::vector<uint32_t> indices(m->ntriangles * 3);
     for (int i = 0; i < m->ntriangles * 3; ++i) indices[i] = static_cast<uint32_t>(m->triangles[i]);
@@ -1534,11 +1610,12 @@ bool ProceduralModelLoadSlot::GenerateTrefoilKnot(const Engine::TrefoilKnotParam
 
     std::vector<Vertex> vertices(m->npoints);
     for (int i = 0; i < m->npoints; ++i) {
-        vertices[i].position = glm::vec3{m->points[i*3], m->points[i*3+1], m->points[i*3+2]} * p.scale;
-        vertices[i].normal   = m->normals ? glm::normalize(glm::vec3{m->normals[i*3], m->normals[i*3+1], m->normals[i*3+2]}) : glm::vec3{0, 1, 0};
-        vertices[i].texcoordU = m->tcoords ? m->tcoords[i*2]   : 0.0f;
-        vertices[i].texcoordV = m->tcoords ? m->tcoords[i*2+1] : 0.0f;
-        vertices[i].tangent = {1, 0, 0, 1}; vertices[i].color = {1, 1, 1, 1};
+        vertices[i].position = glm::vec3{m->points[i * 3], m->points[i * 3 + 1], m->points[i * 3 + 2]} * p.scale;
+        vertices[i].normal = m->normals ? glm::normalize(glm::vec3{m->normals[i * 3], m->normals[i * 3 + 1], m->normals[i * 3 + 2]}) : glm::vec3{0, 1, 0};
+        vertices[i].texcoordU = m->tcoords ? m->tcoords[i * 2] : 0.0f;
+        vertices[i].texcoordV = m->tcoords ? m->tcoords[i * 2 + 1] : 0.0f;
+        vertices[i].tangent = {1, 0, 0, 1};
+        vertices[i].color = {1, 1, 1, 1};
     }
     std::vector<uint32_t> indices(m->ntriangles * 3);
     for (int i = 0; i < m->ntriangles * 3; ++i) indices[i] = static_cast<uint32_t>(m->triangles[i]);
@@ -1558,31 +1635,40 @@ bool ProceduralModelLoadSlot::GenerateSpline(const Engine::SplineParams& p)
     const int totalRings = totalSpans * segs + 1;
 
     auto getCP = [&](int i) -> glm::vec3 {
-        if (i < 0)  return 2.0f * p.controlPoints[0] - p.controlPoints[1];
-        if (i >= N) return 2.0f * p.controlPoints[N-1] - p.controlPoints[N-2];
+        if (i < 0) return 2.0f * p.controlPoints[0] - p.controlPoints[1];
+        if (i >= N) return 2.0f * p.controlPoints[N - 1] - p.controlPoints[N - 2];
         return p.controlPoints[i];
     };
 
     auto catmullPos = [](glm::vec3 p0, glm::vec3 p1, glm::vec3 p2, glm::vec3 p3, float t) -> glm::vec3 {
-        return 0.5f * ((2.0f*p1) + (-p0+p2)*t + (2.0f*p0-5.0f*p1+4.0f*p2-p3)*(t*t) + (-p0+3.0f*p1-3.0f*p2+p3)*(t*t*t));
+        return 0.5f * ((2.0f * p1) + (-p0 + p2) * t + (2.0f * p0 - 5.0f * p1 + 4.0f * p2 - p3) * (t * t) + (-p0 + 3.0f * p1 - 3.0f * p2 + p3) * (t * t * t));
     };
     auto catmullTan = [](glm::vec3 p0, glm::vec3 p1, glm::vec3 p2, glm::vec3 p3, float t) -> glm::vec3 {
-        return 0.5f * ((-p0+p2) + 2.0f*(2.0f*p0-5.0f*p1+4.0f*p2-p3)*t + 3.0f*(-p0+3.0f*p1-3.0f*p2+p3)*(t*t));
+        return 0.5f * ((-p0 + p2) + 2.0f * (2.0f * p0 - 5.0f * p1 + 4.0f * p2 - p3) * t + 3.0f * (-p0 + 3.0f * p1 - 3.0f * p2 + p3) * (t * t));
     };
 
-    struct Frame { glm::vec3 pos, tangent, right, up; };
+    struct Frame
+    {
+        glm::vec3 pos, tangent, right, up;
+    };
     std::vector<Frame> frames;
     frames.reserve(totalRings);
 
     for (int i = 0; i < totalRings; i++) {
         int span;
         float t;
-        if (i == totalRings - 1) { span = N - 2; t = 1.0f; }
-        else                     { span = i / segs; t = static_cast<float>(i % segs) / segs; }
+        if (i == totalRings - 1) {
+            span = N - 2;
+            t = 1.0f;
+        }
+        else {
+            span = i / segs;
+            t = static_cast<float>(i % segs) / segs;
+        }
 
-        glm::vec3 tang = catmullTan(getCP(span-1), getCP(span), getCP(span+1), getCP(span+2), t);
-        if (glm::length(tang) < 1e-6f) tang = frames.empty() ? glm::vec3{0,0,1} : frames.back().tangent;
-        frames.push_back({catmullPos(getCP(span-1), getCP(span), getCP(span+1), getCP(span+2), t), glm::normalize(tang), {}, {}});
+        glm::vec3 tang = catmullTan(getCP(span - 1), getCP(span), getCP(span + 1), getCP(span + 2), t);
+        if (glm::length(tang) < 1e-6f) tang = frames.empty() ? glm::vec3{0, 0, 1} : frames.back().tangent;
+        frames.push_back({catmullPos(getCP(span - 1), getCP(span), getCP(span + 1), getCP(span + 2), t), glm::normalize(tang), {}, {}});
     }
 
     // Parallel transport frames
@@ -1590,16 +1676,17 @@ bool ProceduralModelLoadSlot::GenerateSpline(const Engine::SplineParams& p)
         glm::vec3 worldUp = {0, 1, 0};
         if (glm::abs(glm::dot(frames[0].tangent, worldUp)) > 0.99f) worldUp = {1, 0, 0};
         frames[0].right = glm::normalize(glm::cross(worldUp, frames[0].tangent));
-        frames[0].up    = glm::normalize(glm::cross(frames[0].tangent, frames[0].right));
+        frames[0].up = glm::normalize(glm::cross(frames[0].tangent, frames[0].right));
         for (int i = 1; i < totalRings; i++) {
-            glm::vec3 axis = glm::cross(frames[i-1].tangent, frames[i].tangent);
+            glm::vec3 axis = glm::cross(frames[i - 1].tangent, frames[i].tangent);
             float axisLen = glm::length(axis);
             if (axisLen < 1e-6f) {
-                frames[i].right = frames[i-1].right;
-            } else {
-                float cosA = glm::clamp(glm::dot(frames[i-1].tangent, frames[i].tangent), -1.0f, 1.0f);
+                frames[i].right = frames[i - 1].right;
+            }
+            else {
+                float cosA = glm::clamp(glm::dot(frames[i - 1].tangent, frames[i].tangent), -1.0f, 1.0f);
                 glm::mat4 rot = glm::rotate(glm::mat4(1.0f), glm::acos(cosA), axis / axisLen);
-                frames[i].right = glm::normalize(glm::vec3(rot * glm::vec4(frames[i-1].right, 0.0f)));
+                frames[i].right = glm::normalize(glm::vec3(rot * glm::vec4(frames[i - 1].right, 0.0f)));
             }
             frames[i].up = glm::normalize(glm::cross(frames[i].tangent, frames[i].right));
         }
@@ -1615,28 +1702,32 @@ bool ProceduralModelLoadSlot::GenerateSpline(const Engine::SplineParams& p)
     for (int i = 0; i < totalRings; i++) {
         const Frame& f = frames[i];
         const glm::vec3 rRight = cosRoll * f.right + sinRoll * f.up;
-        const glm::vec3 rUp    = -sinRoll * f.right + cosRoll * f.up;
+        const glm::vec3 rUp = -sinRoll * f.right + cosRoll * f.up;
         const float vCoord = (totalRings > 1) ? static_cast<float>(i) / (totalRings - 1) : 0.0f;
         for (int j = 0; j < sides; j++) {
             const float angle = glm::two_pi<float>() * j / sides;
             const glm::vec3 radial = glm::cos(angle) * rRight + glm::sin(angle) * rUp;
             Vertex v{};
-            v.position   = f.pos + p.radius * radial;
-            v.normal     = radial;
-            v.texcoordU  = static_cast<float>(j) / sides;
-            v.texcoordV  = vCoord;
-            v.tangent    = {rRight.x, rRight.y, rRight.z, 1.0f};
-            v.color      = {1, 1, 1, 1};
+            v.position = f.pos + p.radius * radial;
+            v.normal = radial;
+            v.texcoordU = static_cast<float>(j) / sides;
+            v.texcoordV = vCoord;
+            v.tangent = {rRight.x, rRight.y, rRight.z, 1.0f};
+            v.color = {1, 1, 1, 1};
             vertices.push_back(v);
         }
     }
 
     for (int i = 0; i < totalRings - 1; i++) {
         for (int j = 0; j < sides; j++) {
-            uint32_t a0 = i * sides + j, a1 = i * sides + (j+1) % sides;
-            uint32_t b0 = (i+1) * sides + j, b1 = (i+1) * sides + (j+1) % sides;
-            indices.push_back(a0); indices.push_back(a1); indices.push_back(b0);
-            indices.push_back(a1); indices.push_back(b1); indices.push_back(b0);
+            uint32_t a0 = i * sides + j, a1 = i * sides + (j + 1) % sides;
+            uint32_t b0 = (i + 1) * sides + j, b1 = (i + 1) * sides + (j + 1) % sides;
+            indices.push_back(a0);
+            indices.push_back(a1);
+            indices.push_back(b0);
+            indices.push_back(a1);
+            indices.push_back(b1);
+            indices.push_back(b0);
         }
     }
 
@@ -1645,29 +1736,37 @@ bool ProceduralModelLoadSlot::GenerateSpline(const Engine::SplineParams& p)
         {
             uint32_t cIdx = static_cast<uint32_t>(vertices.size());
             const Frame& f = frames[0];
-            Vertex vc{}; vc.position = f.pos; vc.normal = -f.tangent;
-            vc.texcoordU = 0.5f; vc.texcoordV = 0.0f;
-            vc.tangent = {f.right.x, f.right.y, f.right.z, 1.0f}; vc.color = {1,1,1,1};
+            Vertex vc{};
+            vc.position = f.pos;
+            vc.normal = -f.tangent;
+            vc.texcoordU = 0.5f;
+            vc.texcoordV = 0.0f;
+            vc.tangent = {f.right.x, f.right.y, f.right.z, 1.0f};
+            vc.color = {1, 1, 1, 1};
             vertices.push_back(vc);
             for (int j = 0; j < sides; j++) {
                 indices.push_back(cIdx);
-                indices.push_back((j+1) % sides);
+                indices.push_back((j + 1) % sides);
                 indices.push_back(j);
             }
         }
         // End cap (normal = +tangent)
         {
             uint32_t cIdx = static_cast<uint32_t>(vertices.size());
-            const Frame& f = frames[totalRings-1];
-            uint32_t rStart = static_cast<uint32_t>((totalRings-1) * sides);
-            Vertex vc{}; vc.position = f.pos; vc.normal = f.tangent;
-            vc.texcoordU = 0.5f; vc.texcoordV = 1.0f;
-            vc.tangent = {f.right.x, f.right.y, f.right.z, 1.0f}; vc.color = {1,1,1,1};
+            const Frame& f = frames[totalRings - 1];
+            uint32_t rStart = static_cast<uint32_t>((totalRings - 1) * sides);
+            Vertex vc{};
+            vc.position = f.pos;
+            vc.normal = f.tangent;
+            vc.texcoordU = 0.5f;
+            vc.texcoordV = 1.0f;
+            vc.tangent = {f.right.x, f.right.y, f.right.z, 1.0f};
+            vc.color = {1, 1, 1, 1};
             vertices.push_back(vc);
             for (int j = 0; j < sides; j++) {
                 indices.push_back(cIdx);
                 indices.push_back(rStart + j);
-                indices.push_back(rStart + (j+1) % sides);
+                indices.push_back(rStart + (j + 1) % sides);
             }
         }
     }

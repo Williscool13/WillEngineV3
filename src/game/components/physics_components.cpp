@@ -481,6 +481,7 @@ ComponentEditorResult DrawComponentEditor<Component::PhysicsBodyDesc>(Component:
                             shape.splineParams.controlPoints.clear();
                         }
                         shape.type = newType;
+                        registry.emplace_or_replace<Component::PendingPhysicsShapeCreationTag>(entity);
                     }
                     ImGui::EndDisabled();
                 }
@@ -489,16 +490,17 @@ ComponentEditorResult DrawComponentEditor<Component::PhysicsBodyDesc>(Component:
 
             ImGui::DragFloat3("Offset", &shape.offset.x, 0.01f);
 
+            bool bAnyChange = false;
             switch (shape.type) {
                 case Component::PhysicsShapeType::Box:
-                    ImGui::DragFloat3("Half Extents", &shape.box.halfExtents.x, 0.01f, 0.001f, 100.0f);
+                    bAnyChange |= ImGui::DragFloat3("Half Extents", &shape.box.halfExtents.x, 0.01f, 0.001f, 100.0f);
                     break;
                 case Component::PhysicsShapeType::Sphere:
-                    ImGui::DragFloat("Radius", &shape.sphere.radius, 0.01f, 0.001f, 100.0f);
+                    bAnyChange |= ImGui::DragFloat("Radius", &shape.sphere.radius, 0.01f, 0.001f, 100.0f);
                     break;
                 case Component::PhysicsShapeType::Capsule:
-                    ImGui::DragFloat("Radius", &shape.capsule.radius, 0.01f, 0.001f, 100.0f);
-                    ImGui::DragFloat("Half Height", &shape.capsule.halfHeight, 0.01f, 0.001f, 100.0f);
+                    bAnyChange |= ImGui::DragFloat("Radius", &shape.capsule.radius, 0.01f, 0.001f, 100.0f);
+                    bAnyChange |= ImGui::DragFloat("Half Height", &shape.capsule.halfHeight, 0.01f, 0.001f, 100.0f);
                     break;
                 case Component::PhysicsShapeType::ConvexHull:
                 case Component::PhysicsShapeType::TriangleMesh:
@@ -543,10 +545,14 @@ ComponentEditorResult DrawComponentEditor<Component::PhysicsBodyDesc>(Component:
                             shape.meshSourceModelId = Engine::ModelID::INVALID;
                             shape.proceduralParams = std::monostate{};
                             shape.splineParams.controlPoints.clear();
+                            bAnyChange = true;
                         }
                     }
                     break;
                 }
+            }
+            if (bAnyChange) {
+                registry.emplace_or_replace<Component::PendingPhysicsShapeCreationTag>(entity);
             }
 
             //
@@ -564,13 +570,6 @@ ComponentEditorResult DrawComponentEditor<Component::PhysicsBodyDesc>(Component:
                 Engine::StaticModel* fitModel = fitHandle.IsValid() ? ctx->assetManager->GetModel(fitHandle) : nullptr;
                 const bool bModelLoaded = fitModel && fitModel->modelLoadState == Engine::StaticModel::ModelLoadState::Loaded;
 
-                if (isMeshType && shape.meshSourceHandle.IsValid()) {
-                    const Engine::StaticModel* srcModel = ctx->assetManager->GetModel(shape.meshSourceHandle);
-                    if (srcModel && srcModel->modelLoadState == Engine::StaticModel::ModelLoadState::Loaded
-                        && (!srcModel->physicsCache || srcModel->physicsCache->positions.empty())) {
-                        ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "Nothing will be generated at runtime (vertex count over threshold)");
-                    }
-                }
 
                 ImGui::BeginDisabled(!bModelLoaded && !isMeshType);
                 if (ImGui::Button("Auto-Fit")) {
@@ -628,6 +627,8 @@ ComponentEditorResult DrawComponentEditor<Component::PhysicsBodyDesc>(Component:
                             }
                             break;
                     }
+
+                    registry.emplace_or_replace<Component::PendingPhysicsShapeCreationTag>(entity);
                 }
                 ImGui::EndDisabled();
             }
@@ -785,6 +786,7 @@ ComponentEditorResult DrawComponentEditor<Component::PhysicsBodyDesc>(Component:
             }
             if (shapeToRemove >= 0) {
                 component.shapes.erase(component.shapes.begin() + shapeToRemove);
+                registry.emplace_or_replace<Component::PendingPhysicsShapeCreationTag>(entity);
             }
         }
 
@@ -793,6 +795,7 @@ ComponentEditorResult DrawComponentEditor<Component::PhysicsBodyDesc>(Component:
             desc.type = Component::PhysicsShapeType::Box;
             desc.box.halfExtents = glm::vec3(0.5f);
             component.shapes.push_back(desc);
+            registry.emplace_or_replace<Component::PendingPhysicsShapeCreationTag>(entity);
         }
     }
 
@@ -831,6 +834,8 @@ void OnComponentAdded<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc& co
         registry.emplace_or_replace<Component::PendingPhysicsMeshTag>(entity);
         state->bPendingModelResolve = true;
     }
+
+    registry.emplace_or_replace<Component::PendingPhysicsShapeCreationTag>(entity);
 }
 
 template<>

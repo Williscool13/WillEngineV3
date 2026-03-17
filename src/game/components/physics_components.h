@@ -16,6 +16,7 @@
 #include "engine/core/model_id.h"
 #include "engine/asset_manager_types.h"
 #include "engine/resources/model/model_types.h"
+#include "Jolt/Physics/Collision/Shape/Shape.h"
 
 
 namespace Game::Component
@@ -88,6 +89,9 @@ struct PhysicsBodyDesc
     bool active{true};
 
     std::vector<PhysicsShapeDesc> shapes;
+
+    // potentially also store its type (e.g. compound)
+    JPH::ShapeRefC shapeRef;
 };
 
 struct DynamicPhysicsBodyComponent
@@ -103,6 +107,9 @@ struct DirtyKinematicPhysicsTransformTag
 {};
 
 struct PendingPhysicsMeshTag
+{};
+
+struct PendingPhysicsShapeCreationTag
 {};
 
 struct PendingPhysicsBodyCreationTag
