@@ -323,8 +323,24 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
         const auto vpRight = static_cast<float>(ctx->windowContext.viewportOffsetX + ctx->windowContext.viewportWidth);
         const auto vpTop = static_cast<float>(ctx->windowContext.viewportOffsetY);
 
+        // Determine orbit pivot: selected object's world pos, or 8 units ahead of camera
+        glm::vec3 orbitPivot = editorCameraTransform.translation + frameBuffer->mainViewFamily.mainView.currentViewData.cameraForward * 8.0f;
+        float orbitDist = 8.0f;
+        bool orbitAroundObject = false;
+
+        if (!state->selectedEntities.empty()) {
+            entt::entity target = state->selectedEntities.front();
+            if (state->registry.valid(target)) {
+                if (const auto* targetTransform = state->registry.try_get<Component::TransformComponent>(target)) {
+                    orbitPivot = targetTransform->translation;
+                    orbitDist = glm::max(glm::length(orbitPivot - editorCameraTransform.translation), 0.1f);
+                    orbitAroundObject = true;
+                }
+            }
+        }
+
         glm::mat4 viewCopy = frameBuffer->mainViewFamily.mainView.currentViewData.view;
-        ImGuizmo::ViewManipulate(glm::value_ptr(viewCopy), 8.0f, ImVec2(vpRight - gizmoSize, vpTop), ImVec2(gizmoSize, gizmoSize), 0x10101080);
+        ImGuizmo::ViewManipulate(glm::value_ptr(viewCopy), orbitDist, ImVec2(vpRight - gizmoSize, vpTop), ImVec2(gizmoSize, gizmoSize), 0x10101080);
 
         if (viewCopy != frameBuffer->mainViewFamily.mainView.currentViewData.view) {
             const glm::mat4 invView = glm::inverse(viewCopy);
@@ -332,6 +348,10 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
             const glm::vec3 newUp = glm::normalize(glm::vec3(invView[1]));
 
             editorCameraTransform.rotation = glm::normalize(glm::quat_cast(glm::mat3(invView)));
+
+            if (orbitAroundObject) {
+                editorCameraTransform.translation = orbitPivot - newForward * orbitDist;
+            }
 
             frameBuffer->mainViewFamily.mainView.currentViewData.cameraForward = newForward;
             frameBuffer->mainViewFamily.mainView.currentViewData.cameraLookAt = editorCameraTransform.translation + newForward;
