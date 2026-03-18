@@ -91,6 +91,53 @@ void EditorUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         if (!popupOpen && state->inputFrame->GetKey(Key::ESCAPE).pressed) {
             state->selectedEntities.clear();
         }
+
+        if (!popupOpen && state->inputFrame->GetKey(Key::F).pressed && !state->selectedEntities.empty()) {
+            entt::entity target = state->selectedEntities.front();
+            if (state->registry.valid(target)) {
+                auto* targetTransform = state->registry.try_get<Component::TransformComponent>(target);
+
+                auto editorCamView = state->registry.view<Component::EditorCameraTag, Component::FreeCameraComponent, Component::TransformComponent>();
+                for (entt::entity camEntity : editorCamView) {
+                    auto& camTransform = editorCamView.get<Component::TransformComponent>(camEntity);
+                    const glm::vec3 camForward = glm::normalize(camTransform.rotation * WORLD_FORWARD);
+
+                    glm::vec3 focusPoint = targetTransform ? targetTransform->translation : glm::vec3(0.0f);
+                    float focusDist = 1.0f;
+
+                    const auto* staticMesh = state->registry.try_get<Component::StaticMeshComponent>(target);
+                    const auto* proceduralMesh = state->registry.try_get<Component::ProceduralMeshComponent>(target);
+
+                    Engine::StaticModelHandle modelHandle = Engine::StaticModelHandle::INVALID;
+                    if (staticMesh && staticMesh->modelHandle.IsValid()) {
+                        modelHandle = staticMesh->modelHandle;
+                    } else if (proceduralMesh && proceduralMesh->modelHandle.IsValid()) {
+                        modelHandle = proceduralMesh->modelHandle;
+                    }
+
+                    if (modelHandle.IsValid()) {
+                        if (const Engine::StaticModel* model = ctx->assetManager->GetModel(modelHandle)) {
+                            if (model->modelLoadState == Engine::StaticModel::ModelLoadState::Loaded) {
+                                const Engine::AABB& aabb = model->bounds.aabb;
+                                const glm::vec3 localCenter = aabb.Center();
+                                const glm::vec3 localHalf = aabb.HalfExtents();
+
+                                if (targetTransform) {
+                                    const glm::mat4 worldMatrix = GetMatrix(*targetTransform);
+                                    focusPoint = glm::vec3(worldMatrix * glm::vec4(localCenter, 1.0f));
+                                    const glm::vec3 scale = targetTransform->scale;
+                                    const float maxScale = glm::max(glm::max(glm::abs(scale.x), glm::abs(scale.y)), glm::abs(scale.z));
+                                    focusDist = glm::length(localHalf) * maxScale + 2.0f;
+                                }
+                            }
+                        }
+                    }
+
+                    camTransform.translation = focusPoint - camForward * focusDist;
+                    break;
+                }
+            }
+        }
     }
 
 
