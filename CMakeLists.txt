@@ -342,6 +342,7 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeFilmGrain film_grain
         ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeSharpening sharpening
         ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeColorGrading color_grading
+        ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputePaniniProjection panini_projection
 
         ${CMAKE_SOURCE_DIR}/shaders/common_shaders.slang vertex FullscreenPassVertexMain fullscreen_pass
 

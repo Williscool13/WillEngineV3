@@ -1003,6 +1003,19 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
         if (ImGui::Button("Disable Sharpening")) {
             state->postProcess.sharpeningStrength = 0.0f;
         }
+
+        ImGui::Spacing();
+        ImGui::SeparatorText("Panini Projection");
+        ImGui::SliderFloat("Panini Strength", &state->postProcess.paniniStrength, 0.0f, 1.0f, "%.2f");
+        ImGui::SliderFloat("Panini Compression", &state->postProcess.paniniCompression, 0.0f, 2.0f, "%.2f");
+        if (ImGui::Button("Reset Panini")) {
+            state->postProcess.paniniStrength = defaultPP.paniniStrength;
+            state->postProcess.paniniCompression = defaultPP.paniniCompression;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Disable Panini")) {
+            state->postProcess.paniniStrength = 0.0f;
+        }
     }
     ImGui::End();
 

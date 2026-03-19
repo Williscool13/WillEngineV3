@@ -963,6 +963,8 @@ void RenderThread::CreatePipelines()
                                              sizeof(SharpeningPushConstant), PipelineCategory::Sharpening);
     pipelineManager->RegisterComputePipeline(SID("color_grading"), Platform::GetShaderPath() / "color_grading_compute.spv",
                                              sizeof(ColorGradingPushConstant), PipelineCategory::ColorGrade);
+    pipelineManager->RegisterComputePipeline(SID("panini_projection"), Platform::GetShaderPath() / "panini_projection_compute.spv",
+                                             sizeof(PaniniProjectionPushConstant), PipelineCategory::Panini);
 
     pipelineManager->RegisterComputePipeline(SID("debug_visualize"), Platform::GetShaderPath() / "debug_visualize_compute.spv",
                                              sizeof(DebugVisualizePushConstant), PipelineCategory::Debug);
@@ -2647,17 +2649,42 @@ StringID RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewF
         });
     }
 
+    // Panini Projection
+    {
+        graph.CreateTexture(SID("panini_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
+        RenderPass& paniniPass = graph.AddPass(SID("Panini Projection"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+        paniniPass.ReadBuffer(SID("scene_data"));
+        paniniPass.ReadSampledImage(SID("vignette_aberration_output"));
+        paniniPass.WriteStorageImage(SID("panini_output"));
+        paniniPass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
+            PaniniProjectionPushConstant pc{
+                .outputExtent = {width, height},
+                .inputIndex = graph.GetSampledImageViewDescriptorIndex(SID("vignette_aberration_output")),
+                .outputIndex = graph.GetStorageImageViewDescriptorIndex(SID("panini_output")),
+                .strength = ppConfig.paniniStrength,
+                .compression = ppConfig.paniniCompression,
+            };
+
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("panini_projection"));
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+            vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            uint32_t xDispatch = (width + POST_PROCESS_PANINI_DISPATCH_X - 1) / POST_PROCESS_PANINI_DISPATCH_X;
+            uint32_t yDispatch = (height + POST_PROCESS_PANINI_DISPATCH_Y - 1) / POST_PROCESS_PANINI_DISPATCH_Y;
+            vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
+        });
+    }
+
     // Film Grain
     {
         // graph.CreateTexture("filmGrainOutput", TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1});
         RenderPass& filmGrainPass = graph.AddPass(SID("Film Grain"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
         filmGrainPass.ReadBuffer(SID("scene_data"));
-        filmGrainPass.ReadSampledImage(SID("vignette_aberration_output"));
+        filmGrainPass.ReadSampledImage(SID("panini_output"));
         filmGrainPass.WriteStorageImage(SID("post_process_output"));
         filmGrainPass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
             FilmGrainPushConstant pc{
                 .outputExtent = {width, height},
-                .inputIndex = graph.GetSampledImageViewDescriptorIndex(SID("vignette_aberration_output")),
+                .inputIndex = graph.GetSampledImageViewDescriptorIndex(SID("panini_output")),
                 .outputIndex = graph.GetStorageImageViewDescriptorIndex(SID("post_process_output")),
                 .grainStrength = ppConfig.grainStrength,
                 .grainSize = ppConfig.grainSize,

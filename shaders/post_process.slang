@@ -558,3 +558,14 @@ void ComputeColorGrading(uniform ColorGradingPushConstant pc, uint3 dtid : SV_Di
 
     rdgStorageFloat4[pc.outputIndex][pixelCoord] = float4(color, 1.0);
 }
+
+// ==================== Panini Projection ===============================
+[shader("compute")]
+[numthreads(POST_PROCESS_PANINI_DISPATCH_X, POST_PROCESS_PANINI_DISPATCH_Y, 1)]
+void ComputePaniniProjection(uniform PaniniProjectionPushConstant pc, uint3 dtid : SV_DispatchThreadID) {
+    if (any(dtid.xy >= pc.outputExtent)) return;
+
+    float2 uv = (dtid.xy + 0.5f) / float2(pc.outputExtent);
+    float3 color = rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv, 0).rgb;
+    rdgStorageFloat4[pc.outputIndex][dtid.xy] = float4(color, 1.0f);
+}

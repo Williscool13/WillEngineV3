@@ -134,6 +134,9 @@ struct PostProcessConfiguration
     float grainSize{1.5f};
 
     float sharpeningStrength{0.4f};
+
+    float paniniStrength{0.0f};
+    float paniniCompression{1.0f};
 };
 
 struct GTAOConfiguration

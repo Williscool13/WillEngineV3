@@ -489,6 +489,15 @@ SHADER_PUBLIC struct ColorGradingPushConstant
     SHADER_PUBLIC float tint;
 };
 
+SHADER_PUBLIC struct PaniniProjectionPushConstant
+{
+    SHADER_PUBLIC uint2 outputExtent;
+    SHADER_PUBLIC uint32_t inputIndex;
+    SHADER_PUBLIC uint32_t outputIndex;
+    SHADER_PUBLIC float strength;
+    SHADER_PUBLIC float compression;
+};
+
 
 SHADER_PUBLIC struct GTAODepthPrepassPushConstant
 {

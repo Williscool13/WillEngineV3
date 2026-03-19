@@ -31,10 +31,11 @@ enum class PipelineCategory : uint32_t
     Debug               = 1 << 17,
     AssetGeneration     = 1 << 18,
     EnvironmentMap      = 1 << 19,
+    Panini              = 1 << 20,
 
     MainGeometry = Instancing | Geometry,
     ShadowPass = Instancing | Shadow,
-    PostProcess = TAA | Exposure | Bloom | MotionBlur | Tonemap | ColorGrade | Vignette | FilmGrain | Sharpening | GTAO,
+    PostProcess = TAA | Exposure | Bloom | MotionBlur | Tonemap | ColorGrade | Vignette | FilmGrain | Sharpening | GTAO | Panini,
     All = ~0U,
 };
 
