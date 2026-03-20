@@ -136,7 +136,6 @@ struct PostProcessConfiguration
     float sharpeningStrength{0.4f};
 
     float paniniStrength{0.0f};
-    float paniniCompression{1.0f};
 };
 
 struct GTAOConfiguration

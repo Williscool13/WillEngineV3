@@ -2661,8 +2661,9 @@ StringID RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewF
                 .outputExtent = {width, height},
                 .inputIndex = graph.GetSampledImageViewDescriptorIndex(SID("vignette_aberration_output")),
                 .outputIndex = graph.GetStorageImageViewDescriptorIndex(SID("panini_output")),
+                .perspectiveFov = viewFamily.mainView.currentViewData.fovRadians,
+                .aspect = viewFamily.mainView.currentViewData.aspectRatio,
                 .strength = ppConfig.paniniStrength,
-                .compression = ppConfig.paniniCompression,
             };
 
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("panini_projection"));
