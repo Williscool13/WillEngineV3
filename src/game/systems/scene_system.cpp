@@ -36,6 +36,7 @@ Engine::Scene SaveScene(ComponentRegistry& componentRegistry, entt::registry& re
     for (auto entity : view) {
         auto& tag = view.get<Component::SceneComponent>(entity);
         if (tag.sceneId != sceneId) continue;
+        if (registry.all_of<Component::DoNotSerializeTag>(entity)) continue;
 
         nlohmann::json entityJson;
 

@@ -36,6 +36,10 @@ private:
     float lookYaw{0.0f};
     float lookPitch{0.0f};
     float lookSpeed{0.1f};
+    float characterYaw{0.0f};
+
+    float orbitDistance{3.5f};
+    float orbitSideOffset{0.5f};
 };
 } // Game
 

@@ -10,7 +10,9 @@
 #include <Jolt/Physics/Collision/Shape/RotatedTranslatedShape.h>
 
 #include "game/components/character_components.h"
+#include "game/components/common_components.h"
 #include "game/components/core_components.h"
+#include "game/components/render_components.h"
 #include "game/systems/scene_system.h"
 #include "physics/physics_system.h"
 
@@ -22,11 +24,12 @@ void Character::Initialize(Engine::GameState* gameState, Physics::PhysicsSystem*
 
     entity = CreateSceneEntity(engineGameState);
     auto transformCreated =  CreateComponent<Component::TransformComponent>(engineGameState, entity);
-    assert(transformCreated && "Failed to make transform for Character::Initialize");
+    assert(transformCreated && "Failed to make transform for Character::Initialize.");
 
     auto& transform = engineGameState->registry.get<Component::TransformComponent>(entity);
     transform.translation = spawnPosition;
     engineGameState->registry.emplace_or_replace<Component::DirtyTransformTag>(entity);
+    engineGameState->registry.emplace<Component::DoNotSerializeTag>(entity);
 
     JPH::ShapeRefC capsuleShape = JPH::CapsuleShapeSettings(capsuleHalfHeight, capsuleRadius).Create().Get();
     JPH::ShapeRefC standingShape = JPH::RotatedTranslatedShapeSettings(
@@ -46,10 +49,22 @@ void Character::Initialize(Engine::GameState* gameState, Physics::PhysicsSystem*
     JPH::RVec3 joltPos(spawnPosition.x, spawnPosition.y, spawnPosition.z);
     auto* characterPhysics = new JPH::CharacterVirtual(&settings, joltPos, JPH::Quat::sIdentity(), 0, &physicsSystem->GetPhysicsSystem());
 
-    auto& comp = engineGameState->registry.emplace<Component::CharacterPhysicsComponent>(entity);
-    comp.character = characterPhysics;
-    comp.capsuleShape = capsuleShape;
-    comp.standingShape = standingShape;
+    bool createdPhysicsComp = CreateComponent<Component::CharacterPhysicsComponent>(engineGameState, entity);
+    assert(createdPhysicsComp && "Failed to create character physics comp.");
+    auto& characterPhysicsComp = engineGameState->registry.get<Component::CharacterPhysicsComponent>(entity);
+    characterPhysicsComp.character = characterPhysics;
+    characterPhysicsComp.capsuleShape = capsuleShape;
+    characterPhysicsComp.standingShape = standingShape;
+
+    bool createdProceduralMesh = CreateComponent<Component::ProceduralMeshComponent>(engineGameState, entity);
+    assert(createdProceduralMesh && "Failed to create procedural mesh for Player Character.");
+
+    auto& playerMesh = engineGameState->registry.get<Component::ProceduralMeshComponent>(entity);
+    playerMesh.params = Engine::DodecahedronParams{
+        .radius = capsuleHalfHeight + capsuleRadius,
+    };
+    playerMesh.renderOffset = glm::vec3(0.0f, capsuleHalfHeight + capsuleRadius, 0.0f);
+    Component::RecreateProceduralMesh(playerMesh, engineGameState->registry, entity);
 }
 
 void Character::Update(float deltaTime, const glm::vec3& moveInput, bool jumpRequested, Physics::PhysicsSystem* physicsSystem)

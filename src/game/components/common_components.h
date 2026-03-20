@@ -25,6 +25,9 @@ struct NameComponent
 {
     std::string name;
 };
+
+struct DoNotSerializeTag
+{};
 }
 
 #endif //WILL_ENGINE_COMMON_COMPONENTS_H

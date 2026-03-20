@@ -10,6 +10,7 @@
 #include <vector>
 #include <glm/glm.hpp>
 #include <glm/vec3.hpp>
+#include <entt/entt.hpp>
 
 #include "core/string_id.h"
 #include "engine/resources/material/material_manager.h"
@@ -28,6 +29,7 @@ struct RenderTransformComponent
 {
     glm::mat4 modelMatrix;
     glm::mat4 previousMatrix;
+    glm::vec3 renderOffset{0.0f};
 };
 
 struct PrimitiveData
@@ -47,6 +49,7 @@ struct StaticMeshComponent
     Engine::ModelID modelId{};
     int32_t meshIndex{-1};
     std::array<Engine::MaterialID, 128> materialOverrides{};
+    glm::vec3 renderOffset{0.0f};
 
     // Transient
     Engine::StaticModelHandle modelHandle{};
@@ -55,11 +58,14 @@ struct StaticMeshComponent
 struct StaticMeshLoadingTag
 {};
 
+void RecreateStaticMesh(StaticMeshComponent& component, entt::registry& registry, entt::entity entity);
+
 struct ProceduralMeshComponent
 {
     Engine::ProceduralParams params;
     Engine::MaterialID material{};
     glm::vec4 modelFlags{0.0f};
+    glm::vec3 renderOffset{0.0f};
 
     // Transient
     Engine::StaticModelHandle modelHandle{};
@@ -69,6 +75,8 @@ struct ProceduralMeshComponent
 
 struct ProceduralMeshLoadingTag
 {};
+
+void RecreateProceduralMesh(ProceduralMeshComponent& component, entt::registry& registry, entt::entity entity);
 
 struct SplineMeshComponent
 {
@@ -82,6 +90,7 @@ struct SplineMeshComponent
 
     Engine::MaterialID material{};
     glm::vec4 modelFlags{1.0f, 1.0f, 0.0f, 0.0f};
+    glm::vec3 renderOffset{0.0f};
 
     // Transient
     Engine::StaticModelHandle modelHandle{};

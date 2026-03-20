@@ -5,6 +5,7 @@
 #include "component_registry.h"
 
 #include "../components/camera_components.h"
+#include "../components/character_components.h"
 #include "../components/debug_components.h"
 #include "../components/physics_components.h"
 
@@ -24,6 +25,7 @@ void RegisterComponents(ComponentRegistry& componentRegistry)
     RegisterComponent<Component::ProceduralMeshComponent>(componentRegistry, "ProceduralMeshComponent");
     RegisterComponent<Component::SplineMeshComponent>(componentRegistry, "SplineMeshComponent");
 
+    RegisterComponent<Component::CharacterPhysicsComponent>(componentRegistry, "CharacterPhysicsComponent");
     RegisterComponent<Component::PhysicsBodyDesc>(componentRegistry, "PhysicsBodyDesc");
     RegisterComponent<Component::DrawPhysicsDebugTag>(componentRegistry, "DrawPhysicsDebugTag");
 

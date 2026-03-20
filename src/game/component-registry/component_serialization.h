@@ -12,6 +12,7 @@
 #include "game/components/debug_components.h"
 #include "game/components/physics_components.h"
 #include "game/components/render_components.h"
+#include "game/components/character_components.h"
 #include "game/components/editor_components.h"
 
 namespace Game

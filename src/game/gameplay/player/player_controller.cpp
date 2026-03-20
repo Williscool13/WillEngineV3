@@ -23,8 +23,6 @@ void PlayerController::Initialize(Engine::GameState* gameState, Physics::Physics
 
 void PlayerController::Update(Core::EngineContext* ctx, Engine::GameState* state)
 {
-    if (!character) return;
-
     const float deltaTime = state->timeFrame->deltaTime;
     const Core::InputFrame* input = state->inputFrame;
 
@@ -63,22 +61,29 @@ void PlayerController::Update(Core::EngineContext* ctx, Engine::GameState* state
     JPH::RVec3 pos = comp.character->GetPosition();
     auto& transform = state->registry.get<Component::TransformComponent>(character->GetEntity());
     transform.translation = glm::vec3(pos.GetX(), pos.GetY(), pos.GetZ());
-    transform.rotation = glm::angleAxis(lookYaw, WORLD_UP);
+    if (glm::length(moveInput) > 0.001f) {
+        float targetYaw = std::atan2(-moveInput.x, -moveInput.z);
+        characterYaw = targetYaw;
+    }
+    transform.rotation = glm::angleAxis(characterYaw, WORLD_UP);
     state->registry.emplace_or_replace<Component::DirtyTransformTag>(character->GetEntity());
 
-    // Drive game camera from character
-    const glm::quat fullRotation = glm::angleAxis(lookYaw, WORLD_UP) * glm::angleAxis(lookPitch, WORLD_RIGHT);
-    const glm::vec3 forwardDir = fullRotation * WORLD_FORWARD;
-    // Eye at top of capsule (origin is at feet)
-    const glm::vec3 eyePos = transform.translation + glm::vec3(0.0f, 1.5f, 0.0f);
+    // Orbit camera: behind and slightly to the right
+    const glm::quat orbitRotation = glm::angleAxis(lookYaw, WORLD_UP) * glm::angleAxis(lookPitch, WORLD_RIGHT);
+    const glm::vec3 orbitForward = orbitRotation * WORLD_FORWARD;
+    const glm::vec3 orbitRight = orbitRotation * WORLD_RIGHT;
+
+    const glm::vec3 focusPoint = transform.translation + glm::vec3(0.0f, 1.2f, 0.0f);
+    const glm::vec3 cameraPos = focusPoint - orbitForward * orbitDistance + orbitRight * orbitSideOffset;
+    const glm::vec3 cameraForward = glm::normalize(focusPoint - cameraPos);
 
     auto cameraView = state->registry.view<Component::GameCameraTag, Component::CameraComponent>();
     for (auto camEntity : cameraView) {
         auto& camera = cameraView.get<Component::CameraComponent>(camEntity);
 
-        camera.currentViewData.cameraPos = eyePos;
-        camera.currentViewData.cameraLookAt = eyePos + forwardDir;
-        camera.currentViewData.cameraForward = forwardDir;
+        camera.currentViewData.cameraPos = cameraPos;
+        camera.currentViewData.cameraLookAt = focusPoint;
+        camera.currentViewData.cameraForward = cameraForward;
         camera.currentViewData.cameraUp = WORLD_UP;
         camera.currentViewData.aspectRatio = static_cast<float>(ctx->windowContext.viewportWidth) / static_cast<float>(ctx->windowContext.viewportHeight);
         camera.currentViewData.fovRadians = glm::radians(70.0f);
@@ -89,14 +94,14 @@ void PlayerController::Update(Core::EngineContext* ctx, Engine::GameState* state
         camera.currentViewData.proj = glm::perspective(camera.currentViewData.fovRadians, camera.currentViewData.aspectRatio, camera.currentViewData.farPlane, camera.currentViewData.nearPlane);
     }
 
+
+
     ctx->setCursorHiddenFn(true);
 }
 
 void PlayerController::Shutdown(Physics::PhysicsSystem* physicsSystem)
 {
-    if (character) {
-        character->Shutdown(physicsSystem);
-        character.reset();
-    }
+    character->Shutdown(physicsSystem);
+    character.reset();
 }
 } // Game

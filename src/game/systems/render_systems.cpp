@@ -205,7 +205,7 @@ void RenderPrepareTransforms(Core::EngineContext* ctx, Engine::GameState* state,
         ZoneScopedN("Serial");
         for (auto [entity, transform, renderTransform, dirtyRender] : dirtyView.each()) {
             renderTransform.previousMatrix = renderTransform.modelMatrix;
-            renderTransform.modelMatrix = GetMatrix(transform);
+            renderTransform.modelMatrix = glm::translate(GetMatrix(transform), renderTransform.renderOffset);
             dirtyRender.counter--;
         }
     }
@@ -220,7 +220,7 @@ void RenderPrepareTransforms(Core::EngineContext* ctx, Engine::GameState* state,
                 auto& renderTransform = dirtyView.get<Component::RenderTransformComponent>(entity);
 
                 renderTransform.previousMatrix = renderTransform.modelMatrix;
-                renderTransform.modelMatrix = GetMatrix(transform);
+                renderTransform.modelMatrix = glm::translate(GetMatrix(transform), renderTransform.renderOffset);
 
                 auto& dirty = dirtyView.get<Component::DirtyRenderTransformComponent>(entity);
                 dirty.counter--;
@@ -245,7 +245,7 @@ void RenderPrepareTransforms(Core::EngineContext* ctx, Engine::GameState* state,
         float alpha = state->physicsInterpolationAlpha;
         glm::vec3 interpPos = glm::mix(physics.previousPosition, transform.translation, alpha);
         glm::quat interpRot = glm::slerp(physics.previousRotation, transform.rotation, alpha);
-        renderTransform.modelMatrix = glm::translate(glm::mat4(1.0f), interpPos) * glm::mat4_cast(interpRot) * glm::scale(glm::mat4(1.0f), transform.scale);
+        renderTransform.modelMatrix = glm::translate(glm::mat4(1.0f), interpPos) * glm::mat4_cast(interpRot) * glm::scale(glm::mat4(1.0f), transform.scale) * glm::translate(glm::mat4(1.0f), renderTransform.renderOffset);
     }
 }
 
@@ -356,7 +356,6 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
             if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
                 stableId = stable->id.id;
             }
-
             frameBuffer->mainViewFamily.mainPassInstances.push_back({
                 .primitiveIndex = renderable.primitive.primitiveIndex,
                 .materialID = renderable.primitive.materialID,

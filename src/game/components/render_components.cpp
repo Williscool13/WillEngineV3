@@ -154,12 +154,7 @@ ComponentEditorResult DrawComponentEditor<Component::StaticMeshComponent>(Compon
         if (component.meshIndex == -1) {
             if (model->modelData.meshes.size() == 1) {
                 component.meshIndex = 0;
-                registry.emplace_or_replace<Component::StaticMeshLoadingTag>(entity);
-                auto* transform = registry.try_get<Component::TransformComponent>(entity);
-                glm::mat4 m = transform ? Component::GetMatrix(*transform) : glm::mat4(1.0f);
-                registry.emplace_or_replace<Component::RenderTransformComponent>(entity, m, m);
-                registry.emplace_or_replace<Component::DirtyRenderTransformComponent>(entity);
-                state->bPendingModelResolve |= true;
+                Component::RecreateStaticMesh(component, registry, entity);
             }
             else {
                 if (ImGui::BeginCombo("Select Mesh", "")) {
@@ -170,12 +165,7 @@ ComponentEditorResult DrawComponentEditor<Component::StaticMeshComponent>(Compon
                         }
                         if (ImGui::Selectable(_name.c_str(), false)) {
                             component.meshIndex = i;
-                            registry.emplace_or_replace<Component::StaticMeshLoadingTag>(entity);
-                            auto* transform = registry.try_get<Component::TransformComponent>(entity);
-                            glm::mat4 m = transform ? Component::GetMatrix(*transform) : glm::mat4(1.0f);
-                            registry.emplace_or_replace<Component::RenderTransformComponent>(entity, m, m);
-                            registry.emplace_or_replace<Component::DirtyRenderTransformComponent>(entity);
-                            state->bPendingModelResolve |= true;
+                            Component::RecreateStaticMesh(component, registry, entity);
                         }
                     }
                     ImGui::EndCombo();
@@ -290,23 +280,73 @@ ComponentEditorResult DrawComponentEditor<Component::StaticMeshComponent>(Compon
     return {.requestRemoval = remove};
 }
 
+void Component::RecreateStaticMesh(StaticMeshComponent& component, entt::registry& registry, entt::entity entity)
+{
+    auto* ctx = registry.ctx().get<Core::EngineContext*>();
+    auto* state = registry.ctx().get<Engine::GameState*>();
+
+    // Teardown
+    for (size_t i = 0; i < component.primitiveCount; ++i) {
+        ctx->materialManager->ReleaseMaterial(component.primitives[i].materialID);
+    }
+    component.primitiveCount = 0;
+    if (component.modelHandle.IsValid()) {
+        ctx->assetManager->UnloadModel(component.modelHandle);
+        component.modelHandle = {};
+    }
+
+    // Rebuild
+    if (component.modelId.IsValid() && component.meshIndex != -1) {
+        component.modelHandle = ctx->assetManager->LoadModel(component.modelId);
+        registry.emplace_or_replace<StaticMeshLoadingTag>(entity);
+        state->bPendingModelResolve |= true;
+    }
+
+    auto* transform = registry.try_get<TransformComponent>(entity);
+    glm::mat4 m = transform ? GetMatrix(*transform) : glm::mat4(1.0f);
+    auto& rt = registry.emplace_or_replace<RenderTransformComponent>(entity, m, m);
+    rt.renderOffset = component.renderOffset;
+    registry.emplace_or_replace<DirtyRenderTransformComponent>(entity);
+}
+
+void Component::RecreateProceduralMesh(ProceduralMeshComponent& component, entt::registry& registry, entt::entity entity)
+{
+    auto* ctx = registry.ctx().get<Core::EngineContext*>();
+    auto* state = registry.ctx().get<Engine::GameState*>();
+
+    // Teardown
+    if (component.bPrimitiveReady) {
+        ctx->materialManager->ReleaseMaterial(component.primitive.materialID);
+        component.bPrimitiveReady = false;
+    }
+    if (component.modelHandle.IsValid()) {
+        ctx->assetManager->UnloadModel(component.modelHandle);
+        component.modelHandle = {};
+    }
+
+    // Rebuild
+    if (!std::holds_alternative<std::monostate>(component.params)) {
+        component.modelHandle = ctx->assetManager->LoadProceduralModel(component.params);
+        registry.emplace_or_replace<ProceduralMeshLoadingTag>(entity);
+        state->bPendingModelResolve |= true;
+    }
+
+    auto* transform = registry.try_get<TransformComponent>(entity);
+    glm::mat4 m = transform ? GetMatrix(*transform) : glm::mat4(1.0f);
+    auto& rt = registry.emplace_or_replace<RenderTransformComponent>(entity, m, m);
+    rt.renderOffset = component.renderOffset;
+    registry.emplace_or_replace<DirtyRenderTransformComponent>(entity);
+}
+
 template<>
 void OnComponentAdded<Component::StaticMeshComponent>(Component::StaticMeshComponent& component, entt::registry& registry, entt::entity entity)
 {
+
     if (component.meshIndex == -1) {
         return;
     }
 
-    auto* ctx = registry.ctx().get<Core::EngineContext*>();
-    auto* state = registry.ctx().get<Engine::GameState*>();
-    component.modelHandle = ctx->assetManager->LoadModel(component.modelId);
-    registry.emplace_or_replace<Component::StaticMeshLoadingTag>(entity);
-    state->bPendingModelResolve |= true;
-
-    auto* transform = registry.try_get<Component::TransformComponent>(entity);
-    glm::mat4 m = transform ? Component::GetMatrix(*transform) : glm::mat4(1.0f);
-    registry.emplace_or_replace<Component::RenderTransformComponent>(entity, m, m);
-    registry.emplace_or_replace<Component::DirtyRenderTransformComponent>(entity);
+    Component::RecreateStaticMesh(component, registry, entity);
 }
 
 template<>
@@ -635,9 +675,7 @@ ComponentEditorResult DrawComponentEditor<Component::ProceduralMeshComponent>(Co
             if (ImGui::BeginCombo("Shape", "")) {
                 auto selectShape = [&](auto&& params) {
                     component.params = std::move(params);
-                    component.modelHandle = ctx->assetManager->LoadProceduralModel(component.params);
-                    registry.emplace_or_replace<Component::ProceduralMeshLoadingTag>(entity);
-                    state->bPendingModelResolve |= true;
+                    Component::RecreateProceduralMesh(component, registry, entity);
                 };
                 if (ImGui::Selectable("Staircase")) selectShape(Engine::StaircaseParams{});
                 if (ImGui::Selectable("Box")) selectShape(Engine::BoxParams{});
@@ -671,16 +709,8 @@ ComponentEditorResult DrawComponentEditor<Component::ProceduralMeshComponent>(Co
             ImGui::SameLine();
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
             if (ImGui::SmallButton("X##deselect_shape")) {
-                if (component.modelHandle.IsValid()) {
-                    ctx->assetManager->UnloadModel(component.modelHandle);
-                    component.modelHandle = {};
-                }
-                if (component.bPrimitiveReady) {
-                    ctx->materialManager->ReleaseMaterial(component.primitive.materialID);
-                    component.bPrimitiveReady = false;
-                }
                 component.params = std::monostate{};
-                registry.remove<Component::ProceduralMeshLoadingTag>(entity);
+                Component::RecreateProceduralMesh(component, registry, entity);
             }
             ImGui::PopStyleColor();
 
@@ -897,17 +927,7 @@ ComponentEditorResult DrawComponentEditor<Component::ProceduralMeshComponent>(Co
             }, component.params);
 
             if (dirty) {
-                if (component.modelHandle.IsValid()) {
-                    ctx->assetManager->UnloadModel(component.modelHandle);
-                    component.modelHandle = {};
-                }
-                if (component.bPrimitiveReady) {
-                    ctx->materialManager->ReleaseMaterial(component.primitive.materialID);
-                    component.bPrimitiveReady = false;
-                }
-                component.modelHandle = ctx->assetManager->LoadProceduralModel(component.params);
-                registry.emplace_or_replace<Component::ProceduralMeshLoadingTag>(entity);
-                state->bPendingModelResolve |= true;
+                Component::RecreateProceduralMesh(component, registry, entity);
             }
         }
 
@@ -956,21 +976,7 @@ ComponentEditorResult DrawComponentEditor<Component::ProceduralMeshComponent>(Co
 template<>
 void OnComponentAdded<Component::ProceduralMeshComponent>(Component::ProceduralMeshComponent& component, entt::registry& registry, entt::entity entity)
 {
-    auto* transform = registry.try_get<Component::TransformComponent>(entity);
-    glm::mat4 m = transform ? Component::GetMatrix(*transform) : glm::mat4(1.0f);
-    registry.emplace_or_replace<Component::RenderTransformComponent>(entity, m, m);
-    registry.emplace_or_replace<Component::DirtyRenderTransformComponent>(entity);
-
-    if (std::holds_alternative<std::monostate>(component.params)) {
-        return;
-    }
-
-    auto* state = registry.ctx().get<Engine::GameState*>();
-    auto* ctx = registry.ctx().get<Core::EngineContext*>();
-
-    component.modelHandle = ctx->assetManager->LoadProceduralModel(component.params);
-    registry.emplace_or_replace<Component::ProceduralMeshLoadingTag>(entity);
-    state->bPendingModelResolve |= true;
+    Component::RecreateProceduralMesh(component, registry, entity);
 }
 
 template<>
@@ -1276,7 +1282,8 @@ void OnComponentAdded<Component::SplineMeshComponent>(Component::SplineMeshCompo
 
     auto* transform = registry.try_get<Component::TransformComponent>(entity);
     glm::mat4 m = transform ? Component::GetMatrix(*transform) : glm::mat4(1.0f);
-    registry.emplace_or_replace<Component::RenderTransformComponent>(entity, m, m);
+    auto& rt = registry.emplace_or_replace<Component::RenderTransformComponent>(entity, m, m);
+    rt.renderOffset = component.renderOffset;
     registry.emplace_or_replace<Component::DirtyRenderTransformComponent>(entity);
 }
 
