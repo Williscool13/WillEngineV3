@@ -18,6 +18,7 @@
 #include "game/components/core_components.h"
 #include "game/components/render_components.h"
 #include "game/components/scene_components.h"
+#include "game/gameplay/player/player_controller.h"
 #include "platform/paths.h"
 
 namespace Game
@@ -304,11 +305,20 @@ void PlayStart(Core::EngineContext* ctx, Engine::GameState* state)
             }
         }
     }
+
+    auto& playerController = state->registry.ctx().emplace<PlayerController>();
+    playerController.Initialize(state, ctx->physicsSystem, glm::vec3(0.0f, 3.0f, 0.0f));
+
     state->bIsPlaying = true;
 }
 
 void PlayStop(Core::EngineContext* ctx, Engine::GameState* state)
 {
+    if (auto* playerController = state->registry.ctx().find<PlayerController>()) {
+        playerController->Shutdown(ctx->physicsSystem);
+        state->registry.ctx().erase<PlayerController>();
+    }
+
     auto view = state->registry.view<Component::SceneComponent>();
     for (auto entity : view) {
         for (auto& entry : state->componentRegistry.registry) {

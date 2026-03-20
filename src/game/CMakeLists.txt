@@ -43,7 +43,13 @@ set(GAME_SOURCES
         components/component_types.h
         components/editor_components.cpp
         components/editor_components.h
+        components/character_components.h
         component-registry/component_editor.h
+
+        gameplay/player/character.cpp
+        gameplay/player/character.h
+        gameplay/player/player_controller.cpp
+        gameplay/player/player_controller.h
 )
 
 set(GAME_INCLUDE_DIRS

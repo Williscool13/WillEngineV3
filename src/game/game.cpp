@@ -26,6 +26,7 @@
 #include "systems/camera_system.h"
 #include "systems/editor_systems.h"
 #include "systems/physics_system.h"
+#include "gameplay/player/player_controller.h"
 
 
 extern "C"
@@ -80,7 +81,11 @@ GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::GameState* state)
     const auto frameStart = std::chrono::high_resolution_clock::now();
 
     if (state->bIsPlaying) {
-        Game::UpdateGameCamera(ctx, state);
+        if (auto* playerController = state->registry.ctx().find<Game::PlayerController>()) {
+            playerController->Update(ctx, state);
+        }
+
+        // Game::UpdateGameCamera(ctx, state);
 
         Game::DebugProcessPhysicsCollisions(ctx, state);
         Game::DebugApplyGroundForces(ctx, state);

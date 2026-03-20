@@ -13,6 +13,7 @@
 #include "physics_debug_filter.h"
 #include "physics_debug_renderer.h"
 #include "physics_job_system.h"
+#include "Jolt/RegisterTypes.h"
 #include "Jolt/Physics/PhysicsSystem.h"
 #include "layers/broad_phase_layer_interface.h"
 #include "layers/object_layer_pair_filter.h"
@@ -64,6 +65,7 @@ public:
 
     JPH::BodyInterface& GetBodyInterface() { return physicsSystem.GetBodyInterface(); }
     JPH::PhysicsSystem& GetPhysicsSystem() { return physicsSystem; }
+    JPH::TempAllocator& GetTempAllocator() { return *tempAllocator; }
 
 #if JPH_DEBUG_RENDERER
     DebugDrawFilter& GetDebugDrawFilter() const { return *debugDrawFilter; }
@@ -72,7 +74,11 @@ public:
 
     static void RegisterPhysics()
     {
+#ifndef GAME_STATIC
         JPH::RegisterDefaultAllocator();
+        JPH::Factory::sInstance = new JPH::Factory();
+        JPH::RegisterTypes();
+#endif
     }
 
 private:
