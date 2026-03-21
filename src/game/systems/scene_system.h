@@ -53,12 +53,8 @@ entt::entity CreateSceneEntity(Engine::GameState* state);
 
 /**
  * Copies all registered components from src to a new entity.
- * Phase 1: CopyComponent<T> strips transients and emplaces data.
- * Phase 2: OnComponentAdded re-initializes (mirrors LoadScene).
- * No SceneComponent handling so it's suitable for runtime spawning.
- * @param state
- * @param src
- * @return
+ * CopyComponent<T> strips transients and emplaces data.
+ * Signals (on_construct) fire during emplace, handling initialization.
  */
 inline entt::entity CopyEntity(Engine::GameState* state, entt::entity src)
 {
@@ -67,12 +63,6 @@ inline entt::entity CopyEntity(Engine::GameState* state, entt::entity src)
     for (auto& entry : state->componentRegistry.registry) {
         if (entry.has(state->registry, src)) {
             entry.copy(state->registry, src, state->registry, dst);
-        }
-    }
-
-    for (auto& entry : state->componentRegistry.registry) {
-        if (entry.has(state->registry, dst)) {
-            entry.onAddComponent(state->registry, dst);
         }
     }
 
@@ -106,7 +96,7 @@ bool CreateComponent(Engine::GameState* state, entt::entity entity)
     assert(it != state->componentRegistry.registryMapping.end() && "Component type not registered");
     ComponentEntry& entry = state->componentRegistry.registry[it->second];
     if (!entry.canAdd(state->registry, entity)) { return false; }
-    entry.onAddComponent(state->registry, entity);
+    entry.emplaceDefault(state->registry, entity);
     return true;
 }
 
@@ -116,7 +106,7 @@ void DestroyComponent(Engine::GameState* state, entt::entity entity)
     auto it = state->componentRegistry.registryMapping.find(TypeSID<T>());
     if (it == state->componentRegistry.registryMapping.end()) return;
     ComponentEntry& entry = state->componentRegistry.registry[it->second];
-    entry.onRemoveComponent(state->registry, entity);
+    entry.remove(state->registry, entity);
 }
 
 inline bool CreateComponent(Engine::GameState* state, entt::entity entity, StringID typeId)
@@ -125,7 +115,7 @@ inline bool CreateComponent(Engine::GameState* state, entt::entity entity, Strin
     assert(it != state->componentRegistry.registryMapping.end() && "Component type not registered");
     ComponentEntry& entry = state->componentRegistry.registry[it->second];
     if (!entry.canAdd(state->registry, entity)) { return false; }
-    entry.onAddComponent(state->registry, entity);
+    entry.emplaceDefault(state->registry, entity);
     return true;
 }
 
@@ -134,7 +124,7 @@ inline void DestroyComponent(Engine::GameState* state, entt::entity entity, Stri
     auto it = state->componentRegistry.registryMapping.find(typeId);
     assert(it != state->componentRegistry.registryMapping.end() && "Component type not registered");
     ComponentEntry& entry = state->componentRegistry.registry[it->second];
-    entry.onRemoveComponent(state->registry, entity);
+    entry.remove(state->registry, entity);
 }
 
 void PlayStart(Core::EngineContext* ctx, Engine::GameState* state);

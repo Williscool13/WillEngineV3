@@ -41,10 +41,10 @@ void DeserializeComponent<Component::TransformComponent>(Component::TransformCom
 
 namespace Game
 {
-template<>
-ComponentEditorResult DrawComponentEditor<Component::TransformComponent>(Component::TransformComponent& component, Core::ViewFamily& viewFamily, entt::registry& registry,
+ComponentEditorResult Component::TransformComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry,
                                                         entt::entity entity, const char* name)
 {
+    auto& component = registry.get<Component::TransformComponent>(entity);
     bool open = ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
     ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));

@@ -8,6 +8,11 @@
 #include <glm/glm.hpp>
 #include <glm/detail/type_quat.hpp>
 #include <glm/gtc/quaternion.hpp>
+#include <entt/entt.hpp>
+
+#include "game/components/component_types.h"
+
+namespace Core { struct ViewFamily; }
 
 namespace Game::Component
 {
@@ -16,6 +21,8 @@ struct TransformComponent
     glm::vec3 translation{0.0f, 0.0f, 0.0f};
     glm::quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
     glm::vec3 scale{1.0f, 1.0f, 1.0f};;
+
+    static ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
 };
 
 inline glm::mat4 GetMatrix(const TransformComponent& transform)

@@ -12,7 +12,7 @@
 namespace Game
 {
 // Base: raw copy of all fields.
-// Specialize to strip transient data before OnComponentAdded is called.
+// Specialize to strip transient data before on_construct fires.
 template<typename T>
 T CopyComponent(const T& src, entt::registry& dstReg) { return src; }
 

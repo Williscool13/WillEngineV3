@@ -11,6 +11,9 @@
 #include "procedural_mesh_component.h"
 #include "engine/asset_manager_types.h"
 #include "engine/core/material_id.h"
+#include "game/components/component_types.h"
+
+namespace Core { struct ViewFamily; }
 
 namespace Game::Component
 {
@@ -40,6 +43,7 @@ struct SplineMeshComponent
 
     static void OnConstruct(entt::registry& registry, entt::entity entity);
     static void OnDestroy(entt::registry& registry, entt::entity entity);
+    static ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
 };
 
 struct SplineMeshLoadingTag

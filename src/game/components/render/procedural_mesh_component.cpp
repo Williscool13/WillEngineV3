@@ -357,10 +357,10 @@ void DeserializeComponent<Component::ProceduralMeshComponent>(Component::Procedu
     }
 }
 
-template<>
-ComponentEditorResult DrawComponentEditor<Component::ProceduralMeshComponent>(Component::ProceduralMeshComponent& component, Core::ViewFamily& viewFamily, entt::registry& registry,
+ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry,
                                                                               entt::entity entity, const char* name)
 {
+    auto& component = registry.get<Component::ProceduralMeshComponent>(entity);
     bool open = ImGui::CollapsingHeader("Procedural Mesh", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
     ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));

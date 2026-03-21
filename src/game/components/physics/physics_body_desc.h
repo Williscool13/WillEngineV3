@@ -16,6 +16,9 @@
 #include "engine/core/model_id.h"
 #include "engine/asset_manager_types.h"
 #include "engine/resources/model/model_types.h"
+#include "game/components/component_types.h"
+
+namespace Core { struct ViewFamily; }
 
 namespace Game::Component
 {
@@ -88,6 +91,7 @@ struct PhysicsBodyDesc
     static void OnConstruct(entt::registry& registry, entt::entity entity);
     static void OnUpdate(entt::registry& registry, entt::entity entity);
     static void OnDestroy(entt::registry& registry, entt::entity entity);
+    static ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
 };
 }
 

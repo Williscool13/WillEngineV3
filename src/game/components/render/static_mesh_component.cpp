@@ -129,10 +129,10 @@ void DeserializeComponent<Component::StaticMeshComponent>(Component::StaticMeshC
     }
 }
 
-template<>
-ComponentEditorResult DrawComponentEditor<Component::StaticMeshComponent>(Component::StaticMeshComponent& component, Core::ViewFamily& viewFamily, entt::registry& registry,
+ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry,
                                                                           entt::entity entity, const char* name)
 {
+    auto& component = registry.get<Component::StaticMeshComponent>(entity);
     bool open = ImGui::CollapsingHeader("Static Mesh", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
     ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));

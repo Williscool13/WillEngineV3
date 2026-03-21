@@ -7,6 +7,11 @@
 
 #include <glm/glm.hpp>
 #include <glm/detail/type_quat.hpp>
+#include <entt/entt.hpp>
+
+#include "game/components/component_types.h"
+
+namespace Core { struct ViewFamily; }
 
 namespace Game::Component
 {
@@ -29,7 +34,9 @@ struct PendingPhysicsShapeCreationTag
 {};
 
 struct DrawPhysicsDebugTag
-{};
+{
+    static ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
+};
 }
 
 #endif //WILL_ENGINE_PHYSICS_COMPONENTS_H

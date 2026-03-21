@@ -145,10 +145,10 @@ void DeserializeComponent<Component::SplineMeshComponent>(Component::SplineMeshC
     }
 }
 
-template<>
-ComponentEditorResult DrawComponentEditor<Component::SplineMeshComponent>(Component::SplineMeshComponent& component, Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity,
+ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity,
                                                                           const char* name)
 {
+    auto& component = registry.get<Component::SplineMeshComponent>(entity);
     static int editPointIdx = -1;
     static entt::entity editEntity = entt::null;
     static bool wasUsingGizmo = false;

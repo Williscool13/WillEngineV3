@@ -478,10 +478,10 @@ void DeserializeComponent<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc
     }
 }
 
-template<>
-ComponentEditorResult DrawComponentEditor<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc& component, Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity,
+ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity,
                                                                       const char* name)
 {
+    auto& component = registry.get<Component::PhysicsBodyDesc>(entity);
     static int editShapeIdx = -1;
     static entt::entity editEntity = entt::null;
 

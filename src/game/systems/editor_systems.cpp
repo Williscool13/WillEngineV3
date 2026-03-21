@@ -199,11 +199,6 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
         state->bWantDeleteEntities = false;
         for (entt::entity entity : state->selectedEntities) {
             if (!state->registry.valid(entity)) continue;
-            for (auto& entry : state->componentRegistry.registry) {
-                if (entry.has(state->registry, entity)) {
-                    entry.onRemoveComponent(state->registry, entity);
-                }
-            }
             state->registry.destroy(entity);
         }
         state->selectedEntities.clear();
@@ -723,11 +718,6 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
             if (isPrefabEntity) { ImGui::PopStyleColor(); }
         }
         if (entityToDelete != entt::null) {
-            for (auto& entry : state->componentRegistry.registry) {
-                if (entry.has(state->registry, entityToDelete)) {
-                    entry.onRemoveComponent(state->registry, entityToDelete);
-                }
-            }
             auto it = std::ranges::find(state->selectedEntities, entityToDelete);
             if (it != state->selectedEntities.end()) {
                 state->selectedEntities.erase(it);
@@ -776,7 +766,7 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
                 }
             }
             if (entryToRemove) {
-                entryToRemove->onRemoveComponent(state->registry, entity);
+                entryToRemove->remove(state->registry, entity);
             }
 
             ImGui::Spacing();

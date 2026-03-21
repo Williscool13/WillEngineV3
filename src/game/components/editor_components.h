@@ -6,8 +6,13 @@
 #define WILL_ENGINE_EDITOR_COMPONENTS_H
 #include <array>
 
+#include <entt/entt.hpp>
+
 #include "core/stack_string.h"
 #include "core/string_id.h"
+#include "game/components/component_types.h"
+
+namespace Core { struct ViewFamily; }
 
 namespace Game::Component
 {
@@ -23,6 +28,7 @@ struct EntityFolderComponent
      */
     std::array<ShortString, 2> folderHierarchyNames;
 
+    static ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
 };
 }
 

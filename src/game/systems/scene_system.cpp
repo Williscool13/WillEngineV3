@@ -84,14 +84,6 @@ StringID LoadScene(ComponentRegistry& componentRegistry, entt::registry& registr
         sceneEntities.push_back(entity);
     }
 
-    for (auto entity : sceneEntities) {
-        for (auto& entry : componentRegistry.registry) {
-            if (entry.has(registry, entity)) {
-                entry.onAddComponent(registry, entity);
-            }
-        }
-    }
-
     return sceneId;
 }
 
@@ -135,11 +127,6 @@ void UnloadScene(Engine::GameState* state, StringID sceneId)
     }
 
     for (entt::entity entity : toDestroy) {
-        for (auto& entry : state->componentRegistry.registry) {
-            if (entry.has(state->registry, entity)) {
-                entry.onRemoveComponent(state->registry, entity);
-            }
-        }
         state->registry.destroy(entity);
     }
 
@@ -256,10 +243,6 @@ std::vector<entt::entity> SpawnModel(Engine::GameState* state, Engine::AssetMana
         }
     }
 
-    auto meshEntryIt = state->componentRegistry.registryMapping.find(TypeSID<Component::StaticMeshComponent>());
-    assert(meshEntryIt != state->componentRegistry.registryMapping.end());
-    ComponentEntry& meshEntry = state->componentRegistry.registry[meshEntryIt->second];
-
     std::vector<entt::entity> spawned;
 
     for (size_t i = 0; i < nodes.size(); ++i) {
@@ -277,12 +260,11 @@ std::vector<entt::entity> SpawnModel(Engine::GameState* state, Engine::AssetMana
         transform.rotation = worldR[i];
         transform.scale = worldS[i];
 
-        auto& meshComp = state->registry.emplace<Component::StaticMeshComponent>(entity);
+        Component::StaticMeshComponent meshComp{};
         meshComp.modelId = modelId;
         meshComp.meshIndex = static_cast<int32_t>(node.meshIndex);
         meshComp.modelFlags = {1.0f, 1.0f, 0.0f, 0.0f};
-
-        meshEntry.onAddComponent(state->registry, entity);
+        state->registry.emplace<Component::StaticMeshComponent>(entity, std::move(meshComp));
 
         spawned.push_back(entity);
     }
@@ -396,12 +378,6 @@ entt::entity SpawnPrefab(Engine::GameState* state, Engine::AssetManager* assetMa
     state->registry.emplace<Component::SceneComponent>(entity, state->currentSceneId);
     state->registry.emplace_or_replace<Component::PrefabInstanceComponent>(entity, prefabId);
 
-    for (auto& entry : state->componentRegistry.registry) {
-        if (entry.has(state->registry, entity)) {
-            entry.onAddComponent(state->registry, entity);
-        }
-    }
-
     LOG_INFO(Game, "Spawned prefab '{}' as entity {}", meta->prefabName, entt::to_integral(entity));
     return entity;
 }
@@ -442,11 +418,6 @@ void ResolvePrefabLoads(Engine::GameState* state, Engine::AssetManager* assetMan
             }
         }
 
-        for (auto& entry : state->componentRegistry.registry) {
-            if (entry.has(state->registry, entity)) {
-                entry.onAddComponent(state->registry, entity);
-            }
-        }
     }
 }
 
@@ -469,15 +440,6 @@ void PlayStop(Core::EngineContext* ctx, Engine::GameState* state)
     }
 
     PhysicsOnPlayStop(ctx, state);
-
-    auto view = state->registry.view<Component::SceneComponent>();
-    for (auto entity : view) {
-        for (auto& entry : state->componentRegistry.registry) {
-            if (entry.has(state->registry, entity)) {
-                entry.onPlayStop(state->registry, entity);
-            }
-        }
-    }
 
     DeserializeAll(state, state->pieSnapshot);
     state->pieSnapshot.clear();

@@ -35,10 +35,10 @@ Component::StableIdComponent CopyComponent(const Component::StableIdComponent& s
 {
     return Component::StableIdComponent{};
 }
-template<>
-ComponentEditorResult DrawComponentEditor<Component::StableIdComponent>(Component::StableIdComponent& component, Core::ViewFamily& viewFamily, entt::registry& registry,
+ComponentEditorResult Component::StableIdComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry,
                                                        entt::entity entity, const char* name)
 {
+    auto& component = registry.get<Component::StableIdComponent>(entity);
     char headerLabel[64];
     snprintf(headerLabel, sizeof(headerLabel), "Stable ID: %llu", component.id.id);
     ImGui::CollapsingHeader(headerLabel, ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_AllowOverlap);

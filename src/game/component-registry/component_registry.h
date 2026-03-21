@@ -21,10 +21,8 @@ using SerializeFn = void(*)(const entt::registry&, entt::entity, nlohmann::json&
 using DeserializeFn = void(*)(entt::registry&, entt::entity, const nlohmann::json&);
 using HasComponentFn = bool(*)(const entt::registry&, entt::entity);
 using CanAddComponentFn = bool(*)(const entt::registry&, entt::entity);
-using OnAddComponentFn = void(*)(entt::registry&, entt::entity);
-using OnRemoveComponentFn = void(*)(entt::registry&, entt::entity);
-using OnPlayStartFn = void(*)(entt::registry&, entt::entity);
-using OnPlayStopFn = void(*)(entt::registry&, entt::entity);
+using EmplaceDefaultFn = void(*)(entt::registry&, entt::entity);
+using RemoveComponentFn = void(*)(entt::registry&, entt::entity);
 using CopyComponentFn = void(*)(const entt::registry&, entt::entity, entt::registry&, entt::entity);
 using DrawEditorFn = ComponentEditorResult(*)(Core::ViewFamily&, entt::registry&, entt::entity, const char*);
 
@@ -35,10 +33,8 @@ struct ComponentEntry
     SerializeFn serialize;
     DeserializeFn deserialize;
     CanAddComponentFn canAdd;
-    OnAddComponentFn onAddComponent;
-    OnRemoveComponentFn onRemoveComponent;
-    OnPlayStartFn onPlayStart;
-    OnPlayStopFn onPlayStop;
+    EmplaceDefaultFn emplaceDefault;
+    RemoveComponentFn remove;
     CopyComponentFn copy;
     DrawEditorFn drawEditor;
     HasComponentFn has;
@@ -76,22 +72,20 @@ void RegisterComponent(ComponentRegistry& componentRegistry, const char* name)
             return CanAddComponent<T>(reg, e);
         },
         [](entt::registry& reg, entt::entity e) {
-            OnComponentAdded<T>(reg.get_or_emplace<T>(e), reg, e);
+            T a = reg.get_or_emplace<T>(e);
         },
         [](entt::registry& reg, entt::entity e) {
-            OnComponentRemoved<T>(reg.get<T>(e), reg, e);
-        },
-        [](entt::registry& reg, entt::entity e) {
-            OnPlayStart<T>(reg.get<T>(e), reg, e);
-        },
-        [](entt::registry& reg, entt::entity e) {
-            OnPlayStop<T>(reg.get<T>(e), reg, e);
+            reg.remove<T>(e);
         },
         [](const entt::registry& srcReg, entt::entity srcEntity, entt::registry& dstReg, entt::entity dstEntity) {
             dstReg.emplace_or_replace<T>(dstEntity, CopyComponent<T>(srcReg.get<T>(srcEntity), dstReg));
         },
         [](Core::ViewFamily& viewFamily, entt::registry& reg, entt::entity e, const char* n) {
-            return DrawComponentEditor<T>(reg.get<T>(e), viewFamily, reg, e, n);
+            if constexpr (HasDrawEditor<T>) {
+                return T::DrawEditor(viewFamily, reg, e, n);
+            } else {
+                return DefaultDrawComponentEditor(n);
+            }
         },
         [](const entt::registry& reg, entt::entity e) -> bool {
             return reg.all_of<T>(e);
@@ -122,28 +116,20 @@ void RegisterComponent(ComponentRegistry& componentRegistry, const char* name)
             return CanAddComponent<T>(reg, e);
         },
         [](entt::registry& reg, entt::entity e) {
-            (void)reg.get_or_emplace<T>(e);
-            T dummy{};
-            OnComponentAdded<T>(dummy, reg, e);
+            reg.get_or_emplace<T>(e);
         },
         [](entt::registry& reg, entt::entity e) {
-            T dummy{};
-            OnComponentRemoved<T>(dummy, reg, e);
-        },
-        [](entt::registry& reg, entt::entity e) {
-            T dummy{};
-            OnPlayStart<T>(dummy, reg, e);
-        },
-        [](entt::registry& reg, entt::entity e) {
-            T dummy{};
-            OnPlayStop<T>(dummy, reg, e);
+            reg.remove<T>(e);
         },
         [](const entt::registry&, entt::entity, entt::registry& dstReg, entt::entity dstEntity) {
             (void)dstReg.get_or_emplace<T>(dstEntity);
         },
         [](Core::ViewFamily& viewFamily, entt::registry& reg, entt::entity e, const char* n) {
-            T dummy{};
-            return DrawComponentEditor<T>(dummy, viewFamily, reg, e, n);
+            if constexpr (HasDrawEditor<T>) {
+                return T::DrawEditor(viewFamily, reg, e, n);
+            } else {
+                return DefaultDrawComponentEditor(n);
+            }
         },
         [](const entt::registry& reg, entt::entity e) -> bool {
             return reg.all_of<T>(e);

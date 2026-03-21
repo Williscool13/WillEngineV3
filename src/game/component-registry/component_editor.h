@@ -10,22 +10,16 @@
 #include "imgui.h"
 
 #include "core/include/render_interface.h"
-#include "game/components/common_components.h"
 #include "game/components/component_types.h"
-#include "game/components/core_components.h"
-#include "game/components/editor_components.h"
-#include "game/components/common/stable_id_component.h"
-#include "game/components/physics/physics_components.h"
-#include "game/components/physics/physics_body_desc.h"
-#include "game/components/physics/physics_body_component.h"
-#include "game/components/render/static_mesh_component.h"
-#include "game/components/render/procedural_mesh_component.h"
-#include "game/components/render/spline_mesh_component.h"
 
 namespace Game
 {
 template<typename T>
-ComponentEditorResult DrawComponentEditor(T& component, Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)
+concept HasDrawEditor = requires(Core::ViewFamily& vf, entt::registry& r, entt::entity e, const char* n) {
+    { T::DrawEditor(vf, r, e, n) } -> std::same_as<ComponentEditorResult>;
+};
+
+inline ComponentEditorResult DefaultDrawComponentEditor(const char* name)
 {
     ImGui::CollapsingHeader(name, ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_AllowOverlap);
     ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
@@ -34,41 +28,6 @@ ComponentEditorResult DrawComponentEditor(T& component, Core::ViewFamily& viewFa
     ImGui::PopStyleColor();
     return {.requestRemoval = remove};
 }
-
-template<>
-ComponentEditorResult DrawComponentEditor<Component::TransformComponent>(Component::TransformComponent& component, Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity,
-                                                                         const char* name);
-
-template<>
-ComponentEditorResult DrawComponentEditor<Component::StaticMeshComponent>(Component::StaticMeshComponent& component, Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity,
-                                                                          const char* name);
-
-template<>
-ComponentEditorResult DrawComponentEditor<Component::ProceduralMeshComponent>(Component::ProceduralMeshComponent& component, Core::ViewFamily& viewFamily, entt::registry& registry,
-                                                                              entt::entity entity, const char* name);
-
-template<>
-ComponentEditorResult DrawComponentEditor<Component::StableIdComponent>(Component::StableIdComponent& component, Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity,
-                                                                        const char* name);
-
-template<>
-ComponentEditorResult DrawComponentEditor<Component::NameComponent>(Component::NameComponent& component, Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
-
-template<>
-ComponentEditorResult DrawComponentEditor<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc& component, Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity,
-                                                                      const char* name);
-
-template<>
-ComponentEditorResult DrawComponentEditor<Component::DrawPhysicsDebugTag>(Component::DrawPhysicsDebugTag& component, Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity,
-                                                                          const char* name);
-
-template<>
-ComponentEditorResult DrawComponentEditor<Component::SplineMeshComponent>(Component::SplineMeshComponent& component, Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity,
-                                                                          const char* name);
-
-template<>
-ComponentEditorResult DrawComponentEditor<Component::EntityFolderComponent>(Component::EntityFolderComponent& component, Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity,
-                                                                            const char* name);
 }
 
 #endif //WILL_ENGINE_COMPONENT_EDITOR_H

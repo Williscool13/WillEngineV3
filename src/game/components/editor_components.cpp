@@ -33,8 +33,7 @@ void DeserializeComponent<Component::EntityFolderComponent>(Component::EntityFol
         }
     }
 }
-template<>
-ComponentEditorResult DrawComponentEditor<Component::EntityFolderComponent>(Component::EntityFolderComponent& component, Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity,
+ComponentEditorResult Component::EntityFolderComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity,
     const char* name)
 {
     // todo: select what folder hierarchy. select dropdown from existing folders and also add the ability to create a new folder name
