@@ -35,6 +35,7 @@ void ResolveStaticMeshLoads(Core::EngineContext* ctx, Engine::GameState* state)
         auto model = ctx->assetManager->GetModel(meshComponent.modelHandle);
         if (!model) {
             LOG_ERROR(Game, "Model ({}) is not in the asset manager, it should have been requested to load during scene load.", meshComponent.modelHandle.index);
+            resolved.push_back(entity);
             continue;
         }
         if (model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {

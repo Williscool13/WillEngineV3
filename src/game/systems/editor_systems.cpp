@@ -608,6 +608,65 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
         }
         ImGui::EndDisabled();
 
+        ImGui::SeparatorText("Prefabs");
+
+        const bool hasOneSelected = state->selectedEntities.size() == 1;
+        static char prefabName[128] = "New Prefab";
+
+        Component::PrefabInstanceComponent* prefabInst = hasOneSelected ? state->registry.try_get<Component::PrefabInstanceComponent>(state->selectedEntities[0]) : nullptr;
+        const bool isExistingPrefab = prefabInst != nullptr;
+
+        if (isExistingPrefab) {
+            const auto* meta = ctx->assetManager->GetPrefabMetadata(prefabInst->prefabId);
+            if (meta) {
+                strncpy_s(prefabName, meta->prefabName.c_str(), sizeof(prefabName) - 1);
+            }
+        }
+
+        ImGui::SetNextItemWidth(-1);
+        ImGui::BeginDisabled(!hasOneSelected);
+        ImGui::BeginDisabled(isExistingPrefab);
+        ImGui::InputText("##prefab_name", prefabName, sizeof(prefabName));
+        ImGui::EndDisabled();
+        if (ImGui::Button(isExistingPrefab ? "Save Prefab" : "Save as Prefab")) {
+            SaveEntityAsPrefab(state, ctx->assetManager, ctx, state->selectedEntities[0], prefabName);
+        }
+        ImGui::EndDisabled();
+
+        const auto& prefabCache = ctx->assetManager->GetPrefabCache();
+        static int selectedPrefab = 0;
+        std::vector<std::pair<std::string, StringID>> prefabList;
+        prefabList.reserve(prefabCache.size());
+        for (const auto& [id, meta] : prefabCache) {
+            prefabList.emplace_back(meta.prefabName, id);
+        }
+
+        if (!prefabList.empty()) {
+            std::ranges::sort(prefabList, {}, &std::pair<std::string, StringID>::first);
+            selectedPrefab = std::clamp(selectedPrefab, 0, static_cast<int>(prefabList.size()) - 1);
+        }
+
+        ImGui::SetNextItemWidth(-1);
+        ImGui::BeginDisabled(prefabList.empty());
+        if (ImGui::BeginCombo("##prefab_list", prefabList.empty() ? "No prefabs" : prefabList[selectedPrefab].first.c_str())) {
+            for (int i = 0; i < static_cast<int>(prefabList.size()); ++i) {
+                bool sel = (i == selectedPrefab);
+                if (ImGui::Selectable(prefabList[i].first.c_str(), sel)) {
+                    selectedPrefab = i;
+                }
+            }
+            ImGui::EndCombo();
+        }
+
+        if (ImGui::Button("Spawn Prefab")) {
+            entt::entity spawned = SpawnPrefab(state, ctx->assetManager, prefabList[selectedPrefab].second);
+            if (spawned != entt::null) {
+                state->selectedEntities = {spawned};
+                MarkSceneModified(state, state->currentSceneId);
+            }
+        }
+        ImGui::EndDisabled();
+
         ImGui::NewLine();
 
         ImGui::SeparatorText("Entities");
@@ -638,8 +697,10 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
             char uniqueLabel[256];
             snprintf(uniqueLabel, sizeof(uniqueLabel), "%s##%llu", label, stableId);
 
+            const bool isPrefabEntity = state->registry.all_of<Component::PrefabInstanceComponent>(entity);
             bool selected = std::find(state->selectedEntities.begin(), state->selectedEntities.end(), entity) != state->selectedEntities.end();
 
+            if (isPrefabEntity) { ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.7f, 1.0f, 1.0f)); }
             if (ImGui::SmallButton(fmt::format("X##{}", stableId).c_str())) {
                 entityToDelete = entity;
             }
@@ -662,6 +723,7 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
                     state->selectedEntities = {entity};
                 }
             }
+            if (isPrefabEntity) { ImGui::PopStyleColor(); }
         }
         if (entityToDelete != entt::null) {
             Component::StableIdComponent stableId = state->registry.get<Component::StableIdComponent>(entityToDelete);

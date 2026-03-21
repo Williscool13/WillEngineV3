@@ -26,8 +26,8 @@ void DeserializeComponent(T& comp, const nlohmann::json& json) {}
 template<> void SerializeComponent<Component::TransformComponent>(const Component::TransformComponent& comp, nlohmann::json& json);
 template<> void DeserializeComponent<Component::TransformComponent>(Component::TransformComponent& comp, const nlohmann::json& json);
 
-template<> void SerializeComponent<Component::StableIdComponent>(const Component::StableIdComponent& comp, nlohmann::json& json);
-template<> void DeserializeComponent<Component::StableIdComponent>(Component::StableIdComponent& comp, const nlohmann::json& json);
+template<> void SerializeComponent<Component::PrefabInstanceComponent>(const Component::PrefabInstanceComponent& comp, nlohmann::json& json);
+template<> void DeserializeComponent<Component::PrefabInstanceComponent>(Component::PrefabInstanceComponent& comp, const nlohmann::json& json);
 
 template<> void SerializeComponent<Component::NameComponent>(const Component::NameComponent& comp, nlohmann::json& json);
 template<> void DeserializeComponent<Component::NameComponent>(Component::NameComponent& comp, const nlohmann::json& json);

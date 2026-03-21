@@ -190,6 +190,18 @@ public: // Scenes
 
     [[nodiscard]] const CachedSceneMetadata* GetSceneMetadata(StringID sceneId) const;
 
+public: // Prefabs
+    struct CachedPrefabMetadata
+    {
+        std::filesystem::path source;
+        std::string prefabName;
+        uint32_t componentCount{};
+    };
+
+    const std::unordered_map<StringID, CachedPrefabMetadata>& GetPrefabCache() { return prefabCache; }
+
+    [[nodiscard]] const CachedPrefabMetadata* GetPrefabMetadata(StringID prefabId) const;
+
 private: // Asset Registry
     struct CachedCubemapMetadata
     {
@@ -205,6 +217,7 @@ private: // Asset Registry
     std::unordered_map<StringID, CachedCubemapMetadata> cubemapCache;
 
     std::unordered_map<StringID, CachedSceneMetadata> sceneCache;
+    std::unordered_map<StringID, CachedPrefabMetadata> prefabCache;
 
     /**
      * For (almost 100% chance) unique procedural shapes

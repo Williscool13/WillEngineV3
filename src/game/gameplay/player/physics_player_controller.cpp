@@ -14,10 +14,12 @@
 
 namespace Game
 {
-void PhysicsPlayerController::Initialize(Engine::GameState* gameState, Physics::PhysicsSystem* physicsSystem, glm::vec3 spawnPosition)
+void PhysicsPlayerController::Initialize(Engine::GameState* gameState, Core::EngineContext* ctx, glm::vec3 spawnPosition)
 {
     character = std::make_unique<PhysicsCharacter>();
-    character->Initialize(gameState, physicsSystem, spawnPosition);
+    character->Initialize(gameState, ctx, spawnPosition);
+
+    cameraParams.sideOffset = 0;
 }
 
 void PhysicsPlayerController::Update(Core::EngineContext* ctx, Engine::GameState* state)

@@ -19,20 +19,19 @@ namespace Game
 template<>
 Component::StableIdComponent CopyComponent(const Component::StableIdComponent& src, entt::registry& dstReg)
 {
-    auto* state = dstReg.ctx().get<Engine::GameState*>();
-    return Component::StableIdComponent{Component::StableIdComponent::Generate(state->rng)};
+    return Component::StableIdComponent{};
 }
 
 template<>
-void SerializeComponent<Component::StableIdComponent>(const Component::StableIdComponent& comp, nlohmann::json& json)
+void SerializeComponent<Component::PrefabInstanceComponent>(const Component::PrefabInstanceComponent& comp, nlohmann::json& json)
 {
-    json["id"] = comp.id.id;
+    json["prefabId"] = comp.prefabId.id;
 }
 
 template<>
-void DeserializeComponent<Component::StableIdComponent>(Component::StableIdComponent& comp, const nlohmann::json& json)
+void DeserializeComponent<Component::PrefabInstanceComponent>(Component::PrefabInstanceComponent& comp, const nlohmann::json& json)
 {
-    comp.id = StringID(json["id"].get<uint64_t>());
+    comp.prefabId = StringID(json["prefabId"].get<uint64_t>());
 }
 
 template<>
@@ -68,7 +67,7 @@ template<>
 void OnComponentAdded<Component::StableIdComponent>(Component::StableIdComponent& component, entt::registry& registry, entt::entity entity)
 {
     auto* state = registry.ctx().get<Engine::GameState*>();
-    assert(!state->stableIdToEntityMap.contains(component.id) && "Duplicate stable ID detected");
+    component.id = Component::StableIdComponent::Generate(state->rng);
     state->stableIdToEntityMap[component.id] = entity;
 }
 

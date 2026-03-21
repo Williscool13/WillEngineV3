@@ -8,9 +8,17 @@
 #include <entt/entt.hpp>
 #include <glm/glm.hpp>
 
+#include "core/string_id.h"
+
+namespace Core
+{
+struct EngineContext;
+}
+
 namespace Engine
 {
 struct GameState;
+class AssetManager;
 }
 
 namespace Physics
@@ -20,10 +28,12 @@ class PhysicsSystem;
 
 namespace Game
 {
+inline constexpr StringID PLAYER_CHARACTER_PREFAB_ID{4933586796549546436};
+
 class PhysicsCharacter
 {
 public:
-    void Initialize(Engine::GameState* gameState, Physics::PhysicsSystem* physicsSystem, glm::vec3 spawnPosition);
+    void Initialize(Engine::GameState* gameState, Core::EngineContext* ctx, glm::vec3 spawnPosition);
     void Update(float deltaTime, const glm::vec3& moveInput, bool jumpRequested, Physics::PhysicsSystem* physicsSystem);
     void Shutdown(Physics::PhysicsSystem* physicsSystem);
 
@@ -42,8 +52,8 @@ private:
 
     float sphereRadius{0.5f};
 
-    float moveForce{50.0f};
-    float maxSpeed{10.0f};
+    float torqueStrength{10.0f};
+    float maxAngularSpeed{20.0f};
     float jumpImpulse{5.0f};
 
     bool grounded{false};

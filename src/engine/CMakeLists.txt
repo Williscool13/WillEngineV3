@@ -40,6 +40,8 @@ add_library(engine STATIC
         compression/compression.h
         resources/scene/scene.cpp
         resources/scene/scene.h
+        resources/prefab/prefab_format.cpp
+        resources/prefab/prefab_format.h
 )
 
 target_include_directories(engine PRIVATE

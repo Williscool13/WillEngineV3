@@ -17,6 +17,7 @@ void RegisterComponents(ComponentRegistry& componentRegistry)
 
     RegisterComponent<Component::NameComponent>(componentRegistry, "NameComponent");
     RegisterComponent<Component::StableIdComponent>(componentRegistry, "StableIdComponent");
+    RegisterComponent<Component::PrefabInstanceComponent>(componentRegistry, "PrefabInstanceComponent");
     RegisterComponent<Component::EntityFolderComponent>(componentRegistry, "EntityFolderComponent");
 
     RegisterComponent<Component::TransformComponent>(componentRegistry, "TransformComponent");

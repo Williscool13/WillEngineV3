@@ -25,7 +25,7 @@ namespace Game
 class PhysicsPlayerController
 {
 public:
-    void Initialize(Engine::GameState* gameState, Physics::PhysicsSystem* physicsSystem, glm::vec3 spawnPosition);
+    void Initialize(Engine::GameState* gameState, Core::EngineContext* ctx, glm::vec3 spawnPosition);
     void Update(Core::EngineContext* ctx, Engine::GameState* state);
     void Shutdown(Physics::PhysicsSystem* physicsSystem);
 

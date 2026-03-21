@@ -28,6 +28,11 @@ struct NameComponent
 
 struct DoNotSerializeTag
 {};
+
+struct PrefabInstanceComponent
+{
+    StringID prefabId;
+};
 }
 
 #endif //WILL_ENGINE_COMMON_COMPONENTS_H

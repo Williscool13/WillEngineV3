@@ -41,6 +41,12 @@ void SaveSceneToFile(StringID sceneID, std::string_view sceneName, Engine::GameS
 
 bool LoadSceneFromFile(Engine::GameState* state, Engine::AssetManager* assetManager, StringID sceneId);
 
+void SaveEntityAsPrefab(Engine::GameState* state, Engine::AssetManager* assetManager, Core::EngineContext* ctx, entt::entity entity, std::string_view prefabName);
+
+entt::entity SpawnPrefab(Engine::GameState* state, Engine::AssetManager* assetManager, StringID prefabId);
+
+void ResolvePrefabLoads(Engine::GameState* state, Engine::AssetManager* assetManager);
+
 std::vector<entt::entity> SpawnModel(Engine::GameState* state, Engine::AssetManager* assetManager, Engine::ModelID modelId, const glm::vec3& offset = {});
 
 entt::entity CreateSceneEntity(Engine::GameState* state);

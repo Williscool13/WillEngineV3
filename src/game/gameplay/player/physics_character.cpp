@@ -13,10 +13,11 @@
 #include <Jolt/Physics/Collision/BroadPhase/BroadPhaseQuery.h>
 #include <Jolt/Physics/Collision/NarrowPhaseQuery.h>
 
+#include "core/include/engine_context.h"
+#include "engine/asset_manager.h"
 #include "game/components/common_components.h"
 #include "game/components/core_components.h"
 #include "game/components/physics_components.h"
-#include "game/components/render_components.h"
 #include "game/systems/scene_system.h"
 #include "game/systems/physics_system.h"
 #include "physics/physics_system.h"
@@ -24,19 +25,19 @@
 
 namespace Game
 {
-void PhysicsCharacter::Initialize(Engine::GameState* gameState, Physics::PhysicsSystem* inPhysicsSystem, glm::vec3 spawnPosition)
+void PhysicsCharacter::Initialize(Engine::GameState* gameState, Core::EngineContext* ctx, glm::vec3 spawnPosition)
 {
     engineGameState = gameState;
-    physicsSystem = inPhysicsSystem;
+    physicsSystem = ctx->physicsSystem;
 
-    entity = CreateSceneEntity(engineGameState);
-    bool transformCreated = CreateComponent<Component::TransformComponent>(engineGameState, entity);
-    assert(transformCreated && "Failed to make transform for PhysicsCharacter::Initialize.");
+    entity = SpawnPrefab(engineGameState, ctx->assetManager, PLAYER_CHARACTER_PREFAB_ID);
+    assert(entity != entt::null && "Failed to spawn player character prefab.");
+
+    engineGameState->registry.emplace<Component::DoNotSerializeTag>(entity);
 
     auto& transform = engineGameState->registry.get<Component::TransformComponent>(entity);
     transform.translation = spawnPosition;
     engineGameState->registry.emplace_or_replace<Component::DirtyTransformTag>(entity);
-    engineGameState->registry.emplace<Component::DoNotSerializeTag>(entity);
 
     // Sphere rigid body
     JPH::SphereShapeSettings shapeSettings(sphereRadius);
@@ -45,7 +46,7 @@ void PhysicsCharacter::Initialize(Engine::GameState* gameState, Physics::Physics
     Component::PhysicsBodyDesc bodyDesc{};
     bodyDesc.motionType = Component::PhysicsMotionType::Dynamic;
     bodyDesc.mass = 5.0f;
-    bodyDesc.friction = 0.6f;
+    bodyDesc.friction = 2.0f;
     bodyDesc.motionQuality = JPH::EMotionQuality::LinearCast;
     bodyDesc.shapeRef = shape;
 
@@ -57,17 +58,6 @@ void PhysicsCharacter::Initialize(Engine::GameState* gameState, Physics::Physics
 
     engineGameState->registry.emplace<Component::PhysicsBodyComponent>(entity, bodyId);
     engineGameState->registry.emplace<Component::DynamicPhysicsBodyComponent>(entity, spawnPosition, glm::quat(1, 0, 0, 0));
-
-    // Procedural sphere mesh
-    bool createdProceduralMesh = CreateComponent<Component::ProceduralMeshComponent>(engineGameState, entity);
-    assert(createdProceduralMesh && "Failed to create procedural mesh for PhysicsCharacter.");
-
-    auto& mesh = engineGameState->registry.get<Component::ProceduralMeshComponent>(entity);
-    mesh.params = Engine::SubdividedSphereParams{
-        .radius = sphereRadius,
-        .subdivisions = 3,
-    };
-    Component::RecreateProceduralMesh(mesh, engineGameState->registry, entity);
 }
 
 void PhysicsCharacter::Update(float deltaTime, const glm::vec3& moveInput, bool jumpRequested, Physics::PhysicsSystem* inPhysicsSystem)
@@ -80,29 +70,19 @@ void PhysicsCharacter::Update(float deltaTime, const glm::vec3& moveInput, bool 
 
     grounded = CheckGrounded(inPhysicsSystem);
 
-    JPH::Vec3 currentVelocity = bodyInterface.GetLinearVelocity(bodyId);
-    float horizontalSpeedSq = currentVelocity.GetX() * currentVelocity.GetX() + currentVelocity.GetZ() * currentVelocity.GetZ();
+    if (glm::length(moveInput) > 0.001f && grounded) {
+        // cross(up, moveDir) gives the torque axis that rolls the ball in moveDir
+        JPH::Vec3 torque(moveInput.z * torqueStrength, 0.0f, -moveInput.x * torqueStrength);
 
-    if (glm::length(moveInput) > 0.001f) {
-        JPH::Vec3 force(moveInput.x * moveForce, 0.0f, moveInput.z * moveForce);
-
-        // Taper force near max speed
-        if (horizontalSpeedSq > maxSpeed * maxSpeed * 0.64f) {
-            float ratio = 1.0f - (horizontalSpeedSq / (maxSpeed * maxSpeed));
+        JPH::Vec3 angVel = bodyInterface.GetAngularVelocity(bodyId);
+        float angSpeedSq = angVel.LengthSq();
+        if (angSpeedSq > maxAngularSpeed * maxAngularSpeed * 0.64f) {
+            float ratio = 1.0f - (angSpeedSq / (maxAngularSpeed * maxAngularSpeed));
             if (ratio < 0.1f) ratio = 0.1f;
-            force *= ratio;
+            torque *= ratio;
         }
 
-        if (!grounded) {
-            force *= 0.3f;
-        }
-
-        bodyInterface.AddForce(bodyId, force);
-    }
-    else if (grounded) {
-        // Ground drag when no input
-        JPH::Vec3 drag(-currentVelocity.GetX() * 3.0f, 0.0f, -currentVelocity.GetZ() * 3.0f);
-        bodyInterface.AddForce(bodyId, drag);
+        bodyInterface.AddTorque(bodyId, torque);
     }
 
     if (jumpRequested && grounded) {
