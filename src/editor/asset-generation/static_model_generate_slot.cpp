@@ -916,6 +916,15 @@ bool StaticModelGenerateSlot::WriteStaticModel()
             Engine::WriteMeshInformation(body, mesh);
         }
 
+        Engine::ModelBounds bounds{};
+        {
+            std::vector<glm::vec3> positions;
+            positions.reserve(rawModel.vertices.size());
+            for (const auto& v : rawModel.vertices)
+                positions.push_back(v.position);
+            bounds = Engine::StaticModel::ComputeBounds(positions, &rawModel.indices);
+        }
+
         std::vector<uint8_t> compressedBody = Engine::CompressLZ4(body.data(), body.size());
         header.compressedBodySize = static_cast<uint64_t>(compressedBody.size());
         header.uncompressedBodySize = static_cast<uint64_t>(body.size());
@@ -928,6 +937,7 @@ bool StaticModelGenerateSlot::WriteStaticModel()
         Engine::WriteWStaticModelHeader(file, header);
         file.write(reinterpret_cast<const char*>(compressedBody.data()), static_cast<std::streamsize>(compressedBody.size()));
         file.write(reinterpret_cast<const char*>(nodeSection.data()), static_cast<std::streamsize>(nodeSection.size()));
+        file.write(reinterpret_cast<const char*>(&bounds), sizeof(Engine::ModelBounds));
     }
 
     progress->value.store(100, std::memory_order_release);

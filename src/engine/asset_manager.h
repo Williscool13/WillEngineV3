@@ -84,6 +84,7 @@ public: // Models
         uint32_t nodeCount{};
         uint32_t meshNodesCount{};
         std::vector<Node> nodes;
+        ModelBounds bounds{};
     };
 
     const std::unordered_map<ModelID, CachedModelMetadata>& GetModelCache() { return modelCache; }

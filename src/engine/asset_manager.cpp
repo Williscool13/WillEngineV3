@@ -5,6 +5,7 @@
 #include "asset_manager.h"
 
 #include "asset-load/async_asset_load_manager.h"
+#include "resources/prefab/prefab_format.h"
 #include "resources/scene/scene_format.h"
 #include "editor/asset-generation/miscellaneous_asset_generate.h"
 #include "logging/engine_log.h"
@@ -79,6 +80,12 @@ const AssetManager::CachedSceneMetadata* AssetManager::GetSceneMetadata(StringID
 {
     auto it = sceneCache.find(sceneId);
     return it != sceneCache.end() ? &it->second : nullptr;
+}
+
+const AssetManager::CachedPrefabMetadata* AssetManager::GetPrefabMetadata(StringID prefabId) const
+{
+    auto it = prefabCache.find(prefabId);
+    return it != prefabCache.end() ? &it->second : nullptr;
 }
 
 StaticModelHandle AssetManager::LoadModel(ModelID modelId)
@@ -429,17 +436,36 @@ void AssetManager::Scan()
                     cached.nodeCount = info->header.nodeCount;
                     cached.meshNodesCount = info->header.meshNodeCount;
                     cached.nodes = std::move(info->nodes);
+                    cached.bounds = info->bounds;
                     modelNameToId[cached.name] = id;
                 }
                 else if (ext == ".wscene") {
                     auto header = ReadWSceneHeader(path);
                     if (!header) { continue; }
-                    const std::string stem = path.stem().string();
-                    StringID id{stem.c_str(), stem.size()};
+                    StringID id{header->sceneId};
+                    if (header->sceneId == 0) {
+                        const std::string stem = path.stem().string();
+                        id = StringID{stem.c_str(), stem.size()};
+                        LOG_WARN(Asset, "Scene '{}' has no sceneId, using stem-derived ID. Re-save to fix", stem);
+                    }
                     CachedSceneMetadata& cached = sceneCache[id];
                     cached.source = path;
                     cached.sceneName = header->name;
                     cached.entityCount = header->entityCount;
+                }
+                else if (ext == ".wprefab") {
+                    auto header = ReadWPrefabHeader(path);
+                    if (!header) { continue; }
+                    StringID id{header->prefabId};
+                    if (header->prefabId == 0) {
+                        const std::string stem = path.stem().string();
+                        id = StringID{stem.c_str(), stem.size()};
+                        LOG_WARN(Asset, "Prefab '{}' has no prefabId, using stem-derived ID. Re-save to fix", stem);
+                    }
+                    CachedPrefabMetadata& cached = prefabCache[id];
+                    cached.source = path;
+                    cached.prefabName = header->name;
+                    cached.componentCount = header->componentCount;
                 }
             }
         }

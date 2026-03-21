@@ -207,6 +207,12 @@ bool StaticModelLoadSlot::LoadModelFromDisk()
         for (uint32_t i = 0; i < header.nodeCount; ++i) {
             Engine::ReadNode(ptr, rawData.nodes[i]);
         }
+
+        const size_t bytesConsumed = ptr - nodeData.data();
+        const size_t remaining = nodeData.size() - bytesConsumed;
+        if (remaining >= sizeof(Engine::ModelBounds)) {
+            memcpy(&outputModel->bounds, ptr, sizeof(Engine::ModelBounds));
+        }
     }
 
     return true;
@@ -358,7 +364,8 @@ void StaticModelLoadSlot::PrepareUploadData()
             outputModel->physicsCache = std::move(cache);
         }
 
-        outputModel->bounds = Engine::StaticModel::ComputeBounds(positions, &rawData.indices);
+        if (outputModel->bounds.sphere.radius == 0.f)
+            outputModel->bounds = Engine::StaticModel::ComputeBounds(positions, &rawData.indices);
     }
 
     // Move data to outputModel

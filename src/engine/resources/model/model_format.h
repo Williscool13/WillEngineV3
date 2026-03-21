@@ -11,12 +11,13 @@
 #include <vector>
 
 #include "model_types.h"
+#include "static_model.h"
 
 namespace Engine
 {
 constexpr char STATIC_MODEL_MAGIC[8] = "WSTCMDL";
 constexpr uint32_t STATICMODEL_MAJOR_VERSION = 1;
-constexpr uint32_t STATICMODEL_MINOR_VERSION = 1;
+constexpr uint32_t STATICMODEL_MINOR_VERSION = 2;
 constexpr size_t WSTATICMODEL_NAME_LENGTH = 128;
 
 struct WStaticModelHeader
@@ -55,6 +56,7 @@ struct WStaticModelInfo
 {
     WStaticModelHeader header;
     std::vector<Node> nodes;
+    ModelBounds bounds{};
 };
 
 bool WriteWStaticModelHeader(std::ostream& out, const WStaticModelHeader& header);

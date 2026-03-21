@@ -127,6 +127,12 @@ std::optional<WStaticModelInfo> ReadWStaticModelInfo(const std::filesystem::path
         ReadNode(ptr, info.nodes[i]);
     }
 
+    const size_t bytesConsumed = ptr - buf.data();
+    const size_t remaining = nodesSize - bytesConsumed;
+    if (remaining >= sizeof(ModelBounds)) {
+        memcpy(&info.bounds, ptr, sizeof(ModelBounds));
+    }
+
     return info;
 }
 } // Engine
