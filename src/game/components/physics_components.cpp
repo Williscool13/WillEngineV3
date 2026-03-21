@@ -44,6 +44,9 @@ void SerializeComponent<Component::PhysicsBodyDesc>(const Component::PhysicsBody
     json["motionType"] = comp.motionType;
     json["mass"] = comp.mass;
     json["friction"] = comp.friction;
+    json["restitution"] = comp.restitution;
+    json["motionQuality"] = static_cast<uint8_t>(comp.motionQuality);
+    json["layerOverride"] = comp.layerOverride;
     json["shapes"] = nlohmann::json::array();
 
     for (const auto& shape : comp.shapes) {
@@ -207,6 +210,9 @@ void DeserializeComponent<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc
     comp.motionType = static_cast<Component::PhysicsMotionType>(json["motionType"].get<uint8_t>());
     comp.mass = json["mass"].get<float>();
     comp.friction = json.value<float>("friction", 0.0f);
+    comp.restitution = json.value<float>("restitution", 0.0f);
+    comp.motionQuality = static_cast<JPH::EMotionQuality>(json.value<uint8_t>("motionQuality", 0));
+    comp.layerOverride = json.value<JPH::ObjectLayer>("layerOverride", 0xFFFF);
     comp.shapes.clear();
 
     for (const auto& shapeJson : json["shapes"]) {
@@ -466,12 +472,20 @@ ComponentEditorResult DrawComponentEditor<Component::PhysicsBodyDesc>(Component:
         }
 
         ImGui::DragFloat("Mass", &component.mass, 0.1f, 0.001f, 10000.0f);
-        ImGui::DragFloat("Friction", &component.friction, 0.001f, 0.001f, 1.0f);
+        ImGui::DragFloat("Friction", &component.friction, 0.01f, 0.0f, 10.0f);
+        ImGui::DragFloat("Restitution", &component.restitution, 0.01f, 0.0f, 1.0f);
 
         const char* qualityTypes[] = {"Discrete", "LinearCast"};
         int currentQuality = static_cast<int>(component.motionQuality);
         if (ImGui::Combo("Motion Quality", &currentQuality, qualityTypes, IM_ARRAYSIZE(qualityTypes)))
             component.motionQuality = static_cast<JPH::EMotionQuality>(currentQuality);
+
+        int layer = static_cast<int>(component.layerOverride);
+        if (layer == 0xFFFF) layer = -1;
+        if (ImGui::InputInt("Layer Override", &layer)) {
+            component.layerOverride = layer < 0 ? JPH::ObjectLayer(0xFFFF) : JPH::ObjectLayer(layer);
+        }
+        if (ImGui::IsItemHovered()) { ImGui::SetTooltip("-1 = auto (derived from motion type)"); }
 
         const glm::mat4 view = viewFamily.mainView.currentViewData.view;
         const glm::mat4 proj = viewFamily.mainView.currentViewData.proj;

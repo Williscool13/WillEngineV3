@@ -16,6 +16,7 @@
 #include "engine/core/model_id.h"
 #include "engine/asset_manager_types.h"
 #include "engine/resources/model/model_types.h"
+#include "Jolt/Physics/Collision/ObjectLayer.h"
 #include "Jolt/Physics/Collision/Shape/Shape.h"
 
 
@@ -85,7 +86,9 @@ struct PhysicsBodyDesc
     PhysicsMotionType motionType{PhysicsMotionType::Static};
     float mass{1.0f};
     float friction{0.0f};
+    float restitution{0.0f};
     JPH::EMotionQuality motionQuality{JPH::EMotionQuality::Discrete};
+    JPH::ObjectLayer layerOverride{0xFFFF};
     bool active{true};
 
     std::vector<PhysicsShapeDesc> shapes;

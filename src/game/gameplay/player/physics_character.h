@@ -28,8 +28,6 @@ class PhysicsSystem;
 
 namespace Game
 {
-inline constexpr StringID PLAYER_CHARACTER_PREFAB_ID{4933586796549546436};
-
 class PhysicsCharacter
 {
 public:

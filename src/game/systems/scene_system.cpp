@@ -392,11 +392,19 @@ entt::entity SpawnPrefab(Engine::GameState* state, Engine::AssetManager* assetMa
     }
 
     state->registry.emplace<Component::SceneComponent>(entity, state->currentSceneId);
-    state->registry.emplace<Component::PrefabInstanceComponent>(entity, prefabId);
+    state->registry.emplace_or_replace<Component::PrefabInstanceComponent>(entity, prefabId);
 
     for (auto& entry : state->componentRegistry.registry) {
         if (entry.has(state->registry, entity)) {
             entry.onAddComponent(state->registry, entity);
+        }
+    }
+
+    if (state->bIsPlaying) {
+        for (auto& entry : state->componentRegistry.registry) {
+            if (entry.has(state->registry, entity)) {
+                entry.onPlayStart(state->registry, entity);
+            }
         }
     }
 
@@ -461,12 +469,12 @@ void PlayStart(Core::EngineContext* ctx, Engine::GameState* state)
         }
     }
 
-    auto& playerController = state->registry.ctx().emplace<PhysicsPlayerController>();
-    playerController.Initialize(state, ctx, glm::vec3(0.0f, 3.0f, 0.0f));
-
     state->bIsPlaying = true;
     state->bGameCursorCaptured = true;
     ctx->setCursorHiddenFn(true);
+
+    auto& playerController = state->registry.ctx().emplace<PhysicsPlayerController>();
+    playerController.Initialize(state, ctx, glm::vec3(0.0f, 3.0f, 0.0f));
 }
 
 void PlayStop(Core::EngineContext* ctx, Engine::GameState* state)

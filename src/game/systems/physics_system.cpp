@@ -427,8 +427,11 @@ void ResolvePhysicsBodyCreation(Core::EngineContext* ctx, Engine::GameState* sta
 
         JPH::Vec3 pos(transform->translation.x, transform->translation.y, transform->translation.z);
         JPH::Quat rot(transform->rotation.x, transform->rotation.y, transform->rotation.z, transform->rotation.w);
-        JPH::BodyID bodyId = CreateBodyFromShape(bodyInterface, bodyDesc, pos, rot);
+        JPH::BodyID bodyId = CreateBodyFromShape(bodyInterface, bodyDesc, pos, rot, bodyDesc.layerOverride);
         if (!bodyId.IsInvalid()) {
+            if (bodyDesc.restitution > 0.0f) {
+                bodyInterface.SetRestitution(bodyId, bodyDesc.restitution);
+            }
             state->registry.emplace<Component::PhysicsBodyComponent>(entity, bodyId);
             if (bodyDesc.motionType == Component::PhysicsMotionType::Dynamic) {
                 state->registry.emplace_or_replace<Component::DynamicPhysicsBodyComponent>(entity, transform->translation, transform->rotation);

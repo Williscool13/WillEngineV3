@@ -5,12 +5,9 @@
 #include "physics_character.h"
 
 #include <Jolt/Jolt.h>
-#include <Jolt/Physics/Body/BodyCreationSettings.h>
 #include <Jolt/Physics/Body/BodyInterface.h>
-#include <Jolt/Physics/Collision/Shape/SphereShape.h>
 #include <Jolt/Physics/Collision/RayCast.h>
 #include <Jolt/Physics/Collision/CastResult.h>
-#include <Jolt/Physics/Collision/BroadPhase/BroadPhaseQuery.h>
 #include <Jolt/Physics/Collision/NarrowPhaseQuery.h>
 
 #include "core/include/engine_context.h"
@@ -19,9 +16,7 @@
 #include "game/components/core_components.h"
 #include "game/components/physics_components.h"
 #include "game/systems/scene_system.h"
-#include "game/systems/physics_system.h"
 #include "physics/physics_system.h"
-#include "physics/layers/layer_interface.h"
 
 namespace Game
 {
@@ -30,6 +25,7 @@ void PhysicsCharacter::Initialize(Engine::GameState* gameState, Core::EngineCont
     engineGameState = gameState;
     physicsSystem = ctx->physicsSystem;
 
+    constexpr StringID PLAYER_CHARACTER_PREFAB_ID{4933586796549546436};
     entity = SpawnPrefab(engineGameState, ctx->assetManager, PLAYER_CHARACTER_PREFAB_ID);
     assert(entity != entt::null && "Failed to spawn player character prefab.");
 
@@ -38,26 +34,6 @@ void PhysicsCharacter::Initialize(Engine::GameState* gameState, Core::EngineCont
     auto& transform = engineGameState->registry.get<Component::TransformComponent>(entity);
     transform.translation = spawnPosition;
     engineGameState->registry.emplace_or_replace<Component::DirtyTransformTag>(entity);
-
-    // Sphere rigid body
-    JPH::SphereShapeSettings shapeSettings(sphereRadius);
-    JPH::ShapeRefC shape = shapeSettings.Create().Get();
-
-    Component::PhysicsBodyDesc bodyDesc{};
-    bodyDesc.motionType = Component::PhysicsMotionType::Dynamic;
-    bodyDesc.mass = 5.0f;
-    bodyDesc.friction = 2.0f;
-    bodyDesc.motionQuality = JPH::EMotionQuality::LinearCast;
-    bodyDesc.shapeRef = shape;
-
-    JPH::RVec3 joltPos(spawnPosition.x, spawnPosition.y + sphereRadius, spawnPosition.z);
-    JPH::BodyID bodyId = CreateBodyFromShape(physicsSystem->GetBodyInterface(), bodyDesc, joltPos, JPH::Quat::sIdentity(), Physics::Layers::PLAYER);
-    assert(!bodyId.IsInvalid() && "Failed to create physics body for PhysicsCharacter.");
-
-    physicsSystem->GetBodyInterface().SetRestitution(bodyId, 0.2f);
-
-    engineGameState->registry.emplace<Component::PhysicsBodyComponent>(entity, bodyId);
-    engineGameState->registry.emplace<Component::DynamicPhysicsBodyComponent>(entity, spawnPosition, glm::quat(1, 0, 0, 0));
 }
 
 void PhysicsCharacter::Update(float deltaTime, const glm::vec3& moveInput, bool jumpRequested, Physics::PhysicsSystem* inPhysicsSystem)
