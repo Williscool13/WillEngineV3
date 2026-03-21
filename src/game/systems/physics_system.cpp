@@ -171,9 +171,9 @@ void DebugRenderPhysics(Core::EngineContext* ctx, Engine::GameState* state, Core
                             const auto& pos = model->physicsCache->positions;
                             const auto& idx = model->physicsCache->indices;
                             for (size_t i = 0; i + 2 < idx.size(); i += 3) {
-                                const glm::vec3 a = glm::vec3(entityMat * glm::vec4(pos[idx[i + 0]] + shape.offset, 1.0f));
-                                const glm::vec3 b = glm::vec3(entityMat * glm::vec4(pos[idx[i + 1]] + shape.offset, 1.0f));
-                                const glm::vec3 c = glm::vec3(entityMat * glm::vec4(pos[idx[i + 2]] + shape.offset, 1.0f));
+                                const glm::vec3 a = glm::vec3(entityMat * glm::vec4(pos[idx[i + 0]] * shape.bakedScale + shape.offset, 1.0f));
+                                const glm::vec3 b = glm::vec3(entityMat * glm::vec4(pos[idx[i + 1]] * shape.bakedScale + shape.offset, 1.0f));
+                                const glm::vec3 c = glm::vec3(entityMat * glm::vec4(pos[idx[i + 2]] * shape.bakedScale + shape.offset, 1.0f));
                                 DEBUG_ADD_LINE(vf.debugLines, {a, b, kDebugColor});
                                 DEBUG_ADD_LINE(vf.debugLines, {b, c, kDebugColor});
                                 DEBUG_ADD_LINE(vf.debugLines, {c, a, kDebugColor});
@@ -254,7 +254,8 @@ JPH::ShapeRefC CreateShapeFromDesc(const Component::PhysicsShapeDesc& desc, Engi
             JPH::Array<JPH::Vec3> pts;
             pts.reserve(model->physicsCache->positions.size());
             for (const auto& p : model->physicsCache->positions) {
-                pts.push_back({p.x, p.y, p.z});
+                const glm::vec3 sp = p * desc.bakedScale;
+                pts.push_back({sp.x, sp.y, sp.z});
             }
             JPH::ConvexHullShapeSettings s(pts);
             auto result = s.Create();
@@ -273,11 +274,13 @@ JPH::ShapeRefC CreateShapeFromDesc(const Component::PhysicsShapeDesc& desc, Engi
             const auto& idx = model->physicsCache->indices;
             JPH::TriangleList tris;
             tris.reserve(idx.size() / 3);
+            const glm::vec3 sc = desc.bakedScale;
             for (size_t i = 0; i + 2 < idx.size(); i += 3) {
+                const glm::vec3 a = pos[idx[i]] * sc, b = pos[idx[i + 1]] * sc, c = pos[idx[i + 2]] * sc;
                 tris.push_back(JPH::Triangle(
-                    JPH::Float3(pos[idx[i]].x, pos[idx[i]].y, pos[idx[i]].z),
-                    JPH::Float3(pos[idx[i + 1]].x, pos[idx[i + 1]].y, pos[idx[i + 1]].z),
-                    JPH::Float3(pos[idx[i + 2]].x, pos[idx[i + 2]].y, pos[idx[i + 2]].z)));
+                    JPH::Float3(a.x, a.y, a.z),
+                    JPH::Float3(b.x, b.y, b.z),
+                    JPH::Float3(c.x, c.y, c.z)));
             }
             JPH::MeshShapeSettings s(tris);
             auto result = s.Create();

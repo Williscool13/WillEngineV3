@@ -16,8 +16,10 @@
 #include "engine/resources/prefab/prefab_format.h"
 #include "engine/resources/scene/scene_format.h"
 #include "game/components/common_components.h"
+#include "game/components/common/stable_id_component.h"
 #include "game/components/core_components.h"
 #include "game/components/render_components.h"
+#include "game/components/render/static_mesh_component.h"
 #include "game/components/scene_components.h"
 #include "game/gameplay/player/physics_player_controller.h"
 #include "game/systems/physics_system.h"
@@ -293,8 +295,7 @@ entt::entity CreateSceneEntity(Engine::GameState* state)
     entt::entity newEntity = state->registry.create();
     state->registry.emplace<Component::TransformComponent>(newEntity);
     state->registry.emplace<Component::SceneComponent>(newEntity, state->currentSceneId);
-    Component::StableIdComponent stableIdComponent = state->registry.emplace<Component::StableIdComponent>(newEntity, Component::StableIdComponent::Generate(state->rng));
-    state->stableIdToEntityMap[stableIdComponent.id] = newEntity;
+    state->registry.emplace<Component::StableIdComponent>(newEntity);
     static int32_t runningNameTally = 0;
     auto newName = fmt::format("New Entity {}", runningNameTally++);
     state->registry.emplace<Component::NameComponent>(newEntity, newName);

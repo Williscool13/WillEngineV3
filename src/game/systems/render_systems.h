@@ -5,6 +5,8 @@
 #ifndef WILL_ENGINE_GATHER_RENDERABLES_COMPONENT_H
 #define WILL_ENGINE_GATHER_RENDERABLES_COMPONENT_H
 
+#include <entt/entt.hpp>
+
 namespace Render
 {
 struct FrameResources;
@@ -23,6 +25,8 @@ struct EngineContext;
 
 namespace Game
 {
+void ConnectRenderObservers(entt::registry& registry);
+
 void ResolveStaticMeshLoads(Core::EngineContext* ctx, Engine::GameState* state);
 void ResolveProceduralMeshLoads(Core::EngineContext* ctx, Engine::GameState* state);
 void ResolveSplineMeshLoads(Core::EngineContext* ctx, Engine::GameState* state);

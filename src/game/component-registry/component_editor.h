@@ -14,8 +14,13 @@
 #include "game/components/component_types.h"
 #include "game/components/core_components.h"
 #include "game/components/editor_components.h"
-#include "../components/physics/physics_components.h"
-#include "game/components/render_components.h"
+#include "game/components/common/stable_id_component.h"
+#include "game/components/physics/physics_components.h"
+#include "game/components/physics/physics_body_desc.h"
+#include "game/components/physics/physics_body_component.h"
+#include "game/components/render/static_mesh_component.h"
+#include "game/components/render/procedural_mesh_component.h"
+#include "game/components/render/spline_mesh_component.h"
 
 namespace Game
 {

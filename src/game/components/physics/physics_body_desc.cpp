@@ -12,6 +12,7 @@
 #include "core/include/engine_context.h"
 #include "engine/asset_manager.h"
 #include "engine/engine_api.h"
+#include "game/components/render/static_mesh_component.h"
 
 namespace Game::Component
 {
@@ -97,6 +98,9 @@ void SerializeComponent<Component::PhysicsBodyDesc>(const Component::PhysicsBody
         shapeJson["type"] = shape.type;
         shapeJson["offset"] = {shape.offset.x, shape.offset.y, shape.offset.z};
         shapeJson["rotation"] = {shape.rotation.w, shape.rotation.x, shape.rotation.y, shape.rotation.z};
+        shapeJson["bakedScaleX"] = shape.bakedScale.x;
+        shapeJson["bakedScaleY"] = shape.bakedScale.y;
+        shapeJson["bakedScaleZ"] = shape.bakedScale.z;
 
         switch (shape.type) {
             case Component::PhysicsShapeType::Box:
@@ -267,6 +271,12 @@ void DeserializeComponent<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc
 
         auto& r = shapeJson["rotation"];
         shape.rotation = {r[0].get<float>(), r[1].get<float>(), r[2].get<float>(), r[3].get<float>()};
+
+        shape.bakedScale = {
+            shapeJson.value("bakedScaleX", 1.0f),
+            shapeJson.value("bakedScaleY", 1.0f),
+            shapeJson.value("bakedScaleZ", 1.0f)
+        };
 
         switch (shape.type) {
             case Component::PhysicsShapeType::Box:
@@ -560,6 +570,7 @@ ComponentEditorResult DrawComponentEditor<Component::PhysicsBodyDesc>(Component:
             }
 
             ImGui::DragFloat3("Offset", &shape.offset.x, 0.01f);
+            ImGui::DragFloat3("Baked Scale", &shape.bakedScale.x, 0.01f, 0.001f, 100.0f);
 
             bool bAnyChange = false;
             switch (shape.type) {
@@ -644,22 +655,26 @@ ComponentEditorResult DrawComponentEditor<Component::PhysicsBodyDesc>(Component:
 
                 ImGui::BeginDisabled(!bModelLoaded && !isMeshType);
                 if (ImGui::Button("Auto-Fit")) {
+                    const glm::vec3 scale = transform ? transform->scale : glm::vec3(1.0f);
                     switch (shape.type) {
                         case Component::PhysicsShapeType::Box:
-                            shape.box.halfExtents = fitModel->bounds.aabb.HalfExtents();
-                            shape.offset = fitModel->bounds.aabb.Center();
+                            shape.box.halfExtents = fitModel->bounds.aabb.HalfExtents() * scale;
+                            shape.offset = fitModel->bounds.aabb.Center() * scale;
                             break;
                         case Component::PhysicsShapeType::Sphere:
-                            shape.sphere.radius = fitModel->bounds.sphere.radius;
-                            shape.offset = fitModel->bounds.sphere.center;
+                        {
+                            const float maxScale = glm::max(scale.x, glm::max(scale.y, scale.z));
+                            shape.sphere.radius = fitModel->bounds.sphere.radius * maxScale;
+                            shape.offset = fitModel->bounds.sphere.center * scale;
                             break;
+                        }
                         case Component::PhysicsShapeType::Capsule:
                         {
-                            const glm::vec3 he = fitModel->bounds.aabb.HalfExtents();
+                            const glm::vec3 he = fitModel->bounds.aabb.HalfExtents() * scale;
                             const float radius = glm::max(he.x, he.z);
                             shape.capsule.radius = radius;
                             shape.capsule.halfHeight = glm::max(0.001f, he.y - radius);
-                            shape.offset = fitModel->bounds.aabb.Center();
+                            shape.offset = fitModel->bounds.aabb.Center() * scale;
                             break;
                         }
                         case Component::PhysicsShapeType::ConvexHull:
@@ -668,6 +683,7 @@ ComponentEditorResult DrawComponentEditor<Component::PhysicsBodyDesc>(Component:
                             shape.proceduralParams = std::monostate{};
                             shape.splineParams.controlPoints.clear();
                             shape.offset = {};
+                            shape.bakedScale = scale;
                             if (auto* sm = registry.try_get<Component::StaticMeshComponent>(entity)) {
                                 shape.meshSourceModelId = sm->modelId;
                             }

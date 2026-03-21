@@ -204,9 +204,6 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
                     entry.onRemoveComponent(state->registry, entity);
                 }
             }
-            if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
-                state->stableIdToEntityMap.erase(stable->id);
-            }
             state->registry.destroy(entity);
         }
         state->selectedEntities.clear();
@@ -726,7 +723,6 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
             if (isPrefabEntity) { ImGui::PopStyleColor(); }
         }
         if (entityToDelete != entt::null) {
-            Component::StableIdComponent stableId = state->registry.get<Component::StableIdComponent>(entityToDelete);
             for (auto& entry : state->componentRegistry.registry) {
                 if (entry.has(state->registry, entityToDelete)) {
                     entry.onRemoveComponent(state->registry, entityToDelete);
@@ -736,7 +732,6 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
             if (it != state->selectedEntities.end()) {
                 state->selectedEntities.erase(it);
             }
-            state->stableIdToEntityMap.erase(stableId.id);
             state->registry.destroy(entityToDelete);
             MarkSceneModified(state, state->currentSceneId);
         }

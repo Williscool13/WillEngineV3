@@ -5,10 +5,9 @@
 #ifndef WILL_ENGINE_COMPONENT_COPY_H
 #define WILL_ENGINE_COMPONENT_COPY_H
 
-#include <entt/entt.hpp>
-
-#include "../components/common_components.h"
-#include "../components/render_components.h"
+#include "game/components/common/stable_id_component.h"
+#include "game/components/render/spline_mesh_component.h"
+#include "game/components/render/static_mesh_component.h"
 
 namespace Game
 {

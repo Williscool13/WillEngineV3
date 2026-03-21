@@ -9,6 +9,7 @@
 
 #include "engine/asset_manager.h"
 #include "render_components.h"
+#include "render/static_mesh_component.h"
 
 namespace Engine
 {

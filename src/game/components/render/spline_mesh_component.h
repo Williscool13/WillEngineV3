@@ -1,0 +1,49 @@
+//
+// Created by William on 2026-03-21.
+//
+
+#ifndef WILL_ENGINE_SPLINE_MESH_COMPONENT_H
+#define WILL_ENGINE_SPLINE_MESH_COMPONENT_H
+
+#include <glm/glm.hpp>
+#include <entt/entt.hpp>
+
+#include "procedural_mesh_component.h"
+#include "engine/asset_manager_types.h"
+#include "engine/core/material_id.h"
+
+namespace Game::Component
+{
+struct SplineMeshComponent
+{
+    std::vector<glm::vec3> controlPoints{{0,0,0},{0,0,1},{0,0,2},{0,0,3}};
+    std::vector<float> controlPointRolls;
+    float radius{0.5f};
+    float rollAngle{0.0f};
+    int32_t sides{8};
+    int32_t segmentsPerSpan{8};
+    bool bClosed{false};
+    bool bCaps{true};
+    bool bDualPath{false};
+    float dualPathSpacing{1.0f};
+    bool bCrossPlanks{false};
+    int32_t crossPlankInterval{4};
+
+    Engine::MaterialID material{};
+    glm::vec4 modelFlags{1.0f, 1.0f, 0.0f, 0.0f};
+    glm::vec3 renderOffset{0.0f};
+
+    // Transient
+    Engine::StaticModelHandle modelHandle{};
+    PrimitiveData primitive{};
+    bool bPrimitiveReady{false};
+
+    static void OnConstruct(entt::registry& registry, entt::entity entity);
+    static void OnDestroy(entt::registry& registry, entt::entity entity);
+};
+
+struct SplineMeshLoadingTag
+{};
+}
+
+#endif //WILL_ENGINE_SPLINE_MESH_COMPONENT_H

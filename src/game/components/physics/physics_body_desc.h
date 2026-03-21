@@ -40,6 +40,7 @@ struct PhysicsShapeDesc
     PhysicsShapeType type{PhysicsShapeType::Box};
     glm::vec3 offset{0.0f};
     glm::quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
+    glm::vec3 bakedScale{1.0f};
 
     // Only used for ConvexHull / TriangleMesh (Mutually exclusive, if modelID has priority).
     Engine::ModelID meshSourceModelId{};

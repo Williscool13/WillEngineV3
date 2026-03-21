@@ -17,12 +17,19 @@ set(GAME_SOURCES
 
         components/camera_components.cpp
         components/camera_components.h
+
         components/physics/physics_components.cpp
         components/physics/physics_components.h
         components/physics/physics_body_component.cpp
         components/physics/physics_body_component.h
         components/physics/physics_body_desc.cpp
         components/physics/physics_body_desc.h
+
+        components/render/static_mesh_component.cpp
+        components/render/static_mesh_component.h
+        components/render/procedural_mesh_component.cpp
+        components/render/procedural_mesh_component.h
+
         components/debug_components.cpp
         components/debug_components.h
         components/render_components.cpp
@@ -61,6 +68,13 @@ set(GAME_SOURCES
         gameplay/player/player_controller.cpp
         gameplay/player/player_controller.h
         components/physics/physics_body_desc.cpp
+        systems/common_systems.cpp
+        systems/common_systems.h
+        components/common/stable_id_component.cpp
+        components/common/stable_id_component.h
+        components/render/procedural_mesh_component.cpp
+        components/render/spline_mesh_component.cpp
+        components/render/spline_mesh_component.h
 )
 
 set(GAME_INCLUDE_DIRS

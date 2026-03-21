@@ -13,10 +13,23 @@
 #include "game/fwd_components.h"
 #include "game/components/common_components.h"
 #include "game/components/debug_components.h"
+#include "game/components/render/static_mesh_component.h"
 
 
 namespace Game
 {
+void ConnectRenderObservers(entt::registry& registry)
+{
+    registry.on_construct<Component::StaticMeshComponent>().connect<&Component::StaticMeshComponent::OnConstruct>();
+    registry.on_destroy<Component::StaticMeshComponent>().connect<&Component::StaticMeshComponent::OnDestroy>();
+
+    registry.on_construct<Component::ProceduralMeshComponent>().connect<&Component::ProceduralMeshComponent::OnConstruct>();
+    registry.on_destroy<Component::ProceduralMeshComponent>().connect<&Component::ProceduralMeshComponent::OnDestroy>();
+
+    registry.on_construct<Component::SplineMeshComponent>().connect<&Component::SplineMeshComponent::OnConstruct>();
+    registry.on_destroy<Component::SplineMeshComponent>().connect<&Component::SplineMeshComponent::OnDestroy>();
+}
+
 void ResolveStaticMeshLoads(Core::EngineContext* ctx, Engine::GameState* state)
 {
     // todo: ew

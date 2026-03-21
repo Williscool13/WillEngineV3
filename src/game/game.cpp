@@ -27,6 +27,7 @@
 #include "systems/editor_systems.h"
 #include "systems/physics_system.h"
 #include "gameplay/player/physics_player_controller.h"
+#include "systems/common_systems.h"
 
 
 extern "C"
@@ -67,6 +68,8 @@ GAME_API void GameLoad(Core::EngineContext* ctx, Engine::GameState* state)
     ctx->scheduler->RegisterExternalTaskThread();
     RegisterComponents(state->componentRegistry);
     Game::ConnectPhysicsObservers(state->registry);
+    Game::ConnectCommonObservers(state->registry);
+    Game::ConnectRenderObservers(state->registry);
 
 #if DEBUG
     gInternStringFn = ctx->internStringFn;
