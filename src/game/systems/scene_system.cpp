@@ -20,6 +20,7 @@
 #include "game/components/render_components.h"
 #include "game/components/scene_components.h"
 #include "game/gameplay/player/physics_player_controller.h"
+#include "game/systems/physics_system.h"
 #include "platform/paths.h"
 
 namespace Game
@@ -400,14 +401,6 @@ entt::entity SpawnPrefab(Engine::GameState* state, Engine::AssetManager* assetMa
         }
     }
 
-    if (state->bIsPlaying) {
-        for (auto& entry : state->componentRegistry.registry) {
-            if (entry.has(state->registry, entity)) {
-                entry.onPlayStart(state->registry, entity);
-            }
-        }
-    }
-
     LOG_INFO(Game, "Spawned prefab '{}' as entity {}", meta->prefabName, entt::to_integral(entity));
     return entity;
 }
@@ -459,16 +452,6 @@ void ResolvePrefabLoads(Engine::GameState* state, Engine::AssetManager* assetMan
 void PlayStart(Core::EngineContext* ctx, Engine::GameState* state)
 {
     state->pieSnapshot = SerializeAll(state->componentRegistry, state->registry, state->loadedScenes);
-
-    auto view = state->registry.view<Component::SceneComponent>();
-    for (auto entity : view) {
-        for (auto& entry : state->componentRegistry.registry) {
-            if (entry.has(state->registry, entity)) {
-                entry.onPlayStart(state->registry, entity);
-            }
-        }
-    }
-
     state->bIsPlaying = true;
     state->bGameCursorCaptured = true;
     ctx->setCursorHiddenFn(true);
@@ -483,6 +466,8 @@ void PlayStop(Core::EngineContext* ctx, Engine::GameState* state)
         playerController->Shutdown(ctx->physicsSystem);
         state->registry.ctx().erase<PhysicsPlayerController>();
     }
+
+    PhysicsOnPlayStop(ctx, state);
 
     auto view = state->registry.view<Component::SceneComponent>();
     for (auto entity : view) {

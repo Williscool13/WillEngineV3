@@ -1,40 +1,83 @@
 //
-// Created by William on 2026-01-30.
+// Created by William on 2026-03-21.
 //
 
-#include "physics_components.h"
+#include "physics_body_desc.h"
 
 #include <glm/gtc/type_ptr.hpp>
-
-
-#include "core/include/engine_context.h"
-#include "engine/asset_manager.h"
-#include "engine/engine_api.h"
-#include "engine/logging/engine_log.h"
-#include "game/fwd_components.h"
-#include "game/systems/physics_system.h"
-#include "Jolt/Physics/Body/BodyInterface.h"
-#include "physics/physics_system.h"
 
 #include "game/component-registry/component_serialization.h"
 #include "game/component-registry/component_editor.h"
 
+#include "core/include/engine_context.h"
+#include "engine/asset_manager.h"
+#include "engine/engine_api.h"
+
 namespace Game::Component
 {
-void PhysicsBodyComponent::on_construct(entt::registry& registry, entt::entity entity)
+void PhysicsBodyDesc::OnConstruct(entt::registry& registry, entt::entity entity)
 {
+    auto& component = registry.get<PhysicsBodyDesc>(entity);
+
+    if (component.shapes.empty()) {
+        PhysicsShapeDesc d{};
+        d.type = PhysicsShapeType::Box;
+        d.box.halfExtents = glm::vec3(0.5f);
+        component.shapes.push_back(d);
+    }
+
+    auto* ctx = registry.ctx().get<Core::EngineContext*>();
     auto* state = registry.ctx().get<Engine::GameState*>();
-    auto& physics = registry.get<PhysicsBodyComponent>(entity);
-    state->bodyToEntity[physics.bodyID] = entity;
+    bool needsResolve = false;
+    for (auto& shape : component.shapes) {
+        if (shape.type != PhysicsShapeType::ConvexHull && shape.type != PhysicsShapeType::TriangleMesh) { continue; }
+        if (shape.meshSourceModelId.IsValid()) {
+            shape.meshSourceHandle = ctx->assetManager->LoadModel(shape.meshSourceModelId);
+            needsResolve = true;
+        }
+        else if (!std::holds_alternative<std::monostate>(shape.proceduralParams)) {
+            shape.meshSourceHandle = ctx->assetManager->LoadProceduralModel(shape.proceduralParams);
+            needsResolve = true;
+        }
+        else if (!shape.splineParams.controlPoints.empty()) {
+            shape.meshSourceHandle = ctx->assetManager->LoadSplineModel(shape.splineParams);
+            needsResolve = true;
+        }
+    }
+    if (needsResolve) {
+        registry.emplace_or_replace<PendingPhysicsMeshTag>(entity);
+        state->bPendingModelResolve = true;
+    }
+
+    registry.emplace_or_replace<PendingPhysicsShapeCreationTag>(entity);
 }
 
-void PhysicsBodyComponent::on_destroy(entt::registry& registry, entt::entity entity)
+void PhysicsBodyDesc::OnUpdate(entt::registry& registry, entt::entity entity)
 {
-    auto* state = registry.ctx().get<Engine::GameState*>();
-    auto& physics = registry.get<PhysicsBodyComponent>(entity);
-    state->bodyToEntity.erase(physics.bodyID);
+    auto& component = registry.get<PhysicsBodyDesc>(entity);
+    auto* ctx = registry.ctx().get<Core::EngineContext*>();
+    for (auto& shape : component.shapes) {
+        if (shape.meshSourceHandle.IsValid()) {
+            ctx->assetManager->UnloadModel(shape.meshSourceHandle);
+            shape.meshSourceHandle = {};
+        }
+    }
+    OnConstruct(registry, entity);
+}
+
+void PhysicsBodyDesc::OnDestroy(entt::registry& registry, entt::entity entity)
+{
+    auto& component = registry.get<PhysicsBodyDesc>(entity);
+    auto* ctx = registry.ctx().get<Core::EngineContext*>();
+    for (auto& shape : component.shapes) {
+        if (shape.meshSourceHandle.IsValid()) {
+            ctx->assetManager->UnloadModel(shape.meshSourceHandle);
+            shape.meshSourceHandle = {};
+        }
+    }
 }
 }
+
 
 namespace Game
 {
@@ -509,7 +552,7 @@ ComponentEditorResult DrawComponentEditor<Component::PhysicsBodyDesc>(Component:
                             shape.splineParams.controlPoints.clear();
                         }
                         shape.type = newType;
-                        registry.emplace_or_replace<Component::PendingPhysicsShapeCreationTag>(entity);
+                        registry.patch<Component::PhysicsBodyDesc>(entity);
                     }
                     ImGui::EndDisabled();
                 }
@@ -580,7 +623,7 @@ ComponentEditorResult DrawComponentEditor<Component::PhysicsBodyDesc>(Component:
                 }
             }
             if (bAnyChange) {
-                registry.emplace_or_replace<Component::PendingPhysicsShapeCreationTag>(entity);
+                registry.patch<Component::PhysicsBodyDesc>(entity);
             }
 
             //
@@ -621,25 +664,15 @@ ComponentEditorResult DrawComponentEditor<Component::PhysicsBodyDesc>(Component:
                         }
                         case Component::PhysicsShapeType::ConvexHull:
                         case Component::PhysicsShapeType::TriangleMesh:
-                            if (shape.meshSourceHandle.IsValid()) {
-                                ctx->assetManager->UnloadModel(shape.meshSourceHandle);
-                                shape.meshSourceHandle = {};
-                            }
                             shape.meshSourceModelId = Engine::ModelID::INVALID;
                             shape.proceduralParams = std::monostate{};
                             shape.splineParams.controlPoints.clear();
                             shape.offset = {};
                             if (auto* sm = registry.try_get<Component::StaticMeshComponent>(entity)) {
                                 shape.meshSourceModelId = sm->modelId;
-                                shape.meshSourceHandle = ctx->assetManager->LoadModel(shape.meshSourceModelId);
-                                registry.emplace_or_replace<Component::PendingPhysicsMeshTag>(entity);
-                                state->bPendingModelResolve = true;
                             }
                             else if (auto* pm = registry.try_get<Component::ProceduralMeshComponent>(entity)) {
                                 shape.proceduralParams = pm->params;
-                                shape.meshSourceHandle = ctx->assetManager->LoadProceduralModel(shape.proceduralParams);
-                                registry.emplace_or_replace<Component::PendingPhysicsMeshTag>(entity);
-                                state->bPendingModelResolve = true;
                             }
                             else if (auto* splm = registry.try_get<Component::SplineMeshComponent>(entity)) {
                                 shape.splineParams.controlPoints = splm->controlPoints;
@@ -654,14 +687,11 @@ ComponentEditorResult DrawComponentEditor<Component::PhysicsBodyDesc>(Component:
                                 shape.splineParams.dualPathSpacing = splm->dualPathSpacing;
                                 shape.splineParams.bCrossPlanks = splm->bCrossPlanks;
                                 shape.splineParams.crossPlankInterval = splm->crossPlankInterval;
-                                shape.meshSourceHandle = ctx->assetManager->LoadSplineModel(shape.splineParams);
-                                registry.emplace_or_replace<Component::PendingPhysicsMeshTag>(entity);
-                                state->bPendingModelResolve = true;
                             }
                             break;
                     }
 
-                    registry.emplace_or_replace<Component::PendingPhysicsShapeCreationTag>(entity);
+                    registry.patch<Component::PhysicsBodyDesc>(entity);
                 }
                 ImGui::EndDisabled();
             }
@@ -763,7 +793,8 @@ ComponentEditorResult DrawComponentEditor<Component::PhysicsBodyDesc>(Component:
             }
         };
 
-        ImGui::SeparatorText("Shape"); {
+        ImGui::SeparatorText("Shape");
+        {
             auto& shape = component.shapes[0];
             const bool isEditing = (editShapeIdx == 0);
             ImGui::PushID(0);
@@ -819,7 +850,7 @@ ComponentEditorResult DrawComponentEditor<Component::PhysicsBodyDesc>(Component:
             }
             if (shapeToRemove >= 0) {
                 component.shapes.erase(component.shapes.begin() + shapeToRemove);
-                registry.emplace_or_replace<Component::PendingPhysicsShapeCreationTag>(entity);
+                registry.patch<Component::PhysicsBodyDesc>(entity);
             }
         }
 
@@ -828,95 +859,9 @@ ComponentEditorResult DrawComponentEditor<Component::PhysicsBodyDesc>(Component:
             desc.type = Component::PhysicsShapeType::Box;
             desc.box.halfExtents = glm::vec3(0.5f);
             component.shapes.push_back(desc);
-            registry.emplace_or_replace<Component::PendingPhysicsShapeCreationTag>(entity);
+            registry.patch<Component::PhysicsBodyDesc>(entity);
         }
     }
-
-    return {.requestRemoval = remove};
-}
-
-template<>
-void OnComponentAdded<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc& component, entt::registry& registry, entt::entity entity)
-{
-    if (component.shapes.empty()) {
-        Component::PhysicsShapeDesc d{};
-        d.type = Component::PhysicsShapeType::Box;
-        d.box.halfExtents = glm::vec3(0.5f);
-        component.shapes.push_back(d);
-    }
-
-    auto* ctx = registry.ctx().get<Core::EngineContext*>();
-    auto* state = registry.ctx().get<Engine::GameState*>();
-    bool needsResolve = false;
-    for (auto& shape : component.shapes) {
-        if (shape.type != Component::PhysicsShapeType::ConvexHull && shape.type != Component::PhysicsShapeType::TriangleMesh) { continue; }
-        if (shape.meshSourceModelId.IsValid()) {
-            shape.meshSourceHandle = ctx->assetManager->LoadModel(shape.meshSourceModelId);
-            needsResolve = true;
-        }
-        else if (!std::holds_alternative<std::monostate>(shape.proceduralParams)) {
-            shape.meshSourceHandle = ctx->assetManager->LoadProceduralModel(shape.proceduralParams);
-            needsResolve = true;
-        }
-        else if (!shape.splineParams.controlPoints.empty()) {
-            shape.meshSourceHandle = ctx->assetManager->LoadSplineModel(shape.splineParams);
-            needsResolve = true;
-        }
-    }
-    if (needsResolve) {
-        registry.emplace_or_replace<Component::PendingPhysicsMeshTag>(entity);
-        state->bPendingModelResolve = true;
-    }
-
-    registry.emplace_or_replace<Component::PendingPhysicsShapeCreationTag>(entity);
-}
-
-template<>
-void OnComponentRemoved<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc& component, entt::registry& registry, entt::entity entity)
-{
-    auto* ctx = registry.ctx().get<Core::EngineContext*>();
-    for (auto& shape : component.shapes) {
-        if (shape.meshSourceHandle.IsValid()) {
-            ctx->assetManager->UnloadModel(shape.meshSourceHandle);
-            shape.meshSourceHandle = {};
-        }
-    }
-    registry.remove<Component::PhysicsBodyDesc>(entity);
-}
-
-template<>
-void OnPlayStart<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc& component, entt::registry& registry, entt::entity entity)
-{
-    registry.emplace_or_replace<Component::PendingPhysicsBodyCreationTag>(entity);
-}
-
-template<>
-void OnPlayStop<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc& component, entt::registry& registry, entt::entity entity)
-{
-    registry.remove<Component::PendingPhysicsBodyCreationTag>(entity);
-
-    auto* ctx = registry.ctx().get<Core::EngineContext*>();
-    JPH::BodyInterface& bodyInterface = ctx->physicsSystem->GetBodyInterface();
-
-    if (auto* body = registry.try_get<Component::PhysicsBodyComponent>(entity)) {
-        if (!body->bodyID.IsInvalid()) {
-            bodyInterface.RemoveBody(body->bodyID);
-            bodyInterface.DestroyBody(body->bodyID);
-            registry.remove<Component::PhysicsBodyComponent>(entity);
-            registry.remove<Component::DynamicPhysicsBodyComponent>(entity);
-        }
-    }
-}
-
-template<>
-ComponentEditorResult DrawComponentEditor<Component::DrawPhysicsDebugTag>(Component::DrawPhysicsDebugTag& component, Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity,
-                                                                          const char* name)
-{
-    ImGui::CollapsingHeader("Physics Debug Draw", ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_AllowOverlap);
-    ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
-    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
-    bool remove = ImGui::SmallButton("X##deletephysicscomponent");
-    ImGui::PopStyleColor();
 
     return {.requestRemoval = remove};
 }

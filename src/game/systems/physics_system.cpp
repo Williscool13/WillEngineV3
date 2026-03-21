@@ -13,11 +13,22 @@
 #include "engine/asset_manager.h"
 #include "engine/engine_api.h"
 #include "engine/logging/engine_log.h"
+#include "game/components/physics/physics_body_component.h"
 #include "Jolt/Physics/Body/BodyCreationSettings.h"
 #include "Jolt/Physics/Collision/Shape/StaticCompoundShape.h"
 
 namespace Game
 {
+void ConnectPhysicsObservers(entt::registry& registry)
+{
+    registry.on_construct<Component::PhysicsBodyDesc>().connect<&Component::PhysicsBodyDesc::OnConstruct>();
+    registry.on_update<Component::PhysicsBodyDesc>().connect<&Component::PhysicsBodyDesc::OnUpdate>();
+    registry.on_destroy<Component::PhysicsBodyDesc>().connect<&Component::PhysicsBodyDesc::OnDestroy>();
+
+    registry.on_construct<Component::PhysicsBodyComponent>().connect<&Component::PhysicsBodyComponent::OnConstruct>();
+    registry.on_destroy<Component::PhysicsBodyComponent>().connect<&Component::PhysicsBodyComponent::OnDestroy>();
+}
+
 void UpdatePhysics(Core::EngineContext* ctx, Engine::GameState* state)
 {
     ZoneScoped;
@@ -398,32 +409,23 @@ void ResolvePhysicsShapeCreation(Core::EngineContext* ctx, Engine::GameState* st
 void ResolvePhysicsBodyCreation(Core::EngineContext* ctx, Engine::GameState* state)
 {
     ZoneScoped;
-    std::vector<entt::entity> resolved;
+    if (!state->bIsPlaying) return;
 
-    auto view = state->registry.view<Component::PhysicsBodyDesc, Component::PendingPhysicsBodyCreationTag>(
-        entt::exclude<Component::PendingPhysicsShapeCreationTag>);
+    auto view = state->registry.view<Component::PhysicsBodyDesc>(
+        entt::exclude<Component::PhysicsBodyComponent, Component::PendingPhysicsShapeCreationTag>);
+
     for (const auto& [entity, bodyDesc] : view.each()) {
         if (!bodyDesc.shapeRef) {
-            LOG_WARN(Game, "PhysicsBodyDesc has no resolved shape, skipping body creation");
-            resolved.push_back(entity);
             continue;
         }
 
         auto* transform = state->registry.try_get<Component::TransformComponent>(entity);
         if (!transform) {
             LOG_WARN(Game, "PhysicsBodyDesc on entity without TransformComponent, skipping");
-            resolved.push_back(entity);
             continue;
         }
 
         JPH::BodyInterface& bodyInterface = ctx->physicsSystem->GetBodyInterface();
-
-        if (auto* existing = state->registry.try_get<Component::PhysicsBodyComponent>(entity)) {
-            bodyInterface.RemoveBody(existing->bodyID);
-            bodyInterface.DestroyBody(existing->bodyID);
-            state->registry.remove<Component::PhysicsBodyComponent>(entity);
-            state->registry.remove<Component::DynamicPhysicsBodyComponent>(entity);
-        }
 
         JPH::Vec3 pos(transform->translation.x, transform->translation.y, transform->translation.z);
         JPH::Quat rot(transform->rotation.x, transform->rotation.y, transform->rotation.z, transform->rotation.w);
@@ -437,12 +439,20 @@ void ResolvePhysicsBodyCreation(Core::EngineContext* ctx, Engine::GameState* sta
                 state->registry.emplace_or_replace<Component::DynamicPhysicsBodyComponent>(entity, transform->translation, transform->rotation);
             }
         }
-
-        resolved.push_back(entity);
     }
+}
+void PhysicsOnPlayStop(Core::EngineContext* ctx, Engine::GameState* state)
+{
+    JPH::BodyInterface& bodyInterface = ctx->physicsSystem->GetBodyInterface();
 
-    for (const auto entity : resolved) {
-        state->registry.remove<Component::PendingPhysicsBodyCreationTag>(entity);
+    auto view = state->registry.view<Component::PhysicsBodyComponent>();
+    for (const auto& [entity, body] : view.each()) {
+        if (!body.bodyID.IsInvalid()) {
+            bodyInterface.RemoveBody(body.bodyID);
+            bodyInterface.DestroyBody(body.bodyID);
+        }
     }
+    state->registry.clear<Component::PhysicsBodyComponent>();
+    state->registry.clear<Component::DynamicPhysicsBodyComponent>();
 }
 } // Game

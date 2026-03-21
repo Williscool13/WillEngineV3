@@ -8,7 +8,7 @@
 #include "components/core_components.h"
 #include "components/render_components.h"
 #include "components/camera_components.h"
-#include "components/physics_components.h"
+#include "components/physics/physics_components.h"
 #include "components/portal_components.h"
 #include "components/debug_components.h"
 

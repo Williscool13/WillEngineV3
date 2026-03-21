@@ -68,7 +68,9 @@ void RegisterComponent(ComponentRegistry& componentRegistry, const char* name)
             SerializeComponent<T>(reg.get<T>(e), json);
         },
         [](entt::registry& reg, entt::entity e, const nlohmann::json& json) {
-            DeserializeComponent<T>(reg.get_or_emplace<T>(e), json);
+            T comp{};
+            DeserializeComponent<T>(comp, json);
+            reg.emplace_or_replace<T>(e, std::move(comp));
         },
         [](const entt::registry& reg, entt::entity e) -> bool {
             return CanAddComponent<T>(reg, e);

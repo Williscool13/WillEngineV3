@@ -9,7 +9,8 @@
 
 #include <Jolt/Physics/Collision/Shape/Shape.h>
 
-#include "game/components/physics_components.h"
+#include "../components/physics/physics_components.h"
+#include "game/components/physics/physics_body_desc.h"
 #include "Jolt/Physics/Body/BodyInterface.h"
 #include "Jolt/Physics/Collision/Shape/BoxShape.h"
 #include "Jolt/Physics/Collision/Shape/CapsuleShape.h"
@@ -36,11 +37,13 @@ struct EngineContext;
 
 namespace Game
 {
+void ConnectPhysicsObservers(entt::registry& registry);
 void UpdatePhysics(Core::EngineContext* ctx, Engine::GameState* state);
 void DebugRenderPhysics(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer);
 void ResolvePhysicsMeshLoads(Core::EngineContext* ctx, Engine::GameState* state);
 void ResolvePhysicsShapeCreation(Core::EngineContext* ctx, Engine::GameState* state);
 void ResolvePhysicsBodyCreation(Core::EngineContext* ctx, Engine::GameState* state);
+void PhysicsOnPlayStop(Core::EngineContext* ctx, Engine::GameState* state);
 
 JPH::BodyID CreateBodyFromShape(JPH::BodyInterface& bodyInterface, const Component::PhysicsBodyDesc& desc, JPH::RVec3 position, JPH::Quat rotation, JPH::ObjectLayer layerOverride = JPH::ObjectLayer(0xFFFF));
 JPH::ShapeRefC CreateShapeFromDesc(const Component::PhysicsShapeDesc& desc, Engine::AssetManager* assetManager);

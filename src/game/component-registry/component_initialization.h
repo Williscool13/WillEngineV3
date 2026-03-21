@@ -7,7 +7,7 @@
 #include <entt/entt.hpp>
 
 #include "../components/common_components.h"
-#include "../components/physics_components.h"
+#include "../components/physics/physics_components.h"
 #include "../components/render_components.h"
 
 namespace Game
@@ -25,7 +25,6 @@ void OnComponentAdded(T& component, entt::registry& registry, entt::entity entit
 template<> void OnComponentAdded<Component::StaticMeshComponent>(Component::StaticMeshComponent& component, entt::registry& registry, entt::entity entity);
 template<> void OnComponentAdded<Component::ProceduralMeshComponent>(Component::ProceduralMeshComponent& component, entt::registry& registry, entt::entity entity);
 template<> void OnComponentAdded<Component::SplineMeshComponent>(Component::SplineMeshComponent& component, entt::registry& registry, entt::entity entity);
-template<> void OnComponentAdded<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc& component, entt::registry& registry, entt::entity entity);
 template<> void OnComponentAdded<Component::StableIdComponent>(Component::StableIdComponent& component, entt::registry& registry, entt::entity entity);
 
 template<typename T>
@@ -34,15 +33,12 @@ template<> void OnComponentRemoved<Component::StableIdComponent>(Component::Stab
 template<> void OnComponentRemoved<Component::StaticMeshComponent>(Component::StaticMeshComponent& component, entt::registry& registry, entt::entity entity);
 template<> void OnComponentRemoved<Component::ProceduralMeshComponent>(Component::ProceduralMeshComponent& component, entt::registry& registry, entt::entity entity);
 template<> void OnComponentRemoved<Component::SplineMeshComponent>(Component::SplineMeshComponent& component, entt::registry& registry, entt::entity entity);
-template<> void OnComponentRemoved<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc& component, entt::registry& registry, entt::entity entity);
 
 template<typename T>
 void OnPlayStart(T& component, entt::registry& registry, entt::entity entity) {}
-template<> void OnPlayStart<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc& component, entt::registry& registry, entt::entity entity);
 
 template<typename T>
 void OnPlayStop(T& component, entt::registry& registry, entt::entity entity) {}
-template<> void OnPlayStop<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc& component, entt::registry& registry, entt::entity entity);
 
 } // Game
 

@@ -11,7 +11,8 @@
 #include "engine/engine_api.h"
 #include "game/components/common_components.h"
 #include "game/components/debug_components.h"
-#include "game/components/physics_components.h"
+#include "../components/physics/physics_components.h"
+#include "game/components/physics/physics_body_component.h"
 #include "physics/physics_system.h"
 
 namespace Game

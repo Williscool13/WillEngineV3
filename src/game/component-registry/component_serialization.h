@@ -10,10 +10,11 @@
 #include "game/components/common_components.h"
 #include "game/components/core_components.h"
 #include "game/components/debug_components.h"
-#include "game/components/physics_components.h"
+#include "../components/physics/physics_components.h"
 #include "game/components/render_components.h"
 #include "game/components/character_components.h"
 #include "game/components/editor_components.h"
+#include "game/components/physics/physics_body_desc.h"
 
 namespace Game
 {

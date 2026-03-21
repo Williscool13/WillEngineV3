@@ -66,6 +66,7 @@ GAME_API void GameLoad(Core::EngineContext* ctx, Engine::GameState* state)
     Audio::AudioManager::RegisterAudio();
     ctx->scheduler->RegisterExternalTaskThread();
     RegisterComponents(state->componentRegistry);
+    Game::ConnectPhysicsObservers(state->registry);
 
 #if DEBUG
     gInternStringFn = ctx->internStringFn;

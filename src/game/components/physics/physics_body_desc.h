@@ -1,36 +1,24 @@
 //
-// Created by William on 2026-01-30.
+// Created by William on 2026-03-21.
 //
 
-#ifndef WILL_ENGINE_PHYSICS_COMPONENTS_H
-#define WILL_ENGINE_PHYSICS_COMPONENTS_H
+#ifndef WILL_ENGINE_PHYSICS_BODY_DESC_H
+#define WILL_ENGINE_PHYSICS_BODY_DESC_H
 
 #include <Jolt/Jolt.h>
-#include <Jolt/Physics/Body/BodyID.h>
 #include <entt/entt.hpp>
 #include <glm/glm.hpp>
 #include <glm/detail/type_quat.hpp>
 
 #include "Jolt/Physics/Body/MotionQuality.h"
-#include "core/string_id.h"
+#include "Jolt/Physics/Collision/ObjectLayer.h"
+#include "Jolt/Physics/Collision/Shape/Shape.h"
 #include "engine/core/model_id.h"
 #include "engine/asset_manager_types.h"
 #include "engine/resources/model/model_types.h"
-#include "Jolt/Physics/Collision/ObjectLayer.h"
-#include "Jolt/Physics/Collision/Shape/Shape.h"
-
 
 namespace Game::Component
 {
-struct PhysicsBodyComponent
-{
-    JPH::BodyID bodyID;
-
-    static void on_construct(entt::registry& registry, entt::entity entity);
-
-    static void on_destroy(entt::registry& registry, entt::entity entity);
-};
-
 enum class PhysicsShapeType : uint8_t
 {
     Box,
@@ -95,31 +83,11 @@ struct PhysicsBodyDesc
 
     // potentially also store its type (e.g. compound)
     JPH::ShapeRefC shapeRef;
+
+    static void OnConstruct(entt::registry& registry, entt::entity entity);
+    static void OnUpdate(entt::registry& registry, entt::entity entity);
+    static void OnDestroy(entt::registry& registry, entt::entity entity);
 };
-
-struct DynamicPhysicsBodyComponent
-{
-    glm::vec3 previousPosition{};
-    glm::quat previousRotation{};
-};
-
-struct TeleportPhysicsTransformTag
-{};
-
-struct DirtyKinematicPhysicsTransformTag
-{};
-
-struct PendingPhysicsMeshTag
-{};
-
-struct PendingPhysicsShapeCreationTag
-{};
-
-struct PendingPhysicsBodyCreationTag
-{};
-
-struct DrawPhysicsDebugTag
-{};
 }
 
-#endif //WILL_ENGINE_PHYSICS_COMPONENTS_H
+#endif //WILL_ENGINE_PHYSICS_BODY_DESC_H

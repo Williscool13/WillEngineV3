@@ -14,7 +14,7 @@
 #include "game/components/component_types.h"
 #include "game/components/core_components.h"
 #include "game/components/editor_components.h"
-#include "game/components/physics_components.h"
+#include "../components/physics/physics_components.h"
 #include "game/components/render_components.h"
 
 namespace Game

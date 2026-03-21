@@ -7,7 +7,7 @@
 #include "../components/camera_components.h"
 #include "../components/character_components.h"
 #include "../components/debug_components.h"
-#include "../components/physics_components.h"
+#include "../components/physics/physics_components.h"
 
 namespace Game
 {
