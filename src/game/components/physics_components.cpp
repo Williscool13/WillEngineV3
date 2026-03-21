@@ -75,9 +75,16 @@ void SerializeComponent<Component::PhysicsBodyDesc>(const Component::PhysicsBody
                     sp["segmentsPerSpan"] = shape.splineParams.segmentsPerSpan;
                     sp["bClosed"] = shape.splineParams.bClosed;
                     sp["bCaps"] = shape.splineParams.bCaps;
+                    sp["bDualPath"] = shape.splineParams.bDualPath;
+                    sp["dualPathSpacing"] = shape.splineParams.dualPathSpacing;
+                    sp["bCrossPlanks"] = shape.splineParams.bCrossPlanks;
+                    sp["crossPlankInterval"] = shape.splineParams.crossPlankInterval;
                     sp["controlPoints"] = nlohmann::json::array();
                     for (const auto& cp : shape.splineParams.controlPoints) {
                         sp["controlPoints"].push_back({cp.x, cp.y, cp.z});
+                    }
+                    if (!shape.splineParams.controlPointRolls.empty()) {
+                        sp["controlPointRolls"] = shape.splineParams.controlPointRolls;
                     }
                     shapeJson["splineParams"] = sp;
                 }
@@ -392,9 +399,16 @@ void DeserializeComponent<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc
                     spline.segmentsPerSpan = sp["segmentsPerSpan"].get<int32_t>();
                     spline.bClosed = sp["bClosed"].get<bool>();
                     spline.bCaps = sp["bCaps"].get<bool>();
+                    spline.bDualPath = sp.value("bDualPath", false);
+                    spline.dualPathSpacing = sp.value("dualPathSpacing", 1.0f);
+                    spline.bCrossPlanks = sp.value("bCrossPlanks", false);
+                    spline.crossPlankInterval = sp.value("crossPlankInterval", 4);
                     spline.controlPoints.clear();
                     for (const auto& cp : sp["controlPoints"]) {
                         spline.controlPoints.push_back({cp[0].get<float>(), cp[1].get<float>(), cp[2].get<float>()});
+                    }
+                    if (sp.contains("controlPointRolls")) {
+                        spline.controlPointRolls = sp["controlPointRolls"].get<std::vector<float>>();
                     }
                     shape.splineParams = std::move(spline);
                 }
@@ -615,12 +629,17 @@ ComponentEditorResult DrawComponentEditor<Component::PhysicsBodyDesc>(Component:
                             }
                             else if (auto* splm = registry.try_get<Component::SplineMeshComponent>(entity)) {
                                 shape.splineParams.controlPoints = splm->controlPoints;
+                                shape.splineParams.controlPointRolls = splm->controlPointRolls;
                                 shape.splineParams.radius = splm->radius;
                                 shape.splineParams.rollAngle = splm->rollAngle;
                                 shape.splineParams.sides = splm->sides;
                                 shape.splineParams.segmentsPerSpan = splm->segmentsPerSpan;
                                 shape.splineParams.bClosed = splm->bClosed;
                                 shape.splineParams.bCaps = splm->bCaps;
+                                shape.splineParams.bDualPath = splm->bDualPath;
+                                shape.splineParams.dualPathSpacing = splm->dualPathSpacing;
+                                shape.splineParams.bCrossPlanks = splm->bCrossPlanks;
+                                shape.splineParams.crossPlankInterval = splm->crossPlankInterval;
                                 shape.meshSourceHandle = ctx->assetManager->LoadSplineModel(shape.splineParams);
                                 registry.emplace_or_replace<Component::PendingPhysicsMeshTag>(entity);
                                 state->bPendingModelResolve = true;

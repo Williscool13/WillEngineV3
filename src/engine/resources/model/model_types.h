@@ -283,12 +283,17 @@ struct TrefoilKnotParams
 struct SplineParams
 {
     std::vector<glm::vec3> controlPoints{{0, 0, 0}, {0, 0, 1}, {0, 0, 2}, {0, 0, 3}};
+    std::vector<float> controlPointRolls;
     float radius{0.5f};
     float rollAngle{0.0f}; // degree; rotates around the path tangent
     int32_t sides{8};
     int32_t segmentsPerSpan{8};
     bool bClosed{false};
     bool bCaps{true};
+    bool bDualPath{false};
+    float dualPathSpacing{1.0f};
+    bool bCrossPlanks{false};
+    int32_t crossPlankInterval{4};
 };
 
 using ProceduralParams = std::variant<std::monostate, StaircaseParams, BoxParams, CylinderParams, CapsuleParams, TorusParams, ArchParams, WedgeParams, ConeParams, DoorParams, PlaneParams, SphereParams

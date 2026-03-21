@@ -1630,7 +1630,6 @@ bool ProceduralModelLoadSlot::GenerateSpline(const Engine::SplineParams& p)
 
     const int segs = std::max(1, p.segmentsPerSpan);
     const int sides = std::max(3, p.sides);
-    const float roll = glm::radians(p.rollAngle);
     const int totalSpans = N - 1;
     const int totalRings = totalSpans * segs + 1;
 
@@ -1646,13 +1645,30 @@ bool ProceduralModelLoadSlot::GenerateSpline(const Engine::SplineParams& p)
     auto catmullTan = [](glm::vec3 p0, glm::vec3 p1, glm::vec3 p2, glm::vec3 p3, float t) -> glm::vec3 {
         return 0.5f * ((-p0 + p2) + 2.0f * (2.0f * p0 - 5.0f * p1 + 4.0f * p2 - p3) * t + 3.0f * (-p0 + 3.0f * p1 - 3.0f * p2 + p3) * (t * t));
     };
+    auto catmullScalar = [](float v0, float v1, float v2, float v3, float t) -> float {
+        return 0.5f * ((2.0f * v1) + (-v0 + v2) * t + (2.0f * v0 - 5.0f * v1 + 4.0f * v2 - v3) * (t * t) + (-v0 + 3.0f * v1 - 3.0f * v2 + v3) * (t * t * t));
+    };
+
+    auto getRoll = [&](int i) -> float {
+        if (p.controlPointRolls.empty()) return 0.0f;
+        if (i < 0) return p.controlPointRolls[0];
+        if (i >= static_cast<int>(p.controlPointRolls.size())) return p.controlPointRolls.back();
+        return p.controlPointRolls[i];
+    };
 
     struct Frame
     {
-        glm::vec3 pos, tangent, right, up;
+        glm::vec3 pos;
+        glm::vec3 tangent;
+        glm::vec3 right;
+        glm::vec3 up;
+        glm::vec3 rRight;
+        glm::vec3 rUp;
     };
     std::vector<Frame> frames;
+    std::vector<float> perRingRoll;
     frames.reserve(totalRings);
+    perRingRoll.reserve(totalRings);
 
     for (int i = 0; i < totalRings; i++) {
         int span;
@@ -1668,7 +1684,8 @@ bool ProceduralModelLoadSlot::GenerateSpline(const Engine::SplineParams& p)
 
         glm::vec3 tang = catmullTan(getCP(span - 1), getCP(span), getCP(span + 1), getCP(span + 2), t);
         if (glm::length(tang) < 1e-6f) tang = frames.empty() ? glm::vec3{0, 0, 1} : frames.back().tangent;
-        frames.push_back({catmullPos(getCP(span - 1), getCP(span), getCP(span + 1), getCP(span + 2), t), glm::normalize(tang), {}, {}});
+        perRingRoll.push_back(catmullScalar(getRoll(span - 1), getRoll(span), getRoll(span + 1), getRoll(span + 2), t));
+        frames.push_back({catmullPos(getCP(span - 1), getCP(span), getCP(span + 1), getCP(span + 2), t), glm::normalize(tang), {}, {}, {}, {}});
     }
 
     // Parallel transport frames
@@ -1692,81 +1709,167 @@ bool ProceduralModelLoadSlot::GenerateSpline(const Engine::SplineParams& p)
         }
     }
 
+    // Apply per-ring roll (base rollAngle + interpolated per-point roll)
+    for (int i = 0; i < totalRings; i++) {
+        float totalRoll = glm::radians(p.rollAngle + perRingRoll[i]);
+        float cr = glm::cos(totalRoll), sr = glm::sin(totalRoll);
+        frames[i].rRight = cr * frames[i].right + sr * frames[i].up;
+        frames[i].rUp = -sr * frames[i].right + cr * frames[i].up;
+    }
+
     std::vector<Vertex> vertices;
     std::vector<uint32_t> indices;
-    vertices.reserve(totalRings * sides + (p.bCaps ? 2 : 0));
-    indices.reserve((totalRings - 1) * sides * 6 + (p.bCaps ? sides * 6 : 0));
 
-    const float cosRoll = glm::cos(roll), sinRoll = glm::sin(roll);
+    const int railCount = p.bDualPath ? 2 : 1;
+    const float halfSpacing = p.dualPathSpacing * 0.5f;
 
-    for (int i = 0; i < totalRings; i++) {
-        const Frame& f = frames[i];
-        const glm::vec3 rRight = cosRoll * f.right + sinRoll * f.up;
-        const glm::vec3 rUp = -sinRoll * f.right + cosRoll * f.up;
-        const float vCoord = (totalRings > 1) ? static_cast<float>(i) / (totalRings - 1) : 0.0f;
-        for (int j = 0; j < sides; j++) {
-            const float angle = glm::two_pi<float>() * j / sides;
-            const glm::vec3 radial = glm::cos(angle) * rRight + glm::sin(angle) * rUp;
-            Vertex v{};
-            v.position = f.pos + p.radius * radial;
-            v.normal = radial;
-            v.texcoordU = static_cast<float>(j) / sides;
-            v.texcoordV = vCoord;
-            v.tangent = {rRight.x, rRight.y, rRight.z, 1.0f};
-            v.color = {1, 1, 1, 1};
-            vertices.push_back(v);
-        }
-    }
+    for (int rail = 0; rail < railCount; rail++) {
+        const float offsetSign = (railCount == 1) ? 0.0f : (rail == 0 ? -1.0f : 1.0f);
+        const uint32_t baseVertex = static_cast<uint32_t>(vertices.size());
 
-    for (int i = 0; i < totalRings - 1; i++) {
-        for (int j = 0; j < sides; j++) {
-            uint32_t a0 = i * sides + j, a1 = i * sides + (j + 1) % sides;
-            uint32_t b0 = (i + 1) * sides + j, b1 = (i + 1) * sides + (j + 1) % sides;
-            indices.push_back(a0);
-            indices.push_back(a1);
-            indices.push_back(b0);
-            indices.push_back(a1);
-            indices.push_back(b1);
-            indices.push_back(b0);
-        }
-    }
-
-    if (p.bCaps) {
-        // Start cap (normal = -tangent)
-        {
-            uint32_t cIdx = static_cast<uint32_t>(vertices.size());
-            const Frame& f = frames[0];
-            Vertex vc{};
-            vc.position = f.pos;
-            vc.normal = -f.tangent;
-            vc.texcoordU = 0.5f;
-            vc.texcoordV = 0.0f;
-            vc.tangent = {f.right.x, f.right.y, f.right.z, 1.0f};
-            vc.color = {1, 1, 1, 1};
-            vertices.push_back(vc);
+        for (int i = 0; i < totalRings; i++) {
+            const Frame& f = frames[i];
+            const glm::vec3 center = f.pos + offsetSign * halfSpacing * f.rRight;
+            const float vCoord = (totalRings > 1) ? static_cast<float>(i) / (totalRings - 1) : 0.0f;
             for (int j = 0; j < sides; j++) {
-                indices.push_back(cIdx);
-                indices.push_back((j + 1) % sides);
-                indices.push_back(j);
+                const float angle = glm::two_pi<float>() * j / sides;
+                const glm::vec3 radial = glm::cos(angle) * f.rRight + glm::sin(angle) * f.rUp;
+                Vertex v{};
+                v.position = center + p.radius * radial;
+                v.normal = radial;
+                v.texcoordU = static_cast<float>(j) / sides;
+                v.texcoordV = vCoord;
+                v.tangent = {f.rRight.x, f.rRight.y, f.rRight.z, 1.0f};
+                v.color = {1, 1, 1, 1};
+                vertices.push_back(v);
             }
         }
-        // End cap (normal = +tangent)
-        {
-            uint32_t cIdx = static_cast<uint32_t>(vertices.size());
-            const Frame& f = frames[totalRings - 1];
-            uint32_t rStart = static_cast<uint32_t>((totalRings - 1) * sides);
-            Vertex vc{};
-            vc.position = f.pos;
-            vc.normal = f.tangent;
-            vc.texcoordU = 0.5f;
-            vc.texcoordV = 1.0f;
-            vc.tangent = {f.right.x, f.right.y, f.right.z, 1.0f};
-            vc.color = {1, 1, 1, 1};
-            vertices.push_back(vc);
+
+        for (int i = 0; i < totalRings - 1; i++) {
             for (int j = 0; j < sides; j++) {
-                indices.push_back(cIdx);
-                indices.push_back(rStart + j);
-                indices.push_back(rStart + (j + 1) % sides);
+                uint32_t a0 = baseVertex + i * sides + j, a1 = baseVertex + i * sides + (j + 1) % sides;
+                uint32_t b0 = baseVertex + (i + 1) * sides + j, b1 = baseVertex + (i + 1) * sides + (j + 1) % sides;
+                indices.push_back(a0);
+                indices.push_back(a1);
+                indices.push_back(b0);
+                indices.push_back(a1);
+                indices.push_back(b1);
+                indices.push_back(b0);
+            }
+        }
+
+        if (p.bCaps) {
+            {
+                uint32_t cIdx = static_cast<uint32_t>(vertices.size());
+                const Frame& f = frames[0];
+                const glm::vec3 center = f.pos + offsetSign * halfSpacing * f.rRight;
+                Vertex vc{};
+                vc.position = center;
+                vc.normal = -f.tangent;
+                vc.texcoordU = 0.5f;
+                vc.texcoordV = 0.0f;
+                vc.tangent = {f.right.x, f.right.y, f.right.z, 1.0f};
+                vc.color = {1, 1, 1, 1};
+                vertices.push_back(vc);
+                for (int j = 0; j < sides; j++) {
+                    indices.push_back(cIdx);
+                    indices.push_back(baseVertex + (j + 1) % sides);
+                    indices.push_back(baseVertex + j);
+                }
+            }
+            {
+                uint32_t cIdx = static_cast<uint32_t>(vertices.size());
+                const Frame& f = frames[totalRings - 1];
+                uint32_t rStart = baseVertex + static_cast<uint32_t>((totalRings - 1) * sides);
+                const glm::vec3 center = f.pos + offsetSign * halfSpacing * f.rRight;
+                Vertex vc{};
+                vc.position = center;
+                vc.normal = f.tangent;
+                vc.texcoordU = 0.5f;
+                vc.texcoordV = 1.0f;
+                vc.tangent = {f.right.x, f.right.y, f.right.z, 1.0f};
+                vc.color = {1, 1, 1, 1};
+                vertices.push_back(vc);
+                for (int j = 0; j < sides; j++) {
+                    indices.push_back(cIdx);
+                    indices.push_back(rStart + j);
+                    indices.push_back(rStart + (j + 1) % sides);
+                }
+            }
+        }
+    }
+
+    if (p.bDualPath && p.bCrossPlanks) {
+        constexpr float plankThickness = 0.1f;
+        const int plankInterval = std::max(1, p.crossPlankInterval);
+
+        auto makeVert = [](glm::vec3 pos, glm::vec3 normal, glm::vec3 tan, float u, float v) {
+            Vertex vert{};
+            vert.position = pos;
+            vert.normal = normal;
+            vert.texcoordU = u;
+            vert.texcoordV = v;
+            vert.tangent = {tan.x, tan.y, tan.z, 1.0f};
+            vert.color = {1, 1, 1, 1};
+            return vert;
+        };
+
+        for (int i = 0; i < totalRings - 1; i += plankInterval) {
+            const Frame& f0 = frames[i];
+            const Frame& f1 = frames[i + 1];
+
+            // 8 corners of the plank box
+            const glm::vec3 tl0 = f0.pos - halfSpacing * f0.rRight + p.radius * f0.rUp;
+            const glm::vec3 tr0 = f0.pos + halfSpacing * f0.rRight + p.radius * f0.rUp;
+            const glm::vec3 bl0 = f0.pos - halfSpacing * f0.rRight + (p.radius - plankThickness) * f0.rUp;
+            const glm::vec3 br0 = f0.pos + halfSpacing * f0.rRight + (p.radius - plankThickness) * f0.rUp;
+            const glm::vec3 tl1 = f1.pos - halfSpacing * f1.rRight + p.radius * f1.rUp;
+            const glm::vec3 tr1 = f1.pos + halfSpacing * f1.rRight + p.radius * f1.rUp;
+            const glm::vec3 bl1 = f1.pos - halfSpacing * f1.rRight + (p.radius - plankThickness) * f1.rUp;
+            const glm::vec3 br1 = f1.pos + halfSpacing * f1.rRight + (p.radius - plankThickness) * f1.rUp;
+
+            uint32_t base = static_cast<uint32_t>(vertices.size());
+
+            // Top face (normal = rUp)
+            vertices.push_back(makeVert(tl0, f0.rUp, f0.rRight, 0, 0));
+            vertices.push_back(makeVert(tr0, f0.rUp, f0.rRight, 1, 0));
+            vertices.push_back(makeVert(tl1, f1.rUp, f1.rRight, 0, 1));
+            vertices.push_back(makeVert(tr1, f1.rUp, f1.rRight, 1, 1));
+            // Bottom face (normal = -rUp)
+            vertices.push_back(makeVert(bl0, -f0.rUp, f0.rRight, 0, 0));
+            vertices.push_back(makeVert(br0, -f0.rUp, f0.rRight, 1, 0));
+            vertices.push_back(makeVert(bl1, -f1.rUp, f1.rRight, 0, 1));
+            vertices.push_back(makeVert(br1, -f1.rUp, f1.rRight, 1, 1));
+            // Front face (normal = -tangent)
+            vertices.push_back(makeVert(tl0, -f0.tangent, f0.rRight, 0, 1));
+            vertices.push_back(makeVert(tr0, -f0.tangent, f0.rRight, 1, 1));
+            vertices.push_back(makeVert(bl0, -f0.tangent, f0.rRight, 0, 0));
+            vertices.push_back(makeVert(br0, -f0.tangent, f0.rRight, 1, 0));
+            // Back face (normal = +tangent)
+            vertices.push_back(makeVert(tl1, f1.tangent, f1.rRight, 0, 1));
+            vertices.push_back(makeVert(tr1, f1.tangent, f1.rRight, 1, 1));
+            vertices.push_back(makeVert(bl1, f1.tangent, f1.rRight, 0, 0));
+            vertices.push_back(makeVert(br1, f1.tangent, f1.rRight, 1, 0));
+            // Left face (normal = -rRight)
+            vertices.push_back(makeVert(tl0, -f0.rRight, f0.tangent, 0, 1));
+            vertices.push_back(makeVert(tl1, -f1.rRight, f1.tangent, 1, 1));
+            vertices.push_back(makeVert(bl0, -f0.rRight, f0.tangent, 0, 0));
+            vertices.push_back(makeVert(bl1, -f1.rRight, f1.tangent, 1, 0));
+            // Right face (normal = +rRight)
+            vertices.push_back(makeVert(tr0, f0.rRight, f0.tangent, 0, 1));
+            vertices.push_back(makeVert(tr1, f1.rRight, f1.tangent, 1, 1));
+            vertices.push_back(makeVert(br0, f0.rRight, f0.tangent, 0, 0));
+            vertices.push_back(makeVert(br1, f1.rRight, f1.tangent, 1, 0));
+
+            // 6 faces × 2 triangles each
+            for (int face = 0; face < 6; face++) {
+                uint32_t b = base + face * 4;
+                indices.push_back(b);
+                indices.push_back(b + 1);
+                indices.push_back(b + 2);
+                indices.push_back(b + 1);
+                indices.push_back(b + 3);
+                indices.push_back(b + 2);
             }
         }
     }

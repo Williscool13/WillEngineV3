@@ -175,12 +175,20 @@ StaticModelHandle AssetManager::LoadSplineModel(const SplineParams& params)
     uint64_t hash = fnv1a64(
         reinterpret_cast<const uint8_t*>(params.controlPoints.data()),
         params.controlPoints.size() * sizeof(glm::vec3));
+    if (!params.controlPointRolls.empty()) {
+        hash = fnv1a64(reinterpret_cast<const uint8_t*>(params.controlPointRolls.data()),
+            params.controlPointRolls.size() * sizeof(float), hash);
+    }
     hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.radius),           sizeof(params.radius),           hash);
     hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.rollAngle),        sizeof(params.rollAngle),        hash);
     hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.sides),            sizeof(params.sides),            hash);
     hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.segmentsPerSpan),  sizeof(params.segmentsPerSpan),  hash);
     hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.bClosed),          sizeof(params.bClosed),          hash);
     hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.bCaps),            sizeof(params.bCaps),            hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.bDualPath),        sizeof(params.bDualPath),        hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.dualPathSpacing),  sizeof(params.dualPathSpacing),  hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.bCrossPlanks),     sizeof(params.bCrossPlanks),     hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.crossPlankInterval), sizeof(params.crossPlankInterval), hash);
 
     ModelID splineModelId{hash};
 

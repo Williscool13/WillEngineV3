@@ -67,7 +67,6 @@ void PlayerController::Update(Core::EngineContext* ctx, Engine::GameState* state
     }
     transform.rotation = glm::angleAxis(characterYaw, WORLD_UP);
     state->registry.emplace_or_replace<Component::DirtyTransformTag>(character->GetEntity());
-
     // Orbit camera: behind and slightly to the right
     const glm::quat orbitRotation = glm::angleAxis(lookYaw, WORLD_UP) * glm::angleAxis(lookPitch, WORLD_RIGHT);
     const glm::vec3 orbitForward = orbitRotation * WORLD_FORWARD;
