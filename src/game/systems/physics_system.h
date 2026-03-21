@@ -42,7 +42,7 @@ void ResolvePhysicsMeshLoads(Core::EngineContext* ctx, Engine::GameState* state)
 void ResolvePhysicsShapeCreation(Core::EngineContext* ctx, Engine::GameState* state);
 void ResolvePhysicsBodyCreation(Core::EngineContext* ctx, Engine::GameState* state);
 
-JPH::BodyID CreateBodyFromShape(JPH::BodyInterface& bodyInterface, const Component::PhysicsBodyDesc& desc, JPH::RVec3 position, JPH::Quat rotation);
+JPH::BodyID CreateBodyFromShape(JPH::BodyInterface& bodyInterface, const Component::PhysicsBodyDesc& desc, JPH::RVec3 position, JPH::Quat rotation, JPH::ObjectLayer layerOverride = JPH::ObjectLayer(0xFFFF));
 JPH::ShapeRefC CreateShapeFromDesc(const Component::PhysicsShapeDesc& desc, Engine::AssetManager* assetManager);
 } // Game
 

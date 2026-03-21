@@ -193,7 +193,7 @@ void DebugRenderPhysics(Core::EngineContext* ctx, Engine::GameState* state, Core
 }
 
 
-JPH::BodyID CreateBodyFromShape(JPH::BodyInterface& bodyInterface, const Component::PhysicsBodyDesc& desc, JPH::RVec3 position, JPH::Quat rotation)
+JPH::BodyID CreateBodyFromShape(JPH::BodyInterface& bodyInterface, const Component::PhysicsBodyDesc& desc, JPH::RVec3 position, JPH::Quat rotation, JPH::ObjectLayer layerOverride)
 {
     JPH::EMotionType motionType = desc.motionType == Component::PhysicsMotionType::Static
                                       ? JPH::EMotionType::Static
@@ -201,7 +201,9 @@ JPH::BodyID CreateBodyFromShape(JPH::BodyInterface& bodyInterface, const Compone
                                             ? JPH::EMotionType::Dynamic
                                             : JPH::EMotionType::Kinematic;
 
-    JPH::ObjectLayer layer = desc.motionType == Component::PhysicsMotionType::Static ? Physics::Layers::NON_MOVING : Physics::Layers::MOVING;
+    JPH::ObjectLayer layer = layerOverride != JPH::ObjectLayer(0xFFFF)
+                                 ? layerOverride
+                                 : desc.motionType == Component::PhysicsMotionType::Static ? Physics::Layers::NON_MOVING : Physics::Layers::MOVING;
 
     JPH::BodyCreationSettings settings(desc.shapeRef, position, rotation, motionType, layer);
     if (desc.motionType == Component::PhysicsMotionType::Dynamic) {

@@ -53,8 +53,21 @@ void EditorUpdate(Core::EngineContext* ctx, Engine::GameState* state)
     bool popupOpen = ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
     if (state->bIsPlaying) {
         if (!popupOpen && state->inputFrame->GetKey(Key::ESCAPE).pressed) {
-            PlayStop(ctx, state);
+            if (state->bGameCursorCaptured) {
+                state->bGameCursorCaptured = false;
+                ctx->setCursorHiddenFn(false);
+            }
+            else {
+                PlayStop(ctx, state);
+            }
         }
+
+        if (!state->bGameCursorCaptured && !ctx->bImguiMouseCaptured
+            && state->inputFrame->GetMouse(MouseButton::LMB).pressed) {
+            state->bGameCursorCaptured = true;
+            ctx->setCursorHiddenFn(true);
+        }
+
         return;
     }
 

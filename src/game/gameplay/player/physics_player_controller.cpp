@@ -1,27 +1,26 @@
 //
-// Created by William on 2026-03-20.
+// Created by William on 2026-03-21.
 //
 
-#include "player_controller.h"
+#include "physics_player_controller.h"
 
 #include "core/include/engine_context.h"
 #include "core/input/input_frame.h"
 #include "core/math/constants.h"
 #include "engine/engine_api.h"
 #include "game/components/camera_components.h"
-#include "game/components/character_components.h"
 #include "game/components/core_components.h"
 #include "physics/physics_system.h"
 
 namespace Game
 {
-void PlayerController::Initialize(Engine::GameState* gameState, Physics::PhysicsSystem* physicsSystem, glm::vec3 spawnPosition)
+void PhysicsPlayerController::Initialize(Engine::GameState* gameState, Physics::PhysicsSystem* physicsSystem, glm::vec3 spawnPosition)
 {
-    character = std::make_unique<Character>();
+    character = std::make_unique<PhysicsCharacter>();
     character->Initialize(gameState, physicsSystem, spawnPosition);
 }
 
-void PlayerController::Update(Core::EngineContext* ctx, Engine::GameState* state)
+void PhysicsPlayerController::Update(Core::EngineContext* ctx, Engine::GameState* state)
 {
     const float deltaTime = state->timeFrame->deltaTime;
     const Core::InputFrame* input = state->inputFrame;
@@ -32,7 +31,7 @@ void PlayerController::Update(Core::EngineContext* ctx, Engine::GameState* state
     if (state->bGameCursorCaptured) {
         lookYaw += glm::radians(-input->mouseXDelta * lookSpeed);
         lookPitch += glm::radians(-input->mouseYDelta * lookSpeed);
-        lookPitch = glm::clamp(lookPitch, glm::radians(-89.9f), glm::radians(89.9f));
+        lookPitch = glm::clamp(lookPitch, glm::radians(-89.0f), glm::radians(89.0f));
 
         const glm::quat horizontalRotation = glm::angleAxis(lookYaw, WORLD_UP);
         const glm::vec3 forward = horizontalRotation * WORLD_FORWARD;
@@ -52,22 +51,11 @@ void PlayerController::Update(Core::EngineContext* ctx, Engine::GameState* state
 
     character->Update(deltaTime, moveInput, jumpRequested, ctx->physicsSystem);
 
-    // Sync physics position back to transform
-    auto& comp = state->registry.get<Component::CharacterPhysicsComponent>(character->GetEntity());
-    JPH::RVec3 pos = comp.character->GetPosition();
-    auto& transform = state->registry.get<Component::TransformComponent>(character->GetEntity());
-    transform.translation = glm::vec3(pos.GetX(), pos.GetY(), pos.GetZ());
-    if (glm::length(moveInput) > 0.001f) {
-        float targetYaw = std::atan2(-moveInput.x, -moveInput.z);
-        characterYaw = targetYaw;
-    }
-    transform.rotation = glm::angleAxis(characterYaw, WORLD_UP);
-    state->registry.emplace_or_replace<Component::DirtyTransformTag>(character->GetEntity());
-
-    // Camera
+    // Camera always updates (even when cursor released, so the view doesn't freeze)
+    glm::vec3 characterPos = character->GetInterpolatedPosition();
     const float aspectRatio = static_cast<float>(ctx->windowContext.viewportWidth) / static_cast<float>(ctx->windowContext.viewportHeight);
     Core::ViewData viewData = Camera::ComputeOrbitCameraSwept(
-        transform.translation, lookYaw, lookPitch,
+        characterPos, lookYaw, lookPitch,
         cameraParams, aspectRatio, deltaTime,
         cameraState, ctx->physicsSystem
     );
@@ -77,10 +65,9 @@ void PlayerController::Update(Core::EngineContext* ctx, Engine::GameState* state
         auto& camera = cameraView.get<Component::CameraComponent>(camEntity);
         camera.currentViewData = viewData;
     }
-
 }
 
-void PlayerController::Shutdown(Physics::PhysicsSystem* physicsSystem)
+void PhysicsPlayerController::Shutdown(Physics::PhysicsSystem* physicsSystem)
 {
     character->Shutdown(physicsSystem);
     character.reset();

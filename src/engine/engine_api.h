@@ -51,6 +51,7 @@ struct EditorTextureResidency
 struct GameState
 {
     bool bIsPlaying{false};
+    bool bGameCursorCaptured{false};
 
     const Core::InputFrame* inputFrame{nullptr};
     const Core::TimeFrame* timeFrame{nullptr};
@@ -66,15 +67,13 @@ struct GameState
     std::map<JPH::BodyID, entt::entity> bodyToEntity;
     bool bEnablePhysics = true;
 
-    // Shadows
+    // Lighting
     Core::DirectionalLight directionalLight{};
     Core::ShadowQuality shadowQuality = Core::ShadowQuality::Ultra;
     Core::ShadowConfiguration shadowConfig;
-
     Core::GTAOConfiguration gtaoConfig{};
-
-    // Post-Process
     Core::PostProcessConfiguration postProcess{};
+    CubemapHandle skybox{CubemapHandle::INVALID};
 
     // Asset Loading
     bool bPendingModelResolve{false};

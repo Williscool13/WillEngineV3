@@ -408,5 +408,11 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
     for (auto& [matID, slotIndex] : materialManager->GetIdToEntryMap()) {
         frameBuffer->mainViewFamily.materials[slotIndex] = materialManager->GetProperties(matID);
     }
+
+    if (state->skybox.IsValid()) {
+        frameBuffer->mainViewFamily.skyboxIndex = state->skybox.index;
+    } else {
+        state->skybox = ctx->assetManager->LoadCubemap("kloofendal"_sid);
+    }
 }
 }

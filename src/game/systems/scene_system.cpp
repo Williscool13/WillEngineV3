@@ -18,7 +18,7 @@
 #include "game/components/core_components.h"
 #include "game/components/render_components.h"
 #include "game/components/scene_components.h"
-#include "game/gameplay/player/player_controller.h"
+#include "game/gameplay/player/physics_player_controller.h"
 #include "platform/paths.h"
 
 namespace Game
@@ -307,17 +307,19 @@ void PlayStart(Core::EngineContext* ctx, Engine::GameState* state)
         }
     }
 
-    auto& playerController = state->registry.ctx().emplace<PlayerController>();
+    auto& playerController = state->registry.ctx().emplace<PhysicsPlayerController>();
     playerController.Initialize(state, ctx->physicsSystem, glm::vec3(0.0f, 3.0f, 0.0f));
 
     state->bIsPlaying = true;
+    state->bGameCursorCaptured = true;
+    ctx->setCursorHiddenFn(true);
 }
 
 void PlayStop(Core::EngineContext* ctx, Engine::GameState* state)
 {
-    if (auto* playerController = state->registry.ctx().find<PlayerController>()) {
+    if (auto* playerController = state->registry.ctx().find<PhysicsPlayerController>()) {
         playerController->Shutdown(ctx->physicsSystem);
-        state->registry.ctx().erase<PlayerController>();
+        state->registry.ctx().erase<PhysicsPlayerController>();
     }
 
     auto view = state->registry.view<Component::SceneComponent>();
@@ -333,6 +335,7 @@ void PlayStop(Core::EngineContext* ctx, Engine::GameState* state)
     state->pieSnapshot.clear();
 
     state->bIsPlaying = false;
+    state->bGameCursorCaptured = false;
     ctx->setCursorHiddenFn(false);
 }
 } // Game

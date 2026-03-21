@@ -48,6 +48,12 @@ set(GAME_SOURCES
 
         gameplay/player/character.cpp
         gameplay/player/character.h
+        gameplay/camera/gameplay_camera.cpp
+        gameplay/camera/gameplay_camera.h
+        gameplay/player/physics_character.cpp
+        gameplay/player/physics_character.h
+        gameplay/player/physics_player_controller.cpp
+        gameplay/player/physics_player_controller.h
         gameplay/player/player_controller.cpp
         gameplay/player/player_controller.h
 )

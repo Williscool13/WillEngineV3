@@ -99,8 +99,6 @@ void UpdateGameCamera(Core::EngineContext* ctx, Engine::GameState* state)
         camera.currentViewData.view = glm::lookAt(camera.currentViewData.cameraPos, camera.currentViewData.cameraLookAt, camera.currentViewData.cameraUp);
         camera.currentViewData.proj = glm::perspective(camera.currentViewData.fovRadians, camera.currentViewData.aspectRatio, camera.currentViewData.farPlane, camera.currentViewData.nearPlane);
     }
-
-    ctx->setCursorHiddenFn(true);
 }
 
 void UpdateEditorCamera(Core::EngineContext* ctx, Engine::GameState* state)

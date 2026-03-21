@@ -1,13 +1,13 @@
 //
-// Created by William on 2026-03-20.
+// Created by William on 2026-03-21.
 //
 
-#ifndef WILL_ENGINE_PLAYER_CONTROLLER_H
-#define WILL_ENGINE_PLAYER_CONTROLLER_H
+#ifndef WILL_ENGINE_PHYSICS_PLAYER_CONTROLLER_H
+#define WILL_ENGINE_PHYSICS_PLAYER_CONTROLLER_H
 
 #include <memory>
 
-#include "character.h"
+#include "physics_character.h"
 #include "game/gameplay/camera/gameplay_camera.h"
 
 namespace Core
@@ -22,26 +22,25 @@ struct GameState;
 
 namespace Game
 {
-class PlayerController
+class PhysicsPlayerController
 {
 public:
     void Initialize(Engine::GameState* gameState, Physics::PhysicsSystem* physicsSystem, glm::vec3 spawnPosition);
     void Update(Core::EngineContext* ctx, Engine::GameState* state);
     void Shutdown(Physics::PhysicsSystem* physicsSystem);
 
-    Character* GetCharacter() { return character.get(); }
+    PhysicsCharacter* GetCharacter() { return character.get(); }
 
 private:
-    std::unique_ptr<Character> character;
+    std::unique_ptr<PhysicsCharacter> character;
 
     float lookYaw{0.0f};
     float lookPitch{0.0f};
     float lookSpeed{0.1f};
-    float characterYaw{0.0f};
 
     Camera::OrbitCameraParams cameraParams{};
     Camera::OrbitCameraState cameraState{};
 };
 } // Game
 
-#endif //WILL_ENGINE_PLAYER_CONTROLLER_H
+#endif //WILL_ENGINE_PHYSICS_PLAYER_CONTROLLER_H
