@@ -39,11 +39,6 @@ struct SplineMeshComponent
     glm::vec4 modelFlags{1.0f, 1.0f, 0.0f, 0.0f};
     glm::vec3 renderOffset{0.0f};
 
-    // Transient
-    Engine::StaticModelHandle modelHandle{};
-    PrimitiveData primitive{};
-    bool bPrimitiveReady{false};
-
     static void OnConstruct(entt::registry& registry, entt::entity entity);
     static void OnDestroy(entt::registry& registry, entt::entity entity);
     static ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);

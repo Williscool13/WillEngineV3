@@ -10,13 +10,11 @@
 #include "imgui.h"
 #include <glm/gtc/type_ptr.hpp>
 
-#include "spline_mesh_component.h"
 #include "game/components/scene_components.h"
 #include "core/include/engine_context.h"
 #include "engine/asset_manager.h"
 #include "engine/engine_api.h"
 #include "engine/logging/engine_log.h"
-#include "game/component-registry/component_copy.h"
 #include "game/component-registry/component_serialization.h"
 #include "game/component-registry/component_editor.h"
 
@@ -26,20 +24,21 @@ void RecreateStaticMesh(StaticMeshComponent& component, entt::registry& registry
 {
     auto* ctx = registry.ctx().get<Core::EngineContext*>();
     auto* state = registry.ctx().get<Engine::GameState*>();
+    auto& runtime = registry.get_or_emplace<MeshRuntime>(entity);
 
     // Teardown
-    for (size_t i = 0; i < component.primitiveCount; ++i) {
-        ctx->materialManager->ReleaseMaterial(component.primitives[i].materialID);
+    for (size_t i = 0; i < runtime.primitives.Size(); ++i) {
+        ctx->materialManager->ReleaseMaterial(runtime.primitives[i].materialID);
     }
-    component.primitiveCount = 0;
-    if (component.modelHandle.IsValid()) {
-        ctx->assetManager->UnloadModel(component.modelHandle);
-        component.modelHandle = {};
+    runtime.primitives.Clear();
+    if (runtime.modelHandle.IsValid()) {
+        ctx->assetManager->UnloadModel(runtime.modelHandle);
+        runtime.modelHandle = {};
     }
 
     // Rebuild
     if (component.modelId.IsValid() && component.meshIndex != -1) {
-        component.modelHandle = ctx->assetManager->LoadModel(component.modelId);
+        runtime.modelHandle = ctx->assetManager->LoadModel(component.modelId);
         registry.emplace_or_replace<StaticMeshLoadingTag>(entity);
         state->bPendingModelResolve |= true;
     }
@@ -62,13 +61,15 @@ void StaticMeshComponent::OnConstruct(entt::registry& registry, entt::entity ent
 
 void StaticMeshComponent::OnDestroy(entt::registry& registry, entt::entity entity)
 {
-    auto& component = registry.get<StaticMeshComponent>(entity);
     auto* ctx = registry.ctx().get<Core::EngineContext*>();
-    for (size_t i = 0; i < component.primitiveCount; ++i) {
-        ctx->materialManager->ReleaseMaterial(component.primitives[i].materialID);
-    }
-    if (component.modelHandle.IsValid()) {
-        ctx->assetManager->UnloadModel(component.modelHandle);
+    if (auto* runtime = registry.try_get<MeshRuntime>(entity)) {
+        for (size_t i = 0; i < runtime->primitives.Size(); ++i) {
+            ctx->materialManager->ReleaseMaterial(runtime->primitives[i].materialID);
+        }
+        if (runtime->modelHandle.IsValid()) {
+            ctx->assetManager->UnloadModel(runtime->modelHandle);
+        }
+        registry.remove<MeshRuntime>(entity);
     }
 
     registry.remove<StaticMeshLoadingTag>(entity);
@@ -84,16 +85,6 @@ template<>
 bool CanAddComponent<Component::StaticMeshComponent>(const entt::registry& registry, entt::entity entity)
 {
     return !registry.any_of<Component::ProceduralMeshComponent, Component::SplineMeshComponent>(entity);
-}
-
-template<>
-Component::StaticMeshComponent CopyComponent(const Component::StaticMeshComponent& src, entt::registry& dstReg)
-{
-    Component::StaticMeshComponent copy{};
-    copy.modelFlags = src.modelFlags;
-    copy.modelId = src.modelId;
-    copy.meshIndex = src.meshIndex;
-    return copy;
 }
 
 template<>
@@ -132,7 +123,7 @@ void DeserializeComponent<Component::StaticMeshComponent>(Component::StaticMeshC
 ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry,
                                                                           entt::entity entity, const char* name)
 {
-    auto& component = registry.get<Component::StaticMeshComponent>(entity);
+    auto& component = registry.get<StaticMeshComponent>(entity);
     bool open = ImGui::CollapsingHeader("Static Mesh", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
     ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
@@ -153,13 +144,16 @@ ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::ViewFamil
         auto* ctx = registry.ctx().get<Core::EngineContext*>();
         auto* state = registry.ctx().get<Engine::GameState*>();
 
+        auto* runtime = registry.try_get<MeshRuntime>(entity);
+
         if (!component.modelId.IsValid()) {
             if (ImGui::BeginCombo("Select Model", "")) {
                 const auto& modelCache = ctx->assetManager->GetModelCache();
                 for (const auto& [key, meta] : modelCache) {
                     if (ImGui::Selectable(meta.name.c_str(), false)) {
                         component.modelId = key;
-                        component.modelHandle = ctx->assetManager->LoadModel(component.modelId);
+                        auto& rt = registry.get_or_emplace<MeshRuntime>(entity);
+                        rt.modelHandle = ctx->assetManager->LoadModel(component.modelId);
                     }
                 }
                 ImGui::EndCombo();
@@ -171,23 +165,25 @@ ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::ViewFamil
         ImGui::Text("Model: %s", modelMeta ? modelMeta->name.c_str() : "(invalid)");
         ImGui::SameLine();
         if (ImGui::SmallButton("X##deselect_model")) {
-            ctx->assetManager->UnloadModel(component.modelHandle);
+            if (runtime && runtime->modelHandle.IsValid()) {
+                ctx->assetManager->UnloadModel(runtime->modelHandle);
+                runtime->modelHandle = {};
+                runtime->primitives.Clear();
+            }
             component.modelId = Engine::ModelID::INVALID;
-            component.modelHandle = {};
             component.meshIndex = -1;
-            component.primitiveCount = 0;
-            registry.remove<Component::StaticMeshLoadingTag>(entity);
-            registry.remove<Component::RenderTransformComponent>(entity);
-            registry.remove<Component::DirtyRenderTransformComponent>(entity);
+            registry.remove<StaticMeshLoadingTag>(entity);
+            registry.remove<RenderTransformComponent>(entity);
+            registry.remove<DirtyRenderTransformComponent>(entity);
             return {.requestRemoval = remove};
         }
 
-        if (!component.modelHandle.IsValid()) {
+        if (!runtime || !runtime->modelHandle.IsValid()) {
             LOG_WARN(Game, "modelId specified but model handle is invalid, resetting to unset");
             component.modelId = Engine::ModelID::INVALID;
             return {.requestRemoval = remove};
         }
-        Engine::StaticModel* model = ctx->assetManager->GetModel(component.modelHandle);
+        Engine::StaticModel* model = ctx->assetManager->GetModel(runtime->modelHandle);
         if (model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
             ImGui::Text("Loading Model...");
             return {.requestRemoval = remove};
@@ -196,7 +192,7 @@ ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::ViewFamil
         if (component.meshIndex == -1) {
             if (model->modelData.meshes.size() == 1) {
                 component.meshIndex = 0;
-                Component::RecreateStaticMesh(component, registry, entity);
+                RecreateStaticMesh(component, registry, entity);
             }
             else {
                 if (ImGui::BeginCombo("Select Mesh", "")) {
@@ -207,7 +203,7 @@ ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::ViewFamil
                         }
                         if (ImGui::Selectable(_name.c_str(), false)) {
                             component.meshIndex = i;
-                            Component::RecreateStaticMesh(component, registry, entity);
+                            RecreateStaticMesh(component, registry, entity);
                         }
                     }
                     ImGui::EndCombo();
@@ -220,21 +216,22 @@ ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::ViewFamil
         if (model->modelData.meshes.size() > 1) {
             if (ImGui::SmallButton("X##deselect_mesh")) {
                 component.meshIndex = -1;
-                component.primitiveCount = 0;
-                registry.remove<Component::StaticMeshLoadingTag>(entity);
-                registry.remove<Component::RenderTransformComponent>(entity);
-                registry.remove<Component::DirtyRenderTransformComponent>(entity);
+                if (runtime) runtime->primitives.Clear();
+                registry.remove<StaticMeshLoadingTag>(entity);
+                registry.remove<RenderTransformComponent>(entity);
+                registry.remove<DirtyRenderTransformComponent>(entity);
                 return {.requestRemoval = remove};
             }
         }
 
-        ImGui::Text("Primitive Count: %u", component.primitiveCount);
+        const size_t primCount = runtime ? runtime->primitives.Size() : 0;
+        ImGui::Text("Primitive Count: %zu", primCount);
 
-        if (component.primitiveCount > 0 && ImGui::TreeNode("Primitives")) {
-            for (uint8_t i = 0; i < component.primitiveCount; ++i) {
-                ImGui::PushID(i);
-                if (ImGui::TreeNode("", "Primitive %u", i)) {
-                    const auto& prim = component.primitives[i];
+        if (primCount > 0 && ImGui::TreeNode("Primitives")) {
+            for (size_t i = 0; i < primCount; ++i) {
+                ImGui::PushID(static_cast<int>(i));
+                if (ImGui::TreeNode("", "Primitive %zu", i)) {
+                    const auto& prim = runtime->primitives[i];
                     ImGui::Text("Primitive Index: %u", prim.primitiveIndex);
                     ImGui::Text("Material ID: %llu", prim.materialID.id);
                     ImGui::TreePop();
@@ -244,7 +241,7 @@ ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::ViewFamil
             ImGui::TreePop();
         }
 
-        if (component.primitiveCount > 0) {
+        if (primCount > 0) {
             struct SlotInfo
             {
                 int32_t origIdx;
@@ -252,8 +249,8 @@ ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::ViewFamil
             };
             std::vector<SlotInfo> slots;
             bool seen[128] = {};
-            for (uint8_t i = 0; i < component.primitiveCount; ++i) {
-                int32_t idx = component.primitives[i].originalMaterialIndex;
+            for (size_t i = 0; i < primCount; ++i) {
+                int32_t idx = runtime->primitives[i].originalMaterialIndex;
                 if (idx < 0 || idx >= 128 || seen[idx]) continue;
                 seen[idx] = true;
                 std::string slotName;
@@ -310,7 +307,7 @@ ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::ViewFamil
 
                 if (pendingChangeIdx >= 0) {
                     component.materialOverrides[pendingChangeIdx] = pendingChangeMat;
-                    registry.emplace_or_replace<Component::StaticMeshLoadingTag>(entity);
+                    registry.emplace_or_replace<StaticMeshLoadingTag>(entity);
                     state->bPendingModelResolve |= true;
                 }
 

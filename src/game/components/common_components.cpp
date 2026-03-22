@@ -9,7 +9,6 @@
 #include "imgui.h"
 
 #include "engine/engine_api.h"
-#include "game/component-registry/component_copy.h"
 #include "game/component-registry/component_serialization.h"
 #include "game/component-registry/component_initialization.h"
 #include "game/component-registry/component_editor.h"

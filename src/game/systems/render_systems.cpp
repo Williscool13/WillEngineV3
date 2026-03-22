@@ -36,18 +36,19 @@ void ResolveStaticMeshLoads(Core::EngineContext* ctx, Engine::GameState* state)
     std::vector<entt::entity> resolved;
 
     for (auto [entity, meshComponent] : state->registry.view<Component::StaticMeshComponent, Component::StaticMeshLoadingTag>().each()) {
+        auto* runtime = state->registry.try_get<Component::MeshRuntime>(entity);
+        if (!runtime) continue;
+
         Engine::MaterialManager* materialManager = ctx->materialManager;
         // Cleanup
-        {
-            for (size_t i = 0; i < meshComponent.primitiveCount; ++i) {
-                materialManager->ReleaseMaterial(meshComponent.primitives[i].materialID);
-            }
-            meshComponent.primitiveCount = 0;
+        for (size_t i = 0; i < runtime->primitives.Size(); ++i) {
+            materialManager->ReleaseMaterial(runtime->primitives[i].materialID);
         }
+        runtime->primitives.Clear();
 
-        auto model = ctx->assetManager->GetModel(meshComponent.modelHandle);
+        auto model = ctx->assetManager->GetModel(runtime->modelHandle);
         if (!model) {
-            LOG_ERROR(Game, "Model ({}) is not in the asset manager, it should have been requested to load during scene load.", meshComponent.modelHandle.index);
+            LOG_ERROR(Game, "Model ({}) is not in the asset manager, it should have been requested to load during scene load.", runtime->modelHandle.index);
             resolved.push_back(entity);
             continue;
         }
@@ -58,11 +59,11 @@ void ResolveStaticMeshLoads(Core::EngineContext* ctx, Engine::GameState* state)
 
         Engine::MeshInformation& mesh = model->modelData.meshes[meshComponent.meshIndex];
 
-        if (mesh.primitiveProperties.size() > 128) {
-            LOG_WARN(Game, "Model ({}) has {} primitives, limiting to 128", model->name, mesh.primitiveProperties.size());
+        if (mesh.primitiveProperties.size() > Component::MeshRuntime::MaxPrimitives) {
+            LOG_WARN(Game, "Model ({}) has {} primitives, limiting to {}", model->name, mesh.primitiveProperties.size(), Component::MeshRuntime::MaxPrimitives);
         }
 
-        size_t primCount = std::min(mesh.primitiveProperties.size(), static_cast<size_t>(128));
+        size_t primCount = std::min(mesh.primitiveProperties.size(), Component::MeshRuntime::MaxPrimitives);
 
         for (size_t j = 0; j < primCount; ++j) {
             Engine::PrimitiveProperty& primitive = mesh.primitiveProperties[j];
@@ -87,14 +88,13 @@ void ResolveStaticMeshLoads(Core::EngineContext* ctx, Engine::GameState* state)
                 }
             }
 
-            meshComponent.primitives[j] = {
+            runtime->primitives.PushBack({
                 .primitiveIndex = primitive.index,
                 .originalMaterialIndex = primitive.materialIndex,
                 .materialID = matID
-            };
+            });
             materialManager->AcquireMaterial(matID);
         }
-        meshComponent.primitiveCount = primCount;
 
         resolved.push_back(entity);
     }
@@ -109,17 +109,18 @@ void ResolveProceduralMeshLoads(Core::EngineContext* ctx, Engine::GameState* sta
     std::vector<entt::entity> resolved;
 
     for (auto [entity, meshComponent] : state->registry.view<Component::ProceduralMeshComponent, Component::ProceduralMeshLoadingTag>().each()) {
-        // Cleanup
-        {
-            if (meshComponent.bPrimitiveReady) {
-                ctx->materialManager->ReleaseMaterial(meshComponent.primitive.materialID);
-                meshComponent.bPrimitiveReady = false;
-            }
-        }
+        auto* runtime = state->registry.try_get<Component::MeshRuntime>(entity);
+        if (!runtime) continue;
 
-        auto model = ctx->assetManager->GetModel(meshComponent.modelHandle);
+        // Cleanup
+        for (size_t i = 0; i < runtime->primitives.Size(); ++i) {
+            ctx->materialManager->ReleaseMaterial(runtime->primitives[i].materialID);
+        }
+        runtime->primitives.Clear();
+
+        auto model = ctx->assetManager->GetModel(runtime->modelHandle);
         if (!model) {
-            LOG_ERROR(Game, "Procedural model ({}) is not in the asset manager, it should have been requested to load during scene load.", meshComponent.modelHandle.index);
+            LOG_ERROR(Game, "Procedural model ({}) is not in the asset manager, it should have been requested to load during scene load.", runtime->modelHandle.index);
             continue;
         }
         if (model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
@@ -138,13 +139,12 @@ void ResolveProceduralMeshLoads(Core::EngineContext* ctx, Engine::GameState* sta
             }
         }
 
-        meshComponent.primitive = {
+        runtime->primitives.PushBack({
             .primitiveIndex = primitive.index,
             .originalMaterialIndex = -1,
             .materialID = matID,
-        };
+        });
         materialManager->AcquireMaterial(matID);
-        meshComponent.bPrimitiveReady = true;
 
         resolved.push_back(entity);
     }
@@ -159,14 +159,17 @@ void ResolveSplineMeshLoads(Core::EngineContext* ctx, Engine::GameState* state)
     std::vector<entt::entity> resolved;
 
     for (auto [entity, meshComponent] : state->registry.view<Component::SplineMeshComponent, Component::SplineMeshLoadingTag>().each()) {
-        if (meshComponent.bPrimitiveReady) {
-            ctx->materialManager->ReleaseMaterial(meshComponent.primitive.materialID);
-            meshComponent.bPrimitiveReady = false;
-        }
+        auto* runtime = state->registry.try_get<Component::MeshRuntime>(entity);
+        if (!runtime) continue;
 
-        auto model = ctx->assetManager->GetModel(meshComponent.modelHandle);
+        for (size_t i = 0; i < runtime->primitives.Size(); ++i) {
+            ctx->materialManager->ReleaseMaterial(runtime->primitives[i].materialID);
+        }
+        runtime->primitives.Clear();
+
+        auto model = ctx->assetManager->GetModel(runtime->modelHandle);
         if (!model) {
-            LOG_ERROR(Game, "Spline model ({}) is not in the asset manager.", meshComponent.modelHandle.index);
+            LOG_ERROR(Game, "Spline model ({}) is not in the asset manager.", runtime->modelHandle.index);
             continue;
         }
         if (model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
@@ -184,13 +187,12 @@ void ResolveSplineMeshLoads(Core::EngineContext* ctx, Engine::GameState* state)
             }
         }
 
-        meshComponent.primitive = {
+        runtime->primitives.PushBack({
             .primitiveIndex = primitive.index,
             .originalMaterialIndex = -1,
             .materialID = matID,
-        };
+        });
         materialManager->AcquireMaterial(matID);
-        meshComponent.bPrimitiveReady = true;
 
         resolved.push_back(entity);
     }
@@ -271,14 +273,15 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
     // Gather regular renderables
     {
         ZoneScopedN("MainSceneStaticMeshes");
-        auto view = state->registry.view<Component::StaticMeshComponent, Component::RenderTransformComponent>(
+        auto view = state->registry.view<Component::MeshRuntime, Component::StaticMeshComponent, Component::RenderTransformComponent>(
             entt::exclude<
                 Component::PortalPlaneTag,
                 Component::CubemapVisualizeTag,
                 Component::StaticMeshLoadingTag
             >);
 
-        for (auto [entity, renderable, renderTransform] : view.each()) {
+        for (auto [entity, runtime, renderable, renderTransform] : view.each()) {
+            if (runtime.primitives.IsEmpty()) continue;
             auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.size());
             frameBuffer->mainViewFamily.modelMatrices.push_back({renderTransform.modelMatrix, renderTransform.previousMatrix});
 
@@ -287,8 +290,8 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
                 stableId = stable->id.id;
             }
 
-            for (uint8_t i = 0; i < renderable.primitiveCount; ++i) {
-                auto& prim = renderable.primitives[i];
+            for (size_t i = 0; i < runtime.primitives.Size(); ++i) {
+                auto& prim = runtime.primitives[i];
                 frameBuffer->mainViewFamily.mainPassInstances.push_back({
                     .primitiveIndex = prim.primitiveIndex,
                     .materialID = prim.materialID,
@@ -302,7 +305,7 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
     // Gather portal planes
     {
         ZoneScopedN("PortalRenderables");
-        auto portalView = state->registry.view<Component::PortalPlaneTag, Component::StaticMeshComponent, Component::RenderTransformComponent>();
+        auto portalView = state->registry.view<Component::PortalPlaneTag, Component::MeshRuntime, Component::RenderTransformComponent>();
 
         if (portalView.size_hint() > 0) {
             auto& portalDraw = frameBuffer->mainViewFamily.customShaderDraws["portal_rendering"];
@@ -311,12 +314,12 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
                 portalDraw.stencilValue = 1;
             }
 
-            for (auto [entity, renderable, renderTransform] : portalView.each()) {
+            for (auto [entity, runtime, renderTransform] : portalView.each()) {
                 auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.size());
                 frameBuffer->mainViewFamily.modelMatrices.push_back({renderTransform.modelMatrix, renderTransform.previousMatrix});
 
-                for (uint8_t i = 0; i < renderable.primitiveCount; ++i) {
-                    auto& prim = renderable.primitives[i];
+                for (size_t i = 0; i < runtime.primitives.Size(); ++i) {
+                    auto& prim = runtime.primitives[i];
                     portalDraw.instances.push_back({
                         .primitiveIndex = prim.primitiveIndex,
                         .materialID = prim.materialID,
@@ -330,9 +333,9 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
     // Gather cubemap visualizations
     {
         ZoneScopedN("CubemapVisualizations");
-        auto cubemapView = state->registry.view<Component::CubemapVisualizeTag, Component::StaticMeshComponent, Component::RenderTransformComponent>();
+        auto cubemapView = state->registry.view<Component::CubemapVisualizeTag, Component::MeshRuntime, Component::RenderTransformComponent>();
 
-        for (auto [entity, renderable, renderTransform] : cubemapView.each()) {
+        for (auto [entity, runtime, renderTransform] : cubemapView.each()) {
             auto& cubemapVis = frameBuffer->mainViewFamily.customShaderDraws["cubemap_visualize"];
             if (cubemapVis.instances.empty()) {
                 cubemapVis.pipelineId = SID("cubemap_visualize");
@@ -344,8 +347,8 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
             auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.size());
             frameBuffer->mainViewFamily.modelMatrices.push_back({renderTransform.modelMatrix, renderTransform.previousMatrix});
 
-            for (uint8_t i = 0; i < renderable.primitiveCount; ++i) {
-                auto& prim = renderable.primitives[i];
+            for (size_t i = 0; i < runtime.primitives.Size(); ++i) {
+                auto& prim = runtime.primitives[i];
                 cubemapVis.instances.push_back({
                     .primitiveIndex = prim.primitiveIndex,
                     .materialID = prim.materialID,
@@ -358,10 +361,10 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
     // Gather procedural meshes
     {
         ZoneScopedN("ProceduralMeshes");
-        auto view = state->registry.view<Component::ProceduralMeshComponent, Component::RenderTransformComponent>(entt::exclude<Component::ProceduralMeshLoadingTag>);
+        auto view = state->registry.view<Component::MeshRuntime, Component::ProceduralMeshComponent, Component::RenderTransformComponent>(entt::exclude<Component::ProceduralMeshLoadingTag>);
 
-        for (const auto& [entity, renderable, renderTransform] : view.each()) {
-            if (!renderable.bPrimitiveReady) { continue; }
+        for (const auto& [entity, runtime, renderable, renderTransform] : view.each()) {
+            if (runtime.primitives.IsEmpty()) continue;
 
             auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.size());
             frameBuffer->mainViewFamily.modelMatrices.push_back({renderTransform.modelMatrix, renderTransform.previousMatrix});
@@ -371,8 +374,8 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
                 stableId = stable->id.id;
             }
             frameBuffer->mainViewFamily.mainPassInstances.push_back({
-                .primitiveIndex = renderable.primitive.primitiveIndex,
-                .materialID = renderable.primitive.materialID,
+                .primitiveIndex = runtime.primitives[0].primitiveIndex,
+                .materialID = runtime.primitives[0].materialID,
                 .modelIndex = modelIndex,
                 .stableId = stableId,
             });
@@ -382,9 +385,9 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
     // Gather spline meshes
     {
         ZoneScopedN("SplineMeshes");
-        auto view = state->registry.view<Component::SplineMeshComponent, Component::RenderTransformComponent>(entt::exclude<Component::SplineMeshLoadingTag>);
-        for (const auto& [entity, renderable, renderTransform] : view.each()) {
-            if (!renderable.bPrimitiveReady) { continue; }
+        auto view = state->registry.view<Component::MeshRuntime, Component::SplineMeshComponent, Component::RenderTransformComponent>(entt::exclude<Component::SplineMeshLoadingTag>);
+        for (const auto& [entity, runtime, renderable, renderTransform] : view.each()) {
+            if (runtime.primitives.IsEmpty()) continue;
 
             auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.size());
             frameBuffer->mainViewFamily.modelMatrices.push_back({renderTransform.modelMatrix, renderTransform.previousMatrix});
@@ -395,8 +398,8 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
             }
 
             frameBuffer->mainViewFamily.mainPassInstances.push_back({
-                .primitiveIndex = renderable.primitive.primitiveIndex,
-                .materialID = renderable.primitive.materialID,
+                .primitiveIndex = runtime.primitives[0].primitiveIndex,
+                .materialID = runtime.primitives[0].materialID,
                 .modelIndex = modelIndex,
                 .stableId = stableId,
             });

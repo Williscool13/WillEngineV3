@@ -53,7 +53,6 @@ entt::entity CreateSceneEntity(Engine::GameState* state);
 
 /**
  * Copies all registered components from src to a new entity.
- * CopyComponent<T> strips transients and emplaces data.
  * Signals (on_construct) fire during emplace, handling initialization.
  */
 inline entt::entity CopyEntity(Engine::GameState* state, entt::entity src)

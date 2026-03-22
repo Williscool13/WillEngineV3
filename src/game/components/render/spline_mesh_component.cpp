@@ -6,7 +6,6 @@
 
 #include <glm/gtc/type_ptr.hpp>
 
-#include "game/component-registry/component_copy.h"
 #include "game/component-registry/component_serialization.h"
 #include "game/component-registry/component_initialization.h"
 #include "static_mesh_component.h"
@@ -48,7 +47,8 @@ void SplineMeshComponent::OnConstruct(entt::registry& registry, entt::entity ent
         component.controlPoints.PushBack({0,0,3,0});
     }
 
-    component.modelHandle = ctx->assetManager->LoadSplineModel(ToSplineParams(component));
+    auto& runtime = registry.get_or_emplace<MeshRuntime>(entity);
+    runtime.modelHandle = ctx->assetManager->LoadSplineModel(ToSplineParams(component));
     registry.emplace_or_replace<SplineMeshLoadingTag>(entity);
     state->bPendingModelResolve = true;
 
@@ -61,13 +61,15 @@ void SplineMeshComponent::OnConstruct(entt::registry& registry, entt::entity ent
 
 void SplineMeshComponent::OnDestroy(entt::registry& registry, entt::entity entity)
 {
-    auto& component = registry.get<SplineMeshComponent>(entity);
     auto* ctx = registry.ctx().get<Core::EngineContext*>();
-    if (component.bPrimitiveReady) {
-        ctx->materialManager->ReleaseMaterial(component.primitive.materialID);
-    }
-    if (component.modelHandle.IsValid()) {
-        ctx->assetManager->UnloadModel(component.modelHandle);
+    if (auto* runtime = registry.try_get<MeshRuntime>(entity)) {
+        for (size_t i = 0; i < runtime->primitives.Size(); ++i) {
+            ctx->materialManager->ReleaseMaterial(runtime->primitives[i].materialID);
+        }
+        if (runtime->modelHandle.IsValid()) {
+            ctx->assetManager->UnloadModel(runtime->modelHandle);
+        }
+        registry.remove<MeshRuntime>(entity);
     }
     registry.remove<SplineMeshLoadingTag>(entity);
     registry.remove<RenderTransformComponent>(entity);
@@ -81,16 +83,6 @@ template<>
 bool CanAddComponent<Component::SplineMeshComponent>(const entt::registry& registry, entt::entity entity)
 {
     return !registry.any_of<Component::StaticMeshComponent, Component::ProceduralMeshComponent>(entity);
-}
-
-template<>
-Component::SplineMeshComponent CopyComponent(const Component::SplineMeshComponent& src, entt::registry& dstReg)
-{
-    Component::SplineMeshComponent copy = src;
-    copy.modelHandle = {};
-    copy.primitive = {};
-    copy.bPrimitiveReady = false;
-    return copy;
 }
 
 template<>
@@ -355,12 +347,13 @@ ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::ViewFamil
                     currentLabel = m->name.c_str();
                 }
             }
+            auto* runtime = registry.try_get<MeshRuntime>(entity);
             if (ImGui::BeginCombo("Material##spline", currentLabel)) {
                 if (ImGui::Selectable("(none)", !component.material.IsValid())) {
                     if (component.material.IsValid()) {
-                        if (component.bPrimitiveReady) {
-                            ctx->materialManager->ReleaseMaterial(component.primitive.materialID);
-                            component.bPrimitiveReady = false;
+                        if (runtime && !runtime->primitives.IsEmpty()) {
+                            ctx->materialManager->ReleaseMaterial(runtime->primitives[0].materialID);
+                            runtime->primitives.Clear();
                         }
                         component.material = Engine::MaterialID{};
                         registry.emplace_or_replace<SplineMeshLoadingTag>(entity);
@@ -371,9 +364,9 @@ ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::ViewFamil
                     if (mat.immutable) continue;
                     if (ImGui::Selectable(mat.name.c_str(), matId == component.material)) {
                         if (matId != component.material) {
-                            if (component.bPrimitiveReady) {
-                                ctx->materialManager->ReleaseMaterial(component.primitive.materialID);
-                                component.bPrimitiveReady = false;
+                            if (runtime && !runtime->primitives.IsEmpty()) {
+                                ctx->materialManager->ReleaseMaterial(runtime->primitives[0].materialID);
+                                runtime->primitives.Clear();
                             }
                             component.material = matId;
                             registry.emplace_or_replace<SplineMeshLoadingTag>(entity);
@@ -386,15 +379,16 @@ ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::ViewFamil
         }
 
         if (dirty) {
-            if (component.modelHandle.IsValid()) {
-                ctx->assetManager->UnloadModel(component.modelHandle);
-                component.modelHandle = {};
+            auto& runtime = registry.get_or_emplace<MeshRuntime>(entity);
+            if (runtime.modelHandle.IsValid()) {
+                ctx->assetManager->UnloadModel(runtime.modelHandle);
+                runtime.modelHandle = {};
             }
-            if (component.bPrimitiveReady) {
-                ctx->materialManager->ReleaseMaterial(component.primitive.materialID);
-                component.bPrimitiveReady = false;
+            for (size_t i = 0; i < runtime.primitives.Size(); ++i) {
+                ctx->materialManager->ReleaseMaterial(runtime.primitives[i].materialID);
             }
-            component.modelHandle = ctx->assetManager->LoadSplineModel(ToSplineParams(component));
+            runtime.primitives.Clear();
+            runtime.modelHandle = ctx->assetManager->LoadSplineModel(ToSplineParams(component));
             registry.emplace_or_replace<SplineMeshLoadingTag>(entity);
             state->bPendingModelResolve = true;
         }

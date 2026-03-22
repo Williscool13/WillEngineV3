@@ -5,7 +5,6 @@
 #include "editor_components.h"
 
 #include "component_types.h"
-#include "game/component-registry/component_copy.h"
 #include "game/component-registry/component_serialization.h"
 #include "game/component-registry/component_initialization.h"
 #include "game/component-registry/component_editor.h"

@@ -4,7 +4,6 @@
 
 #include "procedural_mesh_component.h"
 
-#include "game/component-registry/component_copy.h"
 #include "game/component-registry/component_serialization.h"
 #include "game/component-registry/component_initialization.h"
 
@@ -23,13 +22,15 @@ void ProceduralMeshComponent::OnConstruct(entt::registry& registry, entt::entity
 
 void ProceduralMeshComponent::OnDestroy(entt::registry& registry, entt::entity entity)
 {
-    auto& component = registry.get<ProceduralMeshComponent>(entity);
     auto* ctx = registry.ctx().get<Core::EngineContext*>();
-    if (component.bPrimitiveReady) {
-        ctx->materialManager->ReleaseMaterial(component.primitive.materialID);
-    }
-    if (component.modelHandle.IsValid()) {
-        ctx->assetManager->UnloadModel(component.modelHandle);
+    if (auto* runtime = registry.try_get<MeshRuntime>(entity)) {
+        for (size_t i = 0; i < runtime->primitives.Size(); ++i) {
+            ctx->materialManager->ReleaseMaterial(runtime->primitives[i].materialID);
+        }
+        if (runtime->modelHandle.IsValid()) {
+            ctx->assetManager->UnloadModel(runtime->modelHandle);
+        }
+        registry.remove<MeshRuntime>(entity);
     }
 
     registry.remove<ProceduralMeshLoadingTag>(entity);
@@ -41,20 +42,21 @@ void RecreateProceduralMesh(ProceduralMeshComponent& component, entt::registry& 
 {
     auto* ctx = registry.ctx().get<Core::EngineContext*>();
     auto* state = registry.ctx().get<Engine::GameState*>();
+    auto& runtime = registry.get_or_emplace<MeshRuntime>(entity);
 
     // Teardown
-    if (component.bPrimitiveReady) {
-        ctx->materialManager->ReleaseMaterial(component.primitive.materialID);
-        component.bPrimitiveReady = false;
+    for (size_t i = 0; i < runtime.primitives.Size(); ++i) {
+        ctx->materialManager->ReleaseMaterial(runtime.primitives[i].materialID);
     }
-    if (component.modelHandle.IsValid()) {
-        ctx->assetManager->UnloadModel(component.modelHandle);
-        component.modelHandle = {};
+    runtime.primitives.Clear();
+    if (runtime.modelHandle.IsValid()) {
+        ctx->assetManager->UnloadModel(runtime.modelHandle);
+        runtime.modelHandle = {};
     }
 
     // Rebuild
     if (!std::holds_alternative<std::monostate>(component.params)) {
-        component.modelHandle = ctx->assetManager->LoadProceduralModel(component.params);
+        runtime.modelHandle = ctx->assetManager->LoadProceduralModel(component.params);
         registry.emplace_or_replace<ProceduralMeshLoadingTag>(entity);
         state->bPendingModelResolve |= true;
     }
@@ -76,15 +78,6 @@ bool CanAddComponent<Component::ProceduralMeshComponent>(const entt::registry& r
     return !registry.any_of<Component::StaticMeshComponent, Component::SplineMeshComponent>(entity);
 }
 
-template<>
-Component::ProceduralMeshComponent CopyComponent(const Component::ProceduralMeshComponent& src, entt::registry& dstReg)
-{
-    Component::ProceduralMeshComponent copy{};
-    copy.params = src.params;
-    copy.material = src.material;
-    copy.modelFlags = src.modelFlags;
-    return copy;
-}
 
 template<>
 void SerializeComponent<Component::ProceduralMeshComponent>(const Component::ProceduralMeshComponent& comp, nlohmann::json& json)
@@ -649,12 +642,13 @@ ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Core::ViewF
                     currentLabel = m->name.c_str();
                 }
             }
+            auto* runtime = registry.try_get<MeshRuntime>(entity);
             if (ImGui::BeginCombo("Material", currentLabel)) {
                 if (ImGui::Selectable("(none)", !component.material.IsValid())) {
                     if (component.material.IsValid()) {
-                        if (component.bPrimitiveReady) {
-                            ctx->materialManager->ReleaseMaterial(component.primitive.materialID);
-                            component.bPrimitiveReady = false;
+                        if (runtime && !runtime->primitives.IsEmpty()) {
+                            ctx->materialManager->ReleaseMaterial(runtime->primitives[0].materialID);
+                            runtime->primitives.Clear();
                         }
                         component.material = Engine::MaterialID{};
                         registry.emplace_or_replace<Component::ProceduralMeshLoadingTag>(entity);
@@ -665,9 +659,9 @@ ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Core::ViewF
                     if (mat.immutable) continue;
                     if (ImGui::Selectable(mat.name.c_str(), matId == component.material)) {
                         if (matId != component.material) {
-                            if (component.bPrimitiveReady) {
-                                ctx->materialManager->ReleaseMaterial(component.primitive.materialID);
-                                component.bPrimitiveReady = false;
+                            if (runtime && !runtime->primitives.IsEmpty()) {
+                                ctx->materialManager->ReleaseMaterial(runtime->primitives[0].materialID);
+                                runtime->primitives.Clear();
                             }
                             component.material = matId;
                             registry.emplace_or_replace<Component::ProceduralMeshLoadingTag>(entity);

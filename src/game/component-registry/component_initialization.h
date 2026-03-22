@@ -6,11 +6,9 @@
 #define WILL_ENGINE_COMPONENT_INITIALIZATION_H
 #include <entt/entt.hpp>
 
-#include "../components/common_components.h"
-#include "../components/common/stable_id_component.h"
-#include "../components/physics/physics_components.h"
-#include "../components/render_components.h"
 #include "../components/render/static_mesh_component.h"
+#include "game/components/render/procedural_mesh_component.h"
+#include "game/components/render/spline_mesh_component.h"
 
 namespace Game
 {

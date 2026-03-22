@@ -4,7 +4,9 @@
 
 #include "physics_body_component.h"
 
+#include "core/include/engine_context.h"
 #include "engine/engine_api.h"
+#include "physics/physics_system.h"
 
 namespace Game::Component
 {
@@ -18,7 +20,15 @@ void PhysicsBodyComponent::OnConstruct(entt::registry& registry, entt::entity en
 void PhysicsBodyComponent::OnDestroy(entt::registry& registry, entt::entity entity)
 {
     auto* state = registry.ctx().get<Engine::GameState*>();
+    auto* ctx = registry.ctx().get<Core::EngineContext*>();
     auto& physics = registry.get<PhysicsBodyComponent>(entity);
+
+    if (!physics.bodyID.IsInvalid()) {
+        JPH::BodyInterface& bodyInterface = ctx->physicsSystem->GetBodyInterface();
+        bodyInterface.RemoveBody(physics.bodyID);
+        bodyInterface.DestroyBody(physics.bodyID);
+    }
+
     state->bodyToEntity.erase(physics.bodyID);
 }
 }

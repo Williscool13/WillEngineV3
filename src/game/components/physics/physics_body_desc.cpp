@@ -640,11 +640,8 @@ ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewFamily& v
                 const bool isMeshType = shape.type == PhysicsShapeType::ConvexHull || shape.type == PhysicsShapeType::TriangleMesh;
 
                 Engine::StaticModelHandle fitHandle{};
-                if (auto* sm = registry.try_get<StaticMeshComponent>(entity)) {
-                    fitHandle = sm->modelHandle;
-                }
-                else if (auto* pm = registry.try_get<ProceduralMeshComponent>(entity)) {
-                    fitHandle = pm->modelHandle;
+                if (auto* rt = registry.try_get<MeshRuntime>(entity)) {
+                    fitHandle = rt->modelHandle;
                 }
 
                 Engine::StaticModel* fitModel = fitHandle.IsValid() ? ctx->assetManager->GetModel(fitHandle) : nullptr;

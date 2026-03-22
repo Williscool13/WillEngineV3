@@ -446,15 +446,6 @@ void ResolvePhysicsBodyCreation(Core::EngineContext* ctx, Engine::GameState* sta
 }
 void PhysicsOnPlayStop(Core::EngineContext* ctx, Engine::GameState* state)
 {
-    JPH::BodyInterface& bodyInterface = ctx->physicsSystem->GetBodyInterface();
-
-    auto view = state->registry.view<Component::PhysicsBodyComponent>();
-    for (const auto& [entity, body] : view.each()) {
-        if (!body.bodyID.IsInvalid()) {
-            bodyInterface.RemoveBody(body.bodyID);
-            bodyInterface.DestroyBody(body.bodyID);
-        }
-    }
     state->registry.clear<Component::PhysicsBodyComponent>();
     state->registry.clear<Component::DynamicPhysicsBodyComponent>();
 }

@@ -70,13 +70,6 @@ void PhysicsCharacter::Update(float deltaTime, const glm::vec3& moveInput, bool 
 void PhysicsCharacter::Shutdown(Physics::PhysicsSystem* inPhysicsSystem)
 {
     if (engineGameState && engineGameState->registry.valid(entity)) {
-        auto* physicsBody = engineGameState->registry.try_get<Component::PhysicsBodyComponent>(entity);
-        if (physicsBody) {
-            inPhysicsSystem->GetBodyInterface().RemoveBody(physicsBody->bodyID);
-            inPhysicsSystem->GetBodyInterface().DestroyBody(physicsBody->bodyID);
-            engineGameState->registry.remove<Component::PhysicsBodyComponent>(entity);
-            engineGameState->registry.remove<Component::DynamicPhysicsBodyComponent>(entity);
-        }
         engineGameState->registry.destroy(entity);
     }
     entity = entt::null;

@@ -118,14 +118,9 @@ void EditorUpdate(Core::EngineContext* ctx, Engine::GameState* state)
                     glm::vec3 focusPoint = targetTransform ? targetTransform->translation : glm::vec3(0.0f);
                     float focusDist = 1.0f;
 
-                    const auto* staticMesh = state->registry.try_get<Component::StaticMeshComponent>(target);
-                    const auto* proceduralMesh = state->registry.try_get<Component::ProceduralMeshComponent>(target);
-
                     Engine::StaticModelHandle modelHandle = Engine::StaticModelHandle::INVALID;
-                    if (staticMesh && staticMesh->modelHandle.IsValid()) {
-                        modelHandle = staticMesh->modelHandle;
-                    } else if (proceduralMesh && proceduralMesh->modelHandle.IsValid()) {
-                        modelHandle = proceduralMesh->modelHandle;
+                    if (const auto* rt = state->registry.try_get<Component::MeshRuntime>(target)) {
+                        modelHandle = rt->modelHandle;
                     }
 
                     if (modelHandle.IsValid()) {

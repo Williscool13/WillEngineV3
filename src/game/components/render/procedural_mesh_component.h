@@ -17,24 +17,12 @@ namespace Core { struct ViewFamily; }
 
 namespace Game::Component
 {
-struct PrimitiveData
-{
-    uint32_t primitiveIndex;
-    int32_t originalMaterialIndex;
-    Engine::MaterialID materialID;
-};
-
 struct ProceduralMeshComponent
 {
     Engine::ProceduralParams params;
     Engine::MaterialID material{};
     glm::vec4 modelFlags{0.0f};
     glm::vec3 renderOffset{0.0f};
-
-    // Transient
-    Engine::StaticModelHandle modelHandle{};
-    PrimitiveData primitive{};
-    bool bPrimitiveReady{false};
 
     static void OnConstruct(entt::registry& registry, entt::entity entity);
     static void OnDestroy(entt::registry& registry, entt::entity entity);

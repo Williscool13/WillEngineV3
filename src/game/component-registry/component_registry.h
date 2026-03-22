@@ -7,7 +7,6 @@
 #include <entt/entt.hpp>
 #include <json/nlohmann/json.hpp>
 
-#include "component_copy.h"
 #include "component_initialization.h"
 #include "component_serialization.h"
 #include "component_editor.h"
@@ -33,9 +32,12 @@ struct ComponentEntry
     SerializeFn serialize;
     DeserializeFn deserialize;
     CanAddComponentFn canAdd;
+
+    // Type erased fns
     EmplaceDefaultFn emplaceDefault;
     RemoveComponentFn remove;
     CopyComponentFn copy;
+
     DrawEditorFn drawEditor;
     HasComponentFn has;
 };
@@ -78,7 +80,7 @@ void RegisterComponent(ComponentRegistry& componentRegistry, const char* name)
             reg.remove<T>(e);
         },
         [](const entt::registry& srcReg, entt::entity srcEntity, entt::registry& dstReg, entt::entity dstEntity) {
-            dstReg.emplace_or_replace<T>(dstEntity, CopyComponent<T>(srcReg.get<T>(srcEntity), dstReg));
+            dstReg.emplace_or_replace<T>(dstEntity, srcReg.get<T>(srcEntity));
         },
         [](Core::ViewFamily& viewFamily, entt::registry& reg, entt::entity e, const char* n) {
             if constexpr (HasDrawEditor<T>) {

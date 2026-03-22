@@ -13,8 +13,10 @@
 #include <entt/entt.hpp>
 
 #include "core/string_id.h"
+#include "core/allocators/inline_vector.h"
 #include "engine/resources/material/material_manager.h"
 #include "engine/core/model_id.h"
+#include "engine/asset_manager_types.h"
 #include "engine/resources/model/model_types.h"
 
 namespace Game::Component
@@ -30,6 +32,20 @@ struct RenderTransformComponent
     glm::mat4 modelMatrix;
     glm::mat4 previousMatrix;
     glm::vec3 renderOffset{0.0f};
+};
+
+struct PrimitiveData
+{
+    uint32_t primitiveIndex;
+    int32_t originalMaterialIndex;
+    Engine::MaterialID materialID;
+};
+
+struct MeshRuntime
+{
+    static constexpr size_t MaxPrimitives = 128;
+    Core::InlineVector<PrimitiveData, MaxPrimitives> primitives{};
+    Engine::StaticModelHandle modelHandle{};
 };
 }
 
