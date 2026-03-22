@@ -388,7 +388,7 @@ void WillEngine::EditorImgui()
             ImGui::Text("Textures:  %u", assetManager->GetActiveTextureCount());
             ImGui::Text("Samplers:  %u", assetManager->GetActiveSamplerCount());
             ImGui::Text("Cubemaps:  %u", assetManager->GetActiveCubemapCount());
-            ImGui::Text("Materials: %zu", materialManager->GetMaterials().size());
+            ImGui::Text("Materials: %u", materialManager->GetActiveMaterialCount());
         }
 
         ImGui::Checkbox("Freeze Visibility Calculations", &bFreezeVisibility);
@@ -399,7 +399,7 @@ void WillEngine::EditorImgui()
             bLogRDG = false;
         }
 
-        uint8_t* base = static_cast<uint8_t*>(renderThread->GetResourceManager()->debugReadbackBuffer.allocationInfo.pMappedData);
+        auto* base = static_cast<uint8_t*>(renderThread->GetResourceManager()->debugReadbackBuffer.allocationInfo.pMappedData);
         uint8_t* ptr = base;
         if (ImGui::CollapsingHeader("Meshlet Instancing Debug")) {
             auto* instanceMeshletOffsets = reinterpret_cast<InstanceMeshletOffsetPrefixSum*>(ptr);

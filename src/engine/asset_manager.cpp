@@ -69,9 +69,19 @@ AssetManager::AssetManager(Core::EngineContext* ctx, AssetLoad::AsyncAssetLoadMa
 AssetManager::~AssetManager()
 {
     for (auto& model : models) {
-        if (modelAllocator.IsValid(model.selfHandle)) {
-            model.refCount = 1;
-            UnloadModel(model.selfHandle);
+        if (!modelAllocator.IsValid(model.selfHandle)) { continue; }
+        if (model.modelLoadState == StaticModel::ModelLoadState::Loaded) {
+            auto& data = model.modelData;
+            resourceManager->vertexBufferAllocator.free(data.vertexAllocation);
+            resourceManager->meshletVertexBufferAllocator.free(data.meshletVertexAllocation);
+            resourceManager->meshletTriangleBufferAllocator.free(data.meshletTriangleAllocation);
+            resourceManager->meshletBufferAllocator.free(data.meshletAllocation);
+            resourceManager->primitiveBufferAllocator.free(data.primitiveAllocation);
+            data.vertexAllocation = {};
+            data.meshletVertexAllocation = {};
+            data.meshletTriangleAllocation = {};
+            data.meshletAllocation = {};
+            data.primitiveAllocation = {};
         }
     }
 }
@@ -101,6 +111,7 @@ StaticModelHandle AssetManager::LoadModel(ModelID modelId)
         if (modelAllocator.IsValid(existingHandle)) {
             StaticModel& model = models[existingHandle.index];
             model.refCount++;
+            model.retireFrame = 0;
             LOG_TRACE(Asset, "Model already loaded: {}, refCount: {}", model.name, model.refCount);
             return existingHandle;
         }
@@ -148,6 +159,7 @@ StaticModelHandle AssetManager::LoadProceduralModel(ProceduralParams& params)
         if (modelAllocator.IsValid(existingHandle)) {
             StaticModel& model = models[existingHandle.index];
             model.refCount++;
+            model.retireFrame = 0;
             LOG_TRACE(Asset, "Procedural model already loaded: {}, refCount: {}", model.name, model.refCount);
             return existingHandle;
         }
@@ -201,6 +213,7 @@ StaticModelHandle AssetManager::LoadSplineModel(const SplineParams& params)
         if (modelAllocator.IsValid(existingHandle)) {
             StaticModel& model = models[existingHandle.index];
             model.refCount++;
+            model.retireFrame = 0;
             LOG_TRACE(Asset, "Spline model already loaded: {}, refCount: {}", splineModelId.id, model.refCount);
             return existingHandle;
         }
@@ -250,10 +263,7 @@ void AssetManager::UnloadModel(StaticModelHandle handle)
     LOG_TRACE(Asset, "Model refCount decremented: {}, refCount: {}", model.name, model.refCount);
 
     if (model.refCount == 0) {
-        model.modelLoadState = StaticModel::ModelLoadState::NotLoaded;
-        // todo do this like we do with texture
-        // assetLoadThread->RequestModelUnload(handle, &model);
-        modelIdToHandle.erase(model.modelId);
+        model.retireFrame = ctx->currentFrame + Core::FRAME_BUFFER_COUNT * 4;
     }
 }
 
@@ -356,6 +366,45 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
 void AssetManager::ResolveUnloads()
 {
     const uint64_t currentFrame = ctx->currentFrame;
+
+    for (auto& model : models) {
+        if (!modelAllocator.IsValid(model.selfHandle)) { continue; }
+        if (model.refCount > 0 || model.retireFrame == 0 || currentFrame < model.retireFrame) { continue; }
+
+        if (model.modelLoadState == StaticModel::ModelLoadState::Loaded) {
+            auto& data = model.modelData;
+            {
+                std::lock_guard lock(resourceManager->vertexBufferAllocatorMutex);
+                resourceManager->vertexBufferAllocator.free(data.vertexAllocation);
+            }
+            {
+                std::lock_guard lock(resourceManager->meshletVertexBufferAllocatorMutex);
+                resourceManager->meshletVertexBufferAllocator.free(data.meshletVertexAllocation);
+            }
+            {
+                std::lock_guard lock(resourceManager->meshletTriangleBufferAllocatorMutex);
+                resourceManager->meshletTriangleBufferAllocator.free(data.meshletTriangleAllocation);
+            }
+            {
+                std::lock_guard lock(resourceManager->meshletBufferAllocatorMutex);
+                resourceManager->meshletBufferAllocator.free(data.meshletAllocation);
+            }
+            {
+                std::lock_guard lock(resourceManager->primitiveBufferAllocatorMutex);
+                resourceManager->primitiveBufferAllocator.free(data.primitiveAllocation);
+            }
+            data.vertexAllocation = {};
+            data.meshletVertexAllocation = {};
+            data.meshletTriangleAllocation = {};
+            data.meshletAllocation = {};
+            data.primitiveAllocation = {};
+        }
+
+        LOG_TRACE(Asset, "Model unloaded: {}", model.name);
+        modelIdToHandle.erase(model.modelId);
+        modelAllocator.Remove(model.selfHandle);
+        model = {};
+    }
 
     for (auto& texture : textures) {
         if (!textureAllocator.IsValid(texture.selfHandle)) { continue; }

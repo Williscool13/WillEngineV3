@@ -46,6 +46,8 @@ struct MeshRuntime
     static constexpr size_t MaxPrimitives = 128;
     Core::InlineVector<PrimitiveData, MaxPrimitives> primitives{};
     Engine::StaticModelHandle modelHandle{};
+
+    static void OnDestroy(entt::registry& registry, entt::entity entity);
 };
 }
 

@@ -86,6 +86,7 @@ public:
     Engine::ModelID modelId{};
     ModelLoadState modelLoadState{ModelLoadState::NotLoaded};
     uint64_t acquireFrame{UINT64_MAX};
+    uint64_t retireFrame{0};
 
     // Populated by AssetManager, Only for normal models
     std::filesystem::path source{};

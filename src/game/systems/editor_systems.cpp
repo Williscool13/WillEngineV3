@@ -560,7 +560,7 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
 
         const auto& modelCache = ctx->assetManager->GetModelCache();
         static int selectedModel = 0;
-        std::vector<std::pair<std::string, Engine::ModelID>> modelList;
+        std::vector<std::pair<std::string, Engine::ModelID> > modelList;
         modelList.reserve(modelCache.size());
         for (const auto& [id, meta] : modelCache) {
             modelList.emplace_back(meta.name, id);
@@ -622,7 +622,7 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
 
         const auto& prefabCache = ctx->assetManager->GetPrefabCache();
         static int selectedPrefab = 0;
-        std::vector<std::pair<std::string, StringID>> prefabList;
+        std::vector<std::pair<std::string, StringID> > prefabList;
         prefabList.reserve(prefabCache.size());
         for (const auto& [id, meta] : prefabCache) {
             prefabList.emplace_back(meta.prefabName, id);
@@ -753,7 +753,8 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
                     if (result.requestRemoval) {
                         entryToRemove = &entry;
                         if (entityScene) MarkSceneModified(state, entityScene->sceneId);
-                    } else {
+                    }
+                    else {
                         nlohmann::json after;
                         entry.serialize(state->registry, entity, after);
                         if (before != after && entityScene) MarkSceneModified(state, entityScene->sceneId);
@@ -1171,7 +1172,7 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
         const auto& allMaterials = materialManager->GetMaterials();
         int32_t mutableCount = 0;
         for (const auto& [id, mat] : allMaterials) {
-            if (!mat.immutable) ++mutableCount;
+            if (!mat.immutable) { ++mutableCount; }
         }
         ImGui::SeparatorText(fmt::format("Materials ({})", mutableCount).c_str());
 

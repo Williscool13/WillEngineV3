@@ -6,18 +6,23 @@
 #include "render/static_mesh_component.h"
 
 #include <entt/entt.hpp>
-#include <json/nlohmann/json.hpp>
 
 #include "imgui.h"
-#include <glm/gtc/type_ptr.hpp>
-#include <ImGuizmo.h>
 
-#include "scene_components.h"
 #include "core/include/engine_context.h"
 #include "engine/asset_manager.h"
-#include "engine/engine_api.h"
-#include "engine/logging/engine_log.h"
-#include "game/systems/editor_systems.h"
-namespace Game
+
+namespace Game::Component
 {
+void MeshRuntime::OnDestroy(entt::registry& registry, entt::entity entity)
+{
+    auto* ctx = registry.ctx().get<Core::EngineContext*>();
+    auto& runtime = registry.get<MeshRuntime>(entity);
+    for (size_t i = 0; i < runtime.primitives.Size(); ++i) {
+        ctx->materialManager->ReleaseMaterial(runtime.primitives[i].materialID);
+    }
+    if (runtime.modelHandle.IsValid()) {
+        ctx->assetManager->UnloadModel(runtime.modelHandle);
+    }
+}
 }

@@ -22,6 +22,8 @@ namespace Game
 {
 void ConnectRenderObservers(entt::registry& registry)
 {
+    registry.on_destroy<Component::MeshRuntime>().connect<&Component::MeshRuntime::OnDestroy>();
+
     registry.on_construct<Component::StaticMeshComponent>().connect<&Component::StaticMeshComponent::OnConstruct>();
     registry.on_destroy<Component::StaticMeshComponent>().connect<&Component::StaticMeshComponent::OnDestroy>();
 

@@ -61,16 +61,7 @@ void SplineMeshComponent::OnConstruct(entt::registry& registry, entt::entity ent
 
 void SplineMeshComponent::OnDestroy(entt::registry& registry, entt::entity entity)
 {
-    auto* ctx = registry.ctx().get<Core::EngineContext*>();
-    if (auto* runtime = registry.try_get<MeshRuntime>(entity)) {
-        for (size_t i = 0; i < runtime->primitives.Size(); ++i) {
-            ctx->materialManager->ReleaseMaterial(runtime->primitives[i].materialID);
-        }
-        if (runtime->modelHandle.IsValid()) {
-            ctx->assetManager->UnloadModel(runtime->modelHandle);
-        }
-        registry.remove<MeshRuntime>(entity);
-    }
+    registry.remove<MeshRuntime>(entity);
     registry.remove<SplineMeshLoadingTag>(entity);
     registry.remove<RenderTransformComponent>(entity);
     registry.remove<DirtyRenderTransformComponent>(entity);

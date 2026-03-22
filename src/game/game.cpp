@@ -84,6 +84,10 @@ GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::GameState* state)
     ZoneScoped;
     const auto frameStart = std::chrono::high_resolution_clock::now();
 
+#if WILL_EDITOR
+    Game::EditorUpdate(ctx, state);
+#endif
+
     if (state->bIsPlaying) {
         Game::DebugProcessPhysicsCollisions(ctx, state);
         Game::DebugApplyGroundForces(ctx, state);
@@ -118,10 +122,6 @@ GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::GameState* state)
     state->registry.clear<Game::Component::DirtyTransformTag>();
 
     ctx->materialManager->ProcessRetirements();
-
-#if WILL_EDITOR
-    Game::EditorUpdate(ctx, state);
-#endif
 
     const auto frameEnd = std::chrono::high_resolution_clock::now();
     const auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(frameEnd - frameStart);

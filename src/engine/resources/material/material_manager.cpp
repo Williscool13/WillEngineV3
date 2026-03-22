@@ -154,8 +154,7 @@ void MaterialManager::ReleaseMaterial(MaterialID materialID)
 
 void MaterialManager::ProcessRetirements()
 {
-    for (size_t i = 0; i < activeMaterialBuffer.size(); i++) {
-        MaterialEntry& entry = activeMaterialBuffer[i];
+    for (MaterialEntry& entry : activeMaterialBuffer) {
         if (!entry.handle.IsValid()) {
             continue;
         }

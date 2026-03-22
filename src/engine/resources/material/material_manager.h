@@ -41,7 +41,7 @@ public:
      */
     void UpdateMutableMaterial(MaterialID id, const Material& material, bool bSerialize = false);
 
-    MaterialID FindMutableMaterial(StringID name) const;
+    [[nodiscard]] MaterialID FindMutableMaterial(StringID name) const;
 
     void AcquireMaterial(MaterialID materialID);
 
@@ -64,8 +64,8 @@ public:
 
     [[nodiscard]] const Material* GetMaterial(MaterialID id) const;
 
+    [[nodiscard]] const uint32_t GetActiveMaterialCount() const { return activeMaterialAllocator.GetCount(); }
     [[nodiscard]] const std::unordered_map<MaterialID, Material>& GetMaterials() const { return materials; }
-
     [[nodiscard]] const std::array<MaterialEntry, Render::BINDLESS_MATERIAL_BUFFER_COUNT>& GetActiveMaterials() const { return activeMaterialBuffer; }
 
     uint32_t GetMaterialIndex(MaterialID id)

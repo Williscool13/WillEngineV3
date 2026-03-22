@@ -60,23 +60,33 @@ public:
     BindlessResourcesSamplerImages& operator=(BindlessResourcesSamplerImages&& other) noexcept;
 
     /**
+     * Not thread-safe
      * Allocate a sampler in the bindless array.
      * @param sampler Vulkan sampler handle to bind
      * @return Handle for the sampler, or Invalid if full
      */
     BindlessSamplerHandle AllocateSampler(VkSampler sampler);
 
+    /**
+     * Not thread-safe
+     * @return
+     */
     BindlessSamplerHandle ReserveAllocateSampler();
 
     bool UpdateSampler(BindlessSamplerHandle handle, VkSampler sampler);
 
     /**
+     * Not thread-safe
      * Allocate a texture in the bindless array.
      * @param imageInfo Descriptor info for the sampled image
      * @return Handle for the texture, or Invalid if full
      */
     BindlessTextureHandle AllocateTexture(const VkDescriptorImageInfo& imageInfo);
 
+    /**
+     * Not thread-safe
+     * @return
+     */
     BindlessTextureHandle ReserveAllocateTexture();
 
     /**
