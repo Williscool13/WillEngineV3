@@ -358,7 +358,7 @@ void ResolvePhysicsShapeCreation(Core::EngineContext* ctx, Engine::GameState* st
                 continue;
             }
 
-            if (!shape.meshSourceModelId.IsValid() && std::holds_alternative<std::monostate>(shape.proceduralParams) && shape.splineParams.controlPoints.empty()) {
+            if (!shape.meshSourceModelId.IsValid() && std::holds_alternative<std::monostate>(shape.proceduralParams) && shape.splineParams.controlPoints.IsEmpty()) {
                 LOG_WARN(Game, "PhysicsBodyDesc has mesh shape with no mesh source, skipping shape creation");
                 bDegenerate = true;
                 break;
@@ -369,14 +369,14 @@ void ResolvePhysicsShapeCreation(Core::EngineContext* ctx, Engine::GameState* st
             continue;
         }
 
-        if (bodyDesc.shapes.empty()) {
+        if (bodyDesc.shapes.IsEmpty()) {
             LOG_WARN(Game, "PhysicsBodyDesc has no shapes, skipping shape creation");
             resolved.push_back(entity);
             continue;
         }
 
         JPH::ShapeRefC shape;
-        if (bodyDesc.shapes.size() == 1 && bodyDesc.shapes[0].offset == glm::vec3(0.0f)) {
+        if (bodyDesc.shapes.Size() == 1 && bodyDesc.shapes[0].offset == glm::vec3(0.0f)) {
             shape = CreateShapeFromDesc(bodyDesc.shapes[0], ctx->assetManager);
         }
         else {

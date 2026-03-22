@@ -20,11 +20,11 @@ void PhysicsBodyDesc::OnConstruct(entt::registry& registry, entt::entity entity)
 {
     auto& component = registry.get<PhysicsBodyDesc>(entity);
 
-    if (component.shapes.empty()) {
+    if (component.shapes.IsEmpty()) {
         PhysicsShapeDesc d{};
         d.type = PhysicsShapeType::Box;
         d.box.halfExtents = glm::vec3(0.5f);
-        component.shapes.push_back(d);
+        component.shapes.PushBack(d);
     }
 
     auto* ctx = registry.ctx().get<Core::EngineContext*>();
@@ -40,7 +40,7 @@ void PhysicsBodyDesc::OnConstruct(entt::registry& registry, entt::entity entity)
             shape.meshSourceHandle = ctx->assetManager->LoadProceduralModel(shape.proceduralParams);
             needsResolve = true;
         }
-        else if (!shape.splineParams.controlPoints.empty()) {
+        else if (!shape.splineParams.controlPoints.IsEmpty()) {
             shape.meshSourceHandle = ctx->assetManager->LoadSplineModel(shape.splineParams);
             needsResolve = true;
         }
@@ -117,7 +117,7 @@ void SerializeComponent<Component::PhysicsBodyDesc>(const Component::PhysicsBody
             case Component::PhysicsShapeType::TriangleMesh:
                 shapeJson["meshSourceModelId"] = shape.meshSourceModelId.id;
                 shapeJson["proceduralType"] = shape.proceduralParams.index();
-                if (!shape.splineParams.controlPoints.empty()) {
+                if (!shape.splineParams.controlPoints.IsEmpty()) {
                     nlohmann::json sp;
                     sp["radius"] = shape.splineParams.radius;
                     sp["rollAngle"] = shape.splineParams.rollAngle;
@@ -129,12 +129,11 @@ void SerializeComponent<Component::PhysicsBodyDesc>(const Component::PhysicsBody
                     sp["dualPathSpacing"] = shape.splineParams.dualPathSpacing;
                     sp["bCrossPlanks"] = shape.splineParams.bCrossPlanks;
                     sp["crossPlankInterval"] = shape.splineParams.crossPlankInterval;
+                    sp["crossPlankHeight"] = shape.splineParams.crossPlankHeight;
                     sp["controlPoints"] = nlohmann::json::array();
-                    for (const auto& cp : shape.splineParams.controlPoints) {
-                        sp["controlPoints"].push_back({cp.x, cp.y, cp.z});
-                    }
-                    if (!shape.splineParams.controlPointRolls.empty()) {
-                        sp["controlPointRolls"] = shape.splineParams.controlPointRolls;
+                    for (size_t ci = 0; ci < shape.splineParams.controlPoints.Size(); ci++) {
+                        const auto& cp = shape.splineParams.controlPoints[ci];
+                        sp["controlPoints"].push_back({cp.x, cp.y, cp.z, cp.w});
                     }
                     shapeJson["splineParams"] = sp;
                 }
@@ -260,7 +259,7 @@ void DeserializeComponent<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc
     comp.restitution = json.value<float>("restitution", 0.0f);
     comp.motionQuality = static_cast<JPH::EMotionQuality>(json.value<uint8_t>("motionQuality", 0));
     comp.layerOverride = json.value<JPH::ObjectLayer>("layerOverride", 0xFFFF);
-    comp.shapes.clear();
+    comp.shapes.Clear();
 
     for (const auto& shapeJson : json["shapes"]) {
         Component::PhysicsShapeDesc shape{};
@@ -462,26 +461,25 @@ void DeserializeComponent<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc
                     spline.dualPathSpacing = sp.value("dualPathSpacing", 1.0f);
                     spline.bCrossPlanks = sp.value("bCrossPlanks", false);
                     spline.crossPlankInterval = sp.value("crossPlankInterval", 4);
-                    spline.controlPoints.clear();
+                    spline.crossPlankHeight = sp.value("crossPlankHeight", 0.0f);
+                    spline.controlPoints.Clear();
                     for (const auto& cp : sp["controlPoints"]) {
-                        spline.controlPoints.push_back({cp[0].get<float>(), cp[1].get<float>(), cp[2].get<float>()});
+                        float roll = cp.size() > 3 ? cp[3].get<float>() : 0.0f;
+                        spline.controlPoints.PushBack({cp[0].get<float>(), cp[1].get<float>(), cp[2].get<float>(), roll});
                     }
-                    if (sp.contains("controlPointRolls")) {
-                        spline.controlPointRolls = sp["controlPointRolls"].get<std::vector<float>>();
-                    }
-                    shape.splineParams = std::move(spline);
+                    shape.splineParams = spline;
                 }
                 break;
         }
 
-        comp.shapes.push_back(shape);
+        comp.shapes.PushBack(shape);
     }
 }
 
 ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity,
                                                                       const char* name)
 {
-    auto& component = registry.get<Component::PhysicsBodyDesc>(entity);
+    auto& component = registry.get<PhysicsBodyDesc>(entity);
     static int editShapeIdx = -1;
     static entt::entity editEntity = entt::null;
 
@@ -506,18 +504,18 @@ ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewFamily& v
         const char* motionTypes[] = {"Static", "Kinematic", "Dynamic"};
         int currentMotion = static_cast<int>(component.motionType);
         if (ImGui::Combo("Motion Type", &currentMotion, motionTypes, IM_ARRAYSIZE(motionTypes))) {
-            auto newMotion = static_cast<Component::PhysicsMotionType>(currentMotion);
-            if (newMotion == Component::PhysicsMotionType::Dynamic) {
+            auto newMotion = static_cast<PhysicsMotionType>(currentMotion);
+            if (newMotion == PhysicsMotionType::Dynamic) {
                 for (auto& shape : component.shapes) {
-                    if (shape.type == Component::PhysicsShapeType::TriangleMesh) {
+                    if (shape.type == PhysicsShapeType::TriangleMesh) {
                         if (shape.meshSourceHandle.IsValid()) {
                             ctx->assetManager->UnloadModel(shape.meshSourceHandle);
                             shape.meshSourceHandle = {};
                         }
                         shape.meshSourceModelId = Engine::ModelID::INVALID;
                         shape.proceduralParams = std::monostate{};
-                        shape.splineParams.controlPoints.clear();
-                        shape.type = Component::PhysicsShapeType::Box;
+                        shape.splineParams.controlPoints.Clear();
+                        shape.type = PhysicsShapeType::Box;
                     }
                 }
             }
@@ -542,27 +540,27 @@ ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewFamily& v
 
         const glm::mat4 view = viewFamily.mainView.currentViewData.view;
         const glm::mat4 proj = viewFamily.mainView.currentViewData.proj;
-        auto* transform = registry.try_get<Component::TransformComponent>(entity);
+        auto* transform = registry.try_get<TransformComponent>(entity);
 
-        auto renderShapeContent = [&](Component::PhysicsShapeDesc& shape) {
-            const bool bIsDynamic = component.motionType == Component::PhysicsMotionType::Dynamic;
+        auto renderShapeContent = [&](PhysicsShapeDesc& shape) {
+            const bool bIsDynamic = component.motionType == PhysicsMotionType::Dynamic;
             static constexpr const char* kShapeTypes[] = {"Box", "Sphere", "Capsule", "ConvexHull", "TriangleMesh"};
             if (ImGui::BeginCombo("Shape Type", kShapeTypes[static_cast<int>(shape.type)])) {
                 for (int s = 0; s < IM_ARRAYSIZE(kShapeTypes); ++s) {
-                    const bool bDisabled = bIsDynamic && s == static_cast<int>(Component::PhysicsShapeType::TriangleMesh);
+                    const bool bDisabled = bIsDynamic && s == static_cast<int>(PhysicsShapeType::TriangleMesh);
                     ImGui::BeginDisabled(bDisabled);
                     if (ImGui::Selectable(kShapeTypes[s], static_cast<int>(shape.type) == s)) {
-                        auto newType = static_cast<Component::PhysicsShapeType>(s);
-                        bool wasMesh = shape.type == Component::PhysicsShapeType::ConvexHull || shape.type == Component::PhysicsShapeType::TriangleMesh;
-                        bool isMesh = newType == Component::PhysicsShapeType::ConvexHull || newType == Component::PhysicsShapeType::TriangleMesh;
+                        auto newType = static_cast<PhysicsShapeType>(s);
+                        bool wasMesh = shape.type == PhysicsShapeType::ConvexHull || shape.type == PhysicsShapeType::TriangleMesh;
+                        bool isMesh = newType == PhysicsShapeType::ConvexHull || newType == PhysicsShapeType::TriangleMesh;
                         if (wasMesh && !isMesh && shape.meshSourceHandle.IsValid()) {
                             ctx->assetManager->UnloadModel(shape.meshSourceHandle);
                             shape.meshSourceHandle = {};
                             shape.meshSourceModelId = Engine::ModelID::INVALID;
-                            shape.splineParams.controlPoints.clear();
+                            shape.splineParams.controlPoints.Clear();
                         }
                         shape.type = newType;
-                        registry.patch<Component::PhysicsBodyDesc>(entity);
+                        registry.patch<PhysicsBodyDesc>(entity);
                     }
                     ImGui::EndDisabled();
                 }
@@ -574,18 +572,18 @@ ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewFamily& v
 
             bool bAnyChange = false;
             switch (shape.type) {
-                case Component::PhysicsShapeType::Box:
+                case PhysicsShapeType::Box:
                     bAnyChange |= ImGui::DragFloat3("Half Extents", &shape.box.halfExtents.x, 0.01f, 0.001f, 100.0f);
                     break;
-                case Component::PhysicsShapeType::Sphere:
+                case PhysicsShapeType::Sphere:
                     bAnyChange |= ImGui::DragFloat("Radius", &shape.sphere.radius, 0.01f, 0.001f, 100.0f);
                     break;
-                case Component::PhysicsShapeType::Capsule:
+                case PhysicsShapeType::Capsule:
                     bAnyChange |= ImGui::DragFloat("Radius", &shape.capsule.radius, 0.01f, 0.001f, 100.0f);
                     bAnyChange |= ImGui::DragFloat("Half Height", &shape.capsule.halfHeight, 0.01f, 0.001f, 100.0f);
                     break;
-                case Component::PhysicsShapeType::ConvexHull:
-                case Component::PhysicsShapeType::TriangleMesh:
+                case PhysicsShapeType::ConvexHull:
+                case PhysicsShapeType::TriangleMesh:
                 {
                     bool bHasAny = false;
                     const auto* meta = ctx->assetManager->GetModelMetadata(shape.meshSourceModelId);
@@ -605,7 +603,7 @@ ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewFamily& v
                         ImGui::Text("Mesh Source: Procedural %s", kProceduralNames[idx]);
                         bHasAny = true;
                     }
-                    else if (!shape.splineParams.controlPoints.empty()) {
+                    else if (!shape.splineParams.controlPoints.IsEmpty()) {
                         ImGui::Text("Mesh Source: Procedural Spline");
                         bHasAny = true;
                     }
@@ -626,7 +624,7 @@ ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewFamily& v
                             }
                             shape.meshSourceModelId = Engine::ModelID::INVALID;
                             shape.proceduralParams = std::monostate{};
-                            shape.splineParams.controlPoints.clear();
+                            shape.splineParams.controlPoints.Clear();
                             bAnyChange = true;
                         }
                     }
@@ -634,18 +632,18 @@ ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewFamily& v
                 }
             }
             if (bAnyChange) {
-                registry.patch<Component::PhysicsBodyDesc>(entity);
+                registry.patch<PhysicsBodyDesc>(entity);
             }
 
             //
             {
-                const bool isMeshType = shape.type == Component::PhysicsShapeType::ConvexHull || shape.type == Component::PhysicsShapeType::TriangleMesh;
+                const bool isMeshType = shape.type == PhysicsShapeType::ConvexHull || shape.type == PhysicsShapeType::TriangleMesh;
 
                 Engine::StaticModelHandle fitHandle{};
-                if (auto* sm = registry.try_get<Component::StaticMeshComponent>(entity)) {
+                if (auto* sm = registry.try_get<StaticMeshComponent>(entity)) {
                     fitHandle = sm->modelHandle;
                 }
-                else if (auto* pm = registry.try_get<Component::ProceduralMeshComponent>(entity)) {
+                else if (auto* pm = registry.try_get<ProceduralMeshComponent>(entity)) {
                     fitHandle = pm->modelHandle;
                 }
 
@@ -657,18 +655,18 @@ ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewFamily& v
                 if (ImGui::Button("Auto-Fit")) {
                     const glm::vec3 scale = transform ? transform->scale : glm::vec3(1.0f);
                     switch (shape.type) {
-                        case Component::PhysicsShapeType::Box:
+                        case PhysicsShapeType::Box:
                             shape.box.halfExtents = fitModel->bounds.aabb.HalfExtents() * scale;
                             shape.offset = fitModel->bounds.aabb.Center() * scale;
                             break;
-                        case Component::PhysicsShapeType::Sphere:
+                        case PhysicsShapeType::Sphere:
                         {
                             const float maxScale = glm::max(scale.x, glm::max(scale.y, scale.z));
                             shape.sphere.radius = fitModel->bounds.sphere.radius * maxScale;
                             shape.offset = fitModel->bounds.sphere.center * scale;
                             break;
                         }
-                        case Component::PhysicsShapeType::Capsule:
+                        case PhysicsShapeType::Capsule:
                         {
                             const glm::vec3 he = fitModel->bounds.aabb.HalfExtents() * scale;
                             const float radius = glm::max(he.x, he.z);
@@ -677,22 +675,21 @@ ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewFamily& v
                             shape.offset = fitModel->bounds.aabb.Center() * scale;
                             break;
                         }
-                        case Component::PhysicsShapeType::ConvexHull:
-                        case Component::PhysicsShapeType::TriangleMesh:
+                        case PhysicsShapeType::ConvexHull:
+                        case PhysicsShapeType::TriangleMesh:
                             shape.meshSourceModelId = Engine::ModelID::INVALID;
                             shape.proceduralParams = std::monostate{};
-                            shape.splineParams.controlPoints.clear();
+                            shape.splineParams.controlPoints.Clear();
                             shape.offset = {};
                             shape.bakedScale = scale;
-                            if (auto* sm = registry.try_get<Component::StaticMeshComponent>(entity)) {
+                            if (auto* sm = registry.try_get<StaticMeshComponent>(entity)) {
                                 shape.meshSourceModelId = sm->modelId;
                             }
-                            else if (auto* pm = registry.try_get<Component::ProceduralMeshComponent>(entity)) {
+                            else if (auto* pm = registry.try_get<ProceduralMeshComponent>(entity)) {
                                 shape.proceduralParams = pm->params;
                             }
-                            else if (auto* splm = registry.try_get<Component::SplineMeshComponent>(entity)) {
+                            else if (auto* splm = registry.try_get<SplineMeshComponent>(entity)) {
                                 shape.splineParams.controlPoints = splm->controlPoints;
-                                shape.splineParams.controlPointRolls = splm->controlPointRolls;
                                 shape.splineParams.radius = splm->radius;
                                 shape.splineParams.rollAngle = splm->rollAngle;
                                 shape.splineParams.sides = splm->sides;
@@ -703,17 +700,18 @@ ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewFamily& v
                                 shape.splineParams.dualPathSpacing = splm->dualPathSpacing;
                                 shape.splineParams.bCrossPlanks = splm->bCrossPlanks;
                                 shape.splineParams.crossPlankInterval = splm->crossPlankInterval;
+                                shape.splineParams.crossPlankHeight = splm->crossPlankHeight;
                             }
                             break;
                     }
 
-                    registry.patch<Component::PhysicsBodyDesc>(entity);
+                    registry.patch<PhysicsBodyDesc>(entity);
                 }
                 ImGui::EndDisabled();
             }
         };
 
-        auto renderGizmo = [&](int i, Component::PhysicsShapeDesc& shape) {
+        auto renderGizmo = [&](int i, PhysicsShapeDesc& shape) {
             if (editShapeIdx != i || !transform || !hasGizmoClaim) return;
 
             const glm::mat4 entityMat = glm::translate(glm::mat4(1.0f), transform->translation) * glm::mat4_cast(transform->rotation);
@@ -755,12 +753,12 @@ ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewFamily& v
 
             applyStyle({1.0f, 0.85f, 0.20f, 1.0f}, {1.0f, 1.00f, 0.60f, 1.0f}, 0.07f);
             switch (shape.type) {
-                case Component::PhysicsShapeType::Sphere:
+                case PhysicsShapeType::Sphere:
                     gizmo(shapeCenter + glm::vec3(shape.sphere.radius, 0.0f, 0.0f), [&](glm::vec3 newPt) {
                         shape.sphere.radius = glm::max(0.001f, glm::length(newPt - shapeCenter));
                     });
                     break;
-                case Component::PhysicsShapeType::Capsule:
+                case PhysicsShapeType::Capsule:
                     gizmo(shapeCenter + glm::vec3(0.0f, shape.capsule.halfHeight, 0.0f), [&](glm::vec3 newPt) {
                         shape.capsule.halfHeight = glm::max(0.001f, newPt.y - shapeCenter.y);
                     });
@@ -768,7 +766,7 @@ ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewFamily& v
                         shape.capsule.radius = glm::max(0.001f, glm::length(newPt - shapeCenter));
                     });
                     break;
-                case Component::PhysicsShapeType::Box:
+                case PhysicsShapeType::Box:
                     gizmo(shapeCenter + glm::vec3(shape.box.halfExtents.x, 0.0f, 0.0f), [&](glm::vec3 newPt) {
                         shape.box.halfExtents.x = glm::max(0.001f, glm::abs(newPt.x - shapeCenter.x));
                     });
@@ -788,10 +786,10 @@ ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewFamily& v
 
             constexpr glm::vec4 kEditColor{1.0f, 0.6f, 0.1f, 1.0f};
             switch (shape.type) {
-                case Component::PhysicsShapeType::Sphere:
+                case PhysicsShapeType::Sphere:
                     DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {shapeCenter, shape.sphere.radius, kEditColor});
                     break;
-                case Component::PhysicsShapeType::Capsule:
+                case PhysicsShapeType::Capsule:
                 {
                     const glm::vec3 top = shapeCenter + glm::vec3(0.0f, shape.capsule.halfHeight, 0.0f);
                     const glm::vec3 bot = shapeCenter - glm::vec3(0.0f, shape.capsule.halfHeight, 0.0f);
@@ -803,7 +801,7 @@ ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewFamily& v
                     DEBUG_ADD_LINE(viewFamily.debugLines, {top + glm::vec3(0, 0, -shape.capsule.radius), bot + glm::vec3(0, 0, -shape.capsule.radius), kEditColor});
                     break;
                 }
-                case Component::PhysicsShapeType::Box:
+                case PhysicsShapeType::Box:
                     DEBUG_ADD_BOX(viewFamily.debugBoxes, {shapeCenter, shape.box.halfExtents, transform->rotation * shape.rotation, kEditColor});
                     break;
             }
@@ -826,10 +824,10 @@ ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewFamily& v
             ImGui::PopID();
         }
 
-        if (component.shapes.size() > 1) {
+        if (component.shapes.Size() > 1) {
             ImGui::SeparatorText("Additional Colliders");
             int shapeToRemove = -1;
-            for (int i = 1; i < static_cast<int>(component.shapes.size()); ++i) {
+            for (int i = 1; i < static_cast<int>(component.shapes.Size()); ++i) {
                 ImGui::PushID(i);
                 auto& shape = component.shapes[i];
                 const bool isEditing = (editShapeIdx == i);
@@ -865,17 +863,17 @@ ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewFamily& v
                 ImGui::PopID();
             }
             if (shapeToRemove >= 0) {
-                component.shapes.erase(component.shapes.begin() + shapeToRemove);
-                registry.patch<Component::PhysicsBodyDesc>(entity);
+                component.shapes.RemoveAt(shapeToRemove);
+                registry.patch<PhysicsBodyDesc>(entity);
             }
         }
 
         if (ImGui::Button("Add Collider")) {
-            Component::PhysicsShapeDesc desc{};
-            desc.type = Component::PhysicsShapeType::Box;
+            PhysicsShapeDesc desc{};
+            desc.type = PhysicsShapeType::Box;
             desc.box.halfExtents = glm::vec3(0.5f);
-            component.shapes.push_back(desc);
-            registry.patch<Component::PhysicsBodyDesc>(entity);
+            component.shapes.PushBack(desc);
+            registry.patch<PhysicsBodyDesc>(entity);
         }
     }
 

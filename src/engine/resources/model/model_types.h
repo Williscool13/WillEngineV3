@@ -12,6 +12,8 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 
+#include "core/allocators/inline_vector.h"
+
 #include "offsetAllocator.hpp"
 #include "engine/resources/material/material.h"
 
@@ -282,8 +284,9 @@ struct TrefoilKnotParams
 
 struct SplineParams
 {
-    std::vector<glm::vec3> controlPoints{{0, 0, 0}, {0, 0, 1}, {0, 0, 2}, {0, 0, 3}};
-    std::vector<float> controlPointRolls;
+    static constexpr size_t MaxControlPoints = 16;
+
+    Core::InlineVector<glm::vec4, MaxControlPoints> controlPoints{};
     float radius{0.5f};
     float rollAngle{0.0f}; // degree; rotates around the path tangent
     int32_t sides{8};
@@ -294,6 +297,7 @@ struct SplineParams
     float dualPathSpacing{1.0f};
     bool bCrossPlanks{false};
     int32_t crossPlankInterval{4};
+    float crossPlankHeight{0.0f};
 };
 
 using ProceduralParams = std::variant<std::monostate, StaircaseParams, BoxParams, CylinderParams, CapsuleParams, TorusParams, ArchParams, WedgeParams, ConeParams, DoorParams, PlaneParams, SphereParams

@@ -6,7 +6,6 @@
 
 #include <glm/gtc/type_ptr.hpp>
 
-#include "game/component-registry/component_editor.h"
 #include "game/component-registry/component_copy.h"
 #include "game/component-registry/component_serialization.h"
 #include "game/component-registry/component_initialization.h"
@@ -18,15 +17,10 @@
 
 namespace Game::Component
 {
-void SplineMeshComponent::OnConstruct(entt::registry& registry, entt::entity entity)
+static Engine::SplineParams ToSplineParams(const SplineMeshComponent& component)
 {
-    auto& component = registry.get<SplineMeshComponent>(entity);
-    auto* ctx = registry.ctx().get<Core::EngineContext*>();
-    auto* state = registry.ctx().get<Engine::GameState*>();
-
-    Engine::SplineParams params;
+    Engine::SplineParams params{};
     params.controlPoints = component.controlPoints;
-    params.controlPointRolls = component.controlPointRolls;
     params.radius = component.radius;
     params.rollAngle = component.rollAngle;
     params.sides = component.sides;
@@ -37,8 +31,24 @@ void SplineMeshComponent::OnConstruct(entt::registry& registry, entt::entity ent
     params.dualPathSpacing = component.dualPathSpacing;
     params.bCrossPlanks = component.bCrossPlanks;
     params.crossPlankInterval = component.crossPlankInterval;
+    params.crossPlankHeight = component.crossPlankHeight;
+    return params;
+}
 
-    component.modelHandle = ctx->assetManager->LoadSplineModel(params);
+void SplineMeshComponent::OnConstruct(entt::registry& registry, entt::entity entity)
+{
+    auto& component = registry.get<SplineMeshComponent>(entity);
+    auto* ctx = registry.ctx().get<Core::EngineContext*>();
+    auto* state = registry.ctx().get<Engine::GameState*>();
+
+    if (component.controlPoints.IsEmpty()) {
+        component.controlPoints.PushBack({0,0,0,0});
+        component.controlPoints.PushBack({0,0,1,0});
+        component.controlPoints.PushBack({0,0,2,0});
+        component.controlPoints.PushBack({0,0,3,0});
+    }
+
+    component.modelHandle = ctx->assetManager->LoadSplineModel(ToSplineParams(component));
     registry.emplace_or_replace<SplineMeshLoadingTag>(entity);
     state->bPendingModelResolve = true;
 
@@ -76,21 +86,10 @@ bool CanAddComponent<Component::SplineMeshComponent>(const entt::registry& regis
 template<>
 Component::SplineMeshComponent CopyComponent(const Component::SplineMeshComponent& src, entt::registry& dstReg)
 {
-    Component::SplineMeshComponent copy{};
-    copy.controlPoints = src.controlPoints;
-    copy.controlPointRolls = src.controlPointRolls;
-    copy.radius = src.radius;
-    copy.rollAngle = src.rollAngle;
-    copy.sides = src.sides;
-    copy.segmentsPerSpan = src.segmentsPerSpan;
-    copy.bClosed = src.bClosed;
-    copy.bCaps = src.bCaps;
-    copy.bDualPath = src.bDualPath;
-    copy.dualPathSpacing = src.dualPathSpacing;
-    copy.bCrossPlanks = src.bCrossPlanks;
-    copy.crossPlankInterval = src.crossPlankInterval;
-    copy.material = src.material;
-    copy.modelFlags = src.modelFlags;
+    Component::SplineMeshComponent copy = src;
+    copy.modelHandle = {};
+    copy.primitive = {};
+    copy.bPrimitiveReady = false;
     return copy;
 }
 
@@ -107,14 +106,12 @@ void SerializeComponent<Component::SplineMeshComponent>(const Component::SplineM
     json["dualPathSpacing"] = comp.dualPathSpacing;
     json["bCrossPlanks"] = comp.bCrossPlanks;
     json["crossPlankInterval"] = comp.crossPlankInterval;
+    json["crossPlankHeight"] = comp.crossPlankHeight;
     json["material"] = comp.material.id;
 
     json["controlPoints"] = nlohmann::json::array();
     for (const auto& cp : comp.controlPoints) {
-        json["controlPoints"].push_back({cp.x, cp.y, cp.z});
-    }
-    if (!comp.controlPointRolls.empty()) {
-        json["controlPointRolls"] = comp.controlPointRolls;
+        json["controlPoints"].push_back({cp.x, cp.y, cp.z, cp.w});
     }
 }
 
@@ -131,24 +128,27 @@ void DeserializeComponent<Component::SplineMeshComponent>(Component::SplineMeshC
     comp.dualPathSpacing = json.value("dualPathSpacing", 1.0f);
     comp.bCrossPlanks = json.value("bCrossPlanks", false);
     comp.crossPlankInterval = json.value("crossPlankInterval", 4);
+    comp.crossPlankHeight = json.value("crossPlankHeight", 0.0f);
     comp.material = Engine::MaterialID(json["material"].get<uint64_t>());
 
-    comp.controlPoints.clear();
+    comp.controlPoints.Clear();
     for (const auto& cpJson : json["controlPoints"]) {
-        comp.controlPoints.push_back({cpJson[0].get<float>(), cpJson[1].get<float>(), cpJson[2].get<float>()});
+        float w = cpJson.size() > 3 ? cpJson[3].get<float>() : 0.0f;
+        comp.controlPoints.PushBack({cpJson[0].get<float>(), cpJson[1].get<float>(), cpJson[2].get<float>(), w});
     }
-    if (comp.controlPoints.size() < 2) {
-        comp.controlPoints = {{0, 0, 0}, {0, 0, 1}, {0, 0, 2}, {0, 0, 3}};
-    }
-    if (json.contains("controlPointRolls")) {
-        comp.controlPointRolls = json["controlPointRolls"].get<std::vector<float> >();
+    if (comp.controlPoints.Size() < 2) {
+        comp.controlPoints.Clear();
+        comp.controlPoints.PushBack({0,0,0,0});
+        comp.controlPoints.PushBack({0,0,1,0});
+        comp.controlPoints.PushBack({0,0,2,0});
+        comp.controlPoints.PushBack({0,0,3,0});
     }
 }
 
 ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity,
                                                                           const char* name)
 {
-    auto& component = registry.get<Component::SplineMeshComponent>(entity);
+    auto& component = registry.get<SplineMeshComponent>(entity);
     static int editPointIdx = -1;
     static entt::entity editEntity = entt::null;
     static bool wasUsingGizmo = false;
@@ -200,24 +200,15 @@ ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::ViewFamil
             if (component.bCrossPlanks) {
                 ImGui::DragInt("Plank Interval", &component.crossPlankInterval, 1, 1, 32);
                 dirty |= ImGui::IsItemDeactivatedAfterEdit();
-            }
-        } {
-            bool hasPerPointRoll = !component.controlPointRolls.empty();
-            if (ImGui::Checkbox("Per-Point Roll", &hasPerPointRoll)) {
-                if (hasPerPointRoll) {
-                    component.controlPointRolls.resize(component.controlPoints.size(), 0.0f);
-                }
-                else {
-                    component.controlPointRolls.clear();
-                }
-                dirty = true;
+                ImGui::DragFloat("Plank Height", &component.crossPlankHeight, 0.01f, -10.0f, 10.0f);
+                dirty |= ImGui::IsItemDeactivatedAfterEdit();
             }
         }
 
         ImGui::SeparatorText("Control Points");
 
         int pointToRemove = -1;
-        for (int i = 0; i < static_cast<int>(component.controlPoints.size()); i++) {
+        for (int i = 0; i < static_cast<int>(component.controlPoints.Size()); i++) {
             ImGui::PushID(i);
             const bool isEditing = (editPointIdx == i);
 
@@ -237,7 +228,7 @@ ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::ViewFamil
             dirty |= ImGui::IsItemDeactivatedAfterEdit();
             ImGui::SameLine();
 
-            ImGui::BeginDisabled(static_cast<int>(component.controlPoints.size()) <= 2);
+            ImGui::BeginDisabled(static_cast<int>(component.controlPoints.Size()) <= 2);
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
             if (ImGui::SmallButton("X##rmpt")) {
                 pointToRemove = i;
@@ -247,12 +238,12 @@ ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::ViewFamil
             ImGui::PopStyleColor();
             ImGui::EndDisabled();
 
-            if (!component.controlPointRolls.empty()) {
+            {
                 char rollLabel[16];
                 snprintf(rollLabel, sizeof(rollLabel), "##roll%d", i);
                 ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 24.0f);
                 ImGui::SetNextItemWidth(80.0f);
-                ImGui::DragFloat(rollLabel, &component.controlPointRolls[i], 1.0f, -360.0f, 360.0f, "%.1f\xC2\xB0");
+                ImGui::DragFloat(rollLabel, &component.controlPoints[i].w, 1.0f, -360.0f, 360.0f, "%.1f\xC2\xB0");
                 dirty |= ImGui::IsItemDeactivatedAfterEdit();
             }
 
@@ -260,99 +251,78 @@ ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::ViewFamil
         }
 
         if (pointToRemove >= 0) {
-            component.controlPoints.erase(component.controlPoints.begin() + pointToRemove);
-            if (!component.controlPointRolls.empty() && pointToRemove < static_cast<int>(component.controlPointRolls.size())) {
-                component.controlPointRolls.erase(component.controlPointRolls.begin() + pointToRemove);
-            }
+            component.controlPoints.RemoveAt(static_cast<size_t>(pointToRemove));
             dirty = true;
         }
 
+        ImGui::BeginDisabled(component.controlPoints.IsFull());
         if (ImGui::Button("Add Point")) {
-            const glm::vec3 last = component.controlPoints.back();
-            const glm::vec3 prev = component.controlPoints.size() >= 2
-                                       ? component.controlPoints[component.controlPoints.size() - 2]
+            const glm::vec3 last = glm::vec3(component.controlPoints.Back());
+            const glm::vec3 prev = component.controlPoints.Size() >= 2
+                                       ? glm::vec3(component.controlPoints[component.controlPoints.Size() - 2])
                                        : last - glm::vec3(0, 0, 1);
-            component.controlPoints.push_back(last + glm::normalize(last - prev));
-            if (!component.controlPointRolls.empty()) {
-                component.controlPointRolls.push_back(0.0f);
-            }
+            component.controlPoints.PushBack(glm::vec4(last + glm::normalize(last - prev), 0.0f));
             dirty = true;
         }
+        ImGui::EndDisabled();
 
         if (editPointIdx == -1) { hasGizmoClaim = false; }
-        if (hasGizmoClaim && editPointIdx < static_cast<int>(component.controlPoints.size())) {
-            auto* transform = registry.try_get<Component::TransformComponent>(entity);
+        if (hasGizmoClaim && editPointIdx < static_cast<int>(component.controlPoints.Size())) {
+            auto* transform = registry.try_get<TransformComponent>(entity);
             if (transform) {
                 const glm::mat4 view = viewFamily.mainView.currentViewData.view;
                 const glm::mat4 proj = viewFamily.mainView.currentViewData.proj;
                 const glm::mat4 entityMat = glm::translate(glm::mat4(1.0f), transform->translation) * glm::mat4_cast(transform->rotation);
                 const glm::mat4 entityMatInv = glm::inverse(entityMat);
                 const int idx = editPointIdx;
-                const int cpCount = static_cast<int>(component.controlPoints.size());
-                const bool hasRoll = !component.controlPointRolls.empty();
+                const int cpCount = static_cast<int>(component.controlPoints.Size());
 
-                glm::vec3 worldPt = glm::vec3(entityMat * glm::vec4(component.controlPoints[idx], 1.0f));
+                auto cpPos = glm::vec3(component.controlPoints[idx]);
+                glm::vec3 worldPt = glm::vec3(entityMat * glm::vec4(cpPos, 1.0f));
 
-                if (hasRoll) {
-                    // Compute local tangent at this control point
-                    glm::vec3 localTangent;
-                    if (cpCount < 2) localTangent = glm::vec3(0, 0, 1);
-                    else if (idx == 0) localTangent = glm::normalize(component.controlPoints[1] - component.controlPoints[0]);
-                    else if (idx == cpCount - 1) localTangent = glm::normalize(component.controlPoints[cpCount - 1] - component.controlPoints[cpCount - 2]);
-                    else localTangent = glm::normalize(component.controlPoints[idx + 1] - component.controlPoints[idx - 1]);
+                glm::vec3 localTangent;
+                if (cpCount < 2) localTangent = glm::vec3(0, 0, 1);
+                else if (idx == 0) localTangent = glm::normalize(glm::vec3(component.controlPoints[1]) - glm::vec3(component.controlPoints[0]));
+                else if (idx == cpCount - 1) localTangent = glm::normalize(glm::vec3(component.controlPoints[cpCount - 1]) - glm::vec3(component.controlPoints[cpCount - 2]));
+                else localTangent = glm::normalize(glm::vec3(component.controlPoints[idx + 1]) - glm::vec3(component.controlPoints[idx - 1]));
 
-                    glm::vec3 worldTangent = glm::normalize(glm::vec3(entityMat * glm::vec4(localTangent, 0.0f)));
+                glm::vec3 worldTangent = glm::normalize(glm::vec3(entityMat * glm::vec4(localTangent, 0.0f)));
 
-                    // Build base frame (no roll)
-                    glm::vec3 refUp = {0, 1, 0};
-                    if (glm::abs(glm::dot(worldTangent, refUp)) > 0.99f) refUp = {1, 0, 0};
-                    glm::vec3 baseRight = glm::normalize(glm::cross(refUp, worldTangent));
-                    glm::vec3 baseUp = glm::normalize(glm::cross(worldTangent, baseRight));
+                glm::vec3 refUp = {0, 1, 0};
+                if (glm::abs(glm::dot(worldTangent, refUp)) > 0.99f) refUp = {1, 0, 0};
+                glm::vec3 baseRight = glm::normalize(glm::cross(refUp, worldTangent));
+                glm::vec3 baseUp = glm::normalize(glm::cross(worldTangent, baseRight));
 
-                    float currentRoll = glm::radians(component.controlPointRolls[idx]);
-                    glm::vec3 rRight = glm::cos(currentRoll) * baseRight + glm::sin(currentRoll) * baseUp;
-                    glm::vec3 rUp = -glm::sin(currentRoll) * baseRight + glm::cos(currentRoll) * baseUp;
+                float currentRoll = glm::radians(component.controlPoints[idx].w);
+                glm::vec3 rRight = glm::cos(currentRoll) * baseRight + glm::sin(currentRoll) * baseUp;
+                glm::vec3 rUp = -glm::sin(currentRoll) * baseRight + glm::cos(currentRoll) * baseUp;
 
-                    glm::mat4 mat(1.0f);
-                    mat[0] = glm::vec4(rRight, 0);
-                    mat[1] = glm::vec4(rUp, 0);
-                    mat[2] = glm::vec4(worldTangent, 0);
-                    mat[3] = glm::vec4(worldPt, 1);
+                glm::mat4 mat(1.0f);
+                mat[0] = glm::vec4(rRight, 0);
+                mat[1] = glm::vec4(rUp, 0);
+                mat[2] = glm::vec4(worldTangent, 0);
+                mat[3] = glm::vec4(worldPt, 1);
 
-                    ImGuizmo::PushID(editPointIdx);
-                    if (ImGuizmo::Manipulate(
-                        glm::value_ptr(view), glm::value_ptr(proj),
-                        static_cast<ImGuizmo::OPERATION>(ImGuizmo::TRANSLATE | ImGuizmo::ROTATE), ImGuizmo::LOCAL,
-                        glm::value_ptr(mat))) {
-                        component.controlPoints[idx] = glm::vec3(entityMatInv * glm::vec4(glm::vec3(mat[3]), 1.0f));
-                        glm::vec3 newRight = glm::normalize(glm::vec3(mat[0]));
-                        float newRoll = glm::atan(glm::dot(newRight, baseUp), glm::dot(newRight, baseRight));
-                        component.controlPointRolls[idx] = glm::degrees(newRoll);
-                    }
-                    const bool usingGizmo = ImGuizmo::IsUsing();
-                    ImGuizmo::PopID();
-                    if (!usingGizmo && wasUsingGizmo) {
-                        dirty = true;
-                    }
-                    wasUsingGizmo = usingGizmo;
+                const auto gizmoOp = (state->currentGizmoOperation == ImGuizmo::SCALE)
+                    ? ImGuizmo::TRANSLATE
+                    : state->currentGizmoOperation;
+
+                ImGuizmo::PushID(editPointIdx);
+                if (ImGuizmo::Manipulate(
+                    glm::value_ptr(view), glm::value_ptr(proj),
+                    gizmoOp, ImGuizmo::LOCAL,
+                    glm::value_ptr(mat))) {
+                    glm::vec3 newPos = glm::vec3(entityMatInv * glm::vec4(glm::vec3(mat[3]), 1.0f));
+                    glm::vec3 newRight = glm::normalize(glm::vec3(mat[0]));
+                    float newRoll = glm::degrees(glm::atan(glm::dot(newRight, baseUp), glm::dot(newRight, baseRight)));
+                    component.controlPoints[idx] = glm::vec4(newPos, newRoll);
                 }
-                else {
-                    glm::mat4 mat = glm::translate(glm::mat4(1.0f), worldPt);
-
-                    ImGuizmo::PushID(editPointIdx);
-                    if (ImGuizmo::Manipulate(
-                        glm::value_ptr(view), glm::value_ptr(proj),
-                        ImGuizmo::TRANSLATE, ImGuizmo::WORLD,
-                        glm::value_ptr(mat))) {
-                        component.controlPoints[idx] = glm::vec3(entityMatInv * glm::vec4(glm::vec3(mat[3]), 1.0f));
-                    }
-                    const bool usingGizmo = ImGuizmo::IsUsing();
-                    ImGuizmo::PopID();
-                    if (!usingGizmo && wasUsingGizmo) {
-                        dirty = true;
-                    }
-                    wasUsingGizmo = usingGizmo;
+                const bool usingGizmo = ImGuizmo::IsUsing();
+                ImGuizmo::PopID();
+                if (!usingGizmo && wasUsingGizmo) {
+                    dirty = true;
                 }
+                wasUsingGizmo = usingGizmo;
             }
         }
 
@@ -362,16 +332,16 @@ ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::ViewFamil
             constexpr glm::vec4 kPointColor{0.5f, 0.9f, 1.0f, 1.0f};
             constexpr glm::vec4 kEditColor{1.0f, 0.7f, 0.1f, 1.0f};
             constexpr float kPointRadius = 0.08f;
-            auto* transform = registry.try_get<Component::TransformComponent>(entity);
+            auto* transform = registry.try_get<TransformComponent>(entity);
             const glm::mat4 entityMat = transform
                                             ? glm::translate(glm::mat4(1.0f), transform->translation) * glm::mat4_cast(transform->rotation)
                                             : glm::mat4(1.0f);
 
-            for (int i = 0; i < static_cast<int>(component.controlPoints.size()); i++) {
-                glm::vec3 wp = glm::vec3(entityMat * glm::vec4(component.controlPoints[i], 1.0f));
+            for (int i = 0; i < static_cast<int>(component.controlPoints.Size()); i++) {
+                glm::vec3 wp = glm::vec3(entityMat * glm::vec4(glm::vec3(component.controlPoints[i]), 1.0f));
                 DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {wp, kPointRadius, (i == editPointIdx) ? kEditColor : kPointColor});
-                if (i + 1 < static_cast<int>(component.controlPoints.size())) {
-                    glm::vec3 wp2 = glm::vec3(entityMat * glm::vec4(component.controlPoints[i + 1], 1.0f));
+                if (i + 1 < static_cast<int>(component.controlPoints.Size())) {
+                    glm::vec3 wp2 = glm::vec3(entityMat * glm::vec4(glm::vec3(component.controlPoints[i + 1]), 1.0f));
                     DEBUG_ADD_LINE(viewFamily.debugLines, {wp, wp2, kLineColor});
                 }
             }
@@ -393,7 +363,7 @@ ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::ViewFamil
                             component.bPrimitiveReady = false;
                         }
                         component.material = Engine::MaterialID{};
-                        registry.emplace_or_replace<Component::SplineMeshLoadingTag>(entity);
+                        registry.emplace_or_replace<SplineMeshLoadingTag>(entity);
                         state->bPendingModelResolve = true;
                     }
                 }
@@ -406,7 +376,7 @@ ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::ViewFamil
                                 component.bPrimitiveReady = false;
                             }
                             component.material = matId;
-                            registry.emplace_or_replace<Component::SplineMeshLoadingTag>(entity);
+                            registry.emplace_or_replace<SplineMeshLoadingTag>(entity);
                             state->bPendingModelResolve = true;
                         }
                     }
@@ -424,21 +394,8 @@ ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::ViewFamil
                 ctx->materialManager->ReleaseMaterial(component.primitive.materialID);
                 component.bPrimitiveReady = false;
             }
-            Engine::SplineParams params;
-            params.controlPoints = component.controlPoints;
-            params.controlPointRolls = component.controlPointRolls;
-            params.radius = component.radius;
-            params.rollAngle = component.rollAngle;
-            params.sides = component.sides;
-            params.segmentsPerSpan = component.segmentsPerSpan;
-            params.bClosed = component.bClosed;
-            params.bCaps = component.bCaps;
-            params.bDualPath = component.bDualPath;
-            params.dualPathSpacing = component.dualPathSpacing;
-            params.bCrossPlanks = component.bCrossPlanks;
-            params.crossPlankInterval = component.crossPlankInterval;
-            component.modelHandle = ctx->assetManager->LoadSplineModel(params);
-            registry.emplace_or_replace<Component::SplineMeshLoadingTag>(entity);
+            component.modelHandle = ctx->assetManager->LoadSplineModel(ToSplineParams(component));
+            registry.emplace_or_replace<SplineMeshLoadingTag>(entity);
             state->bPendingModelResolve = true;
         }
     }

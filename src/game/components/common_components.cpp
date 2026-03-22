@@ -32,13 +32,13 @@ void DeserializeComponent<Component::PrefabInstanceComponent>(Component::PrefabI
 template<>
 void SerializeComponent<Component::NameComponent>(const Component::NameComponent& comp, nlohmann::json& json)
 {
-    json["name"] = comp.name;
+    json["name"] = comp.name.c_str();
 }
 
 template<>
 void DeserializeComponent<Component::NameComponent>(Component::NameComponent& comp, const nlohmann::json& json)
 {
-    comp.name = json["name"].get<std::string>();
+    comp.name = StackString<256>(json["name"].get<std::string>().c_str());
 }
 } // Game
 
@@ -59,7 +59,7 @@ ComponentEditorResult Component::NameComponent::DrawEditor(Core::ViewFamily& vie
         strncpy_s(buf, component.name.c_str(), sizeof(buf) - 1);
         buf[sizeof(buf) - 1] = '\0';
         if (ImGui::InputText("Name", buf, sizeof(buf))) {
-            component.name = buf;
+            component.name = StackString<256>(buf);
         }
     }
     return {.requestRemoval = remove};

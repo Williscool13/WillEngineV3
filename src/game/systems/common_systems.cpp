@@ -12,6 +12,7 @@ namespace Game
 void ConnectCommonObservers(entt::registry& registry)
 {
     registry.on_construct<Component::StableIdComponent>().connect<&Component::StableIdComponent::OnConstruct>();
+    registry.on_update<Component::StableIdComponent>().connect<&Component::StableIdComponent::OnUpdate>();
     registry.on_destroy<Component::StableIdComponent>().connect<&Component::StableIdComponent::OnDestroy>();
 }
 } // Game

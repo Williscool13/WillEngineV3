@@ -10,6 +10,7 @@
 #include <entt/entt.hpp>
 
 #include "core/string_id.h"
+#include "core/stack_string.h"
 #include "game/components/component_types.h"
 
 namespace Core { struct ViewFamily; }
@@ -18,7 +19,7 @@ namespace Game::Component
 {
 struct NameComponent
 {
-    std::string name;
+    StackString<256> name;
 
     static ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
 };

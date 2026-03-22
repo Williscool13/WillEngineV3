@@ -10,6 +10,7 @@
 #include <glm/glm.hpp>
 #include <glm/detail/type_quat.hpp>
 
+#include "core/allocators/inline_vector.h"
 #include "Jolt/Physics/Body/MotionQuality.h"
 #include "Jolt/Physics/Collision/ObjectLayer.h"
 #include "Jolt/Physics/Collision/Shape/Shape.h"
@@ -83,7 +84,7 @@ struct PhysicsBodyDesc
     JPH::ObjectLayer layerOverride{0xFFFF};
     bool active{true};
 
-    std::vector<PhysicsShapeDesc> shapes;
+    Core::InlineVector<PhysicsShapeDesc, 8> shapes;
 
     // potentially also store its type (e.g. compound)
     JPH::ShapeRefC shapeRef;

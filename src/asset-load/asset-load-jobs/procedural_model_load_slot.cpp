@@ -1625,7 +1625,7 @@ bool ProceduralModelLoadSlot::GenerateTrefoilKnot(const Engine::TrefoilKnotParam
 
 bool ProceduralModelLoadSlot::GenerateSpline(const Engine::SplineParams& p)
 {
-    const int N = static_cast<int>(p.controlPoints.size());
+    const int N = static_cast<int>(p.controlPoints.Size());
     if (N < 2) return false;
 
     const int segs = std::max(1, p.segmentsPerSpan);
@@ -1634,9 +1634,9 @@ bool ProceduralModelLoadSlot::GenerateSpline(const Engine::SplineParams& p)
     const int totalRings = totalSpans * segs + 1;
 
     auto getCP = [&](int i) -> glm::vec3 {
-        if (i < 0) return 2.0f * p.controlPoints[0] - p.controlPoints[1];
-        if (i >= N) return 2.0f * p.controlPoints[N - 1] - p.controlPoints[N - 2];
-        return p.controlPoints[i];
+        if (i < 0) return 2.0f * glm::vec3(p.controlPoints[0]) - glm::vec3(p.controlPoints[1]);
+        if (i >= N) return 2.0f * glm::vec3(p.controlPoints[N - 1]) - glm::vec3(p.controlPoints[N - 2]);
+        return glm::vec3(p.controlPoints[i]);
     };
 
     auto catmullPos = [](glm::vec3 p0, glm::vec3 p1, glm::vec3 p2, glm::vec3 p3, float t) -> glm::vec3 {
@@ -1650,10 +1650,9 @@ bool ProceduralModelLoadSlot::GenerateSpline(const Engine::SplineParams& p)
     };
 
     auto getRoll = [&](int i) -> float {
-        if (p.controlPointRolls.empty()) return 0.0f;
-        if (i < 0) return p.controlPointRolls[0];
-        if (i >= static_cast<int>(p.controlPointRolls.size())) return p.controlPointRolls.back();
-        return p.controlPointRolls[i];
+        if (i < 0) return p.controlPoints[0].w;
+        if (i >= N) return p.controlPoints[N - 1].w;
+        return p.controlPoints[i].w;
     };
 
     struct Frame
@@ -1819,14 +1818,16 @@ bool ProceduralModelLoadSlot::GenerateSpline(const Engine::SplineParams& p)
             const Frame& f1 = frames[i + 1];
 
             // 8 corners of the plank box
-            const glm::vec3 tl0 = f0.pos - halfSpacing * f0.rRight + p.radius * f0.rUp;
-            const glm::vec3 tr0 = f0.pos + halfSpacing * f0.rRight + p.radius * f0.rUp;
-            const glm::vec3 bl0 = f0.pos - halfSpacing * f0.rRight + (p.radius - plankThickness) * f0.rUp;
-            const glm::vec3 br0 = f0.pos + halfSpacing * f0.rRight + (p.radius - plankThickness) * f0.rUp;
-            const glm::vec3 tl1 = f1.pos - halfSpacing * f1.rRight + p.radius * f1.rUp;
-            const glm::vec3 tr1 = f1.pos + halfSpacing * f1.rRight + p.radius * f1.rUp;
-            const glm::vec3 bl1 = f1.pos - halfSpacing * f1.rRight + (p.radius - plankThickness) * f1.rUp;
-            const glm::vec3 br1 = f1.pos + halfSpacing * f1.rRight + (p.radius - plankThickness) * f1.rUp;
+            const float plankTop = p.radius + p.crossPlankHeight;
+            const float plankBot = plankTop - plankThickness;
+            const glm::vec3 tl0 = f0.pos - halfSpacing * f0.rRight + plankTop * f0.rUp;
+            const glm::vec3 tr0 = f0.pos + halfSpacing * f0.rRight + plankTop * f0.rUp;
+            const glm::vec3 bl0 = f0.pos - halfSpacing * f0.rRight + plankBot * f0.rUp;
+            const glm::vec3 br0 = f0.pos + halfSpacing * f0.rRight + plankBot * f0.rUp;
+            const glm::vec3 tl1 = f1.pos - halfSpacing * f1.rRight + plankTop * f1.rUp;
+            const glm::vec3 tr1 = f1.pos + halfSpacing * f1.rRight + plankTop * f1.rUp;
+            const glm::vec3 bl1 = f1.pos - halfSpacing * f1.rRight + plankBot * f1.rUp;
+            const glm::vec3 br1 = f1.pos + halfSpacing * f1.rRight + plankBot * f1.rUp;
 
             uint32_t base = static_cast<uint32_t>(vertices.size());
 
@@ -1862,14 +1863,24 @@ bool ProceduralModelLoadSlot::GenerateSpline(const Engine::SplineParams& p)
             vertices.push_back(makeVert(br1, f1.rRight, f1.tangent, 1, 0));
 
             // 6 faces × 2 triangles each
+            // Faces 0 (top), 3 (back), 4 (left) need flipped winding
             for (int face = 0; face < 6; face++) {
                 uint32_t b = base + face * 4;
-                indices.push_back(b);
-                indices.push_back(b + 1);
-                indices.push_back(b + 2);
-                indices.push_back(b + 1);
-                indices.push_back(b + 3);
-                indices.push_back(b + 2);
+                if (face == 0 || face == 3 || face == 4) {
+                    indices.push_back(b);
+                    indices.push_back(b + 2);
+                    indices.push_back(b + 1);
+                    indices.push_back(b + 1);
+                    indices.push_back(b + 2);
+                    indices.push_back(b + 3);
+                } else {
+                    indices.push_back(b);
+                    indices.push_back(b + 1);
+                    indices.push_back(b + 2);
+                    indices.push_back(b + 1);
+                    indices.push_back(b + 3);
+                    indices.push_back(b + 2);
+                }
             }
         }
     }

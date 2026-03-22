@@ -180,12 +180,8 @@ StaticModelHandle AssetManager::LoadProceduralModel(ProceduralParams& params)
 StaticModelHandle AssetManager::LoadSplineModel(const SplineParams& params)
 {
     uint64_t hash = fnv1a64(
-        reinterpret_cast<const uint8_t*>(params.controlPoints.data()),
-        params.controlPoints.size() * sizeof(glm::vec3));
-    if (!params.controlPointRolls.empty()) {
-        hash = fnv1a64(reinterpret_cast<const uint8_t*>(params.controlPointRolls.data()),
-            params.controlPointRolls.size() * sizeof(float), hash);
-    }
+        reinterpret_cast<const uint8_t*>(params.controlPoints.Data()),
+        params.controlPoints.Size() * sizeof(glm::vec4));
     hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.radius),           sizeof(params.radius),           hash);
     hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.rollAngle),        sizeof(params.rollAngle),        hash);
     hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.sides),            sizeof(params.sides),            hash);

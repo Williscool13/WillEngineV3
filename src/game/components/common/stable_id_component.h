@@ -26,6 +26,7 @@ struct StableIdComponent
     }
 
     static void OnConstruct(entt::registry& registry, entt::entity entity);
+    static void OnUpdate(entt::registry& registry, entt::entity entity);
     static void OnDestroy(entt::registry& registry, entt::entity entity);
     static ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
 };

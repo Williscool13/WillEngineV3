@@ -11,6 +11,7 @@
 #include "procedural_mesh_component.h"
 #include "engine/asset_manager_types.h"
 #include "engine/core/material_id.h"
+#include "core/allocators/inline_vector.h"
 #include "game/components/component_types.h"
 
 namespace Core { struct ViewFamily; }
@@ -19,8 +20,9 @@ namespace Game::Component
 {
 struct SplineMeshComponent
 {
-    std::vector<glm::vec3> controlPoints{{0,0,0},{0,0,1},{0,0,2},{0,0,3}};
-    std::vector<float> controlPointRolls;
+    static constexpr size_t MaxControlPoints = 16;
+
+    Core::InlineVector<glm::vec4, MaxControlPoints> controlPoints{};
     float radius{0.5f};
     float rollAngle{0.0f};
     int32_t sides{8};
@@ -31,6 +33,7 @@ struct SplineMeshComponent
     float dualPathSpacing{1.0f};
     bool bCrossPlanks{false};
     int32_t crossPlankInterval{4};
+    float crossPlankHeight{0.0f};
 
     Engine::MaterialID material{};
     glm::vec4 modelFlags{1.0f, 1.0f, 0.0f, 0.0f};
