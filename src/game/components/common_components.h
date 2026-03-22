@@ -8,6 +8,7 @@
 #include <random>
 
 #include <entt/entt.hpp>
+#include <json/nlohmann/json_fwd.hpp>
 
 #include "core/string_id.h"
 #include "core/stack_string.h"
@@ -21,6 +22,8 @@ struct NameComponent
 {
     StackString<256> name;
 
+    static void Serialize(const NameComponent& comp, nlohmann::json& json);
+    static void Deserialize(NameComponent& comp, const nlohmann::json& json);
     static ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
 };
 
@@ -30,6 +33,9 @@ struct DoNotSerializeTag
 struct PrefabInstanceComponent
 {
     StringID prefabId;
+
+    static void Serialize(const PrefabInstanceComponent& comp, nlohmann::json& json);
+    static void Deserialize(PrefabInstanceComponent& comp, const nlohmann::json& json);
 };
 }
 

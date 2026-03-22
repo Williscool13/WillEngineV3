@@ -10,6 +10,8 @@
 #include <glm/gtc/quaternion.hpp>
 #include <entt/entt.hpp>
 
+#include <json/nlohmann/json_fwd.hpp>
+
 #include "game/components/component_types.h"
 
 namespace Core { struct ViewFamily; }
@@ -22,6 +24,8 @@ struct TransformComponent
     glm::quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
     glm::vec3 scale{1.0f, 1.0f, 1.0f};;
 
+    static void Serialize(const TransformComponent& comp, nlohmann::json& json);
+    static void Deserialize(TransformComponent& comp, const nlohmann::json& json);
     static ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
 };
 

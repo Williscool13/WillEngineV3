@@ -15,8 +15,10 @@
 #include "engine/asset_manager.h"
 #include "engine/engine_api.h"
 #include "engine/logging/engine_log.h"
-#include "game/component-registry/component_serialization.h"
 #include "game/component-registry/component_editor.h"
+#include "game/components/core_components.h"
+#include "game/components/render/procedural_mesh_component.h"
+#include "game/components/render/spline_mesh_component.h"
 
 namespace Game::Component
 {
@@ -81,14 +83,12 @@ void StaticMeshComponent::OnDestroy(entt::registry& registry, entt::entity entit
 
 namespace Game
 {
-template<>
-bool CanAddComponent<Component::StaticMeshComponent>(const entt::registry& registry, entt::entity entity)
+bool Component::StaticMeshComponent::CanAdd(const entt::registry& registry, entt::entity entity)
 {
     return !registry.any_of<Component::ProceduralMeshComponent, Component::SplineMeshComponent>(entity);
 }
 
-template<>
-void SerializeComponent<Component::StaticMeshComponent>(const Component::StaticMeshComponent& comp, nlohmann::json& json)
+void Component::StaticMeshComponent::Serialize(const StaticMeshComponent& comp, nlohmann::json& json)
 {
     json["meshIndex"] = comp.meshIndex;
     json["modelId"] = comp.modelId.id;
@@ -104,8 +104,7 @@ void SerializeComponent<Component::StaticMeshComponent>(const Component::StaticM
     }
 }
 
-template<>
-void DeserializeComponent<Component::StaticMeshComponent>(Component::StaticMeshComponent& comp, const nlohmann::json& json)
+void Component::StaticMeshComponent::Deserialize(StaticMeshComponent& comp, const nlohmann::json& json)
 {
     comp.meshIndex = json["meshIndex"].get<int32_t>();
     comp.modelId = Engine::ModelID(json["modelId"].get<uint64_t>());

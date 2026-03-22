@@ -16,7 +16,6 @@
 #include "Jolt/Physics/Body/BodyInterface.h"
 #include "physics/physics_system.h"
 
-#include "game/component-registry/component_serialization.h"
 #include "game/component-registry/component_editor.h"
 #include "physics_body_desc.h"
 #include "physics_body_component.h"

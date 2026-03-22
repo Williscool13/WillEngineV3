@@ -13,6 +13,7 @@
 #include "game/components/common_components.h"
 #include "game/components/core_components.h"
 #include "game/components/render_components.h"
+#include "game/components/render/procedural_mesh_component.h"
 #include "game/systems/scene_system.h"
 #include "physics/physics_system.h"
 

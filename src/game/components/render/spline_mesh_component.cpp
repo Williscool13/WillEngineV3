@@ -5,14 +5,14 @@
 #include "spline_mesh_component.h"
 
 #include <glm/gtc/type_ptr.hpp>
+#include <json/nlohmann/json.hpp>
 
-#include "game/component-registry/component_serialization.h"
-#include "game/component-registry/component_initialization.h"
 #include "static_mesh_component.h"
 #include "core/include/engine_context.h"
 #include "engine/asset_manager.h"
 #include "engine/engine_api.h"
 #include "game/components/component_types.h"
+#include "game/components/core_components.h"
 
 namespace Game::Component
 {
@@ -79,14 +79,12 @@ void SplineMeshComponent::OnDestroy(entt::registry& registry, entt::entity entit
 
 namespace Game
 {
-template<>
-bool CanAddComponent<Component::SplineMeshComponent>(const entt::registry& registry, entt::entity entity)
+bool Component::SplineMeshComponent::CanAdd(const entt::registry& registry, entt::entity entity)
 {
     return !registry.any_of<Component::StaticMeshComponent, Component::ProceduralMeshComponent>(entity);
 }
 
-template<>
-void SerializeComponent<Component::SplineMeshComponent>(const Component::SplineMeshComponent& comp, nlohmann::json& json)
+void Component::SplineMeshComponent::Serialize(const SplineMeshComponent& comp, nlohmann::json& json)
 {
     json["radius"] = comp.radius;
     json["rollAngle"] = comp.rollAngle;
@@ -107,8 +105,7 @@ void SerializeComponent<Component::SplineMeshComponent>(const Component::SplineM
     }
 }
 
-template<>
-void DeserializeComponent<Component::SplineMeshComponent>(Component::SplineMeshComponent& comp, const nlohmann::json& json)
+void Component::SplineMeshComponent::Deserialize(SplineMeshComponent& comp, const nlohmann::json& json)
 {
     comp.radius = json["radius"].get<float>();
     comp.rollAngle = json.value("rollAngle", 0.0f);

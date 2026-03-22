@@ -4,13 +4,14 @@
 
 #include "procedural_mesh_component.h"
 
-#include "game/component-registry/component_serialization.h"
-#include "game/component-registry/component_initialization.h"
+#include <json/nlohmann/json.hpp>
 
 #include "spline_mesh_component.h"
+#include "static_mesh_component.h"
 #include "core/include/engine_context.h"
 #include "engine/asset_manager.h"
 #include "engine/engine_api.h"
+#include "game/components/core_components.h"
 
 namespace Game::Component
 {
@@ -71,16 +72,12 @@ void RecreateProceduralMesh(ProceduralMeshComponent& component, entt::registry& 
 
 namespace Game
 {
-
-template<>
-bool CanAddComponent<Component::ProceduralMeshComponent>(const entt::registry& registry, entt::entity entity)
+bool Component::ProceduralMeshComponent::CanAdd(const entt::registry& registry, entt::entity entity)
 {
     return !registry.any_of<Component::StaticMeshComponent, Component::SplineMeshComponent>(entity);
 }
 
-
-template<>
-void SerializeComponent<Component::ProceduralMeshComponent>(const Component::ProceduralMeshComponent& comp, nlohmann::json& json)
+void Component::ProceduralMeshComponent::Serialize(const ProceduralMeshComponent& comp, nlohmann::json& json)
 {
     json["type"] = comp.params.index();
     json["material"] = comp.material.id;
@@ -193,8 +190,7 @@ void SerializeComponent<Component::ProceduralMeshComponent>(const Component::Pro
     }, comp.params);
 }
 
-template<>
-void DeserializeComponent<Component::ProceduralMeshComponent>(Component::ProceduralMeshComponent& comp, const nlohmann::json& json)
+void Component::ProceduralMeshComponent::Deserialize(ProceduralMeshComponent& comp, const nlohmann::json& json)
 {
     comp.material = Engine::MaterialID(json["material"].get<uint64_t>());
 
@@ -353,7 +349,7 @@ void DeserializeComponent<Component::ProceduralMeshComponent>(Component::Procedu
 ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry,
                                                                               entt::entity entity, const char* name)
 {
-    auto& component = registry.get<Component::ProceduralMeshComponent>(entity);
+    auto& component = registry.get<ProceduralMeshComponent>(entity);
     bool open = ImGui::CollapsingHeader("Procedural Mesh", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
     ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
@@ -378,7 +374,7 @@ ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Core::ViewF
             if (ImGui::BeginCombo("Shape", "")) {
                 auto selectShape = [&](auto&& params) {
                     component.params = std::move(params);
-                    Component::RecreateProceduralMesh(component, registry, entity);
+                    RecreateProceduralMesh(component, registry, entity);
                 };
                 if (ImGui::Selectable("Staircase")) selectShape(Engine::StaircaseParams{});
                 if (ImGui::Selectable("Box")) selectShape(Engine::BoxParams{});
@@ -413,7 +409,7 @@ ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Core::ViewF
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
             if (ImGui::SmallButton("X##deselect_shape")) {
                 component.params = std::monostate{};
-                Component::RecreateProceduralMesh(component, registry, entity);
+                RecreateProceduralMesh(component, registry, entity);
             }
             ImGui::PopStyleColor();
 
@@ -630,7 +626,7 @@ ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Core::ViewF
             }, component.params);
 
             if (dirty) {
-                Component::RecreateProceduralMesh(component, registry, entity);
+                RecreateProceduralMesh(component, registry, entity);
             }
         }
 
@@ -651,7 +647,7 @@ ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Core::ViewF
                             runtime->primitives.Clear();
                         }
                         component.material = Engine::MaterialID{};
-                        registry.emplace_or_replace<Component::ProceduralMeshLoadingTag>(entity);
+                        registry.emplace_or_replace<ProceduralMeshLoadingTag>(entity);
                         state->bPendingModelResolve |= true;
                     }
                 }
@@ -664,7 +660,7 @@ ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Core::ViewF
                                 runtime->primitives.Clear();
                             }
                             component.material = matId;
-                            registry.emplace_or_replace<Component::ProceduralMeshLoadingTag>(entity);
+                            registry.emplace_or_replace<ProceduralMeshLoadingTag>(entity);
                             state->bPendingModelResolve |= true;
                         }
                     }

@@ -8,6 +8,7 @@
 #include <Jolt/Jolt.h>
 #include <entt/entt.hpp>
 #include <glm/glm.hpp>
+#include <json/nlohmann/json_fwd.hpp>
 #include <glm/detail/type_quat.hpp>
 
 #include "core/allocators/inline_vector.h"
@@ -89,6 +90,8 @@ struct PhysicsBodyDesc
     // potentially also store its type (e.g. compound)
     JPH::ShapeRefC shapeRef;
 
+    static void Serialize(const PhysicsBodyDesc& comp, nlohmann::json& json);
+    static void Deserialize(PhysicsBodyDesc& comp, const nlohmann::json& json);
     static void OnConstruct(entt::registry& registry, entt::entity entity);
     static void OnUpdate(entt::registry& registry, entt::entity entity);
     static void OnDestroy(entt::registry& registry, entt::entity entity);

@@ -18,9 +18,6 @@
 #include "engine/engine_api.h"
 #include "engine/logging/engine_log.h"
 #include "game/systems/editor_systems.h"
-#include "game/component-registry/component_serialization.h"
-#include "game/component-registry/component_initialization.h"
-
 namespace Game
 {
 }

@@ -39,6 +39,9 @@ struct SplineMeshComponent
     glm::vec4 modelFlags{1.0f, 1.0f, 0.0f, 0.0f};
     glm::vec3 renderOffset{0.0f};
 
+    static void Serialize(const SplineMeshComponent& comp, nlohmann::json& json);
+    static void Deserialize(SplineMeshComponent& comp, const nlohmann::json& json);
+    static bool CanAdd(const entt::registry& registry, entt::entity entity);
     static void OnConstruct(entt::registry& registry, entt::entity entity);
     static void OnDestroy(entt::registry& registry, entt::entity entity);
     static ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);

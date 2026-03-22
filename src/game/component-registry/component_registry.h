@@ -7,8 +7,6 @@
 #include <entt/entt.hpp>
 #include <json/nlohmann/json.hpp>
 
-#include "component_initialization.h"
-#include "component_serialization.h"
 #include "component_editor.h"
 #include "game/components/component_types.h"
 #include "core/string_id.h"
@@ -63,15 +61,23 @@ void RegisterComponent(ComponentRegistry& componentRegistry, const char* name)
         typeId,
         name,
         [](const entt::registry& reg, entt::entity e, nlohmann::json& json) {
-            SerializeComponent<T>(reg.get<T>(e), json);
+            if constexpr (HasSerialize<T>) {
+                T::Serialize(reg.get<T>(e), json);
+            }
         },
         [](entt::registry& reg, entt::entity e, const nlohmann::json& json) {
             T comp{};
-            DeserializeComponent<T>(comp, json);
+            if constexpr (HasDeserialize<T>) {
+                T::Deserialize(comp, json);
+            }
             reg.emplace_or_replace<T>(e, std::move(comp));
         },
         [](const entt::registry& reg, entt::entity e) -> bool {
-            return CanAddComponent<T>(reg, e);
+            if constexpr (HasCanAdd<T>) {
+                return T::CanAdd(reg, e);
+            } else {
+                return true;
+            }
         },
         [](entt::registry& reg, entt::entity e) {
             T a = reg.get_or_emplace<T>(e);
@@ -105,17 +111,16 @@ void RegisterComponent(ComponentRegistry& componentRegistry, const char* name)
     componentRegistry.registry.PushBack({
         typeId,
         name,
-        [](const entt::registry& reg, entt::entity e, nlohmann::json& json) {
-            T dummy{};
-            SerializeComponent<T>(dummy, json);
-        },
-        [](entt::registry& reg, entt::entity e, const nlohmann::json& json) {
+        [](const entt::registry&, entt::entity, nlohmann::json&) {},
+        [](entt::registry& reg, entt::entity e, const nlohmann::json&) {
             (void)reg.get_or_emplace<T>(e);
-            T dummy{};
-            DeserializeComponent<T>(dummy, json);
         },
         [](const entt::registry& reg, entt::entity e) -> bool {
-            return CanAddComponent<T>(reg, e);
+            if constexpr (HasCanAdd<T>) {
+                return T::CanAdd(reg, e);
+            } else {
+                return true;
+            }
         },
         [](entt::registry& reg, entt::entity e) {
             reg.get_or_emplace<T>(e);

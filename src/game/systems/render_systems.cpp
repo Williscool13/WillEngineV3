@@ -13,6 +13,8 @@
 #include "game/fwd_components.h"
 #include "game/components/common_components.h"
 #include "game/components/debug_components.h"
+#include "game/components/render/procedural_mesh_component.h"
+#include "game/components/render/spline_mesh_component.h"
 #include "game/components/render/static_mesh_component.h"
 
 

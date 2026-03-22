@@ -11,21 +11,16 @@
 
 #include "engine/engine_api.h"
 
-#include "game/component-registry/component_serialization.h"
 #include "game/component-registry/component_editor.h"
 
-namespace Game
-{
-template<>
-void SerializeComponent<Component::TransformComponent>(const Component::TransformComponent& comp, nlohmann::json& json)
+void Game::Component::TransformComponent::Serialize(const TransformComponent& comp, nlohmann::json& json)
 {
     json["translation"] = {comp.translation.x, comp.translation.y, comp.translation.z};
     json["rotation"]    = {comp.rotation.w, comp.rotation.x, comp.rotation.y, comp.rotation.z};
     json["scale"]       = {comp.scale.x, comp.scale.y, comp.scale.z};
 }
 
-template<>
-void DeserializeComponent<Component::TransformComponent>(Component::TransformComponent& comp, const nlohmann::json& json)
+void Game::Component::TransformComponent::Deserialize(TransformComponent& comp, const nlohmann::json& json)
 {
     const auto& t = json["translation"];
     comp.translation = glm::vec3(t[0].get<float>(), t[1].get<float>(), t[2].get<float>());
@@ -36,7 +31,6 @@ void DeserializeComponent<Component::TransformComponent>(Component::TransformCom
 
     const auto& s = json["scale"];
     comp.scale = glm::vec3(s[0].get<float>(), s[1].get<float>(), s[2].get<float>());
-}
 }
 
 namespace Game

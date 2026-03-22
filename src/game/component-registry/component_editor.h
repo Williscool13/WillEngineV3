@@ -7,6 +7,7 @@
 
 #include <entt/entt.hpp>
 #include <fmt/format.h>
+#include <json/nlohmann/json_fwd.hpp>
 #include "imgui.h"
 
 #include "core/include/render_interface.h"
@@ -17,6 +18,21 @@ namespace Game
 template<typename T>
 concept HasDrawEditor = requires(Core::ViewFamily& vf, entt::registry& r, entt::entity e, const char* n) {
     { T::DrawEditor(vf, r, e, n) } -> std::same_as<ComponentEditorResult>;
+};
+
+template<typename T>
+concept HasSerialize = requires(const T& comp, nlohmann::json& json) {
+    { T::Serialize(comp, json) } -> std::same_as<void>;
+};
+
+template<typename T>
+concept HasDeserialize = requires(T& comp, const nlohmann::json& json) {
+    { T::Deserialize(comp, json) } -> std::same_as<void>;
+};
+
+template<typename T>
+concept HasCanAdd = requires(const entt::registry& r, entt::entity e) {
+    { T::CanAdd(r, e) } -> std::same_as<bool>;
 };
 
 inline ComponentEditorResult DefaultDrawComponentEditor(const char* name)

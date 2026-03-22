@@ -7,6 +7,7 @@
 #include <array>
 
 #include <entt/entt.hpp>
+#include <json/nlohmann/json_fwd.hpp>
 
 #include "core/stack_string.h"
 #include "core/string_id.h"
@@ -28,6 +29,8 @@ struct EntityFolderComponent
      */
     std::array<ShortString, 2> folderHierarchyNames;
 
+    static void Serialize(const EntityFolderComponent& comp, nlohmann::json& json);
+    static void Deserialize(EntityFolderComponent& comp, const nlohmann::json& json);
     static ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
 };
 }

@@ -7,6 +7,7 @@
 
 #include <entt/entt.hpp>
 #include <glm/glm.hpp>
+#include <json/nlohmann/json_fwd.hpp>
 
 #include "engine/resources/material/material_manager.h"
 #include "engine/resources/model/model_types.h"
@@ -24,6 +25,9 @@ struct ProceduralMeshComponent
     glm::vec4 modelFlags{0.0f};
     glm::vec3 renderOffset{0.0f};
 
+    static void Serialize(const ProceduralMeshComponent& comp, nlohmann::json& json);
+    static void Deserialize(ProceduralMeshComponent& comp, const nlohmann::json& json);
+    static bool CanAdd(const entt::registry& registry, entt::entity entity);
     static void OnConstruct(entt::registry& registry, entt::entity entity);
     static void OnDestroy(entt::registry& registry, entt::entity entity);
     static ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);

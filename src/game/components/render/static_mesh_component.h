@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <glm/glm.hpp>
 #include <entt/entt.hpp>
+#include <json/nlohmann/json_fwd.hpp>
 
 #include "engine/core/model_id.h"
 #include "engine/resources/material/material_manager.h"
@@ -31,6 +32,9 @@ struct StaticMeshComponent
     std::array<Engine::MaterialID, MaxMaterialOverrides> materialOverrides{};
     glm::vec3 renderOffset{0.0f};
 
+    static void Serialize(const StaticMeshComponent& comp, nlohmann::json& json);
+    static void Deserialize(StaticMeshComponent& comp, const nlohmann::json& json);
+    static bool CanAdd(const entt::registry& registry, entt::entity entity);
     static void OnConstruct(entt::registry& registry, entt::entity entity);
     static void OnDestroy(entt::registry& registry, entt::entity entity);
     static ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);

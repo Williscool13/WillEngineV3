@@ -4,14 +4,16 @@
 #ifndef WILL_ENGINE_DEBUG_COMPONENTS_H
 #define WILL_ENGINE_DEBUG_COMPONENTS_H
 
-/**
- * A collection of mostly throwaway components for debugging/temporary setups.
- */
+#include <json/nlohmann/json_fwd.hpp>
+
 namespace Game::Component
 {
 struct MotionBlurMovementComponent
 {
     bool bIsHorizontal{false};
+
+    static void Serialize(const MotionBlurMovementComponent& comp, nlohmann::json& json);
+    static void Deserialize(MotionBlurMovementComponent& comp, const nlohmann::json& json);
 };
 struct AntiGravityTag
 {};

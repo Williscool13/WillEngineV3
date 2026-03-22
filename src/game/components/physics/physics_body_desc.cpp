@@ -5,13 +5,17 @@
 #include "physics_body_desc.h"
 
 #include <glm/gtc/type_ptr.hpp>
+#include <json/nlohmann/json.hpp>
 
-#include "game/component-registry/component_serialization.h"
+#include "physics_components.h"
 #include "game/component-registry/component_editor.h"
 
 #include "core/include/engine_context.h"
 #include "engine/asset_manager.h"
 #include "engine/engine_api.h"
+#include "game/components/core_components.h"
+#include "game/components/render/procedural_mesh_component.h"
+#include "game/components/render/spline_mesh_component.h"
 #include "game/components/render/static_mesh_component.h"
 
 namespace Game::Component
@@ -82,8 +86,7 @@ void PhysicsBodyDesc::OnDestroy(entt::registry& registry, entt::entity entity)
 
 namespace Game
 {
-template<>
-void SerializeComponent<Component::PhysicsBodyDesc>(const Component::PhysicsBodyDesc& comp, nlohmann::json& json)
+void Component::PhysicsBodyDesc::Serialize(const PhysicsBodyDesc& comp, nlohmann::json& json)
 {
     json["motionType"] = comp.motionType;
     json["mass"] = comp.mass;
@@ -250,8 +253,7 @@ void SerializeComponent<Component::PhysicsBodyDesc>(const Component::PhysicsBody
     }
 }
 
-template<>
-void DeserializeComponent<Component::PhysicsBodyDesc>(Component::PhysicsBodyDesc& comp, const nlohmann::json& json)
+void Component::PhysicsBodyDesc::Deserialize(PhysicsBodyDesc& comp, const nlohmann::json& json)
 {
     comp.motionType = static_cast<Component::PhysicsMotionType>(json["motionType"].get<uint8_t>());
     comp.mass = json["mass"].get<float>();
