@@ -30,6 +30,9 @@ set(GAME_SOURCES
         components/render/procedural_mesh_component.cpp
         components/render/procedural_mesh_component.h
 
+        components/gameplay/player_spawn_component.cpp
+        components/gameplay/player_spawn_component.h
+
         components/debug_components.cpp
         components/debug_components.h
         components/render_components.cpp

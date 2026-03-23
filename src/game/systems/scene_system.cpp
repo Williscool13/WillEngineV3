@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <fstream>
+#include <limits>
 
 #include <json/nlohmann/json.hpp>
 
@@ -18,6 +19,7 @@
 #include "game/components/common_components.h"
 #include "game/components/common/stable_id_component.h"
 #include "game/components/core_components.h"
+#include "game/components/gameplay/player_spawn_component.h"
 #include "game/components/render_components.h"
 #include "game/components/render/static_mesh_component.h"
 #include "game/components/scene_components.h"
@@ -428,8 +430,21 @@ void PlayStart(Core::EngineContext* ctx, Engine::GameState* state)
     state->bGameCursorCaptured = true;
     ctx->setCursorHiddenFn(true);
 
+    glm::vec3 spawnPosition{0.0f, 3.0f, 0.0f};
+    {
+        int32_t bestPriority = std::numeric_limits<int32_t>::min();
+        auto spawnView = state->registry.view<Component::PlayerSpawnComponent, Component::TransformComponent>();
+        for (auto entity : spawnView) {
+            auto& spawn = spawnView.get<Component::PlayerSpawnComponent>(entity);
+            if (spawn.priority > bestPriority) {
+                bestPriority = spawn.priority;
+                spawnPosition = spawnView.get<Component::TransformComponent>(entity).translation + spawn.offset;
+            }
+        }
+    }
+
     auto& playerController = state->registry.ctx().emplace<PhysicsPlayerController>();
-    playerController.Initialize(state, ctx, glm::vec3(0.0f, 3.0f, 0.0f));
+    playerController.Initialize(state, ctx, spawnPosition);
 }
 
 void PlayStop(Core::EngineContext* ctx, Engine::GameState* state)

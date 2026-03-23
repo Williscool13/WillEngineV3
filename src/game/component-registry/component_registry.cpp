@@ -15,6 +15,7 @@
 #include "game/components/physics/physics_components.h"
 #include "game/components/render/procedural_mesh_component.h"
 #include "game/components/render/spline_mesh_component.h"
+#include "game/components/gameplay/player_spawn_component.h"
 #include "game/components/render/static_mesh_component.h"
 
 namespace Game
@@ -41,5 +42,7 @@ void RegisterComponents(ComponentRegistry& componentRegistry)
     RegisterComponent<Component::MotionBlurMovementComponent>(componentRegistry, "MotionBlurMovementComponent");
     RegisterComponent<Component::AntiGravityTag>(componentRegistry, "AntiGravityTag");
     RegisterComponent<Component::FloorTag>(componentRegistry, "FloorTag");
+
+    RegisterComponent<Component::PlayerSpawnComponent>(componentRegistry, "PlayerSpawnComponent");
 }
 } // Core
