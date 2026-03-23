@@ -17,6 +17,8 @@ set(GAME_SOURCES
 
         components/camera_components.cpp
         components/camera_components.h
+        components/debug_gizmo_component.cpp
+        components/debug_gizmo_component.h
 
         components/physics/physics_components.cpp
         components/physics/physics_components.h

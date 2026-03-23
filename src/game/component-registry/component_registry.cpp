@@ -10,6 +10,7 @@
 #include "game/components/common/stable_id_component.h"
 #include "game/components/core_components.h"
 #include "game/components/debug_components.h"
+#include "game/components/debug_gizmo_component.h"
 #include "game/components/editor_components.h"
 #include "game/components/physics/physics_body_desc.h"
 #include "game/components/physics/physics_components.h"
@@ -43,6 +44,7 @@ void RegisterComponents(ComponentRegistry& componentRegistry)
     RegisterComponent<Component::AntiGravityTag>(componentRegistry, "AntiGravityTag");
     RegisterComponent<Component::FloorTag>(componentRegistry, "FloorTag");
 
+    RegisterComponent<Component::DebugGizmoComponent>(componentRegistry, "DebugGizmoComponent");
     RegisterComponent<Component::PlayerSpawnComponent>(componentRegistry, "PlayerSpawnComponent");
 }
 } // Core

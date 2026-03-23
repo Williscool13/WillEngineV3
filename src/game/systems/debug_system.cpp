@@ -10,7 +10,9 @@
 #include "core/include/engine_context.h"
 #include "engine/engine_api.h"
 #include "game/components/common_components.h"
+#include "game/components/core_components.h"
 #include "game/components/debug_components.h"
+#include "game/components/debug_gizmo_component.h"
 #include "../components/physics/physics_components.h"
 #include "game/components/physics/physics_body_component.h"
 #include "physics/physics_system.h"
@@ -54,6 +56,34 @@ void DebugApplyGroundForces(Core::EngineContext* ctx, Engine::GameState* state)
 #ifndef PACKAGED_BUILD
 void DebugRender(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer)
 {
+    auto& vf = frameBuffer->mainViewFamily;
+    auto view = state->registry.view<Component::DebugGizmoComponent, Component::TransformComponent>();
+    for (auto entity : view) {
+        auto& gizmo = view.get<Component::DebugGizmoComponent>(entity);
+        auto& transform = view.get<Component::TransformComponent>(entity);
+
+        switch (gizmo.shape) {
+        case Component::DebugGizmoShape::Sphere:
+            DEBUG_ADD_SPHERE(vf.debugSpheres, Core::DebugSphere{
+                .center = transform.translation,
+                .radius = gizmo.extents.x,
+                .color = gizmo.color,
+                .width = gizmo.lineWidth,
+            });
+            break;
+        case Component::DebugGizmoShape::Box:
+            DEBUG_ADD_BOX(vf.debugBoxes, Core::DebugBox{
+                .center = transform.translation,
+                .extents = gizmo.extents,
+                .rotation = transform.rotation,
+                .color = gizmo.color,
+                .width = gizmo.lineWidth,
+            });
+            break;
+        default:
+            break;
+        }
+    }
 }
 #endif
 } // Game
