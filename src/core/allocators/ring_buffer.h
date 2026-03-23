@@ -28,6 +28,13 @@ public:
         tail++;
     }
 
+    void Push(T&& item)
+    {
+        if (IsFull()) { head++; }
+        buffer[tail & Mask] = std::move(item);
+        tail++;
+    }
+
     bool Pop(T& item)
     {
         if (IsEmpty()) { return false; }

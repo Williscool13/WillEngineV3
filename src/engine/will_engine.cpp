@@ -680,7 +680,8 @@ void WillEngine::EditorImgui()
 
 #if LOGGING_ENABLED
     if (ImGui::Begin("Log")) {
-        const auto& entries = engineLogger->GetImGuiSink().GetEntries();
+        static std::vector<LogEntry> entries;
+        engineLogger->GetImGuiSink().GetEntries(entries);
 
         // Level filter
         static constexpr spdlog::level::level_enum kLevels[] = {
@@ -705,7 +706,7 @@ void WillEngine::EditorImgui()
             SPDLOG_LEVEL_ERROR >= SPDLOG_ACTIVE_LEVEL,
             SPDLOG_LEVEL_CRITICAL >= SPDLOG_ACTIVE_LEVEL,
         };
-        const auto entryCount = static_cast<int32_t>(entries.GetSize());
+        const auto entryCount = static_cast<int32_t>(entries.size());
 
         for (int l = 0; l < kLevelCount; l++) {
             if (l > 0) ImGui::SameLine();
@@ -733,7 +734,7 @@ void WillEngine::EditorImgui()
             static std::vector<int> filtered;
             filtered.clear();
             for (int i = 0; i < entryCount; i++) {
-                const auto& entry = entries.GetAt(i);
+                const auto& entry = entries[i];
                 bool levelPass = false;
                 for (int l = 0; l < kLevelCount; l++) {
                     if (entry.level == kLevels[l] && levelFilter[l]) {
@@ -748,7 +749,7 @@ void WillEngine::EditorImgui()
             clipper.Begin(static_cast<int>(filtered.size()));
             while (clipper.Step()) {
                 for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++) {
-                    ImGui::TextUnformatted(entries.GetAt(filtered[i]).message.c_str());
+                    ImGui::TextUnformatted(entries[filtered[i]].message.c_str());
                 }
             }
 
