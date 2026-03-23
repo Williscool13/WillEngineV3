@@ -137,20 +137,19 @@ void UnloadScene(Engine::GameState* state, StringID sceneId)
     });
 
     std::erase(state->loadedScenes, sceneId);
+    std::erase(state->modifiedScenes, sceneId);
 }
 
 void SaveSceneToFile(StringID sceneID, std::string_view sceneName, Engine::GameState* state, Engine::AssetManager* assetManager, Core::EngineContext* ctx)
 {
     const auto& sceneCache = assetManager->GetSceneCache();
     std::filesystem::path path;
-    bool isNewScene = false;
 
     auto it = sceneCache.find(sceneID);
-    if (it != sceneCache.end()) {
+    if (it != sceneCache.end() && !it->second.source.empty()) {
         path = it->second.source;
     }
     else {
-        isNewScene = true;
         std::string stem(sceneName);
         std::ranges::transform(stem, stem.begin(), ::tolower);
         std::ranges::replace(stem, ' ', '_');
@@ -171,9 +170,7 @@ void SaveSceneToFile(StringID sceneID, std::string_view sceneName, Engine::GameS
 
     file << s.content.dump(2);
 
-    if (isNewScene) {
-        ctx->bShouldRescanResources.store(true, std::memory_order_release);
-    }
+    assetManager->UpdateSceneCachePath(sceneID, path, sceneHeader.entityCount);
 
     LOG_INFO(Game, "Saved scene '{}' to '{}'", sceneName, path.string());
 }
@@ -210,6 +207,7 @@ bool LoadSceneFromFile(Engine::GameState* state, Engine::AssetManager* assetMana
     StringID loadedId = LoadScene(state->componentRegistry, state->registry, s);
     assert(loadedId == sceneId && "Scene ID in file does not match registry key, file was likely saved with a mismatched ID");
     state->loadedScenes.push_back(loadedId);
+    std::erase(state->modifiedScenes, loadedId);
 
     ResolvePrefabLoads(state, assetManager);
 
@@ -344,7 +342,7 @@ void SaveEntityAsPrefab(Engine::GameState* state, Engine::AssetManager* assetMan
     LOG_INFO(Game, "Saved prefab '{}' to '{}'", prefabName, path.string());
 }
 
-entt::entity SpawnPrefab(Engine::GameState* state, Engine::AssetManager* assetManager, StringID prefabId)
+entt::entity SpawnPrefab(Engine::GameState* state, Engine::AssetManager* assetManager, StringID prefabId, const glm::vec3& spawnPosition)
 {
     const auto* meta = assetManager->GetPrefabMetadata(prefabId);
     if (!meta) {
@@ -375,6 +373,10 @@ entt::entity SpawnPrefab(Engine::GameState* state, Engine::AssetManager* assetMa
                 break;
             }
         }
+    }
+
+    if (auto* transform = state->registry.try_get<Component::TransformComponent>(entity)) {
+        transform->translation = spawnPosition;
     }
 
     state->registry.emplace<Component::SceneComponent>(entity, state->currentSceneId);

@@ -47,7 +47,7 @@ void PhysicsCharacter::Update(float deltaTime, const glm::vec3& moveInput, bool 
 
     grounded = CheckGrounded(inPhysicsSystem);
 
-    if (glm::length(moveInput) > 0.001f && grounded) {
+    if (glm::length(moveInput) > 0.001f) {
         // cross(up, moveDir) gives the torque axis that rolls the ball in moveDir
         JPH::Vec3 torque(moveInput.z * torqueStrength, 0.0f, -moveInput.x * torqueStrength);
 

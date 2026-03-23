@@ -481,28 +481,38 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
 
     if (ImGui::Begin("Scene Browser")) {
         const auto& sceneCache = ctx->assetManager->GetSceneCache();
-        static int selectedScene = 0;
-        std::vector<std::pair<std::string, StringID> > sceneList;
-        sceneList.reserve(sceneCache.size());
-        for (const auto& [id, meta] : sceneCache) {
-            sceneList.emplace_back(meta.sceneName, id);
+
+        if (!sceneCache.empty() && !sceneCache.contains(state->currentSceneId)) {
+            auto& [id, meta] = *sceneCache.begin();
+            state->currentSceneId = id;
+            state->currentSceneName = meta.sceneName;
         }
-        if (!sceneList.empty()) {
-            std::ranges::sort(sceneList, {}, &std::pair<std::string, StringID>::first);
-            selectedScene = std::clamp(selectedScene, 0, static_cast<int>(sceneList.size()) - 1);
+        if (sceneCache.empty()) {
+            state->currentSceneId = {};
+            state->currentSceneName.clear();
         }
 
-        const char* previewLabel = sceneList.empty() ? "" : sceneList[selectedScene].first.c_str();
+        const bool isLoaded = std::ranges::find(state->loadedScenes, state->currentSceneId) != state->loadedScenes.end();
+        const bool isModified = std::ranges::find(state->modifiedScenes, state->currentSceneId) != state->modifiedScenes.end();
+        const bool hasScene = sceneCache.contains(state->currentSceneId);
+
+        // Scene dropdown
         ImGui::SetNextItemWidth(-1);
-        if (ImGui::BeginCombo("##scene_list", previewLabel)) {
-            for (int i = 0; i < static_cast<int>(sceneList.size()); ++i) {
-                const bool loaded = std::ranges::find(state->loadedScenes, sceneList[i].second) != state->loadedScenes.end();
-                if (ImGui::Selectable(sceneList[i].first.c_str(), i == selectedScene)) {
-                    selectedScene = i;
-                    state->currentSceneId = sceneList[i].second;
-                    state->currentSceneName = sceneList[i].first;
+        if (ImGui::BeginCombo("##scene_list", state->currentSceneName.c_str())) {
+            std::vector<std::pair<std::string, StringID>> sceneList;
+            sceneList.reserve(sceneCache.size());
+            for (const auto& [id, meta] : sceneCache) {
+                sceneList.emplace_back(meta.sceneName, id);
+            }
+            std::ranges::sort(sceneList, {}, &std::pair<std::string, StringID>::first);
+
+            for (auto& [name, id] : sceneList) {
+                const bool selected = (id == state->currentSceneId);
+                if (ImGui::Selectable(name.c_str(), selected)) {
+                    state->currentSceneId = id;
+                    state->currentSceneName = name;
                 }
-                if (loaded) {
+                if (std::ranges::find(state->loadedScenes, id) != state->loadedScenes.end()) {
                     ImGui::SameLine();
                     ImGui::TextDisabled("(loaded)");
                 }
@@ -510,51 +520,57 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
             ImGui::EndCombo();
         }
 
-        const bool selectedIsLoaded = !sceneList.empty() && std::ranges::find(state->loadedScenes, sceneList[selectedScene].second) != state->loadedScenes.end();
-
-        ImGui::BeginDisabled(sceneList.empty() || selectedIsLoaded);
-        if (ImGui::Button("Load")) { LoadSceneFromFile(state, ctx->assetManager, sceneList[selectedScene].second); }
+        ImGui::BeginDisabled(!hasScene || isLoaded);
+        if (ImGui::Button("Load")) { LoadSceneFromFile(state, ctx->assetManager, state->currentSceneId); }
         ImGui::EndDisabled();
 
         ImGui::SameLine();
-        ImGui::BeginDisabled(!selectedIsLoaded);
-        if (ImGui::Button("Unload")) { UnloadScene(state, sceneList[selectedScene].second); }
+        ImGui::BeginDisabled(!isLoaded);
+        if (ImGui::Button("Unload")) { UnloadScene(state, state->currentSceneId); }
         ImGui::EndDisabled();
 
         ImGui::SameLine();
-        const bool currentSceneModified = std::ranges::find(state->modifiedScenes, state->currentSceneId) != state->modifiedScenes.end();
-        if (currentSceneModified) { ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.5f, 0.1f, 1.0f)); }
-        if (ImGui::Button(currentSceneModified ? "Save*" : "Save")) {
+        ImGui::BeginDisabled(!isLoaded);
+        if (isModified) { ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.5f, 0.1f, 1.0f)); }
+        if (ImGui::Button(isModified ? "Save*" : "Save")) {
             SaveSceneToFile(state->currentSceneId, state->currentSceneName, state, ctx->assetManager, ctx);
             std::erase(state->modifiedScenes, state->currentSceneId);
         }
-        if (currentSceneModified) { ImGui::PopStyleColor(); }
+        if (isModified) { ImGui::PopStyleColor(); }
+        ImGui::EndDisabled();
 
         ImGui::SameLine();
         if (ImGui::Checkbox("Auto", &state->bAutoSave)) {
             state->autoSaveTimer = 0.0f;
         }
         if (state->bAutoSave && ImGui::IsItemHovered()) {
-            float remaining = state->autoSaveInterval - state->autoSaveTimer;
-            ImGui::SetTooltip("Auto-save in %.0fs", remaining);
+            ImGui::SetTooltip("Auto-save in %.0fs", state->autoSaveInterval - state->autoSaveTimer);
         }
 
+        ImGui::TextDisabled("ID: %llu", state->currentSceneId.id);
+
+        ImGui::SeparatorText("New Scene");
+        static char newSceneName[128] = "New Scene";
+        ImGui::InputText("##new_scene_name", newSceneName, sizeof(newSceneName));
         ImGui::SameLine();
-        if (ImGui::Button("New")) {
-            state->currentSceneId = StringID{state->rng()};
-            state->currentSceneName = "New Scene";
+        const bool nameEmpty = newSceneName[0] == '\0';
+        const bool nameInUse = !nameEmpty && std::ranges::any_of(sceneCache, [&](const auto& pair) {
+            return pair.second.sceneName == newSceneName;
+        });
+        ImGui::BeginDisabled(nameEmpty || nameInUse);
+        if (ImGui::Button("Create")) {
+            StringID newId{state->rng()};
+            ctx->assetManager->RegisterScene(newId, newSceneName);
+            state->currentSceneId = newId;
+            state->currentSceneName = newSceneName;
+            state->loadedScenes.push_back(newId);
+            state->modifiedScenes.push_back(newId);
+            newSceneName[0] = '\0';
         }
-
-        char sceneName[128];
-        strncpy_s(sceneName, state->currentSceneName.c_str(), sizeof(sceneName) - 1);
-        sceneName[sizeof(sceneName) - 1] = '\0';
-        if (ImGui::InputText("Name", sceneName, sizeof(sceneName))) {
-            state->currentSceneName = sceneName;
-        }
-
-        ImGui::BeginDisabled(true);
-        ImGui::Text("ID: %llu", state->currentSceneId.id);
         ImGui::EndDisabled();
+        if (nameInUse && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+            ImGui::SetTooltip("A scene with this name already exists");
+        }
 
         ImGui::SeparatorText("Spawn Model");
 
@@ -646,7 +662,9 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
         }
 
         if (ImGui::Button("Spawn Prefab")) {
-            entt::entity spawned = SpawnPrefab(state, ctx->assetManager, prefabList[selectedPrefab].second);
+            const auto& viewData = frameBuffer->mainViewFamily.mainView.currentViewData;
+            glm::vec3 spawnPos = viewData.cameraPos + viewData.cameraForward * 5.0f;
+            entt::entity spawned = SpawnPrefab(state, ctx->assetManager, prefabList[selectedPrefab].second, spawnPos);
             if (spawned != entt::null) {
                 state->selectedEntities = {spawned};
                 MarkSceneModified(state, state->currentSceneId);

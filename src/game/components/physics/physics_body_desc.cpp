@@ -126,7 +126,6 @@ void Component::PhysicsBodyDesc::Serialize(const PhysicsBodyDesc& comp, nlohmann
                     sp["rollAngle"] = shape.splineParams.rollAngle;
                     sp["sides"] = shape.splineParams.sides;
                     sp["segmentsPerSpan"] = shape.splineParams.segmentsPerSpan;
-                    sp["bClosed"] = shape.splineParams.bClosed;
                     sp["bCaps"] = shape.splineParams.bCaps;
                     sp["bDualPath"] = shape.splineParams.bDualPath;
                     sp["dualPathSpacing"] = shape.splineParams.dualPathSpacing;
@@ -457,7 +456,6 @@ void Component::PhysicsBodyDesc::Deserialize(PhysicsBodyDesc& comp, const nlohma
                     spline.rollAngle = sp["rollAngle"].get<float>();
                     spline.sides = sp["sides"].get<int32_t>();
                     spline.segmentsPerSpan = sp["segmentsPerSpan"].get<int32_t>();
-                    spline.bClosed = sp["bClosed"].get<bool>();
                     spline.bCaps = sp["bCaps"].get<bool>();
                     spline.bDualPath = sp.value("bDualPath", false);
                     spline.dualPathSpacing = sp.value("dualPathSpacing", 1.0f);
@@ -693,7 +691,6 @@ ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewFamily& v
                                 shape.splineParams.rollAngle = splm->rollAngle;
                                 shape.splineParams.sides = splm->sides;
                                 shape.splineParams.segmentsPerSpan = splm->segmentsPerSpan;
-                                shape.splineParams.bClosed = splm->bClosed;
                                 shape.splineParams.bCaps = splm->bCaps;
                                 shape.splineParams.bDualPath = splm->bDualPath;
                                 shape.splineParams.dualPathSpacing = splm->dualPathSpacing;

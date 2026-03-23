@@ -24,7 +24,6 @@ static Engine::SplineParams ToSplineParams(const SplineMeshComponent& component)
     params.rollAngle = component.rollAngle;
     params.sides = component.sides;
     params.segmentsPerSpan = component.segmentsPerSpan;
-    params.bClosed = component.bClosed;
     params.bCaps = component.bCaps;
     params.bDualPath = component.bDualPath;
     params.dualPathSpacing = component.dualPathSpacing;
@@ -81,7 +80,6 @@ void Component::SplineMeshComponent::Serialize(const SplineMeshComponent& comp, 
     json["rollAngle"] = comp.rollAngle;
     json["sides"] = comp.sides;
     json["segmentsPerSpan"] = comp.segmentsPerSpan;
-    json["bClosed"] = comp.bClosed;
     json["bCaps"] = comp.bCaps;
     json["bDualPath"] = comp.bDualPath;
     json["dualPathSpacing"] = comp.dualPathSpacing;
@@ -102,7 +100,6 @@ void Component::SplineMeshComponent::Deserialize(SplineMeshComponent& comp, cons
     comp.rollAngle = json.value("rollAngle", 0.0f);
     comp.sides = json["sides"].get<int32_t>();
     comp.segmentsPerSpan = json["segmentsPerSpan"].get<int32_t>();
-    comp.bClosed = json.value("bClosed", false);
     comp.bCaps = json.value("bCaps", true);
     comp.bDualPath = json.value("bDualPath", false);
     comp.dualPathSpacing = json.value("dualPathSpacing", 1.0f);
@@ -169,8 +166,6 @@ ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::ViewFamil
         ImGui::DragInt("Segments/Span", &component.segmentsPerSpan, 1, 1, 32);
         dirty |= ImGui::IsItemDeactivatedAfterEdit();
         if (ImGui::Checkbox("Caps", &component.bCaps)) { dirty = true; }
-        ImGui::SameLine();
-        if (ImGui::Checkbox("Closed", &component.bClosed)) { dirty = true; }
 
         if (ImGui::Checkbox("Dual Path", &component.bDualPath)) { dirty = true; }
         if (component.bDualPath) {

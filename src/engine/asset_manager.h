@@ -190,6 +190,10 @@ public: // Scenes
 
     [[nodiscard]] const CachedSceneMetadata* GetSceneMetadata(StringID sceneId) const;
 
+    void RegisterScene(StringID sceneId, std::string sceneName);
+
+    void UpdateSceneCachePath(StringID sceneId, const std::filesystem::path& path, uint32_t entityCount);
+
 public: // Prefabs
     struct CachedPrefabMetadata
     {

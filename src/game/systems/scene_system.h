@@ -43,7 +43,7 @@ bool LoadSceneFromFile(Engine::GameState* state, Engine::AssetManager* assetMana
 
 void SaveEntityAsPrefab(Engine::GameState* state, Engine::AssetManager* assetManager, Core::EngineContext* ctx, entt::entity entity, std::string_view prefabName);
 
-entt::entity SpawnPrefab(Engine::GameState* state, Engine::AssetManager* assetManager, StringID prefabId);
+entt::entity SpawnPrefab(Engine::GameState* state, Engine::AssetManager* assetManager, StringID prefabId, const glm::vec3& spawnPosition = {});
 
 void ResolvePrefabLoads(Engine::GameState* state, Engine::AssetManager* assetManager);
 

@@ -27,7 +27,6 @@ struct SplineMeshComponent
     float rollAngle{0.0f};
     int32_t sides{8};
     int32_t segmentsPerSpan{8};
-    bool bClosed{false};
     bool bCaps{true};
     bool bDualPath{false};
     float dualPathSpacing{1.0f};

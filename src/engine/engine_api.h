@@ -106,8 +106,8 @@ struct GameState
     float snapScale{0.1f};
 
     // Scene stuff
-    StringID currentSceneId{"main_scene"_sid};
-    std::string currentSceneName{"Main Scene"};
+    StringID currentSceneId{0};
+    std::string currentSceneName{""};
 
     std::vector<StringID> loadedScenes{};
     std::vector<StringID> modifiedScenes{};

@@ -92,6 +92,21 @@ const AssetManager::CachedSceneMetadata* AssetManager::GetSceneMetadata(StringID
     return it != sceneCache.end() ? &it->second : nullptr;
 }
 
+void AssetManager::RegisterScene(StringID sceneId, std::string sceneName)
+{
+    CachedSceneMetadata& cached = sceneCache[sceneId];
+    cached.sceneName = std::move(sceneName);
+    cached.entityCount = 0;
+}
+
+void AssetManager::UpdateSceneCachePath(StringID sceneId, const std::filesystem::path& path, uint32_t entityCount)
+{
+    auto it = sceneCache.find(sceneId);
+    if (it == sceneCache.end()) return;
+    it->second.source = path;
+    it->second.entityCount = entityCount;
+}
+
 const AssetManager::CachedPrefabMetadata* AssetManager::GetPrefabMetadata(StringID prefabId) const
 {
     auto it = prefabCache.find(prefabId);
@@ -198,7 +213,6 @@ StaticModelHandle AssetManager::LoadSplineModel(const SplineParams& params)
     hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.rollAngle),        sizeof(params.rollAngle),        hash);
     hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.sides),            sizeof(params.sides),            hash);
     hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.segmentsPerSpan),  sizeof(params.segmentsPerSpan),  hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.bClosed),          sizeof(params.bClosed),          hash);
     hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.bCaps),            sizeof(params.bCaps),            hash);
     hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.bDualPath),        sizeof(params.bDualPath),        hash);
     hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.dualPathSpacing),  sizeof(params.dualPathSpacing),  hash);
