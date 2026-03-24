@@ -94,6 +94,7 @@ void Component::PhysicsBodyDesc::Serialize(const PhysicsBodyDesc& comp, nlohmann
     json["restitution"] = comp.restitution;
     json["motionQuality"] = static_cast<uint8_t>(comp.motionQuality);
     json["layerOverride"] = comp.layerOverride;
+    json["enhancedInternalEdgeRemoval"] = comp.enhancedInternalEdgeRemoval;
     json["shapes"] = nlohmann::json::array();
 
     for (const auto& shape : comp.shapes) {
@@ -278,6 +279,7 @@ void Component::PhysicsBodyDesc::Deserialize(PhysicsBodyDesc& comp, const nlohma
     comp.restitution = json.value<float>("restitution", 0.0f);
     comp.motionQuality = static_cast<JPH::EMotionQuality>(json.value<uint8_t>("motionQuality", 0));
     comp.layerOverride = json.value<JPH::ObjectLayer>("layerOverride", 0xFFFF);
+    comp.enhancedInternalEdgeRemoval = json.value<bool>("enhancedInternalEdgeRemoval", false);
     comp.shapes.Clear();
 
     for (const auto& shapeJson : json["shapes"]) {
@@ -577,6 +579,8 @@ ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewFamily& v
             component.layerOverride = layer < 0 ? JPH::ObjectLayer(0xFFFF) : JPH::ObjectLayer(layer);
         }
         if (ImGui::IsItemHovered()) { ImGui::SetTooltip("-1 = auto (derived from motion type)"); }
+
+        ImGui::Checkbox("Enhanced Internal Edge Removal", &component.enhancedInternalEdgeRemoval);
 
         const glm::mat4 view = viewFamily.mainView.currentViewData.view;
         const glm::mat4 proj = viewFamily.mainView.currentViewData.proj;

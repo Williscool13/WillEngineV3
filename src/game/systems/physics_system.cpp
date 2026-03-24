@@ -224,6 +224,8 @@ JPH::BodyID CreateBodyFromShape(JPH::BodyInterface& bodyInterface, const Compone
     settings.mFriction = desc.friction;
     settings.mMotionQuality = desc.motionQuality;
 
+    settings.mEnhancedInternalEdgeRemoval = desc.enhancedInternalEdgeRemoval;
+
     return bodyInterface.CreateAndAddBody(settings, desc.motionType == Component::PhysicsMotionType::Static ? JPH::EActivation::DontActivate : JPH::EActivation::Activate);
 }
 

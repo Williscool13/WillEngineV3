@@ -26,8 +26,8 @@ void PhysicsCharacter::Initialize(Engine::GameState* gameState, Core::EngineCont
     engineGameState = gameState;
     physicsSystem = ctx->physicsSystem;
 
-    constexpr StringID PLAYER_CHARACTER_PREFAB_ID{4933586796549546436};
-    entity = SpawnPrefab(engineGameState, ctx->assetManager, PLAYER_CHARACTER_PREFAB_ID);
+    constexpr StringID WOODEN_BALL_PREFAB_ID{4933586796549546436};
+    entity = SpawnPrefab(engineGameState, ctx->assetManager, WOODEN_BALL_PREFAB_ID);
     assert(entity != entt::null && "Failed to spawn player character prefab.");
 
     engineGameState->registry.emplace<Component::DoNotSerializeTag>(entity);
