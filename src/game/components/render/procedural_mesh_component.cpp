@@ -177,6 +177,24 @@ void Component::ProceduralMeshComponent::Serialize(const ProceduralMeshComponent
             json["slices"] = p.slices;
             json["stacks"] = p.stacks;
         }
+        else if constexpr (std::is_same_v<T, Engine::CurvedRampParams>) {
+            json["width"] = p.width;
+            json["height"] = p.height;
+            json["radius"] = p.radius;
+            json["segments"] = p.segments;
+            json["bHalfPipe"] = p.bHalfPipe;
+            json["flatLength"] = p.flatLength;
+            json["lipHeight"] = p.lipHeight;
+        }
+        else if constexpr (std::is_same_v<T, Engine::BowlParams>) {
+            json["radius"] = p.radius;
+            json["height"] = p.height;
+            json["curveRadius"] = p.curveRadius;
+            json["flatRadius"] = p.flatRadius;
+            json["lipHeight"] = p.lipHeight;
+            json["slices"] = p.slices;
+            json["segments"] = p.segments;
+        }
     }, comp.params);
 }
 
@@ -334,6 +352,28 @@ void Component::ProceduralMeshComponent::Deserialize(ProceduralMeshComponent& co
         p.stacks = json["stacks"].get<int32_t>();
         comp.params = p;
     }
+    else if (type == 21) {
+        Engine::CurvedRampParams p{};
+        p.width = json["width"].get<float>();
+        p.height = json["height"].get<float>();
+        p.radius = json["radius"].get<float>();
+        p.segments = json["segments"].get<int32_t>();
+        p.bHalfPipe = json.value("bHalfPipe", false);
+        p.flatLength = json.value("flatLength", 1.0f);
+        p.lipHeight = json.value("lipHeight", 0.02f);
+        comp.params = p;
+    }
+    else if (type == 22) {
+        Engine::BowlParams p{};
+        p.radius = json["radius"].get<float>();
+        p.height = json["height"].get<float>();
+        p.curveRadius = json["curveRadius"].get<float>();
+        p.flatRadius = json.value("flatRadius", 0.0f);
+        p.lipHeight = json.value("lipHeight", 0.02f);
+        p.slices = json["slices"].get<int32_t>();
+        p.segments = json["segments"].get<int32_t>();
+        comp.params = p;
+    }
 }
 
 ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry,
@@ -386,13 +426,15 @@ ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Core::ViewF
                 if (ImGui::Selectable("Dodecahedron")) selectShape(Engine::DodecahedronParams{});
                 if (ImGui::Selectable("Klein Bottle")) selectShape(Engine::KleinBottleParams{});
                 if (ImGui::Selectable("Trefoil Knot")) selectShape(Engine::TrefoilKnotParams{});
+                if (ImGui::Selectable("Curved Ramp")) selectShape(Engine::CurvedRampParams{});
+                if (ImGui::Selectable("Bowl")) selectShape(Engine::BowlParams{});
                 ImGui::EndCombo();
             }
         }
         else {
             static constexpr const char* shapeNames[] = {
                 "", "Staircase", "Box", "Cylinder", "Capsule", "Torus", "Arch", "Wedge", "Cone", "Door", "Plane", "Sphere", "Subdivided Sphere", "Hemisphere", "Pipe", "Tetrahedron", "Octahedron",
-                "Icosahedron", "Dodecahedron", "Klein Bottle", "Trefoil Knot"
+                "Icosahedron", "Dodecahedron", "Klein Bottle", "Trefoil Knot", "Curved Ramp", "Bowl"
             };
             ImGui::Text("Shape: %s", shapeNames[component.params.index()]);
             ImGui::SameLine();
@@ -611,6 +653,39 @@ ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Core::ViewF
                     ImGui::DragInt("Slices", &p.slices, 1, 3, 64);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
                     ImGui::DragInt("Stacks", &p.stacks, 1, 3, 512);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                }
+                else if constexpr (std::is_same_v<T, Engine::CurvedRampParams>) {
+                    ImGui::DragFloat("Width", &p.width, 0.01f, 0.01f, 100.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Height", &p.height, 0.01f, 0.01f, 100.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Radius", &p.radius, 0.01f, 0.01f, 100.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragInt("Segments", &p.segments, 1, 2, 64);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    if (ImGui::Checkbox("Half-Pipe", &p.bHalfPipe)) { dirty = true; }
+                    if (p.bHalfPipe) {
+                        ImGui::DragFloat("Flat Length", &p.flatLength, 0.01f, 0.0f, 100.0f);
+                        dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    }
+                    ImGui::DragFloat("Lip Height", &p.lipHeight, 0.005f, 0.0f, 1.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                }
+                else if constexpr (std::is_same_v<T, Engine::BowlParams>) {
+                    ImGui::DragFloat("Radius", &p.radius, 0.01f, 0.01f, 100.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Height", &p.height, 0.01f, 0.01f, 100.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Curve Radius", &p.curveRadius, 0.01f, 0.01f, 100.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Flat Radius", &p.flatRadius, 0.01f, 0.0f, 100.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Lip Height", &p.lipHeight, 0.005f, 0.0f, 1.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragInt("Slices", &p.slices, 1, 3, 128);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragInt("Segments", &p.segments, 1, 2, 64);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
                 }
             }, component.params);

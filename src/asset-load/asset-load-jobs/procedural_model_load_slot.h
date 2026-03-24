@@ -96,6 +96,8 @@ private:
     bool GenerateDodecahedron(const Engine::DodecahedronParams& p);
     bool GenerateKleinBottle(const Engine::KleinBottleParams& p);
     bool GenerateTrefoilKnot(const Engine::TrefoilKnotParams& p);
+    bool GenerateCurvedRamp(const Engine::CurvedRampParams& p);
+    bool GenerateBowl(const Engine::BowlParams& p);
     bool GenerateSpline(const Engine::SplineParams& p);
 };
 } // AssetLoad

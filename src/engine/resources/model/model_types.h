@@ -299,8 +299,30 @@ struct SplineParams
     float crossPlankHeight{0.0f};
 };
 
+struct BowlParams
+{
+    float radius{2.0f};
+    float height{2.0f};
+    float curveRadius{2.0f};
+    float flatRadius{0.0f};
+    float lipHeight{0.02f};
+    int32_t slices{16};
+    int32_t segments{8};
+};
+
+struct CurvedRampParams
+{
+    float width{2.0f};
+    float height{2.0f};
+    float radius{2.0f};
+    int32_t segments{8};
+    bool bHalfPipe{false};
+    float flatLength{1.0f};
+    float lipHeight{0.02f};
+};
+
 using ProceduralParams = std::variant<std::monostate, StaircaseParams, BoxParams, CylinderParams, CapsuleParams, TorusParams, ArchParams, WedgeParams, ConeParams, DoorParams, PlaneParams, SphereParams
-    , SubdividedSphereParams, HemisphereParams, PipeParams, TetrahedronParams, OctahedronParams, IcosahedronParams, DodecahedronParams, KleinBottleParams, TrefoilKnotParams>;
+    , SubdividedSphereParams, HemisphereParams, PipeParams, TetrahedronParams, OctahedronParams, IcosahedronParams, DodecahedronParams, KleinBottleParams, TrefoilKnotParams, CurvedRampParams, BowlParams>;
 } // Render
 
 #endif //WILL_ENGINE_MODEL_TYPES_H

@@ -244,6 +244,24 @@ void Component::PhysicsBodyDesc::Serialize(const PhysicsBodyDesc& comp, nlohmann
                         shapeJson["slices"] = p.slices;
                         shapeJson["stacks"] = p.stacks;
                     }
+                    else if constexpr (std::is_same_v<T, Engine::CurvedRampParams>) {
+                        shapeJson["width"] = p.width;
+                        shapeJson["height"] = p.height;
+                        shapeJson["radius"] = p.radius;
+                        shapeJson["segments"] = p.segments;
+                        shapeJson["bHalfPipe"] = p.bHalfPipe;
+                        shapeJson["flatLength"] = p.flatLength;
+                        shapeJson["lipHeight"] = p.lipHeight;
+                    }
+                    else if constexpr (std::is_same_v<T, Engine::BowlParams>) {
+                        shapeJson["radius"] = p.radius;
+                        shapeJson["height"] = p.height;
+                        shapeJson["curveRadius"] = p.curveRadius;
+                        shapeJson["flatRadius"] = p.flatRadius;
+                        shapeJson["lipHeight"] = p.lipHeight;
+                        shapeJson["slices"] = p.slices;
+                        shapeJson["segments"] = p.segments;
+                    }
                 }, shape.proceduralParams);
                 break;
         }
@@ -448,6 +466,28 @@ void Component::PhysicsBodyDesc::Deserialize(PhysicsBodyDesc& comp, const nlohma
                         p.stacks = shapeJson["stacks"].get<int32_t>();
                         shape.proceduralParams = p;
                     }
+                    else if (ptype == 21) {
+                        Engine::CurvedRampParams p{};
+                        p.width = shapeJson["width"].get<float>();
+                        p.height = shapeJson["height"].get<float>();
+                        p.radius = shapeJson["radius"].get<float>();
+                        p.segments = shapeJson["segments"].get<int32_t>();
+                        p.bHalfPipe = shapeJson.value("bHalfPipe", false);
+                        p.flatLength = shapeJson.value("flatLength", 1.0f);
+                        p.lipHeight = shapeJson.value("lipHeight", 0.02f);
+                        shape.proceduralParams = p;
+                    }
+                    else if (ptype == 22) {
+                        Engine::BowlParams p{};
+                        p.radius = shapeJson["radius"].get<float>();
+                        p.height = shapeJson["height"].get<float>();
+                        p.curveRadius = shapeJson["curveRadius"].get<float>();
+                        p.flatRadius = shapeJson.value("flatRadius", 0.0f);
+                        p.lipHeight = shapeJson.value("lipHeight", 0.02f);
+                        p.slices = shapeJson["slices"].get<int32_t>();
+                        p.segments = shapeJson["segments"].get<int32_t>();
+                        shape.proceduralParams = p;
+                    }
                 }
                 if (shapeJson.contains("splineParams")) {
                     const auto& sp = shapeJson["splineParams"];
@@ -587,11 +627,11 @@ ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewFamily& v
                 {
                     bool bHasAny = false;
                     const auto* meta = ctx->assetManager->GetModelMetadata(shape.meshSourceModelId);
-                    static constexpr std::array<const char*, 21> kProceduralNames = {
+                    static constexpr std::array<const char*, 23> kProceduralNames = {
                         nullptr, "Staircase", "Box", "Cylinder", "Capsule", "Torus", "Arch",
                         "Wedge", "Cone", "Door", "Plane", "Sphere", "Subdivided Sphere",
                         "Hemisphere", "Pipe", "Tetrahedron", "Octahedron", "Icosahedron",
-                        "Dodecahedron", "Klein Bottle", "Trefoil Knot",
+                        "Dodecahedron", "Klein Bottle", "Trefoil Knot", "Curved Ramp", "Bowl",
                     };
                     const size_t idx = shape.proceduralParams.index();
 
