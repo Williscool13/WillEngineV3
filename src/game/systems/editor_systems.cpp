@@ -23,6 +23,7 @@
 #include "engine/resources/texture/texture.h"
 #include "game/fwd_components.h"
 #include "game/components/common_components.h"
+#include "game/components/editor_components.h"
 #include "game/components/scene_components.h"
 
 namespace Game
@@ -499,7 +500,7 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
         // Scene dropdown
         ImGui::SetNextItemWidth(-1);
         if (ImGui::BeginCombo("##scene_list", state->currentSceneName.c_str())) {
-            std::vector<std::pair<std::string, StringID>> sceneList;
+            std::vector<std::pair<std::string, StringID> > sceneList;
             sceneList.reserve(sceneCache.size());
             for (const auto& [id, meta] : sceneCache) {
                 sceneList.emplace_back(meta.sceneName, id);
@@ -685,6 +686,20 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
         ImGui::InputText("##search", search, sizeof(search));
 
         entt::entity entityToDelete = entt::null;
+
+        // Collect entities for the current scene, filtered by search
+        struct EntityEntry
+        {
+            entt::entity entity;
+            const char* label;
+            uint64_t stableId;
+            StringID folder0;
+            StringID folder1;
+            const char* folderName0;
+            const char* folderName1;
+        };
+        std::vector<EntityEntry> entries;
+
         auto view2 = state->registry.view<Component::SceneComponent>();
         for (auto entity : view2) {
             auto& scene = view2.get<Component::SceneComponent>(entity);
@@ -699,37 +714,115 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
             auto* stable = state->registry.try_get<Component::StableIdComponent>(entity);
             uint64_t stableId = stable ? stable->id.id : static_cast<uint64_t>(entity);
 
-            char uniqueLabel[256];
-            snprintf(uniqueLabel, sizeof(uniqueLabel), "%s##%llu", label, stableId);
+            StringID f0, f1;
+            const char* fn0 = "";
+            const char* fn1 = "";
+            if (auto* fc = state->registry.try_get<Component::EntityFolderComponent>(entity)) {
+                f0 = fc->folderHierarchy[0];
+                f1 = fc->folderHierarchy[1];
+                fn0 = fc->folderHierarchyNames[0].c_str();
+                fn1 = fc->folderHierarchyNames[1].c_str();
+            }
+            entries.push_back({entity, label, stableId, f0, f1, fn0, fn1});
+        }
 
-            const bool isPrefabEntity = state->registry.all_of<Component::PrefabInstanceComponent>(entity);
-            bool selected = std::find(state->selectedEntities.begin(), state->selectedEntities.end(), entity) != state->selectedEntities.end();
+        // Draw a single entity row
+        auto drawEntityRow = [&](const EntityEntry& e) {
+            const bool isPrefab = state->registry.all_of<Component::PrefabInstanceComponent>(e.entity);
+            bool selected = std::find(state->selectedEntities.begin(), state->selectedEntities.end(), e.entity) != state->selectedEntities.end();
 
-            if (isPrefabEntity) { ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.7f, 1.0f, 1.0f)); }
-            if (ImGui::SmallButton(fmt::format("X##{}", stableId).c_str())) {
-                entityToDelete = entity;
+            if (isPrefab) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.7f, 1.0f, 1.0f));
+            if (ImGui::SmallButton(fmt::format("X##{}", e.stableId).c_str())) {
+                entityToDelete = e.entity;
             }
             ImGui::SameLine();
-            if (ImGui::SmallButton(fmt::format("C##{}", stableId).c_str())) {
-                entt::entity copied = CopySceneEntity(state, entity, state->currentSceneId);
+            if (ImGui::SmallButton(fmt::format("C##{}", e.stableId).c_str())) {
+                entt::entity copied = CopySceneEntity(state, e.entity, state->currentSceneId);
                 state->selectedEntities = {copied};
                 MarkSceneModified(state, state->currentSceneId);
             }
             ImGui::SameLine();
+            char uniqueLabel[256];
+            snprintf(uniqueLabel, sizeof(uniqueLabel), "%s##%llu", e.label, e.stableId);
             if (ImGui::Selectable(uniqueLabel, selected)) {
                 if (ImGui::GetIO().KeyCtrl) {
-                    auto pos = std::find(state->selectedEntities.begin(), state->selectedEntities.end(), entity);
+                    auto pos = std::find(state->selectedEntities.begin(), state->selectedEntities.end(), e.entity);
                     if (pos != state->selectedEntities.end())
                         state->selectedEntities.erase(pos);
                     else
-                        state->selectedEntities.push_back(entity);
+                        state->selectedEntities.push_back(e.entity);
                 }
                 else {
-                    state->selectedEntities = {entity};
+                    state->selectedEntities = {e.entity};
                 }
             }
-            if (isPrefabEntity) { ImGui::PopStyleColor(); }
+            if (isPrefab) ImGui::PopStyleColor();
+        };
+
+        // Collect unique folder names at level 0, sorted
+        struct FolderInfo
+        {
+            StringID id;
+            const char* name;
+        };
+        std::vector<FolderInfo> folders0;
+        for (auto& e : entries) {
+            if (!e.folder0.IsValid()) continue;
+            bool found = false;
+            for (auto& f : folders0) {
+                if (f.id == e.folder0) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) folders0.push_back({e.folder0, e.folderName0});
         }
+        std::ranges::sort(folders0, [](const FolderInfo& a, const FolderInfo& b) { return strcmp(a.name, b.name) < 0; });
+
+        // Draw unfoldered entities first
+        for (auto& e : entries) {
+            if (e.folder0.IsValid()) continue;
+            drawEntityRow(e);
+        }
+
+        // Draw folder tree nodes
+        for (auto& [id0, name0] : folders0) {
+            if (ImGui::TreeNode(fmt::format("{}##folder_{}", name0, id0.id).c_str())) {
+                // Collect subfolders for this folder
+                std::vector<FolderInfo> subfolders;
+                for (auto& e : entries) {
+                    if (e.folder0 != id0 || !e.folder1.IsValid()) continue;
+                    bool found = false;
+                    for (auto& sf : subfolders) {
+                        if (sf.id == e.folder1) {
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found) subfolders.push_back({e.folder1, e.folderName1});
+                }
+                std::ranges::sort(subfolders, [](const FolderInfo& a, const FolderInfo& b) { return strcmp(a.name, b.name) < 0; });
+
+                // No subfolder
+                for (auto& e : entries) {
+                    if (e.folder0 != id0 || e.folder1.IsValid()) continue;
+                    drawEntityRow(e);
+                }
+
+                // Subfolder tree nodes
+                for (auto& [id1, name1] : subfolders) {
+                    if (ImGui::TreeNode(fmt::format("{}##subfolder_{}_{}", name1, id0.id, id1.id).c_str())) {
+                        for (auto& e : entries) {
+                            if (e.folder0 != id0 || e.folder1 != id1) continue;
+                            drawEntityRow(e);
+                        }
+                        ImGui::TreePop();
+                    }
+                }
+                ImGui::TreePop();
+            }
+        }
+
         if (entityToDelete != entt::null) {
             auto it = std::ranges::find(state->selectedEntities, entityToDelete);
             if (it != state->selectedEntities.end()) {

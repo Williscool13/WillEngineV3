@@ -24,6 +24,10 @@ struct StackString
 
     [[nodiscard]] const char* c_str() const { return buf; }
     [[nodiscard]] size_t size() const { return len; }
+
+    bool operator==(const StackString& other) const { return len == other.len && memcmp(buf, other.buf, len) == 0; }
+    bool operator==(const char* str) const { return strcmp(buf, str) == 0; }
+    auto operator<=>(const StackString& other) const { return strcmp(buf, other.buf) <=> 0; }
 };
 
 using ShortString = StackString<16>;
