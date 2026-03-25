@@ -19,6 +19,7 @@
 #include "game/components/common_components.h"
 #include "game/components/common/stable_id_component.h"
 #include "game/components/core_components.h"
+#include "game/components/editor_components.h"
 #include "game/components/gameplay/player_spawn_component.h"
 #include "game/components/render_components.h"
 #include "game/components/render/static_mesh_component.h"
@@ -278,6 +279,7 @@ entt::entity CreateSceneEntity(Engine::GameState* state)
     state->registry.emplace<Component::TransformComponent>(newEntity);
     state->registry.emplace<Component::SceneComponent>(newEntity, state->currentSceneId);
     state->registry.emplace<Component::StableIdComponent>(newEntity);
+    state->registry.emplace<Component::EntityFolderComponent>(newEntity);
     static int32_t runningNameTally = 0;
     auto newName = fmt::format("New Entity {}", runningNameTally++);
     state->registry.emplace<Component::NameComponent>(newEntity, StackString<256>(newName.c_str()));

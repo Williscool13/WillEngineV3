@@ -1,0 +1,74 @@
+wprefab
+version 1 0
+id 6794845865704754424
+name Barrel
+component_count 6
+end_header
+{
+  "1254610073680810491": {
+    "bCapped": true,
+    "height": 1.5,
+    "material": 4805580789092568935,
+    "radius": 0.5,
+    "slices": 16,
+    "type": 3
+  },
+  "1884906092559237059": {
+    "rotation": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "translation": [
+      -37.5,
+      45.25,
+      -76.5
+    ]
+  },
+  "3048324656540157766": {
+    "name": "Barrel"
+  },
+  "5210556776496121574": {
+    "folderHierarchyNames": [
+      "First Area",
+      ""
+    ]
+  },
+  "5740098829229280260": {
+    "enhancedInternalEdgeRemoval": false,
+    "friction": 0.5,
+    "layerOverride": 65535,
+    "mass": 7.5,
+    "motionQuality": 0,
+    "motionType": 2,
+    "restitution": 0.30000001192092896,
+    "shapes": [
+      {
+        "bakedScaleX": 1.0,
+        "bakedScaleY": 1.0,
+        "bakedScaleZ": 1.0,
+        "halfHeight": 0.25,
+        "offset": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "radius": 0.5,
+        "rotation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "type": 2
+      }
+    ]
+  },
+  "7294468376066398399": null
+}
