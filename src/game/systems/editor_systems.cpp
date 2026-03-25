@@ -28,10 +28,289 @@
 
 namespace Game
 {
-static void MarkSceneModified(Engine::GameState* state, StringID sceneId)
+void MarkSceneModified(Engine::GameState* state, StringID sceneId)
 {
     if (std::ranges::find(state->modifiedScenes, sceneId) == state->modifiedScenes.end()) {
         state->modifiedScenes.push_back(sceneId);
+    }
+}
+
+void MarkEntitiesModified(Engine::GameState* state, const std::vector<entt::entity>& entities)
+{
+    for (auto e : entities) {
+        if (auto* sc = state->registry.try_get<Component::SceneComponent>(e)) {
+            MarkSceneModified(state, sc->sceneId);
+        }
+    }
+}
+
+void DrawMultiSelectEditor(Engine::GameState* state, const glm::vec3& centroid, int transformCount)
+{
+    auto& entities = state->selectedEntities;
+    ImGui::Text("%zu entities selected", entities.size());
+
+    // Name
+    if (ImGui::CollapsingHeader("Name##multi_name", ImGuiTreeNodeFlags_DefaultOpen)) {
+        bool allHaveName = true;
+        bool allSame = true;
+        const char* firstName = nullptr;
+        for (auto e : entities) {
+            auto* nc = state->registry.try_get<Component::NameComponent>(e);
+            if (!nc) {
+                allHaveName = false;
+                break;
+            }
+            if (!firstName) {
+                firstName = nc->name.c_str();
+            }
+            else if (strcmp(firstName, nc->name.c_str()) != 0) {
+                allSame = false;
+            }
+        }
+
+        if (allHaveName) {
+            char buf[256];
+            if (allSame) {
+                strncpy_s(buf, firstName, sizeof(buf) - 1);
+            }
+            else {
+                strncpy_s(buf, "...", sizeof(buf) - 1);
+            }
+            buf[sizeof(buf) - 1] = '\0';
+
+            if (ImGui::InputText("Name##multi", buf, sizeof(buf), ImGuiInputTextFlags_EnterReturnsTrue)) {
+                for (auto e : entities) {
+                    state->registry.get<Component::NameComponent>(e).name = StackString<256>(buf);
+                }
+                MarkEntitiesModified(state, entities);
+            }
+        }
+        else {
+            ImGui::TextDisabled("Not all entities have NameComponent");
+        }
+    }
+
+    // Folder
+    if (ImGui::CollapsingHeader("Folder##multi_folder", ImGuiTreeNodeFlags_DefaultOpen)) {
+        bool allHaveFolder = true;
+        bool folder0Same = true, folder1Same = true;
+        ShortString firstFolder0, firstFolder1;
+        StringID firstFolder0Id;
+        bool first = true;
+
+        for (auto e : entities) {
+            auto* fc = state->registry.try_get<Component::EntityFolderComponent>(e);
+            if (!fc) {
+                allHaveFolder = false;
+                break;
+            }
+            if (first) {
+                firstFolder0 = fc->folderHierarchyNames[0];
+                firstFolder1 = fc->folderHierarchyNames[1];
+                firstFolder0Id = fc->folderHierarchy[0];
+                first = false;
+            }
+            else {
+                if (!(fc->folderHierarchyNames[0] == firstFolder0)) {
+                    folder0Same = false;
+                }
+                if (!(fc->folderHierarchyNames[1] == firstFolder1)) {
+                    folder1Same = false;
+                }
+            }
+        }
+
+        if (allHaveFolder) {
+            std::vector<ShortString> existingFolders0;
+            auto folderView = state->registry.view<Component::EntityFolderComponent>();
+            for (auto e : folderView) {
+                auto& fc = folderView.get<Component::EntityFolderComponent>(e);
+                if (fc.folderHierarchyNames[0].size() == 0) {
+                    continue;
+                }
+                bool dup = false;
+                for (auto& ex : existingFolders0) {
+                    if (ex == fc.folderHierarchyNames[0]) {
+                        dup = true;
+                        break;
+                    }
+                }
+                if (!dup) {
+                    existingFolders0.push_back(fc.folderHierarchyNames[0]);
+                }
+            }
+            std::ranges::sort(existingFolders0);
+
+            const char* folder0Display = folder0Same ? (firstFolder0.size() > 0 ? firstFolder0.c_str() : "(None)") : "...";
+
+            ImGui::Text("Folder");
+            if (ImGui::BeginCombo("##multi_folder_0", folder0Display)) {
+                if (ImGui::Selectable("(None)", folder0Same && firstFolder0.size() == 0)) {
+                    for (auto e : entities) {
+                        auto& fc = state->registry.get<Component::EntityFolderComponent>(e);
+                        fc.folderHierarchyNames[0] = ShortString();
+                        fc.folderHierarchy[0] = StringID();
+                        fc.folderHierarchyNames[1] = ShortString();
+                        fc.folderHierarchy[1] = StringID();
+                    }
+                    MarkEntitiesModified(state, entities);
+                }
+                for (auto& fn : existingFolders0) {
+                    bool selected = folder0Same && fn == firstFolder0;
+                    if (ImGui::Selectable(fn.c_str(), selected)) {
+                        StringID id(fn.c_str(), fn.size());
+                        for (auto e : entities) {
+                            auto& fc = state->registry.get<Component::EntityFolderComponent>(e);
+                            fc.folderHierarchyNames[0] = fn;
+                            fc.folderHierarchy[0] = id;
+                        }
+                        MarkEntitiesModified(state, entities);
+                    }
+                }
+                ImGui::EndCombo();
+            }
+
+            if (folder0Same && firstFolder0Id.IsValid()) {
+                std::vector<ShortString> existingFolders1;
+                for (auto e : folderView) {
+                    auto& fc = folderView.get<Component::EntityFolderComponent>(e);
+                    if (fc.folderHierarchy[0] != firstFolder0Id) {
+                        continue;
+                    }
+                    if (fc.folderHierarchyNames[1].size() == 0) {
+                        continue;
+                    }
+                    bool dup = false;
+                    for (auto& ex : existingFolders1) {
+                        if (ex == fc.folderHierarchyNames[1]) {
+                            dup = true;
+                            break;
+                        }
+                    }
+                    if (!dup) {
+                        existingFolders1.push_back(fc.folderHierarchyNames[1]);
+                    }
+                }
+                std::ranges::sort(existingFolders1);
+
+                const char* folder1Display = folder1Same ? (firstFolder1.size() > 0 ? firstFolder1.c_str() : "(None)") : "...";
+
+                ImGui::Text("Subfolder");
+                if (ImGui::BeginCombo("##multi_folder_1", folder1Display)) {
+                    if (ImGui::Selectable("(None)", folder1Same && firstFolder1.size() == 0)) {
+                        for (auto e : entities) {
+                            auto& fc = state->registry.get<Component::EntityFolderComponent>(e);
+                            fc.folderHierarchyNames[1] = ShortString();
+                            fc.folderHierarchy[1] = StringID();
+                        }
+                        MarkEntitiesModified(state, entities);
+                    }
+                    for (auto& fn : existingFolders1) {
+                        bool selected = folder1Same && fn == firstFolder1;
+                        if (ImGui::Selectable(fn.c_str(), selected)) {
+                            StringID id(fn.c_str(), fn.size());
+                            for (auto e : entities) {
+                                auto& fc = state->registry.get<Component::EntityFolderComponent>(e);
+                                fc.folderHierarchyNames[1] = fn;
+                                fc.folderHierarchy[1] = id;
+                            }
+                            MarkEntitiesModified(state, entities);
+                        }
+                    }
+                    ImGui::EndCombo();
+                }
+            }
+        }
+        else {
+            ImGui::TextDisabled("Not all entities have EntityFolderComponent");
+        }
+    }
+
+    // Transform
+    if (transformCount > 0 && ImGui::CollapsingHeader("Transform##multi_transform", ImGuiTreeNodeFlags_DefaultOpen)) {
+        bool allSameRot = true, allSameScale = true;
+        glm::quat firstRot{};
+        glm::vec3 firstScale{};
+        bool first = true;
+        for (auto e : entities) {
+            auto* tf = state->registry.try_get<Component::TransformComponent>(e);
+            if (!tf) {
+                continue;
+            }
+            if (first) {
+                firstRot = tf->rotation;
+                firstScale = tf->scale;
+                first = false;
+            }
+            else {
+                if (glm::dot(firstRot, tf->rotation) < 0.9999f) {
+                    allSameRot = false;
+                }
+                if (glm::any(glm::epsilonNotEqual(firstScale, tf->scale, 1e-4f))) {
+                    allSameScale = false;
+                }
+            }
+        }
+
+        // Translation (on the centroid)
+        glm::vec3 editCentroid = centroid;
+        if (ImGui::DragFloat3("Translation##multi", &editCentroid.x, 0.1f)) {
+            glm::vec3 delta = editCentroid - centroid;
+            for (auto e : entities) {
+                if (auto* tf = state->registry.try_get<Component::TransformComponent>(e)) {
+                    tf->translation += delta;
+                    state->registry.emplace_or_replace<Component::DirtyTransformTag>(e);
+                }
+            }
+            MarkEntitiesModified(state, entities);
+        }
+
+        // Rotation
+        if (allSameRot) {
+            glm::vec3 euler = glm::degrees(glm::eulerAngles(firstRot));
+            if (ImGui::DragFloat3("Rotation##multi", &euler.x, 0.5f)) {
+                glm::quat newRot = glm::quat(glm::radians(euler));
+                for (auto e : entities) {
+                    if (auto* tf = state->registry.try_get<Component::TransformComponent>(e)) {
+                        tf->rotation = newRot;
+                        state->registry.emplace_or_replace<Component::DirtyTransformTag>(e);
+                    }
+                }
+                MarkEntitiesModified(state, entities);
+            }
+        }
+        else {
+            ImGui::BeginDisabled();
+            glm::vec3 dummy{0};
+            ImGui::DragFloat3("Rotation##multi", &dummy.x, 0.5f);
+            ImGui::EndDisabled();
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+                ImGui::SetTooltip("Mixed rotations");
+            }
+        }
+
+        // Scale
+        if (allSameScale) {
+            glm::vec3 scale = firstScale;
+            if (ImGui::DragFloat3("Scale##multi", &scale.x, 0.01f)) {
+                for (auto e : entities) {
+                    if (auto* tf = state->registry.try_get<Component::TransformComponent>(e)) {
+                        tf->scale = scale;
+                        state->registry.emplace_or_replace<Component::DirtyTransformTag>(e);
+                    }
+                }
+                MarkEntitiesModified(state, entities);
+            }
+        }
+        else {
+            ImGui::BeginDisabled();
+            glm::vec3 dummy{0};
+            ImGui::DragFloat3("Scale##multi", &dummy.x, 0.01f);
+            ImGui::EndDisabled();
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+                ImGui::SetTooltip("Mixed scales");
+            }
+        }
     }
 }
 
@@ -905,10 +1184,7 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
             }
         }
         else if (multiSelected) {
-            ImGui::Text("%zu entities selected", state->selectedEntities.size());
-            ImGui::Text("Ctrl+Click to add/remove entities");
-            if (transformCount > 0)
-                ImGui::Text("Centroid: (%.2f, %.2f, %.2f)", multiGizmoCentroid.x, multiGizmoCentroid.y, multiGizmoCentroid.z);
+            DrawMultiSelectEditor(state, multiGizmoCentroid, transformCount);
         }
     }
     ImGui::End();

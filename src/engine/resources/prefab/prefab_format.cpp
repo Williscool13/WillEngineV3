@@ -9,6 +9,8 @@
 #include <ostream>
 #include <string>
 
+#include <json/nlohmann/json.hpp>
+
 namespace Engine
 {
 bool WriteWPrefabHeader(std::ostream& out, const WPrefabHeader& header)
@@ -62,5 +64,25 @@ std::optional<WPrefabHeader> ReadWPrefabHeader(const std::filesystem::path& path
 {
     std::ifstream f(path, std::ios::binary);
     return ReadWPrefabHeader(f);
+}
+
+std::optional<WPrefabData> ReadWPrefab(const std::filesystem::path& path)
+{
+    std::ifstream f(path);
+    if (!f.is_open()) {
+        return std::nullopt;
+    }
+
+    auto header = ReadWPrefabHeader(f);
+    if (!header) {
+        return std::nullopt;
+    }
+
+    auto json = nlohmann::json::parse(f, nullptr, false);
+    if (json.is_discarded()) {
+        return std::nullopt;
+    }
+
+    return WPrefabData{.header = *header, .componentJson = std::move(json)};
 }
 } // Engine

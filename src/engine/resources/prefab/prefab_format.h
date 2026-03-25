@@ -10,6 +10,8 @@
 #include <iosfwd>
 #include <optional>
 
+#include <json/nlohmann/json.hpp>
+
 namespace Engine
 {
 constexpr uint32_t PREFAB_MAJOR_VERSION = 1;
@@ -33,6 +35,14 @@ bool WriteWPrefabHeader(std::ostream& out, const WPrefabHeader& header);
 std::optional<WPrefabHeader> ReadWPrefabHeader(std::istream& in);
 
 std::optional<WPrefabHeader> ReadWPrefabHeader(const std::filesystem::path& path);
+
+struct WPrefabData
+{
+    WPrefabHeader header;
+    nlohmann::json componentJson;
+};
+
+std::optional<WPrefabData> ReadWPrefab(const std::filesystem::path& path);
 } // Engine
 
 #endif //WILL_ENGINE_PREFAB_FORMAT_H

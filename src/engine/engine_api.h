@@ -101,13 +101,13 @@ struct GameState
     // Gizmo snapping
     bool bSnapEnabled{true};
     bool bSnapWorldGrid{true};
-    float snapTranslation{0.5f};
+    float snapTranslation{0.25f};
     float snapRotation{15.0f};
     float snapScale{0.1f};
 
     // Scene stuff
     StringID currentSceneId{0};
-    std::string currentSceneName{""};
+    std::string currentSceneName{};
 
     std::vector<StringID> loadedScenes{};
     std::vector<StringID> modifiedScenes{};

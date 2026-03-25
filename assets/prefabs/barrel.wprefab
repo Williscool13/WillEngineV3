@@ -1,17 +1,16 @@
 wprefab
 version 1 0
-id 6794845865704754424
+id 16907205951425301799
 name Barrel
-component_count 6
+component_count 7
 end_header
 {
   "1254610073680810491": {
-    "bCapped": true,
-    "height": 1.5,
     "material": 4805580789092568935,
-    "radius": 0.5,
-    "slices": 16,
-    "type": 3
+    "sizeX": 1.0,
+    "sizeY": 1.0,
+    "sizeZ": 1.0,
+    "type": 2
   },
   "1884906092559237059": {
     "rotation": [
@@ -26,10 +25,13 @@ end_header
       1.0
     ],
     "translation": [
-      -37.5,
-      45.25,
-      -76.5
+      -43.5,
+      45.5,
+      -85.0
     ]
+  },
+  "2477833447507440368": {
+    "prefabId": 16907205951425301799
   },
   "3048324656540157766": {
     "name": "Barrel"
@@ -44,10 +46,10 @@ end_header
     "enhancedInternalEdgeRemoval": false,
     "friction": 0.5,
     "layerOverride": 65535,
-    "mass": 7.5,
+    "mass": 10.0,
     "motionQuality": 0,
     "motionType": 2,
-    "restitution": 0.30000001192092896,
+    "restitution": 0.0,
     "shapes": [
       {
         "bakedScaleX": 1.0,

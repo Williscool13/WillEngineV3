@@ -27,11 +27,11 @@ struct GameState;
 
 namespace Game
 {
-Engine::Scene SaveScene(ComponentRegistry& componentRegistry, entt::registry& registry, StringID sceneId, std::string_view sceneName);
+Engine::Scene SaveScene(ComponentRegistry& componentRegistry, entt::registry& registry, Engine::AssetManager* assetManager, StringID sceneId, std::string_view sceneName);
 
 StringID LoadScene(ComponentRegistry& componentRegistry, entt::registry& registry, Engine::Scene& scene);
 
-std::vector<Engine::Scene> SerializeAll(ComponentRegistry& componentRegistry, entt::registry& registry, const std::vector<StringID>& loadedScenes);
+std::vector<Engine::Scene> SerializeAll(ComponentRegistry& componentRegistry, entt::registry& registry, Engine::AssetManager* assetManager, const std::vector<StringID>& loadedScenes);
 
 void DeserializeAll(Engine::GameState* state, std::vector<Engine::Scene>& snapshots);
 

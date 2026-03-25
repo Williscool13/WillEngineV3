@@ -2,109 +2,1370 @@ wscene
 version 1 0
 id 13079833564594591779
 name level0
-entity_count 70
+entity_count 48
 end_header
 {
   "entities": [
     {
+      "1254610073680810491": {
+        "bCapped": true,
+        "height": 1.5,
+        "material": 4805580789092568935,
+        "radius": 0.5,
+        "slices": 16,
+        "type": 3
+      },
+      "1884906092559237059": {
+        "rotation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "translation": [
+          -44.5,
+          45.5,
+          -85.0
+        ]
+      },
       "2477833447507440368": {
-        "prefabId": 6794845865704754424
+        "prefabId": 16907205951425301799
       }
     },
     {
-      "2477833447507440368": {
-        "prefabId": 6794845865704754424
-      }
+      "1254610073680810491": {
+        "material": 4805580789092568935,
+        "sizeX": 4.0,
+        "sizeY": 1.0,
+        "sizeZ": 4.0,
+        "type": 2
+      },
+      "1884906092559237059": {
+        "rotation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "translation": [
+          -55.5,
+          31.5,
+          -63.0
+        ]
+      },
+      "3048324656540157766": {
+        "name": "Platform 1"
+      },
+      "5210556776496121574": {
+        "folderHierarchyNames": [
+          "First Area",
+          ""
+        ]
+      },
+      "5740098829229280260": {
+        "enhancedInternalEdgeRemoval": false,
+        "friction": 0.5,
+        "layerOverride": 65535,
+        "mass": 1.0,
+        "motionQuality": 0,
+        "motionType": 0,
+        "restitution": 0.0,
+        "shapes": [
+          {
+            "bakedScaleX": 1.0,
+            "bakedScaleY": 1.0,
+            "bakedScaleZ": 1.0,
+            "halfExtents": [
+              2.0,
+              0.5,
+              2.0
+            ],
+            "offset": [
+              2.0,
+              0.5,
+              2.0
+            ],
+            "rotation": [
+              1.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "type": 0
+          }
+        ]
+      },
+      "7294468376066398399": null
     },
     {
-      "2477833447507440368": {
-        "prefabId": 6794845865704754424
-      }
+      "1254610073680810491": {
+        "material": 4805580789092568935,
+        "sizeX": 4.0,
+        "sizeY": 1.0,
+        "sizeZ": 4.0,
+        "type": 2
+      },
+      "1884906092559237059": {
+        "rotation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "translation": [
+          -37.5,
+          30.5,
+          -47.0
+        ]
+      },
+      "3048324656540157766": {
+        "name": "Platform 1"
+      },
+      "5210556776496121574": {
+        "folderHierarchyNames": [
+          "First Area",
+          ""
+        ]
+      },
+      "5740098829229280260": {
+        "enhancedInternalEdgeRemoval": false,
+        "friction": 0.5,
+        "layerOverride": 65535,
+        "mass": 1.0,
+        "motionQuality": 0,
+        "motionType": 0,
+        "restitution": 0.0,
+        "shapes": [
+          {
+            "bakedScaleX": 1.0,
+            "bakedScaleY": 1.0,
+            "bakedScaleZ": 1.0,
+            "halfExtents": [
+              2.0,
+              0.5,
+              2.0
+            ],
+            "offset": [
+              2.0,
+              0.5,
+              2.0
+            ],
+            "rotation": [
+              1.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "type": 0
+          }
+        ]
+      },
+      "7294468376066398399": null
     },
     {
-      "2477833447507440368": {
-        "prefabId": 6794845865704754424
-      }
+      "1254610073680810491": {
+        "material": 4805580789092568935,
+        "sizeX": 4.0,
+        "sizeY": 1.0,
+        "sizeZ": 4.0,
+        "type": 2
+      },
+      "1884906092559237059": {
+        "rotation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "translation": [
+          -28.0,
+          31.5,
+          -63.0
+        ]
+      },
+      "3048324656540157766": {
+        "name": "Platform 1"
+      },
+      "5210556776496121574": {
+        "folderHierarchyNames": [
+          "First Area",
+          ""
+        ]
+      },
+      "5740098829229280260": {
+        "enhancedInternalEdgeRemoval": false,
+        "friction": 0.5,
+        "layerOverride": 65535,
+        "mass": 1.0,
+        "motionQuality": 0,
+        "motionType": 0,
+        "restitution": 0.0,
+        "shapes": [
+          {
+            "bakedScaleX": 1.0,
+            "bakedScaleY": 1.0,
+            "bakedScaleZ": 1.0,
+            "halfExtents": [
+              2.0,
+              0.5,
+              2.0
+            ],
+            "offset": [
+              2.0,
+              0.5,
+              2.0
+            ],
+            "rotation": [
+              1.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "type": 0
+          }
+        ]
+      },
+      "7294468376066398399": null
     },
     {
-      "2477833447507440368": {
-        "prefabId": 6794845865704754424
-      }
+      "1254610073680810491": {
+        "material": 4805580789092568935,
+        "sizeX": 5.0,
+        "sizeY": 1.0,
+        "sizeZ": 5.0,
+        "type": 2
+      },
+      "1884906092559237059": {
+        "rotation": [
+          0.9239734411239624,
+          0.0,
+          -0.0,
+          -0.38245663046836853
+        ],
+        "scale": [
+          0.9999997019767761,
+          0.9999997019767761,
+          0.9999997019767761
+        ],
+        "translation": [
+          -44.5,
+          21.0,
+          -17.0
+        ]
+      },
+      "3048324656540157766": {
+        "name": "Slide2"
+      },
+      "5210556776496121574": {
+        "folderHierarchyNames": [
+          "Second Area",
+          ""
+        ]
+      },
+      "5740098829229280260": {
+        "enhancedInternalEdgeRemoval": false,
+        "friction": 0.5,
+        "layerOverride": 65535,
+        "mass": 1.0,
+        "motionQuality": 0,
+        "motionType": 0,
+        "restitution": 0.0,
+        "shapes": [
+          {
+            "bakedScaleX": 1.0,
+            "bakedScaleY": 1.0,
+            "bakedScaleZ": 1.0,
+            "halfExtents": [
+              2.4999992847442627,
+              0.49999985098838806,
+              2.4999992847442627
+            ],
+            "offset": [
+              2.4999992847442627,
+              0.49999985098838806,
+              2.4999992847442627
+            ],
+            "rotation": [
+              1.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "type": 0
+          }
+        ]
+      },
+      "7294468376066398399": null
     },
     {
-      "2477833447507440368": {
-        "prefabId": 6794845865704754424
-      }
+      "1254610073680810491": {
+        "material": 4805580789092568935,
+        "sizeX": 4.0,
+        "sizeY": 1.0,
+        "sizeZ": 4.0,
+        "type": 2
+      },
+      "1884906092559237059": {
+        "rotation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "translation": [
+          -56.5,
+          31.5,
+          -48.0
+        ]
+      },
+      "3048324656540157766": {
+        "name": "Platform 1"
+      },
+      "5210556776496121574": {
+        "folderHierarchyNames": [
+          "First Area",
+          ""
+        ]
+      },
+      "5740098829229280260": {
+        "enhancedInternalEdgeRemoval": false,
+        "friction": 0.5,
+        "layerOverride": 65535,
+        "mass": 1.0,
+        "motionQuality": 0,
+        "motionType": 0,
+        "restitution": 0.0,
+        "shapes": [
+          {
+            "bakedScaleX": 1.0,
+            "bakedScaleY": 1.0,
+            "bakedScaleZ": 1.0,
+            "halfExtents": [
+              2.0,
+              0.5,
+              2.0
+            ],
+            "offset": [
+              2.0,
+              0.5,
+              2.0
+            ],
+            "rotation": [
+              1.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "type": 0
+          }
+        ]
+      },
+      "7294468376066398399": null
     },
     {
-      "2477833447507440368": {
-        "prefabId": 6794845865704754424
-      }
+      "1254610073680810491": {
+        "material": 4805580789092568935,
+        "sizeX": 4.0,
+        "sizeY": 1.0,
+        "sizeZ": 4.0,
+        "type": 2
+      },
+      "1884906092559237059": {
+        "rotation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "translation": [
+          -37.0,
+          38.0,
+          -60.0
+        ]
+      },
+      "3048324656540157766": {
+        "name": "Platform 1"
+      },
+      "5210556776496121574": {
+        "folderHierarchyNames": [
+          "First Area",
+          ""
+        ]
+      },
+      "5740098829229280260": {
+        "enhancedInternalEdgeRemoval": false,
+        "friction": 0.5,
+        "layerOverride": 65535,
+        "mass": 1.0,
+        "motionQuality": 0,
+        "motionType": 0,
+        "restitution": 0.0,
+        "shapes": [
+          {
+            "bakedScaleX": 1.0,
+            "bakedScaleY": 1.0,
+            "bakedScaleZ": 1.0,
+            "halfExtents": [
+              2.0,
+              0.5,
+              2.0
+            ],
+            "offset": [
+              2.0,
+              0.5,
+              2.0
+            ],
+            "rotation": [
+              1.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "type": 0
+          }
+        ]
+      },
+      "7294468376066398399": null
     },
     {
-      "2477833447507440368": {
-        "prefabId": 6794845865704754424
-      }
+      "1254610073680810491": {
+        "material": 4805580789092568935,
+        "sizeX": 4.0,
+        "sizeY": 1.0,
+        "sizeZ": 4.0,
+        "type": 2
+      },
+      "1884906092559237059": {
+        "rotation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "translation": [
+          -34.0,
+          33.5,
+          -54.5
+        ]
+      },
+      "3048324656540157766": {
+        "name": "Platform 1"
+      },
+      "5210556776496121574": {
+        "folderHierarchyNames": [
+          "First Area",
+          ""
+        ]
+      },
+      "5740098829229280260": {
+        "enhancedInternalEdgeRemoval": false,
+        "friction": 0.5,
+        "layerOverride": 65535,
+        "mass": 1.0,
+        "motionQuality": 0,
+        "motionType": 0,
+        "restitution": 0.0,
+        "shapes": [
+          {
+            "bakedScaleX": 1.0,
+            "bakedScaleY": 1.0,
+            "bakedScaleZ": 1.0,
+            "halfExtents": [
+              2.0,
+              0.5,
+              2.0
+            ],
+            "offset": [
+              2.0,
+              0.5,
+              2.0
+            ],
+            "rotation": [
+              1.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "type": 0
+          }
+        ]
+      },
+      "7294468376066398399": null
     },
     {
-      "2477833447507440368": {
-        "prefabId": 6794845865704754424
-      }
+      "1254610073680810491": {
+        "material": 4805580789092568935,
+        "sizeX": 4.0,
+        "sizeY": 1.0,
+        "sizeZ": 4.0,
+        "type": 2
+      },
+      "1884906092559237059": {
+        "rotation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "translation": [
+          -43.0,
+          39.0,
+          -79.0
+        ]
+      },
+      "3048324656540157766": {
+        "name": "Platform 1"
+      },
+      "5210556776496121574": {
+        "folderHierarchyNames": [
+          "First Area",
+          ""
+        ]
+      },
+      "5740098829229280260": {
+        "enhancedInternalEdgeRemoval": false,
+        "friction": 0.5,
+        "layerOverride": 65535,
+        "mass": 1.0,
+        "motionQuality": 0,
+        "motionType": 0,
+        "restitution": 0.0,
+        "shapes": [
+          {
+            "bakedScaleX": 1.0,
+            "bakedScaleY": 1.0,
+            "bakedScaleZ": 1.0,
+            "halfExtents": [
+              2.0,
+              0.5,
+              2.0
+            ],
+            "offset": [
+              2.0,
+              0.5,
+              2.0
+            ],
+            "rotation": [
+              1.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "type": 0
+          }
+        ]
+      },
+      "7294468376066398399": null
     },
     {
-      "2477833447507440368": {
-        "prefabId": 6794845865704754424
-      }
+      "1254610073680810491": {
+        "material": 4805580789092568935,
+        "sizeX": 4.0,
+        "sizeY": 1.0,
+        "sizeZ": 4.0,
+        "type": 2
+      },
+      "1884906092559237059": {
+        "rotation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "translation": [
+          -29.5,
+          39.0,
+          -69.0
+        ]
+      },
+      "3048324656540157766": {
+        "name": "Platform 1"
+      },
+      "5210556776496121574": {
+        "folderHierarchyNames": [
+          "First Area",
+          ""
+        ]
+      },
+      "5740098829229280260": {
+        "enhancedInternalEdgeRemoval": false,
+        "friction": 0.5,
+        "layerOverride": 65535,
+        "mass": 1.0,
+        "motionQuality": 0,
+        "motionType": 0,
+        "restitution": 0.0,
+        "shapes": [
+          {
+            "bakedScaleX": 1.0,
+            "bakedScaleY": 1.0,
+            "bakedScaleZ": 1.0,
+            "halfExtents": [
+              2.0,
+              0.5,
+              2.0
+            ],
+            "offset": [
+              2.0,
+              0.5,
+              2.0
+            ],
+            "rotation": [
+              1.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "type": 0
+          }
+        ]
+      },
+      "7294468376066398399": null
     },
     {
-      "2477833447507440368": {
-        "prefabId": 6794845865704754424
-      }
+      "1254610073680810491": {
+        "material": 4805580789092568935,
+        "sizeX": 4.0,
+        "sizeY": 1.0,
+        "sizeZ": 4.0,
+        "type": 2
+      },
+      "1884906092559237059": {
+        "rotation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "translation": [
+          -53.5,
+          40.0,
+          -71.0
+        ]
+      },
+      "3048324656540157766": {
+        "name": "Platform 1"
+      },
+      "5210556776496121574": {
+        "folderHierarchyNames": [
+          "First Area",
+          ""
+        ]
+      },
+      "5740098829229280260": {
+        "enhancedInternalEdgeRemoval": false,
+        "friction": 0.5,
+        "layerOverride": 65535,
+        "mass": 1.0,
+        "motionQuality": 0,
+        "motionType": 0,
+        "restitution": 0.0,
+        "shapes": [
+          {
+            "bakedScaleX": 1.0,
+            "bakedScaleY": 1.0,
+            "bakedScaleZ": 1.0,
+            "halfExtents": [
+              2.0,
+              0.5,
+              2.0
+            ],
+            "offset": [
+              2.0,
+              0.5,
+              2.0
+            ],
+            "rotation": [
+              1.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "type": 0
+          }
+        ]
+      },
+      "7294468376066398399": null
     },
     {
-      "2477833447507440368": {
-        "prefabId": 6794845865704754424
-      }
+      "1254610073680810491": {
+        "material": 4805580789092568935,
+        "sizeX": 4.0,
+        "sizeY": 1.0,
+        "sizeZ": 4.0,
+        "type": 2
+      },
+      "1884906092559237059": {
+        "rotation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "translation": [
+          -43.0,
+          33.5,
+          -56.0
+        ]
+      },
+      "3048324656540157766": {
+        "name": "Platform 1"
+      },
+      "5210556776496121574": {
+        "folderHierarchyNames": [
+          "First Area",
+          ""
+        ]
+      },
+      "5740098829229280260": {
+        "enhancedInternalEdgeRemoval": false,
+        "friction": 0.5,
+        "layerOverride": 65535,
+        "mass": 1.0,
+        "motionQuality": 0,
+        "motionType": 0,
+        "restitution": 0.0,
+        "shapes": [
+          {
+            "bakedScaleX": 1.0,
+            "bakedScaleY": 1.0,
+            "bakedScaleZ": 1.0,
+            "halfExtents": [
+              2.0,
+              0.5,
+              2.0
+            ],
+            "offset": [
+              2.0,
+              0.5,
+              2.0
+            ],
+            "rotation": [
+              1.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "type": 0
+          }
+        ]
+      },
+      "7294468376066398399": null
     },
     {
-      "2477833447507440368": {
-        "prefabId": 6794845865704754424
-      }
+      "1254610073680810491": {
+        "material": 4805580789092568935,
+        "sizeX": 4.0,
+        "sizeY": 1.0,
+        "sizeZ": 4.0,
+        "type": 2
+      },
+      "1884906092559237059": {
+        "rotation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "translation": [
+          -57.0,
+          41.0,
+          -63.5
+        ]
+      },
+      "3048324656540157766": {
+        "name": "Platform 1"
+      },
+      "5210556776496121574": {
+        "folderHierarchyNames": [
+          "First Area",
+          ""
+        ]
+      },
+      "5740098829229280260": {
+        "enhancedInternalEdgeRemoval": false,
+        "friction": 0.5,
+        "layerOverride": 65535,
+        "mass": 1.0,
+        "motionQuality": 0,
+        "motionType": 0,
+        "restitution": 0.0,
+        "shapes": [
+          {
+            "bakedScaleX": 1.0,
+            "bakedScaleY": 1.0,
+            "bakedScaleZ": 1.0,
+            "halfExtents": [
+              2.0,
+              0.5,
+              2.0
+            ],
+            "offset": [
+              2.0,
+              0.5,
+              2.0
+            ],
+            "rotation": [
+              1.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "type": 0
+          }
+        ]
+      },
+      "7294468376066398399": null
     },
     {
-      "2477833447507440368": {
-        "prefabId": 6794845865704754424
-      }
+      "1254610073680810491": {
+        "material": 4805580789092568935,
+        "sizeX": 4.0,
+        "sizeY": 1.0,
+        "sizeZ": 4.0,
+        "type": 2
+      },
+      "1884906092559237059": {
+        "rotation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "translation": [
+          -48.5,
+          35.5,
+          -61.5
+        ]
+      },
+      "3048324656540157766": {
+        "name": "Platform 1"
+      },
+      "5210556776496121574": {
+        "folderHierarchyNames": [
+          "First Area",
+          ""
+        ]
+      },
+      "5740098829229280260": {
+        "enhancedInternalEdgeRemoval": false,
+        "friction": 0.5,
+        "layerOverride": 65535,
+        "mass": 1.0,
+        "motionQuality": 0,
+        "motionType": 0,
+        "restitution": 0.0,
+        "shapes": [
+          {
+            "bakedScaleX": 1.0,
+            "bakedScaleY": 1.0,
+            "bakedScaleZ": 1.0,
+            "halfExtents": [
+              2.0,
+              0.5,
+              2.0
+            ],
+            "offset": [
+              2.0,
+              0.5,
+              2.0
+            ],
+            "rotation": [
+              1.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "type": 0
+          }
+        ]
+      },
+      "7294468376066398399": null
     },
     {
-      "2477833447507440368": {
-        "prefabId": 6794845865704754424
-      }
+      "1254610073680810491": {
+        "material": 4805580789092568935,
+        "sizeX": 4.0,
+        "sizeY": 1.0,
+        "sizeZ": 4.0,
+        "type": 2
+      },
+      "1884906092559237059": {
+        "rotation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "translation": [
+          -47.0,
+          31.0,
+          -46.5
+        ]
+      },
+      "3048324656540157766": {
+        "name": "Platform 1"
+      },
+      "5210556776496121574": {
+        "folderHierarchyNames": [
+          "First Area",
+          ""
+        ]
+      },
+      "5740098829229280260": {
+        "enhancedInternalEdgeRemoval": false,
+        "friction": 0.5,
+        "layerOverride": 65535,
+        "mass": 1.0,
+        "motionQuality": 0,
+        "motionType": 0,
+        "restitution": 0.0,
+        "shapes": [
+          {
+            "bakedScaleX": 1.0,
+            "bakedScaleY": 1.0,
+            "bakedScaleZ": 1.0,
+            "halfExtents": [
+              2.0,
+              0.5,
+              2.0
+            ],
+            "offset": [
+              2.0,
+              0.5,
+              2.0
+            ],
+            "rotation": [
+              1.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "type": 0
+          }
+        ]
+      },
+      "7294468376066398399": null
     },
     {
-      "2477833447507440368": {
-        "prefabId": 6794845865704754424
-      }
+      "1254610073680810491": {
+        "material": 4805580789092568935,
+        "sizeX": 4.0,
+        "sizeY": 1.0,
+        "sizeZ": 4.0,
+        "type": 2
+      },
+      "1884906092559237059": {
+        "rotation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "translation": [
+          -51.5,
+          33.5,
+          -53.0
+        ]
+      },
+      "3048324656540157766": {
+        "name": "Platform 1"
+      },
+      "5210556776496121574": {
+        "folderHierarchyNames": [
+          "First Area",
+          ""
+        ]
+      },
+      "5740098829229280260": {
+        "enhancedInternalEdgeRemoval": false,
+        "friction": 0.5,
+        "layerOverride": 65535,
+        "mass": 1.0,
+        "motionQuality": 0,
+        "motionType": 0,
+        "restitution": 0.0,
+        "shapes": [
+          {
+            "bakedScaleX": 1.0,
+            "bakedScaleY": 1.0,
+            "bakedScaleZ": 1.0,
+            "halfExtents": [
+              2.0,
+              0.5,
+              2.0
+            ],
+            "offset": [
+              2.0,
+              0.5,
+              2.0
+            ],
+            "rotation": [
+              1.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "type": 0
+          }
+        ]
+      },
+      "7294468376066398399": null
     },
     {
-      "2477833447507440368": {
-        "prefabId": 6794845865704754424
-      }
+      "1254610073680810491": {
+        "material": 4805580789092568935,
+        "sizeX": 5.0,
+        "sizeY": 1.0,
+        "sizeZ": 7.0,
+        "type": 2
+      },
+      "1884906092559237059": {
+        "rotation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "translation": [
+          -43.5,
+          16.5,
+          -6.0
+        ]
+      },
+      "3048324656540157766": {
+        "name": "Platform 2"
+      },
+      "5210556776496121574": {
+        "folderHierarchyNames": [
+          "Second Area",
+          ""
+        ]
+      },
+      "5740098829229280260": {
+        "enhancedInternalEdgeRemoval": false,
+        "friction": 0.5,
+        "layerOverride": 65535,
+        "mass": 1.0,
+        "motionQuality": 0,
+        "motionType": 0,
+        "restitution": 0.0,
+        "shapes": [
+          {
+            "bakedScaleX": 1.0,
+            "bakedScaleY": 1.0,
+            "bakedScaleZ": 1.0,
+            "halfExtents": [
+              2.5,
+              0.5,
+              2.5
+            ],
+            "offset": [
+              2.5,
+              0.5,
+              2.5
+            ],
+            "rotation": [
+              1.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "type": 0
+          }
+        ]
+      },
+      "7294468376066398399": null
     },
     {
-      "2477833447507440368": {
-        "prefabId": 6794845865704754424
-      }
+      "1254610073680810491": {
+        "material": 4805580789092568935,
+        "sizeX": 4.0,
+        "sizeY": 1.0,
+        "sizeZ": 4.0,
+        "type": 2
+      },
+      "1884906092559237059": {
+        "rotation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "translation": [
+          -59.0,
+          38.0,
+          -56.5
+        ]
+      },
+      "3048324656540157766": {
+        "name": "Platform 1"
+      },
+      "5210556776496121574": {
+        "folderHierarchyNames": [
+          "First Area",
+          ""
+        ]
+      },
+      "5740098829229280260": {
+        "enhancedInternalEdgeRemoval": false,
+        "friction": 0.5,
+        "layerOverride": 65535,
+        "mass": 1.0,
+        "motionQuality": 0,
+        "motionType": 0,
+        "restitution": 0.0,
+        "shapes": [
+          {
+            "bakedScaleX": 1.0,
+            "bakedScaleY": 1.0,
+            "bakedScaleZ": 1.0,
+            "halfExtents": [
+              2.0,
+              0.5,
+              2.0
+            ],
+            "offset": [
+              2.0,
+              0.5,
+              2.0
+            ],
+            "rotation": [
+              1.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "type": 0
+          }
+        ]
+      },
+      "7294468376066398399": null
     },
     {
-      "2477833447507440368": {
-        "prefabId": 6794845865704754424
-      }
+      "1254610073680810491": {
+        "material": 4805580789092568935,
+        "sizeX": 5.0,
+        "sizeY": 1.0,
+        "sizeZ": 5.0,
+        "type": 2
+      },
+      "1884906092559237059": {
+        "rotation": [
+          0.3829096257686615,
+          0.0,
+          -0.0,
+          -0.9237858057022095
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "translation": [
+          -37.0,
+          21.0,
+          -12.0
+        ]
+      },
+      "3048324656540157766": {
+        "name": "Slide1"
+      },
+      "5210556776496121574": {
+        "folderHierarchyNames": [
+          "Second Area",
+          ""
+        ]
+      },
+      "5740098829229280260": {
+        "enhancedInternalEdgeRemoval": false,
+        "friction": 0.5,
+        "layerOverride": 65535,
+        "mass": 1.0,
+        "motionQuality": 0,
+        "motionType": 0,
+        "restitution": 0.0,
+        "shapes": [
+          {
+            "bakedScaleX": 1.0,
+            "bakedScaleY": 1.0,
+            "bakedScaleZ": 1.0,
+            "halfExtents": [
+              2.5,
+              0.5,
+              2.5
+            ],
+            "offset": [
+              2.5,
+              0.5,
+              2.5
+            ],
+            "rotation": [
+              1.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "type": 0
+          }
+        ]
+      },
+      "7294468376066398399": null
     },
     {
-      "2477833447507440368": {
-        "prefabId": 6794845865704754424
-      }
+      "1254610073680810491": {
+        "material": 4805580789092568935,
+        "sizeX": 5.0,
+        "sizeY": 1.0,
+        "sizeZ": 5.0,
+        "type": 2
+      },
+      "1884906092559237059": {
+        "rotation": [
+          0.3829096257686615,
+          0.0,
+          -0.0,
+          -0.9237858057022095
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "translation": [
+          -37.5,
+          23.0,
+          -22.0
+        ]
+      },
+      "3048324656540157766": {
+        "name": "Slide1"
+      },
+      "5210556776496121574": {
+        "folderHierarchyNames": [
+          "Second Area",
+          ""
+        ]
+      },
+      "5740098829229280260": {
+        "enhancedInternalEdgeRemoval": false,
+        "friction": 0.5,
+        "layerOverride": 65535,
+        "mass": 1.0,
+        "motionQuality": 0,
+        "motionType": 0,
+        "restitution": 0.0,
+        "shapes": [
+          {
+            "bakedScaleX": 1.0,
+            "bakedScaleY": 1.0,
+            "bakedScaleZ": 1.0,
+            "halfExtents": [
+              2.5,
+              0.5,
+              2.5
+            ],
+            "offset": [
+              2.5,
+              0.5,
+              2.5
+            ],
+            "rotation": [
+              1.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "type": 0
+          }
+        ]
+      },
+      "7294468376066398399": null
     },
     {
       "1254610073680810491": {
@@ -1246,12 +2507,19 @@ end_header
       }
     },
     {
+      "1254610073680810491": {
+        "material": 4805580789092568935,
+        "sizeX": 5.0,
+        "sizeY": 1.0,
+        "sizeZ": 5.0,
+        "type": 2
+      },
       "1884906092559237059": {
         "rotation": [
-          1.0,
+          0.9240663647651672,
           0.0,
-          0.0,
-          0.0
+          -0.0,
+          -0.382232129573822
         ],
         "scale": [
           1.0,
@@ -1259,44 +2527,54 @@ end_header
           1.0
         ],
         "translation": [
-          -41.0,
-          46.5,
-          -77.0
+          -45.0,
+          23.0,
+          -27.0
         ]
       },
       "3048324656540157766": {
-        "name": "[PLAYER] Spawn0"
+        "name": "Slide3"
       },
       "5210556776496121574": {
         "folderHierarchyNames": [
-          "First Area",
+          "Second Area",
           ""
         ]
       },
-      "7249683205650136767": {
-        "offset": [
-          0.0,
-          0.0,
-          0.0
-        ],
-        "priority": 100
+      "5740098829229280260": {
+        "enhancedInternalEdgeRemoval": false,
+        "friction": 0.5,
+        "layerOverride": 65535,
+        "mass": 1.0,
+        "motionQuality": 0,
+        "motionType": 0,
+        "restitution": 0.0,
+        "shapes": [
+          {
+            "bakedScaleX": 1.0,
+            "bakedScaleY": 1.0,
+            "bakedScaleZ": 1.0,
+            "halfExtents": [
+              2.5,
+              0.5,
+              2.5
+            ],
+            "offset": [
+              2.5,
+              0.5,
+              2.5
+            ],
+            "rotation": [
+              1.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "type": 0
+          }
+        ]
       },
-      "7294468376066398399": null,
-      "9701894349906914118": {
-        "color": [
-          0.0,
-          1.0,
-          0.0,
-          1.0
-        ],
-        "extents": [
-          0.5,
-          0.5,
-          0.5
-        ],
-        "lineWidth": 0.05000000074505806,
-        "shape": 1
-      }
+      "7294468376066398399": null
     },
     {
       "1254610073680810491": {
@@ -1762,9 +3040,9 @@ end_header
     {
       "1254610073680810491": {
         "material": 4805580789092568935,
-        "sizeX": 4.0,
+        "sizeX": 12.0,
         "sizeY": 1.0,
-        "sizeZ": 4.0,
+        "sizeZ": 12.0,
         "type": 2
       },
       "1884906092559237059": {
@@ -1781,8 +3059,8 @@ end_header
         ],
         "translation": [
           -47.0,
-          40.0,
-          -70.0
+          43.5,
+          -86.0
         ]
       },
       "3048324656540157766": {
@@ -1808,14 +3086,14 @@ end_header
             "bakedScaleY": 1.0,
             "bakedScaleZ": 1.0,
             "halfExtents": [
-              2.0,
+              6.0,
               0.5,
-              2.0
+              6.0
             ],
             "offset": [
-              2.0,
+              6.0,
               0.5,
-              2.0
+              6.0
             ],
             "rotation": [
               1.0,
@@ -2040,6 +3318,160 @@ end_header
       "7294468376066398399": null
     },
     {
+      "1884906092559237059": {
+        "rotation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "translation": [
+          -43.0,
+          45.25,
+          -79.25
+        ]
+      },
+      "3048324656540157766": {
+        "name": "New Entity 1"
+      },
+      "5210556776496121574": {
+        "folderHierarchyNames": [
+          "First Area",
+          ""
+        ]
+      },
+      "7249683205650136767": {
+        "offset": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "priority": 1
+      },
+      "7294468376066398399": null,
+      "9701894349906914118": {
+        "color": [
+          0.0,
+          1.0,
+          0.0,
+          1.0
+        ],
+        "extents": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "lineWidth": 0.05000000074505806,
+        "shape": 1
+      }
+    },
+    {
+      "1254610073680810491": {
+        "material": 4805580789092568935,
+        "sizeX": 4.0,
+        "sizeY": 1.0,
+        "sizeZ": 4.0,
+        "type": 2
+      },
+      "1884906092559237059": {
+        "rotation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "translation": [
+          -47.25,
+          41.5,
+          -71.5
+        ]
+      },
+      "3048324656540157766": {
+        "name": "Platform 1"
+      },
+      "5210556776496121574": {
+        "folderHierarchyNames": [
+          "First Area",
+          ""
+        ]
+      },
+      "5740098829229280260": {
+        "enhancedInternalEdgeRemoval": false,
+        "friction": 0.5,
+        "layerOverride": 65535,
+        "mass": 1.0,
+        "motionQuality": 0,
+        "motionType": 0,
+        "restitution": 0.0,
+        "shapes": [
+          {
+            "bakedScaleX": 1.0,
+            "bakedScaleY": 1.0,
+            "bakedScaleZ": 1.0,
+            "halfExtents": [
+              2.0,
+              0.5,
+              2.0
+            ],
+            "offset": [
+              2.0,
+              0.5,
+              2.0
+            ],
+            "rotation": [
+              1.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "type": 0
+          }
+        ]
+      },
+      "7294468376066398399": null
+    },
+    {
+      "1254610073680810491": {
+        "bCapped": true,
+        "height": 1.5,
+        "material": 4805580789092568935,
+        "radius": 0.5,
+        "slices": 16,
+        "type": 3
+      },
+      "1884906092559237059": {
+        "rotation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "translation": [
+          -46.0,
+          45.5,
+          -85.0
+        ]
+      },
+      "2477833447507440368": {
+        "prefabId": 16907205951425301799
+      }
+    },
+    {
       "1254610073680810491": {
         "material": 4805580789092568935,
         "sizeX": 4.0,
@@ -2111,566 +3543,6 @@ end_header
     },
     {
       "1254610073680810491": {
-        "material": 4805580789092568935,
-        "sizeX": 4.0,
-        "sizeY": 1.0,
-        "sizeZ": 4.0,
-        "type": 2
-      },
-      "1884906092559237059": {
-        "rotation": [
-          1.0,
-          0.0,
-          0.0,
-          0.0
-        ],
-        "scale": [
-          1.0,
-          1.0,
-          1.0
-        ],
-        "translation": [
-          -48.5,
-          35.5,
-          -61.5
-        ]
-      },
-      "3048324656540157766": {
-        "name": "Platform 1"
-      },
-      "5210556776496121574": {
-        "folderHierarchyNames": [
-          "First Area",
-          ""
-        ]
-      },
-      "5740098829229280260": {
-        "enhancedInternalEdgeRemoval": false,
-        "friction": 0.5,
-        "layerOverride": 65535,
-        "mass": 1.0,
-        "motionQuality": 0,
-        "motionType": 0,
-        "restitution": 0.0,
-        "shapes": [
-          {
-            "bakedScaleX": 1.0,
-            "bakedScaleY": 1.0,
-            "bakedScaleZ": 1.0,
-            "halfExtents": [
-              2.0,
-              0.5,
-              2.0
-            ],
-            "offset": [
-              2.0,
-              0.5,
-              2.0
-            ],
-            "rotation": [
-              1.0,
-              0.0,
-              0.0,
-              0.0
-            ],
-            "type": 0
-          }
-        ]
-      },
-      "7294468376066398399": null
-    },
-    {
-      "1254610073680810491": {
-        "material": 4805580789092568935,
-        "sizeX": 4.0,
-        "sizeY": 1.0,
-        "sizeZ": 4.0,
-        "type": 2
-      },
-      "1884906092559237059": {
-        "rotation": [
-          1.0,
-          0.0,
-          0.0,
-          0.0
-        ],
-        "scale": [
-          1.0,
-          1.0,
-          1.0
-        ],
-        "translation": [
-          -37.0,
-          38.0,
-          -60.0
-        ]
-      },
-      "3048324656540157766": {
-        "name": "Platform 1"
-      },
-      "5210556776496121574": {
-        "folderHierarchyNames": [
-          "First Area",
-          ""
-        ]
-      },
-      "5740098829229280260": {
-        "enhancedInternalEdgeRemoval": false,
-        "friction": 0.5,
-        "layerOverride": 65535,
-        "mass": 1.0,
-        "motionQuality": 0,
-        "motionType": 0,
-        "restitution": 0.0,
-        "shapes": [
-          {
-            "bakedScaleX": 1.0,
-            "bakedScaleY": 1.0,
-            "bakedScaleZ": 1.0,
-            "halfExtents": [
-              2.0,
-              0.5,
-              2.0
-            ],
-            "offset": [
-              2.0,
-              0.5,
-              2.0
-            ],
-            "rotation": [
-              1.0,
-              0.0,
-              0.0,
-              0.0
-            ],
-            "type": 0
-          }
-        ]
-      },
-      "7294468376066398399": null
-    },
-    {
-      "1254610073680810491": {
-        "material": 4805580789092568935,
-        "sizeX": 4.0,
-        "sizeY": 1.0,
-        "sizeZ": 4.0,
-        "type": 2
-      },
-      "1884906092559237059": {
-        "rotation": [
-          1.0,
-          0.0,
-          0.0,
-          0.0
-        ],
-        "scale": [
-          1.0,
-          1.0,
-          1.0
-        ],
-        "translation": [
-          -43.0,
-          33.5,
-          -56.0
-        ]
-      },
-      "3048324656540157766": {
-        "name": "Platform 1"
-      },
-      "5210556776496121574": {
-        "folderHierarchyNames": [
-          "First Area",
-          ""
-        ]
-      },
-      "5740098829229280260": {
-        "enhancedInternalEdgeRemoval": false,
-        "friction": 0.5,
-        "layerOverride": 65535,
-        "mass": 1.0,
-        "motionQuality": 0,
-        "motionType": 0,
-        "restitution": 0.0,
-        "shapes": [
-          {
-            "bakedScaleX": 1.0,
-            "bakedScaleY": 1.0,
-            "bakedScaleZ": 1.0,
-            "halfExtents": [
-              2.0,
-              0.5,
-              2.0
-            ],
-            "offset": [
-              2.0,
-              0.5,
-              2.0
-            ],
-            "rotation": [
-              1.0,
-              0.0,
-              0.0,
-              0.0
-            ],
-            "type": 0
-          }
-        ]
-      },
-      "7294468376066398399": null
-    },
-    {
-      "1254610073680810491": {
-        "material": 4805580789092568935,
-        "sizeX": 4.0,
-        "sizeY": 1.0,
-        "sizeZ": 4.0,
-        "type": 2
-      },
-      "1884906092559237059": {
-        "rotation": [
-          1.0,
-          0.0,
-          0.0,
-          0.0
-        ],
-        "scale": [
-          1.0,
-          1.0,
-          1.0
-        ],
-        "translation": [
-          -34.0,
-          33.5,
-          -54.5
-        ]
-      },
-      "3048324656540157766": {
-        "name": "Platform 1"
-      },
-      "5210556776496121574": {
-        "folderHierarchyNames": [
-          "First Area",
-          ""
-        ]
-      },
-      "5740098829229280260": {
-        "enhancedInternalEdgeRemoval": false,
-        "friction": 0.5,
-        "layerOverride": 65535,
-        "mass": 1.0,
-        "motionQuality": 0,
-        "motionType": 0,
-        "restitution": 0.0,
-        "shapes": [
-          {
-            "bakedScaleX": 1.0,
-            "bakedScaleY": 1.0,
-            "bakedScaleZ": 1.0,
-            "halfExtents": [
-              2.0,
-              0.5,
-              2.0
-            ],
-            "offset": [
-              2.0,
-              0.5,
-              2.0
-            ],
-            "rotation": [
-              1.0,
-              0.0,
-              0.0,
-              0.0
-            ],
-            "type": 0
-          }
-        ]
-      },
-      "7294468376066398399": null
-    },
-    {
-      "1254610073680810491": {
-        "material": 4805580789092568935,
-        "sizeX": 4.0,
-        "sizeY": 1.0,
-        "sizeZ": 4.0,
-        "type": 2
-      },
-      "1884906092559237059": {
-        "rotation": [
-          1.0,
-          0.0,
-          0.0,
-          0.0
-        ],
-        "scale": [
-          1.0,
-          1.0,
-          1.0
-        ],
-        "translation": [
-          -37.5,
-          30.5,
-          -47.0
-        ]
-      },
-      "3048324656540157766": {
-        "name": "Platform 1"
-      },
-      "5210556776496121574": {
-        "folderHierarchyNames": [
-          "First Area",
-          ""
-        ]
-      },
-      "5740098829229280260": {
-        "enhancedInternalEdgeRemoval": false,
-        "friction": 0.5,
-        "layerOverride": 65535,
-        "mass": 1.0,
-        "motionQuality": 0,
-        "motionType": 0,
-        "restitution": 0.0,
-        "shapes": [
-          {
-            "bakedScaleX": 1.0,
-            "bakedScaleY": 1.0,
-            "bakedScaleZ": 1.0,
-            "halfExtents": [
-              2.0,
-              0.5,
-              2.0
-            ],
-            "offset": [
-              2.0,
-              0.5,
-              2.0
-            ],
-            "rotation": [
-              1.0,
-              0.0,
-              0.0,
-              0.0
-            ],
-            "type": 0
-          }
-        ]
-      },
-      "7294468376066398399": null
-    },
-    {
-      "1254610073680810491": {
-        "material": 4805580789092568935,
-        "sizeX": 4.0,
-        "sizeY": 1.0,
-        "sizeZ": 4.0,
-        "type": 2
-      },
-      "1884906092559237059": {
-        "rotation": [
-          1.0,
-          0.0,
-          0.0,
-          0.0
-        ],
-        "scale": [
-          1.0,
-          1.0,
-          1.0
-        ],
-        "translation": [
-          -51.5,
-          33.5,
-          -53.0
-        ]
-      },
-      "3048324656540157766": {
-        "name": "Platform 1"
-      },
-      "5210556776496121574": {
-        "folderHierarchyNames": [
-          "First Area",
-          ""
-        ]
-      },
-      "5740098829229280260": {
-        "enhancedInternalEdgeRemoval": false,
-        "friction": 0.5,
-        "layerOverride": 65535,
-        "mass": 1.0,
-        "motionQuality": 0,
-        "motionType": 0,
-        "restitution": 0.0,
-        "shapes": [
-          {
-            "bakedScaleX": 1.0,
-            "bakedScaleY": 1.0,
-            "bakedScaleZ": 1.0,
-            "halfExtents": [
-              2.0,
-              0.5,
-              2.0
-            ],
-            "offset": [
-              2.0,
-              0.5,
-              2.0
-            ],
-            "rotation": [
-              1.0,
-              0.0,
-              0.0,
-              0.0
-            ],
-            "type": 0
-          }
-        ]
-      },
-      "7294468376066398399": null
-    },
-    {
-      "1254610073680810491": {
-        "material": 4805580789092568935,
-        "sizeX": 4.0,
-        "sizeY": 1.0,
-        "sizeZ": 4.0,
-        "type": 2
-      },
-      "1884906092559237059": {
-        "rotation": [
-          1.0,
-          0.0,
-          0.0,
-          0.0
-        ],
-        "scale": [
-          1.0,
-          1.0,
-          1.0
-        ],
-        "translation": [
-          -47.0,
-          31.0,
-          -46.5
-        ]
-      },
-      "3048324656540157766": {
-        "name": "Platform 1"
-      },
-      "5210556776496121574": {
-        "folderHierarchyNames": [
-          "First Area",
-          ""
-        ]
-      },
-      "5740098829229280260": {
-        "enhancedInternalEdgeRemoval": false,
-        "friction": 0.5,
-        "layerOverride": 65535,
-        "mass": 1.0,
-        "motionQuality": 0,
-        "motionType": 0,
-        "restitution": 0.0,
-        "shapes": [
-          {
-            "bakedScaleX": 1.0,
-            "bakedScaleY": 1.0,
-            "bakedScaleZ": 1.0,
-            "halfExtents": [
-              2.0,
-              0.5,
-              2.0
-            ],
-            "offset": [
-              2.0,
-              0.5,
-              2.0
-            ],
-            "rotation": [
-              1.0,
-              0.0,
-              0.0,
-              0.0
-            ],
-            "type": 0
-          }
-        ]
-      },
-      "7294468376066398399": null
-    },
-    {
-      "1254610073680810491": {
-        "material": 4805580789092568935,
-        "sizeX": 5.0,
-        "sizeY": 1.0,
-        "sizeZ": 7.0,
-        "type": 2
-      },
-      "1884906092559237059": {
-        "rotation": [
-          1.0,
-          0.0,
-          0.0,
-          0.0
-        ],
-        "scale": [
-          1.0,
-          1.0,
-          1.0
-        ],
-        "translation": [
-          -43.5,
-          16.5,
-          -6.0
-        ]
-      },
-      "3048324656540157766": {
-        "name": "Platform 2"
-      },
-      "5210556776496121574": {
-        "folderHierarchyNames": [
-          "Second Area",
-          ""
-        ]
-      },
-      "5740098829229280260": {
-        "enhancedInternalEdgeRemoval": false,
-        "friction": 0.5,
-        "layerOverride": 65535,
-        "mass": 1.0,
-        "motionQuality": 0,
-        "motionType": 0,
-        "restitution": 0.0,
-        "shapes": [
-          {
-            "bakedScaleX": 1.0,
-            "bakedScaleY": 1.0,
-            "bakedScaleZ": 1.0,
-            "halfExtents": [
-              2.5,
-              0.5,
-              2.5
-            ],
-            "offset": [
-              2.5,
-              0.5,
-              2.5
-            ],
-            "rotation": [
-              1.0,
-              0.0,
-              0.0,
-              0.0
-            ],
-            "type": 0
-          }
-        ]
-      },
-      "7294468376066398399": null
-    },
-    {
-      "1254610073680810491": {
         "bCapped": true,
         "height": 1.5,
         "material": 4805580789092568935,
@@ -2691,1172 +3563,14 @@ end_header
           1.0
         ],
         "translation": [
-          -51.25,
-          35.25,
-          -49.5
+          -45.5,
+          45.5,
+          -84.0
         ]
       },
-      "3048324656540157766": {
-        "name": "Barrel"
-      },
-      "5210556776496121574": {
-        "folderHierarchyNames": [
-          "First Area",
-          ""
-        ]
-      },
-      "5740098829229280260": {
-        "enhancedInternalEdgeRemoval": false,
-        "friction": 0.5,
-        "layerOverride": 65535,
-        "mass": 10.0,
-        "motionQuality": 0,
-        "motionType": 0,
-        "restitution": 0.30000001192092896,
-        "shapes": [
-          {
-            "bakedScaleX": 1.0,
-            "bakedScaleY": 1.0,
-            "bakedScaleZ": 1.0,
-            "halfHeight": 0.25,
-            "offset": [
-              0.0,
-              0.0,
-              0.0
-            ],
-            "radius": 0.5,
-            "rotation": [
-              1.0,
-              0.0,
-              0.0,
-              0.0
-            ],
-            "type": 2
-          }
-        ]
-      },
-      "7294468376066398399": null
-    },
-    {
-      "1254610073680810491": {
-        "bCapped": true,
-        "height": 1.5,
-        "material": 4805580789092568935,
-        "radius": 0.5,
-        "slices": 16,
-        "type": 3
-      },
-      "1884906092559237059": {
-        "rotation": [
-          1.0,
-          0.0,
-          0.0,
-          0.0
-        ],
-        "scale": [
-          1.0,
-          1.0,
-          1.0
-        ],
-        "translation": [
-          -50.25,
-          35.25,
-          -49.75
-        ]
-      },
-      "3048324656540157766": {
-        "name": "Barrel"
-      },
-      "5210556776496121574": {
-        "folderHierarchyNames": [
-          "First Area",
-          ""
-        ]
-      },
-      "5740098829229280260": {
-        "enhancedInternalEdgeRemoval": false,
-        "friction": 0.5,
-        "layerOverride": 65535,
-        "mass": 10.0,
-        "motionQuality": 0,
-        "motionType": 0,
-        "restitution": 0.30000001192092896,
-        "shapes": [
-          {
-            "bakedScaleX": 1.0,
-            "bakedScaleY": 1.0,
-            "bakedScaleZ": 1.0,
-            "halfHeight": 0.25,
-            "offset": [
-              0.0,
-              0.0,
-              0.0
-            ],
-            "radius": 0.5,
-            "rotation": [
-              1.0,
-              0.0,
-              0.0,
-              0.0
-            ],
-            "type": 2
-          }
-        ]
-      },
-      "7294468376066398399": null
-    },
-    {
-      "1254610073680810491": {
-        "bCapped": true,
-        "height": 1.5,
-        "material": 4805580789092568935,
-        "radius": 0.5,
-        "slices": 16,
-        "type": 3
-      },
-      "1884906092559237059": {
-        "rotation": [
-          1.0,
-          0.0,
-          0.0,
-          0.0
-        ],
-        "scale": [
-          1.0,
-          1.0,
-          1.0
-        ],
-        "translation": [
-          -51.0,
-          35.25,
-          -50.5
-        ]
-      },
-      "3048324656540157766": {
-        "name": "Barrel"
-      },
-      "5210556776496121574": {
-        "folderHierarchyNames": [
-          "First Area",
-          ""
-        ]
-      },
-      "5740098829229280260": {
-        "enhancedInternalEdgeRemoval": false,
-        "friction": 0.5,
-        "layerOverride": 65535,
-        "mass": 10.0,
-        "motionQuality": 0,
-        "motionType": 0,
-        "restitution": 0.30000001192092896,
-        "shapes": [
-          {
-            "bakedScaleX": 1.0,
-            "bakedScaleY": 1.0,
-            "bakedScaleZ": 1.0,
-            "halfHeight": 0.25,
-            "offset": [
-              0.0,
-              0.0,
-              0.0
-            ],
-            "radius": 0.5,
-            "rotation": [
-              1.0,
-              0.0,
-              0.0,
-              0.0
-            ],
-            "type": 2
-          }
-        ]
-      },
-      "7294468376066398399": null
-    },
-    {
-      "1254610073680810491": {
-        "material": 4805580789092568935,
-        "sizeX": 4.0,
-        "sizeY": 1.0,
-        "sizeZ": 4.0,
-        "type": 2
-      },
-      "1884906092559237059": {
-        "rotation": [
-          1.0,
-          0.0,
-          0.0,
-          0.0
-        ],
-        "scale": [
-          1.0,
-          1.0,
-          1.0
-        ],
-        "translation": [
-          -57.0,
-          41.0,
-          -63.5
-        ]
-      },
-      "3048324656540157766": {
-        "name": "Platform 1"
-      },
-      "5210556776496121574": {
-        "folderHierarchyNames": [
-          "First Area",
-          ""
-        ]
-      },
-      "5740098829229280260": {
-        "enhancedInternalEdgeRemoval": false,
-        "friction": 0.5,
-        "layerOverride": 65535,
-        "mass": 1.0,
-        "motionQuality": 0,
-        "motionType": 0,
-        "restitution": 0.0,
-        "shapes": [
-          {
-            "bakedScaleX": 1.0,
-            "bakedScaleY": 1.0,
-            "bakedScaleZ": 1.0,
-            "halfExtents": [
-              2.0,
-              0.5,
-              2.0
-            ],
-            "offset": [
-              2.0,
-              0.5,
-              2.0
-            ],
-            "rotation": [
-              1.0,
-              0.0,
-              0.0,
-              0.0
-            ],
-            "type": 0
-          }
-        ]
-      },
-      "7294468376066398399": null
-    },
-    {
-      "1254610073680810491": {
-        "material": 4805580789092568935,
-        "sizeX": 4.0,
-        "sizeY": 1.0,
-        "sizeZ": 4.0,
-        "type": 2
-      },
-      "1884906092559237059": {
-        "rotation": [
-          1.0,
-          0.0,
-          0.0,
-          0.0
-        ],
-        "scale": [
-          1.0,
-          1.0,
-          1.0
-        ],
-        "translation": [
-          -53.5,
-          40.0,
-          -71.0
-        ]
-      },
-      "3048324656540157766": {
-        "name": "Platform 1"
-      },
-      "5210556776496121574": {
-        "folderHierarchyNames": [
-          "First Area",
-          ""
-        ]
-      },
-      "5740098829229280260": {
-        "enhancedInternalEdgeRemoval": false,
-        "friction": 0.5,
-        "layerOverride": 65535,
-        "mass": 1.0,
-        "motionQuality": 0,
-        "motionType": 0,
-        "restitution": 0.0,
-        "shapes": [
-          {
-            "bakedScaleX": 1.0,
-            "bakedScaleY": 1.0,
-            "bakedScaleZ": 1.0,
-            "halfExtents": [
-              2.0,
-              0.5,
-              2.0
-            ],
-            "offset": [
-              2.0,
-              0.5,
-              2.0
-            ],
-            "rotation": [
-              1.0,
-              0.0,
-              0.0,
-              0.0
-            ],
-            "type": 0
-          }
-        ]
-      },
-      "7294468376066398399": null
-    },
-    {
-      "1254610073680810491": {
-        "material": 4805580789092568935,
-        "sizeX": 4.0,
-        "sizeY": 1.0,
-        "sizeZ": 4.0,
-        "type": 2
-      },
-      "1884906092559237059": {
-        "rotation": [
-          1.0,
-          0.0,
-          0.0,
-          0.0
-        ],
-        "scale": [
-          1.0,
-          1.0,
-          1.0
-        ],
-        "translation": [
-          -29.5,
-          39.0,
-          -69.0
-        ]
-      },
-      "3048324656540157766": {
-        "name": "Platform 1"
-      },
-      "5210556776496121574": {
-        "folderHierarchyNames": [
-          "First Area",
-          ""
-        ]
-      },
-      "5740098829229280260": {
-        "enhancedInternalEdgeRemoval": false,
-        "friction": 0.5,
-        "layerOverride": 65535,
-        "mass": 1.0,
-        "motionQuality": 0,
-        "motionType": 0,
-        "restitution": 0.0,
-        "shapes": [
-          {
-            "bakedScaleX": 1.0,
-            "bakedScaleY": 1.0,
-            "bakedScaleZ": 1.0,
-            "halfExtents": [
-              2.0,
-              0.5,
-              2.0
-            ],
-            "offset": [
-              2.0,
-              0.5,
-              2.0
-            ],
-            "rotation": [
-              1.0,
-              0.0,
-              0.0,
-              0.0
-            ],
-            "type": 0
-          }
-        ]
-      },
-      "7294468376066398399": null
-    },
-    {
       "2477833447507440368": {
-        "prefabId": 6794845865704754424
+        "prefabId": 16907205951425301799
       }
-    },
-    {
-      "1254610073680810491": {
-        "material": 4805580789092568935,
-        "sizeX": 4.0,
-        "sizeY": 1.0,
-        "sizeZ": 4.0,
-        "type": 2
-      },
-      "1884906092559237059": {
-        "rotation": [
-          1.0,
-          0.0,
-          0.0,
-          0.0
-        ],
-        "scale": [
-          1.0,
-          1.0,
-          1.0
-        ],
-        "translation": [
-          -43.0,
-          39.0,
-          -79.0
-        ]
-      },
-      "3048324656540157766": {
-        "name": "Platform 1"
-      },
-      "5210556776496121574": {
-        "folderHierarchyNames": [
-          "First Area",
-          ""
-        ]
-      },
-      "5740098829229280260": {
-        "enhancedInternalEdgeRemoval": false,
-        "friction": 0.5,
-        "layerOverride": 65535,
-        "mass": 1.0,
-        "motionQuality": 0,
-        "motionType": 0,
-        "restitution": 0.0,
-        "shapes": [
-          {
-            "bakedScaleX": 1.0,
-            "bakedScaleY": 1.0,
-            "bakedScaleZ": 1.0,
-            "halfExtents": [
-              2.0,
-              0.5,
-              2.0
-            ],
-            "offset": [
-              2.0,
-              0.5,
-              2.0
-            ],
-            "rotation": [
-              1.0,
-              0.0,
-              0.0,
-              0.0
-            ],
-            "type": 0
-          }
-        ]
-      },
-      "7294468376066398399": null
-    },
-    {
-      "1254610073680810491": {
-        "material": 4805580789092568935,
-        "sizeX": 4.0,
-        "sizeY": 1.0,
-        "sizeZ": 4.0,
-        "type": 2
-      },
-      "1884906092559237059": {
-        "rotation": [
-          1.0,
-          0.0,
-          0.0,
-          0.0
-        ],
-        "scale": [
-          1.0,
-          1.0,
-          1.0
-        ],
-        "translation": [
-          -59.0,
-          38.0,
-          -56.5
-        ]
-      },
-      "3048324656540157766": {
-        "name": "Platform 1"
-      },
-      "5210556776496121574": {
-        "folderHierarchyNames": [
-          "First Area",
-          ""
-        ]
-      },
-      "5740098829229280260": {
-        "enhancedInternalEdgeRemoval": false,
-        "friction": 0.5,
-        "layerOverride": 65535,
-        "mass": 1.0,
-        "motionQuality": 0,
-        "motionType": 0,
-        "restitution": 0.0,
-        "shapes": [
-          {
-            "bakedScaleX": 1.0,
-            "bakedScaleY": 1.0,
-            "bakedScaleZ": 1.0,
-            "halfExtents": [
-              2.0,
-              0.5,
-              2.0
-            ],
-            "offset": [
-              2.0,
-              0.5,
-              2.0
-            ],
-            "rotation": [
-              1.0,
-              0.0,
-              0.0,
-              0.0
-            ],
-            "type": 0
-          }
-        ]
-      },
-      "7294468376066398399": null
-    },
-    {
-      "1254610073680810491": {
-        "material": 4805580789092568935,
-        "sizeX": 4.0,
-        "sizeY": 1.0,
-        "sizeZ": 4.0,
-        "type": 2
-      },
-      "1884906092559237059": {
-        "rotation": [
-          1.0,
-          0.0,
-          0.0,
-          0.0
-        ],
-        "scale": [
-          1.0,
-          1.0,
-          1.0
-        ],
-        "translation": [
-          -55.5,
-          31.5,
-          -63.0
-        ]
-      },
-      "3048324656540157766": {
-        "name": "Platform 1"
-      },
-      "5210556776496121574": {
-        "folderHierarchyNames": [
-          "First Area",
-          ""
-        ]
-      },
-      "5740098829229280260": {
-        "enhancedInternalEdgeRemoval": false,
-        "friction": 0.5,
-        "layerOverride": 65535,
-        "mass": 1.0,
-        "motionQuality": 0,
-        "motionType": 0,
-        "restitution": 0.0,
-        "shapes": [
-          {
-            "bakedScaleX": 1.0,
-            "bakedScaleY": 1.0,
-            "bakedScaleZ": 1.0,
-            "halfExtents": [
-              2.0,
-              0.5,
-              2.0
-            ],
-            "offset": [
-              2.0,
-              0.5,
-              2.0
-            ],
-            "rotation": [
-              1.0,
-              0.0,
-              0.0,
-              0.0
-            ],
-            "type": 0
-          }
-        ]
-      },
-      "7294468376066398399": null
-    },
-    {
-      "1254610073680810491": {
-        "material": 4805580789092568935,
-        "sizeX": 4.0,
-        "sizeY": 1.0,
-        "sizeZ": 4.0,
-        "type": 2
-      },
-      "1884906092559237059": {
-        "rotation": [
-          1.0,
-          0.0,
-          0.0,
-          0.0
-        ],
-        "scale": [
-          1.0,
-          1.0,
-          1.0
-        ],
-        "translation": [
-          -28.0,
-          31.5,
-          -63.0
-        ]
-      },
-      "3048324656540157766": {
-        "name": "Platform 1"
-      },
-      "5210556776496121574": {
-        "folderHierarchyNames": [
-          "First Area",
-          ""
-        ]
-      },
-      "5740098829229280260": {
-        "enhancedInternalEdgeRemoval": false,
-        "friction": 0.5,
-        "layerOverride": 65535,
-        "mass": 1.0,
-        "motionQuality": 0,
-        "motionType": 0,
-        "restitution": 0.0,
-        "shapes": [
-          {
-            "bakedScaleX": 1.0,
-            "bakedScaleY": 1.0,
-            "bakedScaleZ": 1.0,
-            "halfExtents": [
-              2.0,
-              0.5,
-              2.0
-            ],
-            "offset": [
-              2.0,
-              0.5,
-              2.0
-            ],
-            "rotation": [
-              1.0,
-              0.0,
-              0.0,
-              0.0
-            ],
-            "type": 0
-          }
-        ]
-      },
-      "7294468376066398399": null
-    },
-    {
-      "1254610073680810491": {
-        "material": 4805580789092568935,
-        "sizeX": 4.0,
-        "sizeY": 1.0,
-        "sizeZ": 4.0,
-        "type": 2
-      },
-      "1884906092559237059": {
-        "rotation": [
-          1.0,
-          0.0,
-          0.0,
-          0.0
-        ],
-        "scale": [
-          1.0,
-          1.0,
-          1.0
-        ],
-        "translation": [
-          -56.5,
-          31.5,
-          -48.0
-        ]
-      },
-      "3048324656540157766": {
-        "name": "Platform 1"
-      },
-      "5210556776496121574": {
-        "folderHierarchyNames": [
-          "First Area",
-          ""
-        ]
-      },
-      "5740098829229280260": {
-        "enhancedInternalEdgeRemoval": false,
-        "friction": 0.5,
-        "layerOverride": 65535,
-        "mass": 1.0,
-        "motionQuality": 0,
-        "motionType": 0,
-        "restitution": 0.0,
-        "shapes": [
-          {
-            "bakedScaleX": 1.0,
-            "bakedScaleY": 1.0,
-            "bakedScaleZ": 1.0,
-            "halfExtents": [
-              2.0,
-              0.5,
-              2.0
-            ],
-            "offset": [
-              2.0,
-              0.5,
-              2.0
-            ],
-            "rotation": [
-              1.0,
-              0.0,
-              0.0,
-              0.0
-            ],
-            "type": 0
-          }
-        ]
-      },
-      "7294468376066398399": null
-    },
-    {
-      "1254610073680810491": {
-        "material": 4805580789092568935,
-        "sizeX": 4.0,
-        "sizeY": 1.0,
-        "sizeZ": 4.0,
-        "type": 2
-      },
-      "1884906092559237059": {
-        "rotation": [
-          1.0,
-          0.0,
-          0.0,
-          0.0
-        ],
-        "scale": [
-          1.0,
-          1.0,
-          1.0
-        ],
-        "translation": [
-          -27.5,
-          31.5,
-          -52.0
-        ]
-      },
-      "3048324656540157766": {
-        "name": "Platform 1"
-      },
-      "5210556776496121574": {
-        "folderHierarchyNames": [
-          "First Area",
-          ""
-        ]
-      },
-      "5740098829229280260": {
-        "enhancedInternalEdgeRemoval": false,
-        "friction": 0.5,
-        "layerOverride": 65535,
-        "mass": 1.0,
-        "motionQuality": 0,
-        "motionType": 0,
-        "restitution": 0.0,
-        "shapes": [
-          {
-            "bakedScaleX": 1.0,
-            "bakedScaleY": 1.0,
-            "bakedScaleZ": 1.0,
-            "halfExtents": [
-              2.0,
-              0.5,
-              2.0
-            ],
-            "offset": [
-              2.0,
-              0.5,
-              2.0
-            ],
-            "rotation": [
-              1.0,
-              0.0,
-              0.0,
-              0.0
-            ],
-            "type": 0
-          }
-        ]
-      },
-      "7294468376066398399": null
-    },
-    {
-      "1254610073680810491": {
-        "material": 4805580789092568935,
-        "sizeX": 5.0,
-        "sizeY": 1.0,
-        "sizeZ": 5.0,
-        "type": 2
-      },
-      "1884906092559237059": {
-        "rotation": [
-          0.9239734411239624,
-          0.0,
-          -0.0,
-          -0.38245663046836853
-        ],
-        "scale": [
-          0.9999997019767761,
-          0.9999997019767761,
-          0.9999997019767761
-        ],
-        "translation": [
-          -44.5,
-          21.0,
-          -17.0
-        ]
-      },
-      "3048324656540157766": {
-        "name": "Slide2"
-      },
-      "5210556776496121574": {
-        "folderHierarchyNames": [
-          "Second Area",
-          ""
-        ]
-      },
-      "5740098829229280260": {
-        "enhancedInternalEdgeRemoval": false,
-        "friction": 0.5,
-        "layerOverride": 65535,
-        "mass": 1.0,
-        "motionQuality": 0,
-        "motionType": 0,
-        "restitution": 0.0,
-        "shapes": [
-          {
-            "bakedScaleX": 1.0,
-            "bakedScaleY": 1.0,
-            "bakedScaleZ": 1.0,
-            "halfExtents": [
-              2.4999992847442627,
-              0.49999985098838806,
-              2.4999992847442627
-            ],
-            "offset": [
-              2.4999992847442627,
-              0.49999985098838806,
-              2.4999992847442627
-            ],
-            "rotation": [
-              1.0,
-              0.0,
-              0.0,
-              0.0
-            ],
-            "type": 0
-          }
-        ]
-      },
-      "7294468376066398399": null
-    },
-    {
-      "1254610073680810491": {
-        "material": 4805580789092568935,
-        "sizeX": 12.0,
-        "sizeY": 1.0,
-        "sizeZ": 12.0,
-        "type": 2
-      },
-      "1884906092559237059": {
-        "rotation": [
-          1.0,
-          0.0,
-          0.0,
-          0.0
-        ],
-        "scale": [
-          1.0,
-          1.0,
-          1.0
-        ],
-        "translation": [
-          -47.0,
-          43.5,
-          -86.0
-        ]
-      },
-      "3048324656540157766": {
-        "name": "Platform 1"
-      },
-      "5210556776496121574": {
-        "folderHierarchyNames": [
-          "First Area",
-          ""
-        ]
-      },
-      "5740098829229280260": {
-        "enhancedInternalEdgeRemoval": false,
-        "friction": 0.5,
-        "layerOverride": 65535,
-        "mass": 1.0,
-        "motionQuality": 0,
-        "motionType": 0,
-        "restitution": 0.0,
-        "shapes": [
-          {
-            "bakedScaleX": 1.0,
-            "bakedScaleY": 1.0,
-            "bakedScaleZ": 1.0,
-            "halfExtents": [
-              6.0,
-              0.5,
-              6.0
-            ],
-            "offset": [
-              6.0,
-              0.5,
-              6.0
-            ],
-            "rotation": [
-              1.0,
-              0.0,
-              0.0,
-              0.0
-            ],
-            "type": 0
-          }
-        ]
-      },
-      "7294468376066398399": null
-    },
-    {
-      "1254610073680810491": {
-        "material": 4805580789092568935,
-        "sizeX": 5.0,
-        "sizeY": 1.0,
-        "sizeZ": 5.0,
-        "type": 2
-      },
-      "1884906092559237059": {
-        "rotation": [
-          0.9240663647651672,
-          0.0,
-          -0.0,
-          -0.382232129573822
-        ],
-        "scale": [
-          1.0,
-          1.0,
-          1.0
-        ],
-        "translation": [
-          -45.0,
-          23.0,
-          -27.0
-        ]
-      },
-      "3048324656540157766": {
-        "name": "Slide3"
-      },
-      "5210556776496121574": {
-        "folderHierarchyNames": [
-          "Second Area",
-          ""
-        ]
-      },
-      "5740098829229280260": {
-        "enhancedInternalEdgeRemoval": false,
-        "friction": 0.5,
-        "layerOverride": 65535,
-        "mass": 1.0,
-        "motionQuality": 0,
-        "motionType": 0,
-        "restitution": 0.0,
-        "shapes": [
-          {
-            "bakedScaleX": 1.0,
-            "bakedScaleY": 1.0,
-            "bakedScaleZ": 1.0,
-            "halfExtents": [
-              2.5,
-              0.5,
-              2.5
-            ],
-            "offset": [
-              2.5,
-              0.5,
-              2.5
-            ],
-            "rotation": [
-              1.0,
-              0.0,
-              0.0,
-              0.0
-            ],
-            "type": 0
-          }
-        ]
-      },
-      "7294468376066398399": null
-    },
-    {
-      "1254610073680810491": {
-        "material": 4805580789092568935,
-        "sizeX": 5.0,
-        "sizeY": 1.0,
-        "sizeZ": 5.0,
-        "type": 2
-      },
-      "1884906092559237059": {
-        "rotation": [
-          0.3829096257686615,
-          0.0,
-          -0.0,
-          -0.9237858057022095
-        ],
-        "scale": [
-          1.0,
-          1.0,
-          1.0
-        ],
-        "translation": [
-          -37.5,
-          23.0,
-          -22.0
-        ]
-      },
-      "3048324656540157766": {
-        "name": "Slide1"
-      },
-      "5210556776496121574": {
-        "folderHierarchyNames": [
-          "Second Area",
-          ""
-        ]
-      },
-      "5740098829229280260": {
-        "enhancedInternalEdgeRemoval": false,
-        "friction": 0.5,
-        "layerOverride": 65535,
-        "mass": 1.0,
-        "motionQuality": 0,
-        "motionType": 0,
-        "restitution": 0.0,
-        "shapes": [
-          {
-            "bakedScaleX": 1.0,
-            "bakedScaleY": 1.0,
-            "bakedScaleZ": 1.0,
-            "halfExtents": [
-              2.5,
-              0.5,
-              2.5
-            ],
-            "offset": [
-              2.5,
-              0.5,
-              2.5
-            ],
-            "rotation": [
-              1.0,
-              0.0,
-              0.0,
-              0.0
-            ],
-            "type": 0
-          }
-        ]
-      },
-      "7294468376066398399": null
-    },
-    {
-      "1254610073680810491": {
-        "material": 4805580789092568935,
-        "sizeX": 5.0,
-        "sizeY": 1.0,
-        "sizeZ": 5.0,
-        "type": 2
-      },
-      "1884906092559237059": {
-        "rotation": [
-          0.3829096257686615,
-          0.0,
-          -0.0,
-          -0.9237858057022095
-        ],
-        "scale": [
-          1.0,
-          1.0,
-          1.0
-        ],
-        "translation": [
-          -37.0,
-          21.0,
-          -12.0
-        ]
-      },
-      "3048324656540157766": {
-        "name": "Slide1"
-      },
-      "5210556776496121574": {
-        "folderHierarchyNames": [
-          "Second Area",
-          ""
-        ]
-      },
-      "5740098829229280260": {
-        "enhancedInternalEdgeRemoval": false,
-        "friction": 0.5,
-        "layerOverride": 65535,
-        "mass": 1.0,
-        "motionQuality": 0,
-        "motionType": 0,
-        "restitution": 0.0,
-        "shapes": [
-          {
-            "bakedScaleX": 1.0,
-            "bakedScaleY": 1.0,
-            "bakedScaleZ": 1.0,
-            "halfExtents": [
-              2.5,
-              0.5,
-              2.5
-            ],
-            "offset": [
-              2.5,
-              0.5,
-              2.5
-            ],
-            "rotation": [
-              1.0,
-              0.0,
-              0.0,
-              0.0
-            ],
-            "type": 0
-          }
-        ]
-      },
-      "7294468376066398399": null
     }
   ],
   "scene_id": 13079833564594591779,

@@ -30,7 +30,7 @@
 
 namespace Game
 {
-Engine::Scene SaveScene(ComponentRegistry& componentRegistry, entt::registry& registry, StringID sceneId, std::string_view sceneName)
+Engine::Scene SaveScene(ComponentRegistry& componentRegistry, entt::registry& registry, Engine::AssetManager* assetManager, StringID sceneId, std::string_view sceneName)
 {
     Engine::Scene outScene{};
     nlohmann::json& scene = outScene.content;
@@ -40,21 +40,60 @@ Engine::Scene SaveScene(ComponentRegistry& componentRegistry, entt::registry& re
     scene["entities"] = nlohmann::json::array();
 
     auto view = registry.view<Component::SceneComponent>();
+    const StringID prefabTypeId = TypeSID<Component::PrefabInstanceComponent>();
+
+    // Cache prefab JSON per-prefab so we only read each file once
+    std::unordered_map<StringID, nlohmann::json> prefabJsonCache;
+
     for (auto entity : view) {
         auto& tag = view.get<Component::SceneComponent>(entity);
-        if (tag.sceneId != sceneId) continue;
-        if (registry.all_of<Component::DoNotSerializeTag>(entity)) continue;
+        if (tag.sceneId != sceneId) {
+            continue;
+        }
+        if (registry.all_of<Component::DoNotSerializeTag>(entity)) {
+            continue;
+        }
 
         nlohmann::json entityJson;
-        const bool isPrefab = registry.all_of<Component::PrefabInstanceComponent>(entity);
-        const StringID prefabTypeId = TypeSID<Component::PrefabInstanceComponent>();
+        const auto* prefabInst = registry.try_get<Component::PrefabInstanceComponent>(entity);
+
+        const nlohmann::json* prefabRef = nullptr;
+        if (prefabInst) {
+            auto cacheIt = prefabJsonCache.find(prefabInst->prefabId);
+            if (cacheIt == prefabJsonCache.end()) {
+                if (const auto* meta = assetManager->GetPrefabMetadata(prefabInst->prefabId)) {
+                    auto prefabData = Engine::ReadWPrefab(meta->source);
+                    if (prefabData) {
+                        cacheIt = prefabJsonCache.emplace(prefabInst->prefabId, std::move(prefabData->componentJson)).first;
+                    }
+                }
+            }
+            if (cacheIt != prefabJsonCache.end()) {
+                prefabRef = &cacheIt->second;
+            }
+        }
 
         for (ComponentEntry& entry : componentRegistry.registry) {
-            if (entry.has(registry, entity)) {
-                if (isPrefab && entry.typeId != prefabTypeId) continue;
+            if (!entry.has(registry, entity)) {
+                continue;
+            }
 
-                nlohmann::json compJson;
-                entry.serialize(registry, entity, compJson);
+            nlohmann::json compJson;
+            entry.serialize(registry, entity, compJson);
+
+            if (prefabRef) {
+                const std::string key = std::to_string(entry.typeId.id);
+                if (entry.typeId == prefabTypeId) {
+                    entityJson[key] = compJson;
+                }
+                else {
+                    auto it = prefabRef->find(key);
+                    if (it == prefabRef->end() || *it != compJson) {
+                        entityJson[key] = compJson;
+                    }
+                }
+            }
+            else {
                 entityJson[std::to_string(entry.typeId.id)] = compJson;
             }
         }
@@ -90,12 +129,12 @@ StringID LoadScene(ComponentRegistry& componentRegistry, entt::registry& registr
     return sceneId;
 }
 
-std::vector<Engine::Scene> SerializeAll(ComponentRegistry& componentRegistry, entt::registry& registry, const std::vector<StringID>& loadedScenes)
+std::vector<Engine::Scene> SerializeAll(ComponentRegistry& componentRegistry, entt::registry& registry, Engine::AssetManager* assetManager, const std::vector<StringID>& loadedScenes)
 {
     std::vector<Engine::Scene> snapshots;
     snapshots.reserve(loadedScenes.size());
     for (StringID sceneId : loadedScenes) {
-        snapshots.push_back(SaveScene(componentRegistry, registry, sceneId, sceneId.ToString()));
+        snapshots.push_back(SaveScene(componentRegistry, registry, assetManager, sceneId, sceneId.ToString()));
         LOG_INFO(Game, "PIE snapshot: serialized scene '{}'", sceneId.ToString());
     }
     return snapshots;
@@ -157,7 +196,7 @@ void SaveSceneToFile(StringID sceneID, std::string_view sceneName, Engine::GameS
         path = Platform::GetAssetPath() / "scenes" / (stem + ".wscene");
     }
 
-    Engine::Scene s = SaveScene(state->componentRegistry, state->registry, sceneID, sceneName);
+    Engine::Scene s = SaveScene(state->componentRegistry, state->registry, assetManager, sceneID, sceneName);
     std::filesystem::create_directories(path.parent_path());
     std::ofstream file(path);
 
@@ -352,22 +391,14 @@ entt::entity SpawnPrefab(Engine::GameState* state, Engine::AssetManager* assetMa
         return entt::null;
     }
 
-    std::ifstream file(meta->source);
-    if (!file.is_open()) {
-        LOG_ERROR(Game, "Failed to open prefab file '{}'", meta->source.string());
+    auto prefabData = Engine::ReadWPrefab(meta->source);
+    if (!prefabData) {
+        LOG_ERROR(Game, "Failed to read prefab file '{}'", meta->source.string());
         return entt::null;
     }
-
-    auto header = Engine::ReadWPrefabHeader(file);
-    if (!header) {
-        LOG_ERROR(Game, "Failed to read prefab header from '{}'", meta->source.string());
-        return entt::null;
-    }
-
-    nlohmann::json entityJson = nlohmann::json::parse(file);
 
     entt::entity entity = state->registry.create();
-    for (auto& [key, compJson] : entityJson.items()) {
+    for (auto& [key, compJson] : prefabData->componentJson.items()) {
         uint64_t typeId = std::stoull(key);
         for (ComponentEntry& entry : state->componentRegistry.registry) {
             if (entry.typeId.id == typeId) {
@@ -390,6 +421,9 @@ entt::entity SpawnPrefab(Engine::GameState* state, Engine::AssetManager* assetMa
 
 void ResolvePrefabLoads(Engine::GameState* state, Engine::AssetManager* assetManager)
 {
+    // Cache parsed prefab JSON so each file is read once even with many instances
+    std::unordered_map<StringID, nlohmann::json> prefabJsonCache;
+
     auto view = state->registry.view<Component::PrefabInstanceComponent>();
     for (auto entity : view) {
         auto& prefabInst = view.get<Component::PrefabInstanceComponent>(entity);
@@ -400,36 +434,33 @@ void ResolvePrefabLoads(Engine::GameState* state, Engine::AssetManager* assetMan
             continue;
         }
 
-        std::ifstream file(meta->source);
-        if (!file.is_open()) {
-            LOG_WARN(Game, "Failed to open prefab file '{}'", meta->source.string());
-            continue;
+        auto cacheIt = prefabJsonCache.find(prefabInst.prefabId);
+        if (cacheIt == prefabJsonCache.end()) {
+            auto prefabData = Engine::ReadWPrefab(meta->source);
+            if (!prefabData) {
+                LOG_WARN(Game, "Failed to read prefab file '{}'", meta->source.string());
+                continue;
+            }
+            cacheIt = prefabJsonCache.emplace(prefabInst.prefabId, std::move(prefabData->componentJson)).first;
         }
 
-        auto header = Engine::ReadWPrefabHeader(file);
-        if (!header) {
-            LOG_WARN(Game, "Failed to read prefab header from '{}'", meta->source.string());
-            continue;
-        }
-
-        nlohmann::json entityJson = nlohmann::json::parse(file);
-
-        for (auto& [key, compJson] : entityJson.items()) {
+        for (auto& [key, compJson] : cacheIt->second.items()) {
             uint64_t typeId = std::stoull(key);
             for (ComponentEntry& entry : state->componentRegistry.registry) {
                 if (entry.typeId.id == typeId) {
-                    entry.deserialize(state->registry, entity, compJson);
+                    if (!entry.has(state->registry, entity)) {
+                        entry.deserialize(state->registry, entity, compJson);
+                    }
                     break;
                 }
             }
         }
-
     }
 }
 
 void PlayStart(Core::EngineContext* ctx, Engine::GameState* state)
 {
-    state->pieSnapshot = SerializeAll(state->componentRegistry, state->registry, state->loadedScenes);
+    state->pieSnapshot = SerializeAll(state->componentRegistry, state->registry, ctx->assetManager, state->loadedScenes);
     state->bIsPlaying = true;
     state->bGameCursorCaptured = true;
     ctx->setCursorHiddenFn(true);
