@@ -38,7 +38,8 @@ struct EngineContext;
 namespace Game
 {
 void ConnectPhysicsObservers(entt::registry& registry);
-void UpdatePhysics(Core::EngineContext* ctx, Engine::GameState* state);
+void PhysicsUpdate(Core::EngineContext* ctx, Engine::GameState* state);
+void MarkPhysicsTransformsDirty(Engine::GameState* state);
 void DebugRenderPhysics(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer);
 void ResolvePhysicsMeshLoads(Core::EngineContext* ctx, Engine::GameState* state);
 void ResolvePhysicsShapeCreation(Core::EngineContext* ctx, Engine::GameState* state);

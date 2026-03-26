@@ -94,7 +94,7 @@ GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         Game::DebugApplyGroundForces(ctx, state);
 
         if (state->bEnablePhysics) {
-            Game::UpdatePhysics(ctx, state);
+            Game::PhysicsUpdate(ctx, state);
         }
 
         if (auto* playerController = state->registry.ctx().find<Game::PhysicsPlayerController>()) {
@@ -122,6 +122,9 @@ GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::GameState* state)
     Game::ResolvePhysicsBodyCreation(ctx, state);
 
     Game::RenderUpdate(ctx, state);
+
+    Game::MarkPhysicsTransformsDirty(state);
+
     state->registry.clear<Game::Component::DirtyTransformTag>();
 
     ctx->materialManager->ProcessRetirements();

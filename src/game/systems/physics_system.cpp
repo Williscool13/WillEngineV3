@@ -29,7 +29,7 @@ void ConnectPhysicsObservers(entt::registry& registry)
     registry.on_destroy<Component::PhysicsBodyComponent>().connect<&Component::PhysicsBodyComponent::OnDestroy>();
 }
 
-void UpdatePhysics(Core::EngineContext* ctx, Engine::GameState* state)
+void PhysicsUpdate(Core::EngineContext* ctx, Engine::GameState* state)
 {
     ZoneScoped;
     auto* physics = ctx->physicsSystem;
@@ -108,6 +108,18 @@ void UpdatePhysics(Core::EngineContext* ctx, Engine::GameState* state)
     }
 
     state->physicsInterpolationAlpha = state->physicsDeltaTimeAccumulator / Physics::PHYSICS_TIMESTEP;
+}
+
+void MarkPhysicsTransformsDirty(Engine::GameState* state)
+{
+    auto view = state->registry.view<Component::PhysicsBodyComponent, Component::DirtyTransformTag>();
+    for (auto entity : view) {
+        if (state->registry.all_of<Component::DynamicPhysicsBodyComponent>(entity)) {
+            state->registry.emplace_or_replace<Component::TeleportPhysicsTransformTag>(entity);
+        } else {
+            state->registry.emplace_or_replace<Component::DirtyKinematicPhysicsTransformTag>(entity);
+        }
+    }
 }
 
 void DebugRenderPhysics(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer)
