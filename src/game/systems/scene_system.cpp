@@ -328,6 +328,8 @@ entt::entity CreateSceneEntity(Engine::GameState* state)
 
 void SaveEntityAsPrefab(Engine::GameState* state, Engine::AssetManager* assetManager, Core::EngineContext* ctx, entt::entity entity, std::string_view prefabName)
 {
+    // todo: Fix this to:
+    //  Compare all existing prefabs and check their components. If their component fields are precisely the same as the src prefab, then replace it with new
     nlohmann::json entityJson;
     uint32_t componentCount = 0;
 
