@@ -23,30 +23,48 @@ namespace Game::Component
 float ApplyEasing(EasingType type, float t)
 {
     switch (type) {
-    case EasingType::Linear:
-        return t;
-    case EasingType::EaseInQuad:
-        return t * t;
-    case EasingType::EaseOutQuad:
-        return t * (2.0f - t);
-    case EasingType::EaseInOutQuad:
-        return t < 0.5f ? 2.0f * t * t : -1.0f + (4.0f - 2.0f * t) * t;
-    case EasingType::EaseInCubic:
-        return t * t * t;
-    case EasingType::EaseOutCubic: {
-        float u = t - 1.0f;
-        return u * u * u + 1.0f;
-    }
-    case EasingType::EaseInOutCubic:
-        return t < 0.5f ? 4.0f * t * t * t : 1.0f + (t - 1.0f) * (2.0f * t - 2.0f) * (2.0f * t - 2.0f);
+        case EasingType::Linear:
+            return t;
+        case EasingType::EaseInQuad:
+            return t * t;
+        case EasingType::EaseOutQuad:
+            return t * (2.0f - t);
+        case EasingType::EaseInOutQuad:
+            return t < 0.5f ? 2.0f * t * t : -1.0f + (4.0f - 2.0f * t) * t;
+        case EasingType::EaseInCubic:
+            return t * t * t;
+        case EasingType::EaseOutCubic:
+        {
+            float u = t - 1.0f;
+            return u * u * u + 1.0f;
+        }
+        case EasingType::EaseInOutCubic:
+            return t < 0.5f ? 4.0f * t * t * t : 1.0f + (t - 1.0f) * (2.0f * t - 2.0f) * (2.0f * t - 2.0f);
+        case EasingType::EaseInQuart:
+            return t * t * t * t;
+        case EasingType::EaseOutQuart:
+        {
+            float u = t - 1.0f;
+            return 1.0f - u * u * u * u;
+        }
+        case EasingType::EaseInOutQuart:
+            return t < 0.5f ? 8.0f * t * t * t * t : 1.0f - 8.0f * (t - 1.0f) * (t - 1.0f) * (t - 1.0f) * (t - 1.0f);
+        case EasingType::EaseInExpo:
+            return t <= 0.0f ? 0.0f : std::pow(2.0f, 10.0f * t - 10.0f);
+        case EasingType::EaseOutExpo:
+            return t >= 1.0f ? 1.0f : 1.0f - std::pow(2.0f, -10.0f * t);
+        case EasingType::EaseInOutExpo:
+            if (t <= 0.0f) { return 0.0f; }
+            if (t >= 1.0f) { return 1.0f; }
+            return t < 0.5f ? std::pow(2.0f, 20.0f * t - 10.0f) * 0.5f : (2.0f - std::pow(2.0f, -20.0f * t + 10.0f)) * 0.5f;
         case EasingType::EaseInSine:
-        return 1.0f - std::cos(t * glm::pi<float>() * 0.5f);
-    case EasingType::EaseOutSine:
-        return std::sin(t * glm::pi<float>() * 0.5f);
-    case EasingType::EaseInOutSine:
-        return 0.5f * (1.0f - std::cos(glm::pi<float>() * t));
-    default:
-        return t;
+            return 1.0f - std::cos(t * glm::pi<float>() * 0.5f);
+        case EasingType::EaseOutSine:
+            return std::sin(t * glm::pi<float>() * 0.5f);
+        case EasingType::EaseInOutSine:
+            return 0.5f * (1.0f - std::cos(glm::pi<float>() * t));
+        default:
+            return t;
     }
 }
 
@@ -55,12 +73,12 @@ static glm::vec3 CatmullRom(const glm::vec3& p0, const glm::vec3& p1, const glm:
     float t2 = t * t;
     float t3 = t2 * t;
     return 0.5f * ((2.0f * p1) +
-                    (-p0 + p2) * t +
-                    (2.0f * p0 - 5.0f * p1 + 4.0f * p2 - p3) * t2 +
-                    (-p0 + 3.0f * p1 - 3.0f * p2 + p3) * t3);
+                   (-p0 + p2) * t +
+                   (2.0f * p0 - 5.0f * p1 + 4.0f * p2 - p3) * t2 +
+                   (-p0 + 3.0f * p1 - 3.0f * p2 + p3) * t3);
 }
 
-void EvaluatePath(const Core::InlineVector<PathControlPoint, PathMoverComponent::MaxControlPoints>& points, float progress, int32_t direction, glm::vec3& outPos, glm::quat& outRot)
+void EvaluatePath(const Core::InlineVector<PathControlPoint, PathMoverComponent::MAX_CONTROL_POINTS>& points, int32_t source, int32_t target, float progress, bool bIsLoop, glm::vec3& outPos, glm::quat& outRot)
 {
     if (points.Size() < 2) {
         if (points.Size() == 1) {
@@ -70,32 +88,29 @@ void EvaluatePath(const Core::InlineVector<PathControlPoint, PathMoverComponent:
         return;
     }
 
-    int32_t segmentCount = static_cast<int32_t>(points.Size()) - 1;
-    float scaledT = progress * static_cast<float>(segmentCount);
-    auto segment = static_cast<int32_t>(std::floor(scaledT));
-    segment = std::clamp(segment, 0, segmentCount - 1);
-    float localT = scaledT - static_cast<float>(segment);
+    float easedT = ApplyEasing(points[target].easing, progress);
+    auto count = static_cast<int32_t>(points.Size());
 
-    float easedT;
-    if (direction >= 0) {
-        easedT = ApplyEasing(points[segment + 1].easing, localT);
+    int32_t i0, i3;
+    if (bIsLoop) {
+        i0 = (source - (target > source ? 1 : -1) + count) % count;
+        i3 = (target + (target > source ? 1 : -1) + count) % count;
     } else {
-        easedT = 1.0f - ApplyEasing(points[segment].easing, 1.0f - localT);
+        if (source < target) {
+            i0 = std::max(source - 1, 0);
+            i3 = std::min(target + 1, count - 1);
+        } else {
+            i0 = std::min(source + 1, count - 1);
+            i3 = std::max(target - 1, 0);
+        }
     }
 
-    auto count = static_cast<int32_t>(points.Size());
-    int32_t i0 = std::max(segment - 1, 0);
-    int32_t i1 = segment;
-    int32_t i2 = segment + 1;
-    int32_t i3 = std::min(segment + 2, count - 1);
-
-    outPos = CatmullRom(points[i0].position, points[i1].position, points[i2].position, points[i3].position, easedT);
-    outRot = glm::slerp(points[i1].rotation, points[i2].rotation, easedT);
+    outPos = CatmullRom(points[i0].position, points[source].position, points[target].position, points[i3].position, easedT);
+    outRot = glm::slerp(points[source].rotation, points[target].rotation, easedT);
 }
 
 void PathMoverComponent::Serialize(const PathMoverComponent& comp, nlohmann::json& json)
 {
-    json["speed"] = comp.speed;
     json["loopMode"] = comp.loopMode;
     json["controlPoints"] = nlohmann::json::array();
     for (size_t i = 0; i < comp.controlPoints.Size(); i++) {
@@ -104,13 +119,14 @@ void PathMoverComponent::Serialize(const PathMoverComponent& comp, nlohmann::jso
         cpJson["position"] = {cp.position.x, cp.position.y, cp.position.z};
         cpJson["rotation"] = {cp.rotation.x, cp.rotation.y, cp.rotation.z, cp.rotation.w};
         cpJson["easing"] = cp.easing;
+        cpJson["speed"] = cp.speed;
+        cpJson["waitTime"] = cp.waitTime;
         json["controlPoints"].push_back(cpJson);
     }
 }
 
 void PathMoverComponent::Deserialize(PathMoverComponent& comp, const nlohmann::json& json)
 {
-    comp.speed = json.value("speed", 1.0f);
     comp.loopMode = static_cast<PathLoopMode>(json.value("loopMode", 0));
     comp.controlPoints.Clear();
     if (json.contains("controlPoints")) {
@@ -125,6 +141,8 @@ void PathMoverComponent::Deserialize(PathMoverComponent& comp, const nlohmann::j
                 cp.rotation = glm::quat(r[3].get<float>(), r[0].get<float>(), r[1].get<float>(), r[2].get<float>());
             }
             cp.easing = static_cast<EasingType>(cpJson.value("easing", 0));
+            cp.speed = cpJson.value("speed", 1.0f);
+            cp.waitTime = cpJson.value("waitTime", 0.0f);
             comp.controlPoints.PushBack(cp);
         }
     }
@@ -158,14 +176,15 @@ ComponentEditorResult PathMoverComponent::DrawEditor(Core::ViewFamily& viewFamil
     ImGui::PopStyleColor();
 
     if (open) {
-        ImGui::DragFloat("Speed", &component.speed, 0.01f, 0.001f, 100.0f);
-
         int loopModeInt = static_cast<int>(component.loopMode);
         if (ImGui::Combo("Loop Mode", &loopModeInt, PathLoopModeNames, static_cast<int>(PathLoopMode::COUNT))) {
             component.loopMode = static_cast<PathLoopMode>(loopModeInt);
         }
 
         ImGui::SeparatorText("Preview");
+        ImGui::BeginDisabled(true);
+        ImGui::Text("Curr Point %u", component.currentSegment);
+        ImGui::EndDisabled();
         ImGui::SliderFloat("Progress", &component.progress, 0.0f, 1.0f, "%.3f");
 
         ImGui::SeparatorText("Control Points");
@@ -199,9 +218,7 @@ ComponentEditorResult PathMoverComponent::DrawEditor(Core::ViewFamily& viewFamil
                 else if (editPointIdx > i) { editPointIdx--; }
             }
             ImGui::PopStyleColor();
-            ImGui::EndDisabled();
-
-            {
+            ImGui::EndDisabled(); {
                 ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 24.0f);
                 char easingLabel[24];
                 snprintf(easingLabel, sizeof(easingLabel), "##easing%d", i);
@@ -210,6 +227,16 @@ ComponentEditorResult PathMoverComponent::DrawEditor(Core::ViewFamily& viewFamil
                 if (ImGui::Combo(easingLabel, &easingInt, EasingTypeNames, static_cast<int>(EasingType::COUNT))) {
                     cp.easing = static_cast<EasingType>(easingInt);
                 }
+                ImGui::SameLine();
+                char speedLabel[24];
+                snprintf(speedLabel, sizeof(speedLabel), "##speed%d", i);
+                ImGui::SetNextItemWidth(80.0f);
+                ImGui::DragFloat(speedLabel, &cp.speed, 0.01f, 0.001f, 100.0f, "spd %.2f");
+                ImGui::SameLine();
+                char waitLabel[24];
+                snprintf(waitLabel, sizeof(waitLabel), "##wait%d", i);
+                ImGui::SetNextItemWidth(80.0f);
+                ImGui::DragFloat(waitLabel, &cp.waitTime, 0.05f, 0.0f, 60.0f, "wait %.1fs");
             }
 
             ImGui::PopID();
@@ -227,9 +254,12 @@ ComponentEditorResult PathMoverComponent::DrawEditor(Core::ViewFamily& viewFamil
                 const auto& prev = component.controlPoints[component.controlPoints.Size() - 2];
                 newPt.position = last.position + glm::normalize(last.position - prev.position);
                 newPt.rotation = last.rotation;
-            } else if (component.controlPoints.Size() == 1) {
+                newPt.speed = last.speed;
+            }
+            else if (component.controlPoints.Size() == 1) {
                 newPt.position = component.controlPoints.Back().position + glm::vec3(0, 0, 1);
                 newPt.rotation = component.controlPoints.Back().rotation;
+                newPt.speed = component.controlPoints.Back().speed;
             }
             component.controlPoints.PushBack(newPt);
         }
@@ -253,8 +283,8 @@ ComponentEditorResult PathMoverComponent::DrawEditor(Core::ViewFamily& viewFamil
                 glm::mat4 mat = glm::translate(glm::mat4(1.0f), worldPt) * glm::mat4_cast(worldRot);
 
                 const auto gizmoOp = (state->currentGizmoOperation == ImGuizmo::SCALE)
-                    ? ImGuizmo::TRANSLATE
-                    : state->currentGizmoOperation;
+                                         ? ImGuizmo::TRANSLATE
+                                         : state->currentGizmoOperation;
 
                 ImGuizmo::PushID(editPointIdx);
                 if (ImGuizmo::Manipulate(
@@ -291,8 +321,8 @@ ComponentEditorResult PathMoverComponent::DrawEditor(Core::ViewFamily& viewFamil
 
             auto* transform = registry.try_get<TransformComponent>(entity);
             const glm::mat4 entityMat = transform
-                ? glm::translate(glm::mat4(1.0f), transform->translation) * glm::mat4_cast(transform->rotation)
-                : glm::mat4(1.0f);
+                                            ? glm::translate(glm::mat4(1.0f), transform->translation) * glm::mat4_cast(transform->rotation)
+                                            : glm::mat4(1.0f);
 
             for (int i = 0; i < static_cast<int>(component.controlPoints.Size()); i++) {
                 glm::vec3 wp = glm::vec3(entityMat * glm::vec4(component.controlPoints[i].position, 1.0f));
@@ -304,7 +334,7 @@ ComponentEditorResult PathMoverComponent::DrawEditor(Core::ViewFamily& viewFamil
                 }
             }
 
-            // Draw the actual spline curve
+            /*// Draw the actual spline curve
             if (component.controlPoints.Size() >= 2) {
                 glm::vec3 prevPos;
                 glm::quat prevRot;
@@ -327,7 +357,7 @@ ComponentEditorResult PathMoverComponent::DrawEditor(Core::ViewFamily& viewFamil
                 EvaluatePath(component.controlPoints, component.progress, component.direction, progressPos, progressRot);
                 progressPos = glm::vec3(entityMat * glm::vec4(progressPos, 1.0f));
                 DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {progressPos, kPointRadius * 1.5f, kProgressColor});
-            }
+            }*/
         }
     }
 
@@ -335,5 +365,4 @@ ComponentEditorResult PathMoverComponent::DrawEditor(Core::ViewFamily& viewFamil
 
     return {.requestRemoval = remove};
 }
-
 } // Game::Component
