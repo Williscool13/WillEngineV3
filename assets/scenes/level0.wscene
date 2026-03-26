@@ -209,6 +209,40 @@ end_header
         "sizeZ": 3.0,
         "type": 2
       },
+      "15807620201259130911": {
+        "controlPoints": [
+          {
+            "easing": 9,
+            "position": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ]
+          },
+          {
+            "easing": 9,
+            "position": [
+              0.0,
+              26.93767547607422,
+              0.0
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ]
+          }
+        ],
+        "loopMode": 2,
+        "speed": 0.4000000059604645
+      },
       "1884906092559237059": {
         "rotation": [
           1.0,
@@ -223,8 +257,8 @@ end_header
         ],
         "translation": [
           0.75,
-          14.836016654968262,
-          -6.591946125030518
+          14.75,
+          -6.5
         ]
       },
       "3048324656540157766": {
@@ -242,7 +276,7 @@ end_header
         "layerOverride": 65535,
         "mass": 1.0,
         "motionQuality": 0,
-        "motionType": 0,
+        "motionType": 1,
         "restitution": 0.0,
         "shapes": [
           {

@@ -28,6 +28,7 @@
 #include "systems/physics_system.h"
 #include "gameplay/player/physics_player_controller.h"
 #include "systems/common_systems.h"
+#include "systems/gameplay_systems.h"
 
 
 extern "C"
@@ -99,6 +100,8 @@ GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         if (auto* playerController = state->registry.ctx().find<Game::PhysicsPlayerController>()) {
             playerController->Update(ctx, state);
         }
+
+        Game::UpdatePathMovers(ctx, state);
     }
     else {
         Game::UpdateEditorCamera(ctx, state);

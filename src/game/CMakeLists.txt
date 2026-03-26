@@ -20,6 +20,9 @@ set(GAME_SOURCES
         components/debug_gizmo_component.cpp
         components/debug_gizmo_component.h
 
+        components/common/stable_id_component.cpp
+        components/common/stable_id_component.h
+
         components/physics/physics_components.cpp
         components/physics/physics_components.h
         components/physics/physics_body_component.cpp
@@ -31,9 +34,14 @@ set(GAME_SOURCES
         components/render/static_mesh_component.h
         components/render/procedural_mesh_component.cpp
         components/render/procedural_mesh_component.h
+        components/render/procedural_mesh_component.cpp
+        components/render/spline_mesh_component.cpp
+        components/render/spline_mesh_component.h
 
         components/gameplay/player_spawn_component.cpp
         components/gameplay/player_spawn_component.h
+        components/gameplay/path_mover_component.cpp
+        components/gameplay/path_mover_component.h
 
         components/debug_components.cpp
         components/debug_components.h
@@ -45,14 +53,8 @@ set(GAME_SOURCES
         components/core_components.h
         components/scene_components.cpp
         components/scene_components.h
-        systems/core_systems.cpp
-        systems/core_systems.h
-        systems/scene_system.cpp
-        systems/scene_system.h
         components/common_components.cpp
         components/common_components.h
-        systems/component_editor.cpp
-        systems/component_editor.h
         component-registry/component_registry.cpp
         component-registry/component_registry.h
         components/component_types.cpp
@@ -73,13 +75,19 @@ set(GAME_SOURCES
         gameplay/player/player_controller.cpp
         gameplay/player/player_controller.h
         components/physics/physics_body_desc.cpp
+
+
+
+        systems/core_systems.cpp
+        systems/core_systems.h
+        systems/scene_system.cpp
+        systems/scene_system.h
         systems/common_systems.cpp
         systems/common_systems.h
-        components/common/stable_id_component.cpp
-        components/common/stable_id_component.h
-        components/render/procedural_mesh_component.cpp
-        components/render/spline_mesh_component.cpp
-        components/render/spline_mesh_component.h
+        systems/gameplay_systems.cpp
+        systems/gameplay_systems.h
+        systems/component_editor.cpp
+        systems/component_editor.h
 )
 
 set(GAME_INCLUDE_DIRS
