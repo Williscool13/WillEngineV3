@@ -225,10 +225,11 @@ JPH::BodyID CreateBodyFromShape(JPH::BodyInterface& bodyInterface, const Compone
                                  : desc.motionType == Component::PhysicsMotionType::Static ? Physics::Layers::NON_MOVING : Physics::Layers::MOVING;
 
     JPH::BodyCreationSettings settings(desc.shapeRef, position, rotation, motionType, layer);
-    if (desc.motionType == Component::PhysicsMotionType::Dynamic) {
-        settings.mMassPropertiesOverride.mMass = desc.mass;
+    if (desc.motionType != Component::PhysicsMotionType::Static) {
         settings.mOverrideMassProperties = JPH::EOverrideMassProperties::CalculateInertia;
+        settings.mMassPropertiesOverride.mMass = desc.mass;
     }
+
     settings.mFriction = desc.friction;
     settings.mMotionQuality = desc.motionQuality;
 

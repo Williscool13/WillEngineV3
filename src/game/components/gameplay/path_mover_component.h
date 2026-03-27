@@ -90,11 +90,10 @@ struct PathMoverComponent
     Core::InlineVector<PathControlPoint, MAX_CONTROL_POINTS> controlPoints{};
     PathLoopMode loopMode{PathLoopMode::PingPong};
 
-    // Runtime state (not serialized, well it can be serialized, but it isn't atm)
+    // Runtime state
     int32_t currentSegment{0};
     float progress{0.0f};
     int32_t direction{1};
-
     bool bIsWaiting{false};
     float waitTimer{0.0f};
 

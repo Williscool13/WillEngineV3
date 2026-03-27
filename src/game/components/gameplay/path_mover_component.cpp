@@ -78,7 +78,8 @@ static glm::vec3 CatmullRom(const glm::vec3& p0, const glm::vec3& p1, const glm:
                    (-p0 + 3.0f * p1 - 3.0f * p2 + p3) * t3);
 }
 
-void EvaluatePath(const Core::InlineVector<PathControlPoint, PathMoverComponent::MAX_CONTROL_POINTS>& points, int32_t source, int32_t target, float progress, bool bIsLoop, glm::vec3& outPos, glm::quat& outRot)
+void EvaluatePath(const Core::InlineVector<PathControlPoint, PathMoverComponent::MAX_CONTROL_POINTS>& points, int32_t source, int32_t target, float progress, bool bIsLoop, glm::vec3& outPos,
+                  glm::quat& outRot)
 {
     if (points.Size() < 2) {
         if (points.Size() == 1) {
@@ -95,11 +96,13 @@ void EvaluatePath(const Core::InlineVector<PathControlPoint, PathMoverComponent:
     if (bIsLoop) {
         i0 = (source - (target > source ? 1 : -1) + count) % count;
         i3 = (target + (target > source ? 1 : -1) + count) % count;
-    } else {
+    }
+    else {
         if (source < target) {
             i0 = std::max(source - 1, 0);
             i3 = std::min(target + 1, count - 1);
-        } else {
+        }
+        else {
             i0 = std::min(source + 1, count - 1);
             i3 = std::max(target - 1, 0);
         }
@@ -123,6 +126,12 @@ void PathMoverComponent::Serialize(const PathMoverComponent& comp, nlohmann::jso
         cpJson["waitTime"] = cp.waitTime;
         json["controlPoints"].push_back(cpJson);
     }
+
+    json["currentSegment"] = comp.currentSegment;
+    json["progress"] = comp.progress;
+    json["direction"] = comp.direction;
+    json["bIsWaiting"] = comp.bIsWaiting;
+    json["waitTimer"] = comp.waitTimer;
 }
 
 void PathMoverComponent::Deserialize(PathMoverComponent& comp, const nlohmann::json& json)
@@ -150,6 +159,12 @@ void PathMoverComponent::Deserialize(PathMoverComponent& comp, const nlohmann::j
     if (comp.controlPoints.IsEmpty()) {
         comp.controlPoints.PushBack({glm::vec3(0.0f), glm::quat(1, 0, 0, 0), EasingType::Linear});
     }
+
+    comp.currentSegment = json.value("currentSegment", 0);
+    comp.progress = json.value("progress", 0.0f);
+    comp.direction = json.value("direction", 1);
+    comp.bIsWaiting = json.value("bIsWaiting", false);
+    comp.waitTimer = json.value("waitTimer", 0.0f);
 }
 
 ComponentEditorResult PathMoverComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)
@@ -181,11 +196,19 @@ ComponentEditorResult PathMoverComponent::DrawEditor(Core::ViewFamily& viewFamil
             component.loopMode = static_cast<PathLoopMode>(loopModeInt);
         }
 
-        ImGui::SeparatorText("Preview");
-        ImGui::BeginDisabled(true);
-        ImGui::Text("Curr Point %u", component.currentSegment);
-        ImGui::EndDisabled();
+        ImGui::SeparatorText("Runtime State");
+        int maxSeg = std::max(0, static_cast<int>(component.controlPoints.Size()) - 1);
+        ImGui::SliderInt("Segment", &component.currentSegment, 0, maxSeg);
         ImGui::SliderFloat("Progress", &component.progress, 0.0f, 1.0f, "%.3f");
+        static const char* dirNames[] = {"Forward", "Backward"};
+        int dirIdx = (component.direction >= 0) ? 0 : 1;
+        if (ImGui::Combo("Direction", &dirIdx, dirNames, 2)) {
+            component.direction = (dirIdx == 0) ? 1 : -1;
+        }
+        ImGui::Checkbox("Waiting", &component.bIsWaiting);
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(120.0f);
+        ImGui::DragFloat("Wait Timer", &component.waitTimer, 0.05f, 0.0f, 60.0f, "%.2fs");
 
         ImGui::SeparatorText("Control Points");
 
@@ -327,37 +350,45 @@ ComponentEditorResult PathMoverComponent::DrawEditor(Core::ViewFamily& viewFamil
             for (int i = 0; i < static_cast<int>(component.controlPoints.Size()); i++) {
                 glm::vec3 wp = glm::vec3(entityMat * glm::vec4(component.controlPoints[i].position, 1.0f));
                 DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {wp, kPointRadius, (i == editPointIdx) ? kEditColor : kPointColor});
-
-                if (i + 1 < static_cast<int>(component.controlPoints.Size())) {
-                    glm::vec3 wp2 = glm::vec3(entityMat * glm::vec4(component.controlPoints[i + 1].position, 1.0f));
-                    DEBUG_ADD_LINE(viewFamily.debugLines, {wp, wp2, kLineColor, 0.02f});
-                }
             }
 
-            /*// Draw the actual spline curve
+            // Draw the actual spline curve
             if (component.controlPoints.Size() >= 2) {
-                glm::vec3 prevPos;
-                glm::quat prevRot;
-                EvaluatePath(component.controlPoints, 0.0f, 1, prevPos, prevRot);
-                prevPos = glm::vec3(entityMat * glm::vec4(prevPos, 1.0f));
+                const bool bIsLoop = component.loopMode == PathLoopMode::Loop;
+                const int count = static_cast<int>(component.controlPoints.Size());
+                const int numSegments = bIsLoop ? count : count - 1;
 
-                for (int i = 1; i <= kCurveSubdivisions; i++) {
-                    float t = static_cast<float>(i) / static_cast<float>(kCurveSubdivisions);
-                    glm::vec3 curPos;
-                    glm::quat curRot;
-                    EvaluatePath(component.controlPoints, t, 1, curPos, curRot);
-                    curPos = glm::vec3(entityMat * glm::vec4(curPos, 1.0f));
-                    DEBUG_ADD_LINE(viewFamily.debugLines, {prevPos, curPos, kCurveColor, 0.03f});
-                    prevPos = curPos;
+                for (int seg = 0; seg < numSegments; seg++) {
+                    const int source = seg;
+                    const int target = (seg + 1) % count;
+
+                    glm::vec3 prevPos;
+                    glm::quat prevRot;
+                    EvaluatePath(component.controlPoints, source, target, 0.0f, bIsLoop, prevPos, prevRot);
+                    prevPos = glm::vec3(entityMat * glm::vec4(prevPos, 1.0f));
+
+                    for (int step = 1; step <= kCurveSubdivisions; step++) {
+                        float t = static_cast<float>(step) / static_cast<float>(kCurveSubdivisions);
+                        glm::vec3 curPos;
+                        glm::quat curRot;
+                        EvaluatePath(component.controlPoints, source, target, t, bIsLoop, curPos, curRot);
+                        curPos = glm::vec3(entityMat * glm::vec4(curPos, 1.0f));
+                        DEBUG_ADD_LINE(viewFamily.debugLines, {prevPos, curPos, kCurveColor, 0.03f});
+                        prevPos = curPos;
+                    }
                 }
 
                 // Draw current progress position
+                const int source = component.currentSegment;
+                const int target = bIsLoop
+                                       ? (source + component.direction + count) % count
+                                       : std::clamp(source + component.direction, 0, count - 1);
                 glm::vec3 progressPos;
                 glm::quat progressRot;
-                EvaluatePath(component.controlPoints, component.progress, component.direction, progressPos, progressRot);
+                EvaluatePath(component.controlPoints, source, target, component.progress, bIsLoop, progressPos, progressRot);
                 progressPos = glm::vec3(entityMat * glm::vec4(progressPos, 1.0f));
                 DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {progressPos, kPointRadius * 1.5f, kProgressColor});
-            }*/
+            }
         }
     }
 

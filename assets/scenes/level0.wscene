@@ -8,13 +8,18 @@ end_header
   "entities": [
     {
       "1254610073680810491": {
+        "curveRadius": 2.1700000762939453,
+        "flatRadius": 0.20000000298023224,
+        "height": 2.1500000953674316,
+        "lipHeight": 0.004999999888241291,
         "material": 4805580789092568935,
-        "sizeX": 3.0,
-        "sizeY": 1.0,
-        "sizeZ": 3.0,
-        "type": 2
+        "radius": 2.3299999237060547,
+        "segments": 16,
+        "slices": 64,
+        "type": 22
       },
       "15807620201259130911": {
+        "bIsWaiting": false,
         "controlPoints": [
           {
             "easing": 0,
@@ -29,15 +34,15 @@ end_header
               0.0,
               1.0
             ],
-            "speed": 1.0,
+            "speed": 0.5,
             "waitTime": 0.5
           },
           {
             "easing": 0,
             "position": [
-              12.301933288574219,
+              9.581999778747559,
               2.0000057220458984,
-              -5.08541202545166
+              11.78499984741211
             ],
             "rotation": [
               0.0,
@@ -45,15 +50,15 @@ end_header
               0.0,
               1.0
             ],
-            "speed": 1.0,
-            "waitTime": 0.5
+            "speed": 0.3499999940395355,
+            "waitTime": 0.8999999761581421
           },
           {
             "easing": 0,
             "position": [
-              3.8085813522338867,
+              11.758999824523926,
               2.1485862731933594,
-              -9.217363357543945
+              -1.5069999694824219
             ],
             "rotation": [
               0.0,
@@ -61,11 +66,15 @@ end_header
               0.0,
               1.0
             ],
-            "speed": 1.0,
+            "speed": 0.5,
             "waitTime": 0.5
           }
         ],
-        "loopMode": 1
+        "currentSegment": 0,
+        "direction": 1,
+        "loopMode": 1,
+        "progress": 0.0,
+        "waitTimer": 0.0
       },
       "1884906092559237059": {
         "rotation": [
@@ -80,9 +89,9 @@ end_header
           1.0
         ],
         "translation": [
-          10.0,
+          7.5,
           14.0,
-          9.25
+          4.75
         ]
       },
       "3048324656540157766": {
@@ -107,23 +116,27 @@ end_header
             "bakedScaleX": 1.0,
             "bakedScaleY": 1.0,
             "bakedScaleZ": 1.0,
-            "halfExtents": [
-              1.5,
-              0.5,
-              1.5
-            ],
+            "curveRadius": 2.1700000762939453,
+            "flatRadius": 0.20000000298023224,
+            "height": 2.1500000953674316,
+            "lipHeight": 0.004999999888241291,
+            "meshSourceModelId": 0,
             "offset": [
-              1.5,
-              0.5,
-              1.5
+              0.0,
+              0.0,
+              0.0
             ],
+            "proceduralType": 22,
+            "radius": 2.3299999237060547,
             "rotation": [
               1.0,
               0.0,
               0.0,
               0.0
             ],
-            "type": 0
+            "segments": 16,
+            "slices": 64,
+            "type": 4
           }
         ]
       },
@@ -138,6 +151,7 @@ end_header
         "type": 2
       },
       "15807620201259130911": {
+        "bIsWaiting": false,
         "controlPoints": [
           {
             "easing": 0,
@@ -188,7 +202,11 @@ end_header
             "waitTime": 0.0
           }
         ],
-        "loopMode": 2
+        "currentSegment": 0,
+        "direction": 1,
+        "loopMode": 2,
+        "progress": 0.0,
+        "waitTimer": 0.0
       },
       "1884906092559237059": {
         "rotation": [
@@ -203,9 +221,9 @@ end_header
           1.0
         ],
         "translation": [
-          6.5,
+          8.75,
           14.0,
-          -1.0
+          -3.75
         ]
       },
       "3048324656540157766": {
@@ -386,6 +404,7 @@ end_header
         "type": 2
       },
       "15807620201259130911": {
+        "bIsWaiting": true,
         "controlPoints": [
           {
             "easing": 7,
@@ -416,11 +435,15 @@ end_header
               0.0,
               1.0
             ],
-            "speed": 0.07000000029802322,
+            "speed": 0.20000000298023224,
             "waitTime": 1.0
           }
         ],
-        "loopMode": 2
+        "currentSegment": 0,
+        "direction": 1,
+        "loopMode": 2,
+        "progress": 0.0,
+        "waitTimer": 0.30000001192092896
       },
       "1884906092559237059": {
         "rotation": [
