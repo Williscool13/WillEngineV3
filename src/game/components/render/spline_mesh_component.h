@@ -11,6 +11,7 @@
 #include "procedural_mesh_component.h"
 #include "engine/asset_manager_types.h"
 #include "engine/core/material_id.h"
+#include "engine/spline/spline.h"
 #include "core/allocators/inline_vector.h"
 #include "game/components/component_types.h"
 
@@ -20,9 +21,7 @@ namespace Game::Component
 {
 struct SplineMeshComponent
 {
-    static constexpr size_t MaxControlPoints = 16;
-
-    Core::InlineVector<glm::vec4, MaxControlPoints> controlPoints{};
+    Engine::Spline spline;
     float radius{0.5f};
     float rollAngle{0.0f};
     int32_t sides{8};

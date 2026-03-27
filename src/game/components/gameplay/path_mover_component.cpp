@@ -4,6 +4,7 @@
 
 #include "path_mover_component.h"
 
+#include <algorithm>
 #include <cmath>
 
 #include <glm/gtc/quaternion.hpp>
@@ -68,63 +69,38 @@ float ApplyEasing(EasingType type, float t)
     }
 }
 
-static glm::vec3 CatmullRom(const glm::vec3& p0, const glm::vec3& p1, const glm::vec3& p2, const glm::vec3& p3, float t)
+void EvaluatePath(const Engine::Spline& spline, const Core::InlineVector<PathPointSettings, Engine::Spline::MaxPoints>& settings, int32_t source, int32_t target, float t,
+                  glm::vec3& outPos, glm::quat& outRot)
 {
-    float t2 = t * t;
-    float t3 = t2 * t;
-    return 0.5f * ((2.0f * p1) +
-                   (-p0 + p2) * t +
-                   (2.0f * p0 - 5.0f * p1 + 4.0f * p2 - p3) * t2 +
-                   (-p0 + 3.0f * p1 - 3.0f * p2 + p3) * t3);
-}
-
-void EvaluatePath(const Core::InlineVector<PathControlPoint, PathMoverComponent::MAX_CONTROL_POINTS>& points, int32_t source, int32_t target, float progress, bool bIsLoop, glm::vec3& outPos,
-                  glm::quat& outRot)
-{
-    if (points.Size() < 2) {
-        if (points.Size() == 1) {
-            outPos = points[0].position;
-            outRot = points[0].rotation;
-        }
+    if (spline.points.Size() < 2) {
+        if (!spline.points.IsEmpty()) { outPos = spline.points[0]; }
         return;
     }
 
-    float easedT = ApplyEasing(points[target].easing, progress);
-    auto count = static_cast<int32_t>(points.Size());
+    const PathPointSettings& tgtSettings = (static_cast<size_t>(target) < settings.Size()) ? settings[target] : PathPointSettings{};
+    const float easedT = ApplyEasing(tgtSettings.easing, t);
 
-    int32_t i0, i3;
-    if (bIsLoop) {
-        i0 = (source - (target > source ? 1 : -1) + count) % count;
-        i3 = (target + (target > source ? 1 : -1) + count) % count;
-    }
-    else {
-        if (source < target) {
-            i0 = std::max(source - 1, 0);
-            i3 = std::min(target + 1, count - 1);
-        }
-        else {
-            i0 = std::min(source + 1, count - 1);
-            i3 = std::max(target - 1, 0);
-        }
-    }
+    outPos = spline.EvaluatePosition(source, target, easedT);
 
-    outPos = CatmullRom(points[i0].position, points[source].position, points[target].position, points[i3].position, easedT);
-    outRot = glm::slerp(points[source].rotation, points[target].rotation, easedT);
+    const glm::quat& srcRot = (static_cast<size_t>(source) < settings.Size()) ? settings[source].rotation : glm::quat{1, 0, 0, 0};
+    const glm::quat& tgtRot = tgtSettings.rotation;
+    outRot = glm::slerp(srcRot, tgtRot, easedT);
 }
 
 void PathMoverComponent::Serialize(const PathMoverComponent& comp, nlohmann::json& json)
 {
     json["loopMode"] = comp.loopMode;
-    json["controlPoints"] = nlohmann::json::array();
-    for (size_t i = 0; i < comp.controlPoints.Size(); i++) {
-        const auto& cp = comp.controlPoints[i];
-        nlohmann::json cpJson;
-        cpJson["position"] = {cp.position.x, cp.position.y, cp.position.z};
-        cpJson["rotation"] = {cp.rotation.x, cp.rotation.y, cp.rotation.z, cp.rotation.w};
-        cpJson["easing"] = cp.easing;
-        cpJson["speed"] = cp.speed;
-        cpJson["waitTime"] = cp.waitTime;
-        json["controlPoints"].push_back(cpJson);
+    Engine::Spline::Serialize(comp.spline, json["spline"]);
+
+    json["pointSettings"] = nlohmann::json::array();
+    for (size_t i = 0; i < comp.pointSettings.Size(); i++) {
+        const auto& ps = comp.pointSettings[i];
+        nlohmann::json psJson;
+        psJson["rotation"] = {ps.rotation.x, ps.rotation.y, ps.rotation.z, ps.rotation.w};
+        psJson["easing"] = ps.easing;
+        psJson["speed"] = ps.speed;
+        psJson["waitTime"] = ps.waitTime;
+        json["pointSettings"].push_back(psJson);
     }
 
     json["currentSegment"] = comp.currentSegment;
@@ -137,27 +113,33 @@ void PathMoverComponent::Serialize(const PathMoverComponent& comp, nlohmann::jso
 void PathMoverComponent::Deserialize(PathMoverComponent& comp, const nlohmann::json& json)
 {
     comp.loopMode = static_cast<PathLoopMode>(json.value("loopMode", 0));
-    comp.controlPoints.Clear();
-    if (json.contains("controlPoints")) {
-        for (const auto& cpJson : json["controlPoints"]) {
-            PathControlPoint cp{};
-            if (cpJson.contains("position")) {
-                const auto& p = cpJson["position"];
-                cp.position = {p[0].get<float>(), p[1].get<float>(), p[2].get<float>()};
+
+    if (json.contains("spline")) {
+        Engine::Spline::Deserialize(comp.spline, json["spline"]);
+    }
+    comp.spline.bClosed = (comp.loopMode == PathLoopMode::Loop);
+
+    if (json.contains("pointSettings")) {
+        for (const auto& psJson : json["pointSettings"]) {
+            PathPointSettings ps{};
+            if (psJson.contains("rotation")) {
+                const auto& r = psJson["rotation"];
+                ps.rotation = glm::quat(r[3].get<float>(), r[0].get<float>(), r[1].get<float>(), r[2].get<float>());
             }
-            if (cpJson.contains("rotation")) {
-                const auto& r = cpJson["rotation"];
-                cp.rotation = glm::quat(r[3].get<float>(), r[0].get<float>(), r[1].get<float>(), r[2].get<float>());
-            }
-            cp.easing = static_cast<EasingType>(cpJson.value("easing", 0));
-            cp.speed = cpJson.value("speed", 1.0f);
-            cp.waitTime = cpJson.value("waitTime", 0.0f);
-            comp.controlPoints.PushBack(cp);
+            ps.easing = static_cast<EasingType>(psJson.value("easing", 0));
+            ps.speed = psJson.value("speed", 1.0f);
+            ps.waitTime = psJson.value("waitTime", 0.0f);
+            comp.pointSettings.PushBack(ps);
         }
     }
 
-    if (comp.controlPoints.IsEmpty()) {
-        comp.controlPoints.PushBack({glm::vec3(0.0f), glm::quat(1, 0, 0, 0), EasingType::Linear});
+    while (comp.pointSettings.Size() < comp.spline.points.Size()) {
+        comp.pointSettings.PushBack({});
+    }
+
+    if (comp.spline.points.IsEmpty()) {
+        comp.spline.points.PushBack(glm::vec3(0.0f));
+        comp.pointSettings.PushBack({});
     }
 
     comp.currentSegment = json.value("currentSegment", 0);
@@ -194,10 +176,17 @@ ComponentEditorResult PathMoverComponent::DrawEditor(Core::ViewFamily& viewFamil
         int loopModeInt = static_cast<int>(component.loopMode);
         if (ImGui::Combo("Loop Mode", &loopModeInt, PathLoopModeNames, static_cast<int>(PathLoopMode::COUNT))) {
             component.loopMode = static_cast<PathLoopMode>(loopModeInt);
+            component.spline.bClosed = (component.loopMode == PathLoopMode::Loop);
+        }
+
+        int splineModeInt = static_cast<int>(component.spline.mode);
+        ImGui::SetNextItemWidth(140.0f);
+        if (ImGui::Combo("Spline Mode##pm", &splineModeInt, Engine::SplineModeNames, static_cast<int>(Engine::SplineMode::COUNT))) {
+            component.spline.mode = static_cast<Engine::SplineMode>(splineModeInt);
         }
 
         ImGui::SeparatorText("Runtime State");
-        int maxSeg = std::max(0, static_cast<int>(component.controlPoints.Size()) - 1);
+        const int maxSeg = std::max(0, component.spline.SegmentCount() - 1);
         ImGui::SliderInt("Segment", &component.currentSegment, 0, maxSeg);
         ImGui::SliderFloat("Progress", &component.progress, 0.0f, 1.0f, "%.3f");
         static const char* dirNames[] = {"Forward", "Backward"};
@@ -213,11 +202,21 @@ ComponentEditorResult PathMoverComponent::DrawEditor(Core::ViewFamily& viewFamil
         ImGui::SeparatorText("Control Points");
 
         int pointToRemove = -1;
-        for (int i = 0; i < static_cast<int>(component.controlPoints.Size()); i++) {
+        int pointToSwap = -1;
+        const int cpCount = static_cast<int>(component.spline.points.Size());
+        for (int i = 0; i < cpCount; i++) {
             ImGui::PushID(i);
-            auto& cp = component.controlPoints[i];
-            const bool isEditing = (editPointIdx == i);
 
+            ImGui::BeginDisabled(i == 0);
+            if (ImGui::ArrowButton("##up", ImGuiDir_Up)) { pointToSwap = i - 1; }
+            ImGui::EndDisabled();
+            ImGui::SameLine();
+            ImGui::BeginDisabled(i == cpCount - 1);
+            if (ImGui::ArrowButton("##dn", ImGuiDir_Down)) { pointToSwap = i; }
+            ImGui::EndDisabled();
+            ImGui::SameLine();
+
+            const bool isEditing = (editPointIdx == i);
             ImGui::PushStyleColor(ImGuiCol_Button, isEditing ? ImVec4(0.15f, 0.65f, 0.15f, 1.0f) : ImVec4(0.15f, 0.35f, 0.65f, 1.0f));
             ImGui::BeginDisabled((state->bCustomGizmoActive || state->bCustomGizmoActivePrev) && !isEditing);
             if (ImGui::SmallButton(isEditing ? "D##edit" : "E##edit")) {
@@ -230,10 +229,10 @@ ComponentEditorResult PathMoverComponent::DrawEditor(Core::ViewFamily& viewFamil
 
             char posLabel[16];
             snprintf(posLabel, sizeof(posLabel), "##pos%d", i);
-            ImGui::DragFloat3(posLabel, &cp.position.x, 0.01f);
+            ImGui::DragFloat3(posLabel, &component.spline.points[i].x, 0.01f);
             ImGui::SameLine();
 
-            ImGui::BeginDisabled(static_cast<int>(component.controlPoints.Size()) <= 1);
+            ImGui::BeginDisabled(cpCount <= 1);
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
             if (ImGui::SmallButton("X##rmpt")) {
                 pointToRemove = i;
@@ -242,55 +241,68 @@ ComponentEditorResult PathMoverComponent::DrawEditor(Core::ViewFamily& viewFamil
             }
             ImGui::PopStyleColor();
             ImGui::EndDisabled(); {
+                PathPointSettings& ps = (i < static_cast<int>(component.pointSettings.Size())) ? component.pointSettings[i] : component.pointSettings.Back();
                 ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 24.0f);
                 char easingLabel[24];
                 snprintf(easingLabel, sizeof(easingLabel), "##easing%d", i);
                 ImGui::SetNextItemWidth(140.0f);
-                int easingInt = static_cast<int>(cp.easing);
+                int easingInt = static_cast<int>(ps.easing);
                 if (ImGui::Combo(easingLabel, &easingInt, EasingTypeNames, static_cast<int>(EasingType::COUNT))) {
-                    cp.easing = static_cast<EasingType>(easingInt);
+                    ps.easing = static_cast<EasingType>(easingInt);
                 }
                 ImGui::SameLine();
                 char speedLabel[24];
                 snprintf(speedLabel, sizeof(speedLabel), "##speed%d", i);
                 ImGui::SetNextItemWidth(80.0f);
-                ImGui::DragFloat(speedLabel, &cp.speed, 0.01f, 0.001f, 100.0f, "spd %.2f");
+                ImGui::DragFloat(speedLabel, &ps.speed, 0.01f, 0.001f, 100.0f, "spd %.2f");
                 ImGui::SameLine();
                 char waitLabel[24];
                 snprintf(waitLabel, sizeof(waitLabel), "##wait%d", i);
                 ImGui::SetNextItemWidth(80.0f);
-                ImGui::DragFloat(waitLabel, &cp.waitTime, 0.05f, 0.0f, 60.0f, "wait %.1fs");
+                ImGui::DragFloat(waitLabel, &ps.waitTime, 0.05f, 0.0f, 60.0f, "wait %.1fs");
             }
 
             ImGui::PopID();
         }
 
         if (pointToRemove >= 0) {
-            component.controlPoints.RemoveAt(static_cast<size_t>(pointToRemove));
+            component.spline.points.RemoveAt(static_cast<size_t>(pointToRemove));
+            if (pointToRemove < static_cast<int>(component.pointSettings.Size())) {
+                component.pointSettings.RemoveAt(static_cast<size_t>(pointToRemove));
+            }
+        }
+        if (pointToSwap >= 0 && pointToSwap + 1 < cpCount) {
+            std::swap(component.spline.points[pointToSwap], component.spline.points[pointToSwap + 1]);
+            if (pointToSwap < static_cast<int>(component.pointSettings.Size()) - 1) {
+                std::swap(component.pointSettings[pointToSwap], component.pointSettings[pointToSwap + 1]);
+            }
+            if (editPointIdx == pointToSwap) { editPointIdx = pointToSwap + 1; }
+            else if (editPointIdx == pointToSwap + 1) { editPointIdx = pointToSwap; }
         }
 
-        ImGui::BeginDisabled(component.controlPoints.IsFull());
+        ImGui::BeginDisabled(component.spline.points.IsFull());
         if (ImGui::Button("Add Point")) {
-            PathControlPoint newPt{};
-            if (component.controlPoints.Size() >= 2) {
-                const auto& last = component.controlPoints.Back();
-                const auto& prev = component.controlPoints[component.controlPoints.Size() - 2];
-                newPt.position = last.position + glm::normalize(last.position - prev.position);
-                newPt.rotation = last.rotation;
-                newPt.speed = last.speed;
+            PathPointSettings newPs{};
+            if (component.spline.points.Size() >= 2) {
+                const glm::vec3& last = component.spline.points.Back();
+                const glm::vec3& prev = component.spline.points[component.spline.points.Size() - 2];
+                component.spline.points.PushBack(last + glm::normalize(last - prev));
+                newPs = component.pointSettings.IsEmpty() ? PathPointSettings{} : component.pointSettings.Back();
             }
-            else if (component.controlPoints.Size() == 1) {
-                newPt.position = component.controlPoints.Back().position + glm::vec3(0, 0, 1);
-                newPt.rotation = component.controlPoints.Back().rotation;
-                newPt.speed = component.controlPoints.Back().speed;
+            else if (component.spline.points.Size() == 1) {
+                component.spline.points.PushBack(component.spline.points.Back() + glm::vec3(0, 0, 1));
+                newPs = component.pointSettings.IsEmpty() ? PathPointSettings{} : component.pointSettings.Back();
             }
-            component.controlPoints.PushBack(newPt);
+            else {
+                component.spline.points.PushBack(glm::vec3(0, 0, 0));
+            }
+            component.pointSettings.PushBack(newPs);
         }
         ImGui::EndDisabled();
 
         // Gizmo for editing individual control points
         if (editPointIdx == -1) { hasGizmoClaim = false; }
-        if (hasGizmoClaim && editPointIdx < static_cast<int>(component.controlPoints.Size())) {
+        if (hasGizmoClaim && editPointIdx < cpCount) {
             auto* transform = registry.try_get<TransformComponent>(entity);
             if (transform) {
                 const glm::mat4 view = viewFamily.mainView.currentViewData.view;
@@ -299,10 +311,9 @@ ComponentEditorResult PathMoverComponent::DrawEditor(Core::ViewFamily& viewFamil
                 const glm::mat4 entityMatInv = glm::inverse(entityMat);
                 const int idx = editPointIdx;
 
-                auto& cp = component.controlPoints[idx];
-                glm::vec3 worldPt = glm::vec3(entityMat * glm::vec4(cp.position, 1.0f));
-                glm::quat worldRot = transform->rotation * cp.rotation;
-
+                glm::vec3 worldPt = glm::vec3(entityMat * glm::vec4(component.spline.points[idx], 1.0f));
+                const glm::quat& ptRot = (idx < static_cast<int>(component.pointSettings.Size())) ? component.pointSettings[idx].rotation : glm::quat{1, 0, 0, 0};
+                glm::quat worldRot = transform->rotation * ptRot;
                 glm::mat4 mat = glm::translate(glm::mat4(1.0f), worldPt) * glm::mat4_cast(worldRot);
 
                 const auto gizmoOp = (state->currentGizmoOperation == ImGuizmo::SCALE)
@@ -314,16 +325,14 @@ ComponentEditorResult PathMoverComponent::DrawEditor(Core::ViewFamily& viewFamil
                     glm::value_ptr(view), glm::value_ptr(proj),
                     gizmoOp, ImGuizmo::LOCAL,
                     glm::value_ptr(mat))) {
-                    glm::vec3 newWorldPos = glm::vec3(mat[3]);
-                    cp.position = glm::vec3(entityMatInv * glm::vec4(newWorldPos, 1.0f));
+                    component.spline.points[idx] = glm::vec3(entityMatInv * glm::vec4(glm::vec3(mat[3]), 1.0f));
 
-                    if (gizmoOp == ImGuizmo::ROTATE) {
+                    if (gizmoOp == ImGuizmo::ROTATE && idx < static_cast<int>(component.pointSettings.Size())) {
                         glm::mat3 rotMat(mat);
                         rotMat[0] = glm::normalize(rotMat[0]);
                         rotMat[1] = glm::normalize(rotMat[1]);
                         rotMat[2] = glm::normalize(rotMat[2]);
-                        glm::quat newWorldRot = glm::quat_cast(rotMat);
-                        cp.rotation = glm::inverse(transform->rotation) * newWorldRot;
+                        component.pointSettings[idx].rotation = glm::inverse(transform->rotation) * glm::quat_cast(rotMat);
                     }
                 }
                 const bool usingGizmo = ImGuizmo::IsUsing();
@@ -347,32 +356,24 @@ ComponentEditorResult PathMoverComponent::DrawEditor(Core::ViewFamily& viewFamil
                                             ? glm::translate(glm::mat4(1.0f), transform->translation) * glm::mat4_cast(transform->rotation)
                                             : glm::mat4(1.0f);
 
-            for (int i = 0; i < static_cast<int>(component.controlPoints.Size()); i++) {
-                glm::vec3 wp = glm::vec3(entityMat * glm::vec4(component.controlPoints[i].position, 1.0f));
+            for (int i = 0; i < cpCount; i++) {
+                glm::vec3 wp = glm::vec3(entityMat * glm::vec4(component.spline.points[i], 1.0f));
                 DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {wp, kPointRadius, (i == editPointIdx) ? kEditColor : kPointColor});
             }
 
             // Draw the actual spline curve
-            if (component.controlPoints.Size() >= 2) {
-                const bool bIsLoop = component.loopMode == PathLoopMode::Loop;
-                const int count = static_cast<int>(component.controlPoints.Size());
-                const int numSegments = bIsLoop ? count : count - 1;
+            if (component.spline.points.Size() >= 2) {
+                const int numSegments = component.spline.SegmentCount();
 
                 for (int seg = 0; seg < numSegments; seg++) {
                     const int source = seg;
-                    const int target = (seg + 1) % count;
+                    const int target = component.spline.bClosed ? (seg + 1) % cpCount : seg + 1;
 
-                    glm::vec3 prevPos;
-                    glm::quat prevRot;
-                    EvaluatePath(component.controlPoints, source, target, 0.0f, bIsLoop, prevPos, prevRot);
-                    prevPos = glm::vec3(entityMat * glm::vec4(prevPos, 1.0f));
+                    glm::vec3 prevPos = glm::vec3(entityMat * glm::vec4(component.spline.EvaluatePosition(source, target, 0.0f), 1.0f));
 
                     for (int step = 1; step <= kCurveSubdivisions; step++) {
                         float t = static_cast<float>(step) / static_cast<float>(kCurveSubdivisions);
-                        glm::vec3 curPos;
-                        glm::quat curRot;
-                        EvaluatePath(component.controlPoints, source, target, t, bIsLoop, curPos, curRot);
-                        curPos = glm::vec3(entityMat * glm::vec4(curPos, 1.0f));
+                        glm::vec3 curPos = glm::vec3(entityMat * glm::vec4(component.spline.EvaluatePosition(source, target, t), 1.0f));
                         DEBUG_ADD_LINE(viewFamily.debugLines, {prevPos, curPos, kCurveColor, 0.03f});
                         prevPos = curPos;
                     }
@@ -380,13 +381,10 @@ ComponentEditorResult PathMoverComponent::DrawEditor(Core::ViewFamily& viewFamil
 
                 // Draw current progress position
                 const int source = component.currentSegment;
-                const int target = bIsLoop
-                                       ? (source + component.direction + count) % count
-                                       : std::clamp(source + component.direction, 0, count - 1);
-                glm::vec3 progressPos;
-                glm::quat progressRot;
-                EvaluatePath(component.controlPoints, source, target, component.progress, bIsLoop, progressPos, progressRot);
-                progressPos = glm::vec3(entityMat * glm::vec4(progressPos, 1.0f));
+                const int target = component.spline.bClosed
+                                       ? (source + component.direction + cpCount) % cpCount
+                                       : std::clamp(source + component.direction, 0, cpCount - 1);
+                glm::vec3 progressPos = glm::vec3(entityMat * glm::vec4(component.spline.EvaluatePosition(source, target, component.progress), 1.0f));
                 DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {progressPos, kPointRadius * 1.5f, kProgressColor});
             }
         }

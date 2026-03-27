@@ -44,7 +44,7 @@ void PhysicsBodyDesc::OnConstruct(entt::registry& registry, entt::entity entity)
             shape.meshSourceHandle = ctx->assetManager->LoadProceduralModel(shape.proceduralParams);
             needsResolve = true;
         }
-        else if (!shape.splineParams.controlPoints.IsEmpty()) {
+        else if (!shape.splineParams.spline.points.IsEmpty()) {
             shape.meshSourceHandle = ctx->assetManager->LoadSplineModel(shape.splineParams);
             needsResolve = true;
         }
@@ -121,8 +121,9 @@ void Component::PhysicsBodyDesc::Serialize(const PhysicsBodyDesc& comp, nlohmann
             case Component::PhysicsShapeType::TriangleMesh:
                 shapeJson["meshSourceModelId"] = shape.meshSourceModelId.id;
                 shapeJson["proceduralType"] = shape.proceduralParams.index();
-                if (!shape.splineParams.controlPoints.IsEmpty()) {
+                if (!shape.splineParams.spline.points.IsEmpty()) {
                     nlohmann::json sp;
+                    Engine::Spline::Serialize(shape.splineParams.spline, sp["spline"]);
                     sp["radius"] = shape.splineParams.radius;
                     sp["rollAngle"] = shape.splineParams.rollAngle;
                     sp["sides"] = shape.splineParams.sides;
@@ -133,11 +134,6 @@ void Component::PhysicsBodyDesc::Serialize(const PhysicsBodyDesc& comp, nlohmann
                     sp["bCrossPlanks"] = shape.splineParams.bCrossPlanks;
                     sp["crossPlankInterval"] = shape.splineParams.crossPlankInterval;
                     sp["crossPlankHeight"] = shape.splineParams.crossPlankHeight;
-                    sp["controlPoints"] = nlohmann::json::array();
-                    for (size_t ci = 0; ci < shape.splineParams.controlPoints.Size(); ci++) {
-                        const auto& cp = shape.splineParams.controlPoints[ci];
-                        sp["controlPoints"].push_back({cp.x, cp.y, cp.z, cp.w});
-                    }
                     shapeJson["splineParams"] = sp;
                 }
                 std::visit([&shapeJson](const auto& p) {
@@ -494,21 +490,17 @@ void Component::PhysicsBodyDesc::Deserialize(PhysicsBodyDesc& comp, const nlohma
                 if (shapeJson.contains("splineParams")) {
                     const auto& sp = shapeJson["splineParams"];
                     Engine::SplineParams spline{};
-                    spline.radius = sp["radius"].get<float>();
-                    spline.rollAngle = sp["rollAngle"].get<float>();
-                    spline.sides = sp["sides"].get<int32_t>();
-                    spline.segmentsPerSpan = sp["segmentsPerSpan"].get<int32_t>();
-                    spline.bCaps = sp["bCaps"].get<bool>();
+                    if (sp.contains("spline")) { Engine::Spline::Deserialize(spline.spline, sp["spline"]); }
+                    spline.radius = sp.value("radius", 0.5f);
+                    spline.rollAngle = sp.value("rollAngle", 0.0f);
+                    spline.sides = sp.value("sides", 8);
+                    spline.segmentsPerSpan = sp.value("segmentsPerSpan", 8);
+                    spline.bCaps = sp.value("bCaps", true);
                     spline.bDualPath = sp.value("bDualPath", false);
                     spline.dualPathSpacing = sp.value("dualPathSpacing", 1.0f);
                     spline.bCrossPlanks = sp.value("bCrossPlanks", false);
                     spline.crossPlankInterval = sp.value("crossPlankInterval", 4);
                     spline.crossPlankHeight = sp.value("crossPlankHeight", 0.0f);
-                    spline.controlPoints.Clear();
-                    for (const auto& cp : sp["controlPoints"]) {
-                        float roll = cp.size() > 3 ? cp[3].get<float>() : 0.0f;
-                        spline.controlPoints.PushBack({cp[0].get<float>(), cp[1].get<float>(), cp[2].get<float>(), roll});
-                    }
                     shape.splineParams = spline;
                 }
                 break;
@@ -556,7 +548,7 @@ ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewFamily& v
                         }
                         shape.meshSourceModelId = Engine::ModelID::INVALID;
                         shape.proceduralParams = std::monostate{};
-                        shape.splineParams.controlPoints.Clear();
+                        shape.splineParams.spline.points.Clear();
                         shape.type = PhysicsShapeType::Box;
                     }
                 }
@@ -601,7 +593,7 @@ ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewFamily& v
                             ctx->assetManager->UnloadModel(shape.meshSourceHandle);
                             shape.meshSourceHandle = {};
                             shape.meshSourceModelId = Engine::ModelID::INVALID;
-                            shape.splineParams.controlPoints.Clear();
+                            shape.splineParams.spline.points.Clear();
                         }
                         shape.type = newType;
                         registry.patch<PhysicsBodyDesc>(entity);
@@ -647,7 +639,7 @@ ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewFamily& v
                         ImGui::Text("Mesh Source: Procedural %s", kProceduralNames[idx]);
                         bHasAny = true;
                     }
-                    else if (!shape.splineParams.controlPoints.IsEmpty()) {
+                    else if (!shape.splineParams.spline.points.IsEmpty()) {
                         ImGui::Text("Mesh Source: Procedural Spline");
                         bHasAny = true;
                     }
@@ -668,7 +660,7 @@ ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewFamily& v
                             }
                             shape.meshSourceModelId = Engine::ModelID::INVALID;
                             shape.proceduralParams = std::monostate{};
-                            shape.splineParams.controlPoints.Clear();
+                            shape.splineParams.spline.points.Clear();
                             bAnyChange = true;
                         }
                     }
@@ -720,7 +712,7 @@ ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewFamily& v
                         case PhysicsShapeType::TriangleMesh:
                             shape.meshSourceModelId = Engine::ModelID::INVALID;
                             shape.proceduralParams = std::monostate{};
-                            shape.splineParams.controlPoints.Clear();
+                            shape.splineParams.spline.points.Clear();
                             shape.offset = {};
                             shape.bakedScale = scale;
                             if (auto* sm = registry.try_get<StaticMeshComponent>(entity)) {
@@ -730,7 +722,7 @@ ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewFamily& v
                                 shape.proceduralParams = pm->params;
                             }
                             else if (auto* splm = registry.try_get<SplineMeshComponent>(entity)) {
-                                shape.splineParams.controlPoints = splm->controlPoints;
+                                shape.splineParams.spline = splm->spline;
                                 shape.splineParams.radius = splm->radius;
                                 shape.splineParams.rollAngle = splm->rollAngle;
                                 shape.splineParams.sides = splm->sides;

@@ -369,7 +369,7 @@ void ResolvePhysicsShapeCreation(Core::EngineContext* ctx, Engine::GameState* st
                 continue;
             }
 
-            if (!shape.meshSourceModelId.IsValid() && std::holds_alternative<std::monostate>(shape.proceduralParams) && shape.splineParams.controlPoints.IsEmpty()) {
+            if (!shape.meshSourceModelId.IsValid() && std::holds_alternative<std::monostate>(shape.proceduralParams) && shape.splineParams.spline.points.IsEmpty()) {
                 LOG_WARN(Game, "PhysicsBodyDesc has mesh shape with no mesh source, skipping shape creation");
                 bDegenerate = true;
                 break;

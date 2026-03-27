@@ -6,13 +6,12 @@
 #define WILL_ENGINE_MODEL_TYPES_H
 #include <string>
 #include <vector>
-#include <cstdint>
 #include <variant>
 
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 
-#include "core/allocators/inline_vector.h"
+#include "engine/spline/spline.h"
 
 #include "offsetAllocator.hpp"
 #include "engine/resources/material/material.h"
@@ -284,11 +283,9 @@ struct TrefoilKnotParams
 
 struct SplineParams
 {
-    static constexpr size_t MaxControlPoints = 16;
-
-    Core::InlineVector<glm::vec4, MaxControlPoints> controlPoints{};
+    Spline spline;
     float radius{0.5f};
-    float rollAngle{0.0f}; // degree; rotates around the path tangent
+    float rollAngle{0.0f};
     int32_t sides{8};
     int32_t segmentsPerSpan{8};
     bool bCaps{true};

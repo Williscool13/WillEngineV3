@@ -42,6 +42,7 @@ add_library(engine STATIC
         resources/scene/scene.h
         resources/prefab/prefab_format.cpp
         resources/prefab/prefab_format.h
+        spline/spline.cpp
 )
 
 target_include_directories(engine PRIVATE

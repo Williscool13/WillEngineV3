@@ -10,6 +10,7 @@
 #include <entt/entt.hpp>
 #include <json/nlohmann/json_fwd.hpp>
 
+#include "engine/spline/spline.h"
 #include "game/components/component_types.h"
 #include "core/allocators/inline_vector.h"
 
@@ -74,9 +75,8 @@ inline const char* PathLoopModeNames[] = {
     "Ping-Pong",
 };
 
-struct PathControlPoint
+struct PathPointSettings
 {
-    glm::vec3 position{0.0f};
     glm::quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
     EasingType easing{EasingType::Linear};
     float speed{1.0f};
@@ -85,9 +85,8 @@ struct PathControlPoint
 
 struct PathMoverComponent
 {
-    static constexpr size_t MAX_CONTROL_POINTS = 8;
-
-    Core::InlineVector<PathControlPoint, MAX_CONTROL_POINTS> controlPoints{};
+    Engine::Spline spline;
+    Core::InlineVector<PathPointSettings, Engine::Spline::MaxPoints> pointSettings;
     PathLoopMode loopMode{PathLoopMode::PingPong};
 
     // Runtime state
@@ -96,7 +95,6 @@ struct PathMoverComponent
     int32_t direction{1};
     bool bIsWaiting{false};
     float waitTimer{0.0f};
-
 
     static void Serialize(const PathMoverComponent& comp, nlohmann::json& json);
 
@@ -107,7 +105,7 @@ struct PathMoverComponent
 
 float ApplyEasing(EasingType type, float t);
 
-void EvaluatePath(const Core::InlineVector<PathControlPoint, PathMoverComponent::MAX_CONTROL_POINTS>& points, int32_t source, int32_t target, float progress, bool bIsLoop,
+void EvaluatePath(const Engine::Spline& spline, const Core::InlineVector<PathPointSettings, Engine::Spline::MaxPoints>& settings, int32_t source, int32_t target, float t,
                   glm::vec3& outPos, glm::quat& outRot);
 }
 

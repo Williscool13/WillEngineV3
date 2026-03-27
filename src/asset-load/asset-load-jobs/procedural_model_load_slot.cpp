@@ -1940,34 +1940,24 @@ bool ProceduralModelLoadSlot::GenerateBowl(const Engine::BowlParams& p)
 
 bool ProceduralModelLoadSlot::GenerateSpline(const Engine::SplineParams& p)
 {
-    const int N = static_cast<int>(p.controlPoints.Size());
+    const int N = static_cast<int>(p.spline.points.Size());
     if (N < 2) return false;
 
+    const bool bClosed = p.spline.bClosed;
     const int segs = std::max(1, p.segmentsPerSpan);
     const int sides = std::max(3, p.sides);
-    const int totalSpans = N - 1;
-    const int totalRings = totalSpans * segs + 1;
+    const int totalSpans = bClosed ? N : N - 1;
+    const int totalRings = bClosed ? totalSpans * segs : totalSpans * segs + 1;
 
-    auto getCP = [&](int i) -> glm::vec3 {
-        if (i < 0) return 2.0f * glm::vec3(p.controlPoints[0]) - glm::vec3(p.controlPoints[1]);
-        if (i >= N) return 2.0f * glm::vec3(p.controlPoints[N - 1]) - glm::vec3(p.controlPoints[N - 2]);
-        return {p.controlPoints[i]};
-    };
-
-    auto catmullPos = [](glm::vec3 p0, glm::vec3 p1, glm::vec3 p2, glm::vec3 p3, float t) -> glm::vec3 {
-        return 0.5f * ((2.0f * p1) + (-p0 + p2) * t + (2.0f * p0 - 5.0f * p1 + 4.0f * p2 - p3) * (t * t) + (-p0 + 3.0f * p1 - 3.0f * p2 + p3) * (t * t * t));
-    };
-    auto catmullTan = [](glm::vec3 p0, glm::vec3 p1, glm::vec3 p2, glm::vec3 p3, float t) -> glm::vec3 {
-        return 0.5f * ((-p0 + p2) + 2.0f * (2.0f * p0 - 5.0f * p1 + 4.0f * p2 - p3) * t + 3.0f * (-p0 + 3.0f * p1 - 3.0f * p2 + p3) * (t * t));
-    };
     auto catmullScalar = [](float v0, float v1, float v2, float v3, float t) -> float {
         return 0.5f * ((2.0f * v1) + (-v0 + v2) * t + (2.0f * v0 - 5.0f * v1 + 4.0f * v2 - v3) * (t * t) + (-v0 + 3.0f * v1 - 3.0f * v2 + v3) * (t * t * t));
     };
 
-    auto getRoll = [&](int i) -> float {
-        if (i < 0) return p.controlPoints[0].w;
-        if (i >= N) return p.controlPoints[N - 1].w;
-        return p.controlPoints[i].w;
+    auto getRollCP = [&](int i) -> float {
+        const int nR = static_cast<int>(p.spline.rolls.Size());
+        if (nR == 0) { return 0.0f; }
+        if (bClosed) { return p.spline.rolls[((i % nR) + nR) % nR]; }
+        return p.spline.rolls[std::clamp(i, 0, nR - 1)];
     };
 
     struct Frame
@@ -1987,7 +1977,7 @@ bool ProceduralModelLoadSlot::GenerateSpline(const Engine::SplineParams& p)
     for (int i = 0; i < totalRings; i++) {
         int span;
         float t;
-        if (i == totalRings - 1) {
+        if (!bClosed && i == totalRings - 1) {
             span = N - 2;
             t = 1.0f;
         }
@@ -1996,10 +1986,18 @@ bool ProceduralModelLoadSlot::GenerateSpline(const Engine::SplineParams& p)
             t = static_cast<float>(i % segs) / static_cast<float>(segs);
         }
 
-        glm::vec3 tang = catmullTan(getCP(span - 1), getCP(span), getCP(span + 1), getCP(span + 2), t);
-        if (glm::length(tang) < 1e-6f) tang = frames.empty() ? glm::vec3{0, 0, 1} : frames.back().tangent;
-        perRingRoll.push_back(catmullScalar(getRoll(span - 1), getRoll(span), getRoll(span + 1), getRoll(span + 2), t));
-        frames.push_back({catmullPos(getCP(span - 1), getCP(span), getCP(span + 1), getCP(span + 2), t), glm::normalize(tang), {}, {}, {}, {}});
+        const int nextSpan = bClosed ? (span + 1) % N : span + 1;
+        glm::vec3 tang = p.spline.EvaluateTangent(span, nextSpan, t);
+        if (glm::length(tang) < 1e-6f) { tang = frames.empty() ? glm::vec3{0, 0, 1} : frames.back().tangent; }
+        float roll;
+        if (p.spline.mode == Engine::SplineMode::Linear) {
+            roll = glm::mix(getRollCP(span), getRollCP(nextSpan), t);
+        }
+        else {
+            roll = catmullScalar(getRollCP(span - 1), getRollCP(span), getRollCP(nextSpan), getRollCP(nextSpan + 1), t);
+        }
+        perRingRoll.push_back(roll);
+        frames.push_back({p.spline.EvaluatePosition(span, nextSpan, t), glm::normalize(tang), {}, {}, {}, {}});
     }
 
     // Parallel transport frames
@@ -2059,10 +2057,12 @@ bool ProceduralModelLoadSlot::GenerateSpline(const Engine::SplineParams& p)
             }
         }
 
-        for (int i = 0; i < totalRings - 1; i++) {
+        const int stitchCount = bClosed ? totalRings : totalRings - 1;
+        for (int i = 0; i < stitchCount; i++) {
+            const int nextRing = bClosed ? (i + 1) % totalRings : i + 1;
             for (int j = 0; j < sides; j++) {
                 uint32_t a0 = baseVertex + i * sides + j, a1 = baseVertex + i * sides + (j + 1) % sides;
-                uint32_t b0 = baseVertex + (i + 1) * sides + j, b1 = baseVertex + (i + 1) * sides + (j + 1) % sides;
+                uint32_t b0 = baseVertex + nextRing * sides + j, b1 = baseVertex + nextRing * sides + (j + 1) % sides;
                 indices.push_back(a0);
                 indices.push_back(a1);
                 indices.push_back(b0);
@@ -2072,7 +2072,7 @@ bool ProceduralModelLoadSlot::GenerateSpline(const Engine::SplineParams& p)
             }
         }
 
-        if (p.bCaps) {
+        if (p.bCaps && !bClosed) {
             {
                 auto cIdx = static_cast<uint32_t>(vertices.size());
                 const Frame& f = frames[0];
@@ -2127,9 +2127,10 @@ bool ProceduralModelLoadSlot::GenerateSpline(const Engine::SplineParams& p)
             return vert;
         };
 
-        for (int i = 0; i < totalRings - 1; i += plankInterval) {
+        const int plankMaxRing = bClosed ? totalRings : totalRings - 1;
+        for (int i = 0; i < plankMaxRing; i += plankInterval) {
             const Frame& f0 = frames[i];
-            const Frame& f1 = frames[i + 1];
+            const Frame& f1 = frames[bClosed ? (i + 1) % totalRings : i + 1];
 
             // 8 corners of the plank box
             const float plankTop = p.radius + p.crossPlankHeight;

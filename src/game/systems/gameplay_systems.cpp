@@ -26,7 +26,7 @@ void UpdatePathMovers(Core::EngineContext* ctx, Engine::GameState* state)
         auto& mover = view.get<Component::PathMoverComponent>(entity);
         auto& transform = view.get<Component::TransformComponent>(entity);
 
-        if (mover.controlPoints.Size() < 2) {
+        if (mover.spline.points.Size() < 2) {
             continue;
         }
 
@@ -36,7 +36,9 @@ void UpdatePathMovers(Core::EngineContext* ctx, Engine::GameState* state)
             continue;
         }
 
-        auto segmentMax = static_cast<int32_t>(mover.controlPoints.Size()) - 1;
+        const auto segmentCount = mover.spline.SegmentCount();
+        const int32_t segmentMax = segmentCount - 1;
+        const auto pointCount = static_cast<int32_t>(mover.spline.points.Size());
 
         // Finished the wait
         if (mover.bIsWaiting) {
@@ -47,12 +49,10 @@ void UpdatePathMovers(Core::EngineContext* ctx, Engine::GameState* state)
                     }
                     break;
                 case Component::PathLoopMode::PingPong:
-                    if (mover.currentSegment >= segmentMax) {
-                        mover.currentSegment = segmentMax;
+                    if (mover.currentSegment >= pointCount - 1) {
                         mover.direction = -1;
                     }
                     else if (mover.currentSegment <= 0) {
-                        mover.currentSegment = 0;
                         mover.direction = 1;
                     }
                     break;
@@ -64,19 +64,19 @@ void UpdatePathMovers(Core::EngineContext* ctx, Engine::GameState* state)
         }
 
         int32_t targetSegment = mover.currentSegment + mover.direction;
+        if (targetSegment >= pointCount) {
+            targetSegment = 0;
+        }
+        else if (targetSegment < 0) {
+            targetSegment = pointCount - 1;
+        }
 
         glm::vec3 oldPos;
         glm::quat oldRot;
-        if (targetSegment >= static_cast<int32_t>(mover.controlPoints.Size())) {
-            targetSegment = 0;
-        } else if (targetSegment < 0) {
-            targetSegment = static_cast<int32_t>(mover.controlPoints.Size()) - 1;
-        }
+        Component::EvaluatePath(mover.spline, mover.pointSettings, mover.currentSegment, targetSegment, mover.progress, oldPos, oldRot);
 
-        Component::EvaluatePath(mover.controlPoints, mover.currentSegment, targetSegment, mover.progress, mover.loopMode == Component::PathLoopMode::Loop, oldPos, oldRot);
-
-        const float speed = mover.controlPoints[targetSegment].speed;
-        const float wait = mover.controlPoints[targetSegment].waitTime;
+        const float speed = (static_cast<size_t>(targetSegment) < mover.pointSettings.Size()) ? mover.pointSettings[targetSegment].speed : 1.0f;
+        const float wait = (static_cast<size_t>(targetSegment) < mover.pointSettings.Size()) ? mover.pointSettings[targetSegment].waitTime : 0.0f;
 
         mover.progress += speed * dt;
 
@@ -87,10 +87,9 @@ void UpdatePathMovers(Core::EngineContext* ctx, Engine::GameState* state)
             mover.progress = 0.0f;
         }
 
-
         glm::vec3 newPos;
         glm::quat newRot;
-        Component::EvaluatePath(mover.controlPoints, mover.currentSegment, targetSegment, mover.progress, mover.loopMode == Component::PathLoopMode::Loop, newPos, newRot);
+        Component::EvaluatePath(mover.spline, mover.pointSettings, mover.currentSegment, targetSegment, mover.progress, newPos, newRot);
 
         transform.translation += (newPos - oldPos);
         transform.rotation = glm::inverse(oldRot) * newRot * transform.rotation;
