@@ -16,6 +16,7 @@
 #include "engine/resources/scene/scene.h"
 #include "engine/resources/prefab/prefab_format.h"
 #include "engine/resources/scene/scene_format.h"
+#include "game/components/camera_components.h"
 #include "game/components/common_components.h"
 #include "game/components/common/stable_id_component.h"
 #include "game/components/core_components.h"
@@ -197,6 +198,18 @@ void SaveSceneToFile(StringID sceneID, std::string_view sceneName, Engine::GameS
     }
 
     Engine::Scene s = SaveScene(state->componentRegistry, state->registry, assetManager, sceneID, sceneName);
+
+    {
+        auto camView = state->registry.view<Component::EditorCameraTag, Component::TransformComponent>();
+        auto camEntity = camView.front();
+        if (camEntity != entt::null) {
+            const auto& transform = state->registry.get<Component::TransformComponent>(camEntity);
+            nlohmann::json& camJson = s.content["editor_camera"];
+            camJson["translation"] = {transform.translation.x, transform.translation.y, transform.translation.z};
+            camJson["rotation"] = {transform.rotation.w, transform.rotation.x, transform.rotation.y, transform.rotation.z};
+        }
+    }
+
     std::filesystem::create_directories(path.parent_path());
     std::ofstream file(path);
 
@@ -250,6 +263,19 @@ bool LoadSceneFromFile(Engine::GameState* state, Engine::AssetManager* assetMana
     std::erase(state->modifiedScenes, loadedId);
 
     ResolvePrefabLoads(state, assetManager);
+
+    if (s.content.contains("editor_camera")) {
+        auto camView = state->registry.view<Component::EditorCameraTag, Component::TransformComponent>();
+        auto camEntity = camView.front();
+        if (camEntity != entt::null) {
+            const auto& camJson = s.content["editor_camera"];
+            auto& transform = state->registry.get<Component::TransformComponent>(camEntity);
+            const auto& t = camJson["translation"];
+            transform.translation = glm::vec3(t[0].get<float>(), t[1].get<float>(), t[2].get<float>());
+            const auto& r = camJson["rotation"];
+            transform.rotation = glm::quat(r[0].get<float>(), r[1].get<float>(), r[2].get<float>(), r[3].get<float>());
+        }
+    }
 
     LOG_INFO(Game, "Loaded scene '{}' from '{}'", sceneId.ToString(), path.string());
     return true;
@@ -462,6 +488,16 @@ void ResolvePrefabLoads(Engine::GameState* state, Engine::AssetManager* assetMan
 
 void PlayStart(Core::EngineContext* ctx, Engine::GameState* state)
 {
+    {
+        auto camView = state->registry.view<Component::EditorCameraTag, Component::TransformComponent>();
+        auto camEntity = camView.front();
+        if (camEntity != entt::null) {
+            const auto& transform = state->registry.get<Component::TransformComponent>(camEntity);
+            state->pieCameraTranslation = transform.translation;
+            state->pieCameraRotation = transform.rotation;
+        }
+    }
+
     state->pieSnapshot = SerializeAll(state->componentRegistry, state->registry, ctx->assetManager, state->loadedScenes);
 
     {
@@ -513,5 +549,15 @@ void PlayStop(Core::EngineContext* ctx, Engine::GameState* state)
     state->bIsPlaying = false;
     state->bGameCursorCaptured = false;
     ctx->setCursorHiddenFn(false);
+
+    {
+        auto camView = state->registry.view<Component::EditorCameraTag, Component::TransformComponent>();
+        auto camEntity = camView.front();
+        if (camEntity != entt::null) {
+            auto& transform = state->registry.get<Component::TransformComponent>(camEntity);
+            transform.translation = state->pieCameraTranslation;
+            transform.rotation = state->pieCameraRotation;
+        }
+    }
 }
 } // Game

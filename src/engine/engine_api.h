@@ -115,6 +115,8 @@ struct GameState
     float autoSaveInterval{60.0f};
     float autoSaveTimer{0.0f};
     std::vector<Scene> pieSnapshot{};
+    glm::vec3 pieCameraTranslation{};
+    glm::quat pieCameraRotation{1.0f, 0.0f, 0.0f, 0.0f};
 
     std::vector<entt::entity> selectedEntities{};
     std::vector<entt::entity> prevSelectedEntities{};
