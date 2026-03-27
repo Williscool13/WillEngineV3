@@ -463,6 +463,20 @@ void ResolvePrefabLoads(Engine::GameState* state, Engine::AssetManager* assetMan
 void PlayStart(Core::EngineContext* ctx, Engine::GameState* state)
 {
     state->pieSnapshot = SerializeAll(state->componentRegistry, state->registry, ctx->assetManager, state->loadedScenes);
+
+    {
+        std::vector<entt::entity> masterPrefabs;
+        auto view = state->registry.view<Component::PrefabInstanceComponent>();
+        for (auto entity : view) {
+            if (view.get<Component::PrefabInstanceComponent>(entity).bMasterPrefab) {
+                masterPrefabs.push_back(entity);
+            }
+        }
+        for (auto entity : masterPrefabs) {
+            state->registry.destroy(entity);
+        }
+    }
+
     state->bIsPlaying = true;
     state->bGameCursorCaptured = true;
     ctx->setCursorHiddenFn(true);

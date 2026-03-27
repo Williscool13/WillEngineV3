@@ -11,32 +11,61 @@
 #include "engine/engine_api.h"
 #include "game/component-registry/component_editor.h"
 
-void Game::Component::PrefabInstanceComponent::Serialize(const PrefabInstanceComponent& comp, nlohmann::json& json)
+namespace Game::Component
+{
+void PrefabInstanceComponent::Serialize(const PrefabInstanceComponent& comp, nlohmann::json& json)
 {
     json["prefabId"] = comp.prefabId.id;
+    json["bMasterPrefab"] = comp.bMasterPrefab;
 }
 
-void Game::Component::PrefabInstanceComponent::Deserialize(PrefabInstanceComponent& comp, const nlohmann::json& json)
+void PrefabInstanceComponent::Deserialize(PrefabInstanceComponent& comp, const nlohmann::json& json)
 {
     comp.prefabId = StringID(json["prefabId"].get<uint64_t>());
+    comp.bMasterPrefab = json.value("bMasterPrefab", false);
 }
 
-void Game::Component::NameComponent::Serialize(const NameComponent& comp, nlohmann::json& json)
+ComponentEditorResult PrefabInstanceComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)
+{
+    auto& comp = registry.get<PrefabInstanceComponent>(entity);
+
+    bool open = ImGui::CollapsingHeader("Prefab Instance##componentprefab", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
+    ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+    bool remove = ImGui::SmallButton("X##deleteprefab");
+    ImGui::PopStyleColor();
+
+    if (open) {
+        ImGui::TextDisabled("ID: %llu", comp.prefabId.id);
+        if (ImGui::Checkbox("Master Prefab", &comp.bMasterPrefab)) {
+            if (comp.bMasterPrefab) {
+                auto view = registry.view<PrefabInstanceComponent>();
+                for (auto e : view) {
+                    if (e == entity) { continue; }
+                    auto& other = view.get<PrefabInstanceComponent>(e);
+                    if (other.prefabId == comp.prefabId) {
+                        other.bMasterPrefab = false;
+                    }
+                }
+            }
+        }
+    }
+    return {.requestRemoval = remove};
+}
+
+void NameComponent::Serialize(const NameComponent& comp, nlohmann::json& json)
 {
     json["name"] = comp.name.c_str();
 }
 
-void Game::Component::NameComponent::Deserialize(NameComponent& comp, const nlohmann::json& json)
+void NameComponent::Deserialize(NameComponent& comp, const nlohmann::json& json)
 {
     comp.name = StackString<256>(json["name"].get<std::string>().c_str());
 }
 
-namespace Game
+ComponentEditorResult NameComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)
 {
-
-ComponentEditorResult Component::NameComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)
-{
-    auto& component = registry.get<Component::NameComponent>(entity);
+    auto& component = registry.get<NameComponent>(entity);
     bool open = ImGui::CollapsingHeader("Name##componentname", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
     ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
@@ -53,4 +82,4 @@ ComponentEditorResult Component::NameComponent::DrawEditor(Core::ViewFamily& vie
     }
     return {.requestRemoval = remove};
 }
-}
+} // Game::Component

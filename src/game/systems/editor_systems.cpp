@@ -899,6 +899,8 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
         Component::PrefabInstanceComponent* prefabInst = hasOneSelected ? state->registry.try_get<Component::PrefabInstanceComponent>(state->selectedEntities[0]) : nullptr;
         const bool isExistingPrefab = prefabInst != nullptr;
 
+        const bool isMasterPrefab = isExistingPrefab && prefabInst->bMasterPrefab;
+
         if (isExistingPrefab) {
             const auto* meta = ctx->assetManager->GetPrefabMetadata(prefabInst->prefabId);
             if (meta) {
@@ -911,9 +913,11 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
         ImGui::BeginDisabled(isExistingPrefab);
         ImGui::InputText("##prefab_name", prefabName, sizeof(prefabName));
         ImGui::EndDisabled();
+        ImGui::BeginDisabled(isExistingPrefab && !isMasterPrefab);
         if (ImGui::Button(isExistingPrefab ? "Save Prefab" : "Save as Prefab")) {
             SaveEntityAsPrefab(state, ctx->assetManager, ctx, state->selectedEntities[0], prefabName);
         }
+        ImGui::EndDisabled();
         ImGui::EndDisabled();
 
         const auto& prefabCache = ctx->assetManager->GetPrefabCache();
@@ -1007,7 +1011,9 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
 
         // Draw a single entity row
         auto drawEntityRow = [&](const EntityEntry& e) {
-            const bool isPrefab = state->registry.all_of<Component::PrefabInstanceComponent>(e.entity);
+            const auto* prefabInst = state->registry.try_get<Component::PrefabInstanceComponent>(e.entity);
+            const bool isPrefab = prefabInst != nullptr;
+            const bool isMasterPrefab = isPrefab && prefabInst->bMasterPrefab;
             bool selected = std::find(state->selectedEntities.begin(), state->selectedEntities.end(), e.entity) != state->selectedEntities.end();
 
             if (isPrefab) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.7f, 1.0f, 1.0f));
@@ -1022,7 +1028,11 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
             }
             ImGui::SameLine();
             char uniqueLabel[256];
-            snprintf(uniqueLabel, sizeof(uniqueLabel), "%s##%llu", e.label, e.stableId);
+            if (isMasterPrefab) {
+                snprintf(uniqueLabel, sizeof(uniqueLabel), "[M] %s##%llu", e.label, e.stableId);
+            } else {
+                snprintf(uniqueLabel, sizeof(uniqueLabel), "%s##%llu", e.label, e.stableId);
+            }
             if (ImGui::Selectable(uniqueLabel, selected)) {
                 if (ImGui::GetIO().KeyCtrl) {
                     auto pos = std::find(state->selectedEntities.begin(), state->selectedEntities.end(), e.entity);

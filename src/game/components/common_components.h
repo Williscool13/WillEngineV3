@@ -33,9 +33,11 @@ struct DoNotSerializeTag
 struct PrefabInstanceComponent
 {
     StringID prefabId;
+    bool bMasterPrefab{false};
 
     static void Serialize(const PrefabInstanceComponent& comp, nlohmann::json& json);
     static void Deserialize(PrefabInstanceComponent& comp, const nlohmann::json& json);
+    static ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
 };
 }
 
