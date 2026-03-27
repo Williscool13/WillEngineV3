@@ -747,14 +747,15 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
 
         // Right-aligned physics debug dropdown
         {
-            static constexpr const char* kPhysicsDebugLabels[] = {"Off", "Tag Only", "On"};
+            static constexpr const char* kPhysicsDebugLabels[] = {"Off", "Sensor Only", "Sensor + Tag", "On"};
             int currentMode = static_cast<int>(state->physicsDebugMode);
-            const float comboW = 90.0f;
+            const float comboW = 110.0f;
             ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - comboW);
             ImGui::SetNextItemWidth(comboW);
-            if (ImGui::Combo("##physics_debug", &currentMode, kPhysicsDebugLabels, IM_ARRAYSIZE(kPhysicsDebugLabels)))
+            if (ImGui::Combo("##physics_debug", &currentMode, kPhysicsDebugLabels, IM_ARRAYSIZE(kPhysicsDebugLabels))) {
                 state->physicsDebugMode = static_cast<Engine::GameState::PhysicsDebugMode>(currentMode);
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Physics debug draw: Off / Tag Only / On (all)");
+            }
+            if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Physics debug draw: Off / Sensor Only / Sensor + Tag / On (all)"); }
         }
     }
     ImGui::End();

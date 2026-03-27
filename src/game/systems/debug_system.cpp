@@ -39,8 +39,7 @@ void DebugProcessPhysicsCollisions(Core::EngineContext* ctx, Engine::GameState* 
             state->registry.emplace_or_replace<Component::AntiGravityTag>(e2);
     }
 
-    ctx->physicsSystem->ClearCollisionEvents();
-    ctx->physicsSystem->ClearActivationEvents();
+
 }
 
 void DebugApplyGroundForces(Core::EngineContext* ctx, Engine::GameState* state)

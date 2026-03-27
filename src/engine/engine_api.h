@@ -75,6 +75,9 @@ struct GameState
     Core::PostProcessConfiguration postProcess{};
     CubemapHandle skybox{CubemapHandle::INVALID};
 
+    // Gameplay
+    StringID currentCheckpointId{};
+
     // Asset Loading
     bool bPendingModelResolve{false};
 
@@ -95,8 +98,8 @@ struct GameState
     ImGuizmo::MODE currentGizmoMode{ImGuizmo::WORLD};
     bool bUniformScaleMode{true};
 
-    enum class PhysicsDebugMode : uint8_t { Off, TagOnly, On };
-    PhysicsDebugMode physicsDebugMode{PhysicsDebugMode::Off};
+    enum class PhysicsDebugMode : uint8_t { Off, SensorOnly, SensorAndTag, On };
+    PhysicsDebugMode physicsDebugMode{PhysicsDebugMode::SensorOnly};
 
     // Gizmo snapping
     bool bSnapEnabled{true};

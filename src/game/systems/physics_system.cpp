@@ -135,9 +135,20 @@ void DebugRenderPhysics(Core::EngineContext* ctx, Engine::GameState* state, Core
                 filter.AddBody(physicsBody.bodyID);
             }
         }
+        else if (state->physicsDebugMode == PhysicsDebugMode::SensorOnly) {
+            auto view = state->registry.view<Component::PhysicsBodyComponent, Component::PhysicsBodyDesc>();
+            for (const auto& [entity, physicsBody, bodyDesc] : view.each()) {
+                if (bodyDesc.bIsSensor) { filter.AddBody(physicsBody.bodyID); }
+            }
+        }
         else {
-            auto view = state->registry.view<Component::DrawPhysicsDebugTag, Component::PhysicsBodyComponent>();
-            for (const auto& [entity, physicsBody] : view.each()) {
+            // SensorAndTag
+            auto sensorView = state->registry.view<Component::PhysicsBodyComponent, Component::PhysicsBodyDesc>();
+            for (const auto& [entity, physicsBody, bodyDesc] : sensorView.each()) {
+                if (bodyDesc.bIsSensor) { filter.AddBody(physicsBody.bodyID); }
+            }
+            auto tagView = state->registry.view<Component::DrawPhysicsDebugTag, Component::PhysicsBodyComponent>();
+            for (const auto& [entity, physicsBody] : tagView.each()) {
                 filter.AddBody(physicsBody.bodyID);
             }
         }
@@ -146,29 +157,31 @@ void DebugRenderPhysics(Core::EngineContext* ctx, Engine::GameState* state, Core
     }
     else {
         constexpr glm::vec4 kDebugColor{0.2f, 0.8f, 1.0f, 1.0f};
+        constexpr glm::vec4 kSensorColor{1.0f, 0.85f, 0.0f, 1.0f};
         auto& vf = frameBuffer->mainViewFamily;
 
         auto drawEntity = [&](const Component::PhysicsBodyDesc& bodyDesc, const Component::TransformComponent& transform) {
+            const glm::vec4 color = bodyDesc.bIsSensor ? kSensorColor : kDebugColor;
             const glm::mat4 entityMat = glm::translate(glm::mat4(1.0f), transform.translation) * glm::mat4_cast(transform.rotation);
             for (const auto& shape : bodyDesc.shapes) {
                 const glm::vec3 shapeCenter = glm::vec3(entityMat * glm::vec4(shape.offset, 1.0f));
                 switch (shape.type) {
                     case Component::PhysicsShapeType::Box:
-                        DEBUG_ADD_BOX(vf.debugBoxes, {shapeCenter, shape.box.halfExtents, transform.rotation * shape.rotation, kDebugColor});
+                        DEBUG_ADD_BOX(vf.debugBoxes, {shapeCenter, shape.box.halfExtents, transform.rotation * shape.rotation, color});
                         break;
                     case Component::PhysicsShapeType::Sphere:
-                        DEBUG_ADD_SPHERE(vf.debugSpheres, {shapeCenter, shape.sphere.radius, kDebugColor});
+                        DEBUG_ADD_SPHERE(vf.debugSpheres, {shapeCenter, shape.sphere.radius, color});
                         break;
                     case Component::PhysicsShapeType::Capsule:
                     {
                         const glm::vec3 top = shapeCenter + glm::vec3(0.0f, shape.capsule.halfHeight, 0.0f);
                         const glm::vec3 bot = shapeCenter - glm::vec3(0.0f, shape.capsule.halfHeight, 0.0f);
-                        DEBUG_ADD_SPHERE(vf.debugSpheres, {top, shape.capsule.radius, kDebugColor});
-                        DEBUG_ADD_SPHERE(vf.debugSpheres, {bot, shape.capsule.radius, kDebugColor});
-                        DEBUG_ADD_LINE(vf.debugLines, {top + glm::vec3( shape.capsule.radius, 0, 0), bot + glm::vec3( shape.capsule.radius, 0, 0), kDebugColor});
-                        DEBUG_ADD_LINE(vf.debugLines, {top + glm::vec3(-shape.capsule.radius, 0, 0), bot + glm::vec3(-shape.capsule.radius, 0, 0), kDebugColor});
-                        DEBUG_ADD_LINE(vf.debugLines, {top + glm::vec3(0, 0, shape.capsule.radius), bot + glm::vec3(0, 0, shape.capsule.radius), kDebugColor});
-                        DEBUG_ADD_LINE(vf.debugLines, {top + glm::vec3(0, 0, -shape.capsule.radius), bot + glm::vec3(0, 0, -shape.capsule.radius), kDebugColor});
+                        DEBUG_ADD_SPHERE(vf.debugSpheres, {top, shape.capsule.radius, color});
+                        DEBUG_ADD_SPHERE(vf.debugSpheres, {bot, shape.capsule.radius, color});
+                        DEBUG_ADD_LINE(vf.debugLines, {top + glm::vec3( shape.capsule.radius, 0, 0), bot + glm::vec3( shape.capsule.radius, 0, 0), color});
+                        DEBUG_ADD_LINE(vf.debugLines, {top + glm::vec3(-shape.capsule.radius, 0, 0), bot + glm::vec3(-shape.capsule.radius, 0, 0), color});
+                        DEBUG_ADD_LINE(vf.debugLines, {top + glm::vec3(0, 0, shape.capsule.radius), bot + glm::vec3(0, 0, shape.capsule.radius), color});
+                        DEBUG_ADD_LINE(vf.debugLines, {top + glm::vec3(0, 0, -shape.capsule.radius), bot + glm::vec3(0, 0, -shape.capsule.radius), color});
                         break;
                     }
                     case Component::PhysicsShapeType::ConvexHull:
@@ -182,13 +195,13 @@ void DebugRenderPhysics(Core::EngineContext* ctx, Engine::GameState* state, Core
                                 const glm::vec3 a = glm::vec3(entityMat * glm::vec4(pos[idx[i + 0]] * shape.bakedScale + shape.offset, 1.0f));
                                 const glm::vec3 b = glm::vec3(entityMat * glm::vec4(pos[idx[i + 1]] * shape.bakedScale + shape.offset, 1.0f));
                                 const glm::vec3 c = glm::vec3(entityMat * glm::vec4(pos[idx[i + 2]] * shape.bakedScale + shape.offset, 1.0f));
-                                DEBUG_ADD_LINE(vf.debugLines, {a, b, kDebugColor});
-                                DEBUG_ADD_LINE(vf.debugLines, {b, c, kDebugColor});
-                                DEBUG_ADD_LINE(vf.debugLines, {c, a, kDebugColor});
+                                DEBUG_ADD_LINE(vf.debugLines, {a, b, color});
+                                DEBUG_ADD_LINE(vf.debugLines, {b, c, color});
+                                DEBUG_ADD_LINE(vf.debugLines, {c, a, color});
                             }
                         }
                         else {
-                            DEBUG_ADD_SPHERE(vf.debugSpheres, {shapeCenter, 0.25f, kDebugColor});
+                            DEBUG_ADD_SPHERE(vf.debugSpheres, {shapeCenter, 0.25f, color});
                         }
                         break;
                     }
@@ -201,10 +214,17 @@ void DebugRenderPhysics(Core::EngineContext* ctx, Engine::GameState* state, Core
                 drawEntity(bodyDesc, transform);
             }
         }
+        else if (state->physicsDebugMode == PhysicsDebugMode::SensorOnly) {
+            for (const auto& [entity, bodyDesc, transform] : state->registry.view<Component::PhysicsBodyDesc, Component::TransformComponent>().each()) {
+                if (bodyDesc.bIsSensor) { drawEntity(bodyDesc, transform); }
+            }
+        }
         else {
-            // TagOnly
-            for (const auto& [entity, bodyDesc, transform] : state->registry.view<Component::DrawPhysicsDebugTag, Component::PhysicsBodyDesc, Component::TransformComponent>().each()) {
-                drawEntity(bodyDesc, transform);
+            // SensorAndTag
+            for (const auto& [entity, bodyDesc, transform] : state->registry.view<Component::PhysicsBodyDesc, Component::TransformComponent>().each()) {
+                if (bodyDesc.bIsSensor || state->registry.all_of<Component::DrawPhysicsDebugTag>(entity)) {
+                    drawEntity(bodyDesc, transform);
+                }
             }
         }
     }
@@ -220,9 +240,14 @@ JPH::BodyID CreateBodyFromShape(JPH::BodyInterface& bodyInterface, const Compone
                                             ? JPH::EMotionType::Dynamic
                                             : JPH::EMotionType::Kinematic;
 
-    JPH::ObjectLayer layer = layerOverride != JPH::ObjectLayer(0xFFFF)
-                                 ? layerOverride
-                                 : desc.motionType == Component::PhysicsMotionType::Static ? Physics::Layers::NON_MOVING : Physics::Layers::MOVING;
+    JPH::ObjectLayer layer;
+    if (layerOverride != static_cast<JPH::ObjectLayer>(0xFFFF)) {
+        layer = layerOverride;
+    } else if (desc.bIsSensor) {
+        layer = Physics::Layers::SENSOR;
+    } else {
+        layer = desc.motionType == Component::PhysicsMotionType::Static ? Physics::Layers::NON_MOVING : Physics::Layers::MOVING;
+    }
 
     JPH::BodyCreationSettings settings(desc.shapeRef, position, rotation, motionType, layer);
     if (desc.motionType != Component::PhysicsMotionType::Static) {
@@ -232,10 +257,13 @@ JPH::BodyID CreateBodyFromShape(JPH::BodyInterface& bodyInterface, const Compone
 
     settings.mFriction = desc.friction;
     settings.mMotionQuality = desc.motionQuality;
+    settings.mEnhancedInternalEdgeRemoval = desc.bEnhancedInternalEdgeRemoval;
+    settings.mIsSensor = desc.bIsSensor;
 
-    settings.mEnhancedInternalEdgeRemoval = desc.enhancedInternalEdgeRemoval;
-
-    return bodyInterface.CreateAndAddBody(settings, desc.motionType == Component::PhysicsMotionType::Static ? JPH::EActivation::DontActivate : JPH::EActivation::Activate);
+    JPH::EActivation activation = (desc.motionType == Component::PhysicsMotionType::Static && !desc.bIsSensor)
+                                      ? JPH::EActivation::DontActivate
+                                      : JPH::EActivation::Activate;
+    return bodyInterface.CreateAndAddBody(settings, activation);
 }
 
 JPH::ShapeRefC CreateShapeFromDesc(const Component::PhysicsShapeDesc& desc, Engine::AssetManager* assetManager)

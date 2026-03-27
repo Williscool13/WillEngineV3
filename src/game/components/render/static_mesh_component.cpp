@@ -82,6 +82,7 @@ void Component::StaticMeshComponent::Serialize(const StaticMeshComponent& comp, 
 {
     json["meshIndex"] = comp.meshIndex;
     json["modelId"] = comp.modelId.id;
+    json["modelFlags"] = {comp.modelFlags.x, comp.modelFlags.y, comp.modelFlags.z, comp.modelFlags.w};
 
     nlohmann::json overrides = nlohmann::json::object();
     for (int32_t i = 0; i < 128; ++i) {
@@ -98,6 +99,10 @@ void Component::StaticMeshComponent::Deserialize(StaticMeshComponent& comp, cons
 {
     comp.meshIndex = json["meshIndex"].get<int32_t>();
     comp.modelId = Engine::ModelID(json["modelId"].get<uint64_t>());
+    if (json.contains("modelFlags")) {
+        const auto& f = json["modelFlags"];
+        comp.modelFlags = glm::vec4(f[0].get<float>(), f[1].get<float>(), f[2].get<float>(), f[3].get<float>());
+    }
 
     if (json.contains("materialOverrides")) {
         for (const auto& [key, val] : json["materialOverrides"].items()) {

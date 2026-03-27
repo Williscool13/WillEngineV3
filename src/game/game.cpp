@@ -29,6 +29,7 @@
 #include "gameplay/player/physics_player_controller.h"
 #include "systems/common_systems.h"
 #include "systems/gameplay_systems.h"
+#include "systems/checkpoint_system.h"
 
 
 extern "C"
@@ -90,9 +91,6 @@ GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::GameState* state)
 #endif
 
     if (state->bIsPlaying) {
-        Game::DebugProcessPhysicsCollisions(ctx, state);
-        Game::DebugApplyGroundForces(ctx, state);
-
         if (state->bEnablePhysics) {
             Game::PhysicsUpdate(ctx, state);
         }
@@ -101,7 +99,11 @@ GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::GameState* state)
             playerController->Update(ctx, state);
         }
 
+        Game::DebugProcessPhysicsCollisions(ctx, state);
+        Game::DebugApplyGroundForces(ctx, state);
+
         Game::UpdatePathMovers(ctx, state);
+        Game::CheckpointUpdate(ctx, state);
     }
     else {
         Game::UpdateEditorCamera(ctx, state);
@@ -127,6 +129,8 @@ GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::GameState* state)
 
     state->registry.clear<Game::Component::DirtyTransformTag>();
 
+    ctx->physicsSystem->ClearCollisionEvents();
+    ctx->physicsSystem->ClearActivationEvents();
     ctx->materialManager->ProcessRetirements();
 
     const auto frameEnd = std::chrono::high_resolution_clock::now();

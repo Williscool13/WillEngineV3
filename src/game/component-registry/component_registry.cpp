@@ -16,6 +16,7 @@
 #include "game/components/physics/physics_components.h"
 #include "game/components/render/procedural_mesh_component.h"
 #include "game/components/render/spline_mesh_component.h"
+#include "game/components/gameplay/checkpoint_component.h"
 #include "game/components/gameplay/path_mover_component.h"
 #include "game/components/gameplay/player_spawn_component.h"
 #include "game/components/render/static_mesh_component.h"
@@ -46,6 +47,7 @@ void RegisterComponents(ComponentRegistry& componentRegistry)
     RegisterComponent<Component::FloorTag>(componentRegistry, "FloorTag");
 
     RegisterComponent<Component::DebugGizmoComponent>(componentRegistry, "DebugGizmoComponent");
+    RegisterComponent<Component::CheckpointComponent>(componentRegistry, "CheckpointComponent");
     RegisterComponent<Component::PlayerSpawnComponent>(componentRegistry, "PlayerSpawnComponent");
     RegisterComponent<Component::PathMoverComponent>(componentRegistry, "PathMoverComponent");
 }

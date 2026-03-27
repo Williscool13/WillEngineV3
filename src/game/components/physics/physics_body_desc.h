@@ -83,8 +83,9 @@ struct PhysicsBodyDesc
     float restitution{0.0f};
     JPH::EMotionQuality motionQuality{JPH::EMotionQuality::Discrete};
     JPH::ObjectLayer layerOverride{0xFFFF};
-    bool active{true};
-    bool enhancedInternalEdgeRemoval{false};
+    bool bActive{true};
+    bool bEnhancedInternalEdgeRemoval{false};
+    bool bIsSensor{false};
 
     Core::InlineVector<PhysicsShapeDesc, 8> shapes;
 

@@ -285,7 +285,8 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
             >);
 
         for (auto [entity, runtime, renderable, renderTransform] : view.each()) {
-            if (runtime.primitives.IsEmpty()) continue;
+            if (runtime.primitives.IsEmpty()) { continue; }
+            if (renderable.modelFlags.x == 0.0f) { continue; }
             auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.size());
             frameBuffer->mainViewFamily.modelMatrices.push_back({renderTransform.modelMatrix, renderTransform.previousMatrix});
 
@@ -368,7 +369,8 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
         auto view = state->registry.view<Component::MeshRuntime, Component::ProceduralMeshComponent, Component::RenderTransformComponent>(entt::exclude<Component::ProceduralMeshLoadingTag>);
 
         for (const auto& [entity, runtime, renderable, renderTransform] : view.each()) {
-            if (runtime.primitives.IsEmpty()) continue;
+            if (runtime.primitives.IsEmpty()) { continue; }
+            if (renderable.modelFlags.x == 0.0f) { continue; }
 
             auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.size());
             frameBuffer->mainViewFamily.modelMatrices.push_back({renderTransform.modelMatrix, renderTransform.previousMatrix});
@@ -391,7 +393,8 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
         ZoneScopedN("SplineMeshes");
         auto view = state->registry.view<Component::MeshRuntime, Component::SplineMeshComponent, Component::RenderTransformComponent>(entt::exclude<Component::SplineMeshLoadingTag>);
         for (const auto& [entity, runtime, renderable, renderTransform] : view.each()) {
-            if (runtime.primitives.IsEmpty()) continue;
+            if (runtime.primitives.IsEmpty()) { continue; }
+            if (renderable.modelFlags.x == 0.0f) { continue; }
 
             auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.size());
             frameBuffer->mainViewFamily.modelMatrices.push_back({renderTransform.modelMatrix, renderTransform.previousMatrix});

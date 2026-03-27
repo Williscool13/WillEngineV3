@@ -71,6 +71,7 @@ void Component::ProceduralMeshComponent::Serialize(const ProceduralMeshComponent
 {
     json["type"] = comp.params.index();
     json["material"] = comp.material.id;
+    json["modelFlags"] = {comp.modelFlags.x, comp.modelFlags.y, comp.modelFlags.z, comp.modelFlags.w};
 
     std::visit([&json](const auto& p) {
         using T = std::decay_t<decltype(p)>;
@@ -201,6 +202,10 @@ void Component::ProceduralMeshComponent::Serialize(const ProceduralMeshComponent
 void Component::ProceduralMeshComponent::Deserialize(ProceduralMeshComponent& comp, const nlohmann::json& json)
 {
     comp.material = Engine::MaterialID(json["material"].get<uint64_t>());
+    if (json.contains("modelFlags")) {
+        const auto& f = json["modelFlags"];
+        comp.modelFlags = glm::vec4(f[0].get<float>(), f[1].get<float>(), f[2].get<float>(), f[3].get<float>());
+    }
 
     int32_t type = json["type"].get<int32_t>();
     if (type == 1) {
