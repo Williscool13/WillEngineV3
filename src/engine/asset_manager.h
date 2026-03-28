@@ -194,6 +194,8 @@ public: // Scenes
 
     void UpdateSceneCachePath(StringID sceneId, const std::filesystem::path& path, uint32_t entityCount);
 
+    bool DeleteScene(StringID sceneId);
+
 public: // Prefabs
     struct CachedPrefabMetadata
     {
@@ -205,6 +207,8 @@ public: // Prefabs
     const std::unordered_map<StringID, CachedPrefabMetadata>& GetPrefabCache() { return prefabCache; }
 
     [[nodiscard]] const CachedPrefabMetadata* GetPrefabMetadata(StringID prefabId) const;
+
+    bool DeletePrefab(StringID prefabId);
 
 private: // Asset Registry
     struct CachedCubemapMetadata

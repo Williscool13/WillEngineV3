@@ -113,6 +113,28 @@ const AssetManager::CachedPrefabMetadata* AssetManager::GetPrefabMetadata(String
     return it != prefabCache.end() ? &it->second : nullptr;
 }
 
+bool AssetManager::DeleteScene(StringID sceneId)
+{
+    auto it = sceneCache.find(sceneId);
+    if (it == sceneCache.end()) { return false; }
+    if (!it->second.source.empty()) {
+        std::filesystem::remove(it->second.source);
+    }
+    sceneCache.erase(it);
+    return true;
+}
+
+bool AssetManager::DeletePrefab(StringID prefabId)
+{
+    auto it = prefabCache.find(prefabId);
+    if (it == prefabCache.end()) { return false; }
+    if (!it->second.source.empty()) {
+        std::filesystem::remove(it->second.source);
+    }
+    prefabCache.erase(it);
+    return true;
+}
+
 StaticModelHandle AssetManager::LoadModel(ModelID modelId)
 {
     if (!modelCache.contains(modelId)) {

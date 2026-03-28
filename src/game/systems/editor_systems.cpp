@@ -838,6 +838,18 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
             ImGui::SetTooltip("Auto-save in %.0fs", state->autoSaveInterval - state->autoSaveTimer);
         }
 
+        ImGui::SameLine();
+        ImGui::BeginDisabled(!hasScene || isLoaded);
+        if (ImGui::Button("Delete")) {
+            ctx->assetManager->DeleteScene(state->currentSceneId);
+            state->currentSceneId = {};
+            state->currentSceneName.clear();
+        }
+        ImGui::EndDisabled();
+        if (isLoaded && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+            ImGui::SetTooltip("Unload scene before deleting");
+        }
+
         ImGui::TextDisabled("ID: %llu", state->currentSceneId.id);
 
         ImGui::SeparatorText("New Scene");
@@ -963,6 +975,29 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
             if (spawned != entt::null) {
                 state->selectedEntities = {spawned};
                 MarkSceneModified(state, state->currentSceneId);
+            }
+        }
+        ImGui::SameLine();
+        {
+            const StringID selectedPrefabId = prefabList.empty() ? StringID{} : prefabList[selectedPrefab].second;
+            bool prefabInUse = false;
+            if (!prefabList.empty()) {
+                auto prefabView = state->registry.view<Component::PrefabInstanceComponent>();
+                for (auto entity : prefabView) {
+                    if (prefabView.get<Component::PrefabInstanceComponent>(entity).prefabId == selectedPrefabId) {
+                        prefabInUse = true;
+                        break;
+                    }
+                }
+            }
+            ImGui::BeginDisabled(prefabList.empty() || prefabInUse);
+            if (ImGui::Button("Delete Prefab")) {
+                ctx->assetManager->DeletePrefab(selectedPrefabId);
+                selectedPrefab = 0;
+            }
+            ImGui::EndDisabled();
+            if (prefabInUse && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+                ImGui::SetTooltip("Prefab is referenced by scene entities");
             }
         }
         ImGui::EndDisabled();
@@ -1616,6 +1651,7 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
         }
         ImGui::SeparatorText(fmt::format("Materials ({})", mutableCount).c_str());
 
+        Engine::MaterialID materialPendingDelete = Engine::MaterialID::INVALID;
         for (const auto& [id, mat] : allMaterials) {
             if (mat.immutable) continue;
             ImGui::PushID(static_cast<int>(id.id));
@@ -1623,6 +1659,19 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
                 ImGui::BeginDisabled(true);
                 ImGui::Text("ID: %llu", id.id);
                 ImGui::EndDisabled();
+
+                {
+                    const auto& entryMap = materialManager->GetIdToEntryMap();
+                    const bool materialInUse = entryMap.contains(id) && materialManager->GetActiveMaterials()[entryMap.at(id)].refCounter > 0;
+                    ImGui::BeginDisabled(materialInUse);
+                    if (ImGui::Button("Delete Material")) {
+                        materialPendingDelete = id;
+                    }
+                    ImGui::EndDisabled();
+                    if (materialInUse && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+                        ImGui::SetTooltip("Material is referenced by scene entities");
+                    }
+                }
 
                 Engine::Material editMat = mat;
                 MaterialProperties& props = editMat.props;
@@ -1825,6 +1874,9 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
                 }
             }
             ImGui::PopID();
+        }
+        if (materialPendingDelete.IsValid()) {
+            materialManager->DeleteMutableMaterial(materialPendingDelete);
         }
     }
     ImGui::End();

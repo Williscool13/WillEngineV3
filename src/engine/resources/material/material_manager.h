@@ -51,6 +51,8 @@ public:
 
     void CreateMaterial(std::string_view name);
 
+    bool DeleteMutableMaterial(MaterialID id);
+
     void Scan();
 
     void LoadMutableMaterials();

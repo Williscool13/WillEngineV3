@@ -4,6 +4,7 @@
 
 #include "material_manager.h"
 
+#include <filesystem>
 #include <fstream>
 
 #include <json/nlohmann/json.hpp>
@@ -294,6 +295,21 @@ MaterialProperties MaterialManager::GetProperties(MaterialID id) const
         return it->second.props;
     }
     return {};
+}
+
+bool MaterialManager::DeleteMutableMaterial(MaterialID id)
+{
+    auto it = materials.find(id);
+    if (it == materials.end() || it->second.immutable) { return false; }
+
+    if (!it->second.sourcePath.empty()) {
+        std::filesystem::remove(it->second.sourcePath);
+    }
+
+    StringID sid(it->second.name.data(), it->second.name.size());
+    nameToMaterialMap.erase(sid);
+    materials.erase(it);
+    return true;
 }
 
 void MaterialManager::CreateMaterial(std::string_view name)
