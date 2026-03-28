@@ -206,7 +206,7 @@ void ResolveSplineMeshLoads(Core::EngineContext* ctx, Engine::GameState* state)
     }
 }
 
-void RenderUpdate(Core::EngineContext* ctx, Engine::GameState* state)
+void MarkRenderTransformsDirty(Core::EngineContext* ctx, Engine::GameState* state)
 {
     auto transformDirtyView = state->registry.view<Component::RenderTransformComponent, Component::DirtyTransformTag>();
     for (auto entity : transformDirtyView) {

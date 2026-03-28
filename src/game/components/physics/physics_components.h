@@ -33,6 +33,12 @@ struct PendingPhysicsMeshTag
 struct PendingPhysicsShapeCreationTag
 {};
 
+struct SetVelocityTag
+{
+    glm::vec3 linearVelocity{0.0f};
+    glm::vec3 angularVelocity{0.0f};
+};
+
 struct DrawPhysicsDebugTag
 {
     static ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);

@@ -48,10 +48,9 @@ public:
         return bodyActivationListener.GetDeactivatedEvents();
     }
 
-    std::span<const DeferredCollisionEvent> GetCollisionEvents()
-    {
-        return contactListener.GetCollisionEvents();
-    }
+    std::span<const DeferredCollisionEvent> GetAddedEvents()     { return contactListener.GetAddedEvents(); }
+    std::span<const DeferredCollisionEvent> GetPersistedEvents() { return contactListener.GetPersistedEvents(); }
+    std::span<const DeferredRemovedEvent>   GetRemovedEvents()   { return contactListener.GetRemovedEvents(); }
 
     void ClearCollisionEvents()
     {

@@ -16,6 +16,11 @@
 #include "game/components/physics/physics_body_component.h"
 #include "Jolt/Physics/Body/BodyCreationSettings.h"
 #include "Jolt/Physics/Collision/Shape/StaticCompoundShape.h"
+#include "Jolt/Physics/Collision/Shape/BoxShape.h"
+#include "Jolt/Physics/Collision/Shape/CapsuleShape.h"
+#include "Jolt/Physics/Collision/Shape/SphereShape.h"
+#include "Jolt/Physics/Collision/Shape/ConvexHullShape.h"
+#include "Jolt/Physics/Collision/Shape/MeshShape.h"
 
 namespace Game
 {
@@ -63,6 +68,17 @@ void PhysicsUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         }
         state->registry.clear<Component::DirtyKinematicPhysicsTransformTag>();
 
+        // Set velocity
+        auto velocityView = state->registry.view<Component::PhysicsBodyComponent, Component::SetVelocityTag>();
+        for (const auto& [entity, physicsBody, tag] : velocityView.each()) {
+            bodyInterface.SetLinearAndAngularVelocity(
+                physicsBody.bodyID,
+                JPH::Vec3(tag.linearVelocity.x, tag.linearVelocity.y, tag.linearVelocity.z),
+                JPH::Vec3(tag.angularVelocity.x, tag.angularVelocity.y, tag.angularVelocity.z)
+            );
+        }
+        state->registry.clear<Component::SetVelocityTag>();
+
         auto saveView = state->registry.view<Component::DynamicPhysicsBodyComponent, Component::TransformComponent>();
         for (auto [entity, dynamic, transform] : saveView.each()) {
             dynamic.previousPosition = transform.translation;
@@ -104,6 +120,45 @@ void PhysicsUpdate(Core::EngineContext* ctx, Engine::GameState* state)
     }
 
     state->physicsInterpolationAlpha = state->physicsDeltaTimeAccumulator / Physics::PHYSICS_TIMESTEP;
+}
+
+void ResolveCollisionEvents(Core::EngineContext* ctx, Engine::GameState* state)
+{
+    state->resolvedAddedEvents.Clear();
+    for (const auto& event : ctx->physicsSystem->GetAddedEvents()) {
+        auto it1 = state->bodyToEntity.find(event.body1);
+        auto it2 = state->bodyToEntity.find(event.body2);
+        state->resolvedAddedEvents.PushBack({
+            it1 != state->bodyToEntity.end() ? it1->second : entt::null,
+            it2 != state->bodyToEntity.end() ? it2->second : entt::null,
+            {event.worldNormal.GetX(), event.worldNormal.GetY(), event.worldNormal.GetZ()},
+            {event.contactPoint.GetX(), event.contactPoint.GetY(), event.contactPoint.GetZ()},
+            event.penetrationDepth
+        });
+    }
+
+    state->resolvedPersistedEvents.Clear();
+    for (const auto& event : ctx->physicsSystem->GetPersistedEvents()) {
+        auto it1 = state->bodyToEntity.find(event.body1);
+        auto it2 = state->bodyToEntity.find(event.body2);
+        state->resolvedPersistedEvents.PushBack({
+            it1 != state->bodyToEntity.end() ? it1->second : entt::null,
+            it2 != state->bodyToEntity.end() ? it2->second : entt::null,
+            {event.worldNormal.GetX(), event.worldNormal.GetY(), event.worldNormal.GetZ()},
+            {event.contactPoint.GetX(), event.contactPoint.GetY(), event.contactPoint.GetZ()},
+            event.penetrationDepth
+        });
+    }
+
+    state->resolvedRemovedEvents.Clear();
+    for (const auto& event : ctx->physicsSystem->GetRemovedEvents()) {
+        auto it1 = state->bodyToEntity.find(event.body1);
+        auto it2 = state->bodyToEntity.find(event.body2);
+        state->resolvedRemovedEvents.PushBack({
+            it1 != state->bodyToEntity.end() ? it1->second : entt::null,
+            it2 != state->bodyToEntity.end() ? it2->second : entt::null,
+        });
+    }
 }
 
 void MarkPhysicsTransformsDirty(Engine::GameState* state)

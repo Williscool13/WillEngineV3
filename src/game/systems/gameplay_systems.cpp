@@ -4,15 +4,18 @@
 
 #include "gameplay_systems.h"
 
-#include <algorithm>
-#include <cmath>
-
 #include <tracy/Tracy.hpp>
+#include <glm/gtc/quaternion.hpp>
 
 #include "core/time/time_frame.h"
+#include "core/include/engine_context.h"
 #include "engine/engine_api.h"
 #include "game/components/core_components.h"
+#include "game/components/gameplay/checkpoint_component.h"
+#include "game/components/gameplay/death_zone_component.h"
 #include "game/components/gameplay/path_mover_component.h"
+#include "game/components/physics/physics_components.h"
+#include "game/gameplay/player/physics_player_controller.h"
 
 namespace Game
 {
@@ -94,6 +97,72 @@ void UpdatePathMovers(Core::EngineContext* ctx, Engine::GameState* state)
         transform.translation += (newPos - oldPos);
         transform.rotation = glm::inverse(oldRot) * newRot * transform.rotation;
         state->registry.emplace_or_replace<Component::DirtyTransformTag>(entity);
+    }
+}
+
+void CheckpointUpdate(Core::EngineContext* ctx, Engine::GameState* state)
+{
+    for (const auto& event : state->resolvedAddedEvents) {
+        entt::entity checkpointEntity = entt::null;
+        if (event.e1 != entt::null && state->registry.all_of<Component::CheckpointComponent>(event.e1)) {
+            checkpointEntity = event.e1;
+        } else if (event.e2 != entt::null && state->registry.all_of<Component::CheckpointComponent>(event.e2)) {
+            checkpointEntity = event.e2;
+        }
+
+        if (checkpointEntity != entt::null) {
+            const auto& checkpoint = state->registry.get<Component::CheckpointComponent>(checkpointEntity);
+            if (checkpoint.priority > state->currentCheckpointPriority) {
+                state->currentCheckpointId = checkpoint.checkpointId;
+                state->currentCheckpointPriority = checkpoint.priority;
+            }
+        }
+    }
+}
+
+void DeathZoneUpdate(Core::EngineContext* ctx, Engine::GameState* state)
+{
+    auto* playerController = state->registry.ctx().find<PhysicsPlayerController>();
+    if (!playerController) { return; }
+
+    PhysicsCharacter* character = playerController->GetCharacter();
+    if (!character) { return; }
+
+    const entt::entity playerEntity = character->GetEntity();
+    if (playerEntity == entt::null) { return; }
+
+    for (const auto& event : state->resolvedAddedEvents) {
+        bool playerInvolved = (event.e1 == playerEntity || event.e2 == playerEntity);
+        if (!playerInvolved) { continue; }
+
+        entt::entity otherEntity = (event.e1 == playerEntity) ? event.e2 : event.e1;
+        if (otherEntity == entt::null) { continue; }
+        if (!state->registry.all_of<Component::DeathZoneComponent>(otherEntity)) { continue; }
+
+        // Find the active checkpoint entity
+        entt::entity checkpointEntity = entt::null;
+        auto checkpointView = state->registry.view<Component::CheckpointComponent, Component::TransformComponent>();
+        for (auto entity : checkpointView) {
+            const auto& cp = checkpointView.get<Component::CheckpointComponent>(entity);
+            if (cp.checkpointId == state->currentCheckpointId) {
+                checkpointEntity = entity;
+                break;
+            }
+        }
+
+        if (checkpointEntity == entt::null) { break; }
+
+        const auto& checkpoint = state->registry.get<Component::CheckpointComponent>(checkpointEntity);
+        const auto& checkpointTransform = state->registry.get<Component::TransformComponent>(checkpointEntity);
+
+        auto& playerTransform = state->registry.get<Component::TransformComponent>(playerEntity);
+        playerTransform.translation = checkpointTransform.translation + checkpoint.spawnOffset;
+        playerTransform.rotation = glm::quat(glm::radians(checkpoint.spawnRotation));
+
+        state->registry.emplace_or_replace<Component::TeleportPhysicsTransformTag>(playerEntity);
+        state->registry.emplace_or_replace<Component::SetVelocityTag>(playerEntity);
+
+        break;
     }
 }
 } // Game

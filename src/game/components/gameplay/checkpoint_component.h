@@ -5,6 +5,7 @@
 #ifndef WILL_ENGINE_CHECKPOINT_COMPONENT_H
 #define WILL_ENGINE_CHECKPOINT_COMPONENT_H
 
+#include <glm/vec3.hpp>
 #include <entt/entt.hpp>
 #include <json/nlohmann/json_fwd.hpp>
 
@@ -18,6 +19,9 @@ namespace Game::Component
 struct CheckpointComponent
 {
     StringID checkpointId{};
+    int32_t priority{0};
+    glm::vec3 spawnOffset{0.0f, 0.0f, 0.0f};
+    glm::vec3 spawnRotation{0.0f, 0.0f, 0.0f};
 
     static void OnConstruct(entt::registry& registry, entt::entity entity);
     static void Serialize(const CheckpointComponent& comp, nlohmann::json& json);

@@ -13,7 +13,6 @@
 #include "game/components/core_components.h"
 #include "game/components/debug_components.h"
 #include "game/components/debug_gizmo_component.h"
-#include "../components/physics/physics_components.h"
 #include "game/components/physics/physics_body_component.h"
 #include "physics/physics_system.h"
 
@@ -28,9 +27,9 @@ void DebugProcessPhysicsCollisions(Core::EngineContext* ctx, Engine::GameState* 
     ZoneScoped;
     state->registry.clear<Component::AntiGravityTag>();
 
-    for (const auto& event : ctx->physicsSystem->GetCollisionEvents()) {
-        entt::entity e1 = state->bodyToEntity.contains(event.body1) ? state->bodyToEntity[event.body1] : entt::null;
-        entt::entity e2 = state->bodyToEntity.contains(event.body2) ? state->bodyToEntity[event.body2] : entt::null;
+    for (const auto& event : state->resolvedAddedEvents) {
+        entt::entity e1 = event.e1;
+        entt::entity e2 = event.e2;
         if (e1 == entt::null || e2 == entt::null) continue;
 
         if (state->registry.all_of<Component::FloorTag>(e2))

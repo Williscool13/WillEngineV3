@@ -31,7 +31,7 @@ void ResolveStaticMeshLoads(Core::EngineContext* ctx, Engine::GameState* state);
 void ResolveProceduralMeshLoads(Core::EngineContext* ctx, Engine::GameState* state);
 void ResolveSplineMeshLoads(Core::EngineContext* ctx, Engine::GameState* state);
 
-void RenderUpdate(Core::EngineContext* ctx, Engine::GameState* state);
+void MarkRenderTransformsDirty(Core::EngineContext* ctx, Engine::GameState* state);
 
 void RenderPrepareTransforms(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer);
 void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer);

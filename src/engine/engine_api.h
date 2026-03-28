@@ -14,7 +14,9 @@
 #include <ImGuizmo.h>
 
 #include "../game/component-registry/component_registry.h"
+#include "core/allocators/inline_vector.h"
 #include "core/include/render_interface.h"
+#include "physics/physics_config.h"
 #include "resources/scene/scene.h"
 
 namespace Core
@@ -23,6 +25,15 @@ struct TimeFrame;
 struct InputFrame;
 struct EngineContext;
 }
+
+struct ResolvedCollisionEvent
+{
+    entt::entity e1{entt::null};
+    entt::entity e2{entt::null};
+    glm::vec3 worldNormal{};
+    glm::vec3 contactPoint{};
+    float penetrationDepth{0.0f};
+};
 
 namespace Engine
 {
@@ -61,10 +72,17 @@ struct GameState
     std::unordered_map<StringID, entt::entity> stableIdToEntityMap;
     Game::ComponentRegistry componentRegistry{};
 
+    // Asset Loading
+    bool bPendingModelResolve{false};
+    StaticModelHandle portalPlaneHandle{StaticModelHandle::INVALID};
+
     // Physics
     float physicsDeltaTimeAccumulator = 0.0f;
     float physicsInterpolationAlpha = 0.0f;
     std::map<JPH::BodyID, entt::entity> bodyToEntity;
+    Core::InlineVector<ResolvedCollisionEvent, Physics::MAX_COLLISION_EVENTS> resolvedAddedEvents;
+    Core::InlineVector<ResolvedCollisionEvent, Physics::MAX_COLLISION_EVENTS> resolvedPersistedEvents;
+    Core::InlineVector<ResolvedCollisionEvent, Physics::MAX_COLLISION_EVENTS> resolvedRemovedEvents;
     bool bEnablePhysics = true;
 
     // Lighting
@@ -74,15 +92,6 @@ struct GameState
     Core::GTAOConfiguration gtaoConfig{};
     Core::PostProcessConfiguration postProcess{};
     CubemapHandle skybox{CubemapHandle::INVALID};
-
-    // Gameplay
-    StringID currentCheckpointId{};
-
-    // Asset Loading
-    bool bPendingModelResolve{false};
-
-    // Loaded models debug
-    StaticModelHandle portalPlaneHandle{StaticModelHandle::INVALID};
 
     // Debug
     bool bEnablePortal{true};
@@ -94,39 +103,45 @@ struct GameState
     bool bCustomGizmoActive{false};
     bool bCustomGizmoActivePrev{false};
 
+    // Editor
+    //  Gizmo
     ImGuizmo::OPERATION currentGizmoOperation{ImGuizmo::TRANSLATE};
     ImGuizmo::MODE currentGizmoMode{ImGuizmo::WORLD};
     bool bUniformScaleMode{true};
-
-    enum class PhysicsDebugMode : uint8_t { Off, SensorOnly, SensorAndTag, On };
-    PhysicsDebugMode physicsDebugMode{PhysicsDebugMode::SensorOnly};
-
-    // Gizmo snapping
     bool bSnapEnabled{true};
     bool bSnapWorldGrid{true};
     float snapTranslation{0.25f};
     float snapRotation{15.0f};
     float snapScale{0.1f};
-
-    // Scene stuff
-    StringID currentSceneId{0};
-    std::string currentSceneName{};
-
+    //  Physics Debug
+    enum class PhysicsDebugMode : uint8_t { Off, SensorOnly, SensorAndTag, On };
+    PhysicsDebugMode physicsDebugMode{PhysicsDebugMode::SensorOnly};
+    //  Scene
     std::vector<StringID> loadedScenes{};
     std::vector<StringID> modifiedScenes{};
     bool bAutoSave{false};
     float autoSaveInterval{60.0f};
     float autoSaveTimer{0.0f};
+    //  PIE
     std::vector<Scene> pieSnapshot{};
     glm::vec3 pieCameraTranslation{};
     glm::quat pieCameraRotation{1.0f, 0.0f, 0.0f, 0.0f};
-
+    //  Entity selection
     std::vector<entt::entity> selectedEntities{};
     std::vector<entt::entity> prevSelectedEntities{};
     bool bWantCopyEntities{false};
     bool bWantDeleteEntities{false};
-
+    //  ImGui textures
     EditorTextureResidency texResidency{};
+
+
+    // Gameplay
+    StringID currentCheckpointId{};
+    int32_t currentCheckpointPriority{INT32_MIN};
+
+    // Scene stuff
+    StringID currentSceneId{0};
+    std::string currentSceneName{};
 };
 
 class EngineAPI

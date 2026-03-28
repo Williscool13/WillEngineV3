@@ -583,6 +583,16 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
     }
     ImGui::End();
 
+    if (ImGui::Begin("Gameplay")) {
+        if (state->bIsPlaying) {
+            ImGui::Text("Checkpoint ID:       %llu", state->currentCheckpointId.id);
+            ImGui::Text("Checkpoint Priority: %d",   state->currentCheckpointPriority);
+        } else {
+            ImGui::TextDisabled("Not playing");
+        }
+    }
+    ImGui::End();
+
     auto editorCameraView = state->registry.view<Component::FreeCameraComponent, Component::TransformComponent, Component::EditorCameraTag>();
     assert(editorCameraView.size_hint() > 0);
     auto [freeCam, editorCameraTransform] = editorCameraView.get<Component::FreeCameraComponent, Component::TransformComponent>(editorCameraView.front());

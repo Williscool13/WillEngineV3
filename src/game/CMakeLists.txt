@@ -40,6 +40,8 @@ set(GAME_SOURCES
 
         components/gameplay/checkpoint_component.cpp
         components/gameplay/checkpoint_component.h
+        components/gameplay/death_zone_component.cpp
+        components/gameplay/death_zone_component.h
         components/gameplay/player_spawn_component.cpp
         components/gameplay/player_spawn_component.h
         components/gameplay/path_mover_component.cpp
@@ -86,8 +88,6 @@ set(GAME_SOURCES
         systems/scene_system.h
         systems/common_systems.cpp
         systems/common_systems.h
-        systems/checkpoint_system.cpp
-        systems/checkpoint_system.h
         systems/gameplay_systems.cpp
         systems/gameplay_systems.h
         systems/component_editor.cpp

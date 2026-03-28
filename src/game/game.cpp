@@ -29,7 +29,6 @@
 #include "gameplay/player/physics_player_controller.h"
 #include "systems/common_systems.h"
 #include "systems/gameplay_systems.h"
-#include "systems/checkpoint_system.h"
 
 
 extern "C"
@@ -78,7 +77,7 @@ GAME_API void GameLoad(Core::EngineContext* ctx, Engine::GameState* state)
     gResolveStringIdFn = ctx->resolveStringIdFn;
 #endif
 
-    LOG_INFO(Game, "Testing game reload4");
+    // if not editor, load the "default map", which needs to be stored in some engine config file
 }
 
 GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::GameState* state)
@@ -90,10 +89,12 @@ GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::GameState* state)
     Game::EditorUpdate(ctx, state);
 #endif
 
+
     if (state->bIsPlaying) {
         if (state->bEnablePhysics) {
             Game::PhysicsUpdate(ctx, state);
         }
+        Game::ResolveCollisionEvents(ctx, state);
 
         if (auto* playerController = state->registry.ctx().find<Game::PhysicsPlayerController>()) {
             playerController->Update(ctx, state);
@@ -104,13 +105,17 @@ GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::GameState* state)
 
         Game::UpdatePathMovers(ctx, state);
         Game::CheckpointUpdate(ctx, state);
+        Game::DeathZoneUpdate(ctx, state);
     }
     else {
+#if WILL_EDITOR
         Game::UpdateEditorCamera(ctx, state);
+#endif
     }
 
     Game::DebugUpdate(ctx, state);
 
+    // Resolve Creations
     if (ctx->bModelLoadedThisFrame || state->bPendingModelResolve) {
         Game::ResolveStaticMeshLoads(ctx, state);
         Game::ResolveProceduralMeshLoads(ctx, state);
@@ -119,16 +124,15 @@ GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         Game::ResolvePhysicsMeshLoads(ctx, state);
         state->bPendingModelResolve = false;
     }
-
     Game::ResolvePhysicsShapeCreation(ctx, state);
     Game::ResolvePhysicsBodyCreation(ctx, state);
 
-    Game::RenderUpdate(ctx, state);
-
+    // Dirty carry-over to next frame
+    Game::MarkRenderTransformsDirty(ctx, state);
     Game::MarkPhysicsTransformsDirty(state);
 
+    // Frame Cleanup
     state->registry.clear<Game::Component::DirtyTransformTag>();
-
     ctx->physicsSystem->ClearCollisionEvents();
     ctx->physicsSystem->ClearActivationEvents();
     ctx->materialManager->ProcessRetirements();

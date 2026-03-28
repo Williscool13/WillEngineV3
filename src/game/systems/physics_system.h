@@ -9,14 +9,10 @@
 
 #include <Jolt/Physics/Collision/Shape/Shape.h>
 
-#include "../components/physics/physics_components.h"
+#include "game/components/physics/physics_components.h"
 #include "game/components/physics/physics_body_desc.h"
 #include "Jolt/Physics/Body/BodyInterface.h"
-#include "Jolt/Physics/Collision/Shape/BoxShape.h"
-#include "Jolt/Physics/Collision/Shape/CapsuleShape.h"
-#include "Jolt/Physics/Collision/Shape/SphereShape.h"
-#include "Jolt/Physics/Collision/Shape/ConvexHullShape.h"
-#include "Jolt/Physics/Collision/Shape/MeshShape.h"
+
 
 namespace Core
 {
@@ -39,6 +35,7 @@ namespace Game
 {
 void ConnectPhysicsObservers(entt::registry& registry);
 void PhysicsUpdate(Core::EngineContext* ctx, Engine::GameState* state);
+void ResolveCollisionEvents(Core::EngineContext* ctx, Engine::GameState* state);
 void MarkPhysicsTransformsDirty(Engine::GameState* state);
 void DebugRenderPhysics(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer);
 void ResolvePhysicsMeshLoads(Core::EngineContext* ctx, Engine::GameState* state);

@@ -4,10 +4,15 @@
 
 #ifndef WILL_ENGINE_PHYSICS_CONFIG_H
 #define WILL_ENGINE_PHYSICS_CONFIG_H
-#include <cstdint>
 
 namespace Physics
 {
+enum class CollisionEventType : uint8_t
+{
+    Added,
+    Persisted,
+};
+
 inline constexpr float PHYSICS_TIMESTEP = 1 / 60.0f;
 inline constexpr uint32_t PHYSICS_COLLISION_STEPS = 1;
 

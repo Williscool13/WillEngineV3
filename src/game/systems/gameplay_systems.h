@@ -18,6 +18,8 @@ struct GameState;
 namespace Game
 {
 void UpdatePathMovers(Core::EngineContext* ctx, Engine::GameState* state);
+void CheckpointUpdate(Core::EngineContext* ctx, Engine::GameState* state);
+void DeathZoneUpdate(Core::EngineContext* ctx, Engine::GameState* state);
 } // Game
 
 #endif //WILL_ENGINE_GAMEPLAY_SYSTEMS_H
