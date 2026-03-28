@@ -783,7 +783,7 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
             state->currentSceneName.clear();
         }
 
-        const bool isLoaded = std::ranges::find(state->loadedScenes, state->currentSceneId) != state->loadedScenes.end();
+        const bool isLoaded = std::ranges::any_of(state->loadedScenes, [&](const auto& m) { return m.sceneId == state->currentSceneId; });
         const bool isModified = std::ranges::find(state->modifiedScenes, state->currentSceneId) != state->modifiedScenes.end();
         const bool hasScene = sceneCache.contains(state->currentSceneId);
 
@@ -803,7 +803,7 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
                     state->currentSceneId = id;
                     state->currentSceneName = name;
                 }
-                if (std::ranges::find(state->loadedScenes, id) != state->loadedScenes.end()) {
+                if (std::ranges::any_of(state->loadedScenes, [&](const auto& m) { return m.sceneId == id; })) {
                     ImGui::SameLine();
                     ImGui::TextDisabled("(loaded)");
                 }
@@ -854,7 +854,7 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
             ctx->assetManager->RegisterScene(newId, newSceneName);
             state->currentSceneId = newId;
             state->currentSceneName = newSceneName;
-            state->loadedScenes.push_back(newId);
+            state->loadedScenes.push_back({newId, 100});
             state->modifiedScenes.push_back(newId);
             newSceneName[0] = '\0';
         }
@@ -987,6 +987,7 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
             entt::entity entity;
             const char* label;
             uint64_t stableId;
+            uint64_t sortOrder;
             StringID folder0;
             StringID folder1;
             const char* folderName0;
@@ -1007,6 +1008,7 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
 
             auto* stable = state->registry.try_get<Component::StableIdComponent>(entity);
             uint64_t stableId = stable ? stable->id.id : static_cast<uint64_t>(entity);
+            uint64_t sortOrder = stable ? stable->sortOrder : 0;
 
             StringID f0, f1;
             const char* fn0 = "";
@@ -1017,17 +1019,28 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
                 fn0 = fc->folderHierarchyNames[0].c_str();
                 fn1 = fc->folderHierarchyNames[1].c_str();
             }
-            entries.push_back({entity, label, stableId, f0, f1, fn0, fn1});
+            entries.push_back({entity, label, stableId, sortOrder, f0, f1, fn0, fn1});
         }
+        std::ranges::sort(entries, [](const EntityEntry& a, const EntityEntry& b) { return a.sortOrder < b.sortOrder; });
 
-        // Draw a single entity row
-        auto drawEntityRow = [&](const EntityEntry& e) {
-            const auto* prefabInst = state->registry.try_get<Component::PrefabInstanceComponent>(e.entity);
-            const bool isPrefab = prefabInst != nullptr;
-            const bool isMasterPrefab = isPrefab && prefabInst->bMasterPrefab;
-            bool selected = std::find(state->selectedEntities.begin(), state->selectedEntities.end(), e.entity) != state->selectedEntities.end();
-
-            if (isPrefab) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.7f, 1.0f, 1.0f));
+        // Draw a single entity row. prev/next are neighbors within the same group for reordering.
+        auto drawEntityRow = [&](const EntityEntry& e, const EntityEntry* prev, const EntityEntry* next) {
+            ImGui::BeginDisabled(prev == nullptr);
+            if (ImGui::SmallButton(fmt::format("^##{}", e.stableId).c_str())) {
+                std::swap(state->registry.get<Component::StableIdComponent>(e.entity).sortOrder,
+                          state->registry.get<Component::StableIdComponent>(prev->entity).sortOrder);
+                MarkSceneModified(state, state->currentSceneId);
+            }
+            ImGui::EndDisabled();
+            ImGui::SameLine();
+            ImGui::BeginDisabled(next == nullptr);
+            if (ImGui::SmallButton(fmt::format("v##{}", e.stableId).c_str())) {
+                std::swap(state->registry.get<Component::StableIdComponent>(e.entity).sortOrder,
+                          state->registry.get<Component::StableIdComponent>(next->entity).sortOrder);
+                MarkSceneModified(state, state->currentSceneId);
+            }
+            ImGui::EndDisabled();
+            ImGui::SameLine();
             if (ImGui::SmallButton(fmt::format("X##{}", e.stableId).c_str())) {
                 entityToDelete = e.entity;
             }
@@ -1038,6 +1051,12 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
                 MarkSceneModified(state, state->currentSceneId);
             }
             ImGui::SameLine();
+            const auto* prefabInst = state->registry.try_get<Component::PrefabInstanceComponent>(e.entity);
+            const bool isPrefab = prefabInst != nullptr;
+            const bool isMasterPrefab = isPrefab && prefabInst->bMasterPrefab;
+            bool selected = std::find(state->selectedEntities.begin(), state->selectedEntities.end(), e.entity) != state->selectedEntities.end();
+
+            if (isPrefab) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.7f, 1.0f, 1.0f));
             char uniqueLabel[256];
             if (isMasterPrefab) {
                 snprintf(uniqueLabel, sizeof(uniqueLabel), "[M] %s##%llu", e.label, e.stableId);
@@ -1059,7 +1078,15 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
             if (isPrefab) ImGui::PopStyleColor();
         };
 
-        // Collect unique folder names at level 0, sorted
+        auto drawGroup = [&](std::vector<EntityEntry*>& group) {
+            for (size_t i = 0; i < group.size(); ++i) {
+                const EntityEntry* prev = i > 0 ? group[i - 1] : nullptr;
+                const EntityEntry* next = (i + 1 < group.size()) ? group[i + 1] : nullptr;
+                drawEntityRow(*group[i], prev, next);
+            }
+        };
+
+        // Collect unique folder names at level 0, sorted alphabetically
         struct FolderInfo
         {
             StringID id;
@@ -1070,52 +1097,53 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
             if (!e.folder0.IsValid()) continue;
             bool found = false;
             for (auto& f : folders0) {
-                if (f.id == e.folder0) {
-                    found = true;
-                    break;
-                }
+                if (f.id == e.folder0) { found = true; break; }
             }
             if (!found) folders0.push_back({e.folder0, e.folderName0});
         }
         std::ranges::sort(folders0, [](const FolderInfo& a, const FolderInfo& b) { return strcmp(a.name, b.name) < 0; });
 
         // Draw unfoldered entities first
-        for (auto& e : entries) {
-            if (e.folder0.IsValid()) continue;
-            drawEntityRow(e);
+        {
+            std::vector<EntityEntry*> group;
+            for (auto& e : entries) {
+                if (!e.folder0.IsValid()) group.push_back(&e);
+            }
+            drawGroup(group);
         }
 
         // Draw folder tree nodes
         for (auto& [id0, name0] : folders0) {
             if (ImGui::TreeNode(fmt::format("{}##folder_{}", name0, id0.id).c_str())) {
-                // Collect subfolders for this folder
+                // Collect subfolders for this folder, sorted alphabetically
                 std::vector<FolderInfo> subfolders;
                 for (auto& e : entries) {
                     if (e.folder0 != id0 || !e.folder1.IsValid()) continue;
                     bool found = false;
                     for (auto& sf : subfolders) {
-                        if (sf.id == e.folder1) {
-                            found = true;
-                            break;
-                        }
+                        if (sf.id == e.folder1) { found = true; break; }
                     }
                     if (!found) subfolders.push_back({e.folder1, e.folderName1});
                 }
                 std::ranges::sort(subfolders, [](const FolderInfo& a, const FolderInfo& b) { return strcmp(a.name, b.name) < 0; });
 
-                // No subfolder
-                for (auto& e : entries) {
-                    if (e.folder0 != id0 || e.folder1.IsValid()) continue;
-                    drawEntityRow(e);
+                // Direct folder members (no subfolder)
+                {
+                    std::vector<EntityEntry*> group;
+                    for (auto& e : entries) {
+                        if (e.folder0 == id0 && !e.folder1.IsValid()) group.push_back(&e);
+                    }
+                    drawGroup(group);
                 }
 
                 // Subfolder tree nodes
                 for (auto& [id1, name1] : subfolders) {
                     if (ImGui::TreeNode(fmt::format("{}##subfolder_{}_{}", name1, id0.id, id1.id).c_str())) {
+                        std::vector<EntityEntry*> group;
                         for (auto& e : entries) {
-                            if (e.folder0 != id0 || e.folder1 != id1) continue;
-                            drawEntityRow(e);
+                            if (e.folder0 == id0 && e.folder1 == id1) group.push_back(&e);
                         }
+                        drawGroup(group);
                         ImGui::TreePop();
                     }
                 }
@@ -1150,6 +1178,10 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
             ComponentEntry* entryToRemove = nullptr;
             entt::entity entity = state->selectedEntities[0];
             ImGui::Text("Entity: %u", static_cast<uint32_t>(entity));
+            if (const auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
+                ImGui::SameLine();
+                ImGui::TextDisabled("(order: %llu)", stable->sortOrder);
+            }
 
             state->bCustomGizmoActivePrev = state->bCustomGizmoActive;
             state->bCustomGizmoActive = false;

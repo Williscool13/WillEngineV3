@@ -8,6 +8,7 @@
 #include <random>
 
 #include <entt/entt.hpp>
+#include <json/nlohmann/json_fwd.hpp>
 
 #include "core/string_id.h"
 #include "game/components/component_types.h"
@@ -17,29 +18,26 @@ namespace Core { struct ViewFamily; }
 namespace Game::Component
 {
 /**
- * Assigns a random 64-bit identifier to an entity that remains stable for the
- * lifetime of that entity within the current session. Unlike entt::entity,
- * which may be recycled, this ID uniquely identifies an entity until it is
- * destroyed and can be used for cross-system lookups via
- * GameState::stableIdToEntityMap.
+ * Assigns a persistent 64-bit identifier to an entity. Unlike entt::entity,
+ * which may be recycled, this ID survives save/load cycles and play/stop and
+ * can be used for cross-system lookups via GameState::stableIdToEntityMap.
  *
- * Transient: IDs are NOT serialized or preserved across save/load cycles.
- * A new unique ID is generated each time the component is constructed,
- * so the same logical entity will receive a different StableId every session.
- *
- * The ID is generated via GameState::rng and is guaranteed to be non-zero and
- * unique within the current registry (collisions are re-rolled on construct).
+ * On construct: if id is 0 (new entity) or already taken (double-load, prefab
+ * copy), a new unique ID is generated. Otherwise the deserialized ID is kept.
  * OnConstruct/OnUpdate automatically register the mapping; OnDestroy removes it.
  */
 struct StableIdComponent
 {
     StringID id;
+    uint64_t sortOrder{0};
 
     static StringID Generate(std::mt19937_64& rng)
     {
         return StringID(rng());
     }
 
+    static void Serialize(const StableIdComponent& comp, nlohmann::json& json);
+    static void Deserialize(StableIdComponent& comp, const nlohmann::json& json);
     static void OnConstruct(entt::registry& registry, entt::entity entity);
     static void OnUpdate(entt::registry& registry, entt::entity entity);
     static void OnDestroy(entt::registry& registry, entt::entity entity);

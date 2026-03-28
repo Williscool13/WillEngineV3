@@ -117,7 +117,12 @@ struct GameState
     enum class PhysicsDebugMode : uint8_t { Off, SensorOnly, SensorAndTag, On };
     PhysicsDebugMode physicsDebugMode{PhysicsDebugMode::SensorOnly};
     //  Scene
-    std::vector<StringID> loadedScenes{};
+    struct RuntimeSceneMetadata
+    {
+        StringID sceneId;
+        uint64_t nextSortOrder{100};
+    };
+    std::vector<RuntimeSceneMetadata> loadedScenes{};
     std::vector<StringID> modifiedScenes{};
     bool bAutoSave{false};
     float autoSaveInterval{60.0f};

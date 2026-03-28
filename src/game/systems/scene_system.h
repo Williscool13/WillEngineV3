@@ -31,7 +31,7 @@ Engine::Scene SaveScene(ComponentRegistry& componentRegistry, entt::registry& re
 
 StringID LoadScene(ComponentRegistry& componentRegistry, entt::registry& registry, Engine::Scene& scene);
 
-std::vector<Engine::Scene> SerializeAll(ComponentRegistry& componentRegistry, entt::registry& registry, Engine::AssetManager* assetManager, const std::vector<StringID>& loadedScenes);
+std::vector<Engine::Scene> SerializeAll(ComponentRegistry& componentRegistry, entt::registry& registry, Engine::AssetManager* assetManager, const std::vector<Engine::GameState::RuntimeSceneMetadata>& loadedScenes);
 
 void DeserializeAll(Engine::GameState* state, std::vector<Engine::Scene>& snapshots);
 

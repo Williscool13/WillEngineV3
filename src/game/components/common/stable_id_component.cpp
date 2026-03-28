@@ -4,10 +4,33 @@
 
 #include "stable_id_component.h"
 
+#include <json/nlohmann/json.hpp>
+
 #include "engine/engine_api.h"
 
 namespace Game::Component
 {
+
+void StableIdComponent::Serialize(const StableIdComponent& comp, nlohmann::json& json)
+{
+    json["id"] = comp.id.id;
+    json["sortOrder"] = comp.sortOrder;
+}
+
+void StableIdComponent::Deserialize(StableIdComponent& comp, const nlohmann::json& json)
+{
+    if (json.contains("id")) {
+        comp.id = StringID(json["id"].get<uint64_t>());
+    }
+    // else id remains 0, OnConstruct will generate a new one
+    if (json.contains("sortOrder")) {
+        comp.sortOrder = json["sortOrder"].get<uint64_t>();
+    }
+}
+void StableIdComponent::OnUpdate(entt::registry& registry, entt::entity entity)
+{
+    assert(false && "StableIdComponent should never be updated");
+}
 
 void StableIdComponent::OnConstruct(entt::registry& registry, entt::entity entity)
 {
@@ -20,16 +43,6 @@ void StableIdComponent::OnConstruct(entt::registry& registry, entt::entity entit
     state->stableIdToEntityMap[comp.id] = entity;
 }
 
-void StableIdComponent::OnUpdate(entt::registry& registry, entt::entity entity)
-{
-    auto& comp = registry.get<StableIdComponent>(entity);
-    auto* state = registry.ctx().get<Engine::GameState*>();
-
-    while (comp.id.id == 0 || state->stableIdToEntityMap.contains(comp.id)) {
-        comp.id = Generate(state->rng);
-    }
-    state->stableIdToEntityMap[comp.id] = entity;
-}
 
 void StableIdComponent::OnDestroy(entt::registry& registry, entt::entity entity)
 {

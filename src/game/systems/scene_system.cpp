@@ -130,28 +130,44 @@ StringID LoadScene(ComponentRegistry& componentRegistry, entt::registry& registr
     return sceneId;
 }
 
-std::vector<Engine::Scene> SerializeAll(ComponentRegistry& componentRegistry, entt::registry& registry, Engine::AssetManager* assetManager, const std::vector<StringID>& loadedScenes)
+std::vector<Engine::Scene> SerializeAll(ComponentRegistry& componentRegistry, entt::registry& registry, Engine::AssetManager* assetManager, const std::vector<Engine::GameState::RuntimeSceneMetadata>& loadedScenes)
 {
     std::vector<Engine::Scene> snapshots;
     snapshots.reserve(loadedScenes.size());
-    for (StringID sceneId : loadedScenes) {
-        snapshots.push_back(SaveScene(componentRegistry, registry, assetManager, sceneId, sceneId.ToString()));
-        LOG_INFO(Game, "PIE snapshot: serialized scene '{}'", sceneId.ToString());
+    for (const auto& meta : loadedScenes) {
+        snapshots.push_back(SaveScene(componentRegistry, registry, assetManager, meta.sceneId, meta.sceneId.ToString()));
+        LOG_INFO(Game, "PIE snapshot: serialized scene '{}'", meta.sceneId.ToString());
     }
     return snapshots;
 }
 
 void DeserializeAll(Engine::GameState* state, std::vector<Engine::Scene>& snapshots)
 {
-    std::vector<StringID> toUnload = state->loadedScenes;
-    for (StringID sceneId : toUnload) {
-        UnloadScene(state, sceneId);
-        LOG_INFO(Game, "PIE restore: unloaded scene '{}'", sceneId.ToString());
+    std::vector<Engine::GameState::RuntimeSceneMetadata> toUnload = state->loadedScenes;
+    for (const auto& meta : toUnload) {
+        UnloadScene(state, meta.sceneId);
+        LOG_INFO(Game, "PIE restore: unloaded scene '{}'", meta.sceneId.ToString());
     }
 
     for (Engine::Scene& scene : snapshots) {
         StringID loadedId = LoadScene(state->componentRegistry, state->registry, scene);
-        state->loadedScenes.push_back(loadedId);
+        uint64_t maxSortOrder = 0;
+        auto sortView = state->registry.view<Component::SceneComponent, Component::StableIdComponent>();
+        for (auto entity : sortView) {
+            if (sortView.get<Component::SceneComponent>(entity).sceneId == loadedId) {
+                maxSortOrder = std::max(maxSortOrder, sortView.get<Component::StableIdComponent>(entity).sortOrder);
+            }
+        }
+        for (auto entity : sortView) {
+            if (sortView.get<Component::SceneComponent>(entity).sceneId == loadedId) {
+                auto& stable = sortView.get<Component::StableIdComponent>(entity);
+                if (stable.sortOrder == 0) {
+                    maxSortOrder += 100;
+                    stable.sortOrder = maxSortOrder;
+                }
+            }
+        }
+        state->loadedScenes.push_back({loadedId, maxSortOrder + 100});
         LOG_INFO(Game, "PIE restore: reloaded scene '{}'", loadedId.ToString());
     }
 
@@ -177,7 +193,7 @@ void UnloadScene(Engine::GameState* state, StringID sceneId)
         return std::ranges::find(toDestroy, e) != toDestroy.end();
     });
 
-    std::erase(state->loadedScenes, sceneId);
+    std::erase_if(state->loadedScenes, [&](const Engine::GameState::RuntimeSceneMetadata& m) { return m.sceneId == sceneId; });
     std::erase(state->modifiedScenes, sceneId);
 }
 
@@ -230,7 +246,7 @@ void SaveSceneToFile(StringID sceneID, std::string_view sceneName, Engine::GameS
 
 bool LoadSceneFromFile(Engine::GameState* state, Engine::AssetManager* assetManager, StringID sceneId)
 {
-    if (std::ranges::find(state->loadedScenes, sceneId) != state->loadedScenes.end()) {
+    if (std::ranges::any_of(state->loadedScenes, [&](const auto& m) { return m.sceneId == sceneId; })) {
         LOG_WARN(Game, "Scene '{}' is already loaded", sceneId.ToString());
         return false;
     }
@@ -259,7 +275,25 @@ bool LoadSceneFromFile(Engine::GameState* state, Engine::AssetManager* assetMana
     s.content = nlohmann::json::parse(file);
     StringID loadedId = LoadScene(state->componentRegistry, state->registry, s);
     assert(loadedId == sceneId && "Scene ID in file does not match registry key, file was likely saved with a mismatched ID");
-    state->loadedScenes.push_back(loadedId);
+    uint64_t maxSortOrder = 0;
+    {
+        auto sortView = state->registry.view<Component::SceneComponent, Component::StableIdComponent>();
+        for (auto entity : sortView) {
+            if (sortView.get<Component::SceneComponent>(entity).sceneId == loadedId) {
+                maxSortOrder = std::max(maxSortOrder, sortView.get<Component::StableIdComponent>(entity).sortOrder);
+            }
+        }
+        for (auto entity : sortView) {
+            if (sortView.get<Component::SceneComponent>(entity).sceneId == loadedId) {
+                auto& stable = sortView.get<Component::StableIdComponent>(entity);
+                if (stable.sortOrder == 0) {
+                    maxSortOrder += 100;
+                    stable.sortOrder = maxSortOrder;
+                }
+            }
+        }
+    }
+    state->loadedScenes.push_back({loadedId, maxSortOrder + 100});
     std::erase(state->modifiedScenes, loadedId);
 
     ResolvePrefabLoads(state, assetManager);
@@ -344,6 +378,11 @@ entt::entity CreateSceneEntity(Engine::GameState* state)
     state->registry.emplace<Component::TransformComponent>(newEntity);
     state->registry.emplace<Component::SceneComponent>(newEntity, state->currentSceneId);
     state->registry.emplace<Component::StableIdComponent>(newEntity);
+    auto metaIt = std::ranges::find_if(state->loadedScenes, [&](const auto& m) { return m.sceneId == state->currentSceneId; });
+    if (metaIt != state->loadedScenes.end()) {
+        state->registry.get<Component::StableIdComponent>(newEntity).sortOrder = metaIt->nextSortOrder;
+        metaIt->nextSortOrder += 100;
+    }
     state->registry.emplace<Component::EntityFolderComponent>(newEntity);
     static int32_t runningNameTally = 0;
     auto newName = fmt::format("New Entity {}", runningNameTally++);
@@ -442,6 +481,16 @@ entt::entity SpawnPrefab(Engine::GameState* state, Engine::AssetManager* assetMa
 
     state->registry.emplace<Component::SceneComponent>(entity, state->currentSceneId);
     state->registry.emplace_or_replace<Component::PrefabInstanceComponent>(entity, prefabId);
+
+    if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
+        if (stable->sortOrder == 0) {
+            auto metaIt = std::ranges::find_if(state->loadedScenes, [&](const auto& m) { return m.sceneId == state->currentSceneId; });
+            if (metaIt != state->loadedScenes.end()) {
+                stable->sortOrder = metaIt->nextSortOrder;
+                metaIt->nextSortOrder += 100;
+            }
+        }
+    }
 
     LOG_INFO(Game, "Spawned prefab '{}' as entity {}", meta->prefabName, entt::to_integral(entity));
     return entity;
