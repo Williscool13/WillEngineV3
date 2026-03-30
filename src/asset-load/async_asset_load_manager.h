@@ -19,7 +19,7 @@
 #include "asset-load-jobs/procedural_model_load_slot.h"
 #include "asset-load-jobs/texture_load_slot.h"
 #include "asset-load-jobs/cubemap_load_slot.h"
-#include "core/allocators/lock_free_handle_allocator.h"
+#include "core/memory/lock_free_handle_allocator.h"
 #include "engine/resources/sampler/sampler.h"
 
 namespace AssetLoad

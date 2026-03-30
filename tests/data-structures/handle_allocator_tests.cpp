@@ -4,7 +4,7 @@
 
 #include <map>
 #include <catch2/catch_test_macros.hpp>
-#include "core/allocators/handle_allocator.h"
+#include "core/memory/handle_allocator.h"
 
 using namespace Core;
 

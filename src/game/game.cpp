@@ -96,16 +96,16 @@ GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         }
         Game::ResolveCollisionEvents(ctx, state);
 
-        if (auto* playerController = state->registry.ctx().find<Game::PhysicsPlayerController>()) {
-            playerController->Update(ctx, state);
-        }
-
         Game::DebugProcessPhysicsCollisions(ctx, state);
         Game::DebugApplyGroundForces(ctx, state);
 
         Game::UpdatePathMovers(ctx, state);
         Game::CheckpointUpdate(ctx, state);
         Game::DeathZoneUpdate(ctx, state);
+
+        if (auto* playerController = state->registry.ctx().find<Game::PhysicsPlayerController>()) {
+            playerController->Update(ctx, state);
+        }
     }
     else {
 #if WILL_EDITOR

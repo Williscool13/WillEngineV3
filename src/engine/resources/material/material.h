@@ -9,7 +9,7 @@
 #include <json/nlohmann/json.hpp>
 
 #include "core/string_id.h"
-#include "core/allocators/handle.h"
+#include "core/memory/handle.h"
 #include "engine/core/material_id.h"
 #include "engine/core/texture_id.h"
 #include "engine/resources/sampler/sampler.h"

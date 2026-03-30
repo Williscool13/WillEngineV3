@@ -1007,6 +1007,8 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
         ImGui::SeparatorText("Entities");
         if (ImGui::Button("Create Entity")) {
             auto newEntity = CreateSceneEntity(state);
+            const auto& viewData = frameBuffer->mainViewFamily.mainView.currentViewData;
+            state->registry.get<Component::TransformComponent>(newEntity).translation = viewData.cameraPos + viewData.cameraForward * 5.0f;
             state->selectedEntities = {newEntity};
             MarkSceneModified(state, state->currentSceneId);
         }

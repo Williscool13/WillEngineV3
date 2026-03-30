@@ -9,7 +9,7 @@
 
 #include "render/shaders/model_interop.h"
 #include "render/vulkan/vk_resources.h"
-#include "core/allocators/linear_allocator.h"
+#include "core/memory/linear_allocator.h"
 #include "../engine/resources/material/material.h"
 #include "engine/resources/model/model_types.h"
 

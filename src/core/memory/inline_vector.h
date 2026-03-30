@@ -11,6 +11,14 @@
 
 namespace Core
 {
+/**
+ * Non-resizing vector with compile-time capacity. Data is stored inline (inside the object
+ * itself), so the object lives wherever it is declared — stack, arena, or embedded in a struct.
+ * Capacity must be known at compile time.
+ *
+ * Use InlineVector when the maximum count is a known constant.
+ * Use FixedVector when the maximum count is only known at runtime.
+ */
 template<typename T, size_t Capacity>
 class InlineVector
 {

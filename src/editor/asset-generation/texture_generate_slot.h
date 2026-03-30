@@ -14,8 +14,8 @@
 
 #include "asset_generation_types.h"
 #include "dds_defs.h"
-#include "core/allocators/handle.h"
-#include "core/allocators/linear_allocator.h"
+#include "core/memory/handle.h"
+#include "core/memory/linear_allocator.h"
 #include "engine/core/texture_id.h"
 #include "render/vulkan/vk_resources.h"
 

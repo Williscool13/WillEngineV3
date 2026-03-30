@@ -14,7 +14,7 @@
 #include "asset_generation_types.h"
 #include "asset-load/asset_load_types.h"
 
-#include "core/allocators/linear_allocator.h"
+#include "core/memory/linear_allocator.h"
 #include "engine/resources/model/model_types.h"
 
 namespace Editor

@@ -1,14 +1,14 @@
 add_library(core STATIC
-        allocators/free_list.cpp
-        allocators/free_list.h
-        allocators/handle_allocator.cpp
-        allocators/handle_allocator.h
-        allocators/ring_buffer.cpp
-        allocators/ring_buffer.h
+        memory/free_list.cpp
+        memory/free_list.h
+        memory/handle_allocator.cpp
+        memory/handle_allocator.h
+        memory/ring_buffer.cpp
+        memory/ring_buffer.h
         include/render_interface.cpp
         include/render_interface.h
-        allocators/handle.cpp
-        allocators/handle.h
+        memory/handle.cpp
+        memory/handle.h
         include/frame_sync.cpp
         include/frame_sync.h
         include/game_interface.cpp
@@ -29,18 +29,23 @@ add_library(core STATIC
         math/transform.h
         math/constants.cpp
         math/constants.h
-        allocators/linear_allocator.cpp
-        allocators/linear_allocator.h
+        memory/linear_allocator.cpp
+        memory/linear_allocator.h
         math/math_helpers.cpp
         math/math_helpers.h
-        allocators/lock_free_handle_allocator.cpp
-        allocators/lock_free_handle_allocator.h
+        memory/lock_free_handle_allocator.cpp
+        memory/lock_free_handle_allocator.h
         string_id.cpp
         string_id.h
-        allocators/inline_vector.cpp
-        allocators/inline_vector.h
+        memory/inline_vector.cpp
+        memory/inline_vector.h
         hash/fnv_1_a.cpp
         hash/fnv_1_a.h
+        memory/arena.h
+        memory/arena.cpp
+        memory/arena_vector.h
+        memory/buddy_allocator.h
+        memory/buddy_allocator.cpp
 )
 
 

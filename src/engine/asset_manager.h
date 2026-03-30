@@ -12,7 +12,7 @@
 #include "engine/core/model_id.h"
 #include "core/sampler_id.h"
 #include "core/include/engine_context.h"
-#include "core/allocators/handle_allocator.h"
+#include "core/memory/handle_allocator.h"
 #include "engine/resources/sampler/sampler.h"
 #include "render/types/cubemap_asset.h"
 #include "resources/model/model_types.h"

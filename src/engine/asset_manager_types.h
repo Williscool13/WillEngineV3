@@ -4,7 +4,7 @@
 
 #ifndef WILL_ENGINE_ASSET_MANAGER_TYPES_H
 #define WILL_ENGINE_ASSET_MANAGER_TYPES_H
-#include "core/allocators/handle.h"
+#include "core/memory/handle.h"
 
 namespace Audio
 {

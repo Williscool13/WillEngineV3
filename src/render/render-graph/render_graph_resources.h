@@ -11,8 +11,8 @@
 #include <volk.h>
 #include <vulkan/vk_enum_string_helper.h>
 
-#include "core/allocators/handle.h"
-#include "core/allocators/linear_allocator.h"
+#include "core/memory/handle.h"
+#include "core/memory/linear_allocator.h"
 #include "render/render_config.h"
 #include "render/vulkan/vk_resources.h"
 #include "spdlog/spdlog.h"

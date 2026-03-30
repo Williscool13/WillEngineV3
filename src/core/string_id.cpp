@@ -5,7 +5,7 @@
 #include "string_id.h"
 
 #include <cstring>
-#include "allocators/linear_allocator.h"
+#include "memory/linear_allocator.h"
 
 #ifndef PACKAGED_BUILD
 

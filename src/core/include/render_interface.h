@@ -12,7 +12,7 @@
 #include <glm/glm.hpp>
 
 #include "core/string_id.h"
-#include "core/allocators/handle.h"
+#include "core/memory/handle.h"
 #include "core/math/transform.h"
 #include "core/time/time_frame.h"
 #include "../../engine/resources/material/material_manager.h"

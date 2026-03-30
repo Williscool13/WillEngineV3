@@ -6,7 +6,7 @@
 #include <set>
 #include <catch2/catch_test_macros.hpp>
 
-#include "core/allocators/free_list.h"
+#include "core/memory/free_list.h"
 
 using namespace Core;
 

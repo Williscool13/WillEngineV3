@@ -11,8 +11,8 @@
 
 #include "audio_asset.h"
 #include "audio_config.h"
-#include "core/allocators/handle.h"
-#include "core/allocators/handle_allocator.h"
+#include "core/memory/handle.h"
+#include "core/memory/handle_allocator.h"
 #include "SDL3_mixer/SDL_mixer.h"
 
 namespace AssetLoad

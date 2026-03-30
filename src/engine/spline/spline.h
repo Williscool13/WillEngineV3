@@ -8,7 +8,7 @@
 #include <cstdint>
 #include <glm/glm.hpp>
 #include <json/nlohmann/json_fwd.hpp>
-#include "core/allocators/inline_vector.h"
+#include "core/memory/inline_vector.h"
 
 namespace Engine
 {

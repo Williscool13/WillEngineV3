@@ -10,7 +10,7 @@
 #include "component_editor.h"
 #include "game/components/component_types.h"
 #include "core/string_id.h"
-#include "core/allocators/inline_vector.h"
+#include "core/memory/inline_vector.h"
 
 namespace Game
 {

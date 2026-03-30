@@ -10,8 +10,8 @@
 
 #include "material.h"
 #include "core/string_id.h"
-#include "core/allocators/free_list.h"
-#include "core/allocators/handle_allocator.h"
+#include "core/memory/free_list.h"
+#include "core/memory/handle_allocator.h"
 #include "engine/core/material_id.h"
 #include "render/render_config.h"
 #include "render/shaders/model_interop.h"

@@ -17,7 +17,7 @@
 #include "static_model_generate_slot.h"
 #include "TaskScheduler.h"
 #include "texture_generate_slot.h"
-#include "core/allocators/lock_free_handle_allocator.h"
+#include "core/memory/lock_free_handle_allocator.h"
 
 namespace Core
 {

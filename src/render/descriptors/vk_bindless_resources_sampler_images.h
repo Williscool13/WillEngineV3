@@ -5,8 +5,8 @@
 #ifndef WILL_ENGINE_BINDLESS_RESOURCES_SAMPLER_IMAGES_H
 #define WILL_ENGINE_BINDLESS_RESOURCES_SAMPLER_IMAGES_H
 
-#include "core/allocators/handle.h"
-#include "core/allocators/handle_allocator.h"
+#include "core/memory/handle.h"
+#include "core/memory/handle_allocator.h"
 #include "render/render_config.h"
 #include "render/vulkan/vk_resources.h"
 
