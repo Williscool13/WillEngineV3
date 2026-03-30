@@ -197,39 +197,39 @@ private:
     std::condition_variable gpuDispatchWakeCV;
 
     // Audio loading
-    moodycamel::ConcurrentQueue<AudioLoadRequest> audioRequestQueue;
     Core::LockFreeHandleAllocator<AudioLoadSlot, AUDIO_JOB_COUNT> audioLoadAllocator;
     std::array<AudioLoadSlot, AUDIO_JOB_COUNT> audioLoadSlots;
+    moodycamel::ConcurrentQueue<AudioLoadRequest> audioRequestQueue;
     moodycamel::ConcurrentQueue<AudioLoadComplete> audioLoadCompleteQueue;
 
     // Pipeline loading
-    moodycamel::ConcurrentQueue<PipelineLoadRequest> pipelineRequestQueue;
     Core::LockFreeHandleAllocator<PipelineLoadSlot, PIPELINE_JOB_COUNT> pipelineLoadAllocator;
     std::array<PipelineLoadSlot, PIPELINE_JOB_COUNT> pipelineLoadSlots;
+    moodycamel::ConcurrentQueue<PipelineLoadRequest> pipelineRequestQueue;
     moodycamel::ConcurrentQueue<PipelineLoadComplete> pipelineLoadCompleteQueue;
 
     // Model Loading
-    moodycamel::ConcurrentQueue<StaticModelLoadRequest> modelRequestQueue;
     Core::LockFreeHandleAllocator<StaticModelLoadSlot, MODEL_JOB_COUNT> modelLoadAllocator;
     std::array<StaticModelLoadSlot, MODEL_JOB_COUNT> modelLoadSlots;
+    moodycamel::ConcurrentQueue<StaticModelLoadRequest> modelRequestQueue;
     moodycamel::ConcurrentQueue<StaticModelLoadComplete> modelLoadCompleteQueue;
 
     // Procedural Model Loading
-    moodycamel::ConcurrentQueue<StaticModelLoadRequest> proceduralModelRequestQueue;
     Core::LockFreeHandleAllocator<ProceduralModelLoadSlot, PROCEDURAL_MODEL_JOB_COUNT> proceduralModelLoadAllocator;
     std::array<ProceduralModelLoadSlot, PROCEDURAL_MODEL_JOB_COUNT> proceduralModelLoadSlots;
+    moodycamel::ConcurrentQueue<StaticModelLoadRequest> proceduralModelRequestQueue;
     moodycamel::ConcurrentQueue<StaticModelLoadComplete> proceduralModelLoadCompleteQueue;
 
     // Texture Loading
-    moodycamel::ConcurrentQueue<TextureLoadRequest> textureRequestQueue;
     Core::LockFreeHandleAllocator<TextureLoadSlot, TEXTURE_JOB_COUNT> textureLoadAllocator;
     std::array<TextureLoadSlot, TEXTURE_JOB_COUNT> textureLoadSlots;
+    moodycamel::ConcurrentQueue<TextureLoadRequest> textureRequestQueue;
     moodycamel::ConcurrentQueue<TextureLoadComplete> textureLoadCompleteQueue;
 
     // Cubemap Loading
-    moodycamel::ConcurrentQueue<CubemapLoadRequest> cubemapRequestQueue;
     Core::LockFreeHandleAllocator<CubemapLoadSlot, CUBEMAP_JOB_COUNT> cubemapLoadAllocator;
     std::array<CubemapLoadSlot, CUBEMAP_JOB_COUNT> cubemapLoadSlots;
+    moodycamel::ConcurrentQueue<CubemapLoadRequest> cubemapRequestQueue;
     moodycamel::ConcurrentQueue<CubemapLoadComplete> cubemapLoadCompleteQueue;
 
     // Sampler loading (processed inline in ThreadMain, no task slot needed)

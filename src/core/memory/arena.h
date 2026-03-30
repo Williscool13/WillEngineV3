@@ -7,28 +7,30 @@
 
 #include <cassert>
 #include <cstddef>
-#include <cstdlib>
 #include <new>
 #include <type_traits>
 
 namespace Core
 {
 /**
- * Owning linear allocator. One malloc at construction, bump-pointer sub-allocation thereafter.
- * Does NOT call destructors on Reset() or destruction, only use for trivially-destructible
+ * Non-owning bump-pointer allocator over an externally-provided buffer.
+ * Does NOT call destructors on Reset() — only use for trivially-destructible
  * types, or manage lifetimes manually.
  */
 class Arena
 {
 public:
-    explicit Arena(size_t size);
-    ~Arena();
+    Arena() = default;
+
+    Arena(void* memory, size_t size);
 
     Arena(const Arena&) = delete;
+
     Arena& operator=(const Arena&) = delete;
 
-    Arena(Arena&& other) noexcept;
-    Arena& operator=(Arena&& other) noexcept;
+    Arena(Arena&&) = default;
+
+    Arena& operator=(Arena&&) = default;
 
     /**
      * Allocates sizeof(T), aligned to alignof(T), and constructs T with the given args.
@@ -51,27 +53,33 @@ public:
     void* AllocRaw(size_t size, size_t alignment = alignof(std::max_align_t));
 
     /**
-     * Resets the arena to empty. Does not free backing memory. Does not call destructors.
+     * Resets the bump pointer to the start. Does not call destructors.
      */
     void Reset();
 
+    struct Stats
+    {
+        size_t totalBytes;
+        size_t usedBytes;
+        size_t freeBytes;
+    };
+
+    [[nodiscard]] Stats GetStats() const { return {capacity, head, capacity - head}; }
     [[nodiscard]] size_t GetUsed() const { return head; }
     [[nodiscard]] size_t GetCapacity() const { return capacity; }
     [[nodiscard]] size_t GetRemaining() const { return capacity - head; }
 
 private:
-    void* memory = nullptr;
-    size_t head = 0;
-    size_t capacity = 0;
+    void* memory{};
+    size_t head{};
+    size_t capacity{};
 };
 
 template<typename T, typename... Args>
 T* Arena::Alloc(Args&&... args)
 {
     void* ptr = AllocRaw(sizeof(T), alignof(T));
-    if (ptr == nullptr) {
-        return nullptr;
-    }
+    if (!ptr) { return nullptr; }
     return new(ptr) T(std::forward<Args>(args)...);
 }
 
@@ -80,14 +88,10 @@ T* Arena::AllocArray(size_t count)
 {
     assert(count > 0);
     void* ptr = AllocRaw(sizeof(T) * count, alignof(T));
-    if (ptr == nullptr) {
-        return nullptr;
-    }
+    if (!ptr) { return nullptr; }
     if constexpr (!std::is_trivially_constructible_v<T>) {
         T* arr = static_cast<T*>(ptr);
-        for (size_t i = 0; i < count; ++i) {
-            new(arr + i) T();
-        }
+        for (size_t i = 0; i < count; ++i) { new(arr + i) T(); }
     }
     return static_cast<T*>(ptr);
 }

@@ -46,6 +46,8 @@ add_library(core STATIC
         memory/arena_vector.h
         memory/buddy_allocator.h
         memory/buddy_allocator.cpp
+        memory/memory_manager.h
+        memory/memory_manager.cpp
 )
 
 

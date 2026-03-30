@@ -59,6 +59,14 @@ void WillEngine::Initialize(Utils::Logger* logger)
 {
     ZoneScoped;
 
+    memoryManager.Init({
+        .persistentLinearSize = 32ull  * 1024 * 1024,  // 32 MB
+        .assetsPoolSize       = 512ull * 1024 * 1024,  // 512 MB
+        .assetsMinBlock       = 64,
+        .physicsPoolSize      = 64ull  * 1024 * 1024,  // 64 MB
+        .physicsMinBlock      = 64,
+    });
+
 #if LOGGING_ENABLED
     engineLogger = std::make_unique<EngineLogger>();
     engineLogger->Init(logger);
@@ -129,7 +137,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
     //
     {
         ZoneScopedN("CreateTimeManager");
-        timeManager = std::make_unique<Core::TimeManager>();
+        timeManager = memoryManager.PersistentAlloc<Core::TimeManager>();
     }
 
     //
@@ -381,6 +389,16 @@ void WillEngine::EditorImgui()
         }
         else {
             ImGui::Text("Shaders: >60s since reload");
+        }
+
+        if (ImGui::CollapsingHeader("Memory")) {
+            const Core::MemoryManager::Stats ms = memoryManager.GetStats();
+            ImGui::Text("Total:   %zu MB", ms.totalBytes >> 20);
+            ImGui::Separator();
+            ImGui::Text("Linear:  %zu / %zu KB", ms.linear.usedBytes >> 10, ms.linear.totalBytes >> 10);
+            ImGui::Separator();
+            ImGui::Text("Assets:  %zu / %zu MB", ms.assets.usedBytes >> 20, ms.assets.totalBytes >> 20);
+            ImGui::Text("Physics: %zu / %zu MB", ms.physics.usedBytes >> 20, ms.physics.totalBytes >> 20);
         }
 
         if (ImGui::CollapsingHeader("Asset Counts")) {
@@ -960,29 +978,44 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
 
 void WillEngine::Cleanup()
 {
-    asyncAssetLoadManager->Join();
-    asyncAssetLoadManager.reset();
+    gameFunctions.gameUnload(engineContext.get(), gameState.get());
+    gameFunctions.gameShutdown(engineContext.get(), gameState.get());
+    gameState.reset();
+
+#ifndef GAME_STATIC
+    gameDll.Unload();
+#endif
+
+    scheduler->ShutdownNow();
+    engineContext->scheduler = nullptr;
+    engineContext.reset();
+
+    inputManager.reset();
 
 #if WILL_EDITOR
     modelGenerator->Join();
     modelGenerator.reset();
 #endif
 
-    renderThread->Join();
+    physicsSystem.reset();
+    materialManager.reset();
+    assetManager.reset();
+
+    asyncAssetLoadManager->Join();
+    asyncAssetLoadManager.reset();
+
     audioManager.reset();
 
+    engineRenderSynchronization.reset();
 
-    scheduler->ShutdownNow();
-    engineContext->scheduler = nullptr;
+    renderThread->Join();
+    renderThread.reset();
 
-    gameFunctions.gameUnload(engineContext.get(), gameState.get());
-    gameFunctions.gameShutdown(engineContext.get(), gameState.get());
-    gameState = nullptr;
+    scheduler.reset();
 
-    physicsSystem.reset();
-
-#ifndef GAME_STATIC
-    gameDll.Unload();
+#if LOGGING_ENABLED
+    engineLogger->Shutdown();
+    engineLogger.reset();
 #endif
 }
 }

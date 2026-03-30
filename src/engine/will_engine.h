@@ -12,6 +12,7 @@
 #include "core/include/frame_sync.h"
 #include "core/include/game_interface.h"
 #include "core/include/render_interface.h"
+#include "core/memory/memory_manager.h"
 #include "platform/crash_handler.h"
 #include "platform/directory_watcher.h"
 #include "platform/dll_loader.h"
@@ -115,6 +116,8 @@ private: // Windowing
     bool bMinimized{false};
 
 private: // Main Systems
+    Core::MemoryManager memoryManager;
+
 #if LOGGING_ENABLED
     // Unload last so destructor logs go through
     std::unique_ptr<EngineLogger> engineLogger;
@@ -135,7 +138,7 @@ private: // Main Systems
 
 private: // Subsystems
     std::unique_ptr<Core::InputManager> inputManager{};
-    std::unique_ptr<Core::TimeManager> timeManager{};
+    Core::TimeManager* timeManager{};
     bool bCursorHidden{false};
     uint32_t frameBufferIndex{0};
 
