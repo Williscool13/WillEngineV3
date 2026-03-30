@@ -240,9 +240,7 @@ void AsyncAssetLoadManager::ThreadMain()
                     cubemapRequestQueue.enqueue(cubemapReq);
                 }
             }
-        }
-
-        {
+        } {
             ZoneScopedN("Process Sampler Requests");
             SamplerLoadRequest samplerReq{};
             if (samplerRequestQueue.try_dequeue(samplerReq)) {

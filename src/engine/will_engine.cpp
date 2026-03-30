@@ -116,14 +116,14 @@ void WillEngine::Initialize(Utils::Logger* logger)
         window = SDLWindowPtr(
             SDL_CreateWindow(
                 "Will Engine",
-                640,
-                480,
+                640, 480,
                 SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE),
             SDL_DestroyWindow
         );
         SDL_SetWindowPosition(window.get(), SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
         SDL_ShowWindow(window.get());
-        SDL_GetWindowSize(window.get(), &w, &h);
+        SDL_MaximizeWindow(window.get());
+        SDL_GetWindowSizeInPixels(window.get(), &w, &h);
     }
 
     engineContext = std::make_unique<Core::EngineContext>();
@@ -786,6 +786,8 @@ void WillEngine::Run()
 {
     renderThread->Start();
     timeManager->Reset();
+
+    gameState->skybox = assetManager->LoadCubemap("kloofendal"_sid);
 
     SDL_Event e;
     while (true) {

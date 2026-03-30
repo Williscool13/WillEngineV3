@@ -435,8 +435,6 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
 
     if (state->skybox.IsValid()) {
         frameBuffer->mainViewFamily.skyboxIndex = state->skybox.index;
-    } else {
-        state->skybox = ctx->assetManager->LoadCubemap("kloofendal"_sid);
     }
 }
 }
