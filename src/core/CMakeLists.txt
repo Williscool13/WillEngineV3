@@ -32,6 +32,11 @@ add_library(core STATIC
         containers/inline_map.h
         containers/fixed_vector.h
         containers/fixed_map.h
+        containers/span.h
+        # TODO: containers to add (follow Inline/Fixed/Dynamic tiers where applicable):
+        #   - RingBuffer: existing ring_buffer.h needs Inline variant; consider Fixed too
+        #   - Set: Inline, Fixed, Dynamic (open-addressing, value-only map)
+        #   - Bitset: Inline<N>, Fixed (runtime size), possibly Dynamic
         hash/fnv_1_a.cpp
         hash/fnv_1_a.h
         memory/arena.h
