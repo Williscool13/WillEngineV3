@@ -12,7 +12,6 @@
 #include "engine/asset_manager_types.h"
 #include "engine/core/material_id.h"
 #include "engine/spline/spline.h"
-#include "core/memory/inline_vector.h"
 #include "game/components/component_types.h"
 
 namespace Core { struct ViewFamily; }

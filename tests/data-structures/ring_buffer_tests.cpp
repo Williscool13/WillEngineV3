@@ -2,7 +2,7 @@
 // Created by William on 2025-12-24.
 //
 
-#include "core/memory/ring_buffer.h"
+#include "../../src/core/containers/ring_buffer.h"
 
 #include <catch2/catch_test_macros.hpp>
 

@@ -12,7 +12,7 @@
 
 #include "engine/spline/spline.h"
 #include "game/components/component_types.h"
-#include "core/memory/inline_vector.h"
+#include "core/containers/inline_vector.h"
 
 namespace Core
 {

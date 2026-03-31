@@ -13,7 +13,7 @@
 #include <entt/entt.hpp>
 
 #include "core/string_id.h"
-#include "core/memory/inline_vector.h"
+#include "core/containers/inline_vector.h"
 #include "engine/resources/material/material_manager.h"
 #include "engine/core/model_id.h"
 #include "engine/asset_manager_types.h"

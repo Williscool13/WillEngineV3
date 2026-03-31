@@ -7,7 +7,7 @@
 #include <spdlog/sinks/base_sink.h>
 
 #include "log_category.h"
-#include "core/memory/ring_buffer.h"
+#include "../../core/containers/ring_buffer.h"
 
 namespace Engine
 {

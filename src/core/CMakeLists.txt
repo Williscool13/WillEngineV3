@@ -3,8 +3,7 @@ add_library(core STATIC
         memory/free_list.h
         memory/handle_allocator.cpp
         memory/handle_allocator.h
-        memory/ring_buffer.cpp
-        memory/ring_buffer.h
+        containers/ring_buffer.h
         memory/handle.cpp
         memory/handle.h
         input/input_frame.cpp
@@ -17,8 +16,7 @@ add_library(core STATIC
         time/time_manager.h
         time/time_frame.cpp
         time/time_frame.h
-        math/transform.cpp
-        math/transform.h
+        types/transform.h
         math/constants.cpp
         math/constants.h
         memory/linear_allocator.cpp
@@ -29,19 +27,26 @@ add_library(core STATIC
         memory/lock_free_handle_allocator.h
         string_id.cpp
         string_id.h
-        memory/inline_vector.cpp
-        memory/inline_vector.h
+        containers/hash.h
+        containers/inline_vector.h
+        containers/inline_map.h
+        containers/fixed_vector.h
+        containers/fixed_map.h
         hash/fnv_1_a.cpp
         hash/fnv_1_a.h
         memory/arena.h
         memory/arena.cpp
-        memory/arena_vector.h
         memory/buddy_allocator.h
         memory/buddy_allocator.cpp
         memory/memory_manager.h
         memory/memory_manager.cpp
         memory/tlsf_allocator.cpp
         memory/tlsf_allocator.h
+        types/math.h
+        containers/array.h
+        containers/vector.h
+        containers/string.h
+        containers/map.h
 )
 
 

@@ -11,7 +11,7 @@
 #include <json/nlohmann/json_fwd.hpp>
 #include <glm/detail/type_quat.hpp>
 
-#include "core/memory/inline_vector.h"
+#include "core/containers/inline_vector.h"
 #include "Jolt/Physics/Body/MotionQuality.h"
 #include "Jolt/Physics/Collision/ObjectLayer.h"
 #include "Jolt/Physics/Collision/Shape/Shape.h"

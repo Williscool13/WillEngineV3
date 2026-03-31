@@ -13,7 +13,7 @@
 
 #include "core/string_id.h"
 #include "core/memory/handle.h"
-#include "core/math/transform.h"
+#include "../../core/types/transform.h"
 #include "core/time/time_frame.h"
 #include "engine/resources/material/material_manager.h"
 #include "glm/detail/type_quat.hpp"

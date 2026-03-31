@@ -14,7 +14,7 @@
 #include "imgui.h"
 #include "ImGuizmo.h"
 
-#include "../../../render/interface/render_interface.h"
+#include "render/interface/render_interface.h"
 #include "engine/engine_api.h"
 #include "game/component-registry/component_editor.h"
 #include "game/components/core_components.h"
