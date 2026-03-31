@@ -61,10 +61,9 @@ void WillEngine::Initialize(Utils::Logger* logger)
 
     memoryManager.Init({
         .persistentLinearSize = 32ull  * 1024 * 1024,  // 32 MB
+        .generalPoolSize      = 64ull * 1024 * 1024,  // 64 MB
         .assetsPoolSize       = 512ull * 1024 * 1024,  // 512 MB
-        .assetsMinBlock       = 64,
         .physicsPoolSize      = 64ull  * 1024 * 1024,  // 64 MB
-        .physicsMinBlock      = 64,
     });
 
 #if LOGGING_ENABLED
@@ -397,8 +396,40 @@ void WillEngine::EditorImgui()
             ImGui::Separator();
             ImGui::Text("Linear:  %zu / %zu KB", ms.linear.usedBytes >> 10, ms.linear.totalBytes >> 10);
             ImGui::Separator();
-            ImGui::Text("Assets:  %zu / %zu MB", ms.assets.usedBytes >> 20, ms.assets.totalBytes >> 20);
-            ImGui::Text("Physics: %zu / %zu MB", ms.physics.usedBytes >> 20, ms.physics.totalBytes >> 20);
+            ImGui::Text("General: %zu / %zu MB (%zu allocs)", ms.general.usedBytes >> 20, ms.general.totalBytes >> 20, ms.general.allocCount);
+            ImGui::Text("Assets:  %zu / %zu MB (%zu allocs)", ms.assets.usedBytes >> 20, ms.assets.totalBytes >> 20, ms.assets.allocCount);
+            ImGui::Text("Physics: %zu / %zu MB (%zu allocs)", ms.physics.usedBytes >> 20, ms.physics.totalBytes >> 20, ms.physics.allocCount);
+
+            ImGui::Spacing();
+            if (ImGui::Button("Refresh Tag Breakdown")) {
+                memoryManager.General().GetTagStats(cachedGeneralTags);
+                memoryManager.Assets().GetTagStats(cachedAssetsTags);
+                memoryManager.Physics().GetTagStats(cachedPhysicsTags);
+            }
+
+            constexpr ImGuiTableFlags tableFlags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp;
+            auto drawTagTable = [](const char* label, const Core::TlsfAllocator::TagStats* tags) {
+                ImGui::TextUnformatted(label);
+                if (ImGui::BeginTable(label, 3, tableFlags)) {
+                    ImGui::TableSetupColumn("Tag");
+                    ImGui::TableSetupColumn("Allocs");
+                    ImGui::TableSetupColumn("Used (KB)");
+                    ImGui::TableHeadersRow();
+                    for (size_t i = 0; i < static_cast<size_t>(Core::AllocTag::Count); ++i) {
+                        const Core::TlsfAllocator::TagStats& t = tags[i];
+                        if (t.count == 0) { continue; }
+                        ImGui::TableNextRow();
+                        ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted(Core::AllocTagName(t.tag));
+                        ImGui::TableSetColumnIndex(1); ImGui::Text("%zu", t.count);
+                        ImGui::TableSetColumnIndex(2); ImGui::Text("%zu", t.usedBytes >> 10);
+                    }
+                    ImGui::EndTable();
+                }
+            };
+
+            drawTagTable("General##tags", cachedGeneralTags);
+            drawTagTable("Assets##tags",  cachedAssetsTags);
+            drawTagTable("Physics##tags", cachedPhysicsTags);
         }
 
         if (ImGui::CollapsingHeader("Asset Counts")) {

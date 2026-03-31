@@ -48,6 +48,8 @@ add_library(core STATIC
         memory/buddy_allocator.cpp
         memory/memory_manager.h
         memory/memory_manager.cpp
+        memory/tlsf_allocator.cpp
+        memory/tlsf_allocator.h
 )
 
 
@@ -60,4 +62,5 @@ target_link_libraries(core PUBLIC
         spdlog::spdlog
         SDL3::SDL3
         render
+        tlsf
 )

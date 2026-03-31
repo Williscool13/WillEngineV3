@@ -16,18 +16,15 @@ static size_t AlignUp(size_t v, size_t alignment)
 void MemoryManager::Init(const Layout& layout)
 {
     assert(megaBuffer == nullptr && "MemoryManager::Init called twice");
-    assert((layout.assetsPoolSize  & (layout.assetsPoolSize  - 1)) == 0 && "assetsPoolSize must be a power of 2");
-    assert((layout.assetsMinBlock  & (layout.assetsMinBlock  - 1)) == 0 && "assetsMinBlock must be a power of 2");
-    assert((layout.physicsPoolSize & (layout.physicsPoolSize - 1)) == 0 && "physicsPoolSize must be a power of 2");
-    assert((layout.physicsMinBlock & (layout.physicsMinBlock - 1)) == 0 && "physicsMinBlock must be a power of 2");
 
     constexpr size_t kAlign = alignof(std::max_align_t);
 
-    const size_t linearSz     = AlignUp(layout.persistentLinearSize, kAlign);
-    const size_t assetsMetaSz = AlignUp(BuddyAllocator::MetadataSize(layout.assetsPoolSize, layout.assetsMinBlock), kAlign);
-    const size_t physMetaSz   = AlignUp(BuddyAllocator::MetadataSize(layout.physicsPoolSize, layout.physicsMinBlock), kAlign);
+    const size_t linearSz  = AlignUp(layout.persistentLinearSize, kAlign);
+    const size_t generalSz = AlignUp(layout.generalPoolSize, kAlign);
+    const size_t assetsSz  = AlignUp(layout.assetsPoolSize, kAlign);
+    const size_t physicsSz = AlignUp(layout.physicsPoolSize, kAlign);
 
-    totalSize = linearSz + assetsMetaSz + layout.assetsPoolSize + physMetaSz + layout.physicsPoolSize;
+    totalSize = linearSz + generalSz + assetsSz + physicsSz;
 
     megaBuffer = malloc(totalSize);
     assert(megaBuffer != nullptr && "MemoryManager: mega allocation failed");
@@ -37,13 +34,9 @@ void MemoryManager::Init(const Layout& layout)
     persistentArena = Arena(cursor, linearSz);
     cursor += linearSz;
 
-    void* assetsMeta = cursor; cursor += assetsMetaSz;
-    void* assetsPool = cursor; cursor += layout.assetsPoolSize;
-    buddyAssets.Init(assetsPool, layout.assetsPoolSize, layout.assetsMinBlock, assetsMeta);
-
-    void* physMeta = cursor; cursor += physMetaSz;
-    void* physPool = cursor;
-    buddyPhysics.Init(physPool, layout.physicsPoolSize, layout.physicsMinBlock, physMeta);
+    tlsfGeneral.Init(cursor, generalSz); cursor += generalSz;
+    tlsfAssets.Init(cursor, assetsSz);   cursor += assetsSz;
+    tlsfPhysics.Init(cursor, physicsSz);
 }
 
 MemoryManager::~MemoryManager()
@@ -62,8 +55,9 @@ MemoryManager::Stats MemoryManager::GetStats() const
     return {
         totalSize,
         persistentArena.GetStats(),
-        buddyAssets.GetStats(),
-        buddyPhysics.GetStats(),
+        tlsfGeneral.GetStats(),
+        tlsfAssets.GetStats(),
+        tlsfPhysics.GetStats(),
     };
 }
 } // Core

@@ -9,7 +9,7 @@
 #include <cstddef>
 
 #include "arena.h"
-#include "buddy_allocator.h"
+#include "tlsf_allocator.h"
 
 namespace Core
 {
@@ -18,13 +18,14 @@ namespace Core
  * typed regions. All engine systems suballocate from this manager — no additional new/delete.
  *
  * Layout (contiguous):
- *   [persistentLinear | assetsMeta | assetsPool | physicsMeta | physicsPool]
+ *   [persistentLinear | generalPool | assetsPool | physicsPool]
  *
  * Regions:
  *   - Persistent linear (Arena): bump-pointer, never reset. For engine system objects
  *     (RenderThread, AssetManager, etc.) that live for the entire process lifetime.
- *   - Assets buddy: variable-lifetime allocations for models and textures.
- *   - Physics buddy: variable-lifetime allocations for Jolt rigid bodies and shapes.
+ *   - General TLSF: variable-lifetime allocations with no specific domain.
+ *   - Assets TLSF: variable-lifetime allocations for models and textures.
+ *   - Physics TLSF: variable-lifetime allocations for Jolt rigid bodies and shapes.
  */
 class MemoryManager
 {
@@ -32,33 +33,30 @@ public:
     struct Layout
     {
         size_t persistentLinearSize;
-        size_t assetsPoolSize; // must be a power of 2
-        size_t assetsMinBlock; // must be a power of 2, >= 8
-        size_t physicsPoolSize; // must be a power of 2
-        size_t physicsMinBlock; // must be a power of 2, >= 8
+        size_t generalPoolSize;
+        size_t assetsPoolSize;
+        size_t physicsPoolSize;
     };
 
     struct Stats
     {
         size_t totalBytes;
-        Arena::Stats linear;
-        BuddyAllocator::Stats assets;
-        BuddyAllocator::Stats physics;
+        Arena::Stats        linear;
+        TlsfAllocator::Stats general;
+        TlsfAllocator::Stats assets;
+        TlsfAllocator::Stats physics;
     };
 
     MemoryManager() = default;
-
     ~MemoryManager();
 
     MemoryManager(const MemoryManager&) = delete;
-
     MemoryManager& operator=(const MemoryManager&) = delete;
 
     void Init(const Layout& layout);
 
     /**
      * Bump-allocates sizeof(T) from the persistent linear region and constructs T in-place.
-     * Asserts (debug) / returns nullptr (release) on OOM.
      * Never freed individually. Lives for the lifetime of the application.
      */
     template<typename T, typename... Args>
@@ -74,18 +72,20 @@ public:
 
     void* PersistentAllocRaw(size_t size, size_t alignment = alignof(std::max_align_t));
 
-    BuddyAllocator& Assets() { return buddyAssets; }
-    BuddyAllocator& Physics() { return buddyPhysics; }
+    TlsfAllocator& General() { return tlsfGeneral; }
+    TlsfAllocator& Assets()  { return tlsfAssets; }
+    TlsfAllocator& Physics() { return tlsfPhysics; }
 
     [[nodiscard]] Stats GetStats() const;
 
 private:
-    void* megaBuffer{};
+    void*  megaBuffer{};
     size_t totalSize{};
 
-    Arena persistentArena;
-    BuddyAllocator buddyAssets;
-    BuddyAllocator buddyPhysics;
+    Arena         persistentArena;
+    TlsfAllocator tlsfGeneral;
+    TlsfAllocator tlsfAssets;
+    TlsfAllocator tlsfPhysics;
 };
 
 template<typename T, typename... Args>

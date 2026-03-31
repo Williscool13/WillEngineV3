@@ -212,6 +212,13 @@ target_include_directories(bc7enc_rdo PUBLIC extern/bc7enc_rdo)
 target_compile_definitions(bc7enc_rdo PRIVATE MINIZ_HEADER_FILE_ONLY)
 target_link_libraries(bc7enc_rdo PUBLIC miniz)
 
+# tlsf =======================================
+add_library(tlsf STATIC
+        extern/tlsf/tlsf.c
+        extern/tlsf/tlsf.h
+)
+target_include_directories(tlsf PUBLIC extern/tlsf)
+
 # Tracy =======================================
 if (WILL_ENGINE_ENABLE_PROFILER)
     add_library(tracy SHARED
