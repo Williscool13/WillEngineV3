@@ -40,9 +40,7 @@ struct SetVelocityTag
 };
 
 struct DrawPhysicsDebugTag
-{
-    static ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
-};
+{};
 }
 
 #endif //WILL_ENGINE_PHYSICS_COMPONENTS_H

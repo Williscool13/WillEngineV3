@@ -4,7 +4,7 @@
 
 #ifndef WILL_ENGINE_CAMERA_SYSTEM_H
 #define WILL_ENGINE_CAMERA_SYSTEM_H
-#include "core/include/render_interface.h"
+#include "../../render/interface/render_interface.h"
 
 namespace Engine
 {

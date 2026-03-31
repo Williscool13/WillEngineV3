@@ -4,7 +4,7 @@
 
 #include "render_view_helpers.h"
 
-#include "core/include/render_interface.h"
+#include "../interface/render_interface.h"
 #include "core/math/math_helpers.h"
 #include "glm/ext/matrix_clip_space.hpp"
 #include "glm/ext/matrix_transform.hpp"

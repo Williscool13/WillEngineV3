@@ -7,7 +7,7 @@
 #include <Jolt/Jolt.h>
 #include <tracy/Tracy.hpp>
 
-#include "core/include/engine_context.h"
+#include "engine/include/engine_context.h"
 #include "engine/engine_api.h"
 #include "game/components/common_components.h"
 #include "game/components/core_components.h"

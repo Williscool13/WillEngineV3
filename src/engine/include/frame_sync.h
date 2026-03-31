@@ -10,7 +10,7 @@
 
 #include <imgui/imgui_threaded_rendering.h>
 
-#include "render_interface.h"
+#include "../../render/interface/render_interface.h"
 
 namespace Core
 {

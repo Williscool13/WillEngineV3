@@ -5,7 +5,7 @@
 #include "engine_api.h"
 
 #include "asset_manager.h"
-#include "core/include/engine_context.h"
+#include "engine/include/engine_context.h"
 #include "resources/texture/texture.h"
 
 namespace Engine

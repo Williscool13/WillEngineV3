@@ -6,7 +6,7 @@
 #define WILL_ENGINE_GAMEPLAY_CAMERA_H
 
 #include <glm/glm.hpp>
-#include "core/include/render_interface.h"
+#include "../../../render/interface/render_interface.h"
 
 namespace Physics
 {

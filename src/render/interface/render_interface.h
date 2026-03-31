@@ -15,9 +15,9 @@
 #include "core/memory/handle.h"
 #include "core/math/transform.h"
 #include "core/time/time_frame.h"
-#include "../../engine/resources/material/material_manager.h"
+#include "engine/resources/material/material_manager.h"
 #include "glm/detail/type_quat.hpp"
-#include "render/render_config.h"
+
 #include "render/shaders/model_interop.h"
 #include "render/shaders/push_constant_interop.h"
 

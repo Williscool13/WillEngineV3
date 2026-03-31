@@ -10,8 +10,8 @@
 #include <json/nlohmann/json.hpp>
 
 #include "material_format.h"
-#include "core/include/engine_context.h"
-#include "core/include/render_interface.h"
+#include "engine/include/engine_context.h"
+#include "../../../render/interface/render_interface.h"
 #include "engine/logging/engine_log.h"
 #include "engine/asset_manager.h"
 #include "platform/paths.h"

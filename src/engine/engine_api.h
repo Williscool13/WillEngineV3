@@ -13,9 +13,9 @@
 #include <imgui.h>
 #include <ImGuizmo.h>
 
-#include "../game/component-registry/component_registry.h"
+#include "game/component-registry/component_registry.h"
 #include "core/memory/inline_vector.h"
-#include "core/include/render_interface.h"
+#include "../render/interface/render_interface.h"
 #include "physics/physics_config.h"
 #include "resources/scene/scene.h"
 

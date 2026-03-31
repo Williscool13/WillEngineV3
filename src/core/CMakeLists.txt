@@ -5,16 +5,8 @@ add_library(core STATIC
         memory/handle_allocator.h
         memory/ring_buffer.cpp
         memory/ring_buffer.h
-        include/render_interface.cpp
-        include/render_interface.h
         memory/handle.cpp
         memory/handle.h
-        include/frame_sync.cpp
-        include/frame_sync.h
-        include/game_interface.cpp
-        include/game_interface.h
-        include/engine_context.cpp
-        include/engine_context.h
         input/input_frame.cpp
         input/input_frame.h
         input/input_utils.cpp
@@ -61,6 +53,5 @@ target_include_directories(core PRIVATE
 target_link_libraries(core PUBLIC
         spdlog::spdlog
         SDL3::SDL3
-        render
         tlsf
 )

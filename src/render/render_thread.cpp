@@ -1285,7 +1285,7 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
 
         for (int i = 0; i < SHADOW_CASCADE_COUNT; ++i) {
             ViewProjMatrix viewProj = GenerateLightSpaceMatrix(
-                static_cast<float>(shadowConfig.cascadePreset.extents[i].width),
+                static_cast<float>(shadowConfig.cascadePreset.extents[i][0]),
                 shadowData.nearSplits[i],
                 shadowData.farSplits[i],
                 directionalLight.direction,
@@ -1503,11 +1503,18 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFami
         StringID shadowPassId = StringID(shadowPassName.c_str(), shadowPassName.size());
 
 
-        uint32_t cascadeWidth = shadowConfig.cascadePreset.extents[cascadeLevel].width;
-        uint32_t cascadeHeight = shadowConfig.cascadePreset.extents[cascadeLevel].height;
+        uint32_t cascadeWidth = shadowConfig.cascadePreset.extents[cascadeLevel][0];
+        uint32_t cascadeHeight = shadowConfig.cascadePreset.extents[cascadeLevel][1];
         float linearBias = shadowConfig.cascadePreset.biases[cascadeLevel].linear;
         float slopedBias = shadowConfig.cascadePreset.biases[cascadeLevel].sloped;
-        graph.CreateTexture(shadowMapId, TextureInfo{SHADOW_CASCADE_FORMAT, shadowConfig.cascadePreset.extents[cascadeLevel].width, shadowConfig.cascadePreset.extents[cascadeLevel].height, 1}, false);
+        graph.CreateTexture(shadowMapId,
+                            TextureInfo{
+                                SHADOW_CASCADE_FORMAT,
+                                static_cast<uint32_t>(shadowConfig.cascadePreset.extents[cascadeLevel][0]),
+                                static_cast<uint32_t>(shadowConfig.cascadePreset.extents[cascadeLevel][1]),
+                                1
+                            },
+                            false);
 
         // Main Draw
         if (!viewFamily.mainPassInstances.empty()) {

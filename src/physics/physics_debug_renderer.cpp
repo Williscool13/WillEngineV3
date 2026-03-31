@@ -7,7 +7,7 @@
 #include "physics_debug_renderer.h"
 
 #include "physics_helpers.h"
-#include "core/include/render_interface.h"
+#include "render/interface/render_interface.h"
 
 namespace Physics
 {
@@ -22,7 +22,7 @@ void DebugRenderer::DrawLine(JPH::RVec3Arg inFrom, JPH::RVec3Arg inTo, const JPH
 {
     if (!viewFamily) return;
 
-    viewFamily->debugLines.push_back({
+    DEBUG_ADD_LINE(viewFamily->debugLines, {
         .start = PhysicsHelpers::ToGLM(inFrom),
         .end = PhysicsHelpers::ToGLM(inTo),
         .color = PhysicsHelpers::ToGLM(inColor)
@@ -39,9 +39,10 @@ void DebugRenderer::DrawTriangle(JPH::RVec3Arg inV1, JPH::RVec3Arg inV2, JPH::RV
     glm::vec3 v3 = PhysicsHelpers::ToGLM(inV3);
     glm::vec4 color = PhysicsHelpers::ToGLM(inColor);
 
-    viewFamily->debugLines.push_back({.start = v1, .end = v2, .color = color});
-    viewFamily->debugLines.push_back({.start = v2, .end = v3, .color = color});
-    viewFamily->debugLines.push_back({.start = v3, .end = v1, .color = color});
+
+    DEBUG_ADD_LINE(viewFamily->debugLines,{.start = v1, .end = v2, .color = color});
+    DEBUG_ADD_LINE(viewFamily->debugLines,{.start = v2, .end = v3, .color = color});
+    DEBUG_ADD_LINE(viewFamily->debugLines,{.start = v3, .end = v1, .color = color});
 }
 
 JPH::DebugRenderer::Batch DebugRenderer::CreateTriangleBatch(const Triangle* inTriangles, int inTriangleCount)

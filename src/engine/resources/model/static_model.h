@@ -15,7 +15,7 @@
 
 #include "model_types.h"
 #include "TaskScheduler.h"
-#include "core/include/render_interface.h"
+#include "../../../render/interface/render_interface.h"
 #include "engine/core/model_id.h"
 
 

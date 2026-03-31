@@ -7,7 +7,7 @@
 
 #include <json/nlohmann/json_fwd.hpp>
 
-#include "core/include/render_interface.h"
+#include "../../render/interface/render_interface.h"
 
 namespace Game::Component
 {

@@ -7,7 +7,7 @@
 
 #include <tracy/Tracy.hpp>
 
-#include "core/include/engine_context.h"
+#include "engine/include/engine_context.h"
 #include "core/time/time_frame.h"
 #include "game/fwd_components.h"
 #include "engine/asset_manager.h"

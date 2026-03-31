@@ -4,7 +4,7 @@
 
 #ifndef WILL_ENGINE_RENDER_VIEW_HELPERS_H
 #define WILL_ENGINE_RENDER_VIEW_HELPERS_H
-#include "core/include/render_interface.h"
+#include "../interface/render_interface.h"
 #include "render/shaders/common_interop.h"
 #include "render/types/render_types.h"
 

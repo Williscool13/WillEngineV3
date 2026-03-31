@@ -13,7 +13,7 @@
 #include "render_graph_resources.h"
 #include "render/vulkan/vk_resources.h"
 #include "core/memory/handle_allocator.h"
-#include "core/include/render_interface.h"
+#include "../interface/render_interface.h"
 #include "render/render_config.h"
 
 

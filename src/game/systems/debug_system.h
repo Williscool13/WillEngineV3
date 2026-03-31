@@ -7,7 +7,7 @@
 #include <cstdint>
 #include <vector>
 
-#include "core/include/render_interface.h"
+#include "../../render/interface/render_interface.h"
 #include "core/input/input_frame.h"
 #include "render/shaders/common_interop.h"
 

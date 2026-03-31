@@ -8,7 +8,7 @@
 #include <glm/gtc/type_ptr.hpp>
 
 #include "debug_system.h"
-#include "core/include/engine_context.h"
+#include "engine/include/engine_context.h"
 #include "core/math/constants.h"
 #include "engine/engine_api.h"
 #include "game/fwd_components.h"

@@ -32,6 +32,7 @@ target_include_directories(physics PRIVATE
 
 target_link_libraries(physics PUBLIC
         core
+        render # for debug rendering
         fmt::fmt
         Jolt
         enkiTS

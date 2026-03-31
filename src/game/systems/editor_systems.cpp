@@ -13,7 +13,7 @@
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "scene_system.h"
-#include "core/include/engine_context.h"
+#include "engine/include/engine_context.h"
 #include "core/input/input_frame.h"
 #include "core/math/constants.h"
 #include "engine/engine_api.h"
@@ -1580,8 +1580,8 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
                 ImGui::Text("Cascade %d:", i);
                 ImGui::Indent();
                 ImGui::Text("  Resolution: %dx%d",
-                            state->shadowConfig.cascadePreset.extents[i].width,
-                            state->shadowConfig.cascadePreset.extents[i].height);
+                            state->shadowConfig.cascadePreset.extents[i][0],
+                            state->shadowConfig.cascadePreset.extents[i][1]);
                 ImGui::Text("  Bias: %.2f/%.2f",
                             state->shadowConfig.cascadePreset.biases[i].linear,
                             state->shadowConfig.cascadePreset.biases[i].sloped);
@@ -1602,8 +1602,8 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
                 for (int i = 0; i < 4; ++i) {
                     ImGui::PushID(i);
                     if (ImGui::TreeNode("Cascade", "Cascade %d", i)) {
-                        ImGui::InputInt("Width", reinterpret_cast<int*>(&customPreset.extents[i].width));
-                        ImGui::InputInt("Height", reinterpret_cast<int*>(&customPreset.extents[i].height));
+                        ImGui::InputInt("Width", reinterpret_cast<int*>(&customPreset.extents[i][0]));
+                        ImGui::InputInt("Height", reinterpret_cast<int*>(&customPreset.extents[i][1]));
                         ImGui::InputFloat("Linear Bias", &customPreset.biases[i].linear);
                         ImGui::InputFloat("Sloped Bias", &customPreset.biases[i].sloped);
                         ImGui::InputScalar("Blocker Samples", ImGuiDataType_U32, &customPreset.pcssSamples[i].blockerSearchSamples);

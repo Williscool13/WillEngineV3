@@ -10,7 +10,7 @@
 #include "physics_components.h"
 #include "game/component-registry/component_editor.h"
 
-#include "core/include/engine_context.h"
+#include "engine/include/engine_context.h"
 #include "engine/asset_manager.h"
 #include "engine/engine_api.h"
 #include "game/components/core_components.h"

@@ -23,6 +23,12 @@ add_library(engine STATIC
         core/texture_id.h
         core/sampler_id.h
         core/model_id.h
+        include/frame_sync.cpp
+        include/frame_sync.h
+        include/game_interface.cpp
+        include/game_interface.h
+        include/engine_context.cpp
+        include/engine_context.h
         resources/material/material.cpp
         resources/material/material.h
         resources/material/material_format.cpp
@@ -34,14 +40,19 @@ add_library(engine STATIC
         resources/scene/scene_format.h
         resources/sampler/sampler.cpp
         resources/sampler/sampler.h
-        serialization/serialization.cpp
-        serialization/serialization.h
-        compression/compression.cpp
-        compression/compression.h
         resources/scene/scene.cpp
         resources/scene/scene.h
         resources/prefab/prefab_format.cpp
         resources/prefab/prefab_format.h
+        resources/model/model_format.h
+        resources/model/model_types.h
+        resources/model/static_model.cpp
+        resources/model/static_model.h
+        resources/model/model_format.cpp
+        serialization/serialization.cpp
+        serialization/serialization.h
+        compression/compression.cpp
+        compression/compression.h
         spline/spline.cpp
 )
 

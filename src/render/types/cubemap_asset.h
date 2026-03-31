@@ -6,8 +6,8 @@
 #define WILL_ENGINE_CUBEMAP_ASSET_H
 #include <filesystem>
 
-#include "core/include/render_interface.h"
-#include "../descriptors/vk_bindless_resources_sampler_images.h"
+#include "../interface/render_interface.h"
+#include "render/descriptors/vk_bindless_resources_sampler_images.h"
 #include "engine/asset_manager_types.h"
 
 namespace Render

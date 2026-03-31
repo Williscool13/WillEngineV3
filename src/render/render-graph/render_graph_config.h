@@ -6,7 +6,7 @@
 #define WILL_ENGINE_RENDER_GRAPH_CONFIG_H
 #include <cstdint>
 
-#include "core/include/render_interface.h"
+#include "../interface/render_interface.h"
 
 namespace Render
 {

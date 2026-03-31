@@ -8,7 +8,7 @@
 
 #include "spline_mesh_component.h"
 #include "static_mesh_component.h"
-#include "core/include/engine_context.h"
+#include "engine/include/engine_context.h"
 #include "engine/asset_manager.h"
 #include "engine/engine_api.h"
 #include "game/components/core_components.h"

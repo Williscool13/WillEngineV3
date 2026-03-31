@@ -9,9 +9,9 @@
 #include <SDL3/SDL.h>
 #include <enkiTS/src/TaskScheduler.h>
 
-#include "core/include/frame_sync.h"
-#include "core/include/game_interface.h"
-#include "core/include/render_interface.h"
+#include "engine/include/frame_sync.h"
+#include "engine/include/game_interface.h"
+#include "../render/interface/render_interface.h"
 #include "core/memory/memory_manager.h"
 #include "platform/crash_handler.h"
 #include "platform/directory_watcher.h"

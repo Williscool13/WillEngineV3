@@ -11,7 +11,7 @@
 
 #include "frame_resources.h"
 #include "asset-load/async_asset_load_manager.h"
-#include "core/include/render_interface.h"
+#include "interface/render_interface.h"
 #include "render/vulkan/vk_synchronization.h"
 #include "types/render_types.h"
 

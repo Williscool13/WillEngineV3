@@ -41,10 +41,6 @@ add_library(render STATIC
         pipelines/graphics_pipeline_builder.cpp
         pipelines/graphics_pipeline_builder.h
         shaders/model_interop.h
-        ../engine/resources/model/model_format.h
-        ../engine/resources/model/model_types.h
-        ../engine/resources/model/static_model.cpp
-        ../engine/resources/model/static_model.h
         shaders/constants_interop.h
         types/cubemap_asset.cpp
         types/cubemap_asset.h
@@ -74,7 +70,8 @@ add_library(render STATIC
 
         render-graph/passes/instanced_geometry_pass.cpp
         render-graph/passes/instanced_geometry_pass.h
-        ../engine/resources/model/model_format.cpp
+        interface/render_interface.cpp
+        interface/render_interface.h
 )
 
 target_include_directories(render PRIVATE

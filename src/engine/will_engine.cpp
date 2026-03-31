@@ -14,7 +14,7 @@
 
 #include "asset_manager.h"
 #include "engine_api.h"
-#include "core/include/game_interface.h"
+#include "engine/include/game_interface.h"
 #include "core/input/input_manager.h"
 #include "core/time/time_manager.h"
 #include "asset-load/async_asset_load_manager.h"

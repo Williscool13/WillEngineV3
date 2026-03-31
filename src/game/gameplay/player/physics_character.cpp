@@ -10,11 +10,11 @@
 #include <Jolt/Physics/Collision/CastResult.h>
 #include <Jolt/Physics/Collision/NarrowPhaseQuery.h>
 
-#include "core/include/engine_context.h"
+#include "engine/include/engine_context.h"
 #include "engine/asset_manager.h"
 #include "game/components/common_components.h"
 #include "game/components/core_components.h"
-#include "../../components/physics/physics_components.h"
+#include "game/components/physics/physics_components.h"
 #include "game/components/physics/physics_body_component.h"
 #include "game/systems/scene_system.h"
 #include "physics/physics_system.h"

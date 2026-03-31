@@ -10,7 +10,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 
-#include "core/include/render_interface.h"
+#include "../interface/render_interface.h"
 #include "render/shaders/common_interop.h"
 
 namespace Render

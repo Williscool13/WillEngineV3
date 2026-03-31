@@ -8,7 +8,6 @@
 #include <glm/gtc/quaternion.hpp>
 
 #include "core/time/time_frame.h"
-#include "core/include/engine_context.h"
 #include "engine/engine_api.h"
 #include "game/components/core_components.h"
 #include "game/components/gameplay/checkpoint_component.h"

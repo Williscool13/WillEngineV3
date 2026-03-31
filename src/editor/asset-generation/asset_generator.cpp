@@ -9,7 +9,7 @@
 
 #include "miscellaneous_asset_generate.h"
 #include "asset-load/async_asset_load_manager.h"
-#include "core/include/engine_context.h"
+#include "engine/include/engine_context.h"
 #include "platform/thread_utils.h"
 #include "render/render_thread.h"
 

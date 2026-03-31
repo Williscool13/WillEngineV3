@@ -8,7 +8,7 @@
 #include <filesystem>
 #include <volk.h>
 
-#include "core/include/render_interface.h"
+#include "../interface/render_interface.h"
 
 namespace Render::VkHelpers
 {

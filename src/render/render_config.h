@@ -7,9 +7,6 @@
 #include <cstdint>
 #include <array>
 
-#include <volk.h>
-
-#include "dds_defs.h"
 #include "core/string_id.h"
 #include "shaders/instancing_interop.h"
 #include "shaders/lights_interop.h"
@@ -117,7 +114,7 @@ struct PCSSSamples
 
 struct ShadowCascadePreset
 {
-    std::array<VkExtent2D, SHADOW_CASCADE_COUNT> extents;
+    std::array<glm::vec2, SHADOW_CASCADE_COUNT> extents;
     std::array<CascadeBias, SHADOW_CASCADE_COUNT> biases;
     std::array<PCSSSamples, SHADOW_CASCADE_COUNT> pcssSamples;
     std::array<float, SHADOW_CASCADE_COUNT> lightSizes;
@@ -128,7 +125,7 @@ inline constexpr std::array<ShadowCascadePreset, 4> SHADOW_PRESETS = {
         // Ultra
         {
             {
-                VkExtent2D{4096, 4096}, {2048, 2048}, {1024, 1024}, {1024, 1024}
+                glm::vec2{4096, 4096}, {2048, 2048}, {1024, 1024}, {1024, 1024}
             },
             {
                 CascadeBias{0, 7.0f}, {0, 3.0f}, {0, 2.0f}, {0, 1.5f}
@@ -144,7 +141,7 @@ inline constexpr std::array<ShadowCascadePreset, 4> SHADOW_PRESETS = {
         // High
         {
             {
-                VkExtent2D{2048, 2048}, {2048, 2048}, {1024, 1024}, {512, 512}
+                glm::vec2{2048, 2048}, {2048, 2048}, {1024, 1024}, {512, 512}
             },
             {
                 CascadeBias{1.5f, 2.0f}, {1.75f, 2.25f}, {2.25f, 2.75f}, {3.0f, 3.5f}
@@ -160,7 +157,7 @@ inline constexpr std::array<ShadowCascadePreset, 4> SHADOW_PRESETS = {
         // Medium
         {
             {
-                VkExtent2D{2048, 2048}, {1024, 1024}, {512, 512}, {512, 512}
+                glm::vec2{2048, 2048}, {1024, 1024}, {512, 512}, {512, 512}
             },
             {
                 CascadeBias{2.0f, 2.5f}, {2.5f, 3.0f}, {3.0f, 3.5f}, {4.0f, 4.5f}
@@ -176,7 +173,7 @@ inline constexpr std::array<ShadowCascadePreset, 4> SHADOW_PRESETS = {
         // Low
         {
             {
-                VkExtent2D{1024, 1024}, {1024, 1024}, {512, 512}, {256, 256}
+                glm::vec2{1024, 1024}, {1024, 1024}, {512, 512}, {256, 256}
             },
             {
                 CascadeBias{2.5f, 3.0f}, {3.0f, 3.5f}, {4.0f, 4.5f}, {5.0f, 5.5f}

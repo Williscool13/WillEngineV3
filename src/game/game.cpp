@@ -6,8 +6,8 @@
 
 #include "spdlog/spdlog.h"
 
-#include "core/include/game_interface.h"
-#include "core/include/render_interface.h"
+#include "engine/include/game_interface.h"
+#include "../render/interface/render_interface.h"
 #include "core/input/input_frame.h"
 #include "engine/engine_api.h"
 #include "physics/physics_system.h"

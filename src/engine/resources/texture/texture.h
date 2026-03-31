@@ -7,7 +7,7 @@
 
 #include <filesystem>
 
-#include "core/include/render_interface.h"
+#include "../../../render/interface/render_interface.h"
 #include "render/descriptors/vk_bindless_resources_sampler_images.h"
 #include "render/vulkan/vk_resources.h"
 #include "engine/asset_manager_types.h"

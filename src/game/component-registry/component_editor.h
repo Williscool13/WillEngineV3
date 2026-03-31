@@ -10,7 +10,7 @@
 #include <json/nlohmann/json_fwd.hpp>
 #include "imgui.h"
 
-#include "core/include/render_interface.h"
+#include "../../render/interface/render_interface.h"
 #include "game/components/component_types.h"
 
 namespace Game
