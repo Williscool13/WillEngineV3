@@ -9,7 +9,7 @@
 #include <entt/entt.hpp>
 #include <json/nlohmann/json_fwd.hpp>
 
-#include "core/stack_string.h"
+#include "../../core/containers/inline_string.h"
 #include "core/string_id.h"
 #include "game/components/component_types.h"
 
@@ -27,7 +27,7 @@ struct EntityFolderComponent
     /**
      * Stack-based strings (max 16 char)
      */
-    std::array<ShortString, 2> folderHierarchyNames;
+    std::array<Core::ShortString, 2> folderHierarchyNames;
 
     static void Serialize(const EntityFolderComponent& comp, nlohmann::json& json);
     static void Deserialize(EntityFolderComponent& comp, const nlohmann::json& json);

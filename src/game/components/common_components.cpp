@@ -60,7 +60,7 @@ void NameComponent::Serialize(const NameComponent& comp, nlohmann::json& json)
 
 void NameComponent::Deserialize(NameComponent& comp, const nlohmann::json& json)
 {
-    comp.name = StackString<256>(json["name"].get<std::string>().c_str());
+    comp.name = Core::InlineString<256>(json["name"].get<std::string>().c_str());
 }
 
 ComponentEditorResult NameComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)
@@ -77,7 +77,7 @@ ComponentEditorResult NameComponent::DrawEditor(Core::ViewFamily& viewFamily, en
         strncpy_s(buf, component.name.c_str(), sizeof(buf) - 1);
         buf[sizeof(buf) - 1] = '\0';
         if (ImGui::InputText("Name", buf, sizeof(buf))) {
-            component.name = StackString<256>(buf);
+            component.name = Core::InlineString<256>(buf);
         }
     }
     return {.requestRemoval = remove};

@@ -11,7 +11,7 @@
 #include <json/nlohmann/json_fwd.hpp>
 
 #include "core/string_id.h"
-#include "core/stack_string.h"
+#include "core/containers/inline_string.h"
 #include "game/components/component_types.h"
 
 namespace Core { struct ViewFamily; }
@@ -20,7 +20,7 @@ namespace Game::Component
 {
 struct NameComponent
 {
-    StackString<256> name;
+    Core::InlineString<256> name;
 
     static void Serialize(const NameComponent& comp, nlohmann::json& json);
     static void Deserialize(NameComponent& comp, const nlohmann::json& json);

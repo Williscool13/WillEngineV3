@@ -80,7 +80,7 @@ void DrawMultiSelectEditor(Engine::GameState* state, const glm::vec3& centroid, 
 
             if (ImGui::InputText("Name##multi", buf, sizeof(buf), ImGuiInputTextFlags_EnterReturnsTrue)) {
                 for (auto e : entities) {
-                    state->registry.get<Component::NameComponent>(e).name = StackString<256>(buf);
+                    state->registry.get<Component::NameComponent>(e).name = Core::InlineString<256>(buf);
                 }
                 MarkEntitiesModified(state, entities);
             }
@@ -94,7 +94,7 @@ void DrawMultiSelectEditor(Engine::GameState* state, const glm::vec3& centroid, 
     if (ImGui::CollapsingHeader("Folder##multi_folder", ImGuiTreeNodeFlags_DefaultOpen)) {
         bool allHaveFolder = true;
         bool folder0Same = true, folder1Same = true;
-        ShortString firstFolder0, firstFolder1;
+        Core::ShortString firstFolder0, firstFolder1;
         StringID firstFolder0Id;
         bool first = true;
 
@@ -121,7 +121,7 @@ void DrawMultiSelectEditor(Engine::GameState* state, const glm::vec3& centroid, 
         }
 
         if (allHaveFolder) {
-            std::vector<ShortString> existingFolders0;
+            std::vector<Core::ShortString> existingFolders0;
             auto folderView = state->registry.view<Component::EntityFolderComponent>();
             for (auto e : folderView) {
                 auto& fc = folderView.get<Component::EntityFolderComponent>(e);
@@ -148,9 +148,9 @@ void DrawMultiSelectEditor(Engine::GameState* state, const glm::vec3& centroid, 
                 if (ImGui::Selectable("(None)", folder0Same && firstFolder0.size() == 0)) {
                     for (auto e : entities) {
                         auto& fc = state->registry.get<Component::EntityFolderComponent>(e);
-                        fc.folderHierarchyNames[0] = ShortString();
+                        fc.folderHierarchyNames[0] = Core::ShortString();
                         fc.folderHierarchy[0] = StringID();
-                        fc.folderHierarchyNames[1] = ShortString();
+                        fc.folderHierarchyNames[1] = Core::ShortString();
                         fc.folderHierarchy[1] = StringID();
                     }
                     MarkEntitiesModified(state, entities);
@@ -171,7 +171,7 @@ void DrawMultiSelectEditor(Engine::GameState* state, const glm::vec3& centroid, 
             }
 
             if (folder0Same && firstFolder0Id.IsValid()) {
-                std::vector<ShortString> existingFolders1;
+                std::vector<Core::ShortString> existingFolders1;
                 for (auto e : folderView) {
                     auto& fc = folderView.get<Component::EntityFolderComponent>(e);
                     if (fc.folderHierarchy[0] != firstFolder0Id) {
@@ -200,7 +200,7 @@ void DrawMultiSelectEditor(Engine::GameState* state, const glm::vec3& centroid, 
                     if (ImGui::Selectable("(None)", folder1Same && firstFolder1.size() == 0)) {
                         for (auto e : entities) {
                             auto& fc = state->registry.get<Component::EntityFolderComponent>(e);
-                            fc.folderHierarchyNames[1] = ShortString();
+                            fc.folderHierarchyNames[1] = Core::ShortString();
                             fc.folderHierarchy[1] = StringID();
                         }
                         MarkEntitiesModified(state, entities);

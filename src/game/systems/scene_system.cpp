@@ -22,7 +22,6 @@
 #include "game/components/core_components.h"
 #include "game/components/editor_components.h"
 #include "game/components/gameplay/player_spawn_component.h"
-#include "game/components/render_components.h"
 #include "game/components/render/static_mesh_component.h"
 #include "game/components/scene_components.h"
 #include "game/gameplay/player/physics_player_controller.h"
@@ -352,7 +351,7 @@ std::vector<entt::entity> SpawnModel(Engine::GameState* state, Engine::AssetMana
         entt::entity entity = CreateSceneEntity(state);
 
         if (!node.name.empty()) {
-            state->registry.get<Component::NameComponent>(entity).name = StackString<256>(node.name.c_str());
+            state->registry.get<Component::NameComponent>(entity).name = Core::InlineString<256>(node.name.c_str());
         }
 
         auto& transform = state->registry.get<Component::TransformComponent>(entity);
@@ -386,7 +385,7 @@ entt::entity CreateSceneEntity(Engine::GameState* state)
     state->registry.emplace<Component::EntityFolderComponent>(newEntity);
     static int32_t runningNameTally = 0;
     auto newName = fmt::format("New Entity {}", runningNameTally++);
-    state->registry.emplace<Component::NameComponent>(newEntity, StackString<256>(newName.c_str()));
+    state->registry.emplace<Component::NameComponent>(newEntity, Core::InlineString<256>(newName.c_str()));
     LOG_TRACE(Game, "Created new entity {}", entt::to_integral(newEntity));
     return newEntity;
 }

@@ -17,7 +17,7 @@ namespace Game::Component
 void EntityFolderComponent::Serialize(const EntityFolderComponent& comp, nlohmann::json& json)
 {
     json["folderHierarchyNames"] = nlohmann::json::array();
-    for (const ShortString& name : comp.folderHierarchyNames) {
+    for (const Core::ShortString& name : comp.folderHierarchyNames) {
         json["folderHierarchyNames"].push_back(name.c_str());
     }
 }
@@ -28,14 +28,14 @@ void EntityFolderComponent::Deserialize(EntityFolderComponent& comp, const nlohm
         const auto& arr = json["folderHierarchyNames"];
         for (size_t i = 0; i < comp.folderHierarchyNames.size() && i < arr.size(); ++i) {
             const std::string s = arr[i].get<std::string>();
-            comp.folderHierarchyNames[i] = ShortString(s.c_str());
+            comp.folderHierarchyNames[i] = Core::ShortString(s.c_str());
             comp.folderHierarchy[i] = s.empty() ? StringID() : StringID(s.c_str(), s.size());
         }
     }
 }
 
 static void CollectExistingFolderNames(entt::registry& registry, int level,
-                                       std::vector<ShortString>& outNames, StringID parentFilter)
+                                       std::vector<Core::ShortString>& outNames, StringID parentFilter)
 {
     auto view = registry.view<EntityFolderComponent>();
     for (auto e : view) {
@@ -58,16 +58,16 @@ static void CollectExistingFolderNames(entt::registry& registry, int level,
 }
 
 static bool DrawFolderLevelCombo(const char* label, entt::registry& registry, int level,
-                                 ShortString& nameOut, StringID& idOut, StringID parentFilter)
+                                 Core::ShortString& nameOut, StringID& idOut, StringID parentFilter)
 {
     bool changed = false;
-    std::vector<ShortString> existing;
+    std::vector<Core::ShortString> existing;
     CollectExistingFolderNames(registry, level, existing, parentFilter);
 
     const char* currentName = nameOut.size() > 0 ? nameOut.c_str() : "(None)";
     if (ImGui::BeginCombo(label, currentName)) {
         if (ImGui::Selectable("(None)", nameOut.size() == 0)) {
-            nameOut = ShortString();
+            nameOut = Core::ShortString();
             idOut = StringID();
             changed = true;
         }
@@ -87,7 +87,7 @@ static bool DrawFolderLevelCombo(const char* label, entt::registry& registry, in
     if (ImGui::InputTextWithHint(fmt::format("##new_{}", label).c_str(), "New folder name...",
                                  newBuf, sizeof(newBuf), ImGuiInputTextFlags_EnterReturnsTrue)) {
         if (newBuf[0]) {
-            nameOut = ShortString(newBuf);
+            nameOut = Core::ShortString(newBuf);
             idOut = StringID(newBuf, strlen(newBuf));
             changed = true;
         }
@@ -114,7 +114,7 @@ ComponentEditorResult EntityFolderComponent::DrawEditor(Core::ViewFamily& viewFa
             DrawFolderLevelCombo("##folder_1", registry, 1, comp.folderHierarchyNames[1], comp.folderHierarchy[1], comp.folderHierarchy[0]);
         }
         else {
-            comp.folderHierarchyNames[1] = ShortString();
+            comp.folderHierarchyNames[1] = Core::ShortString();
             comp.folderHierarchy[1] = StringID();
         }
     }
