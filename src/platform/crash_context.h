@@ -4,9 +4,10 @@
 
 #ifndef WILLENGINEV3_CRASH_CONTEXT_H
 #define WILLENGINEV3_CRASH_CONTEXT_H
-#include <string>
+
 #include <string_view>
-#include <json/nlohmann/json.hpp>
+
+#include "core/containers/inline_string.h"
 
 namespace Platform
 {
@@ -15,22 +16,19 @@ class CrashContext
 public:
     CrashContext();
 
-    void WriteCrashContext(std::string_view crashReason, const std::filesystem::path& folderPath);
+    void WriteCrashContext(std::string_view crashReason, const char* folderPath);
 
 private:
-    nlohmann::ordered_json context;
+    Core::InlineString<32> sessionStart;
 
 #ifdef _WIN32
-    void CollectSystemInfoWin32();
-
-    void CollectProcessInfoWin32();
+    static void WriteSystemInfoWin32(FILE* f);
+    static void WriteProcessInfoWin32(FILE* f);
 #endif
 
-    static nlohmann::json GetBuildConfiguration();
-
-    static std::string GetTimestamp();
+    static Core::InlineString<32> GetTimestamp();
+    static const char* GetBuildConfiguration();
 };
 } // Platform
-
 
 #endif //WILLENGINEV3_CRASH_CONTEXT_H

@@ -4,12 +4,7 @@
 
 #include "crash_handler.h"
 #include "crash_context.h"
-
-#include <filesystem>
-#include <sstream>
-#include <iomanip>
-#include <chrono>
-#include <utility>
+#include "file_utils.h"
 
 #include <dbghelp.h>
 #include <fmt/format.h>
@@ -26,20 +21,44 @@ namespace Platform
 {
 CrashHandler* CrashHandler::s_instance = nullptr;
 
-CrashHandler::CrashHandler(std::filesystem::path  dumpDirectory)
-    : baseDumpDir(std::move(dumpDirectory))
+
+static size_t BufAppend(char* buf, size_t cap, size_t pos, const char* str)
+{
+    if (pos >= cap - 1) { return pos; }
+    size_t avail = cap - 1 - pos;
+    size_t slen = strlen(str);
+    if (slen > avail) { slen = avail; }
+    memcpy(buf + pos, str, slen);
+    buf[pos + slen] = '\0';
+    return pos + slen;
+}
+
+static size_t BufAppendf(char* buf, size_t cap, size_t pos, const char* fmt, ...)
+{
+    if (pos >= cap - 1) { return pos; }
+    va_list args;
+    va_start(args, fmt);
+    int n = vsnprintf(buf + pos, cap - pos, fmt, args);
+    va_end(args);
+    if (n <= 0) { return pos; }
+    pos += (size_t) n;
+    if (pos >= cap) { pos = cap - 1; }
+    return pos;
+}
+
+CrashHandler::CrashHandler(const char* dumpDirectory)
+    : baseDumpDir(dumpDirectory)
 {
     if (s_instance) {
         fmt::println("Warning: Multiple CrashHandler instances created");
     }
 
     s_instance = this;
-    std::filesystem::create_directories(baseDumpDir);
+    CreateDirectories(baseDumpDir.c_str());
 
-    // #1 Setup exception filter
     SetUnhandledExceptionFilter(ExceptionFilter);
 
-    fmt::println("Initialized crash handler: {}", baseDumpDir.string());
+    fmt::println("Initialized crash handler: {}", baseDumpDir.c_str());
 }
 
 CrashHandler::~CrashHandler()
@@ -56,35 +75,33 @@ LONG WINAPI CrashHandler::ExceptionFilter(PEXCEPTION_POINTERS pExceptionInfo)
         return EXCEPTION_CONTINUE_SEARCH;
     }
 
-    std::filesystem::path currentCrashFolder = s_instance->CreateCrashFolder();
+    Core::Path currentCrashFolder = s_instance->CreateCrashFolder();
 
-    fmt::println("Crash Detected. Writing to folder: {}", currentCrashFolder.string());
+    fmt::println("Crash Detected. Writing to folder: {}", currentCrashFolder.c_str());
 
-    // #2 Write crash context
-    std::string crashReason = s_instance->GetExceptionDescription(pExceptionInfo);
+    auto crashReason = GetExceptionDescription(pExceptionInfo);
+    auto stackTrace = GetStackTrace(pExceptionInfo->ContextRecord);
 
-    std::string stackTrace = GetStackTrace(pExceptionInfo->ContextRecord);
-
-    try {
-        if (const std::shared_ptr<spdlog::logger> defaultLogger = spdlog::default_logger()) {
-            defaultLogger->error("{}", crashReason);
-            defaultLogger->error("{}", stackTrace);
-            defaultLogger->flush();
-        }
-    } catch (...) {
-        fmt::println("Warning: Failed to log crash details via spdlog");
+    auto defaultLogger = spdlog::default_logger();
+    if (defaultLogger) {
+        defaultLogger->error("{}", crashReason.c_str());
+        defaultLogger->error("{}", stackTrace.c_str());
+        defaultLogger->flush();
     }
 
-    CrashContext context;
-    context.WriteCrashContext(crashReason + stackTrace, currentCrashFolder);
+    char combined[256 + 8192];
+    size_t pos = 0;
+    pos = BufAppend(combined, sizeof(combined), pos, crashReason.c_str());
+    pos = BufAppend(combined, sizeof(combined), pos, stackTrace.c_str());
 
-    // #3 Copy Logs
+    CrashContext context;
+    context.WriteCrashContext(combined, currentCrashFolder.c_str());
+
     s_instance->CopyLogsToCrashes(currentCrashFolder);
 
-    // #4 Write crash dump
-    auto dumpPath = currentCrashFolder / "Minidump.dmp";
+    Core::Path dumpPath = currentCrashFolder / "Minidump.dmp";
     if (s_instance->WriteDump(pExceptionInfo, dumpPath)) {
-        fmt::println("Crash dump written to {}", dumpPath.string());
+        fmt::println("Crash dump written to {}", dumpPath.c_str());
     }
     else {
         fmt::println("Failed to create dump");
@@ -93,10 +110,10 @@ LONG WINAPI CrashHandler::ExceptionFilter(PEXCEPTION_POINTERS pExceptionInfo)
     return EXCEPTION_EXECUTE_HANDLER;
 }
 
-bool CrashHandler::WriteDump(PEXCEPTION_POINTERS pExceptionInfo, const std::filesystem::path& filename)
+bool CrashHandler::WriteDump(PEXCEPTION_POINTERS pExceptionInfo, const Core::Path& filename)
 {
     HANDLE hFile = CreateFileA(
-    filename.string().c_str(),
+        filename.c_str(),
         GENERIC_WRITE,
         0, nullptr,
         CREATE_ALWAYS,
@@ -104,7 +121,7 @@ bool CrashHandler::WriteDump(PEXCEPTION_POINTERS pExceptionInfo, const std::file
         nullptr
     );
 
-    if (hFile == INVALID_HANDLE_VALUE) return false;
+    if (hFile == INVALID_HANDLE_VALUE) { return false; }
 
     MINIDUMP_EXCEPTION_INFORMATION mdei = {};
     mdei.ThreadId = GetCurrentThreadId();
@@ -127,176 +144,144 @@ bool CrashHandler::WriteDump(PEXCEPTION_POINTERS pExceptionInfo, const std::file
 
 bool CrashHandler::TriggerManualDump(std::string_view reason)
 {
-    std::filesystem::path currentCrashFolder = CreateCrashFolder();
+    Core::Path currentCrashFolder = CreateCrashFolder();
 
     CopyLogsToCrashes(currentCrashFolder);
 
-    CONTEXT context = {};
-    RtlCaptureContext(&context);
+    CONTEXT ctx = {};
+    RtlCaptureContext(&ctx);
 
     EXCEPTION_RECORD record = {};
-    record.ExceptionCode = 0xC0000001; // Custom code for manual dump
+    record.ExceptionCode = 0xC0000001;
     record.ExceptionAddress = RETURN_ADDRESS();
 
     EXCEPTION_POINTERS pointers = {};
     pointers.ExceptionRecord = &record;
-    pointers.ContextRecord = &context;
+    pointers.ContextRecord = &ctx;
 
-    std::string fullReason = std::string("Manual dump: ") + std::string(reason);
+    char fullReason[512];
+    snprintf(fullReason, sizeof(fullReason), "Manual dump: %.*s", (int) reason.size(), reason.data());
+
     CrashContext crashContext;
-    crashContext.WriteCrashContext(fullReason, currentCrashFolder);
+    crashContext.WriteCrashContext(fullReason, currentCrashFolder.c_str());
 
-    auto dumpPath = currentCrashFolder / "Minidump.dmp";
+    Core::Path dumpPath = currentCrashFolder / "Minidump.dmp";
     return WriteDump(&pointers, dumpPath);
 }
 
-std::string CrashHandler::GetTimestamp()
+Core::InlineString<32> CrashHandler::GetTimestamp()
 {
-    auto now = std::chrono::system_clock::now();
-    auto time_t = std::chrono::system_clock::to_time_t(now);
-
-    std::tm tm_buf{};
-#ifdef _WIN32
-    localtime_s(&tm_buf, &time_t);
-#else
-    localtime_r(&time_t, &tm_buf);
-#endif
-
-    std::stringstream ss;
-    ss << std::put_time(&tm_buf, "%Y%m%d_%H%M%S");
-    return ss.str();
+    SYSTEMTIME st;
+    GetLocalTime(&st);
+    char buf[32];
+    snprintf(buf, sizeof(buf), "%04d%02d%02d_%02d%02d%02d",
+             st.wYear, st.wMonth, st.wDay,
+             st.wHour, st.wMinute, st.wSecond);
+    return Core::InlineString<32>(buf);
 }
 
-std::string CrashHandler::GetExceptionDescription(PEXCEPTION_POINTERS pExceptionInfo)
+Core::InlineString<256> CrashHandler::GetExceptionDescription(PEXCEPTION_POINTERS pExceptionInfo)
 {
     DWORD exceptionCode = pExceptionInfo->ExceptionRecord->ExceptionCode;
     void* exceptionAddress = pExceptionInfo->ExceptionRecord->ExceptionAddress;
 
-    std::string description;
+    char buf[256];
+    size_t pos = 0;
 
     switch (exceptionCode) {
         case EXCEPTION_ACCESS_VIOLATION:
         {
             ULONG_PTR info0 = pExceptionInfo->ExceptionRecord->ExceptionInformation[0];
             ULONG_PTR info1 = pExceptionInfo->ExceptionRecord->ExceptionInformation[1];
-
             if (info0 == 0) {
-                description = fmt::format("Access Violation: Read from invalid address 0x{:X}", info1);
+                pos = BufAppendf(buf, sizeof(buf), pos, "Access Violation: Read from invalid address 0x%llX", (unsigned long long) info1);
             }
             else if (info0 == 1) {
-                description = fmt::format("Access Violation: Write to invalid address 0x{:X}", info1);
+                pos = BufAppendf(buf, sizeof(buf), pos, "Access Violation: Write to invalid address 0x%llX", (unsigned long long) info1);
             }
             else {
-                description = "Access Violation: Execute at invalid address";
+                pos = BufAppend(buf, sizeof(buf), pos, "Access Violation: Execute at invalid address");
             }
             break;
         }
-        case EXCEPTION_ARRAY_BOUNDS_EXCEEDED:
-            description = "Array bounds exceeded";
+        case EXCEPTION_ARRAY_BOUNDS_EXCEEDED: pos = BufAppend(buf, sizeof(buf), pos, "Array bounds exceeded");
             break;
-        case EXCEPTION_DATATYPE_MISALIGNMENT:
-            description = "Data type misalignment";
+        case EXCEPTION_DATATYPE_MISALIGNMENT: pos = BufAppend(buf, sizeof(buf), pos, "Data type misalignment");
             break;
-        case EXCEPTION_FLT_DENORMAL_OPERAND:
-            description = "Floating-point denormal operand";
+        case EXCEPTION_FLT_DENORMAL_OPERAND: pos = BufAppend(buf, sizeof(buf), pos, "Floating-point denormal operand");
             break;
-        case EXCEPTION_FLT_DIVIDE_BY_ZERO:
-            description = "Floating-point division by zero";
+        case EXCEPTION_FLT_DIVIDE_BY_ZERO: pos = BufAppend(buf, sizeof(buf), pos, "Floating-point division by zero");
             break;
-        case EXCEPTION_FLT_INEXACT_RESULT:
-            description = "Floating-point inexact result";
+        case EXCEPTION_FLT_INEXACT_RESULT: pos = BufAppend(buf, sizeof(buf), pos, "Floating-point inexact result");
             break;
-        case EXCEPTION_FLT_INVALID_OPERATION:
-            description = "Floating-point invalid operation";
+        case EXCEPTION_FLT_INVALID_OPERATION: pos = BufAppend(buf, sizeof(buf), pos, "Floating-point invalid operation");
             break;
-        case EXCEPTION_FLT_OVERFLOW:
-            description = "Floating-point overflow";
+        case EXCEPTION_FLT_OVERFLOW: pos = BufAppend(buf, sizeof(buf), pos, "Floating-point overflow");
             break;
-        case EXCEPTION_FLT_STACK_CHECK:
-            description = "Floating-point stack check";
+        case EXCEPTION_FLT_STACK_CHECK: pos = BufAppend(buf, sizeof(buf), pos, "Floating-point stack check");
             break;
-        case EXCEPTION_FLT_UNDERFLOW:
-            description = "Floating-point underflow";
+        case EXCEPTION_FLT_UNDERFLOW: pos = BufAppend(buf, sizeof(buf), pos, "Floating-point underflow");
             break;
-        case EXCEPTION_ILLEGAL_INSTRUCTION:
-            description = "Illegal instruction";
+        case EXCEPTION_ILLEGAL_INSTRUCTION: pos = BufAppend(buf, sizeof(buf), pos, "Illegal instruction");
             break;
-        case EXCEPTION_IN_PAGE_ERROR:
-            description = "Page-in error";
+        case EXCEPTION_IN_PAGE_ERROR: pos = BufAppend(buf, sizeof(buf), pos, "Page-in error");
             break;
-        case EXCEPTION_INT_DIVIDE_BY_ZERO:
-            description = "Integer division by zero";
+        case EXCEPTION_INT_DIVIDE_BY_ZERO: pos = BufAppend(buf, sizeof(buf), pos, "Integer division by zero");
             break;
-        case EXCEPTION_INT_OVERFLOW:
-            description = "Integer overflow";
+        case EXCEPTION_INT_OVERFLOW: pos = BufAppend(buf, sizeof(buf), pos, "Integer overflow");
             break;
-        case EXCEPTION_INVALID_DISPOSITION:
-            description = "Invalid exception disposition";
+        case EXCEPTION_INVALID_DISPOSITION: pos = BufAppend(buf, sizeof(buf), pos, "Invalid exception disposition");
             break;
-        case EXCEPTION_NONCONTINUABLE_EXCEPTION:
-            description = "Noncontinuable exception";
+        case EXCEPTION_NONCONTINUABLE_EXCEPTION: pos = BufAppend(buf, sizeof(buf), pos, "Noncontinuable exception");
             break;
-        case EXCEPTION_PRIV_INSTRUCTION:
-            description = "Privileged instruction";
+        case EXCEPTION_PRIV_INSTRUCTION: pos = BufAppend(buf, sizeof(buf), pos, "Privileged instruction");
             break;
-        case EXCEPTION_SINGLE_STEP:
-            description = "Single step (debugger)";
+        case EXCEPTION_SINGLE_STEP: pos = BufAppend(buf, sizeof(buf), pos, "Single step (debugger)");
             break;
-        case EXCEPTION_STACK_OVERFLOW:
-            description = "Stack overflow";
+        case EXCEPTION_STACK_OVERFLOW: pos = BufAppend(buf, sizeof(buf), pos, "Stack overflow");
             break;
-        case EXCEPTION_BREAKPOINT:
-            description = "Breakpoint hit";
+        case EXCEPTION_BREAKPOINT: pos = BufAppend(buf, sizeof(buf), pos, "Breakpoint hit");
             break;
         default:
-            description = fmt::format("Unknown exception (code: 0x{:X})", exceptionCode);
+            pos = BufAppendf(buf, sizeof(buf), pos, "Unknown exception (code: 0x%lX)", exceptionCode);
             break;
     }
 
-    description += fmt::format(" at address 0x{:X}", reinterpret_cast<uintptr_t>(exceptionAddress));
-
-    return description;
+    BufAppendf(buf, sizeof(buf), pos, " at address 0x%llX", (unsigned long long) (uintptr_t) exceptionAddress);
+    return Core::InlineString<256>(buf);
 }
 
-std::filesystem::path CrashHandler::CreateCrashFolder()
+Core::Path CrashHandler::CreateCrashFolder()
 {
-    std::string timestamp = GetTimestamp();
-    std::filesystem::path crashFolder = baseDumpDir / timestamp;
-
-    std::filesystem::create_directories(crashFolder);
+    auto timestamp = GetTimestamp();
+    Core::Path crashFolder = baseDumpDir / timestamp.c_str();
+    CreateDirectoryA(crashFolder.c_str(), nullptr);
     return crashFolder;
 }
 
-void CrashHandler::CopyLogsToCrashes(const std::filesystem::path& currentCrashFolder)
+void CrashHandler::CopyLogsToCrashes(const Core::Path& currentCrashFolder)
 {
-    try {
-        auto defaultLogger = spdlog::default_logger();
-        if (defaultLogger) {
-            defaultLogger->flush();
-        }
-
-        if (logPath.empty() || !std::filesystem::exists(logPath)) {
-            fmt::println("No log file to copy");
-            return;
-        }
-
-        std::filesystem::path crashLogPath = currentCrashFolder / "engine.log";
-        std::filesystem::copy_file(logPath, crashLogPath,
-                                   std::filesystem::copy_options::overwrite_existing);
-
-        fmt::println("Log file copied to: {}", crashLogPath.string());
-    } catch (const std::exception& ex) {
-        fmt::println("Failed to copy logs: {}", ex.what());
+    if (logPath.IsEmpty() || !logPath.Exists()) {
+        fmt::println("No log file to copy");
+        return;
     }
+
+    Core::Path crashLogPath = currentCrashFolder / "engine.log";
+    if (!Platform::FileCopy(logPath.c_str(), crashLogPath.c_str())) {
+        fmt::println("Failed to copy logs");
+        return;
+    }
+
+    fmt::println("Log file copied to: {}", crashLogPath.c_str());
 }
 
-std::string CrashHandler::GetStackTrace(PCONTEXT context)
+Core::InlineString<8192> CrashHandler::GetStackTrace(PCONTEXT context)
 {
     HANDLE process = GetCurrentProcess();
     HANDLE thread = GetCurrentThread();
 
     if (!SymInitialize(process, nullptr, TRUE)) {
-        return "\nStack Trace: Failed to initialize symbol handler\n";
+        return Core::InlineString<8192>("\nStack Trace: Failed to initialize symbol handler\n");
     }
     SymSetOptions(SYMOPT_LOAD_LINES | SYMOPT_UNDNAME);
 
@@ -308,8 +293,9 @@ std::string CrashHandler::GetStackTrace(PCONTEXT context)
     frame.AddrStack.Offset = context->Rsp;
     frame.AddrStack.Mode = AddrModeFlat;
 
-    std::stringstream ss;
-    ss << "\nStack Trace:\n";
+    char buf[8192];
+    size_t pos = 0;
+    pos = BufAppend(buf, sizeof(buf), pos, "\nStack Trace:\n");
 
     int frameNum = 0;
     while (StackWalk64(
@@ -324,35 +310,33 @@ std::string CrashHandler::GetStackTrace(PCONTEXT context)
         nullptr)) {
         if (frame.AddrPC.Offset == 0) { break; }
 
-        // Symbols
-        char buffer[sizeof(SYMBOL_INFO) + MAX_SYM_NAME * sizeof(TCHAR)];
-        auto symbol = reinterpret_cast<PSYMBOL_INFO>(buffer);
+        char symbolBuf[sizeof(SYMBOL_INFO) + MAX_SYM_NAME * sizeof(TCHAR)];
+        auto symbol = reinterpret_cast<PSYMBOL_INFO>(symbolBuf);
         symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
         symbol->MaxNameLen = MAX_SYM_NAME;
 
         DWORD64 displacement = 0;
         if (SymFromAddr(process, frame.AddrPC.Offset, &displacement, symbol)) {
-            // Line
             IMAGEHLP_LINE64 line = {};
             line.SizeOfStruct = sizeof(IMAGEHLP_LINE64);
             DWORD lineDisplacement = 0;
 
             if (SymGetLineFromAddr64(process, frame.AddrPC.Offset, &lineDisplacement, &line)) {
-                ss << fmt::format("  #{} {} at {}:{}\n", frameNum, symbol->Name, line.FileName, line.LineNumber);
+                pos = BufAppendf(buf, sizeof(buf), pos, "  #%d %s at %s:%lu\n", frameNum, symbol->Name, line.FileName, line.LineNumber);
             }
             else {
-                ss << fmt::format("  #{} {} + 0x{:X}\n", frameNum, symbol->Name, displacement);
+                pos = BufAppendf(buf, sizeof(buf), pos, "  #%d %s + 0x%llX\n", frameNum, symbol->Name, (unsigned long long) displacement);
             }
         }
         else {
-            ss << fmt::format("  #{} 0x{:X}\n", frameNum, frame.AddrPC.Offset);
+            pos = BufAppendf(buf, sizeof(buf), pos, "  #%d 0x%llX\n", frameNum, (unsigned long long) frame.AddrPC.Offset);
         }
 
-        frameNum++;
+        ++frameNum;
         if (frameNum > 64) { break; }
     }
 
     SymCleanup(process);
-    return ss.str();
+    return Core::InlineString<8192>(buf);
 }
 } // Platform

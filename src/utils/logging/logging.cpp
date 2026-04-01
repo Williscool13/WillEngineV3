@@ -4,8 +4,10 @@
 
 #include "logging.h"
 
-#include <filesystem>
-#include <vector>
+#include "platform/file_utils.h"
+
+#include <chrono>
+#include <ctime>
 
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
@@ -13,20 +15,20 @@
 
 namespace Utils
 {
-Logger::Logger(const std::filesystem::path& _logPath)
+Logger::Logger(const Core::Path& _logPath)
     : logPath(_logPath)
 {
-    std::filesystem::create_directories(_logPath.parent_path());
+    Platform::CreateDirectories(_logPath.Parent().c_str());
 
     try {
-        auto fileSink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(_logPath.string(), true);
+        auto fileSink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(logPath.c_str(), true);
         auto consoleSink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
 
         fileSink->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] [%t] [%n] [%!] %v");
         consoleSink->set_pattern("[%^%l%$] [%n] %v");
 
-        sinks.push_back(fileSink);
-        sinks.push_back(consoleSink);
+        sinks.PushBack(fileSink);
+        sinks.PushBack(consoleSink);
     } catch (const std::exception& ex) {
         fmt::print(stderr, "Failed to initialize logger: {}\n", ex.what());
     }
@@ -36,7 +38,7 @@ Logger::~Logger() = default;
 
 void Logger::ArchiveLogs()
 {
-    if (!std::filesystem::exists(logPath)) {
+    if (!logPath.Exists()) {
         return;
     }
 
@@ -50,15 +52,15 @@ void Logger::ArchiveLogs()
     localtime_r(&time, &tm);
 #endif
 
-    char timestamp[64];
-    std::strftime(timestamp, sizeof(timestamp), "%Y%m%d_%H%M%S", &tm);
-    std::filesystem::path archivePath = logPath.parent_path() / (std::string("engine_") + timestamp + ".log");
+    char archiveFilename[128];
+    std::strftime(archiveFilename, sizeof(archiveFilename), "engine_%Y%m%d_%H%M%S.log", &tm);
+    Core::Path archivePath = logPath.Parent() / archiveFilename;
 
-    std::filesystem::copy_file(logPath, archivePath, std::filesystem::copy_options::overwrite_existing);
+    Platform::FileCopy(logPath.c_str(), archivePath.c_str());
 }
 
 void Logger::AddSink(spdlog::sink_ptr sink)
 {
-    sinks.push_back(sink);
+    sinks.PushBack(sink);
 }
 } // Utils

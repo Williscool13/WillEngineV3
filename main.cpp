@@ -10,13 +10,18 @@
 
 int main(int argc, char* argv[])
 {
-    Platform::CrashHandler crashHandler(Platform::GetCrashPath());
+    // MEM: std::string bridge until GetCrashPath() returns Core::Path
+    std::string crashPathStr = Platform::GetCrashPath().string();
+    Platform::CrashHandler crashHandler(crashPathStr.c_str());
 
     Utils::Logger* _logger = nullptr;
 #if LOGGING_ENABLED
-    Utils::Logger logger(Platform::GetLogPath() / "engine.log");
+    // MEM: spdlog allocates internally; not worth custom allocator since logging is disabled in packaged builds
+    // MEM: std::string bridge until GetLogPath() returns Core::Path
+    std::string logPathStr = (Platform::GetLogPath() / "engine.log").string();
+    Utils::Logger logger(Core::Path(logPathStr.c_str()));
     SPDLOG_INFO("Engine starting...");
-    crashHandler.SetLogPath(logger.GetLogPath());
+    crashHandler.SetLogPath(logger.GetLogPath().c_str());
 
     _logger = &logger;
 #endif

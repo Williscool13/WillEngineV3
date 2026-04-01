@@ -1,6 +1,7 @@
 add_library(platform STATIC
         crash_handler.h
         crash_context.h
+        file_utils.h
         paths.h
         dll_loader.h
         thread_utils.h
@@ -11,6 +12,7 @@ if(WIN32)
     target_sources(platform PRIVATE
             crash_handler_win32.cpp
             crash_context_win32.cpp
+            file_utils_win32.cpp
             dll_loader_win32.cpp
             thread_utils_win32.cpp
             directory_watcher_win32.cpp

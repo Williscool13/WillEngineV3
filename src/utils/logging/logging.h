@@ -5,16 +5,18 @@
 #ifndef WILL_ENGINE_LOGGING_H
 #define WILL_ENGINE_LOGGING_H
 
-#include <filesystem>
 #include <memory>
 #include <spdlog/spdlog.h>
+
+#include "core/containers/inline_path.h"
+#include "core/containers/inline_vector.h"
 
 namespace Utils
 {
 class Logger
 {
 public:
-    explicit Logger(const std::filesystem::path& _logPath);
+    explicit Logger(const Core::Path& _logPath);
 
     ~Logger();
 
@@ -26,13 +28,13 @@ public:
 
     void AddSink(spdlog::sink_ptr sink);
 
-    [[nodiscard]] const std::filesystem::path& GetLogPath() const { return logPath; }
+    [[nodiscard]] const Core::Path& GetLogPath() const { return logPath; }
 
-    const std::vector<spdlog::sink_ptr>& GetSinks() const { return sinks; }
+    [[nodiscard]] const Core::InlineVector<spdlog::sink_ptr, 4>& GetSinks() const { return sinks; }
 
 private:
-    std::filesystem::path logPath;
-    std::vector<spdlog::sink_ptr> sinks;
+    Core::Path logPath;
+    Core::InlineVector<spdlog::sink_ptr, 4> sinks;
 };
 } // Utils
 

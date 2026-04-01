@@ -62,6 +62,15 @@ public:
         return result;
     }
 
+    // Everything before the last component. e.g. "/path/to" from "/path/to/foo.wtexture". Empty if no separator.
+    [[nodiscard]] InlinePath Parent() const
+    {
+        size_t sep = len_;
+        while (sep > 0 && buf_[sep - 1] != '/') { --sep; }
+        if (sep > 0) { --sep; } // skip the '/' itself
+        return InlinePath(std::string_view{buf_, sep});
+    }
+
     // Last path component. e.g. "foo.wtexture" from "/path/to/foo.wtexture".
     [[nodiscard]] std::string_view Filename() const
     {

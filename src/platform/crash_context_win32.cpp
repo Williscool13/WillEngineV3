@@ -4,6 +4,7 @@
 
 #include "crash_context.h"
 
+#include <cstdio>
 #include <fstream>
 #include <chrono>
 
@@ -13,86 +14,88 @@
 #include <fmt/format.h>
 #include <fmt/chrono.h>
 
-
 namespace Platform
 {
 CrashContext::CrashContext()
 {
-    context = nlohmann::ordered_json::object();
-    context["session_start"] = GetTimestamp();
-    context["build_config"] = GetBuildConfiguration();
-
-    CollectSystemInfoWin32();
+    sessionStart = GetTimestamp();
 }
 
-void CrashContext::WriteCrashContext(std::string_view crashReason, const std::filesystem::path& folderPath)
+void CrashContext::WriteCrashContext(std::string_view crashReason, const char* folderPath)
 {
-    context["crash"]["reason"] = crashReason;
-    context["crash"]["timestamp"] = GetTimestamp();
+    char contextPath[1024];
+    snprintf(contextPath, sizeof(contextPath), "%s/CrashContext.txt", folderPath);
 
-    CollectProcessInfoWin32();
-
-    try {
-        std::filesystem::path contextPath = folderPath / "CrashContext.json";
-        std::ofstream file(contextPath);
-        file << context.dump(2);
-        file.close();
-
-        fmt::println("Crash context written to: {}", contextPath.string());
-    } catch (const std::exception& e) {
-        fmt::println("Failed to write crash context: {}", e.what());
+    FILE* f = nullptr;
+    fopen_s(&f, contextPath, "w");
+    if (!f) {
+        fmt::println("Failed to write crash context: could not open {}", contextPath);
+        return;
     }
+
+    fprintf(f, "session_start:  %s\n", sessionStart.c_str());
+    fprintf(f, "build_config:   %s\n", GetBuildConfiguration());
+    fprintf(f, "crash_time:     %s\n", GetTimestamp().c_str());
+    fprintf(f, "crash_reason:   %.*s\n", (int) crashReason.size(), crashReason.data());
+    fprintf(f, "\n[system]\n");
+    WriteSystemInfoWin32(f);
+    fprintf(f, "\n[process]\n");
+    WriteProcessInfoWin32(f);
+
+    fclose(f);
+
+    fmt::println("Crash context written to: {}", contextPath);
 }
 
-void CrashContext::CollectSystemInfoWin32()
+void CrashContext::WriteSystemInfoWin32(FILE* f)
 {
-    // Memory info
     MEMORYSTATUSEX memInfo = {};
     memInfo.dwLength = sizeof(memInfo);
     GlobalMemoryStatusEx(&memInfo);
 
-    context["system"]["total_memory_mb"] = memInfo.ullTotalPhys / (1024 * 1024);
-    context["system"]["available_memory_mb"] = memInfo.ullAvailPhys / (1024 * 1024);
-
-    // CPU info
     SYSTEM_INFO sysInfo = {};
     GetSystemInfo(&sysInfo);
-    context["system"]["cpu_count"] = sysInfo.dwNumberOfProcessors;
+
+    fprintf(f, "total_memory_mb:     %llu\n", memInfo.ullTotalPhys / (1024 * 1024));
+    fprintf(f, "available_memory_mb: %llu\n", memInfo.ullAvailPhys / (1024 * 1024));
+    fprintf(f, "cpu_count:           %lu\n", sysInfo.dwNumberOfProcessors);
 }
 
-void CrashContext::CollectProcessInfoWin32()
+void CrashContext::WriteProcessInfoWin32(FILE* f)
 {
     HANDLE process = GetCurrentProcess();
 
-    // Process memory usage
     PROCESS_MEMORY_COUNTERS memCounters = {};
     if (GetProcessMemoryInfo(process, &memCounters, sizeof(memCounters))) {
-        context["process"]["working_set_mb"] = memCounters.WorkingSetSize / (1024 * 1024);
-        context["process"]["peak_working_set_mb"] = memCounters.PeakWorkingSetSize / (1024 * 1024);
+        fprintf(f, "working_set_mb:      %zu\n", memCounters.WorkingSetSize / (1024 * 1024));
+        fprintf(f, "peak_working_set_mb: %zu\n", memCounters.PeakWorkingSetSize / (1024 * 1024));
     }
 
-    // Handle count
     DWORD handleCount = 0;
     GetProcessHandleCount(process, &handleCount);
-    context["process"]["handle_count"] = handleCount;
+    fprintf(f, "handle_count:        %lu\n", handleCount);
 }
 
-nlohmann::json CrashContext::GetBuildConfiguration()
+Core::InlineString<32> CrashContext::GetTimestamp()
+{
+    const auto now = std::chrono::system_clock::now();
+    const auto time = std::chrono::system_clock::to_time_t(now);
+    std::tm tm = {};
+    localtime_s(&tm, &time);
+
+    char buf[32];
+    std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &tm);
+    return Core::InlineString<32>(buf);
+}
+
+const char* CrashContext::GetBuildConfiguration()
 {
 #ifdef BUILD_CONFIG_NAME
     return BUILD_CONFIG_NAME;
+#elif defined(PACKAGED_BUILD)
+    return "Release";
 #else
-    #ifdef PACKAGED_BUILD
-        return "Release";
-    #else
-        return "Debug";
-    #endif
+    return "Debug";
 #endif
 }
-
-std::string CrashContext::GetTimestamp()
-{
-    auto now = std::chrono::system_clock::now();
-    return fmt::format("{:%Y-%m-%d %H:%M:%S}", now);
-}
-}
+} // Platform

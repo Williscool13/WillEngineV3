@@ -4,20 +4,21 @@
 
 #ifndef WILLENGINEV3_CRASH_HANDLER_H
 #define WILLENGINEV3_CRASH_HANDLER_H
-#include <filesystem>
-#include <string>
 #include <string_view>
 
 #ifdef _WIN32
 #include <Windows.h>
 #endif
 
+#include "core/containers/inline_path.h"
+#include "core/containers/inline_string.h"
+
 namespace Platform
 {
 class CrashHandler
 {
 public:
-    explicit CrashHandler(std::filesystem::path  dumpDirectory);
+    explicit CrashHandler(const char* dumpDirectory);
 
     ~CrashHandler();
 
@@ -27,29 +28,29 @@ public:
 
     bool TriggerManualDump(std::string_view reason);
 
-    void SetLogPath(const std::filesystem::path& path) { logPath = path; }
+    void SetLogPath(const char* path) { logPath = Core::Path(path); }
 
 private:
-    std::filesystem::path baseDumpDir;
-    std::filesystem::path logPath;
+    Core::Path baseDumpDir;
+    Core::Path logPath;
 
 #ifdef _WIN32
     static LONG WINAPI ExceptionFilter(PEXCEPTION_POINTERS pExceptionInfo);
 
     static CrashHandler* s_instance;
 
-    bool WriteDump(PEXCEPTION_POINTERS pExceptionInfo, const std::filesystem::path& filename);
+    bool WriteDump(PEXCEPTION_POINTERS pExceptionInfo, const Core::Path& filename);
 
-    std::string GetExceptionDescription(PEXCEPTION_POINTERS pExceptionInfo);
+    static Core::InlineString<256>   GetExceptionDescription(PEXCEPTION_POINTERS pExceptionInfo);
 
-    std::filesystem::path CreateCrashFolder();
+    Core::Path CreateCrashFolder();
 
-    void CopyLogsToCrashes(const std::filesystem::path& currentCrashFolder);
+    void CopyLogsToCrashes(const Core::Path& currentCrashFolder);
 
-    static std::string GetStackTrace(PCONTEXT context);
+    static Core::InlineString<8192>  GetStackTrace(PCONTEXT context);
 #endif
 
-    static std::string GetTimestamp();
+    static Core::InlineString<32> GetTimestamp();
 };
 }
 
