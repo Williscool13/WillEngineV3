@@ -60,7 +60,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
     ZoneScoped;
 
     memoryManager.Init({
-        .persistentLinearSize = 32ull  * 1024 * 1024,  // 32 MB
+        .persistentSize  = 32ull  * 1024 * 1024,  // 32 MB
         .generalPoolSize      = 64ull * 1024 * 1024,  // 64 MB
         .assetsPoolSize       = 512ull * 1024 * 1024,  // 512 MB
         .physicsPoolSize      = 64ull  * 1024 * 1024,  // 64 MB
@@ -394,7 +394,7 @@ void WillEngine::EditorImgui()
             const Core::MemoryManager::Stats ms = memoryManager.GetStats();
             ImGui::Text("Total:   %zu MB", ms.totalBytes >> 20);
             ImGui::Separator();
-            ImGui::Text("Linear:  %zu / %zu KB", ms.linear.usedBytes >> 10, ms.linear.totalBytes >> 10);
+            ImGui::Text("Persistent: %zu / %zu KB (%zu allocs)", ms.persistent.usedBytes >> 10, ms.persistent.totalBytes >> 10, ms.persistent.allocCount);
             ImGui::Separator();
             ImGui::Text("General: %zu / %zu MB (%zu allocs)", ms.general.usedBytes >> 20, ms.general.totalBytes >> 20, ms.general.allocCount);
             ImGui::Text("Assets:  %zu / %zu MB (%zu allocs)", ms.assets.usedBytes >> 20, ms.assets.totalBytes >> 20, ms.assets.allocCount);

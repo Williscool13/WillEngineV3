@@ -13,6 +13,7 @@ namespace Core
 enum class AllocTag : uint32_t
 {
     Unknown = 0,
+        Persistent,
     // Assets
     AssetModel,
     AssetTexture,

@@ -15,6 +15,7 @@ const char* AllocTagName(AllocTag tag)
 {
     switch (tag) {
         case AllocTag::Unknown: return "Unknown";
+        case AllocTag::Persistent: return "Persistent";
         case AllocTag::AssetModel: return "AssetModel";
         case AllocTag::AssetTexture: return "AssetTexture";
         case AllocTag::PhysicsBody: return "PhysicsBody";
