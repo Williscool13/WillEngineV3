@@ -14,7 +14,7 @@ namespace Core
 {
 /**
  * Non-owning bump-pointer allocator over an externally-provided buffer.
- * Does NOT call destructors on Reset() — only use for trivially-destructible
+ * Does NOT call destructors on Reset(); only use for trivially-destructible
  * types, or manage lifetimes manually.
  */
 class Arena
