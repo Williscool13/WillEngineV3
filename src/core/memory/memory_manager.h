@@ -72,6 +72,8 @@ public:
     T* PersistentAllocArray(size_t count);
 
     void* PersistentAllocRaw(size_t size);
+    void* GeneralAllocRaw(size_t size, AllocTag tag = AllocTag::Unknown);
+    void  GeneralFree(void* ptr);
 
     TlsfAllocator& Persistent() { return tlsfPersistent; }
     TlsfAllocator& General()   { return tlsfGeneral; }
@@ -94,7 +96,7 @@ template<typename T, typename... Args>
 T* MemoryManager::PersistentAlloc(Args&&... args)
 {
     void* ptr = tlsfPersistent.Alloc(sizeof(T), AllocTag::Persistent);
-    if (!ptr) { return nullptr; }
+    assert(ptr != nullptr && "OOM: persistent pool exhausted");
     return new(ptr) T(std::forward<Args>(args)...);
 }
 
@@ -103,7 +105,7 @@ T* MemoryManager::PersistentAllocArray(size_t count)
 {
     assert(count > 0);
     void* ptr = tlsfPersistent.Alloc(sizeof(T) * count, AllocTag::Persistent);
-    if (!ptr) { return nullptr; }
+    assert(ptr != nullptr && "OOM: persistent pool exhausted");
     if constexpr (!std::is_trivially_constructible_v<T>) {
         T* arr = static_cast<T*>(ptr);
         for (size_t i = 0; i < count; ++i) { new(arr + i) T(); }

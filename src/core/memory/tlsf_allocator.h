@@ -25,6 +25,8 @@ enum class AllocTag : uint32_t
     RenderMaterial,
     // ECS
     ECS,
+    // Scheduler
+    TaskScheduler,
 
     Count
 };

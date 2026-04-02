@@ -1,11 +1,11 @@
 #ifndef WILL_ENGINE_ENGINE_LOGGER_H
 #define WILL_ENGINE_ENGINE_LOGGER_H
 
-#include <array>
 #include <spdlog/spdlog.h>
 #include "imgui_sink.h"
 #include "log_category.h"
 #include "utils/logging/logging.h"
+#include "core/containers/array.h"
 
 namespace Engine
 {
@@ -25,7 +25,7 @@ public:
 
 private:
     spdlog::sink_ptr imguiSink;
-    std::array<std::shared_ptr<spdlog::logger>, static_cast<int>(LogCategory::Count)> categoryLoggers;
+    Core::Array<std::shared_ptr<spdlog::logger>, static_cast<size_t>(LogCategory::Count)> categoryLoggers;
 };
 
 } // Engine

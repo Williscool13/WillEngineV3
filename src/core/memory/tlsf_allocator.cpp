@@ -23,6 +23,7 @@ const char* AllocTagName(AllocTag tag)
         case AllocTag::RenderMesh: return "RenderMesh";
         case AllocTag::RenderMaterial: return "RenderMaterial";
         case AllocTag::ECS: return "ECS";
+        case AllocTag::TaskScheduler: return "TaskScheduler";
         case AllocTag::Count: return "Count";
     }
     return "Unknown";
@@ -40,7 +41,7 @@ void* TlsfAllocator::Alloc(size_t size, AllocTag tag)
 {
     if (size == 0) { return nullptr; }
     void* raw = tlsf_malloc(static_cast<tlsf_t>(tlsf), kHeaderSize + size);
-    if (!raw) { return nullptr; }
+    assert(raw != nullptr && "OOM: TLSF pool exhausted");
 
     auto* header = static_cast<AllocHeader*>(raw);
     header->tag = tag;
@@ -66,7 +67,7 @@ void* TlsfAllocator::Realloc(void* ptr, size_t newSize)
     const uint32_t oldSize = header->size;
 
     void* raw = tlsf_realloc(static_cast<tlsf_t>(tlsf), header, kHeaderSize + newSize);
-    if (!raw) { return nullptr; }
+    assert(raw != nullptr && "OOM: TLSF pool exhausted");
 
     header = static_cast<AllocHeader*>(raw);
     header->tag = savedTag;

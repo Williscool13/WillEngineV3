@@ -45,7 +45,21 @@ MemoryManager::~MemoryManager()
 
 void* MemoryManager::PersistentAllocRaw(size_t size)
 {
-    return tlsfPersistent.Alloc(size, AllocTag::Persistent);
+    void* ptr = tlsfPersistent.Alloc(size, AllocTag::Persistent);
+    assert(ptr != nullptr && "OOM: persistent pool exhausted");
+    return ptr;
+}
+
+void* MemoryManager::GeneralAllocRaw(size_t size, AllocTag tag)
+{
+    void* ptr = tlsfGeneral.Alloc(size, tag);
+    assert(ptr != nullptr && "OOM: general pool exhausted");
+    return ptr;
+}
+
+void MemoryManager::GeneralFree(void* ptr)
+{
+    tlsfGeneral.Free(ptr);
 }
 
 MemoryManager::Stats MemoryManager::GetStats() const

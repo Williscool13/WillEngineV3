@@ -119,10 +119,9 @@ private: // Main Systems
     Core::MemoryManager memoryManager;
 
 #if LOGGING_ENABLED
-    // Unload last so destructor logs go through
-    std::unique_ptr<EngineLogger> engineLogger;
+    EngineLogger* engineLogger{};
 #endif
-    std::unique_ptr<enki::TaskScheduler> scheduler{};
+    enki::TaskScheduler* scheduler{};
     std::unique_ptr<Render::RenderThread> renderThread{};
     std::unique_ptr<Core::FrameSync> engineRenderSynchronization{};
     std::unique_ptr<Audio::AudioManager> audioManager{};
@@ -137,7 +136,7 @@ private: // Main Systems
     Core::FrameBuffer stagingFrameBuffer{};
 
 private: // Subsystems
-    std::unique_ptr<Core::InputManager> inputManager{};
+    Core::InputManager* inputManager{};
     Core::TimeManager* timeManager{};
     bool bCursorHidden{false};
     uint32_t frameBufferIndex{0};
@@ -149,7 +148,7 @@ private: // Game DLL
 #endif
     Platform::DirectoryWatcher shaderWatcher{};
     Core::GameAPI gameFunctions{};
-    std::unique_ptr<Core::EngineContext> engineContext{};
+    Core::EngineContext* engineContext{};
     std::unique_ptr<GameState> gameState{};
 
 private:
@@ -164,8 +163,9 @@ private: // Debugging
     bool bFreezeVisibility = false;
     bool bLogRDG = false;
 
-    // Cached tag stats — only refreshed when the user clicks Refresh in the Memory panel.
+    // Cached tag stats, only refreshed when the user clicks Refresh in the Memory panel.
     static constexpr size_t kTagCount = static_cast<size_t>(Core::AllocTag::Count);
+    Core::TlsfAllocator::TagStats cachedPersistentTags[kTagCount]{};
     Core::TlsfAllocator::TagStats cachedGeneralTags[kTagCount]{};
     Core::TlsfAllocator::TagStats cachedAssetsTags[kTagCount]{};
     Core::TlsfAllocator::TagStats cachedPhysicsTags[kTagCount]{};

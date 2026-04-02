@@ -60,14 +60,14 @@ void WillEngine::Initialize(Utils::Logger* logger)
     ZoneScoped;
 
     memoryManager.Init({
-        .persistentSize  = 32ull  * 1024 * 1024,  // 32 MB
-        .generalPoolSize      = 64ull * 1024 * 1024,  // 64 MB
-        .assetsPoolSize       = 512ull * 1024 * 1024,  // 512 MB
-        .physicsPoolSize      = 64ull  * 1024 * 1024,  // 64 MB
+        .persistentSize = 32ull * 1024 * 1024,  // 32 MB
+        .generalPoolSize = 64ull * 1024 * 1024, // 64 MB
+        .assetsPoolSize = 512ull * 1024 * 1024, // 512 MB
+        .physicsPoolSize = 64ull * 1024 * 1024, // 64 MB
     });
 
 #if LOGGING_ENABLED
-    engineLogger = std::make_unique<EngineLogger>();
+    engineLogger = memoryManager.PersistentAlloc<EngineLogger>();
     engineLogger->Init(logger);
 #endif
 
@@ -91,9 +91,16 @@ void WillEngine::Initialize(Utils::Logger* logger)
         config.profilerCallbacks.waitForTaskCompleteSuspendStart = [](uint32_t) {};
         config.profilerCallbacks.waitForTaskCompleteSuspendStop = [](uint32_t) {};
         config.numExternalTaskThreads = 8;
+        config.customAllocator.userData = &memoryManager;
+        config.customAllocator.alloc = [](size_t, size_t size_, void* userData_, const char*, int) -> void* {
+            return static_cast<Core::MemoryManager*>(userData_)->GeneralAllocRaw(size_, Core::AllocTag::TaskScheduler);
+        };
+        config.customAllocator.free = [](void* ptr_, size_t, void* userData_, const char*, int) {
+            static_cast<Core::MemoryManager*>(userData_)->GeneralFree(ptr_);
+        };
 
         SPDLOG_INFO("Scheduler operating with {} threads.", config.numTaskThreadsToCreate + 1);
-        scheduler = std::make_unique<enki::TaskScheduler>();
+        scheduler = memoryManager.PersistentAlloc<enki::TaskScheduler>();
         scheduler->Initialize(config);
     }
 
@@ -125,12 +132,12 @@ void WillEngine::Initialize(Utils::Logger* logger)
         SDL_GetWindowSizeInPixels(window.get(), &w, &h);
     }
 
-    engineContext = std::make_unique<Core::EngineContext>();
+    engineContext = memoryManager.PersistentAlloc<Core::EngineContext>();
 
     //
     {
         ZoneScopedN("CreateInputManager");
-        inputManager = std::make_unique<Core::InputManager>(w, h);
+        inputManager = memoryManager.PersistentAlloc<Core::InputManager>(w, h);
     }
 
     //
@@ -143,7 +150,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
     {
         ZoneScopedN("CreateRenderThread");
         engineRenderSynchronization = std::make_unique<Core::FrameSync>();
-        renderThread = std::make_unique<Render::RenderThread>(engineRenderSynchronization.get(), scheduler.get(), window.get(), w, h);
+        renderThread = std::make_unique<Render::RenderThread>(engineRenderSynchronization.get(), scheduler, window.get(), w, h);
     }
 
     //
@@ -171,14 +178,14 @@ void WillEngine::Initialize(Utils::Logger* logger)
     //
     {
         ZoneScopedN("CreateAssetManager");
-        assetManager = std::make_unique<AssetManager>(engineContext.get(), asyncAssetLoadManager.get(), renderThread->GetResourceManager());
-        materialManager = std::make_unique<MaterialManager>(engineContext.get(), assetManager.get());
+        assetManager = std::make_unique<AssetManager>(engineContext, asyncAssetLoadManager.get(), renderThread->GetResourceManager());
+        materialManager = std::make_unique<MaterialManager>(engineContext, assetManager.get());
     }
 
     //
     {
         ZoneScopedN("CreatePhysicsSystem");
-        physicsSystem = std::make_unique<Physics::PhysicsSystem>(scheduler.get());
+        physicsSystem = std::make_unique<Physics::PhysicsSystem>(scheduler);
     }
 
 
@@ -186,7 +193,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
     //
     {
         ZoneScopedN("CreateModelGenerator");
-        modelGenerator = std::make_unique<Editor::AssetGenerator>(engineContext.get(), renderThread->GetVulkanContext(), renderThread.get(), asyncAssetLoadManager.get());
+        modelGenerator = std::make_unique<Editor::AssetGenerator>(engineContext, renderThread->GetVulkanContext(), renderThread.get(), asyncAssetLoadManager.get());
     }
 
 #endif
@@ -210,7 +217,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
         gameState = std::make_unique<GameState>();
 
 #if LOGGING_ENABLED
-        engineContext->engineLogger = engineLogger.get();
+        engineContext->engineLogger = engineLogger;
 #endif
         engineContext->imguiContext = ImGui::GetCurrentContext();
         engineContext->windowContext.windowWidth = w;
@@ -223,7 +230,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
         engineContext->materialManager = materialManager.get();
         engineContext->audioManager = audioManager.get();
         engineContext->physicsSystem = physicsSystem.get();
-        engineContext->scheduler = scheduler.get();
+        engineContext->scheduler = scheduler;
         engineContext->setCursorHiddenFn = [this](bool hidden) {
             if (bCursorHidden == hidden) { return; }
             bCursorHidden = hidden;
@@ -276,8 +283,8 @@ void WillEngine::Initialize(Utils::Logger* logger)
         }
 #endif
 
-        gameFunctions.gameStartup(engineContext.get(), gameState.get());
-        gameFunctions.gameLoad(engineContext.get(), gameState.get());
+        gameFunctions.gameStartup(engineContext, gameState.get());
+        gameFunctions.gameLoad(engineContext, gameState.get());
     }
 
 #if WILL_EDITOR
@@ -285,7 +292,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
     auto gameDirectory = Platform::GetExecutablePath() / "src/game";
     if (exists(gameDirectory)) {
         gameDllWatcher.Start(gameDirectory.string(), [&]() {
-            gameFunctions.gameUnload(engineContext.get(), gameState.get());
+            gameFunctions.gameUnload(engineContext, gameState.get());
             auto reloadResponse = gameDll.Reload();
             switch (reloadResponse) {
                 case Platform::DllLoadResponse::Loaded:
@@ -305,7 +312,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
                     break;
             }
 
-            gameFunctions.gameLoad(engineContext.get(), gameState.get());
+            gameFunctions.gameLoad(engineContext, gameState.get());
         });
     }
     else {
@@ -402,6 +409,7 @@ void WillEngine::EditorImgui()
 
             ImGui::Spacing();
             if (ImGui::Button("Refresh Tag Breakdown")) {
+                memoryManager.Persistent().GetTagStats(cachedPersistentTags);
                 memoryManager.General().GetTagStats(cachedGeneralTags);
                 memoryManager.Assets().GetTagStats(cachedAssetsTags);
                 memoryManager.Physics().GetTagStats(cachedPhysicsTags);
@@ -419,17 +427,21 @@ void WillEngine::EditorImgui()
                         const Core::TlsfAllocator::TagStats& t = tags[i];
                         if (t.count == 0) { continue; }
                         ImGui::TableNextRow();
-                        ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted(Core::AllocTagName(t.tag));
-                        ImGui::TableSetColumnIndex(1); ImGui::Text("%zu", t.count);
-                        ImGui::TableSetColumnIndex(2); ImGui::Text("%zu", t.usedBytes >> 10);
+                        ImGui::TableSetColumnIndex(0);
+                        ImGui::TextUnformatted(Core::AllocTagName(t.tag));
+                        ImGui::TableSetColumnIndex(1);
+                        ImGui::Text("%zu", t.count);
+                        ImGui::TableSetColumnIndex(2);
+                        ImGui::Text("%zu", t.usedBytes >> 10);
                     }
                     ImGui::EndTable();
                 }
             };
 
-            drawTagTable("General##tags", cachedGeneralTags);
-            drawTagTable("Assets##tags",  cachedAssetsTags);
-            drawTagTable("Physics##tags", cachedPhysicsTags);
+            drawTagTable("Persistent", cachedPersistentTags);
+            drawTagTable("General", cachedGeneralTags);
+            drawTagTable("Assets", cachedAssetsTags);
+            drawTagTable("Physics", cachedPhysicsTags);
         }
 
         if (ImGui::CollapsingHeader("Asset Counts")) {
@@ -893,7 +905,7 @@ void WillEngine::Run()
             ZoneScopedN("GameFrame");
             gameState->inputFrame = &inputManager->GetCurrentInput();
             gameState->timeFrame = &timeManager->GetTime();
-            gameFunctions.gameUpdate(engineContext.get(), gameState.get());
+            gameFunctions.gameUpdate(engineContext, gameState.get());
             inputManager->FrameReset();
         }
 
@@ -974,7 +986,7 @@ void WillEngine::Run()
                 //
                 {
                     ZoneScopedN("GamePrepareFrame");
-                    gameFunctions.gamePrepareFrame(engineContext.get(), gameState.get(), &stagingFrameBuffer);
+                    gameFunctions.gamePrepareFrame(engineContext, gameState.get(), &stagingFrameBuffer);
                 }
 
                 //
@@ -1011,8 +1023,8 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
 
 void WillEngine::Cleanup()
 {
-    gameFunctions.gameUnload(engineContext.get(), gameState.get());
-    gameFunctions.gameShutdown(engineContext.get(), gameState.get());
+    gameFunctions.gameUnload(engineContext, gameState.get());
+    gameFunctions.gameShutdown(engineContext, gameState.get());
     gameState.reset();
 
 #ifndef GAME_STATIC
@@ -1021,9 +1033,9 @@ void WillEngine::Cleanup()
 
     scheduler->ShutdownNow();
     engineContext->scheduler = nullptr;
-    engineContext.reset();
+    engineContext->~EngineContext();
 
-    inputManager.reset();
+    inputManager->~InputManager();
 
 #if WILL_EDITOR
     modelGenerator->Join();
@@ -1044,11 +1056,11 @@ void WillEngine::Cleanup()
     renderThread->Join();
     renderThread.reset();
 
-    scheduler.reset();
+    scheduler->~TaskScheduler();
 
 #if LOGGING_ENABLED
     engineLogger->Shutdown();
-    engineLogger.reset();
+    engineLogger->~EngineLogger();
 #endif
 }
 }

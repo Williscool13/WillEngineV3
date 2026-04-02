@@ -19,6 +19,7 @@ void EngineLogger::Init(Utils::Logger* baseLogger)
     auto& s = baseLogger->GetSinks();
 
     // Engine logger first, set as default
+    // MEM: spdlog allocates internally; not worth custom allocator since logging is disabled in packaged builds
     auto engineLogger = std::make_shared<spdlog::logger>(kCategoryNames[0], s.begin(), s.end());
     engineLogger->set_level(static_cast<spdlog::level::level_enum>(SPDLOG_ACTIVE_LEVEL));
     engineLogger->flush_on(spdlog::level::warn);
