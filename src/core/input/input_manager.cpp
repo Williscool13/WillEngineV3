@@ -8,7 +8,7 @@ namespace Core
 {
 InputManager::InputManager(uint32_t w, uint32_t h)
 {
-    this->windowExtents = glm::vec2(static_cast<float>(w), static_cast<float>(h));
+    this->windowExtents = Vec2(static_cast<float>(w), static_cast<float>(h));
 }
 
 void InputManager::ProcessEvent(const SDL_Event& event)
@@ -82,7 +82,7 @@ void InputManager::FrameReset()
 
 void InputManager::UpdateWindowExtent(const uint32_t w, const uint32_t h)
 {
-    windowExtents = glm::vec2(static_cast<float>(w), static_cast<float>(h));
+    windowExtents = Vec2(static_cast<float>(w), static_cast<float>(h));
 }
 
 } // Core

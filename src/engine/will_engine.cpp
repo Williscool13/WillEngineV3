@@ -4,6 +4,8 @@
 
 #include "will_engine.h"
 
+#include <cstring>
+
 #include <tracy/Tracy.hpp>
 #include <SDL3/SDL.h>
 #include <fmt/format.h>
@@ -49,6 +51,30 @@ void operator delete(void* ptr) noexcept
 #endif
 namespace Engine
 {
+static Core::MemoryManager* gMemory = nullptr;
+
+static void* SdlMalloc(size_t size)
+{
+    return gMemory->GeneralAllocRaw(size, Core::AllocTag::SDL);
+}
+
+static void* SdlCalloc(size_t nmemb, size_t size)
+{
+    void* ptr = gMemory->GeneralAllocRaw(nmemb * size, Core::AllocTag::SDL);
+    memset(ptr, 0, nmemb * size);
+    return ptr;
+}
+
+static void* SdlRealloc(void* mem, size_t size)
+{
+    return gMemory->GeneralRealloc(mem, size, Core::AllocTag::SDL);
+}
+
+static void SdlFree(void* mem)
+{
+    gMemory->GeneralFree(mem);
+}
+
 WillEngine::WillEngine(Platform::CrashHandler* crashHandler_)
     : crashHandler(crashHandler_)
 {}
@@ -60,7 +86,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
     ZoneScoped;
 
     memoryManager.Init({
-        .persistentSize = 32ull * 1024 * 1024,  // 32 MB
+        .persistentSize = 32ull * 1024 * 1024, // 32 MB
         .generalPoolSize = 64ull * 1024 * 1024, // 64 MB
         .assetsPoolSize = 512ull * 1024 * 1024, // 512 MB
         .physicsPoolSize = 64ull * 1024 * 1024, // 64 MB
@@ -104,45 +130,41 @@ void WillEngine::Initialize(Utils::Logger* logger)
         scheduler->Initialize(config);
     }
 
+
+    int32_t w;
+    int32_t h;
+
     //
     {
         ZoneScopedN("SDL_Init");
+        gMemory = &memoryManager;
+        SDL_SetMemoryFunctions(SdlMalloc, SdlCalloc, SdlRealloc, SdlFree);
         bool sdlInitSuccess = SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO);
         if (!sdlInitSuccess) {
             SPDLOG_ERROR("SDL_Init failed: {}", SDL_GetError());
             exit(1);
         }
-    }
 
-    int32_t w;
-    int32_t h;
-    //
-    {
-        ZoneScopedN("WindowCreation");
-        window = SDLWindowPtr(
-            SDL_CreateWindow(
-                "Will Engine",
-                640, 480,
-                SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE),
-            SDL_DestroyWindow
-        );
-        SDL_SetWindowPosition(window.get(), SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
-        SDL_ShowWindow(window.get());
-        SDL_MaximizeWindow(window.get());
-        SDL_GetWindowSizeInPixels(window.get(), &w, &h);
-    }
 
-    engineContext = memoryManager.PersistentAlloc<Core::EngineContext>();
+        SDL_DisplayID mainDisplay = SDL_GetPrimaryDisplay();
+        SDL_Rect rect;
+        SDL_GetDisplayUsableBounds(mainDisplay, &rect);
+
+        window = SDL_CreateWindow(
+            "Will Engine",
+            rect.w, rect.h,
+            SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_MAXIMIZED);
+
+        SDL_ShowWindow(window);
+        w = rect.w;
+        h = rect.h;
+    }
 
     //
     {
-        ZoneScopedN("CreateInputManager");
+        ZoneScopedN("Engine Context");
+        engineContext = memoryManager.PersistentAlloc<Core::EngineContext>();
         inputManager = memoryManager.PersistentAlloc<Core::InputManager>(w, h);
-    }
-
-    //
-    {
-        ZoneScopedN("CreateTimeManager");
         timeManager = memoryManager.PersistentAlloc<Core::TimeManager>();
     }
 
@@ -150,7 +172,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
     {
         ZoneScopedN("CreateRenderThread");
         engineRenderSynchronization = std::make_unique<Core::FrameSync>();
-        renderThread = std::make_unique<Render::RenderThread>(engineRenderSynchronization.get(), scheduler, window.get(), w, h);
+        renderThread = std::make_unique<Render::RenderThread>(engineRenderSynchronization.get(), scheduler, window, w, h);
     }
 
     //
@@ -207,11 +229,11 @@ void WillEngine::Initialize(Utils::Logger* logger)
 #endif
         if (bCursorHidden) {
             ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NoMouse;
-            SDL_SetWindowRelativeMouseMode(window.get(), true);
+            SDL_SetWindowRelativeMouseMode(window, true);
         }
         else {
             ImGui::GetIO().ConfigFlags &= ~ImGuiConfigFlags_NoMouse;
-            SDL_SetWindowRelativeMouseMode(window.get(), false);
+            SDL_SetWindowRelativeMouseMode(window, false);
         }
 
         gameState = std::make_unique<GameState>();
@@ -236,12 +258,12 @@ void WillEngine::Initialize(Utils::Logger* logger)
             bCursorHidden = hidden;
             if (bCursorHidden) {
                 ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NoMouse;
-                SDL_SetWindowRelativeMouseMode(window.get(), true);
+                SDL_SetWindowRelativeMouseMode(window, true);
                 ImGui::SetWindowFocus(nullptr);
             }
             else {
                 ImGui::GetIO().ConfigFlags &= ~ImGuiConfigFlags_NoMouse;
-                SDL_SetWindowRelativeMouseMode(window.get(), false);
+                SDL_SetWindowRelativeMouseMode(window, false);
             }
         };
 #if DEBUG
@@ -879,7 +901,7 @@ void WillEngine::Run()
 
         audioManager->Update();
 
-        inputManager->UpdateFocus(SDL_GetWindowFlags(window.get()));
+        inputManager->UpdateFocus(SDL_GetWindowFlags(window));
         timeManager->UpdateGame();
 
 
@@ -939,7 +961,7 @@ void WillEngine::Run()
 
                         int32_t w;
                         int32_t h;
-                        SDL_GetWindowSize(window.get(), &w, &h);
+                        SDL_GetWindowSize(window, &w, &h);
                         stagingFrameBuffer.swapchainRecreateCommand.windowWidth = w;
                         stagingFrameBuffer.swapchainRecreateCommand.windowHeight = h;
                         bRequireSwapchainRecreate = false;
@@ -1027,9 +1049,6 @@ void WillEngine::Cleanup()
     gameFunctions.gameShutdown(engineContext, gameState.get());
     gameState.reset();
 
-#ifndef GAME_STATIC
-    gameDll.Unload();
-#endif
 
     scheduler->ShutdownNow();
     engineContext->scheduler = nullptr;
@@ -1057,6 +1076,14 @@ void WillEngine::Cleanup()
     renderThread.reset();
 
     scheduler->~TaskScheduler();
+
+    SDL_DestroyWindow(window);
+    window = nullptr;
+    gMemory = nullptr;
+
+#ifndef GAME_STATIC
+    gameDll.Unload();
+#endif
 
 #if LOGGING_ENABLED
     engineLogger->Shutdown();

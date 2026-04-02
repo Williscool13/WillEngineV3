@@ -6,8 +6,8 @@
 #define WILL_ENGINE_ENGINE_CONTEXT_H
 
 #include <cstdint>
-#include <functional>
-#include <memory>
+
+#include "core/containers/inline_function.h"
 
 #include "spdlog/logger.h"
 
@@ -83,12 +83,12 @@ struct EngineContext
     // Global Fn
     void (*internStringFn)(uint64_t, const char*);
     const char* (*resolveStringIdFn)(uint64_t);
-    std::function<void(bool)> setCursorHiddenFn;
+    InlineFunction<void(bool)> setCursorHiddenFn;
 
     // ImGui texture preview (routed through engine DLL where Vulkan fn ptrs are loaded)
     // handles are opaque uint64_t (VkSampler, VkImageView, VkDescriptorSet)
-    std::function<uint64_t(uint64_t sampler, uint64_t imageView)> addImguiTextureFn;
-    std::function<void(uint64_t descriptorSet)> removeImguiTextureFn;
+    InlineFunction<uint64_t(uint64_t, uint64_t)> addImguiTextureFn;
+    InlineFunction<void(uint64_t)> removeImguiTextureFn;
 
     std::atomic<bool> bShouldRescanResources{false};
     std::atomic<bool> bShouldRescanMaterials{false};

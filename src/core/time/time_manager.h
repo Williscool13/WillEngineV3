@@ -21,7 +21,7 @@ public:
 
     void UpdateRender();
 
-    const TimeFrame& GetTime() const { return currentTime; }
+    [[nodiscard]] const TimeFrame& GetTime() const { return currentTime; }
 
 private:
     TimeFrame currentTime{};

@@ -66,7 +66,6 @@ class RenderThread;
 
 namespace Engine
 {
-using SDLWindowPtr = std::unique_ptr<SDL_Window, decltype(&SDL_DestroyWindow)>;
 
 static constexpr std::array<const char*, 64> TASK_THREAD_NAMES = {
     "TaskThread0", "TaskThread1", "TaskThread2", "TaskThread3",
@@ -110,7 +109,7 @@ private:
     void EditorImgui();
 
 private: // Windowing
-    SDLWindowPtr window{nullptr, nullptr};
+    SDL_Window* window{};
     bool bRequireSwapchainRecreate{false};
     bool bRequireViewportRecreate{false};
     bool bMinimized{false};

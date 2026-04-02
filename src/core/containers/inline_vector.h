@@ -118,10 +118,10 @@ public:
     T* Data() { return data_; }
     const T* Data() const { return data_; }
 
-    size_t Size() const { return size_; }
-    constexpr size_t GetCapacity() const { return N; }
-    bool IsEmpty() const { return size_ == 0; }
-    bool IsFull() const { return size_ >= N; }
+    [[nodiscard]] size_t Size() const { return size_; }
+    [[nodiscard]] constexpr size_t GetCapacity() const { return N; }
+    [[nodiscard]] bool IsEmpty() const { return size_ == 0; }
+    [[nodiscard]] bool IsFull() const { return size_ >= N; }
 
     T* begin() { return data_; }
     T* end() { return data_ + size_; }

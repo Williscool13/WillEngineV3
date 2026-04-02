@@ -6,7 +6,8 @@
 #define WILL_ENGINE_INPUT_FRAME_H
 
 #include <cstdint>
-#include <glm/glm.hpp>
+#include "core/containers/array.h"
+#include "core/types/math.h"
 
 namespace Core
 {
@@ -57,14 +58,14 @@ struct InputFrame
         bool released;
     };
 
-    ButtonState keys[static_cast<size_t>(Key::COUNT)]{};
-    ButtonState mouseButtons[static_cast<size_t>(MouseButton::COUNT)]{};
+    Array<ButtonState, static_cast<size_t>(Key::COUNT)> keys{};
+    Array<ButtonState, static_cast<size_t>(MouseButton::COUNT)> mouseButtons{};
 
     /**
      * Normalized mouse position
      */
-    glm::vec2 mousePosition{};
-    glm::vec2 mousePositionAbsolute{};
+    Vec2 mousePosition{};
+    Vec2 mousePositionAbsolute{};
     float mouseXDelta{0.0f};
     float mouseYDelta{0.0f};
     float mouseWheelDelta{0.0f};

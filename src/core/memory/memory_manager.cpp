@@ -57,6 +57,13 @@ void* MemoryManager::GeneralAllocRaw(size_t size, AllocTag tag)
     return ptr;
 }
 
+void* MemoryManager::GeneralRealloc(void* ptr, size_t newSize, AllocTag tag)
+{
+    void* p = tlsfGeneral.Realloc(ptr, newSize, tag);
+    assert(p != nullptr && "OOM: general pool exhausted");
+    return p;
+}
+
 void MemoryManager::GeneralFree(void* ptr)
 {
     tlsfGeneral.Free(ptr);

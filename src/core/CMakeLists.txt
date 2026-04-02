@@ -55,9 +55,12 @@ add_library(core STATIC
         containers/string.h
         containers/map.h
         containers/arena_fixed_map.h
-        containers/arena_fixed_map.h
+        containers/arena_fixed_vector.h
         containers/inline_path.h
         containers/inline_string.h
+        containers/inline_function.h
+        containers/arena_function.h
+        containers/function.h
 )
 
 

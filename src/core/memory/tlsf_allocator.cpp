@@ -24,6 +24,7 @@ const char* AllocTagName(AllocTag tag)
         case AllocTag::RenderMaterial: return "RenderMaterial";
         case AllocTag::ECS: return "ECS";
         case AllocTag::TaskScheduler: return "TaskScheduler";
+        case AllocTag::SDL: return "SDL";
         case AllocTag::Count: return "Count";
     }
     return "Unknown";
@@ -54,9 +55,9 @@ void* TlsfAllocator::Alloc(size_t size, AllocTag tag)
     return header + 1;
 }
 
-void* TlsfAllocator::Realloc(void* ptr, size_t newSize)
+void* TlsfAllocator::Realloc(void* ptr, size_t newSize, AllocTag fallbackTag)
 {
-    if (!ptr) { return Alloc(newSize); }
+    if (!ptr) { return Alloc(newSize, fallbackTag); }
     if (newSize == 0) {
         Free(ptr);
         return nullptr;

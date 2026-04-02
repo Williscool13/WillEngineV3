@@ -73,6 +73,7 @@ public:
 
     void* PersistentAllocRaw(size_t size);
     void* GeneralAllocRaw(size_t size, AllocTag tag = AllocTag::Unknown);
+    void* GeneralRealloc(void* ptr, size_t newSize, AllocTag tag = AllocTag::Unknown);
     void  GeneralFree(void* ptr);
 
     TlsfAllocator& Persistent() { return tlsfPersistent; }

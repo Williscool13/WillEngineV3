@@ -29,12 +29,12 @@ public:
 
     [[nodiscard]] const InputFrame& GetCurrentInput() const { return currentInput; }
 
-    bool IsQuitRequested() const { return bRequestedQuit; }
+    [[nodiscard]] bool IsQuitRequested() const { return bRequestedQuit; }
 
 private:
     InputFrame currentInput{};
     bool bRequestedQuit{false};
-    glm::vec2 windowExtents{1700, 900};
+    Vec2 windowExtents{1700, 900};
 };
 } // Core
 
