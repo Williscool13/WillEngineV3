@@ -9,7 +9,6 @@
 #include <imgui/backends/imgui_impl_vulkan.h>
 #include <imgui/backends/imgui_impl_sdl3.h>
 
-#include "VkBootstrap.h"
 #include "vk_context.h"
 #include "vk_utils.h"
 

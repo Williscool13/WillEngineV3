@@ -69,12 +69,12 @@ class RenderThread
         RENDER_REQUESTED_RECREATE,
         SWAPCHAIN_OUTDATED
     };
+
     struct RenderResponse
     {
         RenderResponseCode code;
         uint32_t swapchainIndex; // meaningless if code is not success
     };
-
 
 public:
     RenderThread();
@@ -107,7 +107,7 @@ public:
 private:
     void CreatePipelines();
 
-    void PrepareRenderFamilyProperties(Core::ViewFamily& viewFamily, ReadbackStruct* readbackData, RenderFamilyProperties& renderFamilyProperties, PipelineManager* _pipelineManager, FrameResourceLimits& _limits);
+    RenderFamilyProperties PrepareRenderFamilyProperties(Core::ViewFamily& viewFamily, ReadbackStruct* readbackData, PipelineManager* _pipelineManager, FrameResourceLimits& _limits);
 
     void UploadFrameUniforms(const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, float renderDeltaTime) const;
 
@@ -115,7 +115,8 @@ private:
 
     void SetupCascadedShadows(RenderGraph& graph, const Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties, uint32_t sceneIndex) const;
 
-    struct GBufferTargets {
+    struct GBufferTargets
+    {
         StringID albedo;
         StringID normal;
         StringID pbr;
@@ -135,16 +136,19 @@ private:
         StringID depthStencil; // stencil should be disregarded
     };
 
-    void SetupGeometryPasses(RenderGraph& graph, const Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties, Core::Array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneIndex, bool
-                               bClearTargets) const;
+    void SetupGeometryPasses(RenderGraph& graph, const Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties, Core::Array<uint32_t, 2> renderExtent,
+                             const GBufferTargets& targets, uint32_t sceneIndex, bool
+                             bClearTargets) const;
 
-    void SetupGroundTruthAmbientOcclusion(RenderGraph& graph, const Core::ViewFamily& renderViewFamily, Core::Array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneDataIndex) const;
+    void SetupGroundTruthAmbientOcclusion(RenderGraph& graph, const Core::ViewFamily& renderViewFamily, Core::Array<uint32_t, 2> renderExtent, const GBufferTargets& targets,
+                                          uint32_t sceneDataIndex) const;
 
     void SetupShadowsResolve(RenderGraph& graph, const Core::ViewFamily& renderViewFamily, Core::Array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneDataIndex) const;
 
     void SetupDeferredLighting(RenderGraph& graph, const Core::ViewFamily& renderViewFamily, Core::Array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneDataIndex) const;
 
-    void SetupPortalComposite(RenderGraph& graph, const Core::ViewFamily& renderViewFamily, Core::Array<uint32_t, 2> renderExtent, const GBufferTargets& targets, const GBufferTargets& portalTargets) const;
+    void SetupPortalComposite(RenderGraph& graph, const Core::ViewFamily& renderViewFamily, Core::Array<uint32_t, 2> renderExtent, const GBufferTargets& targets,
+                              const GBufferTargets& portalTargets) const;
 
     void SetupSkyboxRendering(RenderGraph& graph, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneDataIndex) const;
 
@@ -171,11 +175,11 @@ private:
     std::jthread thisThread;
 
     // Owning
-    VulkanContext*   context{};
-    Swapchain*       swapchain{};
-    ImguiWrapper*    imgui{};
+    VulkanContext* context{};
+    Swapchain* swapchain{};
+    ImguiWrapper* imgui{};
     ResourceManager* resourceManager{};
-    RenderExtents*   renderExtents{};
+    RenderExtents* renderExtents{};
     PipelineManager* pipelineManager{};
 
     // todo: refactor
@@ -184,12 +188,11 @@ private:
     Core::Array<RenderSynchronization, Core::FRAME_BUFFER_COUNT> frameSynchronization;
 
     Core::Vector<VkBufferMemoryBarrier2> tempBufferBarriers;
-    Core::Vector<VkImageMemoryBarrier2>  tempImageBarriers;
+    Core::Vector<VkImageMemoryBarrier2> tempImageBarriers;
 
     uint32_t currentFrameInFlight{0};
     uint64_t frameNumber{0};
     // todo remove
-    RenderFamilyProperties persistentRenderFamilyProperties{}; // so vector can be reused
     FrameResourceLimits frameResourceLimits{};
     bool bEngineRequestsRecreate{false};
     bool bRenderRequestsRecreate{false};

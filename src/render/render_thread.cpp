@@ -46,17 +46,17 @@ RenderThread::RenderThread(Core::MemoryManager& memoryManager, Core::FrameSync* 
 {
     Core::TlsfAllocator& renderAlloc = memoryManager.Render();
 
-    context = new(renderAlloc.Alloc(sizeof(VulkanContext), Core::AllocTag::Render)) VulkanContext(window, memoryManager);
-    swapchain = new(renderAlloc.Alloc(sizeof(Swapchain), Core::AllocTag::Render)) Swapchain(context, width, height);
-    renderExtents = new(renderAlloc.Alloc(sizeof(RenderExtents), Core::AllocTag::Render)) RenderExtents(width, height, 1.0f);
-    resourceManager = new(renderAlloc.Alloc(sizeof(ResourceManager), Core::AllocTag::Render)) ResourceManager(context);
+    context = new(memoryManager.RenderAllocRaw(sizeof(VulkanContext))) VulkanContext(window, memoryManager);
+    swapchain = new(memoryManager.RenderAllocRaw(sizeof(Swapchain))) Swapchain(context, width, height);
+    renderExtents = new(memoryManager.RenderAllocRaw(sizeof(RenderExtents))) RenderExtents(width, height, 1.0f);
+    resourceManager = new(memoryManager.RenderAllocRaw(sizeof(ResourceManager))) ResourceManager(context);
     renderGraph = std::make_unique<RenderGraph>(context, resourceManager);
     Core::Array<VkDescriptorSetLayout, 2> layouts{
         resourceManager->bindlessSamplerTextureDescriptorBuffer.descriptorSetLayout.handle,
         resourceManager->bindlessRDGTransientDescriptorBuffer.descriptorSetLayout.handle
     };
-    pipelineManager = new(renderAlloc.Alloc(sizeof(PipelineManager), Core::AllocTag::Render)) PipelineManager(context, renderAlloc, layouts);
-    imgui = new(renderAlloc.Alloc(sizeof(ImguiWrapper), Core::AllocTag::Render)) ImguiWrapper(context, window, Core::FRAME_BUFFER_COUNT, swapchain->format, pipelineManager->GetPipelineCache());
+    pipelineManager = new(memoryManager.RenderAllocRaw(sizeof(PipelineManager))) PipelineManager(context, renderAlloc, layouts);
+    imgui = new(memoryManager.RenderAllocRaw(sizeof(ImguiWrapper))) ImguiWrapper(context, window, Core::FRAME_BUFFER_COUNT, swapchain->format, pipelineManager->GetPipelineCache());
 
     tempBufferBarriers = Core::Vector<VkBufferMemoryBarrier2>(&renderAlloc, Core::AllocTag::Render);
     tempImageBarriers = Core::Vector<VkImageMemoryBarrier2>(&renderAlloc, Core::AllocTag::Render);
@@ -310,8 +310,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
     ReadbackStruct* readbackData = renderGraph->GetReadbackData();
     frameBuffer.stableIdUnderCursor = readbackData->selectedStableId;
 
-    PrepareRenderFamilyProperties(viewFamily, readbackData, persistentRenderFamilyProperties, pipelineManager, frameResourceLimits);
-    RenderFamilyProperties& renderFamilyProperties = persistentRenderFamilyProperties;
+    RenderFamilyProperties renderFamilyProperties = PrepareRenderFamilyProperties(viewFamily, readbackData, pipelineManager, frameResourceLimits);
 
     //
     {
@@ -1188,9 +1187,9 @@ void RenderThread::CreatePipelines()
     }
 }
 
-void RenderThread::PrepareRenderFamilyProperties(Core::ViewFamily& viewFamily, ReadbackStruct* readbackData, RenderFamilyProperties& renderFamilyProperties, PipelineManager* _pipelineManager,
-                                                 FrameResourceLimits& _limits)
+RenderFamilyProperties RenderThread::PrepareRenderFamilyProperties(Core::ViewFamily& viewFamily, ReadbackStruct* readbackData, PipelineManager* _pipelineManager, FrameResourceLimits& _limits)
 {
+    RenderFamilyProperties renderFamilyProperties{};
     renderFamilyProperties.Reset();
     renderFamilyProperties.viewFamily = &viewFamily;
     bool bHasGeometry = !viewFamily.mainPassInstances.empty();
@@ -1255,6 +1254,7 @@ void RenderThread::PrepareRenderFamilyProperties(Core::ViewFamily& viewFamily, R
 
 
     renderFamilyProperties.visibleMeshletUpperBound = _limits.highestMeshletCount;
+    return renderFamilyProperties;
 }
 
 void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const Core::Array<uint32_t, 2> renderExtent, float renderDeltaTime) const
