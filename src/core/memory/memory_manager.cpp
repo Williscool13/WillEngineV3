@@ -52,9 +52,9 @@ MemoryManager::~MemoryManager()
     megaBuffer = nullptr;
 }
 
-void* MemoryManager::PersistentAllocRaw(size_t size)
+void* MemoryManager::PersistentAllocRaw(size_t size, AllocTag tag)
 {
-    void* ptr = tlsfPersistent.Alloc(size, AllocTag::Persistent);
+    void* ptr = tlsfPersistent.Alloc(size, tag);
     assert(ptr != nullptr && "OOM: persistent pool exhausted");
     return ptr;
 }
@@ -99,7 +99,7 @@ void MemoryManager::RenderFree(void* ptr)
 
 MemoryManager::Stats MemoryManager::GetStats() const
 {
-    return {
+    Stats s{
         totalSize,
         tlsfPersistent.GetStats(),
         tlsfGeneral.GetStats(),
@@ -107,5 +107,26 @@ MemoryManager::Stats MemoryManager::GetStats() const
         tlsfPhysics.GetStats(),
         tlsfRender.GetStats(),
     };
+#ifndef PACKAGED_BUILD
+    s.deviceMemory.allocationCount = deviceAllocCount.load(std::memory_order_relaxed);
+    s.deviceMemory.totalBytes      = deviceAllocBytes.load(std::memory_order_relaxed);
+#endif
+    return s;
+}
+
+void MemoryManager::TrackDeviceAlloc(uint64_t size)
+{
+#ifndef PACKAGED_BUILD
+    deviceAllocCount.fetch_add(1, std::memory_order_relaxed);
+    deviceAllocBytes.fetch_add(size, std::memory_order_relaxed);
+#endif
+}
+
+void MemoryManager::TrackDeviceFree(uint64_t size)
+{
+#ifndef PACKAGED_BUILD
+    deviceAllocCount.fetch_sub(1, std::memory_order_relaxed);
+    deviceAllocBytes.fetch_sub(size, std::memory_order_relaxed);
+#endif
 }
 } // Core

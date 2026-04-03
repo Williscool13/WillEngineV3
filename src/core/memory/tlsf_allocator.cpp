@@ -15,7 +15,6 @@ const char* AllocTagName(AllocTag tag)
 {
     switch (tag) {
         case AllocTag::Unknown: return "Unknown";
-        case AllocTag::Persistent: return "Persistent";
         case AllocTag::AssetModel: return "AssetModel";
         case AllocTag::AssetTexture: return "AssetTexture";
         case AllocTag::PhysicsBody: return "PhysicsBody";
@@ -27,6 +26,12 @@ const char* AllocTagName(AllocTag tag)
         case AllocTag::TaskScheduler: return "TaskScheduler";
         case AllocTag::SDL: return "SDL";
         case AllocTag::ImGui: return "ImGui";
+        case AllocTag::EngineLogger: return "EngineLogger";
+        case AllocTag::EngineContext: return "EngineContext";
+        case AllocTag::InputManager: return "InputManager";
+        case AllocTag::TimeManager: return "TimeManager";
+        case AllocTag::FrameSync: return "FrameSync";
+        case AllocTag::RenderThread: return "RenderThread";
         case AllocTag::Count: return "Count";
     }
     return "Unknown";

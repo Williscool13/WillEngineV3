@@ -13,7 +13,6 @@ namespace Core
 enum class AllocTag : uint32_t
 {
     Unknown = 0,
-    Persistent,
     // Assets
     AssetModel,
     AssetTexture,
@@ -32,6 +31,13 @@ enum class AllocTag : uint32_t
     SDL,
     // ImGui
     ImGui,
+    // Engine systems
+    EngineLogger,
+    EngineContext,
+    InputManager,
+    TimeManager,
+    FrameSync,
+    RenderThread,
 
     Count
 };

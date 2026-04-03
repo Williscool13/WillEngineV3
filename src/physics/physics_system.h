@@ -73,11 +73,9 @@ public:
 
     static void RegisterPhysics()
     {
-#ifndef GAME_STATIC
         JPH::RegisterDefaultAllocator();
         JPH::Factory::sInstance = new JPH::Factory();
         JPH::RegisterTypes();
-#endif
     }
 
 private:

@@ -5,6 +5,7 @@
 #include "will_engine.h"
 
 #include <cstring>
+#include <mutex>
 
 #include <tracy/Tracy.hpp>
 #include <SDL3/SDL.h>
@@ -53,13 +54,25 @@ namespace Engine
 {
 static Core::MemoryManager* gMemory = nullptr;
 
+//
+//
+//
+/**
+ * SDL allocates from multiple threads (audio callbacks, async I/O, event handling).
+ * TLSF is not thread-safe, so SDL calls are serialized with a mutex.
+ * SDL allocs are rare so contention cost is acceptable.
+ */
+static std::mutex gSdlAllocMutex;
+
 static void* SdlMalloc(size_t size)
 {
+    std::lock_guard lock(gSdlAllocMutex);
     return gMemory->GeneralAllocRaw(size, Core::AllocTag::SDL);
 }
 
 static void* SdlCalloc(size_t nmemb, size_t size)
 {
+    std::lock_guard lock(gSdlAllocMutex);
     void* ptr = gMemory->GeneralAllocRaw(nmemb * size, Core::AllocTag::SDL);
     memset(ptr, 0, nmemb * size);
     return ptr;
@@ -67,11 +80,13 @@ static void* SdlCalloc(size_t nmemb, size_t size)
 
 static void* SdlRealloc(void* mem, size_t size)
 {
+    std::lock_guard lock(gSdlAllocMutex);
     return gMemory->GeneralRealloc(mem, size, Core::AllocTag::SDL);
 }
 
 static void SdlFree(void* mem)
 {
+    std::lock_guard lock(gSdlAllocMutex);
     gMemory->GeneralFree(mem);
 }
 
@@ -105,7 +120,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
     });
 
 #if LOGGING_ENABLED
-    engineLogger = memoryManager.PersistentAlloc<EngineLogger>();
+    engineLogger = memoryManager.PersistentAlloc<EngineLogger>(Core::AllocTag::EngineLogger);
     engineLogger->Init(logger);
 #endif
 
@@ -138,7 +153,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
         };
 
         SPDLOG_INFO("Scheduler operating with {} threads.", config.numTaskThreadsToCreate + 1);
-        scheduler = memoryManager.PersistentAlloc<enki::TaskScheduler>();
+        scheduler = memoryManager.PersistentAlloc<enki::TaskScheduler>(Core::AllocTag::TaskScheduler);
         scheduler->Initialize(config);
     }
 
@@ -175,17 +190,17 @@ void WillEngine::Initialize(Utils::Logger* logger)
     //
     {
         ZoneScopedN("Engine Context");
-        engineContext = memoryManager.PersistentAlloc<Core::EngineContext>();
-        inputManager = memoryManager.PersistentAlloc<Core::InputManager>(w, h);
-        timeManager = memoryManager.PersistentAlloc<Core::TimeManager>();
+        engineContext = memoryManager.PersistentAlloc<Core::EngineContext>(Core::AllocTag::EngineContext);
+        inputManager = memoryManager.PersistentAlloc<Core::InputManager>(Core::AllocTag::InputManager, w, h);
+        timeManager = memoryManager.PersistentAlloc<Core::TimeManager>(Core::AllocTag::TimeManager);
     }
 
     //
     {
         ZoneScopedN("CreateRenderThread");
         ImGui::SetAllocatorFunctions(ImGuiAlloc, ImGuiFree, &memoryManager);
-        engineRenderSynchronization = memoryManager.PersistentAlloc<Core::FrameSync>();
-        renderThread = memoryManager.PersistentAlloc<Render::RenderThread>(memoryManager, engineRenderSynchronization, scheduler, window, w, h);
+        engineRenderSynchronization = memoryManager.PersistentAlloc<Core::FrameSync>(Core::AllocTag::FrameSync);
+        renderThread = memoryManager.PersistentAlloc<Render::RenderThread>(Core::AllocTag::RenderThread, memoryManager, engineRenderSynchronization, scheduler, window, w, h);
     }
 
     //
@@ -446,14 +461,19 @@ void WillEngine::EditorImgui()
                 bFirstOpen = false;
             }
             const Core::MemoryManager::Stats ms = memoryManager.GetStats();
-            ImGui::Text("Total:   %zu MB", ms.totalBytes >> 20);
+            const Core::Arena::Stats ras = memoryManager.RenderArena().GetStats();
+            const size_t totalUsed = ms.persistent.usedBytes + ms.general.usedBytes + ms.assets.usedBytes + ms.physics.usedBytes + ms.render.usedBytes + ras.usedBytes;
+            constexpr float kToMB = 1.0f / (1024.0f * 1024.0f);
+            ImGui::Text("Total:      %.3f / %.0f MB", static_cast<float>(totalUsed) * kToMB, static_cast<float>(ms.totalBytes) * kToMB);
             ImGui::Separator();
-            ImGui::Text("Persistent: %zu / %zu KB (%zu allocs)", ms.persistent.usedBytes >> 10, ms.persistent.totalBytes >> 10, ms.persistent.allocCount);
+            ImGui::Text("Persistent: %.3f / %.0f MB (%zu allocs)", static_cast<float>(ms.persistent.usedBytes) * kToMB, static_cast<float>(ms.persistent.totalBytes) * kToMB, ms.persistent.allocCount);
             ImGui::Separator();
-            ImGui::Text("General: %zu / %zu MB (%zu allocs)", ms.general.usedBytes >> 20, ms.general.totalBytes >> 20, ms.general.allocCount);
-            ImGui::Text("Assets:  %zu / %zu MB (%zu allocs)", ms.assets.usedBytes >> 20, ms.assets.totalBytes >> 20, ms.assets.allocCount);
-            ImGui::Text("Physics: %zu / %zu MB (%zu allocs)", ms.physics.usedBytes >> 20, ms.physics.totalBytes >> 20, ms.physics.allocCount);
-            ImGui::Text("Render:  %zu / %zu MB (%zu allocs)", ms.render.usedBytes >> 20, ms.render.totalBytes >> 20, ms.render.allocCount);
+            ImGui::Text("General:    %.3f / %.0f MB (%zu allocs)", static_cast<float>(ms.general.usedBytes) * kToMB, static_cast<float>(ms.general.totalBytes) * kToMB, ms.general.allocCount);
+            ImGui::Text("Assets:     %.3f / %.0f MB (%zu allocs)", static_cast<float>(ms.assets.usedBytes) * kToMB, static_cast<float>(ms.assets.totalBytes) * kToMB, ms.assets.allocCount);
+            ImGui::Text("Physics:    %.3f / %.0f MB (%zu allocs)", static_cast<float>(ms.physics.usedBytes) * kToMB, static_cast<float>(ms.physics.totalBytes) * kToMB, ms.physics.allocCount);
+            ImGui::Text("Render:     %.3f / %.0f MB (%zu allocs)", static_cast<float>(ms.render.usedBytes) * kToMB, static_cast<float>(ms.render.totalBytes) * kToMB, ms.render.allocCount);
+            ImGui::Text("RenderArena:%.3f / %.0f MB (bump)", static_cast<float>(ras.usedBytes) * kToMB, static_cast<float>(ras.totalBytes) * kToMB);
+            ImGui::Text("GPU Device: %zu allocs / %.3f MB", static_cast<size_t>(ms.deviceMemory.allocationCount), static_cast<float>(ms.deviceMemory.totalBytes) * kToMB);
 
             ImGui::Spacing();
             if (ImGui::Button("Refresh Tag Breakdown")) {

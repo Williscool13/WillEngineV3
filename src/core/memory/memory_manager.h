@@ -7,8 +7,11 @@
 
 #include <cassert>
 #include <cstddef>
+#include <cstdint>
 #include <new>
 #include <type_traits>
+
+#include <atomic>
 
 #include "arena.h"
 #include "tlsf_allocator.h"
@@ -52,7 +55,10 @@ public:
         TlsfAllocator::Stats assets;
         TlsfAllocator::Stats physics;
         TlsfAllocator::Stats render;
-        // todo render arena
+        struct {
+            uint32_t allocationCount;
+            uint64_t totalBytes;
+        } deviceMemory;
     };
 
     MemoryManager() = default;
@@ -68,7 +74,7 @@ public:
      * Not freed individually. Lives for the lifetime of the application.
      */
     template<typename T, typename... Args>
-    T* PersistentAlloc(Args&&... args);
+    T* PersistentAlloc(AllocTag tag, Args&&... args);
 
     /**
      * Allocates count * sizeof(T) from the persistent pool.
@@ -76,9 +82,9 @@ public:
      * Not freed individually. Lives for the lifetime of the application.
      */
     template<typename T>
-    T* PersistentAllocArray(size_t count);
+    T* PersistentAllocArray(size_t count, AllocTag tag = AllocTag::Unknown);
 
-    void* PersistentAllocRaw(size_t size);
+    void* PersistentAllocRaw(size_t size, AllocTag tag = AllocTag::Unknown);
     void* GeneralAllocRaw(size_t size, AllocTag tag = AllocTag::Unknown);
     void* GeneralRealloc(void* ptr, size_t newSize, AllocTag tag = AllocTag::Unknown);
     void  GeneralFree(void* ptr);
@@ -96,6 +102,9 @@ public:
 
     [[nodiscard]] Stats GetStats() const;
 
+    void TrackDeviceAlloc(uint64_t size);
+    void TrackDeviceFree(uint64_t size);
+
 private:
     void*  megaBuffer{};
     size_t totalSize{};
@@ -106,21 +115,24 @@ private:
     TlsfAllocator tlsfPhysics;
     TlsfAllocator tlsfRender;
     Arena         renderArena;
+
+    std::atomic<uint32_t> deviceAllocCount{0};
+    std::atomic<uint64_t> deviceAllocBytes{0};
 };
 
 template<typename T, typename... Args>
-T* MemoryManager::PersistentAlloc(Args&&... args)
+T* MemoryManager::PersistentAlloc(AllocTag tag, Args&&... args)
 {
-    void* ptr = tlsfPersistent.Alloc(sizeof(T), AllocTag::Persistent);
+    void* ptr = tlsfPersistent.Alloc(sizeof(T), tag);
     assert(ptr != nullptr && "OOM: persistent pool exhausted");
     return new(ptr) T(std::forward<Args>(args)...);
 }
 
 template<typename T>
-T* MemoryManager::PersistentAllocArray(size_t count)
+T* MemoryManager::PersistentAllocArray(size_t count, AllocTag tag)
 {
     assert(count > 0);
-    void* ptr = tlsfPersistent.Alloc(sizeof(T) * count, AllocTag::Persistent);
+    void* ptr = tlsfPersistent.Alloc(sizeof(T) * count, tag);
     assert(ptr != nullptr && "OOM: persistent pool exhausted");
     if constexpr (!std::is_trivially_constructible_v<T>) {
         T* arr = static_cast<T*>(ptr);

@@ -32,6 +32,18 @@ static void VKAPI_PTR VkFree(void* pUserData, void* pMemory)
     static_cast<Core::MemoryManager*>(pUserData)->RenderFree(pMemory);
 }
 
+#ifndef PACKAGED_BUILD
+static void VKAPI_PTR VmaDeviceAllocate(VmaAllocator, uint32_t, VkDeviceMemory, VkDeviceSize size, void* pUserData)
+{
+    static_cast<Core::MemoryManager*>(pUserData)->TrackDeviceAlloc(size);
+}
+
+static void VKAPI_PTR VmaDeviceFree(VmaAllocator, uint32_t, VkDeviceMemory, VkDeviceSize size, void* pUserData)
+{
+    static_cast<Core::MemoryManager*>(pUserData)->TrackDeviceFree(size);
+}
+#endif
+
 static VKAPI_ATTR VkBool32 VKAPI_CALL VulkanDebugCallback(
     VkDebugUtilsMessageSeverityFlagBitsEXT severity,
     VkDebugUtilsMessageTypeFlagsEXT type,
@@ -281,8 +293,13 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
 
     allocatorInfo.pVulkanFunctions = &vulkanFunctions;
     allocatorInfo.pAllocationCallbacks = &allocationCallbacks;
-    // todo: Add hooks to keep track of device memory allocations
-    // allocatorInfo.pDeviceMemoryCallbacks = ;
+#ifndef PACKAGED_BUILD
+    VmaDeviceMemoryCallbacks deviceMemoryCallbacks{};
+    deviceMemoryCallbacks.pfnAllocate = VmaDeviceAllocate;
+    deviceMemoryCallbacks.pfnFree     = VmaDeviceFree;
+    deviceMemoryCallbacks.pUserData   = &memoryManager;
+    allocatorInfo.pDeviceMemoryCallbacks = &deviceMemoryCallbacks;
+#endif
     vmaCreateAllocator(&allocatorInfo, &allocator);
 
     deviceInfo.properties.pNext = &deviceInfo.descriptorBufferProps;
