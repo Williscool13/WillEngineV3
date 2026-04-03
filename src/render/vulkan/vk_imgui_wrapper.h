@@ -17,10 +17,9 @@ struct VulkanContext;
 
 struct ImguiWrapper
 {
-public:
     ImguiWrapper() = default;
 
-    ImguiWrapper(VulkanContext* context, SDL_Window* window, int32_t swapchainImageCount, VkFormat swapchainFormat);
+    ImguiWrapper(VulkanContext* context, SDL_Window* window, int32_t swapchainImageCount, VkFormat swapchainFormat, VkPipelineCache pipelineCache);
 
     ~ImguiWrapper();
 

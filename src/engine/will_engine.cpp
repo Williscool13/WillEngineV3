@@ -75,6 +75,16 @@ static void SdlFree(void* mem)
     gMemory->GeneralFree(mem);
 }
 
+static void* ImGuiAlloc(size_t size, void* userData)
+{
+    return static_cast<Core::MemoryManager*>(userData)->GeneralAllocRaw(size, Core::AllocTag::ImGui);
+}
+
+static void ImGuiFree(void* ptr, void* userData)
+{
+    static_cast<Core::MemoryManager*>(userData)->GeneralFree(ptr);
+}
+
 WillEngine::WillEngine(Platform::CrashHandler* crashHandler_)
     : crashHandler(crashHandler_)
 {}
@@ -86,10 +96,12 @@ void WillEngine::Initialize(Utils::Logger* logger)
     ZoneScoped;
 
     memoryManager.Init({
-        .persistentSize = 32ull * 1024 * 1024, // 32 MB
+        .persistentSize = 32ull * 1024 * 1024,  // 32 MB
         .generalPoolSize = 64ull * 1024 * 1024, // 64 MB
         .assetsPoolSize = 512ull * 1024 * 1024, // 512 MB
         .physicsPoolSize = 64ull * 1024 * 1024, // 64 MB
+        .renderPoolSize = 64ull * 1024 * 1024,  // 64 MB
+        .renderArenaSize = 32ull * 1024 * 1024, // 32 MB
     });
 
 #if LOGGING_ENABLED
@@ -171,8 +183,9 @@ void WillEngine::Initialize(Utils::Logger* logger)
     //
     {
         ZoneScopedN("CreateRenderThread");
-        engineRenderSynchronization = std::make_unique<Core::FrameSync>();
-        renderThread = std::make_unique<Render::RenderThread>(engineRenderSynchronization.get(), scheduler, window, w, h);
+        ImGui::SetAllocatorFunctions(ImGuiAlloc, ImGuiFree, &memoryManager);
+        engineRenderSynchronization = memoryManager.PersistentAlloc<Core::FrameSync>();
+        renderThread = memoryManager.PersistentAlloc<Render::RenderThread>(memoryManager, engineRenderSynchronization, scheduler, window, w, h);
     }
 
     //
@@ -215,7 +228,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
     //
     {
         ZoneScopedN("CreateModelGenerator");
-        modelGenerator = std::make_unique<Editor::AssetGenerator>(engineContext, renderThread->GetVulkanContext(), renderThread.get(), asyncAssetLoadManager.get());
+        modelGenerator = std::make_unique<Editor::AssetGenerator>(engineContext, renderThread->GetVulkanContext(), renderThread, asyncAssetLoadManager.get());
     }
 
 #endif
@@ -242,6 +255,9 @@ void WillEngine::Initialize(Utils::Logger* logger)
         engineContext->engineLogger = engineLogger;
 #endif
         engineContext->imguiContext = ImGui::GetCurrentContext();
+        engineContext->imguiAllocFn = ImGuiAlloc;
+        engineContext->imguiFreeFn = ImGuiFree;
+        engineContext->imguiAllocUserData = &memoryManager;
         engineContext->windowContext.windowWidth = w;
         engineContext->windowContext.windowHeight = h;
         engineContext->windowContext.viewportWidth = w;
@@ -420,6 +436,15 @@ void WillEngine::EditorImgui()
         }
 
         if (ImGui::CollapsingHeader("Memory")) {
+            static bool bFirstOpen = true;
+            if (bFirstOpen) {
+                memoryManager.Persistent().GetTagStats(cachedPersistentTags.Data());
+                memoryManager.General().GetTagStats(cachedGeneralTags.Data());
+                memoryManager.Assets().GetTagStats(cachedAssetsTags.Data());
+                memoryManager.Physics().GetTagStats(cachedPhysicsTags.Data());
+                memoryManager.Render().GetTagStats(cachedRenderTags.Data());
+                bFirstOpen = false;
+            }
             const Core::MemoryManager::Stats ms = memoryManager.GetStats();
             ImGui::Text("Total:   %zu MB", ms.totalBytes >> 20);
             ImGui::Separator();
@@ -428,13 +453,15 @@ void WillEngine::EditorImgui()
             ImGui::Text("General: %zu / %zu MB (%zu allocs)", ms.general.usedBytes >> 20, ms.general.totalBytes >> 20, ms.general.allocCount);
             ImGui::Text("Assets:  %zu / %zu MB (%zu allocs)", ms.assets.usedBytes >> 20, ms.assets.totalBytes >> 20, ms.assets.allocCount);
             ImGui::Text("Physics: %zu / %zu MB (%zu allocs)", ms.physics.usedBytes >> 20, ms.physics.totalBytes >> 20, ms.physics.allocCount);
+            ImGui::Text("Render:  %zu / %zu MB (%zu allocs)", ms.render.usedBytes >> 20, ms.render.totalBytes >> 20, ms.render.allocCount);
 
             ImGui::Spacing();
             if (ImGui::Button("Refresh Tag Breakdown")) {
-                memoryManager.Persistent().GetTagStats(cachedPersistentTags);
-                memoryManager.General().GetTagStats(cachedGeneralTags);
-                memoryManager.Assets().GetTagStats(cachedAssetsTags);
-                memoryManager.Physics().GetTagStats(cachedPhysicsTags);
+                memoryManager.Persistent().GetTagStats(cachedPersistentTags.Data());
+                memoryManager.General().GetTagStats(cachedGeneralTags.Data());
+                memoryManager.Assets().GetTagStats(cachedAssetsTags.Data());
+                memoryManager.Physics().GetTagStats(cachedPhysicsTags.Data());
+                memoryManager.Render().GetTagStats(cachedRenderTags.Data());
             }
 
             constexpr ImGuiTableFlags tableFlags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp;
@@ -460,10 +487,11 @@ void WillEngine::EditorImgui()
                 }
             };
 
-            drawTagTable("Persistent", cachedPersistentTags);
-            drawTagTable("General", cachedGeneralTags);
-            drawTagTable("Assets", cachedAssetsTags);
-            drawTagTable("Physics", cachedPhysicsTags);
+            drawTagTable("Persistent", cachedPersistentTags.Data());
+            drawTagTable("General", cachedGeneralTags.Data());
+            drawTagTable("Assets", cachedAssetsTags.Data());
+            drawTagTable("Physics", cachedPhysicsTags.Data());
+            drawTagTable("Render", cachedRenderTags.Data());
         }
 
         if (ImGui::CollapsingHeader("Asset Counts")) {
@@ -1070,10 +1098,10 @@ void WillEngine::Cleanup()
 
     audioManager.reset();
 
-    engineRenderSynchronization.reset();
+    engineRenderSynchronization->~FrameSync();
 
     renderThread->Join();
-    renderThread.reset();
+    renderThread->~RenderThread();
 
     scheduler->~TaskScheduler();
 

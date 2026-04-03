@@ -62,6 +62,9 @@ struct EngineContext
 
     // Imgui
     ImGuiContext* imguiContext;
+    void* (*imguiAllocFn)(size_t, void*){nullptr};
+    void  (*imguiFreeFn)(void*, void*){nullptr};
+    void* imguiAllocUserData{nullptr};
     bool bImguiKeyboardCaptured = false;
     bool bImguiMouseCaptured = false;
     bool bImGuiWantsTextInput = false;

@@ -5,9 +5,9 @@
 #ifndef WILL_ENGINE_VK_RENDER_EXTENTS_H
 #define WILL_ENGINE_VK_RENDER_EXTENTS_H
 
-#include <array>
-#include <optional>
 #include <glm/glm.hpp>
+
+#include "core/containers/array.h"
 
 namespace Render
 {
@@ -46,14 +46,14 @@ struct RenderExtents
     }
 
     // Swapchain size
-    [[nodiscard]] std::array<uint32_t, 2> GetExtent() const { return renderExtents; }
+    [[nodiscard]] Core::Array<uint32_t, 2> GetExtent() const { return renderExtents; }
 
     // Viewport panel size (blit destination)
-    [[nodiscard]] std::array<uint32_t, 2> GetViewportExtent() const { return viewportExtents; }
-    [[nodiscard]] std::array<uint32_t, 2> GetViewportOffset() const { return viewportOffset; }
+    [[nodiscard]] Core::Array<uint32_t, 2> GetViewportExtent() const { return viewportExtents; }
+    [[nodiscard]] Core::Array<uint32_t, 2> GetViewportOffset() const { return viewportOffset; }
 
     // Actual render target size
-    [[nodiscard]] std::array<uint32_t, 2> GetScaledExtent() const { return scaledViewportExtent; }
+    [[nodiscard]] Core::Array<uint32_t, 2> GetScaledExtent() const { return scaledViewportExtent; }
 
     [[nodiscard]] float GetAspectRatio() const
     {
@@ -73,11 +73,11 @@ private:
         scaledViewportExtent[1] = static_cast<uint32_t>(std::lround(static_cast<float>(viewportExtents[1]) * renderScale));
     }
 
-    std::array<uint32_t, 2> renderExtents;
-    std::array<uint32_t, 2> viewportExtents;
-    std::array<uint32_t, 2> viewportOffset;
+    Core::Array<uint32_t, 2> renderExtents;
+    Core::Array<uint32_t, 2> viewportExtents;
+    Core::Array<uint32_t, 2> viewportOffset;
     float renderScale;
-    std::array<uint32_t, 2> scaledViewportExtent;
+    Core::Array<uint32_t, 2> scaledViewportExtent;
 };
 } // Render
 

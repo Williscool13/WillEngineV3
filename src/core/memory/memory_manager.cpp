@@ -20,21 +20,30 @@ void MemoryManager::Init(const Layout& layout)
     constexpr size_t kAlign = alignof(std::max_align_t);
 
     const size_t persistentSz = AlignUp(layout.persistentSize, kAlign);
-    const size_t generalSz    = AlignUp(layout.generalPoolSize, kAlign);
-    const size_t assetsSz     = AlignUp(layout.assetsPoolSize, kAlign);
-    const size_t physicsSz    = AlignUp(layout.physicsPoolSize, kAlign);
+    const size_t generalSz = AlignUp(layout.generalPoolSize, kAlign);
+    const size_t assetsSz = AlignUp(layout.assetsPoolSize, kAlign);
+    const size_t physicsSz = AlignUp(layout.physicsPoolSize, kAlign);
+    const size_t renderSz = AlignUp(layout.renderPoolSize, kAlign);
+    const size_t renderArenaSz = AlignUp(layout.renderArenaSize, kAlign);
 
-    totalSize = persistentSz + generalSz + assetsSz + physicsSz;
+    totalSize = persistentSz + generalSz + assetsSz + physicsSz + renderSz + renderArenaSz;
 
     megaBuffer = malloc(totalSize);
     assert(megaBuffer != nullptr && "MemoryManager: mega allocation failed");
 
     auto* cursor = static_cast<uint8_t*>(megaBuffer);
 
-    tlsfPersistent.Init(cursor, persistentSz); cursor += persistentSz;
-    tlsfGeneral.Init(cursor, generalSz);       cursor += generalSz;
-    tlsfAssets.Init(cursor, assetsSz);         cursor += assetsSz;
+    tlsfPersistent.Init(cursor, persistentSz);
+    cursor += persistentSz;
+    tlsfGeneral.Init(cursor, generalSz);
+    cursor += generalSz;
+    tlsfAssets.Init(cursor, assetsSz);
+    cursor += assetsSz;
     tlsfPhysics.Init(cursor, physicsSz);
+    cursor += physicsSz;
+    tlsfRender.Init(cursor, renderSz);
+    cursor += renderSz;
+    renderArena = Arena(cursor, renderArenaSz);
 }
 
 MemoryManager::~MemoryManager()
@@ -69,6 +78,25 @@ void MemoryManager::GeneralFree(void* ptr)
     tlsfGeneral.Free(ptr);
 }
 
+void* MemoryManager::RenderAllocRaw(size_t size)
+{
+    void* ptr = tlsfRender.Alloc(size, AllocTag::Render);
+    assert(ptr != nullptr && "OOM: render pool exhausted");
+    return ptr;
+}
+
+void* MemoryManager::RenderRealloc(void* ptr, size_t newSize)
+{
+    void* p = tlsfRender.Realloc(ptr, newSize, AllocTag::Render);
+    assert(p != nullptr && "OOM: render pool exhausted");
+    return p;
+}
+
+void MemoryManager::RenderFree(void* ptr)
+{
+    tlsfRender.Free(ptr);
+}
+
 MemoryManager::Stats MemoryManager::GetStats() const
 {
     return {
@@ -77,6 +105,7 @@ MemoryManager::Stats MemoryManager::GetStats() const
         tlsfGeneral.GetStats(),
         tlsfAssets.GetStats(),
         tlsfPhysics.GetStats(),
+        tlsfRender.GetStats(),
     };
 }
 } // Core

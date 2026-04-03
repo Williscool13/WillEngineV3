@@ -11,12 +11,12 @@
 
 #include "VkBootstrap.h"
 #include "vk_context.h"
-#include "../interface/render_interface.h"
+#include "vk_utils.h"
 
 
 namespace Render
 {
-ImguiWrapper::ImguiWrapper(VulkanContext* context, SDL_Window* window, int32_t swapchainImageCount, VkFormat swapchainFormat)
+ImguiWrapper::ImguiWrapper(VulkanContext* context, SDL_Window* window, int32_t swapchainImageCount, VkFormat swapchainFormat, VkPipelineCache pipelineCache)
     : context(context)
 {
     // DearImGui implementation, basically copied directly from the Vulkan/SDl3 from DearImGui samples.
@@ -34,7 +34,7 @@ ImguiWrapper::ImguiWrapper(VulkanContext* context, SDL_Window* window, int32_t s
             pool_info.maxSets += pool_size.descriptorCount;
         pool_info.poolSizeCount = static_cast<uint32_t>(1);
         pool_info.pPoolSizes = pool_sizes;
-        vkCreateDescriptorPool(context->device, &pool_info, nullptr, &imguiPool);
+        VK_CHECK(vkCreateDescriptorPool(context->device, &pool_info, &context->allocationCallbacks, &imguiPool));
     }
 
     float main_scale = SDL_GetDisplayContentScale(SDL_GetPrimaryDisplay());
@@ -61,22 +61,22 @@ ImguiWrapper::ImguiWrapper(VulkanContext* context, SDL_Window* window, int32_t s
     // Setup Platform/Renderer backends
     ImGui_ImplSDL3_InitForVulkan(window);
     ImGui_ImplVulkan_InitInfo initInfo = {};
-    // init_info.ApiVersion = VK_API_VERSION_1_3;              // Pass in your value of VkApplicationInfo::apiVersion, otherwise will default to header version.
+    initInfo.ApiVersion = VK_API_VERSION_1_4;
     initInfo.Instance = context->instance;
     initInfo.PhysicalDevice = context->physicalDevice;
     initInfo.Device = context->device;
     initInfo.QueueFamily = context->graphicsQueueFamily;
     initInfo.Queue = context->graphicsQueue;
-    // init_info.PipelineCache = g_PipelineCache;
+    initInfo.PipelineCache = pipelineCache;
     initInfo.DescriptorPool = imguiPool;
-    initInfo.MinImageCount = Core::FRAME_BUFFER_COUNT;
-    initInfo.ImageCount = Core::FRAME_BUFFER_COUNT;
+    initInfo.MinImageCount = swapchainImageCount;
+    initInfo.ImageCount = swapchainImageCount;
     initInfo.MinAllocationSize = 1024 * 1024;
-    // initInfo.Allocator = g_Allocator;
+    initInfo.Allocator = &context->allocationCallbacks;
     // initInfo.PipelineInfoMain.RenderPass = wd->RenderPass;
     initInfo.PipelineInfoMain.Subpass = 0;
     initInfo.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
-    // initInfo.CheckVkResultFn = check_vk_result;
+    initInfo.CheckVkResultFn = [](VkResult result) { VK_CHECK(result); };
 
 
     initInfo.UseDynamicRendering = true;
@@ -106,7 +106,7 @@ ImguiWrapper::ImguiWrapper(VulkanContext* context, SDL_Window* window, int32_t s
 ImguiWrapper::~ImguiWrapper()
 {
     ImGui_ImplVulkan_Shutdown();
-    vkDestroyDescriptorPool(context->device, imguiPool, nullptr);
+    vkDestroyDescriptorPool(context->device, imguiPool, &context->allocationCallbacks);
 }
 
 void ImguiWrapper::HandleInput(const SDL_Event& e)

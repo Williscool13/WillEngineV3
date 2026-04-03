@@ -12,6 +12,7 @@
 #include "engine/include/frame_sync.h"
 #include "engine/include/game_interface.h"
 #include "../render/interface/render_interface.h"
+#include "core/containers/array.h"
 #include "core/memory/memory_manager.h"
 #include "platform/crash_handler.h"
 #include "platform/directory_watcher.h"
@@ -121,8 +122,8 @@ private: // Main Systems
     EngineLogger* engineLogger{};
 #endif
     enki::TaskScheduler* scheduler{};
-    std::unique_ptr<Render::RenderThread> renderThread{};
-    std::unique_ptr<Core::FrameSync> engineRenderSynchronization{};
+    Render::RenderThread* renderThread{};
+    Core::FrameSync* engineRenderSynchronization{};
     std::unique_ptr<Audio::AudioManager> audioManager{};
 
     std::unique_ptr<AssetLoad::AsyncAssetLoadManager> asyncAssetLoadManager{};
@@ -164,10 +165,11 @@ private: // Debugging
 
     // Cached tag stats, only refreshed when the user clicks Refresh in the Memory panel.
     static constexpr size_t kTagCount = static_cast<size_t>(Core::AllocTag::Count);
-    Core::TlsfAllocator::TagStats cachedPersistentTags[kTagCount]{};
-    Core::TlsfAllocator::TagStats cachedGeneralTags[kTagCount]{};
-    Core::TlsfAllocator::TagStats cachedAssetsTags[kTagCount]{};
-    Core::TlsfAllocator::TagStats cachedPhysicsTags[kTagCount]{};
+    Core::Array<Core::TlsfAllocator::TagStats, kTagCount> cachedPersistentTags{};
+    Core::Array<Core::TlsfAllocator::TagStats, kTagCount> cachedGeneralTags{};
+    Core::Array<Core::TlsfAllocator::TagStats, kTagCount> cachedAssetsTags{};
+    Core::Array<Core::TlsfAllocator::TagStats, kTagCount> cachedPhysicsTags{};
+    Core::Array<Core::TlsfAllocator::TagStats, kTagCount> cachedRenderTags{};
     std::chrono::high_resolution_clock::time_point lastFrameAcquireTime;
     float lastFrameTimeMs = 0.0f;
 

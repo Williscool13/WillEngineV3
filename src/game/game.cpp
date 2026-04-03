@@ -62,8 +62,10 @@ GAME_API void GameLoad(Core::EngineContext* ctx, Engine::GameState* state)
 {
 #ifndef GAME_STATIC
     ctx->engineLogger->RegisterLoggersForDLL(Engine::LogCategory::Game);
-#endif
     ImGui::SetCurrentContext(ctx->imguiContext);
+    ImGui::SetAllocatorFunctions(ctx->imguiAllocFn, ctx->imguiFreeFn, ctx->imguiAllocUserData);
+#endif
+
     Physics::PhysicsSystem::RegisterPhysics();
     Audio::AudioManager::RegisterAudio();
     ctx->scheduler->RegisterExternalTaskThread();

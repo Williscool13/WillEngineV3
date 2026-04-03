@@ -10,6 +10,7 @@
 #include <new>
 #include <type_traits>
 
+#include "arena.h"
 #include "tlsf_allocator.h"
 
 namespace Core
@@ -19,7 +20,7 @@ namespace Core
  * typed regions. All engine systems suballocate from this manager — no additional new/delete.
  *
  * Layout (contiguous):
- *   [persistentPool | generalPool | assetsPool | physicsPool]
+ *   [persistentPool | generalPool | assetsPool | physicsPool | renderPool | renderArena]
  *
  * Regions:
  *   - Persistent TLSF: individual allocs that live for the entire process lifetime.
@@ -27,6 +28,8 @@ namespace Core
  *   - General TLSF: variable-lifetime allocations with no specific domain.
  *   - Assets TLSF: variable-lifetime allocations for models and textures.
  *   - Physics TLSF: variable-lifetime allocations for Jolt rigid bodies and shapes.
+ *   - Render TLSF: variable-lifetime allocations for render system objects.
+ *   - Render Arena: per-frame bump allocator for transient render data; Reset() each frame.
  */
 class MemoryManager
 {
@@ -37,6 +40,8 @@ public:
         size_t generalPoolSize;
         size_t assetsPoolSize;
         size_t physicsPoolSize;
+        size_t renderPoolSize;
+        size_t renderArenaSize;
     };
 
     struct Stats
@@ -46,6 +51,8 @@ public:
         TlsfAllocator::Stats general;
         TlsfAllocator::Stats assets;
         TlsfAllocator::Stats physics;
+        TlsfAllocator::Stats render;
+        // todo render arena
     };
 
     MemoryManager() = default;
@@ -76,10 +83,16 @@ public:
     void* GeneralRealloc(void* ptr, size_t newSize, AllocTag tag = AllocTag::Unknown);
     void  GeneralFree(void* ptr);
 
+    void* RenderAllocRaw(size_t size);
+    void* RenderRealloc(void* ptr, size_t newSize);
+    void  RenderFree(void* ptr);
+
     TlsfAllocator& Persistent() { return tlsfPersistent; }
     TlsfAllocator& General()   { return tlsfGeneral; }
     TlsfAllocator& Assets()    { return tlsfAssets; }
     TlsfAllocator& Physics()   { return tlsfPhysics; }
+    TlsfAllocator& Render()    { return tlsfRender; }
+    Arena&         RenderArena() { return renderArena; }
 
     [[nodiscard]] Stats GetStats() const;
 
@@ -91,6 +104,8 @@ private:
     TlsfAllocator tlsfGeneral;
     TlsfAllocator tlsfAssets;
     TlsfAllocator tlsfPhysics;
+    TlsfAllocator tlsfRender;
+    Arena         renderArena;
 };
 
 template<typename T, typename... Args>

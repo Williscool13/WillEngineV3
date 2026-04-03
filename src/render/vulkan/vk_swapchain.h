@@ -10,6 +10,8 @@
 #include <volk.h>
 
 #include "vk_config.h"
+#include "core/containers/inline_vector.h"
+#include "render/interface/render_interface.h"
 
 namespace Render
 {
@@ -37,8 +39,8 @@ struct Swapchain
     VkExtent2D extent{};
     VkImageUsageFlags usages{};
     uint32_t imageCount{};
-    std::vector<VkImage> swapchainImages{};
-    std::vector<VkImageView> swapchainImageViews{};
+    Core::InlineVector<VkImage, Core::FRAME_BUFFER_COUNT> swapchainImages{};
+    Core::InlineVector<VkImageView, Core::FRAME_BUFFER_COUNT> swapchainImageViews{};
 
 private:
     const VulkanContext* context;

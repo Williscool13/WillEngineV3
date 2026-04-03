@@ -9,8 +9,10 @@
 #include <atomic>
 #include <memory>
 
+#include "core/containers/vector.h"
 #include "frame_resources.h"
 #include "asset-load/async_asset_load_manager.h"
+#include "core/containers/array.h"
 #include "interface/render_interface.h"
 #include "render/vulkan/vk_synchronization.h"
 #include "types/render_types.h"
@@ -29,6 +31,7 @@ class RenderGraph;
 namespace Core
 {
 struct FrameSync;
+class MemoryManager;
 }
 
 namespace enki
@@ -76,7 +79,7 @@ class RenderThread
 public:
     RenderThread();
 
-    RenderThread(Core::FrameSync* engineRenderSynchronization, enki::TaskScheduler* scheduler, SDL_Window* window, uint32_t width, uint32_t height);
+    RenderThread(Core::MemoryManager& memoryManager, Core::FrameSync* engineRenderSynchronization, enki::TaskScheduler* scheduler, SDL_Window* window, uint32_t width, uint32_t height);
 
     ~RenderThread();
 
@@ -97,16 +100,16 @@ public:
     void ProcessAcquisitions(VkCommandBuffer cmd, const std::vector<Core::BufferAcquireOperation>& bufferAcquireOperations, const std::vector<Core::ImageAcquireOperation>& imageAcquireOperations);
 
 public:
-    VulkanContext* GetVulkanContext() const { return context.get(); }
-    ResourceManager* GetResourceManager() const { return resourceManager.get(); }
-    PipelineManager* GetPipelineManager() const { return pipelineManager.get(); }
+    VulkanContext* GetVulkanContext() const { return context; }
+    ResourceManager* GetResourceManager() const { return resourceManager; }
+    PipelineManager* GetPipelineManager() const { return pipelineManager; }
 
 private:
     void CreatePipelines();
 
     void PrepareRenderFamilyProperties(Core::ViewFamily& viewFamily, ReadbackStruct* readbackData, RenderFamilyProperties& renderFamilyProperties, PipelineManager* _pipelineManager, FrameResourceLimits& _limits);
 
-    void UploadFrameUniforms(const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, float renderDeltaTime) const;
+    void UploadFrameUniforms(const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, float renderDeltaTime) const;
 
     void UploadModelUniforms(Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties) const;
 
@@ -132,24 +135,24 @@ private:
         StringID depthStencil; // stencil should be disregarded
     };
 
-    void SetupGeometryPasses(RenderGraph& graph, const Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties, std::array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneIndex, bool
+    void SetupGeometryPasses(RenderGraph& graph, const Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties, Core::Array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneIndex, bool
                                bClearTargets) const;
 
-    void SetupGroundTruthAmbientOcclusion(RenderGraph& graph, const Core::ViewFamily& renderViewFamily, std::array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneDataIndex) const;
+    void SetupGroundTruthAmbientOcclusion(RenderGraph& graph, const Core::ViewFamily& renderViewFamily, Core::Array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneDataIndex) const;
 
-    void SetupShadowsResolve(RenderGraph& graph, const Core::ViewFamily& renderViewFamily, std::array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneDataIndex) const;
+    void SetupShadowsResolve(RenderGraph& graph, const Core::ViewFamily& renderViewFamily, Core::Array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneDataIndex) const;
 
-    void SetupDeferredLighting(RenderGraph& graph, const Core::ViewFamily& renderViewFamily, std::array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneDataIndex) const;
+    void SetupDeferredLighting(RenderGraph& graph, const Core::ViewFamily& renderViewFamily, Core::Array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneDataIndex) const;
 
-    void SetupPortalComposite(RenderGraph& graph, const Core::ViewFamily& renderViewFamily, std::array<uint32_t, 2> renderExtent, const GBufferTargets& targets, const GBufferTargets& portalTargets) const;
+    void SetupPortalComposite(RenderGraph& graph, const Core::ViewFamily& renderViewFamily, Core::Array<uint32_t, 2> renderExtent, const GBufferTargets& targets, const GBufferTargets& portalTargets) const;
 
-    void SetupSkyboxRendering(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneDataIndex) const;
+    void SetupSkyboxRendering(RenderGraph& graph, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneDataIndex) const;
 
-    StringID SetupTemporalAntialiasing(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, const PostProcessTargets& ppTargets) const;
+    StringID SetupTemporalAntialiasing(RenderGraph& graph, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const PostProcessTargets& ppTargets) const;
 
-    StringID SetupPostProcessing(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, const PostProcessTargets& ppTargets, float deltaTime) const;
+    StringID SetupPostProcessing(RenderGraph& graph, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const PostProcessTargets& ppTargets, float deltaTime) const;
 
-    void SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, StringID depthTarget, StringID targetImage, FrameResourceLimits& limits) const;
+    void SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, StringID depthTarget, StringID targetImage, FrameResourceLimits& limits) const;
 
 public:
 #if WILL_EDITOR
@@ -158,6 +161,7 @@ public:
 
 private:
     // Non-owning
+    Core::MemoryManager* memoryManager{};
     SDL_Window* window{};
     Core::FrameSync* engineRenderSynchronization{};
     enki::TaskScheduler* scheduler{};
@@ -167,21 +171,24 @@ private:
     std::jthread thisThread;
 
     // Owning
-    std::unique_ptr<VulkanContext> context{};
-    std::unique_ptr<Swapchain> swapchain{};
-    std::unique_ptr<ImguiWrapper> imgui{};
-    std::unique_ptr<ResourceManager> resourceManager{};
-    std::unique_ptr<RenderExtents> renderExtents{};
+    VulkanContext*   context{};
+    Swapchain*       swapchain{};
+    ImguiWrapper*    imgui{};
+    ResourceManager* resourceManager{};
+    RenderExtents*   renderExtents{};
+    PipelineManager* pipelineManager{};
+
+    // todo: refactor
     std::unique_ptr<RenderGraph> renderGraph{};
-    std::unique_ptr<PipelineManager> pipelineManager{};
 
-    std::array<RenderSynchronization, Core::FRAME_BUFFER_COUNT> frameSynchronization;
+    Core::Array<RenderSynchronization, Core::FRAME_BUFFER_COUNT> frameSynchronization;
 
-    std::vector<VkBufferMemoryBarrier2> tempBufferBarriers;
-    std::vector<VkImageMemoryBarrier2> tempImageBarriers;
+    Core::Vector<VkBufferMemoryBarrier2> tempBufferBarriers;
+    Core::Vector<VkImageMemoryBarrier2>  tempImageBarriers;
 
     uint32_t currentFrameInFlight{0};
     uint64_t frameNumber{0};
+    // todo remove
     RenderFamilyProperties persistentRenderFamilyProperties{}; // so vector can be reused
     FrameResourceLimits frameResourceLimits{};
     bool bEngineRequestsRecreate{false};

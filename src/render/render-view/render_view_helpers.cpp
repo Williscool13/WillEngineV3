@@ -4,17 +4,14 @@
 
 #include "render_view_helpers.h"
 
-#include "../interface/render_interface.h"
-#include "core/math/math_helpers.h"
-#include "glm/ext/matrix_clip_space.hpp"
-#include "glm/ext/matrix_transform.hpp"
+#include "render/interface/render_interface.h"
 #include "render/frame_resources.h"
 #include "render/pipelines/pipeline_manager.h"
 #include "render/types/render_types.h"
 
 namespace Render
 {
-SceneData GenerateSceneData(const Core::RenderView& view, const Core::PostProcessConfiguration& ppConfig, std::array<uint32_t, 2> renderExtent, uint64_t frameNumber, float deltaTime)
+SceneData GenerateSceneData(const Core::RenderView& view, const Core::PostProcessConfiguration& ppConfig, Core::Array<uint32_t, 2> renderExtent, uint64_t frameNumber, float deltaTime)
 {
     const glm::mat4 viewMatrix = view.currentViewData.view;
     const glm::mat4 projMatrix = view.currentViewData.proj;

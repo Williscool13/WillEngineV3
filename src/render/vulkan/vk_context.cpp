@@ -7,6 +7,7 @@
 #define VMA_IMPLEMENTATION
 #include <vk_mem_alloc.h>
 #include <SDL3/SDL.h>
+#include "core/memory/memory_manager.h"
 #include <SDL3/SDL_vulkan.h>
 #include <VkBootstrap.h>
 #include <vulkan/vk_enum_string_helper.h>
@@ -15,6 +16,21 @@
 namespace Render
 {
 DeviceInfo VulkanContext::deviceInfo{};
+
+static void* VKAPI_PTR VkAllocate(void* pUserData, size_t size, size_t, VkSystemAllocationScope)
+{
+    return static_cast<Core::MemoryManager*>(pUserData)->RenderAllocRaw(size);
+}
+
+static void* VKAPI_PTR VkReallocate(void* pUserData, void* pOriginal, size_t size, size_t, VkSystemAllocationScope)
+{
+    return static_cast<Core::MemoryManager*>(pUserData)->RenderRealloc(pOriginal, size);
+}
+
+static void VKAPI_PTR VkFree(void* pUserData, void* pMemory)
+{
+    static_cast<Core::MemoryManager*>(pUserData)->RenderFree(pMemory);
+}
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL VulkanDebugCallback(
     VkDebugUtilsMessageSeverityFlagBitsEXT severity,
@@ -43,8 +59,13 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL VulkanDebugCallback(
     return VK_FALSE;
 }
 
-VulkanContext::VulkanContext(SDL_Window* window)
+VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryManager)
 {
+    allocationCallbacks.pUserData       = &memoryManager;
+    allocationCallbacks.pfnAllocation   = VkAllocate;
+    allocationCallbacks.pfnReallocation = VkReallocate;
+    allocationCallbacks.pfnFree         = VkFree;
+
     VkResult res = volkInitialize();
     if (res != VK_SUCCESS) {
         SPDLOG_ERROR("Failed to initialize volk: {}", string_VkResult(res));
@@ -231,7 +252,6 @@ VulkanContext::VulkanContext(SDL_Window* window)
     allocatorInfo.instance = instance;
     allocatorInfo.flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
 
-    VmaVulkanFunctions vulkanFunctions = {};
     vulkanFunctions.vkGetInstanceProcAddr = vkGetInstanceProcAddr;
     vulkanFunctions.vkGetDeviceProcAddr = vkGetDeviceProcAddr;
     vulkanFunctions.vkGetPhysicalDeviceProperties = vkGetPhysicalDeviceProperties;
@@ -260,6 +280,9 @@ VulkanContext::VulkanContext(SDL_Window* window)
     vulkanFunctions.vkGetDeviceImageMemoryRequirements = vkGetDeviceImageMemoryRequirements;
 
     allocatorInfo.pVulkanFunctions = &vulkanFunctions;
+    allocatorInfo.pAllocationCallbacks = &allocationCallbacks;
+    // todo: Add hooks to keep track of device memory allocations
+    // allocatorInfo.pDeviceMemoryCallbacks = ;
     vmaCreateAllocator(&allocatorInfo, &allocator);
 
     deviceInfo.properties.pNext = &deviceInfo.descriptorBufferProps;

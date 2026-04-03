@@ -11,6 +11,11 @@
 
 struct SDL_Window;
 
+namespace Core
+{
+class MemoryManager;
+}
+
 namespace Render
 {
 struct DeviceInfo
@@ -39,9 +44,12 @@ struct VulkanContext
     // Optional Extensions
     bool bMaintenance9Enabled{false};
 
+    VmaVulkanFunctions vulkanFunctions{};
+    VkAllocationCallbacks allocationCallbacks{};
+
     VulkanContext() = default;
 
-    explicit VulkanContext(SDL_Window* window);
+    VulkanContext(SDL_Window* window, Core::MemoryManager& memoryManager);
 
     ~VulkanContext();
 

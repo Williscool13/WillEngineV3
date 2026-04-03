@@ -26,6 +26,7 @@
 #include "types/render_types.h"
 #include "render/vulkan/vk_imgui_wrapper.h"
 #include "backends/imgui_impl_vulkan.h"
+#include "core/memory/memory_manager.h"
 #include "core/string_id.h"
 #include "core/math/math_helpers.h"
 #include "engine/logging/engine_log.h"
@@ -39,24 +40,29 @@ namespace Render
 {
 RenderThread::RenderThread() = default;
 
-RenderThread::RenderThread(Core::FrameSync* engineRenderSynchronization, enki::TaskScheduler* scheduler, SDL_Window* window, uint32_t width,
-                           uint32_t height)
-    : window(window), engineRenderSynchronization(engineRenderSynchronization), scheduler(scheduler)
+RenderThread::RenderThread(Core::MemoryManager& memoryManager, Core::FrameSync* engineRenderSynchronization, enki::TaskScheduler* scheduler,
+                           SDL_Window* window, uint32_t width, uint32_t height)
+    : memoryManager(&memoryManager), window(window), engineRenderSynchronization(engineRenderSynchronization), scheduler(scheduler)
 {
-    context = std::make_unique<VulkanContext>(window);
-    swapchain = std::make_unique<Swapchain>(context.get(), width, height);
-    imgui = std::make_unique<ImguiWrapper>(context.get(), window, Core::FRAME_BUFFER_COUNT, swapchain->format);
-    renderExtents = std::make_unique<RenderExtents>(width, height, 1.0f);
-    resourceManager = std::make_unique<ResourceManager>(context.get());
-    renderGraph = std::make_unique<RenderGraph>(context.get(), resourceManager.get());
+    Core::TlsfAllocator& renderAlloc = memoryManager.Render();
+
+    context = new(renderAlloc.Alloc(sizeof(VulkanContext), Core::AllocTag::Render)) VulkanContext(window, memoryManager);
+    swapchain = new(renderAlloc.Alloc(sizeof(Swapchain), Core::AllocTag::Render)) Swapchain(context, width, height);
+    renderExtents = new(renderAlloc.Alloc(sizeof(RenderExtents), Core::AllocTag::Render)) RenderExtents(width, height, 1.0f);
+    resourceManager = new(renderAlloc.Alloc(sizeof(ResourceManager), Core::AllocTag::Render)) ResourceManager(context);
+    renderGraph = std::make_unique<RenderGraph>(context, resourceManager);
     std::array layouts{
         resourceManager->bindlessSamplerTextureDescriptorBuffer.descriptorSetLayout.handle,
         resourceManager->bindlessRDGTransientDescriptorBuffer.descriptorSetLayout.handle
     };
-    pipelineManager = std::make_unique<PipelineManager>(context.get(), layouts);
+    pipelineManager = new(renderAlloc.Alloc(sizeof(PipelineManager), Core::AllocTag::Render)) PipelineManager(context, layouts);
+    imgui = new(renderAlloc.Alloc(sizeof(ImguiWrapper), Core::AllocTag::Render)) ImguiWrapper(context, window, Core::FRAME_BUFFER_COUNT, swapchain->format, pipelineManager->GetPipelineCache());
+
+    tempBufferBarriers = Core::Vector<VkBufferMemoryBarrier2>(&renderAlloc, Core::AllocTag::Render);
+    tempImageBarriers = Core::Vector<VkImageMemoryBarrier2>(&renderAlloc, Core::AllocTag::Render);
 
     for (RenderSynchronization& frameSync : frameSynchronization) {
-        frameSync = RenderSynchronization(context.get());
+        frameSync = RenderSynchronization(context);
         frameSync.Initialize();
     }
 
@@ -68,7 +74,21 @@ RenderThread::RenderThread(Core::FrameSync* engineRenderSynchronization, enki::T
     vmaAllocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
 }
 
-RenderThread::~RenderThread() = default;
+RenderThread::~RenderThread()
+{
+    for (auto& sync : frameSynchronization) {
+        sync = RenderSynchronization{};
+    }
+
+    pipelineManager->~PipelineManager();
+    globalPipelineLayout = {};
+    renderGraph.reset();
+    resourceManager->~ResourceManager();
+    renderExtents->~RenderExtents();
+    imgui->~ImguiWrapper();
+    swapchain->~Swapchain();
+    context->~VulkanContext();
+}
 
 void RenderThread::InitializePipelineManager(AssetLoad::AsyncAssetLoadManager* _asyncAssetLoadManager)
 {
@@ -282,7 +302,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
     }
 
 
-    std::array<uint32_t, 2> renderExtent = renderExtents->GetScaledExtent();
+    Core::Array<uint32_t, 2> renderExtent = renderExtents->GetScaledExtent();
     VkImage currentSwapchainImage = swapchain->swapchainImages[swapchainImageIndex];
     VkImageView currentSwapchainImageView = swapchain->swapchainImageViews[swapchainImageIndex];
 
@@ -290,7 +310,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
     ReadbackStruct* readbackData = renderGraph->GetReadbackData();
     frameBuffer.stableIdUnderCursor = readbackData->selectedStableId;
 
-    PrepareRenderFamilyProperties(viewFamily, readbackData, persistentRenderFamilyProperties, pipelineManager.get(), frameResourceLimits);
+    PrepareRenderFamilyProperties(viewFamily, readbackData, persistentRenderFamilyProperties, pipelineManager, frameResourceLimits);
     RenderFamilyProperties& renderFamilyProperties = persistentRenderFamilyProperties;
 
     //
@@ -714,9 +734,9 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         blitPass.Execute([&, finalOutput](VkCommandBuffer _cmd) {
             VkImage drawImage = renderGraph->GetImageHandle(finalOutput);
 
-            std::array<uint32_t, 2> scaledExtent = renderExtents->GetScaledExtent();
-            std::array<uint32_t, 2> vpOffset = renderExtents->GetViewportOffset();
-            std::array<uint32_t, 2> vpExtent = renderExtents->GetViewportExtent();
+            Core::Array<uint32_t, 2> scaledExtent = renderExtents->GetScaledExtent();
+            Core::Array<uint32_t, 2> vpOffset = renderExtents->GetViewportOffset();
+            Core::Array<uint32_t, 2> vpExtent = renderExtents->GetViewportExtent();
 
             VkImageBlit2 blitRegion{};
             blitRegion.sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2;
@@ -825,8 +845,8 @@ void RenderThread::ProcessAcquisitions(VkCommandBuffer cmd,
         return;
     }
 
-    tempBufferBarriers.clear();
-    tempBufferBarriers.reserve(bufferAcquireOperations.size());
+    tempBufferBarriers.Clear();
+    tempBufferBarriers.Reserve(bufferAcquireOperations.size());
     for (const auto& op : bufferAcquireOperations) {
         VkBufferMemoryBarrier2 barrier{};
         barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
@@ -840,11 +860,11 @@ void RenderThread::ProcessAcquisitions(VkCommandBuffer cmd,
         barrier.buffer = reinterpret_cast<VkBuffer>(op.buffer);
         barrier.offset = op.offset;
         barrier.size = op.size;
-        tempBufferBarriers.push_back(barrier);
+        tempBufferBarriers.PushBack(barrier);
     }
 
-    tempImageBarriers.clear();
-    tempImageBarriers.reserve(imageAcquireOperations.size());
+    tempImageBarriers.Clear();
+    tempImageBarriers.Reserve(imageAcquireOperations.size());
     for (const auto& op : imageAcquireOperations) {
         VkImageMemoryBarrier2 barrier{};
         barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
@@ -863,17 +883,17 @@ void RenderThread::ProcessAcquisitions(VkCommandBuffer cmd,
         barrier.subresourceRange.levelCount = op.levelCount;
         barrier.subresourceRange.baseArrayLayer = op.baseArrayLayer;
         barrier.subresourceRange.layerCount = op.layerCount;
-        tempImageBarriers.push_back(barrier);
+        tempImageBarriers.PushBack(barrier);
     }
 
     VkDependencyInfo depInfo{};
     depInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
     depInfo.pNext = nullptr;
     depInfo.dependencyFlags = 0;
-    depInfo.bufferMemoryBarrierCount = tempBufferBarriers.size();
-    depInfo.pBufferMemoryBarriers = tempBufferBarriers.data();
-    depInfo.imageMemoryBarrierCount = tempImageBarriers.size();
-    depInfo.pImageMemoryBarriers = tempImageBarriers.data();
+    depInfo.bufferMemoryBarrierCount = tempBufferBarriers.Size();
+    depInfo.pBufferMemoryBarriers = tempBufferBarriers.Data();
+    depInfo.imageMemoryBarrierCount = tempImageBarriers.Size();
+    depInfo.pImageMemoryBarriers = tempImageBarriers.Data();
     vkCmdPipelineBarrier2(cmd, &depInfo);
 }
 
@@ -888,7 +908,7 @@ void RenderThread::CreatePipelines()
     layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     layoutInfo.pSetLayouts = layouts.data();
     layoutInfo.setLayoutCount = layouts.size();
-    globalPipelineLayout = PipelineLayout::CreatePipelineLayout(context.get(), layoutInfo);
+    globalPipelineLayout = PipelineLayout::CreatePipelineLayout(context, layoutInfo);
 
     pipelineManager->RegisterComputePipeline(SID("instancing_instance_lod"), Platform::GetShaderPath() / "instancing_instance_lod_compute.spv",
                                              sizeof(InstanceLODPushConstant), PipelineCategory::Instancing);
@@ -1237,7 +1257,7 @@ void RenderThread::PrepareRenderFamilyProperties(Core::ViewFamily& viewFamily, R
     renderFamilyProperties.visibleMeshletUpperBound = _limits.highestMeshletCount;
 }
 
-void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const std::array<uint32_t, 2> renderExtent, float renderDeltaTime) const
+void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const Core::Array<uint32_t, 2> renderExtent, float renderDeltaTime) const
 {
     renderGraph->CreateBuffer(SID("scene_data"), SCENE_DATA_BUFFER_SIZE, false);
     renderGraph->CreateBuffer(SID("shadow_data"), SHADOW_DATA_BUFFER_SIZE, false);
@@ -1542,7 +1562,7 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFami
                 .lodBias = LOD_BIAS,
             };
 
-            InstancedGeometryPassOutputs mainOutputs = SetupInstancedGeometryShadowPass(graph, mainConfig, pipelineManager.get(), sceneIndex, cascadeLevel, false);
+            InstancedGeometryPassOutputs mainOutputs = SetupInstancedGeometryShadowPass(graph, mainConfig, pipelineManager, sceneIndex, cascadeLevel, false);
 
             RenderPass& shadowPass = graph.AddPass(shadowPassId, VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
             shadowPass.ReadWriteDepthAttachment(shadowMapId);
@@ -1621,7 +1641,7 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFami
                 .lodBias = LOD_BIAS,
             };
 
-            InstancedGeometryPassOutputs customOutputs = SetupInstancedGeometryShadowPass(graph, customConfig, pipelineManager.get(), sceneIndex, cascadeLevel, false);
+            InstancedGeometryPassOutputs customOutputs = SetupInstancedGeometryShadowPass(graph, customConfig, pipelineManager, sceneIndex, cascadeLevel, false);
 
             auto customDrawPassName = "Shadow Cascade Pass " + customDraw.first + std::to_string(cascadeLevel);
             RenderPass& customShadowPass = graph.AddPass(customDrawPassName, VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
@@ -1685,7 +1705,7 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFami
 }
 
 void RenderThread::SetupGeometryPasses(RenderGraph& graph, const Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties,
-                                       std::array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneIndex, bool bClearTargets) const
+                                       Core::Array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneIndex, bool bClearTargets) const
 {
     if (bClearTargets) {
         RenderPass& clearPass = graph.AddPass(SID("Clear GBuffer"), VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
@@ -1746,7 +1766,7 @@ void RenderThread::SetupGeometryPasses(RenderGraph& graph, const Core::ViewFamil
             .lodBias = LOD_BIAS,
         };
 
-        InstancedGeometryPassOutputs mainOutputs = SetupInstancedGeometryPass(graph, mainConfig, pipelineManager.get(), sceneIndex);
+        InstancedGeometryPassOutputs mainOutputs = SetupInstancedGeometryPass(graph, mainConfig, pipelineManager, sceneIndex);
 
         RenderPass& instancedMeshShading = graph.AddPass(SID("Instanced Mesh Shading"), VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
         instancedMeshShading.WriteColorAttachment(targets.albedo);
@@ -1837,7 +1857,7 @@ void RenderThread::SetupGeometryPasses(RenderGraph& graph, const Core::ViewFamil
             .lodBias = LOD_BIAS,
         };
 
-        InstancedGeometryPassOutputs customOutputs = SetupInstancedGeometryPass(graph, customConfig, pipelineManager.get(), sceneIndex);
+        InstancedGeometryPassOutputs customOutputs = SetupInstancedGeometryPass(graph, customConfig, pipelineManager, sceneIndex);
 
         std::string customDrawName = "Custom Draw " + customDraw.first;
         StringID customDrawId = StringID(customDrawName.c_str(), customDrawName.size());
@@ -1913,7 +1933,7 @@ void RenderThread::SetupGeometryPasses(RenderGraph& graph, const Core::ViewFamil
     }
 }
 
-void RenderThread::SetupGroundTruthAmbientOcclusion(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, const GBufferTargets& targets,
+void RenderThread::SetupGroundTruthAmbientOcclusion(RenderGraph& graph, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const GBufferTargets& targets,
                                                     uint32_t sceneDataIndex) const
 {
     const Core::GTAOConfiguration& gtaoConfig = viewFamily.gtaoConfig;
@@ -2039,7 +2059,7 @@ void RenderThread::SetupGroundTruthAmbientOcclusion(RenderGraph& graph, const Co
 }
 
 
-void RenderThread::SetupShadowsResolve(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneDataIndex) const
+void RenderThread::SetupShadowsResolve(RenderGraph& graph, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneDataIndex) const
 {
     renderGraph->CreateTexture(SID("shadows_resolve_target"), TextureInfo{VK_FORMAT_R8G8_UNORM, renderExtent[0], renderExtent[1], 1}, true);
     RenderPass& shadowsResolvePass = graph.AddPass(SID("Shadows Resolve"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
@@ -2097,7 +2117,7 @@ void RenderThread::SetupShadowsResolve(RenderGraph& graph, const Core::ViewFamil
     });
 }
 
-void RenderThread::SetupDeferredLighting(RenderGraph& graph, const Core::ViewFamily& viewFamily, const std::array<uint32_t, 2> renderExtent, const GBufferTargets& targets,
+void RenderThread::SetupDeferredLighting(RenderGraph& graph, const Core::ViewFamily& viewFamily, const Core::Array<uint32_t, 2> renderExtent, const GBufferTargets& targets,
                                          uint32_t sceneDataIndex) const
 {
     RenderPass& deferredResolvePass = graph.AddPass(SID("Deferred Resolve"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
@@ -2136,7 +2156,7 @@ void RenderThread::SetupDeferredLighting(RenderGraph& graph, const Core::ViewFam
     });
 }
 
-void RenderThread::SetupPortalComposite(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, const GBufferTargets& targets,
+void RenderThread::SetupPortalComposite(RenderGraph& graph, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const GBufferTargets& targets,
                                         const GBufferTargets& portalTargets) const
 {
     RenderPass& portalCompositePass = graph.AddPass(SID("Portal Composite"), VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT);
@@ -2179,7 +2199,7 @@ void RenderThread::SetupPortalComposite(RenderGraph& graph, const Core::ViewFami
     });
 }
 
-void RenderThread::SetupSkyboxRendering(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneDataIndex) const
+void RenderThread::SetupSkyboxRendering(RenderGraph& graph, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneDataIndex) const
 {
     RenderPass& skyboxPass = graph.AddPass(SID("Skybox"), VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT);
     skyboxPass.WriteColorAttachment(targets.outFinalColor);
@@ -2213,7 +2233,7 @@ void RenderThread::SetupSkyboxRendering(RenderGraph& graph, const Core::ViewFami
     });
 }
 
-StringID RenderThread::SetupTemporalAntialiasing(RenderGraph& graph, const Core::ViewFamily& viewFamily, const std::array<uint32_t, 2> renderExtent, const PostProcessTargets& ppTargets) const
+StringID RenderThread::SetupTemporalAntialiasing(RenderGraph& graph, const Core::ViewFamily& viewFamily, const Core::Array<uint32_t, 2> renderExtent, const PostProcessTargets& ppTargets) const
 {
     graph.CreateTexture(SID("taa_current"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
     renderGraph->CarryTextureToNextFrame(SID("taa_current"), SID("taa_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
@@ -2319,7 +2339,7 @@ StringID RenderThread::SetupTemporalAntialiasing(RenderGraph& graph, const Core:
     return SID("taa_output");
 }
 
-StringID RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamily& viewFamily, const std::array<uint32_t, 2> renderExtent, const PostProcessTargets& ppTargets,
+StringID RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewFamily& viewFamily, const Core::Array<uint32_t, 2> renderExtent, const PostProcessTargets& ppTargets,
                                            float deltaTime) const
 {
     renderGraph->CreateTexture(SID("post_process_output"), TextureInfo{POST_PROCESS_OUTPUT_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
@@ -2711,7 +2731,7 @@ StringID RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewF
     return SID("post_process_output");
 }
 
-void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& viewFamily, std::array<uint32_t, 2> renderExtent, StringID depthTarget, StringID targetImage,
+void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, StringID depthTarget, StringID targetImage,
                                     FrameResourceLimits& limits) const
 {
 #ifndef PACKAGED_BUILD

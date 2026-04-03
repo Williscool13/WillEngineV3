@@ -23,12 +23,15 @@ enum class AllocTag : uint32_t
     // Render
     RenderMesh,
     RenderMaterial,
+    Render,
     // ECS
     ECS,
     // Scheduler
     TaskScheduler,
     // SDL
     SDL,
+    // ImGui
+    ImGui,
 
     Count
 };

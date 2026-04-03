@@ -10,6 +10,7 @@
 #include "vk_context.h"
 #include "vk_utils.h"
 #include "engine/logging/engine_log.h"
+#include "render/interface/render_interface.h"
 
 namespace Render
 {
@@ -69,8 +70,12 @@ void Swapchain::Create(uint32_t width, uint32_t height)
     colorSpace = vkbSwapchain.color_space;
     extent = {vkbSwapchain.extent.width, vkbSwapchain.extent.height};
     usages = vkbSwapchain.image_usage_flags;
-    swapchainImages = imagesResult.value();
-    swapchainImageViews = viewsResult.value();
+
+    for (int32_t i = 0; i < Core::FRAME_BUFFER_COUNT; ++i) {
+        swapchainImages.PushBack(imagesResult.value()[i]);
+        swapchainImageViews.PushBack(viewsResult.value()[i]);
+
+    }
 }
 
 void Swapchain::Recreate(uint32_t width, uint32_t height)
@@ -81,6 +86,8 @@ void Swapchain::Recreate(uint32_t width, uint32_t height)
         vkDestroyImageView(context->device, swapchainImage, nullptr);
     }
 
+    swapchainImages.Clear();
+    swapchainImageViews.Clear();
     Create(width, height);
     Dump();
 }
@@ -92,7 +99,7 @@ void Swapchain::Dump()
     LOG_INFO(Renderer, "Format: {}", string_VkFormat(format));
     LOG_INFO(Renderer, "Color Space: {}", string_VkColorSpaceKHR(colorSpace));
     LOG_INFO(Renderer, "Extent: {}x{}", extent.width, extent.height);
-    LOG_INFO(Renderer, "Images: {}", swapchainImages.size());
-    LOG_INFO(Renderer, "Image Views: {}", swapchainImageViews.size());
+    LOG_INFO(Renderer, "Images: {}", swapchainImages.Size());
+    LOG_INFO(Renderer, "Image Views: {}", swapchainImageViews.Size());
 }
 } // Renderer

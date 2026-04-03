@@ -22,9 +22,11 @@ const char* AllocTagName(AllocTag tag)
         case AllocTag::PhysicsShape: return "PhysicsShape";
         case AllocTag::RenderMesh: return "RenderMesh";
         case AllocTag::RenderMaterial: return "RenderMaterial";
+        case AllocTag::Render: return "Render";
         case AllocTag::ECS: return "ECS";
         case AllocTag::TaskScheduler: return "TaskScheduler";
         case AllocTag::SDL: return "SDL";
+        case AllocTag::ImGui: return "ImGui";
         case AllocTag::Count: return "Count";
     }
     return "Unknown";
