@@ -6,15 +6,15 @@
 #define WILL_ENGINE_PIPELINE_MANAGER_H
 
 
-#include <array>
 #include <filesystem>
 #include <string>
-#include <unordered_map>
 #include <volk.h>
 
 #include "pipeline_category.h"
 #include "pipeline_data.h"
 #include "graphics_pipeline_builder.h"
+#include "core/containers/array.h"
+#include "core/containers/map.h"
 #include "core/string_id.h"
 #include "render/vulkan/vk_context.h"
 
@@ -33,7 +33,7 @@ public: // Thread-Safe
     void RequestReload() { bReloadRequested.store(true, std::memory_order_relaxed); }
 
 public:
-    explicit PipelineManager(VulkanContext* context, const std::array<VkDescriptorSetLayout, 2>& globalLayouts);
+    explicit PipelineManager(VulkanContext* context, Core::TlsfAllocator& renderAlloc, const Core::Array<VkDescriptorSetLayout, 2>& globalLayouts);
 
     ~PipelineManager();
 
@@ -44,7 +44,7 @@ public:
     void RegisterComputePipeline(StringID pipelineId, const std::filesystem::path& shaderPath, uint32_t pushConstantSize, PipelineCategory category);
 
     void RegisterComputePipelineCustomLayout(StringID pipelineId, const std::filesystem::path& shaderPath, uint32_t pushConstantSize, PipelineCategory category,
-                                             std::vector<VkDescriptorSetLayout> customLayouts);
+                                             const std::vector<VkDescriptorSetLayout>& customLayouts);
 
     void RegisterGraphicsPipeline(StringID pipelineId, GraphicsPipelineBuilder& builder, uint32_t pushConstantSize, VkShaderStageFlags pushConstantStages, PipelineCategory category);
 
@@ -68,7 +68,7 @@ private:
     template<typename PipelineMap>
     void CleanupRetiredPipelines(PipelineMap& pipelines)
     {
-        for (auto& [name, pipeline] : pipelines) {
+        for (auto [name, pipeline] : pipelines) {
             if (pipeline.retirementFrame != 0 && currentFrame > pipeline.retirementFrame) {
                 if (pipeline.retiredEntry.pipeline != VK_NULL_HANDLE) {
                     vkDestroyPipeline(context->device, pipeline.retiredEntry.pipeline, nullptr);
@@ -84,13 +84,16 @@ private:
     }
 
 private:
+    // Non-Owning
     VulkanContext* context;
     AssetLoad::AsyncAssetLoadManager* asyncAssetLoadManager{nullptr};
-    std::unordered_map<StringID, GraphicsPipelineData> graphicsPipelines;
-    std::unordered_map<StringID, ComputePipelineData> computePipelines;
+
+    // Owning
+    Core::Map<StringID, GraphicsPipelineData> graphicsPipelines;
+    Core::Map<StringID, ComputePipelineData> computePipelines;
 
     uint32_t currentFrame;
-    std::array<VkDescriptorSetLayout, 2> globalDescriptorSetLayouts;
+    Core::Array<VkDescriptorSetLayout, 2> globalDescriptorSetLayouts;
     VkPipelineCache pipelineCache{VK_NULL_HANDLE};
 
     std::atomic<bool> bReloadRequested{false};

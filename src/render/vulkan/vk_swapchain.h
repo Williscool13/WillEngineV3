@@ -5,8 +5,6 @@
 #ifndef WILLENGINETESTBED_SWAPCHAIN_H
 #define WILLENGINETESTBED_SWAPCHAIN_H
 
-#include <vector>
-
 #include <volk.h>
 
 #include "vk_config.h"

@@ -29,6 +29,20 @@ namespace Core
 template<typename K, typename V, typename H = Hash<K> >
 class FixedMap
 {
+    struct Slot
+    {
+        enum class State : uint8_t { Empty, Occupied, Dead };
+
+        alignas(K) unsigned char keyBuf[sizeof(K)];
+        alignas(V) unsigned char valBuf[sizeof(V)];
+        State state{State::Empty};
+
+        K& Key() { return *reinterpret_cast<K*>(keyBuf); }
+        const K& Key() const { return *reinterpret_cast<const K*>(keyBuf); }
+        V& Val() { return *reinterpret_cast<V*>(valBuf); }
+        const V& Val() const { return *reinterpret_cast<const V*>(valBuf); }
+    };
+
 public:
     FixedMap() = default;
 
@@ -299,6 +313,35 @@ public:
         KVPair operator*() { return {slots[index].Key(), slots[index].Val()}; }
     };
 
+    struct ConstIterator
+    {
+        const Slot* slots;
+        size_t capacity;
+        size_t index;
+
+        void Advance()
+        {
+            ++index;
+            while (index < capacity && slots[index].state != Slot::State::Occupied) { ++index; }
+        }
+
+        bool operator!=(const ConstIterator& other) const { return index != other.index; }
+
+        ConstIterator& operator++()
+        {
+            Advance();
+            return *this;
+        }
+
+        struct KVPair
+        {
+            const K& key;
+            const V& value;
+        };
+
+        KVPair operator*() const { return {slots[index].Key(), slots[index].Val()}; }
+    };
+
     Iterator begin()
     {
         size_t i = 0;
@@ -308,21 +351,19 @@ public:
 
     Iterator end() { return {slots_, capacity_, capacity_}; }
 
-private:
-    struct Slot
+    ConstIterator begin() const
     {
-        enum class State : uint8_t { Empty, Occupied, Dead };
+        size_t i = 0;
+        while (i < capacity_ && slots_[i].state != Slot::State::Occupied) { ++i; }
+        return {slots_, capacity_, i};
+    }
 
-        alignas(K) unsigned char keyBuf[sizeof(K)];
-        alignas(V) unsigned char valBuf[sizeof(V)];
-        State state{State::Empty};
+    ConstIterator end() const { return {slots_, capacity_, capacity_}; }
 
-        K& Key() { return *reinterpret_cast<K*>(keyBuf); }
-        const K& Key() const { return *reinterpret_cast<const K*>(keyBuf); }
-        V& Val() { return *reinterpret_cast<V*>(valBuf); }
-        const V& Val() const { return *reinterpret_cast<const V*>(valBuf); }
-    };
+    ConstIterator cbegin() const { return begin(); }
+    ConstIterator cend() const { return end(); }
 
+private:
     static size_t NextPow2(size_t n)
     {
         if (n == 0) { return 1; }

@@ -5,18 +5,14 @@
 #ifndef WILL_ENGINE_RENDER_INTERFACE_H
 #define WILL_ENGINE_RENDER_INTERFACE_H
 
-#include <cstdint>
-#include <string>
-#include <memory>
-
 #include <glm/glm.hpp>
+#include <glm/detail/type_quat.hpp>
 
 #include "core/string_id.h"
-#include "core/memory/handle.h"
-#include "../../core/types/transform.h"
+#include "core/types/transform.h"
 #include "core/time/time_frame.h"
 #include "engine/resources/material/material_manager.h"
-#include "glm/detail/type_quat.hpp"
+
 
 #include "render/shaders/model_interop.h"
 #include "render/shaders/push_constant_interop.h"

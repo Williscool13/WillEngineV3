@@ -5,18 +5,20 @@
 #include "pipeline_manager.h"
 
 #include <fstream>
-#include <ranges>
 
 #include "graphics_pipeline_builder.h"
 #include "asset-load/async_asset_load_manager.h"
+#include "core/memory/tlsf_allocator.h"
 #include "engine/logging/engine_log.h"
 #include "platform/paths.h"
 #include "render/vulkan/vk_utils.h"
 
 namespace Render
 {
-PipelineManager::PipelineManager(VulkanContext* context, const std::array<VkDescriptorSetLayout, 2>& globalLayouts)
-    : context(context), currentFrame(0), globalDescriptorSetLayouts(globalLayouts)
+PipelineManager::PipelineManager(VulkanContext* context, Core::TlsfAllocator& renderAlloc, const Core::Array<VkDescriptorSetLayout, 2>& globalLayouts)
+    : context(context), currentFrame(0), globalDescriptorSetLayouts(globalLayouts),
+      graphicsPipelines(&renderAlloc, Core::AllocTag::Render, 1024),
+      computePipelines(&renderAlloc, Core::AllocTag::Render, 1024)
 {
     std::filesystem::path cachePath = Platform::GetCachePath() / "pipeline.cache";
 
@@ -89,18 +91,18 @@ PipelineManager::~PipelineManager()
         }
     };
 
-    for (auto& pipeline : graphicsPipelines) {
-        cleanupPipeline(pipeline.second);
+    for (auto [id, pipeline] : graphicsPipelines) {
+        cleanupPipeline(pipeline);
     }
 
-    for (auto& pipeline : computePipelines) {
-        cleanupPipeline(pipeline.second);
+    for (auto [id, pipeline] : computePipelines) {
+        cleanupPipeline(pipeline);
     }
 }
 
 void PipelineManager::RegisterComputePipeline(StringID pipelineId, const std::filesystem::path& shaderPath, uint32_t pushConstantSize, PipelineCategory category)
 {
-    if (computePipelines.contains(pipelineId)) {
+    if (computePipelines.Contains(pipelineId)) {
         LOG_WARN(Renderer, "Pipeline '{}' already registered, skipping", pipelineId.ToString());
         return;
     }
@@ -115,8 +117,8 @@ void PipelineManager::RegisterComputePipeline(StringID pipelineId, const std::fi
     data.pushConstantRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 
     data.layoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    data.layoutCreateInfo.pSetLayouts = globalDescriptorSetLayouts.data();
-    data.layoutCreateInfo.setLayoutCount = static_cast<uint32_t>(globalDescriptorSetLayouts.size());
+    data.layoutCreateInfo.pSetLayouts = globalDescriptorSetLayouts.Data();
+    data.layoutCreateInfo.setLayoutCount = static_cast<uint32_t>(globalDescriptorSetLayouts.Size());
     data.layoutCreateInfo.pPushConstantRanges = &data.pushConstantRange;
     data.layoutCreateInfo.pushConstantRangeCount = pushConstantSize > 0 ? 1 : 0;
 
@@ -126,9 +128,9 @@ void PipelineManager::RegisterComputePipeline(StringID pipelineId, const std::fi
 }
 
 void PipelineManager::RegisterComputePipelineCustomLayout(StringID pipelineId, const std::filesystem::path& shaderPath, uint32_t pushConstantSize, PipelineCategory category,
-                                                          std::vector<VkDescriptorSetLayout> customLayouts)
+                                                          const std::vector<VkDescriptorSetLayout>& customLayouts)
 {
-    if (computePipelines.contains(pipelineId)) {
+    if (computePipelines.Contains(pipelineId)) {
         LOG_WARN(Renderer, "Pipeline '{}' already registered, skipping", pipelineId.ToString());
         return;
     }
@@ -142,7 +144,7 @@ void PipelineManager::RegisterComputePipelineCustomLayout(StringID pipelineId, c
     data.pushConstantRange.size = pushConstantSize;
     data.pushConstantRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 
-    data.customLayout = std::move(customLayouts);
+    data.customLayout = customLayouts;
     data.layoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     data.layoutCreateInfo.pSetLayouts = data.customLayout.data();
     data.layoutCreateInfo.setLayoutCount = data.customLayout.size();
@@ -156,7 +158,7 @@ void PipelineManager::RegisterComputePipelineCustomLayout(StringID pipelineId, c
 
 void PipelineManager::RegisterGraphicsPipeline(StringID pipelineId, GraphicsPipelineBuilder& builder, uint32_t pushConstantSize, VkShaderStageFlags pushConstantStages, PipelineCategory category)
 {
-    if (graphicsPipelines.contains(pipelineId)) {
+    if (graphicsPipelines.Contains(pipelineId)) {
         LOG_WARN(Renderer, "Pipeline '{}' already registered, skipping", pipelineId.ToString());
         return;
     }
@@ -215,8 +217,8 @@ void PipelineManager::RegisterGraphicsPipeline(StringID pipelineId, GraphicsPipe
 
     // Setup pipeline layout
     data.layoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    data.layoutCreateInfo.pSetLayouts = globalDescriptorSetLayouts.data();
-    data.layoutCreateInfo.setLayoutCount = static_cast<uint32_t>(globalDescriptorSetLayouts.size());
+    data.layoutCreateInfo.pSetLayouts = globalDescriptorSetLayouts.Data();
+    data.layoutCreateInfo.setLayoutCount = static_cast<uint32_t>(globalDescriptorSetLayouts.Size());
     data.layoutCreateInfo.pPushConstantRanges = &data.pushConstantRange;
     data.layoutCreateInfo.pushConstantRangeCount = pushConstantSize > 0 ? 1 : 0;
 
@@ -227,12 +229,12 @@ void PipelineManager::RegisterGraphicsPipeline(StringID pipelineId, GraphicsPipe
 
 const PipelineEntry* PipelineManager::GetPipelineEntry(StringID pipelineId)
 {
-    if (auto it = computePipelines.find(pipelineId); it != computePipelines.end()) {
-        return &it->second.activeEntry;
+    if (auto* data = computePipelines.Find(pipelineId)) {
+        return &data->activeEntry;
     }
 
-    if (auto it = graphicsPipelines.find(pipelineId); it != graphicsPipelines.end()) {
-        return &it->second.activeEntry;
+    if (auto* data = graphicsPipelines.Find(pipelineId)) {
+        return &data->activeEntry;
     }
 
     LOG_ERROR(Renderer, "Pipeline '{}' not found", pipelineId.ToString());
@@ -266,17 +268,17 @@ void PipelineManager::Update(uint32_t frameNumber)
 
     AssetLoad::PipelineLoadComplete complete;
     while (asyncAssetLoadManager->TryDequeuePipelineComplete(complete)) {
-        if (auto it = computePipelines.find(complete.pipelineData->pipelineId); it != computePipelines.end()) {
+        if (auto* data = computePipelines.Find(complete.pipelineData->pipelineId)) {
             if (complete.bSuccess) {
                 LOG_INFO(Renderer, "Compute pipeline '{}' loaded", complete.pipelineData->pipelineId.ToString());
             }
-            HandlePipelineCompletion(it->second, complete.bSuccess);
+            HandlePipelineCompletion(*data, complete.bSuccess);
         }
-        else if (auto it2 = graphicsPipelines.find(complete.pipelineData->pipelineId); it2 != graphicsPipelines.end()) {
+        else if (auto* data = graphicsPipelines.Find(complete.pipelineData->pipelineId)) {
             if (complete.bSuccess) {
                 LOG_INFO(Renderer, "Graphics pipeline '{}' loaded", complete.pipelineData->pipelineId.ToString());
             }
-            HandlePipelineCompletion(it2->second, complete.bSuccess);
+            HandlePipelineCompletion(*data, complete.bSuccess);
         }
         else {
             LOG_ERROR(Renderer, "Pipeline '{}' not found", complete.pipelineData->pipelineId.ToString());
@@ -293,7 +295,7 @@ void PipelineManager::Update(uint32_t frameNumber)
 
 bool PipelineManager::IsCategoryReady(PipelineCategory category) const
 {
-    for (const auto& pipeline : computePipelines | std::views::values) {
+    for (auto [id, pipeline] : computePipelines) {
         if (static_cast<uint32_t>(pipeline.category & category) != 0) {
             if (pipeline.activeEntry.layout == VK_NULL_HANDLE || pipeline.activeEntry.pipeline == VK_NULL_HANDLE) {
                 return false;
@@ -301,7 +303,7 @@ bool PipelineManager::IsCategoryReady(PipelineCategory category) const
         }
     }
 
-    for (const auto& pipeline : graphicsPipelines | std::views::values) { // NOLINT(*-use-anyofallof)
+    for (auto [id, pipeline] : graphicsPipelines) {
         if (static_cast<uint32_t>(pipeline.category & category) != 0) {
             if (pipeline.activeEntry.layout == VK_NULL_HANDLE || pipeline.activeEntry.pipeline == VK_NULL_HANDLE) {
                 return false;
@@ -319,7 +321,7 @@ void PipelineManager::SetAssetLoadThread(AssetLoad::AsyncAssetLoadManager* _asyn
 
 void PipelineManager::ReloadModified()
 {
-    for (auto& [pipelineId, data] : computePipelines) {
+    for (auto [pipelineId, data] : computePipelines) {
         if (data.bLoading || data.retirementFrame != 0) { continue; }
 
         auto currentTime = std::filesystem::last_write_time(data.shaderPath);
@@ -330,7 +332,7 @@ void PipelineManager::ReloadModified()
         }
     }
 
-    for (auto& [pipelineId, data] : graphicsPipelines) {
+    for (auto [pipelineId, data] : graphicsPipelines) {
         if (data.bLoading || data.retirementFrame != 0) { continue; }
 
         auto currentTime = std::filesystem::file_time_type::min();

@@ -51,11 +51,11 @@ RenderThread::RenderThread(Core::MemoryManager& memoryManager, Core::FrameSync* 
     renderExtents = new(renderAlloc.Alloc(sizeof(RenderExtents), Core::AllocTag::Render)) RenderExtents(width, height, 1.0f);
     resourceManager = new(renderAlloc.Alloc(sizeof(ResourceManager), Core::AllocTag::Render)) ResourceManager(context);
     renderGraph = std::make_unique<RenderGraph>(context, resourceManager);
-    std::array layouts{
+    Core::Array<VkDescriptorSetLayout, 2> layouts{
         resourceManager->bindlessSamplerTextureDescriptorBuffer.descriptorSetLayout.handle,
         resourceManager->bindlessRDGTransientDescriptorBuffer.descriptorSetLayout.handle
     };
-    pipelineManager = new(renderAlloc.Alloc(sizeof(PipelineManager), Core::AllocTag::Render)) PipelineManager(context, layouts);
+    pipelineManager = new(renderAlloc.Alloc(sizeof(PipelineManager), Core::AllocTag::Render)) PipelineManager(context, renderAlloc, layouts);
     imgui = new(renderAlloc.Alloc(sizeof(ImguiWrapper), Core::AllocTag::Render)) ImguiWrapper(context, window, Core::FRAME_BUFFER_COUNT, swapchain->format, pipelineManager->GetPipelineCache());
 
     tempBufferBarriers = Core::Vector<VkBufferMemoryBarrier2>(&renderAlloc, Core::AllocTag::Render);
@@ -899,15 +899,15 @@ void RenderThread::ProcessAcquisitions(VkCommandBuffer cmd,
 
 void RenderThread::CreatePipelines()
 {
-    std::array layouts{
+    Core::Array<VkDescriptorSetLayout, 2> layouts{
         resourceManager->bindlessSamplerTextureDescriptorBuffer.descriptorSetLayout.handle,
         resourceManager->bindlessRDGTransientDescriptorBuffer.descriptorSetLayout.handle
     };
 
     VkPipelineLayoutCreateInfo layoutInfo{};
     layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    layoutInfo.pSetLayouts = layouts.data();
-    layoutInfo.setLayoutCount = layouts.size();
+    layoutInfo.pSetLayouts = layouts.Data();
+    layoutInfo.setLayoutCount = layouts.Size();
     globalPipelineLayout = PipelineLayout::CreatePipelineLayout(context, layoutInfo);
 
     pipelineManager->RegisterComputePipeline(SID("instancing_instance_lod"), Platform::GetShaderPath() / "instancing_instance_lod_compute.spv",
