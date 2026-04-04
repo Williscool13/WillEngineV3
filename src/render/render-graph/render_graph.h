@@ -4,18 +4,17 @@
 
 #ifndef WILL_ENGINE_RENDER_GRAPH_H
 #define WILL_ENGINE_RENDER_GRAPH_H
-#include <functional>
-#include <memory>
-#include <string>
 
-#include <volk.h>
-
-#include "render_graph_resources.h"
-#include "render/vulkan/vk_resources.h"
+#include "core/containers/arena_fixed_map.h"
+#include "core/containers/arena_fixed_vector.h"
+#include "core/containers/array.h"
+#include "core/containers/vector.h"
+#include "core/memory/arena.h"
 #include "core/memory/handle_allocator.h"
-#include "../interface/render_interface.h"
+#include "render/interface/render_interface.h"
+#include "render/vulkan/vk_resources.h"
 #include "render/render_config.h"
-
+#include "render_graph_resources.h"
 
 namespace Render
 {
@@ -24,31 +23,10 @@ class RenderPass;
 struct TextureResource;
 using TransientImageHandle = Core::Handle<TextureResource>;
 
-struct TextureFrameCarryover
-{
-    StringID srcName;
-    StringID dstName;
-
-    VkImage physicalImage;
-    TextureInfo textInfo;
-    VkImageLayout layout;
-    VkImageUsageFlags accumulatedUsage;
-};
-
-struct BufferFrameCarryover
-{
-    StringID srcName;
-    StringID dstName;
-
-    VkBuffer buffer;
-    BufferInfo bufferInfo;
-    VkBufferUsageFlags accumulatedUsage;
-};
-
 class RenderGraph
 {
 public:
-    RenderGraph(VulkanContext* context, ResourceManager* resourceManager);
+    RenderGraph(VulkanContext* context, ResourceManager* resourceManager, Core::TlsfAllocator& alloc, Core::Arena& arena);
 
     ~RenderGraph();
 
@@ -130,21 +108,23 @@ public:
 public: // Transient Uploader
     UploadAllocation AllocateTransient(size_t size);
 
-    VkBuffer GetTransientUploadBuffer() const { return uploadArenas[currentFrameIndex].buffer.handle; }
+    [[nodiscard]] VkBuffer GetTransientUploadBuffer() const { return uploadArenas[currentFrameIndex].buffer.handle; }
 
 public: // Readback
-    VkBuffer GetReadback() const { return meshletCountReadbacks[currentFrameIndex].buffer.handle; }
+    [[nodiscard]] VkBuffer GetReadback() const { return meshletCountReadbacks[currentFrameIndex].buffer.handle; }
 
-    ReadbackStruct* GetReadbackData() const { return static_cast<ReadbackStruct*>(meshletCountReadbacks[currentFrameIndex].buffer.allocationInfo.pMappedData); }
+    [[nodiscard]] ReadbackStruct* GetReadbackData() const { return static_cast<ReadbackStruct*>(meshletCountReadbacks[currentFrameIndex].buffer.allocationInfo.pMappedData); }
 
 private:
     friend class RenderPass;
     VulkanContext* context;
     ResourceManager* resourceManager;
+    Core::TlsfAllocator* alloc;
+    Core::Arena* arena;
 
     // Logical resources
-    std::vector<TextureResource> textures;
-    std::unordered_map<StringID, uint32_t> textureNameToIndex;
+    Core::ArenaFixedVector<TextureResource> textures;
+    Core::ArenaFixedMap<StringID, uint32_t> textureNameToIndex;
 
     Core::HandleAllocator<TextureResource, RDG_MAX_SAMPLED_TEXTURES> transientSampledImageHandleAllocator;
     Core::HandleAllocator<TextureResource, RDG_MAX_STORAGE_FLOAT4> transientStorageFloat4HandleAllocator;
@@ -154,21 +134,21 @@ private:
     Core::HandleAllocator<TextureResource, RDG_MAX_STORAGE_UINT2> transientStorageUInt2HandleAllocator;
     Core::HandleAllocator<TextureResource, RDG_MAX_STORAGE_UINT> transientStorageUIntHandleAllocator;
 
-    std::vector<BufferResource> buffers;
-    std::unordered_map<StringID, uint32_t> bufferNameToIndex;
+    Core::ArenaFixedVector<BufferResource> buffers;
+    Core::ArenaFixedMap<StringID, uint32_t> bufferNameToIndex;
 
     // Physical resources
-    std::vector<PhysicalResource> physicalResources;
+    Core::Vector<PhysicalResource> physicalResources;
 
     // Render passes
-    std::vector<std::unique_ptr<RenderPass> > passes;
+    Core::ArenaFixedVector<RenderPass*> passes;
 
-    std::vector<TextureFrameCarryover> textureCarryovers;
-    std::vector<BufferFrameCarryover> bufferCarryovers;
+    Core::Vector<TextureFrameCarryover> textureCarryovers;
+    Core::Vector<BufferFrameCarryover> bufferCarryovers;
 
     uint32_t currentFrameIndex{0};
-    std::array<TransientUploadArena, Core::FRAME_BUFFER_COUNT> uploadArenas{};
-    std::array<TransientReadback, Core::FRAME_BUFFER_COUNT> meshletCountReadbacks{};
+    Core::Array<TransientUploadArena, Core::FRAME_BUFFER_COUNT> uploadArenas{};
+    Core::Array<TransientReadback, Core::FRAME_BUFFER_COUNT> meshletCountReadbacks{};
 
     bool bRemoveSwapchainPhysicals{false};
     bool bDestroyViewportAssociated{false};

@@ -36,6 +36,7 @@ inline const StringID GEOMETRY_MESHLET_BUFFER = SID("meshlet_buffer");
 inline const StringID GEOMETRY_MATERIAL_BUFFER = SID("material_buffer");
 
 inline constexpr int32_t RDG_MAX_MIP_LEVELS = 12;
+inline constexpr int32_t RDG_MAX_PASSES = 256;
 inline constexpr int32_t RDG_DEFAULT_UPLOAD_LINEAR_ALLOCATOR_SIZE = 1 * 1024 * 1024; // 1MB base (doubles as needed)
 
 inline constexpr int32_t BINDLESS_MODEL_BUFFER_COUNT = 16384;

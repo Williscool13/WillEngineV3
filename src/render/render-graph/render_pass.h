@@ -4,10 +4,9 @@
 
 #ifndef WILL_ENGINE_RENDER_PASS_H
 #define WILL_ENGINE_RENDER_PASS_H
-#include <string>
-#include <vector>
-
 #include "render_graph.h"
+#include "core/containers/inline_function.h"
+#include "core/containers/inline_vector.h"
 
 namespace Render
 {
@@ -55,9 +54,6 @@ public:
 
     RenderPass& ReadCopyImage(StringID textureId);
 
-
-
-
     // Buffers
     RenderPass& WriteBuffer(StringID bufferId);
 
@@ -78,7 +74,12 @@ public:
     RenderPass& ReadIndirectCountBuffer(StringID bufferId);
 
 
-    RenderPass& Execute(std::function<void(VkCommandBuffer)> func);
+    template<typename F>
+    RenderPass& Execute(F&& func)
+    {
+        executeFunc = Core::InlineFunction<void(VkCommandBuffer), 128>(std::forward<F>(func));
+        return *this;
+    }
 
     RenderGraph& graph;
     StringID renderPassId;
@@ -87,31 +88,30 @@ public:
 private:
     friend class RenderGraph;
 
-    std::vector<uint32_t> colorAttachments{};
+    Core::InlineVector<uint32_t, 8> colorAttachments{};
     uint32_t depthStencilAttachment{UINT_MAX};
     DepthAccessType depthAccessType{0};
 
+    Core::InlineVector<uint32_t, 32> storageImageReads;
+    Core::InlineVector<uint32_t, 32> storageImageWrites;
+    Core::InlineVector<uint32_t, 32> sampledImageReads;
+    Core::InlineVector<uint32_t, 32> imageReadWrite;
+    Core::InlineVector<uint32_t, 16> clearImageWrites;
+    Core::InlineVector<uint32_t, 16> blitImageReads;
+    Core::InlineVector<uint32_t, 16> blitImageWrites;
+    Core::InlineVector<uint32_t, 16> copyImageReads;
+    Core::InlineVector<uint32_t, 16> copyImageWrites;
 
-    std::vector<uint32_t> storageImageReads;
-    std::vector<uint32_t> storageImageWrites;
-    std::vector<uint32_t> sampledImageReads;
-    std::vector<uint32_t> imageReadWrite;
-    std::vector<uint32_t> clearImageWrites;
-    std::vector<uint32_t> blitImageReads;
-    std::vector<uint32_t> blitImageWrites;
-    std::vector<uint32_t> copyImageReads;
-    std::vector<uint32_t> copyImageWrites;
+    Core::InlineVector<uint32_t, 32> bufferReads;
+    Core::InlineVector<uint32_t, 32> bufferWrites;
+    Core::InlineVector<uint32_t, 32> bufferReadWrite;
+    Core::InlineVector<uint32_t, 32> bufferTransferReads;
+    Core::InlineVector<uint32_t, 32> bufferTransferWrites;
+    Core::InlineVector<uint32_t, 16> bufferIndexRead;
+    Core::InlineVector<uint32_t, 16> bufferIndirectReads;
+    Core::InlineVector<uint32_t, 16> bufferIndirectCountReads;
 
-    std::vector<uint32_t> bufferReads;
-    std::vector<uint32_t> bufferWrites;
-    std::vector<uint32_t> bufferReadWrite;
-    std::vector<uint32_t> bufferTransferReads;
-    std::vector<uint32_t> bufferTransferWrites;
-    std::vector<uint32_t> bufferIndexRead;
-    std::vector<uint32_t> bufferIndirectReads;
-    std::vector<uint32_t> bufferIndirectCountReads;
-
-    std::function<void(VkCommandBuffer_T*)> executeFunc;
+    Core::InlineFunction<void(VkCommandBuffer), 128> executeFunc;
 };
 } // Render
 

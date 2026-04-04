@@ -6,10 +6,10 @@
 
 #include <cassert>
 #include <utility>
-#include <unordered_set>
 
 #include "render_graph_config.h"
 #include "render_pass.h"
+#include "core/containers/inline_vector.h"
 #include "engine/logging/engine_log.h"
 #include "render/resource_manager.h"
 #include "render/vulkan/vk_utils.h"
@@ -17,15 +17,19 @@
 
 namespace Render
 {
-RenderGraph::RenderGraph(VulkanContext* context, ResourceManager* resourceManager)
-    : context(context), resourceManager(resourceManager)
+RenderGraph::RenderGraph(VulkanContext* context, ResourceManager* resourceManager, Core::TlsfAllocator& alloc, Core::Arena& arena)
+    : context(context), resourceManager(resourceManager), alloc(&alloc), arena(&arena),
+      textures(&arena, RDG_MAX_SAMPLED_TEXTURES),
+      textureNameToIndex(&arena, RDG_MAX_SAMPLED_TEXTURES),
+      buffers(&arena, 256),
+      bufferNameToIndex(&arena, 256),
+      physicalResources(&alloc, Core::AllocTag::Render, 256),
+      passes(&arena, RDG_MAX_PASSES),
+      textureCarryovers(&alloc, Core::AllocTag::Render),
+      bufferCarryovers(&alloc, Core::AllocTag::Render)
 {
-    textures.reserve(RDG_MAX_SAMPLED_TEXTURES);
-    physicalResources.reserve(256);
-    textures.reserve(256);
-    buffers.reserve(256);
 
-    for (int32_t i = 0; i < uploadArenas.size(); ++i) {
+    for (int32_t i = 0; i < uploadArenas.Size(); ++i) {
         VkBufferCreateInfo bufferInfo = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
         bufferInfo.pNext = nullptr;
         bufferInfo.usage = VK_BUFFER_USAGE_2_TRANSFER_SRC_BIT;
@@ -56,8 +60,9 @@ RenderGraph::~RenderGraph()
 
 RenderPass& RenderGraph::AddPass(StringID passId, VkPipelineStageFlags2 stages)
 {
-    passes.push_back(std::make_unique<RenderPass>(*this, passId, stages));
-    return *passes.back();
+    auto* pass = new(arena->AllocRaw(sizeof(RenderPass), alignof(RenderPass))) RenderPass(*this, passId, stages);
+    passes.PushBack(pass);
+    return *pass;
 }
 
 void RenderGraph::PrunePasses()
@@ -127,7 +132,7 @@ void RenderGraph::AccumulateTextureUsage()
 
 void RenderGraph::CalculateLifetimes()
 {
-    for (uint32_t passIdx = 0; passIdx < passes.size(); passIdx++) {
+    for (uint32_t passIdx = 0; passIdx < passes.Size(); passIdx++) {
         auto& pass = passes[passIdx];
 
         auto UpdateTextureLifetime = [passIdx](TextureResource& tex) {
@@ -194,7 +199,7 @@ void RenderGraph::Compile(int64_t currentFrame)
 
             // Try to find existing physical resource with matching dimensions
             bool foundAlias = false;
-            for (uint32_t i = 0; i < physicalResources.size(); i++) {
+            for (uint32_t i = 0; i < physicalResources.Size(); i++) {
                 auto& phys = physicalResources[i];
                 if (phys.bIsImported) { continue; }
                 if (!phys.bCanAlias) { continue; }
@@ -202,7 +207,7 @@ void RenderGraph::Compile(int64_t currentFrame)
 
                 // Cross-frame resources can't alias at all.
                 // Well, not strictly true. If a texture is carried over to next frame, it can be aliased if the other use is before the texture's first pass.
-                if (!tex.bCanUseAliasedTexture && !phys.logicalResourceIndices.empty()) {
+                if (!tex.bCanUseAliasedTexture && !phys.logicalResourceIndices.IsEmpty()) {
                     continue;
                 }
 
@@ -230,7 +235,7 @@ void RenderGraph::Compile(int64_t currentFrame)
                     if (!phys.IsAllocated()) {
                         phys.dimensions.imageUsage |= tex.accumulatedUsage;
                     }
-                    phys.logicalResourceIndices.push_back(tex.index);
+                    phys.logicalResourceIndices.PushBack(tex.index);
                     phys.bCanAlias = tex.bCanUseAliasedTexture;
                     phys.bIsViewportScaled |= tex.bIsViewportScaled;
                     AppendUsageChain(phys, tex.textureId, tex.bCanUseAliasedTexture, bDebugLogging);
@@ -241,11 +246,11 @@ void RenderGraph::Compile(int64_t currentFrame)
 
             if (!foundAlias) {
                 // No alias found, allocate new physical resource
-                tex.physicalIndex = physicalResources.size();
-                physicalResources.emplace_back();
-                auto& newPhys = physicalResources.back();
+                tex.physicalIndex = physicalResources.Size();
+                physicalResources.EmplaceBack();
+                auto& newPhys = physicalResources.Back();
                 newPhys.dimensions = desiredDim;
-                newPhys.logicalResourceIndices.push_back(tex.index);
+                newPhys.logicalResourceIndices.PushBack(tex.index);
                 newPhys.bCanAlias = tex.bCanUseAliasedTexture;
                 newPhys.bIsViewportScaled = tex.bIsViewportScaled;
                 AppendUsageChain(newPhys, tex.textureId, tex.bCanUseAliasedTexture, bDebugLogging);
@@ -279,7 +284,7 @@ void RenderGraph::Compile(int64_t currentFrame)
             desiredDim.resourceId = buf.bufferId;
 
             bool foundAlias = false;
-            for (uint32_t i = 0; i < physicalResources.size(); i++) {
+            for (uint32_t i = 0; i < physicalResources.Size(); i++) {
                 auto& phys = physicalResources[i];
 
                 if (phys.bIsImported) { continue; }
@@ -289,7 +294,7 @@ void RenderGraph::Compile(int64_t currentFrame)
                 if (phys.dimensions.bufferSize != desiredDim.bufferSize) { continue; }
 
                 // Cross-frame resources can't alias at all.
-                if (!buf.bCanUseAliasedBuffer && !phys.logicalResourceIndices.empty()) {
+                if (!buf.bCanUseAliasedBuffer && !phys.logicalResourceIndices.IsEmpty()) {
                     continue;
                 }
 
@@ -311,7 +316,7 @@ void RenderGraph::Compile(int64_t currentFrame)
 
                 if (canAlias) {
                     buf.physicalIndex = i;
-                    phys.logicalResourceIndices.push_back(buf.index);
+                    phys.logicalResourceIndices.PushBack(buf.index);
                     if (!phys.IsAllocated()) {
                         phys.dimensions.bufferUsage |= buf.accumulatedUsage;
                     }
@@ -324,11 +329,11 @@ void RenderGraph::Compile(int64_t currentFrame)
             }
 
             if (!foundAlias) {
-                buf.physicalIndex = physicalResources.size();
-                physicalResources.emplace_back();
-                auto& newPhys = physicalResources.back();
+                buf.physicalIndex = physicalResources.Size();
+                physicalResources.EmplaceBack();
+                auto& newPhys = physicalResources.Back();
                 newPhys.dimensions = desiredDim;
-                newPhys.logicalResourceIndices.push_back(buf.index);
+                newPhys.logicalResourceIndices.PushBack(buf.index);
                 newPhys.bCanAlias = buf.bCanUseAliasedBuffer;
                 newPhys.bIsViewportScaled = buf.bIsViewportScaled;
                 AppendUsageChain(newPhys, buf.bufferId, buf.bCanUseAliasedBuffer, bDebugLogging);
@@ -452,7 +457,7 @@ void RenderGraph::Compile(int64_t currentFrame)
 
     if (bDebugLogging) {
         SPDLOG_INFO("=== Physical Resource Aliasing Chains ===");
-        for (size_t i = 0; i < physicalResources.size(); ++i) {
+        for (size_t i = 0; i < physicalResources.Size(); ++i) {
             const auto& phys = physicalResources[i];
             if (!phys.usageChain.empty()) {
                 SPDLOG_INFO("  Phys[{}]: {}", i, phys.usageChain);
@@ -476,7 +481,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
         if (bDebugLogging) {
             SPDLOG_INFO("[PASS] {}", pass->renderPassId.ToString());
         }
-        std::vector<VkImageMemoryBarrier2> barriers;
+        Core::InlineVector<VkImageMemoryBarrier2, 32> barriers;
 
         auto GetPhysical = [this](uint32_t texIndex) -> PhysicalResource& {
             return physicalResources[textures[texIndex].physicalIndex];
@@ -496,7 +501,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                     VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
                 );
                 LogImageBarrier(tex.textureId, barrier, tex.physicalIndex);
-                barriers.push_back(barrier);
+                barriers.PushBack(barrier);
             }
 
             if (pass->depthStencilAttachment != UINT_MAX) {
@@ -518,7 +523,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                     phys.event.stages, phys.event.access, tex.layout, dstStages, dstAccess, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
                 );
                 LogImageBarrier(tex.textureId, barrier, tex.physicalIndex);
-                barriers.push_back(barrier);
+                barriers.PushBack(barrier);
             }
 
             for (const uint32_t texIndex : pass->storageImageWrites) {
@@ -531,7 +536,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                     pass->stages, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL
                 );
                 LogImageBarrier(tex.textureId, barrier, tex.physicalIndex);
-                barriers.push_back(barrier);
+                barriers.PushBack(barrier);
             }
 
             for (const uint32_t texIndex : pass->storageImageReads) {
@@ -544,7 +549,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                     pass->stages, VK_ACCESS_2_SHADER_STORAGE_READ_BIT, VK_IMAGE_LAYOUT_GENERAL
                 );
                 LogImageBarrier(tex.textureId, barrier, tex.physicalIndex);
-                barriers.push_back(barrier);
+                barriers.PushBack(barrier);
             }
 
             for (const uint32_t texIndex : pass->sampledImageReads) {
@@ -557,7 +562,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                     pass->stages, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
                 );
                 LogImageBarrier(tex.textureId, barrier, tex.physicalIndex);
-                barriers.push_back(barrier);
+                barriers.PushBack(barrier);
             }
 
             for (const uint32_t texIndex : pass->imageReadWrite) {
@@ -570,7 +575,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                     pass->stages, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL
                 );
                 LogImageBarrier(tex.textureId, barrier, tex.physicalIndex);
-                barriers.push_back(barrier);
+                barriers.PushBack(barrier);
             }
 
             for (const uint32_t texIndex : pass->blitImageReads) {
@@ -583,7 +588,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                     VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
                 );
                 LogImageBarrier(tex.textureId, barrier, tex.physicalIndex);
-                barriers.push_back(barrier);
+                barriers.PushBack(barrier);
             }
 
             for (const uint32_t texIndex : pass->clearImageWrites) {
@@ -596,7 +601,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                     VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
                 );
                 LogImageBarrier(tex.textureId, barrier, tex.physicalIndex);
-                barriers.push_back(barrier);
+                barriers.PushBack(barrier);
             }
 
             for (const uint32_t texIndex : pass->blitImageWrites) {
@@ -609,7 +614,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                     VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
                 );
                 LogImageBarrier(tex.textureId, barrier, tex.physicalIndex);
-                barriers.push_back(barrier);
+                barriers.PushBack(barrier);
             }
 
             for (const uint32_t texIndex : pass->copyImageReads) {
@@ -622,7 +627,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                     VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
                 );
                 LogImageBarrier(tex.textureId, barrier, tex.physicalIndex);
-                barriers.push_back(barrier);
+                barriers.PushBack(barrier);
             }
 
             for (const uint32_t texIndex : pass->copyImageWrites) {
@@ -635,10 +640,10 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                     VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
                 );
                 LogImageBarrier(tex.textureId, barrier, tex.physicalIndex);
-                barriers.push_back(barrier);
+                barriers.PushBack(barrier);
             }
 
-            std::vector<VkBufferMemoryBarrier2> bufferBarriers;
+            Core::InlineVector<VkBufferMemoryBarrier2, 16> bufferBarriers;
 
             for (const uint32_t bufIndex : pass->bufferWrites) {
                 auto& buf = buffers[bufIndex];
@@ -655,7 +660,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                     .offset = 0,
                     .size = VK_WHOLE_SIZE
                 };
-                bufferBarriers.push_back(barrier);
+                bufferBarriers.PushBack(barrier);
                 LogBufferBarrier(buf.bufferId, desiredAccess);
             }
 
@@ -674,7 +679,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                     .offset = 0,
                     .size = VK_WHOLE_SIZE
                 };
-                bufferBarriers.push_back(barrier);
+                bufferBarriers.PushBack(barrier);
                 LogBufferBarrier(buf.bufferId, desiredAccess);
             }
 
@@ -693,7 +698,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                     .offset = 0,
                     .size = VK_WHOLE_SIZE
                 };
-                bufferBarriers.push_back(barrier);
+                bufferBarriers.PushBack(barrier);
                 LogBufferBarrier(buf.bufferId, desiredAccess);
             }
 
@@ -712,7 +717,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                     .offset = 0,
                     .size = VK_WHOLE_SIZE
                 };
-                bufferBarriers.push_back(barrier);
+                bufferBarriers.PushBack(barrier);
                 LogBufferBarrier(buf.bufferId, desiredAccess);
             }
 
@@ -731,7 +736,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                     .offset = 0,
                     .size = VK_WHOLE_SIZE
                 };
-                bufferBarriers.push_back(barrier);
+                bufferBarriers.PushBack(barrier);
                 LogBufferBarrier(buf.bufferId, desiredAccess);
             }
 
@@ -750,7 +755,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                     .offset = 0,
                     .size = VK_WHOLE_SIZE
                 };
-                bufferBarriers.push_back(barrier);
+                bufferBarriers.PushBack(barrier);
                 LogBufferBarrier(buf.bufferId, desiredAccess);
             }
 
@@ -769,7 +774,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                     .offset = 0,
                     .size = VK_WHOLE_SIZE
                 };
-                bufferBarriers.push_back(barrier);
+                bufferBarriers.PushBack(barrier);
                 LogBufferBarrier(buf.bufferId, desiredAccess);
             }
 
@@ -788,26 +793,26 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                     .offset = 0,
                     .size = VK_WHOLE_SIZE
                 };
-                bufferBarriers.push_back(barrier);
+                bufferBarriers.PushBack(barrier);
                 LogBufferBarrier(buf.bufferId, desiredAccess);
             }
 
-            if (!barriers.empty() || !bufferBarriers.empty()) {
+            if (!barriers.IsEmpty() || !bufferBarriers.IsEmpty()) {
                 ZoneScopedN("PipelineBarrier");
                 if (bDebugLogging) {
-                    if (!barriers.empty() && !bufferBarriers.empty()) {
-                        SPDLOG_INFO("  Inserting {} image, {} buffer barrier(s)", barriers.size(), bufferBarriers.size());
-                    } else if (!barriers.empty()) {
-                        SPDLOG_INFO("  Inserting {} image barrier(s)", barriers.size());
+                    if (!barriers.IsEmpty() && !bufferBarriers.IsEmpty()) {
+                        SPDLOG_INFO("  Inserting {} image, {} buffer barrier(s)", barriers.Size(), bufferBarriers.Size());
+                    } else if (!barriers.IsEmpty()) {
+                        SPDLOG_INFO("  Inserting {} image barrier(s)", barriers.Size());
                     } else {
-                        SPDLOG_INFO("  Inserting {} buffer barrier(s)", bufferBarriers.size());
+                        SPDLOG_INFO("  Inserting {} buffer barrier(s)", bufferBarriers.Size());
                     }
                 }
                 VkDependencyInfo depInfo{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
-                depInfo.imageMemoryBarrierCount = static_cast<uint32_t>(barriers.size());
-                depInfo.pImageMemoryBarriers = barriers.data();
-                depInfo.bufferMemoryBarrierCount = static_cast<uint32_t>(bufferBarriers.size());
-                depInfo.pBufferMemoryBarriers = bufferBarriers.data();
+                depInfo.imageMemoryBarrierCount = static_cast<uint32_t>(barriers.Size());
+                depInfo.pImageMemoryBarriers = barriers.Data();
+                depInfo.bufferMemoryBarrierCount = static_cast<uint32_t>(bufferBarriers.Size());
+                depInfo.pBufferMemoryBarriers = bufferBarriers.Data();
                 vkCmdPipelineBarrier2(cmd, &depInfo);
             }
         }
@@ -986,7 +991,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
         if (bDebugLogging) {
             SPDLOG_INFO("[FINAL BARRIERS]");
         }
-        std::vector<VkImageMemoryBarrier2> finalBarriers;
+        Core::InlineVector<VkImageMemoryBarrier2, 16> finalBarriers;
         for (auto& tex : textures) {
             if (tex.HasPhysical() && tex.HasFinalLayout()) {
                 auto& phys = physicalResources[tex.physicalIndex];
@@ -998,16 +1003,16 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                         VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT, VK_ACCESS_2_NONE, tex.finalLayout
                     );
                     LogImageBarrier(tex.textureId, finalBarrier, tex.physicalIndex);
-                    finalBarriers.push_back(finalBarrier);
+                    finalBarriers.PushBack(finalBarrier);
                     tex.layout = tex.finalLayout;
                 }
             }
         }
 
-        if (!finalBarriers.empty()) {
+        if (!finalBarriers.IsEmpty()) {
             VkDependencyInfo depInfo{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
-            depInfo.imageMemoryBarrierCount = static_cast<uint32_t>(finalBarriers.size());
-            depInfo.pImageMemoryBarriers = finalBarriers.data();
+            depInfo.imageMemoryBarrierCount = static_cast<uint32_t>(finalBarriers.Size());
+            depInfo.pImageMemoryBarriers = finalBarriers.Data();
             vkCmdPipelineBarrier2(cmd, &depInfo);
         }
     }
@@ -1015,13 +1020,13 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
 
 void RenderGraph::PrepareSwapchain(VkCommandBuffer cmd, StringID textureId)
 {
-    auto it = textureNameToIndex.find(textureId);
-    if (it == textureNameToIndex.end()) {
+    uint32_t* idx = textureNameToIndex.Find(textureId);
+    if (!idx) {
         SPDLOG_ERROR("[RenderGraph::PrepareSwapchain] Prepare swapchain failed.");
         return;
     }
 
-    TextureResource& swapchainTexture = textures[it->second];
+    TextureResource& swapchainTexture = textures[*idx];
     auto& phys = physicalResources[swapchainTexture.physicalIndex];
 
     VkImageMemoryBarrier2 presentBarrier = VkHelpers::ImageMemoryBarrier(
@@ -1049,15 +1054,21 @@ void RenderGraph::Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint
         ZoneScopedN("DestroyViewportScaledResources");
 
         // Drop carryovers whose src physical is viewport-scaled
-        std::erase_if(textureCarryovers, [this](const TextureFrameCarryover& carryover) {
+        for (int32_t i = static_cast<int32_t>(textureCarryovers.Size()) - 1; i >= 0; --i) {
+            const TextureFrameCarryover& carryover = textureCarryovers[i];
             const TextureResource* tex = GetTexture(carryover.srcName);
-            return tex && tex->HasPhysical() && physicalResources[tex->physicalIndex].bIsViewportScaled;
-        });
+            if (tex && tex->HasPhysical() && physicalResources[tex->physicalIndex].bIsViewportScaled) {
+                textureCarryovers.SwapRemove(i);
+            }
+        }
 
-        std::erase_if(bufferCarryovers, [this](const BufferFrameCarryover& carryover) {
+        for (int32_t i = static_cast<int32_t>(bufferCarryovers.Size()) - 1; i >= 0; --i) {
+            const BufferFrameCarryover& carryover = bufferCarryovers[i];
             const BufferResource* buf = GetBuffer(carryover.srcName);
-            return buf && buf->HasPhysical() && physicalResources[buf->physicalIndex].bIsViewportScaled;
-        });
+            if (buf && buf->HasPhysical() && physicalResources[buf->physicalIndex].bIsViewportScaled) {
+                bufferCarryovers.SwapRemove(i);
+            }
+        }
     }
 
     //
@@ -1085,14 +1096,23 @@ void RenderGraph::Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint
     //
     {
         ZoneScopedN("ClearContainers");
-        passes.clear();
-        textures.clear();
-        textureNameToIndex.clear();
-        buffers.clear();
-        bufferNameToIndex.clear();
+        for (RenderPass* pass : passes) {
+            pass->~RenderPass();
+        }
+        passes.Clear();
+        textures.Clear();
+        textureNameToIndex.Clear();
+        buffers.Clear();
+        bufferNameToIndex.Clear();
+        arena->Reset();
+        passes = Core::ArenaFixedVector<RenderPass*>(arena, RDG_MAX_PASSES);
+        textures = Core::ArenaFixedVector<TextureResource>(arena, RDG_MAX_SAMPLED_TEXTURES);
+        textureNameToIndex = Core::ArenaFixedMap<StringID, uint32_t>(arena, RDG_MAX_SAMPLED_TEXTURES);
+        buffers = Core::ArenaFixedVector<BufferResource>(arena, 256);
+        bufferNameToIndex = Core::ArenaFixedMap<StringID, uint32_t>(arena, 256);
 
         for (auto& phys : physicalResources) {
-            phys.logicalResourceIndices.clear();
+            phys.logicalResourceIndices.Clear();
             phys.bCanAlias = true;
         }
     }
@@ -1100,11 +1120,11 @@ void RenderGraph::Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint
     //
     {
         ZoneScopedN("CleanupUnusedPhysicalResources");
-        for (int i = static_cast<int>(physicalResources.size()) - 1; i >= 0; --i) {
+        for (int i = static_cast<int>(physicalResources.Size()) - 1; i >= 0; --i) {
             auto& phys = physicalResources[i];
 
             if (bRemoveSwapchainPhysicals && phys.bIsSwapchain) {
-                physicalResources.erase(physicalResources.begin() + i);
+                physicalResources.RemoveAt(i);
                 continue;
             }
 
@@ -1113,10 +1133,10 @@ void RenderGraph::Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint
 
             if (bDestroyViewportAssociated && phys.bIsViewportScaled) {
                 DestroyPhysicalResource(phys);
-                physicalResources.erase(physicalResources.begin() + i);
+                physicalResources.RemoveAt(i);
             } else if (currentFrame - phys.lastUsedFrame > maxFramesUnused) {
                 DestroyPhysicalResource(phys);
-                physicalResources.erase(physicalResources.begin() + i);
+                physicalResources.RemoveAt(i);
             }
         }
     }
@@ -1126,7 +1146,7 @@ void RenderGraph::Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint
         ZoneScopedN("CarryoverTextureRestoration");
         for (auto& carryover : textureCarryovers) {
             uint32_t physicalIndex = UINT32_MAX;
-            for (uint32_t i = 0; i < physicalResources.size(); i++) {
+            for (uint32_t i = 0; i < physicalResources.Size(); i++) {
                 if (physicalResources[i].image == carryover.physicalImage) {
                     physicalIndex = i;
                     break;
@@ -1145,17 +1165,17 @@ void RenderGraph::Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint
             newTex->physicalIndex = physicalIndex;
 
             PhysicalResource& phys = physicalResources[physicalIndex];
-            phys.logicalResourceIndices.push_back(newTex->index);
+            phys.logicalResourceIndices.PushBack(newTex->index);
             phys.usageChain.clear();
             AppendUsageChain(phys, newTex->textureId, newTex->bCanUseAliasedTexture, bDebugLogging);
             phys.bCanAlias = false;
         }
-        textureCarryovers.clear();
+        textureCarryovers.Clear();
     } {
         ZoneScopedN("CarryoverBufferRestoration");
         for (auto& carryover : bufferCarryovers) {
             uint32_t physicalIndex = UINT32_MAX;
-            for (uint32_t i = 0; i < physicalResources.size(); i++) {
+            for (uint32_t i = 0; i < physicalResources.Size(); i++) {
                 if (physicalResources[i].buffer == carryover.buffer) {
                     physicalIndex = i;
                     break;
@@ -1173,12 +1193,12 @@ void RenderGraph::Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint
             newBuf->physicalIndex = physicalIndex;
 
             PhysicalResource& phys = physicalResources[physicalIndex];
-            phys.logicalResourceIndices.push_back(newBuf->index);
+            phys.logicalResourceIndices.PushBack(newBuf->index);
             phys.usageChain.clear();
             AppendUsageChain(phys, newBuf->bufferId, newBuf->bCanUseAliasedBuffer, bDebugLogging);
             phys.bCanAlias = false;
         }
-        bufferCarryovers.clear();
+        bufferCarryovers.Clear();
     }
 
     bDestroyViewportAssociated = false;
@@ -1203,9 +1223,9 @@ void RenderGraph::CreateTexture(const StringID textureId, const TextureInfo& tex
 
 void RenderGraph::AliasTexture(const StringID aliasId, const StringID existingId)
 {
-    auto it = textureNameToIndex.find(existingId);
-    assert(it != textureNameToIndex.end() && "Aliasing texture failed because existing texture doesn't exist");
-    textureNameToIndex[aliasId] = it->second;
+    uint32_t* idx = textureNameToIndex.Find(existingId);
+    assert(idx != nullptr && "Aliasing texture failed because existing texture doesn't exist");
+    textureNameToIndex[aliasId] = *idx;
 }
 
 void RenderGraph::CreateBuffer(StringID bufferId, VkDeviceSize size, bool bIsViewportScaled, bool bCanAlias)
@@ -1237,7 +1257,7 @@ void RenderGraph::ImportTexture(StringID textureId,
 
     if (!tex->HasPhysical()) {
         uint32_t foundIndex = UINT32_MAX;
-        for (uint32_t i = 0; i < physicalResources.size(); i++) {
+        for (uint32_t i = 0; i < physicalResources.Size(); i++) {
             auto& phys = physicalResources[i];
             if (phys.bIsImported && phys.image == image) {
                 foundIndex = i;
@@ -1253,8 +1273,8 @@ void RenderGraph::ImportTexture(StringID textureId,
             tex->physicalIndex = foundIndex;
         }
         else {
-            tex->physicalIndex = physicalResources.size();
-            physicalResources.emplace_back();
+            tex->physicalIndex = physicalResources.Size();
+            physicalResources.EmplaceBack();
             auto& phys = physicalResources[tex->physicalIndex];
             phys.image = image;
             phys.imageView = view;
@@ -1291,7 +1311,7 @@ void RenderGraph::ImportBufferNoBarrier(StringID bufferId, VkBuffer buffer, VkDe
     buf->accumulatedUsage = info.usage;
     if (!buf->HasPhysical()) {
         uint32_t foundIndex = UINT32_MAX;
-        for (uint32_t i = 0; i < physicalResources.size(); i++) {
+        for (uint32_t i = 0; i < physicalResources.Size(); i++) {
             auto& phys = physicalResources[i];
             if (phys.bIsImported && phys.buffer == buffer) {
                 foundIndex = i;
@@ -1307,8 +1327,8 @@ void RenderGraph::ImportBufferNoBarrier(StringID bufferId, VkBuffer buffer, VkDe
             buf->physicalIndex = foundIndex;
         }
         else {
-            buf->physicalIndex = physicalResources.size();
-            physicalResources.emplace_back();
+            buf->physicalIndex = physicalResources.Size();
+            physicalResources.EmplaceBack();
             auto& phys = physicalResources[buf->physicalIndex];
             phys.buffer = buffer;
             phys.bufferAddress = address;
@@ -1333,7 +1353,7 @@ void RenderGraph::ImportBuffer(StringID bufferId, VkBuffer buffer, VkDeviceAddre
     buf->accumulatedUsage = info.usage;
     if (!buf->HasPhysical()) {
         uint32_t foundIndex = UINT32_MAX;
-        for (uint32_t i = 0; i < physicalResources.size(); i++) {
+        for (uint32_t i = 0; i < physicalResources.Size(); i++) {
             auto& phys = physicalResources[i];
             if (phys.bIsImported && phys.buffer == buffer) {
                 foundIndex = i;
@@ -1349,8 +1369,8 @@ void RenderGraph::ImportBuffer(StringID bufferId, VkBuffer buffer, VkDeviceAddre
             buf->physicalIndex = foundIndex;
         }
         else {
-            buf->physicalIndex = physicalResources.size();
-            physicalResources.emplace_back();
+            buf->physicalIndex = physicalResources.Size();
+            physicalResources.EmplaceBack();
             auto& phys = physicalResources[buf->physicalIndex];
             phys.buffer = buffer;
             phys.bufferAddress = address;
@@ -1372,22 +1392,20 @@ void RenderGraph::ImportBuffer(StringID bufferId, VkBuffer buffer, VkDeviceAddre
 
 bool RenderGraph::HasTexture(StringID textureId)
 {
-    auto it = textureNameToIndex.find(textureId);
-    return it != textureNameToIndex.end();
+    return textureNameToIndex.Find(textureId) != nullptr;
 }
 
 bool RenderGraph::HasBuffer(StringID bufferId)
 {
-    auto it = bufferNameToIndex.find(bufferId);
-    return it != bufferNameToIndex.end();
+    return bufferNameToIndex.Find(bufferId) != nullptr;
 }
 
 VkImage RenderGraph::GetImageHandle(StringID textureId)
 {
-    auto it = textureNameToIndex.find(textureId);
-    assert(it != textureNameToIndex.end() && "Texture not found");
+    uint32_t* idx = textureNameToIndex.Find(textureId);
+    assert(idx != nullptr && "Texture not found");
 
-    auto& tex = textures[it->second];
+    auto& tex = textures[*idx];
     assert(tex.HasPhysical() && "Texture has no physical resource");
 
     return physicalResources[tex.physicalIndex].image;
@@ -1395,10 +1413,10 @@ VkImage RenderGraph::GetImageHandle(StringID textureId)
 
 VkImageView RenderGraph::GetImageViewHandle(StringID textureId)
 {
-    auto it = textureNameToIndex.find(textureId);
-    assert(it != textureNameToIndex.end() && "Texture not found");
+    uint32_t* idx = textureNameToIndex.Find(textureId);
+    assert(idx != nullptr && "Texture not found");
 
-    auto& tex = textures[it->second];
+    auto& tex = textures[*idx];
     assert(tex.HasPhysical() && "Texture has no physical resource");
 
     return physicalResources[tex.physicalIndex].imageView;
@@ -1406,11 +1424,11 @@ VkImageView RenderGraph::GetImageViewHandle(StringID textureId)
 
 VkImageView RenderGraph::GetImageViewMipHandle(StringID textureId, uint32_t mipLevel)
 {
-    auto it = textureNameToIndex.find(textureId);
-    assert(it != textureNameToIndex.end() && "Texture not found");
+    uint32_t* idx = textureNameToIndex.Find(textureId);
+    assert(idx != nullptr && "Texture not found");
     assert(mipLevel < RDG_MAX_MIP_LEVELS);
 
-    auto& tex = textures[it->second];
+    auto& tex = textures[*idx];
     assert(tex.HasPhysical() && "Texture has no physical resource");
 
     return physicalResources[tex.physicalIndex].mipViews[mipLevel];
@@ -1418,10 +1436,10 @@ VkImageView RenderGraph::GetImageViewMipHandle(StringID textureId, uint32_t mipL
 
 VkImageView RenderGraph::GetDepthOnlyImageViewHandle(StringID textureId)
 {
-    auto it = textureNameToIndex.find(textureId);
-    assert(it != textureNameToIndex.end() && "Texture not found");
+    uint32_t* idx = textureNameToIndex.Find(textureId);
+    assert(idx != nullptr && "Texture not found");
 
-    auto& tex = textures[it->second];
+    auto& tex = textures[*idx];
     assert(tex.HasPhysical() && "Texture has no physical resource");
 
     auto& phys = physicalResources[tex.physicalIndex];
@@ -1436,10 +1454,10 @@ VkImageView RenderGraph::GetDepthOnlyImageViewHandle(StringID textureId)
 
 VkImageView RenderGraph::GetStencilOnlyImageViewHandle(StringID textureId)
 {
-    auto it = textureNameToIndex.find(textureId);
-    assert(it != textureNameToIndex.end() && "Texture not found");
+    uint32_t* idx = textureNameToIndex.Find(textureId);
+    assert(idx != nullptr && "Texture not found");
 
-    auto& tex = textures[it->second];
+    auto& tex = textures[*idx];
     assert(tex.HasPhysical() && "Texture has no physical resource");
 
     auto& phys = physicalResources[tex.physicalIndex];
@@ -1454,10 +1472,10 @@ VkImageView RenderGraph::GetStencilOnlyImageViewHandle(StringID textureId)
 
 const ResourceDimensions& RenderGraph::GetImageDimensions(StringID textureId)
 {
-    auto it = textureNameToIndex.find(textureId);
-    assert(it != textureNameToIndex.end() && "Texture not found");
+    uint32_t* idx = textureNameToIndex.Find(textureId);
+    assert(idx != nullptr && "Texture not found");
 
-    auto& tex = textures[it->second];
+    auto& tex = textures[*idx];
     assert(tex.HasPhysical() && "Texture has no physical resource");
 
     return physicalResources[tex.physicalIndex].dimensions;
@@ -1465,10 +1483,10 @@ const ResourceDimensions& RenderGraph::GetImageDimensions(StringID textureId)
 
 const VkImageAspectFlags RenderGraph::GetImageAspect(StringID textureId)
 {
-    auto it = textureNameToIndex.find(textureId);
-    assert(it != textureNameToIndex.end() && "Texture not found");
+    uint32_t* idx = textureNameToIndex.Find(textureId);
+    assert(idx != nullptr && "Texture not found");
 
-    auto& tex = textures[it->second];
+    auto& tex = textures[*idx];
     assert(tex.HasPhysical() && "Texture has no physical resource");
 
     return physicalResources[tex.physicalIndex].aspect;
@@ -1476,10 +1494,10 @@ const VkImageAspectFlags RenderGraph::GetImageAspect(StringID textureId)
 
 uint32_t RenderGraph::GetSampledImageViewDescriptorIndex(StringID textureId)
 {
-    auto it = textureNameToIndex.find(textureId);
-    assert(it != textureNameToIndex.end() && "Texture not found");
+    uint32_t* idx = textureNameToIndex.Find(textureId);
+    assert(idx != nullptr && "Texture not found");
 
-    auto& tex = textures[it->second];
+    auto& tex = textures[*idx];
     assert(tex.HasPhysical() && "Texture has no physical resource");
 
     return physicalResources[tex.physicalIndex].sampledDescriptorHandle.index;
@@ -1487,10 +1505,10 @@ uint32_t RenderGraph::GetSampledImageViewDescriptorIndex(StringID textureId)
 
 uint32_t RenderGraph::GetStorageImageViewDescriptorIndex(StringID textureId, uint32_t mipLevel)
 {
-    auto it = textureNameToIndex.find(textureId);
-    assert(it != textureNameToIndex.end() && "Texture not found");
+    uint32_t* idx = textureNameToIndex.Find(textureId);
+    assert(idx != nullptr && "Texture not found");
 
-    auto& tex = textures[it->second];
+    auto& tex = textures[*idx];
     assert(tex.HasPhysical() && "Texture has no physical resource");
 
     return physicalResources[tex.physicalIndex].storageMipDescriptorHandles[mipLevel].index;
@@ -1498,10 +1516,10 @@ uint32_t RenderGraph::GetStorageImageViewDescriptorIndex(StringID textureId, uin
 
 uint32_t RenderGraph::GetDepthOnlySampledImageViewDescriptorIndex(StringID textureId)
 {
-    auto it = textureNameToIndex.find(textureId);
-    assert(it != textureNameToIndex.end() && "Texture not found");
+    uint32_t* idx = textureNameToIndex.Find(textureId);
+    assert(idx != nullptr && "Texture not found");
 
-    auto& tex = textures[it->second];
+    auto& tex = textures[*idx];
     assert(tex.HasPhysical() && "Texture has no physical resource");
     auto& phys = physicalResources[tex.physicalIndex];
 
@@ -1515,10 +1533,10 @@ uint32_t RenderGraph::GetDepthOnlySampledImageViewDescriptorIndex(StringID textu
 
 uint32_t RenderGraph::GetStencilOnlyStorageImageViewDescriptorIndex(StringID textureId)
 {
-    auto it = textureNameToIndex.find(textureId);
-    assert(it != textureNameToIndex.end() && "Texture not found");
+    uint32_t* idx = textureNameToIndex.Find(textureId);
+    assert(idx != nullptr && "Texture not found");
 
-    auto& tex = textures[it->second];
+    auto& tex = textures[*idx];
     assert(tex.HasPhysical() && "Texture has no physical resource");
     auto& phys = physicalResources[tex.physicalIndex];
 
@@ -1532,10 +1550,10 @@ uint32_t RenderGraph::GetStencilOnlyStorageImageViewDescriptorIndex(StringID tex
 
 VkBuffer RenderGraph::GetBufferHandle(StringID bufferId)
 {
-    auto it = bufferNameToIndex.find(bufferId);
-    assert(it != bufferNameToIndex.end() && "Buffer not found");
+    uint32_t* idx = bufferNameToIndex.Find(bufferId);
+    assert(idx != nullptr && "Buffer not found");
 
-    auto& buf = buffers[it->second];
+    auto& buf = buffers[*idx];
     assert(buf.HasPhysical() && "Buffer has no physical resource");
 
     return physicalResources[buf.physicalIndex].buffer;
@@ -1543,10 +1561,10 @@ VkBuffer RenderGraph::GetBufferHandle(StringID bufferId)
 
 VkDeviceAddress RenderGraph::GetBufferAddress(StringID bufferId)
 {
-    auto it = bufferNameToIndex.find(bufferId);
-    assert(it != bufferNameToIndex.end() && "Buffer not found");
+    uint32_t* idx = bufferNameToIndex.Find(bufferId);
+    assert(idx != nullptr && "Buffer not found");
 
-    auto& buf = buffers[it->second];
+    auto& buf = buffers[*idx];
     assert(buf.HasPhysical() && "Buffer has no physical resource");
 
     auto& phys = physicalResources[buf.physicalIndex];
@@ -1563,10 +1581,10 @@ VkDeviceAddress RenderGraph::GetBufferAddress(StringID bufferId)
 
 PipelineEvent RenderGraph::GetBufferState(StringID bufferId)
 {
-    auto it = bufferNameToIndex.find(bufferId);
-    assert(it != bufferNameToIndex.end() && "Buffer not found");
+    uint32_t* idx = bufferNameToIndex.Find(bufferId);
+    assert(idx != nullptr && "Buffer not found");
 
-    auto& buf = buffers[it->second];
+    auto& buf = buffers[*idx];
     assert(buf.HasPhysical() && "Buffer has no physical resource");
 
     return physicalResources[buf.physicalIndex].event;
@@ -1574,10 +1592,10 @@ PipelineEvent RenderGraph::GetBufferState(StringID bufferId)
 
 VkImage RenderGraph::GetTextureHandle(StringID textureId)
 {
-    auto it = textureNameToIndex.find(textureId);
-    assert(it != textureNameToIndex.end() && "Texture not found");
+    uint32_t* idx = textureNameToIndex.Find(textureId);
+    assert(idx != nullptr && "Texture not found");
 
-    auto& tex = textures[it->second];
+    auto& tex = textures[*idx];
     assert(tex.HasPhysical() && "Texture has no physical resource");
 
     return physicalResources[tex.physicalIndex].image;
@@ -1604,7 +1622,7 @@ void RenderGraph::CarryTextureToNextFrame(StringID textureId, StringID newTextur
         }
     }
 
-    textureCarryovers.emplace_back(textureId, newTextureId);
+    textureCarryovers.PushBack(TextureFrameCarryover{textureId, newTextureId});
 }
 
 void RenderGraph::CarryBufferToNextFrame(StringID bufferId, StringID newBufferId, VkBufferUsageFlags additionalUsage)
@@ -1625,7 +1643,7 @@ void RenderGraph::CarryBufferToNextFrame(StringID bufferId, StringID newBufferId
         assert(c.dstName != newBufferId && "Destination buffer name already used in another carryover");
     }
 
-    bufferCarryovers.emplace_back(bufferId, newBufferId);
+    bufferCarryovers.PushBack(BufferFrameCarryover{bufferId, newBufferId});
 }
 
 UploadAllocation RenderGraph::AllocateTransient(size_t size)
@@ -1710,24 +1728,21 @@ void RenderGraph::LogBufferBarrier(StringID bufferId, VkAccessFlags2 access) con
 
 TextureResource* RenderGraph::GetTexture(StringID imageId)
 {
-    auto it = textureNameToIndex.find(imageId);
-    if (it != textureNameToIndex.end()) {
-        return &textures[it->second];
+    if (uint32_t* idx = textureNameToIndex.Find(imageId)) {
+        return &textures[*idx];
     }
-
     return nullptr;
 }
 
 TextureResource* RenderGraph::GetOrCreateTexture(StringID textureId)
 {
-    auto it = textureNameToIndex.find(textureId);
-    if (it != textureNameToIndex.end()) {
-        return &textures[it->second];
+    if (uint32_t* idx = textureNameToIndex.Find(textureId)) {
+        return &textures[*idx];
     }
 
-    uint32_t index = textures.size();
-    textures.push_back(TextureResource{
-        . textureId = textureId,
+    uint32_t index = textures.Size();
+    textures.PushBack(TextureResource{
+        .textureId = textureId,
         .index = index,
     });
     textureNameToIndex[textureId] = index;
@@ -1737,23 +1752,20 @@ TextureResource* RenderGraph::GetOrCreateTexture(StringID textureId)
 
 BufferResource* RenderGraph::GetBuffer(const StringID bufferId)
 {
-    auto it = bufferNameToIndex.find(bufferId);
-    if (it != bufferNameToIndex.end()) {
-        return &buffers[it->second];
+    if (uint32_t* idx = bufferNameToIndex.Find(bufferId)) {
+        return &buffers[*idx];
     }
-
     return nullptr;
 }
 
 BufferResource* RenderGraph::GetOrCreateBuffer(StringID bufferId)
 {
-    auto it = bufferNameToIndex.find(bufferId);
-    if (it != bufferNameToIndex.end()) {
-        return &buffers[it->second];
+    if (uint32_t* idx = bufferNameToIndex.Find(bufferId)) {
+        return &buffers[*idx];
     }
 
-    uint32_t index = buffers.size();
-    buffers.push_back(BufferResource{
+    uint32_t index = buffers.Size();
+    buffers.PushBack(BufferResource{
         .bufferId = bufferId,
         .index = index,
     });

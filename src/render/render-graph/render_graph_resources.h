@@ -6,12 +6,13 @@
 #define WILL_ENGINE_RENDER_GRAPH_RESOURCES_H
 
 #include <string>
-#include <vector>
 
 #include <volk.h>
 #include <vulkan/vk_enum_string_helper.h>
 
+#include "core/containers/array.h"
 #include "core/memory/handle.h"
+#include "core/containers/inline_vector.h"
 #include "core/memory/linear_allocator.h"
 #include "render/render_config.h"
 #include "render/vulkan/vk_resources.h"
@@ -152,12 +153,12 @@ struct PhysicalResource
 
     uint64_t lastUsedFrame = 0;
 
-    std::vector<uint32_t> logicalResourceIndices;
+    Core::InlineVector<uint32_t, 16> logicalResourceIndices;
 
     // Image resources (valid if dimensions.is_image())
     VkImage image{VK_NULL_HANDLE};
     VkImageView imageView{VK_NULL_HANDLE};
-    std::array<VkImageView, RDG_MAX_MIP_LEVELS> mipViews{};
+    Core::Array<VkImageView, RDG_MAX_MIP_LEVELS> mipViews{};
     // Only for depth+stencil images
     VkImageView depthOnlyView{VK_NULL_HANDLE};
     VkImageView stencilOnlyView{VK_NULL_HANDLE};
@@ -166,7 +167,7 @@ struct PhysicalResource
     VkImageAspectFlags aspect{VK_IMAGE_ASPECT_NONE};
 
     TransientImageHandle sampledDescriptorHandle{TransientImageHandle::INVALID};
-    std::array<TransientImageHandle, RDG_MAX_MIP_LEVELS> storageMipDescriptorHandles{};
+    Core::Array<TransientImageHandle, RDG_MAX_MIP_LEVELS> storageMipDescriptorHandles{};
     TransientImageHandle depthOnlyDescriptorHandle{TransientImageHandle::INVALID};
     TransientImageHandle stencilOnlyDescriptorHandle{TransientImageHandle::INVALID};
     bool descriptorWritten{false};
@@ -255,6 +256,27 @@ struct TransientUploadArena
 
 struct TransientReadback {
     AllocatedBuffer buffer;
+};
+
+struct TextureFrameCarryover
+{
+    StringID srcName;
+    StringID dstName;
+
+    VkImage physicalImage{};
+    TextureInfo textInfo;
+    VkImageLayout layout{};
+    VkImageUsageFlags accumulatedUsage{};
+};
+
+struct BufferFrameCarryover
+{
+    StringID srcName;
+    StringID dstName;
+
+    VkBuffer buffer{};
+    BufferInfo bufferInfo{};
+    VkBufferUsageFlags accumulatedUsage{};
 };
 } // Render
 

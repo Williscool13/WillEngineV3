@@ -7,7 +7,6 @@
 
 #include <array>
 #include <atomic>
-#include <memory>
 
 #include "core/containers/vector.h"
 #include "frame_resources.h"
@@ -107,8 +106,6 @@ public:
 private:
     void CreatePipelines();
 
-    RenderFamilyProperties PrepareRenderFamilyProperties(Core::ViewFamily& viewFamily, ReadbackStruct* readbackData, PipelineManager* _pipelineManager, FrameResourceLimits& _limits);
-
     void UploadFrameUniforms(const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, float renderDeltaTime) const;
 
     void UploadModelUniforms(Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties) const;
@@ -182,8 +179,7 @@ private:
     RenderExtents* renderExtents{};
     PipelineManager* pipelineManager{};
 
-    // todo: refactor
-    std::unique_ptr<RenderGraph> renderGraph{};
+    RenderGraph* renderGraph{};
 
     Core::Array<RenderSynchronization, Core::FRAME_BUFFER_COUNT> frameSynchronization;
 

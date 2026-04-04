@@ -30,7 +30,7 @@ RenderPass& RenderPass::WriteStorageImage(const StringID textureId, const Textur
         assert(resource->textureInfo.format != VK_FORMAT_UNDEFINED && "Texture not defined - provide TextureInfo on first use");
     }
 
-    storageImageWrites.push_back(resource->index);
+    storageImageWrites.PushBack(resource->index);
     return *this;
 }
 
@@ -45,7 +45,7 @@ RenderPass& RenderPass::WriteClearImage(const StringID textureId, const TextureI
     else {
         assert(resource->textureInfo.format != VK_FORMAT_UNDEFINED && "Texture not defined - provide TextureInfo on first use");
     }
-    clearImageWrites.push_back(resource->index);
+    clearImageWrites.PushBack(resource->index);
     return *this;
 }
 
@@ -60,7 +60,7 @@ RenderPass& RenderPass::WriteBlitImage(const StringID textureId, const TextureIn
     else {
         assert(resource->textureInfo.format != VK_FORMAT_UNDEFINED && "Texture not defined - provide TextureInfo on first use");
     }
-    blitImageWrites.push_back(resource->index);
+    blitImageWrites.PushBack(resource->index);
     return *this;
 }
 
@@ -75,7 +75,7 @@ RenderPass& RenderPass::WriteCopyImage(const StringID textureId, const TextureIn
     else {
         assert(resource->textureInfo.format != VK_FORMAT_UNDEFINED && "Texture not defined - provide TextureInfo on first use");
     }
-    copyImageWrites.push_back(resource->index);
+    copyImageWrites.PushBack(resource->index);
     return *this;
 }
 
@@ -92,7 +92,7 @@ RenderPass& RenderPass::WriteColorAttachment(const StringID textureId, const Tex
         assert(resource->textureInfo.format != VK_FORMAT_UNDEFINED && "Texture not defined - provide TextureInfo on first use");
     }
 
-    colorAttachments.push_back(resource->index);
+    colorAttachments.PushBack(resource->index);
     return *this;
 }
 
@@ -134,7 +134,7 @@ RenderPass& RenderPass::ReadWriteImage(const StringID textureId, const TextureIn
         assert(resource->textureInfo.format != VK_FORMAT_UNDEFINED && "Texture not defined - provide TextureInfo on first use");
     }
 
-    imageReadWrite.push_back(resource->index);
+    imageReadWrite.PushBack(resource->index);
     return *this;
 }
 
@@ -156,28 +156,28 @@ RenderPass& RenderPass::ReadDepthAttachment(const StringID textureId)
 RenderPass& RenderPass::ReadStorageImage(const StringID textureId)
 {
     TextureResource* resource = graph.GetOrCreateTexture(textureId);
-    storageImageReads.push_back(resource->index);
+    storageImageReads.PushBack(resource->index);
     return *this;
 }
 
 RenderPass& RenderPass::ReadSampledImage(const StringID textureId)
 {
     TextureResource* resource = graph.GetOrCreateTexture(textureId);
-    sampledImageReads.push_back(resource->index);
+    sampledImageReads.PushBack(resource->index);
     return *this;
 }
 
 RenderPass& RenderPass::ReadBlitImage(const StringID textureId)
 {
     TextureResource* resource = graph.GetOrCreateTexture(textureId);
-    blitImageReads.push_back(resource->index);
+    blitImageReads.PushBack(resource->index);
     return *this;
 }
 
 RenderPass& RenderPass::ReadCopyImage(const StringID textureId)
 {
     TextureResource* resource = graph.GetOrCreateTexture(textureId);
-    copyImageReads.push_back(resource->index);
+    copyImageReads.PushBack(resource->index);
     return *this;
 }
 
@@ -185,7 +185,7 @@ RenderPass& RenderPass::WriteBuffer(const StringID bufferId)
 {
     BufferResource* resource = graph.GetOrCreateBuffer(bufferId);
     resource->accumulatedUsage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-    bufferWrites.push_back(resource->index);
+    bufferWrites.PushBack(resource->index);
     return *this;
 }
 
@@ -193,7 +193,7 @@ RenderPass& RenderPass::WriteTransferBuffer(const StringID bufferId)
 {
     BufferResource* resource = graph.GetOrCreateBuffer(bufferId);
     resource->accumulatedUsage |= VK_BUFFER_USAGE_2_TRANSFER_DST_BIT;
-    bufferTransferWrites.push_back(resource->index);
+    bufferTransferWrites.PushBack(resource->index);
     return *this;
 }
 
@@ -221,7 +221,7 @@ RenderPass& RenderPass::ReadWriteBuffer(const StringID bufferId)
 {
     BufferResource* resource = graph.GetOrCreateBuffer(bufferId);
     resource->accumulatedUsage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-    bufferReadWrite.push_back(resource->index);
+    bufferReadWrite.PushBack(resource->index);
     return *this;
 }
 
@@ -231,7 +231,7 @@ RenderPass& RenderPass::ReadBuffer(const StringID bufferId)
     BufferResource* resource = graph.GetOrCreateBuffer(bufferId);
     assert(resource->bufferInfo.size > 0 && "Buffer not defined - import or create buffer first");
     resource->accumulatedUsage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-    bufferReads.push_back(resource->index);
+    bufferReads.PushBack(resource->index);
     return *this;
 }
 
@@ -240,7 +240,7 @@ RenderPass& RenderPass::ReadIndexBuffer(const StringID bufferId)
     BufferResource* resource = graph.GetOrCreateBuffer(bufferId);
     assert(resource->bufferInfo.size > 0 && "Buffer not defined - import or create buffer first");
     resource->accumulatedUsage |= VK_BUFFER_USAGE_2_INDEX_BUFFER_BIT;
-    bufferIndexRead.push_back(resource->index);
+    bufferIndexRead.PushBack(resource->index);
     return *this;
 }
 
@@ -249,7 +249,7 @@ RenderPass& RenderPass::ReadTransferBuffer(const StringID bufferId)
     BufferResource* resource = graph.GetOrCreateBuffer(bufferId);
     assert(resource->bufferInfo.size > 0 && "Buffer not defined - import or create buffer first");
     resource->accumulatedUsage |= VK_BUFFER_USAGE_2_TRANSFER_SRC_BIT;
-    bufferTransferReads.push_back(resource->index);
+    bufferTransferReads.PushBack(resource->index);
     return *this;
 }
 
@@ -257,7 +257,7 @@ RenderPass& RenderPass::ReadIndirectBuffer(const StringID bufferId)
 {
     BufferResource* resource = graph.GetOrCreateBuffer(bufferId);
     resource->accumulatedUsage |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-    bufferIndirectReads.push_back(resource->index);
+    bufferIndirectReads.PushBack(resource->index);
     return *this;
 }
 
@@ -265,13 +265,8 @@ RenderPass& RenderPass::ReadIndirectCountBuffer(const StringID bufferId)
 {
     BufferResource* resource = graph.GetOrCreateBuffer(bufferId);
     resource->accumulatedUsage |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-    bufferIndirectCountReads.push_back(resource->index);
+    bufferIndirectCountReads.PushBack(resource->index);
     return *this;
 }
 
-RenderPass& RenderPass::Execute(std::function<void(VkCommandBuffer)> func)
-{
-    executeFunc = std::move(func);
-    return *this;
-}
 } // Render

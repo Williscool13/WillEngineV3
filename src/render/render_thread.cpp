@@ -26,6 +26,7 @@
 #include "types/render_types.h"
 #include "render/vulkan/vk_imgui_wrapper.h"
 #include "backends/imgui_impl_vulkan.h"
+#include "core/containers/inline_string.h"
 #include "core/containers/span.h"
 #include "core/memory/memory_manager.h"
 #include "core/string_id.h"
@@ -51,7 +52,6 @@ RenderThread::RenderThread(Core::MemoryManager& memoryManager, Core::FrameSync* 
     swapchain = new(memoryManager.RenderAllocRaw(sizeof(Swapchain))) Swapchain(context, width, height);
     renderExtents = new(memoryManager.RenderAllocRaw(sizeof(RenderExtents))) RenderExtents(width, height, 1.0f);
     resourceManager = new(memoryManager.RenderAllocRaw(sizeof(ResourceManager))) ResourceManager(context);
-    renderGraph = std::make_unique<RenderGraph>(context, resourceManager);
     Core::Array<VkDescriptorSetLayout, 2> layouts{
         resourceManager->bindlessSamplerTextureDescriptorBuffer.descriptorSetLayout.handle,
         resourceManager->bindlessRDGTransientDescriptorBuffer.descriptorSetLayout.handle
@@ -66,6 +66,8 @@ RenderThread::RenderThread(Core::MemoryManager& memoryManager, Core::FrameSync* 
         frameSync = RenderSynchronization(context);
         frameSync.Initialize();
     }
+
+    renderGraph = new(memoryManager.RenderAllocRaw(sizeof(RenderGraph))) RenderGraph(context, resourceManager, renderAlloc, memoryManager.RenderArena());
 }
 
 RenderThread::~RenderThread()
@@ -76,7 +78,7 @@ RenderThread::~RenderThread()
 
     pipelineManager->~PipelineManager();
     globalPipelineLayout = {};
-    renderGraph.reset();
+    renderGraph->~RenderGraph();
     resourceManager->~ResourceManager();
     renderExtents->~RenderExtents();
     imgui->~ImguiWrapper();
@@ -195,7 +197,8 @@ void RenderThread::RenderFrame(uint32_t currentFrameIndex, RenderSynchronization
     VkDebugUtilsObjectNameInfoEXT nameInfo{VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT};
     nameInfo.objectType = VK_OBJECT_TYPE_COMMAND_BUFFER;
     nameInfo.objectHandle = reinterpret_cast<uint64_t>(renderSync.commandBuffer);
-    std::string cmdBufferName = fmt::format("CommandBuffer {}", frameNumber);
+    Core::InlineString<64> cmdBufferName;
+    cmdBufferName.len = snprintf(cmdBufferName.buf, 64, "CommandBuffer %llu", static_cast<unsigned long long>(frameNumber));
     nameInfo.pObjectName = cmdBufferName.c_str();
     vkSetDebugUtilsObjectNameEXT(context->device, &nameInfo);
 #endif
@@ -309,12 +312,12 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
     //
     {
         ZoneScopedN("BindDescriptorBuffers");
-        std::array bindings{resourceManager->bindlessSamplerTextureDescriptorBuffer.GetBindingInfo(), resourceManager->bindlessRDGTransientDescriptorBuffer.GetBindingInfo()};
-        std::array indices{0u, 1u};
-        std::array<VkDeviceSize, 2> offsets{0, 0};
-        vkCmdBindDescriptorBuffersEXT(cmd, bindings.size(), bindings.data());
-        vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, globalPipelineLayout.handle, 0, bindings.size(), indices.data(), offsets.data());
-        vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, globalPipelineLayout.handle, 0, bindings.size(), indices.data(), offsets.data());
+        Core::Array<VkDescriptorBufferBindingInfoEXT, 2> bindings{resourceManager->bindlessSamplerTextureDescriptorBuffer.GetBindingInfo(), resourceManager->bindlessRDGTransientDescriptorBuffer.GetBindingInfo()};
+        Core::Array<uint32_t, 2> indices{0u, 1u};
+        Core::Array<VkDeviceSize, 2> offsets{0, 0};
+        vkCmdBindDescriptorBuffersEXT(cmd, bindings.Size(), bindings.Data());
+        vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, globalPipelineLayout.handle, 0, bindings.Size(), indices.Data(), offsets.Data());
+        vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, globalPipelineLayout.handle, 0, bindings.Size(), indices.Data(), offsets.Data());
     } {
         ZoneScopedN("SetupUniforms");
         UploadFrameUniforms(viewFamily, renderExtent, frameBuffer.timeFrame.renderDeltaTime);
@@ -1020,7 +1023,7 @@ void RenderThread::CreatePipelines()
         builder.Clear();
     }
 
-    constexpr std::array graphicsColorFormats{
+    constexpr Core::Array<VkFormat, 6> graphicsColorFormats{
         GBUFFER_ALBEDO_FORMAT,
         GBUFFER_NORMAL_FORMAT,
         GBUFFER_PBR_FORMAT,
@@ -1038,7 +1041,7 @@ void RenderThread::CreatePipelines()
         builder.SetupDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_GREATER_OR_EQUAL);
 
 
-        builder.SetupRenderer(graphicsColorFormats.data(), graphicsColorFormats.size(), DEPTH_ATTACHMENT_FORMAT, DEPTH_ATTACHMENT_FORMAT);
+        builder.SetupRenderer(graphicsColorFormats.Data(), graphicsColorFormats.Size(), DEPTH_ATTACHMENT_FORMAT, DEPTH_ATTACHMENT_FORMAT);
 
         pipelineManager->RegisterGraphicsPipeline(
             SID("mesh_shading_instanced"),
@@ -1058,7 +1061,7 @@ void RenderThread::CreatePipelines()
         builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE);
         builder.SetupDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_GREATER_OR_EQUAL);
         builder.SetupStencilState(VK_TRUE, VK_STENCIL_OP_KEEP, VK_STENCIL_OP_REPLACE, VK_STENCIL_OP_KEEP, VK_COMPARE_OP_ALWAYS);
-        builder.SetupRenderer(graphicsColorFormats.data(), graphicsColorFormats.size(), DEPTH_ATTACHMENT_FORMAT, DEPTH_ATTACHMENT_FORMAT);
+        builder.SetupRenderer(graphicsColorFormats.Data(), graphicsColorFormats.Size(), DEPTH_ATTACHMENT_FORMAT, DEPTH_ATTACHMENT_FORMAT);
         builder.AddDynamicState(VK_DYNAMIC_STATE_STENCIL_REFERENCE);
 
         pipelineManager->RegisterGraphicsPipeline(
@@ -1104,7 +1107,7 @@ void RenderThread::CreatePipelines()
         builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
         builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE);
         builder.SetupDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_GREATER_OR_EQUAL);
-        builder.SetupRenderer(graphicsColorFormats.data(), graphicsColorFormats.size(), DEPTH_ATTACHMENT_FORMAT, DEPTH_ATTACHMENT_FORMAT);
+        builder.SetupRenderer(graphicsColorFormats.Data(), graphicsColorFormats.Size(), DEPTH_ATTACHMENT_FORMAT, DEPTH_ATTACHMENT_FORMAT);
 
         pipelineManager->RegisterGraphicsPipeline(
             SID("cubemap_visualize"),
@@ -1175,76 +1178,6 @@ void RenderThread::CreatePipelines()
         );
         builder.Clear();
     }
-}
-
-RenderFamilyProperties RenderThread::PrepareRenderFamilyProperties(Core::ViewFamily& viewFamily, ReadbackStruct* readbackData, PipelineManager* _pipelineManager, FrameResourceLimits& _limits)
-{
-    RenderFamilyProperties renderFamilyProperties{};
-    renderFamilyProperties.Reset();
-    renderFamilyProperties.viewFamily = &viewFamily;
-    bool bHasGeometry = !viewFamily.mainPassInstances.empty();
-    if (!bHasGeometry) {
-        for (const auto& [key, customDraw] : viewFamily.customShaderDraws) {
-            if (!customDraw.instances.empty()) {
-                bHasGeometry = true;
-                break;
-            }
-        }
-    }
-    renderFamilyProperties.bHasGeometry = bHasGeometry && _pipelineManager->IsCategoryReady(PipelineCategory::Geometry | PipelineCategory::Instancing | PipelineCategory::CustomRendering);
-    renderFamilyProperties.bHasGTAO = viewFamily.gtaoConfig.bEnabled && _pipelineManager->IsCategoryReady(PipelineCategory::GTAO);
-    renderFamilyProperties.bHasShadows = viewFamily.shadowConfig.enabled && _pipelineManager->IsCategoryReady(PipelineCategory::ShadowPass);
-    renderFamilyProperties.bHasDeferred = _pipelineManager->IsCategoryReady(PipelineCategory::DeferredShading);
-    renderFamilyProperties.bHasSkybox = viewFamily.skyboxIndex != -1 && _pipelineManager->IsCategoryReady(PipelineCategory::EnvironmentMap);
-
-    if (!viewFamily.mainPassInstances.empty()) {
-        std::ranges::sort(viewFamily.mainPassInstances, [](const Core::InstanceData& a, const Core::InstanceData& b) {
-            return a.primitiveIndex < b.primitiveIndex;
-        });
-    }
-
-
-    _limits.highestModelBuffer = std::max(_limits.highestModelBuffer, NextPowerOfTwo(viewFamily.modelMatrices.size()));
-    _limits.highestMaterialBuffer = std::max(_limits.highestMaterialBuffer, NextPowerOfTwo(viewFamily.materials.size()));
-
-
-    uint32_t totalInstanceCountThisFrame = viewFamily.mainPassInstances.size();
-    for (const auto& [key, customDraw] : viewFamily.customShaderDraws) {
-        totalInstanceCountThisFrame += customDraw.instances.size();
-    }
-    _limits.highestInstanceBuffer = std::max(_limits.highestInstanceBuffer, NextPowerOfTwo(totalInstanceCountThisFrame));
-    _limits.highestMeshletCount = std::max(_limits.highestMeshletCount, NextPowerOfTwo(readbackData->meshletCount));
-
-
-    renderFamilyProperties.modelBufferSize = _limits.highestModelBuffer * sizeof(Model);
-    renderFamilyProperties.materialBufferSize = _limits.highestMaterialBuffer * sizeof(MaterialProperties);
-    renderFamilyProperties.instanceBufferSize = _limits.highestInstanceBuffer * sizeof(Instance);
-
-
-    renderFamilyProperties.instanceMeshletOffsetsBufferSize = _limits.highestInstanceBuffer * sizeof(InstanceMeshletOffsetPrefixSum);
-    uint32_t level1BlockCount = (_limits.highestInstanceBuffer + INSTANCING_PREFIX_SUM_DISPATCH_X - 1) / INSTANCING_PREFIX_SUM_DISPATCH_X;
-    uint32_t level2BlockCount = (level1BlockCount + INSTANCING_PREFIX_SUM_DISPATCH_X - 1) / INSTANCING_PREFIX_SUM_DISPATCH_X;
-    renderFamilyProperties.level1SumsBufferSize = _limits.highestInstanceBuffer * sizeof(uint32_t);
-    renderFamilyProperties.level1BlockSumsBufferSize = level1BlockCount * sizeof(uint32_t);
-    renderFamilyProperties.level2SumsBufferSize = level1BlockCount * sizeof(uint32_t);
-    renderFamilyProperties.level2BlockSumsBufferSize = level2BlockCount * sizeof(uint32_t);
-    renderFamilyProperties.scannedLevel2BlockSumsBufferSize = glm::max(level2BlockCount, INSTANCING_PREFIX_SUM_DISPATCH_X) * sizeof(uint32_t);
-
-    renderFamilyProperties.intermediateMeshletBufferSize = _limits.highestMeshletCount * sizeof(IntermediateMeshlet);
-    uint32_t meshletLevel1BlockCount = (_limits.highestMeshletCount + INSTANCING_PREFIX_SUM_DISPATCH_X - 1) / INSTANCING_PREFIX_SUM_DISPATCH_X;
-    uint32_t meshletLevel2BlockCount = (meshletLevel1BlockCount + INSTANCING_PREFIX_SUM_DISPATCH_X - 1) / INSTANCING_PREFIX_SUM_DISPATCH_X;
-
-    renderFamilyProperties.meshletLevel1SumsBufferSize = _limits.highestMeshletCount * sizeof(uint32_t);
-    renderFamilyProperties.meshletLevel1BlockSumsBufferSize = meshletLevel1BlockCount * sizeof(uint32_t);
-    renderFamilyProperties.meshletLevel2SumsBufferSize = meshletLevel1BlockCount * sizeof(uint32_t);
-    renderFamilyProperties.meshletLevel2BlockSumsBufferSize = meshletLevel2BlockCount * sizeof(uint32_t);
-    renderFamilyProperties.meshletScannedLevel2BlockSumsBufferSize = glm::max(meshletLevel2BlockCount, INSTANCING_PREFIX_SUM_DISPATCH_X) * sizeof(uint32_t);
-
-    renderFamilyProperties.visibleMeshletsBufferSize = _limits.highestMeshletCount * sizeof(CompactedMeshlet);
-
-
-    renderFamilyProperties.visibleMeshletUpperBound = _limits.highestMeshletCount;
-    return renderFamilyProperties;
 }
 
 void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const Core::Array<uint32_t, 2> renderExtent, float renderDeltaTime) const
@@ -1332,7 +1265,7 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
             hasPortal = bHasPortal,
             shadowOffset = shadowDataUploadAllocation.offset,
             lightOffset = lightDataUploadAllocation.offset](VkCommandBuffer cmd) {
-            std::array<VkBufferCopy2, 2> sceneDataRegions{};
+            Core::Array<VkBufferCopy2, 2> sceneDataRegions{};
             uint32_t sceneDataCount{1};
             sceneDataRegions[0].sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2;
             sceneDataRegions[0].srcOffset = sceneOffset;
@@ -1351,11 +1284,11 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
                 .srcBuffer = renderGraph->GetTransientUploadBuffer(),
                 .dstBuffer = renderGraph->GetBufferHandle(SID("scene_data")),
                 .regionCount = sceneDataCount,
-                .pRegions = sceneDataRegions.data()
+                .pRegions = sceneDataRegions.Data()
             };
             vkCmdCopyBuffer2(cmd, &sceneDataCopyInfo);
 
-            std::array<VkBufferCopy2, 1> shadowDataRegions{};
+            Core::Array<VkBufferCopy2, 1> shadowDataRegions{};
             shadowDataRegions[0].sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2;
             shadowDataRegions[0].srcOffset = shadowOffset;
             shadowDataRegions[0].dstOffset = 0;
@@ -1364,12 +1297,12 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
                 .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
                 .srcBuffer = renderGraph->GetTransientUploadBuffer(),
                 .dstBuffer = renderGraph->GetBufferHandle(SID("shadow_data")),
-                .regionCount = shadowDataRegions.size(),
-                .pRegions = shadowDataRegions.data()
+                .regionCount = shadowDataRegions.Size(),
+                .pRegions = shadowDataRegions.Data()
             };
             vkCmdCopyBuffer2(cmd, &shadowDataCopyInfo);
 
-            std::array<VkBufferCopy2, 1> lightDataRegions{};
+            Core::Array<VkBufferCopy2, 1> lightDataRegions{};
             lightDataRegions[0].sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2;
             lightDataRegions[0].srcOffset = lightOffset;
             lightDataRegions[0].dstOffset = 0;
@@ -1378,8 +1311,8 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
                 .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
                 .srcBuffer = renderGraph->GetTransientUploadBuffer(),
                 .dstBuffer = renderGraph->GetBufferHandle(SID("light_data")),
-                .regionCount = lightDataRegions.size(),
-                .pRegions = lightDataRegions.data()
+                .regionCount = lightDataRegions.Size(),
+                .pRegions = lightDataRegions.Data()
             };
             vkCmdCopyBuffer2(cmd, &lightDataCopyInfo);
         });
@@ -1506,8 +1439,10 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFami
     Core::ShadowConfiguration shadowConfig = viewFamily.shadowConfig;
 
     for (int32_t cascadeLevel = 0; cascadeLevel < SHADOW_CASCADE_COUNT; ++cascadeLevel) {
-        std::string shadowMapName = "shadow_cascade_" + std::to_string(cascadeLevel);
-        std::string shadowPassName = "Shadow Cascade Pass " + std::to_string(cascadeLevel);
+        Core::InlineString<32> shadowMapName;
+        shadowMapName.len = snprintf(shadowMapName.buf, 32, "shadow_cascade_%d", cascadeLevel);
+        Core::InlineString<48> shadowPassName;
+        shadowPassName.len = snprintf(shadowPassName.buf, 48, "Shadow Cascade Pass %d", cascadeLevel);
 
         StringID shadowMapId = StringID(shadowMapName.c_str(), shadowMapName.size());
         StringID shadowPassId = StringID(shadowPassName.c_str(), shadowPassName.size());
@@ -1562,7 +1497,7 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFami
             shadowPass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
             shadowPass.ReadBuffer(mainOutputs.visibleMeshlets);
             shadowPass.ReadIndirectBuffer(mainOutputs.compactedDispatchArgs);
-            shadowPass.Execute([&, mainOutputs, sceneIndex, shadowMapName, cascadeLevel, cascadeWidth, cascadeHeight, linearBias, slopedBias, shadowMapId](VkCommandBuffer cmd) {
+            shadowPass.Execute([&, mainOutputs, sceneIndex, cascadeLevel, cascadeWidth, cascadeHeight, linearBias, slopedBias, shadowMapId](VkCommandBuffer cmd) {
                 VkViewport viewport = VkHelpers::GenerateViewport(cascadeWidth, cascadeHeight);
                 vkCmdSetViewport(cmd, 0, 1, &viewport);
                 VkRect2D scissor = VkHelpers::GenerateScissor(cascadeWidth, cascadeHeight);
@@ -1849,7 +1784,8 @@ void RenderThread::SetupGeometryPasses(RenderGraph& graph, const Core::ViewFamil
 
         InstancedGeometryPassOutputs customOutputs = SetupInstancedGeometryPass(graph, customConfig, pipelineManager, sceneIndex);
 
-        std::string customDrawName = "Custom Draw " + customDraw.first;
+        Core::InlineString<128> customDrawName;
+        customDrawName.len = snprintf(customDrawName.buf, 128, "Custom Draw %s", customDraw.first.c_str());
         StringID customDrawId = StringID(customDrawName.c_str(), customDrawName.size());
         RenderPass& customDrawPass = graph.AddPass(customDrawId, VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
         customDrawPass.WriteColorAttachment(targets.albedo);
@@ -1866,7 +1802,7 @@ void RenderThread::SetupGeometryPasses(RenderGraph& graph, const Core::ViewFamil
         customDrawPass.ReadBuffer(customOutputs.visibleMeshlets);
         customDrawPass.ReadIndirectBuffer(customOutputs.compactedDispatchArgs);
         customDrawPass.Execute(
-            [&, customOutputs, customDraw, sceneIndex, width = renderExtent[0], height = renderExtent[1], instanceBufferOffset = customDraw.second.instanceBufferOffset](VkCommandBuffer cmd) {
+            [&, customOutputs, customDrawData = &customDraw.second, sceneIndex, width = renderExtent[0], height = renderExtent[1], instanceBufferOffset = customDraw.second.instanceBufferOffset](VkCommandBuffer cmd) {
                 VkViewport viewport = VkHelpers::GenerateViewport(width, height);
                 vkCmdSetViewport(cmd, 0, 1, &viewport);
                 VkRect2D scissor = VkHelpers::GenerateScissor(width, height);
@@ -1902,14 +1838,14 @@ void RenderThread::SetupGeometryPasses(RenderGraph& graph, const Core::ViewFamil
                     .compactedDispatchBuffer = graph.GetBufferAddress(customOutputs.compactedDispatchArgs),
                     .sceneDataIndex = sceneIndex,
                 };
-                memcpy(pushConstants.customData, customDraw.second.pushConstantCustomData.data(), sizeof(pushConstants.customData));
+                memcpy(pushConstants.customData, customDrawData->pushConstantCustomData.data(), sizeof(pushConstants.customData));
 
-                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(customDraw.second.pipelineId);
+                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(customDrawData->pipelineId);
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineEntry->pipeline);
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT,
                                    0, sizeof(pushConstants), &pushConstants);
-                if (customDraw.second.stencilValue != -1) {
-                    vkCmdSetStencilReference(cmd, VK_STENCIL_FACE_FRONT_AND_BACK, customDraw.second.stencilValue);
+                if (customDrawData->stencilValue != -1) {
+                    vkCmdSetStencilReference(cmd, VK_STENCIL_FACE_FRONT_AND_BACK, customDrawData->stencilValue);
                 }
                 vkCmdDrawMeshTasksIndirectEXT(
                     cmd,
@@ -2167,8 +2103,8 @@ void RenderThread::SetupPortalComposite(RenderGraph& graph, const Core::ViewFami
         VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), nullptr, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
         VkRenderingAttachmentInfo stencilAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), nullptr, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
-        std::array colorAttachments = {colorAttachment, velocityAttachment};
-        VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, colorAttachments.data(), 2, &depthAttachment, &stencilAttachment);
+        Core::Array<VkRenderingAttachmentInfo, 2> colorAttachments{colorAttachment, velocityAttachment};
+        VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, colorAttachments.Data(), 2, &depthAttachment, &stencilAttachment);
         vkCmdBeginRendering(cmd, &renderInfo);
 
         PortalCompositePushConstant pc{
@@ -2203,8 +2139,8 @@ void RenderThread::SetupSkyboxRendering(RenderGraph& graph, const Core::ViewFami
         VkRenderingAttachmentInfo colorAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.outFinalColor), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
         VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), nullptr, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
-        std::array colorAttachments = {colorAttachment};
-        VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, colorAttachments.data(), 1, &depthAttachment, nullptr);
+        Core::Array<VkRenderingAttachmentInfo, 1> colorAttachments{colorAttachment};
+        VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, colorAttachments.Data(), 1, &depthAttachment, nullptr);
         vkCmdBeginRendering(cmd, &renderInfo);
 
         EnvironmentSkyboxPushConstant pc{
@@ -2433,7 +2369,8 @@ StringID RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewF
             uint32_t mipWidth = std::max(1u, renderExtent[0] >> (i + 1));
             uint32_t mipHeight = std::max(1u, renderExtent[1] >> (i + 1));
 
-            std::string passName = std::format("Bloom Downsample {}", i);
+            Core::InlineString<32> passName;
+            passName.len = snprintf(passName.buf, 32, "Bloom Downsample %u", i);
             RenderPass& downsamplePass = graph.AddPass(StringID(passName.c_str(), passName.size()), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
             downsamplePass.ReadWriteImage(SID("bloom_chain"));
             downsamplePass.Execute([&, mipWidth, mipHeight, srcMip = i, dstMip = i + 1](VkCommandBuffer cmd) {
@@ -2458,8 +2395,8 @@ StringID RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewF
             uint32_t mipWidth = std::max(1u, renderExtent[0] >> i);
             uint32_t mipHeight = std::max(1u, renderExtent[1] >> i);
 
-            std::string passName = std::format("Bloom Upsample {}", i);
-
+            Core::InlineString<32> passName;
+            passName.len = snprintf(passName.buf, 32, "Bloom Upsample %d", i);
             RenderPass& upsamplePass = graph.AddPass(StringID(passName.c_str(), passName.size()), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
             upsamplePass.ReadWriteImage(SID("bloom_chain"));
             upsamplePass.Execute([&, mipWidth, mipHeight, dstMip = i, lowerMip = i + 1](VkCommandBuffer cmd) {

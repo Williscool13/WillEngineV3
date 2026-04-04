@@ -4,6 +4,7 @@
 
 #include "render_view_helpers.h"
 
+#include "core/math/math_helpers.h"
 #include "render/interface/render_interface.h"
 #include "render/frame_resources.h"
 #include "render/pipelines/pipeline_manager.h"
@@ -90,6 +91,76 @@ SceneData GenerateSceneData(const Core::RenderView& view, const Core::PostProces
     sceneData.clipPlane = {0.0f, 0.0f, 0.0f, 1.0f};
 
     return sceneData;
+}
+
+RenderFamilyProperties PrepareRenderFamilyProperties(Core::ViewFamily& viewFamily, ReadbackStruct* readbackData, PipelineManager* _pipelineManager, FrameResourceLimits& _limits)
+{
+    RenderFamilyProperties renderFamilyProperties{};
+    renderFamilyProperties.Reset();
+    renderFamilyProperties.viewFamily = &viewFamily;
+    bool bHasGeometry = !viewFamily.mainPassInstances.empty();
+    if (!bHasGeometry) {
+        for (const auto& [key, customDraw] : viewFamily.customShaderDraws) {
+            if (!customDraw.instances.empty()) {
+                bHasGeometry = true;
+                break;
+            }
+        }
+    }
+    renderFamilyProperties.bHasGeometry = bHasGeometry && _pipelineManager->IsCategoryReady(PipelineCategory::Geometry | PipelineCategory::Instancing | PipelineCategory::CustomRendering);
+    renderFamilyProperties.bHasGTAO = viewFamily.gtaoConfig.bEnabled && _pipelineManager->IsCategoryReady(PipelineCategory::GTAO);
+    renderFamilyProperties.bHasShadows = viewFamily.shadowConfig.enabled && _pipelineManager->IsCategoryReady(PipelineCategory::ShadowPass);
+    renderFamilyProperties.bHasDeferred = _pipelineManager->IsCategoryReady(PipelineCategory::DeferredShading);
+    renderFamilyProperties.bHasSkybox = viewFamily.skyboxIndex != -1 && _pipelineManager->IsCategoryReady(PipelineCategory::EnvironmentMap);
+
+    if (!viewFamily.mainPassInstances.empty()) {
+        std::ranges::sort(viewFamily.mainPassInstances, [](const Core::InstanceData& a, const Core::InstanceData& b) {
+            return a.primitiveIndex < b.primitiveIndex;
+        });
+    }
+
+
+    _limits.highestModelBuffer = std::max(_limits.highestModelBuffer, NextPowerOfTwo(viewFamily.modelMatrices.size()));
+    _limits.highestMaterialBuffer = std::max(_limits.highestMaterialBuffer, NextPowerOfTwo(viewFamily.materials.size()));
+
+
+    uint32_t totalInstanceCountThisFrame = viewFamily.mainPassInstances.size();
+    for (const auto& [key, customDraw] : viewFamily.customShaderDraws) {
+        totalInstanceCountThisFrame += customDraw.instances.size();
+    }
+    _limits.highestInstanceBuffer = std::max(_limits.highestInstanceBuffer, NextPowerOfTwo(totalInstanceCountThisFrame));
+    _limits.highestMeshletCount = std::max(_limits.highestMeshletCount, NextPowerOfTwo(readbackData->meshletCount));
+
+
+    renderFamilyProperties.modelBufferSize = _limits.highestModelBuffer * sizeof(Model);
+    renderFamilyProperties.materialBufferSize = _limits.highestMaterialBuffer * sizeof(MaterialProperties);
+    renderFamilyProperties.instanceBufferSize = _limits.highestInstanceBuffer * sizeof(Instance);
+
+
+    renderFamilyProperties.instanceMeshletOffsetsBufferSize = _limits.highestInstanceBuffer * sizeof(InstanceMeshletOffsetPrefixSum);
+    uint32_t level1BlockCount = (_limits.highestInstanceBuffer + INSTANCING_PREFIX_SUM_DISPATCH_X - 1) / INSTANCING_PREFIX_SUM_DISPATCH_X;
+    uint32_t level2BlockCount = (level1BlockCount + INSTANCING_PREFIX_SUM_DISPATCH_X - 1) / INSTANCING_PREFIX_SUM_DISPATCH_X;
+    renderFamilyProperties.level1SumsBufferSize = _limits.highestInstanceBuffer * sizeof(uint32_t);
+    renderFamilyProperties.level1BlockSumsBufferSize = level1BlockCount * sizeof(uint32_t);
+    renderFamilyProperties.level2SumsBufferSize = level1BlockCount * sizeof(uint32_t);
+    renderFamilyProperties.level2BlockSumsBufferSize = level2BlockCount * sizeof(uint32_t);
+    renderFamilyProperties.scannedLevel2BlockSumsBufferSize = glm::max(level2BlockCount, INSTANCING_PREFIX_SUM_DISPATCH_X) * sizeof(uint32_t);
+
+    renderFamilyProperties.intermediateMeshletBufferSize = _limits.highestMeshletCount * sizeof(IntermediateMeshlet);
+    uint32_t meshletLevel1BlockCount = (_limits.highestMeshletCount + INSTANCING_PREFIX_SUM_DISPATCH_X - 1) / INSTANCING_PREFIX_SUM_DISPATCH_X;
+    uint32_t meshletLevel2BlockCount = (meshletLevel1BlockCount + INSTANCING_PREFIX_SUM_DISPATCH_X - 1) / INSTANCING_PREFIX_SUM_DISPATCH_X;
+
+    renderFamilyProperties.meshletLevel1SumsBufferSize = _limits.highestMeshletCount * sizeof(uint32_t);
+    renderFamilyProperties.meshletLevel1BlockSumsBufferSize = meshletLevel1BlockCount * sizeof(uint32_t);
+    renderFamilyProperties.meshletLevel2SumsBufferSize = meshletLevel1BlockCount * sizeof(uint32_t);
+    renderFamilyProperties.meshletLevel2BlockSumsBufferSize = meshletLevel2BlockCount * sizeof(uint32_t);
+    renderFamilyProperties.meshletScannedLevel2BlockSumsBufferSize = glm::max(meshletLevel2BlockCount, INSTANCING_PREFIX_SUM_DISPATCH_X) * sizeof(uint32_t);
+
+    renderFamilyProperties.visibleMeshletsBufferSize = _limits.highestMeshletCount * sizeof(CompactedMeshlet);
+
+
+    renderFamilyProperties.visibleMeshletUpperBound = _limits.highestMeshletCount;
+    return renderFamilyProperties;
 }
 
 float Halton(uint32_t i, uint32_t b)
