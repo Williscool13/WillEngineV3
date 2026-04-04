@@ -7,6 +7,7 @@
 
 #include <cassert>
 #include <cstddef>
+#include <initializer_list>
 #include <utility>
 
 namespace Core
@@ -26,6 +27,14 @@ class InlineVector
 
 public:
     InlineVector() = default;
+
+    InlineVector(std::initializer_list<T> init)
+    {
+        assert(init.size() <= N && "InlineVector initializer list exceeds capacity");
+        for (const T& v : init) {
+            data_[size_++] = v;
+        }
+    }
 
     void PushBack(const T& item)
     {

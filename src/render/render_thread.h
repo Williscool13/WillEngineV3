@@ -192,7 +192,6 @@ private:
 
     uint32_t currentFrameInFlight{0};
     uint64_t frameNumber{0};
-    // todo remove
     FrameResourceLimits frameResourceLimits{};
     bool bEngineRequestsRecreate{false};
     bool bRenderRequestsRecreate{false};

@@ -5,8 +5,10 @@
 #ifndef WILL_ENGINE_VK_GRAPHICS_PIPELINE_BUILDER_H
 #define WILL_ENGINE_VK_GRAPHICS_PIPELINE_BUILDER_H
 
-#include <filesystem>
 #include <volk.h>
+
+#include "core/containers/inline_path.h"
+#include "core/containers/inline_vector.h"
 
 namespace Render
 {
@@ -26,7 +28,7 @@ public:
     static constexpr uint32_t MAX_COLOR_ATTACHMENTS = 8;
     static constexpr uint32_t MAX_DYNAMIC_STATES = 16;
 
-    GraphicsPipelineBuilder& AddShaderStage(const std::filesystem::path& shaderPath, VkShaderStageFlagBits stage);
+    GraphicsPipelineBuilder& AddShaderStage(Core::Path shaderPath, VkShaderStageFlagBits stage);
 
     GraphicsPipelineBuilder& SetupVertexInput(const VkVertexInputBindingDescription* bindings, uint32_t bindingCount,
                                               const VkVertexInputAttributeDescription* attributes, uint32_t attributeCount);
@@ -75,23 +77,17 @@ public:
 
     void Clear();
 
-    std::filesystem::path shaderPaths[MAX_SHADER_STAGES];
-    VkPipelineShaderStageCreateInfo shaderStages[MAX_SHADER_STAGES];
-    uint32_t shaderStageCount{0};
+    Core::InlineVector<Core::Path, MAX_SHADER_STAGES> shaderPaths{};
+    Core::InlineVector<VkPipelineShaderStageCreateInfo, MAX_SHADER_STAGES> shaderStages{};
 
-    VkVertexInputBindingDescription vertexBindings[MAX_VERTEX_BINDINGS];
-    uint32_t vertexBindingCount{0};
-    VkVertexInputAttributeDescription vertexAttributes[MAX_VERTEX_ATTRIBUTES];
-    uint32_t vertexAttributeCount{0};
+    Core::InlineVector<VkVertexInputBindingDescription, MAX_VERTEX_BINDINGS> vertexBindings{};
+    Core::InlineVector<VkVertexInputAttributeDescription, MAX_VERTEX_ATTRIBUTES> vertexAttributes{};
 
-    VkFormat colorAttachmentFormats[MAX_COLOR_ATTACHMENTS];
-    uint32_t colorAttachmentFormatCount{0};
+    Core::InlineVector<VkFormat, MAX_COLOR_ATTACHMENTS> colorAttachmentFormats{};
 
-    VkPipelineColorBlendAttachmentState blendAttachmentStates[MAX_COLOR_ATTACHMENTS];
-    uint32_t blendAttachmentStateCount{0};
+    Core::InlineVector<VkPipelineColorBlendAttachmentState, MAX_COLOR_ATTACHMENTS> blendAttachmentStates{};
 
-    VkDynamicState dynamicStates[MAX_DYNAMIC_STATES]{VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
-    uint32_t dynamicStateCount{2}; // viewport + scissor
+    Core::InlineVector<VkDynamicState, MAX_DYNAMIC_STATES> dynamicStates{VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
 
     VkPushConstantRange pushConstantRange{};
 

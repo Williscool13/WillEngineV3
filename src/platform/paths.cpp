@@ -3,81 +3,86 @@
 //
 
 #include "paths.h"
+
 #include <SDL3/SDL_filesystem.h>
+
+#include "file_utils.h"
 
 namespace Platform
 {
-std::filesystem::path GetExecutablePath()
+const Core::Path& GetExecutablePath()
 {
-    const char* basePath = SDL_GetBasePath();
-    std::filesystem::path result(basePath);
-    return result;
+    static const Core::Path path(SDL_GetBasePath());
+    return path;
 }
 
-std::filesystem::path GetUserDataPath()
+const Core::Path& GetUserDataPath()
 {
-    char* prefPath = SDL_GetPrefPath("WillEngine", "GameEngine");
-    std::filesystem::path result(prefPath);
-    SDL_free(prefPath);
-    return result;
+    static const Core::Path path = []() {
+        char* prefPath = SDL_GetPrefPath("WillEngine", "GameEngine");
+        Core::Path p(prefPath);
+        SDL_free(prefPath);
+        return p;
+    }();
+    return path;
 }
 
-std::filesystem::path GetEngineTempPath()
+const Core::Path& GetEngineTempPath()
 {
-    auto result = std::filesystem::temp_directory_path() / "WillEngine";
-    std::filesystem::create_directories(result);
-    return result;
+    static const Core::Path path = []() {
+        Core::Path p = GetExecutablePath() / "temp";
+        CreateDirectories(p.c_str());
+        return p;
+    }();
+    return path;
 }
 
-std::filesystem::path GetShaderPath()
+const Core::Path& GetShaderPath()
 {
-    return GetExecutablePath() / "shaders";
+    static const Core::Path path = GetExecutablePath() / "shaders";
+    return path;
 }
 
 std::filesystem::path GetAssetPath()
 {
 #ifdef ASSETS_PATH
-    return std::filesystem::path(ASSETS_PATH);
+    return {ASSETS_PATH};
 #else
-    return GetExecutablePath() / "assets";
+    return std::filesystem::path(GetExecutablePath().c_str()) / "assets";
 #endif
 }
 
-std::filesystem::path GetLogPath()
+const Core::Path& GetLogPath()
 {
 #ifndef PACKAGED_BUILD
-    return GetExecutablePath() / "logs";
+    static const Core::Path path = GetExecutablePath() / "logs";
 #else
-    return GetUserDataPath() / "logs";
+    static const Core::Path path = GetUserDataPath() / "logs";
 #endif
+    return path;
 }
 
-std::filesystem::path GetCrashPath()
+const Core::Path& GetCrashPath()
 {
 #ifndef PACKAGED_BUILD
-    return GetExecutablePath() / "crash";
+    static const Core::Path path = GetExecutablePath() / "crash";
 #else
-    return GetUserDataPath() / "crashes";
+    static const Core::Path path = GetUserDataPath() / "crashes";
 #endif
+    return path;
 }
 
-std::filesystem::path SetWorkingDirectory()
+const Core::Path& GetCachePath()
 {
-    auto exePath = GetExecutablePath();
-    std::filesystem::current_path(exePath);
-    return exePath;
-}
-
-std::filesystem::path GetCachePath()
-{
+    static const Core::Path path = []() {
 #ifndef PACKAGED_BUILD
-    auto result = GetExecutablePath() / "cache";
-    std::filesystem::create_directories(result);
-    return result;
+        Core::Path p = GetExecutablePath() / "cache";
 #else
-    auto result = GetUserDataPath() / "cache";
-    std::filesystem::create_directories(result);
-    return result;
+        Core::Path p = GetUserDataPath() / "cache";
 #endif
+        CreateDirectories(p.c_str());
+        return p;
+    }();
+    return path;
 }
 } // Platform

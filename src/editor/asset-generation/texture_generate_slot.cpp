@@ -34,7 +34,6 @@ void TextureGenerateSlot::Initialize(
 {
     scheduler = _scheduler;
     context = _context;
-    temporaryPath = Platform::GetExecutablePath() / "temp" / ("texture_gen_" + std::to_string(slotIndex));
     _graphicsDispatchCallback = std::move(graphicsDispatchCallback);
     _notifyCallback = std::move(notifyCallback);
 

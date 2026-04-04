@@ -36,7 +36,6 @@ void EnvironmentMapGenerateSlot::Initialize(
     context = _context;
     pipelineManager = _pipelineManager;
     resourceManager = _resourceManager;
-    temporaryPath = Platform::GetExecutablePath() / "temp" / ("envmap_gen_" + std::to_string(slotIndex));
     _graphicsDispatchCallback = std::move(graphicsDispatchCallback);
     _notifyCallback = std::move(notifyCallback);
 

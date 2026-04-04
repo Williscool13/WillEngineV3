@@ -29,6 +29,7 @@ struct ResourceManager
     explicit ResourceManager(VulkanContext* context);
 
     // Only managed by Asset Load Thread
+    // OffsetAllocator::Allocator uses heap internally; acceptable as these are relatively rare/low frequency.
     std::mutex vertexBufferAllocatorMutex;
     OffsetAllocator::Allocator vertexBufferAllocator{MEGA_VERTEX_BUFFER_SIZE};
     std::mutex meshletVertexBufferAllocatorMutex;

@@ -7,29 +7,27 @@
 
 #include <filesystem>
 
+#include "core/containers/inline_path.h"
+
 namespace Platform
 {
 inline constexpr int32_t MAX_PATH_LENGTH = 1024;
 
-std::filesystem::path GetExecutablePath();
+const Core::Path& GetExecutablePath();
 
-std::filesystem::path GetUserDataPath();
+const Core::Path& GetUserDataPath();
 
-std::filesystem::path GetEngineTempPath();
+const Core::Path& GetEngineTempPath();
 
-std::filesystem::path GetTempPath();
+const Core::Path& GetLogPath();
 
-std::filesystem::path GetLogPath();
+const Core::Path& GetCrashPath();
 
-std::filesystem::path GetCrashPath();
-
-std::filesystem::path GetShaderPath();
+const Core::Path& GetShaderPath();
 
 std::filesystem::path GetAssetPath();
 
-std::filesystem::path SetWorkingDirectory();
-
-std::filesystem::path GetCachePath();
+const Core::Path& GetCachePath();
 }
 
 #endif //WILL_ENGINE_PLATFORM_H

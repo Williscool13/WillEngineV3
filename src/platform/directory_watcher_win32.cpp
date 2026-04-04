@@ -12,14 +12,14 @@ DirectoryWatcher::~DirectoryWatcher()
     Stop();
 }
 
-bool DirectoryWatcher::Start(const std::string& directory, Callback cb, float debounceSeconds)
+bool DirectoryWatcher::Start(const char* directory, Callback cb, float debounceSeconds)
 {
     callback = std::move(cb);
     debounceTime = debounceSeconds;
     lastTrigger = std::chrono::steady_clock::now();
 
     handle = CreateFileA(
-        directory.c_str(),
+        directory,
         FILE_LIST_DIRECTORY,
         FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
         nullptr,

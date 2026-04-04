@@ -3,22 +3,22 @@
 //
 
 #include "graphics_pipeline_builder.h"
+
 #include <cassert>
 
 namespace Render
 {
-GraphicsPipelineBuilder& GraphicsPipelineBuilder::AddShaderStage(const std::filesystem::path& shaderPath, VkShaderStageFlagBits stage)
+GraphicsPipelineBuilder& GraphicsPipelineBuilder::AddShaderStage(Core::Path shaderPath, VkShaderStageFlagBits stage)
 {
-    assert(shaderStageCount < MAX_SHADER_STAGES && "Too many shader stages");
+    assert(!shaderStages.IsFull() && "Too many shader stages");
 
-    shaderPaths[shaderStageCount] = shaderPath;
-    shaderStages[shaderStageCount] = {
+    shaderPaths.PushBack(shaderPath);
+    shaderStages.PushBack({
         .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
         .stage = stage,
         .module = VK_NULL_HANDLE, // Filled in creation
         .pName = "main",
-    };
-    shaderStageCount++;
+    });
 
     return *this;
 }
@@ -29,14 +29,14 @@ GraphicsPipelineBuilder& GraphicsPipelineBuilder::SetupVertexInput(const VkVerte
     assert(bindingCount <= MAX_VERTEX_BINDINGS && "Too many vertex bindings");
     assert(attributeCount <= MAX_VERTEX_ATTRIBUTES && "Too many vertex attributes");
 
-    vertexBindingCount = bindingCount;
+    vertexBindings.Clear();
     for (uint32_t i = 0; i < bindingCount; ++i) {
-        vertexBindings[i] = bindings[i];
+        vertexBindings.PushBack(bindings[i]);
     }
 
-    vertexAttributeCount = attributeCount;
+    vertexAttributes.Clear();
     for (uint32_t i = 0; i < attributeCount; ++i) {
-        vertexAttributes[i] = attributes[i];
+        vertexAttributes.PushBack(attributes[i]);
     }
 
     return *this;
@@ -87,9 +87,9 @@ GraphicsPipelineBuilder& GraphicsPipelineBuilder::SetupRenderer(const VkFormat* 
 {
     assert(colorAttachmentCount <= MAX_COLOR_ATTACHMENTS && "Too many color attachments");
 
-    this->colorAttachmentFormatCount = colorAttachmentCount;
+    colorAttachmentFormats.Clear();
     for (uint32_t i = 0; i < colorAttachmentCount; ++i) {
-        this->colorAttachmentFormats[i] = _colorAttachmentFormats[i];
+        colorAttachmentFormats.PushBack(_colorAttachmentFormats[i]);
     }
 
     renderInfo.colorAttachmentCount = colorAttachmentCount;
@@ -103,9 +103,9 @@ GraphicsPipelineBuilder& GraphicsPipelineBuilder::SetupBlending(const VkPipeline
 {
     assert(count <= MAX_COLOR_ATTACHMENTS && "Too many blend attachment states");
 
-    this->blendAttachmentStateCount = count;
+    blendAttachmentStates.Clear();
     for (uint32_t i = 0; i < count; ++i) {
-        this->blendAttachmentStates[i] = _blendAttachmentStates[i];
+        blendAttachmentStates.PushBack(_blendAttachmentStates[i]);
     }
 
     return *this;
@@ -154,24 +154,24 @@ GraphicsPipelineBuilder& GraphicsPipelineBuilder::SetupTessellation(int32_t cont
 
 GraphicsPipelineBuilder& GraphicsPipelineBuilder::AddDynamicState(VkDynamicState dynamicState)
 {
-    assert(dynamicStateCount < MAX_DYNAMIC_STATES && "Too many dynamic states");
+    assert(!dynamicStates.IsFull() && "Too many dynamic states");
 
-    dynamicStates[dynamicStateCount++] = dynamicState;
+    dynamicStates.PushBack(dynamicState);
 
     return *this;
 }
 
 void GraphicsPipelineBuilder::Clear()
 {
-    shaderStageCount = 0;
-    vertexBindingCount = 0;
-    vertexAttributeCount = 0;
-    colorAttachmentFormatCount = 0;
-    blendAttachmentStateCount = 0;
-
-    dynamicStateCount = 2;
-    dynamicStates[0] = VK_DYNAMIC_STATE_VIEWPORT;
-    dynamicStates[1] = VK_DYNAMIC_STATE_SCISSOR;
+    shaderPaths.Clear();
+    shaderStages.Clear();
+    vertexBindings.Clear();
+    vertexAttributes.Clear();
+    colorAttachmentFormats.Clear();
+    blendAttachmentStates.Clear();
+    dynamicStates.Clear();
+    dynamicStates.PushBack(VK_DYNAMIC_STATE_VIEWPORT);
+    dynamicStates.PushBack(VK_DYNAMIC_STATE_SCISSOR);
 
     pushConstantRange = {};
 

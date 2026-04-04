@@ -45,7 +45,6 @@ struct VulkanContext
     bool bMaintenance9Enabled{false};
 
     VmaVulkanFunctions vulkanFunctions{};
-    VkAllocationCallbacks allocationCallbacks{};
 
     VulkanContext() = default;
 

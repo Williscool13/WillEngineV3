@@ -19,6 +19,7 @@ namespace Render
 {
 DeviceInfo VulkanContext::deviceInfo{};
 
+// If ever considering a custom allocator for vulkan types, then use these with a mutex
 static void* VKAPI_PTR VkAllocate(void* pUserData, size_t size, size_t, VkSystemAllocationScope)
 {
     return static_cast<Core::MemoryManager*>(pUserData)->RenderAllocRaw(size);
@@ -76,11 +77,6 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL VulkanDebugCallback(
 
 VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryManager)
 {
-    allocationCallbacks.pUserData = &memoryManager;
-    allocationCallbacks.pfnAllocation = VkAllocate;
-    allocationCallbacks.pfnReallocation = VkReallocate;
-    allocationCallbacks.pfnFree = VkFree;
-
     VkResult res = volkInitialize();
     if (res != VK_SUCCESS) {
         LOG_ERROR(Engine, "Failed to initialize volk: {}", string_VkResult(res));
@@ -479,7 +475,8 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
     vulkanFunctions.vkGetDeviceImageMemoryRequirements = vkGetDeviceImageMemoryRequirements;
 
     allocatorInfo.pVulkanFunctions = &vulkanFunctions;
-    allocatorInfo.pAllocationCallbacks = &allocationCallbacks;
+    // todo: idk about this
+    // allocatorInfo.pAllocationCallbacks = &allocationCallbacks;
 #ifndef PACKAGED_BUILD
     VmaDeviceMemoryCallbacks deviceMemoryCallbacks{};
     deviceMemoryCallbacks.pfnAllocate = VmaDeviceAllocate;

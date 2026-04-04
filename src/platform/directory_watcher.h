@@ -28,7 +28,7 @@ public:
 
     DirectoryWatcher& operator=(const DirectoryWatcher&) = delete;
 
-    bool Start(const std::string& directory, Callback cb, float debounceSeconds = 0.2f);
+    bool Start(const char* directory, Callback cb, float debounceSeconds = 0.2f);
 
     void Stop();
 

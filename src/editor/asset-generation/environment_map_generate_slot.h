@@ -65,7 +65,6 @@ private:
     Render::VulkanContext* context{nullptr};
     Render::PipelineManager* pipelineManager{nullptr};
     Render::ResourceManager* resourceManager{nullptr};
-    std::filesystem::path temporaryPath;
     std::function<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> _graphicsDispatchCallback;
     std::function<void(bool success, EnvironmentMapGenerateSlotHandle slotHandle)> _notifyCallback;
 

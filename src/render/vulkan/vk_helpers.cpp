@@ -4,7 +4,6 @@
 
 #include "vk_helpers.h"
 
-#include <filesystem>
 #include <fstream>
 #include <vector>
 
@@ -257,10 +256,10 @@ VkImageViewCreateInfo VkHelpers::ImageViewCreateInfo(VkImage image, VkFormat for
     };
 }
 
-bool VkHelpers::LoadShaderModule(const std::filesystem::path& filePath, VkDevice device, VkShaderModule* outShaderModule)
+bool VkHelpers::LoadShaderModule(const Core::Path& filePath, VkDevice device, VkShaderModule* outShaderModule)
 {
     // open the file. With cursor at the end
-    std::ifstream file(filePath, std::ios::ate | std::ios::binary);
+    std::ifstream file(filePath.c_str(), std::ios::ate | std::ios::binary);
 
 
     if (!file.is_open()) {
@@ -273,6 +272,7 @@ bool VkHelpers::LoadShaderModule(const std::filesystem::path& filePath, VkDevice
 
     // spirv expects the buffer to be on uint32, so make sure to reserve a int
     // vector big enough for the entire file
+    // MEM: vector bad, but this is multithreaded and relatively infrequent
     std::vector<uint32_t> buffer(fileSize / sizeof(uint32_t));
 
     // put file cursor at beginning

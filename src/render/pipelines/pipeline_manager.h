@@ -6,7 +6,6 @@
 #define WILL_ENGINE_PIPELINE_MANAGER_H
 
 
-#include <filesystem>
 #include <string>
 #include <volk.h>
 
@@ -14,7 +13,9 @@
 #include "pipeline_data.h"
 #include "graphics_pipeline_builder.h"
 #include "core/containers/array.h"
+#include "core/containers/inline_path.h"
 #include "core/containers/map.h"
+#include "core/containers/span.h"
 #include "core/string_id.h"
 #include "render/vulkan/vk_context.h"
 
@@ -41,10 +42,10 @@ public:
 
     PipelineManager& operator=(const PipelineManager&) = delete;
 
-    void RegisterComputePipeline(StringID pipelineId, const std::filesystem::path& shaderPath, uint32_t pushConstantSize, PipelineCategory category);
+    void RegisterComputePipeline(StringID pipelineId, Core::Path shaderPath, uint32_t pushConstantSize, PipelineCategory category);
 
-    void RegisterComputePipelineCustomLayout(StringID pipelineId, const std::filesystem::path& shaderPath, uint32_t pushConstantSize, PipelineCategory category,
-                                             const std::vector<VkDescriptorSetLayout>& customLayouts);
+    void RegisterComputePipelineCustomLayout(StringID pipelineId, Core::Path shaderPath, uint32_t pushConstantSize, PipelineCategory category,
+                                             Core::Span<const VkDescriptorSetLayout> customLayouts);
 
     void RegisterGraphicsPipeline(StringID pipelineId, GraphicsPipelineBuilder& builder, uint32_t pushConstantSize, VkShaderStageFlags pushConstantStages, PipelineCategory category);
 
@@ -86,6 +87,7 @@ private:
 private:
     // Non-Owning
     VulkanContext* context;
+    Core::TlsfAllocator* renderAlloc{nullptr};
     AssetLoad::AsyncAssetLoadManager* asyncAssetLoadManager{nullptr};
 
     // Owning

@@ -8,6 +8,8 @@
 #include <filesystem>
 #include <volk.h>
 
+#include "core/containers/inline_path.h"
+#include "core/containers/inline_vector.h"
 #include "core/string_id.h"
 #include "pipeline_category.h"
 
@@ -31,7 +33,7 @@ public:
     StringID pipelineId{};
     PipelineCategory category{PipelineCategory::None};
     VkPipelineLayoutCreateInfo layoutCreateInfo{};
-    std::vector<VkDescriptorSetLayout> customLayout{};
+    Core::InlineVector<VkDescriptorSetLayout, 8> customLayout{};
 
     VkPushConstantRange pushConstantRange{};
 
@@ -52,7 +54,7 @@ public:
     ~ComputePipelineData() override = default;
     bool CreatePipeline(VulkanContext* context, VkPipelineCache pipelineCache) override;
 
-    std::filesystem::path shaderPath{};
+    Core::Path shaderPath{};
 };
 
 class GraphicsPipelineData : public PipelineData
@@ -67,24 +69,17 @@ public:
     static constexpr uint32_t MAX_COLOR_ATTACHMENTS = 8;
     static constexpr uint32_t MAX_DYNAMIC_STATES = 16;
 
-    std::filesystem::path shaderPaths[MAX_SHADER_STAGES];
+    Core::InlineVector<Core::Path, MAX_SHADER_STAGES> shaderPaths{};
+    Core::InlineVector<VkPipelineShaderStageCreateInfo, MAX_SHADER_STAGES> shaderStages{};
 
-    VkPipelineShaderStageCreateInfo shaderStages[MAX_SHADER_STAGES];
-    uint32_t shaderStageCount{0};
+    Core::InlineVector<VkVertexInputBindingDescription, MAX_VERTEX_BINDINGS> vertexBindings{};
+    Core::InlineVector<VkVertexInputAttributeDescription, MAX_VERTEX_ATTRIBUTES> vertexAttributes{};
 
-    VkVertexInputBindingDescription vertexBindings[MAX_VERTEX_BINDINGS];
-    uint32_t vertexBindingCount{0};
-    VkVertexInputAttributeDescription vertexAttributes[MAX_VERTEX_ATTRIBUTES];
-    uint32_t vertexAttributeCount{0};
+    Core::InlineVector<VkFormat, MAX_COLOR_ATTACHMENTS> colorAttachmentFormats{};
 
-    VkFormat colorAttachmentFormats[MAX_COLOR_ATTACHMENTS];
-    uint32_t colorAttachmentFormatCount{0};
+    Core::InlineVector<VkPipelineColorBlendAttachmentState, MAX_COLOR_ATTACHMENTS> blendAttachmentStates{};
 
-    VkPipelineColorBlendAttachmentState blendAttachmentStates[MAX_COLOR_ATTACHMENTS];
-    uint32_t blendAttachmentStateCount{0};
-
-    VkDynamicState dynamicStates[MAX_DYNAMIC_STATES];
-    uint32_t dynamicStateCount{2};
+    Core::InlineVector<VkDynamicState, MAX_DYNAMIC_STATES> dynamicStates{};
 
     VkPipelineVertexInputStateCreateInfo vertexInputInfo{
         .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,

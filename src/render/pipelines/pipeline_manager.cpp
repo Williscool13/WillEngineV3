@@ -7,6 +7,7 @@
 #include <fstream>
 
 #include "graphics_pipeline_builder.h"
+#include "core/containers/vector.h"
 #include "asset-load/async_asset_load_manager.h"
 #include "core/memory/tlsf_allocator.h"
 #include "engine/logging/engine_log.h"
@@ -16,27 +17,27 @@
 namespace Render
 {
 PipelineManager::PipelineManager(VulkanContext* context, Core::TlsfAllocator& renderAlloc, const Core::Array<VkDescriptorSetLayout, 2>& globalLayouts)
-    : context(context), currentFrame(0), globalDescriptorSetLayouts(globalLayouts),
+    : context(context), renderAlloc(&renderAlloc), currentFrame(0), globalDescriptorSetLayouts(globalLayouts),
       graphicsPipelines(&renderAlloc, Core::AllocTag::Render, 1024),
       computePipelines(&renderAlloc, Core::AllocTag::Render, 1024)
 {
-    std::filesystem::path cachePath = Platform::GetCachePath() / "pipeline.cache";
+    Core::Path cachePath = Platform::GetCachePath() / "pipeline.cache";
 
-    std::vector<char> cacheData;
-    if (std::filesystem::exists(cachePath)) {
-        std::ifstream file(cachePath, std::ios::binary | std::ios::ate);
+    Core::Vector<char> cacheData(&renderAlloc, Core::AllocTag::Render);
+    if (cachePath.Exists()) {
+        std::ifstream file(cachePath.c_str(), std::ios::binary | std::ios::ate);
         if (file) {
             size_t fileSize = file.tellg();
             file.seekg(0);
-            cacheData.resize(fileSize);
-            file.read(cacheData.data(), fileSize);
+            cacheData.Resize(fileSize);
+            file.read(cacheData.Data(), fileSize);
             LOG_INFO(Renderer, "Loaded pipeline cache: {} bytes", fileSize);
         }
     }
 
     VkPipelineCacheCreateInfo cacheInfo{VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO};
-    cacheInfo.initialDataSize = cacheData.size();
-    cacheInfo.pInitialData = cacheData.data();
+    cacheInfo.initialDataSize = cacheData.Size();
+    cacheInfo.pInitialData = cacheData.Data();
 
     VK_CHECK(vkCreatePipelineCache(context->device, &cacheInfo, nullptr, &pipelineCache));
 }
@@ -48,13 +49,14 @@ PipelineManager::~PipelineManager()
         vkGetPipelineCacheData(context->device, pipelineCache, &cacheSize, nullptr);
 
         if (cacheSize > 0) {
-            std::vector<char> cacheData(cacheSize);
-            vkGetPipelineCacheData(context->device, pipelineCache, &cacheSize, cacheData.data());
+            Core::Vector<char> cacheData(renderAlloc, Core::AllocTag::Render);
+            cacheData.Resize(cacheSize);
+            vkGetPipelineCacheData(context->device, pipelineCache, &cacheSize, cacheData.Data());
 
-            std::filesystem::path cachePath = Platform::GetCachePath() / "pipeline.cache";
-            std::ofstream file(cachePath, std::ios::binary);
+            Core::Path cachePath = Platform::GetCachePath() / "pipeline.cache";
+            std::ofstream file(cachePath.c_str(), std::ios::binary);
             if (file) {
-                file.write(cacheData.data(), cacheSize);
+                file.write(cacheData.Data(), cacheSize);
                 LOG_INFO(Renderer, "Saved pipeline cache: {} bytes", cacheSize);
             }
         }
@@ -100,7 +102,7 @@ PipelineManager::~PipelineManager()
     }
 }
 
-void PipelineManager::RegisterComputePipeline(StringID pipelineId, const std::filesystem::path& shaderPath, uint32_t pushConstantSize, PipelineCategory category)
+void PipelineManager::RegisterComputePipeline(StringID pipelineId, Core::Path shaderPath, uint32_t pushConstantSize, PipelineCategory category)
 {
     if (computePipelines.Contains(pipelineId)) {
         LOG_WARN(Renderer, "Pipeline '{}' already registered, skipping", pipelineId.ToString());
@@ -127,8 +129,8 @@ void PipelineManager::RegisterComputePipeline(StringID pipelineId, const std::fi
     LOG_INFO(Renderer, "Registered compute pipeline: {}", pipelineId.ToString());
 }
 
-void PipelineManager::RegisterComputePipelineCustomLayout(StringID pipelineId, const std::filesystem::path& shaderPath, uint32_t pushConstantSize, PipelineCategory category,
-                                                          const std::vector<VkDescriptorSetLayout>& customLayouts)
+void PipelineManager::RegisterComputePipelineCustomLayout(StringID pipelineId, Core::Path shaderPath, uint32_t pushConstantSize, PipelineCategory category,
+                                                          Core::Span<const VkDescriptorSetLayout> customLayouts)
 {
     if (computePipelines.Contains(pipelineId)) {
         LOG_WARN(Renderer, "Pipeline '{}' already registered, skipping", pipelineId.ToString());
@@ -144,10 +146,12 @@ void PipelineManager::RegisterComputePipelineCustomLayout(StringID pipelineId, c
     data.pushConstantRange.size = pushConstantSize;
     data.pushConstantRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 
-    data.customLayout = customLayouts;
+    for (const VkDescriptorSetLayout layout : customLayouts) {
+        data.customLayout.PushBack(layout);
+    }
     data.layoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    data.layoutCreateInfo.pSetLayouts = data.customLayout.data();
-    data.layoutCreateInfo.setLayoutCount = data.customLayout.size();
+    data.layoutCreateInfo.pSetLayouts = data.customLayout.Data();
+    data.layoutCreateInfo.setLayoutCount = static_cast<uint32_t>(data.customLayout.Size());
     data.layoutCreateInfo.pPushConstantRanges = &data.pushConstantRange;
     data.layoutCreateInfo.pushConstantRangeCount = pushConstantSize > 0 ? 1 : 0;
 
@@ -168,35 +172,15 @@ void PipelineManager::RegisterGraphicsPipeline(StringID pipelineId, GraphicsPipe
     data.category = category;
     data.retirementFrame = 0;
 
-    data.shaderStageCount = builder.shaderStageCount;
-    for (uint32_t i = 0; i < builder.shaderStageCount; ++i) {
-        data.shaderPaths[i] = builder.shaderPaths[i];
-        data.shaderStages[i] = builder.shaderStages[i];
+    for (uint32_t i = 0; i < builder.shaderStages.Size(); ++i) {
+        data.shaderPaths.PushBack(builder.shaderPaths[i]);
+        data.shaderStages.PushBack(builder.shaderStages[i]);
     }
-
-    data.vertexBindingCount = builder.vertexBindingCount;
-    for (uint32_t i = 0; i < builder.vertexBindingCount; ++i) {
-        data.vertexBindings[i] = builder.vertexBindings[i];
-    }
-    data.vertexAttributeCount = builder.vertexAttributeCount;
-    for (uint32_t i = 0; i < builder.vertexAttributeCount; ++i) {
-        data.vertexAttributes[i] = builder.vertexAttributes[i];
-    }
-
-    data.colorAttachmentFormatCount = builder.colorAttachmentFormatCount;
-    for (uint32_t i = 0; i < builder.colorAttachmentFormatCount; ++i) {
-        data.colorAttachmentFormats[i] = builder.colorAttachmentFormats[i];
-    }
-
-    data.blendAttachmentStateCount = builder.blendAttachmentStateCount;
-    for (uint32_t i = 0; i < builder.blendAttachmentStateCount; ++i) {
-        data.blendAttachmentStates[i] = builder.blendAttachmentStates[i];
-    }
-
-    data.dynamicStateCount = builder.dynamicStateCount;
-    for (uint32_t i = 0; i < builder.dynamicStateCount; ++i) {
-        data.dynamicStates[i] = builder.dynamicStates[i];
-    }
+    for (const auto& b : builder.vertexBindings) { data.vertexBindings.PushBack(b); }
+    for (const auto& a : builder.vertexAttributes) { data.vertexAttributes.PushBack(a); }
+    for (const auto& f : builder.colorAttachmentFormats) { data.colorAttachmentFormats.PushBack(f); }
+    for (const auto& s : builder.blendAttachmentStates) { data.blendAttachmentStates.PushBack(s); }
+    for (const auto& d : builder.dynamicStates) { data.dynamicStates.PushBack(d); }
 
     data.vertexInputInfo = builder.vertexInputInfo;
     data.inputAssembly = builder.inputAssembly;
@@ -324,7 +308,7 @@ void PipelineManager::ReloadModified()
     for (auto [pipelineId, data] : computePipelines) {
         if (data.bLoading || data.retirementFrame != 0) { continue; }
 
-        auto currentTime = std::filesystem::last_write_time(data.shaderPath);
+        auto currentTime = std::filesystem::last_write_time(std::filesystem::path(data.shaderPath.c_str()));
         if (currentTime != data.lastModified) {
             LOG_INFO(Renderer, "Compute shader modified, rebuilding pipeline: {}", pipelineId.ToString());
             data.bLoading = true;
@@ -336,8 +320,8 @@ void PipelineManager::ReloadModified()
         if (data.bLoading || data.retirementFrame != 0) { continue; }
 
         auto currentTime = std::filesystem::file_time_type::min();
-        for (uint32_t i = 0; i < data.shaderStageCount; ++i) {
-            auto modTime = std::filesystem::last_write_time(data.shaderPaths[i]);
+        for (uint32_t i = 0; i < data.shaderPaths.Size(); ++i) {
+            auto modTime = std::filesystem::last_write_time(std::filesystem::path(data.shaderPaths[i].c_str()));
             if (modTime > currentTime) {
                 currentTime = modTime;
             }

@@ -26,6 +26,7 @@
 #include "types/render_types.h"
 #include "render/vulkan/vk_imgui_wrapper.h"
 #include "backends/imgui_impl_vulkan.h"
+#include "core/containers/span.h"
 #include "core/memory/memory_manager.h"
 #include "core/string_id.h"
 #include "core/math/math_helpers.h"
@@ -65,13 +66,6 @@ RenderThread::RenderThread(Core::MemoryManager& memoryManager, Core::FrameSync* 
         frameSync = RenderSynchronization(context);
         frameSync.Initialize();
     }
-
-    VkBufferCreateInfo bufferInfo = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
-    bufferInfo.pNext = nullptr;
-    bufferInfo.usage = VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT;
-    VmaAllocationCreateInfo vmaAllocInfo = {};
-    vmaAllocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
-    vmaAllocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
 }
 
 RenderThread::~RenderThread()
@@ -989,30 +983,26 @@ void RenderThread::CreatePipelines()
                                              sizeof(DebugVisualizePushConstant), PipelineCategory::Debug);
 
 #if WILL_EDITOR
-    std::vector emapLayout{
-        resourceManager->environmentMapGenerateResources.descriptorSetLayout.handle,
-    };
+    const VkDescriptorSetLayout emapLayout = resourceManager->environmentMapGenerateResources.descriptorSetLayout.handle;
     pipelineManager->RegisterComputePipelineCustomLayout(SID("ibl_equirect_to_cubemap"), Platform::GetShaderPath() / "ibl_equirect_to_cubemap_compute.spv",
-                                                         sizeof(EquirectToCubemapPushConstant), PipelineCategory::AssetGeneration, emapLayout);
+                                                         sizeof(EquirectToCubemapPushConstant), PipelineCategory::AssetGeneration, Core::Span(&emapLayout, 1));
 
     pipelineManager->RegisterComputePipelineCustomLayout(SID("ibl_convolve_diffuse"), Platform::GetShaderPath() / "ibl_convolve_diffuse_compute.spv",
-                                                         sizeof(ConvolveDiffusePushConstant), PipelineCategory::AssetGeneration, emapLayout);
+                                                         sizeof(ConvolveDiffusePushConstant), PipelineCategory::AssetGeneration, Core::Span(&emapLayout, 1));
 
     pipelineManager->RegisterComputePipelineCustomLayout(SID("ibl_prefilter_specular"), Platform::GetShaderPath() / "ibl_prefilter_specular_compute.spv",
-                                                         sizeof(PrefilterSpecularPushConstant), PipelineCategory::AssetGeneration, emapLayout);
+                                                         sizeof(PrefilterSpecularPushConstant), PipelineCategory::AssetGeneration, Core::Span(&emapLayout, 1));
 
-    std::vector brdfLutLayout{
-        resourceManager->brdfLutGenerateResources.descriptorSetLayout.handle,
-    };
+    const VkDescriptorSetLayout brdfLutLayout = resourceManager->brdfLutGenerateResources.descriptorSetLayout.handle;
     pipelineManager->RegisterComputePipelineCustomLayout(SID("ibl_brdf_lut"), Platform::GetShaderPath() / "brdf_lut_generate_compute.spv",
-                                                         sizeof(BRDFLUTPushConstant), PipelineCategory::AssetGeneration, brdfLutLayout);
+                                                         sizeof(BRDFLUTPushConstant), PipelineCategory::AssetGeneration, Core::Span(&brdfLutLayout, 1));
 #endif
 
     GraphicsPipelineBuilder builder;
 
     // Shadow cascade pipeline
     {
-        builder.AddShaderStage("shaders/shadow_mesh_shading_instanced_mesh.spv", VK_SHADER_STAGE_MESH_BIT_EXT);
+        builder.AddShaderStage(Platform::GetShaderPath() / "shadow_mesh_shading_instanced_mesh.spv", VK_SHADER_STAGE_MESH_BIT_EXT);
         builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
         builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE);
         builder.SetupDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_GREATER_OR_EQUAL);
@@ -1041,8 +1031,8 @@ void RenderThread::CreatePipelines()
 
     // Instanced mesh shading pipeline
     {
-        builder.AddShaderStage("shaders/mesh_shading_instanced_mesh.spv", VK_SHADER_STAGE_MESH_BIT_EXT);
-        builder.AddShaderStage("shaders/mesh_shading_instanced_fragment.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
+        builder.AddShaderStage(Platform::GetShaderPath() / "mesh_shading_instanced_mesh.spv", VK_SHADER_STAGE_MESH_BIT_EXT);
+        builder.AddShaderStage(Platform::GetShaderPath() / "mesh_shading_instanced_fragment.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
         builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
         builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE);
         builder.SetupDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_GREATER_OR_EQUAL);
@@ -1062,8 +1052,8 @@ void RenderThread::CreatePipelines()
 
     // Portal Graphics Pipeline
     {
-        builder.AddShaderStage("shaders/mesh_shading_instanced_mesh.spv", VK_SHADER_STAGE_MESH_BIT_EXT);
-        builder.AddShaderStage("shaders/mesh_shading_instanced_fragment.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
+        builder.AddShaderStage(Platform::GetShaderPath() / "mesh_shading_instanced_mesh.spv", VK_SHADER_STAGE_MESH_BIT_EXT);
+        builder.AddShaderStage(Platform::GetShaderPath() / "mesh_shading_instanced_fragment.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
         builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
         builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE);
         builder.SetupDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_GREATER_OR_EQUAL);
@@ -1083,8 +1073,8 @@ void RenderThread::CreatePipelines()
 
     // Portal Composite
     {
-        builder.AddShaderStage("shaders/fullscreen_pass_vertex.spv", VK_SHADER_STAGE_VERTEX_BIT);
-        builder.AddShaderStage("shaders/portal_composite_fragment.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
+        builder.AddShaderStage(Platform::GetShaderPath() / "fullscreen_pass_vertex.spv", VK_SHADER_STAGE_VERTEX_BIT);
+        builder.AddShaderStage(Platform::GetShaderPath() / "portal_composite_fragment.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
         builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
         builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
         builder.SetupDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_ALWAYS);
@@ -1109,8 +1099,8 @@ void RenderThread::CreatePipelines()
 
     // Cubemap Visualizer
     {
-        builder.AddShaderStage("shaders/cubemap_visualizer_mesh.spv", VK_SHADER_STAGE_MESH_BIT_EXT);
-        builder.AddShaderStage("shaders/cubemap_visualizer_fragment.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
+        builder.AddShaderStage(Platform::GetShaderPath() / "cubemap_visualizer_mesh.spv", VK_SHADER_STAGE_MESH_BIT_EXT);
+        builder.AddShaderStage(Platform::GetShaderPath() / "cubemap_visualizer_fragment.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
         builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
         builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE);
         builder.SetupDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_GREATER_OR_EQUAL);
@@ -1129,8 +1119,8 @@ void RenderThread::CreatePipelines()
 
     // Skybox Rendering
     {
-        builder.AddShaderStage("shaders/fullscreen_pass_vertex.spv", VK_SHADER_STAGE_VERTEX_BIT);
-        builder.AddShaderStage("shaders/environment_map_skybox_fragment.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
+        builder.AddShaderStage(Platform::GetShaderPath() / "fullscreen_pass_vertex.spv", VK_SHADER_STAGE_VERTEX_BIT);
+        builder.AddShaderStage(Platform::GetShaderPath() / "environment_map_skybox_fragment.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
         builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
         builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
         builder.SetupDepthState(VK_TRUE, VK_FALSE, VK_COMPARE_OP_EQUAL);
@@ -1152,8 +1142,8 @@ void RenderThread::CreatePipelines()
 
     // Debug Render
     {
-        builder.AddShaderStage("shaders/debug_render_mesh.spv", VK_SHADER_STAGE_MESH_BIT_EXT);
-        builder.AddShaderStage("shaders/debug_render_fragment.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
+        builder.AddShaderStage(Platform::GetShaderPath() / "debug_render_mesh.spv", VK_SHADER_STAGE_MESH_BIT_EXT);
+        builder.AddShaderStage(Platform::GetShaderPath() / "debug_render_fragment.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
         builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
         builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
         builder.SetupDepthState(VK_TRUE, VK_FALSE, VK_COMPARE_OP_GREATER_OR_EQUAL);

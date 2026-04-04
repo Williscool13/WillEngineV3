@@ -210,18 +210,13 @@ void WillEngine::Initialize(Utils::Logger* logger)
             renderThread->GetVulkanContext(),
             renderThread->GetResourceManager(),
             renderThread->GetPipelineManager()->GetPipelineCache());
+        renderThread->InitializePipelineManager(asyncAssetLoadManager.get());
     }
 
     //
     {
         ZoneScopedN("CreateAudioManager");
         audioManager = std::make_unique<Audio::AudioManager>(asyncAssetLoadManager.get());
-    }
-
-    //
-    {
-        ZoneScopedN("InitializePipelineManager");
-        renderThread->InitializePipelineManager(asyncAssetLoadManager.get());
     }
 
 
@@ -343,8 +338,8 @@ void WillEngine::Initialize(Utils::Logger* logger)
 #if WILL_EDITOR
 #if !GAME_STATIC
     auto gameDirectory = Platform::GetExecutablePath() / "src/game";
-    if (exists(gameDirectory)) {
-        gameDllWatcher.Start(gameDirectory.string(), [&]() {
+    if (gameDirectory.Exists()) {
+        gameDllWatcher.Start(gameDirectory.c_str(), [&]() {
             gameFunctions.gameUnload(engineContext, gameState.get());
             auto reloadResponse = gameDll.Reload();
             switch (reloadResponse) {
@@ -373,8 +368,8 @@ void WillEngine::Initialize(Utils::Logger* logger)
     }
 #endif
     auto shaderDirectory = Platform::GetShaderPath();
-    if (exists(shaderDirectory)) {
-        shaderWatcher.Start(shaderDirectory.string(), [&]() {
+    if (shaderDirectory.Exists()) {
+        shaderWatcher.Start(shaderDirectory.c_str(), [&]() {
             if (Render::PipelineManager* pipelineManager = renderThread->GetPipelineManager()) {
                 pipelineManager->RequestReload();
             }

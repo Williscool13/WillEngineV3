@@ -61,7 +61,6 @@ private:
 
     enki::TaskScheduler* scheduler{nullptr};
     Render::VulkanContext* context{nullptr};
-    std::filesystem::path temporaryPath;
     std::function<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> _graphicsDispatchCallback;
     std::function<void(bool success, TextureGenerateSlotHandle slotHandle)> _notifyCallback;
 
