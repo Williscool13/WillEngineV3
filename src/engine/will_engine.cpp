@@ -216,7 +216,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
     //
     {
         ZoneScopedN("CreateAudioManager");
-        audioManager = std::make_unique<Audio::AudioManager>(asyncAssetLoadManager.get());
+        audioManager = memoryManager.PersistentAlloc<Audio::AudioManager>(Core::AllocTag::AudioManager, asyncAssetLoadManager.get());
     }
 
 
@@ -276,7 +276,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
         engineContext->windowContext.viewportOffsetY = 0;
         engineContext->assetManager = assetManager.get();
         engineContext->materialManager = materialManager.get();
-        engineContext->audioManager = audioManager.get();
+        engineContext->audioManager = audioManager;
         engineContext->physicsSystem = physicsSystem.get();
         engineContext->scheduler = scheduler;
         engineContext->setCursorHiddenFn = [this](bool hidden) {
@@ -1111,7 +1111,7 @@ void WillEngine::Cleanup()
     asyncAssetLoadManager->Join();
     asyncAssetLoadManager.reset();
 
-    audioManager.reset();
+    audioManager->~AudioManager();
 
     engineRenderSynchronization->~FrameSync();
 

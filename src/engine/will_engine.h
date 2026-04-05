@@ -124,7 +124,7 @@ private: // Main Systems
     enki::TaskScheduler* scheduler{};
     Render::RenderThread* renderThread{};
     Core::FrameSync* engineRenderSynchronization{};
-    std::unique_ptr<Audio::AudioManager> audioManager{};
+    Audio::AudioManager* audioManager{};
 
     std::unique_ptr<AssetLoad::AsyncAssetLoadManager> asyncAssetLoadManager{};
     std::unique_ptr<AssetManager> assetManager{};

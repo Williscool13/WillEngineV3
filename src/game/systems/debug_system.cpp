@@ -7,6 +7,7 @@
 #include <Jolt/Jolt.h>
 #include <tracy/Tracy.hpp>
 
+#include "audio/audio_manager.h"
 #include "engine/include/engine_context.h"
 #include "engine/engine_api.h"
 #include "game/components/common_components.h"
@@ -15,11 +16,24 @@
 #include "game/components/debug_gizmo_component.h"
 #include "game/components/physics/physics_body_component.h"
 #include "physics/physics_system.h"
+#include "platform/paths.h"
 
 namespace Game
 {
 void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
 {
+    if (state->inputFrame->GetKey(Key::M).pressed) {
+        auto musicPath = Platform::GetAssetPath() / "audio/the_entertainer.ogg";
+        auto _musicPath = Core::Path(musicPath);
+        Core::Handle<Audio::WillAudio> testMusic = ctx->audioManager->LoadAudio("test_music", _musicPath);
+        ctx->audioManager->PlayMusic(testMusic);
+    }
+    if (state->inputFrame->GetKey(Key::N).pressed) {
+        ctx->audioManager->SetMusicVolume(0.25f);
+    }
+    if (state->inputFrame->GetKey(Key::B).pressed) {
+        ctx->audioManager->SetMusicVolume(1.0f);
+    }
 }
 
 void DebugProcessPhysicsCollisions(Core::EngineContext* ctx, Engine::GameState* state)

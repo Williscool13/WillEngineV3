@@ -38,6 +38,7 @@ enum class AllocTag : uint32_t
     TimeManager,
     FrameSync,
     RenderThread,
+    AudioManager,
 
     Count
 };

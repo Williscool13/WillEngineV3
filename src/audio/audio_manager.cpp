@@ -39,11 +39,10 @@ AudioManager::AudioManager(AssetLoad::AsyncAssetLoadManager* asyncAssetLoadManag
 
     infiniteMusicProp = SDL_CreateProperties();
     SDL_SetNumberProperty(infiniteMusicProp, MIX_PROP_PLAY_LOOPS_NUMBER, -1);
-    // SetMusicVolume(0.5f);
 
-    std::filesystem::path musicPath = Platform::GetAssetPath() / "audio/the_entertainer.ogg";
+    Core::Path musicPath = Core::Path{Platform::GetAssetPath()} / "audio/the_entertainer.ogg";
     Core::Handle<WillAudio> audioHandle = LoadAudio("test_music", musicPath);
-    LOG_INFO(Audio, "Requesting async load for: {} (handle: {}/{})", musicPath.string(), audioHandle.index, audioHandle.generation);
+    LOG_INFO(Audio, "Requesting async load for: {} (handle: {}/{})", musicPath.c_str(), audioHandle.index, audioHandle.generation);
 }
 
 AudioManager::~AudioManager()
@@ -89,25 +88,26 @@ void AudioManager::Update() const
     while (asyncAssetLoadManager->TryDequeueAudioComplete(complete)) {
         if (complete.bSuccess) {
             complete.audioEntry->loadState = WillAudio::AudioLoadState::Loaded;
-            LOG_INFO(Audio, "Audio loaded: {}", complete.audioEntry->name);
+            LOG_INFO(Audio, "Audio loaded: {}", complete.audioEntry->name.c_str());
         }
         else {
             complete.audioEntry->loadState = WillAudio::AudioLoadState::FailedToLoad;
-            LOG_ERROR(Audio, "Audio load failed: {}", complete.audioEntry->name);
+            LOG_ERROR(Audio, "Audio load failed: {}", complete.audioEntry->name.c_str());
         }
     }
 }
 
-Core::Handle<WillAudio> AudioManager::LoadAudio(const std::string& name, const std::filesystem::path& path)
+Core::Handle<WillAudio> AudioManager::LoadAudio(const char* name, const Core::Path& path)
 {
-    auto it = namedAudio.find(name);
-    if (it != namedAudio.end()) {
-        WillAudio* audio = GetAudioPtr(it->second);
+    const StringID sid{name, strlen(name)};
+    Core::Handle<WillAudio>* existing = namedAudio.Find(sid);
+    if (existing) {
+        WillAudio* audio = GetAudioPtr(*existing);
         if (audio) {
             audio->refCount++;
             LOG_INFO(Audio, "Incremented ref count for audio '{}' to {}", name, audio->refCount);
         }
-        return it->second;
+        return *existing;
     }
 
     Core::Handle<WillAudio> handle = audioHandleAllocator.Add();
@@ -117,14 +117,14 @@ Core::Handle<WillAudio> AudioManager::LoadAudio(const std::string& name, const s
     }
 
     WillAudio& audio = audioAssets[handle.index];
-    audio.name = name;
+    audio.name = Core::InlineString<64>{name};
     audio.source = path;
     audio.mixer = mixer;
     audio.selfHandle = Engine::AudioHandle{handle.index, handle.generation};
     audio.loadState = WillAudio::AudioLoadState::NotLoaded;
     audio.refCount = 1;
 
-    namedAudio[name] = handle;
+    namedAudio.Insert(sid, handle);
     asyncAssetLoadManager->RequestAudioLoad(&audio);
 
     LOG_INFO(Audio, "Loading new audio '{}' with ref count 1", name);
@@ -142,12 +142,12 @@ void AudioManager::UnloadAudio(Core::Handle<WillAudio> handle)
 
     if (audio->refCount > 0) {
         audio->refCount--;
-        LOG_INFO(Audio, "Decremented ref count for audio '{}' to {}", audio->name, audio->refCount);
+        LOG_INFO(Audio, "Decremented ref count for audio '{}' to {}", audio->name.c_str(), audio->refCount);
     }
 
     if (audio->refCount == 0) {
         // TODO: Actually unload audio when needed
-        LOG_INFO(Audio, "Audio '{}' ref count reached 0 (unload not implemented yet)", audio->name);
+        LOG_INFO(Audio, "Audio '{}' ref count reached 0 (unload not implemented yet)", audio->name.c_str());
     }
 }
 
@@ -160,12 +160,12 @@ void AudioManager::PlayMusic(Core::Handle<WillAudio> handle, bool loop)
     }
 
     if (audio->loadState != WillAudio::AudioLoadState::Loaded) {
-        LOG_WARN(Audio, "Audio not loaded yet: {}", audio->name);
+        LOG_WARN(Audio, "Audio not loaded yet: {}", audio->name.c_str());
         return;
     }
 
     if (!audio->mixAudio) {
-        LOG_ERROR(Audio, "Audio data is null for: {}", audio->name);
+        LOG_ERROR(Audio, "Audio data is null for: {}", audio->name.c_str());
         return;
     }
 

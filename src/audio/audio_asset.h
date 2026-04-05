@@ -4,9 +4,9 @@
 
 #ifndef WILL_ENGINE_AUDIO_ASSET_H
 #define WILL_ENGINE_AUDIO_ASSET_H
-#include <filesystem>
-
 #include "engine/asset_manager_types.h"
+#include "core/containers/inline_string.h"
+#include "core/containers/inline_path.h"
 #include "SDL3_mixer/SDL_mixer.h"
 
 namespace Audio
@@ -20,9 +20,9 @@ struct WillAudio
         FailedToLoad
     };
 
-    std::string name{};
+    Core::InlineString<64> name{};
     MIX_Mixer* mixer;
-    std::filesystem::path source{};
+    Core::Path source{};
     Engine::AudioHandle selfHandle;
     AudioLoadState loadState{AudioLoadState::NotLoaded};
     uint32_t refCount = 0;

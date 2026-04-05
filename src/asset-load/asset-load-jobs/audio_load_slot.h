@@ -8,6 +8,7 @@
 #include <TaskScheduler.h>
 
 #include "asset-load/asset_load_types.h"
+#include "core/containers/inline_function.h"
 
 namespace AssetLoad
 {
@@ -23,7 +24,7 @@ public:
 
     ~AudioLoadSlot();
 
-    void Initialize(enki::TaskScheduler* _scheduler, std::function<void(bool success, AudioSlotHandle slotHandle)> _notifyCallback);
+    void Initialize(enki::TaskScheduler* _scheduler, Core::InlineFunction<void(bool, AudioSlotHandle)> _notifyCallback);
 
     void Launch(AudioSlotHandle _audioSlotHandle, Audio::WillAudio* _audioEntry);
 
@@ -43,9 +44,9 @@ private:
 
     AudioSlotHandle audioSlotHandle{};
 
-    std::unique_ptr<LoadAudioTask> task{nullptr};
+    LoadAudioTask task{};
     enki::TaskScheduler* scheduler{nullptr};
-    std::function<void(bool success, AudioSlotHandle slotHandle)> notifyCallback;
+    Core::InlineFunction<void(bool, AudioSlotHandle)> notifyCallback;
 };
 } // Audio
 

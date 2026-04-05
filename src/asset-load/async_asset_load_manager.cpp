@@ -487,10 +487,10 @@ void AsyncAssetLoadManager::OnAudioLoadComplete(bool success, AudioSlotHandle sl
     audioLoadCompleteQueue.enqueue({slot.audioEntry, success});
 
     if (success) {
-        LOG_TRACE(Asset, "Finished loading audio file: {}", slot.audioEntry->source.string());
+        LOG_TRACE(Asset, "Finished loading audio file: {}", slot.audioEntry->source.c_str());
     }
     else {
-        LOG_ERROR(Asset, "Failed to load audio file: {}", slot.audioEntry->source.string());
+        LOG_ERROR(Asset, "Failed to load audio file: {}", slot.audioEntry->source.c_str());
     }
 
     slot.Clear();
