@@ -8,6 +8,9 @@
 #include <TaskScheduler.h>
 
 #include "asset-load/asset_load_types.h"
+#include "core/containers/inline_function.h"
+#include "core/containers/vector.h"
+#include "core/memory/tlsf_allocator.h"
 
 namespace enki
 {
@@ -30,8 +33,9 @@ public:
     ~StaticModelLoadSlot();
 
     void Initialize(enki::TaskScheduler* _scheduler, Render::VulkanContext* _context, Render::ResourceManager* _resourceManager,
-                    std::function<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> _requestDispatchCallback,
-                    std::function<void(bool success, ModelSlotHandle modelSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle)> _notifyCallback);
+                    Core::TlsfAllocator* _allocator,
+                    Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> _requestDispatchCallback,
+                    Core::InlineFunction<void(bool success, ModelSlotHandle modelSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle)> _notifyCallback);
 
     void Launch(ModelSlotHandle _modelSlotHandle, UploadStagingSlotHandle _uploadStagingSlotHandle, UploadStaging* _uploadStaging, Engine::StaticModel* _outputModel);
 
@@ -43,7 +47,7 @@ public:
 
     void PrepareUploadData();
 
-    void UploadGeometry(VkCommandBuffer cmd, const std::function<void(bool)>& submitAndWait);
+    void UploadGeometry(VkCommandBuffer cmd, const Core::InlineFunction<void(bool)>& submitAndWait);
 
     ModelSlotHandle modelSlotHandle{};
     UploadStagingSlotHandle uploadStagingSlotHandle{};
@@ -61,19 +65,16 @@ private:
         void ExecuteRange(enki::TaskSetPartition range, uint32_t threadNum) override;
     };
 
-    std::unique_ptr<LoadModelTask> task{nullptr};
+    LoadModelTask task{};
     enki::TaskScheduler* scheduler{nullptr};
     Render::VulkanContext* context{nullptr};
     Render::ResourceManager* resourceManager{nullptr};
 
     RawStaticModel rawData{};
-    /**
-     * Cached vector to store 3x uint8_t->1x uint32_t for meshlet triangles.
-     */
-    std::vector<uint32_t> packedTriangles;
+    Core::Vector<uint32_t> packedTriangles;
 
-    std::function<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* doneSemaphore)> _requestDispatchCallback;
-    std::function<void(bool success, ModelSlotHandle modelSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle)> _notifyCallback;
+    Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* doneSemaphore)> _requestDispatchCallback;
+    Core::InlineFunction<void(bool success, ModelSlotHandle modelSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle)> _notifyCallback;
 };
 } // AssetLoad
 

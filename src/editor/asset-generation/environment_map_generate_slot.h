@@ -5,15 +5,13 @@
 #ifndef WILL_ENGINE_ENVIRONMENT_MAP_GENERATE_SLOT_H
 #define WILL_ENGINE_ENVIRONMENT_MAP_GENERATE_SLOT_H
 
-#include <filesystem>
 #include <functional>
 #include <vector>
 #include <semaphore>
 #include <TaskScheduler.h>
 
 #include "asset_generation_types.h"
-#include "dds_defs.h"
-#include "environment_map_generate_resources.h"
+#include "core/containers/inline_path.h"
 #include "core/memory/handle.h"
 #include "core/memory/linear_allocator.h"
 #include "render/shaders/constants_interop.h"
@@ -45,7 +43,7 @@ struct EnvironmentMapGenerateSlot
         std::function<void(bool success, EnvironmentMapGenerateSlotHandle slotHandle)> notifyCallback
     );
 
-    void Launch(EnvironmentMapGenerateSlotHandle _slotHandle, const std::filesystem::path& _imagePath, const std::filesystem::path& _outputPath);
+    void Launch(EnvironmentMapGenerateSlotHandle _slotHandle, const Core::Path& _imagePath, const Core::Path& _outputPath);
     void Clear();
 
     struct GenerateTask : enki::ITaskSet
@@ -54,8 +52,8 @@ struct EnvironmentMapGenerateSlot
         void ExecuteRange(enki::TaskSetPartition range, uint32_t threadNum) override;
     };
 
-    std::filesystem::path imagePath;
-    std::filesystem::path outputPath;
+    Core::Path imagePath;
+    Core::Path outputPath;
 
 private:
     bool LoadEquirectangularAndGenerate(VkCommandBuffer cmd, const std::function<void()>& startRecording, const std::function<void(bool)>& submitAndWait);

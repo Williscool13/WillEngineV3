@@ -5,7 +5,6 @@
 #ifndef WILL_ENGINE_TEXTURE_GENERATE_SLOT_H
 #define WILL_ENGINE_TEXTURE_GENERATE_SLOT_H
 
-#include <filesystem>
 #include <functional>
 #include <vector>
 
@@ -14,6 +13,7 @@
 
 #include "asset_generation_types.h"
 #include "dds_defs.h"
+#include "core/containers/inline_path.h"
 #include "core/memory/handle.h"
 #include "core/memory/linear_allocator.h"
 #include "engine/core/texture_id.h"
@@ -41,8 +41,8 @@ struct TextureGenerateSlot
         std::function<void(bool success, TextureGenerateSlotHandle slotHandle)> notifyCallback
     );
 
-    void Launch(TextureGenerateSlotHandle _slotHandle, const std::filesystem::path& _imagePath, const std::filesystem::path& _outputPath, Engine::TextureID _textureId, bool _mipmapped, DXGI_FORMAT _targetFormat);
-    void LaunchFromMemory(TextureGenerateSlotHandle _slotHandle, std::unique_ptr<uint8_t[]> pixels, uint32_t w, uint32_t h, uint32_t bytesPerPixel, const std::filesystem::path& _outputPath, Engine::TextureID _textureId, bool _mipmapped, DXGI_FORMAT _targetFormat);
+    void Launch(TextureGenerateSlotHandle _slotHandle, const Core::Path& _imagePath, const Core::Path& _outputPath, Engine::TextureID _textureId, bool _mipmapped, DXGI_FORMAT _targetFormat);
+    void LaunchFromMemory(TextureGenerateSlotHandle _slotHandle, std::unique_ptr<uint8_t[]> pixels, uint32_t w, uint32_t h, uint32_t bytesPerPixel, const Core::Path& _outputPath, Engine::TextureID _textureId, bool _mipmapped, DXGI_FORMAT _targetFormat);
     void Clear();
 
     struct GenerateTask : enki::ITaskSet
@@ -51,8 +51,8 @@ struct TextureGenerateSlot
         void ExecuteRange(enki::TaskSetPartition range, uint32_t threadNum) override;
     };
 
-    std::filesystem::path imagePath;
-    std::filesystem::path outputPath;
+    Core::Path imagePath;
+    Core::Path outputPath;
     Engine::TextureID textureId{};
 
 private:

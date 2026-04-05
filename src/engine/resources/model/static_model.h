@@ -6,9 +6,7 @@
 #define WILL_ENGINE_WILL_MODEL_ASSET_H
 
 #include <cfloat>
-#include <filesystem>
 #include <optional>
-#include <vector>
 
 #include <glm/vec3.hpp>
 #include <glm/gtc/quaternion.hpp>
@@ -16,6 +14,9 @@
 #include "model_types.h"
 #include "TaskScheduler.h"
 #include "../../../render/interface/render_interface.h"
+#include "core/containers/inline_string.h"
+#include "core/containers/inline_path.h"
+#include "core/containers/inline_vector.h"
 #include "engine/core/model_id.h"
 
 
@@ -78,7 +79,7 @@ public:
     StaticModel& operator=(StaticModel&&) noexcept = default;
 
     // Populated by AssetManager, never changed
-    std::string name{};
+    Core::InlineString<128> name{};
     StaticModelHandle selfHandle;
     /**
      * RNG for gltf models. Hash for procedural.
@@ -89,7 +90,7 @@ public:
     uint64_t retireFrame{0};
 
     // Populated by AssetManager, Only for normal models
-    std::filesystem::path source{};
+    Core::Path source{};
 
     // Populated by AssetManager, Only for (simple) procedural models
     ProceduralParams proceduralParams{};
@@ -99,8 +100,8 @@ public:
 
     // Populated in AssetLoadThread
     StaticModelData modelData{};
-    std::vector<Core::BufferAcquireOperation> bufferAcquireOps{};
-    std::vector<Core::ImageAcquireOperation> imageAcquireOps{};
+    Core::InlineVector<Core::BufferAcquireOperation, 8> bufferAcquireOps{};
+    Core::InlineVector<Core::ImageAcquireOperation, 4> imageAcquireOps{};
 
     struct PhysicsCache
     {

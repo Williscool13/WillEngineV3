@@ -25,7 +25,7 @@ const Core::Path& GetCrashPath();
 
 const Core::Path& GetShaderPath();
 
-std::filesystem::path GetAssetPath();
+const Core::Path& GetAssetPath();
 
 const Core::Path& GetCachePath();
 }

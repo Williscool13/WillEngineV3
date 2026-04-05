@@ -5,7 +5,6 @@
 #ifndef WILL_ENGINE_MODEL_GENERATE_TASK_H
 #define WILL_ENGINE_MODEL_GENERATE_TASK_H
 
-#include <filesystem>
 #include <functional>
 #include <semaphore>
 #include <fastgltf/types.hpp>
@@ -14,7 +13,9 @@
 #include "asset_generation_types.h"
 #include "asset-load/asset_load_types.h"
 
+#include "core/containers/inline_path.h"
 #include "core/memory/linear_allocator.h"
+#include "core/memory/tlsf_allocator.h"
 #include "engine/resources/model/model_types.h"
 
 namespace Editor
@@ -37,15 +38,16 @@ public:
         enki::TaskScheduler* _scheduler,
         AssetGenerator* _generator,
         StaticModelGenerationProgress* _progress,
+        Core::TlsfAllocator* _allocator,
         std::function<void(bool success, ModelGenerateSlotHandle slotHandle)> notifyCallback
     );
 
-    void Launch(ModelGenerateSlotHandle slotHandle, const std::filesystem::path& gltfPath, const std::filesystem::path& outputPath, uint64_t modelId);
+    void Launch(ModelGenerateSlotHandle slotHandle, const Core::Path& gltfPath, const Core::Path& outputPath, uint64_t modelId);
 
     void Clear();
 
-    std::filesystem::path gltfPath;
-    std::filesystem::path outputPath;
+    Core::Path gltfPath;
+    Core::Path outputPath;
     uint64_t modelId{0};
 
 private:
@@ -62,7 +64,7 @@ private:
 
     bool WriteStaticModel();
 
-    void TopologicalSortNodes(std::vector<Engine::Node>& nodes, std::vector<uint32_t>& oldToNew);
+    void TopologicalSortNodes(Core::Vector<Engine::Node>& nodes, std::vector<uint32_t>& oldToNew);
 
     static VkFilter ExtractFilter(fastgltf::Filter filter);
 

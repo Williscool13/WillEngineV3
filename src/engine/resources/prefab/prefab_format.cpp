@@ -60,13 +60,13 @@ std::optional<WPrefabHeader> ReadWPrefabHeader(std::istream& in)
     return std::nullopt;
 }
 
-std::optional<WPrefabHeader> ReadWPrefabHeader(const std::filesystem::path& path)
+std::optional<WPrefabHeader> ReadWPrefabHeader(const char* path)
 {
     std::ifstream f(path, std::ios::binary);
     return ReadWPrefabHeader(f);
 }
 
-std::optional<WPrefabData> ReadWPrefab(const std::filesystem::path& path)
+std::optional<WPrefabData> ReadWPrefab(const char* path)
 {
     std::ifstream f(path);
     if (!f.is_open()) {

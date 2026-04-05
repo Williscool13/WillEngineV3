@@ -4,8 +4,7 @@
 
 #ifndef WILL_ENGINE_ASSET_MANAGER_H
 #define WILL_ENGINE_ASSET_MANAGER_H
-#include <filesystem>
-#include <unordered_map>
+#include <random>
 
 #include "asset_manager_config.h"
 #include "asset_manager_types.h"
@@ -13,6 +12,13 @@
 #include "core/sampler_id.h"
 #include "engine/include/engine_context.h"
 #include "core/memory/handle_allocator.h"
+#include "core/memory/memory_manager.h"
+#include "core/containers/array.h"
+#include "core/containers/fixed_map.h"
+#include "core/containers/inline_map.h"
+#include "core/containers/inline_path.h"
+#include "core/containers/inline_string.h"
+#include "core/containers/vector.h"
 #include "engine/resources/sampler/sampler.h"
 #include "render/types/cubemap_asset.h"
 #include "resources/model/model_types.h"
@@ -43,7 +49,7 @@ struct ResolveLoadResult
 class AssetManager
 {
 public:
-    AssetManager(Core::EngineContext* ctx, AssetLoad::AsyncAssetLoadManager* assetLoadManager, Render::ResourceManager* resourceManager);
+    AssetManager(Core::MemoryManager& memoryManager, Core::EngineContext* ctx, AssetLoad::AsyncAssetLoadManager* assetLoadManager, Render::ResourceManager* resourceManager);
 
     ~AssetManager();
 
@@ -58,8 +64,9 @@ public:
 public: // Models
     [[nodiscard]] ModelID FindModelByName(std::string_view name) const
     {
-        auto it = modelNameToId.find(std::string(name));
-        return it != modelNameToId.end() ? it->second : ModelID::INVALID;
+        const StringID sid{name.data(), name.size()};
+        const ModelID* found = modelNameToId.Find(sid);
+        return found ? *found : ModelID::INVALID;
     }
 
     [[nodiscard]] uint32_t GetActiveModelCount()   const { return modelAllocator.GetCount(); }
@@ -79,28 +86,28 @@ public: // Models
 
     struct CachedModelMetadata
     {
-        std::filesystem::path source;
-        std::string name;
+        Core::Path source;
+        Core::InlineString<128> name{};
         uint32_t nodeCount{};
         uint32_t meshNodesCount{};
-        std::vector<Node> nodes;
+        Core::Vector<Node> nodes;
         ModelBounds bounds{};
     };
 
-    const std::unordered_map<ModelID, CachedModelMetadata>& GetModelCache() { return modelCache; }
+    const Core::FixedMap<ModelID, CachedModelMetadata>& GetModelCache() { return modelCache; }
 
     [[nodiscard]] const CachedModelMetadata* GetModelMetadata(ModelID modelID) const
     {
-        auto it = modelCache.find(modelID);
-        return it != modelCache.end() ? &it->second : nullptr;
+        return modelCache.Find(modelID);
     }
 
 
 public: // Textures
     [[nodiscard]] TextureID FindTextureByName(std::string_view name) const
     {
-        auto it = textureNameToId.find(std::string(name));
-        return it != textureNameToId.end() ? it->second : TextureID::INVALID;
+        const StringID sid{name.data(), name.size()};
+        const TextureID* found = textureNameToId.Find(sid);
+        return found ? *found : TextureID::INVALID;
     }
 
     Texture* LoadTexture(TextureID textureId);
@@ -109,7 +116,7 @@ public: // Textures
 
     struct CachedTextureMetadata
     {
-        std::filesystem::path source;
+        Core::Path source;
         char name[WTEXTURE_NAME_LENGTH]{};
         uint32_t width{};
         uint32_t height{};
@@ -119,13 +126,12 @@ public: // Textures
         uint64_t uncompressedSize{};
     };
 
-    [[nodiscard]] const std::unordered_map<std::string, TextureID>& GetTextureNameToId() const { return textureNameToId; }
-    [[nodiscard]] const std::unordered_map<TextureID, CachedTextureMetadata>& GetTextureCache() const { return textureCache; }
+    [[nodiscard]] const Core::FixedMap<StringID, TextureID>& GetTextureNameToId() const { return textureNameToId; }
+    [[nodiscard]] const Core::FixedMap<TextureID, CachedTextureMetadata>& GetTextureCache() const { return textureCache; }
 
     [[nodiscard]] const CachedTextureMetadata* GetTextureMetadata(TextureID textureID) const
     {
-        auto it = textureCache.find(textureID);
-        return it != textureCache.end() ? &it->second : nullptr;
+        return textureCache.Find(textureID);
     }
 
 public: // Samplers
@@ -154,6 +160,7 @@ public:
     }
 
 private:
+    Core::MemoryManager* memoryManager{};
     Core::EngineContext* ctx;
     AssetLoad::AsyncAssetLoadManager* assetLoadManager;
     Render::ResourceManager* resourceManager;
@@ -162,49 +169,49 @@ private:
     // OffsetAllocator because it's always contiguous
     OffsetAllocator::Allocator jointMatrixAllocator{Render::BINDLESS_MODEL_BUFFER_SIZE};
 
-    std::unordered_map<ModelID, StaticModelHandle> modelIdToHandle;
+    Core::InlineMap<ModelID, StaticModelHandle, 4096> modelIdToHandle;
     Core::HandleAllocator<StaticModel, MAX_LOADED_MODELS> modelAllocator;
-    std::array<StaticModel, MAX_LOADED_MODELS> models;
+    Core::Array<StaticModel, MAX_LOADED_MODELS> models;
 
     Core::HandleAllocator<Texture, MAX_LOADED_TEXTURES> textureAllocator;
-    std::array<Texture, MAX_LOADED_TEXTURES> textures{};
-    std::unordered_map<TextureID, TextureHandle> textureIdToHandle;
+    Core::Array<Texture, MAX_LOADED_TEXTURES> textures{};
+    Core::InlineMap<TextureID, TextureHandle, 4096> textureIdToHandle;
 
     Core::HandleAllocator<Sampler, MAX_LOADED_SAMPLERS> samplerAllocator;
-    std::array<Sampler, MAX_LOADED_SAMPLERS> samplers{};
-    std::unordered_map<SamplerID, SamplerHandle> samplerIdToHandle;
+    Core::Array<Sampler, MAX_LOADED_SAMPLERS> samplers{};
+    Core::InlineMap<SamplerID, SamplerHandle, 256> samplerIdToHandle;
 
     Core::HandleAllocator<Render::Cubemap, MAX_LOADED_CUBEMAPS> cubemapAllocator;
-    std::array<Render::Cubemap, MAX_LOADED_CUBEMAPS> cubemaps{};
-    std::unordered_map<StringID, CubemapHandle> cubemapIdToHandle;
+    Core::Array<Render::Cubemap, MAX_LOADED_CUBEMAPS> cubemaps{};
+    Core::InlineMap<StringID, CubemapHandle, 512> cubemapIdToHandle;
 
 public: // Scenes
     struct CachedSceneMetadata
     {
-        std::filesystem::path source;
-        std::string sceneName;
+        Core::Path source;
+        Core::InlineString<128> sceneName{};
         uint32_t entityCount{};
     };
 
-    const std::unordered_map<StringID, CachedSceneMetadata>& GetSceneCache() { return sceneCache; }
+    const Core::FixedMap<StringID, CachedSceneMetadata>& GetSceneCache() { return sceneCache; }
 
     [[nodiscard]] const CachedSceneMetadata* GetSceneMetadata(StringID sceneId) const;
 
-    void RegisterScene(StringID sceneId, std::string sceneName);
+    void RegisterScene(StringID sceneId, const char* sceneName);
 
-    void UpdateSceneCachePath(StringID sceneId, const std::filesystem::path& path, uint32_t entityCount);
+    void UpdateSceneCachePath(StringID sceneId, const Core::Path& path, uint32_t entityCount);
 
     bool DeleteScene(StringID sceneId);
 
 public: // Prefabs
     struct CachedPrefabMetadata
     {
-        std::filesystem::path source;
-        std::string prefabName;
+        Core::Path source;
+        Core::InlineString<128> prefabName{};
         uint32_t componentCount{};
     };
 
-    const std::unordered_map<StringID, CachedPrefabMetadata>& GetPrefabCache() { return prefabCache; }
+    const Core::FixedMap<StringID, CachedPrefabMetadata>& GetPrefabCache() { return prefabCache; }
 
     [[nodiscard]] const CachedPrefabMetadata* GetPrefabMetadata(StringID prefabId) const;
 
@@ -213,19 +220,19 @@ public: // Prefabs
 private: // Asset Registry
     struct CachedCubemapMetadata
     {
-        std::filesystem::path source;
+        Core::Path source;
     };
 
-    std::unordered_map<std::string, ModelID> modelNameToId;
-    std::unordered_map<ModelID, CachedModelMetadata> modelCache;
+    Core::FixedMap<StringID, ModelID> modelNameToId;
+    Core::FixedMap<ModelID, CachedModelMetadata> modelCache;
 
-    std::unordered_map<std::string, TextureID> textureNameToId;
-    std::unordered_map<TextureID, CachedTextureMetadata> textureCache;
+    Core::FixedMap<StringID, TextureID> textureNameToId;
+    Core::FixedMap<TextureID, CachedTextureMetadata> textureCache;
 
-    std::unordered_map<StringID, CachedCubemapMetadata> cubemapCache;
+    Core::FixedMap<StringID, CachedCubemapMetadata> cubemapCache;
 
-    std::unordered_map<StringID, CachedSceneMetadata> sceneCache;
-    std::unordered_map<StringID, CachedPrefabMetadata> prefabCache;
+    Core::FixedMap<StringID, CachedSceneMetadata> sceneCache;
+    Core::FixedMap<StringID, CachedPrefabMetadata> prefabCache;
 
     /**
      * For (almost 100% chance) unique procedural shapes

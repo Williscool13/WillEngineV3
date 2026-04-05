@@ -11,9 +11,10 @@
 
 #include "material_format.h"
 #include "engine/include/engine_context.h"
-#include "../../../render/interface/render_interface.h"
+#include "render/interface/render_interface.h"
 #include "engine/logging/engine_log.h"
 #include "engine/asset_manager.h"
+#include "platform/file_utils.h"
 #include "platform/paths.h"
 
 
@@ -314,9 +315,9 @@ bool MaterialManager::DeleteMutableMaterial(MaterialID id)
 
 void MaterialManager::CreateMaterial(std::string_view name)
 {
-    std::filesystem::path matDir = Platform::GetAssetPath() / "materials";
-    std::filesystem::create_directories(matDir);
-    std::filesystem::path matPath = matDir / (std::string(name) + ".wmaterial");
+    const Core::Path matDir = Platform::GetAssetPath() / "materials";
+    Platform::CreateDirectories(matDir.c_str());
+    const Core::Path matPath = matDir / (std::string(name) + ".wmaterial");
 
     Material mat{};
     mat.name = std::string(name);
@@ -324,7 +325,7 @@ void MaterialManager::CreateMaterial(std::string_view name)
     mat.props = GetDefaultMaterialProperties();
     std::uniform_real_distribution dist(0.0f, 1.0f);
     mat.props.colorFactor = {dist(mutableIdRng), dist(mutableIdRng), dist(mutableIdRng), 1.0f}; // todo
-    mat.sourcePath = matPath;
+    mat.sourcePath = matPath.c_str();
 
     WMaterialHeader header{};
     header.materialId = mat.id.id;
@@ -332,7 +333,7 @@ void MaterialManager::CreateMaterial(std::string_view name)
     memcpy(header.name, name.data(), nameLen);
     header.name[nameLen] = '\0';
 
-    std::ofstream file(matPath);
+    std::ofstream file(matPath.c_str());
     WriteWMaterialHeader(file, header);
     file << SerializeMaterial(mat).dump(4);
 
@@ -343,8 +344,7 @@ void MaterialManager::Scan()
 {
     bool expectedRescan = true;
     if (ctx->bShouldRescanMaterials.compare_exchange_strong(expectedRescan, false, std::memory_order::acq_rel, std::memory_order::relaxed)) {
-        std::filesystem::path assetPath = Platform::GetAssetPath();
-        for (const auto& entry : std::filesystem::recursive_directory_iterator(assetPath)) {
+        for (const auto& entry : std::filesystem::recursive_directory_iterator(Platform::GetAssetPath().c_str())) {
             if (entry.path().extension() != ".wmaterial") { continue; }
 
             std::ifstream file(entry.path());
@@ -354,7 +354,8 @@ void MaterialManager::Scan()
             StringID sid(header->name, strnlen(header->name, WMATERIAL_NAME_LENGTH));
             if (nameToMaterialMap.contains(sid)) { continue; }
 
-            Material mat = DeserializeMaterial(nlohmann::json::parse(file), entry.path());
+            const nlohmann::json j = nlohmann::json::parse(file);
+            Material mat = DeserializeMaterial(j, entry.path());
             materials[mat.id] = mat;
             nameToMaterialMap[sid] = mat.id;
         }
@@ -363,8 +364,7 @@ void MaterialManager::Scan()
 
 void MaterialManager::LoadMutableMaterials()
 {
-    std::filesystem::path assetPath = Platform::GetAssetPath();
-    for (const auto& entry : std::filesystem::recursive_directory_iterator(assetPath)) {
+    for (const auto& entry : std::filesystem::recursive_directory_iterator(Platform::GetAssetPath().c_str())) {
         if (entry.path().extension() != ".wmaterial") { continue; }
 
         std::ifstream file(entry.path());
@@ -374,7 +374,8 @@ void MaterialManager::LoadMutableMaterials()
             continue;
         }
 
-        Material mat = DeserializeMaterial(nlohmann::json::parse(file), entry.path());
+        const nlohmann::json j = nlohmann::json::parse(file);
+        Material mat = DeserializeMaterial(j, entry.path());
         StringID sid(mat.name.data(), mat.name.size());
         materials[mat.id] = mat;
         nameToMaterialMap[sid] = mat.id;

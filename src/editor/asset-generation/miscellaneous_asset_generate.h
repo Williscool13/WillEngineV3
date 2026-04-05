@@ -5,11 +5,11 @@
 #ifndef WILL_ENGINE_MISCELLANEOUS_ASSET_GENERATE_H
 #define WILL_ENGINE_MISCELLANEOUS_ASSET_GENERATE_H
 
-#include <filesystem>
 #include <functional>
 #include <semaphore>
 #include <vulkan/vulkan_core.h>
 
+#include "core/containers/inline_path.h"
 #include "engine/core/texture_id.h"
 
 namespace Render
@@ -22,7 +22,7 @@ class PipelineManager;
 namespace Editor
 {
 void CreateCriticalEngineResources();
-void CreateBRDFLookupTable(std::filesystem::path outputPath,
+void CreateBRDFLookupTable(Core::Path outputPath,
                            Engine::TextureID textureId,
                            Render::VulkanContext* context,
                            Render::ResourceManager* resourceManager,

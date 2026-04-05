@@ -15,6 +15,8 @@
 
 #include "offsetAllocator.hpp"
 #include "engine/resources/material/material.h"
+#include "core/containers/inline_string.h"
+#include "core/containers/inline_vector.h"
 
 namespace Engine
 {
@@ -33,13 +35,13 @@ struct PrimitiveProperty
 
 struct MeshInformation
 {
-    std::string name;
-    std::vector<PrimitiveProperty> primitiveProperties;
+    Core::InlineString<64> name;
+    Core::InlineVector<PrimitiveProperty, 8> primitiveProperties;
 };
 
 struct Node
 {
-    std::string name{};
+    Core::InlineString<64> name{};
     uint32_t parent{~0u};
     uint32_t meshIndex{~0u};
     uint32_t depth{};

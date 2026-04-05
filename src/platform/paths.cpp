@@ -43,12 +43,14 @@ const Core::Path& GetShaderPath()
     return path;
 }
 
-std::filesystem::path GetAssetPath()
+const Core::Path& GetAssetPath()
 {
 #ifdef ASSETS_PATH
-    return {ASSETS_PATH};
+    static const Core::Path path = Core::Path(ASSETS_PATH);
+    return path;
 #else
-    return std::filesystem::path(GetExecutablePath().c_str()) / "assets";
+    static const Core::Path path = GetExecutablePath() / "assets";
+    return path;
 #endif
 }
 

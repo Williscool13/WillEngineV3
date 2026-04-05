@@ -5,6 +5,7 @@
 #ifndef WILL_ENGINE_STACK_STRING_H
 #define WILL_ENGINE_STACK_STRING_H
 #include <cstring>
+#include <string_view>
 
 namespace Core
 {
@@ -21,6 +22,13 @@ struct InlineString
         len = strlen(str);
         if (len >= N) len = N - 1;
         memcpy(buf, str, len);
+        buf[len] = '\0';
+    }
+    explicit InlineString(std::string_view str)
+    {
+        len = str.size();
+        if (len >= N) len = N - 1;
+        memcpy(buf, str.data(), len);
         buf[len] = '\0';
     }
 

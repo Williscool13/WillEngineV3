@@ -30,17 +30,19 @@ void StaticModelGenerateSlot::Initialize(
     enki::TaskScheduler* _scheduler,
     AssetGenerator* _generator,
     StaticModelGenerationProgress* _progress,
+    Core::TlsfAllocator* _allocator,
     std::function<void(bool success, ModelGenerateSlotHandle slotHandle)> notifyCallback)
 {
     scheduler = _scheduler;
     generator = _generator;
     progress = _progress;
+    rawModel.Init(_allocator);
     _notifyCallback = std::move(notifyCallback);
 }
 
-void StaticModelGenerateSlot::Launch(ModelGenerateSlotHandle _slotHandle, const std::filesystem::path& _gltfPath, const std::filesystem::path& _outputPath, uint64_t _modelId)
+void StaticModelGenerateSlot::Launch(ModelGenerateSlotHandle _slotHandle, const Core::Path& _gltfPath, const Core::Path& _outputPath, uint64_t _modelId)
 {
-    gltfPath.clear();
+    gltfPath = Core::Path{};
     slotHandle = _slotHandle;
     gltfPath = _gltfPath;
     outputPath = _outputPath;
@@ -57,7 +59,7 @@ void StaticModelGenerateSlot::Launch(ModelGenerateSlotHandle _slotHandle, const 
 
 void StaticModelGenerateSlot::Clear()
 {
-    outputPath.clear();
+    outputPath = Core::Path{};
     rawModel = {};
     sortedNodes.clear();
     visited.clear();
@@ -103,13 +105,13 @@ bool StaticModelGenerateSlot::LoadGltf()
                                  | fastgltf::Options::LoadExternalBuffers
                                  | fastgltf::Options::LoadExternalImages;
 
-    auto gltfFile = fastgltf::MappedGltfFile::FromPath(gltfPath);
+    auto gltfFile = fastgltf::MappedGltfFile::FromPath(std::filesystem::path(gltfPath.c_str()));
     if (!static_cast<bool>(gltfFile)) {
-        SPDLOG_ERROR("Failed to open glTF file ({}): {}", gltfPath.filename().string(), getErrorMessage(gltfFile.error()));
+        SPDLOG_ERROR("Failed to open glTF file ({}): {}", gltfPath.Filename(), getErrorMessage(gltfFile.error()));
         return false;
     }
 
-    auto load = parser.loadGltf(gltfFile.get(), gltfPath.parent_path(), gltfOptions);
+    auto load = parser.loadGltf(gltfFile.get(), std::filesystem::path(gltfPath.Parent().c_str()), gltfOptions);
     if (!load) {
         SPDLOG_ERROR("Failed to load glTF: {}", to_underlying(load.error()));
         return false;
@@ -120,7 +122,7 @@ bool StaticModelGenerateSlot::LoadGltf()
     progress->value.store(_progress, std::memory_order_release);
 
     // Samplers
-    rawModel.name = gltfPath.filename().string();
+    rawModel.name = std::string(gltfPath.Filename());
     rawModel.samplerInfos.reserve(gltf.samplers.size());
     for (const fastgltf::Sampler& gltfSampler : gltf.samplers) {
         Engine::SamplerDesc desc{};
@@ -139,7 +141,7 @@ bool StaticModelGenerateSlot::LoadGltf()
         unsigned char* stbiData = nullptr;
         int32_t width, height, nrChannels;
 
-        std::filesystem::path parentPath = gltfPath.parent_path();
+        Core::Path parentPath = gltfPath.Parent();
         for (const fastgltf::Image& gltfImage : gltf.images) {
             std::visit(
                 fastgltf::visitor{
@@ -154,8 +156,9 @@ bool StaticModelGenerateSlot::LoadGltf()
                             return;
                         }
                         const std::wstring widePath(fileName.uri.path().begin(), fileName.uri.path().end());
-                        const std::filesystem::path fullPath = parentPath / widePath;
-                        stbiData = stbi_load(fullPath.string().c_str(), &width, &height, &nrChannels, 4);
+                        const std::string narrowPath(widePath.begin(), widePath.end());
+                        const Core::Path fullPath = parentPath / narrowPath;
+                        stbiData = stbi_load(fullPath.c_str(), &width, &height, &nrChannels, 4);
                     },
                     [&](const fastgltf::sources::Array& vector) {
                         if (vector.bytes.size() > 30) {
@@ -210,7 +213,7 @@ bool StaticModelGenerateSlot::LoadGltf()
     progress->value.store(_progress, std::memory_order_release);
 
     // Materials
-    rawModel.materials.reserve(gltf.materials.size());
+    rawModel.materials.Reserve(gltf.materials.size());
     for (int32_t i = 0; i < gltf.materials.size(); ++i) {
         Engine::Material mat{};
         mat.name = rawModel.name + "_material_" + std::to_string(i);
@@ -219,7 +222,7 @@ bool StaticModelGenerateSlot::LoadGltf()
         // mat.pipelineID = ; not yet used
         mat.immutable = true;
         mat.props = ExtractMaterial(gltf, gltf.materials[i]);
-        rawModel.materials.emplace_back(mat);
+        rawModel.materials.PushBack(mat);
     }
     for (const fastgltf::Material& gltfMaterial : gltf.materials) {}
     _progress += stepDiff;
@@ -229,12 +232,11 @@ bool StaticModelGenerateSlot::LoadGltf()
     // StaticModel stores as SkinnedVertex, when loading, the vertices will be loaded to different buffers depending on whether the model is a skeletal mesh.
     std::vector<Vertex> primitiveVertices{};
     std::vector<uint32_t> primitiveIndices{};
-    rawModel.allMeshes.reserve(gltf.meshes.size());
+    rawModel.allMeshes.Reserve(gltf.meshes.size());
     for (fastgltf::Mesh& mesh : gltf.meshes) {
         Engine::MeshInformation meshData{};
-        meshData.name = mesh.name;
-        meshData.primitiveProperties.reserve(mesh.primitives.size());
-        rawModel.primitives.reserve(rawModel.primitives.size() + mesh.primitives.size());
+        meshData.name = Core::InlineString<64>(mesh.name.c_str());
+        rawModel.primitives.Reserve(rawModel.primitives.Size() + mesh.primitives.size());
 
         for (fastgltf::Primitive& p : mesh.primitives) {
             Primitive primitiveData{};
@@ -536,23 +538,26 @@ bool StaticModelGenerateSlot::LoadGltf()
             primitiveData.boundingSphere = GenerateBoundingSphere(primitiveVertices);
 
             // Same for all LODs (without LOD streaming anyway)
-            uint32_t vertexOffset = rawModel.vertices.size();
-            rawModel.vertices.insert(rawModel.vertices.end(), primitiveVertices.begin(), primitiveVertices.end());
+            uint32_t vertexOffset = rawModel.vertices.Size();
+            rawModel.vertices.Reserve(rawModel.vertices.Size() + primitiveVertices.size());
+            for (const auto& v : primitiveVertices) { rawModel.vertices.PushBack(v); }
 
-            primitiveData.indexOffset = static_cast<uint32_t>(rawModel.indices.size());
+            primitiveData.indexOffset = static_cast<uint32_t>(rawModel.indices.Size());
             for (uint32_t idx : primitiveIndices) {
-                rawModel.indices.push_back(idx + vertexOffset);
+                rawModel.indices.PushBack(idx + vertexOffset);
             }
 
 
             for (uint32_t lod = 0; lod < LOD_COUNT; ++lod) {
-                primitiveData.meshletOffset[lod] = rawModel.meshlets.size();
+                primitiveData.meshletOffset[lod] = rawModel.meshlets.Size();
                 primitiveData.meshletCount[lod] = lodMeshlets[lod].size();
 
-                uint32_t meshletVertexOffset = rawModel.meshletVertices.size();
-                uint32_t meshletTrianglesOffset = rawModel.meshletTriangles.size();
-                rawModel.meshletVertices.insert(rawModel.meshletVertices.end(), lodMeshletVertices[lod].begin(), lodMeshletVertices[lod].end());
-                rawModel.meshletTriangles.insert(rawModel.meshletTriangles.end(), lodMeshletTriangles[lod].begin(), lodMeshletTriangles[lod].end());
+                uint32_t meshletVertexOffset = rawModel.meshletVertices.Size();
+                uint32_t meshletTrianglesOffset = rawModel.meshletTriangles.Size();
+                rawModel.meshletVertices.Reserve(rawModel.meshletVertices.Size() + lodMeshletVertices[lod].size());
+                for (uint32_t mv : lodMeshletVertices[lod]) { rawModel.meshletVertices.PushBack(mv); }
+                rawModel.meshletTriangles.Reserve(rawModel.meshletTriangles.Size() + lodMeshletTriangles[lod].size());
+                for (uint8_t mt : lodMeshletTriangles[lod]) { rawModel.meshletTriangles.PushBack(mt); }
 
                 //
                 {
@@ -567,7 +572,7 @@ bool StaticModelGenerateSlot::LoadGltf()
                             sizeof(Vertex)
                         );
 
-                        rawModel.meshlets.push_back({
+                        rawModel.meshlets.PushBack({
                             .meshletBoundingSphere = glm::vec4(
                                 bounds.center[0], bounds.center[1], bounds.center[2],
                                 bounds.radius
@@ -587,20 +592,20 @@ bool StaticModelGenerateSlot::LoadGltf()
                 }
             }
 
-            meshData.primitiveProperties.emplace_back(static_cast<uint32_t>(rawModel.primitives.size()), materialIndex);
-            rawModel.primitives.push_back(primitiveData);
+            meshData.primitiveProperties.PushBack({static_cast<uint32_t>(rawModel.primitives.Size()), materialIndex});
+            rawModel.primitives.PushBack(primitiveData);
         }
 
-        rawModel.allMeshes.push_back(meshData);
+        rawModel.allMeshes.PushBack(meshData);
     }
     _progress += stepDiff;
     progress->value.store(_progress, std::memory_order::release);
 
     // Nodes
-    rawModel.nodes.reserve(gltf.nodes.size());
+    rawModel.nodes.Reserve(gltf.nodes.size());
     for (const fastgltf::Node& node : gltf.nodes) {
         Engine::Node _node{};
-        _node.name = node.name;
+        _node.name = Core::InlineString<64>(node.name.c_str());
 
         if (node.meshIndex.has_value()) {
             _node.meshIndex = static_cast<int>(*node.meshIndex);
@@ -632,7 +637,7 @@ bool StaticModelGenerateSlot::LoadGltf()
             }
             , node.transform
         );
-        rawModel.nodes.push_back(_node);
+        rawModel.nodes.PushBack(_node);
     }
     for (int i = 0; i < gltf.nodes.size(); i++) {
         for (std::size_t& child : gltf.nodes[i].children) {
@@ -675,7 +680,7 @@ bool StaticModelGenerateSlot::LoadGltf()
     // Node processing
     std::vector<uint32_t> nodeRemap{};
     TopologicalSortNodes(rawModel.nodes, nodeRemap);
-    for (size_t i = 0; i < rawModel.nodes.size(); ++i) {
+    for (size_t i = 0; i < rawModel.nodes.Size(); ++i) {
         uint32_t depth = 0;
         uint32_t currentParent = rawModel.nodes[i].parent;
 
@@ -825,9 +830,9 @@ bool StaticModelGenerateSlot::WriteStaticModel()
     std::vector<Engine::TextureID> textureIDs;
     textureIDs.reserve(rawModel.images.size());
 
-    for (int32_t i = 0; i < rawModel.images.size(); ++i) {
+    for (int32_t i = 0; i < static_cast<int32_t>(rawModel.images.size()); ++i) {
         AssetLoad::RawImage& image = rawModel.images[i];
-        std::filesystem::path textureOutPath = gltfPath.parent_path() / "textures" / (gltfPath.stem().string() + "_texture_" + std::to_string(i) + ".wtexture");
+        Core::Path textureOutPath = gltfPath.Parent() / "textures" / (std::string(gltfPath.Stem()) + "_texture_" + std::to_string(i) + ".wtexture");
         textureIDs.push_back(generator->RequestTextureGenerateFromMemory(std::move(image.imageData), image.w, image.h, image.bpp, textureOutPath, true, preferredImageFormats[i]));
     }
 
@@ -864,7 +869,7 @@ bool StaticModelGenerateSlot::WriteStaticModel()
     // Write Output
     {
         ZoneScopedN("WriteStaticModelFile");
-        std::ofstream file(outputPath, std::ios::binary);
+        std::ofstream file(outputPath.c_str(), std::ios::binary);
         Engine::WStaticModelHeader header{};
         header.modelId = modelId;
         const size_t copyLen = std::min(rawModel.name.size(), Engine::WSTATICMODEL_NAME_LENGTH - 1);
@@ -875,43 +880,43 @@ bool StaticModelGenerateSlot::WriteStaticModel()
         for (const auto& node : rawModel.nodes) {
             if (node.meshIndex != ~0u) { ++meshNodeCount; }
         }
-        header.nodeCount = static_cast<uint32_t>(rawModel.nodes.size());
+        header.nodeCount = static_cast<uint32_t>(rawModel.nodes.Size());
         header.meshNodeCount = meshNodeCount;
 
         std::vector<std::byte> body;
 
         header.vertexOffset = static_cast<uint32_t>(body.size());
-        header.vertexCount = static_cast<uint32_t>(rawModel.vertices.size());
+        header.vertexCount = static_cast<uint32_t>(rawModel.vertices.Size());
         Engine::WriteVector(body, rawModel.vertices);
 
         header.indexOffset = static_cast<uint32_t>(body.size());
-        header.indexCount = static_cast<uint32_t>(rawModel.indices.size());
+        header.indexCount = static_cast<uint32_t>(rawModel.indices.Size());
         Engine::WriteVector(body, rawModel.indices);
 
         header.meshletVertexOffset = static_cast<uint32_t>(body.size());
-        header.meshletVertexCount = static_cast<uint32_t>(rawModel.meshletVertices.size());
+        header.meshletVertexCount = static_cast<uint32_t>(rawModel.meshletVertices.Size());
         Engine::WriteVector(body, rawModel.meshletVertices);
 
         header.meshletTriangleOffset = static_cast<uint32_t>(body.size());
-        header.meshletTriangleCount = static_cast<uint32_t>(rawModel.meshletTriangles.size());
+        header.meshletTriangleCount = static_cast<uint32_t>(rawModel.meshletTriangles.Size());
         Engine::WriteVector(body, rawModel.meshletTriangles);
 
         header.meshletOffset = static_cast<uint32_t>(body.size());
-        header.meshletCount = static_cast<uint32_t>(rawModel.meshlets.size());
+        header.meshletCount = static_cast<uint32_t>(rawModel.meshlets.Size());
         Engine::WriteVector(body, rawModel.meshlets);
 
         header.primitiveOffset = static_cast<uint32_t>(body.size());
-        header.primitiveCount = static_cast<uint32_t>(rawModel.primitives.size());
+        header.primitiveCount = static_cast<uint32_t>(rawModel.primitives.Size());
         Engine::WriteVector(body, rawModel.primitives);
 
         header.materialOffset = static_cast<uint32_t>(body.size());
-        header.materialCount = static_cast<uint32_t>(rawModel.materials.size());
+        header.materialCount = static_cast<uint32_t>(rawModel.materials.Size());
         for (const auto& mat : rawModel.materials) {
             Engine::WriteMaterial(body, mat);
         }
 
         header.meshOffset = static_cast<uint32_t>(body.size());
-        header.meshCount = static_cast<uint32_t>(rawModel.allMeshes.size());
+        header.meshCount = static_cast<uint32_t>(rawModel.allMeshes.Size());
         for (const auto& mesh : rawModel.allMeshes) {
             Engine::WriteMeshInformation(body, mesh);
         }
@@ -919,15 +924,15 @@ bool StaticModelGenerateSlot::WriteStaticModel()
         Engine::ModelBounds bounds{};
         {
             std::vector<glm::vec3> positions;
-            positions.reserve(rawModel.vertices.size());
-            for (const auto& v : rawModel.vertices)
-                positions.push_back(v.position);
-            bounds = Engine::StaticModel::ComputeBounds(positions, &rawModel.indices);
+            positions.reserve(rawModel.vertices.Size());
+            for (const auto& v : rawModel.vertices) { positions.push_back(v.position); }
+            std::vector indices(rawModel.indices.begin(), rawModel.indices.end());
+            bounds = Engine::StaticModel::ComputeBounds(positions, &indices);
         }
 
         std::vector<uint8_t> compressedBody = Engine::CompressLZ4(body.data(), body.size());
-        header.compressedBodySize = static_cast<uint64_t>(compressedBody.size());
-        header.uncompressedBodySize = static_cast<uint64_t>(body.size());
+        header.compressedBodySize = compressedBody.size();
+        header.uncompressedBodySize = body.size();
 
         std::vector<std::byte> nodeSection;
         for (const auto& node : rawModel.nodes) {
@@ -1114,15 +1119,15 @@ glm::vec4 StaticModelGenerateSlot::GenerateBoundingSphere(const std::vector<Vert
     return {center, radius};
 }
 
-void StaticModelGenerateSlot::TopologicalSortNodes(std::vector<Engine::Node>& nodes, std::vector<uint32_t>& oldToNew)
+void StaticModelGenerateSlot::TopologicalSortNodes(Core::Vector<Engine::Node>& nodes, std::vector<uint32_t>& oldToNew)
 {
-    oldToNew.resize(nodes.size());
+    oldToNew.resize(nodes.Size());
 
     sortedNodes.clear();
-    sortedNodes.reserve(nodes.size());
+    sortedNodes.reserve(nodes.Size());
 
     visited.clear();
-    visited.resize(nodes.size(), false);
+    visited.resize(nodes.Size(), false);
 
     // Topological sort
     std::function<void(uint32_t)> visit = [&](uint32_t idx) {
@@ -1137,7 +1142,7 @@ void StaticModelGenerateSlot::TopologicalSortNodes(std::vector<Engine::Node>& no
         sortedNodes.push_back(nodes[idx]);
     };
 
-    for (uint32_t i = 0; i < nodes.size(); ++i) {
+    for (uint32_t i = 0; i < nodes.Size(); ++i) {
         visit(i);
     }
 
@@ -1147,6 +1152,7 @@ void StaticModelGenerateSlot::TopologicalSortNodes(std::vector<Engine::Node>& no
         }
     }
 
-    nodes = std::move(sortedNodes);
+    nodes.Clear();
+    for (auto& n : sortedNodes) { nodes.PushBack(std::move(n)); }
 }
 } // Render

@@ -11,6 +11,7 @@
 #include <TaskScheduler.h>
 
 #include "asset-load/asset_load_types.h"
+#include "core/containers/inline_function.h"
 #include "engine/asset_manager_types.h"
 
 namespace enki
@@ -42,8 +43,8 @@ public:
         enki::TaskScheduler* _scheduler,
         Render::VulkanContext* _context,
         Render::ResourceManager* _resourceManager,
-        std::function<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> dispatchCallback,
-        std::function<void(bool success, TextureSlotHandle textureSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle)> notifyCallback);
+        Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> dispatchCallback,
+        Core::InlineFunction<void(bool success, TextureSlotHandle textureSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle)> notifyCallback);
 
     void Launch(
         TextureSlotHandle _textureSlotHandle,
@@ -57,7 +58,7 @@ public:
 
     bool AllocateGPUResources();
 
-    void UploadTexture(VkCommandBuffer cmd, const std::function<void(bool)>& submitAndWait);
+    void UploadTexture(VkCommandBuffer cmd, const Core::InlineFunction<void(bool)>& submitAndWait);
 
     void PostUploadSetup();
 
@@ -77,15 +78,15 @@ private:
         void ExecuteRange(enki::TaskSetPartition range, uint32_t threadNum) override;
     };
 
-    std::unique_ptr<LoadTextureTask> task{nullptr};
+    LoadTextureTask task{};
     enki::TaskScheduler* scheduler{nullptr};
     Render::VulkanContext* context{nullptr};
     Render::ResourceManager* resourceManager{nullptr};
 
     ktxTexture2* texture{nullptr};
 
-    std::function<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* doneSemaphore)> _requestDispatchCallback;
-    std::function<void(bool success, TextureSlotHandle textureSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle)> _notifyCallback;
+    Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* doneSemaphore)> _requestDispatchCallback;
+    Core::InlineFunction<void(bool success, TextureSlotHandle textureSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle)> _notifyCallback;
 };
 } // AssetLoad
 

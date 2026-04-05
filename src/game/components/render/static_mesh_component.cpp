@@ -190,12 +190,12 @@ ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::ViewFamil
             }
             else {
                 if (ImGui::BeginCombo("Select Mesh", "")) {
-                    for (int32_t i = 0; i < model->modelData.meshes.size(); i++) {
-                        auto _name = model->modelData.meshes[i].name;
-                        if (_name.empty()) {
-                            _name = fmt::format("Mesh {}", i);
-                        }
-                        if (ImGui::Selectable(_name.c_str(), false)) {
+                    for (int32_t i = 0; i < static_cast<int32_t>(model->modelData.meshes.size()); i++) {
+                        const Core::InlineString<64>& meshName = model->modelData.meshes[i].name;
+                        char fallback[32];
+                        if (meshName.size() == 0) { snprintf(fallback, sizeof(fallback), "Mesh %d", i); }
+                        const char* displayName = meshName.size() > 0 ? meshName.c_str() : fallback;
+                        if (ImGui::Selectable(displayName, false)) {
                             component.meshIndex = i;
                             RecreateStaticMesh(component, registry, entity);
                         }

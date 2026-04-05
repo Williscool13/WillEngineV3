@@ -90,8 +90,8 @@ void EnvironmentMapGenerateSlot::Initialize(
 
 void EnvironmentMapGenerateSlot::Launch(
     EnvironmentMapGenerateSlotHandle _slotHandle,
-    const std::filesystem::path& _imagePath,
-    const std::filesystem::path& _outputPath)
+    const Core::Path& _imagePath,
+    const Core::Path& _outputPath)
 {
     slotHandle = _slotHandle;
     imagePath = _imagePath;
@@ -108,8 +108,8 @@ void EnvironmentMapGenerateSlot::Launch(
 
 void EnvironmentMapGenerateSlot::Clear()
 {
-    imagePath.clear();
-    outputPath.clear();
+    imagePath = Core::Path{};
+    outputPath = Core::Path{};
     equiImage = {};
     equiImageView = {};
     mipmappedCubemapImage = {};
@@ -187,9 +187,9 @@ bool EnvironmentMapGenerateSlot::LoadEquirectangularAndGenerate(
 
     // Load HDR equirectangular image
     int32_t width, height, nrChannels;
-    float* hdrData = stbi_loadf(imagePath.string().c_str(), &width, &height, &nrChannels, 4);
+    float* hdrData = stbi_loadf(imagePath.c_str(), &width, &height, &nrChannels, 4);
     if (!hdrData) {
-        SPDLOG_ERROR("[EnvironmentMapGenerateSlot] Failed to load HDR image: {}", imagePath.string());
+        SPDLOG_ERROR("[EnvironmentMapGenerateSlot] Failed to load HDR image: {}", imagePath.c_str());
         return false;
     }
 
@@ -561,7 +561,7 @@ bool EnvironmentMapGenerateSlot::WriteKTXFile()
         }
     }
 
-    result = ktxTexture_WriteToNamedFile(ktxTexture(texture), outputPath.string().c_str());
+    result = ktxTexture_WriteToNamedFile(ktxTexture(texture), outputPath.c_str());
     ktxTexture_Destroy(ktxTexture(texture));
 
     if (result != KTX_SUCCESS) {
@@ -569,7 +569,7 @@ bool EnvironmentMapGenerateSlot::WriteKTXFile()
         return false;
     }
 
-    SPDLOG_INFO("[EnvironmentMapGenerateSlot] Wrote {}", outputPath.string());
+    SPDLOG_INFO("[EnvironmentMapGenerateSlot] Wrote {}", outputPath.c_str());
     return true;
 }
 } // namespace Editor

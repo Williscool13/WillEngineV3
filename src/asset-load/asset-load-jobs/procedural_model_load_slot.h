@@ -8,6 +8,11 @@
 #include <TaskScheduler.h>
 
 #include "asset-load/asset_load_types.h"
+#include <vector>
+
+#include "core/containers/inline_function.h"
+#include "core/containers/vector.h"
+#include "core/memory/tlsf_allocator.h"
 #include "render/shaders/model_interop.h"
 
 namespace enki
@@ -31,8 +36,9 @@ public:
     ~ProceduralModelLoadSlot();
 
     void Initialize(enki::TaskScheduler* _scheduler, Render::VulkanContext* _context, Render::ResourceManager* _resourceManager,
-                    std::function<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> _requestDispatchCallback,
-                    std::function<void(bool success, ProceduralModelSlotHandle slotHandle, UploadStagingSlotHandle uploadStagingSlotHandle)> _notifyCallback);
+                    Core::TlsfAllocator* _allocator,
+                    Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> _requestDispatchCallback,
+                    Core::InlineFunction<void(bool success, ProceduralModelSlotHandle slotHandle, UploadStagingSlotHandle uploadStagingSlotHandle)> _notifyCallback);
 
     void Launch(ProceduralModelSlotHandle _slotHandle, UploadStagingSlotHandle _uploadStagingSlotHandle, UploadStaging* _uploadStaging, Engine::StaticModel* _outputModel);
 
@@ -42,10 +48,9 @@ public:
 
     bool AllocateGPUResources() const;
 
-
     void PrepareUploadData();
 
-    void UploadGeometry(VkCommandBuffer cmd, const std::function<void(bool)>& submitAndWait);
+    void UploadGeometry(VkCommandBuffer cmd, const Core::InlineFunction<void(bool)>& submitAndWait);
 
     ProceduralModelSlotHandle slotHandle{};
     UploadStagingSlotHandle uploadStagingSlotHandle{};
@@ -63,16 +68,16 @@ private:
         void ExecuteRange(enki::TaskSetPartition range, uint32_t threadNum) override;
     };
 
-    std::unique_ptr<GenerateModelTask> task{nullptr};
+    GenerateModelTask task{};
     enki::TaskScheduler* scheduler{nullptr};
     Render::VulkanContext* context{nullptr};
     Render::ResourceManager* resourceManager{nullptr};
 
     RawStaticModel rawData{};
-    std::vector<uint32_t> packedTriangles;
+    Core::Vector<uint32_t> packedTriangles;
 
-    std::function<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* doneSemaphore)> _requestDispatchCallback;
-    std::function<void(bool success, ProceduralModelSlotHandle slotHandle, UploadStagingSlotHandle uploadStagingSlotHandle)> _notifyCallback;
+    Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* doneSemaphore)> _requestDispatchCallback;
+    Core::InlineFunction<void(bool success, ProceduralModelSlotHandle slotHandle, UploadStagingSlotHandle uploadStagingSlotHandle)> _notifyCallback;
 
     bool FinalizeGeometry(std::vector<Vertex>& vertices, std::vector<uint32_t>& indices);
 

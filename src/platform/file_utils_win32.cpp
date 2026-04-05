@@ -28,6 +28,11 @@ void CreateDirectories(const char* path)
     CreateDirectoryA(buf, nullptr);
 }
 
+void RemoveDirectories(const char* path)
+{
+    // todo implement
+}
+
 bool FileCopy(const char* src, const char* dst)
 {
     return CopyFileA(src, dst, FALSE) != FALSE;

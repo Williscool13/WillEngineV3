@@ -40,6 +40,7 @@ AssetGenerator::AssetGenerator(Core::EngineContext* ctx,Render::VulkanContext* v
             assetGeneratorScheduler.get(),
             this,
             &modelGenerationProgress[i],
+            asyncAssetLoadManager->GetAssetsAllocator(),
             [this](bool success, ModelGenerateSlotHandle slotHandle) {
                 OnModelGenerateComplete(success, slotHandle);
             }
@@ -172,7 +173,7 @@ void AssetGenerator::GraphicsQueueGPUDispatch(VkCommandBuffer cmd, VkFence fence
     renderThread->editorGPUDispatchQueue.enqueue({cmd, fence, completionSignal});
 }
 
-void AssetGenerator::RequestModelGenerate(const std::filesystem::path& gltfPath, const std::filesystem::path& outputPath)
+void AssetGenerator::RequestModelGenerate(const Core::Path& gltfPath, const Core::Path& outputPath)
 {
     ZoneScoped;
 
@@ -181,7 +182,7 @@ void AssetGenerator::RequestModelGenerate(const std::filesystem::path& gltfPath,
     wakeCV.notify_one();
 }
 
-Engine::TextureID AssetGenerator::RequestTextureGenerateFromFile(const std::filesystem::path& imagePath, const std::filesystem::path& outputPath, bool mipmapped, DXGI_FORMAT targetFormat)
+Engine::TextureID AssetGenerator::RequestTextureGenerateFromFile(const Core::Path& imagePath, const Core::Path& outputPath, bool mipmapped, DXGI_FORMAT targetFormat)
 {
     ZoneScoped;
     Engine::TextureID id{textureIdRng()};
@@ -191,7 +192,7 @@ Engine::TextureID AssetGenerator::RequestTextureGenerateFromFile(const std::file
     return id;
 }
 
-Engine::TextureID AssetGenerator::RequestTextureGenerateFromMemory(std::unique_ptr<uint8_t[]> pixels, uint32_t w, uint32_t h, uint32_t bytesPerPixel, const std::filesystem::path& outputPath,
+Engine::TextureID AssetGenerator::RequestTextureGenerateFromMemory(std::unique_ptr<uint8_t[]> pixels, uint32_t w, uint32_t h, uint32_t bytesPerPixel, const Core::Path& outputPath,
                                                                    bool mipmapped, DXGI_FORMAT targetFormat)
 {
     ZoneScoped;
@@ -211,7 +212,7 @@ Engine::TextureID AssetGenerator::RequestTextureGenerateFromMemory(std::unique_p
     return id;
 }
 
-void AssetGenerator::RequestEnvironmentMapGenerate(const std::filesystem::path& hdriPath, const std::filesystem::path& outputPath)
+void AssetGenerator::RequestEnvironmentMapGenerate(const Core::Path& hdriPath, const Core::Path& outputPath)
 {
     ZoneScoped;
 
@@ -236,7 +237,7 @@ bool AssetGenerator::TryDequeueCubemapGenerateComplete(EnvironmentMapGenerateCom
     return environmentMapGenerateCompleteQueue.try_dequeue(outResult);
 }
 
-void AssetGenerator::GenerateBRDFLUT(const std::filesystem::path& outputFile)
+void AssetGenerator::GenerateBRDFLUT(const Core::Path& outputFile)
 {
     CreateBRDFLookupTable(outputFile, Engine::TextureID(textureIdRng()), vk, renderThread->GetResourceManager(), renderThread->GetPipelineManager(),
                           [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
@@ -257,10 +258,10 @@ void AssetGenerator::OnModelGenerateComplete(bool success, ModelGenerateSlotHand
     modelGenerateCompleteQueue.enqueue({task.outputPath, success});
 
     if (success) {
-        SPDLOG_INFO("Successfully generated model: {}", task.outputPath.string());
+        SPDLOG_INFO("Successfully generated model: {}", task.outputPath.c_str());
     }
     else {
-        SPDLOG_ERROR("Failed to generate model: {}", task.outputPath.string());
+        SPDLOG_ERROR("Failed to generate model: {}", task.outputPath.c_str());
     }
 
     task.Clear();
@@ -286,10 +287,10 @@ void AssetGenerator::OnTextureGenerateComplete(bool success, TextureGenerateSlot
     textureGenerateCompleteQueue.enqueue({task.outputPath, task.textureId, success});
 
     if (success) {
-        SPDLOG_INFO("Successfully generated texture: {}", task.outputPath.string());
+        SPDLOG_INFO("Successfully generated texture: {}", task.outputPath.c_str());
     }
     else {
-        SPDLOG_ERROR("Failed to generate texture: {}", task.outputPath.string());
+        SPDLOG_ERROR("Failed to generate texture: {}", task.outputPath.c_str());
     }
 
     task.Clear();
@@ -315,10 +316,10 @@ void AssetGenerator::OnEnvironmentGenerateComplete(bool success, EnvironmentMapG
     environmentMapGenerateCompleteQueue.enqueue({task.outputPath, success});
 
     if (success) {
-        SPDLOG_INFO("Successfully generated environment map: {}", task.outputPath.string());
+        SPDLOG_INFO("Successfully generated environment map: {}", task.outputPath.c_str());
     }
     else {
-        SPDLOG_ERROR("Failed to generate environment map: {}", task.outputPath.string());
+        SPDLOG_ERROR("Failed to generate environment map: {}", task.outputPath.c_str());
     }
 
     task.Clear();

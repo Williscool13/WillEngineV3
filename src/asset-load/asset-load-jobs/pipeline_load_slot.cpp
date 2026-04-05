@@ -17,13 +17,12 @@ PipelineLoadSlot::PipelineLoadSlot() = default;
 PipelineLoadSlot::~PipelineLoadSlot() = default;
 
 void PipelineLoadSlot::Initialize(enki::TaskScheduler* _scheduler, Render::VulkanContext* _context, VkPipelineCache _pipelineCache,
-                                  std::function<void(bool success, PipelineSlotHandle slotHandle)> _notifyCallback)
+                                  Core::InlineFunction<void(bool success, PipelineSlotHandle slotHandle)> _notifyCallback)
 {
-
     scheduler = _scheduler;
     context = _context;
     pipelineCache = _pipelineCache;
-    notifyCallback = _notifyCallback;
+    notifyCallback = std::move(_notifyCallback);
 }
 
 void PipelineLoadSlot::Launch(PipelineSlotHandle _pipelineSlotHandle, Render::PipelineData* _pipelineData)
@@ -31,12 +30,11 @@ void PipelineLoadSlot::Launch(PipelineSlotHandle _pipelineSlotHandle, Render::Pi
     pipelineSlotHandle = _pipelineSlotHandle;
     pipelineData = _pipelineData;
 
-    if (task && !task->GetIsComplete()) {
-        scheduler->WaitforTask(task.get());
+    if (!task.GetIsComplete()) {
+        scheduler->WaitforTask(&task);
     }
-    task = std::make_unique<LoadPipelineTask>();
-    task->loadSlot = this;
-    scheduler->AddTaskSetToPipe(task.get());
+    task.loadSlot = this;
+    scheduler->AddTaskSetToPipe(&task);
 }
 
 void PipelineLoadSlot::Clear()

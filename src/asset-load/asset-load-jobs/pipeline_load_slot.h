@@ -5,13 +5,11 @@
 #ifndef WILL_ENGINE_PIPELINE_LOAD_SLOT_H
 #define WILL_ENGINE_PIPELINE_LOAD_SLOT_H
 
-#include <filesystem>
-#include <functional>
-#include <memory>
 #include <volk.h>
 #include <TaskScheduler.h>
 
 #include "asset-load/asset_load_types.h"
+#include "core/containers/inline_function.h"
 
 namespace Render
 {
@@ -29,7 +27,8 @@ public:
 
     ~PipelineLoadSlot();
 
-    void Initialize(enki::TaskScheduler* _scheduler, Render::VulkanContext* _context, VkPipelineCache _pipelineCache, std::function<void(bool success, PipelineSlotHandle slotHandle)> _notifyCallback);
+    void Initialize(enki::TaskScheduler* _scheduler, Render::VulkanContext* _context, VkPipelineCache _pipelineCache,
+                    Core::InlineFunction<void(bool success, PipelineSlotHandle slotHandle)> _notifyCallback);
 
     void Launch(PipelineSlotHandle slotHandle, Render::PipelineData* pipelineData);
 
@@ -49,11 +48,11 @@ private:
 
     PipelineSlotHandle pipelineSlotHandle{};
 
-    std::unique_ptr<LoadPipelineTask> task{nullptr};
+    LoadPipelineTask task{};
     enki::TaskScheduler* scheduler{nullptr};
     Render::VulkanContext* context{nullptr};
     VkPipelineCache pipelineCache{VK_NULL_HANDLE};
-    std::function<void(bool success, PipelineSlotHandle slotHandle)> notifyCallback;
+    Core::InlineFunction<void(bool success, PipelineSlotHandle slotHandle)> notifyCallback;
 };
 } // AssetLoad
 

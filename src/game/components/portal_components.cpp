@@ -29,7 +29,7 @@ PortalPair CreatePortalPair(Core::EngineContext* ctx, Engine::GameState* state, 
 
     auto makePortalRuntime = [&](glm::vec4 color) -> MeshRuntime {
         MeshRuntime runtime{};
-        for (size_t i = 0; i < submesh.primitiveProperties.size(); ++i) {
+        for (size_t i = 0; i < submesh.primitiveProperties.Size(); ++i) {
             Engine::PrimitiveProperty& primitive = submesh.primitiveProperties[i];
             Engine::Material material;
             if (primitive.materialIndex == -1) {
@@ -100,7 +100,7 @@ void CreatePortalPlane(Core::EngineContext* ctx, Engine::GameState* state, glm::
     Engine::MeshInformation& submesh = plane->modelData.meshes[0];
 
     MeshRuntime runtime{};
-    for (size_t i = 0; i < submesh.primitiveProperties.size(); ++i) {
+    for (size_t i = 0; i < submesh.primitiveProperties.Size(); ++i) {
         Engine::PrimitiveProperty& primitive = submesh.primitiveProperties[i];
         Engine::Material material;
         if (primitive.materialIndex == -1) {

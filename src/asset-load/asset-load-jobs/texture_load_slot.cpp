@@ -28,8 +28,8 @@ void TextureLoadSlot::Initialize(
     enki::TaskScheduler* _scheduler,
     Render::VulkanContext* _context,
     Render::ResourceManager* _resourceManager,
-    std::function<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> dispatchCallback,
-    std::function<void(bool success, TextureSlotHandle textureSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle)> notifyCallback)
+    Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> dispatchCallback,
+    Core::InlineFunction<void(bool success, TextureSlotHandle textureSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle)> notifyCallback)
 {
     scheduler = _scheduler;
     context = _context;
@@ -49,12 +49,11 @@ void TextureLoadSlot::Launch(
     uploadStaging = _uploadStaging;
     outputTexture = _outputTexture;
 
-    if (task && !task->GetIsComplete()) {
-        scheduler->WaitforTask(task.get());
+    if (!task.GetIsComplete()) {
+        scheduler->WaitforTask(&task);
     }
-    task = std::make_unique<LoadTextureTask>();
-    task->loadSlot = this;
-    scheduler->AddTaskSetToPipe(task.get());
+    task.loadSlot = this;
+    scheduler->AddTaskSetToPipe(&task);
 }
 
 void TextureLoadSlot::Clear()
@@ -144,12 +143,12 @@ bool TextureLoadSlot::LoadTextureFromDisk()
         return false;
     }
 
-    const std::filesystem::path& texturePath = outputTexture->source;
+    const Core::Path& texturePath = outputTexture->source;
 
     {
         ZoneScopedN("FileExistsCheck");
-        if (!std::filesystem::exists(texturePath)) {
-            LOG_ERROR(Asset, "Failed to find texture: {}", texturePath.string());
+        if (!texturePath.Exists()) {
+            LOG_ERROR(Asset, "Failed to find texture: {}", texturePath.c_str());
             return false;
         }
     }
@@ -158,12 +157,12 @@ bool TextureLoadSlot::LoadTextureFromDisk()
         ZoneScopedN("KTXCreateFromFile");
         ktx_error_code_e result;
 
-        std::ifstream f(texturePath, std::ios::binary);
+        std::ifstream f(texturePath.c_str(), std::ios::binary);
         std::vector<uint8_t> compressed(outputTexture->dataSize);
         f.seekg(outputTexture->dataOffset);
         f.read(reinterpret_cast<char*>(compressed.data()), static_cast<std::streamsize>(outputTexture->dataSize));
         if (!f) {
-            LOG_ERROR(Asset, "Failed to read .wtexture data: {}", texturePath.string());
+            LOG_ERROR(Asset, "Failed to read .wtexture data: {}", texturePath.c_str());
             return false;
         }
 
@@ -172,7 +171,7 @@ bool TextureLoadSlot::LoadTextureFromDisk()
                                               KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, &texture);
 
         if (result != KTX_SUCCESS) {
-            LOG_ERROR(Asset, "Failed to load KTX texture: {}", texturePath.string());
+            LOG_ERROR(Asset, "Failed to load KTX texture: {}", texturePath.c_str());
             return false;
         }
     }
@@ -181,22 +180,22 @@ bool TextureLoadSlot::LoadTextureFromDisk()
 
     ktx_size_t mip0Size = ktxTexture_GetImageSize(ktxTexture(texture), 0);
     if (mip0Size > TEXTURE_LOAD_STAGING_SIZE) {
-        LOG_ERROR(Asset, "Texture too large for staging buffer: {}", texturePath.string());
+        LOG_ERROR(Asset, "Texture too large for staging buffer: {}", texturePath.c_str());
         return false;
     }
 
     if (texture->numDimensions != 2) {
-        LOG_ERROR(Asset, "Only 2D textures supported: {}", texturePath.string());
+        LOG_ERROR(Asset, "Only 2D textures supported: {}", texturePath.c_str());
         return false;
     }
 
     if (texture->isArray) {
-        LOG_ERROR(Asset, "Texture arrays not supported: {}", texturePath.string());
+        LOG_ERROR(Asset, "Texture arrays not supported: {}", texturePath.c_str());
         return false;
     }
 
     if (texture->isCubemap) {
-        LOG_ERROR(Asset, "Cubemaps not supported: {}", texturePath.string());
+        LOG_ERROR(Asset, "Cubemaps not supported: {}", texturePath.c_str());
         return false;
     }
 
@@ -238,7 +237,7 @@ bool TextureLoadSlot::AllocateGPUResources()
     return true;
 }
 
-void TextureLoadSlot::UploadTexture(VkCommandBuffer cmd, const std::function<void(bool)>& submitAndWait)
+void TextureLoadSlot::UploadTexture(VkCommandBuffer cmd, const Core::InlineFunction<void(bool)>& submitAndWait)
 {
     ZoneScopedN("UploadTexture");
 

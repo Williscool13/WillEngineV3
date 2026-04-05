@@ -14,6 +14,7 @@
 #include "bc7enc_rdo/rdo_bc_encoder.h"
 #include "engine/compression/compression.h"
 #include "engine/resources/texture/texture_format.h"
+#include "platform/file_utils.h"
 #include "platform/paths.h"
 #include "render/vulkan/vk_context.h"
 #include "render/vulkan/vk_helpers.h"
@@ -41,7 +42,7 @@ void TextureGenerateSlot::Initialize(
     imageReceivingBuffer = Render::AllocatedBuffer::CreateAllocatedReceivingBuffer(context, TEXTURE_GENERATION_STAGING_BUFFER_SIZE);
 }
 
-void TextureGenerateSlot::Launch(TextureGenerateSlotHandle _slotHandle, const std::filesystem::path& _imagePath, const std::filesystem::path& _outputPath, Engine::TextureID _textureId,
+void TextureGenerateSlot::Launch(TextureGenerateSlotHandle _slotHandle, const Core::Path& _imagePath, const Core::Path& _outputPath, Engine::TextureID _textureId,
                                  bool _mipmapped, DXGI_FORMAT _targetFormat)
 {
     slotHandle = _slotHandle;
@@ -61,7 +62,7 @@ void TextureGenerateSlot::Launch(TextureGenerateSlotHandle _slotHandle, const st
 }
 
 void TextureGenerateSlot::LaunchFromMemory(TextureGenerateSlotHandle _slotHandle, std::unique_ptr<uint8_t[]> pixels, uint32_t w, uint32_t h, uint32_t bytesPerPixel,
-                                           const std::filesystem::path& _outputPath, Engine::TextureID _textureId, bool _mipmapped, DXGI_FORMAT _targetFormat)
+                                           const Core::Path& _outputPath, Engine::TextureID _textureId, bool _mipmapped, DXGI_FORMAT _targetFormat)
 {
     slotHandle = _slotHandle;
     outputPath = _outputPath;
@@ -72,7 +73,7 @@ void TextureGenerateSlot::LaunchFromMemory(TextureGenerateSlotHandle _slotHandle
     preloadedWidth = w;
     preloadedHeight = h;
     preloadedBytesPerPixel = bytesPerPixel;
-    imagePath.clear();
+    imagePath = Core::Path{};
 
     if (task && !task->GetIsComplete()) {
         scheduler->WaitforTask(task.get());
@@ -85,8 +86,8 @@ void TextureGenerateSlot::LaunchFromMemory(TextureGenerateSlotHandle _slotHandle
 
 void TextureGenerateSlot::Clear()
 {
-    imagePath.clear();
-    outputPath.clear();
+    imagePath = Core::Path{};
+    outputPath = Core::Path{};
     sourceImage = {};
     mipData.clear();
     imageStagingAllocator.Reset();
@@ -170,10 +171,10 @@ bool TextureGenerateSlot::LoadImageAndGenerate(VkCommandBuffer cmd, const std::f
     else {
         int32_t w, h, nrChannels;
         stbi_set_flip_vertically_on_load_thread(1);
-        stbiData = stbi_load(imagePath.string().c_str(), &w, &h, &nrChannels, 4);
+        stbiData = stbi_load(imagePath.c_str(), &w, &h, &nrChannels, 4);
         stbi_set_flip_vertically_on_load_thread(0);
         if (!stbiData) {
-            LOG_ERROR(Asset, "Failed to load image: {}", imagePath.string());
+            LOG_ERROR(Asset, "Failed to load image: {}", imagePath.c_str());
             return false;
         }
         imgWidth = w;
@@ -457,25 +458,25 @@ bool TextureGenerateSlot::WriteWTextureFile()
     header.uncompressedSize = static_cast<uint64_t>(ktxSize);
     header.dataSize = static_cast<uint64_t>(compressed.size());
 
-    const std::string stem = imagePath.empty() ? outputPath.stem().string() : imagePath.stem().string();
+    const std::string stem = imagePath.IsEmpty() ? std::string(outputPath.Stem()) : std::string(imagePath.Stem());
     const size_t copyLen = std::min(stem.size(), Engine::WTEXTURE_NAME_LENGTH - 1);
     memcpy(header.name, stem.c_str(), copyLen);
     header.name[copyLen] = '\0';
 
-    std::filesystem::create_directories(outputPath.parent_path());
-    std::ofstream f(outputPath, std::ios::binary);
+    Platform::CreateDirectories(outputPath.Parent().c_str());
+    std::ofstream f(outputPath.c_str(), std::ios::binary);
     if (!f) {
-        LOG_ERROR(Asset, "Failed to open output file: {}", outputPath.string());
+        LOG_ERROR(Asset, "Failed to open output file: {}", outputPath.c_str());
         return false;
     }
 
     if (!Engine::WriteWTextureHeader(f, header)) {
-        LOG_ERROR(Asset, "Failed to write header: {}", outputPath.string());
+        LOG_ERROR(Asset, "Failed to write header: {}", outputPath.c_str());
         return false;
     }
     f.write(reinterpret_cast<const char*>(compressed.data()), static_cast<std::streamsize>(compressed.size()));
 
-    LOG_INFO(Asset, "Wrote {}", outputPath.string());
+    LOG_INFO(Asset, "Wrote {}", outputPath.c_str());
     return true;
 }
 } // Editor

@@ -25,8 +25,8 @@ void CubemapLoadSlot::Initialize(
     enki::TaskScheduler* _scheduler,
     Render::VulkanContext* _context,
     Render::ResourceManager* _resourceManager,
-    std::function<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> dispatchCallback,
-    std::function<void(bool success, CubemapSlotHandle cubemapSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle)> notifyCallback)
+    Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> dispatchCallback,
+    Core::InlineFunction<void(bool success, CubemapSlotHandle cubemapSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle)> notifyCallback)
 {
     scheduler = _scheduler;
     context = _context;
@@ -46,12 +46,11 @@ void CubemapLoadSlot::Launch(
     uploadStaging = _uploadStaging;
     outputCubemap = _outputCubemap;
 
-    if (task && !task->GetIsComplete()) {
-        scheduler->WaitforTask(task.get());
+    if (!task.GetIsComplete()) {
+        scheduler->WaitforTask(&task);
     }
-    task = std::make_unique<LoadCubemapTask>();
-    task->loadSlot = this;
-    scheduler->AddTaskSetToPipe(task.get());
+    task.loadSlot = this;
+    scheduler->AddTaskSetToPipe(&task);
 }
 
 void CubemapLoadSlot::Clear()
@@ -141,12 +140,12 @@ bool CubemapLoadSlot::LoadCubemapFromDisk()
         return false;
     }
 
-    const std::filesystem::path& cubemapPath = outputCubemap->source;
+    const Core::Path& cubemapPath = outputCubemap->source;
 
     {
         ZoneScopedN("FileExistsCheck");
-        if (!std::filesystem::exists(cubemapPath)) {
-            SPDLOG_ERROR("Failed to find cubemap: {}", cubemapPath.string());
+        if (!cubemapPath.Exists()) {
+            SPDLOG_ERROR("Failed to find cubemap: {}", cubemapPath.c_str());
             return false;
         }
     }
@@ -154,13 +153,13 @@ bool CubemapLoadSlot::LoadCubemapFromDisk()
     {
         ZoneScopedN("KTXCreateFromFile");
         ktx_error_code_e result = ktxTexture2_CreateFromNamedFile(
-            cubemapPath.string().c_str(),
+            cubemapPath.c_str(),
             KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT,
             &texture
         );
 
         if (result != KTX_SUCCESS) {
-            SPDLOG_ERROR("Failed to load KTX cubemap: {}", cubemapPath.string());
+            SPDLOG_ERROR("Failed to load KTX cubemap: {}", cubemapPath.c_str());
             return false;
         }
     }
@@ -168,19 +167,19 @@ bool CubemapLoadSlot::LoadCubemapFromDisk()
     assert(!ktxTexture2_NeedsTranscoding(texture) && "This engine no longer supports UASTC/ETC1S compressed textures");
 
     if (!texture->isCubemap) {
-        SPDLOG_ERROR("Expected cubemap texture: {}", cubemapPath.string());
+        SPDLOG_ERROR("Expected cubemap texture: {}", cubemapPath.c_str());
         return false;
     }
 
     if (texture->numFaces != 6) {
-        SPDLOG_ERROR("Cubemap must have 6 faces: {}", cubemapPath.string());
+        SPDLOG_ERROR("Cubemap must have 6 faces: {}", cubemapPath.c_str());
         return false;
     }
 
     // Size check for single face mip0
     ktx_size_t mip0Size = ktxTexture_GetImageSize(ktxTexture(texture), 0);
     if (mip0Size > TEXTURE_LOAD_STAGING_SIZE) {
-        SPDLOG_ERROR("Cubemap face too large for staging buffer: {}", cubemapPath.string());
+        SPDLOG_ERROR("Cubemap face too large for staging buffer: {}", cubemapPath.c_str());
         return false;
     }
 
@@ -223,7 +222,7 @@ bool CubemapLoadSlot::AllocateGPUResources()
     return true;
 }
 
-void CubemapLoadSlot::UploadCubemap(VkCommandBuffer cmd, const std::function<void(bool)>& submitAndWait)
+void CubemapLoadSlot::UploadCubemap(VkCommandBuffer cmd, const Core::InlineFunction<void(bool)>& submitAndWait)
 {
     ZoneScopedN("UploadCubemap");
 

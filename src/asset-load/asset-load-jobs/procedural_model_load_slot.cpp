@@ -31,12 +31,15 @@ void ProceduralModelLoadSlot::Initialize(
     enki::TaskScheduler* _scheduler,
     Render::VulkanContext* _context,
     Render::ResourceManager* _resourceManager,
-    std::function<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> dispatchCallback,
-    std::function<void(bool success, ProceduralModelSlotHandle slotHandle, UploadStagingSlotHandle uploadStagingSlotHandle)> notifyCallback)
+    Core::TlsfAllocator* _allocator,
+    Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> dispatchCallback,
+    Core::InlineFunction<void(bool success, ProceduralModelSlotHandle slotHandle, UploadStagingSlotHandle uploadStagingSlotHandle)> notifyCallback)
 {
     scheduler = _scheduler;
     context = _context;
     resourceManager = _resourceManager;
+    rawData.Init(_allocator);
+    packedTriangles = Core::Vector<uint32_t>(_allocator, Core::AllocTag::AssetModel);
     _requestDispatchCallback = std::move(dispatchCallback);
     _notifyCallback = std::move(notifyCallback);
 }
@@ -52,12 +55,11 @@ void ProceduralModelLoadSlot::Launch(
     uploadStaging = _uploadStaging;
     outputModel = _outputModel;
 
-    if (task && !task->GetIsComplete()) {
-        scheduler->WaitforTask(task.get());
+    if (!task.GetIsComplete()) {
+        scheduler->WaitforTask(&task);
     }
-    task = std::make_unique<GenerateModelTask>();
-    task->loadSlot = this;
-    scheduler->AddTaskSetToPipe(task.get());
+    task.loadSlot = this;
+    scheduler->AddTaskSetToPipe(&task);
 }
 
 void ProceduralModelLoadSlot::Clear()
@@ -68,7 +70,7 @@ void ProceduralModelLoadSlot::Clear()
     uploadStaging = nullptr;
 
     rawData.Reset();
-    packedTriangles.clear();
+    packedTriangles.Clear();
 }
 
 void ProceduralModelLoadSlot::GenerateModelTask::ExecuteRange(enki::TaskSetPartition range, uint32_t threadNum)
@@ -281,25 +283,29 @@ bool ProceduralModelLoadSlot::FinalizeGeometry(std::vector<Vertex>& vertices, st
     radius = std::nextafter(sqrtf(radius), std::numeric_limits<float>::max());
 
     // Fill rawData
-    auto vertexOffset = static_cast<uint32_t>(rawData.vertices.size());
-    auto meshletVertexOffset = static_cast<uint32_t>(rawData.meshletVertices.size());
-    auto meshletTriangleOffset = static_cast<uint32_t>(rawData.meshletTriangles.size());
-    auto meshletBaseOffset = static_cast<uint32_t>(rawData.meshlets.size());
+    auto vertexOffset = static_cast<uint32_t>(rawData.vertices.Size());
+    auto meshletVertexOffset = static_cast<uint32_t>(rawData.meshletVertices.Size());
+    auto meshletTriangleOffset = static_cast<uint32_t>(rawData.meshletTriangles.Size());
+    auto meshletBaseOffset = static_cast<uint32_t>(rawData.meshlets.Size());
 
-    rawData.vertices.insert(rawData.vertices.end(), vertices.begin(), vertices.end());
+    rawData.vertices.Reserve(rawData.vertices.Size() + vertices.size());
+    for (auto& v : vertices) { rawData.vertices.PushBack(v); }
 
-    auto indexOffset = static_cast<uint32_t>(rawData.indices.size());
-    for (uint32_t idx : indices) rawData.indices.push_back(idx + vertexOffset);
+    auto indexOffset = static_cast<uint32_t>(rawData.indices.Size());
+    for (uint32_t idx : indices) { rawData.indices.PushBack(idx + vertexOffset); }
 
-    rawData.meshletVertices.insert(rawData.meshletVertices.end(), meshletVertices.begin(), meshletVertices.end());
-    rawData.meshletTriangles.insert(rawData.meshletTriangles.end(), meshletTriangles.begin(), meshletTriangles.end());
+    rawData.meshletVertices.Reserve(rawData.meshletVertices.Size() + meshletVertices.size());
+    for (uint32_t mv : meshletVertices) { rawData.meshletVertices.PushBack(mv); }
+
+    rawData.meshletTriangles.Reserve(rawData.meshletTriangles.Size() + meshletTriangles.size());
+    for (uint8_t mt : meshletTriangles) { rawData.meshletTriangles.PushBack(mt); }
 
     for (auto& m : meshlets) {
         meshopt_Bounds bounds = meshopt_computeMeshletBounds(
             &meshletVertices[m.vertex_offset], &meshletTriangles[m.triangle_offset], m.triangle_count,
             reinterpret_cast<const float*>(vertices.data()), vertices.size(), sizeof(Vertex));
 
-        rawData.meshlets.push_back({
+        rawData.meshlets.PushBack({
             .meshletBoundingSphere = {bounds.center[0], bounds.center[1], bounds.center[2], bounds.radius},
             .coneApex = {bounds.cone_apex[0], bounds.cone_apex[1], bounds.cone_apex[2]},
             .coneCutoff = bounds.cone_cutoff,
@@ -321,11 +327,11 @@ bool ProceduralModelLoadSlot::FinalizeGeometry(std::vector<Vertex>& vertices, st
     primitiveData.indexOffset = indexOffset;
 
     Engine::MeshInformation meshInfo;
-    meshInfo.name = outputModel->name;
-    meshInfo.primitiveProperties.push_back({static_cast<uint32_t>(rawData.primitives.size()), -1});
+    meshInfo.name = Core::InlineString<64>(outputModel->name.c_str());
+    meshInfo.primitiveProperties.PushBack({static_cast<uint32_t>(rawData.primitives.Size()), -1});
 
-    rawData.primitives.push_back(primitiveData);
-    rawData.allMeshes.push_back(std::move(meshInfo)); {
+    rawData.primitives.PushBack(primitiveData);
+    rawData.allMeshes.PushBack(std::move(meshInfo)); {
         std::vector<glm::vec3> positions;
         positions.reserve(vertices.size());
         for (const auto& v : vertices) positions.push_back(v.position); {
@@ -2206,7 +2212,7 @@ bool ProceduralModelLoadSlot::GenerateSpline(const Engine::SplineParams& p)
 
 bool ProceduralModelLoadSlot::AllocateGPUResources() const
 {
-    size_t sizeVertices = rawData.vertices.size() * sizeof(Vertex); {
+    size_t sizeVertices = rawData.vertices.Size() * sizeof(Vertex); {
         std::lock_guard lock(resourceManager->vertexBufferAllocatorMutex);
         outputModel->modelData.vertexAllocation = resourceManager->vertexBufferAllocator.allocate(sizeVertices);
         if (outputModel->modelData.vertexAllocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
@@ -2215,7 +2221,7 @@ bool ProceduralModelLoadSlot::AllocateGPUResources() const
         }
     }
 
-    size_t sizeMeshletVertices = rawData.meshletVertices.size() * sizeof(uint32_t); {
+    size_t sizeMeshletVertices = rawData.meshletVertices.Size() * sizeof(uint32_t); {
         std::lock_guard lock(resourceManager->meshletVertexBufferAllocatorMutex);
         outputModel->modelData.meshletVertexAllocation = resourceManager->meshletVertexBufferAllocator.allocate(sizeMeshletVertices);
         if (outputModel->modelData.meshletVertexAllocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
@@ -2226,7 +2232,7 @@ bool ProceduralModelLoadSlot::AllocateGPUResources() const
         }
     }
 
-    size_t sizeMeshletTriangles = rawData.meshletTriangles.size() / 3 * sizeof(uint32_t); {
+    size_t sizeMeshletTriangles = rawData.meshletTriangles.Size() / 3 * sizeof(uint32_t); {
         std::lock_guard lock(resourceManager->meshletTriangleBufferAllocatorMutex);
         outputModel->modelData.meshletTriangleAllocation = resourceManager->meshletTriangleBufferAllocator.allocate(sizeMeshletTriangles);
         if (outputModel->modelData.meshletTriangleAllocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
@@ -2242,7 +2248,7 @@ bool ProceduralModelLoadSlot::AllocateGPUResources() const
         }
     }
 
-    size_t sizeMeshlets = rawData.meshlets.size() * sizeof(Meshlet); {
+    size_t sizeMeshlets = rawData.meshlets.Size() * sizeof(Meshlet); {
         std::lock_guard lock(resourceManager->meshletBufferAllocatorMutex);
         outputModel->modelData.meshletAllocation = resourceManager->meshletBufferAllocator.allocate(sizeMeshlets);
         if (outputModel->modelData.meshletAllocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
@@ -2261,7 +2267,7 @@ bool ProceduralModelLoadSlot::AllocateGPUResources() const
         }
     }
 
-    size_t sizePrimitives = rawData.primitives.size() * sizeof(Primitive); {
+    size_t sizePrimitives = rawData.primitives.Size() * sizeof(Primitive); {
         std::lock_guard lock(resourceManager->primitiveBufferAllocatorMutex);
         outputModel->modelData.primitiveAllocation = resourceManager->primitiveBufferAllocator.allocate(sizePrimitives);
         if (outputModel->modelData.primitiveAllocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
@@ -2310,20 +2316,23 @@ void ProceduralModelLoadSlot::PrepareUploadData()
         }
     }
 
-    outputModel->modelData.meshes = std::move(rawData.allMeshes);
-    outputModel->modelData.nodes = std::move(rawData.nodes);
-    outputModel->modelData.materials = std::move(rawData.materials);
+    { auto& dst = outputModel->modelData.meshes; dst.clear(); dst.reserve(rawData.allMeshes.Size());
+      for (auto& m : rawData.allMeshes) { dst.push_back(std::move(m)); } }
+    { auto& dst = outputModel->modelData.nodes; dst.clear(); dst.reserve(rawData.nodes.Size());
+      for (auto& n : rawData.nodes) { dst.push_back(std::move(n)); } }
+    { auto& dst = outputModel->modelData.materials; dst.clear(); dst.reserve(rawData.materials.Size());
+      for (auto& m : rawData.materials) { dst.push_back(std::move(m)); } }
 
-    packedTriangles.reserve(rawData.meshletTriangles.size() / 3);
-    for (size_t i = 0; i < rawData.meshletTriangles.size(); i += 3) {
+    packedTriangles.Reserve(rawData.meshletTriangles.Size() / 3);
+    for (size_t i = 0; i < rawData.meshletTriangles.Size(); i += 3) {
         uint32_t packed = rawData.meshletTriangles[i + 0] |
                           (rawData.meshletTriangles[i + 1] << 8) |
                           (rawData.meshletTriangles[i + 2] << 16);
-        packedTriangles.push_back(packed);
+        packedTriangles.PushBack(packed);
     }
 }
 
-void ProceduralModelLoadSlot::UploadGeometry(VkCommandBuffer cmd, const std::function<void(bool)>& submitAndWait)
+void ProceduralModelLoadSlot::UploadGeometry(VkCommandBuffer cmd, const Core::InlineFunction<void(bool)>& submitAndWait)
 {
     ZoneScopedN("UploadGeometry");
 
@@ -2365,22 +2374,23 @@ void ProceduralModelLoadSlot::UploadGeometry(VkCommandBuffer cmd, const std::fun
         }
     };
 
-    uploadBuffer(rawData.vertices.data(), rawData.vertices.size(), sizeof(Vertex),
+    uploadBuffer(rawData.vertices.Data(), rawData.vertices.Size(), sizeof(Vertex),
                  resourceManager->megaVertexBuffer.handle, outputModel->modelData.vertexAllocation.offset);
 
-    uploadBuffer(rawData.meshletVertices.data(), rawData.meshletVertices.size(), sizeof(uint32_t),
+    uploadBuffer(rawData.meshletVertices.Data(), rawData.meshletVertices.Size(), sizeof(uint32_t),
                  resourceManager->megaMeshletVerticesBuffer.handle, outputModel->modelData.meshletVertexAllocation.offset);
 
-    uploadBuffer(packedTriangles.data(), packedTriangles.size(), sizeof(uint32_t),
+    uploadBuffer(packedTriangles.Data(), packedTriangles.Size(), sizeof(uint32_t),
                  resourceManager->megaMeshletTrianglesBuffer.handle, outputModel->modelData.meshletTriangleAllocation.offset);
 
-    uploadBuffer(rawData.meshlets.data(), rawData.meshlets.size(), sizeof(Meshlet),
+    uploadBuffer(rawData.meshlets.Data(), rawData.meshlets.Size(), sizeof(Meshlet),
                  resourceManager->megaMeshletBuffer.handle, outputModel->modelData.meshletAllocation.offset);
 
-    uploadBuffer(rawData.primitives.data(), rawData.primitives.size(), sizeof(Primitive),
+    uploadBuffer(rawData.primitives.Data(), rawData.primitives.Size(), sizeof(Primitive),
                  resourceManager->primitiveBuffer.handle, outputModel->modelData.primitiveAllocation.offset);
 
-    std::vector<VkBufferMemoryBarrier2> releaseBarriers;
+    VkBufferMemoryBarrier2 releaseBarriers[5];
+    uint32_t barrierCount = 0;
 
     auto createBufferBarrier = [&](VkBuffer buffer, VkDeviceSize offset, VkDeviceSize size) {
         VkBufferMemoryBarrier2 barrier{
@@ -2402,24 +2412,24 @@ void ProceduralModelLoadSlot::UploadGeometry(VkCommandBuffer cmd, const std::fun
         return barrier;
     };
 
-    releaseBarriers.push_back(createBufferBarrier(resourceManager->megaVertexBuffer.handle,
-                                                  outputModel->modelData.vertexAllocation.offset, rawData.vertices.size() * sizeof(Vertex)));
-    releaseBarriers.push_back(createBufferBarrier(resourceManager->megaMeshletVerticesBuffer.handle,
-                                                  outputModel->modelData.meshletVertexAllocation.offset, rawData.meshletVertices.size() * sizeof(uint32_t)));
-    releaseBarriers.push_back(createBufferBarrier(resourceManager->megaMeshletTrianglesBuffer.handle,
-                                                  outputModel->modelData.meshletTriangleAllocation.offset, rawData.meshletTriangles.size() / 3 * sizeof(uint32_t)));
-    releaseBarriers.push_back(createBufferBarrier(resourceManager->megaMeshletBuffer.handle,
-                                                  outputModel->modelData.meshletAllocation.offset, rawData.meshlets.size() * sizeof(Meshlet)));
-    releaseBarriers.push_back(createBufferBarrier(resourceManager->primitiveBuffer.handle,
-                                                  outputModel->modelData.primitiveAllocation.offset, rawData.primitives.size() * sizeof(Primitive)));
+    releaseBarriers[barrierCount++] = createBufferBarrier(resourceManager->megaVertexBuffer.handle,
+                                                          outputModel->modelData.vertexAllocation.offset, rawData.vertices.Size() * sizeof(Vertex));
+    releaseBarriers[barrierCount++] = createBufferBarrier(resourceManager->megaMeshletVerticesBuffer.handle,
+                                                          outputModel->modelData.meshletVertexAllocation.offset, rawData.meshletVertices.Size() * sizeof(uint32_t));
+    releaseBarriers[barrierCount++] = createBufferBarrier(resourceManager->megaMeshletTrianglesBuffer.handle,
+                                                          outputModel->modelData.meshletTriangleAllocation.offset, rawData.meshletTriangles.Size() / 3 * sizeof(uint32_t));
+    releaseBarriers[barrierCount++] = createBufferBarrier(resourceManager->megaMeshletBuffer.handle,
+                                                          outputModel->modelData.meshletAllocation.offset, rawData.meshlets.Size() * sizeof(Meshlet));
+    releaseBarriers[barrierCount++] = createBufferBarrier(resourceManager->primitiveBuffer.handle,
+                                                          outputModel->modelData.primitiveAllocation.offset, rawData.primitives.Size() * sizeof(Primitive));
 
     VkDependencyInfo depInfo{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
-    depInfo.bufferMemoryBarrierCount = releaseBarriers.size();
-    depInfo.pBufferMemoryBarriers = releaseBarriers.data();
+    depInfo.bufferMemoryBarrierCount = barrierCount;
+    depInfo.pBufferMemoryBarriers = releaseBarriers;
     vkCmdPipelineBarrier2(cmd, &depInfo);
 
-    for (auto& barrier : releaseBarriers) {
-        outputModel->bufferAcquireOps.push_back(Render::VkHelpers::FromVkBarrier(barrier));
+    for (uint32_t i = 0; i < barrierCount; ++i) {
+        outputModel->bufferAcquireOps.PushBack(Render::VkHelpers::FromVkBarrier(releaseBarriers[i]));
     }
 }
 } // AssetLoad

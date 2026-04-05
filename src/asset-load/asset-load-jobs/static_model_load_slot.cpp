@@ -27,12 +27,15 @@ void StaticModelLoadSlot::Initialize(
     enki::TaskScheduler* _scheduler,
     Render::VulkanContext* _context,
     Render::ResourceManager* _resourceManager,
-    std::function<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> dispatchCallback,
-    std::function<void(bool success, ModelSlotHandle modelSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle)> notifyCallback)
+    Core::TlsfAllocator* _allocator,
+    Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> dispatchCallback,
+    Core::InlineFunction<void(bool success, ModelSlotHandle modelSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle)> notifyCallback)
 {
     scheduler = _scheduler;
     context = _context;
     resourceManager = _resourceManager;
+    packedTriangles = Core::Vector<uint32_t>(_allocator, Core::AllocTag::AssetModel);
+    rawData.Init(_allocator);
     _requestDispatchCallback = std::move(dispatchCallback);
     _notifyCallback = std::move(notifyCallback);
 }
@@ -49,12 +52,11 @@ void StaticModelLoadSlot::Launch(
     outputModel = _outputModel;
 
 
-    if (task && !task->GetIsComplete()) {
-        scheduler->WaitforTask(task.get());
+    if (!task.GetIsComplete()) {
+        scheduler->WaitforTask(&task);
     }
-    task = std::make_unique<LoadModelTask>();
-    task->loadSlot = this;
-    scheduler->AddTaskSetToPipe(task.get());
+    task.loadSlot = this;
+    scheduler->AddTaskSetToPipe(&task);
 }
 
 void StaticModelLoadSlot::Clear()
@@ -65,7 +67,7 @@ void StaticModelLoadSlot::Clear()
     uploadStaging = nullptr;
 
     rawData.Reset();
-    packedTriangles.clear();
+    packedTriangles.Clear();
 }
 
 void StaticModelLoadSlot::LoadModelTask::ExecuteRange(enki::TaskSetPartition range, uint32_t threadNum)
@@ -138,8 +140,8 @@ bool StaticModelLoadSlot::LoadModelFromDisk()
 {
     ZoneScopedN("LoadModelFromDisk");
 
-    if (!std::filesystem::exists(outputModel->source)) {
-        SPDLOG_ERROR("Failed to find path to static model - {}", outputModel->name);
+    if (!outputModel->source.Exists()) {
+        SPDLOG_ERROR("Failed to find path to static model - {}", outputModel->name.c_str());
         return false;
     }
 
@@ -147,14 +149,14 @@ bool StaticModelLoadSlot::LoadModelFromDisk()
     std::vector<uint8_t> body;
     std::vector<uint8_t> nodeData; {
         ZoneScopedN("ReadFile");
-        std::ifstream file(outputModel->source, std::ios::binary);
+        std::ifstream file(outputModel->source.c_str(), std::ios::binary);
         if (!file) {
-            SPDLOG_ERROR("Failed to open static model - {}", outputModel->name);
+            SPDLOG_ERROR("Failed to open static model - {}", outputModel->name.c_str());
             return false;
         }
         auto optHeader = Engine::ReadWStaticModelHeader(file);
         if (!optHeader) {
-            SPDLOG_ERROR("Failed to read static model header - {}", outputModel->name);
+            SPDLOG_ERROR("Failed to read static model header - {}", outputModel->name.c_str());
             return false;
         }
         header = *optHeader;
@@ -173,10 +175,10 @@ bool StaticModelLoadSlot::LoadModelFromDisk()
         file.read(reinterpret_cast<char*>(nodeData.data()), static_cast<std::streamsize>(nodeData.size()));
     }
 
-    auto readArray = [&]<typename T>(std::vector<T>& vec, uint32_t offset, uint32_t count) {
-        vec.resize(count);
+    auto readArray = [&]<typename T>(Core::Vector<T>& vec, uint32_t offset, uint32_t count) {
+        vec.Resize(count);
         if (count > 0) {
-            std::memcpy(vec.data(), body.data() + offset, count * sizeof(T));
+            std::memcpy(vec.Data(), body.data() + offset, count * sizeof(T));
         }
     }; {
         ZoneScopedN("ParseGeometryData");
@@ -189,21 +191,21 @@ bool StaticModelLoadSlot::LoadModelFromDisk()
     } {
         ZoneScopedN("ParseMaterials");
         const uint8_t* ptr = body.data() + header.materialOffset;
-        rawData.materials.resize(header.materialCount);
+        rawData.materials.Resize(header.materialCount);
         for (uint32_t i = 0; i < header.materialCount; ++i) {
             Engine::ReadMaterial(ptr, rawData.materials[i]);
         }
     } {
         ZoneScopedN("ParseMeshes");
         const uint8_t* ptr = body.data() + header.meshOffset;
-        rawData.allMeshes.resize(header.meshCount);
+        rawData.allMeshes.Resize(header.meshCount);
         for (uint32_t i = 0; i < header.meshCount; ++i) {
             Engine::ReadMeshInformation(ptr, rawData.allMeshes[i]);
         }
     } {
         ZoneScopedN("ParseNodes");
         const uint8_t* ptr = nodeData.data();
-        rawData.nodes.resize(header.nodeCount);
+        rawData.nodes.Resize(header.nodeCount);
         for (uint32_t i = 0; i < header.nodeCount; ++i) {
             Engine::ReadNode(ptr, rawData.nodes[i]);
         }
@@ -221,7 +223,7 @@ bool StaticModelLoadSlot::LoadModelFromDisk()
 bool StaticModelLoadSlot::AllocateGPUResources() const
 {
     // Thread-safe allocation (mutexes are expensive but this is rather infrequent)
-    size_t sizeVertices = rawData.vertices.size() * sizeof(Vertex); {
+    size_t sizeVertices = rawData.vertices.Size() * sizeof(Vertex); {
         std::lock_guard lock(resourceManager->vertexBufferAllocatorMutex);
         outputModel->modelData.vertexAllocation = resourceManager->vertexBufferAllocator.allocate(sizeVertices);
         if (outputModel->modelData.vertexAllocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
@@ -230,7 +232,7 @@ bool StaticModelLoadSlot::AllocateGPUResources() const
         }
     }
 
-    size_t sizeMeshletVertices = rawData.meshletVertices.size() * sizeof(uint32_t);
+    size_t sizeMeshletVertices = rawData.meshletVertices.Size() * sizeof(uint32_t);
     //
     {
         std::lock_guard lock(resourceManager->meshletVertexBufferAllocatorMutex);
@@ -243,7 +245,7 @@ bool StaticModelLoadSlot::AllocateGPUResources() const
         }
     }
 
-    size_t sizeMeshletTriangles = rawData.meshletTriangles.size() / 3 * sizeof(uint32_t);
+    size_t sizeMeshletTriangles = rawData.meshletTriangles.Size() / 3 * sizeof(uint32_t);
     //
     {
         std::lock_guard lock(resourceManager->meshletTriangleBufferAllocatorMutex);
@@ -262,7 +264,7 @@ bool StaticModelLoadSlot::AllocateGPUResources() const
         }
     }
 
-    size_t sizeMeshlets = rawData.meshlets.size() * sizeof(Meshlet);
+    size_t sizeMeshlets = rawData.meshlets.Size() * sizeof(Meshlet);
     //
     {
         std::lock_guard lock(resourceManager->meshletBufferAllocatorMutex);
@@ -284,7 +286,7 @@ bool StaticModelLoadSlot::AllocateGPUResources() const
         }
     }
 
-    size_t sizePrimitives = rawData.primitives.size() * sizeof(Primitive);
+    size_t sizePrimitives = rawData.primitives.Size() * sizeof(Primitive);
     //
     {
         std::lock_guard lock(resourceManager->primitiveBufferAllocatorMutex);
@@ -337,53 +339,70 @@ void StaticModelLoadSlot::PrepareUploadData()
         }
     } {
         std::vector<glm::vec3> positions;
-        positions.reserve(rawData.vertices.size());
-        for (const auto& v : rawData.vertices)
-            positions.push_back(v.position); {
-            Engine::StaticModel::PhysicsCache cache;
-            cache.positions = positions;
-            cache.indices = rawData.indices;
-
-            constexpr size_t kSimplifyThreshold = 1500;
-            constexpr size_t kSimplifyFloor = 1500;
-            constexpr float kSimplifyRatio = 0.15f;
-            constexpr float kSimplifyError = 0.01f;
-            if (cache.indices.size() > kSimplifyThreshold) {
-                const size_t target = std::max(kSimplifyFloor, static_cast<size_t>(cache.indices.size() * kSimplifyRatio));
-                std::vector<uint32_t> simplified(cache.indices.size());
-                const size_t result = meshopt_simplify(
-                    simplified.data(),
-                    cache.indices.data(), cache.indices.size(),
-                    &cache.positions[0].x, cache.positions.size(), sizeof(glm::vec3),
-                    target, kSimplifyError
-                );
-                simplified.resize(result);
-                cache.indices = std::move(simplified);
-            }
-
-            outputModel->physicsCache = std::move(cache);
+        positions.reserve(rawData.vertices.Size());
+        for (const auto& v : rawData.vertices) {
+            positions.push_back(v.position);
         }
 
-        if (outputModel->bounds.sphere.radius == 0.f)
-            outputModel->bounds = Engine::StaticModel::ComputeBounds(positions, &rawData.indices);
+        Engine::StaticModel::PhysicsCache cache;
+        cache.positions = positions;
+        cache.indices.assign(rawData.indices.begin(), rawData.indices.end());
+
+        if (outputModel->bounds.sphere.radius == 0.f) {
+            outputModel->bounds = Engine::StaticModel::ComputeBounds(positions, &cache.indices);
+        }
+
+        constexpr size_t kSimplifyThreshold = 1500;
+        constexpr size_t kSimplifyFloor = 1500;
+        constexpr float kSimplifyRatio = 0.15f;
+        constexpr float kSimplifyError = 0.01f;
+        if (cache.indices.size() > kSimplifyThreshold) {
+            const size_t target = std::max(kSimplifyFloor, static_cast<size_t>(cache.indices.size() * kSimplifyRatio));
+            std::vector<uint32_t> simplified(cache.indices.size());
+            const size_t result = meshopt_simplify(
+                simplified.data(),
+                cache.indices.data(), cache.indices.size(),
+                &cache.positions[0].x, cache.positions.size(), sizeof(glm::vec3),
+                target, kSimplifyError
+            );
+            simplified.resize(result);
+            cache.indices = std::move(simplified);
+        }
+
+        outputModel->physicsCache = std::move(cache);
     }
 
-    // Move data to outputModel
-    outputModel->modelData.meshes = std::move(rawData.allMeshes);
-    outputModel->modelData.nodes = std::move(rawData.nodes);
-    outputModel->modelData.materials = std::move(rawData.materials);
+    // Move geometry data to outputModel (StaticModelData uses std::vector)
+    {
+        auto& dst = outputModel->modelData.meshes;
+        dst.clear();
+        dst.reserve(rawData.allMeshes.Size());
+        for (auto& m : rawData.allMeshes) { dst.push_back(std::move(m)); }
+    }
+    {
+        auto& dst = outputModel->modelData.nodes;
+        dst.clear();
+        dst.reserve(rawData.nodes.Size());
+        for (auto& n : rawData.nodes) { dst.push_back(std::move(n)); }
+    }
+    {
+        auto& dst = outputModel->modelData.materials;
+        dst.clear();
+        dst.reserve(rawData.materials.Size());
+        for (auto& m : rawData.materials) { dst.push_back(std::move(m)); }
+    }
 
     // Pack triangles
-    packedTriangles.reserve(rawData.meshletTriangles.size() / 3);
-    for (size_t i = 0; i < rawData.meshletTriangles.size(); i += 3) {
+    packedTriangles.Reserve(rawData.meshletTriangles.Size() / 3);
+    for (size_t i = 0; i < rawData.meshletTriangles.Size(); i += 3) {
         uint32_t packed = rawData.meshletTriangles[i + 0] |
                           (rawData.meshletTriangles[i + 1] << 8) |
                           (rawData.meshletTriangles[i + 2] << 16);
-        packedTriangles.push_back(packed);
+        packedTriangles.PushBack(packed);
     }
 }
 
-void StaticModelLoadSlot::UploadGeometry(VkCommandBuffer cmd, const std::function<void(bool)>& submitAndWait)
+void StaticModelLoadSlot::UploadGeometry(VkCommandBuffer cmd, const Core::InlineFunction<void(bool)>& submitAndWait)
 {
     ZoneScopedN("UploadGeometry");
 
@@ -425,23 +444,24 @@ void StaticModelLoadSlot::UploadGeometry(VkCommandBuffer cmd, const std::functio
         }
     };
 
-    uploadBuffer(rawData.vertices.data(), rawData.vertices.size(), sizeof(Vertex),
+    uploadBuffer(rawData.vertices.Data(), rawData.vertices.Size(), sizeof(Vertex),
                  resourceManager->megaVertexBuffer.handle, outputModel->modelData.vertexAllocation.offset);
 
-    uploadBuffer(rawData.meshletVertices.data(), rawData.meshletVertices.size(), sizeof(uint32_t),
+    uploadBuffer(rawData.meshletVertices.Data(), rawData.meshletVertices.Size(), sizeof(uint32_t),
                  resourceManager->megaMeshletVerticesBuffer.handle, outputModel->modelData.meshletVertexAllocation.offset);
 
-    uploadBuffer(packedTriangles.data(), packedTriangles.size(), sizeof(uint32_t),
+    uploadBuffer(packedTriangles.Data(), packedTriangles.Size(), sizeof(uint32_t),
                  resourceManager->megaMeshletTrianglesBuffer.handle, outputModel->modelData.meshletTriangleAllocation.offset);
 
-    uploadBuffer(rawData.meshlets.data(), rawData.meshlets.size(), sizeof(Meshlet),
+    uploadBuffer(rawData.meshlets.Data(), rawData.meshlets.Size(), sizeof(Meshlet),
                  resourceManager->megaMeshletBuffer.handle, outputModel->modelData.meshletAllocation.offset);
 
-    uploadBuffer(rawData.primitives.data(), rawData.primitives.size(), sizeof(Primitive),
+    uploadBuffer(rawData.primitives.Data(), rawData.primitives.Size(), sizeof(Primitive),
                  resourceManager->primitiveBuffer.handle, outputModel->modelData.primitiveAllocation.offset);
 
     // Queue family transfer barriers
-    std::vector<VkBufferMemoryBarrier2> releaseBarriers;
+    VkBufferMemoryBarrier2 releaseBarriers[5];
+    uint32_t barrierCount = 0;
 
     auto createBufferBarrier = [&](VkBuffer buffer, VkDeviceSize offset, VkDeviceSize size) {
         VkBufferMemoryBarrier2 barrier{
@@ -463,24 +483,24 @@ void StaticModelLoadSlot::UploadGeometry(VkCommandBuffer cmd, const std::functio
         return barrier;
     };
 
-    releaseBarriers.push_back(createBufferBarrier(resourceManager->megaVertexBuffer.handle,
-                                                  outputModel->modelData.vertexAllocation.offset, rawData.vertices.size() * sizeof(Vertex)));
-    releaseBarriers.push_back(createBufferBarrier(resourceManager->megaMeshletVerticesBuffer.handle,
-                                                  outputModel->modelData.meshletVertexAllocation.offset, rawData.meshletVertices.size() * sizeof(uint32_t)));
-    releaseBarriers.push_back(createBufferBarrier(resourceManager->megaMeshletTrianglesBuffer.handle,
-                                                  outputModel->modelData.meshletTriangleAllocation.offset, rawData.meshletTriangles.size() / 3 * sizeof(uint32_t)));
-    releaseBarriers.push_back(createBufferBarrier(resourceManager->megaMeshletBuffer.handle,
-                                                  outputModel->modelData.meshletAllocation.offset, rawData.meshlets.size() * sizeof(Meshlet)));
-    releaseBarriers.push_back(createBufferBarrier(resourceManager->primitiveBuffer.handle,
-                                                  outputModel->modelData.primitiveAllocation.offset, rawData.primitives.size() * sizeof(Primitive)));
+    releaseBarriers[barrierCount++] = createBufferBarrier(resourceManager->megaVertexBuffer.handle,
+                                                          outputModel->modelData.vertexAllocation.offset, rawData.vertices.Size() * sizeof(Vertex));
+    releaseBarriers[barrierCount++] = createBufferBarrier(resourceManager->megaMeshletVerticesBuffer.handle,
+                                                          outputModel->modelData.meshletVertexAllocation.offset, rawData.meshletVertices.Size() * sizeof(uint32_t));
+    releaseBarriers[barrierCount++] = createBufferBarrier(resourceManager->megaMeshletTrianglesBuffer.handle,
+                                                          outputModel->modelData.meshletTriangleAllocation.offset, rawData.meshletTriangles.Size() / 3 * sizeof(uint32_t));
+    releaseBarriers[barrierCount++] = createBufferBarrier(resourceManager->megaMeshletBuffer.handle,
+                                                          outputModel->modelData.meshletAllocation.offset, rawData.meshlets.Size() * sizeof(Meshlet));
+    releaseBarriers[barrierCount++] = createBufferBarrier(resourceManager->primitiveBuffer.handle,
+                                                          outputModel->modelData.primitiveAllocation.offset, rawData.primitives.Size() * sizeof(Primitive));
 
     VkDependencyInfo depInfo{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
-    depInfo.bufferMemoryBarrierCount = releaseBarriers.size();
-    depInfo.pBufferMemoryBarriers = releaseBarriers.data();
+    depInfo.bufferMemoryBarrierCount = barrierCount;
+    depInfo.pBufferMemoryBarriers = releaseBarriers;
     vkCmdPipelineBarrier2(cmd, &depInfo);
 
-    for (auto& barrier : releaseBarriers) {
-        outputModel->bufferAcquireOps.push_back(Render::VkHelpers::FromVkBarrier(barrier));
+    for (uint32_t i = 0; i < barrierCount; ++i) {
+        outputModel->bufferAcquireOps.PushBack(Render::VkHelpers::FromVkBarrier(releaseBarriers[i]));
     }
 }
 } // AssetLoad

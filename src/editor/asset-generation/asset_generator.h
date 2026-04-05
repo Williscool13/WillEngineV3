@@ -1,7 +1,6 @@
 #ifndef WILL_ENGINE_ASSET_GENERATOR_H
 #define WILL_ENGINE_ASSET_GENERATOR_H
 
-#include <filesystem>
 #include <atomic>
 #include <mutex>
 #include <condition_variable>
@@ -10,6 +9,7 @@
 #include <thread>
 #include <concurrentqueue/concurrentqueue.h>
 
+#include "core/containers/inline_path.h"
 #include "engine/core/texture_id.h"
 
 #include "asset_generation_types.h"
@@ -53,25 +53,25 @@ struct StaticModelGenerationProgress
 
 struct ModelGenerateRequest
 {
-    std::filesystem::path gltfPath;
-    std::filesystem::path outputPath;
+    Core::Path gltfPath;
+    Core::Path outputPath;
     uint64_t modelId{0};
 };
 
 struct ModelGenerateComplete
 {
-    std::filesystem::path outputPath;
-    bool success;
+    Core::Path outputPath;
+    bool success{};
 };
 
 struct TextureGenerateRequest
 {
-    std::filesystem::path outputPath;
+    Core::Path outputPath;
     Engine::TextureID textureId;
     bool mipmapped;
     DXGI_FORMAT targetFormat;
 
-    std::filesystem::path imagePath;
+    Core::Path imagePath;
 
     // Optional: pre-loaded pixel data (takes priority over imagePath)
     std::unique_ptr<uint8_t[]> sourcePixels;
@@ -82,20 +82,20 @@ struct TextureGenerateRequest
 
 struct TextureGenerateComplete
 {
-    std::filesystem::path outputPath;
+    Core::Path outputPath;
     Engine::TextureID textureId;
     bool success;
 };
 
 struct EnvironmentMapGenerateRequest
 {
-    std::filesystem::path imagePath;
-    std::filesystem::path outputPath;
+    Core::Path imagePath;
+    Core::Path outputPath;
 };
 
 struct EnvironmentMapGenerateComplete
 {
-    std::filesystem::path outputPath;
+    Core::Path outputPath;
     bool success;
 };
 
@@ -108,26 +108,26 @@ public:
 
     ~AssetGenerator();
 
-    void RequestModelGenerate(const std::filesystem::path& gltfPath, const std::filesystem::path& outputPath);
+    void RequestModelGenerate(const Core::Path& gltfPath, const Core::Path& outputPath);
 
     bool TryDequeueModelGenerateComplete(ModelGenerateComplete& outResult);
 
-    Engine::TextureID RequestTextureGenerateFromFile(const std::filesystem::path& imagePath, const std::filesystem::path& outputPath, bool mipmapped = true,
+    Engine::TextureID RequestTextureGenerateFromFile(const Core::Path& imagePath, const Core::Path& outputPath, bool mipmapped = true,
                                                      DXGI_FORMAT targetFormat = DXGI_FORMAT_BC7_UNORM);
 
-    Engine::TextureID RequestTextureGenerateFromMemory(std::unique_ptr<uint8_t[]> pixels, uint32_t w, uint32_t h, uint32_t bytesPerPixel, const std::filesystem::path& outputPath,
+    Engine::TextureID RequestTextureGenerateFromMemory(std::unique_ptr<uint8_t[]> pixels, uint32_t w, uint32_t h, uint32_t bytesPerPixel, const Core::Path& outputPath,
                                                        bool mipmapped = false, DXGI_FORMAT targetFormat = DXGI_FORMAT_BC7_UNORM);
 
     bool TryDequeueTextureGenerateComplete(TextureGenerateComplete& outResult);
 
-    void RequestEnvironmentMapGenerate(const std::filesystem::path& hdriPath, const std::filesystem::path& outputPath);
+    void RequestEnvironmentMapGenerate(const Core::Path& hdriPath, const Core::Path& outputPath);
 
     bool TryDequeueCubemapGenerateComplete(EnvironmentMapGenerateComplete& outResult);
 
-    void GenerateBRDFLUT(const std::filesystem::path& outputFile);
+    void GenerateBRDFLUT(const Core::Path& outputFile);
 
     const std::array<StaticModelGenerationProgress, MODEL_GENERATION_JOB_COUNT>& GetModelGenerationProgresses() const { return modelGenerationProgress; }
-    const std::filesystem::path& GetModelGenerateSlotPath(uint32_t index) const { return modelGenerateTasks[index].gltfPath; }
+    const Core::Path& GetModelGenerateSlotPath(uint32_t index) const { return modelGenerateTasks[index].gltfPath; }
 
     [[nodiscard]] uint32_t GetTotalModelGenerateCount() const
     {

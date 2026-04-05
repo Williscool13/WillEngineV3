@@ -4,9 +4,9 @@
 
 #ifndef WILL_ENGINE_CUBEMAP_ASSET_H
 #define WILL_ENGINE_CUBEMAP_ASSET_H
-#include <filesystem>
-
 #include "../interface/render_interface.h"
+#include "core/containers/inline_path.h"
+#include "core/containers/inline_string.h"
 #include "render/descriptors/vk_bindless_resources_sampler_images.h"
 #include "engine/asset_manager_types.h"
 
@@ -25,8 +25,8 @@ struct Cubemap
         FailedToLoad
     };
 
-    std::filesystem::path source{};
-    std::string name{};
+    Core::Path source{};
+    Core::InlineString<64> name{};
     StringID cubemapId{};
     Engine::CubemapHandle selfHandle{Engine::CubemapHandle::INVALID};
     LoadState loadState{LoadState::NotLoaded};

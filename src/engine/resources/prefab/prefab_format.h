@@ -6,7 +6,6 @@
 #define WILL_ENGINE_PREFAB_FORMAT_H
 
 #include <cstdint>
-#include <filesystem>
 #include <iosfwd>
 #include <optional>
 
@@ -34,7 +33,7 @@ bool WriteWPrefabHeader(std::ostream& out, const WPrefabHeader& header);
 
 std::optional<WPrefabHeader> ReadWPrefabHeader(std::istream& in);
 
-std::optional<WPrefabHeader> ReadWPrefabHeader(const std::filesystem::path& path);
+std::optional<WPrefabHeader> ReadWPrefabHeader(const char* path);
 
 struct WPrefabData
 {
@@ -42,7 +41,7 @@ struct WPrefabData
     nlohmann::json componentJson;
 };
 
-std::optional<WPrefabData> ReadWPrefab(const std::filesystem::path& path);
+std::optional<WPrefabData> ReadWPrefab(const char* path);
 } // Engine
 
 #endif //WILL_ENGINE_PREFAB_FORMAT_H

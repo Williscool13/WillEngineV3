@@ -206,25 +206,27 @@ void WillEngine::Initialize(Utils::Logger* logger)
     //
     {
         ZoneScopedN("CreateAssetLoadThread");
-        asyncAssetLoadManager = std::make_unique<AssetLoad::AsyncAssetLoadManager>(
+        asyncAssetLoadManager = memoryManager.PersistentAlloc<AssetLoad::AsyncAssetLoadManager>(
+            Core::AllocTag::AsyncAssetLoadManager,
+            memoryManager,
             renderThread->GetVulkanContext(),
             renderThread->GetResourceManager(),
             renderThread->GetPipelineManager()->GetPipelineCache());
-        renderThread->InitializePipelineManager(asyncAssetLoadManager.get());
+        renderThread->InitializePipelineManager(asyncAssetLoadManager);
     }
 
     //
     {
         ZoneScopedN("CreateAudioManager");
-        audioManager = memoryManager.PersistentAlloc<Audio::AudioManager>(Core::AllocTag::AudioManager, asyncAssetLoadManager.get());
+        audioManager = memoryManager.PersistentAlloc<Audio::AudioManager>(Core::AllocTag::AudioManager, asyncAssetLoadManager);
     }
 
 
     //
     {
         ZoneScopedN("CreateAssetManager");
-        assetManager = std::make_unique<AssetManager>(engineContext, asyncAssetLoadManager.get(), renderThread->GetResourceManager());
-        materialManager = std::make_unique<MaterialManager>(engineContext, assetManager.get());
+        assetManager = memoryManager.PersistentAlloc<AssetManager>(Core::AllocTag::AssetManager, memoryManager, engineContext, asyncAssetLoadManager, renderThread->GetResourceManager());
+        materialManager = std::make_unique<MaterialManager>(engineContext, assetManager);
     }
 
     //
@@ -238,7 +240,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
     //
     {
         ZoneScopedN("CreateModelGenerator");
-        modelGenerator = std::make_unique<Editor::AssetGenerator>(engineContext, renderThread->GetVulkanContext(), renderThread, asyncAssetLoadManager.get());
+        modelGenerator = std::make_unique<Editor::AssetGenerator>(engineContext, renderThread->GetVulkanContext(), renderThread, asyncAssetLoadManager);
     }
 
 #endif
@@ -274,7 +276,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
         engineContext->windowContext.viewportHeight = h;
         engineContext->windowContext.viewportOffsetX = 0;
         engineContext->windowContext.viewportOffsetY = 0;
-        engineContext->assetManager = assetManager.get();
+        engineContext->assetManager = assetManager;
         engineContext->materialManager = materialManager.get();
         engineContext->audioManager = audioManager;
         engineContext->physicsSystem = physicsSystem.get();
@@ -697,7 +699,7 @@ void WillEngine::EditorImgui()
 
 
     if (ImGui::CollapsingHeader("Asset Generation")) {
-        auto startGeneration = [&](const std::string& name, const std::filesystem::path& gltfPath, const std::filesystem::path& outPath) {
+        auto startGeneration = [&](const Core::Path& gltfPath, const Core::Path& outPath) {
             modelGenerator->RequestModelGenerate(gltfPath, outPath);
         };
 
@@ -710,36 +712,30 @@ void WillEngine::EditorImgui()
                                                  Platform::GetAssetPath() / "IntelSponza.wsmesh");
         }
         if (ImGui::Button("dragon.wsmesh")) {
-            startGeneration("dragon",
-                            Platform::GetAssetPath() / "dragon/dragon.gltf",
+            startGeneration(Platform::GetAssetPath() / "dragon/dragon.gltf",
                             Platform::GetAssetPath() / "dragon/dragon.wsmesh");
         }
 
         if (ImGui::Button("BoxTextured.wsmesh")) {
-            startGeneration("BoxTextured",
-                            Platform::GetAssetPath() / "BoxTextured.glb",
+            startGeneration(Platform::GetAssetPath() / "BoxTextured.glb",
                             Platform::GetAssetPath() / "BoxTextured.wsmesh");
         }
 
         if (ImGui::Button("BoxTextured4k.wsmesh")) {
-            startGeneration("BoxTextured4k",
-                            Platform::GetAssetPath() / "BoxTextured4k.glb",
+            startGeneration(Platform::GetAssetPath() / "BoxTextured4k.glb",
                             Platform::GetAssetPath() / "BoxTextured4k.wsmesh");
         }
         if (ImGui::Button("Sphere.wsmesh")) {
-            startGeneration("Sphere",
-                            Platform::GetAssetPath() / "Sphere.glb",
+            startGeneration(Platform::GetAssetPath() / "Sphere.glb",
                             Platform::GetAssetPath() / "Sphere.wsmesh");
         }
 
         if (ImGui::Button("sponza.wsmesh")) {
-            startGeneration("sponza",
-                            Platform::GetAssetPath() / "sponza2/sponza.gltf",
+            startGeneration(Platform::GetAssetPath() / "sponza2/sponza.gltf",
                             Platform::GetAssetPath() / "sponza2/sponza.wsmesh");
         }
         if (ImGui::Button("plane.wsmesh")) {
-            startGeneration("plane",
-                            Platform::GetAssetPath() / "Plane.glb",
+            startGeneration(Platform::GetAssetPath() / "Plane.glb",
                             Platform::GetAssetPath() / "Plane.wsmesh");
         }
 
@@ -787,8 +783,12 @@ void WillEngine::EditorImgui()
                 default: break;
             }
 
-            const std::string modelName = modelGenerator->GetModelGenerateSlotPath(i).stem().string();
-            ImGui::Text("Slot %u: %s", i, modelName.empty() ? "-" : modelName.c_str());
+            const std::string_view modelName = modelGenerator->GetModelGenerateSlotPath(i).Stem();
+            if (modelName.empty()) {
+                ImGui::Text("Slot %u: -", i);
+            } else {
+                ImGui::Text("Slot %u: %.*s", i, static_cast<int>(modelName.size()), modelName.data());
+            }
             char overlay[32];
             snprintf(overlay, sizeof(overlay), "%s (%d%%)", stateLabel, genValue);
             ImGui::ProgressBar(static_cast<float>(genValue) / 100.0f, ImVec2(-1.0f, 0.0f), overlay);
@@ -1106,10 +1106,10 @@ void WillEngine::Cleanup()
 
     physicsSystem.reset();
     materialManager.reset();
-    assetManager.reset();
+    assetManager->~AssetManager();
 
     asyncAssetLoadManager->Join();
-    asyncAssetLoadManager.reset();
+    asyncAssetLoadManager->~AsyncAssetLoadManager();
 
     audioManager->~AudioManager();
 

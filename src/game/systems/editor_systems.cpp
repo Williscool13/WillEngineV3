@@ -322,8 +322,8 @@ void EditorUpdate(Core::EngineContext* ctx, Engine::GameState* state)
             state->autoSaveTimer = 0.0f;
             for (StringID sceneId : state->modifiedScenes) {
                 const auto& sceneCache = ctx->assetManager->GetSceneCache();
-                if (auto it = sceneCache.find(sceneId); it != sceneCache.end()) {
-                    SaveSceneToFile(sceneId, it->second.sceneName, state, ctx->assetManager, ctx);
+                if (const auto* it = sceneCache.Find(sceneId)) {
+                    SaveSceneToFile(sceneId, it->sceneName.c_str(), state, ctx->assetManager, ctx);
                 }
             }
             state->modifiedScenes.clear();
@@ -773,27 +773,29 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
     if (ImGui::Begin("Scene Browser")) {
         const auto& sceneCache = ctx->assetManager->GetSceneCache();
 
-        if (!sceneCache.empty() && !sceneCache.contains(state->currentSceneId)) {
-            auto& [id, meta] = *sceneCache.begin();
-            state->currentSceneId = id;
-            state->currentSceneName = meta.sceneName;
+        if (!sceneCache.IsEmpty() && !sceneCache.Contains(state->currentSceneId)) {
+            for (const auto& [id, meta] : sceneCache) {
+                state->currentSceneId = id;
+                state->currentSceneName = meta.sceneName.c_str();
+                break;
+            }
         }
-        if (sceneCache.empty()) {
+        if (sceneCache.IsEmpty()) {
             state->currentSceneId = {};
             state->currentSceneName.clear();
         }
 
         const bool isLoaded = std::ranges::any_of(state->loadedScenes, [&](const auto& m) { return m.sceneId == state->currentSceneId; });
         const bool isModified = std::ranges::find(state->modifiedScenes, state->currentSceneId) != state->modifiedScenes.end();
-        const bool hasScene = sceneCache.contains(state->currentSceneId);
+        const bool hasScene = sceneCache.Contains(state->currentSceneId);
 
         // Scene dropdown
         ImGui::SetNextItemWidth(-1);
         if (ImGui::BeginCombo("##scene_list", state->currentSceneName.c_str())) {
             std::vector<std::pair<std::string, StringID> > sceneList;
-            sceneList.reserve(sceneCache.size());
+            sceneList.reserve(sceneCache.Size());
             for (const auto& [id, meta] : sceneCache) {
-                sceneList.emplace_back(meta.sceneName, id);
+                sceneList.emplace_back(meta.sceneName.c_str(), id);
             }
             std::ranges::sort(sceneList, {}, &std::pair<std::string, StringID>::first);
 
@@ -857,9 +859,15 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
         ImGui::InputText("##new_scene_name", newSceneName, sizeof(newSceneName));
         ImGui::SameLine();
         const bool nameEmpty = newSceneName[0] == '\0';
-        const bool nameInUse = !nameEmpty && std::ranges::any_of(sceneCache, [&](const auto& pair) {
-            return pair.second.sceneName == newSceneName;
-        });
+        bool nameInUse = false;
+        if (!nameEmpty) {
+            for (const auto& pair : sceneCache) {
+                if (pair.value.sceneName == newSceneName) {
+                    nameInUse = true;
+                    break;
+                }
+            }
+        }
         ImGui::BeginDisabled(nameEmpty || nameInUse);
         if (ImGui::Button("Create")) {
             StringID newId{state->rng()};
@@ -880,9 +888,9 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
         const auto& modelCache = ctx->assetManager->GetModelCache();
         static int selectedModel = 0;
         std::vector<std::pair<std::string, Engine::ModelID> > modelList;
-        modelList.reserve(modelCache.size());
+        modelList.reserve(modelCache.Size());
         for (const auto& [id, meta] : modelCache) {
-            modelList.emplace_back(meta.name, id);
+            modelList.emplace_back(meta.name.c_str(), id);
         }
 
         if (!modelList.empty()) {
@@ -946,9 +954,9 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
         const auto& prefabCache = ctx->assetManager->GetPrefabCache();
         static int selectedPrefab = 0;
         std::vector<std::pair<std::string, StringID> > prefabList;
-        prefabList.reserve(prefabCache.size());
+        prefabList.reserve(prefabCache.Size());
         for (const auto& [id, meta] : prefabCache) {
-            prefabList.emplace_back(meta.prefabName, id);
+            prefabList.emplace_back(meta.prefabName.c_str(), id);
         }
 
         if (!prefabList.empty()) {
@@ -1747,8 +1755,9 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
                     const Engine::TextureID& texId = mat.textureRefs[slot];
                     const char* currentTexName = "None";
                     if (texId.IsValid()) {
-                        auto it = texCache.find(texId);
-                        if (it != texCache.end()) currentTexName = it->second.name;
+                        if (const auto* it = texCache.Find(texId)) {
+                            currentTexName = it->name;
+                        }
                     }
 
                     ImGui::Text("%-13s", slotNames[slot]);
@@ -1776,7 +1785,11 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
                             if (ImGui::Selectable("(None)", noneSelected)) {
                                 texEditPending = Engine::TextureID::INVALID;
                             }
-                            std::vector<std::pair<std::string, Engine::TextureID> > sorted(texNameToId.begin(), texNameToId.end());
+                            std::vector<std::pair<std::string, Engine::TextureID> > sorted;
+                            sorted.reserve(texNameToId.Size());
+                            for (const auto& [name, tid] : texNameToId) {
+                                sorted.emplace_back(name.ToString(), tid);
+                            }
                             std::sort(sorted.begin(), sorted.end());
                             for (const auto& [name, tid] : sorted) {
                                 bool selected = texEditPending == tid;

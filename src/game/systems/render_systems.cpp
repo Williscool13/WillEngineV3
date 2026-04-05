@@ -57,17 +57,17 @@ void ResolveStaticMeshLoads(Core::EngineContext* ctx, Engine::GameState* state)
             continue;
         }
         if (model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
-            LOG_TRACE(Game, "Model ({}) not yet done loading", model->name);
+            LOG_TRACE(Game, "Model ({}) not yet done loading", model->name.c_str());
             continue;
         }
 
         Engine::MeshInformation& mesh = model->modelData.meshes[meshComponent.meshIndex];
 
-        if (mesh.primitiveProperties.size() > Component::MeshRuntime::MaxPrimitives) {
-            LOG_WARN(Game, "Model ({}) has {} primitives, limiting to {}", model->name, mesh.primitiveProperties.size(), Component::MeshRuntime::MaxPrimitives);
+        if (mesh.primitiveProperties.Size() > Component::MeshRuntime::MaxPrimitives) {
+            LOG_WARN(Game, "Model ({}) has {} primitives, limiting to {}", model->name.c_str(), mesh.primitiveProperties.Size(), Component::MeshRuntime::MaxPrimitives);
         }
 
-        size_t primCount = std::min(mesh.primitiveProperties.size(), Component::MeshRuntime::MaxPrimitives);
+        size_t primCount = std::min(mesh.primitiveProperties.Size(), Component::MeshRuntime::MaxPrimitives);
 
         for (size_t j = 0; j < primCount; ++j) {
             Engine::PrimitiveProperty& primitive = mesh.primitiveProperties[j];
@@ -128,7 +128,7 @@ void ResolveProceduralMeshLoads(Core::EngineContext* ctx, Engine::GameState* sta
             continue;
         }
         if (model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
-            LOG_TRACE(Game, "Procedural model ({}) not yet done loading", model->name);
+            LOG_TRACE(Game, "Procedural model ({}) not yet done loading", model->name.c_str());
             continue;
         }
 

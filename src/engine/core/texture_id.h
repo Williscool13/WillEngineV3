@@ -8,6 +8,8 @@
 #include <cstdint>
 #include <functional>
 
+#include "core/containers/hash.h"
+
 namespace Engine
 {
 struct TextureID
@@ -40,6 +42,11 @@ struct hash<Engine::TextureID>
         return t.id;
     }
 };
+}
+
+namespace Core
+{
+template<> struct Hash<Engine::TextureID> { uint64_t operator()(Engine::TextureID t) const { return t.id; } };
 }
 
 #endif //WILL_ENGINE_TEXTURE_ID_H

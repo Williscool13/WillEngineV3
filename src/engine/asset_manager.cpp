@@ -15,8 +15,15 @@
 
 namespace Engine
 {
-AssetManager::AssetManager(Core::EngineContext* ctx, AssetLoad::AsyncAssetLoadManager* assetLoadManager, Render::ResourceManager* resourceManager)
-    : ctx(ctx), assetLoadManager(assetLoadManager), resourceManager(resourceManager)
+AssetManager::AssetManager(Core::MemoryManager& memoryManager, Core::EngineContext* ctx, AssetLoad::AsyncAssetLoadManager* assetLoadManager, Render::ResourceManager* resourceManager)
+    : memoryManager(&memoryManager), ctx(ctx), assetLoadManager(assetLoadManager), resourceManager(resourceManager),
+      modelNameToId(&memoryManager.Persistent(), Core::AllocTag::AssetManager, 2 * MAX_LOADED_MODELS),
+      modelCache(&memoryManager.Persistent(), Core::AllocTag::AssetManager, 2 * MAX_LOADED_MODELS),
+      textureNameToId(&memoryManager.Persistent(), Core::AllocTag::AssetManager, 2 * MAX_LOADED_TEXTURES),
+      textureCache(&memoryManager.Persistent(), Core::AllocTag::AssetManager, 2 * MAX_LOADED_TEXTURES),
+      cubemapCache(&memoryManager.Persistent(), Core::AllocTag::AssetManager, 2 * MAX_LOADED_CUBEMAPS),
+      sceneCache(&memoryManager.Persistent(), Core::AllocTag::AssetManager, 512),
+      prefabCache(&memoryManager.Persistent(), Core::AllocTag::AssetManager, 512)
 {
 #if WILL_EDITOR
     // Creates white/error if they don't exist.
@@ -61,7 +68,7 @@ AssetManager::AssetManager(Core::EngineContext* ctx, AssetLoad::AsyncAssetLoadMa
     Sampler* defaultSampler = LoadSampler(defaultSamplerDesc);
     assert(defaultSampler && defaultSampler->bindlessHandle.index == ASSET_SAMPLER_BINDLESS_INDEX);
 
-    std::filesystem::path assetPath = Platform::GetAssetPath();
+    Core::Path assetPath = Platform::GetAssetPath();
     cubemapCache["kloofendal"_sid].source = assetPath / "environment-map/kloofendal_48d_partly_cloudy_puresky_4k.ktx2";
 }
 
@@ -88,76 +95,73 @@ AssetManager::~AssetManager()
 
 const AssetManager::CachedSceneMetadata* AssetManager::GetSceneMetadata(StringID sceneId) const
 {
-    auto it = sceneCache.find(sceneId);
-    return it != sceneCache.end() ? &it->second : nullptr;
+    return sceneCache.Find(sceneId);
 }
 
-void AssetManager::RegisterScene(StringID sceneId, std::string sceneName)
+void AssetManager::RegisterScene(StringID sceneId, const char* sceneName)
 {
     CachedSceneMetadata& cached = sceneCache[sceneId];
-    cached.sceneName = std::move(sceneName);
+    cached.sceneName = Core::InlineString<128>(sceneName);
     cached.entityCount = 0;
 }
 
-void AssetManager::UpdateSceneCachePath(StringID sceneId, const std::filesystem::path& path, uint32_t entityCount)
+void AssetManager::UpdateSceneCachePath(StringID sceneId, const Core::Path& path, uint32_t entityCount)
 {
-    auto it = sceneCache.find(sceneId);
-    if (it == sceneCache.end()) return;
-    it->second.source = path;
-    it->second.entityCount = entityCount;
+    auto it = sceneCache.Find(sceneId);
+    it->source = path;
+    it->entityCount = entityCount;
 }
 
 const AssetManager::CachedPrefabMetadata* AssetManager::GetPrefabMetadata(StringID prefabId) const
 {
-    auto it = prefabCache.find(prefabId);
-    return it != prefabCache.end() ? &it->second : nullptr;
+    return prefabCache.Find(prefabId);
 }
 
 bool AssetManager::DeleteScene(StringID sceneId)
 {
-    auto it = sceneCache.find(sceneId);
-    if (it == sceneCache.end()) { return false; }
-    if (!it->second.source.empty()) {
-        std::filesystem::remove(it->second.source);
+    const CachedSceneMetadata* it = sceneCache.Find(sceneId);
+    if (!it) { return false; }
+    if (!it->source.IsEmpty()) {
+        std::filesystem::remove(it->source.c_str());
     }
-    sceneCache.erase(it);
+    sceneCache.Remove(sceneId);
     return true;
 }
 
 bool AssetManager::DeletePrefab(StringID prefabId)
 {
-    auto it = prefabCache.find(prefabId);
-    if (it == prefabCache.end()) { return false; }
-    if (!it->second.source.empty()) {
-        std::filesystem::remove(it->second.source);
+    const CachedPrefabMetadata* it = prefabCache.Find(prefabId);
+    if (!it) { return false; }
+    if (!it->source.IsEmpty()) {
+        std::filesystem::remove(it->source.c_str());
     }
-    prefabCache.erase(it);
+    prefabCache.Remove(prefabId);
     return true;
 }
 
 StaticModelHandle AssetManager::LoadModel(ModelID modelId)
 {
-    if (!modelCache.contains(modelId)) {
+    if (!modelCache.Contains(modelId)) {
         LOG_ERROR(Asset, "Model '{}' not found in registry", modelId.id);
         return StaticModelHandle::INVALID;
     }
 
-    auto it = modelIdToHandle.find(modelId);
-    if (it != modelIdToHandle.end()) {
-        StaticModelHandle existingHandle = it->second;
+    StaticModelHandle* existingPtr = modelIdToHandle.Find(modelId);
+    if (existingPtr != nullptr) {
+        StaticModelHandle existingHandle = *existingPtr;
         if (modelAllocator.IsValid(existingHandle)) {
             StaticModel& model = models[existingHandle.index];
             model.refCount++;
             model.retireFrame = 0;
-            LOG_TRACE(Asset, "Model already loaded: {}, refCount: {}", model.name, model.refCount);
+            LOG_TRACE(Asset, "Model already loaded: {}, refCount: {}", model.name.c_str(), model.refCount);
             return existingHandle;
         }
-        modelIdToHandle.erase(it);
+        modelIdToHandle.Remove(modelId);
     }
 
     StaticModelHandle handle = modelAllocator.Add();
     if (!handle.IsValid()) {
-        LOG_ERROR(Asset, "Failed to allocate model slot for: {}", modelCache[modelId].name);
+        LOG_ERROR(Asset, "Failed to allocate model slot for: {}", modelCache[modelId].name.c_str());
         return StaticModelHandle::INVALID;
     }
 
@@ -171,7 +175,7 @@ StaticModelHandle AssetManager::LoadModel(ModelID modelId)
 
     modelIdToHandle[modelId] = handle;
 
-    LOG_TRACE(Asset, "Requesting model load: {}", model.name);
+    LOG_TRACE(Asset, "Requesting model load: {}", model.name.c_str());
     assetLoadManager->RequestModelLoad(&model);
 
     return handle;
@@ -190,17 +194,17 @@ StaticModelHandle AssetManager::LoadProceduralModel(ProceduralParams& params)
 
     ModelID proceduralModelId{hash};
 
-    auto it = modelIdToHandle.find(proceduralModelId);
-    if (it != modelIdToHandle.end()) {
-        StaticModelHandle existingHandle = it->second;
+    StaticModelHandle* existingPtr = modelIdToHandle.Find(proceduralModelId);
+    if (existingPtr != nullptr) {
+        StaticModelHandle existingHandle = *existingPtr;
         if (modelAllocator.IsValid(existingHandle)) {
             StaticModel& model = models[existingHandle.index];
             model.refCount++;
             model.retireFrame = 0;
-            LOG_TRACE(Asset, "Procedural model already loaded: {}, refCount: {}", model.name, model.refCount);
+            LOG_TRACE(Asset, "Procedural model already loaded: {}, refCount: {}", model.name.c_str(), model.refCount);
             return existingHandle;
         }
-        modelIdToHandle.erase(it);
+        modelIdToHandle.Remove(proceduralModelId);
     }
 
     StaticModelHandle handle = modelAllocator.Add();
@@ -212,7 +216,7 @@ StaticModelHandle AssetManager::LoadProceduralModel(ProceduralParams& params)
     static int32_t proceduralCounter = 0;
     StaticModel& model = models[handle.index];
     model.selfHandle = handle;
-    model.name = fmt::format("Procedural Mesh {}", proceduralCounter++);
+    model.name = Core::InlineString<128>(fmt::format("Procedural Mesh {}", proceduralCounter++));
     model.modelId = proceduralModelId;
     model.proceduralParams = params;
     model.refCount = 1;
@@ -220,7 +224,7 @@ StaticModelHandle AssetManager::LoadProceduralModel(ProceduralParams& params)
 
     modelIdToHandle[proceduralModelId] = handle;
 
-    LOG_TRACE(Asset, "Requesting procedural model load: {}", model.name);
+    LOG_TRACE(Asset, "Requesting procedural model load: {}", model.name.c_str());
     assetLoadManager->RequestProceduralModelLoad(&model);
 
     return handle;
@@ -244,9 +248,9 @@ StaticModelHandle AssetManager::LoadSplineModel(const SplineParams& params)
 
     ModelID splineModelId{hash};
 
-    auto it = modelIdToHandle.find(splineModelId);
-    if (it != modelIdToHandle.end()) {
-        StaticModelHandle existingHandle = it->second;
+    StaticModelHandle* existingPtr = modelIdToHandle.Find(splineModelId);
+    if (existingPtr != nullptr) {
+        StaticModelHandle existingHandle = *existingPtr;
         if (modelAllocator.IsValid(existingHandle)) {
             StaticModel& model = models[existingHandle.index];
             model.refCount++;
@@ -254,7 +258,7 @@ StaticModelHandle AssetManager::LoadSplineModel(const SplineParams& params)
             LOG_TRACE(Asset, "Spline model already loaded: {}, refCount: {}", splineModelId.id, model.refCount);
             return existingHandle;
         }
-        modelIdToHandle.erase(it);
+        modelIdToHandle.Remove(splineModelId);
     }
 
     StaticModelHandle handle = modelAllocator.Add();
@@ -266,7 +270,7 @@ StaticModelHandle AssetManager::LoadSplineModel(const SplineParams& params)
     static int32_t splineCounter = 0;
     StaticModel& model = models[handle.index];
     model.selfHandle = handle;
-    model.name = fmt::format("Spline Mesh {}", splineCounter++);
+    model.name = Core::InlineString<128>(fmt::format("Spline Mesh {}", splineCounter++));
     model.modelId = splineModelId;
     model.splineParams = params;
     model.refCount = 1;
@@ -274,7 +278,7 @@ StaticModelHandle AssetManager::LoadSplineModel(const SplineParams& params)
 
     modelIdToHandle[splineModelId] = handle;
 
-    LOG_TRACE(Asset, "Requesting spline model load: {}", model.name);
+    LOG_TRACE(Asset, "Requesting spline model load: {}", model.name.c_str());
     assetLoadManager->RequestProceduralModelLoad(&model);
     return handle;
 }
@@ -297,7 +301,7 @@ void AssetManager::UnloadModel(StaticModelHandle handle)
     StaticModel& model = models[handle.index];
     model.refCount--;
 
-    LOG_TRACE(Asset, "Model refCount decremented: {}, refCount: {}", model.name, model.refCount);
+    LOG_TRACE(Asset, "Model refCount decremented: {}, refCount: {}", model.name.c_str(), model.refCount);
 
     if (model.refCount == 0) {
         model.retireFrame = ctx->currentFrame + Core::FRAME_BUFFER_COUNT * 4;
@@ -318,18 +322,18 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
                                                              complete.model->imageAcquireOps.begin(),
                                                              complete.model->imageAcquireOps.end());
 
-            complete.model->bufferAcquireOps.clear();
-            complete.model->imageAcquireOps.clear();
+            complete.model->bufferAcquireOps.Clear();
+            complete.model->imageAcquireOps.Clear();
             complete.model->modelLoadState = StaticModel::ModelLoadState::Loaded;
             complete.model->acquireFrame = ctx->currentFrame;
-            LOG_TRACE(Asset, "Model load succeeded: {}", complete.model->name);
+            LOG_TRACE(Asset, "Model load succeeded: {}", complete.model->name.c_str());
             loadCounts.modelLoadedCount++;
         }
         else {
-            complete.model->bufferAcquireOps.clear();
-            complete.model->imageAcquireOps.clear();
+            complete.model->bufferAcquireOps.Clear();
+            complete.model->imageAcquireOps.Clear();
             complete.model->modelLoadState = StaticModel::ModelLoadState::NotLoaded;
-            LOG_ERROR(Asset, "Model load failed: {}", complete.model->name);
+            LOG_ERROR(Asset, "Model load failed: {}", complete.model->name.c_str());
         }
     }
 
@@ -340,18 +344,18 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
                                                               proceduralComplete.model->bufferAcquireOps.begin(),
                                                               proceduralComplete.model->bufferAcquireOps.end());
 
-            proceduralComplete.model->bufferAcquireOps.clear();
-            proceduralComplete.model->imageAcquireOps.clear();
+            proceduralComplete.model->bufferAcquireOps.Clear();
+            proceduralComplete.model->imageAcquireOps.Clear();
             proceduralComplete.model->modelLoadState = StaticModel::ModelLoadState::Loaded;
             proceduralComplete.model->acquireFrame = ctx->currentFrame;
-            LOG_TRACE(Asset, "Procedural model generation succeeded: {}", proceduralComplete.model->name);
+            LOG_TRACE(Asset, "Procedural model generation succeeded: {}", proceduralComplete.model->name.c_str());
             loadCounts.modelLoadedCount++;
         }
         else {
-            proceduralComplete.model->bufferAcquireOps.clear();
-            proceduralComplete.model->imageAcquireOps.clear();
+            proceduralComplete.model->bufferAcquireOps.Clear();
+            proceduralComplete.model->imageAcquireOps.Clear();
             proceduralComplete.model->modelLoadState = StaticModel::ModelLoadState::NotLoaded;
-            LOG_ERROR(Asset, "Procedural model generation failed: {}", proceduralComplete.model->name);
+            LOG_ERROR(Asset, "Procedural model generation failed: {}", proceduralComplete.model->name.c_str());
         }
     }
 
@@ -377,12 +381,12 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
             stagingFrameBuffer.imageAcquireOperations.push_back(cubemapComplete.cubemap->acquireBarrier);
 
             cubemapComplete.cubemap->loadState = Render::Cubemap::LoadState::Loaded;
-            LOG_TRACE(Asset, "Cubemap load succeeded: {} (bindless index: {})", cubemapComplete.cubemap->name, static_cast<uint32_t>(cubemapComplete.cubemap->bindlessHandle.index));
+            LOG_TRACE(Asset, "Cubemap load succeeded: {} (bindless index: {})", cubemapComplete.cubemap->name.c_str(), static_cast<uint32_t>(cubemapComplete.cubemap->bindlessHandle.index));
             loadCounts.cubeLoadedCount++;
         }
         else {
             cubemapComplete.cubemap->loadState = Render::Cubemap::LoadState::NotLoaded;
-            LOG_ERROR(Asset, "Cubemap load failed: {}", cubemapComplete.cubemap->name);
+            LOG_ERROR(Asset, "Cubemap load failed: {}", cubemapComplete.cubemap->name.c_str());
         }
     }
 
@@ -437,8 +441,8 @@ void AssetManager::ResolveUnloads()
             data.primitiveAllocation = {};
         }
 
-        LOG_TRACE(Asset, "Model unloaded: {}", model.name);
-        modelIdToHandle.erase(model.modelId);
+        LOG_TRACE(Asset, "Model unloaded: {}", model.name.c_str());
+        modelIdToHandle.Remove(model.modelId);
         modelAllocator.Remove(model.selfHandle);
         model = {};
     }
@@ -450,7 +454,7 @@ void AssetManager::ResolveUnloads()
 
         LOG_TRACE(Asset, "Texture unloaded: {} (bindless index: {})", texture.name, static_cast<uint32_t>(texture.bindlessHandle.index));
         resourceManager->bindlessSamplerTextureDescriptorBuffer.ReleaseTextureBinding(texture.bindlessHandle);
-        textureIdToHandle.erase(texture.textureId);
+        textureIdToHandle.Remove(texture.textureId);
         textureAllocator.Remove(texture.selfHandle);
         texture = {};
     }
@@ -461,7 +465,7 @@ void AssetManager::ResolveUnloads()
 
         LOG_TRACE(Asset, "Sampler unloaded (bindless index: {})", static_cast<uint32_t>(sampler.bindlessHandle.index));
         resourceManager->bindlessSamplerTextureDescriptorBuffer.ReleaseSamplerBinding(sampler.bindlessHandle);
-        samplerIdToHandle.erase(sampler.id);
+        samplerIdToHandle.Remove(sampler.id);
         samplerAllocator.Remove(sampler.selfHandle);
         sampler = {};
     }
@@ -471,9 +475,9 @@ void AssetManager::Scan()
 {
     bool expectedRescan = true;
     if (ctx->bShouldRescanResources.compare_exchange_strong(expectedRescan, false, std::memory_order::acq_rel, std::memory_order::relaxed)) {
-        std::filesystem::path assetPath = Platform::GetAssetPath();
-        if (std::filesystem::exists(assetPath)) {
-            for (const auto& entry : std::filesystem::recursive_directory_iterator(assetPath)) {
+        const Core::Path& assetPath = Platform::GetAssetPath();
+        if (assetPath.Exists()) {
+            for (const auto& entry : std::filesystem::recursive_directory_iterator(assetPath.c_str())) {
                 const auto& path = entry.path();
                 const auto ext = path.extension();
 
@@ -482,12 +486,13 @@ void AssetManager::Scan()
                     if (!header) { continue; }
                     TextureID id{header->textureId};
                     const std::string name{header->name};
-                    if (textureNameToId.contains(name) && textureNameToId.at(name) != id) {
+                    const StringID nameSid{name.c_str(), name.size()};
+                    if (textureNameToId.Contains(nameSid) && *textureNameToId.Find(nameSid) != id) {
                         auto pathName = path.string();
                         LOG_CRITICAL(Asset, "2 Textures were mounted that contain the same name. This will cause issues for texture lookups by name. ({})", pathName);
                     }
                     CachedTextureMetadata& cached = textureCache[id];
-                    cached.source = path;
+                    cached.source = Core::Path(path);
                     memcpy(cached.name, header->name, WTEXTURE_NAME_LENGTH);
                     cached.width = header->width;
                     cached.height = header->height;
@@ -495,7 +500,7 @@ void AssetManager::Scan()
                     cached.dataOffset = header->dataOffset;
                     cached.dataSize = header->dataSize;
                     cached.uncompressedSize = header->uncompressedSize;
-                    textureNameToId[name] = id;
+                    textureNameToId[nameSid] = id;
                 }
                 else if (ext == ".wsmesh") {
                     auto info = ReadWStaticModelInfo(path);
@@ -507,19 +512,23 @@ void AssetManager::Scan()
                     ModelID id{info->header.modelId};
 
                     std::string name{info->header.name};
-                    if (modelNameToId.contains(name) && modelNameToId.at(name) != id) {
+                    const StringID nameSid{name.c_str(), name.size()};
+                    if (modelNameToId.Contains(nameSid) && *modelNameToId.Find(nameSid) != id) {
                         auto pathName = path.string();
                         LOG_CRITICAL(Asset, "2 Models were mounted that contain the same name. This will cause issues for model lookups by name. ({})", pathName);
                     }
 
                     CachedModelMetadata& cached = modelCache[id];
-                    cached.source = path;
-                    cached.name = std::move(name);
+                    cached.source = Core::Path(path);
+                    cached.name = Core::InlineString<128>(name);
                     cached.nodeCount = info->header.nodeCount;
                     cached.meshNodesCount = info->header.meshNodeCount;
-                    cached.nodes = std::move(info->nodes);
+                    cached.nodes = Core::Vector<Node>(&memoryManager->Assets(), Core::AllocTag::AssetModel, info->nodes.size());
+                    for (Node& node : info->nodes) {
+                        cached.nodes.PushBack(node);
+                    }
                     cached.bounds = info->bounds;
-                    modelNameToId[cached.name] = id;
+                    modelNameToId[nameSid] = id;
                 }
                 else if (ext == ".wscene") {
                     auto header = ReadWSceneHeader(path);
@@ -531,12 +540,12 @@ void AssetManager::Scan()
                         LOG_WARN(Asset, "Scene '{}' has no sceneId, using stem-derived ID. Re-save to fix", stem);
                     }
                     CachedSceneMetadata& cached = sceneCache[id];
-                    cached.source = path;
-                    cached.sceneName = header->name;
+                    cached.source = Core::Path(path);
+                    cached.sceneName = Core::InlineString<128>(header->name);
                     cached.entityCount = header->entityCount;
                 }
                 else if (ext == ".wprefab") {
-                    auto header = ReadWPrefabHeader(path);
+                    auto header = ReadWPrefabHeader(path.string().c_str());
                     if (!header) { continue; }
                     StringID id{header->prefabId};
                     if (header->prefabId == 0) {
@@ -545,8 +554,8 @@ void AssetManager::Scan()
                         LOG_WARN(Asset, "Prefab '{}' has no prefabId, using stem-derived ID. Re-save to fix", stem);
                     }
                     CachedPrefabMetadata& cached = prefabCache[id];
-                    cached.source = path;
-                    cached.prefabName = header->name;
+                    cached.source = Core::Path(path);
+                    cached.prefabName = Core::InlineString<128>(header->name);
                     cached.componentCount = header->componentCount;
                 }
             }
@@ -556,14 +565,14 @@ void AssetManager::Scan()
 
 Texture* AssetManager::LoadTexture(TextureID textureId)
 {
-    if (!textureCache.contains(textureId)) {
+    if (!textureCache.Contains(textureId)) {
         LOG_ERROR(Asset, "Texture {:x} not found in registry", textureId.id);
         return nullptr;
     }
 
-    auto it = textureIdToHandle.find(textureId);
-    if (it != textureIdToHandle.end()) {
-        TextureHandle existingHandle = it->second;
+    TextureHandle* existingPtr = textureIdToHandle.Find(textureId);
+    if (existingPtr != nullptr) {
+        TextureHandle existingHandle = *existingPtr;
         if (textureAllocator.IsValid(existingHandle)) {
             Texture& texture = textures[existingHandle.index];
             texture.refCount++;
@@ -571,7 +580,7 @@ Texture* AssetManager::LoadTexture(TextureID textureId)
             LOG_TRACE(Asset, "Texture already loaded: {}, refCount: {}", texture.name, texture.refCount);
             return &texture;
         }
-        textureIdToHandle.erase(it);
+        textureIdToHandle.Remove(textureId);
     }
 
     TextureHandle handle = textureAllocator.Add();
@@ -607,13 +616,13 @@ Texture* AssetManager::LoadTexture(TextureID textureId)
 
 void AssetManager::UnloadTexture(TextureID id)
 {
-    auto it = textureIdToHandle.find(id);
-    if (it == textureIdToHandle.end()) {
+    TextureHandle* handlePtr = textureIdToHandle.Find(id);
+    if (handlePtr == nullptr) {
         LOG_WARN(Asset, "Attempted to unload texture not in registry");
         return;
     }
 
-    TextureHandle handle = it->second;
+    TextureHandle handle = *handlePtr;
     if (!textureAllocator.IsValid(handle)) {
         LOG_WARN(Asset, "Attempted to unload invalid texture handle");
         return;
@@ -633,9 +642,9 @@ Sampler* AssetManager::LoadSampler(SamplerDesc& samplerDesc)
 {
     SamplerID id{fnv1a64(reinterpret_cast<uint8_t*>(&samplerDesc), sizeof(samplerDesc))};
 
-    auto it = samplerIdToHandle.find(id);
-    if (it != samplerIdToHandle.end()) {
-        SamplerHandle existingHandle = it->second;
+    SamplerHandle* existingPtr = samplerIdToHandle.Find(id);
+    if (existingPtr != nullptr) {
+        SamplerHandle existingHandle = *existingPtr;
         if (samplerAllocator.IsValid(existingHandle)) {
             Sampler& existing = samplers[existingHandle.index];
             existing.refCount++;
@@ -643,7 +652,7 @@ Sampler* AssetManager::LoadSampler(SamplerDesc& samplerDesc)
             LOG_TRACE(Asset, "Sampler already loaded (bindless index: {}), refCount: {}", static_cast<uint32_t>(existing.bindlessHandle.index), existing.refCount);
             return &existing;
         }
-        samplerIdToHandle.erase(it);
+        samplerIdToHandle.Remove(id);
     }
 
     SamplerHandle handle = samplerAllocator.Add();
@@ -671,13 +680,13 @@ void AssetManager::UnloadSampler(SamplerDesc& desc)
 {
     SamplerID id{fnv1a64(reinterpret_cast<uint8_t*>(&desc), sizeof(desc))};
 
-    auto it = samplerIdToHandle.find(id);
-    if (it == samplerIdToHandle.end()) {
+    SamplerHandle* handlePtr = samplerIdToHandle.Find(id);
+    if (handlePtr == nullptr) {
         LOG_WARN(Asset, "Attempted to unload sampler not in registry");
         return;
     }
 
-    SamplerHandle handle = it->second;
+    SamplerHandle handle = *handlePtr;
     if (!samplerAllocator.IsValid(handle)) {
         LOG_WARN(Asset, "Attempted to unload invalid sampler handle");
         return;
@@ -695,20 +704,20 @@ void AssetManager::UnloadSampler(SamplerDesc& desc)
 
 CubemapHandle AssetManager::LoadCubemap(StringID cubemapId)
 {
-    if (!cubemapCache.contains(cubemapId)) {
+    if (!cubemapCache.Contains(cubemapId)) {
         LOG_ERROR(Asset, "Cubemap '{}' not found in registry", cubemapId.ToString());
         return CubemapHandle::INVALID;
     }
 
-    auto it = cubemapIdToHandle.find(cubemapId);
-    if (it != cubemapIdToHandle.end()) {
-        CubemapHandle existingHandle = it->second;
+    CubemapHandle* existingPtr = cubemapIdToHandle.Find(cubemapId);
+    if (existingPtr != nullptr) {
+        CubemapHandle existingHandle = *existingPtr;
         if (cubemapAllocator.IsValid(existingHandle)) {
             cubemaps[existingHandle.index].refCount++;
             LOG_TRACE(Asset, "Cubemap already loaded: {}, refCount: {}", cubemapId.ToString(), cubemaps[existingHandle.index].refCount);
             return existingHandle;
         }
-        cubemapIdToHandle.erase(it);
+        cubemapIdToHandle.Remove(cubemapId);
     }
 
     CubemapHandle handle = cubemapAllocator.Add();
@@ -717,10 +726,10 @@ CubemapHandle AssetManager::LoadCubemap(StringID cubemapId)
         return CubemapHandle::INVALID;
     }
 
-    const std::filesystem::path& path = cubemapCache[cubemapId].source;
+    const Core::Path& path = cubemapCache[cubemapId].source;
     Render::Cubemap& cubemap = cubemaps[handle.index];
     cubemap.source = path;
-    cubemap.name = path.stem().string();
+    cubemap.name = Core::InlineString<64>(path.Stem());
     cubemap.cubemapId = cubemapId;
     cubemap.refCount = 1;
     cubemap.loadState = Render::Cubemap::LoadState::Loading;
@@ -728,7 +737,7 @@ CubemapHandle AssetManager::LoadCubemap(StringID cubemapId)
 
     cubemapIdToHandle[cubemapId] = handle;
 
-    LOG_TRACE(Asset, "Requesting cubemap load: {}", cubemap.name);
+    LOG_TRACE(Asset, "Requesting cubemap load: {}", cubemap.name.c_str());
     assetLoadManager->RequestCubemapLoad(&cubemap);
 
     return handle;
@@ -752,12 +761,12 @@ void AssetManager::UnloadCubemap(CubemapHandle handle)
     Render::Cubemap& cubemap = cubemaps[handle.index];
     cubemap.refCount--;
 
-    LOG_TRACE(Asset, "Cubemap refCount decremented: {}, refCount: {}", cubemap.name, cubemap.refCount);
+    LOG_TRACE(Asset, "Cubemap refCount decremented: {}, refCount: {}", cubemap.name.c_str(), cubemap.refCount);
 
     if (cubemap.refCount == 0) {
         cubemap.loadState = Render::Cubemap::LoadState::NotLoaded;
         // assetLoadThread->RequestCubemapUnload(handle, &cubemap);
-        cubemapIdToHandle.erase(cubemap.cubemapId);
+        cubemapIdToHandle.Remove(cubemap.cubemapId);
     }
 }
 } // Engine

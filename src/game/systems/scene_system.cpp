@@ -26,6 +26,7 @@
 #include "game/components/scene_components.h"
 #include "game/gameplay/player/physics_player_controller.h"
 #include "game/systems/physics_system.h"
+#include "platform/file_utils.h"
 #include "platform/paths.h"
 
 namespace Game
@@ -62,7 +63,7 @@ Engine::Scene SaveScene(ComponentRegistry& componentRegistry, entt::registry& re
             auto cacheIt = prefabJsonCache.find(prefabInst->prefabId);
             if (cacheIt == prefabJsonCache.end()) {
                 if (const auto* meta = assetManager->GetPrefabMetadata(prefabInst->prefabId)) {
-                    auto prefabData = Engine::ReadWPrefab(meta->source);
+                    auto prefabData = Engine::ReadWPrefab(meta->source.c_str());
                     if (prefabData) {
                         cacheIt = prefabJsonCache.emplace(prefabInst->prefabId, std::move(prefabData->componentJson)).first;
                     }
@@ -199,15 +200,16 @@ void UnloadScene(Engine::GameState* state, StringID sceneId)
 void SaveSceneToFile(StringID sceneID, std::string_view sceneName, Engine::GameState* state, Engine::AssetManager* assetManager, Core::EngineContext* ctx)
 {
     const auto& sceneCache = assetManager->GetSceneCache();
-    std::filesystem::path path;
+    Core::Path path;
 
-    auto it = sceneCache.find(sceneID);
-    if (it != sceneCache.end() && !it->second.source.empty()) {
-        path = it->second.source;
+    auto it = sceneCache.Find(sceneID);
+    if (it && !it->source.IsEmpty()) {
+        path = it->source;
     }
     else {
+        // todo replace
         std::string stem(sceneName);
-        std::ranges::transform(stem, stem.begin(), ::tolower);
+        std::ranges::transform(stem, stem.begin(), tolower);
         std::ranges::replace(stem, ' ', '_');
         path = Platform::GetAssetPath() / "scenes" / (stem + ".wscene");
     }
@@ -225,8 +227,8 @@ void SaveSceneToFile(StringID sceneID, std::string_view sceneName, Engine::GameS
         }
     }
 
-    std::filesystem::create_directories(path.parent_path());
-    std::ofstream file(path);
+    Platform::CreateDirectories(path.Parent().c_str());
+    std::ofstream file(path.c_str());
 
     Engine::WSceneHeader sceneHeader{};
     sceneHeader.sceneId = sceneID.id;
@@ -240,7 +242,7 @@ void SaveSceneToFile(StringID sceneID, std::string_view sceneName, Engine::GameS
 
     assetManager->UpdateSceneCachePath(sceneID, path, sceneHeader.entityCount);
 
-    LOG_INFO(Game, "Saved scene '{}' to '{}'", sceneName, path.string());
+    LOG_INFO(Game, "Saved scene '{}' to '{}'", sceneName, path.c_str());
 }
 
 bool LoadSceneFromFile(Engine::GameState* state, Engine::AssetManager* assetManager, StringID sceneId)
@@ -251,22 +253,22 @@ bool LoadSceneFromFile(Engine::GameState* state, Engine::AssetManager* assetMana
     }
 
     const auto& sceneCache = assetManager->GetSceneCache();
-    auto it = sceneCache.find(sceneId);
-    if (it == sceneCache.end()) {
+    const auto* it = sceneCache.Find(sceneId);
+    if (!it) {
         LOG_ERROR(Game, "Scene ID not found in registry");
         return false;
     }
 
-    const std::filesystem::path& path = it->second.source;
-    std::ifstream file(path);
+    const Core::Path& path = it->source;
+    std::ifstream file(path.c_str());
     if (!file.is_open()) {
-        LOG_ERROR(Game, "Failed to open scene file '{}'", path.string());
+        LOG_ERROR(Game, "Failed to open scene file '{}'", path.c_str());
         return false;
     }
 
     auto header = Engine::ReadWSceneHeader(file);
     if (!header) {
-        LOG_ERROR(Game, "Failed to read scene header from '{}'", path.string());
+        LOG_ERROR(Game, "Failed to read scene header from '{}'", path.c_str());
         return false;
     }
 
@@ -310,7 +312,7 @@ bool LoadSceneFromFile(Engine::GameState* state, Engine::AssetManager* assetMana
         }
     }
 
-    LOG_INFO(Game, "Loaded scene '{}' from '{}'", sceneId.ToString(), path.string());
+    LOG_INFO(Game, "Loaded scene '{}' from '{}'", sceneId.ToString(), path.c_str());
     return true;
 }
 
@@ -324,11 +326,11 @@ std::vector<entt::entity> SpawnModel(Engine::GameState* state, Engine::AssetMana
 
     const auto& nodes = cached->nodes;
 
-    std::vector<glm::vec3> worldT(nodes.size());
-    std::vector<glm::quat> worldR(nodes.size());
-    std::vector<glm::vec3> worldS(nodes.size());
+    std::vector<glm::vec3> worldT(nodes.Size());
+    std::vector<glm::quat> worldR(nodes.Size());
+    std::vector<glm::vec3> worldS(nodes.Size());
 
-    for (size_t i = 0; i < nodes.size(); ++i) {
+    for (size_t i = 0; i < nodes.Size(); ++i) {
         const auto& node = nodes[i];
         if (node.parent == ~0u) {
             worldT[i] = node.localTranslation;
@@ -344,13 +346,13 @@ std::vector<entt::entity> SpawnModel(Engine::GameState* state, Engine::AssetMana
 
     std::vector<entt::entity> spawned;
 
-    for (size_t i = 0; i < nodes.size(); ++i) {
+    for (size_t i = 0; i < nodes.Size(); ++i) {
         const auto& node = nodes[i];
         if (node.meshIndex == ~0u) continue;
 
         entt::entity entity = CreateSceneEntity(state);
 
-        if (!node.name.empty()) {
+        if (node.name.size() > 0) {
             state->registry.get<Component::NameComponent>(entity).name = Core::InlineString<256>(node.name.c_str());
         }
 
@@ -406,7 +408,7 @@ void SaveEntityAsPrefab(Engine::GameState* state, Engine::AssetManager* assetMan
         }
     }
 
-    std::filesystem::path path;
+    Core::Path path;
     uint64_t prefabId = 0;
     bool isNewPrefab = true;
 
@@ -428,8 +430,8 @@ void SaveEntityAsPrefab(Engine::GameState* state, Engine::AssetManager* assetMan
         prefabId = state->rng();
     }
 
-    std::filesystem::create_directories(path.parent_path());
-    std::ofstream file(path);
+    Platform::CreateDirectories(path.Parent().c_str());
+    std::ofstream file(path.c_str());
 
     Engine::WPrefabHeader header{};
     header.prefabId = prefabId;
@@ -446,7 +448,7 @@ void SaveEntityAsPrefab(Engine::GameState* state, Engine::AssetManager* assetMan
     if (isNewPrefab) {
         ctx->bShouldRescanResources.store(true, std::memory_order_release);
     }
-    LOG_INFO(Game, "Saved prefab '{}' to '{}'", prefabName, path.string());
+    LOG_INFO(Game, "Saved prefab '{}' to '{}'", prefabName, path.c_str());
 }
 
 entt::entity SpawnPrefab(Engine::GameState* state, Engine::AssetManager* assetManager, StringID prefabId, const glm::vec3& spawnPosition)
@@ -457,9 +459,9 @@ entt::entity SpawnPrefab(Engine::GameState* state, Engine::AssetManager* assetMa
         return entt::null;
     }
 
-    auto prefabData = Engine::ReadWPrefab(meta->source);
+    auto prefabData = Engine::ReadWPrefab(meta->source.c_str());
     if (!prefabData) {
-        LOG_ERROR(Game, "Failed to read prefab file '{}'", meta->source.string());
+        LOG_ERROR(Game, "Failed to read prefab file '{}'", meta->source.c_str());
         return entt::null;
     }
 
@@ -491,7 +493,7 @@ entt::entity SpawnPrefab(Engine::GameState* state, Engine::AssetManager* assetMa
         }
     }
 
-    LOG_INFO(Game, "Spawned prefab '{}' as entity {}", meta->prefabName, entt::to_integral(entity));
+    LOG_INFO(Game, "Spawned prefab '{}' as entity {}", meta->prefabName.c_str(), entt::to_integral(entity));
     return entity;
 }
 
@@ -512,9 +514,9 @@ void ResolvePrefabLoads(Engine::GameState* state, Engine::AssetManager* assetMan
 
         auto cacheIt = prefabJsonCache.find(prefabInst.prefabId);
         if (cacheIt == prefabJsonCache.end()) {
-            auto prefabData = Engine::ReadWPrefab(meta->source);
+            auto prefabData = Engine::ReadWPrefab(meta->source.c_str());
             if (!prefabData) {
-                LOG_WARN(Game, "Failed to read prefab file '{}'", meta->source.string());
+                LOG_WARN(Game, "Failed to read prefab file '{}'", meta->source.c_str());
                 continue;
             }
             cacheIt = prefabJsonCache.emplace(prefabInst.prefabId, std::move(prefabData->componentJson)).first;

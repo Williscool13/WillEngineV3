@@ -7,8 +7,13 @@
 
 namespace Platform
 {
-// Creates all intermediate directories in path, similar to std::filesystem::create_directories.
+/**
+ * Creates all intermediate directories in path, similar to std::filesystem::create_directories.
+ * @param path
+ */
 void CreateDirectories(const char* path);
+
+void RemoveDirectories(const char* path);
 
 // Copies src to dst, overwriting dst if it exists. Returns true on success.
 bool FileCopy(const char* src, const char* dst);

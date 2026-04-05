@@ -14,6 +14,7 @@
 #include "engine/compression/compression.h"
 #include "engine/logging/engine_log.h"
 #include "engine/resources/texture/texture_format.h"
+#include "platform/file_utils.h"
 #include "platform/paths.h"
 #include "render/resource_manager.h"
 #include "render/descriptors/vk_bindless_resources_storage.h"
@@ -23,7 +24,7 @@
 
 namespace Editor
 {
-bool WriteSimpleRGBA8WTexture(const std::filesystem::path& outputPath, Engine::TextureID id, const char* name, uint32_t w, uint32_t h, const uint8_t* rgba)
+bool WriteSimpleRGBA8WTexture(const char* outputPath, Engine::TextureID id, const char* name, uint32_t w, uint32_t h, const uint8_t* rgba)
 {
     ktxTexture2* texture;
     ktxTextureCreateInfo createInfo{};
@@ -70,38 +71,35 @@ bool WriteSimpleRGBA8WTexture(const std::filesystem::path& outputPath, Engine::T
     header.dataSize  = static_cast<uint64_t>(compressed.size());
     strncpy_s(header.name, name, Engine::WTEXTURE_NAME_LENGTH - 1);
 
-    std::filesystem::create_directories(outputPath.parent_path());
+    Platform::CreateDirectories(Core::Path(outputPath).Parent().c_str());
     std::ofstream f(outputPath, std::ios::binary);
     if (!f || !Engine::WriteWTextureHeader(f, header)) {
-        LOG_ERROR(Asset, "Failed to write .wtexture: {}", outputPath.string());
+        LOG_ERROR(Asset, "Failed to write .wtexture: {}", outputPath);
         return false;
     }
     f.write(reinterpret_cast<const char*>(compressed.data()), static_cast<std::streamsize>(compressed.size()));
 
-    LOG_INFO(Asset, "Wrote {}", outputPath.string());
+    LOG_INFO(Asset, "Wrote {}", outputPath);
     return true;
 }
 
 void CreateCriticalEngineResources()
 {
-    const std::filesystem::path texturesPath = Platform::GetAssetPath() / "textures";
+    const Core::Path texturesPath = Platform::GetAssetPath() / "textures";
 
-    std::filesystem::path whitePath = texturesPath / "white.wtexture";
-    if (!exists(whitePath)) {
-        // White: 1x1 opaque white
-        {
-            constexpr uint8_t pixels[4] = {255, 255, 255, 255};
-            WriteSimpleRGBA8WTexture(
-                whitePath,
-                Engine::TextureID(fnv1a64("white", 5)),
-                "engine_default_white", 1, 1, pixels
-            );
-        }
+    const Core::Path whitePath = texturesPath / "white.wtexture";
+    if (!whitePath.Exists()) {
+        constexpr uint8_t pixels[4] = {255, 255, 255, 255};
+        WriteSimpleRGBA8WTexture(
+            whitePath.c_str(),
+            Engine::TextureID(fnv1a64("white", 5)),
+            "engine_default_white", 1, 1, pixels
+        );
     }
 
-    std::filesystem::path errorPath = texturesPath / "error.wtexture";
-    if (!exists(errorPath)) {
-        // Error: 4x4 alternating magenta/black checkerboard
+    const Core::Path errorPath = texturesPath / "error.wtexture";
+    if (!errorPath.Exists()) {
+        // 4x4 alternating magenta/black checkerboard
         constexpr uint8_t magenta[4] = {255, 0, 255, 255};
         constexpr uint8_t black[4]   = {0,   0, 0,   255};
         uint8_t pixels[4 * 4 * 4];
@@ -111,7 +109,7 @@ void CreateCriticalEngineResources()
             }
         }
         WriteSimpleRGBA8WTexture(
-            errorPath,
+            errorPath.c_str(),
             Engine::TextureID(fnv1a64("error", 5)),
             "engine_default_error", 4, 4, pixels
         );
@@ -119,7 +117,7 @@ void CreateCriticalEngineResources()
 }
 
 void CreateBRDFLookupTable(
-    std::filesystem::path outputPath,
+    Core::Path outputPath,
     Engine::TextureID textureId,
     Render::VulkanContext* context,
     Render::ResourceManager* resourceManager,
@@ -284,17 +282,17 @@ void CreateBRDFLookupTable(
     header.mipCount  = 1;
     header.uncompressedSize = static_cast<uint64_t>(ktxSize);
     header.dataSize  = static_cast<uint64_t>(compressed.size());
-    strncpy_s(header.name, outputPath.stem().string().c_str(), Engine::WTEXTURE_NAME_LENGTH - 1);
+    strncpy_s(header.name, std::string(outputPath.Stem()).c_str(), Engine::WTEXTURE_NAME_LENGTH - 1);
 
-    std::filesystem::create_directories(outputPath.parent_path());
-    std::ofstream f(outputPath, std::ios::binary);
+    Platform::CreateDirectories(outputPath.Parent().c_str());
+    std::ofstream f(outputPath.c_str(), std::ios::binary);
     if (!f || !Engine::WriteWTextureHeader(f, header)) {
-        LOG_ERROR(Asset, "Failed to write .wtexture: {}", outputPath.string());
+        LOG_ERROR(Asset, "Failed to write .wtexture: {}", outputPath.c_str());
         return;
     }
     f.write(reinterpret_cast<const char*>(compressed.data()), static_cast<std::streamsize>(compressed.size()));
 
-    LOG_INFO(Asset, "Wrote {}", outputPath.string());
+    LOG_INFO(Asset, "Wrote {}", outputPath.c_str());
 
     vkDestroyFence(context->device, graphicsFence, nullptr);
     vkDestroyCommandPool(context->device, graphicsCommandPool, nullptr);

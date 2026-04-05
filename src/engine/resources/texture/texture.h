@@ -5,9 +5,8 @@
 #ifndef WILL_ENGINE_TEXTURE_H
 #define WILL_ENGINE_TEXTURE_H
 
-#include <filesystem>
-
 #include "../../../render/interface/render_interface.h"
+#include "core/containers/inline_path.h"
 #include "render/descriptors/vk_bindless_resources_sampler_images.h"
 #include "render/vulkan/vk_resources.h"
 #include "engine/asset_manager_types.h"
@@ -33,7 +32,7 @@ struct Texture
     Render::ImageView imageView{};
     Core::ImageAcquireOperation acquireBarrier{};
 
-    std::filesystem::path source{};
+    Core::Path source{};
     char name[WTEXTURE_NAME_LENGTH]{};
     TextureID textureId{};
     TextureHandle selfHandle{TextureHandle::INVALID};

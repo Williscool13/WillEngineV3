@@ -22,19 +22,19 @@
 
 namespace AssetLoad
 {
-AsyncAssetLoadManager::AsyncAssetLoadManager(Render::VulkanContext* context, Render::ResourceManager* resourceManager, VkPipelineCache pipelineCache)
-    : context(context), resourceManager(resourceManager), pipelineCache(pipelineCache)
+AsyncAssetLoadManager::AsyncAssetLoadManager(Core::MemoryManager& memoryManager, Render::VulkanContext* context, Render::ResourceManager* resourceManager, VkPipelineCache pipelineCache)
+    : assetsAllocator(&memoryManager.Assets()), context(context), resourceManager(resourceManager), pipelineCache(pipelineCache)
 {
-    assetLoadScheduler = std::make_unique<enki::TaskScheduler>();
+    assetLoadScheduler = memoryManager.PersistentAlloc<enki::TaskScheduler>(Core::AllocTag::AsyncAssetLoadManager);
 
     enki::TaskSchedulerConfig assetConfig;
     assetConfig.numTaskThreadsToCreate = 4;
     assetConfig.profilerCallbacks.threadStart = [](uint32_t threadNum_) {
-        static constexpr std::array<const char*, 8> names = {
+        static constexpr const char* names[8] = {
             "AssetLoad0", "AssetLoad1", "AssetLoad2", "AssetLoad3",
             "AssetLoad4", "AssetLoad5", "AssetLoad6", "AssetLoad7"
         };
-        if (threadNum_ < names.size()) {
+        if (threadNum_ < 8) {
             tracy::SetThreadName(names[threadNum_]);
             Platform::SetThreadName(names[threadNum_]);
         }
@@ -45,22 +45,23 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Render::VulkanContext* context, Ren
     LOG_INFO(Asset, "Asset load scheduler operating with {} threads.", assetConfig.numTaskThreadsToCreate);
 
     for (uint32_t i = 0; i < AUDIO_JOB_COUNT; ++i) {
-        audioLoadSlots[i].Initialize(assetLoadScheduler.get(), [this](bool success, AudioSlotHandle slotHandle) {
+        audioLoadSlots[i].Initialize(assetLoadScheduler, [this](bool success, AudioSlotHandle slotHandle) {
             OnAudioLoadComplete(success, slotHandle);
         });
     }
 
     for (uint32_t i = 0; i < PIPELINE_JOB_COUNT; ++i) {
-        pipelineLoadSlots[i].Initialize(assetLoadScheduler.get(), context, pipelineCache, [this](bool success, PipelineSlotHandle slotHandle) {
+        pipelineLoadSlots[i].Initialize(assetLoadScheduler, context, pipelineCache, [this](bool success, PipelineSlotHandle slotHandle) {
             OnPipelineLoadComplete(success, slotHandle);
         });
     }
 
     for (uint32_t i = 0; i < MODEL_JOB_COUNT; ++i) {
         modelLoadSlots[i].Initialize(
-            assetLoadScheduler.get(),
+            assetLoadScheduler,
             context,
             resourceManager,
+            assetsAllocator,
             [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
                 QueueGPUDispatch(cmd, fence, completionSignal);
             },
@@ -72,9 +73,10 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Render::VulkanContext* context, Ren
 
     for (uint32_t i = 0; i < PROCEDURAL_MODEL_JOB_COUNT; ++i) {
         proceduralModelLoadSlots[i].Initialize(
-            assetLoadScheduler.get(),
+            assetLoadScheduler,
             context,
             resourceManager,
+            assetsAllocator,
             [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
                 QueueGPUDispatch(cmd, fence, completionSignal);
             },
@@ -86,7 +88,7 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Render::VulkanContext* context, Ren
 
     for (uint32_t i = 0; i < TEXTURE_JOB_COUNT; ++i) {
         textureLoadSlots[i].Initialize(
-            assetLoadScheduler.get(),
+            assetLoadScheduler,
             context,
             resourceManager,
             [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
@@ -100,7 +102,7 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Render::VulkanContext* context, Ren
 
     for (uint32_t i = 0; i < CUBEMAP_JOB_COUNT; ++i) {
         cubemapLoadSlots[i].Initialize(
-            assetLoadScheduler.get(),
+            assetLoadScheduler,
             context,
             resourceManager,
             [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
@@ -283,6 +285,7 @@ void AsyncAssetLoadManager::Join()
     thisThread.join();
 
     assetLoadScheduler->WaitforAllAndShutdown();
+    assetLoadScheduler->~TaskScheduler();
 }
 
 void AsyncAssetLoadManager::GPUDispatchThreadMain()
@@ -297,26 +300,24 @@ void AsyncAssetLoadManager::GPUDispatchThreadMain()
         {
             ZoneScopedN("Dispatch GPU Requests");
             constexpr size_t MAX_BATCH = 16;
-            dispatchBatch.resize(MAX_BATCH);
+            GPUDispatchRequest batch[MAX_BATCH];
+            VkFence fenceBuf[MAX_BATCH];
 
-            size_t count = gpuDispatchQueue.try_dequeue_bulk(dispatchBatch.begin(), MAX_BATCH);
+            size_t count = gpuDispatchQueue.try_dequeue_bulk(batch, MAX_BATCH);
             if (count > 0) {
                 VkSubmitInfo submitInfo{.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO};
                 submitInfo.commandBufferCount = 1;
 
                 for (size_t i = 0; i < count; ++i) {
-                    submitInfo.pCommandBuffers = &dispatchBatch[i].cmd;
-                    VK_CHECK(vkQueueSubmit(this->context->transferQueue, 1, &submitInfo, dispatchBatch[i].fence));
-                    fences.push_back(dispatchBatch[i].fence);
+                    submitInfo.pCommandBuffers = &batch[i].cmd;
+                    VK_CHECK(vkQueueSubmit(this->context->transferQueue, 1, &submitInfo, batch[i].fence));
+                    fenceBuf[i] = batch[i].fence;
                 }
 
-                VK_CHECK(vkWaitForFences(context->device, count, fences.data(), VK_TRUE, UINT64_MAX));
+                VK_CHECK(vkWaitForFences(context->device, static_cast<uint32_t>(count), fenceBuf, VK_TRUE, UINT64_MAX));
                 for (size_t i = 0; i < count; ++i) {
-                    dispatchBatch[i].completionSignal->release();
+                    batch[i].completionSignal->release();
                 }
-
-                dispatchBatch.clear();
-                fences.clear();
             }
         }
 
@@ -538,7 +539,7 @@ void AsyncAssetLoadManager::OnModelLoadComplete(bool success, ModelSlotHandle mo
     modelLoadCompleteQueue.enqueue({slot.outputModel, success});
 
     if (!success) {
-        LOG_ERROR(Asset, "Failed to load model: {}", slot.outputModel->name);
+        LOG_ERROR(Asset, "Failed to load model: {}", slot.outputModel->name.c_str());
     }
 
     slot.Clear();
@@ -565,7 +566,7 @@ void AsyncAssetLoadManager::OnProceduralModelLoadComplete(bool success, Procedur
     proceduralModelLoadCompleteQueue.enqueue({slot.outputModel, success});
 
     if (!success) {
-        LOG_ERROR(Asset, "Failed to generate procedural model: {}", slot.outputModel->name);
+        LOG_ERROR(Asset, "Failed to generate procedural model: {}", slot.outputModel->name.c_str());
     }
 
     slot.Clear();
@@ -592,10 +593,10 @@ void AsyncAssetLoadManager::OnTextureLoadComplete(bool success, TextureSlotHandl
     textureLoadCompleteQueue.enqueue({slot.outputTexture, success});
 
     if (success) {
-        LOG_TRACE(Asset, "Finished loading texture: {}", slot.outputTexture->source.string());
+        LOG_TRACE(Asset, "Finished loading texture: {}", slot.outputTexture->source.c_str());
     }
     else {
-        LOG_ERROR(Asset, "Failed to load texture: {}", slot.outputTexture->source.string());
+        LOG_ERROR(Asset, "Failed to load texture: {}", slot.outputTexture->source.c_str());
     }
 
     slot.Clear();
@@ -622,10 +623,10 @@ void AsyncAssetLoadManager::OnCubemapComplete(bool success, CubemapSlotHandle cu
     cubemapLoadCompleteQueue.enqueue({slot.outputCubemap, success});
 
     if (success) {
-        LOG_TRACE(Asset, "Finished loading cubemap: {}", slot.outputCubemap->source.string());
+        LOG_TRACE(Asset, "Finished loading cubemap: {}", slot.outputCubemap->source.c_str());
     }
     else {
-        LOG_ERROR(Asset, "Failed to load cubemap: {}", slot.outputCubemap->source.string());
+        LOG_ERROR(Asset, "Failed to load cubemap: {}", slot.outputCubemap->source.c_str());
     }
 
     slot.Clear();

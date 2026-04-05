@@ -9,6 +9,9 @@
 #include <string>
 #include <vector>
 
+#include "core/containers/inline_string.h"
+#include "core/containers/inline_vector.h"
+#include "core/containers/vector.h"
 #include "engine/resources/material/material.h"
 #include "engine/resources/model/model_types.h"
 
@@ -28,12 +31,30 @@ size_t WriteVector(std::vector<std::byte>& buf, const std::vector<T>& vec)
     return AppendRaw(buf, vec.data(), vec.size() * sizeof(T));
 }
 
+template<typename T>
+size_t WriteVector(std::vector<std::byte>& buf, const Core::Vector<T>& vec)
+{
+    if (vec.Size() == 0) return 0;
+    return AppendRaw(buf, vec.Data(), vec.Size() * sizeof(T));
+}
+
 inline size_t WriteString(std::vector<std::byte>& buf, const std::string& str)
 {
     uint32_t length = static_cast<uint32_t>(str.size());
     size_t written = AppendRaw(buf, &length, sizeof(length));
     if (length > 0) {
         written += AppendRaw(buf, str.data(), length);
+    }
+    return written;
+}
+
+template<size_t N>
+size_t WriteString(std::vector<std::byte>& buf, const Core::InlineString<N>& str)
+{
+    uint32_t length = static_cast<uint32_t>(str.size());
+    size_t written = AppendRaw(buf, &length, sizeof(length));
+    if (length > 0) {
+        written += AppendRaw(buf, str.c_str(), length);
     }
     return written;
 }
@@ -51,6 +72,19 @@ inline void ReadString(const uint8_t*& data, std::string& str)
     }
 }
 
+template<size_t N>
+void ReadString(const uint8_t*& data, Core::InlineString<N>& str)
+{
+    uint32_t length;
+    std::memcpy(&length, data, sizeof(length));
+    data += sizeof(length);
+
+    if (length > 0) {
+        str = Core::InlineString<N>(std::string_view(reinterpret_cast<const char*>(data), length));
+        data += length;
+    }
+}
+
 template<typename T>
 size_t WriteDynamicVector(std::vector<std::byte>& buf, const std::vector<T>& vec)
 {
@@ -58,6 +92,17 @@ size_t WriteDynamicVector(std::vector<std::byte>& buf, const std::vector<T>& vec
     size_t written = AppendRaw(buf, &count, sizeof(count));
     if (count > 0) {
         written += AppendRaw(buf, vec.data(), count * sizeof(T));
+    }
+    return written;
+}
+
+template<typename T, size_t N>
+size_t WriteDynamicVector(std::vector<std::byte>& buf, const Core::InlineVector<T, N>& vec)
+{
+    auto count = static_cast<uint32_t>(vec.Size());
+    size_t written = AppendRaw(buf, &count, sizeof(count));
+    if (count > 0) {
+        written += AppendRaw(buf, vec.Data(), count * sizeof(T));
     }
     return written;
 }
@@ -73,6 +118,24 @@ void ReadDynamicVector(const uint8_t*& data, std::vector<T>& vec)
     if (count > 0) {
         std::memcpy(vec.data(), data, count * sizeof(T));
         data += count * sizeof(T);
+    }
+}
+
+template<typename T, size_t N>
+void ReadDynamicVector(const uint8_t*& data, Core::InlineVector<T, N>& vec)
+{
+    uint32_t count;
+    std::memcpy(&count, data, sizeof(count));
+    data += sizeof(count);
+
+    assert(count <= N && "Serialized count exceeds InlineVector capacity");
+    if (count > 0) {
+        for (uint32_t i = 0; i < count; ++i) {
+            T item;
+            std::memcpy(&item, data, sizeof(T));
+            data += sizeof(T);
+            vec.PushBack(item);
+        }
     }
 }
 
