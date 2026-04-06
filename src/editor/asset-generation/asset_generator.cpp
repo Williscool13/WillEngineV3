@@ -19,6 +19,7 @@ namespace Editor
 AssetGenerator::AssetGenerator(Core::MemoryManager& memoryManager, Core::EngineContext* ctx,Render::VulkanContext* vk, Render::RenderThread* renderThread, AssetLoad::AsyncAssetLoadManager* asyncAssetLoadManager)
     : memoryManager(&memoryManager), ctx(ctx), vk(vk), renderThread(renderThread), asyncAssetLoadManager(asyncAssetLoadManager)
 {
+    // todo remove asset generator specific scheduler, use engine scheduler with low priority
     assetGeneratorScheduler = std::make_unique<enki::TaskScheduler>();
 
     enki::TaskSchedulerConfig generatorConfig;
@@ -62,11 +63,11 @@ AssetGenerator::AssetGenerator(Core::MemoryManager& memoryManager, Core::EngineC
     }
     for (int32_t i = 0; i < ENVIRONMENT_MAP_GENERATION_JOB_COUNT; ++i) {
         environmentMapeGenerateTasks[i].Initialize(
-            i,
             assetGeneratorScheduler.get(),
             vk,
             renderThread->GetPipelineManager(),
             renderThread->GetResourceManager(),
+            &memoryManager,
             [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
                 GraphicsQueueGPUDispatch(cmd, fence, completionSignal);
             },

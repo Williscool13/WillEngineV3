@@ -24,18 +24,19 @@ EnvironmentMapGenerateSlot::EnvironmentMapGenerateSlot() = default;
 EnvironmentMapGenerateSlot::~EnvironmentMapGenerateSlot() = default;
 
 void EnvironmentMapGenerateSlot::Initialize(
-    int32_t slotIndex,
     enki::TaskScheduler* _scheduler,
     Render::VulkanContext* _context,
     Render::PipelineManager* _pipelineManager,
     Render::ResourceManager* _resourceManager,
-    std::function<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> graphicsDispatchCallback,
-    std::function<void(bool success, EnvironmentMapGenerateSlotHandle slotHandle)> notifyCallback)
+    Core::MemoryManager* _memoryManager,
+    Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> graphicsDispatchCallback,
+    Core::InlineFunction<void(bool success, EnvironmentMapGenerateSlotHandle cubemapSlotHandle)> notifyCallback)
 {
     scheduler = _scheduler;
     context = _context;
     pipelineManager = _pipelineManager;
     resourceManager = _resourceManager;
+    memoryManager = _memoryManager;
     _graphicsDispatchCallback = std::move(graphicsDispatchCallback);
     _notifyCallback = std::move(notifyCallback);
 
@@ -97,13 +98,12 @@ void EnvironmentMapGenerateSlot::Launch(
     imagePath = _imagePath;
     outputPath = _outputPath;
 
-    if (task && !task->GetIsComplete()) {
-        scheduler->WaitforTask(task.get());
+    if (!task.GetIsComplete()) {
+        scheduler->WaitforTask(&task);
     }
 
-    task = std::make_unique<GenerateTask>();
-    task->taskSlot = this;
-    scheduler->AddTaskSetToPipe(task.get());
+    task.taskSlot = this;
+    scheduler->AddTaskSetToPipe(&task);
 }
 
 void EnvironmentMapGenerateSlot::Clear()
@@ -118,7 +118,7 @@ void EnvironmentMapGenerateSlot::Clear()
     for (auto& imgView : finalCubemapMipViews) {
         imgView = {};
     }
-    mipData.clear();
+    mipData = {};
     imageStagingAllocator.Reset();
     imageReceivingAllocator.Reset();
 }
@@ -178,10 +178,7 @@ void EnvironmentMapGenerateSlot::GenerateTask::ExecuteRange(enki::TaskSetPartiti
     vkDestroyCommandPool(taskSlot->context->device, graphicsCommandPool, nullptr);
 }
 
-bool EnvironmentMapGenerateSlot::LoadEquirectangularAndGenerate(
-    VkCommandBuffer cmd,
-    const std::function<void()>& startRecording,
-    const std::function<void(bool)>& submitAndWait)
+bool EnvironmentMapGenerateSlot::LoadEquirectangularAndGenerate(VkCommandBuffer cmd, const Core::InlineFunction<void()>& startRecording, const Core::InlineFunction<void(bool)>& submitAndWait)
 {
     ZoneScopedN("LoadEquirectangularAndGenerate");
 
@@ -297,15 +294,16 @@ bool EnvironmentMapGenerateSlot::LoadEquirectangularAndGenerate(
         eqPc.cubemapWidth = 1024;
         eqPc.cubemapHeight = 1024;
 
-        std::array bindings{resourceManager->environmentMapGenerateResources.GetBindingInfo()};
+
+        Core::Array<VkDescriptorBufferBindingInfoEXT, 1> bindings{resourceManager->environmentMapGenerateResources.GetBindingInfo()};
         uint32_t bindingIndex{0u};
         VkDeviceSize bindingOffset{0};
-        vkCmdBindDescriptorBuffersEXT(cmd, bindings.size(), bindings.data());
+        vkCmdBindDescriptorBuffersEXT(cmd, bindings.Size(), bindings.Data());
 
         const Render::PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("ibl_equirect_to_cubemap"));
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(eqPc), &eqPc);
-        vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->layout, 0, bindings.size(), &bindingIndex, &bindingOffset);
+        vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->layout, 0, bindings.Size(), &bindingIndex, &bindingOffset);
         uint32_t dispatchX = (ENVIRONMENT_MAP_RESOLUTION + ENVIRONMENT_MAP_GENERATION_DISPATCH_X - 1) / ENVIRONMENT_MAP_GENERATION_DISPATCH_X;
         uint32_t dispatchY = (ENVIRONMENT_MAP_RESOLUTION + ENVIRONMENT_MAP_GENERATION_DISPATCH_Y - 1) / ENVIRONMENT_MAP_GENERATION_DISPATCH_Y;
         vkCmdDispatch(cmd, dispatchX, dispatchY, 6);
@@ -434,17 +432,17 @@ bool EnvironmentMapGenerateSlot::LoadEquirectangularAndGenerate(
     );
     vkCmdPipelineBarrier2(cmd, &depInfo);
 
-    std::array bindings{resourceManager->environmentMapGenerateResources.GetBindingInfo()};
+    Core::Array<VkDescriptorBufferBindingInfoEXT, 1> bindings{resourceManager->environmentMapGenerateResources.GetBindingInfo()};
     uint32_t bindingIndex{0u};
     VkDeviceSize bindingOffset{0};
-    vkCmdBindDescriptorBuffersEXT(cmd, bindings.size(), bindings.data());
+    vkCmdBindDescriptorBuffersEXT(cmd, bindings.Size(), bindings.Data());
 
     // Generate specular prefilter for mips 0-4
     {
         ZoneScopedN("PrefilterSpecular");
         const Render::PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("ibl_prefilter_specular"));
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
-        vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->layout, 0, bindings.size(), &bindingIndex, &bindingOffset);
+        vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->layout, 0, bindings.Size(), &bindingIndex, &bindingOffset);
 
         for (uint32_t mip = 0; mip < ENVIRONMENT_MAP_DIFFUSE_MIP; mip++) {
             float roughness = static_cast<float>(mip) / static_cast<float>(ENVIRONMENT_MAP_DIFFUSE_MIP - 1);
@@ -473,7 +471,7 @@ bool EnvironmentMapGenerateSlot::LoadEquirectangularAndGenerate(
         ZoneScopedN("ConvolveDiffuse");
         const Render::PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("ibl_convolve_diffuse"));
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
-        vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->layout, 0, bindings.size(), &bindingIndex, &bindingOffset);
+        vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->layout, 0, bindings.Size(), &bindingIndex, &bindingOffset);
 
         ConvolveDiffusePushConstant pc{
             .samplerIndex = CUBEMAP_IMAGE_SAMPLER_INDEX,
@@ -501,7 +499,6 @@ bool EnvironmentMapGenerateSlot::LoadEquirectangularAndGenerate(
     // Copy all mip faces back to CPU for KTX generation
     {
         ZoneScopedN("CopyCubemapToCPU");
-        mipData.resize(ENVIRONMENT_MAP_MIPS);
 
         for (uint32_t mip = 0; mip < ENVIRONMENT_MAP_MIPS; mip++) {
             uint32_t mipResolution = (mip < ENVIRONMENT_MAP_DIFFUSE_MIP) ? (ENVIRONMENT_MAP_RESOLUTION >> mip) : ENVIRONMENT_MAP_DIFFUSE_RESOLUTION;
@@ -524,8 +521,8 @@ bool EnvironmentMapGenerateSlot::LoadEquirectangularAndGenerate(
                 vkCmdCopyImageToBuffer(cmd, finalCubemapImage.handle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, imageReceivingBuffer.handle, 1, &_copyRegion);
                 submitAndWait(!(mip == ENVIRONMENT_MAP_MIPS - 1 && face == 5));
 
-                mipData[mip][face].resize(faceSize);
-                memcpy(mipData[mip][face].data(), imageReceivingBuffer.allocationInfo.pMappedData, faceSize);
+                mipData[mip][face] = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, faceSize);
+                memcpy(mipData[mip][face].Data(), imageReceivingBuffer.allocationInfo.pMappedData, faceSize);
             }
         }
     }
@@ -557,7 +554,7 @@ bool EnvironmentMapGenerateSlot::WriteKTXFile()
     }
     for (uint32_t mip = 0; mip < ENVIRONMENT_MAP_MIPS; mip++) {
         for (uint32_t face = 0; face < 6; face++) {
-            ktxTexture_SetImageFromMemory(ktxTexture(texture), mip, 0, face, mipData[mip][face].data(), mipData[mip][face].size());
+            ktxTexture_SetImageFromMemory(ktxTexture(texture), mip, 0, face, mipData[mip][face].Data(), mipData[mip][face].Size());
         }
     }
 

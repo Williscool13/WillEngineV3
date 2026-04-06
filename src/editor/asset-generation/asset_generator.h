@@ -17,6 +17,7 @@
 #include "static_model_generate_slot.h"
 #include "TaskScheduler.h"
 #include "texture_generate_slot.h"
+#include "core/containers/array.h"
 #include "core/memory/lock_free_handle_allocator.h"
 #include "core/memory/memory_manager.h"
 
@@ -75,6 +76,7 @@ struct TextureGenerateRequest
     Core::Path imagePath;
 
     // Optional: pre-loaded pixel data (takes priority over imagePath)
+    // todo make this asset scratch that will kill itself with RAII
     std::unique_ptr<uint8_t[]> sourcePixels;
     uint32_t sourceWidth{0};
     uint32_t sourceHeight{0};
@@ -127,7 +129,7 @@ public:
 
     void GenerateBRDFLUT(const Core::Path& outputFile);
 
-    const std::array<StaticModelGenerationProgress, MODEL_GENERATION_JOB_COUNT>& GetModelGenerationProgresses() const { return modelGenerationProgress; }
+    const Core::Array<StaticModelGenerationProgress, MODEL_GENERATION_JOB_COUNT>& GetModelGenerationProgresses() const { return modelGenerationProgress; }
     const Core::Path& GetModelGenerateSlotPath(uint32_t index) const { return modelGenerateTasks[index].gltfPath; }
 
     [[nodiscard]] uint32_t GetTotalModelGenerateCount() const
@@ -177,13 +179,13 @@ private:
     std::mt19937_64 modelIdRng{std::random_device{}()};
     std::mt19937_64 textureIdRng{std::random_device{}()};
 
-    std::array<StaticModelGenerateSlot, MODEL_GENERATION_JOB_COUNT> modelGenerateTasks;
+    Core::Array<StaticModelGenerateSlot, MODEL_GENERATION_JOB_COUNT> modelGenerateTasks;
     Core::LockFreeHandleAllocator<StaticModelGenerateSlot, MODEL_GENERATION_JOB_COUNT> modelGenerateAllocator;
 
-    std::array<TextureGenerateSlot, TEXTURE_GENERATION_JOB_COUNT> textureGenerateTasks;
+    Core::Array<TextureGenerateSlot, TEXTURE_GENERATION_JOB_COUNT> textureGenerateTasks;
     Core::LockFreeHandleAllocator<TextureGenerateSlot, TEXTURE_GENERATION_JOB_COUNT> textureGenerateAllocator;
 
-    std::array<EnvironmentMapGenerateSlot, ENVIRONMENT_MAP_GENERATION_JOB_COUNT> environmentMapeGenerateTasks;
+    Core::Array<EnvironmentMapGenerateSlot, ENVIRONMENT_MAP_GENERATION_JOB_COUNT> environmentMapeGenerateTasks;
     Core::LockFreeHandleAllocator<EnvironmentMapGenerateSlot, ENVIRONMENT_MAP_GENERATION_JOB_COUNT> environmentMapGenerateAllocator;
 
     moodycamel::ConcurrentQueue<ModelGenerateRequest> modelGenerateRequestQueue;
@@ -201,7 +203,9 @@ private:
     std::condition_variable wakeCV;
     std::jthread thisThread;
 
-    std::array<StaticModelGenerationProgress, MODEL_GENERATION_JOB_COUNT> modelGenerationProgress{};
+
+    // todo access to this is not thread safe. Needs to be mutex locked (maybe within?). Path should be within, and mutex locked (should be fine)
+    Core::Array<StaticModelGenerationProgress, MODEL_GENERATION_JOB_COUNT> modelGenerationProgress{};
 };
 } // Render
 

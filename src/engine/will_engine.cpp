@@ -468,7 +468,7 @@ void WillEngine::EditorImgui()
             ImGui::Text("Persistent:        %.3f / %.0f MB (%zu allocs)", static_cast<float>(ms.persistent.usedBytes) * kToMB, static_cast<float>(ms.persistent.totalBytes) * kToMB, ms.persistent.allocCount);
             ImGui::Separator();
             ImGui::Text("General:           %.3f / %.0f MB (%zu allocs)", static_cast<float>(ms.general.usedBytes) * kToMB, static_cast<float>(ms.general.totalBytes) * kToMB, ms.general.allocCount);
-            ImGui::Text("Assets (Scratch):  %.3f / %.0f MB (%zu allocs)", static_cast<float>(ms.assets.usedBytes) * kToMB, static_cast<float>(ms.assetsScratch.totalBytes) * kToMB, ms.assetsScratch.allocCount);
+            ImGui::Text("Assets (Scratch):  %.3f / %.0f MB (%zu allocs)", static_cast<float>(ms.assetsScratch.usedBytes) * kToMB, static_cast<float>(ms.assetsScratch.totalBytes) * kToMB, ms.assetsScratch.allocCount);
             ImGui::Text("Assets:            %.3f / %.0f MB (%zu allocs)", static_cast<float>(ms.assets.usedBytes) * kToMB, static_cast<float>(ms.assets.totalBytes) * kToMB, ms.assets.allocCount);
             ImGui::Text("Physics:           %.3f / %.0f MB (%zu allocs)", static_cast<float>(ms.physics.usedBytes) * kToMB, static_cast<float>(ms.physics.totalBytes) * kToMB, ms.physics.allocCount);
             ImGui::Text("Render:            %.3f / %.0f MB (%zu allocs)", static_cast<float>(ms.render.usedBytes) * kToMB, static_cast<float>(ms.render.totalBytes) * kToMB, ms.render.allocCount);
@@ -769,7 +769,7 @@ void WillEngine::EditorImgui()
         ImGui::Separator();
         ImGui::Text("Generation Progress:");
         const auto& genProgresses = modelGenerator->GetModelGenerationProgresses();
-        for (uint32_t i = 0; i < genProgresses.size(); ++i) {
+        for (uint32_t i = 0; i < genProgresses.Size(); ++i) {
             const auto& genProgress = genProgresses[i];
             const auto genState = genProgress.loadingState.load(std::memory_order_acquire);
             const int32_t genValue = genProgress.value.load(std::memory_order_acquire);

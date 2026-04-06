@@ -5,15 +5,17 @@
 #ifndef WILL_ENGINE_ENVIRONMENT_MAP_GENERATE_SLOT_H
 #define WILL_ENGINE_ENVIRONMENT_MAP_GENERATE_SLOT_H
 
-#include <functional>
-#include <vector>
 #include <semaphore>
 #include <TaskScheduler.h>
 
 #include "asset_generation_types.h"
+#include "core/containers/array.h"
+#include "core/containers/inline_function.h"
+#include "core/containers/heap_array.h"
 #include "core/containers/inline_path.h"
 #include "core/memory/handle.h"
 #include "core/memory/linear_allocator.h"
+#include "core/memory/memory_manager.h"
 #include "render/shaders/constants_interop.h"
 #include "render/vulkan/vk_resources.h"
 
@@ -31,24 +33,27 @@ using EnvironmentMapGenerateSlotHandle = Core::Handle<struct EnvironmentMapGener
 struct EnvironmentMapGenerateSlot
 {
     EnvironmentMapGenerateSlot();
+
     ~EnvironmentMapGenerateSlot();
 
     void Initialize(
-        int32_t slotIndex,
         enki::TaskScheduler* _scheduler,
         Render::VulkanContext* _context,
         Render::PipelineManager* _pipelineManager,
         Render::ResourceManager* _resourceManager,
-        std::function<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> graphicsDispatchCallback,
-        std::function<void(bool success, EnvironmentMapGenerateSlotHandle slotHandle)> notifyCallback
+        Core::MemoryManager* _memoryManager,
+        Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> graphicsDispatchCallback,
+        Core::InlineFunction<void(bool success, EnvironmentMapGenerateSlotHandle cubemapSlotHandle)> notifyCallback
     );
 
     void Launch(EnvironmentMapGenerateSlotHandle _slotHandle, const Core::Path& _imagePath, const Core::Path& _outputPath);
+
     void Clear();
 
     struct GenerateTask : enki::ITaskSet
     {
         EnvironmentMapGenerateSlot* taskSlot = nullptr;
+
         void ExecuteRange(enki::TaskSetPartition range, uint32_t threadNum) override;
     };
 
@@ -56,15 +61,18 @@ struct EnvironmentMapGenerateSlot
     Core::Path outputPath;
 
 private:
-    bool LoadEquirectangularAndGenerate(VkCommandBuffer cmd, const std::function<void()>& startRecording, const std::function<void(bool)>& submitAndWait);
+    bool LoadEquirectangularAndGenerate(VkCommandBuffer cmd, const Core::InlineFunction<void()>& startRecording, const Core::InlineFunction<void(bool)>& submitAndWait);
+
     bool WriteKTXFile();
 
     enki::TaskScheduler* scheduler{nullptr};
+    Core::MemoryManager* memoryManager{nullptr};
     Render::VulkanContext* context{nullptr};
     Render::PipelineManager* pipelineManager{nullptr};
     Render::ResourceManager* resourceManager{nullptr};
-    std::function<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> _graphicsDispatchCallback;
-    std::function<void(bool success, EnvironmentMapGenerateSlotHandle slotHandle)> _notifyCallback;
+
+    Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> _graphicsDispatchCallback;
+    Core::InlineFunction<void(bool success, EnvironmentMapGenerateSlotHandle cubemapSlotHandle)> _notifyCallback;
 
     EnvironmentMapGenerateSlotHandle slotHandle{EnvironmentMapGenerateSlotHandle::INVALID};
 
@@ -81,16 +89,17 @@ private:
     Render::Sampler equiSampler;
     Render::Sampler cubemapSampler;
 
-    std::vector<std::array<std::vector<uint8_t>, ENVIRONMENT_MAP_MIPS>> mipData; // [mip][face]
+
+    // Array of mips, containing an array of faces
+    Core::Array<Core::Array<Core::HeapArray<uint8_t>, 13>, 6> mipData; // [mip][face]
 
     Render::AllocatedBuffer imageStagingBuffer;
     Render::AllocatedBuffer imageReceivingBuffer;
     Core::LinearAllocator imageStagingAllocator{ENVIRONMENT_MAP_GENERATION_STAGING_BUFFER_SIZE};
     Core::LinearAllocator imageReceivingAllocator{ENVIRONMENT_MAP_GENERATION_STAGING_BUFFER_SIZE};
 
-    std::unique_ptr<GenerateTask> task;
+    GenerateTask task{};
 };
-
 } // namespace Editor
 
 #endif //WILL_ENGINE_ENVIRONMENT_MAP_GENERATE_SLOT_H

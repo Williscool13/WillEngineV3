@@ -20,7 +20,6 @@ std::vector<uint8_t> CompressZlib(const void* data, size_t size);
 std::vector<uint8_t> DecompressZlib(const void* data, size_t compressedSize, size_t uncompressedSize);
 
 std::vector<uint8_t> CompressLZ4(const void* data, size_t size);
-std::vector<uint8_t> DecompressLZ4(const void* compressedData, size_t compressedSize, size_t uncompressedSize);
 void DecompressLZ4(const void* compressedData, size_t compressedSize, void* decompressedData, size_t uncompressedSize);
 } // Engine
 

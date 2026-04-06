@@ -388,7 +388,7 @@ void StaticModelLoadSlot::PrepareUploadData()
         }
     }
 
-
+    //
     {
         Core::HeapArray<Engine::MeshInformation>& dst = outputModel->modelData.meshes;
         assert(!dst.IsAllocated() && "modelData.meshes was found to be allocated (memory leak)");
@@ -400,16 +400,18 @@ void StaticModelLoadSlot::PrepareUploadData()
 
     //
     {
-        Core::HeapArray<Engine::Node>& dst = outputModel->modelData.nodes;
-        assert(!dst.IsAllocated() && "modelData.nodes was found to be allocated (memory leak)");
-        dst = Core::HeapArray<Engine::Node>(&memoryManager->Assets(), Core::AllocTag::AssetModel, rawData.nodes.Size());
-        for (size_t i = 0; i < rawData.nodes.Size(); ++i) {
-            dst[i] = rawData.nodes[i];
+        if (rawData.nodes.IsAllocated() && !rawData.nodes.IsEmpty()) {
+            Core::HeapArray<Engine::Node>& dst = outputModel->modelData.nodes;
+            assert(!dst.IsAllocated() && "modelData.nodes was found to be allocated (memory leak)");
+            dst = Core::HeapArray<Engine::Node>(&memoryManager->Assets(), Core::AllocTag::AssetModel, rawData.nodes.Size());
+            for (size_t i = 0; i < rawData.nodes.Size(); ++i) {
+                dst[i] = rawData.nodes[i];
+            }
         }
     }
 
-    //
-    {
+
+    if (rawData.materials.IsAllocated() && !rawData.materials.IsEmpty()) {
         Core::HeapArray<Engine::Material>& dst = outputModel->modelData.materials;
         assert(!dst.IsAllocated() && "modelData.materials was found to be allocated (memory leak)");
         dst = Core::HeapArray<Engine::Material>(&memoryManager->Assets(), Core::AllocTag::AssetModel, rawData.materials.Size());

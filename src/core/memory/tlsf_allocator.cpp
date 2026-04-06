@@ -32,6 +32,9 @@ const char* AllocTagName(AllocTag tag)
         case AllocTag::TimeManager: return "TimeManager";
         case AllocTag::FrameSync: return "FrameSync";
         case AllocTag::RenderThread: return "RenderThread";
+        case AllocTag::AudioManager: return "AudioManager";
+        case AllocTag::AsyncAssetLoadManager: return "AsyncAssetLoadManager";
+        case AllocTag::AssetManager: return "AssetManager";
         case AllocTag::Count: return "Count";
     }
     return "Unknown";
@@ -66,9 +69,9 @@ void* TlsfAllocator::Alloc(size_t size, AllocTag tag)
     return header + 1;
 }
 
-void* TlsfAllocator::Realloc(void* ptr, size_t newSize, AllocTag fallbackTag)
+void* TlsfAllocator::Realloc(void* ptr, size_t newSize, AllocTag tag)
 {
-    if (!ptr) { return Alloc(newSize, fallbackTag); }
+    if (!ptr) { return Alloc(newSize, tag); }
     if (newSize == 0) {
         Free(ptr);
         return nullptr;

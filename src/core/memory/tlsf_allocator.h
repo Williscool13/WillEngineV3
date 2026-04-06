@@ -72,7 +72,7 @@ public:
 
     void* Alloc(size_t size, AllocTag tag = AllocTag::Unknown);
 
-    void* Realloc(void* ptr, size_t newSize, AllocTag fallbackTag = AllocTag::Unknown); // preserves original tag; fallbackTag used only when ptr == nullptr
+    void* Realloc(void* ptr, size_t newSize, AllocTag tag = AllocTag::Unknown); // preserves original tag; fallbackTag used only when ptr == nullptr
     void Free(void* ptr);
 
     struct Stats

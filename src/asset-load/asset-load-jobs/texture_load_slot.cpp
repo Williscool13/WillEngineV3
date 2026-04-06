@@ -11,6 +11,7 @@
 #include "engine/compression/compression.h"
 #include "engine/logging/engine_log.h"
 #include "ktxvulkan.h"
+#include "core/memory/memory_manager.h"
 #include "engine/resources/texture/texture.h"
 #include "render/resource_manager.h"
 #include "render/vulkan/vk_context.h"
@@ -28,12 +29,14 @@ void TextureLoadSlot::Initialize(
     enki::TaskScheduler* _scheduler,
     Render::VulkanContext* _context,
     Render::ResourceManager* _resourceManager,
+    Core::MemoryManager* _memoryManager,
     Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> dispatchCallback,
     Core::InlineFunction<void(bool success, TextureSlotHandle textureSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle)> notifyCallback)
 {
     scheduler = _scheduler;
     context = _context;
     resourceManager = _resourceManager;
+    memoryManager = _memoryManager;
     _requestDispatchCallback = std::move(dispatchCallback);
     _notifyCallback = std::move(notifyCallback);
 }
@@ -143,32 +146,29 @@ bool TextureLoadSlot::LoadTextureFromDisk()
         return false;
     }
 
-    const Core::Path& texturePath = outputTexture->source;
-
-    {
+    const Core::Path& texturePath = outputTexture->source; {
         ZoneScopedN("FileExistsCheck");
         if (!texturePath.Exists()) {
             LOG_ERROR(Asset, "Failed to find texture: {}", texturePath.c_str());
             return false;
         }
-    }
-
-    {
+    } {
         ZoneScopedN("KTXCreateFromFile");
         ktx_error_code_e result;
 
         std::ifstream f(texturePath.c_str(), std::ios::binary);
-        std::vector<uint8_t> compressed(outputTexture->dataSize);
+
+        Core::HeapArray<uint8_t> compressed = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetTexture, outputTexture->dataSize);
         f.seekg(outputTexture->dataOffset);
-        f.read(reinterpret_cast<char*>(compressed.data()), static_cast<std::streamsize>(outputTexture->dataSize));
+        f.read(reinterpret_cast<char*>(compressed.Data()), static_cast<std::streamsize>(outputTexture->dataSize));
         if (!f) {
             LOG_ERROR(Asset, "Failed to read .wtexture data: {}", texturePath.c_str());
             return false;
         }
 
-        std::vector<uint8_t> blob = Engine::DecompressLZ4(compressed.data(), compressed.size(), outputTexture->uncompressedSize);
-        result = ktxTexture2_CreateFromMemory(blob.data(), blob.size(),
-                                              KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, &texture);
+        Core::HeapArray<uint8_t> decompressed = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetTexture, outputTexture->uncompressedSize);
+        Engine::DecompressLZ4(compressed.Data(), compressed.Size(), decompressed.Data(), outputTexture->uncompressedSize);
+        result = ktxTexture2_CreateFromMemory(decompressed.Data(), decompressed.Size(), KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, &texture);
 
         if (result != KTX_SUCCESS) {
             LOG_ERROR(Asset, "Failed to load KTX texture: {}", texturePath.c_str());

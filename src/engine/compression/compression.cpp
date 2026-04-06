@@ -56,19 +56,6 @@ std::vector<uint8_t> CompressLZ4(const void* data, size_t size)
     return compressed;
 }
 
-std::vector<uint8_t> DecompressLZ4(const void* compressedData, size_t compressedSize, size_t uncompressedSize)
-{
-    std::vector<uint8_t> decompressed(uncompressedSize);
-    const int result = LZ4_decompress_safe(
-        static_cast<const char*>(compressedData), reinterpret_cast<char*>(decompressed.data()),
-        static_cast<int>(compressedSize), static_cast<int>(uncompressedSize));
-    if (result < 0) {
-        LOG_CRITICAL(Engine, "LZ4 decompression failed.");
-        assert(false);
-    }
-    return decompressed;
-}
-
 void DecompressLZ4(const void* compressedData, size_t compressedSize, void* decompressedData, size_t uncompressedSize)
 {
     const int result = LZ4_decompress_safe(

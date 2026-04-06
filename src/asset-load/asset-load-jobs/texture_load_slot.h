@@ -14,6 +14,11 @@
 #include "core/containers/inline_function.h"
 #include "engine/asset_manager_types.h"
 
+namespace Core
+{
+class MemoryManager;
+}
+
 namespace enki
 {
 class TaskScheduler;
@@ -43,6 +48,7 @@ public:
         enki::TaskScheduler* _scheduler,
         Render::VulkanContext* _context,
         Render::ResourceManager* _resourceManager,
+        Core::MemoryManager* _memoryManager,
         Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> dispatchCallback,
         Core::InlineFunction<void(bool success, TextureSlotHandle textureSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle)> notifyCallback);
 
@@ -82,6 +88,7 @@ private:
     enki::TaskScheduler* scheduler{nullptr};
     Render::VulkanContext* context{nullptr};
     Render::ResourceManager* resourceManager{nullptr};
+    Core::MemoryManager* memoryManager{nullptr};
 
     ktxTexture2* texture{nullptr};
 
