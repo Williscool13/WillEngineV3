@@ -16,8 +16,8 @@
 
 namespace Editor
 {
-AssetGenerator::AssetGenerator(Core::EngineContext* ctx,Render::VulkanContext* vk, Render::RenderThread* renderThread, AssetLoad::AsyncAssetLoadManager* asyncAssetLoadManager)
-    : ctx(ctx), vk(vk), renderThread(renderThread), asyncAssetLoadManager(asyncAssetLoadManager)
+AssetGenerator::AssetGenerator(Core::MemoryManager& memoryManager, Core::EngineContext* ctx,Render::VulkanContext* vk, Render::RenderThread* renderThread, AssetLoad::AsyncAssetLoadManager* asyncAssetLoadManager)
+    : memoryManager(&memoryManager), ctx(ctx), vk(vk), renderThread(renderThread), asyncAssetLoadManager(asyncAssetLoadManager)
 {
     assetGeneratorScheduler = std::make_unique<enki::TaskScheduler>();
 
@@ -40,7 +40,7 @@ AssetGenerator::AssetGenerator(Core::EngineContext* ctx,Render::VulkanContext* v
             assetGeneratorScheduler.get(),
             this,
             &modelGenerationProgress[i],
-            asyncAssetLoadManager->GetAssetsAllocator(),
+            &memoryManager.Assets(),
             [this](bool success, ModelGenerateSlotHandle slotHandle) {
                 OnModelGenerateComplete(success, slotHandle);
             }

@@ -200,8 +200,9 @@ public:
 
     size_t Size() const { return size_; }
     size_t GetCapacity() const { return capacity_; }
-    bool IsEmpty() const { return size_ == 0; }
-    bool IsFull() const { return size_ >= capacity_; }
+    bool   IsEmpty() const { return size_ == 0; }
+    bool   IsFull() const { return size_ >= capacity_; }
+    bool   IsAllocated() const { return data_ != nullptr; }
 
     T* begin() { return data_; }
     T* end() { return data_ + size_; }

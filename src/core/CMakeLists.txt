@@ -61,6 +61,8 @@ add_library(core STATIC
         containers/inline_function.h
         containers/arena_function.h
         containers/function.h
+        containers/arena_array.h
+        containers/heap_array.h
 )
 
 

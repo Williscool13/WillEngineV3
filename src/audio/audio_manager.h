@@ -9,10 +9,12 @@
 #include "audio_config.h"
 #include "core/string_id.h"
 #include "core/containers/array.h"
+#include "core/containers/heap_array.h"
 #include "core/containers/inline_map.h"
 #include "core/containers/inline_path.h"
 #include "core/memory/handle.h"
 #include "core/memory/handle_allocator.h"
+#include "core/memory/memory_manager.h"
 #include "SDL3_mixer/SDL_mixer.h"
 
 namespace AssetLoad
@@ -38,6 +40,7 @@ public:
     void UnloadAudio(Core::Handle<WillAudio> handle);
 
     void PlayMusic(Core::Handle<WillAudio> handle, bool loop = true);
+
     void PlaySfx(Core::Handle<WillAudio> handle);
 
     void SetMusicVolume(float volume);

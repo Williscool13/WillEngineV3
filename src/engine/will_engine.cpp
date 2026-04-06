@@ -113,6 +113,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
     memoryManager.Init({
         .persistentSize = 32ull * 1024 * 1024,  // 32 MB
         .generalPoolSize = 64ull * 1024 * 1024, // 64 MB
+        .assetsScratchPoolSize = 128ull * 1024 * 1024, // 512 MB
         .assetsPoolSize = 512ull * 1024 * 1024, // 512 MB
         .physicsPoolSize = 64ull * 1024 * 1024, // 64 MB
         .renderPoolSize = 64ull * 1024 * 1024,  // 64 MB
@@ -240,7 +241,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
     //
     {
         ZoneScopedN("CreateModelGenerator");
-        modelGenerator = std::make_unique<Editor::AssetGenerator>(engineContext, renderThread->GetVulkanContext(), renderThread, asyncAssetLoadManager);
+        modelGenerator = std::make_unique<Editor::AssetGenerator>(memoryManager, engineContext, renderThread->GetVulkanContext(), renderThread, asyncAssetLoadManager);
     }
 
 #endif
@@ -461,14 +462,17 @@ void WillEngine::EditorImgui()
             const Core::Arena::Stats ras = memoryManager.RenderArena().GetStats();
             const size_t totalUsed = ms.persistent.usedBytes + ms.general.usedBytes + ms.assets.usedBytes + ms.physics.usedBytes + ms.render.usedBytes + ras.usedBytes;
             constexpr float kToMB = 1.0f / (1024.0f * 1024.0f);
-            ImGui::Text("Total:      %.3f / %.0f MB", static_cast<float>(totalUsed) * kToMB, static_cast<float>(ms.totalBytes) * kToMB);
+            ImGui::SeparatorText("TLSF Allocators");
+            ImGui::Text("Total:             %.3f / %.0f MB", static_cast<float>(totalUsed) * kToMB, static_cast<float>(ms.totalBytes) * kToMB);
             ImGui::Separator();
-            ImGui::Text("Persistent: %.3f / %.0f MB (%zu allocs)", static_cast<float>(ms.persistent.usedBytes) * kToMB, static_cast<float>(ms.persistent.totalBytes) * kToMB, ms.persistent.allocCount);
+            ImGui::Text("Persistent:        %.3f / %.0f MB (%zu allocs)", static_cast<float>(ms.persistent.usedBytes) * kToMB, static_cast<float>(ms.persistent.totalBytes) * kToMB, ms.persistent.allocCount);
             ImGui::Separator();
-            ImGui::Text("General:    %.3f / %.0f MB (%zu allocs)", static_cast<float>(ms.general.usedBytes) * kToMB, static_cast<float>(ms.general.totalBytes) * kToMB, ms.general.allocCount);
-            ImGui::Text("Assets:     %.3f / %.0f MB (%zu allocs)", static_cast<float>(ms.assets.usedBytes) * kToMB, static_cast<float>(ms.assets.totalBytes) * kToMB, ms.assets.allocCount);
-            ImGui::Text("Physics:    %.3f / %.0f MB (%zu allocs)", static_cast<float>(ms.physics.usedBytes) * kToMB, static_cast<float>(ms.physics.totalBytes) * kToMB, ms.physics.allocCount);
-            ImGui::Text("Render:     %.3f / %.0f MB (%zu allocs)", static_cast<float>(ms.render.usedBytes) * kToMB, static_cast<float>(ms.render.totalBytes) * kToMB, ms.render.allocCount);
+            ImGui::Text("General:           %.3f / %.0f MB (%zu allocs)", static_cast<float>(ms.general.usedBytes) * kToMB, static_cast<float>(ms.general.totalBytes) * kToMB, ms.general.allocCount);
+            ImGui::Text("Assets (Scratch):  %.3f / %.0f MB (%zu allocs)", static_cast<float>(ms.assets.usedBytes) * kToMB, static_cast<float>(ms.assetsScratch.totalBytes) * kToMB, ms.assetsScratch.allocCount);
+            ImGui::Text("Assets:            %.3f / %.0f MB (%zu allocs)", static_cast<float>(ms.assets.usedBytes) * kToMB, static_cast<float>(ms.assets.totalBytes) * kToMB, ms.assets.allocCount);
+            ImGui::Text("Physics:           %.3f / %.0f MB (%zu allocs)", static_cast<float>(ms.physics.usedBytes) * kToMB, static_cast<float>(ms.physics.totalBytes) * kToMB, ms.physics.allocCount);
+            ImGui::Text("Render:            %.3f / %.0f MB (%zu allocs)", static_cast<float>(ms.render.usedBytes) * kToMB, static_cast<float>(ms.render.totalBytes) * kToMB, ms.render.allocCount);
+            ImGui::SeparatorText("Arenas");
             ImGui::Text("RenderArena:%.3f / %.0f MB (bump)", static_cast<float>(ras.usedBytes) * kToMB, static_cast<float>(ras.totalBytes) * kToMB);
             ImGui::Text("GPU Device: %zu allocs / %.3f MB", static_cast<size_t>(ms.deviceMemory.allocationCount), static_cast<float>(ms.deviceMemory.totalBytes) * kToMB);
 

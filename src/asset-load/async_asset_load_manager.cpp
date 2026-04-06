@@ -23,7 +23,7 @@
 namespace AssetLoad
 {
 AsyncAssetLoadManager::AsyncAssetLoadManager(Core::MemoryManager& memoryManager, Render::VulkanContext* context, Render::ResourceManager* resourceManager, VkPipelineCache pipelineCache)
-    : assetsAllocator(&memoryManager.Assets()), context(context), resourceManager(resourceManager), pipelineCache(pipelineCache)
+    : memoryManager(&memoryManager), context(context), resourceManager(resourceManager), pipelineCache(pipelineCache)
 {
     assetLoadScheduler = memoryManager.PersistentAlloc<enki::TaskScheduler>(Core::AllocTag::AsyncAssetLoadManager);
 
@@ -61,7 +61,7 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Core::MemoryManager& memoryManager,
             assetLoadScheduler,
             context,
             resourceManager,
-            assetsAllocator,
+            &memoryManager,
             [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
                 QueueGPUDispatch(cmd, fence, completionSignal);
             },
@@ -76,7 +76,7 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Core::MemoryManager& memoryManager,
             assetLoadScheduler,
             context,
             resourceManager,
-            assetsAllocator,
+            &memoryManager,
             [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
                 QueueGPUDispatch(cmd, fence, completionSignal);
             },

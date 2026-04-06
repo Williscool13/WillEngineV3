@@ -7,6 +7,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <mutex>
 
 namespace Core
 {
@@ -67,7 +68,7 @@ public:
     // Must equal alignof(std::max_align_t) so returned pointers stay max-aligned.
     static constexpr size_t kHeaderSize = 16;
 
-    void Init(void* pool, size_t bytes);
+    void Init(void* pool, size_t bytes, bool bUseMutex);
 
     void* Alloc(size_t size, AllocTag tag = AllocTag::Unknown);
 
@@ -89,11 +90,11 @@ public:
         size_t usedBytes; // sum of user-requested sizes (excludes header overhead)
     };
 
-    [[nodiscard]] Stats GetStats() const;
+    [[nodiscard]] Stats GetStats();
 
     // Walks the pool and fills out[0..(Count-1)] with per-tag aggregates, indexed by tag value.
     // Always fills exactly AllocTag::Count entries.
-    void GetTagStats(TagStats out[static_cast<size_t>(AllocTag::Count)]) const;
+    void GetTagStats(TagStats out[static_cast<size_t>(AllocTag::Count)]);
 
 private:
     struct AllocHeader
@@ -116,6 +117,8 @@ private:
     size_t poolBytes{};
     size_t usedBytes_{};
     size_t allocCount_{};
+    std::mutex mutex_;
+    bool bUseMutex_{false};
 };
 } // Core
 

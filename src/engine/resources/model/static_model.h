@@ -14,6 +14,7 @@
 #include "model_types.h"
 #include "TaskScheduler.h"
 #include "../../../render/interface/render_interface.h"
+#include "asset-load/asset_load_types.h"
 #include "core/containers/inline_string.h"
 #include "core/containers/inline_path.h"
 #include "core/containers/inline_vector.h"
@@ -65,6 +66,13 @@ public:
         Loaded,
         FailedToLoad
     };
+
+    // todo this is on the way out
+    struct PhysicsCache
+    {
+        std::vector<glm::vec3> positions;
+        std::vector<uint32_t>  indices;
+    };
 public:
     StaticModel();
 
@@ -84,7 +92,7 @@ public:
     /**
      * RNG for gltf models. Hash for procedural.
      */
-    Engine::ModelID modelId{};
+    ModelID modelId{};
     ModelLoadState modelLoadState{ModelLoadState::NotLoaded};
     uint64_t acquireFrame{UINT64_MAX};
     uint64_t retireFrame{0};
@@ -103,18 +111,14 @@ public:
     Core::InlineVector<Core::BufferAcquireOperation, 8> bufferAcquireOps{};
     Core::InlineVector<Core::ImageAcquireOperation, 4> imageAcquireOps{};
 
-    struct PhysicsCache
-    {
-        std::vector<glm::vec3> positions;
-        std::vector<uint32_t>  indices;
-    };
-    std::optional<PhysicsCache> physicsCache;
+    std::optional<AssetLoad::PhysicsCache> physicsCache;
 
     // Populated by AssetManager, Only for spline models
     std::optional<SplineParams> splineParams{};
 
     ModelBounds bounds{};
 
+    // on the way out
     static ModelBounds ComputeBounds(const std::vector<glm::vec3>& positions, const std::vector<uint32_t>* indices = nullptr);
 };
 } // AssetLoad

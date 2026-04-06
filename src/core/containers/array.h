@@ -12,8 +12,7 @@
 namespace Core
 {
 /**
- * Fixed-size array with compile-time capacity. Storage is inline (embedded in the object),
- * so no allocator is needed. All N slots are always live.
+ * Fixed-size array with compile-time capacity. Storage is inline (embedded in the object), matching c++'s std::array.
  * Use when size is a compile-time constant and all elements are always valid.
  */
 template<typename T, size_t N>

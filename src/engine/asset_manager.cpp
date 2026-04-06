@@ -78,17 +78,7 @@ AssetManager::~AssetManager()
     for (auto& model : models) {
         if (!modelAllocator.IsValid(model.selfHandle)) { continue; }
         if (model.modelLoadState == StaticModel::ModelLoadState::Loaded) {
-            auto& data = model.modelData;
-            resourceManager->vertexBufferAllocator.free(data.vertexAllocation);
-            resourceManager->meshletVertexBufferAllocator.free(data.meshletVertexAllocation);
-            resourceManager->meshletTriangleBufferAllocator.free(data.meshletTriangleAllocation);
-            resourceManager->meshletBufferAllocator.free(data.meshletAllocation);
-            resourceManager->primitiveBufferAllocator.free(data.primitiveAllocation);
-            data.vertexAllocation = {};
-            data.meshletVertexAllocation = {};
-            data.meshletTriangleAllocation = {};
-            data.meshletAllocation = {};
-            data.primitiveAllocation = {};
+            model.modelData.Reset(resourceManager);
         }
     }
 }
@@ -413,32 +403,7 @@ void AssetManager::ResolveUnloads()
         if (model.refCount > 0 || model.retireFrame == 0 || currentFrame < model.retireFrame) { continue; }
 
         if (model.modelLoadState == StaticModel::ModelLoadState::Loaded) {
-            auto& data = model.modelData;
-            {
-                std::lock_guard lock(resourceManager->vertexBufferAllocatorMutex);
-                resourceManager->vertexBufferAllocator.free(data.vertexAllocation);
-            }
-            {
-                std::lock_guard lock(resourceManager->meshletVertexBufferAllocatorMutex);
-                resourceManager->meshletVertexBufferAllocator.free(data.meshletVertexAllocation);
-            }
-            {
-                std::lock_guard lock(resourceManager->meshletTriangleBufferAllocatorMutex);
-                resourceManager->meshletTriangleBufferAllocator.free(data.meshletTriangleAllocation);
-            }
-            {
-                std::lock_guard lock(resourceManager->meshletBufferAllocatorMutex);
-                resourceManager->meshletBufferAllocator.free(data.meshletAllocation);
-            }
-            {
-                std::lock_guard lock(resourceManager->primitiveBufferAllocatorMutex);
-                resourceManager->primitiveBufferAllocator.free(data.primitiveAllocation);
-            }
-            data.vertexAllocation = {};
-            data.meshletVertexAllocation = {};
-            data.meshletTriangleAllocation = {};
-            data.meshletAllocation = {};
-            data.primitiveAllocation = {};
+            model.modelData.Reset(resourceManager);
         }
 
         LOG_TRACE(Asset, "Model unloaded: {}", model.name.c_str());

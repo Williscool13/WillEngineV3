@@ -29,12 +29,12 @@ public:
 
     // Constructs from any contiguous container with Data() and Size().
     template<typename Container>
-    constexpr explicit Span(Container& c)
+    constexpr Span(Container& c)
         : data_(c.Data()), size_(c.Size())
     {}
 
     template<typename Container>
-    constexpr explicit Span(const Container& c)
+    constexpr Span(const Container& c)
         : data_(c.Data()), size_(c.Size())
     {}
 

@@ -25,79 +25,6 @@
 
 namespace AssetLoad
 {
-struct AudioLoadRequest
-{
-    Audio::WillAudio* audioEntry;
-};
-
-struct AudioLoadComplete
-{
-    Audio::WillAudio* audioEntry;
-    bool bSuccess;
-};
-
-struct PipelineLoadRequest
-{
-    Render::PipelineData* entry;
-};
-
-struct PipelineLoadComplete
-{
-    Render::PipelineData* pipelineData;
-    bool bSuccess;
-};
-
-struct GPUDispatchRequest
-{
-    VkCommandBuffer cmd;
-    VkFence fence;
-    std::binary_semaphore* completionSignal;
-};
-
-struct StaticModelLoadRequest
-{
-    Engine::StaticModel* model;
-};
-
-struct StaticModelLoadComplete
-{
-    Engine::StaticModel* model;
-    bool bSuccess;
-};
-
-struct TextureLoadRequest
-{
-    Engine::Texture* texture;
-};
-
-struct TextureLoadComplete
-{
-    Engine::Texture* texture;
-    bool bSuccess;
-};
-
-struct CubemapLoadRequest
-{
-    Render::Cubemap* cubemap;
-};
-
-struct CubemapLoadComplete
-{
-    Render::Cubemap* cubemap;
-    bool bSuccess;
-};
-
-struct SamplerLoadRequest
-{
-    Engine::Sampler* sampler;
-};
-
-struct SamplerLoadComplete
-{
-    Engine::Sampler* sampler;
-    bool bSuccess;
-};
-
 class AsyncAssetLoadManager
 {
 public:
@@ -181,11 +108,9 @@ public:
 
     void QueueGPUDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal);
 
-    Core::TlsfAllocator* GetAssetsAllocator() { return assetsAllocator; }
-
 private:
     enki::TaskScheduler* assetLoadScheduler{};
-    Core::TlsfAllocator* assetsAllocator{};
+    Core::MemoryManager* memoryManager{};
     Render::VulkanContext* context;
     Render::ResourceManager* resourceManager;
     VkPipelineCache pipelineCache;

@@ -18,6 +18,7 @@
 #include "TaskScheduler.h"
 #include "texture_generate_slot.h"
 #include "core/memory/lock_free_handle_allocator.h"
+#include "core/memory/memory_manager.h"
 
 namespace Core
 {
@@ -104,7 +105,7 @@ using ModelGenerateSlotHandle = Core::Handle<StaticModelGenerateSlot>;
 class AssetGenerator
 {
 public:
-    AssetGenerator(Core::EngineContext* ctx, Render::VulkanContext* vk, Render::RenderThread* renderThread, AssetLoad::AsyncAssetLoadManager* asyncAssetLoadManager);
+    AssetGenerator(Core::MemoryManager& memoryManager, Core::EngineContext* ctx, Render::VulkanContext* vk, Render::RenderThread* renderThread, AssetLoad::AsyncAssetLoadManager* asyncAssetLoadManager);
 
     ~AssetGenerator();
 
@@ -166,6 +167,7 @@ private:
 
     void GraphicsQueueGPUDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) const;
 
+    Core::MemoryManager* memoryManager{};
     Core::EngineContext* ctx;
     Render::VulkanContext* vk;
     Render::RenderThread* renderThread;

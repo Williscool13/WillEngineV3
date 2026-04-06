@@ -47,7 +47,13 @@ struct WStaticModelHeader
     uint32_t materialCount{0};
     uint32_t meshOffset{0};
     uint32_t meshCount{0};
+    /**
+     * bytes
+     */
     uint64_t compressedBodySize{0};
+    /**
+     * bytes
+     */
     uint64_t uncompressedBodySize{0};
     uint64_t dataOffset{0};
 };

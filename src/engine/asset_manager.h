@@ -233,11 +233,6 @@ private: // Asset Registry
 
     Core::FixedMap<StringID, CachedSceneMetadata> sceneCache;
     Core::FixedMap<StringID, CachedPrefabMetadata> prefabCache;
-
-    /**
-     * For (almost 100% chance) unique procedural shapes
-     */
-    std::mt19937_64 proceduralModelIdRng{std::random_device{}()};
 };
 } // Engine
 

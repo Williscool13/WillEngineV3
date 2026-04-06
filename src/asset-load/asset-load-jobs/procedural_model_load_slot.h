@@ -15,6 +15,11 @@
 #include "core/memory/tlsf_allocator.h"
 #include "render/shaders/model_interop.h"
 
+namespace Core
+{
+class MemoryManager;
+}
+
 namespace enki
 {
 class TaskScheduler;
@@ -36,7 +41,7 @@ public:
     ~ProceduralModelLoadSlot();
 
     void Initialize(enki::TaskScheduler* _scheduler, Render::VulkanContext* _context, Render::ResourceManager* _resourceManager,
-                    Core::TlsfAllocator* _allocator,
+                    Core::MemoryManager* _memoryManager,
                     Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> _requestDispatchCallback,
                     Core::InlineFunction<void(bool success, ProceduralModelSlotHandle slotHandle, UploadStagingSlotHandle uploadStagingSlotHandle)> _notifyCallback);
 
@@ -72,9 +77,9 @@ private:
     enki::TaskScheduler* scheduler{nullptr};
     Render::VulkanContext* context{nullptr};
     Render::ResourceManager* resourceManager{nullptr};
+    Core::MemoryManager* memoryManager{nullptr};
 
-    RawStaticModel rawData{};
-    Core::Vector<uint32_t> packedTriangles;
+    UnpackedStaticModel rawData{};
 
     Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* doneSemaphore)> _requestDispatchCallback;
     Core::InlineFunction<void(bool success, ProceduralModelSlotHandle slotHandle, UploadStagingSlotHandle uploadStagingSlotHandle)> _notifyCallback;

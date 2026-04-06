@@ -184,13 +184,13 @@ ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::ViewFamil
         }
 
         if (component.meshIndex == -1) {
-            if (model->modelData.meshes.size() == 1) {
+            if (model->modelData.meshes.Size() == 1) {
                 component.meshIndex = 0;
                 RecreateStaticMesh(component, registry, entity);
             }
             else {
                 if (ImGui::BeginCombo("Select Mesh", "")) {
-                    for (int32_t i = 0; i < static_cast<int32_t>(model->modelData.meshes.size()); i++) {
+                    for (int32_t i = 0; i < static_cast<int32_t>(model->modelData.meshes.Size()); i++) {
                         const Core::InlineString<64>& meshName = model->modelData.meshes[i].name;
                         char fallback[32];
                         if (meshName.size() == 0) { snprintf(fallback, sizeof(fallback), "Mesh %d", i); }
@@ -207,7 +207,7 @@ ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::ViewFamil
         }
 
         ImGui::Text("Mesh Index: %d", component.meshIndex);
-        if (model->modelData.meshes.size() > 1) {
+        if (model->modelData.meshes.Size() > 1) {
             if (ImGui::SmallButton("X##deselect_mesh")) {
                 component.meshIndex = -1;
                 if (runtime) runtime->primitives.Clear();
@@ -248,7 +248,7 @@ ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::ViewFamil
                 if (idx < 0 || idx >= 128 || seen[idx]) continue;
                 seen[idx] = true;
                 std::string slotName;
-                if (idx < static_cast<int32_t>(model->modelData.materials.size()) &&
+                if (idx < static_cast<int32_t>(model->modelData.materials.Size()) &&
                     !model->modelData.materials[idx].name.empty()) {
                     slotName = model->modelData.materials[idx].name;
                 }

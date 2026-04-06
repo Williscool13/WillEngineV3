@@ -151,7 +151,7 @@ private:
         // +1 for null terminator
         void* raw;
         if (data_) {
-            raw = alloc_->Realloc(data_, newCapacity + 1);
+            raw = alloc_->Realloc(data_, newCapacity + 1, tag_);
         }
         else {
             raw = alloc_->Alloc(newCapacity + 1, tag_);

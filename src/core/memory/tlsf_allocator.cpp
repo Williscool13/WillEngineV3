@@ -37,17 +37,21 @@ const char* AllocTagName(AllocTag tag)
     return "Unknown";
 }
 
-void TlsfAllocator::Init(void* pool, size_t bytes)
+void TlsfAllocator::Init(void* pool, size_t bytes, bool bUseMutex)
 {
     assert(pool != nullptr);
     assert(bytes > tlsf_size() && "pool too small for TLSF control structure");
     tlsf = tlsf_create_with_pool(pool, bytes);
     poolBytes = bytes;
+    bUseMutex_ = bUseMutex;
 }
 
 void* TlsfAllocator::Alloc(size_t size, AllocTag tag)
 {
     if (size == 0) { return nullptr; }
+    std::unique_lock lock(mutex_, std::defer_lock);
+    if (bUseMutex_) { lock.lock(); }
+
     void* raw = tlsf_malloc(static_cast<tlsf_t>(tlsf), kHeaderSize + size);
     assert(raw != nullptr && "OOM: TLSF pool exhausted");
 
@@ -70,6 +74,9 @@ void* TlsfAllocator::Realloc(void* ptr, size_t newSize, AllocTag fallbackTag)
         return nullptr;
     }
 
+    std::unique_lock lock(mutex_, std::defer_lock);
+    if (bUseMutex_) { lock.lock(); }
+
     auto* header = static_cast<AllocHeader*>(ptr) - 1;
     const AllocTag savedTag = header->tag;
     const uint32_t oldSize = header->size;
@@ -90,6 +97,8 @@ void* TlsfAllocator::Realloc(void* ptr, size_t newSize, AllocTag fallbackTag)
 void TlsfAllocator::Free(void* ptr)
 {
     if (!ptr) { return; }
+    std::unique_lock lock(mutex_, std::defer_lock);
+    if (bUseMutex_) { lock.lock(); }
 
     auto* header = static_cast<AllocHeader*>(ptr) - 1;
     usedBytes_ -= kHeaderSize + header->size;
@@ -98,8 +107,10 @@ void TlsfAllocator::Free(void* ptr)
     tlsf_free(static_cast<tlsf_t>(tlsf), header);
 }
 
-TlsfAllocator::Stats TlsfAllocator::GetStats() const
+TlsfAllocator::Stats TlsfAllocator::GetStats()
 {
+    std::unique_lock lock(mutex_, std::defer_lock);
+    if (bUseMutex_) { lock.lock(); }
     return {poolBytes, usedBytes_, poolBytes - usedBytes_, allocCount_};
 }
 
@@ -116,7 +127,7 @@ void TlsfAllocator::TagWalker(void* ptr, size_t /*size*/, int used, void* user)
     entry.usedBytes += header->size;
 }
 
-void TlsfAllocator::GetTagStats(TagStats out[static_cast<size_t>(AllocTag::Count)]) const
+void TlsfAllocator::GetTagStats(TagStats out[static_cast<size_t>(AllocTag::Count)])
 {
     constexpr auto count = static_cast<size_t>(AllocTag::Count);
     memset(out, 0, sizeof(TagStats) * count);
@@ -124,6 +135,8 @@ void TlsfAllocator::GetTagStats(TagStats out[static_cast<size_t>(AllocTag::Count
         out[i].tag = static_cast<AllocTag>(i);
     }
 
+    std::unique_lock lock(mutex_, std::defer_lock);
+    if (bUseMutex_) { lock.lock(); }
     TagWalkCtx ctx{out};
     tlsf_walk_pool(tlsf_get_pool(static_cast<tlsf_t>(tlsf)), TagWalker, &ctx);
 }

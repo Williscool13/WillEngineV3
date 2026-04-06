@@ -19,6 +19,9 @@ add_library(asset-load STATIC
         asset-load-jobs/procedural_model_load_slot.cpp
         asset-load-jobs/procedural_model_load_slot.h
         asset-load-jobs/par_shapes_impl.cpp
+        asset_load_utils.cpp
+        asset_load_utils.h
+        model_types.cpp
 )
 
 target_include_directories(asset-load PUBLIC

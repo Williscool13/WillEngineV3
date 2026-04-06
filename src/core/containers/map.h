@@ -278,7 +278,8 @@ public:
     }
 
     size_t Size() const { return size_; }
-    bool IsEmpty() const { return size_ == 0; }
+    bool   IsEmpty() const { return size_ == 0; }
+    bool   IsAllocated() const { return slots_ != nullptr; }
 
     struct Iterator
     {

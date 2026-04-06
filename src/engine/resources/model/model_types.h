@@ -14,9 +14,17 @@
 #include "engine/spline/spline.h"
 
 #include "offsetAllocator.hpp"
+#include "core/containers/heap_array.h"
 #include "engine/resources/material/material.h"
 #include "core/containers/inline_string.h"
 #include "core/containers/inline_vector.h"
+#include "core/containers/vector.h"
+#include "core/types/math.h"
+
+namespace Render
+{
+struct ResourceManager;
+}
 
 namespace Engine
 {
@@ -36,7 +44,8 @@ struct PrimitiveProperty
 struct MeshInformation
 {
     Core::InlineString<64> name;
-    Core::InlineVector<PrimitiveProperty, 8> primitiveProperties;
+    // todo parameterize this 128 primitive per mesh limit. Perhaps even increase it.
+    Core::InlineVector<PrimitiveProperty,128> primitiveProperties;
 };
 
 struct Node
@@ -48,9 +57,9 @@ struct Node
 
     uint32_t inverseBindIndex{~0u};
 
-    glm::vec3 localTranslation{0.0f};
-    glm::quat localRotation{1.0f, 0.0f, 0.0f, 0.0f};
-    glm::vec3 localScale{1.0f};
+    Vec3 localTranslation{0.0f};
+    Quat localRotation{1.0f, 0.0f, 0.0f, 0.0f};
+    Vec3 localScale{1.0f};
 };
 
 struct AnimationSampler
@@ -92,9 +101,9 @@ struct Animation
 
 struct StaticModelData
 {
-    std::vector<MeshInformation> meshes{};
-    std::vector<Node> nodes{};
-    std::vector<Material> materials{};
+    Core::HeapArray<MeshInformation> meshes{};
+    Core::HeapArray<Node> nodes{};
+    Core::HeapArray<Material> materials{};
 
     OffsetAllocator::Allocation vertexAllocation{};
     // todo index allocation for RT
@@ -113,24 +122,7 @@ struct StaticModelData
 
     StaticModelData& operator=(StaticModelData&&) noexcept = default;
 
-    void Reset()
-    {
-        meshes.clear();
-        nodes.clear();
-        materials.clear();
-
-        assert(vertexAllocation.metadata == OffsetAllocator::Allocation::NO_SPACE && "Vertex allocation should be freed before reset");
-        assert(meshletVertexAllocation.metadata == OffsetAllocator::Allocation::NO_SPACE && "Meshlet vertex allocation should be freed before reset");
-        assert(meshletTriangleAllocation.metadata == OffsetAllocator::Allocation::NO_SPACE && "Meshlet triangle allocation should be freed before reset");
-        assert(meshletAllocation.metadata == OffsetAllocator::Allocation::NO_SPACE && "Meshlet allocation should be freed before reset");
-        assert(primitiveAllocation.metadata == OffsetAllocator::Allocation::NO_SPACE && "Primitive allocation should be freed before reset");
-
-        vertexAllocation = {};
-        meshletVertexAllocation = {};
-        meshletTriangleAllocation = {};
-        meshletAllocation = {};
-        primitiveAllocation = {};
-    }
+    void Reset(Render::ResourceManager* resourceManager);
 };
 
 struct StaircaseParams

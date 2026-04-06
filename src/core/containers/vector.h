@@ -162,7 +162,7 @@ public:
         assert(alloc_ != nullptr && "Vector: no allocator");
         void* raw;
         if (data_) {
-            raw = alloc_->Realloc(data_, newCapacity * sizeof(T));
+            raw = alloc_->Realloc(data_, newCapacity * sizeof(T), tag_);
         }
         else {
             raw = alloc_->Alloc(newCapacity * sizeof(T), tag_);
@@ -241,9 +241,10 @@ public:
     T* Data() { return data_; }
     const T* Data() const { return data_; }
 
-    size_t Size() const { return size_; }
-    size_t GetCapacity() const { return capacity_; }
-    bool IsEmpty() const { return size_ == 0; }
+    [[nodiscard]] size_t Size() const { return size_; }
+    [[nodiscard]] size_t GetCapacity() const { return capacity_; }
+    [[nodiscard]] bool IsEmpty() const { return size_ == 0; }
+    [[nodiscard]] bool IsAllocated() const { return data_ != nullptr; }
 
     T* begin() { return data_; }
     T* end() { return data_ + size_; }

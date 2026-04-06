@@ -41,6 +41,7 @@ public:
     {
         size_t persistentSize;
         size_t generalPoolSize;
+        size_t assetsScratchPoolSize;
         size_t assetsPoolSize;
         size_t physicsPoolSize;
         size_t renderPoolSize;
@@ -52,19 +53,24 @@ public:
         size_t totalBytes;
         TlsfAllocator::Stats persistent;
         TlsfAllocator::Stats general;
+        TlsfAllocator::Stats assetsScratch;
         TlsfAllocator::Stats assets;
         TlsfAllocator::Stats physics;
         TlsfAllocator::Stats render;
-        struct {
+
+        struct
+        {
             uint32_t allocationCount;
             uint64_t totalBytes;
         } deviceMemory;
     };
 
     MemoryManager() = default;
+
     ~MemoryManager();
 
     MemoryManager(const MemoryManager&) = delete;
+
     MemoryManager& operator=(const MemoryManager&) = delete;
 
     void Init(const Layout& layout);
@@ -85,36 +91,45 @@ public:
     T* PersistentAllocArray(size_t count, AllocTag tag = AllocTag::Unknown);
 
     void* PersistentAllocRaw(size_t size, AllocTag tag = AllocTag::Unknown);
+
     void* GeneralAllocRaw(size_t size, AllocTag tag = AllocTag::Unknown);
+
     void* GeneralRealloc(void* ptr, size_t newSize, AllocTag tag = AllocTag::Unknown);
-    void  GeneralFree(void* ptr);
+
+    void GeneralFree(void* ptr);
 
     void* RenderAllocRaw(size_t size);
+
     void* RenderRealloc(void* ptr, size_t newSize);
-    void  RenderFree(void* ptr);
+
+    void RenderFree(void* ptr);
 
     TlsfAllocator& Persistent() { return tlsfPersistent; }
-    TlsfAllocator& General()   { return tlsfGeneral; }
-    TlsfAllocator& Assets()    { return tlsfAssets; }
-    TlsfAllocator& Physics()   { return tlsfPhysics; }
-    TlsfAllocator& Render()    { return tlsfRender; }
-    Arena&         RenderArena() { return renderArena; }
+    TlsfAllocator& General() { return tlsfGeneral; }
+    TlsfAllocator& AssetsScratch() { return tlsfAssetsScratch; }
+    TlsfAllocator& Assets() { return tlsfAssets; }
+    TlsfAllocator& Physics() { return tlsfPhysics; }
+    TlsfAllocator& Render() { return tlsfRender; }
+    Arena& RenderArena() { return renderArena; }
 
-    [[nodiscard]] Stats GetStats() const;
+    [[nodiscard]] Stats GetStats();
 
     void TrackDeviceAlloc(uint64_t size);
+
     void TrackDeviceFree(uint64_t size);
 
 private:
-    void*  megaBuffer{};
+    void* megaBuffer{};
     size_t totalSize{};
 
     TlsfAllocator tlsfPersistent;
     TlsfAllocator tlsfGeneral;
+
+    TlsfAllocator tlsfAssetsScratch;
     TlsfAllocator tlsfAssets;
     TlsfAllocator tlsfPhysics;
     TlsfAllocator tlsfRender;
-    Arena         renderArena;
+    Arena renderArena;
 
     std::atomic<uint32_t> deviceAllocCount{0};
     std::atomic<uint64_t> deviceAllocBytes{0};

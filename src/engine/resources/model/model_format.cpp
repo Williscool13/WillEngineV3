@@ -45,6 +45,7 @@ bool WriteWStaticModelHeader(std::ostream& out, const WStaticModelHeader& header
 
 std::optional<WStaticModelHeader> ReadWStaticModelHeader(std::istream& in)
 {
+    // todo fewer strings please. and those other std:: are they allocating?
     auto trimCR = [](std::string& s) {
         if (!s.empty() && s.back() == '\r') s.pop_back();
     };

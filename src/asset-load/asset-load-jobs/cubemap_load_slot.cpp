@@ -150,6 +150,7 @@ bool CubemapLoadSlot::LoadCubemapFromDisk()
         }
     }
 
+    // todo do ktx unpacking myself to remove heap allocs
     {
         ZoneScopedN("KTXCreateFromFile");
         ktx_error_code_e result = ktxTexture2_CreateFromNamedFile(

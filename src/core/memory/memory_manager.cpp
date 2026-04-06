@@ -21,27 +21,30 @@ void MemoryManager::Init(const Layout& layout)
 
     const size_t persistentSz = AlignUp(layout.persistentSize, kAlign);
     const size_t generalSz = AlignUp(layout.generalPoolSize, kAlign);
+    const size_t assetsScratchSz = AlignUp(layout.assetsScratchPoolSize, kAlign);
     const size_t assetsSz = AlignUp(layout.assetsPoolSize, kAlign);
     const size_t physicsSz = AlignUp(layout.physicsPoolSize, kAlign);
     const size_t renderSz = AlignUp(layout.renderPoolSize, kAlign);
     const size_t renderArenaSz = AlignUp(layout.renderArenaSize, kAlign);
 
-    totalSize = persistentSz + generalSz + assetsSz + physicsSz + renderSz + renderArenaSz;
+    totalSize = persistentSz + generalSz + assetsScratchSz + assetsSz + physicsSz + renderSz + renderArenaSz;
 
     megaBuffer = malloc(totalSize);
     assert(megaBuffer != nullptr && "MemoryManager: mega allocation failed");
 
     auto* cursor = static_cast<uint8_t*>(megaBuffer);
 
-    tlsfPersistent.Init(cursor, persistentSz);
+    tlsfPersistent.Init(cursor, persistentSz, false);
     cursor += persistentSz;
-    tlsfGeneral.Init(cursor, generalSz);
+    tlsfGeneral.Init(cursor, generalSz, false);
     cursor += generalSz;
-    tlsfAssets.Init(cursor, assetsSz);
+    tlsfAssets.Init(cursor, assetsSz, true);
     cursor += assetsSz;
-    tlsfPhysics.Init(cursor, physicsSz);
+    tlsfAssetsScratch.Init(cursor, assetsScratchSz, true);
+    cursor += assetsScratchSz;
+    tlsfPhysics.Init(cursor, physicsSz, false);
     cursor += physicsSz;
-    tlsfRender.Init(cursor, renderSz);
+    tlsfRender.Init(cursor, renderSz, false);
     cursor += renderSz;
     renderArena = Arena(cursor, renderArenaSz);
 }
@@ -97,12 +100,13 @@ void MemoryManager::RenderFree(void* ptr)
     tlsfRender.Free(ptr);
 }
 
-MemoryManager::Stats MemoryManager::GetStats() const
+MemoryManager::Stats MemoryManager::GetStats()
 {
     Stats s{
         totalSize,
         tlsfPersistent.GetStats(),
         tlsfGeneral.GetStats(),
+        tlsfAssetsScratch.GetStats(),
         tlsfAssets.GetStats(),
         tlsfPhysics.GetStats(),
         tlsfRender.GetStats(),

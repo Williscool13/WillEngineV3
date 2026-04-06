@@ -17,6 +17,8 @@
 #include <glm/gtc/constants.hpp>
 #include <mutex>
 
+#include "asset-load/asset_load_utils.h"
+#include "core/memory/memory_manager.h"
 #include "par/par_shapes.h"
 #include "par/par_shapes_ext.h"
 #include "meshoptimizer/src/meshoptimizer.h"
@@ -31,15 +33,14 @@ void ProceduralModelLoadSlot::Initialize(
     enki::TaskScheduler* _scheduler,
     Render::VulkanContext* _context,
     Render::ResourceManager* _resourceManager,
-    Core::TlsfAllocator* _allocator,
+    Core::MemoryManager* _memoryManager,
     Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> dispatchCallback,
     Core::InlineFunction<void(bool success, ProceduralModelSlotHandle slotHandle, UploadStagingSlotHandle uploadStagingSlotHandle)> notifyCallback)
 {
     scheduler = _scheduler;
     context = _context;
     resourceManager = _resourceManager;
-    rawData.Init(_allocator);
-    packedTriangles = Core::Vector<uint32_t>(_allocator, Core::AllocTag::AssetModel);
+    memoryManager = _memoryManager;
     _requestDispatchCallback = std::move(dispatchCallback);
     _notifyCallback = std::move(notifyCallback);
 }
@@ -69,8 +70,8 @@ void ProceduralModelLoadSlot::Clear()
     outputModel = nullptr;
     uploadStaging = nullptr;
 
-    rawData.Reset();
-    packedTriangles.Clear();
+    // RAII dealloc
+    rawData = {};
 }
 
 void ProceduralModelLoadSlot::GenerateModelTask::ExecuteRange(enki::TaskSetPartition range, uint32_t threadNum)
@@ -226,6 +227,7 @@ bool ProceduralModelLoadSlot::GenerateStaircase(const Engine::StaircaseParams& p
     return FinalizeGeometry(vertices, indices);
 }
 
+// todo individually comb through and remove all vectors
 bool ProceduralModelLoadSlot::FinalizeGeometry(std::vector<Vertex>& vertices, std::vector<uint32_t>& indices)
 {
     if (vertices.empty() || indices.empty()) return false;
@@ -284,28 +286,38 @@ bool ProceduralModelLoadSlot::FinalizeGeometry(std::vector<Vertex>& vertices, st
 
     // Fill rawData
     auto vertexOffset = static_cast<uint32_t>(rawData.vertices.Size());
+    assert(rawData.vertices.Size() == 0);
+    assert(rawData.indices.Size() == 0);
     auto meshletVertexOffset = static_cast<uint32_t>(rawData.meshletVertices.Size());
     auto meshletTriangleOffset = static_cast<uint32_t>(rawData.meshletTriangles.Size());
     auto meshletBaseOffset = static_cast<uint32_t>(rawData.meshlets.Size());
 
-    rawData.vertices.Reserve(rawData.vertices.Size() + vertices.size());
-    for (auto& v : vertices) { rawData.vertices.PushBack(v); }
+    rawData.vertices = Core::HeapArray<Vertex>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, vertices.size());
+    rawData.indices = Core::HeapArray<uint32_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, indices.size());
+    rawData.meshletVertices = Core::HeapArray<uint32_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, meshletVertices.size());
+    rawData.meshletTriangles = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, meshletTriangles.size());
+    rawData.meshlets = Core::HeapArray<Meshlet>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, meshlets.size());
 
-    auto indexOffset = static_cast<uint32_t>(rawData.indices.Size());
-    for (uint32_t idx : indices) { rawData.indices.PushBack(idx + vertexOffset); }
-
-    rawData.meshletVertices.Reserve(rawData.meshletVertices.Size() + meshletVertices.size());
-    for (uint32_t mv : meshletVertices) { rawData.meshletVertices.PushBack(mv); }
-
-    rawData.meshletTriangles.Reserve(rawData.meshletTriangles.Size() + meshletTriangles.size());
-    for (uint8_t mt : meshletTriangles) { rawData.meshletTriangles.PushBack(mt); }
-
-    for (auto& m : meshlets) {
+    // todo remove the std containers here too
+    for (size_t i = 0; i < vertices.size(); ++i) {
+        rawData.vertices[i] = vertices[i];
+    }
+    for (size_t i = 0; i < indices.size(); ++i) {
+        rawData.indices[i] = indices[i];
+    }
+    for (size_t i = 0; i < meshletVertices.size(); ++i) {
+        rawData.meshletVertices[i] = meshletVertices[i];
+    }
+    for (size_t i = 0; i < meshletTriangles.size(); ++i) {
+        rawData.meshletTriangles[i] = meshletTriangles[i];
+    }
+    for (size_t i = 0; i < meshlets.size(); ++i) {
+        meshopt_Meshlet& m = meshlets[i];
         meshopt_Bounds bounds = meshopt_computeMeshletBounds(
             &meshletVertices[m.vertex_offset], &meshletTriangles[m.triangle_offset], m.triangle_count,
             reinterpret_cast<const float*>(vertices.data()), vertices.size(), sizeof(Vertex));
 
-        rawData.meshlets.PushBack({
+        rawData.meshlets[i] = {
             .meshletBoundingSphere = {bounds.center[0], bounds.center[1], bounds.center[2], bounds.radius},
             .coneApex = {bounds.cone_apex[0], bounds.cone_apex[1], bounds.cone_apex[2]},
             .coneCutoff = bounds.cone_cutoff,
@@ -315,51 +327,63 @@ bool ProceduralModelLoadSlot::FinalizeGeometry(std::vector<Vertex>& vertices, st
             .meshletTriangleOffset = meshletTriangleOffset + m.triangle_offset,
             .meshletVertexCount = m.vertex_count,
             .meshletTriangleCount = m.triangle_count,
-        });
+        };
     }
 
+    rawData.allMeshes = Core::HeapArray<Engine::MeshInformation>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, 1);
+    rawData.allMeshes[0].name = Core::InlineString<64>(outputModel->name.c_str());
+    rawData.allMeshes[0].primitiveProperties.PushBack({static_cast<uint32_t>(rawData.primitives.Size()), -1});
+
     auto meshletCount = static_cast<uint32_t>(meshlets.size());
-    Primitive primitiveData{};
-    primitiveData.meshletOffset = glm::ivec4(static_cast<int>(meshletBaseOffset));
-    primitiveData.meshletCount = glm::ivec4(static_cast<int>(meshletCount));
-    primitiveData.boundingSphere = {center, radius};
-    primitiveData.bHasTransparent = 0;
-    primitiveData.indexOffset = indexOffset;
+    rawData.primitives = Core::HeapArray<Primitive>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, 1);
+    rawData.primitives[0].meshletOffset = glm::ivec4(static_cast<int>(meshletBaseOffset));
+    rawData.primitives[0].meshletCount = glm::ivec4(static_cast<int>(meshletCount));
+    rawData.primitives[0].boundingSphere = {center, radius};
+    rawData.primitives[0].bHasTransparent = 0;
+    rawData.primitives[0].indexOffset = 0;
 
-    Engine::MeshInformation meshInfo;
-    meshInfo.name = Core::InlineString<64>(outputModel->name.c_str());
-    meshInfo.primitiveProperties.PushBack({static_cast<uint32_t>(rawData.primitives.Size()), -1});
+    // Procedural models strictly do not come with a material.
+    // rawData.materials = Core::HeapArray<Primitive>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, materials.size());
 
-    rawData.primitives.PushBack(primitiveData);
-    rawData.allMeshes.PushBack(std::move(meshInfo)); {
-        std::vector<glm::vec3> positions;
-        positions.reserve(vertices.size());
-        for (const auto& v : vertices) positions.push_back(v.position); {
-            Engine::StaticModel::PhysicsCache cache;
-            cache.positions = positions;
-            cache.indices = indices;
+    //
+    {
+        outputModel->physicsCache = PhysicsCache{};
 
-            constexpr size_t kSimplifyThreshold = 1500;
-            constexpr size_t kSimplifyFloor = 1500;
-            constexpr float kSimplifyRatio = 0.15f;
-            constexpr float kSimplifyError = 0.01f;
-            if (cache.indices.size() > kSimplifyThreshold) {
-                const size_t target = std::max(kSimplifyFloor, static_cast<size_t>(static_cast<float>(cache.indices.size()) * kSimplifyRatio));
-                std::vector<uint32_t> simplified(cache.indices.size());
-                const size_t result = meshopt_simplify(
-                    simplified.data(),
-                    cache.indices.data(), cache.indices.size(),
-                    &cache.positions[0].x, cache.positions.size(), sizeof(glm::vec3),
-                    target, kSimplifyError
-                );
-                simplified.resize(result);
-                cache.indices = std::move(simplified);
-            }
-
-            outputModel->physicsCache = std::move(cache);
+        auto& physicsCache = outputModel->physicsCache.value();
+        physicsCache.positions = Core::HeapArray<Vec3>(&memoryManager->Assets(), Core::AllocTag::AssetModel, rawData.vertices.Size());
+        for (size_t i = 0; i < rawData.vertices.Size(); ++i) {
+            physicsCache.positions[i] = rawData.vertices[i].position;
         }
 
-        outputModel->bounds = Engine::StaticModel::ComputeBounds(positions, &indices);
+        physicsCache.indices = Core::HeapArray<uint32_t>(&memoryManager->Assets(), Core::AllocTag::AssetModel, rawData.indices.Size());
+        for (size_t i = 0; i < rawData.indices.Size(); ++i) {
+            physicsCache.indices[i] = rawData.indices[i];
+        }
+
+        // Always need to compute bounds here for procedural
+        // Compute with full fidelity index buffer
+        outputModel->bounds = ComputeBounds(physicsCache.positions, physicsCache.indices);
+
+        // todo parameterize
+        constexpr size_t kSimplifyThreshold = 1500;
+        constexpr size_t kSimplifyFloor = 1500;
+        constexpr float kSimplifyRatio = 0.15f;
+        constexpr float kSimplifyError = 0.01f;
+        if (physicsCache.indices.Size() > kSimplifyThreshold) {
+            const size_t target = std::max(kSimplifyFloor, static_cast<size_t>(physicsCache.indices.Size() * kSimplifyRatio));
+            Core::HeapArray<uint32_t> simplified = Core::HeapArray<uint32_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, physicsCache.indices.Size());
+            const size_t result = meshopt_simplify(
+                simplified.Data(),
+                physicsCache.indices.Data(), physicsCache.indices.Size(),
+                &physicsCache.positions[0].x, physicsCache.positions.Size(), sizeof(Vec3),
+                target, kSimplifyError
+            );
+
+            physicsCache.indices = Core::HeapArray<uint32_t>(&memoryManager->Assets(), Core::AllocTag::AssetModel, result);
+            for (size_t i = 0; i < result; ++i) {
+                physicsCache.indices[i] = simplified[i];
+            }
+        }
     }
 
     return true;
@@ -1220,9 +1244,7 @@ bool ProceduralModelLoadSlot::GenerateHemisphere(const Engine::HemisphereParams&
     const float pi = glm::pi<float>();
 
     std::vector<Vertex> vertices;
-    std::vector<uint32_t> indices;
-
-    {
+    std::vector<uint32_t> indices; {
         Vertex v{};
         v.position = {0, r, 0};
         v.normal = {0, 1, 0};
@@ -1758,9 +1780,9 @@ bool ProceduralModelLoadSlot::GenerateCurvedRamp(const Engine::CurvedRampParams&
     auto emitFan = [&](uint32_t base, int count, int side) {
         for (int i = 1; i < count - 1; i++) {
             if (side == 0)
-                indices.insert(indices.end(), {base, base + (uint32_t)(i + 1), base + (uint32_t)i});
+                indices.insert(indices.end(), {base, base + (uint32_t) (i + 1), base + (uint32_t) i});
             else
-                indices.insert(indices.end(), {base, base + (uint32_t)i, base + (uint32_t)(i + 1)});
+                indices.insert(indices.end(), {base, base + (uint32_t) i, base + (uint32_t) (i + 1)});
         }
     };
 
@@ -1785,7 +1807,8 @@ bool ProceduralModelLoadSlot::GenerateCurvedRamp(const Engine::CurvedRampParams&
             }
             pushVert({x, 0, totalDepth}, n, 1, 0);
             emitFan(base, 2 + profCount + 1, side);
-        } else {
+        }
+        else {
             // Near fan: bottom-near corner, wall 1, curve 1, flat
             {
                 uint32_t base = static_cast<uint32_t>(vertices.size());
@@ -1835,8 +1858,12 @@ bool ProceduralModelLoadSlot::GenerateBowl(const Engine::BowlParams& p)
 
     // Vertical wall above the curve (if h > cR)
     if (h > cR) {
-        profR.push_back(flatR + cR);  profY.push_back(lip + h);   profN.push_back({-1.0f, 0.0f});
-        profR.push_back(flatR + cR);  profY.push_back(lip + cR);  profN.push_back({-1.0f, 0.0f});
+        profR.push_back(flatR + cR);
+        profY.push_back(lip + h);
+        profN.push_back({-1.0f, 0.0f});
+        profR.push_back(flatR + cR);
+        profY.push_back(lip + cR);
+        profN.push_back({-1.0f, 0.0f});
     }
 
     // Quarter-circle from wall down to floor
@@ -1913,7 +1940,7 @@ bool ProceduralModelLoadSlot::GenerateBowl(const Engine::BowlParams& p)
             vertices.push_back(v);
         }
         for (int j = 0; j < N; j++)
-            indices.insert(indices.end(), {base, base + 1 + (uint32_t)j, base + 1 + (uint32_t)((j + 1) % N)});
+            indices.insert(indices.end(), {base, base + 1 + (uint32_t) j, base + 1 + (uint32_t) ((j + 1) % N)});
     }
 
     // Outer wall (vertical cylinder at R = flatR + cR, from Y=0 to Y=lip+h)
@@ -2212,81 +2239,66 @@ bool ProceduralModelLoadSlot::GenerateSpline(const Engine::SplineParams& p)
 
 bool ProceduralModelLoadSlot::AllocateGPUResources() const
 {
-    size_t sizeVertices = rawData.vertices.Size() * sizeof(Vertex); {
-        std::lock_guard lock(resourceManager->vertexBufferAllocatorMutex);
-        outputModel->modelData.vertexAllocation = resourceManager->vertexBufferAllocator.allocate(sizeVertices);
-        if (outputModel->modelData.vertexAllocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
-            SPDLOG_ERROR("[ProceduralModelLoadSlot] Not enough space in mega vertex buffer");
+    struct BufferAlloc
+    {
+        std::mutex* mutex;
+        OffsetAllocator::Allocator* allocator;
+        OffsetAllocator::Allocation* allocation;
+    };
+
+    Core::InlineVector<BufferAlloc, 5> allocated;
+
+    auto rollback = [&]() {
+        for (auto& prev : allocated) {
+            std::lock_guard lock(*prev.mutex);
+            prev.allocator->free(*prev.allocation);
+        }
+    };
+
+    auto tryAlloc = [&](std::mutex& m, OffsetAllocator::Allocator& a, OffsetAllocator::Allocation& out, size_t size, const char* name) -> bool {
+        std::lock_guard lock(m);
+        out = a.allocate(size);
+        if (out.metadata == OffsetAllocator::Allocation::NO_SPACE) {
+            SPDLOG_ERROR("[ProceduralModelLoadSlot] Not enough space in {}", name);
             return false;
         }
+        allocated.PushBack({&m, &a, &out});
+        return true;
+    };
+
+    if (!tryAlloc(resourceManager->vertexBufferAllocatorMutex, resourceManager->vertexBufferAllocator,
+                  outputModel->modelData.vertexAllocation, rawData.vertices.Size() * sizeof(Vertex),
+                  "mega vertex buffer")) {
+        rollback();
+        return false;
     }
 
-    size_t sizeMeshletVertices = rawData.meshletVertices.Size() * sizeof(uint32_t); {
-        std::lock_guard lock(resourceManager->meshletVertexBufferAllocatorMutex);
-        outputModel->modelData.meshletVertexAllocation = resourceManager->meshletVertexBufferAllocator.allocate(sizeMeshletVertices);
-        if (outputModel->modelData.meshletVertexAllocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
-            std::lock_guard cleanupLock(resourceManager->vertexBufferAllocatorMutex);
-            resourceManager->vertexBufferAllocator.free(outputModel->modelData.vertexAllocation);
-            SPDLOG_ERROR("[ProceduralModelLoadSlot] Not enough space in mega meshlet vertex buffer");
-            return false;
-        }
+    if (!tryAlloc(resourceManager->meshletVertexBufferAllocatorMutex, resourceManager->meshletVertexBufferAllocator,
+                  outputModel->modelData.meshletVertexAllocation, rawData.meshletVertices.Size() * sizeof(uint32_t),
+                  "mega meshlet vertex buffer")) {
+        rollback();
+        return false;
     }
 
-    size_t sizeMeshletTriangles = rawData.meshletTriangles.Size() / 3 * sizeof(uint32_t); {
-        std::lock_guard lock(resourceManager->meshletTriangleBufferAllocatorMutex);
-        outputModel->modelData.meshletTriangleAllocation = resourceManager->meshletTriangleBufferAllocator.allocate(sizeMeshletTriangles);
-        if (outputModel->modelData.meshletTriangleAllocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
-            {
-                std::lock_guard cleanupLock(resourceManager->vertexBufferAllocatorMutex);
-                resourceManager->vertexBufferAllocator.free(outputModel->modelData.vertexAllocation);
-            } {
-                std::lock_guard cleanupLock(resourceManager->meshletVertexBufferAllocatorMutex);
-                resourceManager->meshletVertexBufferAllocator.free(outputModel->modelData.meshletVertexAllocation);
-            }
-            SPDLOG_ERROR("[ProceduralModelLoadSlot] Not enough space in mega meshlet triangle buffer");
-            return false;
-        }
+    if (!tryAlloc(resourceManager->meshletTriangleBufferAllocatorMutex, resourceManager->meshletTriangleBufferAllocator,
+                  outputModel->modelData.meshletTriangleAllocation, rawData.meshletTriangles.Size() / 3 * sizeof(uint32_t),
+                  "mega meshlet triangle buffer")) {
+        rollback();
+        return false;
     }
 
-    size_t sizeMeshlets = rawData.meshlets.Size() * sizeof(Meshlet); {
-        std::lock_guard lock(resourceManager->meshletBufferAllocatorMutex);
-        outputModel->modelData.meshletAllocation = resourceManager->meshletBufferAllocator.allocate(sizeMeshlets);
-        if (outputModel->modelData.meshletAllocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
-            {
-                std::lock_guard cleanupLock(resourceManager->vertexBufferAllocatorMutex);
-                resourceManager->vertexBufferAllocator.free(outputModel->modelData.vertexAllocation);
-            } {
-                std::lock_guard cleanupLock(resourceManager->meshletVertexBufferAllocatorMutex);
-                resourceManager->meshletVertexBufferAllocator.free(outputModel->modelData.meshletVertexAllocation);
-            } {
-                std::lock_guard cleanupLock(resourceManager->meshletTriangleBufferAllocatorMutex);
-                resourceManager->meshletTriangleBufferAllocator.free(outputModel->modelData.meshletTriangleAllocation);
-            }
-            SPDLOG_ERROR("[ProceduralModelLoadSlot] Not enough space in mega meshlet buffer");
-            return false;
-        }
+    if (!tryAlloc(resourceManager->meshletBufferAllocatorMutex, resourceManager->meshletBufferAllocator,
+                  outputModel->modelData.meshletAllocation, rawData.meshlets.Size() * sizeof(Meshlet),
+                  "mega meshlet buffer")) {
+        rollback();
+        return false;
     }
 
-    size_t sizePrimitives = rawData.primitives.Size() * sizeof(Primitive); {
-        std::lock_guard lock(resourceManager->primitiveBufferAllocatorMutex);
-        outputModel->modelData.primitiveAllocation = resourceManager->primitiveBufferAllocator.allocate(sizePrimitives);
-        if (outputModel->modelData.primitiveAllocation.metadata == OffsetAllocator::Allocation::NO_SPACE) {
-            {
-                std::lock_guard cleanupLock(resourceManager->vertexBufferAllocatorMutex);
-                resourceManager->vertexBufferAllocator.free(outputModel->modelData.vertexAllocation);
-            } {
-                std::lock_guard cleanupLock(resourceManager->meshletVertexBufferAllocatorMutex);
-                resourceManager->meshletVertexBufferAllocator.free(outputModel->modelData.meshletVertexAllocation);
-            } {
-                std::lock_guard cleanupLock(resourceManager->meshletTriangleBufferAllocatorMutex);
-                resourceManager->meshletTriangleBufferAllocator.free(outputModel->modelData.meshletTriangleAllocation);
-            } {
-                std::lock_guard cleanupLock(resourceManager->meshletBufferAllocatorMutex);
-                resourceManager->meshletBufferAllocator.free(outputModel->modelData.meshletAllocation);
-            }
-            SPDLOG_ERROR("[ProceduralModelLoadSlot] Not enough space in mega primitive buffer");
-            return false;
-        }
+    if (!tryAlloc(resourceManager->primitiveBufferAllocatorMutex, resourceManager->primitiveBufferAllocator,
+                  outputModel->modelData.primitiveAllocation, rawData.primitives.Size() * sizeof(Primitive),
+                  "mega primitive buffer")) {
+        rollback();
+        return false;
     }
 
     return true;
@@ -2314,22 +2326,34 @@ void ProceduralModelLoadSlot::PrepareUploadData()
         for (auto& primitiveIndex : mesh.primitiveProperties) {
             primitiveIndex.index += primitiveOffsetCount;
         }
+    } {
+        Core::HeapArray<Engine::MeshInformation>& dst = outputModel->modelData.meshes;
+        assert(!dst.IsAllocated() && "modelData.meshes was found to be allocated (memory leak)");
+        dst = Core::HeapArray<Engine::MeshInformation>(&memoryManager->Assets(), Core::AllocTag::AssetModel, rawData.allMeshes.Size());
+        for (size_t i = 0; i < rawData.allMeshes.Size(); ++i) {
+            dst[i] = rawData.allMeshes[i];
+        }
     }
 
-    { auto& dst = outputModel->modelData.meshes; dst.clear(); dst.reserve(rawData.allMeshes.Size());
-      for (auto& m : rawData.allMeshes) { dst.push_back(std::move(m)); } }
-    { auto& dst = outputModel->modelData.nodes; dst.clear(); dst.reserve(rawData.nodes.Size());
-      for (auto& n : rawData.nodes) { dst.push_back(std::move(n)); } }
-    { auto& dst = outputModel->modelData.materials; dst.clear(); dst.reserve(rawData.materials.Size());
-      for (auto& m : rawData.materials) { dst.push_back(std::move(m)); } }
+    // No nodes for procedural
+    /*{
+        Core::HeapArray<Engine::Node>& dst = outputModel->modelData.nodes;
+        assert(!dst.IsAllocated() && "modelData.nodes was found to be allocated (memory leak)");
+        dst = Core::HeapArray<Engine::Node>(&memoryManager->Assets(), Core::AllocTag::AssetModel, rawData.nodes.Size());
+        for (size_t i = 0; i < rawData.nodes.Size(); ++i) {
+            dst[i] = rawData.nodes[i];
+        }
+    }*/
 
-    packedTriangles.Reserve(rawData.meshletTriangles.Size() / 3);
-    for (size_t i = 0; i < rawData.meshletTriangles.Size(); i += 3) {
-        uint32_t packed = rawData.meshletTriangles[i + 0] |
-                          (rawData.meshletTriangles[i + 1] << 8) |
-                          (rawData.meshletTriangles[i + 2] << 16);
-        packedTriangles.PushBack(packed);
-    }
+    // No materials for procedural
+    /*{
+        Core::HeapArray<Engine::Material>& dst = outputModel->modelData.materials;
+        assert(!dst.IsAllocated() && "modelData.materials was found to be allocated (memory leak)");
+        dst = Core::HeapArray<Engine::Material>(&memoryManager->Assets(), Core::AllocTag::AssetModel, rawData.materials.Size());
+        for (size_t i = 0; i < rawData.materials.Size(); ++i) {
+            dst[i] = rawData.materials[i];
+        }
+    }*/
 }
 
 void ProceduralModelLoadSlot::UploadGeometry(VkCommandBuffer cmd, const Core::InlineFunction<void(bool)>& submitAndWait)
@@ -2379,6 +2403,15 @@ void ProceduralModelLoadSlot::UploadGeometry(VkCommandBuffer cmd, const Core::In
 
     uploadBuffer(rawData.meshletVertices.Data(), rawData.meshletVertices.Size(), sizeof(uint32_t),
                  resourceManager->megaMeshletVerticesBuffer.handle, outputModel->modelData.meshletVertexAllocation.offset);
+
+    // Pack triangles
+    Core::HeapArray<uint32_t> packedTriangles(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, rawData.meshletTriangles.Size() / 3);
+    for (size_t i = 0; i < rawData.meshletTriangles.Size(); i += 3) {
+        uint32_t packed = rawData.meshletTriangles[i + 0] |
+                          (rawData.meshletTriangles[i + 1] << 8) |
+                          (rawData.meshletTriangles[i + 2] << 16);
+        packedTriangles[i / 3] = packed;
+    }
 
     uploadBuffer(packedTriangles.Data(), packedTriangles.Size(), sizeof(uint32_t),
                  resourceManager->megaMeshletTrianglesBuffer.handle, outputModel->modelData.meshletTriangleAllocation.offset);
