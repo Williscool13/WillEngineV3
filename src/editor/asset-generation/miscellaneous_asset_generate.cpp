@@ -10,7 +10,12 @@
 #include <semaphore>
 #include <tracy/Tracy.hpp>
 
+#include "core/containers/function.h"
+#include "core/containers/heap_array.h"
+#include "core/containers/inline_function.h"
+#include "core/containers/vector.h"
 #include "core/hash/fnv_1_a.h"
+#include "core/memory/memory_manager.h"
 #include "engine/compression/compression.h"
 #include "engine/logging/engine_log.h"
 #include "engine/resources/texture/texture_format.h"
@@ -24,19 +29,19 @@
 
 namespace Editor
 {
-bool WriteSimpleRGBA8WTexture(const char* outputPath, Engine::TextureID id, const char* name, uint32_t w, uint32_t h, const uint8_t* rgba)
+bool WriteSimpleRGBA8WTexture(Core::MemoryManager* memoryManager, const char* outputPath, Engine::TextureID id, const char* name, uint32_t w, uint32_t h, const uint8_t* rgba)
 {
     ktxTexture2* texture;
     ktxTextureCreateInfo createInfo{};
-    createInfo.vkFormat        = VK_FORMAT_R8G8B8A8_SRGB;
-    createInfo.baseWidth       = w;
-    createInfo.baseHeight      = h;
-    createInfo.baseDepth       = 1;
-    createInfo.numDimensions   = 2;
-    createInfo.numLevels       = 1;
-    createInfo.numLayers       = 1;
-    createInfo.numFaces        = 1;
-    createInfo.isArray         = KTX_FALSE;
+    createInfo.vkFormat = VK_FORMAT_R8G8B8A8_SRGB;
+    createInfo.baseWidth = w;
+    createInfo.baseHeight = h;
+    createInfo.baseDepth = 1;
+    createInfo.numDimensions = 2;
+    createInfo.numLevels = 1;
+    createInfo.numLayers = 1;
+    createInfo.numFaces = 1;
+    createInfo.isArray = KTX_FALSE;
     createInfo.generateMipmaps = KTX_FALSE;
 
     ktx_error_code_e result = ktxTexture2_Create(&createInfo, KTX_TEXTURE_CREATE_ALLOC_STORAGE, &texture);
@@ -50,8 +55,9 @@ bool WriteSimpleRGBA8WTexture(const char* outputPath, Engine::TextureID id, cons
     constexpr char writer[] = "WillEngine";
     ktxHashList_AddKVPair(&texture->kvDataHead, KTX_WRITER_KEY, sizeof(writer), writer);
 
+    // todo: remove ktxlib from this whole thing is possible
     ktx_uint8_t* ktxBytes{nullptr};
-    ktx_size_t   ktxSize{0};
+    ktx_size_t ktxSize{0};
     result = ktxTexture2_WriteToMemory(texture, &ktxBytes, &ktxSize);
     ktxTexture_Destroy(ktxTexture(texture));
     if (result != KTX_SUCCESS) {
@@ -59,16 +65,19 @@ bool WriteSimpleRGBA8WTexture(const char* outputPath, Engine::TextureID id, cons
         return false;
     }
 
-    std::vector<uint8_t> compressed = Engine::CompressLZ4(ktxBytes, ktxSize);
+    auto maxCompressedSize = Engine::CompressLZ4MaxSize(ktxSize);
+    auto compressed = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, maxCompressedSize);
+    size_t realSize = Engine::CompressLZ4(ktxBytes, ktxSize, compressed.Data(), compressed.Size());
+
     free(ktxBytes);
 
     Engine::WTextureHeader header{};
     header.textureId = id.id;
-    header.width     = w;
-    header.height    = h;
-    header.mipCount  = 1;
-    header.uncompressedSize = static_cast<uint64_t>(ktxSize);
-    header.dataSize  = static_cast<uint64_t>(compressed.size());
+    header.width = w;
+    header.height = h;
+    header.mipCount = 1;
+    header.uncompressedSize = ktxSize;
+    header.dataSize = realSize;
     strncpy_s(header.name, name, Engine::WTEXTURE_NAME_LENGTH - 1);
 
     Platform::CreateDirectories(Core::Path(outputPath).Parent().c_str());
@@ -77,13 +86,13 @@ bool WriteSimpleRGBA8WTexture(const char* outputPath, Engine::TextureID id, cons
         LOG_ERROR(Asset, "Failed to write .wtexture: {}", outputPath);
         return false;
     }
-    f.write(reinterpret_cast<const char*>(compressed.data()), static_cast<std::streamsize>(compressed.size()));
+    f.write(reinterpret_cast<const char*>(compressed.Data()), static_cast<std::streamsize>(realSize));
 
     LOG_INFO(Asset, "Wrote {}", outputPath);
     return true;
 }
 
-void CreateCriticalEngineResources()
+void CreateCriticalEngineResources(Core::MemoryManager* memoryManager)
 {
     const Core::Path texturesPath = Platform::GetAssetPath() / "textures";
 
@@ -91,9 +100,9 @@ void CreateCriticalEngineResources()
     if (!whitePath.Exists()) {
         constexpr uint8_t pixels[4] = {255, 255, 255, 255};
         WriteSimpleRGBA8WTexture(
+            memoryManager,
             whitePath.c_str(),
-            Engine::TextureID(fnv1a64("white", 5)),
-            "engine_default_white", 1, 1, pixels
+            Engine::TextureID(fnv1a64("white", 5)), "engine_default_white", 1, 1, pixels
         );
     }
 
@@ -101,7 +110,7 @@ void CreateCriticalEngineResources()
     if (!errorPath.Exists()) {
         // 4x4 alternating magenta/black checkerboard
         constexpr uint8_t magenta[4] = {255, 0, 255, 255};
-        constexpr uint8_t black[4]   = {0,   0, 0,   255};
+        constexpr uint8_t black[4] = {0, 0, 0, 255};
         uint8_t pixels[4 * 4 * 4];
         for (uint32_t y = 0; y < 4; ++y) {
             for (uint32_t x = 0; x < 4; ++x) {
@@ -109,20 +118,21 @@ void CreateCriticalEngineResources()
             }
         }
         WriteSimpleRGBA8WTexture(
+            memoryManager,
             errorPath.c_str(),
-            Engine::TextureID(fnv1a64("error", 5)),
-            "engine_default_error", 4, 4, pixels
+            Engine::TextureID(fnv1a64("error", 5)), "engine_default_error", 4, 4, pixels
         );
     }
 }
 
 void CreateBRDFLookupTable(
+    Core::MemoryManager* memoryManager,
     Core::Path outputPath,
     Engine::TextureID textureId,
     Render::VulkanContext* context,
     Render::ResourceManager* resourceManager,
     Render::PipelineManager* pipelineManager,
-    std::function<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> graphicsDispatchCallback)
+    Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> graphicsDispatchCallback)
 {
     VkCommandPoolCreateInfo graphicsPoolInfo = Render::VkHelpers::CommandPoolCreateInfo(context->graphicsQueueFamily);
     VkCommandPool graphicsCommandPool;
@@ -192,10 +202,10 @@ void CreateBRDFLookupTable(
             .targetIndex = 0
         };
 
-        std::array bindings{resourceManager->brdfLutGenerateResources.GetBindingInfo()};
+        Core::Array<VkDescriptorBufferBindingInfoEXT, 1> bindings{resourceManager->brdfLutGenerateResources.GetBindingInfo()};
         uint32_t bindingIndex{0u};
         VkDeviceSize bindingOffset{0};
-        vkCmdBindDescriptorBuffersEXT(graphicsCmd, bindings.size(), bindings.data());
+        vkCmdBindDescriptorBuffersEXT(graphicsCmd, bindings.Size(), bindings.Data());
 
         const Render::PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("ibl_brdf_lut"));
         if (!pipelineEntry) {
@@ -204,7 +214,7 @@ void CreateBRDFLookupTable(
         }
         vkCmdBindPipeline(graphicsCmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
         vkCmdPushConstants(graphicsCmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-        vkCmdSetDescriptorBufferOffsetsEXT(graphicsCmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->layout, 0, bindings.size(), &bindingIndex, &bindingOffset);
+        vkCmdSetDescriptorBufferOffsetsEXT(graphicsCmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->layout, 0, bindings.Size(), &bindingIndex, &bindingOffset);
         vkCmdDispatch(graphicsCmd,
                       (LUT_SIZE + BRDF_LUT_GENERATION_DISPATCH_X - 1) / BRDF_LUT_GENERATION_DISPATCH_X,
                       (LUT_SIZE + BRDF_LUT_GENERATION_DISPATCH_Y - 1) / BRDF_LUT_GENERATION_DISPATCH_Y,
@@ -234,8 +244,9 @@ void CreateBRDFLookupTable(
     copyRegion.imageExtent = {LUT_SIZE, LUT_SIZE, 1};
     vkCmdCopyImageToBuffer(graphicsCmd, lutImage.handle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, stagingBuffer.handle, 1, &copyRegion);
     graphicsSubmitAndWait(false);
-    std::vector<uint8_t> lutData(lutByteSize);
-    memcpy(lutData.data(), stagingBuffer.allocationInfo.pMappedData, lutByteSize);
+
+    auto lutData = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, lutByteSize);
+    memcpy(lutData.Data(), stagingBuffer.allocationInfo.pMappedData, lutByteSize);
 
 
     // Write to KTX2
@@ -258,13 +269,13 @@ void CreateBRDFLookupTable(
         return;
     }
 
-    ktxTexture_SetImageFromMemory(ktxTexture(texture), 0, 0, 0, lutData.data(), lutData.size());
+    ktxTexture_SetImageFromMemory(ktxTexture(texture), 0, 0, 0, lutData.Data(), lutData.Size());
 
     const char writer[] = "WillEngine";
     ktxHashList_AddKVPair(&texture->kvDataHead, KTX_WRITER_KEY, sizeof(writer), writer);
 
     ktx_uint8_t* ktxBytes{nullptr};
-    ktx_size_t   ktxSize{0};
+    ktx_size_t ktxSize{0};
     result = ktxTexture2_WriteToMemory(texture, &ktxBytes, &ktxSize);
     ktxTexture_Destroy(ktxTexture(texture));
     if (result != KTX_SUCCESS) {
@@ -272,25 +283,33 @@ void CreateBRDFLookupTable(
         return;
     }
 
-    std::vector<uint8_t> compressed = Engine::CompressLZ4(ktxBytes, ktxSize);
+    auto maxCompressedSize = Engine::CompressLZ4MaxSize(ktxSize);
+    auto compressed = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, maxCompressedSize);
+    size_t realSize = Engine::CompressLZ4(ktxBytes, ktxSize, compressed.Data(), compressed.Size());
+
     free(ktxBytes);
 
     Engine::WTextureHeader header{};
     header.textureId = textureId.id;
-    header.width     = LUT_SIZE;
-    header.height    = LUT_SIZE;
-    header.mipCount  = 1;
-    header.uncompressedSize = static_cast<uint64_t>(ktxSize);
-    header.dataSize  = static_cast<uint64_t>(compressed.size());
-    strncpy_s(header.name, std::string(outputPath.Stem()).c_str(), Engine::WTEXTURE_NAME_LENGTH - 1);
+    header.width = LUT_SIZE;
+    header.height = LUT_SIZE;
+    header.mipCount = 1;
+    header.uncompressedSize = ktxSize;
+    header.dataSize = realSize;
 
-    Platform::CreateDirectories(outputPath.Parent().c_str());
+    std::string_view name = outputPath.Stem();
+    size_t copyLen = std::min(name.size(), (size_t)Engine::WTEXTURE_NAME_LENGTH - 1);
+    strncpy_s(header.name, Engine::WTEXTURE_NAME_LENGTH, name.data(), copyLen);
+    header.name[copyLen] = '\0';
+
+    Core::Path outputParent = outputPath.Parent();
+    Platform::CreateDirectories(outputParent.c_str());
     std::ofstream f(outputPath.c_str(), std::ios::binary);
     if (!f || !Engine::WriteWTextureHeader(f, header)) {
         LOG_ERROR(Asset, "Failed to write .wtexture: {}", outputPath.c_str());
         return;
     }
-    f.write(reinterpret_cast<const char*>(compressed.data()), static_cast<std::streamsize>(compressed.size()));
+    f.write(reinterpret_cast<const char*>(compressed.Data()), static_cast<std::streamsize>(realSize));
 
     LOG_INFO(Asset, "Wrote {}", outputPath.c_str());
 

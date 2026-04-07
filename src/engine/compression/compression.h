@@ -19,6 +19,16 @@ enum class CompressionType : uint32_t
 std::vector<uint8_t> CompressZlib(const void* data, size_t size);
 std::vector<uint8_t> DecompressZlib(const void* data, size_t compressedSize, size_t uncompressedSize);
 
+size_t CompressLZ4MaxSize(size_t size);
+/**
+ * Compress some data w/ LZ4. Internally checks if output size is <= the size of the destination container
+ * @param uncompressedData ptr to the 0th element of the raw data container
+ * @param uncompressedSize size of the raw data container. Used to estimate compression size.
+ * @param compressedData ptr to the 0th element of the container to write to
+ * @param compressedSize the size of the compressedData container
+ * @return The actual size of the compressed data
+ */
+size_t CompressLZ4(const void* uncompressedData, size_t uncompressedSize, void* compressedData, size_t compressedSize);
 std::vector<uint8_t> CompressLZ4(const void* data, size_t size);
 void DecompressLZ4(const void* compressedData, size_t compressedSize, void* decompressedData, size_t uncompressedSize);
 } // Engine

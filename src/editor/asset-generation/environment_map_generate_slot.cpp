@@ -547,6 +547,7 @@ bool EnvironmentMapGenerateSlot::WriteKTXFile()
     createInfo.isArray = KTX_FALSE;
     createInfo.generateMipmaps = KTX_FALSE;
 
+    // todo MEM this does 2 mallocs
     ktx_error_code_e result = ktxTexture2_Create(&createInfo, KTX_TEXTURE_CREATE_ALLOC_STORAGE, &texture);
     if (result != KTX_SUCCESS) {
         SPDLOG_ERROR("[EnvironmentMapGenerateSlot] Failed to create KTX texture");

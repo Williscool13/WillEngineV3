@@ -26,8 +26,8 @@ AssetManager::AssetManager(Core::MemoryManager& memoryManager, Core::EngineConte
       prefabCache(&memoryManager.Persistent(), Core::AllocTag::AssetManager, 512)
 {
 #if WILL_EDITOR
-    // Creates white/error if they don't exist.
-    Editor::CreateCriticalEngineResources();
+    // Creates white/error if they don't exist. Also creates BRDF LUT
+    Editor::CreateCriticalEngineResources(&memoryManager);
 #endif
 
     ctx->bShouldRescanResources = true;

@@ -17,6 +17,7 @@ const char* AllocTagName(AllocTag tag)
         case AllocTag::Unknown: return "Unknown";
         case AllocTag::AssetModel: return "AssetModel";
         case AllocTag::AssetTexture: return "AssetTexture";
+        case AllocTag::AssetGenerator: return "AssetGenerator";
         case AllocTag::PhysicsBody: return "PhysicsBody";
         case AllocTag::PhysicsShape: return "PhysicsShape";
         case AllocTag::RenderMesh: return "RenderMesh";

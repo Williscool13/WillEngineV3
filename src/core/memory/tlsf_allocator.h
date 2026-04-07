@@ -17,6 +17,7 @@ enum class AllocTag : uint32_t
     // Assets
     AssetModel,
     AssetTexture,
+    AssetGenerator,
     // Physics
     PhysicsBody,
     PhysicsShape,

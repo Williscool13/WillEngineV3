@@ -41,6 +41,27 @@ std::vector<uint8_t> DecompressZlib(const void* data, size_t compressedSize, siz
     return decompressed;
 }
 
+size_t CompressLZ4MaxSize(size_t size)
+{
+    return LZ4_compressBound(static_cast<int>(size));
+}
+
+size_t CompressLZ4(const void* uncompressedData, size_t uncompressedSize, void* compressedData, size_t compressedSize)
+{
+    size_t maxCompressedSize = CompressLZ4MaxSize(uncompressedSize);
+    assert(maxCompressedSize <= compressedSize && "Compress LZ4 failed due to compressed output too small");
+
+    const int actualCompressedSize = LZ4_compress_HC(
+        static_cast<const char*>(uncompressedData), static_cast<char*>(compressedData),
+        static_cast<int>(uncompressedSize), compressedSize, LZ4HC_CLEVEL_DEFAULT);
+    if (actualCompressedSize <= 0) {
+        LOG_CRITICAL(Engine, "LZ4 compression failed.");
+        assert(false);
+    }
+
+    return actualCompressedSize;
+}
+
 std::vector<uint8_t> CompressLZ4(const void* data, size_t size)
 {
     const int maxCompressedSize = LZ4_compressBound(static_cast<int>(size));

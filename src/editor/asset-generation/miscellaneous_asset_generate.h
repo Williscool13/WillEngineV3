@@ -9,7 +9,9 @@
 #include <semaphore>
 #include <vulkan/vulkan_core.h>
 
+#include "core/containers/inline_function.h"
 #include "core/containers/inline_path.h"
+#include "core/memory/memory_manager.h"
 #include "engine/core/texture_id.h"
 
 namespace Render
@@ -21,13 +23,15 @@ class PipelineManager;
 
 namespace Editor
 {
-void CreateCriticalEngineResources();
-void CreateBRDFLookupTable(Core::Path outputPath,
+void CreateCriticalEngineResources(Core::MemoryManager* memoryManager);
+
+void CreateBRDFLookupTable(Core::MemoryManager* memoryManager,
+                           Core::Path outputPath,
                            Engine::TextureID textureId,
                            Render::VulkanContext* context,
                            Render::ResourceManager* resourceManager,
                            Render::PipelineManager* pipelineManager,
-                           std::function<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> graphicsDispatchCallback);
+                           Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> graphicsDispatchCallback);
 } // Editor
 
 #endif //WILL_ENGINE_MISCELLANEOUS_ASSET_GENERATE_H

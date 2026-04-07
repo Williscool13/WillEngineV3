@@ -240,7 +240,7 @@ bool AssetGenerator::TryDequeueCubemapGenerateComplete(EnvironmentMapGenerateCom
 
 void AssetGenerator::GenerateBRDFLUT(const Core::Path& outputFile)
 {
-    CreateBRDFLookupTable(outputFile, Engine::TextureID(textureIdRng()), vk, renderThread->GetResourceManager(), renderThread->GetPipelineManager(),
+    CreateBRDFLookupTable(memoryManager, outputFile, Engine::TextureID(textureIdRng()), vk, renderThread->GetResourceManager(), renderThread->GetPipelineManager(),
                           [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
                               GraphicsQueueGPUDispatch(cmd, fence, completionSignal);
                           });
