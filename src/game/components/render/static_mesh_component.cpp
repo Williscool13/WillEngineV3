@@ -193,8 +193,8 @@ ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::ViewFamil
                     for (int32_t i = 0; i < static_cast<int32_t>(model->modelData.meshes.Size()); i++) {
                         const Core::InlineString<64>& meshName = model->modelData.meshes[i].name;
                         char fallback[32];
-                        if (meshName.size() == 0) { snprintf(fallback, sizeof(fallback), "Mesh %d", i); }
-                        const char* displayName = meshName.size() > 0 ? meshName.c_str() : fallback;
+                        if (meshName.Size() == 0) { snprintf(fallback, sizeof(fallback), "Mesh %d", i); }
+                        const char* displayName = meshName.Size() > 0 ? meshName.c_str() : fallback;
                         if (ImGui::Selectable(displayName, false)) {
                             component.meshIndex = i;
                             RecreateStaticMesh(component, registry, entity);
@@ -249,8 +249,8 @@ ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::ViewFamil
                 seen[idx] = true;
                 std::string slotName;
                 if (idx < static_cast<int32_t>(model->modelData.materials.Size()) &&
-                    !model->modelData.materials[idx].name.empty()) {
-                    slotName = model->modelData.materials[idx].name;
+                    !model->modelData.materials[idx].name.IsEmpty()) {
+                    slotName = std::string(model->modelData.materials[idx].name.c_str());
                 }
                 else {
                     slotName = fmt::format("Material {}", idx);

@@ -12,9 +12,12 @@
 
 #include "asset_generation_types.h"
 #include "asset-load/asset_load_types.h"
+#include "core/containers/inline_function.h"
 
 #include "core/containers/inline_path.h"
+#include "core/containers/span.h"
 #include "core/memory/linear_allocator.h"
+#include "core/memory/memory_manager.h"
 #include "core/memory/tlsf_allocator.h"
 #include "engine/resources/model/model_types.h"
 
@@ -34,12 +37,11 @@ public:
     ~StaticModelGenerateSlot();
 
     void Initialize(
-        int32_t slotIndex,
+        Core::MemoryManager* _memoryManager,
         enki::TaskScheduler* _scheduler,
         AssetGenerator* _generator,
         StaticModelGenerationProgress* _progress,
-        Core::TlsfAllocator* _allocator,
-        std::function<void(bool success, ModelGenerateSlotHandle slotHandle)> notifyCallback
+        Core::InlineFunction<void(bool success, ModelGenerateSlotHandle slotHandle)> notifyCallback
     );
 
     void Launch(ModelGenerateSlotHandle slotHandle, const Core::Path& gltfPath, const Core::Path& outputPath, uint64_t modelId);
@@ -64,7 +66,12 @@ private:
 
     bool WriteStaticModel();
 
-    void TopologicalSortNodes(Core::Vector<Engine::Node>& nodes, std::vector<uint32_t>& oldToNew);
+    /**
+     *
+     * @param nodes
+     * @param oldToNew used to remap animations so the nodes make sense.
+     */
+    void TopologicalSortNodes(Core::Span<Engine::Node> nodes, Core::Span<uint32_t> oldToNew);
 
     static VkFilter ExtractFilter(fastgltf::Filter filter);
 
@@ -74,20 +81,19 @@ private:
 
     static void LoadTextureIndicesAndUV(const fastgltf::TextureInfo& texture, const fastgltf::Asset& gltf, int& imageIndex, int& samplerIndex, glm::vec4& uvTransform);
 
-    static glm::vec4 GenerateBoundingSphere(const std::vector<Vertex>& vertices);
+    static Vec4 GenerateBoundingSphere(Core::Span<Vertex> vertices);
 
+    Core::MemoryManager* memoryManager{};
     enki::TaskScheduler* scheduler{};
     AssetGenerator* generator{};
     StaticModelGenerationProgress* progress{};
 
-    std::function<void(bool success, ModelGenerateSlotHandle slotHandle)> _notifyCallback;
+    Core::InlineFunction<void(bool success, ModelGenerateSlotHandle slotHandle)> _notifyCallback;
 
     ModelGenerateSlotHandle slotHandle = ModelGenerateSlotHandle::INVALID;
-    std::unique_ptr<GenerateTask> task;
+    GenerateTask task{};
 
-    AssetLoad::RawStaticModel rawModel;
-    std::vector<Engine::Node> sortedNodes;
-    std::vector<bool> visited;
+    RawStaticModel rawModel;
 };
 } // Render
 

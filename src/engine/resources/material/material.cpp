@@ -4,6 +4,8 @@
 
 #include "material.h"
 
+#include "engine/serialization/serialization.h"
+
 namespace Engine
 {
 MaterialID HashMaterial(const Material& m)
@@ -90,7 +92,7 @@ nlohmann::json SerializeMaterial(const Material& mat)
 Material DeserializeMaterial(const nlohmann::json& j, const std::filesystem::path& sourcePath)
 {
     Material mat{};
-    mat.name = j["name"].get<std::string>();
+    mat.name = j["name"].get<Core::InlineString<128>>();
     mat.id = MaterialID(j["id"].get<uint64_t>());
     mat.pipelineID = StringID(j["pipeline"].get<uint64_t>());
 

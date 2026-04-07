@@ -113,7 +113,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
     memoryManager.Init({
         .persistentSize = 32ull * 1024 * 1024,  // 32 MB
         .generalPoolSize = 64ull * 1024 * 1024, // 64 MB
-        .assetsScratchPoolSize = 128ull * 1024 * 1024, // 512 MB
+        .assetsScratchPoolSize = 512ull * 1024 * 1024, // 512 MB
         .assetsPoolSize = 512ull * 1024 * 1024, // 512 MB
         .physicsPoolSize = 64ull * 1024 * 1024, // 64 MB
         .renderPoolSize = 64ull * 1024 * 1024,  // 64 MB

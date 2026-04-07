@@ -40,7 +40,7 @@ static void CollectExistingFolderNames(entt::registry& registry, int level,
     auto view = registry.view<EntityFolderComponent>();
     for (auto e : view) {
         auto& fc = view.get<EntityFolderComponent>(e);
-        if (fc.folderHierarchyNames[level].size() == 0) continue;
+        if (fc.folderHierarchyNames[level].Size() == 0) continue;
         if (level == 1 && fc.folderHierarchy[0] != parentFilter) continue;
 
         bool duplicate = false;
@@ -64,9 +64,9 @@ static bool DrawFolderLevelCombo(const char* label, entt::registry& registry, in
     std::vector<Core::ShortString> existing;
     CollectExistingFolderNames(registry, level, existing, parentFilter);
 
-    const char* currentName = nameOut.size() > 0 ? nameOut.c_str() : "(None)";
+    const char* currentName = nameOut.Size() > 0 ? nameOut.c_str() : "(None)";
     if (ImGui::BeginCombo(label, currentName)) {
-        if (ImGui::Selectable("(None)", nameOut.size() == 0)) {
+        if (ImGui::Selectable("(None)", nameOut.Size() == 0)) {
             nameOut = Core::ShortString();
             idOut = StringID();
             changed = true;
@@ -75,7 +75,7 @@ static bool DrawFolderLevelCombo(const char* label, entt::registry& registry, in
             bool selected = folderName == nameOut;
             if (ImGui::Selectable(folderName.c_str(), selected)) {
                 nameOut = folderName;
-                idOut = StringID(folderName.c_str(), folderName.size());
+                idOut = StringID(folderName.c_str(), folderName.Size());
                 changed = true;
             }
         }

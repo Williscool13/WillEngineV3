@@ -9,6 +9,7 @@
 #include <json/nlohmann/json.hpp>
 
 #include "core/string_id.h"
+#include "core/containers/inline_string.h"
 #include "core/memory/handle.h"
 #include "engine/core/material_id.h"
 #include "engine/core/texture_id.h"
@@ -32,7 +33,7 @@ struct MaterialEntry
 struct Material
 {
     // .wmaterial related properties. Only relevant for user defined materials
-    std::string name;
+    Core::InlineString<128> name;
     MaterialID id;
     std::filesystem::path sourcePath;
 

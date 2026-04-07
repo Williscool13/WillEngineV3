@@ -33,7 +33,35 @@ struct InlineString
     }
 
     [[nodiscard]] const char* c_str() const { return buf; }
-    [[nodiscard]] size_t size() const { return len; }
+    [[nodiscard]] size_t Size() const { return len; }
+    [[nodiscard]] bool IsEmpty() const { return len == 0; }
+
+    bool Append(const char* str)
+    {
+        return Append(str, strlen(str));
+    }
+
+    bool Append(std::string_view str)
+    {
+        return Append(str.data(), str.size());
+    }
+
+    template<size_t M>
+    bool Append(const InlineString<M>& other)
+    {
+        return Append(other.buf, other.len);
+    }
+
+    bool Append(const char* str, size_t strLen)
+    {
+        if (len + strLen >= N) {
+            return false;
+        }
+        memcpy(buf + len, str, strLen);
+        len += strLen;
+        buf[len] = '\0';
+        return true;
+    }
 
     bool operator==(const InlineString& other) const { return len == other.len && memcmp(buf, other.buf, len) == 0; }
     bool operator==(const char* str) const { return strcmp(buf, str) == 0; }

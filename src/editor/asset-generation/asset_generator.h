@@ -76,8 +76,7 @@ struct TextureGenerateRequest
     Core::Path imagePath;
 
     // Optional: pre-loaded pixel data (takes priority over imagePath)
-    // todo make this asset scratch that will kill itself with RAII
-    std::unique_ptr<uint8_t[]> sourcePixels;
+    Core::HeapArray<uint8_t> sourcePixels;
     uint32_t sourceWidth{0};
     uint32_t sourceHeight{0};
     uint32_t sourceBytesPerPixel{0};
@@ -118,7 +117,7 @@ public:
     Engine::TextureID RequestTextureGenerateFromFile(const Core::Path& imagePath, const Core::Path& outputPath, bool mipmapped = true,
                                                      DXGI_FORMAT targetFormat = DXGI_FORMAT_BC7_UNORM);
 
-    Engine::TextureID RequestTextureGenerateFromMemory(std::unique_ptr<uint8_t[]> pixels, uint32_t w, uint32_t h, uint32_t bytesPerPixel, const Core::Path& outputPath,
+    Engine::TextureID RequestTextureGenerateFromMemory(Core::HeapArray<uint8_t> pixels, uint32_t w, uint32_t h, uint32_t bytesPerPixel, const Core::Path& outputPath,
                                                        bool mipmapped = false, DXGI_FORMAT targetFormat = DXGI_FORMAT_BC7_UNORM);
 
     bool TryDequeueTextureGenerateComplete(TextureGenerateComplete& outResult);

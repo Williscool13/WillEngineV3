@@ -34,7 +34,7 @@ public:
         assert(alloc_ != nullptr && "HeapArray: no allocator");
         assert(size_ > 0 && "HeapArray: size must be > 0");
         data_ = static_cast<T*>(alloc_->Alloc(size_ * sizeof(T), tag_));
-        assert(data_ != nullptr && "HeapArray: allocation failed");
+        assert(data_ != nullptr && "OOM: HeapArray allocation failed");
         for (size_t i = 0; i < size_; ++i) {
             new(data_ + i) T();
         }

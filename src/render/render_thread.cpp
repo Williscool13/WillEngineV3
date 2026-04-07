@@ -1444,8 +1444,8 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFami
         Core::InlineString<48> shadowPassName;
         shadowPassName.len = snprintf(shadowPassName.buf, 48, "Shadow Cascade Pass %d", cascadeLevel);
 
-        StringID shadowMapId = StringID(shadowMapName.c_str(), shadowMapName.size());
-        StringID shadowPassId = StringID(shadowPassName.c_str(), shadowPassName.size());
+        StringID shadowMapId = StringID(shadowMapName.c_str(), shadowMapName.Size());
+        StringID shadowPassId = StringID(shadowPassName.c_str(), shadowPassName.Size());
 
 
         uint32_t cascadeWidth = shadowConfig.cascadePreset.extents[cascadeLevel][0];
@@ -1786,7 +1786,7 @@ void RenderThread::SetupGeometryPasses(RenderGraph& graph, const Core::ViewFamil
 
         Core::InlineString<128> customDrawName;
         customDrawName.len = snprintf(customDrawName.buf, 128, "Custom Draw %s", customDraw.first.c_str());
-        StringID customDrawId = StringID(customDrawName.c_str(), customDrawName.size());
+        StringID customDrawId = StringID(customDrawName.c_str(), customDrawName.Size());
         RenderPass& customDrawPass = graph.AddPass(customDrawId, VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
         customDrawPass.WriteColorAttachment(targets.albedo);
         customDrawPass.WriteColorAttachment(targets.normal);
@@ -2371,7 +2371,7 @@ StringID RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewF
 
             Core::InlineString<32> passName;
             passName.len = snprintf(passName.buf, 32, "Bloom Downsample %u", i);
-            RenderPass& downsamplePass = graph.AddPass(StringID(passName.c_str(), passName.size()), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+            RenderPass& downsamplePass = graph.AddPass(StringID(passName.c_str(), passName.Size()), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
             downsamplePass.ReadWriteImage(SID("bloom_chain"));
             downsamplePass.Execute([&, mipWidth, mipHeight, srcMip = i, dstMip = i + 1](VkCommandBuffer cmd) {
                 BloomDownsamplePushConstant pc{
@@ -2397,7 +2397,7 @@ StringID RenderThread::SetupPostProcessing(RenderGraph& graph, const Core::ViewF
 
             Core::InlineString<32> passName;
             passName.len = snprintf(passName.buf, 32, "Bloom Upsample %d", i);
-            RenderPass& upsamplePass = graph.AddPass(StringID(passName.c_str(), passName.size()), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+            RenderPass& upsamplePass = graph.AddPass(StringID(passName.c_str(), passName.Size()), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
             upsamplePass.ReadWriteImage(SID("bloom_chain"));
             upsamplePass.Execute([&, mipWidth, mipHeight, dstMip = i, lowerMip = i + 1](VkCommandBuffer cmd) {
                 BloomUpsamplePushConstant pc{

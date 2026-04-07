@@ -352,7 +352,7 @@ std::vector<entt::entity> SpawnModel(Engine::GameState* state, Engine::AssetMana
 
         entt::entity entity = CreateSceneEntity(state);
 
-        if (node.name.size() > 0) {
+        if (node.name.Size() > 0) {
             state->registry.get<Component::NameComponent>(entity).name = Core::InlineString<256>(node.name.c_str());
         }
 

@@ -125,7 +125,7 @@ void DrawMultiSelectEditor(Engine::GameState* state, const glm::vec3& centroid, 
             auto folderView = state->registry.view<Component::EntityFolderComponent>();
             for (auto e : folderView) {
                 auto& fc = folderView.get<Component::EntityFolderComponent>(e);
-                if (fc.folderHierarchyNames[0].size() == 0) {
+                if (fc.folderHierarchyNames[0].Size() == 0) {
                     continue;
                 }
                 bool dup = false;
@@ -141,11 +141,11 @@ void DrawMultiSelectEditor(Engine::GameState* state, const glm::vec3& centroid, 
             }
             std::ranges::sort(existingFolders0);
 
-            const char* folder0Display = folder0Same ? (firstFolder0.size() > 0 ? firstFolder0.c_str() : "(None)") : "...";
+            const char* folder0Display = folder0Same ? (firstFolder0.Size() > 0 ? firstFolder0.c_str() : "(None)") : "...";
 
             ImGui::Text("Folder");
             if (ImGui::BeginCombo("##multi_folder_0", folder0Display)) {
-                if (ImGui::Selectable("(None)", folder0Same && firstFolder0.size() == 0)) {
+                if (ImGui::Selectable("(None)", folder0Same && firstFolder0.Size() == 0)) {
                     for (auto e : entities) {
                         auto& fc = state->registry.get<Component::EntityFolderComponent>(e);
                         fc.folderHierarchyNames[0] = Core::ShortString();
@@ -158,7 +158,7 @@ void DrawMultiSelectEditor(Engine::GameState* state, const glm::vec3& centroid, 
                 for (auto& fn : existingFolders0) {
                     bool selected = folder0Same && fn == firstFolder0;
                     if (ImGui::Selectable(fn.c_str(), selected)) {
-                        StringID id(fn.c_str(), fn.size());
+                        StringID id(fn.c_str(), fn.Size());
                         for (auto e : entities) {
                             auto& fc = state->registry.get<Component::EntityFolderComponent>(e);
                             fc.folderHierarchyNames[0] = fn;
@@ -177,7 +177,7 @@ void DrawMultiSelectEditor(Engine::GameState* state, const glm::vec3& centroid, 
                     if (fc.folderHierarchy[0] != firstFolder0Id) {
                         continue;
                     }
-                    if (fc.folderHierarchyNames[1].size() == 0) {
+                    if (fc.folderHierarchyNames[1].Size() == 0) {
                         continue;
                     }
                     bool dup = false;
@@ -193,11 +193,11 @@ void DrawMultiSelectEditor(Engine::GameState* state, const glm::vec3& centroid, 
                 }
                 std::ranges::sort(existingFolders1);
 
-                const char* folder1Display = folder1Same ? (firstFolder1.size() > 0 ? firstFolder1.c_str() : "(None)") : "...";
+                const char* folder1Display = folder1Same ? (firstFolder1.Size() > 0 ? firstFolder1.c_str() : "(None)") : "...";
 
                 ImGui::Text("Subfolder");
                 if (ImGui::BeginCombo("##multi_folder_1", folder1Display)) {
-                    if (ImGui::Selectable("(None)", folder1Same && firstFolder1.size() == 0)) {
+                    if (ImGui::Selectable("(None)", folder1Same && firstFolder1.Size() == 0)) {
                         for (auto e : entities) {
                             auto& fc = state->registry.get<Component::EntityFolderComponent>(e);
                             fc.folderHierarchyNames[1] = Core::ShortString();
@@ -208,7 +208,7 @@ void DrawMultiSelectEditor(Engine::GameState* state, const glm::vec3& centroid, 
                     for (auto& fn : existingFolders1) {
                         bool selected = folder1Same && fn == firstFolder1;
                         if (ImGui::Selectable(fn.c_str(), selected)) {
-                            StringID id(fn.c_str(), fn.size());
+                            StringID id(fn.c_str(), fn.Size());
                             for (auto e : entities) {
                                 auto& fc = state->registry.get<Component::EntityFolderComponent>(e);
                                 fc.folderHierarchyNames[1] = fn;

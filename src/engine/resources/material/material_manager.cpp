@@ -70,7 +70,7 @@ MaterialID MaterialManager::CreateImmutableMaterial(const Material& mat)
     }
 
     Material m = mat;
-    m.name = "__immutable__";
+    m.name = Core::InlineString<128>("__immutable__");
     m.id = matId;
     m.immutable = true;
 
@@ -150,7 +150,7 @@ void MaterialManager::ReleaseMaterial(MaterialID materialID)
 
     if (entry->refCounter == 0) {
         entry->retireFrame = ctx->currentFrame + Core::FRAME_BUFFER_COUNT + 1;
-        LOG_TRACE(Engine, "Material {} has hit ref 0, deleting in {} FIF", materials[materialID].name, Core::FRAME_BUFFER_COUNT);
+        LOG_TRACE(Engine, "Material {} has hit ref 0, deleting in {} FIF", materials[materialID].name.c_str(), Core::FRAME_BUFFER_COUNT);
     }
 }
 
@@ -200,7 +200,7 @@ void MaterialManager::UpdateMutableMaterial(MaterialID id, const Material& newMa
     auto serialize = [&]() {
         WMaterialHeader header{};
         header.materialId = mat.id.id;
-        const auto nameLen = std::min(mat.name.size(), WMATERIAL_NAME_LENGTH - 1);
+        const auto nameLen = std::min(mat.name.Size(), WMATERIAL_NAME_LENGTH - 1);
         memcpy(header.name, mat.name.c_str(), nameLen);
         header.name[nameLen] = '\0';
 
@@ -307,7 +307,7 @@ bool MaterialManager::DeleteMutableMaterial(MaterialID id)
         std::filesystem::remove(it->second.sourcePath);
     }
 
-    StringID sid(it->second.name.data(), it->second.name.size());
+    StringID sid(it->second.name.c_str(), it->second.name.Size());
     nameToMaterialMap.erase(sid);
     materials.erase(it);
     return true;
@@ -320,7 +320,7 @@ void MaterialManager::CreateMaterial(std::string_view name)
     const Core::Path matPath = matDir / (std::string(name) + ".wmaterial");
 
     Material mat{};
-    mat.name = std::string(name);
+    mat.name = Core::InlineString<128>(name);
     mat.id = MaterialID{mutableIdRng()};
     mat.props = GetDefaultMaterialProperties();
     std::uniform_real_distribution dist(0.0f, 1.0f);
@@ -376,7 +376,7 @@ void MaterialManager::LoadMutableMaterials()
 
         const nlohmann::json j = nlohmann::json::parse(file);
         Material mat = DeserializeMaterial(j, entry.path());
-        StringID sid(mat.name.data(), mat.name.size());
+        StringID sid(mat.name.c_str(), mat.name.Size());
         materials[mat.id] = mat;
         nameToMaterialMap[sid] = mat.id;
     }

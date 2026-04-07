@@ -61,7 +61,7 @@ void TextureGenerateSlot::Launch(TextureGenerateSlotHandle _slotHandle, const Co
     scheduler->AddTaskSetToPipe(task.get());
 }
 
-void TextureGenerateSlot::LaunchFromMemory(TextureGenerateSlotHandle _slotHandle, std::unique_ptr<uint8_t[]> pixels, uint32_t w, uint32_t h, uint32_t bytesPerPixel,
+void TextureGenerateSlot::LaunchFromMemory(TextureGenerateSlotHandle _slotHandle, Core::HeapArray<uint8_t> pixels, uint32_t w, uint32_t h, uint32_t bytesPerPixel,
                                            const Core::Path& _outputPath, Engine::TextureID _textureId, bool _mipmapped, DXGI_FORMAT _targetFormat)
 {
     slotHandle = _slotHandle;
@@ -92,7 +92,7 @@ void TextureGenerateSlot::Clear()
     mipData.clear();
     imageStagingAllocator.Reset();
     imageReceivingAllocator.Reset();
-    preloadedPixels.reset();
+    preloadedPixels = {};
     preloadedWidth = 0;
     preloadedHeight = 0;
     preloadedBytesPerPixel = 0;
@@ -162,11 +162,11 @@ bool TextureGenerateSlot::LoadImageAndGenerate(VkCommandBuffer cmd, const std::f
     stbi_uc* stbiData = nullptr;
     const void* pixelData = nullptr;
 
-    if (preloadedPixels) {
+    if (preloadedPixels.IsAllocated()) {
         imgWidth = preloadedWidth;
         imgHeight = preloadedHeight;
         pixelSize = static_cast<size_t>(preloadedWidth) * preloadedHeight * preloadedBytesPerPixel;
-        pixelData = preloadedPixels.get();
+        pixelData = preloadedPixels.Data();
     }
     else {
         int32_t w, h, nrChannels;
@@ -200,7 +200,6 @@ bool TextureGenerateSlot::LoadImageAndGenerate(VkCommandBuffer cmd, const std::f
     if (stbiData) {
         stbi_image_free(stbiData);
     }
-    preloadedPixels.reset();
 
     VkImageCreateInfo imageCreateInfo = Render::VkHelpers::ImageCreateInfo(VK_FORMAT_R8G8B8A8_UNORM, imagesize,
                                                                            VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);

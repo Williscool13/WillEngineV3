@@ -15,6 +15,22 @@
 #include "engine/resources/material/material.h"
 #include "engine/resources/model/model_types.h"
 
+namespace Core
+{
+template<size_t N>
+void to_json(nlohmann::json& j, const InlineString<N>& str)
+{
+    j = std::string_view(str.c_str(), str.Size());
+}
+
+template<size_t N>
+void from_json(const nlohmann::json& j, InlineString<N>& str)
+{
+    auto s = j.get<std::string>();
+    str = InlineString<N>(s.c_str());
+}
+} // Core
+
 namespace Engine
 {
 inline size_t AppendRaw(std::vector<std::byte>& buf, const void* data, size_t size)
@@ -25,10 +41,10 @@ inline size_t AppendRaw(std::vector<std::byte>& buf, const void* data, size_t si
 }
 
 template<typename T>
-size_t WriteVector(std::vector<std::byte>& buf, const std::vector<T>& vec)
+size_t WriteArray(std::vector<std::byte>& buf, const Core::HeapArray<T>& arr)
 {
-    if (vec.empty()) return 0;
-    return AppendRaw(buf, vec.data(), vec.size() * sizeof(T));
+    if (arr.Size() == 0) { return 0; }
+    return AppendRaw(buf, arr.Data(), arr.Size() * sizeof(T));
 }
 
 template<typename T>
@@ -51,7 +67,7 @@ inline size_t WriteString(std::vector<std::byte>& buf, const std::string& str)
 template<size_t N>
 size_t WriteString(std::vector<std::byte>& buf, const Core::InlineString<N>& str)
 {
-    uint32_t length = static_cast<uint32_t>(str.size());
+    auto length = static_cast<uint32_t>(str.Size());
     size_t written = AppendRaw(buf, &length, sizeof(length));
     if (length > 0) {
         written += AppendRaw(buf, str.c_str(), length);
@@ -85,19 +101,8 @@ void ReadString(const uint8_t*& data, Core::InlineString<N>& str)
     }
 }
 
-template<typename T>
-size_t WriteDynamicVector(std::vector<std::byte>& buf, const std::vector<T>& vec)
-{
-    auto count = static_cast<uint32_t>(vec.size());
-    size_t written = AppendRaw(buf, &count, sizeof(count));
-    if (count > 0) {
-        written += AppendRaw(buf, vec.data(), count * sizeof(T));
-    }
-    return written;
-}
-
 template<typename T, size_t N>
-size_t WriteDynamicVector(std::vector<std::byte>& buf, const Core::InlineVector<T, N>& vec)
+size_t WriteInlineVector(std::vector<std::byte>& buf, const Core::InlineVector<T, N>& vec)
 {
     auto count = static_cast<uint32_t>(vec.Size());
     size_t written = AppendRaw(buf, &count, sizeof(count));
@@ -162,7 +167,7 @@ inline size_t WriteMeshInformation(std::vector<std::byte>& buf, const MeshInform
 {
     size_t written = 0;
     written += WriteString(buf, mesh.name);
-    written += WriteDynamicVector(buf, mesh.primitiveProperties);
+    written += WriteInlineVector(buf, mesh.primitiveProperties);
     return written;
 }
 
@@ -205,7 +210,7 @@ inline void ReadNode(const uint8_t*& data, Node& node)
     data += sizeof(node.localScale);
 }
 
-inline size_t WriteAnimationSampler(std::vector<std::byte>& buf, const AnimationSampler& sampler)
+/*inline size_t WriteAnimationSampler(std::vector<std::byte>& buf, const AnimationSampler& sampler)
 {
     size_t written = 0;
     written += WriteDynamicVector(buf, sampler.timestamps);
@@ -254,8 +259,7 @@ inline void ReadAnimation(const uint8_t*& data, Animation& anim)
     ReadDynamicVector(data, anim.channels);
     std::memcpy(&anim.duration, data, sizeof(anim.duration));
     data += sizeof(anim.duration);
-}
-
+}*/
 } // Engine
 
 #endif //WILL_ENGINE_SERIALIZATION_H

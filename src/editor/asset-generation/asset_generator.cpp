@@ -37,11 +37,10 @@ AssetGenerator::AssetGenerator(Core::MemoryManager& memoryManager, Core::EngineC
 
     for (int32_t i = 0; i < MODEL_GENERATION_JOB_COUNT; ++i) {
         modelGenerateTasks[i].Initialize(
-            i,
+            &memoryManager,
             assetGeneratorScheduler.get(),
             this,
             &modelGenerationProgress[i],
-            &memoryManager.Assets(),
             [this](bool success, ModelGenerateSlotHandle slotHandle) {
                 OnModelGenerateComplete(success, slotHandle);
             }
@@ -104,14 +103,17 @@ void AssetGenerator::ThreadMain()
                     modelGenerateRequestQueue.enqueue(req);
                 }
             }
-        } {
+        }
+
+        //
+        {
             ZoneScopedN("Process Texture Generation Requests");
             TextureGenerateRequest req{};
             if (textureGenerateRequestQueue.try_dequeue(req)) {
                 Core::Handle<TextureGenerateSlot> slotHandle = textureGenerateAllocator.Add();
                 if (slotHandle.IsValid()) {
                     TextureGenerateSlot& task = textureGenerateTasks[slotHandle.index];
-                    if (req.sourcePixels) {
+                    if (req.sourcePixels.IsAllocated()) {
                         task.LaunchFromMemory(slotHandle, std::move(req.sourcePixels), req.sourceWidth, req.sourceHeight, req.sourceBytesPerPixel, req.outputPath, req.textureId, req.mipmapped,
                                               req.targetFormat);
                     }
@@ -123,7 +125,10 @@ void AssetGenerator::ThreadMain()
                     textureGenerateRequestQueue.enqueue(std::move(req));
                 }
             }
-        } {
+        }
+
+        //
+        {
             ZoneScopedN("Process Environment Map Generation Requests")
             EnvironmentMapGenerateRequest req{};
             if (environmentMapGenerateRequestQueue.try_dequeue(req)) {
@@ -193,7 +198,7 @@ Engine::TextureID AssetGenerator::RequestTextureGenerateFromFile(const Core::Pat
     return id;
 }
 
-Engine::TextureID AssetGenerator::RequestTextureGenerateFromMemory(std::unique_ptr<uint8_t[]> pixels, uint32_t w, uint32_t h, uint32_t bytesPerPixel, const Core::Path& outputPath,
+Engine::TextureID AssetGenerator::RequestTextureGenerateFromMemory(Core::HeapArray<uint8_t> pixels, uint32_t w, uint32_t h, uint32_t bytesPerPixel, const Core::Path& outputPath,
                                                                    bool mipmapped, DXGI_FORMAT targetFormat)
 {
     ZoneScoped;
