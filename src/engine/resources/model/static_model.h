@@ -66,17 +66,10 @@ public:
         Loaded,
         FailedToLoad
     };
-
-    // todo this is on the way out
-    struct PhysicsCache
-    {
-        std::vector<glm::vec3> positions;
-        std::vector<uint32_t>  indices;
-    };
 public:
-    StaticModel();
+    StaticModel() = default;
 
-    ~StaticModel();
+    ~StaticModel() = default;
 
     StaticModel(const StaticModel&) = delete;
 
@@ -117,9 +110,6 @@ public:
     std::optional<SplineParams> splineParams{};
 
     ModelBounds bounds{};
-
-    // on the way out
-    static ModelBounds ComputeBounds(const std::vector<glm::vec3>& positions, const std::vector<uint32_t>* indices = nullptr);
 };
 } // AssetLoad
 

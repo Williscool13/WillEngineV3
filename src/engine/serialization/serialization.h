@@ -33,6 +33,12 @@ void from_json(const nlohmann::json& j, InlineString<N>& str)
 
 namespace Engine
 {
+inline size_t AppendRaw(Core::Vector<std::byte>& buf, const void* data, size_t size)
+{
+    const auto* ptr = reinterpret_cast<const std::byte*>(data);
+    buf.Append(ptr, ptr + size);
+    return size;
+}
 inline size_t AppendRaw(std::vector<std::byte>& buf, const void* data, size_t size)
 {
     const auto* ptr = reinterpret_cast<const std::byte*>(data);
@@ -41,31 +47,21 @@ inline size_t AppendRaw(std::vector<std::byte>& buf, const void* data, size_t si
 }
 
 template<typename T>
-size_t WriteArray(std::vector<std::byte>& buf, const Core::HeapArray<T>& arr)
+size_t WriteArray(Core::Vector<std::byte>& buf, const Core::HeapArray<T>& arr)
 {
     if (arr.Size() == 0) { return 0; }
     return AppendRaw(buf, arr.Data(), arr.Size() * sizeof(T));
 }
 
 template<typename T>
-size_t WriteVector(std::vector<std::byte>& buf, const Core::Vector<T>& vec)
+size_t WriteVector(Core::Vector<std::byte>& buf, const Core::Vector<T>& vec)
 {
     if (vec.Size() == 0) return 0;
     return AppendRaw(buf, vec.Data(), vec.Size() * sizeof(T));
 }
 
-inline size_t WriteString(std::vector<std::byte>& buf, const std::string& str)
-{
-    uint32_t length = static_cast<uint32_t>(str.size());
-    size_t written = AppendRaw(buf, &length, sizeof(length));
-    if (length > 0) {
-        written += AppendRaw(buf, str.data(), length);
-    }
-    return written;
-}
-
 template<size_t N>
-size_t WriteString(std::vector<std::byte>& buf, const Core::InlineString<N>& str)
+size_t WriteString(Core::Vector<std::byte>& buf, const Core::InlineString<N>& str)
 {
     auto length = static_cast<uint32_t>(str.Size());
     size_t written = AppendRaw(buf, &length, sizeof(length));
@@ -75,18 +71,48 @@ size_t WriteString(std::vector<std::byte>& buf, const Core::InlineString<N>& str
     return written;
 }
 
-inline void ReadString(const uint8_t*& data, std::string& str)
+template<typename T, size_t N>
+size_t WriteVector(Core::Vector<std::byte>& buf, const Core::InlineVector<T, N>& vec)
 {
-    uint32_t length;
-    std::memcpy(&length, data, sizeof(length));
-    data += sizeof(length);
-
-    str.resize(length);
-    if (length > 0) {
-        std::memcpy(str.data(), data, length);
-        data += length;
+    auto count = static_cast<uint32_t>(vec.Size());
+    size_t written = AppendRaw(buf, &count, sizeof(count));
+    if (count > 0) {
+        written += AppendRaw(buf, vec.Data(), count * sizeof(T));
     }
+    return written;
 }
+
+inline size_t WriteMaterial(Core::Vector<std::byte>& buf, const Material& mat)
+{
+    size_t written = 0;
+    written += AppendRaw(buf, &mat.props, sizeof(mat.props));
+    written += AppendRaw(buf, mat.textureRefs, sizeof(mat.textureRefs));
+    written += AppendRaw(buf, mat.samplerDesc, sizeof(mat.samplerDesc));
+    return written;
+}
+
+inline size_t WriteMeshInformation(Core::Vector<std::byte>& buf, const MeshInformation& mesh)
+{
+    size_t written = 0;
+    written += WriteString(buf, mesh.name);
+    written += WriteVector(buf, mesh.primitiveProperties);
+    return written;
+}
+
+inline size_t WriteNode(Core::Vector<std::byte>& buf, const Node& node)
+{
+    size_t written = 0;
+    written += WriteString(buf, node.name);
+    written += AppendRaw(buf, &node.parent, sizeof(node.parent));
+    written += AppendRaw(buf, &node.meshIndex, sizeof(node.meshIndex));
+    written += AppendRaw(buf, &node.depth, sizeof(node.depth));
+    written += AppendRaw(buf, &node.inverseBindIndex, sizeof(node.inverseBindIndex));
+    written += AppendRaw(buf, &node.localTranslation, sizeof(node.localTranslation));
+    written += AppendRaw(buf, &node.localRotation, sizeof(node.localRotation));
+    written += AppendRaw(buf, &node.localScale, sizeof(node.localScale));
+    return written;
+}
+
 
 template<size_t N>
 void ReadString(const uint8_t*& data, Core::InlineString<N>& str)
@@ -98,31 +124,6 @@ void ReadString(const uint8_t*& data, Core::InlineString<N>& str)
     if (length > 0) {
         str = Core::InlineString<N>(std::string_view(reinterpret_cast<const char*>(data), length));
         data += length;
-    }
-}
-
-template<typename T, size_t N>
-size_t WriteInlineVector(std::vector<std::byte>& buf, const Core::InlineVector<T, N>& vec)
-{
-    auto count = static_cast<uint32_t>(vec.Size());
-    size_t written = AppendRaw(buf, &count, sizeof(count));
-    if (count > 0) {
-        written += AppendRaw(buf, vec.Data(), count * sizeof(T));
-    }
-    return written;
-}
-
-template<typename T>
-void ReadDynamicVector(const uint8_t*& data, std::vector<T>& vec)
-{
-    uint32_t count;
-    std::memcpy(&count, data, sizeof(count));
-    data += sizeof(count);
-
-    vec.resize(count);
-    if (count > 0) {
-        std::memcpy(vec.data(), data, count * sizeof(T));
-        data += count * sizeof(T);
     }
 }
 
@@ -144,14 +145,6 @@ void ReadDynamicVector(const uint8_t*& data, Core::InlineVector<T, N>& vec)
     }
 }
 
-inline size_t WriteMaterial(std::vector<std::byte>& buf, const Material& mat)
-{
-    size_t written = 0;
-    written += AppendRaw(buf, &mat.props, sizeof(mat.props));
-    written += AppendRaw(buf, mat.textureRefs, sizeof(mat.textureRefs));
-    written += AppendRaw(buf, mat.samplerDesc, sizeof(mat.samplerDesc));
-    return written;
-}
 
 inline void ReadMaterial(const uint8_t*& data, Material& mat)
 {
@@ -163,32 +156,10 @@ inline void ReadMaterial(const uint8_t*& data, Material& mat)
     data += sizeof(mat.samplerDesc);
 }
 
-inline size_t WriteMeshInformation(std::vector<std::byte>& buf, const MeshInformation& mesh)
-{
-    size_t written = 0;
-    written += WriteString(buf, mesh.name);
-    written += WriteInlineVector(buf, mesh.primitiveProperties);
-    return written;
-}
-
 inline void ReadMeshInformation(const uint8_t*& data, MeshInformation& mesh)
 {
     ReadString(data, mesh.name);
     ReadDynamicVector(data, mesh.primitiveProperties);
-}
-
-inline size_t WriteNode(std::vector<std::byte>& buf, const Node& node)
-{
-    size_t written = 0;
-    written += WriteString(buf, node.name);
-    written += AppendRaw(buf, &node.parent, sizeof(node.parent));
-    written += AppendRaw(buf, &node.meshIndex, sizeof(node.meshIndex));
-    written += AppendRaw(buf, &node.depth, sizeof(node.depth));
-    written += AppendRaw(buf, &node.inverseBindIndex, sizeof(node.inverseBindIndex));
-    written += AppendRaw(buf, &node.localTranslation, sizeof(node.localTranslation));
-    written += AppendRaw(buf, &node.localRotation, sizeof(node.localRotation));
-    written += AppendRaw(buf, &node.localScale, sizeof(node.localScale));
-    return written;
 }
 
 inline void ReadNode(const uint8_t*& data, Node& node)

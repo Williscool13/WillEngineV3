@@ -17,6 +17,7 @@
 #include "engine/logging/engine_log.h"
 #include "engine/resources/model/model_format.h"
 #include "engine/serialization/serialization.h"
+#include "asset-load/asset_load_utils.h"
 #include "render/shaders/constants_interop.h"
 #include "tracy/Tracy.hpp"
 
@@ -158,9 +159,7 @@ bool StaticModelGenerateSlot::LoadGltf()
             const auto& gltfImage = gltf.images[i];
             std::visit(
                 fastgltf::visitor{
-                    [&](auto& arg) {
-                        LOG_INFO(Asset, "Whatever4");
-                    },
+                    [&](auto& arg) {},
                     [&](const fastgltf::sources::URI& fileName) {
                         if (fileName.fileByteOffset != 0) {
                             LOG_ERROR(Asset, "File byte offset is not currently supported.");
@@ -172,7 +171,6 @@ bool StaticModelGenerateSlot::LoadGltf()
                         }
 
                         const Core::Path fullPath = parentPath / fileName.uri.path();
-                        LOG_INFO(Asset, "Whatever");
                         stbiData = stbi_load(fullPath.c_str(), &width, &height, &nrChannels, 4);
                     },
                     [&](const fastgltf::sources::Array& vector) {
@@ -183,13 +181,11 @@ bool StaticModelGenerateSlot::LoadGltf()
                                 return;
                             }
                         }
-                        LOG_INFO(Asset, "Whatever2");
                         stbiData = stbi_load_from_memory(reinterpret_cast<const unsigned char*>(vector.bytes.data()), static_cast<int>(vector.bytes.size()), &width, &height, &nrChannels, 4);
                     },
                     [&](const fastgltf::sources::BufferView& view) {
                         const fastgltf::BufferView& bufferView = gltf.bufferViews[view.bufferViewIndex];
                         const fastgltf::Buffer& buffer = gltf.buffers[bufferView.bufferIndex];
-                        LOG_INFO(Asset, "Whatever3");
                         std::visit(fastgltf::visitor{
                                        [](auto&) {},
                                        [&](const fastgltf::sources::Array& vector) {
@@ -853,8 +849,10 @@ bool StaticModelGenerateSlot::WriteStaticModel()
 {
     ZoneScopedN("WriteStaticModel");
 
-    std::vector<DXGI_FORMAT> preferredImageFormats;
-    preferredImageFormats.resize(rawModel.images.Size(), DXGI_FORMAT_BC7_UNORM);
+    auto preferredImageFormats = Core::HeapArray<DXGI_FORMAT>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, rawModel.images.Size());
+    for (auto& imf : preferredImageFormats) {
+        imf = DXGI_FORMAT_BC7_UNORM;
+    }
 
     for (const auto& material : rawModel.materials) {
         // Color/emissive textures -> BC7 SRGB
@@ -886,17 +884,25 @@ bool StaticModelGenerateSlot::WriteStaticModel()
         }
     }
 
-    std::vector<Engine::TextureID> textureIDs;
-    textureIDs.reserve(rawModel.images.Size());
+
+    auto textureIDs = Core::HeapArray<Engine::TextureID>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, rawModel.images.Size());
 
     for (int32_t i = 0; i < static_cast<int32_t>(rawModel.images.Size()); ++i) {
         RawImage& image = rawModel.images[i];
-        Core::Path textureOutPath = gltfPath.Parent() / "textures" / (std::string(gltfPath.Stem()) + "_texture_" + std::to_string(i) + ".wtexture");
-        textureIDs.push_back(generator->RequestTextureGenerateFromMemory(std::move(image.data), image.w, image.h, image.bpp, textureOutPath, true, preferredImageFormats[i]));
+        char indexBuf[16];
+        *std::to_chars(indexBuf, indexBuf + sizeof(indexBuf), i).ptr = '\0';
+
+        Core::InlineString<128> texName(gltfPath.Stem());
+        texName.Append("_texture_");
+        texName.Append(indexBuf);
+        texName.Append(".wtexture");
+
+        Core::Path textureOutPath = gltfPath.Parent() / "textures" / texName.c_str();
+        textureIDs[i] = generator->RequestTextureGenerateFromMemory(std::move(image.data), image.w, image.h, image.bpp, textureOutPath, true, preferredImageFormats[i]);
     }
 
     auto texRef = [&](int idx) -> Engine::TextureID {
-        return idx >= 0 && idx < static_cast<int>(textureIDs.size()) ? textureIDs[idx] : Engine::TextureID::INVALID;
+        return idx >= 0 && idx < static_cast<int>(textureIDs.Size()) ? textureIDs[idx] : Engine::TextureID::INVALID;
     };
     auto sampDesc = [&](int idx) -> Engine::SamplerDesc {
         return idx >= 0 && idx < static_cast<int>(rawModel.samplerInfos.Size()) ? rawModel.samplerInfos[idx] : Engine::SamplerDesc{};
@@ -942,39 +948,39 @@ bool StaticModelGenerateSlot::WriteStaticModel()
         header.nodeCount = static_cast<uint32_t>(rawModel.nodes.Size());
         header.meshNodeCount = meshNodeCount;
 
-        std::vector<std::byte> body;
+        auto body = Core::Vector<std::byte>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, 0);
 
-        header.vertexOffset = static_cast<uint32_t>(body.size());
+        header.vertexOffset = static_cast<uint32_t>(body.Size());
         header.vertexCount = static_cast<uint32_t>(rawModel.vertices.Size());
         Engine::WriteVector(body, rawModel.vertices);
 
-        header.indexOffset = static_cast<uint32_t>(body.size());
+        header.indexOffset = static_cast<uint32_t>(body.Size());
         header.indexCount = static_cast<uint32_t>(rawModel.indices.Size());
         Engine::WriteVector(body, rawModel.indices);
 
-        header.meshletVertexOffset = static_cast<uint32_t>(body.size());
+        header.meshletVertexOffset = static_cast<uint32_t>(body.Size());
         header.meshletVertexCount = static_cast<uint32_t>(rawModel.meshletVertices.Size());
         Engine::WriteVector(body, rawModel.meshletVertices);
 
-        header.meshletTriangleOffset = static_cast<uint32_t>(body.size());
+        header.meshletTriangleOffset = static_cast<uint32_t>(body.Size());
         header.meshletTriangleCount = static_cast<uint32_t>(rawModel.meshletTriangles.Size());
         Engine::WriteVector(body, rawModel.meshletTriangles);
 
-        header.meshletOffset = static_cast<uint32_t>(body.size());
+        header.meshletOffset = static_cast<uint32_t>(body.Size());
         header.meshletCount = static_cast<uint32_t>(rawModel.meshlets.Size());
         Engine::WriteVector(body, rawModel.meshlets);
 
-        header.primitiveOffset = static_cast<uint32_t>(body.size());
+        header.primitiveOffset = static_cast<uint32_t>(body.Size());
         header.primitiveCount = static_cast<uint32_t>(rawModel.primitives.Size());
         Engine::WriteArray(body, rawModel.primitives);
 
-        header.materialOffset = static_cast<uint32_t>(body.size());
+        header.materialOffset = static_cast<uint32_t>(body.Size());
         header.materialCount = static_cast<uint32_t>(rawModel.materials.Size());
         for (const auto& mat : rawModel.materials) {
             Engine::WriteMaterial(body, mat);
         }
 
-        header.meshOffset = static_cast<uint32_t>(body.size());
+        header.meshOffset = static_cast<uint32_t>(body.Size());
         header.meshCount = static_cast<uint32_t>(rawModel.allMeshes.Size());
         for (const auto& mesh : rawModel.allMeshes) {
             Engine::WriteMeshInformation(body, mesh);
@@ -984,25 +990,34 @@ bool StaticModelGenerateSlot::WriteStaticModel()
 
         //
         {
-            std::vector<glm::vec3> positions;
-            positions.reserve(rawModel.vertices.Size());
-            for (const auto& v : rawModel.vertices) { positions.push_back(v.position); }
-            std::vector indices(rawModel.indices.begin(), rawModel.indices.end());
-            bounds = Engine::StaticModel::ComputeBounds(positions, &indices);
+            auto positions = Core::HeapArray<Vec3>(&memoryManager->Assets(), Core::AllocTag::AssetModel, rawModel.vertices.Size());
+            for (size_t i = 0; i < rawModel.vertices.Size(); ++i) {
+                positions[i] = rawModel.vertices[i].position;
+            }
+
+            auto indices = Core::HeapArray<uint32_t>(&memoryManager->Assets(), Core::AllocTag::AssetModel, rawModel.indices.Size());
+            for (size_t i = 0; i < rawModel.indices.Size(); ++i) {
+                indices[i] = rawModel.indices[i];
+            }
+
+            bounds = AssetLoad::ComputeBounds(positions, indices);
         }
 
-        std::vector<uint8_t> compressedBody = Engine::CompressLZ4(body.data(), body.size());
-        header.compressedBodySize = compressedBody.size();
-        header.uncompressedBodySize = body.size();
+        auto maxCompressedSize = Engine::CompressLZ4MaxSize(body.Size());
+        auto compressedBody = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, maxCompressedSize);
+        size_t realCompressedSize = Engine::CompressLZ4(body.Data(), body.Size(), compressedBody.Data(), compressedBody.Size());
 
-        std::vector<std::byte> nodeSection;
+        header.compressedBodySize = realCompressedSize;
+        header.uncompressedBodySize = body.Size();
+
+        auto nodeSection = Core::Vector<std::byte>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, 0);
         for (const auto& node : rawModel.nodes) {
             Engine::WriteNode(nodeSection, node);
         }
 
         Engine::WriteWStaticModelHeader(file, header);
-        file.write(reinterpret_cast<const char*>(compressedBody.data()), static_cast<std::streamsize>(compressedBody.size()));
-        file.write(reinterpret_cast<const char*>(nodeSection.data()), static_cast<std::streamsize>(nodeSection.size()));
+        file.write(reinterpret_cast<const char*>(compressedBody.Data()), static_cast<std::streamsize>(realCompressedSize));
+        file.write(reinterpret_cast<const char*>(nodeSection.Data()), static_cast<std::streamsize>(nodeSection.Size()));
         file.write(reinterpret_cast<const char*>(&bounds), sizeof(Engine::ModelBounds));
     }
 

@@ -184,6 +184,45 @@ public:
         size_ = newSize;
     }
 
+    void Append(const T* first, const T* last)
+    {
+        size_t count = static_cast<size_t>(last - first);
+        if (count == 0) { return; }
+
+        if (size_ + count > capacity_) {
+            Grow(size_ + count);
+        }
+
+        for (size_t i = 0; i < count; ++i) {
+            new(data_ + size_ + i) T(first[i]);
+        }
+        size_ += count;
+    }
+
+    void Insert(T* pos, const T* first, const T* last)
+    {
+        assert(pos >= data_ && pos <= data_ + size_);
+        size_t index = static_cast<size_t>(pos - data_);
+        size_t count = static_cast<size_t>(last - first);
+        if (count == 0) { return; }
+
+        if (size_ + count > capacity_) {
+            Grow(size_ + count);
+        }
+
+        // Shift existing elements
+        for (size_t i = size_; i > index; --i) {
+            new(data_ + i + count - 1) T(std::move(data_[i - 1]));
+            data_[i - 1].~T();
+        }
+
+        // Copy-construct new elements
+        for (size_t i = 0; i < count; ++i) {
+            new(data_ + index + i) T(first[i]);
+        }
+        size_ += count;
+    }
+
     void Clear()
     {
         for (size_t i = 0; i < size_; ++i) {

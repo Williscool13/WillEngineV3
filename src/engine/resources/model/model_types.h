@@ -43,14 +43,14 @@ struct PrimitiveProperty
 
 struct MeshInformation
 {
-    Core::InlineString<64> name;
+    Core::InlineString<> name;
     // todo parameterize this 128 primitive per mesh limit. Perhaps even increase it.
     Core::InlineVector<PrimitiveProperty,128> primitiveProperties;
 };
 
 struct Node
 {
-    Core::InlineString<64> name{};
+    Core::InlineString<> name{};
     uint32_t parent{~0u};
     uint32_t meshIndex{~0u};
     uint32_t depth{};

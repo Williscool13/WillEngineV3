@@ -9,7 +9,7 @@
 
 namespace Core
 {
-template<size_t N = 16>
+template<size_t N = 64>
 struct InlineString
 {
     char buf[N] = {};
