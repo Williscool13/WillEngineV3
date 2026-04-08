@@ -1,9 +1,7 @@
 add_library(audio STATIC
         audio_manager.cpp
         audio_manager.h
-        audio_asset.cpp
         audio_asset.h
-        audio_config.cpp
         audio_config.h
 )
 

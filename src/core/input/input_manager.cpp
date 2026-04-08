@@ -8,7 +8,7 @@ namespace Core
 {
 InputManager::InputManager(uint32_t w, uint32_t h)
 {
-    this->windowExtents = Vec2(static_cast<float>(w), static_cast<float>(h));
+    windowExtents = Vec2(static_cast<float>(w), static_cast<float>(h));
 }
 
 void InputManager::ProcessEvent(const SDL_Event& event)

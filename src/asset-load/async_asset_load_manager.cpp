@@ -10,6 +10,7 @@
 #include "audio/audio_asset.h"
 #include "platform/thread_utils.h"
 #include "asset-load-jobs/cubemap_load_slot.h"
+#include "core/memory/memory_manager.h"
 #include "engine/logging/engine_log.h"
 #include "engine/resources/model/static_model.h"
 #include "engine/resources/sampler/sampler.h"
@@ -25,7 +26,7 @@ namespace AssetLoad
 AsyncAssetLoadManager::AsyncAssetLoadManager(Core::MemoryManager& memoryManager, Render::VulkanContext* context, Render::ResourceManager* resourceManager, VkPipelineCache pipelineCache)
     : memoryManager(&memoryManager), context(context), resourceManager(resourceManager), pipelineCache(pipelineCache)
 {
-    assetLoadScheduler = memoryManager.PersistentAlloc<enki::TaskScheduler>(Core::AllocTag::AsyncAssetLoadManager);
+    assetLoadScheduler = new(memoryManager.PersistentAllocRaw(sizeof(enki::TaskScheduler), Core::AllocTag::AsyncAssetLoadManager)) enki::TaskScheduler();
 
     enki::TaskSchedulerConfig assetConfig;
     assetConfig.numTaskThreadsToCreate = 4;

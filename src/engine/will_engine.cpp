@@ -4,7 +4,6 @@
 
 #include "will_engine.h"
 
-#include <cstring>
 #include <mutex>
 
 #include <tracy/Tracy.hpp>
@@ -29,7 +28,6 @@
 #include "render/render_thread.h"
 #include "render/resource_manager.h"
 #include "render/pipelines/pipeline_manager.h"
-#include "utils/logging/logging.h"
 
 #if WILL_EDITOR
 #include "editor/asset-generation/asset_generator.h"
@@ -121,7 +119,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
     });
 
 #if LOGGING_ENABLED
-    engineLogger = memoryManager.PersistentAlloc<EngineLogger>(Core::AllocTag::EngineLogger);
+    engineLogger = new(memoryManager.PersistentAllocRaw(sizeof(EngineLogger), Core::AllocTag::EngineLogger)) EngineLogger();
     engineLogger->Init(logger);
 #endif
 
@@ -154,7 +152,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
         };
 
         SPDLOG_INFO("Scheduler operating with {} threads.", config.numTaskThreadsToCreate + 1);
-        scheduler = memoryManager.PersistentAlloc<enki::TaskScheduler>(Core::AllocTag::TaskScheduler);
+        scheduler = new(memoryManager.PersistentAllocRaw(sizeof(enki::TaskScheduler), Core::AllocTag::TaskScheduler)) enki::TaskScheduler();
         scheduler->Initialize(config);
     }
 
@@ -191,24 +189,23 @@ void WillEngine::Initialize(Utils::Logger* logger)
     //
     {
         ZoneScopedN("Engine Context");
-        engineContext = memoryManager.PersistentAlloc<Core::EngineContext>(Core::AllocTag::EngineContext);
-        inputManager = memoryManager.PersistentAlloc<Core::InputManager>(Core::AllocTag::InputManager, w, h);
-        timeManager = memoryManager.PersistentAlloc<Core::TimeManager>(Core::AllocTag::TimeManager);
+        engineContext = new(memoryManager.PersistentAllocRaw(sizeof(Core::EngineContext), Core::AllocTag::EngineContext)) Core::EngineContext();
+        inputManager = new(memoryManager.PersistentAllocRaw(sizeof(Core::InputManager), Core::AllocTag::InputManager)) Core::InputManager(w, h);
+        timeManager = new(memoryManager.PersistentAllocRaw(sizeof(Core::TimeManager), Core::AllocTag::TimeManager)) Core::TimeManager();
     }
 
     //
     {
         ZoneScopedN("CreateRenderThread");
         ImGui::SetAllocatorFunctions(ImGuiAlloc, ImGuiFree, &memoryManager);
-        engineRenderSynchronization = memoryManager.PersistentAlloc<Core::FrameSync>(Core::AllocTag::FrameSync);
-        renderThread = memoryManager.PersistentAlloc<Render::RenderThread>(Core::AllocTag::RenderThread, memoryManager, engineRenderSynchronization, scheduler, window, w, h);
+        engineRenderSynchronization = new(memoryManager.PersistentAllocRaw(sizeof(Core::FrameSync), Core::AllocTag::FrameSync)) Core::FrameSync();
+        renderThread = new(memoryManager.PersistentAllocRaw(sizeof(Render::RenderThread), Core::AllocTag::RenderThread)) Render::RenderThread(memoryManager, engineRenderSynchronization, scheduler, window, w, h);
     }
 
     //
     {
         ZoneScopedN("CreateAssetLoadThread");
-        asyncAssetLoadManager = memoryManager.PersistentAlloc<AssetLoad::AsyncAssetLoadManager>(
-            Core::AllocTag::AsyncAssetLoadManager,
+        asyncAssetLoadManager = new(memoryManager.PersistentAllocRaw(sizeof(AssetLoad::AsyncAssetLoadManager), Core::AllocTag::AsyncAssetLoadManager)) AssetLoad::AsyncAssetLoadManager(
             memoryManager,
             renderThread->GetVulkanContext(),
             renderThread->GetResourceManager(),
@@ -219,14 +216,14 @@ void WillEngine::Initialize(Utils::Logger* logger)
     //
     {
         ZoneScopedN("CreateAudioManager");
-        audioManager = memoryManager.PersistentAlloc<Audio::AudioManager>(Core::AllocTag::AudioManager, asyncAssetLoadManager);
+        audioManager = new(memoryManager.PersistentAllocRaw(sizeof(Audio::AudioManager), Core::AllocTag::AudioManager)) Audio::AudioManager(asyncAssetLoadManager);
     }
 
 
     //
     {
         ZoneScopedN("CreateAssetManager");
-        assetManager = memoryManager.PersistentAlloc<AssetManager>(Core::AllocTag::AssetManager, memoryManager, engineContext, asyncAssetLoadManager, renderThread->GetResourceManager());
+        assetManager = new(memoryManager.PersistentAllocRaw(sizeof(AssetManager), Core::AllocTag::AssetManager)) AssetManager(memoryManager, engineContext, asyncAssetLoadManager, renderThread->GetResourceManager());
         materialManager = std::make_unique<MaterialManager>(engineContext, assetManager);
     }
 

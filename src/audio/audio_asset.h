@@ -20,7 +20,7 @@ struct WillAudio
         FailedToLoad
     };
 
-    Core::InlineString<64> name{};
+    Core::InlineString<> name{};
     MIX_Mixer* mixer;
     Core::Path source{};
     Engine::AudioHandle selfHandle;

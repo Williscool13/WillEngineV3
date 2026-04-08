@@ -74,8 +74,8 @@ struct InputFrame
     bool isWindowInputFocus{false};
 
     // Helper accessors
-    const ButtonState& GetKey(Key k) const { return keys[static_cast<size_t>(k)]; }
-    const ButtonState& GetMouse(MouseButton btn) const { return mouseButtons[static_cast<size_t>(btn)]; }
+    [[nodiscard]] const ButtonState& GetKey(Key k) const { return keys[static_cast<size_t>(k)]; }
+    [[nodiscard]] const ButtonState& GetMouse(MouseButton btn) const { return mouseButtons[static_cast<size_t>(btn)]; }
 
     ButtonState& GetKey(Key k) { return keys[static_cast<size_t>(k)]; }
     ButtonState& GetMouse(MouseButton btn) { return mouseButtons[static_cast<size_t>(btn)]; }

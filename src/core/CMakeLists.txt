@@ -6,7 +6,6 @@ add_library(core STATIC
         containers/ring_buffer.h
         memory/handle.cpp
         memory/handle.h
-        input/input_frame.cpp
         input/input_frame.h
         input/input_utils.cpp
         input/input_utils.h
@@ -26,7 +25,6 @@ add_library(core STATIC
         memory/lock_free_handle_allocator.h
         string_id.cpp
         string_id.h
-        hash/fnv_1_a.cpp
         hash/fnv_1_a.h
         memory/arena.h
         memory/arena.cpp
