@@ -16,8 +16,8 @@
 
 namespace Editor
 {
-AssetGenerator::AssetGenerator(Core::MemoryManager& memoryManager, Core::EngineContext* ctx,Render::VulkanContext* vk, Render::RenderThread* renderThread, AssetLoad::AsyncAssetLoadManager* asyncAssetLoadManager)
-    : memoryManager(&memoryManager), ctx(ctx), vk(vk), renderThread(renderThread), asyncAssetLoadManager(asyncAssetLoadManager)
+AssetGenerator::AssetGenerator(Core::MemoryManager& memoryManager, Core::EngineContext* ctx,Render::VulkanContext* vulkanContext, Render::RenderThread* renderThread, AssetLoad::AsyncAssetLoadManager* asyncAssetLoadManager)
+    : memoryManager(&memoryManager), ctx(ctx), vk(vulkanContext), renderThread(renderThread), asyncAssetLoadManager(asyncAssetLoadManager)
 {
     // todo remove asset generator specific scheduler, use engine scheduler with low priority
     assetGeneratorScheduler = std::make_unique<enki::TaskScheduler>();
@@ -49,9 +49,9 @@ AssetGenerator::AssetGenerator(Core::MemoryManager& memoryManager, Core::EngineC
 
     for (int32_t i = 0; i < TEXTURE_GENERATION_JOB_COUNT; ++i) {
         textureGenerateTasks[i].Initialize(
-            i,
             assetGeneratorScheduler.get(),
-            vk,
+            vulkanContext,
+            &memoryManager,
             [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
                 GraphicsQueueGPUDispatch(cmd, fence, completionSignal);
             },
@@ -63,7 +63,7 @@ AssetGenerator::AssetGenerator(Core::MemoryManager& memoryManager, Core::EngineC
     for (int32_t i = 0; i < ENVIRONMENT_MAP_GENERATION_JOB_COUNT; ++i) {
         environmentMapeGenerateTasks[i].Initialize(
             assetGeneratorScheduler.get(),
-            vk,
+            vulkanContext,
             renderThread->GetPipelineManager(),
             renderThread->GetResourceManager(),
             &memoryManager,

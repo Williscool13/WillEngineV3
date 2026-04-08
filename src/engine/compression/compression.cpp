@@ -62,21 +62,6 @@ size_t CompressLZ4(const void* uncompressedData, size_t uncompressedSize, void* 
     return actualCompressedSize;
 }
 
-std::vector<uint8_t> CompressLZ4(const void* data, size_t size)
-{
-    const int maxCompressedSize = LZ4_compressBound(static_cast<int>(size));
-    std::vector<uint8_t> compressed(maxCompressedSize);
-    const int compressedSize = LZ4_compress_HC(
-        static_cast<const char*>(data), reinterpret_cast<char*>(compressed.data()),
-        static_cast<int>(size), maxCompressedSize, LZ4HC_CLEVEL_DEFAULT);
-    if (compressedSize <= 0) {
-        LOG_CRITICAL(Engine, "LZ4 compression failed.");
-        assert(false);
-    }
-    compressed.resize(compressedSize);
-    return compressed;
-}
-
 void DecompressLZ4(const void* compressedData, size_t compressedSize, void* decompressedData, size_t uncompressedSize)
 {
     const int result = LZ4_decompress_safe(

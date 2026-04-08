@@ -29,7 +29,6 @@ size_t CompressLZ4MaxSize(size_t size);
  * @return The actual size of the compressed data
  */
 size_t CompressLZ4(const void* uncompressedData, size_t uncompressedSize, void* compressedData, size_t compressedSize);
-std::vector<uint8_t> CompressLZ4(const void* data, size_t size);
 void DecompressLZ4(const void* compressedData, size_t compressedSize, void* decompressedData, size_t uncompressedSize);
 } // Engine
 

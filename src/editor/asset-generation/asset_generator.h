@@ -106,7 +106,7 @@ using ModelGenerateSlotHandle = Core::Handle<StaticModelGenerateSlot>;
 class AssetGenerator
 {
 public:
-    AssetGenerator(Core::MemoryManager& memoryManager, Core::EngineContext* ctx, Render::VulkanContext* vk, Render::RenderThread* renderThread, AssetLoad::AsyncAssetLoadManager* asyncAssetLoadManager);
+    AssetGenerator(Core::MemoryManager& memoryManager, Core::EngineContext* ctx, Render::VulkanContext* vulkanContext, Render::RenderThread* renderThread, AssetLoad::AsyncAssetLoadManager* asyncAssetLoadManager);
 
     ~AssetGenerator();
 

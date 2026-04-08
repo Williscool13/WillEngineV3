@@ -12,6 +12,7 @@
 
 #include "asset_generation_types.h"
 #include "bc7enc_rdo/rdo_bc_encoder.h"
+#include "core/memory/memory_manager.h"
 #include "engine/compression/compression.h"
 #include "engine/resources/texture/texture_format.h"
 #include "platform/file_utils.h"
@@ -27,14 +28,15 @@ TextureGenerateSlot::TextureGenerateSlot() = default;
 TextureGenerateSlot::~TextureGenerateSlot() = default;
 
 void TextureGenerateSlot::Initialize(
-    int32_t slotIndex,
     enki::TaskScheduler* _scheduler,
     Render::VulkanContext* _context,
-    std::function<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> graphicsDispatchCallback,
-    std::function<void(bool success, TextureGenerateSlotHandle slotHandle)> notifyCallback)
+    Core::MemoryManager* _memoryManager,
+    Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> graphicsDispatchCallback,
+    Core::InlineFunction<void(bool success, TextureGenerateSlotHandle slotHandle)> notifyCallback)
 {
     scheduler = _scheduler;
     context = _context;
+    memoryManager = _memoryManager;
     _graphicsDispatchCallback = std::move(graphicsDispatchCallback);
     _notifyCallback = std::move(notifyCallback);
 
@@ -52,13 +54,12 @@ void TextureGenerateSlot::Launch(TextureGenerateSlotHandle _slotHandle, const Co
     mipmapped = _mipmapped;
     targetFormat = _targetFormat;
 
-    if (task && !task->GetIsComplete()) {
-        scheduler->WaitforTask(task.get());
+    if (!task.GetIsComplete()) {
+        scheduler->WaitforTask(&task);
     }
 
-    task = std::make_unique<GenerateTask>();
-    task->taskSlot = this;
-    scheduler->AddTaskSetToPipe(task.get());
+    task.taskSlot = this;
+    scheduler->AddTaskSetToPipe(&task);
 }
 
 void TextureGenerateSlot::LaunchFromMemory(TextureGenerateSlotHandle _slotHandle, Core::HeapArray<uint8_t> pixels, uint32_t w, uint32_t h, uint32_t bytesPerPixel,
@@ -75,13 +76,12 @@ void TextureGenerateSlot::LaunchFromMemory(TextureGenerateSlotHandle _slotHandle
     preloadedBytesPerPixel = bytesPerPixel;
     imagePath = Core::Path{};
 
-    if (task && !task->GetIsComplete()) {
-        scheduler->WaitforTask(task.get());
+    if (!task.GetIsComplete()) {
+        scheduler->WaitforTask(&task);
     }
 
-    task = std::make_unique<GenerateTask>();
-    task->taskSlot = this;
-    scheduler->AddTaskSetToPipe(task.get());
+    task.taskSlot = this;
+    scheduler->AddTaskSetToPipe(&task);
 }
 
 void TextureGenerateSlot::Clear()
@@ -89,7 +89,7 @@ void TextureGenerateSlot::Clear()
     imagePath = Core::Path{};
     outputPath = Core::Path{};
     sourceImage = {};
-    mipData.clear();
+    mipData = {};
     imageStagingAllocator.Reset();
     imageReceivingAllocator.Reset();
     preloadedPixels = {};
@@ -153,7 +153,7 @@ void TextureGenerateSlot::GenerateTask::ExecuteRange(enki::TaskSetPartition rang
     vkDestroyCommandPool(taskSlot->context->device, graphicsCommandPool, nullptr);
 }
 
-bool TextureGenerateSlot::LoadImageAndGenerate(VkCommandBuffer cmd, const std::function<void()>& startRecording, const std::function<void(bool)>& submitAndWait)
+bool TextureGenerateSlot::LoadImageAndGenerate(VkCommandBuffer cmd, const Core::InlineFunction<void()>& startRecording, const Core::InlineFunction<void(bool)>& submitAndWait)
 {
     ZoneScopedN("LoadImageAndGenerate");
 
@@ -169,7 +169,9 @@ bool TextureGenerateSlot::LoadImageAndGenerate(VkCommandBuffer cmd, const std::f
         pixelData = preloadedPixels.Data();
     }
     else {
-        int32_t w, h, nrChannels;
+        int32_t w{};
+        int32_t h{};
+        int32_t nrChannels{};
         stbi_set_flip_vertically_on_load_thread(1);
         stbiData = stbi_load(imagePath.c_str(), &w, &h, &nrChannels, 4);
         stbi_set_flip_vertically_on_load_thread(0);
@@ -308,7 +310,6 @@ bool TextureGenerateSlot::LoadImageAndGenerate(VkCommandBuffer cmd, const std::f
     // Copy back to CPU
     {
         ZoneScopedN("CopyImageToCPU");
-        mipData.resize(mipLevels);
         for (uint32_t mip = 0; mip < mipLevels; mip++) {
             uint32_t mipWidth = std::max(1u, sourceImage.extent.width >> mip);
             uint32_t mipHeight = std::max(1u, sourceImage.extent.height >> mip);
@@ -330,8 +331,8 @@ bool TextureGenerateSlot::LoadImageAndGenerate(VkCommandBuffer cmd, const std::f
             vkCmdCopyImageToBuffer(cmd, sourceImage.handle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, imageReceivingBuffer.handle, 1, &_copyRegion);
             submitAndWait(mip < mipLevels - 1);
 
-            mipData[mip].resize(mipSize);
-            memcpy(mipData[mip].data(), imageReceivingBuffer.allocationInfo.pMappedData, mipSize);
+            mipData[mip] = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, mipSize);
+            memcpy(mipData[mip].Data(), imageReceivingBuffer.allocationInfo.pMappedData, mipSize);
         }
     }
 
@@ -386,7 +387,7 @@ bool TextureGenerateSlot::WriteWTextureFile()
         struct EncodeMipTask : enki::ITaskSet
         {
             rdo_bc::rdo_bc_params* params;
-            std::vector<std::vector<uint8_t> >* mipData;
+            Core::Array<Core::HeapArray<uint8_t>, 13>* mipData;
             VkExtent3D imageExtent;
             ktxTexture2* texture;
 
@@ -397,7 +398,7 @@ bool TextureGenerateSlot::WriteWTextureFile()
                     uint32_t mipHeight = std::max(1u, imageExtent.height >> mip);
 
                     utils::image_u8 srcImage(mipWidth, mipHeight);
-                    const uint8_t* rgbaData = (*mipData)[mip].data();
+                    const uint8_t* rgbaData = (*mipData)[mip].Data();
                     for (uint32_t y = 0; y < mipHeight; ++y) {
                         for (uint32_t x = 0; x < mipWidth; ++x) {
                             const uint8_t* pixel = &rgbaData[(y * mipWidth + x) * 4];
@@ -416,8 +417,7 @@ bool TextureGenerateSlot::WriteWTextureFile()
                     const void* compressedBlocks = encoder.get_blocks();
                     uint32_t blocksSizeInBytes = encoder.get_total_blocks_size_in_bytes();
 
-                    ktxTexture_SetImageFromMemory(ktxTexture(texture), mip, 0, 0,
-                                                  static_cast<const ktx_uint8_t*>(compressedBlocks), blocksSizeInBytes);
+                    ktxTexture_SetImageFromMemory(ktxTexture(texture), mip, 0, 0, static_cast<const ktx_uint8_t*>(compressedBlocks), blocksSizeInBytes);
                 }
             }
         };
@@ -446,7 +446,9 @@ bool TextureGenerateSlot::WriteWTextureFile()
         return false;
     }
 
-    std::vector<uint8_t> compressed = Engine::CompressLZ4(ktxBytes, ktxSize);
+    auto maxCompressedSize = Engine::CompressLZ4MaxSize(ktxSize);
+    auto compressed = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, maxCompressedSize);
+    size_t realCompressedSize = Engine::CompressLZ4(ktxBytes, ktxSize, compressed.Data(), compressed.Size());
     free(ktxBytes);
 
     Engine::WTextureHeader header{};
@@ -454,11 +456,11 @@ bool TextureGenerateSlot::WriteWTextureFile()
     header.width = sourceImage.extent.width;
     header.height = sourceImage.extent.height;
     header.mipCount = mipLevels;
-    header.uncompressedSize = static_cast<uint64_t>(ktxSize);
-    header.dataSize = static_cast<uint64_t>(compressed.size());
+    header.uncompressedSize = ktxSize;
+    header.dataSize = realCompressedSize;
 
-    const std::string stem = imagePath.IsEmpty() ? std::string(outputPath.Stem()) : std::string(imagePath.Stem());
-    const size_t copyLen = std::min(stem.size(), Engine::WTEXTURE_NAME_LENGTH - 1);
+    Core::InlineString stem = imagePath.IsEmpty() ? Core::InlineString(outputPath.Stem()) : Core::InlineString(imagePath.Stem());
+    const size_t copyLen = std::min(stem.Size(), Engine::WTEXTURE_NAME_LENGTH - 1);
     memcpy(header.name, stem.c_str(), copyLen);
     header.name[copyLen] = '\0';
 
@@ -473,7 +475,7 @@ bool TextureGenerateSlot::WriteWTextureFile()
         LOG_ERROR(Asset, "Failed to write header: {}", outputPath.c_str());
         return false;
     }
-    f.write(reinterpret_cast<const char*>(compressed.data()), static_cast<std::streamsize>(compressed.size()));
+    f.write(reinterpret_cast<const char*>(compressed.Data()), static_cast<std::streamsize>(realCompressedSize));
 
     LOG_INFO(Asset, "Wrote {}", outputPath.c_str());
     return true;
