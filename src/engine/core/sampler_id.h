@@ -6,7 +6,6 @@
 #define WILL_ENGINE_SAMPLER_ID_H
 
 #include <cstdint>
-#include <functional>
 
 #include "core/containers/hash.h"
 
@@ -31,18 +30,6 @@ struct SamplerID
 
 inline const SamplerID SamplerID::INVALID{};
 } // Engine
-
-namespace std
-{
-template<>
-struct hash<Engine::SamplerID>
-{
-    size_t operator()(Engine::SamplerID s) const noexcept
-    {
-        return s.id;
-    }
-};
-}
 
 namespace Core
 {

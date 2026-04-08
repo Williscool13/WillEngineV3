@@ -224,7 +224,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
     {
         ZoneScopedN("CreateAssetManager");
         assetManager = new(memoryManager.PersistentAllocRaw(sizeof(AssetManager), Core::AllocTag::AssetManager)) AssetManager(memoryManager, engineContext, asyncAssetLoadManager, renderThread->GetResourceManager());
-        materialManager = std::make_unique<MaterialManager>(engineContext, assetManager);
+        materialManager = new(memoryManager.PersistentAllocRaw(sizeof(MaterialManager), Core::AllocTag::MaterialManager)) MaterialManager(memoryManager, engineContext, assetManager);
     }
 
     //
@@ -275,7 +275,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
         engineContext->windowContext.viewportOffsetX = 0;
         engineContext->windowContext.viewportOffsetY = 0;
         engineContext->assetManager = assetManager;
-        engineContext->materialManager = materialManager.get();
+        engineContext->materialManager = materialManager;
         engineContext->audioManager = audioManager;
         engineContext->physicsSystem = physicsSystem.get();
         engineContext->scheduler = scheduler;
@@ -1106,7 +1106,7 @@ void WillEngine::Cleanup()
 #endif
 
     physicsSystem.reset();
-    materialManager.reset();
+    materialManager->~MaterialManager();
     assetManager->~AssetManager();
 
     asyncAssetLoadManager->Join();

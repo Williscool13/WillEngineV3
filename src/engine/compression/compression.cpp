@@ -10,35 +10,36 @@
 
 namespace Engine
 {
-std::vector<uint8_t> CompressZlib(const void* data, size_t size)
+size_t CompressZlibMaxSize(size_t size)
 {
-    mz_ulong compressedSize = mz_compressBound(size);
-    std::vector<uint8_t> compressed(compressedSize);
+    return mz_compressBound(static_cast<mz_ulong>(size));
+}
 
-    int result = mz_compress(compressed.data(), &compressedSize, static_cast<const unsigned char*>(data), size);
+size_t CompressZlib(const void* uncompressedData, size_t uncompressedSize, void* compressedData, size_t compressedSize)
+{
+    size_t maxCompressedSize = CompressZlibMaxSize(uncompressedSize);
+    assert(maxCompressedSize <= compressedSize && "CompressZlib failed due to compressed output buffer too small");
 
+    mz_ulong actualCompressedSize = static_cast<mz_ulong>(compressedSize);
+    int result = mz_compress(static_cast<unsigned char*>(compressedData), &actualCompressedSize,
+                             static_cast<const unsigned char*>(uncompressedData), static_cast<mz_ulong>(uncompressedSize));
     if (result != MZ_OK) {
         LOG_CRITICAL(Engine, "zlib compression failed.");
         assert(false);
     }
 
-    compressed.resize(compressedSize);
-    return compressed;
+    return actualCompressedSize;
 }
 
-std::vector<uint8_t> DecompressZlib(const void* data, size_t compressedSize, size_t uncompressedSize)
+void DecompressZlib(const void* compressedData, size_t compressedSize, void* decompressedData, size_t uncompressedSize)
 {
-    std::vector<uint8_t> decompressed(uncompressedSize);
-    mz_ulong destLen = uncompressedSize;
-
-    int result = mz_uncompress(decompressed.data(), &destLen, static_cast<const unsigned char*>(data), compressedSize);
-
+    mz_ulong destLen = static_cast<mz_ulong>(uncompressedSize);
+    int result = mz_uncompress(static_cast<unsigned char*>(decompressedData), &destLen,
+                               static_cast<const unsigned char*>(compressedData), static_cast<mz_ulong>(compressedSize));
     if (result != MZ_OK) {
         LOG_CRITICAL(Engine, "zlib decompression failed.");
         assert(false);
     }
-
-    return decompressed;
 }
 
 size_t CompressLZ4MaxSize(size_t size)

@@ -7,7 +7,7 @@
 #include <spdlog/sinks/base_sink.h>
 
 #include "log_category.h"
-#include "../../core/containers/ring_buffer.h"
+#include "core/containers/ring_buffer.h"
 
 namespace Engine
 {
@@ -85,6 +85,7 @@ protected:
 
 private:
     uint64_t nextSequence = 0;
+    // not thread safe? Needs mutex locks?
     Core::RingBuffer<LogEntry, TRACE_CAPACITY>    traceEntries;
     Core::RingBuffer<LogEntry, DEBUG_CAPACITY>    debugEntries;
     Core::RingBuffer<LogEntry, INFO_CAPACITY>     infoEntries;

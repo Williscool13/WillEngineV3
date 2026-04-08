@@ -13,7 +13,6 @@
 #include "core/containers/function.h"
 #include "core/containers/heap_array.h"
 #include "core/containers/inline_function.h"
-#include "core/containers/vector.h"
 #include "core/hash/fnv_1_a.h"
 #include "core/memory/memory_manager.h"
 #include "engine/compression/compression.h"
@@ -298,7 +297,7 @@ void CreateBRDFLookupTable(
     header.dataSize = realSize;
 
     std::string_view name = outputPath.Stem();
-    size_t copyLen = std::min(name.size(), (size_t)Engine::WTEXTURE_NAME_LENGTH - 1);
+    size_t copyLen = std::min(name.size(), static_cast<size_t>(Engine::WTEXTURE_NAME_LENGTH) - 1);
     strncpy_s(header.name, Engine::WTEXTURE_NAME_LENGTH, name.data(), copyLen);
     header.name[copyLen] = '\0';
 

@@ -9,6 +9,7 @@
 #include "resources/scene/scene_format.h"
 #include "editor/asset-generation/miscellaneous_asset_generate.h"
 #include "logging/engine_log.h"
+#include "platform/file_utils.h"
 #include "platform/paths.h"
 #include "render/resource_manager.h"
 #include "resources/model/model_format.h"
@@ -17,13 +18,13 @@ namespace Engine
 {
 AssetManager::AssetManager(Core::MemoryManager& memoryManager, Core::EngineContext* ctx, AssetLoad::AsyncAssetLoadManager* assetLoadManager, Render::ResourceManager* resourceManager)
     : memoryManager(&memoryManager), ctx(ctx), assetLoadManager(assetLoadManager), resourceManager(resourceManager),
-      modelNameToId(&memoryManager.Persistent(), Core::AllocTag::AssetManager, 2 * MAX_LOADED_MODELS),
-      modelCache(&memoryManager.Persistent(), Core::AllocTag::AssetManager, 2 * MAX_LOADED_MODELS),
-      textureNameToId(&memoryManager.Persistent(), Core::AllocTag::AssetManager, 2 * MAX_LOADED_TEXTURES),
-      textureCache(&memoryManager.Persistent(), Core::AllocTag::AssetManager, 2 * MAX_LOADED_TEXTURES),
-      cubemapCache(&memoryManager.Persistent(), Core::AllocTag::AssetManager, 2 * MAX_LOADED_CUBEMAPS),
-      sceneCache(&memoryManager.Persistent(), Core::AllocTag::AssetManager, 512),
-      prefabCache(&memoryManager.Persistent(), Core::AllocTag::AssetManager, 512)
+      modelNameToId(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_CACHED_MODELS),
+      modelCache(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_CACHED_MODELS),
+      textureNameToId(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_CACHED_TEXTURES),
+      textureCache(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_CACHED_TEXTURES),
+      cubemapCache(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_CACHED_CUBEMAPS),
+      sceneCache(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_CACHED_SCENES),
+      prefabCache(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_CACHED_PREFABS)
 {
 #if WILL_EDITOR
     // Creates white/error if they don't exist. Also creates BRDF LUT
@@ -177,10 +178,10 @@ StaticModelHandle AssetManager::LoadProceduralModel(ProceduralParams& params)
     uint64_t hash = fnv1a64(reinterpret_cast<const uint8_t*>(&idx), sizeof(idx));
     // The fuck is this shit what the fuck
     std::visit([&hash](const auto& v) {
-       if constexpr (!std::is_same_v<std::decay_t<decltype(v)>, std::monostate>) {
-           hash = fnv1a64(reinterpret_cast<const uint8_t*>(&v), sizeof(v), hash);
-       }
-   }, params);
+        if constexpr (!std::is_same_v<std::decay_t<decltype(v)>, std::monostate>) {
+            hash = fnv1a64(reinterpret_cast<const uint8_t*>(&v), sizeof(v), hash);
+        }
+    }, params);
 
     ModelID proceduralModelId{hash};
 
@@ -222,18 +223,18 @@ StaticModelHandle AssetManager::LoadProceduralModel(ProceduralParams& params)
 
 StaticModelHandle AssetManager::LoadSplineModel(const SplineParams& params)
 {
-    uint64_t hash = fnv1a64(reinterpret_cast<const uint8_t*>(params.spline.points.Data()), params.spline.points.Size() * sizeof(glm::vec3));
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.spline.mode),    sizeof(params.spline.mode),    hash);
+    uint64_t hash = fnv1a64(reinterpret_cast<const uint8_t*>(params.spline.points.Data()), params.spline.points.Size() * sizeof(Vec3));
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.spline.mode), sizeof(params.spline.mode), hash);
     hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.spline.bClosed), sizeof(params.spline.bClosed), hash);
     hash = fnv1a64(reinterpret_cast<const uint8_t*>(params.spline.rolls.Data()), params.spline.rolls.Size() * sizeof(float), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.radius),           sizeof(params.radius),           hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.rollAngle),        sizeof(params.rollAngle),        hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.sides),            sizeof(params.sides),            hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.segmentsPerSpan),  sizeof(params.segmentsPerSpan),  hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.bCaps),            sizeof(params.bCaps),            hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.bDualPath),        sizeof(params.bDualPath),        hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.dualPathSpacing),  sizeof(params.dualPathSpacing),  hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.bCrossPlanks),     sizeof(params.bCrossPlanks),     hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.radius), sizeof(params.radius), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.rollAngle), sizeof(params.rollAngle), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.sides), sizeof(params.sides), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.segmentsPerSpan), sizeof(params.segmentsPerSpan), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.bCaps), sizeof(params.bCaps), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.bDualPath), sizeof(params.bDualPath), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.dualPathSpacing), sizeof(params.dualPathSpacing), hash);
+    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.bCrossPlanks), sizeof(params.bCrossPlanks), hash);
     hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.crossPlankInterval), sizeof(params.crossPlankInterval), hash);
 
     ModelID splineModelId{hash};

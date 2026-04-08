@@ -230,6 +230,13 @@ public:
 
     bool Contains(const K& key) const { return Find(key) != nullptr; }
 
+    const V& At(const K& key) const
+    {
+        const V* v = Find(key);
+        assert(v != nullptr && "Map::At: key not found");
+        return *v;
+    }
+
     bool Remove(const K& key)
     {
         if (capacity_ == 0) { return false; }

@@ -230,6 +230,13 @@ public:
 
     bool Contains(const K& key) const { return Find(key) != nullptr; }
 
+    const V& At(const K& key) const
+    {
+        const V* v = Find(key);
+        assert(v != nullptr && "ArenaFixedMap::At: key not found");
+        return *v;
+    }
+
     bool Remove(const K& key)
     {
         if (!slots_) { return false; }

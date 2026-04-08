@@ -5,7 +5,6 @@
 #ifndef WILL_ENGINE_COMPRESSION_H
 #define WILL_ENGINE_COMPRESSION_H
 #include <cstdint>
-#include <vector>
 
 namespace Engine
 {
@@ -16,8 +15,9 @@ enum class CompressionType : uint32_t
     LZ4  = 2,
 };
 
-std::vector<uint8_t> CompressZlib(const void* data, size_t size);
-std::vector<uint8_t> DecompressZlib(const void* data, size_t compressedSize, size_t uncompressedSize);
+size_t CompressZlibMaxSize(size_t size);
+size_t CompressZlib(const void* uncompressedData, size_t uncompressedSize, void* compressedData, size_t compressedSize);
+void DecompressZlib(const void* compressedData, size_t compressedSize, void* decompressedData, size_t uncompressedSize);
 
 size_t CompressLZ4MaxSize(size_t size);
 /**

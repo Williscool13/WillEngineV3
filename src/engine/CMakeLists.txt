@@ -13,9 +13,7 @@ add_library(engine STATIC
         resources/material/material_manager.h
         logging/engine_logger.cpp
         logging/engine_logger.h
-        logging/imgui_sink.cpp
         logging/imgui_sink.h
-        logging/engine_log.cpp
         logging/engine_log.h
         logging/log_category.cpp
         logging/log_category.h
@@ -23,11 +21,9 @@ add_library(engine STATIC
         core/texture_id.h
         core/sampler_id.h
         core/model_id.h
-        include/frame_sync.cpp
         include/frame_sync.h
         include/game_interface.cpp
         include/game_interface.h
-        include/engine_context.cpp
         include/engine_context.h
         resources/material/material.cpp
         resources/material/material.h

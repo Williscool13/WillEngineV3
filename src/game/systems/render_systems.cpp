@@ -429,7 +429,7 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core:
     }
 
     frameBuffer->mainViewFamily.materials.resize(Render::BINDLESS_MATERIAL_BUFFER_COUNT);
-    for (auto& [matID, slotIndex] : materialManager->GetIdToEntryMap()) {
+    for (const auto& [matID, slotIndex] : materialManager->GetIdToEntryMap()) {
         frameBuffer->mainViewFamily.materials[slotIndex] = materialManager->GetProperties(matID);
     }
 

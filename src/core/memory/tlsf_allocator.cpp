@@ -36,6 +36,7 @@ const char* AllocTagName(AllocTag tag)
         case AllocTag::AudioManager: return "AudioManager";
         case AllocTag::AsyncAssetLoadManager: return "AsyncAssetLoadManager";
         case AllocTag::AssetManager: return "AssetManager";
+        case AllocTag::MaterialManager: return "MaterialManager";
         case AllocTag::Count: return "Count";
     }
     return "Unknown";

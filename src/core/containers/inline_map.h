@@ -210,6 +210,13 @@ public:
 
     bool Contains(const K& key) const { return Find(key) != nullptr; }
 
+    const V& At(const K& key) const
+    {
+        const V* v = Find(key);
+        assert(v != nullptr && "InlineMap::At: key not found");
+        return *v;
+    }
+
     bool Remove(const K& key)
     {
         const uint64_t h = H{}(key);

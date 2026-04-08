@@ -6,7 +6,6 @@
 #define WILL_ENGINE_MODEL_ID_H
 
 #include <cstdint>
-#include <functional>
 
 #include "core/containers/hash.h"
 
@@ -31,18 +30,6 @@ struct ModelID
 
 inline const ModelID ModelID::INVALID{};
 } // Engine
-
-namespace std
-{
-template<>
-struct hash<Engine::ModelID>
-{
-    size_t operator()(Engine::ModelID m) const noexcept
-    {
-        return m.id;
-    }
-};
-}
 
 namespace Core
 {

@@ -1672,7 +1672,7 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
 
                 {
                     const auto& entryMap = materialManager->GetIdToEntryMap();
-                    const bool materialInUse = entryMap.contains(id) && materialManager->GetActiveMaterials()[entryMap.at(id)].refCounter > 0;
+                    const bool materialInUse = entryMap.Contains(id) && materialManager->GetActiveMaterials()[entryMap.At(id)].refCounter > 0;
                     ImGui::BeginDisabled(materialInUse);
                     if (ImGui::Button("Delete Material")) {
                         materialPendingDelete = id;

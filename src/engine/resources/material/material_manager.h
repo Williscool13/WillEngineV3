@@ -10,8 +10,11 @@
 
 #include "material.h"
 #include "core/string_id.h"
+#include "core/containers/array.h"
+#include "core/containers/fixed_map.h"
 #include "core/memory/free_list.h"
 #include "core/memory/handle_allocator.h"
+#include "core/memory/memory_manager.h"
 #include "engine/core/material_id.h"
 #include "render/render_config.h"
 #include "render/shaders/model_interop.h"
@@ -28,7 +31,7 @@ class AssetManager;
 class MaterialManager
 {
 public:
-    MaterialManager(Core::EngineContext* ctx, AssetManager* assetManager);
+    MaterialManager(Core::MemoryManager& memoryManager, Core::EngineContext* ctx, AssetManager* assetManager);
 
     MaterialID CreateImmutableMaterial(const Material& mat);
 
@@ -58,21 +61,21 @@ public:
     void LoadMutableMaterials();
 
     [[nodiscard]] MaterialID GetDefaultMaterial() const { return defaultMaterial; }
-    [[nodiscard]] bool DoesMutableMaterialExist(MaterialID materialID) const { return materials.contains(materialID); }
-    [[nodiscard]] const MaterialProperties& GetDefaultMaterialProperties() const { return materials.at(defaultMaterial).props; }
-    [[nodiscard]] const std::unordered_map<MaterialID, uint32_t>& GetIdToEntryMap() const { return idToEntryMap; }
+    [[nodiscard]] bool DoesMutableMaterialExist(MaterialID materialID) const { return materials.Contains(materialID); }
+    [[nodiscard]] const MaterialProperties& GetDefaultMaterialProperties() const { return materials.At(defaultMaterial).props; }
+    [[nodiscard]] const Core::FixedMap<MaterialID, uint32_t>& GetIdToEntryMap() const { return idToEntryMap; }
 
     [[nodiscard]] MaterialProperties GetProperties(MaterialID id) const;
 
     [[nodiscard]] const Material* GetMaterial(MaterialID id) const;
 
     [[nodiscard]] const uint32_t GetActiveMaterialCount() const { return activeMaterialAllocator.GetCount(); }
-    [[nodiscard]] const std::unordered_map<MaterialID, Material>& GetMaterials() const { return materials; }
-    [[nodiscard]] const std::array<MaterialEntry, Render::BINDLESS_MATERIAL_BUFFER_COUNT>& GetActiveMaterials() const { return activeMaterialBuffer; }
+    [[nodiscard]] const Core::FixedMap<MaterialID, Material>& GetMaterials() const { return materials; }
+    [[nodiscard]] const Core::Array<MaterialEntry, Render::BINDLESS_MATERIAL_BUFFER_COUNT>& GetActiveMaterials() const { return activeMaterialBuffer; }
 
     uint32_t GetMaterialIndex(MaterialID id)
     {
-        if (idToEntryMap.contains(id)) {
+        if (idToEntryMap.Contains(id)) {
             return idToEntryMap[id];
         }
 
@@ -85,18 +88,18 @@ private:
 
     MaterialID defaultMaterial{MaterialID::INVALID};
 
-    std::array<MaterialEntry, Render::BINDLESS_MATERIAL_BUFFER_COUNT> activeMaterialBuffer;
+    Core::Array<MaterialEntry, Render::BINDLESS_MATERIAL_BUFFER_COUNT> activeMaterialBuffer;
     Core::HandleAllocator<MaterialProperties, Render::BINDLESS_MATERIAL_BUFFER_COUNT> activeMaterialAllocator;
-    std::unordered_map<MaterialID, uint32_t> idToEntryMap;
 
+    Core::FixedMap<MaterialID, uint32_t> idToEntryMap;
 
     /**
      * Contains:
      *  - Runtime generated materials from models. Immutable so we can alias by hashing.
      *  - User defined materials referenced by String ID (see `nameToMaterialMap`). Designed to be modifiable at runtime.
      */
-    std::unordered_map<MaterialID, Material> materials;
-    std::unordered_map<StringID, MaterialID> nameToMaterialMap;
+    Core::FixedMap<MaterialID, Material> materials;
+    Core::FixedMap<StringID, MaterialID> nameToMaterialMap;
 
     std::mt19937_64 mutableIdRng{std::random_device{}()};
 };

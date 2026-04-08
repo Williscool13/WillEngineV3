@@ -6,7 +6,8 @@
 #define WILL_ENGINE_MATERIAL_ID_H
 
 #include <cstdint>
-#include <functional>
+
+#include "core/containers/hash.h"
 
 namespace Engine
 {
@@ -30,16 +31,9 @@ struct MaterialID
 inline const MaterialID MaterialID::INVALID{};
 } // Engine
 
-namespace std
+namespace Core
 {
-template<>
-struct hash<Engine::MaterialID>
-{
-    size_t operator()(Engine::MaterialID m) const noexcept
-    {
-        return m.id;
-    }
-};
+template<> struct Hash<Engine::MaterialID> { uint64_t operator()(Engine::MaterialID m) const { return m.id; } };
 }
 
 #endif //WILL_ENGINE_MATERIAL_ID_H

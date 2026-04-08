@@ -43,6 +43,7 @@ enum class AllocTag : uint32_t
     AudioManager,
     AsyncAssetLoadManager,
     AssetManager,
+    MaterialManager,
 
     Count
 };

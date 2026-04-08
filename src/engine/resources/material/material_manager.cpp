@@ -20,8 +20,13 @@
 
 namespace Engine
 {
-MaterialManager::MaterialManager(Core::EngineContext* ctx, AssetManager* assetManager)
-    : ctx(ctx), assetManager(assetManager)
+MaterialManager::MaterialManager(Core::MemoryManager& memoryManager, Core::EngineContext* ctx, AssetManager* assetManager)
+    : ctx(ctx),
+      assetManager(assetManager),
+      idToEntryMap(&memoryManager.Persistent(), Core::AllocTag::AssetManager, 2 * MAX_LOADED_MATERIALS),
+      materials(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_LOADED_MATERIALS),
+      nameToMaterialMap(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_LOADED_MATERIALS)
+
 {
     Material defaultMat{};
     defaultMat.props = {
@@ -65,7 +70,7 @@ MaterialManager::MaterialManager(Core::EngineContext* ctx, AssetManager* assetMa
 MaterialID MaterialManager::CreateImmutableMaterial(const Material& mat)
 {
     MaterialID matId = HashMaterial(mat);
-    if (materials.contains(matId)) {
+    if (materials.Contains(matId)) {
         return matId;
     }
 
@@ -82,7 +87,7 @@ MaterialID MaterialManager::CreateImmutableMaterial(const Material& mat)
 void MaterialManager::AcquireMaterial(MaterialID materialID)
 {
     MaterialEntry* entry{nullptr};
-    if (idToEntryMap.contains(materialID)) {
+    if (idToEntryMap.Contains(materialID)) {
         entry = &activeMaterialBuffer[idToEntryMap[materialID]];
     }
     else {
@@ -96,10 +101,10 @@ void MaterialManager::AcquireMaterial(MaterialID materialID)
 
     entry->refCounter++;
 
-    auto it = materials.find(materialID);
-    assert(it != materials.end() && "Material acquired but does not exist in the materials map");
+    auto it = materials.Find(materialID);
+    assert(it && "Material acquired but does not exist in the materials map");
 
-    Material& mat = it->second;
+    Material& mat = *it;
 
     if (!mat.bIsRuntimeLoaded) {
         auto resolveTexture = [&](TextureID id) -> int32_t {
@@ -137,7 +142,7 @@ void MaterialManager::ReleaseMaterial(MaterialID materialID)
     if (materialID == defaultMaterial) { return; }
 
     MaterialEntry* entry{nullptr};
-    if (idToEntryMap.contains(materialID)) {
+    if (idToEntryMap.Contains(materialID)) {
         entry = &activeMaterialBuffer[idToEntryMap[materialID]];
     }
 
@@ -163,10 +168,10 @@ void MaterialManager::ProcessRetirements()
 
         if (entry.refCounter == 0) {
             if (ctx->currentFrame >= entry.retireFrame) {
-                auto it = materials.find(entry.id);
-                assert(it != materials.end() && "Material released but does not exist in the materials map");
+                auto it = materials.Find(entry.id);
+                assert(it && "Material released but does not exist in the materials map");
 
-                const Material& mat = it->second;
+                Material& mat = *it;
                 for (TextureID texID : mat.textureRefs) {
                     if (texID.IsValid()) {
                         assetManager->UnloadTexture(texID);
@@ -176,11 +181,11 @@ void MaterialManager::ProcessRetirements()
                     assetManager->UnloadSampler(desc);
                 }
 
-                assert(it->second.bIsRuntimeLoaded && "Material released but it was never runtime loaded to begin with");
-                it->second.bIsRuntimeLoaded = false;
+                assert(mat.bIsRuntimeLoaded && "Material released but it was never runtime loaded to begin with");
+                mat.bIsRuntimeLoaded = false;
 
                 activeMaterialAllocator.Remove(entry.handle);
-                idToEntryMap.erase(entry.id);
+                idToEntryMap.Remove(entry.id);
                 entry = {};
             }
         }
@@ -192,10 +197,10 @@ void MaterialManager::UpdateMutableMaterial(MaterialID id, const Material& newMa
 {
     // todo: snapshot and restore for PIE materials
 
-    auto it = materials.find(id);
-    if (it == materials.end()) return;
+    auto it = materials.Find(id);
+    if (!it) { return; }
 
-    Material& mat = it->second;
+    Material& mat = *it;
 
     auto serialize = [&]() {
         WMaterialHeader header{};
@@ -276,40 +281,42 @@ void MaterialManager::UpdateMutableMaterial(MaterialID id, const Material& newMa
 
 MaterialID MaterialManager::FindMutableMaterial(StringID name) const
 {
-    if (auto it = nameToMaterialMap.find(name); it != nameToMaterialMap.end()) {
-        return it->second;
+    const MaterialID* mat = nameToMaterialMap.Find(name);;
+    if (mat == nullptr) {
+        return MaterialID::INVALID;
     }
-    return MaterialID::INVALID;
+
+    return *mat;
 }
 
 const Material* MaterialManager::GetMaterial(MaterialID id) const
 {
-    if (auto it = materials.find(id); it != materials.end()) {
-        return &it->second;
-    }
-    return nullptr;
+    return materials.Find(id);
 }
 
 MaterialProperties MaterialManager::GetProperties(MaterialID id) const
 {
-    if (auto it = materials.find(id); it != materials.end()) {
-        return it->second.props;
+    const Material* mat = materials.Find(id);
+    if (mat == nullptr) {
+        return MaterialProperties();
     }
-    return {};
+
+    return mat->props;
 }
 
 bool MaterialManager::DeleteMutableMaterial(MaterialID id)
 {
-    auto it = materials.find(id);
-    if (it == materials.end() || it->second.immutable) { return false; }
+    auto it = materials.Find(id);
+    if (it == nullptr) { return false; }
+    if (it->immutable) { return false; }
 
-    if (!it->second.sourcePath.empty()) {
-        std::filesystem::remove(it->second.sourcePath);
+    if (!it->sourcePath.empty()) {
+        std::filesystem::remove(it->sourcePath);
     }
 
-    StringID sid(it->second.name.c_str(), it->second.name.Size());
-    nameToMaterialMap.erase(sid);
-    materials.erase(it);
+    StringID sid(it->name.c_str(), it->name.Size());
+    nameToMaterialMap.Remove(sid);
+    materials.Remove(id);
     return true;
 }
 
@@ -352,7 +359,7 @@ void MaterialManager::Scan()
             if (!header) { continue; }
 
             StringID sid(header->name, strnlen(header->name, WMATERIAL_NAME_LENGTH));
-            if (nameToMaterialMap.contains(sid)) { continue; }
+            if (nameToMaterialMap.Contains(sid)) { continue; }
 
             const nlohmann::json j = nlohmann::json::parse(file);
             Material mat = DeserializeMaterial(j, entry.path());
