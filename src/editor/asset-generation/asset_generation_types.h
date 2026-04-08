@@ -80,17 +80,21 @@ struct RawStaticModel
         meshlets = Core::Vector<Meshlet>(alloc, Core::AllocTag::AssetModel);
     }
 
-    // Clears without freeing — slot reuses its allocated capacity across loads.
     void Reset()
     {
-        vertices.Clear();
-        indices.Clear();
-        meshletVertices.Clear();
-        meshletTriangles.Clear();
-        meshlets.Clear();
+        vertices = {};
+        indices = {};
+        meshletVertices = {};
+        meshletTriangles = {};
+        meshlets = {};
+        samplerInfos = {};
+        images = {};
+        primitives = {};
+        materials = {};
+        allMeshes = {};
+        nodes = {};
     }
 };
-
 } // Render
 
 #endif //WILL_ENGINE_MODEL_GENERATION_TYPES_H

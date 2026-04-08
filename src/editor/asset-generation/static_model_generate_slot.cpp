@@ -61,7 +61,8 @@ void StaticModelGenerateSlot::Launch(ModelGenerateSlotHandle _slotHandle, const 
 void StaticModelGenerateSlot::Clear()
 {
     outputPath = Core::Path{};
-    rawModel = {};
+    rawModel.Reset();
+    rawModel.Init(&memoryManager->AssetsScratch());
 }
 
 void StaticModelGenerateSlot::GenerateTask::ExecuteRange(enki::TaskSetPartition range, uint32_t threadNum)
@@ -627,14 +628,14 @@ bool StaticModelGenerateSlot::LoadGltf()
                             );
 
                             rawModel.meshlets.PushBack({
-                                .meshletBoundingSphere = glm::vec4(
+                                .meshletBoundingSphere = Vec4(
                                     bounds.center[0], bounds.center[1], bounds.center[2],
                                     bounds.radius
                                 ),
-                                .coneApex = glm::vec3(bounds.cone_apex[0], bounds.cone_apex[1], bounds.cone_apex[2]),
+                                .coneApex = Vec3(bounds.cone_apex[0], bounds.cone_apex[1], bounds.cone_apex[2]),
                                 .coneCutoff = bounds.cone_cutoff,
 
-                                .coneAxis = glm::vec3(bounds.cone_axis[0], bounds.cone_axis[1], bounds.cone_axis[2]),
+                                .coneAxis = Vec3(bounds.cone_axis[0], bounds.cone_axis[1], bounds.cone_axis[2]),
                                 .vertexOffset = vertexOffset,
 
                                 .meshletVertexOffset = meshletVertexOffset + meshlet.vertex_offset,
@@ -849,85 +850,107 @@ bool StaticModelGenerateSlot::WriteStaticModel()
 {
     ZoneScopedN("WriteStaticModel");
 
-    auto preferredImageFormats = Core::HeapArray<DXGI_FORMAT>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, rawModel.images.Size());
-    for (auto& imf : preferredImageFormats) {
-        imf = DXGI_FORMAT_BC7_UNORM;
+    if (!rawModel.images.IsEmpty()) {
+        auto preferredImageFormats = Core::HeapArray<DXGI_FORMAT>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, rawModel.images.Size());
+        for (auto& imf : preferredImageFormats) {
+            imf = DXGI_FORMAT_BC7_UNORM;
+        }
+
+        for (const auto& material : rawModel.materials) {
+            // Color/emissive textures -> BC7 SRGB
+            if (material.props.textureImageIndices.x >= 0) {
+                preferredImageFormats[material.props.textureImageIndices.x] = DXGI_FORMAT_BC7_UNORM_SRGB;
+            }
+            if (material.props.textureImageIndices.w >= 0) {
+                preferredImageFormats[material.props.textureImageIndices.w] = DXGI_FORMAT_BC7_UNORM_SRGB;
+            }
+
+            // Normal map -> BC5
+            if (material.props.textureImageIndices.z >= 0) {
+                preferredImageFormats[material.props.textureImageIndices.z] = DXGI_FORMAT_BC5_UNORM;
+            }
+
+            // Metallic-roughness -> BC7 (linear)
+            if (material.props.textureImageIndices.y >= 0) {
+                preferredImageFormats[material.props.textureImageIndices.y] = DXGI_FORMAT_BC7_UNORM;
+            }
+
+            // Occlusion -> BC4
+            if (material.props.textureImageIndices2.x >= 0) {
+                preferredImageFormats[material.props.textureImageIndices2.x] = DXGI_FORMAT_BC4_UNORM;
+            }
+
+            // Packed NRM (if used) -> BC7
+            if (material.props.textureImageIndices2.y >= 0) {
+                preferredImageFormats[material.props.textureImageIndices2.y] = DXGI_FORMAT_BC7_UNORM;
+            }
+        }
+
+
+        auto textureIDs = Core::HeapArray<Engine::TextureID>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, rawModel.images.Size());
+
+        for (int32_t i = 0; i < static_cast<int32_t>(rawModel.images.Size()); ++i) {
+            RawImage& image = rawModel.images[i];
+            char indexBuf[16];
+            *std::to_chars(indexBuf, indexBuf + sizeof(indexBuf), i).ptr = '\0';
+
+            Core::InlineString<128> texName(gltfPath.Stem());
+            texName.Append("_texture_");
+            texName.Append(indexBuf);
+            texName.Append(".wtexture");
+
+            Core::Path textureOutPath = gltfPath.Parent() / "textures" / texName.c_str();
+            textureIDs[i] = generator->RequestTextureGenerateFromMemory(std::move(image.data), image.w, image.h, image.bpp, textureOutPath, true, preferredImageFormats[i]);
+        }
+
+        auto texRef = [&](int idx) -> Engine::TextureID {
+            return idx >= 0 && idx < static_cast<int>(textureIDs.Size()) ? textureIDs[idx] : Engine::TextureID::INVALID;
+        };
+        auto sampDesc = [&](int idx) -> Engine::SamplerDesc {
+            return idx >= 0 && idx < static_cast<int>(rawModel.samplerInfos.Size()) ? rawModel.samplerInfos[idx] : Engine::SamplerDesc{};
+        };
+
+        if (!rawModel.materials.IsEmpty()) {
+            for (auto& mat : rawModel.materials) {
+                mat.textureRefs[0] = texRef(mat.props.textureImageIndices.x);
+                mat.textureRefs[1] = texRef(mat.props.textureImageIndices.y);
+                mat.textureRefs[2] = texRef(mat.props.textureImageIndices.z);
+                mat.textureRefs[3] = texRef(mat.props.textureImageIndices.w);
+                mat.textureRefs[4] = texRef(mat.props.textureImageIndices2.x);
+                mat.textureRefs[5] = texRef(mat.props.textureImageIndices2.y);
+
+                mat.samplerDesc[0] = sampDesc(mat.props.textureSamplerIndices.x);
+                mat.samplerDesc[1] = sampDesc(mat.props.textureSamplerIndices.y);
+                mat.samplerDesc[2] = sampDesc(mat.props.textureSamplerIndices.z);
+                mat.samplerDesc[3] = sampDesc(mat.props.textureSamplerIndices.w);
+                mat.samplerDesc[4] = sampDesc(mat.props.textureSamplerIndices2.x);
+                mat.samplerDesc[5] = sampDesc(mat.props.textureSamplerIndices2.y);
+
+                // Bindless indices are resolved at load time from textureRefs
+                mat.props.textureImageIndices = glm::ivec4(-1);
+                mat.props.textureSamplerIndices = glm::ivec4(-1);
+                mat.props.textureImageIndices2 = glm::ivec4(-1);
+                mat.props.textureSamplerIndices2 = glm::ivec4(-1);
+            }
+        }
     }
-
-    for (const auto& material : rawModel.materials) {
-        // Color/emissive textures -> BC7 SRGB
-        if (material.props.textureImageIndices.x >= 0) {
-            preferredImageFormats[material.props.textureImageIndices.x] = DXGI_FORMAT_BC7_UNORM_SRGB;
+    else {
+        if (!rawModel.materials.IsEmpty()) {
+            for (auto& mat : rawModel.materials) {
+                mat.textureRefs[0] = Engine::TextureID::INVALID;
+                mat.textureRefs[1] = Engine::TextureID::INVALID;
+                mat.textureRefs[2] = Engine::TextureID::INVALID;
+                mat.textureRefs[3] = Engine::TextureID::INVALID;
+                mat.textureRefs[4] = Engine::TextureID::INVALID;
+                mat.textureRefs[5] = Engine::TextureID::INVALID;
+                mat.samplerDesc[0] = Engine::SamplerDesc{};
+                mat.samplerDesc[1] = Engine::SamplerDesc{};
+                mat.samplerDesc[2] = Engine::SamplerDesc{};
+                mat.samplerDesc[3] = Engine::SamplerDesc{};
+                mat.samplerDesc[4] = Engine::SamplerDesc{};
+                mat.samplerDesc[5] = Engine::SamplerDesc{};
+            }
         }
-        if (material.props.textureImageIndices.w >= 0) {
-            preferredImageFormats[material.props.textureImageIndices.w] = DXGI_FORMAT_BC7_UNORM_SRGB;
-        }
-
-        // Normal map -> BC5
-        if (material.props.textureImageIndices.z >= 0) {
-            preferredImageFormats[material.props.textureImageIndices.z] = DXGI_FORMAT_BC5_UNORM;
-        }
-
-        // Metallic-roughness -> BC7 (linear)
-        if (material.props.textureImageIndices.y >= 0) {
-            preferredImageFormats[material.props.textureImageIndices.y] = DXGI_FORMAT_BC7_UNORM;
-        }
-
-        // Occlusion -> BC4
-        if (material.props.textureImageIndices2.x >= 0) {
-            preferredImageFormats[material.props.textureImageIndices2.x] = DXGI_FORMAT_BC4_UNORM;
-        }
-
-        // Packed NRM (if used) -> BC7
-        if (material.props.textureImageIndices2.y >= 0) {
-            preferredImageFormats[material.props.textureImageIndices2.y] = DXGI_FORMAT_BC7_UNORM;
-        }
-    }
-
-
-    auto textureIDs = Core::HeapArray<Engine::TextureID>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, rawModel.images.Size());
-
-    for (int32_t i = 0; i < static_cast<int32_t>(rawModel.images.Size()); ++i) {
-        RawImage& image = rawModel.images[i];
-        char indexBuf[16];
-        *std::to_chars(indexBuf, indexBuf + sizeof(indexBuf), i).ptr = '\0';
-
-        Core::InlineString<128> texName(gltfPath.Stem());
-        texName.Append("_texture_");
-        texName.Append(indexBuf);
-        texName.Append(".wtexture");
-
-        Core::Path textureOutPath = gltfPath.Parent() / "textures" / texName.c_str();
-        textureIDs[i] = generator->RequestTextureGenerateFromMemory(std::move(image.data), image.w, image.h, image.bpp, textureOutPath, true, preferredImageFormats[i]);
-    }
-
-    auto texRef = [&](int idx) -> Engine::TextureID {
-        return idx >= 0 && idx < static_cast<int>(textureIDs.Size()) ? textureIDs[idx] : Engine::TextureID::INVALID;
-    };
-    auto sampDesc = [&](int idx) -> Engine::SamplerDesc {
-        return idx >= 0 && idx < static_cast<int>(rawModel.samplerInfos.Size()) ? rawModel.samplerInfos[idx] : Engine::SamplerDesc{};
-    };
-
-    for (auto& mat : rawModel.materials) {
-        mat.textureRefs[0] = texRef(mat.props.textureImageIndices.x);
-        mat.textureRefs[1] = texRef(mat.props.textureImageIndices.y);
-        mat.textureRefs[2] = texRef(mat.props.textureImageIndices.z);
-        mat.textureRefs[3] = texRef(mat.props.textureImageIndices.w);
-        mat.textureRefs[4] = texRef(mat.props.textureImageIndices2.x);
-        mat.textureRefs[5] = texRef(mat.props.textureImageIndices2.y);
-
-        mat.samplerDesc[0] = sampDesc(mat.props.textureSamplerIndices.x);
-        mat.samplerDesc[1] = sampDesc(mat.props.textureSamplerIndices.y);
-        mat.samplerDesc[2] = sampDesc(mat.props.textureSamplerIndices.z);
-        mat.samplerDesc[3] = sampDesc(mat.props.textureSamplerIndices.w);
-        mat.samplerDesc[4] = sampDesc(mat.props.textureSamplerIndices2.x);
-        mat.samplerDesc[5] = sampDesc(mat.props.textureSamplerIndices2.y);
-
-        // Clear GLTF-local indices — bindless indices are resolved at load time from textureRefs
-        mat.props.textureImageIndices = glm::ivec4(-1);
-        mat.props.textureSamplerIndices = glm::ivec4(-1);
-        mat.props.textureImageIndices2 = glm::ivec4(-1);
-        mat.props.textureSamplerIndices2 = glm::ivec4(-1);
     }
 
 

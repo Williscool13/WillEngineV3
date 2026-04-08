@@ -14,27 +14,28 @@ module common_interop;
 #define SHADER_PTR(T) T*
 #else
 #include <glm/glm.hpp>
+#include "core/types/math.h"
 #include <cstdint>
 
 using uint = uint32_t;
 using int32 = int32_t;
 using uint32 = uint32_t;
 
-using float2 = glm::vec2;
-using float3 = glm::vec3;
-using float4 = glm::vec4;
+using float2 = Vec2;
+using float3 = Vec3;
+using float4 = Vec4;
 
-using int2 = glm::ivec2;
-using int3 = glm::ivec3;
-using int4 = glm::ivec4;
+using int2 = IVec2;
+using int3 = IVec3;
+using int4 = IVec4;
 
-using uint2 = glm::uvec2;
-using uint3 = glm::uvec3;
-using uint4 = glm::uvec4;
+using uint2 = UVec2;
+using uint3 = UVec3;
+using uint4 = UVec4;
 
-using float2x2 = glm::mat2;
-using float3x3 = glm::mat3;
-using float4x4 = glm::mat4;
+using float2x2 = Mat2;
+using float3x3 = Mat3;
+using float4x4 = Mat4;
 
 #define SHADER_PUBLIC
 #define SHADER_ENUM enum class
