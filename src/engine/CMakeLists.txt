@@ -9,8 +9,8 @@ add_library(engine STATIC
         asset_manager.h
         asset_manager_config.h
         asset_manager_types.h
-        resources/material/material_manager.cpp
-        resources/material/material_manager.h
+        material_manager.cpp
+        material_manager.h
         logging/engine_logger.cpp
         logging/engine_logger.h
         logging/imgui_sink.h

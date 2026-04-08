@@ -23,43 +23,32 @@
 
 namespace AssetLoad
 {
-AsyncAssetLoadManager::AsyncAssetLoadManager(Core::MemoryManager& memoryManager, Render::VulkanContext* context, Render::ResourceManager* resourceManager, VkPipelineCache pipelineCache)
-    : memoryManager(&memoryManager), context(context), resourceManager(resourceManager), pipelineCache(pipelineCache)
+AsyncAssetLoadManager::AsyncAssetLoadManager(Core::MemoryManager& memoryManager,
+                                             Render::VulkanContext* context,
+                                             Render::ResourceManager* resourceManager,
+                                             VkPipelineCache pipelineCache,
+                                             enki::TaskScheduler* scheduler)
+    : scheduler(scheduler),
+      memoryManager(&memoryManager),
+      context(context),
+      resourceManager(resourceManager),
+      pipelineCache(pipelineCache)
 {
-    assetLoadScheduler = new(memoryManager.PersistentAllocRaw(sizeof(enki::TaskScheduler), Core::AllocTag::AsyncAssetLoadManager)) enki::TaskScheduler();
-
-    enki::TaskSchedulerConfig assetConfig;
-    assetConfig.numTaskThreadsToCreate = 4;
-    assetConfig.profilerCallbacks.threadStart = [](uint32_t threadNum_) {
-        static constexpr const char* names[8] = {
-            "AssetLoad0", "AssetLoad1", "AssetLoad2", "AssetLoad3",
-            "AssetLoad4", "AssetLoad5", "AssetLoad6", "AssetLoad7"
-        };
-        if (threadNum_ < 8) {
-            tracy::SetThreadName(names[threadNum_]);
-            Platform::SetThreadName(names[threadNum_]);
-        }
-    };
-    assetConfig.numExternalTaskThreads = 2;
-    assetLoadScheduler->Initialize(assetConfig);
-
-    LOG_INFO(Asset, "Asset load scheduler operating with {} threads.", assetConfig.numTaskThreadsToCreate);
-
     for (uint32_t i = 0; i < AUDIO_JOB_COUNT; ++i) {
-        audioLoadSlots[i].Initialize(assetLoadScheduler, [this](bool success, AudioSlotHandle slotHandle) {
+        audioLoadSlots[i].Initialize(scheduler, [this](bool success, AudioSlotHandle slotHandle) {
             OnAudioLoadComplete(success, slotHandle);
         });
     }
 
     for (uint32_t i = 0; i < PIPELINE_JOB_COUNT; ++i) {
-        pipelineLoadSlots[i].Initialize(assetLoadScheduler, context, pipelineCache, [this](bool success, PipelineSlotHandle slotHandle) {
+        pipelineLoadSlots[i].Initialize(scheduler, context, pipelineCache, [this](bool success, PipelineSlotHandle slotHandle) {
             OnPipelineLoadComplete(success, slotHandle);
         });
     }
 
     for (uint32_t i = 0; i < MODEL_JOB_COUNT; ++i) {
         modelLoadSlots[i].Initialize(
-            assetLoadScheduler,
+            scheduler,
             context,
             resourceManager,
             &memoryManager,
@@ -74,7 +63,7 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Core::MemoryManager& memoryManager,
 
     for (uint32_t i = 0; i < PROCEDURAL_MODEL_JOB_COUNT; ++i) {
         proceduralModelLoadSlots[i].Initialize(
-            assetLoadScheduler,
+            scheduler,
             context,
             resourceManager,
             &memoryManager,
@@ -89,7 +78,7 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Core::MemoryManager& memoryManager,
 
     for (uint32_t i = 0; i < TEXTURE_JOB_COUNT; ++i) {
         textureLoadSlots[i].Initialize(
-            assetLoadScheduler,
+            scheduler,
             context,
             resourceManager,
             &memoryManager,
@@ -104,7 +93,7 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Core::MemoryManager& memoryManager,
 
     for (uint32_t i = 0; i < CUBEMAP_JOB_COUNT; ++i) {
         cubemapLoadSlots[i].Initialize(
-            assetLoadScheduler,
+            scheduler,
             context,
             resourceManager,
             [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
@@ -132,7 +121,7 @@ void AsyncAssetLoadManager::ThreadMain()
     tracy::SetThreadName("AsyncAssetLoadMain");
     Platform::SetThreadName("AsyncAssetLoadMain");
 
-    assetLoadScheduler->RegisterExternalTaskThread();
+    scheduler->RegisterExternalTaskThread();
 
     // todo model, texture, audio, and pipeline unload (not all need to be queued)
     while (!bShouldExit.load(std::memory_order_acquire)) {
@@ -274,29 +263,13 @@ void AsyncAssetLoadManager::ThreadMain()
     }
 }
 
-void AsyncAssetLoadManager::Join()
-{
-    bShouldExit.store(true, std::memory_order_release);
-
-    gpuDispatchWorkCounter.fetch_add(1);
-    gpuDispatchWakeCV.notify_one();
-    gpuDispatchThread.join();
-
-    workCounter.fetch_add(1);
-    wakeCV.notify_one();
-    thisThread.join();
-
-    assetLoadScheduler->WaitforAllAndShutdown();
-    assetLoadScheduler->~TaskScheduler();
-}
-
 void AsyncAssetLoadManager::GPUDispatchThreadMain()
 {
     ZoneScoped;
     tracy::SetThreadName("AsyncGPUDispatcherMain");
     Platform::SetThreadName("AsyncGPUDispatcherMain");
 
-    assetLoadScheduler->RegisterExternalTaskThread();
+    scheduler->RegisterExternalTaskThread();
 
     while (!bShouldExit.load(std::memory_order_acquire)) {
         {
@@ -339,11 +312,17 @@ void AsyncAssetLoadManager::GPUDispatchThreadMain()
     }
 }
 
-void AsyncAssetLoadManager::QueueGPUDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)
+void AsyncAssetLoadManager::Join()
 {
-    gpuDispatchQueue.enqueue({cmd, fence, completionSignal});
+    bShouldExit.store(true, std::memory_order_release);
+
     gpuDispatchWorkCounter.fetch_add(1);
     gpuDispatchWakeCV.notify_one();
+    gpuDispatchThread.join();
+
+    workCounter.fetch_add(1);
+    wakeCV.notify_one();
+    thisThread.join();
 }
 
 void AsyncAssetLoadManager::RequestAudioLoad(Audio::WillAudio* audioEntry)
@@ -475,6 +454,13 @@ void AsyncAssetLoadManager::RequestSamplerLoad(Engine::Sampler* sampler)
 bool AsyncAssetLoadManager::TryDequeueSamplerComplete(SamplerLoadComplete& outResult)
 {
     return samplerLoadCompleteQueue.try_dequeue(outResult);
+}
+
+void AsyncAssetLoadManager::QueueGPUDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)
+{
+    gpuDispatchQueue.enqueue({cmd, fence, completionSignal});
+    gpuDispatchWorkCounter.fetch_add(1);
+    gpuDispatchWakeCV.notify_one();
 }
 
 void AsyncAssetLoadManager::OnAudioLoadComplete(bool success, AudioSlotHandle slotHandle)

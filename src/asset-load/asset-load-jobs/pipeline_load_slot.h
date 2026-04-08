@@ -41,7 +41,10 @@ private:
     {
         PipelineLoadSlot* loadSlot{nullptr};
 
-        explicit LoadPipelineTask() : ITaskSet(1) {}
+        explicit LoadPipelineTask() : ITaskSet(1)
+        {
+            m_Priority = enki::TASK_PRIORITY_LOW;
+        }
 
         void ExecuteRange(enki::TaskSetPartition range, uint32_t threadNum) override;
     };

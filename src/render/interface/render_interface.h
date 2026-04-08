@@ -11,7 +11,7 @@
 #include "core/string_id.h"
 #include "core/types/transform.h"
 #include "core/time/time_frame.h"
-#include "engine/resources/material/material_manager.h"
+#include "../../engine/material_manager.h"
 
 
 #include "render/shaders/model_interop.h"

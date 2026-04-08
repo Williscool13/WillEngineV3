@@ -12,7 +12,7 @@
 #include <json/nlohmann/json_fwd.hpp>
 
 #include "engine/core/model_id.h"
-#include "engine/resources/material/material_manager.h"
+#include "../../../engine/material_manager.h"
 #include "engine/resources/model/model_types.h"
 #include "game/components/component_types.h"
 #include "game/components/render_components.h"

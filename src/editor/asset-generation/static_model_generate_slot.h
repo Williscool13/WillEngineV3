@@ -5,8 +5,6 @@
 #ifndef WILL_ENGINE_MODEL_GENERATE_TASK_H
 #define WILL_ENGINE_MODEL_GENERATE_TASK_H
 
-#include <functional>
-#include <semaphore>
 #include <fastgltf/types.hpp>
 #include <TaskScheduler.h>
 
@@ -16,9 +14,7 @@
 
 #include "core/containers/inline_path.h"
 #include "core/containers/span.h"
-#include "core/memory/linear_allocator.h"
 #include "core/memory/memory_manager.h"
-#include "core/memory/tlsf_allocator.h"
 #include "engine/resources/model/model_types.h"
 
 namespace Editor

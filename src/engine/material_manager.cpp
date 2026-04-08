@@ -9,7 +9,7 @@
 
 #include <json/nlohmann/json.hpp>
 
-#include "material_format.h"
+#include "resources/material/material_format.h"
 #include "engine/include/engine_context.h"
 #include "render/interface/render_interface.h"
 #include "engine/logging/engine_log.h"
@@ -106,6 +106,7 @@ void MaterialManager::AcquireMaterial(MaterialID materialID)
 
     Material& mat = *it;
 
+    // todo material needs to be marked as "in progress". And the model should only be loaded if the material is ready, which should only be true if all the textures and samplers are ready.
     if (!mat.bIsRuntimeLoaded) {
         auto resolveTexture = [&](TextureID id) -> int32_t {
             if (!id.IsValid()) return WHITE_IMAGE_BINDLESS_INDEX;

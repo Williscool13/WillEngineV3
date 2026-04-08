@@ -30,7 +30,8 @@ public:
     AsyncAssetLoadManager(Core::MemoryManager& memoryManager,
                           Render::VulkanContext* context,
                           Render::ResourceManager* resourceManager,
-                          VkPipelineCache pipelineCache);
+                          VkPipelineCache pipelineCache,
+                          enki::TaskScheduler* scheduler);
 
     ~AsyncAssetLoadManager();
 
@@ -108,7 +109,7 @@ public:
     void QueueGPUDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal);
 
 private:
-    enki::TaskScheduler* assetLoadScheduler{};
+    enki::TaskScheduler* scheduler{};
     Core::MemoryManager* memoryManager{};
     Render::VulkanContext* context;
     Render::ResourceManager* resourceManager;

@@ -68,7 +68,10 @@ private:
     {
         ProceduralModelLoadSlot* loadSlot{nullptr};
 
-        explicit GenerateModelTask() : ITaskSet(1) {}
+        explicit GenerateModelTask() : ITaskSet(1)
+        {
+            m_Priority = enki::TASK_PRIORITY_LOW;
+        }
 
         void ExecuteRange(enki::TaskSetPartition range, uint32_t threadNum) override;
     };

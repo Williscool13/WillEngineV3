@@ -14,7 +14,7 @@
 
 #include "core/string_id.h"
 #include "core/containers/inline_vector.h"
-#include "engine/resources/material/material_manager.h"
+#include "../../engine/material_manager.h"
 #include "engine/core/model_id.h"
 #include "engine/asset_manager_types.h"
 #include "engine/resources/model/model_types.h"

@@ -17,7 +17,7 @@
 #include "core/input/input_frame.h"
 #include "core/math/constants.h"
 #include "engine/engine_api.h"
-#include "engine/resources/material/material_manager.h"
+#include "../../engine/material_manager.h"
 #include "engine/asset_manager.h"
 #include "engine/core/model_id.h"
 #include "engine/resources/texture/texture.h"

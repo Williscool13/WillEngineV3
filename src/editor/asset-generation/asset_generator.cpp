@@ -16,29 +16,23 @@
 
 namespace Editor
 {
-AssetGenerator::AssetGenerator(Core::MemoryManager& memoryManager, Core::EngineContext* ctx,Render::VulkanContext* vulkanContext, Render::RenderThread* renderThread, AssetLoad::AsyncAssetLoadManager* asyncAssetLoadManager)
-    : memoryManager(&memoryManager), ctx(ctx), vk(vulkanContext), renderThread(renderThread), asyncAssetLoadManager(asyncAssetLoadManager)
+AssetGenerator::AssetGenerator(Core::MemoryManager& memoryManager,
+                               Core::EngineContext* ctx,
+                               Render::VulkanContext* vulkanContext,
+                               Render::RenderThread* renderThread,
+                               AssetLoad::AsyncAssetLoadManager* asyncAssetLoadManager,
+                               enki::TaskScheduler* scheduler)
+    : memoryManager(&memoryManager),
+      ctx(ctx),
+      vk(vulkanContext),
+      renderThread(renderThread),
+      asyncAssetLoadManager(asyncAssetLoadManager),
+      scheduler(scheduler)
 {
-    // todo remove asset generator specific scheduler, use engine scheduler with low priority
-    assetGeneratorScheduler = std::make_unique<enki::TaskScheduler>();
-
-    enki::TaskSchedulerConfig generatorConfig;
-    generatorConfig.numTaskThreadsToCreate = ASSET_GENERATOR_WORKER_COUNT;
-    generatorConfig.profilerCallbacks.threadStart = [](uint32_t threadNum_) {
-        if (threadNum_ < ASSET_GENERATOR_WORKER_NAMES.size()) {
-            tracy::SetThreadName(ASSET_GENERATOR_WORKER_NAMES[threadNum_]);
-            Platform::SetThreadName(ASSET_GENERATOR_WORKER_NAMES[threadNum_]);
-        }
-    };
-    generatorConfig.numExternalTaskThreads = 1;
-    assetGeneratorScheduler->Initialize(generatorConfig);
-
-    SPDLOG_INFO("Asset generator scheduler operating with {} threads.", generatorConfig.numTaskThreadsToCreate);
-
     for (int32_t i = 0; i < MODEL_GENERATION_JOB_COUNT; ++i) {
         modelGenerateTasks[i].Initialize(
             &memoryManager,
-            assetGeneratorScheduler.get(),
+            scheduler,
             this,
             &modelGenerationProgress[i],
             [this](bool success, ModelGenerateSlotHandle slotHandle) {
@@ -49,7 +43,7 @@ AssetGenerator::AssetGenerator(Core::MemoryManager& memoryManager, Core::EngineC
 
     for (int32_t i = 0; i < TEXTURE_GENERATION_JOB_COUNT; ++i) {
         textureGenerateTasks[i].Initialize(
-            assetGeneratorScheduler.get(),
+            scheduler,
             vulkanContext,
             &memoryManager,
             [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
@@ -62,7 +56,7 @@ AssetGenerator::AssetGenerator(Core::MemoryManager& memoryManager, Core::EngineC
     }
     for (int32_t i = 0; i < ENVIRONMENT_MAP_GENERATION_JOB_COUNT; ++i) {
         environmentMapeGenerateTasks[i].Initialize(
-            assetGeneratorScheduler.get(),
+            scheduler,
             vulkanContext,
             renderThread->GetPipelineManager(),
             renderThread->GetResourceManager(),
@@ -87,7 +81,7 @@ void AssetGenerator::ThreadMain()
     tracy::SetThreadName("AssetGeneratorMain");
     Platform::SetThreadName("AssetGeneratorMain");
 
-    assetGeneratorScheduler->RegisterExternalTaskThread();
+    scheduler->RegisterExternalTaskThread();
 
     while (!bShouldExit.load(std::memory_order_acquire)) {
         {

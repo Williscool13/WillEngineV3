@@ -8,7 +8,7 @@
 #include <random>
 #include <unordered_map>
 
-#include "material.h"
+#include "resources/material/material.h"
 #include "core/string_id.h"
 #include "core/containers/array.h"
 #include "core/containers/fixed_map.h"

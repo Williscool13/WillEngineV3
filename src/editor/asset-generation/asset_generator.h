@@ -106,7 +106,14 @@ using ModelGenerateSlotHandle = Core::Handle<StaticModelGenerateSlot>;
 class AssetGenerator
 {
 public:
-    AssetGenerator(Core::MemoryManager& memoryManager, Core::EngineContext* ctx, Render::VulkanContext* vulkanContext, Render::RenderThread* renderThread, AssetLoad::AsyncAssetLoadManager* asyncAssetLoadManager);
+    AssetGenerator(
+        Core::MemoryManager& memoryManager,
+        Core::EngineContext* ctx,
+        Render::VulkanContext* vulkanContext,
+        Render::RenderThread* renderThread,
+        AssetLoad::AsyncAssetLoadManager* asyncAssetLoadManager,
+        enki::TaskScheduler* scheduler
+        );
 
     ~AssetGenerator();
 
@@ -173,7 +180,7 @@ private:
     Render::VulkanContext* vk;
     Render::RenderThread* renderThread;
     AssetLoad::AsyncAssetLoadManager* asyncAssetLoadManager;
-    std::unique_ptr<enki::TaskScheduler> assetGeneratorScheduler;
+    enki::TaskScheduler* scheduler{};
 
     std::mt19937_64 modelIdRng{std::random_device{}()};
     std::mt19937_64 textureIdRng{std::random_device{}()};

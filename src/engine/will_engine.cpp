@@ -209,7 +209,8 @@ void WillEngine::Initialize(Utils::Logger* logger)
             memoryManager,
             renderThread->GetVulkanContext(),
             renderThread->GetResourceManager(),
-            renderThread->GetPipelineManager()->GetPipelineCache());
+            renderThread->GetPipelineManager()->GetPipelineCache(),
+            scheduler);
         renderThread->InitializePipelineManager(asyncAssetLoadManager);
     }
 
@@ -239,7 +240,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
     //
     {
         ZoneScopedN("CreateModelGenerator");
-        assetGenerator = new(memoryManager.PersistentAllocRaw(sizeof(Editor::AssetGenerator), Core::AllocTag::AssetGenerator)) Editor::AssetGenerator(memoryManager, engineContext, renderThread->GetVulkanContext(), renderThread, asyncAssetLoadManager);
+        assetGenerator = new(memoryManager.PersistentAllocRaw(sizeof(Editor::AssetGenerator), Core::AllocTag::AssetGenerator)) Editor::AssetGenerator(memoryManager, engineContext, renderThread->GetVulkanContext(), renderThread, asyncAssetLoadManager, scheduler);
     }
 
 #endif
@@ -1096,7 +1097,7 @@ void WillEngine::Cleanup()
     gameState.reset();
 
 
-    scheduler->ShutdownNow();
+    scheduler->WaitforAllAndShutdown();
     engineContext->scheduler = nullptr;
     engineContext->~EngineContext();
 

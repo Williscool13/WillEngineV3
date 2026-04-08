@@ -79,7 +79,10 @@ private:
     {
         TextureLoadSlot* loadSlot{nullptr};
 
-        explicit LoadTextureTask() : ITaskSet(1) {}
+        explicit LoadTextureTask() : ITaskSet(1)
+        {
+            m_Priority = enki::TASK_PRIORITY_LOW;
+        }
 
         void ExecuteRange(enki::TaskSetPartition range, uint32_t threadNum) override;
     };
