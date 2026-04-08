@@ -20,7 +20,6 @@
 #include "asset-load-jobs/cubemap_load_slot.h"
 #include "core/containers/array.h"
 #include "core/memory/lock_free_handle_allocator.h"
-#include "core/memory/memory_manager.h"
 #include "engine/resources/sampler/sampler.h"
 
 namespace AssetLoad

@@ -6,7 +6,7 @@
 
 namespace AssetLoad
 {
-static glm::mat3 JacobiEigen3x3(const glm::mat3& symMat)
+static Mat3 JacobiEigen3x3(const Mat3& symMat)
 {
     float a[3][3];
     float v[3][3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
@@ -17,14 +17,14 @@ static glm::mat3 JacobiEigen3x3(const glm::mat3& symMat)
 
     for (int iter = 0; iter < 32; ++iter) {
         int p = 0, q = 1;
-        float maxAbs = std::abs(a[0][1]);
-        if (std::abs(a[0][2]) > maxAbs) {
-            maxAbs = std::abs(a[0][2]);
+        float maxAbs = abs(a[0][1]);
+        if (abs(a[0][2]) > maxAbs) {
+            maxAbs = abs(a[0][2]);
             p = 0;
             q = 2;
         }
-        if (std::abs(a[1][2]) > maxAbs) {
-            maxAbs = std::abs(a[1][2]);
+        if (abs(a[1][2]) > maxAbs) {
+            maxAbs = abs(a[1][2]);
             p = 1;
             q = 2;
         }
@@ -32,9 +32,9 @@ static glm::mat3 JacobiEigen3x3(const glm::mat3& symMat)
 
         const float apq = a[p][q];
         float theta = 0.5f * (a[q][q] - a[p][p]) / apq;
-        float t = 1.f / (std::abs(theta) + std::sqrt(theta * theta + 1.f));
+        float t = 1.f / (abs(theta) + sqrt(theta * theta + 1.f));
         if (theta < 0.f) t = -t;
-        const float c = 1.f / std::sqrt(t * t + 1.f);
+        const float c = 1.f / sqrt(t * t + 1.f);
         const float s = t * c;
 
         a[p][p] -= t * apq;
@@ -54,7 +54,7 @@ static glm::mat3 JacobiEigen3x3(const glm::mat3& symMat)
         }
     }
 
-    glm::mat3 result;
+    Mat3 result;
     for (int col = 0; col < 3; ++col)
         for (int row = 0; row < 3; ++row)
             result[col][row] = v[row][col];
@@ -69,7 +69,7 @@ Engine::ModelBounds ComputeBounds(Core::Span<Vec3> positions, Core::Span<uint32_
 
     const float invN = 1.f / static_cast<float>(positions.Size());
 
-    glm::vec3 mn(FLT_MAX), mx(-FLT_MAX), centroidAccum(0.f);
+    Vec3 mn(FLT_MAX), mx(-FLT_MAX), centroidAccum(0.f);
     for (const auto& p : positions) {
         mn = glm::min(mn, p);
         mx = glm::max(mx, p);
@@ -79,21 +79,21 @@ Engine::ModelBounds ComputeBounds(Core::Span<Vec3> positions, Core::Span<uint32_
     out.aabb.max = mx;
     out.centroid = centroidAccum * invN;
 
-    const glm::vec3 he = out.aabb.HalfExtents();
+    const Vec3 he = out.aabb.HalfExtents();
     out.dominantAxis = (he.x >= he.y && he.x >= he.z) ? 0 : (he.y >= he.z ? 1 : 2);
 
-    const glm::vec3 center = (mn + mx) * 0.5f;
+    const Vec3 center = (mn + mx) * 0.5f;
     float maxDist2 = 0.f;
     for (const auto& p : positions) {
-        const glm::vec3 d = p - center;
+        const Vec3 d = p - center;
         maxDist2 = std::max(maxDist2, glm::dot(d, d));
     }
     out.sphere.center = center;
-    out.sphere.radius = std::sqrt(maxDist2);
+    out.sphere.radius = sqrt(maxDist2);
 
-    glm::mat3 cov(0.f);
+    Mat3 cov(0.f);
     for (const auto& p : positions) {
-        const glm::vec3 d = p - center;
+        const Vec3 d = p - center;
         cov[0][0] += d.x * d.x;
         cov[1][1] += d.y * d.y;
         cov[2][2] += d.z * d.z;
@@ -107,15 +107,15 @@ Engine::ModelBounds ComputeBounds(Core::Span<Vec3> positions, Core::Span<uint32_
     }
     cov *= invN;
 
-    const glm::mat3 axes = JacobiEigen3x3(cov);
+    const Mat3 axes = JacobiEigen3x3(cov);
 
-    glm::vec3 minProj(FLT_MAX), maxProj(-FLT_MAX);
+    Vec3 minProj(FLT_MAX), maxProj(-FLT_MAX);
     for (const auto& p : positions) {
-        const glm::vec3 d = p - center;
-        const glm::vec3 proj(
-            glm::dot(d, glm::vec3(axes[0])),
-            glm::dot(d, glm::vec3(axes[1])),
-            glm::dot(d, glm::vec3(axes[2])));
+        const Vec3 d = p - center;
+        const Vec3 proj(
+            glm::dot(d, Vec3(axes[0])),
+            glm::dot(d, Vec3(axes[1])),
+            glm::dot(d, Vec3(axes[2])));
         minProj = glm::min(minProj, proj);
         maxProj = glm::max(maxProj, proj);
     }
@@ -125,9 +125,9 @@ Engine::ModelBounds ComputeBounds(Core::Span<Vec3> positions, Core::Span<uint32_
 
     if (!indices.IsEmpty() && indices.Size() >= 3) {
         for (size_t i = 0; i + 2 < indices.Size(); i += 3) {
-            const glm::vec3& a = positions[indices[i]];
-            const glm::vec3& b = positions[(indices)[i + 1]];
-            const glm::vec3& c = positions[(indices)[i + 2]];
+            const Vec3& a = positions[indices[i]];
+            const Vec3& b = positions[(indices)[i + 1]];
+            const Vec3& c = positions[(indices)[i + 2]];
             out.surfaceArea += glm::length(glm::cross(b - a, c - a)) * 0.5f;
         }
     }

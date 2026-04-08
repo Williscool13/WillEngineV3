@@ -191,7 +191,7 @@ bool StaticModelLoadSlot::LoadModelFromDisk()
             if (count > 0) {
                 assert(!vec.IsAllocated() && "Array already allocated (memory leak)");
                 vec = Core::HeapArray<T>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, count);
-                std::memcpy(vec.Data(), body.Data() + offset, count * sizeof(T));
+                memcpy(vec.Data(), body.Data() + offset, count * sizeof(T));
             }
         };
 
