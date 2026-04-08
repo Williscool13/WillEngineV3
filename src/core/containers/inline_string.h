@@ -4,6 +4,7 @@
 
 #ifndef WILL_ENGINE_STACK_STRING_H
 #define WILL_ENGINE_STACK_STRING_H
+#include <cstdio>
 #include <cstring>
 #include <string_view>
 
@@ -30,6 +31,15 @@ struct InlineString
         if (len >= N) len = N - 1;
         memcpy(buf, str.data(), len);
         buf[len] = '\0';
+    }
+
+    template<typename... Args>
+    [[nodiscard]] static InlineString Format(const char* fmt, Args&&... args)
+    {
+        InlineString result;
+        int written = snprintf(result.buf, N, fmt, static_cast<Args&&>(args)...);
+        result.len = (written > 0 && static_cast<size_t>(written) < N) ? static_cast<size_t>(written) : N - 1;
+        return result;
     }
 
     [[nodiscard]] const char* c_str() const { return buf; }

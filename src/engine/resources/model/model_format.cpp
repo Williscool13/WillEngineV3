@@ -4,10 +4,11 @@
 
 #include "model_format.h"
 
+#include <charconv>
+#include <cstring>
 #include <fstream>
 #include <istream>
 #include <ostream>
-#include <string>
 
 #include "engine/serialization/serialization.h"
 
@@ -45,63 +46,64 @@ bool WriteWStaticModelHeader(std::ostream& out, const WStaticModelHeader& header
 
 std::optional<WStaticModelHeader> ReadWStaticModelHeader(std::istream& in)
 {
-    // todo fewer strings please. and those other std:: are they allocating?
-    auto trimCR = [](std::string& s) {
-        if (!s.empty() && s.back() == '\r') s.pop_back();
+    constexpr size_t LINE_BUF = 256;
+    char line[LINE_BUF];
+
+    auto trimCR = [](char* s) {
+        const size_t len = strlen(s);
+        if (len > 0 && s[len - 1] == '\r') { s[len - 1] = '\0'; }
     };
 
-    std::string line;
-    if (!std::getline(in, line)) { return std::nullopt; }
+    if (!in.getline(line, LINE_BUF)) { return std::nullopt; }
     trimCR(line);
-    if (line != "wstaticmodel") { return std::nullopt; }
+    if (strcmp(line, "wstaticmodel") != 0) { return std::nullopt; }
 
     WStaticModelHeader header{};
-    while (std::getline(in, line)) {
+    while (in.getline(line, LINE_BUF)) {
         trimCR(line);
-        if (line == "end_header") {
+        if (strcmp(line, "end_header") == 0) {
             header.dataOffset = static_cast<uint64_t>(in.tellg());
             return header;
         }
-        if (line.starts_with("version ")) {
-            const auto rest = line.substr(8);
-            const auto space = rest.find(' ');
-            if (space == std::string::npos) return std::nullopt;
-            if (std::stoul(rest.substr(0, space)) != STATICMODEL_MAJOR_VERSION) return std::nullopt;
+        if (strncmp(line, "version ", 8) == 0) {
+            uint32_t major = 0;
+            std::from_chars(line + 8, line + LINE_BUF, major);
+            if (major != STATICMODEL_MAJOR_VERSION) { return std::nullopt; }
         }
-        else if (line.starts_with("id ")) { header.modelId = std::stoull(line.substr(3)); }
-        else if (line.starts_with("name ")) {
-            auto name = line.substr(5);
-            auto copyLen = std::min(name.size(), WSTATICMODEL_NAME_LENGTH - 1);
-            memcpy(header.name, name.c_str(), copyLen);
+        else if (strncmp(line, "id ", 3) == 0) { std::from_chars(line + 3, line + LINE_BUF, header.modelId); }
+        else if (strncmp(line, "name ", 5) == 0) {
+            const char* name = line + 5;
+            const size_t copyLen = std::min(strlen(name), WSTATICMODEL_NAME_LENGTH - 1);
+            memcpy(header.name, name, copyLen);
             header.name[copyLen] = '\0';
         }
-        else if (line.starts_with("node_count ")) { header.nodeCount = std::stoul(line.substr(11)); }
-        else if (line.starts_with("mesh_node_count ")) { header.meshNodeCount = std::stoul(line.substr(16)); }
-        else if (line.starts_with("vertex_offset ")) { header.vertexOffset = std::stoul(line.substr(14)); }
-        else if (line.starts_with("vertex_count ")) { header.vertexCount = std::stoul(line.substr(13)); }
-        else if (line.starts_with("index_offset ")) { header.indexOffset = std::stoul(line.substr(13)); }
-        else if (line.starts_with("index_count ")) { header.indexCount = std::stoul(line.substr(12)); }
-        else if (line.starts_with("meshlet_vertex_offset ")) { header.meshletVertexOffset = std::stoul(line.substr(22)); }
-        else if (line.starts_with("meshlet_vertex_count ")) { header.meshletVertexCount = std::stoul(line.substr(21)); }
-        else if (line.starts_with("meshlet_triangle_offset ")) { header.meshletTriangleOffset = std::stoul(line.substr(24)); }
-        else if (line.starts_with("meshlet_triangle_count ")) { header.meshletTriangleCount = std::stoul(line.substr(23)); }
-        else if (line.starts_with("meshlet_offset ")) { header.meshletOffset = std::stoul(line.substr(15)); }
-        else if (line.starts_with("meshlet_count ")) { header.meshletCount = std::stoul(line.substr(14)); }
-        else if (line.starts_with("primitive_offset ")) { header.primitiveOffset = std::stoul(line.substr(17)); }
-        else if (line.starts_with("primitive_count ")) { header.primitiveCount = std::stoul(line.substr(16)); }
-        else if (line.starts_with("material_offset ")) { header.materialOffset = std::stoul(line.substr(16)); }
-        else if (line.starts_with("material_count ")) { header.materialCount = std::stoul(line.substr(15)); }
-        else if (line.starts_with("mesh_offset ")) { header.meshOffset = std::stoul(line.substr(12)); }
-        else if (line.starts_with("mesh_count ")) { header.meshCount = std::stoul(line.substr(11)); }
-        else if (line.starts_with("compressed_body_size ")) { header.compressedBodySize = std::stoull(line.substr(21)); }
-        else if (line.starts_with("uncompressed_body_size ")) { header.uncompressedBodySize = std::stoull(line.substr(23)); }
+        else if (strncmp(line, "node_count ", 11) == 0) { std::from_chars(line + 11, line + LINE_BUF, header.nodeCount); }
+        else if (strncmp(line, "mesh_node_count ", 16) == 0) { std::from_chars(line + 16, line + LINE_BUF, header.meshNodeCount); }
+        else if (strncmp(line, "vertex_offset ", 14) == 0) { std::from_chars(line + 14, line + LINE_BUF, header.vertexOffset); }
+        else if (strncmp(line, "vertex_count ", 13) == 0) { std::from_chars(line + 13, line + LINE_BUF, header.vertexCount); }
+        else if (strncmp(line, "index_offset ", 13) == 0) { std::from_chars(line + 13, line + LINE_BUF, header.indexOffset); }
+        else if (strncmp(line, "index_count ", 12) == 0) { std::from_chars(line + 12, line + LINE_BUF, header.indexCount); }
+        else if (strncmp(line, "meshlet_vertex_offset ", 22) == 0) { std::from_chars(line + 22, line + LINE_BUF, header.meshletVertexOffset); }
+        else if (strncmp(line, "meshlet_vertex_count ", 21) == 0) { std::from_chars(line + 21, line + LINE_BUF, header.meshletVertexCount); }
+        else if (strncmp(line, "meshlet_triangle_offset ", 24) == 0) { std::from_chars(line + 24, line + LINE_BUF, header.meshletTriangleOffset); }
+        else if (strncmp(line, "meshlet_triangle_count ", 23) == 0) { std::from_chars(line + 23, line + LINE_BUF, header.meshletTriangleCount); }
+        else if (strncmp(line, "meshlet_offset ", 15) == 0) { std::from_chars(line + 15, line + LINE_BUF, header.meshletOffset); }
+        else if (strncmp(line, "meshlet_count ", 14) == 0) { std::from_chars(line + 14, line + LINE_BUF, header.meshletCount); }
+        else if (strncmp(line, "primitive_offset ", 17) == 0) { std::from_chars(line + 17, line + LINE_BUF, header.primitiveOffset); }
+        else if (strncmp(line, "primitive_count ", 16) == 0) { std::from_chars(line + 16, line + LINE_BUF, header.primitiveCount); }
+        else if (strncmp(line, "material_offset ", 16) == 0) { std::from_chars(line + 16, line + LINE_BUF, header.materialOffset); }
+        else if (strncmp(line, "material_count ", 15) == 0) { std::from_chars(line + 15, line + LINE_BUF, header.materialCount); }
+        else if (strncmp(line, "mesh_offset ", 12) == 0) { std::from_chars(line + 12, line + LINE_BUF, header.meshOffset); }
+        else if (strncmp(line, "mesh_count ", 11) == 0) { std::from_chars(line + 11, line + LINE_BUF, header.meshCount); }
+        else if (strncmp(line, "compressed_body_size ", 21) == 0) { std::from_chars(line + 21, line + LINE_BUF, header.compressedBodySize); }
+        else if (strncmp(line, "uncompressed_body_size ", 23) == 0) { std::from_chars(line + 23, line + LINE_BUF, header.uncompressedBodySize); }
     }
     return std::nullopt;
 }
 
-std::optional<WStaticModelInfo> ReadWStaticModelInfo(const std::filesystem::path& path)
+std::optional<WStaticModelInfo> ReadWStaticModelInfo(const Core::Path& path)
 {
-    std::ifstream file(path, std::ios::binary);
+    std::ifstream file(path.c_str(), std::ios::binary);
     if (!file) { return std::nullopt; }
 
     auto optHeader = ReadWStaticModelHeader(file);

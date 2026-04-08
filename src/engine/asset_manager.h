@@ -116,7 +116,7 @@ public: // Textures
     struct CachedTextureMetadata
     {
         Core::Path source;
-        char name[WTEXTURE_NAME_LENGTH]{};
+        Core::InlineString<128> name;
         uint32_t width{};
         uint32_t height{};
         uint32_t mipCount{};

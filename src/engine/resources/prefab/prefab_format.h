@@ -11,6 +11,8 @@
 
 #include <json/nlohmann/json.hpp>
 
+#include "core/containers/inline_path.h"
+
 namespace Engine
 {
 constexpr uint32_t PREFAB_MAJOR_VERSION = 1;
@@ -33,7 +35,7 @@ bool WriteWPrefabHeader(std::ostream& out, const WPrefabHeader& header);
 
 std::optional<WPrefabHeader> ReadWPrefabHeader(std::istream& in);
 
-std::optional<WPrefabHeader> ReadWPrefabHeader(const char* path);
+std::optional<WPrefabHeader> ReadWPrefabHeader(const Core::Path& path);
 
 struct WPrefabData
 {

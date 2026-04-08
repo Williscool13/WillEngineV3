@@ -10,6 +10,8 @@
 #include <iosfwd>
 #include <optional>
 
+#include "core/containers/inline_path.h"
+
 namespace Engine
 {
 constexpr uint32_t SCENE_MAJOR_VERSION = 1;
@@ -32,7 +34,7 @@ bool WriteWSceneHeader(std::ostream& out, const WSceneHeader& header);
 
 std::optional<WSceneHeader> ReadWSceneHeader(std::istream& in);
 
-std::optional<WSceneHeader> ReadWSceneHeader(const std::filesystem::path& path);
+std::optional<WSceneHeader> ReadWSceneHeader(const Core::Path& path);
 } // Engine
 
 #endif //WILL_ENGINE_SCENE_FORMAT_H

@@ -332,13 +332,13 @@ void TextureLoadSlot::PostUploadSetup()
     VkDebugUtilsObjectNameInfoEXT nameInfo{VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT};
     nameInfo.objectType = VK_OBJECT_TYPE_IMAGE_VIEW;
     nameInfo.objectHandle = reinterpret_cast<uint64_t>(outputTexture->imageView.handle);
-    nameInfo.pObjectName = outputTexture->name;
+    nameInfo.pObjectName = outputTexture->name.c_str();
     vkSetDebugUtilsObjectNameEXT(context->device, &nameInfo);
 
     VkDebugUtilsObjectNameInfoEXT viewNameInfo{VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT};
     viewNameInfo.objectType = VK_OBJECT_TYPE_IMAGE;
     viewNameInfo.objectHandle = reinterpret_cast<uint64_t>(outputTexture->image.handle);
-    viewNameInfo.pObjectName = outputTexture->name;
+    viewNameInfo.pObjectName = outputTexture->name.c_str();
     vkSetDebugUtilsObjectNameEXT(context->device, &viewNameInfo);
 #endif
 

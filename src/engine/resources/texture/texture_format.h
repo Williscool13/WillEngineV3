@@ -10,6 +10,8 @@
 #include <iosfwd>
 #include <optional>
 
+#include "core/containers/inline_path.h"
+
 namespace Engine
 {
 constexpr uint32_t TEXTURE_MAJOR_VERSION = 0;
@@ -36,7 +38,7 @@ bool WriteWTextureHeader(std::ostream& out, const WTextureHeader& header);
 
 std::optional<WTextureHeader> ReadWTextureHeader(std::istream& in);
 
-std::optional<WTextureHeader> ReadWTextureHeader(const std::filesystem::path& path);
+std::optional<WTextureHeader> ReadWTextureHeader(const Core::Path& path);
 } // Engine
 
 #endif //WILL_ENGINE_TEXTURE_FORMAT_H

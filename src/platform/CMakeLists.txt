@@ -19,6 +19,7 @@ if(WIN32)
             paths.cpp
     )
     target_link_libraries(platform PUBLIC
+            core
             dbghelp
             fmt::fmt
             spdlog::spdlog
@@ -31,6 +32,7 @@ else()
             paths.cpp
     )
     target_link_libraries(platform PUBLIC
+            core
             fmt::fmt
             spdlog::spdlog
             SDL3::SDL3

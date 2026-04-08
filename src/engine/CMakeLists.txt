@@ -34,18 +34,14 @@ add_library(engine STATIC
         resources/texture/texture_format.h
         resources/scene/scene_format.cpp
         resources/scene/scene_format.h
-        resources/sampler/sampler.cpp
         resources/sampler/sampler.h
-        resources/scene/scene.cpp
         resources/scene/scene.h
         resources/prefab/prefab_format.cpp
         resources/prefab/prefab_format.h
         resources/model/model_format.h
         resources/model/model_types.h
-        resources/model/static_model.cpp
         resources/model/static_model.h
         resources/model/model_format.cpp
-        serialization/serialization.cpp
         serialization/serialization.h
         compression/compression.cpp
         compression/compression.h

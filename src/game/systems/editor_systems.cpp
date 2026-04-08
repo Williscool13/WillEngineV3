@@ -1756,7 +1756,7 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
                     const char* currentTexName = "None";
                     if (texId.IsValid()) {
                         if (const auto* it = texCache.Find(texId)) {
-                            currentTexName = it->name;
+                            currentTexName = it->name.c_str();
                         }
                     }
 

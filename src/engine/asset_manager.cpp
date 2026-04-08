@@ -99,6 +99,9 @@ void AssetManager::RegisterScene(StringID sceneId, const char* sceneName)
 void AssetManager::UpdateSceneCachePath(StringID sceneId, const Core::Path& path, uint32_t entityCount)
 {
     auto it = sceneCache.Find(sceneId);
+    if (!it) {
+        return;
+    }
     it->source = path;
     it->entityCount = entityCount;
 }
@@ -113,7 +116,7 @@ bool AssetManager::DeleteScene(StringID sceneId)
     const CachedSceneMetadata* it = sceneCache.Find(sceneId);
     if (!it) { return false; }
     if (!it->source.IsEmpty()) {
-        std::filesystem::remove(it->source.c_str());
+        Platform::DeleteSingleFile(it->source.c_str());
     }
     sceneCache.Remove(sceneId);
     return true;
@@ -124,7 +127,7 @@ bool AssetManager::DeletePrefab(StringID prefabId)
     const CachedPrefabMetadata* it = prefabCache.Find(prefabId);
     if (!it) { return false; }
     if (!it->source.IsEmpty()) {
-        std::filesystem::remove(it->source.c_str());
+        Platform::DeleteSingleFile(it->source.c_str());
     }
     prefabCache.Remove(prefabId);
     return true;
@@ -207,7 +210,7 @@ StaticModelHandle AssetManager::LoadProceduralModel(ProceduralParams& params)
     static int32_t proceduralCounter = 0;
     StaticModel& model = models[handle.index];
     model.selfHandle = handle;
-    model.name = Core::InlineString<128>(fmt::format("Procedural Mesh {}", proceduralCounter++));
+    model.name = Core::InlineString<128>::Format("Procedural Mesh %d", proceduralCounter++);
     model.modelId = proceduralModelId;
     model.proceduralParams = params;
     model.refCount = 1;
@@ -261,7 +264,7 @@ StaticModelHandle AssetManager::LoadSplineModel(const SplineParams& params)
     static int32_t splineCounter = 0;
     StaticModel& model = models[handle.index];
     model.selfHandle = handle;
-    model.name = Core::InlineString<128>(fmt::format("Spline Mesh {}", splineCounter++));
+    model.name = Core::InlineString<128>::Format("Spline Mesh %d", splineCounter++);
     model.modelId = splineModelId;
     model.splineParams = params;
     model.refCount = 1;
@@ -357,12 +360,12 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
 
             textureComplete.texture->loadState = Texture::LoadState::Loaded;
             textureComplete.texture->acquireFrame = ctx->currentFrame;
-            LOG_TRACE(Asset, "Texture load succeeded: {} (bindless index: {})", textureComplete.texture->name, static_cast<uint32_t>(textureComplete.texture->bindlessHandle.index));
+            LOG_TRACE(Asset, "Texture load succeeded: {} (bindless index: {})", textureComplete.texture->name.c_str(), static_cast<uint32_t>(textureComplete.texture->bindlessHandle.index));
             loadCounts.textureLoadedCount++;
         }
         else {
             textureComplete.texture->loadState = Texture::LoadState::NotLoaded;
-            LOG_ERROR(Asset, "Texture load failed: {}", textureComplete.texture->name);
+            LOG_ERROR(Asset, "Texture load failed: {}", textureComplete.texture->name.c_str());
         }
     }
 
@@ -418,7 +421,7 @@ void AssetManager::ResolveUnloads()
         if (texture.refCount > 0 || texture.retireFrame == 0 || currentFrame < texture.retireFrame) { continue; }
         if (texture.loadState != Texture::LoadState::Loaded) { continue; }
 
-        LOG_TRACE(Asset, "Texture unloaded: {} (bindless index: {})", texture.name, static_cast<uint32_t>(texture.bindlessHandle.index));
+        LOG_TRACE(Asset, "Texture unloaded: {} (bindless index: {})", texture.name.c_str(), static_cast<uint32_t>(texture.bindlessHandle.index));
         resourceManager->bindlessSamplerTextureDescriptorBuffer.ReleaseTextureBinding(texture.bindlessHandle);
         textureIdToHandle.Remove(texture.textureId);
         textureAllocator.Remove(texture.selfHandle);
@@ -443,23 +446,25 @@ void AssetManager::Scan()
     if (ctx->bShouldRescanResources.compare_exchange_strong(expectedRescan, false, std::memory_order::acq_rel, std::memory_order::relaxed)) {
         const Core::Path& assetPath = Platform::GetAssetPath();
         if (assetPath.Exists()) {
-            for (const auto& entry : std::filesystem::recursive_directory_iterator(assetPath.c_str())) {
-                const auto& path = entry.path();
-                const auto ext = path.extension();
+            Core::Vector<Core::Path> paths;
+            paths = Core::Vector<Core::Path>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetManager);
+            Platform::RecursiveDirectoryIterator(assetPath, paths);
+
+            for (const auto& path : paths) {
+                const auto ext = path.Extension();
 
                 if (ext == ".wtexture") {
                     auto header = ReadWTextureHeader(path);
                     if (!header) { continue; }
                     TextureID id{header->textureId};
-                    const std::string name{header->name};
-                    const StringID nameSid{name.c_str(), name.size()};
+                    const Core::InlineString<128> name{header->name};
+                    const StringID nameSid{name.c_str(), name.Size()};
                     if (textureNameToId.Contains(nameSid) && *textureNameToId.Find(nameSid) != id) {
-                        auto pathName = path.string();
-                        LOG_CRITICAL(Asset, "2 Textures were mounted that contain the same name. This will cause issues for texture lookups by name. ({})", pathName);
+                        LOG_CRITICAL(Asset, "2 Textures were mounted that contain the same name. This will cause issues for texture lookups by name. ({})", path.c_str());
                     }
                     CachedTextureMetadata& cached = textureCache[id];
                     cached.source = Core::Path(path);
-                    memcpy(cached.name, header->name, WTEXTURE_NAME_LENGTH);
+                    cached.name = Core::InlineString<128>(header->name);
                     cached.width = header->width;
                     cached.height = header->height;
                     cached.mipCount = header->mipCount;
@@ -472,16 +477,15 @@ void AssetManager::Scan()
                     auto info = ReadWStaticModelInfo(path);
                     if (!info) { continue; }
                     if (info->header.modelId == 0) {
-                        LOG_WARN(Asset, "Model '{}' has no modelId. Reimport to fix", path.stem().string());
+                        LOG_WARN(Asset, "Model '{}' has no modelId. Reimport to fix", path.Stem());
                         continue;
                     }
                     ModelID id{info->header.modelId};
 
-                    std::string name{info->header.name};
-                    const StringID nameSid{name.c_str(), name.size()};
+                    const Core::InlineString<128> name{info->header.name};
+                    const StringID nameSid{name.c_str(), name.Size()};
                     if (modelNameToId.Contains(nameSid) && *modelNameToId.Find(nameSid) != id) {
-                        auto pathName = path.string();
-                        LOG_CRITICAL(Asset, "2 Models were mounted that contain the same name. This will cause issues for model lookups by name. ({})", pathName);
+                        LOG_CRITICAL(Asset, "2 Models were mounted that contain the same name. This will cause issues for model lookups by name. ({})", path.c_str());
                     }
 
                     CachedModelMetadata& cached = modelCache[id];
@@ -501,9 +505,9 @@ void AssetManager::Scan()
                     if (!header) { continue; }
                     StringID id{header->sceneId};
                     if (header->sceneId == 0) {
-                        const std::string stem = path.stem().string();
-                        id = StringID{stem.c_str(), stem.size()};
-                        LOG_WARN(Asset, "Scene '{}' has no sceneId, using stem-derived ID. Re-save to fix", stem);
+                        Core::InlineString<128> stem{path.Stem()};
+                        id = StringID{stem.c_str(), stem.Size()};
+                        LOG_WARN(Asset, "Scene '{}' has no sceneId, using stem-derived ID. Re-save to fix", stem.c_str());
                     }
                     CachedSceneMetadata& cached = sceneCache[id];
                     cached.source = Core::Path(path);
@@ -511,13 +515,13 @@ void AssetManager::Scan()
                     cached.entityCount = header->entityCount;
                 }
                 else if (ext == ".wprefab") {
-                    auto header = ReadWPrefabHeader(path.string().c_str());
+                    auto header = ReadWPrefabHeader(path);
                     if (!header) { continue; }
                     StringID id{header->prefabId};
                     if (header->prefabId == 0) {
-                        const std::string stem = path.stem().string();
-                        id = StringID{stem.c_str(), stem.size()};
-                        LOG_WARN(Asset, "Prefab '{}' has no prefabId, using stem-derived ID. Re-save to fix", stem);
+                        Core::InlineString<128> stem{path.Stem()};
+                        id = StringID{stem.c_str(), stem.Size()};
+                        LOG_WARN(Asset, "Prefab '{}' has no prefabId, using stem-derived ID. Re-save to fix", stem.c_str());
                     }
                     CachedPrefabMetadata& cached = prefabCache[id];
                     cached.source = Core::Path(path);
@@ -543,7 +547,7 @@ Texture* AssetManager::LoadTexture(TextureID textureId)
             Texture& texture = textures[existingHandle.index];
             texture.refCount++;
             texture.retireFrame = 0;
-            LOG_TRACE(Asset, "Texture already loaded: {}, refCount: {}", texture.name, texture.refCount);
+            LOG_TRACE(Asset, "Texture already loaded: {}, refCount: {}", texture.name.c_str(), texture.refCount);
             return &texture;
         }
         textureIdToHandle.Remove(textureId);
@@ -561,7 +565,7 @@ Texture* AssetManager::LoadTexture(TextureID textureId)
     texture.selfHandle = handle;
     texture.source = meta.source;
     texture.textureId = textureId;
-    memcpy(texture.name, meta.name, WTEXTURE_NAME_LENGTH);
+    texture.name = Core::InlineString<128>(meta.name);
     texture.width = meta.width;
     texture.height = meta.height;
     texture.mipCount = meta.mipCount;
@@ -574,7 +578,7 @@ Texture* AssetManager::LoadTexture(TextureID textureId)
 
     textureIdToHandle[textureId] = handle;
 
-    LOG_TRACE(Asset, "Requesting texture load: {}", texture.name);
+    LOG_TRACE(Asset, "Requesting texture load: {}", texture.name.c_str());
     assetLoadManager->RequestTextureLoad(&texture);
 
     return &texture;
@@ -597,7 +601,7 @@ void AssetManager::UnloadTexture(TextureID id)
     Texture& texture = textures[handle.index];
     texture.refCount--;
 
-    LOG_TRACE(Asset, "Texture refCount decremented: {}, refCount: {}", texture.name, texture.refCount);
+    LOG_TRACE(Asset, "Texture refCount decremented: {}, refCount: {}", texture.name.c_str(), texture.refCount);
 
     if (texture.refCount == 0) {
         texture.retireFrame = ctx->currentFrame + Core::FRAME_BUFFER_COUNT * 4;

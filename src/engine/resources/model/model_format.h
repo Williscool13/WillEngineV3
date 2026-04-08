@@ -61,6 +61,7 @@ struct WStaticModelHeader
 struct WStaticModelInfo
 {
     WStaticModelHeader header;
+    // todo vector
     std::vector<Node> nodes;
     ModelBounds bounds{};
 };
@@ -69,7 +70,7 @@ bool WriteWStaticModelHeader(std::ostream& out, const WStaticModelHeader& header
 
 std::optional<WStaticModelHeader> ReadWStaticModelHeader(std::istream& in);
 
-std::optional<WStaticModelInfo> ReadWStaticModelInfo(const std::filesystem::path& path);
+std::optional<WStaticModelInfo> ReadWStaticModelInfo(const Core::Path& path);
 } // Engine
 
 #endif //WILL_ENGINE_MODEL_FORMAT_H

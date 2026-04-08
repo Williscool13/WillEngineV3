@@ -33,7 +33,7 @@ struct Texture
     Core::ImageAcquireOperation acquireBarrier{};
 
     Core::Path source{};
-    char name[WTEXTURE_NAME_LENGTH]{};
+    Core::InlineString<128> name;
     TextureID textureId{};
     TextureHandle selfHandle{TextureHandle::INVALID};
     LoadState loadState{LoadState::NotLoaded};

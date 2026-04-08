@@ -230,6 +230,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
     //
     {
         ZoneScopedN("CreatePhysicsSystem");
+        // todo physics
         physicsSystem = std::make_unique<Physics::PhysicsSystem>(scheduler);
     }
 
@@ -238,7 +239,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
     //
     {
         ZoneScopedN("CreateModelGenerator");
-        modelGenerator = std::make_unique<Editor::AssetGenerator>(memoryManager, engineContext, renderThread->GetVulkanContext(), renderThread, asyncAssetLoadManager);
+        assetGenerator = new(memoryManager.PersistentAllocRaw(sizeof(Editor::AssetGenerator), Core::AllocTag::AssetGenerator)) Editor::AssetGenerator(memoryManager, engineContext, renderThread->GetVulkanContext(), renderThread, asyncAssetLoadManager);
     }
 
 #endif
@@ -259,6 +260,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
             SDL_SetWindowRelativeMouseMode(window, false);
         }
 
+        // todo game state
         gameState = std::make_unique<GameState>();
 
 #if LOGGING_ENABLED
@@ -701,7 +703,7 @@ void WillEngine::EditorImgui()
 
     if (ImGui::CollapsingHeader("Asset Generation")) {
         auto startGeneration = [&](const Core::Path& gltfPath, const Core::Path& outPath) {
-            modelGenerator->RequestModelGenerate(gltfPath, outPath);
+            assetGenerator->RequestModelGenerate(gltfPath, outPath);
         };
 
 
@@ -709,7 +711,7 @@ void WillEngine::EditorImgui()
         ImGui::Text("Generate Models:");
 
         if (ImGui::Button("Intel Sponza")) {
-            modelGenerator->RequestModelGenerate(Platform::GetAssetPath() / "IntelSponza.glb",
+            assetGenerator->RequestModelGenerate(Platform::GetAssetPath() / "IntelSponza.glb",
                                                  Platform::GetAssetPath() / "IntelSponza.wsmesh");
         }
         if (ImGui::Button("dragon.wsmesh")) {
@@ -744,28 +746,28 @@ void WillEngine::EditorImgui()
         ImGui::Text("Generate Textures:");
 
         if (ImGui::Button("kloofendal_environment.ktx2")) {
-            modelGenerator->RequestEnvironmentMapGenerate(
+            assetGenerator->RequestEnvironmentMapGenerate(
                 Platform::GetAssetPath() / "environment-map/kloofendal_48d_partly_cloudy_puresky_4k.hdr",
                 Platform::GetAssetPath() / "environment-map/kloofendal_48d_partly_cloudy_puresky_4k.ktx2");
         }
 
         if (ImGui::Button("Generate BRDF LUT, Smiling Friend, and Prototype Texture")) {
-            modelGenerator->RequestTextureGenerateFromFile(
+            assetGenerator->RequestTextureGenerateFromFile(
                 Platform::GetAssetPath() / "textures/smiling_friend.jpg",
                 Platform::GetAssetPath() / "textures/smiling_friend.wtexture",
                 true,
                 DXGI_FORMAT_BC7_UNORM_SRGB);
-            modelGenerator->RequestTextureGenerateFromFile(
+            assetGenerator->RequestTextureGenerateFromFile(
                 Platform::GetAssetPath() / "textures/prototype_texture_dark.png",
                 Platform::GetAssetPath() / "textures/prototype_texture_dark.wtexture",
                 true,
                 DXGI_FORMAT_BC7_UNORM_SRGB);
-            modelGenerator->GenerateBRDFLUT(Platform::GetAssetPath() / "textures/brdf_lut.wtexture");
+            assetGenerator->GenerateBRDFLUT(Platform::GetAssetPath() / "textures/brdf_lut.wtexture");
         }
 
         ImGui::Separator();
         ImGui::Text("Generation Progress:");
-        const auto& genProgresses = modelGenerator->GetModelGenerationProgresses();
+        const auto& genProgresses = assetGenerator->GetModelGenerationProgresses();
         for (uint32_t i = 0; i < genProgresses.Size(); ++i) {
             const auto& genProgress = genProgresses[i];
             const auto genState = genProgress.loadingState.load(std::memory_order_acquire);
@@ -784,7 +786,7 @@ void WillEngine::EditorImgui()
                 default: break;
             }
 
-            const std::string_view modelName = modelGenerator->GetModelGenerateSlotPath(i).Stem();
+            const std::string_view modelName = assetGenerator->GetModelGenerateSlotPath(i).Stem();
             if (modelName.empty()) {
                 ImGui::Text("Slot %u: -", i);
             } else {
@@ -797,8 +799,8 @@ void WillEngine::EditorImgui()
 
         ImGui::Separator();
         ImGui::Text("Active Generates:");
-        ImGui::Text("  Models: %u (%u active)", modelGenerator->GetTotalModelGenerateCount(), modelGenerator->GetActiveModelGenerateCount());
-        ImGui::Text("  Textures: %u (%u active)", modelGenerator->GetTotalTextureGenerateCount(), modelGenerator->GetActiveTextureGenerateCount());
+        ImGui::Text("  Models: %u (%u active)", assetGenerator->GetTotalModelGenerateCount(), assetGenerator->GetActiveModelGenerateCount());
+        ImGui::Text("  Textures: %u (%u active)", assetGenerator->GetTotalTextureGenerateCount(), assetGenerator->GetActiveTextureGenerateCount());
         ImGui::Text("Active Loads:");
         ImGui::Text("  Models: %u", asyncAssetLoadManager->GetActiveModelLoadCount());
         ImGui::Text("  Textures: %u", asyncAssetLoadManager->GetActiveTextureLoadCount());
@@ -1101,8 +1103,8 @@ void WillEngine::Cleanup()
     inputManager->~InputManager();
 
 #if WILL_EDITOR
-    modelGenerator->Join();
-    modelGenerator.reset();
+    assetGenerator->Join();
+    assetGenerator->~AssetGenerator();
 #endif
 
     physicsSystem.reset();

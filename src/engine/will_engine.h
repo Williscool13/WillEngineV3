@@ -131,7 +131,7 @@ private: // Main Systems
     MaterialManager* materialManager{};
     std::unique_ptr<Physics::PhysicsSystem> physicsSystem{};
 #if WILL_EDITOR
-    std::unique_ptr<Editor::AssetGenerator> modelGenerator{};
+    Editor::AssetGenerator* assetGenerator{};
 #endif
     Core::FrameBuffer stagingFrameBuffer{};
 

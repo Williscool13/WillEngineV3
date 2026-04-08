@@ -4,10 +4,11 @@
 
 #include "prefab_format.h"
 
+#include <charconv>
+#include <cstring>
 #include <fstream>
 #include <istream>
 #include <ostream>
-#include <string>
 
 #include <json/nlohmann/json.hpp>
 
@@ -26,43 +27,45 @@ bool WriteWPrefabHeader(std::ostream& out, const WPrefabHeader& header)
 
 std::optional<WPrefabHeader> ReadWPrefabHeader(std::istream& in)
 {
-    auto trimCR = [](std::string& s) {
-        if (!s.empty() && s.back() == '\r') s.pop_back();
+    constexpr size_t LINE_BUF = 256;
+    char line[LINE_BUF];
+
+    auto trimCR = [](char* s) {
+        const size_t len = strlen(s);
+        if (len > 0 && s[len - 1] == '\r') { s[len - 1] = '\0'; }
     };
 
-    std::string line;
-    if (!std::getline(in, line)) { return std::nullopt; }
+    if (!in.getline(line, LINE_BUF)) { return std::nullopt; }
     trimCR(line);
-    if (line != "wprefab") { return std::nullopt; }
+    if (strcmp(line, "wprefab") != 0) { return std::nullopt; }
 
     WPrefabHeader header{};
-    while (std::getline(in, line)) {
+    while (in.getline(line, LINE_BUF)) {
         trimCR(line);
-        if (line == "end_header") {
+        if (strcmp(line, "end_header") == 0) {
             header.dataOffset = static_cast<uint64_t>(in.tellg());
             return header;
         }
-        if (line.starts_with("version ")) {
-            const auto rest = line.substr(8);
-            const auto space = rest.find(' ');
-            if (space == std::string::npos) return std::nullopt;
-            if (std::stoul(rest.substr(0, space)) != PREFAB_MAJOR_VERSION) return std::nullopt;
+        if (strncmp(line, "version ", 8) == 0) {
+            uint32_t major = 0;
+            std::from_chars(line + 8, line + LINE_BUF, major);
+            if (major != PREFAB_MAJOR_VERSION) { return std::nullopt; }
         }
-        else if (line.starts_with("id ")) { header.prefabId = std::stoull(line.substr(3)); }
-        else if (line.starts_with("name ")) {
-            auto name = line.substr(5);
-            auto copyLen = std::min(name.size(), WPREFAB_NAME_LENGTH - 1);
-            memcpy(header.name, name.c_str(), copyLen);
+        else if (strncmp(line, "id ", 3) == 0) { std::from_chars(line + 3, line + LINE_BUF, header.prefabId); }
+        else if (strncmp(line, "name ", 5) == 0) {
+            const char* name = line + 5;
+            const size_t copyLen = std::min(strlen(name), WPREFAB_NAME_LENGTH - 1);
+            memcpy(header.name, name, copyLen);
             header.name[copyLen] = '\0';
         }
-        else if (line.starts_with("component_count ")) { header.componentCount = std::stoul(line.substr(16)); }
+        else if (strncmp(line, "component_count ", 16) == 0) { std::from_chars(line + 16, line + LINE_BUF, header.componentCount); }
     }
     return std::nullopt;
 }
 
-std::optional<WPrefabHeader> ReadWPrefabHeader(const char* path)
+std::optional<WPrefabHeader> ReadWPrefabHeader(const Core::Path& path)
 {
-    std::ifstream f(path, std::ios::binary);
+    std::ifstream f(path.c_str(), std::ios::binary);
     return ReadWPrefabHeader(f);
 }
 
