@@ -474,30 +474,30 @@ void AssetManager::Scan()
                     textureNameToId[nameSid] = id;
                 }
                 else if (ext == ".wsmesh") {
-                    auto info = ReadWStaticModelInfo(path);
-                    if (!info) { continue; }
-                    if (info->header.modelId == 0) {
+                    auto optModelHeader = ReadWStaticModelHeader(path);
+                    if (!optModelHeader) { continue; }
+                    if (optModelHeader->modelId == 0) {
                         LOG_WARN(Asset, "Model '{}' has no modelId. Reimport to fix", path.Stem());
                         continue;
                     }
-                    ModelID id{info->header.modelId};
+                    ModelID id{optModelHeader->modelId};
 
-                    const Core::InlineString<128> name{info->header.name};
+                    const Core::InlineString<128> name{optModelHeader->name};
                     const StringID nameSid{name.c_str(), name.Size()};
                     if (modelNameToId.Contains(nameSid) && *modelNameToId.Find(nameSid) != id) {
                         LOG_CRITICAL(Asset, "2 Models were mounted that contain the same name. This will cause issues for model lookups by name. ({})", path.c_str());
                     }
 
+                    auto optNodes = ReadWStaticModelNodes(path, *optModelHeader, memoryManager->Assets(), memoryManager->AssetsScratch());
+                    if (!optNodes) { continue; }
+
                     CachedModelMetadata& cached = modelCache[id];
                     cached.source = Core::Path(path);
-                    cached.name = Core::InlineString<128>(name);
-                    cached.nodeCount = info->header.nodeCount;
-                    cached.meshNodesCount = info->header.meshNodeCount;
-                    cached.nodes = Core::Vector<Node>(&memoryManager->Assets(), Core::AllocTag::AssetModel, info->nodes.size());
-                    for (Node& node : info->nodes) {
-                        cached.nodes.PushBack(node);
-                    }
-                    cached.bounds = info->bounds;
+                    cached.name = Core::InlineString(name);
+                    cached.nodeCount = optModelHeader->nodeCount;
+                    cached.meshNodesCount = optModelHeader->meshNodeCount;
+                    cached.nodes = std::move(optNodes->nodes);
+                    cached.bounds = optNodes->bounds;
                     modelNameToId[nameSid] = id;
                 }
                 else if (ext == ".wscene") {

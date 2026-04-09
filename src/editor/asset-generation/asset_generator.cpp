@@ -151,8 +151,6 @@ void AssetGenerator::ThreadMain()
             }
         }
     }
-
-    // todo fix graceful shutdown (wait for tasks, kill them, whatever)
 }
 
 void AssetGenerator::Join()

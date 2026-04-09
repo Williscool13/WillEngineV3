@@ -58,19 +58,27 @@ struct WStaticModelHeader
     uint64_t dataOffset{0};
 };
 
-struct WStaticModelInfo
+struct WStaticModelData
 {
-    WStaticModelHeader header;
-    // todo vector
-    std::vector<Node> nodes;
+    Core::HeapArray<Node> nodes;
     ModelBounds bounds{};
 };
 
 bool WriteWStaticModelHeader(std::ostream& out, const WStaticModelHeader& header);
 
 std::optional<WStaticModelHeader> ReadWStaticModelHeader(std::istream& in);
+std::optional<WStaticModelHeader> ReadWStaticModelHeader(const Core::Path& path);
 
-std::optional<WStaticModelInfo> ReadWStaticModelInfo(const Core::Path& path);
+/**
+ * Reads nodes and bounds data.
+ * WStaticModelData::nodes will be allocated using the `allocator` (so it can be std::move-d by the caller.
+ * @param path
+ * @param header
+ * @param allocator
+ * @param scratchAllocator
+ * @return
+ */
+std::optional<WStaticModelData> ReadWStaticModelNodes(const Core::Path& path, const WStaticModelHeader& header, Core::TlsfAllocator& allocator, Core::TlsfAllocator& scratchAllocator);
 } // Engine
 
 #endif //WILL_ENGINE_MODEL_FORMAT_H

@@ -89,7 +89,7 @@ public: // Models
         Core::InlineString<128> name{};
         uint32_t nodeCount{};
         uint32_t meshNodesCount{};
-        Core::Vector<Node> nodes;
+        Core::HeapArray<Node> nodes;
         ModelBounds bounds{};
     };
 

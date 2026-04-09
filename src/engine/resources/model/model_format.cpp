@@ -101,41 +101,43 @@ std::optional<WStaticModelHeader> ReadWStaticModelHeader(std::istream& in)
     return std::nullopt;
 }
 
-std::optional<WStaticModelInfo> ReadWStaticModelInfo(const Core::Path& path)
+std::optional<WStaticModelHeader> ReadWStaticModelHeader(const Core::Path& path)
+{
+    std::ifstream file(path.c_str(), std::ios::binary);
+    if (!file) { return std::nullopt; }
+    return ReadWStaticModelHeader(file);
+}
+
+std::optional<WStaticModelData> ReadWStaticModelNodes(const Core::Path& path, const WStaticModelHeader& header, Core::TlsfAllocator& allocator, Core::TlsfAllocator& scratchAllocator)
 {
     std::ifstream file(path.c_str(), std::ios::binary);
     if (!file) { return std::nullopt; }
 
-    auto optHeader = ReadWStaticModelHeader(file);
-    if (!optHeader) { return std::nullopt; }
-
-    const WStaticModelHeader& header = *optHeader;
-
     file.seekg(0, std::ios::end);
-    const size_t fileSize = static_cast<size_t>(file.tellg());
+    const size_t fileSize = file.tellg();
     const size_t nodeDataStart = header.dataOffset + header.compressedBodySize;
     if (fileSize < nodeDataStart) { return std::nullopt; }
 
     const size_t nodesSize = fileSize - nodeDataStart;
-    std::vector<uint8_t> buf(nodesSize);
+
+    auto buf = Core::HeapArray<uint8_t>(&scratchAllocator, Core::AllocTag::AssetManager, nodesSize);
     file.seekg(static_cast<std::streamoff>(nodeDataStart));
-    file.read(reinterpret_cast<char*>(buf.data()), static_cast<std::streamsize>(nodesSize));
+    file.read(reinterpret_cast<char*>(buf.Data()), static_cast<std::streamsize>(nodesSize));
     if (!file) { return std::nullopt; }
 
-    WStaticModelInfo info{};
-    info.header = header;
-    info.nodes.resize(header.nodeCount);
-    const uint8_t* ptr = buf.data();
+    WStaticModelData modelData{};
+    modelData.nodes = Core::HeapArray<Node>(&allocator, Core::AllocTag::Render, header.nodeCount);
+    const uint8_t* ptr = buf.Data();
     for (uint32_t i = 0; i < header.nodeCount; ++i) {
-        ReadNode(ptr, info.nodes[i]);
+        ReadNode(ptr, modelData.nodes[i]);
     }
 
-    const size_t bytesConsumed = ptr - buf.data();
+    const size_t bytesConsumed = ptr - buf.Data();
     const size_t remaining = nodesSize - bytesConsumed;
     if (remaining >= sizeof(ModelBounds)) {
-        memcpy(&info.bounds, ptr, sizeof(ModelBounds));
+        memcpy(&modelData.bounds, ptr, sizeof(ModelBounds));
     }
 
-    return info;
+    return modelData;
 }
 } // Engine

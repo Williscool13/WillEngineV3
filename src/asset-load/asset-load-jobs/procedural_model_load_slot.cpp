@@ -298,7 +298,6 @@ bool ProceduralModelLoadSlot::FinalizeGeometry(std::vector<Vertex>& vertices, st
     rawData.meshletTriangles = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, meshletTriangles.size());
     rawData.meshlets = Core::HeapArray<Meshlet>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, meshlets.size());
 
-    // todo remove the std containers here too
     for (size_t i = 0; i < vertices.size(); ++i) {
         rawData.vertices[i] = vertices[i];
     }
