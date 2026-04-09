@@ -226,7 +226,7 @@ struct ViewFamily
 
 
     // Debugging
-    std::string debugResourceName{};
+    InlineString<> debugResourceName{};
     DebugTransformationType debugTransformationType{};
     DebugViewAspect debugViewAspect{};
 

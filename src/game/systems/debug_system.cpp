@@ -20,7 +20,7 @@
 
 namespace Game
 {
-void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
+void DebugUpdate(Core::EngineContext* ctx, Engine::EngineState* state)
 {
     if (state->inputFrame->GetKey(Key::M).pressed) {
         auto musicPath = Platform::GetAssetPath() / "audio/the_entertainer.ogg";
@@ -36,7 +36,7 @@ void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state)
     }
 }
 
-void DebugProcessPhysicsCollisions(Core::EngineContext* ctx, Engine::GameState* state)
+void DebugProcessPhysicsCollisions(Core::EngineContext* ctx, Engine::EngineState* state)
 {
     ZoneScoped;
     state->registry.clear<Component::AntiGravityTag>();
@@ -55,7 +55,7 @@ void DebugProcessPhysicsCollisions(Core::EngineContext* ctx, Engine::GameState* 
 
 }
 
-void DebugApplyGroundForces(Core::EngineContext* ctx, Engine::GameState* state)
+void DebugApplyGroundForces(Core::EngineContext* ctx, Engine::EngineState* state)
 {
     ZoneScoped;
     auto& bodyInterface = ctx->physicsSystem->GetBodyInterface();
@@ -66,7 +66,7 @@ void DebugApplyGroundForces(Core::EngineContext* ctx, Engine::GameState* state)
 }
 
 #ifndef PACKAGED_BUILD
-void DebugRender(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer)
+void DebugRender(Core::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
     auto& vf = frameBuffer->mainViewFamily;
     auto view = state->registry.view<Component::DebugGizmoComponent, Component::TransformComponent>();

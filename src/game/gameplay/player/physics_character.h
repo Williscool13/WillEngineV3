@@ -17,7 +17,7 @@ struct EngineContext;
 
 namespace Engine
 {
-struct GameState;
+struct EngineState;
 class AssetManager;
 }
 
@@ -31,7 +31,7 @@ namespace Game
 class PhysicsCharacter
 {
 public:
-    void Initialize(Engine::GameState* gameState, Core::EngineContext* ctx, glm::vec3 spawnPosition);
+    void Initialize(Engine::EngineState* gameState, Core::EngineContext* ctx, glm::vec3 spawnPosition);
     void Update(float deltaTime, const glm::vec3& moveInput, bool jumpRequested, Physics::PhysicsSystem* physicsSystem);
     void Shutdown(Physics::PhysicsSystem* physicsSystem);
 
@@ -44,7 +44,7 @@ public:
 private:
     bool CheckGrounded(Physics::PhysicsSystem* physicsSystem) const;
 
-    Engine::GameState* engineGameState{nullptr};
+    Engine::EngineState* engineGameState{nullptr};
     Physics::PhysicsSystem* physicsSystem{nullptr};
     entt::entity entity{entt::null};
 

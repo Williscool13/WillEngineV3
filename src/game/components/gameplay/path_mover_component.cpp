@@ -152,7 +152,7 @@ void PathMoverComponent::Deserialize(PathMoverComponent& comp, const nlohmann::j
 ComponentEditorResult PathMoverComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)
 {
     auto& component = registry.get<PathMoverComponent>(entity);
-    auto* state = registry.ctx().get<Engine::GameState*>();
+    auto* state = registry.ctx().get<Engine::EngineState*>();
 
     static int editPointIdx = -1;
     static entt::entity editEntity = entt::null;

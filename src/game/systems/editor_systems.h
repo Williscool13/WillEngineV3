@@ -9,10 +9,12 @@
 #include <entt/entt.hpp>
 #include <glm/fwd.hpp>
 #include "core/string_id.h"
+#include "core/containers/span.h"
+#include "core/types/math.h"
 
 namespace Engine
 {
-struct GameState;
+struct EngineState;
 }
 
 namespace Core
@@ -24,15 +26,15 @@ struct ViewFamily;
 
 namespace Game
 {
-void MarkSceneModified(Engine::GameState* state, StringID sceneId);
+void MarkSceneModified(Engine::EngineState* state, StringID sceneId);
 
-void MarkEntitiesModified(Engine::GameState* state, const std::vector<entt::entity>& entities);
+void MarkEntitiesModified(Engine::EngineState* state, Core::Span<entt::entity> entities);
 
-void DrawMultiSelectEditor(Engine::GameState* state, const glm::vec3& centroid, int transformCount);
+void DrawMultiSelectEditor(Engine::EngineState* state, const Vec3& centroid, int transformCount);
 
-void EditorUpdate(Core::EngineContext* ctx, Engine::GameState* state);
+void EditorUpdate(Core::EngineContext* ctx, Engine::EngineState* state);
 
-void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer);
+void DrawEditorInterface(Core::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
 }
 
 #endif //WILL_ENGINE_EDITOR_SYSTEMS_H

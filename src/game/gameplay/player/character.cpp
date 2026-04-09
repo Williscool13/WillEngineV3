@@ -19,7 +19,7 @@
 
 namespace Game
 {
-void Character::Initialize(Engine::GameState* gameState, Physics::PhysicsSystem* physicsSystem, glm::vec3 spawnPosition)
+void Character::Initialize(Engine::EngineState* gameState, Physics::PhysicsSystem* physicsSystem, glm::vec3 spawnPosition)
 {
     engineGameState = gameState;
 

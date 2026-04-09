@@ -14,7 +14,10 @@
 #include <ImGuizmo.h>
 
 #include "game/component-registry/component_registry.h"
+#include "core/containers/hash.h"
 #include "core/containers/inline_vector.h"
+#include "core/containers/map.h"
+#include "core/containers/vector.h"
 #include "render/interface/render_interface.h"
 #include "physics/physics_config.h"
 #include "resources/scene/scene.h"
@@ -24,6 +27,8 @@ namespace Core
 struct TimeFrame;
 struct InputFrame;
 struct EngineContext;
+
+template<> struct Hash<JPH::BodyID> { uint64_t operator()(JPH::BodyID k) const { return static_cast<uint64_t>(k.GetIndexAndSequenceNumber()); } };
 }
 
 struct ResolvedCollisionEvent
@@ -46,11 +51,18 @@ struct EditorTextureResidency
     {
         Texture* texture{nullptr};
         uint64_t descSet{0};
+
+        uint64_t freeOnFrame{~0x0ULL};
     };
 
     Sampler* sampler{nullptr};
-    std::unordered_map<TextureID, Entry> entries;
-    std::vector<std::pair<Entry, uint64_t>> pendingRemoval; // {descSet, freeOnFrame}
+    Core::Map<TextureID, Entry> entries{};
+    Core::Vector<Entry> pendingRemoval{};
+
+    EditorTextureResidency() = default;
+    explicit EditorTextureResidency(Core::TlsfAllocator* allocator);
+    ~EditorTextureResidency() = default;
+
 
     void Tick(Core::EngineContext* ctx);
     void Acquire(TextureID id, Core::EngineContext* ctx);
@@ -59,8 +71,15 @@ struct EditorTextureResidency
     void ReleaseAll(Core::EngineContext* ctx);
 };
 
-struct GameState
+constexpr uint32_t MAX_LOADED_SCENES = 8;
+
+struct EngineState
 {
+    EngineState() = default;
+
+    explicit EngineState(Core::TlsfAllocator* allocator);
+    ~EngineState() = default;
+
     bool bIsPlaying{false};
     bool bGameCursorCaptured{false};
 
@@ -69,7 +88,7 @@ struct GameState
     std::mt19937_64 rng{std::random_device{}()};
 
     entt::registry registry;
-    std::unordered_map<StringID, entt::entity> stableIdToEntityMap;
+    Core::Map<StringID, entt::entity> stableIdToEntityMap;
     Game::ComponentRegistry componentRegistry{};
 
     // Asset Loading
@@ -79,7 +98,7 @@ struct GameState
     // Physics
     float physicsDeltaTimeAccumulator = 0.0f;
     float physicsInterpolationAlpha = 0.0f;
-    std::map<JPH::BodyID, entt::entity> bodyToEntity;
+    Core::Map<JPH::BodyID, entt::entity> bodyToEntity;
     Core::InlineVector<ResolvedCollisionEvent, Physics::MAX_COLLISION_EVENTS> resolvedAddedEvents;
     Core::InlineVector<ResolvedCollisionEvent, Physics::MAX_COLLISION_EVENTS> resolvedPersistedEvents;
     Core::InlineVector<ResolvedCollisionEvent, Physics::MAX_COLLISION_EVENTS> resolvedRemovedEvents;
@@ -95,7 +114,7 @@ struct GameState
 
     // Debug
     bool bEnablePortal{true};
-    std::string debugResourceName{};
+    Core::InlineString<> debugResourceName{};
     DebugTransformationType debugTransformationType{};
     Core::DebugViewAspect debugViewAspect{};
 
@@ -122,31 +141,31 @@ struct GameState
         StringID sceneId;
         uint64_t nextSortOrder{100};
     };
-    std::vector<RuntimeSceneMetadata> loadedScenes{};
-    std::vector<StringID> modifiedScenes{};
+
+    Core::InlineVector<RuntimeSceneMetadata, 8> loadedScenes{};
+    Core::InlineVector<StringID, 8> modifiedScenes{};
     bool bAutoSave{false};
     float autoSaveInterval{60.0f};
     float autoSaveTimer{0.0f};
     //  PIE
-    std::vector<Scene> pieSnapshot{};
-    glm::vec3 pieCameraTranslation{};
-    glm::quat pieCameraRotation{1.0f, 0.0f, 0.0f, 0.0f};
+    Core::InlineVector<Scene, 8> pieSnapshot{};
+    Vec3 pieCameraTranslation{};
+    Quat pieCameraRotation{1.0f, 0.0f, 0.0f, 0.0f};
     //  Entity selection
-    std::vector<entt::entity> selectedEntities{};
-    std::vector<entt::entity> prevSelectedEntities{};
+    Core::Vector<entt::entity> selectedEntities{};
+    Core::Vector<entt::entity> prevSelectedEntities{};
     bool bWantCopyEntities{false};
     bool bWantDeleteEntities{false};
     //  ImGui textures
     EditorTextureResidency texResidency{};
 
-
-    // Gameplay
-    StringID currentCheckpointId{};
-    int32_t currentCheckpointPriority{INT32_MIN};
-
     // Scene stuff
     StringID currentSceneId{0};
-    std::string currentSceneName{};
+    Core::InlineString<128> currentSceneName{};
+
+    // Gameplay - move to GameState proper
+    StringID currentCheckpointId{};
+    int32_t currentCheckpointPriority{INT32_MIN};
 };
 
 class EngineAPI

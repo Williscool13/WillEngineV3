@@ -13,11 +13,12 @@
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "scene_system.h"
+#include "core/containers/arena_fixed_vector.h"
 #include "engine/include/engine_context.h"
 #include "core/input/input_frame.h"
 #include "core/math/constants.h"
 #include "engine/engine_api.h"
-#include "../../engine/material_manager.h"
+#include "engine/material_manager.h"
 #include "engine/asset_manager.h"
 #include "engine/core/model_id.h"
 #include "engine/resources/texture/texture.h"
@@ -28,14 +29,14 @@
 
 namespace Game
 {
-void MarkSceneModified(Engine::GameState* state, StringID sceneId)
+void MarkSceneModified(Engine::EngineState* state, StringID sceneId)
 {
-    if (std::ranges::find(state->modifiedScenes, sceneId) == state->modifiedScenes.end()) {
-        state->modifiedScenes.push_back(sceneId);
+    if (!state->modifiedScenes.Contains(sceneId)) {
+        state->modifiedScenes.PushBack(sceneId);
     }
 }
 
-void MarkEntitiesModified(Engine::GameState* state, const std::vector<entt::entity>& entities)
+void MarkEntitiesModified(Engine::EngineState* state, Core::Span<entt::entity> entities)
 {
     for (auto e : entities) {
         if (auto* sc = state->registry.try_get<Component::SceneComponent>(e)) {
@@ -44,10 +45,10 @@ void MarkEntitiesModified(Engine::GameState* state, const std::vector<entt::enti
     }
 }
 
-void DrawMultiSelectEditor(Engine::GameState* state, const glm::vec3& centroid, int transformCount)
+void DrawMultiSelectEditor(Engine::EngineState* state, const Vec3& centroid, int transformCount)
 {
     auto& entities = state->selectedEntities;
-    ImGui::Text("%zu entities selected", entities.size());
+    ImGui::Text("%zu entities selected", entities.Size());
 
     // Name
     if (ImGui::CollapsingHeader("Name##multi_name", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -314,9 +315,9 @@ void DrawMultiSelectEditor(Engine::GameState* state, const glm::vec3& centroid, 
     }
 }
 
-void EditorUpdate(Core::EngineContext* ctx, Engine::GameState* state)
+void EditorUpdate(Core::EngineContext* ctx, Engine::EngineState* state)
 {
-    if (state->bAutoSave && !state->modifiedScenes.empty()) {
+    if (state->bAutoSave && !state->modifiedScenes.IsEmpty()) {
         state->autoSaveTimer += state->timeFrame->deltaTime;
         if (state->autoSaveTimer >= state->autoSaveInterval) {
             state->autoSaveTimer = 0.0f;
@@ -326,7 +327,7 @@ void EditorUpdate(Core::EngineContext* ctx, Engine::GameState* state)
                     SaveSceneToFile(sceneId, it->sceneName.c_str(), state, ctx->assetManager, ctx);
                 }
             }
-            state->modifiedScenes.clear();
+            state->modifiedScenes.Clear();
         }
     }
 
@@ -355,7 +356,7 @@ void EditorUpdate(Core::EngineContext* ctx, Engine::GameState* state)
 
     const bool ctrlHeld = state->inputFrame->GetKey(Key::LCTRL).down || state->inputFrame->GetKey(Key::RCTRL).down;
 
-    const bool multiSelectActive = state->selectedEntities.size() > 1;
+    const bool multiSelectActive = state->selectedEntities.Size() > 1;
     if (multiSelectActive && state->currentGizmoOperation == ImGuizmo::SCALE) {
         state->currentGizmoOperation = ImGuizmo::TRANSLATE;
     }
@@ -382,11 +383,11 @@ void EditorUpdate(Core::EngineContext* ctx, Engine::GameState* state)
         }
 
         if (!popupOpen && state->inputFrame->GetKey(Key::ESCAPE).pressed) {
-            state->selectedEntities.clear();
+            state->selectedEntities.Clear();
         }
 
-        if (!popupOpen && state->inputFrame->GetKey(Key::F).pressed && !state->selectedEntities.empty()) {
-            entt::entity target = state->selectedEntities.front();
+        if (!popupOpen && state->inputFrame->GetKey(Key::F).pressed && !state->selectedEntities.IsEmpty()) {
+            entt::entity target = state->selectedEntities.Front();
             if (state->registry.valid(target)) {
                 auto* targetTransform = state->registry.try_get<Component::TransformComponent>(target);
 
@@ -430,34 +431,35 @@ void EditorUpdate(Core::EngineContext* ctx, Engine::GameState* state)
 
 
     if (!ctx->bImguiMouseCaptured && state->inputFrame->GetMouse(MouseButton::LMB).pressed) {
-        auto it = state->stableIdToEntityMap.find(StringID{ctx->lastKnownStableIdUnderCursor});
-        if (it != state->stableIdToEntityMap.end()) {
-            entt::entity clicked = it->second;
+        auto it = state->stableIdToEntityMap.Find(StringID{ctx->lastKnownStableIdUnderCursor});
+        if (it != nullptr) {
+            entt::entity clicked = *it;
             if (ctrlHeld) {
                 auto pos = std::find(state->selectedEntities.begin(), state->selectedEntities.end(), clicked);
                 if (pos != state->selectedEntities.end()) {
-                    state->selectedEntities.erase(pos);
+                    state->selectedEntities.Remove(pos);
                 }
                 else {
-                    state->selectedEntities.push_back(clicked);
+                    state->selectedEntities.PushBack(clicked);
                 }
             }
             else {
-                state->selectedEntities = {clicked};
+                state->selectedEntities.Clear();
+                state->selectedEntities.PushBack(clicked);
             }
         }
         else if (!ctrlHeld) {
-            state->selectedEntities.clear();
+            state->selectedEntities.Clear();
         }
     }
 
     for (const auto& hotkey : DEBUG_HOTKEYS) {
         if (state->inputFrame->GetKey(hotkey.key).pressed) {
             if (state->debugResourceName == hotkey.resourceName && state->debugViewAspect == hotkey.aspect) {
-                state->debugResourceName.clear();
+                state->debugResourceName.Clear();
             }
             else {
-                state->debugResourceName = hotkey.resourceName;
+                state->debugResourceName = Core::InlineString(hotkey.resourceName);
                 state->debugTransformationType = hotkey.transform;
                 state->debugViewAspect = hotkey.aspect;
             }
@@ -465,7 +467,7 @@ void EditorUpdate(Core::EngineContext* ctx, Engine::GameState* state)
     }
 }
 
-void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer)
+void DrawEditorInterface(Core::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
     state->texResidency.Tick(ctx);
@@ -476,18 +478,20 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
             if (!state->registry.valid(entity)) continue;
             state->registry.destroy(entity);
         }
-        state->selectedEntities.clear();
+        state->selectedEntities.Clear();
     }
 
     if (state->bWantCopyEntities) {
         state->bWantCopyEntities = false;
-        std::vector<entt::entity> copies;
-        copies.reserve(state->selectedEntities.size());
+        auto copies = Core::ArenaFixedVector<entt::entity>(&ctx->memoryManager->GeneralArena(), state->selectedEntities.Size());
         for (entt::entity entity : state->selectedEntities) {
             if (!state->registry.valid(entity)) continue;
-            copies.push_back(CopySceneEntity(state, entity, state->currentSceneId));
+            copies.PushBack(CopySceneEntity(state, entity, state->currentSceneId));
         }
-        state->selectedEntities = copies;
+        state->selectedEntities.Clear();
+        for (auto copy : copies) {
+            state->selectedEntities.PushBack(copy);
+        }
     }
 
     if (ImGui::Begin("Debug View")) {
@@ -500,11 +504,11 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
                     cam.currentViewData.cameraForward.y,
                     cam.currentViewData.cameraForward.z);*/
 
-        ImGui::Text("Current Debug View: %s", state->debugResourceName.empty() ? "None" : state->debugResourceName.c_str());
+        ImGui::Text("Current Debug View: %s", state->debugResourceName.IsEmpty() ? "None" : state->debugResourceName.c_str());
         ImGui::Checkbox("Enable Portals", &state->bEnablePortal);
 
         if (ImGui::Button("Disable Debug View")) {
-            state->debugResourceName.clear();
+            state->debugResourceName.Clear();
         }
 
         ImGui::Separator();
@@ -520,10 +524,10 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
 
         auto setDebugTarget = [&](const char* name, DebugTransformationType _transform, Core::DebugViewAspect aspect) {
             if (state->debugResourceName == name && state->debugViewAspect == aspect) {
-                state->debugResourceName.clear();
+                state->debugResourceName.Clear();
             }
             else {
-                state->debugResourceName = name;
+                state->debugResourceName = Core::InlineString(name);
                 state->debugTransformationType = _transform;
                 state->debugViewAspect = aspect;
             }
@@ -618,8 +622,8 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
         float orbitDist = 8.0f;
         bool orbitAroundObject = false;
 
-        if (!state->selectedEntities.empty()) {
-            entt::entity target = state->selectedEntities.front();
+        if (!state->selectedEntities.IsEmpty()) {
+            entt::entity target = state->selectedEntities.Front();
             if (state->registry.valid(target)) {
                 if (const auto* targetTransform = state->registry.try_get<Component::TransformComponent>(target)) {
                     orbitPivot = targetTransform->translation;
@@ -666,7 +670,7 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
     const glm::vec3 cameraPos = frameBuffer->mainViewFamily.mainView.currentViewData.cameraPos;
     const glm::vec3 cameraFwd = frameBuffer->mainViewFamily.mainView.currentViewData.cameraForward;
 
-    const bool multiSelected = state->selectedEntities.size() > 1;
+    const bool multiSelected = state->selectedEntities.Size() > 1;
     if (multiSelected) {
         state->currentGizmoMode = ImGuizmo::WORLD;
     }
@@ -725,13 +729,14 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
             }
             if (state->currentGizmoOperation == ImGuizmo::TRANSLATE) {
                 ImGui::SameLine();
+                // todo remove, just infer from local/world space
                 ImGui::Checkbox("World Grid##snap_world_grid", &state->bSnapWorldGrid);
                 if (ImGui::IsItemHovered()) ImGui::SetTooltip("Snap to world-origin-aligned grid rather than drag-relative increments");
             }
         }
 
         if (state->prevSelectedEntities != state->selectedEntities) {
-            if (state->selectedEntities.size() == 1) {
+            if (state->selectedEntities.Size() == 1) {
                 if (auto* tf = state->registry.try_get<Component::TransformComponent>(state->selectedEntities[0])) {
                     const bool scaleIsUniform = glm::epsilonEqual(tf->scale.x, tf->scale.y, 1e-5f) && glm::epsilonEqual(tf->scale.y, tf->scale.z, 1e-5f);
                     state->bUniformScaleMode = scaleIsUniform;
@@ -763,7 +768,7 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
             ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - comboW);
             ImGui::SetNextItemWidth(comboW);
             if (ImGui::Combo("##physics_debug", &currentMode, kPhysicsDebugLabels, IM_ARRAYSIZE(kPhysicsDebugLabels))) {
-                state->physicsDebugMode = static_cast<Engine::GameState::PhysicsDebugMode>(currentMode);
+                state->physicsDebugMode = static_cast<Engine::EngineState::PhysicsDebugMode>(currentMode);
             }
             if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Physics debug draw: Off / Sensor Only / Sensor + Tag / On (all)"); }
         }
@@ -776,30 +781,35 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
         if (!sceneCache.IsEmpty() && !sceneCache.Contains(state->currentSceneId)) {
             for (const auto& [id, meta] : sceneCache) {
                 state->currentSceneId = id;
-                state->currentSceneName = meta.sceneName.c_str();
+                state->currentSceneName = meta.sceneName;
                 break;
             }
         }
         if (sceneCache.IsEmpty()) {
             state->currentSceneId = {};
-            state->currentSceneName.clear();
+            state->currentSceneName.Clear();
         }
 
-        const bool isLoaded = std::ranges::any_of(state->loadedScenes, [&](const auto& m) { return m.sceneId == state->currentSceneId; });
-        const bool isModified = std::ranges::find(state->modifiedScenes, state->currentSceneId) != state->modifiedScenes.end();
+        const bool bIsLoaded = std::ranges::any_of(state->loadedScenes, [&](const auto& m) { return m.sceneId == state->currentSceneId; });
+        const bool bIsModified = std::ranges::find(state->modifiedScenes, state->currentSceneId) != state->modifiedScenes.end();
+        const bool bIsMaxLoaded = state->loadedScenes.Size() > Engine::MAX_LOADED_SCENES;
         const bool hasScene = sceneCache.Contains(state->currentSceneId);
 
         // Scene dropdown
         ImGui::SetNextItemWidth(-1);
         if (ImGui::BeginCombo("##scene_list", state->currentSceneName.c_str())) {
-            std::vector<std::pair<std::string, StringID> > sceneList;
-            sceneList.reserve(sceneCache.Size());
+            struct ScenePair
+            {
+                StringID sceneId;
+                Core::InlineString<128> name;
+            };
+            auto sceneList = Core::ArenaFixedVector<ScenePair>(&ctx->memoryManager->GeneralArena(), sceneCache.Size());
             for (const auto& [id, meta] : sceneCache) {
-                sceneList.emplace_back(meta.sceneName.c_str(), id);
+                sceneList.EmplaceBack(id, meta.sceneName);
             }
-            std::ranges::sort(sceneList, {}, &std::pair<std::string, StringID>::first);
+            std::ranges::sort(sceneList, {}, &ScenePair::name);
 
-            for (auto& [name, id] : sceneList) {
+            for (auto& [id, name] : sceneList) {
                 const bool selected = (id == state->currentSceneId);
                 if (ImGui::Selectable(name.c_str(), selected)) {
                     state->currentSceneId = id;
@@ -813,23 +823,25 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
             ImGui::EndCombo();
         }
 
-        ImGui::BeginDisabled(!hasScene || isLoaded);
-        if (ImGui::Button("Load")) { LoadSceneFromFile(state, ctx->assetManager, state->currentSceneId); }
+        ImGui::BeginDisabled(!hasScene || bIsLoaded || bIsMaxLoaded);
+        if (ImGui::Button("Load")) {
+            LoadSceneFromFile(state, ctx->assetManager, state->currentSceneId);
+        }
         ImGui::EndDisabled();
 
         ImGui::SameLine();
-        ImGui::BeginDisabled(!isLoaded);
+        ImGui::BeginDisabled(!bIsLoaded);
         if (ImGui::Button("Unload")) { UnloadScene(state, state->currentSceneId); }
         ImGui::EndDisabled();
 
         ImGui::SameLine();
-        ImGui::BeginDisabled(!isLoaded);
-        if (isModified) { ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.5f, 0.1f, 1.0f)); }
-        if (ImGui::Button(isModified ? "Save*" : "Save")) {
-            SaveSceneToFile(state->currentSceneId, state->currentSceneName, state, ctx->assetManager, ctx);
-            std::erase(state->modifiedScenes, state->currentSceneId);
+        ImGui::BeginDisabled(!bIsLoaded);
+        if (bIsModified) { ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.5f, 0.1f, 1.0f)); }
+        if (ImGui::Button(bIsModified ? "Save*" : "Save")) {
+            SaveSceneToFile(state->currentSceneId, state->currentSceneName.View(), state, ctx->assetManager, ctx);
+            state->modifiedScenes.RemoveFirst(state->currentSceneId);
         }
-        if (isModified) { ImGui::PopStyleColor(); }
+        if (bIsModified) { ImGui::PopStyleColor(); }
         ImGui::EndDisabled();
 
         ImGui::SameLine();
@@ -841,14 +853,14 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
         }
 
         ImGui::SameLine();
-        ImGui::BeginDisabled(!hasScene || isLoaded);
+        ImGui::BeginDisabled(!hasScene || bIsLoaded);
         if (ImGui::Button("Delete")) {
             ctx->assetManager->DeleteScene(state->currentSceneId);
             state->currentSceneId = {};
-            state->currentSceneName.clear();
+            state->currentSceneName.Clear();
         }
         ImGui::EndDisabled();
-        if (isLoaded && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+        if (bIsLoaded && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
             ImGui::SetTooltip("Unload scene before deleting");
         }
 
@@ -873,9 +885,9 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
             StringID newId{state->rng()};
             ctx->assetManager->RegisterScene(newId, newSceneName);
             state->currentSceneId = newId;
-            state->currentSceneName = newSceneName;
-            state->loadedScenes.push_back({newId, 100});
-            state->modifiedScenes.push_back(newId);
+            state->currentSceneName = Core::InlineString<128>(newSceneName);
+            state->loadedScenes.PushBack({newId, 100});
+            state->modifiedScenes.PushBack(newId);
             newSceneName[0] = '\0';
         }
         ImGui::EndDisabled();
@@ -914,9 +926,12 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
         ImGui::BeginDisabled(modelList.empty());
         if (ImGui::Button("Spawn")) {
             glm::vec3 offset = cameraPos + normalize(cameraFwd) * 5.0f;
-            auto spawned = SpawnModel(state, ctx->assetManager, modelList[selectedModel].second, offset);
+            auto spawned = SpawnModel(ctx, state, modelList[selectedModel].second, offset);
             if (!spawned.empty()) {
-                state->selectedEntities = spawned;
+                state->selectedEntities.Clear();
+                for (auto entity : spawned) {
+                    state->selectedEntities.PushBack(entity);
+                }
                 MarkSceneModified(state, state->currentSceneId);
             }
         }
@@ -924,7 +939,7 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
 
         ImGui::SeparatorText("Prefabs");
 
-        const bool hasOneSelected = state->selectedEntities.size() == 1;
+        const bool hasOneSelected = state->selectedEntities.Size() == 1;
         static char prefabName[128] = "New Prefab";
 
         Component::PrefabInstanceComponent* prefabInst = hasOneSelected ? state->registry.try_get<Component::PrefabInstanceComponent>(state->selectedEntities[0]) : nullptr;
@@ -981,7 +996,8 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
             glm::vec3 spawnPos = viewData.cameraPos + viewData.cameraForward * 5.0f;
             entt::entity spawned = SpawnPrefab(state, ctx->assetManager, prefabList[selectedPrefab].second, spawnPos);
             if (spawned != entt::null) {
-                state->selectedEntities = {spawned};
+                state->selectedEntities.Clear();
+                state->selectedEntities.PushBack(spawned);
                 MarkSceneModified(state, state->currentSceneId);
             }
         }
@@ -1017,7 +1033,8 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
             auto newEntity = CreateSceneEntity(state);
             const auto& viewData = frameBuffer->mainViewFamily.mainView.currentViewData;
             state->registry.get<Component::TransformComponent>(newEntity).translation = viewData.cameraPos + viewData.cameraForward * 5.0f;
-            state->selectedEntities = {newEntity};
+            state->selectedEntities.Clear();
+            state->selectedEntities.PushBack(newEntity);
             MarkSceneModified(state, state->currentSceneId);
         }
         static char search[64] = {};
@@ -1092,7 +1109,8 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
             ImGui::SameLine();
             if (ImGui::SmallButton(fmt::format("C##{}", e.stableId).c_str())) {
                 entt::entity copied = CopySceneEntity(state, e.entity, state->currentSceneId);
-                state->selectedEntities = {copied};
+                state->selectedEntities.Clear();
+                state->selectedEntities.PushBack(copied);
                 MarkSceneModified(state, state->currentSceneId);
             }
             ImGui::SameLine();
@@ -1110,14 +1128,16 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
             }
             if (ImGui::Selectable(uniqueLabel, selected)) {
                 if (ImGui::GetIO().KeyCtrl) {
-                    auto pos = std::find(state->selectedEntities.begin(), state->selectedEntities.end(), e.entity);
-                    if (pos != state->selectedEntities.end())
-                        state->selectedEntities.erase(pos);
-                    else
-                        state->selectedEntities.push_back(e.entity);
+                    auto it = std::ranges::find(state->selectedEntities, e.entity);
+                    if (it != state->selectedEntities.end()) {
+                        state->selectedEntities.Remove(it);
+                    } else {
+                        state->selectedEntities.PushBack(e.entity);
+                    }
                 }
                 else {
-                    state->selectedEntities = {e.entity};
+                    state->selectedEntities.Clear();
+                    state->selectedEntities.PushBack(e.entity);
                 }
             }
             if (isPrefab) ImGui::PopStyleColor();
@@ -1199,7 +1219,7 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
         if (entityToDelete != entt::null) {
             auto it = std::ranges::find(state->selectedEntities, entityToDelete);
             if (it != state->selectedEntities.end()) {
-                state->selectedEntities.erase(it);
+                state->selectedEntities.Remove(it);
             }
             state->registry.destroy(entityToDelete);
             MarkSceneModified(state, state->currentSceneId);
@@ -1219,7 +1239,7 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
         multiGizmoCentroid /= static_cast<float>(transformCount);
 
     if (ImGui::Begin("Details")) {
-        if (state->selectedEntities.size() == 1) {
+        if (state->selectedEntities.Size() == 1) {
             ComponentEntry* entryToRemove = nullptr;
             entt::entity entity = state->selectedEntities[0];
             ImGui::Text("Entity: %u", static_cast<uint32_t>(entity));
@@ -1287,8 +1307,8 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::GameState* state, Cor
     }
     ImGui::End();
 
-    if (!state->bCustomGizmoActive && !state->selectedEntities.empty()) {
-        if (state->selectedEntities.size() == 1) {
+    if (!state->bCustomGizmoActive && !state->selectedEntities.IsEmpty()) {
+        if (state->selectedEntities.Size() == 1) {
             entt::entity entity = state->selectedEntities[0];
             if (auto* transform = state->registry.try_get<Component::TransformComponent>(entity)) {
                 auto model = Component::GetMatrix(*transform);

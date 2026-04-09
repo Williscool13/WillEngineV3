@@ -42,6 +42,10 @@ struct InlineString
         return result;
     }
 
+    void Clear() { buf[0] = '\0'; len = 0; }
+
+    [[nodiscard]] std::string_view View() const { return {buf, len}; }
+
     [[nodiscard]] const char* c_str() const { return buf; }
     [[nodiscard]] size_t Size() const { return len; }
     [[nodiscard]] bool IsEmpty() const { return len == 0; }

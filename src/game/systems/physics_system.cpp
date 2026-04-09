@@ -34,7 +34,7 @@ void ConnectPhysicsObservers(entt::registry& registry)
     registry.on_destroy<Component::PhysicsBodyComponent>().connect<&Component::PhysicsBodyComponent::OnDestroy>();
 }
 
-void PhysicsUpdate(Core::EngineContext* ctx, Engine::GameState* state)
+void PhysicsUpdate(Core::EngineContext* ctx, Engine::EngineState* state)
 {
     ZoneScoped;
     auto* physics = ctx->physicsSystem;
@@ -122,15 +122,15 @@ void PhysicsUpdate(Core::EngineContext* ctx, Engine::GameState* state)
     state->physicsInterpolationAlpha = state->physicsDeltaTimeAccumulator / Physics::PHYSICS_TIMESTEP;
 }
 
-void ResolveCollisionEvents(Core::EngineContext* ctx, Engine::GameState* state)
+void ResolveCollisionEvents(Core::EngineContext* ctx, Engine::EngineState* state)
 {
     state->resolvedAddedEvents.Clear();
     for (const auto& event : ctx->physicsSystem->GetAddedEvents()) {
-        auto it1 = state->bodyToEntity.find(event.body1);
-        auto it2 = state->bodyToEntity.find(event.body2);
+        auto it1 = state->bodyToEntity.Find(event.body1);
+        auto it2 = state->bodyToEntity.Find(event.body2);
         state->resolvedAddedEvents.PushBack({
-            it1 != state->bodyToEntity.end() ? it1->second : entt::null,
-            it2 != state->bodyToEntity.end() ? it2->second : entt::null,
+            it1 != nullptr ? *it1 : entt::null,
+            it2 != nullptr ? *it2 : entt::null,
             {event.worldNormal.GetX(), event.worldNormal.GetY(), event.worldNormal.GetZ()},
             {event.contactPoint.GetX(), event.contactPoint.GetY(), event.contactPoint.GetZ()},
             event.penetrationDepth
@@ -139,11 +139,11 @@ void ResolveCollisionEvents(Core::EngineContext* ctx, Engine::GameState* state)
 
     state->resolvedPersistedEvents.Clear();
     for (const auto& event : ctx->physicsSystem->GetPersistedEvents()) {
-        auto it1 = state->bodyToEntity.find(event.body1);
-        auto it2 = state->bodyToEntity.find(event.body2);
+        auto it1 = state->bodyToEntity.Find(event.body1);
+        auto it2 = state->bodyToEntity.Find(event.body2);
         state->resolvedPersistedEvents.PushBack({
-            it1 != state->bodyToEntity.end() ? it1->second : entt::null,
-            it2 != state->bodyToEntity.end() ? it2->second : entt::null,
+            it1 != nullptr ? *it1 : entt::null,
+            it2 != nullptr ? *it2 : entt::null,
             {event.worldNormal.GetX(), event.worldNormal.GetY(), event.worldNormal.GetZ()},
             {event.contactPoint.GetX(), event.contactPoint.GetY(), event.contactPoint.GetZ()},
             event.penetrationDepth
@@ -152,16 +152,16 @@ void ResolveCollisionEvents(Core::EngineContext* ctx, Engine::GameState* state)
 
     state->resolvedRemovedEvents.Clear();
     for (const auto& event : ctx->physicsSystem->GetRemovedEvents()) {
-        auto it1 = state->bodyToEntity.find(event.body1);
-        auto it2 = state->bodyToEntity.find(event.body2);
+        auto it1 = state->bodyToEntity.Find(event.body1);
+        auto it2 = state->bodyToEntity.Find(event.body2);
         state->resolvedRemovedEvents.PushBack({
-            it1 != state->bodyToEntity.end() ? it1->second : entt::null,
-            it2 != state->bodyToEntity.end() ? it2->second : entt::null,
+            it1 != nullptr ? *it1 : entt::null,
+            it2 != nullptr ? *it2 : entt::null,
         });
     }
 }
 
-void MarkPhysicsTransformsDirty(Engine::GameState* state)
+void MarkPhysicsTransformsDirty(Engine::EngineState* state)
 {
     auto view = state->registry.view<Component::PhysicsBodyComponent, Component::DirtyTransformTag>();
     for (auto entity : view) {
@@ -173,11 +173,11 @@ void MarkPhysicsTransformsDirty(Engine::GameState* state)
     }
 }
 
-void DebugRenderPhysics(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer)
+void DebugRenderPhysics(Core::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
 #ifndef PACKAGED_BUILD
-    using PhysicsDebugMode = Engine::GameState::PhysicsDebugMode;
+    using PhysicsDebugMode = Engine::EngineState::PhysicsDebugMode;
     if (state->physicsDebugMode == PhysicsDebugMode::Off) { return; }
 
     if (state->bIsPlaying) {
@@ -388,7 +388,7 @@ JPH::ShapeRefC CreateShapeFromDesc(const Component::PhysicsShapeDesc& desc, Engi
     return nullptr;
 }
 
-void ResolvePhysicsMeshLoads(Core::EngineContext* ctx, Engine::GameState* state)
+void ResolvePhysicsMeshLoads(Core::EngineContext* ctx, Engine::EngineState* state)
 {
     ZoneScoped;
     std::vector<entt::entity> resolved;
@@ -435,7 +435,7 @@ void ResolvePhysicsMeshLoads(Core::EngineContext* ctx, Engine::GameState* state)
     }
 }
 
-void ResolvePhysicsShapeCreation(Core::EngineContext* ctx, Engine::GameState* state)
+void ResolvePhysicsShapeCreation(Core::EngineContext* ctx, Engine::EngineState* state)
 {
     ZoneScoped;
     std::vector<entt::entity> resolved;
@@ -503,7 +503,7 @@ void ResolvePhysicsShapeCreation(Core::EngineContext* ctx, Engine::GameState* st
     }
 }
 
-void ResolvePhysicsBodyCreation(Core::EngineContext* ctx, Engine::GameState* state)
+void ResolvePhysicsBodyCreation(Core::EngineContext* ctx, Engine::EngineState* state)
 {
     ZoneScoped;
     if (!state->bIsPlaying) return;
@@ -538,7 +538,7 @@ void ResolvePhysicsBodyCreation(Core::EngineContext* ctx, Engine::GameState* sta
         }
     }
 }
-void PhysicsOnPlayStop(Core::EngineContext* ctx, Engine::GameState* state)
+void PhysicsOnPlayStop(Core::EngineContext* ctx, Engine::EngineState* state)
 {
     state->registry.clear<Component::PhysicsBodyComponent>();
     state->registry.clear<Component::DynamicPhysicsBodyComponent>();

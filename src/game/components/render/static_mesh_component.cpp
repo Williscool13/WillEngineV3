@@ -25,7 +25,7 @@ namespace Game::Component
 void RecreateStaticMesh(StaticMeshComponent& component, entt::registry& registry, entt::entity entity)
 {
     auto* ctx = registry.ctx().get<Core::EngineContext*>();
-    auto* state = registry.ctx().get<Engine::GameState*>();
+    auto* state = registry.ctx().get<Engine::EngineState*>();
     auto& runtime = registry.get_or_emplace<MeshRuntime>(entity);
 
     // Teardown
@@ -136,7 +136,7 @@ ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::ViewFamil
         }
 
         auto* ctx = registry.ctx().get<Core::EngineContext*>();
-        auto* state = registry.ctx().get<Engine::GameState*>();
+        auto* state = registry.ctx().get<Engine::EngineState*>();
 
         auto* runtime = registry.try_get<MeshRuntime>(entity);
 

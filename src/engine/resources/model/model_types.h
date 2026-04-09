@@ -76,7 +76,8 @@ struct AnimationSampler
     Interpolation interpolation;
 };
 
-struct AnimationChannel
+// Remove heap when implementing
+/*struct AnimationChannel
 {
     enum class TargetPath
     {
@@ -97,7 +98,7 @@ struct Animation
     std::vector<AnimationSampler> samplers;
     std::vector<AnimationChannel> channels;
     float duration;
-};
+};*/
 
 struct StaticModelData
 {

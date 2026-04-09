@@ -11,7 +11,7 @@
 
 namespace Game::Component
 {
-PortalPair CreatePortalPair(Core::EngineContext* ctx, Engine::GameState* state, glm::vec3 posA, glm::quat rotA, glm::vec3 posB, glm::quat rotB)
+PortalPair CreatePortalPair(Core::EngineContext* ctx, Engine::EngineState* state, glm::vec3 posA, glm::quat rotA, glm::vec3 posB, glm::quat rotB)
 {
     if (!state->portalPlaneHandle.IsValid()) {
         SPDLOG_WARN("[DebugSystem] Portal plane model not loaded");
@@ -83,7 +83,7 @@ PortalPair CreatePortalPair(Core::EngineContext* ctx, Engine::GameState* state, 
     return {portalA, portalB};
 }
 
-void CreatePortalPlane(Core::EngineContext* ctx, Engine::GameState* state, glm::vec3 position, glm::quat rotation, glm::vec3 scale)
+void CreatePortalPlane(Core::EngineContext* ctx, Engine::EngineState* state, glm::vec3 position, glm::quat rotation, glm::vec3 scale)
 {
     if (!state->portalPlaneHandle.IsValid()) {
         SPDLOG_WARN("[DebugSystem] Portal plane model not loaded, press F1 first");

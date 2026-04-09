@@ -34,7 +34,7 @@ void ConnectRenderObservers(entt::registry& registry)
     registry.on_destroy<Component::SplineMeshComponent>().connect<&Component::SplineMeshComponent::OnDestroy>();
 }
 
-void ResolveStaticMeshLoads(Core::EngineContext* ctx, Engine::GameState* state)
+void ResolveStaticMeshLoads(Core::EngineContext* ctx, Engine::EngineState* state)
 {
     // todo: ew
     std::vector<entt::entity> resolved;
@@ -108,7 +108,7 @@ void ResolveStaticMeshLoads(Core::EngineContext* ctx, Engine::GameState* state)
     }
 }
 
-void ResolveProceduralMeshLoads(Core::EngineContext* ctx, Engine::GameState* state)
+void ResolveProceduralMeshLoads(Core::EngineContext* ctx, Engine::EngineState* state)
 {
     std::vector<entt::entity> resolved;
 
@@ -158,7 +158,7 @@ void ResolveProceduralMeshLoads(Core::EngineContext* ctx, Engine::GameState* sta
     }
 }
 
-void ResolveSplineMeshLoads(Core::EngineContext* ctx, Engine::GameState* state)
+void ResolveSplineMeshLoads(Core::EngineContext* ctx, Engine::EngineState* state)
 {
     std::vector<entt::entity> resolved;
 
@@ -206,7 +206,7 @@ void ResolveSplineMeshLoads(Core::EngineContext* ctx, Engine::GameState* state)
     }
 }
 
-void MarkRenderTransformsDirty(Core::EngineContext* ctx, Engine::GameState* state)
+void MarkRenderTransformsDirty(Core::EngineContext* ctx, Engine::EngineState* state)
 {
     auto transformDirtyView = state->registry.view<Component::RenderTransformComponent, Component::DirtyTransformTag>();
     for (auto entity : transformDirtyView) {
@@ -214,7 +214,7 @@ void MarkRenderTransformsDirty(Core::EngineContext* ctx, Engine::GameState* stat
     }
 }
 
-void RenderPrepareTransforms(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer)
+void RenderPrepareTransforms(Core::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
 
@@ -269,7 +269,7 @@ void RenderPrepareTransforms(Core::EngineContext* ctx, Engine::GameState* state,
     }
 }
 
-void GatherRenderables(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer)
+void GatherRenderables(Core::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
     auto& materialManager = ctx->materialManager;

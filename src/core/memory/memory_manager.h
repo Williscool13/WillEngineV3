@@ -5,10 +5,7 @@
 #ifndef WILL_ENGINE_MEMORY_MANAGER_H
 #define WILL_ENGINE_MEMORY_MANAGER_H
 
-#include <cassert>
-#include <cstddef>
 #include <cstdint>
-#include <new>
 
 #include <atomic>
 
@@ -32,9 +29,11 @@ namespace Core
  *   - Physics TLSF: variable-lifetime allocations for Jolt rigid bodies and shapes.
  *   - Render TLSF: variable-lifetime allocations for render system objects.
  *   - Render Arena: per-frame bump allocator for transient render data; Reset() each frame.
+ *   - General Arena: per-frame bump allocator for transient render data; Reset() each frame.
  */
 class MemoryManager
 {
+    // todo make struct. remove getters
 public:
     struct Layout
     {
@@ -45,6 +44,7 @@ public:
         size_t physicsPoolSize;
         size_t renderPoolSize;
         size_t renderArenaSize;
+        size_t generalArenaSize;
     };
 
     struct Stats
@@ -95,6 +95,7 @@ public:
     TlsfAllocator& Physics() { return tlsfPhysics; }
     TlsfAllocator& Render() { return tlsfRender; }
     Arena& RenderArena() { return renderArena; }
+    Arena& GeneralArena() { return generalArena; }
 
     [[nodiscard]] Stats GetStats();
 
@@ -114,6 +115,7 @@ private:
     TlsfAllocator tlsfPhysics;
     TlsfAllocator tlsfRender;
     Arena renderArena;
+    Arena generalArena;
 
     std::atomic<uint32_t> deviceAllocCount{0};
     std::atomic<uint64_t> deviceAllocBytes{0};

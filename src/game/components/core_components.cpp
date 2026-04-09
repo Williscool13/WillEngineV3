@@ -54,7 +54,7 @@ ComponentEditorResult Component::TransformComponent::DrawEditor(Core::ViewFamily
         component.rotation = glm::quat(glm::radians(eulerDegrees));
         dirty = true;
     }
-    Engine::GameState* state = registry.ctx().get<Engine::GameState*>();
+    Engine::EngineState* state = registry.ctx().get<Engine::EngineState*>();
     glm::vec3 prevScale = component.scale;
 
     if (ImGui::Checkbox("##uniform", &state->bUniformScaleMode)) {

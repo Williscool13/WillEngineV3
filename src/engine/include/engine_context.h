@@ -6,10 +6,9 @@
 #define WILL_ENGINE_ENGINE_CONTEXT_H
 
 #include <cstdint>
+#include <atomic>
 
 #include "core/containers/inline_function.h"
-
-#include "spdlog/logger.h"
 
 namespace enki
 {
@@ -43,6 +42,8 @@ struct ImGuiContext;
 
 namespace Core
 {
+class MemoryManager;
+
 struct WindowContext
 {
     uint32_t windowWidth;
@@ -56,9 +57,21 @@ struct WindowContext
 
 struct EngineContext
 {
-    WindowContext windowContext;
+    WindowContext windowContext{};
 
-    Engine::EngineLogger* engineLogger;
+    enki::TaskScheduler* scheduler{nullptr};
+    MemoryManager* memoryManager{nullptr};
+
+    Engine::EngineLogger* engineLogger{nullptr};
+    Engine::AssetManager* assetManager{nullptr};
+    Engine::MaterialManager* materialManager{nullptr};
+    Audio::AudioManager* audioManager{nullptr};
+    Physics::PhysicsSystem* physicsSystem{nullptr};
+
+    // Global Fn
+    void (*internStringFn)(uint64_t, const char*);
+    const char* (*resolveStringIdFn)(uint64_t);
+    InlineFunction<void(bool)> setCursorHiddenFn;
 
     // Imgui
     ImGuiContext* imguiContext;
@@ -70,23 +83,9 @@ struct EngineContext
     bool bImGuiWantsTextInput = false;
     uint64_t lastKnownStableIdUnderCursor{0};
 
-    enki::TaskScheduler* scheduler;
-
-    //Render::ResourceManager* resourceManager;
-    Engine::AssetManager* assetManager{nullptr};
-    Engine::MaterialManager* materialManager{nullptr};
-
     uint64_t currentFrame{0};
     bool bModelLoadedThisFrame{false};
 
-
-    Audio::AudioManager* audioManager;
-    Physics::PhysicsSystem* physicsSystem;
-
-    // Global Fn
-    void (*internStringFn)(uint64_t, const char*);
-    const char* (*resolveStringIdFn)(uint64_t);
-    InlineFunction<void(bool)> setCursorHiddenFn;
 
     // ImGui texture preview (routed through engine DLL where Vulkan fn ptrs are loaded)
     // handles are opaque uint64_t (VkSampler, VkImageView, VkDescriptorSet)

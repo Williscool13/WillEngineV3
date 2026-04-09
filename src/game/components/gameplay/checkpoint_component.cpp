@@ -18,7 +18,7 @@ void CheckpointComponent::OnConstruct(entt::registry& registry, entt::entity ent
 {
     auto& comp = registry.get<CheckpointComponent>(entity);
     if (comp.checkpointId.id == 0) {
-        auto* state = registry.ctx().get<Engine::GameState*>();
+        auto* state = registry.ctx().get<Engine::EngineState*>();
         comp.checkpointId = StringID(state->rng());
     }
 }
@@ -62,7 +62,7 @@ ComponentEditorResult CheckpointComponent::DrawEditor(Core::ViewFamily& viewFami
         ImGui::TextUnformatted(idLabel);
         ImGui::SameLine(ImGui::GetContentRegionAvail().x - 50.f);
         if (ImGui::SmallButton("Regenerate")) {
-            auto* state = registry.ctx().get<Engine::GameState*>();
+            auto* state = registry.ctx().get<Engine::EngineState*>();
             component.checkpointId = StringID(state->rng());
         }
         ImGui::DragInt("Priority", &component.priority);

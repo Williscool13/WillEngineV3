@@ -12,14 +12,14 @@ namespace Game::Component
 {
 void PhysicsBodyComponent::OnConstruct(entt::registry& registry, entt::entity entity)
 {
-    auto* state = registry.ctx().get<Engine::GameState*>();
+    auto* state = registry.ctx().get<Engine::EngineState*>();
     auto& physics = registry.get<PhysicsBodyComponent>(entity);
     state->bodyToEntity[physics.bodyID] = entity;
 }
 
 void PhysicsBodyComponent::OnDestroy(entt::registry& registry, entt::entity entity)
 {
-    auto* state = registry.ctx().get<Engine::GameState*>();
+    auto* state = registry.ctx().get<Engine::EngineState*>();
     auto* ctx = registry.ctx().get<Core::EngineContext*>();
     auto& physics = registry.get<PhysicsBodyComponent>(entity);
 
@@ -29,6 +29,6 @@ void PhysicsBodyComponent::OnDestroy(entt::registry& registry, entt::entity enti
         bodyInterface.DestroyBody(physics.bodyID);
     }
 
-    state->bodyToEntity.erase(physics.bodyID);
+    state->bodyToEntity.Remove(physics.bodyID);
 }
 }

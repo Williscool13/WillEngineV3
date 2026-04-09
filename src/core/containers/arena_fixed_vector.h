@@ -142,6 +142,29 @@ public:
         --size_;
     }
 
+    bool RemoveFirst(const T& value)
+    {
+        for (size_t i = 0; i < size_; ++i) {
+            if (data_[i] == value) {
+                RemoveAt(i);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    template<typename Pred>
+    bool RemoveFirstIf(Pred&& pred)
+    {
+        for (size_t i = 0; i < size_; ++i) {
+            if (pred(data_[i])) {
+                RemoveAt(i);
+                return true;
+            }
+        }
+        return false;
+    }
+
     void SwapRemove(size_t index)
     {
         assert(index < size_ && "Index out of bounds");

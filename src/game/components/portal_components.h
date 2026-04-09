@@ -13,7 +13,7 @@
 
 namespace Engine
 {
-struct GameState;
+struct EngineState;
 }
 
 namespace Core
@@ -38,9 +38,9 @@ struct PortalPair
 struct PortalPlaneTag
 {};
 
-PortalPair CreatePortalPair(Core::EngineContext* ctx, Engine::GameState* state, glm::vec3 posA, glm::quat rotA, glm::vec3 posB, glm::quat rotB);
+PortalPair CreatePortalPair(Core::EngineContext* ctx, Engine::EngineState* state, glm::vec3 posA, glm::quat rotA, glm::vec3 posB, glm::quat rotB);
 
-void CreatePortalPlane(Core::EngineContext* ctx, Engine::GameState* state, glm::vec3 position, glm::quat rotation, glm::vec3 scale);
+void CreatePortalPlane(Core::EngineContext* ctx, Engine::EngineState* state, glm::vec3 position, glm::quat rotation, glm::vec3 scale);
 }
 
 #endif //WILL_ENGINE_PORTAL_COMPONENTS_H

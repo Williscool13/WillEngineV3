@@ -32,7 +32,7 @@ void ProceduralMeshComponent::OnDestroy(entt::registry& registry, entt::entity e
 void RecreateProceduralMesh(ProceduralMeshComponent& component, entt::registry& registry, entt::entity entity)
 {
     auto* ctx = registry.ctx().get<Core::EngineContext*>();
-    auto* state = registry.ctx().get<Engine::GameState*>();
+    auto* state = registry.ctx().get<Engine::EngineState*>();
     auto& runtime = registry.get_or_emplace<MeshRuntime>(entity);
 
     // Teardown
@@ -403,7 +403,7 @@ ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Core::ViewF
         }
 
         auto* ctx = registry.ctx().get<Core::EngineContext*>();
-        auto* state = registry.ctx().get<Engine::GameState*>();
+        auto* state = registry.ctx().get<Engine::EngineState*>();
 
         if (std::holds_alternative<std::monostate>(component.params)) {
             if (ImGui::BeginCombo("Shape", "")) {

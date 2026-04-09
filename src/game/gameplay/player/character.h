@@ -10,7 +10,7 @@
 
 namespace Engine
 {
-struct GameState;
+struct EngineState;
 }
 
 namespace Core
@@ -28,7 +28,7 @@ namespace Game
 class Character
 {
 public:
-    void Initialize(Engine::GameState* gameState, Physics::PhysicsSystem* physicsSystem, glm::vec3 spawnPosition);
+    void Initialize(Engine::EngineState* gameState, Physics::PhysicsSystem* physicsSystem, glm::vec3 spawnPosition);
     void Update(float deltaTime, const glm::vec3& moveInput, bool jumpRequested, Physics::PhysicsSystem* physicsSystem);
     void Shutdown(Physics::PhysicsSystem* physicsSystem);
 
@@ -38,7 +38,7 @@ public:
     [[nodiscard]] bool IsGrounded() const;
 
 private:
-    Engine::GameState* engineGameState{nullptr};
+    Engine::EngineState* engineGameState{nullptr};
     entt::entity entity{entt::null};
 
     float moveSpeed{5.0f};

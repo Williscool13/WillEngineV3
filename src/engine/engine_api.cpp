@@ -10,13 +10,18 @@
 
 namespace Engine
 {
+EditorTextureResidency::EditorTextureResidency(Core::TlsfAllocator* allocator)
+    : entries(allocator, Core::AllocTag::EngineContext, 64),
+      pendingRemoval(allocator, Core::AllocTag::EngineContext, 64)
+{}
+
 void EditorTextureResidency::Tick(Core::EngineContext* ctx)
 {
     for (auto it = pendingRemoval.begin(); it != pendingRemoval.end();) {
-        if (ctx->currentFrame >= it->second) {
-            ctx->removeImguiTextureFn(it->first.descSet);
-            ctx->assetManager->UnloadTexture(it->first.texture->textureId);
-            it = pendingRemoval.erase(it);
+        if (ctx->currentFrame >= it->freeOnFrame) {
+            ctx->removeImguiTextureFn(it->descSet);
+            ctx->assetManager->UnloadTexture(it->texture->textureId);
+            it = pendingRemoval.Remove(it);
         }
         else {
             ++it;
@@ -26,13 +31,13 @@ void EditorTextureResidency::Tick(Core::EngineContext* ctx)
 
 void EditorTextureResidency::Acquire(TextureID id, Core::EngineContext* ctx)
 {
-    if (entries.contains(id)) return;
+    if (entries.Contains(id)) return;
 
     // Recover from destruction queue if re-acquired before cleanup
     for (auto it = pendingRemoval.begin(); it != pendingRemoval.end(); ++it) {
-        if (it->first.texture && it->first.texture->textureId == id) {
-            entries[id] = it->first;
-            pendingRemoval.erase(it);
+        if (it->texture && it->texture->textureId == id) {
+            entries[id] = *it;
+            pendingRemoval.Remove(it);
             return;
         }
     }
@@ -48,9 +53,9 @@ void EditorTextureResidency::Acquire(TextureID id, Core::EngineContext* ctx)
 
 uint64_t EditorTextureResidency::GetDescSet(TextureID id, Core::EngineContext* ctx)
 {
-    auto it = entries.find(id);
-    if (it == entries.end()) return 0;
-    Entry& e = it->second;
+    auto it = entries.Find(id);
+    if (!it) { return 0; }
+    Entry& e = *it;
     if (e.texture && e.texture->loadState == Texture::LoadState::Loaded && !e.descSet) {
         e.descSet = ctx->addImguiTextureFn(
             reinterpret_cast<uint64_t>(sampler->sampler.handle),
@@ -61,18 +66,28 @@ uint64_t EditorTextureResidency::GetDescSet(TextureID id, Core::EngineContext* c
 
 void EditorTextureResidency::Release(TextureID id, Core::EngineContext* ctx)
 {
-    auto it = entries.find(id);
-    if (it == entries.end()) return;
-    Entry& e = it->second;
-    pendingRemoval.push_back({e, ctx->currentFrame + Core::FRAME_BUFFER_COUNT + 1});
-    entries.erase(it);
+    auto it = entries.Find(id);
+    if (!it) { return; }
+    Entry& e = *it;
+    e.freeOnFrame = ctx->currentFrame + Core::FRAME_BUFFER_COUNT + 1;
+    pendingRemoval.PushBack(e);
+    entries.Remove(id);
 }
 
 void EditorTextureResidency::ReleaseAll(Core::EngineContext* ctx)
 {
-    for (auto& [id, e] : entries) {
-        pendingRemoval.push_back({e, ctx->currentFrame + Core::FRAME_BUFFER_COUNT + 1});
+    for (const auto& [id, e] : entries) {
+        e.freeOnFrame = ctx->currentFrame + Core::FRAME_BUFFER_COUNT + 1;
+        pendingRemoval.PushBack(e);
     }
-    entries.clear();
+    entries.Clear();
 }
+
+EngineState::EngineState(Core::TlsfAllocator* allocator)
+    : stableIdToEntityMap(allocator, Core::AllocTag::EngineState, 64),
+      bodyToEntity(allocator, Core::AllocTag::EngineState, 64),
+      selectedEntities(allocator, Core::AllocTag::EngineState, 64),
+      prevSelectedEntities(allocator, Core::AllocTag::EngineState, 64),
+      texResidency(allocator)
+{}
 } // namespace Engine

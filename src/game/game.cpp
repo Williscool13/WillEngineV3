@@ -33,7 +33,7 @@
 
 extern "C"
 {
-GAME_API void GameStartup(Core::EngineContext* ctx, Engine::GameState* state)
+GAME_API void GameStartup(Core::EngineContext* ctx, Engine::EngineState* state)
 {
     SPDLOG_TRACE("Game Start Up");
 
@@ -54,11 +54,11 @@ GAME_API void GameStartup(Core::EngineContext* ctx, Engine::GameState* state)
     gameCameraTransform.rotation = glm::quatLookAt(glm::normalize(glm::vec3(0.0f, 0.0f, 0.0f) - glm::vec3(0.0f, 3.0f, 5.0f)), WORLD_UP);
 
 
-    state->registry.ctx().emplace<Engine::GameState*>(state);
+    state->registry.ctx().emplace<Engine::EngineState*>(state);
     state->registry.ctx().emplace<Core::EngineContext*>(ctx);
 }
 
-GAME_API void GameLoad(Core::EngineContext* ctx, Engine::GameState* state)
+GAME_API void GameLoad(Core::EngineContext* ctx, Engine::EngineState* state)
 {
 #ifndef GAME_STATIC
     ctx->engineLogger->RegisterLoggersForDLL(Engine::LogCategory::Game);
@@ -84,7 +84,7 @@ GAME_API void GameLoad(Core::EngineContext* ctx, Engine::GameState* state)
     // if not editor, load the "default map", which needs to be stored in some engine config file
 }
 
-GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::GameState* state)
+GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::EngineState* state)
 {
     ZoneScoped;
     const auto frameStart = std::chrono::high_resolution_clock::now();
@@ -151,7 +151,7 @@ GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::GameState* state)
     }
 }
 
-GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer)
+GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
     frameBuffer->mainViewFamily.modelMatrices.clear();
     frameBuffer->mainViewFamily.mainPassInstances.clear();
@@ -185,14 +185,14 @@ GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::GameState* stat
 #endif
 }
 
-GAME_API void GameUnload(Core::EngineContext* ctx, Engine::GameState* state)
+GAME_API void GameUnload(Core::EngineContext* ctx, Engine::EngineState* state)
 {
     if (ctx->scheduler) {
         ctx->scheduler->DeRegisterExternalTaskThread();
     }
 }
 
-GAME_API void GameShutdown(Core::EngineContext* ctx, Engine::GameState* state)
+GAME_API void GameShutdown(Core::EngineContext* ctx, Engine::EngineState* state)
 {
     SPDLOG_TRACE("Game Shutdown");
 }

@@ -13,6 +13,12 @@ namespace Engine
 struct Scene
 {
     nlohmann::json content;
+
+    Scene() = default;
+    Scene(const Scene&) = delete;
+    Scene& operator=(const Scene&) = delete;
+    Scene(Scene&&) = default;
+    Scene& operator=(Scene&&) = default;
 };
 
 static inline StringID GLOBAL_SCENE_ID = SID("global_scene");

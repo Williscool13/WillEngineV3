@@ -15,7 +15,7 @@
 
 namespace Game
 {
-void UpdateEditorCamera(Core::EngineContext* ctx, Engine::GameState* state)
+void UpdateEditorCamera(Core::EngineContext* ctx, Engine::EngineState* state)
 {
     ZoneScoped;
     auto view = state->registry.view<Component::FreeCameraComponent, Component::CameraComponent, Component::TransformComponent, Component::EditorCameraTag>();
@@ -98,7 +98,7 @@ void UpdateEditorCamera(Core::EngineContext* ctx, Engine::GameState* state)
     }
 }
 
-void BuildViewFamily(Engine::GameState* state, Core::ViewFamily& mainViewFamily)
+void BuildViewFamily(Engine::EngineState* state, Core::ViewFamily& mainViewFamily)
 {
     ZoneScoped;
     entt::entity mainCamera;
@@ -119,7 +119,7 @@ void BuildViewFamily(Engine::GameState* state, Core::ViewFamily& mainViewFamily)
     mainViewFamily.shadowConfig.cascadeFarPlane = mainViewFamily.mainView.currentViewData.farPlane;
 }
 
-void BuildPortalViewFamily(Engine::GameState* state, Core::ViewFamily& mainViewFamily)
+void BuildPortalViewFamily(Engine::EngineState* state, Core::ViewFamily& mainViewFamily)
 {
     ZoneScoped;
     entt::entity mainCamera;

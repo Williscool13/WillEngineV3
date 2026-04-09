@@ -18,7 +18,7 @@
 
 namespace Game
 {
-void UpdatePathMovers(Core::EngineContext* ctx, Engine::GameState* state)
+void UpdatePathMovers(Core::EngineContext* ctx, Engine::EngineState* state)
 {
     ZoneScoped;
     const float dt = state->timeFrame->deltaTime;
@@ -99,7 +99,7 @@ void UpdatePathMovers(Core::EngineContext* ctx, Engine::GameState* state)
     }
 }
 
-void CheckpointUpdate(Core::EngineContext* ctx, Engine::GameState* state)
+void CheckpointUpdate(Core::EngineContext* ctx, Engine::EngineState* state)
 {
     for (const auto& event : state->resolvedAddedEvents) {
         entt::entity checkpointEntity = entt::null;
@@ -119,7 +119,7 @@ void CheckpointUpdate(Core::EngineContext* ctx, Engine::GameState* state)
     }
 }
 
-void DeathZoneUpdate(Core::EngineContext* ctx, Engine::GameState* state)
+void DeathZoneUpdate(Core::EngineContext* ctx, Engine::EngineState* state)
 {
     auto* playerController = state->registry.ctx().find<PhysicsPlayerController>();
     if (!playerController) { return; }

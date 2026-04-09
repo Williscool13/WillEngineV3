@@ -4,10 +4,8 @@
 
 #ifndef WILL_ENGINE_DEBUG_SYSTEM_H
 #define WILL_ENGINE_DEBUG_SYSTEM_H
-#include <cstdint>
-#include <vector>
 
-#include "../../render/interface/render_interface.h"
+#include "render/interface/render_interface.h"
 #include "core/input/input_frame.h"
 #include "render/shaders/common_interop.h"
 
@@ -18,7 +16,7 @@ struct FrameResources;
 
 namespace Engine
 {
-struct GameState;
+struct EngineState;
 }
 
 namespace Core
@@ -55,14 +53,14 @@ static const DebugHotkey DEBUG_HOTKEYS[] = {
 
 namespace Game
 {
-void DebugUpdate(Core::EngineContext* ctx, Engine::GameState* state);
-void DebugProcessPhysicsCollisions(Core::EngineContext* ctx, Engine::GameState* state);
-void DebugApplyGroundForces(Core::EngineContext* ctx, Engine::GameState* state);
+void DebugUpdate(Core::EngineContext* ctx, Engine::EngineState* state);
+void DebugProcessPhysicsCollisions(Core::EngineContext* ctx, Engine::EngineState* state);
+void DebugApplyGroundForces(Core::EngineContext* ctx, Engine::EngineState* state);
 
 
 
 #ifndef PACKAGED_BUILD
-void DebugRender(Core::EngineContext* ctx, Engine::GameState* state, Core::FrameBuffer* frameBuffer);
+void DebugRender(Core::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
 #endif
 } // Game::System
 

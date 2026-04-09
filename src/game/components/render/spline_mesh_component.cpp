@@ -42,7 +42,7 @@ void SplineMeshComponent::OnConstruct(entt::registry& registry, entt::entity ent
 {
     auto& component = registry.get<SplineMeshComponent>(entity);
     auto* ctx = registry.ctx().get<Core::EngineContext*>();
-    auto* state = registry.ctx().get<Engine::GameState*>();
+    auto* state = registry.ctx().get<Engine::EngineState*>();
 
     if (component.spline.points.IsEmpty()) {
         component.spline.points.PushBack({0, 0, 0});
@@ -140,7 +140,7 @@ ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::ViewFamil
     static bool wasUsingGizmo = false;
 
     auto* ctx = registry.ctx().get<Core::EngineContext*>();
-    auto* state = registry.ctx().get<Engine::GameState*>();
+    auto* state = registry.ctx().get<Engine::EngineState*>();
 
     if (editEntity != entity) {
         editPointIdx = -1;

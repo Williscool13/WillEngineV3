@@ -12,14 +12,14 @@ struct EngineContext;
 
 namespace Engine
 {
-struct GameState;
+struct EngineState;
 }
 
 namespace Game
 {
-void UpdatePathMovers(Core::EngineContext* ctx, Engine::GameState* state);
-void CheckpointUpdate(Core::EngineContext* ctx, Engine::GameState* state);
-void DeathZoneUpdate(Core::EngineContext* ctx, Engine::GameState* state);
+void UpdatePathMovers(Core::EngineContext* ctx, Engine::EngineState* state);
+void CheckpointUpdate(Core::EngineContext* ctx, Engine::EngineState* state);
+void DeathZoneUpdate(Core::EngineContext* ctx, Engine::EngineState* state);
 } // Game
 
 #endif //WILL_ENGINE_GAMEPLAY_SYSTEMS_H

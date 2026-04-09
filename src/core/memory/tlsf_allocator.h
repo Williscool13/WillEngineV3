@@ -36,6 +36,7 @@ enum class AllocTag : uint32_t
     // Engine systems
     EngineLogger,
     EngineContext,
+    EngineState,
     InputManager,
     TimeManager,
     FrameSync,

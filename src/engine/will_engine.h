@@ -46,7 +46,7 @@ class AssetManager;
 
 namespace Engine
 {
-struct GameState;
+struct EngineState;
 }
 
 namespace AssetLoad
@@ -149,7 +149,7 @@ private: // Game DLL
     Platform::DirectoryWatcher shaderWatcher{};
     Core::GameAPI gameFunctions{};
     Core::EngineContext* engineContext{};
-    std::unique_ptr<GameState> gameState{};
+    EngineState* engineState{};
 
 private:
     Platform::CrashHandler* crashHandler;

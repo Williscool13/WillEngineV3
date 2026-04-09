@@ -32,7 +32,7 @@ void PhysicsBodyDesc::OnConstruct(entt::registry& registry, entt::entity entity)
     }
 
     auto* ctx = registry.ctx().get<Core::EngineContext*>();
-    auto* state = registry.ctx().get<Engine::GameState*>();
+    auto* state = registry.ctx().get<Engine::EngineState*>();
     bool needsResolve = false;
     for (auto& shape : component.shapes) {
         if (shape.type != PhysicsShapeType::ConvexHull && shape.type != PhysicsShapeType::TriangleMesh) { continue; }
@@ -519,7 +519,7 @@ ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewFamily& v
     static int editShapeIdx = -1;
     static entt::entity editEntity = entt::null;
 
-    auto state = registry.ctx().get<Engine::GameState*>();
+    auto state = registry.ctx().get<Engine::EngineState*>();
     auto ctx = registry.ctx().get<Core::EngineContext*>();
 
     if (editEntity != entity) {

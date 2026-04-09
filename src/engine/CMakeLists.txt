@@ -3,8 +3,6 @@ add_library(engine STATIC
         will_engine.h
         engine_api.cpp
         engine_api.h
-        game_model.cpp
-        game_model.h
         asset_manager.cpp
         asset_manager.h
         asset_manager_config.h
@@ -15,7 +13,6 @@ add_library(engine STATIC
         logging/engine_logger.h
         logging/imgui_sink.h
         logging/engine_log.h
-        logging/log_category.cpp
         logging/log_category.h
         core/material_id.h
         core/texture_id.h

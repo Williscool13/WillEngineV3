@@ -29,8 +29,10 @@ class ImGuiSink : public spdlog::sinks::base_sink<std::mutex>
     static constexpr size_t CRITICAL_CAPACITY = 32;
 
 public:
-    void GetEntries(std::vector<LogEntry>& out) const
+    // todo stop using vector
+    void GetEntries(std::vector<LogEntry>& out)
     {
+        std::lock_guard lock(mutex_);
         out.clear();
         auto append = [&](auto& buf) { buf.ForEach([&](const LogEntry& e) { out.push_back(e); }); };
         append(traceEntries);

@@ -6,7 +6,6 @@
 #define WILL_ENGINE_FRAME_SYNC_H
 #include <array>
 #include <mutex>
-#include <semaphore>
 
 #include <imgui/imgui_threaded_rendering.h>
 

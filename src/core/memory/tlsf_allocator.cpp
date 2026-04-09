@@ -29,6 +29,7 @@ const char* AllocTagName(AllocTag tag)
         case AllocTag::ImGui: return "ImGui";
         case AllocTag::EngineLogger: return "EngineLogger";
         case AllocTag::EngineContext: return "EngineContext";
+        case AllocTag::EngineState: return "EngineState";
         case AllocTag::InputManager: return "InputManager";
         case AllocTag::TimeManager: return "TimeManager";
         case AllocTag::FrameSync: return "FrameSync";

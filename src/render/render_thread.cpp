@@ -647,9 +647,9 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 #endif
 
 
-        bool bHasDebugPass = !viewFamily.debugResourceName.empty() && pipelineManager->IsCategoryReady(PipelineCategory::Debug);
+        bool bHasDebugPass = !viewFamily.debugResourceName.IsEmpty() && pipelineManager->IsCategoryReady(PipelineCategory::Debug);
         if (bHasDebugPass) {
-            StringID debugTargetName = StringID(viewFamily.debugResourceName.c_str(), viewFamily.debugResourceName.size());
+            StringID debugTargetName = StringID(viewFamily.debugResourceName.c_str(), viewFamily.debugResourceName.Size());
 
             if (renderGraph->HasTexture(debugTargetName)) {
                 auto& debugVisPass = renderGraph->AddPass(SID("Debug Visualize"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);

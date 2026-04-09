@@ -116,6 +116,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
         .physicsPoolSize = 64ull * 1024 * 1024, // 64 MB
         .renderPoolSize = 64ull * 1024 * 1024,  // 64 MB
         .renderArenaSize = 32ull * 1024 * 1024, // 32 MB
+        .generalArenaSize = 32ull * 1024 * 1024, // 32 MB
     });
 
 #if LOGGING_ENABLED
@@ -247,7 +248,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
 
     //
     {
-        ZoneScopedN("InitializeGameStateAndEngineContext");
+        ZoneScopedN("InitializeEngineStateAndContext");
 #if !WILL_EDITOR
         ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NoKeyboard;
         bCursorHidden = true;
@@ -262,7 +263,8 @@ void WillEngine::Initialize(Utils::Logger* logger)
         }
 
         // todo game state
-        gameState = std::make_unique<GameState>();
+
+        engineState = new(memoryManager.PersistentAllocRaw(sizeof(EngineState), Core::AllocTag::AssetGenerator)) EngineState(&memoryManager.General());
 
 #if LOGGING_ENABLED
         engineContext->engineLogger = engineLogger;
@@ -282,6 +284,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
         engineContext->audioManager = audioManager;
         engineContext->physicsSystem = physicsSystem.get();
         engineContext->scheduler = scheduler;
+        engineContext->memoryManager = &memoryManager;
         engineContext->setCursorHiddenFn = [this](bool hidden) {
             if (bCursorHidden == hidden) { return; }
             bCursorHidden = hidden;
@@ -334,8 +337,8 @@ void WillEngine::Initialize(Utils::Logger* logger)
         }
 #endif
 
-        gameFunctions.gameStartup(engineContext, gameState.get());
-        gameFunctions.gameLoad(engineContext, gameState.get());
+        gameFunctions.gameStartup(engineContext, engineState);
+        gameFunctions.gameLoad(engineContext, engineState);
     }
 
 #if WILL_EDITOR
@@ -343,7 +346,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
     auto gameDirectory = Platform::GetExecutablePath() / "src/game";
     if (gameDirectory.Exists()) {
         gameDllWatcher.Start(gameDirectory.c_str(), [&]() {
-            gameFunctions.gameUnload(engineContext, gameState.get());
+            gameFunctions.gameUnload(engineContext, engineState);
             auto reloadResponse = gameDll.Reload();
             switch (reloadResponse) {
                 case Platform::DllLoadResponse::Loaded:
@@ -363,7 +366,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
                     break;
             }
 
-            gameFunctions.gameLoad(engineContext, gameState.get());
+            gameFunctions.gameLoad(engineContext, engineState);
         });
     }
     else {
@@ -460,7 +463,8 @@ void WillEngine::EditorImgui()
             }
             const Core::MemoryManager::Stats ms = memoryManager.GetStats();
             const Core::Arena::Stats ras = memoryManager.RenderArena().GetStats();
-            const size_t totalUsed = ms.persistent.usedBytes + ms.general.usedBytes + ms.assets.usedBytes + ms.physics.usedBytes + ms.render.usedBytes + ras.usedBytes;
+            const Core::Arena::Stats gas = memoryManager.GeneralArena().GetStats();
+            const size_t totalUsed = ms.persistent.usedBytes + ms.general.usedBytes + ms.assets.usedBytes + ms.physics.usedBytes + ms.render.usedBytes;
             constexpr float kToMB = 1.0f / (1024.0f * 1024.0f);
             ImGui::SeparatorText("TLSF Allocators");
             ImGui::Text("Total:             %.3f / %.0f MB", static_cast<float>(totalUsed) * kToMB, static_cast<float>(ms.totalBytes) * kToMB);
@@ -472,8 +476,9 @@ void WillEngine::EditorImgui()
             ImGui::Text("Assets:            %.3f / %.0f MB (%zu allocs)", static_cast<float>(ms.assets.usedBytes) * kToMB, static_cast<float>(ms.assets.totalBytes) * kToMB, ms.assets.allocCount);
             ImGui::Text("Physics:           %.3f / %.0f MB (%zu allocs)", static_cast<float>(ms.physics.usedBytes) * kToMB, static_cast<float>(ms.physics.totalBytes) * kToMB, ms.physics.allocCount);
             ImGui::Text("Render:            %.3f / %.0f MB (%zu allocs)", static_cast<float>(ms.render.usedBytes) * kToMB, static_cast<float>(ms.render.totalBytes) * kToMB, ms.render.allocCount);
-            ImGui::SeparatorText("Arenas");
-            ImGui::Text("RenderArena:%.3f / %.0f MB (bump)", static_cast<float>(ras.usedBytes) * kToMB, static_cast<float>(ras.totalBytes) * kToMB);
+            ImGui::SeparatorText("Arenas (excluded from total)");
+            ImGui::Text("RenderArena:  %.3f / %.0f MB (bump)", static_cast<float>(ras.usedBytes) * kToMB, static_cast<float>(ras.totalBytes) * kToMB);
+            ImGui::Text("GeneralArena: %.3f / %.0f MB (bump)", static_cast<float>(gas.usedBytes) * kToMB, static_cast<float>(gas.totalBytes) * kToMB);
             ImGui::Text("GPU Device: %zu allocs / %.3f MB", static_cast<size_t>(ms.deviceMemory.allocationCount), static_cast<float>(ms.deviceMemory.totalBytes) * kToMB);
 
             ImGui::Spacing();
@@ -899,7 +904,7 @@ void WillEngine::Run()
     renderThread->Start();
     timeManager->Reset();
 
-    gameState->skybox = assetManager->LoadCubemap("kloofendal"_sid);
+    engineState->skybox = assetManager->LoadCubemap("kloofendal"_sid);
 
     SDL_Event e;
     while (true) {
@@ -972,9 +977,9 @@ void WillEngine::Run()
         //
         {
             ZoneScopedN("GameFrame");
-            gameState->inputFrame = &inputManager->GetCurrentInput();
-            gameState->timeFrame = &timeManager->GetTime();
-            gameFunctions.gameUpdate(engineContext, gameState.get());
+            engineState->inputFrame = &inputManager->GetCurrentInput();
+            engineState->timeFrame = &timeManager->GetTime();
+            gameFunctions.gameUpdate(engineContext, engineState);
             inputManager->FrameReset();
         }
 
@@ -1047,15 +1052,15 @@ void WillEngine::Run()
 
 
                 glm::uvec2 mousePos = {
-                    gameState->inputFrame->mousePositionAbsolute.x - engineContext->windowContext.viewportOffsetX,
-                    gameState->inputFrame->mousePositionAbsolute.y - engineContext->windowContext.viewportOffsetY
+                    engineState->inputFrame->mousePositionAbsolute.x - engineContext->windowContext.viewportOffsetX,
+                    engineState->inputFrame->mousePositionAbsolute.y - engineContext->windowContext.viewportOffsetY
                 };
                 mousePos.y = engineContext->windowContext.viewportHeight - 1 - mousePos.y;
                 stagingFrameBuffer.currentMousePosition = {(mousePos.x), (mousePos.y)};
                 //
                 {
                     ZoneScopedN("GamePrepareFrame");
-                    gameFunctions.gamePrepareFrame(engineContext, gameState.get(), &stagingFrameBuffer);
+                    gameFunctions.gamePrepareFrame(engineContext, engineState, &stagingFrameBuffer);
                 }
 
                 //
@@ -1074,6 +1079,9 @@ void WillEngine::Run()
                 engineRenderSynchronization->renderCV.notify_one();
             }
         }
+
+        // MEM: General arena reset here, move if needed
+        memoryManager.GeneralArena().Reset();
     }
 }
 
@@ -1092,9 +1100,9 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
 
 void WillEngine::Cleanup()
 {
-    gameFunctions.gameUnload(engineContext, gameState.get());
-    gameFunctions.gameShutdown(engineContext, gameState.get());
-    gameState.reset();
+    gameFunctions.gameUnload(engineContext, engineState);
+    gameFunctions.gameShutdown(engineContext, engineState);
+    engineState->~EngineState();
 
 
     scheduler->WaitforAllAndShutdown();

@@ -5,8 +5,9 @@
 #ifndef WILLENGINETESTBED_RING_BUFFER_H
 #define WILLENGINETESTBED_RING_BUFFER_H
 
-#include <array>
-#include <cstddef>
+#include <utility>
+
+#include "array.h"
 
 namespace Core
 {
@@ -66,7 +67,7 @@ public:
 
 private:
     static constexpr size_t Mask = Capacity - 1;
-    std::array<T, Capacity> buffer;
+    Array<T, Capacity> buffer;
     size_t head;
     size_t tail;
 };

@@ -8,7 +8,7 @@
 
 namespace Engine
 {
-struct GameState;
+struct EngineState;
 }
 
 namespace Core
@@ -19,10 +19,10 @@ struct EngineContext;
 
 namespace Game
 {
-void UpdateEditorCamera(Core::EngineContext* ctx, Engine::GameState* state);
+void UpdateEditorCamera(Core::EngineContext* ctx, Engine::EngineState* state);
 
-void BuildViewFamily(Engine::GameState* state, Core::ViewFamily& mainViewFamily);
-void BuildPortalViewFamily(Engine::GameState* state, Core::ViewFamily& mainViewFamily);
+void BuildViewFamily(Engine::EngineState* state, Core::ViewFamily& mainViewFamily);
+void BuildPortalViewFamily(Engine::EngineState* state, Core::ViewFamily& mainViewFamily);
 } // Game
 
 #endif //WILL_ENGINE_CAMERA_SYSTEM_H

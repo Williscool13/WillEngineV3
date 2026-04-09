@@ -35,9 +35,9 @@ void StableIdComponent::OnUpdate(entt::registry& registry, entt::entity entity)
 void StableIdComponent::OnConstruct(entt::registry& registry, entt::entity entity)
 {
     auto& comp = registry.get<StableIdComponent>(entity);
-    auto* state = registry.ctx().get<Engine::GameState*>();
+    auto* state = registry.ctx().get<Engine::EngineState*>();
 
-    while (comp.id.id == 0 || state->stableIdToEntityMap.contains(comp.id)) {
+    while (comp.id.id == 0 || state->stableIdToEntityMap.Contains(comp.id)) {
         comp.id = Generate(state->rng);
     }
     state->stableIdToEntityMap[comp.id] = entity;
@@ -47,8 +47,8 @@ void StableIdComponent::OnConstruct(entt::registry& registry, entt::entity entit
 void StableIdComponent::OnDestroy(entt::registry& registry, entt::entity entity)
 {
     auto& comp = registry.get<StableIdComponent>(entity);
-    auto* state = registry.ctx().get<Engine::GameState*>();
-    state->stableIdToEntityMap.erase(comp.id);
+    auto* state = registry.ctx().get<Engine::EngineState*>();
+    state->stableIdToEntityMap.Remove(comp.id);
 }
 
 } // Game::Component

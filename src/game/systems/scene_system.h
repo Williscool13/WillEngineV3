@@ -9,6 +9,7 @@
 #include "../component-registry/component_registry.h"
 #include "game/components/scene_components.h"
 #include "core/string_id.h"
+#include "core/containers/span.h"
 #include "engine/include/engine_context.h"
 #include "engine/asset_manager.h"
 #include "engine/core/model_id.h"
@@ -22,7 +23,7 @@ struct EngineContext;
 
 namespace Engine
 {
-struct GameState;
+struct EngineState;
 }
 
 namespace Game
@@ -31,31 +32,31 @@ Engine::Scene SaveScene(ComponentRegistry& componentRegistry, entt::registry& re
 
 StringID LoadScene(ComponentRegistry& componentRegistry, entt::registry& registry, Engine::Scene& scene);
 
-std::vector<Engine::Scene> SerializeAll(ComponentRegistry& componentRegistry, entt::registry& registry, Engine::AssetManager* assetManager, const std::vector<Engine::GameState::RuntimeSceneMetadata>& loadedScenes);
+Core::InlineVector<Engine::Scene, 8> SerializeAll(ComponentRegistry& componentRegistry, entt::registry& registry, Engine::AssetManager* assetManager, Core::Span<Engine::EngineState::RuntimeSceneMetadata> loadedScenes);
 
-void DeserializeAll(Engine::GameState* state, std::vector<Engine::Scene>& snapshots);
+void DeserializeAll(Engine::EngineState* state, Core::Span<Engine::Scene> snapshots);
 
-void UnloadScene(Engine::GameState* state, StringID sceneId);
+void UnloadScene(Engine::EngineState* state, StringID sceneId);
 
-void SaveSceneToFile(StringID sceneID, std::string_view sceneName, Engine::GameState* state, Engine::AssetManager* assetManager, Core::EngineContext* ctx);
+void SaveSceneToFile(StringID sceneID, std::string_view sceneName, Engine::EngineState* state, Engine::AssetManager* assetManager, Core::EngineContext* ctx);
 
-bool LoadSceneFromFile(Engine::GameState* state, Engine::AssetManager* assetManager, StringID sceneId);
+bool LoadSceneFromFile(Engine::EngineState* state, Engine::AssetManager* assetManager, StringID sceneId);
 
-void SaveEntityAsPrefab(Engine::GameState* state, Engine::AssetManager* assetManager, Core::EngineContext* ctx, entt::entity entity, std::string_view prefabName);
+void SaveEntityAsPrefab(Engine::EngineState* state, Engine::AssetManager* assetManager, Core::EngineContext* ctx, entt::entity entity, std::string_view prefabName);
 
-entt::entity SpawnPrefab(Engine::GameState* state, Engine::AssetManager* assetManager, StringID prefabId, const glm::vec3& spawnPosition = {});
+entt::entity SpawnPrefab(Engine::EngineState* state, Engine::AssetManager* assetManager, StringID prefabId, const glm::vec3& spawnPosition = {});
 
-void ResolvePrefabLoads(Engine::GameState* state, Engine::AssetManager* assetManager);
+void ResolvePrefabLoads(Engine::EngineState* state, Engine::AssetManager* assetManager);
 
-std::vector<entt::entity> SpawnModel(Engine::GameState* state, Engine::AssetManager* assetManager, Engine::ModelID modelId, const glm::vec3& offset = {});
+std::vector<entt::entity> SpawnModel(Core::EngineContext* ctx, Engine::EngineState* state, Engine::ModelID modelId, const glm::vec3& offset = {});
 
-entt::entity CreateSceneEntity(Engine::GameState* state);
+entt::entity CreateSceneEntity(Engine::EngineState* state);
 
 /**
  * Copies all registered components from src to a new entity.
  * Signals (on_construct) fire during emplace, handling initialization.
  */
-inline entt::entity CopyEntity(Engine::GameState* state, entt::entity src)
+inline entt::entity CopyEntity(Engine::EngineState* state, entt::entity src)
 {
     entt::entity dst = state->registry.create();
 
@@ -76,7 +77,7 @@ inline entt::entity CopyEntity(Engine::GameState* state, entt::entity src)
  * @param targetScene
  * @return
  */
-inline entt::entity CopySceneEntity(Engine::GameState* state, entt::entity src, StringID targetScene = {})
+inline entt::entity CopySceneEntity(Engine::EngineState* state, entt::entity src, StringID targetScene = {})
 {
     entt::entity dst = CopyEntity(state, src);
 
@@ -89,7 +90,7 @@ inline entt::entity CopySceneEntity(Engine::GameState* state, entt::entity src, 
 }
 
 template<typename T>
-bool CreateComponent(Engine::GameState* state, entt::entity entity)
+bool CreateComponent(Engine::EngineState* state, entt::entity entity)
 {
     auto it = state->componentRegistry.registryMapping.find(TypeSID<T>());
     assert(it != state->componentRegistry.registryMapping.end() && "Component type not registered");
@@ -100,7 +101,7 @@ bool CreateComponent(Engine::GameState* state, entt::entity entity)
 }
 
 template<typename T>
-void DestroyComponent(Engine::GameState* state, entt::entity entity)
+void DestroyComponent(Engine::EngineState* state, entt::entity entity)
 {
     auto it = state->componentRegistry.registryMapping.find(TypeSID<T>());
     if (it == state->componentRegistry.registryMapping.end()) return;
@@ -108,7 +109,7 @@ void DestroyComponent(Engine::GameState* state, entt::entity entity)
     entry.remove(state->registry, entity);
 }
 
-inline bool CreateComponent(Engine::GameState* state, entt::entity entity, StringID typeId)
+inline bool CreateComponent(Engine::EngineState* state, entt::entity entity, StringID typeId)
 {
     auto it = state->componentRegistry.registryMapping.find(typeId);
     assert(it != state->componentRegistry.registryMapping.end() && "Component type not registered");
@@ -118,7 +119,7 @@ inline bool CreateComponent(Engine::GameState* state, entt::entity entity, Strin
     return true;
 }
 
-inline void DestroyComponent(Engine::GameState* state, entt::entity entity, StringID typeId)
+inline void DestroyComponent(Engine::EngineState* state, entt::entity entity, StringID typeId)
 {
     auto it = state->componentRegistry.registryMapping.find(typeId);
     assert(it != state->componentRegistry.registryMapping.end() && "Component type not registered");
@@ -126,9 +127,9 @@ inline void DestroyComponent(Engine::GameState* state, entt::entity entity, Stri
     entry.remove(state->registry, entity);
 }
 
-void PlayStart(Core::EngineContext* ctx, Engine::GameState* state);
+void PlayStart(Core::EngineContext* ctx, Engine::EngineState* state);
 
-void PlayStop(Core::EngineContext* ctx, Engine::GameState* state);
+void PlayStop(Core::EngineContext* ctx, Engine::EngineState* state);
 } // Game
 
 #endif //WILL_ENGINE_SCENE_SYSTEM_H

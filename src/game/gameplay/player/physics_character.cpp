@@ -21,7 +21,7 @@
 
 namespace Game
 {
-void PhysicsCharacter::Initialize(Engine::GameState* gameState, Core::EngineContext* ctx, glm::vec3 spawnPosition)
+void PhysicsCharacter::Initialize(Engine::EngineState* gameState, Core::EngineContext* ctx, glm::vec3 spawnPosition)
 {
     engineGameState = gameState;
     physicsSystem = ctx->physicsSystem;

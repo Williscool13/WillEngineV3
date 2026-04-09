@@ -7,10 +7,11 @@
 
 #include <atomic>
 #include <cstdint>
-#include <array>
 
 #include "handle.h"
+#include "core/containers/array.h"
 
+// todo: important - please update handle to be a single uint64_t and fix this ABA issue
 namespace Core
 {
 template<typename T, size_t MaxSize>
@@ -22,7 +23,7 @@ class LockFreeHandleAllocator
         std::atomic<uint32_t> nextFree;
     };
 
-    std::array<Node, MaxSize> nodes;
+    Array<Node, MaxSize> nodes;
     std::atomic<uint32_t> freeListHead{0};
     std::atomic<uint32_t> count{0};
 

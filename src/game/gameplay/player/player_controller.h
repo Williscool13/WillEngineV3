@@ -17,7 +17,7 @@ struct EngineContext;
 
 namespace Engine
 {
-struct GameState;
+struct EngineState;
 }
 
 namespace Game
@@ -25,8 +25,8 @@ namespace Game
 class PlayerController
 {
 public:
-    void Initialize(Engine::GameState* gameState, Physics::PhysicsSystem* physicsSystem, glm::vec3 spawnPosition);
-    void Update(Core::EngineContext* ctx, Engine::GameState* state);
+    void Initialize(Engine::EngineState* gameState, Physics::PhysicsSystem* physicsSystem, glm::vec3 spawnPosition);
+    void Update(Core::EngineContext* ctx, Engine::EngineState* state);
     void Shutdown(Physics::PhysicsSystem* physicsSystem);
 
     Character* GetCharacter() { return character.get(); }

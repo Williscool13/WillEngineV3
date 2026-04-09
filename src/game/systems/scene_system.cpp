@@ -10,6 +10,8 @@
 
 #include <json/nlohmann/json.hpp>
 
+#include "core/containers/arena_fixed_vector.h"
+#include "core/containers/arena_vector.h"
 #include "engine/asset_manager.h"
 #include "engine/engine_api.h"
 #include "engine/logging/engine_log.h"
@@ -130,20 +132,20 @@ StringID LoadScene(ComponentRegistry& componentRegistry, entt::registry& registr
     return sceneId;
 }
 
-std::vector<Engine::Scene> SerializeAll(ComponentRegistry& componentRegistry, entt::registry& registry, Engine::AssetManager* assetManager, const std::vector<Engine::GameState::RuntimeSceneMetadata>& loadedScenes)
+Core::InlineVector<Engine::Scene, 8> SerializeAll(ComponentRegistry& componentRegistry, entt::registry& registry, Engine::AssetManager* assetManager, Core::Span<Engine::EngineState::RuntimeSceneMetadata> loadedScenes)
 {
-    std::vector<Engine::Scene> snapshots;
-    snapshots.reserve(loadedScenes.size());
-    for (const auto& meta : loadedScenes) {
-        snapshots.push_back(SaveScene(componentRegistry, registry, assetManager, meta.sceneId, meta.sceneId.ToString()));
+    Core::InlineVector<Engine::Scene, 8> snapshots;
+    for (int i = 0; i < loadedScenes.Size(); ++i) {
+        auto& meta = loadedScenes[i];
+        snapshots.PushBack(SaveScene(componentRegistry, registry, assetManager, meta.sceneId, meta.sceneId.ToString()));
         LOG_INFO(Game, "PIE snapshot: serialized scene '{}'", meta.sceneId.ToString());
     }
     return snapshots;
 }
 
-void DeserializeAll(Engine::GameState* state, std::vector<Engine::Scene>& snapshots)
+void DeserializeAll(Engine::EngineState* state, Core::Span<Engine::Scene> snapshots)
 {
-    std::vector<Engine::GameState::RuntimeSceneMetadata> toUnload = state->loadedScenes;
+    Core::InlineVector<Engine::EngineState::RuntimeSceneMetadata, 8> toUnload = state->loadedScenes;
     for (const auto& meta : toUnload) {
         UnloadScene(state, meta.sceneId);
         LOG_INFO(Game, "PIE restore: unloaded scene '{}'", meta.sceneId.ToString());
@@ -167,7 +169,7 @@ void DeserializeAll(Engine::GameState* state, std::vector<Engine::Scene>& snapsh
                 }
             }
         }
-        state->loadedScenes.push_back({loadedId, maxSortOrder + 100});
+        state->loadedScenes.PushBack({loadedId, maxSortOrder + 100});
         LOG_INFO(Game, "PIE restore: reloaded scene '{}'", loadedId.ToString());
     }
 
@@ -175,13 +177,16 @@ void DeserializeAll(Engine::GameState* state, std::vector<Engine::Scene>& snapsh
     ResolvePrefabLoads(state, ctx->assetManager);
 }
 
-void UnloadScene(Engine::GameState* state, StringID sceneId)
+void UnloadScene(Engine::EngineState* state, StringID sceneId)
 {
+    auto* ctx = state->registry.ctx().get<Core::EngineContext*>();
     auto view = state->registry.view<Component::SceneComponent>();
-    std::vector<entt::entity> toDestroy;
+
+    auto size = view.size();
+    Core::ArenaVector<entt::entity> toDestroy(&ctx->memoryManager->GeneralArena(), size);
     for (auto entity : view) {
         if (view.get<Component::SceneComponent>(entity).sceneId == sceneId) {
-            toDestroy.push_back(entity);
+            toDestroy.PushBack(entity);
         }
     }
 
@@ -189,15 +194,14 @@ void UnloadScene(Engine::GameState* state, StringID sceneId)
         state->registry.destroy(entity);
     }
 
-    std::erase_if(state->selectedEntities, [&](entt::entity e) {
-        return std::ranges::find(toDestroy, e) != toDestroy.end();
+    state->selectedEntities.Clear();
+    state->loadedScenes.RemoveFirstIf([sceneId](const Engine::EngineState::RuntimeSceneMetadata& m) {
+        return m.sceneId == sceneId;
     });
-
-    std::erase_if(state->loadedScenes, [&](const Engine::GameState::RuntimeSceneMetadata& m) { return m.sceneId == sceneId; });
-    std::erase(state->modifiedScenes, sceneId);
+    state->modifiedScenes.RemoveFirst(sceneId);
 }
 
-void SaveSceneToFile(StringID sceneID, std::string_view sceneName, Engine::GameState* state, Engine::AssetManager* assetManager, Core::EngineContext* ctx)
+void SaveSceneToFile(StringID sceneID, std::string_view sceneName, Engine::EngineState* state, Engine::AssetManager* assetManager, Core::EngineContext* ctx)
 {
     const auto& sceneCache = assetManager->GetSceneCache();
     Core::Path path;
@@ -207,11 +211,12 @@ void SaveSceneToFile(StringID sceneID, std::string_view sceneName, Engine::GameS
         path = it->source;
     }
     else {
-        // todo replace
-        std::string stem(sceneName);
-        std::ranges::transform(stem, stem.begin(), tolower);
-        std::ranges::replace(stem, ' ', '_');
-        path = Platform::GetAssetPath() / "scenes" / (stem + ".wscene");
+        auto stem = Core::InlineString<128>(sceneName);
+        std::ranges::transform(stem.buf, stem.buf + stem.len, stem.buf, tolower);
+        std::ranges::replace(stem.buf, stem.buf + stem.len, ' ', '_');
+        stem.Append(".wscene");
+        path = Platform::GetAssetPath() / "scenes" / stem.c_str();
+        assert(path.Extension() == ".wscene");
     }
 
     Engine::Scene s = SaveScene(state->componentRegistry, state->registry, assetManager, sceneID, sceneName);
@@ -245,7 +250,7 @@ void SaveSceneToFile(StringID sceneID, std::string_view sceneName, Engine::GameS
     LOG_INFO(Game, "Saved scene '{}' to '{}'", sceneName, path.c_str());
 }
 
-bool LoadSceneFromFile(Engine::GameState* state, Engine::AssetManager* assetManager, StringID sceneId)
+bool LoadSceneFromFile(Engine::EngineState* state, Engine::AssetManager* assetManager, StringID sceneId)
 {
     if (std::ranges::any_of(state->loadedScenes, [&](const auto& m) { return m.sceneId == sceneId; })) {
         LOG_WARN(Game, "Scene '{}' is already loaded", sceneId.ToString());
@@ -294,8 +299,8 @@ bool LoadSceneFromFile(Engine::GameState* state, Engine::AssetManager* assetMana
             }
         }
     }
-    state->loadedScenes.push_back({loadedId, maxSortOrder + 100});
-    std::erase(state->modifiedScenes, loadedId);
+    state->loadedScenes.PushBack({loadedId, maxSortOrder + 100});
+    state->modifiedScenes.RemoveFirst(loadedId);
 
     ResolvePrefabLoads(state, assetManager);
 
@@ -316,9 +321,9 @@ bool LoadSceneFromFile(Engine::GameState* state, Engine::AssetManager* assetMana
     return true;
 }
 
-std::vector<entt::entity> SpawnModel(Engine::GameState* state, Engine::AssetManager* assetManager, Engine::ModelID modelId, const glm::vec3& offset)
+std::vector<entt::entity> SpawnModel(Core::EngineContext* ctx, Engine::EngineState* state, Engine::ModelID modelId, const glm::vec3& offset)
 {
-    const Engine::AssetManager::CachedModelMetadata* cached = assetManager->GetModelMetadata(modelId);
+    const Engine::AssetManager::CachedModelMetadata* cached = ctx->assetManager->GetModelMetadata(modelId);
     if (!cached) {
         LOG_ERROR(Game, "SpawnModel: modelId {} not in asset registry", modelId.id);
         return {};
@@ -373,7 +378,7 @@ std::vector<entt::entity> SpawnModel(Engine::GameState* state, Engine::AssetMana
     return spawned;
 }
 
-entt::entity CreateSceneEntity(Engine::GameState* state)
+entt::entity CreateSceneEntity(Engine::EngineState* state)
 {
     entt::entity newEntity = state->registry.create();
     state->registry.emplace<Component::TransformComponent>(newEntity);
@@ -392,7 +397,7 @@ entt::entity CreateSceneEntity(Engine::GameState* state)
     return newEntity;
 }
 
-void SaveEntityAsPrefab(Engine::GameState* state, Engine::AssetManager* assetManager, Core::EngineContext* ctx, entt::entity entity, std::string_view prefabName)
+void SaveEntityAsPrefab(Engine::EngineState* state, Engine::AssetManager* assetManager, Core::EngineContext* ctx, entt::entity entity, std::string_view prefabName)
 {
     // todo: Fix this to:
     //  Compare all existing prefabs and check their components. If their component fields are precisely the same as the src prefab, then replace it with new
@@ -451,7 +456,7 @@ void SaveEntityAsPrefab(Engine::GameState* state, Engine::AssetManager* assetMan
     LOG_INFO(Game, "Saved prefab '{}' to '{}'", prefabName, path.c_str());
 }
 
-entt::entity SpawnPrefab(Engine::GameState* state, Engine::AssetManager* assetManager, StringID prefabId, const glm::vec3& spawnPosition)
+entt::entity SpawnPrefab(Engine::EngineState* state, Engine::AssetManager* assetManager, StringID prefabId, const glm::vec3& spawnPosition)
 {
     const auto* meta = assetManager->GetPrefabMetadata(prefabId);
     if (!meta) {
@@ -497,7 +502,7 @@ entt::entity SpawnPrefab(Engine::GameState* state, Engine::AssetManager* assetMa
     return entity;
 }
 
-void ResolvePrefabLoads(Engine::GameState* state, Engine::AssetManager* assetManager)
+void ResolvePrefabLoads(Engine::EngineState* state, Engine::AssetManager* assetManager)
 {
     // Cache parsed prefab JSON so each file is read once even with many instances
     std::unordered_map<StringID, nlohmann::json> prefabJsonCache;
@@ -536,7 +541,7 @@ void ResolvePrefabLoads(Engine::GameState* state, Engine::AssetManager* assetMan
     }
 }
 
-void PlayStart(Core::EngineContext* ctx, Engine::GameState* state)
+void PlayStart(Core::EngineContext* ctx, Engine::EngineState* state)
 {
     {
         auto camView = state->registry.view<Component::EditorCameraTag, Component::TransformComponent>();
@@ -584,7 +589,7 @@ void PlayStart(Core::EngineContext* ctx, Engine::GameState* state)
     playerController.Initialize(state, ctx, spawnPosition);
 }
 
-void PlayStop(Core::EngineContext* ctx, Engine::GameState* state)
+void PlayStop(Core::EngineContext* ctx, Engine::EngineState* state)
 {
     if (auto* playerController = state->registry.ctx().find<PhysicsPlayerController>()) {
         playerController->Shutdown(ctx->physicsSystem);
@@ -594,7 +599,7 @@ void PlayStop(Core::EngineContext* ctx, Engine::GameState* state)
     PhysicsOnPlayStop(ctx, state);
 
     DeserializeAll(state, state->pieSnapshot);
-    state->pieSnapshot.clear();
+    state->pieSnapshot.Clear();
 
     state->bIsPlaying = false;
     state->bGameCursorCaptured = false;

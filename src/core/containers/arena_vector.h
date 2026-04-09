@@ -1,9 +1,9 @@
 //
-// Created by William on 2026-03-31.
+// Created by William on 2026-04-09.
 //
 
-#ifndef WILL_ENGINE_VECTOR_H
-#define WILL_ENGINE_VECTOR_H
+#ifndef WILL_ENGINE_ARENA_VECTOR_H
+#define WILL_ENGINE_ARENA_VECTOR_H
 
 #include <cassert>
 #include <cstddef>
@@ -11,40 +11,41 @@
 #include <new>
 #include <utility>
 
-#include "core/memory/tlsf_allocator.h"
+#include "core/memory/arena.h"
 
 namespace Core
 {
 /**
- * Dynamic array backed by a TlsfAllocator.
- * Grows by doubling (minimum capacity 4).
- * Elements are placement-new'd; non-trivial destructors are called on removal.
+ * Dynamically-resizing vector backed by an Arena.
+ * Grows by allocating a new block from the arena and copying; the old block is abandoned
+ * until the arena is bulk-reset externally. Clear() calls element destructors but does NOT
+ * free memory. Reset() additionally forgets the allocation.
  *
- * PREFER StackVector or InlineVector wherever the maximum count is known at init time.
- * Vector is a last resort for truly unbounded, unpredictable growth.
+ * Suitable for per-frame or per-scope scratch data where the arena outlives the vector.
+ * PREFER ArenaFixedVector when the maximum count is known at construction time.
  */
 template<typename T>
-class Vector
+class ArenaVector
 {
 public:
-    Vector() = default;
+    ArenaVector() = default;
 
-    explicit Vector(TlsfAllocator* alloc, AllocTag tag = AllocTag::Unknown)
-        : alloc_(alloc), tag_(tag)
+    explicit ArenaVector(Arena* arena)
+        : arena_(arena)
     {}
 
-    Vector(TlsfAllocator* alloc, AllocTag tag, size_t initialCapacity)
-        : alloc_(alloc), tag_(tag)
+    ArenaVector(Arena* arena, size_t initialCapacity)
+        : arena_(arena)
     {
         if (initialCapacity > 0) {
             Reserve(initialCapacity);
         }
     }
 
-    ~Vector() { Reset(); }
+    ~ArenaVector() { Clear(); }
 
-    Vector(const Vector& other)
-        : alloc_(other.alloc_), tag_(other.tag_)
+    ArenaVector(const ArenaVector& other)
+        : arena_(other.arena_)
     {
         if (other.size_ > 0) {
             Reserve(other.size_);
@@ -55,12 +56,11 @@ public:
         }
     }
 
-    Vector& operator=(const Vector& other)
+    ArenaVector& operator=(const ArenaVector& other)
     {
         if (this == &other) { return *this; }
-        Reset();
-        alloc_ = other.alloc_;
-        tag_ = other.tag_;
+        Clear();
+        arena_ = other.arena_;
         if (other.size_ > 0) {
             Reserve(other.size_);
             for (size_t i = 0; i < other.size_; ++i) {
@@ -71,8 +71,8 @@ public:
         return *this;
     }
 
-    Vector(Vector&& other) noexcept
-        : alloc_(other.alloc_), tag_(other.tag_),
+    ArenaVector(ArenaVector&& other) noexcept
+        : arena_(other.arena_),
           data_(other.data_), size_(other.size_), capacity_(other.capacity_)
     {
         other.data_ = nullptr;
@@ -80,12 +80,11 @@ public:
         other.capacity_ = 0;
     }
 
-    Vector& operator=(Vector&& other) noexcept
+    ArenaVector& operator=(ArenaVector&& other) noexcept
     {
         if (this == &other) { return *this; }
-        Reset();
-        alloc_ = other.alloc_;
-        tag_ = other.tag_;
+        Clear();
+        arena_ = other.arena_;
         data_ = other.data_;
         size_ = other.size_;
         capacity_ = other.capacity_;
@@ -120,29 +119,18 @@ public:
 
     void PopBack()
     {
-        assert(size_ > 0 && "Vector underflow");
+        assert(size_ > 0 && "ArenaVector underflow");
         --size_;
         data_[size_].~T();
     }
 
     T PopBackValue()
     {
-        assert(size_ > 0 && "Vector underflow");
+        assert(size_ > 0 && "ArenaVector underflow");
         --size_;
         T val = std::move(data_[size_]);
         data_[size_].~T();
         return val;
-    }
-
-    void RemoveAt(size_t index)
-    {
-        assert(index < size_ && "Index out of bounds");
-        data_[index].~T();
-        for (size_t i = index; i < size_ - 1; ++i) {
-            new(data_ + i) T(std::move(data_[i + 1]));
-            data_[i + 1].~T();
-        }
-        --size_;
     }
 
     // O(n) linear scan
@@ -177,6 +165,17 @@ public:
         return false;
     }
 
+    void RemoveAt(size_t index)
+    {
+        assert(index < size_ && "Index out of bounds");
+        data_[index].~T();
+        for (size_t i = index; i < size_ - 1; ++i) {
+            new(data_ + i) T(std::move(data_[i + 1]));
+            data_[i + 1].~T();
+        }
+        --size_;
+    }
+
     T* Remove(T* it)
     {
         assert(it >= data_ && it < data_ + size_);
@@ -199,16 +198,16 @@ public:
     void Reserve(size_t newCapacity)
     {
         if (newCapacity <= capacity_) { return; }
-        assert(alloc_ != nullptr && "Vector: no allocator");
-        void* raw;
+        assert(arena_ != nullptr && "ArenaVector: no arena");
+        T* newData = static_cast<T*>(arena_->AllocRaw(newCapacity * sizeof(T), alignof(T)));
+        assert(newData != nullptr && "ArenaVector: allocation failed");
         if (data_) {
-            raw = alloc_->Realloc(data_, newCapacity * sizeof(T), tag_);
+            for (size_t i = 0; i < size_; ++i) {
+                new(newData + i) T(std::move(data_[i]));
+                data_[i].~T();
+            }
         }
-        else {
-            raw = alloc_->Alloc(newCapacity * sizeof(T), tag_);
-        }
-        assert(raw != nullptr && "Vector: allocation failed");
-        data_ = static_cast<T*>(raw);
+        data_ = newData;
         capacity_ = newCapacity;
     }
 
@@ -228,11 +227,7 @@ public:
     {
         size_t count = static_cast<size_t>(last - first);
         if (count == 0) { return; }
-
-        if (size_ + count > capacity_) {
-            Grow(size_ + count);
-        }
-
+        if (size_ + count > capacity_) { Grow(size_ + count); }
         for (size_t i = 0; i < count; ++i) {
             new(data_ + size_ + i) T(first[i]);
         }
@@ -245,18 +240,11 @@ public:
         size_t index = static_cast<size_t>(pos - data_);
         size_t count = static_cast<size_t>(last - first);
         if (count == 0) { return; }
-
-        if (size_ + count > capacity_) {
-            Grow(size_ + count);
-        }
-
-        // Shift existing elements
+        if (size_ + count > capacity_) { Grow(size_ + count); }
         for (size_t i = size_; i > index; --i) {
             new(data_ + i + count - 1) T(std::move(data_[i - 1]));
             data_[i - 1].~T();
         }
-
-        // Copy-construct new elements
         for (size_t i = 0; i < count; ++i) {
             new(data_ + index + i) T(first[i]);
         }
@@ -265,21 +253,28 @@ public:
 
     void Clear()
     {
-        for (size_t i = 0; i < size_; ++i) {
-            data_[i].~T();
-        }
+        for (size_t i = 0; i < size_; ++i) { data_[i].~T(); }
         size_ = 0;
     }
 
+    // Calls destructors and forgets the allocation. Arena memory is reclaimed on arena reset.
     void Reset()
     {
         Clear();
-        if (data_) {
-            alloc_->Free(data_);
-            data_ = nullptr;
-            capacity_ = 0;
-        }
+        data_ = nullptr;
+        capacity_ = 0;
     }
+
+    bool operator==(const ArenaVector& other) const
+    {
+        if (size_ != other.size_) { return false; }
+        for (size_t i = 0; i < size_; ++i) {
+            if (!(data_[i] == other.data_[i])) { return false; }
+        }
+        return true;
+    }
+
+    bool operator!=(const ArenaVector& other) const { return !(*this == other); }
 
     T& operator[](size_t i)
     {
@@ -293,53 +288,23 @@ public:
         return data_[i];
     }
 
-    T& Front()
-    {
-        assert(size_ > 0);
-        return data_[0];
-    }
-
-    const T& Front() const
-    {
-        assert(size_ > 0);
-        return data_[0];
-    }
-
-    T& Back()
-    {
-        assert(size_ > 0);
-        return data_[size_ - 1];
-    }
-
-    const T& Back() const
-    {
-        assert(size_ > 0);
-        return data_[size_ - 1];
-    }
+    T& Front() { assert(size_ > 0); return data_[0]; }
+    const T& Front() const { assert(size_ > 0); return data_[0]; }
+    T& Back() { assert(size_ > 0); return data_[size_ - 1]; }
+    const T& Back() const { assert(size_ > 0); return data_[size_ - 1]; }
 
     T* Data() { return data_; }
     const T* Data() const { return data_; }
 
-    [[nodiscard]] size_t Size() const { return size_; }
+    [[nodiscard]] size_t Size()        const { return size_; }
     [[nodiscard]] size_t GetCapacity() const { return capacity_; }
-    [[nodiscard]] bool IsEmpty() const { return size_ == 0; }
-    [[nodiscard]] bool IsAllocated() const { return data_ != nullptr; }
-
-    bool operator==(const Vector& other) const
-    {
-        if (size_ != other.size_) { return false; }
-        for (size_t i = 0; i < size_; ++i) {
-            if (!(data_[i] == other.data_[i])) { return false; }
-        }
-        return true;
-    }
-
-    bool operator!=(const Vector& other) const { return !(*this == other); }
+    [[nodiscard]] bool   IsEmpty()     const { return size_ == 0; }
+    [[nodiscard]] bool   IsAllocated() const { return data_ != nullptr; }
 
     T* begin() { return data_; }
-    T* end() { return data_ + size_; }
+    T* end()   { return data_ + size_; }
     const T* begin() const { return data_; }
-    const T* end() const { return data_ + size_; }
+    const T* end()   const { return data_ + size_; }
 
 private:
     void Grow(size_t minCapacity)
@@ -349,12 +314,11 @@ private:
         Reserve(newCapacity);
     }
 
-    TlsfAllocator* alloc_{};
-    AllocTag tag_{AllocTag::Unknown};
+    Arena* arena_{};
     T* data_{};
     size_t size_{};
     size_t capacity_{};
 };
 } // namespace Core
 
-#endif // WILL_ENGINE_VECTOR_H
+#endif // WILL_ENGINE_ARENA_VECTOR_H

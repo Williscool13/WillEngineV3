@@ -4,11 +4,9 @@
 
 #ifndef WILLENGINETESTBED_FREE_LIST_H
 #define WILLENGINETESTBED_FREE_LIST_H
-#include <array>
-#include <vector>
 
 #include "handle.h"
-#include "../containers/ring_buffer.h"
+#include "core/containers/ring_buffer.h"
 
 namespace Core
 {
@@ -20,8 +18,8 @@ namespace Core
 template<typename T, size_t MaxSize>
 class FreeList
 {
-    std::vector<T> slots;
-    std::vector<uint32_t> generations;
+    Array<T, MaxSize> slots;
+    Array<uint32_t, MaxSize> generations;
 
     RingBuffer<uint32_t, MaxSize> freeIndices;
     uint32_t count = 0;
@@ -29,8 +27,9 @@ class FreeList
 public:
     FreeList()
     {
-        slots.resize(MaxSize);
-        generations.resize(MaxSize, 1);
+        for (auto& gen : generations) {
+            gen = 1;
+        }
 
         // Push indices 0 to MaxSize-1 in order
         for (uint32_t i = 0; i < MaxSize; ++i) {
@@ -94,7 +93,7 @@ public:
      * Use sparingly, mostly for initialization/deinitialization and debugging
      * @return
      */
-    std::vector<T>& GetAllSlots() { return slots; }
+    Array<T, MaxSize>& GetAllSlots() { return slots; }
 };
 } // Core
 

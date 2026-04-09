@@ -5,25 +5,25 @@
 #ifndef WILLENGINETESTBED_HANDLE_ALLOCATOR_H
 #define WILLENGINETESTBED_HANDLE_ALLOCATOR_H
 
-#include <array>
-#include <vector>
-
 #include "handle.h"
-#include "../containers/ring_buffer.h"
+#include "core/containers/array.h"
+#include "core/containers/ring_buffer.h"
 
 namespace Core
 {
 template<typename T, size_t MaxSize>
 class HandleAllocator
 {
-    std::vector<uint32_t> generations;
+    Array<uint32_t, MaxSize> generations;
     RingBuffer<uint32_t, MaxSize> freeIndices;
     uint32_t count = 0;
 
 public:
     HandleAllocator()
     {
-        generations.resize(MaxSize, 1);
+        for (auto& gen : generations) {
+            gen = 1;
+        }
 
         // Push indices 0 to MaxSize-1 in order
         for (uint32_t i = 0; i < MaxSize; ++i) {

@@ -15,13 +15,13 @@
 
 namespace Game
 {
-void PlayerController::Initialize(Engine::GameState* gameState, Physics::PhysicsSystem* physicsSystem, glm::vec3 spawnPosition)
+void PlayerController::Initialize(Engine::EngineState* gameState, Physics::PhysicsSystem* physicsSystem, glm::vec3 spawnPosition)
 {
     character = std::make_unique<Character>();
     character->Initialize(gameState, physicsSystem, spawnPosition);
 }
 
-void PlayerController::Update(Core::EngineContext* ctx, Engine::GameState* state)
+void PlayerController::Update(Core::EngineContext* ctx, Engine::EngineState* state)
 {
     const float deltaTime = state->timeFrame->deltaTime;
     const Core::InputFrame* input = state->inputFrame;
