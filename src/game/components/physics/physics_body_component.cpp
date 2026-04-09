@@ -4,6 +4,7 @@
 
 #include "physics_body_component.h"
 
+#include "engine/core/hash.h"
 #include "engine/include/engine_context.h"
 #include "engine/engine_api.h"
 #include "physics/physics_system.h"

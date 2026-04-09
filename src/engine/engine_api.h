@@ -5,7 +5,6 @@
 #ifndef WILL_ENGINE_ENGINE_API_H
 #define WILL_ENGINE_ENGINE_API_H
 
-#include <vector>
 
 #include <entt/entt.hpp>
 #include <Jolt/Jolt.h>
@@ -13,12 +12,11 @@
 #include <imgui.h>
 #include <ImGuizmo.h>
 
-#include "game/component-registry/component_registry.h"
-#include "core/containers/hash.h"
 #include "core/containers/inline_vector.h"
 #include "core/containers/map.h"
 #include "core/containers/vector.h"
-#include "render/interface/render_interface.h"
+#include "game/component-registry/component_registry.h"
+#include "engine/core/hash.h"
 #include "physics/physics_config.h"
 #include "resources/scene/scene.h"
 
@@ -28,7 +26,6 @@ struct TimeFrame;
 struct InputFrame;
 struct EngineContext;
 
-template<> struct Hash<JPH::BodyID> { uint64_t operator()(JPH::BodyID k) const { return static_cast<uint64_t>(k.GetIndexAndSequenceNumber()); } };
 }
 
 struct ResolvedCollisionEvent

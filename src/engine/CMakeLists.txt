@@ -43,6 +43,7 @@ add_library(engine STATIC
         compression/compression.cpp
         compression/compression.h
         spline/spline.cpp
+        core/hash.h
 )
 
 target_include_directories(engine PRIVATE
