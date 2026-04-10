@@ -6,25 +6,30 @@
 #include "log_category.h"
 #include "utils/logging/logging.h"
 #include "core/containers/array.h"
+#include "core/memory/memory_manager.h"
+
 
 namespace Engine
 {
 class EngineLogger
 {
 public:
+    EngineLogger() = default;
+    explicit EngineLogger(Core::MemoryManager& memoryManager);
+    ~EngineLogger() = default;
     void Init(Utils::Logger* baseLogger);
 
     void Flush() const;
 
     void Shutdown() const;
 
-    spdlog::logger* GetLogger(LogCategory cat) { return categoryLoggers[(int)cat].get(); }
-    ImGuiSink& GetImGuiSink() { return *std::static_pointer_cast<ImGuiSink>(imguiSink); }
+    spdlog::logger* GetLogger(LogCategory cat) { return categoryLoggers[static_cast<int>(cat)].get(); }
+    ImGuiSink* GetImGuiSink() const { return imguiSink; }
 
     void RegisterLoggersForDLL(LogCategory defaultCategory) const;
 
 private:
-    spdlog::sink_ptr imguiSink;
+    ImGuiSink* imguiSink;
     Core::Array<std::shared_ptr<spdlog::logger>, static_cast<size_t>(LogCategory::Count)> categoryLoggers;
 };
 

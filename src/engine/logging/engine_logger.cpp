@@ -6,15 +6,21 @@
 
 namespace Engine
 {
+EngineLogger::EngineLogger(Core::MemoryManager& memoryManager)
+{
+    imguiSink = new(memoryManager.PersistentAllocRaw(sizeof(ImGuiSink))) ImGuiSink(&memoryManager.Persistent(), Core::AllocTag::EngineLogger);
+}
+
 void EngineLogger::Init(Utils::Logger* baseLogger)
 {
     if (!baseLogger) {
         fmt::println("Engine Logger received nullptr baseLogger");
         return;
     }
-    imguiSink = std::make_shared<ImGuiSink>();
+
     imguiSink->set_pattern("[%n] %v");
-    baseLogger->AddSink(imguiSink);
+    // sink_ptr format but no-op destructor
+    baseLogger->AddSink(spdlog::sink_ptr(imguiSink, [](spdlog::sinks::sink*) {}));
 
     auto& s = baseLogger->GetSinks();
 

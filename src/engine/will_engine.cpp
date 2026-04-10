@@ -120,7 +120,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
     });
 
 #if LOGGING_ENABLED
-    engineLogger = new(memoryManager.PersistentAllocRaw(sizeof(EngineLogger), Core::AllocTag::EngineLogger)) EngineLogger();
+    engineLogger = new(memoryManager.PersistentAllocRaw(sizeof(EngineLogger), Core::AllocTag::EngineLogger)) EngineLogger(memoryManager);
     engineLogger->Init(logger);
 #endif
 
@@ -815,8 +815,7 @@ void WillEngine::EditorImgui()
 
 #if LOGGING_ENABLED
     if (ImGui::Begin("Log")) {
-        static std::vector<LogEntry> entries;
-        engineLogger->GetImGuiSink().GetEntries(entries);
+        auto entries = engineLogger->GetImGuiSink()->GetEntries();
 
         // Level filter
         static constexpr spdlog::level::level_enum kLevels[] = {
@@ -841,7 +840,7 @@ void WillEngine::EditorImgui()
             SPDLOG_LEVEL_ERROR >= SPDLOG_ACTIVE_LEVEL,
             SPDLOG_LEVEL_CRITICAL >= SPDLOG_ACTIVE_LEVEL,
         };
-        const auto entryCount = static_cast<int32_t>(entries.size());
+        const auto entryCount = static_cast<int32_t>(entries.Size());
 
         for (int l = 0; l < kLevelCount; l++) {
             if (l > 0) ImGui::SameLine();

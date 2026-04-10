@@ -3,11 +3,13 @@
 
 #include <algorithm>
 #include <mutex>
-#include <string>
 #include <spdlog/sinks/base_sink.h>
 
 #include "log_category.h"
+#include "core/containers/fixed_vector.h"
+#include "core/containers/inline_string.h"
 #include "core/containers/ring_buffer.h"
+#include "core/containers/span.h"
 
 namespace Engine
 {
@@ -16,7 +18,7 @@ struct LogEntry
     uint64_t sequence;
     LogCategory category;
     spdlog::level::level_enum level;
-    std::string message;
+    Core::InlineString<256> message;
 };
 
 class ImGuiSink : public spdlog::sinks::base_sink<std::mutex>
@@ -27,21 +29,29 @@ class ImGuiSink : public spdlog::sinks::base_sink<std::mutex>
     static constexpr size_t WARN_CAPACITY     = 64;
     static constexpr size_t ERROR_CAPACITY    = 32;
     static constexpr size_t CRITICAL_CAPACITY = 32;
+    static constexpr size_t TOTAL_CAPACITY    = TRACE_CAPACITY + DEBUG_CAPACITY + INFO_CAPACITY
+                                              + WARN_CAPACITY + ERROR_CAPACITY + CRITICAL_CAPACITY;
 
 public:
-    // todo stop using vector
-    void GetEntries(std::vector<LogEntry>& out)
+    ImGuiSink(Core::TlsfAllocator* alloc, Core::AllocTag tag)
+        : sortedEntries(alloc, tag, TOTAL_CAPACITY)
+    {}
+
+    Core::Span<const LogEntry> GetEntries()
     {
         std::lock_guard lock(mutex_);
-        out.clear();
-        auto append = [&](auto& buf) { buf.ForEach([&](const LogEntry& e) { out.push_back(e); }); };
+        sortedEntries.Clear();
+        auto append = [&](auto& buf) { buf.ForEach([&](const LogEntry& e) { sortedEntries.PushBack(e); }); };
         append(traceEntries);
         append(debugEntries);
         append(infoEntries);
         append(warnEntries);
         append(errorEntries);
         append(criticalEntries);
-        std::sort(out.begin(), out.end(), [](const LogEntry& a, const LogEntry& b) { return a.sequence < b.sequence; });
+        std::sort(sortedEntries.begin(), sortedEntries.end(), [](const LogEntry& a, const LogEntry& b) {
+            return a.sequence < b.sequence;
+        });
+        return {sortedEntries.Data(), sortedEntries.Size()};
     }
 
     void Clear()
@@ -70,7 +80,7 @@ protected:
             }
         }
 
-        LogEntry entry{nextSequence++, cat, msg.level, fmt::to_string(formatted)};
+        LogEntry entry{nextSequence++, cat, msg.level, Core::InlineString<256>(std::string_view(formatted.data(), formatted.size()))};
 
         switch (msg.level) {
             case spdlog::level::trace:    traceEntries.Push(std::move(entry));    break;
@@ -87,13 +97,13 @@ protected:
 
 private:
     uint64_t nextSequence = 0;
-    // not thread safe? Needs mutex locks?
     Core::RingBuffer<LogEntry, TRACE_CAPACITY>    traceEntries;
     Core::RingBuffer<LogEntry, DEBUG_CAPACITY>    debugEntries;
     Core::RingBuffer<LogEntry, INFO_CAPACITY>     infoEntries;
     Core::RingBuffer<LogEntry, WARN_CAPACITY>     warnEntries;
     Core::RingBuffer<LogEntry, ERROR_CAPACITY>    errorEntries;
     Core::RingBuffer<LogEntry, CRITICAL_CAPACITY> criticalEntries;
+    Core::FixedVector<LogEntry>                   sortedEntries;
 };
 } // Engine
 
