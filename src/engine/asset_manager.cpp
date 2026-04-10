@@ -565,7 +565,7 @@ Texture* AssetManager::LoadTexture(TextureID textureId)
     texture.selfHandle = handle;
     texture.source = meta.source;
     texture.textureId = textureId;
-    texture.name = Core::InlineString<128>(meta.name);
+    texture.name = Core::InlineString(meta.name);
     texture.width = meta.width;
     texture.height = meta.height;
     texture.mipCount = meta.mipCount;

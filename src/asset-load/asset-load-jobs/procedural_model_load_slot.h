@@ -8,9 +8,9 @@
 #include <TaskScheduler.h>
 
 #include "asset-load/asset_load_types.h"
-#include <vector>
 
 #include "core/containers/inline_function.h"
+#include "core/containers/span.h"
 #include "core/containers/vector.h"
 #include "core/memory/tlsf_allocator.h"
 #include "render/shaders/model_interop.h"
@@ -87,7 +87,7 @@ private:
     Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* doneSemaphore)> _requestDispatchCallback;
     Core::InlineFunction<void(bool success, ProceduralModelSlotHandle slotHandle, UploadStagingSlotHandle uploadStagingSlotHandle)> _notifyCallback;
 
-    bool FinalizeGeometry(std::vector<Vertex>& vertices, std::vector<uint32_t>& indices);
+    bool FinalizeGeometry(Core::Span<const Vertex> vertices, Core::Span<const uint32_t> indices);
 
     bool GenerateStaircase(const Engine::StaircaseParams& p);
     bool GenerateBox(const Engine::BoxParams& p);
