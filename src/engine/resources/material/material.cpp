@@ -89,7 +89,7 @@ nlohmann::json SerializeMaterial(const Material& mat)
     return j;
 }
 
-Material DeserializeMaterial(const nlohmann::json& j, const std::filesystem::path& sourcePath)
+Material DeserializeMaterial(const nlohmann::json& j, const Core::Path& sourcePath)
 {
     Material mat{};
     mat.name = j["name"].get<Core::InlineString<128>>();

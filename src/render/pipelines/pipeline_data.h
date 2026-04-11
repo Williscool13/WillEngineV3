@@ -5,7 +5,6 @@
 #ifndef WILL_ENGINE_PIPELINE_DATA_H
 #define WILL_ENGINE_PIPELINE_DATA_H
 
-#include <filesystem>
 #include <volk.h>
 
 #include "core/containers/inline_path.h"
@@ -42,7 +41,7 @@ public:
     PipelineEntry loadingEntry{};
 
     PipelineEntry activeEntry{};
-    std::filesystem::file_time_type lastModified{};
+    uint64_t lastModified{0};
 
     PipelineEntry retiredEntry{};
     uint32_t retirementFrame{0};

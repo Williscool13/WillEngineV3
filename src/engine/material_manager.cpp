@@ -4,11 +4,11 @@
 
 #include "material_manager.h"
 
-#include <filesystem>
 #include <fstream>
 
 #include <json/nlohmann/json.hpp>
 
+#include "core/containers/vector.h"
 #include "resources/material/material_format.h"
 #include "engine/include/engine_context.h"
 #include "render/interface/render_interface.h"
@@ -210,7 +210,7 @@ void MaterialManager::UpdateMutableMaterial(MaterialID id, const Material& newMa
         memcpy(header.name, mat.name.c_str(), nameLen);
         header.name[nameLen] = '\0';
 
-        std::ofstream file(mat.sourcePath);
+        std::ofstream file(mat.sourcePath.c_str());
         WriteWMaterialHeader(file, header);
         file << SerializeMaterial(mat).dump(4);
     };
@@ -311,8 +311,8 @@ bool MaterialManager::DeleteMutableMaterial(MaterialID id)
     if (it == nullptr) { return false; }
     if (it->immutable) { return false; }
 
-    if (!it->sourcePath.empty()) {
-        std::filesystem::remove(it->sourcePath);
+    if (!it->sourcePath.IsEmpty()) {
+        Platform::DeleteSingleFile(it->sourcePath.c_str());
     }
 
     StringID sid(it->name.c_str(), it->name.Size());
@@ -333,7 +333,7 @@ void MaterialManager::CreateMaterial(std::string_view name)
     mat.props = GetDefaultMaterialProperties();
     std::uniform_real_distribution dist(0.0f, 1.0f);
     mat.props.colorFactor = {dist(mutableIdRng), dist(mutableIdRng), dist(mutableIdRng), 1.0f}; // todo
-    mat.sourcePath = matPath.c_str();
+    mat.sourcePath = matPath;
 
     WMaterialHeader header{};
     header.materialId = mat.id.id;
@@ -352,10 +352,13 @@ void MaterialManager::Scan()
 {
     bool expectedRescan = true;
     if (ctx->bShouldRescanMaterials.compare_exchange_strong(expectedRescan, false, std::memory_order::acq_rel, std::memory_order::relaxed)) {
-        for (const auto& entry : std::filesystem::recursive_directory_iterator(Platform::GetAssetPath().c_str())) {
-            if (entry.path().extension() != ".wmaterial") { continue; }
+        Core::Vector<Core::Path> paths(&ctx->memoryManager->AssetsScratch(), Core::AllocTag::AssetManager);
+        Platform::RecursiveDirectoryIterator(Platform::GetAssetPath(), paths);
 
-            std::ifstream file(entry.path());
+        for (uint32_t i = 0; i < paths.Size(); ++i) {
+            if (paths[i].Extension() != ".wmaterial") { continue; }
+
+            std::ifstream file(paths[i].c_str());
             auto header = ReadWMaterialHeader(file);
             if (!header) { continue; }
 
@@ -363,7 +366,7 @@ void MaterialManager::Scan()
             if (nameToMaterialMap.Contains(sid)) { continue; }
 
             const nlohmann::json j = nlohmann::json::parse(file);
-            Material mat = DeserializeMaterial(j, entry.path());
+            Material mat = DeserializeMaterial(j, paths[i]);
             materials[mat.id] = mat;
             nameToMaterialMap[sid] = mat.id;
         }
@@ -372,18 +375,21 @@ void MaterialManager::Scan()
 
 void MaterialManager::LoadMutableMaterials()
 {
-    for (const auto& entry : std::filesystem::recursive_directory_iterator(Platform::GetAssetPath().c_str())) {
-        if (entry.path().extension() != ".wmaterial") { continue; }
+    Core::Vector<Core::Path> paths(&ctx->memoryManager->AssetsScratch(), Core::AllocTag::AssetManager);
+    Platform::RecursiveDirectoryIterator(Platform::GetAssetPath(), paths);
 
-        std::ifstream file(entry.path());
+    for (uint32_t i = 0; i < paths.Size(); ++i) {
+        if (paths[i].Extension() != ".wmaterial") { continue; }
+
+        std::ifstream file(paths[i].c_str());
         auto header = ReadWMaterialHeader(file);
         if (!header) {
-            spdlog::warn("Skipping {} — missing or invalid wmaterial header", entry.path().string());
+            spdlog::warn("Skipping {} - missing or invalid wmaterial header", paths[i].c_str());
             continue;
         }
 
         const nlohmann::json j = nlohmann::json::parse(file);
-        Material mat = DeserializeMaterial(j, entry.path());
+        Material mat = DeserializeMaterial(j, paths[i]);
         StringID sid(mat.name.c_str(), mat.name.Size());
         materials[mat.id] = mat;
         nameToMaterialMap[sid] = mat.id;

@@ -4,11 +4,11 @@
 
 #ifndef WILL_ENGINE_MATERIALS_H
 #define WILL_ENGINE_MATERIALS_H
-#include <filesystem>
 #include <string>
 #include <json/nlohmann/json.hpp>
 
 #include "core/string_id.h"
+#include "core/containers/inline_path.h"
 #include "core/containers/inline_string.h"
 #include "core/memory/handle.h"
 #include "engine/core/material_id.h"
@@ -35,7 +35,7 @@ struct Material
     // .wmaterial related properties. Only relevant for user defined materials
     Core::InlineString<128> name;
     MaterialID id;
-    std::filesystem::path sourcePath;
+    Core::Path sourcePath;
 
     // The MEAT of the material
     MaterialProperties props;
@@ -57,7 +57,7 @@ MaterialID HashMaterial(const Material& m);
 
 nlohmann::json SerializeMaterial(const Material& mat);
 
-Material DeserializeMaterial(const nlohmann::json& j, const std::filesystem::path& sourcePath);
+Material DeserializeMaterial(const nlohmann::json& j, const Core::Path& sourcePath);
 } // Engine
 
 #endif //WILL_ENGINE_MATERIALS_H

@@ -5,6 +5,7 @@
 #include "pipeline_data.h"
 
 #include "core/containers/array.h"
+#include "platform/file_utils.h"
 #include "render/vulkan/vk_context.h"
 #include "render/vulkan/vk_helpers.h"
 #include "spdlog/spdlog.h"
@@ -61,7 +62,7 @@ bool ComputePipelineData::CreatePipeline(VulkanContext* context, VkPipelineCache
         return false;
     }
 
-    lastModified = std::filesystem::last_write_time(std::filesystem::path(shaderPath.c_str()));
+    lastModified = Platform::GetFileWriteTime(shaderPath.c_str());
     retirementFrame = 0;
     vkDestroyShaderModule(context->device, shaderModule, nullptr);
 
@@ -173,9 +174,9 @@ bool GraphicsPipelineData::CreatePipeline(VulkanContext* context, VkPipelineCach
         return false;
     }
 
-    lastModified = std::filesystem::file_time_type::min();
+    lastModified = 0;
     for (uint32_t i = 0; i < shaderStages.Size(); ++i) {
-        auto modTime = std::filesystem::last_write_time(std::filesystem::path(shaderPaths[i].c_str()));
+        uint64_t modTime = Platform::GetFileWriteTime(shaderPaths[i].c_str());
         if (modTime > lastModified) {
             lastModified = modTime;
         }

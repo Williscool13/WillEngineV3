@@ -11,6 +11,7 @@
 #include "asset-load/async_asset_load_manager.h"
 #include "core/memory/tlsf_allocator.h"
 #include "engine/logging/engine_log.h"
+#include "platform/file_utils.h"
 #include "platform/paths.h"
 #include "render/vulkan/vk_utils.h"
 
@@ -308,7 +309,7 @@ void PipelineManager::ReloadModified()
     for (auto [pipelineId, data] : computePipelines) {
         if (data.bLoading || data.retirementFrame != 0) { continue; }
 
-        auto currentTime = std::filesystem::last_write_time(std::filesystem::path(data.shaderPath.c_str()));
+        uint64_t currentTime = Platform::GetFileWriteTime(data.shaderPath.c_str());
         if (currentTime != data.lastModified) {
             LOG_INFO(Renderer, "Compute shader modified, rebuilding pipeline: {}", pipelineId.ToString());
             data.bLoading = true;
@@ -319,9 +320,9 @@ void PipelineManager::ReloadModified()
     for (auto [pipelineId, data] : graphicsPipelines) {
         if (data.bLoading || data.retirementFrame != 0) { continue; }
 
-        auto currentTime = std::filesystem::file_time_type::min();
+        uint64_t currentTime = 0;
         for (uint32_t i = 0; i < data.shaderPaths.Size(); ++i) {
-            auto modTime = std::filesystem::last_write_time(std::filesystem::path(data.shaderPaths[i].c_str()));
+            uint64_t modTime = Platform::GetFileWriteTime(data.shaderPaths[i].c_str());
             if (modTime > currentTime) {
                 currentTime = modTime;
             }

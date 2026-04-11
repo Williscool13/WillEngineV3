@@ -465,6 +465,7 @@ void WillEngine::EditorImgui()
             const Core::MemoryManager::Stats ms = memoryManager.GetStats();
             const Core::Arena::Stats ras = memoryManager.RenderArena().GetStats();
             const Core::Arena::Stats gas = memoryManager.GeneralArena().GetStats();
+            const Core::Arena::Stats pas = memoryManager.PhysicsArena().GetStats();
             const size_t totalUsed = ms.persistent.usedBytes + ms.general.usedBytes + ms.assets.usedBytes + ms.physics.usedBytes + ms.render.usedBytes;
             constexpr float kToMB = 1.0f / (1024.0f * 1024.0f);
             ImGui::SeparatorText("TLSF Allocators");
@@ -480,6 +481,7 @@ void WillEngine::EditorImgui()
             ImGui::SeparatorText("Arenas (excluded from total)");
             ImGui::Text("RenderArena:  %.3f / %.0f MB (bump)", static_cast<float>(ras.usedBytes) * kToMB, static_cast<float>(ras.totalBytes) * kToMB);
             ImGui::Text("GeneralArena: %.3f / %.0f MB (bump)", static_cast<float>(gas.usedBytes) * kToMB, static_cast<float>(gas.totalBytes) * kToMB);
+            ImGui::Text("PhysicsArena: %.3f / %.0f MB (bump)", static_cast<float>(pas.usedBytes) * kToMB, static_cast<float>(pas.totalBytes) * kToMB);
             ImGui::Text("GPU Device: %zu allocs / %.3f MB", static_cast<size_t>(ms.deviceMemory.allocationCount), static_cast<float>(ms.deviceMemory.totalBytes) * kToMB);
 
             ImGui::Spacing();
@@ -1080,8 +1082,9 @@ void WillEngine::Run()
             }
         }
 
-        // MEM: General arena reset here, move if needed
+        // MEM: General and Physics arena reset here, move if needed
         memoryManager.GeneralArena().Reset();
+        memoryManager.PhysicsArena().Reset();
     }
 }
 
