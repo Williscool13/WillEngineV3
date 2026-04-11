@@ -210,7 +210,7 @@ void BuildPortalViewFamily(Engine::EngineState* state, Core::ViewFamily& mainVie
             // todo fix this
             portalRenderView.view.previousViewData = portalRenderView.view.currentViewData;
 
-            mainViewFamily.portalViews.push_back(portalRenderView);
+            mainViewFamily.portalViews.PushBack(portalRenderView);
         }
     }
 }

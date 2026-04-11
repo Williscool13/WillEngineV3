@@ -9,6 +9,7 @@
 #include <functional>
 #include <string>
 
+#include "containers/inline_string.h"
 #include "hash/fnv_1_a.h"
 
 #ifndef PACKAGED_BUILD
@@ -91,9 +92,9 @@ inline StringID MakeConcatStringId(const char* a, size_t aLen,
     return {buf, aLen + bLen};
 }
 
-inline StringID MakeConcatStringId(const std::string& a, const char* b, size_t bLen)
+inline StringID MakeConcatStringId(const Core::InlineString<>& a, const char* b, size_t bLen)
 {
-    return MakeConcatStringId(a.c_str(), a.size(), b, bLen);
+    return MakeConcatStringId(a.c_str(), a.Size(), b, bLen);
 }
 #define SID_CONCAT(str, lit) MakeConcatStringId(str, lit, sizeof(lit) - 1)
 

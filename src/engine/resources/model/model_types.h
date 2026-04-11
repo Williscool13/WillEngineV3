@@ -4,12 +4,8 @@
 
 #ifndef WILL_ENGINE_MODEL_TYPES_H
 #define WILL_ENGINE_MODEL_TYPES_H
-#include <string>
 #include <vector>
 #include <variant>
-
-#include <glm/glm.hpp>
-#include <glm/gtc/quaternion.hpp>
 
 #include "engine/spline/spline.h"
 

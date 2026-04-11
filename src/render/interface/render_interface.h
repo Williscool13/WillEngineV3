@@ -9,6 +9,9 @@
 #include <glm/detail/type_quat.hpp>
 
 #include "core/string_id.h"
+#include "core/containers/fixed_vector.h"
+#include "core/containers/map.h"
+#include "core/containers/vector.h"
 #include "core/time/time_frame.h"
 #include "core/types/transform.h"
 #include "engine/material_manager.h"
@@ -150,31 +153,28 @@ struct GTAOConfiguration
 
 struct InstanceData
 {
-    uint32_t primitiveIndex;
-    Engine::MaterialID materialID;
-    uint32_t modelIndex;
-    uint32_t gpuMaterialIndex;
-    uint64_t stableId;
+    uint32_t primitiveIndex{};
+    Engine::MaterialID materialID{};
+    uint32_t modelIndex{};
+    uint32_t gpuMaterialIndex{};
+    uint64_t stableId{};
 };
 
 struct CustomShaderDraw
 {
+    InlineString<> prefix;
     StringID pipelineId;
 
-    std::array<uint32_t, 38> pushConstantCustomData;
-    std::vector<InstanceData> instances;
+    Array<uint32_t, 38> pushConstantCustomData;
+    /**
+     * Allocated when added to custom draw map in ViewFamily
+     */
+    Vector<InstanceData> instances;
 
     int32_t stencilValue{-1}; // if >=0 will be set with dynamic state
 
-
     // Transient data read/written by the render thread during render graph construction
     uint32_t instanceBufferOffset{0};
-};
-
-struct CustomStencilDrawBatch
-{
-    uint32_t stencilValue{0};
-    std::vector<InstanceData> instances;
 };
 
 struct DebugLine
@@ -202,41 +202,10 @@ struct DebugSphere
     float width{0.05f};
 };
 
-struct ViewFamily
-{
-    RenderView mainView{};
-    std::vector<PortalView> portalViews;
-
-    std::vector<InstanceData> mainPassInstances{256};
-    std::unordered_map<std::string, CustomShaderDraw> customShaderDraws{};
-
-    std::vector<Model> modelMatrices{256};
-    std::vector<MaterialProperties> materials{256};
-
-    int32_t skyboxIndex{-1};
-
-    ShadowConfiguration shadowConfig{};
-    DirectionalLight directionalLight{};
-    // std::vector<LightInstance> allLights;
-
-    GTAOConfiguration gtaoConfig{};
-    PostProcessConfiguration postProcessConfig{};
-
-
-    // Debugging
-    InlineString<> debugResourceName{};
-    DebugTransformationType debugTransformationType{};
-    DebugViewAspect debugViewAspect{};
-
-    std::vector<DebugLine> debugLines;
-    std::vector<DebugBox> debugBoxes;
-    std::vector<DebugSphere> debugSpheres;
-};
-
 #ifndef PACKAGED_BUILD
-#define DEBUG_ADD_LINE(container, ...) container.push_back(__VA_ARGS__)
-#define DEBUG_ADD_BOX(container, ...) container.push_back(__VA_ARGS__)
-#define DEBUG_ADD_SPHERE(container, ...) container.push_back(__VA_ARGS__)
+#define DEBUG_ADD_LINE(container, ...) container.PushBack(__VA_ARGS__)
+#define DEBUG_ADD_BOX(container, ...) container.PushBack(__VA_ARGS__)
+#define DEBUG_ADD_SPHERE(container, ...) container.PushBack(__VA_ARGS__)
 #else
 #define DEBUG_ADD_LINE(container, ...) ((void)0)
 #define DEBUG_ADD_BOX(container, ...) ((void)0)
@@ -292,18 +261,65 @@ struct ViewportResizeCommand
     uint32_t sizeY{0};
 };
 
+struct ViewFamily
+{
+    ViewFamily() = default;
+    explicit ViewFamily(TlsfAllocator& allocator);
+    ~ViewFamily() = default;
+
+
+    CustomShaderDraw& GetOrCreateCustomShaderDraw(StringID id);
+
+    // To allocate containers. Nothing else.
+    TlsfAllocator* allocator{nullptr};
+
+    RenderView mainView{};
+    FixedVector<PortalView> portalViews{};
+
+    Vector<InstanceData> mainPassInstances{};
+    Map<StringID, CustomShaderDraw> customShaderDraws{};
+
+    Vector<Model> modelMatrices{};
+    Vector<MaterialProperties> materials{};
+
+    int32_t skyboxIndex{-1};
+
+    ShadowConfiguration shadowConfig{};
+    DirectionalLight directionalLight{};
+    // std::vector<LightInstance> allLights;
+
+    GTAOConfiguration gtaoConfig{};
+    PostProcessConfiguration postProcessConfig{};
+
+    // Debugging
+    InlineString<> debugResourceName{};
+    DebugTransformationType debugTransformationType{};
+    DebugViewAspect debugViewAspect{};
+
+    Vector<DebugLine> debugLines{};
+    Vector<DebugBox> debugBoxes{};
+    Vector<DebugSphere> debugSpheres{};
+};
+
 struct FrameBuffer
 {
+    FrameBuffer() = default;
+    explicit FrameBuffer(TlsfAllocator& allocator);
+    ~FrameBuffer() = default;
+
+    // To allocate containers. Nothing else.
+    TlsfAllocator* allocator{nullptr};
+
     ViewFamily mainViewFamily{};
 
-    TimeFrame timeFrame;
+    TimeFrame timeFrame{};
     uint32_t currentFrameBuffer{};
-    std::array<uint32_t, 2> currentMousePosition{};
+    Array<uint32_t, 2> currentMousePosition{};
     SwapchainRecreateCommand swapchainRecreateCommand{};
     ViewportResizeCommand viewportResizeCommand{};
 
-    std::vector<BufferAcquireOperation> bufferAcquireOperations;
-    std::vector<ImageAcquireOperation> imageAcquireOperations;
+    Vector<BufferAcquireOperation> bufferAcquireOperations;
+    Vector<ImageAcquireOperation> imageAcquireOperations;
 
     // Readback
     uint64_t stableIdUnderCursor{0};
@@ -312,6 +328,8 @@ struct FrameBuffer
     bool bDrawImgui = false;
     bool bFreezeVisibility = false;
     bool bLogRDG = false;
+
+
 };
 } // Core
 

@@ -28,7 +28,6 @@ RenderGraph::RenderGraph(VulkanContext* context, ResourceManager* resourceManage
       textureCarryovers(&alloc, Core::AllocTag::Render),
       bufferCarryovers(&alloc, Core::AllocTag::Render)
 {
-
     for (int32_t i = 0; i < uploadArenas.Size(); ++i) {
         VkBufferCreateInfo bufferInfo = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
         bufferInfo.pNext = nullptr;
@@ -39,7 +38,9 @@ RenderGraph::RenderGraph(VulkanContext* context, ResourceManager* resourceManage
         bufferInfo.size = RDG_DEFAULT_UPLOAD_LINEAR_ALLOCATOR_SIZE;
 
         uploadArenas[i].buffer = std::move(AllocatedBuffer::CreateAllocatedBuffer(context, bufferInfo, vmaAllocInfo));
-        uploadArenas[i].buffer.SetDebugName(("rdgFrameBufferUploader_" + std::to_string(i)).c_str());
+        auto debugName = Core::InlineString<>("rdgFrameBufferUploader_");
+        debugName.Append(i);
+        uploadArenas[i].buffer.SetDebugName(debugName.c_str());
         uploadArenas[i].allocator = Core::LinearAllocator(RDG_DEFAULT_UPLOAD_LINEAR_ALLOCATOR_SIZE);
         uploadArenas[i].size = RDG_DEFAULT_UPLOAD_LINEAR_ALLOCATOR_SIZE;
 
@@ -47,7 +48,9 @@ RenderGraph::RenderGraph(VulkanContext* context, ResourceManager* resourceManage
         vmaAllocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
         vmaAllocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
         meshletCountReadbacks[i].buffer = std::move(AllocatedBuffer::CreateAllocatedBuffer(context, bufferInfo, vmaAllocInfo));
-        meshletCountReadbacks[i].buffer.SetDebugName(("rdgReadbackBuffer_" + std::to_string(i)).c_str());
+        auto readbackDebugName = Core::InlineString("rdgReadbackBuffer__");
+        readbackDebugName.Append(i);
+        meshletCountReadbacks[i].buffer.SetDebugName(readbackDebugName.c_str());
     }
 }
 
@@ -459,8 +462,8 @@ void RenderGraph::Compile(int64_t currentFrame)
         SPDLOG_INFO("=== Physical Resource Aliasing Chains ===");
         for (size_t i = 0; i < physicalResources.Size(); ++i) {
             const auto& phys = physicalResources[i];
-            if (!phys.usageChain.empty()) {
-                SPDLOG_INFO("  Phys[{}]: {}", i, phys.usageChain);
+            if (!phys.usageChain.IsEmpty()) {
+                SPDLOG_INFO("  Phys[{}]: {}", i, phys.usageChain.c_str());
             }
         }
     }
@@ -485,9 +488,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
 
         auto GetPhysical = [this](uint32_t texIndex) -> PhysicalResource& {
             return physicalResources[textures[texIndex].physicalIndex];
-        };
-
-        {
+        }; {
             ZoneScopedN("Barriers");
             for (const uint32_t texIndex : pass->colorAttachments) {
                 auto& tex = textures[texIndex];
@@ -802,9 +803,11 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 if (bDebugLogging) {
                     if (!barriers.IsEmpty() && !bufferBarriers.IsEmpty()) {
                         SPDLOG_INFO("  Inserting {} image, {} buffer barrier(s)", barriers.Size(), bufferBarriers.Size());
-                    } else if (!barriers.IsEmpty()) {
+                    }
+                    else if (!barriers.IsEmpty()) {
                         SPDLOG_INFO("  Inserting {} image barrier(s)", barriers.Size());
-                    } else {
+                    }
+                    else {
                         SPDLOG_INFO("  Inserting {} buffer barrier(s)", bufferBarriers.Size());
                     }
                 }
@@ -826,9 +829,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
             vkCmdBeginDebugUtilsLabelEXT(cmd, &label);
             pass->executeFunc(cmd);
             vkCmdEndDebugUtilsLabelEXT(cmd);
-        }
-
-        {
+        } {
             ZoneScopedN("UpdateResourceState");
             for (const uint32_t texIndex : pass->colorAttachments) {
                 auto& tex = textures[texIndex];
@@ -984,9 +985,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 phys.event.access = VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT;
             }
         }
-    }
-
-    {
+    } {
         ZoneScopedN("FinalBarriers");
         if (bDebugLogging) {
             SPDLOG_INFO("[FINAL BARRIERS]");
@@ -1134,7 +1133,8 @@ void RenderGraph::Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint
             if (bDestroyViewportAssociated && phys.bIsViewportScaled) {
                 DestroyPhysicalResource(phys);
                 physicalResources.RemoveAt(i);
-            } else if (currentFrame - phys.lastUsedFrame > maxFramesUnused) {
+            }
+            else if (currentFrame - phys.lastUsedFrame > maxFramesUnused) {
                 DestroyPhysicalResource(phys);
                 physicalResources.RemoveAt(i);
             }
@@ -1166,7 +1166,7 @@ void RenderGraph::Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint
 
             PhysicalResource& phys = physicalResources[physicalIndex];
             phys.logicalResourceIndices.PushBack(newTex->index);
-            phys.usageChain.clear();
+            phys.usageChain.Clear();
             AppendUsageChain(phys, newTex->textureId, newTex->bCanUseAliasedTexture, bDebugLogging);
             phys.bCanAlias = false;
         }
@@ -1194,7 +1194,7 @@ void RenderGraph::Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint
 
             PhysicalResource& phys = physicalResources[physicalIndex];
             phys.logicalResourceIndices.PushBack(newBuf->index);
-            phys.usageChain.clear();
+            phys.usageChain.Clear();
             AppendUsageChain(phys, newBuf->bufferId, newBuf->bCanUseAliasedBuffer, bDebugLogging);
             phys.bCanAlias = false;
         }
@@ -1300,7 +1300,7 @@ void RenderGraph::ImportTexture(StringID textureId,
 
     phys.aspect = VkHelpers::GetImageAspect(info.format);
     phys.dimensions.resourceId = textureId;
-    phys.usageChain.clear();
+    phys.usageChain.Clear();
     tex->finalLayout = finalLayout;
 }
 
@@ -1342,7 +1342,7 @@ void RenderGraph::ImportBufferNoBarrier(StringID bufferId, VkBuffer buffer, VkDe
 
     auto& phys = physicalResources[buf->physicalIndex];
     phys.dimensions.resourceId = bufferId;
-    phys.usageChain.clear();
+    phys.usageChain.Clear();
     phys.bDisableBarriers = true;
 }
 
@@ -1386,7 +1386,7 @@ void RenderGraph::ImportBuffer(StringID bufferId, VkBuffer buffer, VkDeviceAddre
     phys.event.stages = initialState.stages;
     phys.event.access = initialState.access;
     phys.dimensions.resourceId = bufferId;
-    phys.usageChain.clear();
+    phys.usageChain.Clear();
     phys.bDisableBarriers = false;
 }
 
@@ -1860,7 +1860,9 @@ void RenderGraph::DestroyPhysicalResource(PhysicalResource& resource)
 
 void RenderGraph::CreatePhysicalImage(PhysicalResource& resource, const ResourceDimensions& dim)
 {
-    resource.debugName = fmt::format("PhysicalResource{}", debugNameCounter++);
+    auto debugName = Core::InlineString<>("PhysicalImage");
+    debugName.Append(debugNameCounter++);
+    resource.debugName = debugName;
     VkImageCreateInfo imageInfo = VkHelpers::ImageCreateInfo(
         dim.format,
         {dim.width, dim.height, dim.depth},
@@ -1943,7 +1945,9 @@ void RenderGraph::CreatePhysicalImage(PhysicalResource& resource, const Resource
 
 void RenderGraph::CreatePhysicalBuffer(PhysicalResource& resource, const ResourceDimensions& dim)
 {
-    resource.debugName = fmt::format("PhysicalResource{}", debugNameCounter++);
+    auto debugName = Core::InlineString<>("PhysicalImage");
+    debugName.Append(debugNameCounter++);
+    resource.debugName = debugName;
     VkBufferCreateInfo bufferInfo = {};
     bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     bufferInfo.size = dim.bufferSize;
@@ -1967,20 +1971,19 @@ void RenderGraph::CreatePhysicalBuffer(PhysicalResource& resource, const Resourc
 #endif
 }
 
-void RenderGraph::AppendUsageChain(PhysicalResource& phys, StringID resourceId, bool canAlias, bool debugLogging)
+void RenderGraph::AppendUsageChain(PhysicalResource& phys, StringID resourceId, bool bCanAlias, bool debugLogging)
 {
 #ifndef PACKAGED_BUILD
     if (!debugLogging) return;
 
     const char* name = resourceId.ToString();
-    const std::string nameStr = name ? name : "<unresolved>";
+    const char* nameStr = name ? name : "<unresolved>";
 
-    if (phys.usageChain.empty()) {
-        phys.usageChain = canAlias ? nameStr : "[noalias]" + nameStr;
+    if (bCanAlias) {
+        phys.usageChain.Append("[noalias]");
     }
-    else {
-        phys.usageChain += "->" + nameStr;
-    }
+    phys.usageChain.Append(nameStr);
+    phys.usageChain.Append(" -> ");
 #endif
 }
 } // Render

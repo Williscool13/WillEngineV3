@@ -104,8 +104,6 @@ public:
 
     void Cleanup();
 
-    [[nodiscard]] Core::FrameBuffer& GetStagingFrameBuffer() { return stagingFrameBuffer; }
-
 private:
     void EditorImgui();
 
@@ -133,7 +131,6 @@ private: // Main Systems
 #if WILL_EDITOR
     Editor::AssetGenerator* assetGenerator{};
 #endif
-    Core::FrameBuffer stagingFrameBuffer{};
 
 private: // Subsystems
     Core::InputManager* inputManager{};

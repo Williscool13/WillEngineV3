@@ -308,11 +308,11 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
     AssetLoad::StaticModelLoadComplete complete{};
     while (assetLoadManager->TryDequeueModelComplete(complete)) {
         if (complete.bSuccess) {
-            stagingFrameBuffer.bufferAcquireOperations.insert(stagingFrameBuffer.bufferAcquireOperations.end(),
+            stagingFrameBuffer.bufferAcquireOperations.Insert(stagingFrameBuffer.bufferAcquireOperations.end(),
                                                               complete.model->bufferAcquireOps.begin(),
                                                               complete.model->bufferAcquireOps.end());
 
-            stagingFrameBuffer.imageAcquireOperations.insert(stagingFrameBuffer.imageAcquireOperations.end(),
+            stagingFrameBuffer.imageAcquireOperations.Insert(stagingFrameBuffer.imageAcquireOperations.end(),
                                                              complete.model->imageAcquireOps.begin(),
                                                              complete.model->imageAcquireOps.end());
 
@@ -334,7 +334,7 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
     AssetLoad::StaticModelLoadComplete proceduralComplete{};
     while (assetLoadManager->TryDequeueProceduralModelComplete(proceduralComplete)) {
         if (proceduralComplete.bSuccess) {
-            stagingFrameBuffer.bufferAcquireOperations.insert(stagingFrameBuffer.bufferAcquireOperations.end(),
+            stagingFrameBuffer.bufferAcquireOperations.Insert(stagingFrameBuffer.bufferAcquireOperations.end(),
                                                               proceduralComplete.model->bufferAcquireOps.begin(),
                                                               proceduralComplete.model->bufferAcquireOps.end());
 
@@ -356,7 +356,7 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
     AssetLoad::TextureLoadComplete textureComplete{};
     while (assetLoadManager->TryDequeueTextureComplete(textureComplete)) {
         if (textureComplete.bSuccess) {
-            stagingFrameBuffer.imageAcquireOperations.push_back(textureComplete.texture->acquireBarrier);
+            stagingFrameBuffer.imageAcquireOperations.PushBack(textureComplete.texture->acquireBarrier);
 
             textureComplete.texture->loadState = Texture::LoadState::Loaded;
             textureComplete.texture->acquireFrame = ctx->currentFrame;
@@ -372,7 +372,7 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
     AssetLoad::CubemapLoadComplete cubemapComplete{};
     while (assetLoadManager->TryDequeueCubemapComplete(cubemapComplete)) {
         if (cubemapComplete.bSuccess) {
-            stagingFrameBuffer.imageAcquireOperations.push_back(cubemapComplete.cubemap->acquireBarrier);
+            stagingFrameBuffer.imageAcquireOperations.PushBack(cubemapComplete.cubemap->acquireBarrier);
 
             cubemapComplete.cubemap->loadState = Render::Cubemap::LoadState::Loaded;
             LOG_TRACE(Asset, "Cubemap load succeeded: {} (bindless index: {})", cubemapComplete.cubemap->name.c_str(), static_cast<uint32_t>(cubemapComplete.cubemap->bindlessHandle.index));

@@ -22,6 +22,7 @@ namespace Engine
 {
 MaterialManager::MaterialManager(Core::MemoryManager& memoryManager, Core::EngineContext* ctx, AssetManager* assetManager)
     : ctx(ctx),
+      memoryManager(&memoryManager),
       assetManager(assetManager),
       idToEntryMap(&memoryManager.Persistent(), Core::AllocTag::AssetManager, 2 * MAX_LOADED_MATERIALS),
       materials(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_LOADED_MATERIALS),
@@ -375,7 +376,7 @@ void MaterialManager::Scan()
 
 void MaterialManager::LoadMutableMaterials()
 {
-    Core::Vector<Core::Path> paths(&ctx->memoryManager->AssetsScratch(), Core::AllocTag::AssetManager);
+    Core::Vector<Core::Path> paths(&memoryManager->AssetsScratch(), Core::AllocTag::AssetManager);
     Platform::RecursiveDirectoryIterator(Platform::GetAssetPath(), paths);
 
     for (uint32_t i = 0; i < paths.Size(); ++i) {

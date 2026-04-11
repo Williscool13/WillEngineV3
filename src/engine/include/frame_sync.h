@@ -4,7 +4,7 @@
 
 #ifndef WILL_ENGINE_FRAME_SYNC_H
 #define WILL_ENGINE_FRAME_SYNC_H
-#include <array>
+
 #include <mutex>
 
 #include <imgui/imgui_threaded_rendering.h>
@@ -16,7 +16,12 @@ namespace Core
 {
 struct FrameSync
 {
+    FrameSync() = default;
+    explicit FrameSync(MemoryManager& memoryManager);
+    ~FrameSync() = default;
     Array<FrameBuffer, FRAME_BUFFER_COUNT> frameBuffers{};
+    FrameBuffer stagingFrameBuffer{};
+
     Array<ImDrawDataSnapshot, FRAME_BUFFER_COUNT> imguiDataSnapshots{};
 
     std::atomic<uint32_t> gameFrames{3};

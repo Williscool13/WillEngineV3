@@ -98,10 +98,10 @@ RenderFamilyProperties PrepareRenderFamilyProperties(Core::ViewFamily& viewFamil
     RenderFamilyProperties renderFamilyProperties{};
     renderFamilyProperties.Reset();
     renderFamilyProperties.viewFamily = &viewFamily;
-    bool bHasGeometry = !viewFamily.mainPassInstances.empty();
+    bool bHasGeometry = !viewFamily.mainPassInstances.IsEmpty();
     if (!bHasGeometry) {
         for (const auto& [key, customDraw] : viewFamily.customShaderDraws) {
-            if (!customDraw.instances.empty()) {
+            if (!customDraw.instances.IsEmpty()) {
                 bHasGeometry = true;
                 break;
             }
@@ -113,20 +113,20 @@ RenderFamilyProperties PrepareRenderFamilyProperties(Core::ViewFamily& viewFamil
     renderFamilyProperties.bHasDeferred = _pipelineManager->IsCategoryReady(PipelineCategory::DeferredShading);
     renderFamilyProperties.bHasSkybox = viewFamily.skyboxIndex != -1 && _pipelineManager->IsCategoryReady(PipelineCategory::EnvironmentMap);
 
-    if (!viewFamily.mainPassInstances.empty()) {
+    if (!viewFamily.mainPassInstances.IsEmpty()) {
         std::ranges::sort(viewFamily.mainPassInstances, [](const Core::InstanceData& a, const Core::InstanceData& b) {
             return a.primitiveIndex < b.primitiveIndex;
         });
     }
 
 
-    _limits.highestModelBuffer = std::max(_limits.highestModelBuffer, NextPowerOfTwo(viewFamily.modelMatrices.size()));
-    _limits.highestMaterialBuffer = std::max(_limits.highestMaterialBuffer, NextPowerOfTwo(viewFamily.materials.size()));
+    _limits.highestModelBuffer = std::max(_limits.highestModelBuffer, NextPowerOfTwo(viewFamily.modelMatrices.Size()));
+    _limits.highestMaterialBuffer = std::max(_limits.highestMaterialBuffer, NextPowerOfTwo(viewFamily.materials.Size()));
 
 
-    uint32_t totalInstanceCountThisFrame = viewFamily.mainPassInstances.size();
+    uint32_t totalInstanceCountThisFrame = viewFamily.mainPassInstances.Size();
     for (const auto& [key, customDraw] : viewFamily.customShaderDraws) {
-        totalInstanceCountThisFrame += customDraw.instances.size();
+        totalInstanceCountThisFrame += customDraw.instances.Size();
     }
     _limits.highestInstanceBuffer = std::max(_limits.highestInstanceBuffer, NextPowerOfTwo(totalInstanceCountThisFrame));
     _limits.highestMeshletCount = std::max(_limits.highestMeshletCount, NextPowerOfTwo(readbackData->meshletCount));

@@ -44,6 +44,7 @@ add_library(engine STATIC
         compression/compression.h
         spline/spline.cpp
         core/hash.h
+        include/frame_sync.cpp
 )
 
 target_include_directories(engine PRIVATE

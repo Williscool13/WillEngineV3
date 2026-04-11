@@ -66,6 +66,14 @@ struct InlineString
         return Append(other.buf, other.len);
     }
 
+    bool Append(int32_t value)
+    {
+        char tmp[24];
+        int written = snprintf(tmp, sizeof(tmp), "%d", value);
+        if (written <= 0) { return false; }
+        return Append(tmp, static_cast<size_t>(written));
+    }
+
     bool Append(const char* str, size_t strLen)
     {
         if (len + strLen >= N) {

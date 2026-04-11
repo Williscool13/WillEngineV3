@@ -265,7 +265,8 @@ void RenderPrepareTransforms(Core::EngineContext* ctx, Engine::EngineState* stat
         float alpha = state->physicsInterpolationAlpha;
         glm::vec3 interpPos = glm::mix(physics.previousPosition, transform.translation, alpha);
         glm::quat interpRot = glm::slerp(physics.previousRotation, transform.rotation, alpha);
-        renderTransform.modelMatrix = glm::translate(glm::mat4(1.0f), interpPos) * glm::mat4_cast(interpRot) * glm::scale(glm::mat4(1.0f), transform.scale) * glm::translate(glm::mat4(1.0f), renderTransform.renderOffset);
+        renderTransform.modelMatrix = glm::translate(glm::mat4(1.0f), interpPos) * glm::mat4_cast(interpRot) * glm::scale(glm::mat4(1.0f), transform.scale) * glm::translate(
+                                          glm::mat4(1.0f), renderTransform.renderOffset);
     }
 }
 
@@ -287,8 +288,8 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::EngineState* state, Cor
         for (auto [entity, runtime, renderable, renderTransform] : view.each()) {
             if (runtime.primitives.IsEmpty()) { continue; }
             if (renderable.modelFlags.x == 0.0f) { continue; }
-            auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.size());
-            frameBuffer->mainViewFamily.modelMatrices.push_back({renderTransform.modelMatrix, renderTransform.previousMatrix});
+            auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.Size());
+            frameBuffer->mainViewFamily.modelMatrices.PushBack({renderTransform.modelMatrix, renderTransform.previousMatrix});
 
             uint64_t stableId = 1234567890;
             if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
@@ -297,7 +298,7 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::EngineState* state, Cor
 
             for (size_t i = 0; i < runtime.primitives.Size(); ++i) {
                 auto& prim = runtime.primitives[i];
-                frameBuffer->mainViewFamily.mainPassInstances.push_back({
+                frameBuffer->mainViewFamily.mainPassInstances.PushBack({
                     .primitiveIndex = prim.primitiveIndex,
                     .materialID = prim.materialID,
                     .modelIndex = modelIndex,
@@ -313,19 +314,20 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::EngineState* state, Cor
         auto portalView = state->registry.view<Component::PortalPlaneTag, Component::MeshRuntime, Component::RenderTransformComponent>();
 
         if (portalView.size_hint() > 0) {
-            auto& portalDraw = frameBuffer->mainViewFamily.customShaderDraws["portal_rendering"];
-            if (portalDraw.instances.empty()) {
-                portalDraw.pipelineId = SID("portal_rendering");
-                portalDraw.stencilValue = 1;
-            }
+            auto id = SID("portal_rendering");
+            Core::CustomShaderDraw& portalDraw = frameBuffer->mainViewFamily.GetOrCreateCustomShaderDraw(id);
+            portalDraw.prefix = Core::InlineString("portal_render");
+            portalDraw.pipelineId = id;
+            portalDraw.stencilValue = 1;
+
 
             for (auto [entity, runtime, renderTransform] : portalView.each()) {
-                auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.size());
-                frameBuffer->mainViewFamily.modelMatrices.push_back({renderTransform.modelMatrix, renderTransform.previousMatrix});
+                auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.Size());
+                frameBuffer->mainViewFamily.modelMatrices.PushBack({renderTransform.modelMatrix, renderTransform.previousMatrix});
 
                 for (size_t i = 0; i < runtime.primitives.Size(); ++i) {
                     auto& prim = runtime.primitives[i];
-                    portalDraw.instances.push_back({
+                    portalDraw.instances.PushBack({
                         .primitiveIndex = prim.primitiveIndex,
                         .materialID = prim.materialID,
                         .modelIndex = modelIndex
@@ -341,20 +343,20 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::EngineState* state, Cor
         auto cubemapView = state->registry.view<Component::CubemapVisualizeTag, Component::MeshRuntime, Component::RenderTransformComponent>();
 
         for (auto [entity, runtime, renderTransform] : cubemapView.each()) {
-            auto& cubemapVis = frameBuffer->mainViewFamily.customShaderDraws["cubemap_visualize"];
-            if (cubemapVis.instances.empty()) {
-                cubemapVis.pipelineId = SID("cubemap_visualize");
-                cubemapVis.pushConstantCustomData[0] = 0;
-                cubemapVis.pushConstantCustomData[1] = ASSET_SAMPLER_BINDLESS_INDEX;
-                cubemapVis.pushConstantCustomData[2] = 0;
-            }
+            auto id = SID("cubemap_visualize");
+            Core::CustomShaderDraw& cubemapVis = frameBuffer->mainViewFamily.GetOrCreateCustomShaderDraw(id);
+            cubemapVis.prefix = Core::InlineString("cubemap_vis");
+            cubemapVis.pipelineId = id;
+            cubemapVis.pushConstantCustomData[0] = 0;
+            cubemapVis.pushConstantCustomData[1] = ASSET_SAMPLER_BINDLESS_INDEX;
+            cubemapVis.pushConstantCustomData[2] = 0;
 
-            auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.size());
-            frameBuffer->mainViewFamily.modelMatrices.push_back({renderTransform.modelMatrix, renderTransform.previousMatrix});
+            auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.Size());
+            frameBuffer->mainViewFamily.modelMatrices.PushBack({renderTransform.modelMatrix, renderTransform.previousMatrix});
 
             for (size_t i = 0; i < runtime.primitives.Size(); ++i) {
                 auto& prim = runtime.primitives[i];
-                cubemapVis.instances.push_back({
+                cubemapVis.instances.PushBack({
                     .primitiveIndex = prim.primitiveIndex,
                     .materialID = prim.materialID,
                     .modelIndex = modelIndex
@@ -372,14 +374,14 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::EngineState* state, Cor
             if (runtime.primitives.IsEmpty()) { continue; }
             if (renderable.modelFlags.x == 0.0f) { continue; }
 
-            auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.size());
-            frameBuffer->mainViewFamily.modelMatrices.push_back({renderTransform.modelMatrix, renderTransform.previousMatrix});
+            auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.Size());
+            frameBuffer->mainViewFamily.modelMatrices.PushBack({renderTransform.modelMatrix, renderTransform.previousMatrix});
 
             uint64_t stableId = 1234567890;
             if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
                 stableId = stable->id.id;
             }
-            frameBuffer->mainViewFamily.mainPassInstances.push_back({
+            frameBuffer->mainViewFamily.mainPassInstances.PushBack({
                 .primitiveIndex = runtime.primitives[0].primitiveIndex,
                 .materialID = runtime.primitives[0].materialID,
                 .modelIndex = modelIndex,
@@ -396,15 +398,15 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::EngineState* state, Cor
             if (runtime.primitives.IsEmpty()) { continue; }
             if (renderable.modelFlags.x == 0.0f) { continue; }
 
-            auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.size());
-            frameBuffer->mainViewFamily.modelMatrices.push_back({renderTransform.modelMatrix, renderTransform.previousMatrix});
+            auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.Size());
+            frameBuffer->mainViewFamily.modelMatrices.PushBack({renderTransform.modelMatrix, renderTransform.previousMatrix});
 
             uint64_t stableId = 1234567890;
             if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
                 stableId = stable->id.id;
             }
 
-            frameBuffer->mainViewFamily.mainPassInstances.push_back({
+            frameBuffer->mainViewFamily.mainPassInstances.PushBack({
                 .primitiveIndex = runtime.primitives[0].primitiveIndex,
                 .materialID = runtime.primitives[0].materialID,
                 .modelIndex = modelIndex,
@@ -421,14 +423,14 @@ void GatherRenderables(Core::EngineContext* ctx, Engine::EngineState* state, Cor
             instance.gpuMaterialIndex = materialManager->GetMaterialIndex(instance.materialID);
         }
 
-        for (auto& customDraw : frameBuffer->mainViewFamily.customShaderDraws) {
-            for (auto& instance : customDraw.second.instances) {
+        for (const auto& customDraw : frameBuffer->mainViewFamily.customShaderDraws) {
+            for (auto& instance : customDraw.value.instances) {
                 instance.gpuMaterialIndex = materialManager->GetMaterialIndex(instance.materialID);
             }
         }
     }
 
-    frameBuffer->mainViewFamily.materials.resize(Render::BINDLESS_MATERIAL_BUFFER_COUNT);
+    frameBuffer->mainViewFamily.materials.Resize(Render::BINDLESS_MATERIAL_BUFFER_COUNT);
     for (const auto& [matID, slotIndex] : materialManager->GetIdToEntryMap()) {
         frameBuffer->mainViewFamily.materials[slotIndex] = materialManager->GetProperties(matID);
     }

@@ -153,18 +153,18 @@ GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::EngineState* state)
 
 GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
-    frameBuffer->mainViewFamily.modelMatrices.clear();
-    frameBuffer->mainViewFamily.mainPassInstances.clear();
-    for (Core::CustomShaderDraw& draw : frameBuffer->mainViewFamily.customShaderDraws | std::views::values) {
-        draw.instances.clear();
-        draw.instanceBufferOffset = 0;
+    frameBuffer->mainViewFamily.modelMatrices.Clear();
+    frameBuffer->mainViewFamily.mainPassInstances.Clear();
+    for (const auto& pair : frameBuffer->mainViewFamily.customShaderDraws) {
+        pair.value.instances.Clear();
+        pair.value.instanceBufferOffset = 0;
     }
-    frameBuffer->mainViewFamily.materials.clear();
-    frameBuffer->mainViewFamily.portalViews.clear();
+    frameBuffer->mainViewFamily.materials.Clear();
+    frameBuffer->mainViewFamily.portalViews.Clear();
 #ifndef PACKAGED_BUILD
-    frameBuffer->mainViewFamily.debugLines.clear();
-    frameBuffer->mainViewFamily.debugBoxes.clear();
-    frameBuffer->mainViewFamily.debugSpheres.clear();
+    frameBuffer->mainViewFamily.debugLines.Clear();
+    frameBuffer->mainViewFamily.debugBoxes.Clear();
+    frameBuffer->mainViewFamily.debugSpheres.Clear();
 #endif
 
     Game::BuildViewFamily(state, frameBuffer->mainViewFamily);

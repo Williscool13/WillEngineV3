@@ -177,7 +177,7 @@ private:
 
     void LogBufferBarrier(StringID bufferId, VkAccessFlags2 access) const;
 
-    static void AppendUsageChain(PhysicalResource& phys, StringID resourceId, bool canAlias, bool debugLogging);
+    static void AppendUsageChain(PhysicalResource& phys, StringID resourceId, bool bCanAlias, bool debugLogging);
 };
 } // Render
 

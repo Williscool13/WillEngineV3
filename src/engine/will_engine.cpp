@@ -200,7 +200,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
     {
         ZoneScopedN("CreateRenderThread");
         ImGui::SetAllocatorFunctions(ImGuiAlloc, ImGuiFree, &memoryManager);
-        engineRenderSynchronization = new(memoryManager.PersistentAllocRaw(sizeof(Core::FrameSync), Core::AllocTag::FrameSync)) Core::FrameSync();
+        engineRenderSynchronization = new(memoryManager.PersistentAllocRaw(sizeof(Core::FrameSync), Core::AllocTag::FrameSync)) Core::FrameSync(memoryManager);
         renderThread = new(memoryManager.PersistentAllocRaw(sizeof(Render::RenderThread), Core::AllocTag::RenderThread)) Render::RenderThread(memoryManager, engineRenderSynchronization, scheduler, window, w, h);
     }
 
@@ -964,7 +964,7 @@ void WillEngine::Run()
 #endif
         shaderWatcher.Poll();
 
-        ResolveLoadResult loadCounts = assetManager->ResolveLoads(stagingFrameBuffer);
+        ResolveLoadResult loadCounts = assetManager->ResolveLoads(engineRenderSynchronization->stagingFrameBuffer);
         assetManager->ResolveUnloads();
 #if WILL_EDITOR
         materialManager->Scan();
@@ -1001,27 +1001,27 @@ void WillEngine::Run()
 
                 Core::FrameBuffer& currentFrameBuffer = engineRenderSynchronization->frameBuffers[frameBufferIndex];
                 engineContext->lastKnownStableIdUnderCursor = currentFrameBuffer.stableIdUnderCursor;
-                stagingFrameBuffer.currentFrameBuffer = frameBufferIndex;
-                stagingFrameBuffer.bFreezeVisibility = bFreezeVisibility;
-                stagingFrameBuffer.bLogRDG = bLogRDG;
-                stagingFrameBuffer.bDrawImgui = bDrawImgui;
+                engineRenderSynchronization->stagingFrameBuffer.currentFrameBuffer = frameBufferIndex;
+                engineRenderSynchronization->stagingFrameBuffer.bFreezeVisibility = bFreezeVisibility;
+                engineRenderSynchronization->stagingFrameBuffer.bLogRDG = bLogRDG;
+                engineRenderSynchronization->stagingFrameBuffer.bDrawImgui = bDrawImgui;
 
                 //
                 {
                     ZoneScopedN("SwapchainRecreate");
-                    stagingFrameBuffer.swapchainRecreateCommand.bIsMinimized = bMinimized;
+                    engineRenderSynchronization->stagingFrameBuffer.swapchainRecreateCommand.bIsMinimized = bMinimized;
                     if (bRequireSwapchainRecreate) {
-                        stagingFrameBuffer.swapchainRecreateCommand.bEngineCommandsRecreate = true;
+                        engineRenderSynchronization->stagingFrameBuffer.swapchainRecreateCommand.bEngineCommandsRecreate = true;
 
                         int32_t w;
                         int32_t h;
                         SDL_GetWindowSize(window, &w, &h);
-                        stagingFrameBuffer.swapchainRecreateCommand.windowWidth = w;
-                        stagingFrameBuffer.swapchainRecreateCommand.windowHeight = h;
+                        engineRenderSynchronization->stagingFrameBuffer.swapchainRecreateCommand.windowWidth = w;
+                        engineRenderSynchronization->stagingFrameBuffer.swapchainRecreateCommand.windowHeight = h;
                         bRequireSwapchainRecreate = false;
                     }
                     else {
-                        stagingFrameBuffer.swapchainRecreateCommand.bEngineCommandsRecreate = false;
+                        engineRenderSynchronization->stagingFrameBuffer.swapchainRecreateCommand.bEngineCommandsRecreate = false;
                     }
                 }
 
@@ -1038,7 +1038,7 @@ void WillEngine::Run()
                 // Viewport
                 {
                     if (bRequireViewportRecreate) {
-                        stagingFrameBuffer.viewportResizeCommand = {
+                        engineRenderSynchronization->stagingFrameBuffer.viewportResizeCommand = {
                             true,
                             engineContext->windowContext.viewportOffsetX,
                             engineContext->windowContext.viewportOffsetY,
@@ -1048,7 +1048,7 @@ void WillEngine::Run()
                         bRequireViewportRecreate = false;
                     }
                     else {
-                        stagingFrameBuffer.viewportResizeCommand.bEngineCommandsResize = false;
+                        engineRenderSynchronization->stagingFrameBuffer.viewportResizeCommand.bEngineCommandsResize = false;
                     }
                 }
 
@@ -1058,20 +1058,20 @@ void WillEngine::Run()
                     engineState->inputFrame->mousePositionAbsolute.y - engineContext->windowContext.viewportOffsetY
                 };
                 mousePos.y = engineContext->windowContext.viewportHeight - 1 - mousePos.y;
-                stagingFrameBuffer.currentMousePosition = {(mousePos.x), (mousePos.y)};
+                engineRenderSynchronization->stagingFrameBuffer.currentMousePosition = {(mousePos.x), (mousePos.y)};
                 //
                 {
                     ZoneScopedN("GamePrepareFrame");
-                    gameFunctions.gamePrepareFrame(engineContext, engineState, &stagingFrameBuffer);
+                    gameFunctions.gamePrepareFrame(engineContext, engineState, &engineRenderSynchronization->stagingFrameBuffer);
                 }
 
                 //
                 {
                     ZoneScopedN("SwapAndPrepare");
-                    std::swap(currentFrameBuffer, stagingFrameBuffer);
-                    stagingFrameBuffer.timeFrame = timeManager->GetTime();
-                    stagingFrameBuffer.bufferAcquireOperations.clear();
-                    stagingFrameBuffer.imageAcquireOperations.clear();
+                    std::swap(currentFrameBuffer, engineRenderSynchronization->stagingFrameBuffer);
+                    engineRenderSynchronization->stagingFrameBuffer.timeFrame = timeManager->GetTime();
+                    engineRenderSynchronization->stagingFrameBuffer.bufferAcquireOperations.Clear();
+                    engineRenderSynchronization->stagingFrameBuffer.imageAcquireOperations.Clear();
                     PrepareImgui(frameBufferIndex);
                 }
 

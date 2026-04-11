@@ -7,6 +7,7 @@
 #include <string>
 
 #include "core/string_id.h"
+#include "core/containers/inline_string.h"
 
 namespace Render
 {
@@ -15,7 +16,7 @@ class RenderGraph;
 
 struct InstancedGeometryPassConfig
 {
-    std::string prefix;
+    Core::InlineString<> prefix;
     uint32_t instanceCount{0};
     uint32_t instanceBufferOffset{0};
     uint32_t visibleMeshletUpperBound{128};

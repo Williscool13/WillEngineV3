@@ -11,6 +11,7 @@
 #include <vulkan/vk_enum_string_helper.h>
 
 #include "core/containers/array.h"
+#include "core/containers/inline_string.h"
 #include "core/memory/handle.h"
 #include "core/containers/inline_vector.h"
 #include "core/memory/linear_allocator.h"
@@ -139,8 +140,8 @@ struct ResourceDimensions
 
 struct PhysicalResource
 {
-    std::string debugName{};
-    std::string usageChain{};
+    Core::InlineString<> debugName{};
+    Core::InlineString<1024> usageChain{};
 
     ResourceDimensions dimensions;
     PipelineEvent event;

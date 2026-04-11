@@ -312,7 +312,9 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
     //
     {
         ZoneScopedN("BindDescriptorBuffers");
-        Core::Array<VkDescriptorBufferBindingInfoEXT, 2> bindings{resourceManager->bindlessSamplerTextureDescriptorBuffer.GetBindingInfo(), resourceManager->bindlessRDGTransientDescriptorBuffer.GetBindingInfo()};
+        Core::Array<VkDescriptorBufferBindingInfoEXT, 2> bindings{
+            resourceManager->bindlessSamplerTextureDescriptorBuffer.GetBindingInfo(), resourceManager->bindlessRDGTransientDescriptorBuffer.GetBindingInfo()
+        };
         Core::Array<uint32_t, 2> indices{0u, 1u};
         Core::Array<VkDeviceSize, 2> offsets{0, 0};
         vkCmdBindDescriptorBuffersEXT(cmd, bindings.Size(), bindings.Data());
@@ -428,7 +430,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 SetupSkyboxRendering(*renderGraph, viewFamily, renderExtent, targets, 0);
             }
 
-            bool bHasPortalView = !viewFamily.portalViews.empty();
+            bool bHasPortalView = !viewFamily.portalViews.IsEmpty();
             if (bHasPortalView) {
                 renderGraph->CreateTexture(portalTargets.albedo, TextureInfo{GBUFFER_ALBEDO_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
                 renderGraph->CreateTexture(portalTargets.normal, TextureInfo{GBUFFER_NORMAL_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
@@ -832,17 +834,15 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
     return {SUCCESS, swapchainImageIndex};
 }
 
-void RenderThread::ProcessAcquisitions(VkCommandBuffer cmd,
-                                       const std::vector<Core::BufferAcquireOperation>& bufferAcquireOperations,
-                                       const std::vector<Core::ImageAcquireOperation>& imageAcquireOperations)
+void RenderThread::ProcessAcquisitions(VkCommandBuffer cmd, Core::Span<Core::BufferAcquireOperation> bufferAcquireOperations, Core::Span<Core::ImageAcquireOperation> imageAcquireOperations)
 {
     ZoneScoped;
-    if (bufferAcquireOperations.empty() && imageAcquireOperations.empty()) {
+    if (bufferAcquireOperations.IsEmpty() && imageAcquireOperations.IsEmpty()) {
         return;
     }
 
     tempBufferBarriers.Clear();
-    tempBufferBarriers.Reserve(bufferAcquireOperations.size());
+    tempBufferBarriers.Reserve(bufferAcquireOperations.Size());
     for (const auto& op : bufferAcquireOperations) {
         VkBufferMemoryBarrier2 barrier{};
         barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
@@ -860,7 +860,7 @@ void RenderThread::ProcessAcquisitions(VkCommandBuffer cmd,
     }
 
     tempImageBarriers.Clear();
-    tempImageBarriers.Reserve(imageAcquireOperations.size());
+    tempImageBarriers.Reserve(imageAcquireOperations.Size());
     for (const auto& op : imageAcquireOperations) {
         VkImageMemoryBarrier2 barrier{};
         barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
@@ -1192,7 +1192,7 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
     memcpy(sceneDataUploadAllocation.ptr, &sceneData, sizeof(SceneData));
     // Portal Scene Data
     UploadAllocation portalSceneDataUploadAllocation{};
-    bool bHasPortal = !viewFamily.portalViews.empty();
+    bool bHasPortal = !viewFamily.portalViews.IsEmpty();
     if (bHasPortal) {
         SceneData portalSceneData = GenerateSceneData(viewFamily.portalViews[0].view, viewFamily.postProcessConfig, renderExtent, frameNumber, renderDeltaTime);
         portalSceneData.clipPlane = glm::vec4(viewFamily.portalViews[0].exitPortalNormal,
@@ -1320,17 +1320,17 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
 
 void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties) const
 {
-    size_t totalInstanceCount = viewFamily.mainPassInstances.size();
+    size_t totalInstanceCount = viewFamily.mainPassInstances.Size();
 
-    for (auto& [key, customDraw] : viewFamily.customShaderDraws) {
-        customDraw.instanceBufferOffset = static_cast<uint32_t>(totalInstanceCount * sizeof(Instance));
-        totalInstanceCount += customDraw.instances.size();
+    for (const auto& pair : viewFamily.customShaderDraws) {
+        pair.value.instanceBufferOffset = static_cast<uint32_t>(totalInstanceCount * sizeof(Instance));
+        totalInstanceCount += pair.value.instances.Size();
     }
 
     UploadAllocation instanceUpload = renderGraph->AllocateTransient(totalInstanceCount * sizeof(Instance));
     auto* instanceBuffer = static_cast<Instance*>(instanceUpload.ptr);
 
-    for (size_t i = 0; i < viewFamily.mainPassInstances.size(); ++i) {
+    for (size_t i = 0; i < viewFamily.mainPassInstances.Size(); ++i) {
         auto& inst = viewFamily.mainPassInstances[i];
         instanceBuffer[i] = {
             .primitiveIndex = inst.primitiveIndex,
@@ -1340,9 +1340,9 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
         };
     }
 
-    for (auto& [key, customDraw] : viewFamily.customShaderDraws) {
+    for (const auto& [key, customDraw] : viewFamily.customShaderDraws) {
         size_t startIndex = customDraw.instanceBufferOffset / sizeof(Instance);
-        for (size_t i = 0; i < customDraw.instances.size(); ++i) {
+        for (size_t i = 0; i < customDraw.instances.Size(); ++i) {
             auto& inst = customDraw.instances[i];
             instanceBuffer[startIndex + i] = {
                 .primitiveIndex = inst.primitiveIndex,
@@ -1377,16 +1377,16 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
     }
 
 
-    if (!viewFamily.modelMatrices.empty()) {
+    if (!viewFamily.modelMatrices.IsEmpty()) {
         renderGraph->CreateBuffer(SID("model_buffer"), renderFamilyProperties.modelBufferSize, false);
-        UploadAllocation modelUpload = renderGraph->AllocateTransient(viewFamily.modelMatrices.size() * sizeof(Model));
-        memcpy(modelUpload.ptr, viewFamily.modelMatrices.data(), viewFamily.modelMatrices.size() * sizeof(Model));
+        UploadAllocation modelUpload = renderGraph->AllocateTransient(viewFamily.modelMatrices.Size() * sizeof(Model));
+        memcpy(modelUpload.ptr, viewFamily.modelMatrices.Data(), viewFamily.modelMatrices.Size() * sizeof(Model));
 
         RenderPass& uploadModelMatricesPass = renderGraph->AddPass(SID("Upload Model Matrices"), VK_PIPELINE_STAGE_2_COPY_BIT);
         uploadModelMatricesPass.WriteTransferBuffer(SID("model_buffer"));
         uploadModelMatricesPass.Execute([&,
                 modelOffset = modelUpload.offset,
-                modelSize = viewFamily.modelMatrices.size() * sizeof(Model)](VkCommandBuffer cmd) {
+                modelSize = viewFamily.modelMatrices.Size() * sizeof(Model)](VkCommandBuffer cmd) {
                 VkBufferCopy2 copy{
                     .sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
                     .srcOffset = modelOffset,
@@ -1405,16 +1405,16 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
             });
     }
 
-    if (!viewFamily.materials.empty()) {
+    if (!viewFamily.materials.IsEmpty()) {
         renderGraph->CreateBuffer(SID("material_buffer"), renderFamilyProperties.materialBufferSize, false);
-        UploadAllocation materialUpload = renderGraph->AllocateTransient(viewFamily.materials.size() * sizeof(MaterialProperties));
-        memcpy(materialUpload.ptr, viewFamily.materials.data(), viewFamily.materials.size() * sizeof(MaterialProperties));
+        UploadAllocation materialUpload = renderGraph->AllocateTransient(viewFamily.materials.Size() * sizeof(MaterialProperties));
+        memcpy(materialUpload.ptr, viewFamily.materials.Data(), viewFamily.materials.Size() * sizeof(MaterialProperties));
 
         RenderPass& uploadMaterialsPass = renderGraph->AddPass(SID("Upload Materials"), VK_PIPELINE_STAGE_2_COPY_BIT);
         uploadMaterialsPass.WriteTransferBuffer(SID("material_buffer"));
         uploadMaterialsPass.Execute([&,
                 materialOffset = materialUpload.offset,
-                materialSize = viewFamily.materials.size() * sizeof(MaterialProperties)](VkCommandBuffer cmd) {
+                materialSize = viewFamily.materials.Size() * sizeof(MaterialProperties)](VkCommandBuffer cmd) {
                 VkBufferCopy2 copy{
                     .sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
                     .srcOffset = materialOffset,
@@ -1462,10 +1462,10 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFami
                             false);
 
         // Main Draw
-        if (!viewFamily.mainPassInstances.empty()) {
+        if (!viewFamily.mainPassInstances.IsEmpty()) {
             InstancedGeometryPassConfig mainConfig{
-                .prefix = "main_shadow",
-                .instanceCount = static_cast<uint32_t>(viewFamily.mainPassInstances.size()),
+                .prefix = Core::InlineString("main_shadow"),
+                .instanceCount = static_cast<uint32_t>(viewFamily.mainPassInstances.Size()),
                 .instanceBufferOffset = 0,
                 .visibleMeshletUpperBound = renderFamilyProperties.visibleMeshletUpperBound,
 
@@ -1666,10 +1666,10 @@ void RenderThread::SetupGeometryPasses(RenderGraph& graph, const Core::ViewFamil
 
 
     // Main Draw
-    if (!viewFamily.mainPassInstances.empty()) {
+    if (!viewFamily.mainPassInstances.IsEmpty()) {
         InstancedGeometryPassConfig mainConfig{
-            .prefix = "main",
-            .instanceCount = static_cast<uint32_t>(viewFamily.mainPassInstances.size()),
+            .prefix = Core::InlineString("main"),
+            .instanceCount = static_cast<uint32_t>(viewFamily.mainPassInstances.Size()),
             .instanceBufferOffset = 0,
             .visibleMeshletUpperBound = renderFamilyProperties.visibleMeshletUpperBound,
 
@@ -1762,9 +1762,9 @@ void RenderThread::SetupGeometryPasses(RenderGraph& graph, const Core::ViewFamil
 
     for (const auto& customDraw : viewFamily.customShaderDraws) {
         InstancedGeometryPassConfig customConfig{
-            .prefix = customDraw.first,
-            .instanceCount = static_cast<uint32_t>(customDraw.second.instances.size()),
-            .instanceBufferOffset = customDraw.second.instanceBufferOffset,
+            .prefix = customDraw.value.prefix,
+            .instanceCount = static_cast<uint32_t>(customDraw.value.instances.Size()),
+            .instanceBufferOffset = customDraw.value.instanceBufferOffset,
             .visibleMeshletUpperBound = renderFamilyProperties.visibleMeshletUpperBound,
             .instanceMeshletOffsetsBufferSize = renderFamilyProperties.instanceMeshletOffsetsBufferSize,
             .level1SumsBufferSize = renderFamilyProperties.level1SumsBufferSize,
@@ -1784,8 +1784,8 @@ void RenderThread::SetupGeometryPasses(RenderGraph& graph, const Core::ViewFamil
 
         InstancedGeometryPassOutputs customOutputs = SetupInstancedGeometryPass(graph, customConfig, pipelineManager, sceneIndex);
 
-        Core::InlineString<128> customDrawName;
-        customDrawName.len = snprintf(customDrawName.buf, 128, "Custom Draw %s", customDraw.first.c_str());
+        Core::InlineString<> customDrawName = Core::InlineString("Custom Draw ");
+        customDrawName.Append(customDraw.value.prefix);
         StringID customDrawId = StringID(customDrawName.c_str(), customDrawName.Size());
         RenderPass& customDrawPass = graph.AddPass(customDrawId, VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
         customDrawPass.WriteColorAttachment(targets.albedo);
@@ -1802,7 +1802,8 @@ void RenderThread::SetupGeometryPasses(RenderGraph& graph, const Core::ViewFamil
         customDrawPass.ReadBuffer(customOutputs.visibleMeshlets);
         customDrawPass.ReadIndirectBuffer(customOutputs.compactedDispatchArgs);
         customDrawPass.Execute(
-            [&, customOutputs, customDrawData = &customDraw.second, sceneIndex, width = renderExtent[0], height = renderExtent[1], instanceBufferOffset = customDraw.second.instanceBufferOffset](VkCommandBuffer cmd) {
+            [&, customOutputs, customDrawData = &customDraw.value, sceneIndex, width = renderExtent[0], height = renderExtent[1], instanceBufferOffset = customDraw.value.instanceBufferOffset
+            ](VkCommandBuffer cmd) {
                 VkViewport viewport = VkHelpers::GenerateViewport(width, height);
                 vkCmdSetViewport(cmd, 0, 1, &viewport);
                 VkRect2D scissor = VkHelpers::GenerateScissor(width, height);
@@ -1838,7 +1839,7 @@ void RenderThread::SetupGeometryPasses(RenderGraph& graph, const Core::ViewFamil
                     .compactedDispatchBuffer = graph.GetBufferAddress(customOutputs.compactedDispatchArgs),
                     .sceneDataIndex = sceneIndex,
                 };
-                memcpy(pushConstants.customData, customDrawData->pushConstantCustomData.data(), sizeof(pushConstants.customData));
+                memcpy(pushConstants.customData, customDrawData->pushConstantCustomData.Data(), sizeof(pushConstants.customData));
 
                 const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(customDrawData->pipelineId);
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineEntry->pipeline);
@@ -2664,9 +2665,9 @@ void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& 
 #ifndef PACKAGED_BUILD
     // Worst-case segment counts for buffer allocation
     size_t totalSegments = 0;
-    totalSegments += viewFamily.debugLines.size(); // 1 segment per line
-    totalSegments += viewFamily.debugBoxes.size() * 12; // 12 edges per box
-    totalSegments += viewFamily.debugSpheres.size() * 96; // 32 segs * 3 circles (max LOD)
+    totalSegments += viewFamily.debugLines.Size(); // 1 segment per line
+    totalSegments += viewFamily.debugBoxes.Size() * 12; // 12 edges per box
+    totalSegments += viewFamily.debugSpheres.Size() * 96; // 32 segs * 3 circles (max LOD)
 
     if (totalSegments == 0) {
         return;

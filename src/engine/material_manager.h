@@ -84,6 +84,7 @@ public:
 
 private:
     Core::EngineContext* ctx;
+    Core::MemoryManager* memoryManager;
     AssetManager* assetManager;
 
     MaterialID defaultMaterial{MaterialID::INVALID};
