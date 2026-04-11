@@ -7,12 +7,14 @@
 
 #ifdef JPH_DEBUG_RENDERER
 
+#include <algorithm>
 #include <Jolt/Jolt.h>
 #include <Jolt/Physics/Body/Body.h>
-#include <vector>
-#include <algorithm>
+#include <Jolt/Physics/Body/BodyFilter.h>
 
-#include "Jolt/Physics/Body/BodyFilter.h"
+#include "core/memory/memory_manager.h"
+#include "core/containers/vector.h"
+
 
 namespace Physics
 {
@@ -20,18 +22,20 @@ namespace Physics
 class DebugDrawFilter final : public JPH::BodyDrawFilter
 {
 public:
+    DebugDrawFilter() = default;
+    explicit DebugDrawFilter(Core::MemoryManager& memoryManager);
     ~DebugDrawFilter() override = default;
 
-    bool ShouldDraw(const JPH::Body& inBody) const override
+    [[nodiscard]] bool ShouldDraw(const JPH::Body& inBody) const override
     {
-        return !bodiesToDraw.empty() && 
+        return !bodiesToDraw.IsEmpty() &&
                std::ranges::find(bodiesToDraw, inBody.GetID()) != bodiesToDraw.end();
     }
 
     void AddBody(const JPH::BodyID bodyId)
     {
         if (std::ranges::find(bodiesToDraw, bodyId) == bodiesToDraw.end()) {
-            bodiesToDraw.push_back(bodyId);
+            bodiesToDraw.PushBack(bodyId);
         }
     }
 
@@ -39,17 +43,17 @@ public:
     {
         const auto it = std::ranges::find(bodiesToDraw, bodyId);
         if (it != bodiesToDraw.end()) {
-            bodiesToDraw.erase(it);
+            bodiesToDraw.Remove(it);
         }
     }
 
     void Clear()
     {
-        bodiesToDraw.clear();
+        bodiesToDraw.Clear();
     }
 
 private:
-    std::vector<JPH::BodyID> bodiesToDraw;
+    Core::Vector<JPH::BodyID> bodiesToDraw;
 };
 
 } // Physics

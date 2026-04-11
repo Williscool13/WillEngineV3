@@ -60,7 +60,7 @@ void PhysicsJobSystem::QueueJob(Job* inJob)
     mTasks[idx].Reset();
     inJob->AddRef();
 
-    mTasks[idx].jobs.push_back(inJob);
+    mTasks[idx].jobs.PushBack(inJob);
     mTasks[idx].m_SetSize = 1;
     scheduler->AddTaskSetToPipe(&mTasks[idx]);
 }
@@ -77,7 +77,7 @@ void PhysicsJobSystem::QueueJobs(Job** inJobs, JPH::uint inNumJobs)
     mTasks[idx].Reset();
     for (uint32_t i = 0; i < inNumJobs; ++i) {
         inJobs[i]->AddRef();
-        mTasks[idx].jobs.push_back(inJobs[i]);
+        mTasks[idx].jobs.PushBack(inJobs[i]);
     }
     mTasks[idx].m_SetSize = inNumJobs;
     scheduler->AddTaskSetToPipe(&mTasks[idx]);

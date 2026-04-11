@@ -45,13 +45,13 @@ void BodyActivationListener::OnBodyDeactivated(const JPH::BodyID& inBodyID, uint
 std::span<const DeferredBodyActivationEvent> BodyActivationListener::GetActivatedEvents()
 {
     size_t count = std::min(activatedCount.load(std::memory_order_acquire), MAX_BODY_ACTIVATION_EVENTS);
-    return {activatedEvents.data(), count};
+    return {activatedEvents.Data(), count};
 }
 
 std::span<const DeferredBodyActivationEvent> BodyActivationListener::GetDeactivatedEvents()
 {
     size_t count = std::min(deactivatedCount.load(std::memory_order_acquire), MAX_BODY_ACTIVATION_EVENTS);
-    return {deactivatedEvents.data(), count};
+    return {deactivatedEvents.Data(), count};
 }
 
 void BodyActivationListener::ClearEvents()

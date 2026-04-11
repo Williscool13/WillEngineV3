@@ -7,7 +7,6 @@
 
 #include <array>
 #include <atomic>
-#include <span>
 
 #include <Jolt/Jolt.h>
 #include <Jolt/Physics/Body/Body.h>
@@ -16,6 +15,8 @@
 #include <Jolt/Physics/Collision/Shape/SubShapeIDPair.h>
 
 #include "physics_config.h"
+#include "core/containers/span.h"
+#include "core/containers/array.h"
 
 
 namespace Physics
@@ -41,9 +42,9 @@ public:
     ContactListener();
     ~ContactListener() override;
 
-    std::span<const DeferredCollisionEvent> GetAddedEvents();
-    std::span<const DeferredCollisionEvent> GetPersistedEvents();
-    std::span<const DeferredRemovedEvent>   GetRemovedEvents();
+    Core::Span<const DeferredCollisionEvent> GetAddedEvents();
+    Core::Span<const DeferredCollisionEvent> GetPersistedEvents();
+    Core::Span<const DeferredRemovedEvent>   GetRemovedEvents();
 
     void ClearEvents();
 
@@ -53,18 +54,18 @@ public:
 
 private:
     void PushContactEvent(const JPH::Body& inBody1, const JPH::Body& inBody2, const JPH::ContactManifold& inManifold,
-                          std::array<DeferredCollisionEvent, MAX_COLLISION_EVENTS>& events,
+                          Core::Array<DeferredCollisionEvent, 8192>& events,
                           std::atomic<uint32_t>& count, std::atomic<int32_t>& warnCount, const char* label);
 
-    std::array<DeferredCollisionEvent, MAX_COLLISION_EVENTS> addedEvents;
+    Core::Array<DeferredCollisionEvent, MAX_COLLISION_EVENTS> addedEvents;
     std::atomic<uint32_t> addedCount{0};
     std::atomic<int32_t>  addedWarnCount{0};
 
-    std::array<DeferredCollisionEvent, MAX_COLLISION_EVENTS> persistedEvents;
+    Core::Array<DeferredCollisionEvent, MAX_COLLISION_EVENTS> persistedEvents;
     std::atomic<uint32_t> persistedCount{0};
     std::atomic<int32_t>  persistedWarnCount{0};
 
-    std::array<DeferredRemovedEvent, MAX_COLLISION_EVENTS> removedEvents;
+    Core::Array<DeferredRemovedEvent, MAX_COLLISION_EVENTS> removedEvents;
     std::atomic<uint32_t> removedCount{0};
     std::atomic<int32_t>  removedWarnCount{0};
 };

@@ -66,7 +66,7 @@ GAME_API void GameLoad(Core::EngineContext* ctx, Engine::EngineState* state)
     ImGui::SetCurrentContext(ctx->imguiContext);
     ImGui::SetAllocatorFunctions(ctx->imguiAllocFn, ctx->imguiFreeFn, ctx->imguiAllocUserData);
 
-    Physics::PhysicsSystem::RegisterPhysics();
+    ctx->physicsSystem->RegisterPhysics();
 #endif
 
     Audio::AudioManager::RegisterAudio();

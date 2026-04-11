@@ -5,13 +5,14 @@
 #ifndef WILL_ENGINE_PHYSICS_JOB_SYSTEM_H
 #define WILL_ENGINE_PHYSICS_JOB_SYSTEM_H
 
-#include <array>
 #include <JoltPhysics/Jolt/Jolt.h>
 #include <JoltPhysics/Jolt/Core/FixedSizeFreeList.h>
 #include <JoltPhysics/Jolt/Core/JobSystemWithBarrier.h>
 #include <enkiTS/src/TaskScheduler.h>
 
 #include "physics_config.h"
+#include "core/containers/array.h"
+#include "core/containers/inline_vector.h"
 
 namespace Physics
 {
@@ -19,11 +20,13 @@ class PhysicsJobSystem : public JPH::JobSystemWithBarrier
 {
     struct PhysicsJobTask final : enki::ITaskSet
     {
-        std::vector<Job*> jobs;
+        static constexpr uint32_t kMaxJobs = 32; // JPH::PhysicsUpdateContext::cMaxConcurrency
+        Core::InlineVector<Job*, kMaxJobs> jobs;
+
+
 
         PhysicsJobTask()
         {
-            jobs.reserve(16);
             m_SetSize = 0;
         }
 
@@ -37,7 +40,7 @@ class PhysicsJobSystem : public JPH::JobSystemWithBarrier
 
         void Reset()
         {
-            jobs.clear();
+            jobs.Clear();
             m_SetSize = 0;
         }
     };
@@ -68,7 +71,7 @@ private:
     /// Array of jobs (fixed size)
     using AvailableJobs = JPH::FixedSizeFreeList<Job>;
     AvailableJobs mJobs;
-    std::array<PhysicsJobTask, MAX_PHYSICS_TASKS> mTasks;
+    Core::Array<PhysicsJobTask, MAX_PHYSICS_TASKS> mTasks;
     std::atomic<uint64_t> mTaskIndex{0};
 };
 } // Physics

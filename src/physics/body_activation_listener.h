@@ -12,6 +12,7 @@
 #include <Jolt/Physics/Body/BodyID.h>
 
 #include "physics_config.h"
+#include "core/containers/array.h"
 
 namespace Physics
 {
@@ -40,8 +41,8 @@ private:
     void OnBodyDeactivated(const JPH::BodyID& inBodyID, uint64_t inBodyUserData) override;
 
 private:
-    std::array<DeferredBodyActivationEvent, MAX_BODY_ACTIVATION_EVENTS> activatedEvents;
-    std::array<DeferredBodyActivationEvent, MAX_BODY_ACTIVATION_EVENTS> deactivatedEvents;
+    Core::Array<DeferredBodyActivationEvent, MAX_BODY_ACTIVATION_EVENTS> activatedEvents;
+    Core::Array<DeferredBodyActivationEvent, MAX_BODY_ACTIVATION_EVENTS> deactivatedEvents;
     std::atomic<uint32_t> activatedCount{0};
     std::atomic<uint32_t> deactivatedCount{0};
 

@@ -9,11 +9,9 @@
 #include <glm/detail/type_quat.hpp>
 
 #include "core/string_id.h"
-#include "core/types/transform.h"
 #include "core/time/time_frame.h"
-#include "../../engine/material_manager.h"
-
-
+#include "core/types/transform.h"
+#include "engine/material_manager.h"
 #include "render/shaders/model_interop.h"
 #include "render/shaders/push_constant_interop.h"
 

@@ -12,22 +12,22 @@ ContactListener::ContactListener() = default;
 
 ContactListener::~ContactListener() = default;
 
-std::span<const DeferredCollisionEvent> ContactListener::GetAddedEvents()
+Core::Span<const DeferredCollisionEvent> ContactListener::GetAddedEvents()
 {
     size_t count = std::min(addedCount.load(std::memory_order_acquire), MAX_COLLISION_EVENTS);
-    return {addedEvents.data(), count};
+    return {addedEvents.Data(), count};
 }
 
-std::span<const DeferredCollisionEvent> ContactListener::GetPersistedEvents()
+Core::Span<const DeferredCollisionEvent> ContactListener::GetPersistedEvents()
 {
     size_t count = std::min(persistedCount.load(std::memory_order_acquire), MAX_COLLISION_EVENTS);
-    return {persistedEvents.data(), count};
+    return {persistedEvents.Data(), count};
 }
 
-std::span<const DeferredRemovedEvent> ContactListener::GetRemovedEvents()
+Core::Span<const DeferredRemovedEvent> ContactListener::GetRemovedEvents()
 {
     size_t count = std::min(removedCount.load(std::memory_order_acquire), MAX_COLLISION_EVENTS);
-    return {removedEvents.data(), count};
+    return {removedEvents.Data(), count};
 }
 
 void ContactListener::ClearEvents()
@@ -38,7 +38,7 @@ void ContactListener::ClearEvents()
 }
 
 void ContactListener::PushContactEvent(const JPH::Body& inBody1, const JPH::Body& inBody2, const JPH::ContactManifold& inManifold,
-                                       std::array<DeferredCollisionEvent, MAX_COLLISION_EVENTS>& events,
+                                       Core::Array<DeferredCollisionEvent, MAX_COLLISION_EVENTS>& events,
                                        std::atomic<uint32_t>& count, std::atomic<int32_t>& warnCount, const char* label)
 {
     size_t idx = count.fetch_add(1, std::memory_order_relaxed);

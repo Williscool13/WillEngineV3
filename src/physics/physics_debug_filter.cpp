@@ -5,4 +5,8 @@
 #include "physics_debug_filter.h"
 
 namespace Physics
-{} // Physics
+{
+DebugDrawFilter::DebugDrawFilter(Core::MemoryManager& memoryManager)
+    : bodiesToDraw(&memoryManager.Physics(), Core::AllocTag::Physics, 128)
+{}
+} // Physics

@@ -114,6 +114,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
         .assetsScratchPoolSize = 512ull * 1024 * 1024, // 512 MB
         .assetsPoolSize = 512ull * 1024 * 1024, // 512 MB
         .physicsPoolSize = 64ull * 1024 * 1024, // 64 MB
+        .physicsArenaSize = Physics::PHYSICS_TEMP_ALLOCATOR_SIZE, // 32 MB
         .renderPoolSize = 64ull * 1024 * 1024,  // 64 MB
         .renderArenaSize = 32ull * 1024 * 1024, // 32 MB
         .generalArenaSize = 32ull * 1024 * 1024, // 32 MB
@@ -233,7 +234,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
     {
         ZoneScopedN("CreatePhysicsSystem");
         // todo physics
-        physicsSystem = std::make_unique<Physics::PhysicsSystem>(scheduler);
+        physicsSystem = new(memoryManager.PersistentAllocRaw(sizeof(Physics::PhysicsSystem), Core::AllocTag::Physics)) Physics::PhysicsSystem(memoryManager, scheduler);
     }
 
 
@@ -282,7 +283,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
         engineContext->assetManager = assetManager;
         engineContext->materialManager = materialManager;
         engineContext->audioManager = audioManager;
-        engineContext->physicsSystem = physicsSystem.get();
+        engineContext->physicsSystem = physicsSystem;
         engineContext->scheduler = scheduler;
         engineContext->memoryManager = &memoryManager;
         engineContext->setCursorHiddenFn = [this](bool hidden) {
@@ -1115,7 +1116,7 @@ void WillEngine::Cleanup()
     assetGenerator->~AssetGenerator();
 #endif
 
-    physicsSystem.reset();
+    physicsSystem->~PhysicsSystem();
     materialManager->~MaterialManager();
     assetManager->~AssetManager();
 

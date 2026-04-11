@@ -5,19 +5,20 @@
 #ifndef WILL_ENGINE_PHYSICS_MANAGER_H
 #define WILL_ENGINE_PHYSICS_MANAGER_H
 #include <memory>
-
 #include <Jolt/Jolt.h>
+#include <Jolt/RegisterTypes.h>
+#include <Jolt/Physics/PhysicsSystem.h>
 
+#include "physics_temp_allocator.h"
 #include "body_activation_listener.h"
 #include "contact_listener.h"
 #include "physics_debug_filter.h"
 #include "physics_debug_renderer.h"
 #include "physics_job_system.h"
-#include "Jolt/RegisterTypes.h"
-#include "Jolt/Physics/PhysicsSystem.h"
 #include "layers/broad_phase_layer_interface.h"
 #include "layers/object_layer_pair_filter.h"
 #include "layers/object_vs_broad_phase_layer_filter.h"
+#include "core/memory/memory_manager.h"
 
 namespace Core
 {
@@ -32,7 +33,7 @@ class PhysicsSystem
 public:
     PhysicsSystem();
 
-    explicit PhysicsSystem(enki::TaskScheduler* scheduler);
+    explicit PhysicsSystem(Core::MemoryManager& memoryManager, enki::TaskScheduler* scheduler);
 
     ~PhysicsSystem();
 
@@ -64,25 +65,24 @@ public:
 
     JPH::BodyInterface& GetBodyInterface() { return physicsSystem.GetBodyInterface(); }
     JPH::PhysicsSystem& GetPhysicsSystem() { return physicsSystem; }
-    JPH::TempAllocator& GetTempAllocator() { return *tempAllocator; }
+    JPH::TempAllocator& GetTempAllocator() { return tempAllocator; }
 
 #if JPH_DEBUG_RENDERER
     DebugDrawFilter& GetDebugDrawFilter() const { return *debugDrawFilter; }
 #endif
     void DrawDebug(Core::ViewFamily* viewFamily, bool bUseFilter = true);
 
-    static void RegisterPhysics()
-    {
-        JPH::RegisterDefaultAllocator();
-        JPH::Factory::sInstance = new JPH::Factory();
-        JPH::RegisterTypes();
-    }
+    // Must be called before any Jolt allocation; safe to call from game DLL on load.
+    static void RegisterAllocators(Core::MemoryManager& memoryManager);
+
+    void RegisterPhysics() const;
 
 private:
+    Core::MemoryManager* memoryManager{};
     enki::TaskScheduler* scheduler{};
 
-    std::unique_ptr<PhysicsJobSystem> jobSystem;
-    std::unique_ptr<JPH::TempAllocatorImpl> tempAllocator{};
+    PhysicsJobSystem* jobSystem{};
+    PhysicsTempAllocator tempAllocator{};
     JPH::PhysicsSystem physicsSystem;
 
     BPLayerInterfaceImpl broadPhaseLayerInterface;
@@ -93,8 +93,8 @@ private:
     ContactListener contactListener;
 
 #if JPH_DEBUG_RENDERER
-    std::unique_ptr<DebugRenderer> debugRenderer;
-    std::unique_ptr<DebugDrawFilter> debugDrawFilter;
+    DebugRenderer* debugRenderer{};
+    DebugDrawFilter* debugDrawFilter{};
 #endif
 };
 } // Physics

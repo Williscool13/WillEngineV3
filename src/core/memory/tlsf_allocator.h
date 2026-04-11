@@ -19,8 +19,7 @@ enum class AllocTag : uint32_t
     AssetTexture,
     AssetGenerator,
     // Physics
-    PhysicsBody,
-    PhysicsShape,
+    Physics,
     // Render
     RenderMesh,
     RenderMaterial,
@@ -77,6 +76,11 @@ public:
 
     void* Realloc(void* ptr, size_t newSize, AllocTag tag = AllocTag::Unknown); // preserves original tag; fallbackTag used only when ptr == nullptr
     void Free(void* ptr);
+
+    // No AllocHeader; tag stats will not reflect aligned allocations.
+    // usedBytes_ uses tlsf_block_size for symmetric tracking.
+    void* AlignedAlloc(size_t size, size_t alignment, AllocTag tag = AllocTag::Unknown);
+    void AlignedFree(void* ptr);
 
     struct Stats
     {

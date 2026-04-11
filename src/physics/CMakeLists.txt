@@ -22,7 +22,7 @@ add_library(physics STATIC
         physics_helpers.h
         physics_debug_filter.cpp
         physics_debug_filter.h
-
+        physics_temp_allocator.h
 )
 
 target_include_directories(physics PRIVATE

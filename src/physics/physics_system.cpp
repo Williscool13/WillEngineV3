@@ -13,13 +13,13 @@
 #include "contact_listener.h"
 #include "physics_job_system.h"
 #include "Jolt/Physics/Body/BodyCreationSettings.h"
-#include "Jolt/Physics/Collision/Shape/BoxShape.h"
 
 
 #ifdef JPH_ENABLE_ASSERTS
 static bool AssertFailedImpl(const char* inExpression, const char* inMessage, const char* inFile, uint32_t inLine)
 {
-    std::string msg = fmt::format("JPH Assert Failed: {} | {} ({}:{})", inExpression, inMessage, inFile, inLine);
+    char msg[512];
+    snprintf(msg, sizeof(msg), "JPH Assert Failed: %s | %s (%s:%u)", inExpression, inMessage, inFile, inLine);
     SPDLOG_ERROR("{}", msg);
     return true;
 };
@@ -37,22 +37,79 @@ static void TraceImpl(const char* inFMT, ...)
 }
 
 
+// ---- Jolt custom allocator ----
+// Routed through the physics TLSF pool (mutex-enabled for thread safety).
+
+static Core::TlsfAllocator* sPhysicsAlloc = nullptr;
+
+// All three routed through memalign to guarantee JPH_RVECTOR_ALIGNMENT.
+// Jolt's operator new calls JPH::Allocate directly for alignas(16) types (not over-aligned
+// on MSVC x64), so JoltAlloc must return JPH_RVECTOR_ALIGNMENT-aligned memory.
+// Realloc free+allocs to preserve alignment (tlsf_realloc doesn't guarantee it).
+
+static void* JoltAlloc(size_t size)
+{
+    return sPhysicsAlloc->AlignedAlloc(size, JPH_RVECTOR_ALIGNMENT, Core::AllocTag::Physics);
+}
+
+static void* JoltRealloc(void* ptr, size_t oldSize, size_t newSize)
+{
+    void* newPtr = sPhysicsAlloc->AlignedAlloc(newSize, JPH_RVECTOR_ALIGNMENT, Core::AllocTag::Physics);
+    if (ptr) {
+        memcpy(newPtr, ptr, oldSize < newSize ? oldSize : newSize);
+        sPhysicsAlloc->AlignedFree(ptr);
+    }
+    return newPtr;
+}
+
+static void JoltFree(void* ptr)
+{
+    sPhysicsAlloc->AlignedFree(ptr);
+}
+
+static void* JoltAlignedAlloc(size_t size, size_t alignment)
+{
+    return sPhysicsAlloc->AlignedAlloc(size, alignment, Core::AllocTag::Physics);
+}
+
+static void JoltAlignedFree(void* ptr)
+{
+    sPhysicsAlloc->AlignedFree(ptr);
+}
+
 namespace Physics
 {
 PhysicsSystem::PhysicsSystem() = default;
 
-PhysicsSystem::PhysicsSystem(enki::TaskScheduler* scheduler)
-    : scheduler(scheduler)
+void PhysicsSystem::RegisterAllocators(Core::MemoryManager& memoryManager)
 {
-    JPH::RegisterDefaultAllocator();
+    sPhysicsAlloc = &memoryManager.Physics();
+    JPH::Allocate = JoltAlloc;
+    JPH::Reallocate = JoltRealloc;
+    JPH::Free = JoltFree;
+    JPH::AlignedAllocate = JoltAlignedAlloc;
+    JPH::AlignedFree = JoltAlignedFree;
+}
+
+void PhysicsSystem::RegisterPhysics() const
+{
+    RegisterAllocators(*memoryManager);
+    JPH::Factory::sInstance = new JPH::Factory();
+    JPH::RegisterTypes();
+}
+
+PhysicsSystem::PhysicsSystem(Core::MemoryManager& memoryManager, enki::TaskScheduler* scheduler)
+    : memoryManager(&memoryManager)
+    , scheduler(scheduler)
+    , tempAllocator(memoryManager.PhysicsArena().Data(), memoryManager.PhysicsArena().GetCapacity())
+{
+    RegisterPhysics();
+
     JPH::Trace = TraceImpl;
     JPH_IF_ENABLE_ASSERTS(JPH::AssertFailed = AssertFailedImpl;)
 
-    JPH::Factory::sInstance = new JPH::Factory();
-    JPH::RegisterTypes();
-
-    tempAllocator= std::make_unique<JPH::TempAllocatorImpl>(PHYSICS_TEMP_ALLOCATOR_SIZE);
-    jobSystem = std::make_unique<PhysicsJobSystem>(scheduler, MAX_PHYSICS_JOBS, 8);
+    void* jobMem = memoryManager.PhysicsAllocRaw(sizeof(PhysicsJobSystem));
+    jobSystem = new(jobMem) PhysicsJobSystem(scheduler, MAX_PHYSICS_JOBS, 8);
 
     physicsSystem.Init(MAX_PHYSICS_BODIES, PHYSICS_BODY_MUTEX_COUNT,
                        MAX_BODY_PAIRS, MAX_CONTACT_CONSTRAINTS,
@@ -66,13 +123,27 @@ PhysicsSystem::PhysicsSystem(enki::TaskScheduler* scheduler)
                 MAX_PHYSICS_BODIES, PHYSICS_BODY_MUTEX_COUNT, MAX_BODY_PAIRS, MAX_CONTACT_CONSTRAINTS, MAX_PHYSICS_JOBS);
 
 #if JPH_DEBUG_RENDERER
-    debugRenderer = std::make_unique<DebugRenderer>();
-    debugDrawFilter = std::make_unique<DebugDrawFilter>();
+    void* mem0 = memoryManager.PhysicsAllocRaw(sizeof(DebugRenderer));
+    debugRenderer = new(mem0) DebugRenderer();
+    void* mem1 = memoryManager.PhysicsAllocRaw(sizeof(DebugDrawFilter));
+    debugDrawFilter = new(mem1) DebugDrawFilter(memoryManager);
 #endif
 }
 
 PhysicsSystem::~PhysicsSystem()
 {
+#if JPH_DEBUG_RENDERER
+    if (debugRenderer) {
+        debugRenderer->~DebugRenderer();
+        memoryManager->PhysicsFree(debugRenderer);
+        debugRenderer = nullptr;
+    }
+    if (debugDrawFilter) {
+        debugDrawFilter->~DebugDrawFilter();
+        memoryManager->PhysicsFree(debugDrawFilter);
+        debugDrawFilter = nullptr;
+    }
+#endif
     JPH::UnregisterTypes();
     delete JPH::Factory::sInstance;
     JPH::Factory::sInstance = nullptr;
@@ -80,7 +151,7 @@ PhysicsSystem::~PhysicsSystem()
 
 void PhysicsSystem::Step(float deltaTime)
 {
-    physicsSystem.Update(deltaTime, PHYSICS_COLLISION_STEPS, tempAllocator.get(), jobSystem.get());
+    physicsSystem.Update(deltaTime, PHYSICS_COLLISION_STEPS, &tempAllocator, jobSystem);
 }
 
 void PhysicsSystem::DrawDebug(Core::ViewFamily* viewFamily, bool bUseFilter)
@@ -94,9 +165,9 @@ void PhysicsSystem::DrawDebug(Core::ViewFamily* viewFamily, bool bUseFilter)
     settings.mDrawShapeColor = JPH::BodyManager::EShapeColor::MotionTypeColor;
 
     if (bUseFilter) {
-        physicsSystem.DrawBodies(settings, debugRenderer.get(), debugDrawFilter.get());
+        physicsSystem.DrawBodies(settings, debugRenderer, debugDrawFilter);
     } else {
-        physicsSystem.DrawBodies(settings, debugRenderer.get(), nullptr);
+        physicsSystem.DrawBodies(settings, debugRenderer, nullptr);
     }
 #endif
 }

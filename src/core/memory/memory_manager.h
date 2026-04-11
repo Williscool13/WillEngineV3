@@ -19,7 +19,7 @@ namespace Core
  * typed regions. All engine systems suballocate from this manager — no additional new/delete.
  *
  * Layout (contiguous):
- *   [persistentPool | generalPool | assetsPool | physicsPool | renderPool | renderArena]
+ *   [persistentPool | generalPool | assetsPool | physicsPool | physicsArena | renderPool | renderArena | generalArena]
  *
  * Regions:
  *   - Persistent TLSF: individual allocs that live for the entire process lifetime.
@@ -27,6 +27,7 @@ namespace Core
  *   - General TLSF: variable-lifetime allocations with no specific domain.
  *   - Assets TLSF: variable-lifetime allocations for models and textures.
  *   - Physics TLSF: variable-lifetime allocations for Jolt rigid bodies and shapes.
+ *   - Physics Arena: contiguous scratch buffer for Jolt's per-step TempAllocator; reset each step.
  *   - Render TLSF: variable-lifetime allocations for render system objects.
  *   - Render Arena: per-frame bump allocator for transient render data; Reset() each frame.
  *   - General Arena: per-frame bump allocator for transient render data; Reset() each frame.
@@ -42,6 +43,7 @@ public:
         size_t assetsScratchPoolSize;
         size_t assetsPoolSize;
         size_t physicsPoolSize;
+        size_t physicsArenaSize;
         size_t renderPoolSize;
         size_t renderArenaSize;
         size_t generalArenaSize;
@@ -82,6 +84,10 @@ public:
 
     void GeneralFree(void* ptr);
 
+    void* PhysicsAllocRaw(size_t size);
+
+    void PhysicsFree(void* ptr);
+
     void* RenderAllocRaw(size_t size);
 
     void* RenderRealloc(void* ptr, size_t newSize);
@@ -93,6 +99,7 @@ public:
     TlsfAllocator& AssetsScratch() { return tlsfAssetsScratch; }
     TlsfAllocator& Assets() { return tlsfAssets; }
     TlsfAllocator& Physics() { return tlsfPhysics; }
+    Arena& PhysicsArena() { return physicsArena; }
     TlsfAllocator& Render() { return tlsfRender; }
     Arena& RenderArena() { return renderArena; }
     Arena& GeneralArena() { return generalArena; }
@@ -113,6 +120,7 @@ private:
     TlsfAllocator tlsfAssetsScratch;
     TlsfAllocator tlsfAssets;
     TlsfAllocator tlsfPhysics;
+    Arena physicsArena;
     TlsfAllocator tlsfRender;
     Arena renderArena;
     Arena generalArena;

@@ -18,8 +18,7 @@ const char* AllocTagName(AllocTag tag)
         case AllocTag::AssetModel: return "AssetModel";
         case AllocTag::AssetTexture: return "AssetTexture";
         case AllocTag::AssetGenerator: return "AssetGenerator";
-        case AllocTag::PhysicsBody: return "PhysicsBody";
-        case AllocTag::PhysicsShape: return "PhysicsShape";
+        case AllocTag::Physics: return "Physics";
         case AllocTag::RenderMesh: return "RenderMesh";
         case AllocTag::RenderMaterial: return "RenderMaterial";
         case AllocTag::Render: return "Render";
@@ -113,6 +112,33 @@ void TlsfAllocator::Free(void* ptr)
     tlsf_free(static_cast<tlsf_t>(tlsf), header);
 }
 
+void* TlsfAllocator::AlignedAlloc(size_t size, size_t alignment, AllocTag /*tag*/)
+{
+    if (size == 0) { return nullptr; }
+    std::unique_lock lock(mutex_, std::defer_lock);
+    if (bUseMutex_) { lock.lock(); }
+
+    void* ptr = tlsf_memalign(static_cast<tlsf_t>(tlsf), alignment, size);
+    assert(ptr != nullptr && "OOM: TLSF pool exhausted");
+
+    usedBytes_ += tlsf_block_size(ptr);
+    allocCount_ += 1;
+
+    return ptr;
+}
+
+void TlsfAllocator::AlignedFree(void* ptr)
+{
+    if (!ptr) { return; }
+    std::unique_lock lock(mutex_, std::defer_lock);
+    if (bUseMutex_) { lock.lock(); }
+
+    usedBytes_ -= tlsf_block_size(ptr);
+    allocCount_ -= 1;
+
+    tlsf_free(static_cast<tlsf_t>(tlsf), ptr);
+}
+
 TlsfAllocator::Stats TlsfAllocator::GetStats()
 {
     std::unique_lock lock(mutex_, std::defer_lock);
@@ -126,7 +152,10 @@ void TlsfAllocator::TagWalker(void* ptr, size_t /*size*/, int used, void* user)
     auto* ctx = static_cast<TagWalkCtx*>(user);
     auto* header = static_cast<AllocHeader*>(ptr);
 
+    // Aligned allocs have no AllocHeader; skip blocks with out-of-range tag values.
     const auto idx = static_cast<size_t>(header->tag);
+    if (idx >= static_cast<size_t>(AllocTag::Count)) { return; }
+
     TagStats& entry = ctx->out[idx];
     entry.tag = header->tag;
     entry.count += 1;
