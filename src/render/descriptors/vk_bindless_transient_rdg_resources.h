@@ -34,7 +34,7 @@ public:
     explicit BindlessTransientRDGResourcesDescriptorBuffer(VulkanContext* context)
         : context(context)
     {
-        DescriptorLayoutBuilder layoutBuilder{1};
+        DescriptorLayoutBuilder layoutBuilder;
         layoutBuilder.AddBinding(0, VK_DESCRIPTOR_TYPE_SAMPLER, SamplerCount);
         layoutBuilder.AddBinding(1, VK_DESCRIPTOR_TYPE_SAMPLER, CompareSamplerCount);
         layoutBuilder.AddBinding(2, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, SampledImageCount);

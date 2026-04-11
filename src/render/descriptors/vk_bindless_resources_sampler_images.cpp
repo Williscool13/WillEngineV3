@@ -17,7 +17,7 @@ BindlessResourcesSamplerImages::BindlessResourcesSamplerImages() = default;
 BindlessResourcesSamplerImages::BindlessResourcesSamplerImages(VulkanContext* context)
     : context(context)
 {
-    DescriptorLayoutBuilder layoutBuilder{3}; // Changed from 2 to 3
+    DescriptorLayoutBuilder layoutBuilder;
     layoutBuilder.AddBinding(0, VK_DESCRIPTOR_TYPE_SAMPLER, BINDLESS_SAMPLER_COUNT);
     layoutBuilder.AddBinding(1, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, BINDLESS_SAMPLED_IMAGE_COUNT);
     layoutBuilder.AddBinding(2, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, BINDLESS_SAMPLED_CUBEMAP_COUNT);

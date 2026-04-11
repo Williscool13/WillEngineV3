@@ -46,7 +46,7 @@ public:
     explicit BindlessResourcesStorage(VulkanContext* context)
         : context(context)
     {
-        DescriptorLayoutBuilder layoutBuilder{1};
+        DescriptorLayoutBuilder layoutBuilder;
         layoutBuilder.AddBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, BINDLESS_STORAGE_IMAGE_COUNT);
 
         VkDescriptorSetLayoutCreateInfo layoutCreateInfo = layoutBuilder.Build(

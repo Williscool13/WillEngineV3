@@ -16,7 +16,7 @@ BindlessResourcesCombined::BindlessResourcesCombined() = default;
 BindlessResourcesCombined::BindlessResourcesCombined(VulkanContext* context)
     : context(context)
 {
-    DescriptorLayoutBuilder layoutBuilder{1};
+    DescriptorLayoutBuilder layoutBuilder;;
     layoutBuilder.AddBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, BINDLESS_COMBINED_IMAGE_SAMPLER_COUNT);
 
     VkDescriptorSetLayoutCreateInfo layoutCreateInfo = layoutBuilder.Build(

@@ -17,7 +17,7 @@ EnvironmentMapGenerateResources::EnvironmentMapGenerateResources() = default;
 EnvironmentMapGenerateResources::EnvironmentMapGenerateResources(Render::VulkanContext* context)
     : context(context)
 {
-    Render::DescriptorLayoutBuilder layoutBuilder{4};
+    Render::DescriptorLayoutBuilder layoutBuilder;
     layoutBuilder.AddBinding(0, VK_DESCRIPTOR_TYPE_SAMPLER, MAX_SAMPLERS);
     layoutBuilder.AddBinding(1, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, MAX_TEXTURES_2D);
     layoutBuilder.AddBinding(2, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, MAX_CUBEMAPS);

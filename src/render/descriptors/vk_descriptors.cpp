@@ -8,11 +8,8 @@
 
 namespace Render
 {
-DescriptorLayoutBuilder::DescriptorLayoutBuilder(const uint32_t reservedSize)
+DescriptorLayoutBuilder::DescriptorLayoutBuilder()
 {
-    if (reservedSize > 0) {
-        bindings.reserve(reservedSize);
-    }
 }
 
 void DescriptorLayoutBuilder::AddBinding(uint32_t binding, VkDescriptorType type)
@@ -22,7 +19,7 @@ void DescriptorLayoutBuilder::AddBinding(uint32_t binding, VkDescriptorType type
     newbind.descriptorCount = 1;
     newbind.descriptorType = type;
 
-    bindings.push_back(newbind);
+    bindings.PushBack(newbind);
 }
 
 void DescriptorLayoutBuilder::AddBinding(uint32_t binding, VkDescriptorType type, uint32_t count)
@@ -32,12 +29,12 @@ void DescriptorLayoutBuilder::AddBinding(uint32_t binding, VkDescriptorType type
         .descriptorType = type,
         .descriptorCount = count,
     };
-    bindings.push_back(descriptorSetLayoutBinding);
+    bindings.PushBack(descriptorSetLayoutBinding);
 }
 
 void DescriptorLayoutBuilder::Clear()
 {
-    bindings.clear();
+    bindings.Clear();
 }
 
 VkDescriptorSetLayoutCreateInfo DescriptorLayoutBuilder::Build(const VkShaderStageFlagBits shaderStageFlags,
@@ -51,8 +48,8 @@ VkDescriptorSetLayoutCreateInfo DescriptorLayoutBuilder::Build(const VkShaderSta
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
         .pNext = nullptr,
         .flags = layoutCreateFlags,
-        .bindingCount = static_cast<uint32_t>(bindings.size()),
-        .pBindings = bindings.data(),
+        .bindingCount = static_cast<uint32_t>(bindings.Size()),
+        .pBindings = bindings.Data(),
     };
 }
 
@@ -67,8 +64,8 @@ VkDescriptorSetLayout DescriptorLayoutBuilder::Build(VkDevice device, VkShaderSt
     VkDescriptorSetLayoutCreateInfo info = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
     info.pNext = pNext;
 
-    info.pBindings = bindings.data();
-    info.bindingCount = static_cast<uint32_t>(bindings.size());
+    info.pBindings = bindings.Data();
+    info.bindingCount = static_cast<uint32_t>(bindings.Size());
     info.flags = flags;
 
     VkDescriptorSetLayout set;

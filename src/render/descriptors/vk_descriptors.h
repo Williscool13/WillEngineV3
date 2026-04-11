@@ -5,18 +5,17 @@
 #ifndef WILL_ENGINE_VK_DESCRIPTORS_H
 #define WILL_ENGINE_VK_DESCRIPTORS_H
 
-#include <cstdint>
-#include <vector>
-
 #include <volk.h>
+
+#include "core/containers/inline_vector.h"
 
 namespace Render
 {
 struct DescriptorLayoutBuilder
 {
-    explicit DescriptorLayoutBuilder(uint32_t reservedSize = 0);
+    explicit DescriptorLayoutBuilder();
 
-    std::vector<VkDescriptorSetLayoutBinding> bindings;
+    Core::InlineVector<VkDescriptorSetLayoutBinding, 16> bindings;
 
     void AddBinding(uint32_t binding, VkDescriptorType type);
 

@@ -12,18 +12,6 @@
 using namespace Render;
 
 TEST_CASE("DescriptorLayoutBuilder construction", "[renderer][descriptor-builder]") {
-    SECTION("Default construction") {
-        DescriptorLayoutBuilder builder;
-
-        REQUIRE(builder.bindings.empty());
-    }
-
-    SECTION("Construction with reserved size") {
-        DescriptorLayoutBuilder builder(10);
-
-        REQUIRE(builder.bindings.capacity() >= 10);
-        REQUIRE(builder.bindings.empty());
-    }
 }
 
 TEST_CASE("DescriptorLayoutBuilder AddBinding", "[renderer][descriptor-builder]") {
