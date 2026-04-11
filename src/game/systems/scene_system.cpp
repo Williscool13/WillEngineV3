@@ -84,20 +84,20 @@ Engine::Scene SaveScene(ComponentRegistry& componentRegistry, entt::registry& re
             nlohmann::json compJson;
             entry.serialize(registry, entity, compJson);
 
+            auto s = Core::ShortString::Format("%llu", entry.typeId.id);
             if (prefabRef) {
-                const std::string key = std::to_string(entry.typeId.id);
                 if (entry.typeId == prefabTypeId) {
-                    entityJson[key] = compJson;
+                    entityJson[s.c_str()] = compJson;
                 }
                 else {
-                    auto it = prefabRef->find(key);
+                    auto it = prefabRef->find(s.c_str());
                     if (it == prefabRef->end() || *it != compJson) {
-                        entityJson[key] = compJson;
+                        entityJson[s.c_str()] = compJson;
                     }
                 }
             }
             else {
-                entityJson[std::to_string(entry.typeId.id)] = compJson;
+                entityJson[s.c_str()] = compJson;
             }
         }
 
@@ -408,7 +408,8 @@ void SaveEntityAsPrefab(Engine::EngineState* state, Engine::AssetManager* assetM
         if (entry.has(state->registry, entity)) {
             nlohmann::json compJson;
             entry.serialize(state->registry, entity, compJson);
-            entityJson[std::to_string(entry.typeId.id)] = compJson;
+            auto s = Core::ShortString::Format("%llu", entry.typeId.id);
+            entityJson[s.c_str()] = compJson;
             componentCount++;
         }
     }
@@ -428,10 +429,11 @@ void SaveEntityAsPrefab(Engine::EngineState* state, Engine::AssetManager* assetM
     }
 
     if (isNewPrefab) {
-        std::string stem(prefabName);
-        std::ranges::transform(stem, stem.begin(), ::tolower);
-        std::ranges::replace(stem, ' ', '_');
-        path = Platform::GetAssetPath() / "prefabs" / (stem + ".wprefab");
+        Core::InlineString s{prefabName};
+        s.ToLower();
+        s.Replace(' ', '_');
+        s.Append(".wprefab");
+        path = Platform::GetAssetPath() / "prefabs" / s.c_str();
         prefabId = state->rng();
     }
 

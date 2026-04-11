@@ -87,7 +87,8 @@ void Component::StaticMeshComponent::Serialize(const StaticMeshComponent& comp, 
     nlohmann::json overrides = nlohmann::json::object();
     for (int32_t i = 0; i < 128; ++i) {
         if (comp.materialOverrides[i].IsValid()) {
-            overrides[std::to_string(i)] = comp.materialOverrides[i].id;
+            auto s = Core::ShortString::Format("%d", i);
+            overrides[s.c_str()] = comp.materialOverrides[i].id;
         }
     }
     if (!overrides.empty()) {
@@ -191,7 +192,7 @@ ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::ViewFamil
             else {
                 if (ImGui::BeginCombo("Select Mesh", "")) {
                     for (int32_t i = 0; i < static_cast<int32_t>(model->modelData.meshes.Size()); i++) {
-                        const Core::InlineString<64>& meshName = model->modelData.meshes[i].name;
+                        const Core::InlineString<>& meshName = model->modelData.meshes[i].name;
                         char fallback[32];
                         if (meshName.Size() == 0) { snprintf(fallback, sizeof(fallback), "Mesh %d", i); }
                         const char* displayName = meshName.Size() > 0 ? meshName.c_str() : fallback;
@@ -239,7 +240,7 @@ ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::ViewFamil
             struct SlotInfo
             {
                 int32_t origIdx;
-                std::string name;
+                Core::InlineString<128> name;
             };
             std::vector<SlotInfo> slots;
             bool seen[128] = {};
@@ -247,13 +248,13 @@ ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::ViewFamil
                 int32_t idx = runtime->primitives[i].originalMaterialIndex;
                 if (idx < 0 || idx >= 128 || seen[idx]) continue;
                 seen[idx] = true;
-                std::string slotName;
+                Core::InlineString<128> slotName;
                 if (idx < static_cast<int32_t>(model->modelData.materials.Size()) &&
                     !model->modelData.materials[idx].name.IsEmpty()) {
-                    slotName = std::string(model->modelData.materials[idx].name.c_str());
+                    slotName = model->modelData.materials[idx].name;
                 }
                 else {
-                    slotName = fmt::format("Material {}", idx);
+                    slotName = Core::InlineString<128>::Format("Material %d", idx);
                 }
                 slots.push_back({idx, std::move(slotName)});
             }

@@ -12,15 +12,15 @@
 #include "body_activation_listener.h"
 #include "contact_listener.h"
 #include "physics_job_system.h"
+#include "core/containers/inline_string.h"
 #include "Jolt/Physics/Body/BodyCreationSettings.h"
 
 
 #ifdef JPH_ENABLE_ASSERTS
 static bool AssertFailedImpl(const char* inExpression, const char* inMessage, const char* inFile, uint32_t inLine)
 {
-    char msg[512];
-    snprintf(msg, sizeof(msg), "JPH Assert Failed: %s | %s (%s:%u)", inExpression, inMessage, inFile, inLine);
-    SPDLOG_ERROR("{}", msg);
+    auto msg = Core::InlineString<512>::Format("JPH Assert Failed: %s | %s (%s:%u)", inExpression, inMessage, inFile, inLine);
+    SPDLOG_ERROR("{}", msg.c_str());
     return true;
 };
 #endif

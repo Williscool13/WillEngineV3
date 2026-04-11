@@ -326,7 +326,9 @@ void MaterialManager::CreateMaterial(std::string_view name)
 {
     const Core::Path matDir = Platform::GetAssetPath() / "materials";
     Platform::CreateDirectories(matDir.c_str());
-    const Core::Path matPath = matDir / (std::string(name) + ".wmaterial");
+    auto fileName = Core::InlineString(name);
+    fileName.Append(".wmaterial");
+    const Core::Path matPath = matDir / fileName.c_str();
 
     Material mat{};
     mat.name = Core::InlineString<128>(name);

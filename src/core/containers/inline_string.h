@@ -4,6 +4,7 @@
 
 #ifndef WILL_ENGINE_STACK_STRING_H
 #define WILL_ENGINE_STACK_STRING_H
+#include <cctype>
 #include <cstdio>
 #include <cstring>
 #include <string_view>
@@ -74,6 +75,30 @@ struct InlineString
         return Append(tmp, static_cast<size_t>(written));
     }
 
+    bool Append(uint32_t value)
+    {
+        char tmp[24];
+        int written = snprintf(tmp, sizeof(tmp), "%u", value);
+        if (written <= 0) { return false; }
+        return Append(tmp, static_cast<size_t>(written));
+    }
+
+    bool Append(int64_t value)
+    {
+        char tmp[24];
+        int written = snprintf(tmp, sizeof(tmp), "%lld", value);
+        if (written <= 0) { return false; }
+        return Append(tmp, static_cast<size_t>(written));
+    }
+
+    bool Append(uint64_t value)
+    {
+        char tmp[24];
+        int written = snprintf(tmp, sizeof(tmp), "%llu", value);
+        if (written <= 0) { return false; }
+        return Append(tmp, static_cast<size_t>(written));
+    }
+
     bool Append(const char* str, size_t strLen)
     {
         if (len + strLen >= N) {
@@ -83,6 +108,27 @@ struct InlineString
         len += strLen;
         buf[len] = '\0';
         return true;
+    }
+
+    void Replace(char from, char to)
+    {
+        for (size_t i = 0; i < len; ++i) {
+            if (buf[i] == from) { buf[i] = to; }
+        }
+    }
+
+    void ToUpper()
+    {
+        for (size_t i = 0; i < len; ++i) {
+            buf[i] = static_cast<char>(toupper(static_cast<unsigned char>(buf[i])));
+        }
+    }
+
+    void ToLower()
+    {
+        for (size_t i = 0; i < len; ++i) {
+            buf[i] = static_cast<char>(tolower(static_cast<unsigned char>(buf[i])));
+        }
     }
 
     bool operator==(const InlineString& other) const { return len == other.len && memcmp(buf, other.buf, len) == 0; }
