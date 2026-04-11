@@ -92,6 +92,13 @@ bool FileCopy(const char* src, const char* dst)
     return CopyFileA(src, dst, FALSE) != FALSE;
 }
 
+uint64_t GetFileWriteTime(const char* path)
+{
+    WIN32_FILE_ATTRIBUTE_DATA info;
+    if (!GetFileAttributesExA(path, GetFileExInfoStandard, &info)) { return 0; }
+    return (static_cast<uint64_t>(info.ftLastWriteTime.dwHighDateTime) << 32) | info.ftLastWriteTime.dwLowDateTime;
+}
+
 void RecursiveDirectoryIterator(const Core::Path& dir, Core::Vector<Core::Path>& out)
 {
     Core::Path search = dir / "*";

@@ -27,6 +27,9 @@ bool DeleteSingleFile(const char* path);
 // Copies src to dst, overwriting dst if it exists. Returns true on success.
 bool FileCopy(const char* src, const char* dst);
 
+// Returns the last-write time of path as a uint64_t (packed FILETIME on Win32). Returns 0 on failure.
+uint64_t GetFileWriteTime(const char* path);
+
 // Recursively enumerates all files under path and appends their paths to out.
 void RecursiveDirectoryIterator(const char* path, Core::Vector<Core::Path>& out);
 void RecursiveDirectoryIterator(const Core::Path& path, Core::Vector<Core::Path>& out);

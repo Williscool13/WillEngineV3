@@ -4,7 +4,6 @@
 
 #ifndef WILL_ENGINE_DLL_LOADER_H
 #define WILL_ENGINE_DLL_LOADER_H
-#include <string>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -13,6 +12,8 @@ using DllHandle = HMODULE;
 #include <dlfcn.h>
 using DllHandle = void*;
 #endif
+
+#include "core/containers/inline_path.h"
 
 namespace Platform
 {
@@ -34,7 +35,7 @@ public:
 
     DllLoader& operator=(const DllLoader&) = delete;
 
-    bool Load(const std::string& dllPath, const std::string& tempCopyName = "");
+    bool Load(const char* dllPath, const char* tempCopyName = "");
 
     void Unload();
 
@@ -55,10 +56,10 @@ public:
 
 private:
     DllHandle handle = nullptr;
-    std::string originalPath;
-    std::string loadedPath;
+    Core::Path originalPath;
+    Core::Path loadedPath;
     int32_t reloadCount{0};
-    std::filesystem::file_time_type lastWriteTime{};
+    uint64_t lastWriteTime{0};
 };
 }
 

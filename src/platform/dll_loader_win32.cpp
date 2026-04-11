@@ -2,53 +2,47 @@
 // Created by William on 2025-12-14.
 //
 
-#include <filesystem>
+#include <Windows.h>
 
 #include "dll_loader.h"
+#include "file_utils.h"
 #include "spdlog/spdlog.h"
 
 namespace Platform
 {
-bool DllLoader::Load(const std::string& dllPath, const std::string& tempCopyName)
+bool DllLoader::Load(const char* dllPath, const char* tempCopyName)
 {
-    originalPath = dllPath;
+    originalPath = Core::Path(dllPath);
 
-    std::error_code ec;
-    lastWriteTime = std::filesystem::last_write_time(dllPath, ec);
-    if (ec) {
-        SPDLOG_WARN("Failed to get DLL timestamp: {}", ec.message());
+    lastWriteTime = GetFileWriteTime(dllPath);
+    if (lastWriteTime == 0) {
+        SPDLOG_WARN("Failed to get DLL timestamp: {}", dllPath);
     }
 
-    if (!tempCopyName.empty()) {
-        std::filesystem::path srcPath(dllPath);
+    if (tempCopyName && tempCopyName[0] != '\0') {
+        Core::Path tempDir = originalPath.Parent() / "gamedlls";
+        CreateDirectories(tempDir.c_str());
 
-        // Create subdirectory for temp DLLs
-        std::filesystem::path tempDir = srcPath.parent_path() / "gamedlls";
-        std::filesystem::create_directories(tempDir);
+        Core::Path dstPath = tempDir / tempCopyName;
 
-        std::filesystem::path dstPath = tempDir / tempCopyName;
-
-        std::error_code ec;
-        std::filesystem::copy_file(srcPath, dstPath, std::filesystem::copy_options::overwrite_existing, ec);
-
-        if (ec) {
-            SPDLOG_ERROR("Failed to copy DLL: {}", ec.message());
+        if (!FileCopy(dllPath, dstPath.c_str())) {
+            SPDLOG_ERROR("Failed to copy DLL: {} -> {}", dllPath, dstPath.c_str());
             return false;
         }
 
-        loadedPath = dstPath.string();
+        loadedPath = dstPath;
     }
     else {
-        loadedPath = dllPath;
+        loadedPath = Core::Path(dllPath);
     }
 
     handle = LoadLibraryA(loadedPath.c_str());
     if (!handle) {
-        SPDLOG_ERROR("Failed to load DLL: {}", loadedPath);
+        SPDLOG_ERROR("Failed to load DLL: {}", loadedPath.c_str());
         return false;
     }
 
-    SPDLOG_DEBUG("Loaded DLL: {}", loadedPath);
+    SPDLOG_DEBUG("Loaded DLL: {}", loadedPath.c_str());
     return true;
 }
 
@@ -57,17 +51,16 @@ void DllLoader::Unload()
     if (handle) {
         FreeLibrary(handle);
         handle = nullptr;
-        SPDLOG_DEBUG("Unloaded DLL: {}", loadedPath);
+        SPDLOG_DEBUG("Unloaded DLL: {}", loadedPath.c_str());
     }
 }
 
 DllLoadResponse DllLoader::Reload()
 {
-    std::error_code ec;
-    auto currentWriteTime = std::filesystem::last_write_time(originalPath, ec);
+    uint64_t currentWriteTime = GetFileWriteTime(originalPath.c_str());
 
-    if (ec) {
-        SPDLOG_ERROR("Failed to check DLL timestamp: {}", ec.message());
+    if (currentWriteTime == 0) {
+        SPDLOG_ERROR("Failed to check DLL timestamp: {}", originalPath.c_str());
         return DllLoadResponse::FailedToLoad;
     }
 
@@ -77,7 +70,7 @@ DllLoadResponse DllLoader::Reload()
     }
 
     Unload();
-    bool res = Load(originalPath, "game_temp.dll");
+    bool res = Load(originalPath.c_str(), "game_temp.dll");
     return res ? DllLoadResponse::Loaded : DllLoadResponse::FailedToLoad;
 }
 }
