@@ -381,7 +381,7 @@ void Component::ProceduralMeshComponent::Deserialize(ProceduralMeshComponent& co
     }
 }
 
-ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry,
+Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry,
                                                                               entt::entity entity, const char* name)
 {
     auto& component = registry.get<ProceduralMeshComponent>(entity);

@@ -6,11 +6,10 @@
 #define WILL_ENGINE_SCENE_SYSTEM_H
 #include <entt/entt.hpp>
 
-#include "../component-registry/component_registry.h"
+#include "game/component-registry/component_registry.h"
 #include "game/components/scene_components.h"
 #include "core/string_id.h"
 #include "core/containers/span.h"
-#include "engine/include/engine_context.h"
 #include "engine/asset_manager.h"
 #include "engine/core/model_id.h"
 #include "engine/engine_api.h"
@@ -28,11 +27,12 @@ struct EngineState;
 
 namespace Game
 {
-Engine::Scene SaveScene(ComponentRegistry& componentRegistry, entt::registry& registry, Engine::AssetManager* assetManager, StringID sceneId, std::string_view sceneName);
+Engine::Scene SaveScene(Engine::ComponentRegistry& componentRegistry, entt::registry& registry, Engine::AssetManager* assetManager, StringID sceneId, std::string_view sceneName);
 
-StringID LoadScene(ComponentRegistry& componentRegistry, entt::registry& registry, Engine::Scene& scene);
+StringID LoadScene(Engine::ComponentRegistry& componentRegistry, entt::registry& registry, Engine::Scene& scene);
 
-Core::InlineVector<Engine::Scene, 8> SerializeAll(ComponentRegistry& componentRegistry, entt::registry& registry, Engine::AssetManager* assetManager, Core::Span<Engine::EngineState::RuntimeSceneMetadata> loadedScenes);
+Core::InlineVector<Engine::Scene, 8> SerializeAll(Engine::ComponentRegistry& componentRegistry, entt::registry& registry, Engine::AssetManager* assetManager,
+                                                  Core::Span<Engine::EngineState::RuntimeSceneMetadata> loadedScenes);
 
 void DeserializeAll(Engine::EngineState* state, Core::Span<Engine::Scene> snapshots);
 
@@ -92,9 +92,10 @@ inline entt::entity CopySceneEntity(Engine::EngineState* state, entt::entity src
 template<typename T>
 bool CreateComponent(Engine::EngineState* state, entt::entity entity)
 {
-    auto it = state->componentRegistry.registryMapping.find(TypeSID<T>());
-    assert(it != state->componentRegistry.registryMapping.end() && "Component type not registered");
-    ComponentEntry& entry = state->componentRegistry.registry[it->second];
+    auto it = state->componentRegistry.registryMapping.Find(TypeSID<T>());
+    assert(it != nullptr && "Component type not registered");
+    if (it == nullptr) { return false; }
+    Engine::ComponentEntry& entry = state->componentRegistry.registry[*it];
     if (!entry.canAdd(state->registry, entity)) { return false; }
     entry.emplaceDefault(state->registry, entity);
     return true;
@@ -103,17 +104,17 @@ bool CreateComponent(Engine::EngineState* state, entt::entity entity)
 template<typename T>
 void DestroyComponent(Engine::EngineState* state, entt::entity entity)
 {
-    auto it = state->componentRegistry.registryMapping.find(TypeSID<T>());
-    if (it == state->componentRegistry.registryMapping.end()) return;
-    ComponentEntry& entry = state->componentRegistry.registry[it->second];
+    auto it = state->componentRegistry.registryMapping.Find(TypeSID<T>());
+    if (it == nullptr) return;
+    Engine::ComponentEntry& entry = state->componentRegistry.registry[*it];
     entry.remove(state->registry, entity);
 }
 
 inline bool CreateComponent(Engine::EngineState* state, entt::entity entity, StringID typeId)
 {
-    auto it = state->componentRegistry.registryMapping.find(typeId);
-    assert(it != state->componentRegistry.registryMapping.end() && "Component type not registered");
-    ComponentEntry& entry = state->componentRegistry.registry[it->second];
+    auto it = state->componentRegistry.registryMapping.Find(typeId);
+    assert(it != nullptr && "Component type not registered");
+    Engine::ComponentEntry& entry = state->componentRegistry.registry[*it];
     if (!entry.canAdd(state->registry, entity)) { return false; }
     entry.emplaceDefault(state->registry, entity);
     return true;
@@ -121,9 +122,9 @@ inline bool CreateComponent(Engine::EngineState* state, entt::entity entity, Str
 
 inline void DestroyComponent(Engine::EngineState* state, entt::entity entity, StringID typeId)
 {
-    auto it = state->componentRegistry.registryMapping.find(typeId);
-    assert(it != state->componentRegistry.registryMapping.end() && "Component type not registered");
-    ComponentEntry& entry = state->componentRegistry.registry[it->second];
+    auto it = state->componentRegistry.registryMapping.Find(typeId);
+    assert(it != nullptr && "Component type not registered");
+    Engine::ComponentEntry& entry = state->componentRegistry.registry[*it];
     entry.remove(state->registry, entity);
 }
 

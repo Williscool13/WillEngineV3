@@ -10,7 +10,7 @@
 
 namespace Game
 {
-ComponentEditorResult Component::DeathZoneComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)
+Engine::ComponentEditorResult Component::DeathZoneComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)
 {
     bool open = ImGui::CollapsingHeader("Death Zone", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
     ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);

@@ -12,6 +12,7 @@
 
 #include "core/string_id.h"
 #include "core/containers/inline_string.h"
+#include "engine/engine_api.h"
 #include "game/components/component_types.h"
 
 namespace Core { struct ViewFamily; }
@@ -24,7 +25,7 @@ struct NameComponent
 
     static void Serialize(const NameComponent& comp, nlohmann::json& json);
     static void Deserialize(NameComponent& comp, const nlohmann::json& json);
-    static ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
+    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
 };
 
 struct DoNotSerializeTag
@@ -37,7 +38,7 @@ struct PrefabInstanceComponent
 
     static void Serialize(const PrefabInstanceComponent& comp, nlohmann::json& json);
     static void Deserialize(PrefabInstanceComponent& comp, const nlohmann::json& json);
-    static ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
+    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
 };
 }
 

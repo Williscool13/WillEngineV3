@@ -47,7 +47,7 @@ void CheckpointComponent::Deserialize(CheckpointComponent& comp, const nlohmann:
     }
 }
 
-ComponentEditorResult CheckpointComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)
+Engine::ComponentEditorResult CheckpointComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)
 {
     auto& component = registry.get<CheckpointComponent>(entity);
     bool open = ImGui::CollapsingHeader("Checkpoint", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);

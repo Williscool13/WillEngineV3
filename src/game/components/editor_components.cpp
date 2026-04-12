@@ -95,7 +95,7 @@ static bool DrawFolderLevelCombo(const char* label, entt::registry& registry, in
     return changed;
 }
 
-ComponentEditorResult EntityFolderComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity,
+Engine::ComponentEditorResult EntityFolderComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity,
                                                         const char* name)
 {
     auto& comp = registry.get<EntityFolderComponent>(entity);

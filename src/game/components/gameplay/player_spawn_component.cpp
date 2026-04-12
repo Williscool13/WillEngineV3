@@ -28,7 +28,7 @@ void Game::Component::PlayerSpawnComponent::Deserialize(PlayerSpawnComponent& co
 namespace Game
 {
 
-ComponentEditorResult Component::PlayerSpawnComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)
+Engine::ComponentEditorResult Component::PlayerSpawnComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)
 {
     auto& component = registry.get<Component::PlayerSpawnComponent>(entity);
     bool open = ImGui::CollapsingHeader("Player Spawn", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);

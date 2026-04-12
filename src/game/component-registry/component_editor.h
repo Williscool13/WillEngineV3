@@ -12,12 +12,13 @@
 
 #include "render/interface/render_interface.h"
 #include "game/components/component_types.h"
+#include "engine/engine_api.h"
 
 namespace Game
 {
 template<typename T>
 concept HasDrawEditor = requires(Core::ViewFamily& vf, entt::registry& r, entt::entity e, const char* n) {
-    { T::DrawEditor(vf, r, e, n) } -> std::same_as<ComponentEditorResult>;
+    { T::DrawEditor(vf, r, e, n) } -> std::same_as<Engine::ComponentEditorResult>;
 };
 
 template<typename T>
@@ -35,7 +36,7 @@ concept HasCanAdd = requires(const entt::registry& r, entt::entity e) {
     { T::CanAdd(r, e) } -> std::same_as<bool>;
 };
 
-inline ComponentEditorResult DefaultDrawComponentEditor(const char* name)
+inline Engine::ComponentEditorResult DefaultDrawComponentEditor(const char* name)
 {
     ImGui::CollapsingHeader(name, ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_AllowOverlap);
     ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);

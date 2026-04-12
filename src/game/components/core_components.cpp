@@ -35,7 +35,7 @@ void Game::Component::TransformComponent::Deserialize(TransformComponent& comp, 
 
 namespace Game
 {
-ComponentEditorResult Component::TransformComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry,
+Engine::ComponentEditorResult Component::TransformComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry,
                                                         entt::entity entity, const char* name)
 {
     auto& component = registry.get<Component::TransformComponent>(entity);

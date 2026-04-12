@@ -12,6 +12,7 @@
 #include "engine/asset_manager_types.h"
 #include "engine/core/material_id.h"
 #include "engine/spline/spline.h"
+#include "engine/engine_api.h"
 #include "game/components/component_types.h"
 
 namespace Core { struct ViewFamily; }
@@ -41,7 +42,7 @@ struct SplineMeshComponent
     static bool CanAdd(const entt::registry& registry, entt::entity entity);
     static void OnConstruct(entt::registry& registry, entt::entity entity);
     static void OnDestroy(entt::registry& registry, entt::entity entity);
-    static ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
+    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
 };
 
 struct SplineMeshLoadingTag

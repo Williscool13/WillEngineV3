@@ -37,7 +37,7 @@ void Game::Component::DebugGizmoComponent::Deserialize(DebugGizmoComponent& comp
 namespace Game
 {
 
-ComponentEditorResult Component::DebugGizmoComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)
+Engine::ComponentEditorResult Component::DebugGizmoComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)
 {
     auto& comp = registry.get<Component::DebugGizmoComponent>(entity);
     bool open = ImGui::CollapsingHeader("Debug Gizmo", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);

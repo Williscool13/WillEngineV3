@@ -9,7 +9,7 @@
 #include <entt/entt.hpp>
 #include <json/nlohmann/json_fwd.hpp>
 
-#include "game/components/component_types.h"
+#include "engine/engine_api.h"
 
 namespace Core { struct ViewFamily; }
 
@@ -22,7 +22,7 @@ struct PlayerSpawnComponent
 
     static void Serialize(const PlayerSpawnComponent& comp, nlohmann::json& json);
     static void Deserialize(PlayerSpawnComponent& comp, const nlohmann::json& json);
-    static ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
+    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
 };
 }
 

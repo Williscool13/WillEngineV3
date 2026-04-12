@@ -15,8 +15,9 @@
 #include "core/containers/inline_vector.h"
 #include "core/containers/map.h"
 #include "core/containers/vector.h"
-#include "game/component-registry/component_registry.h"
+#include "core/types/math.h"
 #include "engine/core/hash.h"
+#include "render/interface/render_interface.h"
 #include "physics/physics_config.h"
 #include "resources/scene/scene.h"
 
@@ -32,13 +33,14 @@ struct ResolvedCollisionEvent
 {
     entt::entity e1{entt::null};
     entt::entity e2{entt::null};
-    glm::vec3 worldNormal{};
-    glm::vec3 contactPoint{};
+    Vec3 worldNormal{};
+    Vec3 contactPoint{};
     float penetrationDepth{0.0f};
 };
 
 namespace Engine
 {
+struct TextureID;
 struct Texture;
 struct Sampler;
 
@@ -70,11 +72,54 @@ struct EditorTextureResidency
 
 constexpr uint32_t MAX_LOADED_SCENES = 8;
 
+struct ComponentEditorResult {
+    bool requestRemoval{false};
+};
+
+using SerializeFn = void(*)(const entt::registry&, entt::entity, nlohmann::json&);
+using DeserializeFn = void(*)(entt::registry&, entt::entity, const nlohmann::json&);
+using HasComponentFn = bool(*)(const entt::registry&, entt::entity);
+using CanAddComponentFn = bool(*)(const entt::registry&, entt::entity);
+using EmplaceDefaultFn = void(*)(entt::registry&, entt::entity);
+using RemoveComponentFn = void(*)(entt::registry&, entt::entity);
+using CopyComponentFn = void(*)(const entt::registry&, entt::entity, entt::registry&, entt::entity);
+using DrawEditorFn = ComponentEditorResult(*)(Core::ViewFamily&, entt::registry&, entt::entity, const char*);
+
+struct ComponentEntry
+{
+    StringID typeId;
+    const char* name;
+    SerializeFn serialize;
+    DeserializeFn deserialize;
+    CanAddComponentFn canAdd;
+
+    // Type erased fns
+    EmplaceDefaultFn emplaceDefault;
+    RemoveComponentFn remove;
+    CopyComponentFn copy;
+
+    DrawEditorFn drawEditor;
+    HasComponentFn has;
+};
+
+struct ComponentRegistry
+{
+    ComponentRegistry() = default;
+
+    explicit ComponentRegistry(Core::TlsfAllocator* allocator);
+
+    ~ComponentRegistry() = default;
+
+    Core::Vector<ComponentEntry> registry{};
+    Core::Map<StringID, size_t> registryMapping{};
+};
+
 struct EngineState
 {
     EngineState() = default;
 
     explicit EngineState(Core::TlsfAllocator* allocator);
+
     ~EngineState() = default;
 
     bool bIsPlaying{false};
@@ -86,7 +131,7 @@ struct EngineState
 
     entt::registry registry;
     Core::Map<StringID, entt::entity> stableIdToEntityMap;
-    Game::ComponentRegistry componentRegistry{};
+    ComponentRegistry componentRegistry{};
 
     // Asset Loading
     bool bPendingModelResolve{false};

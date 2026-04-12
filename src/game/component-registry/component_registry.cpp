@@ -24,7 +24,7 @@
 
 namespace Game
 {
-void RegisterComponents(ComponentRegistry& componentRegistry)
+void RegisterComponents(Engine::ComponentRegistry& componentRegistry)
 {
     componentRegistry.registry.Clear();
 

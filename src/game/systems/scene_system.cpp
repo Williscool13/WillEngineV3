@@ -33,7 +33,7 @@
 
 namespace Game
 {
-Engine::Scene SaveScene(ComponentRegistry& componentRegistry, entt::registry& registry, Engine::AssetManager* assetManager, StringID sceneId, std::string_view sceneName)
+Engine::Scene SaveScene(Engine::ComponentRegistry& componentRegistry, entt::registry& registry, Engine::AssetManager* assetManager, StringID sceneId, std::string_view sceneName)
 {
     Engine::Scene outScene{};
     nlohmann::json& scene = outScene.content;
@@ -46,7 +46,7 @@ Engine::Scene SaveScene(ComponentRegistry& componentRegistry, entt::registry& re
     const StringID prefabTypeId = TypeSID<Component::PrefabInstanceComponent>();
 
     // Cache prefab JSON per-prefab so we only read each file once
-    std::unordered_map<StringID, nlohmann::json> prefabJsonCache;
+    Core::InlineMap<StringID, nlohmann::json, 512> prefabJsonCache;
 
     for (auto entity : view) {
         auto& tag = view.get<Component::SceneComponent>(entity);
@@ -62,21 +62,21 @@ Engine::Scene SaveScene(ComponentRegistry& componentRegistry, entt::registry& re
 
         const nlohmann::json* prefabRef = nullptr;
         if (prefabInst) {
-            auto cacheIt = prefabJsonCache.find(prefabInst->prefabId);
-            if (cacheIt == prefabJsonCache.end()) {
+            auto cacheIt = prefabJsonCache.Find(prefabInst->prefabId);
+            if (cacheIt) {
                 if (const auto* meta = assetManager->GetPrefabMetadata(prefabInst->prefabId)) {
                     auto prefabData = Engine::ReadWPrefab(meta->source.c_str());
                     if (prefabData) {
-                        cacheIt = prefabJsonCache.emplace(prefabInst->prefabId, std::move(prefabData->componentJson)).first;
+                        cacheIt = &prefabJsonCache.Emplace(prefabInst->prefabId, std::move(prefabData->componentJson));
                     }
                 }
             }
-            if (cacheIt != prefabJsonCache.end()) {
-                prefabRef = &cacheIt->second;
+            if (cacheIt) {
+                prefabRef = cacheIt;
             }
         }
 
-        for (ComponentEntry& entry : componentRegistry.registry) {
+        for (Engine::ComponentEntry& entry : componentRegistry.registry) {
             if (!entry.has(registry, entity)) {
                 continue;
             }
@@ -107,7 +107,7 @@ Engine::Scene SaveScene(ComponentRegistry& componentRegistry, entt::registry& re
     return outScene;
 }
 
-StringID LoadScene(ComponentRegistry& componentRegistry, entt::registry& registry, Engine::Scene& scene)
+StringID LoadScene(Engine::ComponentRegistry& componentRegistry, entt::registry& registry, Engine::Scene& scene)
 {
     auto sceneId = StringID(scene.content["scene_id"].get<uint64_t>());
 
@@ -118,7 +118,7 @@ StringID LoadScene(ComponentRegistry& componentRegistry, entt::registry& registr
         auto entity = registry.create();
         for (auto& [key, compJson] : entityJson.items()) {
             uint64_t typeId = std::stoull(key);
-            for (ComponentEntry& entry : componentRegistry.registry) {
+            for (Engine::ComponentEntry& entry : componentRegistry.registry) {
                 if (entry.typeId.id == typeId) {
                     entry.deserialize(registry, entity, compJson);
                     break;
@@ -132,7 +132,7 @@ StringID LoadScene(ComponentRegistry& componentRegistry, entt::registry& registr
     return sceneId;
 }
 
-Core::InlineVector<Engine::Scene, 8> SerializeAll(ComponentRegistry& componentRegistry, entt::registry& registry, Engine::AssetManager* assetManager, Core::Span<Engine::EngineState::RuntimeSceneMetadata> loadedScenes)
+Core::InlineVector<Engine::Scene, 8> SerializeAll(Engine::ComponentRegistry& componentRegistry, entt::registry& registry, Engine::AssetManager* assetManager, Core::Span<Engine::EngineState::RuntimeSceneMetadata> loadedScenes)
 {
     Core::InlineVector<Engine::Scene, 8> snapshots;
     for (int i = 0; i < loadedScenes.Size(); ++i) {
@@ -404,7 +404,7 @@ void SaveEntityAsPrefab(Engine::EngineState* state, Engine::AssetManager* assetM
     nlohmann::json entityJson;
     uint32_t componentCount = 0;
 
-    for (ComponentEntry& entry : state->componentRegistry.registry) {
+    for (Engine::ComponentEntry& entry : state->componentRegistry.registry) {
         if (entry.has(state->registry, entity)) {
             nlohmann::json compJson;
             entry.serialize(state->registry, entity, compJson);
@@ -475,7 +475,7 @@ entt::entity SpawnPrefab(Engine::EngineState* state, Engine::AssetManager* asset
     entt::entity entity = state->registry.create();
     for (auto& [key, compJson] : prefabData->componentJson.items()) {
         uint64_t typeId = std::stoull(key);
-        for (ComponentEntry& entry : state->componentRegistry.registry) {
+        for (Engine::ComponentEntry& entry : state->componentRegistry.registry) {
             if (entry.typeId.id == typeId) {
                 entry.deserialize(state->registry, entity, compJson);
                 break;
@@ -507,7 +507,7 @@ entt::entity SpawnPrefab(Engine::EngineState* state, Engine::AssetManager* asset
 void ResolvePrefabLoads(Engine::EngineState* state, Engine::AssetManager* assetManager)
 {
     // Cache parsed prefab JSON so each file is read once even with many instances
-    std::unordered_map<StringID, nlohmann::json> prefabJsonCache;
+    Core::InlineMap<StringID, nlohmann::json, 512> prefabJsonCache;
 
     auto view = state->registry.view<Component::PrefabInstanceComponent>();
     for (auto entity : view) {
@@ -519,19 +519,19 @@ void ResolvePrefabLoads(Engine::EngineState* state, Engine::AssetManager* assetM
             continue;
         }
 
-        auto cacheIt = prefabJsonCache.find(prefabInst.prefabId);
-        if (cacheIt == prefabJsonCache.end()) {
+        auto cacheIt = prefabJsonCache.Find(prefabInst.prefabId);
+        if (cacheIt == nullptr) {
             auto prefabData = Engine::ReadWPrefab(meta->source.c_str());
             if (!prefabData) {
                 LOG_WARN(Game, "Failed to read prefab file '{}'", meta->source.c_str());
                 continue;
             }
-            cacheIt = prefabJsonCache.emplace(prefabInst.prefabId, std::move(prefabData->componentJson)).first;
+            cacheIt = &prefabJsonCache.Emplace(prefabInst.prefabId, std::move(prefabData->componentJson));
         }
 
-        for (auto& [key, compJson] : cacheIt->second.items()) {
+        for (auto& [key, compJson] : cacheIt->items()) {
             uint64_t typeId = std::stoull(key);
-            for (ComponentEntry& entry : state->componentRegistry.registry) {
+            for (Engine::ComponentEntry& entry : state->componentRegistry.registry) {
                 if (entry.typeId.id == typeId) {
                     if (!entry.has(state->registry, entity)) {
                         entry.deserialize(state->registry, entity, compJson);

@@ -115,7 +115,7 @@ void Component::StaticMeshComponent::Deserialize(StaticMeshComponent& comp, cons
     }
 }
 
-ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry,
+Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry,
                                                                           entt::entity entity, const char* name)
 {
     auto& component = registry.get<StaticMeshComponent>(entity);

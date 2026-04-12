@@ -10,6 +10,7 @@
 #include <json/nlohmann/json_fwd.hpp>
 
 #include "core/string_id.h"
+#include "engine/engine_api.h"
 #include "game/components/component_types.h"
 
 namespace Core { struct ViewFamily; }
@@ -26,7 +27,7 @@ struct CheckpointComponent
     static void OnConstruct(entt::registry& registry, entt::entity entity);
     static void Serialize(const CheckpointComponent& comp, nlohmann::json& json);
     static void Deserialize(CheckpointComponent& comp, const nlohmann::json& json);
-    static ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
+    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
 };
 }
 

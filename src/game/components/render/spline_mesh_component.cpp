@@ -131,7 +131,7 @@ void Component::SplineMeshComponent::Deserialize(SplineMeshComponent& comp, cons
     }
 }
 
-ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity,
+Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity,
                                                                           const char* name)
 {
     auto& component = registry.get<SplineMeshComponent>(entity);

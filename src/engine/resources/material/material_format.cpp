@@ -59,9 +59,9 @@ std::optional<WMaterialHeader> ReadWMaterialHeader(std::istream& in)
     return std::nullopt;
 }
 
-std::optional<WMaterialHeader> ReadWMaterialHeader(const std::filesystem::path& path)
+std::optional<WMaterialHeader> ReadWMaterialHeader(const Core::Path& path)
 {
-    std::ifstream f(path);
-    return ReadWMaterialHeader(f);
+    std::ifstream file(path.c_str());
+    return ReadWMaterialHeader(file);
 }
 } // Engine

@@ -55,7 +55,7 @@ void StableIdComponent::OnDestroy(entt::registry& registry, entt::entity entity)
 
 namespace Game
 {
-ComponentEditorResult Component::StableIdComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry,
+Engine::ComponentEditorResult Component::StableIdComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry,
                                                        entt::entity entity, const char* name)
 {
     auto& component = registry.get<Component::StableIdComponent>(entity);

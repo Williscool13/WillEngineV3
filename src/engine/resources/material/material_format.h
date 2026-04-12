@@ -6,9 +6,11 @@
 #define WILL_ENGINE_MATERIAL_FORMAT_H
 
 #include <cstdint>
-#include <filesystem>
 #include <iosfwd>
 #include <optional>
+
+#include "core/containers/inline_path.h"
+
 
 namespace Engine
 {
@@ -29,7 +31,7 @@ bool WriteWMaterialHeader(std::ostream& out, const WMaterialHeader& header);
 
 std::optional<WMaterialHeader> ReadWMaterialHeader(std::istream& in);
 
-std::optional<WMaterialHeader> ReadWMaterialHeader(const std::filesystem::path& path);
+std::optional<WMaterialHeader> ReadWMaterialHeader(const Core::Path& path);
 } // Engine
 
 #endif //WILL_ENGINE_MATERIAL_FORMAT_H

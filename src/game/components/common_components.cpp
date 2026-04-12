@@ -25,7 +25,7 @@ void PrefabInstanceComponent::Deserialize(PrefabInstanceComponent& comp, const n
     comp.bMasterPrefab = json.value("bMasterPrefab", false);
 }
 
-ComponentEditorResult PrefabInstanceComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)
+Engine::ComponentEditorResult PrefabInstanceComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)
 {
     auto& comp = registry.get<PrefabInstanceComponent>(entity);
 
@@ -63,7 +63,7 @@ void NameComponent::Deserialize(NameComponent& comp, const nlohmann::json& json)
     comp.name = Core::InlineString<256>(json["name"].get<std::string>().c_str());
 }
 
-ComponentEditorResult NameComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)
+Engine::ComponentEditorResult NameComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)
 {
     auto& component = registry.get<NameComponent>(entity);
     bool open = ImGui::CollapsingHeader("Name##componentname", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);

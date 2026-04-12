@@ -11,6 +11,7 @@
 #include <json/nlohmann/json_fwd.hpp>
 
 #include "core/string_id.h"
+#include "engine/engine_api.h"
 #include "game/components/component_types.h"
 
 namespace Core { struct ViewFamily; }
@@ -41,7 +42,7 @@ struct StableIdComponent
     static void OnConstruct(entt::registry& registry, entt::entity entity);
     static void OnUpdate(entt::registry& registry, entt::entity entity);
     static void OnDestroy(entt::registry& registry, entt::entity entity);
-    static ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
+    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
 };
 
 }

@@ -9,10 +9,6 @@
 
 namespace Game
 {
-struct ComponentEditorResult {
-    bool requestRemoval{false};
-};
-
 template<typename T>
 StringID TypeSID() {
 #if defined(_MSC_VER)

@@ -11,6 +11,7 @@
 
 #include "../../../engine/material_manager.h"
 #include "engine/resources/model/model_types.h"
+#include "engine/engine_api.h"
 #include "game/components/component_types.h"
 #include "game/components/render_components.h"
 
@@ -30,7 +31,7 @@ struct ProceduralMeshComponent
     static bool CanAdd(const entt::registry& registry, entt::entity entity);
     static void OnConstruct(entt::registry& registry, entt::entity entity);
     static void OnDestroy(entt::registry& registry, entt::entity entity);
-    static ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
+    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
 };
 
 struct ProceduralMeshLoadingTag

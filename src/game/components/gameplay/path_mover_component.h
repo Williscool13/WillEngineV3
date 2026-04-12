@@ -11,6 +11,7 @@
 #include <json/nlohmann/json_fwd.hpp>
 
 #include "engine/spline/spline.h"
+#include "engine/engine_api.h"
 #include "game/components/component_types.h"
 #include "core/containers/inline_vector.h"
 
@@ -100,7 +101,7 @@ struct PathMoverComponent
 
     static void Deserialize(PathMoverComponent& comp, const nlohmann::json& json);
 
-    static ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
+    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
 };
 
 float ApplyEasing(EasingType type, float t);

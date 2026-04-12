@@ -11,6 +11,7 @@
 
 #include "../../core/containers/inline_string.h"
 #include "core/string_id.h"
+#include "engine/engine_api.h"
 #include "game/components/component_types.h"
 
 namespace Core { struct ViewFamily; }
@@ -31,7 +32,7 @@ struct EntityFolderComponent
 
     static void Serialize(const EntityFolderComponent& comp, nlohmann::json& json);
     static void Deserialize(EntityFolderComponent& comp, const nlohmann::json& json);
-    static ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
+    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
 };
 }
 

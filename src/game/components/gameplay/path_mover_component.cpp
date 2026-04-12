@@ -149,7 +149,7 @@ void PathMoverComponent::Deserialize(PathMoverComponent& comp, const nlohmann::j
     comp.waitTimer = json.value("waitTimer", 0.0f);
 }
 
-ComponentEditorResult PathMoverComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)
+Engine::ComponentEditorResult PathMoverComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)
 {
     auto& component = registry.get<PathMoverComponent>(entity);
     auto* state = registry.ctx().get<Engine::EngineState*>();

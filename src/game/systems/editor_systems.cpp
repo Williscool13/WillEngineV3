@@ -1114,14 +1114,14 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::EngineState* state, C
                 MarkSceneModified(state, state->currentSceneId);
             }
             ImGui::SameLine();
-            const auto* prefabInst = state->registry.try_get<Component::PrefabInstanceComponent>(e.entity);
-            const bool isPrefab = prefabInst != nullptr;
-            const bool isMasterPrefab = isPrefab && prefabInst->bMasterPrefab;
+            const auto* prefabInst2 = state->registry.try_get<Component::PrefabInstanceComponent>(e.entity);
+            const bool isPrefab = prefabInst2 != nullptr;
+            const bool isMasterPrefab2 = isPrefab && prefabInst2->bMasterPrefab;
             bool selected = std::find(state->selectedEntities.begin(), state->selectedEntities.end(), e.entity) != state->selectedEntities.end();
 
             if (isPrefab) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.7f, 1.0f, 1.0f));
             char uniqueLabel[256];
-            if (isMasterPrefab) {
+            if (isMasterPrefab2) {
                 snprintf(uniqueLabel, sizeof(uniqueLabel), "[M] %s##%llu", e.label, e.stableId);
             } else {
                 snprintf(uniqueLabel, sizeof(uniqueLabel), "%s##%llu", e.label, e.stableId);
@@ -1240,7 +1240,7 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::EngineState* state, C
 
     if (ImGui::Begin("Details")) {
         if (state->selectedEntities.Size() == 1) {
-            ComponentEntry* entryToRemove = nullptr;
+            Engine::ComponentEntry* entryToRemove = nullptr;
             entt::entity entity = state->selectedEntities[0];
             ImGui::Text("Entity: %u", static_cast<uint32_t>(entity));
             if (const auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
@@ -1251,12 +1251,12 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::EngineState* state, C
             state->bCustomGizmoActivePrev = state->bCustomGizmoActive;
             state->bCustomGizmoActive = false;
             auto* entityScene = state->registry.try_get<Component::SceneComponent>(entity);
-            for (ComponentEntry& entry : state->componentRegistry.registry) {
+            for (Engine::ComponentEntry& entry : state->componentRegistry.registry) {
                 if (entry.has(state->registry, entity)) {
                     nlohmann::json before;
                     entry.serialize(state->registry, entity, before);
 
-                    ComponentEditorResult result = entry.drawEditor(frameBuffer->mainViewFamily, state->registry, entity, entry.name);
+                    Engine::ComponentEditorResult result = entry.drawEditor(frameBuffer->mainViewFamily, state->registry, entity, entry.name);
 
                     if (result.requestRemoval) {
                         entryToRemove = &entry;

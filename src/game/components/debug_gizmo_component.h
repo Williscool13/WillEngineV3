@@ -12,6 +12,7 @@
 #include <entt/entt.hpp>
 #include <json/nlohmann/json_fwd.hpp>
 
+#include "engine/engine_api.h"
 #include "game/components/component_types.h"
 
 namespace Core { struct ViewFamily; }
@@ -35,7 +36,7 @@ struct DebugGizmoComponent
 
     static void Serialize(const DebugGizmoComponent& comp, nlohmann::json& json);
     static void Deserialize(DebugGizmoComponent& comp, const nlohmann::json& json);
-    static ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
+    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
 };
 }
 

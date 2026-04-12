@@ -83,8 +83,15 @@ void EditorTextureResidency::ReleaseAll(Core::EngineContext* ctx)
     entries.Clear();
 }
 
+ComponentRegistry::ComponentRegistry(Core::TlsfAllocator* allocator)
+{
+    registry = Core::Vector<ComponentEntry>(allocator, Core::AllocTag::EngineState, 1024);
+    registryMapping = Core::Map<StringID, size_t>(allocator, Core::AllocTag::EngineState, 1024);
+}
+
 EngineState::EngineState(Core::TlsfAllocator* allocator)
     : stableIdToEntityMap(allocator, Core::AllocTag::EngineState, 64),
+      componentRegistry(allocator),
       bodyToEntity(allocator, Core::AllocTag::EngineState, 64),
       selectedEntities(allocator, Core::AllocTag::EngineState, 64),
       prevSelectedEntities(allocator, Core::AllocTag::EngineState, 64),

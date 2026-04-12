@@ -18,6 +18,7 @@
 #include "core/math/constants.h"
 
 #include "fwd_components.h"
+#include "component-registry/component_registry.h"
 #include "components/common_components.h"
 #include "engine/logging/engine_log.h"
 #include "engine/logging/engine_logger.h"
@@ -71,7 +72,7 @@ GAME_API void GameLoad(Core::EngineContext* ctx, Engine::EngineState* state)
 
     Audio::AudioManager::RegisterAudio();
     ctx->scheduler->RegisterExternalTaskThread();
-    RegisterComponents(state->componentRegistry);
+    Game::RegisterComponents(state->componentRegistry);
     Game::ConnectPhysicsObservers(state->registry);
     Game::ConnectCommonObservers(state->registry);
     Game::ConnectRenderObservers(state->registry);
