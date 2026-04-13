@@ -5,7 +5,6 @@
 #include "tlsf_allocator.h"
 
 #include <cassert>
-#include <cstring>
 
 #include "tlsf.h"
 
@@ -58,7 +57,7 @@ void* TlsfAllocator::Alloc(size_t size, AllocTag tag)
     std::unique_lock lock(mutex_, std::defer_lock);
     if (bUseMutex_) { lock.lock(); }
 
-    void* raw = tlsf_malloc(static_cast<tlsf_t>(tlsf), kHeaderSize + size);
+    void* raw = tlsf_malloc(tlsf, kHeaderSize + size);
     assert(raw != nullptr && "OOM: TLSF pool exhausted");
 
     auto* header = static_cast<AllocHeader*>(raw);
@@ -87,7 +86,7 @@ void* TlsfAllocator::Realloc(void* ptr, size_t newSize, AllocTag tag)
     const AllocTag savedTag = header->tag;
     const uint32_t oldSize = header->size;
 
-    void* raw = tlsf_realloc(static_cast<tlsf_t>(tlsf), header, kHeaderSize + newSize);
+    void* raw = tlsf_realloc(tlsf, header, kHeaderSize + newSize);
     assert(raw != nullptr && "OOM: TLSF pool exhausted");
 
     header = static_cast<AllocHeader*>(raw);
@@ -110,16 +109,16 @@ void TlsfAllocator::Free(void* ptr)
     usedBytes_ -= kHeaderSize + header->size;
     allocCount_ -= 1;
 
-    tlsf_free(static_cast<tlsf_t>(tlsf), header);
+    tlsf_free(tlsf, header);
 }
 
-void* TlsfAllocator::AlignedAlloc(size_t size, size_t alignment, AllocTag /*tag*/)
+void* TlsfAllocator::AlignedAlloc(size_t size, size_t alignment, AllocTag tag)
 {
     if (size == 0) { return nullptr; }
     std::unique_lock lock(mutex_, std::defer_lock);
     if (bUseMutex_) { lock.lock(); }
 
-    void* ptr = tlsf_memalign(static_cast<tlsf_t>(tlsf), alignment, size);
+    void* ptr = tlsf_memalign(tlsf, alignment, size);
     assert(ptr != nullptr && "OOM: TLSF pool exhausted");
 
     usedBytes_ += tlsf_block_size(ptr);
@@ -137,7 +136,7 @@ void TlsfAllocator::AlignedFree(void* ptr)
     usedBytes_ -= tlsf_block_size(ptr);
     allocCount_ -= 1;
 
-    tlsf_free(static_cast<tlsf_t>(tlsf), ptr);
+    tlsf_free(tlsf, ptr);
 }
 
 TlsfAllocator::Stats TlsfAllocator::GetStats()
@@ -153,7 +152,6 @@ void TlsfAllocator::TagWalker(void* ptr, size_t /*size*/, int used, void* user)
     auto* ctx = static_cast<TagWalkCtx*>(user);
     auto* header = static_cast<AllocHeader*>(ptr);
 
-    // Aligned allocs have no AllocHeader; skip blocks with out-of-range tag values.
     const auto idx = static_cast<size_t>(header->tag);
     if (idx >= static_cast<size_t>(AllocTag::Count)) { return; }
 
@@ -174,6 +172,6 @@ void TlsfAllocator::GetTagStats(TagStats out[static_cast<size_t>(AllocTag::Count
     std::unique_lock lock(mutex_, std::defer_lock);
     if (bUseMutex_) { lock.lock(); }
     TagWalkCtx ctx{out};
-    tlsf_walk_pool(tlsf_get_pool(static_cast<tlsf_t>(tlsf)), TagWalker, &ctx);
+    tlsf_walk_pool(tlsf_get_pool(tlsf), TagWalker, &ctx);
 }
 } // Core

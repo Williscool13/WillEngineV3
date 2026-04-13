@@ -40,41 +40,42 @@ static void TraceImpl(const char* inFMT, ...)
 // ---- Jolt custom allocator ----
 // Routed through the physics TLSF pool (mutex-enabled for thread safety).
 
-static Core::TlsfAllocator* sPhysicsAlloc = nullptr;
+static Core::MemoryManager* sPhysicsMemory = nullptr;
 
-// All three routed through memalign to guarantee JPH_RVECTOR_ALIGNMENT.
 // Jolt's operator new calls JPH::Allocate directly for alignas(16) types (not over-aligned
 // on MSVC x64), so JoltAlloc must return JPH_RVECTOR_ALIGNMENT-aligned memory.
 // Realloc free+allocs to preserve alignment (tlsf_realloc doesn't guarantee it).
+// All Jolt allocs go to the dedicated physicsAligned pool; headered PhysicsAllocRaw
+// allocs go to the separate physics pool.
 
 static void* JoltAlloc(size_t size)
 {
-    return sPhysicsAlloc->AlignedAlloc(size, JPH_RVECTOR_ALIGNMENT, Core::AllocTag::Physics);
+    return sPhysicsMemory->PhysicsAlignedAllocRaw(size, JPH_RVECTOR_ALIGNMENT);
 }
 
 static void* JoltRealloc(void* ptr, size_t oldSize, size_t newSize)
 {
-    void* newPtr = sPhysicsAlloc->AlignedAlloc(newSize, JPH_RVECTOR_ALIGNMENT, Core::AllocTag::Physics);
+    void* newPtr = sPhysicsMemory->PhysicsAlignedAllocRaw(newSize, JPH_RVECTOR_ALIGNMENT);
     if (ptr) {
         memcpy(newPtr, ptr, oldSize < newSize ? oldSize : newSize);
-        sPhysicsAlloc->AlignedFree(ptr);
+        sPhysicsMemory->PhysicsAlignedFree(ptr);
     }
     return newPtr;
 }
 
 static void JoltFree(void* ptr)
 {
-    sPhysicsAlloc->AlignedFree(ptr);
+    sPhysicsMemory->PhysicsAlignedFree(ptr);
 }
 
 static void* JoltAlignedAlloc(size_t size, size_t alignment)
 {
-    return sPhysicsAlloc->AlignedAlloc(size, alignment, Core::AllocTag::Physics);
+    return sPhysicsMemory->PhysicsAlignedAllocRaw(size, alignment);
 }
 
 static void JoltAlignedFree(void* ptr)
 {
-    sPhysicsAlloc->AlignedFree(ptr);
+    sPhysicsMemory->PhysicsAlignedFree(ptr);
 }
 
 namespace Physics
@@ -83,7 +84,7 @@ PhysicsSystem::PhysicsSystem() = default;
 
 void PhysicsSystem::RegisterAllocators(Core::MemoryManager& memoryManager)
 {
-    sPhysicsAlloc = &memoryManager.Physics();
+    sPhysicsMemory = &memoryManager;
     JPH::Allocate = JoltAlloc;
     JPH::Reallocate = JoltRealloc;
     JPH::Free = JoltFree;

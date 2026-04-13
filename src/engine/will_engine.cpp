@@ -53,40 +53,26 @@ namespace Engine
 {
 static Core::MemoryManager* gMemory = nullptr;
 
-//
-//
-//
-/**
- * SDL allocates from multiple threads (audio callbacks, async I/O, event handling).
- * TLSF is not thread-safe, so SDL calls are serialized with a mutex.
- * SDL allocs are rare so contention cost is acceptable.
- */
-static std::mutex gSdlAllocMutex;
-
 static void* SdlMalloc(size_t size)
 {
-    std::lock_guard lock(gSdlAllocMutex);
-    return gMemory->GeneralAllocRaw(size, Core::AllocTag::SDL);
+    return gMemory->PersistentAllocRaw(size, Core::AllocTag::SDL);
 }
 
 static void* SdlCalloc(size_t nmemb, size_t size)
 {
-    std::lock_guard lock(gSdlAllocMutex);
-    void* ptr = gMemory->GeneralAllocRaw(nmemb * size, Core::AllocTag::SDL);
+    void* ptr = gMemory->PersistentAllocRaw(nmemb * size, Core::AllocTag::SDL);
     memset(ptr, 0, nmemb * size);
     return ptr;
 }
 
 static void* SdlRealloc(void* mem, size_t size)
 {
-    std::lock_guard lock(gSdlAllocMutex);
-    return gMemory->GeneralRealloc(mem, size, Core::AllocTag::SDL);
+    return gMemory->PersistentRealloc(mem, size, Core::AllocTag::SDL);
 }
 
 static void SdlFree(void* mem)
 {
-    std::lock_guard lock(gSdlAllocMutex);
-    gMemory->GeneralFree(mem);
+    gMemory->PersistentFree(mem);
 }
 
 static void* ImGuiAlloc(size_t size, void* userData)
@@ -110,15 +96,16 @@ void WillEngine::Initialize(Utils::Logger* logger)
     ZoneScoped;
 
     memoryManager.Init({
-        .persistentSize = 32ull * 1024 * 1024,  // 32 MB
-        .generalPoolSize = 64ull * 1024 * 1024, // 64 MB
-        .assetsScratchPoolSize = 512ull * 1024 * 1024, // 512 MB
-        .assetsPoolSize = 512ull * 1024 * 1024, // 512 MB
-        .physicsPoolSize = 64ull * 1024 * 1024, // 64 MB
-        .physicsArenaSize = Physics::PHYSICS_TEMP_ALLOCATOR_SIZE, // 32 MB
-        .renderPoolSize = 64ull * 1024 * 1024,  // 64 MB
-        .renderArenaSize = 32ull * 1024 * 1024, // 32 MB
-        .generalArenaSize = 32ull * 1024 * 1024, // 32 MB
+        .persistentSize = 48ull * 1024 * 1024,  // 64 MB
+        .generalPoolSize = 16ull * 1024 * 1024, // 16 MB
+        .assetsScratchPoolSize = 128ull * 1024 * 1024, // 128 MB
+        .assetsPoolSize = 128ull * 1024 * 1024, // 128 MB
+        .physicsPoolSize = 1ull * 1024 * 1024,          // 4 MB
+        .physicsAlignedPoolSize = 32ull * 1024 * 1024,  // 32 MB
+        .physicsArenaSize = Physics::PHYSICS_TEMP_ALLOCATOR_SIZE, // 16 MB
+        .renderPoolSize = 4ull * 1024 * 1024,  // 8 MB
+        .renderArenaSize = 1ull * 1024 * 1024, // 1 MB
+        .generalArenaSize = 1ull * 1024 * 1024, // 1 MB
     });
 
 #if LOGGING_ENABLED
@@ -463,11 +450,12 @@ void WillEngine::EditorImgui()
                 memoryManager.Render().GetTagStats(cachedRenderTags.Data());
                 bFirstOpen = false;
             }
+
             const Core::MemoryManager::Stats ms = memoryManager.GetStats();
             const Core::Arena::Stats ras = memoryManager.RenderArena().GetStats();
             const Core::Arena::Stats gas = memoryManager.GeneralArena().GetStats();
             const Core::Arena::Stats pas = memoryManager.PhysicsArena().GetStats();
-            const size_t totalUsed = ms.persistent.usedBytes + ms.general.usedBytes + ms.assets.usedBytes + ms.physics.usedBytes + ms.render.usedBytes;
+            const size_t totalUsed = ms.persistent.usedBytes + ms.general.usedBytes + ms.assets.usedBytes + ms.physics.usedBytes + ms.physicsAligned.usedBytes + ms.render.usedBytes;
             constexpr float kToMB = 1.0f / (1024.0f * 1024.0f);
             ImGui::SeparatorText("TLSF Allocators");
             ImGui::Text("Total:             %.3f / %.0f MB", static_cast<float>(totalUsed) * kToMB, static_cast<float>(ms.totalBytes) * kToMB);
@@ -478,6 +466,7 @@ void WillEngine::EditorImgui()
             ImGui::Text("Assets (Scratch):  %.3f / %.0f MB (%zu allocs)", static_cast<float>(ms.assetsScratch.usedBytes) * kToMB, static_cast<float>(ms.assetsScratch.totalBytes) * kToMB, ms.assetsScratch.allocCount);
             ImGui::Text("Assets:            %.3f / %.0f MB (%zu allocs)", static_cast<float>(ms.assets.usedBytes) * kToMB, static_cast<float>(ms.assets.totalBytes) * kToMB, ms.assets.allocCount);
             ImGui::Text("Physics:           %.3f / %.0f MB (%zu allocs)", static_cast<float>(ms.physics.usedBytes) * kToMB, static_cast<float>(ms.physics.totalBytes) * kToMB, ms.physics.allocCount);
+            ImGui::Text("Physics (Aligned): %.3f / %.0f MB (%zu allocs)", static_cast<float>(ms.physicsAligned.usedBytes) * kToMB, static_cast<float>(ms.physicsAligned.totalBytes) * kToMB, ms.physicsAligned.allocCount);
             ImGui::Text("Render:            %.3f / %.0f MB (%zu allocs)", static_cast<float>(ms.render.usedBytes) * kToMB, static_cast<float>(ms.render.totalBytes) * kToMB, ms.render.allocCount);
             ImGui::SeparatorText("Arenas (excluded from total)");
             ImGui::Text("RenderArena:  %.3f / %.0f MB (bump)", static_cast<float>(ras.usedBytes) * kToMB, static_cast<float>(ras.totalBytes) * kToMB);
@@ -493,6 +482,7 @@ void WillEngine::EditorImgui()
                 memoryManager.Physics().GetTagStats(cachedPhysicsTags.Data());
                 memoryManager.Render().GetTagStats(cachedRenderTags.Data());
             }
+
 
             constexpr ImGuiTableFlags tableFlags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp;
             auto drawTagTable = [](const char* label, const Core::TlsfAllocator::TagStats* tags) {

@@ -75,12 +75,14 @@ public:
 
     void* Alloc(size_t size, AllocTag tag = AllocTag::Unknown);
 
-    void* Realloc(void* ptr, size_t newSize, AllocTag tag = AllocTag::Unknown); // preserves original tag; fallbackTag used only when ptr == nullptr
+    void* Realloc(void* ptr, size_t newSize, AllocTag tag = AllocTag::Unknown);
+
     void Free(void* ptr);
 
-    // No AllocHeader; tag stats will not reflect aligned allocations.
+    // No AllocHeader; tag stats reported under AllocTag::Aligned.
     // usedBytes_ uses tlsf_block_size for symmetric tracking.
     void* AlignedAlloc(size_t size, size_t alignment, AllocTag tag = AllocTag::Unknown);
+
     void AlignedFree(void* ptr);
 
     struct Stats

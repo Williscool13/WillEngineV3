@@ -4,8 +4,6 @@
 
 #include "memory_manager.h"
 
-#include <cstdlib>
-
 namespace Core
 {
 static size_t AlignUp(size_t v, size_t alignment)
@@ -24,19 +22,20 @@ void MemoryManager::Init(const Layout& layout)
     const size_t assetsScratchSz = AlignUp(layout.assetsScratchPoolSize, kAlign);
     const size_t assetsSz = AlignUp(layout.assetsPoolSize, kAlign);
     const size_t physicsSz = AlignUp(layout.physicsPoolSize, kAlign);
+    const size_t physicsAlignedSz = AlignUp(layout.physicsAlignedPoolSize, kAlign);
     const size_t physicsArenaSz = AlignUp(layout.physicsArenaSize, kAlign);
     const size_t renderSz = AlignUp(layout.renderPoolSize, kAlign);
     const size_t renderArenaSz = AlignUp(layout.renderArenaSize, kAlign);
     const size_t generalArenaSize = AlignUp(layout.generalArenaSize, kAlign);
 
-    totalSize = persistentSz + generalSz + assetsScratchSz + assetsSz + physicsSz + physicsArenaSz + renderSz + renderArenaSz + generalArenaSize;
+    totalSize = persistentSz + generalSz + assetsScratchSz + assetsSz + physicsSz + physicsAlignedSz + physicsArenaSz + renderSz + renderArenaSz + generalArenaSize;
 
     megaBuffer = malloc(totalSize);
     assert(megaBuffer != nullptr && "MemoryManager: mega allocation failed");
 
     auto* cursor = static_cast<uint8_t*>(megaBuffer);
 
-    tlsfPersistent.Init(cursor, persistentSz, false);
+    tlsfPersistent.Init(cursor, persistentSz, true);
     cursor += persistentSz;
     tlsfGeneral.Init(cursor, generalSz, false);
     cursor += generalSz;
@@ -46,6 +45,8 @@ void MemoryManager::Init(const Layout& layout)
     cursor += assetsScratchSz;
     tlsfPhysics.Init(cursor, physicsSz, true);
     cursor += physicsSz;
+    tlsfPhysicsAligned.Init(cursor, physicsAlignedSz, true);
+    cursor += physicsAlignedSz;
     physicsArena = Arena(cursor, physicsArenaSz);
     cursor += physicsArenaSz;
     tlsfRender.Init(cursor, renderSz, false);
@@ -66,6 +67,18 @@ void* MemoryManager::PersistentAllocRaw(size_t size, AllocTag tag)
     void* ptr = tlsfPersistent.Alloc(size, tag);
     assert(ptr != nullptr && "OOM: persistent pool exhausted");
     return ptr;
+}
+
+void* MemoryManager::PersistentRealloc(void* ptr, size_t newSize, AllocTag tag)
+{
+    void* p = tlsfPersistent.Realloc(ptr, newSize, tag);
+    assert(p != nullptr && "OOM: persistent pool exhausted");
+    return p;
+}
+
+void MemoryManager::PersistentFree(void* ptr)
+{
+    tlsfPersistent.Free(ptr);
 }
 
 void* MemoryManager::GeneralAllocRaw(size_t size, AllocTag tag)
@@ -99,6 +112,18 @@ void MemoryManager::PhysicsFree(void* ptr)
     tlsfPhysics.Free(ptr);
 }
 
+void* MemoryManager::PhysicsAlignedAllocRaw(size_t size, size_t alignment)
+{
+    void* ptr = tlsfPhysicsAligned.AlignedAlloc(size, alignment);
+    assert(ptr != nullptr && "OOM: physics aligned pool exhausted");
+    return ptr;
+}
+
+void MemoryManager::PhysicsAlignedFree(void* ptr)
+{
+    tlsfPhysicsAligned.AlignedFree(ptr);
+}
+
 void* MemoryManager::RenderAllocRaw(size_t size)
 {
     void* ptr = tlsfRender.Alloc(size, AllocTag::Render);
@@ -127,6 +152,7 @@ MemoryManager::Stats MemoryManager::GetStats()
         tlsfAssetsScratch.GetStats(),
         tlsfAssets.GetStats(),
         tlsfPhysics.GetStats(),
+        tlsfPhysicsAligned.GetStats(),
         tlsfRender.GetStats(),
     };
 #ifndef PACKAGED_BUILD

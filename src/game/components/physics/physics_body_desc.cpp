@@ -270,7 +270,7 @@ void Component::PhysicsBodyDesc::Serialize(const PhysicsBodyDesc& comp, nlohmann
 
 void Component::PhysicsBodyDesc::Deserialize(PhysicsBodyDesc& comp, const nlohmann::json& json)
 {
-    comp.motionType = static_cast<Component::PhysicsMotionType>(json["motionType"].get<uint8_t>());
+    comp.motionType = static_cast<PhysicsMotionType>(json["motionType"].get<uint8_t>());
     comp.mass = json["mass"].get<float>();
     comp.friction = json.value<float>("friction", 0.0f);
     comp.restitution = json.value<float>("restitution", 0.0f);
@@ -281,8 +281,8 @@ void Component::PhysicsBodyDesc::Deserialize(PhysicsBodyDesc& comp, const nlohma
     comp.shapes.Clear();
 
     for (const auto& shapeJson : json["shapes"]) {
-        Component::PhysicsShapeDesc shape{};
-        shape.type = static_cast<Component::PhysicsShapeType>(shapeJson["type"].get<uint8_t>());
+        PhysicsShapeDesc shape{};
+        shape.type = static_cast<PhysicsShapeType>(shapeJson["type"].get<uint8_t>());
 
         auto& o = shapeJson["offset"];
         shape.offset = {o[0].get<float>(), o[1].get<float>(), o[2].get<float>()};
@@ -297,21 +297,21 @@ void Component::PhysicsBodyDesc::Deserialize(PhysicsBodyDesc& comp, const nlohma
         };
 
         switch (shape.type) {
-            case Component::PhysicsShapeType::Box:
+            case PhysicsShapeType::Box:
             {
                 auto& h = shapeJson["halfExtents"];
                 shape.box.halfExtents = {h[0].get<float>(), h[1].get<float>(), h[2].get<float>()};
                 break;
             }
-            case Component::PhysicsShapeType::Sphere:
+            case PhysicsShapeType::Sphere:
                 shape.sphere.radius = shapeJson["radius"].get<float>();
                 break;
-            case Component::PhysicsShapeType::Capsule:
+            case PhysicsShapeType::Capsule:
                 shape.capsule.radius = shapeJson["radius"].get<float>();
                 shape.capsule.halfHeight = shapeJson["halfHeight"].get<float>();
                 break;
-            case Component::PhysicsShapeType::ConvexHull:
-            case Component::PhysicsShapeType::TriangleMesh:
+            case PhysicsShapeType::ConvexHull:
+            case PhysicsShapeType::TriangleMesh:
                 if (shapeJson.contains("meshSourceModelId")) {
                     shape.meshSourceModelId = Engine::ModelID(shapeJson["meshSourceModelId"].get<uint64_t>());
                 }

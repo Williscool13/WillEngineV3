@@ -18,9 +18,11 @@
 namespace Render
 {
 PipelineManager::PipelineManager(VulkanContext* context, Core::TlsfAllocator& renderAlloc, const Core::Array<VkDescriptorSetLayout, 2>& globalLayouts)
-    : context(context), renderAlloc(&renderAlloc), currentFrame(0), globalDescriptorSetLayouts(globalLayouts),
-      graphicsPipelines(&renderAlloc, Core::AllocTag::Render, 1024),
-      computePipelines(&renderAlloc, Core::AllocTag::Render, 1024)
+    : context(context), renderAlloc(&renderAlloc),
+      graphicsPipelines(&renderAlloc, Core::AllocTag::Render, 256),
+      computePipelines(&renderAlloc, Core::AllocTag::Render, 1024),
+      currentFrame(0),
+      globalDescriptorSetLayouts(globalLayouts)
 {
     Core::Path cachePath = Platform::GetCachePath() / "pipeline.cache";
 

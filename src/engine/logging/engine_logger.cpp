@@ -8,7 +8,7 @@ namespace Engine
 {
 EngineLogger::EngineLogger(Core::MemoryManager& memoryManager)
 {
-    imguiSink = new(memoryManager.PersistentAllocRaw(sizeof(ImGuiSink))) ImGuiSink(&memoryManager.Persistent(), Core::AllocTag::EngineLogger);
+    imguiSink = new(memoryManager.PersistentAllocRaw(sizeof(ImGuiSink), Core::AllocTag::EngineLogger)) ImGuiSink(&memoryManager.Persistent(), Core::AllocTag::EngineLogger);
 }
 
 void EngineLogger::Init(Utils::Logger* baseLogger)
