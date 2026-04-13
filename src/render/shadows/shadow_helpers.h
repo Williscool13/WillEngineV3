@@ -5,11 +5,9 @@
 #ifndef WILL_ENGINE_SHADOW_HELPERS_H
 #define WILL_ENGINE_SHADOW_HELPERS_H
 
-#include <array>
-
 #include <glm/glm.hpp>
 
-#include "../interface/render_interface.h"
+#include "render/interface/render_interface.h"
 
 namespace Render
 {
@@ -26,7 +24,7 @@ ViewProjMatrix GenerateLightSpaceMatrix(
     const glm::vec3& lightDirection,
     const Core::ViewData& viewData);
 
-std::array<glm::vec3, 8> GetPerspectiveFrustumCornersWorldSpace(float nearPlane, float farPlane, float fov, float aspect, glm::vec3 position, glm::vec3 viewDir);
+Core::Array<Vec3, 8> GetPerspectiveFrustumCornersWorldSpace(float nearPlane, float farPlane, float fov, float aspect, glm::vec3 position, glm::vec3 viewDir);
 
 inline uint32_t PackCascadeIndices(uint8_t c0, uint8_t c1, uint8_t c2, uint8_t c3)
 {

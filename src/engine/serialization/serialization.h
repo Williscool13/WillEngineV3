@@ -6,8 +6,6 @@
 #define WILL_ENGINE_SERIALIZATION_H
 
 #include <cstddef>
-#include <string>
-#include <vector>
 
 #include "core/containers/inline_string.h"
 #include "core/containers/inline_vector.h"
@@ -36,12 +34,6 @@ inline size_t AppendRaw(Core::Vector<std::byte>& buf, const void* data, size_t s
 {
     const auto* ptr = reinterpret_cast<const std::byte*>(data);
     buf.Append(ptr, ptr + size);
-    return size;
-}
-inline size_t AppendRaw(std::vector<std::byte>& buf, const void* data, size_t size)
-{
-    const auto* ptr = reinterpret_cast<const std::byte*>(data);
-    buf.insert(buf.end(), ptr, ptr + size);
     return size;
 }
 

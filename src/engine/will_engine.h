@@ -11,7 +11,7 @@
 
 #include "engine/include/frame_sync.h"
 #include "engine/include/game_interface.h"
-#include "../render/interface/render_interface.h"
+#include "render/interface/render_interface.h"
 #include "core/containers/array.h"
 #include "core/memory/memory_manager.h"
 #include "platform/crash_handler.h"
@@ -68,7 +68,7 @@ class RenderThread;
 namespace Engine
 {
 
-static constexpr std::array<const char*, 64> TASK_THREAD_NAMES = {
+static constexpr Core::Array<const char*, 64> TASK_THREAD_NAMES{
     "TaskThread0", "TaskThread1", "TaskThread2", "TaskThread3",
     "TaskThread4", "TaskThread5", "TaskThread6", "TaskThread7",
     "TaskThread8", "TaskThread9", "TaskThread10", "TaskThread11",

@@ -5,10 +5,9 @@
 #ifndef WILL_ENGINE_VK_CONSTANTS_H
 #define WILL_ENGINE_VK_CONSTANTS_H
 #include <cstdint>
-#include <array>
 
 #include "core/string_id.h"
-#include "shaders/instancing_interop.h"
+#include "core/containers/array.h"
 #include "shaders/lights_interop.h"
 #include "shaders/model_interop.h"
 #include "shaders/shadows_interop.h"
@@ -80,7 +79,7 @@ struct HaltonSample
 };
 
 // Pre-computed 16-point Halton sequence (base 2, 3)
-inline constexpr std::array<HaltonSample, HALTON_SEQUENCE_COUNT> HALTON_SEQUENCE{
+inline constexpr Core::Array<HaltonSample, HALTON_SEQUENCE_COUNT> HALTON_SEQUENCE{
     HaltonSample(0.5f, 0.5f),
     {0.25f, 0.66666667f},
     {0.75f, 0.11111111f},
@@ -115,13 +114,13 @@ struct PCSSSamples
 
 struct ShadowCascadePreset
 {
-    std::array<glm::vec2, SHADOW_CASCADE_COUNT> extents;
-    std::array<CascadeBias, SHADOW_CASCADE_COUNT> biases;
-    std::array<PCSSSamples, SHADOW_CASCADE_COUNT> pcssSamples;
-    std::array<float, SHADOW_CASCADE_COUNT> lightSizes;
+    Core::Array<glm::vec2, SHADOW_CASCADE_COUNT> extents;
+    Core::Array<CascadeBias, SHADOW_CASCADE_COUNT> biases;
+    Core::Array<PCSSSamples, SHADOW_CASCADE_COUNT> pcssSamples;
+    Core::Array<float, SHADOW_CASCADE_COUNT> lightSizes;
 };
 
-inline constexpr std::array<ShadowCascadePreset, 4> SHADOW_PRESETS = {
+inline constexpr Core::Array<ShadowCascadePreset, 4> SHADOW_PRESETS = {
     {
         // Ultra
         {

@@ -7,6 +7,7 @@
 
 #include <tracy/Tracy.hpp>
 
+#include "core/containers/arena_fixed_vector.h"
 #include "engine/include/engine_context.h"
 #include "core/time/time_frame.h"
 #include "game/fwd_components.h"
@@ -167,7 +168,8 @@ void MarkPhysicsTransformsDirty(Engine::EngineState* state)
     for (auto entity : view) {
         if (state->registry.all_of<Component::DynamicPhysicsBodyComponent>(entity)) {
             state->registry.emplace_or_replace<Component::TeleportPhysicsTransformTag>(entity);
-        } else {
+        }
+        else {
             state->registry.emplace_or_replace<Component::DirtyKinematicPhysicsTransformTag>(entity);
         }
     }
@@ -298,9 +300,11 @@ JPH::BodyID CreateBodyFromShape(JPH::BodyInterface& bodyInterface, const Compone
     JPH::ObjectLayer layer;
     if (layerOverride != static_cast<JPH::ObjectLayer>(0xFFFF)) {
         layer = layerOverride;
-    } else if (desc.bIsSensor) {
+    }
+    else if (desc.bIsSensor) {
         layer = Physics::Layers::SENSOR;
-    } else {
+    }
+    else {
         layer = desc.motionType == Component::PhysicsMotionType::Static ? Physics::Layers::NON_MOVING : Physics::Layers::MOVING;
     }
 
@@ -391,9 +395,12 @@ JPH::ShapeRefC CreateShapeFromDesc(const Component::PhysicsShapeDesc& desc, Engi
 void ResolvePhysicsMeshLoads(Core::EngineContext* ctx, Engine::EngineState* state)
 {
     ZoneScoped;
-    std::vector<entt::entity> resolved;
-
     auto view = state->registry.view<Component::PhysicsBodyDesc, Component::PendingPhysicsMeshTag>();
+    size_t viewCount = view.size_hint();
+    if (viewCount == 0) {
+        return;
+    }
+    auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->memoryManager->GeneralArena(), viewCount);
     for (const auto& [entity, bodyDesc] : view.each()) {
         bool allReady = true;
         bool shouldAbandon = false;
@@ -427,7 +434,7 @@ void ResolvePhysicsMeshLoads(Core::EngineContext* ctx, Engine::EngineState* stat
             continue;
         }
 
-        resolved.push_back(entity);
+        resolved.PushBack(entity);
     }
 
     for (const auto entity : resolved) {
@@ -438,11 +445,16 @@ void ResolvePhysicsMeshLoads(Core::EngineContext* ctx, Engine::EngineState* stat
 void ResolvePhysicsShapeCreation(Core::EngineContext* ctx, Engine::EngineState* state)
 {
     ZoneScoped;
-    std::vector<entt::entity> resolved;
 
     // Mesh based physics need to wait for its mesh to load
     auto view = state->registry.view<Component::PhysicsBodyDesc, Component::PendingPhysicsShapeCreationTag>(
         entt::exclude<Component::PendingPhysicsMeshTag>);
+
+    size_t viewCount = view.size_hint();
+    if (viewCount == 0) {
+        return;
+    }
+    auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->memoryManager->GeneralArena(), viewCount);
 
     for (const auto& [entity, bodyDesc] : view.each()) {
         bool bDegenerate = false;
@@ -459,13 +471,13 @@ void ResolvePhysicsShapeCreation(Core::EngineContext* ctx, Engine::EngineState* 
             }
         }
         if (bDegenerate) {
-            resolved.push_back(entity);
+            resolved.PushBack(entity);
             continue;
         }
 
         if (bodyDesc.shapes.IsEmpty()) {
             LOG_WARN(Game, "PhysicsBodyDesc has no shapes, skipping shape creation");
-            resolved.push_back(entity);
+            resolved.PushBack(entity);
             continue;
         }
 
@@ -478,7 +490,10 @@ void ResolvePhysicsShapeCreation(Core::EngineContext* ctx, Engine::EngineState* 
             bool bAnyNull = false;
             for (const auto& shapeDesc : bodyDesc.shapes) {
                 JPH::ShapeRefC subShape = CreateShapeFromDesc(shapeDesc, ctx->assetManager);
-                if (!subShape) { bAnyNull = true; break; }
+                if (!subShape) {
+                    bAnyNull = true;
+                    break;
+                }
                 compound.AddShape(
                     JPH::Vec3(shapeDesc.offset.x, shapeDesc.offset.y, shapeDesc.offset.z),
                     JPH::Quat(shapeDesc.rotation.x, shapeDesc.rotation.y, shapeDesc.rotation.z, shapeDesc.rotation.w),
@@ -490,12 +505,12 @@ void ResolvePhysicsShapeCreation(Core::EngineContext* ctx, Engine::EngineState* 
 
         if (!shape) {
             LOG_WARN(Game, "Shape creation failed, skipping");
-            resolved.push_back(entity);
+            resolved.PushBack(entity);
             continue;
         }
 
         bodyDesc.shapeRef = shape;
-        resolved.push_back(entity);
+        resolved.PushBack(entity);
     }
 
     for (const auto entity : resolved) {
@@ -538,6 +553,7 @@ void ResolvePhysicsBodyCreation(Core::EngineContext* ctx, Engine::EngineState* s
         }
     }
 }
+
 void PhysicsOnPlayStop(Core::EngineContext* ctx, Engine::EngineState* state)
 {
     state->registry.clear<Component::PhysicsBodyComponent>();

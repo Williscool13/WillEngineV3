@@ -626,7 +626,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                 {
                     bool bHasAny = false;
                     const auto* meta = ctx->assetManager->GetModelMetadata(shape.meshSourceModelId);
-                    static constexpr std::array<const char*, 23> kProceduralNames = {
+                    static constexpr Core::Array<const char*, 23> kProceduralNames = {
                         nullptr, "Staircase", "Box", "Cylinder", "Capsule", "Torus", "Arch",
                         "Wedge", "Cone", "Door", "Plane", "Sphere", "Subdivided Sphere",
                         "Hemisphere", "Pipe", "Tetrahedron", "Octahedron", "Icosahedron",
@@ -638,7 +638,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                         ImGui::Text("Mesh Source: %s", meta->name.c_str());
                         bHasAny = true;
                     }
-                    else if (idx > 0 && idx < kProceduralNames.size()) {
+                    else if (idx > 0 && idx < kProceduralNames.Size()) {
                         ImGui::Text("Mesh Source: Procedural %s", kProceduralNames[idx]);
                         bHasAny = true;
                     }

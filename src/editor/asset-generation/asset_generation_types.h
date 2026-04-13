@@ -20,8 +20,7 @@ constexpr uint32_t ENVIRONMENT_MAP_GENERATION_JOB_COUNT = 1;
 constexpr uint32_t TEXTURE_GENERATION_STAGING_BUFFER_SIZE = 64 * 1024 * 1024; // 64MB
 constexpr uint32_t ENVIRONMENT_MAP_GENERATION_STAGING_BUFFER_SIZE = 128 * 1024 * 1024; // 128MB
 
-// MEM std::array exception for constexpr array of names
-static constexpr std::array<const char*, 32> ASSET_GENERATOR_WORKER_NAMES = {
+static constexpr Core::Array<const char*, 32> ASSET_GENERATOR_WORKER_NAMES{
     "AssetGenerator0", "AssetGenerator1", "AssetGenerator2", "AssetGenerator3",
     "AssetGenerator4", "AssetGenerator5", "AssetGenerator6", "AssetGenerator7",
     "AssetGenerator8", "AssetGenerator9", "AssetGenerator10", "AssetGenerator11",

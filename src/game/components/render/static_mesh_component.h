@@ -6,16 +6,13 @@
 #define WILL_ENGINE_STATIC_MESH_COMPONENT_H
 
 #include <array>
-#include <cstdint>
-#include <glm/glm.hpp>
 #include <entt/entt.hpp>
 #include <json/nlohmann/json_fwd.hpp>
 
 #include "engine/core/model_id.h"
-#include "../../../engine/material_manager.h"
+#include "engine/material_manager.h"
 #include "engine/resources/model/model_types.h"
 #include "engine/engine_api.h"
-#include "game/components/component_types.h"
 #include "game/components/render_components.h"
 
 namespace Core { struct ViewFamily; }
@@ -26,12 +23,12 @@ struct StaticMeshComponent
 {
     static constexpr size_t MaxMaterialOverrides = 128;
 
-    glm::vec4 modelFlags{1.0f, 1.0f, 0.0f, 0.0f}; // x: visible, y: shadow-caster, zw: reserved
+    Vec4 modelFlags{1.0f, 1.0f, 0.0f, 0.0f}; // x: visible, y: shadow-caster, zw: reserved
 
     Engine::ModelID modelId{};
     int32_t meshIndex{-1};
-    std::array<Engine::MaterialID, MaxMaterialOverrides> materialOverrides{};
-    glm::vec3 renderOffset{0.0f};
+    Core::Array<Engine::MaterialID, MaxMaterialOverrides> materialOverrides{};
+    Vec3 renderOffset{0.0f};
 
     static void Serialize(const StaticMeshComponent& comp, nlohmann::json& json);
     static void Deserialize(StaticMeshComponent& comp, const nlohmann::json& json);

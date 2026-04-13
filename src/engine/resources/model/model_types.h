@@ -58,6 +58,8 @@ struct Node
     Vec3 localScale{1.0f};
 };
 
+/*
+// Remove heap when implementing
 struct AnimationSampler
 {
     enum class Interpolation
@@ -72,8 +74,7 @@ struct AnimationSampler
     Interpolation interpolation;
 };
 
-// Remove heap when implementing
-/*struct AnimationChannel
+struct AnimationChannel
 {
     enum class TargetPath
     {

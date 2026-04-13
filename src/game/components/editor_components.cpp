@@ -4,12 +4,12 @@
 
 #include "editor_components.h"
 
-#include <vector>
-
 #include <fmt/format.h>
 #include <json/nlohmann/json.hpp>
 
 #include "component_types.h"
+#include "core/containers/arena_vector.h"
+#include "engine/include/engine_context.h"
 #include "game/component-registry/component_editor.h"
 
 namespace Game::Component
@@ -26,7 +26,7 @@ void EntityFolderComponent::Deserialize(EntityFolderComponent& comp, const nlohm
 {
     if (json.contains("folderHierarchyNames")) {
         const auto& arr = json["folderHierarchyNames"];
-        for (size_t i = 0; i < comp.folderHierarchyNames.size() && i < arr.size(); ++i) {
+        for (size_t i = 0; i < comp.folderHierarchyNames.Size() && i < arr.size(); ++i) {
             auto s = arr[i].get<std::string_view>();
             comp.folderHierarchyNames[i] = Core::ShortString(s);
             comp.folderHierarchy[i] = s.empty() ? StringID() : StringID(s.data(), s.size());
@@ -34,8 +34,7 @@ void EntityFolderComponent::Deserialize(EntityFolderComponent& comp, const nlohm
     }
 }
 
-static void CollectExistingFolderNames(entt::registry& registry, int level,
-                                       std::vector<Core::ShortString>& outNames, StringID parentFilter)
+static void CollectExistingFolderNames(entt::registry& registry, int level, Core::ArenaVector<Core::ShortString>& outNames, StringID parentFilter)
 {
     auto view = registry.view<EntityFolderComponent>();
     for (auto e : view) {
@@ -51,7 +50,7 @@ static void CollectExistingFolderNames(entt::registry& registry, int level,
             }
         }
         if (!duplicate) {
-            outNames.push_back(fc.folderHierarchyNames[level]);
+            outNames.PushBack(fc.folderHierarchyNames[level]);
         }
     }
     std::ranges::sort(outNames);
@@ -61,7 +60,8 @@ static bool DrawFolderLevelCombo(const char* label, entt::registry& registry, in
                                  Core::ShortString& nameOut, StringID& idOut, StringID parentFilter)
 {
     bool changed = false;
-    std::vector<Core::ShortString> existing;
+    auto* ctx = registry.ctx().get<Core::EngineContext*>();
+    Core::ArenaVector<Core::ShortString> existing{&ctx->memoryManager->GeneralArena(), 128};
     CollectExistingFolderNames(registry, level, existing, parentFilter);
 
     const char* currentName = nameOut.Size() > 0 ? nameOut.c_str() : "(None)";

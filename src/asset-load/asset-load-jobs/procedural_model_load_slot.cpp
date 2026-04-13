@@ -1863,7 +1863,7 @@ bool ProceduralModelLoadSlot::GenerateCurvedRamp(const Engine::CurvedRampParams&
         }
     };
 
-    auto sideUV = [&](int i) -> std::pair<float, float> {
+    auto sideUV = [&](int i) -> Vec2 {
         return {profile[i].z / std::max(totalDepth, 0.01f), profile[i].y / std::max(h, 0.01f)};
     };
 
@@ -1879,8 +1879,8 @@ bool ProceduralModelLoadSlot::GenerateCurvedRamp(const Engine::CurvedRampParams&
             pushVert({x, 0, 0}, n, 0, 0);
             pushVert({x, lip + h, 0}, n, 0, 1);
             for (int i = 0; i < profCount; i++) {
-                auto [u, v] = sideUV(i);
-                pushVert({x, profile[i].y, profile[i].z}, n, u, v);
+                auto uv = sideUV(i);
+                pushVert({x, profile[i].y, profile[i].z}, n, uv.x, uv.y);
             }
             pushVert({x, 0, totalDepth}, n, 1, 0);
             emitFan(base, 2 + profCount + 1, side);
@@ -1892,8 +1892,8 @@ bool ProceduralModelLoadSlot::GenerateCurvedRamp(const Engine::CurvedRampParams&
                 pushVert({x, 0, 0}, n, 0, 0);
                 pushVert({x, lip + h, 0}, n, 0, 1);
                 for (int i = 0; i < splitIdx; i++) {
-                    auto [u, v] = sideUV(i);
-                    pushVert({x, profile[i].y, profile[i].z}, n, u, v);
+                    auto uv = sideUV(i);
+                    pushVert({x, profile[i].y, profile[i].z}, n, uv.x, uv.y);
                 }
                 emitFan(base, 2 + splitIdx, side);
             }
@@ -1902,8 +1902,8 @@ bool ProceduralModelLoadSlot::GenerateCurvedRamp(const Engine::CurvedRampParams&
                 uint32_t base = static_cast<uint32_t>(vertices.Size());
                 pushVert({x, 0, totalDepth}, n, 1, 0);
                 for (int i = splitIdx; i < profCount; i++) {
-                    auto [u, v] = sideUV(i);
-                    pushVert({x, profile[i].y, profile[i].z}, n, u, v);
+                    auto uv = sideUV(i);
+                    pushVert({x, profile[i].y, profile[i].z}, n, uv.x, uv.y);
                 }
                 pushVert({x, lip + h, totalDepth}, n, 1, 1);
                 emitFan(base, 1 + (profCount - splitIdx) + 1, side);

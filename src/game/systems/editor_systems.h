@@ -30,7 +30,7 @@ void MarkSceneModified(Engine::EngineState* state, StringID sceneId);
 
 void MarkEntitiesModified(Engine::EngineState* state, Core::Span<entt::entity> entities);
 
-void DrawMultiSelectEditor(Engine::EngineState* state, const Vec3& centroid, int transformCount);
+void DrawMultiSelectEditor(Core::EngineContext* ctx, Engine::EngineState* state, const Vec3& centroid, int transformCount);
 
 void EditorUpdate(Core::EngineContext* ctx, Engine::EngineState* state);
 

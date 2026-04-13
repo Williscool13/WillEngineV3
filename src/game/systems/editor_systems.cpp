@@ -45,7 +45,7 @@ void MarkEntitiesModified(Engine::EngineState* state, Core::Span<entt::entity> e
     }
 }
 
-void DrawMultiSelectEditor(Engine::EngineState* state, const Vec3& centroid, int transformCount)
+void DrawMultiSelectEditor(Core::EngineContext* ctx, Engine::EngineState* state, const Vec3& centroid, int transformCount)
 {
     auto& entities = state->selectedEntities;
     ImGui::Text("%zu entities selected", entities.Size());
@@ -122,7 +122,7 @@ void DrawMultiSelectEditor(Engine::EngineState* state, const Vec3& centroid, int
         }
 
         if (allHaveFolder) {
-            std::vector<Core::ShortString> existingFolders0;
+            Core::ArenaVector<Core::ShortString> existingFolders0{&ctx->memoryManager->GeneralArena(), 16};
             auto folderView = state->registry.view<Component::EntityFolderComponent>();
             for (auto e : folderView) {
                 auto& fc = folderView.get<Component::EntityFolderComponent>(e);
@@ -137,7 +137,7 @@ void DrawMultiSelectEditor(Engine::EngineState* state, const Vec3& centroid, int
                     }
                 }
                 if (!dup) {
-                    existingFolders0.push_back(fc.folderHierarchyNames[0]);
+                    existingFolders0.PushBack(fc.folderHierarchyNames[0]);
                 }
             }
             std::ranges::sort(existingFolders0);
@@ -172,7 +172,7 @@ void DrawMultiSelectEditor(Engine::EngineState* state, const Vec3& centroid, int
             }
 
             if (folder0Same && firstFolder0Id.IsValid()) {
-                std::vector<Core::ShortString> existingFolders1;
+            Core::ArenaVector<Core::ShortString> existingFolders1{&ctx->memoryManager->GeneralArena(), 16};
                 for (auto e : folderView) {
                     auto& fc = folderView.get<Component::EntityFolderComponent>(e);
                     if (fc.folderHierarchy[0] != firstFolder0Id) {
@@ -189,7 +189,7 @@ void DrawMultiSelectEditor(Engine::EngineState* state, const Vec3& centroid, int
                         }
                     }
                     if (!dup) {
-                        existingFolders1.push_back(fc.folderHierarchyNames[1]);
+                        existingFolders1.PushBack(fc.folderHierarchyNames[1]);
                     }
                 }
                 std::ranges::sort(existingFolders1);
@@ -1066,7 +1066,8 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::EngineState* state, C
             const char* folderName0;
             const char* folderName1;
         };
-        std::vector<EntityEntry> entries;
+
+        Core::ArenaVector<EntityEntry> entries{&ctx->memoryManager->GeneralArena(), 1024};
 
         auto view2 = state->registry.view<Component::SceneComponent>();
         for (auto entity : view2) {
@@ -1092,7 +1093,7 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::EngineState* state, C
                 fn0 = fc->folderHierarchyNames[0].c_str();
                 fn1 = fc->folderHierarchyNames[1].c_str();
             }
-            entries.push_back({entity, label, stableId, sortOrder, f0, f1, fn0, fn1});
+            entries.PushBack({entity, label, stableId, sortOrder, f0, f1, fn0, fn1});
         }
         std::ranges::sort(entries, [](const EntityEntry& a, const EntityEntry& b) { return a.sortOrder < b.sortOrder; });
 
@@ -1154,10 +1155,10 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::EngineState* state, C
             if (isPrefab) ImGui::PopStyleColor();
         };
 
-        auto drawGroup = [&](std::vector<EntityEntry*>& group) {
-            for (size_t i = 0; i < group.size(); ++i) {
+        auto drawGroup = [&](Core::Span<EntityEntry*> group) {
+            for (size_t i = 0; i < group.Size(); ++i) {
                 const EntityEntry* prev = i > 0 ? group[i - 1] : nullptr;
-                const EntityEntry* next = (i + 1 < group.size()) ? group[i + 1] : nullptr;
+                const EntityEntry* next = (i + 1 < group.Size()) ? group[i + 1] : nullptr;
                 drawEntityRow(*group[i], prev, next);
             }
         };
@@ -1168,22 +1169,22 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::EngineState* state, C
             StringID id;
             const char* name;
         };
-        std::vector<FolderInfo> folders0;
+        Core::ArenaVector<FolderInfo> folders0{&ctx->memoryManager->GeneralArena(), 64};
         for (auto& e : entries) {
             if (!e.folder0.IsValid()) continue;
             bool found = false;
             for (auto& f : folders0) {
                 if (f.id == e.folder0) { found = true; break; }
             }
-            if (!found) folders0.push_back({e.folder0, e.folderName0});
+            if (!found) folders0.PushBack({e.folder0, e.folderName0});
         }
         std::ranges::sort(folders0, [](const FolderInfo& a, const FolderInfo& b) { return strcmp(a.name, b.name) < 0; });
 
         // Draw unfoldered entities first
         {
-            std::vector<EntityEntry*> group;
+            Core::ArenaVector<EntityEntry*> group{&ctx->memoryManager->GeneralArena(), 1024};
             for (auto& e : entries) {
-                if (!e.folder0.IsValid()) group.push_back(&e);
+                if (!e.folder0.IsValid()) group.PushBack(&e);
             }
             drawGroup(group);
         }
@@ -1192,22 +1193,22 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::EngineState* state, C
         for (auto& [id0, name0] : folders0) {
             if (ImGui::TreeNode(fmt::format("{}##folder_{}", name0, id0.id).c_str())) {
                 // Collect subfolders for this folder, sorted alphabetically
-                std::vector<FolderInfo> subfolders;
+                Core::ArenaVector<FolderInfo> subfolders{&ctx->memoryManager->GeneralArena(), 64};
                 for (auto& e : entries) {
                     if (e.folder0 != id0 || !e.folder1.IsValid()) continue;
                     bool found = false;
                     for (auto& sf : subfolders) {
                         if (sf.id == e.folder1) { found = true; break; }
                     }
-                    if (!found) subfolders.push_back({e.folder1, e.folderName1});
+                    if (!found) subfolders.PushBack({e.folder1, e.folderName1});
                 }
                 std::ranges::sort(subfolders, [](const FolderInfo& a, const FolderInfo& b) { return strcmp(a.name, b.name) < 0; });
 
                 // Direct folder members (no subfolder)
                 {
-                    std::vector<EntityEntry*> group;
+                    Core::ArenaVector<EntityEntry*> group{&ctx->memoryManager->GeneralArena(), 1024};
                     for (auto& e : entries) {
-                        if (e.folder0 == id0 && !e.folder1.IsValid()) group.push_back(&e);
+                        if (e.folder0 == id0 && !e.folder1.IsValid()) group.PushBack(&e);
                     }
                     drawGroup(group);
                 }
@@ -1215,9 +1216,9 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::EngineState* state, C
                 // Subfolder tree nodes
                 for (auto& [id1, name1] : subfolders) {
                     if (ImGui::TreeNode(fmt::format("{}##subfolder_{}_{}", name1, id0.id, id1.id).c_str())) {
-                        std::vector<EntityEntry*> group;
+                        Core::ArenaVector<EntityEntry*> group{&ctx->memoryManager->GeneralArena(), 1024};
                         for (auto& e : entries) {
-                            if (e.folder0 == id0 && e.folder1 == id1) group.push_back(&e);
+                            if (e.folder0 == id0 && e.folder1 == id1) group.PushBack(&e);
                         }
                         drawGroup(group);
                         ImGui::TreePop();
@@ -1313,7 +1314,7 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::EngineState* state, C
             }
         }
         else if (multiSelected) {
-            DrawMultiSelectEditor(state, multiGizmoCentroid, transformCount);
+            DrawMultiSelectEditor(ctx, state, multiGizmoCentroid, transformCount);
         }
     }
     ImGui::End();
@@ -1827,20 +1828,20 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::EngineState* state, C
                                 sorted.EmplaceBack(meta.name, StringID(meta.name.c_str(), meta.name.Size()), texId2);
                             }
                             std::ranges::sort(sorted, {}, &TexturePair::name);
-                            for (const auto& [name, nameId, id] : sorted) {
-                                bool selected = texEditPending == id;
+                            for (const auto& [name, nameId, id2] : sorted) {
+                                bool selected = texEditPending == id2;
                                 if (ImGui::Selectable(name.c_str(), selected)) {
-                                    texEditPending = id;
+                                    texEditPending = id2;
                                 }
                                 if (ImGui::IsItemHovered()) {
-                                    if (previewId != id) {
+                                    if (previewId != id2) {
                                         if (previewId.IsValid()) state->texResidency.Release(previewId, ctx);
-                                        previewId = id;
+                                        previewId = id2;
                                         // todo: ideally only load the lowest mip for preview
-                                        state->texResidency.Acquire(id, ctx);
+                                        state->texResidency.Acquire(id2, ctx);
                                     }
                                     ImGui::BeginTooltip();
-                                    uint64_t ds = state->texResidency.GetDescSet(id, ctx);
+                                    uint64_t ds = state->texResidency.GetDescSet(id2, ctx);
                                     if (ds) {
                                         ImGui::Image(ds, {128.0f, 128.0f});
                                     }

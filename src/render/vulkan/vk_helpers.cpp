@@ -272,7 +272,7 @@ bool VkHelpers::LoadShaderModule(const Core::Path& filePath, VkDevice device, Vk
 
     // spirv expects the buffer to be on uint32, so make sure to reserve a int
     // vector big enough for the entire file
-    // MEM: vector bad, but this is multithreaded and relatively infrequent
+    // MEM: vector bad, but this is multithreaded and relatively infrequent. Ideally use the asset scratch tlsf
     std::vector<uint32_t> buffer(fileSize / sizeof(uint32_t));
 
     // put file cursor at beginning

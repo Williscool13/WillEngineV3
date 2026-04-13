@@ -9,10 +9,9 @@
 #include <entt/entt.hpp>
 #include <json/nlohmann/json_fwd.hpp>
 
-#include "../../core/containers/inline_string.h"
+#include "core/containers/inline_string.h"
 #include "core/string_id.h"
 #include "engine/engine_api.h"
-#include "game/components/component_types.h"
 
 namespace Core { struct ViewFamily; }
 
@@ -23,12 +22,12 @@ struct EntityFolderComponent
     /**
      * Up to 2 levels deep
      */
-    std::array<StringID, 2> folderHierarchy;
+    Core::Array<StringID, 2> folderHierarchy;
 
     /**
      * Stack-based strings (max 16 char)
      */
-    std::array<Core::ShortString, 2> folderHierarchyNames;
+    Core::Array<Core::ShortString, 2> folderHierarchyNames;
 
     static void Serialize(const EntityFolderComponent& comp, nlohmann::json& json);
     static void Deserialize(EntityFolderComponent& comp, const nlohmann::json& json);

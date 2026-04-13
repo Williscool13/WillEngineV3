@@ -9,7 +9,6 @@
 
 #include <Jolt/Physics/Collision/Shape/Shape.h>
 
-#include "game/components/physics/physics_components.h"
 #include "game/components/physics/physics_body_desc.h"
 #include "Jolt/Physics/Body/BodyInterface.h"
 

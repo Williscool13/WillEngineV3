@@ -19,7 +19,7 @@ ViewProjMatrix GenerateLightSpaceMatrix(
     const glm::vec3& lightDirection,
     const Core::ViewData& viewData)
 {
-    std::array<glm::vec3, 8> corners = GetPerspectiveFrustumCornersWorldSpace(
+    auto corners = GetPerspectiveFrustumCornersWorldSpace(
         cascadeNear, cascadeFar, viewData.fovRadians,
         viewData.aspectRatio, viewData.cameraPos, viewData.cameraForward
     );
@@ -70,9 +70,9 @@ ViewProjMatrix GenerateLightSpaceMatrix(
     return {lightView, lightProj};
 }
 
-std::array<glm::vec3, 8> GetPerspectiveFrustumCornersWorldSpace(const float nearPlane, const float farPlane, const float fov, const float aspect, const glm::vec3 position, const glm::vec3 viewDir)
+Core::Array<Vec3, 8> GetPerspectiveFrustumCornersWorldSpace(const float nearPlane, const float farPlane, const float fov, const float aspect, const glm::vec3 position, const glm::vec3 viewDir)
 {
-    std::array<glm::vec3, 8> output{};
+    Core::Array<glm::vec3, 8> output{};
     constexpr glm::vec3 up{0.0f, 1.0f, 0.0f};
 
     const glm::vec3 right = normalize(cross(viewDir, up));

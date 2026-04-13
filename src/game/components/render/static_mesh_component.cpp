@@ -242,7 +242,7 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
                 int32_t origIdx;
                 Core::InlineString<128> name;
             };
-            std::vector<SlotInfo> slots;
+            Core::InlineVector <SlotInfo, 128> slots;
             bool seen[128] = {};
             for (size_t i = 0; i < primCount; ++i) {
                 int32_t idx = runtime->primitives[i].originalMaterialIndex;
@@ -256,10 +256,10 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
                 else {
                     slotName = Core::InlineString<128>::Format("Material %d", idx);
                 }
-                slots.push_back({idx, std::move(slotName)});
+                slots.PushBack({idx, std::move(slotName)});
             }
 
-            if (!slots.empty() && ImGui::TreeNode("Material Overrides")) {
+            if (!slots.IsEmpty() && ImGui::TreeNode("Material Overrides")) {
                 const auto& allMaterials = ctx->materialManager->GetMaterials();
                 int32_t pendingChangeIdx = -1;
                 Engine::MaterialID pendingChangeMat{};
