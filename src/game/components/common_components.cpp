@@ -60,7 +60,7 @@ void NameComponent::Serialize(const NameComponent& comp, nlohmann::json& json)
 
 void NameComponent::Deserialize(NameComponent& comp, const nlohmann::json& json)
 {
-    comp.name = Core::InlineString<256>(json["name"].get<std::string>().c_str());
+    comp.name = Core::InlineString<256>(json["name"].get<std::string_view>());
 }
 
 Engine::ComponentEditorResult NameComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)

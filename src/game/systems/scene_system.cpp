@@ -10,8 +10,6 @@
 
 #include <json/nlohmann/json.hpp>
 
-#include "core/containers/arena_fixed_vector.h"
-#include "core/containers/arena_vector.h"
 #include "engine/asset_manager.h"
 #include "engine/engine_api.h"
 #include "engine/logging/engine_log.h"
@@ -111,9 +109,6 @@ StringID LoadScene(Engine::ComponentRegistry& componentRegistry, entt::registry&
 {
     auto sceneId = StringID(scene.content["scene_id"].get<uint64_t>());
 
-    std::vector<entt::entity> sceneEntities;
-    sceneEntities.reserve(scene.content["entities"].size());
-
     for (auto& entityJson : scene.content["entities"]) {
         auto entity = registry.create();
         for (auto& [key, compJson] : entityJson.items()) {
@@ -126,7 +121,6 @@ StringID LoadScene(Engine::ComponentRegistry& componentRegistry, entt::registry&
             }
         }
         registry.emplace<Component::SceneComponent>(entity, sceneId);
-        sceneEntities.push_back(entity);
     }
 
     return sceneId;
@@ -183,7 +177,7 @@ void UnloadScene(Engine::EngineState* state, StringID sceneId)
     auto view = state->registry.view<Component::SceneComponent>();
 
     auto size = view.size();
-    Core::ArenaVector<entt::entity> toDestroy(&ctx->memoryManager->GeneralArena(), size);
+    Core::ArenaVector<entt::entity> toDestroy{&ctx->memoryManager->GeneralArena(), size};
     for (auto entity : view) {
         if (view.get<Component::SceneComponent>(entity).sceneId == sceneId) {
             toDestroy.PushBack(entity);
@@ -321,7 +315,7 @@ bool LoadSceneFromFile(Engine::EngineState* state, Engine::AssetManager* assetMa
     return true;
 }
 
-std::vector<entt::entity> SpawnModel(Core::EngineContext* ctx, Engine::EngineState* state, Engine::ModelID modelId, const glm::vec3& offset)
+Core::ArenaVector<entt::entity> SpawnModel(Core::EngineContext* ctx, Engine::EngineState* state, Engine::ModelID modelId, const glm::vec3& offset)
 {
     const Engine::AssetManager::CachedModelMetadata* cached = ctx->assetManager->GetModelMetadata(modelId);
     if (!cached) {
@@ -331,9 +325,9 @@ std::vector<entt::entity> SpawnModel(Core::EngineContext* ctx, Engine::EngineSta
 
     const auto& nodes = cached->nodes;
 
-    std::vector<glm::vec3> worldT(nodes.Size());
-    std::vector<glm::quat> worldR(nodes.Size());
-    std::vector<glm::vec3> worldS(nodes.Size());
+     auto worldT = Core::ArenaFixedVector<Vec3>(&ctx->memoryManager->GeneralArena(),nodes.Size());
+     auto worldR = Core::ArenaFixedVector<Quat>(&ctx->memoryManager->GeneralArena(),nodes.Size());
+     auto worldS = Core::ArenaFixedVector<Vec3>(&ctx->memoryManager->GeneralArena(),nodes.Size());
 
     for (size_t i = 0; i < nodes.Size(); ++i) {
         const auto& node = nodes[i];
@@ -349,7 +343,7 @@ std::vector<entt::entity> SpawnModel(Core::EngineContext* ctx, Engine::EngineSta
         }
     }
 
-    std::vector<entt::entity> spawned;
+    auto spawned = Core::ArenaVector<entt::entity>(&ctx->memoryManager->GeneralArena(), 32);
 
     for (size_t i = 0; i < nodes.Size(); ++i) {
         const auto& node = nodes[i];
@@ -372,7 +366,7 @@ std::vector<entt::entity> SpawnModel(Core::EngineContext* ctx, Engine::EngineSta
         meshComp.modelFlags = {1.0f, 1.0f, 0.0f, 0.0f};
         state->registry.emplace<Component::StaticMeshComponent>(entity, std::move(meshComp));
 
-        spawned.push_back(entity);
+        spawned.PushBack(entity);
     }
 
     return spawned;
@@ -558,11 +552,11 @@ void PlayStart(Core::EngineContext* ctx, Engine::EngineState* state)
     state->pieSnapshot = SerializeAll(state->componentRegistry, state->registry, ctx->assetManager, state->loadedScenes);
 
     {
-        std::vector<entt::entity> masterPrefabs;
         auto view = state->registry.view<Component::PrefabInstanceComponent>();
+        auto masterPrefabs = Core::ArenaFixedVector<entt::entity>(&ctx->memoryManager->GeneralArena(), view.size());
         for (auto entity : view) {
             if (view.get<Component::PrefabInstanceComponent>(entity).bMasterPrefab) {
-                masterPrefabs.push_back(entity);
+                masterPrefabs.PushBack(entity);
             }
         }
         for (auto entity : masterPrefabs) {

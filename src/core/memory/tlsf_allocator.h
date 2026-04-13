@@ -32,6 +32,7 @@ enum class AllocTag : uint32_t
     SDL,
     // ImGui
     ImGui,
+    Editor,
     // Engine systems
     EngineLogger,
     EngineContext,

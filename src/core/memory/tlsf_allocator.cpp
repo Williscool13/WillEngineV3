@@ -26,6 +26,7 @@ const char* AllocTagName(AllocTag tag)
         case AllocTag::TaskScheduler: return "TaskScheduler";
         case AllocTag::SDL: return "SDL";
         case AllocTag::ImGui: return "ImGui";
+        case AllocTag::Editor: return "Editor";
         case AllocTag::EngineLogger: return "EngineLogger";
         case AllocTag::EngineContext: return "EngineContext";
         case AllocTag::EngineState: return "EngineState";

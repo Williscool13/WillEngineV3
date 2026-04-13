@@ -6,6 +6,7 @@
 
 #include <tracy/Tracy.hpp>
 
+#include "core/containers/arena_fixed_vector.h"
 #include "engine/include/engine_context.h"
 #include "engine/asset_manager.h"
 #include "engine/engine_api.h"
@@ -36,10 +37,13 @@ void ConnectRenderObservers(entt::registry& registry)
 
 void ResolveStaticMeshLoads(Core::EngineContext* ctx, Engine::EngineState* state)
 {
-    // todo: ew
-    std::vector<entt::entity> resolved;
-
-    for (auto [entity, meshComponent] : state->registry.view<Component::StaticMeshComponent, Component::StaticMeshLoadingTag>().each()) {
+    auto view = state->registry.view<Component::StaticMeshComponent, Component::StaticMeshLoadingTag>();
+    size_t viewCount = view.size_hint();
+    if (viewCount == 0) {
+        return;
+    }
+    auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->memoryManager->GeneralArena(), viewCount);
+    for (const auto& [entity, meshComponent] : view.each()) {
         auto* runtime = state->registry.try_get<Component::MeshRuntime>(entity);
         if (!runtime) continue;
 
@@ -53,7 +57,7 @@ void ResolveStaticMeshLoads(Core::EngineContext* ctx, Engine::EngineState* state
         auto model = ctx->assetManager->GetModel(runtime->modelHandle);
         if (!model) {
             LOG_ERROR(Game, "Model ({}) is not in the asset manager, it should have been requested to load during scene load.", runtime->modelHandle.index);
-            resolved.push_back(entity);
+            resolved.PushBack(entity);
             continue;
         }
         if (model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
@@ -100,7 +104,7 @@ void ResolveStaticMeshLoads(Core::EngineContext* ctx, Engine::EngineState* state
             materialManager->AcquireMaterial(matID);
         }
 
-        resolved.push_back(entity);
+        resolved.PushBack(entity);
     }
 
     for (const auto entity : resolved) {
@@ -110,9 +114,14 @@ void ResolveStaticMeshLoads(Core::EngineContext* ctx, Engine::EngineState* state
 
 void ResolveProceduralMeshLoads(Core::EngineContext* ctx, Engine::EngineState* state)
 {
-    std::vector<entt::entity> resolved;
+    auto view = state->registry.view<Component::ProceduralMeshComponent, Component::ProceduralMeshLoadingTag>();
+    size_t viewCount = view.size_hint();
+    if (viewCount == 0) {
+        return;
+    }
 
-    for (auto [entity, meshComponent] : state->registry.view<Component::ProceduralMeshComponent, Component::ProceduralMeshLoadingTag>().each()) {
+    auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->memoryManager->GeneralArena(), viewCount);
+    for (const auto& [entity, meshComponent] : view.each()) {
         auto* runtime = state->registry.try_get<Component::MeshRuntime>(entity);
         if (!runtime) continue;
 
@@ -150,7 +159,7 @@ void ResolveProceduralMeshLoads(Core::EngineContext* ctx, Engine::EngineState* s
         });
         materialManager->AcquireMaterial(matID);
 
-        resolved.push_back(entity);
+        resolved.PushBack(entity);
     }
 
     for (const auto entity : resolved) {
@@ -160,9 +169,13 @@ void ResolveProceduralMeshLoads(Core::EngineContext* ctx, Engine::EngineState* s
 
 void ResolveSplineMeshLoads(Core::EngineContext* ctx, Engine::EngineState* state)
 {
-    std::vector<entt::entity> resolved;
-
-    for (auto [entity, meshComponent] : state->registry.view<Component::SplineMeshComponent, Component::SplineMeshLoadingTag>().each()) {
+    auto view = state->registry.view<Component::SplineMeshComponent, Component::SplineMeshLoadingTag>();
+    size_t viewCount = view.size_hint();
+    if (viewCount == 0) {
+        return;
+    }
+    auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->memoryManager->GeneralArena(), viewCount);
+    for (auto [entity, meshComponent] : view.each()) {
         auto* runtime = state->registry.try_get<Component::MeshRuntime>(entity);
         if (!runtime) continue;
 
@@ -198,7 +211,7 @@ void ResolveSplineMeshLoads(Core::EngineContext* ctx, Engine::EngineState* state
         });
         materialManager->AcquireMaterial(matID);
 
-        resolved.push_back(entity);
+        resolved.PushBack(entity);
     }
 
     for (const auto entity : resolved) {
@@ -221,7 +234,8 @@ void RenderPrepareTransforms(Core::EngineContext* ctx, Engine::EngineState* stat
     auto dirtyView = state->registry.view<Component::TransformComponent, Component::RenderTransformComponent, Component::DirtyRenderTransformComponent>(
         entt::exclude<Component::DynamicPhysicsBodyComponent>);
     constexpr size_t TASK_THRESHOLD = 1000;
-    if (dirtyView.size_hint() < TASK_THRESHOLD) {
+    size_t dirtyViewCount = dirtyView.size_hint();
+    if (dirtyViewCount < TASK_THRESHOLD) {
         ZoneScopedN("Serial");
         for (auto [entity, transform, renderTransform, dirtyRender] : dirtyView.each()) {
             renderTransform.previousMatrix = renderTransform.modelMatrix;
@@ -231,9 +245,12 @@ void RenderPrepareTransforms(Core::EngineContext* ctx, Engine::EngineState* stat
     }
     else {
         ZoneScopedN("Parallel");
-        std::vector entities(dirtyView.begin(), dirtyView.end());
+        auto entities = Core::ArenaFixedVector<entt::entity>(&ctx->memoryManager->GeneralArena(), dirtyViewCount);
+        for (entt::entity e : dirtyView) {
+            entities.PushBack(e);
+        }
 
-        enki::TaskSet task(entities.size(), [&](enki::TaskSetPartition range, uint32_t) {
+        enki::TaskSet task(entities.Size(), [&](enki::TaskSetPartition range, uint32_t) {
             for (uint32_t i = range.start; i < range.end; ++i) {
                 auto entity = entities[i];
                 auto& transform = dirtyView.get<Component::TransformComponent>(entity);

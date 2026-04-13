@@ -899,23 +899,29 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::EngineState* state, C
 
         const auto& modelCache = ctx->assetManager->GetModelCache();
         static int selectedModel = 0;
-        std::vector<std::pair<std::string, Engine::ModelID> > modelList;
-        modelList.reserve(modelCache.Size());
+
+        struct ModelPair
+        {
+            Core::InlineString<128> name;
+            Engine::ModelID id;
+        };
+
+        auto modelList = Core::ArenaFixedVector<ModelPair>(&ctx->memoryManager->GeneralArena(), modelCache.Size());
         for (const auto& [id, meta] : modelCache) {
-            modelList.emplace_back(meta.name.c_str(), id);
+            modelList.EmplaceBack(meta.name, id);
         }
 
-        if (!modelList.empty()) {
-            std::ranges::sort(modelList, {}, &std::pair<std::string, Engine::ModelID>::first);
-            selectedModel = std::clamp(selectedModel, 0, static_cast<int>(modelList.size()) - 1);
+        if (!modelList.IsEmpty()) {
+            std::ranges::sort(modelList, {}, &ModelPair::name);
+            selectedModel = std::clamp(selectedModel, 0, static_cast<int>(modelList.Size()) - 1);
         }
 
         ImGui::SetNextItemWidth(-1);
-        ImGui::BeginDisabled(modelList.empty());
-        if (ImGui::BeginCombo("##model_list", modelList.empty() ? "No models" : modelList[selectedModel].first.c_str())) {
-            for (int i = 0; i < static_cast<int>(modelList.size()); ++i) {
+        ImGui::BeginDisabled(modelList.IsEmpty());
+        if (ImGui::BeginCombo("##model_list", modelList.IsEmpty() ? "No models" : modelList[selectedModel].name.c_str())) {
+            for (int i = 0; i < static_cast<int>(modelList.Size()); ++i) {
                 bool sel = (i == selectedModel);
-                if (ImGui::Selectable(modelList[i].first.c_str(), sel)) {
+                if (ImGui::Selectable(modelList[i].name.c_str(), sel)) {
                     selectedModel = i;
                 }
             }
@@ -923,11 +929,11 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::EngineState* state, C
         }
         ImGui::EndDisabled();
 
-        ImGui::BeginDisabled(modelList.empty());
+        ImGui::BeginDisabled(modelList.IsEmpty());
         if (ImGui::Button("Spawn")) {
             glm::vec3 offset = cameraPos + normalize(cameraFwd) * 5.0f;
-            auto spawned = SpawnModel(ctx, state, modelList[selectedModel].second, offset);
-            if (!spawned.empty()) {
+            auto spawned = SpawnModel(ctx, state, modelList[selectedModel].id, offset);
+            if (!spawned.IsEmpty()) {
                 state->selectedEntities.Clear();
                 for (auto entity : spawned) {
                     state->selectedEntities.PushBack(entity);
@@ -968,23 +974,28 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::EngineState* state, C
 
         const auto& prefabCache = ctx->assetManager->GetPrefabCache();
         static int selectedPrefab = 0;
-        std::vector<std::pair<std::string, StringID> > prefabList;
-        prefabList.reserve(prefabCache.Size());
+        struct PrefabPair
+        {
+            Core::InlineString<128> name;
+            StringID id;
+        };
+
+        auto prefabList = Core::ArenaFixedVector<PrefabPair>(&ctx->memoryManager->GeneralArena(), prefabCache.Size());
         for (const auto& [id, meta] : prefabCache) {
-            prefabList.emplace_back(meta.prefabName.c_str(), id);
+            prefabList.EmplaceBack(meta.prefabName, id);
         }
 
-        if (!prefabList.empty()) {
-            std::ranges::sort(prefabList, {}, &std::pair<std::string, StringID>::first);
-            selectedPrefab = std::clamp(selectedPrefab, 0, static_cast<int>(prefabList.size()) - 1);
+        if (!prefabList.IsEmpty()) {
+            std::ranges::sort(prefabList, {}, &PrefabPair::name);
+            selectedPrefab = std::clamp(selectedPrefab, 0, static_cast<int>(prefabList.Size()) - 1);
         }
 
         ImGui::SetNextItemWidth(-1);
-        ImGui::BeginDisabled(prefabList.empty());
-        if (ImGui::BeginCombo("##prefab_list", prefabList.empty() ? "No prefabs" : prefabList[selectedPrefab].first.c_str())) {
-            for (int i = 0; i < static_cast<int>(prefabList.size()); ++i) {
+        ImGui::BeginDisabled(prefabList.IsEmpty());
+        if (ImGui::BeginCombo("##prefab_list", prefabList.IsEmpty() ? "No prefabs" : prefabList[selectedPrefab].name.c_str())) {
+            for (int i = 0; i < static_cast<int>(prefabList.Size()); ++i) {
                 bool sel = (i == selectedPrefab);
-                if (ImGui::Selectable(prefabList[i].first.c_str(), sel)) {
+                if (ImGui::Selectable(prefabList[i].name.c_str(), sel)) {
                     selectedPrefab = i;
                 }
             }
@@ -994,7 +1005,7 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::EngineState* state, C
         if (ImGui::Button("Spawn Prefab")) {
             const auto& viewData = frameBuffer->mainViewFamily.mainView.currentViewData;
             glm::vec3 spawnPos = viewData.cameraPos + viewData.cameraForward * 5.0f;
-            entt::entity spawned = SpawnPrefab(state, ctx->assetManager, prefabList[selectedPrefab].second, spawnPos);
+            entt::entity spawned = SpawnPrefab(state, ctx->assetManager, prefabList[selectedPrefab].id, spawnPos);
             if (spawned != entt::null) {
                 state->selectedEntities.Clear();
                 state->selectedEntities.PushBack(spawned);
@@ -1003,9 +1014,9 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::EngineState* state, C
         }
         ImGui::SameLine();
         {
-            const StringID selectedPrefabId = prefabList.empty() ? StringID{} : prefabList[selectedPrefab].second;
+            const StringID selectedPrefabId = prefabList.IsEmpty() ? StringID{} : prefabList[selectedPrefab].id;
             bool prefabInUse = false;
-            if (!prefabList.empty()) {
+            if (!prefabList.IsEmpty()) {
                 auto prefabView = state->registry.view<Component::PrefabInstanceComponent>();
                 for (auto entity : prefabView) {
                     if (prefabView.get<Component::PrefabInstanceComponent>(entity).prefabId == selectedPrefabId) {
@@ -1014,7 +1025,7 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::EngineState* state, C
                     }
                 }
             }
-            ImGui::BeginDisabled(prefabList.empty() || prefabInUse);
+            ImGui::BeginDisabled(prefabList.IsEmpty() || prefabInUse);
             if (ImGui::Button("Delete Prefab")) {
                 ctx->assetManager->DeletePrefab(selectedPrefabId);
                 selectedPrefab = 0;
@@ -1766,7 +1777,6 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::EngineState* state, C
                 static Engine::TextureID texEditPending = Engine::TextureID::INVALID;
                 static Engine::SamplerDesc samplerEditPending{};
 
-                const auto& texNameToId = ctx->assetManager->GetTextureNameToId();
                 const auto& texCache = ctx->assetManager->GetTextureCache();
 
                 for (int32_t slot = 0; slot < 6; ++slot) {
@@ -1805,26 +1815,32 @@ void DrawEditorInterface(Core::EngineContext* ctx, Engine::EngineState* state, C
                             if (ImGui::Selectable("(None)", noneSelected)) {
                                 texEditPending = Engine::TextureID::INVALID;
                             }
-                            std::vector<std::pair<std::string, Engine::TextureID> > sorted;
-                            sorted.reserve(texNameToId.Size());
-                            for (const auto& [name, tid] : texNameToId) {
-                                sorted.emplace_back(name.ToString(), tid);
+                            struct TexturePair
+                            {
+                                Core::InlineString<128> name;
+                                StringID nameId;
+                                Engine::TextureID id;
+                            };
+
+                            auto sorted = Core::ArenaFixedVector<TexturePair>(&ctx->memoryManager->GeneralArena(), texCache.Size());
+                            for (const auto& [texId2, meta] : texCache) {
+                                sorted.EmplaceBack(meta.name, StringID(meta.name.c_str(), meta.name.Size()), texId2);
                             }
-                            std::sort(sorted.begin(), sorted.end());
-                            for (const auto& [name, tid] : sorted) {
-                                bool selected = texEditPending == tid;
+                            std::ranges::sort(sorted, {}, &TexturePair::name);
+                            for (const auto& [name, nameId, id] : sorted) {
+                                bool selected = texEditPending == id;
                                 if (ImGui::Selectable(name.c_str(), selected)) {
-                                    texEditPending = tid;
+                                    texEditPending = id;
                                 }
                                 if (ImGui::IsItemHovered()) {
-                                    if (previewId != tid) {
+                                    if (previewId != id) {
                                         if (previewId.IsValid()) state->texResidency.Release(previewId, ctx);
-                                        previewId = tid;
+                                        previewId = id;
                                         // todo: ideally only load the lowest mip for preview
-                                        state->texResidency.Acquire(tid, ctx);
+                                        state->texResidency.Acquire(id, ctx);
                                     }
                                     ImGui::BeginTooltip();
-                                    uint64_t ds = state->texResidency.GetDescSet(tid, ctx);
+                                    uint64_t ds = state->texResidency.GetDescSet(id, ctx);
                                     if (ds) {
                                         ImGui::Image(ds, {128.0f, 128.0f});
                                     }

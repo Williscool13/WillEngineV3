@@ -21,6 +21,7 @@
 #include "core/time/time_manager.h"
 #include "asset-load/async_asset_load_manager.h"
 #include "audio/audio_manager.h"
+#include "core/containers/arena_fixed_vector.h"
 #include "logging/engine_logger.h"
 #include "physics/physics_system.h"
 #include "platform/paths.h"
@@ -868,8 +869,8 @@ void WillEngine::EditorImgui()
 
         if (ImGui::BeginChild("LogScrollRegion", ImVec2(0, 0), false, ImGuiWindowFlags_HorizontalScrollbar)) {
             ImGuiListClipper clipper;
-            static std::vector<int> filtered;
-            filtered.clear();
+            Core::Arena& genArena = memoryManager.GeneralArena();
+            auto filtered = Core::ArenaFixedVector<int32_t>(&genArena, entryCount);
             for (int i = 0; i < entryCount; i++) {
                 const auto& entry = entries[i];
                 bool levelPass = false;
@@ -880,10 +881,10 @@ void WillEngine::EditorImgui()
                     }
                 }
                 if (levelPass && categoryFilter[static_cast<int>(entry.category)])
-                    filtered.push_back(i);
+                    filtered.PushBack(i);
             }
 
-            clipper.Begin(static_cast<int>(filtered.size()));
+            clipper.Begin(static_cast<int>(filtered.Size()));
             while (clipper.Step()) {
                 for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++) {
                     ImGui::TextUnformatted(entries[filtered[i]].message.c_str());

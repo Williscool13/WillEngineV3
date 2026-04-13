@@ -26,8 +26,7 @@ void to_json(nlohmann::json& j, const InlineString<N>& str)
 template<size_t N>
 void from_json(const nlohmann::json& j, InlineString<N>& str)
 {
-    auto s = j.get<std::string>();
-    str = InlineString<N>(s.c_str());
+    str = InlineString<N>(j.get<std::string_view>());
 }
 } // Core
 

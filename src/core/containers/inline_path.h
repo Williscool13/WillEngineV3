@@ -43,14 +43,6 @@ public:
         Assign(sv.data(), sv.size());
     }
 
-    // Scan-time conversion only. Normalizes backslashes to forward slashes.
-    explicit InlinePath(const std::filesystem::path& p)
-    {
-        const std::string s = p.string();
-        Assign(s.data(), s.size());
-        Normalize();
-    }
-
     // Returns a new path with the component appended, separated by '/'.
     InlinePath operator/(std::string_view component) const
     {

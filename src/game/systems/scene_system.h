@@ -10,6 +10,9 @@
 #include "game/components/scene_components.h"
 #include "core/string_id.h"
 #include "core/containers/span.h"
+#include "core/containers/arena_fixed_vector.h"
+#include "core/containers/arena_vector.h"
+#include "core/containers/vector.h"
 #include "engine/asset_manager.h"
 #include "engine/core/model_id.h"
 #include "engine/engine_api.h"
@@ -48,7 +51,7 @@ entt::entity SpawnPrefab(Engine::EngineState* state, Engine::AssetManager* asset
 
 void ResolvePrefabLoads(Engine::EngineState* state, Engine::AssetManager* assetManager);
 
-std::vector<entt::entity> SpawnModel(Core::EngineContext* ctx, Engine::EngineState* state, Engine::ModelID modelId, const glm::vec3& offset = {});
+Core::ArenaVector<entt::entity> SpawnModel(Core::EngineContext* ctx, Engine::EngineState* state, Engine::ModelID modelId, const glm::vec3& offset = {});
 
 entt::entity CreateSceneEntity(Engine::EngineState* state);
 

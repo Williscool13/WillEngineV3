@@ -27,9 +27,9 @@ void EntityFolderComponent::Deserialize(EntityFolderComponent& comp, const nlohm
     if (json.contains("folderHierarchyNames")) {
         const auto& arr = json["folderHierarchyNames"];
         for (size_t i = 0; i < comp.folderHierarchyNames.size() && i < arr.size(); ++i) {
-            const std::string s = arr[i].get<std::string>();
-            comp.folderHierarchyNames[i] = Core::ShortString(s.c_str());
-            comp.folderHierarchy[i] = s.empty() ? StringID() : StringID(s.c_str(), s.size());
+            auto s = arr[i].get<std::string_view>();
+            comp.folderHierarchyNames[i] = Core::ShortString(s);
+            comp.folderHierarchy[i] = s.empty() ? StringID() : StringID(s.data(), s.size());
         }
     }
 }
