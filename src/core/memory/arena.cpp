@@ -24,6 +24,7 @@ void* Arena::AllocRaw(size_t size, size_t alignment)
     if (alignedHead + size > capacity) { return nullptr; }
 
     head = alignedHead + size;
+    if (head > peakHead) { peakHead = head; }
     return static_cast<char*>(memory) + alignedHead;
 }
 

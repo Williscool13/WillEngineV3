@@ -160,12 +160,14 @@ private: // Debugging
     bool bFreezeVisibility = false;
     bool bLogRDG = false;
 
-    // Cached tag stats, only refreshed when the user clicks Refresh in the Memory panel.
+    // Cached tag stats, auto-refreshed every second when the Memory panel is open.
     static constexpr size_t kTagCount = static_cast<size_t>(Core::AllocTag::Count);
     Core::Array<Core::TlsfAllocator::TagStats, kTagCount> cachedPersistentTags{};
     Core::Array<Core::TlsfAllocator::TagStats, kTagCount> cachedGeneralTags{};
+    Core::Array<Core::TlsfAllocator::TagStats, kTagCount> cachedAssetsScratchTags{};
     Core::Array<Core::TlsfAllocator::TagStats, kTagCount> cachedAssetsTags{};
     Core::Array<Core::TlsfAllocator::TagStats, kTagCount> cachedPhysicsTags{};
+    Core::Array<Core::TlsfAllocator::TagStats, kTagCount> cachedPhysicsAlignedTags{};
     Core::Array<Core::TlsfAllocator::TagStats, kTagCount> cachedRenderTags{};
     std::chrono::high_resolution_clock::time_point lastFrameAcquireTime;
     float lastFrameTimeMs = 0.0f;

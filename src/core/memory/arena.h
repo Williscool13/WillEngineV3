@@ -62,18 +62,21 @@ public:
         size_t totalBytes;
         size_t usedBytes;
         size_t freeBytes;
+        size_t peakBytes;
     };
 
-    [[nodiscard]] Stats GetStats() const { return {capacity, head, capacity - head}; }
+    [[nodiscard]] Stats GetStats() const { return {capacity, head, capacity - head, peakHead}; }
     [[nodiscard]] void* Data() const { return memory; }
     [[nodiscard]] size_t GetUsed() const { return head; }
     [[nodiscard]] size_t GetCapacity() const { return capacity; }
     [[nodiscard]] size_t GetRemaining() const { return capacity - head; }
+    [[nodiscard]] size_t GetPeak() const { return peakHead; }
 
 private:
     void* memory{};
     size_t head{};
     size_t capacity{};
+    size_t peakHead{};
 };
 
 template<typename T, typename... Args>

@@ -22,6 +22,7 @@
 #include "asset-load/async_asset_load_manager.h"
 #include "audio/audio_manager.h"
 #include "core/containers/arena_fixed_vector.h"
+#include "core/containers/inline_string.h"
 #include "logging/engine_logger.h"
 #include "physics/physics_system.h"
 #include "platform/paths.h"
@@ -441,77 +442,149 @@ void WillEngine::EditorImgui()
         }
 
         if (ImGui::CollapsingHeader("Memory")) {
-            static bool bFirstOpen = true;
-            if (bFirstOpen) {
+            static float refreshTimer = 1.0f; // triggers immediately on first open
+            static int selectedPool = 0;
+
+            refreshTimer += ImGui::GetIO().DeltaTime;
+            if (refreshTimer >= 1.0f) {
                 memoryManager.Persistent().GetTagStats(cachedPersistentTags.Data());
                 memoryManager.General().GetTagStats(cachedGeneralTags.Data());
+                memoryManager.AssetsScratch().GetTagStats(cachedAssetsScratchTags.Data());
                 memoryManager.Assets().GetTagStats(cachedAssetsTags.Data());
                 memoryManager.Physics().GetTagStats(cachedPhysicsTags.Data());
+                memoryManager.PhysicsAligned().GetTagStats(cachedPhysicsAlignedTags.Data());
                 memoryManager.Render().GetTagStats(cachedRenderTags.Data());
-                bFirstOpen = false;
+                refreshTimer = 0.0f;
             }
 
             const Core::MemoryManager::Stats ms = memoryManager.GetStats();
             const Core::Arena::Stats ras = memoryManager.RenderArena().GetStats();
             const Core::Arena::Stats gas = memoryManager.GeneralArena().GetStats();
             const Core::Arena::Stats pas = memoryManager.PhysicsArena().GetStats();
-            const size_t totalUsed = ms.persistent.usedBytes + ms.general.usedBytes + ms.assets.usedBytes + ms.physics.usedBytes + ms.physicsAligned.usedBytes + ms.render.usedBytes;
             constexpr float kToMB = 1.0f / (1024.0f * 1024.0f);
-            ImGui::SeparatorText("TLSF Allocators");
-            ImGui::Text("Total:             %.3f / %.0f MB", static_cast<float>(totalUsed) * kToMB, static_cast<float>(ms.totalBytes) * kToMB);
-            ImGui::Separator();
-            ImGui::Text("Persistent:        %.3f / %.0f MB (%zu allocs)", static_cast<float>(ms.persistent.usedBytes) * kToMB, static_cast<float>(ms.persistent.totalBytes) * kToMB, ms.persistent.allocCount);
-            ImGui::Separator();
-            ImGui::Text("General:           %.3f / %.0f MB (%zu allocs)", static_cast<float>(ms.general.usedBytes) * kToMB, static_cast<float>(ms.general.totalBytes) * kToMB, ms.general.allocCount);
-            ImGui::Text("Assets (Scratch):  %.3f / %.0f MB (%zu allocs)", static_cast<float>(ms.assetsScratch.usedBytes) * kToMB, static_cast<float>(ms.assetsScratch.totalBytes) * kToMB, ms.assetsScratch.allocCount);
-            ImGui::Text("Assets:            %.3f / %.0f MB (%zu allocs)", static_cast<float>(ms.assets.usedBytes) * kToMB, static_cast<float>(ms.assets.totalBytes) * kToMB, ms.assets.allocCount);
-            ImGui::Text("Physics:           %.3f / %.0f MB (%zu allocs)", static_cast<float>(ms.physics.usedBytes) * kToMB, static_cast<float>(ms.physics.totalBytes) * kToMB, ms.physics.allocCount);
-            ImGui::Text("Physics (Aligned): %.3f / %.0f MB (%zu allocs)", static_cast<float>(ms.physicsAligned.usedBytes) * kToMB, static_cast<float>(ms.physicsAligned.totalBytes) * kToMB, ms.physicsAligned.allocCount);
-            ImGui::Text("Render:            %.3f / %.0f MB (%zu allocs)", static_cast<float>(ms.render.usedBytes) * kToMB, static_cast<float>(ms.render.totalBytes) * kToMB, ms.render.allocCount);
-            ImGui::SeparatorText("Arenas (excluded from total)");
-            ImGui::Text("RenderArena:  %.3f / %.0f MB (bump)", static_cast<float>(ras.usedBytes) * kToMB, static_cast<float>(ras.totalBytes) * kToMB);
-            ImGui::Text("GeneralArena: %.3f / %.0f MB (bump)", static_cast<float>(gas.usedBytes) * kToMB, static_cast<float>(gas.totalBytes) * kToMB);
-            ImGui::Text("PhysicsArena: %.3f / %.0f MB (bump)", static_cast<float>(pas.usedBytes) * kToMB, static_cast<float>(pas.totalBytes) * kToMB);
-            ImGui::Text("GPU Device: %zu allocs / %.3f MB", static_cast<size_t>(ms.deviceMemory.allocationCount), static_cast<float>(ms.deviceMemory.totalBytes) * kToMB);
+            // Fixed x-offset so all bars align regardless of label length
+            constexpr float kLabelX = 125.0f;
 
-            ImGui::Spacing();
-            if (ImGui::Button("Refresh Tag Breakdown")) {
-                memoryManager.Persistent().GetTagStats(cachedPersistentTags.Data());
-                memoryManager.General().GetTagStats(cachedGeneralTags.Data());
-                memoryManager.Assets().GetTagStats(cachedAssetsTags.Data());
-                memoryManager.Physics().GetTagStats(cachedPhysicsTags.Data());
-                memoryManager.Render().GetTagStats(cachedRenderTags.Data());
-            }
+            // TLSF bar: green->yellow->red gradient based on fill fraction; overlay shows capacity; tooltip shows details
+            auto drawMemBar = [&](const char* label, size_t usedBytes_, size_t totalBytes_, size_t allocCount_) {
+                const float fraction = totalBytes_ > 0 ? static_cast<float>(usedBytes_) / static_cast<float>(totalBytes_) : 0.0f;
+                const float r = fraction < 0.5f ? fraction * 2.0f : 1.0f;
+                const float g = fraction < 0.5f ? 1.0f : (1.0f - (fraction - 0.5f) * 2.0f);
+                const auto overlay = Core::InlineString<48>::Format("%.2f / %.0f MB",
+                    static_cast<float>(usedBytes_) * kToMB,
+                    static_cast<float>(totalBytes_) * kToMB);
 
-
-            constexpr ImGuiTableFlags tableFlags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp;
-            auto drawTagTable = [](const char* label, const Core::TlsfAllocator::TagStats* tags) {
                 ImGui::TextUnformatted(label);
-                if (ImGui::BeginTable(label, 3, tableFlags)) {
-                    ImGui::TableSetupColumn("Tag");
-                    ImGui::TableSetupColumn("Allocs");
-                    ImGui::TableSetupColumn("Used (KB)");
-                    ImGui::TableHeadersRow();
-                    for (size_t i = 0; i < static_cast<size_t>(Core::AllocTag::Count); ++i) {
-                        const Core::TlsfAllocator::TagStats& t = tags[i];
-                        if (t.count == 0) { continue; }
-                        ImGui::TableNextRow();
-                        ImGui::TableSetColumnIndex(0);
-                        ImGui::TextUnformatted(Core::AllocTagName(t.tag));
-                        ImGui::TableSetColumnIndex(1);
-                        ImGui::Text("%zu", t.count);
-                        ImGui::TableSetColumnIndex(2);
-                        ImGui::Text("%zu", t.usedBytes >> 10);
-                    }
-                    ImGui::EndTable();
+                ImGui::SameLine(kLabelX);
+                ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImVec4(r, g, 0.0f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.12f, 0.12f, 0.12f, 1.0f));
+                ImGui::ProgressBar(fraction, ImVec2(-1.0f, 0.0f), overlay.c_str());
+                ImGui::PopStyleColor(2);
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("%.3f / %.0f MB  (%zu allocs)",
+                        static_cast<float>(usedBytes_) * kToMB,
+                        static_cast<float>(totalBytes_) * kToMB,
+                        allocCount_);
                 }
             };
 
-            drawTagTable("Persistent", cachedPersistentTags.Data());
-            drawTagTable("General", cachedGeneralTags.Data());
-            drawTagTable("Assets", cachedAssetsTags.Data());
-            drawTagTable("Physics", cachedPhysicsTags.Data());
-            drawTagTable("Render", cachedRenderTags.Data());
+            // Arena bar: bar driven by peak (stable); overlay shows "cur / peak MB"; tooltip shows capacity
+            auto drawArenaBar = [&](const char* label, const Core::Arena::Stats& s) {
+                const float peakFraction = s.totalBytes > 0 ? static_cast<float>(s.peakBytes) / static_cast<float>(s.totalBytes) : 0.0f;
+                const auto overlay = Core::InlineString<48>::Format("pk %.2f / %.0f MB",
+                    static_cast<float>(s.peakBytes) * kToMB,
+                    static_cast<float>(s.totalBytes) * kToMB);
+
+                ImGui::TextUnformatted(label);
+                ImGui::SameLine(kLabelX);
+                ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImVec4(0.3f, 0.45f, 0.8f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.12f, 0.12f, 0.12f, 1.0f));
+                ImGui::ProgressBar(peakFraction, ImVec2(-1.0f, 0.0f), overlay.c_str());
+                ImGui::PopStyleColor(2);
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("cur: %.3f MB", static_cast<float>(s.usedBytes) * kToMB);
+                }
+            };
+
+            // Grand total across all TLSF pools
+            {
+                const size_t tlsfUsed = ms.persistent.usedBytes + ms.general.usedBytes + ms.assetsScratch.usedBytes
+                                      + ms.assets.usedBytes + ms.physics.usedBytes + ms.physicsAligned.usedBytes + ms.render.usedBytes;
+                const size_t tlsfTotal = ms.persistent.totalBytes + ms.general.totalBytes + ms.assetsScratch.totalBytes
+                                       + ms.assets.totalBytes + ms.physics.totalBytes + ms.physicsAligned.totalBytes + ms.render.totalBytes;
+                const size_t tlsfAllocs = ms.persistent.allocCount + ms.general.allocCount + ms.assetsScratch.allocCount
+                                        + ms.assets.allocCount + ms.physics.allocCount + ms.physicsAligned.allocCount + ms.render.allocCount;
+                ImGui::SeparatorText("TLSF Total");
+                drawMemBar("All Pools", tlsfUsed, tlsfTotal, tlsfAllocs);
+            }
+
+            ImGui::SeparatorText("General");
+            drawMemBar("General",        ms.general.usedBytes,       ms.general.totalBytes,       ms.general.allocCount);
+            drawMemBar("Assets Scratch", ms.assetsScratch.usedBytes, ms.assetsScratch.totalBytes, ms.assetsScratch.allocCount);
+            drawMemBar("Assets",         ms.assets.usedBytes,        ms.assets.totalBytes,        ms.assets.allocCount);
+
+            ImGui::SeparatorText("Physics");
+            drawMemBar("Physics",        ms.physics.usedBytes,        ms.physics.totalBytes,        ms.physics.allocCount);
+            drawMemBar("Phys Aligned",   ms.physicsAligned.usedBytes, ms.physicsAligned.totalBytes, ms.physicsAligned.allocCount);
+
+            ImGui::SeparatorText("Render");
+            drawMemBar("Render",         ms.render.usedBytes,         ms.render.totalBytes,         ms.render.allocCount);
+
+            ImGui::SeparatorText("Engine");
+            drawMemBar("Persistent",     ms.persistent.usedBytes,     ms.persistent.totalBytes,     ms.persistent.allocCount);
+
+            ImGui::SeparatorText("Arenas");
+            drawArenaBar("Render Arena",  ras);
+            drawArenaBar("General Arena", gas);
+            drawArenaBar("Physics Arena", pas);
+
+            ImGui::SeparatorText("GPU");
+            ImGui::Text("Device: %zu allocs / %.3f MB",
+                static_cast<size_t>(ms.deviceMemory.allocationCount),
+                static_cast<float>(ms.deviceMemory.totalBytes) * kToMB);
+
+            // Per-pool tag breakdown with pool selector
+            ImGui::SeparatorText("Tag Breakdown");
+
+            struct PoolEntry { const char* name; const Core::TlsfAllocator::TagStats* tags; };
+            const PoolEntry pools[] = {
+                {"Persistent",    cachedPersistentTags.Data()},
+                {"General",       cachedGeneralTags.Data()},
+                {"Assets Scratch",cachedAssetsScratchTags.Data()},
+                {"Assets",        cachedAssetsTags.Data()},
+                {"Physics",       cachedPhysicsTags.Data()},
+                {"Phys Aligned",  cachedPhysicsAlignedTags.Data()},
+                {"Render",        cachedRenderTags.Data()},
+            };
+            constexpr int kPoolCount = 7;
+
+            for (int i = 0; i < kPoolCount; ++i) {
+                if (i > 0) { ImGui::SameLine(); }
+                const bool sel = (selectedPool == i);
+                if (sel) { ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive)); }
+                if (ImGui::SmallButton(pools[i].name)) { selectedPool = i; }
+                if (sel) { ImGui::PopStyleColor(); }
+            }
+
+            ImGui::Spacing();
+            constexpr ImGuiTableFlags tableFlags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp;
+            if (ImGui::BeginTable("MemTagTable", 3, tableFlags)) {
+                ImGui::TableSetupColumn("Tag");
+                ImGui::TableSetupColumn("Allocs");
+                ImGui::TableSetupColumn("Used (KB)");
+                ImGui::TableHeadersRow();
+
+                const Core::TlsfAllocator::TagStats* tags = pools[selectedPool].tags;
+                for (size_t i = 0; i < static_cast<size_t>(Core::AllocTag::Count); ++i) {
+                    const Core::TlsfAllocator::TagStats& t = tags[i];
+                    if (t.count == 0) { continue; }
+                    ImGui::TableNextRow();
+                    ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted(Core::AllocTagName(t.tag));
+                    ImGui::TableSetColumnIndex(1); ImGui::Text("%zu", t.count);
+                    ImGui::TableSetColumnIndex(2); ImGui::Text("%.1f", static_cast<float>(t.usedBytes) / 1024.0f);
+                }
+                ImGui::EndTable();
+            }
         }
 
         if (ImGui::CollapsingHeader("Asset Counts")) {
