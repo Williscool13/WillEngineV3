@@ -12,10 +12,10 @@
 
 namespace Render
 {
-bool ComputePipelineData::CreatePipeline(VulkanContext* context, VkPipelineCache pipelineCache)
+bool ComputePipelineData::CreatePipeline(VulkanContext* context, Core::MemoryManager* memoryManager, VkPipelineCache pipelineCache)
 {
     VkShaderModule shaderModule = VK_NULL_HANDLE;
-    if (!VkHelpers::LoadShaderModule(shaderPath, context->device, &shaderModule)) {
+    if (!VkHelpers::LoadShaderModule(&memoryManager->AssetsScratch(), shaderPath, context->device, &shaderModule)) {
         SPDLOG_ERROR("Failed to load shader: {}", shaderPath.c_str());
         return false;
     }
@@ -69,11 +69,11 @@ bool ComputePipelineData::CreatePipeline(VulkanContext* context, VkPipelineCache
     return true;
 }
 
-bool GraphicsPipelineData::CreatePipeline(VulkanContext* context, VkPipelineCache pipelineCache)
+bool GraphicsPipelineData::CreatePipeline(VulkanContext* context, Core::MemoryManager* memoryManager, VkPipelineCache pipelineCache)
 {
     Core::Array<VkShaderModule, MAX_SHADER_STAGES> shaderModules{};
     for (uint32_t i = 0; i < shaderStages.Size(); ++i) {
-        if (!VkHelpers::LoadShaderModule(shaderPaths[i], context->device, &shaderModules[i])) {
+        if (!VkHelpers::LoadShaderModule(&memoryManager->AssetsScratch(), shaderPaths[i], context->device, &shaderModules[i])) {
             SPDLOG_ERROR("Failed to load shader: {}", shaderPaths[i].c_str());
             for (uint32_t j = 0; j < i; ++j) {
                 if (shaderModules[j] != VK_NULL_HANDLE) {

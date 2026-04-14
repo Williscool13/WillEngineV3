@@ -11,6 +11,7 @@
 #include "core/containers/inline_vector.h"
 #include "core/string_id.h"
 #include "pipeline_category.h"
+#include "core/memory/memory_manager.h"
 
 namespace Render
 {
@@ -26,7 +27,7 @@ class PipelineData
 {
 public:
     virtual ~PipelineData() = default;
-    virtual bool CreatePipeline(VulkanContext* ctx, VkPipelineCache pipelineCache) = 0;
+    virtual bool CreatePipeline(VulkanContext* ctx, Core::MemoryManager* memoryManager, VkPipelineCache pipelineCache) = 0;
 
     // Initialized once, never modified again
     StringID pipelineId{};
@@ -51,7 +52,7 @@ class ComputePipelineData : public PipelineData
 {
 public:
     ~ComputePipelineData() override = default;
-    bool CreatePipeline(VulkanContext* context, VkPipelineCache pipelineCache) override;
+    bool CreatePipeline(VulkanContext* context, Core::MemoryManager* memoryManager, VkPipelineCache pipelineCache) override;
 
     Core::Path shaderPath{};
 };
@@ -60,7 +61,7 @@ class GraphicsPipelineData : public PipelineData
 {
 public:
     ~GraphicsPipelineData() override = default;
-    bool CreatePipeline(VulkanContext* context, VkPipelineCache pipelineCache) override;
+    bool CreatePipeline(VulkanContext* context, Core::MemoryManager* memoryManager, VkPipelineCache pipelineCache) override;
 
     static constexpr uint32_t MAX_SHADER_STAGES = 5;
     static constexpr uint32_t MAX_VERTEX_BINDINGS = 8;

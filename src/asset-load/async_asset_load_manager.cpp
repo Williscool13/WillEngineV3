@@ -41,7 +41,12 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Core::MemoryManager& memoryManager,
     }
 
     for (uint32_t i = 0; i < PIPELINE_JOB_COUNT; ++i) {
-        pipelineLoadSlots[i].Initialize(scheduler, context, pipelineCache, [this](bool success, PipelineSlotHandle slotHandle) {
+        pipelineLoadSlots[i].Initialize(
+            scheduler,
+            context,
+            pipelineCache,
+            &memoryManager,
+            [this](bool success, PipelineSlotHandle slotHandle) {
             OnPipelineLoadComplete(success, slotHandle);
         });
     }

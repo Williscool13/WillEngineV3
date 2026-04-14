@@ -10,6 +10,7 @@
 
 #include "asset-load/asset_load_types.h"
 #include "core/containers/inline_function.h"
+#include "core/memory/memory_manager.h"
 
 namespace Render
 {
@@ -27,7 +28,7 @@ public:
 
     ~PipelineLoadSlot();
 
-    void Initialize(enki::TaskScheduler* _scheduler, Render::VulkanContext* _context, VkPipelineCache _pipelineCache,
+    void Initialize(enki::TaskScheduler* _scheduler, Render::VulkanContext* _context, VkPipelineCache _pipelineCache, Core::MemoryManager* _memoryManager,
                     Core::InlineFunction<void(bool success, PipelineSlotHandle slotHandle)> _notifyCallback);
 
     void Launch(PipelineSlotHandle slotHandle, Render::PipelineData* pipelineData);
@@ -55,6 +56,7 @@ private:
     enki::TaskScheduler* scheduler{nullptr};
     Render::VulkanContext* context{nullptr};
     VkPipelineCache pipelineCache{VK_NULL_HANDLE};
+    Core::MemoryManager* memoryManager{nullptr};
     Core::InlineFunction<void(bool success, PipelineSlotHandle slotHandle)> notifyCallback;
 };
 } // AssetLoad

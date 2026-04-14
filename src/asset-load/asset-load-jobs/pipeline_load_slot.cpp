@@ -16,12 +16,17 @@ PipelineLoadSlot::PipelineLoadSlot() = default;
 
 PipelineLoadSlot::~PipelineLoadSlot() = default;
 
-void PipelineLoadSlot::Initialize(enki::TaskScheduler* _scheduler, Render::VulkanContext* _context, VkPipelineCache _pipelineCache,
-                                  Core::InlineFunction<void(bool success, PipelineSlotHandle slotHandle)> _notifyCallback)
+void PipelineLoadSlot::Initialize(
+    enki::TaskScheduler* _scheduler,
+    Render::VulkanContext* _context,
+    VkPipelineCache _pipelineCache,
+    Core::MemoryManager* _memoryManager,
+    Core::InlineFunction<void(bool success, PipelineSlotHandle slotHandle)> _notifyCallback)
 {
     scheduler = _scheduler;
     context = _context;
     pipelineCache = _pipelineCache;
+    memoryManager = _memoryManager;
     notifyCallback = std::move(_notifyCallback);
 }
 
@@ -58,7 +63,7 @@ void PipelineLoadSlot::LoadPipelineTask::ExecuteRange(enki::TaskSetPartition ran
     bool success = false;
     {
         ZoneScopedN("CreatePipeline");
-        success = loadSlot->pipelineData->CreatePipeline(loadSlot->context, loadSlot->pipelineCache);
+        success = loadSlot->pipelineData->CreatePipeline(loadSlot->context, loadSlot->memoryManager, loadSlot->pipelineCache);
     }
 
     if (loadSlot->notifyCallback) {

@@ -55,7 +55,7 @@ VkImageCreateInfo ImageCreateInfo(VkFormat format, VkExtent3D extent, VkFlags us
 
 VkImageViewCreateInfo ImageViewCreateInfo(VkImage image, VkFormat format, VkFlags aspectFlags);
 
-bool LoadShaderModule(const Core::Path& filePath, VkDevice device, VkShaderModule* outShaderModule);
+bool LoadShaderModule(Core::TlsfAllocator* assetScratch, const Core::Path& filePath, VkDevice device, VkShaderModule* outShaderModule);
 
 VkPipelineShaderStageCreateInfo PipelineShaderStageCreateInfo(VkShaderModule shader, VkShaderStageFlagBits shaderStage);
 

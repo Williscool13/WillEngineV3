@@ -7,6 +7,8 @@
 #include <fstream>
 #include <vector>
 
+#include "core/containers/heap_array.h"
+
 namespace Render
 {
 VkImageMemoryBarrier2 VkHelpers::ImageMemoryBarrier(
@@ -256,7 +258,7 @@ VkImageViewCreateInfo VkHelpers::ImageViewCreateInfo(VkImage image, VkFormat for
     };
 }
 
-bool VkHelpers::LoadShaderModule(const Core::Path& filePath, VkDevice device, VkShaderModule* outShaderModule)
+bool VkHelpers::LoadShaderModule(Core::TlsfAllocator* assetScratch, const Core::Path& filePath, VkDevice device, VkShaderModule* outShaderModule)
 {
     // open the file. With cursor at the end
     std::ifstream file(filePath.c_str(), std::ios::ate | std::ios::binary);
@@ -272,14 +274,13 @@ bool VkHelpers::LoadShaderModule(const Core::Path& filePath, VkDevice device, Vk
 
     // spirv expects the buffer to be on uint32, so make sure to reserve a int
     // vector big enough for the entire file
-    // MEM: vector bad, but this is multithreaded and relatively infrequent. Ideally use the asset scratch tlsf
-    std::vector<uint32_t> buffer(fileSize / sizeof(uint32_t));
+    Core::HeapArray<uint32_t> buffer{assetScratch, Core::AllocTag::AssetModel, fileSize / sizeof(uint32_t)};
 
     // put file cursor at beginning
     file.seekg(0);
 
     // load the entire file into the buffer
-    file.read((char*) buffer.data(), fileSize);
+    file.read((char*) buffer.Data(), fileSize);
 
     // now that the file is loaded into the buffer, we can close it
     file.close();
@@ -291,8 +292,8 @@ bool VkHelpers::LoadShaderModule(const Core::Path& filePath, VkDevice device, Vk
 
     // codeSize has to be in bytes, so multply the ints in the buffer by size of
     // int to know the real size of the buffer
-    createInfo.codeSize = buffer.size() * sizeof(uint32_t);
-    createInfo.pCode = buffer.data();
+    createInfo.codeSize = buffer.Size() * sizeof(uint32_t);
+    createInfo.pCode = buffer.Data();
 
     // check that the creation goes well.
     VkShaderModule shaderModule;
@@ -337,7 +338,6 @@ VkRenderingAttachmentInfo VkHelpers::RenderingAttachmentInfo(VkImageView view, c
         .clearValue = clear ? *clear : VkClearValue{}
     };
 }
-
 VkRenderingInfo VkHelpers::RenderingInfo(const VkExtent2D renderExtent, const VkRenderingAttachmentInfo* colorAttachment, const VkRenderingAttachmentInfo* depthAttachment)
 {
     return {
