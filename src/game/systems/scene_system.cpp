@@ -126,7 +126,7 @@ StringID LoadScene(Engine::ComponentRegistry& componentRegistry, entt::registry&
     return sceneId;
 }
 
-Core::InlineVector<Engine::Scene, 8> SerializeAll(Engine::ComponentRegistry& componentRegistry, entt::registry& registry, Engine::AssetManager* assetManager, Core::Span<Engine::EngineState::RuntimeSceneMetadata> loadedScenes)
+Core::InlineVector<Engine::Scene, 8> SerializeAll(Engine::ComponentRegistry& componentRegistry, entt::registry& registry, Engine::AssetManager* assetManager, Core::Span<Engine::RuntimeSceneMetadata> loadedScenes)
 {
     Core::InlineVector<Engine::Scene, 8> snapshots;
     for (int i = 0; i < loadedScenes.Size(); ++i) {
@@ -139,7 +139,7 @@ Core::InlineVector<Engine::Scene, 8> SerializeAll(Engine::ComponentRegistry& com
 
 void DeserializeAll(Engine::EngineState* state, Core::Span<Engine::Scene> snapshots)
 {
-    Core::InlineVector<Engine::EngineState::RuntimeSceneMetadata, 8> toUnload = state->loadedScenes;
+    Core::InlineVector<Engine::RuntimeSceneMetadata, 8> toUnload = state->editor.loadedScenes;
     for (const auto& meta : toUnload) {
         UnloadScene(state, meta.sceneId);
         LOG_INFO(Game, "PIE restore: unloaded scene '{}'", meta.sceneId.ToString());
@@ -163,7 +163,7 @@ void DeserializeAll(Engine::EngineState* state, Core::Span<Engine::Scene> snapsh
                 }
             }
         }
-        state->loadedScenes.PushBack({loadedId, maxSortOrder + 100});
+        state->editor.loadedScenes.PushBack({loadedId, maxSortOrder + 100});
         LOG_INFO(Game, "PIE restore: reloaded scene '{}'", loadedId.ToString());
     }
 
@@ -188,11 +188,11 @@ void UnloadScene(Engine::EngineState* state, StringID sceneId)
         state->registry.destroy(entity);
     }
 
-    state->selectedEntities.Clear();
-    state->loadedScenes.RemoveFirstIf([sceneId](const Engine::EngineState::RuntimeSceneMetadata& m) {
+    state->editor.selectedEntities.Clear();
+    state->editor.loadedScenes.RemoveFirstIf([sceneId](const Engine::RuntimeSceneMetadata& m) {
         return m.sceneId == sceneId;
     });
-    state->modifiedScenes.RemoveFirst(sceneId);
+    state->editor.modifiedScenes.RemoveFirst(sceneId);
 }
 
 void SaveSceneToFile(StringID sceneID, std::string_view sceneName, Engine::EngineState* state, Engine::AssetManager* assetManager, Engine::EngineContext* ctx)
@@ -246,7 +246,7 @@ void SaveSceneToFile(StringID sceneID, std::string_view sceneName, Engine::Engin
 
 bool LoadSceneFromFile(Engine::EngineState* state, Engine::AssetManager* assetManager, StringID sceneId)
 {
-    if (std::ranges::any_of(state->loadedScenes, [&](const auto& m) { return m.sceneId == sceneId; })) {
+    if (std::ranges::any_of(state->editor.loadedScenes, [&](const auto& m) { return m.sceneId == sceneId; })) {
         LOG_WARN(Game, "Scene '{}' is already loaded", sceneId.ToString());
         return false;
     }
@@ -293,8 +293,8 @@ bool LoadSceneFromFile(Engine::EngineState* state, Engine::AssetManager* assetMa
             }
         }
     }
-    state->loadedScenes.PushBack({loadedId, maxSortOrder + 100});
-    state->modifiedScenes.RemoveFirst(loadedId);
+    state->editor.loadedScenes.PushBack({loadedId, maxSortOrder + 100});
+    state->editor.modifiedScenes.RemoveFirst(loadedId);
 
     ResolvePrefabLoads(state, assetManager);
 
@@ -378,8 +378,8 @@ entt::entity CreateSceneEntity(Engine::EngineState* state)
     state->registry.emplace<Component::TransformComponent>(newEntity);
     state->registry.emplace<Component::SceneComponent>(newEntity, state->currentSceneId);
     state->registry.emplace<Component::StableIdComponent>(newEntity);
-    auto metaIt = std::ranges::find_if(state->loadedScenes, [&](const auto& m) { return m.sceneId == state->currentSceneId; });
-    if (metaIt != state->loadedScenes.end()) {
+    auto metaIt = std::ranges::find_if(state->editor.loadedScenes, [&](const auto& m) { return m.sceneId == state->currentSceneId; });
+    if (metaIt != state->editor.loadedScenes.end()) {
         state->registry.get<Component::StableIdComponent>(newEntity).sortOrder = metaIt->nextSortOrder;
         metaIt->nextSortOrder += 100;
     }
@@ -486,8 +486,8 @@ entt::entity SpawnPrefab(Engine::EngineState* state, Engine::AssetManager* asset
 
     if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
         if (stable->sortOrder == 0) {
-            auto metaIt = std::ranges::find_if(state->loadedScenes, [&](const auto& m) { return m.sceneId == state->currentSceneId; });
-            if (metaIt != state->loadedScenes.end()) {
+            auto metaIt = std::ranges::find_if(state->editor.loadedScenes, [&](const auto& m) { return m.sceneId == state->currentSceneId; });
+            if (metaIt != state->editor.loadedScenes.end()) {
                 stable->sortOrder = metaIt->nextSortOrder;
                 metaIt->nextSortOrder += 100;
             }
@@ -544,12 +544,12 @@ void PlayStart(Engine::EngineContext* ctx, Engine::EngineState* state)
         auto camEntity = camView.front();
         if (camEntity != entt::null) {
             const auto& transform = state->registry.get<Component::TransformComponent>(camEntity);
-            state->pieCameraTranslation = transform.translation;
-            state->pieCameraRotation = transform.rotation;
+            state->editor.pieCameraTranslation = transform.translation;
+            state->editor.pieCameraRotation = transform.rotation;
         }
     }
 
-    state->pieSnapshot = SerializeAll(state->componentRegistry, state->registry, ctx->assetManager, state->loadedScenes);
+    state->editor.pieSnapshot = SerializeAll(state->componentRegistry, state->registry, ctx->assetManager, state->editor.loadedScenes);
 
     {
         auto view = state->registry.view<Component::PrefabInstanceComponent>();
@@ -594,8 +594,8 @@ void PlayStop(Engine::EngineContext* ctx, Engine::EngineState* state)
 
     PhysicsOnPlayStop(ctx, state);
 
-    DeserializeAll(state, state->pieSnapshot);
-    state->pieSnapshot.Clear();
+    DeserializeAll(state, state->editor.pieSnapshot);
+    state->editor.pieSnapshot.Clear();
 
     state->bIsPlaying = false;
     state->bGameCursorCaptured = false;
@@ -606,8 +606,8 @@ void PlayStop(Engine::EngineContext* ctx, Engine::EngineState* state)
         auto camEntity = camView.front();
         if (camEntity != entt::null) {
             auto& transform = state->registry.get<Component::TransformComponent>(camEntity);
-            transform.translation = state->pieCameraTranslation;
-            transform.rotation = state->pieCameraRotation;
+            transform.translation = state->editor.pieCameraTranslation;
+            transform.rotation = state->editor.pieCameraRotation;
         }
     }
 }

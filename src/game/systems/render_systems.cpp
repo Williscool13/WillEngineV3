@@ -279,7 +279,7 @@ void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* st
     for (auto [entity, physics, transform, renderTransform] : physicsView.each()) {
         renderTransform.previousMatrix = renderTransform.modelMatrix;
 
-        float alpha = state->physicsInterpolationAlpha;
+        float alpha = state->physics.interpolationAlpha;
         glm::vec3 interpPos = glm::mix(physics.previousPosition, transform.translation, alpha);
         glm::quat interpRot = glm::slerp(physics.previousRotation, transform.rotation, alpha);
         renderTransform.modelMatrix = glm::translate(glm::mat4(1.0f), interpPos) * glm::mat4_cast(interpRot) * glm::scale(glm::mat4(1.0f), transform.scale) * glm::translate(
@@ -452,8 +452,8 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
         frameBuffer->mainViewFamily.materials[slotIndex] = materialManager->GetProperties(matID);
     }
 
-    if (state->skybox.IsValid()) {
-        frameBuffer->mainViewFamily.skyboxIndex = state->skybox.index;
+    if (state->lighting.skybox.IsValid()) {
+        frameBuffer->mainViewFamily.skyboxIndex = state->lighting.skybox.index;
     }
 }
 }

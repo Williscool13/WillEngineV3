@@ -40,7 +40,7 @@ public:
 private:
     bool CheckGrounded(Physics::PhysicsSystem* physicsSystem) const;
 
-    Engine::EngineState* engineGameState{nullptr};
+    Engine::EngineState* engineState{nullptr};
     Physics::PhysicsSystem* physicsSystem{nullptr};
     entt::entity entity{entt::null};
 

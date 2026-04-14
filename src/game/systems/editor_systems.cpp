@@ -31,8 +31,8 @@ namespace Game
 {
 void MarkSceneModified(Engine::EngineState* state, StringID sceneId)
 {
-    if (!state->modifiedScenes.Contains(sceneId)) {
-        state->modifiedScenes.PushBack(sceneId);
+    if (!state->editor.modifiedScenes.Contains(sceneId)) {
+        state->editor.modifiedScenes.PushBack(sceneId);
     }
 }
 
@@ -47,7 +47,7 @@ void MarkEntitiesModified(Engine::EngineState* state, Core::Span<entt::entity> e
 
 void DrawMultiSelectEditor(Engine::EngineContext* ctx, Engine::EngineState* state, const Vec3& centroid, int transformCount)
 {
-    auto& entities = state->selectedEntities;
+    auto& entities = state->editor.selectedEntities;
     ImGui::Text("%zu entities selected", entities.Size());
 
     // Name
@@ -317,17 +317,17 @@ void DrawMultiSelectEditor(Engine::EngineContext* ctx, Engine::EngineState* stat
 
 void EditorUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    if (state->bAutoSave && !state->modifiedScenes.IsEmpty()) {
-        state->autoSaveTimer += state->timeFrame->deltaTime;
-        if (state->autoSaveTimer >= state->autoSaveInterval) {
-            state->autoSaveTimer = 0.0f;
-            for (StringID sceneId : state->modifiedScenes) {
+    if (state->editor.bAutoSave && !state->editor.modifiedScenes.IsEmpty()) {
+        state->editor.autoSaveTimer += state->timeFrame->deltaTime;
+        if (state->editor.autoSaveTimer >= state->editor.autoSaveInterval) {
+            state->editor.autoSaveTimer = 0.0f;
+            for (StringID sceneId : state->editor.modifiedScenes) {
                 const auto& sceneCache = ctx->assetManager->GetSceneCache();
                 if (const auto* it = sceneCache.Find(sceneId)) {
                     SaveSceneToFile(sceneId, it->sceneName.c_str(), state, ctx->assetManager, ctx);
                 }
             }
-            state->modifiedScenes.Clear();
+            state->editor.modifiedScenes.Clear();
         }
     }
 
@@ -356,38 +356,38 @@ void EditorUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 
     const bool ctrlHeld = state->inputFrame->GetKey(Key::LCTRL).down || state->inputFrame->GetKey(Key::RCTRL).down;
 
-    const bool multiSelectActive = state->selectedEntities.Size() > 1;
-    if (multiSelectActive && state->currentGizmoOperation == ImGuizmo::SCALE) {
-        state->currentGizmoOperation = ImGuizmo::TRANSLATE;
+    const bool multiSelectActive = state->editor.selectedEntities.Size() > 1;
+    if (multiSelectActive && state->editor.currentGizmoOperation == ImGuizmo::SCALE) {
+        state->editor.currentGizmoOperation = ImGuizmo::TRANSLATE;
     }
     if (!ctrlHeld) {
         if (state->inputFrame->GetKey(Key::W).pressed) {
-            state->currentGizmoOperation = ImGuizmo::TRANSLATE;
+            state->editor.currentGizmoOperation = ImGuizmo::TRANSLATE;
         }
         else if (state->inputFrame->GetKey(Key::E).pressed) {
-            state->currentGizmoOperation = ImGuizmo::ROTATE;
+            state->editor.currentGizmoOperation = ImGuizmo::ROTATE;
         }
         else if (state->inputFrame->GetKey(Key::R).pressed && !multiSelectActive) {
-            state->currentGizmoOperation = ImGuizmo::SCALE;
+            state->editor.currentGizmoOperation = ImGuizmo::SCALE;
         }
     }
 
     const bool rmbHeld = state->inputFrame->GetMouse(MouseButton::RMB).down;
     if (!rmbHeld) {
         if (!popupOpen && ctrlHeld && state->inputFrame->GetKey(Key::W).pressed) {
-            state->bWantCopyEntities = true;
+            state->editor.bWantCopyEntities = true;
         }
 
         if (!popupOpen && state->inputFrame->GetKey(Key::DEL).pressed) {
-            state->bWantDeleteEntities = true;
+            state->editor.bWantDeleteEntities = true;
         }
 
         if (!popupOpen && state->inputFrame->GetKey(Key::ESCAPE).pressed) {
-            state->selectedEntities.Clear();
+            state->editor.selectedEntities.Clear();
         }
 
-        if (!popupOpen && state->inputFrame->GetKey(Key::F).pressed && !state->selectedEntities.IsEmpty()) {
-            entt::entity target = state->selectedEntities.Front();
+        if (!popupOpen && state->inputFrame->GetKey(Key::F).pressed && !state->editor.selectedEntities.IsEmpty()) {
+            entt::entity target = state->editor.selectedEntities.Front();
             if (state->registry.valid(target)) {
                 auto* targetTransform = state->registry.try_get<Component::TransformComponent>(target);
 
@@ -435,33 +435,33 @@ void EditorUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
         if (it != nullptr) {
             entt::entity clicked = *it;
             if (ctrlHeld) {
-                auto pos = std::find(state->selectedEntities.begin(), state->selectedEntities.end(), clicked);
-                if (pos != state->selectedEntities.end()) {
-                    state->selectedEntities.Remove(pos);
+                auto pos = std::find(state->editor.selectedEntities.begin(), state->editor.selectedEntities.end(), clicked);
+                if (pos != state->editor.selectedEntities.end()) {
+                    state->editor.selectedEntities.Remove(pos);
                 }
                 else {
-                    state->selectedEntities.PushBack(clicked);
+                    state->editor.selectedEntities.PushBack(clicked);
                 }
             }
             else {
-                state->selectedEntities.Clear();
-                state->selectedEntities.PushBack(clicked);
+                state->editor.selectedEntities.Clear();
+                state->editor.selectedEntities.PushBack(clicked);
             }
         }
         else if (!ctrlHeld) {
-            state->selectedEntities.Clear();
+            state->editor.selectedEntities.Clear();
         }
     }
 
     for (const auto& hotkey : DEBUG_HOTKEYS) {
         if (state->inputFrame->GetKey(hotkey.key).pressed) {
-            if (state->debugResourceName == hotkey.resourceName && state->debugViewAspect == hotkey.aspect) {
-                state->debugResourceName.Clear();
+            if (state->debug.resourceName == hotkey.resourceName && state->debug.viewAspect == hotkey.aspect) {
+                state->debug.resourceName.Clear();
             }
             else {
-                state->debugResourceName = Core::InlineString(hotkey.resourceName);
-                state->debugTransformationType = hotkey.transform;
-                state->debugViewAspect = hotkey.aspect;
+                state->debug.resourceName = Core::InlineString(hotkey.resourceName);
+                state->debug.transformationType = hotkey.transform;
+                state->debug.viewAspect = hotkey.aspect;
             }
         }
     }
@@ -470,27 +470,27 @@ void EditorUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
-    state->texResidency.Tick(ctx);
+    state->editor.texResidency.Tick(ctx);
 
-    if (state->bWantDeleteEntities) {
-        state->bWantDeleteEntities = false;
-        for (entt::entity entity : state->selectedEntities) {
+    if (state->editor.bWantDeleteEntities) {
+        state->editor.bWantDeleteEntities = false;
+        for (entt::entity entity : state->editor.selectedEntities) {
             if (!state->registry.valid(entity)) continue;
             state->registry.destroy(entity);
         }
-        state->selectedEntities.Clear();
+        state->editor.selectedEntities.Clear();
     }
 
-    if (state->bWantCopyEntities) {
-        state->bWantCopyEntities = false;
-        auto copies = Core::ArenaFixedVector<entt::entity>(&ctx->memoryManager->GeneralArena(), state->selectedEntities.Size());
-        for (entt::entity entity : state->selectedEntities) {
+    if (state->editor.bWantCopyEntities) {
+        state->editor.bWantCopyEntities = false;
+        auto copies = Core::ArenaFixedVector<entt::entity>(&ctx->memoryManager->GeneralArena(), state->editor.selectedEntities.Size());
+        for (entt::entity entity : state->editor.selectedEntities) {
             if (!state->registry.valid(entity)) continue;
             copies.PushBack(CopySceneEntity(state, entity, state->currentSceneId));
         }
-        state->selectedEntities.Clear();
+        state->editor.selectedEntities.Clear();
         for (auto copy : copies) {
-            state->selectedEntities.PushBack(copy);
+            state->editor.selectedEntities.PushBack(copy);
         }
     }
 
@@ -504,11 +504,11 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
                     cam.currentViewData.cameraForward.y,
                     cam.currentViewData.cameraForward.z);*/
 
-        ImGui::Text("Current Debug View: %s", state->debugResourceName.IsEmpty() ? "None" : state->debugResourceName.c_str());
-        ImGui::Checkbox("Enable Portals", &state->bEnablePortal);
+        ImGui::Text("Current Debug View: %s", state->debug.resourceName.IsEmpty() ? "None" : state->debug.resourceName.c_str());
+        ImGui::Checkbox("Enable Portals", &state->debug.bEnablePortal);
 
         if (ImGui::Button("Disable Debug View")) {
-            state->debugResourceName.Clear();
+            state->debug.resourceName.Clear();
         }
 
         ImGui::Separator();
@@ -523,13 +523,13 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
         ImGui::Separator();
 
         auto setDebugTarget = [&](const char* name, DebugTransformationType _transform, Core::DebugViewAspect aspect) {
-            if (state->debugResourceName == name && state->debugViewAspect == aspect) {
-                state->debugResourceName.Clear();
+            if (state->debug.resourceName == name && state->debug.viewAspect == aspect) {
+                state->debug.resourceName.Clear();
             }
             else {
-                state->debugResourceName = Core::InlineString(name);
-                state->debugTransformationType = _transform;
-                state->debugViewAspect = aspect;
+                state->debug.resourceName = Core::InlineString(name);
+                state->debug.transformationType = _transform;
+                state->debug.viewAspect = aspect;
             }
         };
         if (ImGui::CollapsingHeader("G-Buffer")) {
@@ -622,8 +622,8 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
         float orbitDist = 8.0f;
         bool orbitAroundObject = false;
 
-        if (!state->selectedEntities.IsEmpty()) {
-            entt::entity target = state->selectedEntities.Front();
+        if (!state->editor.selectedEntities.IsEmpty()) {
+            entt::entity target = state->editor.selectedEntities.Front();
             if (state->registry.valid(target)) {
                 if (const auto* targetTransform = state->registry.try_get<Component::TransformComponent>(target)) {
                     orbitPivot = targetTransform->translation;
@@ -670,20 +670,20 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
     const glm::vec3 cameraPos = frameBuffer->mainViewFamily.mainView.currentViewData.cameraPos;
     const glm::vec3 cameraFwd = frameBuffer->mainViewFamily.mainView.currentViewData.cameraForward;
 
-    const bool multiSelected = state->selectedEntities.Size() > 1;
+    const bool multiSelected = state->editor.selectedEntities.Size() > 1;
     if (multiSelected) {
-        state->currentGizmoMode = ImGuizmo::WORLD;
+        state->editor.currentGizmoMode = ImGuizmo::WORLD;
     }
 
     if (ImGui::Begin("Toolbar", nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse)) {
-        if (ImGui::RadioButton("T##gizmo_op", state->currentGizmoOperation == ImGuizmo::TRANSLATE)) { state->currentGizmoOperation = ImGuizmo::TRANSLATE; }
+        if (ImGui::RadioButton("T##gizmo_op", state->editor.currentGizmoOperation == ImGuizmo::TRANSLATE)) { state->editor.currentGizmoOperation = ImGuizmo::TRANSLATE; }
         if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Translate (W)"); }
         ImGui::SameLine();
-        if (ImGui::RadioButton("R##gizmo_op", state->currentGizmoOperation == ImGuizmo::ROTATE)) { state->currentGizmoOperation = ImGuizmo::ROTATE; }
+        if (ImGui::RadioButton("R##gizmo_op", state->editor.currentGizmoOperation == ImGuizmo::ROTATE)) { state->editor.currentGizmoOperation = ImGuizmo::ROTATE; }
         if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Rotate (E)"); }
         ImGui::SameLine();
         ImGui::BeginDisabled(multiSelected);
-        if (ImGui::RadioButton("S##gizmo_op", state->currentGizmoOperation == ImGuizmo::SCALE)) { state->currentGizmoOperation = ImGuizmo::SCALE; }
+        if (ImGui::RadioButton("S##gizmo_op", state->editor.currentGizmoOperation == ImGuizmo::SCALE)) { state->editor.currentGizmoOperation = ImGuizmo::SCALE; }
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
             ImGui::SetTooltip(multiSelected ? "Scale (R) — unavailable for multi-selection" : "Scale (R)");
         }
@@ -693,17 +693,17 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
         ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
         ImGui::SameLine();
 
-        ImGui::BeginDisabled(state->currentGizmoOperation == ImGuizmo::SCALE || multiSelected);
-        if (ImGui::RadioButton("L##gizmo_mode", state->currentGizmoMode == ImGuizmo::LOCAL)) { state->currentGizmoMode = ImGuizmo::LOCAL; }
+        ImGui::BeginDisabled(state->editor.currentGizmoOperation == ImGuizmo::SCALE || multiSelected);
+        if (ImGui::RadioButton("L##gizmo_mode", state->editor.currentGizmoMode == ImGuizmo::LOCAL)) { state->editor.currentGizmoMode = ImGuizmo::LOCAL; }
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) { ImGui::SetTooltip("Local space"); }
         ImGui::SameLine();
-        if (ImGui::RadioButton("W##gizmo_mode", state->currentGizmoMode == ImGuizmo::WORLD)) { state->currentGizmoMode = ImGuizmo::WORLD; }
+        if (ImGui::RadioButton("W##gizmo_mode", state->editor.currentGizmoMode == ImGuizmo::WORLD)) { state->editor.currentGizmoMode = ImGuizmo::WORLD; }
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) { ImGui::SetTooltip("World space"); }
         ImGui::EndDisabled();
 
-        if (state->currentGizmoOperation == ImGuizmo::SCALE) {
+        if (state->editor.currentGizmoOperation == ImGuizmo::SCALE) {
             ImGui::SameLine();
-            ImGui::Checkbox("Uni##gizmo_uni", &state->bUniformScaleMode);
+            ImGui::Checkbox("Uni##gizmo_uni", &state->editor.bUniformScaleMode);
             if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Uniform scale"); }
         }
 
@@ -711,39 +711,39 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
         ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
         ImGui::SameLine();
 
-        ImGui::Checkbox("Snap##gizmo_snap", &state->bSnapEnabled);
-        if (state->bSnapEnabled) {
+        ImGui::Checkbox("Snap##gizmo_snap", &state->editor.bSnapEnabled);
+        if (state->editor.bSnapEnabled) {
             ImGui::SameLine();
             ImGui::SetNextItemWidth(55.0f);
-            if (state->currentGizmoOperation == ImGuizmo::TRANSLATE) {
-                ImGui::DragFloat("##snap_val", &state->snapTranslation, 0.05f, 0.01f, 10.0f, "%.2f");
+            if (state->editor.currentGizmoOperation == ImGuizmo::TRANSLATE) {
+                ImGui::DragFloat("##snap_val", &state->editor.snapTranslation, 0.05f, 0.01f, 10.0f, "%.2f");
                 if (ImGui::IsItemHovered()) ImGui::SetTooltip("Translation snap (world units)");
             }
-            else if (state->currentGizmoOperation == ImGuizmo::ROTATE) {
-                ImGui::DragFloat("##snap_val", &state->snapRotation, 1.0f, 1.0f, 180.0f, "%.0f deg");
+            else if (state->editor.currentGizmoOperation == ImGuizmo::ROTATE) {
+                ImGui::DragFloat("##snap_val", &state->editor.snapRotation, 1.0f, 1.0f, 180.0f, "%.0f deg");
                 if (ImGui::IsItemHovered()) ImGui::SetTooltip("Rotation snap (degrees)");
             }
             else {
-                ImGui::DragFloat("##snap_val", &state->snapScale, 0.05f, 0.01f, 2.0f, "%.2f");
+                ImGui::DragFloat("##snap_val", &state->editor.snapScale, 0.05f, 0.01f, 2.0f, "%.2f");
                 if (ImGui::IsItemHovered()) ImGui::SetTooltip("Scale snap");
             }
-            if (state->currentGizmoOperation == ImGuizmo::TRANSLATE) {
+            if (state->editor.currentGizmoOperation == ImGuizmo::TRANSLATE) {
                 ImGui::SameLine();
                 // todo remove, just infer from local/world space
-                ImGui::Checkbox("World Grid##snap_world_grid", &state->bSnapWorldGrid);
+                ImGui::Checkbox("World Grid##snap_world_grid", &state->editor.bSnapWorldGrid);
                 if (ImGui::IsItemHovered()) ImGui::SetTooltip("Snap to world-origin-aligned grid rather than drag-relative increments");
             }
         }
 
-        if (state->prevSelectedEntities != state->selectedEntities) {
-            if (state->selectedEntities.Size() == 1) {
-                if (auto* tf = state->registry.try_get<Component::TransformComponent>(state->selectedEntities[0])) {
+        if (state->editor.prevSelectedEntities != state->editor.selectedEntities) {
+            if (state->editor.selectedEntities.Size() == 1) {
+                if (auto* tf = state->registry.try_get<Component::TransformComponent>(state->editor.selectedEntities[0])) {
                     const bool scaleIsUniform = glm::epsilonEqual(tf->scale.x, tf->scale.y, 1e-5f) && glm::epsilonEqual(tf->scale.y, tf->scale.z, 1e-5f);
-                    state->bUniformScaleMode = scaleIsUniform;
+                    state->editor.bUniformScaleMode = scaleIsUniform;
                 }
             }
         }
-        state->prevSelectedEntities = state->selectedEntities;
+        state->editor.prevSelectedEntities = state->editor.selectedEntities;
 
         ImGui::SameLine();
         ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
@@ -763,12 +763,12 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
         // Right-aligned physics debug dropdown
         {
             static constexpr const char* kPhysicsDebugLabels[] = {"Off", "Sensor Only", "Sensor + Tag", "On"};
-            int currentMode = static_cast<int>(state->physicsDebugMode);
+            int currentMode = static_cast<int>(state->editor.physicsDebugMode);
             const float comboW = 110.0f;
             ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - comboW);
             ImGui::SetNextItemWidth(comboW);
             if (ImGui::Combo("##physics_debug", &currentMode, kPhysicsDebugLabels, IM_ARRAYSIZE(kPhysicsDebugLabels))) {
-                state->physicsDebugMode = static_cast<Engine::EngineState::PhysicsDebugMode>(currentMode);
+                state->editor.physicsDebugMode = static_cast<Engine::PhysicsDebugMode>(currentMode);
             }
             if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Physics debug draw: Off / Sensor Only / Sensor + Tag / On (all)"); }
         }
@@ -790,9 +790,9 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             state->currentSceneName.Clear();
         }
 
-        const bool bIsLoaded = std::ranges::any_of(state->loadedScenes, [&](const auto& m) { return m.sceneId == state->currentSceneId; });
-        const bool bIsModified = std::ranges::find(state->modifiedScenes, state->currentSceneId) != state->modifiedScenes.end();
-        const bool bIsMaxLoaded = state->loadedScenes.Size() > Engine::MAX_LOADED_SCENES;
+        const bool bIsLoaded = std::ranges::any_of(state->editor.loadedScenes, [&](const auto& m) { return m.sceneId == state->currentSceneId; });
+        const bool bIsModified = std::ranges::find(state->editor.modifiedScenes, state->currentSceneId) != state->editor.modifiedScenes.end();
+        const bool bIsMaxLoaded = state->editor.loadedScenes.Size() > Engine::MAX_LOADED_SCENES;
         const bool hasScene = sceneCache.Contains(state->currentSceneId);
 
         // Scene dropdown
@@ -815,7 +815,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
                     state->currentSceneId = id;
                     state->currentSceneName = name;
                 }
-                if (std::ranges::any_of(state->loadedScenes, [&](const auto& m) { return m.sceneId == id; })) {
+                if (std::ranges::any_of(state->editor.loadedScenes, [&](const auto& m) { return m.sceneId == id; })) {
                     ImGui::SameLine();
                     ImGui::TextDisabled("(loaded)");
                 }
@@ -839,17 +839,17 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
         if (bIsModified) { ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.5f, 0.1f, 1.0f)); }
         if (ImGui::Button(bIsModified ? "Save*" : "Save")) {
             SaveSceneToFile(state->currentSceneId, state->currentSceneName.View(), state, ctx->assetManager, ctx);
-            state->modifiedScenes.RemoveFirst(state->currentSceneId);
+            state->editor.modifiedScenes.RemoveFirst(state->currentSceneId);
         }
         if (bIsModified) { ImGui::PopStyleColor(); }
         ImGui::EndDisabled();
 
         ImGui::SameLine();
-        if (ImGui::Checkbox("Auto", &state->bAutoSave)) {
-            state->autoSaveTimer = 0.0f;
+        if (ImGui::Checkbox("Auto", &state->editor.bAutoSave)) {
+            state->editor.autoSaveTimer = 0.0f;
         }
-        if (state->bAutoSave && ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Auto-save in %.0fs", state->autoSaveInterval - state->autoSaveTimer);
+        if (state->editor.bAutoSave && ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Auto-save in %.0fs", state->editor.autoSaveInterval - state->editor.autoSaveTimer);
         }
 
         ImGui::SameLine();
@@ -886,8 +886,8 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             ctx->assetManager->RegisterScene(newId, newSceneName);
             state->currentSceneId = newId;
             state->currentSceneName = Core::InlineString<128>(newSceneName);
-            state->loadedScenes.PushBack({newId, 100});
-            state->modifiedScenes.PushBack(newId);
+            state->editor.loadedScenes.PushBack({newId, 100});
+            state->editor.modifiedScenes.PushBack(newId);
             newSceneName[0] = '\0';
         }
         ImGui::EndDisabled();
@@ -934,9 +934,9 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             glm::vec3 offset = cameraPos + normalize(cameraFwd) * 5.0f;
             auto spawned = SpawnModel(ctx, state, modelList[selectedModel].id, offset);
             if (!spawned.IsEmpty()) {
-                state->selectedEntities.Clear();
+                state->editor.selectedEntities.Clear();
                 for (auto entity : spawned) {
-                    state->selectedEntities.PushBack(entity);
+                    state->editor.selectedEntities.PushBack(entity);
                 }
                 MarkSceneModified(state, state->currentSceneId);
             }
@@ -945,10 +945,10 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
 
         ImGui::SeparatorText("Prefabs");
 
-        const bool hasOneSelected = state->selectedEntities.Size() == 1;
+        const bool hasOneSelected = state->editor.selectedEntities.Size() == 1;
         static char prefabName[128] = "New Prefab";
 
-        Component::PrefabInstanceComponent* prefabInst = hasOneSelected ? state->registry.try_get<Component::PrefabInstanceComponent>(state->selectedEntities[0]) : nullptr;
+        Component::PrefabInstanceComponent* prefabInst = hasOneSelected ? state->registry.try_get<Component::PrefabInstanceComponent>(state->editor.selectedEntities[0]) : nullptr;
         const bool isExistingPrefab = prefabInst != nullptr;
 
         const bool isMasterPrefab = isExistingPrefab && prefabInst->bMasterPrefab;
@@ -967,7 +967,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
         ImGui::EndDisabled();
         ImGui::BeginDisabled(isExistingPrefab && !isMasterPrefab);
         if (ImGui::Button(isExistingPrefab ? "Save Prefab" : "Save as Prefab")) {
-            SaveEntityAsPrefab(state, ctx->assetManager, ctx, state->selectedEntities[0], prefabName);
+            SaveEntityAsPrefab(state, ctx->assetManager, ctx, state->editor.selectedEntities[0], prefabName);
         }
         ImGui::EndDisabled();
         ImGui::EndDisabled();
@@ -1007,8 +1007,8 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             glm::vec3 spawnPos = viewData.cameraPos + viewData.cameraForward * 5.0f;
             entt::entity spawned = SpawnPrefab(state, ctx->assetManager, prefabList[selectedPrefab].id, spawnPos);
             if (spawned != entt::null) {
-                state->selectedEntities.Clear();
-                state->selectedEntities.PushBack(spawned);
+                state->editor.selectedEntities.Clear();
+                state->editor.selectedEntities.PushBack(spawned);
                 MarkSceneModified(state, state->currentSceneId);
             }
         }
@@ -1044,8 +1044,8 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             auto newEntity = CreateSceneEntity(state);
             const auto& viewData = frameBuffer->mainViewFamily.mainView.currentViewData;
             state->registry.get<Component::TransformComponent>(newEntity).translation = viewData.cameraPos + viewData.cameraForward * 5.0f;
-            state->selectedEntities.Clear();
-            state->selectedEntities.PushBack(newEntity);
+            state->editor.selectedEntities.Clear();
+            state->editor.selectedEntities.PushBack(newEntity);
             MarkSceneModified(state, state->currentSceneId);
         }
         static char search[64] = {};
@@ -1121,15 +1121,15 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             ImGui::SameLine();
             if (ImGui::SmallButton(fmt::format("C##{}", e.stableId).c_str())) {
                 entt::entity copied = CopySceneEntity(state, e.entity, state->currentSceneId);
-                state->selectedEntities.Clear();
-                state->selectedEntities.PushBack(copied);
+                state->editor.selectedEntities.Clear();
+                state->editor.selectedEntities.PushBack(copied);
                 MarkSceneModified(state, state->currentSceneId);
             }
             ImGui::SameLine();
             const auto* prefabInst2 = state->registry.try_get<Component::PrefabInstanceComponent>(e.entity);
             const bool isPrefab = prefabInst2 != nullptr;
             const bool isMasterPrefab2 = isPrefab && prefabInst2->bMasterPrefab;
-            bool selected = std::find(state->selectedEntities.begin(), state->selectedEntities.end(), e.entity) != state->selectedEntities.end();
+            bool selected = std::find(state->editor.selectedEntities.begin(), state->editor.selectedEntities.end(), e.entity) != state->editor.selectedEntities.end();
 
             if (isPrefab) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.7f, 1.0f, 1.0f));
             char uniqueLabel[256];
@@ -1140,16 +1140,16 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             }
             if (ImGui::Selectable(uniqueLabel, selected)) {
                 if (ImGui::GetIO().KeyCtrl) {
-                    auto it = std::ranges::find(state->selectedEntities, e.entity);
-                    if (it != state->selectedEntities.end()) {
-                        state->selectedEntities.Remove(it);
+                    auto it = std::ranges::find(state->editor.selectedEntities, e.entity);
+                    if (it != state->editor.selectedEntities.end()) {
+                        state->editor.selectedEntities.Remove(it);
                     } else {
-                        state->selectedEntities.PushBack(e.entity);
+                        state->editor.selectedEntities.PushBack(e.entity);
                     }
                 }
                 else {
-                    state->selectedEntities.Clear();
-                    state->selectedEntities.PushBack(e.entity);
+                    state->editor.selectedEntities.Clear();
+                    state->editor.selectedEntities.PushBack(e.entity);
                 }
             }
             if (isPrefab) ImGui::PopStyleColor();
@@ -1229,9 +1229,9 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
         }
 
         if (entityToDelete != entt::null) {
-            auto it = std::ranges::find(state->selectedEntities, entityToDelete);
-            if (it != state->selectedEntities.end()) {
-                state->selectedEntities.Remove(it);
+            auto it = std::ranges::find(state->editor.selectedEntities, entityToDelete);
+            if (it != state->editor.selectedEntities.end()) {
+                state->editor.selectedEntities.Remove(it);
             }
             state->registry.destroy(entityToDelete);
             MarkSceneModified(state, state->currentSceneId);
@@ -1241,7 +1241,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
 
     glm::vec3 multiGizmoCentroid{0.0f};
     int transformCount = 0;
-    for (auto entity : state->selectedEntities) {
+    for (auto entity : state->editor.selectedEntities) {
         if (auto* tf = state->registry.try_get<Component::TransformComponent>(entity)) {
             multiGizmoCentroid += tf->translation;
             ++transformCount;
@@ -1251,17 +1251,17 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
         multiGizmoCentroid /= static_cast<float>(transformCount);
 
     if (ImGui::Begin("Details")) {
-        if (state->selectedEntities.Size() == 1) {
+        if (state->editor.selectedEntities.Size() == 1) {
             Engine::ComponentEntry* entryToRemove = nullptr;
-            entt::entity entity = state->selectedEntities[0];
+            entt::entity entity = state->editor.selectedEntities[0];
             ImGui::Text("Entity: %u", static_cast<uint32_t>(entity));
             if (const auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
                 ImGui::SameLine();
                 ImGui::TextDisabled("(order: %llu)", stable->sortOrder);
             }
 
-            state->bCustomGizmoActivePrev = state->bCustomGizmoActive;
-            state->bCustomGizmoActive = false;
+            state->editor.bCustomGizmoActivePrev = state->editor.bCustomGizmoActive;
+            state->editor.bCustomGizmoActive = false;
             auto* entityScene = state->registry.try_get<Component::SceneComponent>(entity);
             for (Engine::ComponentEntry& entry : state->componentRegistry.registry) {
                 if (entry.has(state->registry, entity)) {
@@ -1319,28 +1319,28 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
     }
     ImGui::End();
 
-    if (!state->bCustomGizmoActive && !state->selectedEntities.IsEmpty()) {
-        if (state->selectedEntities.Size() == 1) {
-            entt::entity entity = state->selectedEntities[0];
+    if (!state->editor.bCustomGizmoActive && !state->editor.selectedEntities.IsEmpty()) {
+        if (state->editor.selectedEntities.Size() == 1) {
+            entt::entity entity = state->editor.selectedEntities[0];
             if (auto* transform = state->registry.try_get<Component::TransformComponent>(entity)) {
                 auto model = Component::GetMatrix(*transform);
                 float snapArr[3] = {};
                 float* snap = nullptr;
-                if (state->bSnapEnabled) {
-                    if (state->currentGizmoOperation == ImGuizmo::TRANSLATE)
-                        snapArr[0] = snapArr[1] = snapArr[2] = state->snapTranslation;
-                    else if (state->currentGizmoOperation == ImGuizmo::ROTATE)
-                        snapArr[0] = snapArr[1] = snapArr[2] = state->snapRotation;
+                if (state->editor.bSnapEnabled) {
+                    if (state->editor.currentGizmoOperation == ImGuizmo::TRANSLATE)
+                        snapArr[0] = snapArr[1] = snapArr[2] = state->editor.snapTranslation;
+                    else if (state->editor.currentGizmoOperation == ImGuizmo::ROTATE)
+                        snapArr[0] = snapArr[1] = snapArr[2] = state->editor.snapRotation;
                     else
-                        snapArr[0] = snapArr[1] = snapArr[2] = state->snapScale;
+                        snapArr[0] = snapArr[1] = snapArr[2] = state->editor.snapScale;
                     snap = snapArr;
                 }
 
                 ImGuizmo::Manipulate(
                     glm::value_ptr(view),
                     glm::value_ptr(proj),
-                    state->currentGizmoOperation,
-                    state->currentGizmoMode,
+                    state->editor.currentGizmoOperation,
+                    state->editor.currentGizmoMode,
                     glm::value_ptr(model),
                     nullptr,
                     snap
@@ -1349,13 +1349,13 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
                     float t[3], r[3], s[3];
                     ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(model), t, r, s);
                     glm::vec3 translation = glm::vec3(t[0], t[1], t[2]);
-                    if (state->bSnapEnabled && state->bSnapWorldGrid && state->currentGizmoOperation == ImGuizmo::TRANSLATE) {
-                        const float g = state->snapTranslation;
+                    if (state->editor.bSnapEnabled && state->editor.bSnapWorldGrid && state->editor.currentGizmoOperation == ImGuizmo::TRANSLATE) {
+                        const float g = state->editor.snapTranslation;
                         translation = glm::round(translation / g) * g;
                     }
                     transform->translation = translation;
                     transform->rotation = glm::quat(glm::radians(glm::vec3(r[0], r[1], r[2])));
-                    if (state->bUniformScaleMode)
+                    if (state->editor.bUniformScaleMode)
                         transform->scale = glm::vec3((s[0] + s[1] + s[2]) / 3.0f);
                     else
                         transform->scale = glm::vec3(s[0], s[1], s[2]);
@@ -1366,17 +1366,17 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
                 }
             }
         }
-        else if (state->currentGizmoOperation != ImGuizmo::SCALE) {
+        else if (state->editor.currentGizmoOperation != ImGuizmo::SCALE) {
             static glm::vec3 s_prevTranslation{};
             static bool s_wasDragging = false;
 
             float snapArr[3] = {};
             float* snap = nullptr;
-            if (state->bSnapEnabled) {
-                if (state->currentGizmoOperation == ImGuizmo::TRANSLATE)
-                    snapArr[0] = snapArr[1] = snapArr[2] = state->snapTranslation;
+            if (state->editor.bSnapEnabled) {
+                if (state->editor.currentGizmoOperation == ImGuizmo::TRANSLATE)
+                    snapArr[0] = snapArr[1] = snapArr[2] = state->editor.snapTranslation;
                 else
-                    snapArr[0] = snapArr[1] = snapArr[2] = state->snapRotation;
+                    snapArr[0] = snapArr[1] = snapArr[2] = state->editor.snapRotation;
                 snap = snapArr;
             }
 
@@ -1385,7 +1385,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             ImGuizmo::Manipulate(
                 glm::value_ptr(view),
                 glm::value_ptr(proj),
-                state->currentGizmoOperation,
+                state->editor.currentGizmoOperation,
                 ImGuizmo::WORLD,
                 glm::value_ptr(gizmoMatrix),
                 glm::value_ptr(deltaMatrix),
@@ -1396,7 +1396,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
                 if (!s_wasDragging) {
                     s_prevTranslation = multiGizmoCentroid;
                     s_wasDragging = true;
-                    for (auto e : state->selectedEntities) {
+                    for (auto e : state->editor.selectedEntities) {
                         if (auto* sc = state->registry.try_get<Component::SceneComponent>(e)) {
                             MarkSceneModified(state, sc->sceneId);
                         }
@@ -1404,12 +1404,12 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
                 }
 
                 glm::vec3 deltaTranslation{0.0f};
-                if (state->currentGizmoOperation == ImGuizmo::TRANSLATE) {
+                if (state->editor.currentGizmoOperation == ImGuizmo::TRANSLATE) {
                     float t[3], r[3], s[3];
                     ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(gizmoMatrix), t, r, s);
                     glm::vec3 newT = {t[0], t[1], t[2]};
-                    if (state->bSnapEnabled && state->bSnapWorldGrid) {
-                        const float g = state->snapTranslation;
+                    if (state->editor.bSnapEnabled && state->editor.bSnapWorldGrid) {
+                        const float g = state->editor.snapTranslation;
                         newT = glm::round(newT / g) * g;
                     }
                     deltaTranslation = newT - s_prevTranslation;
@@ -1418,7 +1418,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
 
                 const glm::quat deltaRotation = glm::normalize(glm::quat_cast(glm::mat3(deltaMatrix)));
 
-                for (auto entity : state->selectedEntities) {
+                for (auto entity : state->editor.selectedEntities) {
                     auto* transform = state->registry.try_get<Component::TransformComponent>(entity);
                     if (!transform) continue;
 
@@ -1442,177 +1442,177 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
     if (ImGui::Begin("Post-Processing")) {
         constexpr Core::PostProcessConfiguration defaultPP{};
         if (ImGui::Button("Reset All to Defaults")) {
-            state->postProcess = defaultPP;
+            state->lighting.postProcess = defaultPP;
         }
         ImGui::SameLine();
         if (ImGui::Button("Disable All Effects")) {
-            state->postProcess.bEnableTemporalAntialiasing = false;
-            state->postProcess.tonemapOperator = -1;
-            state->postProcess.bloomIntensity = 0.0f;
-            state->postProcess.motionBlurVelocityScale = 0.0f;
-            state->postProcess.chromaticAberrationStrength = 0.0f;
-            state->postProcess.vignetteStrength = 0.0f;
-            state->postProcess.grainStrength = 0.0f;
-            state->postProcess.sharpeningStrength = 0.0f;
+            state->lighting.postProcess.bEnableTemporalAntialiasing = false;
+            state->lighting.postProcess.tonemapOperator = -1;
+            state->lighting.postProcess.bloomIntensity = 0.0f;
+            state->lighting.postProcess.motionBlurVelocityScale = 0.0f;
+            state->lighting.postProcess.chromaticAberrationStrength = 0.0f;
+            state->lighting.postProcess.vignetteStrength = 0.0f;
+            state->lighting.postProcess.grainStrength = 0.0f;
+            state->lighting.postProcess.sharpeningStrength = 0.0f;
         }
 
         ImGui::Spacing();
         ImGui::SeparatorText("Ground Truth Ambient Occlusion");
-        ImGui::Checkbox("Enable GTAO", &state->gtaoConfig.bEnabled);
+        ImGui::Checkbox("Enable GTAO", &state->lighting.gtaoConfig.bEnabled);
 
         ImGui::Spacing();
         ImGui::SeparatorText("Anti-Aliasing");
-        ImGui::Checkbox("Enable TAA", &state->postProcess.bEnableTemporalAntialiasing);
+        ImGui::Checkbox("Enable TAA", &state->lighting.postProcess.bEnableTemporalAntialiasing);
 
         ImGui::Spacing();
         ImGui::SeparatorText("Tonemapping");
         const char* tonemapOperators[] = {"None", "ACES", "Uncharted 2", "Reinhard", "Lottes"};
-        int currentItem = state->postProcess.tonemapOperator + 1;
+        int currentItem = state->lighting.postProcess.tonemapOperator + 1;
         if (ImGui::Combo("Operator", &currentItem, tonemapOperators, IM_ARRAYSIZE(tonemapOperators))) {
-            state->postProcess.tonemapOperator = currentItem - 1;
+            state->lighting.postProcess.tonemapOperator = currentItem - 1;
         }
 
         ImGui::Spacing();
         ImGui::SeparatorText("Exposure");
-        ImGui::SliderFloat("Target Luminance", &state->postProcess.exposureTargetLuminance, 0.01f, 1.0f, "%.3f");
-        ImGui::SliderFloat("Adaptation Speed", &state->postProcess.exposureAdaptationRate, 0.1f, 50.0f, "%.1f");
+        ImGui::SliderFloat("Target Luminance", &state->lighting.postProcess.exposureTargetLuminance, 0.01f, 1.0f, "%.3f");
+        ImGui::SliderFloat("Adaptation Speed", &state->lighting.postProcess.exposureAdaptationRate, 0.1f, 50.0f, "%.1f");
         if (ImGui::Button("Reset Exposure")) {
-            state->postProcess.exposureTargetLuminance = defaultPP.exposureTargetLuminance;
-            state->postProcess.exposureAdaptationRate = defaultPP.exposureAdaptationRate;
+            state->lighting.postProcess.exposureTargetLuminance = defaultPP.exposureTargetLuminance;
+            state->lighting.postProcess.exposureAdaptationRate = defaultPP.exposureAdaptationRate;
         }
 
 
         ImGui::Spacing();
         ImGui::SeparatorText("Bloom");
-        ImGui::SliderFloat("Intensity", &state->postProcess.bloomIntensity, 0.0f, 0.2f, "%.3f");
-        ImGui::SliderFloat("Threshold", &state->postProcess.bloomThreshold, 0.0f, 2.0f, "%.2f");
-        ImGui::SliderFloat("Soft Threshold", &state->postProcess.bloomSoftThreshold, 0.0f, 1.0f, "%.2f");
-        ImGui::SliderFloat("Radius", &state->postProcess.bloomRadius, 0.5f, 2.0f, "%.2f");
+        ImGui::SliderFloat("Intensity", &state->lighting.postProcess.bloomIntensity, 0.0f, 0.2f, "%.3f");
+        ImGui::SliderFloat("Threshold", &state->lighting.postProcess.bloomThreshold, 0.0f, 2.0f, "%.2f");
+        ImGui::SliderFloat("Soft Threshold", &state->lighting.postProcess.bloomSoftThreshold, 0.0f, 1.0f, "%.2f");
+        ImGui::SliderFloat("Radius", &state->lighting.postProcess.bloomRadius, 0.5f, 2.0f, "%.2f");
         if (ImGui::Button("Reset Bloom")) {
-            state->postProcess.bloomIntensity = defaultPP.bloomIntensity;
-            state->postProcess.bloomThreshold = defaultPP.bloomThreshold;
-            state->postProcess.bloomSoftThreshold = defaultPP.bloomSoftThreshold;
-            state->postProcess.bloomRadius = defaultPP.bloomRadius;
+            state->lighting.postProcess.bloomIntensity = defaultPP.bloomIntensity;
+            state->lighting.postProcess.bloomThreshold = defaultPP.bloomThreshold;
+            state->lighting.postProcess.bloomSoftThreshold = defaultPP.bloomSoftThreshold;
+            state->lighting.postProcess.bloomRadius = defaultPP.bloomRadius;
         }
         ImGui::SameLine();
         if (ImGui::Button("Disable Bloom")) {
-            state->postProcess.bloomIntensity = 0.0f;
+            state->lighting.postProcess.bloomIntensity = 0.0f;
         }
 
         ImGui::Spacing();
         ImGui::SeparatorText("Motion Blur");
-        ImGui::DragFloat("Velocity Scale", &state->postProcess.motionBlurVelocityScale, 0.05f, 0.0f, 4.0f, "%.2f");
-        ImGui::DragFloat("Depth Scale", &state->postProcess.motionBlurDepthScale, 0.1f, 2.0f, 10.0f, "%.2f");
+        ImGui::DragFloat("Velocity Scale", &state->lighting.postProcess.motionBlurVelocityScale, 0.05f, 0.0f, 4.0f, "%.2f");
+        ImGui::DragFloat("Depth Scale", &state->lighting.postProcess.motionBlurDepthScale, 0.1f, 2.0f, 10.0f, "%.2f");
         if (ImGui::Button("Reset Motion Blur")) {
-            state->postProcess.motionBlurVelocityScale = defaultPP.motionBlurVelocityScale;
-            state->postProcess.motionBlurDepthScale = defaultPP.motionBlurDepthScale;
+            state->lighting.postProcess.motionBlurVelocityScale = defaultPP.motionBlurVelocityScale;
+            state->lighting.postProcess.motionBlurDepthScale = defaultPP.motionBlurDepthScale;
         }
         ImGui::SameLine();
         if (ImGui::Button("Disable Motion Blur")) {
-            state->postProcess.motionBlurVelocityScale = 0.0f;
+            state->lighting.postProcess.motionBlurVelocityScale = 0.0f;
         }
 
         ImGui::Spacing();
         ImGui::SeparatorText("Color Grading");
-        ImGui::SliderFloat("Exposure Offset", &state->postProcess.colorGradingExposure, -2.0f, 2.0f, "%.2f");
-        ImGui::SliderFloat("Contrast", &state->postProcess.colorGradingContrast, 0.5f, 2.0f, "%.2f");
-        ImGui::SliderFloat("Saturation", &state->postProcess.colorGradingSaturation, 0.0f, 2.0f, "%.2f");
-        ImGui::SliderFloat("Temperature", &state->postProcess.colorGradingTemperature, -1.0f, 1.0f, "%.2f");
-        ImGui::SliderFloat("Tint", &state->postProcess.colorGradingTint, -1.0f, 1.0f, "%.2f");
+        ImGui::SliderFloat("Exposure Offset", &state->lighting.postProcess.colorGradingExposure, -2.0f, 2.0f, "%.2f");
+        ImGui::SliderFloat("Contrast", &state->lighting.postProcess.colorGradingContrast, 0.5f, 2.0f, "%.2f");
+        ImGui::SliderFloat("Saturation", &state->lighting.postProcess.colorGradingSaturation, 0.0f, 2.0f, "%.2f");
+        ImGui::SliderFloat("Temperature", &state->lighting.postProcess.colorGradingTemperature, -1.0f, 1.0f, "%.2f");
+        ImGui::SliderFloat("Tint", &state->lighting.postProcess.colorGradingTint, -1.0f, 1.0f, "%.2f");
         if (ImGui::Button("Reset Color Grading")) {
-            state->postProcess.colorGradingExposure = defaultPP.colorGradingExposure;
-            state->postProcess.colorGradingContrast = defaultPP.colorGradingContrast;
-            state->postProcess.colorGradingSaturation = defaultPP.colorGradingSaturation;
-            state->postProcess.colorGradingTemperature = defaultPP.colorGradingTemperature;
-            state->postProcess.colorGradingTint = defaultPP.colorGradingTint;
+            state->lighting.postProcess.colorGradingExposure = defaultPP.colorGradingExposure;
+            state->lighting.postProcess.colorGradingContrast = defaultPP.colorGradingContrast;
+            state->lighting.postProcess.colorGradingSaturation = defaultPP.colorGradingSaturation;
+            state->lighting.postProcess.colorGradingTemperature = defaultPP.colorGradingTemperature;
+            state->lighting.postProcess.colorGradingTint = defaultPP.colorGradingTint;
         }
 
         ImGui::Spacing();
         ImGui::SeparatorText("Chromatic Aberration");
-        ImGui::SliderFloat("Aberration Strength", &state->postProcess.chromaticAberrationStrength, 0.0f, 100.0f, "%.2f");
+        ImGui::SliderFloat("Aberration Strength", &state->lighting.postProcess.chromaticAberrationStrength, 0.0f, 100.0f, "%.2f");
         if (ImGui::Button("Reset Aberration")) {
-            state->postProcess.chromaticAberrationStrength = defaultPP.chromaticAberrationStrength;
+            state->lighting.postProcess.chromaticAberrationStrength = defaultPP.chromaticAberrationStrength;
         }
         ImGui::SameLine();
         if (ImGui::Button("Disable Aberration")) {
-            state->postProcess.chromaticAberrationStrength = 0.0f;
+            state->lighting.postProcess.chromaticAberrationStrength = 0.0f;
         }
 
         ImGui::Spacing();
         ImGui::SeparatorText("Vignette");
-        ImGui::SliderFloat("Vignette Strength", &state->postProcess.vignetteStrength, 0.0f, 1.0f, "%.2f");
-        ImGui::SliderFloat("Vignette Radius", &state->postProcess.vignetteRadius, 0.5f, 1.0f, "%.2f");
-        ImGui::SliderFloat("Vignette Smoothness", &state->postProcess.vignetteSmoothness, 0.1f, 1.0f, "%.2f");
+        ImGui::SliderFloat("Vignette Strength", &state->lighting.postProcess.vignetteStrength, 0.0f, 1.0f, "%.2f");
+        ImGui::SliderFloat("Vignette Radius", &state->lighting.postProcess.vignetteRadius, 0.5f, 1.0f, "%.2f");
+        ImGui::SliderFloat("Vignette Smoothness", &state->lighting.postProcess.vignetteSmoothness, 0.1f, 1.0f, "%.2f");
         if (ImGui::Button("Reset Vignette")) {
-            state->postProcess.vignetteStrength = defaultPP.vignetteStrength;
-            state->postProcess.vignetteRadius = defaultPP.vignetteRadius;
-            state->postProcess.vignetteSmoothness = defaultPP.vignetteSmoothness;
+            state->lighting.postProcess.vignetteStrength = defaultPP.vignetteStrength;
+            state->lighting.postProcess.vignetteRadius = defaultPP.vignetteRadius;
+            state->lighting.postProcess.vignetteSmoothness = defaultPP.vignetteSmoothness;
         }
         ImGui::SameLine();
         if (ImGui::Button("Disable Vignette")) {
-            state->postProcess.vignetteStrength = 0.0f;
+            state->lighting.postProcess.vignetteStrength = 0.0f;
         }
 
         ImGui::Spacing();
         ImGui::SeparatorText("Film Grain");
-        ImGui::SliderFloat("Grain Strength", &state->postProcess.grainStrength, 0.0f, 0.15f, "%.3f");
-        ImGui::SliderFloat("Grain Size", &state->postProcess.grainSize, 1.0f, 3.0f, "%.2f");
+        ImGui::SliderFloat("Grain Strength", &state->lighting.postProcess.grainStrength, 0.0f, 0.15f, "%.3f");
+        ImGui::SliderFloat("Grain Size", &state->lighting.postProcess.grainSize, 1.0f, 3.0f, "%.2f");
         if (ImGui::Button("Reset Grain")) {
-            state->postProcess.grainStrength = defaultPP.grainStrength;
-            state->postProcess.grainSize = defaultPP.grainSize;
+            state->lighting.postProcess.grainStrength = defaultPP.grainStrength;
+            state->lighting.postProcess.grainSize = defaultPP.grainSize;
         }
         ImGui::SameLine();
         if (ImGui::Button("Disable Grain")) {
-            state->postProcess.grainStrength = 0.0f;
+            state->lighting.postProcess.grainStrength = 0.0f;
         }
 
         ImGui::Spacing();
         ImGui::SeparatorText("Sharpening");
-        ImGui::SliderFloat("Sharpening Strength", &state->postProcess.sharpeningStrength, 0.0f, 100.0f, "%.02f");
+        ImGui::SliderFloat("Sharpening Strength", &state->lighting.postProcess.sharpeningStrength, 0.0f, 100.0f, "%.02f");
         if (ImGui::Button("Reset Sharpening")) {
-            state->postProcess.sharpeningStrength = defaultPP.sharpeningStrength;
+            state->lighting.postProcess.sharpeningStrength = defaultPP.sharpeningStrength;
         }
         ImGui::SameLine();
         if (ImGui::Button("Disable Sharpening")) {
-            state->postProcess.sharpeningStrength = 0.0f;
+            state->lighting.postProcess.sharpeningStrength = 0.0f;
         }
 
         ImGui::Spacing();
         ImGui::SeparatorText("Panini Projection");
-        ImGui::SliderFloat("Panini Strength", &state->postProcess.paniniStrength, 0.0f, 1.0f, "%.2f");
+        ImGui::SliderFloat("Panini Strength", &state->lighting.postProcess.paniniStrength, 0.0f, 1.0f, "%.2f");
         if (ImGui::Button("Reset Panini")) {
-            state->postProcess.paniniStrength = defaultPP.paniniStrength;
+            state->lighting.postProcess.paniniStrength = defaultPP.paniniStrength;
         }
         ImGui::SameLine();
         if (ImGui::Button("Disable Panini")) {
-            state->postProcess.paniniStrength = 0.0f;
+            state->lighting.postProcess.paniniStrength = 0.0f;
         }
     }
     ImGui::End();
 
     if (ImGui::Begin("Scene")) {
-        ImGui::Checkbox("Enable Physics", &state->bEnablePhysics);
+        ImGui::Checkbox("Enable Physics", &state->physics.bEnabled);
 
         if (ImGui::CollapsingHeader("Directional Light")) {
-            ImGui::SliderFloat3("Direction", &state->directionalLight.direction.x, -1.0f, 1.0f);
+            ImGui::SliderFloat3("Direction", &state->lighting.directionalLight.direction.x, -1.0f, 1.0f);
             if (ImGui::Button("Normalize Direction")) {
-                frameBuffer->mainViewFamily.directionalLight.direction = glm::normalize(state->directionalLight.direction);
+                frameBuffer->mainViewFamily.directionalLight.direction = glm::normalize(state->lighting.directionalLight.direction);
             }
-            ImGui::SliderFloat("Intensity", &state->directionalLight.intensity, 0.0f, 5.0f);
-            ImGui::ColorEdit3("Color", &state->directionalLight.color.x);
+            ImGui::SliderFloat("Intensity", &state->lighting.directionalLight.intensity, 0.0f, 5.0f);
+            ImGui::ColorEdit3("Color", &state->lighting.directionalLight.color.x);
         }
 
         if (ImGui::CollapsingHeader("Shadow Settings")) {
             const char* qualityNames[] = {"Ultra", "High", "Medium", "Low", "Custom"};
-            int currentQuality = static_cast<int>(state->shadowQuality);
+            int currentQuality = static_cast<int>(state->lighting.shadowQuality);
             if (ImGui::Combo("Quality", &currentQuality, qualityNames, 5)) {
-                state->shadowQuality = static_cast<Core::ShadowQuality>(currentQuality);
+                state->lighting.shadowQuality = static_cast<Core::ShadowQuality>(currentQuality);
                 if (currentQuality < 4) {
-                    state->shadowConfig.cascadePreset = Render::SHADOW_PRESETS[currentQuality];
+                    state->lighting.shadowConfig.cascadePreset = Render::SHADOW_PRESETS[currentQuality];
                 }
             }
 
-            ImGui::SliderFloat("Shadow Intensity", &state->shadowConfig.shadowIntensity, 0.0f, 1.0f);
+            ImGui::SliderFloat("Shadow Intensity", &state->lighting.shadowConfig.shadowIntensity, 0.0f, 1.0f);
 
             ImGui::Separator();
             ImGui::Text("Current Configuration:");
@@ -1620,24 +1620,24 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
                 ImGui::Text("Cascade %d:", i);
                 ImGui::Indent();
                 ImGui::Text("  Resolution: %dx%d",
-                            state->shadowConfig.cascadePreset.extents[i][0],
-                            state->shadowConfig.cascadePreset.extents[i][1]);
+                            state->lighting.shadowConfig.cascadePreset.extents[i][0],
+                            state->lighting.shadowConfig.cascadePreset.extents[i][1]);
                 ImGui::Text("  Bias: %.2f/%.2f",
-                            state->shadowConfig.cascadePreset.biases[i].linear,
-                            state->shadowConfig.cascadePreset.biases[i].sloped);
+                            state->lighting.shadowConfig.cascadePreset.biases[i].linear,
+                            state->lighting.shadowConfig.cascadePreset.biases[i].sloped);
                 ImGui::Text("  PCSS Samples: %u blocker, %u PCF",
-                            state->shadowConfig.cascadePreset.pcssSamples[i].blockerSearchSamples,
-                            state->shadowConfig.cascadePreset.pcssSamples[i].pcfSamples);
+                            state->lighting.shadowConfig.cascadePreset.pcssSamples[i].blockerSearchSamples,
+                            state->lighting.shadowConfig.cascadePreset.pcssSamples[i].pcfSamples);
                 ImGui::Text("  Light Size: %.4f",
-                            state->shadowConfig.cascadePreset.lightSizes[i]);
+                            state->lighting.shadowConfig.cascadePreset.lightSizes[i]);
                 ImGui::Unindent();
             }
 
-            if (state->shadowQuality == Core::ShadowQuality::Custom) {
+            if (state->lighting.shadowQuality == Core::ShadowQuality::Custom) {
                 ImGui::Separator();
                 ImGui::Text("Custom Settings:");
 
-                static Render::ShadowCascadePreset customPreset = state->shadowConfig.cascadePreset;
+                static Render::ShadowCascadePreset customPreset = state->lighting.shadowConfig.cascadePreset;
 
                 for (int i = 0; i < 4; ++i) {
                     ImGui::PushID(i);
@@ -1655,14 +1655,14 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
                 }
 
                 if (ImGui::Button("Apply Custom Settings")) {
-                    state->shadowConfig.cascadePreset = customPreset;
+                    state->lighting.shadowConfig.cascadePreset = customPreset;
                 }
             }
 
             ImGui::Separator();
-            ImGui::SliderFloat("Split Lambda", &state->shadowConfig.splitLambda, 0.0f, 1.0f);
-            ImGui::SliderFloat("Split Overlap", &state->shadowConfig.splitOverlap, 1.0f, 1.2f);
-            ImGui::Checkbox("Enabled", &state->shadowConfig.enabled);
+            ImGui::SliderFloat("Split Lambda", &state->lighting.shadowConfig.splitLambda, 0.0f, 1.0f);
+            ImGui::SliderFloat("Split Overlap", &state->lighting.shadowConfig.splitOverlap, 1.0f, 1.2f);
+            ImGui::Checkbox("Enabled", &state->lighting.shadowConfig.enabled);
         }
     }
     ImGui::End();
@@ -1835,13 +1835,13 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
                                 }
                                 if (ImGui::IsItemHovered()) {
                                     if (previewId != id2) {
-                                        if (previewId.IsValid()) state->texResidency.Release(previewId, ctx);
+                                        if (previewId.IsValid()) state->editor.texResidency.Release(previewId, ctx);
                                         previewId = id2;
                                         // todo: ideally only load the lowest mip for preview
-                                        state->texResidency.Acquire(id2, ctx);
+                                        state->editor.texResidency.Acquire(id2, ctx);
                                     }
                                     ImGui::BeginTooltip();
-                                    uint64_t ds = state->texResidency.GetDescSet(id2, ctx);
+                                    uint64_t ds = state->editor.texResidency.GetDescSet(id2, ctx);
                                     if (ds) {
                                         ImGui::Image(ds, {128.0f, 128.0f});
                                     }
@@ -1859,7 +1859,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
                             _editMat.textureRefs[slot] = texEditPending;
                             materialManager->UpdateMutableMaterial(id, _editMat, true);
                             if (previewId.IsValid()) {
-                                state->texResidency.Release(previewId, ctx);
+                                state->editor.texResidency.Release(previewId, ctx);
                                 previewId = Engine::TextureID::INVALID;
                             }
                             ImGui::CloseCurrentPopup();
@@ -1867,7 +1867,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
                         ImGui::SameLine();
                         if (ImGui::Button("Cancel") || state->inputFrame->GetKey(Key::ESCAPE).pressed) {
                             if (previewId.IsValid()) {
-                                state->texResidency.Release(previewId, ctx);
+                                state->editor.texResidency.Release(previewId, ctx);
                                 previewId = Engine::TextureID::INVALID;
                             }
                             ImGui::CloseCurrentPopup();
@@ -1933,12 +1933,12 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
     }
     ImGui::End();
 
-    frameBuffer->mainViewFamily.directionalLight = state->directionalLight;
-    frameBuffer->mainViewFamily.shadowConfig = state->shadowConfig;
-    frameBuffer->mainViewFamily.postProcessConfig = state->postProcess;
-    frameBuffer->mainViewFamily.gtaoConfig = state->gtaoConfig;
-    frameBuffer->mainViewFamily.debugResourceName = state->debugResourceName;
-    frameBuffer->mainViewFamily.debugTransformationType = state->debugTransformationType;
-    frameBuffer->mainViewFamily.debugViewAspect = state->debugViewAspect;
+    frameBuffer->mainViewFamily.directionalLight = state->lighting.directionalLight;
+    frameBuffer->mainViewFamily.shadowConfig = state->lighting.shadowConfig;
+    frameBuffer->mainViewFamily.postProcessConfig = state->lighting.postProcess;
+    frameBuffer->mainViewFamily.gtaoConfig = state->lighting.gtaoConfig;
+    frameBuffer->mainViewFamily.debugResourceName = state->debug.resourceName;
+    frameBuffer->mainViewFamily.debugTransformationType = state->debug.transformationType;
+    frameBuffer->mainViewFamily.debugViewAspect = state->debug.viewAspect;
 }
 }

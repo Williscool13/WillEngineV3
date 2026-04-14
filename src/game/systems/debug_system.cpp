@@ -41,7 +41,7 @@ void DebugProcessPhysicsCollisions(Engine::EngineContext* ctx, Engine::EngineSta
     ZoneScoped;
     state->registry.clear<Component::AntiGravityTag>();
 
-    for (const auto& event : state->resolvedAddedEvents) {
+    for (const auto& event : state->physics.resolvedAddedEvents) {
         entt::entity e1 = event.e1;
         entt::entity e2 = event.e2;
         if (e1 == entt::null || e2 == entt::null) continue;

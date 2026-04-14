@@ -164,7 +164,7 @@ Engine::ComponentEditorResult PathMoverComponent::DrawEditor(Core::ViewFamily& v
         wasUsingGizmo = false;
     }
 
-    bool hasGizmoClaim = editPointIdx != -1 && !state->bCustomGizmoActive;
+    bool hasGizmoClaim = editPointIdx != -1 && !state->editor.bCustomGizmoActive;
 
     bool open = ImGui::CollapsingHeader("Path Mover", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
     ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
@@ -218,7 +218,7 @@ Engine::ComponentEditorResult PathMoverComponent::DrawEditor(Core::ViewFamily& v
 
             const bool isEditing = (editPointIdx == i);
             ImGui::PushStyleColor(ImGuiCol_Button, isEditing ? ImVec4(0.15f, 0.65f, 0.15f, 1.0f) : ImVec4(0.15f, 0.35f, 0.65f, 1.0f));
-            ImGui::BeginDisabled((state->bCustomGizmoActive || state->bCustomGizmoActivePrev) && !isEditing);
+            ImGui::BeginDisabled((state->editor.bCustomGizmoActive || state->editor.bCustomGizmoActivePrev) && !isEditing);
             if (ImGui::SmallButton(isEditing ? "D##edit" : "E##edit")) {
                 editPointIdx = isEditing ? -1 : i;
                 if (editPointIdx == -1) { hasGizmoClaim = false; }
@@ -316,9 +316,9 @@ Engine::ComponentEditorResult PathMoverComponent::DrawEditor(Core::ViewFamily& v
                 glm::quat worldRot = transform->rotation * ptRot;
                 glm::mat4 mat = glm::translate(glm::mat4(1.0f), worldPt) * glm::mat4_cast(worldRot);
 
-                const auto gizmoOp = (state->currentGizmoOperation == ImGuizmo::SCALE)
+                const auto gizmoOp = (state->editor.currentGizmoOperation == ImGuizmo::SCALE)
                                          ? ImGuizmo::TRANSLATE
-                                         : state->currentGizmoOperation;
+                                         : state->editor.currentGizmoOperation;
 
                 ImGuizmo::PushID(editPointIdx);
                 if (ImGuizmo::Manipulate(
@@ -390,7 +390,7 @@ Engine::ComponentEditorResult PathMoverComponent::DrawEditor(Core::ViewFamily& v
         }
     }
 
-    if (hasGizmoClaim) { state->bCustomGizmoActive = true; }
+    if (hasGizmoClaim) { state->editor.bCustomGizmoActive = true; }
 
     return {.requestRemoval = remove};
 }

@@ -23,23 +23,23 @@ namespace Game
 {
 void PhysicsCharacter::Initialize(Engine::EngineState* gameState, Engine::EngineContext* ctx, glm::vec3 spawnPosition)
 {
-    engineGameState = gameState;
+    engineState = gameState;
     physicsSystem = ctx->physicsSystem;
 
     constexpr StringID WOODEN_BALL_PREFAB_ID{4933586796549546436};
-    entity = SpawnPrefab(engineGameState, ctx->assetManager, WOODEN_BALL_PREFAB_ID);
+    entity = SpawnPrefab(engineState, ctx->assetManager, WOODEN_BALL_PREFAB_ID);
     assert(entity != entt::null && "Failed to spawn player character prefab.");
 
-    engineGameState->registry.emplace<Component::DoNotSerializeTag>(entity);
+    engineState->registry.emplace<Component::DoNotSerializeTag>(entity);
 
-    auto& transform = engineGameState->registry.get<Component::TransformComponent>(entity);
+    auto& transform = engineState->registry.get<Component::TransformComponent>(entity);
     transform.translation = spawnPosition;
-    engineGameState->registry.emplace_or_replace<Component::DirtyTransformTag>(entity);
+    engineState->registry.emplace_or_replace<Component::DirtyTransformTag>(entity);
 }
 
 void PhysicsCharacter::Update(float deltaTime, const glm::vec3& moveInput, bool jumpRequested, Physics::PhysicsSystem* inPhysicsSystem)
 {
-    auto* physicsBody = engineGameState->registry.try_get<Component::PhysicsBodyComponent>(entity);
+    auto* physicsBody = engineState->registry.try_get<Component::PhysicsBodyComponent>(entity);
     if (!physicsBody) return;
 
     auto& bodyInterface = inPhysicsSystem->GetBodyInterface();
@@ -69,34 +69,34 @@ void PhysicsCharacter::Update(float deltaTime, const glm::vec3& moveInput, bool 
 
 void PhysicsCharacter::Shutdown(Physics::PhysicsSystem* inPhysicsSystem)
 {
-    if (engineGameState && engineGameState->registry.valid(entity)) {
-        engineGameState->registry.destroy(entity);
+    if (engineState && engineState->registry.valid(entity)) {
+        engineState->registry.destroy(entity);
     }
     entity = entt::null;
-    engineGameState = nullptr;
+    engineState = nullptr;
     physicsSystem = nullptr;
 }
 
 glm::vec3 PhysicsCharacter::GetPosition() const
 {
-    if (!engineGameState || !engineGameState->registry.valid(entity)) return {};
-    return engineGameState->registry.get<Component::TransformComponent>(entity).translation;
+    if (!engineState || !engineState->registry.valid(entity)) return {};
+    return engineState->registry.get<Component::TransformComponent>(entity).translation;
 }
 
 glm::vec3 PhysicsCharacter::GetInterpolatedPosition() const
 {
-    if (!engineGameState || !engineGameState->registry.valid(entity)) return {};
-    auto* dynamic = engineGameState->registry.try_get<Component::DynamicPhysicsBodyComponent>(entity);
+    if (!engineState || !engineState->registry.valid(entity)) return {};
+    auto* dynamic = engineState->registry.try_get<Component::DynamicPhysicsBodyComponent>(entity);
     if (!dynamic) return GetPosition();
-    const auto& transform = engineGameState->registry.get<Component::TransformComponent>(entity);
-    float alpha = engineGameState->physicsInterpolationAlpha;
+    const auto& transform = engineState->registry.get<Component::TransformComponent>(entity);
+    float alpha = engineState->physics.interpolationAlpha;
     return glm::mix(dynamic->previousPosition, transform.translation, alpha);
 }
 
 glm::vec3 PhysicsCharacter::GetLinearVelocity() const
 {
     if (!physicsSystem) return {};
-    auto* physicsBody = engineGameState->registry.try_get<Component::PhysicsBodyComponent>(entity);
+    auto* physicsBody = engineState->registry.try_get<Component::PhysicsBodyComponent>(entity);
     if (!physicsBody) return {};
     JPH::Vec3 v = physicsSystem->GetBodyInterface().GetLinearVelocity(physicsBody->bodyID);
     return {v.GetX(), v.GetY(), v.GetZ()};
@@ -109,7 +109,7 @@ bool PhysicsCharacter::IsGrounded() const
 
 bool PhysicsCharacter::CheckGrounded(Physics::PhysicsSystem* inPhysicsSystem) const
 {
-    auto* physicsBody = engineGameState->registry.try_get<Component::PhysicsBodyComponent>(entity);
+    auto* physicsBody = engineState->registry.try_get<Component::PhysicsBodyComponent>(entity);
     if (!physicsBody) return false;
 
     JPH::RVec3 bodyPos = inPhysicsSystem->GetBodyInterface().GetPosition(physicsBody->bodyID);

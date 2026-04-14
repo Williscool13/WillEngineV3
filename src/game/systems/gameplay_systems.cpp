@@ -101,7 +101,7 @@ void UpdatePathMovers(Engine::EngineContext* ctx, Engine::EngineState* state)
 
 void CheckpointUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    for (const auto& event : state->resolvedAddedEvents) {
+    for (const auto& event : state->physics.resolvedAddedEvents) {
         entt::entity checkpointEntity = entt::null;
         if (event.e1 != entt::null && state->registry.all_of<Component::CheckpointComponent>(event.e1)) {
             checkpointEntity = event.e1;
@@ -130,7 +130,7 @@ void DeathZoneUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
     const entt::entity playerEntity = character->GetEntity();
     if (playerEntity == entt::null) { return; }
 
-    for (const auto& event : state->resolvedAddedEvents) {
+    for (const auto& event : state->physics.resolvedAddedEvents) {
         bool playerInvolved = (event.e1 == playerEntity || event.e2 == playerEntity);
         if (!playerInvolved) { continue; }
 

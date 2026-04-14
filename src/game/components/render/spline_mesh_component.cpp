@@ -148,7 +148,7 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
         wasUsingGizmo = false;
     }
 
-    bool hasGizmoClaim = editPointIdx != -1 && !state->bCustomGizmoActive;
+    bool hasGizmoClaim = editPointIdx != -1 && !state->editor.bCustomGizmoActive;
 
     bool open = ImGui::CollapsingHeader("Spline Mesh", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
     ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
@@ -218,7 +218,7 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
             ImGui::SameLine();
 
             ImGui::PushStyleColor(ImGuiCol_Button, isEditing ? ImVec4(0.15f, 0.65f, 0.15f, 1.0f) : ImVec4(0.15f, 0.35f, 0.65f, 1.0f));
-            ImGui::BeginDisabled((state->bCustomGizmoActive || state->bCustomGizmoActivePrev) && !isEditing);
+            ImGui::BeginDisabled((state->editor.bCustomGizmoActive || state->editor.bCustomGizmoActivePrev) && !isEditing);
             if (ImGui::SmallButton(isEditing ? "D##edit" : "E##edit")) {
                 editPointIdx = isEditing ? -1 : i;
                 if (editPointIdx == -1) { hasGizmoClaim = false; }
@@ -323,9 +323,9 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
                 mat[2] = glm::vec4(worldTangent, 0);
                 mat[3] = glm::vec4(worldPt, 1);
 
-                const auto gizmoOp = (state->currentGizmoOperation == ImGuizmo::SCALE)
+                const auto gizmoOp = (state->editor.currentGizmoOperation == ImGuizmo::SCALE)
                     ? ImGuizmo::TRANSLATE
-                    : state->currentGizmoOperation;
+                    : state->editor.currentGizmoOperation;
 
                 ImGuizmo::PushID(editPointIdx);
                 if (ImGuizmo::Manipulate(
@@ -424,7 +424,7 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
         }
     }
 
-    if (hasGizmoClaim) { state->bCustomGizmoActive = true; }
+    if (hasGizmoClaim) { state->editor.bCustomGizmoActive = true; }
 
     return {.requestRemoval = remove};
 }

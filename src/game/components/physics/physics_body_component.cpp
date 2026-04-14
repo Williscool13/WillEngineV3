@@ -15,7 +15,7 @@ void PhysicsBodyComponent::OnConstruct(entt::registry& registry, entt::entity en
 {
     auto* state = registry.ctx().get<Engine::EngineState*>();
     auto& physics = registry.get<PhysicsBodyComponent>(entity);
-    state->bodyToEntity[physics.bodyID] = entity;
+    state->physics.bodyToEntity[physics.bodyID] = entity;
 }
 
 void PhysicsBodyComponent::OnDestroy(entt::registry& registry, entt::entity entity)
@@ -30,6 +30,6 @@ void PhysicsBodyComponent::OnDestroy(entt::registry& registry, entt::entity enti
         bodyInterface.DestroyBody(physics.bodyID);
     }
 
-    state->bodyToEntity.Remove(physics.bodyID);
+    state->physics.bodyToEntity.Remove(physics.bodyID);
 }
 }

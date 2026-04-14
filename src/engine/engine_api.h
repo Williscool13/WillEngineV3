@@ -112,6 +112,88 @@ struct ComponentRegistry
     Core::Map<StringID, size_t> registryMapping{};
 };
 
+enum class PhysicsDebugMode : uint8_t { Off, SensorOnly, SensorAndTag, On };
+
+struct RuntimeSceneMetadata
+{
+    StringID sceneId;
+    uint64_t nextSortOrder{100};
+};
+
+struct PhysicsState
+{
+    PhysicsState() = default;
+    explicit PhysicsState(Core::TlsfAllocator* allocator);
+    ~PhysicsState() = default;
+
+    float deltaTimeAccumulator = 0.0f;
+    float interpolationAlpha = 0.0f;
+    bool bEnabled = true;
+    Core::Map<JPH::BodyID, entt::entity> bodyToEntity;
+    Core::InlineVector<ResolvedCollisionEvent, Physics::MAX_COLLISION_EVENTS> resolvedAddedEvents;
+    Core::InlineVector<ResolvedCollisionEvent, Physics::MAX_COLLISION_EVENTS> resolvedPersistedEvents;
+    Core::InlineVector<ResolvedCollisionEvent, Physics::MAX_COLLISION_EVENTS> resolvedRemovedEvents;
+};
+
+struct LightingState
+{
+    Core::DirectionalLight directionalLight{};
+    Core::ShadowQuality shadowQuality = Core::ShadowQuality::Ultra;
+    Core::ShadowConfiguration shadowConfig;
+    Core::GTAOConfiguration gtaoConfig{};
+    Core::PostProcessConfiguration postProcess{};
+    CubemapHandle skybox{CubemapHandle::INVALID};
+};
+
+struct EditorState
+{
+    EditorState() = default;
+    explicit EditorState(Core::TlsfAllocator* allocator);
+    ~EditorState() = default;
+
+    // Gizmo
+    ImGuizmo::OPERATION currentGizmoOperation{ImGuizmo::TRANSLATE};
+    ImGuizmo::MODE currentGizmoMode{ImGuizmo::WORLD};
+    bool bUniformScaleMode{true};
+    bool bSnapEnabled{true};
+    bool bSnapWorldGrid{true};
+    float snapTranslation{0.25f};
+    float snapRotation{15.0f};
+    float snapScale{0.1f};
+    bool bCustomGizmoActive{false};
+    bool bCustomGizmoActivePrev{false};
+    PhysicsDebugMode physicsDebugMode{PhysicsDebugMode::SensorOnly};
+
+    // Scene management
+    Core::InlineVector<RuntimeSceneMetadata, 8> loadedScenes{};
+    Core::InlineVector<StringID, 8> modifiedScenes{};
+    bool bAutoSave{false};
+    float autoSaveInterval{60.0f};
+    float autoSaveTimer{0.0f};
+
+    // PIE
+    Core::InlineVector<Scene, 8> pieSnapshot{};
+    Vec3 pieCameraTranslation{};
+    Quat pieCameraRotation{1.0f, 0.0f, 0.0f, 0.0f};
+
+    // Entity selection
+    Core::Vector<entt::entity> selectedEntities{};
+    Core::Vector<entt::entity> prevSelectedEntities{};
+    bool bWantCopyEntities{false};
+    bool bWantDeleteEntities{false};
+
+    // ImGui textures
+    EditorTextureResidency texResidency{};
+};
+
+struct DebugState
+{
+    bool bEnablePortal{true};
+    Core::InlineString<> resourceName{};
+    DebugTransformationType transformationType{};
+    Core::DebugViewAspect viewAspect{};
+};
+
 struct EngineState
 {
     EngineState() = default;
@@ -135,77 +217,16 @@ struct EngineState
     bool bPendingModelResolve{false};
     StaticModelHandle portalPlaneHandle{StaticModelHandle::INVALID};
 
-    // Physics
-    float physicsDeltaTimeAccumulator = 0.0f;
-    float physicsInterpolationAlpha = 0.0f;
-    Core::Map<JPH::BodyID, entt::entity> bodyToEntity;
-    Core::InlineVector<ResolvedCollisionEvent, Physics::MAX_COLLISION_EVENTS> resolvedAddedEvents;
-    Core::InlineVector<ResolvedCollisionEvent, Physics::MAX_COLLISION_EVENTS> resolvedPersistedEvents;
-    Core::InlineVector<ResolvedCollisionEvent, Physics::MAX_COLLISION_EVENTS> resolvedRemovedEvents;
-    bool bEnablePhysics = true;
-
-    // Lighting
-    Core::DirectionalLight directionalLight{};
-    Core::ShadowQuality shadowQuality = Core::ShadowQuality::Ultra;
-    Core::ShadowConfiguration shadowConfig;
-    Core::GTAOConfiguration gtaoConfig{};
-    Core::PostProcessConfiguration postProcess{};
-    CubemapHandle skybox{CubemapHandle::INVALID};
-
-    // Debug
-    bool bEnablePortal{true};
-    Core::InlineString<> debugResourceName{};
-    DebugTransformationType debugTransformationType{};
-    Core::DebugViewAspect debugViewAspect{};
-
-    // If true transform imguizmo will not be drawn
-    bool bCustomGizmoActive{false};
-    bool bCustomGizmoActivePrev{false};
-
-    // Editor
-    //  Gizmo
-    ImGuizmo::OPERATION currentGizmoOperation{ImGuizmo::TRANSLATE};
-    ImGuizmo::MODE currentGizmoMode{ImGuizmo::WORLD};
-    bool bUniformScaleMode{true};
-    bool bSnapEnabled{true};
-    bool bSnapWorldGrid{true};
-    float snapTranslation{0.25f};
-    float snapRotation{15.0f};
-    float snapScale{0.1f};
-    //  Physics Debug
-    enum class PhysicsDebugMode : uint8_t { Off, SensorOnly, SensorAndTag, On };
-    PhysicsDebugMode physicsDebugMode{PhysicsDebugMode::SensorOnly};
-    //  Scene
-    struct RuntimeSceneMetadata
-    {
-        StringID sceneId;
-        uint64_t nextSortOrder{100};
-    };
-
-    Core::InlineVector<RuntimeSceneMetadata, 8> loadedScenes{};
-    Core::InlineVector<StringID, 8> modifiedScenes{};
-    bool bAutoSave{false};
-    float autoSaveInterval{60.0f};
-    float autoSaveTimer{0.0f};
-    //  PIE
-    Core::InlineVector<Scene, 8> pieSnapshot{};
-    Vec3 pieCameraTranslation{};
-    Quat pieCameraRotation{1.0f, 0.0f, 0.0f, 0.0f};
-    //  Entity selection
-    Core::Vector<entt::entity> selectedEntities{};
-    Core::Vector<entt::entity> prevSelectedEntities{};
-    bool bWantCopyEntities{false};
-    bool bWantDeleteEntities{false};
-    //  ImGui textures
-    EditorTextureResidency texResidency{};
-
-    // Scene stuff
+    // Gameplay
     StringID currentSceneId{0};
     Core::InlineString<128> currentSceneName{};
-
-    // Gameplay - move to GameState proper
     StringID currentCheckpointId{};
     int32_t currentCheckpointPriority{INT32_MIN};
+
+    PhysicsState physics;
+    LightingState lighting;
+    EditorState editor;
+    DebugState debug;
 };
 
 class EngineAPI

@@ -527,8 +527,8 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
         editEntity = entity;
     }
 
-    const bool hasGizmoClaim = editShapeIdx != -1 && !state->bCustomGizmoActive;
-    if (hasGizmoClaim) state->bCustomGizmoActive = true;
+    const bool hasGizmoClaim = editShapeIdx != -1 && !state->editor.bCustomGizmoActive;
+    if (hasGizmoClaim) state->editor.bCustomGizmoActive = true;
 
     bool open = ImGui::CollapsingHeader("Physics Body", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
     ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
@@ -848,7 +848,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
             const bool isEditing = (editShapeIdx == 0);
             ImGui::PushID(0);
             ImGui::PushStyleColor(ImGuiCol_Button, isEditing ? ImVec4(0.15f, 0.65f, 0.15f, 1.0f) : ImVec4(0.15f, 0.35f, 0.65f, 1.0f));
-            ImGui::BeginDisabled((state->bCustomGizmoActive || state->bCustomGizmoActivePrev) && !isEditing);
+            ImGui::BeginDisabled((state->editor.bCustomGizmoActive || state->editor.bCustomGizmoActivePrev) && !isEditing);
             if (ImGui::Button(isEditing ? "Done" : "Edit")) {
                 editShapeIdx = isEditing ? -1 : 0;
             }
@@ -875,7 +875,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
 
                 ImGui::SameLine(avail - xBtnW - spacing - editBtnW);
                 ImGui::PushStyleColor(ImGuiCol_Button, isEditing ? ImVec4(0.15f, 0.65f, 0.15f, 1.0f) : ImVec4(0.15f, 0.35f, 0.65f, 1.0f));
-                ImGui::BeginDisabled((state->bCustomGizmoActive || state->bCustomGizmoActivePrev) && !isEditing);
+                ImGui::BeginDisabled((state->editor.bCustomGizmoActive || state->editor.bCustomGizmoActivePrev) && !isEditing);
                 if (ImGui::SmallButton(isEditing ? "Done##edit" : "Edit##edit")) {
                     editShapeIdx = isEditing ? -1 : i;
                 }

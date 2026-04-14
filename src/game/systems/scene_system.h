@@ -31,7 +31,7 @@ Engine::Scene SaveScene(Engine::ComponentRegistry& componentRegistry, entt::regi
 StringID LoadScene(Engine::ComponentRegistry& componentRegistry, entt::registry& registry, Engine::Scene& scene);
 
 Core::InlineVector<Engine::Scene, 8> SerializeAll(Engine::ComponentRegistry& componentRegistry, entt::registry& registry, Engine::AssetManager* assetManager,
-                                                  Core::Span<Engine::EngineState::RuntimeSceneMetadata> loadedScenes);
+                                                  Core::Span<Engine::RuntimeSceneMetadata> loadedScenes);
 
 void DeserializeAll(Engine::EngineState* state, Core::Span<Engine::Scene> snapshots);
 

@@ -99,7 +99,7 @@ GAME_API void GameUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 
 
     if (state->bIsPlaying) {
-        if (state->bEnablePhysics) {
+        if (state->physics.bEnabled) {
             Game::PhysicsUpdate(ctx, state);
         }
         Game::ResolveCollisionEvents(ctx, state);
@@ -172,7 +172,7 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
 #endif
 
     Game::BuildViewFamily(state, frameBuffer->mainViewFamily);
-    if (state->bEnablePortal) {
+    if (state->debug.bEnablePortal) {
         Game::BuildPortalViewFamily(state, frameBuffer->mainViewFamily);
     }
 

@@ -89,12 +89,20 @@ ComponentRegistry::ComponentRegistry(Core::TlsfAllocator* allocator)
     registryMapping = Core::Map<StringID, size_t>(allocator, Core::AllocTag::EngineState, 1024);
 }
 
+PhysicsState::PhysicsState(Core::TlsfAllocator* allocator)
+    : bodyToEntity(allocator, Core::AllocTag::EngineState, 64)
+{}
+
+EditorState::EditorState(Core::TlsfAllocator* allocator)
+    : selectedEntities(allocator, Core::AllocTag::EngineState, 64),
+      prevSelectedEntities(allocator, Core::AllocTag::EngineState, 64),
+      texResidency(allocator)
+{}
+
 EngineState::EngineState(Core::TlsfAllocator* allocator)
     : stableIdToEntityMap(allocator, Core::AllocTag::EngineState, 64),
       componentRegistry(allocator),
-      bodyToEntity(allocator, Core::AllocTag::EngineState, 64),
-      selectedEntities(allocator, Core::AllocTag::EngineState, 64),
-      prevSelectedEntities(allocator, Core::AllocTag::EngineState, 64),
-      texResidency(allocator)
+      physics(allocator),
+      editor(allocator)
 {}
 } // namespace Engine

@@ -970,7 +970,7 @@ void WillEngine::Run()
     renderThread->Start();
     timeManager->Reset();
 
-    engineState->skybox = assetManager->LoadCubemap("kloofendal"_sid);
+    engineState->lighting.skybox = assetManager->LoadCubemap("kloofendal"_sid);
 
     SDL_Event e;
     while (true) {

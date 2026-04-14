@@ -39,10 +39,10 @@ void PhysicsUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     ZoneScoped;
     auto* physics = ctx->physicsSystem;
-    state->physicsDeltaTimeAccumulator += state->timeFrame->deltaTime;
+    state->physics.deltaTimeAccumulator += state->timeFrame->deltaTime;
 
     // todo: Truly teleport mechanics are a little more user-defined. Need a unified "mark movement as teleport" function that emplaces the teleport physics transform tag to allow kinematics to teleport.
-    while (state->physicsDeltaTimeAccumulator >= Physics::PHYSICS_TIMESTEP) {
+    while (state->physics.deltaTimeAccumulator >= Physics::PHYSICS_TIMESTEP) {
         auto& bodyInterface = physics->GetBodyInterface();
 
         // Teleport
@@ -117,19 +117,19 @@ void PhysicsUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
             }*/
         }
 
-        state->physicsDeltaTimeAccumulator -= Physics::PHYSICS_TIMESTEP;
+        state->physics.deltaTimeAccumulator -= Physics::PHYSICS_TIMESTEP;
     }
 
-    state->physicsInterpolationAlpha = state->physicsDeltaTimeAccumulator / Physics::PHYSICS_TIMESTEP;
+    state->physics.interpolationAlpha = state->physics.deltaTimeAccumulator / Physics::PHYSICS_TIMESTEP;
 }
 
 void ResolveCollisionEvents(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    state->resolvedAddedEvents.Clear();
+    state->physics.resolvedAddedEvents.Clear();
     for (const auto& event : ctx->physicsSystem->GetAddedEvents()) {
-        auto it1 = state->bodyToEntity.Find(event.body1);
-        auto it2 = state->bodyToEntity.Find(event.body2);
-        state->resolvedAddedEvents.PushBack({
+        auto it1 = state->physics.bodyToEntity.Find(event.body1);
+        auto it2 = state->physics.bodyToEntity.Find(event.body2);
+        state->physics.resolvedAddedEvents.PushBack({
             it1 != nullptr ? *it1 : entt::null,
             it2 != nullptr ? *it2 : entt::null,
             {event.worldNormal.GetX(), event.worldNormal.GetY(), event.worldNormal.GetZ()},
@@ -138,11 +138,11 @@ void ResolveCollisionEvents(Engine::EngineContext* ctx, Engine::EngineState* sta
         });
     }
 
-    state->resolvedPersistedEvents.Clear();
+    state->physics.resolvedPersistedEvents.Clear();
     for (const auto& event : ctx->physicsSystem->GetPersistedEvents()) {
-        auto it1 = state->bodyToEntity.Find(event.body1);
-        auto it2 = state->bodyToEntity.Find(event.body2);
-        state->resolvedPersistedEvents.PushBack({
+        auto it1 = state->physics.bodyToEntity.Find(event.body1);
+        auto it2 = state->physics.bodyToEntity.Find(event.body2);
+        state->physics.resolvedPersistedEvents.PushBack({
             it1 != nullptr ? *it1 : entt::null,
             it2 != nullptr ? *it2 : entt::null,
             {event.worldNormal.GetX(), event.worldNormal.GetY(), event.worldNormal.GetZ()},
@@ -151,11 +151,11 @@ void ResolveCollisionEvents(Engine::EngineContext* ctx, Engine::EngineState* sta
         });
     }
 
-    state->resolvedRemovedEvents.Clear();
+    state->physics.resolvedRemovedEvents.Clear();
     for (const auto& event : ctx->physicsSystem->GetRemovedEvents()) {
-        auto it1 = state->bodyToEntity.Find(event.body1);
-        auto it2 = state->bodyToEntity.Find(event.body2);
-        state->resolvedRemovedEvents.PushBack({
+        auto it1 = state->physics.bodyToEntity.Find(event.body1);
+        auto it2 = state->physics.bodyToEntity.Find(event.body2);
+        state->physics.resolvedRemovedEvents.PushBack({
             it1 != nullptr ? *it1 : entt::null,
             it2 != nullptr ? *it2 : entt::null,
         });
@@ -179,20 +179,20 @@ void DebugRenderPhysics(Engine::EngineContext* ctx, Engine::EngineState* state, 
 {
     ZoneScoped;
 #ifndef PACKAGED_BUILD
-    using PhysicsDebugMode = Engine::EngineState::PhysicsDebugMode;
-    if (state->physicsDebugMode == PhysicsDebugMode::Off) { return; }
+    using PhysicsDebugMode = Engine::PhysicsDebugMode;
+    if (state->editor.physicsDebugMode == PhysicsDebugMode::Off) { return; }
 
     if (state->bIsPlaying) {
         auto& filter = ctx->physicsSystem->GetDebugDrawFilter();
         filter.Clear();
 
-        if (state->physicsDebugMode == PhysicsDebugMode::On) {
+        if (state->editor.physicsDebugMode == PhysicsDebugMode::On) {
             auto view = state->registry.view<Component::PhysicsBodyComponent>();
             for (const auto& [entity, physicsBody] : view.each()) {
                 filter.AddBody(physicsBody.bodyID);
             }
         }
-        else if (state->physicsDebugMode == PhysicsDebugMode::SensorOnly) {
+        else if (state->editor.physicsDebugMode == PhysicsDebugMode::SensorOnly) {
             auto view = state->registry.view<Component::PhysicsBodyComponent, Component::PhysicsBodyDesc>();
             for (const auto& [entity, physicsBody, bodyDesc] : view.each()) {
                 if (bodyDesc.bIsSensor) { filter.AddBody(physicsBody.bodyID); }
@@ -266,12 +266,12 @@ void DebugRenderPhysics(Engine::EngineContext* ctx, Engine::EngineState* state, 
             }
         };
 
-        if (state->physicsDebugMode == PhysicsDebugMode::On) {
+        if (state->editor.physicsDebugMode == PhysicsDebugMode::On) {
             for (const auto& [entity, bodyDesc, transform] : state->registry.view<Component::PhysicsBodyDesc, Component::TransformComponent>().each()) {
                 drawEntity(bodyDesc, transform);
             }
         }
-        else if (state->physicsDebugMode == PhysicsDebugMode::SensorOnly) {
+        else if (state->editor.physicsDebugMode == PhysicsDebugMode::SensorOnly) {
             for (const auto& [entity, bodyDesc, transform] : state->registry.view<Component::PhysicsBodyDesc, Component::TransformComponent>().each()) {
                 if (bodyDesc.bIsSensor) { drawEntity(bodyDesc, transform); }
             }
