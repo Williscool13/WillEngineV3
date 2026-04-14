@@ -22,7 +22,6 @@ struct EngineState;
 namespace Core
 {
 struct FrameBuffer;
-struct EngineContext;
 }
 
 namespace Game
@@ -53,14 +52,14 @@ static const DebugHotkey DEBUG_HOTKEYS[] = {
 
 namespace Game
 {
-void DebugUpdate(Core::EngineContext* ctx, Engine::EngineState* state);
-void DebugProcessPhysicsCollisions(Core::EngineContext* ctx, Engine::EngineState* state);
-void DebugApplyGroundForces(Core::EngineContext* ctx, Engine::EngineState* state);
+void DebugUpdate(Engine::EngineContext* ctx, Engine::EngineState* state);
+void DebugProcessPhysicsCollisions(Engine::EngineContext* ctx, Engine::EngineState* state);
+void DebugApplyGroundForces(Engine::EngineContext* ctx, Engine::EngineState* state);
 
 
 
 #ifndef PACKAGED_BUILD
-void DebugRender(Core::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
+void DebugRender(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
 #endif
 } // Game::System
 

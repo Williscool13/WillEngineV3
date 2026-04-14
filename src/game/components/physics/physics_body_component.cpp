@@ -21,7 +21,7 @@ void PhysicsBodyComponent::OnConstruct(entt::registry& registry, entt::entity en
 void PhysicsBodyComponent::OnDestroy(entt::registry& registry, entt::entity entity)
 {
     auto* state = registry.ctx().get<Engine::EngineState*>();
-    auto* ctx = registry.ctx().get<Core::EngineContext*>();
+    auto* ctx = registry.ctx().get<Engine::EngineContext*>();
     auto& physics = registry.get<PhysicsBodyComponent>(entity);
 
     if (!physics.bodyID.IsInvalid()) {

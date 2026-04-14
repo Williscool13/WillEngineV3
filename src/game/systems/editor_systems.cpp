@@ -45,7 +45,7 @@ void MarkEntitiesModified(Engine::EngineState* state, Core::Span<entt::entity> e
     }
 }
 
-void DrawMultiSelectEditor(Core::EngineContext* ctx, Engine::EngineState* state, const Vec3& centroid, int transformCount)
+void DrawMultiSelectEditor(Engine::EngineContext* ctx, Engine::EngineState* state, const Vec3& centroid, int transformCount)
 {
     auto& entities = state->selectedEntities;
     ImGui::Text("%zu entities selected", entities.Size());
@@ -315,7 +315,7 @@ void DrawMultiSelectEditor(Core::EngineContext* ctx, Engine::EngineState* state,
     }
 }
 
-void EditorUpdate(Core::EngineContext* ctx, Engine::EngineState* state)
+void EditorUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     if (state->bAutoSave && !state->modifiedScenes.IsEmpty()) {
         state->autoSaveTimer += state->timeFrame->deltaTime;
@@ -467,7 +467,7 @@ void EditorUpdate(Core::EngineContext* ctx, Engine::EngineState* state)
     }
 }
 
-void DrawEditorInterface(Core::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
+void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
     state->texResidency.Tick(ctx);

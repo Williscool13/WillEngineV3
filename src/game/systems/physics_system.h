@@ -21,26 +21,22 @@ struct ViewFamily;
 
 namespace Engine
 {
+struct EngineContext;
 struct EngineState;
 class AssetManager;
-}
-
-namespace Core
-{
-struct EngineContext;
 }
 
 namespace Game
 {
 void ConnectPhysicsObservers(entt::registry& registry);
-void PhysicsUpdate(Core::EngineContext* ctx, Engine::EngineState* state);
-void ResolveCollisionEvents(Core::EngineContext* ctx, Engine::EngineState* state);
+void PhysicsUpdate(Engine::EngineContext* ctx, Engine::EngineState* state);
+void ResolveCollisionEvents(Engine::EngineContext* ctx, Engine::EngineState* state);
 void MarkPhysicsTransformsDirty(Engine::EngineState* state);
-void DebugRenderPhysics(Core::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
-void ResolvePhysicsMeshLoads(Core::EngineContext* ctx, Engine::EngineState* state);
-void ResolvePhysicsShapeCreation(Core::EngineContext* ctx, Engine::EngineState* state);
-void ResolvePhysicsBodyCreation(Core::EngineContext* ctx, Engine::EngineState* state);
-void PhysicsOnPlayStop(Core::EngineContext* ctx, Engine::EngineState* state);
+void DebugRenderPhysics(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
+void ResolvePhysicsMeshLoads(Engine::EngineContext* ctx, Engine::EngineState* state);
+void ResolvePhysicsShapeCreation(Engine::EngineContext* ctx, Engine::EngineState* state);
+void ResolvePhysicsBodyCreation(Engine::EngineContext* ctx, Engine::EngineState* state);
+void PhysicsOnPlayStop(Engine::EngineContext* ctx, Engine::EngineState* state);
 
 JPH::BodyID CreateBodyFromShape(JPH::BodyInterface& bodyInterface, const Component::PhysicsBodyDesc& desc, JPH::RVec3 position, JPH::Quat rotation, JPH::ObjectLayer layerOverride = JPH::ObjectLayer(0xFFFF));
 JPH::ShapeRefC CreateShapeFromDesc(const Component::PhysicsShapeDesc& desc, Engine::AssetManager* assetManager);

@@ -20,7 +20,7 @@
 
 namespace Engine
 {
-MaterialManager::MaterialManager(Core::MemoryManager& memoryManager, Core::EngineContext* ctx, AssetManager* assetManager)
+MaterialManager::MaterialManager(Core::MemoryManager& memoryManager, Engine::EngineContext* ctx, AssetManager* assetManager)
     : ctx(ctx),
       memoryManager(&memoryManager),
       assetManager(assetManager),

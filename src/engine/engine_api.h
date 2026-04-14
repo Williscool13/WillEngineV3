@@ -25,8 +25,6 @@ namespace Core
 {
 struct TimeFrame;
 struct InputFrame;
-struct EngineContext;
-
 }
 
 struct ResolvedCollisionEvent
@@ -63,11 +61,11 @@ struct EditorTextureResidency
     ~EditorTextureResidency() = default;
 
 
-    void Tick(Core::EngineContext* ctx);
-    void Acquire(TextureID id, Core::EngineContext* ctx);
-    uint64_t GetDescSet(TextureID id, Core::EngineContext* ctx);
-    void Release(TextureID id, Core::EngineContext* ctx);
-    void ReleaseAll(Core::EngineContext* ctx);
+    void Tick(Engine::EngineContext* ctx);
+    void Acquire(TextureID id, Engine::EngineContext* ctx);
+    uint64_t GetDescSet(TextureID id, Engine::EngineContext* ctx);
+    void Release(TextureID id, Engine::EngineContext* ctx);
+    void ReleaseAll(Engine::EngineContext* ctx);
 };
 
 constexpr uint32_t MAX_LOADED_SCENES = 8;

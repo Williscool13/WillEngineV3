@@ -18,13 +18,9 @@
 #include "engine/engine_api.h"
 #include "engine/resources/scene/scene.h"
 
-namespace Core
-{
-struct EngineContext;
-}
-
 namespace Engine
 {
+struct EngineContext;
 struct EngineState;
 }
 
@@ -41,17 +37,17 @@ void DeserializeAll(Engine::EngineState* state, Core::Span<Engine::Scene> snapsh
 
 void UnloadScene(Engine::EngineState* state, StringID sceneId);
 
-void SaveSceneToFile(StringID sceneID, std::string_view sceneName, Engine::EngineState* state, Engine::AssetManager* assetManager, Core::EngineContext* ctx);
+void SaveSceneToFile(StringID sceneID, std::string_view sceneName, Engine::EngineState* state, Engine::AssetManager* assetManager, Engine::EngineContext* ctx);
 
 bool LoadSceneFromFile(Engine::EngineState* state, Engine::AssetManager* assetManager, StringID sceneId);
 
-void SaveEntityAsPrefab(Engine::EngineState* state, Engine::AssetManager* assetManager, Core::EngineContext* ctx, entt::entity entity, std::string_view prefabName);
+void SaveEntityAsPrefab(Engine::EngineState* state, Engine::AssetManager* assetManager, Engine::EngineContext* ctx, entt::entity entity, std::string_view prefabName);
 
 entt::entity SpawnPrefab(Engine::EngineState* state, Engine::AssetManager* assetManager, StringID prefabId, const glm::vec3& spawnPosition = {});
 
 void ResolvePrefabLoads(Engine::EngineState* state, Engine::AssetManager* assetManager);
 
-Core::ArenaVector<entt::entity> SpawnModel(Core::EngineContext* ctx, Engine::EngineState* state, Engine::ModelID modelId, const glm::vec3& offset = {});
+Core::ArenaVector<entt::entity> SpawnModel(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::ModelID modelId, const glm::vec3& offset = {});
 
 entt::entity CreateSceneEntity(Engine::EngineState* state);
 
@@ -131,9 +127,9 @@ inline void DestroyComponent(Engine::EngineState* state, entt::entity entity, St
     entry.remove(state->registry, entity);
 }
 
-void PlayStart(Core::EngineContext* ctx, Engine::EngineState* state);
+void PlayStart(Engine::EngineContext* ctx, Engine::EngineState* state);
 
-void PlayStop(Core::EngineContext* ctx, Engine::EngineState* state);
+void PlayStop(Engine::EngineContext* ctx, Engine::EngineState* state);
 } // Game
 
 #endif //WILL_ENGINE_SCENE_SYSTEM_H

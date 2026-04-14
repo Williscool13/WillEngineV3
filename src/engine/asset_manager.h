@@ -48,7 +48,7 @@ struct ResolveLoadResult
 class AssetManager
 {
 public:
-    AssetManager(Core::MemoryManager& memoryManager, Core::EngineContext* ctx, AssetLoad::AsyncAssetLoadManager* assetLoadManager, Render::ResourceManager* resourceManager);
+    AssetManager(Core::MemoryManager& memoryManager, Engine::EngineContext* ctx, AssetLoad::AsyncAssetLoadManager* assetLoadManager, Render::ResourceManager* resourceManager);
 
     ~AssetManager();
 
@@ -160,7 +160,7 @@ public:
 
 private:
     Core::MemoryManager* memoryManager{};
-    Core::EngineContext* ctx;
+    Engine::EngineContext* ctx;
     AssetLoad::AsyncAssetLoadManager* assetLoadManager;
     Render::ResourceManager* resourceManager;
 

@@ -10,13 +10,9 @@
 #include "character.h"
 #include "game/gameplay/camera/gameplay_camera.h"
 
-namespace Core
-{
-struct EngineContext;
-}
-
 namespace Engine
 {
+struct EngineContext;
 struct EngineState;
 }
 
@@ -26,7 +22,7 @@ class PlayerController
 {
 public:
     void Initialize(Engine::EngineState* gameState, Physics::PhysicsSystem* physicsSystem, glm::vec3 spawnPosition);
-    void Update(Core::EngineContext* ctx, Engine::EngineState* state);
+    void Update(Engine::EngineContext* ctx, Engine::EngineState* state);
     void Shutdown(Physics::PhysicsSystem* physicsSystem);
 
     Character* GetCharacter() { return character.get(); }

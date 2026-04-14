@@ -145,7 +145,7 @@ private: // Game DLL
 #endif
     Platform::DirectoryWatcher shaderWatcher{};
     Core::GameAPI gameFunctions{};
-    Core::EngineContext* engineContext{};
+    Engine::EngineContext* engineContext{};
     EngineState* engineState{};
 
 private:

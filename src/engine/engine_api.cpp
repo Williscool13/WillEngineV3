@@ -15,7 +15,7 @@ EditorTextureResidency::EditorTextureResidency(Core::TlsfAllocator* allocator)
       pendingRemoval(allocator, Core::AllocTag::EngineContext, 64)
 {}
 
-void EditorTextureResidency::Tick(Core::EngineContext* ctx)
+void EditorTextureResidency::Tick(Engine::EngineContext* ctx)
 {
     for (auto it = pendingRemoval.begin(); it != pendingRemoval.end();) {
         if (ctx->currentFrame >= it->freeOnFrame) {
@@ -29,7 +29,7 @@ void EditorTextureResidency::Tick(Core::EngineContext* ctx)
     }
 }
 
-void EditorTextureResidency::Acquire(TextureID id, Core::EngineContext* ctx)
+void EditorTextureResidency::Acquire(TextureID id, Engine::EngineContext* ctx)
 {
     if (entries.Contains(id)) return;
 
@@ -51,7 +51,7 @@ void EditorTextureResidency::Acquire(TextureID id, Core::EngineContext* ctx)
     entries[id].texture = ctx->assetManager->LoadTexture(id);
 }
 
-uint64_t EditorTextureResidency::GetDescSet(TextureID id, Core::EngineContext* ctx)
+uint64_t EditorTextureResidency::GetDescSet(TextureID id, Engine::EngineContext* ctx)
 {
     auto it = entries.Find(id);
     if (!it) { return 0; }
@@ -64,7 +64,7 @@ uint64_t EditorTextureResidency::GetDescSet(TextureID id, Core::EngineContext* c
     return e.descSet;
 }
 
-void EditorTextureResidency::Release(TextureID id, Core::EngineContext* ctx)
+void EditorTextureResidency::Release(TextureID id, Engine::EngineContext* ctx)
 {
     auto it = entries.Find(id);
     if (!it) { return; }
@@ -74,7 +74,7 @@ void EditorTextureResidency::Release(TextureID id, Core::EngineContext* ctx)
     entries.Remove(id);
 }
 
-void EditorTextureResidency::ReleaseAll(Core::EngineContext* ctx)
+void EditorTextureResidency::ReleaseAll(Engine::EngineContext* ctx)
 {
     for (const auto& [id, e] : entries) {
         e.freeOnFrame = ctx->currentFrame + Core::FRAME_BUFFER_COUNT + 1;

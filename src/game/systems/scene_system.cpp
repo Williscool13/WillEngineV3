@@ -167,13 +167,13 @@ void DeserializeAll(Engine::EngineState* state, Core::Span<Engine::Scene> snapsh
         LOG_INFO(Game, "PIE restore: reloaded scene '{}'", loadedId.ToString());
     }
 
-    auto* ctx = state->registry.ctx().get<Core::EngineContext*>();
+    auto* ctx = state->registry.ctx().get<Engine::EngineContext*>();
     ResolvePrefabLoads(state, ctx->assetManager);
 }
 
 void UnloadScene(Engine::EngineState* state, StringID sceneId)
 {
-    auto* ctx = state->registry.ctx().get<Core::EngineContext*>();
+    auto* ctx = state->registry.ctx().get<Engine::EngineContext*>();
     auto view = state->registry.view<Component::SceneComponent>();
 
     auto size = view.size();
@@ -195,7 +195,7 @@ void UnloadScene(Engine::EngineState* state, StringID sceneId)
     state->modifiedScenes.RemoveFirst(sceneId);
 }
 
-void SaveSceneToFile(StringID sceneID, std::string_view sceneName, Engine::EngineState* state, Engine::AssetManager* assetManager, Core::EngineContext* ctx)
+void SaveSceneToFile(StringID sceneID, std::string_view sceneName, Engine::EngineState* state, Engine::AssetManager* assetManager, Engine::EngineContext* ctx)
 {
     const auto& sceneCache = assetManager->GetSceneCache();
     Core::Path path;
@@ -315,7 +315,7 @@ bool LoadSceneFromFile(Engine::EngineState* state, Engine::AssetManager* assetMa
     return true;
 }
 
-Core::ArenaVector<entt::entity> SpawnModel(Core::EngineContext* ctx, Engine::EngineState* state, Engine::ModelID modelId, const glm::vec3& offset)
+Core::ArenaVector<entt::entity> SpawnModel(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::ModelID modelId, const glm::vec3& offset)
 {
     const Engine::AssetManager::CachedModelMetadata* cached = ctx->assetManager->GetModelMetadata(modelId);
     if (!cached) {
@@ -391,7 +391,7 @@ entt::entity CreateSceneEntity(Engine::EngineState* state)
     return newEntity;
 }
 
-void SaveEntityAsPrefab(Engine::EngineState* state, Engine::AssetManager* assetManager, Core::EngineContext* ctx, entt::entity entity, std::string_view prefabName)
+void SaveEntityAsPrefab(Engine::EngineState* state, Engine::AssetManager* assetManager, Engine::EngineContext* ctx, entt::entity entity, std::string_view prefabName)
 {
     // todo: Fix this to:
     //  Compare all existing prefabs and check their components. If their component fields are precisely the same as the src prefab, then replace it with new
@@ -537,7 +537,7 @@ void ResolvePrefabLoads(Engine::EngineState* state, Engine::AssetManager* assetM
     }
 }
 
-void PlayStart(Core::EngineContext* ctx, Engine::EngineState* state)
+void PlayStart(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     {
         auto camView = state->registry.view<Component::EditorCameraTag, Component::TransformComponent>();
@@ -585,7 +585,7 @@ void PlayStart(Core::EngineContext* ctx, Engine::EngineState* state)
     playerController.Initialize(state, ctx, spawnPosition);
 }
 
-void PlayStop(Core::EngineContext* ctx, Engine::EngineState* state)
+void PlayStop(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     if (auto* playerController = state->registry.ctx().find<PhysicsPlayerController>()) {
         playerController->Shutdown(ctx->physicsSystem);

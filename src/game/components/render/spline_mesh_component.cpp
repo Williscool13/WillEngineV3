@@ -41,7 +41,7 @@ static Engine::SplineParams ToSplineParams(const SplineMeshComponent& component)
 void SplineMeshComponent::OnConstruct(entt::registry& registry, entt::entity entity)
 {
     auto& component = registry.get<SplineMeshComponent>(entity);
-    auto* ctx = registry.ctx().get<Core::EngineContext*>();
+    auto* ctx = registry.ctx().get<Engine::EngineContext*>();
     auto* state = registry.ctx().get<Engine::EngineState*>();
 
     if (component.spline.points.IsEmpty()) {
@@ -139,7 +139,7 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
     static entt::entity editEntity = entt::null;
     static bool wasUsingGizmo = false;
 
-    auto* ctx = registry.ctx().get<Core::EngineContext*>();
+    auto* ctx = registry.ctx().get<Engine::EngineContext*>();
     auto* state = registry.ctx().get<Engine::EngineState*>();
 
     if (editEntity != entity) {

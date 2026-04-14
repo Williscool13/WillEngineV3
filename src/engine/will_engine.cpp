@@ -180,7 +180,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
     //
     {
         ZoneScopedN("Engine Context");
-        engineContext = new(memoryManager.PersistentAllocRaw(sizeof(Core::EngineContext), Core::AllocTag::EngineContext)) Core::EngineContext();
+        engineContext = new(memoryManager.PersistentAllocRaw(sizeof(Engine::EngineContext), Core::AllocTag::EngineContext)) Engine::EngineContext();
         inputManager = new(memoryManager.PersistentAllocRaw(sizeof(Core::InputManager), Core::AllocTag::InputManager)) Core::InputManager(w, h);
         timeManager = new(memoryManager.PersistentAllocRaw(sizeof(Core::TimeManager), Core::AllocTag::TimeManager)) Core::TimeManager();
     }
@@ -407,7 +407,7 @@ void WillEngine::EditorImgui()
         auto newWidth = static_cast<uint32_t>(centralNode->Size.x);
         auto newHeight = static_cast<uint32_t>(centralNode->Size.y);
 
-        Core::WindowContext& wc = engineContext->windowContext;
+        Engine::WindowContext& wc = engineContext->windowContext;
         if (newOffsetX != wc.viewportOffsetX || newOffsetY != wc.viewportOffsetY ||
             newWidth != wc.viewportWidth || newHeight != wc.viewportHeight) {
             wc.viewportOffsetX = newOffsetX;

@@ -43,7 +43,10 @@ struct ImGuiContext;
 namespace Core
 {
 class MemoryManager;
+} // Core
 
+namespace Engine
+{
 struct WindowContext
 {
     uint32_t windowWidth;
@@ -60,18 +63,18 @@ struct EngineContext
     WindowContext windowContext{};
 
     enki::TaskScheduler* scheduler{nullptr};
-    MemoryManager* memoryManager{nullptr};
+    Core::MemoryManager* memoryManager{nullptr};
 
-    Engine::EngineLogger* engineLogger{nullptr};
-    Engine::AssetManager* assetManager{nullptr};
-    Engine::MaterialManager* materialManager{nullptr};
+    EngineLogger* engineLogger{nullptr};
+    AssetManager* assetManager{nullptr};
+    MaterialManager* materialManager{nullptr};
     Audio::AudioManager* audioManager{nullptr};
     Physics::PhysicsSystem* physicsSystem{nullptr};
 
     // Global Fn
     void (*internStringFn)(uint64_t, const char*);
     const char* (*resolveStringIdFn)(uint64_t);
-    InlineFunction<void(bool)> setCursorHiddenFn;
+    Core::InlineFunction<void(bool)> setCursorHiddenFn;
 
     // Imgui
     ImGuiContext* imguiContext;
@@ -89,12 +92,12 @@ struct EngineContext
 
     // ImGui texture preview (routed through engine DLL where Vulkan fn ptrs are loaded)
     // handles are opaque uint64_t (VkSampler, VkImageView, VkDescriptorSet)
-    InlineFunction<uint64_t(uint64_t, uint64_t)> addImguiTextureFn;
-    InlineFunction<void(uint64_t)> removeImguiTextureFn;
+    Core::InlineFunction<uint64_t(uint64_t, uint64_t)> addImguiTextureFn;
+    Core::InlineFunction<void(uint64_t)> removeImguiTextureFn;
 
     std::atomic<bool> bShouldRescanResources{false};
     std::atomic<bool> bShouldRescanMaterials{false};
 };
-} // Core
+} // Engine
 
 #endif //WILL_ENGINE_ENGINE_CONTEXT_H

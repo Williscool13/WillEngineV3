@@ -16,7 +16,7 @@
 
 namespace Engine
 {
-AssetManager::AssetManager(Core::MemoryManager& memoryManager, Core::EngineContext* ctx, AssetLoad::AsyncAssetLoadManager* assetLoadManager, Render::ResourceManager* resourceManager)
+AssetManager::AssetManager(Core::MemoryManager& memoryManager, Engine::EngineContext* ctx, AssetLoad::AsyncAssetLoadManager* assetLoadManager, Render::ResourceManager* resourceManager)
     : memoryManager(&memoryManager), ctx(ctx), assetLoadManager(assetLoadManager), resourceManager(resourceManager),
       modelNameToId(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_CACHED_MODELS),
       modelCache(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_CACHED_MODELS),

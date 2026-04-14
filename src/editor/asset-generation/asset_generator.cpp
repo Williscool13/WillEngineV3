@@ -17,7 +17,7 @@
 namespace Editor
 {
 AssetGenerator::AssetGenerator(Core::MemoryManager& memoryManager,
-                               Core::EngineContext* ctx,
+                               Engine::EngineContext* ctx,
                                Render::VulkanContext* vulkanContext,
                                Render::RenderThread* renderThread,
                                AssetLoad::AsyncAssetLoadManager* asyncAssetLoadManager,

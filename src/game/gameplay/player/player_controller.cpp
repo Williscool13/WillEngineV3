@@ -21,7 +21,7 @@ void PlayerController::Initialize(Engine::EngineState* gameState, Physics::Physi
     character->Initialize(gameState, physicsSystem, spawnPosition);
 }
 
-void PlayerController::Update(Core::EngineContext* ctx, Engine::EngineState* state)
+void PlayerController::Update(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     const float deltaTime = state->timeFrame->deltaTime;
     const Core::InputFrame* input = state->inputFrame;

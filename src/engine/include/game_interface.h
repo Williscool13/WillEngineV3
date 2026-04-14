@@ -16,24 +16,24 @@ namespace Core
 {
 struct FrameBuffer;
 
-using GameStartUpFunc = void(*)(EngineContext*, Engine::EngineState*);
-using GameLoadFunc = void(*)(EngineContext*, Engine::EngineState*);
-using GameUpdateFunc = void(*)(EngineContext*, Engine::EngineState*);
-using GamePrepareFrameFunc = void(*)(EngineContext*, Engine::EngineState*, FrameBuffer*);
-using GameUnloadFunc = void(*)(EngineContext*, Engine::EngineState*);
-using GameShutdownFunc = void(*)(EngineContext*, Engine::EngineState*);
+using GameStartUpFunc = void(*)(Engine::EngineContext*, Engine::EngineState*);
+using GameLoadFunc = void(*)(Engine::EngineContext*, Engine::EngineState*);
+using GameUpdateFunc = void(*)(Engine::EngineContext*, Engine::EngineState*);
+using GamePrepareFrameFunc = void(*)(Engine::EngineContext*, Engine::EngineState*, FrameBuffer*);
+using GameUnloadFunc = void(*)(Engine::EngineContext*, Engine::EngineState*);
+using GameShutdownFunc = void(*)(Engine::EngineContext*, Engine::EngineState*);
 
-void StubStartup(EngineContext* ctx, Engine::EngineState* state);
+void StubStartup(Engine::EngineContext* ctx, Engine::EngineState* state);
 
-void StubLoad(EngineContext* ctx, Engine::EngineState* state);
+void StubLoad(Engine::EngineContext* ctx, Engine::EngineState* state);
 
-void StubUpdate(EngineContext* ctx, Engine::EngineState* state);
+void StubUpdate(Engine::EngineContext* ctx, Engine::EngineState* state);
 
-void StubPrepareFrame(EngineContext* ctx, Engine::EngineState* state, FrameBuffer* frameBuffer);
+void StubPrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* state, FrameBuffer* frameBuffer);
 
-void StubUnload(EngineContext* ctx, Engine::EngineState* state);
+void StubUnload(Engine::EngineContext* ctx, Engine::EngineState* state);
 
-void StubShutdown(EngineContext* ctx, Engine::EngineState* state);
+void StubShutdown(Engine::EngineContext* ctx, Engine::EngineState* state);
 
 struct GameAPI
 {
@@ -73,21 +73,21 @@ extern "C"
  * @param ctx
  * @param state
  */
-GAME_API void GameStartup(Core::EngineContext* ctx, Engine::EngineState* state);
+GAME_API void GameStartup(Engine::EngineContext* ctx, Engine::EngineState* state);
 
 /**
  * Called once every time the dll is loaded, including on application start after GameStartup.
  * @param ctx
  * @param state
  */
-GAME_API void GameLoad(Core::EngineContext* ctx, Engine::EngineState* state);
+GAME_API void GameLoad(Engine::EngineContext* ctx, Engine::EngineState* state);
 
 /**
  * Called every tick. This is executed by the main engine loop.
  * @param ctx
  * @param state
  */
-GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::EngineState* state);
+GAME_API void GameUpdate(Engine::EngineContext* ctx, Engine::EngineState* state);
 
 /**
  * Called before frame buffer is sent directly to the render thread to be drawn.
@@ -95,21 +95,21 @@ GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::EngineState* state);
  * @param state
  * @param frameBuffer
  */
-GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
+GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
 
 /**
  * Called before unloading DLL during hot-reload. Clean up DLL-specific resources.
  * @param ctx
  * @param state
  */
-GAME_API void GameUnload(Core::EngineContext* ctx, Engine::EngineState* state);
+GAME_API void GameUnload(Engine::EngineContext* ctx, Engine::EngineState* state);
 
 /**
  * Called once on application exit after GameUnload.
  * @param ctx
  * @param state
  */
-GAME_API void GameShutdown(Core::EngineContext* ctx, Engine::EngineState* state);
+GAME_API void GameShutdown(Engine::EngineContext* ctx, Engine::EngineState* state);
 }
 
 #endif // WILL_ENGINE_GAME_INTERFACE_H

@@ -31,7 +31,7 @@ void ProceduralMeshComponent::OnDestroy(entt::registry& registry, entt::entity e
 
 void RecreateProceduralMesh(ProceduralMeshComponent& component, entt::registry& registry, entt::entity entity)
 {
-    auto* ctx = registry.ctx().get<Core::EngineContext*>();
+    auto* ctx = registry.ctx().get<Engine::EngineContext*>();
     auto* state = registry.ctx().get<Engine::EngineState*>();
     auto& runtime = registry.get_or_emplace<MeshRuntime>(entity);
 
@@ -402,7 +402,7 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
             component.modelFlags.y = shadowCaster ? 1.0f : 0.0f;
         }
 
-        auto* ctx = registry.ctx().get<Core::EngineContext*>();
+        auto* ctx = registry.ctx().get<Engine::EngineContext*>();
         auto* state = registry.ctx().get<Engine::EngineState*>();
 
         if (std::holds_alternative<std::monostate>(component.params)) {

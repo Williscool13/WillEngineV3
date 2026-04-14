@@ -35,7 +35,7 @@ void ConnectPhysicsObservers(entt::registry& registry)
     registry.on_destroy<Component::PhysicsBodyComponent>().connect<&Component::PhysicsBodyComponent::OnDestroy>();
 }
 
-void PhysicsUpdate(Core::EngineContext* ctx, Engine::EngineState* state)
+void PhysicsUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     ZoneScoped;
     auto* physics = ctx->physicsSystem;
@@ -123,7 +123,7 @@ void PhysicsUpdate(Core::EngineContext* ctx, Engine::EngineState* state)
     state->physicsInterpolationAlpha = state->physicsDeltaTimeAccumulator / Physics::PHYSICS_TIMESTEP;
 }
 
-void ResolveCollisionEvents(Core::EngineContext* ctx, Engine::EngineState* state)
+void ResolveCollisionEvents(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     state->resolvedAddedEvents.Clear();
     for (const auto& event : ctx->physicsSystem->GetAddedEvents()) {
@@ -175,7 +175,7 @@ void MarkPhysicsTransformsDirty(Engine::EngineState* state)
     }
 }
 
-void DebugRenderPhysics(Core::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
+void DebugRenderPhysics(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
 #ifndef PACKAGED_BUILD
@@ -392,7 +392,7 @@ JPH::ShapeRefC CreateShapeFromDesc(const Component::PhysicsShapeDesc& desc, Engi
     return nullptr;
 }
 
-void ResolvePhysicsMeshLoads(Core::EngineContext* ctx, Engine::EngineState* state)
+void ResolvePhysicsMeshLoads(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     ZoneScoped;
     auto view = state->registry.view<Component::PhysicsBodyDesc, Component::PendingPhysicsMeshTag>();
@@ -442,7 +442,7 @@ void ResolvePhysicsMeshLoads(Core::EngineContext* ctx, Engine::EngineState* stat
     }
 }
 
-void ResolvePhysicsShapeCreation(Core::EngineContext* ctx, Engine::EngineState* state)
+void ResolvePhysicsShapeCreation(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     ZoneScoped;
 
@@ -518,7 +518,7 @@ void ResolvePhysicsShapeCreation(Core::EngineContext* ctx, Engine::EngineState* 
     }
 }
 
-void ResolvePhysicsBodyCreation(Core::EngineContext* ctx, Engine::EngineState* state)
+void ResolvePhysicsBodyCreation(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     ZoneScoped;
     if (!state->bIsPlaying) return;
@@ -554,7 +554,7 @@ void ResolvePhysicsBodyCreation(Core::EngineContext* ctx, Engine::EngineState* s
     }
 }
 
-void PhysicsOnPlayStop(Core::EngineContext* ctx, Engine::EngineState* state)
+void PhysicsOnPlayStop(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     state->registry.clear<Component::PhysicsBodyComponent>();
     state->registry.clear<Component::DynamicPhysicsBodyComponent>();

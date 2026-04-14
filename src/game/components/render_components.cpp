@@ -16,7 +16,7 @@ namespace Game::Component
 {
 void MeshRuntime::OnDestroy(entt::registry& registry, entt::entity entity)
 {
-    auto* ctx = registry.ctx().get<Core::EngineContext*>();
+    auto* ctx = registry.ctx().get<Engine::EngineContext*>();
     auto& runtime = registry.get<MeshRuntime>(entity);
     for (size_t i = 0; i < runtime.primitives.Size(); ++i) {
         ctx->materialManager->ReleaseMaterial(runtime.primitives[i].materialID);

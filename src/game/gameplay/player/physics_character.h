@@ -10,13 +10,9 @@
 
 #include "core/string_id.h"
 
-namespace Core
-{
-struct EngineContext;
-}
-
 namespace Engine
 {
+struct EngineContext;
 struct EngineState;
 class AssetManager;
 }
@@ -31,7 +27,7 @@ namespace Game
 class PhysicsCharacter
 {
 public:
-    void Initialize(Engine::EngineState* gameState, Core::EngineContext* ctx, glm::vec3 spawnPosition);
+    void Initialize(Engine::EngineState* gameState, Engine::EngineContext* ctx, glm::vec3 spawnPosition);
     void Update(float deltaTime, const glm::vec3& moveInput, bool jumpRequested, Physics::PhysicsSystem* physicsSystem);
     void Shutdown(Physics::PhysicsSystem* physicsSystem);
 

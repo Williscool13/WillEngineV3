@@ -6,32 +6,26 @@
 #define WILL_ENGINE_MATERIAL_MANAGER_H
 #include <cstdint>
 #include <random>
-#include <unordered_map>
 
 #include "resources/material/material.h"
 #include "core/string_id.h"
 #include "core/containers/array.h"
 #include "core/containers/fixed_map.h"
-#include "core/memory/free_list.h"
 #include "core/memory/handle_allocator.h"
 #include "core/memory/memory_manager.h"
 #include "engine/core/material_id.h"
 #include "render/render_config.h"
 #include "render/shaders/model_interop.h"
 
-namespace Core
-{
-struct EngineContext;
-}
-
 namespace Engine
 {
+struct EngineContext;
 class AssetManager;
 
 class MaterialManager
 {
 public:
-    MaterialManager(Core::MemoryManager& memoryManager, Core::EngineContext* ctx, AssetManager* assetManager);
+    MaterialManager(Core::MemoryManager& memoryManager, EngineContext* ctx, AssetManager* assetManager);
 
     MaterialID CreateImmutableMaterial(const Material& mat);
 
@@ -83,7 +77,7 @@ public:
     }
 
 private:
-    Core::EngineContext* ctx;
+    Engine::EngineContext* ctx;
     Core::MemoryManager* memoryManager;
     AssetManager* assetManager;
 

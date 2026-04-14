@@ -14,7 +14,7 @@
 
 namespace Game
 {
-void PhysicsPlayerController::Initialize(Engine::EngineState* gameState, Core::EngineContext* ctx, glm::vec3 spawnPosition)
+void PhysicsPlayerController::Initialize(Engine::EngineState* gameState, Engine::EngineContext* ctx, glm::vec3 spawnPosition)
 {
     character = std::make_unique<PhysicsCharacter>();
     character->Initialize(gameState, ctx, spawnPosition);
@@ -22,7 +22,7 @@ void PhysicsPlayerController::Initialize(Engine::EngineState* gameState, Core::E
     cameraParams.sideOffset = 0;
 }
 
-void PhysicsPlayerController::Update(Core::EngineContext* ctx, Engine::EngineState* state)
+void PhysicsPlayerController::Update(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     const float deltaTime = state->timeFrame->deltaTime;
     const Core::InputFrame* input = state->inputFrame;

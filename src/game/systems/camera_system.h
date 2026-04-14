@@ -14,12 +14,11 @@ struct EngineState;
 namespace Core
 {
 struct FrameBuffer;
-struct EngineContext;
 }
 
 namespace Game
 {
-void UpdateEditorCamera(Core::EngineContext* ctx, Engine::EngineState* state);
+void UpdateEditorCamera(Engine::EngineContext* ctx, Engine::EngineState* state);
 
 void BuildViewFamily(Engine::EngineState* state, Core::ViewFamily& mainViewFamily);
 void BuildPortalViewFamily(Engine::EngineState* state, Core::ViewFamily& mainViewFamily);

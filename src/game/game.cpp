@@ -29,12 +29,13 @@
 #include "systems/physics_system.h"
 #include "gameplay/player/physics_player_controller.h"
 #include "systems/common_systems.h"
+#include "systems/core_systems.h"
 #include "systems/gameplay_systems.h"
 
 
 extern "C"
 {
-GAME_API void GameStartup(Core::EngineContext* ctx, Engine::EngineState* state)
+GAME_API void GameStartup(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     SPDLOG_TRACE("Game Start Up");
 
@@ -56,10 +57,10 @@ GAME_API void GameStartup(Core::EngineContext* ctx, Engine::EngineState* state)
 
 
     state->registry.ctx().emplace<Engine::EngineState*>(state);
-    state->registry.ctx().emplace<Core::EngineContext*>(ctx);
+    state->registry.ctx().emplace<Engine::EngineContext*>(ctx);
 }
 
-GAME_API void GameLoad(Core::EngineContext* ctx, Engine::EngineState* state)
+GAME_API void GameLoad(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
 #ifndef GAME_STATIC
     ctx->engineLogger->RegisterLoggersForDLL(Engine::LogCategory::Game);
@@ -85,7 +86,7 @@ GAME_API void GameLoad(Core::EngineContext* ctx, Engine::EngineState* state)
     // if not editor, load the "default map", which needs to be stored in some engine config file
 }
 
-GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::EngineState* state)
+GAME_API void GameUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     ZoneScoped;
     const auto frameStart = std::chrono::high_resolution_clock::now();
@@ -93,6 +94,8 @@ GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::EngineState* state)
 #if WILL_EDITOR
     Game::EditorUpdate(ctx, state);
 #endif
+
+    Game::FunctionKeySystem(ctx, state);
 
 
     if (state->bIsPlaying) {
@@ -152,7 +155,7 @@ GAME_API void GameUpdate(Core::EngineContext* ctx, Engine::EngineState* state)
     }
 }
 
-GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
+GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
     frameBuffer->mainViewFamily.modelMatrices.Clear();
     frameBuffer->mainViewFamily.mainPassInstances.Clear();
@@ -186,14 +189,14 @@ GAME_API void GamePrepareFrame(Core::EngineContext* ctx, Engine::EngineState* st
 #endif
 }
 
-GAME_API void GameUnload(Core::EngineContext* ctx, Engine::EngineState* state)
+GAME_API void GameUnload(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     if (ctx->scheduler) {
         ctx->scheduler->DeRegisterExternalTaskThread();
     }
 }
 
-GAME_API void GameShutdown(Core::EngineContext* ctx, Engine::EngineState* state)
+GAME_API void GameShutdown(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     SPDLOG_TRACE("Game Shutdown");
 }

@@ -31,7 +31,7 @@ void PhysicsBodyDesc::OnConstruct(entt::registry& registry, entt::entity entity)
         component.shapes.PushBack(d);
     }
 
-    auto* ctx = registry.ctx().get<Core::EngineContext*>();
+    auto* ctx = registry.ctx().get<Engine::EngineContext*>();
     auto* state = registry.ctx().get<Engine::EngineState*>();
     bool needsResolve = false;
     for (auto& shape : component.shapes) {
@@ -60,7 +60,7 @@ void PhysicsBodyDesc::OnConstruct(entt::registry& registry, entt::entity entity)
 void PhysicsBodyDesc::OnUpdate(entt::registry& registry, entt::entity entity)
 {
     auto& component = registry.get<PhysicsBodyDesc>(entity);
-    auto* ctx = registry.ctx().get<Core::EngineContext*>();
+    auto* ctx = registry.ctx().get<Engine::EngineContext*>();
     for (auto& shape : component.shapes) {
         if (shape.meshSourceHandle.IsValid()) {
             ctx->assetManager->UnloadModel(shape.meshSourceHandle);
@@ -73,7 +73,7 @@ void PhysicsBodyDesc::OnUpdate(entt::registry& registry, entt::entity entity)
 void PhysicsBodyDesc::OnDestroy(entt::registry& registry, entt::entity entity)
 {
     auto& component = registry.get<PhysicsBodyDesc>(entity);
-    auto* ctx = registry.ctx().get<Core::EngineContext*>();
+    auto* ctx = registry.ctx().get<Engine::EngineContext*>();
     for (auto& shape : component.shapes) {
         if (shape.meshSourceHandle.IsValid()) {
             ctx->assetManager->UnloadModel(shape.meshSourceHandle);
@@ -520,7 +520,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
     static entt::entity editEntity = entt::null;
 
     auto state = registry.ctx().get<Engine::EngineState*>();
-    auto ctx = registry.ctx().get<Core::EngineContext*>();
+    auto ctx = registry.ctx().get<Engine::EngineContext*>();
 
     if (editEntity != entity) {
         editShapeIdx = -1;

@@ -35,7 +35,7 @@ void ConnectRenderObservers(entt::registry& registry)
     registry.on_destroy<Component::SplineMeshComponent>().connect<&Component::SplineMeshComponent::OnDestroy>();
 }
 
-void ResolveStaticMeshLoads(Core::EngineContext* ctx, Engine::EngineState* state)
+void ResolveStaticMeshLoads(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     auto view = state->registry.view<Component::StaticMeshComponent, Component::StaticMeshLoadingTag>();
     size_t viewCount = view.size_hint();
@@ -112,7 +112,7 @@ void ResolveStaticMeshLoads(Core::EngineContext* ctx, Engine::EngineState* state
     }
 }
 
-void ResolveProceduralMeshLoads(Core::EngineContext* ctx, Engine::EngineState* state)
+void ResolveProceduralMeshLoads(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     auto view = state->registry.view<Component::ProceduralMeshComponent, Component::ProceduralMeshLoadingTag>();
     size_t viewCount = view.size_hint();
@@ -167,7 +167,7 @@ void ResolveProceduralMeshLoads(Core::EngineContext* ctx, Engine::EngineState* s
     }
 }
 
-void ResolveSplineMeshLoads(Core::EngineContext* ctx, Engine::EngineState* state)
+void ResolveSplineMeshLoads(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     auto view = state->registry.view<Component::SplineMeshComponent, Component::SplineMeshLoadingTag>();
     size_t viewCount = view.size_hint();
@@ -219,7 +219,7 @@ void ResolveSplineMeshLoads(Core::EngineContext* ctx, Engine::EngineState* state
     }
 }
 
-void MarkRenderTransformsDirty(Core::EngineContext* ctx, Engine::EngineState* state)
+void MarkRenderTransformsDirty(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     auto transformDirtyView = state->registry.view<Component::RenderTransformComponent, Component::DirtyTransformTag>();
     for (auto entity : transformDirtyView) {
@@ -227,7 +227,7 @@ void MarkRenderTransformsDirty(Core::EngineContext* ctx, Engine::EngineState* st
     }
 }
 
-void RenderPrepareTransforms(Core::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
+void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
 
@@ -287,7 +287,7 @@ void RenderPrepareTransforms(Core::EngineContext* ctx, Engine::EngineState* stat
     }
 }
 
-void GatherRenderables(Core::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
+void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
     auto& materialManager = ctx->materialManager;

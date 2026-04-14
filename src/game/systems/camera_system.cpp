@@ -15,7 +15,7 @@
 
 namespace Game
 {
-void UpdateEditorCamera(Core::EngineContext* ctx, Engine::EngineState* state)
+void UpdateEditorCamera(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     ZoneScoped;
     auto view = state->registry.view<Component::FreeCameraComponent, Component::CameraComponent, Component::TransformComponent, Component::EditorCameraTag>();

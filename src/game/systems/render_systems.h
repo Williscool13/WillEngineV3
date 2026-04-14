@@ -14,27 +14,27 @@ struct FrameResources;
 
 namespace Engine
 {
+struct EngineContext;
 struct EngineState;
 }
 
 namespace Core
 {
 struct FrameBuffer;
-struct EngineContext;
 }
 
 namespace Game
 {
 void ConnectRenderObservers(entt::registry& registry);
 
-void ResolveStaticMeshLoads(Core::EngineContext* ctx, Engine::EngineState* state);
-void ResolveProceduralMeshLoads(Core::EngineContext* ctx, Engine::EngineState* state);
-void ResolveSplineMeshLoads(Core::EngineContext* ctx, Engine::EngineState* state);
+void ResolveStaticMeshLoads(Engine::EngineContext* ctx, Engine::EngineState* state);
+void ResolveProceduralMeshLoads(Engine::EngineContext* ctx, Engine::EngineState* state);
+void ResolveSplineMeshLoads(Engine::EngineContext* ctx, Engine::EngineState* state);
 
-void MarkRenderTransformsDirty(Core::EngineContext* ctx, Engine::EngineState* state);
+void MarkRenderTransformsDirty(Engine::EngineContext* ctx, Engine::EngineState* state);
 
-void RenderPrepareTransforms(Core::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
-void GatherRenderables(Core::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
+void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
+void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
 } // Game
 
 #endif //WILL_ENGINE_GATHER_RENDERABLES_COMPONENT_H

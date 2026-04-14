@@ -21,7 +21,7 @@
 #include "core/memory/lock_free_handle_allocator.h"
 #include "core/memory/memory_manager.h"
 
-namespace Core
+namespace Engine
 {
 struct EngineContext;
 }
@@ -108,7 +108,7 @@ class AssetGenerator
 public:
     AssetGenerator(
         Core::MemoryManager& memoryManager,
-        Core::EngineContext* ctx,
+        Engine::EngineContext* ctx,
         Render::VulkanContext* vulkanContext,
         Render::RenderThread* renderThread,
         AssetLoad::AsyncAssetLoadManager* asyncAssetLoadManager,
@@ -176,7 +176,7 @@ private:
     void GraphicsQueueGPUDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) const;
 
     Core::MemoryManager* memoryManager{};
-    Core::EngineContext* ctx;
+    Engine::EngineContext* ctx;
     Render::VulkanContext* vk;
     Render::RenderThread* renderThread;
     AssetLoad::AsyncAssetLoadManager* asyncAssetLoadManager;

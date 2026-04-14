@@ -60,7 +60,7 @@ static bool DrawFolderLevelCombo(const char* label, entt::registry& registry, in
                                  Core::ShortString& nameOut, StringID& idOut, StringID parentFilter)
 {
     bool changed = false;
-    auto* ctx = registry.ctx().get<Core::EngineContext*>();
+    auto* ctx = registry.ctx().get<Engine::EngineContext*>();
     Core::ArenaVector<Core::ShortString> existing{&ctx->memoryManager->GeneralArena(), 128};
     CollectExistingFolderNames(registry, level, existing, parentFilter);
 
