@@ -95,8 +95,7 @@ GAME_API void GameUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
     Game::EditorUpdate(ctx, state);
 #endif
 
-    Game::FunctionKeySystem(ctx, state);
-
+    Game::FunctionKeyUpdate(ctx, state);
 
     if (state->bIsPlaying) {
         if (state->physics.bEnabled) {
@@ -170,6 +169,8 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
     frameBuffer->mainViewFamily.debugBoxes.Clear();
     frameBuffer->mainViewFamily.debugSpheres.Clear();
 #endif
+
+    Game::FunctionKeyRenderUpdate(ctx, state, frameBuffer);
 
     Game::BuildViewFamily(state, frameBuffer->mainViewFamily);
     if (state->debug.bEnablePortal) {

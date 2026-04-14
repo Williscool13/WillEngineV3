@@ -73,6 +73,8 @@ add_library(render STATIC
         interface/render_interface.cpp
         interface/render_interface.h
         stb_write_impl.cpp
+        systems/render_screen_capture.cpp
+        systems/render_screen_capture.h
 )
 
 target_include_directories(render PRIVATE

@@ -104,7 +104,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
         .physicsPoolSize = 1ull * 1024 * 1024,          // 4 MB
         .physicsAlignedPoolSize = 32ull * 1024 * 1024,  // 32 MB
         .physicsArenaSize = Physics::PHYSICS_TEMP_ALLOCATOR_SIZE, // 16 MB
-        .renderPoolSize = 4ull * 1024 * 1024,  // 8 MB
+        .renderPoolSize = 4ull * 1024 * 1024,  // 4 MB
         .renderArenaSize = 1ull * 1024 * 1024, // 1 MB
         .generalArenaSize = 1ull * 1024 * 1024, // 1 MB
     });

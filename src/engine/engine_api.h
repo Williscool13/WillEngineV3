@@ -204,6 +204,7 @@ struct EngineState
 
     bool bIsPlaying{false};
     bool bGameCursorCaptured{false};
+    bool bWantsScreenshot{false};
 
     const Core::InputFrame* inputFrame{nullptr};
     const Core::TimeFrame* timeFrame{nullptr};

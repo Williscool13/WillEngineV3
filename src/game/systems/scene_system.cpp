@@ -553,15 +553,18 @@ void PlayStart(Engine::EngineContext* ctx, Engine::EngineState* state)
 
     {
         auto view = state->registry.view<Component::PrefabInstanceComponent>();
-        auto masterPrefabs = Core::ArenaFixedVector<entt::entity>(&ctx->memoryManager->GeneralArena(), view.size());
-        for (auto entity : view) {
-            if (view.get<Component::PrefabInstanceComponent>(entity).bMasterPrefab) {
-                masterPrefabs.PushBack(entity);
+        if (view.size() > 0) {
+            auto masterPrefabs = Core::ArenaFixedVector<entt::entity>(&ctx->memoryManager->GeneralArena(), view.size());
+            for (auto entity : view) {
+                if (view.get<Component::PrefabInstanceComponent>(entity).bMasterPrefab) {
+                    masterPrefabs.PushBack(entity);
+                }
+            }
+            for (auto entity : masterPrefabs) {
+                state->registry.destroy(entity);
             }
         }
-        for (auto entity : masterPrefabs) {
-            state->registry.destroy(entity);
-        }
+
     }
 
     state->bIsPlaying = true;

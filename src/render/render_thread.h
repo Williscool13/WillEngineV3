@@ -16,6 +16,7 @@
 #include "interface/render_interface.h"
 #include "render/vulkan/vk_resources.h"
 #include "render/vulkan/vk_synchronization.h"
+#include "systems/render_screen_capture.h"
 #include "types/render_types.h"
 
 namespace AssetLoad
@@ -195,18 +196,8 @@ private:
     bool bRenderRequestsRecreate{false};
     bool bFrozenVisibility{false};
 
-    void EnsureScreenshotResources(uint32_t width, uint32_t height);
-    void WriteScreenshot();
-
 private:
-    AllocatedImage screenshotIntermediateImage{};
-    AllocatedBuffer screenshotReadbackBuffer{};
-    uint32_t screenshotPendingSlot{UINT32_MAX};
-    Core::Path screenshotSavePath{};
-    uint32_t screenshotCaptureWidth{0};
-    uint32_t screenshotCaptureHeight{0};
-
-private:
+    RenderScreenCapture* screenCapture{};
     PipelineLayout globalPipelineLayout;
 };
 } // Render

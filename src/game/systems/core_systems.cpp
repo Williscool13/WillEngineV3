@@ -9,10 +9,16 @@
 
 namespace Game
 {
-void FunctionKeySystem(Engine::EngineContext* ctx, Engine::EngineState* state)
+void FunctionKeyUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    if (state->inputFrame->GetKey(Key::F10).down) {
-        // state->
+    if (state->inputFrame->GetKey(Key::F10).pressed) {
+        state->bWantsScreenshot |= true;
     }
+}
+
+void FunctionKeyRenderUpdate(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
+{
+    frameBuffer->bTakeScreenshot = state->bWantsScreenshot;
+    state->bWantsScreenshot = false;
 }
 } // Game

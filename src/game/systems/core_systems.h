@@ -19,7 +19,8 @@ struct FrameBuffer;
 
 namespace Game
 {
-void FunctionKeySystem(Engine::EngineContext* ctx, Engine::EngineState* state);
+void FunctionKeyUpdate(Engine::EngineContext* ctx, Engine::EngineState* state);
+void FunctionKeyRenderUpdate(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
 }
 
 #endif //WILL_ENGINE_CORE_SYSTEMS_H
