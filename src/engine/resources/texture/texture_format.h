@@ -6,7 +6,6 @@
 #define WILL_ENGINE_TEXTURE_FORMAT_H
 
 #include <cstdint>
-#include <filesystem>
 #include <iosfwd>
 #include <optional>
 

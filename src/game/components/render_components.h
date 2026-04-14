@@ -5,17 +5,12 @@
 #ifndef WILL_ENGINE_RENDER_COMPONENTS_H
 #define WILL_ENGINE_RENDER_COMPONENTS_H
 
-#include <array>
-#include <cstdint>
-#include <vector>
 #include <glm/glm.hpp>
 #include <glm/vec3.hpp>
 #include <entt/entt.hpp>
 
-#include "core/string_id.h"
 #include "core/containers/inline_vector.h"
-#include "../../engine/material_manager.h"
-#include "engine/core/model_id.h"
+#include "engine/material_manager.h"
 #include "engine/asset_manager_types.h"
 #include "engine/resources/model/model_types.h"
 

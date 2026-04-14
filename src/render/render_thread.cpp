@@ -6,6 +6,7 @@
 
 #include <enkiTS/src/TaskScheduler.h>
 #include <spdlog/spdlog.h>
+#include <stb/stb_image_write.h>
 #include <tracy/Tracy.hpp>
 #include <tracy/TracyVulkan.hpp>
 
@@ -17,6 +18,7 @@
 #include "render/vulkan/vk_swapchain.h"
 #include "render/vulkan/vk_utils.h"
 #include "engine/will_engine.h"
+#include "platform/file_utils.h"
 #include "platform/paths.h"
 #include "render-graph/render_graph.h"
 #include "render-graph/render_pass.h"
@@ -187,6 +189,11 @@ void RenderThread::RenderFrame(uint32_t currentFrameIndex, RenderSynchronization
         ZoneScopedN("WaitForFence");
         VK_CHECK(vkWaitForFences(context->device, 1, &renderSync.renderFence, true, UINT64_MAX));
         VK_CHECK(vkResetFences(context->device, 1, &renderSync.renderFence));
+    }
+
+    if (screenshotPendingSlot == currentFrameIndex) {
+        WriteScreenshot();
+        screenshotPendingSlot = UINT32_MAX;
     }
 
     VK_CHECK(vkResetCommandBuffer(renderSync.commandBuffer, 0));
@@ -775,6 +782,66 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 vkCmdEndRendering(_cmd);
             });
         }
+
+        if (frameBuffer.bTakeScreenshot) {
+            EnsureScreenshotResources(renderExtent[0], renderExtent[1]);
+            renderGraph->CreateTexture(SID("screenshot_intermediate"), TextureInfo{VK_FORMAT_R8G8B8A8_UNORM, renderExtent[0], renderExtent[1], 1}, true);
+
+            auto& screenshotBlitPass = renderGraph->AddPass(SID("Screenshot Blit"), VK_PIPELINE_STAGE_2_BLIT_BIT);
+            screenshotBlitPass.ReadBlitImage(finalOutput);
+            screenshotBlitPass.WriteBlitImage(SID("screenshot_intermediate"));
+            screenshotBlitPass.Execute([&, finalOutput](VkCommandBuffer _cmd) {
+                VkImageBlit2 blitRegion{};
+                blitRegion.sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2;
+                blitRegion.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+                blitRegion.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+                blitRegion.srcOffsets[0] = {0, 0, 0};
+                blitRegion.srcOffsets[1] = {static_cast<int32_t>(renderExtent[0]), static_cast<int32_t>(renderExtent[1]), 1};
+                blitRegion.dstOffsets[0] = {0, 0, 0};
+                blitRegion.dstOffsets[1] = {static_cast<int32_t>(renderExtent[0]), static_cast<int32_t>(renderExtent[1]), 1};
+
+                VkBlitImageInfo2 blitInfo{};
+                blitInfo.sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2;
+                blitInfo.srcImage = renderGraph->GetImageHandle(finalOutput);
+                blitInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+                blitInfo.dstImage = renderGraph->GetImageHandle(SID("screenshot_intermediate"));
+                blitInfo.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+                blitInfo.regionCount = 1;
+                blitInfo.pRegions = &blitRegion;
+                blitInfo.filter = VK_FILTER_LINEAR;
+                vkCmdBlitImage2(_cmd, &blitInfo);
+            });
+
+            auto& screenshotCopyPass = renderGraph->AddPass(SID("Screenshot Copy"), VK_PIPELINE_STAGE_2_COPY_BIT);
+            screenshotCopyPass.ReadCopyImage(SID("screenshot_intermediate"));
+            screenshotCopyPass.Execute([&](VkCommandBuffer _cmd) {
+                VkBufferImageCopy2 copyRegion{};
+                copyRegion.sType = VK_STRUCTURE_TYPE_BUFFER_IMAGE_COPY_2;
+                copyRegion.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+                copyRegion.imageExtent = {screenshotCaptureWidth, screenshotCaptureHeight, 1};
+
+                VkCopyImageToBufferInfo2 copyInfo{};
+                copyInfo.sType = VK_STRUCTURE_TYPE_COPY_IMAGE_TO_BUFFER_INFO_2;
+                copyInfo.srcImage = renderGraph->GetImageHandle(SID("screenshot_intermediate"));
+                copyInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+                copyInfo.dstBuffer = screenshotReadbackBuffer.handle;
+                copyInfo.regionCount = 1;
+                copyInfo.pRegions = &copyRegion;
+                vkCmdCopyImageToBuffer2(_cmd, &copyInfo);
+            });
+
+            screenshotCaptureWidth = renderExtent[0];
+            screenshotCaptureHeight = renderExtent[1];
+
+            Core::Path screenshotDir = Platform::GetUserDataPath() / "screenshots";
+            Platform::CreateDirectories(screenshotDir.c_str());
+
+            Core::InlineString<64> filename;
+            filename.len = snprintf(filename.buf, 64, "screenshot_%llu.png", static_cast<unsigned long long>(frameNumber));
+            screenshotSavePath = screenshotDir / filename.c_str();
+
+            screenshotPendingSlot = frameIndex;
+        }
     }
 
     if (frameBuffer.currentMousePosition[0] > 0 && frameBuffer.currentMousePosition[0] < renderExtent[0] &&
@@ -891,6 +958,43 @@ void RenderThread::ProcessAcquisitions(VkCommandBuffer cmd, Core::Span<Core::Buf
     depInfo.imageMemoryBarrierCount = tempImageBarriers.Size();
     depInfo.pImageMemoryBarriers = tempImageBarriers.Data();
     vkCmdPipelineBarrier2(cmd, &depInfo);
+}
+
+void RenderThread::EnsureScreenshotResources(uint32_t width, uint32_t height)
+{
+    if (screenshotIntermediateImage.handle != VK_NULL_HANDLE &&
+        screenshotIntermediateImage.extent.width == width &&
+        screenshotIntermediateImage.extent.height == height) {
+        return;
+    }
+
+    screenshotIntermediateImage = AllocatedImage{};
+    screenshotReadbackBuffer = AllocatedBuffer{};
+
+    VkImageCreateInfo imageInfo{};
+    imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    imageInfo.imageType = VK_IMAGE_TYPE_2D;
+    imageInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
+    imageInfo.extent = {width, height, 1};
+    imageInfo.mipLevels = 1;
+    imageInfo.arrayLayers = 1;
+    imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+    imageInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    screenshotIntermediateImage = AllocatedImage::CreateAllocatedImage(context, imageInfo);
+    screenshotIntermediateImage.SetDebugName("screenshot_intermediate");
+
+    const size_t bufferSize = static_cast<size_t>(width) * height * 4;
+    screenshotReadbackBuffer = AllocatedBuffer::CreateAllocatedReceivingBuffer(context, bufferSize);
+    screenshotReadbackBuffer.SetDebugName("screenshot_readback");
+}
+
+void RenderThread::WriteScreenshot()
+{
+    const void* data = screenshotReadbackBuffer.allocationInfo.pMappedData;
+    stbi_write_png(screenshotSavePath.c_str(), static_cast<int>(screenshotCaptureWidth), static_cast<int>(screenshotCaptureHeight), 4, data,
+                   static_cast<int>(screenshotCaptureWidth * 4));
+    LOG_INFO(Renderer, "Screenshot saved: {}", screenshotSavePath.c_str());
 }
 
 void RenderThread::CreatePipelines()

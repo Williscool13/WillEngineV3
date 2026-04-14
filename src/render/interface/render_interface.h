@@ -329,7 +329,7 @@ struct FrameBuffer
     bool bFreezeVisibility = false;
     bool bLogRDG = false;
 
-
+    bool bTakeScreenshot{false};
 };
 } // Core
 

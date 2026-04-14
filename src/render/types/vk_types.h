@@ -5,7 +5,6 @@
 #ifndef WILL_ENGINE_VK_TYPES_H
 #define WILL_ENGINE_VK_TYPES_H
 
-#include <filesystem>
 #include <glm/glm.hpp>
 
 namespace Render

@@ -6,11 +6,8 @@
 #define WILL_ENGINE_ASSET_LOAD_TYPES_H
 
 #include <semaphore>
-#include <vector>
 
 #include "core/containers/heap_array.h"
-#include "core/containers/string.h"
-#include "core/containers/vector.h"
 #include "core/memory/tlsf_allocator.h"
 #include "render/shaders/model_interop.h"
 #include "render/vulkan/vk_resources.h"

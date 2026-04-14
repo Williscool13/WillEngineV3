@@ -5,8 +5,6 @@
 #ifndef WILL_ENGINE_PLATFORM_H
 #define WILL_ENGINE_PLATFORM_H
 
-#include <filesystem>
-
 #include "core/containers/inline_path.h"
 
 namespace Platform

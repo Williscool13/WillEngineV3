@@ -12,7 +12,9 @@
 #include "frame_resources.h"
 #include "asset-load/async_asset_load_manager.h"
 #include "core/containers/array.h"
+#include "core/containers/inline_path.h"
 #include "interface/render_interface.h"
+#include "render/vulkan/vk_resources.h"
 #include "render/vulkan/vk_synchronization.h"
 #include "types/render_types.h"
 
@@ -192,6 +194,17 @@ private:
     bool bEngineRequestsRecreate{false};
     bool bRenderRequestsRecreate{false};
     bool bFrozenVisibility{false};
+
+    void EnsureScreenshotResources(uint32_t width, uint32_t height);
+    void WriteScreenshot();
+
+private:
+    AllocatedImage screenshotIntermediateImage{};
+    AllocatedBuffer screenshotReadbackBuffer{};
+    uint32_t screenshotPendingSlot{UINT32_MAX};
+    Core::Path screenshotSavePath{};
+    uint32_t screenshotCaptureWidth{0};
+    uint32_t screenshotCaptureHeight{0};
 
 private:
     PipelineLayout globalPipelineLayout;

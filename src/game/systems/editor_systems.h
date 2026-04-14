@@ -5,9 +5,7 @@
 #ifndef WILL_ENGINE_EDITOR_SYSTEMS_H
 #define WILL_ENGINE_EDITOR_SYSTEMS_H
 
-#include <vector>
 #include <entt/entt.hpp>
-#include <glm/fwd.hpp>
 #include "core/string_id.h"
 #include "core/containers/span.h"
 #include "core/types/math.h"

@@ -5,10 +5,8 @@
 #ifndef WILL_ENGINE_MODEL_FORMAT_H
 #define WILL_ENGINE_MODEL_FORMAT_H
 
-#include <filesystem>
 #include <iosfwd>
 #include <optional>
-#include <vector>
 
 #include "model_types.h"
 #include "static_model.h"

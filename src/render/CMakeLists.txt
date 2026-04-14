@@ -72,6 +72,7 @@ add_library(render STATIC
         render-graph/passes/instanced_geometry_pass.h
         interface/render_interface.cpp
         interface/render_interface.h
+        stb_write_impl.cpp
 )
 
 target_include_directories(render PRIVATE

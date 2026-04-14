@@ -5,7 +5,6 @@
 #include "vk_helpers.h"
 
 #include <fstream>
-#include <vector>
 
 #include "core/containers/heap_array.h"
 

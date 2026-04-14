@@ -4,7 +4,7 @@
 
 #ifndef WILL_ENGINE_MODEL_TYPES_H
 #define WILL_ENGINE_MODEL_TYPES_H
-#include <vector>
+
 #include <variant>
 
 #include "engine/spline/spline.h"
@@ -14,7 +14,6 @@
 #include "engine/resources/material/material.h"
 #include "core/containers/inline_string.h"
 #include "core/containers/inline_vector.h"
-#include "core/containers/vector.h"
 #include "core/types/math.h"
 
 namespace Render

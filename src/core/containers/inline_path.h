@@ -6,7 +6,6 @@
 #define WILL_ENGINE_INLINE_PATH_H
 
 #include <cstring>
-#include <filesystem>
 #include <string_view>
 
 #ifdef _WIN32
@@ -44,7 +43,7 @@ public:
     }
 
     // Returns a new path with the component appended, separated by '/'.
-    InlinePath operator/(std::string_view component) const
+    InlinePath operator/(const std::string_view component) const
     {
         InlinePath result = *this;
         if (result.len_ > 0 && result.buf_[result.len_ - 1] != '/') {
