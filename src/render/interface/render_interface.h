@@ -283,6 +283,7 @@ struct ViewFamily
     Vector<MaterialProperties> materials{};
 
     int32_t skyboxIndex{-1};
+    int32_t skyboxLOD{0};
 
     ShadowConfiguration shadowConfig{};
     DirectionalLight directionalLight{};

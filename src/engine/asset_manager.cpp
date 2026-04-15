@@ -388,9 +388,11 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
     while (assetLoadManager->TryDequeueSamplerComplete(samplerComplete)) {
         if (samplerComplete.bSuccess) {
             LOG_TRACE(Asset, "Sampler load succeeded (bindless index: {})", static_cast<uint32_t>(samplerComplete.sampler->bindlessHandle.index));
+            samplerComplete.sampler->loadState = Sampler::LoadState::Loaded;
             loadCounts.samplerLoadedCount++;
         }
         else {
+            samplerComplete.sampler->loadState = Sampler::LoadState::FailedToLoad;
             LOG_ERROR(Asset, "Sampler load failed");
         }
     }

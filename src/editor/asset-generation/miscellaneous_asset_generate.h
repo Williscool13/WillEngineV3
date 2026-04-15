@@ -5,7 +5,6 @@
 #ifndef WILL_ENGINE_MISCELLANEOUS_ASSET_GENERATE_H
 #define WILL_ENGINE_MISCELLANEOUS_ASSET_GENERATE_H
 
-#include <functional>
 #include <semaphore>
 #include <vulkan/vulkan_core.h>
 

@@ -287,7 +287,7 @@ bool EnvironmentMapGenerateSlot::LoadEquirectangularAndGenerate(VkCommandBuffer 
     // Generate mip 0 cubemap
     {
         ZoneScopedN("Generate Cubemap Mip 0")
-        EquirectToCubemapPushConstant eqPc;
+        EquirectToCubemapPushConstant eqPc{};
         eqPc.samplerIndex = EQUI_IMAGE_SAMPLER_INDEX;
         eqPc.sourceEquiIndex = 0;
         eqPc.targetCubeIndex = 0;

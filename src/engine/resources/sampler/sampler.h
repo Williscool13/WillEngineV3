@@ -52,10 +52,19 @@ struct SamplerDesc
 
 struct Sampler
 {
+    enum class LoadState
+    {
+        NotLoaded,
+        Loading,
+        Loaded,
+        FailedToLoad
+    };
+
     SamplerDesc desc;
     SamplerID id{SamplerID::INVALID};
 
     SamplerHandle selfHandle{SamplerHandle::INVALID};
+    LoadState loadState{LoadState::NotLoaded};
     uint32_t refCount = 0;
     uint64_t retireFrame = 0;
 
