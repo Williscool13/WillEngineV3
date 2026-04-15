@@ -4,12 +4,16 @@
 
 #include "environment_map_generate_slot.h"
 
+#include <fstream>
 #include <spdlog/spdlog.h>
 #include <stb/stb_image.h>
 #include <ktx.h>
 #include <tracy/Tracy.hpp>
 
 #include "asset_generation_types.h"
+#include "engine/compression/compression.h"
+#include "engine/resources/environment_map/environment_map_format.h"
+#include "platform/file_utils.h"
 #include "platform/paths.h"
 #include "render/resource_manager.h"
 #include "render/pipelines/pipeline_manager.h"
@@ -92,11 +96,13 @@ void EnvironmentMapGenerateSlot::Initialize(
 void EnvironmentMapGenerateSlot::Launch(
     EnvironmentMapGenerateSlotHandle _slotHandle,
     const Core::Path& _imagePath,
-    const Core::Path& _outputPath)
+    const Core::Path& _outputPath,
+    Engine::EnvironmentMapID _environmentMapId)
 {
     slotHandle = _slotHandle;
     imagePath = _imagePath;
     outputPath = _outputPath;
+    environmentMapId = _environmentMapId;
 
     if (!task.GetIsComplete()) {
         scheduler->WaitforTask(&task);
@@ -165,7 +171,7 @@ void EnvironmentMapGenerateSlot::GenerateTask::ExecuteRange(enki::TaskSetPartiti
         return;
     }
 
-    if (!taskSlot->WriteKTXFile()) {
+    if (!taskSlot->WriteWEnvMapFile()) {
         taskSlot->_notifyCallback(false, taskSlot->slotHandle);
         vkDestroyFence(taskSlot->context->device, graphicsFence, nullptr);
         vkDestroyCommandPool(taskSlot->context->device, graphicsCommandPool, nullptr);
@@ -530,9 +536,9 @@ bool EnvironmentMapGenerateSlot::LoadEquirectangularAndGenerate(VkCommandBuffer 
     return true;
 }
 
-bool EnvironmentMapGenerateSlot::WriteKTXFile()
+bool EnvironmentMapGenerateSlot::WriteWEnvMapFile()
 {
-    ZoneScopedN("WriteKTXFile");
+    ZoneScopedN("WriteWEnvMapFile");
 
     ktxTexture2* texture;
     ktxTextureCreateInfo createInfo{};
@@ -547,7 +553,6 @@ bool EnvironmentMapGenerateSlot::WriteKTXFile()
     createInfo.isArray = KTX_FALSE;
     createInfo.generateMipmaps = KTX_FALSE;
 
-    // todo MEM this does 2 mallocs
     ktx_error_code_e result = ktxTexture2_Create(&createInfo, KTX_TEXTURE_CREATE_ALLOC_STORAGE, &texture);
     if (result != KTX_SUCCESS) {
         SPDLOG_ERROR("[EnvironmentMapGenerateSlot] Failed to create KTX texture");
@@ -559,13 +564,46 @@ bool EnvironmentMapGenerateSlot::WriteKTXFile()
         }
     }
 
-    result = ktxTexture_WriteToNamedFile(ktxTexture(texture), outputPath.c_str());
+    ktx_uint8_t* ktxBytes{nullptr};
+    ktx_size_t ktxSize{0};
+    result = ktxTexture2_WriteToMemory(texture, &ktxBytes, &ktxSize);
     ktxTexture_Destroy(ktxTexture(texture));
 
     if (result != KTX_SUCCESS) {
-        SPDLOG_ERROR("[EnvironmentMapGenerateSlot] Failed to write KTX file");
+        SPDLOG_ERROR("[EnvironmentMapGenerateSlot] Failed to serialise KTX texture to memory");
         return false;
     }
+
+    auto maxCompressedSize = Engine::CompressLZ4MaxSize(ktxSize);
+    auto compressed = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, maxCompressedSize);
+    size_t realCompressedSize = Engine::CompressLZ4(ktxBytes, ktxSize, compressed.Data(), compressed.Size());
+    free(ktxBytes);
+
+    Engine::WEnvMapHeader header{};
+    header.environmentMapId = environmentMapId.id;
+    header.width = ENVIRONMENT_MAP_RESOLUTION;
+    header.height = ENVIRONMENT_MAP_RESOLUTION;
+    header.mipCount = ENVIRONMENT_MAP_MIPS;
+    header.uncompressedSize = ktxSize;
+    header.dataSize = realCompressedSize;
+
+    Core::InlineString stem{imagePath.IsEmpty() ? Core::InlineString(outputPath.Stem()) : Core::InlineString(imagePath.Stem())};
+    const size_t copyLen = std::min(stem.Size(), Engine::WENVMAP_NAME_LENGTH - 1);
+    memcpy(header.name, stem.c_str(), copyLen);
+    header.name[copyLen] = '\0';
+
+    Platform::CreateDirectories(outputPath.Parent().c_str());
+    std::ofstream f(outputPath.c_str(), std::ios::binary);
+    if (!f) {
+        SPDLOG_ERROR("[EnvironmentMapGenerateSlot] Failed to open output file: {}", outputPath.c_str());
+        return false;
+    }
+
+    if (!Engine::WriteWEnvMapHeader(f, header)) {
+        SPDLOG_ERROR("[EnvironmentMapGenerateSlot] Failed to write header: {}", outputPath.c_str());
+        return false;
+    }
+    f.write(reinterpret_cast<const char*>(compressed.Data()), static_cast<std::streamsize>(realCompressedSize));
 
     SPDLOG_INFO("[EnvironmentMapGenerateSlot] Wrote {}", outputPath.c_str());
     return true;

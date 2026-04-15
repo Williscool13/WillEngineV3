@@ -101,6 +101,7 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Core::MemoryManager& memoryManager,
             scheduler,
             context,
             resourceManager,
+            &memoryManager,
             [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
                 QueueGPUDispatch(cmd, fence, completionSignal);
             },

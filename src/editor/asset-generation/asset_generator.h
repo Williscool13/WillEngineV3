@@ -10,6 +10,7 @@
 #include <concurrentqueue/concurrentqueue.h>
 
 #include "core/containers/inline_path.h"
+#include "engine/core/environment_map_id.h"
 #include "engine/core/texture_id.h"
 
 #include "asset_generation_types.h"
@@ -93,11 +94,13 @@ struct EnvironmentMapGenerateRequest
 {
     Core::Path imagePath;
     Core::Path outputPath;
+    Engine::EnvironmentMapID environmentMapId{};
 };
 
 struct EnvironmentMapGenerateComplete
 {
     Core::Path outputPath;
+    Engine::EnvironmentMapID environmentMapId{};
     bool success;
 };
 
@@ -184,6 +187,7 @@ private:
 
     std::mt19937_64 modelIdRng{std::random_device{}()};
     std::mt19937_64 textureIdRng{std::random_device{}()};
+    std::mt19937_64 environmentMapIdRng{std::random_device{}()};
 
     Core::Array<StaticModelGenerateSlot, MODEL_GENERATION_JOB_COUNT> modelGenerateTasks;
     Core::LockFreeHandleAllocator<StaticModelGenerateSlot, MODEL_GENERATION_JOB_COUNT> modelGenerateAllocator;

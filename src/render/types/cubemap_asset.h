@@ -9,6 +9,7 @@
 #include "core/containers/inline_string.h"
 #include "render/descriptors/vk_bindless_resources_sampler_images.h"
 #include "engine/asset_manager_types.h"
+#include "engine/core/environment_map_id.h"
 
 namespace Render
 {
@@ -26,9 +27,12 @@ struct Cubemap
     };
 
     Core::Path source{};
-    Core::InlineString<64> name{};
-    StringID cubemapId{};
+    Core::InlineString<128> name{};
+    Engine::EnvironmentMapID cubemapId{};
     Engine::CubemapHandle selfHandle{Engine::CubemapHandle::INVALID};
+    uint64_t dataOffset{0};
+    uint64_t dataSize{0};
+    uint64_t uncompressedSize{0};
     LoadState loadState{LoadState::NotLoaded};
     uint32_t refCount = 0;
     BindlessCubemapHandle bindlessHandle{};

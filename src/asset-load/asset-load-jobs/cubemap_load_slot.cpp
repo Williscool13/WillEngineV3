@@ -4,9 +4,14 @@
 
 #include "cubemap_load_slot.h"
 
+#include <fstream>
 #include <semaphore>
 
 #include "asset-load/asset_load_config.h"
+#include "core/containers/heap_array.h"
+#include "core/memory/memory_manager.h"
+#include "engine/compression/compression.h"
+#include "engine/resources/environment_map/environment_map_format.h"
 #include "ktxvulkan.h"
 #include "render/resource_manager.h"
 #include "render/types/cubemap_asset.h"
@@ -25,12 +30,14 @@ void CubemapLoadSlot::Initialize(
     enki::TaskScheduler* _scheduler,
     Render::VulkanContext* _context,
     Render::ResourceManager* _resourceManager,
+    Core::MemoryManager* _memoryManager,
     Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> dispatchCallback,
     Core::InlineFunction<void(bool success, CubemapSlotHandle cubemapSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle)> notifyCallback)
 {
     scheduler = _scheduler;
     context = _context;
     resourceManager = _resourceManager;
+    memoryManager = _memoryManager;
     _requestDispatchCallback = std::move(dispatchCallback);
     _notifyCallback = std::move(notifyCallback);
 }
@@ -150,14 +157,23 @@ bool CubemapLoadSlot::LoadCubemapFromDisk()
         }
     }
 
-    // todo do ktx unpacking myself to remove heap allocs
     {
-        ZoneScopedN("KTXCreateFromFile");
-        ktx_error_code_e result = ktxTexture2_CreateFromNamedFile(
-            cubemapPath.c_str(),
-            KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT,
-            &texture
-        );
+        ZoneScopedN("KTXCreateFromMemory");
+        ktx_error_code_e result;
+
+        std::ifstream f(cubemapPath.c_str(), std::ios::binary);
+
+        Core::HeapArray<uint8_t> compressed = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetTexture, outputCubemap->dataSize);
+        f.seekg(static_cast<std::streamoff>(outputCubemap->dataOffset));
+        f.read(reinterpret_cast<char*>(compressed.Data()), static_cast<std::streamsize>(outputCubemap->dataSize));
+        if (!f) {
+            SPDLOG_ERROR("Failed to read .wenvmap data: {}", cubemapPath.c_str());
+            return false;
+        }
+
+        Core::HeapArray<uint8_t> decompressed = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetTexture, outputCubemap->uncompressedSize);
+        Engine::DecompressLZ4(compressed.Data(), compressed.Size(), decompressed.Data(), outputCubemap->uncompressedSize);
+        result = ktxTexture2_CreateFromMemory(decompressed.Data(), decompressed.Size(), KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, &texture);
 
         if (result != KTX_SUCCESS) {
             SPDLOG_ERROR("Failed to load KTX cubemap: {}", cubemapPath.c_str());
@@ -177,7 +193,6 @@ bool CubemapLoadSlot::LoadCubemapFromDisk()
         return false;
     }
 
-    // Size check for single face mip0
     ktx_size_t mip0Size = ktxTexture_GetImageSize(ktxTexture(texture), 0);
     if (mip0Size > TEXTURE_LOAD_STAGING_SIZE) {
         SPDLOG_ERROR("Cubemap face too large for staging buffer: {}", cubemapPath.c_str());

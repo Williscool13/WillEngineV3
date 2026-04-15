@@ -16,6 +16,7 @@
 #include "core/memory/handle.h"
 #include "core/memory/linear_allocator.h"
 #include "core/memory/memory_manager.h"
+#include "engine/core/environment_map_id.h"
 #include "render/shaders/constants_interop.h"
 #include "render/vulkan/vk_resources.h"
 
@@ -46,7 +47,7 @@ struct EnvironmentMapGenerateSlot
         Core::InlineFunction<void(bool success, EnvironmentMapGenerateSlotHandle cubemapSlotHandle)> notifyCallback
     );
 
-    void Launch(EnvironmentMapGenerateSlotHandle _slotHandle, const Core::Path& _imagePath, const Core::Path& _outputPath);
+    void Launch(EnvironmentMapGenerateSlotHandle _slotHandle, const Core::Path& _imagePath, const Core::Path& _outputPath, Engine::EnvironmentMapID _environmentMapId);
 
     void Clear();
 
@@ -59,11 +60,12 @@ struct EnvironmentMapGenerateSlot
 
     Core::Path imagePath;
     Core::Path outputPath;
+    Engine::EnvironmentMapID environmentMapId{};
 
 private:
     bool LoadEquirectangularAndGenerate(VkCommandBuffer cmd, const Core::InlineFunction<void()>& startRecording, const Core::InlineFunction<void(bool)>& submitAndWait);
 
-    bool WriteKTXFile();
+    bool WriteWEnvMapFile();
 
     enki::TaskScheduler* scheduler{nullptr};
     Core::MemoryManager* memoryManager{nullptr};

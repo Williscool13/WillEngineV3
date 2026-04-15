@@ -5,6 +5,7 @@
 #include "asset_manager.h"
 
 #include "asset-load/async_asset_load_manager.h"
+#include "resources/environment_map/environment_map_format.h"
 #include "resources/prefab/prefab_format.h"
 #include "resources/scene/scene_format.h"
 #include "editor/asset-generation/miscellaneous_asset_generate.h"
@@ -22,6 +23,7 @@ AssetManager::AssetManager(Core::MemoryManager& memoryManager, Engine::EngineCon
       modelCache(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_CACHED_MODELS),
       textureNameToId(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_CACHED_TEXTURES),
       textureCache(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_CACHED_TEXTURES),
+      cubemapNameToId(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_CACHED_CUBEMAPS),
       cubemapCache(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_CACHED_CUBEMAPS),
       sceneCache(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_CACHED_SCENES),
       prefabCache(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_CACHED_PREFABS)
@@ -68,11 +70,6 @@ AssetManager::AssetManager(Core::MemoryManager& memoryManager, Engine::EngineCon
     defaultSamplerDesc.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
     Sampler* defaultSampler = LoadSampler(defaultSamplerDesc);
     assert(defaultSampler && defaultSampler->bindlessHandle.index == ASSET_SAMPLER_BINDLESS_INDEX);
-
-    Core::Path assetPath = Platform::GetAssetPath();
-    cubemapCache["kloofendal"_sid].source = assetPath / "environment-map/kloofendal_48d_partly_cloudy_puresky_4k.ktx2";
-    cubemapCache["mud_road"_sid].source = assetPath / "environment-map/mud_road_puresky_4k.ktx2";
-    cubemapCache["modern_street"_sid].source = assetPath / "environment-map/modern_evening_street_4k.ktx2";
 }
 
 
@@ -504,6 +501,26 @@ void AssetManager::Scan()
                     cached.bounds = optNodes->bounds;
                     modelNameToId[nameSid] = id;
                 }
+                else if (ext == ".wenvmap") {
+                    auto header = ReadWEnvMapHeader(path);
+                    if (!header) { continue; }
+                    EnvironmentMapID id{header->environmentMapId};
+                    const Core::InlineString<128> name{header->name};
+                    const StringID nameSid{name.c_str(), name.Size()};
+                    if (cubemapNameToId.Contains(nameSid) && *cubemapNameToId.Find(nameSid) != id) {
+                        LOG_CRITICAL(Asset, "2 Environment maps were mounted that contain the same name. This will cause issues for cubemap lookups by name. ({})", path.c_str());
+                    }
+                    CachedCubemapMetadata& cached = cubemapCache[id];
+                    cached.source = Core::Path(path);
+                    cached.name = Core::InlineString<128>(header->name);
+                    cached.width = header->width;
+                    cached.height = header->height;
+                    cached.mipCount = header->mipCount;
+                    cached.dataOffset = header->dataOffset;
+                    cached.dataSize = header->dataSize;
+                    cached.uncompressedSize = header->uncompressedSize;
+                    cubemapNameToId[nameSid] = id;
+                }
                 else if (ext == ".wscene") {
                     auto header = ReadWSceneHeader(path);
                     if (!header) { continue; }
@@ -676,10 +693,15 @@ void AssetManager::UnloadSampler(SamplerDesc& desc)
     }
 }
 
-CubemapHandle AssetManager::LoadCubemap(StringID cubemapId)
+CubemapHandle AssetManager::LoadCubemap(EnvironmentMapID cubemapId)
 {
+    if (!cubemapId.IsValid()) {
+        LOG_ERROR(Asset, "LoadCubemap called with invalid EnvironmentMapID");
+        return CubemapHandle::INVALID;
+    }
+
     if (!cubemapCache.Contains(cubemapId)) {
-        LOG_ERROR(Asset, "Cubemap '{}' not found in registry", cubemapId.ToString());
+        LOG_ERROR(Asset, "Cubemap {:x} not found in registry", cubemapId.id);
         return CubemapHandle::INVALID;
     }
 
@@ -688,7 +710,7 @@ CubemapHandle AssetManager::LoadCubemap(StringID cubemapId)
         CubemapHandle existingHandle = *existingPtr;
         if (cubemapAllocator.IsValid(existingHandle)) {
             cubemaps[existingHandle.index].refCount++;
-            LOG_TRACE(Asset, "Cubemap already loaded: {}, refCount: {}", cubemapId.ToString(), cubemaps[existingHandle.index].refCount);
+            LOG_TRACE(Asset, "Cubemap already loaded: {}, refCount: {}", cubemaps[existingHandle.index].name.c_str(), cubemaps[existingHandle.index].refCount);
             return existingHandle;
         }
         cubemapIdToHandle.Remove(cubemapId);
@@ -696,15 +718,18 @@ CubemapHandle AssetManager::LoadCubemap(StringID cubemapId)
 
     CubemapHandle handle = cubemapAllocator.Add();
     if (!handle.IsValid()) {
-        LOG_ERROR(Asset, "Failed to allocate cubemap slot for: {}", cubemapId.ToString());
+        LOG_ERROR(Asset, "Failed to allocate cubemap slot for: {:x}", cubemapId.id);
         return CubemapHandle::INVALID;
     }
 
-    const Core::Path& path = cubemapCache[cubemapId].source;
+    const CachedCubemapMetadata& meta = cubemapCache[cubemapId];
     Render::Cubemap& cubemap = cubemaps[handle.index];
-    cubemap.source = path;
-    cubemap.name = Core::InlineString(path.Stem());
+    cubemap.source = meta.source;
+    cubemap.name = meta.name;
     cubemap.cubemapId = cubemapId;
+    cubemap.dataOffset = meta.dataOffset;
+    cubemap.dataSize = meta.dataSize;
+    cubemap.uncompressedSize = meta.uncompressedSize;
     cubemap.refCount = 1;
     cubemap.loadState = Render::Cubemap::LoadState::Loading;
     cubemap.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateCubemap();

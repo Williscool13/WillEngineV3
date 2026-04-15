@@ -129,7 +129,7 @@ void AssetGenerator::ThreadMain()
                 Core::Handle<EnvironmentMapGenerateSlot> slotHandle = environmentMapGenerateAllocator.Add();
                 if (slotHandle.IsValid()) {
                     EnvironmentMapGenerateSlot& task = environmentMapeGenerateTasks[slotHandle.index];
-                    task.Launch(slotHandle, req.imagePath, req.outputPath);
+                    task.Launch(slotHandle, req.imagePath, req.outputPath, req.environmentMapId);
                 }
                 else {
                     environmentMapGenerateRequestQueue.enqueue(req);
@@ -214,7 +214,8 @@ void AssetGenerator::RequestEnvironmentMapGenerate(const Core::Path& hdriPath, c
 {
     ZoneScoped;
 
-    environmentMapGenerateRequestQueue.enqueue({hdriPath, outputPath});
+    Engine::EnvironmentMapID id{environmentMapIdRng()};
+    environmentMapGenerateRequestQueue.enqueue({hdriPath, outputPath, id});
     workCounter.fetch_add(1);
     wakeCV.notify_one();
 }
@@ -311,7 +312,7 @@ void AssetGenerator::OnEnvironmentGenerateComplete(bool success, EnvironmentMapG
     }
 
     EnvironmentMapGenerateSlot& task = environmentMapeGenerateTasks[slotHandle.index];
-    environmentMapGenerateCompleteQueue.enqueue({task.outputPath, success});
+    environmentMapGenerateCompleteQueue.enqueue({task.outputPath, task.environmentMapId, success});
 
     if (success) {
         SPDLOG_INFO("Successfully generated environment map: {}", task.outputPath.c_str());
@@ -323,6 +324,8 @@ void AssetGenerator::OnEnvironmentGenerateComplete(bool success, EnvironmentMapG
     task.Clear();
     bool removed = environmentMapGenerateAllocator.Remove(slotHandle);
     assert(removed && "Failed to remove valid slot handle");
+
+    ctx->bShouldRescanResources.store(true, std::memory_order_release);
 
     workCounter.fetch_add(1);
     wakeCV.notify_one();

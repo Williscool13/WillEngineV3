@@ -7,6 +7,7 @@
 
 #include "asset_manager_config.h"
 #include "asset_manager_types.h"
+#include "engine/core/environment_map_id.h"
 #include "engine/core/model_id.h"
 #include "core/sampler_id.h"
 #include "engine/include/engine_context.h"
@@ -139,11 +140,38 @@ public: // Samplers
     void UnloadSampler(SamplerDesc& desc);
 
 public: // Cubemaps
-    CubemapHandle LoadCubemap(StringID cubemapId);
+    [[nodiscard]] EnvironmentMapID FindCubemapByName(std::string_view name) const
+    {
+        const StringID sid{name.data(), name.size()};
+        const EnvironmentMapID* found = cubemapNameToId.Find(sid);
+        return found ? *found : EnvironmentMapID::INVALID;
+    }
+
+    CubemapHandle LoadCubemap(EnvironmentMapID cubemapId);
 
     Render::Cubemap* GetCubemap(CubemapHandle handle);
 
     void UnloadCubemap(CubemapHandle handle);
+
+    struct CachedCubemapMetadata
+    {
+        Core::Path source;
+        Core::InlineString<128> name;
+        uint32_t width{};
+        uint32_t height{};
+        uint32_t mipCount{};
+        uint64_t dataOffset{};
+        uint64_t dataSize{};
+        uint64_t uncompressedSize{};
+    };
+
+    [[nodiscard]] const Core::FixedMap<StringID, EnvironmentMapID>& GetCubemapNameToId() const { return cubemapNameToId; }
+    [[nodiscard]] const Core::FixedMap<EnvironmentMapID, CachedCubemapMetadata>& GetCubemapCache() const { return cubemapCache; }
+
+    [[nodiscard]] const CachedCubemapMetadata* GetCubemapMetadata(EnvironmentMapID cubemapId) const
+    {
+        return cubemapCache.Find(cubemapId);
+    }
 
 public: // Per-Tick calls
     ResolveLoadResult ResolveLoads(Core::FrameBuffer& stagingFrameBuffer) const;
@@ -182,7 +210,7 @@ private:
 
     Core::HandleAllocator<Render::Cubemap, MAX_LOADED_CUBEMAPS> cubemapAllocator;
     Core::Array<Render::Cubemap, MAX_LOADED_CUBEMAPS> cubemaps{};
-    Core::InlineMap<StringID, CubemapHandle, 512> cubemapIdToHandle;
+    Core::InlineMap<EnvironmentMapID, CubemapHandle, 512> cubemapIdToHandle;
 
 public: // Scenes
     struct CachedSceneMetadata
@@ -217,18 +245,14 @@ public: // Prefabs
     bool DeletePrefab(StringID prefabId);
 
 private: // Asset Registry
-    struct CachedCubemapMetadata
-    {
-        Core::Path source;
-    };
-
     Core::FixedMap<StringID, ModelID> modelNameToId;
     Core::FixedMap<ModelID, CachedModelMetadata> modelCache;
 
     Core::FixedMap<StringID, TextureID> textureNameToId;
     Core::FixedMap<TextureID, CachedTextureMetadata> textureCache;
 
-    Core::FixedMap<StringID, CachedCubemapMetadata> cubemapCache;
+    Core::FixedMap<StringID, EnvironmentMapID> cubemapNameToId;
+    Core::FixedMap<EnvironmentMapID, CachedCubemapMetadata> cubemapCache;
 
     Core::FixedMap<StringID, CachedSceneMetadata> sceneCache;
     Core::FixedMap<StringID, CachedPrefabMetadata> prefabCache;

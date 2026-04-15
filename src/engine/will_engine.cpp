@@ -101,7 +101,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
     memoryManager.Init({
         .persistentSize = 48ull * 1024 * 1024, // 64 MB
         .generalPoolSize = 16ull * 1024 * 1024, // 16 MB
-        .assetsScratchPoolSize = 128ull * 1024 * 1024, // 128 MB
+        .assetsScratchPoolSize = 256ull * 1024 * 1024, // 128 MB
         .assetsPoolSize = 128ull * 1024 * 1024, // 128 MB
         .physicsPoolSize = 1ull * 1024 * 1024, // 4 MB
         .physicsAlignedPoolSize = 32ull * 1024 * 1024, // 32 MB
@@ -868,7 +868,7 @@ void WillEngine::EditorImgui()
                 const auto stem = hdrPath.Stem();
                 Core::InlineString<256> outName;
                 outName.Append(stem.data(), stem.size());
-                outName.Append(".ktx2");
+                outName.Append(".wenvmap");
                 const Core::Path outputPath = hdrPath.Parent() / outName.c_str();
                 assetGenerator->RequestEnvironmentMapGenerate(hdrPath, outputPath);
             }
@@ -1022,8 +1022,8 @@ void WillEngine::Run()
     renderThread->Start();
     timeManager->Reset();
 
-    // engineState->lighting.skybox = assetManager->LoadCubemap("kloofendal"_sid);
-    engineState->lighting.skybox = assetManager->LoadCubemap("modern_street"_sid);
+    // engineState->lighting.skybox = assetManager->LoadCubemap(assetManager->FindCubemapByName("kloofendal_48d_partly_cloudy_puresky_4k"));
+    engineState->lighting.skybox = assetManager->LoadCubemap(assetManager->FindCubemapByName("modern_evening_street_4k"));
 
     SDL_Event e;
     while (true) {

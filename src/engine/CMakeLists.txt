@@ -14,6 +14,7 @@ add_library(engine STATIC
         logging/imgui_sink.h
         logging/engine_log.h
         logging/log_category.h
+        core/environment_map_id.h
         core/material_id.h
         core/texture_id.h
         core/sampler_id.h
@@ -26,6 +27,8 @@ add_library(engine STATIC
         resources/material/material.h
         resources/material/material_format.cpp
         resources/material/material_format.h
+        resources/environment_map/environment_map_format.cpp
+        resources/environment_map/environment_map_format.h
         resources/texture/texture.h
         resources/texture/texture_format.cpp
         resources/texture/texture_format.h
