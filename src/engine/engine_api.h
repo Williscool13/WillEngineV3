@@ -143,6 +143,7 @@ struct LightingState
     Core::GTAOConfiguration gtaoConfig{};
     Core::PostProcessConfiguration postProcess{};
     CubemapHandle skybox{CubemapHandle::INVALID};
+    int32_t skyboxLOD{0};
 };
 
 struct EditorState

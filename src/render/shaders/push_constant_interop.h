@@ -590,6 +590,7 @@ SHADER_PUBLIC struct PrefilterSpecularPushConstant
     SHADER_PUBLIC uint32_t width;
     SHADER_PUBLIC uint32_t height;
     SHADER_PUBLIC uint32_t sampleCount;
+    SHADER_PUBLIC float fireflyThreshold;
 };
 
 SHADER_PUBLIC struct EnvironmentSkyboxPushConstant
@@ -597,6 +598,7 @@ SHADER_PUBLIC struct EnvironmentSkyboxPushConstant
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC uint32_t sceneDataIndex;
     SHADER_PUBLIC int32_t cubemapIndex;
+    SHADER_PUBLIC int32_t skyboxLOD;
 };
 
 SHADER_PUBLIC struct BRDFLUTPushConstant

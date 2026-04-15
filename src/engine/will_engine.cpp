@@ -875,6 +875,20 @@ void WillEngine::EditorImgui()
             ImGui::EndDisabled();
         }
 
+        ImGui::SeparatorText("Skybox LOD:"); {
+            static constexpr const char* kLODLabels[] = {"Specular 0", "Specular 1", "Specular 2", "Specular 3", "Diffuse"};
+            ImGui::SetNextItemWidth(-1);
+            if (ImGui::BeginCombo("##skybox_lod", kLODLabels[engineState->lighting.skyboxLOD])) {
+                for (int i = 0; i < 5; ++i) {
+                    const bool selected = engineState->lighting.skyboxLOD == i;
+                    if (ImGui::Selectable(kLODLabels[i], selected)) {
+                        engineState->lighting.skyboxLOD = i;
+                    }
+                }
+                ImGui::EndCombo();
+            }
+        }
+
         if (ImGui::Button("Generate BRDF LUT, Smiling Friend, and Prototype Texture")) {
             assetGenerator->RequestTextureGenerateFromFile(
                 Platform::GetAssetPath() / "textures/smiling_friend.jpg",

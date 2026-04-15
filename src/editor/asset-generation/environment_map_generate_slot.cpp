@@ -461,7 +461,8 @@ bool EnvironmentMapGenerateSlot::LoadEquirectangularAndGenerate(VkCommandBuffer 
                 .roughness = roughness,
                 .width = mipResolution,
                 .height = mipResolution,
-                .sampleCount = 4096
+                .sampleCount = 4096,
+                .fireflyThreshold = 10.0f
             };
 
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);

@@ -17,5 +17,6 @@ float4 FragmentSkybox(uniform EnvironmentSkyboxPushConstant pc, FullscreenPassVe
     float3 rayDir = normalize(worldPos.xyz / worldPos.w - scene.cameraWorldPos.xyz);
     rayDir.y = -rayDir.y;
 
-    return assetCubemaps[pc.cubemapIndex].SampleLevel(assetSamplers[ASSET_SAMPLER_BINDLESS_INDEX], rayDir, 0);
+    int mip = pc.skyboxLOD < 4 ? pc.skyboxLOD : ENVIRONMENT_MAP_DIFFUSE_MIP;
+    return assetCubemaps[pc.cubemapIndex].SampleLevel(assetSamplers[ASSET_SAMPLER_BINDLESS_INDEX], rayDir, mip);
 }

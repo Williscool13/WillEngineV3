@@ -190,7 +190,10 @@ void ComputePrefilterSpecular(uniform PrefilterSpecularPushConstant pc, uint3 ti
 
             float mipLevel = roughness == 0.0 ? 0.0 : 0.5 * log2(saSample / saTexel);
 
-            prefilteredColor += sourceCubemaps[pc.sourceIndex].SampleLevel(samplers[pc.samplerIndex], L, mipLevel).rgb * NdotL;
+            float3 sampleColor = sourceCubemaps[pc.sourceIndex].SampleLevel(samplers[pc.samplerIndex], L, mipLevel).rgb;
+            float luma = dot(sampleColor, float3(0.2126, 0.7152, 0.0722));
+            sampleColor *= 1.0 / (1.0 + luma / pc.fireflyThreshold);
+            prefilteredColor += sampleColor * NdotL;
             totalWeight += NdotL;
         }
     }

@@ -2214,6 +2214,7 @@ void RenderThread::SetupSkyboxRendering(RenderGraph& graph, const Core::ViewFami
             .sceneData = graph.GetBufferAddress(SID("scene_data")),
             .sceneDataIndex = sceneDataIndex,
             .cubemapIndex = viewFamily.skyboxIndex,
+            .skyboxLOD = viewFamily.skyboxLOD,
         };
 
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("environment_skybox"));
