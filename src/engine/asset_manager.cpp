@@ -71,6 +71,8 @@ AssetManager::AssetManager(Core::MemoryManager& memoryManager, Engine::EngineCon
 
     Core::Path assetPath = Platform::GetAssetPath();
     cubemapCache["kloofendal"_sid].source = assetPath / "environment-map/kloofendal_48d_partly_cloudy_puresky_4k.ktx2";
+    cubemapCache["mud_road"_sid].source = assetPath / "environment-map/mud_road_puresky_4k.ktx2";
+    cubemapCache["modern_street"_sid].source = assetPath / "environment-map/modern_evening_street_4k.ktx2";
 }
 
 
@@ -701,7 +703,7 @@ CubemapHandle AssetManager::LoadCubemap(StringID cubemapId)
     const Core::Path& path = cubemapCache[cubemapId].source;
     Render::Cubemap& cubemap = cubemaps[handle.index];
     cubemap.source = path;
-    cubemap.name = Core::InlineString<64>(path.Stem());
+    cubemap.name = Core::InlineString(path.Stem());
     cubemap.cubemapId = cubemapId;
     cubemap.refCount = 1;
     cubemap.loadState = Render::Cubemap::LoadState::Loading;

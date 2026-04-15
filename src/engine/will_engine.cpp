@@ -23,8 +23,10 @@
 #include "audio/audio_manager.h"
 #include "core/containers/arena_fixed_vector.h"
 #include "core/containers/inline_string.h"
+#include "core/containers/inline_vector.h"
 #include "logging/engine_logger.h"
 #include "physics/physics_system.h"
+#include "platform/file_utils.h"
 #include "platform/paths.h"
 #include "platform/thread_utils.h"
 #include "render/render_thread.h"
@@ -97,14 +99,14 @@ void WillEngine::Initialize(Utils::Logger* logger)
     ZoneScoped;
 
     memoryManager.Init({
-        .persistentSize = 48ull * 1024 * 1024,  // 64 MB
+        .persistentSize = 48ull * 1024 * 1024, // 64 MB
         .generalPoolSize = 16ull * 1024 * 1024, // 16 MB
         .assetsScratchPoolSize = 128ull * 1024 * 1024, // 128 MB
         .assetsPoolSize = 128ull * 1024 * 1024, // 128 MB
-        .physicsPoolSize = 1ull * 1024 * 1024,          // 4 MB
-        .physicsAlignedPoolSize = 32ull * 1024 * 1024,  // 32 MB
+        .physicsPoolSize = 1ull * 1024 * 1024, // 4 MB
+        .physicsAlignedPoolSize = 32ull * 1024 * 1024, // 32 MB
         .physicsArenaSize = Physics::PHYSICS_TEMP_ALLOCATOR_SIZE, // 16 MB
-        .renderPoolSize = 4ull * 1024 * 1024,  // 4 MB
+        .renderPoolSize = 4ull * 1024 * 1024, // 4 MB
         .renderArenaSize = 1ull * 1024 * 1024, // 1 MB
         .generalArenaSize = 1ull * 1024 * 1024, // 1 MB
     });
@@ -190,7 +192,8 @@ void WillEngine::Initialize(Utils::Logger* logger)
         ZoneScopedN("CreateRenderThread");
         ImGui::SetAllocatorFunctions(ImGuiAlloc, ImGuiFree, &memoryManager);
         engineRenderSynchronization = new(memoryManager.PersistentAllocRaw(sizeof(Core::FrameSync), Core::AllocTag::FrameSync)) Core::FrameSync(memoryManager);
-        renderThread = new(memoryManager.PersistentAllocRaw(sizeof(Render::RenderThread), Core::AllocTag::RenderThread)) Render::RenderThread(memoryManager, engineRenderSynchronization, scheduler, window, w, h);
+        renderThread = new(memoryManager.PersistentAllocRaw(sizeof(Render::RenderThread), Core::AllocTag::RenderThread)) Render::RenderThread(
+            memoryManager, engineRenderSynchronization, scheduler, window, w, h);
     }
 
     //
@@ -215,7 +218,8 @@ void WillEngine::Initialize(Utils::Logger* logger)
     //
     {
         ZoneScopedN("CreateAssetManager");
-        assetManager = new(memoryManager.PersistentAllocRaw(sizeof(AssetManager), Core::AllocTag::AssetManager)) AssetManager(memoryManager, engineContext, asyncAssetLoadManager, renderThread->GetResourceManager());
+        assetManager = new(memoryManager.PersistentAllocRaw(sizeof(AssetManager), Core::AllocTag::AssetManager)) AssetManager(
+            memoryManager, engineContext, asyncAssetLoadManager, renderThread->GetResourceManager());
         materialManager = new(memoryManager.PersistentAllocRaw(sizeof(MaterialManager), Core::AllocTag::MaterialManager)) MaterialManager(memoryManager, engineContext, assetManager);
     }
 
@@ -231,7 +235,8 @@ void WillEngine::Initialize(Utils::Logger* logger)
     //
     {
         ZoneScopedN("CreateModelGenerator");
-        assetGenerator = new(memoryManager.PersistentAllocRaw(sizeof(Editor::AssetGenerator), Core::AllocTag::AssetGenerator)) Editor::AssetGenerator(memoryManager, engineContext, renderThread->GetVulkanContext(), renderThread, asyncAssetLoadManager, scheduler);
+        assetGenerator = new(memoryManager.PersistentAllocRaw(sizeof(Editor::AssetGenerator), Core::AllocTag::AssetGenerator)) Editor::AssetGenerator(
+            memoryManager, engineContext, renderThread->GetVulkanContext(), renderThread, asyncAssetLoadManager, scheduler);
     }
 
 #endif
@@ -471,8 +476,8 @@ void WillEngine::EditorImgui()
                 const float r = fraction < 0.5f ? fraction * 2.0f : 1.0f;
                 const float g = fraction < 0.5f ? 1.0f : (1.0f - (fraction - 0.5f) * 2.0f);
                 const auto overlay = Core::InlineString<48>::Format("%.2f / %.0f MB",
-                    static_cast<float>(usedBytes_) * kToMB,
-                    static_cast<float>(totalBytes_) * kToMB);
+                                                                    static_cast<float>(usedBytes_) * kToMB,
+                                                                    static_cast<float>(totalBytes_) * kToMB);
 
                 ImGui::TextUnformatted(label);
                 ImGui::SameLine(kLabelX);
@@ -482,9 +487,9 @@ void WillEngine::EditorImgui()
                 ImGui::PopStyleColor(2);
                 if (ImGui::IsItemHovered()) {
                     ImGui::SetTooltip("%.3f / %.0f MB  (%zu allocs)",
-                        static_cast<float>(usedBytes_) * kToMB,
-                        static_cast<float>(totalBytes_) * kToMB,
-                        allocCount_);
+                                      static_cast<float>(usedBytes_) * kToMB,
+                                      static_cast<float>(totalBytes_) * kToMB,
+                                      allocCount_);
                 }
             };
 
@@ -492,8 +497,8 @@ void WillEngine::EditorImgui()
             auto drawArenaBar = [&](const char* label, const Core::Arena::Stats& s) {
                 const float peakFraction = s.totalBytes > 0 ? static_cast<float>(s.peakBytes) / static_cast<float>(s.totalBytes) : 0.0f;
                 const auto overlay = Core::InlineString<48>::Format("pk %.2f / %.0f MB",
-                    static_cast<float>(s.peakBytes) * kToMB,
-                    static_cast<float>(s.totalBytes) * kToMB);
+                                                                    static_cast<float>(s.peakBytes) * kToMB,
+                                                                    static_cast<float>(s.totalBytes) * kToMB);
 
                 ImGui::TextUnformatted(label);
                 ImGui::SameLine(kLabelX);
@@ -509,52 +514,56 @@ void WillEngine::EditorImgui()
             // Grand total across all TLSF pools
             {
                 const size_t tlsfUsed = ms.persistent.usedBytes + ms.general.usedBytes + ms.assetsScratch.usedBytes
-                                      + ms.assets.usedBytes + ms.physics.usedBytes + ms.physicsAligned.usedBytes + ms.render.usedBytes;
+                                        + ms.assets.usedBytes + ms.physics.usedBytes + ms.physicsAligned.usedBytes + ms.render.usedBytes;
                 const size_t tlsfTotal = ms.persistent.totalBytes + ms.general.totalBytes + ms.assetsScratch.totalBytes
-                                       + ms.assets.totalBytes + ms.physics.totalBytes + ms.physicsAligned.totalBytes + ms.render.totalBytes;
+                                         + ms.assets.totalBytes + ms.physics.totalBytes + ms.physicsAligned.totalBytes + ms.render.totalBytes;
                 const size_t tlsfAllocs = ms.persistent.allocCount + ms.general.allocCount + ms.assetsScratch.allocCount
-                                        + ms.assets.allocCount + ms.physics.allocCount + ms.physicsAligned.allocCount + ms.render.allocCount;
+                                          + ms.assets.allocCount + ms.physics.allocCount + ms.physicsAligned.allocCount + ms.render.allocCount;
                 ImGui::SeparatorText("TLSF Total");
                 drawMemBar("All Pools", tlsfUsed, tlsfTotal, tlsfAllocs);
             }
 
             ImGui::SeparatorText("General");
-            drawMemBar("General",        ms.general.usedBytes,       ms.general.totalBytes,       ms.general.allocCount);
+            drawMemBar("General", ms.general.usedBytes, ms.general.totalBytes, ms.general.allocCount);
             drawMemBar("Assets Scratch", ms.assetsScratch.usedBytes, ms.assetsScratch.totalBytes, ms.assetsScratch.allocCount);
-            drawMemBar("Assets",         ms.assets.usedBytes,        ms.assets.totalBytes,        ms.assets.allocCount);
+            drawMemBar("Assets", ms.assets.usedBytes, ms.assets.totalBytes, ms.assets.allocCount);
 
             ImGui::SeparatorText("Physics");
-            drawMemBar("Physics",        ms.physics.usedBytes,        ms.physics.totalBytes,        ms.physics.allocCount);
-            drawMemBar("Phys Aligned",   ms.physicsAligned.usedBytes, ms.physicsAligned.totalBytes, ms.physicsAligned.allocCount);
+            drawMemBar("Physics", ms.physics.usedBytes, ms.physics.totalBytes, ms.physics.allocCount);
+            drawMemBar("Phys Aligned", ms.physicsAligned.usedBytes, ms.physicsAligned.totalBytes, ms.physicsAligned.allocCount);
 
             ImGui::SeparatorText("Render");
-            drawMemBar("Render",         ms.render.usedBytes,         ms.render.totalBytes,         ms.render.allocCount);
+            drawMemBar("Render", ms.render.usedBytes, ms.render.totalBytes, ms.render.allocCount);
 
             ImGui::SeparatorText("Engine");
-            drawMemBar("Persistent",     ms.persistent.usedBytes,     ms.persistent.totalBytes,     ms.persistent.allocCount);
+            drawMemBar("Persistent", ms.persistent.usedBytes, ms.persistent.totalBytes, ms.persistent.allocCount);
 
             ImGui::SeparatorText("Arenas");
-            drawArenaBar("Render Arena",  ras);
+            drawArenaBar("Render Arena", ras);
             drawArenaBar("General Arena", gas);
             drawArenaBar("Physics Arena", pas);
 
             ImGui::SeparatorText("GPU");
             ImGui::Text("Device: %zu allocs / %.3f MB",
-                static_cast<size_t>(ms.deviceMemory.allocationCount),
-                static_cast<float>(ms.deviceMemory.totalBytes) * kToMB);
+                        static_cast<size_t>(ms.deviceMemory.allocationCount),
+                        static_cast<float>(ms.deviceMemory.totalBytes) * kToMB);
 
             // Per-pool tag breakdown with pool selector
             ImGui::SeparatorText("Tag Breakdown");
 
-            struct PoolEntry { const char* name; const Core::TlsfAllocator::TagStats* tags; };
+            struct PoolEntry
+            {
+                const char* name;
+                const Core::TlsfAllocator::TagStats* tags;
+            };
             const PoolEntry pools[] = {
-                {"Persistent",    cachedPersistentTags.Data()},
-                {"General",       cachedGeneralTags.Data()},
-                {"Assets Scratch",cachedAssetsScratchTags.Data()},
-                {"Assets",        cachedAssetsTags.Data()},
-                {"Physics",       cachedPhysicsTags.Data()},
-                {"Phys Aligned",  cachedPhysicsAlignedTags.Data()},
-                {"Render",        cachedRenderTags.Data()},
+                {"Persistent", cachedPersistentTags.Data()},
+                {"General", cachedGeneralTags.Data()},
+                {"Assets Scratch", cachedAssetsScratchTags.Data()},
+                {"Assets", cachedAssetsTags.Data()},
+                {"Physics", cachedPhysicsTags.Data()},
+                {"Phys Aligned", cachedPhysicsAlignedTags.Data()},
+                {"Render", cachedRenderTags.Data()},
             };
             constexpr int kPoolCount = 7;
 
@@ -579,9 +588,12 @@ void WillEngine::EditorImgui()
                     const Core::TlsfAllocator::TagStats& t = tags[i];
                     if (t.count == 0) { continue; }
                     ImGui::TableNextRow();
-                    ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted(Core::AllocTagName(t.tag));
-                    ImGui::TableSetColumnIndex(1); ImGui::Text("%zu", t.count);
-                    ImGui::TableSetColumnIndex(2); ImGui::Text("%.1f", static_cast<float>(t.usedBytes) / 1024.0f);
+                    ImGui::TableSetColumnIndex(0);
+                    ImGui::TextUnformatted(Core::AllocTagName(t.tag));
+                    ImGui::TableSetColumnIndex(1);
+                    ImGui::Text("%zu", t.count);
+                    ImGui::TableSetColumnIndex(2);
+                    ImGui::Text("%.1f", static_cast<float>(t.usedBytes) / 1024.0f);
                 }
                 ImGui::EndTable();
             }
@@ -815,13 +827,52 @@ void WillEngine::EditorImgui()
                             Platform::GetAssetPath() / "Plane.wsmesh");
         }
 
-        ImGui::Separator();
-        ImGui::Text("Generate Textures:");
+        ImGui::SeparatorText("Generate Environment Map:"); {
+            static Core::InlineVector<Core::Path, 32> hdrFiles;
+            static int selectedHdrIdx = 0;
+            static bool hdrScanned = false;
 
-        if (ImGui::Button("kloofendal_environment.ktx2")) {
-            assetGenerator->RequestEnvironmentMapGenerate(
-                Platform::GetAssetPath() / "environment-map/kloofendal_48d_partly_cloudy_puresky_4k.hdr",
-                Platform::GetAssetPath() / "environment-map/kloofendal_48d_partly_cloudy_puresky_4k.ktx2");
+            if (ImGui::Button("Refresh##hdr") || !hdrScanned) {
+                hdrFiles.Clear();
+                Core::Path tempPaths[32];
+                const uint32_t found = Platform::FindFilesByExtension(
+                    Platform::GetAssetPath(), ".hdr", tempPaths, 32);
+                for (uint32_t i = 0; i < found; ++i) {
+                    hdrFiles.PushBack(std::move(tempPaths[i]));
+                }
+                selectedHdrIdx = 0;
+                hdrScanned = true;
+            }
+
+            if (!hdrFiles.IsEmpty()) {
+                selectedHdrIdx = std::clamp(selectedHdrIdx, 0, static_cast<int>(hdrFiles.Size()) - 1);
+            }
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(-1);
+            ImGui::BeginDisabled(hdrFiles.IsEmpty());
+            const char* previewLabel = hdrFiles.IsEmpty() ? "No .hdr files found" : hdrFiles[selectedHdrIdx].Filename().data();
+            if (ImGui::BeginCombo("##hdr_list", previewLabel)) {
+                for (int i = 0; i < static_cast<int>(hdrFiles.Size()); ++i) {
+                    const bool selected = (i == selectedHdrIdx);
+                    if (ImGui::Selectable(hdrFiles[i].Filename().data(), selected)) {
+                        selectedHdrIdx = i;
+                    }
+                }
+                ImGui::EndCombo();
+            }
+            ImGui::EndDisabled();
+
+            ImGui::BeginDisabled(hdrFiles.IsEmpty());
+            if (ImGui::Button("Generate##envmap")) {
+                const Core::Path& hdrPath = hdrFiles[selectedHdrIdx];
+                const auto stem = hdrPath.Stem();
+                Core::InlineString<256> outName;
+                outName.Append(stem.data(), stem.size());
+                outName.Append(".ktx2");
+                const Core::Path outputPath = hdrPath.Parent() / outName.c_str();
+                assetGenerator->RequestEnvironmentMapGenerate(hdrPath, outputPath);
+            }
+            ImGui::EndDisabled();
         }
 
         if (ImGui::Button("Generate BRDF LUT, Smiling Friend, and Prototype Texture")) {
@@ -862,7 +913,8 @@ void WillEngine::EditorImgui()
             const std::string_view modelName = assetGenerator->GetModelGenerateSlotPath(i).Stem();
             if (modelName.empty()) {
                 ImGui::Text("Slot %u: -", i);
-            } else {
+            }
+            else {
                 ImGui::Text("Slot %u: %.*s", i, static_cast<int>(modelName.size()), modelName.data());
             }
             char overlay[32];
@@ -970,7 +1022,8 @@ void WillEngine::Run()
     renderThread->Start();
     timeManager->Reset();
 
-    engineState->lighting.skybox = assetManager->LoadCubemap("kloofendal"_sid);
+    // engineState->lighting.skybox = assetManager->LoadCubemap("kloofendal"_sid);
+    engineState->lighting.skybox = assetManager->LoadCubemap("modern_street"_sid);
 
     SDL_Event e;
     while (true) {

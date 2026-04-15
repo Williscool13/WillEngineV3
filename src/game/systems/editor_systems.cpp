@@ -1933,6 +1933,45 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
     }
     ImGui::End();
 
+    if (ImGui::Begin("Textures")) {
+        const auto& texCache = ctx->assetManager->GetTextureCache();
+
+        struct TextureEntry {
+            Core::InlineString<128> name;
+            uint32_t width;
+            uint32_t height;
+            uint32_t mipCount;
+        };
+        auto sorted = Core::ArenaFixedVector<TextureEntry>(&ctx->memoryManager->GeneralArena(), texCache.Size());
+        for (const auto& [texId, meta] : texCache) {
+            sorted.EmplaceBack(meta.name, meta.width, meta.height, meta.mipCount);
+        }
+        std::ranges::sort(sorted, {}, &TextureEntry::name);
+
+        if (ImGui::BeginTable("##textures", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY)) {
+            ImGui::TableSetupScrollFreeze(0, 1);
+            ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableSetupColumn("Width", ImGuiTableColumnFlags_WidthFixed, 60.0f);
+            ImGui::TableSetupColumn("Height", ImGuiTableColumnFlags_WidthFixed, 60.0f);
+            ImGui::TableSetupColumn("Mips", ImGuiTableColumnFlags_WidthFixed, 40.0f);
+            ImGui::TableHeadersRow();
+
+            for (const auto& entry : sorted) {
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0);
+                ImGui::TextUnformatted(entry.name.c_str());
+                ImGui::TableSetColumnIndex(1);
+                ImGui::Text("%u", entry.width);
+                ImGui::TableSetColumnIndex(2);
+                ImGui::Text("%u", entry.height);
+                ImGui::TableSetColumnIndex(3);
+                ImGui::Text("%u", entry.mipCount);
+            }
+            ImGui::EndTable();
+        }
+    }
+    ImGui::End();
+
     frameBuffer->mainViewFamily.directionalLight = state->lighting.directionalLight;
     frameBuffer->mainViewFamily.shadowConfig = state->lighting.shadowConfig;
     frameBuffer->mainViewFamily.postProcessConfig = state->lighting.postProcess;

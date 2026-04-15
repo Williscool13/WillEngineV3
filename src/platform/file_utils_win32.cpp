@@ -121,4 +121,30 @@ void RecursiveDirectoryIterator(const char* path, Core::Vector<Core::Path>& out)
 {
     RecursiveDirectoryIterator(Core::Path(path), out);
 }
+
+static uint32_t FindFilesByExtensionImpl(const Core::Path& dir, const char* ext,
+    Core::Path* out, uint32_t max, uint32_t count)
+{
+    Core::Path search = dir / "*";
+    WIN32_FIND_DATAA ffd;
+    HANDLE hFind = FindFirstFileA(search.c_str(), &ffd);
+    if (hFind == INVALID_HANDLE_VALUE) { return count; }
+    do {
+        if (strcmp(ffd.cFileName, ".") == 0 || strcmp(ffd.cFileName, "..") == 0) { continue; }
+        Core::Path child = dir / ffd.cFileName;
+        if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+            count = FindFilesByExtensionImpl(child, ext, out, max, count);
+        } else if (count < max && child.Extension() == ext) {
+            out[count++] = child;
+        }
+    } while (FindNextFileA(hFind, &ffd) && count < max);
+    FindClose(hFind);
+    return count;
+}
+
+uint32_t FindFilesByExtension(const Core::Path& dir, const char* ext,
+    Core::Path* outPaths, uint32_t maxPaths)
+{
+    return FindFilesByExtensionImpl(dir, ext, outPaths, maxPaths, 0);
+}
 } // Platform

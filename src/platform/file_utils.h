@@ -18,21 +18,54 @@ void CreateDirectories(const char* path);
 
 void RemoveDirectories(const char* path);
 
-// Creates all intermediate directories for path, then creates the file. Returns true on success.
+/**
+ * Creates all intermediate directories for path, then creates the file. Returns true on success.
+ * @param path
+ * @return
+ */
 bool CreateEmptyFile(const char* path);
 
-// Deletes the file at path. Returns true on success.
+/**
+ * Deletes the file at path. Returns true on success.
+ * @param path
+ * @return
+ */
 bool DeleteSingleFile(const char* path);
 
-// Copies src to dst, overwriting dst if it exists. Returns true on success.
+/**
+ * Copies src to dst, overwriting dst if it exists. Returns true on success.
+ * @param src
+ * @param dst
+ * @return
+ */
 bool FileCopy(const char* src, const char* dst);
 
-// Returns the last-write time of path as a uint64_t (packed FILETIME on Win32). Returns 0 on failure.
+/**
+ * Returns the last-write time of path as a uint64_t (packed FILETIME on Win32). Returns 0 on failure.
+ * @param path
+ * @return
+ */
 uint64_t GetFileWriteTime(const char* path);
 
-// Recursively enumerates all files under path and appends their paths to out.
+/**
+ * Recursively enumerates all files under path and appends their paths to out.
+ * @param path
+ * @param out
+ */
 void RecursiveDirectoryIterator(const char* path, Core::Vector<Core::Path>& out);
+
 void RecursiveDirectoryIterator(const Core::Path& path, Core::Vector<Core::Path>& out);
+
+/**
+ * Recursively finds all files with the given extension under dir.
+ * Writes up to maxPaths paths into outPaths. Returns the count written.
+ * @param dir
+ * @param ext
+ * @param outPaths
+ * @param maxPaths
+ * @return
+ */
+uint32_t FindFilesByExtension(const Core::Path& dir, const char* ext, Core::Path* outPaths, uint32_t maxPaths);
 } // Platform
 
 #endif //WILL_ENGINE_FILE_UTILS_H
