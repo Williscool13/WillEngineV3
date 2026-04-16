@@ -110,22 +110,42 @@ FragmentOutput FragmentMain(VertexOutput vertexInput, PrimitiveOutput primitiveI
 
 // ==================== Compute Shader ====================
 [shader("compute")]
-[numthreads(8, 8, 1)]
+[numthreads(16, 16, 1)]
 void VisibilityBufferResolveMain(uint3 dtid : SV_DispatchThreadID, uniform VisibilityBufferResolvePushConstant pc)
 {
     if (dtid.x >= pc.extents.x || dtid.y >= pc.extents.y) {
         return;
     }
 
-    // uint2 vis = rdgTextures[pc.normalIndex].Load(int3(dtid.xy, 0)).xy;
+    uint2 vis = rdgTexturesUInt2[pc.visibilityBufferIndex].Load(int3(dtid.xy, 0)).xy;
 
-    // 3. Early out if pixel is background (visibility == 0 or sentinel)
+    if (vis.x == 0 && vis.y == 0) {
+        return;
+    }
 
-    // 4. Fetch instance -> primitive -> model, material
+    uint meshletIndex = vis.x >> 8;
+    uint triangleIndexWithinMeshlet = vis.x & 0xFF;
+    uint instanceIndex = vis.y;
 
-    // 5. Fetch meshlet -> get meshletTriangleOffset + triangle_id -> fetch packed triangle -> unpack idx0, idx1, idx2
+    Instance inst = pc.instanceBuffer[instanceIndex];
+    Primitive prim = pc.primitiveBuffer[inst.primitiveIndex];
+    Model m = pc.modelBuffer[inst.modelIndex];
+    // material here for bucketing? Later.
 
-    // 6. Fetch three vertices from vertexBuffer via meshletVerticesBuffer indirection
+
+    Meshlet meshlet = pc.meshletBuffer[meshletIndex];
+    uint triangleIndex = meshlet.meshletTriangleOffset + triangleIndexWithinMeshlet;
+
+    uint packedTriangle = pc.meshletTrianglesBuffer[triangleIndex];
+    uint idx0 = (packedTriangle >> 0) & 0xFF;
+    uint idx1 = (packedTriangle >> 8) & 0xFF;
+    uint idx2 = (packedTriangle >> 16) & 0xFF;
+    uint v0i = pc.meshletVerticesBuffer[meshlet.meshletVertexOffset + idx0];
+    uint v1i = pc.meshletVerticesBuffer[meshlet.meshletVertexOffset + idx1];
+    uint v2i = pc.meshletVerticesBuffer[meshlet.meshletVertexOffset + idx2];
+    Vertex v0 = pc.vertexBuffer[v0i];
+    Vertex v1 = pc.vertexBuffer[v1i];
+    Vertex v2 = pc.vertexBuffer[v2i];
 
     // 7. Transform three vertex positions to clip space via model matrix + viewProj
 

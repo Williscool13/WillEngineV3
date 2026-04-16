@@ -56,7 +56,7 @@ void ComputeGTAODepthPrepass(uniform GTAODepthPrepassPushConstant pc, uint3 dtid
 
     float2 uv = float2(screenPos) * pc.sceneData[pc.sceneDataIndex].texelSize;
 
-    float4 depths = rdgTextures[pc.inputDepth].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], uv, int2(1, 1));
+    float4 depths = rdgTexturesFloat[pc.inputDepth].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], uv, int2(1, 1));
     float rDepth0 = depths.w;
     float rDepth1 = depths.z;
     float rDepth2 = depths.x;
@@ -197,8 +197,8 @@ void ComputeGTAOMain(uniform GTAOMainPushConstant pc, uint3 dtid : SV_DispatchTh
     float2 uv = (float2(screenPos) + 0.5) * pc.sceneData[pc.sceneDataIndex].texelSize;
 
     float2 gatherCenter = float2(screenPos) * pc.sceneData[pc.sceneDataIndex].texelSize;
-    float4 valuesUL = rdgTextures[pc.prefilteredDepthIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], gatherCenter);
-    float4 valuesBR = rdgTextures[pc.prefilteredDepthIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], gatherCenter, int2(1, 1));
+    float4 valuesUL = rdgTexturesFloat[pc.prefilteredDepthIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], gatherCenter);
+    float4 valuesBR = rdgTexturesFloat[pc.prefilteredDepthIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], gatherCenter, int2(1, 1));
 
     float viewSpaceZM = valuesUL.y;
     const float viewSpaceZL = valuesUL.x;
@@ -211,7 +211,7 @@ void ComputeGTAOMain(uniform GTAOMainPushConstant pc, uint3 dtid : SV_DispatchTh
     float packedEdges = XeGTAO_PackEdges(edges);
     rdgStorageFloat[pc.edgeDataIndex][screenPos] = packedEdges;
 
-    float3 viewNormal = rdgTextures[pc.normalBufferIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], uv, 0).rgb;
+    float3 viewNormal = rdgTexturesFloat4[pc.normalBufferIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], uv, 0).rgb;
     viewNormal = viewNormal * 2.0 - 1.0;
 
     // Move center pixel slightly towards camera to avoid precision artifacts
@@ -302,11 +302,11 @@ void ComputeGTAOMain(uniform GTAOMainPushConstant pc, uint3 dtid : SV_DispatchTh
             sampleOffset = round(sampleOffset) * pc.sceneData[pc.sceneDataIndex].texelSize;
 
             float2 sampleScreenPos0 = uv + sampleOffset;
-            float SZ0 = rdgTextures[pc.prefilteredDepthIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], sampleScreenPos0, mipLevel).r;
+            float SZ0 = rdgTexturesFloat[pc.prefilteredDepthIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], sampleScreenPos0, mipLevel).r;
             float3 samplePos0 = CheapReconstructViewSpacePosition(pc.sceneData[pc.sceneDataIndex].ndcToViewMul, pc.sceneData[pc.sceneDataIndex].ndcToViewAdd, sampleScreenPos0, SZ0);
 
             float2 sampleScreenPos1 = uv - sampleOffset;
-            float SZ1 = rdgTextures[pc.prefilteredDepthIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], sampleScreenPos1, mipLevel).r;
+            float SZ1 = rdgTexturesFloat[pc.prefilteredDepthIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], sampleScreenPos1, mipLevel).r;
             float3 samplePos1 = CheapReconstructViewSpacePosition(pc.sceneData[pc.sceneDataIndex].ndcToViewMul, pc.sceneData[pc.sceneDataIndex].ndcToViewAdd, sampleScreenPos1, SZ1);
 
             float3 sampleDelta0 = samplePos0 - vPos;
@@ -392,14 +392,14 @@ void ComputeGTAODenoise(uniform GTAODenoisePushConstant pc, uint3 dtid : SV_Disp
     // Gather edge and AO data
     float2 gatherCenter = float2(screenPos) * pc.sceneData[pc.sceneDataIndex].texelSize;
 
-    float4 edgesQ0 = rdgTextures[pc.edgeDataIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], gatherCenter, int2(0, 0));
-    float4 edgesQ1 = rdgTextures[pc.edgeDataIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], gatherCenter, int2(2, 0));
-    float4 edgesQ2 = rdgTextures[pc.edgeDataIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], gatherCenter, int2(1, 2));
+    float4 edgesQ0 = rdgTexturesFloat[pc.edgeDataIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], gatherCenter, int2(0, 0));
+    float4 edgesQ1 = rdgTexturesFloat[pc.edgeDataIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], gatherCenter, int2(2, 0));
+    float4 edgesQ2 = rdgTexturesFloat[pc.edgeDataIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], gatherCenter, int2(1, 2));
 
-    float4 visQ0 = rdgTextures[pc.rawAOIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], gatherCenter, int2(0, 0));
-    float4 visQ1 = rdgTextures[pc.rawAOIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], gatherCenter, int2(2, 0));
-    float4 visQ2 = rdgTextures[pc.rawAOIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], gatherCenter, int2(0, 2));
-    float4 visQ3 = rdgTextures[pc.rawAOIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], gatherCenter, int2(2, 2));
+    float4 visQ0 = rdgTexturesFloat[pc.rawAOIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], gatherCenter, int2(0, 0));
+    float4 visQ1 = rdgTexturesFloat[pc.rawAOIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], gatherCenter, int2(2, 0));
+    float4 visQ2 = rdgTexturesFloat[pc.rawAOIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], gatherCenter, int2(0, 2));
+    float4 visQ3 = rdgTexturesFloat[pc.rawAOIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], gatherCenter, int2(2, 2));
 
     for (int side = 0; side < 2; side++) {
         const int2 sideScreenPos = int2(screenPos.x + side, screenPos.y);

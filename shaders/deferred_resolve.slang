@@ -10,15 +10,15 @@ void ComputeMain(uniform DeferredResolvePushConstant pc, uint3 threadID : SV_Dis
     if (threadID.x >= pc.sceneData[pc.sceneDataIndex].mainRenderTargetSize.x || threadID.y >= pc.sceneData[pc.sceneDataIndex].mainRenderTargetSize.y) return;
 
     float2 uv = (float2(threadID.xy) + 0.5) / float2(pc.sceneData[pc.sceneDataIndex].mainRenderTargetSize);
-    float4 albedo = rdgTextures[pc.albedoIndex].Load(int3(threadID.xy, 0));
-    float depth = rdgTextures[pc.depthIndex].Load(int3(threadID.xy, 0)).r;
+    float4 albedo = rdgTexturesFloat4[pc.albedoIndex].Load(int3(threadID.xy, 0));
+    float depth = rdgTexturesFloat[pc.depthIndex].Load(int3(threadID.xy, 0)).r;
     if (depth <= 0.0) {
         return;
     }
-    float3 viewNormal = rdgTextures[pc.normalIndex].Load(int3(threadID.xy, 0)).xyz;
-    float4 pbrData = rdgTextures[pc.pbrIndex].Load(int3(threadID.xy, 0));
-    float4 emissiveData = rdgTextures[pc.emissiveIndex].Load(int3(threadID.xy, 0));
-    float2 shadows = rdgTextures[pc.shadowsIndex].Load(int3(threadID.xy, 0)).xy;
+    float3 viewNormal = rdgTexturesFloat4[pc.normalIndex].Load(int3(threadID.xy, 0)).xyz;
+    float4 pbrData = rdgTexturesFloat4[pc.pbrIndex].Load(int3(threadID.xy, 0));
+    float4 emissiveData = rdgTexturesFloat4[pc.emissiveIndex].Load(int3(threadID.xy, 0));
+    float2 shadows = rdgTexturesFloat2[pc.shadowsIndex].Load(int3(threadID.xy, 0)).xy;
 
     float viewSpaceDepth = ScreenToViewSpaceDepth(depth, pc.sceneData[pc.sceneDataIndex].depthLinearizeMult, pc.sceneData[pc.sceneDataIndex].depthLinearizeAdd);
     float3 viewPosition = CheapReconstructViewSpacePosition(pc.sceneData[pc.sceneDataIndex].ndcToViewMul, pc.sceneData[pc.sceneDataIndex].ndcToViewAdd, uv, viewSpaceDepth);

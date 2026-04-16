@@ -49,6 +49,7 @@ RenderThread::RenderThread(Core::MemoryManager& memoryManager, Core::FrameSync* 
     : memoryManager(&memoryManager), window(window), engineRenderSynchronization(engineRenderSynchronization), scheduler(scheduler)
 {
     Core::TlsfAllocator& renderAlloc = memoryManager.Render();
+    Core::TlsfAllocator& assetScratchAlloc = memoryManager.AssetsScratch();
 
     context = new(memoryManager.RenderAllocRaw(sizeof(VulkanContext))) VulkanContext(window, memoryManager);
     swapchain = new(memoryManager.RenderAllocRaw(sizeof(Swapchain))) Swapchain(context, width, height);
@@ -58,7 +59,7 @@ RenderThread::RenderThread(Core::MemoryManager& memoryManager, Core::FrameSync* 
         resourceManager->bindlessSamplerTextureDescriptorBuffer.descriptorSetLayout.handle,
         resourceManager->bindlessRDGTransientDescriptorBuffer.descriptorSetLayout.handle
     };
-    pipelineManager = new(memoryManager.RenderAllocRaw(sizeof(PipelineManager))) PipelineManager(context, renderAlloc, layouts);
+    pipelineManager = new(memoryManager.RenderAllocRaw(sizeof(PipelineManager))) PipelineManager(context, renderAlloc, assetScratchAlloc, layouts);
     imgui = new(memoryManager.RenderAllocRaw(sizeof(ImguiWrapper))) ImguiWrapper(context, window, Core::FRAME_BUFFER_COUNT, swapchain->format, pipelineManager->GetPipelineCache());
 
     tempBufferBarriers = Core::Vector<VkBufferMemoryBarrier2>(&renderAlloc, Core::AllocTag::Render);
@@ -684,23 +685,26 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                         viewAspect = VK_IMAGE_ASPECT_STENCIL_BIT;
                     }
 
-                    StorageImageType storageType = GetStorageImageType(dims.format, viewAspect);
+                    ImageChannelType storageType = GetImageChannelType(dims.format, viewAspect);
                     uint32_t textureArrayIndex{3};
                     switch (storageType) {
-                        case StorageImageType::Float4:
+                        case ImageChannelType::Float4:
                             textureArrayIndex = 0;
                             break;
-                        case StorageImageType::Float2:
+                        case ImageChannelType::Float2:
                             textureArrayIndex = 1;
                             break;
-                        case StorageImageType::Float:
+                        case ImageChannelType::Float:
                             textureArrayIndex = 2;
                             break;
-                        case StorageImageType::UInt4:
-                            textureArrayIndex = 0;
+                        case ImageChannelType::UInt4:
+                            textureArrayIndex = 3;
                             break;
-                        case StorageImageType::UInt:
-                            textureArrayIndex = 2;
+                        case ImageChannelType::UInt2:
+                            textureArrayIndex = 4;
+                            break;
+                        case ImageChannelType::UInt:
+                            textureArrayIndex = 5;
                             break;
                     }
 

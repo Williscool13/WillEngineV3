@@ -59,9 +59,9 @@ float3 LottesTonemapSimple(float3 c) {
 [numthreads(16, 16, 1)]
 void ComputeSDRTonemap(uniform TonemapSDRPushConstant pc, uint3 dtid : SV_DispatchThreadID) {
     int2 pixelCoord = int2(dtid.xy);
-    float3 sceneColor = rdgTextures[pc.srcImageIndex].Load(int3(pixelCoord, 0)).rgb;
+    float3 sceneColor = rdgTexturesFloat4[pc.srcImageIndex].Load(int3(pixelCoord, 0)).rgb;
 
-    float3 bloom = rdgTextures[pc.bloomImageIndex].Load(int3(pixelCoord, 0)).rgb;
+    float3 bloom = rdgTexturesFloat4[pc.bloomImageIndex].Load(int3(pixelCoord, 0)).rgb;
     float3 hdrColor = sceneColor + bloom * pc.bloomIntensity;
 
     float avgLuminance = pc.luminanceBufferAddress[0];
@@ -115,7 +115,7 @@ void ComputeBuildHistogramExposure(uniform HistogramBuildPushConstant pc, uint3 
     GroupMemoryBarrierWithGroupSync();
 
     if (tid.x < pc.width && tid.y < pc.height) {
-        float3 hdrColor = rdgTextures[pc.hdrImageIndex].Load(int3(tid.xy, 0)).rgb;
+        float3 hdrColor = rdgTexturesFloat4[pc.hdrImageIndex].Load(int3(tid.xy, 0)).rgb;
         uint binIndex = HDRToHistogramBin(hdrColor, pc.minLogLuminance, pc.oneOverLogLuminanceRange);
         InterlockedAdd(g_sharedHistogram[binIndex], 1);
     }
@@ -173,7 +173,7 @@ void ComputeMotionBlurTileMax(uniform MotionBlurTileVelocityPushConstant pc, uin
             if (any(pixelCoord >= pc.velocityBufferSize))
                 continue;
 
-            float2 objectVelocity = rdgTextures[pc.velocityBufferIndex].Load(int3(pixelCoord, 0)).ba;
+            float2 objectVelocity = rdgTexturesFloat4[pc.velocityBufferIndex].Load(int3(pixelCoord, 0)).ba;
             float velocityLengthSq = dot(objectVelocity, objectVelocity);
 
             if (velocityLengthSq > maxVelocityLengthSq) {
@@ -205,7 +205,7 @@ void ComputeMotionBlurNeighborMax(uniform MotionBlurNeighborMaxPushConstant pc, 
 
             sampleCoord = clamp(sampleCoord, int2(0, 0), int2(pc.tileBufferSize) - int2(1, 1));
 
-            float2 velocity = rdgTextures[pc.tileMaxIndex].Load(int3(sampleCoord, 0)).rg;
+            float2 velocity = rdgTexturesFloat2[pc.tileMaxIndex].Load(int3(sampleCoord, 0)).rg;
             float velocityLengthSq = dot(velocity, velocity);
 
             if (velocityLengthSq > maxVelocityLengthSq) {
@@ -237,9 +237,9 @@ void ComputeMotionBlurReconstruction(uniform MotionBlurReconstructionPushConstan
     float2 uv = (float2(pixelCoord) + 0.5) / pc.srcBufferSize;
 
     uint2 tileCoord = pixelCoord / POST_PROCESS_MOTION_BLUR_TILE_SIZE;
-    float2 neighborMaxVelocity = rdgTextures[pc.tileNeighborMaxIndex].Load(int3(tileCoord, 0)).rg * 0.5;
+    float2 neighborMaxVelocity = rdgTexturesFloat2[pc.tileNeighborMaxIndex].Load(int3(tileCoord, 0)).rg * 0.5;
     float neighborMaxLen = length(neighborMaxVelocity * pc.srcBufferSize);
-    float3 centerColor = rdgTextures[pc.sceneColorIndex].Load(int3(pixelCoord, 0)).rgb;
+    float3 centerColor = rdgTexturesFloat4[pc.sceneColorIndex].Load(int3(pixelCoord, 0)).rgb;
 
     float blurLen = neighborMaxLen * pc.velocityScale;
     if (blurLen < 0.5) {
@@ -247,8 +247,8 @@ void ComputeMotionBlurReconstruction(uniform MotionBlurReconstructionPushConstan
         return;
     }
 
-    float2 objectVelocity = rdgTextures[pc.velocityBufferIndex].Load(int3(pixelCoord, 0)).ba * 0.5;
-    float centerDepth = rdgTextures[pc.depthBufferIndex].Load(int3(pixelCoord, 0)).r;
+    float2 objectVelocity = rdgTexturesFloat4[pc.velocityBufferIndex].Load(int3(pixelCoord, 0)).ba * 0.5;
+    float centerDepth = rdgTexturesFloat[pc.depthBufferIndex].Load(int3(pixelCoord, 0)).r;
     float centerSpreadLen = length(objectVelocity * pc.velocityScale * pc.srcBufferSize);
 
     float3 colorAccum = float3(0.0, 0.0, 0.0);
@@ -267,9 +267,9 @@ void ComputeMotionBlurReconstruction(uniform MotionBlurReconstructionPushConstan
             if (any(sampleUV < 0.0) || any(sampleUV > 1.0)) continue;
 
             int2 sampleCoord = int2(sampleUV * pc.srcBufferSize);
-            float3 sampleColor = rdgTextures[pc.sceneColorIndex].Load(int3(sampleCoord, 0)).rgb;
-            float sampleDepth = rdgTextures[pc.depthBufferIndex].Load(int3(sampleCoord, 0)).r;
-            float2 sampleObjectVelocity = rdgTextures[pc.velocityBufferIndex].Load(int3(sampleCoord, 0)).ba * 0.5;
+            float3 sampleColor = rdgTexturesFloat4[pc.sceneColorIndex].Load(int3(sampleCoord, 0)).rgb;
+            float sampleDepth = rdgTexturesFloat[pc.depthBufferIndex].Load(int3(sampleCoord, 0)).r;
+            float2 sampleObjectVelocity = rdgTexturesFloat4[pc.velocityBufferIndex].Load(int3(sampleCoord, 0)).ba * 0.5;
             float sampleSpreadLen = length(sampleObjectVelocity * pc.velocityScale * pc.srcBufferSize);
 
             float2 d = DepthCmp(centerDepth, sampleDepth, pc.depthScale);
@@ -312,7 +312,7 @@ void ComputeBloomThreshold(uniform BloomThresholdPushConstant pc, uint3 dtid : S
         return;
     }
 
-    float3 color = rdgTextures[pc.inputColorIndex].Load(int3(pixelCoord, 0)).rgb;
+    float3 color = rdgTexturesFloat4[pc.inputColorIndex].Load(int3(pixelCoord, 0)).rgb;
     float3 thresholded = ApplyThreshold(color, pc.threshold, pc.softThreshold);
     rdgStorageFloat4[pc.outputIndex][pixelCoord] = float4(thresholded, 1.0);
 }
@@ -329,29 +329,29 @@ void ComputeBloomDownsample(uniform BloomDownsamplePushConstant pc, uint3 dtid :
 
     uint2 inputSize;
     uint numMips;
-    rdgTextures[pc.inputIndex].GetDimensions(0, inputSize.x, inputSize.y, numMips);
+    rdgTexturesFloat4[pc.inputIndex].GetDimensions(0, inputSize.x, inputSize.y, numMips);
 
     inputSize = inputSize >> pc.srcMipLevel;
     float2 texelSize = 1.0 / float2(inputSize);
 
     // 13-tap filter (Jimenez 2014)
-    float3 A = rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2(-2, -2) * texelSize, pc.srcMipLevel).rgb;
-    float3 B = rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 0, -2) * texelSize, pc.srcMipLevel).rgb;
-    float3 C = rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 2, -2) * texelSize, pc.srcMipLevel).rgb;
+    float3 A = rdgTexturesFloat4[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2(-2, -2) * texelSize, pc.srcMipLevel).rgb;
+    float3 B = rdgTexturesFloat4[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 0, -2) * texelSize, pc.srcMipLevel).rgb;
+    float3 C = rdgTexturesFloat4[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 2, -2) * texelSize, pc.srcMipLevel).rgb;
 
-    float3 D = rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2(-1, -1) * texelSize, pc.srcMipLevel).rgb;
-    float3 E = rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 1, -1) * texelSize, pc.srcMipLevel).rgb;
+    float3 D = rdgTexturesFloat4[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2(-1, -1) * texelSize, pc.srcMipLevel).rgb;
+    float3 E = rdgTexturesFloat4[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 1, -1) * texelSize, pc.srcMipLevel).rgb;
 
-    float3 F = rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2(-2,  0) * texelSize, pc.srcMipLevel).rgb;
-    float3 G = rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 0,  0) * texelSize, pc.srcMipLevel).rgb;
-    float3 H = rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 2,  0) * texelSize, pc.srcMipLevel).rgb;
+    float3 F = rdgTexturesFloat4[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2(-2,  0) * texelSize, pc.srcMipLevel).rgb;
+    float3 G = rdgTexturesFloat4[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 0,  0) * texelSize, pc.srcMipLevel).rgb;
+    float3 H = rdgTexturesFloat4[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 2,  0) * texelSize, pc.srcMipLevel).rgb;
 
-    float3 I = rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2(-1,  1) * texelSize, pc.srcMipLevel).rgb;
-    float3 J = rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 1,  1) * texelSize, pc.srcMipLevel).rgb;
+    float3 I = rdgTexturesFloat4[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2(-1,  1) * texelSize, pc.srcMipLevel).rgb;
+    float3 J = rdgTexturesFloat4[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 1,  1) * texelSize, pc.srcMipLevel).rgb;
 
-    float3 K = rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2(-2,  2) * texelSize, pc.srcMipLevel).rgb;
-    float3 L = rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 0,  2) * texelSize, pc.srcMipLevel).rgb;
-    float3 M = rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 2,  2) * texelSize, pc.srcMipLevel).rgb;
+    float3 K = rdgTexturesFloat4[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2(-2,  2) * texelSize, pc.srcMipLevel).rgb;
+    float3 L = rdgTexturesFloat4[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 0,  2) * texelSize, pc.srcMipLevel).rgb;
+    float3 M = rdgTexturesFloat4[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 2,  2) * texelSize, pc.srcMipLevel).rgb;
 
     // Weighted average (weights from Jimenez presentation)
     float3 result =
@@ -380,29 +380,29 @@ void ComputeBloomUpsample(uniform BloomUpsamplePushConstant pc, uint3 dtid : SV_
     // Lower mip size
     uint2 lowerSize;
     uint numMips;
-    rdgTextures[pc.inputIndex].GetDimensions(0, lowerSize.x, lowerSize.y, numMips);
+    rdgTexturesFloat4[pc.inputIndex].GetDimensions(0, lowerSize.x, lowerSize.y, numMips);
     lowerSize = lowerSize >> pc.lowerMipLevel;
     float2 texelSize = pc.radius / float2(lowerSize);
 
     // 9-tap tent filter (3x3 with bilinear, weights sum to 16)
     float3 result = float3(0, 0, 0);
 
-    result += rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2(-1, -1) * texelSize, pc.lowerMipLevel).rgb * 1.0;
-    result += rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 0, -1) * texelSize, pc.lowerMipLevel).rgb * 2.0;
-    result += rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 1, -1) * texelSize, pc.lowerMipLevel).rgb * 1.0;
+    result += rdgTexturesFloat4[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2(-1, -1) * texelSize, pc.lowerMipLevel).rgb * 1.0;
+    result += rdgTexturesFloat4[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 0, -1) * texelSize, pc.lowerMipLevel).rgb * 2.0;
+    result += rdgTexturesFloat4[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 1, -1) * texelSize, pc.lowerMipLevel).rgb * 1.0;
 
-    result += rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2(-1,  0) * texelSize, pc.lowerMipLevel).rgb * 2.0;
-    result += rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 0,  0) * texelSize, pc.lowerMipLevel).rgb * 4.0;
-    result += rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 1,  0) * texelSize, pc.lowerMipLevel).rgb * 2.0;
+    result += rdgTexturesFloat4[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2(-1,  0) * texelSize, pc.lowerMipLevel).rgb * 2.0;
+    result += rdgTexturesFloat4[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 0,  0) * texelSize, pc.lowerMipLevel).rgb * 4.0;
+    result += rdgTexturesFloat4[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 1,  0) * texelSize, pc.lowerMipLevel).rgb * 2.0;
 
-    result += rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2(-1,  1) * texelSize, pc.lowerMipLevel).rgb * 1.0;
-    result += rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 0,  1) * texelSize, pc.lowerMipLevel).rgb * 2.0;
-    result += rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 1,  1) * texelSize, pc.lowerMipLevel).rgb * 1.0;
+    result += rdgTexturesFloat4[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2(-1,  1) * texelSize, pc.lowerMipLevel).rgb * 1.0;
+    result += rdgTexturesFloat4[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 0,  1) * texelSize, pc.lowerMipLevel).rgb * 2.0;
+    result += rdgTexturesFloat4[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 1,  1) * texelSize, pc.lowerMipLevel).rgb * 1.0;
 
     result /= 16.0;
 
     // Add higher mip (current level we're upsampling to)
-    float3 higher = rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv, pc.higherMipLevel).rgb;
+    float3 higher = rdgTexturesFloat4[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv, pc.higherMipLevel).rgb;
     result += higher;
 
     rdgStorageFloat4[pc.outputIndex][pixelCoord] = float4(result, 1.0);
@@ -425,9 +425,9 @@ void ComputeVignetteAberration(uniform VignetteChromaticAberrationPushConstant p
     float2 uvR = uv + direction * aberrationOffset;
     float2 uvG = uv;
     float2 uvB = uv - direction * aberrationOffset;
-    float r = rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uvR, 0).r;
-    float g = rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uvG, 0).g;
-    float b = rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uvB, 0).b;
+    float r = rdgTexturesFloat4[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uvR, 0).r;
+    float g = rdgTexturesFloat4[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uvG, 0).g;
+    float b = rdgTexturesFloat4[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uvB, 0).b;
     float3 color = float3(r, g, b);
 
     // Vignette
@@ -462,7 +462,7 @@ void ComputeFilmGrain(uniform FilmGrainPushConstant pc, uint3 dtid : SV_Dispatch
     float noise = FilmGrainHash(grainUV);
     noise = noise * 2.0 - 1.0;
 
-    float3 color = rdgTextures[pc.inputIndex].Load(int3(pixelCoord, 0)).rgb;
+    float3 color = rdgTexturesFloat4[pc.inputIndex].Load(int3(pixelCoord, 0)).rgb;
     color += noise * pc.grainStrength;
     rdgStorageFloat4[pc.outputIndex][pixelCoord] = float4(color, 1.0);
 }
@@ -478,11 +478,11 @@ void ComputeSharpening(uniform SharpeningPushConstant pc, uint3 dtid : SV_Dispat
     float2 texelSize = 1.0 / pc.outputExtent;
 
     // Sample center and cross neighbors
-    float3 b = rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 0, -1) * texelSize, 0).rgb;
-    float3 d = rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2(-1,  0) * texelSize, 0).rgb;
-    float3 e = rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv, 0).rgb;
-    float3 f = rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 1,  0) * texelSize, 0).rgb;
-    float3 h = rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 0,  1) * texelSize, 0).rgb;
+    float3 b = rdgTexturesFloat4[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 0, -1) * texelSize, 0).rgb;
+    float3 d = rdgTexturesFloat4[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2(-1,  0) * texelSize, 0).rgb;
+    float3 e = rdgTexturesFloat4[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv, 0).rgb;
+    float3 f = rdgTexturesFloat4[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 1,  0) * texelSize, 0).rgb;
+    float3 h = rdgTexturesFloat4[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 0,  1) * texelSize, 0).rgb;
 
     // Simple unsharp mask approach
     float3 blurred = (b + d + f + h) * 0.25;
@@ -500,15 +500,15 @@ void ComputeSharpening(uniform SharpeningPushConstant pc, uint3 dtid : SV_Dispat
     float2 uv = (dtid.xy + 0.5) / pc.outputExtent;
     float2 texelSize = 1.0 / pc.outputExtent;
 
-    float3 a = rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2(-1, -1) * texelSize, 0).rgb;
-    float3 b = rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 0, -1) * texelSize, 0).rgb;
-    float3 c = rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 1, -1) * texelSize, 0).rgb;
-    float3 d = rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2(-1,  0) * texelSize, 0).rgb;
-    float3 e = rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 0,  0) * texelSize, 0).rgb;
-    float3 f = rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 1,  0) * texelSize, 0).rgb;
-    float3 g = rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2(-1,  1) * texelSize, 0).rgb;
-    float3 h = rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 0,  1) * texelSize, 0).rgb;
-    float3 i = rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 1,  1) * texelSize, 0).rgb;
+    float3 a = rdgTexturesFloat4[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2(-1, -1) * texelSize, 0).rgb;
+    float3 b = rdgTexturesFloat4[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 0, -1) * texelSize, 0).rgb;
+    float3 c = rdgTexturesFloat4[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 1, -1) * texelSize, 0).rgb;
+    float3 d = rdgTexturesFloat4[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2(-1,  0) * texelSize, 0).rgb;
+    float3 e = rdgTexturesFloat4[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 0,  0) * texelSize, 0).rgb;
+    float3 f = rdgTexturesFloat4[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 1,  0) * texelSize, 0).rgb;
+    float3 g = rdgTexturesFloat4[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2(-1,  1) * texelSize, 0).rgb;
+    float3 h = rdgTexturesFloat4[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 0,  1) * texelSize, 0).rgb;
+    float3 i = rdgTexturesFloat4[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( 1,  1) * texelSize, 0).rgb;
     float3 minRGB = min(min(min(d, e), min(f, b)), h);
     float3 maxRGB = max(max(max(d, e), max(f, b)), h);
 
@@ -534,7 +534,7 @@ void ComputeColorGrading(uniform ColorGradingPushConstant pc, uint3 dtid : SV_Di
     if (any(dtid.xy >= pc.outputExtent)) return;
 
     uint2 pixelCoord = dtid.xy;
-    float3 color = rdgTextures[pc.inputIndex].Load(int3(pixelCoord, 0)).rgb;
+    float3 color = rdgTexturesFloat4[pc.inputIndex].Load(int3(pixelCoord, 0)).rgb;
 
     color *= exp2(pc.exposure);
 
@@ -615,7 +615,7 @@ void ComputePaniniProjection(uniform PaniniProjectionPushConstant pc, uint3 dtid
         float2 sampleUV = ndc * 0.5f + 0.5f;
 
         if (all(sampleUV >= 0.0f) && all(sampleUV <= 1.0f)) {
-            color = rdgTextures[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], sampleUV, 0).rgb;
+            color = rdgTexturesFloat4[pc.inputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], sampleUV, 0).rgb;
         }
     }
 

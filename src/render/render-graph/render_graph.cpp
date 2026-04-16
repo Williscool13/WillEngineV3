@@ -357,16 +357,56 @@ void RenderGraph::Compile(int64_t currentFrame)
     for (auto& phys : physicalResources) {
         if (phys.NeedsDescriptorWrite() && phys.imageView != VK_NULL_HANDLE) {
             if (phys.NeedsDescriptorWrite() && phys.imageView != VK_NULL_HANDLE) {
-                phys.sampledDescriptorHandle = transientSampledImageHandleAllocator.Add();
-                assert(phys.sampledDescriptorHandle.IsValid());
-                resourceManager->bindlessRDGTransientDescriptorBuffer.WriteSampledImageDescriptor(
-                    phys.sampledDescriptorHandle.index, {nullptr, phys.imageView, VK_IMAGE_LAYOUT_GENERAL}
-                );
+                ImageChannelType sampledChannelType = GetImageChannelType(phys.dimensions.format, phys.aspect);
+                switch (sampledChannelType) {
+                    case ImageChannelType::Float4:
+                        phys.sampledDescriptorHandle = transientSampledImageHandleAllocator.Add();
+                        assert(phys.sampledDescriptorHandle.IsValid());
+                        resourceManager->bindlessRDGTransientDescriptorBuffer.WriteSampledImageDescriptor(
+                            phys.sampledDescriptorHandle.index, {nullptr, phys.imageView, VK_IMAGE_LAYOUT_GENERAL}
+                        );
+                        break;
+                    case ImageChannelType::Float2:
+                        phys.sampledDescriptorHandle = transientSampledFloat2HandleAllocator.Add();
+                        assert(phys.sampledDescriptorHandle.IsValid());
+                        resourceManager->bindlessRDGTransientDescriptorBuffer.WriteSampledFloat2Descriptor(
+                            phys.sampledDescriptorHandle.index, {nullptr, phys.imageView, VK_IMAGE_LAYOUT_GENERAL}
+                        );
+                        break;
+                    case ImageChannelType::Float:
+                        phys.sampledDescriptorHandle = transientSampledFloatHandleAllocator.Add();
+                        assert(phys.sampledDescriptorHandle.IsValid());
+                        resourceManager->bindlessRDGTransientDescriptorBuffer.WriteSampledFloatDescriptor(
+                            phys.sampledDescriptorHandle.index, {nullptr, phys.imageView, VK_IMAGE_LAYOUT_GENERAL}
+                        );
+                        break;
+                    case ImageChannelType::UInt4:
+                        phys.sampledDescriptorHandle = transientSampledUInt4HandleAllocator.Add();
+                        assert(phys.sampledDescriptorHandle.IsValid());
+                        resourceManager->bindlessRDGTransientDescriptorBuffer.WriteSampledUInt4Descriptor(
+                            phys.sampledDescriptorHandle.index, {nullptr, phys.imageView, VK_IMAGE_LAYOUT_GENERAL}
+                        );
+                        break;
+                    case ImageChannelType::UInt2:
+                        phys.sampledDescriptorHandle = transientSampledUInt2HandleAllocator.Add();
+                        assert(phys.sampledDescriptorHandle.IsValid());
+                        resourceManager->bindlessRDGTransientDescriptorBuffer.WriteSampledUInt2Descriptor(
+                            phys.sampledDescriptorHandle.index, {nullptr, phys.imageView, VK_IMAGE_LAYOUT_GENERAL}
+                        );
+                        break;
+                    case ImageChannelType::UInt:
+                        phys.sampledDescriptorHandle = transientSampledUIntHandleAllocator.Add();
+                        assert(phys.sampledDescriptorHandle.IsValid());
+                        resourceManager->bindlessRDGTransientDescriptorBuffer.WriteSampledUIntDescriptor(
+                            phys.sampledDescriptorHandle.index, {nullptr, phys.imageView, VK_IMAGE_LAYOUT_GENERAL}
+                        );
+                        break;
+                }
 
                 if (phys.depthOnlyView != VK_NULL_HANDLE) {
-                    phys.depthOnlyDescriptorHandle = transientSampledImageHandleAllocator.Add();
+                    phys.depthOnlyDescriptorHandle = transientSampledFloatHandleAllocator.Add();
                     assert(phys.depthOnlyDescriptorHandle.IsValid());
-                    resourceManager->bindlessRDGTransientDescriptorBuffer.WriteSampledImageDescriptor(
+                    resourceManager->bindlessRDGTransientDescriptorBuffer.WriteSampledFloatDescriptor(
                         phys.depthOnlyDescriptorHandle.index, {nullptr, phys.depthOnlyView, VK_IMAGE_LAYOUT_GENERAL}
                     );
                 }
@@ -380,10 +420,10 @@ void RenderGraph::Compile(int64_t currentFrame)
                     );
                 }
 
-                StorageImageType storageType = GetStorageImageType(phys.dimensions.format, phys.aspect);
+                ImageChannelType storageType = GetImageChannelType(phys.dimensions.format, phys.aspect);
                 for (uint32_t mip = 0; mip < phys.dimensions.levels; ++mip) {
                     switch (storageType) {
-                        case StorageImageType::Float4:
+                        case ImageChannelType::Float4:
                         {
                             phys.storageMipDescriptorHandles[mip] = transientStorageFloat4HandleAllocator.Add();
                             assert(phys.storageMipDescriptorHandles[mip].IsValid());
@@ -393,7 +433,7 @@ void RenderGraph::Compile(int64_t currentFrame)
                             );
                             break;
                         }
-                        case StorageImageType::Float2:
+                        case ImageChannelType::Float2:
                         {
                             phys.storageMipDescriptorHandles[mip] = transientStorageFloat2HandleAllocator.Add();
                             assert(phys.storageMipDescriptorHandles[mip].IsValid());
@@ -403,7 +443,7 @@ void RenderGraph::Compile(int64_t currentFrame)
                             );
                             break;
                         }
-                        case StorageImageType::Float:
+                        case ImageChannelType::Float:
                         {
                             phys.storageMipDescriptorHandles[mip] = transientStorageFloatHandleAllocator.Add();
                             assert(phys.storageMipDescriptorHandles[mip].IsValid());
@@ -413,7 +453,7 @@ void RenderGraph::Compile(int64_t currentFrame)
                             );
                             break;
                         }
-                        case StorageImageType::UInt4:
+                        case ImageChannelType::UInt4:
                         {
                             phys.storageMipDescriptorHandles[mip] = transientStorageUInt4HandleAllocator.Add();
                             assert(phys.storageMipDescriptorHandles[mip].IsValid());
@@ -423,7 +463,7 @@ void RenderGraph::Compile(int64_t currentFrame)
                             );
                             break;
                         }
-                        case StorageImageType::UInt2:
+                        case ImageChannelType::UInt2:
                         {
                             phys.storageMipDescriptorHandles[mip] = transientStorageUInt2HandleAllocator.Add();
                             assert(phys.storageMipDescriptorHandles[mip].IsValid());
@@ -433,7 +473,7 @@ void RenderGraph::Compile(int64_t currentFrame)
                             );
                             break;
                         }
-                        case StorageImageType::UInt:
+                        case ImageChannelType::UInt:
                         {
                             phys.storageMipDescriptorHandles[mip] = transientStorageUIntHandleAllocator.Add();
                             assert(phys.storageMipDescriptorHandles[mip].IsValid());
@@ -829,7 +869,10 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
             vkCmdBeginDebugUtilsLabelEXT(cmd, &label);
             pass->executeFunc(cmd);
             vkCmdEndDebugUtilsLabelEXT(cmd);
-        } {
+        }
+
+        //
+        {
             ZoneScopedN("UpdateResourceState");
             for (const uint32_t texIndex : pass->colorAttachments) {
                 auto& tex = textures[texIndex];
@@ -1787,24 +1830,24 @@ void RenderGraph::DestroyPhysicalResource(PhysicalResource& resource)
                 resource.mipViews[mip] = VK_NULL_HANDLE;
             }
             if (resource.storageMipDescriptorHandles[mip].IsValid()) {
-                StorageImageType storageType = GetStorageImageType(resource.dimensions.format, resource.aspect);
+                ImageChannelType storageType = GetImageChannelType(resource.dimensions.format, resource.aspect);
                 switch (storageType) {
-                    case StorageImageType::Float4:
+                    case ImageChannelType::Float4:
                         transientStorageFloat4HandleAllocator.Remove(resource.storageMipDescriptorHandles[mip]);
                         break;
-                    case StorageImageType::Float2:
+                    case ImageChannelType::Float2:
                         transientStorageFloat2HandleAllocator.Remove(resource.storageMipDescriptorHandles[mip]);
                         break;
-                    case StorageImageType::Float:
+                    case ImageChannelType::Float:
                         transientStorageFloatHandleAllocator.Remove(resource.storageMipDescriptorHandles[mip]);
                         break;
-                    case StorageImageType::UInt4:
+                    case ImageChannelType::UInt4:
                         transientStorageUInt4HandleAllocator.Remove(resource.storageMipDescriptorHandles[mip]);
                         break;
-                    case StorageImageType::UInt2:
+                    case ImageChannelType::UInt2:
                         transientStorageUInt2HandleAllocator.Remove(resource.storageMipDescriptorHandles[mip]);
                         break;
-                    case StorageImageType::UInt:
+                    case ImageChannelType::UInt:
                         transientStorageUIntHandleAllocator.Remove(resource.storageMipDescriptorHandles[mip]);
                         break;
                 }
@@ -1817,7 +1860,27 @@ void RenderGraph::DestroyPhysicalResource(PhysicalResource& resource)
             resource.imageView = VK_NULL_HANDLE;
         }
         if (resource.sampledDescriptorHandle.IsValid()) {
-            transientSampledImageHandleAllocator.Remove(resource.sampledDescriptorHandle);
+            ImageChannelType sampledChannelType = GetImageChannelType(resource.dimensions.format, resource.aspect);
+            switch (sampledChannelType) {
+                case ImageChannelType::Float4:
+                    transientSampledImageHandleAllocator.Remove(resource.sampledDescriptorHandle);
+                    break;
+                case ImageChannelType::Float2:
+                    transientSampledFloat2HandleAllocator.Remove(resource.sampledDescriptorHandle);
+                    break;
+                case ImageChannelType::Float:
+                    transientSampledFloatHandleAllocator.Remove(resource.sampledDescriptorHandle);
+                    break;
+                case ImageChannelType::UInt4:
+                    transientSampledUInt4HandleAllocator.Remove(resource.sampledDescriptorHandle);
+                    break;
+                case ImageChannelType::UInt2:
+                    transientSampledUInt2HandleAllocator.Remove(resource.sampledDescriptorHandle);
+                    break;
+                case ImageChannelType::UInt:
+                    transientSampledUIntHandleAllocator.Remove(resource.sampledDescriptorHandle);
+                    break;
+            }
             resource.sampledDescriptorHandle = {};
         }
 
@@ -1826,7 +1889,7 @@ void RenderGraph::DestroyPhysicalResource(PhysicalResource& resource)
             resource.depthOnlyView = VK_NULL_HANDLE;
         }
         if (resource.depthOnlyDescriptorHandle.IsValid()) {
-            transientSampledImageHandleAllocator.Remove(resource.depthOnlyDescriptorHandle);
+            transientSampledFloatHandleAllocator.Remove(resource.depthOnlyDescriptorHandle);
             resource.depthOnlyDescriptorHandle = {};
         }
 

@@ -13,7 +13,8 @@
 namespace Render
 {
 template<size_t SamplerCount, size_t CompareSamplerCount, size_t SampledImageCount,
-    size_t StorageFloat4Count, size_t StorageFloat2Count, size_t StorageFloatCount, size_t StorageUInt4Count, size_t StorageUInt2Count, size_t StorageUIntCount>
+    size_t StorageFloat4Count, size_t StorageFloat2Count, size_t StorageFloatCount, size_t StorageUInt4Count, size_t StorageUInt2Count, size_t StorageUIntCount,
+    size_t SampledFloat2Count, size_t SampledFloatCount, size_t SampledUInt4Count, size_t SampledUInt2Count, size_t SampledUIntCount>
 class BindlessTransientRDGResourcesDescriptorBuffer
 {
 public:
@@ -27,6 +28,11 @@ public:
     uint32_t GetStorageFloatCount() { return StorageFloatCount; }
     uint32_t GetStorageUInt4Count() { return StorageUInt4Count; }
     uint32_t GetStorageUIntCount() { return StorageUIntCount; }
+    uint32_t GetSampledFloat2Count() { return SampledFloat2Count; }
+    uint32_t GetSampledFloatCount() { return SampledFloatCount; }
+    uint32_t GetSampledUInt4Count() { return SampledUInt4Count; }
+    uint32_t GetSampledUInt2Count() { return SampledUInt2Count; }
+    uint32_t GetSampledUIntCount() { return SampledUIntCount; }
 
 public:
     BindlessTransientRDGResourcesDescriptorBuffer() = default;
@@ -44,6 +50,11 @@ public:
         layoutBuilder.AddBinding(6, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, StorageUInt4Count);
         layoutBuilder.AddBinding(7, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, StorageUInt2Count);
         layoutBuilder.AddBinding(8, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, StorageUIntCount);
+        layoutBuilder.AddBinding(9,  VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, SampledFloat2Count);
+        layoutBuilder.AddBinding(10, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, SampledFloatCount);
+        layoutBuilder.AddBinding(11, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, SampledUInt4Count);
+        layoutBuilder.AddBinding(12, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, SampledUInt2Count);
+        layoutBuilder.AddBinding(13, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, SampledUIntCount);
 
         VkDescriptorSetLayoutCreateInfo layoutCreateInfo = layoutBuilder.Build(
             static_cast<VkShaderStageFlagBits>(VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT),
@@ -174,6 +185,61 @@ public:
             return false;
         }
         return WriteStorageImageHelper(8, index, imageInfo);
+    }
+
+    bool WriteSampledFloat2Descriptor(uint32_t index, const VkDescriptorImageInfo& imageInfo)
+    {
+        if (index >= SampledFloat2Count) {
+            SPDLOG_ERROR("Invalid sampled float2 index: {}", index);
+            return false;
+        }
+        return WriteDescriptorHelper(9, index, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                                     VulkanContext::deviceInfo.descriptorBufferProps.sampledImageDescriptorSize,
+                                     [&](VkDescriptorGetInfoEXT& info) { info.data.pSampledImage = &imageInfo; });
+    }
+
+    bool WriteSampledFloatDescriptor(uint32_t index, const VkDescriptorImageInfo& imageInfo)
+    {
+        if (index >= SampledFloatCount) {
+            SPDLOG_ERROR("Invalid sampled float index: {}", index);
+            return false;
+        }
+        return WriteDescriptorHelper(10, index, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                                     VulkanContext::deviceInfo.descriptorBufferProps.sampledImageDescriptorSize,
+                                     [&](VkDescriptorGetInfoEXT& info) { info.data.pSampledImage = &imageInfo; });
+    }
+
+    bool WriteSampledUInt4Descriptor(uint32_t index, const VkDescriptorImageInfo& imageInfo)
+    {
+        if (index >= SampledUInt4Count) {
+            SPDLOG_ERROR("Invalid sampled uint4 index: {}", index);
+            return false;
+        }
+        return WriteDescriptorHelper(11, index, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                                     VulkanContext::deviceInfo.descriptorBufferProps.sampledImageDescriptorSize,
+                                     [&](VkDescriptorGetInfoEXT& info) { info.data.pSampledImage = &imageInfo; });
+    }
+
+    bool WriteSampledUInt2Descriptor(uint32_t index, const VkDescriptorImageInfo& imageInfo)
+    {
+        if (index >= SampledUInt2Count) {
+            SPDLOG_ERROR("Invalid sampled uint2 index: {}", index);
+            return false;
+        }
+        return WriteDescriptorHelper(12, index, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                                     VulkanContext::deviceInfo.descriptorBufferProps.sampledImageDescriptorSize,
+                                     [&](VkDescriptorGetInfoEXT& info) { info.data.pSampledImage = &imageInfo; });
+    }
+
+    bool WriteSampledUIntDescriptor(uint32_t index, const VkDescriptorImageInfo& imageInfo)
+    {
+        if (index >= SampledUIntCount) {
+            SPDLOG_ERROR("Invalid sampled uint index: {}", index);
+            return false;
+        }
+        return WriteDescriptorHelper(13, index, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                                     VulkanContext::deviceInfo.descriptorBufferProps.sampledImageDescriptorSize,
+                                     [&](VkDescriptorGetInfoEXT& info) { info.data.pSampledImage = &imageInfo; });
     }
 
     [[nodiscard]] VkDescriptorBufferBindingInfoEXT GetBindingInfo() const

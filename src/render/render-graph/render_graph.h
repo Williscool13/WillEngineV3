@@ -133,6 +133,11 @@ private:
     Core::HandleAllocator<TextureResource, RDG_MAX_STORAGE_UINT4> transientStorageUInt4HandleAllocator;
     Core::HandleAllocator<TextureResource, RDG_MAX_STORAGE_UINT2> transientStorageUInt2HandleAllocator;
     Core::HandleAllocator<TextureResource, RDG_MAX_STORAGE_UINT> transientStorageUIntHandleAllocator;
+    Core::HandleAllocator<TextureResource, RDG_MAX_SAMPLED_FLOAT2> transientSampledFloat2HandleAllocator;
+    Core::HandleAllocator<TextureResource, RDG_MAX_SAMPLED_FLOAT> transientSampledFloatHandleAllocator;
+    Core::HandleAllocator<TextureResource, RDG_MAX_SAMPLED_UINT4> transientSampledUInt4HandleAllocator;
+    Core::HandleAllocator<TextureResource, RDG_MAX_SAMPLED_UINT2> transientSampledUInt2HandleAllocator;
+    Core::HandleAllocator<TextureResource, RDG_MAX_SAMPLED_UINT> transientSampledUIntHandleAllocator;
 
     Core::ArenaFixedVector<BufferResource> buffers;
     Core::ArenaFixedMap<StringID, uint32_t> bufferNameToIndex;

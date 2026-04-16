@@ -16,6 +16,11 @@ namespace Render
 {
 inline constexpr int32_t RDG_PHYSICAL_RESOURCE_UNUSED_THRESHOLD = 1024; // in ticks
 inline constexpr int32_t RDG_MAX_SAMPLED_TEXTURES = 256;
+inline constexpr int32_t RDG_MAX_SAMPLED_FLOAT2   = 128;
+inline constexpr int32_t RDG_MAX_SAMPLED_FLOAT    = 256;
+inline constexpr int32_t RDG_MAX_SAMPLED_UINT4    = 64;
+inline constexpr int32_t RDG_MAX_SAMPLED_UINT2    = 64;
+inline constexpr int32_t RDG_MAX_SAMPLED_UINT     = 64;
 inline constexpr int32_t RDG_MAX_STORAGE_FLOAT4 = 512;
 inline constexpr int32_t RDG_MAX_STORAGE_FLOAT2 = 128;
 inline constexpr int32_t RDG_MAX_STORAGE_FLOAT  = 256;

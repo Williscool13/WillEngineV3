@@ -10,7 +10,7 @@ float DepthToZ(float depth, float n, float f) {
 	return n * f / (f - depth * (f - n));
 }
 
-float PCF(Texture2D shadowMap, SamplerComparisonState comparisonSampler, float2 uv, float receiverDepth, float filterRadius, int32_t sampleCount) {
+float PCF(Texture2D<float> shadowMap, SamplerComparisonState comparisonSampler, float2 uv, float receiverDepth, float filterRadius, int32_t sampleCount) {
 	float sum = 0.0;
 	for (int i = 0; i < sampleCount; ++i) {
 		float2 offset;
@@ -37,7 +37,7 @@ float PCF(Texture2D shadowMap, SamplerComparisonState comparisonSampler, float2 
 	return sum / sampleCount;
 }
 
-float FindBlockerDistance(Texture2D shadowMap, SamplerState sampler, float2 uv, float receiverDepth, float nearPlane, float farPlane, float searchRadius, float lightSize)
+float FindBlockerDistance(Texture2D<float> shadowMap, SamplerState sampler, float2 uv, float receiverDepth, float nearPlane, float farPlane, float searchRadius, float lightSize)
 {
     float blockerSum = 0.0;
     int blockerCount = 0;
@@ -60,7 +60,7 @@ float FindBlockerDistance(Texture2D shadowMap, SamplerState sampler, float2 uv, 
     return blockerSum / float(blockerCount);
 }
 
-float PCSS(Texture2D shadowMap, SamplerState sampler, SamplerComparisonState comparisonSampler, float2 uv, float receiverDepth, float receiverViewSpaceDepth, float lightSize, float nearPlane, float farPlane, int pcfSamples)
+float PCSS(Texture2D<float> shadowMap, SamplerState sampler, SamplerComparisonState comparisonSampler, float2 uv, float receiverDepth, float receiverViewSpaceDepth, float lightSize, float nearPlane, float farPlane, int pcfSamples)
 {
     // Blocker search
     float searchRadius = lightSize * (receiverViewSpaceDepth - nearPlane) / receiverViewSpaceDepth;
@@ -80,7 +80,7 @@ float PCSS(Texture2D shadowMap, SamplerState sampler, SamplerComparisonState com
 }
 
 public float GetShadowFactor(float3 viewPos, float3 viewNormal, SceneData sceneData, ShadowData* shadowData, int4 csmIndices,
-                            Texture2D textures[], SamplerState sampler, SamplerComparisonState comparisonSampler)
+                            Texture2D<float> textures[], SamplerState sampler, SamplerComparisonState comparisonSampler)
 {
     float viewSpaceDepth = abs(viewPos.z);
     if (viewSpaceDepth < shadowData->nearSplits[0]) {
@@ -109,7 +109,7 @@ public float GetShadowFactor(float3 viewPos, float3 viewNormal, SceneData sceneD
     projCoords.xy = projCoords.xy * 0.5 + 0.5;
 
     uint shadowMapIndex = csmIndices[cascadeLevel];
-    Texture2D shadowMap = textures[NonUniformResourceIndex(shadowMapIndex)];
+    Texture2D<float> shadowMap = textures[NonUniformResourceIndex(shadowMapIndex)];
 
     float lightSize = shadowData->lightSizes[cascadeLevel];
     int pcfSamples = int(shadowData->pcfSamples[cascadeLevel]);
@@ -138,7 +138,7 @@ public float GetShadowFactor(float3 viewPos, float3 viewNormal, SceneData sceneD
             nextProjCoords.xy = nextProjCoords.xy * 0.5 + 0.5;
 
             uint nextShadowMapIndex = csmIndices[cascadeLevel + 1];
-            Texture2D nextShadowMap = textures[NonUniformResourceIndex(nextShadowMapIndex)];
+            Texture2D<float> nextShadowMap = textures[NonUniformResourceIndex(nextShadowMapIndex)];
 
             float nextLightSize = shadowData->lightSizes[cascadeLevel + 1];
             int nextPcfSamples = int(shadowData->pcfSamples[cascadeLevel + 1]);

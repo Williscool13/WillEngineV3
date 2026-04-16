@@ -17,8 +17,10 @@
 
 namespace Render
 {
-PipelineManager::PipelineManager(VulkanContext* context, Core::TlsfAllocator& renderAlloc, const Core::Array<VkDescriptorSetLayout, 2>& globalLayouts)
-    : context(context), renderAlloc(&renderAlloc),
+PipelineManager::PipelineManager(VulkanContext* context, Core::TlsfAllocator& renderAlloc, Core::TlsfAllocator& assetScratchAlloc, const Core::Array<VkDescriptorSetLayout, 2>& globalLayouts)
+    : context(context),
+      renderAlloc(&renderAlloc),
+      assetScratchAlloc(&assetScratchAlloc),
       graphicsPipelines(&renderAlloc, Core::AllocTag::Render, 256),
       computePipelines(&renderAlloc, Core::AllocTag::Render, 1024),
       currentFrame(0),
@@ -52,7 +54,7 @@ PipelineManager::~PipelineManager()
         vkGetPipelineCacheData(context->device, pipelineCache, &cacheSize, nullptr);
 
         if (cacheSize > 0) {
-            Core::Vector<char> cacheData(renderAlloc, Core::AllocTag::Render);
+            Core::Vector<char> cacheData(assetScratchAlloc, Core::AllocTag::Render);
             cacheData.Resize(cacheSize);
             vkGetPipelineCacheData(context->device, pipelineCache, &cacheSize, cacheData.Data());
 

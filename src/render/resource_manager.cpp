@@ -59,7 +59,12 @@ ResourceManager::ResourceManager(VulkanContext* context)
         RDG_MAX_STORAGE_FLOAT,
         RDG_MAX_STORAGE_UINT4,
         RDG_MAX_STORAGE_UINT2,
-        RDG_MAX_STORAGE_UINT
+        RDG_MAX_STORAGE_UINT,
+        RDG_MAX_SAMPLED_FLOAT2,
+        RDG_MAX_SAMPLED_FLOAT,
+        RDG_MAX_SAMPLED_UINT4,
+        RDG_MAX_SAMPLED_UINT2,
+        RDG_MAX_SAMPLED_UINT
     >(context);
 
     bufferInfo.usage = VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_2_TRANSFER_DST_BIT;

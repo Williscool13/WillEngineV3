@@ -21,9 +21,9 @@ struct CompositeOutput {
 CompositeOutput FragmentPortalComposite(uniform PortalCompositePushConstant pc, FullscreenPassVertexOutput input) {
     CompositeOutput output;
 
-    output.color = rdgTextures[pc.portalColorIndex].Sample(rdgSamplers[RDG_POINT_SAMPLER_INDEX], input.uv);
-    output.velocity = rdgTextures[pc.portalVelocityIndex].Sample(rdgSamplers[RDG_POINT_SAMPLER_INDEX], input.uv);
-    output.depth = rdgTextures[pc.portalDepthIndex].Sample(rdgSamplers[RDG_POINT_SAMPLER_INDEX], input.uv).r;
+    output.color = rdgTexturesFloat4[pc.portalColorIndex].Sample(rdgSamplers[RDG_POINT_SAMPLER_INDEX], input.uv);
+    output.velocity = rdgTexturesFloat4[pc.portalVelocityIndex].Sample(rdgSamplers[RDG_POINT_SAMPLER_INDEX], input.uv);
+    output.depth = rdgTexturesFloat[pc.portalDepthIndex].Sample(rdgSamplers[RDG_POINT_SAMPLER_INDEX], input.uv).r;
 
     return output;
 }

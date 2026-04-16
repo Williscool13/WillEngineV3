@@ -34,7 +34,10 @@ public: // Thread-Safe
     void RequestReload() { bReloadRequested.store(true, std::memory_order_relaxed); }
 
 public:
-    explicit PipelineManager(VulkanContext* context, Core::TlsfAllocator& renderAlloc, const Core::Array<VkDescriptorSetLayout, 2>& globalLayouts);
+    explicit PipelineManager(VulkanContext* context,
+        Core::TlsfAllocator& renderAlloc,
+        Core::TlsfAllocator& assetScratchAlloc,
+        const Core::Array<VkDescriptorSetLayout, 2>& globalLayouts);
 
     ~PipelineManager();
 
@@ -88,6 +91,7 @@ private:
     // Non-Owning
     VulkanContext* context;
     Core::TlsfAllocator* renderAlloc{nullptr};
+    Core::TlsfAllocator* assetScratchAlloc{nullptr};
     AssetLoad::AsyncAssetLoadManager* asyncAssetLoadManager{nullptr};
 
     // Owning

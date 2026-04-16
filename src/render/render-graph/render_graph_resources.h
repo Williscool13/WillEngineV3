@@ -48,7 +48,7 @@ inline bool operator!(DepthAccessType a) {
     return static_cast<int>(a) == 0;
 }
 
-enum class StorageImageType {
+enum class ImageChannelType {
     Float4,
     Float2,
     Float,
@@ -57,14 +57,14 @@ enum class StorageImageType {
     UInt
 };
 
-inline StorageImageType GetStorageImageType(VkFormat format, VkImageAspectFlags aspect) {
+inline ImageChannelType GetImageChannelType(VkFormat format, VkImageAspectFlags aspect) {
     if (aspect & VK_IMAGE_ASPECT_DEPTH_BIT) {
         // Depth-Stencil, mip chain will be depth aspect. Stencil mips are not supported in this engine
-        return StorageImageType::Float;
+        return ImageChannelType::Float;
     }
 
     if (aspect & VK_IMAGE_ASPECT_STENCIL_BIT) {
-        return StorageImageType::UInt;
+        return ImageChannelType::UInt;
     }
     switch (format) {
         case VK_FORMAT_R32G32B32A32_SFLOAT:
@@ -73,24 +73,29 @@ inline StorageImageType GetStorageImageType(VkFormat format, VkImageAspectFlags 
         case VK_FORMAT_B8G8R8A8_UNORM:
         case VK_FORMAT_B8G8R8A8_SRGB:
         case VK_FORMAT_A2R10G10B10_UNORM_PACK32:
-            return StorageImageType::Float4;
+            return ImageChannelType::Float4;
         case VK_FORMAT_R32G32_SFLOAT:
         case VK_FORMAT_R16G16_SFLOAT:
         case VK_FORMAT_R8G8_UNORM:
-            return StorageImageType::Float2;
+            return ImageChannelType::Float2;
         case VK_FORMAT_R32_SFLOAT:
         case VK_FORMAT_R16_SFLOAT:
         case VK_FORMAT_R8_UNORM:
-            return StorageImageType::Float;
+            return ImageChannelType::Float;
+        case VK_FORMAT_R32G32B32A32_UINT:
+        case VK_FORMAT_R16G16B16A16_UINT:
+        case VK_FORMAT_R8G8B8A8_UINT:
+            return ImageChannelType::UInt4;
         case VK_FORMAT_R32G32_UINT:
-            return StorageImageType::UInt2;
+        case VK_FORMAT_R16G16_UINT:
+            return ImageChannelType::UInt2;
         case VK_FORMAT_R32_UINT:
         case VK_FORMAT_R16_UINT:
         case VK_FORMAT_R8_UINT:
-            return StorageImageType::UInt;
+            return ImageChannelType::UInt;
         default:
-            SPDLOG_ERROR("Unsupported storage image format: {}", string_VkFormat(format));
-            return StorageImageType::Float4;
+            SPDLOG_ERROR("Unsupported image channel format: {}", string_VkFormat(format));
+            return ImageChannelType::Float4;
     }
 }
 
