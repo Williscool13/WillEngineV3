@@ -43,7 +43,7 @@ void MeshMain(
     out indices uint3 triangles[MESHLET_MAX_TRIANGLES],
     out primitives PrimitiveOutput primitives[MESHLET_MAX_TRIANGLES],
     uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID,
-    uniform BaseMeshShadingPushConstant pc)
+    uniform VisibilityBufferAccumulatePushConstant pc)
 {
     uint globalMeshletIndex = gid.x + gid.y * (MAX_MESH_WORK_GROUP_COUNT_X / 2);
 
@@ -100,10 +100,17 @@ struct FragmentOutput {
 };
 
 [shader("fragment")]
-FragmentOutput FragmentMain(VertexOutput vertexInput, PrimitiveOutput primitiveInput, uniform BaseMeshShadingPushConstant pc)
+FragmentOutput FragmentMain(VertexOutput vertexInput, PrimitiveOutput primitiveInput)
 {
     FragmentOutput output;
     output.visibilityBuffer = primitiveInput.visibility;
     output.stableId = uint2(uint(vertexInput.stableId & 0xFFFFFFFF), uint(vertexInput.stableId >> 32));
     return output;
+}
+
+// ==================== Compute Shader ====================
+[shader("compute")]
+void ComputeMain()
+{
+    //
 }

@@ -67,6 +67,7 @@ SHADER_PUBLIC struct DebugVisualizePushConstant
     SHADER_PUBLIC uint outputImageIndex;
 };
 
+#pragma region Instancing
 SHADER_PUBLIC struct InstanceLODPushConstant
 {
     // Read-Only
@@ -254,6 +255,22 @@ SHADER_PUBLIC struct MaxMeshletCountPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(InstancingMeshletDispatchIndirect) indirectDispatchBuffer;
     SHADER_PUBLIC SHADER_PTR(uint32_t) currentHighest;
+};
+#pragma endregion
+
+SHADER_PUBLIC struct VisibilityBufferAccumulatePushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC SHADER_PTR(Vertex) vertexBuffer;
+    SHADER_PUBLIC SHADER_PTR(uint32_t) meshletVerticesBuffer;
+    SHADER_PUBLIC SHADER_PTR(uint32_t) meshletTrianglesBuffer;
+    SHADER_PUBLIC SHADER_PTR(Meshlet) meshletBuffer;
+    SHADER_PUBLIC SHADER_PTR(Primitive) primitiveBuffer;
+    SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
+    SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
+    SHADER_PUBLIC SHADER_PTR(CompactedMeshlet) visibleMeshlets;
+    SHADER_PUBLIC SHADER_PTR(InstancingCompactedMeshletDispatchIndirect) compactedDispatchBuffer; // for "total visible meshlets"
+    SHADER_PUBLIC uint32_t sceneDataIndex;
 };
 
 SHADER_PUBLIC struct BaseMeshShadingPushConstant

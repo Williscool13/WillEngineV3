@@ -529,7 +529,7 @@ void SetupGeometryPass(RenderGraph& graph,
 
         vkCmdBeginRendering(cmd, &renderInfo);
 
-        BaseMeshShadingPushConstant pushConstants{
+        VisibilityBufferAccumulatePushConstant pushConstants{
             .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
             .vertexBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_BUFFER),
             .meshletVerticesBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_VERTEX_BUFFER),
@@ -537,7 +537,6 @@ void SetupGeometryPass(RenderGraph& graph,
             .meshletBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_BUFFER),
             .primitiveBuffer = graph.GetBufferAddress(GEOMETRY_PRIMITIVE_BUFFER),
             .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
-            .materialBuffer = graph.GetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
             .modelBuffer = graph.GetBufferAddress(GEOMETRY_MODEL_BUFFER),
             .visibleMeshlets = graph.GetBufferAddress(visibleMeshlets),
             .compactedDispatchBuffer = graph.GetBufferAddress(compactedMeshletDispatchArgs),
@@ -546,7 +545,7 @@ void SetupGeometryPass(RenderGraph& graph,
 
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("visibility_buffer_accumulate"));
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineEntry->pipeline);
-        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(BaseMeshShadingPushConstant), &pushConstants);
+        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_MESH_BIT_EXT, 0, sizeof(VisibilityBufferAccumulatePushConstant), &pushConstants);
 
         vkCmdDrawMeshTasksIndirectEXT(
             cmd,

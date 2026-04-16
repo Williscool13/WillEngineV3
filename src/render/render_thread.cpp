@@ -1114,8 +1114,8 @@ void RenderThread::CreatePipelines()
         pipelineManager->RegisterGraphicsPipeline(
             SID("visibility_buffer_accumulate"),
             builder,
-            sizeof(BaseMeshShadingPushConstant),
-            VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT,
+            sizeof(VisibilityBufferAccumulatePushConstant),
+            VK_SHADER_STAGE_MESH_BIT_EXT,
             PipelineCategory::Geometry
         );
         builder.Clear();
