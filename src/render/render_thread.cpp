@@ -1135,7 +1135,7 @@ void RenderThread::CreatePipelines()
         pipelineManager->RegisterGraphicsPipeline(
             SID("portal_rendering"),
             builder,
-            sizeof(BaseMeshShadingPushConstant),
+            sizeof(VisibilityBufferAccumulatePushConstant),
             VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT,
             PipelineCategory::CustomRendering
         );

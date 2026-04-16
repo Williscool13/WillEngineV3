@@ -9,7 +9,7 @@ module bindless_declarations;
 // Descriptor buffer for RDG
 [[vk::binding(0, 1)]] public SamplerState rdgSamplers[];
 [[vk::binding(1, 1)]] public SamplerComparisonState rdgCompareSamplers[];
-[[vk::binding(2, 1)]] public Texture2D rdgTextures[];
+[[vk::binding(2, 1)]] public Texture2D<float4> rdgTextures[];
 [[vk::binding(3, 1)]] public RWTexture2D<float4> rdgStorageFloat4[];
 [[vk::binding(4, 1)]] public RWTexture2D<float2> rdgStorageFloat2[];
 [[vk::binding(5, 1)]] public RWTexture2D<float>  rdgStorageFloat[];

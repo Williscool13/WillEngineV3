@@ -64,7 +64,7 @@ void MeshMain(
 
     uint meshletIndex = prim.meshletOffset[lod] + meshletIndexWithinLOD;
     Meshlet meshlet = pc.meshletBuffer[meshletIndex];
-    float4x4 jitteredViewProj = pc.sceneData[pc.sceneDataIndex].viewProj;
+    float4x4 jitteredViewProj = pc.sceneData->viewProj;
 
     SetMeshOutputCounts(meshlet.meshletVertexCount, meshlet.meshletTriangleCount);
 
@@ -75,7 +75,7 @@ void MeshMain(
         float4 worldPos = mul(m.modelMatrix, float4(v.position, 1.0));
         float4 clipPos = mul(jitteredViewProj, worldPos);
 
-        vertices[i].clipDistance[0] = dot(worldPos.xyz, pc.sceneData[pc.sceneDataIndex].clipPlane.xyz) + pc.sceneData[pc.sceneDataIndex].clipPlane.w;
+        vertices[i].clipDistance[0] = dot(worldPos.xyz, pc.sceneData->clipPlane.xyz) + pc.sceneData->clipPlane.w;
         vertices[i].position = clipPos;
         vertices[i].stableId = inst.stableId;
     }
@@ -110,7 +110,34 @@ FragmentOutput FragmentMain(VertexOutput vertexInput, PrimitiveOutput primitiveI
 
 // ==================== Compute Shader ====================
 [shader("compute")]
-void ComputeMain()
+[numthreads(8, 8, 1)]
+void VisibilityBufferResolveMain(uint3 dtid : SV_DispatchThreadID, uniform VisibilityBufferResolvePushConstant pc)
 {
-    //
+    if (dtid.x >= pc.extents.x || dtid.y >= pc.extents.y) {
+        return;
+    }
+
+    // uint2 vis = rdgTextures[pc.normalIndex].Load(int3(dtid.xy, 0)).xy;
+
+    // 3. Early out if pixel is background (visibility == 0 or sentinel)
+
+    // 4. Fetch instance -> primitive -> model, material
+
+    // 5. Fetch meshlet -> get meshletTriangleOffset + triangle_id -> fetch packed triangle -> unpack idx0, idx1, idx2
+
+    // 6. Fetch three vertices from vertexBuffer via meshletVerticesBuffer indirection
+
+    // 7. Transform three vertex positions to clip space via model matrix + viewProj
+
+    // 8. Compute screen-space barycentrics from pixel NDC position and three clip-space verts
+
+    // 9. Interpolate UV, normal, tangent using barycentrics
+
+    // 10. Fetch textures (albedo, metalRough, normal map, emissive, occlusion) via material indices
+
+    // 11. Reconstruct world position from depth buffer + inverse viewProj
+
+    // 12. Evaluate BRDF (direct lighting, IBL, AO)
+
+    // 13. Write result to output UAV
 }

@@ -530,7 +530,7 @@ void SetupGeometryPass(RenderGraph& graph,
         vkCmdBeginRendering(cmd, &renderInfo);
 
         VisibilityBufferAccumulatePushConstant pushConstants{
-            .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
+            .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER) + sceneIndex * sizeof(SceneData),
             .vertexBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_BUFFER),
             .meshletVerticesBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_VERTEX_BUFFER),
             .meshletTrianglesBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_TRIANGLE_BUFFER),
@@ -540,7 +540,6 @@ void SetupGeometryPass(RenderGraph& graph,
             .modelBuffer = graph.GetBufferAddress(GEOMETRY_MODEL_BUFFER),
             .visibleMeshlets = graph.GetBufferAddress(visibleMeshlets),
             .compactedDispatchBuffer = graph.GetBufferAddress(compactedMeshletDispatchArgs),
-            .sceneDataIndex = sceneIndex,
         };
 
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("visibility_buffer_accumulate"));
