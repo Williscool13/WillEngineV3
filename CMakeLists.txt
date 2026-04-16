@@ -318,8 +318,8 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/instancing_shadows.slang compute ComputeInstanceLODShadows instancing_instance_lod_shadows
         ${CMAKE_SOURCE_DIR}/shaders/instancing_shadows.slang compute ComputeExpandInstancesToMeshletsShadows instancing_expand_instance_to_meshlet_shadows
 
-        ${CMAKE_SOURCE_DIR}/shaders/mesh_shading_instanced.slang mesh MeshMain mesh_shading_instanced
-        ${CMAKE_SOURCE_DIR}/shaders/mesh_shading_instanced.slang fragment FragmentMain mesh_shading_instanced
+        ${CMAKE_SOURCE_DIR}/shaders/visibility_buffer.slang mesh MeshMain visibility_buffer
+        ${CMAKE_SOURCE_DIR}/shaders/visibility_buffer.slang fragment FragmentMain visibility_buffer
 
         ${CMAKE_SOURCE_DIR}/shaders/shadow_mesh_shading_instanced.slang mesh MeshMain shadow_mesh_shading_instanced
 

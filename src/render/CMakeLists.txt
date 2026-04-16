@@ -3,9 +3,7 @@ add_library(render STATIC
         render_thread.h
         resource_manager.cpp
         resource_manager.h
-        frame_resources.cpp
         frame_resources.h
-        render_config.cpp
         render_config.h
         vulkan/vk_context.cpp
         vulkan/vk_context.h

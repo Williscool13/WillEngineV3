@@ -1100,10 +1100,10 @@ void RenderThread::CreatePipelines()
         GBUFFER_STABLE_ID_FORMAT
     };
 
-    // Instanced mesh shading pipeline
+    // Visibility Buffer
     {
-        builder.AddShaderStage(Platform::GetShaderPath() / "mesh_shading_instanced_mesh.spv", VK_SHADER_STAGE_MESH_BIT_EXT);
-        builder.AddShaderStage(Platform::GetShaderPath() / "mesh_shading_instanced_fragment.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
+        builder.AddShaderStage(Platform::GetShaderPath() / "visibility_buffer_mesh.spv", VK_SHADER_STAGE_MESH_BIT_EXT);
+        builder.AddShaderStage(Platform::GetShaderPath() / "visibility_buffer_fragment.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
         builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
         builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE);
         builder.SetupDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_GREATER_OR_EQUAL);
@@ -1112,7 +1112,7 @@ void RenderThread::CreatePipelines()
         builder.SetupRenderer(graphicsColorFormats.Data(), graphicsColorFormats.Size(), DEPTH_ATTACHMENT_FORMAT, DEPTH_ATTACHMENT_FORMAT);
 
         pipelineManager->RegisterGraphicsPipeline(
-            SID("mesh_shading_instanced"),
+            SID("visibility_buffer_accumulate"),
             builder,
             sizeof(BaseMeshShadingPushConstant),
             VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT,
@@ -1123,8 +1123,8 @@ void RenderThread::CreatePipelines()
 
     // Portal Graphics Pipeline
     {
-        builder.AddShaderStage(Platform::GetShaderPath() / "mesh_shading_instanced_mesh.spv", VK_SHADER_STAGE_MESH_BIT_EXT);
-        builder.AddShaderStage(Platform::GetShaderPath() / "mesh_shading_instanced_fragment.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
+        builder.AddShaderStage(Platform::GetShaderPath() / "visibility_buffer_mesh.spv", VK_SHADER_STAGE_MESH_BIT_EXT);
+        builder.AddShaderStage(Platform::GetShaderPath() / "visibility_buffer_fragment.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
         builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
         builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE);
         builder.SetupDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_GREATER_OR_EQUAL);

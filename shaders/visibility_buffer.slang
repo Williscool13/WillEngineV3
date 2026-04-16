@@ -10,7 +10,6 @@ import bindless_declarations;
 import shader_functions;
 
 // =============== Shader Summary ============
-
 /* Main geometry pass for opaque objects.
 *    Technique: Visibility Buffer
 *    Format: RG32

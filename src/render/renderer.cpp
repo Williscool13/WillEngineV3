@@ -158,6 +158,7 @@ void SetupGeometryPass(RenderGraph& graph,
                 });
         }
 
+        // todo if count < 255, then just do this in 1 group, 1 step.
         // Prefix Sum for Expansion
         {
             uint32_t level1BlockCount = (instanceCount + INSTANCING_PREFIX_SUM_DISPATCH_X - 1) / INSTANCING_PREFIX_SUM_DISPATCH_X;
@@ -543,7 +544,7 @@ void SetupGeometryPass(RenderGraph& graph,
             .sceneDataIndex = sceneIndex,
         };
 
-        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("mesh_shading_instanced"));
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("visibility_buffer_accumulate"));
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineEntry->pipeline);
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(BaseMeshShadingPushConstant), &pushConstants);
 
