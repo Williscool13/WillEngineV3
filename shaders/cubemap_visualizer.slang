@@ -43,15 +43,15 @@ void MeshMain(
 
     CompactedMeshlet compacted = pc.visibleMeshlets[globalMeshletIndex];
     uint instanceIndex = compacted.instanceIndex;
-    uint packedLocal = compacted.localMeshletIndex;
-    uint localMeshletIndex = packedLocal & 0x3FFFFFFF;
+    uint packedLocal = compacted.meshletIndexWithinLOD;
+    uint meshletIndexWithinLOD = packedLocal & 0x3FFFFFFF;
     uint lod = packedLocal >> 30;
 
     Instance inst = pc.instanceBuffer[instanceIndex];
     Primitive prim = pc.primitiveBuffer[inst.primitiveIndex];
     Model m = pc.modelBuffer[inst.modelIndex];
 
-    uint meshletIndex = prim.meshletOffset[lod] + localMeshletIndex;
+    uint meshletIndex = prim.meshletOffset[lod] + meshletIndexWithinLOD;
     Meshlet meshlet = pc.meshletBuffer[meshletIndex];
 
     float4x4 jitteredViewProj = pc.sceneData[pc.sceneDataIndex].viewProj;

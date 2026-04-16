@@ -84,13 +84,13 @@ void ComputeExpandInstancesToMeshletsShadows(uniform ExpandMeshletsShadowsPushCo
 
     // Meshlet Visibility
     uint meshletOffset = pc.instanceMeshletOffsets[instanceIndex].offset;
-    uint localMeshletIndex = globalMeshletIndex - meshletOffset;
+    uint meshletIndexWithinLOD = globalMeshletIndex - meshletOffset;
     Instance inst = pc.instanceBuffer[instanceIndex];
     Primitive prim = pc.primitiveBuffer[inst.primitiveIndex];
     Model model = pc.modelBuffer[inst.modelIndex];
 
     uint lod = pc.instanceMeshletOffsets[instanceIndex].lod;
-    Meshlet mlet = pc.meshletBuffer[prim.meshletOffset[lod] + localMeshletIndex];
+    Meshlet mlet = pc.meshletBuffer[prim.meshletOffset[lod] + meshletIndexWithinLOD];
 
     float3 scale = float3(
         length(model.modelMatrix[0].xyz),
@@ -107,10 +107,10 @@ void ComputeExpandInstancesToMeshletsShadows(uniform ExpandMeshletsShadowsPushCo
     // Instance greatest bit is visibility,
     uint packedInstanceIndex = (instanceIndex & 0x7FFFFFFF) | (bVisible ? 0x80000000 : 0);
     // Meshlet 2 greatest bit indicates which LOD to use,
-    uint packedLocalMeshlet = (localMeshletIndex & 0x3FFFFFFF) | (lod << 30);
+    uint packedLocalMeshlet = (meshletIndexWithinLOD & 0x3FFFFFFF) | (lod << 30);
 
     if (globalMeshletIndex < pc.currentFrameBufferMeshletLimit) {
         pc.intermediateMeshlets[globalMeshletIndex].instanceIndex = packedInstanceIndex;
-        pc.intermediateMeshlets[globalMeshletIndex].localMeshletIndex = packedLocalMeshlet;
+        pc.intermediateMeshlets[globalMeshletIndex].meshletIndexWithinLOD = packedLocalMeshlet;
     }
 }

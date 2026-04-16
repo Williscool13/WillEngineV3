@@ -669,11 +669,11 @@ void WillEngine::EditorImgui()
 
                 for (uint32_t i = 0; i < 128; ++i) {
                     uint32_t packedInstance = intermediateMeshlets[i].instanceIndex;
-                    uint32_t packedLocal = intermediateMeshlets[i].localMeshletIndex;
+                    uint32_t packedLocal = intermediateMeshlets[i].meshletIndexWithinLOD;
 
                     uint32_t instanceIndex = packedInstance & 0x7FFFFFFF;
                     bool visible = (packedInstance >> 31) & 1;
-                    uint32_t localMeshletIndex = packedLocal & 0x3FFFFFFF;
+                    uint32_t meshletIndexWithinLOD = packedLocal & 0x3FFFFFFF;
                     uint32_t lod = packedLocal >> 30;
 
                     ImGui::TableNextRow();
@@ -684,7 +684,7 @@ void WillEngine::EditorImgui()
                     ImGui::TableNextColumn();
                     ImGui::Text("%s", visible ? "Yes" : "No");
                     ImGui::TableNextColumn();
-                    ImGui::Text("%u", localMeshletIndex);
+                    ImGui::Text("%u", meshletIndexWithinLOD);
                     ImGui::TableNextColumn();
                     ImGui::Text("%u", lod);
                 }
@@ -705,8 +705,8 @@ void WillEngine::EditorImgui()
                 ImGui::TableHeadersRow();
 
                 for (uint32_t i = 0; i < 128; ++i) {
-                    uint32_t packedLocal = visibleMeshlets[i].localMeshletIndex;
-                    uint32_t localMeshletIndex = packedLocal & 0x3FFFFFFF;
+                    uint32_t packedLocal = visibleMeshlets[i].meshletIndexWithinLOD;
+                    uint32_t meshletIndexWithinLOD = packedLocal & 0x3FFFFFFF;
                     uint32_t lod = packedLocal >> 30;
 
                     ImGui::TableNextRow();
@@ -715,7 +715,7 @@ void WillEngine::EditorImgui()
                     ImGui::TableNextColumn();
                     ImGui::Text("%u", visibleMeshlets[i].instanceIndex);
                     ImGui::TableNextColumn();
-                    ImGui::Text("%u", localMeshletIndex);
+                    ImGui::Text("%u", meshletIndexWithinLOD);
                     ImGui::TableNextColumn();
                     ImGui::Text("%u", lod);
                 }
@@ -770,11 +770,11 @@ void WillEngine::EditorImgui()
                     ImGui::Text("%u", i);
                     ImGui::TableNextColumn();
                     ImGui::Text("%u", visibleMeshlets[i].instanceIndex);
-                    uint32_t packedLocal = visibleMeshlets[i].localMeshletIndex;
-                    uint32_t localMeshletIndex = packedLocal & 0x3FFFFFFF;
+                    uint32_t packedLocal = visibleMeshlets[i].meshletIndexWithinLOD;
+                    uint32_t meshletIndexWithinLOD = packedLocal & 0x3FFFFFFF;
                     uint32_t lod = packedLocal >> 30;
                     ImGui::TableNextColumn();
-                    ImGui::Text("%u", localMeshletIndex);
+                    ImGui::Text("%u", meshletIndexWithinLOD);
                     ImGui::TableNextColumn();
                     ImGui::Text("%u", lod);
                 }

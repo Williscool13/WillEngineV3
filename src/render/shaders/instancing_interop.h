@@ -98,13 +98,13 @@ SHADER_PUBLIC struct InstancingMeshletDispatchIndirect
 SHADER_PUBLIC struct IntermediateMeshlet
 {
     SHADER_PUBLIC uint32_t instanceIndex; // 1/31. greatest bit is whether it is visible
-    SHADER_PUBLIC uint32_t localMeshletIndex; // 2/30, greatest 2 bits are LOD
+    SHADER_PUBLIC uint32_t meshletIndexWithinLOD; // 2/30, greatest 2 bits are LOD
 };
 
 SHADER_PUBLIC struct CompactedMeshlet
 {
     SHADER_PUBLIC uint32_t instanceIndex; // 32 for instanceIndex
-    SHADER_PUBLIC uint32_t localMeshletIndex; // 2/30, greatest 2 bits are LOD
+    SHADER_PUBLIC uint32_t meshletIndexWithinLOD; // 2/30, greatest 2 bits are LOD
 };
 
 SHADER_PUBLIC struct InstancingCompactedMeshletDispatchIndirect

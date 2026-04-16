@@ -68,13 +68,13 @@ add_library(render STATIC
         pipelines/pipeline_data.cpp
         pipelines/pipeline_data.h
 
-        render-graph/passes/instanced_geometry_pass.cpp
-        render-graph/passes/instanced_geometry_pass.h
         interface/render_interface.cpp
         interface/render_interface.h
         stb_write_impl.cpp
         systems/render_screen_capture.cpp
         systems/render_screen_capture.h
+        renderer.cpp
+        renderer.h
 )
 
 target_include_directories(render PRIVATE

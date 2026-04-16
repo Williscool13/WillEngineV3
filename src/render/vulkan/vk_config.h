@@ -30,7 +30,10 @@ inline constexpr VkFormat GBUFFER_NORMAL_FORMAT = VK_FORMAT_A2R10G10B10_UNORM_PA
 inline constexpr VkFormat GBUFFER_PBR_FORMAT = VK_FORMAT_R8G8B8A8_UNORM; // rough, metallic
 inline constexpr VkFormat GBUFFER_EMISSIVE_FORMAT = VK_FORMAT_R16G16B16A16_SFLOAT;
 inline constexpr VkFormat GBUFFER_MOTION_FORMAT = VK_FORMAT_R16G16B16A16_SFLOAT; // x,y total velocity. z,w object velocity only
+
+inline constexpr VkFormat VISIBILITY_BUFFER_FORMAT = VK_FORMAT_R32G32_UINT;
 inline constexpr VkFormat GBUFFER_STABLE_ID_FORMAT = VK_FORMAT_R32G32_UINT;
+
 inline constexpr VkFormat POST_PROCESS_OUTPUT_FORMAT = VK_FORMAT_R16G16B16A16_SFLOAT;
 
 // Shadows

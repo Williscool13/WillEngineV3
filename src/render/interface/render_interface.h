@@ -276,6 +276,7 @@ struct ViewFamily
     RenderView mainView{};
     FixedVector<PortalView> portalViews{};
 
+    // todo: should contain all instances. Pipeline choice will be embedded in material
     Vector<InstanceData> mainPassInstances{};
     Map<StringID, CustomShaderDraw> customShaderDraws{};
 

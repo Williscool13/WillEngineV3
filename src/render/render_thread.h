@@ -136,10 +136,6 @@ private:
         StringID depthStencil; // stencil should be disregarded
     };
 
-    void SetupGeometryPasses(RenderGraph& graph, const Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties, Core::Array<uint32_t, 2> renderExtent,
-                             const GBufferTargets& targets, uint32_t sceneIndex, bool
-                             bClearTargets) const;
-
     void SetupGroundTruthAmbientOcclusion(RenderGraph& graph, const Core::ViewFamily& renderViewFamily, Core::Array<uint32_t, 2> renderExtent, const GBufferTargets& targets,
                                           uint32_t sceneDataIndex) const;
 
