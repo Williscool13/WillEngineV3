@@ -17,31 +17,8 @@ void SetupGeometryPass(RenderGraph& graph,
                        const RenderFamilyProperties& renderFamilyProperties,
                        Core::Array<uint32_t, 2> renderExtent,
                        const VisibilityBufferTargets& targets,
-                       uint32_t sceneIndex,
-                       bool bClearTargets)
+                       uint32_t sceneIndex)
 {
-    if (bClearTargets) {
-        RenderPass& clearPass = graph.AddPass(SID("Clear Visibility Buffer"), VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
-        clearPass.WriteColorAttachment(targets.visibility);
-        clearPass.WriteColorAttachment(targets.stableId);
-        clearPass.WriteDepthAttachment(targets.depthStencil);
-        clearPass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
-            constexpr VkClearValue colorClear = {.color = {{0.0f, 0.0f, 0.0f, 0.0f}}};
-            constexpr VkClearValue depthClear = {.depthStencil = {0.0f, 0u}};
-
-            auto visibilityAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.visibility), &colorClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-            auto stableIdAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.stableId), &colorClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-            auto depthAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), &depthClear, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
-            auto stencilAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), &depthClear, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
-
-            const VkRenderingAttachmentInfo colorAttachments[] = {visibilityAttachment, stableIdAttachment};
-            const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, colorAttachments, 2, &depthAttachment, &stencilAttachment);
-
-            vkCmdBeginRendering(cmd, &renderInfo);
-            vkCmdEndRendering(cmd);
-        });
-    }
-
     if (viewFamily.mainPassInstances.IsEmpty()) {
         return;
     }
@@ -519,10 +496,13 @@ void SetupGeometryPass(RenderGraph& graph,
         VkRect2D scissor = VkHelpers::GenerateScissor(width, height);
         vkCmdSetScissor(cmd, 0, 1, &scissor);
 
-        auto visibilityAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.visibility), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-        auto stableIdAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.stableId), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-        auto depthAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), nullptr, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
-        auto stencilAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), nullptr, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+        constexpr VkClearValue uintClear = {.color = {.uint32 = {0u, 0u, 0u, 0u}}};
+        constexpr VkClearValue depthClear = {.depthStencil = {0.0f, 0u}};
+
+        auto visibilityAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.visibility), &uintClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        auto stableIdAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.stableId), &uintClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        auto depthAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), &depthClear, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+        auto stencilAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), &depthClear, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
         const VkRenderingAttachmentInfo colorAttachments[] = {visibilityAttachment, stableIdAttachment};
         const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, colorAttachments, 2, &depthAttachment, &stencilAttachment);
@@ -555,6 +535,12 @@ void SetupGeometryPass(RenderGraph& graph,
 
         vkCmdEndRendering(cmd);
     });
+}
+
+void SetupVisibilityResolvePass(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent,
+    const VisibilityBufferResolveTargets& targets, uint32_t sceneIndex)
+{
+
 }
 } // Render
 

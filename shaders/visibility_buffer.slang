@@ -31,7 +31,7 @@ struct VertexOutput
 
 struct PrimitiveOutput
 {
-    nointerpolation uint2 visibility : COLOR0;
+     [[vk::location(0)]] uint2 visibility;
 };
 
 
@@ -39,10 +39,11 @@ struct PrimitiveOutput
 [outputtopology("triangle")]
 [numthreads(MESH_SHADER_DISPATCH_X, 1, 1)]
 void MeshMain(
-    out vertices VertexOutput vertices[MESHLET_MAX_VERTICES],
-    out indices uint3 triangles[MESHLET_MAX_TRIANGLES],
-    out primitives PrimitiveOutput primitives[MESHLET_MAX_TRIANGLES],
-    uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID,
+    OutputVertices<VertexOutput, MESHLET_MAX_VERTICES> vertices,
+    OutputIndices<uint3, MESHLET_MAX_TRIANGLES> triangles,
+    OutputPrimitives<PrimitiveOutput, MESHLET_MAX_TRIANGLES> primitives,
+    uint3 gid : SV_GroupID,
+    uint3 gtid : SV_GroupThreadID,
     uniform VisibilityBufferAccumulatePushConstant pc)
 {
     uint globalMeshletIndex = gid.x + gid.y * (MAX_MESH_WORK_GROUP_COUNT_X / 2);
@@ -96,16 +97,72 @@ void MeshMain(
 // ==================== Fragment Shader ====================
 struct FragmentOutput {
     uint2 visibilityBuffer : SV_Target0;
-    uint2 stableId : SV_Target5;
+    uint2 stableId : SV_Target1;
 };
 
 [shader("fragment")]
-FragmentOutput FragmentMain(VertexOutput vertexInput, PrimitiveOutput primitiveInput)
+FragmentOutput FragmentMain(
+    VertexOutput vertexInput,
+    PrimitiveOutput primitiveInput)
 {
     FragmentOutput output;
     output.visibilityBuffer = primitiveInput.visibility;
+    // output.visibilityBuffer = vertexInput.visibility;
     output.stableId = uint2(uint(vertexInput.stableId & 0xFFFFFFFF), uint(vertexInput.stableId >> 32));
     return output;
+}
+
+// ==================== Barycentric Derivatives ====================
+struct BarycentricDeriv
+{
+    float3 m_lambda;
+    float3 m_ddx;
+    float3 m_ddy;
+};
+
+// Perspective-correct barycentrics + analytic UV derivatives.
+// From: http://filmicworlds.com/blog/visibility-buffer-rendering-with-material-graphs/
+// pt0/pt1/pt2: clip-space positions; pixelNdc: NDC of current pixel (Y-up convention);
+// winSize: viewport dimensions in pixels.
+BarycentricDeriv CalcFullBary(float4 pt0, float4 pt1, float4 pt2, float2 pixelNdc, float2 winSize)
+{
+    BarycentricDeriv ret = (BarycentricDeriv)0;
+
+    float3 invW = rcp(float3(pt0.w, pt1.w, pt2.w));
+
+    float2 ndc0 = pt0.xy * invW.x;
+    float2 ndc1 = pt1.xy * invW.y;
+    float2 ndc2 = pt2.xy * invW.z;
+
+    float invDet = rcp(determinant(float2x2(ndc2 - ndc1, ndc0 - ndc1)));
+    ret.m_ddx = float3(ndc1.y - ndc2.y, ndc2.y - ndc0.y, ndc0.y - ndc1.y) * invDet * invW;
+    ret.m_ddy = float3(ndc2.x - ndc1.x, ndc0.x - ndc2.x, ndc1.x - ndc0.x) * invDet * invW;
+    float ddxSum = dot(ret.m_ddx, float3(1, 1, 1));
+    float ddySum = dot(ret.m_ddy, float3(1, 1, 1));
+
+    float2 deltaVec = pixelNdc - ndc0;
+    float interpInvW = invW.x + deltaVec.x * ddxSum + deltaVec.y * ddySum;
+    float interpW = rcp(interpInvW);
+
+    ret.m_lambda.x = interpW * (invW[0] + deltaVec.x * ret.m_ddx.x + deltaVec.y * ret.m_ddy.x);
+    ret.m_lambda.y = interpW * (0.0f    + deltaVec.x * ret.m_ddx.y + deltaVec.y * ret.m_ddy.y);
+    ret.m_lambda.z = interpW * (0.0f    + deltaVec.x * ret.m_ddx.z + deltaVec.y * ret.m_ddy.z);
+
+    ret.m_ddx *= (2.0f / winSize.x);
+    ret.m_ddy *= (2.0f / winSize.y);
+    ddxSum    *= (2.0f / winSize.x);
+    ddySum    *= (2.0f / winSize.y);
+
+    ret.m_ddy *= -1.0f;
+    ddySum    *= -1.0f;
+
+    float interpW_ddx = 1.0f / (interpInvW + ddxSum);
+    float interpW_ddy = 1.0f / (interpInvW + ddySum);
+
+    ret.m_ddx = interpW_ddx * (ret.m_lambda * interpInvW + ret.m_ddx) - ret.m_lambda;
+    ret.m_ddy = interpW_ddy * (ret.m_lambda * interpInvW + ret.m_ddy) - ret.m_lambda;
+
+    return ret;
 }
 
 // ==================== Compute Shader ====================
@@ -132,7 +189,6 @@ void VisibilityBufferResolveMain(uint3 dtid : SV_DispatchThreadID, uniform Visib
     Model m = pc.modelBuffer[inst.modelIndex];
     // material here for bucketing? Later.
 
-
     Meshlet meshlet = pc.meshletBuffer[meshletIndex];
     uint triangleIndex = meshlet.meshletTriangleOffset + triangleIndexWithinMeshlet;
 
@@ -147,11 +203,30 @@ void VisibilityBufferResolveMain(uint3 dtid : SV_DispatchThreadID, uniform Visib
     Vertex v1 = pc.vertexBuffer[v1i];
     Vertex v2 = pc.vertexBuffer[v2i];
 
-    // 7. Transform three vertex positions to clip space via model matrix + viewProj
+    float4x4 mvp = mul(pc.sceneData->viewProj, m.modelMatrix);
+    float4 p0 = mul(mvp, float4(v0.position, 1.0));
+    float4 p1 = mul(mvp, float4(v1.position, 1.0));
+    float4 p2 = mul(mvp, float4(v2.position, 1.0));
 
-    // 8. Compute screen-space barycentrics from pixel NDC position and three clip-space verts
+    float2 pixelNDC = (float2(dtid.xy) + 0.5) / float2(pc.extents) * 2.0 - 1.0;
+    pixelNDC.y = -pixelNDC.y; // Y-up NDC convention (flipped viewport)
+
+    BarycentricDeriv baryDeriv = CalcFullBary(p0, p1, p2, pixelNDC, float2(pc.extents));
+    float3 bary = baryDeriv.m_lambda;
+
+    float2 uv0 = float2(v0.texcoordU, v0.texcoordV);
+    float2 uv1 = float2(v1.texcoordU, v1.texcoordV);
+    float2 uv2 = float2(v2.texcoordU, v2.texcoordV);
+
+    float2 uvDdx = baryDeriv.m_ddx.x * uv0 + baryDeriv.m_ddx.y * uv1 + baryDeriv.m_ddx.z * uv2;
+    float2 uvDdy = baryDeriv.m_ddy.x * uv0 + baryDeriv.m_ddy.y * uv1 + baryDeriv.m_ddy.z * uv2;
+
+    rdgStorageFloat2[pc.barycentricTargetIndex][dtid.xy] = float2(bary.x, bary.y);
+    rdgStorageFloat4[pc.derivativeTargetIndex][dtid.xy] = float4(uvDdx, uvDdy);
+
 
     // 9. Interpolate UV, normal, tangent using barycentrics
+    // Calculate Barycentrics, Derivatives + flags, and Tangent frame
 
     // 10. Fetch textures (albedo, metalRough, normal map, emissive, occlusion) via material indices
 

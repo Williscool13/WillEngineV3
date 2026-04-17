@@ -7,7 +7,7 @@ import bindless_declarations;
 
 [numthreads(16, 16, 1)]
 void ComputeMain(uniform ShadowsResolvePushConstant pc, uint3 threadID : SV_DispatchThreadID) {
-    if (threadID.x >= pc.sceneData[pc.sceneDataIndex].mainRenderTargetSize.x || threadID.y >= pc.sceneData[pc.sceneDataIndex].mainRenderTargetSize.y) return;
+/*    if (threadID.x >= pc.sceneData[pc.sceneDataIndex].mainRenderTargetSize.x || threadID.y >= pc.sceneData[pc.sceneDataIndex].mainRenderTargetSize.y) return;
 
     float2 uv = (float2(threadID.xy) + 0.5) / float2(pc.sceneData[pc.sceneDataIndex].mainRenderTargetSize);
     float depth = rdgTexturesFloat[pc.depthIndex].Load(int3(threadID.xy, 0)).r;
@@ -38,5 +38,5 @@ void ComputeMain(uniform ShadowsResolvePushConstant pc, uint3 threadID : SV_Disp
         gtao = 1.0f;
     }
 
-    rdgStorageFloat2[pc.outputImageIndex][threadID.xy] = float2(shadowFactor, gtao);
+    rdgStorageFloat2[pc.outputImageIndex][threadID.xy] = float2(shadowFactor, gtao);*/
 }

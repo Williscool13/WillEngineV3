@@ -1,4 +1,5 @@
 import common_interop;
+import model_interop;
 
 // Returns false if it has been culled
 bool FrustumCullSphere(Frustum frustum, float4 sphere) {
@@ -80,4 +81,54 @@ float3 YCoCgToRGB(float3 ycocg) {
     float b = tmp - Co;
 
     return float3(r, g, b);
+}
+
+// Interpolated surface attributes in view space, reconstructed from barycentrics + vertices.
+// Call from GBuffer pass material shaders after re-fetching the 3 triangle vertices.
+// mv: model-view matrix (mul(view, modelMatrix))
+// bary: float3(bary.x, bary.y, 1 - bary.x - bary.y) from the barycentric buffer
+struct InterpolatedVertex
+{
+    float3 positionVS;
+    float3 normalVS;
+    float2 uv;
+    float4 color;
+};
+
+InterpolatedVertex InterpolateVertex(float3 bary, Vertex v0, Vertex v1, Vertex v2, float4x4 mv)
+{
+    InterpolatedVertex result;
+
+    float3 objPos = bary.x * v0.position + bary.y * v1.position + bary.z * v2.position;
+    result.positionVS = mul(mv, float4(objPos, 1.0f)).xyz;
+
+    float3 objNormal = normalize(bary.x * v0.normal + bary.y * v1.normal + bary.z * v2.normal);
+    result.normalVS = normalize(mul(Adjugate((float3x3)mv), objNormal));
+
+    result.uv = bary.x * float2(v0.texcoordU, v0.texcoordV)
+              + bary.y * float2(v1.texcoordU, v1.texcoordV)
+              + bary.z * float2(v2.texcoordU, v2.texcoordV);
+
+    result.color = bary.x * v0.color + bary.y * v1.color + bary.z * v2.color;
+
+    return result;
+}
+
+// Octahedral encoding: maps a unit float3 normal to float2 in [-1,1]^2.
+float2 OctEncode(float3 n)
+{
+    n /= abs(n.x) + abs(n.y) + abs(n.z);
+    if (n.z < 0.0f) {
+        n.xy = (1.0f - abs(n.yx)) * float2(n.x >= 0.0f ? 1.0f : -1.0f, n.y >= 0.0f ? 1.0f : -1.0f);
+    }
+    return n.xy;
+}
+
+// Decodes an octahedral-encoded normal back to a unit float3.
+float3 OctDecode(float2 f)
+{
+    float3 n = float3(f.x, f.y, 1.0f - abs(f.x) - abs(f.y));
+    float t = saturate(-n.z);
+    n.xy += float2(n.x >= 0.0f ? -t : t, n.y >= 0.0f ? -t : t);
+    return normalize(n);
 }

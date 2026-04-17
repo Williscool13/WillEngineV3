@@ -52,7 +52,10 @@ SHADER_PUBLIC SHADER_ENUM DebugTransformationType
     MultiplyBy10000,
     DivideBy1000,
     DivideBy10000,
-    StencilRemap
+    StencilRemap,
+    VisBuffTriangle,
+    VisBuffMeshlet,
+    VisBuffInstance
 };
 
 SHADER_PUBLIC struct Frustum
