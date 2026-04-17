@@ -26,12 +26,19 @@ struct VertexOutput
 {
     float4 position : SV_Position;
     nointerpolation uint64_t stableId : COLOR0;
+    nointerpolation uint2 visibility : COLOR1; // .x = meshletIndex, .y = instanceIndex
     float clipDistance[1] : SV_ClipDistance;
 };
 
+// Use while they fix https://github.com/shader-slang/slang/issues/7019
+// https://anki3d.org/workarounds-for-issues-with-mesh-shaders-vulkan-hlsl
+// In the future can pass visibility
 struct PrimitiveOutput
 {
-     [[vk::location(0)]] uint2 visibility;
+     [[vk::location(0)]] uint primitiveID : SV_PrimitiveID;
+
+     //[[vk::location(0)]]  nointerpolation uint2 visibility;
+     // primitives[i].visibility = uint2((meshletIndex << 8) | i, instanceIndex);
 };
 
 
@@ -79,6 +86,7 @@ void MeshMain(
         vertices[i].clipDistance[0] = dot(worldPos.xyz, pc.sceneData->clipPlane.xyz) + pc.sceneData->clipPlane.w;
         vertices[i].position = clipPos;
         vertices[i].stableId = inst.stableId;
+        vertices[i].visibility = uint2(meshletIndex, instanceIndex);
     }
 
     for (uint i = threadIndex; i < meshlet.meshletTriangleCount; i += MESH_SHADER_DISPATCH_X) {
@@ -90,7 +98,7 @@ void MeshMain(
         uint idx2 = (packed >> 16) & 0xFF;
 
         triangles[i] = uint3(idx0, idx1, idx2);
-        primitives[i].visibility = uint2((meshletIndex << 8) | i, instanceIndex);
+        primitives[i].primitiveID = i;
     }
 }
 
@@ -101,13 +109,10 @@ struct FragmentOutput {
 };
 
 [shader("fragment")]
-FragmentOutput FragmentMain(
-    VertexOutput vertexInput,
-    PrimitiveOutput primitiveInput)
+FragmentOutput FragmentMain(VertexOutput vertexInput, PrimitiveOutput primitiveInput) //, uint primitiveId : SV_PrimitiveID)
 {
     FragmentOutput output;
-    output.visibilityBuffer = primitiveInput.visibility;
-    // output.visibilityBuffer = vertexInput.visibility;
+    output.visibilityBuffer = uint2((vertexInput.visibility.x << 8) | primitiveInput.primitiveID & 0xFF, vertexInput.visibility.y);
     output.stableId = uint2(uint(vertexInput.stableId & 0xFFFFFFFF), uint(vertexInput.stableId >> 32));
     return output;
 }
