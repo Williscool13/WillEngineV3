@@ -128,7 +128,7 @@ void RenderGraph::AccumulateTextureUsage()
 
         if (pass->depthStencilAttachment != UINT_MAX) {
             auto& tex = textures[pass->depthStencilAttachment];
-            tex.accumulatedUsage |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+            tex.accumulatedUsage |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
         }
     }
 }
@@ -357,50 +357,52 @@ void RenderGraph::Compile(int64_t currentFrame)
     for (auto& phys : physicalResources) {
         if (phys.NeedsDescriptorWrite() && phys.imageView != VK_NULL_HANDLE) {
             if (phys.NeedsDescriptorWrite() && phys.imageView != VK_NULL_HANDLE) {
-                ImageChannelType sampledChannelType = GetImageChannelType(phys.dimensions.format, phys.aspect);
-                switch (sampledChannelType) {
-                    case ImageChannelType::Float4:
-                        phys.sampledDescriptorHandle = transientSampledImageHandleAllocator.Add();
-                        assert(phys.sampledDescriptorHandle.IsValid());
-                        resourceManager->bindlessRDGTransientDescriptorBuffer.WriteSampledImageDescriptor(
-                            phys.sampledDescriptorHandle.index, {nullptr, phys.imageView, VK_IMAGE_LAYOUT_GENERAL}
-                        );
-                        break;
-                    case ImageChannelType::Float2:
-                        phys.sampledDescriptorHandle = transientSampledFloat2HandleAllocator.Add();
-                        assert(phys.sampledDescriptorHandle.IsValid());
-                        resourceManager->bindlessRDGTransientDescriptorBuffer.WriteSampledFloat2Descriptor(
-                            phys.sampledDescriptorHandle.index, {nullptr, phys.imageView, VK_IMAGE_LAYOUT_GENERAL}
-                        );
-                        break;
-                    case ImageChannelType::Float:
-                        phys.sampledDescriptorHandle = transientSampledFloatHandleAllocator.Add();
-                        assert(phys.sampledDescriptorHandle.IsValid());
-                        resourceManager->bindlessRDGTransientDescriptorBuffer.WriteSampledFloatDescriptor(
-                            phys.sampledDescriptorHandle.index, {nullptr, phys.imageView, VK_IMAGE_LAYOUT_GENERAL}
-                        );
-                        break;
-                    case ImageChannelType::UInt4:
-                        phys.sampledDescriptorHandle = transientSampledUInt4HandleAllocator.Add();
-                        assert(phys.sampledDescriptorHandle.IsValid());
-                        resourceManager->bindlessRDGTransientDescriptorBuffer.WriteSampledUInt4Descriptor(
-                            phys.sampledDescriptorHandle.index, {nullptr, phys.imageView, VK_IMAGE_LAYOUT_GENERAL}
-                        );
-                        break;
-                    case ImageChannelType::UInt2:
-                        phys.sampledDescriptorHandle = transientSampledUInt2HandleAllocator.Add();
-                        assert(phys.sampledDescriptorHandle.IsValid());
-                        resourceManager->bindlessRDGTransientDescriptorBuffer.WriteSampledUInt2Descriptor(
-                            phys.sampledDescriptorHandle.index, {nullptr, phys.imageView, VK_IMAGE_LAYOUT_GENERAL}
-                        );
-                        break;
-                    case ImageChannelType::UInt:
-                        phys.sampledDescriptorHandle = transientSampledUIntHandleAllocator.Add();
-                        assert(phys.sampledDescriptorHandle.IsValid());
-                        resourceManager->bindlessRDGTransientDescriptorBuffer.WriteSampledUIntDescriptor(
-                            phys.sampledDescriptorHandle.index, {nullptr, phys.imageView, VK_IMAGE_LAYOUT_GENERAL}
-                        );
-                        break;
+                if ((phys.dimensions.imageUsage & VK_IMAGE_USAGE_SAMPLED_BIT) == VK_IMAGE_USAGE_SAMPLED_BIT) {
+                    ImageChannelType sampledChannelType = GetImageChannelType(phys.dimensions.format, phys.aspect);
+                    switch (sampledChannelType) {
+                        case ImageChannelType::Float4:
+                            phys.sampledDescriptorHandle = transientSampledImageHandleAllocator.Add();
+                            assert(phys.sampledDescriptorHandle.IsValid());
+                            resourceManager->bindlessRDGTransientDescriptorBuffer.WriteSampledImageDescriptor(
+                                phys.sampledDescriptorHandle.index, {nullptr, phys.imageView, VK_IMAGE_LAYOUT_GENERAL}
+                            );
+                            break;
+                        case ImageChannelType::Float2:
+                            phys.sampledDescriptorHandle = transientSampledFloat2HandleAllocator.Add();
+                            assert(phys.sampledDescriptorHandle.IsValid());
+                            resourceManager->bindlessRDGTransientDescriptorBuffer.WriteSampledFloat2Descriptor(
+                                phys.sampledDescriptorHandle.index, {nullptr, phys.imageView, VK_IMAGE_LAYOUT_GENERAL}
+                            );
+                            break;
+                        case ImageChannelType::Float:
+                            phys.sampledDescriptorHandle = transientSampledFloatHandleAllocator.Add();
+                            assert(phys.sampledDescriptorHandle.IsValid());
+                            resourceManager->bindlessRDGTransientDescriptorBuffer.WriteSampledFloatDescriptor(
+                                phys.sampledDescriptorHandle.index, {nullptr, phys.imageView, VK_IMAGE_LAYOUT_GENERAL}
+                            );
+                            break;
+                        case ImageChannelType::UInt4:
+                            phys.sampledDescriptorHandle = transientSampledUInt4HandleAllocator.Add();
+                            assert(phys.sampledDescriptorHandle.IsValid());
+                            resourceManager->bindlessRDGTransientDescriptorBuffer.WriteSampledUInt4Descriptor(
+                                phys.sampledDescriptorHandle.index, {nullptr, phys.imageView, VK_IMAGE_LAYOUT_GENERAL}
+                            );
+                            break;
+                        case ImageChannelType::UInt2:
+                            phys.sampledDescriptorHandle = transientSampledUInt2HandleAllocator.Add();
+                            assert(phys.sampledDescriptorHandle.IsValid());
+                            resourceManager->bindlessRDGTransientDescriptorBuffer.WriteSampledUInt2Descriptor(
+                                phys.sampledDescriptorHandle.index, {nullptr, phys.imageView, VK_IMAGE_LAYOUT_GENERAL}
+                            );
+                            break;
+                        case ImageChannelType::UInt:
+                            phys.sampledDescriptorHandle = transientSampledUIntHandleAllocator.Add();
+                            assert(phys.sampledDescriptorHandle.IsValid());
+                            resourceManager->bindlessRDGTransientDescriptorBuffer.WriteSampledUIntDescriptor(
+                                phys.sampledDescriptorHandle.index, {nullptr, phys.imageView, VK_IMAGE_LAYOUT_GENERAL}
+                            );
+                            break;
+                    }
                 }
 
                 if (phys.depthOnlyView != VK_NULL_HANDLE) {
@@ -414,74 +416,76 @@ void RenderGraph::Compile(int64_t currentFrame)
                 if (phys.stencilOnlyView != VK_NULL_HANDLE) {
                     phys.stencilOnlyDescriptorHandle = transientStorageUIntHandleAllocator.Add();
                     assert(phys.stencilOnlyDescriptorHandle.IsValid());
-                    resourceManager->bindlessRDGTransientDescriptorBuffer.WriteStorageUIntDescriptor(
+                    resourceManager->bindlessRDGTransientDescriptorBuffer.WriteSampledUIntDescriptor(
                         phys.stencilOnlyDescriptorHandle.index,
                         {nullptr, phys.stencilOnlyView, VK_IMAGE_LAYOUT_GENERAL}
                     );
                 }
 
-                ImageChannelType storageType = GetImageChannelType(phys.dimensions.format, phys.aspect);
-                for (uint32_t mip = 0; mip < phys.dimensions.levels; ++mip) {
-                    switch (storageType) {
-                        case ImageChannelType::Float4:
-                        {
-                            phys.storageMipDescriptorHandles[mip] = transientStorageFloat4HandleAllocator.Add();
-                            assert(phys.storageMipDescriptorHandles[mip].IsValid());
-                            resourceManager->bindlessRDGTransientDescriptorBuffer.WriteStorageFloat4Descriptor(
-                                phys.storageMipDescriptorHandles[mip].index,
-                                {nullptr, phys.mipViews[mip], VK_IMAGE_LAYOUT_GENERAL}
-                            );
-                            break;
-                        }
-                        case ImageChannelType::Float2:
-                        {
-                            phys.storageMipDescriptorHandles[mip] = transientStorageFloat2HandleAllocator.Add();
-                            assert(phys.storageMipDescriptorHandles[mip].IsValid());
-                            resourceManager->bindlessRDGTransientDescriptorBuffer.WriteStorageFloat2Descriptor(
-                                phys.storageMipDescriptorHandles[mip].index,
-                                {nullptr, phys.mipViews[mip], VK_IMAGE_LAYOUT_GENERAL}
-                            );
-                            break;
-                        }
-                        case ImageChannelType::Float:
-                        {
-                            phys.storageMipDescriptorHandles[mip] = transientStorageFloatHandleAllocator.Add();
-                            assert(phys.storageMipDescriptorHandles[mip].IsValid());
-                            resourceManager->bindlessRDGTransientDescriptorBuffer.WriteStorageFloatDescriptor(
-                                phys.storageMipDescriptorHandles[mip].index,
-                                {nullptr, phys.mipViews[mip], VK_IMAGE_LAYOUT_GENERAL}
-                            );
-                            break;
-                        }
-                        case ImageChannelType::UInt4:
-                        {
-                            phys.storageMipDescriptorHandles[mip] = transientStorageUInt4HandleAllocator.Add();
-                            assert(phys.storageMipDescriptorHandles[mip].IsValid());
-                            resourceManager->bindlessRDGTransientDescriptorBuffer.WriteStorageUInt4Descriptor(
-                                phys.storageMipDescriptorHandles[mip].index,
-                                {nullptr, phys.mipViews[mip], VK_IMAGE_LAYOUT_GENERAL}
-                            );
-                            break;
-                        }
-                        case ImageChannelType::UInt2:
-                        {
-                            phys.storageMipDescriptorHandles[mip] = transientStorageUInt2HandleAllocator.Add();
-                            assert(phys.storageMipDescriptorHandles[mip].IsValid());
-                            resourceManager->bindlessRDGTransientDescriptorBuffer.WriteStorageUInt2Descriptor(
-                                phys.storageMipDescriptorHandles[mip].index,
-                                {nullptr, phys.mipViews[mip], VK_IMAGE_LAYOUT_GENERAL}
-                            );
-                            break;
-                        }
-                        case ImageChannelType::UInt:
-                        {
-                            phys.storageMipDescriptorHandles[mip] = transientStorageUIntHandleAllocator.Add();
-                            assert(phys.storageMipDescriptorHandles[mip].IsValid());
-                            resourceManager->bindlessRDGTransientDescriptorBuffer.WriteStorageUIntDescriptor(
-                                phys.storageMipDescriptorHandles[mip].index,
-                                {nullptr, phys.mipViews[mip], VK_IMAGE_LAYOUT_GENERAL}
-                            );
-                            break;
+                if ((phys.dimensions.imageUsage & VK_IMAGE_USAGE_STORAGE_BIT) == VK_IMAGE_USAGE_STORAGE_BIT) {
+                    ImageChannelType storageType = GetImageChannelType(phys.dimensions.format, phys.aspect);
+                    for (uint32_t mip = 0; mip < phys.dimensions.levels; ++mip) {
+                        switch (storageType) {
+                            case ImageChannelType::Float4:
+                            {
+                                phys.storageMipDescriptorHandles[mip] = transientStorageFloat4HandleAllocator.Add();
+                                assert(phys.storageMipDescriptorHandles[mip].IsValid());
+                                resourceManager->bindlessRDGTransientDescriptorBuffer.WriteStorageFloat4Descriptor(
+                                    phys.storageMipDescriptorHandles[mip].index,
+                                    {nullptr, phys.mipViews[mip], VK_IMAGE_LAYOUT_GENERAL}
+                                );
+                                break;
+                            }
+                            case ImageChannelType::Float2:
+                            {
+                                phys.storageMipDescriptorHandles[mip] = transientStorageFloat2HandleAllocator.Add();
+                                assert(phys.storageMipDescriptorHandles[mip].IsValid());
+                                resourceManager->bindlessRDGTransientDescriptorBuffer.WriteStorageFloat2Descriptor(
+                                    phys.storageMipDescriptorHandles[mip].index,
+                                    {nullptr, phys.mipViews[mip], VK_IMAGE_LAYOUT_GENERAL}
+                                );
+                                break;
+                            }
+                            case ImageChannelType::Float:
+                            {
+                                phys.storageMipDescriptorHandles[mip] = transientStorageFloatHandleAllocator.Add();
+                                assert(phys.storageMipDescriptorHandles[mip].IsValid());
+                                resourceManager->bindlessRDGTransientDescriptorBuffer.WriteStorageFloatDescriptor(
+                                    phys.storageMipDescriptorHandles[mip].index,
+                                    {nullptr, phys.mipViews[mip], VK_IMAGE_LAYOUT_GENERAL}
+                                );
+                                break;
+                            }
+                            case ImageChannelType::UInt4:
+                            {
+                                phys.storageMipDescriptorHandles[mip] = transientStorageUInt4HandleAllocator.Add();
+                                assert(phys.storageMipDescriptorHandles[mip].IsValid());
+                                resourceManager->bindlessRDGTransientDescriptorBuffer.WriteStorageUInt4Descriptor(
+                                    phys.storageMipDescriptorHandles[mip].index,
+                                    {nullptr, phys.mipViews[mip], VK_IMAGE_LAYOUT_GENERAL}
+                                );
+                                break;
+                            }
+                            case ImageChannelType::UInt2:
+                            {
+                                phys.storageMipDescriptorHandles[mip] = transientStorageUInt2HandleAllocator.Add();
+                                assert(phys.storageMipDescriptorHandles[mip].IsValid());
+                                resourceManager->bindlessRDGTransientDescriptorBuffer.WriteStorageUInt2Descriptor(
+                                    phys.storageMipDescriptorHandles[mip].index,
+                                    {nullptr, phys.mipViews[mip], VK_IMAGE_LAYOUT_GENERAL}
+                                );
+                                break;
+                            }
+                            case ImageChannelType::UInt:
+                            {
+                                phys.storageMipDescriptorHandles[mip] = transientStorageUIntHandleAllocator.Add();
+                                assert(phys.storageMipDescriptorHandles[mip].IsValid());
+                                resourceManager->bindlessRDGTransientDescriptorBuffer.WriteStorageUIntDescriptor(
+                                    phys.storageMipDescriptorHandles[mip].index,
+                                    {nullptr, phys.mipViews[mip], VK_IMAGE_LAYOUT_GENERAL}
+                                );
+                                break;
+                            }
                         }
                     }
                 }

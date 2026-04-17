@@ -820,7 +820,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 blitInfo.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
                 blitInfo.regionCount = 1;
                 blitInfo.pRegions = &blitRegion;
-                blitInfo.filter = VK_FILTER_LINEAR;
+                blitInfo.filter = VK_FILTER_NEAREST;
                 vkCmdBlitImage2(_cmd, &blitInfo);
             });
 
