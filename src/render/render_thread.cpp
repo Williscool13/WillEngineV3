@@ -467,6 +467,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             AOTargets postProcessTargets{
                 .normal = visShadingTargets.normal,
                 .depthStencil = targets.depthStencil,
+                .outputColor = shadingOutputTarget
             };
 
             if (renderFamilyProperties.bHasGTAO) {
@@ -487,10 +488,8 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             };
 
             SetupDeferredResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, deferredResolveTargets, 0);
-            //
-            // if (renderFamilyProperties.bHasSkybox) {
-            //     SetupSkyboxRendering(*renderGraph, viewFamily, renderExtent, targets, 0);
-            // }
+
+            SetupSkyboxRendering(*renderGraph, pipelineManager, viewFamily, renderExtent, postProcessTargets, 0);
 
             // fix portals. again.
             /*bool bHasPortalView = !viewFamily.portalViews.IsEmpty();
@@ -1753,45 +1752,6 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFami
     }
 }
 
-void RenderThread::SetupDeferredLighting(RenderGraph& graph, const Core::ViewFamily& viewFamily, const Core::Array<uint32_t, 2> renderExtent, const GBufferTargets& targets,
-                                         uint32_t sceneDataIndex) const
-{
-    RenderPass& deferredResolvePass = graph.AddPass(SID("Deferred Resolve"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-    deferredResolvePass.ReadBuffer(SID("scene_data"));
-    deferredResolvePass.ReadBuffer(SID("light_data"));
-    deferredResolvePass.ReadSampledImage(targets.albedo);
-    deferredResolvePass.ReadSampledImage(targets.normal);
-    deferredResolvePass.ReadSampledImage(targets.pbr);
-    deferredResolvePass.ReadSampledImage(targets.emissive);
-    deferredResolvePass.ReadSampledImage(targets.depthStencil);
-    deferredResolvePass.ReadSampledImage(SID("shadows_resolve_target"));
-    deferredResolvePass.WriteStorageImage(targets.outFinalColor);
-    deferredResolvePass.Execute([&, width = renderExtent[0], height = renderExtent[1], sceneDataIndex](VkCommandBuffer cmd) {
-        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("deferred_resolve"));
-
-        DeferredResolvePushConstant pushData{
-            .sceneData = graph.GetBufferAddress(SID("scene_data")),
-            .lightData = graph.GetBufferAddress(SID("light_data")),
-            .albedoIndex = graph.GetSampledImageViewDescriptorIndex(targets.albedo),
-            .normalIndex = graph.GetSampledImageViewDescriptorIndex(targets.normal),
-            .pbrIndex = graph.GetSampledImageViewDescriptorIndex(targets.pbr),
-            .emissiveIndex = graph.GetSampledImageViewDescriptorIndex(targets.emissive),
-            .depthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(targets.depthStencil),
-            .shadowsIndex = graph.GetSampledImageViewDescriptorIndex(SID("shadows_resolve_target")),
-            .skyboxIndex = viewFamily.skyboxIndex,
-            .outputImageIndex = graph.GetStorageImageViewDescriptorIndex(targets.outFinalColor),
-            .sceneDataIndex = sceneDataIndex,
-        };
-
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
-        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(DeferredResolvePushConstant), &pushData);
-
-        uint32_t xDispatch = (width + 15) / 16;
-        uint32_t yDispatch = (height + 15) / 16;
-        vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
-    });
-}
-
 void RenderThread::SetupPortalComposite(RenderGraph& graph, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const GBufferTargets& targets,
                                         const GBufferTargets& portalTargets) const
 {
@@ -1829,41 +1789,6 @@ void RenderThread::SetupPortalComposite(RenderGraph& graph, const Core::ViewFami
         vkCmdSetStencilReference(cmd, VK_STENCIL_FACE_FRONT_AND_BACK, 1);
 
         // Because this writes to SV_Depth, apparently all future draw calls to this depth will not use early Z out lol. (stackoverflow 2018)
-        vkCmdDraw(cmd, 3, 1, 0, 0);
-
-        vkCmdEndRendering(cmd);
-    });
-}
-
-void RenderThread::SetupSkyboxRendering(RenderGraph& graph, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneDataIndex) const
-{
-    RenderPass& skyboxPass = graph.AddPass(SID("Skybox"), VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT);
-    skyboxPass.WriteColorAttachment(targets.outFinalColor);
-    skyboxPass.ReadWriteDepthAttachment(targets.depthStencil);
-    skyboxPass.Execute([&, width = renderExtent[0], height = renderExtent[1], sceneDataIndex](VkCommandBuffer cmd) {
-        VkViewport viewport = VkHelpers::GenerateViewport(width, height);
-        vkCmdSetViewport(cmd, 0, 1, &viewport);
-        VkRect2D scissor = VkHelpers::GenerateScissor(width, height);
-        vkCmdSetScissor(cmd, 0, 1, &scissor);
-
-        VkRenderingAttachmentInfo colorAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.outFinalColor), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-        VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), nullptr, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
-
-        Core::Array<VkRenderingAttachmentInfo, 1> colorAttachments{colorAttachment};
-        VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, colorAttachments.Data(), 1, &depthAttachment, nullptr);
-        vkCmdBeginRendering(cmd, &renderInfo);
-
-        EnvironmentSkyboxPushConstant pc{
-            .sceneData = graph.GetBufferAddress(SID("scene_data")),
-            .sceneDataIndex = sceneDataIndex,
-            .cubemapIndex = viewFamily.skyboxIndex,
-            .skyboxLOD = viewFamily.skyboxLOD,
-        };
-
-        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("environment_skybox"));
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineEntry->pipeline);
-        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pc), &pc);
-
         vkCmdDraw(cmd, 3, 1, 0, 0);
 
         vkCmdEndRendering(cmd);

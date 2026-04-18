@@ -136,12 +136,9 @@ private:
         StringID depthStencil; // stencil should be disregarded
     };
 
-    void SetupDeferredLighting(RenderGraph& graph, const Core::ViewFamily& renderViewFamily, Core::Array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneDataIndex) const;
 
     void SetupPortalComposite(RenderGraph& graph, const Core::ViewFamily& renderViewFamily, Core::Array<uint32_t, 2> renderExtent, const GBufferTargets& targets,
                               const GBufferTargets& portalTargets) const;
-
-    void SetupSkyboxRendering(RenderGraph& graph, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const GBufferTargets& targets, uint32_t sceneDataIndex) const;
 
     StringID SetupTemporalAntialiasing(RenderGraph& graph, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const PostProcessTargets& ppTargets) const;
 

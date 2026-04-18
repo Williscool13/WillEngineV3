@@ -82,6 +82,7 @@ struct AOTargets
 {
     StringID normal; // in
     StringID depthStencil; // in
+    StringID outputColor;
 };
 
 void SetupGroundTruthAmbientOcclusion(RenderGraph& graph,
@@ -99,6 +100,13 @@ void SetupShadowsResolve(RenderGraph& graph,
                          Core::Array<uint32_t, 2> renderExtent,
                          const AOTargets& targets,
                          uint32_t sceneIndex);
+
+void SetupSkyboxRendering(RenderGraph& graph,
+                          PipelineManager* pipelineManager,
+                          const Core::ViewFamily& viewFamily,
+                          Core::Array<uint32_t, 2> renderExtent,
+                          const AOTargets& targets,
+                          uint32_t sceneIndex);
 } // Render
 
 #endif //WILL_ENGINE_RENDERER_H

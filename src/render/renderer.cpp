@@ -916,6 +916,47 @@ void SetupShadowsResolve(RenderGraph& graph,
             vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
         });
 }
+
+void SetupSkyboxRendering(RenderGraph& graph,
+    PipelineManager* pipelineManager,
+    const Core::ViewFamily& viewFamily,
+    Core::Array<uint32_t, 2> renderExtent,
+    const AOTargets& targets,
+    uint32_t sceneIndex)
+{
+    RenderPass& skyboxPass = graph.AddPass(SID("Skybox"), VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT);
+    skyboxPass.WriteColorAttachment(targets.outputColor);
+    skyboxPass.ReadWriteDepthAttachment(targets.depthStencil);
+    skyboxPass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1], sceneIndex,
+    outputColor = targets.outputColor, depthStencil = targets.depthStencil, skyboxIndex = viewFamily.skyboxIndex, skyboxLOD = viewFamily.skyboxLOD](VkCommandBuffer cmd) {
+        VkViewport viewport = VkHelpers::GenerateViewport(width, height);
+        vkCmdSetViewport(cmd, 0, 1, &viewport);
+        VkRect2D scissor = VkHelpers::GenerateScissor(width, height);
+        vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+        auto colorAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(outputColor), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        auto depthAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(depthStencil), nullptr, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+
+        Core::Array<VkRenderingAttachmentInfo, 1> colorAttachments{colorAttachment};
+        VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, colorAttachments.Data(), 1, &depthAttachment, nullptr);
+        vkCmdBeginRendering(cmd, &renderInfo);
+
+        EnvironmentSkyboxPushConstant pc{
+            .sceneData = graph.GetBufferAddress(SID("scene_data")),
+            .sceneDataIndex = sceneIndex,
+            .cubemapIndex = skyboxIndex,
+            .skyboxLOD = skyboxLOD,
+        };
+
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("environment_skybox"));
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineEntry->pipeline);
+        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pc), &pc);
+
+        vkCmdDraw(cmd, 3, 1, 0, 0);
+
+        vkCmdEndRendering(cmd);
+    });
+}
 } // Render
 
 /*InstancedGeometryPassOutputs SetupInstancedGeometryShadowPass(RenderGraph& graph, const InstancedGeometryPassConfig& config, PipelineManager* pipelineManager, uint32_t sceneDataIndex,
