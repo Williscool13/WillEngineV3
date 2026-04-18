@@ -26,23 +26,20 @@ void SetupGeometryPass(RenderGraph& graph,
                        const VisibilityBufferTargets& targets,
                        uint32_t sceneIndex);
 
-struct VisibilityBufferResolveTargets
+struct VisibilityBufferBarycentricDerivativeTargets
 {
-    // In
-    StringID visibility;
-
-    // Out
-    StringID barycentric;
-    StringID derivatives;
+    StringID visibility; // in
+    StringID barycentric; // out
+    StringID derivatives; // out
 };
 
 
-void SetupVisibilityResolvePass(RenderGraph& graph,
-    PipelineManager* pipelineManager,
-    const Core::ViewFamily& viewFamily,
-    Core::Array<uint32_t, 2> renderExtent,
-    const VisibilityBufferResolveTargets& targets,
-    uint32_t sceneIndex);
+void SetupVisibilityBarycentricDerivativePass(RenderGraph& graph,
+                                              PipelineManager* pipelineManager,
+                                              const Core::ViewFamily& viewFamily,
+                                              Core::Array<uint32_t, 2> renderExtent,
+                                              const VisibilityBufferBarycentricDerivativeTargets& targets,
+                                              uint32_t sceneIndex);
 } // Render
 
 #endif //WILL_ENGINE_RENDERER_H

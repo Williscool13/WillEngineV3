@@ -537,10 +537,58 @@ void SetupGeometryPass(RenderGraph& graph,
     });
 }
 
-void SetupVisibilityResolvePass(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent,
-    const VisibilityBufferResolveTargets& targets, uint32_t sceneIndex)
+void SetupVisibilityBarycentricDerivativePass(RenderGraph& graph,
+                                              PipelineManager* pipelineManager,
+                                              const Core::ViewFamily& viewFamily,
+                                              Core::Array<uint32_t, 2> renderExtent,
+                                              const VisibilityBufferBarycentricDerivativeTargets& targets,
+                                              uint32_t sceneIndex)
 {
+    RenderPass& clearPass = graph.AddPass(SID("Clear Visibility Intermediates"), VK_PIPELINE_STAGE_2_CLEAR_BIT);
+    clearPass.WriteClearImage(targets.barycentric);
+    clearPass.WriteClearImage(targets.derivatives);
+    clearPass.Execute([&](VkCommandBuffer cmd) {
+        constexpr VkClearColorValue clearColor = {0.0f, 0.0f, 0.0f, 0.0f};
+        VkImageSubresourceRange subresource = VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 1, 1);
+        vkCmdClearColorImage(cmd, graph.GetImageHandle(targets.barycentric), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &subresource);
+        vkCmdClearColorImage(cmd, graph.GetImageHandle(targets.derivatives), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &subresource);
+    });
 
+    RenderPass& visBarDer = graph.AddPass(SID("Visibility Barycentric Derivative"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+    visBarDer.ReadSampledImage(targets.visibility);
+    visBarDer.ReadBuffer(SCENE_DATA_BUFFER);
+    visBarDer.ReadBuffer(GEOMETRY_VERTEX_BUFFER);
+    visBarDer.ReadBuffer(GEOMETRY_MESHLET_VERTEX_BUFFER);
+    visBarDer.ReadBuffer(GEOMETRY_MESHLET_TRIANGLE_BUFFER);
+    visBarDer.ReadBuffer(GEOMETRY_MESHLET_BUFFER);
+    visBarDer.ReadBuffer(GEOMETRY_PRIMITIVE_BUFFER);
+    visBarDer.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
+    visBarDer.ReadBuffer(GEOMETRY_MODEL_BUFFER);
+    visBarDer.WriteStorageImage(targets.barycentric);
+    visBarDer.WriteStorageImage(targets.derivatives);
+    visBarDer.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1], sceneIndex](VkCommandBuffer cmd) {
+        VisibilityBufferResolvePushConstant pc{
+            .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER) + sceneIndex * sizeof(SceneData),
+            .vertexBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_BUFFER),
+            .meshletVerticesBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_VERTEX_BUFFER),
+            .meshletTrianglesBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_TRIANGLE_BUFFER),
+            .meshletBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_BUFFER),
+            .primitiveBuffer = graph.GetBufferAddress(GEOMETRY_PRIMITIVE_BUFFER),
+            .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
+            .modelBuffer = graph.GetBufferAddress(GEOMETRY_MODEL_BUFFER),
+            .extents = {width, height},
+            .visibilityBufferIndex = graph.GetSampledImageViewDescriptorIndex(targets.visibility),
+            .barycentricTargetIndex = graph.GetStorageImageViewDescriptorIndex(targets.barycentric),
+            .derivativeTargetIndex = graph.GetStorageImageViewDescriptorIndex(targets.derivatives),
+        };
+
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("visibility_buffer_barycentric_derivative"));
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+        uint32_t xDispatch = (width + 15) / 16;
+        uint32_t yDispatch = (height + 15) / 16;
+        vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
+    });
 }
 } // Render
 

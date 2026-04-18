@@ -173,7 +173,7 @@ BarycentricDeriv CalcFullBary(float4 pt0, float4 pt1, float4 pt2, float2 pixelNd
 // ==================== Compute Shader ====================
 [shader("compute")]
 [numthreads(16, 16, 1)]
-void VisibilityBufferResolveMain(uint3 dtid : SV_DispatchThreadID, uniform VisibilityBufferResolvePushConstant pc)
+void VisibilityBufferBarycentricDerivative(uint3 dtid : SV_DispatchThreadID, uniform VisibilityBufferResolvePushConstant pc)
 {
     if (dtid.x >= pc.extents.x || dtid.y >= pc.extents.y) {
         return;
@@ -204,9 +204,9 @@ void VisibilityBufferResolveMain(uint3 dtid : SV_DispatchThreadID, uniform Visib
     uint v0i = pc.meshletVerticesBuffer[meshlet.meshletVertexOffset + idx0];
     uint v1i = pc.meshletVerticesBuffer[meshlet.meshletVertexOffset + idx1];
     uint v2i = pc.meshletVerticesBuffer[meshlet.meshletVertexOffset + idx2];
-    Vertex v0 = pc.vertexBuffer[v0i];
-    Vertex v1 = pc.vertexBuffer[v1i];
-    Vertex v2 = pc.vertexBuffer[v2i];
+    Vertex v0 = pc.vertexBuffer[meshlet.vertexOffset + v0i];
+    Vertex v1 = pc.vertexBuffer[meshlet.vertexOffset + v1i];
+    Vertex v2 = pc.vertexBuffer[meshlet.vertexOffset + v2i];
 
     float4x4 mvp = mul(pc.sceneData->viewProj, m.modelMatrix);
     float4 p0 = mul(mvp, float4(v0.position, 1.0));

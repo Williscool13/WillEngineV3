@@ -383,6 +383,11 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
         // Gather / clip
         features10.shaderImageGatherExtended = VK_TRUE;
         features10.shaderClipDistance = VK_TRUE;
+#ifdef ENABLE_VULKAN_VALIDATION
+        // Suppresses a false-positive validation error: SV_PrimitiveID in mesh shaders
+        // triggers a geometry shader requirement check that doesn't apply here.
+        features10.geometryShader = VK_TRUE;
+#endif
 
         // Extensions
         descriptorBufferFeatures.descriptorBuffer = VK_TRUE;

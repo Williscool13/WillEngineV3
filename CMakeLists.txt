@@ -299,10 +299,8 @@ add_shader_include("${CMAKE_SOURCE_DIR}/shaders/bindless_declarations.slang")
 compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/debug_visualize.slang compute ComputeMain debug_visualize
 
-
-
+        # Instancing (Either 1->2->scan->1->2 or 1->scan->2)
         ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputeInstanceLOD instancing_instance_lod
-        # Either 1->2->scan->1->2 or 1->scan->2
         ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputePrefixSumUpsweep1 instancing_prefix_sum_up_1
         ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputePrefixSumUpsweep2 instancing_prefix_sum_up_2
         ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputePrefixSumScanBlocks instancing_scan_blocks
@@ -314,6 +312,10 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputeMeshletVisibilityPrefixSumDownsweep2 instancing_meshlet_visibility_prefix_sum_down_2
         ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputeCompactedMeshletDispatch instancing_compacted_meshlet_dispatch
         ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputeMaxMeshletCount instancing_max_meshlet_count
+
+        # Visibility Buffer
+        ${CMAKE_SOURCE_DIR}/shaders/visibility_buffer.slang compute VisibilityBufferBarycentricDerivative visibility_buffer_barycentric_derivative
+
 
         ${CMAKE_SOURCE_DIR}/shaders/instancing_shadows.slang compute ComputeInstanceLODShadows instancing_instance_lod_shadows
         ${CMAKE_SOURCE_DIR}/shaders/instancing_shadows.slang compute ComputeExpandInstancesToMeshletsShadows instancing_expand_instance_to_meshlet_shadows
