@@ -73,6 +73,8 @@ add_library(render STATIC
         systems/render_screen_capture.h
         renderer.cpp
         renderer.h
+        post-processing/post_processing.cpp
+        post-processing/post_processing.h
 )
 
 target_include_directories(render PRIVATE

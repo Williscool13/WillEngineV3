@@ -18,6 +18,7 @@
 #include "render/vulkan/vk_synchronization.h"
 #include "systems/render_screen_capture.h"
 #include "types/render_types.h"
+#include "post-processing/post_processing.h"
 
 namespace AssetLoad
 {
@@ -129,20 +130,10 @@ private:
         StringID outFinalColor;
     };
 
-    struct PostProcessTargets
-    {
-        StringID finalColor;
-        StringID velocity;
-        StringID depthStencil; // stencil should be disregarded
-    };
-
-
     void SetupPortalComposite(RenderGraph& graph, const Core::ViewFamily& renderViewFamily, Core::Array<uint32_t, 2> renderExtent, const GBufferTargets& targets,
                               const GBufferTargets& portalTargets) const;
 
     StringID SetupTemporalAntialiasing(RenderGraph& graph, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const PostProcessTargets& ppTargets) const;
-
-    StringID SetupPostProcessing(RenderGraph& graph, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const PostProcessTargets& ppTargets, float deltaTime) const;
 
     void SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, StringID depthTarget, StringID targetImage, FrameResourceLimits& limits) const;
 

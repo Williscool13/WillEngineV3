@@ -84,7 +84,8 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
         case 7: { // VisBuffTriangle - bits [0:7] of vis.x
             if (srcPixel.x == 0.0 && srcPixel.y == 0.0) { break; }
             uint triIdx = uint(srcPixel.x) & 0xFF;
-            srcPixel.xyz = float3(float(triIdx) / 255.0);
+            uint h = (triIdx + 1u) * 2654435761u;
+            srcPixel.xyz = float3(float(h >> 24), float((h >> 16) & 0xFF), float((h >> 8) & 0xFF)) / 255.0;
             break;
         }
         case 8: { // VisBuffMeshlet - bits [8:31] of vis.x

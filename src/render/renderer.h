@@ -6,6 +6,7 @@
 #define WILL_ENGINE_RENDERER_H
 #include "render-graph/render_graph.h"
 #include "types/render_types.h"
+#include "post-processing/post_processing.h"
 
 namespace Render
 {
@@ -107,6 +108,14 @@ void SetupSkyboxRendering(RenderGraph& graph,
                           Core::Array<uint32_t, 2> renderExtent,
                           const AOTargets& targets,
                           uint32_t sceneIndex);
+StringID SetupPostProcessing(RenderGraph& graph,
+                              PipelineManager* pipelineManager,
+                              const Core::ViewFamily& viewFamily,
+                              Core::Array<uint32_t, 2> renderExtent,
+                              const PostProcessTargets& targets,
+                              float deltaTime,
+                              uint64_t frameNumber);
+
 } // Render
 
 #endif //WILL_ENGINE_RENDERER_H
