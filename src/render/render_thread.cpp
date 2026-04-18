@@ -374,7 +374,9 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         .depthStencil = SID("depth_target"),
     };
 
-    StringID shadingOutputTarget = SID("shade_output");
+    renderGraph->CreateTexture(targets.visibility, TextureInfo{VISIBILITY_BUFFER_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
+    renderGraph->CreateTexture(targets.stableId, TextureInfo{GBUFFER_STABLE_ID_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
+    renderGraph->CreateTexture(targets.depthStencil, TextureInfo{DEPTH_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
 
     VisibilityBufferBarycentricDerivativeTargets visBarDerTargets{
         .visibility = targets.visibility,
@@ -382,13 +384,26 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         .derivatives = SID("visibility_derivatives"),
     };
 
-    renderGraph->CreateTexture(targets.visibility, TextureInfo{VISIBILITY_BUFFER_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
-    renderGraph->CreateTexture(targets.stableId, TextureInfo{GBUFFER_STABLE_ID_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
-    renderGraph->CreateTexture(targets.depthStencil, TextureInfo{DEPTH_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
-
     renderGraph->CreateTexture(visBarDerTargets.barycentric, TextureInfo{VK_FORMAT_R16G16_SFLOAT, renderExtent[0], renderExtent[1], 1}, true);
     renderGraph->CreateTexture(visBarDerTargets.derivatives, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, renderExtent[0], renderExtent[1], 1}, true);
 
+    VisibilityShadingTargets visShadingTargets{
+        .visibility = targets.visibility,
+.barycentric = visBarDerTargets.barycentric,
+.derivatives = visBarDerTargets.derivatives,
+.albedo =SID("albedo_target"),
+.normal =SID("normal_target"),
+.pbr =SID("pbr_target"),
+.emissive =SID("emissive_target"),
+//     .stableId =SID("velocity_target"), probably do in barycentric derivatives pass. Determine later
+    };
+
+    renderGraph->CreateTexture(visShadingTargets.albedo, TextureInfo{GBUFFER_ALBEDO_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
+    renderGraph->CreateTexture(visShadingTargets.normal, TextureInfo{GBUFFER_NORMAL_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
+    renderGraph->CreateTexture(visShadingTargets.pbr, TextureInfo{GBUFFER_PBR_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
+    renderGraph->CreateTexture(visShadingTargets.emissive, TextureInfo{GBUFFER_EMISSIVE_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
+
+    StringID shadingOutputTarget = SID("shade_output");
     renderGraph->CreateTexture(shadingOutputTarget, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
 
 
@@ -444,6 +459,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
             SetupVisibilityBarycentricDerivativePass(*renderGraph, pipelineManager, viewFamily, renderExtent, visBarDerTargets, 0);
 
+            SetupVisibilityShadingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, visShadingTargets, 0);
             // if (renderFamilyProperties.bHasGTAO) {
             //     SetupGroundTruthAmbientOcclusion(*renderGraph, viewFamily, renderExtent, targets, 0);
             // }
@@ -1023,6 +1039,8 @@ void RenderThread::CreatePipelines()
 
     pipelineManager->RegisterComputePipeline(SID("visibility_buffer_barycentric_derivative"), Platform::GetShaderPath() / "visibility_buffer_barycentric_derivative_compute.spv",
                                              sizeof(VisibilityBufferResolvePushConstant), PipelineCategory::VisibilityBuffer);
+    pipelineManager->RegisterComputePipeline(SID("visibility_shading"), Platform::GetShaderPath() / "visibility_shading_compute.spv",
+                                             sizeof(VisibilityShadingPushConstant), PipelineCategory::VisibilityBuffer);
     pipelineManager->RegisterComputePipeline(SID("instancing_instance_lod_shadows"), Platform::GetShaderPath() / "instancing_instance_lod_shadows_compute.spv",
                                              sizeof(InstanceLODShadowsPushConstant), PipelineCategory::Instancing);
     pipelineManager->RegisterComputePipeline(SID("instancing_expand_instance_to_meshlet_shadows"), Platform::GetShaderPath() / "instancing_expand_instance_to_meshlet_shadows_compute.spv",

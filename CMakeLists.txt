@@ -315,6 +315,7 @@ compile_shaders(will-engine
 
         # Visibility Buffer
         ${CMAKE_SOURCE_DIR}/shaders/visibility_buffer.slang compute VisibilityBufferBarycentricDerivative visibility_buffer_barycentric_derivative
+        ${CMAKE_SOURCE_DIR}/shaders/visibility_shading.slang compute VisibilityShading visibility_shading
 
 
         ${CMAKE_SOURCE_DIR}/shaders/instancing_shadows.slang compute ComputeInstanceLODShadows instancing_instance_lod_shadows

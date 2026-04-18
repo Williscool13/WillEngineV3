@@ -40,6 +40,24 @@ void SetupVisibilityBarycentricDerivativePass(RenderGraph& graph,
                                               Core::Array<uint32_t, 2> renderExtent,
                                               const VisibilityBufferBarycentricDerivativeTargets& targets,
                                               uint32_t sceneIndex);
+
+struct VisibilityShadingTargets
+{
+    StringID visibility;   // in
+    StringID barycentric;  // in
+    StringID derivatives;  // in
+    StringID albedo;       // out
+    StringID normal;       // out
+    StringID pbr;          // out
+    StringID emissive;     // out
+};
+
+void SetupVisibilityShadingPass(RenderGraph& graph,
+                                PipelineManager* pipelineManager,
+                                const Core::ViewFamily& viewFamily,
+                                Core::Array<uint32_t, 2> renderExtent,
+                                const VisibilityShadingTargets& targets,
+                                uint32_t sceneIndex);
 } // Render
 
 #endif //WILL_ENGINE_RENDERER_H

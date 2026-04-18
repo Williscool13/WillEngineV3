@@ -590,6 +590,74 @@ void SetupVisibilityBarycentricDerivativePass(RenderGraph& graph,
         vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
     });
 }
+
+void SetupVisibilityShadingPass(RenderGraph& graph,
+                                PipelineManager* pipelineManager,
+                                const Core::ViewFamily& viewFamily,
+                                Core::Array<uint32_t, 2> renderExtent,
+                                const VisibilityShadingTargets& targets,
+                                uint32_t sceneIndex)
+{
+    RenderPass& clearPass = graph.AddPass(SID("Clear Visibility Shading RTs"), VK_PIPELINE_STAGE_2_CLEAR_BIT);
+    clearPass.WriteClearImage(targets.albedo);
+    clearPass.WriteClearImage(targets.normal);
+    clearPass.WriteClearImage(targets.pbr);
+    clearPass.WriteClearImage(targets.emissive);
+    clearPass.Execute([&](VkCommandBuffer cmd) {
+        constexpr VkClearColorValue clearColor = {0.0f, 0.0f, 0.0f, 0.0f};
+        VkImageSubresourceRange subresource = VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 1, 1);
+        vkCmdClearColorImage(cmd, graph.GetImageHandle(targets.albedo), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &subresource);
+        vkCmdClearColorImage(cmd, graph.GetImageHandle(targets.normal), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &subresource);
+        vkCmdClearColorImage(cmd, graph.GetImageHandle(targets.pbr), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &subresource);
+        vkCmdClearColorImage(cmd, graph.GetImageHandle(targets.emissive), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &subresource);
+    });
+
+    RenderPass& visShading = graph.AddPass(SID("Visibility Shading"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+    visShading.ReadSampledImage(targets.visibility);
+    visShading.ReadStorageImage(targets.barycentric);
+    visShading.ReadStorageImage(targets.derivatives);
+    visShading.ReadBuffer(SCENE_DATA_BUFFER);
+    visShading.ReadBuffer(GEOMETRY_VERTEX_BUFFER);
+    visShading.ReadBuffer(GEOMETRY_MESHLET_VERTEX_BUFFER);
+    visShading.ReadBuffer(GEOMETRY_MESHLET_TRIANGLE_BUFFER);
+    visShading.ReadBuffer(GEOMETRY_MESHLET_BUFFER);
+    visShading.ReadBuffer(GEOMETRY_PRIMITIVE_BUFFER);
+    visShading.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
+    visShading.ReadBuffer(GEOMETRY_MODEL_BUFFER);
+    visShading.ReadBuffer(GEOMETRY_MATERIAL_BUFFER);
+    visShading.WriteStorageImage(targets.albedo);
+    visShading.WriteStorageImage(targets.normal);
+    visShading.WriteStorageImage(targets.pbr);
+    visShading.WriteStorageImage(targets.emissive);
+    visShading.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1], sceneIndex](VkCommandBuffer cmd) {
+        VisibilityShadingPushConstant pc{
+            .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER) + sceneIndex * sizeof(SceneData),
+            .vertexBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_BUFFER),
+            .meshletVerticesBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_VERTEX_BUFFER),
+            .meshletTrianglesBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_TRIANGLE_BUFFER),
+            .meshletBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_BUFFER),
+            .primitiveBuffer = graph.GetBufferAddress(GEOMETRY_PRIMITIVE_BUFFER),
+            .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
+            .modelBuffer = graph.GetBufferAddress(GEOMETRY_MODEL_BUFFER),
+            .materialBuffer = graph.GetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
+            .extents = {width, height},
+            .visibilityBufferIndex = graph.GetSampledImageViewDescriptorIndex(targets.visibility),
+            .barycentricBufferIndex = graph.GetStorageImageViewDescriptorIndex(targets.barycentric),
+            .derivativeBufferIndex = graph.GetStorageImageViewDescriptorIndex(targets.derivatives),
+            .albedoTargetIndex = graph.GetStorageImageViewDescriptorIndex(targets.albedo),
+            .normalTargetIndex = graph.GetStorageImageViewDescriptorIndex(targets.normal),
+            .pbrTargetIndex = graph.GetStorageImageViewDescriptorIndex(targets.pbr),
+            .emissiveTargetIndex = graph.GetStorageImageViewDescriptorIndex(targets.emissive),
+        };
+
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("visibility_shading"));
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+        uint32_t xDispatch = (width + 15) / 16;
+        uint32_t yDispatch = (height + 15) / 16;
+        vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
+    });
+}
 } // Render
 
 /*InstancedGeometryPassOutputs SetupInstancedGeometryShadowPass(RenderGraph& graph, const InstancedGeometryPassConfig& config, PipelineManager* pipelineManager, uint32_t sceneDataIndex,

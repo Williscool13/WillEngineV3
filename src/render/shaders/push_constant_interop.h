@@ -288,14 +288,27 @@ SHADER_PUBLIC struct VisibilityBufferResolvePushConstant
     SHADER_PUBLIC uint32_t derivativeTargetIndex;
 };
 
-SHADER_PUBLIC struct VisibilityBufferTexturingPushContant
+SHADER_PUBLIC struct VisibilityShadingPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC SHADER_PTR(Vertex) vertexBuffer;
+    SHADER_PUBLIC SHADER_PTR(uint32_t) meshletVerticesBuffer;
+    SHADER_PUBLIC SHADER_PTR(uint32_t) meshletTrianglesBuffer;
+    SHADER_PUBLIC SHADER_PTR(Meshlet) meshletBuffer;
+    SHADER_PUBLIC SHADER_PTR(Primitive) primitiveBuffer;
+    SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
+    SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
     SHADER_PUBLIC SHADER_PTR(MaterialProperties) materialBuffer;
-
+    SHADER_PUBLIC uint2 extents;
     // In
+    SHADER_PUBLIC uint32_t visibilityBufferIndex;
     SHADER_PUBLIC uint32_t barycentricBufferIndex;
     SHADER_PUBLIC uint32_t derivativeBufferIndex;
+    // Out
+    SHADER_PUBLIC uint32_t albedoTargetIndex;
+    SHADER_PUBLIC uint32_t normalTargetIndex;
+    SHADER_PUBLIC uint32_t pbrTargetIndex;
+    SHADER_PUBLIC uint32_t emissiveTargetIndex;
 };
 
 SHADER_PUBLIC struct BaseMeshShadingPushConstant

@@ -214,7 +214,6 @@ void VisibilityBufferBarycentricDerivative(uint3 dtid : SV_DispatchThreadID, uni
     float4 p2 = mul(mvp, float4(v2.position, 1.0));
 
     float2 pixelNDC = (float2(dtid.xy) + 0.5) / float2(pc.extents) * 2.0 - 1.0;
-    pixelNDC.y = -pixelNDC.y; // Y-up NDC convention (flipped viewport)
 
     BarycentricDeriv baryDeriv = CalcFullBary(p0, p1, p2, pixelNDC, float2(pc.extents));
     float3 bary = baryDeriv.m_lambda;
@@ -228,16 +227,4 @@ void VisibilityBufferBarycentricDerivative(uint3 dtid : SV_DispatchThreadID, uni
 
     rdgStorageFloat2[pc.barycentricTargetIndex][dtid.xy] = float2(bary.x, bary.y);
     rdgStorageFloat4[pc.derivativeTargetIndex][dtid.xy] = float4(uvDdx, uvDdy);
-
-
-    // 9. Interpolate UV, normal, tangent using barycentrics
-    // Calculate Barycentrics, Derivatives + flags, and Tangent frame
-
-    // 10. Fetch textures (albedo, metalRough, normal map, emissive, occlusion) via material indices
-
-    // 11. Reconstruct world position from depth buffer + inverse viewProj
-
-    // 12. Evaluate BRDF (direct lighting, IBL, AO)
-
-    // 13. Write result to output UAV
 }
