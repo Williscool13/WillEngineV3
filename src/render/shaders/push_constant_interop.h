@@ -357,7 +357,6 @@ SHADER_PUBLIC struct ShadowsResolvePushConstant
     SHADER_PUBLIC int4 csmIndices;
     SHADER_PUBLIC uint32_t depthIndex;
     SHADER_PUBLIC uint32_t normalIndex;
-    SHADER_PUBLIC uint32_t sceneDataIndex;
 };
 
 SHADER_PUBLIC struct SHADER_ALIGN DeferredResolvePushConstant
@@ -567,7 +566,6 @@ SHADER_PUBLIC struct GTAODepthPrepassPushConstant
     SHADER_PUBLIC float effectRadius;
     SHADER_PUBLIC float effectFalloffRange;
     SHADER_PUBLIC float radiusMultiplier;
-    SHADER_PUBLIC uint32_t sceneDataIndex;
 };
 
 SHADER_PUBLIC struct GTAOMainPushConstant
@@ -588,7 +586,6 @@ SHADER_PUBLIC struct GTAOMainPushConstant
     SHADER_PUBLIC float sliceCount;
     SHADER_PUBLIC float stepsPerSlice;
     SHADER_PUBLIC uint32_t noiseIndex;
-    SHADER_PUBLIC uint32_t sceneDataIndex;
 };
 
 SHADER_PUBLIC struct GTAODenoisePushConstant
@@ -599,7 +596,6 @@ SHADER_PUBLIC struct GTAODenoisePushConstant
     SHADER_PUBLIC uint32_t filteredAOIndex;
     SHADER_PUBLIC float denoiseBlurBeta;
     SHADER_PUBLIC uint32_t isFinalDenoisePass;
-    SHADER_PUBLIC uint32_t sceneDataIndex;
 };
 
 SHADER_PUBLIC struct PortalCompositePushConstant

@@ -44,13 +44,13 @@ void SetupVisibilityBarycentricDerivativePass(RenderGraph& graph,
 
 struct VisibilityShadingTargets
 {
-    StringID visibility;   // in
-    StringID barycentric;  // in
-    StringID derivatives;  // in
-    StringID albedo;       // out
-    StringID normal;       // out
-    StringID pbr;          // out
-    StringID emissive;     // out
+    StringID visibility; // in
+    StringID barycentric; // in
+    StringID derivatives; // in
+    StringID albedo; // out
+    StringID normal; // out
+    StringID pbr; // out
+    StringID emissive; // out
 };
 
 void SetupVisibilityShadingPass(RenderGraph& graph,
@@ -62,13 +62,13 @@ void SetupVisibilityShadingPass(RenderGraph& graph,
 
 struct DeferredResolveTargets
 {
-    StringID albedo;    // in
-    StringID normal;    // in
-    StringID pbr;       // in
-    StringID emissive;  // in
-    StringID depth;     // in
-    StringID shadows;   // in (optional, leave default-constructed if unavailable)
-    StringID output;    // out
+    StringID albedo; // in
+    StringID normal; // in
+    StringID pbr; // in
+    StringID emissive; // in
+    StringID depth; // in
+    StringID shadows; // in (optional, leave default-constructed if unavailable)
+    StringID output; // out
 };
 
 void SetupDeferredResolvePass(RenderGraph& graph,
@@ -77,6 +77,28 @@ void SetupDeferredResolvePass(RenderGraph& graph,
                               Core::Array<uint32_t, 2> renderExtent,
                               const DeferredResolveTargets& targets,
                               uint32_t sceneIndex);
+
+struct AOTargets
+{
+    StringID normal; // in
+    StringID depthStencil; // in
+};
+
+void SetupGroundTruthAmbientOcclusion(RenderGraph& graph,
+                                      PipelineManager* pipelineManager,
+                                      const Core::ViewFamily& viewFamily,
+                                      Core::Array<uint32_t, 2> renderExtent,
+                                      const AOTargets& targets,
+                                      uint64_t frameNumber,
+                                      uint32_t sceneIndex);
+
+
+void SetupShadowsResolve(RenderGraph& graph,
+                         PipelineManager* pipelineManager,
+                         const Core::ViewFamily& viewFamily,
+                         Core::Array<uint32_t, 2> renderExtent,
+                         const AOTargets& targets,
+                         uint32_t sceneIndex);
 } // Render
 
 #endif //WILL_ENGINE_RENDERER_H
