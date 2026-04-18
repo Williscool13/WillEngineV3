@@ -15,6 +15,7 @@ struct VisibilityBufferTargets
 {
     StringID visibility;
     StringID stableId;
+    StringID velocity;
     StringID depthStencil;
 };
 
@@ -58,6 +59,24 @@ void SetupVisibilityShadingPass(RenderGraph& graph,
                                 Core::Array<uint32_t, 2> renderExtent,
                                 const VisibilityShadingTargets& targets,
                                 uint32_t sceneIndex);
+
+struct DeferredResolveTargets
+{
+    StringID albedo;    // in
+    StringID normal;    // in
+    StringID pbr;       // in
+    StringID emissive;  // in
+    StringID depth;     // in
+    StringID shadows;   // in (optional, leave default-constructed if unavailable)
+    StringID output;    // out
+};
+
+void SetupDeferredResolvePass(RenderGraph& graph,
+                              PipelineManager* pipelineManager,
+                              const Core::ViewFamily& viewFamily,
+                              Core::Array<uint32_t, 2> renderExtent,
+                              const DeferredResolveTargets& targets,
+                              uint32_t sceneIndex);
 } // Render
 
 #endif //WILL_ENGINE_RENDERER_H

@@ -84,12 +84,10 @@ float3 YCoCgToRGB(float3 ycocg) {
 }
 
 // Interpolated surface attributes in view space, reconstructed from barycentrics + vertices.
-// Call from GBuffer pass material shaders after re-fetching the 3 triangle vertices.
 // mv: model-view matrix (mul(view, modelMatrix))
 // bary: float3(bary.x, bary.y, 1 - bary.x - bary.y) from the barycentric buffer
 struct InterpolatedVertex
 {
-    float3 positionVS;
     float3 normalVS;
     float2 uv;
     float4 color;
@@ -98,9 +96,6 @@ struct InterpolatedVertex
 InterpolatedVertex InterpolateVertex(float3 bary, Vertex v0, Vertex v1, Vertex v2, float4x4 mv)
 {
     InterpolatedVertex result;
-
-    float3 objPos = bary.x * v0.position + bary.y * v1.position + bary.z * v2.position;
-    result.positionVS = mul(mv, float4(objPos, 1.0f)).xyz;
 
     float3 objNormal = normalize(bary.x * v0.normal + bary.y * v1.normal + bary.z * v2.normal);
     result.normalVS = normalize(mul(Adjugate((float3x3)mv), objNormal));
@@ -112,6 +107,14 @@ InterpolatedVertex InterpolateVertex(float3 bary, Vertex v0, Vertex v1, Vertex v
     result.color = bary.x * v0.color + bary.y * v1.color + bary.z * v2.color;
 
     return result;
+}
+
+// Returns interpolated view-space position. For custom shading pipelines that need exact object-space
+// position and already have the vertices in registers. mv: model-view matrix (mul(view, modelMatrix))
+float3 InterpolatePosition(float3 bary, Vertex v0, Vertex v1, Vertex v2, float4x4 mv)
+{
+    float3 objPos = bary.x * v0.position + bary.y * v1.position + bary.z * v2.position;
+    return mul(mv, float4(objPos, 1.0f)).xyz;
 }
 
 // Octahedral encoding: maps a unit float3 normal to float2 in [-1,1]^2.

@@ -371,11 +371,13 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
     VisibilityBufferTargets targets{
         .visibility = SID("visibility_target"),
         .stableId = SID("stable_id"),
+        .velocity = SID("velocity_target"),
         .depthStencil = SID("depth_target"),
     };
 
     renderGraph->CreateTexture(targets.visibility, TextureInfo{VISIBILITY_BUFFER_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
     renderGraph->CreateTexture(targets.stableId, TextureInfo{GBUFFER_STABLE_ID_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
+    renderGraph->CreateTexture(targets.velocity, TextureInfo{GBUFFER_MOTION_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
     renderGraph->CreateTexture(targets.depthStencil, TextureInfo{DEPTH_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
 
     VisibilityBufferBarycentricDerivativeTargets visBarDerTargets{
@@ -389,13 +391,13 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
     VisibilityShadingTargets visShadingTargets{
         .visibility = targets.visibility,
-.barycentric = visBarDerTargets.barycentric,
-.derivatives = visBarDerTargets.derivatives,
-.albedo =SID("albedo_target"),
-.normal =SID("normal_target"),
-.pbr =SID("pbr_target"),
-.emissive =SID("emissive_target"),
-//     .stableId =SID("velocity_target"), probably do in barycentric derivatives pass. Determine later
+        .barycentric = visBarDerTargets.barycentric,
+        .derivatives = visBarDerTargets.derivatives,
+        .albedo = SID("albedo_target"),
+        .normal = SID("normal_target"),
+        .pbr = SID("pbr_target"),
+        .emissive = SID("emissive_target"),
+
     };
 
     renderGraph->CreateTexture(visShadingTargets.albedo, TextureInfo{GBUFFER_ALBEDO_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
@@ -405,7 +407,6 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
     StringID shadingOutputTarget = SID("shade_output");
     renderGraph->CreateTexture(shadingOutputTarget, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
-
 
 
     // Main view G-buffer
@@ -455,15 +456,27 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 SetupCascadedShadows(*renderGraph, viewFamily, renderFamilyProperties, 0);
             }
 
+            // todo guard these passes. Instead of spread out, define the base shaders as "Critical" and do not let anything render until they exist.
             SetupGeometryPass(*renderGraph, pipelineManager, viewFamily, renderFamilyProperties, renderExtent, targets, 0);
 
             SetupVisibilityBarycentricDerivativePass(*renderGraph, pipelineManager, viewFamily, renderExtent, visBarDerTargets, 0);
 
             SetupVisibilityShadingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, visShadingTargets, 0);
-            // if (renderFamilyProperties.bHasGTAO) {
-            //     SetupGroundTruthAmbientOcclusion(*renderGraph, viewFamily, renderExtent, targets, 0);
-            // }
-            //
+
+            DeferredResolveTargets deferredResolveTargets{
+                .albedo = visShadingTargets.albedo,
+                .normal = visShadingTargets.normal,
+                .pbr = visShadingTargets.pbr,
+                .emissive = visShadingTargets.emissive,
+                .depth = targets.depthStencil,
+                .output = shadingOutputTarget,
+            };
+            SetupDeferredResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, deferredResolveTargets, 0);
+
+            if (renderFamilyProperties.bHasGTAO) {
+                SetupGroundTruthAmbientOcclusion(*renderGraph, viewFamily, renderExtent, targets, 0);
+            }
+
             // SetupShadowsResolve(*renderGraph, viewFamily, renderExtent, targets, 0);
             //
             // if (renderFamilyProperties.bHasDeferred) {
@@ -1132,9 +1145,10 @@ void RenderThread::CreatePipelines()
         builder.Clear();
     }
 
-    constexpr Core::Array<VkFormat, 2> graphicsColorFormats{
+    constexpr Core::Array<VkFormat, 3> graphicsColorFormats{
         VISIBILITY_BUFFER_FORMAT,
-        GBUFFER_STABLE_ID_FORMAT
+        GBUFFER_STABLE_ID_FORMAT,
+        GBUFFER_MOTION_FORMAT
     };
 
     // Visibility Buffer

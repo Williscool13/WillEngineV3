@@ -482,6 +482,7 @@ void SetupGeometryPass(RenderGraph& graph,
 
     RenderPass& instancedMeshShading = graph.AddPass(SID("Instanced Mesh Shading"), VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
     instancedMeshShading.WriteColorAttachment(targets.visibility);
+    instancedMeshShading.WriteColorAttachment(targets.velocity);
     instancedMeshShading.WriteColorAttachment(targets.stableId);
     instancedMeshShading.WriteDepthAttachment(targets.depthStencil);
     instancedMeshShading.ReadBuffer(SCENE_DATA_BUFFER);
@@ -497,15 +498,17 @@ void SetupGeometryPass(RenderGraph& graph,
         vkCmdSetScissor(cmd, 0, 1, &scissor);
 
         constexpr VkClearValue uintClear = {.color = {.uint32 = {0u, 0u, 0u, 0u}}};
+        constexpr VkClearValue floatClear = {.color = {.float32 = {0u, 0u, 0u, 0u}}};
         constexpr VkClearValue depthClear = {.depthStencil = {0.0f, 0u}};
 
         auto visibilityAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.visibility), &uintClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
         auto stableIdAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.stableId), &uintClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        auto velocityAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.velocity), &floatClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
         auto depthAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), &depthClear, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
         auto stencilAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), &depthClear, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
-        const VkRenderingAttachmentInfo colorAttachments[] = {visibilityAttachment, stableIdAttachment};
-        const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, colorAttachments, 2, &depthAttachment, &stencilAttachment);
+        const VkRenderingAttachmentInfo colorAttachments[] = {visibilityAttachment, stableIdAttachment, velocityAttachment};
+        const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, colorAttachments, 3, &depthAttachment, &stencilAttachment);
 
         vkCmdBeginRendering(cmd, &renderInfo);
 
@@ -653,6 +656,52 @@ void SetupVisibilityShadingPass(RenderGraph& graph,
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("visibility_shading"));
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+        uint32_t xDispatch = (width + 15) / 16;
+        uint32_t yDispatch = (height + 15) / 16;
+        vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
+    });
+}
+
+void SetupDeferredResolvePass(RenderGraph& graph,
+                              PipelineManager* pipelineManager,
+                              const Core::ViewFamily& viewFamily,
+                              Core::Array<uint32_t, 2> renderExtent,
+                              const DeferredResolveTargets& targets,
+                              uint32_t sceneIndex)
+{
+    RenderPass& deferredResolvePass = graph.AddPass(SID("Deferred Resolve"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+    deferredResolvePass.ReadBuffer(SCENE_DATA_BUFFER);
+    deferredResolvePass.ReadBuffer(SHADOW_DATA_BUFFER);
+    deferredResolvePass.ReadBuffer(SID("light_data"));
+    deferredResolvePass.ReadSampledImage(targets.albedo);
+    deferredResolvePass.ReadSampledImage(targets.normal);
+    deferredResolvePass.ReadSampledImage(targets.pbr);
+    deferredResolvePass.ReadSampledImage(targets.emissive);
+    deferredResolvePass.ReadSampledImage(targets.depth);
+    if (targets.shadows != StringID{}) {
+        deferredResolvePass.ReadSampledImage(targets.shadows);
+    }
+    deferredResolvePass.WriteStorageImage(targets.output);
+    deferredResolvePass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1], sceneIndex](VkCommandBuffer cmd) {
+        DeferredResolvePushConstant pc{
+            .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
+            .shadowData = graph.GetBufferAddress(SHADOW_DATA_BUFFER),
+            .lightData = graph.GetBufferAddress(SID("light_data")),
+            .albedoIndex = graph.GetSampledImageViewDescriptorIndex(targets.albedo),
+            .normalIndex = graph.GetSampledImageViewDescriptorIndex(targets.normal),
+            .pbrIndex = graph.GetSampledImageViewDescriptorIndex(targets.pbr),
+            .emissiveIndex = graph.GetSampledImageViewDescriptorIndex(targets.emissive),
+            .depthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(targets.depth),
+            .shadowsIndex = targets.shadows != StringID{} ? graph.GetSampledImageViewDescriptorIndex(targets.shadows) : ~0x0u,
+            .skyboxIndex = viewFamily.skyboxIndex,
+            .outputImageIndex = graph.GetStorageImageViewDescriptorIndex(targets.output),
+            .sceneDataIndex = sceneIndex,
+        };
+
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("deferred_resolve"));
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+
         uint32_t xDispatch = (width + 15) / 16;
         uint32_t yDispatch = (height + 15) / 16;
         vkCmdDispatch(cmd, xDispatch, yDispatch, 1);

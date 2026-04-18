@@ -99,17 +99,4 @@ void VisibilityShading(uint3 dtid : SV_DispatchThreadID, uniform VisibilityShadi
     rdgStorageFloat4[pc.normalTargetIndex][dtid.xy]   = float4(shadingNormal * 0.5 + 0.5, 0.0);
     rdgStorageFloat4[pc.pbrTargetIndex][dtid.xy]      = float4(metallic, roughness, 0.0, 0.0);
     rdgStorageFloat4[pc.emissiveTargetIndex][dtid.xy] = float4(emissiveColor, mat.emissiveFactor.w);
-
-
-
-    // 9. Interpolate UV, normal, tangent using barycentrics
-    // Calculate Barycentrics, Derivatives + flags, and Tangent frame
-
-    // 10. Fetch textures (albedo, metalRough, normal map, emissive, occlusion) via material indices
-
-    // 11. Reconstruct world position from depth buffer + inverse viewProj
-
-    // 12. Evaluate BRDF (direct lighting, IBL, AO)
-
-    // 13. Write result to output UAV
 }

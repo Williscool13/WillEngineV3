@@ -27,6 +27,8 @@ struct VertexOutput
     float4 position : SV_Position;
     nointerpolation uint64_t stableId : COLOR0;
     nointerpolation uint2 visibility : COLOR1; // .x = meshletIndex, .y = instanceIndex
+    float4 currentClipPos : TEXCOORD0;
+    float4 prevClipPos : TEXCOORD1;
     float clipDistance[1] : SV_ClipDistance;
 };
 
@@ -73,6 +75,8 @@ void MeshMain(
     uint meshletIndex = prim.meshletOffset[lod] + meshletIndexWithinLOD;
     Meshlet meshlet = pc.meshletBuffer[meshletIndex];
     float4x4 jitteredViewProj = pc.sceneData->viewProj;
+    float4x4 unjitteredViewProj = pc.sceneData->unjitteredViewProj;
+    float4x4 unjitteredPrevViewProj = pc.sceneData->unjitteredPrevViewProj;
 
     SetMeshOutputCounts(meshlet.meshletVertexCount, meshlet.meshletTriangleCount);
 
@@ -81,12 +85,15 @@ void MeshMain(
         uint localVertexIndex = pc.meshletVerticesBuffer[meshlet.meshletVertexOffset + i];
         Vertex v = pc.vertexBuffer[meshlet.vertexOffset + localVertexIndex];
         float4 worldPos = mul(m.modelMatrix, float4(v.position, 1.0));
+        float4 prevWorldPos = mul(m.prevModelMatrix, float4(v.position, 1.0));
         float4 clipPos = mul(jitteredViewProj, worldPos);
 
         vertices[i].clipDistance[0] = dot(worldPos.xyz, pc.sceneData->clipPlane.xyz) + pc.sceneData->clipPlane.w;
         vertices[i].position = clipPos;
         vertices[i].stableId = inst.stableId;
         vertices[i].visibility = uint2(meshletIndex, instanceIndex);
+        vertices[i].currentClipPos = mul(unjitteredViewProj, worldPos);
+        vertices[i].prevClipPos = mul(unjitteredPrevViewProj, prevWorldPos);
     }
 
     for (uint i = threadIndex; i < meshlet.meshletTriangleCount; i += MESH_SHADER_DISPATCH_X) {
@@ -106,6 +113,7 @@ void MeshMain(
 struct FragmentOutput {
     uint2 visibilityBuffer : SV_Target0;
     uint2 stableId : SV_Target1;
+    float2 velocity : SV_Target2;
 };
 
 [shader("fragment")]
@@ -114,6 +122,11 @@ FragmentOutput FragmentMain(VertexOutput vertexInput, PrimitiveOutput primitiveI
     FragmentOutput output;
     output.visibilityBuffer = uint2((vertexInput.visibility.x << 8) | primitiveInput.primitiveID & 0xFF, vertexInput.visibility.y);
     output.stableId = uint2(uint(vertexInput.stableId & 0xFFFFFFFF), uint(vertexInput.stableId >> 32));
+
+    float2 currentNDC = vertexInput.currentClipPos.xy / vertexInput.currentClipPos.w;
+    float2 prevNDC = vertexInput.prevClipPos.xy / vertexInput.prevClipPos.w;
+    output.velocity = currentNDC - prevNDC;
+
     return output;
 }
 

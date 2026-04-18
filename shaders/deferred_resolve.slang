@@ -18,7 +18,10 @@ void ComputeMain(uniform DeferredResolvePushConstant pc, uint3 threadID : SV_Dis
     float3 viewNormal = rdgTexturesFloat4[pc.normalIndex].Load(int3(threadID.xy, 0)).xyz;
     float4 pbrData = rdgTexturesFloat4[pc.pbrIndex].Load(int3(threadID.xy, 0));
     float4 emissiveData = rdgTexturesFloat4[pc.emissiveIndex].Load(int3(threadID.xy, 0));
-    float2 shadows = rdgTexturesFloat2[pc.shadowsIndex].Load(int3(threadID.xy, 0)).xy;
+    float2 shadows = float2(1.0f);
+    if (pc.shadowsIndex != ~0x0u){
+        shadows = rdgTexturesFloat2[pc.shadowsIndex].Load(int3(threadID.xy, 0)).xy;
+    }
 
     float viewSpaceDepth = ScreenToViewSpaceDepth(depth, pc.sceneData[pc.sceneDataIndex].depthLinearizeMult, pc.sceneData[pc.sceneDataIndex].depthLinearizeAdd);
     float3 viewPosition = CheapReconstructViewSpacePosition(pc.sceneData[pc.sceneDataIndex].ndcToViewMul, pc.sceneData[pc.sceneDataIndex].ndcToViewAdd, uv, viewSpaceDepth);
@@ -58,7 +61,7 @@ void ComputeMain(uniform DeferredResolvePushConstant pc, uint3 threadID : SV_Dis
     float3 directLight = (diffuse + specular) * nDotL * shadowFactor * lightIntensity * lightColor;
 
     // IBL
-    float3 ibl = 0.0;
+    float3 ibl = 1.0;
     if (pc.skyboxIndex >= 0)
     {
         float NdotV = max(dot(N, V), 0.0);
