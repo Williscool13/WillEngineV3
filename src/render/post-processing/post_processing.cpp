@@ -257,7 +257,7 @@ StringID PPMotionBlur(PostProcessContext& ctx, StringID input)
     const uint32_t width = ctx.extent[0];
     const uint32_t height = ctx.extent[1];
     PipelineManager* pipelines = ctx.pipelines;
-    StringID velocity = ctx.targets.velocity;
+    StringID velocity = ctx.targets.gbufferTwo;
     StringID depthStencil = ctx.targets.depthStencil;
     float velocityScale = ctx.config.motionBlurVelocityScale;
     float depthScale = ctx.config.motionBlurDepthScale;

@@ -10,7 +10,7 @@ struct VisibilityBufferTargets
 {
     StringID visibility;
     StringID stableId;
-    StringID velocity;
+    StringID gbufferTwo; // color attachment: R=0, G=packed motion vectors (R16G16 half-float)
     StringID depthStencil;
 };
 struct VisibilityBufferBarycentricDerivativeTargets
@@ -24,28 +24,23 @@ struct VisibilityShadingTargets
     StringID visibility; // in
     StringID barycentric; // in
     StringID derivatives; // in
-    StringID albedo; // out
-    StringID normal; // out
-    StringID pbr; // out
-    StringID emissive; // out
+    StringID gbufferOne; // out: R=albedo RGB8, G=normal oct16, B=emissive RGBE
+    StringID gbufferTwo; // read-write: R=roughness/metal (write), G=motion vectors (preserve)
 };
 
 struct DeferredResolveTargets
 {
-    StringID albedo; // in
-    StringID normal; // in
-    StringID pbr; // in
-    StringID emissive; // in
+    StringID gbufferOne; // in: R=albedo, G=normal, B=emissive
+    StringID gbufferTwo; // in: R=roughness/metal, G=motion vectors
     StringID depthStencil; // in
     StringID shadows; // in (optional, leave default-constructed if unavailable)
     StringID output; // out
 };
 struct MainRenderTargets
 {
-    StringID normal;
+    StringID gbufferOne; // for GTAO + shadow resolve (G=normal oct16)
+    StringID gbufferTwo; // for motion blur (G=packed motion vectors)
     StringID depthStencil;
-    // todo: velocity
-    StringID velocity;
     StringID outputColor;
 };
 

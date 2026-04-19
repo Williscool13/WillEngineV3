@@ -37,17 +37,11 @@ inline constexpr VkFormat VISIBILITY_DERIVATIVES_FORMAT = VK_FORMAT_R16G16B16A16
 // R: Albedo RGB8 | 8-bit spare (whatever)
 // G: Normal oct16 RG16 packed into R32
 // B: Emissive RGBE 9:9:9:5 packed into R32
-inline constexpr VkFormat GBUFFER_TARGET_ONE = VK_FORMAT_R32G32B32_UINT;
+inline constexpr VkFormat GBUFFER_TARGET_ONE = VK_FORMAT_R32G32B32A32_UINT;
 
 // R: Roughness 15-bit | Metalness 1-bit
 // G: Motion vectors XY R16G16 | 16-bit spare (game-specific)
 inline constexpr VkFormat GBUFFER_TARGET_TWO = VK_FORMAT_R32G32_UINT;
-
-inline constexpr VkFormat GBUFFER_ALBEDO_FORMAT = VK_FORMAT_R8G8B8A8_UNORM;
-inline constexpr VkFormat GBUFFER_NORMAL_FORMAT = VK_FORMAT_A2R10G10B10_UNORM_PACK32;
-inline constexpr VkFormat GBUFFER_PBR_FORMAT = VK_FORMAT_R8G8B8A8_UNORM; // rough, metallic
-inline constexpr VkFormat GBUFFER_EMISSIVE_FORMAT = VK_FORMAT_R16G16B16A16_SFLOAT;
-inline constexpr VkFormat GBUFFER_MOTION_FORMAT = VK_FORMAT_R16G16_SFLOAT;
 
 
 

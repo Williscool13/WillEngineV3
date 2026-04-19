@@ -112,8 +112,8 @@ void MeshMain(
 // ==================== Fragment Shader ====================
 struct FragmentOutput {
     uint2 visibilityBuffer : SV_Target0;
-    uint2 stableId : SV_Target1;
-    float2 velocity : SV_Target2;
+    uint2 gbufferTwo       : SV_Target1; // R=0 (roughness/metal written later), G=packed motion vectors
+    uint2 stableId         : SV_Target2;
 };
 
 [shader("fragment")]
@@ -125,7 +125,7 @@ FragmentOutput FragmentMain(VertexOutput vertexInput, PrimitiveOutput primitiveI
 
     float2 currentNDC = vertexInput.currentClipPos.xy / vertexInput.currentClipPos.w;
     float2 prevNDC = vertexInput.prevClipPos.xy / vertexInput.prevClipPos.w;
-    output.velocity = currentNDC - prevNDC;
+    output.gbufferTwo = uint2(0u, PackMotionVectors(currentNDC - prevNDC));
 
     return output;
 }

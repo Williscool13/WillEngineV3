@@ -303,12 +303,8 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             return {SWAPCHAIN_OUTDATED, ~0u};
         }
     }
-    //
-    {
-        ZoneScopedN("RenderGraphReset");
-        renderGraph->Reset(frameIndex, frameNumber, RDG_PHYSICAL_RESOURCE_UNUSED_THRESHOLD);
-    }
 
+    renderGraph->Reset(frameIndex, frameNumber, RDG_PHYSICAL_RESOURCE_UNUSED_THRESHOLD);
 
     Core::Array<uint32_t, 2> renderExtent = renderExtents->GetScaledExtent();
     VkImage currentSwapchainImage = swapchain->swapchainImages[swapchainImageIndex];
@@ -370,19 +366,19 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
 
     VisibilityBufferTargets targets{
-        .visibility = SID("visibility_target"),
-        .stableId = SID("stable_id"),
-        .velocity = SID("velocity_target"),
+        .visibility   = SID("visibility_target"),
+        .stableId     = SID("stable_id"),
+        .gbufferTwo   = SID("gbuffer_two"),
         .depthStencil = SID("depth_target"),
     };
 
     renderGraph->CreateTexture(targets.visibility, TextureInfo{VISIBILITY_BUFFER_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
     renderGraph->CreateTexture(targets.stableId, TextureInfo{GBUFFER_STABLE_ID_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
-    renderGraph->CreateTexture(targets.velocity, TextureInfo{GBUFFER_MOTION_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
+    renderGraph->CreateTexture(targets.gbufferTwo, TextureInfo{GBUFFER_TARGET_TWO, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
     renderGraph->CreateTexture(targets.depthStencil, TextureInfo{DEPTH_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_DEPTH_FAR, true);
 
     VisibilityBufferBarycentricDerivativeTargets visBarDerTargets{
-        .visibility = targets.visibility,
+        .visibility  = targets.visibility,
         .barycentric = SID("visibility_barycentric"),
         .derivatives = SID("visibility_derivatives"),
     };
@@ -391,30 +387,28 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
     renderGraph->CreateTexture(visBarDerTargets.derivatives, TextureInfo{VISIBILITY_DERIVATIVES_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
 
     VisibilityShadingTargets visShadingTargets{
-        .visibility = targets.visibility,
+        .visibility  = targets.visibility,
         .barycentric = visBarDerTargets.barycentric,
         .derivatives = visBarDerTargets.derivatives,
-        .albedo = SID("albedo_target"),
-        .normal = SID("normal_target"),
-        .pbr = SID("pbr_target"),
-        .emissive = SID("emissive_target"),
-
+        .gbufferOne  = SID("gbuffer_one"),
+        .gbufferTwo  = targets.gbufferTwo,
     };
 
-    renderGraph->CreateTexture(visShadingTargets.albedo, TextureInfo{GBUFFER_ALBEDO_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
-    renderGraph->CreateTexture(visShadingTargets.normal, TextureInfo{GBUFFER_NORMAL_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
-    renderGraph->CreateTexture(visShadingTargets.pbr, TextureInfo{GBUFFER_PBR_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
-    renderGraph->CreateTexture(visShadingTargets.emissive, TextureInfo{GBUFFER_EMISSIVE_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
+    renderGraph->CreateTexture(visShadingTargets.gbufferOne, TextureInfo{GBUFFER_TARGET_ONE, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
 
     StringID shadingOutputTarget = SID("shade_output");
-    renderGraph->CreateTexture(shadingOutputTarget, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
+    renderGraph->CreateTexture(shadingOutputTarget, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, VkClearValue{0.0f, 0.1f, 0.2f, 1.0f}, true);
 
 
     MainRenderTargets mainTargets{
-        .normal = visShadingTargets.normal,
+        .gbufferOne   = visShadingTargets.gbufferOne,
+        .gbufferTwo   = targets.gbufferTwo,
         .depthStencil = targets.depthStencil,
-        .outputColor = shadingOutputTarget
+        .outputColor  = shadingOutputTarget,
     };
+
+
+    StringID finalOutput = shadingOutputTarget;
 
     if (renderFamilyProperties.bCanRender) {
         ZoneScopedN("SetupRenderGraph");
@@ -440,19 +434,19 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             SetupShadowsResolve(*renderGraph, pipelineManager, viewFamily, renderExtent, mainTargets, 0);
 
             DeferredResolveTargets deferredResolveTargets{
-                .albedo = visShadingTargets.albedo,
-                .normal = visShadingTargets.normal,
-                .pbr = visShadingTargets.pbr,
-                .emissive = visShadingTargets.emissive,
+                .gbufferOne   = visShadingTargets.gbufferOne,
+                .gbufferTwo   = visShadingTargets.gbufferTwo,
                 .depthStencil = targets.depthStencil,
-                .shadows = SID("shadows_resolve_target"),
-                .output = shadingOutputTarget,
+                .shadows      = SID("shadows_resolve_target"),
+                .output       = shadingOutputTarget,
             };
 
             SetupDeferredResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, deferredResolveTargets, 0);
         }
 
-        SetupSkyboxRendering(*renderGraph, pipelineManager, viewFamily, renderExtent, mainTargets, 0);
+        if (viewFamily.skyboxIndex != -1) {
+            SetupSkyboxRendering(*renderGraph, pipelineManager, viewFamily, renderExtent, mainTargets, 0);
+        }
 
         // fix portals. again.
         /*bool bHasPortalView = !viewFamily.portalViews.IsEmpty();
@@ -480,7 +474,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         }*/
 
 
-        StringID finalOutput = shadingOutputTarget;
+        finalOutput = shadingOutputTarget;
         // bool bHasTAAPass = pipelineManager->IsCategoryReady(PipelineCategory::TAA) && viewFamily.postProcessConfig.bEnableTemporalAntialiasing;
         // if (bHasTAAPass) {
         //     taaTargets.finalColor = SetupTemporalAntialiasing(*renderGraph, viewFamily, renderExtent, ppTargets);
@@ -736,8 +730,9 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 });
             }
         }
+    }
 
-        renderGraph->ImportTexture(SID("swapchain_image"), currentSwapchainImage, currentSwapchainImageView, TextureInfo{swapchain->format, swapchain->extent.width, swapchain->extent.height, 1},
+    renderGraph->ImportTexture(SID("swapchain_image"), currentSwapchainImage, currentSwapchainImageView, TextureInfo{swapchain->format, swapchain->extent.width, swapchain->extent.height, 1},
                                    swapchain->usages,
                                    VK_IMAGE_LAYOUT_UNDEFINED, VK_PIPELINE_STAGE_2_BLIT_BIT, VK_IMAGE_LAYOUT_UNDEFINED, true);
 
@@ -847,7 +842,6 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             screenCapture->screenshotPendingSlot = frameIndex;
             screenCapture->StartScreenshot();
         }
-    }
 
     if (frameBuffer.currentMousePosition[0] > 0 && frameBuffer.currentMousePosition[0] < renderExtent[0] &&
         frameBuffer.currentMousePosition[1] > 0 && frameBuffer.currentMousePosition[1] < renderExtent[1]) {
@@ -1100,8 +1094,8 @@ void RenderThread::CreatePipelines()
 
     constexpr Core::Array<VkFormat, 3> graphicsColorFormats{
         VISIBILITY_BUFFER_FORMAT,
+        GBUFFER_TARGET_TWO,
         GBUFFER_STABLE_ID_FORMAT,
-        GBUFFER_MOTION_FORMAT
     };
 
     // Visibility Buffer
@@ -1157,7 +1151,7 @@ void RenderThread::CreatePipelines()
 
         VkFormat colorFormats[2] = {
             COLOR_ATTACHMENT_FORMAT,
-            GBUFFER_MOTION_FORMAT
+            GBUFFER_TARGET_TWO
         };
         builder.SetupRenderer(colorFormats, 2, DEPTH_ATTACHMENT_FORMAT, DEPTH_ATTACHMENT_FORMAT);
         builder.AddDynamicState(VK_DYNAMIC_STATE_STENCIL_REFERENCE);
@@ -1706,10 +1700,10 @@ void RenderThread::SetupPortalComposite(RenderGraph& graph, const Core::ViewFami
 {
     RenderPass& portalCompositePass = graph.AddPass(SID("Portal Composite"), VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT);
     portalCompositePass.ReadSampledImage(portalTargets.outputColor);
-    portalCompositePass.ReadSampledImage(portalTargets.velocity);
+    portalCompositePass.ReadSampledImage(portalTargets.gbufferTwo);
     portalCompositePass.ReadSampledImage(portalTargets.depthStencil);
     portalCompositePass.WriteColorAttachment(targets.outputColor);
-    portalCompositePass.WriteColorAttachment(targets.velocity);
+    portalCompositePass.WriteColorAttachment(targets.gbufferTwo);
     portalCompositePass.ReadWriteDepthAttachment(targets.depthStencil);
     portalCompositePass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
         VkViewport viewport = VkHelpers::GenerateViewport(width, height);
@@ -1717,18 +1711,18 @@ void RenderThread::SetupPortalComposite(RenderGraph& graph, const Core::ViewFami
         VkRect2D scissor = VkHelpers::GenerateScissor(width, height);
         vkCmdSetScissor(cmd, 0, 1, &scissor);
 
-        VkRenderingAttachmentInfo colorAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.outputColor), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-        VkRenderingAttachmentInfo velocityAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.velocity), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-        VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), nullptr, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
-        VkRenderingAttachmentInfo stencilAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), nullptr, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+        VkRenderingAttachmentInfo colorAttachment    = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.outputColor), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        VkRenderingAttachmentInfo gbufferTwoAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.gbufferTwo), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        VkRenderingAttachmentInfo depthAttachment    = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), nullptr, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+        VkRenderingAttachmentInfo stencilAttachment  = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), nullptr, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
-        Core::Array<VkRenderingAttachmentInfo, 2> colorAttachments{colorAttachment, velocityAttachment};
+        Core::Array<VkRenderingAttachmentInfo, 2> colorAttachments{colorAttachment, gbufferTwoAttachment};
         VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, colorAttachments.Data(), 2, &depthAttachment, &stencilAttachment);
         vkCmdBeginRendering(cmd, &renderInfo);
 
         PortalCompositePushConstant pc{
             .portalColorIndex = graph.GetSampledImageViewDescriptorIndex(portalTargets.outputColor),
-            .portalVelocityIndex = graph.GetSampledImageViewDescriptorIndex(portalTargets.velocity),
+            .portalVelocityIndex = graph.GetSampledImageViewDescriptorIndex(portalTargets.gbufferTwo),
             .portalDepthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(portalTargets.depthStencil),
         };
 
@@ -1749,8 +1743,8 @@ StringID RenderThread::SetupTemporalAntialiasing(RenderGraph& graph, const Core:
     graph.CreateTexture(SID("taa_current"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
     renderGraph->CarryTextureToNextFrame(SID("taa_current"), SID("taa_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
 
-    if (renderGraph->HasTexture(SID("velocity_target"))) {
-        renderGraph->CarryTextureToNextFrame(SID("velocity_target"), SID("velocity_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
+    if (renderGraph->HasTexture(SID("gbuffer_two"))) {
+        renderGraph->CarryTextureToNextFrame(SID("gbuffer_two"), SID("gbuffer_two_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
     }
 
     if (!graph.HasTexture(SID("taa_history")) || !graph.HasTexture(SID("velocity_history"))) {
@@ -1788,7 +1782,7 @@ StringID RenderThread::SetupTemporalAntialiasing(RenderGraph& graph, const Core:
     taaPass.ReadSampledImage(ppTargets.outputColor);
     taaPass.ReadSampledImage(ppTargets.depthStencil);
     taaPass.ReadSampledImage(SID("taa_history"));
-    taaPass.ReadSampledImage(ppTargets.velocity);
+    taaPass.ReadSampledImage(ppTargets.gbufferTwo);
     taaPass.ReadSampledImage(SID("velocity_history"));
     taaPass.WriteStorageImage(SID("taa_current"));
     taaPass.Execute([&, width = renderExtent[0], height = renderExtent[1], ppTargets](VkCommandBuffer cmd) {
@@ -1797,7 +1791,7 @@ StringID RenderThread::SetupTemporalAntialiasing(RenderGraph& graph, const Core:
             .colorResolvedIndex = graph.GetSampledImageViewDescriptorIndex(ppTargets.outputColor),
             .depthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(ppTargets.depthStencil),
             .colorHistoryIndex = graph.GetSampledImageViewDescriptorIndex(SID("taa_history")),
-            .velocityIndex = graph.GetSampledImageViewDescriptorIndex(ppTargets.velocity),
+            .velocityIndex = graph.GetSampledImageViewDescriptorIndex(ppTargets.gbufferTwo),
             .velocityHistoryIndex = graph.GetSampledImageViewDescriptorIndex(SID("velocity_history")),
             .outputImageIndex = graph.GetStorageImageViewDescriptorIndex(SID("taa_current")),
         };

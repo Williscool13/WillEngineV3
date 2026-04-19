@@ -10,14 +10,18 @@ void ComputeMain(uniform DeferredResolvePushConstant pc, uint3 threadID : SV_Dis
     if (threadID.x >= pc.sceneData[pc.sceneDataIndex].mainRenderTargetSize.x || threadID.y >= pc.sceneData[pc.sceneDataIndex].mainRenderTargetSize.y) return;
 
     float2 uv = (float2(threadID.xy) + 0.5) / float2(pc.sceneData[pc.sceneDataIndex].mainRenderTargetSize);
-    float4 albedo = rdgTexturesFloat4[pc.albedoIndex].Load(int3(threadID.xy, 0));
     float depth = rdgTexturesFloat[pc.depthIndex].Load(int3(threadID.xy, 0)).r;
     if (depth <= 0.0) {
         return;
     }
-    float3 viewNormal = rdgTexturesFloat4[pc.normalIndex].Load(int3(threadID.xy, 0)).xyz;
-    float4 pbrData = rdgTexturesFloat4[pc.pbrIndex].Load(int3(threadID.xy, 0));
-    float4 emissiveData = rdgTexturesFloat4[pc.emissiveIndex].Load(int3(threadID.xy, 0));
+    uint4 gt1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(threadID.xy, 0));
+    uint2 gt2 = rdgTexturesUInt2[pc.gbufferTwoIndex].Load(int3(threadID.xy, 0));
+    float4 albedo = UnpackAlbedoRGB8(gt1.r);
+    float3 viewNormal = UnpackNormalOct16(gt1.g);
+    float3 emissiveRGB = UnpackEmissiveRGBE(gt1.b);
+    float4 emissiveData = float4(emissiveRGB, 1.0);
+    float roughness, metallic;
+    UnpackPBR(gt2.r, roughness, metallic);
     float2 shadows = float2(1.0f);
     if (pc.shadowsIndex != ~0x0u){
         shadows = rdgTexturesFloat2[pc.shadowsIndex].Load(int3(threadID.xy, 0)).xy;
@@ -26,10 +30,7 @@ void ComputeMain(uniform DeferredResolvePushConstant pc, uint3 threadID : SV_Dis
     float viewSpaceDepth = ScreenToViewSpaceDepth(depth, pc.sceneData[pc.sceneDataIndex].depthLinearizeMult, pc.sceneData[pc.sceneDataIndex].depthLinearizeAdd);
     float3 viewPosition = CheapReconstructViewSpacePosition(pc.sceneData[pc.sceneDataIndex].ndcToViewMul, pc.sceneData[pc.sceneDataIndex].ndcToViewAdd, uv, viewSpaceDepth);
 
-    float roughness = pbrData.g;
-    float metallic = pbrData.r;
-
-    float3 N = normalize(viewNormal * 2.0 - 1.0);
+    float3 N = normalize(viewNormal);
     float3 V = normalize(-viewPosition);
 
     // Directional light in view space (transform from world space)
@@ -77,7 +78,7 @@ void ComputeMain(uniform DeferredResolvePushConstant pc, uint3 threadID : SV_Dis
         ibl = (kD_ibl * reflectionDiffuse + reflectionSpecular) * gtao;
     }
 
-    float3 emissive = emissiveData.rgb * emissiveData.a;
+    float3 emissive = emissiveRGB;
     float3 finalColor = directLight + ibl + emissive;
     rdgStorageFloat4[pc.outputImageIndex][threadID.xy] = float4(finalColor, 1.0);
 }

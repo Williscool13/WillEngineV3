@@ -453,8 +453,11 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
     }
 
     if (state->lighting.skybox.IsValid()) {
-        frameBuffer->mainViewFamily.skyboxIndex = state->lighting.skybox.index;
-        frameBuffer->mainViewFamily.skyboxLOD = state->lighting.skyboxLOD;
+        Render::Cubemap* cubemap = ctx->assetManager->GetCubemap(state->lighting.skybox);
+        if (cubemap && cubemap->loadState == Render::Cubemap::LoadState::Loaded) {
+            frameBuffer->mainViewFamily.skyboxIndex = state->lighting.skybox.index;
+            frameBuffer->mainViewFamily.skyboxLOD = state->lighting.skyboxLOD;
+        }
     }
 }
 }

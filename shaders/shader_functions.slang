@@ -117,6 +117,85 @@ float3 InterpolatePosition(float3 bary, Vertex v0, Vertex v1, Vertex v2, float4x
     return mul(mv, float4(objPos, 1.0f)).xyz;
 }
 
+// Albedo: pack float4 RGBA into R32 (RGB8 + 8-bit alpha)
+uint PackAlbedoRGB8(float4 c)
+{
+    return uint(saturate(c.r) * 255.0 + 0.5)
+         | (uint(saturate(c.g) * 255.0 + 0.5) << 8)
+         | (uint(saturate(c.b) * 255.0 + 0.5) << 16)
+         | (uint(saturate(c.a) * 255.0 + 0.5) << 24);
+}
+
+float4 UnpackAlbedoRGB8(uint p)
+{
+    return float4(
+        float(p & 0xFF),
+        float((p >> 8) & 0xFF),
+        float((p >> 16) & 0xFF),
+        float((p >> 24) & 0xFF)
+    ) / 255.0;
+}
+
+// Normal oct16: encodes a unit view-space normal into R32 as two packed uint16s
+uint PackNormalOct16(float3 n)
+{
+    float2 oct = OctEncode(n) * 0.5 + 0.5; // remap [-1,1] -> [0,1]
+    uint x = uint(saturate(oct.x) * 65535.0 + 0.5);
+    uint y = uint(saturate(oct.y) * 65535.0 + 0.5);
+    return x | (y << 16);
+}
+
+float3 UnpackNormalOct16(uint p)
+{
+    float2 oct = float2(float(p & 0xFFFF), float(p >> 16)) / 65535.0 * 2.0 - 1.0;
+    return OctDecode(oct);
+}
+
+// Emissive: E5B9G9R9 shared-exponent (same bit layout as VK_FORMAT_E5B9G9R9_UFLOAT_PACK32)
+uint PackEmissiveRGBE(float3 e)
+{
+    float maxC = max(max(e.r, e.g), max(e.b, 1e-5f));
+    float exp_ = floor(log2(maxC)) + 1.0;
+    float scale = pow(2.0, -(exp_ - 9.0));
+    uint re = uint(clamp(e.r * scale, 0.0, 511.0) + 0.5);
+    uint ge = uint(clamp(e.g * scale, 0.0, 511.0) + 0.5);
+    uint be = uint(clamp(e.b * scale, 0.0, 511.0) + 0.5);
+    uint biasedExp = uint(clamp(exp_ + 15.0, 0.0, 31.0));
+    return re | (ge << 9) | (be << 18) | (biasedExp << 27);
+}
+
+float3 UnpackEmissiveRGBE(uint p)
+{
+    uint biasedExp = p >> 27;
+    float scale = pow(2.0, float(biasedExp) - 15.0 - 9.0);
+    return float3(float(p & 0x1FF), float((p >> 9) & 0x1FF), float((p >> 18) & 0x1FF)) * scale;
+}
+
+// PBR: roughness (15-bit) + metalness (1-bit, binary) packed into R32
+uint PackPBR(float roughness, float metallic)
+{
+    uint r = uint(saturate(roughness) * 32767.0 + 0.5);
+    uint m = metallic >= 0.5 ? 1u : 0u;
+    return r | (m << 31);
+}
+
+void UnpackPBR(uint p, out float roughness, out float metallic)
+{
+    roughness = float(p & 0x7FFF) / 32767.0;
+    metallic  = float(p >> 31);
+}
+
+// Motion vectors: float2 NDC delta packed as R16G16 half-float into R32
+uint PackMotionVectors(float2 v)
+{
+    return f32tof16(v.x) | (f32tof16(v.y) << 16);
+}
+
+float2 UnpackMotionVectors(uint p)
+{
+    return float2(f16tof32(p & 0xFFFF), f16tof32(p >> 16));
+}
+
 // Octahedral encoding: maps a unit float3 normal to float2 in [-1,1]^2.
 float2 OctEncode(float3 n)
 {

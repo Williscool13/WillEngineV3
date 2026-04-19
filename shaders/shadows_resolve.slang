@@ -17,10 +17,11 @@ void ComputeMain(uniform ShadowsResolvePushConstant pc, uint3 threadID : SV_Disp
         return;
     }
 
-    float3 viewNormal = rdgTexturesFloat4[pc.normalIndex].Load(int3(threadID.xy, 0)).xyz;
+    uint4 gt1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(threadID.xy, 0));
+    float3 viewNormal = UnpackNormalOct16(gt1.g);
     float viewSpaceDepth = ScreenToViewSpaceDepth(depth, pc.sceneData->depthLinearizeMult, pc.sceneData->depthLinearizeAdd);
     float3 viewPosition = CheapReconstructViewSpacePosition(pc.sceneData->ndcToViewMul, pc.sceneData->ndcToViewAdd, uv, viewSpaceDepth);
-    float3 N = normalize(viewNormal * 2.0 - 1.0);
+    float3 N = normalize(viewNormal);
 
     // CSM shadow factor
     float shadowFactor;

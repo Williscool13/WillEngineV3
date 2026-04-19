@@ -50,7 +50,7 @@ public:
         layoutBuilder.AddBinding(6, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, StorageUInt4Count);
         layoutBuilder.AddBinding(7, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, StorageUInt2Count);
         layoutBuilder.AddBinding(8, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, StorageUIntCount);
-        layoutBuilder.AddBinding(9,  VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, SampledFloat2Count);
+        layoutBuilder.AddBinding(9, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, SampledFloat2Count);
         layoutBuilder.AddBinding(10, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, SampledFloatCount);
         layoutBuilder.AddBinding(11, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, SampledUInt4Count);
         layoutBuilder.AddBinding(12, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, SampledUInt2Count);
@@ -162,7 +162,7 @@ public:
 
     bool WriteStorageUInt4Descriptor(uint32_t index, const VkDescriptorImageInfo& imageInfo)
     {
-        if (index >= StorageUIntCount) {
+        if (index >= StorageUInt4Count) {
             SPDLOG_ERROR("Invalid storage uint4 index: {}", index);
             return false;
         }
@@ -171,7 +171,7 @@ public:
 
     bool WriteStorageUInt2Descriptor(uint32_t index, const VkDescriptorImageInfo& imageInfo)
     {
-        if (index >= StorageUIntCount) {
+        if (index >= StorageUInt2Count) {
             SPDLOG_ERROR("Invalid storage uint2 index: {}", index);
             return false;
         }

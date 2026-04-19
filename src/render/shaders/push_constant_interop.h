@@ -305,10 +305,8 @@ SHADER_PUBLIC struct VisibilityShadingPushConstant
     SHADER_PUBLIC uint32_t barycentricBufferIndex;
     SHADER_PUBLIC uint32_t derivativeBufferIndex;
     // Out
-    SHADER_PUBLIC uint32_t albedoTargetIndex;
-    SHADER_PUBLIC uint32_t normalTargetIndex;
-    SHADER_PUBLIC uint32_t pbrTargetIndex;
-    SHADER_PUBLIC uint32_t emissiveTargetIndex;
+    SHADER_PUBLIC uint32_t gbufferOneIndex;
+    SHADER_PUBLIC uint32_t gbufferTwoIndex;
 };
 
 SHADER_PUBLIC struct BaseMeshShadingPushConstant
@@ -356,7 +354,7 @@ SHADER_PUBLIC struct ShadowsResolvePushConstant
     SHADER_PUBLIC uint32_t outputImageIndex;
     SHADER_PUBLIC int4 csmIndices;
     SHADER_PUBLIC uint32_t depthIndex;
-    SHADER_PUBLIC uint32_t normalIndex;
+    SHADER_PUBLIC uint32_t gbufferOneIndex;
 };
 
 SHADER_PUBLIC struct SHADER_ALIGN DeferredResolvePushConstant
@@ -364,10 +362,8 @@ SHADER_PUBLIC struct SHADER_ALIGN DeferredResolvePushConstant
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC SHADER_PTR(ShadowData) shadowData;
     SHADER_PUBLIC SHADER_PTR(LightData) lightData;
-    SHADER_PUBLIC uint32_t albedoIndex;
-    SHADER_PUBLIC uint32_t normalIndex;
-    SHADER_PUBLIC uint32_t pbrIndex;
-    SHADER_PUBLIC uint32_t emissiveIndex;
+    SHADER_PUBLIC uint32_t gbufferOneIndex;
+    SHADER_PUBLIC uint32_t gbufferTwoIndex;
     SHADER_PUBLIC uint32_t depthIndex;
     SHADER_PUBLIC uint32_t shadowsIndex;
     SHADER_PUBLIC int32_t skyboxIndex;
@@ -572,7 +568,7 @@ SHADER_PUBLIC struct GTAOMainPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC uint32_t prefilteredDepthIndex;
-    SHADER_PUBLIC uint32_t normalBufferIndex;
+    SHADER_PUBLIC uint32_t gbufferOneIndex;
     SHADER_PUBLIC uint32_t aoOutputIndex;
     SHADER_PUBLIC uint32_t edgeDataIndex;
 

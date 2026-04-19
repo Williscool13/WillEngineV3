@@ -483,7 +483,7 @@ void SetupGeometryPass(RenderGraph& graph,
 
     RenderPass& instancedMeshShading = graph.AddPass(SID("Instanced Mesh Shading"), VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
     instancedMeshShading.WriteColorAttachment(targets.visibility);
-    instancedMeshShading.WriteColorAttachment(targets.velocity);
+    instancedMeshShading.WriteColorAttachment(targets.gbufferTwo);
     instancedMeshShading.WriteColorAttachment(targets.stableId);
     instancedMeshShading.WriteDepthAttachment(targets.depthStencil);
     instancedMeshShading.ReadBuffer(SCENE_DATA_BUFFER);
@@ -499,16 +499,15 @@ void SetupGeometryPass(RenderGraph& graph,
         vkCmdSetScissor(cmd, 0, 1, &scissor);
 
         constexpr VkClearValue uintClear = {.color = {.uint32 = {0u, 0u, 0u, 0u}}};
-        constexpr VkClearValue floatClear = {.color = {.float32 = {0u, 0u, 0u, 0u}}};
         constexpr VkClearValue depthClear = {.depthStencil = {0.0f, 0u}};
 
-        auto visibilityAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.visibility), &uintClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-        auto stableIdAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.stableId), &uintClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-        auto velocityAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.velocity), &floatClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-        auto depthAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), &depthClear, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
-        auto stencilAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), &depthClear, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+        auto visibilityAttachment  = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.visibility), &uintClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        auto gbufferTwoAttachment  = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.gbufferTwo), &uintClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        auto stableIdAttachment    = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.stableId), &uintClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        auto depthAttachment       = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), &depthClear, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+        auto stencilAttachment     = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), &depthClear, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
-        const VkRenderingAttachmentInfo colorAttachments[] = {visibilityAttachment, stableIdAttachment, velocityAttachment};
+        const VkRenderingAttachmentInfo colorAttachments[] = {visibilityAttachment, gbufferTwoAttachment, stableIdAttachment};
         const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, colorAttachments, 3, &depthAttachment, &stencilAttachment);
 
         vkCmdBeginRendering(cmd, &renderInfo);
@@ -605,11 +604,10 @@ void SetupVisibilityShadingPass(RenderGraph& graph,
     visShading.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
     visShading.ReadBuffer(GEOMETRY_MODEL_BUFFER);
     visShading.ReadBuffer(GEOMETRY_MATERIAL_BUFFER);
-    visShading.WriteStorageImage(targets.albedo);
-    visShading.WriteStorageImage(targets.normal);
-    visShading.WriteStorageImage(targets.pbr);
-    visShading.WriteStorageImage(targets.emissive);
-    visShading.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1], sceneIndex](VkCommandBuffer cmd) {
+    visShading.WriteStorageImage(targets.gbufferOne);
+    visShading.ReadWriteImage(targets.gbufferTwo);
+    visShading.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1], sceneIndex,
+            gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo](VkCommandBuffer cmd) {
         VisibilityShadingPushConstant pc{
             .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER) + sceneIndex * sizeof(SceneData),
             .vertexBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_BUFFER),
@@ -624,10 +622,8 @@ void SetupVisibilityShadingPass(RenderGraph& graph,
             .visibilityBufferIndex = graph.GetSampledImageViewDescriptorIndex(targets.visibility),
             .barycentricBufferIndex = graph.GetStorageImageViewDescriptorIndex(targets.barycentric),
             .derivativeBufferIndex = graph.GetStorageImageViewDescriptorIndex(targets.derivatives),
-            .albedoTargetIndex = graph.GetStorageImageViewDescriptorIndex(targets.albedo),
-            .normalTargetIndex = graph.GetStorageImageViewDescriptorIndex(targets.normal),
-            .pbrTargetIndex = graph.GetStorageImageViewDescriptorIndex(targets.pbr),
-            .emissiveTargetIndex = graph.GetStorageImageViewDescriptorIndex(targets.emissive),
+            .gbufferOneIndex = graph.GetStorageImageViewDescriptorIndex(gbufferOne),
+            .gbufferTwoIndex = graph.GetStorageImageViewDescriptorIndex(gbufferTwo),
         };
 
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("visibility_shading"));
@@ -650,10 +646,8 @@ void SetupDeferredResolvePass(RenderGraph& graph,
     deferredResolvePass.ReadBuffer(SCENE_DATA_BUFFER);
     deferredResolvePass.ReadBuffer(SHADOW_DATA_BUFFER);
     deferredResolvePass.ReadBuffer(SID("light_data"));
-    deferredResolvePass.ReadSampledImage(targets.albedo);
-    deferredResolvePass.ReadSampledImage(targets.normal);
-    deferredResolvePass.ReadSampledImage(targets.pbr);
-    deferredResolvePass.ReadSampledImage(targets.emissive);
+    deferredResolvePass.ReadSampledImage(targets.gbufferOne);
+    deferredResolvePass.ReadSampledImage(targets.gbufferTwo);
     deferredResolvePass.ReadSampledImage(targets.depthStencil);
     if (targets.shadows != StringID{}) {
         deferredResolvePass.ReadSampledImage(targets.shadows);
@@ -661,17 +655,15 @@ void SetupDeferredResolvePass(RenderGraph& graph,
     deferredResolvePass.WriteStorageImage(targets.output);
     deferredResolvePass.Execute([&, pipelineManager,
             width = renderExtent[0], height = renderExtent[1], sceneIndex,
-            albedo = targets.albedo, normal = targets.normal, pbr = targets.pbr,
-            emissive = targets.emissive, depth = targets.depthStencil, shadows = targets.shadows,
+            gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
+            depth = targets.depthStencil, shadows = targets.shadows,
             output = targets.output, skyboxIndex = viewFamily.skyboxIndex](VkCommandBuffer cmd) {
             DeferredResolvePushConstant pc{
                 .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
                 .shadowData = graph.GetBufferAddress(SHADOW_DATA_BUFFER),
                 .lightData = graph.GetBufferAddress(SID("light_data")),
-                .albedoIndex = graph.GetSampledImageViewDescriptorIndex(albedo),
-                .normalIndex = graph.GetSampledImageViewDescriptorIndex(normal),
-                .pbrIndex = graph.GetSampledImageViewDescriptorIndex(pbr),
-                .emissiveIndex = graph.GetSampledImageViewDescriptorIndex(emissive),
+                .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
+                .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
                 .depthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(depth),
                 .shadowsIndex = shadows != StringID{} ? graph.GetSampledImageViewDescriptorIndex(shadows) : ~0x0u,
                 .skyboxIndex = skyboxIndex,
@@ -740,11 +732,11 @@ void SetupGroundTruthAmbientOcclusion(RenderGraph& graph,
 
     RenderPass& gtaoMainPass = graph.AddPass(SID("GTAO Main"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
     gtaoMainPass.ReadSampledImage(SID("gtao_depth"));
-    gtaoMainPass.ReadSampledImage(targets.normal);
+    gtaoMainPass.ReadSampledImage(targets.gbufferOne);
     gtaoMainPass.WriteStorageImage(SID("gtao_ao"));
     gtaoMainPass.WriteStorageImage(SID("gtao_edges"));
     gtaoMainPass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1], sceneIndex, frameNumber,
-            normal = targets.normal,
+            normal = targets.gbufferOne,
             effectRadius = gtaoConfig.effectRadius,
             radiusMultiplier = gtaoConfig.radiusMultiplier,
             effectFalloffRange = gtaoConfig.effectFalloffRange,
@@ -757,7 +749,7 @@ void SetupGroundTruthAmbientOcclusion(RenderGraph& graph,
             GTAOMainPushConstant pc{
                 .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER) + sizeof(SceneData) * sceneIndex,
                 .prefilteredDepthIndex = graph.GetSampledImageViewDescriptorIndex(SID("gtao_depth")),
-                .normalBufferIndex = graph.GetSampledImageViewDescriptorIndex(normal),
+                .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(normal),
                 .aoOutputIndex = graph.GetStorageImageViewDescriptorIndex(SID("gtao_ao")),
                 .edgeDataIndex = graph.GetStorageImageViewDescriptorIndex(SID("gtao_edges")),
 
@@ -839,7 +831,7 @@ void SetupShadowsResolve(RenderGraph& graph,
 {
     graph.CreateTexture(SID("shadows_resolve_target"), TextureInfo{VK_FORMAT_R8G8_UNORM, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
     RenderPass& shadowsResolvePass = graph.AddPass(SID("Shadows Resolve"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-    shadowsResolvePass.ReadSampledImage(targets.normal);
+    shadowsResolvePass.ReadSampledImage(targets.gbufferOne);
     shadowsResolvePass.ReadSampledImage(targets.depthStencil);
 
     bool bHasGTAO = graph.HasTexture(SID("gtao_filtered"));
@@ -861,7 +853,7 @@ void SetupShadowsResolve(RenderGraph& graph,
     shadowsResolvePass.WriteStorageImage(SID("shadows_resolve_target"));
     shadowsResolvePass.Execute([&, pipelineManager, bHasShadows, bHasGTAO,
             width = renderExtent[0], height = renderExtent[1], sceneIndex,
-            depthStencil = targets.depthStencil, normal = targets.normal](VkCommandBuffer cmd) {
+            depthStencil = targets.depthStencil, gbufferOne = targets.gbufferOne](VkCommandBuffer cmd) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("shadows_resolve"));
 
             glm::ivec4 csmIndices{-1, -1, -1, -1};
@@ -882,7 +874,7 @@ void SetupShadowsResolve(RenderGraph& graph,
                 .outputImageIndex = graph.GetStorageImageViewDescriptorIndex(SID("shadows_resolve_target")),
                 .csmIndices = csmIndices,
                 .depthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(depthStencil),
-                .normalIndex = graph.GetSampledImageViewDescriptorIndex(normal),
+                .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
             };
 
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);

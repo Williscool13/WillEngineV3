@@ -95,8 +95,14 @@ void VisibilityShading(uint3 dtid : SV_DispatchThreadID, uniform VisibilityShadi
         emissiveColor *= assetTextures[mat.textureImageIndices.w].SampleGrad(assetSamplers[mat.textureSamplerIndices.w], emissiveUV, ddx, ddy).rgb;
     }
 
-    rdgStorageFloat4[pc.albedoTargetIndex][dtid.xy]   = albedo;
-    rdgStorageFloat4[pc.normalTargetIndex][dtid.xy]   = float4(shadingNormal * 0.5 + 0.5, 0.0);
-    rdgStorageFloat4[pc.pbrTargetIndex][dtid.xy]      = float4(metallic, roughness, 0.0, 0.0);
-    rdgStorageFloat4[pc.emissiveTargetIndex][dtid.xy] = float4(emissiveColor, mat.emissiveFactor.w);
+    uint2 existingGT2 = rdgStorageUInt2[pc.gbufferTwoIndex][dtid.xy];
+
+    uint4 gbufferOne = uint4(
+        PackAlbedoRGB8(albedo),
+        PackNormalOct16(shadingNormal),
+        PackEmissiveRGBE(emissiveColor),
+        0u
+    );
+    rdgStorageUInt4[pc.gbufferOneIndex][dtid.xy] = gbufferOne;
+    rdgStorageUInt2[pc.gbufferTwoIndex][dtid.xy] = uint2(PackPBR(roughness, metallic), existingGT2.g);
 }
