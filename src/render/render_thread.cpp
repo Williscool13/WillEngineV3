@@ -11,6 +11,7 @@
 #include <tracy/TracyVulkan.hpp>
 
 #include "renderer.h"
+#include "render_utils.h"
 #include "render/vulkan/vk_context.h"
 #include "render/vulkan/vk_helpers.h"
 #include "render/vulkan/vk_render_extents.h"
@@ -375,10 +376,10 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         .depthStencil = SID("depth_target"),
     };
 
-    renderGraph->CreateTexture(targets.visibility, TextureInfo{VISIBILITY_BUFFER_FORMAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
-    renderGraph->CreateTexture(targets.stableId, TextureInfo{GBUFFER_STABLE_ID_FORMAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
-    renderGraph->CreateTexture(targets.velocity, TextureInfo{GBUFFER_MOTION_FORMAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
-    renderGraph->CreateTexture(targets.depthStencil, TextureInfo{DEPTH_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
+    renderGraph->CreateTexture(targets.visibility, TextureInfo{VISIBILITY_BUFFER_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
+    renderGraph->CreateTexture(targets.stableId, TextureInfo{GBUFFER_STABLE_ID_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
+    renderGraph->CreateTexture(targets.velocity, TextureInfo{GBUFFER_MOTION_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
+    renderGraph->CreateTexture(targets.depthStencil, TextureInfo{DEPTH_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_DEPTH_FAR, true);
 
     VisibilityBufferBarycentricDerivativeTargets visBarDerTargets{
         .visibility = targets.visibility,
@@ -386,8 +387,8 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         .derivatives = SID("visibility_derivatives"),
     };
 
-    renderGraph->CreateTexture(visBarDerTargets.barycentric, TextureInfo{VK_FORMAT_R16G16_SFLOAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
-    renderGraph->CreateTexture(visBarDerTargets.derivatives, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
+    renderGraph->CreateTexture(visBarDerTargets.barycentric, TextureInfo{VISIBILITY_BARYCENTRIC_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
+    renderGraph->CreateTexture(visBarDerTargets.derivatives, TextureInfo{VISIBILITY_DERIVATIVES_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
 
     VisibilityShadingTargets visShadingTargets{
         .visibility = targets.visibility,
@@ -400,13 +401,13 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
     };
 
-    renderGraph->CreateTexture(visShadingTargets.albedo, TextureInfo{GBUFFER_ALBEDO_FORMAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
-    renderGraph->CreateTexture(visShadingTargets.normal, TextureInfo{GBUFFER_NORMAL_FORMAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
-    renderGraph->CreateTexture(visShadingTargets.pbr, TextureInfo{GBUFFER_PBR_FORMAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
-    renderGraph->CreateTexture(visShadingTargets.emissive, TextureInfo{GBUFFER_EMISSIVE_FORMAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
+    renderGraph->CreateTexture(visShadingTargets.albedo, TextureInfo{GBUFFER_ALBEDO_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
+    renderGraph->CreateTexture(visShadingTargets.normal, TextureInfo{GBUFFER_NORMAL_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
+    renderGraph->CreateTexture(visShadingTargets.pbr, TextureInfo{GBUFFER_PBR_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
+    renderGraph->CreateTexture(visShadingTargets.emissive, TextureInfo{GBUFFER_EMISSIVE_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
 
     StringID shadingOutputTarget = SID("shade_output");
-    renderGraph->CreateTexture(shadingOutputTarget, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
+    renderGraph->CreateTexture(shadingOutputTarget, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
 
 
     MainRenderTargets mainTargets{
@@ -415,24 +416,8 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         .outputColor = shadingOutputTarget
     };
 
-    //
     if (renderFamilyProperties.bCanRender) {
         ZoneScopedN("SetupRenderGraph");
-
-        RenderPass& clearDeferredImagePass = renderGraph->AddPass(SID("Clear Color Outputs"), VK_PIPELINE_STAGE_2_CLEAR_BIT);
-        clearDeferredImagePass.WriteClearImage(shadingOutputTarget);
-        // clearDeferredImagePass.WriteClearImage(portalTargets.outFinalColor);
-        clearDeferredImagePass.Execute([&, shadingOutputTarget](VkCommandBuffer _cmd) {
-            constexpr VkClearColorValue clearColor = {0.0f, 0.1f, 0.2f, 1.0f};
-            VkImageSubresourceRange colorSubresource = VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 1, 1);
-
-            VkImage mainImg = renderGraph->GetImageHandle(shadingOutputTarget);
-            vkCmdClearColorImage(_cmd, mainImg, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &colorSubresource);
-
-            /*VkImage portalImg = renderGraph->GetImageHandle(portalTargets.outFinalColor);
-            vkCmdClearColorImage(_cmd, portalImg, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &colorSubresource);*/
-        });
-
 
         // Geometry
         if (!viewFamily.mainPassInstances.IsEmpty()) {
@@ -808,7 +793,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
         if (frameBuffer.bTakeScreenshot && screenCapture->CanScreenshot()) {
             screenCapture->PrepareScreenshotResources(renderExtent[0], renderExtent[1]);
-            renderGraph->CreateTexture(SID("screenshot_intermediate"), TextureInfo{VK_FORMAT_R8G8B8A8_UNORM, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
+            renderGraph->CreateTexture(SID("screenshot_intermediate"), TextureInfo{VK_FORMAT_R8G8B8A8_UNORM, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
 
             auto& screenshotBlitPass = renderGraph->AddPass(SID("Screenshot Blit"), VK_PIPELINE_STAGE_2_BLIT_BIT);
             screenshotBlitPass.ReadBlitImage(finalOutput);
@@ -1546,7 +1531,7 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFami
                                 static_cast<uint32_t>(shadowConfig.cascadePreset.extents[cascadeLevel][1]),
                                 1
                             },
-                            {std::nullopt}, false);
+                            CLEAR_COLOR_FULL, false);
 
         // Main Draw
         if (!viewFamily.mainPassInstances.IsEmpty()) {
@@ -1761,7 +1746,7 @@ void RenderThread::SetupPortalComposite(RenderGraph& graph, const Core::ViewFami
 
 StringID RenderThread::SetupTemporalAntialiasing(RenderGraph& graph, const Core::ViewFamily& viewFamily, const Core::Array<uint32_t, 2> renderExtent, const MainRenderTargets& ppTargets) const
 {
-    graph.CreateTexture(SID("taa_current"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
+    graph.CreateTexture(SID("taa_current"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
     renderGraph->CarryTextureToNextFrame(SID("taa_current"), SID("taa_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
 
     if (renderGraph->HasTexture(SID("velocity_target"))) {
@@ -1827,7 +1812,7 @@ StringID RenderThread::SetupTemporalAntialiasing(RenderGraph& graph, const Core:
     });
 
 
-    graph.CreateTexture(SID("taa_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
+    graph.CreateTexture(SID("taa_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
 
     RenderPass& finalCopyPass = graph.AddPass(SID("TAA Final Copy"), VK_PIPELINE_STAGE_2_BLIT_BIT);
     finalCopyPass.ReadBlitImage(SID("taa_current"));

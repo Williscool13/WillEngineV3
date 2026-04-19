@@ -111,6 +111,8 @@ private:
     Core::InlineVector<uint32_t, 16> bufferIndirectReads;
     Core::InlineVector<uint32_t, 16> bufferIndirectCountReads;
 
+    Core::InlineVector<uint32_t, 8> autoClearTextures{};
+
     Core::InlineFunction<void(VkCommandBuffer), 128> executeFunc;
 };
 } // Render

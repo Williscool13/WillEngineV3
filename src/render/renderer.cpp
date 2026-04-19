@@ -548,16 +548,6 @@ void SetupVisibilityBarycentricDerivativePass(RenderGraph& graph,
                                               const VisibilityBufferBarycentricDerivativeTargets& targets,
                                               uint32_t sceneIndex)
 {
-    RenderPass& clearPass = graph.AddPass(SID("Clear Visibility Intermediates"), VK_PIPELINE_STAGE_2_CLEAR_BIT);
-    clearPass.WriteClearImage(targets.barycentric);
-    clearPass.WriteClearImage(targets.derivatives);
-    clearPass.Execute([&](VkCommandBuffer cmd) {
-        constexpr VkClearColorValue clearColor = {0.0f, 0.0f, 0.0f, 0.0f};
-        VkImageSubresourceRange subresource = VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 1, 1);
-        vkCmdClearColorImage(cmd, graph.GetImageHandle(targets.barycentric), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &subresource);
-        vkCmdClearColorImage(cmd, graph.GetImageHandle(targets.derivatives), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &subresource);
-    });
-
     RenderPass& visBarDer = graph.AddPass(SID("Visibility Barycentric Derivative"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
     visBarDer.ReadSampledImage(targets.visibility);
     visBarDer.ReadBuffer(SCENE_DATA_BUFFER);
@@ -602,20 +592,6 @@ void SetupVisibilityShadingPass(RenderGraph& graph,
                                 const VisibilityShadingTargets& targets,
                                 uint32_t sceneIndex)
 {
-    RenderPass& clearPass = graph.AddPass(SID("Clear Visibility Shading RTs"), VK_PIPELINE_STAGE_2_CLEAR_BIT);
-    clearPass.WriteClearImage(targets.albedo);
-    clearPass.WriteClearImage(targets.normal);
-    clearPass.WriteClearImage(targets.pbr);
-    clearPass.WriteClearImage(targets.emissive);
-    clearPass.Execute([&](VkCommandBuffer cmd) {
-        constexpr VkClearColorValue clearColor = {0.0f, 0.0f, 0.0f, 0.0f};
-        VkImageSubresourceRange subresource = VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 1, 1);
-        vkCmdClearColorImage(cmd, graph.GetImageHandle(targets.albedo), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &subresource);
-        vkCmdClearColorImage(cmd, graph.GetImageHandle(targets.normal), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &subresource);
-        vkCmdClearColorImage(cmd, graph.GetImageHandle(targets.pbr), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &subresource);
-        vkCmdClearColorImage(cmd, graph.GetImageHandle(targets.emissive), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &subresource);
-    });
-
     RenderPass& visShading = graph.AddPass(SID("Visibility Shading"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
     visShading.ReadSampledImage(targets.visibility);
     visShading.ReadStorageImage(targets.barycentric);

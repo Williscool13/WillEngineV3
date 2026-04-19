@@ -205,7 +205,6 @@ void VisibilityBufferBarycentricDerivative(uint3 dtid : SV_DispatchThreadID, uni
     Instance inst = pc.instanceBuffer[instanceIndex];
     Primitive prim = pc.primitiveBuffer[inst.primitiveIndex];
     Model m = pc.modelBuffer[inst.modelIndex];
-    // material here for bucketing? Later.
 
     Meshlet meshlet = pc.meshletBuffer[meshletIndex];
     uint triangleIndex = meshlet.meshletTriangleOffset + triangleIndexWithinMeshlet;
@@ -240,4 +239,7 @@ void VisibilityBufferBarycentricDerivative(uint3 dtid : SV_DispatchThreadID, uni
 
     rdgStorageFloat2[pc.barycentricTargetIndex][dtid.xy] = float2(bary.x, bary.y);
     rdgStorageFloat4[pc.derivativeTargetIndex][dtid.xy] = float4(uvDdx, uvDdy);
+
+    // Note: We could interpolate here to avoid another vertex fetch in the subsequent pass.
+    //  But this shader will be large, and the barycentrics become useless.
 }

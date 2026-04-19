@@ -131,6 +131,12 @@ void RenderGraph::AccumulateTextureUsage()
             tex.accumulatedUsage |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
         }
     }
+
+    for (auto& tex : textures) {
+        if (tex.clear.has_value()) {
+            tex.accumulatedUsage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        }
+    }
 }
 
 void RenderGraph::CalculateLifetimes()
@@ -171,6 +177,15 @@ void RenderGraph::CalculateLifetimes()
     }
 }
 
+void RenderGraph::PopulateAutoClearTextures()
+{
+    for (auto& tex : textures) {
+        if (!tex.clear.has_value()) { continue; }
+        if (tex.firstPass == UINT32_MAX) { continue; }
+        passes[tex.firstPass]->autoClearTextures.PushBack(tex.index);
+    }
+}
+
 void RenderGraph::Compile(int64_t currentFrame)
 {
     PrunePasses();
@@ -178,6 +193,8 @@ void RenderGraph::Compile(int64_t currentFrame)
     AccumulateTextureUsage();
 
     CalculateLifetimes();
+
+    PopulateAutoClearTextures();
 
     for (auto& tex : textures) {
         if (tex.accumulatedUsage == 0) {
@@ -532,7 +549,43 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
 
         auto GetPhysical = [this](uint32_t texIndex) -> PhysicalResource& {
             return physicalResources[textures[texIndex].physicalIndex];
-        }; {
+        };
+
+        if (!pass->autoClearTextures.IsEmpty()) {
+            ZoneScopedN("AutoClear");
+            Core::InlineVector<VkImageMemoryBarrier2, 8> preClearBarriers;
+            for (const uint32_t texIndex : pass->autoClearTextures) {
+                auto& tex = textures[texIndex];
+                auto& phys = GetPhysical(texIndex);
+                preClearBarriers.PushBack(VkHelpers::ImageMemoryBarrier(
+                    phys.image, VkHelpers::SubresourceRange(phys.aspect),
+                    phys.event.stages, phys.event.access, tex.layout,
+                    VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
+                ));
+            }
+            if (!preClearBarriers.IsEmpty()) {
+                VkDependencyInfo depInfo{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
+                depInfo.imageMemoryBarrierCount = static_cast<uint32_t>(preClearBarriers.Size());
+                depInfo.pImageMemoryBarriers = preClearBarriers.Data();
+                vkCmdPipelineBarrier2(cmd, &depInfo);
+            }
+            for (const uint32_t texIndex : pass->autoClearTextures) {
+                auto& tex = textures[texIndex];
+                auto& phys = GetPhysical(texIndex);
+                VkImageSubresourceRange range = VkHelpers::SubresourceRange(phys.aspect);
+                if (phys.aspect & VK_IMAGE_ASPECT_DEPTH_BIT) {
+                    vkCmdClearDepthStencilImage(cmd, phys.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &tex.clear.value().depthStencil, 1, &range);
+                } else {
+                    vkCmdClearColorImage(cmd, phys.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &tex.clear.value().color, 1, &range);
+                }
+                tex.layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+                phys.event.stages = VK_PIPELINE_STAGE_2_CLEAR_BIT;
+                phys.event.access = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+            }
+        }
+
+        {
             ZoneScopedN("Barriers");
             for (const uint32_t texIndex : pass->colorAttachments) {
                 auto& tex = textures[texIndex];
@@ -1252,7 +1305,7 @@ void RenderGraph::Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint
     bRemoveSwapchainPhysicals = false;
 }
 
-void RenderGraph::CreateTexture(const StringID textureId, const TextureInfo& texInfo, std::optional<VkClearColorValue> clearColor, bool bIsViewportScaled)
+void RenderGraph::CreateTexture(const StringID textureId, const TextureInfo& texInfo, std::optional<VkClearValue> clearValue, bool bIsViewportScaled)
 {
     TextureResource* tex = GetOrCreateTexture(textureId);
 
@@ -1266,6 +1319,7 @@ void RenderGraph::CreateTexture(const StringID textureId, const TextureInfo& tex
     assert(texInfo.format != VK_FORMAT_UNDEFINED && "Texture info uses undefined format");
     tex->textureInfo = texInfo;
     tex->bIsViewportScaled = bIsViewportScaled;
+    tex->clear = clearValue;
 }
 
 void RenderGraph::AliasTexture(const StringID aliasId, const StringID existingId)

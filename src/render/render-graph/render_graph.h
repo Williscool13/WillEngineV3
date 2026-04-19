@@ -38,6 +38,8 @@ public:
 
     void CalculateLifetimes();
 
+    void PopulateAutoClearTextures();
+
     void Compile(int64_t currentFrame);
 
     void Execute(VkCommandBuffer cmd);
@@ -52,7 +54,7 @@ public:
 
     void InvalidateAllSwapchainAssociated() { bRemoveSwapchainPhysicals = true; }
 
-    void CreateTexture(StringID textureId, const TextureInfo& texInfo, std::optional<VkClearColorValue> clearColor = std::nullopt, bool bIsViewportScaled = false);
+    void CreateTexture(StringID textureId, const TextureInfo& texInfo, std::optional<VkClearValue> clearValue = std::nullopt, bool bIsViewportScaled = false);
 
     void AliasTexture(StringID aliasId, StringID existingId);
 
