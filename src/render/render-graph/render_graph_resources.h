@@ -208,6 +208,9 @@ struct TextureResource
     uint32_t index;
     uint32_t physicalIndex = UINT32_MAX;
     bool bCanUseAliasedTexture = true;
+
+    // todo: actually use this value
+    std::optional<VkClearColorValue> clear{std::nullopt};
     bool bIsViewportScaled = false;
 
     TextureInfo textureInfo;

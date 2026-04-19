@@ -1252,7 +1252,7 @@ void RenderGraph::Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint
     bRemoveSwapchainPhysicals = false;
 }
 
-void RenderGraph::CreateTexture(const StringID textureId, const TextureInfo& texInfo, bool bIsViewportScaled)
+void RenderGraph::CreateTexture(const StringID textureId, const TextureInfo& texInfo, std::optional<VkClearColorValue> clearColor, bool bIsViewportScaled)
 {
     TextureResource* tex = GetOrCreateTexture(textureId);
 

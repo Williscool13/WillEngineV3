@@ -52,7 +52,7 @@ public:
 
     void InvalidateAllSwapchainAssociated() { bRemoveSwapchainPhysicals = true; }
 
-    void CreateTexture(StringID textureId, const TextureInfo& texInfo, bool bIsViewportScaled = false);
+    void CreateTexture(StringID textureId, const TextureInfo& texInfo, std::optional<VkClearColorValue> clearColor = std::nullopt, bool bIsViewportScaled = false);
 
     void AliasTexture(StringID aliasId, StringID existingId);
 

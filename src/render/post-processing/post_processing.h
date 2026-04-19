@@ -9,6 +9,7 @@
 
 #include "core/containers/array.h"
 #include "core/string_id.h"
+#include "render/renderer_types.h"
 
 namespace Core
 {
@@ -21,18 +22,11 @@ namespace Render
 class RenderGraph;
 class PipelineManager;
 
-struct PostProcessTargets
-{
-    StringID finalColor;
-    StringID velocity;
-    StringID depthStencil;
-};
-
 struct PostProcessContext
 {
     RenderGraph& graph;
     const Core::PostProcessConfiguration& config;
-    const PostProcessTargets& targets;
+    const MainRenderTargets& targets;
     const Core::ViewFamily& view;
     Core::Array<uint32_t, 2> extent;
     float deltaTime;

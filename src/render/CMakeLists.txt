@@ -75,6 +75,7 @@ add_library(render STATIC
         renderer.h
         post-processing/post_processing.cpp
         post-processing/post_processing.h
+        renderer_types.h
 )
 
 target_include_directories(render PRIVATE

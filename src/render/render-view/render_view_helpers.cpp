@@ -107,11 +107,8 @@ RenderFamilyProperties PrepareRenderFamilyProperties(Core::ViewFamily& viewFamil
             }
         }
     }
-    renderFamilyProperties.bHasGeometry = bHasGeometry && _pipelineManager->IsCategoryReady(PipelineCategory::Geometry | PipelineCategory::Instancing | PipelineCategory::CustomRendering);
-    renderFamilyProperties.bHasGTAO = viewFamily.gtaoConfig.bEnabled && _pipelineManager->IsCategoryReady(PipelineCategory::GTAO);
-    renderFamilyProperties.bHasShadows = viewFamily.shadowConfig.enabled && _pipelineManager->IsCategoryReady(PipelineCategory::ShadowPass);
-    renderFamilyProperties.bHasDeferred = _pipelineManager->IsCategoryReady(PipelineCategory::DeferredShading);
-    renderFamilyProperties.bHasSkybox = viewFamily.skyboxIndex != -1 && _pipelineManager->IsCategoryReady(PipelineCategory::EnvironmentMap);
+
+    renderFamilyProperties.bCanRender = _pipelineManager->IsCategoryReady(PipelineCategory::Critical);
 
     if (!viewFamily.mainPassInstances.IsEmpty()) {
         std::ranges::sort(viewFamily.mainPassInstances, [](const Core::InstanceData& a, const Core::InstanceData& b) {

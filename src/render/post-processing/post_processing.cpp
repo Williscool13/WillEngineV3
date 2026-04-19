@@ -102,7 +102,7 @@ StringID PPBloom(PostProcessContext& ctx, StringID input)
 
     const uint32_t numDownsamples = (width >= 3840) ? 6 : 5;
     const uint32_t numMips = numDownsamples + 1;
-    graph.CreateTexture(SID("bloom_chain"), TextureInfo{COLOR_ATTACHMENT_FORMAT, width, height, numMips}, true);
+    graph.CreateTexture(SID("bloom_chain"), TextureInfo{COLOR_ATTACHMENT_FORMAT, width, height, numMips}, {std::nullopt}, true);
 
     RenderPass& thresholdPass = graph.AddPass(SID("Bloom Threshold"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
     thresholdPass.ReadSampledImage(input);
@@ -186,7 +186,7 @@ StringID PPSharpening(PostProcessContext& ctx, StringID input)
     PipelineManager* pipelines = ctx.pipelines;
     float sharpness = ctx.config.sharpeningStrength;
 
-    graph.CreateTexture(SID("sharpening_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, width, height, 1}, true);
+    graph.CreateTexture(SID("sharpening_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, width, height, 1}, {std::nullopt}, true);
     RenderPass& sharpeningPass = graph.AddPass(SID("Sharpening"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
     sharpeningPass.ReadBuffer(SID("scene_data"));
     sharpeningPass.ReadSampledImage(input);
@@ -220,8 +220,8 @@ StringID PPTonemap(PostProcessContext& ctx, StringID input)
     float targetLuminance = ctx.config.exposureTargetLuminance;
     float bloomIntensity = ctx.config.bloomIntensity;
 
-    // todo: add support for HDR swapchain
-    graph.CreateTexture(SID("tonemap_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, width, height, 1}, true);
+    // {std::nullopt}: add support for HDR swapchain
+    graph.CreateTexture(SID("tonemap_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, width, height, 1}, {std::nullopt}, true);
     RenderPass& tonemapPass = graph.AddPass(SID("Tonemap SDR"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
     tonemapPass.ReadSampledImage(input);
     tonemapPass.ReadSampledImage(SID("bloom_chain"));
@@ -263,9 +263,9 @@ StringID PPMotionBlur(PostProcessContext& ctx, StringID input)
 
     uint32_t blurTiledX = (width + POST_PROCESS_MOTION_BLUR_TILE_SIZE - 1) / POST_PROCESS_MOTION_BLUR_TILE_SIZE;
     uint32_t blurTiledY = (height + POST_PROCESS_MOTION_BLUR_TILE_SIZE - 1) / POST_PROCESS_MOTION_BLUR_TILE_SIZE;
-    graph.CreateTexture(SID("motion_blur_tiled_max"), TextureInfo{VK_FORMAT_R16G16_SFLOAT, blurTiledX, blurTiledY, 1}, true);
-    graph.CreateTexture(SID("motion_blur_tiled_neighbor_max"), TextureInfo{VK_FORMAT_R16G16_SFLOAT, blurTiledX, blurTiledY, 1}, true);
-    graph.CreateTexture(SID("motion_blur_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, width, height, 1}, true);
+    graph.CreateTexture(SID("motion_blur_tiled_max"), TextureInfo{VK_FORMAT_R16G16_SFLOAT, blurTiledX, blurTiledY, 1}, {std::nullopt}, true);
+    graph.CreateTexture(SID("motion_blur_tiled_neighbor_max"), TextureInfo{VK_FORMAT_R16G16_SFLOAT, blurTiledX, blurTiledY, 1}, {std::nullopt}, true);
+    graph.CreateTexture(SID("motion_blur_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, width, height, 1}, {std::nullopt}, true);
 
     RenderPass& motionBlurTiledMaxPass = graph.AddPass(SID("Motion Blur Tiled Max"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
     motionBlurTiledMaxPass.ReadBuffer(SID("scene_data"));
@@ -347,7 +347,7 @@ StringID PPColorGrading(PostProcessContext& ctx, StringID input)
     float temperature = ctx.config.colorGradingTemperature;
     float tint = ctx.config.colorGradingTint;
 
-    graph.CreateTexture(SID("color_grading_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, width, height, 1}, true);
+    graph.CreateTexture(SID("color_grading_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, width, height, 1}, {std::nullopt}, true);
     RenderPass& colorGradingPass = graph.AddPass(SID("Color Grading"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
     colorGradingPass.ReadBuffer(SID("scene_data"));
     colorGradingPass.ReadSampledImage(input);
@@ -386,7 +386,7 @@ StringID PPVignetteAberration(PostProcessContext& ctx, StringID input)
     float vignetteRadius = ctx.config.vignetteRadius;
     float vignetteSmoothness = ctx.config.vignetteSmoothness;
 
-    graph.CreateTexture(SID("vignette_aberration_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, width, height, 1}, true);
+    graph.CreateTexture(SID("vignette_aberration_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, width, height, 1}, {std::nullopt}, true);
     RenderPass& vignetteAberrationPass = graph.AddPass(SID("Vignette and Aberration"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
     vignetteAberrationPass.ReadBuffer(SID("scene_data"));
     vignetteAberrationPass.ReadSampledImage(input);
@@ -424,7 +424,7 @@ StringID PPPanini(PostProcessContext& ctx, StringID input)
     float aspect = ctx.view.mainView.currentViewData.aspectRatio;
     float paniniStrength = ctx.config.paniniStrength;
 
-    graph.CreateTexture(SID("panini_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, width, height, 1}, true);
+    graph.CreateTexture(SID("panini_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, width, height, 1}, {std::nullopt}, true);
     RenderPass& paniniPass = graph.AddPass(SID("Panini Projection"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
     paniniPass.ReadBuffer(SID("scene_data"));
     paniniPass.ReadSampledImage(input);
@@ -460,7 +460,7 @@ StringID PPFilmGrain(PostProcessContext& ctx, StringID input)
     float grainSize = ctx.config.grainSize;
     uint32_t frameIndex = static_cast<uint32_t>(ctx.frameNumber);
 
-    graph.CreateTexture(SID("post_process_output"), TextureInfo{POST_PROCESS_OUTPUT_FORMAT, width, height, 1}, true);
+    graph.CreateTexture(SID("post_process_output"), TextureInfo{POST_PROCESS_OUTPUT_FORMAT, width, height, 1}, {std::nullopt}, true);
     RenderPass& filmGrainPass = graph.AddPass(SID("Film Grain"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
     filmGrainPass.ReadBuffer(SID("scene_data"));
     filmGrainPass.ReadSampledImage(input);

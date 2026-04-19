@@ -4,6 +4,7 @@
 
 #ifndef WILL_ENGINE_RENDERER_H
 #define WILL_ENGINE_RENDERER_H
+#include "renderer_types.h"
 #include "render-graph/render_graph.h"
 #include "types/render_types.h"
 #include "post-processing/post_processing.h"
@@ -12,13 +13,7 @@ namespace Render
 {
 class PipelineManager;
 
-struct VisibilityBufferTargets
-{
-    StringID visibility;
-    StringID stableId;
-    StringID velocity;
-    StringID depthStencil;
-};
+
 
 void SetupGeometryPass(RenderGraph& graph,
                        PipelineManager* pipelineManager,
@@ -28,13 +23,6 @@ void SetupGeometryPass(RenderGraph& graph,
                        const VisibilityBufferTargets& targets,
                        uint32_t sceneIndex);
 
-struct VisibilityBufferBarycentricDerivativeTargets
-{
-    StringID visibility; // in
-    StringID barycentric; // out
-    StringID derivatives; // out
-};
-
 
 void SetupVisibilityBarycentricDerivativePass(RenderGraph& graph,
                                               PipelineManager* pipelineManager,
@@ -43,16 +31,6 @@ void SetupVisibilityBarycentricDerivativePass(RenderGraph& graph,
                                               const VisibilityBufferBarycentricDerivativeTargets& targets,
                                               uint32_t sceneIndex);
 
-struct VisibilityShadingTargets
-{
-    StringID visibility; // in
-    StringID barycentric; // in
-    StringID derivatives; // in
-    StringID albedo; // out
-    StringID normal; // out
-    StringID pbr; // out
-    StringID emissive; // out
-};
 
 void SetupVisibilityShadingPass(RenderGraph& graph,
                                 PipelineManager* pipelineManager,
@@ -61,16 +39,6 @@ void SetupVisibilityShadingPass(RenderGraph& graph,
                                 const VisibilityShadingTargets& targets,
                                 uint32_t sceneIndex);
 
-struct DeferredResolveTargets
-{
-    StringID albedo; // in
-    StringID normal; // in
-    StringID pbr; // in
-    StringID emissive; // in
-    StringID depth; // in
-    StringID shadows; // in (optional, leave default-constructed if unavailable)
-    StringID output; // out
-};
 
 void SetupDeferredResolvePass(RenderGraph& graph,
                               PipelineManager* pipelineManager,
@@ -79,18 +47,12 @@ void SetupDeferredResolvePass(RenderGraph& graph,
                               const DeferredResolveTargets& targets,
                               uint32_t sceneIndex);
 
-struct AOTargets
-{
-    StringID normal; // in
-    StringID depthStencil; // in
-    StringID outputColor;
-};
 
 void SetupGroundTruthAmbientOcclusion(RenderGraph& graph,
                                       PipelineManager* pipelineManager,
                                       const Core::ViewFamily& viewFamily,
                                       Core::Array<uint32_t, 2> renderExtent,
-                                      const AOTargets& targets,
+                                      const MainRenderTargets& targets,
                                       uint64_t frameNumber,
                                       uint32_t sceneIndex);
 
@@ -99,23 +61,23 @@ void SetupShadowsResolve(RenderGraph& graph,
                          PipelineManager* pipelineManager,
                          const Core::ViewFamily& viewFamily,
                          Core::Array<uint32_t, 2> renderExtent,
-                         const AOTargets& targets,
+                         const MainRenderTargets& targets,
                          uint32_t sceneIndex);
 
 void SetupSkyboxRendering(RenderGraph& graph,
                           PipelineManager* pipelineManager,
                           const Core::ViewFamily& viewFamily,
                           Core::Array<uint32_t, 2> renderExtent,
-                          const AOTargets& targets,
+                          const MainRenderTargets& targets,
                           uint32_t sceneIndex);
-StringID SetupPostProcessing(RenderGraph& graph,
-                              PipelineManager* pipelineManager,
-                              const Core::ViewFamily& viewFamily,
-                              Core::Array<uint32_t, 2> renderExtent,
-                              const PostProcessTargets& targets,
-                              float deltaTime,
-                              uint64_t frameNumber);
 
+StringID SetupPostProcessing(RenderGraph& graph,
+                             PipelineManager* pipelineManager,
+                             const Core::ViewFamily& viewFamily,
+                             Core::Array<uint32_t, 2> renderExtent,
+                             const MainRenderTargets& targets,
+                             float deltaTime,
+                             uint64_t frameNumber);
 } // Render
 
 #endif //WILL_ENGINE_RENDERER_H

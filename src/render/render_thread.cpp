@@ -38,7 +38,6 @@
 #include "pipelines/graphics_pipeline_builder.h"
 #include "render-view/render_view_helpers.h"
 #include "shadows/shadow_helpers.h"
-#include "post-processing/post_processing.h"
 
 
 namespace Render
@@ -376,10 +375,10 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         .depthStencil = SID("depth_target"),
     };
 
-    renderGraph->CreateTexture(targets.visibility, TextureInfo{VISIBILITY_BUFFER_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
-    renderGraph->CreateTexture(targets.stableId, TextureInfo{GBUFFER_STABLE_ID_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
-    renderGraph->CreateTexture(targets.velocity, TextureInfo{GBUFFER_MOTION_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
-    renderGraph->CreateTexture(targets.depthStencil, TextureInfo{DEPTH_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
+    renderGraph->CreateTexture(targets.visibility, TextureInfo{VISIBILITY_BUFFER_FORMAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
+    renderGraph->CreateTexture(targets.stableId, TextureInfo{GBUFFER_STABLE_ID_FORMAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
+    renderGraph->CreateTexture(targets.velocity, TextureInfo{GBUFFER_MOTION_FORMAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
+    renderGraph->CreateTexture(targets.depthStencil, TextureInfo{DEPTH_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
 
     VisibilityBufferBarycentricDerivativeTargets visBarDerTargets{
         .visibility = targets.visibility,
@@ -387,8 +386,8 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         .derivatives = SID("visibility_derivatives"),
     };
 
-    renderGraph->CreateTexture(visBarDerTargets.barycentric, TextureInfo{VK_FORMAT_R16G16_SFLOAT, renderExtent[0], renderExtent[1], 1}, true);
-    renderGraph->CreateTexture(visBarDerTargets.derivatives, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, renderExtent[0], renderExtent[1], 1}, true);
+    renderGraph->CreateTexture(visBarDerTargets.barycentric, TextureInfo{VK_FORMAT_R16G16_SFLOAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
+    renderGraph->CreateTexture(visBarDerTargets.derivatives, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
 
     VisibilityShadingTargets visShadingTargets{
         .visibility = targets.visibility,
@@ -401,44 +400,26 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
     };
 
-    renderGraph->CreateTexture(visShadingTargets.albedo, TextureInfo{GBUFFER_ALBEDO_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
-    renderGraph->CreateTexture(visShadingTargets.normal, TextureInfo{GBUFFER_NORMAL_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
-    renderGraph->CreateTexture(visShadingTargets.pbr, TextureInfo{GBUFFER_PBR_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
-    renderGraph->CreateTexture(visShadingTargets.emissive, TextureInfo{GBUFFER_EMISSIVE_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
+    renderGraph->CreateTexture(visShadingTargets.albedo, TextureInfo{GBUFFER_ALBEDO_FORMAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
+    renderGraph->CreateTexture(visShadingTargets.normal, TextureInfo{GBUFFER_NORMAL_FORMAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
+    renderGraph->CreateTexture(visShadingTargets.pbr, TextureInfo{GBUFFER_PBR_FORMAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
+    renderGraph->CreateTexture(visShadingTargets.emissive, TextureInfo{GBUFFER_EMISSIVE_FORMAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
 
     StringID shadingOutputTarget = SID("shade_output");
-    renderGraph->CreateTexture(shadingOutputTarget, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
+    renderGraph->CreateTexture(shadingOutputTarget, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
 
 
-    // Main view G-buffer
-    GBufferTargets targets2{
-        SID("albedo_target"),
-        SID("normal_target"),
-        SID("pbr_target"),
-        SID("emissive_target"),
-        SID("velocity_target"),
-        SID("depth_target"),
-        SID("stable_id"),
-        SID("deferred_resolve_target")
+    MainRenderTargets mainTargets{
+        .normal = visShadingTargets.normal,
+        .depthStencil = targets.depthStencil,
+        .outputColor = shadingOutputTarget
     };
-    renderGraph->CreateTexture(SID("deferred_resolve_target"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
-    /*GBufferTargets portalTargets{
-        SID("portal_albedo"),
-        SID("portal_normal"),
-        SID("portal_pbr"),
-        SID("portal_emissive"),
-        SID("portal_velocity"),
-        SID("portal_depth"),
-        SID("dummy_black_rg32"),
-        SID("portal_deferred_resolve")
-    };
-    renderGraph->CreateTexture(SID("portal_deferred_resolve"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, true);*/
 
     //
-    {
+    if (renderFamilyProperties.bCanRender) {
         ZoneScopedN("SetupRenderGraph");
 
-        RenderPass& clearDeferredImagePass = renderGraph->AddPass(SID("Clear Deferred Images"), VK_PIPELINE_STAGE_2_CLEAR_BIT);
+        RenderPass& clearDeferredImagePass = renderGraph->AddPass(SID("Clear Color Outputs"), VK_PIPELINE_STAGE_2_CLEAR_BIT);
         clearDeferredImagePass.WriteClearImage(shadingOutputTarget);
         // clearDeferredImagePass.WriteClearImage(portalTargets.outFinalColor);
         clearDeferredImagePass.Execute([&, shadingOutputTarget](VkCommandBuffer _cmd) {
@@ -452,12 +433,13 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             vkCmdClearColorImage(_cmd, portalImg, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &colorSubresource);*/
         });
 
-        if (renderFamilyProperties.bHasGeometry) {
-            if (renderFamilyProperties.bHasShadows) {
+
+        // Geometry
+        if (!viewFamily.mainPassInstances.IsEmpty()) {
+            if (viewFamily.shadowConfig.enabled) {
                 SetupCascadedShadows(*renderGraph, viewFamily, renderFamilyProperties, 0);
             }
 
-            // todo guard these passes. Instead of spread out, define the base shaders as "Critical" and do not let anything render until they exist.
             SetupGeometryPass(*renderGraph, pipelineManager, viewFamily, renderFamilyProperties, renderExtent, targets, 0);
 
             SetupVisibilityBarycentricDerivativePass(*renderGraph, pipelineManager, viewFamily, renderExtent, visBarDerTargets, 0);
@@ -465,78 +447,63 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             SetupVisibilityShadingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, visShadingTargets, 0);
 
 
-            AOTargets postProcessTargets{
-                .normal = visShadingTargets.normal,
-                .depthStencil = targets.depthStencil,
-                .outputColor = shadingOutputTarget
-            };
-
-            if (renderFamilyProperties.bHasGTAO) {
-                SetupGroundTruthAmbientOcclusion(*renderGraph, pipelineManager, viewFamily, renderExtent, postProcessTargets, frameNumber, 0);
+            if (viewFamily.gtaoConfig.bEnabled) {
+                SetupGroundTruthAmbientOcclusion(*renderGraph, pipelineManager, viewFamily, renderExtent, mainTargets, frameNumber, 0);
             }
 
             // Outputs "shadows_resolve_target"
-            SetupShadowsResolve(*renderGraph, pipelineManager, viewFamily, renderExtent, postProcessTargets, 0);
+            SetupShadowsResolve(*renderGraph, pipelineManager, viewFamily, renderExtent, mainTargets, 0);
 
             DeferredResolveTargets deferredResolveTargets{
                 .albedo = visShadingTargets.albedo,
                 .normal = visShadingTargets.normal,
                 .pbr = visShadingTargets.pbr,
                 .emissive = visShadingTargets.emissive,
-                .depth = targets.depthStencil,
+                .depthStencil = targets.depthStencil,
                 .shadows = SID("shadows_resolve_target"),
                 .output = shadingOutputTarget,
             };
 
             SetupDeferredResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, deferredResolveTargets, 0);
-
-            SetupSkyboxRendering(*renderGraph, pipelineManager, viewFamily, renderExtent, postProcessTargets, 0);
-
-            // fix portals. again.
-            /*bool bHasPortalView = !viewFamily.portalViews.IsEmpty();
-            if (bHasPortalView) {
-                renderGraph->CreateTexture(portalTargets.albedo, TextureInfo{GBUFFER_ALBEDO_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
-                renderGraph->CreateTexture(portalTargets.normal, TextureInfo{GBUFFER_NORMAL_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
-                renderGraph->CreateTexture(portalTargets.pbr, TextureInfo{GBUFFER_PBR_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
-                renderGraph->CreateTexture(portalTargets.emissive, TextureInfo{GBUFFER_EMISSIVE_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
-                renderGraph->CreateTexture(portalTargets.velocity, TextureInfo{GBUFFER_MOTION_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
-                renderGraph->CreateTexture(portalTargets.depthStencil, TextureInfo{DEPTH_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
-
-                SetupGeometryPasses(*renderGraph, viewFamily, renderFamilyProperties, renderExtent, portalTargets, 1, true);
-
-                if (renderFamilyProperties.bHasGTAO) {
-                    SetupGroundTruthAmbientOcclusion(*renderGraph, viewFamily, renderExtent, portalTargets, 1);
-                }
-
-                SetupShadowsResolve(*renderGraph, viewFamily, renderExtent, portalTargets, 1);
-
-                if (renderFamilyProperties.bHasDeferred) {
-                    SetupDeferredLighting(*renderGraph, viewFamily, renderExtent, portalTargets, 1);
-                }
-
-                SetupPortalComposite(*renderGraph, viewFamily, renderExtent, targets, portalTargets);
-            }*/
         }
 
-        PostProcessTargets ppTargets{shadingOutputTarget, targets.velocity, targets.depthStencil};
-        PostProcessTargets taaTargets{shadingOutputTarget, targets.velocity, targets.depthStencil};
-        StringID finalOutput = shadingOutputTarget;
-        if (renderFamilyProperties.bHasGeometry) {
-            // bool bHasTAAPass = pipelineManager->IsCategoryReady(PipelineCategory::TAA) && viewFamily.postProcessConfig.bEnableTemporalAntialiasing;
-            // if (bHasTAAPass) {
-            //     taaTargets.finalColor = SetupTemporalAntialiasing(*renderGraph, viewFamily, renderExtent, ppTargets);
-            // }
+        SetupSkyboxRendering(*renderGraph, pipelineManager, viewFamily, renderExtent, mainTargets, 0);
 
-            bool bHasPostProcess = pipelineManager->IsCategoryReady(PipelineCategory::PostProcess);
-            if (bHasPostProcess) {
-                finalOutput = SetupPostProcessing(*renderGraph, pipelineManager, viewFamily, renderExtent, taaTargets, frameBuffer.timeFrame.renderDeltaTime, frameNumber);
+        // fix portals. again.
+        /*bool bHasPortalView = !viewFamily.portalViews.IsEmpty();
+        if (bHasPortalView) {
+            renderGraph->CreateTexture(portalTargets.albedo, TextureInfo{GBUFFER_ALBEDO_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
+            renderGraph->CreateTexture(portalTargets.normal, TextureInfo{GBUFFER_NORMAL_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
+            renderGraph->CreateTexture(portalTargets.pbr, TextureInfo{GBUFFER_PBR_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
+            renderGraph->CreateTexture(portalTargets.emissive, TextureInfo{GBUFFER_EMISSIVE_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
+            renderGraph->CreateTexture(portalTargets.velocity, TextureInfo{GBUFFER_MOTION_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
+            renderGraph->CreateTexture(portalTargets.depthStencil, TextureInfo{DEPTH_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
+
+            SetupGeometryPasses(*renderGraph, viewFamily, renderFamilyProperties, renderExtent, portalTargets, 1, true);
+
+            if (renderFamilyProperties.bHasGTAO) {
+                SetupGroundTruthAmbientOcclusion(*renderGraph, viewFamily, renderExtent, portalTargets, 1);
             }
-        }
 
-        bool bHasDebugRender = pipelineManager->IsCategoryReady(PipelineCategory::DebugRendering);
-        if (bHasDebugRender) {
-            SetupDebugRender(*renderGraph, viewFamily, renderExtent, targets.depthStencil, finalOutput, frameResourceLimits);
-        }
+            SetupShadowsResolve(*renderGraph, viewFamily, renderExtent, portalTargets, 1);
+
+            if (renderFamilyProperties.bHasDeferred) {
+                SetupDeferredLighting(*renderGraph, viewFamily, renderExtent, portalTargets, 1);
+            }
+
+            SetupPortalComposite(*renderGraph, viewFamily, renderExtent, targets, portalTargets);
+        }*/
+
+
+        StringID finalOutput = shadingOutputTarget;
+        // bool bHasTAAPass = pipelineManager->IsCategoryReady(PipelineCategory::TAA) && viewFamily.postProcessConfig.bEnableTemporalAntialiasing;
+        // if (bHasTAAPass) {
+        //     taaTargets.finalColor = SetupTemporalAntialiasing(*renderGraph, viewFamily, renderExtent, ppTargets);
+        // }
+
+        finalOutput = SetupPostProcessing(*renderGraph, pipelineManager, viewFamily, renderExtent, mainTargets, frameBuffer.timeFrame.renderDeltaTime, frameNumber);
+
+        SetupDebugRender(*renderGraph, viewFamily, renderExtent, targets.depthStencil, finalOutput, frameResourceLimits);
 
 
 #if WILL_EDITOR
@@ -710,9 +677,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         offset += sizeof(CompactedMeshlet) * 128;
 #endif
 
-
-        bool bHasDebugPass = !viewFamily.debugResourceName.IsEmpty() && pipelineManager->IsCategoryReady(PipelineCategory::Debug);
-        if (bHasDebugPass) {
+        if (!viewFamily.debugResourceName.IsEmpty()) {
             StringID debugTargetName = StringID(viewFamily.debugResourceName.c_str(), viewFamily.debugResourceName.Size());
 
             if (renderGraph->HasTexture(debugTargetName)) {
@@ -843,7 +808,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
         if (frameBuffer.bTakeScreenshot && screenCapture->CanScreenshot()) {
             screenCapture->PrepareScreenshotResources(renderExtent[0], renderExtent[1]);
-            renderGraph->CreateTexture(SID("screenshot_intermediate"), TextureInfo{VK_FORMAT_R8G8B8A8_UNORM, renderExtent[0], renderExtent[1], 1}, true);
+            renderGraph->CreateTexture(SID("screenshot_intermediate"), TextureInfo{VK_FORMAT_R8G8B8A8_UNORM, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
 
             auto& screenshotBlitPass = renderGraph->AddPass(SID("Screenshot Blit"), VK_PIPELINE_STAGE_2_BLIT_BIT);
             screenshotBlitPass.ReadBlitImage(finalOutput);
@@ -1029,86 +994,86 @@ void RenderThread::CreatePipelines()
     globalPipelineLayout = PipelineLayout::CreatePipelineLayout(context, layoutInfo);
 
     pipelineManager->RegisterComputePipeline(SID("instancing_instance_lod"), Platform::GetShaderPath() / "instancing_instance_lod_compute.spv",
-                                             sizeof(InstanceLODPushConstant), PipelineCategory::Instancing);
+                                             sizeof(InstanceLODPushConstant), PipelineCategory::Critical);
     pipelineManager->RegisterComputePipeline(SID("instancing_prefix_sum_up_1"), Platform::GetShaderPath() / "instancing_prefix_sum_up_1_compute.spv",
-                                             sizeof(PrefixSumUpsweep1PushConstant), PipelineCategory::Instancing);
+                                             sizeof(PrefixSumUpsweep1PushConstant), PipelineCategory::Critical);
     pipelineManager->RegisterComputePipeline(SID("instancing_prefix_sum_up_2"), Platform::GetShaderPath() / "instancing_prefix_sum_up_2_compute.spv",
-                                             sizeof(PrefixSumUpsweep2PushConstant), PipelineCategory::Instancing);
+                                             sizeof(PrefixSumUpsweep2PushConstant), PipelineCategory::Critical);
     pipelineManager->RegisterComputePipeline(SID("instancing_scan_blocks"), Platform::GetShaderPath() / "instancing_scan_blocks_compute.spv",
-                                             sizeof(PrefixSumScanBlocksPushConstant), PipelineCategory::Instancing);
+                                             sizeof(PrefixSumScanBlocksPushConstant), PipelineCategory::Critical);
     pipelineManager->RegisterComputePipeline(SID("instancing_prefix_sum_down_1"), Platform::GetShaderPath() / "instancing_prefix_sum_down_1_compute.spv",
-                                             sizeof(PrefixSumDownsweep1PushConstant), PipelineCategory::Instancing);
+                                             sizeof(PrefixSumDownsweep1PushConstant), PipelineCategory::Critical);
     pipelineManager->RegisterComputePipeline(SID("instancing_prefix_sum_down_2"), Platform::GetShaderPath() / "instancing_prefix_sum_down_2_compute.spv",
-                                             sizeof(PrefixSumDownsweep2PushConstant), PipelineCategory::Instancing);
+                                             sizeof(PrefixSumDownsweep2PushConstant), PipelineCategory::Critical);
     pipelineManager->RegisterComputePipeline(SID("instancing_total_meshlet_count"), Platform::GetShaderPath() / "instancing_total_meshlet_count_compute.spv",
-                                             sizeof(TotalMeshletCountPushConstant), PipelineCategory::Instancing);
+                                             sizeof(TotalMeshletCountPushConstant), PipelineCategory::Critical);
     pipelineManager->RegisterComputePipeline(SID("instancing_expand_instance_to_meshlet"), Platform::GetShaderPath() / "instancing_expand_instance_to_meshlet_compute.spv",
-                                             sizeof(ExpandMeshletsPushConstant), PipelineCategory::Instancing);
+                                             sizeof(ExpandMeshletsPushConstant), PipelineCategory::Critical);
     pipelineManager->RegisterComputePipeline(SID("instancing_meshlet_visibility_prefix_sum_up_1"), Platform::GetShaderPath() / "instancing_meshlet_visibility_prefix_sum_up_1_compute.spv",
-                                             sizeof(MeshletVisibilityPrefixSumUpsweep1PushConstant), PipelineCategory::Instancing);
+                                             sizeof(MeshletVisibilityPrefixSumUpsweep1PushConstant), PipelineCategory::Critical);
     pipelineManager->RegisterComputePipeline(SID("instancing_meshlet_visibility_prefix_sum_down_2"), Platform::GetShaderPath() / "instancing_meshlet_visibility_prefix_sum_down_2_compute.spv",
-                                             sizeof(MeshletVisibilityPrefixSumDownsweep2PushConstant), PipelineCategory::Instancing);
+                                             sizeof(MeshletVisibilityPrefixSumDownsweep2PushConstant), PipelineCategory::Critical);
     pipelineManager->RegisterComputePipeline(SID("instancing_compacted_meshlet_dispatch"), Platform::GetShaderPath() / "instancing_compacted_meshlet_dispatch_compute.spv",
-                                             sizeof(CompactedMeshletDispatchPushConstant), PipelineCategory::Instancing);
+                                             sizeof(CompactedMeshletDispatchPushConstant), PipelineCategory::Critical);
     pipelineManager->RegisterComputePipeline(SID("instancing_max_meshlet_count"), Platform::GetShaderPath() / "instancing_max_meshlet_count_compute.spv",
-                                             sizeof(MaxMeshletCountPushConstant), PipelineCategory::Instancing);
+                                             sizeof(MaxMeshletCountPushConstant), PipelineCategory::Critical);
 
     pipelineManager->RegisterComputePipeline(SID("visibility_buffer_barycentric_derivative"), Platform::GetShaderPath() / "visibility_buffer_barycentric_derivative_compute.spv",
-                                             sizeof(VisibilityBufferResolvePushConstant), PipelineCategory::VisibilityBuffer);
+                                             sizeof(VisibilityBufferResolvePushConstant), PipelineCategory::Critical);
     pipelineManager->RegisterComputePipeline(SID("visibility_shading"), Platform::GetShaderPath() / "visibility_shading_compute.spv",
-                                             sizeof(VisibilityShadingPushConstant), PipelineCategory::VisibilityBuffer);
+                                             sizeof(VisibilityShadingPushConstant), PipelineCategory::Critical);
     pipelineManager->RegisterComputePipeline(SID("instancing_instance_lod_shadows"), Platform::GetShaderPath() / "instancing_instance_lod_shadows_compute.spv",
-                                             sizeof(InstanceLODShadowsPushConstant), PipelineCategory::Instancing);
+                                             sizeof(InstanceLODShadowsPushConstant), PipelineCategory::Legacy);
     pipelineManager->RegisterComputePipeline(SID("instancing_expand_instance_to_meshlet_shadows"), Platform::GetShaderPath() / "instancing_expand_instance_to_meshlet_shadows_compute.spv",
-                                             sizeof(ExpandMeshletsShadowsPushConstant), PipelineCategory::Instancing);
+                                             sizeof(ExpandMeshletsShadowsPushConstant), PipelineCategory::Legacy);
 
     pipelineManager->RegisterComputePipeline(SID("shadows_resolve"), Platform::GetShaderPath() / "shadows_resolve_compute.spv",
-                                             sizeof(ShadowsResolvePushConstant), PipelineCategory::ShadowCombine);
+                                             sizeof(ShadowsResolvePushConstant), PipelineCategory::Critical);
     pipelineManager->RegisterComputePipeline(SID("deferred_resolve"), Platform::GetShaderPath() / "deferred_resolve_compute.spv",
-                                             sizeof(DeferredResolvePushConstant), PipelineCategory::DeferredShading);
+                                             sizeof(DeferredResolvePushConstant), PipelineCategory::Critical);
 
     pipelineManager->RegisterComputePipeline(SID("temporal_antialiasing"), Platform::GetShaderPath() / "temporal_antialiasing_compute.spv",
-                                             sizeof(TemporalAntialiasingPushConstant), PipelineCategory::TAA);
+                                             sizeof(TemporalAntialiasingPushConstant), PipelineCategory::Legacy);
 
     pipelineManager->RegisterComputePipeline(SID("gtao_depth_prepass"), Platform::GetShaderPath() / "gtao_depth_prepass_compute.spv",
-                                             sizeof(GTAODepthPrepassPushConstant), PipelineCategory::GTAO);
+                                             sizeof(GTAODepthPrepassPushConstant), PipelineCategory::Critical);
     pipelineManager->RegisterComputePipeline(SID("gtao_main"), Platform::GetShaderPath() / "gtao_main_compute.spv",
-                                             sizeof(GTAOMainPushConstant), PipelineCategory::GTAO);
+                                             sizeof(GTAOMainPushConstant), PipelineCategory::Critical);
     pipelineManager->RegisterComputePipeline(SID("gtao_denoise"), Platform::GetShaderPath() / "gtao_denoise_compute.spv",
-                                             sizeof(GTAODenoisePushConstant), PipelineCategory::GTAO);
+                                             sizeof(GTAODenoisePushConstant), PipelineCategory::Critical);
 
 
     pipelineManager->RegisterComputePipeline(SID("exposure_build_histogram"), Platform::GetShaderPath() / "exposure_build_histogram_compute.spv",
-                                             sizeof(HistogramBuildPushConstant), PipelineCategory::Exposure);
+                                             sizeof(HistogramBuildPushConstant), PipelineCategory::Critical);
     pipelineManager->RegisterComputePipeline(SID("exposure_calculate_average"), Platform::GetShaderPath() / "exposure_calculate_average_compute.spv",
-                                             sizeof(ExposureCalculatePushConstant), PipelineCategory::Exposure);
+                                             sizeof(ExposureCalculatePushConstant), PipelineCategory::Critical);
     pipelineManager->RegisterComputePipeline(SID("tonemap_sdr"), Platform::GetShaderPath() / "tonemap_sdr_compute.spv",
-                                             sizeof(TonemapSDRPushConstant), PipelineCategory::Tonemap);
+                                             sizeof(TonemapSDRPushConstant), PipelineCategory::Critical);
     pipelineManager->RegisterComputePipeline(SID("motion_blur_tile_max"), Platform::GetShaderPath() / "motion_blur_tile_max_compute.spv",
-                                             sizeof(MotionBlurTileVelocityPushConstant), PipelineCategory::MotionBlur);
+                                             sizeof(MotionBlurTileVelocityPushConstant), PipelineCategory::Critical);
     pipelineManager->RegisterComputePipeline(SID("motion_blur_neighbor_max"), Platform::GetShaderPath() / "motion_blur_neighbor_max_compute.spv",
-                                             sizeof(MotionBlurNeighborMaxPushConstant), PipelineCategory::MotionBlur);
+                                             sizeof(MotionBlurNeighborMaxPushConstant), PipelineCategory::Critical);
     pipelineManager->RegisterComputePipeline(SID("motion_blur_reconstruction"), Platform::GetShaderPath() / "motion_blur_reconstruction_compute.spv",
-                                             sizeof(MotionBlurReconstructionPushConstant), PipelineCategory::MotionBlur);
+                                             sizeof(MotionBlurReconstructionPushConstant), PipelineCategory::Critical);
     pipelineManager->RegisterComputePipeline(SID("bloom_threshold"), Platform::GetShaderPath() / "bloom_threshold_compute.spv",
-                                             sizeof(BloomThresholdPushConstant), PipelineCategory::Bloom);
+                                             sizeof(BloomThresholdPushConstant), PipelineCategory::Critical);
     pipelineManager->RegisterComputePipeline(SID("bloom_downsample"), Platform::GetShaderPath() / "bloom_downsample_compute.spv",
-                                             sizeof(BloomDownsamplePushConstant), PipelineCategory::Bloom);
+                                             sizeof(BloomDownsamplePushConstant), PipelineCategory::Critical);
     pipelineManager->RegisterComputePipeline(SID("bloom_upsample"), Platform::GetShaderPath() / "bloom_upsample_compute.spv",
-                                             sizeof(BloomUpsamplePushConstant), PipelineCategory::Bloom);
+                                             sizeof(BloomUpsamplePushConstant), PipelineCategory::Critical);
     pipelineManager->RegisterComputePipeline(SID("vignette_aberration"), Platform::GetShaderPath() / "vignette_aberration_compute.spv",
-                                             sizeof(VignetteChromaticAberrationPushConstant), PipelineCategory::Vignette);
+                                             sizeof(VignetteChromaticAberrationPushConstant), PipelineCategory::Critical);
     pipelineManager->RegisterComputePipeline(SID("film_grain"), Platform::GetShaderPath() / "film_grain_compute.spv",
-                                             sizeof(FilmGrainPushConstant), PipelineCategory::FilmGrain);
+                                             sizeof(FilmGrainPushConstant), PipelineCategory::Critical);
     pipelineManager->RegisterComputePipeline(SID("sharpening"), Platform::GetShaderPath() / "sharpening_compute.spv",
-                                             sizeof(SharpeningPushConstant), PipelineCategory::Sharpening);
+                                             sizeof(SharpeningPushConstant), PipelineCategory::Critical);
     pipelineManager->RegisterComputePipeline(SID("color_grading"), Platform::GetShaderPath() / "color_grading_compute.spv",
-                                             sizeof(ColorGradingPushConstant), PipelineCategory::ColorGrade);
+                                             sizeof(ColorGradingPushConstant), PipelineCategory::Critical);
     pipelineManager->RegisterComputePipeline(SID("panini_projection"), Platform::GetShaderPath() / "panini_projection_compute.spv",
-                                             sizeof(PaniniProjectionPushConstant), PipelineCategory::Panini);
+                                             sizeof(PaniniProjectionPushConstant), PipelineCategory::Critical);
 
     pipelineManager->RegisterComputePipeline(SID("debug_visualize"), Platform::GetShaderPath() / "debug_visualize_compute.spv",
-                                             sizeof(DebugVisualizePushConstant), PipelineCategory::Debug);
+                                             sizeof(DebugVisualizePushConstant), PipelineCategory::Critical);
 
 #if WILL_EDITOR
     const VkDescriptorSetLayout emapLayout = resourceManager->environmentMapGenerateResources.descriptorSetLayout.handle;
@@ -1143,7 +1108,7 @@ void RenderThread::CreatePipelines()
             builder,
             sizeof(ShadowMeshShadingPushConstant),
             VK_SHADER_STAGE_MESH_BIT_EXT,
-            PipelineCategory::Shadow
+            PipelineCategory::Critical
         );
         builder.Clear();
     }
@@ -1170,7 +1135,7 @@ void RenderThread::CreatePipelines()
             builder,
             sizeof(VisibilityBufferAccumulatePushConstant),
             VK_SHADER_STAGE_MESH_BIT_EXT,
-            PipelineCategory::Geometry
+            PipelineCategory::Critical
         );
         builder.Clear();
     }
@@ -1191,7 +1156,7 @@ void RenderThread::CreatePipelines()
             builder,
             sizeof(VisibilityBufferAccumulatePushConstant),
             VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT,
-            PipelineCategory::CustomRendering
+            PipelineCategory::Critical
         );
         builder.Clear();
     }
@@ -1217,7 +1182,7 @@ void RenderThread::CreatePipelines()
             builder,
             sizeof(PortalCompositePushConstant),
             VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-            PipelineCategory::CustomRendering
+            PipelineCategory::Critical
         );
         builder.Clear();
     }
@@ -1236,7 +1201,7 @@ void RenderThread::CreatePipelines()
             builder,
             sizeof(BaseMeshShadingPushConstant),
             VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT,
-            PipelineCategory::DebugRendering
+            PipelineCategory::Critical
         );
         builder.Clear();
     }
@@ -1260,7 +1225,7 @@ void RenderThread::CreatePipelines()
             builder,
             sizeof(EnvironmentSkyboxPushConstant),
             VK_SHADER_STAGE_FRAGMENT_BIT,
-            PipelineCategory::EnvironmentMap
+            PipelineCategory::Critical
         );
         builder.Clear();
     }
@@ -1296,7 +1261,7 @@ void RenderThread::CreatePipelines()
             builder,
             sizeof(DebugDrawPushConstant),
             VK_SHADER_STAGE_MESH_BIT_EXT,
-            PipelineCategory::DebugRendering
+            PipelineCategory::Critical
         );
         builder.Clear();
     }
@@ -1581,7 +1546,7 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFami
                                 static_cast<uint32_t>(shadowConfig.cascadePreset.extents[cascadeLevel][1]),
                                 1
                             },
-                            false);
+                            {std::nullopt}, false);
 
         // Main Draw
         if (!viewFamily.mainPassInstances.IsEmpty()) {
@@ -1751,14 +1716,14 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFami
     }
 }
 
-void RenderThread::SetupPortalComposite(RenderGraph& graph, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const GBufferTargets& targets,
-                                        const GBufferTargets& portalTargets) const
+void RenderThread::SetupPortalComposite(RenderGraph& graph, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const MainRenderTargets& targets,
+                                        const MainRenderTargets& portalTargets) const
 {
     RenderPass& portalCompositePass = graph.AddPass(SID("Portal Composite"), VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT);
-    portalCompositePass.ReadSampledImage(portalTargets.outFinalColor);
+    portalCompositePass.ReadSampledImage(portalTargets.outputColor);
     portalCompositePass.ReadSampledImage(portalTargets.velocity);
     portalCompositePass.ReadSampledImage(portalTargets.depthStencil);
-    portalCompositePass.WriteColorAttachment(targets.outFinalColor);
+    portalCompositePass.WriteColorAttachment(targets.outputColor);
     portalCompositePass.WriteColorAttachment(targets.velocity);
     portalCompositePass.ReadWriteDepthAttachment(targets.depthStencil);
     portalCompositePass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
@@ -1767,7 +1732,7 @@ void RenderThread::SetupPortalComposite(RenderGraph& graph, const Core::ViewFami
         VkRect2D scissor = VkHelpers::GenerateScissor(width, height);
         vkCmdSetScissor(cmd, 0, 1, &scissor);
 
-        VkRenderingAttachmentInfo colorAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.outFinalColor), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        VkRenderingAttachmentInfo colorAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.outputColor), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
         VkRenderingAttachmentInfo velocityAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.velocity), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
         VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), nullptr, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
         VkRenderingAttachmentInfo stencilAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), nullptr, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
@@ -1777,7 +1742,7 @@ void RenderThread::SetupPortalComposite(RenderGraph& graph, const Core::ViewFami
         vkCmdBeginRendering(cmd, &renderInfo);
 
         PortalCompositePushConstant pc{
-            .portalColorIndex = graph.GetSampledImageViewDescriptorIndex(portalTargets.outFinalColor),
+            .portalColorIndex = graph.GetSampledImageViewDescriptorIndex(portalTargets.outputColor),
             .portalVelocityIndex = graph.GetSampledImageViewDescriptorIndex(portalTargets.velocity),
             .portalDepthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(portalTargets.depthStencil),
         };
@@ -1794,9 +1759,9 @@ void RenderThread::SetupPortalComposite(RenderGraph& graph, const Core::ViewFami
     });
 }
 
-StringID RenderThread::SetupTemporalAntialiasing(RenderGraph& graph, const Core::ViewFamily& viewFamily, const Core::Array<uint32_t, 2> renderExtent, const PostProcessTargets& ppTargets) const
+StringID RenderThread::SetupTemporalAntialiasing(RenderGraph& graph, const Core::ViewFamily& viewFamily, const Core::Array<uint32_t, 2> renderExtent, const MainRenderTargets& ppTargets) const
 {
-    graph.CreateTexture(SID("taa_current"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
+    graph.CreateTexture(SID("taa_current"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
     renderGraph->CarryTextureToNextFrame(SID("taa_current"), SID("taa_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
 
     if (renderGraph->HasTexture(SID("velocity_target"))) {
@@ -1805,10 +1770,10 @@ StringID RenderThread::SetupTemporalAntialiasing(RenderGraph& graph, const Core:
 
     if (!graph.HasTexture(SID("taa_history")) || !graph.HasTexture(SID("velocity_history"))) {
         RenderPass& taaPass = graph.AddPass(SID("TAA Copy Deferred"), VK_PIPELINE_STAGE_2_COPY_BIT);
-        taaPass.ReadCopyImage(ppTargets.finalColor);
+        taaPass.ReadCopyImage(ppTargets.outputColor);
         taaPass.WriteCopyImage(SID("taa_current"));
         taaPass.Execute([&, width = renderExtent[0], height = renderExtent[1], ppTargets](VkCommandBuffer cmd) {
-            VkImage drawImage = graph.GetImageHandle(ppTargets.finalColor);
+            VkImage drawImage = graph.GetImageHandle(ppTargets.outputColor);
             VkImage taaImage = graph.GetImageHandle(SID("taa_current"));
 
             VkImageCopy2 copyRegion{};
@@ -1830,12 +1795,12 @@ StringID RenderThread::SetupTemporalAntialiasing(RenderGraph& graph, const Core:
 
             vkCmdCopyImage2(cmd, &copyInfo);
         });
-        return ppTargets.finalColor;
+        return ppTargets.outputColor;
     }
 
     RenderPass& taaPass = graph.AddPass(SID("TAA Main"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
     taaPass.ReadBuffer(SID("scene_data"));
-    taaPass.ReadSampledImage(ppTargets.finalColor);
+    taaPass.ReadSampledImage(ppTargets.outputColor);
     taaPass.ReadSampledImage(ppTargets.depthStencil);
     taaPass.ReadSampledImage(SID("taa_history"));
     taaPass.ReadSampledImage(ppTargets.velocity);
@@ -1844,7 +1809,7 @@ StringID RenderThread::SetupTemporalAntialiasing(RenderGraph& graph, const Core:
     taaPass.Execute([&, width = renderExtent[0], height = renderExtent[1], ppTargets](VkCommandBuffer cmd) {
         TemporalAntialiasingPushConstant pushData{
             .sceneData = graph.GetBufferAddress(SID("scene_data")),
-            .colorResolvedIndex = graph.GetSampledImageViewDescriptorIndex(ppTargets.finalColor),
+            .colorResolvedIndex = graph.GetSampledImageViewDescriptorIndex(ppTargets.outputColor),
             .depthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(ppTargets.depthStencil),
             .colorHistoryIndex = graph.GetSampledImageViewDescriptorIndex(SID("taa_history")),
             .velocityIndex = graph.GetSampledImageViewDescriptorIndex(ppTargets.velocity),
@@ -1862,7 +1827,7 @@ StringID RenderThread::SetupTemporalAntialiasing(RenderGraph& graph, const Core:
     });
 
 
-    graph.CreateTexture(SID("taa_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, true);
+    graph.CreateTexture(SID("taa_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
 
     RenderPass& finalCopyPass = graph.AddPass(SID("TAA Final Copy"), VK_PIPELINE_STAGE_2_BLIT_BIT);
     finalCopyPass.ReadBlitImage(SID("taa_current"));

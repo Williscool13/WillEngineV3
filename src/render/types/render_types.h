@@ -28,11 +28,8 @@ int32_t GetSphereSegments(const glm::vec3& center, const glm::vec3& viewPos, flo
 struct RenderFamilyProperties
 {
     Core::ViewFamily* viewFamily{nullptr};
-    bool bHasGeometry{false};
-    bool bHasGTAO{false};
-    bool bHasShadows{false};
-    bool bHasDeferred{false};
-    bool bHasSkybox{false};
+
+    bool bCanRender{false};
 
     size_t modelBufferSize{128};
     size_t materialBufferSize{128};
@@ -59,10 +56,7 @@ struct RenderFamilyProperties
     void Reset()
     {
         viewFamily = nullptr;
-        bHasGeometry = false;
-        bHasGTAO = false;
-        bHasShadows = false;
-        bHasDeferred = false;
+        bCanRender = false;
 
         modelBufferSize = 128;
         materialBufferSize = 128;

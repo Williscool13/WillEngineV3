@@ -678,7 +678,7 @@ void SetupDeferredResolvePass(RenderGraph& graph,
     deferredResolvePass.ReadSampledImage(targets.normal);
     deferredResolvePass.ReadSampledImage(targets.pbr);
     deferredResolvePass.ReadSampledImage(targets.emissive);
-    deferredResolvePass.ReadSampledImage(targets.depth);
+    deferredResolvePass.ReadSampledImage(targets.depthStencil);
     if (targets.shadows != StringID{}) {
         deferredResolvePass.ReadSampledImage(targets.shadows);
     }
@@ -686,7 +686,7 @@ void SetupDeferredResolvePass(RenderGraph& graph,
     deferredResolvePass.Execute([&, pipelineManager,
             width = renderExtent[0], height = renderExtent[1], sceneIndex,
             albedo = targets.albedo, normal = targets.normal, pbr = targets.pbr,
-            emissive = targets.emissive, depth = targets.depth, shadows = targets.shadows,
+            emissive = targets.emissive, depth = targets.depthStencil, shadows = targets.shadows,
             output = targets.output, skyboxIndex = viewFamily.skyboxIndex](VkCommandBuffer cmd) {
             DeferredResolvePushConstant pc{
                 .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
@@ -717,18 +717,18 @@ void SetupGroundTruthAmbientOcclusion(RenderGraph& graph,
                                       PipelineManager* pipelineManager,
                                       const Core::ViewFamily& viewFamily,
                                       Core::Array<uint32_t, 2> renderExtent,
-                                      const AOTargets& targets,
+                                      const MainRenderTargets& targets,
                                       uint64_t frameNumber,
                                       uint32_t sceneIndex)
 {
     const Core::GTAOConfiguration& gtaoConfig = viewFamily.gtaoConfig;
 
-    graph.CreateTexture(SID("gtao_depth"), TextureInfo{VK_FORMAT_R16_SFLOAT, renderExtent[0], renderExtent[1], 5}, true);
-    graph.CreateTexture(SID("gtao_ao"), TextureInfo{VK_FORMAT_R8_UNORM, renderExtent[0], renderExtent[1], 1}, true);
-    graph.CreateTexture(SID("gtao_edges"), TextureInfo{VK_FORMAT_R8_UNORM, renderExtent[0], renderExtent[1], 1}, true);
+    graph.CreateTexture(SID("gtao_depth"), TextureInfo{VK_FORMAT_R16_SFLOAT, renderExtent[0], renderExtent[1], 5}, {std::nullopt}, true);
+    graph.CreateTexture(SID("gtao_ao"), TextureInfo{VK_FORMAT_R8_UNORM, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
+    graph.CreateTexture(SID("gtao_edges"), TextureInfo{VK_FORMAT_R8_UNORM, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
     // Denoise pass(es) - typically run 2-3 times for better quality
-    graph.CreateTexture(SID("gtao_temp"), TextureInfo{VK_FORMAT_R8_UNORM, renderExtent[0], renderExtent[1], 1}, true);
-    graph.CreateTexture(SID("gtao_filtered"), TextureInfo{VK_FORMAT_R8_UNORM, renderExtent[0], renderExtent[1], 1}, true);
+    graph.CreateTexture(SID("gtao_temp"), TextureInfo{VK_FORMAT_R8_UNORM, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
+    graph.CreateTexture(SID("gtao_filtered"), TextureInfo{VK_FORMAT_R8_UNORM, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
 
     RenderPass& depthPrepass = graph.AddPass(SID("GTAO Depth Prepass"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
     depthPrepass.ReadBuffer(SID("scene_data"));
@@ -858,10 +858,10 @@ void SetupShadowsResolve(RenderGraph& graph,
                          PipelineManager* pipelineManager,
                          const Core::ViewFamily& viewFamily,
                          Core::Array<uint32_t, 2> renderExtent,
-                         const AOTargets& targets,
+                         const MainRenderTargets& targets,
                          uint32_t sceneIndex)
 {
-    graph.CreateTexture(SID("shadows_resolve_target"), TextureInfo{VK_FORMAT_R8G8_UNORM, renderExtent[0], renderExtent[1], 1}, true);
+    graph.CreateTexture(SID("shadows_resolve_target"), TextureInfo{VK_FORMAT_R8G8_UNORM, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
     RenderPass& shadowsResolvePass = graph.AddPass(SID("Shadows Resolve"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
     shadowsResolvePass.ReadSampledImage(targets.normal);
     shadowsResolvePass.ReadSampledImage(targets.depthStencil);
@@ -922,7 +922,7 @@ void SetupSkyboxRendering(RenderGraph& graph,
     PipelineManager* pipelineManager,
     const Core::ViewFamily& viewFamily,
     Core::Array<uint32_t, 2> renderExtent,
-    const AOTargets& targets,
+    const MainRenderTargets& targets,
     uint32_t sceneIndex)
 {
     RenderPass& skyboxPass = graph.AddPass(SID("Skybox"), VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT);
@@ -963,7 +963,7 @@ StringID SetupPostProcessing(RenderGraph& graph,
                               PipelineManager* pipelineManager,
                               const Core::ViewFamily& viewFamily,
                               Core::Array<uint32_t, 2> renderExtent,
-                              const PostProcessTargets& targets,
+                              const MainRenderTargets& targets,
                               float deltaTime,
                               uint64_t frameNumber)
 {
@@ -978,7 +978,7 @@ StringID SetupPostProcessing(RenderGraph& graph,
         .pipelines = pipelineManager,
     };
 
-    StringID current = ctx.targets.finalColor;
+    StringID current = ctx.targets.outputColor;
     current = PPExposure(ctx, current);
     current = PPBloom(ctx, current);
     current = PPSharpening(ctx, current);
