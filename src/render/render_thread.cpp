@@ -333,8 +333,10 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         UploadModelUniforms(viewFamily, renderFamilyProperties);
     } {
         ZoneScopedN("ImportBuffers");
-        renderGraph->ImportBufferNoBarrier(SID("vertex_buffer"), resourceManager->megaVertexBuffer.handle, resourceManager->megaVertexBuffer.address,
-                                           {resourceManager->megaVertexBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
+        renderGraph->ImportBufferNoBarrier(GEOMETRY_VERTEX_POSITION_BUFFER, resourceManager->megaVertexPositionBuffer.handle, resourceManager->megaVertexPositionBuffer.address,
+                                           {resourceManager->megaVertexPositionBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
+        renderGraph->ImportBufferNoBarrier(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER, resourceManager->megaVertexAttributeBuffer.handle, resourceManager->megaVertexAttributeBuffer.address,
+                                           {resourceManager->megaVertexAttributeBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
         renderGraph->ImportBufferNoBarrier(SID("meshlet_vertex_buffer"), resourceManager->megaMeshletVerticesBuffer.handle, resourceManager->megaMeshletVerticesBuffer.address,
                                            {resourceManager->megaMeshletVerticesBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
         renderGraph->ImportBufferNoBarrier(SID("meshlet_triangle_buffer"), resourceManager->megaMeshletTrianglesBuffer.handle, resourceManager->megaMeshletTrianglesBuffer.address,
@@ -366,9 +368,9 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
 
     VisibilityBufferTargets targets{
-        .visibility   = SID("visibility_target"),
-        .stableId     = SID("stable_id"),
-        .gbufferOne   = SID("gbuffer_one"),
+        .visibility = SID("visibility_target"),
+        .stableId = SID("stable_id"),
+        .gbufferOne = SID("gbuffer_one"),
         .depthStencil = SID("depth_target"),
     };
 
@@ -378,7 +380,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
     renderGraph->CreateTexture(targets.depthStencil, TextureInfo{DEPTH_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_DEPTH_FAR, true);
 
     VisibilityBufferBarycentricDerivativeTargets visBarDerTargets{
-        .visibility  = targets.visibility,
+        .visibility = targets.visibility,
         .barycentric = SID("visibility_barycentric"),
         .derivatives = SID("visibility_derivatives"),
     };
@@ -387,11 +389,11 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
     renderGraph->CreateTexture(visBarDerTargets.derivatives, TextureInfo{VISIBILITY_DERIVATIVES_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
 
     VisibilityShadingTargets visShadingTargets{
-        .visibility  = targets.visibility,
+        .visibility = targets.visibility,
         .barycentric = visBarDerTargets.barycentric,
         .derivatives = visBarDerTargets.derivatives,
-        .gbufferOne  = targets.gbufferOne,
-        .gbufferTwo  = SID("gbuffer_two"),
+        .gbufferOne = targets.gbufferOne,
+        .gbufferTwo = SID("gbuffer_two"),
     };
 
     renderGraph->CreateTexture(visShadingTargets.gbufferTwo, TextureInfo{GBUFFER_TARGET_TWO, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
@@ -401,10 +403,10 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
 
     MainRenderTargets mainTargets{
-        .gbufferOne   = visShadingTargets.gbufferOne,
-        .gbufferTwo   = visShadingTargets.gbufferTwo,
+        .gbufferOne = visShadingTargets.gbufferOne,
+        .gbufferTwo = visShadingTargets.gbufferTwo,
         .depthStencil = targets.depthStencil,
-        .outputColor  = shadingOutputTarget,
+        .outputColor = shadingOutputTarget,
     };
 
 
@@ -434,11 +436,11 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             SetupShadowsResolve(*renderGraph, pipelineManager, viewFamily, renderExtent, mainTargets, 0);
 
             DeferredResolveTargets deferredResolveTargets{
-                .gbufferOne   = visShadingTargets.gbufferOne,
-                .gbufferTwo   = visShadingTargets.gbufferTwo,
+                .gbufferOne = visShadingTargets.gbufferOne,
+                .gbufferTwo = visShadingTargets.gbufferTwo,
                 .depthStencil = targets.depthStencil,
-                .shadows      = SID("shadows_resolve_target"),
-                .output       = shadingOutputTarget,
+                .shadows = SID("shadows_resolve_target"),
+                .output = shadingOutputTarget,
             };
 
             SetupDeferredResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, deferredResolveTargets, 0);
@@ -733,115 +735,115 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
     }
 
     renderGraph->ImportTexture(SID("swapchain_image"), currentSwapchainImage, currentSwapchainImageView, TextureInfo{swapchain->format, swapchain->extent.width, swapchain->extent.height, 1},
-                                   swapchain->usages,
-                                   VK_IMAGE_LAYOUT_UNDEFINED, VK_PIPELINE_STAGE_2_BLIT_BIT, VK_IMAGE_LAYOUT_UNDEFINED, true);
+                               swapchain->usages,
+                               VK_IMAGE_LAYOUT_UNDEFINED, VK_PIPELINE_STAGE_2_BLIT_BIT, VK_IMAGE_LAYOUT_UNDEFINED, true);
 
-        auto& blitPass = renderGraph->AddPass(SID("Blit To Swapchain"), VK_PIPELINE_STAGE_2_BLIT_BIT);
-        blitPass.ReadBlitImage(finalOutput);
-        blitPass.WriteBlitImage(SID("swapchain_image"));
-        blitPass.Execute([&, finalOutput](VkCommandBuffer _cmd) {
-            VkImage drawImage = renderGraph->GetImageHandle(finalOutput);
+    auto& blitPass = renderGraph->AddPass(SID("Blit To Swapchain"), VK_PIPELINE_STAGE_2_BLIT_BIT);
+    blitPass.ReadBlitImage(finalOutput);
+    blitPass.WriteBlitImage(SID("swapchain_image"));
+    blitPass.Execute([&, finalOutput](VkCommandBuffer _cmd) {
+        VkImage drawImage = renderGraph->GetImageHandle(finalOutput);
 
-            Core::Array<uint32_t, 2> scaledExtent = renderExtents->GetScaledExtent();
-            Core::Array<uint32_t, 2> vpOffset = renderExtents->GetViewportOffset();
-            Core::Array<uint32_t, 2> vpExtent = renderExtents->GetViewportExtent();
+        Core::Array<uint32_t, 2> scaledExtent = renderExtents->GetScaledExtent();
+        Core::Array<uint32_t, 2> vpOffset = renderExtents->GetViewportOffset();
+        Core::Array<uint32_t, 2> vpExtent = renderExtents->GetViewportExtent();
 
+        VkImageBlit2 blitRegion{};
+        blitRegion.sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2;
+        blitRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        blitRegion.srcSubresource.layerCount = 1;
+        blitRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        blitRegion.dstSubresource.layerCount = 1;
+        blitRegion.srcOffsets[0] = {0, 0, 0};
+        blitRegion.srcOffsets[1] = {static_cast<int32_t>(renderExtent[0]), static_cast<int32_t>(renderExtent[1]), 1};
+        blitRegion.dstOffsets[0] = {static_cast<int32_t>(vpOffset[0]), static_cast<int32_t>(vpOffset[1] + vpExtent[1]), 0};
+        blitRegion.dstOffsets[1] = {static_cast<int32_t>(vpOffset[0] + vpExtent[0]), static_cast<int32_t>(vpOffset[1]), 1};
+
+        VkBlitImageInfo2 blitInfo{};
+        blitInfo.sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2;
+        blitInfo.srcImage = drawImage;
+        blitInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        blitInfo.dstImage = currentSwapchainImage;
+        blitInfo.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        blitInfo.regionCount = 1;
+        blitInfo.pRegions = &blitRegion;
+        blitInfo.filter = VK_FILTER_LINEAR;
+
+        vkCmdBlitImage2(_cmd, &blitInfo);
+    });
+
+    if (frameBuffer.bDrawImgui) {
+        auto& imguiEditorPass = renderGraph->AddPass(SID("Imgui Draw"), VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT);
+        imguiEditorPass.WriteColorAttachment(SID("swapchain_image"));
+        imguiEditorPass.Execute([&](VkCommandBuffer _cmd) {
+            const VkRenderingAttachmentInfo imguiAttachment = VkHelpers::RenderingAttachmentInfo(renderGraph->GetImageViewHandle(SID("swapchain_image")), nullptr,
+                                                                                                 VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+            const ResourceDimensions& dims = renderGraph->GetImageDimensions(SID("swapchain_image"));
+            const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({dims.width, dims.height}, &imguiAttachment, nullptr);
+            vkCmdBeginRendering(_cmd, &renderInfo);
+            ImDrawDataSnapshot& imguiSnapshot = engineRenderSynchronization->imguiDataSnapshots[frameIndex];
+            ImGui_ImplVulkan_RenderDrawData(&imguiSnapshot.DrawData, _cmd);
+
+            vkCmdEndRendering(_cmd);
+        });
+    }
+
+    if (frameBuffer.bTakeScreenshot && screenCapture->CanScreenshot()) {
+        screenCapture->PrepareScreenshotResources(renderExtent[0], renderExtent[1]);
+        renderGraph->CreateTexture(SID("screenshot_intermediate"), TextureInfo{VK_FORMAT_R8G8B8A8_UNORM, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
+
+        auto& screenshotBlitPass = renderGraph->AddPass(SID("Screenshot Blit"), VK_PIPELINE_STAGE_2_BLIT_BIT);
+        screenshotBlitPass.ReadBlitImage(finalOutput);
+        screenshotBlitPass.WriteBlitImage(SID("screenshot_intermediate"));
+        screenshotBlitPass.Execute([&, finalOutput](VkCommandBuffer _cmd) {
             VkImageBlit2 blitRegion{};
             blitRegion.sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2;
-            blitRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            blitRegion.srcSubresource.layerCount = 1;
-            blitRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            blitRegion.dstSubresource.layerCount = 1;
+            blitRegion.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+            blitRegion.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
             blitRegion.srcOffsets[0] = {0, 0, 0};
             blitRegion.srcOffsets[1] = {static_cast<int32_t>(renderExtent[0]), static_cast<int32_t>(renderExtent[1]), 1};
-            blitRegion.dstOffsets[0] = {static_cast<int32_t>(vpOffset[0]), static_cast<int32_t>(vpOffset[1] + vpExtent[1]), 0};
-            blitRegion.dstOffsets[1] = {static_cast<int32_t>(vpOffset[0] + vpExtent[0]), static_cast<int32_t>(vpOffset[1]), 1};
+            blitRegion.dstOffsets[0] = {0, 0, 0};
+            blitRegion.dstOffsets[1] = {static_cast<int32_t>(renderExtent[0]), static_cast<int32_t>(renderExtent[1]), 1};
 
             VkBlitImageInfo2 blitInfo{};
             blitInfo.sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2;
-            blitInfo.srcImage = drawImage;
+            blitInfo.srcImage = renderGraph->GetImageHandle(finalOutput);
             blitInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-            blitInfo.dstImage = currentSwapchainImage;
+            blitInfo.dstImage = renderGraph->GetImageHandle(SID("screenshot_intermediate"));
             blitInfo.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
             blitInfo.regionCount = 1;
             blitInfo.pRegions = &blitRegion;
-            blitInfo.filter = VK_FILTER_LINEAR;
-
+            blitInfo.filter = VK_FILTER_NEAREST;
             vkCmdBlitImage2(_cmd, &blitInfo);
         });
 
-        if (frameBuffer.bDrawImgui) {
-            auto& imguiEditorPass = renderGraph->AddPass(SID("Imgui Draw"), VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT);
-            imguiEditorPass.WriteColorAttachment(SID("swapchain_image"));
-            imguiEditorPass.Execute([&](VkCommandBuffer _cmd) {
-                const VkRenderingAttachmentInfo imguiAttachment = VkHelpers::RenderingAttachmentInfo(renderGraph->GetImageViewHandle(SID("swapchain_image")), nullptr,
-                                                                                                     VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-                const ResourceDimensions& dims = renderGraph->GetImageDimensions(SID("swapchain_image"));
-                const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({dims.width, dims.height}, &imguiAttachment, nullptr);
-                vkCmdBeginRendering(_cmd, &renderInfo);
-                ImDrawDataSnapshot& imguiSnapshot = engineRenderSynchronization->imguiDataSnapshots[frameIndex];
-                ImGui_ImplVulkan_RenderDrawData(&imguiSnapshot.DrawData, _cmd);
+        auto& screenshotCopyPass = renderGraph->AddPass(SID("Screenshot Copy"), VK_PIPELINE_STAGE_2_COPY_BIT);
+        screenshotCopyPass.ReadCopyImage(SID("screenshot_intermediate"));
+        screenshotCopyPass.Execute([&](VkCommandBuffer _cmd) {
+            VkBufferImageCopy2 copyRegion{};
+            copyRegion.sType = VK_STRUCTURE_TYPE_BUFFER_IMAGE_COPY_2;
+            copyRegion.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+            copyRegion.imageExtent = {screenCapture->screenshotCaptureWidth, screenCapture->screenshotCaptureHeight, 1};
 
-                vkCmdEndRendering(_cmd);
-            });
-        }
+            VkCopyImageToBufferInfo2 copyInfo{};
+            copyInfo.sType = VK_STRUCTURE_TYPE_COPY_IMAGE_TO_BUFFER_INFO_2;
+            copyInfo.srcImage = renderGraph->GetImageHandle(SID("screenshot_intermediate"));
+            copyInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            copyInfo.dstBuffer = screenCapture->screenshotReadbackBuffer.handle;
+            copyInfo.regionCount = 1;
+            copyInfo.pRegions = &copyRegion;
+            vkCmdCopyImageToBuffer2(_cmd, &copyInfo);
+        });
 
-        if (frameBuffer.bTakeScreenshot && screenCapture->CanScreenshot()) {
-            screenCapture->PrepareScreenshotResources(renderExtent[0], renderExtent[1]);
-            renderGraph->CreateTexture(SID("screenshot_intermediate"), TextureInfo{VK_FORMAT_R8G8B8A8_UNORM, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
+        Core::Path screenshotDir = Platform::GetUserDataPath() / "screenshots";
+        Platform::CreateDirectories(screenshotDir.c_str());
 
-            auto& screenshotBlitPass = renderGraph->AddPass(SID("Screenshot Blit"), VK_PIPELINE_STAGE_2_BLIT_BIT);
-            screenshotBlitPass.ReadBlitImage(finalOutput);
-            screenshotBlitPass.WriteBlitImage(SID("screenshot_intermediate"));
-            screenshotBlitPass.Execute([&, finalOutput](VkCommandBuffer _cmd) {
-                VkImageBlit2 blitRegion{};
-                blitRegion.sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2;
-                blitRegion.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-                blitRegion.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-                blitRegion.srcOffsets[0] = {0, 0, 0};
-                blitRegion.srcOffsets[1] = {static_cast<int32_t>(renderExtent[0]), static_cast<int32_t>(renderExtent[1]), 1};
-                blitRegion.dstOffsets[0] = {0, 0, 0};
-                blitRegion.dstOffsets[1] = {static_cast<int32_t>(renderExtent[0]), static_cast<int32_t>(renderExtent[1]), 1};
-
-                VkBlitImageInfo2 blitInfo{};
-                blitInfo.sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2;
-                blitInfo.srcImage = renderGraph->GetImageHandle(finalOutput);
-                blitInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-                blitInfo.dstImage = renderGraph->GetImageHandle(SID("screenshot_intermediate"));
-                blitInfo.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-                blitInfo.regionCount = 1;
-                blitInfo.pRegions = &blitRegion;
-                blitInfo.filter = VK_FILTER_NEAREST;
-                vkCmdBlitImage2(_cmd, &blitInfo);
-            });
-
-            auto& screenshotCopyPass = renderGraph->AddPass(SID("Screenshot Copy"), VK_PIPELINE_STAGE_2_COPY_BIT);
-            screenshotCopyPass.ReadCopyImage(SID("screenshot_intermediate"));
-            screenshotCopyPass.Execute([&](VkCommandBuffer _cmd) {
-                VkBufferImageCopy2 copyRegion{};
-                copyRegion.sType = VK_STRUCTURE_TYPE_BUFFER_IMAGE_COPY_2;
-                copyRegion.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-                copyRegion.imageExtent = {screenCapture->screenshotCaptureWidth, screenCapture->screenshotCaptureHeight, 1};
-
-                VkCopyImageToBufferInfo2 copyInfo{};
-                copyInfo.sType = VK_STRUCTURE_TYPE_COPY_IMAGE_TO_BUFFER_INFO_2;
-                copyInfo.srcImage = renderGraph->GetImageHandle(SID("screenshot_intermediate"));
-                copyInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-                copyInfo.dstBuffer = screenCapture->screenshotReadbackBuffer.handle;
-                copyInfo.regionCount = 1;
-                copyInfo.pRegions = &copyRegion;
-                vkCmdCopyImageToBuffer2(_cmd, &copyInfo);
-            });
-
-            Core::Path screenshotDir = Platform::GetUserDataPath() / "screenshots";
-            Platform::CreateDirectories(screenshotDir.c_str());
-
-            Core::InlineString<> filename;
-            filename.len = snprintf(filename.buf, 64, "screenshot_%llu.png", static_cast<unsigned long long>(frameNumber));
-            screenCapture->screenshotSavePath = screenshotDir / filename.c_str();
-            screenCapture->screenshotPendingSlot = frameIndex;
-            screenCapture->StartScreenshot();
-        }
+        Core::InlineString<> filename;
+        filename.len = snprintf(filename.buf, 64, "screenshot_%llu.png", static_cast<unsigned long long>(frameNumber));
+        screenCapture->screenshotSavePath = screenshotDir / filename.c_str();
+        screenCapture->screenshotPendingSlot = frameIndex;
+        screenCapture->StartScreenshot();
+    }
 
     if (frameBuffer.currentMousePosition[0] > 0 && frameBuffer.currentMousePosition[0] < renderExtent[0] &&
         frameBuffer.currentMousePosition[1] > 0 && frameBuffer.currentMousePosition[1] < renderExtent[1]) {
@@ -1092,9 +1094,8 @@ void RenderThread::CreatePipelines()
         builder.Clear();
     }
 
-    constexpr Core::Array<VkFormat, 3> graphicsColorFormats{
+    constexpr Core::Array<VkFormat, 2> graphicsColorFormats{
         VISIBILITY_BUFFER_FORMAT,
-        GBUFFER_TARGET_ONE,
         GBUFFER_STABLE_ID_FORMAT,
     };
 
@@ -1294,7 +1295,7 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
 
         for (int i = 0; i < SHADOW_CASCADE_COUNT; ++i) {
             ViewProjMatrix viewProj = GenerateLightSpaceMatrix(
-                static_cast<float>(shadowConfig.cascadePreset.extents[i][0]),
+                shadowConfig.cascadePreset.extents[i][0],
                 shadowData.nearSplits[i],
                 shadowData.farSplits[i],
                 directionalLight.direction,
@@ -1577,7 +1578,7 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFami
                 ShadowMeshShadingPushConstant pushConstants{
                     .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
                     .shadowData = graph.GetBufferAddress(SHADOW_DATA_BUFFER),
-                    .vertexBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_BUFFER),
+                    .positionBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_POSITION_BUFFER),
                     .meshletVerticesBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_VERTEX_BUFFER),
                     .meshletTrianglesBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_TRIANGLE_BUFFER),
                     .meshletBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_BUFFER),
@@ -1659,7 +1660,7 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFami
                     ShadowMeshShadingPushConstant pushConstants{
                         .sceneData = graph.GetBufferAddress("scene_data"),
                         .shadowData = graph.GetBufferAddress(GEOMETRY_BUFFER_SHADOW_DATA),
-                        .vertexBuffer = graph.GetBufferAddress("vertex_buffer"),
+                        .positionBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_POSITION_BUFFER),
                         .meshletVerticesBuffer = graph.GetBufferAddress("meshlet_vertex_buffer"),
                         .meshletTrianglesBuffer = graph.GetBufferAddress("meshlet_triangle_buffer"),
                         .meshletBuffer = graph.GetBufferAddress("meshlet_buffer"),
@@ -1711,10 +1712,10 @@ void RenderThread::SetupPortalComposite(RenderGraph& graph, const Core::ViewFami
         VkRect2D scissor = VkHelpers::GenerateScissor(width, height);
         vkCmdSetScissor(cmd, 0, 1, &scissor);
 
-        VkRenderingAttachmentInfo colorAttachment    = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.outputColor), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        VkRenderingAttachmentInfo colorAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.outputColor), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
         VkRenderingAttachmentInfo gbufferTwoAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.gbufferTwo), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-        VkRenderingAttachmentInfo depthAttachment    = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), nullptr, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
-        VkRenderingAttachmentInfo stencilAttachment  = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), nullptr, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+        VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), nullptr, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+        VkRenderingAttachmentInfo stencilAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), nullptr, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
         Core::Array<VkRenderingAttachmentInfo, 2> colorAttachments{colorAttachment, gbufferTwoAttachment};
         VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, colorAttachments.Data(), 2, &depthAttachment, &stencilAttachment);

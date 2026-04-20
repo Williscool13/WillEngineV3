@@ -16,7 +16,7 @@ void StaticModelData::Reset(Render::ResourceManager* resourceManager)
 
     {
         std::lock_guard lock(resourceManager->vertexBufferAllocatorMutex);
-        resourceManager->vertexBufferAllocator.free(vertexAllocation);
+        resourceManager->vertexBufferAllocator.free(vertexPositionAllocation);
     }
     {
         std::lock_guard lock(resourceManager->meshletVertexBufferAllocatorMutex);
@@ -34,7 +34,7 @@ void StaticModelData::Reset(Render::ResourceManager* resourceManager)
         std::lock_guard lock(resourceManager->primitiveBufferAllocatorMutex);
         resourceManager->primitiveBufferAllocator.free(primitiveAllocation);
     }
-    vertexAllocation = {};
+    vertexPositionAllocation = {};
     meshletVertexAllocation = {};
     meshletTriangleAllocation = {};
     meshletAllocation = {};

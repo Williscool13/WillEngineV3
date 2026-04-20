@@ -259,7 +259,7 @@ SHADER_PUBLIC struct MaxMeshletCountPushConstant
 SHADER_PUBLIC struct VisibilityBufferAccumulatePushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
-    SHADER_PUBLIC SHADER_PTR(Vertex) vertexBuffer;
+    SHADER_PUBLIC SHADER_PTR(VertexPosition) vertexPosBuffer;
     SHADER_PUBLIC SHADER_PTR(uint32_t) meshletVerticesBuffer;
     SHADER_PUBLIC SHADER_PTR(uint32_t) meshletTrianglesBuffer;
     SHADER_PUBLIC SHADER_PTR(Meshlet) meshletBuffer;
@@ -273,7 +273,8 @@ SHADER_PUBLIC struct VisibilityBufferAccumulatePushConstant
 SHADER_PUBLIC struct VisibilityBufferResolvePushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
-    SHADER_PUBLIC SHADER_PTR(Vertex) vertexBuffer;
+    SHADER_PUBLIC SHADER_PTR(VertexPosition) vertexPosBuffer;
+    SHADER_PUBLIC SHADER_PTR(VertexAttribute) vertexAttrBuffer;
     SHADER_PUBLIC SHADER_PTR(uint32_t) meshletVerticesBuffer;
     SHADER_PUBLIC SHADER_PTR(uint32_t) meshletTrianglesBuffer;
     SHADER_PUBLIC SHADER_PTR(Meshlet) meshletBuffer;
@@ -291,7 +292,8 @@ SHADER_PUBLIC struct VisibilityBufferResolvePushConstant
 SHADER_PUBLIC struct VisibilityShadingPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
-    SHADER_PUBLIC SHADER_PTR(Vertex) vertexBuffer;
+    SHADER_PUBLIC SHADER_PTR(VertexPosition) vertexPosBuffer;
+    SHADER_PUBLIC SHADER_PTR(VertexAttribute) vertexAttrBuffer;
     SHADER_PUBLIC SHADER_PTR(uint32_t) meshletVerticesBuffer;
     SHADER_PUBLIC SHADER_PTR(uint32_t) meshletTrianglesBuffer;
     SHADER_PUBLIC SHADER_PTR(Meshlet) meshletBuffer;
@@ -312,7 +314,8 @@ SHADER_PUBLIC struct VisibilityShadingPushConstant
 SHADER_PUBLIC struct BaseMeshShadingPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
-    SHADER_PUBLIC SHADER_PTR(Vertex) vertexBuffer;
+    SHADER_PUBLIC SHADER_PTR(VertexPosition) positionBuffer;
+    SHADER_PUBLIC SHADER_PTR(VertexAttribute) attrBuffer;
     SHADER_PUBLIC SHADER_PTR(uint32_t) meshletVerticesBuffer;
     SHADER_PUBLIC SHADER_PTR(uint32_t) meshletTrianglesBuffer;
     SHADER_PUBLIC SHADER_PTR(Meshlet) meshletBuffer;
@@ -323,14 +326,14 @@ SHADER_PUBLIC struct BaseMeshShadingPushConstant
     SHADER_PUBLIC SHADER_PTR(CompactedMeshlet) visibleMeshlets;
     SHADER_PUBLIC SHADER_PTR(InstancingCompactedMeshletDispatchIndirect) compactedDispatchBuffer; // for "total visible meshlets"
     SHADER_PUBLIC uint32_t sceneDataIndex;
-    SHADER_PUBLIC uint32_t customData[41]; // vk1.4 target, custom PC space that can be filled by anything needed
+    SHADER_PUBLIC uint32_t customData[39]; // vk1.4 target, custom PC space that can be filled by anything needed
 };
 
 SHADER_PUBLIC struct ShadowMeshShadingPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC SHADER_PTR(ShadowData) shadowData;
-    SHADER_PUBLIC SHADER_PTR(Vertex) vertexBuffer;
+    SHADER_PUBLIC SHADER_PTR(VertexPosition) positionBuffer;
     SHADER_PUBLIC SHADER_PTR(uint32_t) meshletVerticesBuffer;
     SHADER_PUBLIC SHADER_PTR(uint32_t) meshletTrianglesBuffer;
     SHADER_PUBLIC SHADER_PTR(Meshlet) meshletBuffer;
@@ -412,7 +415,8 @@ SHADER_PUBLIC struct DirectMeshShadingPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
 
-    SHADER_PUBLIC SHADER_PTR(Vertex) vertexBuffer;
+    SHADER_PUBLIC SHADER_PTR(VertexPosition) positionBuffer;
+    SHADER_PUBLIC SHADER_PTR(VertexAttribute) attrBuffer;
     SHADER_PUBLIC SHADER_PTR(uint32_t) meshletVerticesBuffer;
     SHADER_PUBLIC SHADER_PTR(uint32_t) meshletTrianglesBuffer;
     SHADER_PUBLIC SHADER_PTR(Meshlet) meshletBuffer;

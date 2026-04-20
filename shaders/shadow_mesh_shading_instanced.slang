@@ -45,9 +45,9 @@ void MeshMain(
 
     for (uint i = gtid.x; i < meshlet.meshletVertexCount; i += MESH_SHADER_DISPATCH_X) {
         uint localVertexIndex = pc.meshletVerticesBuffer[meshlet.meshletVertexOffset + i];
-        Vertex v = pc.vertexBuffer[meshlet.vertexOffset + localVertexIndex];
+        VertexPosition vp = pc.positionBuffer[meshlet.vertexOffset + localVertexIndex];
         float3 extent = prim.boundingBoxMax - prim.boundingBoxMin;
-        float3 vertexPos = DecodePosition(v, prim.boundingBoxMin, extent);
+        float3 vertexPos = DecodePosition(vp, prim.boundingBoxMin, extent);
         positions[i] = mul(lightViewProj, mul(m.modelMatrix, float4(vertexPos, 1.0)));
         positions[i] = float4(1.0f);
     }

@@ -33,9 +33,14 @@ ResourceManager::ResourceManager(VulkanContext* context)
     VmaAllocationCreateInfo vmaAllocInfo = {};
     vmaAllocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
 
-    bufferInfo.size = MEGA_VERTEX_BUFFER_SIZE;
-    megaVertexBuffer = AllocatedBuffer::CreateAllocatedBuffer(context, bufferInfo, vmaAllocInfo);
-    megaVertexBuffer.SetDebugName("Mega Vertex Buffer");
+
+
+    bufferInfo.size = MEGA_VERTEX_POSITION_BUFFER_SIZE;
+    megaVertexPositionBuffer = AllocatedBuffer::CreateAllocatedBuffer(context, bufferInfo, vmaAllocInfo);
+    megaVertexPositionBuffer.SetDebugName("Mega Vertex Position Buffer");
+    bufferInfo.size = MEGA_VERTEX_ATTRIBUTE_BUFFER_SIZE;
+    megaVertexAttributeBuffer = AllocatedBuffer::CreateAllocatedBuffer(context, bufferInfo, vmaAllocInfo);
+    megaVertexAttributeBuffer.SetDebugName("Mega Vertex Attribute Buffer");
     bufferInfo.size = MEGA_MESHLET_VERTEX_BUFFER_SIZE;
     megaMeshletVerticesBuffer = AllocatedBuffer::CreateAllocatedBuffer(context, bufferInfo, vmaAllocInfo);
     megaMeshletVerticesBuffer.SetDebugName("Mega Meshlet Vertex Buffer");

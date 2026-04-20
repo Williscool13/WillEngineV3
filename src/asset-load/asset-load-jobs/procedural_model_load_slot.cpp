@@ -280,7 +280,7 @@ bool ProceduralModelLoadSlot::FinalizeGeometry(Core::Span<const Engine::FullVert
     auto meshletTriangleOffset = static_cast<uint32_t>(rawData.meshletTriangles.Size());
     auto meshletBaseOffset = static_cast<uint32_t>(rawData.meshlets.Size());
 
-    rawData.vertices = Core::HeapArray<Vertex>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, remappedVertices.Size());
+    rawData.vertices = Core::HeapArray<Engine::Vertex>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, remappedVertices.Size());
     rawData.indices = Core::HeapArray<uint32_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, remappedIndices.Size());
     rawData.meshletVertices = Core::HeapArray<uint32_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, meshletVertexCount);
     rawData.meshletTriangles = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, meshletTriangleCount);
@@ -2297,8 +2297,8 @@ bool ProceduralModelLoadSlot::AllocateGPUResources() const
     };
 
     if (!tryAlloc(resourceManager->vertexBufferAllocatorMutex, resourceManager->vertexBufferAllocator,
-                  outputModel->modelData.vertexAllocation, rawData.vertices.Size() * sizeof(Vertex),
-                  "mega vertex buffer")) {
+                  outputModel->modelData.vertexPositionAllocation, rawData.vertices.Size() * sizeof(VertexPosition),
+                  "mega vertex position buffer")) {
         rollback();
         return false;
     }
@@ -2336,7 +2336,7 @@ bool ProceduralModelLoadSlot::AllocateGPUResources() const
 
 void ProceduralModelLoadSlot::PrepareUploadData()
 {
-    uint32_t vertexOffset = outputModel->modelData.vertexAllocation.offset / sizeof(Vertex);
+    uint32_t vertexOffset = outputModel->modelData.vertexPositionAllocation.offset / sizeof(VertexPosition);
     uint32_t meshletVerticesOffset = outputModel->modelData.meshletVertexAllocation.offset / sizeof(uint32_t);
     uint32_t meshletTriangleOffset = outputModel->modelData.meshletTriangleAllocation.offset / sizeof(uint32_t);
 
@@ -2393,45 +2393,65 @@ void ProceduralModelLoadSlot::UploadGeometry(VkCommandBuffer cmd, const Core::In
     Core::LinearAllocator& stagingAllocator = uploadStaging->GetStagingAllocator();
     Render::AllocatedBuffer& stagingBuffer = uploadStaging->GetStagingBuffer();
 
-    auto uploadBuffer = [&](const void* sourceData, size_t count, size_t elementSize,
+    auto uploadBuffer = [&](const void* sourceData, size_t count,
+                            size_t srcStride, size_t srcOffset, size_t dstElementSize,
                             VkBuffer targetBuffer, VkDeviceSize targetOffset) {
-        size_t totalSize = count * elementSize;
-        size_t uploaded = 0;
+        size_t uploaded = 0; // in elements
 
-        while (uploaded < totalSize) {
-            size_t remaining = totalSize - uploaded;
-            size_t allocation = stagingAllocator.Allocate(remaining);
+        while (uploaded < count) {
+            size_t elemsRemaining = count - uploaded;
+            size_t bytesRemaining = elemsRemaining * dstElementSize;
+            size_t allocation = stagingAllocator.Allocate(bytesRemaining);
 
             if (allocation == SIZE_MAX) {
                 size_t freeSpace = stagingAllocator.GetRemaining();
-                if (freeSpace == 0) {
+                size_t elemsCanFit = freeSpace / dstElementSize;
+                if (elemsCanFit == 0) {
                     submitAndWait(true);
                     stagingAllocator.Reset();
                     continue;
                 }
-                remaining = std::min(remaining, freeSpace);
-                allocation = stagingAllocator.Allocate(remaining);
+                elemsRemaining = std::min(elemsRemaining, elemsCanFit);
+                bytesRemaining = elemsRemaining * dstElementSize;
+                allocation = stagingAllocator.Allocate(bytesRemaining);
                 assert(allocation != SIZE_MAX);
             }
 
-            const char* srcPtr = static_cast<const char*>(sourceData) + uploaded;
             char* dstPtr = static_cast<char*>(stagingBuffer.allocationInfo.pMappedData) + allocation;
-            memcpy(dstPtr, srcPtr, remaining);
+
+            if (srcStride == dstElementSize && srcOffset == 0) {
+                const char* srcPtr = static_cast<const char*>(sourceData) + uploaded * dstElementSize;
+                memcpy(dstPtr, srcPtr, bytesRemaining);
+            } else {
+                for (size_t i = 0; i < elemsRemaining; ++i) {
+                    const char* srcPtr = static_cast<const char*>(sourceData) + (uploaded + i) * srcStride + srcOffset;
+                    memcpy(dstPtr + i * dstElementSize, srcPtr, dstElementSize);
+                }
+            }
 
             VkBufferCopy copyRegion{};
             copyRegion.srcOffset = allocation;
-            copyRegion.dstOffset = targetOffset + uploaded;
-            copyRegion.size = remaining;
+            copyRegion.dstOffset = targetOffset + uploaded * dstElementSize;
+            copyRegion.size = bytesRemaining;
             vkCmdCopyBuffer(cmd, stagingBuffer.handle, targetBuffer, 1, &copyRegion);
 
-            uploaded += remaining;
+            uploaded += elemsRemaining;
         }
     };
 
-    uploadBuffer(rawData.vertices.Data(), rawData.vertices.Size(), sizeof(Vertex),
-                 resourceManager->megaVertexBuffer.handle, outputModel->modelData.vertexAllocation.offset);
+    const VkDeviceSize positionBufOffset = outputModel->modelData.vertexPositionAllocation.offset;
+    const VkDeviceSize attributeBufOffset = (positionBufOffset / sizeof(VertexPosition)) * sizeof(VertexAttribute);
 
-    uploadBuffer(rawData.meshletVertices.Data(), rawData.meshletVertices.Size(), sizeof(uint32_t),
+    uploadBuffer(rawData.vertices.Data(), rawData.vertices.Size(),
+                 sizeof(Engine::Vertex), 0, sizeof(VertexPosition),
+                 resourceManager->megaVertexPositionBuffer.handle, positionBufOffset);
+
+    uploadBuffer(rawData.vertices.Data(), rawData.vertices.Size(),
+                 sizeof(Engine::Vertex), offsetof(Engine::Vertex, normalOct), sizeof(VertexAttribute),
+                 resourceManager->megaVertexAttributeBuffer.handle, attributeBufOffset);
+
+    uploadBuffer(rawData.meshletVertices.Data(), rawData.meshletVertices.Size(),
+                 sizeof(uint32_t), 0, sizeof(uint32_t),
                  resourceManager->megaMeshletVerticesBuffer.handle, outputModel->modelData.meshletVertexAllocation.offset);
 
     // Pack triangles
@@ -2443,16 +2463,19 @@ void ProceduralModelLoadSlot::UploadGeometry(VkCommandBuffer cmd, const Core::In
         packedTriangles[i / 3] = packed;
     }
 
-    uploadBuffer(packedTriangles.Data(), packedTriangles.Size(), sizeof(uint32_t),
+    uploadBuffer(packedTriangles.Data(), packedTriangles.Size(),
+                 sizeof(uint32_t), 0, sizeof(uint32_t),
                  resourceManager->megaMeshletTrianglesBuffer.handle, outputModel->modelData.meshletTriangleAllocation.offset);
 
-    uploadBuffer(rawData.meshlets.Data(), rawData.meshlets.Size(), sizeof(Meshlet),
+    uploadBuffer(rawData.meshlets.Data(), rawData.meshlets.Size(),
+                 sizeof(Meshlet), 0, sizeof(Meshlet),
                  resourceManager->megaMeshletBuffer.handle, outputModel->modelData.meshletAllocation.offset);
 
-    uploadBuffer(rawData.primitives.Data(), rawData.primitives.Size(), sizeof(Primitive),
+    uploadBuffer(rawData.primitives.Data(), rawData.primitives.Size(),
+                 sizeof(Primitive), 0, sizeof(Primitive),
                  resourceManager->primitiveBuffer.handle, outputModel->modelData.primitiveAllocation.offset);
 
-    VkBufferMemoryBarrier2 releaseBarriers[5];
+    VkBufferMemoryBarrier2 releaseBarriers[6];
     uint32_t barrierCount = 0;
 
     auto createBufferBarrier = [&](VkBuffer buffer, VkDeviceSize offset, VkDeviceSize size) {
@@ -2475,8 +2498,10 @@ void ProceduralModelLoadSlot::UploadGeometry(VkCommandBuffer cmd, const Core::In
         return barrier;
     };
 
-    releaseBarriers[barrierCount++] = createBufferBarrier(resourceManager->megaVertexBuffer.handle,
-                                                          outputModel->modelData.vertexAllocation.offset, rawData.vertices.Size() * sizeof(Vertex));
+    releaseBarriers[barrierCount++] = createBufferBarrier(resourceManager->megaVertexPositionBuffer.handle,
+                                                          positionBufOffset, rawData.vertices.Size() * sizeof(VertexPosition));
+    releaseBarriers[barrierCount++] = createBufferBarrier(resourceManager->megaVertexAttributeBuffer.handle,
+                                                          attributeBufOffset, rawData.vertices.Size() * sizeof(VertexAttribute));
     releaseBarriers[barrierCount++] = createBufferBarrier(resourceManager->megaMeshletVerticesBuffer.handle,
                                                           outputModel->modelData.meshletVertexAllocation.offset, rawData.meshletVertices.Size() * sizeof(uint32_t));
     releaseBarriers[barrierCount++] = createBufferBarrier(resourceManager->megaMeshletTrianglesBuffer.handle,

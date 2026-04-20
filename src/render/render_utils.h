@@ -22,6 +22,6 @@ constexpr VkClearValue CLEAR_DEPTH_FAR   = {.depthStencil = {.depth = 0.0f, .ste
 Vec2 OctEncode(Vec3 n);
 Vec3 OctDecode(Vec2 f);
 
-Vertex& CompressVertex(const Engine::FullVertex& fullVertex, const Engine::MeshBounds& bounds);
+Engine::Vertex CompressVertex(const Engine::FullVertex& fullVertex, const Engine::MeshBounds& bounds);
 
 #endif //WILL_ENGINE_RENDER_UTILS_H

@@ -36,9 +36,13 @@ void VisibilityShading(uint3 dtid : SV_DispatchThreadID, uniform VisibilityShadi
     uint v0i = pc.meshletVerticesBuffer[meshlet.meshletVertexOffset + idx0];
     uint v1i = pc.meshletVerticesBuffer[meshlet.meshletVertexOffset + idx1];
     uint v2i = pc.meshletVerticesBuffer[meshlet.meshletVertexOffset + idx2];
-    Vertex v0 = pc.vertexBuffer[meshlet.vertexOffset + v0i];
-    Vertex v1 = pc.vertexBuffer[meshlet.vertexOffset + v1i];
-    Vertex v2 = pc.vertexBuffer[meshlet.vertexOffset + v2i];
+    VertexPosition v0 = pc.vertexPosBuffer[meshlet.vertexOffset + v0i];
+    VertexPosition v1 = pc.vertexPosBuffer[meshlet.vertexOffset + v1i];
+    VertexPosition v2 = pc.vertexPosBuffer[meshlet.vertexOffset + v2i];
+
+    VertexAttribute va0 = pc.vertexAttrBuffer[meshlet.vertexOffset + v0i];
+    VertexAttribute va1 = pc.vertexAttrBuffer[meshlet.vertexOffset + v1i];
+    VertexAttribute va2 = pc.vertexAttrBuffer[meshlet.vertexOffset + v2i];
 
     float2 bary2 = rdgStorageFloat2[pc.barycentricBufferIndex].Load(dtid.xy);
     float3 bary = float3(bary2.x, bary2.y, 1.0 - bary2.x - bary2.y);
@@ -47,9 +51,12 @@ void VisibilityShading(uint3 dtid : SV_DispatchThreadID, uniform VisibilityShadi
     float2 uvDdy = derivs.zw;
 
     float4x4 mv = mul(pc.sceneData->view, m.modelMatrix);
-    // todo only allow vertex interpolation in the visibility resolve buffer
     float3 extent = prim.boundingBoxMax - prim.boundingBoxMin;
-    InterpolatedVertex interp = InterpolateVertex(bary, v0, v1, v2, mv, prim.boundingBoxMin, extent);
+    float3 objPos = bary.x * DecodePosition(v0, prim.boundingBoxMin, extent)
+                  + bary.y * DecodePosition(v1, prim.boundingBoxMin, extent)
+                  + bary.z * DecodePosition(v2, prim.boundingBoxMin, extent);
+    float3 pos = mul(mv, float4(objPos, 1.0)).xyz;
+    InterpolatedVertex interp = InterpolateVertex(bary, va0, va1, va2, mv);
 
     // TODO: normal maps not yet implemented
     // float3 objTangent = bary.x * v0.tangent.xyz + bary.y * v1.tangent.xyz + bary.z * v2.tangent.xyz;
@@ -98,11 +105,15 @@ void VisibilityShading(uint3 dtid : SV_DispatchThreadID, uniform VisibilityShadi
         emissiveColor *= assetTextures[mat.textureImageIndices.w].SampleGrad(assetSamplers[mat.textureSamplerIndices.w], emissiveUV, ddx, ddy).rgb;
     }
 
-    uint4 existingGT1 = rdgStorageUInt4[pc.gbufferOneIndex][dtid.xy];
+    float4 currClip = mul(pc.sceneData->viewProj, mul(m.modelMatrix, float4(objPos, 1.0)));
+    float4 prevClip = mul(pc.sceneData->prevViewProj, mul(m.prevModelMatrix, float4(objPos, 1.0)));
+    float2 currNDC = currClip.xy / currClip.w;
+    float2 prevNDC = prevClip.xy / prevClip.w;
+    float2 velocity = (currNDC - pc.sceneData->jitter) - (prevNDC - pc.sceneData->prevJitter);
 
     uint4 gbufferOne = uint4(
         PackNormalOct16(shadingNormal),
-        existingGT1.g,
+        PackMotionVectors(velocity),
         PackPBR(roughness, metallic),
         0u
     );

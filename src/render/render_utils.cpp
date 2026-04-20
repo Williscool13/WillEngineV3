@@ -27,9 +27,9 @@ Vec3 OctDecode(Vec2 f)
     return glm::normalize(n);
 }
 
-Vertex& CompressVertex(const Engine::FullVertex& fullVertex, const Engine::MeshBounds& bounds)
+Engine::Vertex CompressVertex(const Engine::FullVertex& fullVertex, const Engine::MeshBounds& bounds)
 {
-    Vertex outVertex{};
+    Engine::Vertex outVertex{};
     uint32_t px = static_cast<uint32_t>(meshopt_quantizeUnorm((fullVertex.position.x - bounds.aabb.min.x) / bounds.aabbExtents.x, 16));
     uint32_t py = static_cast<uint32_t>(meshopt_quantizeUnorm((fullVertex.position.y - bounds.aabb.min.y) / bounds.aabbExtents.y, 16));
     uint32_t pz = static_cast<uint32_t>(meshopt_quantizeUnorm((fullVertex.position.z - bounds.aabb.min.z) / bounds.aabbExtents.z, 16));

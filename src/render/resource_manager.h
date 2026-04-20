@@ -31,7 +31,7 @@ struct ResourceManager
     // Only managed by Asset Load Thread
     // OffsetAllocator::Allocator uses heap internally; acceptable as these are relatively rare/low frequency.
     std::mutex vertexBufferAllocatorMutex;
-    OffsetAllocator::Allocator vertexBufferAllocator{MEGA_VERTEX_BUFFER_SIZE};
+    OffsetAllocator::Allocator vertexBufferAllocator{MEGA_VERTEX_POSITION_BUFFER_SIZE};
     std::mutex meshletVertexBufferAllocatorMutex;
     OffsetAllocator::Allocator meshletVertexBufferAllocator{MEGA_MESHLET_VERTEX_BUFFER_SIZE};
     std::mutex meshletTriangleBufferAllocatorMutex;
@@ -42,7 +42,8 @@ struct ResourceManager
     OffsetAllocator::Allocator primitiveBufferAllocator{MEGA_PRIMITIVE_BUFFER_SIZE};
 
     // Managed by Asset Load, bound in the Render Threads. Synchronized by engine.
-    AllocatedBuffer megaVertexBuffer;
+    AllocatedBuffer megaVertexPositionBuffer;
+    AllocatedBuffer megaVertexAttributeBuffer;
     AllocatedBuffer megaMeshletVerticesBuffer;
     AllocatedBuffer megaMeshletTrianglesBuffer;
     AllocatedBuffer megaMeshletBuffer;

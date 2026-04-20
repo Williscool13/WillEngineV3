@@ -502,19 +502,18 @@ void SetupGeometryPass(RenderGraph& graph,
         constexpr VkClearValue depthClear = {.depthStencil = {0.0f, 0u}};
 
         auto visibilityAttachment  = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.visibility), &uintClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-        auto gbufferOneAttachment  = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.gbufferOne), &uintClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
         auto stableIdAttachment    = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.stableId), &uintClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
         auto depthAttachment       = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), &depthClear, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
         auto stencilAttachment     = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), &depthClear, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
-        const VkRenderingAttachmentInfo colorAttachments[] = {visibilityAttachment, gbufferOneAttachment, stableIdAttachment};
-        const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, colorAttachments, 3, &depthAttachment, &stencilAttachment);
+        const VkRenderingAttachmentInfo colorAttachments[] = {visibilityAttachment, stableIdAttachment};
+        const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, colorAttachments, 2, &depthAttachment, &stencilAttachment);
 
         vkCmdBeginRendering(cmd, &renderInfo);
 
         VisibilityBufferAccumulatePushConstant pushConstants{
             .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER) + sceneIndex * sizeof(SceneData),
-            .vertexBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_BUFFER),
+            .vertexPosBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_POSITION_BUFFER),
             .meshletVerticesBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_VERTEX_BUFFER),
             .meshletTrianglesBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_TRIANGLE_BUFFER),
             .meshletBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_BUFFER),
@@ -550,7 +549,8 @@ void SetupVisibilityBarycentricDerivativePass(RenderGraph& graph,
     RenderPass& visBarDer = graph.AddPass(SID("Visibility Barycentric Derivative"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
     visBarDer.ReadSampledImage(targets.visibility);
     visBarDer.ReadBuffer(SCENE_DATA_BUFFER);
-    visBarDer.ReadBuffer(GEOMETRY_VERTEX_BUFFER);
+    visBarDer.ReadBuffer(GEOMETRY_VERTEX_POSITION_BUFFER);
+    visBarDer.ReadBuffer(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER);
     visBarDer.ReadBuffer(GEOMETRY_MESHLET_VERTEX_BUFFER);
     visBarDer.ReadBuffer(GEOMETRY_MESHLET_TRIANGLE_BUFFER);
     visBarDer.ReadBuffer(GEOMETRY_MESHLET_BUFFER);
@@ -562,7 +562,8 @@ void SetupVisibilityBarycentricDerivativePass(RenderGraph& graph,
     visBarDer.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1], sceneIndex](VkCommandBuffer cmd) {
         VisibilityBufferResolvePushConstant pc{
             .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER) + sceneIndex * sizeof(SceneData),
-            .vertexBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_BUFFER),
+            .vertexPosBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_POSITION_BUFFER),
+            .vertexAttrBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER),
             .meshletVerticesBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_VERTEX_BUFFER),
             .meshletTrianglesBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_TRIANGLE_BUFFER),
             .meshletBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_BUFFER),
@@ -596,7 +597,8 @@ void SetupVisibilityShadingPass(RenderGraph& graph,
     visShading.ReadStorageImage(targets.barycentric);
     visShading.ReadStorageImage(targets.derivatives);
     visShading.ReadBuffer(SCENE_DATA_BUFFER);
-    visShading.ReadBuffer(GEOMETRY_VERTEX_BUFFER);
+    visShading.ReadBuffer(GEOMETRY_VERTEX_POSITION_BUFFER);
+    visShading.ReadBuffer(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER);
     visShading.ReadBuffer(GEOMETRY_MESHLET_VERTEX_BUFFER);
     visShading.ReadBuffer(GEOMETRY_MESHLET_TRIANGLE_BUFFER);
     visShading.ReadBuffer(GEOMETRY_MESHLET_BUFFER);
@@ -604,13 +606,14 @@ void SetupVisibilityShadingPass(RenderGraph& graph,
     visShading.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
     visShading.ReadBuffer(GEOMETRY_MODEL_BUFFER);
     visShading.ReadBuffer(GEOMETRY_MATERIAL_BUFFER);
-    visShading.ReadWriteImage(targets.gbufferOne);
+    visShading.WriteStorageImage(targets.gbufferOne);
     visShading.WriteStorageImage(targets.gbufferTwo);
     visShading.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1], sceneIndex,
             gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo](VkCommandBuffer cmd) {
         VisibilityShadingPushConstant pc{
             .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER) + sceneIndex * sizeof(SceneData),
-            .vertexBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_BUFFER),
+            .vertexPosBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_POSITION_BUFFER),
+            .vertexAttrBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER),
             .meshletVerticesBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_VERTEX_BUFFER),
             .meshletTrianglesBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_TRIANGLE_BUFFER),
             .meshletBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_BUFFER),

@@ -55,7 +55,7 @@ private:
 
 struct UnpackedStaticModel
 {
-    Core::HeapArray<Vertex> vertices{};
+    Core::HeapArray<Engine::Vertex> vertices{};
     Core::HeapArray<uint32_t> indices{};
     Core::HeapArray<uint32_t> meshletVertices{};
     Core::HeapArray<uint8_t> meshletTriangles{};

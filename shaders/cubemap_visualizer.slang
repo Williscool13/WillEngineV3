@@ -62,14 +62,16 @@ void MeshMain(
     uint32_t threadIndex = gtid.x;
     for (uint i = threadIndex; i < meshlet.meshletVertexCount; i += MESH_SHADER_DISPATCH_X) {
         uint localVertexIndex = pc.meshletVerticesBuffer[meshlet.meshletVertexOffset + i];
-        Vertex v = pc.vertexBuffer[meshlet.vertexOffset + localVertexIndex];
+        uint vertexIndex = meshlet.vertexOffset + localVertexIndex;
+        VertexPosition vp = pc.positionBuffer[vertexIndex];
+        VertexAttribute va = pc.attrBuffer[vertexIndex];
         float3 extent = prim.boundingBoxMax - prim.boundingBoxMin;
-        float3 vertexPos = DecodePosition(v, prim.boundingBoxMin, extent);
+        float3 vertexPos = DecodePosition(vp, prim.boundingBoxMin, extent);
         float4 worldPos = mul(m.modelMatrix, float4(vertexPos, 1.0));
         float4 clipPos = mul(jitteredViewProj, worldPos);
         float4 prevClipPos = mul(jitteredPrevViewProj, mul(m.prevModelMatrix, float4(vertexPos, 1.0)));
         vertices[i].position = clipPos;
-        vertices[i].worldNormal = normalize(DecodeNormal(v));
+        vertices[i].worldNormal = normalize(DecodeNormal(va));
         vertices[i].currentClipPos = clipPos;
         vertices[i].previousClipPos = prevClipPos;
     }

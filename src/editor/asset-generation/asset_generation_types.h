@@ -49,7 +49,7 @@ struct RawStaticModel
     Core::HeapArray<RawImage> images{};
 
     // Vector instead of HeapArray because this accumulates over all submeshes in a gltf, so we can't preallocate for all at the beginning.
-    Core::Vector<Vertex> vertices{};
+    Core::Vector<Engine::Vertex> vertices{};
     Core::Vector<uint32_t> indices{};
     Core::Vector<uint32_t> meshletVertices{};
     Core::Vector<uint8_t> meshletTriangles{};
@@ -75,7 +75,7 @@ struct RawStaticModel
 
     void Init(Core::TlsfAllocator* alloc)
     {
-        vertices = Core::Vector<Vertex>(alloc, Core::AllocTag::AssetModel);
+        vertices = Core::Vector<Engine::Vertex>(alloc, Core::AllocTag::AssetModel);
         indices = Core::Vector<uint32_t>(alloc, Core::AllocTag::AssetModel);
         meshletVertices = Core::Vector<uint32_t>(alloc, Core::AllocTag::AssetModel);
         meshletTriangles = Core::Vector<uint8_t>(alloc, Core::AllocTag::AssetModel);

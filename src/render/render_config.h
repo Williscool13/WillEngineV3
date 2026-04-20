@@ -33,7 +33,8 @@ inline const StringID SHADOW_DATA_BUFFER = SID("shadow_data");
 inline const StringID GEOMETRY_PRIMITIVE_BUFFER = SID("primitive_buffer");
 inline const StringID GEOMETRY_MODEL_BUFFER = SID("model_buffer");
 inline const StringID GEOMETRY_INSTANCE_BUFFER = SID("main_instance_buffer");
-inline const StringID GEOMETRY_VERTEX_BUFFER = SID("vertex_buffer");
+inline const StringID GEOMETRY_VERTEX_POSITION_BUFFER = SID("vertex_position_buffer");
+inline const StringID GEOMETRY_VERTEX_ATTRIBUTE_BUFFER = SID("vertex_attribute_buffer");
 inline const StringID GEOMETRY_MESHLET_VERTEX_BUFFER = SID("meshlet_vertex_buffer");
 inline const StringID GEOMETRY_MESHLET_TRIANGLE_BUFFER = SID("meshlet_triangle_buffer");
 inline const StringID GEOMETRY_MESHLET_BUFFER = SID("meshlet_buffer");
@@ -50,7 +51,8 @@ inline constexpr int32_t BINDLESS_INSTANCE_BUFFER_SIZE = sizeof(Instance) * BIND
 inline constexpr int32_t BINDLESS_MATERIAL_BUFFER_COUNT = 2048;
 inline constexpr int32_t BINDLESS_MATERIAL_BUFFER_SIZE = sizeof(MaterialProperties) * BINDLESS_MATERIAL_BUFFER_COUNT;
 
-inline constexpr int32_t MEGA_VERTEX_BUFFER_SIZE = sizeof(Vertex) * 4194302; // 4M verts
+inline constexpr int32_t MEGA_VERTEX_POSITION_BUFFER_SIZE = sizeof(VertexPosition) * 4194302; // 4M verts
+inline constexpr int32_t MEGA_VERTEX_ATTRIBUTE_BUFFER_SIZE = sizeof(VertexAttribute) * 4194302; // 4M verts
 inline constexpr int32_t MEGA_PRIMITIVE_BUFFER_COUNT = 65536; // Important for instancing - it's 256x256
 inline constexpr int32_t MEGA_PRIMITIVE_BUFFER_SIZE = sizeof(Primitive) * MEGA_PRIMITIVE_BUFFER_COUNT;
 

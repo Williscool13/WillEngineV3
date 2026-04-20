@@ -59,10 +59,14 @@ SHADER_PUBLIC struct DebugLineSegment
 };
 
 
-SHADER_PUBLIC struct Vertex
+SHADER_PUBLIC struct VertexPosition
 {
-    SHADER_PUBLIC uint32_t pos0;        // unorm16: bits[15:0]=X, bits[31:16]=Y
-    SHADER_PUBLIC uint32_t pos1;        // unorm16: bits[15:0]=Z, bits[31:16]=unused
+    SHADER_PUBLIC uint32_t pos0; // X, Y
+    SHADER_PUBLIC uint32_t pos1; // Z, padding
+};
+
+SHADER_PUBLIC struct VertexAttribute
+{
     SHADER_PUBLIC uint32_t normalOct;   // snorm8: bits[7:0]=X, bits[15:8]=Y
     SHADER_PUBLIC uint32_t tangentOct;  // snorm8: bits[7:0]=X, bits[15:8]=Y; bit[16]=sign(0=neg,1=pos)
     SHADER_PUBLIC uint32_t texcoord;    // float16: bits[15:0]=U, bits[31:16]=V

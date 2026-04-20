@@ -102,8 +102,8 @@ struct StaticModelData
     Core::HeapArray<Node> nodes{};
     Core::HeapArray<Material> materials{};
 
-    OffsetAllocator::Allocation vertexAllocation{};
-    // todo index allocation for RT
+    OffsetAllocator::Allocation vertexPositionAllocation{};
+    // todo index allocation for RT and shadow passes
     OffsetAllocator::Allocation meshletVertexAllocation{};
     OffsetAllocator::Allocation meshletTriangleAllocation{};
     OffsetAllocator::Allocation meshletAllocation{};
@@ -132,6 +132,19 @@ struct FullVertex
     Vec3 normal;
     Vec4 tangent;
     Vec4 color;
+};
+
+/**
+ * Compacted vertex meant for storage. Position is loaded into a separate buffer form the rest of the vertex attributes.
+ */
+struct Vertex
+{
+    uint32_t pos0;        // unorm16: bits[15:0]=X, bits[31:16]=Y
+    uint32_t pos1;        // unorm16: bits[15:0]=Z, bits[31:16]=unused
+    uint32_t normalOct;   // snorm8: bits[7:0]=X, bits[15:8]=Y
+    uint32_t tangentOct;  // snorm8: bits[7:0]=X, bits[15:8]=Y; bit[16]=sign(0=neg,1=pos)
+    uint32_t texcoord;    // float16: bits[15:0]=U, bits[31:16]=V
+    uint32_t color;       // unorm8: bits[7:0]=R, bits[15:8]=G, bits[23:16]=B, bits[31:24]=A
 };
 
 struct StaircaseParams
