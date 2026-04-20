@@ -368,13 +368,13 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
     VisibilityBufferTargets targets{
         .visibility   = SID("visibility_target"),
         .stableId     = SID("stable_id"),
-        .gbufferTwo   = SID("gbuffer_two"),
+        .gbufferOne   = SID("gbuffer_one"),
         .depthStencil = SID("depth_target"),
     };
 
     renderGraph->CreateTexture(targets.visibility, TextureInfo{VISIBILITY_BUFFER_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
     renderGraph->CreateTexture(targets.stableId, TextureInfo{GBUFFER_STABLE_ID_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
-    renderGraph->CreateTexture(targets.gbufferTwo, TextureInfo{GBUFFER_TARGET_TWO, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
+    renderGraph->CreateTexture(targets.gbufferOne, TextureInfo{GBUFFER_TARGET_ONE, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
     renderGraph->CreateTexture(targets.depthStencil, TextureInfo{DEPTH_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_DEPTH_FAR, true);
 
     VisibilityBufferBarycentricDerivativeTargets visBarDerTargets{
@@ -390,11 +390,11 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         .visibility  = targets.visibility,
         .barycentric = visBarDerTargets.barycentric,
         .derivatives = visBarDerTargets.derivatives,
-        .gbufferOne  = SID("gbuffer_one"),
-        .gbufferTwo  = targets.gbufferTwo,
+        .gbufferOne  = targets.gbufferOne,
+        .gbufferTwo  = SID("gbuffer_two"),
     };
 
-    renderGraph->CreateTexture(visShadingTargets.gbufferOne, TextureInfo{GBUFFER_TARGET_ONE, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
+    renderGraph->CreateTexture(visShadingTargets.gbufferTwo, TextureInfo{GBUFFER_TARGET_TWO, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
 
     StringID shadingOutputTarget = SID("shade_output");
     renderGraph->CreateTexture(shadingOutputTarget, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, VkClearValue{0.0f, 0.1f, 0.2f, 1.0f}, true);
@@ -402,7 +402,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
     MainRenderTargets mainTargets{
         .gbufferOne   = visShadingTargets.gbufferOne,
-        .gbufferTwo   = targets.gbufferTwo,
+        .gbufferTwo   = visShadingTargets.gbufferTwo,
         .depthStencil = targets.depthStencil,
         .outputColor  = shadingOutputTarget,
     };
@@ -1094,7 +1094,7 @@ void RenderThread::CreatePipelines()
 
     constexpr Core::Array<VkFormat, 3> graphicsColorFormats{
         VISIBILITY_BUFFER_FORMAT,
-        GBUFFER_TARGET_TWO,
+        GBUFFER_TARGET_ONE,
         GBUFFER_STABLE_ID_FORMAT,
     };
 

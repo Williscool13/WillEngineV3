@@ -483,7 +483,7 @@ void SetupGeometryPass(RenderGraph& graph,
 
     RenderPass& instancedMeshShading = graph.AddPass(SID("Instanced Mesh Shading"), VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
     instancedMeshShading.WriteColorAttachment(targets.visibility);
-    instancedMeshShading.WriteColorAttachment(targets.gbufferTwo);
+    instancedMeshShading.WriteColorAttachment(targets.gbufferOne);
     instancedMeshShading.WriteColorAttachment(targets.stableId);
     instancedMeshShading.WriteDepthAttachment(targets.depthStencil);
     instancedMeshShading.ReadBuffer(SCENE_DATA_BUFFER);
@@ -502,12 +502,12 @@ void SetupGeometryPass(RenderGraph& graph,
         constexpr VkClearValue depthClear = {.depthStencil = {0.0f, 0u}};
 
         auto visibilityAttachment  = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.visibility), &uintClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-        auto gbufferTwoAttachment  = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.gbufferTwo), &uintClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        auto gbufferOneAttachment  = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.gbufferOne), &uintClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
         auto stableIdAttachment    = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.stableId), &uintClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
         auto depthAttachment       = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), &depthClear, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
         auto stencilAttachment     = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), &depthClear, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
-        const VkRenderingAttachmentInfo colorAttachments[] = {visibilityAttachment, gbufferTwoAttachment, stableIdAttachment};
+        const VkRenderingAttachmentInfo colorAttachments[] = {visibilityAttachment, gbufferOneAttachment, stableIdAttachment};
         const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, colorAttachments, 3, &depthAttachment, &stencilAttachment);
 
         vkCmdBeginRendering(cmd, &renderInfo);
@@ -604,8 +604,8 @@ void SetupVisibilityShadingPass(RenderGraph& graph,
     visShading.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
     visShading.ReadBuffer(GEOMETRY_MODEL_BUFFER);
     visShading.ReadBuffer(GEOMETRY_MATERIAL_BUFFER);
-    visShading.WriteStorageImage(targets.gbufferOne);
-    visShading.ReadWriteImage(targets.gbufferTwo);
+    visShading.ReadWriteImage(targets.gbufferOne);
+    visShading.WriteStorageImage(targets.gbufferTwo);
     visShading.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1], sceneIndex,
             gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo](VkCommandBuffer cmd) {
         VisibilityShadingPushConstant pc{

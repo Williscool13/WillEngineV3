@@ -212,7 +212,7 @@ void ComputeGTAOMain(uniform GTAOMainPushConstant pc, uint3 dtid : SV_DispatchTh
     rdgStorageFloat[pc.edgeDataIndex][screenPos] = packedEdges;
 
     uint4 gt1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(screenPos, 0));
-    float3 viewNormal = UnpackNormalOct16(gt1.g);
+    float3 viewNormal = UnpackNormalOct16(gt1.r);
 
     // Move center pixel slightly towards camera to avoid precision artifacts
     viewSpaceZM = viewSpaceZM * 0.99920;

@@ -34,13 +34,14 @@ inline constexpr VkFormat VISIBILITY_BARYCENTRIC_FORMAT = VK_FORMAT_R32G32_SFLOA
 // Keep an eye for mip selection artifacts
 inline constexpr VkFormat VISIBILITY_DERIVATIVES_FORMAT = VK_FORMAT_R16G16B16A16_SFLOAT;
 
-// R: Albedo RGB8 | 8-bit spare (whatever)
-// G: Normal oct16 RG16 packed into R32
-// B: Emissive RGBE 9:9:9:5 packed into R32
+// R: Normal oct16 RG16 packed into R32
+// G: Motion vectors XY R16G16 | 16-bit spare
+// B: Roughness 15-bit | Metalness 1-bit
+// A: spare
 inline constexpr VkFormat GBUFFER_TARGET_ONE = VK_FORMAT_R32G32B32A32_UINT;
 
-// R: Roughness 15-bit | Metalness 1-bit
-// G: Motion vectors XY R16G16 | 16-bit spare (game-specific)
+// R: Albedo RGB8 | 8-bit spare
+// G: Emissive RGBE 9:9:9:5 packed into R32
 inline constexpr VkFormat GBUFFER_TARGET_TWO = VK_FORMAT_R32G32_UINT;
 
 

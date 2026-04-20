@@ -16,12 +16,12 @@ void ComputeMain(uniform DeferredResolvePushConstant pc, uint3 threadID : SV_Dis
     }
     uint4 gt1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(threadID.xy, 0));
     uint2 gt2 = rdgTexturesUInt2[pc.gbufferTwoIndex].Load(int3(threadID.xy, 0));
-    float4 albedo = UnpackAlbedoRGB8(gt1.r);
-    float3 viewNormal = UnpackNormalOct16(gt1.g);
-    float3 emissiveRGB = UnpackEmissiveRGBE(gt1.b);
-    float4 emissiveData = float4(emissiveRGB, 1.0);
+    float3 viewNormal = UnpackNormalOct16(gt1.r);
     float roughness, metallic;
-    UnpackPBR(gt2.r, roughness, metallic);
+    UnpackPBR(gt1.b, roughness, metallic);
+    float4 albedo = UnpackAlbedoRGB8(gt2.r);
+    float3 emissiveRGB = UnpackEmissiveRGBE(gt2.g);
+    float4 emissiveData = float4(emissiveRGB, 1.0);
     float2 shadows = float2(1.0f);
     if (pc.shadowsIndex != ~0x0u){
         shadows = rdgTexturesFloat2[pc.shadowsIndex].Load(int3(threadID.xy, 0)).xy;
