@@ -84,8 +84,11 @@ void MeshMain(
     for (uint i = threadIndex; i < meshlet.meshletVertexCount; i += MESH_SHADER_DISPATCH_X) {
         uint localVertexIndex = pc.meshletVerticesBuffer[meshlet.meshletVertexOffset + i];
         Vertex v = pc.vertexBuffer[meshlet.vertexOffset + localVertexIndex];
-        float4 worldPos = mul(m.modelMatrix, float4(v.position, 1.0));
-        float4 prevWorldPos = mul(m.prevModelMatrix, float4(v.position, 1.0));
+        float3 extent = prim.boundingBoxMax - prim.boundingBoxMin;
+        float3 vertexPos = DecodePosition(v, prim.boundingBoxMin, extent);
+
+        float4 worldPos = mul(m.modelMatrix, float4(vertexPos, 1.0));
+        float4 prevWorldPos = mul(m.prevModelMatrix, float4(vertexPos, 1.0));
         float4 clipPos = mul(jitteredViewProj, worldPos);
 
         vertices[i].clipDistance[0] = dot(worldPos.xyz, pc.sceneData->clipPlane.xyz) + pc.sceneData->clipPlane.w;
@@ -206,6 +209,8 @@ void VisibilityBufferBarycentricDerivative(uint3 dtid : SV_DispatchThreadID, uni
     Primitive prim = pc.primitiveBuffer[inst.primitiveIndex];
     Model m = pc.modelBuffer[inst.modelIndex];
 
+    float3 extent = prim.boundingBoxMax - prim.boundingBoxMin;
+
     Meshlet meshlet = pc.meshletBuffer[meshletIndex];
     uint triangleIndex = meshlet.meshletTriangleOffset + triangleIndexWithinMeshlet;
 
@@ -217,22 +222,25 @@ void VisibilityBufferBarycentricDerivative(uint3 dtid : SV_DispatchThreadID, uni
     uint v1i = pc.meshletVerticesBuffer[meshlet.meshletVertexOffset + idx1];
     uint v2i = pc.meshletVerticesBuffer[meshlet.meshletVertexOffset + idx2];
     Vertex v0 = pc.vertexBuffer[meshlet.vertexOffset + v0i];
+    float3 v0pos = DecodePosition(v0, prim.boundingBoxMin, extent);
     Vertex v1 = pc.vertexBuffer[meshlet.vertexOffset + v1i];
+    float3 v1pos = DecodePosition(v1, prim.boundingBoxMin, extent);
     Vertex v2 = pc.vertexBuffer[meshlet.vertexOffset + v2i];
+    float3 v2pos = DecodePosition(v2, prim.boundingBoxMin, extent);
 
     float4x4 mvp = mul(pc.sceneData->viewProj, m.modelMatrix);
-    float4 p0 = mul(mvp, float4(v0.position, 1.0));
-    float4 p1 = mul(mvp, float4(v1.position, 1.0));
-    float4 p2 = mul(mvp, float4(v2.position, 1.0));
+    float4 p0 = mul(mvp, float4(v0pos, 1.0));
+    float4 p1 = mul(mvp, float4(v1pos, 1.0));
+    float4 p2 = mul(mvp, float4(v2pos, 1.0));
 
     float2 pixelNDC = (float2(dtid.xy) + 0.5) / float2(pc.extents) * 2.0 - 1.0;
 
     BarycentricDeriv baryDeriv = CalcFullBary(p0, p1, p2, pixelNDC, float2(pc.extents));
     float3 bary = baryDeriv.m_lambda;
 
-    float2 uv0 = float2(v0.texcoordU, v0.texcoordV);
-    float2 uv1 = float2(v1.texcoordU, v1.texcoordV);
-    float2 uv2 = float2(v2.texcoordU, v2.texcoordV);
+    float2 uv0 = float2(f16tof32(v0.texcoord & 0xFFFF), f16tof32(v0.texcoord >> 16));
+    float2 uv1 = float2(f16tof32(v1.texcoord & 0xFFFF), f16tof32(v1.texcoord >> 16));
+    float2 uv2 = float2(f16tof32(v2.texcoord & 0xFFFF), f16tof32(v2.texcoord >> 16));
 
     float2 uvDdx = baryDeriv.m_ddx.x * uv0 + baryDeriv.m_ddx.y * uv1 + baryDeriv.m_ddx.z * uv2;
     float2 uvDdy = baryDeriv.m_ddy.x * uv0 + baryDeriv.m_ddy.y * uv1 + baryDeriv.m_ddy.z * uv2;

@@ -89,32 +89,92 @@ float3 YCoCgToRGB(float3 ycocg) {
 struct InterpolatedVertex
 {
     float3 normalVS;
+    float3 tangentVS;
     float2 uv;
     float4 color;
 };
 
-InterpolatedVertex InterpolateVertex(float3 bary, Vertex v0, Vertex v1, Vertex v2, float4x4 mv)
+InterpolatedVertex InterpolateVertex(float3 bary, Vertex v0, Vertex v1, Vertex v2, float4x4 mv, float3 minBounds, float3 extent)
 {
-    InterpolatedVertex result;
+    // Position: unorm16 packed as pos0=[Y:X], pos1=[_:Z]
+    float3 pos0 = float3(float(v0.pos0 & 0xFFFF), float(v0.pos0 >> 16), float(v0.pos1 & 0xFFFF)) / 65535.0 * extent + minBounds;
+    float3 pos1 = float3(float(v1.pos0 & 0xFFFF), float(v1.pos0 >> 16), float(v1.pos1 & 0xFFFF)) / 65535.0 * extent + minBounds;
+    float3 pos2 = float3(float(v2.pos0 & 0xFFFF), float(v2.pos0 >> 16), float(v2.pos1 & 0xFFFF)) / 65535.0 * extent + minBounds;
 
-    float3 objNormal = normalize(bary.x * v0.normal + bary.y * v1.normal + bary.z * v2.normal);
-    result.normalVS = normalize(mul(Adjugate((float3x3)mv), objNormal));
+    // Normal: snorm8 packed as normalOct=[_:_:Y:X], sign-extended via shift
+    float3 n0 = OctDecode(float2(float(int((v0.normalOct & 0xFF) << 24) >> 24), float(int((v0.normalOct >> 8 & 0xFF) << 24) >> 24)) / 127.0);
+    float3 n1 = OctDecode(float2(float(int((v1.normalOct & 0xFF) << 24) >> 24), float(int((v1.normalOct >> 8 & 0xFF) << 24) >> 24)) / 127.0);
+    float3 n2 = OctDecode(float2(float(int((v2.normalOct & 0xFF) << 24) >> 24), float(int((v2.normalOct >> 8 & 0xFF) << 24) >> 24)) / 127.0);
 
-    result.uv = bary.x * float2(v0.texcoordU, v0.texcoordV)
-              + bary.y * float2(v1.texcoordU, v1.texcoordV)
-              + bary.z * float2(v2.texcoordU, v2.texcoordV);
+    // Tangent: snorm8 packed as tangentOct=[sign:_:Y:X], sign-extended via shift
+    float3 t0 = OctDecode(float2(float(int((v0.tangentOct & 0xFF) << 24) >> 24), float(int((v0.tangentOct >> 8 & 0xFF) << 24) >> 24)) / 127.0);
+    float3 t1 = OctDecode(float2(float(int((v1.tangentOct & 0xFF) << 24) >> 24), float(int((v1.tangentOct >> 8 & 0xFF) << 24) >> 24)) / 127.0);
+    float3 t2 = OctDecode(float2(float(int((v2.tangentOct & 0xFF) << 24) >> 24), float(int((v2.tangentOct >> 8 & 0xFF) << 24) >> 24)) / 127.0);
 
-    result.color = bary.x * v0.color + bary.y * v1.color + bary.z * v2.color;
+    // UV: float16 packed as texcoord=[V:U]
+    float2 uv0 = float2(f16tof32(v0.texcoord & 0xFFFF), f16tof32(v0.texcoord >> 16));
+    float2 uv1 = float2(f16tof32(v1.texcoord & 0xFFFF), f16tof32(v1.texcoord >> 16));
+    float2 uv2 = float2(f16tof32(v2.texcoord & 0xFFFF), f16tof32(v2.texcoord >> 16));
 
-    return result;
+    // Color: unorm8 RGBA packed into color
+    float4 c0 = float4(float(v0.color & 0xFF), float(v0.color >> 8 & 0xFF), float(v0.color >> 16 & 0xFF), float(v0.color >> 24 & 0xFF)) / 255.0;
+    float4 c1 = float4(float(v1.color & 0xFF), float(v1.color >> 8 & 0xFF), float(v1.color >> 16 & 0xFF), float(v1.color >> 24 & 0xFF)) / 255.0;
+    float4 c2 = float4(float(v2.color & 0xFF), float(v2.color >> 8 & 0xFF), float(v2.color >> 16 & 0xFF), float(v2.color >> 24 & 0xFF)) / 255.0;
+
+    InterpolatedVertex interp;
+    float3 position  = bary.x * pos0 + bary.y * pos1 + bary.z * pos2;
+    float3 normalOS  = normalize(bary.x * n0 + bary.y * n1 + bary.z * n2);
+    float3 tangentOS = normalize(bary.x * t0 + bary.y * t1 + bary.z * t2);
+
+    interp.normalVS  = normalize(mul((float3x3)mv, normalOS));
+    interp.tangentVS = normalize(mul((float3x3)mv, tangentOS));
+    interp.uv        = bary.x * uv0 + bary.y * uv1 + bary.z * uv2;
+    interp.color     = bary.x * c0  + bary.y * c1  + bary.z * c2;
+
+    return interp;
 }
 
 // Returns interpolated view-space position. For custom shading pipelines that need exact object-space
 // position and already have the vertices in registers. mv: model-view matrix (mul(view, modelMatrix))
 float3 InterpolatePosition(float3 bary, Vertex v0, Vertex v1, Vertex v2, float4x4 mv)
 {
-    float3 objPos = bary.x * v0.position + bary.y * v1.position + bary.z * v2.position;
-    return mul(mv, float4(objPos, 1.0f)).xyz;
+    /*float3 objPos = bary.x * v0.position + bary.y * v1.position + bary.z * v2.position;
+    return mul(mv, float4(objPos, 1.0f)).xyz;*/
+    return float3(1.0f);
+}
+
+float3 DecodePosition(Vertex v, float3 minBounds, float3 extent)
+{
+    return float3(float(v.pos0 & 0xFFFF), float(v.pos0 >> 16), float(v.pos1 & 0xFFFF)) / 65535.0 * extent + minBounds;
+}
+
+float3 DecodeNormal(Vertex v)
+{
+    float nx = float(int((v.normalOct & 0xFF) << 24) >> 24) / 127.0;
+    float ny = float(int((v.normalOct >> 8 & 0xFF) << 24) >> 24) / 127.0;
+    return OctDecode(float2(nx, ny));
+}
+
+float3 DecodeTangent(Vertex v)
+{
+    float tx = float(int((v.tangentOct & 0xFF) << 24) >> 24) / 127.0;
+    float ty = float(int((v.tangentOct >> 8 & 0xFF) << 24) >> 24) / 127.0;
+    return OctDecode(float2(tx, ty));
+}
+
+float DecodeTangentSign(Vertex v)
+{
+    return bool(v.tangentOct >> 16 & 1) ? 1.0 : -1.0;
+}
+
+float2 DecodeUV(Vertex v)
+{
+    return float2(f16tof32(v.texcoord & 0xFFFF), f16tof32(v.texcoord >> 16));
+}
+
+float4 DecodeColor(Vertex v)
+{
+    return float4(float(v.color & 0xFF), float(v.color >> 8 & 0xFF), float(v.color >> 16 & 0xFF), float(v.color >> 24 & 0xFF)) / 255.0;
 }
 
 // Albedo: pack float4 RGBA into R32 (RGB8 + 8-bit alpha)

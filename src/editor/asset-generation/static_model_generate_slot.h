@@ -80,7 +80,7 @@ private:
 
     static void LoadTextureIndicesAndUV(const fastgltf::TextureInfo& texture, const fastgltf::Asset& gltf, int& imageIndex, int& samplerIndex, glm::vec4& uvTransform);
 
-    static Vec4 GenerateBoundingSphere(Core::Span<Vertex> vertices);
+    static Vec4 GenerateBoundingSphere(Core::Span<Engine::FullVertex> vertices);
 
     Core::MemoryManager* memoryManager{};
     enki::TaskScheduler* scheduler{};

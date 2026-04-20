@@ -122,6 +122,18 @@ struct StaticModelData
     void Reset(Render::ResourceManager* resourceManager);
 };
 
+/**
+ * Not meant for model use. Only for vertex processing.
+ */
+struct FullVertex
+{
+    Vec3 position;
+    Vec2 uv;
+    Vec3 normal;
+    Vec4 tangent;
+    Vec4 color;
+};
+
 struct StaircaseParams
 {
     int32_t stepCount{10};

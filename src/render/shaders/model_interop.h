@@ -49,7 +49,8 @@ SHADER_PUBLIC struct DebugVertex
     SHADER_PUBLIC float4 color;
 };
 
-SHADER_PUBLIC struct DebugLineSegment {
+SHADER_PUBLIC struct DebugLineSegment
+{
     SHADER_PUBLIC float3 a;
     SHADER_PUBLIC float width;
     SHADER_PUBLIC float3 b;
@@ -60,14 +61,13 @@ SHADER_PUBLIC struct DebugLineSegment {
 
 SHADER_PUBLIC struct Vertex
 {
-    SHADER_PUBLIC float3 position;
-    SHADER_PUBLIC float texcoordU;
-    SHADER_PUBLIC float3 normal;
-    SHADER_PUBLIC float texcoordV;
-    SHADER_PUBLIC float4 tangent;
-    SHADER_PUBLIC float4 color;
+    SHADER_PUBLIC uint32_t pos0;        // unorm16: bits[15:0]=X, bits[31:16]=Y
+    SHADER_PUBLIC uint32_t pos1;        // unorm16: bits[15:0]=Z, bits[31:16]=unused
+    SHADER_PUBLIC uint32_t normalOct;   // snorm8: bits[7:0]=X, bits[15:8]=Y
+    SHADER_PUBLIC uint32_t tangentOct;  // snorm8: bits[7:0]=X, bits[15:8]=Y; bit[16]=sign(0=neg,1=pos)
+    SHADER_PUBLIC uint32_t texcoord;    // float16: bits[15:0]=U, bits[31:16]=V
+    SHADER_PUBLIC uint32_t color;       // unorm8: bits[7:0]=R, bits[15:8]=G, bits[23:16]=B, bits[31:24]=A
 };
-
 
 SHADER_PUBLIC struct Meshlet
 {
@@ -90,10 +90,10 @@ SHADER_PUBLIC struct Primitive
     SHADER_PUBLIC int4 meshletOffset;
     SHADER_PUBLIC int4 meshletCount;
     SHADER_PUBLIC float4 boundingSphere; // {3} center, {1} radius
+    SHADER_PUBLIC float3 boundingBoxMin;
     SHADER_PUBLIC uint32_t bHasTransparent;
+    SHADER_PUBLIC float3 boundingBoxMax;
     SHADER_PUBLIC uint32_t indexOffset;
-    uint32_t padding1;
-    uint32_t padding2;
 };
 
 SHADER_PUBLIC struct SHADER_ALIGN MaterialProperties

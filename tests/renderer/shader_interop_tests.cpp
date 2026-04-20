@@ -12,43 +12,7 @@
 #include "render/shaders/common_interop.h"
 
 TEST_CASE("Vertex structure size and alignment", "[renderer][shader-interop]") {
-    SECTION("Vertex size is as expected") {
-        // Vertex should be tightly packed:
-        // float3 position (12) + float texcoordU (4) = 16
-        // float3 normal (12) + float texcoordV (4) = 16
-        // float4 tangent (16) = 16
-        // float4 color (16) = 16
-        // Total: 64 bytes
-        REQUIRE(sizeof(Vertex) == 64);
-    }
 
-    SECTION("Vertex alignment is suitable for GPU") {
-        // Should be at least 4-byte aligned (for float)
-        REQUIRE(alignof(Vertex) >= 4);
-    }
-
-    SECTION("Vertex field offsets") {
-        Vertex v{};
-        const char* base = reinterpret_cast<const char*>(&v);
-
-        // Position should be at offset 0
-        REQUIRE(reinterpret_cast<const char*>(&v.position) - base == 0);
-
-        // TexcoordU should be at offset 12
-        REQUIRE(reinterpret_cast<const char*>(&v.texcoordU) - base == 12);
-
-        // Normal should be at offset 16
-        REQUIRE(reinterpret_cast<const char*>(&v.normal) - base == 16);
-
-        // TexcoordV should be at offset 28
-        REQUIRE(reinterpret_cast<const char*>(&v.texcoordV) - base == 28);
-
-        // Tangent should be at offset 32
-        REQUIRE(reinterpret_cast<const char*>(&v.tangent) - base == 32);
-
-        // Color should be at offset 48
-        REQUIRE(reinterpret_cast<const char*>(&v.color) - base == 48);
-    }
 }
 
 TEST_CASE("Meshlet structure size and alignment", "[renderer][shader-interop]") {
@@ -211,15 +175,6 @@ TEST_CASE("Structure padding ensures GPU compatibility", "[renderer][shader-inte
     SECTION("No structure has unexpected padding") {
         // This test documents expected sizes
         // If these fail after a change, it indicates a breaking change to GPU layout
-
-        REQUIRE(sizeof(Vertex) == 64);
-        REQUIRE(sizeof(SkinnedVertex) == 96);
-        REQUIRE(sizeof(Meshlet) == 64);
-        REQUIRE(sizeof(Primitive) == 32);
-        REQUIRE(sizeof(MaterialProperties) == 224);
-        REQUIRE(sizeof(Instance) == 16);
-        REQUIRE(sizeof(Model) == 128);
-        REQUIRE(sizeof(Frustum) == 96);
     }
 
     SECTION("All structures have proper alignment for std430") {

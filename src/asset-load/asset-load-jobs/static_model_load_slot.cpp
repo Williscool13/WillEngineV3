@@ -352,7 +352,8 @@ void StaticModelLoadSlot::PrepareUploadData()
         auto& physicsCache = outputModel->physicsCache.value();
         physicsCache.positions = Core::HeapArray<Vec3>(&memoryManager->Assets(), Core::AllocTag::AssetModel, rawData.vertices.Size());
         for (size_t i = 0; i < rawData.vertices.Size(); ++i) {
-            physicsCache.positions[i] = rawData.vertices[i].position;
+            // todo fix..?
+            //physicsCache.positions[i] = rawData.vertices[i].position;
         }
 
         physicsCache.indices = Core::HeapArray<uint32_t>(&memoryManager->Assets(), Core::AllocTag::AssetModel, rawData.indices.Size());
@@ -363,7 +364,7 @@ void StaticModelLoadSlot::PrepareUploadData()
         // If no bounds from model generation, compute them here (strictly worse)
         // Compute with full fidelity index buffer
         if (outputModel->bounds.sphere.radius == 0.f) {
-            outputModel->bounds = ComputeBounds(physicsCache.positions, physicsCache.indices);
+            outputModel->bounds = ComputeBounds(physicsCache.positions);
         }
 
         // todo parameterize

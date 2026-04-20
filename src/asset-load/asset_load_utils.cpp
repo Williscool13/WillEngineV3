@@ -6,7 +6,7 @@
 
 namespace AssetLoad
 {
-static Mat3 JacobiEigen3x3(const Mat3& symMat)
+Mat3 JacobiEigen3x3(const Mat3& symMat)
 {
     float a[3][3];
     float v[3][3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
@@ -61,7 +61,29 @@ static Mat3 JacobiEigen3x3(const Mat3& symMat)
     return result;
 }
 
-Engine::ModelBounds ComputeBounds(Core::Span<Vec3> positions, Core::Span<uint32_t> indices)
+Engine::MeshBounds CalculateMeshBounds(Core::Span<Engine::FullVertex> vertices)
+{
+    Engine::MeshBounds result{};
+
+    for (const auto& v : vertices) {
+        result.aabb.min = glm::min(result.aabb.min, v.position);
+        result.aabb.max = glm::max(result.aabb.max, v.position);
+    }
+
+    Vec3 center = result.aabb.Center();
+    float radius = 0.f;
+    for (const auto& v : vertices) {
+        radius = glm::max(radius, glm::length(v.position - center));
+    }
+
+    result.sphere.center = center;
+    result.sphere.radius = radius;
+    result.aabbExtents = result.aabb.max - result.aabb.min;
+
+    return result;
+}
+
+Engine::ModelBounds ComputeBounds(Core::Span<Vec3> positions)
 {
     if (positions.IsEmpty()) return {};
 
@@ -122,15 +144,6 @@ Engine::ModelBounds ComputeBounds(Core::Span<Vec3> positions, Core::Span<uint32_
     out.obb.halfExtents = (maxProj - minProj) * 0.5f;
     out.obb.center = center + axes * ((minProj + maxProj) * 0.5f);
     out.obb.orientation = glm::quat_cast(axes);
-
-    if (!indices.IsEmpty() && indices.Size() >= 3) {
-        for (size_t i = 0; i + 2 < indices.Size(); i += 3) {
-            const Vec3& a = positions[indices[i]];
-            const Vec3& b = positions[(indices)[i + 1]];
-            const Vec3& c = positions[(indices)[i + 2]];
-            out.surfaceArea += glm::length(glm::cross(b - a, c - a)) * 0.5f;
-        }
-    }
 
     return out;
 }

@@ -9,6 +9,7 @@
 #include "core/containers/vector.h"
 #include "engine/resources/material/material.h"
 #include "engine/resources/model/model_types.h"
+#include "engine/resources/model/static_model.h"
 #include "engine/resources/sampler/sampler.h"
 
 namespace Editor
@@ -59,6 +60,8 @@ struct RawStaticModel
 
     Core::HeapArray<Engine::MeshInformation> allMeshes{};
     Core::HeapArray<Engine::Node> nodes{};
+
+    Engine::ModelBounds modelBounds{};
 
     RawStaticModel() = default;
 

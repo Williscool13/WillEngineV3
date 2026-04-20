@@ -16,48 +16,6 @@
 
 TEST_CASE("Vertex initialization and data packing", "[renderer][model-data]")
 {
-    SECTION("Default initialization") {
-        Vertex v{};
-
-        REQUIRE(v.position.x == 0.0f);
-        REQUIRE(v.position.y == 0.0f);
-        REQUIRE(v.position.z == 0.0f);
-        REQUIRE(v.texcoordU == 0.0f);
-        REQUIRE(v.texcoordV == 0.0f);
-    }
-
-    SECTION("Position and texture coordinate packing") {
-        Vertex v{};
-        v.position = float3{1.0f, 2.0f, 3.0f};
-        v.texcoordU = 0.5f;
-        v.texcoordV = 0.75f;
-
-        REQUIRE(v.position.x == 1.0f);
-        REQUIRE(v.position.y == 2.0f);
-        REQUIRE(v.position.z == 3.0f);
-        REQUIRE(v.texcoordU == 0.5f);
-        REQUIRE(v.texcoordV == 0.75f);
-    }
-
-    SECTION("Normal and tangent data") {
-        Vertex v{};
-        v.normal = float3{0.0f, 1.0f, 0.0f};
-        v.tangent = float4{1.0f, 0.0f, 0.0f, 1.0f};
-
-        REQUIRE(v.normal.y == 1.0f);
-        REQUIRE(v.tangent.x == 1.0f);
-        REQUIRE(v.tangent.w == 1.0f); // tangent handedness
-    }
-
-    SECTION("Vertex color") {
-        Vertex v{};
-        v.color = float4{1.0f, 0.5f, 0.25f, 1.0f};
-
-        REQUIRE_THAT(v.color.r, Catch::Matchers::WithinRel(1.0f, 0.0001f));
-        REQUIRE_THAT(v.color.g, Catch::Matchers::WithinRel(0.5f, 0.0001f));
-        REQUIRE_THAT(v.color.b, Catch::Matchers::WithinRel(0.25f, 0.0001f));
-        REQUIRE_THAT(v.color.a, Catch::Matchers::WithinRel(1.0f, 0.0001f));
-    }
 }
 
 TEST_CASE("Meshlet bounding and culling data", "[renderer][model-data]") {

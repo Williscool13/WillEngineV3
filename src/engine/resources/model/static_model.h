@@ -25,26 +25,33 @@ namespace Engine
 {
 struct BoundingSphere
 {
-    glm::vec3 center{0.f};
+    Vec3 center{0.f};
     float radius{0.f};
 };
 
 struct AABB
 {
-    glm::vec3 min{FLT_MAX, FLT_MAX, FLT_MAX};
-    glm::vec3 max{-FLT_MAX, -FLT_MAX, -FLT_MAX};
+    Vec3 min{FLT_MAX, FLT_MAX, FLT_MAX};
+    Vec3 max{-FLT_MAX, -FLT_MAX, -FLT_MAX};
 
-    glm::vec3 Center() const { return (min + max) * 0.5f; }
-    glm::vec3 HalfExtents() const { return (max - min) * 0.5f; }
+    Vec3 Center() const { return (min + max) * 0.5f; }
+    Vec3 HalfExtents() const { return (max - min) * 0.5f; }
     float SurfaceArea() const { glm::vec3 d = max - min; return 2.f * (d.x * d.y + d.y * d.z + d.z * d.x); }
     float Volume() const { glm::vec3 d = max - min; return d.x * d.y * d.z; }
 };
 
 struct OBB
 {
-    glm::vec3 center{0.f};
-    glm::vec3 halfExtents{0.f};
-    glm::quat orientation{1.f, 0.f, 0.f, 0.f};
+    Vec3 center{0.f};
+    Vec3 halfExtents{0.f};
+    Quat orientation{1.f, 0.f, 0.f, 0.f};
+};
+
+struct MeshBounds
+{
+    AABB aabb;
+    Vec3 aabbExtents{0.f};
+    BoundingSphere sphere;
 };
 
 struct ModelBounds
@@ -54,7 +61,6 @@ struct ModelBounds
     OBB obb{};
     glm::vec3 centroid{0.f};
     int dominantAxis{1};
-    float surfaceArea{0.f};
 };
 
 struct StaticModel

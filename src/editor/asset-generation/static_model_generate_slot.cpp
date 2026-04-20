@@ -18,6 +18,7 @@
 #include "engine/resources/model/model_format.h"
 #include "engine/serialization/serialization.h"
 #include "asset-load/asset_load_utils.h"
+#include "render/render_utils.h"
 #include "render/shaders/constants_interop.h"
 #include "tracy/Tracy.hpp"
 
@@ -246,6 +247,7 @@ bool StaticModelGenerateSlot::LoadGltf()
     _progress += stepDiff;
     progress->value.store(_progress, std::memory_order::release);
 
+    Core::Vector<Vec3> allPositions(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, 0);
     // Meshes
     if (!gltf.meshes.empty()) {
         rawModel.allMeshes = Core::HeapArray<Engine::MeshInformation>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, gltf.meshes.size());
@@ -269,7 +271,7 @@ bool StaticModelGenerateSlot::LoadGltf()
 
                 int32_t materialIndex{-1};
                 Core::HeapArray<uint32_t> primitiveIndices;
-                Core::HeapArray<Vertex> primitiveVertices;
+                Core::HeapArray<Engine::FullVertex> primitiveVertices;
 
                 // Extract accessor data
                 {
@@ -288,7 +290,7 @@ bool StaticModelGenerateSlot::LoadGltf()
                     // POSITION (REQUIRED)
                     const fastgltf::Attribute* positionIt = p.findAttribute("POSITION");
                     const fastgltf::Accessor& posAccessor = gltf.accessors[positionIt->accessorIndex];
-                    primitiveVertices = Core::HeapArray<Vertex>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, posAccessor.count);
+                    primitiveVertices = Core::HeapArray<Engine::FullVertex>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, posAccessor.count);
                     fastgltf::iterateAccessorWithIndex<fastgltf::math::fvec3>(gltf, posAccessor, [&](fastgltf::math::fvec3 v, const size_t index) {
                         primitiveVertices[index] = {};
                         primitiveVertices[index].position = {v.x(), v.y(), v.z()};
@@ -341,8 +343,7 @@ bool StaticModelGenerateSlot::LoadGltf()
                                     // f = max(c / 127.0, -1.0)
                                     float u = std::max(static_cast<float>(uv.x()) / 127.0f, -1.0f);
                                     float v = std::max(static_cast<float>(uv.y()) / 127.0f, -1.0f);
-                                    primitiveVertices[index].texcoordU = u;
-                                    primitiveVertices[index].texcoordV = v;
+                                    primitiveVertices[index].uv = {u, v};
                                 });
                                 break;
                             case fastgltf::ComponentType::UnsignedByte:
@@ -350,8 +351,7 @@ bool StaticModelGenerateSlot::LoadGltf()
                                     // f = c / 255.0
                                     float u = static_cast<float>(uv.x()) / 255.0f;
                                     float v = static_cast<float>(uv.y()) / 255.0f;
-                                    primitiveVertices[index].texcoordU = u;
-                                    primitiveVertices[index].texcoordV = v;
+                                    primitiveVertices[index].uv = {u, v};
                                 });
                                 break;
                             case fastgltf::ComponentType::Short:
@@ -359,8 +359,7 @@ bool StaticModelGenerateSlot::LoadGltf()
                                     // f = max(c / 32767.0, -1.0)
                                     float u = std::max(static_cast<float>(uv.x()) / 32767.0f, -1.0f);
                                     float v = std::max(static_cast<float>(uv.y()) / 32767.0f, -1.0f);
-                                    primitiveVertices[index].texcoordU = u;
-                                    primitiveVertices[index].texcoordV = v;
+                                    primitiveVertices[index].uv = {u, v};
                                 });
                                 break;
                             case fastgltf::ComponentType::UnsignedShort:
@@ -368,14 +367,12 @@ bool StaticModelGenerateSlot::LoadGltf()
                                     // f = c / 65535.0
                                     float u = static_cast<float>(uv.x()) / 65535.0f;
                                     float v = static_cast<float>(uv.y()) / 65535.0f;
-                                    primitiveVertices[index].texcoordU = u;
-                                    primitiveVertices[index].texcoordV = v;
+                                    primitiveVertices[index].uv = {u, v};
                                 });
                                 break;
                             case fastgltf::ComponentType::Float:
                                 fastgltf::iterateAccessorWithIndex<fastgltf::math::fvec2>(gltf, uvAccessor, [&](fastgltf::math::fvec2 uv, const size_t index) {
-                                    primitiveVertices[index].texcoordU = uv.x();
-                                    primitiveVertices[index].texcoordV = uv.y();
+                                    primitiveVertices[index].uv = {uv.x(), uv.y()};
                                 });
                                 break;
                             default:
@@ -426,7 +423,7 @@ bool StaticModelGenerateSlot::LoadGltf()
                             indexCount,
                             primitiveVertices.Data(),
                             vertexCount,
-                            sizeof(Vertex));
+                            sizeof(Engine::FullVertex));
                     }
                     //
                     {
@@ -438,12 +435,12 @@ bool StaticModelGenerateSlot::LoadGltf()
                             primitiveIndices.Size(),
                             remap.Data());
 
-                        auto remappedVertices = Core::HeapArray<Vertex>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, uniqueVertices);
+                        auto remappedVertices = Core::HeapArray<Engine::FullVertex>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, uniqueVertices);
                         meshopt_remapVertexBuffer(
                             remappedVertices.Data(),
                             primitiveVertices.Data(),
                             primitiveVertices.Size(),
-                            sizeof(Vertex),
+                            sizeof(Engine::FullVertex),
                             remap.Data()
                         );
 
@@ -469,7 +466,7 @@ bool StaticModelGenerateSlot::LoadGltf()
                             primitiveIndices.Size(),
                             &primitiveVertices[0].position.x,
                             primitiveVertices.Size(),
-                            sizeof(Vertex),
+                            sizeof(Engine::FullVertex),
                             1.05f
                         );
                     }
@@ -482,17 +479,25 @@ bool StaticModelGenerateSlot::LoadGltf()
                             primitiveIndices.Size(),
                             primitiveVertices.Data(),
                             primitiveVertices.Size(),
-                            sizeof(Vertex)
+                            sizeof(Engine::FullVertex)
                         );
                     }
                 }
+
+
+                auto primitiveBounds = AssetLoad::CalculateMeshBounds(primitiveVertices);
+                primitiveData.boundingSphere = {primitiveBounds.sphere.center, primitiveBounds.sphere.radius};
+                primitiveData.boundingBoxMin = primitiveBounds.aabb.min;
+                primitiveData.boundingBoxMax = primitiveBounds.aabb.max;
 
                 // All LODs draw from the same "source vertex buffer".
                 // Perhaps with LOD streaming this needs to change
                 uint32_t vertexOffset = rawModel.vertices.Size();
                 rawModel.vertices.Reserve(rawModel.vertices.Size() + primitiveVertices.Size());
+                allPositions.Reserve(allPositions.Size() + primitiveVertices.Size());
                 for (const auto& v : primitiveVertices) {
-                    rawModel.vertices.PushBack(v);
+                    rawModel.vertices.EmplaceBack(CompressVertex(v, primitiveBounds));
+                    allPositions.PushBack(v.position);
                 }
 
                 // todo: prepare LODs for this too? Determine when using for raytracing.
@@ -538,7 +543,7 @@ bool StaticModelGenerateSlot::LoadGltf()
                             lodInformation[lod - 1].indexCount,
                             &primitiveVertices[0].position.x,
                             primitiveVertices.Size(),
-                            sizeof(Vertex),
+                            sizeof(Engine::FullVertex),
                             targetIndexCount,
                             0.01f
                         );
@@ -565,7 +570,7 @@ bool StaticModelGenerateSlot::LoadGltf()
                             lodInformation[lod].indexCount,
                             &primitiveVertices[0].position.x,
                             primitiveVertices.Size(),
-                            sizeof(Vertex),
+                            sizeof(Engine::FullVertex),
                             MESHLET_MAX_VERTICES,
                             MESHLET_MAX_TRIANGLES,
                             0.0f
@@ -593,8 +598,6 @@ bool StaticModelGenerateSlot::LoadGltf()
                         lodInformation[lod].meshletTriangleCount = last.triangle_offset + last.triangle_count * 3;
                     }
                 }
-
-                primitiveData.boundingSphere = GenerateBoundingSphere(primitiveVertices);
 
                 for (size_t lod = 0; lod < LOD_COUNT; ++lod) {
                     primitiveData.meshletOffset[lod] = static_cast<int32_t>(rawModel.meshlets.Size());
@@ -624,7 +627,7 @@ bool StaticModelGenerateSlot::LoadGltf()
                                 meshlet.triangle_count,
                                 reinterpret_cast<const float*>(primitiveVertices.Data()),
                                 primitiveVertices.Size(),
-                                sizeof(Vertex)
+                                sizeof(Engine::FullVertex)
                             );
 
                             rawModel.meshlets.PushBack({
@@ -651,6 +654,9 @@ bool StaticModelGenerateSlot::LoadGltf()
             }
         }
     }
+
+
+    rawModel.modelBounds = AssetLoad::ComputeBounds(allPositions);
 
     _progress += stepDiff;
     progress->value.store(_progress, std::memory_order::release);
@@ -1009,23 +1015,6 @@ bool StaticModelGenerateSlot::WriteStaticModel()
             Engine::WriteMeshInformation(body, mesh);
         }
 
-        Engine::ModelBounds bounds{};
-
-        //
-        {
-            auto positions = Core::HeapArray<Vec3>(&memoryManager->Assets(), Core::AllocTag::AssetModel, rawModel.vertices.Size());
-            for (size_t i = 0; i < rawModel.vertices.Size(); ++i) {
-                positions[i] = rawModel.vertices[i].position;
-            }
-
-            auto indices = Core::HeapArray<uint32_t>(&memoryManager->Assets(), Core::AllocTag::AssetModel, rawModel.indices.Size());
-            for (size_t i = 0; i < rawModel.indices.Size(); ++i) {
-                indices[i] = rawModel.indices[i];
-            }
-
-            bounds = AssetLoad::ComputeBounds(positions, indices);
-        }
-
         auto maxCompressedSize = Engine::CompressLZ4MaxSize(body.Size());
         auto compressedBody = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, maxCompressedSize);
         size_t realCompressedSize = Engine::CompressLZ4(body.Data(), body.Size(), compressedBody.Data(), compressedBody.Size());
@@ -1041,7 +1030,7 @@ bool StaticModelGenerateSlot::WriteStaticModel()
         Engine::WriteWStaticModelHeader(file, header);
         file.write(reinterpret_cast<const char*>(compressedBody.Data()), static_cast<std::streamsize>(realCompressedSize));
         file.write(reinterpret_cast<const char*>(nodeSection.Data()), static_cast<std::streamsize>(nodeSection.Size()));
-        file.write(reinterpret_cast<const char*>(&bounds), sizeof(Engine::ModelBounds));
+        file.write(reinterpret_cast<const char*>(&rawModel.modelBounds), sizeof(Engine::ModelBounds));
     }
 
     progress->value.store(100, std::memory_order_release);
@@ -1199,7 +1188,7 @@ void StaticModelGenerateSlot::LoadTextureIndicesAndUV(const fastgltf::TextureInf
     }
 }
 
-Vec4 StaticModelGenerateSlot::GenerateBoundingSphere(Core::Span<Vertex> vertices)
+Vec4 StaticModelGenerateSlot::GenerateBoundingSphere(Core::Span<Engine::FullVertex> vertices)
 {
     glm::vec3 center = {0, 0, 0};
 

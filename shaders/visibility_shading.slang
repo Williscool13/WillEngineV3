@@ -23,6 +23,7 @@ void VisibilityShading(uint3 dtid : SV_DispatchThreadID, uniform VisibilityShadi
     uint instanceIndex = vis.y;
 
     Instance inst = pc.instanceBuffer[instanceIndex];
+    Primitive prim = pc.primitiveBuffer[inst.primitiveIndex];
     Model m = pc.modelBuffer[inst.modelIndex];
     MaterialProperties mat = pc.materialBuffer[inst.materialIndex];
 
@@ -46,7 +47,9 @@ void VisibilityShading(uint3 dtid : SV_DispatchThreadID, uniform VisibilityShadi
     float2 uvDdy = derivs.zw;
 
     float4x4 mv = mul(pc.sceneData->view, m.modelMatrix);
-    InterpolatedVertex interp = InterpolateVertex(bary, v0, v1, v2, mv);
+    // todo only allow vertex interpolation in the visibility resolve buffer
+    float3 extent = prim.boundingBoxMax - prim.boundingBoxMin;
+    InterpolatedVertex interp = InterpolateVertex(bary, v0, v1, v2, mv, prim.boundingBoxMin, extent);
 
     // TODO: normal maps not yet implemented
     // float3 objTangent = bary.x * v0.tangent.xyz + bary.y * v1.tangent.xyz + bary.z * v2.tangent.xyz;

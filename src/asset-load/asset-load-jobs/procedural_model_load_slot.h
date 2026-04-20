@@ -87,7 +87,7 @@ private:
     Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* doneSemaphore)> _requestDispatchCallback;
     Core::InlineFunction<void(bool success, ProceduralModelSlotHandle slotHandle, UploadStagingSlotHandle uploadStagingSlotHandle)> _notifyCallback;
 
-    bool FinalizeGeometry(Core::Span<const Vertex> vertices, Core::Span<const uint32_t> indices);
+    bool FinalizeGeometry(Core::Span<const Engine::FullVertex> vertices, Core::Span<const uint32_t> indices);
 
     bool GenerateStaircase(const Engine::StaircaseParams& p);
     bool GenerateBox(const Engine::BoxParams& p);
