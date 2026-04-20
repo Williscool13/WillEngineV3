@@ -260,6 +260,7 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
                     q12.shaderUniformBufferArrayNonUniformIndexing &&
                     q12.shaderStorageBufferArrayNonUniformIndexing &&
                     q12.drawIndirectCount &&
+                    q12.scalarBlockLayout &&
                     // Shader types (Vulkan 1.2)
                     q12.shaderInt8 &&
                     q12.shaderFloat16 &&
@@ -362,6 +363,7 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
         features12.shaderUniformBufferArrayNonUniformIndexing = VK_TRUE;
         features12.shaderStorageBufferArrayNonUniformIndexing = VK_TRUE;
         features12.drawIndirectCount = VK_TRUE;
+        features12.scalarBlockLayout = VK_TRUE;
 
         // Shader types (Vulkan 1.2)
         features12.shaderInt8 = VK_TRUE;

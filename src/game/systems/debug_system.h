@@ -37,10 +37,10 @@ struct DebugHotkey
 
 static const DebugHotkey DEBUG_HOTKEYS[] = {
     {Key::NUM_1, "Depth Target", "depth_target", DebugTransformationType::DepthRemap, Core::DebugViewAspect::Depth},
-    {Key::NUM_2, "Albedo Target", "albedo_target", DebugTransformationType::None, Core::DebugViewAspect::None},
-    {Key::NUM_3, "Normal Target", "normal_target", DebugTransformationType::None, Core::DebugViewAspect::None},
-    {Key::NUM_4, "PBR Target", "pbr_target", DebugTransformationType::None, Core::DebugViewAspect::None},
-    {Key::NUM_5, "Velocity Target", "velocity_target", DebugTransformationType::None, Core::DebugViewAspect::None},
+    {Key::NUM_2, "GBuffer Albedo", "gbuffer_two", DebugTransformationType::GBufferAlbedo, Core::DebugViewAspect::None},
+    {Key::NUM_3, "GBuffer Normal", "gbuffer_one", DebugTransformationType::GBufferNormal, Core::DebugViewAspect::None},
+    {Key::NUM_4, "GBuffer PBR", "gbuffer_one", DebugTransformationType::GBufferPBR, Core::DebugViewAspect::None},
+    {Key::NUM_5, "GBuffer Motion Vectors", "gbuffer_one", DebugTransformationType::GBufferMotionVectors, Core::DebugViewAspect::None},
     {Key::NUM_6, "Motion Blur Tiled Max", "motion_blur_tiled_max", DebugTransformationType::None, Core::DebugViewAspect::None},
     {Key::NUM_7, "Motion Blur Neighbor Max", "motion_blur_tiled_neighbor_max", DebugTransformationType::None, Core::DebugViewAspect::None},
     {Key::NUM_8, "Motion Blur Output", "motion_blur_output", DebugTransformationType::None, Core::DebugViewAspect::None},

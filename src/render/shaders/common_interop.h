@@ -55,7 +55,12 @@ SHADER_PUBLIC SHADER_ENUM DebugTransformationType
     StencilRemap,
     VisBuffTriangle,
     VisBuffMeshlet,
-    VisBuffInstance
+    VisBuffInstance,
+    GBufferNormal,
+    GBufferMotionVectors,
+    GBufferPBR,
+    GBufferAlbedo,
+    GBufferEmissive,
 };
 
 SHADER_PUBLIC struct Frustum
