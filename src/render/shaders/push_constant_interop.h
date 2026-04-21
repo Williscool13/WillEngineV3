@@ -380,8 +380,8 @@ SHADER_PUBLIC struct TemporalAntialiasingPushConstant
     SHADER_PUBLIC uint32_t colorResolvedIndex;
     SHADER_PUBLIC uint32_t depthIndex;
     SHADER_PUBLIC uint32_t colorHistoryIndex;
-    SHADER_PUBLIC uint32_t velocityIndex;
-    SHADER_PUBLIC uint32_t velocityHistoryIndex;
+    SHADER_PUBLIC uint32_t gbufferOneIndex;
+    SHADER_PUBLIC uint32_t gbufferOneHistoryIndex;
     SHADER_PUBLIC uint32_t outputImageIndex;
 };
 

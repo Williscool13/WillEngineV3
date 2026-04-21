@@ -109,7 +109,9 @@ void VisibilityShading(uint3 dtid : SV_DispatchThreadID, uniform VisibilityShadi
     float4 prevClip = mul(pc.sceneData->prevViewProj, mul(m.prevModelMatrix, float4(objPos, 1.0)));
     float2 currNDC = currClip.xy / currClip.w;
     float2 prevNDC = prevClip.xy / prevClip.w;
-    float2 velocity = (currNDC - pc.sceneData->jitter) - (prevNDC - pc.sceneData->prevJitter);
+    float2 velocity = prevNDC - currNDC;
+    velocity -= pc.sceneData->jitter;
+    velocity += pc.sceneData->prevJitter;
 
     uint4 gbufferOne = uint4(
         PackNormalOct16(shadingNormal),

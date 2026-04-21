@@ -119,8 +119,6 @@ private:
     void SetupPortalComposite(RenderGraph& graph, const Core::ViewFamily& renderViewFamily, Core::Array<uint32_t, 2> renderExtent, const MainRenderTargets& targets,
                               const MainRenderTargets& portalTargets) const;
 
-    StringID SetupTemporalAntialiasing(RenderGraph& graph, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const MainRenderTargets& ppTargets) const;
-
     void SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, StringID depthTarget, StringID targetImage, FrameResourceLimits& limits) const;
 
 public:

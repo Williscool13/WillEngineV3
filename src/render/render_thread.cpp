@@ -478,10 +478,14 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
         finalOutput = shadingOutputTarget;
         // bool bHasTAAPass = pipelineManager->IsCategoryReady(PipelineCategory::TAA) && viewFamily.postProcessConfig.bEnableTemporalAntialiasing;
+        if (viewFamily.postProcessConfig.bEnableTemporalAntialiasing) {
+            finalOutput = SetupTemporalAntialiasing(*renderGraph, pipelineManager, viewFamily, renderExtent, mainTargets);
+        }
         // if (bHasTAAPass) {
-        //     taaTargets.finalColor = SetupTemporalAntialiasing(*renderGraph, viewFamily, renderExtent, ppTargets);
+        //
         // }
 
+        mainTargets.outputColor = finalOutput;
         finalOutput = SetupPostProcessing(*renderGraph, pipelineManager, viewFamily, renderExtent, mainTargets, frameBuffer.timeFrame.renderDeltaTime, frameNumber);
 
         SetupDebugRender(*renderGraph, viewFamily, renderExtent, targets.depthStencil, finalOutput, frameResourceLimits);
@@ -1737,112 +1741,6 @@ void RenderThread::SetupPortalComposite(RenderGraph& graph, const Core::ViewFami
 
         vkCmdEndRendering(cmd);
     });
-}
-
-StringID RenderThread::SetupTemporalAntialiasing(RenderGraph& graph, const Core::ViewFamily& viewFamily, const Core::Array<uint32_t, 2> renderExtent, const MainRenderTargets& ppTargets) const
-{
-    graph.CreateTexture(SID("taa_current"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
-    renderGraph->CarryTextureToNextFrame(SID("taa_current"), SID("taa_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
-
-    if (renderGraph->HasTexture(SID("gbuffer_two"))) {
-        renderGraph->CarryTextureToNextFrame(SID("gbuffer_two"), SID("gbuffer_two_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
-    }
-
-    if (!graph.HasTexture(SID("taa_history")) || !graph.HasTexture(SID("velocity_history"))) {
-        RenderPass& taaPass = graph.AddPass(SID("TAA Copy Deferred"), VK_PIPELINE_STAGE_2_COPY_BIT);
-        taaPass.ReadCopyImage(ppTargets.outputColor);
-        taaPass.WriteCopyImage(SID("taa_current"));
-        taaPass.Execute([&, width = renderExtent[0], height = renderExtent[1], ppTargets](VkCommandBuffer cmd) {
-            VkImage drawImage = graph.GetImageHandle(ppTargets.outputColor);
-            VkImage taaImage = graph.GetImageHandle(SID("taa_current"));
-
-            VkImageCopy2 copyRegion{};
-            copyRegion.sType = VK_STRUCTURE_TYPE_IMAGE_COPY_2;
-            copyRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            copyRegion.srcSubresource.layerCount = 1;
-            copyRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            copyRegion.dstSubresource.layerCount = 1;
-            copyRegion.extent = {width, height, 1};
-
-            VkCopyImageInfo2 copyInfo{};
-            copyInfo.sType = VK_STRUCTURE_TYPE_COPY_IMAGE_INFO_2;
-            copyInfo.srcImage = drawImage;
-            copyInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-            copyInfo.dstImage = taaImage;
-            copyInfo.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-            copyInfo.regionCount = 1;
-            copyInfo.pRegions = &copyRegion;
-
-            vkCmdCopyImage2(cmd, &copyInfo);
-        });
-        return ppTargets.outputColor;
-    }
-
-    RenderPass& taaPass = graph.AddPass(SID("TAA Main"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-    taaPass.ReadBuffer(SID("scene_data"));
-    taaPass.ReadSampledImage(ppTargets.outputColor);
-    taaPass.ReadSampledImage(ppTargets.depthStencil);
-    taaPass.ReadSampledImage(SID("taa_history"));
-    taaPass.ReadSampledImage(ppTargets.gbufferTwo);
-    taaPass.ReadSampledImage(SID("velocity_history"));
-    taaPass.WriteStorageImage(SID("taa_current"));
-    taaPass.Execute([&, width = renderExtent[0], height = renderExtent[1], ppTargets](VkCommandBuffer cmd) {
-        TemporalAntialiasingPushConstant pushData{
-            .sceneData = graph.GetBufferAddress(SID("scene_data")),
-            .colorResolvedIndex = graph.GetSampledImageViewDescriptorIndex(ppTargets.outputColor),
-            .depthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(ppTargets.depthStencil),
-            .colorHistoryIndex = graph.GetSampledImageViewDescriptorIndex(SID("taa_history")),
-            .velocityIndex = graph.GetSampledImageViewDescriptorIndex(ppTargets.gbufferTwo),
-            .velocityHistoryIndex = graph.GetSampledImageViewDescriptorIndex(SID("velocity_history")),
-            .outputImageIndex = graph.GetStorageImageViewDescriptorIndex(SID("taa_current")),
-        };
-
-        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("temporal_antialiasing"));
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
-        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(TemporalAntialiasingPushConstant), &pushData);
-
-        uint32_t xDispatch = (width + 15) / 16;
-        uint32_t yDispatch = (height + 15) / 16;
-        vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
-    });
-
-
-    graph.CreateTexture(SID("taa_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
-
-    RenderPass& finalCopyPass = graph.AddPass(SID("TAA Final Copy"), VK_PIPELINE_STAGE_2_BLIT_BIT);
-    finalCopyPass.ReadBlitImage(SID("taa_current"));
-    finalCopyPass.WriteBlitImage(SID("taa_output"));
-    finalCopyPass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
-        VkImage src = graph.GetImageHandle(SID("taa_current"));
-        VkImage dst = graph.GetImageHandle(SID("taa_output"));
-
-        VkOffset3D renderOffset = {static_cast<int32_t>(width), static_cast<int32_t>(height), 1};
-
-        VkImageBlit2 blitRegion{};
-        blitRegion.sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2;
-        blitRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        blitRegion.srcSubresource.layerCount = 1;
-        blitRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        blitRegion.dstSubresource.layerCount = 1;
-        blitRegion.srcOffsets[0] = {0, 0, 0};
-        blitRegion.srcOffsets[1] = renderOffset;
-        blitRegion.dstOffsets[0] = {0, 0, 0};
-        blitRegion.dstOffsets[1] = renderOffset;
-
-        VkBlitImageInfo2 blitInfo{};
-        blitInfo.sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2;
-        blitInfo.srcImage = src;
-        blitInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-        blitInfo.dstImage = dst;
-        blitInfo.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        blitInfo.regionCount = 1;
-        blitInfo.pRegions = &blitRegion;
-        blitInfo.filter = VK_FILTER_LINEAR;
-
-        vkCmdBlitImage2(cmd, &blitInfo);
-    });
-
-    return SID("taa_output");
 }
 
 void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, StringID depthTarget, StringID targetImage,

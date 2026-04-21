@@ -110,7 +110,7 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
         }
         case 11: { // GBufferMotionVectors, R16G16 half in gbuffer_one.g
             float2 mv = UnpackMotionVectors(asuint(srcPixel.y));
-            srcPixel = float4(abs(mv), 0.0, 1.0);
+            srcPixel = float4(abs(mv) * 50, 0.0, 1.0);
             break;
         }
         case 12: { // GBufferPBR, roughness/metallic in gbuffer_one.b; r=roughness g=metallic

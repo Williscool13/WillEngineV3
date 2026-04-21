@@ -71,6 +71,12 @@ void SetupSkyboxRendering(RenderGraph& graph,
                           const MainRenderTargets& targets,
                           uint32_t sceneIndex);
 
+StringID SetupTemporalAntialiasing(RenderGraph& graph,
+                                    PipelineManager* pipelineManager,
+                                    const Core::ViewFamily& viewFamily,
+                                    Core::Array<uint32_t, 2> renderExtent,
+                                    const MainRenderTargets& ppTargets);
+
 StringID SetupPostProcessing(RenderGraph& graph,
                              PipelineManager* pipelineManager,
                              const Core::ViewFamily& viewFamily,

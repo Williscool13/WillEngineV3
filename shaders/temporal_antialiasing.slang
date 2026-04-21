@@ -78,16 +78,15 @@ float3 SampleHistoryCatmullRom(float2 uv) {
 }
 
 // https://www.elopezr.com/temporal-aa-and-the-quest-for-the-holy-trail/ and help from AI
-float2 GetVelocityDilated(float2 uv) {
+float2 GetVelocityDilated(int2 pixelCoord) {
     float maxMagnitude = 0.0;
     float2 dilatedVelocity = float2(0.0);
 
     for (int y = -1; y <= 1; ++y) {
         for (int x = -1; x <= 1; ++x) {
-            float2 offset = float2(x, y) * pc.sceneData.texelSize;
-            float2 sampleUv = uv + offset;
-
-            float2 velocity = rdgTexturesFloat4[pc.velocityIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], sampleUv, 0).rg;
+            int2 sampleCoord = pixelCoord + int2(x, y);
+            uint4 g1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(sampleCoord, 0));
+            float2 velocity = UnpackMotionVectors(g1.g);
             float magnitude = dot(velocity, velocity);
 
             if (magnitude > maxMagnitude) {
@@ -107,7 +106,9 @@ float ComputeVelocityDisocclusion(float2 uv, float2 currentVelocityUV) {
         return 1.0;
     }
 
-    float2 previousVelocityNDC = rdgTexturesFloat4[pc.velocityHistoryIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], historyUv, 0).rg;
+    int2 historyCoord = int2(historyUv * float2(pc.sceneData.mainRenderTargetSize));
+    uint4 histG1 = rdgTexturesUInt4[pc.gbufferOneHistoryIndex].Load(int3(historyCoord, 0));
+    float2 previousVelocityNDC = UnpackMotionVectors(histG1.g);
     float2 previousVelocityUV = previousVelocityNDC * 0.5;
 
     float velocityDelta = length(previousVelocityUV - currentVelocityUV);
@@ -122,36 +123,31 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
     int2 texelCoord = int2(threadID.xy);
     float2 uv = (float2(texelCoord.xy) + 0.5) / float2(pc.sceneData.mainRenderTargetSize);
 
-    float2 velocityNDC = GetVelocityDilated(uv);
-    float2 velocity = velocityNDC * 0.5;
-
-    float velocityDisocclusion = ComputeVelocityDisocclusion(uv, velocity);
-
-    float2 historyUv = uv - velocity;
-    bool validHistory = all(historyUv >= float2(0.0)) && all(historyUv <= float2(1.0));
-
     float3 currentColor = rdgTexturesFloat4[pc.colorResolvedIndex].Load(int3(texelCoord, 0)).rgb;
-    float3 resultRGB;
+    float3 historyColor = rdgTexturesFloat4[pc.colorHistoryIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv, 0).rgb;
 
-    if (!validHistory) {
-        resultRGB = currentColor;
-    } else {
-        float3 currentYCoCg = RGBToYCoCg(currentColor);
-        float3 historyYCoCg = SampleHistoryCatmullRom(historyUv);
-
-        historyYCoCg = VarianceClipping(historyYCoCg, uv);
-
-        float alpha = lerp(0.1, 0.9, velocityDisocclusion);
-
-        float lumaCurrent = currentYCoCg.r;
-        float lumaHistory = historyYCoCg.r;
-        float lumaDiff = abs(lumaCurrent - lumaHistory) / max(lumaCurrent, 0.2);
-        alpha = lerp(alpha, min(alpha * 2.0, 0.5), lumaDiff);
-
-        alpha = 0.1f;
-        float3 resultYCoCg = lerp(historyYCoCg, currentYCoCg, alpha);
-        resultRGB = YCoCgToRGB(resultYCoCg);
-    }
+    float3 resultRGB = lerp(historyColor, currentColor, 0.1);
 
     rdgStorageFloat4[pc.outputImageIndex][threadID.xy] = float4(resultRGB, 1.0);
+
+    // Full TAA (velocity reprojection, variance clipping, luma anti-flicker)
+    // float2 velocityNDC = GetVelocityDilated(texelCoord);
+    // float2 velocity = velocityNDC * 0.5;
+    // float velocityDisocclusion = ComputeVelocityDisocclusion(uv, velocity);
+    // float2 historyUv = uv - velocity;
+    // bool validHistory = all(historyUv >= float2(0.0)) && all(historyUv <= float2(1.0));
+    // if (!validHistory) {
+    //     resultRGB = currentColor;
+    // } else {
+    //     float3 currentYCoCg = RGBToYCoCg(currentColor);
+    //     float3 historyYCoCg = SampleHistoryCatmullRom(historyUv);
+    //     historyYCoCg = VarianceClipping(historyYCoCg, uv);
+    //     float alpha = lerp(0.1, 0.9, velocityDisocclusion);
+    //     float lumaCurrent = currentYCoCg.r;
+    //     float lumaHistory = historyYCoCg.r;
+    //     float lumaDiff = abs(lumaCurrent - lumaHistory) / max(lumaCurrent, 0.2);
+    //     alpha = lerp(alpha, min(alpha * 2.0, 0.5), lumaDiff);
+    //     float3 resultYCoCg = lerp(historyYCoCg, currentYCoCg, alpha);
+    //     resultRGB = YCoCgToRGB(resultYCoCg);
+    // }
 }

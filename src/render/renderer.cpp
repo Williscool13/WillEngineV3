@@ -4,10 +4,12 @@
 
 #include "renderer.h"
 
+#include "render_utils.h"
 #include "pipelines/pipeline_data.h"
 #include "pipelines/pipeline_manager.h"
 #include "render-graph/render_pass.h"
 #include "vulkan/vk_helpers.h"
+#include "vulkan/vk_config.h"
 #include "post-processing/post_processing.h"
 
 namespace Render
@@ -492,7 +494,8 @@ void SetupGeometryPass(RenderGraph& graph,
     instancedMeshShading.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
     instancedMeshShading.ReadBuffer(visibleMeshlets);
     instancedMeshShading.ReadIndirectBuffer(compactedMeshletDispatchArgs);
-    instancedMeshShading.Execute([&, pipelineManager, visibleMeshlets, compactedMeshletDispatchArgs, sceneIndex, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
+    instancedMeshShading.Execute([&, pipelineManager, visibleMeshlets, compactedMeshletDispatchArgs, sceneIndex, width = renderExtent[0], height = renderExtent[1],
+            visibility = targets.visibility, stableId = targets.stableId, depthStencil = targets.depthStencil](VkCommandBuffer cmd) {
         VkViewport viewport = VkHelpers::GenerateViewport(width, height);
         vkCmdSetViewport(cmd, 0, 1, &viewport);
         VkRect2D scissor = VkHelpers::GenerateScissor(width, height);
@@ -501,10 +504,10 @@ void SetupGeometryPass(RenderGraph& graph,
         constexpr VkClearValue uintClear = {.color = {.uint32 = {0u, 0u, 0u, 0u}}};
         constexpr VkClearValue depthClear = {.depthStencil = {0.0f, 0u}};
 
-        auto visibilityAttachment  = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.visibility), &uintClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-        auto stableIdAttachment    = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.stableId), &uintClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-        auto depthAttachment       = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), &depthClear, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
-        auto stencilAttachment     = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targets.depthStencil), &depthClear, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+        auto visibilityAttachment  = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(visibility), &uintClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        auto stableIdAttachment    = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(stableId), &uintClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        auto depthAttachment       = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(depthStencil), &depthClear, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+        auto stencilAttachment     = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(depthStencil), &depthClear, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
         const VkRenderingAttachmentInfo colorAttachments[] = {visibilityAttachment, stableIdAttachment};
         const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, colorAttachments, 2, &depthAttachment, &stencilAttachment);
@@ -559,7 +562,8 @@ void SetupVisibilityBarycentricDerivativePass(RenderGraph& graph,
     visBarDer.ReadBuffer(GEOMETRY_MODEL_BUFFER);
     visBarDer.WriteStorageImage(targets.barycentric);
     visBarDer.WriteStorageImage(targets.derivatives);
-    visBarDer.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1], sceneIndex](VkCommandBuffer cmd) {
+    visBarDer.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1], sceneIndex,
+            visibility = targets.visibility, barycentric = targets.barycentric, derivatives = targets.derivatives](VkCommandBuffer cmd) {
         VisibilityBufferResolvePushConstant pc{
             .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER) + sceneIndex * sizeof(SceneData),
             .vertexPosBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_POSITION_BUFFER),
@@ -571,9 +575,9 @@ void SetupVisibilityBarycentricDerivativePass(RenderGraph& graph,
             .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
             .modelBuffer = graph.GetBufferAddress(GEOMETRY_MODEL_BUFFER),
             .extents = {width, height},
-            .visibilityBufferIndex = graph.GetSampledImageViewDescriptorIndex(targets.visibility),
-            .barycentricTargetIndex = graph.GetStorageImageViewDescriptorIndex(targets.barycentric),
-            .derivativeTargetIndex = graph.GetStorageImageViewDescriptorIndex(targets.derivatives),
+            .visibilityBufferIndex = graph.GetSampledImageViewDescriptorIndex(visibility),
+            .barycentricTargetIndex = graph.GetStorageImageViewDescriptorIndex(barycentric),
+            .derivativeTargetIndex = graph.GetStorageImageViewDescriptorIndex(derivatives),
         };
 
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("visibility_buffer_barycentric_derivative"));
@@ -609,6 +613,7 @@ void SetupVisibilityShadingPass(RenderGraph& graph,
     visShading.WriteStorageImage(targets.gbufferOne);
     visShading.WriteStorageImage(targets.gbufferTwo);
     visShading.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1], sceneIndex,
+            visibility = targets.visibility, barycentric = targets.barycentric, derivatives = targets.derivatives,
             gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo](VkCommandBuffer cmd) {
         VisibilityShadingPushConstant pc{
             .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER) + sceneIndex * sizeof(SceneData),
@@ -622,9 +627,9 @@ void SetupVisibilityShadingPass(RenderGraph& graph,
             .modelBuffer = graph.GetBufferAddress(GEOMETRY_MODEL_BUFFER),
             .materialBuffer = graph.GetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
             .extents = {width, height},
-            .visibilityBufferIndex = graph.GetSampledImageViewDescriptorIndex(targets.visibility),
-            .barycentricBufferIndex = graph.GetStorageImageViewDescriptorIndex(targets.barycentric),
-            .derivativeBufferIndex = graph.GetStorageImageViewDescriptorIndex(targets.derivatives),
+            .visibilityBufferIndex = graph.GetSampledImageViewDescriptorIndex(visibility),
+            .barycentricBufferIndex = graph.GetStorageImageViewDescriptorIndex(barycentric),
+            .derivativeBufferIndex = graph.GetStorageImageViewDescriptorIndex(derivatives),
             .gbufferOneIndex = graph.GetStorageImageViewDescriptorIndex(gbufferOne),
             .gbufferTwoIndex = graph.GetStorageImageViewDescriptorIndex(gbufferTwo),
         };
@@ -928,6 +933,117 @@ void SetupSkyboxRendering(RenderGraph& graph,
 
         vkCmdEndRendering(cmd);
     });
+}
+
+StringID SetupTemporalAntialiasing(RenderGraph& graph,
+                                    PipelineManager* pipelineManager,
+                                    const Core::ViewFamily& viewFamily,
+                                    Core::Array<uint32_t, 2> renderExtent,
+                                    const MainRenderTargets& ppTargets)
+{
+    graph.CreateTexture(SID("taa_current"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
+    graph.CarryTextureToNextFrame(SID("taa_current"), SID("taa_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
+
+    if (graph.HasTexture(ppTargets.gbufferOne)) {
+        graph.CarryTextureToNextFrame(ppTargets.gbufferOne, SID("gbuffer_one_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
+    }
+
+    if (!graph.HasTexture(SID("taa_history")) || !graph.HasTexture(SID("gbuffer_one_history"))) {
+        RenderPass& taaPass = graph.AddPass(SID("TAA Copy Deferred"), VK_PIPELINE_STAGE_2_COPY_BIT);
+        taaPass.ReadCopyImage(ppTargets.outputColor);
+        taaPass.WriteCopyImage(SID("taa_current"));
+        taaPass.Execute([&, width = renderExtent[0], height = renderExtent[1], outputColor = ppTargets.outputColor](VkCommandBuffer cmd) {
+            VkImage drawImage = graph.GetImageHandle(outputColor);
+            VkImage taaImage = graph.GetImageHandle(SID("taa_current"));
+
+            VkImageCopy2 copyRegion{};
+            copyRegion.sType = VK_STRUCTURE_TYPE_IMAGE_COPY_2;
+            copyRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            copyRegion.srcSubresource.layerCount = 1;
+            copyRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            copyRegion.dstSubresource.layerCount = 1;
+            copyRegion.extent = {width, height, 1};
+
+            VkCopyImageInfo2 copyInfo{};
+            copyInfo.sType = VK_STRUCTURE_TYPE_COPY_IMAGE_INFO_2;
+            copyInfo.srcImage = drawImage;
+            copyInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            copyInfo.dstImage = taaImage;
+            copyInfo.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            copyInfo.regionCount = 1;
+            copyInfo.pRegions = &copyRegion;
+
+            vkCmdCopyImage2(cmd, &copyInfo);
+        });
+        return ppTargets.outputColor;
+    }
+
+    RenderPass& taaPass = graph.AddPass(SID("TAA Main"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+    taaPass.ReadBuffer(SID("scene_data"));
+    taaPass.ReadSampledImage(ppTargets.outputColor);
+    taaPass.ReadSampledImage(ppTargets.depthStencil);
+    taaPass.ReadSampledImage(SID("taa_history"));
+    taaPass.ReadSampledImage(ppTargets.gbufferOne);
+    taaPass.ReadSampledImage(SID("gbuffer_one_history"));
+    taaPass.WriteStorageImage(SID("taa_current"));
+    taaPass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1],
+            outputColor = ppTargets.outputColor, depthStencil = ppTargets.depthStencil,
+            gbufferOne = ppTargets.gbufferOne](VkCommandBuffer cmd) {
+        TemporalAntialiasingPushConstant pushData{
+            .sceneData = graph.GetBufferAddress(SID("scene_data")),
+            .colorResolvedIndex = graph.GetSampledImageViewDescriptorIndex(outputColor),
+            .depthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(depthStencil),
+            .colorHistoryIndex = graph.GetSampledImageViewDescriptorIndex(SID("taa_history")),
+            .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
+            .gbufferOneHistoryIndex = graph.GetSampledImageViewDescriptorIndex(SID("gbuffer_one_history")),
+            .outputImageIndex = graph.GetStorageImageViewDescriptorIndex(SID("taa_current")),
+        };
+
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("temporal_antialiasing"));
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(TemporalAntialiasingPushConstant), &pushData);
+
+        uint32_t xDispatch = (width + 15) / 16;
+        uint32_t yDispatch = (height + 15) / 16;
+        vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
+    });
+
+    graph.CreateTexture(SID("taa_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
+
+    RenderPass& finalCopyPass = graph.AddPass(SID("TAA Final Copy"), VK_PIPELINE_STAGE_2_BLIT_BIT);
+    finalCopyPass.ReadBlitImage(SID("taa_current"));
+    finalCopyPass.WriteBlitImage(SID("taa_output"));
+    finalCopyPass.Execute([&, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
+        VkImage src = graph.GetImageHandle(SID("taa_current"));
+        VkImage dst = graph.GetImageHandle(SID("taa_output"));
+
+        VkOffset3D renderOffset = {static_cast<int32_t>(width), static_cast<int32_t>(height), 1};
+
+        VkImageBlit2 blitRegion{};
+        blitRegion.sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2;
+        blitRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        blitRegion.srcSubresource.layerCount = 1;
+        blitRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        blitRegion.dstSubresource.layerCount = 1;
+        blitRegion.srcOffsets[0] = {0, 0, 0};
+        blitRegion.srcOffsets[1] = renderOffset;
+        blitRegion.dstOffsets[0] = {0, 0, 0};
+        blitRegion.dstOffsets[1] = renderOffset;
+
+        VkBlitImageInfo2 blitInfo{};
+        blitInfo.sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2;
+        blitInfo.srcImage = src;
+        blitInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        blitInfo.dstImage = dst;
+        blitInfo.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        blitInfo.regionCount = 1;
+        blitInfo.pRegions = &blitRegion;
+        blitInfo.filter = VK_FILTER_LINEAR;
+
+        vkCmdBlitImage2(cmd, &blitInfo);
+    });
+
+    return SID("taa_output");
 }
 
 StringID SetupPostProcessing(RenderGraph& graph,
