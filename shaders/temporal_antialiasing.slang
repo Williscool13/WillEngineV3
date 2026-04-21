@@ -31,7 +31,7 @@ float3 VarianceClipping(float3 historyColor, float2 uv) {
     float3 variance = squaredSum - mean * mean;
     float3 stddev = sqrt(max(variance, float3(0.0)));
 
-    float3 gamma = float3(1.0, 1.25, 1.25);
+    float3 gamma = float3(1.5, 1.25, 1.25);
     float3 minc = mean - gamma * stddev;
     float3 maxc = mean + gamma * stddev;
 
@@ -123,31 +123,32 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
     int2 texelCoord = int2(threadID.xy);
     float2 uv = (float2(texelCoord.xy) + 0.5) / float2(pc.sceneData.mainRenderTargetSize);
 
-    float3 currentColor = rdgTexturesFloat4[pc.colorResolvedIndex].Load(int3(texelCoord, 0)).rgb;
-    float3 historyColor = rdgTexturesFloat4[pc.colorHistoryIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv, 0).rgb;
+    float2 velocityNDC = GetVelocityDilated(texelCoord);
+    float2 velocity = velocityNDC * 0.5;
+    float2 historyUv = uv + velocity;
+    bool validHistory = all(historyUv >= float2(0.0)) && all(historyUv <= float2(1.0));
 
-    float3 resultRGB = lerp(historyColor, currentColor, 0.1);
+    float velocityDisocclusion = ComputeVelocityDisocclusion(uv, velocity);
+
+    float3 currentColor = rdgTexturesFloat4[pc.colorResolvedIndex].Load(int3(texelCoord, 0)).rgb;
+    float3 resultRGB;
+
+    if (!validHistory) {
+        resultRGB = currentColor;
+    } else {
+        float3 currentYCoCg = RGBToYCoCg(currentColor);
+        float3 historyYCoCg = SampleHistoryCatmullRom(historyUv);
+        historyYCoCg = VarianceClipping(historyYCoCg, uv);
+
+        float alpha = lerp(0.1, 0.9, velocityDisocclusion);
+        float lumaCurrent = currentYCoCg.r;
+        float lumaHistory = historyYCoCg.r;
+        float lumaDiff = abs(lumaCurrent - lumaHistory) / max(lumaCurrent, 0.2);
+        alpha = lerp(alpha, min(alpha * 2.0, 0.5), lumaDiff);
+
+        float3 resultYCoCg = lerp(historyYCoCg, currentYCoCg, alpha);
+        resultRGB = YCoCgToRGB(resultYCoCg);
+    }
 
     rdgStorageFloat4[pc.outputImageIndex][threadID.xy] = float4(resultRGB, 1.0);
-
-    // Full TAA (velocity reprojection, variance clipping, luma anti-flicker)
-    // float2 velocityNDC = GetVelocityDilated(texelCoord);
-    // float2 velocity = velocityNDC * 0.5;
-    // float velocityDisocclusion = ComputeVelocityDisocclusion(uv, velocity);
-    // float2 historyUv = uv - velocity;
-    // bool validHistory = all(historyUv >= float2(0.0)) && all(historyUv <= float2(1.0));
-    // if (!validHistory) {
-    //     resultRGB = currentColor;
-    // } else {
-    //     float3 currentYCoCg = RGBToYCoCg(currentColor);
-    //     float3 historyYCoCg = SampleHistoryCatmullRom(historyUv);
-    //     historyYCoCg = VarianceClipping(historyYCoCg, uv);
-    //     float alpha = lerp(0.1, 0.9, velocityDisocclusion);
-    //     float lumaCurrent = currentYCoCg.r;
-    //     float lumaHistory = historyYCoCg.r;
-    //     float lumaDiff = abs(lumaCurrent - lumaHistory) / max(lumaCurrent, 0.2);
-    //     alpha = lerp(alpha, min(alpha * 2.0, 0.5), lumaDiff);
-    //     float3 resultYCoCg = lerp(historyYCoCg, currentYCoCg, alpha);
-    //     resultRGB = YCoCgToRGB(resultYCoCg);
-    // }
 }
