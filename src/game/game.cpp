@@ -31,6 +31,8 @@
 #include "systems/common_systems.h"
 #include "systems/core_systems.h"
 #include "systems/gameplay_systems.h"
+#include "engine/asset_manager.h"
+#include "systems/scene_system.h"
 
 
 extern "C"
@@ -83,7 +85,17 @@ GAME_API void GameLoad(Engine::EngineContext* ctx, Engine::EngineState* state)
     gResolveStringIdFn = ctx->resolveStringIdFn;
 #endif
 
-    // if not editor, load the "default map", which needs to be stored in some engine config file
+#ifndef WILL_EDITOR
+    if (!state->projectConfig.defaultScene.IsEmpty()) {
+        const auto& sceneCache = ctx->assetManager->GetSceneCache();
+        for (const auto& pair : sceneCache) {
+            if (pair.value.sceneName == state->projectConfig.defaultScene.c_str()) {
+                Game::LoadSceneFromFile(state, ctx->assetManager, pair.key);
+                break;
+            }
+        }
+    }
+#endif
 }
 
 GAME_API void GameUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)

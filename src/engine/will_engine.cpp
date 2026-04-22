@@ -260,6 +260,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
         // todo game state
 
         engineState = new(memoryManager.PersistentAllocRaw(sizeof(EngineState), Core::AllocTag::AssetGenerator)) EngineState(&memoryManager.General());
+        engineState->projectConfig = ReadProjectConfig();
 
 #if LOGGING_ENABLED
         engineContext->engineLogger = engineLogger;

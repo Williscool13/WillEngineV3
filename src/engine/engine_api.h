@@ -20,6 +20,7 @@
 #include "render/interface/render_interface.h"
 #include "physics/physics_config.h"
 #include "resources/scene/scene.h"
+#include "project_config.h"
 
 namespace Core
 {
@@ -230,6 +231,7 @@ struct EngineState
     LightingState lighting;
     EditorState editor;
     DebugState debug;
+    ProjectConfig projectConfig{};
 };
 
 class EngineAPI

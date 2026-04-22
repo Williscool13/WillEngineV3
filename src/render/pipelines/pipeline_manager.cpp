@@ -28,7 +28,7 @@ PipelineManager::PipelineManager(VulkanContext* context, Core::TlsfAllocator& re
 {
     Core::Path cachePath = Platform::GetCachePath() / "pipeline.cache";
 
-    Core::Vector<char> cacheData(&renderAlloc, Core::AllocTag::Render);
+    Core::Vector<char> cacheData(&assetScratchAlloc, Core::AllocTag::Render);
     if (cachePath.Exists()) {
         std::ifstream file(cachePath.c_str(), std::ios::binary | std::ios::ate);
         if (file) {

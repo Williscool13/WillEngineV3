@@ -4,9 +4,11 @@
 
 #include "physics_debug_filter.h"
 
+#ifdef JPH_DEBUG_RENDERER
 namespace Physics
 {
 DebugDrawFilter::DebugDrawFilter(Core::MemoryManager& memoryManager)
     : bodiesToDraw(&memoryManager.Physics(), Core::AllocTag::Physics, 128)
 {}
 } // Physics
+#endif

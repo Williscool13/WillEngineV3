@@ -868,6 +868,16 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
 
         ImGui::TextDisabled("ID: %llu", state->currentSceneId.id);
 
+        ImGui::BeginDisabled(!hasScene);
+        if (ImGui::Button("Set Default")) {
+            state->projectConfig.defaultScene = Core::InlineString<256>(state->currentSceneName.View());
+            Engine::WriteProjectConfig(state->projectConfig);
+        }
+        ImGui::EndDisabled();
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled) && hasScene) {
+            ImGui::SetTooltip("Set '%s' as the scene loaded on startup (non-editor)", state->currentSceneName.c_str());
+        }
+
         ImGui::SeparatorText("New Scene");
         static char newSceneName[128] = "New Scene";
         ImGui::InputText("##new_scene_name", newSceneName, sizeof(newSceneName));

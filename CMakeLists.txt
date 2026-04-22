@@ -43,6 +43,7 @@ if (WILL_ENGINE_ENABLE_VALIDATION)
 endif()
 
 if (WILL_ENGINE_PACKAGED_BUILD)
+    add_compile_definitions(ASSETS_PATH="${CMAKE_SOURCE_DIR}/assets")
     add_compile_definitions(PACKAGED_BUILD)
 else ()
     add_compile_definitions(ASSETS_PATH="${CMAKE_SOURCE_DIR}/assets")
