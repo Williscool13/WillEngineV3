@@ -30,6 +30,7 @@ struct RenderFamilyProperties
     Core::ViewFamily* viewFamily{nullptr};
 
     bool bCanRender{false};
+    bool bWireframe{false};
 
     size_t modelBufferSize{128};
     size_t materialBufferSize{128};
@@ -57,6 +58,7 @@ struct RenderFamilyProperties
     {
         viewFamily = nullptr;
         bCanRender = false;
+        bWireframe = false;
 
         modelBufferSize = 128;
         materialBufferSize = 128;

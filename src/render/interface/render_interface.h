@@ -329,6 +329,7 @@ struct FrameBuffer
     // Debug
     bool bDrawImgui = false;
     bool bFreezeVisibility = false;
+    bool bWireframe = false;
     bool bLogRDG = false;
 
     bool bTakeScreenshot{false};

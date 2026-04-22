@@ -173,6 +173,7 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
     Game::FunctionKeyRenderUpdate(ctx, state, frameBuffer);
 
     Game::BuildViewFamily(state, frameBuffer->mainViewFamily);
+    frameBuffer->bWireframe = state->debug.bWireframe;
     if (state->debug.bEnablePortal) {
         Game::BuildPortalViewFamily(state, frameBuffer->mainViewFamily);
     }

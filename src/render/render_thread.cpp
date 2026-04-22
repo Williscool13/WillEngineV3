@@ -315,6 +315,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
     frameBuffer.stableIdUnderCursor = readbackData->selectedStableId;
 
     RenderFamilyProperties renderFamilyProperties = PrepareRenderFamilyProperties(viewFamily, readbackData, pipelineManager, frameResourceLimits);
+    renderFamilyProperties.bWireframe = frameBuffer.bWireframe;
 
     //
     {
@@ -477,13 +478,9 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
 
         finalOutput = shadingOutputTarget;
-        // bool bHasTAAPass = pipelineManager->IsCategoryReady(PipelineCategory::TAA) && viewFamily.postProcessConfig.bEnableTemporalAntialiasing;
         if (viewFamily.postProcessConfig.bEnableTemporalAntialiasing) {
             finalOutput = SetupTemporalAntialiasing(*renderGraph, pipelineManager, viewFamily, renderExtent, mainTargets);
         }
-        // if (bHasTAAPass) {
-        //
-        // }
 
         mainTargets.outputColor = finalOutput;
         finalOutput = SetupPostProcessing(*renderGraph, pipelineManager, viewFamily, renderExtent, mainTargets, frameBuffer.timeFrame.renderDeltaTime, frameNumber);
@@ -1110,7 +1107,7 @@ void RenderThread::CreatePipelines()
         builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
         builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE);
         builder.SetupDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_GREATER_OR_EQUAL);
-
+        builder.AddDynamicState(VK_DYNAMIC_STATE_POLYGON_MODE_EXT);
 
         builder.SetupRenderer(graphicsColorFormats.Data(), graphicsColorFormats.Size(), DEPTH_ATTACHMENT_FORMAT, DEPTH_ATTACHMENT_FORMAT);
 

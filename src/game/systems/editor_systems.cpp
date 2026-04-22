@@ -172,7 +172,7 @@ void DrawMultiSelectEditor(Engine::EngineContext* ctx, Engine::EngineState* stat
             }
 
             if (folder0Same && firstFolder0Id.IsValid()) {
-            Core::ArenaVector<Core::ShortString> existingFolders1{&ctx->memoryManager->GeneralArena(), 16};
+                Core::ArenaVector<Core::ShortString> existingFolders1{&ctx->memoryManager->GeneralArena(), 16};
                 for (auto e : folderView) {
                     auto& fc = folderView.get<Component::EntityFolderComponent>(e);
                     if (fc.folderHierarchy[0] != firstFolder0Id) {
@@ -495,14 +495,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
     }
 
     if (ImGui::Begin("Debug View")) {
-        /*auto cameraView = state->registry.view<Component::CameraComponent, Component::GameCameraTag, Component::TransformComponent>();
-        const auto& [cam, transform] = cameraView.get(cameraView.front());
-        ImGui::Text("Camera Pos: (%.2f, %.2f, %.2f)",
-                    transform.translation.x, transform.translation.y, transform.translation.z);
-        ImGui::Text("Camera Forward: (%.2f, %.2f, %.2f)",
-                    cam.currentViewData.cameraForward.x,
-                    cam.currentViewData.cameraForward.y,
-                    cam.currentViewData.cameraForward.z);*/
+        ImGui::Checkbox("Wireframe", &state->debug.bWireframe);
 
         ImGui::Text("Current Debug View: %s", state->debug.resourceName.IsEmpty() ? "None" : state->debug.resourceName.c_str());
         ImGui::Checkbox("Enable Portals", &state->debug.bEnablePortal);
@@ -598,8 +591,9 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
     if (ImGui::Begin("Gameplay")) {
         if (state->bIsPlaying) {
             ImGui::Text("Checkpoint ID:       %llu", state->currentCheckpointId.id);
-            ImGui::Text("Checkpoint Priority: %d",   state->currentCheckpointPriority);
-        } else {
+            ImGui::Text("Checkpoint Priority: %d", state->currentCheckpointPriority);
+        }
+        else {
             ImGui::TextDisabled("Not playing");
         }
     }
@@ -1020,8 +1014,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
                 MarkSceneModified(state, state->currentSceneId);
             }
         }
-        ImGui::SameLine();
-        {
+        ImGui::SameLine(); {
             const StringID selectedPrefabId = prefabList.IsEmpty() ? StringID{} : prefabList[selectedPrefab].id;
             bool prefabInUse = false;
             if (!prefabList.IsEmpty()) {
@@ -1143,7 +1136,8 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             char uniqueLabel[256];
             if (isMasterPrefab2) {
                 snprintf(uniqueLabel, sizeof(uniqueLabel), "[M] %s##%llu", e.label, e.stableId);
-            } else {
+            }
+            else {
                 snprintf(uniqueLabel, sizeof(uniqueLabel), "%s##%llu", e.label, e.stableId);
             }
             if (ImGui::Selectable(uniqueLabel, selected)) {
@@ -1151,7 +1145,8 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
                     auto it = std::ranges::find(state->editor.selectedEntities, e.entity);
                     if (it != state->editor.selectedEntities.end()) {
                         state->editor.selectedEntities.Remove(it);
-                    } else {
+                    }
+                    else {
                         state->editor.selectedEntities.PushBack(e.entity);
                     }
                 }
@@ -1182,7 +1177,10 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             if (!e.folder0.IsValid()) continue;
             bool found = false;
             for (auto& f : folders0) {
-                if (f.id == e.folder0) { found = true; break; }
+                if (f.id == e.folder0) {
+                    found = true;
+                    break;
+                }
             }
             if (!found) folders0.PushBack({e.folder0, e.folderName0});
         }
@@ -1206,7 +1204,10 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
                     if (e.folder0 != id0 || !e.folder1.IsValid()) continue;
                     bool found = false;
                     for (auto& sf : subfolders) {
-                        if (sf.id == e.folder1) { found = true; break; }
+                        if (sf.id == e.folder1) {
+                            found = true;
+                            break;
+                        }
                     }
                     if (!found) subfolders.PushBack({e.folder1, e.folderName1});
                 }
@@ -1708,9 +1709,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             if (ImGui::CollapsingHeader(mat.name.c_str())) {
                 ImGui::BeginDisabled(true);
                 ImGui::Text("ID: %llu", id.id);
-                ImGui::EndDisabled();
-
-                {
+                ImGui::EndDisabled(); {
                     const auto& entryMap = materialManager->GetIdToEntryMap();
                     const bool materialInUse = entryMap.Contains(id) && materialManager->GetActiveMaterials()[entryMap.At(id)].refCounter > 0;
                     ImGui::BeginDisabled(materialInUse);
@@ -1944,7 +1943,8 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
     if (ImGui::Begin("Textures")) {
         const auto& texCache = ctx->assetManager->GetTextureCache();
 
-        struct TextureEntry {
+        struct TextureEntry
+        {
             Core::InlineString<128> name;
             uint32_t width;
             uint32_t height;

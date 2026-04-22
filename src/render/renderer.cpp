@@ -495,11 +495,13 @@ void SetupGeometryPass(RenderGraph& graph,
     instancedMeshShading.ReadBuffer(visibleMeshlets);
     instancedMeshShading.ReadIndirectBuffer(compactedMeshletDispatchArgs);
     instancedMeshShading.Execute([&, pipelineManager, visibleMeshlets, compactedMeshletDispatchArgs, sceneIndex, width = renderExtent[0], height = renderExtent[1],
+            bWireframe = renderFamilyProperties.bWireframe,
             visibility = targets.visibility, stableId = targets.stableId, depthStencil = targets.depthStencil](VkCommandBuffer cmd) {
         VkViewport viewport = VkHelpers::GenerateViewport(width, height);
         vkCmdSetViewport(cmd, 0, 1, &viewport);
         VkRect2D scissor = VkHelpers::GenerateScissor(width, height);
         vkCmdSetScissor(cmd, 0, 1, &scissor);
+        vkCmdSetPolygonModeEXT(cmd, bWireframe ? VK_POLYGON_MODE_LINE : VK_POLYGON_MODE_FILL);
 
         constexpr VkClearValue uintClear = {.color = {.uint32 = {0u, 0u, 0u, 0u}}};
         constexpr VkClearValue depthClear = {.depthStencil = {0.0f, 0u}};

@@ -170,6 +170,7 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
     VkPhysicalDeviceFeatures features10{};
     VkPhysicalDeviceDescriptorBufferFeaturesEXT descriptorBufferFeatures{.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT};
     VkPhysicalDeviceMeshShaderFeaturesEXT meshShaderFeatures{.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT};
+    VkPhysicalDeviceExtendedDynamicState3FeaturesEXT extendedDynamicState3Features{.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT};
     VkPhysicalDeviceMaintenance9FeaturesKHR maintenance9Features{.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_9_FEATURES_KHR};
 
     // --- Physical Device Selection ---
@@ -178,6 +179,7 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
         requiredDeviceExtensions.PushBack(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
         requiredDeviceExtensions.PushBack(VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME);
         requiredDeviceExtensions.PushBack(VK_EXT_MESH_SHADER_EXTENSION_NAME);
+        requiredDeviceExtensions.PushBack(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME);
 #if PROFILER_ENABLED
         requiredDeviceExtensions.PushBack(VK_EXT_CALIBRATED_TIMESTAMPS_EXTENSION_NAME);
 #endif
@@ -239,12 +241,14 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
             VkPhysicalDeviceVulkan11Features q11{.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES};
             VkPhysicalDeviceDescriptorBufferFeaturesEXT qDesc{.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT};
             VkPhysicalDeviceMeshShaderFeaturesEXT qMesh{.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT};
+            VkPhysicalDeviceExtendedDynamicState3FeaturesEXT qExtDynState3{.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT};
 
             query.pNext = &q13;
             q13.pNext = &q12;
             q12.pNext = &q11;
             q11.pNext = &qDesc;
             qDesc.pNext = &qMesh;
+            qMesh.pNext = &qExtDynState3;
 
             vkGetPhysicalDeviceFeatures2(pd, &query);
 
@@ -280,7 +284,8 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
                     // Extensions
                     qDesc.descriptorBuffer &&
                     qMesh.taskShader &&
-                    qMesh.meshShader;
+                    qMesh.meshShader &&
+                    qExtDynState3.extendedDynamicState3PolygonMode;
 
             if (!hasFeatures) {
                 continue;
@@ -385,6 +390,7 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
         // Gather / clip
         features10.shaderImageGatherExtended = VK_TRUE;
         features10.shaderClipDistance = VK_TRUE;
+        features10.fillModeNonSolid = VK_TRUE;
 #ifdef ENABLE_VULKAN_VALIDATION
         // Suppresses a false-positive validation error: SV_PrimitiveID in mesh shaders
         // triggers a geometry shader requirement check that doesn't apply here.
@@ -395,6 +401,7 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
         descriptorBufferFeatures.descriptorBuffer = VK_TRUE;
         meshShaderFeatures.taskShader = VK_TRUE;
         meshShaderFeatures.meshShader = VK_TRUE;
+        extendedDynamicState3Features.extendedDynamicState3PolygonMode = VK_TRUE;
         if (bMaintenance9Enabled) {
             maintenance9Features.maintenance9 = VK_TRUE;
         }
@@ -403,12 +410,14 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
         features12.pNext = &features11;
         features11.pNext = &descriptorBufferFeatures;
         descriptorBufferFeatures.pNext = &meshShaderFeatures;
-        meshShaderFeatures.pNext = bMaintenance9Enabled ? static_cast<void*>(&maintenance9Features) : nullptr;
+        meshShaderFeatures.pNext = &extendedDynamicState3Features;
+        extendedDynamicState3Features.pNext = bMaintenance9Enabled ? static_cast<void*>(&maintenance9Features) : nullptr;
 
         Core::InlineVector<const char*, 8> deviceExts;
         deviceExts.PushBack(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
         deviceExts.PushBack(VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME);
         deviceExts.PushBack(VK_EXT_MESH_SHADER_EXTENSION_NAME);
+        deviceExts.PushBack(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME);
 #if PROFILER_ENABLED
         deviceExts.PushBack(VK_EXT_CALIBRATED_TIMESTAMPS_EXTENSION_NAME);
 #endif

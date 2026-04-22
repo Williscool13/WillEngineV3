@@ -189,6 +189,7 @@ struct EditorState
 
 struct DebugState
 {
+    bool bWireframe = false;
     bool bEnablePortal{true};
     Core::InlineString<> resourceName{};
     DebugTransformationType transformationType{};
