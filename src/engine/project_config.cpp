@@ -14,7 +14,7 @@ namespace Engine
 {
 static Core::Path GetProjectConfigPath()
 {
-    return Platform::GetAssetPath().Parent() / "project.wconfig";
+    return Platform::GetConfigPath() / "project.wconfig";
 }
 
 ProjectConfig ReadProjectConfig()

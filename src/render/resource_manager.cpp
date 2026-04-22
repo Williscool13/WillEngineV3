@@ -69,7 +69,9 @@ ResourceManager::ResourceManager(VulkanContext* context)
         RDG_MAX_SAMPLED_FLOAT,
         RDG_MAX_SAMPLED_UINT4,
         RDG_MAX_SAMPLED_UINT2,
-        RDG_MAX_SAMPLED_UINT
+        RDG_MAX_SAMPLED_UINT,
+        RDG_MAX_MULTISAMPLED_IMAGE,
+        RDG_MAX_MULTISAMPLED_UINT_IMAGE
     >(context);
 
     bufferInfo.usage = VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_2_TRANSFER_DST_BIT;

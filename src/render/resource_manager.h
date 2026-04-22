@@ -76,7 +76,9 @@ struct ResourceManager
         RDG_MAX_SAMPLED_FLOAT,
         RDG_MAX_SAMPLED_UINT4,
         RDG_MAX_SAMPLED_UINT2,
-        RDG_MAX_SAMPLED_UINT
+        RDG_MAX_SAMPLED_UINT,
+        RDG_MAX_MULTISAMPLED_IMAGE,
+        RDG_MAX_MULTISAMPLED_UINT_IMAGE
     > bindlessRDGTransientDescriptorBuffer{};
 
     AllocatedBuffer debugReadbackBuffer;

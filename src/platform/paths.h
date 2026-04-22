@@ -26,6 +26,8 @@ const Core::Path& GetShaderPath();
 const Core::Path& GetAssetPath();
 
 const Core::Path& GetCachePath();
+
+const Core::Path& GetConfigPath();
 }
 
 #endif //WILL_ENGINE_PLATFORM_H

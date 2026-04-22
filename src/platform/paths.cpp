@@ -87,4 +87,18 @@ const Core::Path& GetCachePath()
     }();
     return path;
 }
+
+const Core::Path& GetConfigPath()
+{
+    static const Core::Path path = []() {
+#ifndef PACKAGED_BUILD
+        Core::Path p = GetAssetPath() / "config";
+#else
+        Core::Path p = GetExecutablePath() / "config";
+#endif
+        CreateDirectories(p.c_str());
+        return p;
+    }();
+    return path;
+}
 } // Platform
