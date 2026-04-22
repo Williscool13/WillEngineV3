@@ -69,10 +69,10 @@ GAME_API void GameLoad(Engine::EngineContext* ctx, Engine::EngineState* state)
     ImGui::SetAllocatorFunctions(ctx->imguiAllocFn, ctx->imguiFreeFn, ctx->imguiAllocUserData);
 
     ctx->physicsSystem->RegisterPhysics();
+    ctx->scheduler->RegisterExternalTaskThread();
 #endif
 
     Audio::AudioManager::RegisterAudio();
-    ctx->scheduler->RegisterExternalTaskThread();
     Game::RegisterComponents(state->componentRegistry);
     Game::ConnectPhysicsObservers(state->registry);
     Game::ConnectCommonObservers(state->registry);
@@ -117,6 +117,8 @@ GAME_API void GameUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
     else {
 #if WILL_EDITOR
         Game::UpdateEditorCamera(ctx, state);
+#else
+    Game::PlayStart(ctx, state);
 #endif
     }
 
@@ -193,9 +195,11 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
 
 GAME_API void GameUnload(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
+#ifndef GAME_STATIC
     if (ctx->scheduler) {
         ctx->scheduler->DeRegisterExternalTaskThread();
     }
+#endif
 }
 
 GAME_API void GameShutdown(Engine::EngineContext* ctx, Engine::EngineState* state)

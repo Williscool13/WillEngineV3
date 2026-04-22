@@ -266,6 +266,10 @@ struct ViewFamily
     ViewFamily() = default;
     explicit ViewFamily(TlsfAllocator& allocator);
     ~ViewFamily() = default;
+    ViewFamily(const ViewFamily&) = default;
+    ViewFamily& operator=(const ViewFamily&) = default;
+    ViewFamily(ViewFamily&&) = default;
+    ViewFamily& operator=(ViewFamily&&) = default;
 
 
     CustomShaderDraw& GetOrCreateCustomShaderDraw(StringID id);
@@ -308,6 +312,10 @@ struct FrameBuffer
     FrameBuffer() = default;
     explicit FrameBuffer(TlsfAllocator& allocator);
     ~FrameBuffer() = default;
+    FrameBuffer(const FrameBuffer&) = default;
+    FrameBuffer& operator=(const FrameBuffer&) = default;
+    FrameBuffer(FrameBuffer&&) = default;
+    FrameBuffer& operator=(FrameBuffer&&) = default;
 
     // To allocate containers. Nothing else.
     TlsfAllocator* allocator{nullptr};

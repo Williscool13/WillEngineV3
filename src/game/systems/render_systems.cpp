@@ -306,7 +306,7 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
             if (runtime.primitives.IsEmpty()) { continue; }
             if (renderable.modelFlags.x == 0.0f) { continue; }
             auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.Size());
-            frameBuffer->mainViewFamily.modelMatrices.PushBack({renderTransform.modelMatrix, renderTransform.previousMatrix});
+            frameBuffer->mainViewFamily.modelMatrices.EmplaceBack(renderTransform.modelMatrix, renderTransform.previousMatrix);
 
             uint64_t stableId = 1234567890;
             if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
@@ -392,7 +392,7 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
             if (renderable.modelFlags.x == 0.0f) { continue; }
 
             auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.Size());
-            frameBuffer->mainViewFamily.modelMatrices.PushBack({renderTransform.modelMatrix, renderTransform.previousMatrix});
+            frameBuffer->mainViewFamily.modelMatrices.EmplaceBack(renderTransform.modelMatrix, renderTransform.previousMatrix);
 
             uint64_t stableId = 1234567890;
             if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
@@ -416,7 +416,7 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
             if (renderable.modelFlags.x == 0.0f) { continue; }
 
             auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.Size());
-            frameBuffer->mainViewFamily.modelMatrices.PushBack({renderTransform.modelMatrix, renderTransform.previousMatrix});
+            frameBuffer->mainViewFamily.modelMatrices.EmplaceBack(renderTransform.modelMatrix, renderTransform.previousMatrix);
 
             uint64_t stableId = 1234567890;
             if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {

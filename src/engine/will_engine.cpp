@@ -1234,12 +1234,12 @@ void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
 
 void WillEngine::Cleanup()
 {
+    scheduler->WaitforAll();
+
     gameFunctions.gameUnload(engineContext, engineState);
     gameFunctions.gameShutdown(engineContext, engineState);
     engineState->~EngineState();
-
-
-    scheduler->WaitforAllAndShutdown();
+    scheduler->ShutdownNow();
     engineContext->scheduler = nullptr;
     engineContext->~EngineContext();
 
