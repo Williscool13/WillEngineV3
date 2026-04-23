@@ -479,7 +479,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
         finalOutput = shadingOutputTarget;
         if (viewFamily.postProcessConfig.bEnableTemporalAntialiasing) {
-            finalOutput = SetupTemporalAntialiasing(*renderGraph, pipelineManager, viewFamily, renderExtent, mainTargets);
+            finalOutput = SetupTemporalAntiAliasing(*renderGraph, pipelineManager, viewFamily, renderExtent, mainTargets);
         }
 
         mainTargets.outputColor = finalOutput;
@@ -1016,6 +1016,13 @@ void RenderThread::CreatePipelines()
 
     pipelineManager->RegisterComputePipeline(SID("temporal_antialiasing"), Platform::GetShaderPath() / "temporal_antialiasing_compute.spv",
                                              sizeof(TemporalAntialiasingPushConstant), PipelineCategory::Legacy);
+
+    pipelineManager->RegisterComputePipeline(SID("smaa_edge_detection"), Platform::GetShaderPath() / "smaa_edge_detection_compute.spv",
+                                             sizeof(SmaaEdgeDetectionPushConstant), PipelineCategory::Critical);
+    pipelineManager->RegisterComputePipeline(SID("smaa_blend_weight"), Platform::GetShaderPath() / "smaa_blend_weight_compute.spv",
+                                             sizeof(SmaaBlendWeightPushConstant), PipelineCategory::Critical);
+    pipelineManager->RegisterComputePipeline(SID("smaa_neighborhood_blend"), Platform::GetShaderPath() / "smaa_neighborhood_blend_compute.spv",
+                                             sizeof(SmaaNeighborhoodBlendPushConstant), PipelineCategory::Critical);
 
     pipelineManager->RegisterComputePipeline(SID("gtao_depth_prepass"), Platform::GetShaderPath() / "gtao_depth_prepass_compute.spv",
                                              sizeof(GTAODepthPrepassPushConstant), PipelineCategory::Critical);

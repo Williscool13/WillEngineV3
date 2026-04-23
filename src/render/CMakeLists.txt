@@ -169,6 +169,7 @@ function(compile_shader TARGET SHADER_SOURCE STAGE ENTRY)
             -entry ${ENTRY}
             -stage ${STAGE}
             -I ${SHADER_INCLUDE_DIR}
+            -I ${CMAKE_SOURCE_DIR}/shaders
             -o ${SHADER_OUTPUT}
             DEPENDS ${SHADER_SOURCE_ABS} ${INTEROP_FILES} ${INCLUDE_FILES}
             COMMENT "Compiling ${STAGE} shader: ${SHADER_NAME}_${STAGE}.spv"

@@ -385,6 +385,30 @@ SHADER_PUBLIC struct TemporalAntialiasingPushConstant
     SHADER_PUBLIC uint32_t outputImageIndex;
 };
 
+SHADER_PUBLIC struct SmaaEdgeDetectionPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC uint32_t colorIndex;
+    SHADER_PUBLIC uint32_t outputEdgeIndex;
+};
+
+SHADER_PUBLIC struct SmaaBlendWeightPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC uint32_t edgeIndex;
+    SHADER_PUBLIC uint32_t areaTexIndex;
+    SHADER_PUBLIC uint32_t searchTexIndex;
+    SHADER_PUBLIC uint32_t outputBlendIndex;
+};
+
+SHADER_PUBLIC struct SmaaNeighborhoodBlendPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC uint32_t colorIndex;
+    SHADER_PUBLIC uint32_t blendWeightIndex;
+    SHADER_PUBLIC uint32_t outputIndex;
+};
+
 SHADER_PUBLIC struct TonemapSDRPushConstant
 {
     // 0=ACES, 1=Uncharted2, 2=Reinhard, 3=Lottes

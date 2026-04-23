@@ -937,11 +937,17 @@ void SetupSkyboxRendering(RenderGraph& graph,
     });
 }
 
-StringID SetupTemporalAntialiasing(RenderGraph& graph,
-                                    PipelineManager* pipelineManager,
-                                    const Core::ViewFamily& viewFamily,
-                                    Core::Array<uint32_t, 2> renderExtent,
-                                    const MainRenderTargets& ppTargets)
+StringID SetupSubpixelMorphologicalAntiAliasing(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent,
+    const MainRenderTargets& ppTargets)
+{
+    return ppTargets.outputColor;
+}
+
+StringID SetupTemporalAntiAliasing(RenderGraph& graph,
+                                   PipelineManager* pipelineManager,
+                                   const Core::ViewFamily& viewFamily,
+                                   Core::Array<uint32_t, 2> renderExtent,
+                                   const MainRenderTargets& ppTargets)
 {
     graph.CreateTexture(SID("taa_current"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
     graph.CarryTextureToNextFrame(SID("taa_current"), SID("taa_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
