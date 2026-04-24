@@ -175,6 +175,7 @@ ResourceManager::ResourceManager(VulkanContext* context)
 #if WILL_EDITOR
     environmentMapGenerateResources = Editor::EnvironmentMapGenerateResources(context);
     brdfLutGenerateResources = Render::BindlessResourcesStorage<1>(context);
+    smaaLookupGenerateResources = Render::BindlessResourcesStorage<1>(context);
 #endif
 }
 } // Render

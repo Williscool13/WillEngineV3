@@ -138,6 +138,8 @@ public:
 
     void GenerateBRDFLUT(const Core::Path& outputFile);
 
+    void GenerateSMAATextures(const Core::Path& parentDirectory);
+
     const Core::Array<StaticModelGenerationProgress, MODEL_GENERATION_JOB_COUNT>& GetModelGenerationProgresses() const { return modelGenerationProgress; }
     const Core::Path& GetModelGenerateSlotPath(uint32_t index) const { return modelGenerateTasks[index].gltfPath; }
 

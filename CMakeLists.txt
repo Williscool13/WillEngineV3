@@ -368,6 +368,9 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/environment_map.slang fragment FragmentSkybox environment_map_skybox
 
         ${CMAKE_SOURCE_DIR}/shaders/brdf_lut.slang compute ComputeBRDFLUT brdf_lut_generate
+
+        ${CMAKE_SOURCE_DIR}/shaders/anti-aliasing/subpixel_morphological_area_generate.slang compute GenerateSMAAArea smaa_area_generate
+        ${CMAKE_SOURCE_DIR}/shaders/anti-aliasing/subpixel_morphological_search_generate.slang compute GenerateSMAASearch smaa_search_generate
 )
 
 # Post-Build Commands =========================

@@ -57,6 +57,7 @@ struct ResourceManager
 #if WILL_EDITOR
     Editor::EnvironmentMapGenerateResources environmentMapGenerateResources{};
     BindlessResourcesStorage<1> brdfLutGenerateResources{};
+    BindlessResourcesStorage<1> smaaLookupGenerateResources{};
 #endif
 
     VkSampler pointSampler;

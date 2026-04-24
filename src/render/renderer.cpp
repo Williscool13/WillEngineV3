@@ -940,7 +940,80 @@ void SetupSkyboxRendering(RenderGraph& graph,
 StringID SetupSubpixelMorphologicalAntiAliasing(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent,
     const MainRenderTargets& ppTargets)
 {
-    return ppTargets.outputColor;
+    graph.CreateTexture(SID("smaa_edges"), TextureInfo{VK_FORMAT_R8G8_UNORM, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
+    graph.CreateTexture(SID("smaa_blend"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
+    graph.CreateTexture(SID("smaa_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
+
+    // Pass 1: Edge Detection
+    RenderPass& edgePass = graph.AddPass(SID("SMAA Edge Detection"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+    edgePass.ReadBuffer(SID("scene_data"));
+    edgePass.ReadSampledImage(ppTargets.outputColor);
+    edgePass.WriteStorageImage(SID("smaa_edges"));
+    edgePass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1],
+            outputColor = ppTargets.outputColor](VkCommandBuffer cmd) {
+        SmaaEdgeDetectionPushConstant pushData{
+            .sceneData = graph.GetBufferAddress(SID("scene_data")),
+            .colorIndex = graph.GetSampledImageViewDescriptorIndex(outputColor),
+            .outputEdgeIndex = graph.GetStorageImageViewDescriptorIndex(SID("smaa_edges")),
+        };
+
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("smaa_edge_detection"));
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(SmaaEdgeDetectionPushConstant), &pushData);
+
+        uint32_t xDispatch = (width + 15) / 16;
+        uint32_t yDispatch = (height + 15) / 16;
+        vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
+    });
+
+    // Pass 2: Blend Weight Calculation
+    RenderPass& blendPass = graph.AddPass(SID("SMAA Blend Weight"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+    blendPass.ReadBuffer(SID("scene_data"));
+    blendPass.ReadSampledImage(SID("smaa_edges"));
+    blendPass.WriteStorageImage(SID("smaa_blend"));
+    blendPass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
+        SmaaBlendWeightPushConstant pushData{
+            .sceneData = graph.GetBufferAddress(SID("scene_data")),
+            .edgeIndex = graph.GetSampledImageViewDescriptorIndex(SID("smaa_edges")),
+            .areaTexIndex = 0,   // TODO: bind precomputed SMAA area texture
+            .searchTexIndex = 0, // TODO: bind precomputed SMAA search texture
+            .outputBlendIndex = graph.GetStorageImageViewDescriptorIndex(SID("smaa_blend")),
+        };
+
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("smaa_blend_weight"));
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(SmaaBlendWeightPushConstant), &pushData);
+
+        uint32_t xDispatch = (width + 15) / 16;
+        uint32_t yDispatch = (height + 15) / 16;
+        vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
+    });
+
+    // Pass 3: Neighborhood Blending
+    RenderPass& neighborhoodPass = graph.AddPass(SID("SMAA Neighborhood Blend"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+    neighborhoodPass.ReadBuffer(SID("scene_data"));
+    neighborhoodPass.ReadSampledImage(ppTargets.outputColor);
+    neighborhoodPass.ReadSampledImage(SID("smaa_blend"));
+    neighborhoodPass.WriteStorageImage(SID("smaa_output"));
+    neighborhoodPass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1],
+            outputColor = ppTargets.outputColor](VkCommandBuffer cmd) {
+        SmaaNeighborhoodBlendPushConstant pushData{
+            .sceneData = graph.GetBufferAddress(SID("scene_data")),
+            .colorIndex = graph.GetSampledImageViewDescriptorIndex(outputColor),
+            .blendWeightIndex = graph.GetSampledImageViewDescriptorIndex(SID("smaa_blend")),
+            .outputIndex = graph.GetStorageImageViewDescriptorIndex(SID("smaa_output")),
+        };
+
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("smaa_neighborhood_blend"));
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(SmaaNeighborhoodBlendPushConstant), &pushData);
+
+        uint32_t xDispatch = (width + 15) / 16;
+        uint32_t yDispatch = (height + 15) / 16;
+        vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
+    });
+
+    return SID("smaa_output");
 }
 
 StringID SetupTemporalAntiAliasing(RenderGraph& graph,

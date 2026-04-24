@@ -902,6 +902,7 @@ void WillEngine::EditorImgui()
                 true,
                 DXGI_FORMAT_BC7_UNORM_SRGB);
             assetGenerator->GenerateBRDFLUT(Platform::GetAssetPath() / "textures/brdf_lut.wtexture");
+            assetGenerator->GenerateSMAATextures(Platform::GetAssetPath() / "textures");
         }
 
         ImGui::Separator();

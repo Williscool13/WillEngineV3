@@ -681,4 +681,14 @@ SHADER_PUBLIC struct BRDFLUTPushConstant
     SHADER_PUBLIC uint32_t targetIndex;
 };
 
+SHADER_PUBLIC struct SMAAAreaGeneratePushConstant
+{
+    SHADER_PUBLIC uint32_t targetIndex;
+};
+
+SHADER_PUBLIC struct SMAASearchGeneratePushConstant
+{
+    SHADER_PUBLIC uint32_t targetIndex;
+};
+
 #endif //WILL_ENGINE_PUSH_CONSTANT_INTEROP_H

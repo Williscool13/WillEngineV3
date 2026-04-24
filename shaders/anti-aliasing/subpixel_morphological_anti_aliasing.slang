@@ -2,20 +2,15 @@ import common_interop;
 import push_constant_interop;
 import constants_interop;
 import bindless_declarations;
+import shader_functions;
 
-static const float  SMAA_THRESHOLD                      = 0.1;
-static const float  SMAA_LOCAL_CONTRAST_ADAPTATION      = 2.0;
-static const int    SMAA_MAX_SEARCH_STEPS               = 32;
-static const float  SMAA_AREATEX_MAX_DISTANCE           = 16.0;
-static const float2 SMAA_AREATEX_PIXEL_SIZE             = float2(1.0 / 160.0, 1.0 / 560.0);
-static const float  SMAA_AREATEX_SUBTEX_SIZE            = 1.0 / 7.0;
-static const float  SMAA_CORNER_ROUNDING                = 0.25;
-
-// ---- Helpers ----
-float Luma(float3 c)
-{
-    return dot(c, float3(0.2126, 0.7152, 0.0722));
-}
+static const float SMAA_THRESHOLD = 0.1;
+static const float SMAA_LOCAL_CONTRAST_ADAPTATION = 2.0;
+static const int SMAA_MAX_SEARCH_STEPS = 32;
+static const float SMAA_AREATEX_MAX_DISTANCE = 16.0;
+static const float2 SMAA_AREATEX_PIXEL_SIZE = float2(1.0 / 160.0, 1.0 / 560.0);
+static const float SMAA_AREATEX_SUBTEX_SIZE = 1.0 / 7.0;
+static const float SMAA_CORNER_ROUNDING = 0.25;
 
 // Searches along a row for the farthest edge in one direction.
 // Returns the UV of the stopping point.
@@ -83,8 +78,8 @@ void DetectHorizontalCornerPattern(uint edgeIndex, inout float2 weights, float2 
     float2 rounding = SMAA_CORNER_ROUNDING * leftRight;
 
     float2 factor = float2(1.0, 1.0);
-    factor.x -= rounding.x * rdgTexturesFloat2[edgeIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2(0.0,  texelSize.y), 0).r;
-    factor.x -= rounding.y * rdgTexturesFloat2[edgeIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2(d.x,  texelSize.y) * texelSize, 0).r;
+    factor.x -= rounding.x * rdgTexturesFloat2[edgeIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2(0.0, texelSize.y), 0).r;
+    factor.x -= rounding.y * rdgTexturesFloat2[edgeIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2(d.x, texelSize.y) * texelSize, 0).r;
     factor.y -= rounding.x * rdgTexturesFloat2[edgeIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2(0.0, -texelSize.y), 0).r;
     factor.y -= rounding.y * rdgTexturesFloat2[edgeIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2(d.x, -texelSize.y) * texelSize, 0).r;
 
@@ -97,8 +92,8 @@ void DetectVerticalCornerPattern(uint edgeIndex, inout float2 weights, float2 uv
     float2 rounding = SMAA_CORNER_ROUNDING * leftRight;
 
     float2 factor = float2(1.0, 1.0);
-    factor.x -= rounding.x * rdgTexturesFloat2[edgeIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( texelSize.x, 0.0), 0).g;
-    factor.x -= rounding.y * rdgTexturesFloat2[edgeIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2( texelSize.x, d.x) * texelSize, 0).g;
+    factor.x -= rounding.x * rdgTexturesFloat2[edgeIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2(texelSize.x, 0.0), 0).g;
+    factor.x -= rounding.y * rdgTexturesFloat2[edgeIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2(texelSize.x, d.x) * texelSize, 0).g;
     factor.y -= rounding.x * rdgTexturesFloat2[edgeIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2(-texelSize.x, 0.0), 0).g;
     factor.y -= rounding.y * rdgTexturesFloat2[edgeIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + float2(-texelSize.x, d.x) * texelSize, 0).g;
 
@@ -114,17 +109,17 @@ void EdgeDetectionMain(uniform SmaaEdgeDetectionPushConstant pc, uint3 threadID 
 {
     if (threadID.x >= uint(pc.sceneData.mainRenderTargetSize.x) || threadID.y >= uint(pc.sceneData.mainRenderTargetSize.y)) { return; }
 
-    int2 coord    = int2(threadID.xy);
-    float2 uv     = (float2(coord) + 0.5) * pc.sceneData.texelSize;
-    float2 tsize  = pc.sceneData.texelSize;
+    int2 coord = int2(threadID.xy);
+    float2 uv = (float2(coord) + 0.5) * pc.sceneData.texelSize;
+    float2 tsize = pc.sceneData.texelSize;
 
-    float3 cc = rdgTexturesFloat4[pc.colorIndex].Load(int3(coord,             0)).rgb;
-    float3 cl = rdgTexturesFloat4[pc.colorIndex].Load(int3(coord + int2(-1,0), 0)).rgb;
-    float3 ct = rdgTexturesFloat4[pc.colorIndex].Load(int3(coord + int2(0,-1), 0)).rgb;
+    float3 cc = rdgTexturesFloat4[pc.colorIndex].Load(int3(coord, 0)).rgb;
+    float3 cl = rdgTexturesFloat4[pc.colorIndex].Load(int3(coord + int2(-1, 0), 0)).rgb;
+    float3 ct = rdgTexturesFloat4[pc.colorIndex].Load(int3(coord + int2(0, -1), 0)).rgb;
 
-    float L    = Luma(cc);
-    float Ll   = Luma(cl);
-    float Lt   = Luma(ct);
+    float L = Luma(cc);
+    float Ll = Luma(cl);
+    float Lt = Luma(ct);
 
     float2 delta = abs(float2(L - Ll, L - Lt));
     float2 edges = step(SMAA_THRESHOLD, delta);
@@ -132,8 +127,8 @@ void EdgeDetectionMain(uniform SmaaEdgeDetectionPushConstant pc, uint3 threadID 
     // Local contrast adaptation: suppress edges that are weaker than their surroundings
     float3 cr = rdgTexturesFloat4[pc.colorIndex].Load(int3(coord + int2(1, 0), 0)).rgb;
     float3 cb = rdgTexturesFloat4[pc.colorIndex].Load(int3(coord + int2(0, 1), 0)).rgb;
-    float Lr   = Luma(cr);
-    float Lb   = Luma(cb);
+    float Lr = Luma(cr);
+    float Lb = Luma(cb);
 
     float2 maxDelta = max(delta, abs(float2(L - Lr, L - Lb)));
 
@@ -156,34 +151,28 @@ void BlendWeightMain(uniform SmaaBlendWeightPushConstant pc, uint3 threadID : SV
 {
     if (threadID.x >= uint(pc.sceneData.mainRenderTargetSize.x) || threadID.y >= uint(pc.sceneData.mainRenderTargetSize.y)) { return; }
 
-    int2  coord   = int2(threadID.xy);
-    float2 uv     = (float2(coord) + 0.5) * pc.sceneData.texelSize;
-    float2 tsize  = pc.sceneData.texelSize;
+    int2 coord = int2(threadID.xy);
+    float2 uv = (float2(coord) + 0.5) * pc.sceneData.texelSize;
+    float2 tsize = pc.sceneData.texelSize;
 
     float4 weights = float4(0.0);
-
     float2 e = rdgTexturesFloat2[pc.edgeIndex].Load(int3(coord, 0));
 
     // ---- Horizontal edge (R channel = top edge at this pixel) ----
     if (e.g > 0.0) {
-        // Search left and right along the top edge
         float2 d;
         float2 coords;
 
-        // Left
         coords = SearchXLeft(pc.edgeIndex, uv, tsize, uv.x - float(SMAA_MAX_SEARCH_STEPS) * tsize.x);
         d.x = coords.x;
         float e1 = rdgTexturesFloat2[pc.edgeIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], coords + float2(-0.5, 0.0) * tsize, 0).r;
 
-        // Right
         coords = SearchXRight(pc.edgeIndex, uv, tsize, uv.x + float(SMAA_MAX_SEARCH_STEPS) * tsize.x);
         d.y = coords.x;
         float e2 = rdgTexturesFloat2[pc.edgeIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], coords + float2(0.5, 0.0) * tsize, 0).r;
 
-        // Convert to pixel distances
         d = abs(round(d / tsize.x - uv.x / tsize.x));
 
-        // Area texture lookup
         float2 sqrtD = sqrt(d);
         float2 areaUV = AreaTexCoord(sqrtD, float2(e1, e2), 0.0);
         weights.rg = rdgTexturesFloat2[pc.areaTexIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], areaUV, 0);
@@ -196,12 +185,10 @@ void BlendWeightMain(uniform SmaaBlendWeightPushConstant pc, uint3 threadID : SV
         float2 d;
         float2 coords;
 
-        // Up
         coords = SearchYUp(pc.edgeIndex, uv, tsize, uv.y - float(SMAA_MAX_SEARCH_STEPS) * tsize.y);
         d.x = coords.y;
         float e1 = rdgTexturesFloat2[pc.edgeIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], coords + float2(0.0, -0.5) * tsize, 0).g;
 
-        // Down
         coords = SearchYDown(pc.edgeIndex, uv, tsize, uv.y + float(SMAA_MAX_SEARCH_STEPS) * tsize.y);
         d.y = coords.y;
         float e2 = rdgTexturesFloat2[pc.edgeIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], coords + float2(0.0, 0.5) * tsize, 0).g;
@@ -227,20 +214,19 @@ void NeighborhoodBlendMain(uniform SmaaNeighborhoodBlendPushConstant pc, uint3 t
 {
     if (threadID.x >= uint(pc.sceneData.mainRenderTargetSize.x) || threadID.y >= uint(pc.sceneData.mainRenderTargetSize.y)) { return; }
 
-    int2  coord  = int2(threadID.xy);
-    float2 uv    = (float2(coord) + 0.5) * pc.sceneData.texelSize;
+    int2 coord = int2(threadID.xy);
+    float2 uv = (float2(coord) + 0.5) * pc.sceneData.texelSize;
     float2 tsize = pc.sceneData.texelSize;
 
     float4 a;
-    a.x = rdgTexturesFloat4[pc.blendWeightIndex].Load(int3(coord + int2( 0,  1), 0)).a; // top    .ba of pixel above
-    a.y = rdgTexturesFloat4[pc.blendWeightIndex].Load(int3(coord,               0)).b; // bottom .b  of this pixel
-    a.z = rdgTexturesFloat4[pc.blendWeightIndex].Load(int3(coord + int2( 1,  0), 0)).g; // right  .g  of right pixel
-    a.w = rdgTexturesFloat4[pc.blendWeightIndex].Load(int3(coord,               0)).r; // left   .r  of this pixel
+    a.x = rdgTexturesFloat4[pc.blendWeightIndex].Load(int3(coord + int2(0, 1), 0)).a;
+    a.y = rdgTexturesFloat4[pc.blendWeightIndex].Load(int3(coord, 0)).b;
+    a.z = rdgTexturesFloat4[pc.blendWeightIndex].Load(int3(coord + int2(1, 0), 0)).g;
+    a.w = rdgTexturesFloat4[pc.blendWeightIndex].Load(int3(coord, 0)).r;
 
     float3 result;
 
     if (dot(a, float4(1.0)) < 1e-5) {
-        // No blending needed
         result = rdgTexturesFloat4[pc.colorIndex].Load(int3(coord, 0)).rgb;
     } else {
         bool h = max(a.x, a.y) > max(a.z, a.w);
@@ -254,8 +240,8 @@ void NeighborhoodBlendMain(uniform SmaaNeighborhoodBlendPushConstant pc, uint3 t
         blendingWeight /= dot(blendingWeight, float2(1.0, 1.0));
 
         float4 blendingCoord = float4(uv, uv) + (h
-            ? float4( blendingOffset.z, 0.0, -blendingOffset.w, 0.0)
-            : float4(0.0,  blendingOffset.x, 0.0, -blendingOffset.y)) * float4(tsize, tsize);
+            ? float4(blendingOffset.z, 0.0, -blendingOffset.w, 0.0)
+            : float4(0.0, blendingOffset.x, 0.0, -blendingOffset.y)) * float4(tsize, tsize);
 
         float3 color0 = rdgTexturesFloat4[pc.colorIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], blendingCoord.xy, 0).rgb;
         float3 color1 = rdgTexturesFloat4[pc.colorIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], blendingCoord.zw, 0).rgb;

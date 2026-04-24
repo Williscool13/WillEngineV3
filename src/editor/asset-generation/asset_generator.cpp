@@ -244,6 +244,21 @@ void AssetGenerator::GenerateBRDFLUT(const Core::Path& outputFile)
                           });
 }
 
+void AssetGenerator::GenerateSMAATextures(const Core::Path& parentDirectory)
+{
+    CreateSMAATextures(memoryManager,
+                       parentDirectory / "smaa_area",
+                       parentDirectory / "smaa_search",
+                       Engine::TextureID(textureIdRng()),
+                       Engine::TextureID(textureIdRng()),
+                       vk,
+                       renderThread->GetResourceManager(),
+                       renderThread->GetPipelineManager(),
+                       [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
+                           GraphicsQueueGPUDispatch(cmd, fence, completionSignal);
+                       });
+}
+
 void AssetGenerator::OnModelGenerateComplete(bool success, ModelGenerateSlotHandle slotHandle)
 {
     ZoneScoped;

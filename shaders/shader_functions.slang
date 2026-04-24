@@ -273,3 +273,8 @@ float3 OctDecode(float2 f)
     n.xy += float2(n.x >= 0.0f ? -t : t, n.y >= 0.0f ? -t : t);
     return normalize(n);
 }
+
+float Luma(float3 c)
+{
+    return dot(c, float3(0.2126, 0.7152, 0.0722));
+}

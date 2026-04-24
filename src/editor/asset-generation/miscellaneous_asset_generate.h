@@ -31,6 +31,16 @@ void CreateBRDFLookupTable(Core::MemoryManager* memoryManager,
                            Render::ResourceManager* resourceManager,
                            Render::PipelineManager* pipelineManager,
                            Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> graphicsDispatchCallback);
+
+void CreateSMAATextures(Core::MemoryManager* memoryManager,
+                           Core::Path outputAreaPath,
+                           Core::Path outputSearchPath,
+                           Engine::TextureID areaTextureId,
+                           Engine::TextureID searchTextureId,
+                           Render::VulkanContext* context,
+                           Render::ResourceManager* resourceManager,
+                           Render::PipelineManager* pipelineManager,
+                           Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> graphicsDispatchCallback);
 } // Editor
 
 #endif //WILL_ENGINE_MISCELLANEOUS_ASSET_GENERATE_H
