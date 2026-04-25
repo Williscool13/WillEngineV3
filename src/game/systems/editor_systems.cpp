@@ -562,6 +562,10 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
         if (ImGui::CollapsingHeader("Anti-Aliasing")) {
             if (ImGui::Button("TAA Current")) setDebugTarget("taa_current", DebugTransformationType::None, Core::DebugViewAspect::None);
             if (ImGui::Button("TAA Output")) setDebugTarget("taa_output", DebugTransformationType::None, Core::DebugViewAspect::None);
+            ImGui::Separator();
+            if (ImGui::Button("SMAA Edges")) setDebugTarget("smaa_edges", DebugTransformationType::None, Core::DebugViewAspect::None);
+            if (ImGui::Button("SMAA Blend Weights")) setDebugTarget("smaa_blend", DebugTransformationType::None, Core::DebugViewAspect::None);
+            if (ImGui::Button("SMAA Output")) setDebugTarget("smaa_output", DebugTransformationType::None, Core::DebugViewAspect::None);
         }
 
         if (ImGui::CollapsingHeader("Portal")) {

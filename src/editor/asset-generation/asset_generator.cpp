@@ -250,13 +250,7 @@ void AssetGenerator::GenerateSMAATextures(const Core::Path& parentDirectory)
                        parentDirectory / "smaa_area.wtexture",
                        parentDirectory / "smaa_search.wtexture",
                        Engine::TextureID(textureIdRng()),
-                       Engine::TextureID(textureIdRng()),
-                       vk,
-                       renderThread->GetResourceManager(),
-                       renderThread->GetPipelineManager(),
-                       [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
-                           GraphicsQueueGPUDispatch(cmd, fence, completionSignal);
-                       });
+                       Engine::TextureID(textureIdRng()));
 }
 
 void AssetGenerator::OnModelGenerateComplete(bool success, ModelGenerateSlotHandle slotHandle)

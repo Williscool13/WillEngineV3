@@ -485,6 +485,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
 
         finalOutput = shadingOutputTarget;
+        SetupSubpixelMorphologicalAntiAliasing(*renderGraph, pipelineManager, viewFamily, renderExtent, mainTargets);
         if (viewFamily.postProcessConfig.bEnableTemporalAntialiasing) {
             finalOutput = SetupTemporalAntiAliasing(*renderGraph, pipelineManager, viewFamily, renderExtent, mainTargets);
         }
@@ -1024,12 +1025,18 @@ void RenderThread::CreatePipelines()
     pipelineManager->RegisterComputePipeline(SID("temporal_antialiasing"), Platform::GetShaderPath() / "temporal_antialiasing_compute.spv",
                                              sizeof(TemporalAntialiasingPushConstant), PipelineCategory::Legacy);
 
-    pipelineManager->RegisterComputePipeline(SID("smaa_edge_detection"), Platform::GetShaderPath() / "smaa_edge_detection_compute.spv",
+    pipelineManager->RegisterComputePipeline(SID("smaa_luma_edge_detection"), Platform::GetShaderPath() / "smaa_luma_edge_detection_compute.spv",
+                                             sizeof(SmaaEdgeDetectionPushConstant), PipelineCategory::Critical);
+    pipelineManager->RegisterComputePipeline(SID("smaa_color_edge_detection"), Platform::GetShaderPath() / "smaa_color_edge_detection_compute.spv",
+                                             sizeof(SmaaEdgeDetectionPushConstant), PipelineCategory::Critical);
+    pipelineManager->RegisterComputePipeline(SID("smaa_depth_edge_detection"), Platform::GetShaderPath() / "smaa_depth_edge_detection_compute.spv",
                                              sizeof(SmaaEdgeDetectionPushConstant), PipelineCategory::Critical);
     pipelineManager->RegisterComputePipeline(SID("smaa_blend_weight"), Platform::GetShaderPath() / "smaa_blend_weight_compute.spv",
                                              sizeof(SmaaBlendWeightPushConstant), PipelineCategory::Critical);
     pipelineManager->RegisterComputePipeline(SID("smaa_neighborhood_blend"), Platform::GetShaderPath() / "smaa_neighborhood_blend_compute.spv",
                                              sizeof(SmaaNeighborhoodBlendPushConstant), PipelineCategory::Critical);
+    pipelineManager->RegisterComputePipeline(SID("smaa_temporal_resolve"), Platform::GetShaderPath() / "smaa_temporal_resolve_compute.spv",
+                                             sizeof(SmaaTemporalResolvePushConstant), PipelineCategory::Critical);
 
     pipelineManager->RegisterComputePipeline(SID("gtao_depth_prepass"), Platform::GetShaderPath() / "gtao_depth_prepass_compute.spv",
                                              sizeof(GTAODepthPrepassPushConstant), PipelineCategory::Critical);

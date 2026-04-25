@@ -336,9 +336,11 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/shadows_resolve.slang compute ComputeMain shadows_resolve
         ${CMAKE_SOURCE_DIR}/shaders/deferred_resolve.slang compute ComputeMain deferred_resolve
         ${CMAKE_SOURCE_DIR}/shaders/temporal_antialiasing.slang compute ComputeMain temporal_antialiasing
-        ${CMAKE_SOURCE_DIR}/shaders/anti-aliasing/subpixel_morphological_anti_aliasing.slang compute EdgeDetectionMain smaa_edge_detection
-        ${CMAKE_SOURCE_DIR}/shaders/anti-aliasing/subpixel_morphological_anti_aliasing.slang compute BlendWeightMain smaa_blend_weight
-        ${CMAKE_SOURCE_DIR}/shaders/anti-aliasing/subpixel_morphological_anti_aliasing.slang compute NeighborhoodBlendMain smaa_neighborhood_blend
+        ${CMAKE_SOURCE_DIR}/shaders/anti-aliasing/subpixel_morphological_anti_aliasing_edge_detection.slang compute LumaEdgeDetectionMain smaa_luma_edge_detection
+        ${CMAKE_SOURCE_DIR}/shaders/anti-aliasing/subpixel_morphological_anti_aliasing_edge_detection.slang compute ColorEdgeDetectionMain smaa_color_edge_detection
+        ${CMAKE_SOURCE_DIR}/shaders/anti-aliasing/subpixel_morphological_anti_aliasing_edge_detection.slang compute DepthEdgeDetectionMain smaa_depth_edge_detection
+        ${CMAKE_SOURCE_DIR}/shaders/anti-aliasing/subpixel_morphological_anti_aliasing_blend_weight.slang compute BlendWeightMain smaa_blend_weight
+        ${CMAKE_SOURCE_DIR}/shaders/anti-aliasing/subpixel_morphological_anti_aliasing_neighborhood_blend.slang compute NeighborhoodBlendMain smaa_neighborhood_blend
         ${CMAKE_SOURCE_DIR}/shaders/ground_truth_ambient_occlusion.slang compute ComputeGTAODepthPrepass gtao_depth_prepass
         ${CMAKE_SOURCE_DIR}/shaders/ground_truth_ambient_occlusion.slang compute ComputeGTAOMain gtao_main
         ${CMAKE_SOURCE_DIR}/shaders/ground_truth_ambient_occlusion.slang compute ComputeGTAODenoise gtao_denoise
@@ -369,8 +371,7 @@ compile_shaders(will-engine
 
         ${CMAKE_SOURCE_DIR}/shaders/brdf_lut.slang compute ComputeBRDFLUT brdf_lut_generate
 
-        ${CMAKE_SOURCE_DIR}/shaders/anti-aliasing/subpixel_morphological_area_generate.slang compute GenerateSMAAArea smaa_area_generate
-        ${CMAKE_SOURCE_DIR}/shaders/anti-aliasing/subpixel_morphological_search_generate.slang compute GenerateSMAASearch smaa_search_generate
+        ${CMAKE_SOURCE_DIR}/shaders/anti-aliasing/subpixel_morphological_anti_aliasing_temporal_resolve.slang compute TemporalResolveMain smaa_temporal_resolve
 )
 
 # Post-Build Commands =========================
