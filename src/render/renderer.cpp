@@ -497,51 +497,51 @@ void SetupGeometryPass(RenderGraph& graph,
     instancedMeshShading.Execute([&, pipelineManager, visibleMeshlets, compactedMeshletDispatchArgs, sceneIndex, width = renderExtent[0], height = renderExtent[1],
             bWireframe = renderFamilyProperties.bWireframe,
             visibility = targets.visibility, stableId = targets.stableId, depthStencil = targets.depthStencil](VkCommandBuffer cmd) {
-        VkViewport viewport = VkHelpers::GenerateViewport(width, height);
-        vkCmdSetViewport(cmd, 0, 1, &viewport);
-        VkRect2D scissor = VkHelpers::GenerateScissor(width, height);
-        vkCmdSetScissor(cmd, 0, 1, &scissor);
-        vkCmdSetPolygonModeEXT(cmd, bWireframe ? VK_POLYGON_MODE_LINE : VK_POLYGON_MODE_FILL);
+            VkViewport viewport = VkHelpers::GenerateViewport(width, height);
+            vkCmdSetViewport(cmd, 0, 1, &viewport);
+            VkRect2D scissor = VkHelpers::GenerateScissor(width, height);
+            vkCmdSetScissor(cmd, 0, 1, &scissor);
+            vkCmdSetPolygonModeEXT(cmd, bWireframe ? VK_POLYGON_MODE_LINE : VK_POLYGON_MODE_FILL);
 
-        constexpr VkClearValue uintClear = {.color = {.uint32 = {0u, 0u, 0u, 0u}}};
-        constexpr VkClearValue depthClear = {.depthStencil = {0.0f, 0u}};
+            constexpr VkClearValue uintClear = {.color = {.uint32 = {0u, 0u, 0u, 0u}}};
+            constexpr VkClearValue depthClear = {.depthStencil = {0.0f, 0u}};
 
-        auto visibilityAttachment  = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(visibility), &uintClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-        auto stableIdAttachment    = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(stableId), &uintClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-        auto depthAttachment       = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(depthStencil), &depthClear, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
-        auto stencilAttachment     = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(depthStencil), &depthClear, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+            auto visibilityAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(visibility), &uintClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+            auto stableIdAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(stableId), &uintClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+            auto depthAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(depthStencil), &depthClear, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+            auto stencilAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(depthStencil), &depthClear, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
-        const VkRenderingAttachmentInfo colorAttachments[] = {visibilityAttachment, stableIdAttachment};
-        const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, colorAttachments, 2, &depthAttachment, &stencilAttachment);
+            const VkRenderingAttachmentInfo colorAttachments[] = {visibilityAttachment, stableIdAttachment};
+            const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, colorAttachments, 2, &depthAttachment, &stencilAttachment);
 
-        vkCmdBeginRendering(cmd, &renderInfo);
+            vkCmdBeginRendering(cmd, &renderInfo);
 
-        VisibilityBufferAccumulatePushConstant pushConstants{
-            .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER) + sceneIndex * sizeof(SceneData),
-            .vertexPosBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_POSITION_BUFFER),
-            .meshletVerticesBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_VERTEX_BUFFER),
-            .meshletTrianglesBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_TRIANGLE_BUFFER),
-            .meshletBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_BUFFER),
-            .primitiveBuffer = graph.GetBufferAddress(GEOMETRY_PRIMITIVE_BUFFER),
-            .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
-            .modelBuffer = graph.GetBufferAddress(GEOMETRY_MODEL_BUFFER),
-            .visibleMeshlets = graph.GetBufferAddress(visibleMeshlets),
-            .compactedDispatchBuffer = graph.GetBufferAddress(compactedMeshletDispatchArgs),
-        };
+            VisibilityBufferAccumulatePushConstant pushConstants{
+                .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER) + sceneIndex * sizeof(SceneData),
+                .vertexPosBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_POSITION_BUFFER),
+                .meshletVerticesBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_VERTEX_BUFFER),
+                .meshletTrianglesBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_TRIANGLE_BUFFER),
+                .meshletBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_BUFFER),
+                .primitiveBuffer = graph.GetBufferAddress(GEOMETRY_PRIMITIVE_BUFFER),
+                .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
+                .modelBuffer = graph.GetBufferAddress(GEOMETRY_MODEL_BUFFER),
+                .visibleMeshlets = graph.GetBufferAddress(visibleMeshlets),
+                .compactedDispatchBuffer = graph.GetBufferAddress(compactedMeshletDispatchArgs),
+            };
 
-        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("visibility_buffer_accumulate"));
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineEntry->pipeline);
-        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_MESH_BIT_EXT, 0, sizeof(VisibilityBufferAccumulatePushConstant), &pushConstants);
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("visibility_buffer_accumulate"));
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineEntry->pipeline);
+            vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_MESH_BIT_EXT, 0, sizeof(VisibilityBufferAccumulatePushConstant), &pushConstants);
 
-        vkCmdDrawMeshTasksIndirectEXT(
-            cmd,
-            graph.GetBufferHandle(compactedMeshletDispatchArgs),
-            offsetof(InstancingCompactedMeshletDispatchIndirect, x),
-            1,
-            sizeof(InstancingCompactedMeshletDispatchIndirect));
+            vkCmdDrawMeshTasksIndirectEXT(
+                cmd,
+                graph.GetBufferHandle(compactedMeshletDispatchArgs),
+                offsetof(InstancingCompactedMeshletDispatchIndirect, x),
+                1,
+                sizeof(InstancingCompactedMeshletDispatchIndirect));
 
-        vkCmdEndRendering(cmd);
-    });
+            vkCmdEndRendering(cmd);
+        });
 }
 
 void SetupVisibilityBarycentricDerivativePass(RenderGraph& graph,
@@ -566,29 +566,29 @@ void SetupVisibilityBarycentricDerivativePass(RenderGraph& graph,
     visBarDer.WriteStorageImage(targets.derivatives);
     visBarDer.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1], sceneIndex,
             visibility = targets.visibility, barycentric = targets.barycentric, derivatives = targets.derivatives](VkCommandBuffer cmd) {
-        VisibilityBufferResolvePushConstant pc{
-            .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER) + sceneIndex * sizeof(SceneData),
-            .vertexPosBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_POSITION_BUFFER),
-            .vertexAttrBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER),
-            .meshletVerticesBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_VERTEX_BUFFER),
-            .meshletTrianglesBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_TRIANGLE_BUFFER),
-            .meshletBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_BUFFER),
-            .primitiveBuffer = graph.GetBufferAddress(GEOMETRY_PRIMITIVE_BUFFER),
-            .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
-            .modelBuffer = graph.GetBufferAddress(GEOMETRY_MODEL_BUFFER),
-            .extents = {width, height},
-            .visibilityBufferIndex = graph.GetSampledImageViewDescriptorIndex(visibility),
-            .barycentricTargetIndex = graph.GetStorageImageViewDescriptorIndex(barycentric),
-            .derivativeTargetIndex = graph.GetStorageImageViewDescriptorIndex(derivatives),
-        };
+            VisibilityBufferResolvePushConstant pc{
+                .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER) + sceneIndex * sizeof(SceneData),
+                .vertexPosBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_POSITION_BUFFER),
+                .vertexAttrBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER),
+                .meshletVerticesBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_VERTEX_BUFFER),
+                .meshletTrianglesBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_TRIANGLE_BUFFER),
+                .meshletBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_BUFFER),
+                .primitiveBuffer = graph.GetBufferAddress(GEOMETRY_PRIMITIVE_BUFFER),
+                .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
+                .modelBuffer = graph.GetBufferAddress(GEOMETRY_MODEL_BUFFER),
+                .extents = {width, height},
+                .visibilityBufferIndex = graph.GetSampledImageViewDescriptorIndex(visibility),
+                .barycentricTargetIndex = graph.GetStorageImageViewDescriptorIndex(barycentric),
+                .derivativeTargetIndex = graph.GetStorageImageViewDescriptorIndex(derivatives),
+            };
 
-        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("visibility_buffer_barycentric_derivative"));
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
-        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-        uint32_t xDispatch = (width + 15) / 16;
-        uint32_t yDispatch = (height + 15) / 16;
-        vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
-    });
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("visibility_buffer_barycentric_derivative"));
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+            vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            uint32_t xDispatch = (width + 15) / 16;
+            uint32_t yDispatch = (height + 15) / 16;
+            vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
+        });
 }
 
 void SetupVisibilityShadingPass(RenderGraph& graph,
@@ -617,32 +617,32 @@ void SetupVisibilityShadingPass(RenderGraph& graph,
     visShading.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1], sceneIndex,
             visibility = targets.visibility, barycentric = targets.barycentric, derivatives = targets.derivatives,
             gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo](VkCommandBuffer cmd) {
-        VisibilityShadingPushConstant pc{
-            .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER) + sceneIndex * sizeof(SceneData),
-            .vertexPosBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_POSITION_BUFFER),
-            .vertexAttrBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER),
-            .meshletVerticesBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_VERTEX_BUFFER),
-            .meshletTrianglesBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_TRIANGLE_BUFFER),
-            .meshletBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_BUFFER),
-            .primitiveBuffer = graph.GetBufferAddress(GEOMETRY_PRIMITIVE_BUFFER),
-            .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
-            .modelBuffer = graph.GetBufferAddress(GEOMETRY_MODEL_BUFFER),
-            .materialBuffer = graph.GetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
-            .extents = {width, height},
-            .visibilityBufferIndex = graph.GetSampledImageViewDescriptorIndex(visibility),
-            .barycentricBufferIndex = graph.GetStorageImageViewDescriptorIndex(barycentric),
-            .derivativeBufferIndex = graph.GetStorageImageViewDescriptorIndex(derivatives),
-            .gbufferOneIndex = graph.GetStorageImageViewDescriptorIndex(gbufferOne),
-            .gbufferTwoIndex = graph.GetStorageImageViewDescriptorIndex(gbufferTwo),
-        };
+            VisibilityShadingPushConstant pc{
+                .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER) + sceneIndex * sizeof(SceneData),
+                .vertexPosBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_POSITION_BUFFER),
+                .vertexAttrBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER),
+                .meshletVerticesBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_VERTEX_BUFFER),
+                .meshletTrianglesBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_TRIANGLE_BUFFER),
+                .meshletBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_BUFFER),
+                .primitiveBuffer = graph.GetBufferAddress(GEOMETRY_PRIMITIVE_BUFFER),
+                .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
+                .modelBuffer = graph.GetBufferAddress(GEOMETRY_MODEL_BUFFER),
+                .materialBuffer = graph.GetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
+                .extents = {width, height},
+                .visibilityBufferIndex = graph.GetSampledImageViewDescriptorIndex(visibility),
+                .barycentricBufferIndex = graph.GetStorageImageViewDescriptorIndex(barycentric),
+                .derivativeBufferIndex = graph.GetStorageImageViewDescriptorIndex(derivatives),
+                .gbufferOneIndex = graph.GetStorageImageViewDescriptorIndex(gbufferOne),
+                .gbufferTwoIndex = graph.GetStorageImageViewDescriptorIndex(gbufferTwo),
+            };
 
-        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("visibility_shading"));
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
-        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-        uint32_t xDispatch = (width + 15) / 16;
-        uint32_t yDispatch = (height + 15) / 16;
-        vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
-    });
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("visibility_shading"));
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+            vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            uint32_t xDispatch = (width + 15) / 16;
+            uint32_t yDispatch = (height + 15) / 16;
+            vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
+        });
 }
 
 void SetupDeferredResolvePass(RenderGraph& graph,
@@ -897,48 +897,48 @@ void SetupShadowsResolve(RenderGraph& graph,
 }
 
 void SetupSkyboxRendering(RenderGraph& graph,
-    PipelineManager* pipelineManager,
-    const Core::ViewFamily& viewFamily,
-    Core::Array<uint32_t, 2> renderExtent,
-    const MainRenderTargets& targets,
-    uint32_t sceneIndex)
+                          PipelineManager* pipelineManager,
+                          const Core::ViewFamily& viewFamily,
+                          Core::Array<uint32_t, 2> renderExtent,
+                          const MainRenderTargets& targets,
+                          uint32_t sceneIndex)
 {
     RenderPass& skyboxPass = graph.AddPass(SID("Skybox"), VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT);
     skyboxPass.WriteColorAttachment(targets.outputColor);
     skyboxPass.ReadWriteDepthAttachment(targets.depthStencil);
     skyboxPass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1], sceneIndex,
-    outputColor = targets.outputColor, depthStencil = targets.depthStencil, skyboxIndex = viewFamily.skyboxIndex, skyboxLOD = viewFamily.skyboxLOD](VkCommandBuffer cmd) {
-        VkViewport viewport = VkHelpers::GenerateViewport(width, height);
-        vkCmdSetViewport(cmd, 0, 1, &viewport);
-        VkRect2D scissor = VkHelpers::GenerateScissor(width, height);
-        vkCmdSetScissor(cmd, 0, 1, &scissor);
+            outputColor = targets.outputColor, depthStencil = targets.depthStencil, skyboxIndex = viewFamily.skyboxIndex, skyboxLOD = viewFamily.skyboxLOD](VkCommandBuffer cmd) {
+            VkViewport viewport = VkHelpers::GenerateViewport(width, height);
+            vkCmdSetViewport(cmd, 0, 1, &viewport);
+            VkRect2D scissor = VkHelpers::GenerateScissor(width, height);
+            vkCmdSetScissor(cmd, 0, 1, &scissor);
 
-        auto colorAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(outputColor), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-        auto depthAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(depthStencil), nullptr, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+            auto colorAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(outputColor), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+            auto depthAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(depthStencil), nullptr, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
-        Core::Array<VkRenderingAttachmentInfo, 1> colorAttachments{colorAttachment};
-        VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, colorAttachments.Data(), 1, &depthAttachment, nullptr);
-        vkCmdBeginRendering(cmd, &renderInfo);
+            Core::Array<VkRenderingAttachmentInfo, 1> colorAttachments{colorAttachment};
+            VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, colorAttachments.Data(), 1, &depthAttachment, nullptr);
+            vkCmdBeginRendering(cmd, &renderInfo);
 
-        EnvironmentSkyboxPushConstant pc{
-            .sceneData = graph.GetBufferAddress(SID("scene_data")),
-            .sceneDataIndex = sceneIndex,
-            .cubemapIndex = skyboxIndex,
-            .skyboxLOD = skyboxLOD,
-        };
+            EnvironmentSkyboxPushConstant pc{
+                .sceneData = graph.GetBufferAddress(SID("scene_data")),
+                .sceneDataIndex = sceneIndex,
+                .cubemapIndex = skyboxIndex,
+                .skyboxLOD = skyboxLOD,
+            };
 
-        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("environment_skybox"));
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineEntry->pipeline);
-        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pc), &pc);
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("environment_skybox"));
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineEntry->pipeline);
+            vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pc), &pc);
 
-        vkCmdDraw(cmd, 3, 1, 0, 0);
+            vkCmdDraw(cmd, 3, 1, 0, 0);
 
-        vkCmdEndRendering(cmd);
-    });
+            vkCmdEndRendering(cmd);
+        });
 }
 
 StringID SetupSubpixelMorphologicalAntiAliasing(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent,
-    const MainRenderTargets& ppTargets)
+                                                const MainRenderTargets& ppTargets)
 {
     graph.CreateTexture(SID("smaa_edges"), TextureInfo{VK_FORMAT_R8G8_UNORM, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
     graph.CreateTexture(SID("smaa_blend"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
@@ -951,15 +951,36 @@ StringID SetupSubpixelMorphologicalAntiAliasing(RenderGraph& graph, PipelineMana
     edgePass.WriteStorageImage(SID("smaa_edges"));
     edgePass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1],
             outputColor = ppTargets.outputColor](VkCommandBuffer cmd) {
-        SmaaEdgeDetectionPushConstant pushData{
+            SmaaEdgeDetectionPushConstant pushData{
+                .sceneData = graph.GetBufferAddress(SID("scene_data")),
+                .colorIndex = graph.GetSampledImageViewDescriptorIndex(outputColor),
+                .outputEdgeIndex = graph.GetStorageImageViewDescriptorIndex(SID("smaa_edges")),
+            };
+
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("smaa_luma_edge_detection"));
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+            vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(SmaaEdgeDetectionPushConstant), &pushData);
+
+            uint32_t xDispatch = (width + 15) / 16;
+            uint32_t yDispatch = (height + 15) / 16;
+            vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
+        });
+
+    // Pass 2: Blend Weight Calculation
+    RenderPass& blendPass = graph.AddPass(SID("SMAA Blend Weight"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+    blendPass.ReadBuffer(SID("scene_data"));
+    blendPass.ReadSampledImage(SID("smaa_edges"));
+    blendPass.WriteStorageImage(SID("smaa_blend"));
+    blendPass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
+        SmaaBlendWeightPushConstant pushData{
             .sceneData = graph.GetBufferAddress(SID("scene_data")),
-            .colorIndex = graph.GetSampledImageViewDescriptorIndex(outputColor),
-            .outputEdgeIndex = graph.GetStorageImageViewDescriptorIndex(SID("smaa_edges")),
+            .edgeIndex = graph.GetSampledImageViewDescriptorIndex(SID("smaa_edges")),
+            .outputBlendIndex = graph.GetStorageImageViewDescriptorIndex(SID("smaa_blend")),
         };
 
-        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("smaa_luma_edge_detection"));
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("smaa_blend_weight"));
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
-        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(SmaaEdgeDetectionPushConstant), &pushData);
+        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(SmaaBlendWeightPushConstant), &pushData);
 
         uint32_t xDispatch = (width + 15) / 16;
         uint32_t yDispatch = (height + 15) / 16;
@@ -967,27 +988,6 @@ StringID SetupSubpixelMorphologicalAntiAliasing(RenderGraph& graph, PipelineMana
     });
 
     return SID("smaa_edges");
-
-    // Pass 2: Blend Weight Calculation
-    //RenderPass& blendPass = graph.AddPass(SID("SMAA Blend Weight"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-    //blendPass.ReadBuffer(SID("scene_data"));
-    //blendPass.ReadSampledImage(SID("smaa_edges"));
-    //blendPass.WriteStorageImage(SID("smaa_blend"));
-    //blendPass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
-    //    SmaaBlendWeightPushConstant pushData{
-    //        .sceneData = graph.GetBufferAddress(SID("scene_data")),
-    //        .edgeIndex = graph.GetSampledImageViewDescriptorIndex(SID("smaa_edges")),
-    //        .outputBlendIndex = graph.GetStorageImageViewDescriptorIndex(SID("smaa_blend")),
-    //    };
-
-    //    const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("smaa_blend_weight"));
-    //    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
-    //    vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(SmaaBlendWeightPushConstant), &pushData);
-
-    //    uint32_t xDispatch = (width + 15) / 16;
-    //    uint32_t yDispatch = (height + 15) / 16;
-    //    vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
-    //});
 
     // Pass 3: Neighborhood Blending
     //RenderPass& neighborhoodPass = graph.AddPass(SID("SMAA Neighborhood Blend"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
@@ -1070,24 +1070,24 @@ StringID SetupTemporalAntiAliasing(RenderGraph& graph,
     taaPass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1],
             outputColor = ppTargets.outputColor, depthStencil = ppTargets.depthStencil,
             gbufferOne = ppTargets.gbufferOne](VkCommandBuffer cmd) {
-        TemporalAntialiasingPushConstant pushData{
-            .sceneData = graph.GetBufferAddress(SID("scene_data")),
-            .colorResolvedIndex = graph.GetSampledImageViewDescriptorIndex(outputColor),
-            .depthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(depthStencil),
-            .colorHistoryIndex = graph.GetSampledImageViewDescriptorIndex(SID("taa_history")),
-            .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
-            .gbufferOneHistoryIndex = graph.GetSampledImageViewDescriptorIndex(SID("gbuffer_one_history")),
-            .outputImageIndex = graph.GetStorageImageViewDescriptorIndex(SID("taa_current")),
-        };
+            TemporalAntialiasingPushConstant pushData{
+                .sceneData = graph.GetBufferAddress(SID("scene_data")),
+                .colorResolvedIndex = graph.GetSampledImageViewDescriptorIndex(outputColor),
+                .depthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(depthStencil),
+                .colorHistoryIndex = graph.GetSampledImageViewDescriptorIndex(SID("taa_history")),
+                .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
+                .gbufferOneHistoryIndex = graph.GetSampledImageViewDescriptorIndex(SID("gbuffer_one_history")),
+                .outputImageIndex = graph.GetStorageImageViewDescriptorIndex(SID("taa_current")),
+            };
 
-        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("temporal_antialiasing"));
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
-        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(TemporalAntialiasingPushConstant), &pushData);
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("temporal_antialiasing"));
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+            vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(TemporalAntialiasingPushConstant), &pushData);
 
-        uint32_t xDispatch = (width + 15) / 16;
-        uint32_t yDispatch = (height + 15) / 16;
-        vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
-    });
+            uint32_t xDispatch = (width + 15) / 16;
+            uint32_t yDispatch = (height + 15) / 16;
+            vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
+        });
 
     graph.CreateTexture(SID("taa_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
 
@@ -1128,12 +1128,12 @@ StringID SetupTemporalAntiAliasing(RenderGraph& graph,
 }
 
 StringID SetupPostProcessing(RenderGraph& graph,
-                              PipelineManager* pipelineManager,
-                              const Core::ViewFamily& viewFamily,
-                              Core::Array<uint32_t, 2> renderExtent,
-                              const MainRenderTargets& targets,
-                              float deltaTime,
-                              uint64_t frameNumber)
+                             PipelineManager* pipelineManager,
+                             const Core::ViewFamily& viewFamily,
+                             Core::Array<uint32_t, 2> renderExtent,
+                             const MainRenderTargets& targets,
+                             float deltaTime,
+                             uint64_t frameNumber)
 {
     PostProcessContext ctx{
         .graph = graph,

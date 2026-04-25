@@ -60,7 +60,7 @@ float2 SMAAAreaDiag(float2 dist, float2 e, float2 tsize)
     float2 texcoord = mad(float2(SMAA_AREATEX_MAX_DISTANCE_DIAG, SMAA_AREATEX_MAX_DISTANCE_DIAG), e, dist);
     texcoord = mad(SMAA_AREATEX_PIXEL_SIZE, texcoord, 0.5 * SMAA_AREATEX_PIXEL_SIZE);
     texcoord.x += 0.5; // diagonal areas are on the right half of the area texture
-    return rdgTexturesFloat2[SMAA_AREA_BINDLESS_INDEX].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], texcoord, 0);
+    return assetTextures[SMAA_AREA_BINDLESS_INDEX].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], texcoord, 0).rg;
 }
 
 float2 SMAACalculateDiagWeights(uint edgeIndex, float2 texcoord, float2 e, float2 tsize)
@@ -127,7 +127,7 @@ float SMAASearchLength(float2 e, float offset)
     bias  += float2( 0.5, -0.5);
     scale *= 1.0 / SMAA_SEARCHTEX_PACKED_SIZE;
     bias  *= 1.0 / SMAA_SEARCHTEX_PACKED_SIZE;
-    return rdgTexturesFloat[SMAA_SEARCH_BINDLESS_INDEX].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], mad(scale, e, bias), 0);
+    return assetTextures[SMAA_SEARCH_BINDLESS_INDEX].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], mad(scale, e, bias), 0).r;
 }
 
 // texcoord should be pre-biased by (-0.25, -0.125) * tsize before calling (@PSEUDO_GATHER4)
@@ -182,7 +182,7 @@ float2 SMAAArea(float2 dist, float e1, float e2)
 {
     float2 texcoord = mad(float2(SMAA_AREATEX_MAX_DISTANCE, SMAA_AREATEX_MAX_DISTANCE), round(4.0 * float2(e1, e2)), dist);
     texcoord = mad(SMAA_AREATEX_PIXEL_SIZE, texcoord, 0.5 * SMAA_AREATEX_PIXEL_SIZE);
-    return rdgTexturesFloat2[SMAA_AREA_BINDLESS_INDEX].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], texcoord, 0);
+    return assetTextures[SMAA_AREA_BINDLESS_INDEX].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], texcoord, 0).rg;
 }
 
 //-----------------------------------------------------------------------------
