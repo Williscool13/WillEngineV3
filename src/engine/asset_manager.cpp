@@ -64,6 +64,27 @@ AssetManager::AssetManager(Core::MemoryManager& memoryManager, Engine::EngineCon
         LOG_CRITICAL(Asset, "Default smiling friend logo does not exist, please regenerate and restart the engine");
     }
 
+    TextureID smaaArea = FindTextureByName("smaa_area");
+    if (smaaArea.IsValid()) {
+        Texture* smaaAreaTex = LoadTexture(smaaArea);
+        assert(smaaAreaTex && smaaAreaTex->bindlessHandle.index == SMAA_AREA);
+    }
+    else {
+        // reserve, unused. Requires Engine restart
+        resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTexture();
+        LOG_CRITICAL(Asset, "Default SMAA Area logo does not exist, please regenerate and restart the engine");
+    }
+    TextureID smaaSearch = FindTextureByName("smaa_search");
+    if (smaaSearch.IsValid()) {
+        Texture* smaaSearchTex = LoadTexture(smaaSearch);
+        assert(smaaSearchTex && smaaSearchTex->bindlessHandle.index == SMAA_SEARCH);
+    }
+    else {
+        // reserve, unused. Requires Engine restart
+        resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTexture();
+        LOG_CRITICAL(Asset, "Default SMAA Search logo does not exist, please regenerate and restart the engine");
+    }
+
     SamplerDesc defaultSamplerDesc{};
     defaultSamplerDesc.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
     defaultSamplerDesc.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;

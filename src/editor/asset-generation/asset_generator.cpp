@@ -247,8 +247,8 @@ void AssetGenerator::GenerateBRDFLUT(const Core::Path& outputFile)
 void AssetGenerator::GenerateSMAATextures(const Core::Path& parentDirectory)
 {
     CreateSMAATextures(memoryManager,
-                       parentDirectory / "smaa_area",
-                       parentDirectory / "smaa_search",
+                       parentDirectory / "smaa_area.wtexture",
+                       parentDirectory / "smaa_search.wtexture",
                        Engine::TextureID(textureIdRng()),
                        Engine::TextureID(textureIdRng()),
                        vk,

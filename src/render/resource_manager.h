@@ -58,6 +58,7 @@ struct ResourceManager
     Editor::EnvironmentMapGenerateResources environmentMapGenerateResources{};
     BindlessResourcesStorage<1> brdfLutGenerateResources{};
     BindlessResourcesStorage<1> smaaLookupGenerateResources{};
+    BindlessResourcesStorage<1> smaaSearchGenerateResources{};
 #endif
 
     VkSampler pointSampler;

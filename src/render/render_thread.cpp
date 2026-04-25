@@ -4,6 +4,7 @@
 
 #include "render_thread.h"
 
+#include <chrono>
 #include <enkiTS/src/TaskScheduler.h>
 #include <spdlog/spdlog.h>
 #include <stb/stb_image_write.h>
@@ -128,60 +129,79 @@ void RenderThread::ThreadMain()
     while (!bShouldExit.load()) {
         pipelineManager->Update(frameNumber);
         // Wait for frame
+        bool bHasFrame;
         {
             ZoneScopedN("Idle - WaitForFrame");
             std::unique_lock lock(engineRenderSynchronization->renderMutex);
-            engineRenderSynchronization->renderCV.wait(lock, [&] {
+            bHasFrame = engineRenderSynchronization->renderCV.wait_for(lock, std::chrono::milliseconds(1), [&] {
                 return engineRenderSynchronization->renderFrames.load(std::memory_order_acquire) > 0 || bShouldExit.load(std::memory_order_acquire);
             });
-            engineRenderSynchronization->renderFrames.fetch_sub(1);
+            if (bHasFrame) {
+                engineRenderSynchronization->renderFrames.fetch_sub(1);
+            }
         }
 
         if (bShouldExit.load()) {
             break;
         }
 
-        // Render Frame
-        {
-            currentFrameInFlight = frameNumber % Core::FRAME_BUFFER_COUNT;
-            Core::FrameBuffer& frameBuffer = engineRenderSynchronization->frameBuffers[currentFrameInFlight];
-            assert(frameBuffer.currentFrameBuffer == currentFrameInFlight);
+        if (bHasFrame) {
+            // Render Frame
+            {
+                currentFrameInFlight = frameNumber % Core::FRAME_BUFFER_COUNT;
+                Core::FrameBuffer& frameBuffer = engineRenderSynchronization->frameBuffers[currentFrameInFlight];
+                assert(frameBuffer.currentFrameBuffer == currentFrameInFlight);
 
 
-            bEngineRequestsRecreate |= frameBuffer.swapchainRecreateCommand.bEngineCommandsRecreate;
-            if (!frameBuffer.swapchainRecreateCommand.bIsMinimized && bEngineRequestsRecreate) {
-                ZoneScopedN("SwapchainRecreate");
-                vkDeviceWaitIdle(context->device);
-                LOG_INFO(Renderer, "Swapchain Recreated");
+                bEngineRequestsRecreate |= frameBuffer.swapchainRecreateCommand.bEngineCommandsRecreate;
+                if (!frameBuffer.swapchainRecreateCommand.bIsMinimized && bEngineRequestsRecreate) {
+                    ZoneScopedN("SwapchainRecreate");
+                    vkDeviceWaitIdle(context->device);
+                    LOG_INFO(Renderer, "Swapchain Recreated");
 
-                swapchain->Recreate(frameBuffer.swapchainRecreateCommand.windowWidth, frameBuffer.swapchainRecreateCommand.windowHeight);
-                renderExtents->ApplyResize(frameBuffer.swapchainRecreateCommand.windowWidth, frameBuffer.swapchainRecreateCommand.windowHeight);
-                renderGraph->InvalidateAllSwapchainAssociated();
+                    swapchain->Recreate(frameBuffer.swapchainRecreateCommand.windowWidth, frameBuffer.swapchainRecreateCommand.windowHeight);
+                    renderExtents->ApplyResize(frameBuffer.swapchainRecreateCommand.windowWidth, frameBuffer.swapchainRecreateCommand.windowHeight);
+                    renderGraph->InvalidateAllSwapchainAssociated();
 
-                bRenderRequestsRecreate = false;
-                bEngineRequestsRecreate = false;
-                frameBuffer.swapchainRecreateCommand.bEngineCommandsRecreate = false;
+                    bRenderRequestsRecreate = false;
+                    bEngineRequestsRecreate = false;
+                    frameBuffer.swapchainRecreateCommand.bEngineCommandsRecreate = false;
+                }
+
+                if (frameBuffer.viewportResizeCommand.bEngineCommandsResize) {
+                    vkDeviceWaitIdle(context->device);
+                    LOG_INFO(Renderer, "Viewport remade");
+
+                    renderExtents->ApplyViewportResize(frameBuffer.viewportResizeCommand.offsetX, frameBuffer.viewportResizeCommand.offsetY, frameBuffer.viewportResizeCommand.sizeX,
+                                                       frameBuffer.viewportResizeCommand.sizeY);
+                    frameBuffer.viewportResizeCommand.bEngineCommandsResize = false;
+                    renderGraph->InvalidateAllViewportAssociated();
+                }
+
+                // Wait for the frame N - 3 to finish using resources
+                RenderSynchronization& currentRenderSynchronization = frameSynchronization[currentFrameInFlight];
+                RenderFrame(currentFrameInFlight, currentRenderSynchronization, frameBuffer);
+
+                frameNumber++;
             }
 
-            if (frameBuffer.viewportResizeCommand.bEngineCommandsResize) {
-                vkDeviceWaitIdle(context->device);
-                LOG_INFO(Renderer, "Viewport remade");
-
-                renderExtents->ApplyViewportResize(frameBuffer.viewportResizeCommand.offsetX, frameBuffer.viewportResizeCommand.offsetY, frameBuffer.viewportResizeCommand.sizeX,
-                                                   frameBuffer.viewportResizeCommand.sizeY);
-                frameBuffer.viewportResizeCommand.bEngineCommandsResize = false;
-                renderGraph->InvalidateAllViewportAssociated();
-            }
-
-            // Wait for the frame N - 3 to finish using resources
-            RenderSynchronization& currentRenderSynchronization = frameSynchronization[currentFrameInFlight];
-            RenderFrame(currentFrameInFlight, currentRenderSynchronization, frameBuffer);
-
-            frameNumber++;
+            FrameMark;
+            engineRenderSynchronization->gameFrames.fetch_add(1, std::memory_order_release);
         }
 
-        FrameMark;
-        engineRenderSynchronization->gameFrames.fetch_add(1, std::memory_order_release);
+#ifdef WILL_EDITOR
+        {
+            AssetLoad::GPUDispatchRequest req{};
+            while (editorGPUDispatchQueue.try_dequeue(req)) {
+                VkSubmitInfo submitInfo{.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO};
+                submitInfo.commandBufferCount = 1;
+                submitInfo.pCommandBuffers = &req.cmd;
+                VK_CHECK(vkQueueSubmit(context->graphicsQueue, 1, &submitInfo, req.fence));
+                VK_CHECK(vkWaitForFences(context->device, 1, &req.fence, VK_TRUE, UINT64_MAX));
+                req.completionSignal->release();
+            }
+        }
+#endif
     }
 
     vkDeviceWaitIdle(context->device);
@@ -269,19 +289,6 @@ void RenderThread::RenderFrame(uint32_t currentFrameIndex, RenderSynchronization
         break;
     }
 
-#ifdef WILL_EDITOR
-    {
-        AssetLoad::GPUDispatchRequest req{};
-        while (editorGPUDispatchQueue.try_dequeue(req)) {
-            VkSubmitInfo submitInfo{.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO};
-            submitInfo.commandBufferCount = 1;
-            submitInfo.pCommandBuffers = &req.cmd;
-            VK_CHECK(vkQueueSubmit(context->graphicsQueue, 1, &submitInfo, req.fence));
-            VK_CHECK(vkWaitForFences(context->device, 1, &req.fence, VK_TRUE, UINT64_MAX));
-            req.completionSignal->release();
-        }
-    }
-#endif
 }
 
 RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCommandBuffer cmd, VkSemaphore swapchainSemaphore, Core::FrameBuffer& frameBuffer)
@@ -1082,8 +1089,9 @@ void RenderThread::CreatePipelines()
     const VkDescriptorSetLayout smaaLookupLayout = resourceManager->smaaLookupGenerateResources.descriptorSetLayout.handle;
     pipelineManager->RegisterComputePipelineCustomLayout(SID("smaa_area_generate"), Platform::GetShaderPath() / "smaa_area_generate_compute.spv",
                                                          sizeof(SMAAAreaGeneratePushConstant), PipelineCategory::AssetGeneration, Core::Span(&smaaLookupLayout, 1));
+    const VkDescriptorSetLayout smaaSearchLayout = resourceManager->smaaSearchGenerateResources.descriptorSetLayout.handle;
     pipelineManager->RegisterComputePipelineCustomLayout(SID("smaa_search_generate"), Platform::GetShaderPath() / "smaa_search_generate_compute.spv",
-                                                         sizeof(SMAASearchGeneratePushConstant), PipelineCategory::AssetGeneration, Core::Span(&smaaLookupLayout, 1));
+                                                         sizeof(SMAASearchGeneratePushConstant), PipelineCategory::AssetGeneration, Core::Span(&smaaSearchLayout, 1));
 #endif
 
     GraphicsPipelineBuilder builder;

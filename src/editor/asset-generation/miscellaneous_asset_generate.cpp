@@ -301,10 +301,7 @@ void CreateBRDFLookupTable(
     header.uncompressedSize = ktxSize;
     header.dataSize = realSize;
 
-    std::string_view name = outputPath.Stem();
-    size_t copyLen = std::min(name.size(), static_cast<size_t>(Engine::WTEXTURE_NAME_LENGTH) - 1);
-    strncpy_s(header.name, Engine::WTEXTURE_NAME_LENGTH, name.data(), copyLen);
-    header.name[copyLen] = '\0';
+    strncpy_s(header.name, Engine::WTEXTURE_NAME_LENGTH, "brdf_lut", Engine::WTEXTURE_NAME_LENGTH - 1);
 
     Core::Path outputParent = outputPath.Parent();
     Platform::CreateDirectories(outputParent.c_str());
@@ -399,7 +396,10 @@ void CreateSMAATextures(Core::MemoryManager* memoryManager,
         VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL
     );
     VkDependencyInfo depInfo{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO, .imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &barrier};
-    vkCmdPipelineBarrier2(graphicsCmd, &depInfo); {
+    vkCmdPipelineBarrier2(graphicsCmd, &depInfo);
+
+    //
+    {
         SMAAAreaGeneratePushConstant pc{.targetIndex = 0};
 
         Core::Array<VkDescriptorBufferBindingInfoEXT, 1> bindings{resourceManager->smaaLookupGenerateResources.GetBindingInfo()};
@@ -493,10 +493,7 @@ void CreateSMAATextures(Core::MemoryManager* memoryManager,
         header.uncompressedSize = ktxSize;
         header.dataSize = realSize;
 
-        std::string_view name = outputAreaPath.Stem();
-        size_t copyLen = std::min(name.size(), static_cast<size_t>(Engine::WTEXTURE_NAME_LENGTH) - 1);
-        strncpy_s(header.name, Engine::WTEXTURE_NAME_LENGTH, name.data(), copyLen);
-        header.name[copyLen] = '\0';
+        strncpy_s(header.name, Engine::WTEXTURE_NAME_LENGTH, "smaa_area", Engine::WTEXTURE_NAME_LENGTH - 1);
 
         Platform::CreateDirectories(outputAreaPath.Parent().c_str());
         std::ofstream f(outputAreaPath.c_str(), std::ios::binary);
@@ -509,7 +506,7 @@ void CreateSMAATextures(Core::MemoryManager* memoryManager,
     }
 
     // === Search Texture (64x16, R8_UNORM) ===
-    /*constexpr uint32_t SEARCH_W = 64;
+    constexpr uint32_t SEARCH_W = 64;
     constexpr uint32_t SEARCH_H = 16;
     constexpr VkDeviceSize searchByteSize = SEARCH_W * SEARCH_H * sizeof(uint8_t);
 
@@ -527,7 +524,7 @@ void CreateSMAATextures(Core::MemoryManager* memoryManager,
     );
     searchViewInfo.subresourceRange = Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1);
     Render::ImageView searchImageView = Render::ImageView::CreateImageView(context, searchViewInfo);
-    success = resourceManager->smaaLookupGenerateResources.WriteDescriptor(0, {nullptr, searchImageView.handle, VK_IMAGE_LAYOUT_GENERAL});
+    success = resourceManager->smaaSearchGenerateResources.WriteDescriptor(0, {nullptr, searchImageView.handle, VK_IMAGE_LAYOUT_GENERAL});
     assert(success);
 
     startGraphicsRecording();
@@ -541,11 +538,10 @@ void CreateSMAATextures(Core::MemoryManager* memoryManager,
     depInfo = {.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO, .imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &barrier};
     vkCmdPipelineBarrier2(graphicsCmd, &depInfo);
 
-    //
     {
         SMAASearchGeneratePushConstant pc{.targetIndex = 0};
 
-        Core::Array<VkDescriptorBufferBindingInfoEXT, 1> bindings{resourceManager->smaaLookupGenerateResources.GetBindingInfo()};
+        Core::Array<VkDescriptorBufferBindingInfoEXT, 1> bindings{resourceManager->smaaSearchGenerateResources.GetBindingInfo()};
         uint32_t bindingIndex{0u};
         VkDeviceSize bindingOffset{0};
         vkCmdBindDescriptorBuffersEXT(graphicsCmd, bindings.Size(), bindings.Data());
@@ -636,10 +632,7 @@ void CreateSMAATextures(Core::MemoryManager* memoryManager,
         header.uncompressedSize = ktxSize;
         header.dataSize = realSize;
 
-        std::string_view name = outputSearchPath.Stem();
-        size_t copyLen = std::min(name.size(), static_cast<size_t>(Engine::WTEXTURE_NAME_LENGTH) - 1);
-        strncpy_s(header.name, Engine::WTEXTURE_NAME_LENGTH, name.data(), copyLen);
-        header.name[copyLen] = '\0';
+        strncpy_s(header.name, Engine::WTEXTURE_NAME_LENGTH, "smaa_search", Engine::WTEXTURE_NAME_LENGTH - 1);
 
         Platform::CreateDirectories(outputSearchPath.Parent().c_str());
         std::ofstream f(outputSearchPath.c_str(), std::ios::binary);
@@ -650,7 +643,6 @@ void CreateSMAATextures(Core::MemoryManager* memoryManager,
         f.write(reinterpret_cast<const char*>(compressed.Data()), static_cast<std::streamsize>(realSize));
         LOG_INFO(Asset, "Wrote {}", outputSearchPath.c_str());
     }
-    */
     vkDestroyFence(context->device, graphicsFence, nullptr);
     vkDestroyCommandPool(context->device, graphicsCommandPool, nullptr);
 }
