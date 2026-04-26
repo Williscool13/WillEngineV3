@@ -29,7 +29,7 @@ void NeighborhoodBlendMain(uniform SmaaNeighborhoodBlendPushConstant pc, uint3 t
     a.z = rdgTexturesFloat4[pc.blendWeightIndex].Load(int3(coord,              0)).b; // current
     a.w = rdgTexturesFloat4[pc.blendWeightIndex].Load(int3(coord,              0)).r; // current
 
-    float3 result;
+    float3 result = float3(0.0f);
 
     if (dot(a, float4(1.0)) < 1e-5) {
         result = rdgTexturesFloat4[pc.colorIndex].Load(int3(coord, 0)).rgb;
