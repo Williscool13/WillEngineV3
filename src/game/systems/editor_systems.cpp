@@ -1486,7 +1486,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
         ImGui::Spacing();
         ImGui::SeparatorText("Anti-Aliasing");
         {
-            const char* aaModes[] = {"None", "SMAA", "TAA"};
+            const char* aaModes[] = {"None", "SMAA", "TAA", "SMAA T2X"};
             int currentAA = static_cast<int>(state->lighting.aaMode);
             if (ImGui::Combo("Mode##aa", &currentAA, aaModes, IM_ARRAYSIZE(aaModes))) {
                 state->lighting.aaMode = static_cast<Core::AntiAliasingMode>(currentAA);

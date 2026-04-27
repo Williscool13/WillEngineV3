@@ -417,7 +417,7 @@ SHADER_PUBLIC struct SmaaTemporalResolvePushConstant
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC uint32_t currentColorIndex;
     SHADER_PUBLIC uint32_t previousColorIndex;
-    SHADER_PUBLIC uint32_t velocityIndex;
+    SHADER_PUBLIC uint32_t gbufferOneIndex;
     SHADER_PUBLIC uint32_t outputIndex;
 };
 

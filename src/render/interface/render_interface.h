@@ -137,6 +137,7 @@ enum class AntiAliasingMode
     None = 0,
     SMAA,
     TAA,
+    SMAAT2X,
 };
 
 enum class SMAAEdgeDetectionMode : int32_t

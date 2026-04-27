@@ -46,6 +46,30 @@ SceneData GenerateSceneData(const Core::RenderView& view, Core::AntiAliasingMode
         sceneData.proj = jitteredProj;
         sceneData.prevProj = jitteredPrevProj;
     }
+    else if (aaMode == Core::AntiAliasingMode::SMAAT2X) {
+        // Alternates between two canonical SMAA subsample positions each frame.
+        static constexpr glm::vec2 kSubsampleOffsets[2] = {{-0.25f, -0.25f}, {0.25f, 0.25f}};
+        const glm::vec2& curr = kSubsampleOffsets[frameNumber % 2];
+        const glm::vec2& prev = kSubsampleOffsets[(frameNumber + 1) % 2];
+
+        float jitterX = curr.x / static_cast<float>(renderExtent[0]);
+        float jitterY = curr.y / static_cast<float>(renderExtent[1]);
+        float prevJitterX = prev.x / static_cast<float>(renderExtent[0]);
+        float prevJitterY = prev.y / static_cast<float>(renderExtent[1]);
+
+        glm::mat4 jitteredProj = projMatrix;
+        jitteredProj[2][0] += jitterX;
+        jitteredProj[2][1] += jitterY;
+
+        glm::mat4 jitteredPrevProj = prevProjMatrix;
+        jitteredPrevProj[2][0] += prevJitterX;
+        jitteredPrevProj[2][1] += prevJitterY;
+
+        sceneData.jitter = {jitterX, jitterY};
+        sceneData.prevJitter = {prevJitterX, prevJitterY};
+        sceneData.proj = jitteredProj;
+        sceneData.prevProj = jitteredPrevProj;
+    }
     else {
         sceneData.jitter = {0.0f, 0.0f};
         sceneData.prevJitter = {0.0f, 0.0f};

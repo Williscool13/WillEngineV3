@@ -82,6 +82,12 @@ StringID SetupTemporalAntiAliasing(RenderGraph& graph,
                                    Core::Array<uint32_t, 2> renderExtent,
                                    const MainRenderTargets& ppTargets);
 
+StringID SetupSMAA_T2X(RenderGraph& graph,
+                       PipelineManager* pipelineManager,
+                       const Core::ViewFamily& viewFamily,
+                       Core::Array<uint32_t, 2> renderExtent,
+                       const MainRenderTargets& ppTargets);
+
 StringID SetupPostProcessing(RenderGraph& graph,
                              PipelineManager* pipelineManager,
                              const Core::ViewFamily& viewFamily,

@@ -492,6 +492,9 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             case Core::AntiAliasingMode::TAA:
                 finalOutput = SetupTemporalAntiAliasing(*renderGraph, pipelineManager, viewFamily, renderExtent, mainTargets);
                 break;
+            case Core::AntiAliasingMode::SMAAT2X:
+                finalOutput = SetupSMAA_T2X(*renderGraph, pipelineManager, viewFamily, renderExtent, mainTargets);
+                break;
             default: break;
         }
 
