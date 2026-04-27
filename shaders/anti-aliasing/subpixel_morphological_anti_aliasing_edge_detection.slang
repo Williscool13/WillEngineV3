@@ -4,9 +4,7 @@ import constants_interop;
 import bindless_declarations;
 import shader_functions;
 
-static const float SMAA_THRESHOLD                      = 0.1;
-static const float SMAA_DEPTH_THRESHOLD                = 0.1;
-static const float SMAA_LOCAL_CONTRAST_ADAPTATION      = 2.0;
+static const float SMAA_DEPTH_THRESHOLD = 0.1;
 
 // ============================================================
 // Pass 1a: Luma Edge Detection
@@ -37,13 +35,13 @@ void LumaEdgeDetectionMain(uniform SmaaEdgeDetectionPushConstant pc, uint3 threa
 
     float4 delta;
     delta.xy = abs(L - float2(Ll, Lt));
-    float2 edges = step(SMAA_THRESHOLD, delta.xy);
+    float2 edges = step(pc.threshold, delta.xy);
 
     delta.zw   = abs(L - float2(Luma(Cr), Luma(Cb)));
     float2 maxDelta = max(delta.xy, delta.zw);
     maxDelta = max(maxDelta, abs(float2(Ll - Luma(Cll), Lt - Luma(Ctt))));
 
-    edges *= step(max(maxDelta.x, maxDelta.y), SMAA_LOCAL_CONTRAST_ADAPTATION * delta.xy);
+    edges *= step(max(maxDelta.x, maxDelta.y), pc.localContrastAdaptation * delta.xy);
 
     rdgStorageFloat2[pc.outputEdgeIndex][coord] = edges;
 }
@@ -73,7 +71,7 @@ void ColorEdgeDetectionMain(uniform SmaaEdgeDetectionPushConstant pc, uint3 thre
     t = abs(C - Cl); delta.x = max(max(t.r, t.g), t.b);
     t = abs(C - Ct); delta.y = max(max(t.r, t.g), t.b);
 
-    float2 edges = step(SMAA_THRESHOLD, delta.xy);
+    float2 edges = step(pc.threshold, delta.xy);
 
     float3 Cr = rdgTexturesFloat4[pc.colorIndex].Load(int3(coord + int2( 1,  0), 0)).rgb;
     float3 Cb = rdgTexturesFloat4[pc.colorIndex].Load(int3(coord + int2( 0,  1), 0)).rgb;
@@ -91,7 +89,7 @@ void ColorEdgeDetectionMain(uniform SmaaEdgeDetectionPushConstant pc, uint3 thre
 
     maxDelta = max(maxDelta, delta.zw);
 
-    edges *= step(max(maxDelta.x, maxDelta.y), SMAA_LOCAL_CONTRAST_ADAPTATION * delta.xy);
+    edges *= step(max(maxDelta.x, maxDelta.y), pc.localContrastAdaptation * delta.xy);
 
     rdgStorageFloat2[pc.outputEdgeIndex][coord] = edges;
 }

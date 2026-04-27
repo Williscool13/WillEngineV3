@@ -14,7 +14,7 @@ namespace Render
 class PipelineManager;
 struct FrameResourceLimits;
 
-SceneData GenerateSceneData(const Core::RenderView& view, const Core::PostProcessConfiguration& ppConfig, Core::Array<uint32_t, 2> renderExtent, uint64_t frameNumber, float deltaTime);
+SceneData GenerateSceneData(const Core::RenderView& view, Core::AntiAliasingMode aaMode, Core::Array<uint32_t, 2> renderExtent, uint64_t frameNumber, float deltaTime);
 
 RenderFamilyProperties PrepareRenderFamilyProperties(Core::ViewFamily& viewFamily, ReadbackStruct* readbackData, PipelineManager* _pipelineManager, FrameResourceLimits& _limits);
 

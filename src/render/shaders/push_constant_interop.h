@@ -391,6 +391,8 @@ SHADER_PUBLIC struct SmaaEdgeDetectionPushConstant
     SHADER_PUBLIC uint32_t colorIndex;
     SHADER_PUBLIC uint32_t depthIndex;
     SHADER_PUBLIC uint32_t outputEdgeIndex;
+    SHADER_PUBLIC float threshold;
+    SHADER_PUBLIC float localContrastAdaptation;
 };
 
 SHADER_PUBLIC struct SmaaBlendWeightPushConstant
@@ -398,6 +400,8 @@ SHADER_PUBLIC struct SmaaBlendWeightPushConstant
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC uint32_t edgeIndex;
     SHADER_PUBLIC uint32_t outputBlendIndex;
+    SHADER_PUBLIC int32_t maxSearchSteps;
+    SHADER_PUBLIC int32_t maxSearchStepsDiag;
 };
 
 SHADER_PUBLIC struct SmaaNeighborhoodBlendPushConstant

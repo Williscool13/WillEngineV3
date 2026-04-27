@@ -12,7 +12,7 @@
 
 namespace Render
 {
-SceneData GenerateSceneData(const Core::RenderView& view, const Core::PostProcessConfiguration& ppConfig, Core::Array<uint32_t, 2> renderExtent, uint64_t frameNumber, float deltaTime)
+SceneData GenerateSceneData(const Core::RenderView& view, Core::AntiAliasingMode aaMode, Core::Array<uint32_t, 2> renderExtent, uint64_t frameNumber, float deltaTime)
 {
     const glm::mat4 viewMatrix = view.currentViewData.view;
     const glm::mat4 projMatrix = view.currentViewData.proj;
@@ -24,7 +24,7 @@ SceneData GenerateSceneData(const Core::RenderView& view, const Core::PostProces
     sceneData.view = viewMatrix;
     sceneData.prevView = prevViewMatrix;
 
-    if (ppConfig.bEnableTemporalAntialiasing) {
+    if (aaMode == Core::AntiAliasingMode::TAA) {
         glm::mat4 jitteredProj = projMatrix;
         float haltonX = 2.0f * Halton((frameNumber + 1) % HALTON_SEQUENCE_COUNT + 1, 2) - 1.0f;
         float haltonY = 2.0f * Halton((frameNumber + 1) % HALTON_SEQUENCE_COUNT + 1, 3) - 1.0f;
@@ -61,9 +61,6 @@ SceneData GenerateSceneData(const Core::RenderView& view, const Core::PostProces
     sceneData.invProj = glm::inverse(sceneData.proj);
     sceneData.invViewProj = glm::inverse(sceneData.viewProj);
 
-
-    sceneData.unjitteredViewProj = projMatrix * viewMatrix;
-    sceneData.unjitteredPrevViewProj = prevProjMatrix * prevViewMatrix;
     sceneData.clipToPrevClip = sceneData.prevProj * sceneData.prevView * sceneData.invView * sceneData.invProj;
 
     sceneData.cameraWorldPos = glm::vec4(view.currentViewData.cameraPos, 1.0f);

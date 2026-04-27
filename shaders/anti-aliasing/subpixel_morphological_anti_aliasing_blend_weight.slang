@@ -31,10 +31,10 @@ float4 SMAADecodeDiagBilinearAccess(float4 e)
     return round(e);
 }
 
-float2 SMAASearchDiag1(uint edgeIndex, float2 texcoord, float2 dir, out float2 e, float2 tsize)
+float2 SMAASearchDiag1(uint edgeIndex, float2 texcoord, float2 dir, out float2 e, float2 tsize, int maxStepsDiag)
 {
     float4 coord = float4(texcoord, -1.0, 1.0);
-    while (coord.z < float(SMAA_MAX_SEARCH_STEPS_DIAG - 1) && coord.w > 0.9) {
+    while (coord.z < float(maxStepsDiag - 1) && coord.w > 0.9) {
         coord.xyz = mad(float3(dir, 1.0), float3(tsize, 1.0), coord.xyz);
         e = rdgTexturesFloat2[edgeIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], coord.xy, 0).rg;
         coord.w = dot(e, float2(0.5, 0.5));
@@ -42,11 +42,11 @@ float2 SMAASearchDiag1(uint edgeIndex, float2 texcoord, float2 dir, out float2 e
     return coord.zw;
 }
 
-float2 SMAASearchDiag2(uint edgeIndex, float2 texcoord, float2 dir, out float2 e, float2 tsize)
+float2 SMAASearchDiag2(uint edgeIndex, float2 texcoord, float2 dir, out float2 e, float2 tsize, int maxStepsDiag)
 {
     float4 coord = float4(texcoord, -1.0, 1.0);
     coord.x += 0.25 * tsize.x;
-    while (coord.z < float(SMAA_MAX_SEARCH_STEPS_DIAG - 1) && coord.w > 0.9) {
+    while (coord.z < float(maxStepsDiag - 1) && coord.w > 0.9) {
         coord.xyz = mad(float3(dir, 1.0), float3(tsize, 1.0), coord.xyz);
         e = rdgTexturesFloat2[edgeIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], coord.xy, 0).rg;
         e = SMAADecodeDiagBilinearAccess(e);
@@ -63,19 +63,19 @@ float2 SMAAAreaDiag(float2 dist, float2 e, float2 tsize)
     return assetTextures[SMAA_AREA_BINDLESS_INDEX].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], texcoord, 0).rg;
 }
 
-float2 SMAACalculateDiagWeights(uint edgeIndex, float2 texcoord, float2 e, float2 tsize)
+float2 SMAACalculateDiagWeights(uint edgeIndex, float2 texcoord, float2 e, float2 tsize, int maxStepsDiag)
 {
     float2 weights = float2(0.0, 0.0);
     float4 d;
     float2 end;
 
     if (e.r > 0.0) {
-        d.xz = SMAASearchDiag1(edgeIndex, texcoord, float2(-1.0,  1.0), end, tsize);
+        d.xz = SMAASearchDiag1(edgeIndex, texcoord, float2(-1.0,  1.0), end, tsize, maxStepsDiag);
         d.x += float(end.y > 0.9);
     } else {
         d.xz = float2(0.0, 0.0);
     }
-    d.yw = SMAASearchDiag1(edgeIndex, texcoord, float2(1.0, -1.0), end, tsize);
+    d.yw = SMAASearchDiag1(edgeIndex, texcoord, float2(1.0, -1.0), end, tsize, maxStepsDiag);
 
     if (d.x + d.y > 2.0) {
         float4 coords = mad(float4(-d.x + 0.25, d.x, d.y, -d.y - 0.25), tsize.xyxy, texcoord.xyxy);
@@ -91,9 +91,9 @@ float2 SMAACalculateDiagWeights(uint edgeIndex, float2 texcoord, float2 e, float
         weights += SMAAAreaDiag(d.xy, cc, tsize);
     }
 
-    d.xz = SMAASearchDiag2(edgeIndex, texcoord, float2(-1.0, -1.0), end, tsize);
+    d.xz = SMAASearchDiag2(edgeIndex, texcoord, float2(-1.0, -1.0), end, tsize, maxStepsDiag);
     if (rdgTexturesFloat2[edgeIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], texcoord + float2(1, 0) * tsize, 0).r > 0.0) {
-        d.yw = SMAASearchDiag2(edgeIndex, texcoord, float2(1.0, 1.0), end, tsize);
+        d.yw = SMAASearchDiag2(edgeIndex, texcoord, float2(1.0, 1.0), end, tsize, maxStepsDiag);
         d.y += float(end.y > 0.9);
     } else {
         d.yw = float2(0.0, 0.0);
@@ -241,7 +241,7 @@ void BlendWeightMain(uniform SmaaBlendWeightPushConstant pc, uint3 threadID : SV
     // ---- Horizontal edge (g = top edge present at this pixel) ----
     if (e.g > 0.0) {
         // Diagonal detection: runs first and takes priority.
-        weights.rg = SMAACalculateDiagWeights(pc.edgeIndex, uv, e, tsize);
+        weights.rg = SMAACalculateDiagWeights(pc.edgeIndex, uv, e, tsize, pc.maxSearchStepsDiag);
 
         if (weights.r == -weights.g) { // no diagonal found (r + g == 0)
             float2 d;
@@ -250,8 +250,8 @@ void BlendWeightMain(uniform SmaaBlendWeightPushConstant pc, uint3 threadID : SV
             // End limits account for 2-texel steps over SMAA_MAX_SEARCH_STEPS iterations.
             float2 coordsL = uv + float2(-0.25, -0.125) * tsize;
             float2 coordsR = uv + float2( 1.25, -0.125) * tsize;
-            float  endL    = coordsL.x - 2.0 * float(SMAA_MAX_SEARCH_STEPS) * tsize.x;
-            float  endR    = coordsR.x + 2.0 * float(SMAA_MAX_SEARCH_STEPS) * tsize.x;
+            float  endL    = coordsL.x - 2.0 * float(pc.maxSearchSteps) * tsize.x;
+            float  endR    = coordsR.x + 2.0 * float(pc.maxSearchSteps) * tsize.x;
 
             d.x = SMAASearchXLeft(pc.edgeIndex, coordsL, endL, tsize);
             d.y = SMAASearchXRight(pc.edgeIndex, coordsR, endR, tsize);
@@ -277,8 +277,8 @@ void BlendWeightMain(uniform SmaaBlendWeightPushConstant pc, uint3 threadID : SV
 
         float2 coordsU = uv + float2(-0.125, -0.25) * tsize;
         float2 coordsD = uv + float2(-0.125,  1.25) * tsize;
-        float  endU    = coordsU.y - 2.0 * float(SMAA_MAX_SEARCH_STEPS) * tsize.y;
-        float  endD    = coordsD.y + 2.0 * float(SMAA_MAX_SEARCH_STEPS) * tsize.y;
+        float  endU    = coordsU.y - 2.0 * float(pc.maxSearchSteps) * tsize.y;
+        float  endD    = coordsD.y + 2.0 * float(pc.maxSearchSteps) * tsize.y;
 
         d.x = SMAASearchYUp(pc.edgeIndex, coordsU, endU, tsize);
         d.y = SMAASearchYDown(pc.edgeIndex, coordsD, endD, tsize);

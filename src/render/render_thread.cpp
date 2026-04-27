@@ -485,9 +485,14 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
 
         finalOutput = shadingOutputTarget;
-        SetupSubpixelMorphologicalAntiAliasing(*renderGraph, pipelineManager, viewFamily, renderExtent, mainTargets);
-        if (viewFamily.postProcessConfig.bEnableTemporalAntialiasing) {
-            finalOutput = SetupTemporalAntiAliasing(*renderGraph, pipelineManager, viewFamily, renderExtent, mainTargets);
+        switch (viewFamily.aaMode) {
+            case Core::AntiAliasingMode::SMAA:
+                finalOutput = SetupSubpixelMorphologicalAntiAliasing(*renderGraph, pipelineManager, viewFamily, renderExtent, mainTargets);
+                break;
+            case Core::AntiAliasingMode::TAA:
+                finalOutput = SetupTemporalAntiAliasing(*renderGraph, pipelineManager, viewFamily, renderExtent, mainTargets);
+                break;
+            default: break;
         }
 
         mainTargets.outputColor = finalOutput;
@@ -1283,14 +1288,14 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
     renderGraph->CreateBuffer(SID("light_data"), LIGHT_DATA_BUFFER_SIZE, false);
 
     // Scene Data
-    SceneData sceneData = GenerateSceneData(viewFamily.mainView, viewFamily.postProcessConfig, renderExtent, frameNumber, renderDeltaTime);
+    SceneData sceneData = GenerateSceneData(viewFamily.mainView, viewFamily.aaMode, renderExtent, frameNumber, renderDeltaTime);
     UploadAllocation sceneDataUploadAllocation = renderGraph->AllocateTransient(sizeof(SceneData));
     memcpy(sceneDataUploadAllocation.ptr, &sceneData, sizeof(SceneData));
     // Portal Scene Data
     UploadAllocation portalSceneDataUploadAllocation{};
     bool bHasPortal = !viewFamily.portalViews.IsEmpty();
     if (bHasPortal) {
-        SceneData portalSceneData = GenerateSceneData(viewFamily.portalViews[0].view, viewFamily.postProcessConfig, renderExtent, frameNumber, renderDeltaTime);
+        SceneData portalSceneData = GenerateSceneData(viewFamily.portalViews[0].view, viewFamily.aaMode, renderExtent, frameNumber, renderDeltaTime);
         portalSceneData.clipPlane = glm::vec4(viewFamily.portalViews[0].exitPortalNormal,
                                               -glm::dot(viewFamily.portalViews[0].exitPortalNormal, viewFamily.portalViews[0].exitPortalTransform.translation));
         portalSceneDataUploadAllocation = renderGraph->AllocateTransient(sizeof(SceneData));

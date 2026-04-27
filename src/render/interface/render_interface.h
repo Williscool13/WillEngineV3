@@ -99,9 +99,6 @@ struct DirectionalLight
 
 struct PostProcessConfiguration
 {
-    // Post Process (move into view)
-    bool bEnableTemporalAntialiasing{true};
-
     float exposureTargetLuminance{0.18f};
     float exposureAdaptationRate{16.0f};
 
@@ -133,6 +130,29 @@ struct PostProcessConfiguration
     float sharpeningStrength{0.4f};
 
     float paniniStrength{0.0f};
+};
+
+enum class AntiAliasingMode
+{
+    None = 0,
+    SMAA,
+    TAA,
+};
+
+enum class SMAAEdgeDetectionMode : int32_t
+{
+    Luma  = 0,
+    Color = 1,
+    Depth = 2,
+};
+
+struct SMAAConfiguration
+{
+    SMAAEdgeDetectionMode edgeDetectionMode{SMAAEdgeDetectionMode::Color};
+    float threshold{0.05f};
+    float localContrastAdaptation{2.0f};
+    int32_t maxSearchSteps{32};
+    int32_t maxSearchStepsDiag{8};
 };
 
 struct GTAOConfiguration
@@ -294,7 +314,9 @@ struct ViewFamily
     DirectionalLight directionalLight{};
     // std::vector<LightInstance> allLights;
 
+    AntiAliasingMode aaMode{AntiAliasingMode::TAA};
     GTAOConfiguration gtaoConfig{};
+    SMAAConfiguration smaaConfig{};
     PostProcessConfiguration postProcessConfig{};
 
     // Debugging

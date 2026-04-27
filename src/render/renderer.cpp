@@ -944,20 +944,34 @@ StringID SetupSubpixelMorphologicalAntiAliasing(RenderGraph& graph, PipelineMana
     graph.CreateTexture(SID("smaa_blend"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
     graph.CreateTexture(SID("smaa_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
 
+    const Core::SMAAConfiguration& smaaConfig = viewFamily.smaaConfig;
+
     // Pass 1: Edge Detection
     RenderPass& edgePass = graph.AddPass(SID("SMAA Edge Detection"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
     edgePass.ReadBuffer(SID("scene_data"));
     edgePass.ReadSampledImage(ppTargets.outputColor);
+    edgePass.ReadSampledImage(ppTargets.depthStencil);
     edgePass.WriteStorageImage(SID("smaa_edges"));
     edgePass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1],
-            outputColor = ppTargets.outputColor](VkCommandBuffer cmd) {
+            outputColor = ppTargets.outputColor, depthStencil = ppTargets.depthStencil,
+            smaaConfig](VkCommandBuffer cmd) {
             SmaaEdgeDetectionPushConstant pushData{
                 .sceneData = graph.GetBufferAddress(SID("scene_data")),
                 .colorIndex = graph.GetSampledImageViewDescriptorIndex(outputColor),
+                .depthIndex = graph.GetSampledImageViewDescriptorIndex(depthStencil),
                 .outputEdgeIndex = graph.GetStorageImageViewDescriptorIndex(SID("smaa_edges")),
+                .threshold = smaaConfig.threshold,
+                .localContrastAdaptation = smaaConfig.localContrastAdaptation,
             };
 
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("smaa_luma_edge_detection"));
+            StringID pipelineID;
+            switch (smaaConfig.edgeDetectionMode) {
+                case Core::SMAAEdgeDetectionMode::Color: pipelineID = SID("smaa_color_edge_detection"); break;
+                case Core::SMAAEdgeDetectionMode::Depth: pipelineID = SID("smaa_depth_edge_detection"); break;
+                default:                                 pipelineID = SID("smaa_luma_edge_detection");  break;
+            }
+
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(pipelineID);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(SmaaEdgeDetectionPushConstant), &pushData);
 
@@ -971,11 +985,13 @@ StringID SetupSubpixelMorphologicalAntiAliasing(RenderGraph& graph, PipelineMana
     blendPass.ReadBuffer(SID("scene_data"));
     blendPass.ReadSampledImage(SID("smaa_edges"));
     blendPass.WriteStorageImage(SID("smaa_blend"));
-    blendPass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1]](VkCommandBuffer cmd) {
+    blendPass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1], smaaConfig](VkCommandBuffer cmd) {
         SmaaBlendWeightPushConstant pushData{
             .sceneData = graph.GetBufferAddress(SID("scene_data")),
             .edgeIndex = graph.GetSampledImageViewDescriptorIndex(SID("smaa_edges")),
             .outputBlendIndex = graph.GetStorageImageViewDescriptorIndex(SID("smaa_blend")),
+            .maxSearchSteps = smaaConfig.maxSearchSteps,
+            .maxSearchStepsDiag = smaaConfig.maxSearchStepsDiag,
         };
 
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("smaa_blend_weight"));

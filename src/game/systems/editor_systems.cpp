@@ -1469,7 +1469,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
         }
         ImGui::SameLine();
         if (ImGui::Button("Disable All Effects")) {
-            state->lighting.postProcess.bEnableTemporalAntialiasing = false;
+            state->lighting.aaMode = Core::AntiAliasingMode::None;
             state->lighting.postProcess.tonemapOperator = -1;
             state->lighting.postProcess.bloomIntensity = 0.0f;
             state->lighting.postProcess.motionBlurVelocityScale = 0.0f;
@@ -1485,7 +1485,30 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
 
         ImGui::Spacing();
         ImGui::SeparatorText("Anti-Aliasing");
-        ImGui::Checkbox("Enable TAA", &state->lighting.postProcess.bEnableTemporalAntialiasing);
+        {
+            const char* aaModes[] = {"None", "SMAA", "TAA"};
+            int currentAA = static_cast<int>(state->lighting.aaMode);
+            if (ImGui::Combo("Mode##aa", &currentAA, aaModes, IM_ARRAYSIZE(aaModes))) {
+                state->lighting.aaMode = static_cast<Core::AntiAliasingMode>(currentAA);
+            }
+        }
+
+        ImGui::Spacing();
+        ImGui::SeparatorText("SMAA");
+        {
+            Core::SMAAConfiguration& smaa = state->lighting.smaaConfig;
+            constexpr Core::SMAAConfiguration defaultSMAA{};
+            const char* edgeModes[] = {"Luma", "Color", "Depth"};
+            int currentMode = static_cast<int>(smaa.edgeDetectionMode);
+            if (ImGui::Combo("Edge Detection##smaa", &currentMode, edgeModes, IM_ARRAYSIZE(edgeModes))) {
+                smaa.edgeDetectionMode = static_cast<Core::SMAAEdgeDetectionMode>(currentMode);
+            }
+            ImGui::SliderFloat("Threshold##smaa", &smaa.threshold, 0.01f, 0.5f, "%.3f");
+            ImGui::SliderFloat("Local Contrast Adapt.##smaa", &smaa.localContrastAdaptation, 0.5f, 4.0f, "%.2f");
+            ImGui::SliderInt("Max Search Steps##smaa", &smaa.maxSearchSteps, 1, 112);
+            ImGui::SliderInt("Max Search Steps Diag##smaa", &smaa.maxSearchStepsDiag, 1, 20);
+            if (ImGui::Button("Reset SMAA")) { smaa = defaultSMAA; }
+        }
 
         ImGui::Spacing();
         ImGui::SeparatorText("Tonemapping");
@@ -1997,7 +2020,9 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
     frameBuffer->mainViewFamily.directionalLight = state->lighting.directionalLight;
     frameBuffer->mainViewFamily.shadowConfig = state->lighting.shadowConfig;
     frameBuffer->mainViewFamily.postProcessConfig = state->lighting.postProcess;
+    frameBuffer->mainViewFamily.aaMode = state->lighting.aaMode;
     frameBuffer->mainViewFamily.gtaoConfig = state->lighting.gtaoConfig;
+    frameBuffer->mainViewFamily.smaaConfig = state->lighting.smaaConfig;
     frameBuffer->mainViewFamily.debugResourceName = state->debug.resourceName;
     frameBuffer->mainViewFamily.debugTransformationType = state->debug.transformationType;
     frameBuffer->mainViewFamily.debugViewAspect = state->debug.viewAspect;
