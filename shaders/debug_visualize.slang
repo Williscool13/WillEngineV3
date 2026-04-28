@@ -19,7 +19,9 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
     if (threadID.x >= pc.dstExtent.x || threadID.y >= pc.dstExtent.y) return;
 
     float2 uv = (float2(threadID.xy) + 0.5) / float2(pc.dstExtent);
-    uint2 texCoord = uint2(threadID.xy);
+
+    int3 sampleTexCoord = int3(threadID.xy, 0);
+    int2 texCoord =  uint2(threadID.xy);
 
     float4 srcPixel = float4(1.0f, 0.0f, 0.0f, 1.0f);
     switch (pc.textureArrayIndex) {
@@ -33,31 +35,16 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
             float c = rdgTexturesFloat[pc.textureIndexInArray].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv, 0).r;
             srcPixel.xyz = float3(c);
             break;
-        case 3: // Sampled uint4, bitcast to preserve exact bits for unpacking
-            uint4 v = rdgTexturesUInt4[pc.textureIndexInArray].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv, 0).rgba;
-            srcPixel = asfloat(v);
+        case 3: // Sampled uint4
+            uint4 v = rdgTexturesUInt4[pc.textureIndexInArray].Load(sampleTexCoord).rgba;
+            srcPixel = float4(v.x, v.y, v.z, v.w);
             break;
-        case 4: // Sampled uint2, bitcast to preserve exact bits for unpacking
-            uint2 b = rdgTexturesUInt2[pc.textureIndexInArray].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv, 0).rg;
-            srcPixel.xy = asfloat(b);
+        case 4: // Sampled uint2
+            uint2 b = rdgTexturesUInt2[pc.textureIndexInArray].Load(sampleTexCoord).rg;
+            srcPixel.xy = float2(b.x, b.y);
             break;
         case 5: // Sampled uint
             srcPixel.x = float(rdgTexturesUInt[pc.textureIndexInArray].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv, 0).r);
-            break;
-        case 6: // Storage uint4, bitcast to preserve exact bits for unpacking
-            srcPixel = asfloat(rdgStorageUInt4[pc.textureIndexInArray].Load(texCoord));
-            break;
-        case 7: // Storage uint
-            srcPixel.xyz = float3(rdgStorageUInt[pc.textureIndexInArray].Load(texCoord).r);
-            break;
-        case 8: // Storage float4
-            srcPixel = rdgStorageFloat4[pc.textureIndexInArray].Load(texCoord);
-            break;
-        case 9: // Storage float2
-            srcPixel.xy = rdgStorageFloat2[pc.textureIndexInArray].Load(texCoord);
-            break;
-        case 10: // Storage uint2, bitcast to preserve exact bits for unpacking
-            srcPixel.xy = asfloat(rdgStorageUInt2[pc.textureIndexInArray].Load(texCoord));
             break;
     }
 
