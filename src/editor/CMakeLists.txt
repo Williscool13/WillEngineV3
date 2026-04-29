@@ -13,6 +13,8 @@ add_library(editor STATIC
         asset-generation/environment_map_generate_resources.h
         asset-generation/miscellaneous_asset_generate.cpp
         asset-generation/miscellaneous_asset_generate.h
+        renderer/debug_readback_buffer.cpp
+        renderer/debug_readback_buffer.h
 )
 
 target_include_directories(editor PUBLIC

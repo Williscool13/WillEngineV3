@@ -74,13 +74,9 @@ ResourceManager::ResourceManager(VulkanContext* context)
         RDG_MAX_MULTISAMPLED_UINT_IMAGE
     >(context);
 
-    bufferInfo.usage = VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_2_TRANSFER_DST_BIT;
-    vmaAllocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
-    vmaAllocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
-
-    bufferInfo.size = 8 * 1024 * 1024;
-    debugReadbackBuffer = AllocatedBuffer::CreateAllocatedBuffer(context, bufferInfo, vmaAllocInfo);
-    debugReadbackBuffer.SetDebugName("Debug Readback Buffer");
+#if WILL_EDITOR
+    debugReadback.Init(context, 8 * 1024 * 1024);
+#endif
 
     VkSamplerCreateInfo pointSamplerInfo = {
         .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,

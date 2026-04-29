@@ -121,6 +121,10 @@ private:
 
     void SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, StringID depthTarget, StringID targetImage, FrameResourceLimits& limits) const;
 
+#if WILL_EDITOR
+    void RegisterDebugReadbacks();
+#endif
+
 public:
 #if WILL_EDITOR
     moodycamel::ConcurrentQueue<AssetLoad::GPUDispatchRequest> editorGPUDispatchQueue;

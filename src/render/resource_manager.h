@@ -15,6 +15,7 @@
 
 #if WILL_EDITOR
 #include "editor/asset-generation/environment_map_generate_resources.h"
+#include "editor/renderer/debug_readback_buffer.h"
 #endif
 
 
@@ -83,8 +84,9 @@ struct ResourceManager
         RDG_MAX_MULTISAMPLED_UINT_IMAGE
     > bindlessRDGTransientDescriptorBuffer{};
 
-    AllocatedBuffer debugReadbackBuffer;
-    PipelineEvent debugReadbackLastKnownState;
+#if WILL_EDITOR
+    Editor::DebugReadbackBuffer debugReadback;
+#endif
 
     VulkanContext* context{};
 };

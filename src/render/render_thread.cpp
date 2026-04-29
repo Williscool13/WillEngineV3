@@ -40,6 +40,11 @@
 #include "pipelines/graphics_pipeline_builder.h"
 #include "render-view/render_view_helpers.h"
 #include "shadows/shadow_helpers.h"
+#if WILL_EDITOR
+#include <imgui.h>
+#include "editor/renderer/debug_readback_buffer.h"
+#include "shaders/instancing_interop.h"
+#endif
 
 
 namespace Render
@@ -74,6 +79,9 @@ RenderThread::RenderThread(Core::MemoryManager& memoryManager, Core::FrameSync* 
 
     renderGraph = new(memoryManager.RenderAllocRaw(sizeof(RenderGraph))) RenderGraph(context, resourceManager, renderAlloc, memoryManager.RenderArena());
     screenCapture = new(memoryManager.RenderAllocRaw(sizeof(RenderScreenCapture))) RenderScreenCapture(context, scheduler, memoryManager.AssetsScratch());
+#if WILL_EDITOR
+    RegisterDebugReadbacks();
+#endif
 }
 
 RenderThread::~RenderThread()
@@ -353,8 +361,13 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                                            {resourceManager->megaMeshletBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
         renderGraph->ImportBufferNoBarrier(SID("primitive_buffer"), resourceManager->primitiveBuffer.handle, resourceManager->primitiveBuffer.address,
                                            {resourceManager->primitiveBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
-        renderGraph->ImportBuffer(SID("debug_readback_buffer"), resourceManager->debugReadbackBuffer.handle, resourceManager->debugReadbackBuffer.address,
-                                  {resourceManager->debugReadbackBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT}, resourceManager->debugReadbackLastKnownState);
+#if WILL_EDITOR
+        renderGraph->ImportBuffer(SID("debug_readback_buffer"),
+                                  resourceManager->debugReadback.GetHandle(),
+                                  resourceManager->debugReadback.GetAddress(),
+                                  {resourceManager->debugReadback.GetSize(), VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT},
+                                  resourceManager->debugReadback.GetLastKnownState());
+#endif
     }
 
     renderGraph->ImportTexture(SID("dummy_black_rg32"),
@@ -505,174 +518,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
 
 #if WILL_EDITOR
-        size_t offset = 0;
-        if (renderGraph->HasBuffer(SID("portal_rendering_instance_meshlet_offsets"))) {
-            RenderPass& debugReadbackPass = renderGraph->AddPass(
-                SID("Debug Readback Meshlet Instancing"),
-                VK_PIPELINE_STAGE_2_COPY_BIT
-            );
-
-            debugReadbackPass.ReadTransferBuffer(SID("portal_rendering_instance_meshlet_offsets"));
-            debugReadbackPass.WriteTransferBuffer(SID("debug_readback_buffer"));
-
-            debugReadbackPass.Execute([&, offset](VkCommandBuffer cmd) {
-                VkBufferCopy copies[1];
-
-                // Instance meshlet offsets
-                copies[0].srcOffset = 0;
-                copies[0].dstOffset = offset;
-                copies[0].size = 640 * sizeof(InstanceMeshletOffsetPrefixSum);
-
-                vkCmdCopyBuffer(
-                    cmd,
-                    renderGraph->GetBufferHandle(SID("portal_rendering_instance_meshlet_offsets")),
-                    renderGraph->GetBufferHandle(SID("debug_readback_buffer")),
-                    1,
-                    &copies[0]
-                );
-            });
-        }
-        offset += 640 * sizeof(InstanceMeshletOffsetPrefixSum);
-
-        if (renderGraph->HasBuffer(SID("portal_rendering_meshlet_count_dispatch_args"))) {
-            RenderPass& debugReadbackPass = renderGraph->AddPass(SID("Debug Readback meshlet dispatch args"), VK_PIPELINE_STAGE_2_COPY_BIT);
-
-            debugReadbackPass.ReadTransferBuffer(SID("portal_rendering_meshlet_count_dispatch_args"));
-            debugReadbackPass.WriteTransferBuffer(SID("debug_readback_buffer"));
-
-            debugReadbackPass.Execute([&, offset](VkCommandBuffer cmd) {
-                VkBufferCopy copies[1];
-
-                copies[0].srcOffset = 0;
-                copies[0].dstOffset = offset;
-                copies[0].size = sizeof(InstancingMeshletDispatchIndirect);
-
-                vkCmdCopyBuffer(
-                    cmd,
-                    renderGraph->GetBufferHandle(SID("portal_rendering_meshlet_count_dispatch_args")),
-                    renderGraph->GetBufferHandle(SID("debug_readback_buffer")),
-                    1,
-                    &copies[0]
-                );
-            });
-        }
-        offset += sizeof(InstancingMeshletDispatchIndirect);
-
-        if (renderGraph->HasBuffer(SID("portal_rendering_intermediate_meshlets"))) {
-            RenderPass& debugReadbackPass = renderGraph->AddPass(SID("Debug Readback intermediate meshlets"), VK_PIPELINE_STAGE_2_COPY_BIT);
-
-            debugReadbackPass.ReadTransferBuffer(SID("portal_rendering_intermediate_meshlets"));
-            debugReadbackPass.WriteTransferBuffer(SID("debug_readback_buffer"));
-
-            debugReadbackPass.Execute([&, offset](VkCommandBuffer cmd) {
-                VkBufferCopy copies[1];
-
-                copies[0].srcOffset = 0;
-                copies[0].dstOffset = offset;
-                copies[0].size = sizeof(IntermediateMeshlet) * 128;
-
-                vkCmdCopyBuffer(
-                    cmd,
-                    renderGraph->GetBufferHandle(SID("portal_rendering_intermediate_meshlets")),
-                    renderGraph->GetBufferHandle(SID("debug_readback_buffer")),
-                    1,
-                    &copies[0]
-                );
-            });
-        }
-        offset += sizeof(IntermediateMeshlet) * 128;
-
-        if (renderGraph->HasBuffer(SID("portal_rendering_visible_meshlets"))) {
-            RenderPass& debugReadbackPass = renderGraph->AddPass(SID("Debug Readback visible meshlets"), VK_PIPELINE_STAGE_2_COPY_BIT);
-
-            debugReadbackPass.ReadTransferBuffer(SID("portal_rendering_visible_meshlets"));
-            debugReadbackPass.WriteTransferBuffer(SID("debug_readback_buffer"));
-
-            debugReadbackPass.Execute([&, offset](VkCommandBuffer cmd) {
-                VkBufferCopy copies[1];
-
-                copies[0].srcOffset = 0;
-                copies[0].dstOffset = offset;
-                copies[0].size = sizeof(CompactedMeshlet) * 128;
-
-                vkCmdCopyBuffer(
-                    cmd,
-                    renderGraph->GetBufferHandle(SID("portal_rendering_visible_meshlets")),
-                    renderGraph->GetBufferHandle(SID("debug_readback_buffer")),
-                    1,
-                    &copies[0]
-                );
-            });
-        }
-        offset += sizeof(CompactedMeshlet) * 128;
-
-        if (renderGraph->HasBuffer(SID("portal_rendering_meshlet_scanned_level2_block_sums"))) {
-            RenderPass& debugReadbackPass = renderGraph->AddPass(SID("Debug Readback meshlet scanned level2 block sums"), VK_PIPELINE_STAGE_2_COPY_BIT);
-
-            debugReadbackPass.ReadTransferBuffer(SID("portal_rendering_meshlet_scanned_level2_block_sums"));
-            debugReadbackPass.WriteTransferBuffer(SID("debug_readback_buffer"));
-
-            debugReadbackPass.Execute([&, offset](VkCommandBuffer cmd) {
-                VkBufferCopy copies[1];
-
-                copies[0].srcOffset = 0;
-                copies[0].dstOffset = offset;
-                copies[0].size = sizeof(uint32_t) * 256;
-
-                vkCmdCopyBuffer(
-                    cmd,
-                    renderGraph->GetBufferHandle(SID("portal_rendering_meshlet_scanned_level2_block_sums")),
-                    renderGraph->GetBufferHandle(SID("debug_readback_buffer")),
-                    1,
-                    &copies[0]
-                );
-            });
-        }
-        offset += sizeof(uint32_t) * 256;
-
-        if (renderGraph->HasBuffer(SID("portal_rendering_compacted_meshlet_dispatch_args"))) {
-            RenderPass& debugReadbackPass = renderGraph->AddPass(SID("Debug Readback compacted dispatch args"), VK_PIPELINE_STAGE_2_COPY_BIT);
-
-            debugReadbackPass.ReadTransferBuffer(SID("portal_rendering_compacted_meshlet_dispatch_args"));
-            debugReadbackPass.WriteTransferBuffer(SID("debug_readback_buffer"));
-
-            debugReadbackPass.Execute([&, offset](VkCommandBuffer cmd) {
-                VkBufferCopy copies[1];
-
-                copies[0].srcOffset = 0;
-                copies[0].dstOffset = offset;
-                copies[0].size = sizeof(InstancingCompactedMeshletDispatchIndirect);
-
-                vkCmdCopyBuffer(
-                    cmd,
-                    renderGraph->GetBufferHandle(SID("portal_rendering_compacted_meshlet_dispatch_args")),
-                    renderGraph->GetBufferHandle(SID("debug_readback_buffer")),
-                    1,
-                    &copies[0]
-                );
-            });
-        }
-        offset += sizeof(InstancingCompactedMeshletDispatchIndirect);
-
-        if (renderGraph->HasBuffer(SID("portal_rendering_visible_meshlets"))) {
-            RenderPass& readbackVisibleMeshlets = renderGraph->AddPass(SID("Readback Visible Meshlets"), VK_PIPELINE_STAGE_2_COPY_BIT);
-            readbackVisibleMeshlets.ReadTransferBuffer(SID("portal_rendering_visible_meshlets"));
-            readbackVisibleMeshlets.Execute([&, offset](VkCommandBuffer cmd) {
-                VkBufferCopy copy;
-                copy.srcOffset = 0;
-                copy.dstOffset = offset;
-                copy.size = sizeof(CompactedMeshlet) * 128;
-
-                vkCmdCopyBuffer(
-                    cmd,
-                    renderGraph->GetBufferHandle(SID("portal_rendering_visible_meshlets")),
-                    renderGraph->GetBufferHandle(SID("debug_readback_buffer")),
-                    1,
-                    &copy
-                );
-            });
-        }
-        offset += sizeof(CompactedMeshlet) * 128;
+        resourceManager->debugReadback.ScheduleCopies(*renderGraph, SID("debug_readback_buffer"));
 #endif
 
         if (!viewFamily.debugResourceName.IsEmpty()) {
@@ -915,7 +761,9 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         renderGraph->PrepareSwapchain(cmd, SID("swapchain_image"));
     }
 
-    resourceManager->debugReadbackLastKnownState = renderGraph->GetBufferState(SID("debug_readback_buffer"));
+#if WILL_EDITOR
+    resourceManager->debugReadback.SetLastKnownState(renderGraph->GetBufferState(SID("debug_readback_buffer")));
+#endif
     return {SUCCESS, swapchainImageIndex};
 }
 
@@ -977,6 +825,155 @@ void RenderThread::ProcessAcquisitions(VkCommandBuffer cmd, Core::Span<Core::Buf
     depInfo.pImageMemoryBarriers = tempImageBarriers.Data();
     vkCmdPipelineBarrier2(cmd, &depInfo);
 }
+
+#if WILL_EDITOR
+void RenderThread::RegisterDebugReadbacks()
+{
+    struct InstanceMeshletOffsets { InstanceMeshletOffsetPrefixSum data[1024]; };
+    struct IntermediateMeshlets   { IntermediateMeshlet data[128]; };
+    struct VisibleMeshlets        { CompactedMeshlet data[128]; };
+
+    resourceManager->debugReadback.Register<InstanceMeshletOffsets>(
+        "Instance Meshlet Offsets",
+        [](RenderGraph& graph, StringID dst, size_t dstOffset) {
+            if (!graph.HasBuffer(SID("instance_meshlet_offsets"))) { return; }
+            RenderPass& pass = graph.AddPass(SID("Readback Instance Meshlet Offsets"), VK_PIPELINE_STAGE_2_COPY_BIT);
+            pass.ReadTransferBuffer(SID("instance_meshlet_offsets"));
+            pass.WriteTransferBuffer(dst);
+            pass.Execute([&graph, dst, dstOffset](VkCommandBuffer cmd) {
+                VkBufferCopy copy{ 0, dstOffset, sizeof(InstanceMeshletOffsets) };
+                vkCmdCopyBuffer(cmd, graph.GetBufferHandle(SID("instance_meshlet_offsets")), graph.GetBufferHandle(dst), 1, &copy);
+            });
+        },
+        [](const InstanceMeshletOffsets& d) {
+            if (ImGui::BeginTable("InstanceMeshletOffsetsTable", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+                ImGui::TableSetupColumn("Instance");
+                ImGui::TableSetupColumn("Offset");
+                ImGui::TableSetupColumn("Count");
+                ImGui::TableSetupColumn("LOD");
+                ImGui::TableSetupColumn("Primitive Index");
+                ImGui::TableHeadersRow();
+                for (int i = 0; i < 1024; ++i) {
+                    if (d.data[i].count == 0) { continue; }
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn(); ImGui::Text("%d", i);
+                    ImGui::TableNextColumn(); ImGui::Text("%u", d.data[i].offset);
+                    ImGui::TableNextColumn(); ImGui::Text("%u", d.data[i].count);
+                    ImGui::TableNextColumn(); ImGui::Text("%u", d.data[i].lod);
+                    ImGui::TableNextColumn(); ImGui::Text("%u", d.data[i].primitiveIndex);
+                }
+                ImGui::EndTable();
+            }
+        }
+    );
+
+    resourceManager->debugReadback.Register<InstancingMeshletDispatchIndirect>(
+        "Meshlet Dispatch Args",
+        [](RenderGraph& graph, StringID dst, size_t dstOffset) {
+            if (!graph.HasBuffer(SID("meshlet_count_dispatch_args"))) { return; }
+            RenderPass& pass = graph.AddPass(SID("Readback Meshlet Dispatch Args"), VK_PIPELINE_STAGE_2_COPY_BIT);
+            pass.ReadTransferBuffer(SID("meshlet_count_dispatch_args"));
+            pass.WriteTransferBuffer(dst);
+            pass.Execute([&graph, dst, dstOffset](VkCommandBuffer cmd) {
+                VkBufferCopy copy{ 0, dstOffset, sizeof(InstancingMeshletDispatchIndirect) };
+                vkCmdCopyBuffer(cmd, graph.GetBufferHandle(SID("meshlet_count_dispatch_args")), graph.GetBufferHandle(dst), 1, &copy);
+            });
+        },
+        [](const InstancingMeshletDispatchIndirect& d) {
+            ImGui::Text("Total Meshlets: %u", d.totalMeshlets);
+            ImGui::Text("Dispatch Groups: (%u, %u, %u)", d.x, d.y, d.z);
+        }
+    );
+
+    resourceManager->debugReadback.Register<IntermediateMeshlets>(
+        "Intermediate Meshlets",
+        [](RenderGraph& graph, StringID dst, size_t dstOffset) {
+            if (!graph.HasBuffer(SID("intermediate_meshlets"))) { return; }
+            RenderPass& pass = graph.AddPass(SID("Readback Intermediate Meshlets"), VK_PIPELINE_STAGE_2_COPY_BIT);
+            pass.ReadTransferBuffer(SID("intermediate_meshlets"));
+            pass.WriteTransferBuffer(dst);
+            pass.Execute([&graph, dst, dstOffset](VkCommandBuffer cmd) {
+                VkBufferCopy copy{ 0, dstOffset, sizeof(IntermediateMeshlets) };
+                vkCmdCopyBuffer(cmd, graph.GetBufferHandle(SID("intermediate_meshlets")), graph.GetBufferHandle(dst), 1, &copy);
+            });
+        },
+        [](const IntermediateMeshlets& d) {
+            if (ImGui::BeginTable("IntermediateMeshletsTable", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+                ImGui::TableSetupColumn("Index");
+                ImGui::TableSetupColumn("Instance Index");
+                ImGui::TableSetupColumn("Visible");
+                ImGui::TableSetupColumn("Local Meshlet Index");
+                ImGui::TableSetupColumn("LOD");
+                ImGui::TableHeadersRow();
+                for (int i = 0; i < 128; ++i) {
+                    uint32_t instanceIndex = d.data[i].instanceIndex & 0x7FFFFFFF;
+                    bool visible = (d.data[i].instanceIndex >> 31) & 1;
+                    uint32_t meshletIndex = d.data[i].meshletIndexWithinLOD & 0x3FFFFFFF;
+                    uint32_t lod = d.data[i].meshletIndexWithinLOD >> 30;
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn(); ImGui::Text("%d", i);
+                    ImGui::TableNextColumn(); ImGui::Text("%u", instanceIndex);
+                    ImGui::TableNextColumn(); ImGui::Text("%s", visible ? "Yes" : "No");
+                    ImGui::TableNextColumn(); ImGui::Text("%u", meshletIndex);
+                    ImGui::TableNextColumn(); ImGui::Text("%u", lod);
+                }
+                ImGui::EndTable();
+            }
+        }
+    );
+
+    resourceManager->debugReadback.Register<VisibleMeshlets>(
+        "Visible Meshlets",
+        [](RenderGraph& graph, StringID dst, size_t dstOffset) {
+            if (!graph.HasBuffer(SID("visible_meshlets"))) { return; }
+            RenderPass& pass = graph.AddPass(SID("Readback Visible Meshlets"), VK_PIPELINE_STAGE_2_COPY_BIT);
+            pass.ReadTransferBuffer(SID("visible_meshlets"));
+            pass.WriteTransferBuffer(dst);
+            pass.Execute([&graph, dst, dstOffset](VkCommandBuffer cmd) {
+                VkBufferCopy copy{ 0, dstOffset, sizeof(VisibleMeshlets) };
+                vkCmdCopyBuffer(cmd, graph.GetBufferHandle(SID("visible_meshlets")), graph.GetBufferHandle(dst), 1, &copy);
+            });
+        },
+        [](const VisibleMeshlets& d) {
+            if (ImGui::BeginTable("VisibleMeshletsTable", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+                ImGui::TableSetupColumn("Index");
+                ImGui::TableSetupColumn("Instance Index");
+                ImGui::TableSetupColumn("Local Meshlet Index");
+                ImGui::TableSetupColumn("LOD");
+                ImGui::TableHeadersRow();
+                for (int i = 0; i < 128; ++i) {
+                    uint32_t meshletIndex = d.data[i].meshletIndexWithinLOD & 0x3FFFFFFF;
+                    uint32_t lod = d.data[i].meshletIndexWithinLOD >> 30;
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn(); ImGui::Text("%d", i);
+                    ImGui::TableNextColumn(); ImGui::Text("%u", d.data[i].instanceIndex);
+                    ImGui::TableNextColumn(); ImGui::Text("%u", meshletIndex);
+                    ImGui::TableNextColumn(); ImGui::Text("%u", lod);
+                }
+                ImGui::EndTable();
+            }
+        }
+    );
+
+    resourceManager->debugReadback.Register<InstancingCompactedMeshletDispatchIndirect>(
+        "Compacted Dispatch Args",
+        [](RenderGraph& graph, StringID dst, size_t dstOffset) {
+            if (!graph.HasBuffer(SID("compacted_meshlet_dispatch_args"))) { return; }
+            RenderPass& pass = graph.AddPass(SID("Readback Compacted Dispatch Args"), VK_PIPELINE_STAGE_2_COPY_BIT);
+            pass.ReadTransferBuffer(SID("compacted_meshlet_dispatch_args"));
+            pass.WriteTransferBuffer(dst);
+            pass.Execute([&graph, dst, dstOffset](VkCommandBuffer cmd) {
+                VkBufferCopy copy{ 0, dstOffset, sizeof(InstancingCompactedMeshletDispatchIndirect) };
+                vkCmdCopyBuffer(cmd, graph.GetBufferHandle(SID("compacted_meshlet_dispatch_args")), graph.GetBufferHandle(dst), 1, &copy);
+            });
+        },
+        [](const InstancingCompactedMeshletDispatchIndirect& d) {
+            ImGui::Text("Total Visible Meshlets: %u", d.totalVisibleMeshlets);
+            ImGui::Text("Dispatch Groups: (%u, %u, %u)", d.x, d.y, d.z);
+        }
+    );
+}
+#endif
 
 void RenderThread::CreatePipelines()
 {

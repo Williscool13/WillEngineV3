@@ -37,11 +37,11 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
             break;
         case 3: // Sampled uint4
             uint4 v = rdgTexturesUInt4[pc.textureIndexInArray].Load(sampleTexCoord).rgba;
-            srcPixel = float4(v.x, v.y, v.z, v.w);
+            srcPixel = asfloat(v);
             break;
         case 4: // Sampled uint2
             uint2 b = rdgTexturesUInt2[pc.textureIndexInArray].Load(sampleTexCoord).rg;
-            srcPixel.xy = float2(b.x, b.y);
+            srcPixel.xy = asfloat(b);
             break;
         case 5: // Sampled uint
             srcPixel.x = float(rdgTexturesUInt[pc.textureIndexInArray].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv, 0).r);
@@ -70,22 +70,25 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
             srcPixel.xyz /= 255.0f;
             break;
         case 7: { // VisBuffTriangle - bits [0:7] of vis.x
-            if (srcPixel.x == 0.0 && srcPixel.y == 0.0) { break; }
-            uint triIdx = asuint(srcPixel.x) & 0xFF;
+            uint2 intSrcPixel = asuint(srcPixel.xy);
+            if (intSrcPixel.x == 0.0 && intSrcPixel.y == 0.0) { break; }
+            uint triIdx = intSrcPixel.x & 0xFF;
             uint h = (triIdx + 1u) * 2654435761u;
             srcPixel.xyz = float3(float(h >> 24), float((h >> 16) & 0xFF), float((h >> 8) & 0xFF)) / 255.0;
             break;
         }
         case 8: { // VisBuffMeshlet - bits [8:31] of vis.x
-            if (srcPixel.x == 0.0 && srcPixel.y == 0.0) { break; }
-            uint meshletIdx = asuint(srcPixel.x) >> 8;
+            uint2 intSrcPixel = asuint(srcPixel.xy);
+            if (intSrcPixel.x == 0.0 && intSrcPixel.y == 0.0) { break; }
+            uint meshletIdx = intSrcPixel.x >> 8;
             uint h = (meshletIdx + 1u) * 2654435761u;
             srcPixel.xyz = float3(float(h >> 24), float((h >> 16) & 0xFF), float((h >> 8) & 0xFF)) / 255.0;
             break;
         }
         case 9: { // VisBuffInstance - vis.y
-            if (srcPixel.x == 0.0 && srcPixel.y == 0.0) { break; }
-            uint instIdx = asuint(srcPixel.y);
+            uint2 intSrcPixel = asuint(srcPixel.xy);
+            if (intSrcPixel.x == 0.0 && intSrcPixel.y == 0.0) { break; }
+            uint instIdx = intSrcPixel.y;
             uint h = (instIdx + 1u) * 2654435761u;
             srcPixel.xyz = float3(float(h >> 24), float((h >> 16) & 0xFF), float((h >> 8) & 0xFF)) / 255.0;
             break;
