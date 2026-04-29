@@ -335,29 +335,29 @@ compile_shaders(will-engine
 
         ${CMAKE_SOURCE_DIR}/shaders/shadows_resolve.slang compute ComputeMain shadows_resolve
         ${CMAKE_SOURCE_DIR}/shaders/deferred_resolve.slang compute ComputeMain deferred_resolve
-        ${CMAKE_SOURCE_DIR}/shaders/temporal_antialiasing.slang compute ComputeMain temporal_antialiasing
+        ${CMAKE_SOURCE_DIR}/shaders/anti-aliasing/temporal_antialiasing.slang compute ComputeMain temporal_antialiasing
         ${CMAKE_SOURCE_DIR}/shaders/anti-aliasing/subpixel_morphological_anti_aliasing_edge_detection.slang compute LumaEdgeDetectionMain smaa_luma_edge_detection
         ${CMAKE_SOURCE_DIR}/shaders/anti-aliasing/subpixel_morphological_anti_aliasing_edge_detection.slang compute ColorEdgeDetectionMain smaa_color_edge_detection
         ${CMAKE_SOURCE_DIR}/shaders/anti-aliasing/subpixel_morphological_anti_aliasing_edge_detection.slang compute DepthEdgeDetectionMain smaa_depth_edge_detection
         ${CMAKE_SOURCE_DIR}/shaders/anti-aliasing/subpixel_morphological_anti_aliasing_blend_weight.slang compute BlendWeightMain smaa_blend_weight
         ${CMAKE_SOURCE_DIR}/shaders/anti-aliasing/subpixel_morphological_anti_aliasing_neighborhood_blend.slang compute NeighborhoodBlendMain smaa_neighborhood_blend
-        ${CMAKE_SOURCE_DIR}/shaders/ground_truth_ambient_occlusion.slang compute ComputeGTAODepthPrepass gtao_depth_prepass
-        ${CMAKE_SOURCE_DIR}/shaders/ground_truth_ambient_occlusion.slang compute ComputeGTAOMain gtao_main
-        ${CMAKE_SOURCE_DIR}/shaders/ground_truth_ambient_occlusion.slang compute ComputeGTAODenoise gtao_denoise
-        ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeSDRTonemap tonemap_sdr
-        ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeBuildHistogramExposure exposure_build_histogram
-        ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeAverageExposure exposure_calculate_average
-        ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeMotionBlurTileMax motion_blur_tile_max
-        ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeMotionBlurNeighborMax motion_blur_neighbor_max
-        ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeMotionBlurReconstruction motion_blur_reconstruction
-        ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeBloomThreshold bloom_threshold
-        ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeBloomDownsample bloom_downsample
-        ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeBloomUpsample bloom_upsample
-        ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeVignetteAberration vignette_aberration
-        ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeFilmGrain film_grain
-        ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeSharpening sharpening
-        ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputeColorGrading color_grading
-        ${CMAKE_SOURCE_DIR}/shaders/post_process.slang compute ComputePaniniProjection panini_projection
+        ${CMAKE_SOURCE_DIR}/shaders/ambient-occlusion/ground_truth_ambient_occlusion.slang compute ComputeGTAODepthPrepass gtao_depth_prepass
+        ${CMAKE_SOURCE_DIR}/shaders/ambient-occlusion/ground_truth_ambient_occlusion.slang compute ComputeGTAOMain gtao_main
+        ${CMAKE_SOURCE_DIR}/shaders/ambient-occlusion/ground_truth_ambient_occlusion.slang compute ComputeGTAODenoise gtao_denoise
+        ${CMAKE_SOURCE_DIR}/shaders/post-process/tonemapping.slang compute ComputeSDRTonemap tonemap_sdr
+        ${CMAKE_SOURCE_DIR}/shaders/post-process/exposure.slang compute ComputeBuildHistogramExposure exposure_build_histogram
+        ${CMAKE_SOURCE_DIR}/shaders/post-process/exposure.slang compute ComputeAverageExposure exposure_calculate_average
+        ${CMAKE_SOURCE_DIR}/shaders/post-process/motion_blur.slang compute ComputeMotionBlurTileMax motion_blur_tile_max
+        ${CMAKE_SOURCE_DIR}/shaders/post-process/motion_blur.slang compute ComputeMotionBlurNeighborMax motion_blur_neighbor_max
+        ${CMAKE_SOURCE_DIR}/shaders/post-process/motion_blur.slang compute ComputeMotionBlurReconstruction motion_blur_reconstruction
+        ${CMAKE_SOURCE_DIR}/shaders/post-process/bloom.slang compute ComputeBloomThreshold bloom_threshold
+        ${CMAKE_SOURCE_DIR}/shaders/post-process/bloom.slang compute ComputeBloomDownsample bloom_downsample
+        ${CMAKE_SOURCE_DIR}/shaders/post-process/bloom.slang compute ComputeBloomUpsample bloom_upsample
+        ${CMAKE_SOURCE_DIR}/shaders/post-process/vignette_aberration.slang compute ComputeVignetteAberration vignette_aberration
+        ${CMAKE_SOURCE_DIR}/shaders/post-process/film_grain.slang compute ComputeFilmGrain film_grain
+        ${CMAKE_SOURCE_DIR}/shaders/post-process/sharpening.slang compute ComputeSharpening sharpening
+        ${CMAKE_SOURCE_DIR}/shaders/post-process/color_grading.slang compute ComputeColorGrading color_grading
+        ${CMAKE_SOURCE_DIR}/shaders/post-process/panini_projection.slang compute ComputePaniniProjection panini_projection
 
         ${CMAKE_SOURCE_DIR}/shaders/common_shaders.slang vertex FullscreenPassVertexMain fullscreen_pass
 
