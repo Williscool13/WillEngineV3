@@ -1056,14 +1056,14 @@ void RenderThread::CreatePipelines()
 
     pipelineManager->RegisterComputePipeline(SID("visibility_buffer_barycentric_derivative"), Platform::GetShaderPath() / "visibility_buffer_barycentric_derivative_compute.spv",
                                              sizeof(VisibilityBufferResolvePushConstant), PipelineCategory::Critical);
-    pipelineManager->RegisterComputePipeline(SID("visibility_shading"), Platform::GetShaderPath() / "visibility_shading_compute.spv",
-                                             sizeof(VisibilityShadingPushConstant), PipelineCategory::Critical);
     pipelineManager->RegisterComputePipeline(SID("visibility_bucketing_bounds_calculation"), Platform::GetShaderPath() / "visibility_bucketing_bounds_calculation_compute.spv",
                                              sizeof(ShadeBucketingPushConstant), PipelineCategory::Critical);
     pipelineManager->RegisterComputePipeline(SID("visibility_bucketing_resolve"), Platform::GetShaderPath() / "visibility_bucketing_resolve_compute.spv",
                                              sizeof(ShadeBucketingResolvePushConstant), PipelineCategory::Critical);
 
     pipelineManager->RegisterComputePipeline(SID("shading_bucket_visualize"), Platform::GetShaderPath() / "shading_bucket_visualize_compute.spv",
+                                             sizeof(VisibilityShadingPushConstant), PipelineCategory::Critical);
+    pipelineManager->RegisterComputePipeline(SID("shading_default_lit"), Platform::GetShaderPath() / "shading_default_lit_compute.spv",
                                              sizeof(VisibilityShadingPushConstant), PipelineCategory::Critical);
 
 
@@ -1147,13 +1147,6 @@ void RenderThread::CreatePipelines()
     const VkDescriptorSetLayout brdfLutLayout = resourceManager->brdfLutGenerateResources.descriptorSetLayout.handle;
     pipelineManager->RegisterComputePipelineCustomLayout(SID("ibl_brdf_lut"), Platform::GetShaderPath() / "brdf_lut_generate_compute.spv",
                                                          sizeof(BRDFLUTPushConstant), PipelineCategory::AssetGeneration, Core::Span(&brdfLutLayout, 1));
-
-    const VkDescriptorSetLayout smaaLookupLayout = resourceManager->smaaLookupGenerateResources.descriptorSetLayout.handle;
-    pipelineManager->RegisterComputePipelineCustomLayout(SID("smaa_area_generate"), Platform::GetShaderPath() / "smaa_area_generate_compute.spv",
-                                                         sizeof(SMAAAreaGeneratePushConstant), PipelineCategory::AssetGeneration, Core::Span(&smaaLookupLayout, 1));
-    const VkDescriptorSetLayout smaaSearchLayout = resourceManager->smaaSearchGenerateResources.descriptorSetLayout.handle;
-    pipelineManager->RegisterComputePipelineCustomLayout(SID("smaa_search_generate"), Platform::GetShaderPath() / "smaa_search_generate_compute.spv",
-                                                         sizeof(SMAASearchGeneratePushConstant), PipelineCategory::AssetGeneration, Core::Span(&smaaSearchLayout, 1));
 #endif
 
     GraphicsPipelineBuilder builder;

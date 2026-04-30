@@ -47,8 +47,8 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Core::MemoryManager& memoryManager,
             pipelineCache,
             &memoryManager,
             [this](bool success, PipelineSlotHandle slotHandle) {
-            OnPipelineLoadComplete(success, slotHandle);
-        });
+                OnPipelineLoadComplete(success, slotHandle);
+            });
     }
 
     for (uint32_t i = 0; i < MODEL_JOB_COUNT; ++i) {

@@ -11,7 +11,6 @@
 
 namespace AssetLoad
 {
-
 PipelineLoadSlot::PipelineLoadSlot() = default;
 
 PipelineLoadSlot::~PipelineLoadSlot() = default;
@@ -54,21 +53,18 @@ void PipelineLoadSlot::LoadPipelineTask::ExecuteRange(enki::TaskSetPartition ran
 
     if (!loadSlot || !loadSlot->pipelineData) {
         SPDLOG_ERROR("LoadPipelineTask: Invalid slot or pipeline data");
-        if (loadSlot && loadSlot->notifyCallback) {
+        if (loadSlot) {
             loadSlot->notifyCallback(false, loadSlot->pipelineSlotHandle);
         }
         return;
     }
 
-    bool success = false;
-    {
+    bool success = false; {
         ZoneScopedN("CreatePipeline");
         success = loadSlot->pipelineData->CreatePipeline(loadSlot->context, loadSlot->memoryManager, loadSlot->pipelineCache);
     }
 
-    if (loadSlot->notifyCallback) {
-        loadSlot->notifyCallback(success, loadSlot->pipelineSlotHandle);
-    }
-}
 
+    loadSlot->notifyCallback(success, loadSlot->pipelineSlotHandle);
+}
 } // AssetLoad
