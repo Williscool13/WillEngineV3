@@ -138,27 +138,27 @@ RenderFamilyProperties PrepareRenderFamilyProperties(Core::ViewFamily& viewFamil
     }
 
 
-    _limits.highestModelBuffer = std::max(_limits.highestModelBuffer, NextPowerOfTwo(viewFamily.modelMatrices.Size()));
-    _limits.highestMaterialBuffer = std::max(_limits.highestMaterialBuffer, NextPowerOfTwo(viewFamily.materials.Size()));
-
+    _limits.highestModelCount = std::max(_limits.highestModelCount, NextPowerOfTwo(viewFamily.modelMatrices.Size()));
+    _limits.highestMaterialCount = std::max(_limits.highestMaterialCount, NextPowerOfTwo(viewFamily.materials.Size()));
 
     uint32_t totalInstanceCountThisFrame = viewFamily.mainPassInstances.Size();
     for (const auto& [key, customDraw] : viewFamily.customShaderDraws) {
         totalInstanceCountThisFrame += customDraw.instances.Size();
     }
-    _limits.highestInstanceBuffer = std::max(_limits.highestInstanceBuffer, NextPowerOfTwo(totalInstanceCountThisFrame));
+    _limits.highestInstanceCount = std::max(_limits.highestInstanceCount, NextPowerOfTwo(totalInstanceCountThisFrame));
     _limits.highestMeshletCount = std::max(_limits.highestMeshletCount, NextPowerOfTwo(readbackData->meshletCount));
 
 
-    renderFamilyProperties.modelBufferSize = _limits.highestModelBuffer * sizeof(Model);
-    renderFamilyProperties.materialBufferSize = _limits.highestMaterialBuffer * sizeof(MaterialProperties);
-    renderFamilyProperties.instanceBufferSize = _limits.highestInstanceBuffer * sizeof(Instance);
+    renderFamilyProperties.modelBufferSize = _limits.highestModelCount * sizeof(Model);
+    renderFamilyProperties.materialBufferSize = _limits.highestMaterialCount * sizeof(MaterialProperties);
+    renderFamilyProperties.shadeDispatchBufferSize = _limits.highestMaterialCount * sizeof(ShadeDispatchParameters);
+    renderFamilyProperties.instanceBufferSize = _limits.highestInstanceCount * sizeof(Instance);
 
 
-    renderFamilyProperties.instanceMeshletOffsetsBufferSize = _limits.highestInstanceBuffer * sizeof(InstanceMeshletOffsetPrefixSum);
-    uint32_t level1BlockCount = (_limits.highestInstanceBuffer + INSTANCING_PREFIX_SUM_DISPATCH_X - 1) / INSTANCING_PREFIX_SUM_DISPATCH_X;
+    renderFamilyProperties.instanceMeshletOffsetsBufferSize = _limits.highestInstanceCount * sizeof(InstanceMeshletOffsetPrefixSum);
+    uint32_t level1BlockCount = (_limits.highestInstanceCount + INSTANCING_PREFIX_SUM_DISPATCH_X - 1) / INSTANCING_PREFIX_SUM_DISPATCH_X;
     uint32_t level2BlockCount = (level1BlockCount + INSTANCING_PREFIX_SUM_DISPATCH_X - 1) / INSTANCING_PREFIX_SUM_DISPATCH_X;
-    renderFamilyProperties.level1SumsBufferSize = _limits.highestInstanceBuffer * sizeof(uint32_t);
+    renderFamilyProperties.level1SumsBufferSize = _limits.highestInstanceCount * sizeof(uint32_t);
     renderFamilyProperties.level1BlockSumsBufferSize = level1BlockCount * sizeof(uint32_t);
     renderFamilyProperties.level2SumsBufferSize = level1BlockCount * sizeof(uint32_t);
     renderFamilyProperties.level2BlockSumsBufferSize = level2BlockCount * sizeof(uint32_t);

@@ -67,10 +67,10 @@ SHADER_PUBLIC struct VertexPosition
 
 SHADER_PUBLIC struct VertexAttribute
 {
-    SHADER_PUBLIC uint32_t normalOct;   // snorm8: bits[7:0]=X, bits[15:8]=Y
-    SHADER_PUBLIC uint32_t tangentOct;  // snorm8: bits[7:0]=X, bits[15:8]=Y; bit[16]=sign(0=neg,1=pos)
-    SHADER_PUBLIC uint32_t texcoord;    // float16: bits[15:0]=U, bits[31:16]=V
-    SHADER_PUBLIC uint32_t color;       // unorm8: bits[7:0]=R, bits[15:8]=G, bits[23:16]=B, bits[31:24]=A
+    SHADER_PUBLIC uint32_t normalOct; // snorm8: bits[7:0]=X, bits[15:8]=Y
+    SHADER_PUBLIC uint32_t tangentOct; // snorm8: bits[7:0]=X, bits[15:8]=Y; bit[16]=sign(0=neg,1=pos)
+    SHADER_PUBLIC uint32_t texcoord; // float16: bits[15:0]=U, bits[31:16]=V
+    SHADER_PUBLIC uint32_t color; // unorm8: bits[7:0]=R, bits[15:8]=G, bits[23:16]=B, bits[31:24]=A
 };
 
 SHADER_PUBLIC struct Meshlet
@@ -128,8 +128,6 @@ SHADER_PUBLIC struct SHADER_ALIGN MaterialProperties
     SHADER_PUBLIC float4 emissiveFactor; // xyz: emissive color, w: emissive strength
     SHADER_PUBLIC float4 alphaProperties; // x: alpha cutoff, y: alpha mode, z: double sided, w: unlit
     SHADER_PUBLIC float4 physicalProperties; // x: IOR, y: dispersion, z: normal scale, w: occlusion strength
-
-
 };
 
 SHADER_PUBLIC struct Instance
@@ -149,5 +147,18 @@ SHADER_PUBLIC struct SHADER_ALIGN Model
     SHADER_PUBLIC float4x4 prevModelMatrix;
 };
 
+SHADER_PUBLIC struct SHADER_ALIGN ShadeDispatchParameters
+{
+    SHADER_PUBLIC uint32_t xDispatch;
+    SHADER_PUBLIC uint32_t yDispatch;
+    SHADER_PUBLIC uint32_t zDispatch;
+
+    SHADER_PUBLIC uint32_t minX;
+    SHADER_PUBLIC uint32_t maxX;
+    SHADER_PUBLIC uint32_t minY;
+    SHADER_PUBLIC uint32_t maxY;
+
+    SHADER_PUBLIC uint32_t materialIndex;
+};
 
 #endif // WILLENGINEV3_MODEL_INTEROP_H

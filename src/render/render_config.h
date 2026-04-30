@@ -42,6 +42,8 @@ inline const StringID GEOMETRY_MESHLET_TRIANGLE_BUFFER = SID("meshlet_triangle_b
 inline const StringID GEOMETRY_MESHLET_BUFFER = SID("meshlet_buffer");
 inline const StringID GEOMETRY_MATERIAL_BUFFER = SID("material_buffer");
 
+inline const StringID SHADE_DISPATCH_BUCKETING_BUFFER = SID("shade_bucketing_buffer");
+
 inline constexpr int32_t RDG_MAX_MIP_LEVELS = 12;
 inline constexpr int32_t RDG_MAX_PASSES = 256;
 inline constexpr int32_t RDG_DEFAULT_UPLOAD_LINEAR_ALLOCATOR_SIZE = 1 * 1024 * 1024; // 1MB base (doubles as needed)

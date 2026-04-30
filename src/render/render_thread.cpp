@@ -832,6 +832,45 @@ void RenderThread::RegisterDebugReadbacks()
     struct InstanceMeshletOffsets { InstanceMeshletOffsetPrefixSum data[1024]; };
     struct IntermediateMeshlets   { IntermediateMeshlet data[128]; };
     struct VisibleMeshlets        { CompactedMeshlet data[128]; };
+    struct ShadeDispatchReadback  { ShadeDispatchParameters data[16]; };
+
+    resourceManager->debugReadback.Register<ShadeDispatchReadback>(
+        "Shade Dispatch Parameters",
+        [](RenderGraph& graph, StringID dst, size_t dstOffset) {
+            if (!graph.HasBuffer(SHADE_DISPATCH_BUCKETING_BUFFER)) { return; }
+            RenderPass& pass = graph.AddPass(SID("Readback Shade Dispatch"), VK_PIPELINE_STAGE_2_COPY_BIT);
+            pass.ReadTransferBuffer(SHADE_DISPATCH_BUCKETING_BUFFER);
+            pass.WriteTransferBuffer(dst);
+            pass.Execute([&graph, dst, dstOffset](VkCommandBuffer cmd) {
+                VkBufferCopy copy{ 0, dstOffset, sizeof(ShadeDispatchReadback) };
+                vkCmdCopyBuffer(cmd, graph.GetBufferHandle(SHADE_DISPATCH_BUCKETING_BUFFER), graph.GetBufferHandle(dst), 1, &copy);
+            });
+        },
+        [](const ShadeDispatchReadback& d) {
+            if (ImGui::BeginTable("ShadeDispatchTable", 7, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+                ImGui::TableSetupColumn("Index");
+                ImGui::TableSetupColumn("Material");
+                ImGui::TableSetupColumn("Dispatch");
+                ImGui::TableSetupColumn("MinX");
+                ImGui::TableSetupColumn("MinY");
+                ImGui::TableSetupColumn("MaxX");
+                ImGui::TableSetupColumn("MaxY");
+                ImGui::TableHeadersRow();
+                for (int i = 0; i < 16; ++i) {
+                    const ShadeDispatchParameters& p = d.data[i];
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn(); ImGui::Text("%d", i);
+                    ImGui::TableNextColumn(); ImGui::Text("%u", p.materialIndex);
+                    ImGui::TableNextColumn(); ImGui::Text("(%u,%u,%u)", p.xDispatch, p.yDispatch, p.zDispatch);
+                    ImGui::TableNextColumn(); ImGui::Text("%u", p.minX);
+                    ImGui::TableNextColumn(); ImGui::Text("%u", p.minY);
+                    ImGui::TableNextColumn(); ImGui::Text("%u", p.maxX);
+                    ImGui::TableNextColumn(); ImGui::Text("%u", p.maxY);
+                }
+                ImGui::EndTable();
+            }
+        }
+    );
 
     resourceManager->debugReadback.Register<InstanceMeshletOffsets>(
         "Instance Meshlet Offsets",
@@ -1479,7 +1518,7 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
 
 
     if (!viewFamily.modelMatrices.IsEmpty()) {
-        renderGraph->CreateBuffer(SID("model_buffer"), renderFamilyProperties.modelBufferSize, false);
+        renderGraph->CreateBuffer(GEOMETRY_MODEL_BUFFER, renderFamilyProperties.modelBufferSize, false);
         UploadAllocation modelUpload = renderGraph->AllocateTransient(viewFamily.modelMatrices.Size() * sizeof(Model));
         memcpy(modelUpload.ptr, viewFamily.modelMatrices.Data(), viewFamily.modelMatrices.Size() * sizeof(Model));
 
@@ -1507,7 +1546,8 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
     }
 
     if (!viewFamily.materials.IsEmpty()) {
-        renderGraph->CreateBuffer(SID("material_buffer"), renderFamilyProperties.materialBufferSize, false);
+        renderGraph->CreateBuffer(GEOMETRY_MATERIAL_BUFFER, renderFamilyProperties.materialBufferSize, false);
+
         UploadAllocation materialUpload = renderGraph->AllocateTransient(viewFamily.materials.Size() * sizeof(MaterialProperties));
         memcpy(materialUpload.ptr, viewFamily.materials.Data(), viewFamily.materials.Size() * sizeof(MaterialProperties));
 
@@ -1532,6 +1572,44 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
                 };
                 vkCmdCopyBuffer2(cmd, &copyInfo);
             });
+
+        renderGraph->CreateBuffer(SHADE_DISPATCH_BUCKETING_BUFFER, renderFamilyProperties.shadeDispatchBufferSize, false);
+
+        UploadAllocation shadeDispatchUpload = renderGraph->AllocateTransient(viewFamily.materials.Size() * sizeof(ShadeDispatchParameters));
+        auto* shadeDispatchBuffer = static_cast<ShadeDispatchParameters*>(shadeDispatchUpload.ptr);
+        for (size_t i = 0; i < viewFamily.materials.Size(); ++i) {
+            shadeDispatchBuffer[i] = {
+                .xDispatch = 0,
+                .yDispatch = 0,
+                .zDispatch = 0,
+                .minX = UINT32_MAX,
+                .maxX = 0,
+                .minY = UINT32_MAX,
+                .maxY = 0,
+                .materialIndex = static_cast<uint32_t>(i),
+            };
+        }
+
+        RenderPass& uploadShadeDispatchPass = renderGraph->AddPass(SID("Upload Shade Dispatch"), VK_PIPELINE_STAGE_2_COPY_BIT);
+        uploadShadeDispatchPass.WriteTransferBuffer(SHADE_DISPATCH_BUCKETING_BUFFER);
+        uploadShadeDispatchPass.Execute([&,
+                shadeDispatchOffset = shadeDispatchUpload.offset,
+                shadeDispatchSize = viewFamily.materials.Size() * sizeof(ShadeDispatchParameters)](VkCommandBuffer cmd) {
+            VkBufferCopy2 copy{
+                .sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
+                .srcOffset = shadeDispatchOffset,
+                .dstOffset = 0,
+                .size = shadeDispatchSize,
+            };
+            VkCopyBufferInfo2 copyInfo{
+                .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
+                .srcBuffer = renderGraph->GetTransientUploadBuffer(),
+                .dstBuffer = renderGraph->GetBufferHandle(SHADE_DISPATCH_BUCKETING_BUFFER),
+                .regionCount = 1,
+                .pRegions = &copy,
+            };
+            vkCmdCopyBuffer2(cmd, &copyInfo);
+        });
     }
 }
 
@@ -1787,9 +1865,9 @@ void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& 
         return;
     }
 
-    limits.highestDebugSegmentBuffer = std::max(limits.highestDebugSegmentBuffer, NextPowerOfTwo(totalSegments));
+    limits.highestDebugSegmentCount = std::max(limits.highestDebugSegmentCount, NextPowerOfTwo(totalSegments));
 
-    graph.CreateBuffer(SID("debug_segment_buffer"), limits.highestDebugSegmentBuffer * sizeof(DebugLineSegment), false);
+    graph.CreateBuffer(SID("debug_segment_buffer"), limits.highestDebugSegmentCount * sizeof(DebugLineSegment), false);
 
     UploadAllocation segmentUpload = graph.AllocateTransient(totalSegments * sizeof(DebugLineSegment));
     auto* segments = static_cast<DebugLineSegment*>(segmentUpload.ptr);

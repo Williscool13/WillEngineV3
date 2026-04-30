@@ -9,14 +9,14 @@ namespace Render
 {
 struct FrameResourceLimits
 {
-    size_t highestModelBuffer{128};
-    size_t highestMaterialBuffer{128};
+    size_t highestModelCount{128};
+    size_t highestMaterialCount{128};
 
-    size_t highestInstanceBuffer{1024};
+    size_t highestInstanceCount{1024};
     size_t highestMeshletCount{128};
 
 #ifndef PACKAGED_BUILD
-    size_t highestDebugSegmentBuffer{128};
+    size_t highestDebugSegmentCount{128};
 #endif
 };
 

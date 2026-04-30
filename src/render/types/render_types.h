@@ -34,6 +34,7 @@ struct RenderFamilyProperties
 
     size_t modelBufferSize{128};
     size_t materialBufferSize{128};
+    size_t shadeDispatchBufferSize{128};
     size_t instanceBufferSize{128};
 
     uint32_t visibleMeshletUpperBound{0};
@@ -62,6 +63,7 @@ struct RenderFamilyProperties
 
         modelBufferSize = 128;
         materialBufferSize = 128;
+        shadeDispatchBufferSize = 128;
         instanceBufferSize = 128;
     }
 };
