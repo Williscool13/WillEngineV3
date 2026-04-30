@@ -38,7 +38,7 @@ struct Material
     Core::Path sourcePath;
 
     // The MEAT of the material
-    MaterialProperties props;
+    MaterialProperties props{};
     TextureID textureRefs[6];
     SamplerDesc samplerDesc[6];
     bool bIsRuntimeLoaded{false};

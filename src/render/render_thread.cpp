@@ -1436,7 +1436,7 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
         instanceBuffer[i] = {
             .primitiveIndex = inst.primitiveIndex,
             .modelIndex = inst.modelIndex,
-            .materialIndex = inst.gpuMaterialIndex,
+            .materialIndex = viewFamily.activeMaterials[inst.materialID],
             .stableId = inst.stableId,
         };
     }
@@ -1448,7 +1448,7 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
             instanceBuffer[startIndex + i] = {
                 .primitiveIndex = inst.primitiveIndex,
                 .modelIndex = inst.modelIndex,
-                .materialIndex = inst.gpuMaterialIndex,
+                .materialIndex = viewFamily.activeMaterials[inst.materialID],
                 .stableId = inst.stableId,
             };
         }

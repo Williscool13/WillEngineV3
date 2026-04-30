@@ -176,6 +176,7 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
         pair.value.instances.Clear();
         pair.value.instanceBufferOffset = 0;
     }
+    frameBuffer->mainViewFamily.activeMaterials.Clear();
     frameBuffer->mainViewFamily.materials.Clear();
     frameBuffer->mainViewFamily.portalViews.Clear();
 #ifndef PACKAGED_BUILD

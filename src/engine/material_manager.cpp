@@ -387,10 +387,9 @@ void MaterialManager::LoadMutableMaterials()
         std::ifstream file(paths[i].c_str());
         auto header = ReadWMaterialHeader(file);
         if (!header) {
-            spdlog::warn("Skipping {} - missing or invalid wmaterial header", paths[i].c_str());
+            LOG_WARN(Asset, "Skipping {} - missing or invalid wmaterial header", paths[i].c_str());
             continue;
         }
-
         const nlohmann::json j = nlohmann::json::parse(file);
         Material mat = DeserializeMaterial(j, paths[i]);
         StringID sid(mat.name.c_str(), mat.name.Size());

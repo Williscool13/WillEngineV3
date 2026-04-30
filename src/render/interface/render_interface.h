@@ -177,7 +177,6 @@ struct InstanceData
     uint32_t primitiveIndex{};
     Engine::MaterialID materialID{};
     uint32_t modelIndex{};
-    uint32_t gpuMaterialIndex{};
     uint64_t stableId{};
 };
 
@@ -306,6 +305,10 @@ struct ViewFamily
     Map<StringID, CustomShaderDraw> customShaderDraws{};
 
     Vector<Model> modelMatrices{};
+    /**
+     * Indexes into the materials vector
+     */
+    Map<Engine::MaterialID, uint32_t> activeMaterials{};
     Vector<MaterialProperties> materials{};
 
     int32_t skyboxIndex{-1};

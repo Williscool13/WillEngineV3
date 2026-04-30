@@ -922,7 +922,8 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             Engine::ModelID id;
         };
 
-        auto modelList = Core::ArenaFixedVector<ModelPair>(&ctx->memoryManager->GeneralArena(), modelCache.Size());
+        if (modelCache.IsEmpty()) { ImGui::TextDisabled("No models loaded"); }
+        auto modelList = Core::ArenaFixedVector<ModelPair>(&ctx->memoryManager->GeneralArena(), std::max(modelCache.Size(), size_t{1}));
         for (const auto& [id, meta] : modelCache) {
             modelList.EmplaceBack(meta.name, id);
         }

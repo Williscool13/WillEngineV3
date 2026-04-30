@@ -102,6 +102,11 @@ SHADER_PUBLIC struct Primitive
 
 SHADER_PUBLIC struct SHADER_ALIGN MaterialProperties
 {
+    SHADER_PUBLIC uint32_t shadingBucketIndex;
+    SHADER_PUBLIC uint32_t padding0;
+    SHADER_PUBLIC uint32_t padding1;
+    SHADER_PUBLIC uint32_t padding2;
+
     // Base PBR properties
     SHADER_PUBLIC float4 colorFactor;
     SHADER_PUBLIC float4 metalRoughFactors; // x: metallic, y: roughness, z: pad, w: pad
@@ -123,6 +128,8 @@ SHADER_PUBLIC struct SHADER_ALIGN MaterialProperties
     SHADER_PUBLIC float4 emissiveFactor; // xyz: emissive color, w: emissive strength
     SHADER_PUBLIC float4 alphaProperties; // x: alpha cutoff, y: alpha mode, z: double sided, w: unlit
     SHADER_PUBLIC float4 physicalProperties; // x: IOR, y: dispersion, z: normal scale, w: occlusion strength
+
+
 };
 
 SHADER_PUBLIC struct Instance

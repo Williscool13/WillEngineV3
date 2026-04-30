@@ -14,6 +14,7 @@ ViewFamily::ViewFamily(TlsfAllocator& allocator)
     customShaderDraws = Map<StringID, CustomShaderDraw>(&allocator, AllocTag::FrameSync, 256);
 
     modelMatrices = Vector<Model>(&allocator, AllocTag::FrameSync, 256);
+    activeMaterials = Map<Engine::MaterialID, uint32_t>(&allocator, AllocTag::FrameSync, 256);
     materials = Vector<MaterialProperties>(&allocator, AllocTag::FrameSync, 256);
 
     debugLines = Vector<DebugLine>(&allocator, AllocTag::FrameSync, 256);

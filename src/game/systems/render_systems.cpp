@@ -434,24 +434,17 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
 
     // Material remap
     {
-        ZoneScopedN("Material Remap");
-        // todo revisit this, dont need this much indirection
+        ZoneScopedN("Material Recording");
         for (auto& instance : frameBuffer->mainViewFamily.mainPassInstances) {
-            instance.gpuMaterialIndex = materialManager->GetMaterialIndex(instance.materialID);
-        }
-
-        for (const auto& customDraw : frameBuffer->mainViewFamily.customShaderDraws) {
-            for (auto& instance : customDraw.value.instances) {
-                instance.gpuMaterialIndex = materialManager->GetMaterialIndex(instance.materialID);
+            auto [val, inserted] = frameBuffer->mainViewFamily.activeMaterials.TryEmplace(instance.materialID);
+            if (inserted) {
+                val = frameBuffer->mainViewFamily.materials.Size();
+                frameBuffer->mainViewFamily.materials.PushBack(materialManager->GetProperties(instance.materialID));
             }
         }
     }
 
-    frameBuffer->mainViewFamily.materials.Resize(Render::BINDLESS_MATERIAL_BUFFER_COUNT);
-    for (const auto& [matID, slotIndex] : materialManager->GetIdToEntryMap()) {
-        frameBuffer->mainViewFamily.materials[slotIndex] = materialManager->GetProperties(matID);
-    }
-
+    assert(frameBuffer->mainViewFamily.customShaderDraws.IsEmpty());
     if (state->lighting.skybox.IsValid()) {
         Render::Cubemap* cubemap = ctx->assetManager->GetCubemap(state->lighting.skybox);
         if (cubemap && cubemap->loadState == Render::Cubemap::LoadState::Loaded) {
