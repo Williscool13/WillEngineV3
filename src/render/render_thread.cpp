@@ -446,6 +446,8 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
             SetupVisibilityBarycentricDerivativePass(*renderGraph, pipelineManager, viewFamily, renderExtent, visBarDerTargets, 0);
 
+            SetupShadeDispatchBucketPass(*renderGraph, pipelineManager, viewFamily, renderExtent, visBarDerTargets, 0);
+
             SetupVisibilityShadingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, visShadingTargets, 0);
 
 
@@ -1056,6 +1058,10 @@ void RenderThread::CreatePipelines()
                                              sizeof(VisibilityBufferResolvePushConstant), PipelineCategory::Critical);
     pipelineManager->RegisterComputePipeline(SID("visibility_shading"), Platform::GetShaderPath() / "visibility_shading_compute.spv",
                                              sizeof(VisibilityShadingPushConstant), PipelineCategory::Critical);
+    pipelineManager->RegisterComputePipeline(SID("visibility_bucketing_bounds_calculation"), Platform::GetShaderPath() / "visibility_bucketing_bounds_calculation_compute.spv",
+                                             sizeof(ShadeBucketingPushConstant), PipelineCategory::Critical);
+    pipelineManager->RegisterComputePipeline(SID("visibility_bucketing_resolve"), Platform::GetShaderPath() / "visibility_bucketing_resolve_compute.spv",
+                                             sizeof(ShadeBucketingResolvePushConstant), PipelineCategory::Critical);
     pipelineManager->RegisterComputePipeline(SID("instancing_instance_lod_shadows"), Platform::GetShaderPath() / "instancing_instance_lod_shadows_compute.spv",
                                              sizeof(InstanceLODShadowsPushConstant), PipelineCategory::Legacy);
     pipelineManager->RegisterComputePipeline(SID("instancing_expand_instance_to_meshlet_shadows"), Platform::GetShaderPath() / "instancing_expand_instance_to_meshlet_shadows_compute.spv",
@@ -1546,6 +1552,7 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
     }
 
     if (!viewFamily.materials.IsEmpty()) {
+        // todo: good chance this will be re-arranged a bit so that materials that use the same shader will be dispatched together
         renderGraph->CreateBuffer(GEOMETRY_MATERIAL_BUFFER, renderFamilyProperties.materialBufferSize, false);
 
         UploadAllocation materialUpload = renderGraph->AllocateTransient(viewFamily.materials.Size() * sizeof(MaterialProperties));

@@ -591,6 +591,47 @@ void SetupVisibilityBarycentricDerivativePass(RenderGraph& graph,
         });
 }
 
+void SetupShadeDispatchBucketPass(RenderGraph& graph,
+                                     PipelineManager* pipelineManager,
+                                     const Core::ViewFamily& viewFamily,
+                                     Core::Array<uint32_t, 2> renderExtent,
+                                     const VisibilityBufferBarycentricDerivativeTargets& targets,
+                                     uint32_t sceneIndex)
+{
+    if (!graph.HasBuffer(SHADE_DISPATCH_BUCKETING_BUFFER)) { return; }
+
+    RenderPass& boundsPass = graph.AddPass(SID("Shade Bucketing Bounds"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+    boundsPass.ReadSampledImage(targets.visibility);
+    boundsPass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
+    boundsPass.ReadWriteBuffer(SHADE_DISPATCH_BUCKETING_BUFFER);
+    boundsPass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1],
+            visibility = targets.visibility](VkCommandBuffer cmd) {
+            ShadeBucketingPushConstant pc{
+                .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
+                .shadeDispatchBuffer = graph.GetBufferAddress(SHADE_DISPATCH_BUCKETING_BUFFER),
+                .extents = {width, height},
+                .visibilityBufferIndex = graph.GetSampledImageViewDescriptorIndex(visibility),
+            };
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("visibility_bucketing_bounds_calculation"));
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+            vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            vkCmdDispatch(cmd, (width + 15) / 16, (height + 15) / 16, 1);
+        });
+
+    RenderPass& resolvePass = graph.AddPass(SID("Shade Bucketing Resolve"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+    resolvePass.ReadWriteBuffer(SHADE_DISPATCH_BUCKETING_BUFFER);
+    resolvePass.Execute([&, pipelineManager, materialCount = static_cast<uint32_t>(viewFamily.materials.Size())](VkCommandBuffer cmd) {
+        ShadeBucketingResolvePushConstant pc{
+            .shadeDispatchBuffer = graph.GetBufferAddress(SHADE_DISPATCH_BUCKETING_BUFFER),
+            .materialCount = materialCount,
+        };
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("visibility_bucketing_resolve"));
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+        vkCmdDispatch(cmd, (materialCount + 255) / 256, 1, 1);
+    });
+}
+
 void SetupVisibilityShadingPass(RenderGraph& graph,
                                 PipelineManager* pipelineManager,
                                 const Core::ViewFamily& viewFamily,
@@ -966,9 +1007,12 @@ StringID SetupSubpixelMorphologicalAntiAliasing(RenderGraph& graph, PipelineMana
 
             StringID pipelineID;
             switch (smaaConfig.edgeDetectionMode) {
-                case Core::SMAAEdgeDetectionMode::Color: pipelineID = SID("smaa_color_edge_detection"); break;
-                case Core::SMAAEdgeDetectionMode::Depth: pipelineID = SID("smaa_depth_edge_detection"); break;
-                default:                                 pipelineID = SID("smaa_luma_edge_detection");  break;
+                case Core::SMAAEdgeDetectionMode::Color: pipelineID = SID("smaa_color_edge_detection");
+                    break;
+                case Core::SMAAEdgeDetectionMode::Depth: pipelineID = SID("smaa_depth_edge_detection");
+                    break;
+                default: pipelineID = SID("smaa_luma_edge_detection");
+                    break;
             }
 
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(pipelineID);
@@ -1064,9 +1108,12 @@ StringID SetupSMAA_T2X(RenderGraph& graph,
 
             StringID pipelineID;
             switch (smaaConfig.edgeDetectionMode) {
-                case Core::SMAAEdgeDetectionMode::Color: pipelineID = SID("smaa_color_edge_detection"); break;
-                case Core::SMAAEdgeDetectionMode::Depth: pipelineID = SID("smaa_depth_edge_detection"); break;
-                default:                                 pipelineID = SID("smaa_luma_edge_detection");  break;
+                case Core::SMAAEdgeDetectionMode::Color: pipelineID = SID("smaa_color_edge_detection");
+                    break;
+                case Core::SMAAEdgeDetectionMode::Depth: pipelineID = SID("smaa_depth_edge_detection");
+                    break;
+                default: pipelineID = SID("smaa_luma_edge_detection");
+                    break;
             }
 
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(pipelineID);

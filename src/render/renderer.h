@@ -30,6 +30,13 @@ void SetupVisibilityBarycentricDerivativePass(RenderGraph& graph,
                                               const VisibilityBufferBarycentricDerivativeTargets& targets,
                                               uint32_t sceneIndex);
 
+void SetupShadeDispatchBucketPass(RenderGraph& graph,
+                                              PipelineManager* pipelineManager,
+                                              const Core::ViewFamily& viewFamily,
+                                              Core::Array<uint32_t, 2> renderExtent,
+                                              const VisibilityBufferBarycentricDerivativeTargets& targets,
+                                              uint32_t sceneIndex);
+
 
 void SetupVisibilityShadingPass(RenderGraph& graph,
                                 PipelineManager* pipelineManager,
