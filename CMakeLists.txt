@@ -290,6 +290,7 @@ function(add_shader_include INCLUDE_FILE)
     set_property(GLOBAL APPEND PROPERTY SHADER_INCLUDE_FILES ${INCLUDE_ABS})
 endfunction()
 
+add_shader_include("${CMAKE_SOURCE_DIR}/shaders/visibility_shading.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/shader_constants.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/shader_functions.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/shadow_functions.slang")
@@ -319,10 +320,12 @@ compile_shaders(will-engine
         #   Shade DispatchBucketing
         ${CMAKE_SOURCE_DIR}/shaders/visibility_bucketing.slang compute ComputeShadeDispatchBucketing visibility_bucketing_bounds_calculation
         ${CMAKE_SOURCE_DIR}/shaders/visibility_bucketing.slang compute ComputeShadeDispatchBucketingResolve visibility_bucketing_resolve
+        #   "Fragment Shaders"
+        ${CMAKE_SOURCE_DIR}/shaders/visibility_bucketing.slang compute ComputeShadeDispatchBucketing visibility_bucketing_bounds_calculation
+        ${CMAKE_SOURCE_DIR}/shaders/visibility_bucketing.slang compute ComputeShadeDispatchBucketingResolve visibility_bucketing_resolve
 
-
-        ${CMAKE_SOURCE_DIR}/shaders/instancing_shadows.slang compute ComputeInstanceLODShadows instancing_instance_lod_shadows
-        ${CMAKE_SOURCE_DIR}/shaders/instancing_shadows.slang compute ComputeExpandInstancesToMeshletsShadows instancing_expand_instance_to_meshlet_shadows
+        ${CMAKE_SOURCE_DIR}/shaders/shading/bucket_visualize.slang compute ComputeBucketVisualize shading_bucket_visualize
+        ${CMAKE_SOURCE_DIR}/shaders/shading/default_lit.slang compute ComputeDefaultLit shading_default_lit
 
         ${CMAKE_SOURCE_DIR}/shaders/visibility_buffer.slang mesh MeshMain visibility_buffer
         ${CMAKE_SOURCE_DIR}/shaders/visibility_buffer.slang fragment FragmentMain visibility_buffer

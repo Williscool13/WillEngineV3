@@ -592,11 +592,11 @@ void SetupVisibilityBarycentricDerivativePass(RenderGraph& graph,
 }
 
 void SetupShadeDispatchBucketPass(RenderGraph& graph,
-                                     PipelineManager* pipelineManager,
-                                     const Core::ViewFamily& viewFamily,
-                                     Core::Array<uint32_t, 2> renderExtent,
-                                     const VisibilityBufferBarycentricDerivativeTargets& targets,
-                                     uint32_t sceneIndex)
+                                  PipelineManager* pipelineManager,
+                                  const Core::ViewFamily& viewFamily,
+                                  Core::Array<uint32_t, 2> renderExtent,
+                                  const VisibilityBufferBarycentricDerivativeTargets& targets,
+                                  uint32_t sceneIndex)
 {
     if (!graph.HasBuffer(SHADE_DISPATCH_BUCKETING_BUFFER)) { return; }
 
@@ -683,6 +683,59 @@ void SetupVisibilityShadingPass(RenderGraph& graph,
             uint32_t xDispatch = (width + 15) / 16;
             uint32_t yDispatch = (height + 15) / 16;
             vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
+        });
+
+    if (!graph.HasBuffer(SHADE_DISPATCH_BUCKETING_BUFFER)) { return; }
+
+    RenderPass& bucketVisualizePass = graph.AddPass(SID("Bucket Visualize"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+    bucketVisualizePass.ReadSampledImage(targets.visibility);
+    bucketVisualizePass.ReadStorageImage(targets.barycentric);
+    bucketVisualizePass.ReadStorageImage(targets.derivatives);
+    bucketVisualizePass.ReadBuffer(SCENE_DATA_BUFFER);
+    bucketVisualizePass.ReadBuffer(GEOMETRY_VERTEX_POSITION_BUFFER);
+    bucketVisualizePass.ReadBuffer(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER);
+    bucketVisualizePass.ReadBuffer(GEOMETRY_MESHLET_VERTEX_BUFFER);
+    bucketVisualizePass.ReadBuffer(GEOMETRY_MESHLET_TRIANGLE_BUFFER);
+    bucketVisualizePass.ReadBuffer(GEOMETRY_MESHLET_BUFFER);
+    bucketVisualizePass.ReadBuffer(GEOMETRY_PRIMITIVE_BUFFER);
+    bucketVisualizePass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
+    bucketVisualizePass.ReadBuffer(GEOMETRY_MODEL_BUFFER);
+    bucketVisualizePass.ReadBuffer(GEOMETRY_MATERIAL_BUFFER);
+    bucketVisualizePass.ReadIndirectBuffer(SHADE_DISPATCH_BUCKETING_BUFFER);
+    bucketVisualizePass.WriteStorageImage(targets.gbufferOne);
+    bucketVisualizePass.WriteStorageImage(targets.gbufferTwo);
+    bucketVisualizePass.Execute([&, pipelineManager, sceneIndex,
+            visibility = targets.visibility, barycentric = targets.barycentric, derivatives = targets.derivatives,
+            gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
+            materialCount = static_cast<uint32_t>(viewFamily.materials.Size())](VkCommandBuffer cmd) {
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("shading_bucket_visualize"));
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+
+            VkDeviceAddress shadeDispatchAddress = graph.GetBufferAddress(SHADE_DISPATCH_BUCKETING_BUFFER);
+            for (uint32_t i = 0; i < materialCount; ++i) {
+                VisibilityShadingPushConstant pc{
+                    .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER) + sceneIndex * sizeof(SceneData),
+                    .vertexPosBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_POSITION_BUFFER),
+                    .vertexAttrBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER),
+                    .meshletVerticesBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_VERTEX_BUFFER),
+                    .meshletTrianglesBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_TRIANGLE_BUFFER),
+                    .meshletBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_BUFFER),
+                    .primitiveBuffer = graph.GetBufferAddress(GEOMETRY_PRIMITIVE_BUFFER),
+                    .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
+                    .modelBuffer = graph.GetBufferAddress(GEOMETRY_MODEL_BUFFER),
+                    .materialBuffer = graph.GetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
+                    .shadeDispatchBuffer = shadeDispatchAddress,
+                    .materialIndex = i,
+                    .visibilityBufferIndex = graph.GetSampledImageViewDescriptorIndex(visibility),
+                    .barycentricBufferIndex = graph.GetStorageImageViewDescriptorIndex(barycentric),
+                    .derivativeBufferIndex = graph.GetStorageImageViewDescriptorIndex(derivatives),
+                    .gbufferOneIndex = graph.GetStorageImageViewDescriptorIndex(gbufferOne),
+                    .gbufferTwoIndex = graph.GetStorageImageViewDescriptorIndex(gbufferTwo),
+                };
+                vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+                vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(SHADE_DISPATCH_BUCKETING_BUFFER),
+                                      i * sizeof(ShadeDispatchParameters) + offsetof(ShadeDispatchParameters, xDispatch));
+            }
         });
 }
 

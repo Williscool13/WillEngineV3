@@ -26,9 +26,9 @@ void ComputeShadeDispatchBucketing(uint3 dtid : SV_DispatchThreadID, uniform Sha
     Instance inst = pc.instanceBuffer[instanceIndex];
 
     InterlockedMin(pc.shadeDispatchBuffer[inst.materialIndex].minX, dtid.x);
-    InterlockedMax(pc.shadeDispatchBuffer[inst.materialIndex].maxX, dtid.x);
+    InterlockedMax(pc.shadeDispatchBuffer[inst.materialIndex].maxX, dtid.x + 1);
     InterlockedMin(pc.shadeDispatchBuffer[inst.materialIndex].minY, dtid.y);
-    InterlockedMax(pc.shadeDispatchBuffer[inst.materialIndex].maxY, dtid.y);
+    InterlockedMax(pc.shadeDispatchBuffer[inst.materialIndex].maxY, dtid.y + 1);
 }
 
 // ==================== Compute Shader ====================
@@ -42,8 +42,8 @@ void ComputeShadeDispatchBucketingResolve(uint3 dtid : SV_DispatchThreadID, unif
     }
 
     ShadeDispatchParameters dispatchParams = pc.shadeDispatchBuffer[materialIndex];
-    uint32_t width = dispatchParams.maxX - dispatchParams.minX + 1;
-    uint32_t height = dispatchParams.maxY - dispatchParams.minY + 1;
+    uint32_t width = dispatchParams.maxX - dispatchParams.minX;
+    uint32_t height = dispatchParams.maxY - dispatchParams.minY;
 
     pc.shadeDispatchBuffer[materialIndex].xDispatch = (width + 15) / 16;
     pc.shadeDispatchBuffer[materialIndex].yDispatch = (height + 15) / 16;

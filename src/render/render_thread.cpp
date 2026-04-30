@@ -1062,6 +1062,11 @@ void RenderThread::CreatePipelines()
                                              sizeof(ShadeBucketingPushConstant), PipelineCategory::Critical);
     pipelineManager->RegisterComputePipeline(SID("visibility_bucketing_resolve"), Platform::GetShaderPath() / "visibility_bucketing_resolve_compute.spv",
                                              sizeof(ShadeBucketingResolvePushConstant), PipelineCategory::Critical);
+
+    pipelineManager->RegisterComputePipeline(SID("shading_bucket_visualize"), Platform::GetShaderPath() / "shading_bucket_visualize_compute.spv",
+                                             sizeof(VisibilityShadingPushConstant), PipelineCategory::Critical);
+
+
     pipelineManager->RegisterComputePipeline(SID("instancing_instance_lod_shadows"), Platform::GetShaderPath() / "instancing_instance_lod_shadows_compute.spv",
                                              sizeof(InstanceLODShadowsPushConstant), PipelineCategory::Legacy);
     pipelineManager->RegisterComputePipeline(SID("instancing_expand_instance_to_meshlet_shadows"), Platform::GetShaderPath() / "instancing_expand_instance_to_meshlet_shadows_compute.spv",

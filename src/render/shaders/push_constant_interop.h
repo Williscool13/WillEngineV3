@@ -270,21 +270,6 @@ SHADER_PUBLIC struct VisibilityBufferAccumulatePushConstant
     SHADER_PUBLIC SHADER_PTR(InstancingCompactedMeshletDispatchIndirect) compactedDispatchBuffer; // for "total visible meshlets"
 };
 
-SHADER_PUBLIC struct ShadeBucketingPushConstant
-{
-    SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
-    SHADER_PUBLIC SHADER_PTR(ShadeDispatchParameters) shadeDispatchBuffer; // out
-    SHADER_PUBLIC uint2 extents;
-    // In
-    SHADER_PUBLIC uint32_t visibilityBufferIndex;
-};
-
-SHADER_PUBLIC struct ShadeBucketingResolvePushConstant
-{
-    SHADER_PUBLIC SHADER_PTR(ShadeDispatchParameters) shadeDispatchBuffer; // in/out
-    SHADER_PUBLIC uint32_t materialCount;
-};
-
 SHADER_PUBLIC struct VisibilityBufferResolvePushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
@@ -304,6 +289,22 @@ SHADER_PUBLIC struct VisibilityBufferResolvePushConstant
     SHADER_PUBLIC uint32_t derivativeTargetIndex;
 };
 
+
+SHADER_PUBLIC struct ShadeBucketingPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
+    SHADER_PUBLIC SHADER_PTR(ShadeDispatchParameters) shadeDispatchBuffer; // out
+    SHADER_PUBLIC uint2 extents;
+    // In
+    SHADER_PUBLIC uint32_t visibilityBufferIndex;
+};
+
+SHADER_PUBLIC struct ShadeBucketingResolvePushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(ShadeDispatchParameters) shadeDispatchBuffer; // in/out
+    SHADER_PUBLIC uint32_t materialCount;
+};
+
 SHADER_PUBLIC struct VisibilityShadingPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
@@ -316,8 +317,10 @@ SHADER_PUBLIC struct VisibilityShadingPushConstant
     SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
     SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
     SHADER_PUBLIC SHADER_PTR(MaterialProperties) materialBuffer;
+    SHADER_PUBLIC SHADER_PTR(ShadeDispatchParameters) shadeDispatchBuffer; // in
     SHADER_PUBLIC uint2 extents;
     // In
+    SHADER_PUBLIC uint32_t materialIndex;
     SHADER_PUBLIC uint32_t visibilityBufferIndex;
     SHADER_PUBLIC uint32_t barycentricBufferIndex;
     SHADER_PUBLIC uint32_t derivativeBufferIndex;
