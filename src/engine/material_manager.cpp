@@ -223,6 +223,7 @@ void MaterialManager::UpdateMutableMaterial(MaterialID id, const Material& newMa
     const glm::ivec4 oldSamplerIdx2 = mat.props.textureSamplerIndices2;
 
     mat.props = newMat.props;
+    mat.fragmentShader = newMat.fragmentShader;
 
     if (!mat.bIsRuntimeLoaded) {
         for (int32_t i = 0; i < 6; ++i) {

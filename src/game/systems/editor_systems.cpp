@@ -1818,6 +1818,41 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
                     ImGui::TreePop();
                 }
 
+                ImGui::SeparatorText("Shader");
+                {
+                    const char* knownOptions[] = {"default_lit", "error_unlit"};
+                    const StringID knownIds[] = {"default_lit"_sid, "error_unlit"_sid};
+                    constexpr int knownCount = 2;
+
+                    int currentShader = -1;
+                    for (int i = 0; i < knownCount; ++i) {
+                        if (editMat.fragmentShader == knownIds[i]) {
+                            currentShader = i;
+                            break;
+                        }
+                    }
+
+                    const bool isUnknown = currentShader < 0;
+                    // Build options list; append unknown entry if needed so it shows in the combo
+                    Core::InlineString<64> unknownLabel{};
+                    const char* options[knownCount + 1];
+                    int optionCount = knownCount;
+                    for (int i = 0; i < knownCount; ++i) { options[i] = knownOptions[i]; }
+                    if (isUnknown) {
+                        unknownLabel = Core::InlineString<64>{"(unknown) "};
+                        unknownLabel.Append(editMat.fragmentShader.ToString());
+                        options[optionCount++] = unknownLabel.c_str();
+                        currentShader = knownCount;
+                    }
+
+                    if (ImGui::Combo("Fragment Shader", &currentShader, options, optionCount)) {
+                        if (currentShader < knownCount) {
+                            editMat.fragmentShader = knownIds[currentShader];
+                            changed = true;
+                        }
+                    }
+                }
+
                 ImGui::SeparatorText("Textures");
                 static const char* slotNames[] = {"Color", "Metal/Rough", "Normal", "Emissive", "Occlusion", "Packed NRM"};
                 static Engine::TextureID texEditPending = Engine::TextureID::INVALID;

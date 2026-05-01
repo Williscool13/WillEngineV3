@@ -17,6 +17,7 @@ constexpr VkClearValue CLEAR_COLOR_EMPTY = {.color = {{0.0f, 0.0f, 0.0f, 1.0f}}}
 constexpr VkClearValue CLEAR_COLOR_FULL = {.color = {{1.0f, 1.0f, 1.0f, 1.0f}}};
 constexpr VkClearValue CLEAR_COLOR_BLACK = {.color = {{0.0f, 0.0f, 0.0f, 1.0f}}};
 constexpr VkClearValue CLEAR_DEPTH_FAR   = {.depthStencil = {.depth = 0.0f, .stencil = 0}};
+constexpr VkClearValue CLEAR_VISIBILITY_EMPTY = {.color = {.uint32 = {0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu}}};
 } // Render
 
 Vec2 OctEncode(Vec3 n);

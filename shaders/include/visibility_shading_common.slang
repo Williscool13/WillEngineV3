@@ -1,6 +1,7 @@
 module visibility_shading_common;
 
 import common_interop;
+import constants_interop;
 import model_interop;
 import instancing_interop;
 import push_constant_interop;
@@ -48,7 +49,7 @@ public ReconstructedShadingData ReconstructShadingInputs(
     result.valid = false;
 
     uint2 vis = rdgTexturesUInt2[visibilityBufferIndex].Load(int3(pixel, 0)).xy;
-    if (vis.x == 0 && vis.y == 0) {
+    if (vis.x == VISIBILITY_BUFFER_SENTINEL && vis.y == VISIBILITY_BUFFER_SENTINEL) {
         return result;
     }
 

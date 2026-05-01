@@ -185,7 +185,7 @@ void VisibilityBufferBarycentricDerivative(uint3 dtid : SV_DispatchThreadID, uni
 
     uint2 vis = rdgTexturesUInt2[pc.visibilityBufferIndex].Load(int3(dtid.xy, 0)).xy;
 
-    if (vis.x == 0 && vis.y == 0) {
+    if (vis.x == VISIBILITY_BUFFER_SENTINEL && vis.y == VISIBILITY_BUFFER_SENTINEL) {
         return;
     }
 

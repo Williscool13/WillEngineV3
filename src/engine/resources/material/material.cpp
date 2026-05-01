@@ -94,7 +94,9 @@ Material DeserializeMaterial(const nlohmann::json& j, const Core::Path& sourcePa
     Material mat{};
     mat.name = j["name"].get<Core::InlineString<128>>();
     mat.id = MaterialID(j["id"].get<uint64_t>());
-    mat.fragmentShader = StringID(j["pipeline"].get<uint64_t>());
+    if (j.contains("fragmentShader")) {
+        mat.fragmentShader = StringID(j["fragmentShader"].get<uint64_t>());
+    }
 
     auto readF4 = [&](const char* key, glm::vec4& v) {
         const auto& a = j[key];

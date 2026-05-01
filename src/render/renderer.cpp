@@ -503,11 +503,10 @@ void SetupGeometryPass(RenderGraph& graph,
             vkCmdSetScissor(cmd, 0, 1, &scissor);
             vkCmdSetPolygonModeEXT(cmd, bWireframe ? VK_POLYGON_MODE_LINE : VK_POLYGON_MODE_FILL);
 
-            constexpr VkClearValue uintClear = {.color = {.uint32 = {0u, 0u, 0u, 0u}}};
             constexpr VkClearValue depthClear = {.depthStencil = {0.0f, 0u}};
 
-            auto visibilityAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(visibility), &uintClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-            auto stableIdAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(stableId), &uintClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+            auto visibilityAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(visibility), &Render::CLEAR_VISIBILITY_EMPTY, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+            auto stableIdAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(stableId), &Render::CLEAR_COLOR_EMPTY, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
             auto depthAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(depthStencil), &depthClear, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
             auto stencilAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(depthStencil), &depthClear, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
@@ -689,6 +688,9 @@ void SetupVisibilityShadingPass(RenderGraph& graph,
 
             if (entry.fragmentShader != boundShader) {
                 pipelineEntry = pipelineManager->GetPipelineEntry(entry.fragmentShader);
+                if (!pipelineEntry) {
+                    pipelineEntry = pipelineManager->GetPipelineEntry(SID("error_unlit"));
+                }
                 if (!pipelineEntry) { continue; }
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                 boundShader = entry.fragmentShader;

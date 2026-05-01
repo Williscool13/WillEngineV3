@@ -1,4 +1,5 @@
 import common_interop;
+import constants_interop;
 import model_interop;
 import push_constant_interop;
 
@@ -15,7 +16,7 @@ void ComputeShadeDispatchBucketing(uint3 dtid : SV_DispatchThreadID, uniform Sha
 
     uint2 vis = rdgTexturesUInt2[pc.visibilityBufferIndex].Load(int3(dtid.xy, 0)).xy;
 
-    if (vis.x == 0 && vis.y == 0) {
+    if (vis.x == VISIBILITY_BUFFER_SENTINEL && vis.y == VISIBILITY_BUFFER_SENTINEL) {
         return;
     }
 
