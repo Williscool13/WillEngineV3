@@ -637,9 +637,25 @@ void SetupVisibilityShadingPass(RenderGraph& graph,
                                 const Core::ViewFamily& viewFamily,
                                 Core::Array<uint32_t, 2> renderExtent,
                                 const VisibilityShadingTargets& targets,
-                                uint32_t sceneIndex)
+                                uint32_t sceneIndex,
+                                Core::Arena& arena)
 {
     if (!graph.HasBuffer(SHADE_DISPATCH_BUCKETING_BUFFER)) { return; }
+
+    struct MaterialEntry
+    {
+        uint32_t materialIndex;
+        StringID fragmentShader;
+    };
+
+    const uint32_t materialCount = static_cast<uint32_t>(viewFamily.materials.Size());
+    MaterialEntry* sortedMaterials = arena.AllocArray<MaterialEntry>(materialCount);
+    for (uint32_t i = 0; i < materialCount; ++i) {
+        sortedMaterials[i] = {i, viewFamily.materials[i].fragmentShader};
+    }
+    std::sort(sortedMaterials, sortedMaterials + materialCount, [](const MaterialEntry& a, const MaterialEntry& b) {
+        return a.fragmentShader < b.fragmentShader;
+    });
 
     RenderPass& visShading = graph.AddPass(SID("Visibility Shading"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
     visShading.ReadSampledImage(targets.visibility);
@@ -661,12 +677,23 @@ void SetupVisibilityShadingPass(RenderGraph& graph,
     visShading.Execute([&, pipelineManager, sceneIndex,
             visibility = targets.visibility, barycentric = targets.barycentric, derivatives = targets.derivatives,
             gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
-            materialCount = static_cast<uint32_t>(viewFamily.materials.Size())](VkCommandBuffer cmd) {
-        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("shading_default_lit"));
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
-
+            sortedMaterials, materialCount](VkCommandBuffer cmd) {
         VkDeviceAddress shadeDispatchAddress = graph.GetBufferAddress(SHADE_DISPATCH_BUCKETING_BUFFER);
+
+        StringID boundShader{};
+        const PipelineEntry* pipelineEntry = nullptr;
+
         for (uint32_t i = 0; i < materialCount; ++i) {
+            const MaterialEntry& entry = sortedMaterials[i];
+            if (!entry.fragmentShader) { continue; }
+
+            if (entry.fragmentShader != boundShader) {
+                pipelineEntry = pipelineManager->GetPipelineEntry(entry.fragmentShader);
+                if (!pipelineEntry) { continue; }
+                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+                boundShader = entry.fragmentShader;
+            }
+
             VisibilityShadingPushConstant pc{
                 .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER) + sceneIndex * sizeof(SceneData),
                 .vertexPosBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_POSITION_BUFFER),
@@ -679,7 +706,7 @@ void SetupVisibilityShadingPass(RenderGraph& graph,
                 .modelBuffer = graph.GetBufferAddress(GEOMETRY_MODEL_BUFFER),
                 .materialBuffer = graph.GetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
                 .shadeDispatchBuffer = shadeDispatchAddress,
-                .materialIndex = i,
+                .materialIndex = entry.materialIndex,
                 .visibilityBufferIndex = graph.GetSampledImageViewDescriptorIndex(visibility),
                 .barycentricBufferIndex = graph.GetStorageImageViewDescriptorIndex(barycentric),
                 .derivativeBufferIndex = graph.GetStorageImageViewDescriptorIndex(derivatives),
@@ -688,7 +715,7 @@ void SetupVisibilityShadingPass(RenderGraph& graph,
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(SHADE_DISPATCH_BUCKETING_BUFFER),
-                i * sizeof(ShadeDispatchParameters) + offsetof(ShadeDispatchParameters, xDispatch));
+                entry.materialIndex * sizeof(ShadeDispatchParameters) + offsetof(ShadeDispatchParameters, xDispatch));
         }
     });
 

@@ -1,0 +1,24 @@
+# .wstaticmodel Format Changelist
+#
+# Format: MAJOR.MINOR
+# MAJOR bump: breaking change, old files cannot be loaded without migration.
+# MINOR bump: additive or metadata-only change; loaders should handle gracefully.
+# Magic: "WSTCMDL" (7 chars, char[8])
+# Header: WStaticModelHeader in model_format.h
+
+================================================================================
+VERSION 2.4  (current)
+================================================================================
+- Added `fragmentShader` field to `Material` to associate a fragment shader with
+  each material entry. Immutable materials always use default_lit; no exceptions.
+
+================================================================================
+VERSION 2.3
+================================================================================
+- Added `shadingBucketIndex` field to `MaterialProperties` (model_interop.h) to
+  support shading dispatch bucketing.
+
+================================================================================
+VERSION 2.2 and earlier
+================================================================================
+- Pre-changelist. See git history for details.

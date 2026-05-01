@@ -54,12 +54,23 @@ public:
 
     void LoadMutableMaterials();
 
-    [[nodiscard]] MaterialID GetDefaultMaterial() const { return defaultMaterial; }
-    [[nodiscard]] bool DoesMutableMaterialExist(MaterialID materialID) const { return materials.Contains(materialID); }
+    [[nodiscard]] MaterialID GetDefaultMaterialID() const { return defaultMaterial; }
     [[nodiscard]] const MaterialProperties& GetDefaultMaterialProperties() const { return materials.At(defaultMaterial).props; }
+    [[nodiscard]] const StringID& GetDefaultMaterialFragmentShader() const { return materials.At(defaultMaterial).fragmentShader; }
+
+    [[nodiscard]] RenderMaterial GetDefaultRenderMaterial() const
+    {
+        Material mat = materials.At(defaultMaterial);
+        return {mat.props, mat.fragmentShader};
+    }
+
+    [[nodiscard]] bool DoesMutableMaterialExist(MaterialID materialID) const { return materials.Contains(materialID); }
     [[nodiscard]] const Core::FixedMap<MaterialID, uint32_t>& GetIdToEntryMap() const { return idToEntryMap; }
 
+
     [[nodiscard]] MaterialProperties GetProperties(MaterialID id) const;
+
+    [[nodiscard]] RenderMaterial GetRenderMaterial(MaterialID id) const;
 
     [[nodiscard]] const Material* GetMaterial(MaterialID id) const;
 

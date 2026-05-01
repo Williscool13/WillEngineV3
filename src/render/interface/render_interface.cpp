@@ -15,7 +15,7 @@ ViewFamily::ViewFamily(TlsfAllocator& allocator)
 
     modelMatrices = Vector<Model>(&allocator, AllocTag::FrameSync, 256);
     activeMaterials = Map<Engine::MaterialID, uint32_t>(&allocator, AllocTag::FrameSync, 256);
-    materials = Vector<MaterialProperties>(&allocator, AllocTag::FrameSync, 256);
+    materials = Vector<Engine::RenderMaterial>(&allocator, AllocTag::FrameSync, 256);
 
     debugLines = Vector<DebugLine>(&allocator, AllocTag::FrameSync, 256);
     debugBoxes = Vector<DebugBox>(&allocator, AllocTag::FrameSync, 256);

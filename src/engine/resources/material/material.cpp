@@ -24,6 +24,7 @@ MaterialID HashMaterial(const Material& m)
         glm::vec4 physicalProperties;
         TextureID textureRefs[6];
         SamplerDesc samplerDesc[6];
+
     };
 
     StableKey key{};
@@ -50,8 +51,7 @@ nlohmann::json SerializeMaterial(const Material& mat)
 
     j["name"] = mat.name;
     j["id"] = mat.id.id;
-    j["pipeline"] = mat.pipelineID.id;
-    j["pipelineName"] = mat.pipelineID.ToString();
+    j["fragmentShader"] = mat.fragmentShader.id;
 
     j["colorFactor"] = {mat.props.colorFactor.x, mat.props.colorFactor.y, mat.props.colorFactor.z, mat.props.colorFactor.w};
     j["metalRoughFactors"] = {mat.props.metalRoughFactors.x, mat.props.metalRoughFactors.y, mat.props.metalRoughFactors.z, mat.props.metalRoughFactors.w};
@@ -94,7 +94,7 @@ Material DeserializeMaterial(const nlohmann::json& j, const Core::Path& sourcePa
     Material mat{};
     mat.name = j["name"].get<Core::InlineString<128>>();
     mat.id = MaterialID(j["id"].get<uint64_t>());
-    mat.pipelineID = StringID(j["pipeline"].get<uint64_t>());
+    mat.fragmentShader = StringID(j["pipeline"].get<uint64_t>());
 
     auto readF4 = [&](const char* key, glm::vec4& v) {
         const auto& a = j[key];

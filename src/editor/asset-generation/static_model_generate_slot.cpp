@@ -233,6 +233,7 @@ bool StaticModelGenerateSlot::LoadGltf()
             const auto [ptr, ec] = std::to_chars(indexBuf, indexBuf + sizeof(indexBuf), i);
             *ptr = '\0';
 
+            rawModel.materials[i] = {};
             rawModel.materials[i].name = rawModel.name;
             rawModel.materials[i].name.Append("_material_");
             rawModel.materials[i].name.Append(indexBuf);

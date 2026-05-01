@@ -309,7 +309,7 @@ struct ViewFamily
      * Indexes into the materials vector
      */
     Map<Engine::MaterialID, uint32_t> activeMaterials{};
-    Vector<MaterialProperties> materials{};
+    Vector<Engine::RenderMaterial> materials{};
 
     int32_t skyboxIndex{-1};
     int32_t skyboxLOD{0};

@@ -41,16 +41,17 @@ struct Material
     MaterialProperties props{};
     TextureID textureRefs[6];
     SamplerDesc samplerDesc[6];
+    StringID fragmentShader{"default_lit"_sid};
     bool bIsRuntimeLoaded{false};
-
-
-    /**
-     * Expected pipeline to draw this material with (not used at the moment)
-     */
-    StringID pipelineID;
 
     // Runtime specific fields
     bool immutable{false};
+};
+
+struct RenderMaterial
+{
+    MaterialProperties props{};
+    StringID fragmentShader{};
 };
 
 MaterialID HashMaterial(const Material& m);

@@ -324,6 +324,7 @@ compile_shaders(will-engine
 
         ${CMAKE_SOURCE_DIR}/shaders/shading/bucket_visualize.slang compute ComputeBucketVisualize shading_bucket_visualize
         ${CMAKE_SOURCE_DIR}/shaders/shading/default_lit.slang compute ComputeDefaultLit shading_default_lit
+        ${CMAKE_SOURCE_DIR}/shaders/shading/error_unlit.slang compute ComputeErrorUnlit shading_error_unlit
 
         ${CMAKE_SOURCE_DIR}/shaders/visibility_buffer.slang mesh MeshMain visibility_buffer
         ${CMAKE_SOURCE_DIR}/shaders/visibility_buffer.slang fragment FragmentMain visibility_buffer

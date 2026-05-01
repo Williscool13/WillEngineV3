@@ -137,8 +137,7 @@ void RenderThread::ThreadMain()
     while (!bShouldExit.load()) {
         pipelineManager->Update(frameNumber);
         // Wait for frame
-        bool bHasFrame;
-        {
+        bool bHasFrame; {
             ZoneScopedN("Idle - WaitForFrame");
             std::unique_lock lock(engineRenderSynchronization->renderMutex);
             bHasFrame = engineRenderSynchronization->renderCV.wait_for(lock, std::chrono::milliseconds(1), [&] {
@@ -296,7 +295,6 @@ void RenderThread::RenderFrame(uint32_t currentFrameIndex, RenderSynchronization
         }
         break;
     }
-
 }
 
 RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCommandBuffer cmd, VkSemaphore swapchainSemaphore, Core::FrameBuffer& frameBuffer)
@@ -448,7 +446,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
             SetupShadeDispatchBucketPass(*renderGraph, pipelineManager, viewFamily, renderExtent, visBarDerTargets, 0);
 
-            SetupVisibilityShadingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, visShadingTargets, 0);
+            SetupVisibilityShadingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, visShadingTargets, 0, memoryManager->RenderArena());
 
 
             if (viewFamily.gtaoConfig.bEnabled) {
@@ -831,10 +829,22 @@ void RenderThread::ProcessAcquisitions(VkCommandBuffer cmd, Core::Span<Core::Buf
 #if WILL_EDITOR
 void RenderThread::RegisterDebugReadbacks()
 {
-    struct InstanceMeshletOffsets { InstanceMeshletOffsetPrefixSum data[1024]; };
-    struct IntermediateMeshlets   { IntermediateMeshlet data[128]; };
-    struct VisibleMeshlets        { CompactedMeshlet data[128]; };
-    struct ShadeDispatchReadback  { ShadeDispatchParameters data[16]; };
+    struct InstanceMeshletOffsets
+    {
+        InstanceMeshletOffsetPrefixSum data[1024];
+    };
+    struct IntermediateMeshlets
+    {
+        IntermediateMeshlet data[128];
+    };
+    struct VisibleMeshlets
+    {
+        CompactedMeshlet data[128];
+    };
+    struct ShadeDispatchReadback
+    {
+        ShadeDispatchParameters data[16];
+    };
 
     resourceManager->debugReadback.Register<ShadeDispatchReadback>(
         "Shade Dispatch Parameters",
@@ -844,7 +854,7 @@ void RenderThread::RegisterDebugReadbacks()
             pass.ReadTransferBuffer(SHADE_DISPATCH_BUCKETING_BUFFER);
             pass.WriteTransferBuffer(dst);
             pass.Execute([&graph, dst, dstOffset](VkCommandBuffer cmd) {
-                VkBufferCopy copy{ 0, dstOffset, sizeof(ShadeDispatchReadback) };
+                VkBufferCopy copy{0, dstOffset, sizeof(ShadeDispatchReadback)};
                 vkCmdCopyBuffer(cmd, graph.GetBufferHandle(SHADE_DISPATCH_BUCKETING_BUFFER), graph.GetBufferHandle(dst), 1, &copy);
             });
         },
@@ -861,13 +871,20 @@ void RenderThread::RegisterDebugReadbacks()
                 for (int i = 0; i < 16; ++i) {
                     const ShadeDispatchParameters& p = d.data[i];
                     ImGui::TableNextRow();
-                    ImGui::TableNextColumn(); ImGui::Text("%d", i);
-                    ImGui::TableNextColumn(); ImGui::Text("%u", p.materialIndex);
-                    ImGui::TableNextColumn(); ImGui::Text("(%u,%u,%u)", p.xDispatch, p.yDispatch, p.zDispatch);
-                    ImGui::TableNextColumn(); ImGui::Text("%u", p.minX);
-                    ImGui::TableNextColumn(); ImGui::Text("%u", p.minY);
-                    ImGui::TableNextColumn(); ImGui::Text("%u", p.maxX);
-                    ImGui::TableNextColumn(); ImGui::Text("%u", p.maxY);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%d", i);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", p.materialIndex);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("(%u,%u,%u)", p.xDispatch, p.yDispatch, p.zDispatch);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", p.minX);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", p.minY);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", p.maxX);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", p.maxY);
                 }
                 ImGui::EndTable();
             }
@@ -882,7 +899,7 @@ void RenderThread::RegisterDebugReadbacks()
             pass.ReadTransferBuffer(SID("instance_meshlet_offsets"));
             pass.WriteTransferBuffer(dst);
             pass.Execute([&graph, dst, dstOffset](VkCommandBuffer cmd) {
-                VkBufferCopy copy{ 0, dstOffset, sizeof(InstanceMeshletOffsets) };
+                VkBufferCopy copy{0, dstOffset, sizeof(InstanceMeshletOffsets)};
                 vkCmdCopyBuffer(cmd, graph.GetBufferHandle(SID("instance_meshlet_offsets")), graph.GetBufferHandle(dst), 1, &copy);
             });
         },
@@ -897,11 +914,16 @@ void RenderThread::RegisterDebugReadbacks()
                 for (int i = 0; i < 1024; ++i) {
                     if (d.data[i].count == 0) { continue; }
                     ImGui::TableNextRow();
-                    ImGui::TableNextColumn(); ImGui::Text("%d", i);
-                    ImGui::TableNextColumn(); ImGui::Text("%u", d.data[i].offset);
-                    ImGui::TableNextColumn(); ImGui::Text("%u", d.data[i].count);
-                    ImGui::TableNextColumn(); ImGui::Text("%u", d.data[i].lod);
-                    ImGui::TableNextColumn(); ImGui::Text("%u", d.data[i].primitiveIndex);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%d", i);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", d.data[i].offset);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", d.data[i].count);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", d.data[i].lod);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", d.data[i].primitiveIndex);
                 }
                 ImGui::EndTable();
             }
@@ -916,7 +938,7 @@ void RenderThread::RegisterDebugReadbacks()
             pass.ReadTransferBuffer(SID("meshlet_count_dispatch_args"));
             pass.WriteTransferBuffer(dst);
             pass.Execute([&graph, dst, dstOffset](VkCommandBuffer cmd) {
-                VkBufferCopy copy{ 0, dstOffset, sizeof(InstancingMeshletDispatchIndirect) };
+                VkBufferCopy copy{0, dstOffset, sizeof(InstancingMeshletDispatchIndirect)};
                 vkCmdCopyBuffer(cmd, graph.GetBufferHandle(SID("meshlet_count_dispatch_args")), graph.GetBufferHandle(dst), 1, &copy);
             });
         },
@@ -934,7 +956,7 @@ void RenderThread::RegisterDebugReadbacks()
             pass.ReadTransferBuffer(SID("intermediate_meshlets"));
             pass.WriteTransferBuffer(dst);
             pass.Execute([&graph, dst, dstOffset](VkCommandBuffer cmd) {
-                VkBufferCopy copy{ 0, dstOffset, sizeof(IntermediateMeshlets) };
+                VkBufferCopy copy{0, dstOffset, sizeof(IntermediateMeshlets)};
                 vkCmdCopyBuffer(cmd, graph.GetBufferHandle(SID("intermediate_meshlets")), graph.GetBufferHandle(dst), 1, &copy);
             });
         },
@@ -952,11 +974,16 @@ void RenderThread::RegisterDebugReadbacks()
                     uint32_t meshletIndex = d.data[i].meshletIndexWithinLOD & 0x3FFFFFFF;
                     uint32_t lod = d.data[i].meshletIndexWithinLOD >> 30;
                     ImGui::TableNextRow();
-                    ImGui::TableNextColumn(); ImGui::Text("%d", i);
-                    ImGui::TableNextColumn(); ImGui::Text("%u", instanceIndex);
-                    ImGui::TableNextColumn(); ImGui::Text("%s", visible ? "Yes" : "No");
-                    ImGui::TableNextColumn(); ImGui::Text("%u", meshletIndex);
-                    ImGui::TableNextColumn(); ImGui::Text("%u", lod);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%d", i);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", instanceIndex);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%s", visible ? "Yes" : "No");
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", meshletIndex);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", lod);
                 }
                 ImGui::EndTable();
             }
@@ -971,7 +998,7 @@ void RenderThread::RegisterDebugReadbacks()
             pass.ReadTransferBuffer(SID("visible_meshlets"));
             pass.WriteTransferBuffer(dst);
             pass.Execute([&graph, dst, dstOffset](VkCommandBuffer cmd) {
-                VkBufferCopy copy{ 0, dstOffset, sizeof(VisibleMeshlets) };
+                VkBufferCopy copy{0, dstOffset, sizeof(VisibleMeshlets)};
                 vkCmdCopyBuffer(cmd, graph.GetBufferHandle(SID("visible_meshlets")), graph.GetBufferHandle(dst), 1, &copy);
             });
         },
@@ -986,10 +1013,14 @@ void RenderThread::RegisterDebugReadbacks()
                     uint32_t meshletIndex = d.data[i].meshletIndexWithinLOD & 0x3FFFFFFF;
                     uint32_t lod = d.data[i].meshletIndexWithinLOD >> 30;
                     ImGui::TableNextRow();
-                    ImGui::TableNextColumn(); ImGui::Text("%d", i);
-                    ImGui::TableNextColumn(); ImGui::Text("%u", d.data[i].instanceIndex);
-                    ImGui::TableNextColumn(); ImGui::Text("%u", meshletIndex);
-                    ImGui::TableNextColumn(); ImGui::Text("%u", lod);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%d", i);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", d.data[i].instanceIndex);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", meshletIndex);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", lod);
                 }
                 ImGui::EndTable();
             }
@@ -1004,7 +1035,7 @@ void RenderThread::RegisterDebugReadbacks()
             pass.ReadTransferBuffer(SID("compacted_meshlet_dispatch_args"));
             pass.WriteTransferBuffer(dst);
             pass.Execute([&graph, dst, dstOffset](VkCommandBuffer cmd) {
-                VkBufferCopy copy{ 0, dstOffset, sizeof(InstancingCompactedMeshletDispatchIndirect) };
+                VkBufferCopy copy{0, dstOffset, sizeof(InstancingCompactedMeshletDispatchIndirect)};
                 vkCmdCopyBuffer(cmd, graph.GetBufferHandle(SID("compacted_meshlet_dispatch_args")), graph.GetBufferHandle(dst), 1, &copy);
             });
         },
@@ -1063,7 +1094,9 @@ void RenderThread::CreatePipelines()
 
     pipelineManager->RegisterComputePipeline(SID("shading_bucket_visualize"), Platform::GetShaderPath() / "shading_bucket_visualize_compute.spv",
                                              sizeof(VisibilityShadingPushConstant), PipelineCategory::Critical);
-    pipelineManager->RegisterComputePipeline(SID("shading_default_lit"), Platform::GetShaderPath() / "shading_default_lit_compute.spv",
+    pipelineManager->RegisterComputePipeline(SID("default_lit"), Platform::GetShaderPath() / "shading_default_lit_compute.spv",
+                                             sizeof(VisibilityShadingPushConstant), PipelineCategory::Critical);
+    pipelineManager->RegisterComputePipeline(SID("error_unlit"), Platform::GetShaderPath() / "shading_error_unlit_compute.spv",
                                              sizeof(VisibilityShadingPushConstant), PipelineCategory::Critical);
 
 
@@ -1550,11 +1583,13 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
     }
 
     if (!viewFamily.materials.IsEmpty()) {
-        // todo: good chance this will be re-arranged a bit so that materials that use the same shader will be dispatched together
         renderGraph->CreateBuffer(GEOMETRY_MATERIAL_BUFFER, renderFamilyProperties.materialBufferSize, false);
 
         UploadAllocation materialUpload = renderGraph->AllocateTransient(viewFamily.materials.Size() * sizeof(MaterialProperties));
-        memcpy(materialUpload.ptr, viewFamily.materials.Data(), viewFamily.materials.Size() * sizeof(MaterialProperties));
+        auto* dst = static_cast<MaterialProperties*>(materialUpload.ptr);
+        for (size_t i = 0; i < viewFamily.materials.Size(); ++i) {
+            dst[i] = viewFamily.materials[i].props;
+        }
 
         RenderPass& uploadMaterialsPass = renderGraph->AddPass(SID("Upload Materials"), VK_PIPELINE_STAGE_2_COPY_BIT);
         uploadMaterialsPass.WriteTransferBuffer(SID("material_buffer"));
@@ -1600,21 +1635,21 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
         uploadShadeDispatchPass.Execute([&,
                 shadeDispatchOffset = shadeDispatchUpload.offset,
                 shadeDispatchSize = viewFamily.materials.Size() * sizeof(ShadeDispatchParameters)](VkCommandBuffer cmd) {
-            VkBufferCopy2 copy{
-                .sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
-                .srcOffset = shadeDispatchOffset,
-                .dstOffset = 0,
-                .size = shadeDispatchSize,
-            };
-            VkCopyBufferInfo2 copyInfo{
-                .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
-                .srcBuffer = renderGraph->GetTransientUploadBuffer(),
-                .dstBuffer = renderGraph->GetBufferHandle(SHADE_DISPATCH_BUCKETING_BUFFER),
-                .regionCount = 1,
-                .pRegions = &copy,
-            };
-            vkCmdCopyBuffer2(cmd, &copyInfo);
-        });
+                VkBufferCopy2 copy{
+                    .sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
+                    .srcOffset = shadeDispatchOffset,
+                    .dstOffset = 0,
+                    .size = shadeDispatchSize,
+                };
+                VkCopyBufferInfo2 copyInfo{
+                    .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
+                    .srcBuffer = renderGraph->GetTransientUploadBuffer(),
+                    .dstBuffer = renderGraph->GetBufferHandle(SHADE_DISPATCH_BUCKETING_BUFFER),
+                    .regionCount = 1,
+                    .pRegions = &copy,
+                };
+                vkCmdCopyBuffer2(cmd, &copyInfo);
+            });
     }
 }
 

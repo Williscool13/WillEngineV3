@@ -78,7 +78,7 @@ void ResolveStaticMeshLoads(Engine::EngineContext* ctx, Engine::EngineState* sta
 
             Engine::MaterialID matID;
             if (primitive.materialIndex == -1) {
-                matID = materialManager->GetDefaultMaterial();
+                matID = materialManager->GetDefaultMaterialID();
             }
             else {
                 Engine::MaterialID materialOverride = meshComponent.materialOverrides[primitive.materialIndex];
@@ -145,7 +145,7 @@ void ResolveProceduralMeshLoads(Engine::EngineContext* ctx, Engine::EngineState*
         Engine::PrimitiveProperty& primitive = mesh.primitiveProperties[0];
 
         Engine::MaterialManager* materialManager = ctx->materialManager;
-        Engine::MaterialID matID = materialManager->GetDefaultMaterial();
+        Engine::MaterialID matID = materialManager->GetDefaultMaterialID();
         if (meshComponent.material.IsValid()) {
             if (materialManager->DoesMutableMaterialExist(meshComponent.material)) {
                 matID = meshComponent.material;
@@ -197,7 +197,7 @@ void ResolveSplineMeshLoads(Engine::EngineContext* ctx, Engine::EngineState* sta
         Engine::PrimitiveProperty& primitive = mesh.primitiveProperties[0];
 
         Engine::MaterialManager* materialManager = ctx->materialManager;
-        Engine::MaterialID matID = materialManager->GetDefaultMaterial();
+        Engine::MaterialID matID = materialManager->GetDefaultMaterialID();
         if (meshComponent.material.IsValid()) {
             if (materialManager->DoesMutableMaterialExist(meshComponent.material)) {
                 matID = meshComponent.material;
@@ -439,7 +439,7 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
             auto [val, inserted] = frameBuffer->mainViewFamily.activeMaterials.TryEmplace(instance.materialID);
             if (inserted) {
                 val = frameBuffer->mainViewFamily.materials.Size();
-                frameBuffer->mainViewFamily.materials.PushBack(materialManager->GetProperties(instance.materialID));
+                frameBuffer->mainViewFamily.materials.PushBack(materialManager->GetRenderMaterial(instance.materialID));
             }
         }
     }

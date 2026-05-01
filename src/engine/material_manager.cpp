@@ -306,6 +306,16 @@ MaterialProperties MaterialManager::GetProperties(MaterialID id) const
     return mat->props;
 }
 
+RenderMaterial MaterialManager::GetRenderMaterial(MaterialID id) const
+{
+    const Material* mat = materials.Find(id);
+    if (mat == nullptr) {
+        return GetDefaultRenderMaterial();
+    }
+
+    return {mat->props, mat->fragmentShader};
+}
+
 bool MaterialManager::DeleteMutableMaterial(MaterialID id)
 {
     auto it = materials.Find(id);
@@ -334,6 +344,7 @@ void MaterialManager::CreateMaterial(std::string_view name)
     mat.name = Core::InlineString<128>(name);
     mat.id = MaterialID{mutableIdRng()};
     mat.props = GetDefaultMaterialProperties();
+    mat.fragmentShader = GetDefaultMaterialFragmentShader();
     std::uniform_real_distribution dist(0.0f, 1.0f);
     mat.props.colorFactor = {dist(mutableIdRng), dist(mutableIdRng), dist(mutableIdRng), 1.0f}; // todo
     mat.sourcePath = matPath;
