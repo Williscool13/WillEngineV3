@@ -251,51 +251,50 @@ target_include_directories(tracy PUBLIC
 # Shaders =====================================
 preprocess_shader_interop(
         ${CMAKE_SOURCE_DIR}/src/render/shaders/common_interop.h
-        ${CMAKE_SOURCE_DIR}/shaders/common_interop.slang
+        ${CMAKE_SOURCE_DIR}/shaders/include/common_interop.slang
 )
 
 preprocess_shader_interop(
         ${CMAKE_SOURCE_DIR}/src/render/shaders/model_interop.h
-        ${CMAKE_SOURCE_DIR}/shaders/model_interop.slang
+        ${CMAKE_SOURCE_DIR}/shaders/include/model_interop.slang
 )
 preprocess_shader_interop(
         ${CMAKE_SOURCE_DIR}/src/render/shaders/instancing_interop.h
-        ${CMAKE_SOURCE_DIR}/shaders/instancing_interop.slang
+        ${CMAKE_SOURCE_DIR}/shaders/include/instancing_interop.slang
 )
 preprocess_shader_interop(
         ${CMAKE_SOURCE_DIR}/src/render/shaders/shadows_interop.h
-        ${CMAKE_SOURCE_DIR}/shaders/shadows_interop.slang
+        ${CMAKE_SOURCE_DIR}/shaders/include/shadows_interop.slang
 )
 preprocess_shader_interop(
         ${CMAKE_SOURCE_DIR}/src/render/shaders/lights_interop.h
-        ${CMAKE_SOURCE_DIR}/shaders/lights_interop.slang
+        ${CMAKE_SOURCE_DIR}/shaders/include/lights_interop.slang
 )
 preprocess_shader_interop(
         ${CMAKE_SOURCE_DIR}/src/render/shaders/constants_interop.h
-        ${CMAKE_SOURCE_DIR}/shaders/constants_interop.slang
+        ${CMAKE_SOURCE_DIR}/shaders/include/constants_interop.slang
 )
 preprocess_shader_interop(
         ${CMAKE_SOURCE_DIR}/src/render/shaders/push_constant_interop.h
-        ${CMAKE_SOURCE_DIR}/shaders/push_constant_interop.slang
+        ${CMAKE_SOURCE_DIR}/shaders/include/push_constant_interop.slang
 )
 
 
 get_property(INTEROP_FILES GLOBAL PROPERTY SHADER_INTEROP_FILES)
 add_custom_target(shader_interop DEPENDS ${INTEROP_FILES})
 
+# Used to define dependencies for building (not actually the includes)
 set_property(GLOBAL PROPERTY SHADER_INCLUDE_FILES "")
-
 function(add_shader_include INCLUDE_FILE)
     get_filename_component(INCLUDE_ABS ${INCLUDE_FILE} ABSOLUTE)
     set_property(GLOBAL APPEND PROPERTY SHADER_INCLUDE_FILES ${INCLUDE_ABS})
 endfunction()
-
-add_shader_include("${CMAKE_SOURCE_DIR}/shaders/visibility_shading.slang")
-add_shader_include("${CMAKE_SOURCE_DIR}/shaders/shader_constants.slang")
-add_shader_include("${CMAKE_SOURCE_DIR}/shaders/shader_functions.slang")
-add_shader_include("${CMAKE_SOURCE_DIR}/shaders/shadow_functions.slang")
-add_shader_include("${CMAKE_SOURCE_DIR}/shaders/pbr_functions.slang")
-add_shader_include("${CMAKE_SOURCE_DIR}/shaders/bindless_declarations.slang")
+add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/visibility_shading_common.slang")
+add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/shader_constants.slang")
+add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/shader_functions.slang")
+add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/shadow_functions.slang")
+add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/pbr_functions.slang")
+add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/bindless_declarations.slang")
 
 compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/debug_visualize.slang compute ComputeMain debug_visualize

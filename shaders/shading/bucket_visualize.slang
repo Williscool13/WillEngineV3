@@ -7,7 +7,7 @@ import limits_declarations;
 import bindless_declarations;
 import shader_functions;
 
-import visibility_shading;
+import visibility_shading_common;
 
 [shader("compute")]
 [numthreads(16, 16, 1)]
