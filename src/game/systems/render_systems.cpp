@@ -365,7 +365,7 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
             cubemapVis.prefix = Core::InlineString("cubemap_vis");
             cubemapVis.pipelineId = id;
             cubemapVis.pushConstantCustomData[0] = 0;
-            cubemapVis.pushConstantCustomData[1] = ASSET_SAMPLER_BINDLESS_INDEX;
+            cubemapVis.pushConstantCustomData[1] = ASSET_SAMPLER_LINEAR_BINDLESS_INDEX;
             cubemapVis.pushConstantCustomData[2] = 0;
 
             auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.Size());

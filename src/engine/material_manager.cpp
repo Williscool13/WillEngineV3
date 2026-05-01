@@ -34,9 +34,9 @@ MaterialManager::MaterialManager(Core::MemoryManager& memoryManager, Engine::Eng
         .colorFactor = {1.0f, 1.0f, 1.0f, 1.0f}, // white
         .metalRoughFactors = {0.0f, 1.0f, 0.0f, 0.0f}, // non-metallic, rough
         .textureImageIndices = {WHITE_IMAGE_BINDLESS_INDEX, WHITE_IMAGE_BINDLESS_INDEX, WHITE_IMAGE_BINDLESS_INDEX, WHITE_IMAGE_BINDLESS_INDEX},
-        .textureSamplerIndices = {ASSET_SAMPLER_BINDLESS_INDEX, ASSET_SAMPLER_BINDLESS_INDEX, ASSET_SAMPLER_BINDLESS_INDEX, ASSET_SAMPLER_BINDLESS_INDEX},
+        .textureSamplerIndices = {ASSET_SAMPLER_LINEAR_BINDLESS_INDEX, ASSET_SAMPLER_LINEAR_BINDLESS_INDEX, ASSET_SAMPLER_LINEAR_BINDLESS_INDEX, ASSET_SAMPLER_LINEAR_BINDLESS_INDEX},
         .textureImageIndices2 = {WHITE_IMAGE_BINDLESS_INDEX, WHITE_IMAGE_BINDLESS_INDEX, WHITE_IMAGE_BINDLESS_INDEX, WHITE_IMAGE_BINDLESS_INDEX},
-        .textureSamplerIndices2 = {ASSET_SAMPLER_BINDLESS_INDEX, ASSET_SAMPLER_BINDLESS_INDEX, ASSET_SAMPLER_BINDLESS_INDEX, ASSET_SAMPLER_BINDLESS_INDEX},
+        .textureSamplerIndices2 = {ASSET_SAMPLER_LINEAR_BINDLESS_INDEX, ASSET_SAMPLER_LINEAR_BINDLESS_INDEX, ASSET_SAMPLER_LINEAR_BINDLESS_INDEX, ASSET_SAMPLER_LINEAR_BINDLESS_INDEX},
         .colorUvTransform = {1.0f, 1.0f, 0.0f, 0.0f}, // identity
         .metalRoughUvTransform = {1.0f, 1.0f, 0.0f, 0.0f},
         .normalUvTransform = {1.0f, 1.0f, 0.0f, 0.0f},
@@ -117,7 +117,7 @@ void MaterialManager::AcquireMaterial(MaterialID materialID)
 
         auto resolveSampler = [&](SamplerDesc& desc) -> int32_t {
             Sampler* s = assetManager->LoadSampler(desc);
-            return s ? static_cast<int32_t>(s->bindlessHandle.index) : ASSET_SAMPLER_BINDLESS_INDEX;
+            return s ? static_cast<int32_t>(s->bindlessHandle.index) : ASSET_SAMPLER_LINEAR_BINDLESS_INDEX;
         };
 
         mat.props.textureImageIndices.x = resolveTexture(mat.textureRefs[0]);
@@ -275,7 +275,7 @@ void MaterialManager::UpdateMutableMaterial(MaterialID id, const Material& newMa
             assetManager->UnloadSampler(mat.samplerDesc[i]);
             mat.samplerDesc[i] = newMat.samplerDesc[i];
             Sampler* s = assetManager->LoadSampler(mat.samplerDesc[i]);
-            samplerIdxRef(i) = s ? static_cast<int32_t>(s->bindlessHandle.index) : ASSET_SAMPLER_BINDLESS_INDEX;
+            samplerIdxRef(i) = s ? static_cast<int32_t>(s->bindlessHandle.index) : ASSET_SAMPLER_LINEAR_BINDLESS_INDEX;
         }
     }
 

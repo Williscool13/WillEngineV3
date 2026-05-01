@@ -34,7 +34,7 @@ void ComputeErrorUnlit(uint3 dtid : SV_DispatchThreadID, uniform VisibilityShadi
     ShadingInputs shadingInputs = data.shadingInputs;
 
     float2 uv = shadingInputs.interp.uv;
-    float4 albedo = assetTextures[ERROR_IMAGE_BINDLESS_INDEX].SampleGrad(assetSamplers[ASSET_SAMPLER_BINDLESS_INDEX], uv, shadingInputs.uvDdx, shadingInputs.uvDdy);
+    float4 albedo = assetTextures[ERROR_IMAGE_BINDLESS_INDEX].SampleGrad(assetSamplers[ASSET_SAMPLER_NEAREST_BINDLESS_INDEX], uv, shadingInputs.uvDdx, shadingInputs.uvDdy);
 
     rdgStorageUInt4[pc.gbufferOneIndex][pixel] = uint4(
         PackNormalOct16(shadingInputs.interp.normalVS),

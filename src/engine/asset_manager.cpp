@@ -85,12 +85,21 @@ AssetManager::AssetManager(Core::MemoryManager& memoryManager, Engine::EngineCon
         LOG_CRITICAL(Asset, "Default SMAA Search logo does not exist, please regenerate and restart the engine");
     }
 
-    SamplerDesc defaultSamplerDesc{};
-    defaultSamplerDesc.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    defaultSamplerDesc.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    defaultSamplerDesc.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    Sampler* defaultSampler = LoadSampler(defaultSamplerDesc);
-    assert(defaultSampler && defaultSampler->bindlessHandle.index == ASSET_SAMPLER_BINDLESS_INDEX);
+    SamplerDesc defaultLinearSamplerDesc{};
+    defaultLinearSamplerDesc.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    defaultLinearSamplerDesc.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    defaultLinearSamplerDesc.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    Sampler* defaultLinear = LoadSampler(defaultLinearSamplerDesc);
+    assert(defaultLinear && defaultLinear->bindlessHandle.index == ASSET_SAMPLER_LINEAR_BINDLESS_INDEX);
+
+    SamplerDesc defaultNearestSamplerDesc{};
+    defaultNearestSamplerDesc.magFilter = VK_FILTER_NEAREST;
+    defaultNearestSamplerDesc.minFilter = VK_FILTER_NEAREST;
+    defaultNearestSamplerDesc.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    defaultNearestSamplerDesc.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    defaultNearestSamplerDesc.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    Sampler* defaultNearest = LoadSampler(defaultNearestSamplerDesc);
+    assert(defaultNearest && defaultNearest->bindlessHandle.index == ASSET_SAMPLER_NEAREST_BINDLESS_INDEX);
 }
 
 
