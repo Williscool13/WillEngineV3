@@ -25,6 +25,12 @@ bool IntersectsOBB(const Frustum& frustum, const glm::vec3& center, const glm::v
 
 int32_t GetSphereSegments(const glm::vec3& center, const glm::vec3& viewPos, float radius);
 
+struct BucketIndices
+{
+    uint32_t shadingBucket;
+    uint32_t lightingBucket;
+};
+
 struct RenderFamilyProperties
 {
     Core::ViewFamily* viewFamily{nullptr};

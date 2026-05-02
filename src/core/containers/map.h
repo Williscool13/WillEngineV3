@@ -310,6 +310,7 @@ public:
     }
 
     size_t Size() const { return size_; }
+    size_t GetCapacity() const { return capacity_; }
     bool   IsEmpty() const { return size_ == 0; }
     bool   IsAllocated() const { return slots_ != nullptr; }
 

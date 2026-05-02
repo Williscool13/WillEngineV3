@@ -155,6 +155,37 @@ public:
         --size_;
     }
 
+    bool Contains(const T& value) const
+    {
+        for (size_t i = 0; i < size_; ++i) {
+            if (data_[i] == value) { return true; }
+        }
+        return false;
+    }
+
+    bool RemoveFirst(const T& value)
+    {
+        for (size_t i = 0; i < size_; ++i) {
+            if (data_[i] == value) {
+                RemoveAt(i);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    template<typename Pred>
+    bool RemoveFirstIf(Pred&& pred)
+    {
+        for (size_t i = 0; i < size_; ++i) {
+            if (pred(data_[i])) {
+                RemoveAt(i);
+                return true;
+            }
+        }
+        return false;
+    }
+
     void Clear()
     {
         for (size_t i = 0; i < size_; ++i) { data_[i].~T(); }

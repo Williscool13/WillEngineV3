@@ -323,6 +323,7 @@ public:
     [[nodiscard]] size_t Size() const { return size_; }
     [[nodiscard]] size_t GetCapacity() const { return capacity_; }
     [[nodiscard]] bool IsEmpty() const { return size_ == 0; }
+    [[nodiscard]] bool IsFull() const { return size_ >= capacity_; }
     [[nodiscard]] bool IsAllocated() const { return data_ != nullptr; }
 
     bool operator==(const Vector& other) const

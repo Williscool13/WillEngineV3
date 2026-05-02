@@ -1,0 +1,273 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+
+  <!-- ===== STRING ID ===== -->
+
+  <Type Name="StringID">
+    <DisplayString>StringID({id})</DisplayString>
+  </Type>
+
+  <!-- ===== VECTORS ===== -->
+
+  <Type Name="Core::Vector&lt;*&gt;">
+    <DisplayString>{{ size={size_}, capacity={capacity_} }}</DisplayString>
+    <Expand>
+      <Item Name="[size]">size_</Item>
+      <Item Name="[capacity]">capacity_</Item>
+      <ArrayItems>
+        <Size>size_</Size>
+        <ValuePointer>data_</ValuePointer>
+      </ArrayItems>
+    </Expand>
+  </Type>
+
+  <Type Name="Core::FixedVector&lt;*&gt;">
+    <DisplayString>{{ size={size_}, capacity={capacity_} }}</DisplayString>
+    <Expand>
+      <Item Name="[size]">size_</Item>
+      <Item Name="[capacity]">capacity_</Item>
+      <ArrayItems>
+        <Size>size_</Size>
+        <ValuePointer>data_</ValuePointer>
+      </ArrayItems>
+    </Expand>
+  </Type>
+
+  <Type Name="Core::ArenaVector&lt;*&gt;">
+    <DisplayString>{{ size={size_}, capacity={capacity_} }}</DisplayString>
+    <Expand>
+      <Item Name="[size]">size_</Item>
+      <Item Name="[capacity]">capacity_</Item>
+      <ArrayItems>
+        <Size>size_</Size>
+        <ValuePointer>data_</ValuePointer>
+      </ArrayItems>
+    </Expand>
+  </Type>
+
+  <Type Name="Core::ArenaFixedVector&lt;*&gt;">
+    <DisplayString>{{ size={size_}, capacity={capacity_} }}</DisplayString>
+    <Expand>
+      <Item Name="[size]">size_</Item>
+      <Item Name="[capacity]">capacity_</Item>
+      <ArrayItems>
+        <Size>size_</Size>
+        <ValuePointer>data_</ValuePointer>
+      </ArrayItems>
+    </Expand>
+  </Type>
+
+  <Type Name="Core::InlineVector&lt;*,*&gt;">
+    <DisplayString>{{ size={size_} }}</DisplayString>
+    <Expand>
+      <Item Name="[size]">size_</Item>
+      <ArrayItems>
+        <Size>size_</Size>
+        <ValuePointer>data_</ValuePointer>
+      </ArrayItems>
+    </Expand>
+  </Type>
+
+  <!-- ===== ARRAYS ===== -->
+
+  <Type Name="Core::Array&lt;*,*&gt;">
+    <DisplayString>{{ size={$T2} }}</DisplayString>
+    <Expand>
+      <Item Name="[size]">$T2</Item>
+      <ArrayItems>
+        <Size>$T2</Size>
+        <ValuePointer>data_</ValuePointer>
+      </ArrayItems>
+    </Expand>
+  </Type>
+
+  <Type Name="Core::HeapArray&lt;*&gt;">
+    <DisplayString>{{ size={size_} }}</DisplayString>
+    <Expand>
+      <Item Name="[size]">size_</Item>
+      <ArrayItems>
+        <Size>size_</Size>
+        <ValuePointer>data_</ValuePointer>
+      </ArrayItems>
+    </Expand>
+  </Type>
+
+  <Type Name="Core::ArenaArray&lt;*&gt;">
+    <DisplayString>{{ size={size_} }}</DisplayString>
+    <Expand>
+      <Item Name="[size]">size_</Item>
+      <ArrayItems>
+        <Size>size_</Size>
+        <ValuePointer>data_</ValuePointer>
+      </ArrayItems>
+    </Expand>
+  </Type>
+
+  <!-- ===== MAPS ===== -->
+  <!--
+    All map types use open-addressing with a Slot per bucket.
+    Each Slot stores raw keyBuf/valBuf char arrays plus a State enum (0=Empty, 1=Occupied, 2=Dead).
+    CustomListItems loops over all buckets and emits only Occupied ones; no blank entries.
+  -->
+
+  <Type Name="Core::Map&lt;*,*,*&gt;">
+    <DisplayString>{{ size={size_}, capacity={capacity_} }}</DisplayString>
+    <Expand>
+      <Item Name="[size]">size_</Item>
+      <Item Name="[capacity]">capacity_</Item>
+      <CustomListItems MaxItemsPerView="500">
+        <Variable Name="i" InitialValue="0"/>
+        <Loop Condition="i &lt; capacity_">
+          <If Condition="slots_[i].state == 1">
+            <Item Name="{*($T1*)(slots_[i].keyBuf)}">*($T2*)(slots_[i].valBuf)</Item>
+          </If>
+          <Exec>i++</Exec>
+        </Loop>
+      </CustomListItems>
+    </Expand>
+  </Type>
+
+  <Type Name="Core::FixedMap&lt;*,*,*&gt;">
+    <DisplayString>{{ size={size_}, capacity={capacity_} }}</DisplayString>
+    <Expand>
+      <Item Name="[size]">size_</Item>
+      <Item Name="[capacity]">capacity_</Item>
+      <CustomListItems MaxItemsPerView="500">
+        <Variable Name="i" InitialValue="0"/>
+        <Loop Condition="i &lt; capacity_">
+          <If Condition="slots_[i].state == 1">
+            <Item Name="{*($T1*)(slots_[i].keyBuf)}">*($T2*)(slots_[i].valBuf)</Item>
+          </If>
+          <Exec>i++</Exec>
+        </Loop>
+      </CustomListItems>
+    </Expand>
+  </Type>
+
+  <Type Name="Core::ArenaFixedMap&lt;*,*,*&gt;">
+    <DisplayString>{{ size={size_}, capacity={capacity_} }}</DisplayString>
+    <Expand>
+      <Item Name="[size]">size_</Item>
+      <Item Name="[capacity]">capacity_</Item>
+      <CustomListItems MaxItemsPerView="500">
+        <Variable Name="i" InitialValue="0"/>
+        <Loop Condition="i &lt; capacity_">
+          <If Condition="slots_[i].state == 1">
+            <Item Name="{*($T1*)(slots_[i].keyBuf)}">*($T2*)(slots_[i].valBuf)</Item>
+          </If>
+          <Exec>i++</Exec>
+        </Loop>
+      </CustomListItems>
+    </Expand>
+  </Type>
+
+  <Type Name="Core::InlineMap&lt;*,*,*,*&gt;">
+    <DisplayString>{{ size={size_}, capacity={$T3} }}</DisplayString>
+    <Expand>
+      <Item Name="[size]">size_</Item>
+      <Item Name="[capacity]">$T3</Item>
+      <CustomListItems MaxItemsPerView="500">
+        <Variable Name="i" InitialValue="0"/>
+        <Loop Condition="i &lt; $T3">
+          <If Condition="slots_[i].state == 1">
+            <Item Name="{*($T1*)(slots_[i].keyBuf)}">*($T2*)(slots_[i].valBuf)</Item>
+          </If>
+          <Exec>i++</Exec>
+        </Loop>
+      </CustomListItems>
+    </Expand>
+  </Type>
+
+  <!-- ===== STRINGS ===== -->
+
+  <Type Name="Core::String">
+    <DisplayString>{data_,s}</DisplayString>
+    <Expand>
+      <Item Name="[size]">size_</Item>
+      <Item Name="[capacity]">capacity_</Item>
+      <ArrayItems>
+        <Size>size_</Size>
+        <ValuePointer>data_</ValuePointer>
+      </ArrayItems>
+    </Expand>
+  </Type>
+
+  <Type Name="Core::InlineString&lt;*&gt;">
+    <DisplayString>{buf,s}</DisplayString>
+    <Expand>
+      <Item Name="[length]">len</Item>
+      <ArrayItems>
+        <Size>len</Size>
+        <ValuePointer>buf</ValuePointer>
+      </ArrayItems>
+    </Expand>
+  </Type>
+
+  <!-- ===== PATHS ===== -->
+
+  <Type Name="Core::InlinePath&lt;*&gt;">
+    <DisplayString>{buf_,s}</DisplayString>
+    <Expand>
+      <Item Name="[length]">len_</Item>
+      <ArrayItems>
+        <Size>len_</Size>
+        <ValuePointer>buf_</ValuePointer>
+      </ArrayItems>
+    </Expand>
+  </Type>
+
+  <!-- ===== SPAN ===== -->
+
+  <Type Name="Core::Span&lt;*&gt;">
+    <DisplayString>{{ size={size_} }}</DisplayString>
+    <Expand>
+      <Item Name="[size]">size_</Item>
+      <ArrayItems>
+        <Size>size_</Size>
+        <ValuePointer>data_</ValuePointer>
+      </ArrayItems>
+    </Expand>
+  </Type>
+
+  <!-- ===== RING BUFFERS ===== -->
+
+  <Type Name="Core::RingBuffer&lt;*,*&gt;">
+    <DisplayString>{{ head={head}, tail={tail} }}</DisplayString>
+    <Expand>
+      <Item Name="[head]">head</Item>
+      <Item Name="[tail]">tail</Item>
+      <Item Name="[buffer]">buffer</Item>
+    </Expand>
+  </Type>
+
+  <Type Name="Core::HeapRingBuffer&lt;*&gt;">
+    <DisplayString>{{ capacity={capacity_}, head={head_}, tail={tail_} }}</DisplayString>
+    <Expand>
+      <Item Name="[capacity]">capacity_</Item>
+      <Item Name="[head]">head_</Item>
+      <Item Name="[tail]">tail_</Item>
+      <ArrayItems>
+        <Size>capacity_</Size>
+        <ValuePointer>data_</ValuePointer>
+      </ArrayItems>
+    </Expand>
+  </Type>
+
+  <!-- ===== FUNCTIONS ===== -->
+
+  <Type Name="Core::InlineFunction&lt;*,*&gt;">
+    <DisplayString Condition="invoker_ != 0">bound</DisplayString>
+    <DisplayString>empty</DisplayString>
+  </Type>
+
+  <Type Name="Core::Function&lt;*&gt;">
+    <DisplayString Condition="invoker_ != 0">bound (size={size_})</DisplayString>
+    <DisplayString>empty</DisplayString>
+  </Type>
+
+  <Type Name="Core::ArenaFunction&lt;*&gt;">
+    <DisplayString Condition="invoker_ != 0">bound</DisplayString>
+    <DisplayString>empty</DisplayString>
+  </Type>
+
+</AutoVisualizer>

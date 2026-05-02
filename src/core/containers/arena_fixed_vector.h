@@ -176,6 +176,14 @@ public:
         --size_;
     }
 
+    bool Contains(const T& value) const
+    {
+        for (size_t i = 0; i < size_; ++i) {
+            if (data_[i] == value) { return true; }
+        }
+        return false;
+    }
+
     void Clear()
     {
         for (size_t i = 0; i < size_; ++i) { data_[i].~T(); }

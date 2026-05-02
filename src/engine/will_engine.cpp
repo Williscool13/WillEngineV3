@@ -297,6 +297,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
 #if DEBUG
         engineContext->internStringFn = [](uint64_t hash, const char* str) { DBG_InternString(hash, str); };
         engineContext->resolveStringIdFn = [](uint64_t hash) { return DBG_ResolveStringId(hash); };
+        gResolveStringIdFn = [](uint64_t hash) { return DBG_ResolveStringId(hash); };
 #endif
         engineContext->addImguiTextureFn = [](uint64_t sampler, uint64_t imageView) -> uint64_t {
             VkDescriptorSet ds = ImGui_ImplVulkan_AddTexture(

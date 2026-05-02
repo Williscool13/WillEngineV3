@@ -184,6 +184,30 @@ public:
         return slots_[0].Val();
     }
 
+    struct EmplaceResult { V& value; bool inserted; };
+
+    template<typename... Args>
+    EmplaceResult TryEmplace(const K& key, Args&&... args)
+    {
+        const uint64_t h = H{}(key);
+        for (size_t probe = 0; probe < N; ++probe) {
+            const size_t idx = (h + probe) & (N - 1);
+            Slot& s = slots_[idx];
+            if (s.state == Slot::State::Occupied && s.Key() == key) {
+                return {s.Val(), false};
+            }
+            if (s.state == Slot::State::Empty || s.state == Slot::State::Dead) {
+                new(s.keyBuf) K(key);
+                new(s.valBuf) V(std::forward<Args>(args)...);
+                s.state = Slot::State::Occupied;
+                ++size_;
+                return {s.Val(), true};
+            }
+        }
+        assert(false && "InlineMap: table full");
+        return {slots_[0].Val(), false};
+    }
+
     V* Find(const K& key)
     {
         const uint64_t h = H{}(key);
