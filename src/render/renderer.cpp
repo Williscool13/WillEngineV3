@@ -677,50 +677,54 @@ void SetupVisibilityShadingPass(RenderGraph& graph,
             visibility = targets.visibility, barycentric = targets.barycentric, derivatives = targets.derivatives,
             gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             sortedMaterials, materialCount](VkCommandBuffer cmd) {
-        VkDeviceAddress shadeDispatchAddress = graph.GetBufferAddress(SHADE_DISPATCH_BUCKETING_BUFFER);
+            VkDeviceAddress shadeDispatchAddress = graph.GetBufferAddress(SHADE_DISPATCH_BUCKETING_BUFFER);
 
-        StringID boundShader{};
-        const PipelineEntry* pipelineEntry = nullptr;
+            StringID boundShader{};
+            const PipelineEntry* pipelineEntry = nullptr;
 
-        for (uint32_t i = 0; i < materialCount; ++i) {
-            const MaterialEntry& entry = sortedMaterials[i];
-            if (!entry.fragmentShader) { continue; }
+            for (uint32_t i = 0; i < materialCount; ++i) {
+                const MaterialEntry& entry = sortedMaterials[i];
+                if (!entry.fragmentShader) { continue; }
 
-            if (entry.fragmentShader != boundShader) {
-                pipelineEntry = pipelineManager->GetPipelineEntry(entry.fragmentShader);
-                if (!pipelineEntry) {
-                    pipelineEntry = pipelineManager->GetPipelineEntry(SID("error_unlit"));
+                if (entry.fragmentShader != boundShader) {
+                    pipelineEntry = pipelineManager->GetPipelineEntry(entry.fragmentShader);
+                    if (!pipelineEntry) {
+                        pipelineEntry = pipelineManager->GetPipelineEntry(SID("error_unlit"));
+                    }
+                    if (!pipelineEntry) { continue; }
+                    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+                    boundShader = entry.fragmentShader;
                 }
-                if (!pipelineEntry) { continue; }
-                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
-                boundShader = entry.fragmentShader;
+
+                VisibilityShadingPushConstant pc{
+                    .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER) + sceneIndex * sizeof(SceneData),
+                    .vertexPosBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_POSITION_BUFFER),
+                    .vertexAttrBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER),
+                    .meshletVerticesBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_VERTEX_BUFFER),
+                    .meshletTrianglesBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_TRIANGLE_BUFFER),
+                    .meshletBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_BUFFER),
+                    .primitiveBuffer = graph.GetBufferAddress(GEOMETRY_PRIMITIVE_BUFFER),
+                    .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
+                    .modelBuffer = graph.GetBufferAddress(GEOMETRY_MODEL_BUFFER),
+                    .materialBuffer = graph.GetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
+                    .shadeDispatchBuffer = shadeDispatchAddress,
+                    .materialIndex = entry.materialIndex,
+                    .visibilityBufferIndex = graph.GetSampledImageViewDescriptorIndex(visibility),
+                    .barycentricBufferIndex = graph.GetStorageImageViewDescriptorIndex(barycentric),
+                    .derivativeBufferIndex = graph.GetStorageImageViewDescriptorIndex(derivatives),
+                    .gbufferOneIndex = graph.GetStorageImageViewDescriptorIndex(gbufferOne),
+                    .gbufferTwoIndex = graph.GetStorageImageViewDescriptorIndex(gbufferTwo),
+                };
+                vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+                vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(SHADE_DISPATCH_BUCKETING_BUFFER),
+                                      entry.materialIndex * sizeof(ShadeDispatchParameters) + offsetof(ShadeDispatchParameters, xDispatch));
             }
+        });
+}
 
-            VisibilityShadingPushConstant pc{
-                .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER) + sceneIndex * sizeof(SceneData),
-                .vertexPosBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_POSITION_BUFFER),
-                .vertexAttrBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER),
-                .meshletVerticesBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_VERTEX_BUFFER),
-                .meshletTrianglesBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_TRIANGLE_BUFFER),
-                .meshletBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_BUFFER),
-                .primitiveBuffer = graph.GetBufferAddress(GEOMETRY_PRIMITIVE_BUFFER),
-                .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
-                .modelBuffer = graph.GetBufferAddress(GEOMETRY_MODEL_BUFFER),
-                .materialBuffer = graph.GetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
-                .shadeDispatchBuffer = shadeDispatchAddress,
-                .materialIndex = entry.materialIndex,
-                .visibilityBufferIndex = graph.GetSampledImageViewDescriptorIndex(visibility),
-                .barycentricBufferIndex = graph.GetStorageImageViewDescriptorIndex(barycentric),
-                .derivativeBufferIndex = graph.GetStorageImageViewDescriptorIndex(derivatives),
-                .gbufferOneIndex = graph.GetStorageImageViewDescriptorIndex(gbufferOne),
-                .gbufferTwoIndex = graph.GetStorageImageViewDescriptorIndex(gbufferTwo),
-            };
-            vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-            vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(SHADE_DISPATCH_BUCKETING_BUFFER),
-                entry.materialIndex * sizeof(ShadeDispatchParameters) + offsetof(ShadeDispatchParameters, xDispatch));
-        }
-    });
-
+void SetupVisibilityBucketingDebugPass(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent,
+                                       const VisibilityShadingTargets& targets, uint32_t sceneIndex, Core::Arena& arena)
+{
     RenderPass& bucketVisualizePass = graph.AddPass(SID("Bucket Visualize"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
     bucketVisualizePass.ReadSampledImage(targets.visibility);
     bucketVisualizePass.ReadStorageImage(targets.barycentric);

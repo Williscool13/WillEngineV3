@@ -498,11 +498,20 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
         ImGui::Checkbox("Wireframe", &state->debug.bWireframe);
 
         ImGui::Text("Current Debug View: %s", state->debug.resourceName.IsEmpty() ? "None" : state->debug.resourceName.c_str());
-        ImGui::Checkbox("Enable Portals", &state->debug.bEnablePortal);
-
+        ImGui::SameLine();
         if (ImGui::Button("Disable Debug View")) {
             state->debug.resourceName.Clear();
         }
+        ImGui::Checkbox("Enable V-Buffer Bucketing Visualization", &state->debug.bEnableVisibilityBufferBucketingVisualization);
+
+        ImGui::BeginDisabled(true);
+        ImGui::Checkbox("Enable Portals", &state->debug.bEnablePortal);
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Portals are not currently functional");
+        }
+        ImGui::EndDisabled();
+
+
 
         ImGui::Separator();
 
@@ -1839,7 +1848,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
                     int optionCount = knownCount;
                     for (int i = 0; i < knownCount; ++i) { options[i] = knownOptions[i]; }
                     if (isUnknown) {
-                        unknownLabel = Core::InlineString<64>{"(unknown) "};
+                        unknownLabel = Core::InlineString{"(unknown) "};
                         unknownLabel.Append(editMat.fragmentShader.ToString());
                         options[optionCount++] = unknownLabel.c_str();
                         currentShader = knownCount;

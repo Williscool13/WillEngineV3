@@ -189,6 +189,7 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
 
     Game::BuildViewFamily(state, frameBuffer->mainViewFamily);
     frameBuffer->bWireframe = state->debug.bWireframe;
+    frameBuffer->bEnableVisibilityBufferBucketingVisualization = state->debug.bEnableVisibilityBufferBucketingVisualization;
     if (state->debug.bEnablePortal) {
         Game::BuildPortalViewFamily(state, frameBuffer->mainViewFamily);
     }

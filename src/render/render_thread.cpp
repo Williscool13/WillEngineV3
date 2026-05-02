@@ -448,6 +448,10 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
             SetupVisibilityShadingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, visShadingTargets, 0, memoryManager->RenderArena());
 
+            if (frameBuffer.bEnableVisibilityBufferBucketingVisualization) {
+                SetupVisibilityBucketingDebugPass(*renderGraph, pipelineManager, viewFamily, renderExtent, visShadingTargets, 0, memoryManager->RenderArena());
+            }
+
 
             if (viewFamily.gtaoConfig.bEnabled) {
                 SetupGroundTruthAmbientOcclusion(*renderGraph, pipelineManager, viewFamily, renderExtent, mainTargets, frameNumber, 0);
