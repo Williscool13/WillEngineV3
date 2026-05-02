@@ -9,6 +9,9 @@
 
 #include "miscellaneous_asset_generate.h"
 #include "asset-load/async_asset_load_manager.h"
+#include "engine/resources/environment_map/environment_map_format.h"
+#include "engine/resources/model/model_format.h"
+#include "engine/resources/texture/texture_format.h"
 #include "engine/include/engine_context.h"
 #include "platform/thread_utils.h"
 #include "render/render_thread.h"
@@ -175,7 +178,13 @@ void AssetGenerator::RequestModelGenerate(const Core::Path& gltfPath, const Core
 {
     ZoneScoped;
 
-    modelGenerateRequestQueue.enqueue({gltfPath, outputPath, modelIdRng()});
+    uint64_t modelId = modelIdRng();
+    if (outputPath.Exists()) {
+        if (auto header = Engine::ReadWStaticModelHeader(outputPath)) {
+            modelId = header->modelId;
+        }
+    }
+    modelGenerateRequestQueue.enqueue({gltfPath, outputPath, modelId});
     workCounter.fetch_add(1);
     wakeCV.notify_one();
 }
@@ -184,6 +193,11 @@ Engine::TextureID AssetGenerator::RequestTextureGenerateFromFile(const Core::Pat
 {
     ZoneScoped;
     Engine::TextureID id{textureIdRng()};
+    if (outputPath.Exists()) {
+        if (auto header = Engine::ReadWTextureHeader(outputPath)) {
+            id = Engine::TextureID{header->textureId};
+        }
+    }
     textureGenerateRequestQueue.enqueue({outputPath, id, mipmapped, targetFormat, imagePath});
     workCounter.fetch_add(1);
     wakeCV.notify_one();
@@ -195,6 +209,11 @@ Engine::TextureID AssetGenerator::RequestTextureGenerateFromMemory(Core::HeapArr
 {
     ZoneScoped;
     Engine::TextureID id{textureIdRng()};
+    if (outputPath.Exists()) {
+        if (auto header = Engine::ReadWTextureHeader(outputPath)) {
+            id = Engine::TextureID{header->textureId};
+        }
+    }
     TextureGenerateRequest req{};
     req.outputPath = outputPath;
     req.textureId = id;
@@ -215,6 +234,11 @@ void AssetGenerator::RequestEnvironmentMapGenerate(const Core::Path& hdriPath, c
     ZoneScoped;
 
     Engine::EnvironmentMapID id{environmentMapIdRng()};
+    if (outputPath.Exists()) {
+        if (auto header = Engine::ReadWEnvMapHeader(outputPath)) {
+            id = Engine::EnvironmentMapID{header->environmentMapId};
+        }
+    }
     environmentMapGenerateRequestQueue.enqueue({hdriPath, outputPath, id});
     workCounter.fetch_add(1);
     wakeCV.notify_one();
