@@ -1,13 +1,21 @@
 # .wstaticmodel Format Changelist
 #
-# Format: MAJOR.MINOR
-# MAJOR bump: breaking change, old files cannot be loaded without migration.
-# MINOR bump: additive or metadata-only change; loaders should handle gracefully.
+# Format: single integer version field; any change is breaking.
+# Loader rejects files whose version != STATICMODEL_VERSION.
+# Asset generator uses ReadWStaticModelHeaderAnyVersion to detect and regenerate stale files.
 # Magic: "WSTCMDL" (7 chars, char[8])
 # Header: WStaticModelHeader in model_format.h
 
 ================================================================================
-VERSION 2.4  (current)
+VERSION 3  (current)
+================================================================================
+- Merged major/minor version fields into a single `version` field.
+- Added `lightingShader` field to `Material` (default: "default_pbr"). Written
+  and read alongside `fragmentShader` in WriteMaterial/ReadMaterial.
+- Added ReadWStaticModelHeaderAnyVersion for asset generator use (no version rejection).
+
+================================================================================
+VERSION 2.4
 ================================================================================
 - Added `fragmentShader` field to `Material` to associate a fragment shader with
   each material entry. Immutable materials always use default_lit; no exceptions.

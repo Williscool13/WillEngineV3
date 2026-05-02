@@ -14,8 +14,7 @@
 namespace Engine
 {
 constexpr char STATIC_MODEL_MAGIC[8] = "WSTCMDL";
-constexpr uint32_t STATICMODEL_MAJOR_VERSION = 2;
-constexpr uint32_t STATICMODEL_MINOR_VERSION = 4;
+constexpr uint32_t STATICMODEL_VERSION = 3;
 constexpr size_t WSTATICMODEL_NAME_LENGTH = 128;
 
 struct WStaticModelHeader
@@ -23,8 +22,7 @@ struct WStaticModelHeader
     uint64_t modelId{0};
     char name[WSTATICMODEL_NAME_LENGTH]{};
 
-    uint32_t major{STATICMODEL_MAJOR_VERSION};
-    uint32_t minor{STATICMODEL_MINOR_VERSION};
+    uint32_t version{STATICMODEL_VERSION};
 
     uint32_t nodeCount{0};
     uint32_t meshNodeCount{0};
@@ -66,6 +64,9 @@ bool WriteWStaticModelHeader(std::ostream& out, const WStaticModelHeader& header
 
 std::optional<WStaticModelHeader> ReadWStaticModelHeader(std::istream& in);
 std::optional<WStaticModelHeader> ReadWStaticModelHeader(const Core::Path& path);
+
+/** Reads header without rejecting on version mismatch. For use by the asset generator to detect stale files. */
+std::optional<WStaticModelHeader> ReadWStaticModelHeaderAnyVersion(const Core::Path& path);
 
 /**
  * Reads nodes and bounds data.

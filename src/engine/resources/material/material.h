@@ -42,6 +42,7 @@ struct Material
     TextureID textureRefs[6];
     SamplerDesc samplerDesc[6];
     StringID fragmentShader{"default_lit"_sid};
+    StringID lightingShader{"default_pbr"_sid};
     bool bIsRuntimeLoaded{false};
 
     // Runtime specific fields
@@ -52,6 +53,7 @@ struct RenderMaterial
 {
     MaterialProperties props{};
     StringID fragmentShader{};
+    StringID lightingShader{};
 };
 
 MaterialID HashMaterial(const Material& m);

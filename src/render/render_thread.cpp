@@ -1201,25 +1201,16 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
 
     for (size_t i = 0; i < viewFamily.mainPassInstances.Size(); ++i) {
         auto& inst = viewFamily.mainPassInstances[i];
+        BucketIndices materialBucket = renderFamilyProperties.shadingBucketMap.At(inst.materialID);
+        uint32_t materialIndex = viewFamily.activeMaterials[inst.materialID];
         instanceBuffer[i] = {
             .primitiveIndex = inst.primitiveIndex,
             .modelIndex = inst.modelIndex,
-            .materialIndex = viewFamily.activeMaterials[inst.materialID],
+            .materialIndex = materialIndex,
             .stableId = inst.stableId,
+            .shadingBucketIndex = materialBucket.shadingBucket,
+            .lightingBucketIndex = materialBucket.lightingBucket,
         };
-    }
-
-    for (const auto& [key, customDraw] : viewFamily.customShaderDraws) {
-        size_t startIndex = customDraw.instanceBufferOffset / sizeof(Instance);
-        for (size_t i = 0; i < customDraw.instances.Size(); ++i) {
-            auto& inst = customDraw.instances[i];
-            instanceBuffer[startIndex + i] = {
-                .primitiveIndex = inst.primitiveIndex,
-                .modelIndex = inst.modelIndex,
-                .materialIndex = viewFamily.activeMaterials[inst.materialID],
-                .stableId = inst.stableId,
-            };
-        }
     }
 
     if (totalInstanceCount > 0) {

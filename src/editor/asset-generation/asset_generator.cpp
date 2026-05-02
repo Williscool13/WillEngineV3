@@ -180,7 +180,7 @@ void AssetGenerator::RequestModelGenerate(const Core::Path& gltfPath, const Core
 
     uint64_t modelId = modelIdRng();
     if (outputPath.Exists()) {
-        if (auto header = Engine::ReadWStaticModelHeader(outputPath)) {
+        if (auto header = Engine::ReadWStaticModelHeaderAnyVersion(outputPath)) {
             modelId = header->modelId;
         }
     }

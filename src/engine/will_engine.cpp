@@ -277,6 +277,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
         engineContext->windowContext.viewportOffsetY = 0;
         engineContext->assetManager = assetManager;
         engineContext->materialManager = materialManager;
+        engineContext->pipelineManager = renderThread->GetPipelineManager();
         engineContext->audioManager = audioManager;
         engineContext->physicsSystem = physicsSystem;
         engineContext->scheduler = scheduler;

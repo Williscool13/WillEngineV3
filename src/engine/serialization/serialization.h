@@ -79,6 +79,8 @@ inline size_t WriteMaterial(Core::Vector<std::byte>& buf, const Material& mat)
     written += AppendRaw(buf, &mat.props, sizeof(mat.props));
     written += AppendRaw(buf, mat.textureRefs, sizeof(mat.textureRefs));
     written += AppendRaw(buf, mat.samplerDesc, sizeof(mat.samplerDesc));
+    written += AppendRaw(buf, &mat.fragmentShader.id, sizeof(mat.fragmentShader.id));
+    written += AppendRaw(buf, &mat.lightingShader.id, sizeof(mat.lightingShader.id));
     return written;
 }
 
@@ -145,6 +147,10 @@ inline void ReadMaterial(const uint8_t*& data, Material& mat)
     data += sizeof(mat.textureRefs);
     std::memcpy(mat.samplerDesc, data, sizeof(mat.samplerDesc));
     data += sizeof(mat.samplerDesc);
+    std::memcpy(&mat.fragmentShader.id, data, sizeof(mat.fragmentShader.id));
+    data += sizeof(mat.fragmentShader.id);
+    std::memcpy(&mat.lightingShader.id, data, sizeof(mat.lightingShader.id));
+    data += sizeof(mat.lightingShader.id);
 }
 
 inline void ReadMeshInformation(const uint8_t*& data, MeshInformation& mesh)

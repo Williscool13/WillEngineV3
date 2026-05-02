@@ -57,11 +57,12 @@ public:
     [[nodiscard]] MaterialID GetDefaultMaterialID() const { return defaultMaterial; }
     [[nodiscard]] const MaterialProperties& GetDefaultMaterialProperties() const { return materials.At(defaultMaterial).props; }
     [[nodiscard]] const StringID& GetDefaultMaterialFragmentShader() const { return materials.At(defaultMaterial).fragmentShader; }
+    [[nodiscard]] const StringID& GetDefaultMaterialLightingShader() const { return materials.At(defaultMaterial).lightingShader; }
 
     [[nodiscard]] RenderMaterial GetDefaultRenderMaterial() const
     {
         Material mat = materials.At(defaultMaterial);
-        return {mat.props, mat.fragmentShader};
+        return {mat.props, mat.fragmentShader, mat.lightingShader};
     }
 
     [[nodiscard]] bool DoesMutableMaterialExist(MaterialID materialID) const { return materials.Contains(materialID); }

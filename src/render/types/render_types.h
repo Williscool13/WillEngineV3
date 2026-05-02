@@ -11,6 +11,7 @@
 #include <glm/gtc/quaternion.hpp>
 
 #include "../interface/render_interface.h"
+#include "core/containers/inline_map.h"
 #include "render/shaders/common_interop.h"
 
 namespace Render
@@ -59,19 +60,9 @@ struct RenderFamilyProperties
     size_t meshletLevel2SumsBufferSize{128};
     size_t meshletLevel2BlockSumsBufferSize{128};
     size_t meshletScannedLevel2BlockSumsBufferSize{128};
-    size_t visibleMeshletsBufferSize{128};       // Final compacted output
+    size_t visibleMeshletsBufferSize{128};       // Final compacted output{}
 
-    void Reset()
-    {
-        viewFamily = nullptr;
-        bCanRender = false;
-        bWireframe = false;
-
-        modelBufferSize = 128;
-        materialBufferSize = 128;
-        shadeDispatchBufferSize = 128;
-        instanceBufferSize = 128;
-    }
+    Core::InlineMap<Engine::MaterialID, BucketIndices, 512> shadingBucketMap{};
 };
 } // Render
 

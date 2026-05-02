@@ -224,6 +224,7 @@ void MaterialManager::UpdateMutableMaterial(MaterialID id, const Material& newMa
 
     mat.props = newMat.props;
     mat.fragmentShader = newMat.fragmentShader;
+    mat.lightingShader = newMat.lightingShader;
 
     if (!mat.bIsRuntimeLoaded) {
         for (int32_t i = 0; i < 6; ++i) {
@@ -314,7 +315,7 @@ RenderMaterial MaterialManager::GetRenderMaterial(MaterialID id) const
         return GetDefaultRenderMaterial();
     }
 
-    return {mat->props, mat->fragmentShader};
+    return {mat->props, mat->fragmentShader, mat->lightingShader};
 }
 
 bool MaterialManager::DeleteMutableMaterial(MaterialID id)
@@ -346,6 +347,7 @@ void MaterialManager::CreateMaterial(std::string_view name)
     mat.id = MaterialID{mutableIdRng()};
     mat.props = GetDefaultMaterialProperties();
     mat.fragmentShader = GetDefaultMaterialFragmentShader();
+    mat.lightingShader = GetDefaultMaterialLightingShader();
     std::uniform_real_distribution dist(0.0f, 1.0f);
     mat.props.colorFactor = {dist(mutableIdRng), dist(mutableIdRng), dist(mutableIdRng), 1.0f}; // todo
     mat.sourcePath = matPath;

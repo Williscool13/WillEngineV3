@@ -374,9 +374,9 @@ void PipelineManager::RegisterPipelines()
                             sizeof(DeferredResolvePushConstant), PipelineCategory::Critical);
 
 
-    RegisterComputePipeline("lighting_pbr"_sid, src / "lighting_pbr_compute.spv",
+    RegisterComputePipeline("default_pbr"_sid, src / "lighting_pbr_compute.spv",
                             sizeof(LightingResolvePushConstant), PipelineCategory::Critical);
-    lightingPipelines.PushBack("lighting_pbr"_sid);
+    lightingPipelines.PushBack("default_pbr"_sid);
 
 
 

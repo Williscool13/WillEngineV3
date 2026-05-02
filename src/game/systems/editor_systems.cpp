@@ -1829,34 +1829,65 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
 
                 ImGui::SeparatorText("Shader");
                 {
-                    const char* knownOptions[] = {"default_lit", "error_unlit"};
-                    const StringID knownIds[] = {"default_lit"_sid, "error_unlit"_sid};
-                    constexpr int knownCount = 2;
+                    Core::Span<const StringID> shadingPipelines = ctx->pipelineManager->GetShadingPipelines();
+                    const int32_t pipelineCount = static_cast<int32_t>(shadingPipelines.Size());
 
                     int currentShader = -1;
-                    for (int i = 0; i < knownCount; ++i) {
-                        if (editMat.fragmentShader == knownIds[i]) {
+                    for (int32_t i = 0; i < pipelineCount; ++i) {
+                        if (editMat.fragmentShader == shadingPipelines[i]) {
                             currentShader = i;
                             break;
                         }
                     }
 
                     const bool isUnknown = currentShader < 0;
-                    // Build options list; append unknown entry if needed so it shows in the combo
-                    Core::InlineString<64> unknownLabel{};
-                    const char* options[knownCount + 1];
-                    int optionCount = knownCount;
-                    for (int i = 0; i < knownCount; ++i) { options[i] = knownOptions[i]; }
+                    Core::InlineString unknownLabel{};
+                    Core::InlineVector<const char*, 32> options{};
+                    for (int32_t i = 0; i < pipelineCount; ++i) {
+                        options.PushBack(shadingPipelines[i].ToString());
+                    }
                     if (isUnknown) {
                         unknownLabel = Core::InlineString{"(unknown) "};
                         unknownLabel.Append(editMat.fragmentShader.ToString());
-                        options[optionCount++] = unknownLabel.c_str();
-                        currentShader = knownCount;
+                        options.PushBack(unknownLabel.c_str());
+                        currentShader = pipelineCount;
                     }
 
-                    if (ImGui::Combo("Fragment Shader", &currentShader, options, optionCount)) {
-                        if (currentShader < knownCount) {
-                            editMat.fragmentShader = knownIds[currentShader];
+                    if (ImGui::Combo("Fragment Shader", &currentShader, options.Data(), static_cast<int32_t>(options.Size()))) {
+                        if (currentShader < pipelineCount) {
+                            editMat.fragmentShader = shadingPipelines[currentShader];
+                            changed = true;
+                        }
+                    }
+                }
+                {
+                    Core::Span<const StringID> lightingPipelines = ctx->pipelineManager->GetLightingPipelines();
+                    const int32_t pipelineCount = static_cast<int32_t>(lightingPipelines.Size());
+
+                    int currentShader = -1;
+                    for (int32_t i = 0; i < pipelineCount; ++i) {
+                        if (editMat.lightingShader == lightingPipelines[i]) {
+                            currentShader = i;
+                            break;
+                        }
+                    }
+
+                    const bool isUnknown = currentShader < 0;
+                    Core::InlineString<64> unknownLabel{};
+                    Core::InlineVector<const char*, 32> options{};
+                    for (int32_t i = 0; i < pipelineCount; ++i) {
+                        options.PushBack(lightingPipelines[i].ToString());
+                    }
+                    if (isUnknown) {
+                        unknownLabel = Core::InlineString<64>{"(unknown) "};
+                        unknownLabel.Append(editMat.lightingShader.ToString());
+                        options.PushBack(unknownLabel.c_str());
+                        currentShader = pipelineCount;
+                    }
+
+                    if (ImGui::Combo("Lighting Shader", &currentShader, options.Data(), static_cast<int32_t>(options.Size()))) {
+                        if (currentShader < pipelineCount) {
+                            editMat.lightingShader = lightingPipelines[currentShader];
                             changed = true;
                         }
                     }

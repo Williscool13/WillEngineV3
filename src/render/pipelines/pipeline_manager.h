@@ -71,6 +71,9 @@ public:
 
     VkPipelineCache GetPipelineCache() const { return pipelineCache; }
 
+    Core::Span<const StringID> GetShadingPipelines() const { return Core::Span<const StringID>{shadingPipelines.Data(), shadingPipelines.Size()}; }
+    Core::Span<const StringID> GetLightingPipelines() const { return Core::Span<const StringID>{lightingPipelines.Data(), lightingPipelines.Size()}; }
+
 private:
     void SubmitPipelineLoad(PipelineData* data) const;
 

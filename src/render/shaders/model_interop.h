@@ -135,10 +135,10 @@ SHADER_PUBLIC struct Instance
     SHADER_PUBLIC uint32_t primitiveIndex;
     SHADER_PUBLIC uint32_t modelIndex;
     SHADER_PUBLIC uint32_t materialIndex;
-    uint32_t padding;
-    SHADER_PUBLIC uint64_t stableId;
     uint32_t padding1;
-    uint32_t padding2;
+    SHADER_PUBLIC uint64_t stableId;
+    SHADER_PUBLIC uint32_t shadingBucketIndex;
+    SHADER_PUBLIC uint32_t lightingBucketIndex;
 };
 
 SHADER_PUBLIC struct SHADER_ALIGN Model

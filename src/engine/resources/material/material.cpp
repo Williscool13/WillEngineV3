@@ -52,6 +52,7 @@ nlohmann::json SerializeMaterial(const Material& mat)
     j["name"] = mat.name;
     j["id"] = mat.id.id;
     j["fragmentShader"] = mat.fragmentShader.id;
+    j["lightingShader"] = mat.lightingShader.id;
 
     j["colorFactor"] = {mat.props.colorFactor.x, mat.props.colorFactor.y, mat.props.colorFactor.z, mat.props.colorFactor.w};
     j["metalRoughFactors"] = {mat.props.metalRoughFactors.x, mat.props.metalRoughFactors.y, mat.props.metalRoughFactors.z, mat.props.metalRoughFactors.w};
@@ -96,6 +97,9 @@ Material DeserializeMaterial(const nlohmann::json& j, const Core::Path& sourcePa
     mat.id = MaterialID(j["id"].get<uint64_t>());
     if (j.contains("fragmentShader")) {
         mat.fragmentShader = StringID(j["fragmentShader"].get<uint64_t>());
+    }
+    if (j.contains("lightingShader")) {
+        mat.lightingShader = StringID(j["lightingShader"].get<uint64_t>());
     }
 
     auto readF4 = [&](const char* key, glm::vec4& v) {

@@ -9,6 +9,7 @@
 #include <atomic>
 
 #include "core/containers/inline_function.h"
+#include "render/pipelines/pipeline_manager.h"
 
 namespace enki
 {
@@ -68,6 +69,7 @@ struct EngineContext
     EngineLogger* engineLogger{nullptr};
     AssetManager* assetManager{nullptr};
     MaterialManager* materialManager{nullptr};
+    Render::PipelineManager* pipelineManager{nullptr};
     Audio::AudioManager* audioManager{nullptr};
     Physics::PhysicsSystem* physicsSystem{nullptr};
 

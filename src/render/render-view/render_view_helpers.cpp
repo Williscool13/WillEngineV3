@@ -117,7 +117,6 @@ SceneData GenerateSceneData(const Core::RenderView& view, Core::AntiAliasingMode
 RenderFamilyProperties PrepareRenderFamilyProperties(Core::ViewFamily& viewFamily, ReadbackStruct* readbackData, PipelineManager* _pipelineManager, FrameResourceLimits& _limits)
 {
     RenderFamilyProperties renderFamilyProperties{};
-    renderFamilyProperties.Reset();
     renderFamilyProperties.viewFamily = &viewFamily;
     bool bHasGeometry = !viewFamily.mainPassInstances.IsEmpty();
     if (!bHasGeometry) {
@@ -178,6 +177,29 @@ RenderFamilyProperties PrepareRenderFamilyProperties(Core::ViewFamily& viewFamil
 
 
     renderFamilyProperties.visibleMeshletUpperBound = _limits.highestMeshletCount;
+
+    // Gather buckets. Assign unique IDs for materials and lighting shaders.
+    Core::InlineMap<StringID, uint32_t, 128> lightingBuckets;
+
+    uint32_t shadingBucketIndex{0};
+    uint32_t lightingBucketIndex{0};
+    for (const auto& materialPair : viewFamily.activeMaterials) {
+        if (renderFamilyProperties.shadingBucketMap.Contains(materialPair.key)) {
+            continue;
+        }
+
+        BucketIndices bucketIndices{};
+        bucketIndices.shadingBucket = shadingBucketIndex++;
+
+        Engine::RenderMaterial& mat = viewFamily.materials[materialPair.value];
+
+        auto [lightingVal, lightingInserted] = lightingBuckets.TryEmplace(mat.lightingShader, lightingBucketIndex);
+        if (lightingInserted) { lightingBucketIndex++; }
+        bucketIndices.lightingBucket = lightingVal;
+
+        renderFamilyProperties.shadingBucketMap.Emplace(materialPair.key, bucketIndices);
+    }
+
     return renderFamilyProperties;
 }
 
