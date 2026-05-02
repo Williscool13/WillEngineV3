@@ -18,6 +18,7 @@
 #include "core/containers/span.h"
 #include "core/string_id.h"
 #include "render/vulkan/vk_context.h"
+#include "render/vulkan/vk_resources.h"
 
 namespace AssetLoad
 {
@@ -26,6 +27,7 @@ class AsyncAssetLoadManager;
 
 namespace Render
 {
+struct ResourceManager;
 struct VulkanContext;
 
 class PipelineManager
@@ -35,9 +37,10 @@ public: // Thread-Safe
 
 public:
     explicit PipelineManager(VulkanContext* context,
-        Core::TlsfAllocator& renderAlloc,
-        Core::TlsfAllocator& assetScratchAlloc,
-        const Core::Array<VkDescriptorSetLayout, 2>& globalLayouts);
+                             ResourceManager* resourceManager,
+                             Core::TlsfAllocator& renderAlloc,
+                             Core::TlsfAllocator& assetScratchAlloc,
+                             const Core::Array<VkDescriptorSetLayout, 2>& globalLayouts);
 
     ~PipelineManager();
 
@@ -61,6 +64,10 @@ public:
     bool IsCategoryReady(PipelineCategory category) const;
 
     void SetAssetLoadThread(AssetLoad::AsyncAssetLoadManager* _asyncAssetLoadManager);
+
+    void RegisterPipelines();
+
+    VkPipelineLayout GetGlobalPipelineLayout() const { return globalPipelineLayout.handle; }
 
     VkPipelineCache GetPipelineCache() const { return pipelineCache; }
 
@@ -90,6 +97,7 @@ private:
 private:
     // Non-Owning
     VulkanContext* context;
+    ResourceManager* resourceManager;
     Core::TlsfAllocator* renderAlloc{nullptr};
     Core::TlsfAllocator* assetScratchAlloc{nullptr};
     AssetLoad::AsyncAssetLoadManager* asyncAssetLoadManager{nullptr};
@@ -97,6 +105,12 @@ private:
     // Owning
     Core::Map<StringID, GraphicsPipelineData> graphicsPipelines;
     Core::Map<StringID, ComputePipelineData> computePipelines;
+
+    // // Geometry pipelines
+    Core::InlineVector<StringID, 128> shadingPipelines;
+    Core::InlineVector<StringID, 128> lightingPipelines;
+
+    PipelineLayout globalPipelineLayout;
 
     uint32_t currentFrame;
     Core::Array<VkDescriptorSetLayout, 2> globalDescriptorSetLayouts;

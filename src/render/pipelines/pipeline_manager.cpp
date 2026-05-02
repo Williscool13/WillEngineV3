@@ -13,12 +13,16 @@
 #include "engine/logging/engine_log.h"
 #include "platform/file_utils.h"
 #include "platform/paths.h"
+#include "render/resource_manager.h"
+#include "render/vulkan/vk_config.h"
 #include "render/vulkan/vk_utils.h"
 
 namespace Render
 {
-PipelineManager::PipelineManager(VulkanContext* context, Core::TlsfAllocator& renderAlloc, Core::TlsfAllocator& assetScratchAlloc, const Core::Array<VkDescriptorSetLayout, 2>& globalLayouts)
+PipelineManager::PipelineManager(VulkanContext* context, ResourceManager* resourceManager, Core::TlsfAllocator& renderAlloc, Core::TlsfAllocator& assetScratchAlloc,
+                                 const Core::Array<VkDescriptorSetLayout, 2>& globalLayouts)
     : context(context),
+      resourceManager(resourceManager),
       renderAlloc(&renderAlloc),
       assetScratchAlloc(&assetScratchAlloc),
       graphicsPipelines(&renderAlloc, Core::AllocTag::Render, 256),
@@ -306,6 +310,329 @@ bool PipelineManager::IsCategoryReady(PipelineCategory category) const
 void PipelineManager::SetAssetLoadThread(AssetLoad::AsyncAssetLoadManager* _asyncAssetLoadManager)
 {
     asyncAssetLoadManager = _asyncAssetLoadManager;
+}
+
+void PipelineManager::RegisterPipelines()
+{
+    Core::Array<VkDescriptorSetLayout, 2> layouts{
+        resourceManager->bindlessSamplerTextureDescriptorBuffer.descriptorSetLayout.handle,
+        resourceManager->bindlessRDGTransientDescriptorBuffer.descriptorSetLayout.handle
+    };
+
+    VkPipelineLayoutCreateInfo layoutInfo{};
+    layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    layoutInfo.pSetLayouts = layouts.Data();
+    layoutInfo.setLayoutCount = layouts.Size();
+    globalPipelineLayout = PipelineLayout::CreatePipelineLayout(context, layoutInfo);
+
+    auto src = Platform::GetShaderPath();
+
+    RegisterComputePipeline(SID("instancing_instance_lod"), src / "instancing_instance_lod_compute.spv",
+                            sizeof(InstanceLODPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("instancing_prefix_sum_up_1"), src / "instancing_prefix_sum_up_1_compute.spv",
+                            sizeof(PrefixSumUpsweep1PushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("instancing_prefix_sum_up_2"), src / "instancing_prefix_sum_up_2_compute.spv",
+                            sizeof(PrefixSumUpsweep2PushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("instancing_scan_blocks"), src / "instancing_scan_blocks_compute.spv",
+                            sizeof(PrefixSumScanBlocksPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("instancing_prefix_sum_down_1"), src / "instancing_prefix_sum_down_1_compute.spv",
+                            sizeof(PrefixSumDownsweep1PushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("instancing_prefix_sum_down_2"), src / "instancing_prefix_sum_down_2_compute.spv",
+                            sizeof(PrefixSumDownsweep2PushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("instancing_total_meshlet_count"), src / "instancing_total_meshlet_count_compute.spv",
+                            sizeof(TotalMeshletCountPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("instancing_expand_instance_to_meshlet"), src / "instancing_expand_instance_to_meshlet_compute.spv",
+                            sizeof(ExpandMeshletsPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("instancing_meshlet_visibility_prefix_sum_up_1"), src / "instancing_meshlet_visibility_prefix_sum_up_1_compute.spv",
+                            sizeof(MeshletVisibilityPrefixSumUpsweep1PushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("instancing_meshlet_visibility_prefix_sum_down_2"), src / "instancing_meshlet_visibility_prefix_sum_down_2_compute.spv",
+                            sizeof(MeshletVisibilityPrefixSumDownsweep2PushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("instancing_compacted_meshlet_dispatch"), src / "instancing_compacted_meshlet_dispatch_compute.spv",
+                            sizeof(CompactedMeshletDispatchPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("instancing_max_meshlet_count"), src / "instancing_max_meshlet_count_compute.spv",
+                            sizeof(MaxMeshletCountPushConstant), PipelineCategory::Critical);
+
+    RegisterComputePipeline("visibility_buffer_barycentric_derivative"_sid, src / "visibility_buffer_barycentric_derivative_compute.spv",
+                            sizeof(VisibilityBufferResolvePushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline("visibility_bucketing_bounds_calculation"_sid, src / "visibility_bucketing_bounds_calculation_compute.spv",
+                            sizeof(ShadeBucketingPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline("visibility_bucketing_resolve"_sid, src / "visibility_bucketing_resolve_compute.spv",
+                            sizeof(ShadeBucketingResolvePushConstant), PipelineCategory::Critical);
+
+    RegisterComputePipeline("shading_bucket_visualize"_sid, src / "shading_bucket_visualize_compute.spv",
+                            sizeof(VisibilityShadingPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline("default_lit"_sid, src / "shading_default_lit_compute.spv",
+                            sizeof(VisibilityShadingPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline("error_unlit"_sid, src / "shading_error_unlit_compute.spv",
+                            sizeof(VisibilityShadingPushConstant), PipelineCategory::Critical);
+
+    shadingPipelines.PushBack("shading_bucket_visualize"_sid);
+    shadingPipelines.PushBack("default_lit"_sid);
+    shadingPipelines.PushBack("error_unlit"_sid);
+
+    RegisterComputePipeline("deferred_resolve"_sid, src / "deferred_resolve_compute.spv",
+                            sizeof(DeferredResolvePushConstant), PipelineCategory::Critical);
+
+
+    RegisterComputePipeline("lighting_pbr"_sid, src / "lighting_pbr_compute.spv",
+                            sizeof(LightingResolvePushConstant), PipelineCategory::Critical);
+    lightingPipelines.PushBack("lighting_pbr"_sid);
+
+
+
+    RegisterComputePipeline(SID("instancing_instance_lod_shadows"), src / "instancing_instance_lod_shadows_compute.spv",
+                            sizeof(InstanceLODShadowsPushConstant), PipelineCategory::Legacy);
+    RegisterComputePipeline(SID("instancing_expand_instance_to_meshlet_shadows"), src / "instancing_expand_instance_to_meshlet_shadows_compute.spv",
+                            sizeof(ExpandMeshletsShadowsPushConstant), PipelineCategory::Legacy);
+
+    RegisterComputePipeline(SID("shadows_resolve"), src / "shadows_resolve_compute.spv",
+                            sizeof(ShadowsResolvePushConstant), PipelineCategory::Critical);
+
+    RegisterComputePipeline(SID("temporal_antialiasing"), src / "temporal_antialiasing_compute.spv",
+                            sizeof(TemporalAntialiasingPushConstant), PipelineCategory::Legacy);
+
+    RegisterComputePipeline(SID("smaa_luma_edge_detection"), src / "smaa_luma_edge_detection_compute.spv",
+                            sizeof(SmaaEdgeDetectionPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("smaa_color_edge_detection"), src / "smaa_color_edge_detection_compute.spv",
+                            sizeof(SmaaEdgeDetectionPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("smaa_depth_edge_detection"), src / "smaa_depth_edge_detection_compute.spv",
+                            sizeof(SmaaEdgeDetectionPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("smaa_blend_weight"), src / "smaa_blend_weight_compute.spv",
+                            sizeof(SmaaBlendWeightPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("smaa_neighborhood_blend"), src / "smaa_neighborhood_blend_compute.spv",
+                            sizeof(SmaaNeighborhoodBlendPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("smaa_temporal_resolve"), src / "smaa_temporal_resolve_compute.spv",
+                            sizeof(SmaaTemporalResolvePushConstant), PipelineCategory::Critical);
+
+    RegisterComputePipeline(SID("gtao_depth_prepass"), src / "gtao_depth_prepass_compute.spv",
+                            sizeof(GTAODepthPrepassPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("gtao_main"), src / "gtao_main_compute.spv",
+                            sizeof(GTAOMainPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("gtao_denoise"), src / "gtao_denoise_compute.spv",
+                            sizeof(GTAODenoisePushConstant), PipelineCategory::Critical);
+
+
+    RegisterComputePipeline(SID("exposure_build_histogram"), src / "exposure_build_histogram_compute.spv",
+                            sizeof(HistogramBuildPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("exposure_calculate_average"), src / "exposure_calculate_average_compute.spv",
+                            sizeof(ExposureCalculatePushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("tonemap_sdr"), src / "tonemap_sdr_compute.spv",
+                            sizeof(TonemapSDRPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("motion_blur_tile_max"), src / "motion_blur_tile_max_compute.spv",
+                            sizeof(MotionBlurTileVelocityPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("motion_blur_neighbor_max"), src / "motion_blur_neighbor_max_compute.spv",
+                            sizeof(MotionBlurNeighborMaxPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("motion_blur_reconstruction"), src / "motion_blur_reconstruction_compute.spv",
+                            sizeof(MotionBlurReconstructionPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("bloom_threshold"), src / "bloom_threshold_compute.spv",
+                            sizeof(BloomThresholdPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("bloom_downsample"), src / "bloom_downsample_compute.spv",
+                            sizeof(BloomDownsamplePushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("bloom_upsample"), src / "bloom_upsample_compute.spv",
+                            sizeof(BloomUpsamplePushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("vignette_aberration"), src / "vignette_aberration_compute.spv",
+                            sizeof(VignetteChromaticAberrationPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("film_grain"), src / "film_grain_compute.spv",
+                            sizeof(FilmGrainPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("sharpening"), src / "sharpening_compute.spv",
+                            sizeof(SharpeningPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("color_grading"), src / "color_grading_compute.spv",
+                            sizeof(ColorGradingPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("panini_projection"), src / "panini_projection_compute.spv",
+                            sizeof(PaniniProjectionPushConstant), PipelineCategory::Critical);
+
+    RegisterComputePipeline(SID("debug_visualize"), src / "debug_visualize_compute.spv",
+                            sizeof(DebugVisualizePushConstant), PipelineCategory::Critical);
+
+#if WILL_EDITOR
+    const VkDescriptorSetLayout emapLayout = resourceManager->environmentMapGenerateResources.descriptorSetLayout.handle;
+    RegisterComputePipelineCustomLayout(SID("ibl_equirect_to_cubemap"), src / "ibl_equirect_to_cubemap_compute.spv",
+                                        sizeof(EquirectToCubemapPushConstant), PipelineCategory::AssetGeneration, Core::Span(&emapLayout, 1));
+
+    RegisterComputePipelineCustomLayout(SID("ibl_convolve_diffuse"), src / "ibl_convolve_diffuse_compute.spv",
+                                        sizeof(ConvolveDiffusePushConstant), PipelineCategory::AssetGeneration, Core::Span(&emapLayout, 1));
+
+    RegisterComputePipelineCustomLayout(SID("ibl_prefilter_specular"), src / "ibl_prefilter_specular_compute.spv",
+                                        sizeof(PrefilterSpecularPushConstant), PipelineCategory::AssetGeneration, Core::Span(&emapLayout, 1));
+
+    const VkDescriptorSetLayout brdfLutLayout = resourceManager->brdfLutGenerateResources.descriptorSetLayout.handle;
+    RegisterComputePipelineCustomLayout(SID("ibl_brdf_lut"), src / "brdf_lut_generate_compute.spv",
+                                        sizeof(BRDFLUTPushConstant), PipelineCategory::AssetGeneration, Core::Span(&brdfLutLayout, 1));
+#endif
+
+    GraphicsPipelineBuilder builder;
+
+    // Shadow cascade pipeline
+    {
+        builder.AddShaderStage(src / "shadow_mesh_shading_instanced_mesh.spv", VK_SHADER_STAGE_MESH_BIT_EXT);
+        builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+        builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE);
+        builder.SetupDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_GREATER_OR_EQUAL);
+        builder.EnableDepthBias();
+        builder.SetupRenderer(nullptr, 0, SHADOW_CASCADE_FORMAT);
+        builder.AddDynamicState(VK_DYNAMIC_STATE_DEPTH_BIAS);
+
+        RegisterGraphicsPipeline(
+            SID("shadow_cascade_instanced"),
+            builder,
+            sizeof(ShadowMeshShadingPushConstant),
+            VK_SHADER_STAGE_MESH_BIT_EXT,
+            PipelineCategory::Critical
+        );
+        builder.Clear();
+    }
+
+    constexpr Core::Array<VkFormat, 2> graphicsColorFormats{
+        VISIBILITY_BUFFER_FORMAT,
+        GBUFFER_STABLE_ID_FORMAT,
+    };
+
+    // Visibility Buffer
+    {
+        builder.AddShaderStage(src / "visibility_buffer_mesh.spv", VK_SHADER_STAGE_MESH_BIT_EXT);
+        builder.AddShaderStage(src / "visibility_buffer_fragment.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
+        builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+        builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE);
+        builder.SetupDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_GREATER_OR_EQUAL);
+        builder.AddDynamicState(VK_DYNAMIC_STATE_POLYGON_MODE_EXT);
+
+        builder.SetupRenderer(graphicsColorFormats.Data(), graphicsColorFormats.Size(), DEPTH_ATTACHMENT_FORMAT, DEPTH_ATTACHMENT_FORMAT);
+
+        RegisterGraphicsPipeline(
+            SID("visibility_buffer_accumulate"),
+            builder,
+            sizeof(VisibilityBufferAccumulatePushConstant),
+            VK_SHADER_STAGE_MESH_BIT_EXT,
+            PipelineCategory::Critical
+        );
+        builder.Clear();
+    }
+
+    // Portal Graphics Pipeline
+    {
+        builder.AddShaderStage(src / "visibility_buffer_mesh.spv", VK_SHADER_STAGE_MESH_BIT_EXT);
+        builder.AddShaderStage(src / "visibility_buffer_fragment.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
+        builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+        builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE);
+        builder.SetupDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_GREATER_OR_EQUAL);
+        builder.SetupStencilState(VK_TRUE, VK_STENCIL_OP_KEEP, VK_STENCIL_OP_REPLACE, VK_STENCIL_OP_KEEP, VK_COMPARE_OP_ALWAYS);
+        builder.SetupRenderer(graphicsColorFormats.Data(), graphicsColorFormats.Size(), DEPTH_ATTACHMENT_FORMAT, DEPTH_ATTACHMENT_FORMAT);
+        builder.AddDynamicState(VK_DYNAMIC_STATE_STENCIL_REFERENCE);
+
+        RegisterGraphicsPipeline(
+            SID("portal_rendering"),
+            builder,
+            sizeof(VisibilityBufferAccumulatePushConstant),
+            VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT,
+            PipelineCategory::Critical
+        );
+        builder.Clear();
+    }
+
+    // Portal Composite
+    {
+        builder.AddShaderStage(src / "fullscreen_pass_vertex.spv", VK_SHADER_STAGE_VERTEX_BIT);
+        builder.AddShaderStage(src / "portal_composite_fragment.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
+        builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+        builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
+        builder.SetupDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_ALWAYS);
+        builder.SetupStencilState(VK_TRUE, VK_STENCIL_OP_KEEP, VK_STENCIL_OP_KEEP, VK_STENCIL_OP_KEEP, VK_COMPARE_OP_EQUAL);
+
+        VkFormat colorFormats[2] = {
+            COLOR_ATTACHMENT_FORMAT,
+            GBUFFER_TARGET_TWO
+        };
+        builder.SetupRenderer(colorFormats, 2, DEPTH_ATTACHMENT_FORMAT, DEPTH_ATTACHMENT_FORMAT);
+        builder.AddDynamicState(VK_DYNAMIC_STATE_STENCIL_REFERENCE);
+
+        RegisterGraphicsPipeline(
+            SID("portal_composite"),
+            builder,
+            sizeof(PortalCompositePushConstant),
+            VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+            PipelineCategory::Critical
+        );
+        builder.Clear();
+    }
+
+    // Cubemap Visualizer
+    {
+        builder.AddShaderStage(src / "cubemap_visualizer_mesh.spv", VK_SHADER_STAGE_MESH_BIT_EXT);
+        builder.AddShaderStage(src / "cubemap_visualizer_fragment.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
+        builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+        builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE);
+        builder.SetupDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_GREATER_OR_EQUAL);
+        builder.SetupRenderer(graphicsColorFormats.Data(), graphicsColorFormats.Size(), DEPTH_ATTACHMENT_FORMAT, DEPTH_ATTACHMENT_FORMAT);
+
+        RegisterGraphicsPipeline(
+            SID("cubemap_visualize"),
+            builder,
+            sizeof(BaseMeshShadingPushConstant),
+            VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT,
+            PipelineCategory::Critical
+        );
+        builder.Clear();
+    }
+
+
+    // Skybox Rendering
+    {
+        builder.AddShaderStage(src / "fullscreen_pass_vertex.spv", VK_SHADER_STAGE_VERTEX_BIT);
+        builder.AddShaderStage(src / "environment_map_skybox_fragment.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
+        builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+        builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
+        builder.SetupDepthState(VK_TRUE, VK_FALSE, VK_COMPARE_OP_EQUAL);
+
+        VkFormat colorFormats[1] = {
+            COLOR_ATTACHMENT_FORMAT,
+        };
+        builder.SetupRenderer(colorFormats, 1, DEPTH_ATTACHMENT_FORMAT, VK_FORMAT_UNDEFINED);
+
+        RegisterGraphicsPipeline(
+            SID("environment_skybox"),
+            builder,
+            sizeof(EnvironmentSkyboxPushConstant),
+            VK_SHADER_STAGE_FRAGMENT_BIT,
+            PipelineCategory::Critical
+        );
+        builder.Clear();
+    }
+
+    // Debug Render
+    {
+        builder.AddShaderStage(src / "debug_render_mesh.spv", VK_SHADER_STAGE_MESH_BIT_EXT);
+        builder.AddShaderStage(src / "debug_render_fragment.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
+        builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+        builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
+        builder.SetupDepthState(VK_TRUE, VK_FALSE, VK_COMPARE_OP_GREATER_OR_EQUAL);
+        VkPipelineColorBlendAttachmentState blendState{
+            .blendEnable = VK_TRUE,
+            .srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
+            .dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+            .colorBlendOp = VK_BLEND_OP_ADD,
+            .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
+            .dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
+            .alphaBlendOp = VK_BLEND_OP_ADD,
+            .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                              VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT
+        };
+
+        builder.SetupBlending(&blendState, 1);
+
+        VkFormat colorFormats[1] = {
+            POST_PROCESS_OUTPUT_FORMAT,
+        };
+        builder.SetupRenderer(colorFormats, 1, DEPTH_ATTACHMENT_FORMAT);
+
+        RegisterGraphicsPipeline(
+            SID("debug_render"),
+            builder,
+            sizeof(DebugDrawPushConstant),
+            VK_SHADER_STAGE_MESH_BIT_EXT,
+            PipelineCategory::Critical
+        );
+        builder.Clear();
+    }
 }
 
 void PipelineManager::ReloadModified()

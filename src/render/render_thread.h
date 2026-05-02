@@ -86,7 +86,7 @@ public:
 
     ~RenderThread();
 
-    void InitializePipelineManager(AssetLoad::AsyncAssetLoadManager* _asyncAssetLoadManager);
+    void InitializePipelineManager(AssetLoad::AsyncAssetLoadManager* _asyncAssetLoadManager) const;
 
     void Start();
 
@@ -108,8 +108,6 @@ public:
     PipelineManager* GetPipelineManager() const { return pipelineManager; }
 
 private:
-    void CreatePipelines();
-
     void UploadFrameUniforms(const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, float renderDeltaTime) const;
 
     void UploadModelUniforms(Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties) const;
@@ -165,7 +163,6 @@ private:
 
 private:
     RenderScreenCapture* screenCapture{};
-    PipelineLayout globalPipelineLayout;
 };
 } // Render
 
