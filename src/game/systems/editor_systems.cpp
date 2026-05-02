@@ -502,7 +502,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
         if (ImGui::Button("Disable Debug View")) {
             state->debug.resourceName.Clear();
         }
-        ImGui::Checkbox("Enable V-Buffer Bucketing Visualization", &state->debug.bEnableVisibilityBufferBucketingVisualization);
+        ImGui::Checkbox("Enable V-Buffer Shade Dispatch Bucketing Visualization", &state->debug.bEnableShadeDispatchBucketingVisualization);
 
         ImGui::BeginDisabled(true);
         ImGui::Checkbox("Enable Portals", &state->debug.bEnablePortal);

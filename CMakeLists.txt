@@ -315,16 +315,18 @@ compile_shaders(will-engine
 
         # Visibility Buffer
         ${CMAKE_SOURCE_DIR}/shaders/visibility_buffer.slang compute VisibilityBufferBarycentricDerivative visibility_buffer_barycentric_derivative
-        #   Shade DispatchBucketing
+        #   Shade Dispatch Bucketing
         ${CMAKE_SOURCE_DIR}/shaders/visibility_bucketing.slang compute ComputeShadeDispatchBucketing visibility_bucketing_bounds_calculation
         ${CMAKE_SOURCE_DIR}/shaders/visibility_bucketing.slang compute ComputeShadeDispatchBucketingResolve visibility_bucketing_resolve
         #   "Fragment Shaders"
-        ${CMAKE_SOURCE_DIR}/shaders/visibility_bucketing.slang compute ComputeShadeDispatchBucketing visibility_bucketing_bounds_calculation
-        ${CMAKE_SOURCE_DIR}/shaders/visibility_bucketing.slang compute ComputeShadeDispatchBucketingResolve visibility_bucketing_resolve
+        ${CMAKE_SOURCE_DIR}/shaders/shading/shading_bucket_visualize.slang compute ComputeMain shading_bucket_visualize
+        ${CMAKE_SOURCE_DIR}/shaders/shading/shading_default_lit.slang compute ComputeMain shading_default_lit
+        ${CMAKE_SOURCE_DIR}/shaders/shading/shading_error_unlit.slang compute ComputeMain shading_error_unlit
+        #   "Lighting Shaders"
+        ${CMAKE_SOURCE_DIR}/shaders/lighting/lighting_pbr.slang compute ComputeMain lighting_pbr
+        # ${CMAKE_SOURCE_DIR}/shaders/lighting/lighting_unlit.slang compute ComputeShadeDispatchBucketingResolve visibility_bucketing_resolve
 
-        ${CMAKE_SOURCE_DIR}/shaders/shading/bucket_visualize.slang compute ComputeBucketVisualize shading_bucket_visualize
-        ${CMAKE_SOURCE_DIR}/shaders/shading/default_lit.slang compute ComputeDefaultLit shading_default_lit
-        ${CMAKE_SOURCE_DIR}/shaders/shading/error_unlit.slang compute ComputeErrorUnlit shading_error_unlit
+
 
         ${CMAKE_SOURCE_DIR}/shaders/visibility_buffer.slang mesh MeshMain visibility_buffer
         ${CMAKE_SOURCE_DIR}/shaders/visibility_buffer.slang fragment FragmentMain visibility_buffer

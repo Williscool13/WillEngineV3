@@ -11,7 +11,7 @@ import visibility_shading_common;
 
 [shader("compute")]
 [numthreads(16, 16, 1)]
-void ComputeBucketVisualize(uint3 dtid : SV_DispatchThreadID, uniform VisibilityShadingPushConstant pc)
+void ComputeMain(uint3 dtid : SV_DispatchThreadID, uniform VisibilityShadingPushConstant pc)
 {
     ShadeDispatchParameters shadeParams = pc.shadeDispatchBuffer[pc.materialIndex];
     uint2 pixel = dtid.xy + uint2(shadeParams.minX, shadeParams.minY);

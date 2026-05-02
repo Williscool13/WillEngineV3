@@ -364,7 +364,7 @@ struct FrameBuffer
     bool bDrawImgui = false;
     bool bFreezeVisibility = false;
     bool bWireframe = false;
-    bool bEnableVisibilityBufferBucketingVisualization = false;
+    bool bEnableShadeDispatchBucketingVisualization = false;
     bool bLogRDG = false;
 
     bool bTakeScreenshot{false};

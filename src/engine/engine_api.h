@@ -194,7 +194,7 @@ struct DebugState
 {
     bool bWireframe{false};
     bool bEnablePortal{true};
-    bool bEnableVisibilityBufferBucketingVisualization{false};
+    bool bEnableShadeDispatchBucketingVisualization{false};
     Core::InlineString<> resourceName{};
     DebugTransformationType transformationType{};
     Core::DebugViewAspect viewAspect{};
