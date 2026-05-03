@@ -174,31 +174,7 @@ RenderFamilyProperties PrepareRenderFamilyProperties(Core::ViewFamily& viewFamil
     renderFamilyProperties.meshletScannedLevel2BlockSumsBufferSize = glm::max(meshletLevel2BlockCount, INSTANCING_PREFIX_SUM_DISPATCH_X) * sizeof(uint32_t);
 
     renderFamilyProperties.visibleMeshletsBufferSize = _limits.highestMeshletCount * sizeof(CompactedMeshlet);
-
-
     renderFamilyProperties.visibleMeshletUpperBound = _limits.highestMeshletCount;
-
-    // Gather buckets. Assign unique IDs for materials and lighting shaders.
-    Core::InlineMap<StringID, uint32_t, 128> lightingBuckets;
-
-    uint32_t shadingBucketIndex{0};
-    uint32_t lightingBucketIndex{0};
-    for (const auto& materialPair : viewFamily.activeMaterials) {
-        if (renderFamilyProperties.shadingBucketMap.Contains(materialPair.key)) {
-            continue;
-        }
-
-        BucketIndices bucketIndices{};
-        bucketIndices.shadingBucket = shadingBucketIndex++;
-
-        Engine::RenderMaterial& mat = viewFamily.materials[materialPair.value];
-
-        auto [lightingVal, lightingInserted] = lightingBuckets.TryEmplace(mat.lightingShader, lightingBucketIndex);
-        if (lightingInserted) { lightingBucketIndex++; }
-        bucketIndices.lightingBucket = lightingVal;
-
-        renderFamilyProperties.shadingBucketMap.Emplace(materialPair.key, bucketIndices);
-    }
 
     return renderFamilyProperties;
 }

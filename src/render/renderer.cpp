@@ -607,6 +607,7 @@ void SetupShadeDispatchBucketPass(RenderGraph& graph,
             visibility = targets.visibility](VkCommandBuffer cmd) {
             ShadeBucketingPushConstant pc{
                 .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
+                .materialBuffer = graph.GetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
                 .shadeDispatchBuffer = graph.GetBufferAddress(SHADE_DISPATCH_BUCKETING_BUFFER),
                 .extents = {width, height},
                 .visibilityBufferIndex = graph.GetSampledImageViewDescriptorIndex(visibility),

@@ -61,8 +61,6 @@ struct RenderFamilyProperties
     size_t meshletLevel2BlockSumsBufferSize{128};
     size_t meshletScannedLevel2BlockSumsBufferSize{128};
     size_t visibleMeshletsBufferSize{128};       // Final compacted output{}
-
-    Core::InlineMap<Engine::MaterialID, BucketIndices, 512> shadingBucketMap{};
 };
 } // Render
 

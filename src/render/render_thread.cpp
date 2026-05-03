@@ -1201,15 +1201,12 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
 
     for (size_t i = 0; i < viewFamily.mainPassInstances.Size(); ++i) {
         auto& inst = viewFamily.mainPassInstances[i];
-        BucketIndices materialBucket = renderFamilyProperties.shadingBucketMap.At(inst.materialID);
         uint32_t materialIndex = viewFamily.activeMaterials[inst.materialID];
         instanceBuffer[i] = {
             .primitiveIndex = inst.primitiveIndex,
             .modelIndex = inst.modelIndex,
             .materialIndex = materialIndex,
             .stableId = inst.stableId,
-            .shadingBucketIndex = materialBucket.shadingBucket,
-            .lightingBucketIndex = materialBucket.lightingBucket,
         };
     }
 
@@ -1268,9 +1265,21 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
     if (!viewFamily.materials.IsEmpty()) {
         renderGraph->CreateBuffer(GEOMETRY_MATERIAL_BUFFER, renderFamilyProperties.materialBufferSize, false);
 
+
+        // Assign unique IDs for materials and lighting shaders.
+        Core::InlineMap<StringID, uint32_t, 128> lightingBuckets{};
         UploadAllocation materialUpload = renderGraph->AllocateTransient(viewFamily.materials.Size() * sizeof(MaterialProperties));
         auto* dst = static_cast<MaterialProperties*>(materialUpload.ptr);
+        uint32_t runningLightingBucketIndex{0};
         for (size_t i = 0; i < viewFamily.materials.Size(); ++i) {
+            uint32_t shadingBucketIndex = i;
+
+            auto [lightingVal, lightingInserted] = lightingBuckets.TryEmplace(viewFamily.materials[i].lightingShader, runningLightingBucketIndex);
+            if (lightingInserted) { runningLightingBucketIndex++; }
+            uint32_t lightingBucketIndex = lightingVal;
+
+            viewFamily.materials[i].props.shadingBucketIndex = shadingBucketIndex;
+            viewFamily.materials[i].props.lightingBucketIndex = lightingBucketIndex;
             dst[i] = viewFamily.materials[i].props;
         }
 

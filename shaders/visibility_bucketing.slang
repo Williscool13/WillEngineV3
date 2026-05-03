@@ -25,11 +25,12 @@ void ComputeShadeDispatchBucketing(uint3 dtid : SV_DispatchThreadID, uniform Sha
     uint instanceIndex = vis.y;
 
     Instance inst = pc.instanceBuffer[instanceIndex];
+    MaterialProperties material = pc.materialBuffer[inst.materialIndex];
 
-    InterlockedMin(pc.shadeDispatchBuffer[inst.materialIndex].minX, dtid.x);
-    InterlockedMax(pc.shadeDispatchBuffer[inst.materialIndex].maxX, dtid.x + 1);
-    InterlockedMin(pc.shadeDispatchBuffer[inst.materialIndex].minY, dtid.y);
-    InterlockedMax(pc.shadeDispatchBuffer[inst.materialIndex].maxY, dtid.y + 1);
+    InterlockedMin(pc.shadeDispatchBuffer[material.shadingBucketIndex].minX, dtid.x);
+    InterlockedMax(pc.shadeDispatchBuffer[material.shadingBucketIndex].maxX, dtid.x + 1);
+    InterlockedMin(pc.shadeDispatchBuffer[material.shadingBucketIndex].minY, dtid.y);
+    InterlockedMax(pc.shadeDispatchBuffer[material.shadingBucketIndex].maxY, dtid.y + 1);
 }
 
 // ==================== Compute Shader ====================

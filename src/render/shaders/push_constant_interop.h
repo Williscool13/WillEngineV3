@@ -293,6 +293,7 @@ SHADER_PUBLIC struct VisibilityBufferResolvePushConstant
 SHADER_PUBLIC struct ShadeBucketingPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
+    SHADER_PUBLIC SHADER_PTR(MaterialProperties) materialBuffer;
     SHADER_PUBLIC SHADER_PTR(ShadeDispatchParameters) shadeDispatchBuffer; // out
     SHADER_PUBLIC uint2 extents;
     // In
