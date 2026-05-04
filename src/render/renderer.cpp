@@ -590,7 +590,7 @@ void SetupVisibilityBarycentricDerivativePass(RenderGraph& graph,
         });
 }
 
-void SetupShadeDispatchBucketPass(RenderGraph& graph,
+void SetupVisibilityBucketingPass(RenderGraph& graph,
                                   PipelineManager* pipelineManager,
                                   const Core::ViewFamily& viewFamily,
                                   Core::Array<uint32_t, 2> renderExtent,
@@ -628,7 +628,7 @@ void SetupShadeDispatchBucketPass(RenderGraph& graph,
             .shadeDispatchBuffer = graph.GetBufferAddress(SHADING_DISPATCH_BUCKETING_BUFFER),
             .materialCount = materialCount,
         };
-        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("visibility_bucketing_resolve"));
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("visibility_shading_bucketing_resolve"));
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         vkCmdDispatch(cmd, (materialCount + 255) / 256, 1, 1);
@@ -818,6 +818,77 @@ void SetupLightingBucketingDebugPass(RenderGraph& graph, PipelineManager* pipeli
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(LIGHTING_DISPATCH_BUCKETING_BUFFER),
                                       i * sizeof(LightingDispatchParameters) + offsetof(LightingDispatchParameters, xDispatch));
+            }
+        });
+}
+
+void SetupVisibilityLightingResolvePass(RenderGraph& graph,
+                                        PipelineManager* pipelineManager,
+                                        const Core::ViewFamily& viewFamily,
+                                        Core::Array<uint32_t, 2> renderExtent,
+                                        const DeferredResolveTargets& targets,
+                                        uint32_t sceneIndex,
+                                        Core::Arena& arena)
+{
+    if (!graph.HasBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER)) { return; }
+
+    struct LightingEntry
+    {
+        uint32_t bucketIndex;
+        StringID lightingShader;
+    };
+
+    const uint32_t lightingCount = static_cast<uint32_t>(viewFamily.lightingBuckets.Size());
+    LightingEntry* buckets = arena.AllocArray<LightingEntry>(lightingCount);
+    uint32_t idx = 0;
+    for (const auto& [shader, bucketIndex] : viewFamily.lightingBuckets) {
+        buckets[idx++] = {bucketIndex, shader};
+    }
+
+    RenderPass& lightingResolve = graph.AddPass(SID("Visibility Lighting Resolve"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+    lightingResolve.ReadBuffer(SCENE_DATA_BUFFER);
+    lightingResolve.ReadBuffer(SHADOW_DATA_BUFFER);
+    lightingResolve.ReadBuffer(SID("light_data"));
+    lightingResolve.ReadIndirectBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER);
+    lightingResolve.ReadSampledImage(targets.gbufferOne);
+    lightingResolve.ReadSampledImage(targets.gbufferTwo);
+    lightingResolve.ReadSampledImage(targets.depthStencil);
+    if (targets.shadows != StringID{}) {
+        lightingResolve.ReadSampledImage(targets.shadows);
+    }
+    lightingResolve.WriteStorageImage(targets.output);
+    lightingResolve.Execute([&, pipelineManager, sceneIndex,
+            gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
+            depth = targets.depthStencil, shadows = targets.shadows,
+            output = targets.output, skyboxIndex = viewFamily.skyboxIndex,
+            buckets, lightingCount](VkCommandBuffer cmd) {
+            VkDeviceAddress lightDispatchAddress = graph.GetBufferAddress(LIGHTING_DISPATCH_BUCKETING_BUFFER);
+
+            for (uint32_t i = 0; i < lightingCount; ++i) {
+                const LightingEntry& entry = buckets[i];
+                if (!entry.lightingShader) { continue; }
+
+                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(entry.lightingShader);
+                if (!pipelineEntry) { continue; }
+                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+
+                LightingResolvePushConstant pc{
+                    .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
+                    .shadowData = graph.GetBufferAddress(SHADOW_DATA_BUFFER),
+                    .lightData = graph.GetBufferAddress(SID("light_data")),
+                    .lightDispatchBuffer = lightDispatchAddress,
+                    .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
+                    .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
+                    .depthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(depth),
+                    .shadowsIndex = shadows != StringID{} ? graph.GetSampledImageViewDescriptorIndex(shadows) : ~0x0u,
+                    .skyboxIndex = skyboxIndex,
+                    .outputImageIndex = graph.GetStorageImageViewDescriptorIndex(output),
+                    .sceneDataIndex = sceneIndex,
+                    .lightingBucketIndex = entry.bucketIndex,
+                };
+                vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+                vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(LIGHTING_DISPATCH_BUCKETING_BUFFER),
+                                      entry.bucketIndex * sizeof(LightingDispatchParameters) + offsetof(LightingDispatchParameters, xDispatch));
             }
         });
 }

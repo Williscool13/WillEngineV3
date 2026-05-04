@@ -442,7 +442,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
             SetupVisibilityBarycentricDerivativePass(*renderGraph, pipelineManager, viewFamily, renderExtent, visBarDerTargets, 0);
 
-            SetupShadeDispatchBucketPass(*renderGraph, pipelineManager, viewFamily, renderExtent, visBarDerTargets, 0);
+            SetupVisibilityBucketingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, visBarDerTargets, 0);
 
             SetupVisibilityShadingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, visShadingTargets, 0, memoryManager->RenderArena());
 
@@ -470,7 +470,8 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 .output = shadingOutputTarget,
             };
 
-            SetupDeferredResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, deferredResolveTargets, 0);
+            SetupVisibilityLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, deferredResolveTargets, 0, memoryManager->RenderArena());
+            //SetupDeferredResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, deferredResolveTargets, 0);
         }
 
         if (viewFamily.skyboxIndex != -1) {

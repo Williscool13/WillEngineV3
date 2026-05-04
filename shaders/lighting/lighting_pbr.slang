@@ -1,21 +1,26 @@
 import push_constant_interop;
 import shader_functions;
 import constants_interop;
+import model_interop;
 import pbr_functions;
 
 import bindless_declarations;
 
 [numthreads(16, 16, 1)]
 void ComputeMain(uniform LightingResolvePushConstant pc, uint3 threadID : SV_DispatchThreadID) {
-    if (threadID.x >= pc.sceneData[pc.sceneDataIndex].mainRenderTargetSize.x || threadID.y >= pc.sceneData[pc.sceneDataIndex].mainRenderTargetSize.y) return;
+    LightingDispatchParameters lightParams = pc.lightDispatchBuffer[pc.lightingBucketIndex];
+    uint2 pixel = threadID.xy + uint2(lightParams.minX, lightParams.minY);
+    if (any(pixel >= uint2(lightParams.maxX, lightParams.maxY))) {
+        return;
+    }
 
-    float2 uv = (float2(threadID.xy) + 0.5) / float2(pc.sceneData[pc.sceneDataIndex].mainRenderTargetSize);
-    float depth = rdgTexturesFloat[pc.depthIndex].Load(int3(threadID.xy, 0)).r;
+    float2 uv = (float2(pixel) + 0.5) / float2(pc.sceneData[pc.sceneDataIndex].mainRenderTargetSize);
+    float depth = rdgTexturesFloat[pc.depthIndex].Load(int3(pixel, 0)).r;
     if (depth <= 0.0) {
         return;
     }
-    uint4 gt1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(threadID.xy, 0));
-    uint2 gt2 = rdgTexturesUInt2[pc.gbufferTwoIndex].Load(int3(threadID.xy, 0));
+    uint4 gt1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(pixel, 0));
+    uint2 gt2 = rdgTexturesUInt2[pc.gbufferTwoIndex].Load(int3(pixel, 0));
     float3 viewNormal = UnpackNormalOct16(gt1.r);
     float roughness, metallic;
     UnpackPBR(gt1.b, roughness, metallic);
@@ -24,7 +29,7 @@ void ComputeMain(uniform LightingResolvePushConstant pc, uint3 threadID : SV_Dis
     float4 emissiveData = float4(emissiveRGB, 1.0);
     float2 shadows = float2(1.0f);
     if (pc.shadowsIndex != ~0x0u){
-        shadows = rdgTexturesFloat2[pc.shadowsIndex].Load(int3(threadID.xy, 0)).xy;
+        shadows = rdgTexturesFloat2[pc.shadowsIndex].Load(int3(pixel, 0)).xy;
     }
 
     float viewSpaceDepth = ScreenToViewSpaceDepth(depth, pc.sceneData[pc.sceneDataIndex].depthLinearizeMult, pc.sceneData[pc.sceneDataIndex].depthLinearizeAdd);
@@ -80,5 +85,5 @@ void ComputeMain(uniform LightingResolvePushConstant pc, uint3 threadID : SV_Dis
 
     float3 emissive = emissiveRGB;
     float3 finalColor = directLight + ibl + emissive;
-    rdgStorageFloat4[pc.outputImageIndex][threadID.xy] = float4(finalColor, 1.0);
+    rdgStorageFloat4[pc.outputImageIndex][pixel] = float4(finalColor, 1.0);
 }

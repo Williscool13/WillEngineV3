@@ -30,7 +30,7 @@ void SetupVisibilityBarycentricDerivativePass(RenderGraph& graph,
                                               const VisibilityBufferBarycentricDerivativeTargets& targets,
                                               uint32_t sceneIndex);
 
-void SetupShadeDispatchBucketPass(RenderGraph& graph,
+void SetupVisibilityBucketingPass(RenderGraph& graph,
                                               PipelineManager* pipelineManager,
                                               const Core::ViewFamily& viewFamily,
                                               Core::Array<uint32_t, 2> renderExtent,
@@ -61,6 +61,14 @@ void SetupLightingBucketingDebugPass(RenderGraph& graph,
                                 const VisibilityShadingTargets& targets,
                                 uint32_t sceneIndex);
 
+
+void SetupVisibilityLightingResolvePass(RenderGraph& graph,
+                                        PipelineManager* pipelineManager,
+                                        const Core::ViewFamily& viewFamily,
+                                        Core::Array<uint32_t, 2> renderExtent,
+                                        const DeferredResolveTargets& targets,
+                                        uint32_t sceneIndex,
+                                        Core::Arena& arena);
 
 void SetupDeferredResolvePass(RenderGraph& graph,
                               PipelineManager* pipelineManager,
