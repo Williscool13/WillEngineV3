@@ -46,21 +46,23 @@ using float4x4 = Mat4;
 
 SHADER_PUBLIC SHADER_ENUM DebugTransformationType
 {
-    None,
-    DepthRemap,
-    MultiplyBy1000,
-    MultiplyBy10000,
-    DivideBy1000,
-    DivideBy10000,
-    StencilRemap,
-    VisBuffTriangle,
-    VisBuffMeshlet,
-    VisBuffInstance,
-    GBufferNormal,
-    GBufferMotionVectors,
-    GBufferPBR,
-    GBufferAlbedo,
-    GBufferEmissive,
+    None = 0,
+    DepthRemap = 1,
+    MultiplyBy1000 = 2,
+    MultiplyBy10000 = 3,
+    DivideBy1000 = 4,
+    DivideBy10000 = 5,
+    StencilRemap = 6,
+    VisBuffTriangle = 7,
+    VisBuffMeshlet = 8,
+    VisBuffInstance = 9,
+    GBufferNormal = 10,
+    GBufferMotionVectors = 11,
+    GBufferPBR = 12,
+    GBufferAlbedo = 13,
+    GBufferEmissive = 14,
+    VisBucketShading = 15,
+    VisBucketLighting = 16,
 };
 
 SHADER_PUBLIC struct Frustum

@@ -57,6 +57,15 @@ using float4x4 = glm::mat4;
 SHADER_PUBLIC struct DebugVisualizePushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC SHADER_PTR(VertexPosition) vertexPosBuffer;
+    SHADER_PUBLIC SHADER_PTR(VertexAttribute) vertexAttrBuffer;
+    SHADER_PUBLIC SHADER_PTR(uint32_t) meshletVerticesBuffer;
+    SHADER_PUBLIC SHADER_PTR(uint32_t) meshletTrianglesBuffer;
+    SHADER_PUBLIC SHADER_PTR(Meshlet) meshletBuffer;
+    SHADER_PUBLIC SHADER_PTR(Primitive) primitiveBuffer;
+    SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
+    SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
+    SHADER_PUBLIC SHADER_PTR(MaterialProperties) materialBuffer;
     SHADER_PUBLIC int2 srcExtent;
     SHADER_PUBLIC int2 dstExtent;
     SHADER_PUBLIC float nearPlane;

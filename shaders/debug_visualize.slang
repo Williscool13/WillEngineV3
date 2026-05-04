@@ -71,7 +71,7 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
             break;
         case 7: { // VisBuffTriangle - bits [0:7] of vis.x
             uint2 intSrcPixel = asuint(srcPixel.xy);
-            if (intSrcPixel.x == 0.0 && intSrcPixel.y == 0.0) { break; }
+            if (intSrcPixel.x == 0xFFFFFFFFu && intSrcPixel.y == 0xFFFFFFFFu) { break; }
             uint triIdx = intSrcPixel.x & 0xFF;
             uint h = (triIdx + 1u) * 2654435761u;
             srcPixel.xyz = float3(float(h >> 24), float((h >> 16) & 0xFF), float((h >> 8) & 0xFF)) / 255.0;
@@ -79,7 +79,7 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
         }
         case 8: { // VisBuffMeshlet - bits [8:31] of vis.x
             uint2 intSrcPixel = asuint(srcPixel.xy);
-            if (intSrcPixel.x == 0.0 && intSrcPixel.y == 0.0) { break; }
+            if (intSrcPixel.x == 0xFFFFFFFFu && intSrcPixel.y == 0xFFFFFFFFu) { break; }
             uint meshletIdx = intSrcPixel.x >> 8;
             uint h = (meshletIdx + 1u) * 2654435761u;
             srcPixel.xyz = float3(float(h >> 24), float((h >> 16) & 0xFF), float((h >> 8) & 0xFF)) / 255.0;
@@ -87,7 +87,7 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
         }
         case 9: { // VisBuffInstance - vis.y
             uint2 intSrcPixel = asuint(srcPixel.xy);
-            if (intSrcPixel.x == 0.0 && intSrcPixel.y == 0.0) { break; }
+            if (intSrcPixel.x == 0xFFFFFFFFu && intSrcPixel.y == 0xFFFFFFFFu) { break; }
             uint instIdx = intSrcPixel.y;
             uint h = (instIdx + 1u) * 2654435761u;
             srcPixel.xyz = float3(float(h >> 24), float((h >> 16) & 0xFF), float((h >> 8) & 0xFF)) / 255.0;
@@ -116,6 +116,26 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
         case 14: { // GBufferEmissive, RGBE packed in gbuffer_two.g
             float3 emissive = UnpackEmissiveRGBE(asuint(srcPixel.y));
             srcPixel = float4(emissive, 1.0);
+            break;
+        }
+        case 15: { // VisBuffShadingBucket - shadingBucketIndex from material of instance in vis.y
+            uint2 intSrcPixel = asuint(srcPixel.xy);
+            if (intSrcPixel.x == 0xFFFFFFFFu && intSrcPixel.y == 0xFFFFFFFFu) { break; }
+            uint instIdx = intSrcPixel.y;
+            uint matIdx = pc.instanceBuffer[instIdx].materialIndex;
+            uint bucketIdx = pc.materialBuffer[matIdx].shadingBucketIndex;
+            uint h = (bucketIdx + 1u) * 2654435761u;
+            srcPixel.xyz = float3(float(h >> 24), float((h >> 16) & 0xFF), float((h >> 8) & 0xFF)) / 255.0;
+            break;
+        }
+        case 16: { // VisBuffLightingBucket - lightingBucketIndex from material of instance in vis.y
+            uint2 intSrcPixel = asuint(srcPixel.xy);
+            if (intSrcPixel.x == 0xFFFFFFFFu && intSrcPixel.y == 0xFFFFFFFFu) { break; }
+            uint instIdx = intSrcPixel.y;
+            uint matIdx = pc.instanceBuffer[instIdx].materialIndex;
+            uint bucketIdx = pc.materialBuffer[matIdx].lightingBucketIndex;
+            uint h = (bucketIdx + 1u) * 2654435761u;
+            srcPixel.xyz = float3(float(h >> 24), float((h >> 16) & 0xFF), float((h >> 8) & 0xFF)) / 255.0;
             break;
         }
     }

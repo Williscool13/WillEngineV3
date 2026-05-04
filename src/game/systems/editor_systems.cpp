@@ -512,7 +512,6 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
         ImGui::EndDisabled();
 
 
-
         ImGui::Separator();
 
         if (ImGui::CollapsingHeader("Hotkeys", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -541,6 +540,8 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             if (ImGui::Button("Visibility Buffer (Triangle)")) setDebugTarget("visibility_target", DebugTransformationType::VisBuffTriangle, Core::DebugViewAspect::None);
             if (ImGui::Button("Visibility Barycentric")) setDebugTarget("visibility_barycentric", DebugTransformationType::None, Core::DebugViewAspect::None);
             if (ImGui::Button("Visibility Derivatives")) setDebugTarget("visibility_derivatives", DebugTransformationType::None, Core::DebugViewAspect::None);
+            if (ImGui::Button("Visibility Bucketing (Shading)")) setDebugTarget("visibility_target", DebugTransformationType::VisBucketShading, Core::DebugViewAspect::None);
+            if (ImGui::Button("Visibility Bucketing (Lighting)")) setDebugTarget("visibility_target", DebugTransformationType::VisBucketLighting, Core::DebugViewAspect::None);
         }
         if (ImGui::CollapsingHeader("G-Buffer")) {
             if (ImGui::Button("Depth Target")) setDebugTarget("depth_target", DebugTransformationType::DepthRemap, Core::DebugViewAspect::Depth);
@@ -1494,8 +1495,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
         ImGui::Checkbox("Enable GTAO", &state->lighting.gtaoConfig.bEnabled);
 
         ImGui::Spacing();
-        ImGui::SeparatorText("Anti-Aliasing");
-        {
+        ImGui::SeparatorText("Anti-Aliasing"); {
             const char* aaModes[] = {"None", "SMAA", "TAA", "SMAA T2X"};
             int currentAA = static_cast<int>(state->lighting.aaMode);
             if (ImGui::Combo("Mode##aa", &currentAA, aaModes, IM_ARRAYSIZE(aaModes))) {
@@ -1504,8 +1504,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
         }
 
         ImGui::Spacing();
-        ImGui::SeparatorText("SMAA");
-        {
+        ImGui::SeparatorText("SMAA"); {
             Core::SMAAConfiguration& smaa = state->lighting.smaaConfig;
             constexpr Core::SMAAConfiguration defaultSMAA{};
             const char* edgeModes[] = {"Luma", "Color", "Depth"};
@@ -1827,8 +1826,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
                     ImGui::TreePop();
                 }
 
-                ImGui::SeparatorText("Shader");
-                {
+                ImGui::SeparatorText("Shader"); {
                     Core::Span<const StringID> shadingPipelines = ctx->pipelineManager->GetShadingPipelines();
                     const int32_t pipelineCount = static_cast<int32_t>(shadingPipelines.Size());
 
@@ -1859,8 +1857,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
                             changed = true;
                         }
                     }
-                }
-                {
+                } {
                     Core::Span<const StringID> lightingPipelines = ctx->pipelineManager->GetLightingPipelines();
                     const int32_t pipelineCount = static_cast<int32_t>(lightingPipelines.Size());
 

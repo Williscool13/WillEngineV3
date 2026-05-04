@@ -579,6 +579,15 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
                     DebugVisualizePushConstant pc{
                         .sceneData = renderGraph->GetBufferAddress(SID("scene_data")),
+                        .vertexPosBuffer = renderGraph->GetBufferAddress(GEOMETRY_VERTEX_POSITION_BUFFER),
+                        .vertexAttrBuffer = renderGraph->GetBufferAddress(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER),
+                        .meshletVerticesBuffer = renderGraph->GetBufferAddress(GEOMETRY_MESHLET_VERTEX_BUFFER),
+                        .meshletTrianglesBuffer = renderGraph->GetBufferAddress(GEOMETRY_MESHLET_TRIANGLE_BUFFER),
+                        .meshletBuffer = renderGraph->GetBufferAddress(GEOMETRY_MESHLET_BUFFER),
+                        .primitiveBuffer = renderGraph->GetBufferAddress(GEOMETRY_PRIMITIVE_BUFFER),
+                        .instanceBuffer = renderGraph->GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
+                        .modelBuffer = renderGraph->GetBufferAddress(GEOMETRY_MODEL_BUFFER),
+                        .materialBuffer = renderGraph->GetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
                         .srcExtent = {dims.width, dims.height},
                         .dstExtent = {renderExtent[0], renderExtent[1]},
                         .nearPlane = viewFamily.mainView.currentViewData.nearPlane,

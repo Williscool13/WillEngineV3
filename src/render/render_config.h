@@ -40,7 +40,7 @@ inline const StringID GEOMETRY_VERTEX_ATTRIBUTE_BUFFER = SID("vertex_attribute_b
 inline const StringID GEOMETRY_MESHLET_VERTEX_BUFFER = SID("meshlet_vertex_buffer");
 inline const StringID GEOMETRY_MESHLET_TRIANGLE_BUFFER = SID("meshlet_triangle_buffer");
 inline const StringID GEOMETRY_MESHLET_BUFFER = SID("meshlet_buffer");
-inline const StringID GEOMETRY_MATERIAL_BUFFER = SID("material_buffer");
+inline const StringID   GEOMETRY_MATERIAL_BUFFER = SID("material_buffer");
 
 inline const StringID SHADE_DISPATCH_BUCKETING_BUFFER = SID("shade_bucketing_buffer");
 
