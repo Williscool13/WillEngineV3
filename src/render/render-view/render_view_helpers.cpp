@@ -4,6 +4,7 @@
 
 #include "render_view_helpers.h"
 
+#include "core/containers/inline_set.h"
 #include "core/math/math_helpers.h"
 #include "render/interface/render_interface.h"
 #include "render/frame_resources.h"
@@ -139,6 +140,7 @@ RenderFamilyProperties PrepareRenderFamilyProperties(Core::ViewFamily& viewFamil
 
     _limits.highestModelCount = std::max(_limits.highestModelCount, NextPowerOfTwo(viewFamily.modelMatrices.Size()));
     _limits.highestMaterialCount = std::max(_limits.highestMaterialCount, NextPowerOfTwo(viewFamily.materials.Size()));
+    _limits.highestLightingCount = std::max(_limits.highestLightingCount, NextPowerOfTwo(viewFamily.lightingBuckets.Size()));
 
     uint32_t totalInstanceCountThisFrame = viewFamily.mainPassInstances.Size();
     for (const auto& [key, customDraw] : viewFamily.customShaderDraws) {
@@ -151,6 +153,7 @@ RenderFamilyProperties PrepareRenderFamilyProperties(Core::ViewFamily& viewFamil
     renderFamilyProperties.modelBufferSize = _limits.highestModelCount * sizeof(Model);
     renderFamilyProperties.materialBufferSize = _limits.highestMaterialCount * sizeof(MaterialProperties);
     renderFamilyProperties.shadeDispatchBufferSize = _limits.highestMaterialCount * sizeof(ShadeDispatchParameters);
+    renderFamilyProperties.lightingDispatchBufferSize = _limits.highestLightingCount * sizeof(LightingDispatchParameters);
     renderFamilyProperties.instanceBufferSize = _limits.highestInstanceCount * sizeof(Instance);
 
 

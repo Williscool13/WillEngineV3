@@ -442,6 +442,16 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
                 frameBuffer->mainViewFamily.materials.PushBack(materialManager->GetRenderMaterial(instance.materialID));
             }
         }
+
+        uint32_t runningLightingBucketIndex{0};
+        for (size_t i = 0; i < frameBuffer->mainViewFamily.materials.Size(); ++i) {
+            Engine::RenderMaterial& mat = frameBuffer->mainViewFamily.materials[i];
+
+            auto [lightingVal, lightingInserted] = frameBuffer->mainViewFamily.lightingBuckets.TryEmplace(mat.lightingShader, runningLightingBucketIndex);
+            if (lightingInserted) {
+                runningLightingBucketIndex++;
+            }
+        }
     }
 
     assert(frameBuffer->mainViewFamily.customShaderDraws.IsEmpty());

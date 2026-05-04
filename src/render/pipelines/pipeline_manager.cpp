@@ -358,9 +358,13 @@ void PipelineManager::RegisterPipelines()
                             sizeof(ShadeBucketingPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline("visibility_bucketing_resolve"_sid, src / "visibility_bucketing_resolve_compute.spv",
                             sizeof(ShadeBucketingResolvePushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline("visibility_lighting_bucketing_resolve"_sid, src / "visibility_lighting_bucketing_resolve_compute.spv",
+                            sizeof(LightingBucketingResolvePushConstant), PipelineCategory::Critical);
 
     RegisterComputePipeline("shading_bucket_visualize"_sid, src / "shading_bucket_visualize_compute.spv",
                             sizeof(VisibilityShadingPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline("lighting_bucket_visualize"_sid, src / "lighting_bucket_visualize_compute.spv",
+                            sizeof(LightingBucketVisualizePushConstant), PipelineCategory::Critical);
     RegisterComputePipeline("default_lit"_sid, src / "shading_default_lit_compute.spv",
                             sizeof(VisibilityShadingPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline("error_unlit"_sid, src / "shading_error_unlit_compute.spv",

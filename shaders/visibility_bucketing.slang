@@ -31,6 +31,11 @@ void ComputeShadeDispatchBucketing(uint3 dtid : SV_DispatchThreadID, uniform Sha
     InterlockedMax(pc.shadeDispatchBuffer[material.shadingBucketIndex].maxX, dtid.x + 1);
     InterlockedMin(pc.shadeDispatchBuffer[material.shadingBucketIndex].minY, dtid.y);
     InterlockedMax(pc.shadeDispatchBuffer[material.shadingBucketIndex].maxY, dtid.y + 1);
+
+    InterlockedMin(pc.lightDispatchBuffer[material.lightingBucketIndex].minX, dtid.x);
+    InterlockedMax(pc.lightDispatchBuffer[material.lightingBucketIndex].maxX, dtid.x + 1);
+    InterlockedMin(pc.lightDispatchBuffer[material.lightingBucketIndex].minY, dtid.y);
+    InterlockedMax(pc.lightDispatchBuffer[material.lightingBucketIndex].maxY, dtid.y + 1);
 }
 
 // ==================== Compute Shader ====================
@@ -50,4 +55,23 @@ void ComputeShadeDispatchBucketingResolve(uint3 dtid : SV_DispatchThreadID, unif
     pc.shadeDispatchBuffer[materialIndex].xDispatch = (width + 15) / 16;
     pc.shadeDispatchBuffer[materialIndex].yDispatch = (height + 15) / 16;
     pc.shadeDispatchBuffer[materialIndex].zDispatch = 1;
+}
+
+// ==================== Compute Shader ====================
+[shader("compute")]
+[numthreads(256, 1, 1)]
+void ComputeLightDispatchBucketingResolve(uint3 dtid : SV_DispatchThreadID, uniform LightingBucketingResolvePushConstant pc)
+{
+    uint32_t lightingIndex = dtid.x;
+    if (lightingIndex >= pc.lightingCount) {
+        return;
+    }
+
+    LightingDispatchParameters dispatchParams = pc.lightDispatchBuffer[lightingIndex];
+    uint32_t width = dispatchParams.maxX - dispatchParams.minX;
+    uint32_t height = dispatchParams.maxY - dispatchParams.minY;
+
+    pc.lightDispatchBuffer[lightingIndex].xDispatch = (width + 15) / 16;
+    pc.lightDispatchBuffer[lightingIndex].yDispatch = (height + 15) / 16;
+    pc.lightDispatchBuffer[lightingIndex].zDispatch = 1;
 }

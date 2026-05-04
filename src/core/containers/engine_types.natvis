@@ -178,6 +178,81 @@
     </Expand>
   </Type>
 
+  <!-- ===== SETS ===== -->
+  <!--
+    All set types use open-addressing with a Slot per bucket.
+    Each Slot stores a raw keyBuf char array plus a State enum (0=Empty, 1=Occupied, 2=Dead).
+    CustomListItems loops over all buckets and emits only Occupied ones; no blank entries.
+  -->
+
+  <Type Name="Core::Set&lt;*,*&gt;">
+    <DisplayString>{{ size={size_}, capacity={capacity_} }}</DisplayString>
+    <Expand>
+      <Item Name="[size]">size_</Item>
+      <Item Name="[capacity]">capacity_</Item>
+      <CustomListItems MaxItemsPerView="500">
+        <Variable Name="i" InitialValue="0"/>
+        <Loop Condition="i &lt; capacity_">
+          <If Condition="slots_[i].state == 1">
+            <Item>*($T1*)(slots_[i].keyBuf)</Item>
+          </If>
+          <Exec>i++</Exec>
+        </Loop>
+      </CustomListItems>
+    </Expand>
+  </Type>
+
+  <Type Name="Core::FixedSet&lt;*,*&gt;">
+    <DisplayString>{{ size={size_}, capacity={capacity_} }}</DisplayString>
+    <Expand>
+      <Item Name="[size]">size_</Item>
+      <Item Name="[capacity]">capacity_</Item>
+      <CustomListItems MaxItemsPerView="500">
+        <Variable Name="i" InitialValue="0"/>
+        <Loop Condition="i &lt; capacity_">
+          <If Condition="slots_[i].state == 1">
+            <Item>*($T1*)(slots_[i].keyBuf)</Item>
+          </If>
+          <Exec>i++</Exec>
+        </Loop>
+      </CustomListItems>
+    </Expand>
+  </Type>
+
+  <Type Name="Core::ArenaFixedSet&lt;*,*&gt;">
+    <DisplayString>{{ size={size_}, capacity={capacity_} }}</DisplayString>
+    <Expand>
+      <Item Name="[size]">size_</Item>
+      <Item Name="[capacity]">capacity_</Item>
+      <CustomListItems MaxItemsPerView="500">
+        <Variable Name="i" InitialValue="0"/>
+        <Loop Condition="i &lt; capacity_">
+          <If Condition="slots_[i].state == 1">
+            <Item>*($T1*)(slots_[i].keyBuf)</Item>
+          </If>
+          <Exec>i++</Exec>
+        </Loop>
+      </CustomListItems>
+    </Expand>
+  </Type>
+
+  <Type Name="Core::InlineSet&lt;*,*,*&gt;">
+    <DisplayString>{{ size={size_}, capacity={$T2} }}</DisplayString>
+    <Expand>
+      <Item Name="[size]">size_</Item>
+      <Item Name="[capacity]">$T2</Item>
+      <CustomListItems MaxItemsPerView="500">
+        <Variable Name="i" InitialValue="0"/>
+        <Loop Condition="i &lt; $T2">
+          <If Condition="slots_[i].state == 1">
+            <Item>*($T1*)(slots_[i].keyBuf)</Item>
+          </If>
+          <Exec>i++</Exec>
+        </Loop>
+      </CustomListItems>
+    </Expand>
+  </Type>
+
   <!-- ===== STRINGS ===== -->
 
   <Type Name="Core::String">

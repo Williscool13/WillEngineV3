@@ -11,6 +11,7 @@ struct FrameResourceLimits
 {
     size_t highestModelCount{128};
     size_t highestMaterialCount{128};
+    size_t highestLightingCount{128};
 
     size_t highestInstanceCount{1024};
     size_t highestMeshletCount{128};

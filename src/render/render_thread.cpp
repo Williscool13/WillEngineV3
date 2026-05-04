@@ -415,7 +415,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
     renderGraph->CreateTexture(visShadingTargets.gbufferTwo, TextureInfo{GBUFFER_TARGET_TWO, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
 
-    StringID shadingOutputTarget = SID("shade_output");
+    StringID shadingOutputTarget = SID("shading_output");
     renderGraph->CreateTexture(shadingOutputTarget, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, VkClearValue{0.0f, 0.1f, 0.2f, 1.0f}, true);
 
 
@@ -448,6 +448,10 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
             if (frameBuffer.bEnableShadeDispatchBucketingVisualization) {
                 SetupVisibilityBucketingDebugPass(*renderGraph, pipelineManager, viewFamily, renderExtent, visShadingTargets, 0, memoryManager->RenderArena());
+            }
+
+            if (frameBuffer.bEnableLightingBucketingVisualization) {
+                SetupLightingBucketingDebugPass(*renderGraph, pipelineManager, viewFamily, renderExtent, visShadingTargets, 0);
             }
 
 
@@ -526,7 +530,19 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         if (!viewFamily.debugResourceName.IsEmpty()) {
             StringID debugTargetName = StringID(viewFamily.debugResourceName.c_str(), viewFamily.debugResourceName.Size());
 
-            if (renderGraph->HasTexture(debugTargetName)) {
+            const bool bDebugBuffersReady =
+                renderGraph->HasBuffer(SID("scene_data")) &&
+                renderGraph->HasBuffer(GEOMETRY_VERTEX_POSITION_BUFFER) &&
+                renderGraph->HasBuffer(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER) &&
+                renderGraph->HasBuffer(GEOMETRY_MESHLET_VERTEX_BUFFER) &&
+                renderGraph->HasBuffer(GEOMETRY_MESHLET_TRIANGLE_BUFFER) &&
+                renderGraph->HasBuffer(GEOMETRY_MESHLET_BUFFER) &&
+                renderGraph->HasBuffer(GEOMETRY_PRIMITIVE_BUFFER) &&
+                renderGraph->HasBuffer(GEOMETRY_INSTANCE_BUFFER) &&
+                renderGraph->HasBuffer(GEOMETRY_MODEL_BUFFER) &&
+                renderGraph->HasBuffer(GEOMETRY_MATERIAL_BUFFER);
+
+            if (bDebugBuffersReady && renderGraph->HasTexture(debugTargetName)) {
                 auto& debugVisPass = renderGraph->AddPass(SID("Debug Visualize"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
                 debugVisPass.ReadSampledImage(debugTargetName);
                 debugVisPass.WriteStorageImage(finalOutput);
@@ -856,17 +872,21 @@ void RenderThread::RegisterDebugReadbacks()
     {
         ShadeDispatchParameters data[16];
     };
+    struct LightDispatchReadback
+    {
+        LightingDispatchParameters data[16];
+    };
 
     resourceManager->debugReadback.Register<ShadeDispatchReadback>(
         "Shade Dispatch Parameters",
         [](RenderGraph& graph, StringID dst, size_t dstOffset) {
-            if (!graph.HasBuffer(SHADE_DISPATCH_BUCKETING_BUFFER)) { return; }
+            if (!graph.HasBuffer(SHADING_DISPATCH_BUCKETING_BUFFER)) { return; }
             RenderPass& pass = graph.AddPass(SID("Readback Shade Dispatch"), VK_PIPELINE_STAGE_2_COPY_BIT);
-            pass.ReadTransferBuffer(SHADE_DISPATCH_BUCKETING_BUFFER);
+            pass.ReadTransferBuffer(SHADING_DISPATCH_BUCKETING_BUFFER);
             pass.WriteTransferBuffer(dst);
             pass.Execute([&graph, dst, dstOffset](VkCommandBuffer cmd) {
                 VkBufferCopy copy{0, dstOffset, sizeof(ShadeDispatchReadback)};
-                vkCmdCopyBuffer(cmd, graph.GetBufferHandle(SHADE_DISPATCH_BUCKETING_BUFFER), graph.GetBufferHandle(dst), 1, &copy);
+                vkCmdCopyBuffer(cmd, graph.GetBufferHandle(SHADING_DISPATCH_BUCKETING_BUFFER), graph.GetBufferHandle(dst), 1, &copy);
             });
         },
         [](const ShadeDispatchReadback& d) {
@@ -885,7 +905,52 @@ void RenderThread::RegisterDebugReadbacks()
                     ImGui::TableNextColumn();
                     ImGui::Text("%d", i);
                     ImGui::TableNextColumn();
-                    ImGui::Text("%u", p.materialIndex);
+                    ImGui::Text("%u", p.shadingIndex);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("(%u,%u,%u)", p.xDispatch, p.yDispatch, p.zDispatch);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", p.minX);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", p.minY);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", p.maxX);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", p.maxY);
+                }
+                ImGui::EndTable();
+            }
+        }
+    );
+
+    resourceManager->debugReadback.Register<LightDispatchReadback>(
+        "Light Dispatch Parameters",
+        [](RenderGraph& graph, StringID dst, size_t dstOffset) {
+            if (!graph.HasBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER)) { return; }
+            RenderPass& pass = graph.AddPass(SID("Readback Light Dispatch"), VK_PIPELINE_STAGE_2_COPY_BIT);
+            pass.ReadTransferBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER);
+            pass.WriteTransferBuffer(dst);
+            pass.Execute([&graph, dst, dstOffset](VkCommandBuffer cmd) {
+                VkBufferCopy copy{0, dstOffset, sizeof(LightDispatchReadback)};
+                vkCmdCopyBuffer(cmd, graph.GetBufferHandle(LIGHTING_DISPATCH_BUCKETING_BUFFER), graph.GetBufferHandle(dst), 1, &copy);
+            });
+        },
+        [](const LightDispatchReadback& d) {
+            if (ImGui::BeginTable("LightDispatchTable", 7, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+                ImGui::TableSetupColumn("Index");
+                ImGui::TableSetupColumn("Lighting");
+                ImGui::TableSetupColumn("Dispatch");
+                ImGui::TableSetupColumn("MinX");
+                ImGui::TableSetupColumn("MinY");
+                ImGui::TableSetupColumn("MaxX");
+                ImGui::TableSetupColumn("MaxY");
+                ImGui::TableHeadersRow();
+                for (int i = 0; i < 16; ++i) {
+                    const LightingDispatchParameters& p = d.data[i];
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%d", i);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", p.lightingIndex);
                     ImGui::TableNextColumn();
                     ImGui::Text("(%u,%u,%u)", p.xDispatch, p.yDispatch, p.zDispatch);
                     ImGui::TableNextColumn();
@@ -1274,21 +1339,13 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
     if (!viewFamily.materials.IsEmpty()) {
         renderGraph->CreateBuffer(GEOMETRY_MATERIAL_BUFFER, renderFamilyProperties.materialBufferSize, false);
 
-
         // Assign unique IDs for materials and lighting shaders.
-        Core::InlineMap<StringID, uint32_t, 128> lightingBuckets{};
         UploadAllocation materialUpload = renderGraph->AllocateTransient(viewFamily.materials.Size() * sizeof(MaterialProperties));
         auto* dst = static_cast<MaterialProperties*>(materialUpload.ptr);
-        uint32_t runningLightingBucketIndex{0};
         for (size_t i = 0; i < viewFamily.materials.Size(); ++i) {
-            uint32_t shadingBucketIndex = i;
-
-            auto [lightingVal, lightingInserted] = lightingBuckets.TryEmplace(viewFamily.materials[i].lightingShader, runningLightingBucketIndex);
-            if (lightingInserted) { runningLightingBucketIndex++; }
-            uint32_t lightingBucketIndex = lightingVal;
-
-            viewFamily.materials[i].props.shadingBucketIndex = shadingBucketIndex;
-            viewFamily.materials[i].props.lightingBucketIndex = lightingBucketIndex;
+            assert(viewFamily.lightingBuckets.Contains(viewFamily.materials[i].lightingShader) && "Lighting bucket missing lighting model for a material");
+            viewFamily.materials[i].props.shadingBucketIndex = i;
+            viewFamily.materials[i].props.lightingBucketIndex = viewFamily.lightingBuckets.At(viewFamily.materials[i].lightingShader);
             dst[i] = viewFamily.materials[i].props;
         }
 
@@ -1314,7 +1371,7 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
                 vkCmdCopyBuffer2(cmd, &copyInfo);
             });
 
-        renderGraph->CreateBuffer(SHADE_DISPATCH_BUCKETING_BUFFER, renderFamilyProperties.shadeDispatchBufferSize, false);
+        renderGraph->CreateBuffer(SHADING_DISPATCH_BUCKETING_BUFFER, renderFamilyProperties.shadeDispatchBufferSize, false);
 
         UploadAllocation shadeDispatchUpload = renderGraph->AllocateTransient(viewFamily.materials.Size() * sizeof(ShadeDispatchParameters));
         auto* shadeDispatchBuffer = static_cast<ShadeDispatchParameters*>(shadeDispatchUpload.ptr);
@@ -1327,12 +1384,12 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
                 .maxX = 0,
                 .minY = UINT32_MAX,
                 .maxY = 0,
-                .materialIndex = static_cast<uint32_t>(i),
+                .shadingIndex = static_cast<uint32_t>(i),
             };
         }
 
         RenderPass& uploadShadeDispatchPass = renderGraph->AddPass(SID("Upload Shade Dispatch"), VK_PIPELINE_STAGE_2_COPY_BIT);
-        uploadShadeDispatchPass.WriteTransferBuffer(SHADE_DISPATCH_BUCKETING_BUFFER);
+        uploadShadeDispatchPass.WriteTransferBuffer(SHADING_DISPATCH_BUCKETING_BUFFER);
         uploadShadeDispatchPass.Execute([&,
                 shadeDispatchOffset = shadeDispatchUpload.offset,
                 shadeDispatchSize = viewFamily.materials.Size() * sizeof(ShadeDispatchParameters)](VkCommandBuffer cmd) {
@@ -1345,7 +1402,45 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
                 VkCopyBufferInfo2 copyInfo{
                     .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
                     .srcBuffer = renderGraph->GetTransientUploadBuffer(),
-                    .dstBuffer = renderGraph->GetBufferHandle(SHADE_DISPATCH_BUCKETING_BUFFER),
+                    .dstBuffer = renderGraph->GetBufferHandle(SHADING_DISPATCH_BUCKETING_BUFFER),
+                    .regionCount = 1,
+                    .pRegions = &copy,
+                };
+                vkCmdCopyBuffer2(cmd, &copyInfo);
+            });
+
+        renderGraph->CreateBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER, renderFamilyProperties.lightingDispatchBufferSize, false);
+
+        UploadAllocation lightDispatchUpload = renderGraph->AllocateTransient(viewFamily.lightingBuckets.Size() * sizeof(LightingDispatchParameters));
+        auto* lightDispatchBuffer = static_cast<LightingDispatchParameters*>(lightDispatchUpload.ptr);
+        for (size_t i = 0; i < viewFamily.lightingBuckets.Size(); ++i) {
+            lightDispatchBuffer[i] = {
+                .xDispatch = 0,
+                .yDispatch = 0,
+                .zDispatch = 0,
+                .minX = UINT32_MAX,
+                .maxX = 0,
+                .minY = UINT32_MAX,
+                .maxY = 0,
+                .lightingIndex = static_cast<uint32_t>(i),
+            };
+        }
+
+        RenderPass& uploadLightDispatchPass = renderGraph->AddPass(SID("Upload Light Dispatch"), VK_PIPELINE_STAGE_2_COPY_BIT);
+        uploadLightDispatchPass.WriteTransferBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER);
+        uploadLightDispatchPass.Execute([&,
+                lightDispatchOffset = lightDispatchUpload.offset,
+                lightDispatchSize = viewFamily.lightingBuckets.Size() * sizeof(LightingDispatchParameters)](VkCommandBuffer cmd) {
+                VkBufferCopy2 copy{
+                    .sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
+                    .srcOffset = lightDispatchOffset,
+                    .dstOffset = 0,
+                    .size = lightDispatchSize,
+                };
+                VkCopyBufferInfo2 copyInfo{
+                    .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
+                    .srcBuffer = renderGraph->GetTransientUploadBuffer(),
+                    .dstBuffer = renderGraph->GetBufferHandle(LIGHTING_DISPATCH_BUCKETING_BUFFER),
                     .regionCount = 1,
                     .pRegions = &copy,
                 };

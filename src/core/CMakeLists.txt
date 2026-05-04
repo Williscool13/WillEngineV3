@@ -63,6 +63,10 @@ add_library(core STATIC
         containers/heap_array.h
         containers/heap_ring_buffer.h
         containers/arena_vector.h
+        containers/inline_set.h
+        containers/set.h
+        containers/fixed_set.h
+        containers/arena_fixed_set.h
 )
 
 

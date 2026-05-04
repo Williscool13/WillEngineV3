@@ -304,6 +304,7 @@ SHADER_PUBLIC struct ShadeBucketingPushConstant
     SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
     SHADER_PUBLIC SHADER_PTR(MaterialProperties) materialBuffer;
     SHADER_PUBLIC SHADER_PTR(ShadeDispatchParameters) shadeDispatchBuffer; // out
+    SHADER_PUBLIC SHADER_PTR(LightingDispatchParameters) lightDispatchBuffer; // out
     SHADER_PUBLIC uint2 extents;
     // In
     SHADER_PUBLIC uint32_t visibilityBufferIndex;
@@ -313,6 +314,21 @@ SHADER_PUBLIC struct ShadeBucketingResolvePushConstant
 {
     SHADER_PUBLIC SHADER_PTR(ShadeDispatchParameters) shadeDispatchBuffer; // in/out
     SHADER_PUBLIC uint32_t materialCount;
+};
+
+SHADER_PUBLIC struct LightingBucketingResolvePushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(LightingDispatchParameters) lightDispatchBuffer; // in/out
+    SHADER_PUBLIC uint32_t lightingCount;
+};
+
+SHADER_PUBLIC struct LightingBucketVisualizePushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(LightingDispatchParameters) lightDispatchBuffer; // in
+    SHADER_PUBLIC uint32_t lightingIndex;
+    // Out
+    SHADER_PUBLIC uint32_t gbufferOneIndex;
+    SHADER_PUBLIC uint32_t gbufferTwoIndex;
 };
 
 SHADER_PUBLIC struct VisibilityShadingPushConstant

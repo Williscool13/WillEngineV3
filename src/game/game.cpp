@@ -178,6 +178,7 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
     }
     frameBuffer->mainViewFamily.activeMaterials.Clear();
     frameBuffer->mainViewFamily.materials.Clear();
+    frameBuffer->mainViewFamily.lightingBuckets.Clear();
     frameBuffer->mainViewFamily.portalViews.Clear();
 #ifndef PACKAGED_BUILD
     frameBuffer->mainViewFamily.debugLines.Clear();
@@ -190,6 +191,7 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
     Game::BuildViewFamily(state, frameBuffer->mainViewFamily);
     frameBuffer->bWireframe = state->debug.bWireframe;
     frameBuffer->bEnableShadeDispatchBucketingVisualization = state->debug.bEnableShadeDispatchBucketingVisualization;
+    frameBuffer->bEnableLightingBucketingVisualization = state->debug.bEnableLightingBucketingVisualization;
     if (state->debug.bEnablePortal) {
         Game::BuildPortalViewFamily(state, frameBuffer->mainViewFamily);
     }

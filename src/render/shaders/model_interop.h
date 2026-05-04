@@ -158,7 +158,20 @@ SHADER_PUBLIC struct SHADER_ALIGN ShadeDispatchParameters
     SHADER_PUBLIC uint32_t minY;
     SHADER_PUBLIC uint32_t maxY;
 
-    SHADER_PUBLIC uint32_t materialIndex;
+    SHADER_PUBLIC uint32_t shadingIndex;
+};
+SHADER_PUBLIC struct SHADER_ALIGN LightingDispatchParameters
+{
+    SHADER_PUBLIC uint32_t xDispatch;
+    SHADER_PUBLIC uint32_t yDispatch;
+    SHADER_PUBLIC uint32_t zDispatch;
+
+    SHADER_PUBLIC uint32_t minX;
+    SHADER_PUBLIC uint32_t maxX;
+    SHADER_PUBLIC uint32_t minY;
+    SHADER_PUBLIC uint32_t maxY;
+
+    SHADER_PUBLIC uint32_t lightingIndex;
 };
 
 #endif // WILLENGINEV3_MODEL_INTEROP_H

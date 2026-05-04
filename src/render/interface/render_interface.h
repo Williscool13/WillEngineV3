@@ -310,6 +310,7 @@ struct ViewFamily
      */
     Map<Engine::MaterialID, uint32_t> activeMaterials{};
     Vector<Engine::RenderMaterial> materials{};
+    Map<StringID, uint32_t> lightingBuckets{};
 
     int32_t skyboxIndex{-1};
     int32_t skyboxLOD{0};
@@ -365,6 +366,7 @@ struct FrameBuffer
     bool bFreezeVisibility = false;
     bool bWireframe = false;
     bool bEnableShadeDispatchBucketingVisualization = false;
+    bool bEnableLightingBucketingVisualization = false;
     bool bLogRDG = false;
 
     bool bTakeScreenshot{false};
