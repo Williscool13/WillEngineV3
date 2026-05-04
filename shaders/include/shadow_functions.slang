@@ -5,6 +5,7 @@ import constants_interop;
 import shadows_interop;
 import shader_constants;
 
+// I gotta stop duplicating this. Use ScreenToViewSpaceDepth(depth);
 float DepthToZ(float depth, float n, float f) {
 	// return n * f / (depth * (n - f) + f); (normal depth buffer)
 	return n * f / (f - depth * (f - n));

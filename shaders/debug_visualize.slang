@@ -7,13 +7,6 @@ import shader_functions;
 [[vk::push_constant]]
 DebugVisualizePushConstant pc;
 
-float LinearizeDepth(float depth) {
-    float zNear = pc.nearPlane;
-    float zFar = pc.farPlane;
-    float flipped = 1.0 - depth;
-    return (2.0 * zNear) / (zFar + zNear - flipped * (zFar - zNear));
-}
-
 [numthreads(16, 16, 1)]
 void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
     if (threadID.x >= pc.dstExtent.x || threadID.y >= pc.dstExtent.y) return;
@@ -50,9 +43,10 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
 
     switch (pc.valueTransformationType) {
         case 1: // DepthRemap
-            srcPixel.x = LinearizeDepth(srcPixel.x);
-            srcPixel.y = LinearizeDepth(srcPixel.y);
-            srcPixel.z = LinearizeDepth(srcPixel.z);
+        {
+            float v = ScreenToViewSpaceDepth(srcPixel.x, pc.sceneData->depthLinearizeMult, pc.sceneData->depthLinearizeAdd) / 500.0f;
+            srcPixel.xyz = float3(v);
+        }
             break;
         case 2: // MultiplyBy1000
             srcPixel.xyz *= 1000.0f;

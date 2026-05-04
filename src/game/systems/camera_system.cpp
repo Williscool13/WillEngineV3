@@ -93,7 +93,15 @@ void UpdateEditorCamera(Engine::EngineContext* ctx, Engine::EngineState* state)
             camera.currentViewData.proj = glm::ortho(-halfW, halfW, -halfH, halfH, camera.currentViewData.farPlane, camera.currentViewData.nearPlane);
         }
         else {
-            camera.currentViewData.proj = glm::perspective(camera.currentViewData.fovRadians, camera.currentViewData.aspectRatio, camera.currentViewData.farPlane, camera.currentViewData.nearPlane);
+            auto& vd = camera.currentViewData;
+            float tanHalfFov = glm::tan(vd.fovRadians * 0.5f);
+            glm::mat4 proj(0.0f);
+            proj[0][0] = 1.0f / (vd.aspectRatio * tanHalfFov);
+            proj[1][1] = 1.0f / tanHalfFov;
+            proj[2][3] = -1.0f;
+            proj[3][2] = vd.nearPlane;
+            vd.proj = proj;
+            // camera.currentViewData.proj = glm::infinitePerspective(camera.currentViewData.fovRadians, camera.currentViewData.aspectRatio, camera.currentViewData.farPlane);
         }
     }
 }
@@ -187,8 +195,8 @@ void BuildPortalViewFamily(Engine::EngineState* state, Core::ViewFamily& mainVie
             portalRenderView.view.currentViewData.cameraUp = portalUp;
             portalRenderView.view.currentViewData.view = glm::lookAt(portalRenderView.view.currentViewData.cameraPos, portalRenderView.view.currentViewData.cameraLookAt,
                                                                      portalRenderView.view.currentViewData.cameraUp);
-            portalRenderView.view.currentViewData.proj = glm::perspective(portalRenderView.view.currentViewData.fovRadians, portalRenderView.view.currentViewData.aspectRatio,
-                                                                          portalRenderView.view.currentViewData.farPlane, portalRenderView.view.currentViewData.nearPlane);
+            portalRenderView.view.currentViewData.proj = glm::infinitePerspective(portalRenderView.view.currentViewData.fovRadians, portalRenderView.view.currentViewData.aspectRatio,
+                                                                          portalRenderView.view.currentViewData.farPlane);
 
             glm::mat3 entryRotation = glm::mat3(sourceMatrix);
             portalRenderView.entryPortalTransform = Transform(entryTransform.translation, entryTransform.rotation, entryTransform.scale);

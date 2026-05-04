@@ -7,13 +7,6 @@ import bindless_declarations;
 
 
 // ==================== Depth Prepass ===============================
-
-float ScreenToViewSpaceDepth(float screenDepth, float depthLinearizeMul, float depthLinearizeAdd) {
-    // Optimization by XeGTAO
-    // https://github.com/GameTechDev/XeGTAO/blob/a5b1686c7ea37788eeb3576b5be47f7c03db532c/Source/Rendering/Shaders/XeGTAO.hlsli#L112
-    return depthLinearizeMul / (depthLinearizeAdd - screenDepth);
-}
-
 float ClampDepth(float depth){
     return clamp( depth, 0.0, 65504.0);
 }

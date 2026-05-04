@@ -41,7 +41,20 @@ static Core::ViewData BuildViewData(glm::vec3 cameraPos, glm::vec3 focusPoint, f
     vd.nearPlane = 0.1f;
     vd.farPlane = 100.0f;
     vd.view = glm::lookAt(vd.cameraPos, vd.cameraLookAt, vd.cameraUp);
-    vd.proj = glm::perspective(vd.fovRadians, vd.aspectRatio, vd.farPlane, vd.nearPlane);
+
+    float tanHalfFov = glm::tan(vd.fovRadians * 0.5f);
+    glm::mat4 proj(0.0f);
+    proj[0][0] = 1.0f / (vd.aspectRatio * tanHalfFov);
+    proj[1][1] = 1.0f / tanHalfFov;
+    proj[2][3] = -1.0f;
+    proj[3][2] = vd.nearPlane;
+    vd.proj = proj;
+    // glm::mat4 mat(0.0f);
+    // mat[0][0] = 1.0f / (aspect * tanHalfFov);
+    // mat[1][1] = 1.0f / tanHalfFov;
+    // mat[2][3] = -1.0f;
+    // mat[3][2] = near;
+    // vd.proj = glm::infinitePerspective(vd.fovRadians, vd.aspectRatio, vd.farPlane);
     return vd;
 }
 
