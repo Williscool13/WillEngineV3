@@ -835,7 +835,8 @@ namespace IMGUIZMO_NAMESPACE
       const float moy = (1.f - ((io.MousePos.y - position.y) / size.y)) * 2.f - 1.f;
 
       const float zNear = gContext.mReversed ? (1.f - FLT_EPSILON) : 0.f;
-      const float zFar = gContext.mReversed ? 0.f : (1.f - FLT_EPSILON);
+      //const float zFar = gContext.mReversed ? 0.f : (1.f - FLT_EPSILON);
+      const float zFar = gContext.mReversed ? FLT_EPSILON : (1.f - FLT_EPSILON);
 
       rayOrigin.Transform(makeVect(mox, moy, zNear, 1.f), mViewProjInverse);
       rayOrigin *= 1.f / rayOrigin.w;
@@ -1101,7 +1102,8 @@ namespace IMGUIZMO_NAMESPACE
        nearPos.Transform(makeVect(0, 0, 1.f, 1.f), gContext.mProjectionMat);
        farPos.Transform(makeVect(0, 0, 2.f, 1.f), gContext.mProjectionMat);
 
-       gContext.mReversed = (nearPos.z/nearPos.w) > (farPos.z / farPos.w);
+       // gContext.mReversed = (nearPos.z/nearPos.w) > (farPos.z / farPos.w);
+       gContext.mReversed = true;
 
       // compute scale from the size of camera right vector projected on screen at the matrix position
       vec_t pointRight = viewInverse.v.right;
