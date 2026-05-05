@@ -37,7 +37,7 @@ void MemoryManager::Init(const Layout& layout)
 
     tlsfPersistent.Init(cursor, persistentSz, true);
     cursor += persistentSz;
-    tlsfGeneral.Init(cursor, generalSz, false);
+    tlsfGeneral.Init(cursor, generalSz, true);
     cursor += generalSz;
     tlsfAssets.Init(cursor, assetsSz, true);
     cursor += assetsSz;

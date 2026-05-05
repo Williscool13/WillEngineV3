@@ -384,6 +384,9 @@ void PipelineManager::RegisterPipelines()
     RegisterComputePipeline("default_toon"_sid, src / "lighting_toon_compute.spv",
                             sizeof(LightingResolvePushConstant), PipelineCategory::Critical);
     lightingPipelines.PushBack("default_toon"_sid);
+    RegisterComputePipeline("default_unlit"_sid, src / "lighting_unlit_compute.spv",
+                            sizeof(LightingResolvePushConstant), PipelineCategory::Critical);
+    lightingPipelines.PushBack("default_unlit"_sid);
 
 
 

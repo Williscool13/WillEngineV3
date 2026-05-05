@@ -325,6 +325,8 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
     ReadbackStruct* readbackData = renderGraph->GetReadbackData();
     frameBuffer.stableIdUnderCursor = readbackData->selectedStableId;
 
+    SanitizeViewFamily(viewFamily, pipelineManager, &memoryManager->RenderArena());
+    PrepareRenderFamily(viewFamily);
     RenderFamilyProperties renderFamilyProperties = PrepareRenderFamilyProperties(viewFamily, readbackData, pipelineManager, frameResourceLimits);
     renderFamilyProperties.bWireframe = frameBuffer.bWireframe;
 

@@ -4,7 +4,7 @@
 
 #include "render_view_helpers.h"
 
-#include "core/containers/inline_set.h"
+#include "core/containers/arena_fixed_map.h"
 #include "core/math/math_helpers.h"
 #include "render/interface/render_interface.h"
 #include "render/frame_resources.h"
@@ -114,6 +114,41 @@ SceneData GenerateSceneData(const Core::RenderView& view, Core::AntiAliasingMode
 
     return sceneData;
 }
+
+void SanitizeViewFamily(Core::ViewFamily& viewFamily, PipelineManager* pipelineManager, Core::Arena* arena)
+{
+    // Verify that shading and lighting shaders exist. If not use the default error unlit
+    Core::ArenaFixedMap<StringID, bool> pipelineExists{arena, 1024};
+    auto checkExists = [&](StringID id) -> bool {
+        if (const bool* cached = pipelineExists.Find(id)) { return *cached; }
+        bool exists = pipelineManager->GetPipelineEntry(id) != nullptr;
+        pipelineExists.Insert(id, exists);
+        return exists;
+    };
+
+    for (Engine::RenderMaterial& mat : viewFamily.materials) {
+        bool fragOk = checkExists(mat.fragmentShader);
+        bool lightOk = checkExists(mat.lightingShader);
+        if (!fragOk || !lightOk) {
+            mat.fragmentShader = "error_unlit"_sid;
+            mat.lightingShader = "default_unlit"_sid;
+        }
+    }
+}
+
+void PrepareRenderFamily(Core::ViewFamily& viewFamily)
+{
+    uint32_t runningLightingBucketIndex{0};
+    for (size_t i = 0; i < viewFamily.materials.Size(); ++i) {
+        Engine::RenderMaterial& mat = viewFamily.materials[i];
+
+        auto [lightingVal, lightingInserted] = viewFamily.lightingBuckets.TryEmplace(mat.lightingShader, runningLightingBucketIndex);
+        if (lightingInserted) {
+            runningLightingBucketIndex++;
+        }
+    }
+}
+
 
 RenderFamilyProperties PrepareRenderFamilyProperties(Core::ViewFamily& viewFamily, ReadbackStruct* readbackData, PipelineManager* _pipelineManager, FrameResourceLimits& _limits)
 {

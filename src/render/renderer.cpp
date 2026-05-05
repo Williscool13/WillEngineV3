@@ -660,12 +660,12 @@ void SetupVisibilityShadingPass(RenderGraph& graph,
 
     struct MaterialEntry
     {
-        uint32_t materialIndex;
-        StringID fragmentShader;
+        uint32_t materialIndex{};
+        StringID fragmentShader{};
     };
 
-    const uint32_t materialCount = static_cast<uint32_t>(viewFamily.materials.Size());
-    MaterialEntry* sortedMaterials = arena.AllocArray<MaterialEntry>(materialCount);
+    const auto materialCount = static_cast<uint32_t>(viewFamily.materials.Size());
+    auto* sortedMaterials = arena.AllocArray<MaterialEntry>(materialCount);
     for (uint32_t i = 0; i < materialCount; ++i) {
         sortedMaterials[i] = {i, viewFamily.materials[i].fragmentShader};
     }
@@ -705,10 +705,7 @@ void SetupVisibilityShadingPass(RenderGraph& graph,
 
                 if (entry.fragmentShader != boundShader) {
                     pipelineEntry = pipelineManager->GetPipelineEntry(entry.fragmentShader);
-                    if (!pipelineEntry) {
-                        pipelineEntry = pipelineManager->GetPipelineEntry(SID("error_unlit"));
-                    }
-                    if (!pipelineEntry) { continue; }
+                    assert(pipelineEntry && "Pipeline missing even after sanitization");
                     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                     boundShader = entry.fragmentShader;
                 }
