@@ -326,7 +326,8 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/shading/shading_error_unlit.slang compute ComputeMain shading_error_unlit
         #   "Lighting Shaders"
         ${CMAKE_SOURCE_DIR}/shaders/lighting/lighting_pbr.slang compute ComputeMain lighting_pbr
-        # ${CMAKE_SOURCE_DIR}/shaders/lighting/lighting_unlit.slang compute ComputeShadeDispatchBucketingResolve visibility_bucketing_resolve
+        ${CMAKE_SOURCE_DIR}/shaders/lighting/lighting_toon.slang compute ComputeMain lighting_toon
+
 
 
 

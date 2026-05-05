@@ -410,6 +410,8 @@ SHADER_PUBLIC struct SHADER_ALIGN LightingResolvePushConstant
     SHADER_PUBLIC SHADER_PTR(ShadowData) shadowData;
     SHADER_PUBLIC SHADER_PTR(LightData) lightData;
     SHADER_PUBLIC SHADER_PTR(LightingDispatchParameters) lightDispatchBuffer;
+    SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
+    SHADER_PUBLIC uint32_t visibilityBufferIndex;
     SHADER_PUBLIC uint32_t gbufferOneIndex;
     SHADER_PUBLIC uint32_t gbufferTwoIndex;
     SHADER_PUBLIC uint32_t depthIndex;
@@ -417,7 +419,7 @@ SHADER_PUBLIC struct SHADER_ALIGN LightingResolvePushConstant
     SHADER_PUBLIC int32_t skyboxIndex;
     SHADER_PUBLIC uint32_t outputImageIndex;
     SHADER_PUBLIC uint32_t sceneDataIndex;
-    SHADER_PUBLIC uint32_t lightingBucketIndex;
+    SHADER_PUBLIC uint32_t lightingIndex;
 };
 
 SHADER_PUBLIC struct SHADER_ALIGN DeferredResolvePushConstant

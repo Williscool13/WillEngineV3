@@ -858,7 +858,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
     }
     lightingResolve.WriteStorageImage(targets.output);
     lightingResolve.Execute([&, pipelineManager, sceneIndex,
-            gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
+            visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             depth = targets.depthStencil, shadows = targets.shadows,
             output = targets.output, skyboxIndex = viewFamily.skyboxIndex,
             buckets, lightingCount](VkCommandBuffer cmd) {
@@ -877,6 +877,8 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                     .shadowData = graph.GetBufferAddress(SHADOW_DATA_BUFFER),
                     .lightData = graph.GetBufferAddress(SID("light_data")),
                     .lightDispatchBuffer = lightDispatchAddress,
+                    .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
+                    .visibilityBufferIndex = graph.GetSampledImageViewDescriptorIndex(visibility),
                     .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                     .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
                     .depthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(depth),
@@ -884,7 +886,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                     .skyboxIndex = skyboxIndex,
                     .outputImageIndex = graph.GetStorageImageViewDescriptorIndex(output),
                     .sceneDataIndex = sceneIndex,
-                    .lightingBucketIndex = entry.bucketIndex,
+                    .lightingIndex = entry.bucketIndex,
                 };
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(LIGHTING_DISPATCH_BUCKETING_BUFFER),

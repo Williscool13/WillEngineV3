@@ -30,6 +30,7 @@ struct VisibilityShadingTargets
 
 struct DeferredResolveTargets
 {
+    StringID visibility; // in
     StringID gbufferOne; // in: R=normal oct16, G=velocity, B=pbr
     StringID gbufferTwo; // in: R=albedo, G=emissive
     StringID depthStencil; // in

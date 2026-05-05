@@ -87,7 +87,7 @@ struct ShadowConfiguration
     float splitOverlap = 1.10f;
     Render::ShadowCascadePreset cascadePreset = Render::SHADOW_PRESETS[static_cast<uint32_t>(ShadowQuality::Medium)];
     float shadowIntensity = 0.0f; // lower is darker
-    bool enabled = true;
+    bool enabled = false;
 };
 
 struct DirectionalLight

@@ -24,7 +24,7 @@ void ComputeMain(uniform ShadowsResolvePushConstant pc, uint3 threadID : SV_Disp
     float3 N = normalize(viewNormal);
 
     // CSM shadow factor
-    float shadowFactor;
+    float shadowFactor = 1.0f;
     if (any(pc.csmIndices == int4(-1, -1, -1, -1))) {
         shadowFactor = 1.0f;
     } else {

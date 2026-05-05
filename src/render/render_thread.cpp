@@ -463,6 +463,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             SetupShadowsResolve(*renderGraph, pipelineManager, viewFamily, renderExtent, mainTargets, 0);
 
             DeferredResolveTargets deferredResolveTargets{
+                .visibility = targets.visibility,
                 .gbufferOne = visShadingTargets.gbufferOne,
                 .gbufferTwo = visShadingTargets.gbufferTwo,
                 .depthStencil = targets.depthStencil,
@@ -1277,10 +1278,13 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
     for (size_t i = 0; i < viewFamily.mainPassInstances.Size(); ++i) {
         auto& inst = viewFamily.mainPassInstances[i];
         uint32_t materialIndex = viewFamily.activeMaterials[inst.materialID];
+        Engine::RenderMaterial& mat = viewFamily.materials[materialIndex];
+        uint32_t lightingIndex = viewFamily.lightingBuckets[mat.lightingShader];
         instanceBuffer[i] = {
             .primitiveIndex = inst.primitiveIndex,
             .modelIndex = inst.modelIndex,
             .materialIndex = materialIndex,
+            .lightingIndex = lightingIndex,
             .stableId = inst.stableId,
         };
     }
