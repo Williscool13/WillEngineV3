@@ -3,6 +3,7 @@ import constants_interop;
 import model_interop;
 import push_constant_interop;
 
+import shader_constants;
 import bindless_declarations;
 
 // ==================== Compute Shader ====================
@@ -135,6 +136,13 @@ void ComputeShadeDispatchBucketingResolve(uint3 dtid : SV_DispatchThreadID, unif
     }
 
     ShadeDispatchParameters dispatchParams = pc.shadeDispatchBuffer[materialIndex];
+    if (dispatchParams.minX == UINT32_MAX) {
+        pc.shadeDispatchBuffer[materialIndex].xDispatch = 0;
+        pc.shadeDispatchBuffer[materialIndex].yDispatch = 0;
+        pc.shadeDispatchBuffer[materialIndex].zDispatch = 0;
+        return;
+    }
+
     uint32_t width = dispatchParams.maxX - dispatchParams.minX;
     uint32_t height = dispatchParams.maxY - dispatchParams.minY;
 
@@ -154,10 +162,45 @@ void ComputeLightDispatchBucketingResolve(uint3 dtid : SV_DispatchThreadID, unif
     }
 
     LightingDispatchParameters dispatchParams = pc.lightDispatchBuffer[lightingIndex];
+    if (dispatchParams.minX == UINT32_MAX) {
+        pc.lightDispatchBuffer[lightingIndex].xDispatch = 0;
+        pc.lightDispatchBuffer[lightingIndex].yDispatch = 0;
+        pc.lightDispatchBuffer[lightingIndex].zDispatch = 0;
+        return;
+    }
+
     uint32_t width = dispatchParams.maxX - dispatchParams.minX;
     uint32_t height = dispatchParams.maxY - dispatchParams.minY;
 
     pc.lightDispatchBuffer[lightingIndex].xDispatch = (width + 15) / 16;
     pc.lightDispatchBuffer[lightingIndex].yDispatch = (height + 15) / 16;
     pc.lightDispatchBuffer[lightingIndex].zDispatch = 1;
+}
+
+// ==================== Compute Shader ====================
+[shader("compute")]
+[numthreads(256, 1, 1)]
+void ComputeBucketDispatchCount(uint3 dtid : SV_DispatchThreadID, uniform BucketDispatchCountPushConstant pc)
+{
+    uint32_t shadeActive = 0;
+    if (dtid.x < pc.materialCount) {
+        shadeActive = (pc.shadeDispatchBuffer[dtid.x].xDispatch > 0) ? 1 : 0;
+    }
+
+    uint32_t lightActive = 0;
+    if (dtid.x < pc.lightingCount) {
+        lightActive = (pc.lightDispatchBuffer[dtid.x].xDispatch > 0) ? 1 : 0;
+    }
+
+    uint32_t waveShadeCount = WaveActiveCountBits(shadeActive != 0);
+    uint32_t waveLightCount = WaveActiveCountBits(lightActive != 0);
+
+    if (WaveIsFirstLane()) {
+        if (waveShadeCount > 0) {
+            InterlockedAdd(pc.countBuffer[0], waveShadeCount);
+        }
+        if (waveLightCount > 0) {
+            InterlockedAdd(pc.countBuffer[1], waveLightCount);
+        }
+    }
 }

@@ -6,6 +6,18 @@
 #define WILL_ENGINE_RENDERER_TYPES_H
 #include "core/string_id.h"
 
+struct RendererStatistics
+{
+    uint64_t clippingInvocations{};
+    uint64_t clippingPrimitives{};
+    uint64_t fragmentInvocations{};
+    uint64_t computeInvocations{};
+    /**
+     * Optional, depends on driver support. Will be ~0x0 if invalid.
+     */
+    uint64_t meshInvocations{};
+};
+
 struct VisibilityBufferTargets
 {
     StringID visibility;

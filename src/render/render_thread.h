@@ -5,15 +5,15 @@
 #ifndef WILLENGINEV3_RENDER_THREAD_H
 #define WILLENGINEV3_RENDER_THREAD_H
 
-#include <array>
 #include <atomic>
 
 #include "core/containers/vector.h"
 #include "frame_resources.h"
 #include "asset-load/async_asset_load_manager.h"
 #include "core/containers/array.h"
-#include "core/containers/inline_path.h"
 #include "interface/render_interface.h"
+#include "render/renderer_statistics.h"
+#include "render/vulkan/vk_pipeline_stats.h"
 #include "render/vulkan/vk_resources.h"
 #include "render/vulkan/vk_synchronization.h"
 #include "systems/render_screen_capture.h"
@@ -106,6 +106,7 @@ public:
     VulkanContext* GetVulkanContext() const { return context; }
     ResourceManager* GetResourceManager() const { return resourceManager; }
     PipelineManager* GetPipelineManager() const { return pipelineManager; }
+    RendererStatistics GetRendererStatistics() { return statisticsManager.GetPublished(); }
 
 private:
     void UploadFrameUniforms(const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, float renderDeltaTime) const;
@@ -150,6 +151,8 @@ private:
     RenderGraph* renderGraph{};
 
     Core::Array<RenderSynchronization, Core::FRAME_BUFFER_COUNT> frameSynchronization;
+    PipelineStatsQueryPool pipelineStatsQuery{};
+    RendererStatisticsManager statisticsManager{};
 
     Core::Vector<VkBufferMemoryBarrier2> tempBufferBarriers;
     Core::Vector<VkImageMemoryBarrier2> tempImageBarriers;

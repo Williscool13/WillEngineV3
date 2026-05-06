@@ -319,6 +319,7 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/visibility_bucketing.slang compute ComputeShadeDispatchBucketing visibility_bucketing_bounds_calculation
         ${CMAKE_SOURCE_DIR}/shaders/visibility_bucketing.slang compute ComputeShadeDispatchBucketingResolve visibility_shading_bucketing_resolve
         ${CMAKE_SOURCE_DIR}/shaders/visibility_bucketing.slang compute ComputeLightDispatchBucketingResolve visibility_lighting_bucketing_resolve
+        ${CMAKE_SOURCE_DIR}/shaders/visibility_bucketing.slang compute ComputeBucketDispatchCount bucketing_dispatch_count
         #   "Fragment Shaders"
         ${CMAKE_SOURCE_DIR}/shaders/shading/shading_bucket_visualize.slang compute ComputeMain shading_bucket_visualize
         ${CMAKE_SOURCE_DIR}/shaders/shading/lighting_bucket_visualize.slang compute ComputeMain lighting_bucket_visualize

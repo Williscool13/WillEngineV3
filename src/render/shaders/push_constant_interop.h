@@ -322,6 +322,15 @@ SHADER_PUBLIC struct LightingBucketingResolvePushConstant
     SHADER_PUBLIC uint32_t lightingCount;
 };
 
+SHADER_PUBLIC struct BucketDispatchCountPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(ShadeDispatchParameters) shadeDispatchBuffer;    // in
+    SHADER_PUBLIC SHADER_PTR(LightingDispatchParameters) lightDispatchBuffer; // in
+    SHADER_PUBLIC SHADER_PTR(uint32_t) countBuffer;                           // out: [shadingActive, lightingActive]
+    SHADER_PUBLIC uint32_t materialCount;
+    SHADER_PUBLIC uint32_t lightingCount;
+};
+
 SHADER_PUBLIC struct LightingBucketVisualizePushConstant
 {
     SHADER_PUBLIC SHADER_PTR(LightingDispatchParameters) lightDispatchBuffer; // in

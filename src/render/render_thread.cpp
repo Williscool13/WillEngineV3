@@ -78,6 +78,7 @@ RenderThread::RenderThread(Core::MemoryManager& memoryManager, Core::FrameSync* 
 
     renderGraph = new(memoryManager.RenderAllocRaw(sizeof(RenderGraph))) RenderGraph(context, resourceManager, renderAlloc, memoryManager.RenderArena());
     screenCapture = new(memoryManager.RenderAllocRaw(sizeof(RenderScreenCapture))) RenderScreenCapture(context, scheduler, memoryManager.AssetsScratch());
+    pipelineStatsQuery.Init(context);
 #if WILL_EDITOR
     RegisterDebugReadbacks();
 #endif
@@ -85,6 +86,7 @@ RenderThread::RenderThread(Core::MemoryManager& memoryManager, Core::FrameSync* 
 
 RenderThread::~RenderThread()
 {
+    pipelineStatsQuery.Destroy(context->device);
     screenCapture->~RenderScreenCapture();
 
     for (auto& sync : frameSynchronization) {
@@ -223,11 +225,18 @@ void RenderThread::RenderFrame(uint32_t currentFrameIndex, RenderSynchronization
         VK_CHECK(vkResetFences(context->device, 1, &renderSync.renderFence));
     }
 
+    const PipelineStatsResults pipelineStats = pipelineStatsQuery.Collect(context->device, currentFrameIndex);
+    statisticsManager.scratch.clippingInvocations = pipelineStats.clippingInvocations;
+    statisticsManager.scratch.clippingPrimitives  = pipelineStats.clippingPrimitives;
+    statisticsManager.scratch.fragmentInvocations = pipelineStats.fragmentInvocations;
+    statisticsManager.scratch.computeInvocations  = pipelineStats.computeInvocations;
+    statisticsManager.scratch.meshInvocations     = pipelineStats.meshInvocations;
     screenCapture->ResolveScreenshot(currentFrameIndex);
 
     VK_CHECK(vkResetCommandBuffer(renderSync.commandBuffer, 0));
     VkCommandBufferBeginInfo beginInfo = VkHelpers::CommandBufferBeginInfo();
     VK_CHECK(vkBeginCommandBuffer(renderSync.commandBuffer, &beginInfo));
+    pipelineStatsQuery.Begin(renderSync.commandBuffer, currentFrameIndex);
 
 #ifdef ENABLE_VULKAN_VALIDATION
     VkDebugUtilsObjectNameInfoEXT nameInfo{VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT};
@@ -246,6 +255,9 @@ void RenderThread::RenderFrame(uint32_t currentFrameIndex, RenderSynchronization
         ProcessAcquisitions(renderSync.commandBuffer, frameBuffer.bufferAcquireOperations, frameBuffer.imageAcquireOperations);
         res = RecordFrame(currentFrameIndex, renderSync.commandBuffer, renderSync.swapchainSemaphore, frameBuffer);
     }
+    // ends if not already ended
+    pipelineStatsQuery.End(renderSync.commandBuffer, currentFrameIndex);
+    statisticsManager.Publish();
     TracyVkCollect(context->tracyContext, renderSync.commandBuffer);
     VK_CHECK(vkEndCommandBuffer(renderSync.commandBuffer));
 
@@ -324,6 +336,9 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
     Core::ViewFamily& viewFamily = frameBuffer.mainViewFamily;
     ReadbackStruct* readbackData = renderGraph->GetReadbackData();
     frameBuffer.stableIdUnderCursor = readbackData->selectedStableId;
+    statisticsManager.scratch.visibleMeshletCount = readbackData->meshletCount;
+    statisticsManager.scratch.shadingDispatches   = readbackData->shadingDispatches;
+    statisticsManager.scratch.lightingDispatches  = readbackData->lightingDispatches;
 
     SanitizeViewFamily(viewFamily, pipelineManager, &memoryManager->RenderArena());
     PrepareRenderFamily(viewFamily);
@@ -669,7 +684,10 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
     if (frameBuffer.bDrawImgui) {
         auto& imguiEditorPass = renderGraph->AddPass(SID("Imgui Draw"), VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT);
         imguiEditorPass.WriteColorAttachment(SID("swapchain_image"));
-        imguiEditorPass.Execute([&](VkCommandBuffer _cmd) {
+        imguiEditorPass.Execute([&, frameIndex](VkCommandBuffer _cmd) {
+            // Try to end before imgui draws so they're not included in statistics
+            pipelineStatsQuery.End(_cmd, frameIndex);
+
             const VkRenderingAttachmentInfo imguiAttachment = VkHelpers::RenderingAttachmentInfo(renderGraph->GetImageViewHandle(SID("swapchain_image")), nullptr,
                                                                                                  VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
             const ResourceDimensions& dims = renderGraph->GetImageDimensions(SID("swapchain_image"));

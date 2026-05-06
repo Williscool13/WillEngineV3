@@ -618,6 +618,18 @@ void WillEngine::EditorImgui()
             bLogRDG = false;
         }
 
+        if (ImGui::CollapsingHeader("Renderer Statistics")) {
+            const Render::RendererStatistics stats = renderThread->GetRendererStatistics();
+            ImGui::Text("Visible Meshlets:            %u",  stats.visibleMeshletCount);
+            ImGui::Text("Shading Dispatches:          %u",  stats.shadingDispatches);
+            ImGui::Text("Lighting Dispatches:         %u",  stats.lightingDispatches);
+            ImGui::Separator();
+            ImGui::Text("Mesh Invocations:            %llu", stats.meshInvocations);
+            ImGui::Text("Fragment Invocations:        %.2f M", static_cast<double>(stats.fragmentInvocations) / 1'000'000.0);
+            ImGui::Text("Compute Invocations:         %.2f M", static_cast<double>(stats.computeInvocations) / 1'000'000.0);
+            ImGui::Text("Clipping Invocations:        %llu", stats.clippingInvocations);
+            ImGui::Text("Clipping Primitives:         %llu", stats.clippingPrimitives);
+        }
         renderThread->GetResourceManager()->debugReadback.Present();
     }
 

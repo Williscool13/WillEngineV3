@@ -360,6 +360,8 @@ void PipelineManager::RegisterPipelines()
                             sizeof(ShadeBucketingResolvePushConstant), PipelineCategory::Critical);
     RegisterComputePipeline("visibility_lighting_bucketing_resolve"_sid, src / "visibility_lighting_bucketing_resolve_compute.spv",
                             sizeof(LightingBucketingResolvePushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline("bucketing_dispatch_count"_sid, src / "bucketing_dispatch_count_compute.spv",
+                            sizeof(BucketDispatchCountPushConstant), PipelineCategory::Critical);
 
     RegisterComputePipeline("shading_bucket_visualize"_sid, src / "shading_bucket_visualize_compute.spv",
                             sizeof(VisibilityShadingPushConstant), PipelineCategory::Critical);

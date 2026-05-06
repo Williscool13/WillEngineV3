@@ -197,6 +197,7 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
         VkPhysicalDevice selected = VK_NULL_HANDLE;
         bool selectedIsDiscrete = false;
         bool selectedMaintenance9 = false;
+        bool selectedMeshShaderQueries = false;
         uint32_t selectedGraphicsFamily = UINT32_MAX;
         uint32_t selectedTransferFamily = UINT32_MAX;
 
@@ -339,6 +340,7 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
                 selectedGraphicsFamily = graphicsFamily;
                 selectedTransferFamily = transferFamily;
                 selectedMaintenance9 = hasMaintenance9;
+                selectedMeshShaderQueries = static_cast<bool>(qMesh.meshShaderQueries);
                 selectedIsDiscrete = isDiscrete;
             }
         }
@@ -352,6 +354,7 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
         graphicsQueueFamily = selectedGraphicsFamily;
         transferQueueFamily = selectedTransferFamily;
         bMaintenance9Enabled = selectedMaintenance9;
+        bMeshShaderQueriesEnabled = selectedMeshShaderQueries;
     }
 
     // --- Logical Device ---
@@ -382,6 +385,7 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
 
         // GPU Driven Rendering (core)
         features10.multiDrawIndirect = VK_TRUE;
+        features10.pipelineStatisticsQuery = VK_TRUE;
 
         // Shader types (core)
         features10.shaderInt16 = VK_TRUE;
@@ -401,6 +405,9 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
         descriptorBufferFeatures.descriptorBuffer = VK_TRUE;
         meshShaderFeatures.taskShader = VK_TRUE;
         meshShaderFeatures.meshShader = VK_TRUE;
+        if (bMeshShaderQueriesEnabled) {
+            meshShaderFeatures.meshShaderQueries = VK_TRUE;
+        }
         extendedDynamicState3Features.extendedDynamicState3PolygonMode = VK_TRUE;
         if (bMaintenance9Enabled) {
             maintenance9Features.maintenance9 = VK_TRUE;

@@ -646,6 +646,26 @@ void SetupVisibilityBucketingPass(RenderGraph& graph,
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         vkCmdDispatch(cmd, (lightingCount + 255) / 256, 1, 1);
     });
+
+    RenderPass& dispatchCountPass = graph.AddPass(SID("Bucket Dispatch Count"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+    dispatchCountPass.ReadBuffer(SHADING_DISPATCH_BUCKETING_BUFFER);
+    dispatchCountPass.ReadBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER);
+    dispatchCountPass.ReadWriteBuffer(SID("readback_buffer"));
+    dispatchCountPass.Execute([&, pipelineManager,
+            materialCount = static_cast<uint32_t>(viewFamily.materials.Size()),
+            lightingCount = static_cast<uint32_t>(viewFamily.lightingBuckets.Size())](VkCommandBuffer cmd) {
+        BucketDispatchCountPushConstant pc{
+            .shadeDispatchBuffer = graph.GetBufferAddress(SHADING_DISPATCH_BUCKETING_BUFFER),
+            .lightDispatchBuffer = graph.GetBufferAddress(LIGHTING_DISPATCH_BUCKETING_BUFFER),
+            .countBuffer         = graph.GetBufferAddress(SID("readback_buffer")) + offsetof(ReadbackStruct, shadingDispatches),
+            .materialCount       = materialCount,
+            .lightingCount       = lightingCount,
+        };
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("bucketing_dispatch_count"));
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+        vkCmdDispatch(cmd, 1, 1, 1);
+    });
 }
 
 void SetupVisibilityShadingPass(RenderGraph& graph,

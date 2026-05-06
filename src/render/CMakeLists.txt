@@ -78,6 +78,8 @@ add_library(render STATIC
         renderer_types.h
         render_utils.h
         render_utils.cpp
+        vulkan/vk_pipeline_stats.cpp
+        vulkan/vk_pipeline_stats.h
 )
 
 target_include_directories(render PRIVATE
