@@ -99,9 +99,11 @@ struct DirectionalLight
 
 struct PostProcessConfiguration
 {
+    bool bExposureEnabled{true};
     float exposureTargetLuminance{0.18f};
     float exposureAdaptationRate{16.0f};
 
+    bool bBloomEnabled{true};
     float bloomThreshold{1.0f};
     float bloomSoftThreshold{0.5f};
     float bloomRadius{1.0f};
@@ -112,24 +114,31 @@ struct PostProcessConfiguration
     float motionBlurVelocityScale{0.8f};
     float motionBlurDepthScale{50.0f};
 
+    bool bColorGradingEnabled{true};
     float colorGradingExposure = 0.0f;
     float colorGradingContrast = 1.0f;
     float colorGradingSaturation = 1.0f;
     float colorGradingTemperature = 0.0f;
     float colorGradingTint = 0.0f;
 
+    bool bVignetteAberrationEnabled{true};
     float chromaticAberrationStrength{1.5f};
-
     float vignetteStrength{0.2f};
     float vignetteRadius{0.8f};
     float vignetteSmoothness{0.5f};
 
+    bool bSharpeningEnabled{true};
+    float sharpeningStrength{0.4f};
+
+    bool bPaniniEnabled{false};
+    float paniniStrength{0.0f};
+
+    bool bFilmGrainEnabled{true};
     float grainStrength{0.01f};
     float grainSize{1.5f};
 
-    float sharpeningStrength{0.4f};
-
-    float paniniStrength{0.0f};
+    bool bDitherEnabled{true};
+    float ditherStrength{1.0f};
 };
 
 enum class AntiAliasingMode
@@ -291,9 +300,6 @@ struct ViewFamily
     ViewFamily(ViewFamily&&) = default;
     ViewFamily& operator=(ViewFamily&&) = default;
 
-
-    CustomShaderDraw& GetOrCreateCustomShaderDraw(StringID id);
-
     // To allocate containers. Nothing else.
     TlsfAllocator* allocator{nullptr};
 
@@ -301,8 +307,7 @@ struct ViewFamily
     FixedVector<PortalView> portalViews{};
 
     // todo: should contain all instances. Pipeline choice will be embedded in material
-    Vector<InstanceData> mainPassInstances{};
-    Map<StringID, CustomShaderDraw> customShaderDraws{};
+    Vector<InstanceData> instances{};
 
     Vector<Model> modelMatrices{};
     /**

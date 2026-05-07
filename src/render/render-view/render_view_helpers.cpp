@@ -154,20 +154,10 @@ RenderFamilyProperties PrepareRenderFamilyProperties(Core::ViewFamily& viewFamil
 {
     RenderFamilyProperties renderFamilyProperties{};
     renderFamilyProperties.viewFamily = &viewFamily;
-    bool bHasGeometry = !viewFamily.mainPassInstances.IsEmpty();
-    if (!bHasGeometry) {
-        for (const auto& [key, customDraw] : viewFamily.customShaderDraws) {
-            if (!customDraw.instances.IsEmpty()) {
-                bHasGeometry = true;
-                break;
-            }
-        }
-    }
-
     renderFamilyProperties.bCanRender = _pipelineManager->IsCategoryReady(PipelineCategory::Critical);
 
-    if (!viewFamily.mainPassInstances.IsEmpty()) {
-        std::ranges::sort(viewFamily.mainPassInstances, [](const Core::InstanceData& a, const Core::InstanceData& b) {
+    if (!viewFamily.instances.IsEmpty()) {
+        std::ranges::sort(viewFamily.instances, [](const Core::InstanceData& a, const Core::InstanceData& b) {
             return a.primitiveIndex < b.primitiveIndex;
         });
     }
@@ -177,10 +167,7 @@ RenderFamilyProperties PrepareRenderFamilyProperties(Core::ViewFamily& viewFamil
     _limits.highestMaterialCount = std::max(_limits.highestMaterialCount, NextPowerOfTwo(viewFamily.materials.Size()));
     _limits.highestLightingCount = std::max(_limits.highestLightingCount, NextPowerOfTwo(viewFamily.lightingBuckets.Size()));
 
-    uint32_t totalInstanceCountThisFrame = viewFamily.mainPassInstances.Size();
-    for (const auto& [key, customDraw] : viewFamily.customShaderDraws) {
-        totalInstanceCountThisFrame += customDraw.instances.Size();
-    }
+    uint32_t totalInstanceCountThisFrame = viewFamily.instances.Size();
     _limits.highestInstanceCount = std::max(_limits.highestInstanceCount, NextPowerOfTwo(totalInstanceCountThisFrame));
     _limits.highestMeshletCount = std::max(_limits.highestMeshletCount, NextPowerOfTwo(readbackData->meshletCount));
 

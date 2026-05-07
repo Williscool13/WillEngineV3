@@ -370,6 +370,7 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/post-process/sharpening.slang compute ComputeSharpening sharpening
         ${CMAKE_SOURCE_DIR}/shaders/post-process/color_grading.slang compute ComputeColorGrading color_grading
         ${CMAKE_SOURCE_DIR}/shaders/post-process/panini_projection.slang compute ComputePaniniProjection panini_projection
+        ${CMAKE_SOURCE_DIR}/shaders/post-process/dither.slang compute ComputeDither dither
 
         ${CMAKE_SOURCE_DIR}/shaders/common_shaders.slang vertex FullscreenPassVertexMain fullscreen_pass
 

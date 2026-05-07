@@ -1483,12 +1483,14 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
         if (ImGui::Button("Disable All Effects")) {
             state->lighting.aaMode = Core::AntiAliasingMode::None;
             state->lighting.postProcess.tonemapOperator = -1;
-            state->lighting.postProcess.bloomIntensity = 0.0f;
-            state->lighting.postProcess.motionBlurVelocityScale = 0.0f;
-            state->lighting.postProcess.chromaticAberrationStrength = 0.0f;
-            state->lighting.postProcess.vignetteStrength = 0.0f;
-            state->lighting.postProcess.grainStrength = 0.0f;
-            state->lighting.postProcess.sharpeningStrength = 0.0f;
+            state->lighting.postProcess.bExposureEnabled = false;
+            state->lighting.postProcess.bBloomEnabled = false;
+            state->lighting.postProcess.bColorGradingEnabled = false;
+            state->lighting.postProcess.bVignetteAberrationEnabled = false;
+            state->lighting.postProcess.bSharpeningEnabled = false;
+            state->lighting.postProcess.bPaniniEnabled = false;
+            state->lighting.postProcess.bFilmGrainEnabled = false;
+            state->lighting.postProcess.bDitherEnabled = false;
         }
 
         ImGui::Spacing();
@@ -1530,6 +1532,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
 
         ImGui::Spacing();
         ImGui::SeparatorText("Exposure");
+        ImGui::Checkbox("Enabled##exposure", &state->lighting.postProcess.bExposureEnabled);
         ImGui::SliderFloat("Target Luminance", &state->lighting.postProcess.exposureTargetLuminance, 0.01f, 1.0f, "%.3f");
         ImGui::SliderFloat("Adaptation Speed", &state->lighting.postProcess.exposureAdaptationRate, 0.1f, 50.0f, "%.1f");
         if (ImGui::Button("Reset Exposure")) {
@@ -1537,9 +1540,9 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             state->lighting.postProcess.exposureAdaptationRate = defaultPP.exposureAdaptationRate;
         }
 
-
         ImGui::Spacing();
         ImGui::SeparatorText("Bloom");
+        ImGui::Checkbox("Enabled##bloom", &state->lighting.postProcess.bBloomEnabled);
         ImGui::SliderFloat("Intensity", &state->lighting.postProcess.bloomIntensity, 0.0f, 0.2f, "%.3f");
         ImGui::SliderFloat("Threshold", &state->lighting.postProcess.bloomThreshold, 0.0f, 2.0f, "%.2f");
         ImGui::SliderFloat("Soft Threshold", &state->lighting.postProcess.bloomSoftThreshold, 0.0f, 1.0f, "%.2f");
@@ -1550,10 +1553,6 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             state->lighting.postProcess.bloomSoftThreshold = defaultPP.bloomSoftThreshold;
             state->lighting.postProcess.bloomRadius = defaultPP.bloomRadius;
         }
-        ImGui::SameLine();
-        if (ImGui::Button("Disable Bloom")) {
-            state->lighting.postProcess.bloomIntensity = 0.0f;
-        }
 
         ImGui::Spacing();
         ImGui::SeparatorText("Motion Blur");
@@ -1563,13 +1562,10 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             state->lighting.postProcess.motionBlurVelocityScale = defaultPP.motionBlurVelocityScale;
             state->lighting.postProcess.motionBlurDepthScale = defaultPP.motionBlurDepthScale;
         }
-        ImGui::SameLine();
-        if (ImGui::Button("Disable Motion Blur")) {
-            state->lighting.postProcess.motionBlurVelocityScale = 0.0f;
-        }
 
         ImGui::Spacing();
         ImGui::SeparatorText("Color Grading");
+        ImGui::Checkbox("Enabled##colorgrading", &state->lighting.postProcess.bColorGradingEnabled);
         ImGui::SliderFloat("Exposure Offset", &state->lighting.postProcess.colorGradingExposure, -2.0f, 2.0f, "%.2f");
         ImGui::SliderFloat("Contrast", &state->lighting.postProcess.colorGradingContrast, 0.5f, 2.0f, "%.2f");
         ImGui::SliderFloat("Saturation", &state->lighting.postProcess.colorGradingSaturation, 0.0f, 2.0f, "%.2f");
@@ -1584,64 +1580,51 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
         }
 
         ImGui::Spacing();
-        ImGui::SeparatorText("Chromatic Aberration");
+        ImGui::SeparatorText("Vignette & Chromatic Aberration");
+        ImGui::Checkbox("Enabled##vigab", &state->lighting.postProcess.bVignetteAberrationEnabled);
         ImGui::SliderFloat("Aberration Strength", &state->lighting.postProcess.chromaticAberrationStrength, 0.0f, 100.0f, "%.2f");
-        if (ImGui::Button("Reset Aberration")) {
-            state->lighting.postProcess.chromaticAberrationStrength = defaultPP.chromaticAberrationStrength;
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Disable Aberration")) {
-            state->lighting.postProcess.chromaticAberrationStrength = 0.0f;
-        }
-
-        ImGui::Spacing();
-        ImGui::SeparatorText("Vignette");
         ImGui::SliderFloat("Vignette Strength", &state->lighting.postProcess.vignetteStrength, 0.0f, 1.0f, "%.2f");
         ImGui::SliderFloat("Vignette Radius", &state->lighting.postProcess.vignetteRadius, 0.5f, 1.0f, "%.2f");
         ImGui::SliderFloat("Vignette Smoothness", &state->lighting.postProcess.vignetteSmoothness, 0.1f, 1.0f, "%.2f");
-        if (ImGui::Button("Reset Vignette")) {
+        if (ImGui::Button("Reset Vignette & Aberration")) {
+            state->lighting.postProcess.chromaticAberrationStrength = defaultPP.chromaticAberrationStrength;
             state->lighting.postProcess.vignetteStrength = defaultPP.vignetteStrength;
             state->lighting.postProcess.vignetteRadius = defaultPP.vignetteRadius;
             state->lighting.postProcess.vignetteSmoothness = defaultPP.vignetteSmoothness;
         }
-        ImGui::SameLine();
-        if (ImGui::Button("Disable Vignette")) {
-            state->lighting.postProcess.vignetteStrength = 0.0f;
+
+        ImGui::Spacing();
+        ImGui::SeparatorText("Sharpening");
+        ImGui::Checkbox("Enabled##sharpening", &state->lighting.postProcess.bSharpeningEnabled);
+        ImGui::SliderFloat("Sharpening Strength", &state->lighting.postProcess.sharpeningStrength, 0.0f, 100.0f, "%.02f");
+        if (ImGui::Button("Reset Sharpening")) {
+            state->lighting.postProcess.sharpeningStrength = defaultPP.sharpeningStrength;
+        }
+
+        ImGui::Spacing();
+        ImGui::SeparatorText("Panini Projection");
+        ImGui::Checkbox("Enabled##panini", &state->lighting.postProcess.bPaniniEnabled);
+        ImGui::SliderFloat("Panini Strength", &state->lighting.postProcess.paniniStrength, 0.0f, 1.0f, "%.2f");
+        if (ImGui::Button("Reset Panini")) {
+            state->lighting.postProcess.paniniStrength = defaultPP.paniniStrength;
         }
 
         ImGui::Spacing();
         ImGui::SeparatorText("Film Grain");
+        ImGui::Checkbox("Enabled##filmgrain", &state->lighting.postProcess.bFilmGrainEnabled);
         ImGui::SliderFloat("Grain Strength", &state->lighting.postProcess.grainStrength, 0.0f, 0.15f, "%.3f");
         ImGui::SliderFloat("Grain Size", &state->lighting.postProcess.grainSize, 1.0f, 3.0f, "%.2f");
         if (ImGui::Button("Reset Grain")) {
             state->lighting.postProcess.grainStrength = defaultPP.grainStrength;
             state->lighting.postProcess.grainSize = defaultPP.grainSize;
         }
-        ImGui::SameLine();
-        if (ImGui::Button("Disable Grain")) {
-            state->lighting.postProcess.grainStrength = 0.0f;
-        }
 
         ImGui::Spacing();
-        ImGui::SeparatorText("Sharpening");
-        ImGui::SliderFloat("Sharpening Strength", &state->lighting.postProcess.sharpeningStrength, 0.0f, 100.0f, "%.02f");
-        if (ImGui::Button("Reset Sharpening")) {
-            state->lighting.postProcess.sharpeningStrength = defaultPP.sharpeningStrength;
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Disable Sharpening")) {
-            state->lighting.postProcess.sharpeningStrength = 0.0f;
-        }
-
-        ImGui::Spacing();
-        ImGui::SeparatorText("Panini Projection");
-        ImGui::SliderFloat("Panini Strength", &state->lighting.postProcess.paniniStrength, 0.0f, 1.0f, "%.2f");
-        if (ImGui::Button("Reset Panini")) {
-            state->lighting.postProcess.paniniStrength = defaultPP.paniniStrength;
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Disable Panini")) {
-            state->lighting.postProcess.paniniStrength = 0.0f;
+        ImGui::SeparatorText("Dither");
+        ImGui::Checkbox("Enabled##dither", &state->lighting.postProcess.bDitherEnabled);
+        ImGui::SliderFloat("Dither Strength", &state->lighting.postProcess.ditherStrength, 0.0f, 4.0f, "%.2f");
+        if (ImGui::Button("Reset Dither")) {
+            state->lighting.postProcess.ditherStrength = defaultPP.ditherStrength;
         }
     }
     ImGui::End();

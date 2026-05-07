@@ -450,7 +450,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         ZoneScopedN("SetupRenderGraph");
 
         // Geometry
-        if (!viewFamily.mainPassInstances.IsEmpty()) {
+        if (!viewFamily.instances.IsEmpty()) {
             if (viewFamily.shadowConfig.enabled) {
                 SetupCascadedShadows(*renderGraph, viewFamily, renderFamilyProperties, 0);
             }
@@ -1285,18 +1285,12 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
 
 void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties) const
 {
-    size_t totalInstanceCount = viewFamily.mainPassInstances.Size();
-
-    for (const auto& pair : viewFamily.customShaderDraws) {
-        pair.value.instanceBufferOffset = static_cast<uint32_t>(totalInstanceCount * sizeof(Instance));
-        totalInstanceCount += pair.value.instances.Size();
-    }
-
+    size_t totalInstanceCount = viewFamily.instances.Size();
     UploadAllocation instanceUpload = renderGraph->AllocateTransient(totalInstanceCount * sizeof(Instance));
     auto* instanceBuffer = static_cast<Instance*>(instanceUpload.ptr);
 
-    for (size_t i = 0; i < viewFamily.mainPassInstances.Size(); ++i) {
-        auto& inst = viewFamily.mainPassInstances[i];
+    for (size_t i = 0; i < viewFamily.instances.Size(); ++i) {
+        auto& inst = viewFamily.instances[i];
         uint32_t materialIndex = viewFamily.activeMaterials[inst.materialID];
         Engine::RenderMaterial& mat = viewFamily.materials[materialIndex];
         uint32_t lightingIndex = viewFamily.lightingBuckets[mat.lightingShader];
@@ -1502,7 +1496,7 @@ void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFami
                             CLEAR_COLOR_FULL, false);
 
         // Main Draw
-        if (!viewFamily.mainPassInstances.IsEmpty()) {
+        if (!viewFamily.instances.IsEmpty()) {
             /*InstancedGeometryPassConfig mainConfig{
                 .prefix = Core::InlineString("main_shadow"),
                 .instanceCount = static_cast<uint32_t>(viewFamily.mainPassInstances.Size()),

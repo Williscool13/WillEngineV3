@@ -21,6 +21,7 @@ namespace Render
 {
 StringID PPExposure(PostProcessContext& ctx, StringID input)
 {
+    if (!ctx.config.bExposureEnabled) { return input; }
     RenderGraph& graph = ctx.graph;
     const uint32_t width = ctx.extent[0];
     const uint32_t height = ctx.extent[1];
@@ -93,6 +94,7 @@ StringID PPExposure(PostProcessContext& ctx, StringID input)
 
 StringID PPBloom(PostProcessContext& ctx, StringID input)
 {
+    if (!ctx.config.bBloomEnabled) { return input; }
     RenderGraph& graph = ctx.graph;
     const uint32_t width = ctx.extent[0];
     const uint32_t height = ctx.extent[1];
@@ -181,6 +183,7 @@ StringID PPBloom(PostProcessContext& ctx, StringID input)
 
 StringID PPSharpening(PostProcessContext& ctx, StringID input)
 {
+    if (!ctx.config.bSharpeningEnabled) { return input; }
     RenderGraph& graph = ctx.graph;
     const uint32_t width = ctx.extent[0];
     const uint32_t height = ctx.extent[1];
@@ -338,6 +341,7 @@ StringID PPMotionBlur(PostProcessContext& ctx, StringID input)
 
 StringID PPColorGrading(PostProcessContext& ctx, StringID input)
 {
+    if (!ctx.config.bColorGradingEnabled) { return input; }
     RenderGraph& graph = ctx.graph;
     const uint32_t width = ctx.extent[0];
     const uint32_t height = ctx.extent[1];
@@ -378,6 +382,7 @@ StringID PPColorGrading(PostProcessContext& ctx, StringID input)
 
 StringID PPVignetteAberration(PostProcessContext& ctx, StringID input)
 {
+    if (!ctx.config.bVignetteAberrationEnabled) { return input; }
     RenderGraph& graph = ctx.graph;
     const uint32_t width = ctx.extent[0];
     const uint32_t height = ctx.extent[1];
@@ -417,6 +422,7 @@ StringID PPVignetteAberration(PostProcessContext& ctx, StringID input)
 
 StringID PPPanini(PostProcessContext& ctx, StringID input)
 {
+    if (!ctx.config.bPaniniEnabled) { return input; }
     RenderGraph& graph = ctx.graph;
     const uint32_t width = ctx.extent[0];
     const uint32_t height = ctx.extent[1];
@@ -453,6 +459,7 @@ StringID PPPanini(PostProcessContext& ctx, StringID input)
 
 StringID PPFilmGrain(PostProcessContext& ctx, StringID input)
 {
+    if (!ctx.config.bFilmGrainEnabled) { return input; }
     RenderGraph& graph = ctx.graph;
     const uint32_t width = ctx.extent[0];
     const uint32_t height = ctx.extent[1];
@@ -485,5 +492,37 @@ StringID PPFilmGrain(PostProcessContext& ctx, StringID input)
     });
 
     return SID("post_process_output");
+}
+
+StringID PPDither(PostProcessContext& ctx, StringID input)
+{
+    if (!ctx.config.bDitherEnabled) { return input; }
+    RenderGraph& graph = ctx.graph;
+    const uint32_t width = ctx.extent[0];
+    const uint32_t height = ctx.extent[1];
+    PipelineManager* pipelines = ctx.pipelines;
+    float ditherStrength = ctx.config.ditherStrength;
+
+    graph.CreateTexture(SID("dither_output"), TextureInfo{POST_PROCESS_OUTPUT_FORMAT, width, height, 1}, CLEAR_COLOR_EMPTY, true);
+    RenderPass& ditherPass = graph.AddPass(SID("Dither"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+    ditherPass.ReadSampledImage(input);
+    ditherPass.WriteStorageImage(SID("dither_output"));
+    ditherPass.Execute([&graph, width, height, input, pipelines, ditherStrength](VkCommandBuffer cmd) {
+        DitherPushConstant pc{
+            .outputExtent = {width, height},
+            .inputIndex = graph.GetSampledImageViewDescriptorIndex(input),
+            .outputIndex = graph.GetStorageImageViewDescriptorIndex(SID("dither_output")),
+            .ditherStrength = ditherStrength,
+        };
+
+        const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry(SID("dither"));
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+        uint32_t xDispatch = (width + POST_PROCESS_DITHER_DISPATCH_X - 1) / POST_PROCESS_DITHER_DISPATCH_X;
+        uint32_t yDispatch = (height + POST_PROCESS_DITHER_DISPATCH_Y - 1) / POST_PROCESS_DITHER_DISPATCH_Y;
+        vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
+    });
+
+    return SID("dither_output");
 }
 } // Render

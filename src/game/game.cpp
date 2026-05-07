@@ -171,11 +171,7 @@ GAME_API void GameUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
     frameBuffer->mainViewFamily.modelMatrices.Clear();
-    frameBuffer->mainViewFamily.mainPassInstances.Clear();
-    for (const auto& pair : frameBuffer->mainViewFamily.customShaderDraws) {
-        pair.value.instances.Clear();
-        pair.value.instanceBufferOffset = 0;
-    }
+    frameBuffer->mainViewFamily.instances.Clear();
     frameBuffer->mainViewFamily.activeMaterials.Clear();
     frameBuffer->mainViewFamily.materials.Clear();
     frameBuffer->mainViewFamily.lightingBuckets.Clear();

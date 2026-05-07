@@ -22,7 +22,7 @@ void SetupGeometryPass(RenderGraph& graph,
                        const VisibilityBufferTargets& targets,
                        uint32_t sceneIndex)
 {
-    if (viewFamily.mainPassInstances.IsEmpty()) {
+    if (viewFamily.instances.IsEmpty()) {
         return;
     }
 
@@ -41,7 +41,7 @@ void SetupGeometryPass(RenderGraph& graph,
     const StringID visibleMeshlets = SID("visible_meshlets");
     const StringID meshletCountDispatchArgs = SID("meshlet_count_dispatch_args");
     const StringID compactedMeshletDispatchArgs = SID("compacted_meshlet_dispatch_args");
-    auto instanceCount = static_cast<uint32_t>(viewFamily.mainPassInstances.Size());
+    auto instanceCount = static_cast<uint32_t>(viewFamily.instances.Size());
     auto lodBias = static_cast<int32_t>(LOD_BIAS);
     auto highestMeshletCount = renderFamilyProperties.visibleMeshletUpperBound;
 
@@ -1573,6 +1573,7 @@ StringID SetupPostProcessing(RenderGraph& graph,
     current = PPVignetteAberration(ctx, current);
     current = PPPanini(ctx, current);
     current = PPFilmGrain(ctx, current);
+    current = PPDither(ctx, current);
     return current;
 }
 } // Render

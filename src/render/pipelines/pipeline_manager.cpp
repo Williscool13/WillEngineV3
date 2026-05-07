@@ -452,6 +452,8 @@ void PipelineManager::RegisterPipelines()
                             sizeof(ColorGradingPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("panini_projection"), src / "panini_projection_compute.spv",
                             sizeof(PaniniProjectionPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("dither"), src / "dither_compute.spv",
+                            sizeof(DitherPushConstant), PipelineCategory::Critical);
 
     RegisterComputePipeline(SID("debug_visualize"), src / "debug_visualize_compute.spv",
                             sizeof(DebugVisualizePushConstant), PipelineCategory::Critical);

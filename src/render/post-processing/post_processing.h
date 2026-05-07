@@ -46,6 +46,7 @@ StringID PPColorGrading(PostProcessContext& ctx, StringID input);
 StringID PPVignetteAberration(PostProcessContext& ctx, StringID input);
 StringID PPPanini(PostProcessContext& ctx, StringID input);
 StringID PPFilmGrain(PostProcessContext& ctx, StringID input);
+StringID PPDither(PostProcessContext& ctx, StringID input);
 
 } // Render
 

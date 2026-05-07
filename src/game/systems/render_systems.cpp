@@ -315,7 +315,7 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
 
             for (size_t i = 0; i < runtime.primitives.Size(); ++i) {
                 auto& prim = runtime.primitives[i];
-                frameBuffer->mainViewFamily.mainPassInstances.PushBack({
+                frameBuffer->mainViewFamily.instances.PushBack({
                     .primitiveIndex = prim.primitiveIndex,
                     .materialID = prim.materialID,
                     .modelIndex = modelIndex,
@@ -327,7 +327,7 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
 
     // Gather portal planes
     {
-        ZoneScopedN("PortalRenderables");
+        /*ZoneScopedN("PortalRenderables");
         auto portalView = state->registry.view<Component::PortalPlaneTag, Component::MeshRuntime, Component::RenderTransformComponent>();
 
         if (portalView.size_hint() > 0) {
@@ -351,12 +351,12 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
                     });
                 }
             }
-        }
+        }*/
     }
 
     // Gather cubemap visualizations
     {
-        ZoneScopedN("CubemapVisualizations");
+        /*ZoneScopedN("CubemapVisualizations");
         auto cubemapView = state->registry.view<Component::CubemapVisualizeTag, Component::MeshRuntime, Component::RenderTransformComponent>();
 
         for (auto [entity, runtime, renderTransform] : cubemapView.each()) {
@@ -379,7 +379,7 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
                     .modelIndex = modelIndex
                 });
             }
-        }
+        }*/
     }
 
     // Gather procedural meshes
@@ -398,7 +398,7 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
             if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
                 stableId = stable->id.id;
             }
-            frameBuffer->mainViewFamily.mainPassInstances.PushBack({
+            frameBuffer->mainViewFamily.instances.PushBack({
                 .primitiveIndex = runtime.primitives[0].primitiveIndex,
                 .materialID = runtime.primitives[0].materialID,
                 .modelIndex = modelIndex,
@@ -423,7 +423,7 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
                 stableId = stable->id.id;
             }
 
-            frameBuffer->mainViewFamily.mainPassInstances.PushBack({
+            frameBuffer->mainViewFamily.instances.PushBack({
                 .primitiveIndex = runtime.primitives[0].primitiveIndex,
                 .materialID = runtime.primitives[0].materialID,
                 .modelIndex = modelIndex,
@@ -435,7 +435,7 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
     // Material remap
     {
         ZoneScopedN("Material Recording");
-        for (auto& instance : frameBuffer->mainViewFamily.mainPassInstances) {
+        for (auto& instance : frameBuffer->mainViewFamily.instances) {
             auto [val, inserted] = frameBuffer->mainViewFamily.activeMaterials.TryEmplace(instance.materialID);
             if (inserted) {
                 val = frameBuffer->mainViewFamily.materials.Size();
@@ -444,7 +444,6 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
         }
     }
 
-    assert(frameBuffer->mainViewFamily.customShaderDraws.IsEmpty());
     if (state->lighting.skybox.IsValid()) {
         Render::Cubemap* cubemap = ctx->assetManager->GetCubemap(state->lighting.skybox);
         if (cubemap && cubemap->loadState == Render::Cubemap::LoadState::Loaded) {
