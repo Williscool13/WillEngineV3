@@ -933,6 +933,14 @@ bool StaticModelGenerateSlot::WriteStaticModel()
                 mat.samplerDesc[4] = sampDesc(mat.props.textureSamplerIndices2.x);
                 mat.samplerDesc[5] = sampDesc(mat.props.textureSamplerIndices2.y);
 
+                // Enable anisotropy on detail slots (color, metal/rough, normal)
+                for (int32_t s = 0; s < 3; ++s) {
+                    if (mat.samplerDesc[s].minFilter == VK_FILTER_LINEAR) {
+                        mat.samplerDesc[s].anisotropyEnable = VK_TRUE;
+                        mat.samplerDesc[s].maxAnisotropy = 4.0f;
+                    }
+                }
+
                 // Bindless indices are resolved at load time from textureRefs
                 mat.props.textureImageIndices = glm::ivec4(-1);
                 mat.props.textureSamplerIndices = glm::ivec4(-1);

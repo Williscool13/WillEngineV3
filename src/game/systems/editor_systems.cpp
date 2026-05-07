@@ -1911,16 +1911,40 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
 
                     ImGui::Text("%-13s", slotNames[slot]);
                     ImGui::SameLine();
-                    ImGui::Text("%-32s", currentTexName);
+                    ImGui::TextDisabled("|");
                     ImGui::SameLine();
                     if (ImGui::SmallButton("Tex")) {
                         texEditPending = texId;
                         ImGui::OpenPopup("TextureSelect");
                     }
                     ImGui::SameLine();
+                    ImGui::Text("%-32s", currentTexName);
+                    ImGui::SameLine();
                     if (ImGui::SmallButton("Smp")) {
                         samplerEditPending = mat.samplerDesc[slot];
                         ImGui::OpenPopup("SamplerEdit");
+                    }
+                    ImGui::SameLine();
+                    {
+                        const Engine::SamplerDesc& sd = mat.samplerDesc[slot];
+                        const Engine::SamplerDesc def{};
+                        const bool filterDiff = sd.magFilter != def.magFilter || sd.minFilter != def.minFilter;
+                        const bool mipDiff = sd.mipmapMode != def.mipmapMode;
+                        const bool addrDiff = sd.addressModeU != def.addressModeU || sd.addressModeV != def.addressModeV || sd.addressModeW != def.addressModeW;
+                        const bool anisoDiff = sd.anisotropyEnable != def.anisotropyEnable || sd.maxAnisotropy != def.maxAnisotropy;
+                        const bool lodDiff = sd.mipLodBias != def.mipLodBias || sd.minLod != def.minLod || sd.maxLod != def.maxLod;
+                        const int diffCount = filterDiff + mipDiff + addrDiff + anisoDiff + lodDiff;
+                        const char* label = "Default";
+                        if (diffCount == 1) {
+                            if (filterDiff) { label = "Custom Filter"; }
+                            else if (mipDiff) { label = "Custom Mip Mode"; }
+                            else if (addrDiff) { label = "Custom Address"; }
+                            else if (anisoDiff) { label = "Custom Aniso"; }
+                            else if (lodDiff) { label = "Custom LOD"; }
+                        } else if (diffCount > 1) {
+                            label = "Custom Sampler";
+                        }
+                        ImGui::TextDisabled("%s", label);
                     }
 
                     if (ImGui::BeginPopupModal("TextureSelect", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
@@ -2017,7 +2041,17 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
 
                         bool aniso = samplerEditPending.anisotropyEnable == VK_TRUE;
                         if (ImGui::Checkbox("Anisotropy", &aniso)) samplerEditPending.anisotropyEnable = aniso ? VK_TRUE : VK_FALSE;
-                        if (aniso) ImGui::SliderFloat("Max Anisotropy", &samplerEditPending.maxAnisotropy, 1.0f, 16.0f);
+                        if (aniso) {
+                            static const float anisoLevels[] = {1.0f, 2.0f, 4.0f, 8.0f, 16.0f};
+                            static const char* anisoLabels[] = {"1x", "2x", "4x", "8x", "16x"};
+                            int anisoIdx = 0;
+                            for (int k = 4; k >= 0; --k) {
+                                if (samplerEditPending.maxAnisotropy >= anisoLevels[k]) { anisoIdx = k; break; }
+                            }
+                            if (ImGui::Combo("Max Anisotropy", &anisoIdx, anisoLabels, 5)) {
+                                samplerEditPending.maxAnisotropy = anisoLevels[anisoIdx];
+                            }
+                        }
 
                         ImGui::DragFloat("Mip LOD Bias", &samplerEditPending.mipLodBias, 0.1f);
                         ImGui::DragFloat("Min LOD", &samplerEditPending.minLod, 0.1f, 0.0f, 100.0f);

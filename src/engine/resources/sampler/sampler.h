@@ -61,6 +61,9 @@ struct Sampler
     };
 
     SamplerDesc desc;
+    /**
+     * fnv1a64 hash of the desc
+     */
     SamplerID id{SamplerID::INVALID};
 
     SamplerHandle selfHandle{SamplerHandle::INVALID};

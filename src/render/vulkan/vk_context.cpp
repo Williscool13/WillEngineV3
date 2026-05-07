@@ -282,6 +282,7 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
                     // Gather / clip
                     query.features.shaderImageGatherExtended &&
                     query.features.shaderClipDistance &&
+                    query.features.samplerAnisotropy &&
                     // Extensions
                     qDesc.descriptorBuffer &&
                     qMesh.taskShader &&
@@ -394,6 +395,7 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
         // Gather / clip
         features10.shaderImageGatherExtended = VK_TRUE;
         features10.shaderClipDistance = VK_TRUE;
+        features10.samplerAnisotropy = VK_TRUE;
         features10.fillModeNonSolid = VK_TRUE;
 #ifdef ENABLE_VULKAN_VALIDATION
         // Suppresses a false-positive validation error: SV_PrimitiveID in mesh shaders
