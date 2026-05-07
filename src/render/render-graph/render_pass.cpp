@@ -184,7 +184,6 @@ RenderPass& RenderPass::ReadCopyImage(const StringID textureId)
 RenderPass& RenderPass::WriteBuffer(const StringID bufferId)
 {
     BufferResource* resource = graph.GetOrCreateBuffer(bufferId);
-    resource->accumulatedUsage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
     bufferWrites.PushBack(resource->index);
     return *this;
 }
@@ -192,7 +191,6 @@ RenderPass& RenderPass::WriteBuffer(const StringID bufferId)
 RenderPass& RenderPass::WriteTransferBuffer(const StringID bufferId)
 {
     BufferResource* resource = graph.GetOrCreateBuffer(bufferId);
-    resource->accumulatedUsage |= VK_BUFFER_USAGE_2_TRANSFER_DST_BIT;
     bufferTransferWrites.PushBack(resource->index);
     return *this;
 }
@@ -220,7 +218,6 @@ RenderPass& RenderPass::ReadWriteDepthAttachment(const StringID bufferId, const 
 RenderPass& RenderPass::ReadWriteBuffer(const StringID bufferId)
 {
     BufferResource* resource = graph.GetOrCreateBuffer(bufferId);
-    resource->accumulatedUsage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
     bufferReadWrite.PushBack(resource->index);
     return *this;
 }
@@ -230,7 +227,6 @@ RenderPass& RenderPass::ReadBuffer(const StringID bufferId)
 {
     BufferResource* resource = graph.GetOrCreateBuffer(bufferId);
     assert(resource->bufferInfo.size > 0 && "Buffer not defined - import or create buffer first");
-    resource->accumulatedUsage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
     bufferReads.PushBack(resource->index);
     return *this;
 }
@@ -239,7 +235,6 @@ RenderPass& RenderPass::ReadIndexBuffer(const StringID bufferId)
 {
     BufferResource* resource = graph.GetOrCreateBuffer(bufferId);
     assert(resource->bufferInfo.size > 0 && "Buffer not defined - import or create buffer first");
-    resource->accumulatedUsage |= VK_BUFFER_USAGE_2_INDEX_BUFFER_BIT;
     bufferIndexRead.PushBack(resource->index);
     return *this;
 }
@@ -248,7 +243,6 @@ RenderPass& RenderPass::ReadTransferBuffer(const StringID bufferId)
 {
     BufferResource* resource = graph.GetOrCreateBuffer(bufferId);
     assert(resource->bufferInfo.size > 0 && "Buffer not defined - import or create buffer first");
-    resource->accumulatedUsage |= VK_BUFFER_USAGE_2_TRANSFER_SRC_BIT;
     bufferTransferReads.PushBack(resource->index);
     return *this;
 }
@@ -256,7 +250,6 @@ RenderPass& RenderPass::ReadTransferBuffer(const StringID bufferId)
 RenderPass& RenderPass::ReadIndirectBuffer(const StringID bufferId)
 {
     BufferResource* resource = graph.GetOrCreateBuffer(bufferId);
-    resource->accumulatedUsage |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
     bufferIndirectReads.PushBack(resource->index);
     return *this;
 }
@@ -264,7 +257,6 @@ RenderPass& RenderPass::ReadIndirectBuffer(const StringID bufferId)
 RenderPass& RenderPass::ReadIndirectCountBuffer(const StringID bufferId)
 {
     BufferResource* resource = graph.GetOrCreateBuffer(bufferId);
-    resource->accumulatedUsage |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
     bufferIndirectCountReads.PushBack(resource->index);
     return *this;
 }

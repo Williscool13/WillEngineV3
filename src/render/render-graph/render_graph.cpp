@@ -73,7 +73,7 @@ void RenderGraph::PrunePasses()
     // Add pruning when productive pruning is actually relevant
 }
 
-void RenderGraph::AccumulateTextureUsage()
+void RenderGraph::AccumulateUsage()
 {
     for (auto& pass : passes) {
         for (const uint32_t texIndex : pass->storageImageWrites) {
@@ -129,6 +129,38 @@ void RenderGraph::AccumulateTextureUsage()
         if (pass->depthStencilAttachment != UINT_MAX) {
             auto& tex = textures[pass->depthStencilAttachment];
             tex.accumulatedUsage |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+        }
+
+        for (const uint32_t bufIndex : pass->bufferWrites) {
+            buffers[bufIndex].accumulatedUsage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+        }
+
+        for (const uint32_t bufIndex : pass->bufferReadWrite) {
+            buffers[bufIndex].accumulatedUsage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+        }
+
+        for (const uint32_t bufIndex : pass->bufferReads) {
+            buffers[bufIndex].accumulatedUsage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+        }
+
+        for (const uint32_t bufIndex : pass->bufferTransferWrites) {
+            buffers[bufIndex].accumulatedUsage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+        }
+
+        for (const uint32_t bufIndex : pass->bufferTransferReads) {
+            buffers[bufIndex].accumulatedUsage |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+        }
+
+        for (const uint32_t bufIndex : pass->bufferIndexRead) {
+            buffers[bufIndex].accumulatedUsage |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+        }
+
+        for (const uint32_t bufIndex : pass->bufferIndirectReads) {
+            buffers[bufIndex].accumulatedUsage |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+        }
+
+        for (const uint32_t bufIndex : pass->bufferIndirectCountReads) {
+            buffers[bufIndex].accumulatedUsage |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
         }
     }
 
@@ -190,7 +222,7 @@ void RenderGraph::Compile(int64_t currentFrame)
 {
     PrunePasses();
 
-    AccumulateTextureUsage();
+    AccumulateUsage();
 
     CalculateLifetimes();
 

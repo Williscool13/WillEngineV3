@@ -26,8 +26,10 @@ void ComputeDither(uniform DitherPushConstant pc, uint3 dtid : SV_DispatchThread
     uint by = pixelCoord.y & 7u;
     float threshold = (bayer8[by * 8u + bx] + 0.5) / 64.0 - 0.5;
 
+    float frameOffset = frac(pc.frameIndex * 0.6180339887) - 0.5;
+
     // scale threshold to one LDR step (1/255) and apply strength
-    color += threshold * pc.ditherStrength * (1.0 / 255.0);
+    color += (threshold + frameOffset) * pc.ditherStrength * (1.0 / 255.0);
 
     rdgStorageFloat4[pc.outputIndex][pixelCoord] = float4(color, 1.0);
 }

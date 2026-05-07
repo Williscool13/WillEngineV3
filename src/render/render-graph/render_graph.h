@@ -34,7 +34,7 @@ public:
 
     void PrunePasses();
 
-    void AccumulateTextureUsage();
+    void AccumulateUsage();
 
     void CalculateLifetimes();
 
