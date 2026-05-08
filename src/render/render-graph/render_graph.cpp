@@ -210,7 +210,8 @@ void RenderGraph::BuildDependencyEdges()
                 }
                 else if (t.latestPassIdx != UINT32_MAX && t.layout == targetLayout) {
                     // Same epoch: all readers wait on whoever caused the transition into this layout
-                    if (t.transitionPassIdx != UINT32_MAX) { addEdge(t.transitionPassIdx, passIdx); }
+                    ENGINE_ASSERT(Renderer, t.transitionPassIdx != UINT32_MAX, "Epoch has readers but no transition pass");
+                    addEdge(t.transitionPassIdx, passIdx);
                     t.latestPassIdx = passIdx;
                 }
                 else {
@@ -274,6 +275,7 @@ void RenderGraph::TopologicalSortPasses()
         }
     }
 
+    // Kahn's Topolohical Sort
     while (zeroDegreeQueue.Size() > 0) {
         const uint32_t currPassIdx = zeroDegreeQueue.Pop();
         const auto& currPass = passes[currPassIdx];
@@ -290,12 +292,6 @@ void RenderGraph::TopologicalSortPasses()
     ENGINE_ASSERT(Renderer, sortedPasses.Size() == passes.Size(), "Render graph cycle detected");
 
     if (bDebugLogging) {
-        LOG_INFO(Renderer, "=== Before RDG Topological Sort ===");
-        for (uint32_t i = 0; i < passes.Size(); i++) {
-            const RenderPass* pass = passes[i];
-            LOG_INFO(Renderer, "  [{}] {}", i, pass->renderPassId.ToString());
-        }
-
         LOG_INFO(Renderer, "=== RDG Topological Sort ===");
         for (uint32_t i = 0; i < sortedPasses.Size(); i++) {
             const RenderPass* pass = sortedPasses[i];
@@ -421,11 +417,12 @@ void RenderGraph::AssignPhysicalResources(int64_t currentFrame)
 
                 // Cross-frame resources can't alias at all.
                 // Well, not strictly true. If a texture is carried over to next frame, it can be aliased if the other use is before the texture's first pass.
+                // But we can't reasonably infer that information from the current frame, so we will reject cross-frame aliasing.
                 if (!tex.bCanUseAliasedTexture && !phys.logicalResourceIndices.IsEmpty()) {
                     continue;
                 }
 
-                // If reusing already existing allocated resource, must be superset
+                // If already allocated, must be superset (greedy first-fit search)
                 if (phys.IsAllocated()) {
                     if ((phys.dimensions.imageUsage & tex.accumulatedUsage) != tex.accumulatedUsage) {
                         continue;
@@ -512,7 +509,7 @@ void RenderGraph::AssignPhysicalResources(int64_t currentFrame)
                     continue;
                 }
 
-                // If already allocated, must be superset
+                // If already allocated, must be superset (greedy search)
                 if (phys.IsAllocated()) {
                     if ((phys.dimensions.bufferUsage & buf.accumulatedUsage) != buf.accumulatedUsage) {
                         continue;
