@@ -67,6 +67,9 @@ add_library(core STATIC
         containers/set.h
         containers/fixed_set.h
         containers/arena_fixed_set.h
+        containers/inline_queue.h
+        containers/queue.h
+        containers/arena_queue.h
 )
 
 

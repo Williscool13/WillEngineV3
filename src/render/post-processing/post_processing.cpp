@@ -507,12 +507,13 @@ StringID PPDither(PostProcessContext& ctx, StringID input)
     RenderPass& ditherPass = graph.AddPass(SID("Dither"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
     ditherPass.ReadSampledImage(input);
     ditherPass.WriteStorageImage(SID("dither_output"));
-    ditherPass.Execute([&graph, width, height, input, pipelines, ditherStrength](VkCommandBuffer cmd) {
+    ditherPass.Execute([&graph, width, height, input, pipelines, ditherStrength, frameIndex = static_cast<float>(ctx.frameNumber)](VkCommandBuffer cmd) {
         DitherPushConstant pc{
             .outputExtent = {width, height},
             .inputIndex = graph.GetSampledImageViewDescriptorIndex(input),
             .outputIndex = graph.GetStorageImageViewDescriptorIndex(SID("dither_output")),
             .ditherStrength = ditherStrength,
+            .frameIndex = frameIndex,
         };
 
         const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry(SID("dither"));

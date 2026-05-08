@@ -636,6 +636,7 @@ SHADER_PUBLIC struct DitherPushConstant
     SHADER_PUBLIC uint32_t inputIndex;
     SHADER_PUBLIC uint32_t outputIndex;
     SHADER_PUBLIC float ditherStrength;
+    SHADER_PUBLIC float frameIndex;
 };
 
 SHADER_PUBLIC struct SharpeningPushConstant

@@ -50,6 +50,7 @@ add_library(engine STATIC
         spline/spline.cpp
         core/hash.h
         include/frame_sync.cpp
+        logging/engine_assert.h
 )
 
 target_include_directories(engine PRIVATE

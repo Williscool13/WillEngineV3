@@ -776,7 +776,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
             vkCmdCopyImageToBuffer(
                 cmd,
-                renderGraph->GetTextureHandle(SID("stable_id")),
+                renderGraph->GetImageHandle(SID("stable_id")),
                 VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                 renderGraph->GetBufferHandle(SID("readback_buffer")),
                 1,

@@ -42,11 +42,9 @@ void EngineLogger::Init(Utils::Logger* baseLogger)
     }
 }
 
-void EngineLogger::Flush() const
+void EngineLogger::Flush()
 {
-    for (auto& cat : categoryLoggers) {
-        if (cat) cat->flush();
-    }
+    spdlog::apply_all([](const std::shared_ptr<spdlog::logger>& l) { l->flush(); });
 }
 
 void EngineLogger::Shutdown() const
@@ -60,6 +58,6 @@ void EngineLogger::RegisterLoggersForDLL(LogCategory defaultCategory) const
     for (auto& cat : categoryLoggers) {
         if (cat) spdlog::register_or_replace(cat);
     }
-    spdlog::set_default_logger(categoryLoggers[(int)defaultCategory]);
+    spdlog::set_default_logger(categoryLoggers[static_cast<int>(defaultCategory)]);
 }
 }

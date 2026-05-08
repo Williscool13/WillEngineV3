@@ -21,4 +21,10 @@
 #define LOG_CRITICAL(category, fmt, ...) \
     SPDLOG_LOGGER_CRITICAL(spdlog::get(Engine::kCategoryNames[(int)Engine::LogCategory::category]), fmt, ##__VA_ARGS__)
 
+#define LOG_FLUSH(category) \
+    do { \
+        auto _logger = spdlog::get(Engine::kCategoryNames[(int)Engine::LogCategory::category]); \
+        if (_logger) { _logger->flush(); } \
+    } while(0)
+
 #endif //WILL_ENGINE_ENGINE_LOG_H

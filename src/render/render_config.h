@@ -15,6 +15,9 @@
 namespace Render
 {
 inline constexpr int32_t RDG_PHYSICAL_RESOURCE_UNUSED_THRESHOLD = 1024; // in ticks
+inline constexpr int32_t RDG_MAX_TEXTURES = 2048;
+inline constexpr int32_t RDG_MAX_BUFFERS = 2048;
+
 inline constexpr int32_t RDG_MAX_SAMPLED_TEXTURES = 256;
 inline constexpr int32_t RDG_MAX_SAMPLED_FLOAT2   = 128;
 inline constexpr int32_t RDG_MAX_SAMPLED_FLOAT    = 256;
@@ -40,7 +43,7 @@ inline const StringID GEOMETRY_VERTEX_ATTRIBUTE_BUFFER = SID("vertex_attribute_b
 inline const StringID GEOMETRY_MESHLET_VERTEX_BUFFER = SID("meshlet_vertex_buffer");
 inline const StringID GEOMETRY_MESHLET_TRIANGLE_BUFFER = SID("meshlet_triangle_buffer");
 inline const StringID GEOMETRY_MESHLET_BUFFER = SID("meshlet_buffer");
-inline const StringID   GEOMETRY_MATERIAL_BUFFER = SID("material_buffer");
+inline const StringID GEOMETRY_MATERIAL_BUFFER = SID("material_buffer");
 
 inline const StringID SHADING_DISPATCH_BUCKETING_BUFFER = SID("shading_bucketing_buffer");
 inline const StringID LIGHTING_DISPATCH_BUCKETING_BUFFER = SID("lighting_bucketing_buffer");

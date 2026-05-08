@@ -5,6 +5,7 @@
 #include "render_pass.h"
 
 #include <cassert>
+#include "engine/logging/engine_assert.h"
 
 namespace Render
 {
@@ -21,13 +22,13 @@ RenderPass& RenderPass::WriteStorageImage(const StringID textureId, const Textur
             resource->textureInfo = texInfo;
         }
         else {
-            assert(resource->textureInfo.format == texInfo.format && "Format mismatch");
-            assert(resource->textureInfo.width == texInfo.width && "Width mismatch");
-            assert(resource->textureInfo.height == texInfo.height && "Height mismatch");
+            ENGINE_ASSERT(Renderer, resource->textureInfo.format == texInfo.format, "Format mismatch");
+            ENGINE_ASSERT(Renderer, resource->textureInfo.width == texInfo.width, "Width mismatch");
+            ENGINE_ASSERT(Renderer, resource->textureInfo.height == texInfo.height, "Height mismatch");
         }
     }
     else {
-        assert(resource->textureInfo.format != VK_FORMAT_UNDEFINED && "Texture not defined - provide TextureInfo on first use");
+        ENGINE_ASSERT(Renderer, resource->textureInfo.format != VK_FORMAT_UNDEFINED, "Texture not defined - provide TextureInfo on first use");
     }
 
     storageImageWrites.PushBack(resource->index);
@@ -43,7 +44,7 @@ RenderPass& RenderPass::WriteClearImage(const StringID textureId, const TextureI
         }
     }
     else {
-        assert(resource->textureInfo.format != VK_FORMAT_UNDEFINED && "Texture not defined - provide TextureInfo on first use");
+        ENGINE_ASSERT(Renderer, resource->textureInfo.format != VK_FORMAT_UNDEFINED, "Texture not defined - provide TextureInfo on first use");
     }
     clearImageWrites.PushBack(resource->index);
     return *this;
@@ -58,7 +59,7 @@ RenderPass& RenderPass::WriteBlitImage(const StringID textureId, const TextureIn
         }
     }
     else {
-        assert(resource->textureInfo.format != VK_FORMAT_UNDEFINED && "Texture not defined - provide TextureInfo on first use");
+        ENGINE_ASSERT(Renderer, resource->textureInfo.format != VK_FORMAT_UNDEFINED, "Texture not defined - provide TextureInfo on first use");
     }
     blitImageWrites.PushBack(resource->index);
     return *this;
@@ -73,7 +74,7 @@ RenderPass& RenderPass::WriteCopyImage(const StringID textureId, const TextureIn
         }
     }
     else {
-        assert(resource->textureInfo.format != VK_FORMAT_UNDEFINED && "Texture not defined - provide TextureInfo on first use");
+        ENGINE_ASSERT(Renderer, resource->textureInfo.format != VK_FORMAT_UNDEFINED, "Texture not defined - provide TextureInfo on first use");
     }
     copyImageWrites.PushBack(resource->index);
     return *this;
@@ -89,7 +90,7 @@ RenderPass& RenderPass::WriteColorAttachment(const StringID textureId, const Tex
         }
     }
     else {
-        assert(resource->textureInfo.format != VK_FORMAT_UNDEFINED && "Texture not defined - provide TextureInfo on first use");
+        ENGINE_ASSERT(Renderer, resource->textureInfo.format != VK_FORMAT_UNDEFINED, "Texture not defined - provide TextureInfo on first use");
     }
 
     colorAttachments.PushBack(resource->index);
@@ -106,10 +107,10 @@ RenderPass& RenderPass::WriteDepthAttachment(const StringID textureId, const Tex
         }
     }
     else {
-        assert(resource->textureInfo.format != VK_FORMAT_UNDEFINED && "Texture not defined - provide TextureInfo on first use");
+        ENGINE_ASSERT(Renderer, resource->textureInfo.format != VK_FORMAT_UNDEFINED, "Texture not defined - provide TextureInfo on first use");
     }
 
-    assert(depthStencilAttachment == UINT_MAX && "Only one depth attachment per pass");
+    ENGINE_ASSERT(Renderer, depthStencilAttachment == UINT_MAX, "Only one depth attachment per pass");
 
     depthStencilAttachment = resource->index;
     depthAccessType |= DepthAccessType::Write;
@@ -125,13 +126,13 @@ RenderPass& RenderPass::ReadWriteImage(const StringID textureId, const TextureIn
             resource->textureInfo = texInfo;
         }
         else {
-            assert(resource->textureInfo.format == texInfo.format && "Format mismatch");
-            assert(resource->textureInfo.width == texInfo.width && "Width mismatch");
-            assert(resource->textureInfo.height == texInfo.height && "Height mismatch");
+            ENGINE_ASSERT(Renderer, resource->textureInfo.format == texInfo.format, "Format mismatch");
+            ENGINE_ASSERT(Renderer, resource->textureInfo.width == texInfo.width, "Width mismatch");
+            ENGINE_ASSERT(Renderer, resource->textureInfo.height == texInfo.height, "Height mismatch");
         }
     }
     else {
-        assert(resource->textureInfo.format != VK_FORMAT_UNDEFINED && "Texture not defined - provide TextureInfo on first use");
+        ENGINE_ASSERT(Renderer, resource->textureInfo.format != VK_FORMAT_UNDEFINED, "Texture not defined - provide TextureInfo on first use");
     }
 
     imageReadWrite.PushBack(resource->index);
@@ -143,10 +144,10 @@ RenderPass& RenderPass::ReadDepthAttachment(const StringID textureId)
     TextureResource* resource = graph.GetOrCreateTexture(textureId);
 
     if (resource->textureInfo.format != VK_FORMAT_UNDEFINED) {
-        assert(resource->textureInfo.format != VK_FORMAT_UNDEFINED && "Texture not defined - provide TextureInfo on first use");
+        ENGINE_ASSERT(Renderer, resource->textureInfo.format != VK_FORMAT_UNDEFINED, "Texture not defined - provide TextureInfo on first use");
     }
 
-    assert(depthStencilAttachment == UINT_MAX && "Only one depth attachment per pass");
+    ENGINE_ASSERT(Renderer, depthStencilAttachment == UINT_MAX, "Only one depth attachment per pass");
 
     depthStencilAttachment = resource->index;
     depthAccessType = DepthAccessType::Read;
@@ -205,10 +206,10 @@ RenderPass& RenderPass::ReadWriteDepthAttachment(const StringID bufferId, const 
         }
     }
     else {
-        assert(resource->textureInfo.format != VK_FORMAT_UNDEFINED && "Texture not defined - provide TextureInfo on first use");
+        ENGINE_ASSERT(Renderer, resource->textureInfo.format != VK_FORMAT_UNDEFINED, "Texture not defined - provide TextureInfo on first use");
     }
 
-    assert(depthStencilAttachment == UINT_MAX && "Only one depth attachment per pass");
+    ENGINE_ASSERT(Renderer, depthStencilAttachment == UINT_MAX, "Only one depth attachment per pass");
 
     depthStencilAttachment = resource->index;
     depthAccessType = DepthAccessType::Read | DepthAccessType::Write;
@@ -226,7 +227,7 @@ RenderPass& RenderPass::ReadWriteBuffer(const StringID bufferId)
 RenderPass& RenderPass::ReadBuffer(const StringID bufferId)
 {
     BufferResource* resource = graph.GetOrCreateBuffer(bufferId);
-    assert(resource->bufferInfo.size > 0 && "Buffer not defined - import or create buffer first");
+    ENGINE_ASSERT(Renderer, resource->bufferInfo.size > 0, "Buffer not defined - import or create buffer first");
     bufferReads.PushBack(resource->index);
     return *this;
 }
@@ -234,7 +235,7 @@ RenderPass& RenderPass::ReadBuffer(const StringID bufferId)
 RenderPass& RenderPass::ReadIndexBuffer(const StringID bufferId)
 {
     BufferResource* resource = graph.GetOrCreateBuffer(bufferId);
-    assert(resource->bufferInfo.size > 0 && "Buffer not defined - import or create buffer first");
+    ENGINE_ASSERT(Renderer, resource->bufferInfo.size > 0, "Buffer not defined - import or create buffer first");
     bufferIndexRead.PushBack(resource->index);
     return *this;
 }
@@ -242,7 +243,7 @@ RenderPass& RenderPass::ReadIndexBuffer(const StringID bufferId)
 RenderPass& RenderPass::ReadTransferBuffer(const StringID bufferId)
 {
     BufferResource* resource = graph.GetOrCreateBuffer(bufferId);
-    assert(resource->bufferInfo.size > 0 && "Buffer not defined - import or create buffer first");
+    ENGINE_ASSERT(Renderer, resource->bufferInfo.size > 0, "Buffer not defined - import or create buffer first");
     bufferTransferReads.PushBack(resource->index);
     return *this;
 }

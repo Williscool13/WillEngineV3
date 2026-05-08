@@ -30,32 +30,32 @@ public:
 
     ~RenderGraph();
 
-    RenderPass& AddPass(StringID passId, VkPipelineStageFlags2 stages);
-
-    void PrunePasses();
-
-    void AccumulateUsage();
-
-    void CalculateLifetimes();
-
-    void PopulateAutoClearTextures();
-
-    void Compile(int64_t currentFrame);
-
-    void Execute(VkCommandBuffer cmd);
-
-    void PrepareSwapchain(VkCommandBuffer cmd, StringID textureId);
-
+public: // Frame setup
+    /**
+     *
+     * @param _currentFrameIndex
+     * @param currentFrame
+     * @param maxFramesUnused physical resources unused for this many frames are evicted
+     */
     void Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint64_t maxFramesUnused);
 
     void SetDebugLogging(bool enable) { bDebugLogging = enable; }
 
+    /**
+     * Destroys all viewport-scaled physical resources so they are recreated at the new size next frame
+     */
     void InvalidateAllViewportAssociated() { bDestroyViewportAssociated = true; }
 
     void InvalidateAllSwapchainAssociated() { bRemoveSwapchainPhysicals = true; }
 
+public: // Resource registration
     void CreateTexture(StringID textureId, const TextureInfo& texInfo, std::optional<VkClearValue> clearValue = std::nullopt, bool bIsViewportScaled = false);
 
+    /**
+     * Makes aliasId refer to the same logical resource as existingId
+     * @param aliasId
+     * @param existingId
+     */
     void AliasTexture(StringID aliasId, StringID existingId);
 
     void CreateBuffer(StringID bufferId, VkDeviceSize size, bool bIsViewportScaled = false, bool bCanAlias = true);
@@ -63,10 +63,32 @@ public:
     void ImportTexture(StringID textureId, VkImage image, VkImageView view, const TextureInfo& info, VkImageUsageFlags usage, VkImageLayout initialLayout, VkPipelineStageFlags2 initialStage,
                        VkImageLayout finalLayout, bool bIsSwapchain = false);
 
+
+    /**
+     * Imports a buffer with no barrier tracking; the caller is responsible for synchronization.
+     * @param bufferId
+     * @param buffer
+     * @param address
+     * @param info
+     */
     void ImportBufferNoBarrier(StringID bufferId, VkBuffer buffer, VkDeviceAddress address, const BufferInfo& info);
 
     void ImportBuffer(StringID bufferId, VkBuffer buffer, VkDeviceAddress address, const BufferInfo& info, PipelineEvent initialState);
 
+    /**
+     * Carries a texture across a frame boundary; the physical image is re-imported under newTextureId next frame
+     * @param textureId
+     * @param newTextureId
+     * @param additionalUsage
+     */
+    void CarryTextureToNextFrame(StringID textureId, StringID newTextureId, VkImageUsageFlags additionalUsage);
+
+    void CarryBufferToNextFrame(StringID bufferId, StringID newBufferId, VkBufferUsageFlags additionalUsage);
+
+public: // Pass setup
+    RenderPass& AddPass(StringID passId, VkPipelineStageFlags2 stages);
+
+public: // Resource queries
     bool HasTexture(StringID textureId);
 
     bool HasBuffer(StringID bufferId);
@@ -101,11 +123,42 @@ public:
 
     PipelineEvent GetBufferState(StringID bufferId);
 
-    VkImage GetTextureHandle(StringID textureId);
+public: // Compile and execute
+    /**
+     * Removes passes with no execute callback and no side effects
+     */
+    void PrunePasses();
 
-    void CarryTextureToNextFrame(StringID textureId, StringID newTextureId, VkImageUsageFlags additionalUsage);
+    /**
+     * Accumulates VkImageUsageFlags / VkBufferUsageFlags across all passes for physical resource creation
+     */
+    void AccumulateUsage();
 
-    void CarryBufferToNextFrame(StringID bufferId, StringID newBufferId, VkBufferUsageFlags additionalUsage);
+    void BuildDependencyEdges();
+
+    void TopologicalSortPasses();
+
+    /**
+     * Computes firstPass/lastPass for each logical resource to drive physical resource aliasing
+     */
+    void CalculateLifetimes();
+
+    void PopulateAutoClearTextures();
+
+    /**
+     * Allocates/aliases physical resources and writes descriptors; call after CalculateLifetimes
+     * @param currentFrame
+     */
+    void Compile(int64_t currentFrame);
+
+    void Execute(VkCommandBuffer cmd);
+
+    /**
+     * Transitions the named texture to present-src layout; call after Execute
+     * @param cmd
+     * @param textureId
+     */
+    void PrepareSwapchain(VkCommandBuffer cmd, StringID textureId);
 
 public: // Transient Uploader
     UploadAllocation AllocateTransient(size_t size);
@@ -151,6 +204,8 @@ private:
 
     // Render passes
     Core::ArenaFixedVector<RenderPass*> passes;
+    //   Generated at compile time
+    Core::ArenaFixedVector<RenderPass*> sortedPasses;
 
     Core::Vector<TextureFrameCarryover> textureCarryovers;
     Core::Vector<BufferFrameCarryover> bufferCarryovers;

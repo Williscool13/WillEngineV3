@@ -19,7 +19,7 @@ public:
     ~EngineLogger() = default;
     void Init(Utils::Logger* baseLogger);
 
-    void Flush() const;
+    static void Flush();
 
     void Shutdown() const;
 

@@ -4,12 +4,14 @@
 
 #include "render_graph.h"
 
-#include <cassert>
 #include <utility>
 
 #include "render_graph_config.h"
 #include "render_pass.h"
+#include "core/containers/arena_array.h"
+#include "core/containers/inline_queue.h"
 #include "core/containers/inline_vector.h"
+#include "engine/logging/engine_assert.h"
 #include "engine/logging/engine_log.h"
 #include "render/resource_manager.h"
 #include "render/vulkan/vk_utils.h"
@@ -18,13 +20,11 @@
 namespace Render
 {
 RenderGraph::RenderGraph(VulkanContext* context, ResourceManager* resourceManager, Core::TlsfAllocator& alloc, Core::Arena& arena)
-    : context(context), resourceManager(resourceManager), alloc(&alloc), arena(&arena),
-      textures(&arena, RDG_MAX_SAMPLED_TEXTURES),
-      textureNameToIndex(&arena, RDG_MAX_SAMPLED_TEXTURES),
-      buffers(&arena, 256),
-      bufferNameToIndex(&arena, 256),
+    : context(context),
+      resourceManager(resourceManager),
+      alloc(&alloc),
+      arena(&arena),
       physicalResources(&alloc, Core::AllocTag::Render, 256),
-      passes(&arena, RDG_MAX_PASSES),
       textureCarryovers(&alloc, Core::AllocTag::Render),
       bufferCarryovers(&alloc, Core::AllocTag::Render)
 {
@@ -171,6 +171,107 @@ void RenderGraph::AccumulateUsage()
     }
 }
 
+void RenderGraph::BuildDependencyEdges()
+{
+    // Arrays that contain the index of the last known pass that wrote that resource
+    auto lastTextureWriter = Core::ArenaArray<uint32_t>(arena, RDG_MAX_TEXTURES);
+    auto lastBufferWriter = Core::ArenaArray<uint32_t>(arena, RDG_MAX_BUFFERS);
+
+    for (auto& lastWriter : lastTextureWriter) {
+        lastWriter = UINT32_MAX;
+    }
+
+    for (auto& lastWriter : lastBufferWriter) {
+        lastWriter = UINT32_MAX;
+    }
+
+    for (uint32_t passIdx = 0; passIdx < passes.Size(); passIdx++) {
+        auto& pass = passes[passIdx];
+
+        auto addEdges = [&](Core::Span<uint32_t> lastResourceWriter, Core::Span<uint32_t> reads) {
+            for (auto resourceIndex : reads) {
+                if (lastResourceWriter[resourceIndex] != UINT32_MAX) {
+                    uint32_t writerPassIdx = lastResourceWriter[resourceIndex];
+                    passes[writerPassIdx]->outEdges.PushBack(passIdx);
+                    passes[passIdx]->inEdges.PushBack(lastResourceWriter[resourceIndex]);
+                    passes[passIdx]->inDegree++;
+                }
+            }
+        };
+
+        auto stampWriter = [&](Core::Span<uint32_t> lastWriter, Core::Span<uint32_t> writes) {
+            for (uint32_t resourceIndex : writes) {
+                lastWriter[resourceIndex] = passIdx;
+            }
+        };
+
+
+        // Textures
+        addEdges(lastTextureWriter, pass->storageImageReads);
+        addEdges(lastTextureWriter, pass->sampledImageReads);
+        addEdges(lastTextureWriter, pass->blitImageReads);
+        addEdges(lastTextureWriter, pass->copyImageReads);
+
+        addEdges(lastTextureWriter, pass->imageReadWrite);
+        stampWriter(lastTextureWriter, pass->imageReadWrite);
+
+        stampWriter(lastTextureWriter, pass->clearImageWrites);
+        stampWriter(lastTextureWriter, pass->storageImageWrites);
+        stampWriter(lastTextureWriter, pass->blitImageWrites);
+        stampWriter(lastTextureWriter, pass->copyImageWrites);
+        stampWriter(lastTextureWriter, pass->colorAttachments);
+        if (pass->depthStencilAttachment != UINT_MAX) {
+            uint32_t texIndex = pass->depthStencilAttachment;
+            if ((pass->depthAccessType & DepthAccessType::Read) != DepthAccessType::None) {
+                addEdges(lastTextureWriter, Core::Span{&texIndex, 1});
+            }
+            if ((pass->depthAccessType & DepthAccessType::Write) != DepthAccessType::None) {
+                stampWriter(lastTextureWriter, Core::Span{&texIndex, 1});
+            }
+        }
+
+        // Buffers
+        addEdges(lastBufferWriter, pass->bufferReads);
+        addEdges(lastBufferWriter, pass->bufferTransferReads);
+        addEdges(lastBufferWriter, pass->bufferIndexRead);
+        addEdges(lastBufferWriter, pass->bufferIndirectReads);
+        addEdges(lastBufferWriter, pass->bufferIndirectCountReads);
+
+        addEdges(lastBufferWriter, pass->bufferReadWrite);
+        stampWriter(lastBufferWriter, pass->bufferReadWrite);
+
+        stampWriter(lastBufferWriter, pass->bufferWrites);
+        stampWriter(lastBufferWriter, pass->bufferTransferWrites);
+    }
+}
+
+void RenderGraph::TopologicalSortPasses()
+{
+    Core::InlineQueue<uint32_t, RDG_MAX_PASSES> zeroDegreeQueue;
+
+    for (uint32_t passIdx = 0; passIdx < passes.Size(); passIdx++) {
+        auto& pass = passes[passIdx];
+        if (pass->inDegree == 0) {
+            zeroDegreeQueue.Push(passIdx);
+        }
+    }
+
+    while (zeroDegreeQueue.Size() > 0) {
+        const uint32_t currPassIdx = zeroDegreeQueue.Pop();
+        const auto& currPass = passes[currPassIdx];
+        sortedPasses.PushBack(currPass);
+
+        for (const uint32_t neighborIdx : currPass->outEdges) {
+            passes[neighborIdx]->inDegree--;
+            if (passes[neighborIdx]->inDegree == 0) {
+                zeroDegreeQueue.Push(neighborIdx);
+            }
+        }
+    }
+
+    ENGINE_ASSERT(Renderer, sortedPasses.Size() == passes.Size(), "Render graph cycle detected");
+}
+
 void RenderGraph::CalculateLifetimes()
 {
     for (uint32_t passIdx = 0; passIdx < passes.Size(); passIdx++) {
@@ -223,6 +324,8 @@ void RenderGraph::Compile(int64_t currentFrame)
     PrunePasses();
 
     AccumulateUsage();
+    BuildDependencyEdges();
+    TopologicalSortPasses();
 
     CalculateLifetimes();
 
@@ -411,42 +514,42 @@ void RenderGraph::Compile(int64_t currentFrame)
                     switch (sampledChannelType) {
                         case ImageChannelType::Float4:
                             phys.sampledDescriptorHandle = transientSampledImageHandleAllocator.Add();
-                            assert(phys.sampledDescriptorHandle.IsValid());
+                            ENGINE_ASSERT(Renderer, phys.sampledDescriptorHandle.IsValid(), "Sampled descriptor handle pool exhausted (Float4)");
                             resourceManager->bindlessRDGTransientDescriptorBuffer.WriteSampledImageDescriptor(
                                 phys.sampledDescriptorHandle.index, {nullptr, phys.imageView, VK_IMAGE_LAYOUT_GENERAL}
                             );
                             break;
                         case ImageChannelType::Float2:
                             phys.sampledDescriptorHandle = transientSampledFloat2HandleAllocator.Add();
-                            assert(phys.sampledDescriptorHandle.IsValid());
+                            ENGINE_ASSERT(Renderer, phys.sampledDescriptorHandle.IsValid(), "Sampled descriptor handle pool exhausted (Float2)");
                             resourceManager->bindlessRDGTransientDescriptorBuffer.WriteSampledFloat2Descriptor(
                                 phys.sampledDescriptorHandle.index, {nullptr, phys.imageView, VK_IMAGE_LAYOUT_GENERAL}
                             );
                             break;
                         case ImageChannelType::Float:
                             phys.sampledDescriptorHandle = transientSampledFloatHandleAllocator.Add();
-                            assert(phys.sampledDescriptorHandle.IsValid());
+                            ENGINE_ASSERT(Renderer, phys.sampledDescriptorHandle.IsValid(), "Sampled descriptor handle pool exhausted (Float)");
                             resourceManager->bindlessRDGTransientDescriptorBuffer.WriteSampledFloatDescriptor(
                                 phys.sampledDescriptorHandle.index, {nullptr, phys.imageView, VK_IMAGE_LAYOUT_GENERAL}
                             );
                             break;
                         case ImageChannelType::UInt4:
                             phys.sampledDescriptorHandle = transientSampledUInt4HandleAllocator.Add();
-                            assert(phys.sampledDescriptorHandle.IsValid());
+                            ENGINE_ASSERT(Renderer, phys.sampledDescriptorHandle.IsValid(), "Sampled descriptor handle pool exhausted (UInt4)");
                             resourceManager->bindlessRDGTransientDescriptorBuffer.WriteSampledUInt4Descriptor(
                                 phys.sampledDescriptorHandle.index, {nullptr, phys.imageView, VK_IMAGE_LAYOUT_GENERAL}
                             );
                             break;
                         case ImageChannelType::UInt2:
                             phys.sampledDescriptorHandle = transientSampledUInt2HandleAllocator.Add();
-                            assert(phys.sampledDescriptorHandle.IsValid());
+                            ENGINE_ASSERT(Renderer, phys.sampledDescriptorHandle.IsValid(), "Sampled descriptor handle pool exhausted (UInt2)");
                             resourceManager->bindlessRDGTransientDescriptorBuffer.WriteSampledUInt2Descriptor(
                                 phys.sampledDescriptorHandle.index, {nullptr, phys.imageView, VK_IMAGE_LAYOUT_GENERAL}
                             );
                             break;
                         case ImageChannelType::UInt:
                             phys.sampledDescriptorHandle = transientSampledUIntHandleAllocator.Add();
-                            assert(phys.sampledDescriptorHandle.IsValid());
+                            ENGINE_ASSERT(Renderer, phys.sampledDescriptorHandle.IsValid(), "Sampled descriptor handle pool exhausted (UInt)");
                             resourceManager->bindlessRDGTransientDescriptorBuffer.WriteSampledUIntDescriptor(
                                 phys.sampledDescriptorHandle.index, {nullptr, phys.imageView, VK_IMAGE_LAYOUT_GENERAL}
                             );
@@ -456,7 +559,7 @@ void RenderGraph::Compile(int64_t currentFrame)
 
                 if (phys.depthOnlyView != VK_NULL_HANDLE) {
                     phys.depthOnlyDescriptorHandle = transientSampledFloatHandleAllocator.Add();
-                    assert(phys.depthOnlyDescriptorHandle.IsValid());
+                    ENGINE_ASSERT(Renderer, phys.depthOnlyDescriptorHandle.IsValid(), "Depth-only descriptor handle pool exhausted");
                     resourceManager->bindlessRDGTransientDescriptorBuffer.WriteSampledFloatDescriptor(
                         phys.depthOnlyDescriptorHandle.index, {nullptr, phys.depthOnlyView, VK_IMAGE_LAYOUT_GENERAL}
                     );
@@ -464,7 +567,7 @@ void RenderGraph::Compile(int64_t currentFrame)
 
                 if (phys.stencilOnlyView != VK_NULL_HANDLE) {
                     phys.stencilOnlyDescriptorHandle = transientStorageUIntHandleAllocator.Add();
-                    assert(phys.stencilOnlyDescriptorHandle.IsValid());
+                    ENGINE_ASSERT(Renderer, phys.stencilOnlyDescriptorHandle.IsValid(), "Stencil-only descriptor handle pool exhausted");
                     resourceManager->bindlessRDGTransientDescriptorBuffer.WriteSampledUIntDescriptor(
                         phys.stencilOnlyDescriptorHandle.index,
                         {nullptr, phys.stencilOnlyView, VK_IMAGE_LAYOUT_GENERAL}
@@ -478,7 +581,7 @@ void RenderGraph::Compile(int64_t currentFrame)
                             case ImageChannelType::Float4:
                             {
                                 phys.storageMipDescriptorHandles[mip] = transientStorageFloat4HandleAllocator.Add();
-                                assert(phys.storageMipDescriptorHandles[mip].IsValid());
+                                ENGINE_ASSERT(Renderer, phys.storageMipDescriptorHandles[mip].IsValid(), "Storage mip descriptor handle pool exhausted (Float4)");
                                 resourceManager->bindlessRDGTransientDescriptorBuffer.WriteStorageFloat4Descriptor(
                                     phys.storageMipDescriptorHandles[mip].index,
                                     {nullptr, phys.mipViews[mip], VK_IMAGE_LAYOUT_GENERAL}
@@ -488,7 +591,7 @@ void RenderGraph::Compile(int64_t currentFrame)
                             case ImageChannelType::Float2:
                             {
                                 phys.storageMipDescriptorHandles[mip] = transientStorageFloat2HandleAllocator.Add();
-                                assert(phys.storageMipDescriptorHandles[mip].IsValid());
+                                ENGINE_ASSERT(Renderer, phys.storageMipDescriptorHandles[mip].IsValid(), "Storage mip descriptor handle pool exhausted (Float2)");
                                 resourceManager->bindlessRDGTransientDescriptorBuffer.WriteStorageFloat2Descriptor(
                                     phys.storageMipDescriptorHandles[mip].index,
                                     {nullptr, phys.mipViews[mip], VK_IMAGE_LAYOUT_GENERAL}
@@ -498,7 +601,7 @@ void RenderGraph::Compile(int64_t currentFrame)
                             case ImageChannelType::Float:
                             {
                                 phys.storageMipDescriptorHandles[mip] = transientStorageFloatHandleAllocator.Add();
-                                assert(phys.storageMipDescriptorHandles[mip].IsValid());
+                                ENGINE_ASSERT(Renderer, phys.storageMipDescriptorHandles[mip].IsValid(), "Storage mip descriptor handle pool exhausted (Float)");
                                 resourceManager->bindlessRDGTransientDescriptorBuffer.WriteStorageFloatDescriptor(
                                     phys.storageMipDescriptorHandles[mip].index,
                                     {nullptr, phys.mipViews[mip], VK_IMAGE_LAYOUT_GENERAL}
@@ -508,7 +611,7 @@ void RenderGraph::Compile(int64_t currentFrame)
                             case ImageChannelType::UInt4:
                             {
                                 phys.storageMipDescriptorHandles[mip] = transientStorageUInt4HandleAllocator.Add();
-                                assert(phys.storageMipDescriptorHandles[mip].IsValid());
+                                ENGINE_ASSERT(Renderer, phys.storageMipDescriptorHandles[mip].IsValid(), "Storage mip descriptor handle pool exhausted (UInt4)");
                                 resourceManager->bindlessRDGTransientDescriptorBuffer.WriteStorageUInt4Descriptor(
                                     phys.storageMipDescriptorHandles[mip].index,
                                     {nullptr, phys.mipViews[mip], VK_IMAGE_LAYOUT_GENERAL}
@@ -518,7 +621,7 @@ void RenderGraph::Compile(int64_t currentFrame)
                             case ImageChannelType::UInt2:
                             {
                                 phys.storageMipDescriptorHandles[mip] = transientStorageUInt2HandleAllocator.Add();
-                                assert(phys.storageMipDescriptorHandles[mip].IsValid());
+                                ENGINE_ASSERT(Renderer, phys.storageMipDescriptorHandles[mip].IsValid(), "Storage mip descriptor handle pool exhausted (UInt2)");
                                 resourceManager->bindlessRDGTransientDescriptorBuffer.WriteStorageUInt2Descriptor(
                                     phys.storageMipDescriptorHandles[mip].index,
                                     {nullptr, phys.mipViews[mip], VK_IMAGE_LAYOUT_GENERAL}
@@ -528,7 +631,7 @@ void RenderGraph::Compile(int64_t currentFrame)
                             case ImageChannelType::UInt:
                             {
                                 phys.storageMipDescriptorHandles[mip] = transientStorageUIntHandleAllocator.Add();
-                                assert(phys.storageMipDescriptorHandles[mip].IsValid());
+                                ENGINE_ASSERT(Renderer, phys.storageMipDescriptorHandles[mip].IsValid(), "Storage mip descriptor handle pool exhausted (UInt)");
                                 resourceManager->bindlessRDGTransientDescriptorBuffer.WriteStorageUIntDescriptor(
                                     phys.storageMipDescriptorHandles[mip].index,
                                     {nullptr, phys.mipViews[mip], VK_IMAGE_LAYOUT_GENERAL}
@@ -608,7 +711,8 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 VkImageSubresourceRange range = VkHelpers::SubresourceRange(phys.aspect);
                 if (phys.aspect & VK_IMAGE_ASPECT_DEPTH_BIT) {
                     vkCmdClearDepthStencilImage(cmd, phys.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &tex.clear.value().depthStencil, 1, &range);
-                } else {
+                }
+                else {
                     vkCmdClearColorImage(cmd, phys.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &tex.clear.value().color, 1, &range);
                 }
                 tex.layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
@@ -616,7 +720,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 phys.event.access = VK_ACCESS_2_TRANSFER_WRITE_BIT;
             }
         }
-
+        //
         {
             ZoneScopedN("Barriers");
             for (const uint32_t texIndex : pass->colorAttachments) {
@@ -979,7 +1083,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 if ((pass->depthAccessType & DepthAccessType::Write) != DepthAccessType::None) {
                     dstAccess |= VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
                 }
-                assert(dstAccess != 0 && "Depth/stencil attachment must have at least Read or Write access");
+                ENGINE_ASSERT(Renderer, dstAccess != 0, "Depth/stencil attachment must have at least Read or Write access");
 
                 const uint32_t texIndex = pass->depthStencilAttachment;
                 auto& tex = textures[texIndex];
@@ -1237,10 +1341,11 @@ void RenderGraph::Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint
         bufferNameToIndex.Clear();
         arena->Reset();
         passes = Core::ArenaFixedVector<RenderPass*>(arena, RDG_MAX_PASSES);
-        textures = Core::ArenaFixedVector<TextureResource>(arena, RDG_MAX_SAMPLED_TEXTURES);
-        textureNameToIndex = Core::ArenaFixedMap<StringID, uint32_t>(arena, RDG_MAX_SAMPLED_TEXTURES);
-        buffers = Core::ArenaFixedVector<BufferResource>(arena, 256);
-        bufferNameToIndex = Core::ArenaFixedMap<StringID, uint32_t>(arena, 256);
+        sortedPasses = Core::ArenaFixedVector<RenderPass*>(arena, RDG_MAX_PASSES);
+        textures = Core::ArenaFixedVector<TextureResource>(arena, RDG_MAX_TEXTURES);
+        textureNameToIndex = Core::ArenaFixedMap<StringID, uint32_t>(arena, RDG_MAX_TEXTURES);
+        buffers = Core::ArenaFixedVector<BufferResource>(arena, RDG_MAX_BUFFERS);
+        bufferNameToIndex = Core::ArenaFixedMap<StringID, uint32_t>(arena, RDG_MAX_BUFFERS);
 
         for (auto& phys : physicalResources) {
             phys.logicalResourceIndices.Clear();
@@ -1342,13 +1447,13 @@ void RenderGraph::CreateTexture(const StringID textureId, const TextureInfo& tex
     TextureResource* tex = GetOrCreateTexture(textureId);
 
     if (tex->textureInfo.format != VK_FORMAT_UNDEFINED) {
-        assert(tex->textureInfo.format == texInfo.format && "Texture format mismatch");
-        assert(tex->textureInfo.width == texInfo.width && "Texture width mismatch");
-        assert(tex->textureInfo.height == texInfo.height && "Texture height mismatch");
-        assert(tex->textureInfo.mipLevels == texInfo.mipLevels && "Texture mip level mismatch");
+        ENGINE_ASSERT(Renderer, tex->textureInfo.format == texInfo.format, "Texture format mismatch");
+        ENGINE_ASSERT(Renderer, tex->textureInfo.width == texInfo.width, "Texture width mismatch");
+        ENGINE_ASSERT(Renderer, tex->textureInfo.height == texInfo.height, "Texture height mismatch");
+        ENGINE_ASSERT(Renderer, tex->textureInfo.mipLevels == texInfo.mipLevels, "Texture mip level mismatch");
     }
 
-    assert(texInfo.format != VK_FORMAT_UNDEFINED && "Texture info uses undefined format");
+    ENGINE_ASSERT(Renderer, texInfo.format != VK_FORMAT_UNDEFINED, "Texture info uses undefined format");
     tex->textureInfo = texInfo;
     tex->bIsViewportScaled = bIsViewportScaled;
     tex->clear = clearValue;
@@ -1357,7 +1462,7 @@ void RenderGraph::CreateTexture(const StringID textureId, const TextureInfo& tex
 void RenderGraph::AliasTexture(const StringID aliasId, const StringID existingId)
 {
     uint32_t* idx = textureNameToIndex.Find(existingId);
-    assert(idx != nullptr && "Aliasing texture failed because existing texture doesn't exist");
+    ENGINE_ASSERT(Renderer, idx != nullptr, "Aliasing texture failed because existing texture doesn't exist");
     textureNameToIndex[aliasId] = *idx;
 }
 
@@ -1366,7 +1471,7 @@ void RenderGraph::CreateBuffer(StringID bufferId, VkDeviceSize size, bool bIsVie
     BufferResource* buf = GetOrCreateBuffer(bufferId);
 
     if (buf->bufferInfo.size != 0) {
-        assert(buf->bufferInfo.size == size && "Buffer size mismatch");
+        ENGINE_ASSERT(Renderer, buf->bufferInfo.size == size, "Buffer size mismatch");
     }
 
     buf->bufferInfo.size = size;
@@ -1394,10 +1499,10 @@ void RenderGraph::ImportTexture(StringID textureId,
             auto& phys = physicalResources[i];
             if (phys.bIsImported && phys.image == image) {
                 foundIndex = i;
-                assert(phys.dimensions.format == info.format && "Reimported image format mismatch");
-                assert(phys.dimensions.width == info.width && "Reimported image width mismatch");
-                assert(phys.dimensions.height == info.height && "Reimported image height mismatch");
-                assert(phys.dimensions.levels == info.mipLevels && "Reimported image mip level mismatch");
+                ENGINE_ASSERT(Renderer, phys.dimensions.format == info.format, "Reimported image format mismatch");
+                ENGINE_ASSERT(Renderer, phys.dimensions.width == info.width, "Reimported image width mismatch");
+                ENGINE_ASSERT(Renderer, phys.dimensions.height == info.height, "Reimported image height mismatch");
+                ENGINE_ASSERT(Renderer, phys.dimensions.levels == info.mipLevels, "Reimported image mip level mismatch");
                 break;
             }
         }
@@ -1448,10 +1553,10 @@ void RenderGraph::ImportBufferNoBarrier(StringID bufferId, VkBuffer buffer, VkDe
             auto& phys = physicalResources[i];
             if (phys.bIsImported && phys.buffer == buffer) {
                 foundIndex = i;
-                assert(phys.dimensions.bufferSize == info.size && "Reimported buffer size mismatch");
-                assert(phys.dimensions.bufferUsage == info.usage && "Reimported buffer usage mismatch");
-                assert(phys.bufferAddress == address && "Reimported buffer address mismatch");
-                assert(phys.addressRetrieved && "Reimported buffer not marked as address retrieved");
+                ENGINE_ASSERT(Renderer, phys.dimensions.bufferSize == info.size, "Reimported buffer size mismatch");
+                ENGINE_ASSERT(Renderer, phys.dimensions.bufferUsage == info.usage, "Reimported buffer usage mismatch");
+                ENGINE_ASSERT(Renderer, phys.bufferAddress == address, "Reimported buffer address mismatch");
+                ENGINE_ASSERT(Renderer, phys.addressRetrieved, "Reimported buffer not marked as address retrieved");
                 break;
             }
         }
@@ -1490,10 +1595,10 @@ void RenderGraph::ImportBuffer(StringID bufferId, VkBuffer buffer, VkDeviceAddre
             auto& phys = physicalResources[i];
             if (phys.bIsImported && phys.buffer == buffer) {
                 foundIndex = i;
-                assert(phys.dimensions.bufferSize == info.size && "Reimported buffer size mismatch");
-                assert(phys.dimensions.bufferUsage == info.usage && "Reimported buffer usage mismatch");
-                assert(phys.bufferAddress == address && "Reimported buffer address mismatch");
-                assert(phys.addressRetrieved && "Reimported buffer not marked as address retrieved");
+                ENGINE_ASSERT(Renderer, phys.dimensions.bufferSize == info.size, "Reimported buffer size mismatch");
+                ENGINE_ASSERT(Renderer, phys.dimensions.bufferUsage == info.usage, "Reimported buffer usage mismatch");
+                ENGINE_ASSERT(Renderer, phys.bufferAddress == address, "Reimported buffer address mismatch");
+                ENGINE_ASSERT(Renderer, phys.addressRetrieved, "Reimported buffer not marked as address retrieved");
                 break;
             }
         }
@@ -1536,10 +1641,10 @@ bool RenderGraph::HasBuffer(StringID bufferId)
 VkImage RenderGraph::GetImageHandle(StringID textureId)
 {
     uint32_t* idx = textureNameToIndex.Find(textureId);
-    assert(idx != nullptr && "Texture not found");
+    ENGINE_ASSERT(Renderer, idx != nullptr, "Texture not found");
 
     auto& tex = textures[*idx];
-    assert(tex.HasPhysical() && "Texture has no physical resource");
+    ENGINE_ASSERT(Renderer, tex.HasPhysical(), "Texture has no physical resource");
 
     return physicalResources[tex.physicalIndex].image;
 }
@@ -1547,10 +1652,10 @@ VkImage RenderGraph::GetImageHandle(StringID textureId)
 VkImageView RenderGraph::GetImageViewHandle(StringID textureId)
 {
     uint32_t* idx = textureNameToIndex.Find(textureId);
-    assert(idx != nullptr && "Texture not found");
+    ENGINE_ASSERT(Renderer, idx != nullptr, "Texture not found");
 
     auto& tex = textures[*idx];
-    assert(tex.HasPhysical() && "Texture has no physical resource");
+    ENGINE_ASSERT(Renderer, tex.HasPhysical(), "Texture has no physical resource");
 
     return physicalResources[tex.physicalIndex].imageView;
 }
@@ -1558,11 +1663,11 @@ VkImageView RenderGraph::GetImageViewHandle(StringID textureId)
 VkImageView RenderGraph::GetImageViewMipHandle(StringID textureId, uint32_t mipLevel)
 {
     uint32_t* idx = textureNameToIndex.Find(textureId);
-    assert(idx != nullptr && "Texture not found");
-    assert(mipLevel < RDG_MAX_MIP_LEVELS);
+    ENGINE_ASSERT(Renderer, idx != nullptr, "Texture not found");
+    ENGINE_ASSERT(Renderer, mipLevel < RDG_MAX_MIP_LEVELS, "Mip level out of range");
 
     auto& tex = textures[*idx];
-    assert(tex.HasPhysical() && "Texture has no physical resource");
+    ENGINE_ASSERT(Renderer, tex.HasPhysical(), "Texture has no physical resource");
 
     return physicalResources[tex.physicalIndex].mipViews[mipLevel];
 }
@@ -1570,10 +1675,10 @@ VkImageView RenderGraph::GetImageViewMipHandle(StringID textureId, uint32_t mipL
 VkImageView RenderGraph::GetDepthOnlyImageViewHandle(StringID textureId)
 {
     uint32_t* idx = textureNameToIndex.Find(textureId);
-    assert(idx != nullptr && "Texture not found");
+    ENGINE_ASSERT(Renderer, idx != nullptr, "Texture not found");
 
     auto& tex = textures[*idx];
-    assert(tex.HasPhysical() && "Texture has no physical resource");
+    ENGINE_ASSERT(Renderer, tex.HasPhysical(), "Texture has no physical resource");
 
     auto& phys = physicalResources[tex.physicalIndex];
 
@@ -1581,17 +1686,17 @@ VkImageView RenderGraph::GetDepthOnlyImageViewHandle(StringID textureId)
         return phys.imageView;
     }
 
-    assert(phys.depthOnlyView != VK_NULL_HANDLE && "Texture has no depth only view");
+    ENGINE_ASSERT(Renderer, phys.depthOnlyView != VK_NULL_HANDLE, "Texture has no depth only view");
     return phys.depthOnlyView;
 }
 
 VkImageView RenderGraph::GetStencilOnlyImageViewHandle(StringID textureId)
 {
     uint32_t* idx = textureNameToIndex.Find(textureId);
-    assert(idx != nullptr && "Texture not found");
+    ENGINE_ASSERT(Renderer, idx != nullptr, "Texture not found");
 
     auto& tex = textures[*idx];
-    assert(tex.HasPhysical() && "Texture has no physical resource");
+    ENGINE_ASSERT(Renderer, tex.HasPhysical(), "Texture has no physical resource");
 
     auto& phys = physicalResources[tex.physicalIndex];
 
@@ -1599,17 +1704,17 @@ VkImageView RenderGraph::GetStencilOnlyImageViewHandle(StringID textureId)
         return phys.imageView;
     }
 
-    assert(phys.stencilOnlyView != VK_NULL_HANDLE && "Texture has no stencil only view");
+    ENGINE_ASSERT(Renderer, phys.stencilOnlyView != VK_NULL_HANDLE, "Texture has no stencil only view");
     return phys.stencilOnlyView;
 }
 
 const ResourceDimensions& RenderGraph::GetImageDimensions(StringID textureId)
 {
     uint32_t* idx = textureNameToIndex.Find(textureId);
-    assert(idx != nullptr && "Texture not found");
+    ENGINE_ASSERT(Renderer, idx != nullptr, "Texture not found");
 
     auto& tex = textures[*idx];
-    assert(tex.HasPhysical() && "Texture has no physical resource");
+    ENGINE_ASSERT(Renderer, tex.HasPhysical(), "Texture has no physical resource");
 
     return physicalResources[tex.physicalIndex].dimensions;
 }
@@ -1617,10 +1722,10 @@ const ResourceDimensions& RenderGraph::GetImageDimensions(StringID textureId)
 const VkImageAspectFlags RenderGraph::GetImageAspect(StringID textureId)
 {
     uint32_t* idx = textureNameToIndex.Find(textureId);
-    assert(idx != nullptr && "Texture not found");
+    ENGINE_ASSERT(Renderer, idx != nullptr, "Texture not found");
 
     auto& tex = textures[*idx];
-    assert(tex.HasPhysical() && "Texture has no physical resource");
+    ENGINE_ASSERT(Renderer, tex.HasPhysical(), "Texture has no physical resource");
 
     return physicalResources[tex.physicalIndex].aspect;
 }
@@ -1628,10 +1733,10 @@ const VkImageAspectFlags RenderGraph::GetImageAspect(StringID textureId)
 uint32_t RenderGraph::GetSampledImageViewDescriptorIndex(StringID textureId)
 {
     uint32_t* idx = textureNameToIndex.Find(textureId);
-    assert(idx != nullptr && "Texture not found");
+    ENGINE_ASSERT(Renderer, idx != nullptr, "Texture not found");
 
     auto& tex = textures[*idx];
-    assert(tex.HasPhysical() && "Texture has no physical resource");
+    ENGINE_ASSERT(Renderer, tex.HasPhysical(), "Texture has no physical resource");
 
     return physicalResources[tex.physicalIndex].sampledDescriptorHandle.index;
 }
@@ -1639,10 +1744,10 @@ uint32_t RenderGraph::GetSampledImageViewDescriptorIndex(StringID textureId)
 uint32_t RenderGraph::GetStorageImageViewDescriptorIndex(StringID textureId, uint32_t mipLevel)
 {
     uint32_t* idx = textureNameToIndex.Find(textureId);
-    assert(idx != nullptr && "Texture not found");
+    ENGINE_ASSERT(Renderer, idx != nullptr, "Texture not found");
 
     auto& tex = textures[*idx];
-    assert(tex.HasPhysical() && "Texture has no physical resource");
+    ENGINE_ASSERT(Renderer, tex.HasPhysical(), "Texture has no physical resource");
 
     return physicalResources[tex.physicalIndex].storageMipDescriptorHandles[mipLevel].index;
 }
@@ -1650,44 +1755,44 @@ uint32_t RenderGraph::GetStorageImageViewDescriptorIndex(StringID textureId, uin
 uint32_t RenderGraph::GetDepthOnlySampledImageViewDescriptorIndex(StringID textureId)
 {
     uint32_t* idx = textureNameToIndex.Find(textureId);
-    assert(idx != nullptr && "Texture not found");
+    ENGINE_ASSERT(Renderer, idx != nullptr, "Texture not found");
 
     auto& tex = textures[*idx];
-    assert(tex.HasPhysical() && "Texture has no physical resource");
+    ENGINE_ASSERT(Renderer, tex.HasPhysical(), "Texture has no physical resource");
     auto& phys = physicalResources[tex.physicalIndex];
 
     if (phys.aspect == VK_IMAGE_ASPECT_DEPTH_BIT) {
         return phys.sampledDescriptorHandle.index;
     }
 
-    assert(phys.depthOnlyDescriptorHandle.IsValid() && "Texture has no depth only descriptor");
+    ENGINE_ASSERT(Renderer, phys.depthOnlyDescriptorHandle.IsValid(), "Texture has no depth only descriptor");
     return phys.depthOnlyDescriptorHandle.index;
 }
 
 uint32_t RenderGraph::GetStencilOnlyStorageImageViewDescriptorIndex(StringID textureId)
 {
     uint32_t* idx = textureNameToIndex.Find(textureId);
-    assert(idx != nullptr && "Texture not found");
+    ENGINE_ASSERT(Renderer, idx != nullptr, "Texture not found");
 
     auto& tex = textures[*idx];
-    assert(tex.HasPhysical() && "Texture has no physical resource");
+    ENGINE_ASSERT(Renderer, tex.HasPhysical(), "Texture has no physical resource");
     auto& phys = physicalResources[tex.physicalIndex];
 
     if (phys.aspect == VK_IMAGE_ASPECT_STENCIL_BIT) {
         return phys.sampledDescriptorHandle.index;
     }
 
-    assert(phys.stencilOnlyDescriptorHandle.IsValid() && "Texture has no stencil only descriptor");
+    ENGINE_ASSERT(Renderer, phys.stencilOnlyDescriptorHandle.IsValid(), "Texture has no stencil only descriptor");
     return phys.stencilOnlyDescriptorHandle.index;
 }
 
 VkBuffer RenderGraph::GetBufferHandle(StringID bufferId)
 {
     uint32_t* idx = bufferNameToIndex.Find(bufferId);
-    assert(idx != nullptr && "Buffer not found");
+    ENGINE_ASSERT(Renderer, idx != nullptr, "Buffer not found");
 
     auto& buf = buffers[*idx];
-    assert(buf.HasPhysical() && "Buffer has no physical resource");
+    ENGINE_ASSERT(Renderer, buf.HasPhysical(), "Buffer has no physical resource");
 
     return physicalResources[buf.physicalIndex].buffer;
 }
@@ -1695,10 +1800,10 @@ VkBuffer RenderGraph::GetBufferHandle(StringID bufferId)
 VkDeviceAddress RenderGraph::GetBufferAddress(StringID bufferId)
 {
     uint32_t* idx = bufferNameToIndex.Find(bufferId);
-    assert(idx != nullptr && "Buffer not found");
+    ENGINE_ASSERT(Renderer, idx != nullptr, "Buffer not found");
 
     auto& buf = buffers[*idx];
-    assert(buf.HasPhysical() && "Buffer has no physical resource");
+    ENGINE_ASSERT(Renderer, buf.HasPhysical(), "Buffer has no physical resource");
 
     auto& phys = physicalResources[buf.physicalIndex];
 
@@ -1715,23 +1820,12 @@ VkDeviceAddress RenderGraph::GetBufferAddress(StringID bufferId)
 PipelineEvent RenderGraph::GetBufferState(StringID bufferId)
 {
     uint32_t* idx = bufferNameToIndex.Find(bufferId);
-    assert(idx != nullptr && "Buffer not found");
+    ENGINE_ASSERT(Renderer, idx != nullptr, "Buffer not found");
 
     auto& buf = buffers[*idx];
-    assert(buf.HasPhysical() && "Buffer has no physical resource");
+    ENGINE_ASSERT(Renderer, buf.HasPhysical(), "Buffer has no physical resource");
 
     return physicalResources[buf.physicalIndex].event;
-}
-
-VkImage RenderGraph::GetTextureHandle(StringID textureId)
-{
-    uint32_t* idx = textureNameToIndex.Find(textureId);
-    assert(idx != nullptr && "Texture not found");
-
-    auto& tex = textures[*idx];
-    assert(tex.HasPhysical() && "Texture has no physical resource");
-
-    return physicalResources[tex.physicalIndex].image;
 }
 
 void RenderGraph::CarryTextureToNextFrame(StringID textureId, StringID newTextureId, VkImageUsageFlags additionalUsage)
@@ -1743,15 +1837,15 @@ void RenderGraph::CarryTextureToNextFrame(StringID textureId, StringID newTextur
     if (tex->physicalIndex != UINT32_MAX) {
         auto& phys = physicalResources[tex->physicalIndex];
         if (phys.IsAllocated()) {
-            assert((phys.dimensions.bufferUsage & additionalUsage) == additionalUsage && "Existing physical texture usage is not a superset of required usage");
+            ENGINE_ASSERT(Renderer, (phys.dimensions.bufferUsage & additionalUsage) == additionalUsage, "Existing physical texture usage is not a superset of required usage");
         }
     }
 
     for (const auto& c : textureCarryovers) {
-        assert(c.srcName != textureId && "Source texture already designated for carryover");
-        assert(c.dstName != newTextureId && "Destination texture name already used in another carryover");
+        ENGINE_ASSERT(Renderer, c.srcName != textureId, "Source texture already designated for carryover");
+        ENGINE_ASSERT(Renderer, c.dstName != newTextureId, "Destination texture name already used in another carryover");
         if (const TextureResource* otherTex = GetTexture(c.srcName)) {
-            assert(otherTex->index != tex->index && "Cannot carry over texture already marked to be carried over");
+            ENGINE_ASSERT(Renderer, otherTex->index != tex->index, "Cannot carry over texture already marked to be carried over");
         }
     }
 
@@ -1767,13 +1861,13 @@ void RenderGraph::CarryBufferToNextFrame(StringID bufferId, StringID newBufferId
     if (buf->physicalIndex != UINT32_MAX) {
         auto& phys = physicalResources[buf->physicalIndex];
         if (phys.IsAllocated()) {
-            assert((phys.dimensions.bufferUsage & additionalUsage) == additionalUsage && "Existing physical buffer usage is not a superset of required usage");
+            ENGINE_ASSERT(Renderer, (phys.dimensions.bufferUsage & additionalUsage) == additionalUsage, "Existing physical buffer usage is not a superset of required usage");
         }
     }
 
     for (const auto& c : bufferCarryovers) {
-        assert(c.srcName != bufferId && "Source buffer already designated for carryover");
-        assert(c.dstName != newBufferId && "Destination buffer name already used in another carryover");
+        ENGINE_ASSERT(Renderer, c.srcName != bufferId, "Source buffer already designated for carryover");
+        ENGINE_ASSERT(Renderer, c.dstName != newBufferId, "Destination buffer name already used in another carryover");
     }
 
     bufferCarryovers.PushBack(BufferFrameCarryover{bufferId, newBufferId});
@@ -1789,7 +1883,7 @@ UploadAllocation RenderGraph::AllocateTransient(size_t size)
         size_t newSize = std::max(arena.size * 2, required);
         RecreateTransientArena(currentFrameIndex, newSize);
         offset = arena.allocator.Allocate(size);
-        assert(offset != SIZE_MAX && "Still OOM after resize");
+        ENGINE_ASSERT(Renderer, offset != SIZE_MAX, "Still OOM after transient arena resize");
     }
 
     return {
