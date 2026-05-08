@@ -87,7 +87,7 @@ public:
 public: // DAG compile-time fields
     uint32_t passIndex{UINT_MAX};
     uint32_t inDegree{0};
-    Core::InlineVector<uint32_t, 8> inEdges{};
+    Core::InlineVector<uint32_t, 32> inEdges{};
     Core::InlineVector<uint32_t, 32> outEdges{};
 
 private:

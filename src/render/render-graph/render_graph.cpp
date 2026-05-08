@@ -211,15 +211,20 @@ void RenderGraph::BuildDependencyEdges()
         addEdges(lastTextureWriter, pass->sampledImageReads);
         addEdges(lastTextureWriter, pass->blitImageReads);
         addEdges(lastTextureWriter, pass->copyImageReads);
-
+        addEdges(lastTextureWriter, pass->clearImageWrites);
+        addEdges(lastTextureWriter, pass->storageImageWrites);
+        addEdges(lastTextureWriter, pass->blitImageWrites);
+        addEdges(lastTextureWriter, pass->copyImageWrites);
+        addEdges(lastTextureWriter, pass->colorAttachments);
         addEdges(lastTextureWriter, pass->imageReadWrite);
-        stampWriter(lastTextureWriter, pass->imageReadWrite);
 
         stampWriter(lastTextureWriter, pass->clearImageWrites);
         stampWriter(lastTextureWriter, pass->storageImageWrites);
         stampWriter(lastTextureWriter, pass->blitImageWrites);
         stampWriter(lastTextureWriter, pass->copyImageWrites);
         stampWriter(lastTextureWriter, pass->colorAttachments);
+        stampWriter(lastTextureWriter, pass->imageReadWrite);
+
         if (pass->depthStencilAttachment != UINT_MAX) {
             uint32_t texIndex = pass->depthStencilAttachment;
             if ((pass->depthAccessType & DepthAccessType::Read) != DepthAccessType::None) {
@@ -270,6 +275,20 @@ void RenderGraph::TopologicalSortPasses()
     }
 
     ENGINE_ASSERT(Renderer, sortedPasses.Size() == passes.Size(), "Render graph cycle detected");
+
+    if (bDebugLogging) {
+        LOG_INFO(Renderer, "=== Before RDG Topological Sort ===");
+        for (uint32_t i = 0; i < passes.Size(); i++) {
+            const RenderPass* pass = passes[i];
+            LOG_INFO(Renderer, "  [{}] {}", i, pass->renderPassId.ToString());
+        }
+
+        LOG_INFO(Renderer, "=== RDG Topological Sort ===");
+        for (uint32_t i = 0; i < sortedPasses.Size(); i++) {
+            const RenderPass* pass = sortedPasses[i];
+            LOG_INFO(Renderer, "  [{}] {}", i, pass->renderPassId.ToString());
+        }
+    }
 }
 
 void RenderGraph::CalculateLifetimes()
@@ -655,11 +674,11 @@ void RenderGraph::Compile(int64_t currentFrame)
     }
 
     if (bDebugLogging) {
-        SPDLOG_INFO("=== Physical Resource Aliasing Chains ===");
+        LOG_INFO(Renderer,"=== Physical Resource Aliasing Chains ===");
         for (size_t i = 0; i < physicalResources.Size(); ++i) {
             const auto& phys = physicalResources[i];
             if (!phys.usageChain.IsEmpty()) {
-                SPDLOG_INFO("  Phys[{}]: {}", i, phys.usageChain.c_str());
+                LOG_INFO(Renderer,"  Phys[{}]: {}", i, phys.usageChain.c_str());
             }
         }
     }
@@ -670,7 +689,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
     ZoneScoped;
 
     if (bDebugLogging) {
-        SPDLOG_INFO("=== RenderGraph Execution ===");
+        LOG_INFO(Renderer,"=== RenderGraph Execution ===");
     }
 
     for (auto& pass : passes) {
@@ -678,7 +697,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
         ZoneText(pass->renderPassId.ToString(), strlen(pass->renderPassId.ToString()));
 
         if (bDebugLogging) {
-            SPDLOG_INFO("[PASS] {}", pass->renderPassId.ToString());
+            LOG_INFO(Renderer,"[PASS] {}", pass->renderPassId.ToString());
         }
         Core::InlineVector<VkImageMemoryBarrier2, 32> barriers;
 
@@ -1035,13 +1054,13 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 ZoneScopedN("PipelineBarrier");
                 if (bDebugLogging) {
                     if (!barriers.IsEmpty() && !bufferBarriers.IsEmpty()) {
-                        SPDLOG_INFO("  Inserting {} image, {} buffer barrier(s)", barriers.Size(), bufferBarriers.Size());
+                        LOG_INFO(Renderer,"  Inserting {} image, {} buffer barrier(s)", barriers.Size(), bufferBarriers.Size());
                     }
                     else if (!barriers.IsEmpty()) {
-                        SPDLOG_INFO("  Inserting {} image barrier(s)", barriers.Size());
+                        LOG_INFO(Renderer,"  Inserting {} image barrier(s)", barriers.Size());
                     }
                     else {
-                        SPDLOG_INFO("  Inserting {} buffer barrier(s)", bufferBarriers.Size());
+                        LOG_INFO(Renderer,"  Inserting {} buffer barrier(s)", bufferBarriers.Size());
                     }
                 }
                 VkDependencyInfo depInfo{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
@@ -1224,7 +1243,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
     } {
         ZoneScopedN("FinalBarriers");
         if (bDebugLogging) {
-            SPDLOG_INFO("[FINAL BARRIERS]");
+            LOG_INFO(Renderer,"[FINAL BARRIERS]");
         }
         Core::InlineVector<VkImageMemoryBarrier2, 16> finalBarriers;
         for (auto& tex : textures) {
@@ -1257,7 +1276,7 @@ void RenderGraph::PrepareSwapchain(VkCommandBuffer cmd, StringID textureId)
 {
     uint32_t* idx = textureNameToIndex.Find(textureId);
     if (!idx) {
-        SPDLOG_ERROR("[RenderGraph::PrepareSwapchain] Prepare swapchain failed.");
+        LOG_ERROR(Renderer,"[RenderGraph::PrepareSwapchain] Prepare swapchain failed.");
         return;
     }
 
@@ -1391,7 +1410,7 @@ void RenderGraph::Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint
             }
 
             if (physicalIndex == UINT32_MAX) {
-                SPDLOG_ERROR("Carryover texture '{}' physical resource not found", carryover.dstName.ToString());
+                LOG_ERROR(Renderer,"Carryover texture '{}' physical resource not found", carryover.dstName.ToString());
                 continue;
             }
 
@@ -1420,7 +1439,7 @@ void RenderGraph::Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint
             }
 
             if (physicalIndex == UINT32_MAX) {
-                SPDLOG_ERROR("Carryover buffer '{}' physical resource not found", carryover.dstName.ToString());
+                LOG_ERROR(Renderer,"Carryover buffer '{}' physical resource not found", carryover.dstName.ToString());
                 continue;
             }
 
@@ -1937,7 +1956,7 @@ void RenderGraph::LogImageBarrier(StringID textureId, const VkImageMemoryBarrier
         }
     };
 
-    SPDLOG_INFO("  [BARRIER] {} ({}): {} -> {}", textureId.ToString(), physicalIndex, LayoutToString(barrier.oldLayout), LayoutToString(barrier.newLayout));
+    LOG_INFO(Renderer,"  [BARRIER] {} ({}): {} -> {}", textureId.ToString(), physicalIndex, LayoutToString(barrier.oldLayout), LayoutToString(barrier.newLayout));
 }
 
 void RenderGraph::LogBufferBarrier(StringID bufferId, VkAccessFlags2 access) const
@@ -1949,7 +1968,7 @@ void RenderGraph::LogBufferBarrier(StringID bufferId, VkAccessFlags2 access) con
         accessType = "write";
     }
 
-    SPDLOG_INFO("  [BUFFER BARRIER] {} ({})", bufferId.ToString(), accessType);
+    LOG_INFO(Renderer,"  [BUFFER BARRIER] {} ({})", bufferId.ToString(), accessType);
 }
 
 
