@@ -39,7 +39,13 @@ public: // Frame setup
      */
     void Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint64_t maxFramesUnused);
 
-    void SetDebugLogging(bool enable) { bDebugLogging = enable; }
+    void SetDebugLogging(bool enable)
+    {
+        if (enable && !bDebugLogging) {
+            bDebugLogging = true;
+            debugCaptureFramesLeft = 2;
+        }
+    }
 
     /**
      * Destroys all viewport-scaled physical resources so they are recreated at the new size next frame
@@ -126,11 +132,6 @@ public: // Resource queries
 
 public: // Compile and execute
     /**
-     * Removes passes with no execute callback and no side effects
-     */
-    void PrunePasses();
-
-    /**
      * Accumulates VkImageUsageFlags / VkBufferUsageFlags across all passes for physical resource creation
      */
     void AccumulateUsage();
@@ -147,6 +148,13 @@ public: // Compile and execute
     void CalculateLifetimes();
 
     void PopulateAutoClearTextures();
+
+    void AssignPhysicalResources(int64_t currentFrame);
+
+    /**
+     * Precomputes per-wave and per-pass barriers into flat arrays; call after Compile
+     */
+    void PrecomputeBarriers();
 
     /**
      * Allocates/aliases physical resources and writes descriptors; call after CalculateLifetimes
@@ -211,6 +219,19 @@ private:
     Core::ArenaFixedVector<RenderPass*> sortedPasses;
     Core::Vector<uint32_t> waveOffsets;
 
+    struct WaveBarrierRange
+    {
+        uint32_t preClearImageStart;
+        uint32_t preClearImageCount;
+        uint32_t imageStart;
+        uint32_t imageCount;
+        uint32_t bufferStart;
+        uint32_t bufferCount;
+    };
+    Core::Vector<VkImageMemoryBarrier2> compiledImageBarriers;
+    Core::Vector<VkBufferMemoryBarrier2> compiledBufferBarriers;
+    Core::Vector<WaveBarrierRange> compiledWaveRanges;
+
     Core::Vector<TextureFrameCarryover> textureCarryovers;
     Core::Vector<BufferFrameCarryover> bufferCarryovers;
 
@@ -222,6 +243,7 @@ private:
     bool bDestroyViewportAssociated{false};
 
     bool bDebugLogging = false;
+    uint32_t debugCaptureFramesLeft{0};
     uint32_t debugNameCounter{0};
 
 private:
