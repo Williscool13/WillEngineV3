@@ -227,10 +227,10 @@ void RenderThread::RenderFrame(uint32_t currentFrameIndex, RenderSynchronization
 
     const PipelineStatsResults pipelineStats = pipelineStatsQuery.Collect(context->device, currentFrameIndex);
     statisticsManager.scratch.clippingInvocations = pipelineStats.clippingInvocations;
-    statisticsManager.scratch.clippingPrimitives  = pipelineStats.clippingPrimitives;
+    statisticsManager.scratch.clippingPrimitives = pipelineStats.clippingPrimitives;
     statisticsManager.scratch.fragmentInvocations = pipelineStats.fragmentInvocations;
-    statisticsManager.scratch.computeInvocations  = pipelineStats.computeInvocations;
-    statisticsManager.scratch.meshInvocations     = pipelineStats.meshInvocations;
+    statisticsManager.scratch.computeInvocations = pipelineStats.computeInvocations;
+    statisticsManager.scratch.meshInvocations = pipelineStats.meshInvocations;
     screenCapture->ResolveScreenshot(currentFrameIndex);
 
     VK_CHECK(vkResetCommandBuffer(renderSync.commandBuffer, 0));
@@ -337,8 +337,8 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
     ReadbackStruct* readbackData = renderGraph->GetReadbackData();
     frameBuffer.stableIdUnderCursor = readbackData->selectedStableId;
     statisticsManager.scratch.visibleMeshletCount = readbackData->meshletCount;
-    statisticsManager.scratch.shadingDispatches   = readbackData->shadingDispatches;
-    statisticsManager.scratch.lightingDispatches  = readbackData->lightingDispatches;
+    statisticsManager.scratch.shadingDispatches = readbackData->shadingDispatches;
+    statisticsManager.scratch.lightingDispatches = readbackData->lightingDispatches;
 
     SanitizeViewFamily(viewFamily, pipelineManager, &memoryManager->RenderArena());
     PrepareRenderFamily(viewFamily);
@@ -549,18 +549,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         if (!viewFamily.debugResourceName.IsEmpty()) {
             StringID debugTargetName = StringID(viewFamily.debugResourceName.c_str(), viewFamily.debugResourceName.Size());
 
-            const bool bDebugBuffersReady =
-                renderGraph->HasBuffer(SID("scene_data")) &&
-                renderGraph->HasBuffer(GEOMETRY_VERTEX_POSITION_BUFFER) &&
-                renderGraph->HasBuffer(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER) &&
-                renderGraph->HasBuffer(GEOMETRY_MESHLET_VERTEX_BUFFER) &&
-                renderGraph->HasBuffer(GEOMETRY_MESHLET_TRIANGLE_BUFFER) &&
-                renderGraph->HasBuffer(GEOMETRY_MESHLET_BUFFER) &&
-                renderGraph->HasBuffer(GEOMETRY_PRIMITIVE_BUFFER) &&
-                renderGraph->HasBuffer(GEOMETRY_INSTANCE_BUFFER) &&
-                renderGraph->HasBuffer(GEOMETRY_MODEL_BUFFER) &&
-                renderGraph->HasBuffer(GEOMETRY_MATERIAL_BUFFER);
-
+            bool bDebugBuffersReady = renderGraph->HasBuffer(SID("scene_data"));
             if (bDebugBuffersReady && renderGraph->HasTexture(debugTargetName)) {
                 auto& debugVisPass = renderGraph->AddPass(SID("Debug Visualize"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
                 debugVisPass.ReadSampledImage(debugTargetName);
@@ -613,16 +602,16 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                     uint32_t outputIndexIndex = renderGraph->GetStorageImageViewDescriptorIndex(finalOutput);
 
                     DebugVisualizePushConstant pc{
-                        .sceneData = renderGraph->GetBufferAddress(SID("scene_data")),
-                        .vertexPosBuffer = renderGraph->GetBufferAddress(GEOMETRY_VERTEX_POSITION_BUFFER),
-                        .vertexAttrBuffer = renderGraph->GetBufferAddress(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER),
-                        .meshletVerticesBuffer = renderGraph->GetBufferAddress(GEOMETRY_MESHLET_VERTEX_BUFFER),
-                        .meshletTrianglesBuffer = renderGraph->GetBufferAddress(GEOMETRY_MESHLET_TRIANGLE_BUFFER),
-                        .meshletBuffer = renderGraph->GetBufferAddress(GEOMETRY_MESHLET_BUFFER),
-                        .primitiveBuffer = renderGraph->GetBufferAddress(GEOMETRY_PRIMITIVE_BUFFER),
-                        .instanceBuffer = renderGraph->GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
-                        .modelBuffer = renderGraph->GetBufferAddress(GEOMETRY_MODEL_BUFFER),
-                        .materialBuffer = renderGraph->GetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
+                        .sceneData = renderGraph->TryGetBufferAddress(SID("scene_data")),
+                        .vertexPosBuffer = renderGraph->TryGetBufferAddress(GEOMETRY_VERTEX_POSITION_BUFFER),
+                        .vertexAttrBuffer = renderGraph->TryGetBufferAddress(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER),
+                        .meshletVerticesBuffer = renderGraph->TryGetBufferAddress(GEOMETRY_MESHLET_VERTEX_BUFFER),
+                        .meshletTrianglesBuffer = renderGraph->TryGetBufferAddress(GEOMETRY_MESHLET_TRIANGLE_BUFFER),
+                        .meshletBuffer = renderGraph->TryGetBufferAddress(GEOMETRY_MESHLET_BUFFER),
+                        .primitiveBuffer = renderGraph->TryGetBufferAddress(GEOMETRY_PRIMITIVE_BUFFER),
+                        .instanceBuffer = renderGraph->TryGetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
+                        .modelBuffer = renderGraph->TryGetBufferAddress(GEOMETRY_MODEL_BUFFER),
+                        .materialBuffer = renderGraph->TryGetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
                         .srcExtent = {dims.width, dims.height},
                         .dstExtent = {renderExtent[0], renderExtent[1]},
                         .nearPlane = viewFamily.mainView.currentViewData.nearPlane,

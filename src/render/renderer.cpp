@@ -1140,6 +1140,7 @@ void SetupSkyboxRendering(RenderGraph& graph,
     RenderPass& skyboxPass = graph.AddPass(
         SID("Skybox"),
         VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT);
+    skyboxPass.ReadBuffer(SCENE_DATA_BUFFER);
     skyboxPass.WriteColorAttachment(targets.outputColor);
     skyboxPass.ReadWriteDepthAttachment(targets.depthStencil);
     skyboxPass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1], sceneIndex,
@@ -1411,6 +1412,7 @@ StringID SetupTemporalAntiAliasing(RenderGraph& graph,
     graph.CreateTexture(SID("taa_current"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
     graph.CarryTextureToNextFrame(SID("taa_current"), SID("taa_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
 
+    // For velocity
     if (graph.HasTexture(ppTargets.gbufferOne)) {
         graph.CarryTextureToNextFrame(ppTargets.gbufferOne, SID("gbuffer_one_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
     }

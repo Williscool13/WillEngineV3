@@ -228,6 +228,7 @@ StringID PPTonemap(PostProcessContext& ctx, StringID input)
     graph.CreateTexture(SID("tonemap_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, width, height, 1}, CLEAR_COLOR_EMPTY, true);
     RenderPass& tonemapPass = graph.AddPass(SID("[Tonemap] SDR"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
     tonemapPass.ReadSampledImage(input);
+    // todo if either bloom or luminance dont exist, need to handle in shader
     tonemapPass.ReadSampledImage(SID("bloom_chain"));
     tonemapPass.ReadBuffer(SID("luminance_buffer"));
     tonemapPass.WriteStorageImage(SID("tonemap_output"));

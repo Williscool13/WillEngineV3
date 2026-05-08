@@ -118,6 +118,7 @@ public: // Resource queries
     VkBuffer GetBufferHandle(StringID bufferId);
 
     VkDeviceAddress GetBufferAddress(StringID bufferId);
+    VkDeviceAddress TryGetBufferAddress(StringID bufferId);
 
     [[nodiscard]] ResourceManager* GetResourceManager() const { return resourceManager; }
 
