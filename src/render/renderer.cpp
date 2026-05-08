@@ -65,43 +65,6 @@ void SetupGeometryPass(RenderGraph& graph,
             graph.CreateBuffer(visibleMeshlets, renderFamilyProperties.visibleMeshletsBufferSize, false);
             graph.CreateBuffer(meshletCountDispatchArgs, sizeof(InstancingMeshletDispatchIndirect), false);
             graph.CreateBuffer(compactedMeshletDispatchArgs, sizeof(InstancingCompactedMeshletDispatchIndirect), false);
-
-            RenderPass& clearPass = graph.AddPass(SID("Clear Temp Instancing Buffers"), VK_PIPELINE_STAGE_2_TRANSFER_BIT);
-            clearPass.WriteTransferBuffer(instanceMeshletOffsets);
-            clearPass.WriteTransferBuffer(level1Sums);
-            clearPass.WriteTransferBuffer(level1BlockSums);
-            clearPass.WriteTransferBuffer(level2Sums);
-            clearPass.WriteTransferBuffer(level2BlockSums);
-            clearPass.WriteTransferBuffer(scannedLevel2BlockSums);
-            clearPass.WriteTransferBuffer(intermediateMeshlets);
-            clearPass.WriteTransferBuffer(meshletLevel1Sums);
-            clearPass.WriteTransferBuffer(meshletLevel1BlockSums);
-            clearPass.WriteTransferBuffer(meshletLevel2Sums);
-            clearPass.WriteTransferBuffer(meshletLevel2BlockSums);
-            clearPass.WriteTransferBuffer(meshletScannedLevel2BlockSums);
-            clearPass.WriteTransferBuffer(visibleMeshlets);
-            clearPass.WriteTransferBuffer(meshletCountDispatchArgs);
-            clearPass.WriteTransferBuffer(compactedMeshletDispatchArgs);
-            clearPass.Execute([instanceMeshletOffsets, level1Sums, level1BlockSums, level2Sums, level2BlockSums,
-                    scannedLevel2BlockSums, intermediateMeshlets, meshletLevel1Sums, meshletLevel1BlockSums,
-                    meshletLevel2Sums, meshletLevel2BlockSums, meshletScannedLevel2BlockSums,
-                    visibleMeshlets, meshletCountDispatchArgs, compactedMeshletDispatchArgs, &graph](VkCommandBuffer cmd) {
-                    vkCmdFillBuffer(cmd, graph.GetBufferHandle(instanceMeshletOffsets), 0, VK_WHOLE_SIZE, 0);
-                    vkCmdFillBuffer(cmd, graph.GetBufferHandle(level1Sums), 0, VK_WHOLE_SIZE, 0);
-                    vkCmdFillBuffer(cmd, graph.GetBufferHandle(level1BlockSums), 0, VK_WHOLE_SIZE, 0);
-                    vkCmdFillBuffer(cmd, graph.GetBufferHandle(level2Sums), 0, VK_WHOLE_SIZE, 0);
-                    vkCmdFillBuffer(cmd, graph.GetBufferHandle(level2BlockSums), 0, VK_WHOLE_SIZE, 0);
-                    vkCmdFillBuffer(cmd, graph.GetBufferHandle(scannedLevel2BlockSums), 0, VK_WHOLE_SIZE, 0);
-                    vkCmdFillBuffer(cmd, graph.GetBufferHandle(intermediateMeshlets), 0, VK_WHOLE_SIZE, 0);
-                    vkCmdFillBuffer(cmd, graph.GetBufferHandle(meshletLevel1Sums), 0, VK_WHOLE_SIZE, 0);
-                    vkCmdFillBuffer(cmd, graph.GetBufferHandle(meshletLevel1BlockSums), 0, VK_WHOLE_SIZE, 0);
-                    vkCmdFillBuffer(cmd, graph.GetBufferHandle(meshletLevel2Sums), 0, VK_WHOLE_SIZE, 0);
-                    vkCmdFillBuffer(cmd, graph.GetBufferHandle(meshletLevel2BlockSums), 0, VK_WHOLE_SIZE, 0);
-                    vkCmdFillBuffer(cmd, graph.GetBufferHandle(meshletScannedLevel2BlockSums), 0, VK_WHOLE_SIZE, 0);
-                    vkCmdFillBuffer(cmd, graph.GetBufferHandle(visibleMeshlets), 0, VK_WHOLE_SIZE, 0);
-                    vkCmdFillBuffer(cmd, graph.GetBufferHandle(meshletCountDispatchArgs), 0, VK_WHOLE_SIZE, 0);
-                    vkCmdFillBuffer(cmd, graph.GetBufferHandle(compactedMeshletDispatchArgs), 0, VK_WHOLE_SIZE, 0);
-                });
         }
 
         // Instance Visibility/LOD
@@ -483,7 +446,10 @@ void SetupGeometryPass(RenderGraph& graph,
         });
     }
 
-    RenderPass& instancedMeshShading = graph.AddPass(SID("Instanced Mesh Shading"), VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT);
+    RenderPass& instancedMeshShading = graph.AddPass(
+        SID("Instanced Mesh Shading"),
+        VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT |
+        VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT);
     instancedMeshShading.WriteColorAttachment(targets.visibility);
     instancedMeshShading.WriteColorAttachment(targets.gbufferOne);
     instancedMeshShading.WriteColorAttachment(targets.stableId);
@@ -647,6 +613,7 @@ void SetupVisibilityBucketingPass(RenderGraph& graph,
         vkCmdDispatch(cmd, (lightingCount + 255) / 256, 1, 1);
     });
 
+    // Technically not "critical", used for stats. But since we write to readback_buffer, it becomes critical.
     RenderPass& dispatchCountPass = graph.AddPass(SID("Bucket Dispatch Count"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
     dispatchCountPass.ReadBuffer(SHADING_DISPATCH_BUCKETING_BUFFER);
     dispatchCountPass.ReadBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER);
@@ -654,18 +621,18 @@ void SetupVisibilityBucketingPass(RenderGraph& graph,
     dispatchCountPass.Execute([&, pipelineManager,
             materialCount = static_cast<uint32_t>(viewFamily.materials.Size()),
             lightingCount = static_cast<uint32_t>(viewFamily.lightingBuckets.Size())](VkCommandBuffer cmd) {
-        BucketDispatchCountPushConstant pc{
-            .shadeDispatchBuffer = graph.GetBufferAddress(SHADING_DISPATCH_BUCKETING_BUFFER),
-            .lightDispatchBuffer = graph.GetBufferAddress(LIGHTING_DISPATCH_BUCKETING_BUFFER),
-            .countBuffer         = graph.GetBufferAddress(SID("readback_buffer")) + offsetof(ReadbackStruct, shadingDispatches),
-            .materialCount       = materialCount,
-            .lightingCount       = lightingCount,
-        };
-        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("bucketing_dispatch_count"));
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
-        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-        vkCmdDispatch(cmd, 1, 1, 1);
-    });
+            BucketDispatchCountPushConstant pc{
+                .shadeDispatchBuffer = graph.GetBufferAddress(SHADING_DISPATCH_BUCKETING_BUFFER),
+                .lightDispatchBuffer = graph.GetBufferAddress(LIGHTING_DISPATCH_BUCKETING_BUFFER),
+                .countBuffer = graph.GetBufferAddress(SID("readback_buffer")) + offsetof(ReadbackStruct, shadingDispatches),
+                .materialCount = materialCount,
+                .lightingCount = lightingCount,
+            };
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("bucketing_dispatch_count"));
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+            vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            vkCmdDispatch(cmd, 1, 1, 1);
+        });
 }
 
 void SetupVisibilityShadingPass(RenderGraph& graph,
@@ -1170,7 +1137,9 @@ void SetupSkyboxRendering(RenderGraph& graph,
                           const MainRenderTargets& targets,
                           uint32_t sceneIndex)
 {
-    RenderPass& skyboxPass = graph.AddPass(SID("Skybox"), VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT);
+    RenderPass& skyboxPass = graph.AddPass(
+        SID("Skybox"),
+        VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT);
     skyboxPass.WriteColorAttachment(targets.outputColor);
     skyboxPass.ReadWriteDepthAttachment(targets.depthStencil);
     skyboxPass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1], sceneIndex,

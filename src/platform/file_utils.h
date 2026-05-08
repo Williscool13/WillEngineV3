@@ -5,6 +5,8 @@
 #ifndef WILL_ENGINE_FILE_UTILS_H
 #define WILL_ENGINE_FILE_UTILS_H
 
+#include <string_view>
+
 #include "core/containers/inline_path.h"
 #include "core/containers/vector.h"
 
@@ -16,7 +18,11 @@ namespace Platform
  */
 void CreateDirectories(const char* path);
 
+void CreateDirectories(const Core::Path& path);
+
 void RemoveDirectories(const char* path);
+
+void RemoveDirectories(const Core::Path& path);
 
 /**
  * Creates all intermediate directories for path, then creates the file. Returns true on success.
@@ -25,12 +31,16 @@ void RemoveDirectories(const char* path);
  */
 bool CreateEmptyFile(const char* path);
 
+bool CreateEmptyFile(const Core::Path& path);
+
 /**
  * Deletes the file at path. Returns true on success.
  * @param path
  * @return
  */
 bool DeleteSingleFile(const char* path);
+
+bool DeleteSingleFile(const Core::Path& path);
 
 /**
  * Copies src to dst, overwriting dst if it exists. Returns true on success.
@@ -40,12 +50,16 @@ bool DeleteSingleFile(const char* path);
  */
 bool FileCopy(const char* src, const char* dst);
 
+bool FileCopy(const Core::Path& src, const Core::Path& dst);
+
 /**
  * Returns the last-write time of path as a uint64_t (packed FILETIME on Win32). Returns 0 on failure.
  * @param path
  * @return
  */
 uint64_t GetFileWriteTime(const char* path);
+
+uint64_t GetFileWriteTime(const Core::Path& path);
 
 /**
  * Recursively enumerates all files under path and appends their paths to out.
@@ -66,6 +80,26 @@ void RecursiveDirectoryIterator(const Core::Path& path, Core::Vector<Core::Path>
  * @return
  */
 uint32_t FindFilesByExtension(const Core::Path& dir, const char* ext, Core::Path* outPaths, uint32_t maxPaths);
+
+/**
+ * Writes data to path, creating or overwriting the file. Creates intermediate directories. Returns true on success.
+ * @param path
+ * @param data
+ * @param size
+ */
+bool WriteFile(const Core::Path& path, const void* data, size_t size);
+
+bool WriteFile(const Core::Path& path, std::string_view data);
+
+/**
+ * Appends data to path, creating the file if it does not exist. Returns true on success.
+ * @param path
+ * @param data
+ * @param size
+ */
+bool AppendFile(const Core::Path& path, const void* data, size_t size);
+
+bool AppendFile(const Core::Path& path, std::string_view data);
 } // Platform
 
 #endif //WILL_ENGINE_FILE_UTILS_H

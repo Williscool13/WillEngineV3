@@ -7,8 +7,11 @@
 #include <utility>
 
 #include "render_graph_config.h"
+#include "platform/file_utils.h"
+#include "platform/paths.h"
 #include "render_pass.h"
 #include "core/containers/arena_array.h"
+#include "core/containers/arena_string.h"
 #include "core/containers/inline_queue.h"
 #include "core/containers/inline_vector.h"
 #include "engine/logging/engine_assert.h"
@@ -26,7 +29,8 @@ RenderGraph::RenderGraph(VulkanContext* context, ResourceManager* resourceManage
       arena(&arena),
       physicalResources(&alloc, Core::AllocTag::Render, 256),
       textureCarryovers(&alloc, Core::AllocTag::Render),
-      bufferCarryovers(&alloc, Core::AllocTag::Render)
+      bufferCarryovers(&alloc, Core::AllocTag::Render),
+      waveOffsets(&alloc, Core::AllocTag::Render)
 {
     for (int32_t i = 0; i < uploadArenas.Size(); ++i) {
         VkBufferCreateInfo bufferInfo = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
@@ -276,6 +280,8 @@ void RenderGraph::TopologicalSortPasses()
 
     ENGINE_ASSERT(Renderer, sortedPasses.Size() == passes.Size(), "Render graph cycle detected");
 
+    AssignWaveIndices();
+
     if (bDebugLogging) {
         LOG_INFO(Renderer, "=== Before RDG Topological Sort ===");
         for (uint32_t i = 0; i < passes.Size(); i++) {
@@ -287,6 +293,38 @@ void RenderGraph::TopologicalSortPasses()
         for (uint32_t i = 0; i < sortedPasses.Size(); i++) {
             const RenderPass* pass = sortedPasses[i];
             LOG_INFO(Renderer, "  [{}] {}", i, pass->renderPassId.ToString());
+        }
+
+        LOG_INFO(Renderer, "=== RDG Waves ===");
+        for (uint32_t w = 0; w < waveOffsets.Size(); w++) {
+            const uint32_t start = waveOffsets[w];
+            const uint32_t end = (w + 1 < waveOffsets.Size()) ? waveOffsets[w + 1] : static_cast<uint32_t>(sortedPasses.Size());
+            LOG_INFO(Renderer, "  Wave {}:", w);
+            for (uint32_t i = start; i < end; i++) {
+                LOG_INFO(Renderer, "    [{}] {}", i, sortedPasses[i]->renderPassId.ToString());
+            }
+        }
+
+        ExportGraphviz();
+    }
+}
+
+void RenderGraph::AssignWaveIndices()
+{
+    waveOffsets.Clear();
+
+    for (uint32_t i = 0; i < sortedPasses.Size(); i++) {
+        RenderPass* pass = sortedPasses[i];
+        pass->passIndex = i;
+
+        uint32_t wave = 0;
+        for (const uint32_t predIdx : pass->inEdges) {
+            wave = std::max(wave, passes[predIdx]->waveIndex + 1);
+        }
+        pass->waveIndex = wave;
+
+        if (wave >= waveOffsets.Size()) {
+            waveOffsets.PushBack(i);
         }
     }
 }
@@ -674,11 +712,11 @@ void RenderGraph::Compile(int64_t currentFrame)
     }
 
     if (bDebugLogging) {
-        LOG_INFO(Renderer,"=== Physical Resource Aliasing Chains ===");
+        LOG_INFO(Renderer, "=== Physical Resource Aliasing Chains ===");
         for (size_t i = 0; i < physicalResources.Size(); ++i) {
             const auto& phys = physicalResources[i];
             if (!phys.usageChain.IsEmpty()) {
-                LOG_INFO(Renderer,"  Phys[{}]: {}", i, phys.usageChain.c_str());
+                LOG_INFO(Renderer, "  Phys[{}]: {}", i, phys.usageChain.c_str());
             }
         }
     }
@@ -689,7 +727,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
     ZoneScoped;
 
     if (bDebugLogging) {
-        LOG_INFO(Renderer,"=== RenderGraph Execution ===");
+        LOG_INFO(Renderer, "=== RenderGraph Execution ===");
     }
 
     for (auto& pass : passes) {
@@ -697,7 +735,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
         ZoneText(pass->renderPassId.ToString(), strlen(pass->renderPassId.ToString()));
 
         if (bDebugLogging) {
-            LOG_INFO(Renderer,"[PASS] {}", pass->renderPassId.ToString());
+            LOG_INFO(Renderer, "[PASS] {}", pass->renderPassId.ToString());
         }
         Core::InlineVector<VkImageMemoryBarrier2, 32> barriers;
 
@@ -1054,13 +1092,13 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 ZoneScopedN("PipelineBarrier");
                 if (bDebugLogging) {
                     if (!barriers.IsEmpty() && !bufferBarriers.IsEmpty()) {
-                        LOG_INFO(Renderer,"  Inserting {} image, {} buffer barrier(s)", barriers.Size(), bufferBarriers.Size());
+                        LOG_INFO(Renderer, "  Inserting {} image, {} buffer barrier(s)", barriers.Size(), bufferBarriers.Size());
                     }
                     else if (!barriers.IsEmpty()) {
-                        LOG_INFO(Renderer,"  Inserting {} image barrier(s)", barriers.Size());
+                        LOG_INFO(Renderer, "  Inserting {} image barrier(s)", barriers.Size());
                     }
                     else {
-                        LOG_INFO(Renderer,"  Inserting {} buffer barrier(s)", bufferBarriers.Size());
+                        LOG_INFO(Renderer, "  Inserting {} buffer barrier(s)", bufferBarriers.Size());
                     }
                 }
                 VkDependencyInfo depInfo{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
@@ -1243,7 +1281,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
     } {
         ZoneScopedN("FinalBarriers");
         if (bDebugLogging) {
-            LOG_INFO(Renderer,"[FINAL BARRIERS]");
+            LOG_INFO(Renderer, "[FINAL BARRIERS]");
         }
         Core::InlineVector<VkImageMemoryBarrier2, 16> finalBarriers;
         for (auto& tex : textures) {
@@ -1276,7 +1314,7 @@ void RenderGraph::PrepareSwapchain(VkCommandBuffer cmd, StringID textureId)
 {
     uint32_t* idx = textureNameToIndex.Find(textureId);
     if (!idx) {
-        LOG_ERROR(Renderer,"[RenderGraph::PrepareSwapchain] Prepare swapchain failed.");
+        LOG_ERROR(Renderer, "[RenderGraph::PrepareSwapchain] Prepare swapchain failed.");
         return;
     }
 
@@ -1410,7 +1448,7 @@ void RenderGraph::Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint
             }
 
             if (physicalIndex == UINT32_MAX) {
-                LOG_ERROR(Renderer,"Carryover texture '{}' physical resource not found", carryover.dstName.ToString());
+                LOG_ERROR(Renderer, "Carryover texture '{}' physical resource not found", carryover.dstName.ToString());
                 continue;
             }
 
@@ -1439,7 +1477,7 @@ void RenderGraph::Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint
             }
 
             if (physicalIndex == UINT32_MAX) {
-                LOG_ERROR(Renderer,"Carryover buffer '{}' physical resource not found", carryover.dstName.ToString());
+                LOG_ERROR(Renderer, "Carryover buffer '{}' physical resource not found", carryover.dstName.ToString());
                 continue;
             }
 
@@ -1934,6 +1972,89 @@ void RenderGraph::RecreateTransientArena(uint32_t frameIndex, size_t newSize)
     arena.size = newSize;
 }
 
+void RenderGraph::ExportGraphviz()
+{
+    auto StageColor = [](VkPipelineStageFlags2 stages) -> const char* {
+        if (stages & VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT) { return "#f8cecc"; }
+        if (stages & (VK_PIPELINE_STAGE_2_TRANSFER_BIT | VK_PIPELINE_STAGE_2_COPY_BIT | VK_PIPELINE_STAGE_2_BLIT_BIT | VK_PIPELINE_STAGE_2_CLEAR_BIT)) { return "#fff2cc"; }
+        if (stages & (VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT |
+                      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT |
+                      VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT)) { return "#dae8fc"; }
+        if (stages & VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT) { return "#d5e8d4"; }
+        return "#f5f5f5";
+    };
+
+    Core::ArenaString dot(arena, 65536);
+    dot.Append("digraph RDG {\n");
+    dot.Append("    rankdir=TB;\n");
+    dot.Append("    splines=ortho;\n");
+    dot.Append("    nodesep=0.5;\n");
+    dot.Append("    ranksep=1.0;\n");
+    dot.Append("    node [shape=box fontname=\"Consolas\" style=filled];\n\n");
+
+    // Legend
+    dot.Append("    subgraph cluster_legend {\n");
+    dot.Append("        label=\"Legend\"; fontname=\"Consolas\"; style=filled; fillcolor=\"#ffffff\";\n");
+    dot.Append("        legend_graphics  [label=\"Graphics\"     fillcolor=\"#dae8fc\"];\n");
+    dot.Append("        legend_compute   [label=\"Compute\"      fillcolor=\"#d5e8d4\"];\n");
+    dot.Append("        legend_transfer  [label=\"Transfer/Copy/Clear\" fillcolor=\"#fff2cc\"];\n");
+    dot.Append("        legend_heavy     [label=\"All Graphics (heavy)\" fillcolor=\"#f8cecc\"];\n");
+    dot.Append("        legend_unknown   [label=\"Unknown\"      fillcolor=\"#f5f5f5\"];\n");
+    dot.Append("        legend_graphics -> legend_compute -> legend_transfer -> legend_heavy -> legend_unknown [style=invis];\n");
+    dot.Append("    }\n\n");
+
+    // Node declarations with wave label and stage color
+    for (const RenderPass* pass : sortedPasses) {
+        dot.Append("    \"");
+        dot.Append(pass->renderPassId.ToString());
+        dot.Append("\" [label=\"");
+        dot.Append(pass->renderPassId.ToString());
+        dot.Append("\\nwave ");
+        dot.Append(pass->waveIndex);
+        dot.Append("\" fillcolor=\"");
+        dot.Append(StageColor(pass->stages));
+        dot.Append("\"];\n");
+    }
+
+    dot.Append("\n");
+
+    // One subgraph per wave so Graphviz ranks them on the same row
+    for (uint32_t w = 0; w < waveOffsets.Size(); w++) {
+        const uint32_t start = waveOffsets[w];
+        const uint32_t end = (w + 1 < waveOffsets.Size()) ? waveOffsets[w + 1] : static_cast<uint32_t>(sortedPasses.Size());
+
+        dot.Append("    { rank=same;");
+        for (uint32_t i = start; i < end; i++) {
+            dot.Append(" \"");
+            dot.Append(sortedPasses[i]->renderPassId.ToString());
+            dot.Append("\";");
+        }
+        dot.Append(" }\n");
+    }
+
+    dot.Append("\n");
+
+    // One edge per unique src->dst pair; outEdges may contain duplicates from multiple shared resources
+    for (const RenderPass* pass : sortedPasses) {
+        uint32_t lastEmitted = UINT32_MAX;
+        for (const uint32_t neighborIdx : pass->outEdges) {
+            if (neighborIdx == lastEmitted) { continue; }
+            lastEmitted = neighborIdx;
+            const RenderPass* neighbor = passes[neighborIdx];
+            dot.Append("    \"");
+            dot.Append(pass->renderPassId.ToString());
+            dot.Append("\" -> \"");
+            dot.Append(neighbor->renderPassId.ToString());
+            dot.Append("\";\n");
+        }
+    }
+
+    dot.Append("}\n");
+
+    const Core::Path outPath = Platform::GetAssetPath() / "visualizations" / "rdg.dot";
+    Platform::WriteFile(outPath, dot.c_str(), dot.Size());
+}
+
 void RenderGraph::LogImageBarrier(StringID textureId, const VkImageMemoryBarrier2& barrier, uint32_t physicalIndex) const
 {
     if (!bDebugLogging) return;
@@ -1956,7 +2077,7 @@ void RenderGraph::LogImageBarrier(StringID textureId, const VkImageMemoryBarrier
         }
     };
 
-    LOG_INFO(Renderer,"  [BARRIER] {} ({}): {} -> {}", textureId.ToString(), physicalIndex, LayoutToString(barrier.oldLayout), LayoutToString(barrier.newLayout));
+    LOG_INFO(Renderer, "  [BARRIER] {} ({}): {} -> {}", textureId.ToString(), physicalIndex, LayoutToString(barrier.oldLayout), LayoutToString(barrier.newLayout));
 }
 
 void RenderGraph::LogBufferBarrier(StringID bufferId, VkAccessFlags2 access) const
@@ -1968,7 +2089,7 @@ void RenderGraph::LogBufferBarrier(StringID bufferId, VkAccessFlags2 access) con
         accessType = "write";
     }
 
-    LOG_INFO(Renderer,"  [BUFFER BARRIER] {} ({})", bufferId.ToString(), accessType);
+    LOG_INFO(Renderer, "  [BUFFER BARRIER] {} ({})", bufferId.ToString(), accessType);
 }
 
 

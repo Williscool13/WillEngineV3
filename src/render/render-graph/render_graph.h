@@ -138,6 +138,8 @@ public: // Compile and execute
 
     void TopologicalSortPasses();
 
+    void AssignWaveIndices();
+
     /**
      * Computes firstPass/lastPass for each logical resource to drive physical resource aliasing
      */
@@ -204,8 +206,9 @@ private:
 
     // Render passes
     Core::ArenaFixedVector<RenderPass*> passes;
-    //   Generated at compile time
+    // Generated at compile time
     Core::ArenaFixedVector<RenderPass*> sortedPasses;
+    Core::Vector<uint32_t> waveOffsets;
 
     Core::Vector<TextureFrameCarryover> textureCarryovers;
     Core::Vector<BufferFrameCarryover> bufferCarryovers;
@@ -240,6 +243,8 @@ private:
     void LogImageBarrier(StringID textureId, const VkImageMemoryBarrier2& barrier, uint32_t physicalIndex) const;
 
     void LogBufferBarrier(StringID bufferId, VkAccessFlags2 access) const;
+
+    void ExportGraphviz();
 
     static void AppendUsageChain(PhysicalResource& phys, StringID resourceId, bool bCanAlias, bool debugLogging);
 };

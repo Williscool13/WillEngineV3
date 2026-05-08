@@ -394,7 +394,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
     // Readback that will be copied into the FIF host memory at the end of the frame (to be read on frame N+3)
     renderGraph->CreateBuffer(SID("readback_buffer"), sizeof(ReadbackStruct), false);
-    RenderPass& clearReadbackBuffer = renderGraph->AddPass(SID("Clear Readback Buffer"), VK_PIPELINE_STAGE_2_TRANSFER_BIT);
+    RenderPass& clearReadbackBuffer = renderGraph->AddPass(SID("Clear Readback Buffer"), VK_PIPELINE_STAGE_2_CLEAR_BIT);
     clearReadbackBuffer.WriteTransferBuffer(SID("readback_buffer"));
     clearReadbackBuffer.Execute([&](VkCommandBuffer cmd) {
         vkCmdFillBuffer(cmd, renderGraph->GetBufferHandle(SID("readback_buffer")), 0, VK_WHOLE_SIZE, 0);
@@ -785,7 +785,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         });
     }
 
-    RenderPass& readbackMeshletCount = renderGraph->AddPass(SID("Readback Copy"), VK_PIPELINE_STAGE_2_COPY_BIT);
+    RenderPass& readbackMeshletCount = renderGraph->AddPass(SID("[Critical] Readback Copy"), VK_PIPELINE_STAGE_2_COPY_BIT);
     readbackMeshletCount.ReadTransferBuffer(SID("readback_buffer"));
     readbackMeshletCount.Execute([&](VkCommandBuffer cmd) {
         VkBufferCopy copy;
@@ -903,7 +903,7 @@ void RenderThread::RegisterDebugReadbacks()
         "Shade Dispatch Parameters",
         [](RenderGraph& graph, StringID dst, size_t dstOffset) {
             if (!graph.HasBuffer(SHADING_DISPATCH_BUCKETING_BUFFER)) { return; }
-            RenderPass& pass = graph.AddPass(SID("Readback Shade Dispatch"), VK_PIPELINE_STAGE_2_COPY_BIT);
+            RenderPass& pass = graph.AddPass(SID("[Debug] Readback Shade Dispatch"), VK_PIPELINE_STAGE_2_COPY_BIT);
             pass.ReadTransferBuffer(SHADING_DISPATCH_BUCKETING_BUFFER);
             pass.WriteTransferBuffer(dst);
             pass.Execute([&graph, dst, dstOffset](VkCommandBuffer cmd) {
@@ -948,7 +948,7 @@ void RenderThread::RegisterDebugReadbacks()
         "Light Dispatch Parameters",
         [](RenderGraph& graph, StringID dst, size_t dstOffset) {
             if (!graph.HasBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER)) { return; }
-            RenderPass& pass = graph.AddPass(SID("Readback Light Dispatch"), VK_PIPELINE_STAGE_2_COPY_BIT);
+            RenderPass& pass = graph.AddPass(SID("[Debug] Readback Light Dispatch"), VK_PIPELINE_STAGE_2_COPY_BIT);
             pass.ReadTransferBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER);
             pass.WriteTransferBuffer(dst);
             pass.Execute([&graph, dst, dstOffset](VkCommandBuffer cmd) {
@@ -993,7 +993,7 @@ void RenderThread::RegisterDebugReadbacks()
         "Instance Meshlet Offsets",
         [](RenderGraph& graph, StringID dst, size_t dstOffset) {
             if (!graph.HasBuffer(SID("instance_meshlet_offsets"))) { return; }
-            RenderPass& pass = graph.AddPass(SID("Readback Instance Meshlet Offsets"), VK_PIPELINE_STAGE_2_COPY_BIT);
+            RenderPass& pass = graph.AddPass(SID("[Debug] Readback Instance Meshlet Offsets"), VK_PIPELINE_STAGE_2_COPY_BIT);
             pass.ReadTransferBuffer(SID("instance_meshlet_offsets"));
             pass.WriteTransferBuffer(dst);
             pass.Execute([&graph, dst, dstOffset](VkCommandBuffer cmd) {
@@ -1050,7 +1050,7 @@ void RenderThread::RegisterDebugReadbacks()
         "Intermediate Meshlets",
         [](RenderGraph& graph, StringID dst, size_t dstOffset) {
             if (!graph.HasBuffer(SID("intermediate_meshlets"))) { return; }
-            RenderPass& pass = graph.AddPass(SID("Readback Intermediate Meshlets"), VK_PIPELINE_STAGE_2_COPY_BIT);
+            RenderPass& pass = graph.AddPass(SID("[Debug] Readback Intermediate Meshlets"), VK_PIPELINE_STAGE_2_COPY_BIT);
             pass.ReadTransferBuffer(SID("intermediate_meshlets"));
             pass.WriteTransferBuffer(dst);
             pass.Execute([&graph, dst, dstOffset](VkCommandBuffer cmd) {
@@ -1092,7 +1092,7 @@ void RenderThread::RegisterDebugReadbacks()
         "Visible Meshlets",
         [](RenderGraph& graph, StringID dst, size_t dstOffset) {
             if (!graph.HasBuffer(SID("visible_meshlets"))) { return; }
-            RenderPass& pass = graph.AddPass(SID("Readback Visible Meshlets"), VK_PIPELINE_STAGE_2_COPY_BIT);
+            RenderPass& pass = graph.AddPass(SID("[Debug] Readback Visible Meshlets"), VK_PIPELINE_STAGE_2_COPY_BIT);
             pass.ReadTransferBuffer(SID("visible_meshlets"));
             pass.WriteTransferBuffer(dst);
             pass.Execute([&graph, dst, dstOffset](VkCommandBuffer cmd) {
@@ -1129,7 +1129,7 @@ void RenderThread::RegisterDebugReadbacks()
         "Compacted Dispatch Args",
         [](RenderGraph& graph, StringID dst, size_t dstOffset) {
             if (!graph.HasBuffer(SID("compacted_meshlet_dispatch_args"))) { return; }
-            RenderPass& pass = graph.AddPass(SID("Readback Compacted Dispatch Args"), VK_PIPELINE_STAGE_2_COPY_BIT);
+            RenderPass& pass = graph.AddPass(SID("[Debug] Readback Compacted Dispatch Args"), VK_PIPELINE_STAGE_2_COPY_BIT);
             pass.ReadTransferBuffer(SID("compacted_meshlet_dispatch_args"));
             pass.WriteTransferBuffer(dst);
             pass.Execute([&graph, dst, dstOffset](VkCommandBuffer cmd) {
@@ -1220,7 +1220,7 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
     UploadAllocation lightDataUploadAllocation = renderGraph->AllocateTransient(sizeof(LightData));
     memcpy(lightDataUploadAllocation.ptr, &lightData, sizeof(LightData));
 
-    auto& uploadUniformsPass = renderGraph->AddPass(SID("Upload Uniforms"), VK_PIPELINE_STAGE_2_TRANSFER_BIT);
+    auto& uploadUniformsPass = renderGraph->AddPass(SID("Upload Uniforms"), VK_PIPELINE_STAGE_2_COPY_BIT);
     uploadUniformsPass.WriteTransferBuffer(SID("scene_data"));
     uploadUniformsPass.WriteTransferBuffer(SID("shadow_data"));
     uploadUniformsPass.WriteTransferBuffer(SID("light_data"));
@@ -1792,7 +1792,7 @@ void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& 
 
     const uint32_t totalLineSegments = segmentOffset;
 
-    RenderPass& uploadDebugPass = graph.AddPass(SID("Upload Debug Geometry"), VK_PIPELINE_STAGE_2_TRANSFER_BIT);
+    RenderPass& uploadDebugPass = graph.AddPass(SID("Upload Debug Geometry"), VK_PIPELINE_STAGE_2_COPY_BIT);
     uploadDebugPass.WriteTransferBuffer(SID("debug_segment_buffer"));
 
     VkBuffer srcBuffer = graph.GetTransientUploadBuffer();
