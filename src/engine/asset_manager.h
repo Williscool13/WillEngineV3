@@ -174,7 +174,7 @@ public: // Cubemaps
     }
 
 public: // Per-Tick calls
-    ResolveLoadResult ResolveLoads(Core::FrameBuffer& stagingFrameBuffer) const;
+    ResolveLoadResult ResolveLoads(Core::FrameBuffer& stagingFrameBuffer);
 
     void ResolveUnloads();
 
@@ -185,6 +185,8 @@ public:
     {
         return jointMatrixAllocator;
     }
+
+    std::atomic<bool> bVerboseLogging{false};
 
 private:
     Core::MemoryManager* memoryManager{};
@@ -211,6 +213,27 @@ private:
     Core::HandleAllocator<Render::Cubemap, MAX_LOADED_CUBEMAPS> cubemapAllocator;
     Core::Array<Render::Cubemap, MAX_LOADED_CUBEMAPS> cubemaps{};
     Core::InlineMap<EnvironmentMapID, CubemapHandle, 512> cubemapIdToHandle;
+
+    int32_t pendingModelLogCount{0};
+    std::chrono::steady_clock::time_point modelLastActivity{};
+
+    int32_t pendingTextureLogCount{0};
+    std::chrono::steady_clock::time_point textureLastActivity{};
+
+    int32_t pendingCubemapLogCount{0};
+    std::chrono::steady_clock::time_point cubemapLastActivity{};
+
+    int32_t pendingSamplerLogCount{0};
+    std::chrono::steady_clock::time_point samplerLastActivity{};
+
+    int32_t pendingModelUnloadLogCount{0};
+    std::chrono::steady_clock::time_point modelUnloadLastActivity{};
+
+    int32_t pendingTextureUnloadLogCount{0};
+    std::chrono::steady_clock::time_point textureUnloadLastActivity{};
+
+    int32_t pendingSamplerUnloadLogCount{0};
+    std::chrono::steady_clock::time_point samplerUnloadLastActivity{};
 
 public: // Scenes
     struct CachedSceneMetadata

@@ -4,6 +4,8 @@
 
 #include "asset_manager.h"
 
+#include <chrono>
+
 #include "asset-load/async_asset_load_manager.h"
 #include "resources/environment_map/environment_map_format.h"
 #include "resources/prefab/prefab_format.h"
@@ -176,7 +178,9 @@ StaticModelHandle AssetManager::LoadModel(ModelID modelId)
             StaticModel& model = models[existingHandle.index];
             model.refCount++;
             model.retireFrame = 0;
-            LOG_TRACE(Asset, "Model already loaded: {}, refCount: {}", model.name.c_str(), model.refCount);
+            if (bVerboseLogging.load(std::memory_order_relaxed)) {
+                LOG_TRACE(Asset, "Model already loaded: {}, refCount: {}", model.name.c_str(), model.refCount);
+            }
             return existingHandle;
         }
         modelIdToHandle.Remove(modelId);
@@ -198,7 +202,9 @@ StaticModelHandle AssetManager::LoadModel(ModelID modelId)
 
     modelIdToHandle[modelId] = handle;
 
-    LOG_TRACE(Asset, "Requesting model load: {}", model.name.c_str());
+    if (bVerboseLogging.load(std::memory_order_relaxed)) {
+        LOG_TRACE(Asset, "Requesting model load: {}", model.name.c_str());
+    }
     assetLoadManager->RequestModelLoad(&model);
 
     return handle;
@@ -224,7 +230,9 @@ StaticModelHandle AssetManager::LoadProceduralModel(ProceduralParams& params)
             StaticModel& model = models[existingHandle.index];
             model.refCount++;
             model.retireFrame = 0;
-            LOG_TRACE(Asset, "Procedural model already loaded: {}, refCount: {}", model.name.c_str(), model.refCount);
+            if (bVerboseLogging.load(std::memory_order_relaxed)) {
+                LOG_TRACE(Asset, "Procedural model already loaded: {}, refCount: {}", model.name.c_str(), model.refCount);
+            }
             return existingHandle;
         }
         modelIdToHandle.Remove(proceduralModelId);
@@ -247,7 +255,9 @@ StaticModelHandle AssetManager::LoadProceduralModel(ProceduralParams& params)
 
     modelIdToHandle[proceduralModelId] = handle;
 
-    LOG_TRACE(Asset, "Requesting procedural model load: {}", model.name.c_str());
+    if (bVerboseLogging.load(std::memory_order_relaxed)) {
+        LOG_TRACE(Asset, "Requesting procedural model load: {}", model.name.c_str());
+    }
     assetLoadManager->RequestProceduralModelLoad(&model);
 
     return handle;
@@ -278,7 +288,9 @@ StaticModelHandle AssetManager::LoadSplineModel(const SplineParams& params)
             StaticModel& model = models[existingHandle.index];
             model.refCount++;
             model.retireFrame = 0;
-            LOG_TRACE(Asset, "Spline model already loaded: {}, refCount: {}", splineModelId.id, model.refCount);
+            if (bVerboseLogging.load(std::memory_order_relaxed)) {
+                LOG_TRACE(Asset, "Spline model already loaded: {}, refCount: {}", splineModelId.id, model.refCount);
+            }
             return existingHandle;
         }
         modelIdToHandle.Remove(splineModelId);
@@ -301,7 +313,9 @@ StaticModelHandle AssetManager::LoadSplineModel(const SplineParams& params)
 
     modelIdToHandle[splineModelId] = handle;
 
-    LOG_TRACE(Asset, "Requesting spline model load: {}", model.name.c_str());
+    if (bVerboseLogging.load(std::memory_order_relaxed)) {
+        LOG_TRACE(Asset, "Requesting spline model load: {}", model.name.c_str());
+    }
     assetLoadManager->RequestProceduralModelLoad(&model);
     return handle;
 }
@@ -324,17 +338,20 @@ void AssetManager::UnloadModel(StaticModelHandle handle)
     StaticModel& model = models[handle.index];
     model.refCount--;
 
-    LOG_TRACE(Asset, "Model refCount decremented: {}, refCount: {}", model.name.c_str(), model.refCount);
+    if (bVerboseLogging.load(std::memory_order_relaxed)) {
+        LOG_TRACE(Asset, "Model refCount decremented: {}, refCount: {}", model.name.c_str(), model.refCount);
+    }
 
     if (model.refCount == 0) {
         model.retireFrame = ctx->currentFrame + Core::FRAME_BUFFER_COUNT * 4;
     }
 }
 
-ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuffer) const
+ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuffer)
 {
     ResolveLoadResult loadCounts{};
     AssetLoad::StaticModelLoadComplete complete{};
+    int32_t modelsThisTick{0};
     while (assetLoadManager->TryDequeueModelComplete(complete)) {
         if (complete.bSuccess) {
             stagingFrameBuffer.bufferAcquireOperations.Insert(stagingFrameBuffer.bufferAcquireOperations.end(),
@@ -349,8 +366,11 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
             complete.model->imageAcquireOps.Clear();
             complete.model->modelLoadState = StaticModel::ModelLoadState::Loaded;
             complete.model->acquireFrame = ctx->currentFrame;
-            LOG_TRACE(Asset, "Model load succeeded: {}", complete.model->name.c_str());
+            if (bVerboseLogging.load(std::memory_order_relaxed)) {
+                LOG_TRACE(Asset, "Model load succeeded: {}", complete.model->name.c_str());
+            }
             loadCounts.modelLoadedCount++;
+            modelsThisTick++;
         }
         else {
             complete.model->bufferAcquireOps.Clear();
@@ -371,8 +391,11 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
             proceduralComplete.model->imageAcquireOps.Clear();
             proceduralComplete.model->modelLoadState = StaticModel::ModelLoadState::Loaded;
             proceduralComplete.model->acquireFrame = ctx->currentFrame;
-            LOG_TRACE(Asset, "Procedural model generation succeeded: {}", proceduralComplete.model->name.c_str());
+            if (bVerboseLogging.load(std::memory_order_relaxed)) {
+                LOG_TRACE(Asset, "Procedural model generation succeeded: {}", proceduralComplete.model->name.c_str());
+            }
             loadCounts.modelLoadedCount++;
+            modelsThisTick++;
         }
         else {
             proceduralComplete.model->bufferAcquireOps.Clear();
@@ -382,15 +405,27 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
         }
     }
 
+    if (modelsThisTick > 0) {
+        pendingModelLogCount += modelsThisTick;
+        modelLastActivity = std::chrono::steady_clock::now();
+    }
+    if (pendingModelLogCount > 0 && modelsThisTick == 0 && (std::chrono::steady_clock::now() - modelLastActivity) >= std::chrono::seconds(ASSET_LOG_IDLE_SECONDS)) {
+        LOG_INFO(Asset, "{} model(s) loaded", pendingModelLogCount);
+        pendingModelLogCount = 0;
+    }
+
     AssetLoad::TextureLoadComplete textureComplete{};
+    int32_t texturesThisTick{0};
     while (assetLoadManager->TryDequeueTextureComplete(textureComplete)) {
         if (textureComplete.bSuccess) {
             stagingFrameBuffer.imageAcquireOperations.PushBack(textureComplete.texture->acquireBarrier);
-
             textureComplete.texture->loadState = Texture::LoadState::Loaded;
             textureComplete.texture->acquireFrame = ctx->currentFrame;
-            LOG_TRACE(Asset, "Texture load succeeded: {} (bindless index: {})", textureComplete.texture->name.c_str(), static_cast<uint32_t>(textureComplete.texture->bindlessHandle.index));
+            if (bVerboseLogging.load(std::memory_order_relaxed)) {
+                LOG_TRACE(Asset, "Texture load succeeded: {} (bindless index: {})", textureComplete.texture->name.c_str(), static_cast<uint32_t>(textureComplete.texture->bindlessHandle.index));
+            }
             loadCounts.textureLoadedCount++;
+            texturesThisTick++;
         }
         else {
             textureComplete.texture->loadState = Texture::LoadState::NotLoaded;
@@ -398,14 +433,26 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
         }
     }
 
+    if (texturesThisTick > 0) {
+        pendingTextureLogCount += texturesThisTick;
+        textureLastActivity = std::chrono::steady_clock::now();
+    }
+    if (pendingTextureLogCount > 0 && texturesThisTick == 0 && (std::chrono::steady_clock::now() - textureLastActivity) >= std::chrono::seconds(ASSET_LOG_IDLE_SECONDS)) {
+        LOG_INFO(Asset, "{} texture(s) loaded", pendingTextureLogCount);
+        pendingTextureLogCount = 0;
+    }
+
     AssetLoad::CubemapLoadComplete cubemapComplete{};
+    int32_t cubemapsThisTick{0};
     while (assetLoadManager->TryDequeueCubemapComplete(cubemapComplete)) {
         if (cubemapComplete.bSuccess) {
             stagingFrameBuffer.imageAcquireOperations.PushBack(cubemapComplete.cubemap->acquireBarrier);
-
             cubemapComplete.cubemap->loadState = Render::Cubemap::LoadState::Loaded;
-            LOG_TRACE(Asset, "Cubemap load succeeded: {} (bindless index: {})", cubemapComplete.cubemap->name.c_str(), static_cast<uint32_t>(cubemapComplete.cubemap->bindlessHandle.index));
+            if (bVerboseLogging.load(std::memory_order_relaxed)) {
+                LOG_TRACE(Asset, "Cubemap load succeeded: {} (bindless index: {})", cubemapComplete.cubemap->name.c_str(), static_cast<uint32_t>(cubemapComplete.cubemap->bindlessHandle.index));
+            }
             loadCounts.cubeLoadedCount++;
+            cubemapsThisTick++;
         }
         else {
             cubemapComplete.cubemap->loadState = Render::Cubemap::LoadState::NotLoaded;
@@ -413,17 +460,39 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
         }
     }
 
+    if (cubemapsThisTick > 0) {
+        pendingCubemapLogCount += cubemapsThisTick;
+        cubemapLastActivity = std::chrono::steady_clock::now();
+    }
+    if (pendingCubemapLogCount > 0 && cubemapsThisTick == 0 && (std::chrono::steady_clock::now() - cubemapLastActivity) >= std::chrono::seconds(ASSET_LOG_IDLE_SECONDS)) {
+        LOG_INFO(Asset, "{} cubemap(s) loaded", pendingCubemapLogCount);
+        pendingCubemapLogCount = 0;
+    }
+
     AssetLoad::SamplerLoadComplete samplerComplete{};
+    int32_t samplersThisTick{0};
     while (assetLoadManager->TryDequeueSamplerComplete(samplerComplete)) {
         if (samplerComplete.bSuccess) {
-            LOG_TRACE(Asset, "Sampler load succeeded (bindless index: {})", static_cast<uint32_t>(samplerComplete.sampler->bindlessHandle.index));
             samplerComplete.sampler->loadState = Sampler::LoadState::Loaded;
+            if (bVerboseLogging.load(std::memory_order_relaxed)) {
+                LOG_TRACE(Asset, "Sampler load succeeded (bindless index: {})", static_cast<uint32_t>(samplerComplete.sampler->bindlessHandle.index));
+            }
             loadCounts.samplerLoadedCount++;
+            samplersThisTick++;
         }
         else {
             samplerComplete.sampler->loadState = Sampler::LoadState::FailedToLoad;
             LOG_ERROR(Asset, "Sampler load failed");
         }
+    }
+
+    if (samplersThisTick > 0) {
+        pendingSamplerLogCount += samplersThisTick;
+        samplerLastActivity = std::chrono::steady_clock::now();
+    }
+    if (pendingSamplerLogCount > 0 && samplersThisTick == 0 && (std::chrono::steady_clock::now() - samplerLastActivity) >= std::chrono::seconds(ASSET_LOG_IDLE_SECONDS)) {
+        LOG_INFO(Asset, "{} sampler(s) loaded", pendingSamplerLogCount);
+        pendingSamplerLogCount = 0;
     }
 
     return loadCounts;
@@ -433,6 +502,7 @@ void AssetManager::ResolveUnloads()
 {
     const uint64_t currentFrame = ctx->currentFrame;
 
+    int32_t modelsUnloadedThisTick{0};
     for (auto& model : models) {
         if (!modelAllocator.IsValid(model.selfHandle)) { continue; }
         if (model.refCount > 0 || model.retireFrame == 0 || currentFrame < model.retireFrame) { continue; }
@@ -441,33 +511,65 @@ void AssetManager::ResolveUnloads()
             model.modelData.Reset(resourceManager);
         }
 
-        LOG_TRACE(Asset, "Model unloaded: {}", model.name.c_str());
+        if (bVerboseLogging.load(std::memory_order_relaxed)) { LOG_TRACE(Asset, "Model unloaded: {}", model.name.c_str()); }
         modelIdToHandle.Remove(model.modelId);
         modelAllocator.Remove(model.selfHandle);
         model = {};
+        modelsUnloadedThisTick++;
     }
 
+    if (modelsUnloadedThisTick > 0) {
+        pendingModelUnloadLogCount += modelsUnloadedThisTick;
+        modelUnloadLastActivity = std::chrono::steady_clock::now();
+    }
+    if (pendingModelUnloadLogCount > 0 && modelsUnloadedThisTick == 0 && (std::chrono::steady_clock::now() - modelUnloadLastActivity) >= std::chrono::seconds(ASSET_LOG_IDLE_SECONDS)) {
+        LOG_INFO(Asset, "{} model(s) unloaded", pendingModelUnloadLogCount);
+        pendingModelUnloadLogCount = 0;
+    }
+
+    int32_t texturesUnloadedThisTick{0};
     for (auto& texture : textures) {
         if (!textureAllocator.IsValid(texture.selfHandle)) { continue; }
         if (texture.refCount > 0 || texture.retireFrame == 0 || currentFrame < texture.retireFrame) { continue; }
         if (texture.loadState != Texture::LoadState::Loaded) { continue; }
 
-        LOG_TRACE(Asset, "Texture unloaded: {} (bindless index: {})", texture.name.c_str(), static_cast<uint32_t>(texture.bindlessHandle.index));
+        if (bVerboseLogging.load(std::memory_order_relaxed)) { LOG_TRACE(Asset, "Texture unloaded: {} (bindless index: {})", texture.name.c_str(), static_cast<uint32_t>(texture.bindlessHandle.index)); }
         resourceManager->bindlessSamplerTextureDescriptorBuffer.ReleaseTextureBinding(texture.bindlessHandle);
         textureIdToHandle.Remove(texture.textureId);
         textureAllocator.Remove(texture.selfHandle);
         texture = {};
+        texturesUnloadedThisTick++;
     }
 
+    if (texturesUnloadedThisTick > 0) {
+        pendingTextureUnloadLogCount += texturesUnloadedThisTick;
+        textureUnloadLastActivity = std::chrono::steady_clock::now();
+    }
+    if (pendingTextureUnloadLogCount > 0 && texturesUnloadedThisTick == 0 && (std::chrono::steady_clock::now() - textureUnloadLastActivity) >= std::chrono::seconds(ASSET_LOG_IDLE_SECONDS)) {
+        LOG_INFO(Asset, "{} texture(s) unloaded", pendingTextureUnloadLogCount);
+        pendingTextureUnloadLogCount = 0;
+    }
+
+    int32_t samplersUnloadedThisTick{0};
     for (auto& sampler : samplers) {
         if (!samplerAllocator.IsValid(sampler.selfHandle)) { continue; }
         if (sampler.refCount > 0 || sampler.retireFrame == 0 || currentFrame < sampler.retireFrame) { continue; }
 
-        LOG_TRACE(Asset, "Sampler unloaded (bindless index: {})", static_cast<uint32_t>(sampler.bindlessHandle.index));
+        if (bVerboseLogging.load(std::memory_order_relaxed)) { LOG_TRACE(Asset, "Sampler unloaded (bindless index: {})", static_cast<uint32_t>(sampler.bindlessHandle.index)); }
         resourceManager->bindlessSamplerTextureDescriptorBuffer.ReleaseSamplerBinding(sampler.bindlessHandle);
         samplerIdToHandle.Remove(sampler.id);
         samplerAllocator.Remove(sampler.selfHandle);
         sampler = {};
+        samplersUnloadedThisTick++;
+    }
+
+    if (samplersUnloadedThisTick > 0) {
+        pendingSamplerUnloadLogCount += samplersUnloadedThisTick;
+        samplerUnloadLastActivity = std::chrono::steady_clock::now();
+    }
+    if (pendingSamplerUnloadLogCount > 0 && samplersUnloadedThisTick == 0 && (std::chrono::steady_clock::now() - samplerUnloadLastActivity) >= std::chrono::seconds(ASSET_LOG_IDLE_SECONDS)) {
+        LOG_INFO(Asset, "{} sampler(s) unloaded", pendingSamplerUnloadLogCount);
+        pendingSamplerUnloadLogCount = 0;
     }
 }
 
@@ -598,7 +700,9 @@ Texture* AssetManager::LoadTexture(TextureID textureId)
             Texture& texture = textures[existingHandle.index];
             texture.refCount++;
             texture.retireFrame = 0;
-            LOG_TRACE(Asset, "Texture already loaded: {}, refCount: {}", texture.name.c_str(), texture.refCount);
+            if (bVerboseLogging.load(std::memory_order_relaxed)) {
+                LOG_TRACE(Asset, "Texture already loaded: {}, refCount: {}", texture.name.c_str(), texture.refCount);
+            }
             return &texture;
         }
         textureIdToHandle.Remove(textureId);
@@ -629,7 +733,9 @@ Texture* AssetManager::LoadTexture(TextureID textureId)
 
     textureIdToHandle[textureId] = handle;
 
-    LOG_TRACE(Asset, "Requesting texture load: {}", texture.name.c_str());
+    if (bVerboseLogging.load(std::memory_order_relaxed)) {
+        LOG_TRACE(Asset, "Requesting texture load: {}", texture.name.c_str());
+    }
     assetLoadManager->RequestTextureLoad(&texture);
 
     return &texture;
@@ -652,7 +758,9 @@ void AssetManager::UnloadTexture(TextureID id)
     Texture& texture = textures[handle.index];
     texture.refCount--;
 
-    LOG_TRACE(Asset, "Texture refCount decremented: {}, refCount: {}", texture.name.c_str(), texture.refCount);
+    if (bVerboseLogging.load(std::memory_order_relaxed)) {
+        LOG_TRACE(Asset, "Texture refCount decremented: {}, refCount: {}", texture.name.c_str(), texture.refCount);
+    }
 
     if (texture.refCount == 0) {
         texture.retireFrame = ctx->currentFrame + Core::FRAME_BUFFER_COUNT * 4;
@@ -670,7 +778,9 @@ Sampler* AssetManager::LoadSampler(SamplerDesc& samplerDesc)
             Sampler& existing = samplers[existingHandle.index];
             existing.refCount++;
             existing.retireFrame = 0;
-            LOG_TRACE(Asset, "Sampler already loaded (bindless index: {}), refCount: {}", static_cast<uint32_t>(existing.bindlessHandle.index), existing.refCount);
+            if (bVerboseLogging.load(std::memory_order_relaxed)) {
+                LOG_TRACE(Asset, "Sampler already loaded (bindless index: {}), refCount: {}", static_cast<uint32_t>(existing.bindlessHandle.index), existing.refCount);
+            }
             return &existing;
         }
         samplerIdToHandle.Remove(id);
@@ -691,7 +801,9 @@ Sampler* AssetManager::LoadSampler(SamplerDesc& samplerDesc)
 
     samplerIdToHandle[id] = handle;
 
-    LOG_TRACE(Asset, "Requesting sampler load (bindless index: {})", static_cast<uint32_t>(sampler.bindlessHandle.index));
+    if (bVerboseLogging.load(std::memory_order_relaxed)) {
+        LOG_TRACE(Asset, "Requesting sampler load (bindless index: {})", static_cast<uint32_t>(sampler.bindlessHandle.index));
+    }
     assetLoadManager->RequestSamplerLoad(&sampler);
 
     return &sampler;
@@ -716,7 +828,9 @@ void AssetManager::UnloadSampler(SamplerDesc& desc)
     Sampler& sampler = samplers[handle.index];
     sampler.refCount--;
 
-    LOG_TRACE(Asset, "Sampler refCount decremented: {}, refCount: {}", sampler.id.id, sampler.refCount);
+    if (bVerboseLogging.load(std::memory_order_relaxed)) {
+        LOG_TRACE(Asset, "Sampler refCount decremented: {}, refCount: {}", sampler.id.id, sampler.refCount);
+    }
 
     if (sampler.refCount == 0) {
         sampler.retireFrame = ctx->currentFrame + Core::FRAME_BUFFER_COUNT * 4;
@@ -766,7 +880,9 @@ CubemapHandle AssetManager::LoadCubemap(EnvironmentMapID cubemapId)
 
     cubemapIdToHandle[cubemapId] = handle;
 
-    LOG_TRACE(Asset, "Requesting cubemap load: {}", cubemap.name.c_str());
+    if (bVerboseLogging.load(std::memory_order_relaxed)) {
+        LOG_TRACE(Asset, "Requesting cubemap load: {}", cubemap.name.c_str());
+    }
     assetLoadManager->RequestCubemapLoad(&cubemap);
 
     return handle;
@@ -790,7 +906,9 @@ void AssetManager::UnloadCubemap(CubemapHandle handle)
     Render::Cubemap& cubemap = cubemaps[handle.index];
     cubemap.refCount--;
 
-    LOG_TRACE(Asset, "Cubemap refCount decremented: {}, refCount: {}", cubemap.name.c_str(), cubemap.refCount);
+    if (bVerboseLogging.load(std::memory_order_relaxed)) {
+        LOG_TRACE(Asset, "Cubemap refCount decremented: {}, refCount: {}", cubemap.name.c_str(), cubemap.refCount);
+    }
 
     if (cubemap.refCount == 0) {
         cubemap.loadState = Render::Cubemap::LoadState::NotLoaded;

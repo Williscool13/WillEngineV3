@@ -4,6 +4,10 @@
 
 #include "material_manager.h"
 
+#include <chrono>
+
+#include "asset_manager_config.h"
+
 #include <fstream>
 
 #include <json/nlohmann/json.hpp>
@@ -151,7 +155,8 @@ void MaterialManager::ReleaseMaterial(MaterialID materialID)
 
     if (entry->refCounter == 0) {
         entry->retireFrame = ctx->currentFrame + Core::FRAME_BUFFER_COUNT + 1;
-        LOG_TRACE(Engine, "Material {} has hit ref 0, deleting in {} FIF", materials[materialID].name.c_str(), Core::FRAME_BUFFER_COUNT);
+        pendingMaterialRetireLogCount++;
+        materialRetireLastActivity = std::chrono::steady_clock::now();
     }
 }
 
@@ -185,6 +190,11 @@ void MaterialManager::ProcessRetirements()
                 entry = {};
             }
         }
+    }
+
+    if (pendingMaterialRetireLogCount > 0 && (std::chrono::steady_clock::now() - materialRetireLastActivity) >= std::chrono::seconds(ASSET_LOG_IDLE_SECONDS)) {
+        LOG_INFO(Engine, "{} material(s) retired", pendingMaterialRetireLogCount);
+        pendingMaterialRetireLogCount = 0;
     }
 }
 

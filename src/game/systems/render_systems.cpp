@@ -42,6 +42,8 @@ void ResolveStaticMeshLoads(Engine::EngineContext* ctx, Engine::EngineState* sta
     if (viewCount == 0) {
         return;
     }
+    int32_t modelsWaitingThisTick{0};
+
     auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->memoryManager->GeneralArena(), viewCount);
     for (const auto& [entity, meshComponent] : view.each()) {
         auto* runtime = state->registry.try_get<Component::MeshRuntime>(entity);
@@ -61,7 +63,7 @@ void ResolveStaticMeshLoads(Engine::EngineContext* ctx, Engine::EngineState* sta
             continue;
         }
         if (model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
-            LOG_TRACE(Game, "Model ({}) not yet done loading", model->name.c_str());
+            modelsWaitingThisTick++;
             continue;
         }
 
@@ -107,6 +109,15 @@ void ResolveStaticMeshLoads(Engine::EngineContext* ctx, Engine::EngineState* sta
         resolved.PushBack(entity);
     }
 
+    if (modelsWaitingThisTick > 0) {
+        state->pendingModelWaitCount += modelsWaitingThisTick;
+        state->modelWaitLastActivity = std::chrono::steady_clock::now();
+    }
+    if (state->pendingModelWaitCount > 0 && modelsWaitingThisTick == 0 && (std::chrono::steady_clock::now() - state->modelWaitLastActivity) >= std::chrono::seconds(1)) {
+        LOG_TRACE(Game, "{} model(s) not yet done loading", state->pendingModelWaitCount);
+        state->pendingModelWaitCount = 0;
+    }
+
     for (const auto entity : resolved) {
         state->registry.remove<Component::StaticMeshLoadingTag>(entity);
     }
@@ -119,6 +130,8 @@ void ResolveProceduralMeshLoads(Engine::EngineContext* ctx, Engine::EngineState*
     if (viewCount == 0) {
         return;
     }
+
+    int32_t proceduralWaitingThisTick{0};
 
     auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->memoryManager->GeneralArena(), viewCount);
     for (const auto& [entity, meshComponent] : view.each()) {
@@ -137,7 +150,7 @@ void ResolveProceduralMeshLoads(Engine::EngineContext* ctx, Engine::EngineState*
             continue;
         }
         if (model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
-            LOG_TRACE(Game, "Procedural model ({}) not yet done loading", model->name.c_str());
+            proceduralWaitingThisTick++;
             continue;
         }
 
@@ -160,6 +173,15 @@ void ResolveProceduralMeshLoads(Engine::EngineContext* ctx, Engine::EngineState*
         materialManager->AcquireMaterial(matID);
 
         resolved.PushBack(entity);
+    }
+
+    if (proceduralWaitingThisTick > 0) {
+        state->pendingProceduralWaitCount += proceduralWaitingThisTick;
+        state->proceduralWaitLastActivity = std::chrono::steady_clock::now();
+    }
+    if (state->pendingProceduralWaitCount > 0 && proceduralWaitingThisTick == 0 && (std::chrono::steady_clock::now() - state->proceduralWaitLastActivity) >= std::chrono::seconds(1)) {
+        LOG_TRACE(Game, "{} procedural model(s) not yet done loading", state->pendingProceduralWaitCount);
+        state->pendingProceduralWaitCount = 0;
     }
 
     for (const auto entity : resolved) {

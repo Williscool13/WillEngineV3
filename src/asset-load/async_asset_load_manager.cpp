@@ -140,8 +140,13 @@ void AsyncAssetLoadManager::ThreadMain()
                     AudioLoadSlot& slot = audioLoadSlots[slotHandle.index];
                     slot.Launch(slotHandle, audioReq.audioEntry);
                 }
+                else {
+                    audioRequestQueue.enqueue(audioReq);
+                }
             }
-        } {
+        }
+        //
+        {
             ZoneScopedN("Process Pipeline Requests");
             PipelineLoadRequest pipelineReq{};
             if (pipelineRequestQueue.try_dequeue(pipelineReq)) {
@@ -150,8 +155,13 @@ void AsyncAssetLoadManager::ThreadMain()
                     PipelineLoadSlot& slot = pipelineLoadSlots[slotHandle.index];
                     slot.Launch(slotHandle, pipelineReq.entry);
                 }
+                else {
+                    pipelineRequestQueue.enqueue(pipelineReq);
+                }
             }
-        } {
+        }
+        //
+        {
             ZoneScopedN("Process Model Requests");
             StaticModelLoadRequest modelReq{};
             if (modelRequestQueue.try_dequeue(modelReq)) {
@@ -173,7 +183,9 @@ void AsyncAssetLoadManager::ThreadMain()
                     modelRequestQueue.enqueue(modelReq);
                 }
             }
-        } {
+        }
+        //
+        {
             ZoneScopedN("Process Procedural Model Requests");
             StaticModelLoadRequest proceduralReq{};
             if (proceduralModelRequestQueue.try_dequeue(proceduralReq)) {
@@ -195,7 +207,9 @@ void AsyncAssetLoadManager::ThreadMain()
                     proceduralModelRequestQueue.enqueue(proceduralReq);
                 }
             }
-        } {
+        }
+        //
+        {
             ZoneScopedN("Process Texture Requests");
             TextureLoadRequest textureReq{};
             if (textureRequestQueue.try_dequeue(textureReq)) {
@@ -217,7 +231,9 @@ void AsyncAssetLoadManager::ThreadMain()
                     textureRequestQueue.enqueue(textureReq);
                 }
             }
-        } {
+        }
+        //
+        {
             ZoneScopedN("Process Cubemap Requests");
             CubemapLoadRequest cubemapReq{};
             if (cubemapRequestQueue.try_dequeue(cubemapReq)) {
@@ -239,7 +255,9 @@ void AsyncAssetLoadManager::ThreadMain()
                     cubemapRequestQueue.enqueue(cubemapReq);
                 }
             }
-        } {
+        }
+        //
+        {
             ZoneScopedN("Process Sampler Requests");
             SamplerLoadRequest samplerReq{};
             if (samplerRequestQueue.try_dequeue(samplerReq)) {
@@ -586,10 +604,7 @@ void AsyncAssetLoadManager::OnTextureLoadComplete(bool success, TextureSlotHandl
     TextureLoadSlot& slot = textureLoadSlots[textureSlotHandle.index];
     textureLoadCompleteQueue.enqueue({slot.outputTexture, success});
 
-    if (success) {
-        LOG_TRACE(Asset, "Finished loading texture: {}", slot.outputTexture->source.c_str());
-    }
-    else {
+    if (!success) {
         LOG_ERROR(Asset, "Failed to load texture: {}", slot.outputTexture->source.c_str());
     }
 

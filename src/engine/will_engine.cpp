@@ -608,6 +608,16 @@ void WillEngine::EditorImgui()
             ImGui::Text("Samplers:  %u", assetManager->GetActiveSamplerCount());
             ImGui::Text("Cubemaps:  %u", assetManager->GetActiveCubemapCount());
             ImGui::Text("Materials: %u", materialManager->GetActiveMaterialCount());
+            bool verboseAsset = assetManager->bVerboseLogging.load(std::memory_order_relaxed);
+            if (ImGui::Checkbox("Verbose Asset Logging", &verboseAsset)) {
+                assetManager->bVerboseLogging.store(verboseAsset, std::memory_order_relaxed);
+            }
+            if (Render::PipelineManager* pipelineManager = renderThread->GetPipelineManager()) {
+                bool verbosePipeline = pipelineManager->bVerbosePipelineLoading.load(std::memory_order_relaxed);
+                if (ImGui::Checkbox("Verbose Pipeline Loading", &verbosePipeline)) {
+                    pipelineManager->bVerbosePipelineLoading.store(verbosePipeline, std::memory_order_relaxed);
+                }
+            }
         }
 
         ImGui::Checkbox("Freeze Visibility Calculations", &bFreezeVisibility);

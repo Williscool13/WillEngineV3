@@ -4,6 +4,8 @@
 
 #include "pipeline_manager.h"
 
+#include "pipeline_config.h"
+
 #include <fstream>
 
 #include "graphics_pipeline_builder.h"
@@ -135,7 +137,10 @@ void PipelineManager::RegisterComputePipeline(StringID pipelineId, Core::Path sh
 
     SubmitPipelineLoad(&data);
 
-    LOG_INFO(Renderer, "Registered compute pipeline: {}", pipelineId.ToString());
+    registeredComputeCount++;
+    if constexpr (VERBOSE_PIPELINE_REGISTRATION) {
+        LOG_INFO(Renderer, "Registered compute pipeline: {}", pipelineId.ToString());
+    }
 }
 
 void PipelineManager::RegisterComputePipelineCustomLayout(StringID pipelineId, Core::Path shaderPath, uint32_t pushConstantSize, PipelineCategory category,
@@ -166,7 +171,10 @@ void PipelineManager::RegisterComputePipelineCustomLayout(StringID pipelineId, C
 
     SubmitPipelineLoad(&data);
 
-    LOG_INFO(Renderer, "Registered compute pipeline (custom layout): {}", pipelineId.ToString());
+    registeredComputeCount++;
+    if constexpr (VERBOSE_PIPELINE_REGISTRATION) {
+        LOG_INFO(Renderer, "Registered compute pipeline (custom layout): {}", pipelineId.ToString());
+    }
 }
 
 void PipelineManager::RegisterGraphicsPipeline(StringID pipelineId, GraphicsPipelineBuilder& builder, uint32_t pushConstantSize, VkShaderStageFlags pushConstantStages, PipelineCategory category)
@@ -217,7 +225,10 @@ void PipelineManager::RegisterGraphicsPipeline(StringID pipelineId, GraphicsPipe
 
     SubmitPipelineLoad(&data);
 
-    LOG_INFO(Renderer, "Registered graphics pipeline: {}", pipelineId.ToString());
+    registeredGraphicsCount++;
+    if constexpr (VERBOSE_PIPELINE_REGISTRATION) {
+        LOG_INFO(Renderer, "Registered graphics pipeline: {}", pipelineId.ToString());
+    }
 }
 
 const PipelineEntry* PipelineManager::GetPipelineEntry(StringID pipelineId)
@@ -259,23 +270,40 @@ void PipelineManager::Update(uint32_t frameNumber)
 {
     currentFrame = frameNumber;
 
-    AssetLoad::PipelineLoadComplete complete;
+    AssetLoad::PipelineLoadComplete complete{};
+    int32_t pipelinesThisTick{0};
     while (asyncAssetLoadManager->TryDequeuePipelineComplete(complete)) {
         if (auto* data = computePipelines.Find(complete.pipelineData->pipelineId)) {
             if (complete.bSuccess) {
-                LOG_INFO(Renderer, "Compute pipeline '{}' loaded", complete.pipelineData->pipelineId.ToString());
+                pipelinesThisTick++;
+                if (bVerbosePipelineLoading.load(std::memory_order_relaxed)) {
+                    LOG_INFO(Renderer, "Compute pipeline '{}' loaded", complete.pipelineData->pipelineId.ToString());
+                }
             }
             HandlePipelineCompletion(*data, complete.bSuccess);
         }
         else if (auto* data = graphicsPipelines.Find(complete.pipelineData->pipelineId)) {
             if (complete.bSuccess) {
-                LOG_INFO(Renderer, "Graphics pipeline '{}' loaded", complete.pipelineData->pipelineId.ToString());
+                pipelinesThisTick++;
+                if (bVerbosePipelineLoading.load(std::memory_order_relaxed)) {
+                    LOG_INFO(Renderer, "Graphics pipeline '{}' loaded", complete.pipelineData->pipelineId.ToString());
+                }
             }
             HandlePipelineCompletion(*data, complete.bSuccess);
         }
         else {
             LOG_ERROR(Renderer, "Pipeline '{}' not found", complete.pipelineData->pipelineId.ToString());
         }
+    }
+
+    if (pipelinesThisTick > 0) {
+        pendingPipelineLogCount += pipelinesThisTick;
+        pipelineLastActivity = std::chrono::steady_clock::now();
+    }
+
+    if (pendingPipelineLogCount > 0 && pipelinesThisTick == 0 && (std::chrono::steady_clock::now() - pipelineLastActivity) >= std::chrono::seconds(PIPELINE_LOG_IDLE_SECONDS)) {
+        LOG_INFO(Renderer, "{} pipeline(s) loaded", pendingPipelineLogCount);
+        pendingPipelineLogCount = 0;
     }
 
     if (bReloadRequested.exchange(false, std::memory_order_relaxed)) {
@@ -310,6 +338,11 @@ bool PipelineManager::IsCategoryReady(PipelineCategory category) const
 void PipelineManager::SetAssetLoadThread(AssetLoad::AsyncAssetLoadManager* _asyncAssetLoadManager)
 {
     asyncAssetLoadManager = _asyncAssetLoadManager;
+}
+
+void PipelineManager::LogRegistrationSummary()
+{
+    LOG_INFO(Renderer, "Registered {} compute + {} graphics pipelines", registeredComputeCount, registeredGraphicsCount);
 }
 
 void PipelineManager::RegisterPipelines()
@@ -647,6 +680,8 @@ void PipelineManager::RegisterPipelines()
         );
         builder.Clear();
     }
+
+    LogRegistrationSummary();
 }
 
 void PipelineManager::ReloadModified()

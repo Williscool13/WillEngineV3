@@ -6,6 +6,7 @@
 #define WILL_ENGINE_ENGINE_API_H
 
 
+#include <chrono>
 #include <entt/entt.hpp>
 #include <Jolt/Jolt.h>
 #include <Jolt/Physics/Body/BodyID.h>
@@ -223,6 +224,12 @@ struct EngineState
 
     // Asset Loading
     bool bPendingModelResolve{false};
+
+    int32_t pendingModelWaitCount{0};
+    std::chrono::steady_clock::time_point modelWaitLastActivity{};
+
+    int32_t pendingProceduralWaitCount{0};
+    std::chrono::steady_clock::time_point proceduralWaitLastActivity{};
     StaticModelHandle portalPlaneHandle{StaticModelHandle::INVALID};
 
     // Gameplay

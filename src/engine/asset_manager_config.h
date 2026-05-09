@@ -25,6 +25,8 @@ inline constexpr uint32_t MAX_CACHED_PREFABS = 512;
 
 inline constexpr uint32_t MAX_LOADED_MATERIALS = 4096;
 
+inline constexpr uint32_t ASSET_LOG_IDLE_SECONDS = 1;
+
 }
 
 #endif //WILL_ENGINE_ASSET_MANAGER_CONFIG_H

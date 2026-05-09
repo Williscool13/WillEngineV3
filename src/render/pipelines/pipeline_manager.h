@@ -6,6 +6,7 @@
 #define WILL_ENGINE_PIPELINE_MANAGER_H
 
 
+#include <chrono>
 #include <string>
 #include <volk.h>
 
@@ -67,6 +68,8 @@ public:
 
     void RegisterPipelines();
 
+    void LogRegistrationSummary();
+
     VkPipelineLayout GetGlobalPipelineLayout() const { return globalPipelineLayout.handle; }
 
     VkPipelineCache GetPipelineCache() const { return pipelineCache; }
@@ -120,6 +123,15 @@ private:
     VkPipelineCache pipelineCache{VK_NULL_HANDLE};
 
     std::atomic<bool> bReloadRequested{false};
+
+    int32_t registeredComputeCount{0};
+    int32_t registeredGraphicsCount{0};
+
+    int32_t pendingPipelineLogCount{0};
+    std::chrono::steady_clock::time_point pipelineLastActivity{};
+
+public:
+    std::atomic<bool> bVerbosePipelineLoading{false};
 };
 } // Render
 

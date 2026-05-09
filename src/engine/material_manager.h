@@ -4,6 +4,7 @@
 
 #ifndef WILL_ENGINE_MATERIAL_MANAGER_H
 #define WILL_ENGINE_MATERIAL_MANAGER_H
+#include <chrono>
 #include <cstdint>
 #include <random>
 
@@ -107,6 +108,9 @@ private:
      */
     Core::FixedMap<MaterialID, Material> materials;
     Core::FixedMap<StringID, MaterialID> nameToMaterialMap;
+
+    int32_t pendingMaterialRetireLogCount{0};
+    std::chrono::steady_clock::time_point materialRetireLastActivity{};
 
     std::mt19937_64 mutableIdRng{std::random_device{}()};
 };
