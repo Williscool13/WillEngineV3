@@ -1202,12 +1202,16 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
             if (pass->executeFunc) {
                 ZoneScopedN("Execute");
                 ZoneText(pass->renderPassId.ToString(), strlen(pass->renderPassId.ToString()));
+#if ENABLE_VULKAN_VALIDATION
                 VkDebugUtilsLabelEXT label = {};
                 label.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT;
                 label.pLabelName = pass->renderPassId.ToString();
                 vkCmdBeginDebugUtilsLabelEXT(cmd, &label);
+#endif
                 pass->executeFunc(cmd);
+#if ENABLE_VULKAN_VALIDATION
                 vkCmdEndDebugUtilsLabelEXT(cmd);
+#endif
             }
         }
     }
@@ -2235,7 +2239,7 @@ void RenderGraph::CreatePhysicalImage(PhysicalResource& resource, const Resource
     allocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
 
     VK_CHECK(vmaCreateImage(context->allocator, &imageInfo, &allocInfo, &resource.image, &resource.imageAllocation, nullptr));
-#ifdef _DEBUG
+#ifdef ENABLE_VULKAN_VALIDATION
     VkDebugUtilsObjectNameInfoEXT nameInfo{VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT};
     nameInfo.objectType = VK_OBJECT_TYPE_IMAGE;
     nameInfo.objectHandle = reinterpret_cast<uint64_t>(resource.image);
@@ -2321,7 +2325,7 @@ void RenderGraph::CreatePhysicalBuffer(PhysicalResource& resource, const Resourc
     resource.dimensions = dim;
     resource.event = {};
 
-#ifdef _DEBUG
+#ifdef ENABLE_VULKAN_VALIDATION
     VkDebugUtilsObjectNameInfoEXT nameInfo{VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT};
     nameInfo.objectType = VK_OBJECT_TYPE_BUFFER;
     nameInfo.objectHandle = reinterpret_cast<uint64_t>(resource.buffer);

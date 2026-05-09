@@ -11,7 +11,7 @@ option(WILL_ENGINE_PACKAGED_BUILD "Enable the use UserDataPath for log and crash
 option(WILL_ENGINE_BUILD_TESTS "Build test suite" OFF)
 option(WILL_ENGINE_ENABLE_PROFILER "Enables tracy profiler" OFF)
 option(WILL_ENGINE_ENABLE_LOGGING "Enables logging" ON)
-option(WILL_ENGINE_ENABLE_VALIDATION "Enables Vulkan validation error" ON)
+option(WILL_ENGINE_ENABLE_VULKAN_VALIDATION "Enables Vulkan validation error" OFF)
 
 # Configuration ==============================
 if (NOT WILL_ENGINE_ENABLE_LOGGING)
