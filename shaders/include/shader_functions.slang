@@ -90,6 +90,7 @@ struct InterpolatedVertex
 {
     float3 normalVS;
     float3 tangentVS;
+    float tangentSign;
     float2 uv;
     float4 color;
 };
@@ -166,10 +167,15 @@ InterpolatedVertex InterpolateVertex(float3 bary, VertexAttribute v0, VertexAttr
     float3 normalOS  = normalize(bary.x * n0 + bary.y * n1 + bary.z * n2);
     float3 tangentOS = normalize(bary.x * t0 + bary.y * t1 + bary.z * t2);
 
-    interp.normalVS  = normalize(mul((float3x3)mv, normalOS));
-    interp.tangentVS = normalize(mul((float3x3)mv, tangentOS));
-    interp.uv        = bary.x * uv0 + bary.y * uv1 + bary.z * uv2;
-    interp.color     = bary.x * c0  + bary.y * c1  + bary.z * c2;
+    float s0 = DecodeTangentSign(v0);
+    float s1 = DecodeTangentSign(v1);
+    float s2 = DecodeTangentSign(v2);
+
+    interp.normalVS   = normalize(mul((float3x3)mv, normalOS));
+    interp.tangentVS  = normalize(mul((float3x3)mv, tangentOS));
+    interp.tangentSign = sign(bary.x * s0 + bary.y * s1 + bary.z * s2);
+    interp.uv         = bary.x * uv0 + bary.y * uv1 + bary.z * uv2;
+    interp.color      = bary.x * c0  + bary.y * c1  + bary.z * c2;
 
     return interp;
 }

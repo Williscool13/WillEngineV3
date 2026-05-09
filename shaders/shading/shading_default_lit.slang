@@ -36,6 +36,9 @@ void ComputeMain(uint3 dtid : SV_DispatchThreadID, uniform VisibilityShadingPush
     MaterialProperties material = pc.materialBuffer[pc.materialIndex];
 
     float3 shadingNormal = shadingInputs.interp.normalVS;
+    float3 T = shadingInputs.interp.tangentVS;
+    float3 N = shadingNormal;
+    float3 B = cross(N, T) * shadingInputs.interp.tangentSign;
 
     // Albedo
     float2 colorUV = shadingInputs.interp.uv * material.colorUvTransform.xy + material.colorUvTransform.zw;
@@ -50,7 +53,19 @@ void ComputeMain(uint3 dtid : SV_DispatchThreadID, uniform VisibilityShadingPush
     float roughness = material.metalRoughFactors.y;
     // TODO: metallic/roughness texture sampling
 
-    // TODO: normal map sampling
+    // Normal map
+    if (material.textureImageIndices.z >= 0) {
+        float2 normalUV = shadingInputs.interp.uv * material.normalUvTransform.xy + material.normalUvTransform.zw;
+        float2 ddxN = shadingInputs.uvDdx * material.normalUvTransform.xy;
+        float2 ddyN = shadingInputs.uvDdy * material.normalUvTransform.xy;
+        float2 normalRG = assetTextures[material.textureImageIndices.z].SampleGrad(assetSamplers[material.textureSamplerIndices.z], normalUV, ddxN, ddyN).xy;
+        float3 tsNormal;
+        tsNormal.xy = normalRG * 2.0 - 1.0;
+        tsNormal.z  = sqrt(saturate(1.0 - dot(tsNormal.xy, tsNormal.xy)));
+        tsNormal.xy *= material.physicalProperties.z; // normal scale
+        tsNormal = normalize(tsNormal);
+        shadingNormal = normalize(tsNormal.x * T + tsNormal.y * B + tsNormal.z * N);
+    }
 
     // Emissive
     float3 emissiveColor = material.emissiveFactor.rgb;
