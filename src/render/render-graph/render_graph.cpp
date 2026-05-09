@@ -433,9 +433,17 @@ void RenderGraph::AssignPhysicalResources(int64_t currentFrame)
                 for (uint32_t logicalIdx : phys.logicalResourceIndices) {
                     auto& existing = textures[logicalIdx];
 
-                    bool overlap = !(tex.lastPass < existing.firstPass || existing.lastPass < tex.firstPass);
+                    bool passOverlap = !(tex.lastPass < existing.firstPass || existing.lastPass < tex.firstPass);
+                    bool waveOverlap = false;
+                    if (tex.firstPass != UINT32_MAX && tex.lastPass != UINT32_MAX && existing.firstPass != UINT32_MAX && existing.lastPass != UINT32_MAX) {
+                        uint32_t texFirstWave = sortedPasses[tex.firstPass]->waveIndex;
+                        uint32_t texLastWave = sortedPasses[tex.lastPass]->waveIndex;
+                        uint32_t existingFirstWave = sortedPasses[existing.firstPass]->waveIndex;
+                        uint32_t existingLastWave = sortedPasses[existing.lastPass]->waveIndex;
+                        waveOverlap = !(texLastWave < existingFirstWave || existingLastWave < texFirstWave);
+                    }
 
-                    if (overlap) {
+                    if (passOverlap || waveOverlap) {
                         canAlias = false;
                         break;
                     }
@@ -519,7 +527,18 @@ void RenderGraph::AssignPhysicalResources(int64_t currentFrame)
                 bool canAlias = true;
                 for (uint32_t logicalIdx : phys.logicalResourceIndices) {
                     auto& existing = buffers[logicalIdx];
-                    if (!(buf.lastPass < existing.firstPass || existing.lastPass < buf.firstPass)) {
+
+                    bool passOverlap = !(buf.lastPass < existing.firstPass || existing.lastPass < buf.firstPass);
+                    bool waveOverlap = false;
+                    if (buf.firstPass != UINT32_MAX && buf.lastPass != UINT32_MAX && existing.firstPass != UINT32_MAX && existing.lastPass != UINT32_MAX) {
+                        uint32_t bufFirstWave = sortedPasses[buf.firstPass]->waveIndex;
+                        uint32_t bufLastWave = sortedPasses[buf.lastPass]->waveIndex;
+                        uint32_t existingFirstWave = sortedPasses[existing.firstPass]->waveIndex;
+                        uint32_t existingLastWave = sortedPasses[existing.lastPass]->waveIndex;
+                        waveOverlap = !(bufLastWave < existingFirstWave || existingLastWave < bufFirstWave);
+                    }
+
+                    if (passOverlap || waveOverlap) {
                         canAlias = false;
                         break;
                     }
