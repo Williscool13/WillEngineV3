@@ -33,10 +33,10 @@ MaterialManager::MaterialManager(Core::MemoryManager& memoryManager, Engine::Eng
     defaultMat.props = {
         .colorFactor = {1.0f, 1.0f, 1.0f, 1.0f}, // white
         .metalRoughFactors = {0.0f, 1.0f, 0.0f, 0.0f}, // non-metallic, rough
-        .textureImageIndices = {WHITE_IMAGE_BINDLESS_INDEX, WHITE_IMAGE_BINDLESS_INDEX, WHITE_IMAGE_BINDLESS_INDEX, WHITE_IMAGE_BINDLESS_INDEX},
-        .textureSamplerIndices = {ASSET_SAMPLER_LINEAR_BINDLESS_INDEX, ASSET_SAMPLER_LINEAR_BINDLESS_INDEX, ASSET_SAMPLER_LINEAR_BINDLESS_INDEX, ASSET_SAMPLER_LINEAR_BINDLESS_INDEX},
-        .textureImageIndices2 = {WHITE_IMAGE_BINDLESS_INDEX, WHITE_IMAGE_BINDLESS_INDEX, WHITE_IMAGE_BINDLESS_INDEX, WHITE_IMAGE_BINDLESS_INDEX},
-        .textureSamplerIndices2 = {ASSET_SAMPLER_LINEAR_BINDLESS_INDEX, ASSET_SAMPLER_LINEAR_BINDLESS_INDEX, ASSET_SAMPLER_LINEAR_BINDLESS_INDEX, ASSET_SAMPLER_LINEAR_BINDLESS_INDEX},
+        .textureImageIndices = {-1, -1, -1, -1},
+        .textureSamplerIndices = {-1, -1, -1, -1},
+        .textureImageIndices2 = {-1, -1, -1, -1},
+        .textureSamplerIndices2 = {-1, -1, -1, -1},
         .colorUvTransform = {1.0f, 1.0f, 0.0f, 0.0f}, // identity
         .metalRoughUvTransform = {1.0f, 1.0f, 0.0f, 0.0f},
         .normalUvTransform = {1.0f, 1.0f, 0.0f, 0.0f},
@@ -47,13 +47,7 @@ MaterialManager::MaterialManager(Core::MemoryManager& memoryManager, Engine::Eng
         .physicalProperties = {1.5f, 0.0f, 1.0f, 1.0f} // IOR 1.5, no dispersion, normal scale 1.0, full occlusion
     };
 
-    TextureID whiteTexture = assetManager->FindTextureByName("white");
-    defaultMat.textureRefs[0] = whiteTexture;
-    defaultMat.textureRefs[1] = whiteTexture;
-    defaultMat.textureRefs[2] = whiteTexture;
-    defaultMat.textureRefs[3] = whiteTexture;
-    defaultMat.textureRefs[4] = whiteTexture;
-    defaultMat.textureRefs[5] = whiteTexture;
+    // No texture refs -- factors alone define the default material appearance.
     defaultMat.samplerDesc[0] = SamplerDesc{};
     defaultMat.samplerDesc[1] = SamplerDesc{};
     defaultMat.samplerDesc[2] = SamplerDesc{};
@@ -110,9 +104,9 @@ void MaterialManager::AcquireMaterial(MaterialID materialID)
     // todo material needs to be marked as "in progress". And the model should only be loaded if the material is ready, which should only be true if all the textures and samplers are ready.
     if (!mat.bIsRuntimeLoaded) {
         auto resolveTexture = [&](TextureID id) -> int32_t {
-            if (!id.IsValid()) return WHITE_IMAGE_BINDLESS_INDEX;
+            if (!id.IsValid()) return -1;
             Texture* tex = assetManager->LoadTexture(id);
-            return tex ? static_cast<int32_t>(tex->bindlessHandle.index) : WHITE_IMAGE_BINDLESS_INDEX;
+            return tex ? static_cast<int32_t>(tex->bindlessHandle.index) : -1;
         };
 
         auto resolveSampler = [&](SamplerDesc& desc) -> int32_t {
@@ -269,7 +263,7 @@ void MaterialManager::UpdateMutableMaterial(MaterialID id, const Material& newMa
             }
             mat.textureRefs[i] = newMat.textureRefs[i];
             Texture* tex = newMat.textureRefs[i].IsValid() ? assetManager->LoadTexture(newMat.textureRefs[i]) : nullptr;
-            texIdxRef(i) = tex ? static_cast<int32_t>(tex->bindlessHandle.index) : WHITE_IMAGE_BINDLESS_INDEX;
+            texIdxRef(i) = tex ? static_cast<int32_t>(tex->bindlessHandle.index) : -1;
         }
 
         if (mat.samplerDesc[i] != newMat.samplerDesc[i]) {
