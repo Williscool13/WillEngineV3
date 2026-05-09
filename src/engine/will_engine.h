@@ -166,7 +166,6 @@ private: // Debugging
     Core::Array<Core::TlsfAllocator::TagStats, kTagCount> cachedGeneralTags{};
     Core::Array<Core::TlsfAllocator::TagStats, kTagCount> cachedAssetsScratchTags{};
     Core::Array<Core::TlsfAllocator::TagStats, kTagCount> cachedAssetsTags{};
-    Core::Array<Core::TlsfAllocator::TagStats, kTagCount> cachedPhysicsTags{};
     Core::Array<Core::TlsfAllocator::TagStats, kTagCount> cachedPhysicsAlignedTags{};
     Core::Array<Core::TlsfAllocator::TagStats, kTagCount> cachedRenderTags{};
     std::chrono::high_resolution_clock::time_point lastFrameAcquireTime;

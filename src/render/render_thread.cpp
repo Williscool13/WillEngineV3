@@ -1021,7 +1021,7 @@ void RenderThread::RegisterDebugReadbacks()
         "Meshlet Dispatch Args",
         [](RenderGraph& graph, StringID dst, size_t dstOffset) {
             if (!graph.HasBuffer(SID("meshlet_count_dispatch_args"))) { return; }
-            RenderPass& pass = graph.AddPass(SID("Readback Meshlet Dispatch Args"), VK_PIPELINE_STAGE_2_COPY_BIT);
+            RenderPass& pass = graph.AddPass(SID("[Debug] Readback Meshlet Dispatch Args"), VK_PIPELINE_STAGE_2_COPY_BIT);
             pass.ReadTransferBuffer(SID("meshlet_count_dispatch_args"));
             pass.WriteTransferBuffer(dst);
             pass.Execute([&graph, dst, dstOffset](VkCommandBuffer cmd) {

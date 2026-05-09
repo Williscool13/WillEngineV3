@@ -8,7 +8,7 @@
 namespace Physics
 {
 DebugDrawFilter::DebugDrawFilter(Core::MemoryManager& memoryManager)
-    : bodiesToDraw(&memoryManager.Physics(), Core::AllocTag::Physics, 128)
+    : bodiesToDraw(&memoryManager.PhysicsAligned(), Core::AllocTag::Physics, 128)
 {}
 } // Physics
 #endif

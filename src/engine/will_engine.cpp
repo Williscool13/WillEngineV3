@@ -103,8 +103,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
         .generalPoolSize = 32ull * 1024 * 1024, // 16 MB
         .assetsScratchPoolSize = 1024ull * 1024 * 1024, // 128 MB
         .assetsPoolSize = 128ull * 1024 * 1024, // 128 MB
-        .physicsPoolSize = 1ull * 1024 * 1024, // 4 MB
-        .physicsAlignedPoolSize = 32ull * 1024 * 1024, // 32 MB
+        .physicsAlignedPoolSize = 32ull * 1024 * 1024, // 64 MB
         .physicsArenaSize = Physics::PHYSICS_TEMP_ALLOCATOR_SIZE, // 16 MB
         .renderPoolSize = 4ull * 1024 * 1024, // 4 MB
         .renderArenaSize = 1ull * 1024 * 1024, // 1 MB
@@ -226,8 +225,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
     //
     {
         ZoneScopedN("CreatePhysicsSystem");
-        // todo physics
-        physicsSystem = new(memoryManager.PersistentAllocRaw(sizeof(Physics::PhysicsSystem), Core::AllocTag::Physics)) Physics::PhysicsSystem(memoryManager, scheduler);
+        physicsSystem = new(memoryManager.PhysicsAlignedAllocRaw(sizeof(Physics::PhysicsSystem), 64)) Physics::PhysicsSystem(memoryManager, scheduler);
     }
 
 
@@ -459,7 +457,6 @@ void WillEngine::EditorImgui()
                 memoryManager.General().GetTagStats(cachedGeneralTags.Data());
                 memoryManager.AssetsScratch().GetTagStats(cachedAssetsScratchTags.Data());
                 memoryManager.Assets().GetTagStats(cachedAssetsTags.Data());
-                memoryManager.Physics().GetTagStats(cachedPhysicsTags.Data());
                 memoryManager.PhysicsAligned().GetTagStats(cachedPhysicsAlignedTags.Data());
                 memoryManager.Render().GetTagStats(cachedRenderTags.Data());
                 refreshTimer = 0.0f;
@@ -517,11 +514,11 @@ void WillEngine::EditorImgui()
             // Grand total across all TLSF pools
             {
                 const size_t tlsfUsed = ms.persistent.usedBytes + ms.general.usedBytes + ms.assetsScratch.usedBytes
-                                        + ms.assets.usedBytes + ms.physics.usedBytes + ms.physicsAligned.usedBytes + ms.render.usedBytes;
+                                        + ms.assets.usedBytes + ms.physicsAligned.usedBytes + ms.render.usedBytes;
                 const size_t tlsfTotal = ms.persistent.totalBytes + ms.general.totalBytes + ms.assetsScratch.totalBytes
-                                         + ms.assets.totalBytes + ms.physics.totalBytes + ms.physicsAligned.totalBytes + ms.render.totalBytes;
+                                         + ms.assets.totalBytes + ms.physicsAligned.totalBytes + ms.render.totalBytes;
                 const size_t tlsfAllocs = ms.persistent.allocCount + ms.general.allocCount + ms.assetsScratch.allocCount
-                                          + ms.assets.allocCount + ms.physics.allocCount + ms.physicsAligned.allocCount + ms.render.allocCount;
+                                          + ms.assets.allocCount + ms.physicsAligned.allocCount + ms.render.allocCount;
                 ImGui::SeparatorText("TLSF Total");
                 drawMemBar("All Pools", tlsfUsed, tlsfTotal, tlsfAllocs);
             }
@@ -532,7 +529,6 @@ void WillEngine::EditorImgui()
             drawMemBar("Assets", ms.assets.usedBytes, ms.assets.totalBytes, ms.assets.allocCount);
 
             ImGui::SeparatorText("Physics");
-            drawMemBar("Physics", ms.physics.usedBytes, ms.physics.totalBytes, ms.physics.allocCount);
             drawMemBar("Phys Aligned", ms.physicsAligned.usedBytes, ms.physicsAligned.totalBytes, ms.physicsAligned.allocCount);
 
             ImGui::SeparatorText("Render");
@@ -564,7 +560,6 @@ void WillEngine::EditorImgui()
                 {"General", cachedGeneralTags.Data()},
                 {"Assets Scratch", cachedAssetsScratchTags.Data()},
                 {"Assets", cachedAssetsTags.Data()},
-                {"Physics", cachedPhysicsTags.Data()},
                 {"Phys Aligned", cachedPhysicsAlignedTags.Data()},
                 {"Render", cachedRenderTags.Data()},
             };

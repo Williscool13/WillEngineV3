@@ -130,7 +130,7 @@ GAME_API void GameUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 #if WILL_EDITOR
         Game::UpdateEditorCamera(ctx, state);
 #else
-    Game::PlayStart(ctx, state);
+        Game::PlayStart(ctx, state);
 #endif
     }
 

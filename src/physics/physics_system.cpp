@@ -38,15 +38,14 @@ static void TraceImpl(const char* inFMT, ...)
 
 
 // ---- Jolt custom allocator ----
-// Routed through the physics TLSF pool (mutex-enabled for thread safety).
 
 static Core::MemoryManager* sPhysicsMemory = nullptr;
 
-// Jolt's operator new calls JPH::Allocate directly for alignas(16) types (not over-aligned
-// on MSVC x64), so JoltAlloc must return JPH_RVECTOR_ALIGNMENT-aligned memory.
-// Realloc free+allocs to preserve alignment (tlsf_realloc doesn't guarantee it).
-// All Jolt allocs go to the dedicated physicsAligned pool; headered PhysicsAllocRaw
-// allocs go to the separate physics pool.
+// Jolt uses JPH::Allocate/Free from multiple threads (requires thread-safe allocator).
+// TempAllocatorImpl is single-threaded per-update.
+
+// For SIMD-containing types (PhysicsSystem, MotionProperties, etc.), the custom allocator must return alignment that matches the type's alignof.
+// For example, mGravity is stored in JPH::PhysicsSystem so it needs to be aligned.
 
 static void* JoltAlloc(size_t size)
 {
@@ -109,7 +108,7 @@ PhysicsSystem::PhysicsSystem(Core::MemoryManager& memoryManager, enki::TaskSched
     JPH::Trace = TraceImpl;
     JPH_IF_ENABLE_ASSERTS(JPH::AssertFailed = AssertFailedImpl;)
 
-    void* jobMem = memoryManager.PhysicsAllocRaw(sizeof(PhysicsJobSystem));
+    void* jobMem = memoryManager.PhysicsAlignedAllocRaw(sizeof(PhysicsJobSystem), 64);
     jobSystem = new(jobMem) PhysicsJobSystem(scheduler, MAX_PHYSICS_JOBS, 8);
 
     physicsSystem.Init(MAX_PHYSICS_BODIES, PHYSICS_BODY_MUTEX_COUNT,
@@ -124,9 +123,9 @@ PhysicsSystem::PhysicsSystem(Core::MemoryManager& memoryManager, enki::TaskSched
                 MAX_PHYSICS_BODIES, PHYSICS_BODY_MUTEX_COUNT, MAX_BODY_PAIRS, MAX_CONTACT_CONSTRAINTS, MAX_PHYSICS_JOBS);
 
 #if JPH_DEBUG_RENDERER
-    void* mem0 = memoryManager.PhysicsAllocRaw(sizeof(DebugRenderer));
+    void* mem0 = memoryManager.PhysicsAlignedAllocRaw(sizeof(DebugRenderer), 64);
     debugRenderer = new(mem0) DebugRenderer();
-    void* mem1 = memoryManager.PhysicsAllocRaw(sizeof(DebugDrawFilter));
+    void* mem1 = memoryManager.PhysicsAlignedAllocRaw(sizeof(DebugDrawFilter), 64);
     debugDrawFilter = new(mem1) DebugDrawFilter(memoryManager);
 #endif
 }
@@ -136,12 +135,12 @@ PhysicsSystem::~PhysicsSystem()
 #if JPH_DEBUG_RENDERER
     if (debugRenderer) {
         debugRenderer->~DebugRenderer();
-        memoryManager->PhysicsFree(debugRenderer);
+        memoryManager->PhysicsAlignedFree(debugRenderer);
         debugRenderer = nullptr;
     }
     if (debugDrawFilter) {
         debugDrawFilter->~DebugDrawFilter();
-        memoryManager->PhysicsFree(debugDrawFilter);
+        memoryManager->PhysicsAlignedFree(debugDrawFilter);
         debugDrawFilter = nullptr;
     }
 #endif
