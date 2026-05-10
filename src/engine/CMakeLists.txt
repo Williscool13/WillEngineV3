@@ -51,6 +51,8 @@ add_library(engine STATIC
         core/hash.h
         include/frame_sync.cpp
         logging/engine_assert.h
+        resources/font/font_format.cpp
+        resources/font/font_format.h
 )
 
 target_include_directories(engine PRIVATE
