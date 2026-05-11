@@ -27,7 +27,6 @@ bool WriteWFontHeader(std::ostream& out, const WFontHeader& header)
     out << "atlas_width " << header.atlasWidth << "\n";
     out << "atlas_height " << header.atlasHeight << "\n";
     out << "glyph_count " << header.glyphCount << "\n";
-    out << "kerning_count " << header.kerningCount << "\n";
     out << "atlas_data_size " << header.atlasDataSize << "\n";
     out << "end_header\n";
     return out.good();
@@ -35,9 +34,8 @@ bool WriteWFontHeader(std::ostream& out, const WFontHeader& header)
 
 static void ComputeOffsets(WFontHeader& header, uint64_t headerEnd)
 {
-    header.glyphDataOffset   = headerEnd;
-    header.kerningDataOffset = header.glyphDataOffset + static_cast<uint64_t>(header.glyphCount) * sizeof(WGlyphInfo);
-    header.atlasDataOffset   = header.kerningDataOffset + static_cast<uint64_t>(header.kerningCount) * sizeof(WKerningPair);
+    header.glyphDataOffset = headerEnd;
+    header.atlasDataOffset = header.glyphDataOffset + static_cast<uint64_t>(header.glyphCount) * sizeof(WGlyphInfo);
 }
 
 static bool ParseFontHeaderFields(char* line, size_t lineBufSize, WFontHeader& header)
@@ -58,7 +56,6 @@ static bool ParseFontHeaderFields(char* line, size_t lineBufSize, WFontHeader& h
     else if (strncmp(line, "atlas_width ", 12) == 0) { std::from_chars(line + 12, line + lineBufSize, header.atlasWidth); }
     else if (strncmp(line, "atlas_height ", 13) == 0) { std::from_chars(line + 13, line + lineBufSize, header.atlasHeight); }
     else if (strncmp(line, "glyph_count ", 12) == 0) { std::from_chars(line + 12, line + lineBufSize, header.glyphCount); }
-    else if (strncmp(line, "kerning_count ", 14) == 0) { std::from_chars(line + 14, line + lineBufSize, header.kerningCount); }
     else if (strncmp(line, "atlas_data_size ", 16) == 0) { std::from_chars(line + 16, line + lineBufSize, header.atlasDataSize); }
     return true;
 }

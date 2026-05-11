@@ -11,6 +11,8 @@ add_library(editor STATIC
         asset-generation/environment_map_generate_slot.h
         asset-generation/environment_map_generate_resources.cpp
         asset-generation/environment_map_generate_resources.h
+        asset-generation/font_generate_slot.cpp
+        asset-generation/font_generate_slot.h
         asset-generation/miscellaneous_asset_generate.cpp
         asset-generation/miscellaneous_asset_generate.h
         renderer/debug_readback_buffer.cpp
@@ -29,4 +31,6 @@ target_link_libraries(editor PUBLIC
         enkiTS
         meshoptimizer
         bc7enc_rdo
+        msdf-atlas-gen
+        freetype
 )

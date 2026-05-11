@@ -13,6 +13,7 @@
 #include "engine/resources/model/model_format.h"
 #include "engine/resources/texture/texture_format.h"
 #include "engine/include/engine_context.h"
+#include "engine/resources/font/font_format.h"
 #include "platform/thread_utils.h"
 #include "render/render_thread.h"
 
@@ -54,6 +55,15 @@ AssetGenerator::AssetGenerator(Core::MemoryManager& memoryManager,
             },
             [this](bool success, TextureGenerateSlotHandle slotHandle) {
                 OnTextureGenerateComplete(success, slotHandle);
+            }
+        );
+    }
+    for (int32_t i = 0; i < FONT_GENERATION_JOB_COUNT; ++i) {
+        fontGenerateTasks[i].Initialize(
+            scheduler,
+            &memoryManager,
+            [this](bool success, FontGenerateSlotHandle slotHandle) {
+                OnFontGenerateComplete(success, slotHandle);
             }
         );
     }
@@ -136,6 +146,21 @@ void AssetGenerator::ThreadMain()
                 }
                 else {
                     environmentMapGenerateRequestQueue.enqueue(req);
+                }
+            }
+        }
+
+        {
+            ZoneScopedN("Process Font Generation Requests");
+            FontGenerateRequest req{};
+            if (fontGenerateRequestQueue.try_dequeue(req)) {
+                Core::Handle<FontGenerateSlot> slotHandle = fontGenerateAllocator.Add();
+                if (slotHandle.IsValid()) {
+                    FontGenerateSlot& task = fontGenerateTasks[slotHandle.index];
+                    task.Launch(slotHandle, req.ttfPath, req.outputPath, req.fontId);
+                }
+                else {
+                    fontGenerateRequestQueue.enqueue(std::move(req));
                 }
             }
         }
@@ -356,6 +381,56 @@ void AssetGenerator::OnEnvironmentGenerateComplete(bool success, EnvironmentMapG
 
     task.Clear();
     bool removed = environmentMapGenerateAllocator.Remove(slotHandle);
+    assert(removed && "Failed to remove valid slot handle");
+
+    ctx->bShouldRescanResources.store(true, std::memory_order_release);
+
+    workCounter.fetch_add(1);
+    wakeCV.notify_one();
+}
+
+Engine::FontID AssetGenerator::RequestFontGenerate(const Core::Path& ttfPath, const Core::Path& outputPath)
+{
+    ZoneScoped;
+
+    Engine::FontID id{fontIdRng()};
+    if (outputPath.Exists()) {
+        if (auto header = Engine::ReadWFontHeaderAnyVersion(outputPath)) {
+            id = Engine::FontID{header->fontId};
+        }
+    }
+    fontGenerateRequestQueue.enqueue({ttfPath, outputPath, id});
+    workCounter.fetch_add(1);
+    wakeCV.notify_one();
+    return id;
+}
+
+bool AssetGenerator::TryDequeueFontGenerateComplete(FontGenerateComplete& outResult)
+{
+    return fontGenerateCompleteQueue.try_dequeue(outResult);
+}
+
+void AssetGenerator::OnFontGenerateComplete(bool success, FontGenerateSlotHandle slotHandle)
+{
+    ZoneScoped;
+
+    if (!fontGenerateAllocator.IsValid(slotHandle)) {
+        SPDLOG_ERROR("OnFontGenerateComplete called with invalid slot handle");
+        return;
+    }
+
+    FontGenerateSlot& task = fontGenerateTasks[slotHandle.index];
+    fontGenerateCompleteQueue.enqueue({task.outputPath, task.fontId, success});
+
+    if (success) {
+        SPDLOG_INFO("Successfully generated font: {}", task.outputPath.c_str());
+    }
+    else {
+        SPDLOG_ERROR("Failed to generate font: {}", task.outputPath.c_str());
+    }
+
+    task.Clear();
+    bool removed = fontGenerateAllocator.Remove(slotHandle);
     assert(removed && "Failed to remove valid slot handle");
 
     ctx->bShouldRescanResources.store(true, std::memory_order_release);

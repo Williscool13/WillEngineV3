@@ -15,12 +15,14 @@
 
 #include "asset_generation_types.h"
 #include "environment_map_generate_slot.h"
+#include "font_generate_slot.h"
 #include "static_model_generate_slot.h"
 #include "TaskScheduler.h"
 #include "texture_generate_slot.h"
 #include "core/containers/array.h"
 #include "core/memory/lock_free_handle_allocator.h"
 #include "core/memory/memory_manager.h"
+#include "engine/core/font_id.h"
 
 namespace Engine
 {
@@ -104,6 +106,20 @@ struct EnvironmentMapGenerateComplete
     bool success;
 };
 
+struct FontGenerateRequest
+{
+    Core::Path ttfPath;
+    Core::Path outputPath;
+    Engine::FontID fontId{};
+};
+
+struct FontGenerateComplete
+{
+    Core::Path outputPath;
+    Engine::FontID fontId{};
+    bool success{};
+};
+
 using ModelGenerateSlotHandle = Core::Handle<StaticModelGenerateSlot>;
 
 class AssetGenerator
@@ -135,6 +151,10 @@ public:
     void RequestEnvironmentMapGenerate(const Core::Path& hdriPath, const Core::Path& outputPath);
 
     bool TryDequeueCubemapGenerateComplete(EnvironmentMapGenerateComplete& outResult);
+
+    Engine::FontID RequestFontGenerate(const Core::Path& ttfPath, const Core::Path& outputPath);
+
+    bool TryDequeueFontGenerateComplete(FontGenerateComplete& outResult);
 
     void GenerateBRDFLUT(const Core::Path& outputFile);
 
@@ -176,6 +196,8 @@ private:
 
     void OnEnvironmentGenerateComplete(bool success, EnvironmentMapGenerateSlotHandle slotHandle);
 
+    void OnFontGenerateComplete(bool success, FontGenerateSlotHandle slotHandle);
+
     void TransferQueueGPUDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) const;
 
     void GraphicsQueueGPUDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) const;
@@ -190,6 +212,7 @@ private:
     std::mt19937_64 modelIdRng{std::random_device{}()};
     std::mt19937_64 textureIdRng{std::random_device{}()};
     std::mt19937_64 environmentMapIdRng{std::random_device{}()};
+    std::mt19937_64 fontIdRng{std::random_device{}()};
 
     Core::Array<StaticModelGenerateSlot, MODEL_GENERATION_JOB_COUNT> modelGenerateTasks;
     Core::LockFreeHandleAllocator<StaticModelGenerateSlot, MODEL_GENERATION_JOB_COUNT> modelGenerateAllocator;
@@ -200,6 +223,9 @@ private:
     Core::Array<EnvironmentMapGenerateSlot, ENVIRONMENT_MAP_GENERATION_JOB_COUNT> environmentMapeGenerateTasks;
     Core::LockFreeHandleAllocator<EnvironmentMapGenerateSlot, ENVIRONMENT_MAP_GENERATION_JOB_COUNT> environmentMapGenerateAllocator;
 
+    Core::Array<FontGenerateSlot, FONT_GENERATION_JOB_COUNT> fontGenerateTasks;
+    Core::LockFreeHandleAllocator<FontGenerateSlot, FONT_GENERATION_JOB_COUNT> fontGenerateAllocator;
+
     moodycamel::ConcurrentQueue<ModelGenerateRequest> modelGenerateRequestQueue;
     moodycamel::ConcurrentQueue<ModelGenerateComplete> modelGenerateCompleteQueue;
 
@@ -208,6 +234,9 @@ private:
 
     moodycamel::ConcurrentQueue<EnvironmentMapGenerateRequest> environmentMapGenerateRequestQueue;
     moodycamel::ConcurrentQueue<EnvironmentMapGenerateComplete> environmentMapGenerateCompleteQueue;
+
+    moodycamel::ConcurrentQueue<FontGenerateRequest> fontGenerateRequestQueue;
+    moodycamel::ConcurrentQueue<FontGenerateComplete> fontGenerateCompleteQueue;
 
     std::atomic<bool> bShouldExit{false};
     std::atomic<uint32_t> workCounter{0};

@@ -40,7 +40,7 @@ endif ()
 
 if (WILL_ENGINE_ENABLE_VALIDATION)
     add_compile_definitions(ENABLE_VULKAN_VALIDATION)
-endif()
+endif ()
 
 if (WILL_ENGINE_PACKAGED_BUILD)
     # todo remove when actually making packaged builds
@@ -53,7 +53,7 @@ endif ()
 
 if (WILL_ENGINE_ENABLE_PROFILER)
     add_compile_definitions(PROFILER_ENABLED)
-endif()
+endif ()
 # Build =======================================
 if (NOT WILL_ENGINE_BUILD_EDITOR AND WILL_ENGINE_NO_CONSOLE AND WIN32)
     add_executable(will-engine WIN32 main.cpp)
@@ -106,7 +106,23 @@ set(KTX_FEATURE_JS OFF)
 add_subdirectory(extern/KTX-Software/lib)
 add_subdirectory(extern/meshoptimizer)
 add_subdirectory(extern/fastgltf)
-
+set(FT_DISABLE_ZLIB ON CACHE BOOL "" FORCE)
+set(FT_DISABLE_BZIP2 ON CACHE BOOL "" FORCE)
+set(FT_DISABLE_PNG ON CACHE BOOL "" FORCE)
+set(FT_DISABLE_HARFBUZZ ON CACHE BOOL "" FORCE)
+set(FT_DISABLE_BROTLI ON CACHE BOOL "" FORCE)
+add_subdirectory(extern/freetype)
+add_library(Freetype::Freetype ALIAS freetype)
+set(MSDF_ATLAS_BUILD_STANDALONE OFF CACHE BOOL "" FORCE)
+set(MSDF_ATLAS_USE_VCPKG OFF CACHE BOOL "" FORCE)
+set(MSDF_ATLAS_USE_SKIA OFF CACHE BOOL "" FORCE)
+set(MSDF_ATLAS_NO_ARTERY_FONT ON CACHE BOOL "" FORCE)
+set(MSDF_ATLAS_DYNAMIC_RUNTIME ON CACHE BOOL "" FORCE)
+set(MSDFGEN_BUILD_STANDALONE OFF CACHE BOOL "" FORCE)
+set(MSDFGEN_USE_VCPKG OFF CACHE BOOL "" FORCE)
+set(MSDFGEN_DISABLE_SVG ON CACHE BOOL "" FORCE)
+set(MSDFGEN_DISABLE_PNG ON CACHE BOOL "" FORCE)
+add_subdirectory(extern/msdf-atlas-gen)
 add_subdirectory(src/engine)
 add_subdirectory(src/core)
 add_subdirectory(src/game)
@@ -237,14 +253,14 @@ if (WILL_ENGINE_ENABLE_PROFILER)
             TRACY_ENABLE
             TRACY_IMPORTS
     )
-else()
+else ()
     add_library(tracy STATIC
             extern/tracy/public/TracyClient.cpp
     )
 
     add_library(tracy_interface INTERFACE)
     target_link_libraries(tracy_interface INTERFACE tracy)
-endif()
+endif ()
 
 target_include_directories(tracy PUBLIC
         extern/tracy/public
@@ -331,8 +347,6 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/lighting/lighting_pbr.slang compute ComputeMain lighting_pbr
         ${CMAKE_SOURCE_DIR}/shaders/lighting/lighting_toon.slang compute ComputeMain lighting_toon
         ${CMAKE_SOURCE_DIR}/shaders/lighting/lighting_unlit.slang compute ComputeMain lighting_unlit
-
-
 
 
         ${CMAKE_SOURCE_DIR}/shaders/visibility_buffer.slang mesh MeshMain visibility_buffer

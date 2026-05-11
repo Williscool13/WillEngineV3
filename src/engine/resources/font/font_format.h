@@ -38,13 +38,6 @@ struct WGlyphInfo
     float uvTop{0.0f};
 };
 
-struct WKerningPair
-{
-    uint32_t codepoint0{0};
-    uint32_t codepoint1{0};
-    float advance{0.0f};
-};
-
 struct WFontHeader
 {
     uint64_t fontId{0};
@@ -67,15 +60,13 @@ struct WFontHeader
     uint32_t atlasWidth{0};
     uint32_t atlasHeight{0};
     uint32_t glyphCount{0};
-    uint32_t kerningCount{0};
     uint64_t atlasDataSize{0};
 
     /**
      * Byte offsets from file start -- set by the reader after parsing end_header.
-     * Layout: [header text] [glyphCount x WGlyphInfo] [kerningCount x WKerningPair] [atlas KTX2 blob]
+     * Layout: [header text] [glyphCount x WGlyphInfo] [atlas KTX2 blob]
      */
     uint64_t glyphDataOffset{0};
-    uint64_t kerningDataOffset{0};
     uint64_t atlasDataOffset{0};
 };
 

@@ -625,9 +625,9 @@ void WillEngine::EditorImgui()
 
         if (ImGui::CollapsingHeader("Renderer Statistics")) {
             const Render::RendererStatistics stats = renderThread->GetRendererStatistics();
-            ImGui::Text("Visible Meshlets:            %u",  stats.visibleMeshletCount);
-            ImGui::Text("Shading Dispatches:          %u",  stats.shadingDispatches);
-            ImGui::Text("Lighting Dispatches:         %u",  stats.lightingDispatches);
+            ImGui::Text("Visible Meshlets:            %u", stats.visibleMeshletCount);
+            ImGui::Text("Shading Dispatches:          %u", stats.shadingDispatches);
+            ImGui::Text("Lighting Dispatches:         %u", stats.lightingDispatches);
             ImGui::Separator();
             ImGui::Text("Mesh Invocations:            %llu", stats.meshInvocations);
             ImGui::Text("Fragment Invocations:        %.2f M", static_cast<double>(stats.fragmentInvocations) / 1'000'000.0);
@@ -755,6 +755,12 @@ void WillEngine::EditorImgui()
                 DXGI_FORMAT_BC7_UNORM_SRGB);
             assetGenerator->GenerateBRDFLUT(Platform::GetAssetPath() / "textures/brdf_lut.wtexture");
             assetGenerator->GenerateSMAATextures(Platform::GetAssetPath() / "textures");
+        }
+
+        if (ImGui::Button("Generate Roboto")) {
+            assetGenerator->RequestFontGenerate(
+                Platform::GetAssetPath() / "fonts/Roboto/Roboto-VariableFont_wdth,wght.ttf",
+                Platform::GetAssetPath() / "fonts/Roboto/Roboto.wsfont");
         }
 
         ImGui::Separator();
