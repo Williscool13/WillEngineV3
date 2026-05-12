@@ -332,12 +332,12 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputeMaxMeshletCount instancing_max_meshlet_count
 
         # Visibility Buffer
-        ${CMAKE_SOURCE_DIR}/shaders/visibility_buffer.slang compute VisibilityBufferBarycentricDerivative visibility_buffer_barycentric_derivative
+        ${CMAKE_SOURCE_DIR}/shaders/visibility_buffer/visibility_bucketing.slang compute VisibilityBufferBarycentricDerivative visibility_buffer_barycentric_derivative
         #   Shade Dispatch Bucketing
-        ${CMAKE_SOURCE_DIR}/shaders/visibility_bucketing.slang compute ComputeShadeDispatchBucketing visibility_bucketing_bounds_calculation
-        ${CMAKE_SOURCE_DIR}/shaders/visibility_bucketing.slang compute ComputeShadeDispatchBucketingResolve visibility_shading_bucketing_resolve
-        ${CMAKE_SOURCE_DIR}/shaders/visibility_bucketing.slang compute ComputeLightDispatchBucketingResolve visibility_lighting_bucketing_resolve
-        ${CMAKE_SOURCE_DIR}/shaders/visibility_bucketing.slang compute ComputeBucketDispatchCount bucketing_dispatch_count
+        ${CMAKE_SOURCE_DIR}/shaders/visibility_buffer/visibility_bucketing.slang compute ComputeShadeDispatchBucketing visibility_bucketing_bounds_calculation
+        ${CMAKE_SOURCE_DIR}/shaders/visibility_buffer/visibility_bucketing.slang compute ComputeShadeDispatchBucketingResolve visibility_shading_bucketing_resolve
+        ${CMAKE_SOURCE_DIR}/shaders/visibility_buffer/visibility_bucketing.slang compute ComputeLightDispatchBucketingResolve visibility_lighting_bucketing_resolve
+        ${CMAKE_SOURCE_DIR}/shaders/visibility_buffer/visibility_bucketing.slang compute ComputeBucketDispatchCount bucketing_dispatch_count
         #   "Fragment Shaders"
         ${CMAKE_SOURCE_DIR}/shaders/shading/shading_bucket_visualize.slang compute ComputeMain shading_bucket_visualize
         ${CMAKE_SOURCE_DIR}/shaders/shading/lighting_bucket_visualize.slang compute ComputeMain lighting_bucket_visualize
@@ -349,8 +349,8 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/lighting/lighting_unlit.slang compute ComputeMain lighting_unlit
 
 
-        ${CMAKE_SOURCE_DIR}/shaders/visibility_buffer.slang mesh MeshMain visibility_buffer
-        ${CMAKE_SOURCE_DIR}/shaders/visibility_buffer.slang fragment FragmentMain visibility_buffer
+        ${CMAKE_SOURCE_DIR}/shaders/geometry/geometry_visibility_buffer.slang mesh MeshMain visibility_buffer
+        ${CMAKE_SOURCE_DIR}/shaders/geometry/geometry_visibility_buffer.slang fragment FragmentMain visibility_buffer
 
         ${CMAKE_SOURCE_DIR}/shaders/shadow_mesh_shading_instanced.slang mesh MeshMain shadow_mesh_shading_instanced
 

@@ -3,7 +3,8 @@
     "allow": [
       "Bash(dir:*)",
       "Bash(git log:*)",
-      "Bash(xargs grep:*)"
+      "Bash(xargs grep:*)",
+      "Bash(grep -E \"\\\\.h$|\\\\.cpp$\")"
     ],
     "deny": [],
     "ask": []
