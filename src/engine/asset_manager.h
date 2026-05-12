@@ -8,6 +8,7 @@
 #include "asset_manager_config.h"
 #include "asset_manager_types.h"
 #include "engine/core/environment_map_id.h"
+#include "engine/core/font_id.h"
 #include "engine/core/model_id.h"
 #include "core/sampler_id.h"
 #include "engine/include/engine_context.h"
@@ -22,6 +23,7 @@
 #include "engine/resources/sampler/sampler.h"
 #include "render/types/cubemap_asset.h"
 #include "resources/model/model_types.h"
+#include "engine/resources/font/font.h"
 #include "engine/resources/texture/texture.h"
 #include "engine/resources/model/static_model.h"
 #include "game/components/render_components.h"
@@ -44,6 +46,7 @@ struct ResolveLoadResult
     int32_t textureLoadedCount{0};
     int32_t cubeLoadedCount{0};
     int32_t samplerLoadedCount{0};
+    int32_t fontLoadedCount{0};
 };
 
 class AssetManager
@@ -173,6 +176,33 @@ public: // Cubemaps
         return cubemapCache.Find(cubemapId);
     }
 
+public: // Fonts
+    [[nodiscard]] FontID FindFontByName(std::string_view name) const
+    {
+        const StringID sid{name.data(), name.size()};
+        const FontID* found = fontNameToId.Find(sid);
+        return found ? *found : FontID::INVALID;
+    }
+
+    FontHandle LoadFont(FontID id);
+    void UnloadFont(FontHandle handle);
+    Font* GetFont(FontHandle handle);
+
+    /** Returns the glyph info for the given codepoint, or nullptr if not found or not loaded. */
+    [[nodiscard]] const WGlyphInfo* GetGlyph(FontHandle handle, uint32_t codepoint) const;
+
+    struct CachedFontMetadata
+    {
+        Core::Path source{};
+        Core::InlineString<128> name{};
+        WFontHeader header{};
+    };
+
+    [[nodiscard]] const Core::FixedMap<StringID, FontID>& GetFontNameToId() const { return fontNameToId; }
+    [[nodiscard]] const Core::FixedMap<FontID, CachedFontMetadata>& GetFontCache() const { return fontCache; }
+    [[nodiscard]] const CachedFontMetadata* GetFontMetadata(FontID fontId) const { return fontCache.Find(fontId); }
+    [[nodiscard]] uint32_t GetActiveFontCount() const { return fontAllocator.GetCount(); }
+
 public: // Per-Tick calls
     ResolveLoadResult ResolveLoads(Core::FrameBuffer& stagingFrameBuffer);
 
@@ -226,6 +256,16 @@ private:
     int32_t pendingSamplerLogCount{0};
     std::chrono::steady_clock::time_point samplerLastActivity{};
 
+    Core::HandleAllocator<Font, MAX_LOADED_FONTS> fontAllocator;
+    Core::Array<Font, MAX_LOADED_FONTS> fonts{};
+    Core::InlineMap<FontID, FontHandle, MAX_LOADED_FONTS> fontIdToHandle;
+
+    int32_t pendingFontLogCount{0};
+    std::chrono::steady_clock::time_point fontLastActivity{};
+
+    int32_t pendingFontUnloadLogCount{0};
+    std::chrono::steady_clock::time_point fontUnloadLastActivity{};
+
     int32_t pendingModelUnloadLogCount{0};
     std::chrono::steady_clock::time_point modelUnloadLastActivity{};
 
@@ -270,6 +310,9 @@ public: // Prefabs
 private: // Asset Registry
     Core::FixedMap<StringID, ModelID> modelNameToId;
     Core::FixedMap<ModelID, CachedModelMetadata> modelCache;
+
+    Core::FixedMap<StringID, FontID> fontNameToId;
+    Core::FixedMap<FontID, CachedFontMetadata> fontCache;
 
     Core::FixedMap<StringID, TextureID> textureNameToId;
     Core::FixedMap<TextureID, CachedTextureMetadata> textureCache;

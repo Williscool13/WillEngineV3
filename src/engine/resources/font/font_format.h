@@ -14,7 +14,7 @@
 namespace Engine
 {
 constexpr uint32_t FONT_MAJOR_VERSION = 0;
-constexpr uint32_t FONT_MINOR_VERSION = 1;
+constexpr uint32_t FONT_MINOR_VERSION = 2;
 constexpr size_t WFONT_NAME_LENGTH = 128;
 
 /**
@@ -60,7 +60,10 @@ struct WFontHeader
     uint32_t atlasWidth{0};
     uint32_t atlasHeight{0};
     uint32_t glyphCount{0};
+    /** LZ4-compressed size of the KTX2 atlas blob as stored on disk. */
     uint64_t atlasDataSize{0};
+    /** Uncompressed size of the KTX2 atlas blob; used by the texture loader for decompression. */
+    uint64_t atlasUncompressedSize{0};
 
     /**
      * Byte offsets from file start -- set by the reader after parsing end_header.

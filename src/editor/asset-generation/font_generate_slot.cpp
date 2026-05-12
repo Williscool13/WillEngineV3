@@ -14,6 +14,7 @@
 #include <ktx.h>
 #include <msdf-atlas-gen/msdf-atlas-gen.h>
 
+#include "engine/compression/compression.h"
 #include "engine/logging/engine_log.h"
 #include "engine/resources/font/font_format.h"
 #include "platform/file_utils.h"
@@ -169,6 +170,11 @@ bool FontGenerateSlot::GenerateAndWrite()
     }
     ktxTexture_Destroy(ktxTexture(ktxTex));
 
+    const size_t compressMaxSize = Engine::CompressLZ4MaxSize(ktxSize);
+    Core::HeapArray<uint8_t> atlasCompressed(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, compressMaxSize);
+    const size_t compressedSize = Engine::CompressLZ4(ktxBytes, ktxSize, atlasCompressed.Data(), compressMaxSize);
+    free(ktxBytes);
+
     // Gather glyph metrics
     const msdf_atlas::FontGeometry::GlyphRange glyphRange = fontGeometry.getGlyphs();
     const msdfgen::FontMetrics& metrics = fontGeometry.getMetrics();
@@ -218,10 +224,11 @@ bool FontGenerateSlot::GenerateAndWrite()
     header.lineHeight   = static_cast<float>(metrics.lineHeight);
     header.atlasWidth   = static_cast<uint32_t>(atlasWidth);
     header.atlasHeight  = static_cast<uint32_t>(atlasHeight);
-    header.glyphCount    = static_cast<uint32_t>(glyphInfos.Size());
-    header.atlasDataSize = ktxSize;
+    header.glyphCount            = static_cast<uint32_t>(glyphInfos.Size());
+    header.atlasDataSize         = static_cast<uint64_t>(compressedSize);
+    header.atlasUncompressedSize = static_cast<uint64_t>(ktxSize);
 
-    const Core::InlineString<> stem = Core::InlineString(ttfPath.Stem());
+    const Core::InlineString<> stem = Core::InlineString(outputPath.Stem());
     const size_t copyLen = std::min(stem.Size(), Engine::WFONT_NAME_LENGTH - 1);
     memcpy(header.name, stem.c_str(), copyLen);
     header.name[copyLen] = '\0';
@@ -230,19 +237,16 @@ bool FontGenerateSlot::GenerateAndWrite()
     std::ofstream f(outputPath.c_str(), std::ios::binary);
     if (!f) {
         LOG_ERROR(Asset, "Failed to open font output file: {}", outputPath.c_str());
-        free(ktxBytes);
         return false;
     }
 
     if (!Engine::WriteWFontHeader(f, header)) {
         LOG_ERROR(Asset, "Failed to write font header: {}", outputPath.c_str());
-        free(ktxBytes);
         return false;
     }
 
     f.write(reinterpret_cast<const char*>(glyphInfos.Data()), static_cast<std::streamsize>(glyphInfos.Size() * sizeof(Engine::WGlyphInfo)));
-    f.write(reinterpret_cast<const char*>(ktxBytes), static_cast<std::streamsize>(ktxSize));
-    free(ktxBytes);
+    f.write(reinterpret_cast<const char*>(atlasCompressed.Data()), static_cast<std::streamsize>(compressedSize));
 
     LOG_INFO(Asset, "Wrote font {}", outputPath.c_str());
     return f.good();

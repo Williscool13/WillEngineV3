@@ -99,6 +99,7 @@ struct EngineContext
 
     std::atomic<bool> bShouldRescanResources{false};
     std::atomic<bool> bShouldRescanMaterials{false};
+    std::atomic<bool> bShouldRescanFonts{false};
 };
 } // Engine
 

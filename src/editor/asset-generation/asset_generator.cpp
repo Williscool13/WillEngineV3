@@ -434,6 +434,7 @@ void AssetGenerator::OnFontGenerateComplete(bool success, FontGenerateSlotHandle
     assert(removed && "Failed to remove valid slot handle");
 
     ctx->bShouldRescanResources.store(true, std::memory_order_release);
+    ctx->bShouldRescanFonts.store(true, std::memory_order_release);
 
     workCounter.fetch_add(1);
     wakeCV.notify_one();

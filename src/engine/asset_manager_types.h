@@ -21,12 +21,14 @@ namespace Engine
 struct StaticModel;
 struct Sampler;
 struct Texture;
+struct Font;
 
 using StaticModelHandle = Core::Handle<StaticModel>;
 using TextureHandle = Core::Handle<Texture>;
 using SamplerHandle = Core::Handle<Sampler>;
 using CubemapHandle = Core::Handle<Render::Cubemap>;
 using AudioHandle = Core::Handle<Audio::WillAudio>;
+using FontHandle = Core::Handle<Font>;
 }
 
 #endif //WILL_ENGINE_ASSET_MANAGER_TYPES_H

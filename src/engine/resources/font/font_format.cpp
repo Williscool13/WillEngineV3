@@ -28,6 +28,7 @@ bool WriteWFontHeader(std::ostream& out, const WFontHeader& header)
     out << "atlas_height " << header.atlasHeight << "\n";
     out << "glyph_count " << header.glyphCount << "\n";
     out << "atlas_data_size " << header.atlasDataSize << "\n";
+    out << "atlas_uncompressed_size " << header.atlasUncompressedSize << "\n";
     out << "end_header\n";
     return out.good();
 }
@@ -57,6 +58,7 @@ static bool ParseFontHeaderFields(char* line, size_t lineBufSize, WFontHeader& h
     else if (strncmp(line, "atlas_height ", 13) == 0) { std::from_chars(line + 13, line + lineBufSize, header.atlasHeight); }
     else if (strncmp(line, "glyph_count ", 12) == 0) { std::from_chars(line + 12, line + lineBufSize, header.glyphCount); }
     else if (strncmp(line, "atlas_data_size ", 16) == 0) { std::from_chars(line + 16, line + lineBufSize, header.atlasDataSize); }
+    else if (strncmp(line, "atlas_uncompressed_size ", 24) == 0) { std::from_chars(line + 24, line + lineBufSize, header.atlasUncompressedSize); }
     return true;
 }
 
@@ -82,9 +84,10 @@ std::optional<WFontHeader> ReadWFontHeader(std::istream& in)
             return header;
         }
         if (strncmp(line, "version ", 8) == 0) {
-            uint32_t major = 0;
-            std::from_chars(line + 8, line + LINE_BUF, major);
-            if (major != FONT_MAJOR_VERSION) { return std::nullopt; }
+            uint32_t major = 0, minor = 0;
+            auto res = std::from_chars(line + 8, line + LINE_BUF, major);
+            if (res.ptr && *res.ptr == ' ') { std::from_chars(res.ptr + 1, line + LINE_BUF, minor); }
+            if (major != FONT_MAJOR_VERSION || minor != FONT_MINOR_VERSION) { return std::nullopt; }
         }
         else { ParseFontHeaderFields(line, LINE_BUF, header); }
     }

@@ -5,9 +5,11 @@
 #include "asset_manager.h"
 
 #include <chrono>
+#include <fstream>
 
 #include "asset-load/async_asset_load_manager.h"
 #include "resources/environment_map/environment_map_format.h"
+#include "resources/font/font_format.h"
 #include "resources/prefab/prefab_format.h"
 #include "resources/scene/scene_format.h"
 #include "editor/asset-generation/miscellaneous_asset_generate.h"
@@ -28,7 +30,9 @@ AssetManager::AssetManager(Core::MemoryManager& memoryManager, Engine::EngineCon
       cubemapNameToId(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_CACHED_CUBEMAPS),
       cubemapCache(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_CACHED_CUBEMAPS),
       sceneCache(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_CACHED_SCENES),
-      prefabCache(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_CACHED_PREFABS)
+      prefabCache(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_CACHED_PREFABS),
+      fontNameToId(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_CACHED_FONTS),
+      fontCache(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_CACHED_FONTS)
 {
 #if WILL_EDITOR
     // Creates white/error if they don't exist. Also creates BRDF LUT
@@ -85,6 +89,11 @@ AssetManager::AssetManager(Core::MemoryManager& memoryManager, Engine::EngineCon
         // reserve, unused. Requires Engine restart
         resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTexture();
         LOG_CRITICAL(Asset, "Default SMAA Search logo does not exist, please regenerate and restart the engine");
+    }
+
+    auto roboto = FindFontByName("Roboto");
+    if (roboto.IsValid()) {
+        LoadFont(roboto);
     }
 
     SamplerDesc defaultLinearSamplerDesc{};
@@ -495,6 +504,34 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
         pendingSamplerLogCount = 0;
     }
 
+    int32_t fontsThisTick{0};
+    for (auto& font : fonts) {
+        if (!fontAllocator.IsValid(font.selfHandle)) { continue; }
+        if (font.loadState != Font::LoadState::Loading) { continue; }
+
+        if (font.atlasTexture.loadState == Texture::LoadState::Loaded) {
+            font.loadState = Font::LoadState::Loaded;
+            if (bVerboseLogging.load(std::memory_order_relaxed)) {
+                LOG_TRACE(Asset, "Font loaded: {} (atlas bindless index: {})", font.name.c_str(), static_cast<uint32_t>(font.atlasTexture.bindlessHandle.index));
+            }
+            loadCounts.fontLoadedCount++;
+            fontsThisTick++;
+        }
+        else if (font.atlasTexture.loadState == Texture::LoadState::FailedToLoad) {
+            font.loadState = Font::LoadState::FailedToLoad;
+            LOG_ERROR(Asset, "Font atlas upload failed: {}", font.name.c_str());
+        }
+    }
+
+    if (fontsThisTick > 0) {
+        pendingFontLogCount += fontsThisTick;
+        fontLastActivity = std::chrono::steady_clock::now();
+    }
+    if (pendingFontLogCount > 0 && fontsThisTick == 0 && (std::chrono::steady_clock::now() - fontLastActivity) >= std::chrono::seconds(ASSET_LOG_IDLE_SECONDS)) {
+        LOG_INFO(Asset, "{} font(s) loaded", pendingFontLogCount);
+        pendingFontLogCount = 0;
+    }
+
     return loadCounts;
 }
 
@@ -533,7 +570,9 @@ void AssetManager::ResolveUnloads()
         if (texture.refCount > 0 || texture.retireFrame == 0 || currentFrame < texture.retireFrame) { continue; }
         if (texture.loadState != Texture::LoadState::Loaded) { continue; }
 
-        if (bVerboseLogging.load(std::memory_order_relaxed)) { LOG_TRACE(Asset, "Texture unloaded: {} (bindless index: {})", texture.name.c_str(), static_cast<uint32_t>(texture.bindlessHandle.index)); }
+        if (bVerboseLogging.load(std::memory_order_relaxed)) {
+            LOG_TRACE(Asset, "Texture unloaded: {} (bindless index: {})", texture.name.c_str(), static_cast<uint32_t>(texture.bindlessHandle.index));
+        }
         resourceManager->bindlessSamplerTextureDescriptorBuffer.ReleaseTextureBinding(texture.bindlessHandle);
         textureIdToHandle.Remove(texture.textureId);
         textureAllocator.Remove(texture.selfHandle);
@@ -570,6 +609,29 @@ void AssetManager::ResolveUnloads()
     if (pendingSamplerUnloadLogCount > 0 && samplersUnloadedThisTick == 0 && (std::chrono::steady_clock::now() - samplerUnloadLastActivity) >= std::chrono::seconds(ASSET_LOG_IDLE_SECONDS)) {
         LOG_INFO(Asset, "{} sampler(s) unloaded", pendingSamplerUnloadLogCount);
         pendingSamplerUnloadLogCount = 0;
+    }
+
+    int32_t fontsUnloadedThisTick{0};
+    for (auto& font : fonts) {
+        if (!fontAllocator.IsValid(font.selfHandle)) { continue; }
+        if (font.refCount > 0 || font.retireFrame == 0 || currentFrame < font.retireFrame) { continue; }
+        if (font.loadState != Font::LoadState::Loaded) { continue; }
+
+        if (bVerboseLogging.load(std::memory_order_relaxed)) { LOG_TRACE(Asset, "Font unloaded: {}", font.name.c_str()); }
+        resourceManager->bindlessSamplerTextureDescriptorBuffer.ReleaseTextureBinding(font.atlasTexture.bindlessHandle);
+        fontIdToHandle.Remove(font.fontId);
+        fontAllocator.Remove(font.selfHandle);
+        font = {};
+        fontsUnloadedThisTick++;
+    }
+
+    if (fontsUnloadedThisTick > 0) {
+        pendingFontUnloadLogCount += fontsUnloadedThisTick;
+        fontUnloadLastActivity = std::chrono::steady_clock::now();
+    }
+    if (pendingFontUnloadLogCount > 0 && fontsUnloadedThisTick == 0 && (std::chrono::steady_clock::now() - fontUnloadLastActivity) >= std::chrono::seconds(ASSET_LOG_IDLE_SECONDS)) {
+        LOG_INFO(Asset, "{} font(s) unloaded", pendingFontUnloadLogCount);
+        pendingFontUnloadLogCount = 0;
     }
 }
 
@@ -666,6 +728,21 @@ void AssetManager::Scan()
                     cached.source = Core::Path(path);
                     cached.sceneName = Core::InlineString<128>(header->name);
                     cached.entityCount = header->entityCount;
+                }
+                else if (ext == ".wsfont") {
+                    auto header = ReadWFontHeader(path);
+                    if (!header) { continue; }
+                    FontID id{header->fontId};
+                    const Core::InlineString<128> name{header->name};
+                    const StringID nameSid{name.c_str(), name.Size()};
+                    if (fontNameToId.Contains(nameSid) && *fontNameToId.Find(nameSid) != id) {
+                        LOG_CRITICAL(Asset, "Two fonts share the same name; lookups by name will be ambiguous. ({})", path.c_str());
+                    }
+                    CachedFontMetadata& cached = fontCache[id];
+                    cached.source = path;
+                    cached.name = name;
+                    cached.header = *header;
+                    fontNameToId[nameSid] = id;
                 }
                 else if (ext == ".wprefab") {
                     auto header = ReadWPrefabHeader(path);
@@ -915,5 +992,130 @@ void AssetManager::UnloadCubemap(CubemapHandle handle)
         // assetLoadThread->RequestCubemapUnload(handle, &cubemap);
         cubemapIdToHandle.Remove(cubemap.cubemapId);
     }
+}
+
+FontHandle AssetManager::LoadFont(FontID id)
+{
+    if (!fontCache.Contains(id)) {
+        LOG_ERROR(Asset, "Font {:x} not found in registry", id.id);
+        return FontHandle::INVALID;
+    }
+
+    FontHandle* existingPtr = fontIdToHandle.Find(id);
+    if (existingPtr != nullptr) {
+        FontHandle existingHandle = *existingPtr;
+        if (fontAllocator.IsValid(existingHandle)) {
+            Font& font = fonts[existingHandle.index];
+            font.refCount++;
+            font.retireFrame = 0;
+            if (bVerboseLogging.load(std::memory_order_relaxed)) {
+                LOG_TRACE(Asset, "Font already loaded: {}, refCount: {}", font.name.c_str(), font.refCount);
+            }
+            return existingHandle;
+        }
+        fontIdToHandle.Remove(id);
+    }
+
+    FontHandle handle = fontAllocator.Add();
+    if (!handle.IsValid()) {
+        LOG_ERROR(Asset, "Failed to allocate font slot for {:x}", id.id);
+        return FontHandle::INVALID;
+    }
+
+    const CachedFontMetadata& meta = fontCache[id];
+    Font& font = fonts[handle.index];
+    font.selfHandle = handle;
+    font.fontId = id;
+    font.name = meta.name;
+    font.source = meta.source;
+    font.header = meta.header;
+    font.refCount = 1;
+    font.loadState = Font::LoadState::Loading;
+
+    //
+    {
+        std::ifstream f(meta.source.c_str(), std::ios::binary);
+        if (!f) {
+            LOG_ERROR(Asset, "Failed to open font file: {}", meta.source.c_str());
+            fontAllocator.Remove(handle);
+            font = {};
+            return FontHandle::INVALID;
+        }
+        font.glyphs = Core::HeapArray<WGlyphInfo>(&memoryManager->Assets(), Core::AllocTag::AssetManager, meta.header.glyphCount);
+        f.seekg(static_cast<std::streamoff>(meta.header.glyphDataOffset));
+        f.read(reinterpret_cast<char*>(font.glyphs.Data()), static_cast<std::streamsize>(meta.header.glyphCount * sizeof(WGlyphInfo)));
+        if (!f) {
+            LOG_ERROR(Asset, "Failed to read glyph data for font: {}", meta.name.c_str());
+            fontAllocator.Remove(handle);
+            font = {};
+            return FontHandle::INVALID;
+        }
+    }
+
+    font.atlasTexture.source = meta.source;
+    font.atlasTexture.name = meta.name;
+    font.atlasTexture.width = meta.header.atlasWidth;
+    font.atlasTexture.height = meta.header.atlasHeight;
+    font.atlasTexture.mipCount = 1;
+    font.atlasTexture.dataOffset = meta.header.atlasDataOffset;
+    font.atlasTexture.dataSize = meta.header.atlasDataSize;
+    font.atlasTexture.uncompressedSize = meta.header.atlasUncompressedSize;
+    font.atlasTexture.loadState = Texture::LoadState::Loading;
+    font.atlasTexture.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTexture();
+
+    fontIdToHandle[id] = handle;
+
+    if (bVerboseLogging.load(std::memory_order_relaxed)) {
+        LOG_TRACE(Asset, "Requesting font load: {}", font.name.c_str());
+    }
+    assetLoadManager->RequestTextureLoad(&font.atlasTexture);
+
+    return handle;
+}
+
+void AssetManager::UnloadFont(FontHandle handle)
+{
+    if (!fontAllocator.IsValid(handle)) {
+        LOG_WARN(Asset, "Attempted to unload invalid font handle");
+        return;
+    }
+
+    Font& font = fonts[handle.index];
+    font.refCount--;
+
+    if (bVerboseLogging.load(std::memory_order_relaxed)) {
+        LOG_TRACE(Asset, "Font refCount decremented: {}, refCount: {}", font.name.c_str(), font.refCount);
+    }
+
+    if (font.refCount == 0) {
+        font.retireFrame = ctx->currentFrame + Core::FRAME_BUFFER_COUNT * 4;
+    }
+}
+
+Font* AssetManager::GetFont(FontHandle handle)
+{
+    if (!fontAllocator.IsValid(handle)) {
+        return nullptr;
+    }
+    return &fonts[handle.index];
+}
+
+const WGlyphInfo* AssetManager::GetGlyph(FontHandle handle, uint32_t codepoint) const
+{
+    if (!fontAllocator.IsValid(handle)) {
+        return nullptr;
+    }
+
+    const Font& font = fonts[handle.index];
+    if (font.loadState != Font::LoadState::Loaded) {
+        return nullptr;
+    }
+
+    for (uint32_t i = 0; i < font.glyphs.Size(); ++i) {
+        if (font.glyphs[i].codepoint == codepoint) {
+            return &font.glyphs[i];
+        }
+    }
+    return nullptr;
 }
 } // Engine
