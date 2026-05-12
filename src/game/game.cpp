@@ -137,6 +137,8 @@ GAME_API void GameUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
     Game::DebugUpdate(ctx, state);
 
     // Resolve Creations
+    Game::ResolveTextLoads(ctx, state);
+
     if (ctx->bModelLoadedThisFrame || state->bPendingModelResolve) {
         Game::ResolveStaticMeshLoads(ctx, state);
         Game::ResolveProceduralMeshLoads(ctx, state);
@@ -172,6 +174,8 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
 {
     frameBuffer->mainViewFamily.modelMatrices.Clear();
     frameBuffer->mainViewFamily.instances.Clear();
+    frameBuffer->mainViewFamily.glyphQuads.Clear();
+    frameBuffer->mainViewFamily.textDrawCalls.Clear();
     frameBuffer->mainViewFamily.activeMaterials.Clear();
     frameBuffer->mainViewFamily.materials.Clear();
     frameBuffer->mainViewFamily.lightingBuckets.Clear();
@@ -194,6 +198,7 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
 
     Game::RenderPrepareTransforms(ctx, state, frameBuffer);
     Game::GatherRenderables(ctx, state, frameBuffer);
+    Game::GatherTextRenderables(ctx, state, frameBuffer);
 
 #if WILL_EDITOR
     Game::DrawEditorInterface(ctx, state, frameBuffer);

@@ -17,6 +17,7 @@
 #include "game/components/render/procedural_mesh_component.h"
 #include "game/components/render/spline_mesh_component.h"
 #include "game/components/render/static_mesh_component.h"
+#include "game/components/render/text_component.h"
 
 
 namespace Game
@@ -33,6 +34,9 @@ void ConnectRenderObservers(entt::registry& registry)
 
     registry.on_construct<Component::SplineMeshComponent>().connect<&Component::SplineMeshComponent::OnConstruct>();
     registry.on_destroy<Component::SplineMeshComponent>().connect<&Component::SplineMeshComponent::OnDestroy>();
+
+    registry.on_construct<Component::TextComponent>().connect<&Component::TextComponent::OnConstruct>();
+    registry.on_destroy<Component::TextComponent>().connect<&Component::TextComponent::OnDestroy>();
 }
 
 void ResolveStaticMeshLoads(Engine::EngineContext* ctx, Engine::EngineState* state)
@@ -472,6 +476,85 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
             frameBuffer->mainViewFamily.skyboxIndex = state->lighting.skybox.index;
             frameBuffer->mainViewFamily.skyboxLOD = state->lighting.skyboxLOD;
         }
+    }
+}
+
+void ResolveTextLoads(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
+    auto view = state->registry.view<Component::TextComponent, Component::TextLoadingTag>();
+    if (view.size_hint() == 0) { return; }
+
+    auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->memoryManager->GeneralArena(), view.size_hint());
+    for (auto [entity, textComp] : view.each()) {
+        if (!textComp.fontHandle.IsValid()) { continue; }
+
+        Engine::Font* font = ctx->assetManager->GetFont(textComp.fontHandle);
+        if (!font) { continue; }
+        if (font->loadState == Engine::Font::LoadState::FailedToLoad) {
+            resolved.PushBack(entity);
+            continue;
+        }
+        if (font->loadState != Engine::Font::LoadState::Loaded) { continue; }
+
+        resolved.PushBack(entity);
+    }
+
+    for (const auto entity : resolved) {
+        state->registry.remove<Component::TextLoadingTag>(entity);
+    }
+}
+
+void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
+{
+    ZoneScoped;
+    auto view = state->registry.view<Component::TextComponent, Component::RenderTransformComponent>(entt::exclude<Component::TextLoadingTag>);
+
+    for (auto [entity, textComp, renderTransform] : view.each()) {
+        if (textComp.text.IsEmpty()) { continue; }
+
+        Engine::Font* font = ctx->assetManager->GetFont(textComp.fontHandle);
+        if (!font) { continue; }
+
+        const float scale = textComp.renderSizePx / font->header.emSize;
+        const float screenPxRange = font->header.sdfSpread * (textComp.renderSizePx / static_cast<float>(font->header.sourceSizePx));
+
+        const uint32_t modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.Size());
+        frameBuffer->mainViewFamily.modelMatrices.EmplaceBack(renderTransform.modelMatrix, renderTransform.previousMatrix);
+
+        const uint32_t quadOffset = static_cast<uint32_t>(frameBuffer->mainViewFamily.glyphQuads.Size());
+        uint32_t quadCount = 0;
+
+        float cursorX = 0.0f;
+        for (size_t i = 0; i < textComp.text.Size(); ++i) {
+            const uint32_t codepoint = static_cast<unsigned char>(textComp.text.c_str()[i]);
+            const Engine::WGlyphInfo* g = ctx->assetManager->GetGlyph(textComp.fontHandle, codepoint);
+            if (!g) {
+                cursorX += textComp.renderSizePx * 0.25f;
+                continue;
+            }
+
+            GlyphQuad quad{};
+            quad.posMin = {cursorX + g->planeLeft * scale, g->planeBottom * scale};
+            quad.posMax = {cursorX + g->planeRight * scale, g->planeTop * scale};
+            quad.uvMin = {g->uvLeft, g->uvBottom};
+            quad.uvMax = {g->uvRight, g->uvTop};
+            quad.color = textComp.color;
+            frameBuffer->mainViewFamily.glyphQuads.PushBack(quad);
+            ++quadCount;
+
+            cursorX += g->advance * scale;
+        }
+
+        if (quadCount == 0) { continue; }
+
+        frameBuffer->mainViewFamily.textDrawCalls.PushBack({
+            .quadOffset = quadOffset,
+            .quadCount = quadCount,
+            .modelIndex = modelIndex,
+            .atlasBindlessIndex = font->atlasTexture.bindlessHandle.index,
+            .samplerIndex = 0,
+            .screenPxRange = screenPxRange,
+        });
     }
 }
 }

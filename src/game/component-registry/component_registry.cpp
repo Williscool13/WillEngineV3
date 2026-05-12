@@ -21,6 +21,7 @@
 #include "game/components/gameplay/path_mover_component.h"
 #include "game/components/gameplay/player_spawn_component.h"
 #include "game/components/render/static_mesh_component.h"
+#include "game/components/render/text_component.h"
 
 namespace Game
 {
@@ -36,6 +37,7 @@ void RegisterComponents(Engine::ComponentRegistry& componentRegistry)
     RegisterComponent<Component::TransformComponent>(componentRegistry, "TransformComponent");
     RegisterComponent<Component::FreeCameraComponent>(componentRegistry, "FreeCameraComponent");
     RegisterComponent<Component::StaticMeshComponent>(componentRegistry, "StaticMeshComponent");
+    RegisterComponent<Component::TextComponent>(componentRegistry, "TextComponent");
     RegisterComponent<Component::ProceduralMeshComponent>(componentRegistry, "ProceduralMeshComponent");
     RegisterComponent<Component::SplineMeshComponent>(componentRegistry, "SplineMeshComponent");
 

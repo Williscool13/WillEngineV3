@@ -32,6 +32,8 @@ set(GAME_SOURCES
 
         components/render/static_mesh_component.cpp
         components/render/static_mesh_component.h
+        components/render/text_component.cpp
+        components/render/text_component.h
         components/render/procedural_mesh_component.cpp
         components/render/procedural_mesh_component.h
         components/render/procedural_mesh_component.cpp

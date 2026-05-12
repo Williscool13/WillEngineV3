@@ -17,6 +17,7 @@
 #include "engine/material_manager.h"
 #include "render/shaders/model_interop.h"
 #include "render/shaders/push_constant_interop.h"
+#include "render/shaders/text_interop.h"
 
 
 namespace Core
@@ -151,7 +152,7 @@ enum class AntiAliasingMode
 
 enum class SMAAEdgeDetectionMode : int32_t
 {
-    Luma  = 0,
+    Luma = 0,
     Color = 1,
     Depth = 2,
 };
@@ -293,11 +294,17 @@ struct ViewportResizeCommand
 struct ViewFamily
 {
     ViewFamily() = default;
+
     explicit ViewFamily(TlsfAllocator& allocator);
+
     ~ViewFamily() = default;
+
     ViewFamily(const ViewFamily&) = default;
+
     ViewFamily& operator=(const ViewFamily&) = default;
+
     ViewFamily(ViewFamily&&) = default;
+
     ViewFamily& operator=(ViewFamily&&) = default;
 
     // To allocate containers. Nothing else.
@@ -306,8 +313,9 @@ struct ViewFamily
     RenderView mainView{};
     FixedVector<PortalView> portalViews{};
 
-    // todo: should contain all instances. Pipeline choice will be embedded in material
     Vector<InstanceData> instances{};
+    Vector<GlyphQuad> glyphQuads{};
+    Vector<TextDrawCall> textDrawCalls{};
 
     Vector<Model> modelMatrices{};
     /**
@@ -344,11 +352,17 @@ struct ViewFamily
 struct FrameBuffer
 {
     FrameBuffer() = default;
+
     explicit FrameBuffer(TlsfAllocator& allocator);
+
     ~FrameBuffer() = default;
+
     FrameBuffer(const FrameBuffer&) = default;
+
     FrameBuffer& operator=(const FrameBuffer&) = default;
+
     FrameBuffer(FrameBuffer&&) = default;
+
     FrameBuffer& operator=(FrameBuffer&&) = default;
 
     // To allocate containers. Nothing else.

@@ -75,7 +75,7 @@ namespace Game
 {
 bool Component::StaticMeshComponent::CanAdd(const entt::registry& registry, entt::entity entity)
 {
-    return !registry.any_of<Component::ProceduralMeshComponent, Component::SplineMeshComponent>(entity);
+    return !registry.any_of<ProceduralMeshComponent, SplineMeshComponent>(entity);
 }
 
 void Component::StaticMeshComponent::Serialize(const StaticMeshComponent& comp, nlohmann::json& json)
