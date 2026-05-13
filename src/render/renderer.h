@@ -70,13 +70,6 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                                         uint32_t sceneIndex,
                                         Core::Arena& arena);
 
-void SetupDeferredResolvePass(RenderGraph& graph,
-                              PipelineManager* pipelineManager,
-                              const Core::ViewFamily& viewFamily,
-                              Core::Array<uint32_t, 2> renderExtent,
-                              const DeferredResolveTargets& targets,
-                              uint32_t sceneIndex);
-
 
 void SetupGroundTruthAmbientOcclusion(RenderGraph& graph,
                                       PipelineManager* pipelineManager,

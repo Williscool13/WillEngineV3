@@ -332,6 +332,9 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/instancing.slang compute ComputeMaxMeshletCount instancing_max_meshlet_count
 
         # Visibility Buffer
+        #   Geometry
+        ${CMAKE_SOURCE_DIR}/shaders/geometry/geometry_visibility_buffer.slang mesh MeshMain visibility_buffer
+        ${CMAKE_SOURCE_DIR}/shaders/geometry/geometry_visibility_buffer.slang fragment FragmentMain visibility_buffer
         ${CMAKE_SOURCE_DIR}/shaders/visibility_buffer/visibility_bucketing.slang compute VisibilityBufferBarycentricDerivative visibility_buffer_barycentric_derivative
         #   Shade Dispatch Bucketing
         ${CMAKE_SOURCE_DIR}/shaders/visibility_buffer/visibility_bucketing.slang compute ComputeShadeDispatchBucketing visibility_bucketing_bounds_calculation
@@ -348,21 +351,23 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/lighting/lighting_toon.slang compute ComputeMain lighting_toon
         ${CMAKE_SOURCE_DIR}/shaders/lighting/lighting_unlit.slang compute ComputeMain lighting_unlit
 
+        ${CMAKE_SOURCE_DIR}/shaders/shadows_resolve.slang compute ComputeMain shadows_resolve
 
-        ${CMAKE_SOURCE_DIR}/shaders/geometry/geometry_visibility_buffer.slang mesh MeshMain visibility_buffer
-        ${CMAKE_SOURCE_DIR}/shaders/geometry/geometry_visibility_buffer.slang fragment FragmentMain visibility_buffer
+        # Text Rendering
+        ${CMAKE_SOURCE_DIR}/shaders/text/text_default.slang mesh MeshMain default_text
+        ${CMAKE_SOURCE_DIR}/shaders/text/text_default.slang fragment FragmentMain default_text
 
-        ${CMAKE_SOURCE_DIR}/shaders/shadow_mesh_shading_instanced.slang mesh MeshMain shadow_mesh_shading_instanced
-
-
-        ${CMAKE_SOURCE_DIR}/shaders/portal_rendering.slang fragment FragmentPortalComposite portal_composite
-
+        # Debug Rendering
         ${CMAKE_SOURCE_DIR}/shaders/debug_render.slang fragment FragmentMain debug_render
         ${CMAKE_SOURCE_DIR}/shaders/debug_render.slang mesh MeshMain debug_render
 
 
-        ${CMAKE_SOURCE_DIR}/shaders/shadows_resolve.slang compute ComputeMain shadows_resolve
-        ${CMAKE_SOURCE_DIR}/shaders/deferred_resolve.slang compute ComputeMain deferred_resolve
+        # Deprecated
+        ${CMAKE_SOURCE_DIR}/shaders/shadow_mesh_shading_instanced.slang mesh MeshMain shadow_mesh_shading_instanced
+        ${CMAKE_SOURCE_DIR}/shaders/portal_rendering.slang fragment FragmentPortalComposite portal_composite
+
+
+
         ${CMAKE_SOURCE_DIR}/shaders/anti-aliasing/temporal_antialiasing.slang compute ComputeMain temporal_antialiasing
         ${CMAKE_SOURCE_DIR}/shaders/anti-aliasing/subpixel_morphological_anti_aliasing_edge_detection.slang compute LumaEdgeDetectionMain smaa_luma_edge_detection
         ${CMAKE_SOURCE_DIR}/shaders/anti-aliasing/subpixel_morphological_anti_aliasing_edge_detection.slang compute ColorEdgeDetectionMain smaa_color_edge_detection

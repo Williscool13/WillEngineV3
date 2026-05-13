@@ -879,52 +879,6 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
         });
 }
 
-void SetupDeferredResolvePass(RenderGraph& graph,
-                              PipelineManager* pipelineManager,
-                              const Core::ViewFamily& viewFamily,
-                              Core::Array<uint32_t, 2> renderExtent,
-                              const DeferredResolveTargets& targets,
-                              uint32_t sceneIndex)
-{
-    RenderPass& deferredResolvePass = graph.AddPass(SID("Deferred Resolve"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-    deferredResolvePass.ReadBuffer(SCENE_DATA_BUFFER);
-    deferredResolvePass.ReadBuffer(SHADOW_DATA_BUFFER);
-    deferredResolvePass.ReadBuffer(SID("light_data"));
-    deferredResolvePass.ReadSampledImage(targets.gbufferOne);
-    deferredResolvePass.ReadSampledImage(targets.gbufferTwo);
-    deferredResolvePass.ReadSampledImage(targets.depthStencil);
-    if (targets.shadows != StringID{}) {
-        deferredResolvePass.ReadSampledImage(targets.shadows);
-    }
-    deferredResolvePass.WriteStorageImage(targets.output);
-    deferredResolvePass.Execute([&, pipelineManager,
-            width = renderExtent[0], height = renderExtent[1], sceneIndex,
-            gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
-            depth = targets.depthStencil, shadows = targets.shadows,
-            output = targets.output, skyboxIndex = viewFamily.skyboxIndex](VkCommandBuffer cmd) {
-            DeferredResolvePushConstant pc{
-                .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
-                .shadowData = graph.GetBufferAddress(SHADOW_DATA_BUFFER),
-                .lightData = graph.GetBufferAddress(SID("light_data")),
-                .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
-                .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
-                .depthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(depth),
-                .shadowsIndex = shadows != StringID{} ? graph.GetSampledImageViewDescriptorIndex(shadows) : ~0x0u,
-                .skyboxIndex = skyboxIndex,
-                .outputImageIndex = graph.GetStorageImageViewDescriptorIndex(output),
-                .sceneDataIndex = sceneIndex,
-            };
-
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("deferred_resolve"));
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
-            vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-
-            uint32_t xDispatch = (width + 15) / 16;
-            uint32_t yDispatch = (height + 15) / 16;
-            vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
-        });
-}
-
 void SetupGroundTruthAmbientOcclusion(RenderGraph& graph,
                                       PipelineManager* pipelineManager,
                                       const Core::ViewFamily& viewFamily,

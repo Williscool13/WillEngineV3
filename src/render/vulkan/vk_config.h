@@ -44,10 +44,6 @@ inline constexpr VkFormat GBUFFER_TARGET_ONE = VK_FORMAT_R32G32B32A32_UINT;
 // G: Emissive RGBE 9:9:9:5 packed into R32
 inline constexpr VkFormat GBUFFER_TARGET_TWO = VK_FORMAT_R32G32_UINT;
 
-
-
-inline constexpr VkFormat POST_PROCESS_OUTPUT_FORMAT = VK_FORMAT_R16G16B16A16_SFLOAT;
-
 // Shadows
 inline constexpr VkFormat SHADOW_CASCADE_FORMAT = VK_FORMAT_D32_SFLOAT;
 } // Render

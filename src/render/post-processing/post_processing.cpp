@@ -470,7 +470,7 @@ StringID PPFilmGrain(PostProcessContext& ctx, StringID input)
     float grainSize = ctx.config.grainSize;
     uint32_t frameIndex = static_cast<uint32_t>(ctx.frameNumber);
 
-    graph.CreateTexture(SID("post_process_output"), TextureInfo{POST_PROCESS_OUTPUT_FORMAT, width, height, 1}, CLEAR_COLOR_EMPTY, true);
+    graph.CreateTexture(SID("post_process_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, width, height, 1}, CLEAR_COLOR_EMPTY, true);
     RenderPass& filmGrainPass = graph.AddPass(SID("[Film Grain] Apply"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
     filmGrainPass.ReadBuffer(SID("scene_data"));
     filmGrainPass.ReadSampledImage(input);
@@ -505,7 +505,7 @@ StringID PPDither(PostProcessContext& ctx, StringID input)
     PipelineManager* pipelines = ctx.pipelines;
     float ditherStrength = ctx.config.ditherStrength;
 
-    graph.CreateTexture(SID("dither_output"), TextureInfo{POST_PROCESS_OUTPUT_FORMAT, width, height, 1}, CLEAR_COLOR_EMPTY, true);
+    graph.CreateTexture(SID("dither_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, width, height, 1}, CLEAR_COLOR_EMPTY, true);
     RenderPass& ditherPass = graph.AddPass(SID("[Dither] Apply"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
     ditherPass.ReadSampledImage(input);
     ditherPass.WriteStorageImage(SID("dither_output"));

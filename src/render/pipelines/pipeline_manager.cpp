@@ -409,9 +409,6 @@ void PipelineManager::RegisterPipelines()
     shadingPipelines.PushBack("default_lit"_sid);
     shadingPipelines.PushBack("error_unlit"_sid);
 
-    RegisterComputePipeline("deferred_resolve"_sid, src / "deferred_resolve_compute.spv",
-                            sizeof(DeferredResolvePushConstant), PipelineCategory::Critical);
-
 
     RegisterComputePipeline("default_pbr"_sid, src / "lighting_pbr_compute.spv",
                             sizeof(LightingResolvePushConstant), PipelineCategory::Critical);
@@ -645,6 +642,42 @@ void PipelineManager::RegisterPipelines()
         builder.Clear();
     }
 
+    // Default Text
+    {
+        builder.AddShaderStage(src / "default_text_mesh.spv", VK_SHADER_STAGE_MESH_BIT_EXT);
+        builder.AddShaderStage(src / "default_text_fragment.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
+        builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+        builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
+        builder.SetupDepthState(VK_TRUE, VK_FALSE, VK_COMPARE_OP_GREATER_OR_EQUAL);
+        VkPipelineColorBlendAttachmentState blendState{
+            .blendEnable = VK_TRUE,
+            .srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
+            .dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+            .colorBlendOp = VK_BLEND_OP_ADD,
+            .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
+            .dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
+            .alphaBlendOp = VK_BLEND_OP_ADD,
+            .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                              VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT
+        };
+
+        builder.SetupBlending(&blendState, 1);
+
+        VkFormat colorFormats[1] = {
+            COLOR_ATTACHMENT_FORMAT,
+        };
+        builder.SetupRenderer(colorFormats, 1, DEPTH_ATTACHMENT_FORMAT);
+
+        RegisterGraphicsPipeline(
+            SID("default_text"),
+            builder,
+            sizeof(TextRenderPushConstant),
+            VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT,
+            PipelineCategory::Critical
+        );
+        builder.Clear();
+    }
+
     // Debug Render
     {
         builder.AddShaderStage(src / "debug_render_mesh.spv", VK_SHADER_STAGE_MESH_BIT_EXT);
@@ -667,7 +700,7 @@ void PipelineManager::RegisterPipelines()
         builder.SetupBlending(&blendState, 1);
 
         VkFormat colorFormats[1] = {
-            POST_PROCESS_OUTPUT_FORMAT,
+            COLOR_ATTACHMENT_FORMAT,
         };
         builder.SetupRenderer(colorFormats, 1, DEPTH_ATTACHMENT_FORMAT);
 

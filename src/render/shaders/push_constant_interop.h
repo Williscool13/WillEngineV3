@@ -19,6 +19,7 @@ import constants_interop;
 import instancing_interop;
 import shadows_interop;
 import lights_interop;
+import text_interop;
 #else
 #include <glm/glm.hpp>
 #include <volk.h>
@@ -26,6 +27,7 @@ import lights_interop;
 #include "common_interop.h"
 #include "model_interop.h"
 #include "instancing_interop.h"
+#include "text_interop.h"
 
 using uint = uint32_t;
 using int32 = int32_t;
@@ -781,6 +783,18 @@ SHADER_PUBLIC struct SMAAAreaGeneratePushConstant
 SHADER_PUBLIC struct SMAASearchGeneratePushConstant
 {
     SHADER_PUBLIC uint32_t targetIndex;
+};
+
+SHADER_PUBLIC struct TextRenderPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData)        sceneData;
+    SHADER_PUBLIC SHADER_PTR(GlyphQuad)        glyphQuads;
+    SHADER_PUBLIC SHADER_PTR(TextInstanceData) textInstanceData;
+    SHADER_PUBLIC SHADER_PTR(Model)            modelBuffer;
+    SHADER_PUBLIC uint32_t quadOffset;
+    SHADER_PUBLIC uint32_t quadCount;
+    SHADER_PUBLIC uint32_t sceneDataIndex;
+    SHADER_PUBLIC uint32_t _pad;
 };
 
 #endif //WILL_ENGINE_PUSH_CONSTANT_INTEROP_H

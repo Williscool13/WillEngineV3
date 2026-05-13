@@ -315,7 +315,7 @@ struct ViewFamily
 
     Vector<InstanceData> instances{};
     Vector<GlyphQuad> glyphQuads{};
-    Vector<TextDrawCall> textDrawCalls{};
+    Vector<TextInstanceData> textInstances{};
 
     Vector<Model> modelMatrices{};
     /**

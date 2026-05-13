@@ -516,12 +516,13 @@ void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* stat
         if (!font) { continue; }
 
         const float scale = textComp.renderSizePx / font->header.emSize;
-        const float screenPxRange = font->header.sdfSpread * (textComp.renderSizePx / static_cast<float>(font->header.sourceSizePx));
+        const float screenPxRange = static_cast<float>(font->header.sdfSpread) * (textComp.renderSizePx / static_cast<float>(font->header.sourceSizePx));
 
-        const uint32_t modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.Size());
+        const auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.Size());
         frameBuffer->mainViewFamily.modelMatrices.EmplaceBack(renderTransform.modelMatrix, renderTransform.previousMatrix);
 
-        const uint32_t quadOffset = static_cast<uint32_t>(frameBuffer->mainViewFamily.glyphQuads.Size());
+        const auto drawCallIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.textInstances.Size());
+        const auto quadOffset = static_cast<uint32_t>(frameBuffer->mainViewFamily.glyphQuads.Size());
         uint32_t quadCount = 0;
 
         float cursorX = 0.0f;
@@ -534,11 +535,12 @@ void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* stat
             }
 
             GlyphQuad quad{};
-            quad.posMin = {cursorX + g->planeLeft * scale, g->planeBottom * scale};
-            quad.posMax = {cursorX + g->planeRight * scale, g->planeTop * scale};
-            quad.uvMin = {g->uvLeft, g->uvBottom};
-            quad.uvMax = {g->uvRight, g->uvTop};
-            quad.color = textComp.color;
+            quad.posMin       = {cursorX + g->planeLeft * scale, g->planeBottom * scale};
+            quad.posMax       = {cursorX + g->planeRight * scale, g->planeTop * scale};
+            quad.uvMin        = {g->uvLeft, g->uvBottom};
+            quad.uvMax        = {g->uvRight, g->uvTop};
+            quad.color        = textComp.color;
+            quad.drawCallIndex = drawCallIndex;
             frameBuffer->mainViewFamily.glyphQuads.PushBack(quad);
             ++quadCount;
 
@@ -547,13 +549,11 @@ void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* stat
 
         if (quadCount == 0) { continue; }
 
-        frameBuffer->mainViewFamily.textDrawCalls.PushBack({
-            .quadOffset = quadOffset,
-            .quadCount = quadCount,
-            .modelIndex = modelIndex,
+        frameBuffer->mainViewFamily.textInstances.PushBack({
+            .modelIndex         = modelIndex,
+            .screenPxRange      = screenPxRange,
             .atlasBindlessIndex = font->atlasTexture.bindlessHandle.index,
-            .samplerIndex = 0,
-            .screenPxRange = screenPxRange,
+            .samplerIndex       = 0,
         });
     }
 }

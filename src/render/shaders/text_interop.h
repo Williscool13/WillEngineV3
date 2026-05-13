@@ -21,18 +21,18 @@ struct SHADER_ALIGN GlyphQuad
     SHADER_PUBLIC float2   uvMin;
     SHADER_PUBLIC float2   uvMax;
     SHADER_PUBLIC float4   color;
+    SHADER_PUBLIC uint32_t drawCallIndex;
+    SHADER_PUBLIC uint32_t _pad0;
+    SHADER_PUBLIC uint32_t _pad1;
+    SHADER_PUBLIC uint32_t _pad2;
 };
 
-#ifndef __SLANG__
-struct TextDrawCall
+struct SHADER_ALIGN TextInstanceData
 {
-    uint32_t quadOffset;
-    uint32_t quadCount;
-    uint32_t modelIndex;
-    uint32_t atlasBindlessIndex;
-    uint32_t samplerIndex;
-    float    screenPxRange;
+    SHADER_PUBLIC uint32_t modelIndex;
+    SHADER_PUBLIC float    screenPxRange;
+    SHADER_PUBLIC uint32_t atlasBindlessIndex;
+    SHADER_PUBLIC uint32_t samplerIndex;
 };
-#endif // __SLANG__
 
 #endif //WILL_ENGINE_TEXT_INTEROP_H
