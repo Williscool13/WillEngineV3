@@ -1,8 +1,10 @@
 import common_interop;
+import constants_interop;
 import model_interop;
 import push_constant_interop;
 import text_interop;
 import bindless_declarations;
+import shader_functions;
 
 // ==================== Mesh Shader ====================
 
@@ -85,13 +87,16 @@ float4 FragmentMain(VertexOutput input, uniform TextRenderPushConstant pc) : SV_
 {
     TextInstanceData inst = pc.textInstanceData[input.drawCallIndex];
 
-    float3 msd = assetTextures[inst.atlasBindlessIndex].Sample(assetSamplers[inst.samplerIndex], input.uv).rgb;
+    Texture2D atlasTex = assetTextures[inst.atlasBindlessIndex];
+    float4 msd = atlasTex.Sample(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], input.uv);
+    float screenPxRange = MSDFScreenPxRange(atlasTex, input.uv, inst.pxRange);
 
-    float sd = MSDFMedian(msd.r, msd.g, msd.b);
-    float screenPxDist = inst.screenPxRange * (sd - 0.5);
+    float sd = msd.a;
+    float screenPxDist = screenPxRange * (sd - 0.5);
     float opacity = clamp(screenPxDist + 0.5, 0.0, 1.0);
 
     if (opacity < 0.001) { discard; }
 
     return float4(input.color.rgb, input.color.a * opacity);
+    // return float4(msd.rgb, 1.0f);
 }

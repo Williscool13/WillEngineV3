@@ -90,8 +90,8 @@ bool FontGenerateSlot::GenerateAndWrite()
     msdf_atlas::FontGeometry fontGeometry(&glyphs);
     fontGeometry.loadCharset(font, 1.0, charset);
 
-    constexpr double MSDF_PIXEL_RANGE = 4.0;
-    constexpr double MSDF_MIN_SCALE   = 48.0;
+    constexpr double MSDF_PIXEL_RANGE = 8.0;
+    constexpr double MSDF_MIN_SCALE = 48.0;
 
     for (msdf_atlas::GlyphGeometry& glyph : glyphs) {
         glyph.edgeColoring(&msdfgen::edgeColoringInkTrap, 3.0, 0);
@@ -108,23 +108,18 @@ bool FontGenerateSlot::GenerateAndWrite()
     int atlasHeight = 0;
     packer.getDimensions(atlasWidth, atlasHeight);
 
-    using Generator = msdf_atlas::ImmediateAtlasGenerator<
-        float, 3,
-        msdf_atlas::msdfGenerator,
-        msdf_atlas::BitmapAtlasStorage<float, 3>>;
-
     msdf_atlas::GeneratorAttributes genAttribs;
     genAttribs.config.overlapSupport = true;
     genAttribs.scanlinePass = true;
 
-    Generator generator(atlasWidth, atlasHeight);
+    auto generator = msdf_atlas::ImmediateAtlasGenerator<float, 4, msdf_atlas::mtsdfGenerator, msdf_atlas::BitmapAtlasStorage<float, 4> >(atlasWidth, atlasHeight);
     generator.setAttributes(genAttribs);
     generator.setThreadCount(4);
     generator.generate(glyphs.data(), static_cast<int>(glyphs.size()));
 
-    auto bitmap = static_cast<msdfgen::BitmapConstRef<float, 3>>(generator.atlasStorage());
+    auto bitmap = static_cast<msdfgen::BitmapConstRef<float, 4>>(generator.atlasStorage());
 
-    // Convert float RGB atlas to uint8 RGBA (A=255); V-flip baked here for Vulkan y-down.
+    // V-flip baked here for Vulkan y-down.
     const size_t rgbaSize = static_cast<size_t>(atlasWidth) * atlasHeight * 4;
     Core::HeapArray<uint8_t> rgba(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, rgbaSize);
     for (int y = 0; y < atlasHeight; ++y) {
@@ -135,21 +130,21 @@ bool FontGenerateSlot::GenerateAndWrite()
             dst[0] = static_cast<uint8_t>(std::clamp(src[0], 0.0f, 1.0f) * 255.0f + 0.5f);
             dst[1] = static_cast<uint8_t>(std::clamp(src[1], 0.0f, 1.0f) * 255.0f + 0.5f);
             dst[2] = static_cast<uint8_t>(std::clamp(src[2], 0.0f, 1.0f) * 255.0f + 0.5f);
-            dst[3] = 255;
+            dst[3] = static_cast<uint8_t>(std::clamp(src[3], 0.0f, 1.0f) * 255.0f + 0.5f);
         }
     }
 
     ktxTexture2* ktxTex{nullptr};
     ktxTextureCreateInfo ktxInfo{};
-    ktxInfo.vkFormat       = VK_FORMAT_R8G8B8A8_UNORM;
-    ktxInfo.baseWidth      = static_cast<uint32_t>(atlasWidth);
-    ktxInfo.baseHeight     = static_cast<uint32_t>(atlasHeight);
-    ktxInfo.baseDepth      = 1;
-    ktxInfo.numDimensions  = 2;
-    ktxInfo.numLevels      = 1;
-    ktxInfo.numLayers      = 1;
-    ktxInfo.numFaces       = 1;
-    ktxInfo.isArray        = KTX_FALSE;
+    ktxInfo.vkFormat = VK_FORMAT_R8G8B8A8_UNORM;
+    ktxInfo.baseWidth = static_cast<uint32_t>(atlasWidth);
+    ktxInfo.baseHeight = static_cast<uint32_t>(atlasHeight);
+    ktxInfo.baseDepth = 1;
+    ktxInfo.numDimensions = 2;
+    ktxInfo.numLevels = 1;
+    ktxInfo.numLayers = 1;
+    ktxInfo.numFaces = 1;
+    ktxInfo.isArray = KTX_FALSE;
     ktxInfo.generateMipmaps = KTX_FALSE;
 
     if (ktxTexture2_Create(&ktxInfo, KTX_TEXTURE_CREATE_ALLOC_STORAGE, &ktxTex) != KTX_SUCCESS) {
@@ -161,7 +156,7 @@ bool FontGenerateSlot::GenerateAndWrite()
     ktxTexture_SetImageFromMemory(ktxTexture(ktxTex), 0, 0, 0, rgba.Data(), rgba.Size());
 
     ktx_uint8_t* ktxBytes{nullptr};
-    ktx_size_t   ktxSize{0};
+    ktx_size_t ktxSize{0};
     if (ktxTexture2_WriteToMemory(ktxTex, &ktxBytes, &ktxSize) != KTX_SUCCESS) {
         LOG_ERROR(Asset, "Failed to serialise font atlas KTX2 to memory");
         ktxTexture_Destroy(ktxTexture(ktxTex));
@@ -178,7 +173,7 @@ bool FontGenerateSlot::GenerateAndWrite()
     // Gather glyph metrics
     const msdf_atlas::FontGeometry::GlyphRange glyphRange = fontGeometry.getGlyphs();
     const msdfgen::FontMetrics& metrics = fontGeometry.getMetrics();
-    const double emSize  = metrics.emSize;
+    const double emSize = metrics.emSize;
     const double invAtlasW = 1.0 / atlasWidth;
     const double invAtlasH = 1.0 / atlasHeight;
 
@@ -189,22 +184,22 @@ bool FontGenerateSlot::GenerateAndWrite()
 
         Engine::WGlyphInfo info{};
         info.codepoint = static_cast<uint32_t>(g.getCodepoint());
-        info.advance   = static_cast<float>(g.getAdvance());
+        info.advance = static_cast<float>(g.getAdvance());
 
         double pl, pb, pr, pt;
         g.getQuadPlaneBounds(pl, pb, pr, pt);
-        info.planeLeft   = static_cast<float>(pl);
+        info.planeLeft = static_cast<float>(pl);
         info.planeBottom = static_cast<float>(pb);
-        info.planeRight  = static_cast<float>(pr);
-        info.planeTop    = static_cast<float>(pt);
+        info.planeRight = static_cast<float>(pr);
+        info.planeTop = static_cast<float>(pt);
 
         double al, ab, ar, at;
         g.getQuadAtlasBounds(al, ab, ar, at);
         // V-flip: atlas is y-up, Vulkan is y-down; baked here so runtime needs no flip
-        info.uvLeft   = static_cast<float>(al * invAtlasW);
+        info.uvLeft = static_cast<float>(al * invAtlasW);
         info.uvBottom = static_cast<float>((atlasHeight - at) * invAtlasH);
-        info.uvRight  = static_cast<float>(ar * invAtlasW);
-        info.uvTop    = static_cast<float>((atlasHeight - ab) * invAtlasH);
+        info.uvRight = static_cast<float>(ar * invAtlasW);
+        info.uvTop = static_cast<float>((atlasHeight - ab) * invAtlasH);
 
         glyphInfos.PushBack(info);
     }
@@ -213,19 +208,19 @@ bool FontGenerateSlot::GenerateAndWrite()
 
     // Build and write .wsfont
     Engine::WFontHeader header{};
-    header.fontId       = fontId.id;
-    header.major        = Engine::FONT_MAJOR_VERSION;
-    header.minor        = Engine::FONT_MINOR_VERSION;
+    header.fontId = fontId.id;
+    header.major = Engine::FONT_MAJOR_VERSION;
+    header.minor = Engine::FONT_MINOR_VERSION;
     header.sourceSizePx = static_cast<uint32_t>(MSDF_MIN_SCALE);
-    header.sdfSpread    = static_cast<uint32_t>(MSDF_PIXEL_RANGE);
-    header.emSize       = static_cast<float>(emSize);
-    header.ascender     = static_cast<float>(metrics.ascenderY);
-    header.descender    = static_cast<float>(metrics.descenderY);
-    header.lineHeight   = static_cast<float>(metrics.lineHeight);
-    header.atlasWidth   = static_cast<uint32_t>(atlasWidth);
-    header.atlasHeight  = static_cast<uint32_t>(atlasHeight);
-    header.glyphCount            = static_cast<uint32_t>(glyphInfos.Size());
-    header.atlasDataSize         = static_cast<uint64_t>(compressedSize);
+    header.sdfSpread = static_cast<uint32_t>(MSDF_PIXEL_RANGE);
+    header.emSize = static_cast<float>(emSize);
+    header.ascender = static_cast<float>(metrics.ascenderY);
+    header.descender = static_cast<float>(metrics.descenderY);
+    header.lineHeight = static_cast<float>(metrics.lineHeight);
+    header.atlasWidth = static_cast<uint32_t>(atlasWidth);
+    header.atlasHeight = static_cast<uint32_t>(atlasHeight);
+    header.glyphCount = static_cast<uint32_t>(glyphInfos.Size());
+    header.atlasDataSize = static_cast<uint64_t>(compressedSize);
     header.atlasUncompressedSize = static_cast<uint64_t>(ktxSize);
 
     const Core::InlineString<> stem = Core::InlineString(outputPath.Stem());

@@ -356,11 +356,16 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         vkCmdBindDescriptorBuffersEXT(cmd, bindings.Size(), bindings.Data());
         vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineManager->GetGlobalPipelineLayout(), 0, bindings.Size(), indices.Data(), offsets.Data());
         vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineManager->GetGlobalPipelineLayout(), 0, bindings.Size(), indices.Data(), offsets.Data());
-    } {
+    }
+    //
+    {
         ZoneScopedN("SetupUniforms");
         UploadFrameUniforms(viewFamily, renderExtent, frameBuffer.timeFrame.renderDeltaTime);
         UploadModelUniforms(viewFamily, renderFamilyProperties);
-    } {
+        UploadTextUniforms(viewFamily, renderFamilyProperties);
+    }
+    //
+    {
         ZoneScopedN("ImportBuffers");
         renderGraph->ImportBufferNoBarrier(GEOMETRY_VERTEX_POSITION_BUFFER, resourceManager->megaVertexPositionBuffer.handle, resourceManager->megaVertexPositionBuffer.address,
                                            {resourceManager->megaVertexPositionBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
@@ -536,7 +541,11 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             default: break;
         }
 
+
         mainTargets.outputColor = finalOutput;
+
+        SetupTextForwardPass(*renderGraph, viewFamily, renderExtent, mainTargets);
+
         finalOutput = SetupPostProcessing(*renderGraph, pipelineManager, viewFamily, renderExtent, mainTargets, frameBuffer.timeFrame.renderDeltaTime, frameNumber);
 
         SetupDebugRender(*renderGraph, viewFamily, renderExtent, targets.depthStencil, finalOutput, frameResourceLimits);
@@ -1457,6 +1466,61 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
     }
 }
 
+void RenderThread::UploadTextUniforms(Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties) const
+{
+    if (viewFamily.glyphQuads.IsEmpty()) { return; }
+
+    renderGraph->CreateBuffer(TEXT_GLYPH_QUAD_BUFFER, renderFamilyProperties.glyphQuadBufferSize, false);
+    UploadAllocation glyphUpload = renderGraph->AllocateTransient(viewFamily.glyphQuads.Size() * sizeof(GlyphQuad));
+    memcpy(glyphUpload.ptr, viewFamily.glyphQuads.Data(), viewFamily.glyphQuads.Size() * sizeof(GlyphQuad));
+
+    RenderPass& uploadGlyphPass = renderGraph->AddPass(SID("Upload Glyph Quads"), VK_PIPELINE_STAGE_2_COPY_BIT);
+    uploadGlyphPass.WriteTransferBuffer(TEXT_GLYPH_QUAD_BUFFER);
+    uploadGlyphPass.Execute([&,
+            srcOffset = glyphUpload.offset,
+            totalSize = viewFamily.glyphQuads.Size() * sizeof(GlyphQuad)](VkCommandBuffer cmd) {
+            VkBufferCopy2 copy{
+                .sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
+                .srcOffset = srcOffset,
+                .dstOffset = 0,
+                .size = totalSize,
+            };
+            VkCopyBufferInfo2 copyInfo{
+                .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
+                .srcBuffer = renderGraph->GetTransientUploadBuffer(),
+                .dstBuffer = renderGraph->GetBufferHandle(TEXT_GLYPH_QUAD_BUFFER),
+                .regionCount = 1,
+                .pRegions = &copy,
+            };
+            vkCmdCopyBuffer2(cmd, &copyInfo);
+        });
+
+    renderGraph->CreateBuffer(TEXT_INSTANCE_BUFFER, renderFamilyProperties.textInstanceBufferSize, false);
+    UploadAllocation instUpload = renderGraph->AllocateTransient(viewFamily.textInstances.Size() * sizeof(TextInstanceData));
+    memcpy(instUpload.ptr, viewFamily.textInstances.Data(), viewFamily.textInstances.Size() * sizeof(TextInstanceData));
+
+    RenderPass& uploadInstPass = renderGraph->AddPass(SID("Upload Text Instances"), VK_PIPELINE_STAGE_2_COPY_BIT);
+    uploadInstPass.WriteTransferBuffer(TEXT_INSTANCE_BUFFER);
+    uploadInstPass.Execute([&,
+            srcOffset = instUpload.offset,
+            totalSize = viewFamily.textInstances.Size() * sizeof(TextInstanceData)](VkCommandBuffer cmd) {
+            VkBufferCopy2 copy{
+                .sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
+                .srcOffset = srcOffset,
+                .dstOffset = 0,
+                .size = totalSize,
+            };
+            VkCopyBufferInfo2 copyInfo{
+                .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
+                .srcBuffer = renderGraph->GetTransientUploadBuffer(),
+                .dstBuffer = renderGraph->GetBufferHandle(TEXT_INSTANCE_BUFFER),
+                .regionCount = 1,
+                .pRegions = &copy,
+            };
+            vkCmdCopyBuffer2(cmd, &copyInfo);
+        });
+}
+
 void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties, uint32_t sceneIndex) const
 {
     Core::ShadowConfiguration shadowConfig = viewFamily.shadowConfig;
@@ -1690,6 +1754,60 @@ void RenderThread::SetupPortalComposite(RenderGraph& graph, const Core::ViewFami
 
         // Because this writes to SV_Depth, apparently all future draw calls to this depth will not use early Z out lol. (stackoverflow 2018)
         vkCmdDraw(cmd, 3, 1, 0, 0);
+
+        vkCmdEndRendering(cmd);
+    });
+}
+
+void RenderThread::SetupTextForwardPass(RenderGraph& graph, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const MainRenderTargets& targets) const
+{
+    if (viewFamily.glyphQuads.IsEmpty()) { return; }
+    if (!graph.HasBuffer(TEXT_GLYPH_QUAD_BUFFER) || !graph.HasBuffer(TEXT_INSTANCE_BUFFER)) { return; }
+
+    const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("default_text"));
+    if (!pipelineEntry) { return; }
+
+    RenderPass& textPass = graph.AddPass(SID("Text Forward"), VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT);
+    textPass.ReadBuffer(SCENE_DATA_BUFFER);
+    textPass.ReadBuffer(TEXT_GLYPH_QUAD_BUFFER);
+    textPass.ReadBuffer(TEXT_INSTANCE_BUFFER);
+    textPass.ReadBuffer(GEOMETRY_MODEL_BUFFER);
+    //textPass.ReadDepthAttachment(targets.depthStencil);
+    textPass.ReadWriteDepthAttachment(targets.depthStencil);
+    textPass.WriteColorAttachment(targets.outputColor);
+    auto totalQuads = static_cast<uint32_t>(viewFamily.glyphQuads.Size());
+
+    textPass.Execute([&, width = renderExtent[0], height = renderExtent[1], pipelineEntry, colorOutput = targets.outputColor, depthOutput = targets.depthStencil, totalQuads](VkCommandBuffer cmd) {
+        VkViewport viewport = VkHelpers::GenerateViewport(width, height);
+        vkCmdSetViewport(cmd, 0, 1, &viewport);
+        VkRect2D scissor = VkHelpers::GenerateScissor(width, height);
+        vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+        VkImageView colorView = graph.GetImageViewHandle(colorOutput);
+        VkImageView depthView = graph.GetImageViewHandle(depthOutput);
+        VkRenderingAttachmentInfo colorAttachment = VkHelpers::RenderingAttachmentInfo(colorView, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        // VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(depthView, nullptr, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL);
+        VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(depthView, nullptr, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+        VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, &colorAttachment, 1, &depthAttachment, nullptr);
+        vkCmdBeginRendering(cmd, &renderInfo);
+
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineEntry->pipeline);
+
+        // Single dispatch covering all glyph quads; shader indexes per-quad drawCallIndex to look up TextInstanceData.
+        uint32_t groupCount = (totalQuads + 15) / 16;
+
+        TextRenderPushConstant pc{
+            .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
+            .glyphQuads = graph.GetBufferAddress(TEXT_GLYPH_QUAD_BUFFER),
+            .textInstanceData = graph.GetBufferAddress(TEXT_INSTANCE_BUFFER),
+            .modelBuffer = graph.GetBufferAddress(GEOMETRY_MODEL_BUFFER),
+            .quadOffset = 0,
+            .quadCount = totalQuads,
+            .sceneDataIndex = 0,
+            ._pad = 0,
+        };
+        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(TextRenderPushConstant), &pc);
+        vkCmdDrawMeshTasksEXT(cmd, groupCount, 1, 1);
 
         vkCmdEndRendering(cmd);
     });

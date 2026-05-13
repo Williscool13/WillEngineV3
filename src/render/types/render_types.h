@@ -62,6 +62,9 @@ struct RenderFamilyProperties
     size_t meshletLevel2BlockSumsBufferSize{128};
     size_t meshletScannedLevel2BlockSumsBufferSize{128};
     size_t visibleMeshletsBufferSize{128};       // Final compacted output{}
+
+    size_t glyphQuadBufferSize{128};
+    size_t textInstanceBufferSize{128};
 };
 } // Render
 

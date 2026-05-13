@@ -16,11 +16,11 @@ import common_interop;
 
 struct SHADER_ALIGN GlyphQuad
 {
-    SHADER_PUBLIC float2   posMin;
-    SHADER_PUBLIC float2   posMax;
-    SHADER_PUBLIC float2   uvMin;
-    SHADER_PUBLIC float2   uvMax;
-    SHADER_PUBLIC float4   color;
+    SHADER_PUBLIC float2 posMin;
+    SHADER_PUBLIC float2 posMax;
+    SHADER_PUBLIC float2 uvMin;
+    SHADER_PUBLIC float2 uvMax;
+    SHADER_PUBLIC float4 color;
     SHADER_PUBLIC uint32_t drawCallIndex;
     SHADER_PUBLIC uint32_t _pad0;
     SHADER_PUBLIC uint32_t _pad1;
@@ -30,9 +30,9 @@ struct SHADER_ALIGN GlyphQuad
 struct SHADER_ALIGN TextInstanceData
 {
     SHADER_PUBLIC uint32_t modelIndex;
-    SHADER_PUBLIC float    screenPxRange;
+    SHADER_PUBLIC float pxRange;
     SHADER_PUBLIC uint32_t atlasBindlessIndex;
-    SHADER_PUBLIC uint32_t samplerIndex;
+    uint32_t pad;
 };
 
 #endif //WILL_ENGINE_TEXT_INTEROP_H

@@ -516,13 +516,11 @@ void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* stat
         if (!font) { continue; }
 
         const float scale = textComp.renderSizePx / font->header.emSize;
-        const float screenPxRange = static_cast<float>(font->header.sdfSpread) * (textComp.renderSizePx / static_cast<float>(font->header.sourceSizePx));
 
         const auto modelIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.modelMatrices.Size());
         frameBuffer->mainViewFamily.modelMatrices.EmplaceBack(renderTransform.modelMatrix, renderTransform.previousMatrix);
 
         const auto drawCallIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.textInstances.Size());
-        const auto quadOffset = static_cast<uint32_t>(frameBuffer->mainViewFamily.glyphQuads.Size());
         uint32_t quadCount = 0;
 
         float cursorX = 0.0f;
@@ -551,9 +549,8 @@ void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* stat
 
         frameBuffer->mainViewFamily.textInstances.PushBack({
             .modelIndex         = modelIndex,
-            .screenPxRange      = screenPxRange,
+            .pxRange            = static_cast<float>(font->header.sdfSpread),
             .atlasBindlessIndex = font->atlasTexture.bindlessHandle.index,
-            .samplerIndex       = 0,
         });
     }
 }
