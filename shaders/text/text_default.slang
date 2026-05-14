@@ -14,11 +14,13 @@ static const uint TRIS_PER_GROUP  = QUADS_PER_GROUP * 2; // 32, since text rende
 
 struct VertexOutput
 {
-    float4 position      : SV_Position;
-    float2 uv            : TEXCOORD0;
-    float4 color         : COLOR0;
-    nointerpolation uint drawCallIndex : COLOR1;
+    float4 position : SV_Position;
+    [[vk::location(0)]] float2 uv : TEXCOORD0;
+    [[vk::location(1)]] float4 color : COLOR0;
+    [[vk::location(2)]] nointerpolation uint drawCallIndex : COLOR1;
 };
+
+groupshared uint gs_visibleQuadIndices[QUADS_PER_GROUP];
 
 [shader("mesh")]
 [outputtopology("triangle")]
@@ -32,33 +34,67 @@ void MeshMain(
 {
     uint globalQuadBase = pc.quadOffset + gid.x * QUADS_PER_GROUP;
     uint batchEnd = pc.quadOffset + pc.quadCount;
-
     uint localQuadCount = (batchEnd > globalQuadBase) ? min(QUADS_PER_GROUP, batchEnd - globalQuadBase) : 0u;
 
-    SetMeshOutputCounts(localQuadCount * 4, localQuadCount * 2);
-
-    if (localQuadCount == 0) { return; }
+    if (localQuadCount == 0) {
+        SetMeshOutputCounts(0, 0);
+        return;
+    }
 
     SceneData scene = pc.sceneData[pc.sceneDataIndex];
     uint tid = gtid.x;
 
-    for (uint vi = tid; vi < localQuadCount * 4; vi += 32) {
-        uint quadIdx = vi / 4;
+    // Frustum cull; z=0 in local space so only need columns 0, 1, 3 of the model matrix
+    bool visible = false;
+    if (tid < localQuadCount) {
+        GlyphQuad q = pc.glyphQuads[globalQuadBase + tid];
+        TextInstanceData inst = pc.textInstanceData[q.drawCallIndex];
+        float4x4 M = pc.modelBuffer[inst.modelIndex].modelMatrix;
+
+        float3 col0 = float3(M[0][0], M[1][0], M[2][0]);
+        float3 col1 = float3(M[0][1], M[1][1], M[2][1]);
+        float3 col3 = float3(M[0][3], M[1][3], M[2][3]);
+
+        float3 c00 = col0 * q.posMin.x + col1 * q.posMin.y + col3;
+        float3 c11 = col0 * q.posMax.x + col1 * q.posMax.y + col3;
+
+        visible = FrustumCullAABB(scene.frustum, min(c00, c11), max(c00, c11));
+
+        if (visible) {
+            gs_visibleQuadIndices[WavePrefixCountBits(visible)] = tid;
+        }
+    }
+
+    // Wave intrinsics because xDispatch is 32 (NVIDIA wave size 32, AMD wave size 64 so we're safe)
+    uint visibleCount = WaveActiveCountBits(visible);
+
+    GroupMemoryBarrierWithGroupSync();
+
+    SetMeshOutputCounts(visibleCount * 4, visibleCount * 2);
+
+    if (visibleCount == 0) { return; }
+
+    for (uint vi = tid; vi < visibleCount * 4; vi += 32) {
+        uint quadIdx = gs_visibleQuadIndices[vi / 4];
         uint cornerIdx = vi % 4;
 
         GlyphQuad q = pc.glyphQuads[globalQuadBase + quadIdx];
         TextInstanceData inst = pc.textInstanceData[q.drawCallIndex];
-        Model m = pc.modelBuffer[inst.modelIndex];
+        float4x4 M = pc.modelBuffer[inst.modelIndex].modelMatrix;
 
-        // bit 0 = right (x), bit 1 = top (y)
+        float3 col0 = float3(M[0][0], M[1][0], M[2][0]);
+        float3 col1 = float3(M[0][1], M[1][1], M[2][1]);
+        float3 col3 = float3(M[0][3], M[1][3], M[2][3]);
+
         float px = (cornerIdx & 1u) != 0u ? q.posMax.x : q.posMin.x;
         float py = (cornerIdx & 2u) != 0u ? q.posMax.y : q.posMin.y;
-        float ux = (cornerIdx & 1u) != 0u ? q.uvMax.x  : q.uvMin.x;
-        // world top (posMax.y) maps to atlas low-V (uvMin.y); world bottom to high-V (uvMax.y)
-        float uy = (cornerIdx & 2u) != 0u ? q.uvMin.y  : q.uvMax.y;
+        float3 worldXY = col0 * px + col1 * py + col3;
 
-        float4 worldPos = mul(m.modelMatrix, float4(px, py, 0.0, 1.0));
-        float4 clipPos  = mul(scene.viewProj, worldPos);
+        float ux = (cornerIdx & 1u) != 0u ? q.uvMax.x : q.uvMin.x;
+        // world top (posMax.y) maps to atlas low-V (uvMin.y); world bottom to high-V (uvMax.y)
+        float uy = (cornerIdx & 2u) != 0u ? q.uvMin.y : q.uvMax.y;
+
+        float4 clipPos = mul(scene.viewProj, float4(worldXY, 1.0));
 
         VertexOutput v;
         v.position = clipPos;
@@ -68,7 +104,7 @@ void MeshMain(
         vertices[vi] = v;
     }
 
-    if (tid < localQuadCount) {
+    if (tid < visibleCount) {
         uint base = tid * 4;
         // CCW winding: corners 0=BL, 1=BR, 2=TL, 3=TR
         triangles[tid * 2 + 0] = uint3(base + 0, base + 1, base + 2);
@@ -98,5 +134,4 @@ float4 FragmentMain(VertexOutput input, uniform TextRenderPushConstant pc) : SV_
     if (opacity < 0.001) { discard; }
 
     return float4(input.color.rgb, input.color.a * opacity);
-    // return float4(msd.rgb, 1.0f);
 }

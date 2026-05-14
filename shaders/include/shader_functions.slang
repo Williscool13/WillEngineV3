@@ -1,6 +1,24 @@
 import common_interop;
 import model_interop;
 
+// Returns false if the world-space AABB is fully outside any frustum plane
+bool FrustumCullAABB(Frustum frustum, float3 aabbMin, float3 aabbMax)
+{
+    for (int i = 0; i < 6; i++) {
+        float4 plane = frustum.planes[i];
+        // Positive vertex: component-wise max projection onto plane normal
+        float3 pv = float3(
+            plane.x >= 0.0 ? aabbMax.x : aabbMin.x,
+            plane.y >= 0.0 ? aabbMax.y : aabbMin.y,
+            plane.z >= 0.0 ? aabbMax.z : aabbMin.z
+        );
+        if (dot(plane.xyz, pv) + plane.w < 0.0) {
+            return false;
+        }
+    }
+    return true;
+}
+
 // Returns false if it has been culled
 bool FrustumCullSphere(Frustum frustum, float4 sphere) {
     // sphere.xyz = center, sphere.w = radius
