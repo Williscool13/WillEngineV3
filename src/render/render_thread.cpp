@@ -1472,7 +1472,27 @@ void RenderThread::UploadTextUniforms(Core::ViewFamily& viewFamily, const Render
 
     renderGraph->CreateBuffer(TEXT_GLYPH_QUAD_BUFFER, renderFamilyProperties.glyphQuadBufferSize, false);
     UploadAllocation glyphUpload = renderGraph->AllocateTransient(viewFamily.glyphQuads.Size() * sizeof(GlyphQuad));
-    memcpy(glyphUpload.ptr, viewFamily.glyphQuads.Data(), viewFamily.glyphQuads.Size() * sizeof(GlyphQuad));
+    //
+    {
+        auto* dst = static_cast<GlyphQuad*>(glyphUpload.ptr);
+        for (uint32_t i = 0; i < viewFamily.glyphQuads.Size(); ++i) {
+            GlyphQuad q = viewFamily.glyphQuads[i];
+            q.uvOrigMin = q.uvMin;
+            q.uvOrigMax = q.uvMax;
+            const TextInstanceData& inst = viewFamily.textInstances[q.drawCallIndex];
+            const TextRenderMaterial& mat = viewFamily.textMaterials[inst.textMaterialIndex];
+            Vec2 shadowPad = {glm::abs(mat.shadowOffset.x), glm::abs(mat.shadowOffset.y)};
+            if (shadowPad.x > 0.0f || shadowPad.y > 0.0f) {
+                Vec2 posDelta = abs(q.posMax - q.posMin);
+                Vec2 uvPerPos = (q.uvMax - q.uvMin) / posDelta;
+                q.posMin -= shadowPad * posDelta / uvPerPos;
+                q.posMax += shadowPad * posDelta / uvPerPos;
+                q.uvMin -= shadowPad * posDelta;
+                q.uvMax += shadowPad * posDelta;
+            }
+            dst[i] = q;
+        }
+    }
 
     RenderPass& uploadGlyphPass = renderGraph->AddPass(SID("Upload Glyph Quads"), VK_PIPELINE_STAGE_2_COPY_BIT);
     uploadGlyphPass.WriteTransferBuffer(TEXT_GLYPH_QUAD_BUFFER);

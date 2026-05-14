@@ -18,6 +18,8 @@ struct VertexOutput
     [[vk::location(0)]] float2 uv : TEXCOORD0;
     [[vk::location(1)]] float4 color : COLOR0;
     [[vk::location(2)]] nointerpolation uint drawCallIndex : COLOR1;
+    [[vk::location(3)]] nointerpolation float2 uvOrigMin : TEXCOORD2;
+    [[vk::location(4)]] nointerpolation float2 uvOrigMax : TEXCOORD3;
 };
 
 groupshared uint gs_visibleQuadIndices[QUADS_PER_GROUP];
@@ -97,10 +99,13 @@ void MeshMain(
         float4 clipPos = mul(scene.viewProj, float4(worldXY, 1.0));
 
         VertexOutput v;
+
         v.position = clipPos;
         v.uv = float2(ux, uy);
         v.color = q.color;
         v.drawCallIndex = q.drawCallIndex;
+        v.uvOrigMin = q.uvOrigMin;
+        v.uvOrigMax = q.uvOrigMax;
         vertices[vi] = v;
     }
 
@@ -125,15 +130,32 @@ float4 FragmentMain(VertexOutput input, uniform TextRenderPushConstant pc) : SV_
     TextRenderMaterial mat = pc.textMaterialBuffer[inst.textMaterialIndex];
 
     Texture2D atlasTex = assetTextures[inst.atlasBindlessIndex];
-    float4 msd = atlasTex.Sample(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], input.uv);
+    SamplerState smp = assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX];
     float screenPxRange = MSDFScreenPxRange(atlasTex, input.uv, inst.pxRange);
 
+    // Shadows
+    float2 shadowUv = input.uv - mat.shadowOffset;
+    float4 shadowSample = atlasTex.Sample(smp, clamp(shadowUv, input.uvOrigMin, input.uvOrigMax));
+    float shadowSd = shadowSample.a;
+    float shadowPxDist = screenPxRange * (shadowSd - 0.5);
+    float shadowEdge = max(screenPxRange * mat.shadowSoftness, 0.001);
+    float shadowOpacity = clamp(shadowPxDist / shadowEdge + 0.5, 0.0, 1.0);
+    float4 result = float4(mat.shadowColor.rgb, mat.shadowColor.a * shadowOpacity);
+
+    // Fill + outline
+    float4 msd = atlasTex.Sample(smp, clamp(input.uv, input.uvOrigMin, input.uvOrigMax));
     float sd = msd.a;
     float screenPxDist = screenPxRange * (sd - 0.5);
-    float opacity = clamp(screenPxDist + 0.5, 0.0, 1.0);
+    float fillOpacity = clamp(screenPxDist + 0.5, 0.0, 1.0);
 
-    if (opacity < 0.001) { discard; }
-
+    float outlineOpacity = clamp(screenPxDist + 0.5 + screenPxRange * min(mat.outlineWidth, 0.475), 0.0, 1.0);
     float4 baseColor = input.color * mat.colorTint;
-    return float4(baseColor.rgb, baseColor.a * opacity);
+    float4 glyphColor = lerp(float4(mat.outlineColor.rgb, mat.outlineColor.a * outlineOpacity), float4(baseColor.rgb, baseColor.a * fillOpacity), fillOpacity);
+
+    // Composite: shadow behind, glyph on top
+    result = lerp(result, glyphColor, glyphColor.a);
+
+    if (result.a < 0.001) { discard; }
+
+    return result;
 }

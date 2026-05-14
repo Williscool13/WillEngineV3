@@ -296,6 +296,10 @@ preprocess_shader_interop(
         ${CMAKE_SOURCE_DIR}/src/render/shaders/push_constant_interop.h
         ${CMAKE_SOURCE_DIR}/shaders/include/push_constant_interop.slang
 )
+preprocess_shader_interop(
+        ${CMAKE_SOURCE_DIR}/src/render/shaders/text_interop.h
+        ${CMAKE_SOURCE_DIR}/shaders/include/text_interop.slang
+)
 
 
 get_property(INTEROP_FILES GLOBAL PROPERTY SHADER_INTEROP_FILES)

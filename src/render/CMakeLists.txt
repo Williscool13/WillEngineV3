@@ -65,6 +65,7 @@ add_library(render STATIC
         render-view/render_view_helpers.h
         pipelines/pipeline_data.cpp
         pipelines/pipeline_data.h
+        shaders/text_interop.h
 
         interface/render_interface.cpp
         interface/render_interface.h

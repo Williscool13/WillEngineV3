@@ -2112,11 +2112,11 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
 
                         ImGui::SeparatorText("Outline");
                         changed |= ImGui::ColorEdit4("Outline Color", &editMat.outlineColor.x);
-                        changed |= ImGui::SliderFloat("Outline Width", &editMat.outlineWidth, 0.0f, 0.5f);
+                        changed |= ImGui::SliderFloat("Outline Width", &editMat.outlineWidth, 0.0f, 0.475f);
 
                         ImGui::SeparatorText("Shadow");
                         changed |= ImGui::ColorEdit4("Shadow Color", &editMat.shadowColor.x);
-                        changed |= ImGui::DragFloat2("Shadow Offset", &editMat.shadowOffset.x, 0.001f);
+                        changed |= ImGui::DragFloat2("Shadow Offset", &editMat.shadowOffset.x, 0.01f);
                         changed |= ImGui::SliderFloat("Shadow Softness", &editMat.shadowSoftness, 0.0f, 1.0f);
 
                         if (changed) {
