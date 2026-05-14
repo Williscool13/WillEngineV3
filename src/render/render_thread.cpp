@@ -1519,6 +1519,31 @@ void RenderThread::UploadTextUniforms(Core::ViewFamily& viewFamily, const Render
             };
             vkCmdCopyBuffer2(cmd, &copyInfo);
         });
+
+    renderGraph->CreateBuffer(TEXT_MATERIAL_BUFFER, renderFamilyProperties.textMaterialBufferSize, false);
+    UploadAllocation matUpload = renderGraph->AllocateTransient(viewFamily.textMaterials.Size() * sizeof(TextRenderMaterial));
+    memcpy(matUpload.ptr, viewFamily.textMaterials.Data(), viewFamily.textMaterials.Size() * sizeof(TextRenderMaterial));
+
+    RenderPass& uploadMatPass = renderGraph->AddPass(SID("Upload Text Materials"), VK_PIPELINE_STAGE_2_COPY_BIT);
+    uploadMatPass.WriteTransferBuffer(TEXT_MATERIAL_BUFFER);
+    uploadMatPass.Execute([&,
+            srcOffset = matUpload.offset,
+            totalSize = viewFamily.textMaterials.Size() * sizeof(TextRenderMaterial)](VkCommandBuffer cmd) {
+            VkBufferCopy2 copy{
+                .sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
+                .srcOffset = srcOffset,
+                .dstOffset = 0,
+                .size = totalSize,
+            };
+            VkCopyBufferInfo2 copyInfo{
+                .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
+                .srcBuffer = renderGraph->GetTransientUploadBuffer(),
+                .dstBuffer = renderGraph->GetBufferHandle(TEXT_MATERIAL_BUFFER),
+                .regionCount = 1,
+                .pRegions = &copy,
+            };
+            vkCmdCopyBuffer2(cmd, &copyInfo);
+        });
 }
 
 void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties, uint32_t sceneIndex) const
@@ -1762,7 +1787,7 @@ void RenderThread::SetupPortalComposite(RenderGraph& graph, const Core::ViewFami
 void RenderThread::SetupTextForwardPass(RenderGraph& graph, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const MainRenderTargets& targets) const
 {
     if (viewFamily.glyphQuads.IsEmpty()) { return; }
-    if (!graph.HasBuffer(TEXT_GLYPH_QUAD_BUFFER) || !graph.HasBuffer(TEXT_INSTANCE_BUFFER)) { return; }
+    if (!graph.HasBuffer(TEXT_GLYPH_QUAD_BUFFER) || !graph.HasBuffer(TEXT_INSTANCE_BUFFER) || !graph.HasBuffer(TEXT_MATERIAL_BUFFER)) { return; }
 
     const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("default_text"));
     if (!pipelineEntry) { return; }
@@ -1771,6 +1796,7 @@ void RenderThread::SetupTextForwardPass(RenderGraph& graph, const Core::ViewFami
     textPass.ReadBuffer(SCENE_DATA_BUFFER);
     textPass.ReadBuffer(TEXT_GLYPH_QUAD_BUFFER);
     textPass.ReadBuffer(TEXT_INSTANCE_BUFFER);
+    textPass.ReadBuffer(TEXT_MATERIAL_BUFFER);
     textPass.ReadBuffer(GEOMETRY_MODEL_BUFFER);
     //textPass.ReadDepthAttachment(targets.depthStencil);
     textPass.ReadWriteDepthAttachment(targets.depthStencil);
@@ -1801,6 +1827,7 @@ void RenderThread::SetupTextForwardPass(RenderGraph& graph, const Core::ViewFami
             .glyphQuads = graph.GetBufferAddress(TEXT_GLYPH_QUAD_BUFFER),
             .textInstanceData = graph.GetBufferAddress(TEXT_INSTANCE_BUFFER),
             .modelBuffer = graph.GetBufferAddress(GEOMETRY_MODEL_BUFFER),
+            .textMaterialBuffer = graph.GetBufferAddress(TEXT_MATERIAL_BUFFER),
             .quadOffset = 0,
             .quadCount = totalQuads,
             .sceneDataIndex = 0,

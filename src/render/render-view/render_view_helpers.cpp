@@ -172,6 +172,7 @@ RenderFamilyProperties PrepareRenderFamilyProperties(Core::ViewFamily& viewFamil
     _limits.highestMeshletCount = std::max(_limits.highestMeshletCount, NextPowerOfTwo(readbackData->meshletCount));
     _limits.highestGlyphQuadCount = std::max(_limits.highestGlyphQuadCount, NextPowerOfTwo(viewFamily.glyphQuads.Size()));
     _limits.highestTextInstanceCount = std::max(_limits.highestTextInstanceCount, NextPowerOfTwo(viewFamily.textInstances.Size()));
+    _limits.highestTextMaterialCount = std::max(_limits.highestTextMaterialCount, NextPowerOfTwo(viewFamily.textMaterials.Size()));
 
 
     renderFamilyProperties.modelBufferSize = _limits.highestModelCount * sizeof(Model);
@@ -203,8 +204,9 @@ RenderFamilyProperties PrepareRenderFamilyProperties(Core::ViewFamily& viewFamil
     renderFamilyProperties.visibleMeshletsBufferSize = _limits.highestMeshletCount * sizeof(CompactedMeshlet);
     renderFamilyProperties.visibleMeshletUpperBound = _limits.highestMeshletCount;
 
-    renderFamilyProperties.glyphQuadBufferSize     = _limits.highestGlyphQuadCount * sizeof(GlyphQuad);
-    renderFamilyProperties.textInstanceBufferSize  = _limits.highestTextInstanceCount * sizeof(TextInstanceData);
+    renderFamilyProperties.glyphQuadBufferSize = _limits.highestGlyphQuadCount * sizeof(GlyphQuad);
+    renderFamilyProperties.textInstanceBufferSize = _limits.highestTextInstanceCount * sizeof(TextInstanceData);
+    renderFamilyProperties.textMaterialBufferSize = _limits.highestTextMaterialCount * sizeof(TextRenderMaterial);
 
     return renderFamilyProperties;
 }

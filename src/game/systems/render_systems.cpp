@@ -9,6 +9,7 @@
 #include "core/containers/arena_fixed_vector.h"
 #include "engine/include/engine_context.h"
 #include "engine/asset_manager.h"
+#include "engine/material_manager.h"
 #include "engine/engine_api.h"
 #include "engine/logging/engine_log.h"
 #include "game/fwd_components.h"
@@ -547,10 +548,17 @@ void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* stat
 
         if (quadCount == 0) { continue; }
 
+        auto [matIndexRef, inserted] = frameBuffer->mainViewFamily.activeTextMaterials.TryEmplace(textComp.textMaterialId);
+        if (inserted) {
+            matIndexRef = static_cast<uint32_t>(frameBuffer->mainViewFamily.textMaterials.Size());
+            frameBuffer->mainViewFamily.textMaterials.PushBack(ctx->materialManager->GetRenderTextMaterial(textComp.textMaterialId));
+        }
+
         frameBuffer->mainViewFamily.textInstances.PushBack({
-            .modelIndex         = modelIndex,
-            .pxRange            = static_cast<float>(font->header.sdfSpread),
+            .modelIndex = modelIndex,
+            .pxRange = static_cast<float>(font->header.sdfSpread),
             .atlasBindlessIndex = font->atlasTexture.bindlessHandle.index,
+            .textMaterialIndex = matIndexRef,
         });
     }
 }

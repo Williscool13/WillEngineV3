@@ -9,14 +9,17 @@
 #include <random>
 
 #include "resources/material/material.h"
+#include "resources/text_material/text_material.h"
 #include "core/string_id.h"
 #include "core/containers/array.h"
 #include "core/containers/fixed_map.h"
 #include "core/memory/handle_allocator.h"
 #include "core/memory/memory_manager.h"
 #include "engine/core/material_id.h"
+#include "engine/core/text_material_id.h"
 #include "render/render_config.h"
 #include "render/shaders/model_interop.h"
+#include "render/shaders/text_interop.h"
 
 namespace Engine
 {
@@ -55,6 +58,15 @@ public:
 
     void LoadMutableMaterials();
 
+    // TextMaterial management
+    void CreateTextMaterial(std::string_view name);
+    void UpdateTextMaterial(TextMaterialID id, const TextMaterial& mat, bool bSerialize = true);
+    bool DeleteTextMaterial(TextMaterialID id);
+    [[nodiscard]] TextMaterialID FindTextMaterial(StringID name) const;
+    [[nodiscard]] const TextMaterial* GetTextMaterial(TextMaterialID id) const;
+    [[nodiscard]] TextRenderMaterial GetRenderTextMaterial(TextMaterialID id) const;
+    [[nodiscard]] const Core::FixedMap<TextMaterialID, TextMaterial>& GetTextMaterials() const { return textMaterials; }
+
     [[nodiscard]] MaterialID GetDefaultMaterialID() const { return defaultMaterial; }
     [[nodiscard]] const MaterialProperties& GetDefaultMaterialProperties() const { return materials.At(defaultMaterial).props; }
     [[nodiscard]] const StringID& GetDefaultMaterialFragmentShader() const { return materials.At(defaultMaterial).fragmentShader; }
@@ -90,7 +102,7 @@ public:
     }
 
 private:
-    Engine::EngineContext* ctx;
+    EngineContext* ctx;
     Core::MemoryManager* memoryManager;
     AssetManager* assetManager;
 
@@ -113,6 +125,11 @@ private:
     std::chrono::steady_clock::time_point materialRetireLastActivity{};
 
     std::mt19937_64 mutableIdRng{std::random_device{}()};
+
+    Core::FixedMap<TextMaterialID, TextMaterial> textMaterials;
+    Core::FixedMap<StringID, TextMaterialID> nameToTextMaterialMap;
+
+    std::mt19937_64 textMaterialIdRng{std::random_device{}()};
 };
 }
 

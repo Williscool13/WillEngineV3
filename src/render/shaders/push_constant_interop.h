@@ -326,9 +326,9 @@ SHADER_PUBLIC struct LightingBucketingResolvePushConstant
 
 SHADER_PUBLIC struct BucketDispatchCountPushConstant
 {
-    SHADER_PUBLIC SHADER_PTR(ShadeDispatchParameters) shadeDispatchBuffer;    // in
+    SHADER_PUBLIC SHADER_PTR(ShadeDispatchParameters) shadeDispatchBuffer; // in
     SHADER_PUBLIC SHADER_PTR(LightingDispatchParameters) lightDispatchBuffer; // in
-    SHADER_PUBLIC SHADER_PTR(uint32_t) countBuffer;                           // out: [shadingActive, lightingActive]
+    SHADER_PUBLIC SHADER_PTR(uint32_t) countBuffer; // out: [shadingActive, lightingActive]
     SHADER_PUBLIC uint32_t materialCount;
     SHADER_PUBLIC uint32_t lightingCount;
 };
@@ -787,10 +787,11 @@ SHADER_PUBLIC struct SMAASearchGeneratePushConstant
 
 SHADER_PUBLIC struct TextRenderPushConstant
 {
-    SHADER_PUBLIC SHADER_PTR(SceneData)        sceneData;
-    SHADER_PUBLIC SHADER_PTR(GlyphQuad)        glyphQuads;
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC SHADER_PTR(GlyphQuad) glyphQuads;
     SHADER_PUBLIC SHADER_PTR(TextInstanceData) textInstanceData;
-    SHADER_PUBLIC SHADER_PTR(Model)            modelBuffer;
+    SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
+    SHADER_PUBLIC SHADER_PTR(TextRenderMaterial) textMaterialBuffer;
     SHADER_PUBLIC uint32_t quadOffset;
     SHADER_PUBLIC uint32_t quadCount;
     SHADER_PUBLIC uint32_t sceneDataIndex;

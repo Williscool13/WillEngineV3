@@ -316,6 +316,8 @@ struct ViewFamily
     Vector<InstanceData> instances{};
     Vector<GlyphQuad> glyphQuads{};
     Vector<TextInstanceData> textInstances{};
+    Map<Engine::TextMaterialID, uint32_t> activeTextMaterials{};
+    Vector<TextRenderMaterial> textMaterials{};
 
     Vector<Model> modelMatrices{};
     /**

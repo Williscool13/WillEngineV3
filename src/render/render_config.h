@@ -19,19 +19,19 @@ inline constexpr int32_t RDG_MAX_TEXTURES = 2048;
 inline constexpr int32_t RDG_MAX_BUFFERS = 2048;
 
 inline constexpr int32_t RDG_MAX_SAMPLED_TEXTURES = 256;
-inline constexpr int32_t RDG_MAX_SAMPLED_FLOAT2   = 128;
-inline constexpr int32_t RDG_MAX_SAMPLED_FLOAT    = 256;
-inline constexpr int32_t RDG_MAX_SAMPLED_UINT4    = 64;
-inline constexpr int32_t RDG_MAX_SAMPLED_UINT2    = 64;
-inline constexpr int32_t RDG_MAX_SAMPLED_UINT     = 64;
-inline constexpr int32_t RDG_MAX_MULTISAMPLED_IMAGE      = 4;
+inline constexpr int32_t RDG_MAX_SAMPLED_FLOAT2 = 128;
+inline constexpr int32_t RDG_MAX_SAMPLED_FLOAT = 256;
+inline constexpr int32_t RDG_MAX_SAMPLED_UINT4 = 64;
+inline constexpr int32_t RDG_MAX_SAMPLED_UINT2 = 64;
+inline constexpr int32_t RDG_MAX_SAMPLED_UINT = 64;
+inline constexpr int32_t RDG_MAX_MULTISAMPLED_IMAGE = 4;
 inline constexpr int32_t RDG_MAX_MULTISAMPLED_UINT_IMAGE = 4;
 inline constexpr int32_t RDG_MAX_STORAGE_FLOAT4 = 512;
 inline constexpr int32_t RDG_MAX_STORAGE_FLOAT2 = 128;
-inline constexpr int32_t RDG_MAX_STORAGE_FLOAT  = 256;
-inline constexpr int32_t RDG_MAX_STORAGE_UINT4   = 64;
-inline constexpr int32_t RDG_MAX_STORAGE_UINT2   = 64;
-inline constexpr int32_t RDG_MAX_STORAGE_UINT   = 64;
+inline constexpr int32_t RDG_MAX_STORAGE_FLOAT = 256;
+inline constexpr int32_t RDG_MAX_STORAGE_UINT4 = 64;
+inline constexpr int32_t RDG_MAX_STORAGE_UINT2 = 64;
+inline constexpr int32_t RDG_MAX_STORAGE_UINT = 64;
 
 inline const StringID SCENE_DATA_BUFFER = SID("scene_data");
 inline const StringID SHADOW_DATA_BUFFER = SID("shadow_data");
@@ -45,8 +45,9 @@ inline const StringID GEOMETRY_MESHLET_TRIANGLE_BUFFER = SID("meshlet_triangle_b
 inline const StringID GEOMETRY_MESHLET_BUFFER = SID("meshlet_buffer");
 inline const StringID GEOMETRY_MATERIAL_BUFFER = SID("material_buffer");
 
-inline const StringID TEXT_GLYPH_QUAD_BUFFER   = SID("text_glyph_quad_buffer");
-inline const StringID TEXT_INSTANCE_BUFFER     = SID("text_instance_buffer");
+inline const StringID TEXT_GLYPH_QUAD_BUFFER = SID("text_glyph_quad_buffer");
+inline const StringID TEXT_INSTANCE_BUFFER = SID("text_instance_buffer");
+inline const StringID TEXT_MATERIAL_BUFFER = SID("text_material_buffer");
 
 inline const StringID SHADING_DISPATCH_BUCKETING_BUFFER = SID("shading_bucketing_buffer");
 inline const StringID LIGHTING_DISPATCH_BUCKETING_BUFFER = SID("lighting_bucketing_buffer");
@@ -115,7 +116,6 @@ inline constexpr Core::Array<HaltonSample, HALTON_SEQUENCE_COUNT> HALTON_SEQUENC
     {0.9375f, 0.25925925f},
     {0.03125f, 0.5925926f},
 };
-
 
 
 struct CascadeBias

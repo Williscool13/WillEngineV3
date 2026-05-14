@@ -29,6 +29,10 @@ add_library(engine STATIC
         resources/material/material.h
         resources/material/material_format.cpp
         resources/material/material_format.h
+        resources/text_material/text_material.cpp
+        resources/text_material/text_material.h
+        resources/text_material/text_material_format.cpp
+        resources/text_material/text_material_format.h
         resources/environment_map/environment_map_format.cpp
         resources/environment_map/environment_map_format.h
         resources/texture/texture.h

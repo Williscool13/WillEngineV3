@@ -122,6 +122,7 @@ float MSDFMedian(float r, float g, float b)
 float4 FragmentMain(VertexOutput input, uniform TextRenderPushConstant pc) : SV_Target0
 {
     TextInstanceData inst = pc.textInstanceData[input.drawCallIndex];
+    TextRenderMaterial mat = pc.textMaterialBuffer[inst.textMaterialIndex];
 
     Texture2D atlasTex = assetTextures[inst.atlasBindlessIndex];
     float4 msd = atlasTex.Sample(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], input.uv);
@@ -133,5 +134,6 @@ float4 FragmentMain(VertexOutput input, uniform TextRenderPushConstant pc) : SV_
 
     if (opacity < 0.001) { discard; }
 
-    return float4(input.color.rgb, input.color.a * opacity);
+    float4 baseColor = input.color * mat.colorTint;
+    return float4(baseColor.rgb, baseColor.a * opacity);
 }

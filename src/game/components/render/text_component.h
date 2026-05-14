@@ -11,6 +11,7 @@
 #include "core/containers/inline_string.h"
 #include "engine/asset_manager_types.h"
 #include "engine/core/font_id.h"
+#include "engine/core/text_material_id.h"
 #include "engine/engine_api.h"
 
 namespace Core { struct ViewFamily; }
@@ -21,6 +22,7 @@ struct TextComponent
 {
     Engine::FontHandle fontHandle{Engine::FontHandle::INVALID};
     Engine::FontID fontId{};
+    Engine::TextMaterialID textMaterialId{};
     Core::InlineString<256> text{};
     float renderSizePx{32.0f};
     glm::vec4 color{1.0f, 1.0f, 1.0f, 1.0f};

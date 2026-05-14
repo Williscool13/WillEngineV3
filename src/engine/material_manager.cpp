@@ -4,6 +4,9 @@
 
 #include "material_manager.h"
 
+#include "resources/text_material/text_material.h"
+#include "resources/text_material/text_material_format.h"
+
 #include <chrono>
 
 #include "asset_manager_config.h"
@@ -30,7 +33,9 @@ MaterialManager::MaterialManager(Core::MemoryManager& memoryManager, Engine::Eng
       assetManager(assetManager),
       idToEntryMap(&memoryManager.Persistent(), Core::AllocTag::AssetManager, 2 * MAX_LOADED_MATERIALS),
       materials(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_LOADED_MATERIALS),
-      nameToMaterialMap(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_LOADED_MATERIALS)
+      nameToMaterialMap(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_LOADED_MATERIALS),
+      textMaterials(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_LOADED_TEXT_MATERIALS),
+      nameToTextMaterialMap(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_LOADED_TEXT_MATERIALS)
 
 {
     Material defaultMat{};
@@ -377,19 +382,31 @@ void MaterialManager::Scan()
         Platform::RecursiveDirectoryIterator(Platform::GetAssetPath(), paths);
 
         for (uint32_t i = 0; i < paths.Size(); ++i) {
-            if (paths[i].Extension() != ".wmaterial") { continue; }
+            if (paths[i].Extension() == ".wmaterial") {
+                std::ifstream file(paths[i].c_str());
+                auto header = ReadWMaterialHeader(file);
+                if (!header) { continue; }
 
-            std::ifstream file(paths[i].c_str());
-            auto header = ReadWMaterialHeader(file);
-            if (!header) { continue; }
+                StringID sid(header->name, strnlen(header->name, WMATERIAL_NAME_LENGTH));
+                if (nameToMaterialMap.Contains(sid)) { continue; }
 
-            StringID sid(header->name, strnlen(header->name, WMATERIAL_NAME_LENGTH));
-            if (nameToMaterialMap.Contains(sid)) { continue; }
+                const nlohmann::json j = nlohmann::json::parse(file);
+                Material mat = DeserializeMaterial(j, paths[i]);
+                materials[mat.id] = mat;
+                nameToMaterialMap[sid] = mat.id;
+            } else if (paths[i].Extension() == ".wtextmaterial") {
+                std::ifstream file(paths[i].c_str());
+                auto header = ReadWTextMaterialHeader(file);
+                if (!header) { continue; }
 
-            const nlohmann::json j = nlohmann::json::parse(file);
-            Material mat = DeserializeMaterial(j, paths[i]);
-            materials[mat.id] = mat;
-            nameToMaterialMap[sid] = mat.id;
+                StringID sid(header->name, strnlen(header->name, WTEXT_MATERIAL_NAME_LENGTH));
+                if (nameToTextMaterialMap.Contains(sid)) { continue; }
+
+                const nlohmann::json j = nlohmann::json::parse(file);
+                TextMaterial mat = DeserializeTextMaterial(j, paths[i]);
+                textMaterials[mat.id] = mat;
+                nameToTextMaterialMap[sid] = mat.id;
+            }
         }
     }
 }
@@ -400,19 +417,129 @@ void MaterialManager::LoadMutableMaterials()
     Platform::RecursiveDirectoryIterator(Platform::GetAssetPath(), paths);
 
     for (uint32_t i = 0; i < paths.Size(); ++i) {
-        if (paths[i].Extension() != ".wmaterial") { continue; }
-
-        std::ifstream file(paths[i].c_str());
-        auto header = ReadWMaterialHeader(file);
-        if (!header) {
-            LOG_WARN(Asset, "Skipping {} - missing or invalid wmaterial header", paths[i].c_str());
-            continue;
+        if (paths[i].Extension() == ".wmaterial") {
+            std::ifstream file(paths[i].c_str());
+            auto header = ReadWMaterialHeader(file);
+            if (!header) {
+                LOG_WARN(Asset, "Skipping {} - missing or invalid wmaterial header", paths[i].c_str());
+                continue;
+            }
+            StringID sid(header->name, strnlen(header->name, WMATERIAL_NAME_LENGTH));
+            const nlohmann::json j = nlohmann::json::parse(file);
+            Material mat = DeserializeMaterial(j, paths[i]);
+            materials[mat.id] = mat;
+            nameToMaterialMap[sid] = mat.id;
+        } else if (paths[i].Extension() == ".wtextmaterial") {
+            std::ifstream file(paths[i].c_str());
+            auto header = ReadWTextMaterialHeader(file);
+            if (!header) {
+                LOG_WARN(Asset, "Skipping {} - missing or invalid wstextmat header", paths[i].c_str());
+                continue;
+            }
+            StringID sid(header->name, strnlen(header->name, WTEXT_MATERIAL_NAME_LENGTH));
+            const nlohmann::json j = nlohmann::json::parse(file);
+            TextMaterial mat = DeserializeTextMaterial(j, paths[i]);
+            textMaterials[mat.id] = mat;
+            nameToTextMaterialMap[sid] = mat.id;
         }
-        const nlohmann::json j = nlohmann::json::parse(file);
-        Material mat = DeserializeMaterial(j, paths[i]);
-        StringID sid(mat.name.c_str(), mat.name.Size());
-        materials[mat.id] = mat;
-        nameToMaterialMap[sid] = mat.id;
     }
+}
+
+void MaterialManager::CreateTextMaterial(std::string_view name)
+{
+    const Core::Path matDir = Platform::GetAssetPath() / "text_materials";
+    Platform::CreateDirectories(matDir.c_str());
+    auto fileName = Core::InlineString(name);
+    fileName.Append(".wtextmaterial");
+    const Core::Path matPath = matDir / fileName.c_str();
+
+    TextMaterial mat{};
+    mat.id = TextMaterialID{textMaterialIdRng()};
+    mat.name = Core::InlineString<128>(name);
+    mat.sourcePath = matPath;
+
+    WTextMaterialHeader header{};
+    header.textMaterialId = mat.id.id;
+    const auto nameLen = std::min(name.size(), WTEXT_MATERIAL_NAME_LENGTH - 1);
+    memcpy(header.name, name.data(), nameLen);
+    header.name[nameLen] = '\0';
+
+    std::ofstream file(matPath.c_str());
+    WriteWTextMaterialHeader(file, header);
+    file << SerializeTextMaterial(mat).dump(4);
+
+    StringID sid(mat.name.c_str(), mat.name.Size());
+    textMaterials[mat.id] = mat;
+    nameToTextMaterialMap[sid] = mat.id;
+
+    ctx->bShouldRescanMaterials.store(true, std::memory_order_release);
+}
+
+void MaterialManager::UpdateTextMaterial(TextMaterialID id, const TextMaterial& newMat, bool bSerialize)
+{
+    TextMaterial* mat = textMaterials.Find(id);
+    if (!mat) { return; }
+
+    mat->colorTint = newMat.colorTint;
+    mat->outlineColor = newMat.outlineColor;
+    mat->outlineWidth = newMat.outlineWidth;
+    mat->shadowSoftness = newMat.shadowSoftness;
+    mat->shadowOffset = newMat.shadowOffset;
+    mat->shadowColor = newMat.shadowColor;
+
+    if (bSerialize) {
+        WTextMaterialHeader header{};
+        header.textMaterialId = mat->id.id;
+        const auto nameLen = std::min(mat->name.Size(), WTEXT_MATERIAL_NAME_LENGTH - 1);
+        memcpy(header.name, mat->name.c_str(), nameLen);
+        header.name[nameLen] = '\0';
+
+        std::ofstream file(mat->sourcePath.c_str());
+        WriteWTextMaterialHeader(file, header);
+        file << SerializeTextMaterial(*mat).dump(4);
+    }
+}
+
+bool MaterialManager::DeleteTextMaterial(TextMaterialID id)
+{
+    const TextMaterial* mat = textMaterials.Find(id);
+    if (!mat) { return false; }
+
+    if (!mat->sourcePath.IsEmpty()) {
+        Platform::DeleteSingleFile(mat->sourcePath.c_str());
+    }
+
+    StringID sid(mat->name.c_str(), mat->name.Size());
+    nameToTextMaterialMap.Remove(sid);
+    textMaterials.Remove(id);
+    return true;
+}
+
+
+TextMaterialID MaterialManager::FindTextMaterial(StringID name) const
+{
+    const TextMaterialID* id = nameToTextMaterialMap.Find(name);
+    return id ? *id : TextMaterialID::INVALID;
+}
+
+const TextMaterial* MaterialManager::GetTextMaterial(TextMaterialID id) const
+{
+    return textMaterials.Find(id);
+}
+
+TextRenderMaterial MaterialManager::GetRenderTextMaterial(TextMaterialID id) const
+{
+    const TextMaterial* mat = textMaterials.Find(id);
+    if (!mat) {
+        return TextRenderMaterial{.colorTint = {1.0f, 1.0f, 1.0f, 1.0f}};
+    }
+    return TextRenderMaterial{
+        .colorTint = mat->colorTint,
+        .outlineColor = mat->outlineColor,
+        .outlineWidth = mat->outlineWidth,
+        .shadowSoftness = mat->shadowSoftness,
+        .shadowOffset = mat->shadowOffset,
+        .shadowColor = mat->shadowColor,
+    };
 }
 } // Engine

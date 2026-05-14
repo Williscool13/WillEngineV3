@@ -65,6 +65,7 @@ struct RenderFamilyProperties
 
     size_t glyphQuadBufferSize{128};
     size_t textInstanceBufferSize{128};
+    size_t textMaterialBufferSize{128};
 };
 } // Render
 

@@ -27,12 +27,27 @@ struct SHADER_ALIGN GlyphQuad
     SHADER_PUBLIC uint32_t _pad2;
 };
 
+// GPU-side text material. Uploaded as a flat buffer; indexed by TextInstanceData.textMaterialIndex.
+struct SHADER_ALIGN TextRenderMaterial
+{
+    SHADER_PUBLIC float4 colorTint;
+    SHADER_PUBLIC float4 outlineColor;
+    SHADER_PUBLIC float outlineWidth;
+    SHADER_PUBLIC float shadowSoftness;
+    SHADER_PUBLIC float2 shadowOffset;
+    SHADER_PUBLIC float4 shadowColor;
+};
+
 struct SHADER_ALIGN TextInstanceData
 {
     SHADER_PUBLIC uint32_t modelIndex;
     SHADER_PUBLIC float pxRange;
     SHADER_PUBLIC uint32_t atlasBindlessIndex;
-    uint32_t pad;
+    SHADER_PUBLIC uint32_t textMaterialIndex;
+    SHADER_PUBLIC uint32_t _pad0;
+    SHADER_PUBLIC uint32_t _pad1;
+    SHADER_PUBLIC uint32_t _pad2;
+    SHADER_PUBLIC uint32_t _pad3;
 };
 
 #endif //WILL_ENGINE_TEXT_INTEROP_H

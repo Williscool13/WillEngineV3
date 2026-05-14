@@ -12,6 +12,7 @@
 
 #include "engine/include/engine_context.h"
 #include "engine/asset_manager.h"
+#include "engine/material_manager.h"
 #include "engine/engine_api.h"
 #include "game/component-registry/component_editor.h"
 #include "game/components/core_components.h"
@@ -50,6 +51,7 @@ void TextComponent::OnDestroy(entt::registry& registry, entt::entity entity)
 void TextComponent::Serialize(const TextComponent& comp, nlohmann::json& json)
 {
     json["fontId"] = comp.fontId.id;
+    json["textMaterialId"] = comp.textMaterialId.id;
     json["text"] = comp.text.c_str();
     json["renderSizePx"] = comp.renderSizePx;
     json["color"] = {comp.color.r, comp.color.g, comp.color.b, comp.color.a};
@@ -58,6 +60,9 @@ void TextComponent::Serialize(const TextComponent& comp, nlohmann::json& json)
 void TextComponent::Deserialize(TextComponent& comp, const nlohmann::json& json)
 {
     comp.fontId = Engine::FontID(json["fontId"].get<uint64_t>());
+    if (json.contains("textMaterialId")) {
+        comp.textMaterialId = Engine::TextMaterialID(json["textMaterialId"].get<uint64_t>());
+    }
     comp.text = Core::InlineString<256>(json["text"].get<std::string>().c_str());
     comp.renderSizePx = json["renderSizePx"].get<float>();
     if (json.contains("color")) {
@@ -109,6 +114,27 @@ Engine::ComponentEditorResult TextComponent::DrawEditor(Core::ViewFamily& viewFa
             }
         }
         ImGui::EndCombo();
+    }
+
+    // TextMaterial picker
+    {
+        const char* matLabel = "(none)";
+        const Engine::TextMaterial* currentMat = ctx->materialManager->GetTextMaterial(comp.textMaterialId);
+        if (currentMat) { matLabel = currentMat->name.c_str(); }
+
+        if (ImGui::BeginCombo("Text Material", matLabel)) {
+            if (ImGui::Selectable("(none)", !comp.textMaterialId.IsValid())) {
+                comp.textMaterialId = Engine::TextMaterialID::INVALID;
+            }
+            const auto& textMats = ctx->materialManager->GetTextMaterials();
+            for (const auto& [matId, mat] : textMats) {
+                bool selected = comp.textMaterialId == matId;
+                if (ImGui::Selectable(mat.name.c_str(), selected)) {
+                    comp.textMaterialId = matId;
+                }
+            }
+            ImGui::EndCombo();
+        }
     }
 
     // Text content

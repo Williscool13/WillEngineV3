@@ -26,6 +26,7 @@ inline constexpr uint32_t MAX_CACHED_FONTS = 256;
 
 
 inline constexpr uint32_t MAX_LOADED_MATERIALS = 4096;
+inline constexpr uint32_t MAX_LOADED_TEXT_MATERIALS = 256;
 
 inline constexpr uint32_t ASSET_LOG_IDLE_SECONDS = 1;
 

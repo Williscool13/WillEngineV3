@@ -18,6 +18,7 @@ struct FrameResourceLimits
 
     size_t highestGlyphQuadCount{128};
     size_t highestTextInstanceCount{32};
+    size_t highestTextMaterialCount{32};
 
 #ifndef PACKAGED_BUILD
     size_t highestDebugSegmentCount{128};
