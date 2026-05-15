@@ -132,7 +132,7 @@ public:
         Render::RenderThread* renderThread,
         AssetLoad::AsyncAssetLoadManager* asyncAssetLoadManager,
         enki::TaskScheduler* scheduler
-        );
+    );
 
     ~AssetGenerator();
 
@@ -181,6 +181,26 @@ public:
     [[nodiscard]] uint32_t GetActiveTextureGenerateCount() const
     {
         return textureGenerateAllocator.GetCount();
+    }
+
+    [[nodiscard]] uint32_t GetTotalEnvironmentMapGenerateCount() const
+    {
+        return environmentMapGenerateAllocator.GetCount() + environmentMapGenerateRequestQueue.size_approx();
+    }
+
+    [[nodiscard]] uint32_t GetActiveEnvironmentMapGenerateCount() const
+    {
+        return environmentMapGenerateAllocator.GetCount();
+    }
+
+    [[nodiscard]] uint32_t GetTotalFontGenerateCount() const
+    {
+        return fontGenerateAllocator.GetCount() + fontGenerateRequestQueue.size_approx();
+    }
+
+    [[nodiscard]] uint32_t GetActiveFontGenerateCount() const
+    {
+        return fontGenerateAllocator.GetCount();
     }
 
     void Join();
@@ -241,7 +261,7 @@ private:
     moodycamel::ConcurrentQueue<FontGenerateRequest> fontGenerateRequestQueue;
     moodycamel::ConcurrentQueue<FontGenerateComplete> fontGenerateCompleteQueue;
 
-    std::atomic<bool> bFastMode{false};
+    std::atomic<bool> bFastMode{true};
     std::atomic<bool> bShouldExit{false};
     std::atomic<uint32_t> workCounter{0};
     std::mutex wakeMutex;

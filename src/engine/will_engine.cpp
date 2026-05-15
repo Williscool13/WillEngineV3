@@ -638,6 +638,10 @@ void WillEngine::EditorImgui()
         renderThread->GetResourceManager()->debugReadback.Present();
     }
 
+    bool fastMode = assetGenerator->GetFastMode();
+    if (ImGui::Checkbox("Fast Mode##assetgen", &fastMode)) {
+        assetGenerator->SetFastMode(fastMode);
+    }
     if (ImGui::Button("Recreate All Assets (excl. Intel Sponza)")) {
         const Core::Path assets = Platform::GetAssetPath();
         assetGenerator->RequestModelGenerate(assets / "dragon/dragon.gltf", assets / "dragon/dragon.wsmesh");
@@ -823,6 +827,8 @@ void WillEngine::EditorImgui()
         ImGui::Text("Active Generates:");
         ImGui::Text("  Models: %u (%u active)", assetGenerator->GetTotalModelGenerateCount(), assetGenerator->GetActiveModelGenerateCount());
         ImGui::Text("  Textures: %u (%u active)", assetGenerator->GetTotalTextureGenerateCount(), assetGenerator->GetActiveTextureGenerateCount());
+        ImGui::Text("  Env Maps: %u (%u active)", assetGenerator->GetTotalEnvironmentMapGenerateCount(), assetGenerator->GetActiveEnvironmentMapGenerateCount());
+        ImGui::Text("  Fonts: %u (%u active)", assetGenerator->GetTotalFontGenerateCount(), assetGenerator->GetActiveFontGenerateCount());
         ImGui::Text("Active Loads:");
         ImGui::Text("  Models: %u", asyncAssetLoadManager->GetActiveModelLoadCount());
         ImGui::Text("  Textures: %u", asyncAssetLoadManager->GetActiveTextureLoadCount());

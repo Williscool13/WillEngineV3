@@ -60,9 +60,11 @@ std::optional<WStaticModelHeader> ReadWStaticModelHeader(std::istream& in)
     if (strcmp(line, "wstaticmodel") != 0) { return std::nullopt; }
 
     WStaticModelHeader header{};
+    bool bCompressionSeen = false;
     while (in.getline(line, LINE_BUF)) {
         trimCR(line);
         if (strcmp(line, "end_header") == 0) {
+            if (!bCompressionSeen) { return std::nullopt; }
             header.dataOffset = static_cast<uint64_t>(in.tellg());
             return header;
         }
@@ -101,6 +103,7 @@ std::optional<WStaticModelHeader> ReadWStaticModelHeader(std::istream& in)
             uint32_t v = 0;
             std::from_chars(line + 12, line + LINE_BUF, v);
             header.compressionType = static_cast<CompressionType>(v);
+            bCompressionSeen = true;
         }
     }
     return std::nullopt;
@@ -131,9 +134,11 @@ std::optional<WStaticModelHeader> ReadWStaticModelHeaderAnyVersion(const Core::P
     if (strcmp(line, "wstaticmodel") != 0) { return std::nullopt; }
 
     WStaticModelHeader header{};
+    bool bCompressionSeen = false;
     while (in.getline(line, LINE_BUF)) {
         trimCR(line);
         if (strcmp(line, "end_header") == 0) {
+            if (!bCompressionSeen) { return std::nullopt; }
             header.dataOffset = static_cast<uint64_t>(in.tellg());
             return header;
         }
@@ -169,6 +174,7 @@ std::optional<WStaticModelHeader> ReadWStaticModelHeaderAnyVersion(const Core::P
             uint32_t v = 0;
             std::from_chars(line + 12, line + LINE_BUF, v);
             header.compressionType = static_cast<CompressionType>(v);
+            bCompressionSeen = true;
         }
     }
     return std::nullopt;

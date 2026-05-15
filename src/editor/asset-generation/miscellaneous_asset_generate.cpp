@@ -79,6 +79,7 @@ bool WriteSimpleRGBA8WTexture(Core::MemoryManager* memoryManager, const char* ou
     header.mipCount = 1;
     header.uncompressedSize = ktxSize;
     header.dataSize = realSize;
+    header.compressionType = Engine::DEFAULT_TEXTURE_COMPRESSION;
     strncpy_s(header.name, name, Engine::WTEXTURE_NAME_LENGTH - 1);
 
     Platform::CreateDirectories(Core::Path(outputPath).Parent().c_str());
@@ -142,6 +143,7 @@ bool WriteRawBytesWTexture(Core::MemoryManager* memoryManager, const char* outpu
     header.mipCount = 1;
     header.uncompressedSize = ktxSize;
     header.dataSize = realSize;
+    header.compressionType = Engine::DEFAULT_TEXTURE_COMPRESSION;
     strncpy_s(header.name, name, Engine::WTEXTURE_NAME_LENGTH - 1);
 
     Platform::CreateDirectories(Core::Path(outputPath).Parent().c_str());
@@ -365,7 +367,7 @@ void CreateBRDFLookupTable(
     header.mipCount = 1;
     header.uncompressedSize = ktxSize;
     header.dataSize = realSize;
-
+    header.compressionType = Engine::DEFAULT_TEXTURE_COMPRESSION;
     strncpy_s(header.name, Engine::WTEXTURE_NAME_LENGTH, "brdf_lut", Engine::WTEXTURE_NAME_LENGTH - 1);
 
     Core::Path outputParent = outputPath.Parent();

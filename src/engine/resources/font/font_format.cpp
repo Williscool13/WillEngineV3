@@ -83,9 +83,11 @@ std::optional<WFontHeader> ReadWFontHeader(std::istream& in)
     if (strcmp(line, "wsfont") != 0) { return std::nullopt; }
 
     WFontHeader header{};
+    bool bCompressionSeen = false;
     while (in.getline(line, LINE_BUF)) {
         trimCR(line);
         if (strcmp(line, "end_header") == 0) {
+            if (!bCompressionSeen) { return std::nullopt; }
             ComputeOffsets(header, static_cast<uint64_t>(in.tellg()));
             return header;
         }
@@ -95,7 +97,10 @@ std::optional<WFontHeader> ReadWFontHeader(std::istream& in)
             if (res.ptr && *res.ptr == ' ') { std::from_chars(res.ptr + 1, line + LINE_BUF, minor); }
             if (major != FONT_MAJOR_VERSION || minor != FONT_MINOR_VERSION) { return std::nullopt; }
         }
-        else { ParseFontHeaderFields(line, LINE_BUF, header); }
+        else {
+            if (strncmp(line, "atlas_compression ", 18) == 0) { bCompressionSeen = true; }
+            ParseFontHeaderFields(line, LINE_BUF, header);
+        }
     }
     return std::nullopt;
 }
@@ -125,14 +130,19 @@ std::optional<WFontHeader> ReadWFontHeaderAnyVersion(const Core::Path& path)
     if (strcmp(line, "wsfont") != 0) { return std::nullopt; }
 
     WFontHeader header{};
+    bool bCompressionSeen = false;
     while (in.getline(line, LINE_BUF)) {
         trimCR(line);
         if (strcmp(line, "end_header") == 0) {
+            if (!bCompressionSeen) { return std::nullopt; }
             ComputeOffsets(header, static_cast<uint64_t>(in.tellg()));
             return header;
         }
         if (strncmp(line, "version ", 8) == 0) { std::from_chars(line + 8, line + LINE_BUF, header.major); }
-        else { ParseFontHeaderFields(line, LINE_BUF, header); }
+        else {
+            if (strncmp(line, "atlas_compression ", 18) == 0) { bCompressionSeen = true; }
+            ParseFontHeaderFields(line, LINE_BUF, header);
+        }
     }
     return std::nullopt;
 }

@@ -102,6 +102,7 @@ target_link_libraries(render PUBLIC
         ktx
         miniz
         lz4
+        zstd
         imgui
         tracy_interface
         bc7enc_rdo

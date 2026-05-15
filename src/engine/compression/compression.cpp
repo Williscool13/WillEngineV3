@@ -7,6 +7,7 @@
 #include "engine/logging/engine_log.h"
 #include "miniz/miniz.h"
 #include "lz4/lz4hc.h"
+#include "zstd/lib/zstd.h"
 
 namespace Engine
 {
@@ -76,19 +77,26 @@ void DecompressLZ4(const void* compressedData, size_t compressedSize, void* deco
 
 size_t CompressZstdMaxSize(size_t size)
 {
-    assert(false && "Zstd not yet implemented");
-    return 0;
+    return ZSTD_compressBound(size);
 }
 
 size_t CompressZstd(const void* uncompressedData, size_t uncompressedSize, void* compressedData, size_t compressedSize)
 {
-    assert(false && "Zstd not yet implemented");
-    return 0;
+    size_t result = ZSTD_compress(compressedData, compressedSize, uncompressedData, uncompressedSize, ZSTD_CLEVEL_DEFAULT);
+    if (ZSTD_isError(result)) {
+        LOG_CRITICAL(Engine, "zstd compression failed: {}", ZSTD_getErrorName(result));
+        assert(false);
+    }
+    return result;
 }
 
 void DecompressZstd(const void* compressedData, size_t compressedSize, void* decompressedData, size_t uncompressedSize)
 {
-    assert(false && "Zstd not yet implemented");
+    size_t result = ZSTD_decompress(decompressedData, uncompressedSize, compressedData, compressedSize);
+    if (ZSTD_isError(result)) {
+        LOG_CRITICAL(Engine, "zstd decompression failed: {}", ZSTD_getErrorName(result));
+        assert(false);
+    }
 }
 
 size_t CompressMaxSize(CompressionType type, size_t size)

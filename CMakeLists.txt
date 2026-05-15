@@ -205,6 +205,38 @@ add_library(lz4 STATIC
 )
 target_include_directories(lz4 PUBLIC extern/lz4)
 
+# zstd ========================================
+add_library(zstd STATIC
+        extern/zstd/lib/common/debug.c
+        extern/zstd/lib/common/entropy_common.c
+        extern/zstd/lib/common/error_private.c
+        extern/zstd/lib/common/fse_decompress.c
+        extern/zstd/lib/common/pool.c
+        extern/zstd/lib/common/threading.c
+        extern/zstd/lib/common/xxhash.c
+        extern/zstd/lib/common/zstd_common.c
+        extern/zstd/lib/compress/fse_compress.c
+        extern/zstd/lib/compress/hist.c
+        extern/zstd/lib/compress/huf_compress.c
+        extern/zstd/lib/compress/zstd_compress.c
+        extern/zstd/lib/compress/zstd_compress_literals.c
+        extern/zstd/lib/compress/zstd_compress_sequences.c
+        extern/zstd/lib/compress/zstd_compress_superblock.c
+        extern/zstd/lib/compress/zstd_double_fast.c
+        extern/zstd/lib/compress/zstd_fast.c
+        extern/zstd/lib/compress/zstd_lazy.c
+        extern/zstd/lib/compress/zstd_ldm.c
+        extern/zstd/lib/compress/zstd_opt.c
+        extern/zstd/lib/compress/zstd_preSplit.c
+        extern/zstd/lib/compress/zstdmt_compress.c
+        extern/zstd/lib/decompress/huf_decompress.c
+        extern/zstd/lib/decompress/zstd_ddict.c
+        extern/zstd/lib/decompress/zstd_decompress.c
+        extern/zstd/lib/decompress/zstd_decompress_block.c
+)
+target_include_directories(zstd PUBLIC extern/zstd/lib)
+target_compile_definitions(zstd PRIVATE ZSTD_MULTITHREAD)
+
 # bc7enc_rdo ==================================
 add_library(bc7enc_rdo STATIC
         extern/bc7enc_rdo/bc7enc.cpp
