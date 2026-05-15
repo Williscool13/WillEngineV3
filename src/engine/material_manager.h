@@ -121,6 +121,9 @@ private:
     Core::FixedMap<MaterialID, Material> materials;
     Core::FixedMap<StringID, MaterialID> nameToMaterialMap;
 
+    int32_t pendingMaterialLoadLogCount{0};
+    std::chrono::steady_clock::time_point materialLoadLastActivity{};
+
     int32_t pendingMaterialRetireLogCount{0};
     std::chrono::steady_clock::time_point materialRetireLastActivity{};
 

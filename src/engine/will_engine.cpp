@@ -763,6 +763,12 @@ void WillEngine::EditorImgui()
                 Platform::GetAssetPath() / "fonts/Roboto/Roboto.wsfont");
         }
 
+        if (ImGui::Button("Generate JetBrainsMono")) {
+            assetGenerator->RequestFontGenerate(
+                Platform::GetAssetPath() / "fonts/JetBrainsMono/fonts/ttf/JetBrainsMonoNL-Regular.ttf",
+                Platform::GetAssetPath() / "fonts/JetBrainsMono/JetBrainsMono.wsfont");
+        }
+
         ImGui::Separator();
         ImGui::Text("Generation Progress:");
         const auto& genProgresses = assetGenerator->GetModelGenerationProgresses();

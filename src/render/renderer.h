@@ -31,11 +31,11 @@ void SetupVisibilityBarycentricDerivativePass(RenderGraph& graph,
                                               uint32_t sceneIndex);
 
 void SetupVisibilityBucketingPass(RenderGraph& graph,
-                                              PipelineManager* pipelineManager,
-                                              const Core::ViewFamily& viewFamily,
-                                              Core::Array<uint32_t, 2> renderExtent,
-                                              const VisibilityBufferBarycentricDerivativeTargets& targets,
-                                              uint32_t sceneIndex);
+                                  PipelineManager* pipelineManager,
+                                  const Core::ViewFamily& viewFamily,
+                                  Core::Array<uint32_t, 2> renderExtent,
+                                  const VisibilityBufferBarycentricDerivativeTargets& targets,
+                                  uint32_t sceneIndex);
 
 
 void SetupVisibilityShadingPass(RenderGraph& graph,
@@ -47,19 +47,19 @@ void SetupVisibilityShadingPass(RenderGraph& graph,
                                 Core::Arena& arena);
 
 void SetupVisibilityBucketingDebugPass(RenderGraph& graph,
-                                PipelineManager* pipelineManager,
-                                const Core::ViewFamily& viewFamily,
-                                Core::Array<uint32_t, 2> renderExtent,
-                                const VisibilityShadingTargets& targets,
-                                uint32_t sceneIndex,
-                                Core::Arena& arena);
+                                       PipelineManager* pipelineManager,
+                                       const Core::ViewFamily& viewFamily,
+                                       Core::Array<uint32_t, 2> renderExtent,
+                                       const VisibilityShadingTargets& targets,
+                                       uint32_t sceneIndex,
+                                       Core::Arena& arena);
 
 void SetupLightingBucketingDebugPass(RenderGraph& graph,
-                                PipelineManager* pipelineManager,
-                                const Core::ViewFamily& viewFamily,
-                                Core::Array<uint32_t, 2> renderExtent,
-                                const VisibilityShadingTargets& targets,
-                                uint32_t sceneIndex);
+                                     PipelineManager* pipelineManager,
+                                     const Core::ViewFamily& viewFamily,
+                                     Core::Array<uint32_t, 2> renderExtent,
+                                     const VisibilityShadingTargets& targets,
+                                     uint32_t sceneIndex);
 
 
 void SetupVisibilityLightingResolvePass(RenderGraph& graph,
@@ -93,6 +93,21 @@ void SetupSkyboxRendering(RenderGraph& graph,
                           Core::Array<uint32_t, 2> renderExtent,
                           const MainRenderTargets& targets,
                           uint32_t sceneIndex);
+
+/**
+ * Prepares the render graph pass for text rendering in a forward-shading blending pass.
+ * Note: Run before TAA. Rationale is text is almost never "free-floating" so the surface right behind the text will emit consistent motion vectors.
+ * @param graph
+ * @param pipelineManager
+ * @param viewFamily
+ * @param renderExtent
+ * @param targets
+ */
+void SetupTextForwardPass(RenderGraph& graph,
+                          PipelineManager* pipelineManager,
+                          const Core::ViewFamily& viewFamily,
+                          Core::Array<uint32_t, 2> renderExtent,
+                          const MainRenderTargets& targets);
 
 StringID SetupSubpixelMorphologicalAntiAliasing(RenderGraph& graph,
                                                 PipelineManager* pipelineManager,

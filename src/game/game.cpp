@@ -178,6 +178,7 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
     frameBuffer->mainViewFamily.textInstances.Clear();
     frameBuffer->mainViewFamily.activeTextMaterials.Clear();
     frameBuffer->mainViewFamily.textMaterials.Clear();
+    frameBuffer->mainViewFamily.textDrawCalls.Clear();
     frameBuffer->mainViewFamily.activeMaterials.Clear();
     frameBuffer->mainViewFamily.materials.Clear();
     frameBuffer->mainViewFamily.lightingBuckets.Clear();

@@ -127,32 +127,39 @@ float MSDFMedian(float r, float g, float b)
 float4 FragmentMain(VertexOutput input, uniform TextRenderPushConstant pc) : SV_Target0
 {
     TextInstanceData inst = pc.textInstanceData[input.drawCallIndex];
-    TextRenderMaterial mat = pc.textMaterialBuffer[inst.textMaterialIndex];
+    TextRenderMaterial mat = pc.textMaterialBuffer[pc.textMaterialIndex];
 
-    Texture2D atlasTex = assetTextures[inst.atlasBindlessIndex];
+    Texture2D atlasTex = assetTextures[pc.atlasBindlessIndex];
     SamplerState smp = assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX];
     float screenPxRange = MSDFScreenPxRange(atlasTex, input.uv, inst.pxRange);
 
-    // Shadows
-    float2 shadowUv = input.uv - mat.shadowOffset;
-    float4 shadowSample = atlasTex.Sample(smp, clamp(shadowUv, input.uvOrigMin, input.uvOrigMax));
-    float shadowSd = shadowSample.a;
-    float shadowPxDist = screenPxRange * (shadowSd - 0.5);
-    float shadowEdge = max(screenPxRange * mat.shadowSoftness, 0.001);
-    float shadowOpacity = clamp(shadowPxDist / shadowEdge + 0.5, 0.0, 1.0);
-    float4 result = float4(mat.shadowColor.rgb, mat.shadowColor.a * shadowOpacity);
-
-    // Fill + outline
     float4 msd = atlasTex.Sample(smp, clamp(input.uv, input.uvOrigMin, input.uvOrigMax));
     float sd = msd.a;
     float screenPxDist = screenPxRange * (sd - 0.5);
     float fillOpacity = clamp(screenPxDist + 0.5, 0.0, 1.0);
 
-    float outlineOpacity = clamp(screenPxDist + 0.5 + screenPxRange * min(mat.outlineWidth, 0.475), 0.0, 1.0);
     float4 baseColor = input.color * mat.colorTint;
-    float4 glyphColor = lerp(float4(mat.outlineColor.rgb, mat.outlineColor.a * outlineOpacity), float4(baseColor.rgb, baseColor.a * fillOpacity), fillOpacity);
 
-    // Composite: shadow behind, glyph on top
+    float4 result;
+    if (mat.shadowColor.a > 0.0 && (mat.shadowOffset.x != 0.0 || mat.shadowOffset.y != 0.0)) {
+        float2 shadowUv = input.uv - mat.shadowOffset;
+        float4 shadowSample = atlasTex.Sample(smp, clamp(shadowUv, input.uvOrigMin, input.uvOrigMax));
+        float shadowPxDist = screenPxRange * (shadowSample.a - 0.5);
+        float shadowEdge = max(screenPxRange * mat.shadowSoftness, 0.001);
+        float shadowOpacity = clamp(shadowPxDist / shadowEdge + 0.5, 0.0, 1.0);
+        result = float4(mat.shadowColor.rgb, mat.shadowColor.a * shadowOpacity);
+    } else {
+        result = float4(0.0, 0.0, 0.0, 0.0);
+    }
+
+    float4 glyphColor;
+    if (mat.outlineColor.a > 0.0 && mat.outlineWidth > 0.0) {
+        float outlineOpacity = clamp(screenPxDist + 0.5 + screenPxRange * min(mat.outlineWidth, 0.475), 0.0, 1.0);
+        glyphColor = lerp(float4(mat.outlineColor.rgb, mat.outlineColor.a * outlineOpacity), float4(baseColor.rgb, baseColor.a * fillOpacity), fillOpacity);
+    } else {
+        glyphColor = float4(baseColor.rgb, baseColor.a * fillOpacity);
+    }
+
     result = lerp(result, glyphColor, glyphColor.a);
 
     if (result.a < 0.001) { discard; }

@@ -291,6 +291,22 @@ struct ViewportResizeCommand
     uint32_t sizeY{0};
 };
 
+struct TextDrawCall
+{
+    uint32_t quadOffset;
+    uint32_t quadCount;
+    uint32_t atlasBindlessIndex;
+    uint32_t textMaterialIndex;
+};
+
+struct TextInstanceDataFull
+{
+    uint32_t modelIndex;
+    float pxRange;
+    uint32_t atlasBindlessIndex;
+    uint32_t textMaterialIndex;
+};
+
 struct ViewFamily
 {
     ViewFamily() = default;
@@ -315,9 +331,10 @@ struct ViewFamily
 
     Vector<InstanceData> instances{};
     Vector<GlyphQuad> glyphQuads{};
-    Vector<TextInstanceData> textInstances{};
+    Vector<TextInstanceDataFull> textInstances{};
     Map<Engine::TextMaterialID, uint32_t> activeTextMaterials{};
     Vector<TextRenderMaterial> textMaterials{};
+    Vector<TextDrawCall> textDrawCalls{};
 
     Vector<Model> modelMatrices{};
     /**

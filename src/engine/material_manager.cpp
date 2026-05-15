@@ -138,6 +138,8 @@ void MaterialManager::AcquireMaterial(MaterialID materialID)
         mat.props.textureSamplerIndices2.y = resolveSampler(mat.samplerDesc[5]);
 
         mat.bIsRuntimeLoaded = true;
+        pendingMaterialLoadLogCount++;
+        materialLoadLastActivity = std::chrono::steady_clock::now();
     }
 }
 
@@ -195,6 +197,11 @@ void MaterialManager::ProcessRetirements()
                 entry = {};
             }
         }
+    }
+
+    if (pendingMaterialLoadLogCount > 0 && (std::chrono::steady_clock::now() - materialLoadLastActivity) >= std::chrono::seconds(ASSET_LOG_IDLE_SECONDS)) {
+        LOG_INFO(Engine, "{} material(s) loaded", pendingMaterialLoadLogCount);
+        pendingMaterialLoadLogCount = 0;
     }
 
     if (pendingMaterialRetireLogCount > 0 && (std::chrono::steady_clock::now() - materialRetireLastActivity) >= std::chrono::seconds(ASSET_LOG_IDLE_SECONDS)) {
@@ -536,10 +543,10 @@ TextRenderMaterial MaterialManager::GetRenderTextMaterial(TextMaterialID id) con
     return TextRenderMaterial{
         .colorTint = mat->colorTint,
         .outlineColor = mat->outlineColor,
+        .shadowColor = mat->shadowColor,
+        .shadowOffset = mat->shadowOffset,
         .outlineWidth = mat->outlineWidth,
         .shadowSoftness = mat->shadowSoftness,
-        .shadowOffset = mat->shadowOffset,
-        .shadowColor = mat->shadowColor,
     };
 }
 } // Engine

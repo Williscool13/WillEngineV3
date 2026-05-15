@@ -794,8 +794,9 @@ SHADER_PUBLIC struct TextRenderPushConstant
     SHADER_PUBLIC SHADER_PTR(TextRenderMaterial) textMaterialBuffer;
     SHADER_PUBLIC uint32_t quadOffset;
     SHADER_PUBLIC uint32_t quadCount;
+    SHADER_PUBLIC uint32_t atlasBindlessIndex;
+    SHADER_PUBLIC uint32_t textMaterialIndex;
     SHADER_PUBLIC uint32_t sceneDataIndex;
-    SHADER_PUBLIC uint32_t _pad;
 };
 
 #endif //WILL_ENGINE_PUSH_CONSTANT_INTEROP_H

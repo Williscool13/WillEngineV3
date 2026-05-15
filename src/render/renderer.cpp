@@ -1128,6 +1128,71 @@ void SetupSkyboxRendering(RenderGraph& graph,
         });
 }
 
+void SetupTextForwardPass(RenderGraph& graph,
+                          PipelineManager* pipelineManager,
+                          const Core::ViewFamily& viewFamily,
+                          Core::Array<uint32_t, 2> renderExtent,
+                          const MainRenderTargets& targets)
+{
+    if (viewFamily.glyphQuads.IsEmpty()) { return; }
+    if (!graph.HasBuffer(TEXT_GLYPH_QUAD_BUFFER) || !graph.HasBuffer(TEXT_INSTANCE_BUFFER) || !graph.HasBuffer(TEXT_MATERIAL_BUFFER)) { return; }
+
+    const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("default_text"));
+    if (!pipelineEntry) { return; }
+
+    RenderPass& textPass = graph.AddPass(SID("Text Forward"), VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT);
+    textPass.ReadBuffer(SCENE_DATA_BUFFER);
+    textPass.ReadBuffer(TEXT_GLYPH_QUAD_BUFFER);
+    textPass.ReadBuffer(TEXT_INSTANCE_BUFFER);
+    textPass.ReadBuffer(TEXT_MATERIAL_BUFFER);
+    textPass.ReadBuffer(GEOMETRY_MODEL_BUFFER);
+    //textPass.ReadDepthAttachment(targets.depthStencil);
+    textPass.ReadWriteDepthAttachment(targets.depthStencil);
+    textPass.WriteColorAttachment(targets.outputColor);
+    textPass.Execute([&, width = renderExtent[0], height = renderExtent[1], pipelineEntry, colorOutput = targets.outputColor, depthOutput = targets.depthStencil](VkCommandBuffer cmd) {
+        VkViewport viewport = VkHelpers::GenerateViewport(width, height);
+        vkCmdSetViewport(cmd, 0, 1, &viewport);
+        VkRect2D scissor = VkHelpers::GenerateScissor(width, height);
+        vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+        VkImageView colorView = graph.GetImageViewHandle(colorOutput);
+        VkImageView depthView = graph.GetImageViewHandle(depthOutput);
+        VkRenderingAttachmentInfo colorAttachment = VkHelpers::RenderingAttachmentInfo(colorView, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        // VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(depthView, nullptr, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL);
+        VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(depthView, nullptr, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+        VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, &colorAttachment, 1, &depthAttachment, nullptr);
+        vkCmdBeginRendering(cmd, &renderInfo);
+
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineEntry->pipeline);
+
+        VkDeviceAddress sceneDataAddr = graph.GetBufferAddress(SCENE_DATA_BUFFER);
+        VkDeviceAddress glyphQuadsAddr = graph.GetBufferAddress(TEXT_GLYPH_QUAD_BUFFER);
+        VkDeviceAddress instAddr = graph.GetBufferAddress(TEXT_INSTANCE_BUFFER);
+        VkDeviceAddress modelAddr = graph.GetBufferAddress(GEOMETRY_MODEL_BUFFER);
+        VkDeviceAddress matAddr = graph.GetBufferAddress(TEXT_MATERIAL_BUFFER);
+
+        for (const Core::TextDrawCall& dc : viewFamily.textDrawCalls) {
+            uint32_t groupCount = (dc.quadCount + 15) / 16;
+            TextRenderPushConstant pc{
+                .sceneData = sceneDataAddr,
+                .glyphQuads = glyphQuadsAddr,
+                .textInstanceData = instAddr,
+                .modelBuffer = modelAddr,
+                .textMaterialBuffer = matAddr,
+                .quadOffset = dc.quadOffset,
+                .quadCount = dc.quadCount,
+                .atlasBindlessIndex = dc.atlasBindlessIndex,
+                .textMaterialIndex = dc.textMaterialIndex,
+                .sceneDataIndex = 0,
+            };
+            vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(TextRenderPushConstant), &pc);
+            vkCmdDrawMeshTasksEXT(cmd, groupCount, 1, 1);
+        }
+
+        vkCmdEndRendering(cmd);
+    });
+}
+
 StringID SetupSubpixelMorphologicalAntiAliasing(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent,
                                                 const MainRenderTargets& ppTargets)
 {

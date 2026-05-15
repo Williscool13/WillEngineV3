@@ -10,14 +10,15 @@ ViewFamily::ViewFamily(TlsfAllocator& allocator)
     : allocator(&allocator)
 {
     portalViews = FixedVector<PortalView>(&allocator, AllocTag::FrameSync, Render::VIEW_COUNT - 1);
-    instances = Vector<InstanceData>(&allocator, AllocTag::FrameSync, 128);
-
-    glyphQuads = Vector<GlyphQuad>(&allocator, AllocTag::FrameSync, 256);
-    textInstances = Vector<TextInstanceData>(&allocator, AllocTag::FrameSync, 32);
 
     modelMatrices = Vector<Model>(&allocator, AllocTag::FrameSync, 256);
 
+    instances = Vector<InstanceData>(&allocator, AllocTag::FrameSync, 128);
+    glyphQuads = Vector<GlyphQuad>(&allocator, AllocTag::FrameSync, 256);
+    textInstances = Vector<TextInstanceDataFull>(&allocator, AllocTag::FrameSync, 32);
+
     lightingBuckets = Map<StringID, uint32_t>(&allocator, AllocTag::FrameSync, 256);
+    textDrawCalls = Vector<TextDrawCall>(&allocator, AllocTag::FrameSync, 256);
 
     activeMaterials = Map<Engine::MaterialID, uint32_t>(&allocator, AllocTag::FrameSync, 256);
     materials = Vector<Engine::RenderMaterial>(&allocator, AllocTag::FrameSync, 256);
