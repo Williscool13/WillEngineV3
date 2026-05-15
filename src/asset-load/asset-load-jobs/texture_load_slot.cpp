@@ -168,7 +168,7 @@ bool TextureLoadSlot::LoadTextureFromDisk()
 
         // todo hand roll texture generation from ktx instead of using ktx functions which heap alloc
         Core::HeapArray<uint8_t> decompressed = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetTexture, outputTexture->uncompressedSize);
-        Engine::DecompressLZ4(compressed.Data(), compressed.Size(), decompressed.Data(), outputTexture->uncompressedSize);
+        Engine::Decompress(outputTexture->compressionType, compressed.Data(), compressed.Size(), decompressed.Data(), outputTexture->uncompressedSize);
         result = ktxTexture2_CreateFromMemory(decompressed.Data(), decompressed.Size(), KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, &texture);
 
         if (result != KTX_SUCCESS) {

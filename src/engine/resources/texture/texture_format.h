@@ -10,11 +10,12 @@
 #include <optional>
 
 #include "core/containers/inline_path.h"
+#include "engine/compression/compression.h"
 
 namespace Engine
 {
 constexpr uint32_t TEXTURE_MAJOR_VERSION = 0;
-constexpr uint32_t TEXTURE_MINOR_VERSION = 4;
+constexpr uint32_t TEXTURE_MINOR_VERSION = 5;
 constexpr size_t WTEXTURE_NAME_LENGTH = 128;
 
 struct WTextureHeader
@@ -31,6 +32,7 @@ struct WTextureHeader
     uint64_t dataOffset{0};
     uint64_t dataSize{0};
     uint64_t uncompressedSize{0};
+    CompressionType compressionType{DEFAULT_TEXTURE_COMPRESSION};
 };
 
 bool WriteWTextureHeader(std::ostream& out, const WTextureHeader& header);

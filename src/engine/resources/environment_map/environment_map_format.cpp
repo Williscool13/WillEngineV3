@@ -23,6 +23,7 @@ bool WriteWEnvMapHeader(std::ostream& out, const WEnvMapHeader& header)
     out << "mips " << header.mipCount << "\n";
     out << "data_size " << header.dataSize << "\n";
     out << "uncompressed_size " << header.uncompressedSize << "\n";
+    out << "compression " << static_cast<uint32_t>(header.compressionType) << "\n";
     out << "end_header\n";
     return out.good();
 }
@@ -67,6 +68,11 @@ std::optional<WEnvMapHeader> ReadWEnvMapHeader(std::istream& in)
         else if (strncmp(line, "mips ", 5) == 0) { std::from_chars(line + 5, line + LINE_BUF, header.mipCount); }
         else if (strncmp(line, "data_size ", 10) == 0) { std::from_chars(line + 10, line + LINE_BUF, header.dataSize); }
         else if (strncmp(line, "uncompressed_size ", 18) == 0) { std::from_chars(line + 18, line + LINE_BUF, header.uncompressedSize); }
+        else if (strncmp(line, "compression ", 12) == 0) {
+            uint32_t v = 0;
+            std::from_chars(line + 12, line + LINE_BUF, v);
+            header.compressionType = static_cast<CompressionType>(v);
+        }
     }
     return std::nullopt;
 }

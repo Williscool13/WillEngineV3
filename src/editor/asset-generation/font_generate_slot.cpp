@@ -165,9 +165,9 @@ bool FontGenerateSlot::GenerateAndWrite()
     }
     ktxTexture_Destroy(ktxTexture(ktxTex));
 
-    const size_t compressMaxSize = Engine::CompressLZ4MaxSize(ktxSize);
+    const size_t compressMaxSize = Engine::CompressMaxSize(Engine::DEFAULT_FONT_COMPRESSION, ktxSize);
     Core::HeapArray<uint8_t> atlasCompressed(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, compressMaxSize);
-    const size_t compressedSize = Engine::CompressLZ4(ktxBytes, ktxSize, atlasCompressed.Data(), compressMaxSize);
+    const size_t compressedSize = Engine::Compress(Engine::DEFAULT_FONT_COMPRESSION, ktxBytes, ktxSize, atlasCompressed.Data(), compressMaxSize);
     free(ktxBytes);
 
     // Gather glyph metrics

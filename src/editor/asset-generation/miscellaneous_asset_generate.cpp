@@ -66,9 +66,9 @@ bool WriteSimpleRGBA8WTexture(Core::MemoryManager* memoryManager, const char* ou
         return false;
     }
 
-    auto maxCompressedSize = Engine::CompressLZ4MaxSize(ktxSize);
+    auto maxCompressedSize = Engine::CompressMaxSize(Engine::DEFAULT_TEXTURE_COMPRESSION, ktxSize);
     auto compressed = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, maxCompressedSize);
-    size_t realSize = Engine::CompressLZ4(ktxBytes, ktxSize, compressed.Data(), compressed.Size());
+    size_t realSize = Engine::Compress(Engine::DEFAULT_TEXTURE_COMPRESSION, ktxBytes, ktxSize, compressed.Data(), compressed.Size());
 
     free(ktxBytes);
 
@@ -129,9 +129,9 @@ bool WriteRawBytesWTexture(Core::MemoryManager* memoryManager, const char* outpu
         return false;
     }
 
-    auto maxCompressedSize = Engine::CompressLZ4MaxSize(ktxSize);
+    auto maxCompressedSize = Engine::CompressMaxSize(Engine::DEFAULT_TEXTURE_COMPRESSION, ktxSize);
     auto compressed = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, maxCompressedSize);
-    size_t realSize = Engine::CompressLZ4(ktxBytes, ktxSize, compressed.Data(), compressed.Size());
+    size_t realSize = Engine::Compress(Engine::DEFAULT_TEXTURE_COMPRESSION, ktxBytes, ktxSize, compressed.Data(), compressed.Size());
 
     free(ktxBytes);
 
@@ -352,9 +352,9 @@ void CreateBRDFLookupTable(
         return;
     }
 
-    auto maxCompressedSize = Engine::CompressLZ4MaxSize(ktxSize);
+    auto maxCompressedSize = Engine::CompressMaxSize(Engine::DEFAULT_TEXTURE_COMPRESSION, ktxSize);
     auto compressed = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, maxCompressedSize);
-    size_t realSize = Engine::CompressLZ4(ktxBytes, ktxSize, compressed.Data(), compressed.Size());
+    size_t realSize = Engine::Compress(Engine::DEFAULT_TEXTURE_COMPRESSION, ktxBytes, ktxSize, compressed.Data(), compressed.Size());
 
     free(ktxBytes);
 

@@ -47,6 +47,7 @@ struct Texture
     uint32_t dataOffset{0};
     uint64_t dataSize{0};
     uint64_t uncompressedSize{0};
+    CompressionType compressionType{DEFAULT_TEXTURE_COMPRESSION};
 };
 } // Engine
 

@@ -29,6 +29,7 @@ bool WriteWFontHeader(std::ostream& out, const WFontHeader& header)
     out << "glyph_count " << header.glyphCount << "\n";
     out << "atlas_data_size " << header.atlasDataSize << "\n";
     out << "atlas_uncompressed_size " << header.atlasUncompressedSize << "\n";
+    out << "atlas_compression " << static_cast<uint32_t>(header.atlasCompressionType) << "\n";
     out << "end_header\n";
     return out.good();
 }
@@ -59,6 +60,11 @@ static bool ParseFontHeaderFields(char* line, size_t lineBufSize, WFontHeader& h
     else if (strncmp(line, "glyph_count ", 12) == 0) { std::from_chars(line + 12, line + lineBufSize, header.glyphCount); }
     else if (strncmp(line, "atlas_data_size ", 16) == 0) { std::from_chars(line + 16, line + lineBufSize, header.atlasDataSize); }
     else if (strncmp(line, "atlas_uncompressed_size ", 24) == 0) { std::from_chars(line + 24, line + lineBufSize, header.atlasUncompressedSize); }
+    else if (strncmp(line, "atlas_compression ", 18) == 0) {
+        uint32_t v = 0;
+        std::from_chars(line + 18, line + lineBufSize, v);
+        header.atlasCompressionType = static_cast<CompressionType>(v);
+    }
     return true;
 }
 

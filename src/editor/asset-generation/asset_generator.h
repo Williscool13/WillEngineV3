@@ -185,6 +185,9 @@ public:
 
     void Join();
 
+    bool GetFastMode() const { return bFastMode.load(std::memory_order_relaxed); }
+    void SetFastMode(bool value) { bFastMode.store(value, std::memory_order_relaxed); }
+
 private:
     friend class StaticModelGenerateSlot;
 
@@ -238,6 +241,7 @@ private:
     moodycamel::ConcurrentQueue<FontGenerateRequest> fontGenerateRequestQueue;
     moodycamel::ConcurrentQueue<FontGenerateComplete> fontGenerateCompleteQueue;
 
+    std::atomic<bool> bFastMode{false};
     std::atomic<bool> bShouldExit{false};
     std::atomic<uint32_t> workCounter{0};
     std::mutex wakeMutex;

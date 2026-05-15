@@ -10,11 +10,12 @@
 #include <optional>
 
 #include "core/containers/inline_path.h"
+#include "engine/compression/compression.h"
 
 namespace Engine
 {
 constexpr uint32_t ENV_MAP_MAJOR_VERSION = 0;
-constexpr uint32_t ENV_MAP_MINOR_VERSION = 0;
+constexpr uint32_t ENV_MAP_MINOR_VERSION = 1;
 constexpr size_t WENVMAP_NAME_LENGTH = 128;
 
 struct WEnvMapHeader
@@ -31,6 +32,7 @@ struct WEnvMapHeader
     uint64_t dataOffset{0};
     uint64_t dataSize{0};
     uint64_t uncompressedSize{0};
+    CompressionType compressionType{DEFAULT_ENV_MAP_COMPRESSION};
 };
 
 bool WriteWEnvMapHeader(std::ostream& out, const WEnvMapHeader& header);

@@ -50,6 +50,7 @@ AssetGenerator::AssetGenerator(Core::MemoryManager& memoryManager,
             scheduler,
             vulkanContext,
             &memoryManager,
+            this,
             [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
                 GraphicsQueueGPUDispatch(cmd, fence, completionSignal);
             },

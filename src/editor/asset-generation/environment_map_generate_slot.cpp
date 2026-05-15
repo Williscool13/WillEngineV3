@@ -575,9 +575,9 @@ bool EnvironmentMapGenerateSlot::WriteWEnvMapFile()
         return false;
     }
 
-    auto maxCompressedSize = Engine::CompressLZ4MaxSize(ktxSize);
+    auto maxCompressedSize = Engine::CompressMaxSize(Engine::DEFAULT_ENV_MAP_COMPRESSION, ktxSize);
     auto compressed = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, maxCompressedSize);
-    size_t realCompressedSize = Engine::CompressLZ4(ktxBytes, ktxSize, compressed.Data(), compressed.Size());
+    size_t realCompressedSize = Engine::Compress(Engine::DEFAULT_ENV_MAP_COMPRESSION, ktxBytes, ktxSize, compressed.Data(), compressed.Size());
     free(ktxBytes);
 
     Engine::WEnvMapHeader header{};

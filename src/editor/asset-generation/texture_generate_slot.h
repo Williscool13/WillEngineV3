@@ -30,6 +30,11 @@ struct VulkanContext;
 
 namespace Editor
 {
+constexpr int32_t BC7_UBER_LEVEL = 4;
+constexpr float RDO_LAMBDA = 0.5f;
+
+class AssetGenerator;
+
 using TextureGenerateSlotHandle = Core::Handle<struct TextureGenerateSlot>;
 
 struct TextureGenerateSlot
@@ -42,6 +47,7 @@ struct TextureGenerateSlot
         enki::TaskScheduler* _scheduler,
         Render::VulkanContext* _context,
         Core::MemoryManager* _memoryManager,
+        AssetGenerator* _assetGenerator,
         Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> graphicsDispatchCallback,
         Core::InlineFunction<void(bool success, TextureGenerateSlotHandle slotHandle)> notifyCallback
     );
@@ -77,6 +83,7 @@ private:
     enki::TaskScheduler* scheduler{nullptr};
     Render::VulkanContext* context{nullptr};
     Core::MemoryManager* memoryManager{nullptr};
+    AssetGenerator* assetGenerator{nullptr};
     Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> _graphicsDispatchCallback;
     Core::InlineFunction<void(bool success, TextureGenerateSlotHandle slotHandle)> _notifyCallback;
 

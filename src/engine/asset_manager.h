@@ -127,6 +127,7 @@ public: // Textures
         uint64_t dataOffset{};
         uint64_t dataSize{};
         uint64_t uncompressedSize{};
+        CompressionType compressionType{DEFAULT_TEXTURE_COMPRESSION};
     };
 
     [[nodiscard]] const Core::FixedMap<StringID, TextureID>& GetTextureNameToId() const { return textureNameToId; }
@@ -166,6 +167,7 @@ public: // Cubemaps
         uint64_t dataOffset{};
         uint64_t dataSize{};
         uint64_t uncompressedSize{};
+        CompressionType compressionType{DEFAULT_ENV_MAP_COMPRESSION};
     };
 
     [[nodiscard]] const Core::FixedMap<StringID, EnvironmentMapID>& GetCubemapNameToId() const { return cubemapNameToId; }

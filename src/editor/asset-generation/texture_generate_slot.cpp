@@ -4,6 +4,8 @@
 
 #include "texture_generate_slot.h"
 
+#include "asset_generator.h"
+
 #include <fstream>
 #include "engine/logging/engine_log.h"
 #include <stb/stb_image.h>
@@ -31,12 +33,14 @@ void TextureGenerateSlot::Initialize(
     enki::TaskScheduler* _scheduler,
     Render::VulkanContext* _context,
     Core::MemoryManager* _memoryManager,
+    AssetGenerator* _assetGenerator,
     Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> graphicsDispatchCallback,
     Core::InlineFunction<void(bool success, TextureGenerateSlotHandle slotHandle)> notifyCallback)
 {
     scheduler = _scheduler;
     context = _context;
     memoryManager = _memoryManager;
+    assetGenerator = _assetGenerator;
     _graphicsDispatchCallback = std::move(graphicsDispatchCallback);
     _notifyCallback = std::move(notifyCallback);
 
@@ -377,8 +381,9 @@ bool TextureGenerateSlot::WriteWTextureFile()
     } {
         ZoneScopedN("EncodeBC");
         rdo_bc::rdo_bc_params encodeParams;
-        encodeParams.m_bc7_uber_level = 1;
-        encodeParams.m_rdo_lambda = 0.0f;
+        const bool fastMode = assetGenerator->GetFastMode();
+        encodeParams.m_bc7_uber_level = fastMode ? 1 : BC7_UBER_LEVEL;
+        encodeParams.m_rdo_lambda = fastMode ? 0.0f : RDO_LAMBDA;
         encodeParams.m_dxgi_format = targetFormat;
         if (encodeParams.m_dxgi_format == DXGI_FORMAT_BC7_UNORM_SRGB) {
             encodeParams.m_dxgi_format = DXGI_FORMAT_BC7_UNORM;
@@ -446,9 +451,9 @@ bool TextureGenerateSlot::WriteWTextureFile()
         return false;
     }
 
-    auto maxCompressedSize = Engine::CompressLZ4MaxSize(ktxSize);
+    auto maxCompressedSize = Engine::CompressMaxSize(Engine::DEFAULT_TEXTURE_COMPRESSION, ktxSize);
     auto compressed = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, maxCompressedSize);
-    size_t realCompressedSize = Engine::CompressLZ4(ktxBytes, ktxSize, compressed.Data(), compressed.Size());
+    size_t realCompressedSize = Engine::Compress(Engine::DEFAULT_TEXTURE_COMPRESSION, ktxBytes, ktxSize, compressed.Data(), compressed.Size());
     free(ktxBytes);
 
     Engine::WTextureHeader header{};

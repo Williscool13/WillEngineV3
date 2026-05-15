@@ -73,4 +73,60 @@ void DecompressLZ4(const void* compressedData, size_t compressedSize, void* deco
         assert(false);
     }
 }
+
+size_t CompressZstdMaxSize(size_t size)
+{
+    assert(false && "Zstd not yet implemented");
+    return 0;
+}
+
+size_t CompressZstd(const void* uncompressedData, size_t uncompressedSize, void* compressedData, size_t compressedSize)
+{
+    assert(false && "Zstd not yet implemented");
+    return 0;
+}
+
+void DecompressZstd(const void* compressedData, size_t compressedSize, void* decompressedData, size_t uncompressedSize)
+{
+    assert(false && "Zstd not yet implemented");
+}
+
+size_t CompressMaxSize(CompressionType type, size_t size)
+{
+    switch (type) {
+        case CompressionType::Zlib: return CompressZlibMaxSize(size);
+        case CompressionType::LZ4:  return CompressLZ4MaxSize(size);
+        case CompressionType::Zstd: return CompressZstdMaxSize(size);
+        default:
+            LOG_CRITICAL(Engine, "CompressMaxSize called with unsupported CompressionType {}.", static_cast<uint32_t>(type));
+            assert(false);
+            return 0;
+    }
+}
+
+size_t Compress(CompressionType type, const void* uncompressedData, size_t uncompressedSize, void* compressedData, size_t compressedSize)
+{
+    switch (type) {
+        case CompressionType::Zlib: return CompressZlib(uncompressedData, uncompressedSize, compressedData, compressedSize);
+        case CompressionType::LZ4:  return CompressLZ4(uncompressedData, uncompressedSize, compressedData, compressedSize);
+        case CompressionType::Zstd: return CompressZstd(uncompressedData, uncompressedSize, compressedData, compressedSize);
+        default:
+            LOG_CRITICAL(Engine, "Compress called with unsupported CompressionType {}.", static_cast<uint32_t>(type));
+            assert(false);
+            return 0;
+    }
+}
+
+void Decompress(CompressionType type, const void* compressedData, size_t compressedSize, void* decompressedData, size_t uncompressedSize)
+{
+    switch (type) {
+        case CompressionType::Zlib: DecompressZlib(compressedData, compressedSize, decompressedData, uncompressedSize); break;
+        case CompressionType::LZ4:  DecompressLZ4(compressedData, compressedSize, decompressedData, uncompressedSize);  break;
+        case CompressionType::Zstd: DecompressZstd(compressedData, compressedSize, decompressedData, uncompressedSize); break;
+        default:
+            LOG_CRITICAL(Engine, "Decompress called with unsupported CompressionType {}.", static_cast<uint32_t>(type));
+            assert(false);
+            break;
+    }
+}
 } // Engine

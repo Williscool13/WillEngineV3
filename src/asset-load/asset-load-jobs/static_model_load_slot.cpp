@@ -171,7 +171,7 @@ bool StaticModelLoadSlot::LoadModelFromDisk()
         file.read(reinterpret_cast<char*>(compressedBody.Data()), static_cast<std::streamsize>(header.compressedBodySize));
 
         body = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, header.uncompressedBodySize);
-        Engine::DecompressLZ4(compressedBody.Data(), header.compressedBodySize, body.Data(), header.uncompressedBodySize);
+        Engine::Decompress(header.compressionType, compressedBody.Data(), header.compressedBodySize, body.Data(), header.uncompressedBodySize);
         compressedBody.Reset();
 
         file.seekg(0, std::ios::end);

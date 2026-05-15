@@ -638,135 +638,152 @@ void WillEngine::EditorImgui()
         renderThread->GetResourceManager()->debugReadback.Present();
     }
 
+    if (ImGui::Button("Recreate All Assets (excl. Intel Sponza)")) {
+        const Core::Path assets = Platform::GetAssetPath();
+        assetGenerator->RequestModelGenerate(assets / "dragon/dragon.gltf", assets / "dragon/dragon.wsmesh");
+        assetGenerator->RequestModelGenerate(assets / "BoxTextured.glb", assets / "BoxTextured.wsmesh");
+        assetGenerator->RequestModelGenerate(assets / "BoxTextured4k.glb", assets / "BoxTextured4k.wsmesh");
+        assetGenerator->RequestModelGenerate(assets / "Sphere.glb", assets / "Sphere.wsmesh");
+        assetGenerator->RequestModelGenerate(assets / "sponza2/sponza.gltf", assets / "sponza2/sponza.wsmesh");
+        assetGenerator->RequestModelGenerate(assets / "Plane.glb", assets / "Plane.wsmesh");
+        assetGenerator->RequestTextureGenerateFromFile(
+            assets / "textures/smiling_friend.jpg",
+            assets / "textures/smiling_friend.wtexture",
+            true,
+            DXGI_FORMAT_BC7_UNORM_SRGB);
+        assetGenerator->RequestTextureGenerateFromFile(
+            assets / "textures/prototype_texture_dark.png",
+            assets / "textures/prototype_texture_dark.wtexture",
+            true,
+            DXGI_FORMAT_BC7_UNORM_SRGB);
+        assetGenerator->GenerateBRDFLUT(assets / "textures/brdf_lut.wtexture");
+        assetGenerator->GenerateSMAATextures(assets / "textures");
+        assetGenerator->RequestFontGenerate(
+            assets / "fonts/Roboto/Roboto-VariableFont_wdth,wght.ttf",
+            assets / "fonts/Roboto/Roboto.wsfont");
+        assetGenerator->RequestFontGenerate(
+            assets / "fonts/JetBrainsMono/fonts/ttf/JetBrainsMonoNL-Regular.ttf",
+            assets / "fonts/JetBrainsMono/JetBrainsMono.wsfont");
+    }
 
     if (ImGui::CollapsingHeader("Asset Generation")) {
-        auto startGeneration = [&](const Core::Path& gltfPath, const Core::Path& outPath) {
-            assetGenerator->RequestModelGenerate(gltfPath, outPath);
-        };
+        if (ImGui::CollapsingHeader("Individual Assets##individual")) {
+            ImGui::Separator();
+            ImGui::Text("Generate Models:");
 
-
-        ImGui::Separator();
-        ImGui::Text("Generate Models:");
-
-        if (ImGui::Button("Intel Sponza")) {
-            assetGenerator->RequestModelGenerate(Platform::GetAssetPath() / "IntelSponza.glb",
-                                                 Platform::GetAssetPath() / "IntelSponza.wsmesh");
-        }
-        if (ImGui::Button("dragon.wsmesh")) {
-            startGeneration(Platform::GetAssetPath() / "dragon/dragon.gltf",
-                            Platform::GetAssetPath() / "dragon/dragon.wsmesh");
-        }
-
-        if (ImGui::Button("BoxTextured.wsmesh")) {
-            startGeneration(Platform::GetAssetPath() / "BoxTextured.glb",
-                            Platform::GetAssetPath() / "BoxTextured.wsmesh");
-        }
-
-        if (ImGui::Button("BoxTextured4k.wsmesh")) {
-            startGeneration(Platform::GetAssetPath() / "BoxTextured4k.glb",
-                            Platform::GetAssetPath() / "BoxTextured4k.wsmesh");
-        }
-        if (ImGui::Button("Sphere.wsmesh")) {
-            startGeneration(Platform::GetAssetPath() / "Sphere.glb",
-                            Platform::GetAssetPath() / "Sphere.wsmesh");
-        }
-
-        if (ImGui::Button("sponza.wsmesh")) {
-            startGeneration(Platform::GetAssetPath() / "sponza2/sponza.gltf",
-                            Platform::GetAssetPath() / "sponza2/sponza.wsmesh");
-        }
-        if (ImGui::Button("plane.wsmesh")) {
-            startGeneration(Platform::GetAssetPath() / "Plane.glb",
-                            Platform::GetAssetPath() / "Plane.wsmesh");
-        }
-
-        ImGui::SeparatorText("Generate Environment Map:"); {
-            static Core::InlineVector<Core::Path, 32> hdrFiles;
-            static int selectedHdrIdx = 0;
-            static bool hdrScanned = false;
-
-            if (ImGui::Button("Refresh##hdr") || !hdrScanned) {
-                hdrFiles.Clear();
-                Core::Path tempPaths[32];
-                const uint32_t found = Platform::FindFilesByExtension(
-                    Platform::GetAssetPath(), ".hdr", tempPaths, 32);
-                for (uint32_t i = 0; i < found; ++i) {
-                    hdrFiles.PushBack(std::move(tempPaths[i]));
-                }
-                selectedHdrIdx = 0;
-                hdrScanned = true;
+            if (ImGui::Button("Intel Sponza")) {
+                assetGenerator->RequestModelGenerate(Platform::GetAssetPath() / "IntelSponza.glb", Platform::GetAssetPath() / "IntelSponza.wsmesh");
+            }
+            if (ImGui::Button("dragon.wsmesh")) {
+                assetGenerator->RequestModelGenerate(Platform::GetAssetPath() / "dragon/dragon.gltf", Platform::GetAssetPath() / "dragon/dragon.wsmesh");
             }
 
-            if (!hdrFiles.IsEmpty()) {
-                selectedHdrIdx = std::clamp(selectedHdrIdx, 0, static_cast<int>(hdrFiles.Size()) - 1);
+            if (ImGui::Button("BoxTextured.wsmesh")) {
+                assetGenerator->RequestModelGenerate(Platform::GetAssetPath() / "BoxTextured.glb", Platform::GetAssetPath() / "BoxTextured.wsmesh");
             }
-            ImGui::SameLine();
-            ImGui::SetNextItemWidth(-1);
-            ImGui::BeginDisabled(hdrFiles.IsEmpty());
-            const char* previewLabel = hdrFiles.IsEmpty() ? "No .hdr files found" : hdrFiles[selectedHdrIdx].Filename().data();
-            if (ImGui::BeginCombo("##hdr_list", previewLabel)) {
-                for (int i = 0; i < static_cast<int>(hdrFiles.Size()); ++i) {
-                    const bool selected = (i == selectedHdrIdx);
-                    if (ImGui::Selectable(hdrFiles[i].Filename().data(), selected)) {
-                        selectedHdrIdx = i;
+
+            if (ImGui::Button("BoxTextured4k.wsmesh")) {
+                assetGenerator->RequestModelGenerate(Platform::GetAssetPath() / "BoxTextured4k.glb", Platform::GetAssetPath() / "BoxTextured4k.wsmesh");
+            }
+            if (ImGui::Button("Sphere.wsmesh")) {
+                assetGenerator->RequestModelGenerate(Platform::GetAssetPath() / "Sphere.glb", Platform::GetAssetPath() / "Sphere.wsmesh");
+            }
+
+            if (ImGui::Button("sponza.wsmesh")) {
+                assetGenerator->RequestModelGenerate(Platform::GetAssetPath() / "sponza2/sponza.gltf", Platform::GetAssetPath() / "sponza2/sponza.wsmesh");
+            }
+            if (ImGui::Button("plane.wsmesh")) {
+                assetGenerator->RequestModelGenerate(Platform::GetAssetPath() / "Plane.glb", Platform::GetAssetPath() / "Plane.wsmesh");
+            }
+
+            ImGui::SeparatorText("Generate Environment Map:"); {
+                static Core::InlineVector<Core::Path, 32> hdrFiles;
+                static int selectedHdrIdx = 0;
+                static bool hdrScanned = false;
+
+                if (ImGui::Button("Refresh##hdr") || !hdrScanned) {
+                    hdrFiles.Clear();
+                    Core::Path tempPaths[32];
+                    const uint32_t found = Platform::FindFilesByExtension(
+                        Platform::GetAssetPath(), ".hdr", tempPaths, 32);
+                    for (uint32_t i = 0; i < found; ++i) {
+                        hdrFiles.PushBack(std::move(tempPaths[i]));
                     }
+                    selectedHdrIdx = 0;
+                    hdrScanned = true;
                 }
-                ImGui::EndCombo();
-            }
-            ImGui::EndDisabled();
 
-            ImGui::BeginDisabled(hdrFiles.IsEmpty());
-            if (ImGui::Button("Generate##envmap")) {
-                const Core::Path& hdrPath = hdrFiles[selectedHdrIdx];
-                const auto stem = hdrPath.Stem();
-                Core::InlineString<256> outName;
-                outName.Append(stem.data(), stem.size());
-                outName.Append(".wenvmap");
-                const Core::Path outputPath = hdrPath.Parent() / outName.c_str();
-                assetGenerator->RequestEnvironmentMapGenerate(hdrPath, outputPath);
-            }
-            ImGui::EndDisabled();
-        }
-
-        ImGui::SeparatorText("Skybox LOD:"); {
-            static constexpr const char* kLODLabels[] = {"Specular 0", "Specular 1", "Specular 2", "Specular 3", "Diffuse"};
-            ImGui::SetNextItemWidth(-1);
-            if (ImGui::BeginCombo("##skybox_lod", kLODLabels[engineState->lighting.skyboxLOD])) {
-                for (int i = 0; i < 5; ++i) {
-                    const bool selected = engineState->lighting.skyboxLOD == i;
-                    if (ImGui::Selectable(kLODLabels[i], selected)) {
-                        engineState->lighting.skyboxLOD = i;
+                if (!hdrFiles.IsEmpty()) {
+                    selectedHdrIdx = std::clamp(selectedHdrIdx, 0, static_cast<int>(hdrFiles.Size()) - 1);
+                }
+                ImGui::SameLine();
+                ImGui::SetNextItemWidth(-1);
+                ImGui::BeginDisabled(hdrFiles.IsEmpty());
+                const char* previewLabel = hdrFiles.IsEmpty() ? "No .hdr files found" : hdrFiles[selectedHdrIdx].Filename().data();
+                if (ImGui::BeginCombo("##hdr_list", previewLabel)) {
+                    for (int i = 0; i < static_cast<int>(hdrFiles.Size()); ++i) {
+                        const bool selected = (i == selectedHdrIdx);
+                        if (ImGui::Selectable(hdrFiles[i].Filename().data(), selected)) {
+                            selectedHdrIdx = i;
+                        }
                     }
+                    ImGui::EndCombo();
                 }
-                ImGui::EndCombo();
+                ImGui::EndDisabled();
+
+                ImGui::BeginDisabled(hdrFiles.IsEmpty());
+                if (ImGui::Button("Generate##envmap")) {
+                    const Core::Path& hdrPath = hdrFiles[selectedHdrIdx];
+                    const auto stem = hdrPath.Stem();
+                    Core::InlineString<256> outName;
+                    outName.Append(stem.data(), stem.size());
+                    outName.Append(".wenvmap");
+                    const Core::Path outputPath = hdrPath.Parent() / outName.c_str();
+                    assetGenerator->RequestEnvironmentMapGenerate(hdrPath, outputPath);
+                }
+                ImGui::EndDisabled();
             }
-        }
 
-        if (ImGui::Button("Generate BRDF LUT, Smiling Friend, and Prototype Texture")) {
-            assetGenerator->RequestTextureGenerateFromFile(
-                Platform::GetAssetPath() / "textures/smiling_friend.jpg",
-                Platform::GetAssetPath() / "textures/smiling_friend.wtexture",
-                true,
-                DXGI_FORMAT_BC7_UNORM_SRGB);
-            assetGenerator->RequestTextureGenerateFromFile(
-                Platform::GetAssetPath() / "textures/prototype_texture_dark.png",
-                Platform::GetAssetPath() / "textures/prototype_texture_dark.wtexture",
-                true,
-                DXGI_FORMAT_BC7_UNORM_SRGB);
-            assetGenerator->GenerateBRDFLUT(Platform::GetAssetPath() / "textures/brdf_lut.wtexture");
-            assetGenerator->GenerateSMAATextures(Platform::GetAssetPath() / "textures");
-        }
+            ImGui::SeparatorText("Skybox LOD:"); {
+                static constexpr const char* kLODLabels[] = {"Specular 0", "Specular 1", "Specular 2", "Specular 3", "Diffuse"};
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::BeginCombo("##skybox_lod", kLODLabels[engineState->lighting.skyboxLOD])) {
+                    for (int i = 0; i < 5; ++i) {
+                        const bool selected = engineState->lighting.skyboxLOD == i;
+                        if (ImGui::Selectable(kLODLabels[i], selected)) {
+                            engineState->lighting.skyboxLOD = i;
+                        }
+                    }
+                    ImGui::EndCombo();
+                }
+            }
 
-        if (ImGui::Button("Generate Roboto")) {
-            assetGenerator->RequestFontGenerate(
-                Platform::GetAssetPath() / "fonts/Roboto/Roboto-VariableFont_wdth,wght.ttf",
-                Platform::GetAssetPath() / "fonts/Roboto/Roboto.wsfont");
-        }
+            if (ImGui::Button("Generate BRDF LUT, Smiling Friend, and Prototype Texture")) {
+                assetGenerator->RequestTextureGenerateFromFile(
+                    Platform::GetAssetPath() / "textures/smiling_friend.jpg",
+                    Platform::GetAssetPath() / "textures/smiling_friend.wtexture",
+                    true,
+                    DXGI_FORMAT_BC7_UNORM_SRGB);
+                assetGenerator->RequestTextureGenerateFromFile(
+                    Platform::GetAssetPath() / "textures/prototype_texture_dark.png",
+                    Platform::GetAssetPath() / "textures/prototype_texture_dark.wtexture",
+                    true,
+                    DXGI_FORMAT_BC7_UNORM_SRGB);
+                assetGenerator->GenerateBRDFLUT(Platform::GetAssetPath() / "textures/brdf_lut.wtexture");
+                assetGenerator->GenerateSMAATextures(Platform::GetAssetPath() / "textures");
+            }
 
-        if (ImGui::Button("Generate JetBrainsMono")) {
-            assetGenerator->RequestFontGenerate(
-                Platform::GetAssetPath() / "fonts/JetBrainsMono/fonts/ttf/JetBrainsMonoNL-Regular.ttf",
-                Platform::GetAssetPath() / "fonts/JetBrainsMono/JetBrainsMono.wsfont");
+            if (ImGui::Button("Generate Roboto")) {
+                assetGenerator->RequestFontGenerate(
+                    Platform::GetAssetPath() / "fonts/Roboto/Roboto-VariableFont_wdth,wght.ttf",
+                    Platform::GetAssetPath() / "fonts/Roboto/Roboto.wsfont");
+            }
+
+            if (ImGui::Button("Generate JetBrainsMono")) {
+                assetGenerator->RequestFontGenerate(
+                    Platform::GetAssetPath() / "fonts/JetBrainsMono/fonts/ttf/JetBrainsMonoNL-Regular.ttf",
+                    Platform::GetAssetPath() / "fonts/JetBrainsMono/JetBrainsMono.wsfont");
+            }
         }
 
         ImGui::Separator();

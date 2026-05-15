@@ -1024,9 +1024,9 @@ bool StaticModelGenerateSlot::WriteStaticModel()
             Engine::WriteMeshInformation(body, mesh);
         }
 
-        auto maxCompressedSize = Engine::CompressLZ4MaxSize(body.Size());
+        auto maxCompressedSize = Engine::CompressMaxSize(Engine::DEFAULT_STATIC_MODEL_COMPRESSION, body.Size());
         auto compressedBody = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, maxCompressedSize);
-        size_t realCompressedSize = Engine::CompressLZ4(body.Data(), body.Size(), compressedBody.Data(), compressedBody.Size());
+        size_t realCompressedSize = Engine::Compress(Engine::DEFAULT_STATIC_MODEL_COMPRESSION, body.Data(), body.Size(), compressedBody.Data(), compressedBody.Size());
 
         header.compressedBodySize = realCompressedSize;
         header.uncompressedBodySize = body.Size();

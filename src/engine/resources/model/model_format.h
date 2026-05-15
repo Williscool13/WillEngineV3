@@ -10,11 +10,12 @@
 
 #include "model_types.h"
 #include "static_model.h"
+#include "engine/compression/compression.h"
 
 namespace Engine
 {
 constexpr char STATIC_MODEL_MAGIC[8] = "WSTCMDL";
-constexpr uint32_t STATICMODEL_VERSION = 3;
+constexpr uint32_t STATICMODEL_VERSION = 4;
 constexpr size_t WSTATICMODEL_NAME_LENGTH = 128;
 
 struct WStaticModelHeader
@@ -52,6 +53,7 @@ struct WStaticModelHeader
      */
     uint64_t uncompressedBodySize{0};
     uint64_t dataOffset{0};
+    CompressionType compressionType{DEFAULT_STATIC_MODEL_COMPRESSION};
 };
 
 struct WStaticModelData

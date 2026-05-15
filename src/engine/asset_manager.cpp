@@ -666,6 +666,7 @@ void AssetManager::Scan()
                     cached.dataOffset = header->dataOffset;
                     cached.dataSize = header->dataSize;
                     cached.uncompressedSize = header->uncompressedSize;
+                    cached.compressionType = header->compressionType;
                     textureNameToId[nameSid] = id;
                 }
                 else if (ext == ".wsmesh") {
@@ -713,6 +714,7 @@ void AssetManager::Scan()
                     cached.dataOffset = header->dataOffset;
                     cached.dataSize = header->dataSize;
                     cached.uncompressedSize = header->uncompressedSize;
+                    cached.compressionType = header->compressionType;
                     cubemapNameToId[nameSid] = id;
                 }
                 else if (ext == ".wscene") {
@@ -804,6 +806,7 @@ Texture* AssetManager::LoadTexture(TextureID textureId)
     texture.dataOffset = meta.dataOffset;
     texture.dataSize = meta.dataSize;
     texture.uncompressedSize = meta.uncompressedSize;
+    texture.compressionType = meta.compressionType;
     texture.loadState = Texture::LoadState::Loading;
     texture.refCount = 1;
     texture.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTexture();
@@ -951,6 +954,7 @@ CubemapHandle AssetManager::LoadCubemap(EnvironmentMapID cubemapId)
     cubemap.dataOffset = meta.dataOffset;
     cubemap.dataSize = meta.dataSize;
     cubemap.uncompressedSize = meta.uncompressedSize;
+    cubemap.compressionType = meta.compressionType;
     cubemap.refCount = 1;
     cubemap.loadState = Render::Cubemap::LoadState::Loading;
     cubemap.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateCubemap();
@@ -1060,6 +1064,7 @@ FontHandle AssetManager::LoadFont(FontID id)
     font.atlasTexture.dataOffset = meta.header.atlasDataOffset;
     font.atlasTexture.dataSize = meta.header.atlasDataSize;
     font.atlasTexture.uncompressedSize = meta.header.atlasUncompressedSize;
+    font.atlasTexture.compressionType = meta.header.atlasCompressionType;
     font.atlasTexture.loadState = Texture::LoadState::Loading;
     font.atlasTexture.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTexture();
 

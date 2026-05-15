@@ -6,6 +6,7 @@
 #define WILL_ENGINE_CUBEMAP_ASSET_H
 #include "../interface/render_interface.h"
 #include "core/containers/inline_path.h"
+#include "engine/compression/compression.h"
 #include "core/containers/inline_string.h"
 #include "render/descriptors/vk_bindless_resources_sampler_images.h"
 #include "engine/asset_manager_types.h"
@@ -33,6 +34,7 @@ struct Cubemap
     uint64_t dataOffset{0};
     uint64_t dataSize{0};
     uint64_t uncompressedSize{0};
+    Engine::CompressionType compressionType{Engine::DEFAULT_ENV_MAP_COMPRESSION};
     LoadState loadState{LoadState::NotLoaded};
     uint32_t refCount = 0;
     BindlessCubemapHandle bindlessHandle{};

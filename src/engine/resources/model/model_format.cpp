@@ -40,6 +40,7 @@ bool WriteWStaticModelHeader(std::ostream& out, const WStaticModelHeader& header
     out << "mesh_count " << header.meshCount << "\n";
     out << "compressed_body_size " << header.compressedBodySize << "\n";
     out << "uncompressed_body_size " << header.uncompressedBodySize << "\n";
+    out << "compression " << static_cast<uint32_t>(header.compressionType) << "\n";
     out << "end_header\n";
     return out.good();
 }
@@ -96,6 +97,11 @@ std::optional<WStaticModelHeader> ReadWStaticModelHeader(std::istream& in)
         else if (strncmp(line, "mesh_count ", 11) == 0) { std::from_chars(line + 11, line + LINE_BUF, header.meshCount); }
         else if (strncmp(line, "compressed_body_size ", 21) == 0) { std::from_chars(line + 21, line + LINE_BUF, header.compressedBodySize); }
         else if (strncmp(line, "uncompressed_body_size ", 23) == 0) { std::from_chars(line + 23, line + LINE_BUF, header.uncompressedBodySize); }
+        else if (strncmp(line, "compression ", 12) == 0) {
+            uint32_t v = 0;
+            std::from_chars(line + 12, line + LINE_BUF, v);
+            header.compressionType = static_cast<CompressionType>(v);
+        }
     }
     return std::nullopt;
 }
@@ -159,6 +165,11 @@ std::optional<WStaticModelHeader> ReadWStaticModelHeaderAnyVersion(const Core::P
         else if (strncmp(line, "mesh_count ", 11) == 0) { std::from_chars(line + 11, line + LINE_BUF, header.meshCount); }
         else if (strncmp(line, "compressed_body_size ", 21) == 0) { std::from_chars(line + 21, line + LINE_BUF, header.compressedBodySize); }
         else if (strncmp(line, "uncompressed_body_size ", 23) == 0) { std::from_chars(line + 23, line + LINE_BUF, header.uncompressedBodySize); }
+        else if (strncmp(line, "compression ", 12) == 0) {
+            uint32_t v = 0;
+            std::from_chars(line + 12, line + LINE_BUF, v);
+            header.compressionType = static_cast<CompressionType>(v);
+        }
     }
     return std::nullopt;
 }
