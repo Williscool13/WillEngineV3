@@ -839,6 +839,45 @@ Texture* AssetManager::LoadTexture(TextureID textureId)
     return &texture;
 }
 
+bool AssetManager::ReloadTexture(TextureID textureId)
+{
+    if (!textureCache.Contains(textureId)) {
+        LOG_ERROR(Asset, "Texture {:x} not found in registry", textureId.id);
+        return false;
+    }
+
+    TextureHandle* existingPtr = textureIdToHandle.Find(textureId);
+    if (existingPtr == nullptr) {
+        LOG_ERROR(Asset, "Texture {:x} requested reload but it is not currently loaded", textureId.id);
+        return false;
+    }
+
+    const CachedTextureMetadata& meta = textureCache[textureId];
+
+    Texture& texture = textures[existingPtr->index];
+    texture.selfHandle = *existingPtr;
+    texture.source = meta.source;
+    texture.textureId = textureId;
+    texture.name = Core::InlineString(meta.name);
+    texture.width = meta.width;
+    texture.height = meta.height;
+    texture.mipCount = meta.mipCount;
+    texture.dataOffset = meta.dataOffset;
+    texture.dataSize = meta.dataSize;
+    texture.uncompressedSize = meta.uncompressedSize;
+    texture.compressionType = meta.compressionType;
+    texture.loadState = Texture::LoadState::Loading;
+    texture.refCount = 1;
+    texture.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTexture();
+
+    if (bVerboseLogging.load(std::memory_order_relaxed)) {
+        LOG_TRACE(Asset, "Requesting texture reload: {}", texture.name.c_str());
+    }
+    assetLoadManager->RequestTextureLoad(&texture);
+
+    return true;
+}
+
 void AssetManager::UnloadTexture(TextureID id)
 {
     TextureHandle* handlePtr = textureIdToHandle.Find(id);

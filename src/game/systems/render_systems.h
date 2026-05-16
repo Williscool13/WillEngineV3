@@ -27,8 +27,11 @@ namespace Game
 {
 void ConnectRenderObservers(entt::registry& registry);
 
+// Editor-only (generate while engine is running)
 void ResolveModelHotReloads(Engine::EngineContext* ctx, Engine::EngineState* state);
 void ResolveFontHotReloads(Engine::EngineContext* ctx, Engine::EngineState* state);
+void ResolveTextureHotReloads(Engine::EngineContext* ctx, Engine::EngineState* state);
+
 void ResolveStaticMeshLoads(Engine::EngineContext* ctx, Engine::EngineState* state);
 void ResolveTextLoads(Engine::EngineContext* ctx, Engine::EngineState* state);
 void ResolveProceduralMeshLoads(Engine::EngineContext* ctx, Engine::EngineState* state);

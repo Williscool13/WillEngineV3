@@ -112,6 +112,11 @@ public: // Models
 
 
 public: // Textures
+    bool IsTextureLoaded(TextureID textureId)
+    {
+        return textureIdToHandle.Contains(textureId);
+    }
+
     [[nodiscard]] TextureID FindTextureByName(std::string_view name) const
     {
         const StringID sid{name.data(), name.size()};
@@ -120,6 +125,8 @@ public: // Textures
     }
 
     Texture* LoadTexture(TextureID textureId);
+
+    bool ReloadTexture(TextureID textureId);
 
     void UnloadTexture(TextureID id);
 

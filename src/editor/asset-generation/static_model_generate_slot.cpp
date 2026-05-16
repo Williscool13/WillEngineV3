@@ -294,7 +294,7 @@ bool StaticModelGenerateSlot::LoadGltf()
                     primitiveVertices = Core::HeapArray<Engine::FullVertex>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, posAccessor.count);
                     fastgltf::iterateAccessorWithIndex<fastgltf::math::fvec3>(gltf, posAccessor, [&](fastgltf::math::fvec3 v, const size_t index) {
                         primitiveVertices[index] = {};
-                        primitiveVertices[index].position = {v.x(), v.y(), v.z()};
+                        primitiveVertices[index].position = Vec3{v.x(), v.y(), v.z()};
                         primitiveVertices[index].color = {1.0f, 1.0f, 1.0f, 1.0f};
                         primitiveVertices[index].normal = {0.0f, 0.0f, 1.0f};
                         primitiveVertices[index].tangent = {1.0f, 0.0f, 0.0f, 1.0f};

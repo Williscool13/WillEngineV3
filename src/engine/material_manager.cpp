@@ -84,6 +84,8 @@ MaterialID MaterialManager::CreateImmutableMaterial(const Material& mat)
     m.immutable = true;
 
     materials[matId] = m;
+    pendingMaterialLoadLogCount++;
+
     return matId;
 }
 
@@ -437,7 +439,8 @@ void MaterialManager::Scan()
                 Material mat = DeserializeMaterial(j, paths[i]);
                 materials[mat.id] = mat;
                 nameToMaterialMap[sid] = mat.id;
-            } else if (paths[i].Extension() == ".wtextmaterial") {
+            }
+            else if (paths[i].Extension() == ".wtextmaterial") {
                 std::ifstream file(paths[i].c_str());
                 auto header = ReadWTextMaterialHeader(file);
                 if (!header) { continue; }
@@ -472,7 +475,8 @@ void MaterialManager::LoadMutableMaterials()
             Material mat = DeserializeMaterial(j, paths[i]);
             materials[mat.id] = mat;
             nameToMaterialMap[sid] = mat.id;
-        } else if (paths[i].Extension() == ".wtextmaterial") {
+        }
+        else if (paths[i].Extension() == ".wtextmaterial") {
             std::ifstream file(paths[i].c_str());
             auto header = ReadWTextMaterialHeader(file);
             if (!header) {

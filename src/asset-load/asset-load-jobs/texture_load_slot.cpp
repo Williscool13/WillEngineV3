@@ -80,11 +80,15 @@ void TextureLoadSlot::LoadTextureTask::ExecuteRange(enki::TaskSetPartition range
         return;
     }
 
-    if (!loadSlot->AllocateGPUResources()) {
+    AllocatedTextureResources resources = loadSlot->AllocateGPUResources();
+    if (!resources.bSuccess) {
         loadSlot->_notifyCallback(false, loadSlot->textureSlotHandle, loadSlot->uploadStagingSlotHandle);
         loadSlot->Clear();
         return;
     }
+
+    loadSlot->outputTexture->image = std::move(resources.image);
+    loadSlot->outputTexture->imageView = std::move(resources.imageView);
 
     VkCommandPoolCreateInfo poolInfo = Render::VkHelpers::CommandPoolCreateInfo(loadSlot->context->transferQueueFamily);
     VkCommandPool commandPool;
@@ -203,8 +207,9 @@ bool TextureLoadSlot::LoadTextureFromDisk()
     return true;
 }
 
-bool TextureLoadSlot::AllocateGPUResources()
+TextureLoadSlot::AllocatedTextureResources TextureLoadSlot::AllocateGPUResources() const
 {
+    AllocatedTextureResources output{};
     VkExtent3D extent{
         .width = texture->baseWidth,
         .height = texture->baseHeight,
@@ -222,20 +227,20 @@ bool TextureLoadSlot::AllocateGPUResources()
     imageCreateInfo.arrayLayers = texture->numLayers;
     imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
-    outputTexture->image = Render::AllocatedImage::CreateAllocatedImage(context, imageCreateInfo);
+    output.image = Render::AllocatedImage::CreateAllocatedImage(context, imageCreateInfo);
 
     VkImageViewCreateInfo viewInfo = Render::VkHelpers::ImageViewCreateInfo(
-        outputTexture->image.handle,
-        outputTexture->image.format,
+        output.image.handle,
+        output.image.format,
         VK_IMAGE_ASPECT_COLOR_BIT
     );
     viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
     viewInfo.subresourceRange.layerCount = texture->numLayers;
     viewInfo.subresourceRange.levelCount = texture->numLevels;
 
-    outputTexture->imageView = Render::ImageView::CreateImageView(context, viewInfo);
-
-    return true;
+    output.imageView = Render::ImageView::CreateImageView(context, viewInfo);
+    output.bSuccess = true;
+    return output;
 }
 
 void TextureLoadSlot::UploadTexture(VkCommandBuffer cmd, const Core::InlineFunction<void(bool)>& submitAndWait)

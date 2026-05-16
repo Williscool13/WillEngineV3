@@ -46,10 +46,9 @@ void ResolveModelHotReloads(Engine::EngineContext* ctx, Engine::EngineState* sta
     if (state->pendingHotReloadModelIds.IsEmpty()) { return; }
 
     auto view = state->registry.view<Component::StaticMeshComponent, Component::MeshRuntime>();
-    if (view.size_hint() == 0) {return;}
+    if (view.size_hint() == 0) { return; }
 
     Core::ArenaVector<entt::entity> entitiesToReload{&ctx->memoryManager->GeneralArena(), view.size_hint()};
-
 
     for (const auto& [entity, smc, runtime] : view.each()) {
         for (const Engine::ModelID& hotId : state->pendingHotReloadModelIds) {
@@ -60,6 +59,8 @@ void ResolveModelHotReloads(Engine::EngineContext* ctx, Engine::EngineState* sta
         }
     }
 
+    if (entitiesToReload.IsEmpty()) { return; }
+
     for (const Engine::ModelID& hotId : state->pendingHotReloadModelIds) {
         ctx->assetManager->EvictModel(hotId);
     }
@@ -67,6 +68,47 @@ void ResolveModelHotReloads(Engine::EngineContext* ctx, Engine::EngineState* sta
     for (const entt::entity entity : entitiesToReload) {
         auto& smc = state->registry.get<Component::StaticMeshComponent>(entity);
         Component::LoadStaticMesh(smc, state->registry, entity);
+    }
+}
+
+void ResolveFontHotReloads(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
+    if (state->pendingHotReloadFontIds.IsEmpty()) { return; }
+
+    auto view = state->registry.view<Component::TextComponent, Component::TextRuntime>();
+    if (view.size_hint() == 0) { return; }
+
+    Core::ArenaVector<entt::entity> entitiesToReload{&ctx->memoryManager->GeneralArena(), view.size_hint()};
+
+    for (auto [entity, textComp, runtime] : view.each()) {
+        for (const Engine::FontID& hotId : state->pendingHotReloadFontIds) {
+            if (textComp.fontId != hotId) { continue; }
+            Component::UnloadTextComponent(textComp, state->registry, entity);
+            entitiesToReload.PushBack(entity);
+            break;
+        }
+    }
+
+    if (state->pendingHotReloadFontIds.IsEmpty()) { return; }
+
+    for (const Engine::FontID& hotId : state->pendingHotReloadFontIds) {
+        ctx->assetManager->EvictFont(hotId);
+    }
+
+    for (const entt::entity entity : entitiesToReload) {
+        auto& textComp = state->registry.get<Component::TextComponent>(entity);
+        Component::LoadTextComponent(textComp, state->registry, entity);
+    }
+}
+
+void ResolveTextureHotReloads(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
+    if (state->pendingHotReloadTextureIds.IsEmpty()) { return; }
+
+    for (auto hotId : state->pendingHotReloadTextureIds) {
+        if (ctx->assetManager->IsTextureLoaded(hotId)) {
+            ctx->assetManager->ReloadTexture(hotId);
+        }
     }
 }
 
@@ -510,34 +552,6 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
     }
 }
 
-void ResolveFontHotReloads(Engine::EngineContext* ctx, Engine::EngineState* state)
-{
-    if (state->pendingHotReloadFontIds.IsEmpty()) { return; }
-
-    auto view = state->registry.view<Component::TextComponent, Component::TextRuntime>();
-    if (view.size_hint() == 0) { return; }
-
-    Core::ArenaVector<entt::entity> entitiesToReload{&ctx->memoryManager->GeneralArena(), view.size_hint()};
-
-    for (auto [entity, textComp, runtime] : view.each()) {
-        for (const Engine::FontID& hotId : state->pendingHotReloadFontIds) {
-            if (textComp.fontId != hotId) { continue; }
-            Component::UnloadTextComponent(textComp, state->registry, entity);
-            entitiesToReload.PushBack(entity);
-            break;
-        }
-    }
-
-    for (const Engine::FontID& hotId : state->pendingHotReloadFontIds) {
-        ctx->assetManager->EvictFont(hotId);
-    }
-
-    for (const entt::entity entity : entitiesToReload) {
-        auto& textComp = state->registry.get<Component::TextComponent>(entity);
-        Component::LoadTextComponent(textComp, state->registry, entity);
-    }
-}
-
 void ResolveTextLoads(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     auto view = state->registry.view<Component::TextRuntime, Component::TextLoadingTag>();
@@ -592,11 +606,11 @@ void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* stat
             }
 
             GlyphQuad quad{};
-            quad.posMin       = {cursorX + g->planeLeft * scale, g->planeBottom * scale};
-            quad.posMax       = {cursorX + g->planeRight * scale, g->planeTop * scale};
-            quad.uvMin        = {g->uvLeft, g->uvBottom};
-            quad.uvMax        = {g->uvRight, g->uvTop};
-            quad.color        = textComp.color;
+            quad.posMin = {cursorX + g->planeLeft * scale, g->planeBottom * scale};
+            quad.posMax = {cursorX + g->planeRight * scale, g->planeTop * scale};
+            quad.uvMin = {g->uvLeft, g->uvBottom};
+            quad.uvMax = {g->uvRight, g->uvTop};
+            quad.color = textComp.color;
             quad.drawCallIndex = drawCallIndex;
             frameBuffer->mainViewFamily.glyphQuads.PushBack(quad);
             ++quadCount;

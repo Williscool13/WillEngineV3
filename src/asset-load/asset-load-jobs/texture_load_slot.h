@@ -62,7 +62,14 @@ public:
 
     bool LoadTextureFromDisk();
 
-    bool AllocateGPUResources();
+    struct AllocatedTextureResources
+    {
+        bool bSuccess{false};
+        Render::AllocatedImage image{};
+        Render::ImageView imageView{};
+    };
+
+    AllocatedTextureResources AllocateGPUResources() const;
 
     void UploadTexture(VkCommandBuffer cmd, const Core::InlineFunction<void(bool)>& submitAndWait);
 
