@@ -14,7 +14,7 @@ import common_interop;
 #include "common_interop.h"
 #endif // __SLANG__
 
-SHADER_PUBLIC struct SHADER_ALIGN GlyphQuad
+SHADER_PUBLIC struct SHADER_ALIGN WorldGlyphQuad
 {
     SHADER_PUBLIC float4 color;
     SHADER_PUBLIC float2 posMin;
@@ -24,7 +24,7 @@ SHADER_PUBLIC struct SHADER_ALIGN GlyphQuad
     SHADER_PUBLIC float2 uvOrigMin;
     SHADER_PUBLIC float2 uvOrigMax;
     SHADER_PUBLIC uint32_t drawCallIndex;
-    SHADER_PUBLIC uint32_t _pad0;
+    uint32_t _pad0;
     uint32_t _pad1;
     uint32_t _pad2;
 };

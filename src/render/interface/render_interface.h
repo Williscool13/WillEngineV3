@@ -330,7 +330,7 @@ struct ViewFamily
     FixedVector<PortalView> portalViews{};
 
     Vector<InstanceData> instances{};
-    Vector<GlyphQuad> glyphQuads{};
+    Vector<WorldGlyphQuad> worldGlyphQuads{};
     Vector<TextInstanceDataFull> textInstances{};
     Map<Engine::TextMaterialID, uint32_t> activeTextMaterials{};
     Vector<TextRenderMaterial> textMaterials{};

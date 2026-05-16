@@ -605,14 +605,14 @@ void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* stat
                 continue;
             }
 
-            GlyphQuad quad{};
+            WorldGlyphQuad quad{};
             quad.posMin = {cursorX + g->planeLeft * scale, g->planeBottom * scale};
             quad.posMax = {cursorX + g->planeRight * scale, g->planeTop * scale};
             quad.uvMin = {g->uvLeft, g->uvBottom};
             quad.uvMax = {g->uvRight, g->uvTop};
             quad.color = textComp.color;
             quad.drawCallIndex = drawCallIndex;
-            frameBuffer->mainViewFamily.glyphQuads.PushBack(quad);
+            frameBuffer->mainViewFamily.worldGlyphQuads.PushBack(quad);
             ++quadCount;
 
             cursorX += g->advance * scale;
@@ -635,9 +635,9 @@ void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* stat
     }
 
     // Sort quads by (atlasBindlessIndex, textMaterialIndex) so each dispatch is wave-uniform on atlas texture.
-    auto& quads = frameBuffer->mainViewFamily.glyphQuads;
+    auto& quads = frameBuffer->mainViewFamily.worldGlyphQuads;
     const auto& cpuInsts = frameBuffer->mainViewFamily.textInstances;
-    std::sort(quads.Data(), quads.Data() + quads.Size(), [&](const GlyphQuad& a, const GlyphQuad& b) {
+    std::sort(quads.Data(), quads.Data() + quads.Size(), [&](const WorldGlyphQuad& a, const WorldGlyphQuad& b) {
         const Core::TextInstanceDataFull& ia = cpuInsts[a.drawCallIndex];
         const Core::TextInstanceDataFull& ib = cpuInsts[b.drawCallIndex];
         if (ia.atlasBindlessIndex != ib.atlasBindlessIndex) {

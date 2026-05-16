@@ -106,6 +106,7 @@ target_link_libraries(render PUBLIC
         imgui
         tracy_interface
         bc7enc_rdo
+        clay
 )
 
 if(WILL_ENGINE_BUILD_EDITOR)

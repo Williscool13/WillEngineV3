@@ -49,7 +49,7 @@ void MeshMain(
     // Frustum cull; z=0 in local space so only need columns 0, 1, 3 of the model matrix
     bool visible = false;
     if (tid < localQuadCount) {
-        GlyphQuad q = pc.glyphQuads[globalQuadBase + tid];
+        WorldGlyphQuad q = pc.worldGlyphQuads[globalQuadBase + tid];
         TextInstanceData inst = pc.textInstanceData[q.drawCallIndex];
         float4x4 M = pc.modelBuffer[inst.modelIndex].modelMatrix;
 
@@ -80,7 +80,7 @@ void MeshMain(
         uint quadIdx = gs_visibleQuadIndices[vi / 4];
         uint cornerIdx = vi % 4;
 
-        GlyphQuad q = pc.glyphQuads[globalQuadBase + quadIdx];
+        WorldGlyphQuad q = pc.worldGlyphQuads[globalQuadBase + quadIdx];
         TextInstanceData inst = pc.textInstanceData[q.drawCallIndex];
         float4x4 M = pc.modelBuffer[inst.modelIndex].modelMatrix;
 

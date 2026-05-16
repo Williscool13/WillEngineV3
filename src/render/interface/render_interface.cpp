@@ -14,7 +14,7 @@ ViewFamily::ViewFamily(TlsfAllocator& allocator)
     modelMatrices = Vector<Model>(&allocator, AllocTag::FrameSync, 256);
 
     instances = Vector<InstanceData>(&allocator, AllocTag::FrameSync, 128);
-    glyphQuads = Vector<GlyphQuad>(&allocator, AllocTag::FrameSync, 256);
+    worldGlyphQuads = Vector<WorldGlyphQuad>(&allocator, AllocTag::FrameSync, 256);
     textInstances = Vector<TextInstanceDataFull>(&allocator, AllocTag::FrameSync, 32);
 
     lightingBuckets = Map<StringID, uint32_t>(&allocator, AllocTag::FrameSync, 256);

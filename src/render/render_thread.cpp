@@ -1466,15 +1466,15 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
 
 void RenderThread::UploadTextUniforms(Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties) const
 {
-    if (viewFamily.glyphQuads.IsEmpty()) { return; }
+    if (viewFamily.worldGlyphQuads.IsEmpty()) { return; }
 
     renderGraph->CreateBuffer(TEXT_GLYPH_QUAD_BUFFER, renderFamilyProperties.glyphQuadBufferSize, false);
-    UploadAllocation glyphUpload = renderGraph->AllocateTransient(viewFamily.glyphQuads.Size() * sizeof(GlyphQuad));
+    UploadAllocation glyphUpload = renderGraph->AllocateTransient(viewFamily.worldGlyphQuads.Size() * sizeof(WorldGlyphQuad));
     //
     {
-        auto* dst = static_cast<GlyphQuad*>(glyphUpload.ptr);
-        for (uint32_t i = 0; i < viewFamily.glyphQuads.Size(); ++i) {
-            GlyphQuad q = viewFamily.glyphQuads[i];
+        auto* dst = static_cast<WorldGlyphQuad*>(glyphUpload.ptr);
+        for (uint32_t i = 0; i < viewFamily.worldGlyphQuads.Size(); ++i) {
+            WorldGlyphQuad q = viewFamily.worldGlyphQuads[i];
             q.uvOrigMin = q.uvMin;
             q.uvOrigMax = q.uvMax;
             const Core::TextInstanceDataFull& inst = viewFamily.textInstances[q.drawCallIndex];
@@ -1496,7 +1496,7 @@ void RenderThread::UploadTextUniforms(Core::ViewFamily& viewFamily, const Render
     uploadGlyphPass.WriteTransferBuffer(TEXT_GLYPH_QUAD_BUFFER);
     uploadGlyphPass.Execute([&,
             srcOffset = glyphUpload.offset,
-            totalSize = viewFamily.glyphQuads.Size() * sizeof(GlyphQuad)](VkCommandBuffer cmd) {
+            totalSize = viewFamily.worldGlyphQuads.Size() * sizeof(WorldGlyphQuad)](VkCommandBuffer cmd) {
             VkBufferCopy2 copy{
                 .sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
                 .srcOffset = srcOffset,

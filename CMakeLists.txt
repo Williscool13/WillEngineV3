@@ -262,6 +262,13 @@ target_include_directories(bc7enc_rdo PUBLIC extern/bc7enc_rdo)
 target_compile_definitions(bc7enc_rdo PRIVATE MINIZ_HEADER_FILE_ONLY)
 target_link_libraries(bc7enc_rdo PUBLIC miniz)
 
+# Clay UI =====================================
+add_library(clay STATIC
+        extern/clay/clay.cpp
+        extern/clay/clay.h
+)
+target_include_directories(clay PUBLIC extern/clay)
+
 # tlsf =======================================
 add_library(tlsf STATIC
         extern/tlsf/tlsf.c

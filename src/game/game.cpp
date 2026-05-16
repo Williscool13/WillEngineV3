@@ -179,7 +179,7 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
 {
     frameBuffer->mainViewFamily.modelMatrices.Clear();
     frameBuffer->mainViewFamily.instances.Clear();
-    frameBuffer->mainViewFamily.glyphQuads.Clear();
+    frameBuffer->mainViewFamily.worldGlyphQuads.Clear();
     frameBuffer->mainViewFamily.textInstances.Clear();
     frameBuffer->mainViewFamily.activeTextMaterials.Clear();
     frameBuffer->mainViewFamily.textMaterials.Clear();

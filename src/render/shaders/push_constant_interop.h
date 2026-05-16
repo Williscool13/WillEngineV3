@@ -788,7 +788,7 @@ SHADER_PUBLIC struct SMAASearchGeneratePushConstant
 SHADER_PUBLIC struct TextRenderPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
-    SHADER_PUBLIC SHADER_PTR(GlyphQuad) glyphQuads;
+    SHADER_PUBLIC SHADER_PTR(WorldGlyphQuad) worldGlyphQuads;
     SHADER_PUBLIC SHADER_PTR(TextInstanceData) textInstanceData;
     SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
     SHADER_PUBLIC SHADER_PTR(TextRenderMaterial) textMaterialBuffer;

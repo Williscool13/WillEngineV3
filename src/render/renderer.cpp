@@ -1134,7 +1134,7 @@ void SetupTextForwardPass(RenderGraph& graph,
                           Core::Array<uint32_t, 2> renderExtent,
                           const MainRenderTargets& targets)
 {
-    if (viewFamily.glyphQuads.IsEmpty()) { return; }
+    if (viewFamily.worldGlyphQuads.IsEmpty()) { return; }
     if (!graph.HasBuffer(TEXT_GLYPH_QUAD_BUFFER) || !graph.HasBuffer(TEXT_INSTANCE_BUFFER) || !graph.HasBuffer(TEXT_MATERIAL_BUFFER)) { return; }
 
     const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("default_text"));
@@ -1175,7 +1175,7 @@ void SetupTextForwardPass(RenderGraph& graph,
             uint32_t groupCount = (dc.quadCount + 15) / 16;
             TextRenderPushConstant pc{
                 .sceneData = sceneDataAddr,
-                .glyphQuads = glyphQuadsAddr,
+                .worldGlyphQuads = glyphQuadsAddr,
                 .textInstanceData = instAddr,
                 .modelBuffer = modelAddr,
                 .textMaterialBuffer = matAddr,
