@@ -100,6 +100,16 @@ bool WriteFile(const Core::Path& path, std::string_view data);
 bool AppendFile(const Core::Path& path, const void* data, size_t size);
 
 bool AppendFile(const Core::Path& path, std::string_view data);
+
+/**
+ * Renames (moves) src to dst. Returns true on success.
+ * @param src
+ * @param dst
+ * @return
+ */
+bool RenameFile(const char* src, const char* dst);
+
+bool RenameFile(const Core::Path& src, const Core::Path& dst);
 } // Platform
 
 #endif //WILL_ENGINE_FILE_UTILS_H

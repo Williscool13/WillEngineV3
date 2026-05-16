@@ -350,6 +350,42 @@ bool MaterialManager::DeleteMutableMaterial(MaterialID id)
     return true;
 }
 
+bool MaterialManager::RenameMutableMaterial(MaterialID id, std::string_view newName)
+{
+    Material* mat = materials.Find(id);
+    if (!mat || mat->immutable) { return false; }
+
+    const StringID newSid(newName.data(), newName.size());
+    if (nameToMaterialMap.Contains(newSid)) { return false; }
+
+    const StringID oldSid(mat->name.c_str(), mat->name.Size());
+    nameToMaterialMap.Remove(oldSid);
+
+    mat->name = Core::InlineString<128>(newName);
+
+    if (!mat->sourcePath.IsEmpty()) {
+        Core::InlineString<256> newFileName(newName);
+        newFileName.Append(".wmaterial");
+        Core::Path newPath = mat->sourcePath.Parent() / newFileName.c_str();
+
+        Platform::RenameFile(mat->sourcePath, newPath);
+        mat->sourcePath = newPath;
+
+        WMaterialHeader header{};
+        header.materialId = mat->id.id;
+        const auto nameLen = std::min(newName.size(), WMATERIAL_NAME_LENGTH - 1);
+        memcpy(header.name, newName.data(), nameLen);
+        header.name[nameLen] = '\0';
+
+        std::ofstream file(newPath.c_str());
+        WriteWMaterialHeader(file, header);
+        file << SerializeMaterial(*mat).dump(4);
+    }
+
+    nameToMaterialMap[newSid] = id;
+    return true;
+}
+
 void MaterialManager::CreateMaterial(std::string_view name)
 {
     const Core::Path matDir = Platform::GetAssetPath() / "materials";
@@ -522,6 +558,42 @@ bool MaterialManager::DeleteTextMaterial(TextMaterialID id)
     return true;
 }
 
+
+bool MaterialManager::RenameTextMaterial(TextMaterialID id, std::string_view newName)
+{
+    TextMaterial* mat = textMaterials.Find(id);
+    if (!mat) { return false; }
+
+    const StringID newSid(newName.data(), newName.size());
+    if (nameToTextMaterialMap.Contains(newSid)) { return false; }
+
+    const StringID oldSid(mat->name.c_str(), mat->name.Size());
+    nameToTextMaterialMap.Remove(oldSid);
+
+    mat->name = Core::InlineString<128>(newName);
+
+    if (!mat->sourcePath.IsEmpty()) {
+        Core::InlineString<256> newFileName(newName);
+        newFileName.Append(".wtextmaterial");
+        Core::Path newPath = mat->sourcePath.Parent() / newFileName.c_str();
+
+        Platform::RenameFile(mat->sourcePath, newPath);
+        mat->sourcePath = newPath;
+
+        WTextMaterialHeader header{};
+        header.textMaterialId = mat->id.id;
+        const auto nameLen = std::min(newName.size(), WTEXT_MATERIAL_NAME_LENGTH - 1);
+        memcpy(header.name, newName.data(), nameLen);
+        header.name[nameLen] = '\0';
+
+        std::ofstream file(newPath.c_str());
+        WriteWTextMaterialHeader(file, header);
+        file << SerializeTextMaterial(*mat).dump(4);
+    }
+
+    nameToTextMaterialMap[newSid] = id;
+    return true;
+}
 
 TextMaterialID MaterialManager::FindTextMaterial(StringID name) const
 {

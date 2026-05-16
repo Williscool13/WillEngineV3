@@ -54,6 +54,8 @@ public:
 
     bool DeleteMutableMaterial(MaterialID id);
 
+    bool RenameMutableMaterial(MaterialID id, std::string_view newName);
+
     void Scan();
 
     void LoadMutableMaterials();
@@ -62,6 +64,8 @@ public:
     void CreateTextMaterial(std::string_view name);
     void UpdateTextMaterial(TextMaterialID id, const TextMaterial& mat, bool bSerialize = true);
     bool DeleteTextMaterial(TextMaterialID id);
+
+    bool RenameTextMaterial(TextMaterialID id, std::string_view newName);
     [[nodiscard]] TextMaterialID FindTextMaterial(StringID name) const;
     [[nodiscard]] const TextMaterial* GetTextMaterial(TextMaterialID id) const;
     [[nodiscard]] TextRenderMaterial GetRenderTextMaterial(TextMaterialID id) const;

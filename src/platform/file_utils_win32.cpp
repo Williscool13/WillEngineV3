@@ -193,4 +193,14 @@ bool AppendFile(const Core::Path& path, std::string_view data)
 {
     return WriteFileImpl(path, data.data(), data.size(), true);
 }
+
+bool RenameFile(const char* src, const char* dst)
+{
+    return MoveFileExA(src, dst, MOVEFILE_REPLACE_EXISTING) != FALSE;
+}
+
+bool RenameFile(const Core::Path& src, const Core::Path& dst)
+{
+    return RenameFile(src.c_str(), dst.c_str());
+}
 } // Platform

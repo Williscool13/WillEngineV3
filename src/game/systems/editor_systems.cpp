@@ -1734,6 +1734,9 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
                 }
                 ImGui::SeparatorText(fmt::format("Materials ({})", mutableCount).c_str());
 
+                static Engine::MaterialID matRenameActive = Engine::MaterialID::INVALID;
+                static char matRenameBuffer[128] = {};
+
                 Engine::MaterialID materialPendingDelete = Engine::MaterialID::INVALID;
                 for (const auto& [id, mat] : allMaterials) {
                     if (mat.immutable) continue;
@@ -1751,6 +1754,39 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
                             ImGui::EndDisabled();
                             if (materialInUse && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
                                 ImGui::SetTooltip("Material is referenced by scene entities");
+                            }
+                        }
+                        ImGui::SameLine();
+                        const bool isRenaming = matRenameActive == id;
+                        if (isRenaming) {
+                            ImGui::SetNextItemWidth(180.0f);
+                            ImGui::InputText("##rename", matRenameBuffer, sizeof(matRenameBuffer));
+                            ImGui::SameLine();
+                            const bool nameUnchanged = strcmp(matRenameBuffer, mat.name.c_str()) == 0;
+                            const bool nameEmpty = matRenameBuffer[0] == '\0';
+                            const bool nameExists = !nameEmpty && !nameUnchanged && materialManager->FindMutableMaterial(StringID{matRenameBuffer, strlen(matRenameBuffer)}).IsValid();
+                            ImGui::BeginDisabled(nameEmpty || nameUnchanged || nameExists);
+                            if (ImGui::Button("Apply")) {
+                                materialManager->RenameMutableMaterial(id, matRenameBuffer);
+                                matRenameActive = Engine::MaterialID::INVALID;
+                            }
+                            ImGui::EndDisabled();
+                            ImGui::SameLine();
+                            if (ImGui::Button("Cancel")) {
+                                matRenameActive = Engine::MaterialID::INVALID;
+                            }
+                            if (nameExists) {
+                                ImGui::SameLine();
+                                ImGui::TextColored({1.0f, 0.3f, 0.3f, 1.0f}, "already exists");
+                            }
+                        }
+                        else {
+                            if (ImGui::Button("Rename")) {
+                                matRenameActive = id;
+                                const auto& n = mat.name;
+                                const size_t copyLen = std::min(n.Size(), sizeof(matRenameBuffer) - 1);
+                                memcpy(matRenameBuffer, n.c_str(), copyLen);
+                                matRenameBuffer[copyLen] = '\0';
                             }
                         }
 
@@ -2094,6 +2130,9 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
                 const auto& allTextMaterials = materialManager->GetTextMaterials();
                 ImGui::SeparatorText(fmt::format("Text Materials ({})", allTextMaterials.Size()).c_str());
 
+                static Engine::TextMaterialID textMatRenameActive = Engine::TextMaterialID::INVALID;
+                static char textMatRenameBuffer[128] = {};
+
                 Engine::TextMaterialID textMatPendingDelete = Engine::TextMaterialID::INVALID;
                 for (const auto& [id, mat] : allTextMaterials) {
                     ImGui::PushID(static_cast<int>(id.id));
@@ -2103,6 +2142,39 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
                         ImGui::EndDisabled();
                         if (ImGui::Button("Delete")) {
                             textMatPendingDelete = id;
+                        }
+                        ImGui::SameLine();
+                        const bool isRenaming = textMatRenameActive == id;
+                        if (isRenaming) {
+                            ImGui::SetNextItemWidth(180.0f);
+                            ImGui::InputText("##rename", textMatRenameBuffer, sizeof(textMatRenameBuffer));
+                            ImGui::SameLine();
+                            const bool nameUnchanged = strcmp(textMatRenameBuffer, mat.name.c_str()) == 0;
+                            const bool nameEmpty = textMatRenameBuffer[0] == '\0';
+                            const bool nameExists = !nameEmpty && !nameUnchanged && materialManager->FindTextMaterial(StringID{textMatRenameBuffer, strlen(textMatRenameBuffer)}).IsValid();
+                            ImGui::BeginDisabled(nameEmpty || nameUnchanged || nameExists);
+                            if (ImGui::Button("Apply")) {
+                                materialManager->RenameTextMaterial(id, textMatRenameBuffer);
+                                textMatRenameActive = Engine::TextMaterialID::INVALID;
+                            }
+                            ImGui::EndDisabled();
+                            ImGui::SameLine();
+                            if (ImGui::Button("Cancel")) {
+                                textMatRenameActive = Engine::TextMaterialID::INVALID;
+                            }
+                            if (nameExists) {
+                                ImGui::SameLine();
+                                ImGui::TextColored({1.0f, 0.3f, 0.3f, 1.0f}, "already exists");
+                            }
+                        }
+                        else {
+                            if (ImGui::Button("Rename")) {
+                                textMatRenameActive = id;
+                                const auto& n = mat.name;
+                                const size_t copyLen = std::min(n.Size(), sizeof(textMatRenameBuffer) - 1);
+                                memcpy(textMatRenameBuffer, n.c_str(), copyLen);
+                                textMatRenameBuffer[copyLen] = '\0';
+                            }
                         }
 
                         Engine::TextMaterial editMat = mat;
@@ -2116,7 +2188,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
 
                         ImGui::SeparatorText("Shadow");
                         changed |= ImGui::ColorEdit4("Shadow Color", &editMat.shadowColor.x);
-                        changed |= ImGui::DragFloat2("Shadow Offset", &editMat.shadowOffset.x, 0.01f);
+                        changed |= ImGui::DragFloat2("Shadow Offset", &editMat.shadowOffset.x, 0.001f);
                         changed |= ImGui::SliderFloat("Shadow Softness", &editMat.shadowSoftness, 0.0f, 1.0f);
 
                         if (changed) {
