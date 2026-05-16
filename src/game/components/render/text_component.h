@@ -20,7 +20,6 @@ namespace Game::Component
 {
 struct TextComponent
 {
-    Engine::FontHandle fontHandle{Engine::FontHandle::INVALID};
     Engine::FontID fontId{};
     Engine::TextMaterialID textMaterialId{};
     Core::InlineString<256> text{};
@@ -34,8 +33,16 @@ struct TextComponent
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
 };
 
+struct TextRuntime
+{
+    Engine::FontHandle fontHandle{Engine::FontHandle::INVALID};
+};
+
 struct TextLoadingTag
 {};
+
+void UnloadTextComponent(TextComponent& comp, entt::registry& registry, entt::entity entity);
+void LoadTextComponent(TextComponent& comp, entt::registry& registry, entt::entity entity);
 } // Game::Component
 
 #endif //WILL_ENGINE_TEXT_COMPONENT_H

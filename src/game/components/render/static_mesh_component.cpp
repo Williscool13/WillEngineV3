@@ -10,7 +10,6 @@
 #include "imgui.h"
 #include <glm/gtc/type_ptr.hpp>
 
-#include "game/components/scene_components.h"
 #include "engine/include/engine_context.h"
 #include "engine/asset_manager.h"
 #include "engine/engine_api.h"
@@ -22,23 +21,32 @@
 
 namespace Game::Component
 {
-void RecreateStaticMesh(StaticMeshComponent& component, entt::registry& registry, entt::entity entity)
+void UnloadStaticMesh(StaticMeshComponent& component, entt::registry& registry, entt::entity entity)
 {
     auto* ctx = registry.ctx().get<Engine::EngineContext*>();
-    auto* state = registry.ctx().get<Engine::EngineState*>();
     auto& runtime = registry.get_or_emplace<MeshRuntime>(entity);
 
-    // Teardown
+    // Materials acquired when the model has resolved. If it never resolves this is a no-op
     for (size_t i = 0; i < runtime.primitives.Size(); ++i) {
         ctx->materialManager->ReleaseMaterial(runtime.primitives[i].materialID);
     }
     runtime.primitives.Clear();
+
     if (runtime.modelHandle.IsValid()) {
         ctx->assetManager->UnloadModel(runtime.modelHandle);
         runtime.modelHandle = {};
     }
 
-    // Rebuild
+    // If unloaded before it finished loading
+    registry.remove<StaticMeshLoadingTag>(entity);
+}
+
+void LoadStaticMesh(StaticMeshComponent& component, entt::registry& registry, entt::entity entity)
+{
+    auto* ctx = registry.ctx().get<Engine::EngineContext*>();
+    auto* state = registry.ctx().get<Engine::EngineState*>();
+    auto& runtime = registry.get_or_emplace<MeshRuntime>(entity);
+
     if (component.modelId.IsValid() && component.meshIndex != -1) {
         runtime.modelHandle = ctx->assetManager->LoadModel(component.modelId);
         registry.emplace_or_replace<StaticMeshLoadingTag>(entity);
@@ -58,7 +66,7 @@ void StaticMeshComponent::OnConstruct(entt::registry& registry, entt::entity ent
     if (component.meshIndex == -1) {
         return;
     }
-    RecreateStaticMesh(component, registry, entity);
+    LoadStaticMesh(component, registry, entity);
 }
 
 void StaticMeshComponent::OnDestroy(entt::registry& registry, entt::entity entity)
@@ -116,7 +124,7 @@ void Component::StaticMeshComponent::Deserialize(StaticMeshComponent& comp, cons
 }
 
 Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry,
-                                                                          entt::entity entity, const char* name)
+                                                                         entt::entity entity, const char* name)
 {
     auto& component = registry.get<StaticMeshComponent>(entity);
     bool open = ImGui::CollapsingHeader("Static Mesh", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
@@ -186,8 +194,9 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
 
         if (component.meshIndex == -1) {
             if (model->modelData.meshes.Size() == 1) {
+                UnloadStaticMesh(component, registry, entity);
                 component.meshIndex = 0;
-                RecreateStaticMesh(component, registry, entity);
+                LoadStaticMesh(component, registry, entity);
             }
             else {
                 if (ImGui::BeginCombo("Select Mesh", "")) {
@@ -197,8 +206,9 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
                         if (meshName.Size() == 0) { snprintf(fallback, sizeof(fallback), "Mesh %d", i); }
                         const char* displayName = meshName.Size() > 0 ? meshName.c_str() : fallback;
                         if (ImGui::Selectable(displayName, false)) {
+                            UnloadStaticMesh(component, registry, entity);
                             component.meshIndex = i;
-                            RecreateStaticMesh(component, registry, entity);
+                            LoadStaticMesh(component, registry, entity);
                         }
                     }
                     ImGui::EndCombo();
@@ -242,7 +252,7 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
                 int32_t origIdx;
                 Core::InlineString<128> name;
             };
-            Core::InlineVector <SlotInfo, 128> slots;
+            Core::InlineVector<SlotInfo, 128> slots;
             bool seen[128] = {};
             for (size_t i = 0; i < primCount; ++i) {
                 int32_t idx = runtime->primitives[i].originalMaterialIndex;

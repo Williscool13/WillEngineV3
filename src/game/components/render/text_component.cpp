@@ -20,15 +20,31 @@
 
 namespace Game::Component
 {
-void TextComponent::OnConstruct(entt::registry& registry, entt::entity entity)
+void UnloadTextComponent(TextComponent& comp, entt::registry& registry, entt::entity entity)
 {
     auto* ctx = registry.ctx().get<Engine::EngineContext*>();
-    auto& comp = registry.get<TextComponent>(entity);
+    auto& runtime = registry.get_or_emplace<TextRuntime>(entity);
+    if (runtime.fontHandle.IsValid()) {
+        ctx->assetManager->UnloadFont(runtime.fontHandle);
+        runtime.fontHandle = {};
+    }
+    registry.remove<TextLoadingTag>(entity);
+}
 
-    if (comp.fontId.IsValid() && !comp.fontHandle.IsValid()) {
-        comp.fontHandle = ctx->assetManager->LoadFont(comp.fontId);
+void LoadTextComponent(TextComponent& comp, entt::registry& registry, entt::entity entity)
+{
+    auto* ctx = registry.ctx().get<Engine::EngineContext*>();
+    auto& runtime = registry.get_or_emplace<TextRuntime>(entity);
+    if (comp.fontId.IsValid()) {
+        runtime.fontHandle = ctx->assetManager->LoadFont(comp.fontId);
         registry.emplace_or_replace<TextLoadingTag>(entity);
     }
+}
+
+void TextComponent::OnConstruct(entt::registry& registry, entt::entity entity)
+{
+    auto& comp = registry.get<TextComponent>(entity);
+    LoadTextComponent(comp, registry, entity);
 
     auto* transform = registry.try_get<TransformComponent>(entity);
     glm::mat4 m = transform ? GetMatrix(*transform) : glm::mat4(1.0f);
@@ -38,12 +54,9 @@ void TextComponent::OnConstruct(entt::registry& registry, entt::entity entity)
 
 void TextComponent::OnDestroy(entt::registry& registry, entt::entity entity)
 {
-    auto* ctx = registry.ctx().get<Engine::EngineContext*>();
     auto& comp = registry.get<TextComponent>(entity);
-    if (comp.fontHandle.IsValid()) {
-        ctx->assetManager->UnloadFont(comp.fontHandle);
-    }
-    registry.remove<TextLoadingTag>(entity);
+    UnloadTextComponent(comp, registry, entity);
+    registry.remove<TextRuntime>(entity);
     registry.remove<RenderTransformComponent>(entity);
     registry.remove<DirtyRenderTransformComponent>(entity);
 }
@@ -86,12 +99,13 @@ Engine::ComponentEditorResult TextComponent::DrawEditor(Core::ViewFamily& viewFa
     }
 
     auto* ctx = registry.ctx().get<Engine::EngineContext*>();
+    auto& runtime = registry.get_or_emplace<TextRuntime>(entity);
 
     // Font picker
     const char* fontLabel = "(none)";
     const Engine::AssetManager::CachedFontMetadata* currentMeta = nullptr;
-    if (comp.fontHandle.IsValid()) {
-        Engine::Font* font = ctx->assetManager->GetFont(comp.fontHandle);
+    if (runtime.fontHandle.IsValid()) {
+        Engine::Font* font = ctx->assetManager->GetFont(runtime.fontHandle);
         if (font) {
             currentMeta = ctx->assetManager->GetFontMetadata(font->fontId);
             if (currentMeta) { fontLabel = currentMeta->name.c_str(); }
@@ -101,16 +115,13 @@ Engine::ComponentEditorResult TextComponent::DrawEditor(Core::ViewFamily& viewFa
     if (ImGui::BeginCombo("Font", fontLabel)) {
         const auto& fontCache = ctx->assetManager->GetFontCache();
         for (const auto& [fontId, meta] : fontCache) {
-            bool selected = comp.fontHandle.IsValid() &&
-                            ctx->assetManager->GetFont(comp.fontHandle) &&
-                            ctx->assetManager->GetFont(comp.fontHandle)->fontId == fontId;
+            bool selected = runtime.fontHandle.IsValid() &&
+                            ctx->assetManager->GetFont(runtime.fontHandle) &&
+                            ctx->assetManager->GetFont(runtime.fontHandle)->fontId == fontId;
             if (ImGui::Selectable(meta.name.c_str(), selected)) {
-                if (comp.fontHandle.IsValid()) {
-                    ctx->assetManager->UnloadFont(comp.fontHandle);
-                }
+                UnloadTextComponent(comp, registry, entity);
                 comp.fontId = fontId;
-                comp.fontHandle = ctx->assetManager->LoadFont(fontId);
-                registry.emplace_or_replace<TextLoadingTag>(entity);
+                LoadTextComponent(comp, registry, entity);
             }
         }
         ImGui::EndCombo();
@@ -148,13 +159,13 @@ Engine::ComponentEditorResult TextComponent::DrawEditor(Core::ViewFamily& viewFa
     ImGui::DragFloat("Size (px)", &comp.renderSizePx, 1.0f, 1.0f, 2048.0f);
     ImGui::ColorEdit4("Color", glm::value_ptr(comp.color));
 
-    if (comp.fontHandle.IsValid()) {
-        Engine::Font* font = ctx->assetManager->GetFont(comp.fontHandle);
+    if (runtime.fontHandle.IsValid()) {
+        Engine::Font* font = ctx->assetManager->GetFont(runtime.fontHandle);
         if (font) {
             switch (font->loadState) {
-                case Engine::Font::LoadState::Loading:     ImGui::TextDisabled("Loading..."); break;
+                case Engine::Font::LoadState::Loading:      ImGui::TextDisabled("Loading..."); break;
                 case Engine::Font::LoadState::FailedToLoad: ImGui::TextColored({1,0,0,1}, "Failed to load"); break;
-                case Engine::Font::LoadState::Loaded:      ImGui::TextDisabled("Ready"); break;
+                case Engine::Font::LoadState::Loaded:       ImGui::TextDisabled("Ready"); break;
                 default: break;
             }
         }

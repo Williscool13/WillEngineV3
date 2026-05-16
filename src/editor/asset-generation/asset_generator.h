@@ -11,6 +11,7 @@
 
 #include "core/containers/inline_path.h"
 #include "engine/core/environment_map_id.h"
+#include "engine/core/model_id.h"
 #include "engine/core/texture_id.h"
 
 #include "asset_generation_types.h"
@@ -66,6 +67,7 @@ struct ModelGenerateRequest
 struct ModelGenerateComplete
 {
     Core::Path outputPath;
+    Engine::ModelID modelId{};
     bool success{};
 };
 

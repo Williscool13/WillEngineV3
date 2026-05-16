@@ -106,6 +106,11 @@ public:
     Arena& PhysicsArena() { return physicsArena; }
     TlsfAllocator& Render() { return tlsfRender; }
     Arena& RenderArena() { return renderArena; }
+    /**
+     * General per-frame arena. Cleared at the end of each game frame.
+     * Access from game thread only.
+     * @return
+     */
     Arena& GeneralArena() { return generalArena; }
 
     [[nodiscard]] Stats GetStats();

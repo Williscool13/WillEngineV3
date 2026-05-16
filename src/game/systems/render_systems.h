@@ -27,6 +27,8 @@ namespace Game
 {
 void ConnectRenderObservers(entt::registry& registry);
 
+void ResolveModelHotReloads(Engine::EngineContext* ctx, Engine::EngineState* state);
+void ResolveFontHotReloads(Engine::EngineContext* ctx, Engine::EngineState* state);
 void ResolveStaticMeshLoads(Engine::EngineContext* ctx, Engine::EngineState* state);
 void ResolveTextLoads(Engine::EngineContext* ctx, Engine::EngineState* state);
 void ResolveProceduralMeshLoads(Engine::EngineContext* ctx, Engine::EngineState* state);

@@ -447,7 +447,7 @@ void SaveEntityAsPrefab(Engine::EngineState* state, Engine::AssetManager* assetM
     state->registry.emplace_or_replace<Component::PrefabInstanceComponent>(entity, StringID{prefabId});
 
     if (isNewPrefab) {
-        ctx->bShouldRescanResources.store(true, std::memory_order_release);
+        ctx->bShouldRescanResources = true;
     }
     LOG_INFO(Game, "Saved prefab '{}' to '{}'", prefabName, path.c_str());
 }

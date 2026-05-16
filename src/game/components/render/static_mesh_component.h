@@ -41,7 +41,8 @@ struct StaticMeshComponent
 struct StaticMeshLoadingTag
 {};
 
-void RecreateStaticMesh(StaticMeshComponent& component, entt::registry& registry, entt::entity entity);
+void UnloadStaticMesh(StaticMeshComponent& component, entt::registry& registry, entt::entity entity);
+void LoadStaticMesh(StaticMeshComponent& component, entt::registry& registry, entt::entity entity);
 }
 
 #endif //WILL_ENGINE_STATIC_MESH_COMPONENT_H

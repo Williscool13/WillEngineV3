@@ -313,7 +313,7 @@ void AssetGenerator::OnModelGenerateComplete(bool success, ModelGenerateSlotHand
     }
 
     StaticModelGenerateSlot& task = modelGenerateTasks[slotHandle.index];
-    modelGenerateCompleteQueue.enqueue({task.outputPath, success});
+    modelGenerateCompleteQueue.enqueue({task.outputPath, Engine::ModelID{task.modelId}, success});
 
     if (success) {
         SPDLOG_INFO("Successfully generated model: {}", task.outputPath.c_str());
@@ -325,8 +325,6 @@ void AssetGenerator::OnModelGenerateComplete(bool success, ModelGenerateSlotHand
     task.Clear();
     bool removed = modelGenerateAllocator.Remove(slotHandle);
     assert(removed && "Failed to remove valid slot handle");
-
-    ctx->bShouldRescanResources.store(true, std::memory_order_release);
 
     workCounter.fetch_add(1);
     wakeCV.notify_one();
@@ -355,8 +353,6 @@ void AssetGenerator::OnTextureGenerateComplete(bool success, TextureGenerateSlot
     bool removed = textureGenerateAllocator.Remove(slotHandle);
     assert(removed && "Failed to remove valid slot handle");
 
-    ctx->bShouldRescanResources.store(true, std::memory_order_release);
-
     workCounter.fetch_add(1);
     wakeCV.notify_one();
 }
@@ -383,8 +379,6 @@ void AssetGenerator::OnEnvironmentGenerateComplete(bool success, EnvironmentMapG
     task.Clear();
     bool removed = environmentMapGenerateAllocator.Remove(slotHandle);
     assert(removed && "Failed to remove valid slot handle");
-
-    ctx->bShouldRescanResources.store(true, std::memory_order_release);
 
     workCounter.fetch_add(1);
     wakeCV.notify_one();
@@ -433,9 +427,6 @@ void AssetGenerator::OnFontGenerateComplete(bool success, FontGenerateSlotHandle
     task.Clear();
     bool removed = fontGenerateAllocator.Remove(slotHandle);
     assert(removed && "Failed to remove valid slot handle");
-
-    ctx->bShouldRescanResources.store(true, std::memory_order_release);
-    ctx->bShouldRescanFonts.store(true, std::memory_order_release);
 
     workCounter.fetch_add(1);
     wakeCV.notify_one();

@@ -87,6 +87,12 @@ public: // Models
 
     void UnloadModel(StaticModelHandle handle);
 
+    /**
+     * Evict model. Forcing it to unload (will not be recovered if loaded again before retire frame arrives).
+     * @param modelId
+     */
+    void EvictModel(ModelID modelId);
+
     struct CachedModelMetadata
     {
         Core::Path source;
@@ -188,6 +194,12 @@ public: // Fonts
 
     FontHandle LoadFont(FontID id);
     void UnloadFont(FontHandle handle);
+
+    /**
+     * Unloads the font and immediately removes it from the active handle map, so a subsequent LoadFont allocates a fresh slot.
+     * @param fontId
+     */
+    void EvictFont(FontID fontId);
     Font* GetFont(FontHandle handle);
 
     /** Returns the glyph info for the given codepoint, or nullptr if not found or not loaded. */
@@ -210,6 +222,9 @@ public: // Per-Tick calls
 
     void ResolveUnloads();
 
+    /**
+     * Scan for assets. Done once in constructor, but editor calls this frequently to gather generated assets.
+     */
     void Scan();
 
 public:

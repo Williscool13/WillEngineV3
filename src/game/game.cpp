@@ -137,6 +137,10 @@ GAME_API void GameUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
     Game::DebugUpdate(ctx, state);
 
     // Resolve Creations
+#if WILL_EDITOR
+    Game::ResolveModelHotReloads(ctx, state);
+    Game::ResolveFontHotReloads(ctx, state);
+#endif
     Game::ResolveTextLoads(ctx, state);
 
     if (ctx->bModelLoadedThisFrame || state->bPendingModelResolve) {

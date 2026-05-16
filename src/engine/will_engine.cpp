@@ -987,6 +987,40 @@ void WillEngine::Run()
         ResolveLoadResult loadCounts = assetManager->ResolveLoads(engineRenderSynchronization->stagingFrameBuffer);
         assetManager->ResolveUnloads();
 #if WILL_EDITOR
+        {
+            engineState->pendingHotReloadModelIds.Clear();
+            Editor::ModelGenerateComplete modelComplete{};
+            while (!engineState->pendingHotReloadModelIds.IsFull() && assetGenerator->TryDequeueModelGenerateComplete(modelComplete)) {
+                engineContext->bShouldRescanResources = true;
+                if (modelComplete.success && modelComplete.modelId.IsValid()) {
+                    engineState->pendingHotReloadModelIds.PushBack(modelComplete.modelId);
+                }
+            }
+            engineState->pendingHotReloadFontIds.Clear();
+            Editor::FontGenerateComplete fontComplete{};
+            while (!engineState->pendingHotReloadFontIds.IsFull() && assetGenerator->TryDequeueFontGenerateComplete(fontComplete)) {
+                engineContext->bShouldRescanResources = true;
+                if (fontComplete.success && fontComplete.fontId.IsValid()) {
+                    engineState->pendingHotReloadFontIds.PushBack(fontComplete.fontId);
+                }
+            }
+            engineState->pendingHotReloadTextureIds.Clear();
+            Editor::TextureGenerateComplete textureComplete{};
+            while (!engineState->pendingHotReloadTextureIds.IsFull() && assetGenerator->TryDequeueTextureGenerateComplete(textureComplete)) {
+                engineContext->bShouldRescanResources = true;
+                if (textureComplete.success && textureComplete.textureId.IsValid()) {
+                    engineState->pendingHotReloadTextureIds.PushBack(textureComplete.textureId);
+                }
+            }
+            engineState->pendingHotReloadEnvironmentMapIds.Clear();
+            Editor::EnvironmentMapGenerateComplete envMapComplete{};
+            while (!engineState->pendingHotReloadEnvironmentMapIds.IsFull() && assetGenerator->TryDequeueCubemapGenerateComplete(envMapComplete)) {
+                engineContext->bShouldRescanResources = true;
+                if (envMapComplete.success && envMapComplete.environmentMapId.IsValid()) {
+                    engineState->pendingHotReloadEnvironmentMapIds.PushBack(envMapComplete.environmentMapId);
+                }
+            }
+        }
         materialManager->Scan();
         assetManager->Scan();
 #endif

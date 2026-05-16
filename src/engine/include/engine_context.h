@@ -97,9 +97,8 @@ struct EngineContext
     Core::InlineFunction<uint64_t(uint64_t, uint64_t)> addImguiTextureFn;
     Core::InlineFunction<void(uint64_t)> removeImguiTextureFn;
 
-    std::atomic<bool> bShouldRescanResources{false};
+    bool bShouldRescanResources{false};
     std::atomic<bool> bShouldRescanMaterials{false};
-    std::atomic<bool> bShouldRescanFonts{false};
 };
 } // Engine
 

@@ -356,6 +356,15 @@ void AssetManager::UnloadModel(StaticModelHandle handle)
     }
 }
 
+void AssetManager::EvictModel(ModelID modelId)
+{
+    StaticModelHandle* handle = modelIdToHandle.Find(modelId);
+    assert(handle);
+    StaticModel& model = models[handle->index];
+    assert(model.refCount == 0 && "EvictModel called while model still has active references");
+    modelIdToHandle.Remove(modelId);
+}
+
 ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuffer)
 {
     ResolveLoadResult loadCounts{};
@@ -549,7 +558,11 @@ void AssetManager::ResolveUnloads()
         }
 
         if (bVerboseLogging.load(std::memory_order_relaxed)) { LOG_TRACE(Asset, "Model unloaded: {}", model.name.c_str()); }
-        modelIdToHandle.Remove(model.modelId);
+        StaticModelHandle* stored = modelIdToHandle.Find(model.modelId);
+        // If the model in the handle map is still the same one we're unloading here.
+        if (stored && *stored == model.selfHandle) {
+            modelIdToHandle.Remove(model.modelId);
+        }
         modelAllocator.Remove(model.selfHandle);
         model = {};
         modelsUnloadedThisTick++;
@@ -619,7 +632,11 @@ void AssetManager::ResolveUnloads()
 
         if (bVerboseLogging.load(std::memory_order_relaxed)) { LOG_TRACE(Asset, "Font unloaded: {}", font.name.c_str()); }
         resourceManager->bindlessSamplerTextureDescriptorBuffer.ReleaseTextureBinding(font.atlasTexture.bindlessHandle);
-        fontIdToHandle.Remove(font.fontId);
+        FontHandle* storedFont = fontIdToHandle.Find(font.fontId);
+        // If the font in the handle map is still the same one we're unloading here.
+        if (storedFont && *storedFont == font.selfHandle) {
+            fontIdToHandle.Remove(font.fontId);
+        }
         fontAllocator.Remove(font.selfHandle);
         font = {};
         fontsUnloadedThisTick++;
@@ -637,8 +654,7 @@ void AssetManager::ResolveUnloads()
 
 void AssetManager::Scan()
 {
-    bool expectedRescan = true;
-    if (ctx->bShouldRescanResources.compare_exchange_strong(expectedRescan, false, std::memory_order::acq_rel, std::memory_order::relaxed)) {
+    if (ctx->bShouldRescanResources) {
         const Core::Path& assetPath = Platform::GetAssetPath();
         if (assetPath.Exists()) {
             Core::Vector<Core::Path> paths;
@@ -763,6 +779,8 @@ void AssetManager::Scan()
             }
         }
     }
+
+    ctx->bShouldRescanResources = false;
 }
 
 Texture* AssetManager::LoadTexture(TextureID textureId)
@@ -1095,6 +1113,15 @@ void AssetManager::UnloadFont(FontHandle handle)
     if (font.refCount == 0) {
         font.retireFrame = ctx->currentFrame + Core::FRAME_BUFFER_COUNT * 4;
     }
+}
+
+void AssetManager::EvictFont(FontID fontId)
+{
+    FontHandle* handle = fontIdToHandle.Find(fontId);
+    assert(handle);
+    Font& font = fonts[handle->index];
+    assert(font.refCount == 0 && "EvictFont called while font still has active references");
+    fontIdToHandle.Remove(fontId);
 }
 
 Font* AssetManager::GetFont(FontHandle handle)

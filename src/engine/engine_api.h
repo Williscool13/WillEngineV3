@@ -18,6 +18,10 @@
 #include "core/containers/vector.h"
 #include "core/types/math.h"
 #include "engine/core/hash.h"
+#include "engine/core/environment_map_id.h"
+#include "engine/core/font_id.h"
+#include "engine/core/model_id.h"
+#include "engine/core/texture_id.h"
 #include "render/interface/render_interface.h"
 #include "physics/physics_config.h"
 #include "resources/scene/scene.h"
@@ -224,6 +228,10 @@ struct EngineState
 
     // Asset Loading
     bool bPendingModelResolve{false};
+    Core::InlineVector<ModelID, 16> pendingHotReloadModelIds{};
+    Core::InlineVector<FontID, 16> pendingHotReloadFontIds{};
+    Core::InlineVector<TextureID, 16> pendingHotReloadTextureIds{};
+    Core::InlineVector<EnvironmentMapID, 16> pendingHotReloadEnvironmentMapIds{};
 
     int32_t pendingModelWaitCount{0};
     std::chrono::steady_clock::time_point modelWaitLastActivity{};
