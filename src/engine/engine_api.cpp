@@ -106,5 +106,10 @@ EngineState::EngineState(Core::TlsfAllocator* allocator)
       componentRegistry(allocator),
       physics(allocator),
       editor(allocator)
-{}
+{
+    const uint64_t clayMemorySize = Clay_MinMemorySize();
+    void* clayMemory = allocator->Alloc(clayMemorySize, Core::AllocTag::Clay);
+    clayArena = Clay_CreateArenaWithCapacityAndMemory(clayMemorySize, clayMemory);
+    Clay_Initialize(clayArena, {0.0f, 0.0f}, {nullptr, 0});
+}
 } // namespace Engine

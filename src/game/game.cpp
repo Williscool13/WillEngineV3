@@ -33,6 +33,7 @@
 #include "systems/gameplay_systems.h"
 #include "engine/asset_manager.h"
 #include "systems/scene_system.h"
+#include "clay/clay.h"
 
 
 extern "C"
@@ -175,6 +176,41 @@ GAME_API void GameUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
     }
 }
 
+static void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
+{
+    Clay_SetLayoutDimensions({static_cast<float>(ctx->windowContext.viewportWidth), static_cast<float>(ctx->windowContext.viewportHeight)});
+
+    Clay_BeginLayout();
+
+    CLAY(CLAY_ID("OuterContainer"), {
+         .layout = {
+         .sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0)},
+         .padding = CLAY_PADDING_ALL(16),
+         .childGap = 8,
+         .layoutDirection = CLAY_TOP_TO_BOTTOM,
+         }
+         })
+
+    //
+    {
+        CLAY(CLAY_ID("HeaderBar"), {
+             .layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(48)}},
+             .backgroundColor = {40, 40, 40, 220}
+             })
+        //
+        {
+            CLAY_TEXT(CLAY_STRING("WillEngine"),
+                      CLAY_TEXT_CONFIG({
+                          .textColor = {255, 255, 255, 255},
+                          .fontSize = 24,
+                          }));
+        }
+    }
+
+    Clay_RenderCommandArray renderCommands = Clay_EndLayout();
+    (void) renderCommands;
+}
+
 GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
     frameBuffer->mainViewFamily.modelMatrices.Clear();
@@ -207,6 +243,7 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
     Game::RenderPrepareTransforms(ctx, state, frameBuffer);
     Game::GatherRenderables(ctx, state, frameBuffer);
     Game::GatherTextRenderables(ctx, state, frameBuffer);
+    GatherUIRenderables(ctx, state, frameBuffer);
 
 #if WILL_EDITOR
     Game::DrawEditorInterface(ctx, state, frameBuffer);

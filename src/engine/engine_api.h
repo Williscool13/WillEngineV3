@@ -13,6 +13,7 @@
 #include <imgui.h>
 #include <ImGuizmo.h>
 
+#include "clay/clay.h"
 #include "core/containers/inline_vector.h"
 #include "core/containers/map.h"
 #include "core/containers/vector.h"
@@ -225,6 +226,7 @@ struct EngineState
     entt::registry registry;
     Core::Map<StringID, entt::entity> stableIdToEntityMap;
     ComponentRegistry componentRegistry{};
+    Clay_Arena clayArena{};
 
     // Asset Loading
     bool bPendingModelResolve{false};

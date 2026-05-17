@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <atomic>
+#include <clay.h>
 
 #include "core/containers/inline_function.h"
 #include "render/pipelines/pipeline_manager.h"
@@ -87,6 +88,9 @@ struct EngineContext
     bool bImguiMouseCaptured = false;
     bool bImGuiWantsTextInput = false;
     uint64_t lastKnownStableIdUnderCursor{0};
+
+    // Clay
+    Clay_Context* clayContext{nullptr};
 
     uint64_t currentFrame{0};
     bool bModelLoadedThisFrame{false};

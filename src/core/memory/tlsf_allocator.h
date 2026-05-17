@@ -45,6 +45,7 @@ enum class AllocTag : uint32_t
     AsyncAssetLoadManager,
     AssetManager,
     MaterialManager,
+    Clay,
 
     Count
 };
