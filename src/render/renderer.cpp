@@ -1149,7 +1149,8 @@ void SetupTextForwardPass(RenderGraph& graph,
     //textPass.ReadDepthAttachment(targets.depthStencil);
     textPass.ReadWriteDepthAttachment(targets.depthStencil);
     textPass.WriteColorAttachment(targets.outputColor);
-    textPass.Execute([&, width = renderExtent[0], height = renderExtent[1], pipelineEntry, colorOutput = targets.outputColor, depthOutput = targets.depthStencil](VkCommandBuffer cmd) {
+    textPass.WriteColorAttachment(targets.stableId);
+    textPass.Execute([&, width = renderExtent[0], height = renderExtent[1], pipelineEntry, colorOutput = targets.outputColor, depthOutput = targets.depthStencil, stableId = targets.stableId](VkCommandBuffer cmd) {
         VkViewport viewport = VkHelpers::GenerateViewport(width, height);
         vkCmdSetViewport(cmd, 0, 1, &viewport);
         VkRect2D scissor = VkHelpers::GenerateScissor(width, height);
@@ -1157,10 +1158,13 @@ void SetupTextForwardPass(RenderGraph& graph,
 
         VkImageView colorView = graph.GetImageViewHandle(colorOutput);
         VkImageView depthView = graph.GetImageViewHandle(depthOutput);
+        VkImageView stableIdView = graph.GetImageViewHandle(stableId);
         VkRenderingAttachmentInfo colorAttachment = VkHelpers::RenderingAttachmentInfo(colorView, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        VkRenderingAttachmentInfo stableIdAttachment = VkHelpers::RenderingAttachmentInfo(stableIdView, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
         // VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(depthView, nullptr, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL);
         VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(depthView, nullptr, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
-        VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, &colorAttachment, 1, &depthAttachment, nullptr);
+        const VkRenderingAttachmentInfo colorAttachments[] = {colorAttachment, stableIdAttachment};
+        VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, colorAttachments, 2, &depthAttachment, nullptr);
         vkCmdBeginRendering(cmd, &renderInfo);
 
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineEntry->pipeline);

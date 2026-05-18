@@ -267,6 +267,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
         engineContext->imguiAllocFn = ImGuiAlloc;
         engineContext->imguiFreeFn = ImGuiFree;
         engineContext->imguiAllocUserData = &memoryManager;
+        engineContext->clayContext = Clay_GetCurrentContext();
         engineContext->windowContext.windowWidth = w;
         engineContext->windowContext.windowHeight = h;
         engineContext->windowContext.viewportWidth = w;

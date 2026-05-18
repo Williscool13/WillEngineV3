@@ -44,8 +44,8 @@ SHADER_PUBLIC struct SHADER_ALIGN TextInstanceData
 {
     SHADER_PUBLIC uint32_t modelIndex;
     SHADER_PUBLIC float pxRange;
-    uint32_t _pad0;
-    uint32_t _pad1;
+    SHADER_PUBLIC uint32_t stableIdLo;
+    SHADER_PUBLIC uint32_t stableIdHi;
 };
 
 #endif //WILL_ENGINE_TEXT_INTEROP_H

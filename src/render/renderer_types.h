@@ -55,6 +55,7 @@ struct MainRenderTargets
     StringID gbufferTwo; // R=albedo, G=emissive
     StringID depthStencil;
     StringID outputColor;
+    StringID stableId;
 };
 
 #endif //WILL_ENGINE_RENDERER_TYPES_H

@@ -70,6 +70,7 @@ GAME_API void GameLoad(Engine::EngineContext* ctx, Engine::EngineState* state)
 
     ImGui::SetCurrentContext(ctx->imguiContext);
     ImGui::SetAllocatorFunctions(ctx->imguiAllocFn, ctx->imguiFreeFn, ctx->imguiAllocUserData);
+    Clay_SetCurrentContext(ctx->clayContext);
 
     ctx->physicsSystem->RegisterPhysics();
     ctx->scheduler->RegisterExternalTaskThread();
@@ -182,32 +183,28 @@ static void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState*
 
     Clay_BeginLayout();
 
-    CLAY(CLAY_ID("OuterContainer"), {
-         .layout = {
-         .sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0)},
-         .padding = CLAY_PADDING_ALL(16),
-         .childGap = 8,
-         .layoutDirection = CLAY_TOP_TO_BOTTOM,
-         }
-         })
+    constexpr Clay_Color COLOR_LIGHT = Clay_Color{224, 215, 210, 255};
+    constexpr Clay_Color COLOR_RED = Clay_Color{168, 66, 28, 255};
+    constexpr Clay_Color COLOR_ORANGE = Clay_Color{225, 138, 50, 255};
 
-    //
-    {
-        CLAY(CLAY_ID("HeaderBar"), {
-             .layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(48)}},
-             .backgroundColor = {40, 40, 40, 220}
-             })
-        //
-        {
-            CLAY_TEXT(CLAY_STRING("WillEngine"),
-                      CLAY_TEXT_CONFIG({
-                          .textColor = {255, 255, 255, 255},
-                          .fontSize = 24,
-                          }));
+    uint32_t smilingFriendImageIndex = SMILING_FRIENDS_BINDLESS_INDEX;
+
+    CLAY(CLAY_ID("OuterContainer"), { .layout = { .sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0)}, .padding = CLAY_PADDING_ALL(16), .childGap = 16 }, .backgroundColor = {250, 250, 255, 255} }) {
+        CLAY(CLAY_ID("SideBar"), {
+             .layout = {.sizing = {.width = CLAY_SIZING_FIXED(300), .height = CLAY_SIZING_GROW(0)}, .padding = CLAY_PADDING_ALL(16), .childGap = 16, .layoutDirection = CLAY_TOP_TO_BOTTOM, },
+             .backgroundColor = COLOR_LIGHT
+             }) {
+            CLAY(CLAY_ID("ProfilePictureOuter"), { .layout = { .sizing = { .width = CLAY_SIZING_GROW(0) }, .padding = CLAY_PADDING_ALL(16), .childGap = 16, .childAlignment = { .y = CLAY_ALIGN_Y_CENTER } }, .backgroundColor = COLOR_RED }) {
+                CLAY(CLAY_ID("ProfilePicture"), { .layout = { .sizing = { .width = CLAY_SIZING_FIXED(60), .height = CLAY_SIZING_FIXED(60) }}, .image = { .imageData = &smilingFriendImageIndex } }) {}
+                CLAY_TEXT(CLAY_STRING("Clay - UI Library"), { .textColor = {255, 255, 255, 255}, .fontSize = 24, });
+            }
+            CLAY_TEXT(CLAY_STRING("WillEngine"), {.textColor = {255, 255, 255, 255}, .fontSize = 24, });
+
+            CLAY(CLAY_ID("MainContent"), { .layout = { .sizing = { .width = CLAY_SIZING_GROW(0), .height = CLAY_SIZING_GROW(0) } }, .backgroundColor = COLOR_LIGHT }) {}
         }
     }
 
-    Clay_RenderCommandArray renderCommands = Clay_EndLayout();
+    Clay_RenderCommandArray renderCommands = Clay_EndLayout(frameBuffer->timeFrame.deltaTime);
     (void) renderCommands;
 }
 

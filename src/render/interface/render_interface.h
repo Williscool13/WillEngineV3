@@ -305,6 +305,7 @@ struct TextInstanceDataFull
     float pxRange;
     uint32_t atlasBindlessIndex;
     uint32_t textMaterialIndex;
+    uint64_t stableId{0};
 };
 
 struct ViewFamily

@@ -626,11 +626,17 @@ void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* stat
             frameBuffer->mainViewFamily.textMaterials.PushBack(ctx->materialManager->GetRenderTextMaterial(textComp.textMaterialId));
         }
 
+        uint64_t stableId = 0;
+        if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
+            stableId = stable->id.id;
+        }
+
         frameBuffer->mainViewFamily.textInstances.PushBack({
             .modelIndex = modelIndex,
             .pxRange = static_cast<float>(font->header.sdfSpread),
             .atlasBindlessIndex = font->atlasTexture.bindlessHandle.index,
             .textMaterialIndex = matIndexRef,
+            .stableId = stableId,
         });
     }
 

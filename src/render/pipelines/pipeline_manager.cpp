@@ -661,12 +661,19 @@ void PipelineManager::RegisterPipelines()
                               VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT
         };
 
-        builder.SetupBlending(&blendState, 1);
-
-        VkFormat colorFormats[1] = {
-            COLOR_ATTACHMENT_FORMAT,
+        VkPipelineColorBlendAttachmentState stableIdBlendState{
+            .blendEnable = VK_FALSE,
+            .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                              VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT
         };
-        builder.SetupRenderer(colorFormats, 1, DEPTH_ATTACHMENT_FORMAT);
+        VkPipelineColorBlendAttachmentState blendStates[] = {blendState, stableIdBlendState};
+        builder.SetupBlending(blendStates, 2);
+
+        VkFormat colorFormats[2] = {
+            COLOR_ATTACHMENT_FORMAT,
+            GBUFFER_STABLE_ID_FORMAT,
+        };
+        builder.SetupRenderer(colorFormats, 2, DEPTH_ATTACHMENT_FORMAT);
 
         RegisterGraphicsPipeline(
             SID("default_text"),

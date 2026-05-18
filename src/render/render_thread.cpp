@@ -446,6 +446,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         .gbufferTwo = visShadingTargets.gbufferTwo,
         .depthStencil = targets.depthStencil,
         .outputColor = shadingOutputTarget,
+        .stableId = targets.stableId,
     };
 
 
@@ -1518,7 +1519,13 @@ void RenderThread::UploadTextUniforms(Core::ViewFamily& viewFamily, const Render
     UploadAllocation instUpload = renderGraph->AllocateTransient(instCount * sizeof(TextInstanceData)); {
         auto* dst = static_cast<TextInstanceData*>(instUpload.ptr);
         for (uint32_t i = 0; i < instCount; ++i) {
-            dst[i] = {viewFamily.textInstances[i].modelIndex, viewFamily.textInstances[i].pxRange};
+            const Core::TextInstanceDataFull& src = viewFamily.textInstances[i];
+            dst[i] = {
+                .modelIndex = src.modelIndex,
+                .pxRange = src.pxRange,
+                .stableIdLo = static_cast<uint32_t>(src.stableId & 0xFFFFFFFFu),
+                .stableIdHi = static_cast<uint32_t>(src.stableId >> 32u),
+            };
         }
     }
 

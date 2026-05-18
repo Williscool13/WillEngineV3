@@ -20,6 +20,7 @@ struct VertexOutput
     [[vk::location(2)]] nointerpolation uint drawCallIndex : COLOR1;
     [[vk::location(3)]] nointerpolation float2 uvOrigMin : TEXCOORD2;
     [[vk::location(4)]] nointerpolation float2 uvOrigMax : TEXCOORD3;
+    [[vk::location(5)]] nointerpolation uint2 stableId : COLOR2;
 };
 
 groupshared uint gs_visibleQuadIndices[QUADS_PER_GROUP];
@@ -106,6 +107,7 @@ void MeshMain(
         v.drawCallIndex = q.drawCallIndex;
         v.uvOrigMin = q.uvOrigMin;
         v.uvOrigMax = q.uvOrigMax;
+        v.stableId = uint2(inst.stableIdLo, inst.stableIdHi);
         vertices[vi] = v;
     }
 
@@ -123,8 +125,14 @@ float MSDFMedian(float r, float g, float b)
     return max(min(r, g), min(max(r, g), b));
 }
 
+struct FragmentOutput
+{
+    float4 color   : SV_Target0;
+    uint2 stableId : SV_Target1;
+};
+
 [shader("fragment")]
-float4 FragmentMain(VertexOutput input, uniform TextRenderPushConstant pc) : SV_Target0
+FragmentOutput FragmentMain(VertexOutput input, uniform TextRenderPushConstant pc)
 {
     TextInstanceData inst = pc.textInstanceData[input.drawCallIndex];
     TextRenderMaterial mat = pc.textMaterialBuffer[pc.textMaterialIndex];
@@ -164,5 +172,8 @@ float4 FragmentMain(VertexOutput input, uniform TextRenderPushConstant pc) : SV_
 
     if (result.a < 0.001) { discard; }
 
-    return result;
+    FragmentOutput output;
+    output.color = result;
+    output.stableId = input.stableId;
+    return output;
 }
