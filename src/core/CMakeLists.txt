@@ -70,6 +70,8 @@ add_library(core STATIC
         containers/inline_queue.h
         containers/queue.h
         containers/arena_queue.h
+        memory/arena_suballocator.cpp
+        memory/arena_suballocator.h
 )
 
 

@@ -122,7 +122,7 @@ void DrawMultiSelectEditor(Engine::EngineContext* ctx, Engine::EngineState* stat
         }
 
         if (allHaveFolder) {
-            Core::ArenaVector<Core::ShortString> existingFolders0{&ctx->memoryManager->GeneralArena(), 16};
+            Core::ArenaVector<Core::ShortString> existingFolders0{&ctx->editorArena.Get(), 16};
             auto folderView = state->registry.view<Component::EntityFolderComponent>();
             for (auto e : folderView) {
                 auto& fc = folderView.get<Component::EntityFolderComponent>(e);
@@ -172,7 +172,7 @@ void DrawMultiSelectEditor(Engine::EngineContext* ctx, Engine::EngineState* stat
             }
 
             if (folder0Same && firstFolder0Id.IsValid()) {
-                Core::ArenaVector<Core::ShortString> existingFolders1{&ctx->memoryManager->GeneralArena(), 16};
+                Core::ArenaVector<Core::ShortString> existingFolders1{&ctx->editorArena.Get(), 16};
                 for (auto e : folderView) {
                     auto& fc = folderView.get<Component::EntityFolderComponent>(e);
                     if (fc.folderHierarchy[0] != firstFolder0Id) {
@@ -483,7 +483,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
 
     if (state->editor.bWantCopyEntities) {
         state->editor.bWantCopyEntities = false;
-        auto copies = Core::ArenaFixedVector<entt::entity>(&ctx->memoryManager->GeneralArena(), state->editor.selectedEntities.Size());
+        auto copies = Core::ArenaFixedVector<entt::entity>(&ctx->editorArena.Get(), state->editor.selectedEntities.Size());
         for (entt::entity entity : state->editor.selectedEntities) {
             if (!state->registry.valid(entity)) continue;
             copies.PushBack(CopySceneEntity(state, entity, state->currentSceneId));
@@ -820,7 +820,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
                 StringID sceneId;
                 Core::InlineString<128> name;
             };
-            auto sceneList = Core::ArenaFixedVector<ScenePair>(&ctx->memoryManager->GeneralArena(), sceneCache.Size());
+            auto sceneList = Core::ArenaFixedVector<ScenePair>(&ctx->editorArena.Get(), sceneCache.Size());
             for (const auto& [id, meta] : sceneCache) {
                 sceneList.EmplaceBack(id, meta.sceneName);
             }
@@ -934,7 +934,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
         };
 
         if (modelCache.IsEmpty()) { ImGui::TextDisabled("No models loaded"); }
-        auto modelList = Core::ArenaFixedVector<ModelPair>(&ctx->memoryManager->GeneralArena(), std::max(modelCache.Size(), size_t{1}));
+        auto modelList = Core::ArenaFixedVector<ModelPair>(&ctx->editorArena.Get(), std::max(modelCache.Size(), size_t{1}));
         for (const auto& [id, meta] : modelCache) {
             modelList.EmplaceBack(meta.name, id);
         }
@@ -1008,7 +1008,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             StringID id;
         };
 
-        auto prefabList = Core::ArenaFixedVector<PrefabPair>(&ctx->memoryManager->GeneralArena(), prefabCache.Size());
+        auto prefabList = Core::ArenaFixedVector<PrefabPair>(&ctx->editorArena.Get(), prefabCache.Size());
         for (const auto& [id, meta] : prefabCache) {
             prefabList.EmplaceBack(meta.prefabName, id);
         }
@@ -1094,7 +1094,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             const char* folderName1;
         };
 
-        Core::ArenaVector<EntityEntry> entries{&ctx->memoryManager->GeneralArena(), 1024};
+        Core::ArenaVector<EntityEntry> entries{&ctx->editorArena.Get(), 1024};
 
         auto view2 = state->registry.view<Component::SceneComponent>();
         for (auto entity : view2) {
@@ -1198,7 +1198,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             StringID id;
             const char* name;
         };
-        Core::ArenaVector<FolderInfo> folders0{&ctx->memoryManager->GeneralArena(), 64};
+        Core::ArenaVector<FolderInfo> folders0{&ctx->editorArena.Get(), 64};
         for (auto& e : entries) {
             if (!e.folder0.IsValid()) continue;
             bool found = false;
@@ -1214,7 +1214,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
 
         // Draw unfoldered entities first
         {
-            Core::ArenaVector<EntityEntry*> group{&ctx->memoryManager->GeneralArena(), 1024};
+            Core::ArenaVector<EntityEntry*> group{&ctx->editorArena.Get(), 1024};
             for (auto& e : entries) {
                 if (!e.folder0.IsValid()) group.PushBack(&e);
             }
@@ -1225,7 +1225,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
         for (auto& [id0, name0] : folders0) {
             if (ImGui::TreeNode(fmt::format("{}##folder_{}", name0, id0.id).c_str())) {
                 // Collect subfolders for this folder, sorted alphabetically
-                Core::ArenaVector<FolderInfo> subfolders{&ctx->memoryManager->GeneralArena(), 64};
+                Core::ArenaVector<FolderInfo> subfolders{&ctx->editorArena.Get(), 64};
                 for (auto& e : entries) {
                     if (e.folder0 != id0 || !e.folder1.IsValid()) continue;
                     bool found = false;
@@ -1241,7 +1241,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
 
                 // Direct folder members (no subfolder)
                 {
-                    Core::ArenaVector<EntityEntry*> group{&ctx->memoryManager->GeneralArena(), 1024};
+                    Core::ArenaVector<EntityEntry*> group{&ctx->editorArena.Get(), 1024};
                     for (auto& e : entries) {
                         if (e.folder0 == id0 && !e.folder1.IsValid()) group.PushBack(&e);
                     }
@@ -1251,7 +1251,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
                 // Subfolder tree nodes
                 for (auto& [id1, name1] : subfolders) {
                     if (ImGui::TreeNode(fmt::format("{}##subfolder_{}_{}", name1, id0.id, id1.id).c_str())) {
-                        Core::ArenaVector<EntityEntry*> group{&ctx->memoryManager->GeneralArena(), 1024};
+                        Core::ArenaVector<EntityEntry*> group{&ctx->editorArena.Get(), 1024};
                         for (auto& e : entries) {
                             if (e.folder0 == id0 && e.folder1 == id1) group.PushBack(&e);
                         }
@@ -1986,7 +1986,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
                                         Engine::TextureID id;
                                     };
 
-                                    auto sorted = Core::ArenaFixedVector<TexturePair>(&ctx->memoryManager->GeneralArena(), texCache.Size());
+                                    auto sorted = Core::ArenaFixedVector<TexturePair>(&ctx->editorArena.Get(), texCache.Size());
                                     for (const auto& [texId2, meta] : texCache) {
                                         sorted.EmplaceBack(meta.name, StringID(meta.name.c_str(), meta.name.Size()), texId2);
                                     }
@@ -2219,7 +2219,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             uint32_t height;
             uint32_t mipCount;
         };
-        auto sorted = Core::ArenaFixedVector<TextureEntry>(&ctx->memoryManager->GeneralArena(), texCache.Size());
+        auto sorted = Core::ArenaFixedVector<TextureEntry>(&ctx->editorArena.Get(), texCache.Size());
         for (const auto& [texId, meta] : texCache) {
             sorted.EmplaceBack(meta.name, meta.width, meta.height, meta.mipCount);
         }

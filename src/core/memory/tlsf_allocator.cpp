@@ -140,10 +140,8 @@ void TlsfAllocator::AlignedFree(void* ptr)
     tlsf_free(tlsf, ptr);
 }
 
-TlsfAllocator::Stats TlsfAllocator::GetStats()
+TlsfAllocator::Stats TlsfAllocator::GetStats() const
 {
-    std::unique_lock lock(mutex_, std::defer_lock);
-    if (bUseMutex_) { lock.lock(); }
     return {poolBytes, usedBytes_, poolBytes - usedBytes_, allocCount_};
 }
 

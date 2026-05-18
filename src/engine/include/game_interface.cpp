@@ -29,6 +29,11 @@ void StubPrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* state, Fr
 
 }
 
+void StubEndFrame(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
+
+}
+
 void StubUnload(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     SPDLOG_WARN("Game DLL not loaded - stub Unload");

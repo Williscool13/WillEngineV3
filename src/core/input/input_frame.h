@@ -68,7 +68,7 @@ struct InputFrame
     Vec2 mousePositionAbsolute{};
     float mouseXDelta{0.0f};
     float mouseYDelta{0.0f};
-    float mouseWheelDelta{0.0f};
+    Vec2 mouseWheelDelta{};
 
     bool isCursorActive{false};
     bool isWindowInputFocus{false};

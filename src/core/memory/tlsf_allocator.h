@@ -101,7 +101,7 @@ public:
         size_t usedBytes; // sum of user-requested sizes (excludes header overhead)
     };
 
-    [[nodiscard]] Stats GetStats();
+    [[nodiscard]] Stats GetStats() const;
 
     // Walks the pool and fills out[0..(Count-1)] with per-tag aggregates, indexed by tag value.
     // Always fills exactly AllocTag::Count entries.

@@ -104,10 +104,8 @@ void WillEngine::Initialize(Utils::Logger* logger)
         .assetsScratchPoolSize = 1024ull * 1024 * 1024, // 128 MB
         .assetsPoolSize = 128ull * 1024 * 1024, // 128 MB
         .physicsAlignedPoolSize = 32ull * 1024 * 1024, // 64 MB
-        .physicsArenaSize = Physics::PHYSICS_TEMP_ALLOCATOR_SIZE, // 16 MB
         .renderPoolSize = 4ull * 1024 * 1024, // 4 MB
-        .renderArenaSize = 1ull * 1024 * 1024, // 1 MB
-        .generalArenaSize = 1ull * 1024 * 1024, // 1 MB
+        .arenaPoolSize = 128ull * 1024 * 1024, // 128 MB
     });
 
 #if LOGGING_ENABLED
@@ -281,6 +279,8 @@ void WillEngine::Initialize(Utils::Logger* logger)
         engineContext->physicsSystem = physicsSystem;
         engineContext->scheduler = scheduler;
         engineContext->memoryManager = &memoryManager;
+        engineContext->gameplayArena = Core::ManagedArena(memoryManager.ArenaPool(), 512ull * 1024, Core::AllocTag::ECS);
+        engineContext->editorArena = Core::ManagedArena(memoryManager.ArenaPool(), 1ull * 1024 * 1024, Core::AllocTag::Editor);
         engineContext->setCursorHiddenFn = [this](bool hidden) {
             if (bCursorHidden == hidden) { return; }
             bCursorHidden = hidden;
@@ -318,6 +318,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
         gameFunctions.gameLoad = &GameLoad;
         gameFunctions.gameUpdate = &GameUpdate;
         gameFunctions.gamePrepareFrame = &GamePrepareFrame;
+        gameFunctions.gameEndFrame = &GameEndFrame;
         gameFunctions.gameUnload = &GameUnload;
         gameFunctions.gameShutdown = &GameShutdown;
 #else
@@ -326,6 +327,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
             gameFunctions.gameLoad = gameDll.GetFunction<Core::GameLoadFunc>("GameLoad");
             gameFunctions.gameUpdate = gameDll.GetFunction<Core::GameUpdateFunc>("GameUpdate");
             gameFunctions.gamePrepareFrame = gameDll.GetFunction<Core::GamePrepareFrameFunc>("GamePrepareFrame");
+            gameFunctions.gameEndFrame = gameDll.GetFunction<Core::GameEndFrameFunc>("GameEndFrame");
             gameFunctions.gameUnload = gameDll.GetFunction<Core::GameUnloadFunc>("GameUnload");
             gameFunctions.gameShutdown = gameDll.GetFunction<Core::GameShutdownFunc>("GameShutdown");
         }
@@ -354,6 +356,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
                     gameFunctions.gameLoad = gameDll.GetFunction<Core::GameLoadFunc>("GameLoad");
                     gameFunctions.gameUpdate = gameDll.GetFunction<Core::GameUpdateFunc>("GameUpdate");
                     gameFunctions.gamePrepareFrame = gameDll.GetFunction<Core::GamePrepareFrameFunc>("GamePrepareFrame");
+                    gameFunctions.gameEndFrame = gameDll.GetFunction<Core::GameEndFrameFunc>("GameEndFrame");
                     gameFunctions.gameUnload = gameDll.GetFunction<Core::GameUnloadFunc>("GameUnload");
                     gameFunctions.gameShutdown = gameDll.GetFunction<Core::GameShutdownFunc>("GameShutdown");
                     break;
@@ -460,13 +463,11 @@ void WillEngine::EditorImgui()
                 memoryManager.Assets().GetTagStats(cachedAssetsTags.Data());
                 memoryManager.PhysicsAligned().GetTagStats(cachedPhysicsAlignedTags.Data());
                 memoryManager.Render().GetTagStats(cachedRenderTags.Data());
+                memoryManager.ArenaPool().GetTagStats(cachedArenaPoolTags.Data());
                 refreshTimer = 0.0f;
             }
 
             const Core::MemoryManager::Stats ms = memoryManager.GetStats();
-            const Core::Arena::Stats ras = memoryManager.RenderArena().GetStats();
-            const Core::Arena::Stats gas = memoryManager.GeneralArena().GetStats();
-            const Core::Arena::Stats pas = memoryManager.PhysicsArena().GetStats();
             constexpr float kToMB = 1.0f / (1024.0f * 1024.0f);
             // Fixed x-offset so all bars align regardless of label length
             constexpr float kLabelX = 125.0f;
@@ -538,10 +539,91 @@ void WillEngine::EditorImgui()
             ImGui::SeparatorText("Engine");
             drawMemBar("Persistent", ms.persistent.usedBytes, ms.persistent.totalBytes, ms.persistent.allocCount);
 
-            ImGui::SeparatorText("Arenas");
-            drawArenaBar("Render Arena", ras);
-            drawArenaBar("General Arena", gas);
-            drawArenaBar("Physics Arena", pas);
+            ImGui::SeparatorText("Arena Pool");
+            {
+                const Core::ArenaSuballocator::Stats as = memoryManager.ArenaPool().GetStats();
+                const float totalBytes = static_cast<float>(as.totalBytes);
+
+                constexpr float kBarHeight = 20.0f;
+                constexpr ImU32 kFreeColor = IM_COL32(40, 40, 40, 255);
+                constexpr ImU32 kChunkColors[] = {
+                    IM_COL32(70, 130, 180, 255),
+                    IM_COL32(180, 100, 60,  255),
+                    IM_COL32(80,  160, 80,  255),
+                    IM_COL32(160, 80,  160, 255),
+                    IM_COL32(180, 160, 50,  255),
+                    IM_COL32(60,  160, 160, 255),
+                    IM_COL32(160, 60,  80,  255),
+                    IM_COL32(100, 100, 200, 255),
+                };
+                constexpr int kNumColors = static_cast<int>(sizeof(kChunkColors) / sizeof(kChunkColors[0]));
+
+                // Collect active chunks
+                struct ChunkEntry { const char* name; float bytes; ImU32 color; };
+                Core::InlineVector<ChunkEntry, 32> chunks;
+                int colorIdx = 0;
+                for (size_t i = 0; i < kTagCount; ++i) {
+                    const auto& ts = cachedArenaPoolTags[i];
+                    if (ts.count == 0) { continue; }
+                    chunks.PushBack({Core::AllocTagName(ts.tag), static_cast<float>(ts.usedBytes), kChunkColors[colorIdx % kNumColors]});
+                    ++colorIdx;
+                }
+
+                const ImVec2 barSize{ImGui::GetContentRegionAvail().x, kBarHeight};
+                const ImVec2 cursor = ImGui::GetCursorScreenPos();
+                ImDrawList* dl = ImGui::GetWindowDrawList();
+
+                float x = cursor.x;
+                int hoveredChunk = -1;
+                const ImVec2 mousePos = ImGui::GetIO().MousePos;
+
+                // Draw chunks
+                for (int i = 0; i < static_cast<int>(chunks.Size()); ++i) {
+                    const float w = (chunks[i].bytes / totalBytes) * barSize.x;
+                    if (w < 1.0f) { continue; }
+                    const ImVec2 p0{x, cursor.y};
+                    const ImVec2 p1{x + w, cursor.y + kBarHeight};
+                    dl->AddRectFilled(p0, p1, chunks[i].color);
+                    dl->AddRect(p0, p1, IM_COL32(0, 0, 0, 80));
+                    if (mousePos.x >= p0.x && mousePos.x < p1.x && mousePos.y >= p0.y && mousePos.y < p1.y) {
+                        hoveredChunk = i;
+                    }
+                    // Full name if it fits, otherwise first letter, otherwise nothing
+                    if (w >= 10.0f) {
+                        const ImVec2 fullSize = ImGui::CalcTextSize(chunks[i].name);
+                        const char* label = chunks[i].name;
+                        char initial[2] = {chunks[i].name[0], '\0'};
+                        ImVec2 textSize = fullSize;
+                        if (fullSize.x + 4.0f > w) {
+                            label = initial;
+                            textSize = ImGui::CalcTextSize(label);
+                        }
+                        dl->AddText({p0.x + (w - textSize.x) * 0.5f, p0.y + (kBarHeight - textSize.y) * 0.5f}, IM_COL32(255, 255, 255, 220), label);
+                    }
+                    x += w;
+                }
+
+                // Free space
+                const float freeW = cursor.x + barSize.x - x;
+                if (freeW > 0.0f) {
+                    const ImVec2 p0{x, cursor.y};
+                    const ImVec2 p1{x + freeW, cursor.y + kBarHeight};
+                    dl->AddRectFilled(p0, p1, kFreeColor);
+                    if (mousePos.x >= p0.x && mousePos.x < p1.x && mousePos.y >= p0.y && mousePos.y < p1.y) {
+                        hoveredChunk = static_cast<int>(chunks.Size()); // sentinel for free
+                    }
+                }
+
+                ImGui::Dummy(barSize);
+
+                if (hoveredChunk >= 0 && hoveredChunk < static_cast<int>(chunks.Size())) {
+                    ImGui::SetTooltip("%s\n%.2f MB", chunks[hoveredChunk].name, chunks[hoveredChunk].bytes * kToMB);
+                } else if (hoveredChunk == static_cast<int>(chunks.Size())) {
+                    ImGui::SetTooltip("Free\n%.2f MB", static_cast<float>(as.freeBytes) * kToMB);
+                }
+
+                ImGui::Text("%.1f / %.0f MB  (%zu chunks)", static_cast<float>(as.usedBytes) * kToMB, static_cast<float>(as.totalBytes) * kToMB, as.activeChunks);
+            }
 
             ImGui::SeparatorText("GPU");
             ImGui::Text("Device: %zu allocs / %.3f MB",
@@ -564,7 +646,7 @@ void WillEngine::EditorImgui()
                 {"Phys Aligned", cachedPhysicsAlignedTags.Data()},
                 {"Render", cachedRenderTags.Data()},
             };
-            constexpr int kPoolCount = 7;
+            constexpr int kPoolCount = 6;
 
             for (int i = 0; i < kPoolCount; ++i) {
                 if (i > 0) { ImGui::SameLine(); }
@@ -888,8 +970,7 @@ void WillEngine::EditorImgui()
 
         if (ImGui::BeginChild("LogScrollRegion", ImVec2(0, 0), false, ImGuiWindowFlags_HorizontalScrollbar)) {
             ImGuiListClipper clipper;
-            Core::Arena& genArena = memoryManager.GeneralArena();
-            auto filtered = Core::ArenaFixedVector<int32_t>(&genArena, entryCount);
+            auto filtered = Core::ArenaFixedVector<int32_t>(&engineContext->editorArena.Get(), entryCount);
             for (int i = 0; i < entryCount; i++) {
                 const auto& entry = entries[i];
                 bool levelPass = false;
@@ -1125,8 +1206,7 @@ void WillEngine::Run()
                     ZoneScopedN("SwapAndPrepare");
                     std::swap(currentFrameBuffer, engineRenderSynchronization->stagingFrameBuffer);
                     engineRenderSynchronization->stagingFrameBuffer.timeFrame = timeManager->GetTime();
-                    engineRenderSynchronization->stagingFrameBuffer.bufferAcquireOperations.Clear();
-                    engineRenderSynchronization->stagingFrameBuffer.imageAcquireOperations.Clear();
+                    engineRenderSynchronization->stagingFrameBuffer.Reinitialize();
                     PrepareImgui(frameBufferIndex);
                 }
 
@@ -1137,9 +1217,7 @@ void WillEngine::Run()
             }
         }
 
-        // MEM: General and Physics arena reset here, move if needed
-        memoryManager.GeneralArena().Reset();
-        memoryManager.PhysicsArena().Reset();
+        gameFunctions.gameEndFrame(engineContext, engineState);
     }
 }
 

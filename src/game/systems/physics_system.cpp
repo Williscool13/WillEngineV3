@@ -400,7 +400,7 @@ void ResolvePhysicsMeshLoads(Engine::EngineContext* ctx, Engine::EngineState* st
     if (viewCount == 0) {
         return;
     }
-    auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->memoryManager->GeneralArena(), viewCount);
+    auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), viewCount);
     for (const auto& [entity, bodyDesc] : view.each()) {
         bool allReady = true;
         bool shouldAbandon = false;
@@ -454,7 +454,7 @@ void ResolvePhysicsShapeCreation(Engine::EngineContext* ctx, Engine::EngineState
     if (viewCount == 0) {
         return;
     }
-    auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->memoryManager->GeneralArena(), viewCount);
+    auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), viewCount);
 
     for (const auto& [entity, bodyDesc] : view.each()) {
         bool bDegenerate = false;

@@ -61,7 +61,7 @@ static bool DrawFolderLevelCombo(const char* label, entt::registry& registry, in
 {
     bool changed = false;
     auto* ctx = registry.ctx().get<Engine::EngineContext*>();
-    Core::ArenaVector<Core::ShortString> existing{&ctx->memoryManager->GeneralArena(), 128};
+    Core::ArenaVector<Core::ShortString> existing{&ctx->editorArena.Get(), 128};
     CollectExistingFolderNames(registry, level, existing, parentFilter);
 
     const char* currentName = nameOut.Size() > 0 ? nameOut.c_str() : "(None)";

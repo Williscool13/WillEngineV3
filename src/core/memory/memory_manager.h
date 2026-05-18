@@ -10,6 +10,7 @@
 #include <atomic>
 
 #include "arena.h"
+#include "arena_suballocator.h"
 #include "tlsf_allocator.h"
 
 namespace Core
@@ -19,7 +20,7 @@ namespace Core
  * typed regions. All engine systems suballocate from this manager — no additional new/delete.
  *
  * Layout (contiguous):
- *   [persistentPool | generalPool | assetsPool | physicsPool | physicsArena | renderPool | renderArena | generalArena]
+ *   [persistentPool | generalPool | assetsPool | physicsPool | renderPool | arenaPool]
  *
  * Regions:
  *   - Persistent TLSF: individual allocs that live for the entire process lifetime.
@@ -43,10 +44,8 @@ public:
         size_t assetsScratchPoolSize;
         size_t assetsPoolSize;
         size_t physicsAlignedPoolSize;
-        size_t physicsArenaSize;
         size_t renderPoolSize;
-        size_t renderArenaSize;
-        size_t generalArenaSize;
+        size_t arenaPoolSize;
     };
 
     struct Stats
@@ -103,15 +102,13 @@ public:
     TlsfAllocator& AssetsScratch() { return tlsfAssetsScratch; }
     TlsfAllocator& Assets() { return tlsfAssets; }
     TlsfAllocator& PhysicsAligned() { return tlsfPhysicsAligned; }
-    Arena& PhysicsArena() { return physicsArena; }
     TlsfAllocator& Render() { return tlsfRender; }
-    Arena& RenderArena() { return renderArena; }
     /**
      * General per-frame arena. Cleared at the end of each game frame.
      * Access from game thread only.
      * @return
      */
-    Arena& GeneralArena() { return generalArena; }
+    ArenaSuballocator& ArenaPool() { return arenaPool; }
 
     [[nodiscard]] Stats GetStats();
 
@@ -129,10 +126,8 @@ private:
     TlsfAllocator tlsfAssetsScratch;
     TlsfAllocator tlsfAssets;
     TlsfAllocator tlsfPhysicsAligned;
-    Arena physicsArena;
     TlsfAllocator tlsfRender;
-    Arena renderArena;
-    Arena generalArena;
+    ArenaSuballocator arenaPool;
 
     std::atomic<uint32_t> deviceAllocCount{0};
     std::atomic<uint64_t> deviceAllocBytes{0};

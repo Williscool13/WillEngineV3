@@ -34,6 +34,7 @@ class RenderGraph;
 namespace Core
 {
 struct FrameSync;
+class ManagedArena;
 class MemoryManager;
 }
 
@@ -150,6 +151,7 @@ private:
     RenderExtents* renderExtents{};
     PipelineManager* pipelineManager{};
 
+    Core::ManagedArena renderArena{};
     RenderGraph* renderGraph{};
 
     Core::Array<RenderSynchronization, Core::FRAME_BUFFER_COUNT> frameSynchronization;

@@ -181,6 +181,13 @@ static void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState*
 {
     Clay_SetLayoutDimensions({static_cast<float>(ctx->windowContext.viewportWidth), static_cast<float>(ctx->windowContext.viewportHeight)});
 
+    const Vec2 mousePos = state->inputFrame->mousePositionAbsolute;
+    const bool bIsMouseDown = state->inputFrame->GetMouse(MouseButton::LMB).down;
+    Clay_SetPointerState(Clay_Vector2{mousePos.x, mousePos.y}, bIsMouseDown);
+
+    const Vec2 mouseWheelDelta = state->inputFrame->mouseWheelDelta;
+    Clay_UpdateScrollContainers(true, Clay_Vector2{mouseWheelDelta.x, mouseWheelDelta.y}, state->timeFrame->deltaTime);
+
     Clay_BeginLayout();
 
     constexpr Clay_Color COLOR_LIGHT = Clay_Color{224, 215, 210, 255};
@@ -249,6 +256,14 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
 #ifndef PACKAGED_BUILD
     Game::DebugRender(ctx, state, frameBuffer);
     Game::DebugRenderPhysics(ctx, state, frameBuffer);
+#endif
+}
+
+GAME_API void GameEndFrame(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
+    ctx->gameplayArena.Get().Reset();
+#if WILL_EDITOR
+    ctx->editorArena.Get().Reset();
 #endif
 }
 

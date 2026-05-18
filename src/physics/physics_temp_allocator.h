@@ -15,7 +15,7 @@
 namespace Physics
 {
 // LIFO bump allocator for Jolt's per-step scratch memory.
-// Buffer is owned by MemoryManager's physicsArena; no locking needed
+// Buffer is owned by PhysicsSystem's ManagedArena; no locking needed
 // since Jolt guarantees LIFO ordering through job dependencies.
 class PhysicsTempAllocator final : public JPH::TempAllocator
 {

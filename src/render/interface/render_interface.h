@@ -9,9 +9,11 @@
 #include <glm/detail/type_quat.hpp>
 
 #include "core/string_id.h"
-#include "core/containers/fixed_vector.h"
-#include "core/containers/map.h"
+#include "core/containers/arena_fixed_map.h"
+#include "core/containers/arena_fixed_vector.h"
+#include "core/containers/arena_vector.h"
 #include "core/containers/vector.h"
+#include "core/memory/arena_suballocator.h"
 #include "core/time/time_frame.h"
 #include "core/types/transform.h"
 #include "engine/material_manager.h"
@@ -312,44 +314,38 @@ struct ViewFamily
 {
     ViewFamily() = default;
 
-    explicit ViewFamily(TlsfAllocator& allocator);
+    explicit ViewFamily(Arena& arena);
 
     ~ViewFamily() = default;
 
-    ViewFamily(const ViewFamily&) = default;
+    ViewFamily(const ViewFamily&) = delete;
 
-    ViewFamily& operator=(const ViewFamily&) = default;
+    ViewFamily& operator=(const ViewFamily&) = delete;
 
     ViewFamily(ViewFamily&&) = default;
 
     ViewFamily& operator=(ViewFamily&&) = default;
 
-    // To allocate containers. Nothing else.
-    TlsfAllocator* allocator{nullptr};
-
     RenderView mainView{};
-    FixedVector<PortalView> portalViews{};
+    ArenaFixedVector<PortalView> portalViews{};
 
-    Vector<InstanceData> instances{};
-    Vector<WorldGlyphQuad> worldGlyphQuads{};
-    Vector<TextInstanceDataFull> textInstances{};
-    Map<Engine::TextMaterialID, uint32_t> activeTextMaterials{};
-    Vector<TextRenderMaterial> textMaterials{};
-    Vector<TextDrawCall> textDrawCalls{};
+    ArenaVector<InstanceData> instances{};
+    ArenaVector<WorldGlyphQuad> worldGlyphQuads{};
+    ArenaVector<TextInstanceDataFull> textInstances{};
+    ArenaFixedMap<Engine::TextMaterialID, uint32_t> activeTextMaterials{};
+    ArenaVector<TextRenderMaterial> textMaterials{};
+    ArenaVector<TextDrawCall> textDrawCalls{};
 
-    Vector<Model> modelMatrices{};
-    /**
-     * Indexes into the materials vector
-     */
-    Map<Engine::MaterialID, uint32_t> activeMaterials{};
-    Vector<Engine::RenderMaterial> materials{};
+    ArenaVector<Model> modelMatrices{};
+    /** Indexes into the materials vector */
+    ArenaFixedMap<Engine::MaterialID, uint32_t> activeMaterials{};
+    ArenaVector<Engine::RenderMaterial> materials{};
 
     int32_t skyboxIndex{-1};
     int32_t skyboxLOD{0};
 
     ShadowConfiguration shadowConfig{};
     DirectionalLight directionalLight{};
-    // std::vector<LightInstance> allLights;
 
     AntiAliasingMode aaMode{AntiAliasingMode::TAA};
     GTAOConfiguration gtaoConfig{};
@@ -361,32 +357,33 @@ struct ViewFamily
     DebugTransformationType debugTransformationType{};
     DebugViewAspect debugViewAspect{};
 
-    Vector<DebugLine> debugLines{};
-    Vector<DebugBox> debugBoxes{};
-    Vector<DebugSphere> debugSpheres{};
+    ArenaVector<DebugLine> debugLines{};
+    ArenaVector<DebugBox> debugBoxes{};
+    ArenaVector<DebugSphere> debugSpheres{};
 
     // Written to on render thread
-    Map<StringID, uint32_t> lightingBuckets{};
+    ArenaFixedMap<StringID, uint32_t> lightingBuckets{};
 };
 
 struct FrameBuffer
 {
     FrameBuffer() = default;
 
-    explicit FrameBuffer(TlsfAllocator& allocator);
+    explicit FrameBuffer(ArenaSuballocator& pool);
 
     ~FrameBuffer() = default;
 
-    FrameBuffer(const FrameBuffer&) = default;
+    FrameBuffer(const FrameBuffer&) = delete;
 
-    FrameBuffer& operator=(const FrameBuffer&) = default;
+    FrameBuffer& operator=(const FrameBuffer&) = delete;
 
     FrameBuffer(FrameBuffer&&) = default;
 
     FrameBuffer& operator=(FrameBuffer&&) = default;
 
-    // To allocate containers. Nothing else.
-    TlsfAllocator* allocator{nullptr};
+    void Reinitialize();
+
+    ManagedArena frameArena{};
 
     ViewFamily mainViewFamily{};
 
@@ -396,8 +393,8 @@ struct FrameBuffer
     SwapchainRecreateCommand swapchainRecreateCommand{};
     ViewportResizeCommand viewportResizeCommand{};
 
-    Vector<BufferAcquireOperation> bufferAcquireOperations;
-    Vector<ImageAcquireOperation> imageAcquireOperations;
+    ArenaVector<BufferAcquireOperation> bufferAcquireOperations;
+    ArenaVector<ImageAcquireOperation> imageAcquireOperations;
 
     // Readback
     uint64_t stableIdUnderCursor{0};

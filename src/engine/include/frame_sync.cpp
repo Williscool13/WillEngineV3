@@ -9,9 +9,9 @@ namespace Core
 FrameSync::FrameSync(MemoryManager& memoryManager)
 {
     for (auto& frameBuffer : frameBuffers) {
-        frameBuffer = FrameBuffer(memoryManager.General());
+        frameBuffer = FrameBuffer(memoryManager.ArenaPool());
     }
 
-    stagingFrameBuffer = FrameBuffer(memoryManager.General());
+    stagingFrameBuffer = FrameBuffer(memoryManager.ArenaPool());
 }
 } // Core

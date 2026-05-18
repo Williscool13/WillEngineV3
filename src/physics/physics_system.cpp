@@ -101,7 +101,8 @@ void PhysicsSystem::RegisterPhysics() const
 PhysicsSystem::PhysicsSystem(Core::MemoryManager& memoryManager, enki::TaskScheduler* scheduler)
     : memoryManager(&memoryManager)
     , scheduler(scheduler)
-    , tempAllocator(memoryManager.PhysicsArena().Data(), memoryManager.PhysicsArena().GetCapacity())
+    , physicsArena(memoryManager.ArenaPool(), PHYSICS_TEMP_ALLOCATOR_SIZE, Core::AllocTag::Physics)
+    , tempAllocator(physicsArena.Get().Data(), physicsArena.Get().GetCapacity())
 {
     RegisterPhysics();
 

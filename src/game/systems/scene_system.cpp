@@ -177,7 +177,7 @@ void UnloadScene(Engine::EngineState* state, StringID sceneId)
     auto view = state->registry.view<Component::SceneComponent>();
 
     auto size = view.size();
-    Core::ArenaVector<entt::entity> toDestroy{&ctx->memoryManager->GeneralArena(), size};
+    Core::ArenaVector<entt::entity> toDestroy{&ctx->gameplayArena.Get(), size};
     for (auto entity : view) {
         if (view.get<Component::SceneComponent>(entity).sceneId == sceneId) {
             toDestroy.PushBack(entity);
@@ -325,9 +325,9 @@ Core::ArenaVector<entt::entity> SpawnModel(Engine::EngineContext* ctx, Engine::E
 
     const auto& nodes = cached->nodes;
 
-     auto worldT = Core::ArenaFixedVector<Vec3>(&ctx->memoryManager->GeneralArena(),nodes.Size());
-     auto worldR = Core::ArenaFixedVector<Quat>(&ctx->memoryManager->GeneralArena(),nodes.Size());
-     auto worldS = Core::ArenaFixedVector<Vec3>(&ctx->memoryManager->GeneralArena(),nodes.Size());
+     auto worldT = Core::ArenaFixedVector<Vec3>(&ctx->gameplayArena.Get(),nodes.Size());
+     auto worldR = Core::ArenaFixedVector<Quat>(&ctx->gameplayArena.Get(),nodes.Size());
+     auto worldS = Core::ArenaFixedVector<Vec3>(&ctx->gameplayArena.Get(),nodes.Size());
 
     for (size_t i = 0; i < nodes.Size(); ++i) {
         const auto& node = nodes[i];
@@ -343,7 +343,7 @@ Core::ArenaVector<entt::entity> SpawnModel(Engine::EngineContext* ctx, Engine::E
         }
     }
 
-    auto spawned = Core::ArenaVector<entt::entity>(&ctx->memoryManager->GeneralArena(), 32);
+    auto spawned = Core::ArenaVector<entt::entity>(&ctx->gameplayArena.Get(), 32);
 
     for (size_t i = 0; i < nodes.Size(); ++i) {
         const auto& node = nodes[i];
@@ -554,7 +554,7 @@ void PlayStart(Engine::EngineContext* ctx, Engine::EngineState* state)
     {
         auto view = state->registry.view<Component::PrefabInstanceComponent>();
         if (view.size() > 0) {
-            auto masterPrefabs = Core::ArenaFixedVector<entt::entity>(&ctx->memoryManager->GeneralArena(), view.size());
+            auto masterPrefabs = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), view.size());
             for (auto entity : view) {
                 if (view.get<Component::PrefabInstanceComponent>(entity).bMasterPrefab) {
                     masterPrefabs.PushBack(entity);

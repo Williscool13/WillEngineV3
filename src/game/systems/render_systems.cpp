@@ -48,7 +48,7 @@ void ResolveModelHotReloads(Engine::EngineContext* ctx, Engine::EngineState* sta
     auto view = state->registry.view<Component::StaticMeshComponent, Component::MeshRuntime>();
     if (view.size_hint() == 0) { return; }
 
-    Core::ArenaVector<entt::entity> entitiesToReload{&ctx->memoryManager->GeneralArena(), view.size_hint()};
+    Core::ArenaVector<entt::entity> entitiesToReload{&ctx->gameplayArena.Get(), view.size_hint()};
 
     for (const auto& [entity, smc, runtime] : view.each()) {
         for (const Engine::ModelID& hotId : state->pendingHotReloadModelIds) {
@@ -78,7 +78,7 @@ void ResolveFontHotReloads(Engine::EngineContext* ctx, Engine::EngineState* stat
     auto view = state->registry.view<Component::TextComponent, Component::TextRuntime>();
     if (view.size_hint() == 0) { return; }
 
-    Core::ArenaVector<entt::entity> entitiesToReload{&ctx->memoryManager->GeneralArena(), view.size_hint()};
+    Core::ArenaVector<entt::entity> entitiesToReload{&ctx->gameplayArena.Get(), view.size_hint()};
 
     for (auto [entity, textComp, runtime] : view.each()) {
         for (const Engine::FontID& hotId : state->pendingHotReloadFontIds) {
@@ -121,7 +121,7 @@ void ResolveStaticMeshLoads(Engine::EngineContext* ctx, Engine::EngineState* sta
     }
     int32_t modelsWaitingThisTick{0};
 
-    auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->memoryManager->GeneralArena(), viewCount);
+    auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), viewCount);
     for (const auto& [entity, meshComponent] : view.each()) {
         auto* runtime = state->registry.try_get<Component::MeshRuntime>(entity);
         if (!runtime) continue;
@@ -210,7 +210,7 @@ void ResolveProceduralMeshLoads(Engine::EngineContext* ctx, Engine::EngineState*
 
     int32_t proceduralWaitingThisTick{0};
 
-    auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->memoryManager->GeneralArena(), viewCount);
+    auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), viewCount);
     for (const auto& [entity, meshComponent] : view.each()) {
         auto* runtime = state->registry.try_get<Component::MeshRuntime>(entity);
         if (!runtime) continue;
@@ -273,7 +273,7 @@ void ResolveSplineMeshLoads(Engine::EngineContext* ctx, Engine::EngineState* sta
     if (viewCount == 0) {
         return;
     }
-    auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->memoryManager->GeneralArena(), viewCount);
+    auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), viewCount);
     for (auto [entity, meshComponent] : view.each()) {
         auto* runtime = state->registry.try_get<Component::MeshRuntime>(entity);
         if (!runtime) continue;
@@ -344,7 +344,7 @@ void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* st
     }
     else {
         ZoneScopedN("Parallel");
-        auto entities = Core::ArenaFixedVector<entt::entity>(&ctx->memoryManager->GeneralArena(), dirtyViewCount);
+        auto entities = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), dirtyViewCount);
         for (entt::entity e : dirtyView) {
             entities.PushBack(e);
         }
@@ -557,7 +557,7 @@ void ResolveTextLoads(Engine::EngineContext* ctx, Engine::EngineState* state)
     auto view = state->registry.view<Component::TextRuntime, Component::TextLoadingTag>();
     if (view.size_hint() == 0) { return; }
 
-    auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->memoryManager->GeneralArena(), view.size_hint());
+    auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), view.size_hint());
     for (auto [entity, runtime] : view.each()) {
         if (!runtime.fontHandle.IsValid()) { continue; }
 

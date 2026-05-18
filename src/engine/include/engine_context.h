@@ -10,6 +10,7 @@
 #include <clay.h>
 
 #include "core/containers/inline_function.h"
+#include "core/memory/arena_suballocator.h"
 #include "render/pipelines/pipeline_manager.h"
 
 namespace enki
@@ -66,6 +67,8 @@ struct EngineContext
 
     enki::TaskScheduler* scheduler{nullptr};
     Core::MemoryManager* memoryManager{nullptr};
+    Core::ManagedArena gameplayArena{};
+    Core::ManagedArena editorArena{};
 
     EngineLogger* engineLogger{nullptr};
     AssetManager* assetManager{nullptr};

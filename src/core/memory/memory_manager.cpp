@@ -22,12 +22,10 @@ void MemoryManager::Init(const Layout& layout)
     const size_t assetsScratchSz = AlignUp(layout.assetsScratchPoolSize, kAlign);
     const size_t assetsSz = AlignUp(layout.assetsPoolSize, kAlign);
     const size_t physicsAlignedSz = AlignUp(layout.physicsAlignedPoolSize, kAlign);
-    const size_t physicsArenaSz = AlignUp(layout.physicsArenaSize, kAlign);
     const size_t renderSz = AlignUp(layout.renderPoolSize, kAlign);
-    const size_t renderArenaSz = AlignUp(layout.renderArenaSize, kAlign);
-    const size_t generalArenaSize = AlignUp(layout.generalArenaSize, kAlign);
+    const size_t arenaPoolSz = AlignUp(layout.arenaPoolSize, kAlign);
 
-    totalSize = persistentSz + generalSz + assetsScratchSz + assetsSz + physicsAlignedSz + physicsArenaSz + renderSz + renderArenaSz + generalArenaSize;
+    totalSize = persistentSz + generalSz + assetsScratchSz + assetsSz + physicsAlignedSz + renderSz + arenaPoolSz;
 
     megaBuffer = malloc(totalSize);
     assert(megaBuffer != nullptr && "MemoryManager: mega allocation failed");
@@ -44,13 +42,9 @@ void MemoryManager::Init(const Layout& layout)
     cursor += assetsScratchSz;
     tlsfPhysicsAligned.Init(cursor, physicsAlignedSz, true);
     cursor += physicsAlignedSz;
-    physicsArena = Arena(cursor, physicsArenaSz);
-    cursor += physicsArenaSz;
     tlsfRender.Init(cursor, renderSz, false);
     cursor += renderSz;
-    renderArena = Arena(cursor, renderArenaSz);
-    cursor += renderArenaSz;
-    generalArena = Arena(cursor, generalArenaSize);
+    arenaPool.Init(cursor, arenaPoolSz, true);
 }
 
 MemoryManager::~MemoryManager()

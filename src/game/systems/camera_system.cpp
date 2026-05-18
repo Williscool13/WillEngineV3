@@ -68,7 +68,7 @@ void UpdateEditorCamera(Engine::EngineContext* ctx, Engine::EngineState* state)
         transform.translation += right * velocity.x + forwardDir * velocity.z + WORLD_UP * verticalVelocity;
 
         if (!ctx->bImguiMouseCaptured && rmbHeld) {
-            freeCam.moveSpeed = glm::clamp(freeCam.moveSpeed + state->inputFrame->mouseWheelDelta * 0.5f, 1.0f, 100.0f);
+            freeCam.moveSpeed = glm::clamp(freeCam.moveSpeed + state->inputFrame->mouseWheelDelta.y * 0.5f, 1.0f, 100.0f);
         }
 
         if (!ctx->bImguiMouseCaptured && state->inputFrame->GetMouse(MouseButton::MMB).down) {

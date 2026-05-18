@@ -145,7 +145,7 @@ private: // Game DLL
 #endif
     Platform::DirectoryWatcher shaderWatcher{};
     Core::GameAPI gameFunctions{};
-    Engine::EngineContext* engineContext{};
+    EngineContext* engineContext{};
     EngineState* engineState{};
 
 private:
@@ -168,6 +168,7 @@ private: // Debugging
     Core::Array<Core::TlsfAllocator::TagStats, kTagCount> cachedAssetsTags{};
     Core::Array<Core::TlsfAllocator::TagStats, kTagCount> cachedPhysicsAlignedTags{};
     Core::Array<Core::TlsfAllocator::TagStats, kTagCount> cachedRenderTags{};
+    Core::Array<Core::TlsfAllocator::TagStats, kTagCount> cachedArenaPoolTags{};
     std::chrono::high_resolution_clock::time_point lastFrameAcquireTime;
     float lastFrameTimeMs = 0.0f;
 

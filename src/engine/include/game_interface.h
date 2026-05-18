@@ -20,6 +20,7 @@ using GameStartUpFunc = void(*)(Engine::EngineContext*, Engine::EngineState*);
 using GameLoadFunc = void(*)(Engine::EngineContext*, Engine::EngineState*);
 using GameUpdateFunc = void(*)(Engine::EngineContext*, Engine::EngineState*);
 using GamePrepareFrameFunc = void(*)(Engine::EngineContext*, Engine::EngineState*, FrameBuffer*);
+using GameEndFrameFunc = void(*)(Engine::EngineContext*, Engine::EngineState*);
 using GameUnloadFunc = void(*)(Engine::EngineContext*, Engine::EngineState*);
 using GameShutdownFunc = void(*)(Engine::EngineContext*, Engine::EngineState*);
 
@@ -31,6 +32,8 @@ void StubUpdate(Engine::EngineContext* ctx, Engine::EngineState* state);
 
 void StubPrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* state, FrameBuffer* frameBuffer);
 
+void StubEndFrame(Engine::EngineContext* ctx, Engine::EngineState* state);
+
 void StubUnload(Engine::EngineContext* ctx, Engine::EngineState* state);
 
 void StubShutdown(Engine::EngineContext* ctx, Engine::EngineState* state);
@@ -41,6 +44,7 @@ struct GameAPI
     GameLoadFunc gameLoad;
     GameUpdateFunc gameUpdate;
     GamePrepareFrameFunc gamePrepareFrame;
+    GameEndFrameFunc gameEndFrame;
     GameUnloadFunc gameUnload;
     GameShutdownFunc gameShutdown;
 
@@ -50,6 +54,7 @@ struct GameAPI
         gameLoad = StubLoad;
         gameUpdate = StubUpdate;
         gamePrepareFrame = StubPrepareFrame;
+        gameEndFrame = StubEndFrame;
         gameUnload = StubUnload;
         gameShutdown = StubShutdown;
     }
@@ -96,6 +101,13 @@ GAME_API void GameUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
  * @param frameBuffer
  */
 GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
+
+/**
+ * Called after the frame buffer is swapped. Game resets its per-frame arenas here.
+ * @param ctx
+ * @param state
+ */
+GAME_API void GameEndFrame(Engine::EngineContext* ctx, Engine::EngineState* state);
 
 /**
  * Called before unloading DLL during hot-reload. Clean up DLL-specific resources.

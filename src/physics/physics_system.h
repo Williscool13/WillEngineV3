@@ -18,6 +18,7 @@
 #include "layers/broad_phase_layer_interface.h"
 #include "layers/object_layer_pair_filter.h"
 #include "layers/object_vs_broad_phase_layer_filter.h"
+#include "core/memory/arena_suballocator.h"
 #include "core/memory/memory_manager.h"
 
 namespace Core
@@ -82,6 +83,7 @@ private:
     enki::TaskScheduler* scheduler{};
 
     PhysicsJobSystem* jobSystem{};
+    Core::ManagedArena physicsArena{};
     PhysicsTempAllocator tempAllocator{};
     JPH::PhysicsSystem physicsSystem;
 

@@ -44,7 +44,8 @@ void InputManager::ProcessEvent(const SDL_Event& event)
 
         case SDL_EVENT_MOUSE_WHEEL:
         {
-            currentInput.mouseWheelDelta += event.wheel.y;
+            currentInput.mouseWheelDelta.x += event.wheel.x;
+            currentInput.mouseWheelDelta.y += event.wheel.y;
             break;
         }
         case SDL_EVENT_QUIT:
@@ -77,7 +78,8 @@ void InputManager::FrameReset()
 
     currentInput.mouseXDelta = 0.0f;
     currentInput.mouseYDelta = 0.0f;
-    currentInput.mouseWheelDelta = 0.0f;
+    currentInput.mouseWheelDelta.x = 0;
+    currentInput.mouseWheelDelta.y = 0;
 }
 
 void InputManager::UpdateWindowExtent(const uint32_t w, const uint32_t h)

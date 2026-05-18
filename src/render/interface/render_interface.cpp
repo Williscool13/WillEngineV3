@@ -6,35 +6,45 @@
 
 namespace Core
 {
-ViewFamily::ViewFamily(TlsfAllocator& allocator)
-    : allocator(&allocator)
+ViewFamily::ViewFamily(Arena& arena)
 {
-    portalViews = FixedVector<PortalView>(&allocator, AllocTag::FrameSync, Render::VIEW_COUNT - 1);
+    portalViews = ArenaFixedVector<PortalView>(&arena, Render::VIEW_COUNT - 1);
 
-    modelMatrices = Vector<Model>(&allocator, AllocTag::FrameSync, 256);
+    modelMatrices = ArenaVector<Model>(&arena, 256);
 
-    instances = Vector<InstanceData>(&allocator, AllocTag::FrameSync, 128);
-    worldGlyphQuads = Vector<WorldGlyphQuad>(&allocator, AllocTag::FrameSync, 256);
-    textInstances = Vector<TextInstanceDataFull>(&allocator, AllocTag::FrameSync, 32);
+    instances = ArenaVector<InstanceData>(&arena, 128);
+    worldGlyphQuads = ArenaVector<WorldGlyphQuad>(&arena, 256);
+    textInstances = ArenaVector<TextInstanceDataFull>(&arena, 32);
 
-    lightingBuckets = Map<StringID, uint32_t>(&allocator, AllocTag::FrameSync, 256);
-    textDrawCalls = Vector<TextDrawCall>(&allocator, AllocTag::FrameSync, 256);
+    lightingBuckets = ArenaFixedMap<StringID, uint32_t>(&arena, 256);
+    textDrawCalls = ArenaVector<TextDrawCall>(&arena, 256);
 
-    activeMaterials = Map<Engine::MaterialID, uint32_t>(&allocator, AllocTag::FrameSync, 256);
-    materials = Vector<Engine::RenderMaterial>(&allocator, AllocTag::FrameSync, 256);
-    activeTextMaterials = Map<Engine::TextMaterialID, uint32_t>(&allocator, AllocTag::FrameSync, 256);
-    textMaterials = Vector<TextRenderMaterial>(&allocator, AllocTag::FrameSync, 256);
+    activeMaterials = ArenaFixedMap<Engine::MaterialID, uint32_t>(&arena, 256);
+    materials = ArenaVector<Engine::RenderMaterial>(&arena, 256);
+    activeTextMaterials = ArenaFixedMap<Engine::TextMaterialID, uint32_t>(&arena, 256);
+    textMaterials = ArenaVector<TextRenderMaterial>(&arena, 256);
 
-    debugLines = Vector<DebugLine>(&allocator, AllocTag::FrameSync, 256);
-    debugBoxes = Vector<DebugBox>(&allocator, AllocTag::FrameSync, 256);
-    debugSpheres = Vector<DebugSphere>(&allocator, AllocTag::FrameSync, 256);
+    debugLines = ArenaVector<DebugLine>(&arena, 256);
+    debugBoxes = ArenaVector<DebugBox>(&arena, 256);
+    debugSpheres = ArenaVector<DebugSphere>(&arena, 256);
 }
 
-FrameBuffer::FrameBuffer(TlsfAllocator& allocator)
-    : allocator(&allocator)
+FrameBuffer::FrameBuffer(ArenaSuballocator& pool)
+    : frameArena(pool, 4ull * 1024 * 1024, AllocTag::FrameSync)
 {
-    mainViewFamily = ViewFamily(allocator);
-    bufferAcquireOperations = Vector<BufferAcquireOperation>(&allocator, AllocTag::FrameSync, 256);
-    imageAcquireOperations = Vector<ImageAcquireOperation>(&allocator, AllocTag::FrameSync, 256);
+    mainViewFamily = ViewFamily(frameArena.Get());
+    bufferAcquireOperations = ArenaVector<BufferAcquireOperation>(&frameArena.Get(), 2048);
+    imageAcquireOperations = ArenaVector<ImageAcquireOperation>(&frameArena.Get(), 2048);
+}
+
+void FrameBuffer::Reinitialize()
+{
+    mainViewFamily = ViewFamily{};
+    bufferAcquireOperations = ArenaVector<BufferAcquireOperation>{};
+    imageAcquireOperations = ArenaVector<ImageAcquireOperation>{};
+    frameArena.Get().Reset();
+    mainViewFamily = ViewFamily(frameArena.Get());
+    bufferAcquireOperations = ArenaVector<BufferAcquireOperation>(&frameArena.Get(), 2048);
+    imageAcquireOperations = ArenaVector<ImageAcquireOperation>(&frameArena.Get(), 2048);
 }
 } // Core

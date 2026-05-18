@@ -32,6 +32,7 @@
 #include "backends/imgui_impl_vulkan.h"
 #include "core/containers/inline_string.h"
 #include "core/containers/span.h"
+#include "core/memory/arena_suballocator.h"
 #include "core/memory/memory_manager.h"
 #include "core/string_id.h"
 #include "core/math/math_helpers.h"
@@ -76,7 +77,8 @@ RenderThread::RenderThread(Core::MemoryManager& memoryManager, Core::FrameSync* 
         frameSync.Initialize();
     }
 
-    renderGraph = new(memoryManager.RenderAllocRaw(sizeof(RenderGraph))) RenderGraph(context, resourceManager, renderAlloc, memoryManager.RenderArena());
+    renderArena = Core::ManagedArena(memoryManager.ArenaPool(), 1ull * 1024 * 1024, Core::AllocTag::Render);
+    renderGraph = new(memoryManager.RenderAllocRaw(sizeof(RenderGraph))) RenderGraph(context, resourceManager, renderAlloc, renderArena.Get());
     screenCapture = new(memoryManager.RenderAllocRaw(sizeof(RenderScreenCapture))) RenderScreenCapture(context, scheduler, memoryManager.AssetsScratch());
     pipelineStatsQuery.Init(context);
 #if WILL_EDITOR
@@ -340,7 +342,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
     statisticsManager.scratch.shadingDispatches = readbackData->shadingDispatches;
     statisticsManager.scratch.lightingDispatches = readbackData->lightingDispatches;
 
-    SanitizeViewFamily(viewFamily, pipelineManager, &memoryManager->RenderArena());
+    SanitizeViewFamily(viewFamily, pipelineManager, &renderArena.Get());
     PrepareRenderFamily(viewFamily);
     RenderFamilyProperties renderFamilyProperties = PrepareRenderFamilyProperties(viewFamily, readbackData, pipelineManager, frameResourceLimits);
     renderFamilyProperties.bWireframe = frameBuffer.bWireframe;
@@ -467,10 +469,10 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
             SetupVisibilityBucketingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, visBarDerTargets, 0);
 
-            SetupVisibilityShadingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, visShadingTargets, 0, memoryManager->RenderArena());
+            SetupVisibilityShadingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, visShadingTargets, 0, renderArena.Get());
 
             if (frameBuffer.bEnableShadeDispatchBucketingVisualization) {
-                SetupVisibilityBucketingDebugPass(*renderGraph, pipelineManager, viewFamily, renderExtent, visShadingTargets, 0, memoryManager->RenderArena());
+                SetupVisibilityBucketingDebugPass(*renderGraph, pipelineManager, viewFamily, renderExtent, visShadingTargets, 0, renderArena.Get());
             }
 
             if (frameBuffer.bEnableLightingBucketingVisualization) {
@@ -494,7 +496,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 .output = shadingOutputTarget,
             };
 
-            SetupVisibilityLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, deferredResolveTargets, 0, memoryManager->RenderArena());
+            SetupVisibilityLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, deferredResolveTargets, 0, renderArena.Get());
             //SetupDeferredResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, deferredResolveTargets, 0);
         }
 
