@@ -6,34 +6,47 @@
 #define WILL_ENGINE_ARENA_SUBALLOCATOR_H
 
 #include <cstddef>
+#include <mutex>
 #include <utility>
 
 #include "arena.h"
 #include "tlsf_allocator.h"
+#include "core/containers/inline_vector.h"
 
 namespace Core
 {
 /**
  * TLSF-backed pool from which callers can acquire Arena-wrapped chunks.
+ * Thread-safe: a single mutex covers Acquire, Release, and stats queries.
  *
  * Usage:
  *   ArenaSuballocator sub;
- *   sub.Init(pool, poolBytes, false);
+ *   sub.Init(pool, poolBytes);
  *
  *   Arena a = sub.Acquire(256 * 1024, AllocTag::FrameSync);
+ *   sub.RegisterArena(a.Data(), &a);   // patch live pointer for stats
  *   // ... bump-allocate into a ...
  *   sub.Release(a);  // chunk returned to pool; a is invalidated
  */
 class ArenaSuballocator
 {
 public:
-    void Init(void* pool, size_t bytes, bool bUseMutex);
+    static constexpr size_t kMaxTracked = 64;
+
+    void Init(void* pool, size_t bytes);
 
     /**
      * Allocates a contiguous chunk of `size` bytes from the pool and returns
      * an Arena wrapping it. Returns a null Arena (Data() == nullptr) on failure.
+     * Call RegisterArena(arena.Data(), &arena) afterwards to enable live stats.
      */
     Arena Acquire(size_t size, AllocTag tag = AllocTag::Unknown);
+
+    /**
+     * Patches the Arena* for an already-acquired chunk so GetLiveArenaStats can read it.
+     * chunkPtr must equal the arena.Data() returned by Acquire.
+     */
+    void RegisterArena(void* chunkPtr, Arena* arena);
 
     /**
      * Returns the chunk backing `arena` to the pool and invalidates `arena`.
@@ -49,14 +62,34 @@ public:
         size_t activeChunks;
     };
 
+    struct LiveArenaStats
+    {
+        AllocTag tag;
+        Arena::Stats arenaStats;
+    };
+
     [[nodiscard]] Stats GetStats() const;
 
-    void GetTagStats(TlsfAllocator::TagStats out[static_cast<size_t>(AllocTag::Count)]) { tlsf.GetTagStats(out); }
+    void GetTagStats(TlsfAllocator::TagStats out[static_cast<size_t>(AllocTag::Count)]);
+
+    /** Locks and snapshots peak/used/capacity for all live arenas. Returns count written. */
+    size_t GetLiveArenaStats(LiveArenaStats out[], size_t maxOut);
 
 private:
+    struct TrackedArena
+    {
+        void* chunkPtr{nullptr};
+        AllocTag tag{AllocTag::Unknown};
+        Arena* arena{nullptr};
+    };
+
     TlsfAllocator tlsf;
     size_t activeChunks_{0};
+    mutable std::mutex mutex_;
+
+    InlineVector<TrackedArena, kMaxTracked> tracked_;
 };
+
 /**
  * RAII owner of an Arena acquired from an ArenaSuballocator.
  * Releases the chunk back to the pool on destruction.
@@ -67,7 +100,12 @@ public:
     ManagedArena() = default;
 
     ManagedArena(ArenaSuballocator& pool, size_t size, AllocTag tag = AllocTag::Unknown)
-        : pool_(&pool), arena_(pool.Acquire(size, tag)) {}
+        : pool_(&pool), arena_(pool.Acquire(size, tag))
+    {
+        if (arena_.Data()) {
+            pool.RegisterArena(arena_.Data(), &arena_);
+        }
+    }
 
     ~ManagedArena() { Release(); }
 
@@ -78,6 +116,9 @@ public:
         : pool_(other.pool_), arena_(std::move(other.arena_))
     {
         other.pool_ = nullptr;
+        if (pool_ && arena_.Data()) {
+            pool_->RegisterArena(arena_.Data(), &arena_);
+        }
     }
 
     ManagedArena& operator=(ManagedArena&& other) noexcept
@@ -87,6 +128,9 @@ public:
             pool_ = other.pool_;
             arena_ = std::move(other.arena_);
             other.pool_ = nullptr;
+            if (pool_ && arena_.Data()) {
+                pool_->RegisterArena(arena_.Data(), &arena_);
+            }
         }
         return *this;
     }

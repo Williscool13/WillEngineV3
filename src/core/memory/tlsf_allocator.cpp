@@ -31,7 +31,10 @@ const char* AllocTagName(AllocTag tag)
         case AllocTag::EngineState: return "EngineState";
         case AllocTag::InputManager: return "InputManager";
         case AllocTag::TimeManager: return "TimeManager";
-        case AllocTag::FrameSync: return "FrameSync";
+        case AllocTag::FrameSync0: return "FrameSync0";
+        case AllocTag::FrameSync1: return "FrameSync1";
+        case AllocTag::FrameSync2: return "FrameSync2";
+        case AllocTag::FrameSync3: return "FrameSync3";
         case AllocTag::RenderThread: return "RenderThread";
         case AllocTag::AudioManager: return "AudioManager";
         case AllocTag::AsyncAssetLoadManager: return "AsyncAssetLoadManager";

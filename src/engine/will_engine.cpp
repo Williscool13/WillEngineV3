@@ -451,7 +451,14 @@ void WillEngine::EditorImgui()
             ImGui::Text("Shaders: >60s since reload");
         }
 
-        if (ImGui::CollapsingHeader("Memory")) {
+        {
+            static bool bMemoryWasOpen = false;
+            const bool bMemoryOpen = ImGui::CollapsingHeader("Memory");
+            if (bMemoryOpen && !bMemoryWasOpen) {
+                cachedLiveArenaCount = memoryManager.ArenaPool().GetLiveArenaStats(cachedLiveArenaStats.Data(), cachedLiveArenaStats.Size());
+            }
+            bMemoryWasOpen = bMemoryOpen;
+        if (bMemoryOpen) {
             static float refreshTimer = 1.0f; // triggers immediately on first open
             static int selectedPool = 0;
 
@@ -617,12 +624,56 @@ void WillEngine::EditorImgui()
                 ImGui::Dummy(barSize);
 
                 if (hoveredChunk >= 0 && hoveredChunk < static_cast<int>(chunks.Size())) {
-                    ImGui::SetTooltip("%s\n%.2f MB", chunks[hoveredChunk].name, chunks[hoveredChunk].bytes * kToMB);
+                    // Find matching live stats entry for peak info
+                    const char* name = chunks[hoveredChunk].name;
+                    const float chunkMB = chunks[hoveredChunk].bytes * kToMB;
+                    bool foundLive = false;
+                    for (size_t li = 0; li < cachedLiveArenaCount; ++li) {
+                        if (Core::AllocTagName(cachedLiveArenaStats[li].tag) == name) {
+                            const auto& ls = cachedLiveArenaStats[li].arenaStats;
+                            ImGui::SetTooltip("%s\nallocated: %.2f MB\npeak: %.2f MB\ncapacity: %.2f MB",
+                                name, chunkMB, static_cast<float>(ls.peakBytes) * kToMB, static_cast<float>(ls.totalBytes) * kToMB);
+                            foundLive = true;
+                            break;
+                        }
+                    }
+                    if (!foundLive) {
+                        ImGui::SetTooltip("%s\n%.2f MB", name, chunkMB);
+                    }
                 } else if (hoveredChunk == static_cast<int>(chunks.Size())) {
                     ImGui::SetTooltip("Free\n%.2f MB", static_cast<float>(as.freeBytes) * kToMB);
                 }
 
                 ImGui::Text("%.1f / %.0f MB  (%zu chunks)", static_cast<float>(as.usedBytes) * kToMB, static_cast<float>(as.totalBytes) * kToMB, as.activeChunks);
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Refresh##arenaStats")) {
+                    cachedLiveArenaCount = memoryManager.ArenaPool().GetLiveArenaStats(cachedLiveArenaStats.Data(), cachedLiveArenaStats.Size());
+                }
+
+                if (cachedLiveArenaCount > 0) {
+                    constexpr ImGuiTableFlags arenaTableFlags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp;
+                    if (ImGui::BeginTable("ArenaLiveTable", 4, arenaTableFlags)) {
+                        ImGui::TableSetupColumn("Arena");
+                        ImGui::TableSetupColumn("Used (KB)");
+                        ImGui::TableSetupColumn("Peak (KB)");
+                        ImGui::TableSetupColumn("Cap (KB)");
+                        ImGui::TableHeadersRow();
+
+                        for (size_t i = 0; i < cachedLiveArenaCount; ++i) {
+                            const auto& la = cachedLiveArenaStats[i];
+                            ImGui::TableNextRow();
+                            ImGui::TableSetColumnIndex(0);
+                            ImGui::TextUnformatted(Core::AllocTagName(la.tag));
+                            ImGui::TableSetColumnIndex(1);
+                            ImGui::Text("%.1f", static_cast<float>(la.arenaStats.usedBytes) / 1024.0f);
+                            ImGui::TableSetColumnIndex(2);
+                            ImGui::Text("%.1f", static_cast<float>(la.arenaStats.peakBytes) / 1024.0f);
+                            ImGui::TableSetColumnIndex(3);
+                            ImGui::Text("%.1f", static_cast<float>(la.arenaStats.totalBytes) / 1024.0f);
+                        }
+                        ImGui::EndTable();
+                    }
+                }
             }
 
             ImGui::SeparatorText("GPU");
@@ -678,7 +729,7 @@ void WillEngine::EditorImgui()
                 }
                 ImGui::EndTable();
             }
-        }
+        }} // bMemoryOpen + outer block
 
         if (ImGui::CollapsingHeader("Asset Counts")) {
             ImGui::Text("Models:    %u", assetManager->GetActiveModelCount());

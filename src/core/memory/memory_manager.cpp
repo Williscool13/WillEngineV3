@@ -44,7 +44,7 @@ void MemoryManager::Init(const Layout& layout)
     cursor += physicsAlignedSz;
     tlsfRender.Init(cursor, renderSz, false);
     cursor += renderSz;
-    arenaPool.Init(cursor, arenaPoolSz, true);
+    arenaPool.Init(cursor, arenaPoolSz);
 }
 
 MemoryManager::~MemoryManager()

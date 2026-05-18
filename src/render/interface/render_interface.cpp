@@ -29,8 +29,8 @@ ViewFamily::ViewFamily(Arena& arena)
     debugSpheres = ArenaVector<DebugSphere>(&arena, 256);
 }
 
-FrameBuffer::FrameBuffer(ArenaSuballocator& pool)
-    : frameArena(pool, 4ull * 1024 * 1024, AllocTag::FrameSync)
+FrameBuffer::FrameBuffer(ArenaSuballocator& pool, Core::AllocTag tag)
+    : frameArena(pool, 4ull * 1024 * 1024, tag)
 {
     mainViewFamily = ViewFamily(frameArena.Get());
     bufferAcquireOperations = ArenaVector<BufferAcquireOperation>(&frameArena.Get(), 2048);
