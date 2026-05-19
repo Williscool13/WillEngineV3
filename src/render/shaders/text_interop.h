@@ -48,4 +48,15 @@ SHADER_PUBLIC struct SHADER_ALIGN TextInstanceData
     SHADER_PUBLIC uint32_t stableIdHi;
 };
 
+SHADER_PUBLIC struct SHADER_ALIGN UIGlyphQuad
+{
+    SHADER_PUBLIC float4 color;
+    SHADER_PUBLIC float2 posMin;
+    SHADER_PUBLIC float2 posMax;
+    SHADER_PUBLIC float2 uvMin;
+    SHADER_PUBLIC float2 uvMax;
+    SHADER_PUBLIC float2 uvOrigMin;
+    SHADER_PUBLIC float2 uvOrigMax;
+};
+
 #endif //WILL_ENGINE_TEXT_INTEROP_H

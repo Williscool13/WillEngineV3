@@ -227,6 +227,8 @@ struct EngineState
     Core::Map<StringID, entt::entity> stableIdToEntityMap;
     ComponentRegistry componentRegistry{};
     Clay_Arena clayArena{};
+    // todo: remove
+    FontHandle uiFont{FontHandle::INVALID};
 
     // Asset Loading
     bool bPendingModelResolve{false};

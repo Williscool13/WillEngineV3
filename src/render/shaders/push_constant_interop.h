@@ -799,6 +799,15 @@ SHADER_PUBLIC struct TextRenderPushConstant
     SHADER_PUBLIC uint32_t sceneDataIndex;
 };
 
+SHADER_PUBLIC struct UITextRenderPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(UIGlyphQuad) uiGlyphQuads;
+    SHADER_PUBLIC uint32_t quadOffset;
+    SHADER_PUBLIC uint32_t quadCount;
+    SHADER_PUBLIC uint32_t atlasBindlessIndex;
+    SHADER_PUBLIC float pxRange;
+};
+
 SHADER_PUBLIC struct UIImagePushConstant
 {
     SHADER_PUBLIC float2 posMin;

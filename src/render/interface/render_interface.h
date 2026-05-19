@@ -311,6 +311,15 @@ struct TextInstanceDataFull
     uint64_t stableId{0};
 };
 
+struct UITextDrawCall
+{
+    uint32_t quadOffset;
+    uint32_t quadCount;
+    uint32_t atlasBindlessIndex;
+    float pxRange;
+    int32_t zIndex;
+};
+
 struct UIRenderCommandImage
 {
     Vec2 posMin;
@@ -336,6 +345,8 @@ struct ViewFamilyWatermarks
     size_t debugBoxes{256};
     size_t debugSpheres{256};
     size_t uiImageCommands{512};
+    size_t uiGlyphQuads{512};
+    size_t uiTextDrawCalls{32};
     size_t textDrawCalls{256};
 };
 
@@ -392,6 +403,8 @@ struct ViewFamily
 
     // UI
     ArenaVector<UIRenderCommandImage> uiImageCommands{};
+    ArenaVector<UIGlyphQuad> uiGlyphQuads{};
+    ArenaVector<UITextDrawCall> uiTextDrawCalls{};
 
     // Written to on render thread
     ArenaFixedMap<StringID, uint32_t> lightingBuckets{};

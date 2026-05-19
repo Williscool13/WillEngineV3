@@ -403,6 +403,8 @@ compile_shaders(will-engine
         # UI Rendering
         ${CMAKE_SOURCE_DIR}/shaders/text/ui_image_default.slang vertex VertexMain ui_image_default
         ${CMAKE_SOURCE_DIR}/shaders/text/ui_image_default.slang fragment FragmentMain ui_image_default
+        ${CMAKE_SOURCE_DIR}/shaders/text/ui_text_default.slang vertex VertexMain ui_text_default
+        ${CMAKE_SOURCE_DIR}/shaders/text/ui_text_default.slang fragment FragmentMain ui_text_default
 
         # Debug Rendering
         ${CMAKE_SOURCE_DIR}/shaders/debug_render.slang fragment FragmentMain debug_render

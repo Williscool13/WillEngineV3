@@ -64,6 +64,7 @@ struct RenderFamilyProperties
     size_t visibleMeshletsBufferSize{128};       // Final compacted output{}
 
     size_t glyphQuadBufferSize{128};
+    size_t uiGlyphQuadBufferSize{128};
     size_t textInstanceBufferSize{128};
     size_t textMaterialBufferSize{128};
 };

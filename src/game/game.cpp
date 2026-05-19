@@ -76,6 +76,33 @@ GAME_API void GameLoad(Engine::EngineContext* ctx, Engine::EngineState* state)
     ctx->scheduler->RegisterExternalTaskThread();
 #endif
 
+    const Engine::FontID robotoId = ctx->assetManager->FindFontByName("Roboto");
+    if (robotoId.IsValid()) {
+        state->uiFont = ctx->assetManager->LoadFont(robotoId);
+    }
+
+    struct UIFontContext { Engine::AssetManager* assetManager; Engine::FontHandle handle; };
+    static UIFontContext uiFontCtx{};
+    uiFontCtx.assetManager = ctx->assetManager;
+    uiFontCtx.handle = state->uiFont;
+
+    Clay_SetMeasureTextFunction([](Clay_StringSlice text, Clay_TextElementConfig* config, void* userData) -> Clay_Dimensions {
+        auto* fc = static_cast<UIFontContext*>(userData);
+        const Engine::Font* font = fc->assetManager->GetFont(fc->handle);
+        if (!font) { return {0.0f, static_cast<float>(config->fontSize)}; }
+        const float scale = static_cast<float>(config->fontSize) / font->header.emSize;
+        float width = 0.0f;
+        for (int32_t i = 0; i < text.length; ++i) {
+            const uint32_t cp = static_cast<unsigned char>(text.chars[i]);
+            const Engine::WGlyphInfo* g = fc->assetManager->GetGlyph(fc->handle, cp);
+            if (!g) { width += config->fontSize * 0.25f; continue; }
+            width += g->advance * scale;
+            if (i < text.length - 1) { width += config->letterSpacing; }
+        }
+        const float height = config->lineHeight > 0 ? static_cast<float>(config->lineHeight) : static_cast<float>(config->fontSize);
+        return {width, height};
+    }, &uiFontCtx);
+
     Audio::AudioManager::RegisterAudio();
     Game::RegisterComponents(state->componentRegistry);
     Game::ConnectPhysicsObservers(state->registry);
@@ -217,34 +244,86 @@ static void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState*
     const float vpHeight = static_cast<float>(ctx->windowContext.viewportHeight);
 
     Core::ViewFamily& vf = frameBuffer->mainViewFamily;
+    const Engine::Font* uiFont = ctx->assetManager->GetFont(state->uiFont);
+    assert(uiFont);
+
     for (int32_t i = 0; i < renderCommands.length; ++i) {
         const Clay_RenderCommand& cmd = renderCommands.internalArray[i];
-        if (cmd.commandType != CLAY_RENDER_COMMAND_TYPE_IMAGE) { continue; }
 
-        const Clay_BoundingBox& bb = cmd.boundingBox;
-        const Clay_ImageRenderData& img = cmd.renderData.image;
-        const uint32_t bindlessIndex = *static_cast<const uint32_t*>(img.imageData);
+        if (cmd.commandType == CLAY_RENDER_COMMAND_TYPE_IMAGE) {
+            const Clay_BoundingBox& bb = cmd.boundingBox;
+            const Clay_ImageRenderData& img = cmd.renderData.image;
+            const uint32_t bindlessIndex = *static_cast<const uint32_t*>(img.imageData);
 
-        const float xMin = bb.x / vpWidth * 2.0f - 1.0f;
-        const float yMin = bb.y / vpHeight * 2.0f - 1.0f;
-        const float xMax = (bb.x + bb.width) / vpWidth * 2.0f - 1.0f;
-        const float yMax = (bb.y + bb.height) / vpHeight * 2.0f - 1.0f;
+            const float xMin = bb.x / vpWidth * 2.0f - 1.0f;
+            const float yMin = bb.y / vpHeight * 2.0f - 1.0f;
+            const float xMax = (bb.x + bb.width) / vpWidth * 2.0f - 1.0f;
+            const float yMax = (bb.y + bb.height) / vpHeight * 2.0f - 1.0f;
 
-        const Clay_Color& tc = img.backgroundColor;
-        const bool bUntinted = tc.r == 0 && tc.g == 0 && tc.b == 0 && tc.a == 0;
-        const Vec4 tint = bUntinted
-            ? Vec4{1.0f, 1.0f, 1.0f, 1.0f}
-            : Vec4{tc.r / 255.0f, tc.g / 255.0f, tc.b / 255.0f, tc.a / 255.0f};
+            const Clay_Color& tc = img.backgroundColor;
+            const bool bUntinted = tc.r == 0 && tc.g == 0 && tc.b == 0 && tc.a == 0;
+            const Vec4 tint = bUntinted
+                ? Vec4{1.0f, 1.0f, 1.0f, 1.0f}
+                : Vec4{tc.r / 255.0f, tc.g / 255.0f, tc.b / 255.0f, tc.a / 255.0f};
 
-        vf.uiImageCommands.PushBack(Core::UIRenderCommandImage{
-            .posMin = {xMin, yMin},
-            .posMax = {xMax, yMax},
-            .uvMin = {0.0f, 0.0f},
-            .uvMax = {1.0f, 1.0f},
-            .tintColor = tint,
-            .imageBindlessIndex = bindlessIndex,
-            .zIndex = cmd.zIndex,
-        });
+            vf.uiImageCommands.PushBack(Core::UIRenderCommandImage{
+                .posMin = {xMin, yMin},
+                .posMax = {xMax, yMax},
+                .uvMin = {0.0f, 1.0f}, // y flip
+                .uvMax = {1.0f, 0.0f},
+                .tintColor = tint,
+                .imageBindlessIndex = bindlessIndex,
+                .zIndex = cmd.zIndex,
+            });
+        }
+        else if (cmd.commandType == CLAY_RENDER_COMMAND_TYPE_TEXT) {
+
+            const Clay_BoundingBox& bb = cmd.boundingBox;
+            const Clay_TextRenderData& td = cmd.renderData.text;
+            const float fontSize = td.fontSize;
+            const float scale = fontSize / uiFont->header.emSize;
+            const Vec4 color{td.textColor.r / 255.0f, td.textColor.g / 255.0f, td.textColor.b / 255.0f, td.textColor.a / 255.0f};
+
+            const auto quadStart = static_cast<uint32_t>(vf.uiGlyphQuads.Size());
+            uint32_t quadCount = 0;
+
+            float cursorX = bb.x;
+            const float baselineY = bb.y + fontSize;
+
+            for (int32_t ci = 0; ci < td.stringContents.length; ++ci) {
+                const uint32_t cp = static_cast<unsigned char>(td.stringContents.chars[ci]);
+                const Engine::WGlyphInfo* g = ctx->assetManager->GetGlyph(state->uiFont, cp);
+                if (!g) { cursorX += fontSize * 0.25f; continue; }
+
+                const float xMin = (cursorX + g->planeLeft * scale) / vpWidth * 2.0f - 1.0f;
+                const float yMax = (baselineY - g->planeBottom * scale) / vpHeight * 2.0f - 1.0f;
+                const float xMax = (cursorX + g->planeRight * scale) / vpWidth * 2.0f - 1.0f;
+                const float yMin = (baselineY - g->planeTop * scale) / vpHeight * 2.0f - 1.0f;
+
+                vf.uiGlyphQuads.PushBack(UIGlyphQuad{
+                    .color = {color.x, color.y, color.z, color.w},
+                    .posMin = {xMin, yMin},
+                    .posMax = {xMax, yMax},
+                    .uvMin = {g->uvLeft, g->uvBottom},
+                    .uvMax = {g->uvRight, g->uvTop},
+                    .uvOrigMin = {g->uvLeft, g->uvBottom},
+                    .uvOrigMax = {g->uvRight, g->uvTop},
+                });
+                ++quadCount;
+
+                cursorX += g->advance * scale + td.letterSpacing;
+            }
+
+            if (quadCount == 0) { continue; }
+
+            vf.uiTextDrawCalls.PushBack(Core::UITextDrawCall{
+                .quadOffset = quadStart,
+                .quadCount = quadCount,
+                .atlasBindlessIndex = uiFont->atlasTexture.bindlessHandle.index,
+                .pxRange = static_cast<float>(uiFont->header.sdfSpread),
+                .zIndex = cmd.zIndex,
+            });
+        }
     }
 }
 

@@ -365,6 +365,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         UploadFrameUniforms(viewFamily, renderExtent, frameBuffer.timeFrame.renderDeltaTime);
         UploadModelUniforms(viewFamily, renderFamilyProperties);
         UploadTextUniforms(viewFamily, renderFamilyProperties);
+        UploadUITextUniforms(viewFamily, renderFamilyProperties);
     }
     //
     {
@@ -1578,6 +1579,35 @@ void RenderThread::UploadTextUniforms(Core::ViewFamily& viewFamily, const Render
             };
             vkCmdCopyBuffer2(cmd, &copyInfo);
         });
+}
+
+void RenderThread::UploadUITextUniforms(const Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties) const
+{
+    if (viewFamily.uiGlyphQuads.IsEmpty()) { return; }
+
+    renderGraph->CreateBuffer(UI_GLYPH_QUAD_BUFFER, renderFamilyProperties.uiGlyphQuadBufferSize, false);
+    const uint32_t quadCount = viewFamily.uiGlyphQuads.Size();
+    UploadAllocation glyphUpload = renderGraph->AllocateTransient(quadCount * sizeof(UIGlyphQuad));
+    memcpy(glyphUpload.ptr, viewFamily.uiGlyphQuads.Data(), quadCount * sizeof(UIGlyphQuad));
+
+    RenderPass& uploadPass = renderGraph->AddPass(SID("Upload UI Glyph Quads"), VK_PIPELINE_STAGE_2_COPY_BIT);
+    uploadPass.WriteTransferBuffer(UI_GLYPH_QUAD_BUFFER);
+    uploadPass.Execute([&, srcOffset = glyphUpload.offset, totalSize = quadCount * sizeof(UIGlyphQuad)](VkCommandBuffer cmd) {
+        VkBufferCopy2 copy{
+            .sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
+            .srcOffset = srcOffset,
+            .dstOffset = 0,
+            .size = totalSize,
+        };
+        VkCopyBufferInfo2 copyInfo{
+            .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
+            .srcBuffer = renderGraph->GetTransientUploadBuffer(),
+            .dstBuffer = renderGraph->GetBufferHandle(UI_GLYPH_QUAD_BUFFER),
+            .regionCount = 1,
+            .pRegions = &copy,
+        };
+        vkCmdCopyBuffer2(cmd, &copyInfo);
+    });
 }
 
 void RenderThread::SetupCascadedShadows(RenderGraph& graph, const Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties, uint32_t sceneIndex) const
