@@ -27,12 +27,7 @@
 #include "physics/physics_config.h"
 #include "resources/scene/scene.h"
 #include "project_config.h"
-
-namespace Core
-{
-struct TimeFrame;
-struct InputFrame;
-}
+#include "core/input/input_frame.h"
 
 struct ResolvedCollisionEvent
 {
@@ -221,6 +216,13 @@ struct EngineState
 
     const Core::InputFrame* inputFrame{nullptr};
     const Core::TimeFrame* timeFrame{nullptr};
+
+    /**
+     * Accumulated across game ticks since the last render-prepare; drained and reset each render frame.
+     * Note: Do not use directly, inputFrame and timeFrame will be replaced with this in the render frame function.
+     */
+    Core::InputFrame renderInputFrame{};
+    Core::TimeFrame renderTimeFrame{};
     std::mt19937_64 rng{std::random_device{}()};
 
     entt::registry registry;

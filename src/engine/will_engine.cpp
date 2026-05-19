@@ -449,287 +449,291 @@ void WillEngine::EditorImgui()
         }
         else {
             ImGui::Text("Shaders: >60s since reload");
-        }
-
-        {
+        } {
             static bool bMemoryWasOpen = false;
             const bool bMemoryOpen = ImGui::CollapsingHeader("Memory");
             if (bMemoryOpen && !bMemoryWasOpen) {
                 cachedLiveArenaCount = memoryManager.ArenaPool().GetLiveArenaStats(cachedLiveArenaStats.Data(), cachedLiveArenaStats.Size());
             }
             bMemoryWasOpen = bMemoryOpen;
-        if (bMemoryOpen) {
-            static float refreshTimer = 1.0f; // triggers immediately on first open
-            static int selectedPool = 0;
+            if (bMemoryOpen) {
+                static float refreshTimer = 1.0f; // triggers immediately on first open
+                static int selectedPool = 0;
 
-            refreshTimer += ImGui::GetIO().DeltaTime;
-            if (refreshTimer >= 1.0f) {
-                memoryManager.Persistent().GetTagStats(cachedPersistentTags.Data());
-                memoryManager.General().GetTagStats(cachedGeneralTags.Data());
-                memoryManager.AssetsScratch().GetTagStats(cachedAssetsScratchTags.Data());
-                memoryManager.Assets().GetTagStats(cachedAssetsTags.Data());
-                memoryManager.PhysicsAligned().GetTagStats(cachedPhysicsAlignedTags.Data());
-                memoryManager.Render().GetTagStats(cachedRenderTags.Data());
-                memoryManager.ArenaPool().GetTagStats(cachedArenaPoolTags.Data());
-                refreshTimer = 0.0f;
-            }
-
-            const Core::MemoryManager::Stats ms = memoryManager.GetStats();
-            constexpr float kToMB = 1.0f / (1024.0f * 1024.0f);
-            // Fixed x-offset so all bars align regardless of label length
-            constexpr float kLabelX = 125.0f;
-
-            // TLSF bar: green->yellow->red gradient based on fill fraction; overlay shows capacity; tooltip shows details
-            auto drawMemBar = [&](const char* label, size_t usedBytes_, size_t totalBytes_, size_t allocCount_) {
-                const float fraction = totalBytes_ > 0 ? static_cast<float>(usedBytes_) / static_cast<float>(totalBytes_) : 0.0f;
-                const float r = fraction < 0.5f ? fraction * 2.0f : 1.0f;
-                const float g = fraction < 0.5f ? 1.0f : (1.0f - (fraction - 0.5f) * 2.0f);
-                const auto overlay = Core::InlineString<48>::Format("%.2f / %.0f MB",
-                                                                    static_cast<float>(usedBytes_) * kToMB,
-                                                                    static_cast<float>(totalBytes_) * kToMB);
-
-                ImGui::TextUnformatted(label);
-                ImGui::SameLine(kLabelX);
-                ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImVec4(r, g, 0.0f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.12f, 0.12f, 0.12f, 1.0f));
-                ImGui::ProgressBar(fraction, ImVec2(-1.0f, 0.0f), overlay.c_str());
-                ImGui::PopStyleColor(2);
-                if (ImGui::IsItemHovered()) {
-                    ImGui::SetTooltip("%.3f / %.0f MB  (%zu allocs)",
-                                      static_cast<float>(usedBytes_) * kToMB,
-                                      static_cast<float>(totalBytes_) * kToMB,
-                                      allocCount_);
+                refreshTimer += ImGui::GetIO().DeltaTime;
+                if (refreshTimer >= 1.0f) {
+                    memoryManager.Persistent().GetTagStats(cachedPersistentTags.Data());
+                    memoryManager.General().GetTagStats(cachedGeneralTags.Data());
+                    memoryManager.AssetsScratch().GetTagStats(cachedAssetsScratchTags.Data());
+                    memoryManager.Assets().GetTagStats(cachedAssetsTags.Data());
+                    memoryManager.PhysicsAligned().GetTagStats(cachedPhysicsAlignedTags.Data());
+                    memoryManager.Render().GetTagStats(cachedRenderTags.Data());
+                    memoryManager.ArenaPool().GetTagStats(cachedArenaPoolTags.Data());
+                    refreshTimer = 0.0f;
                 }
-            };
 
-            // Arena bar: bar driven by peak (stable); overlay shows "cur / peak MB"; tooltip shows capacity
-            auto drawArenaBar = [&](const char* label, const Core::Arena::Stats& s) {
-                const float peakFraction = s.totalBytes > 0 ? static_cast<float>(s.peakBytes) / static_cast<float>(s.totalBytes) : 0.0f;
-                const auto overlay = Core::InlineString<48>::Format("pk %.2f / %.0f MB",
-                                                                    static_cast<float>(s.peakBytes) * kToMB,
-                                                                    static_cast<float>(s.totalBytes) * kToMB);
+                const Core::MemoryManager::Stats ms = memoryManager.GetStats();
+                constexpr float kToMB = 1.0f / (1024.0f * 1024.0f);
+                // Fixed x-offset so all bars align regardless of label length
+                constexpr float kLabelX = 125.0f;
 
-                ImGui::TextUnformatted(label);
-                ImGui::SameLine(kLabelX);
-                ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImVec4(0.3f, 0.45f, 0.8f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.12f, 0.12f, 0.12f, 1.0f));
-                ImGui::ProgressBar(peakFraction, ImVec2(-1.0f, 0.0f), overlay.c_str());
-                ImGui::PopStyleColor(2);
-                if (ImGui::IsItemHovered()) {
-                    ImGui::SetTooltip("cur: %.3f MB", static_cast<float>(s.usedBytes) * kToMB);
-                }
-            };
+                // TLSF bar: green->yellow->red gradient based on fill fraction; overlay shows capacity; tooltip shows details
+                auto drawMemBar = [&](const char* label, size_t usedBytes_, size_t totalBytes_, size_t allocCount_) {
+                    const float fraction = totalBytes_ > 0 ? static_cast<float>(usedBytes_) / static_cast<float>(totalBytes_) : 0.0f;
+                    const float r = fraction < 0.5f ? fraction * 2.0f : 1.0f;
+                    const float g = fraction < 0.5f ? 1.0f : (1.0f - (fraction - 0.5f) * 2.0f);
+                    const auto overlay = Core::InlineString<48>::Format("%.2f / %.0f MB",
+                                                                        static_cast<float>(usedBytes_) * kToMB,
+                                                                        static_cast<float>(totalBytes_) * kToMB);
 
-            // Grand total across all TLSF pools
-            {
-                const size_t tlsfUsed = ms.persistent.usedBytes + ms.general.usedBytes + ms.assetsScratch.usedBytes
-                                        + ms.assets.usedBytes + ms.physicsAligned.usedBytes + ms.render.usedBytes;
-                const size_t tlsfTotal = ms.persistent.totalBytes + ms.general.totalBytes + ms.assetsScratch.totalBytes
-                                         + ms.assets.totalBytes + ms.physicsAligned.totalBytes + ms.render.totalBytes;
-                const size_t tlsfAllocs = ms.persistent.allocCount + ms.general.allocCount + ms.assetsScratch.allocCount
-                                          + ms.assets.allocCount + ms.physicsAligned.allocCount + ms.render.allocCount;
-                ImGui::SeparatorText("TLSF Total");
-                drawMemBar("All Pools", tlsfUsed, tlsfTotal, tlsfAllocs);
-            }
-
-            ImGui::SeparatorText("General");
-            drawMemBar("General", ms.general.usedBytes, ms.general.totalBytes, ms.general.allocCount);
-            drawMemBar("Assets Scratch", ms.assetsScratch.usedBytes, ms.assetsScratch.totalBytes, ms.assetsScratch.allocCount);
-            drawMemBar("Assets", ms.assets.usedBytes, ms.assets.totalBytes, ms.assets.allocCount);
-
-            ImGui::SeparatorText("Physics");
-            drawMemBar("Phys Aligned", ms.physicsAligned.usedBytes, ms.physicsAligned.totalBytes, ms.physicsAligned.allocCount);
-
-            ImGui::SeparatorText("Render");
-            drawMemBar("Render", ms.render.usedBytes, ms.render.totalBytes, ms.render.allocCount);
-
-            ImGui::SeparatorText("Engine");
-            drawMemBar("Persistent", ms.persistent.usedBytes, ms.persistent.totalBytes, ms.persistent.allocCount);
-
-            ImGui::SeparatorText("Arena Pool");
-            {
-                const Core::ArenaSuballocator::Stats as = memoryManager.ArenaPool().GetStats();
-                const float totalBytes = static_cast<float>(as.totalBytes);
-
-                constexpr float kBarHeight = 20.0f;
-                constexpr ImU32 kFreeColor = IM_COL32(40, 40, 40, 255);
-                constexpr ImU32 kChunkColors[] = {
-                    IM_COL32(70, 130, 180, 255),
-                    IM_COL32(180, 100, 60,  255),
-                    IM_COL32(80,  160, 80,  255),
-                    IM_COL32(160, 80,  160, 255),
-                    IM_COL32(180, 160, 50,  255),
-                    IM_COL32(60,  160, 160, 255),
-                    IM_COL32(160, 60,  80,  255),
-                    IM_COL32(100, 100, 200, 255),
+                    ImGui::TextUnformatted(label);
+                    ImGui::SameLine(kLabelX);
+                    ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImVec4(r, g, 0.0f, 1.0f));
+                    ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.12f, 0.12f, 0.12f, 1.0f));
+                    ImGui::ProgressBar(fraction, ImVec2(-1.0f, 0.0f), overlay.c_str());
+                    ImGui::PopStyleColor(2);
+                    if (ImGui::IsItemHovered()) {
+                        ImGui::SetTooltip("%.3f / %.0f MB  (%zu allocs)",
+                                          static_cast<float>(usedBytes_) * kToMB,
+                                          static_cast<float>(totalBytes_) * kToMB,
+                                          allocCount_);
+                    }
                 };
-                constexpr int kNumColors = static_cast<int>(sizeof(kChunkColors) / sizeof(kChunkColors[0]));
 
-                // Collect active chunks
-                struct ChunkEntry { const char* name; float bytes; ImU32 color; };
-                Core::InlineVector<ChunkEntry, 32> chunks;
-                int colorIdx = 0;
-                for (size_t i = 0; i < kTagCount; ++i) {
-                    const auto& ts = cachedArenaPoolTags[i];
-                    if (ts.count == 0) { continue; }
-                    chunks.PushBack({Core::AllocTagName(ts.tag), static_cast<float>(ts.usedBytes), kChunkColors[colorIdx % kNumColors]});
-                    ++colorIdx;
+                // Arena bar: bar driven by peak (stable); overlay shows "cur / peak MB"; tooltip shows capacity
+                auto drawArenaBar = [&](const char* label, const Core::Arena::Stats& s) {
+                    const float peakFraction = s.totalBytes > 0 ? static_cast<float>(s.peakBytes) / static_cast<float>(s.totalBytes) : 0.0f;
+                    const auto overlay = Core::InlineString<48>::Format("pk %.2f / %.0f MB",
+                                                                        static_cast<float>(s.peakBytes) * kToMB,
+                                                                        static_cast<float>(s.totalBytes) * kToMB);
+
+                    ImGui::TextUnformatted(label);
+                    ImGui::SameLine(kLabelX);
+                    ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImVec4(0.3f, 0.45f, 0.8f, 1.0f));
+                    ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.12f, 0.12f, 0.12f, 1.0f));
+                    ImGui::ProgressBar(peakFraction, ImVec2(-1.0f, 0.0f), overlay.c_str());
+                    ImGui::PopStyleColor(2);
+                    if (ImGui::IsItemHovered()) {
+                        ImGui::SetTooltip("cur: %.3f MB", static_cast<float>(s.usedBytes) * kToMB);
+                    }
+                };
+
+                // Grand total across all TLSF pools
+                {
+                    const size_t tlsfUsed = ms.persistent.usedBytes + ms.general.usedBytes + ms.assetsScratch.usedBytes
+                                            + ms.assets.usedBytes + ms.physicsAligned.usedBytes + ms.render.usedBytes;
+                    const size_t tlsfTotal = ms.persistent.totalBytes + ms.general.totalBytes + ms.assetsScratch.totalBytes
+                                             + ms.assets.totalBytes + ms.physicsAligned.totalBytes + ms.render.totalBytes;
+                    const size_t tlsfAllocs = ms.persistent.allocCount + ms.general.allocCount + ms.assetsScratch.allocCount
+                                              + ms.assets.allocCount + ms.physicsAligned.allocCount + ms.render.allocCount;
+                    ImGui::SeparatorText("TLSF Total");
+                    drawMemBar("All Pools", tlsfUsed, tlsfTotal, tlsfAllocs);
                 }
 
-                const ImVec2 barSize{ImGui::GetContentRegionAvail().x, kBarHeight};
-                const ImVec2 cursor = ImGui::GetCursorScreenPos();
-                ImDrawList* dl = ImGui::GetWindowDrawList();
+                ImGui::SeparatorText("General");
+                drawMemBar("General", ms.general.usedBytes, ms.general.totalBytes, ms.general.allocCount);
+                drawMemBar("Assets Scratch", ms.assetsScratch.usedBytes, ms.assetsScratch.totalBytes, ms.assetsScratch.allocCount);
+                drawMemBar("Assets", ms.assets.usedBytes, ms.assets.totalBytes, ms.assets.allocCount);
 
-                float x = cursor.x;
-                int hoveredChunk = -1;
-                const ImVec2 mousePos = ImGui::GetIO().MousePos;
+                ImGui::SeparatorText("Physics");
+                drawMemBar("Phys Aligned", ms.physicsAligned.usedBytes, ms.physicsAligned.totalBytes, ms.physicsAligned.allocCount);
 
-                // Draw chunks
-                for (int i = 0; i < static_cast<int>(chunks.Size()); ++i) {
-                    const float w = (chunks[i].bytes / totalBytes) * barSize.x;
-                    if (w < 1.0f) { continue; }
-                    const ImVec2 p0{x, cursor.y};
-                    const ImVec2 p1{x + w, cursor.y + kBarHeight};
-                    dl->AddRectFilled(p0, p1, chunks[i].color);
-                    dl->AddRect(p0, p1, IM_COL32(0, 0, 0, 80));
-                    if (mousePos.x >= p0.x && mousePos.x < p1.x && mousePos.y >= p0.y && mousePos.y < p1.y) {
-                        hoveredChunk = i;
+                ImGui::SeparatorText("Render");
+                drawMemBar("Render", ms.render.usedBytes, ms.render.totalBytes, ms.render.allocCount);
+
+                ImGui::SeparatorText("Engine");
+                drawMemBar("Persistent", ms.persistent.usedBytes, ms.persistent.totalBytes, ms.persistent.allocCount);
+
+                ImGui::SeparatorText("Arena Pool"); {
+                    const Core::ArenaSuballocator::Stats as = memoryManager.ArenaPool().GetStats();
+                    const float totalBytes = static_cast<float>(as.totalBytes);
+
+                    constexpr float kBarHeight = 20.0f;
+                    constexpr ImU32 kFreeColor = IM_COL32(40, 40, 40, 255);
+                    constexpr ImU32 kChunkColors[] = {
+                        IM_COL32(70, 130, 180, 255),
+                        IM_COL32(180, 100, 60, 255),
+                        IM_COL32(80, 160, 80, 255),
+                        IM_COL32(160, 80, 160, 255),
+                        IM_COL32(180, 160, 50, 255),
+                        IM_COL32(60, 160, 160, 255),
+                        IM_COL32(160, 60, 80, 255),
+                        IM_COL32(100, 100, 200, 255),
+                    };
+                    constexpr int kNumColors = static_cast<int>(sizeof(kChunkColors) / sizeof(kChunkColors[0]));
+
+                    // Collect active chunks
+                    struct ChunkEntry
+                    {
+                        const char* name;
+                        float bytes;
+                        ImU32 color;
+                    };
+                    Core::InlineVector<ChunkEntry, 32> chunks;
+                    int colorIdx = 0;
+                    for (size_t i = 0; i < kTagCount; ++i) {
+                        const auto& ts = cachedArenaPoolTags[i];
+                        if (ts.count == 0) { continue; }
+                        chunks.PushBack({Core::AllocTagName(ts.tag), static_cast<float>(ts.usedBytes), kChunkColors[colorIdx % kNumColors]});
+                        ++colorIdx;
                     }
-                    // Full name if it fits, otherwise first letter, otherwise nothing
-                    if (w >= 10.0f) {
-                        const ImVec2 fullSize = ImGui::CalcTextSize(chunks[i].name);
-                        const char* label = chunks[i].name;
-                        char initial[2] = {chunks[i].name[0], '\0'};
-                        ImVec2 textSize = fullSize;
-                        if (fullSize.x + 4.0f > w) {
-                            label = initial;
-                            textSize = ImGui::CalcTextSize(label);
+
+                    const ImVec2 barSize{ImGui::GetContentRegionAvail().x, kBarHeight};
+                    const ImVec2 cursor = ImGui::GetCursorScreenPos();
+                    ImDrawList* dl = ImGui::GetWindowDrawList();
+
+                    float x = cursor.x;
+                    int hoveredChunk = -1;
+                    const ImVec2 mousePos = ImGui::GetIO().MousePos;
+
+                    // Draw chunks
+                    for (int i = 0; i < static_cast<int>(chunks.Size()); ++i) {
+                        const float w = (chunks[i].bytes / totalBytes) * barSize.x;
+                        if (w < 1.0f) { continue; }
+                        const ImVec2 p0{x, cursor.y};
+                        const ImVec2 p1{x + w, cursor.y + kBarHeight};
+                        dl->AddRectFilled(p0, p1, chunks[i].color);
+                        dl->AddRect(p0, p1, IM_COL32(0, 0, 0, 80));
+                        if (mousePos.x >= p0.x && mousePos.x < p1.x && mousePos.y >= p0.y && mousePos.y < p1.y) {
+                            hoveredChunk = i;
                         }
-                        dl->AddText({p0.x + (w - textSize.x) * 0.5f, p0.y + (kBarHeight - textSize.y) * 0.5f}, IM_COL32(255, 255, 255, 220), label);
+                        // Full name if it fits, otherwise first letter, otherwise nothing
+                        if (w >= 10.0f) {
+                            const ImVec2 fullSize = ImGui::CalcTextSize(chunks[i].name);
+                            const char* label = chunks[i].name;
+                            char initial[2] = {chunks[i].name[0], '\0'};
+                            ImVec2 textSize = fullSize;
+                            if (fullSize.x + 4.0f > w) {
+                                label = initial;
+                                textSize = ImGui::CalcTextSize(label);
+                            }
+                            dl->AddText({p0.x + (w - textSize.x) * 0.5f, p0.y + (kBarHeight - textSize.y) * 0.5f}, IM_COL32(255, 255, 255, 220), label);
+                        }
+                        x += w;
                     }
-                    x += w;
-                }
 
-                // Free space
-                const float freeW = cursor.x + barSize.x - x;
-                if (freeW > 0.0f) {
-                    const ImVec2 p0{x, cursor.y};
-                    const ImVec2 p1{x + freeW, cursor.y + kBarHeight};
-                    dl->AddRectFilled(p0, p1, kFreeColor);
-                    if (mousePos.x >= p0.x && mousePos.x < p1.x && mousePos.y >= p0.y && mousePos.y < p1.y) {
-                        hoveredChunk = static_cast<int>(chunks.Size()); // sentinel for free
-                    }
-                }
-
-                ImGui::Dummy(barSize);
-
-                if (hoveredChunk >= 0 && hoveredChunk < static_cast<int>(chunks.Size())) {
-                    // Find matching live stats entry for peak info
-                    const char* name = chunks[hoveredChunk].name;
-                    const float chunkMB = chunks[hoveredChunk].bytes * kToMB;
-                    bool foundLive = false;
-                    for (size_t li = 0; li < cachedLiveArenaCount; ++li) {
-                        if (Core::AllocTagName(cachedLiveArenaStats[li].tag) == name) {
-                            const auto& ls = cachedLiveArenaStats[li].arenaStats;
-                            ImGui::SetTooltip("%s\nallocated: %.2f MB\npeak: %.2f MB\ncapacity: %.2f MB",
-                                name, chunkMB, static_cast<float>(ls.peakBytes) * kToMB, static_cast<float>(ls.totalBytes) * kToMB);
-                            foundLive = true;
-                            break;
+                    // Free space
+                    const float freeW = cursor.x + barSize.x - x;
+                    if (freeW > 0.0f) {
+                        const ImVec2 p0{x, cursor.y};
+                        const ImVec2 p1{x + freeW, cursor.y + kBarHeight};
+                        dl->AddRectFilled(p0, p1, kFreeColor);
+                        if (mousePos.x >= p0.x && mousePos.x < p1.x && mousePos.y >= p0.y && mousePos.y < p1.y) {
+                            hoveredChunk = static_cast<int>(chunks.Size()); // sentinel for free
                         }
                     }
-                    if (!foundLive) {
-                        ImGui::SetTooltip("%s\n%.2f MB", name, chunkMB);
-                    }
-                } else if (hoveredChunk == static_cast<int>(chunks.Size())) {
-                    ImGui::SetTooltip("Free\n%.2f MB", static_cast<float>(as.freeBytes) * kToMB);
-                }
 
-                ImGui::Text("%.1f / %.0f MB  (%zu chunks)", static_cast<float>(as.usedBytes) * kToMB, static_cast<float>(as.totalBytes) * kToMB, as.activeChunks);
-                ImGui::SameLine();
-                if (ImGui::SmallButton("Refresh##arenaStats")) {
-                    cachedLiveArenaCount = memoryManager.ArenaPool().GetLiveArenaStats(cachedLiveArenaStats.Data(), cachedLiveArenaStats.Size());
-                }
+                    ImGui::Dummy(barSize);
 
-                if (cachedLiveArenaCount > 0) {
-                    constexpr ImGuiTableFlags arenaTableFlags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp;
-                    if (ImGui::BeginTable("ArenaLiveTable", 4, arenaTableFlags)) {
-                        ImGui::TableSetupColumn("Arena");
-                        ImGui::TableSetupColumn("Used (KB)");
-                        ImGui::TableSetupColumn("Peak (KB)");
-                        ImGui::TableSetupColumn("Cap (KB)");
-                        ImGui::TableHeadersRow();
-
-                        for (size_t i = 0; i < cachedLiveArenaCount; ++i) {
-                            const auto& la = cachedLiveArenaStats[i];
-                            ImGui::TableNextRow();
-                            ImGui::TableSetColumnIndex(0);
-                            ImGui::TextUnformatted(Core::AllocTagName(la.tag));
-                            ImGui::TableSetColumnIndex(1);
-                            ImGui::Text("%.1f", static_cast<float>(la.arenaStats.usedBytes) / 1024.0f);
-                            ImGui::TableSetColumnIndex(2);
-                            ImGui::Text("%.1f", static_cast<float>(la.arenaStats.peakBytes) / 1024.0f);
-                            ImGui::TableSetColumnIndex(3);
-                            ImGui::Text("%.1f", static_cast<float>(la.arenaStats.totalBytes) / 1024.0f);
+                    if (hoveredChunk >= 0 && hoveredChunk < static_cast<int>(chunks.Size())) {
+                        // Find matching live stats entry for peak info
+                        const char* name = chunks[hoveredChunk].name;
+                        const float chunkMB = chunks[hoveredChunk].bytes * kToMB;
+                        bool foundLive = false;
+                        for (size_t li = 0; li < cachedLiveArenaCount; ++li) {
+                            if (Core::AllocTagName(cachedLiveArenaStats[li].tag) == name) {
+                                const auto& ls = cachedLiveArenaStats[li].arenaStats;
+                                ImGui::SetTooltip("%s\nallocated: %.2f MB\npeak: %.2f MB\ncapacity: %.2f MB",
+                                                  name, chunkMB, static_cast<float>(ls.peakBytes) * kToMB, static_cast<float>(ls.totalBytes) * kToMB);
+                                foundLive = true;
+                                break;
+                            }
                         }
-                        ImGui::EndTable();
+                        if (!foundLive) {
+                            ImGui::SetTooltip("%s\n%.2f MB", name, chunkMB);
+                        }
                     }
+                    else if (hoveredChunk == static_cast<int>(chunks.Size())) {
+                        ImGui::SetTooltip("Free\n%.2f MB", static_cast<float>(as.freeBytes) * kToMB);
+                    }
+
+                    ImGui::Text("%.1f / %.0f MB  (%zu chunks)", static_cast<float>(as.usedBytes) * kToMB, static_cast<float>(as.totalBytes) * kToMB, as.activeChunks);
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton("Refresh##arenaStats")) {
+                        cachedLiveArenaCount = memoryManager.ArenaPool().GetLiveArenaStats(cachedLiveArenaStats.Data(), cachedLiveArenaStats.Size());
+                    }
+
+                    if (cachedLiveArenaCount > 0) {
+                        constexpr ImGuiTableFlags arenaTableFlags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp;
+                        if (ImGui::BeginTable("ArenaLiveTable", 4, arenaTableFlags)) {
+                            ImGui::TableSetupColumn("Arena");
+                            ImGui::TableSetupColumn("Used (KB)");
+                            ImGui::TableSetupColumn("Peak (KB)");
+                            ImGui::TableSetupColumn("Cap (KB)");
+                            ImGui::TableHeadersRow();
+
+                            for (size_t i = 0; i < cachedLiveArenaCount; ++i) {
+                                const auto& la = cachedLiveArenaStats[i];
+                                ImGui::TableNextRow();
+                                ImGui::TableSetColumnIndex(0);
+                                ImGui::TextUnformatted(Core::AllocTagName(la.tag));
+                                ImGui::TableSetColumnIndex(1);
+                                ImGui::Text("%.1f", static_cast<float>(la.arenaStats.usedBytes) / 1024.0f);
+                                ImGui::TableSetColumnIndex(2);
+                                ImGui::Text("%.1f", static_cast<float>(la.arenaStats.peakBytes) / 1024.0f);
+                                ImGui::TableSetColumnIndex(3);
+                                ImGui::Text("%.1f", static_cast<float>(la.arenaStats.totalBytes) / 1024.0f);
+                            }
+                            ImGui::EndTable();
+                        }
+                    }
+                }
+
+                ImGui::SeparatorText("GPU");
+                ImGui::Text("Device: %zu allocs / %.3f MB",
+                            static_cast<size_t>(ms.deviceMemory.allocationCount),
+                            static_cast<float>(ms.deviceMemory.totalBytes) * kToMB);
+
+                // Per-pool tag breakdown with pool selector
+                ImGui::SeparatorText("Tag Breakdown");
+
+                struct PoolEntry
+                {
+                    const char* name;
+                    const Core::TlsfAllocator::TagStats* tags;
+                };
+                const PoolEntry pools[] = {
+                    {"Persistent", cachedPersistentTags.Data()},
+                    {"General", cachedGeneralTags.Data()},
+                    {"Assets Scratch", cachedAssetsScratchTags.Data()},
+                    {"Assets", cachedAssetsTags.Data()},
+                    {"Phys Aligned", cachedPhysicsAlignedTags.Data()},
+                    {"Render", cachedRenderTags.Data()},
+                };
+                constexpr int kPoolCount = 6;
+
+                for (int i = 0; i < kPoolCount; ++i) {
+                    if (i > 0) { ImGui::SameLine(); }
+                    const bool sel = (selectedPool == i);
+                    if (sel) { ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive)); }
+                    if (ImGui::SmallButton(pools[i].name)) { selectedPool = i; }
+                    if (sel) { ImGui::PopStyleColor(); }
+                }
+
+                ImGui::Spacing();
+                constexpr ImGuiTableFlags tableFlags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp;
+                if (ImGui::BeginTable("MemTagTable", 3, tableFlags)) {
+                    ImGui::TableSetupColumn("Tag");
+                    ImGui::TableSetupColumn("Allocs");
+                    ImGui::TableSetupColumn("Used (KB)");
+                    ImGui::TableHeadersRow();
+
+                    const Core::TlsfAllocator::TagStats* tags = pools[selectedPool].tags;
+                    for (size_t i = 0; i < static_cast<size_t>(Core::AllocTag::Count); ++i) {
+                        const Core::TlsfAllocator::TagStats& t = tags[i];
+                        if (t.count == 0) { continue; }
+                        ImGui::TableNextRow();
+                        ImGui::TableSetColumnIndex(0);
+                        ImGui::TextUnformatted(Core::AllocTagName(t.tag));
+                        ImGui::TableSetColumnIndex(1);
+                        ImGui::Text("%zu", t.count);
+                        ImGui::TableSetColumnIndex(2);
+                        ImGui::Text("%.1f", static_cast<float>(t.usedBytes) / 1024.0f);
+                    }
+                    ImGui::EndTable();
                 }
             }
-
-            ImGui::SeparatorText("GPU");
-            ImGui::Text("Device: %zu allocs / %.3f MB",
-                        static_cast<size_t>(ms.deviceMemory.allocationCount),
-                        static_cast<float>(ms.deviceMemory.totalBytes) * kToMB);
-
-            // Per-pool tag breakdown with pool selector
-            ImGui::SeparatorText("Tag Breakdown");
-
-            struct PoolEntry
-            {
-                const char* name;
-                const Core::TlsfAllocator::TagStats* tags;
-            };
-            const PoolEntry pools[] = {
-                {"Persistent", cachedPersistentTags.Data()},
-                {"General", cachedGeneralTags.Data()},
-                {"Assets Scratch", cachedAssetsScratchTags.Data()},
-                {"Assets", cachedAssetsTags.Data()},
-                {"Phys Aligned", cachedPhysicsAlignedTags.Data()},
-                {"Render", cachedRenderTags.Data()},
-            };
-            constexpr int kPoolCount = 6;
-
-            for (int i = 0; i < kPoolCount; ++i) {
-                if (i > 0) { ImGui::SameLine(); }
-                const bool sel = (selectedPool == i);
-                if (sel) { ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive)); }
-                if (ImGui::SmallButton(pools[i].name)) { selectedPool = i; }
-                if (sel) { ImGui::PopStyleColor(); }
-            }
-
-            ImGui::Spacing();
-            constexpr ImGuiTableFlags tableFlags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp;
-            if (ImGui::BeginTable("MemTagTable", 3, tableFlags)) {
-                ImGui::TableSetupColumn("Tag");
-                ImGui::TableSetupColumn("Allocs");
-                ImGui::TableSetupColumn("Used (KB)");
-                ImGui::TableHeadersRow();
-
-                const Core::TlsfAllocator::TagStats* tags = pools[selectedPool].tags;
-                for (size_t i = 0; i < static_cast<size_t>(Core::AllocTag::Count); ++i) {
-                    const Core::TlsfAllocator::TagStats& t = tags[i];
-                    if (t.count == 0) { continue; }
-                    ImGui::TableNextRow();
-                    ImGui::TableSetColumnIndex(0);
-                    ImGui::TextUnformatted(Core::AllocTagName(t.tag));
-                    ImGui::TableSetColumnIndex(1);
-                    ImGui::Text("%zu", t.count);
-                    ImGui::TableSetColumnIndex(2);
-                    ImGui::Text("%.1f", static_cast<float>(t.usedBytes) / 1024.0f);
-                }
-                ImGui::EndTable();
-            }
-        }} // bMemoryOpen + outer block
+        } // bMemoryOpen + outer block
 
         if (ImGui::CollapsingHeader("Asset Counts")) {
             ImGui::Text("Models:    %u", assetManager->GetActiveModelCount());
@@ -1166,10 +1170,39 @@ void WillEngine::Run()
         //
         {
             ZoneScopedN("GameFrame");
-            engineState->inputFrame = &inputManager->GetCurrentInput();
+            const Core::InputFrame& currentInput = inputManager->GetCurrentInput();
+            engineState->inputFrame = &currentInput;
             engineState->timeFrame = &timeManager->GetTime();
             gameFunctions.gameUpdate(engineContext, engineState);
+
+            // Accumulate into render frame
+            Core::InputFrame& ri = engineState->renderInputFrame;
+            for (size_t i = 0; i < currentInput.keys.Size(); ++i) {
+                ri.keys[i].pressed |= currentInput.keys[i].pressed;
+                ri.keys[i].down |= currentInput.keys[i].down;
+                ri.keys[i].released |= currentInput.keys[i].released;
+            }
+            for (size_t i = 0; i < currentInput.mouseButtons.Size(); ++i) {
+                ri.mouseButtons[i].pressed |= currentInput.mouseButtons[i].pressed;
+                ri.mouseButtons[i].down |= currentInput.mouseButtons[i].down;
+                ri.mouseButtons[i].released |= currentInput.mouseButtons[i].released;
+            }
+            ri.mousePosition = currentInput.mousePosition;
+            ri.mousePositionAbsolute = currentInput.mousePositionAbsolute;
+            ri.mouseXDelta += currentInput.mouseXDelta;
+            ri.mouseYDelta += currentInput.mouseYDelta;
+            ri.mouseWheelDelta += currentInput.mouseWheelDelta;
+            ri.isCursorActive = currentInput.isCursorActive;
+            ri.isWindowInputFocus = currentInput.isWindowInputFocus;
             inputManager->FrameReset();
+
+            Core::TimeFrame& rt = engineState->renderTimeFrame;
+            const Core::TimeFrame& ct = *engineState->timeFrame;
+            rt.deltaTime += ct.deltaTime;
+            rt.totalTime = ct.totalTime;
+            rt.frameCount = ct.frameCount;
+            rt.renderDeltaTime = ct.renderDeltaTime;
+            rt.renderTotalTime = ct.renderTotalTime;
         }
 
 
@@ -1249,8 +1282,12 @@ void WillEngine::Run()
                 //
                 {
                     ZoneScopedN("GamePrepareFrame");
+                    engineState->inputFrame = &engineState->renderInputFrame;
+                    engineState->timeFrame = &engineState->renderTimeFrame;
                     engineRenderSynchronization->stagingFrameBuffer.Reinitialize();
                     gameFunctions.gamePrepareFrame(engineContext, engineState, &engineRenderSynchronization->stagingFrameBuffer);
+                    engineState->renderInputFrame = {};
+                    engineState->renderTimeFrame = {};
                 }
 
                 //
