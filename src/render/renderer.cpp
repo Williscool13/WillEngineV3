@@ -1570,6 +1570,42 @@ StringID SetupPostProcessing(RenderGraph& graph,
     current = PPDither(ctx, current);
     return current;
 }
+void SetupUIRender(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, StringID targetImage)
+{
+    if (viewFamily.uiImageCommands.IsEmpty()) { return; }
+
+    RenderPass& uiPass = graph.AddPass(SID("UI Render"), VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT);
+    uiPass.WriteColorAttachment(targetImage);
+    uiPass.Execute([&, width = renderExtent[0], height = renderExtent[1], targetImage, pipelineManager](VkCommandBuffer cmd) {
+        VkViewport viewport = VkHelpers::GenerateViewport(width, height);
+        vkCmdSetViewport(cmd, 0, 1, &viewport);
+
+        const VkRenderingAttachmentInfo colorAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targetImage), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, &colorAttachment, 1, nullptr, nullptr);
+        vkCmdBeginRendering(cmd, &renderInfo);
+
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("ui_image_default"));
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineEntry->pipeline);
+
+        for (const Core::UIRenderCommandImage& uiCmd : viewFamily.uiImageCommands) {
+            VkRect2D scissor = VkHelpers::GenerateScissor(width, height);
+            vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+            UIImagePushConstant pc{
+                .posMin = {uiCmd.posMin.x, uiCmd.posMin.y},
+                .posMax = {uiCmd.posMax.x, uiCmd.posMax.y},
+                .uvMin = {uiCmd.uvMin.x, uiCmd.uvMin.y},
+                .uvMax = {uiCmd.uvMax.x, uiCmd.uvMax.y},
+                .tintColor = {uiCmd.tintColor.x, uiCmd.tintColor.y, uiCmd.tintColor.z, uiCmd.tintColor.w},
+                .imageBindlessIndex = uiCmd.imageBindlessIndex,
+            };
+            vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(UIImagePushConstant), &pc);
+            vkCmdDraw(cmd, 4, 1, 0, 0);
+        }
+
+        vkCmdEndRendering(cmd);
+    });
+}
 } // Render
 
 /*InstancedGeometryPassOutputs SetupInstancedGeometryShadowPass(RenderGraph& graph, const InstancedGeometryPassConfig& config, PipelineManager* pipelineManager, uint32_t sceneDataIndex,

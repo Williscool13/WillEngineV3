@@ -212,28 +212,44 @@ static void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState*
     }
 
     Clay_RenderCommandArray renderCommands = Clay_EndLayout(frameBuffer->timeFrame.deltaTime);
-    (void) renderCommands;
+
+    const float vpWidth = static_cast<float>(ctx->windowContext.viewportWidth);
+    const float vpHeight = static_cast<float>(ctx->windowContext.viewportHeight);
+
+    Core::ViewFamily& vf = frameBuffer->mainViewFamily;
+    for (int32_t i = 0; i < renderCommands.length; ++i) {
+        const Clay_RenderCommand& cmd = renderCommands.internalArray[i];
+        if (cmd.commandType != CLAY_RENDER_COMMAND_TYPE_IMAGE) { continue; }
+
+        const Clay_BoundingBox& bb = cmd.boundingBox;
+        const Clay_ImageRenderData& img = cmd.renderData.image;
+        const uint32_t bindlessIndex = *static_cast<const uint32_t*>(img.imageData);
+
+        const float xMin = bb.x / vpWidth * 2.0f - 1.0f;
+        const float yMin = bb.y / vpHeight * 2.0f - 1.0f;
+        const float xMax = (bb.x + bb.width) / vpWidth * 2.0f - 1.0f;
+        const float yMax = (bb.y + bb.height) / vpHeight * 2.0f - 1.0f;
+
+        const Clay_Color& tc = img.backgroundColor;
+        const bool bUntinted = tc.r == 0 && tc.g == 0 && tc.b == 0 && tc.a == 0;
+        const Vec4 tint = bUntinted
+            ? Vec4{1.0f, 1.0f, 1.0f, 1.0f}
+            : Vec4{tc.r / 255.0f, tc.g / 255.0f, tc.b / 255.0f, tc.a / 255.0f};
+
+        vf.uiImageCommands.PushBack(Core::UIRenderCommandImage{
+            .posMin = {xMin, yMin},
+            .posMax = {xMax, yMax},
+            .uvMin = {0.0f, 0.0f},
+            .uvMax = {1.0f, 1.0f},
+            .tintColor = tint,
+            .imageBindlessIndex = bindlessIndex,
+            .zIndex = cmd.zIndex,
+        });
+    }
 }
 
 GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
-    frameBuffer->mainViewFamily.modelMatrices.Clear();
-    frameBuffer->mainViewFamily.instances.Clear();
-    frameBuffer->mainViewFamily.worldGlyphQuads.Clear();
-    frameBuffer->mainViewFamily.textInstances.Clear();
-    frameBuffer->mainViewFamily.activeTextMaterials.Clear();
-    frameBuffer->mainViewFamily.textMaterials.Clear();
-    frameBuffer->mainViewFamily.textDrawCalls.Clear();
-    frameBuffer->mainViewFamily.activeMaterials.Clear();
-    frameBuffer->mainViewFamily.materials.Clear();
-    frameBuffer->mainViewFamily.lightingBuckets.Clear();
-    frameBuffer->mainViewFamily.portalViews.Clear();
-#ifndef PACKAGED_BUILD
-    frameBuffer->mainViewFamily.debugLines.Clear();
-    frameBuffer->mainViewFamily.debugBoxes.Clear();
-    frameBuffer->mainViewFamily.debugSpheres.Clear();
-#endif
-
     Game::FunctionKeyRenderUpdate(ctx, state, frameBuffer);
 
     Game::BuildViewFamily(state, frameBuffer->mainViewFamily);

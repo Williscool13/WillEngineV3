@@ -799,4 +799,14 @@ SHADER_PUBLIC struct TextRenderPushConstant
     SHADER_PUBLIC uint32_t sceneDataIndex;
 };
 
+SHADER_PUBLIC struct UIImagePushConstant
+{
+    SHADER_PUBLIC float2 posMin;
+    SHADER_PUBLIC float2 posMax;
+    SHADER_PUBLIC float2 uvMin;
+    SHADER_PUBLIC float2 uvMax;
+    SHADER_PUBLIC float4 tintColor;
+    SHADER_PUBLIC uint32_t imageBindlessIndex;
+};
+
 #endif //WILL_ENGINE_PUSH_CONSTANT_INTEROP_H

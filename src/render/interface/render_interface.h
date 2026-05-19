@@ -11,6 +11,7 @@
 #include "core/string_id.h"
 #include "core/containers/arena_fixed_map.h"
 #include "core/containers/arena_fixed_vector.h"
+#include "core/containers/arena_map.h"
 #include "core/containers/arena_vector.h"
 #include "core/containers/vector.h"
 #include "core/memory/arena_suballocator.h"
@@ -303,18 +304,46 @@ struct TextDrawCall
 
 struct TextInstanceDataFull
 {
-    uint32_t modelIndex;
-    float pxRange;
-    uint32_t atlasBindlessIndex;
-    uint32_t textMaterialIndex;
+    uint32_t modelIndex{0};
+    float pxRange{0.0f};
+    uint32_t atlasBindlessIndex{0};
+    uint32_t textMaterialIndex{0};
     uint64_t stableId{0};
+};
+
+struct UIRenderCommandImage
+{
+    Vec2 posMin;
+    Vec2 posMax;
+    Vec2 uvMin;
+    Vec2 uvMax;
+    Vec4 tintColor;
+    uint32_t imageBindlessIndex;
+    int16_t zIndex;
+};
+
+struct ViewFamilyWatermarks
+{
+    size_t instances{128};
+    size_t worldGlyphQuads{256};
+    size_t textInstances{32};
+    size_t modelMatrices{256};
+    size_t activeMaterials{256};
+    size_t materials{256};
+    size_t activeTextMaterials{32};
+    size_t textMaterials{256};
+    size_t debugLines{256};
+    size_t debugBoxes{256};
+    size_t debugSpheres{256};
+    size_t uiImageCommands{512};
+    size_t textDrawCalls{256};
 };
 
 struct ViewFamily
 {
     ViewFamily() = default;
 
-    explicit ViewFamily(Arena& arena);
+    explicit ViewFamily(Arena& arena, const ViewFamilyWatermarks& wm = {});
 
     ~ViewFamily() = default;
 
@@ -330,16 +359,16 @@ struct ViewFamily
     ArenaFixedVector<PortalView> portalViews{};
 
     ArenaVector<InstanceData> instances{};
-    ArenaVector<WorldGlyphQuad> worldGlyphQuads{};
-    ArenaVector<TextInstanceDataFull> textInstances{};
-    ArenaFixedMap<Engine::TextMaterialID, uint32_t> activeTextMaterials{};
-    ArenaVector<TextRenderMaterial> textMaterials{};
-    ArenaVector<TextDrawCall> textDrawCalls{};
-
     ArenaVector<Model> modelMatrices{};
     /** Indexes into the materials vector */
-    ArenaFixedMap<Engine::MaterialID, uint32_t> activeMaterials{};
+    ArenaMap<Engine::MaterialID, uint32_t> activeMaterials{};
     ArenaVector<Engine::RenderMaterial> materials{};
+
+    ArenaVector<WorldGlyphQuad> worldGlyphQuads{};
+    ArenaVector<TextInstanceDataFull> textInstances{};
+    /** Indexes into text materials vector */
+    ArenaMap<Engine::TextMaterialID, uint32_t> activeTextMaterials{};
+    ArenaVector<TextRenderMaterial> textMaterials{};
 
     int32_t skyboxIndex{-1};
     int32_t skyboxLOD{0};
@@ -361,8 +390,12 @@ struct ViewFamily
     ArenaVector<DebugBox> debugBoxes{};
     ArenaVector<DebugSphere> debugSpheres{};
 
+    // UI
+    ArenaVector<UIRenderCommandImage> uiImageCommands{};
+
     // Written to on render thread
     ArenaFixedMap<StringID, uint32_t> lightingBuckets{};
+    ArenaVector<TextDrawCall> textDrawCalls{};
 };
 
 struct FrameBuffer
@@ -385,6 +418,7 @@ struct FrameBuffer
 
     ManagedArena frameArena{};
 
+    ViewFamilyWatermarks viewFamilyWatermarks{};
     ViewFamily mainViewFamily{};
 
     TimeFrame timeFrame{};

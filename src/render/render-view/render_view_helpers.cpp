@@ -138,13 +138,46 @@ void SanitizeViewFamily(Core::ViewFamily& viewFamily, PipelineManager* pipelineM
 
 void PrepareRenderFamily(Core::ViewFamily& viewFamily)
 {
-    uint32_t runningLightingBucketIndex{0};
-    for (size_t i = 0; i < viewFamily.materials.Size(); ++i) {
-        Engine::RenderMaterial& mat = viewFamily.materials[i];
+    // Lighting bucket finalization
+    {
+        uint32_t runningLightingBucketIndex{0};
+        for (size_t i = 0; i < viewFamily.materials.Size(); ++i) {
+            Engine::RenderMaterial& mat = viewFamily.materials[i];
 
-        auto [lightingVal, lightingInserted] = viewFamily.lightingBuckets.TryEmplace(mat.lightingShader, runningLightingBucketIndex);
-        if (lightingInserted) {
-            runningLightingBucketIndex++;
+            auto [lightingVal, lightingInserted] = viewFamily.lightingBuckets.TryEmplace(mat.lightingShader, runningLightingBucketIndex);
+            if (lightingInserted) {
+                runningLightingBucketIndex++;
+            }
+        }
+    }
+
+    // Text finalization
+    {
+        // Sort quads by (atlasBindlessIndex, textMaterialIndex) so each dispatch is wave-uniform on atlas texture.
+        auto& quads = viewFamily.worldGlyphQuads;
+        const auto& cpuInsts = viewFamily.textInstances;
+        std::sort(quads.Data(), quads.Data() + quads.Size(), [&](const WorldGlyphQuad& a, const WorldGlyphQuad& b) {
+            const Core::TextInstanceDataFull& ia = cpuInsts[a.drawCallIndex];
+            const Core::TextInstanceDataFull& ib = cpuInsts[b.drawCallIndex];
+            if (ia.atlasBindlessIndex != ib.atlasBindlessIndex) {
+                return ia.atlasBindlessIndex < ib.atlasBindlessIndex;
+            }
+            return ia.textMaterialIndex < ib.textMaterialIndex;
+        });
+
+        auto& drawCalls = viewFamily.textDrawCalls;
+        if (!quads.IsEmpty()) {
+            uint32_t runStart = 0;
+            const Core::TextInstanceDataFull* prev = &cpuInsts[quads[0].drawCallIndex];
+            for (uint32_t i = 1; i < quads.Size(); ++i) {
+                const Core::TextInstanceDataFull& cur = cpuInsts[quads[i].drawCallIndex];
+                if (cur.atlasBindlessIndex != prev->atlasBindlessIndex || cur.textMaterialIndex != prev->textMaterialIndex) {
+                    drawCalls.PushBack({runStart, i - runStart, prev->atlasBindlessIndex, prev->textMaterialIndex});
+                    runStart = i;
+                    prev = &cur;
+                }
+            }
+            drawCalls.PushBack({runStart, static_cast<uint32_t>(quads.Size()) - runStart, prev->atlasBindlessIndex, prev->textMaterialIndex});
         }
     }
 }

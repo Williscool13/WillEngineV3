@@ -134,6 +134,12 @@ StringID SetupPostProcessing(RenderGraph& graph,
                              const MainRenderTargets& targets,
                              float deltaTime,
                              uint64_t frameNumber);
+
+void SetupUIRender(RenderGraph& graph,
+                   PipelineManager* pipelineManager,
+                   const Core::ViewFamily& viewFamily,
+                   Core::Array<uint32_t, 2> renderExtent,
+                   StringID targetImage);
 } // Render
 
 #endif //WILL_ENGINE_RENDERER_H

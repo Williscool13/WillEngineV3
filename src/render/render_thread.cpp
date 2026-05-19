@@ -551,6 +551,8 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
         SetupDebugRender(*renderGraph, viewFamily, renderExtent, targets.depthStencil, finalOutput, frameResourceLimits);
 
+        SetupUIRender(*renderGraph, pipelineManager, viewFamily, renderExtent, finalOutput);
+
 
 #if WILL_EDITOR
         resourceManager->debugReadback.ScheduleCopies(*renderGraph, SID("debug_readback_buffer"));
@@ -1973,4 +1975,5 @@ void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& 
     return;
 #endif
 }
+
 } // Render

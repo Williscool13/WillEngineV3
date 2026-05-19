@@ -639,32 +639,5 @@ void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* stat
             .stableId = stableId,
         });
     }
-
-    // Sort quads by (atlasBindlessIndex, textMaterialIndex) so each dispatch is wave-uniform on atlas texture.
-    auto& quads = frameBuffer->mainViewFamily.worldGlyphQuads;
-    const auto& cpuInsts = frameBuffer->mainViewFamily.textInstances;
-    std::sort(quads.Data(), quads.Data() + quads.Size(), [&](const WorldGlyphQuad& a, const WorldGlyphQuad& b) {
-        const Core::TextInstanceDataFull& ia = cpuInsts[a.drawCallIndex];
-        const Core::TextInstanceDataFull& ib = cpuInsts[b.drawCallIndex];
-        if (ia.atlasBindlessIndex != ib.atlasBindlessIndex) {
-            return ia.atlasBindlessIndex < ib.atlasBindlessIndex;
-        }
-        return ia.textMaterialIndex < ib.textMaterialIndex;
-    });
-
-    auto& drawCalls = frameBuffer->mainViewFamily.textDrawCalls;
-    if (!quads.IsEmpty()) {
-        uint32_t runStart = 0;
-        const Core::TextInstanceDataFull* prev = &cpuInsts[quads[0].drawCallIndex];
-        for (uint32_t i = 1; i < quads.Size(); ++i) {
-            const Core::TextInstanceDataFull& cur = cpuInsts[quads[i].drawCallIndex];
-            if (cur.atlasBindlessIndex != prev->atlasBindlessIndex || cur.textMaterialIndex != prev->textMaterialIndex) {
-                drawCalls.PushBack({runStart, i - runStart, prev->atlasBindlessIndex, prev->textMaterialIndex});
-                runStart = i;
-                prev = &cur;
-            }
-        }
-        drawCalls.PushBack({runStart, static_cast<uint32_t>(quads.Size()) - runStart, prev->atlasBindlessIndex, prev->textMaterialIndex});
-    }
 }
 }

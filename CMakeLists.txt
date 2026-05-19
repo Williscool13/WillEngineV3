@@ -400,6 +400,10 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/text/text_default.slang mesh MeshMain default_text
         ${CMAKE_SOURCE_DIR}/shaders/text/text_default.slang fragment FragmentMain default_text
 
+        # UI Rendering
+        ${CMAKE_SOURCE_DIR}/shaders/text/ui_image_default.slang vertex VertexMain ui_image_default
+        ${CMAKE_SOURCE_DIR}/shaders/text/ui_image_default.slang fragment FragmentMain ui_image_default
+
         # Debug Rendering
         ${CMAKE_SOURCE_DIR}/shaders/debug_render.slang fragment FragmentMain debug_render
         ${CMAKE_SOURCE_DIR}/shaders/debug_render.slang mesh MeshMain debug_render
