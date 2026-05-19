@@ -344,6 +344,7 @@ struct ViewFamilyWatermarks
     size_t debugLines{256};
     size_t debugBoxes{256};
     size_t debugSpheres{256};
+    size_t uiRects{512};
     size_t uiImageCommands{512};
     size_t uiGlyphQuads{512};
     size_t uiTextDrawCalls{32};
@@ -402,6 +403,7 @@ struct ViewFamily
     ArenaVector<DebugSphere> debugSpheres{};
 
     // UI
+    ArenaVector<UIRectData> uiRects{};
     ArenaVector<UIRenderCommandImage> uiImageCommands{};
     ArenaVector<UIGlyphQuad> uiGlyphQuads{};
     ArenaVector<UITextDrawCall> uiTextDrawCalls{};

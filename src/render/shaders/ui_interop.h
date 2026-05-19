@@ -1,0 +1,24 @@
+//
+// Created by William on 2026-05-19.
+//
+
+#ifndef WILL_ENGINE_UI_INTEROP_H
+#define WILL_ENGINE_UI_INTEROP_H
+
+#ifdef __SLANG__
+module ui_interop;
+import common_interop;
+#define SHADER_PUBLIC public
+#define SHADER_ALIGN
+#else
+#include "common_interop.h"
+#endif // __SLANG__
+
+SHADER_PUBLIC struct SHADER_ALIGN UIRectData
+{
+    SHADER_PUBLIC float4 color;
+    SHADER_PUBLIC float2 posMin;
+    SHADER_PUBLIC float2 posMax;
+};
+
+#endif //WILL_ENGINE_UI_INTEROP_H

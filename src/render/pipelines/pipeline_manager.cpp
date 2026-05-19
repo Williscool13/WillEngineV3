@@ -685,6 +685,37 @@ void PipelineManager::RegisterPipelines()
         builder.Clear();
     }
 
+    // UI Rect
+    {
+        builder.AddShaderStage(src / "ui_rect_default_vertex.spv", VK_SHADER_STAGE_VERTEX_BIT);
+        builder.AddShaderStage(src / "ui_rect_default_fragment.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
+        builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP);
+        builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
+        builder.SetupDepthState(VK_FALSE, VK_FALSE, VK_COMPARE_OP_ALWAYS);
+        VkPipelineColorBlendAttachmentState uiRectBlend{
+            .blendEnable = VK_TRUE,
+            .srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
+            .dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+            .colorBlendOp = VK_BLEND_OP_ADD,
+            .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
+            .dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+            .alphaBlendOp = VK_BLEND_OP_ADD,
+            .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                              VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT
+        };
+        builder.SetupBlending(&uiRectBlend, 1);
+        VkFormat colorFormats[1] = {COLOR_ATTACHMENT_FORMAT};
+        builder.SetupRenderer(colorFormats, 1);
+        RegisterGraphicsPipeline(
+            SID("ui_rect_default"),
+            builder,
+            sizeof(UIRectRenderPushConstant),
+            VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+            PipelineCategory::Critical
+        );
+        builder.Clear();
+    }
+
     // UI Image
     {
         builder.AddShaderStage(src / "ui_image_default_vertex.spv", VK_SHADER_STAGE_VERTEX_BIT);

@@ -223,7 +223,7 @@ static void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState*
 
     uint32_t smilingFriendImageIndex = SMILING_FRIENDS_BINDLESS_INDEX;
 
-    CLAY(CLAY_ID("OuterContainer"), { .layout = { .sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0)}, .padding = CLAY_PADDING_ALL(16), .childGap = 16 }, .backgroundColor = {250, 250, 255, 255} }) {
+    CLAY(CLAY_ID("OuterContainer"), { .layout = { .sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0)}, .padding = CLAY_PADDING_ALL(16), .childGap = 16 }, .backgroundColor = {250, 250, 255, 64} }) {
         CLAY(CLAY_ID("SideBar"), {
              .layout = {.sizing = {.width = CLAY_SIZING_FIXED(300), .height = CLAY_SIZING_GROW(0)}, .padding = CLAY_PADDING_ALL(16), .childGap = 16, .layoutDirection = CLAY_TOP_TO_BOTTOM, },
              .backgroundColor = COLOR_LIGHT
@@ -250,7 +250,20 @@ static void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState*
     for (int32_t i = 0; i < renderCommands.length; ++i) {
         const Clay_RenderCommand& cmd = renderCommands.internalArray[i];
 
-        if (cmd.commandType == CLAY_RENDER_COMMAND_TYPE_IMAGE) {
+        if (cmd.commandType == CLAY_RENDER_COMMAND_TYPE_RECTANGLE) {
+            const Clay_BoundingBox& bb = cmd.boundingBox;
+            const Clay_Color& c = cmd.renderData.rectangle.backgroundColor;
+            const float xMin = bb.x / vpWidth * 2.0f - 1.0f;
+            const float yMin = bb.y / vpHeight * 2.0f - 1.0f;
+            const float xMax = (bb.x + bb.width) / vpWidth * 2.0f - 1.0f;
+            const float yMax = (bb.y + bb.height) / vpHeight * 2.0f - 1.0f;
+            vf.uiRects.PushBack(UIRectData{
+                .color = {c.r / 255.0f, c.g / 255.0f, c.b / 255.0f, c.a / 255.0f},
+                .posMin = {xMin, yMin},
+                .posMax = {xMax, yMax},
+            });
+        }
+        else if (cmd.commandType == CLAY_RENDER_COMMAND_TYPE_IMAGE) {
             const Clay_BoundingBox& bb = cmd.boundingBox;
             const Clay_ImageRenderData& img = cmd.renderData.image;
             const uint32_t bindlessIndex = *static_cast<const uint32_t*>(img.imageData);

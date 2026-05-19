@@ -1572,14 +1572,16 @@ StringID SetupPostProcessing(RenderGraph& graph,
 }
 void SetupUIRender(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, StringID targetImage)
 {
+    const bool bHasRects = !viewFamily.uiRects.IsEmpty() && graph.HasBuffer(UI_RECT_BUFFER);
     const bool bHasImages = !viewFamily.uiImageCommands.IsEmpty();
     const bool bHasText = !viewFamily.uiTextDrawCalls.IsEmpty() && graph.HasBuffer(UI_GLYPH_QUAD_BUFFER);
-    if (!bHasImages && !bHasText) { return; }
+    if (!bHasRects && !bHasImages && !bHasText) { return; }
 
     RenderPass& uiPass = graph.AddPass(SID("UI Render"), VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT);
+    if (bHasRects) { uiPass.ReadBuffer(UI_RECT_BUFFER); }
     if (bHasText) { uiPass.ReadBuffer(UI_GLYPH_QUAD_BUFFER); }
     uiPass.WriteColorAttachment(targetImage);
-    uiPass.Execute([&, width = renderExtent[0], height = renderExtent[1], targetImage, pipelineManager, bHasImages, bHasText](VkCommandBuffer cmd) {
+    uiPass.Execute([&, width = renderExtent[0], height = renderExtent[1], targetImage, pipelineManager, bHasRects, bHasImages, bHasText](VkCommandBuffer cmd) {
         // Y-flipped viewport: blit to swapchain inverts Y, so pre-invert here to cancel it out
         VkViewport viewport = VkHelpers::GenerateViewport(width, height);
         viewport.y = static_cast<float>(height);
@@ -1591,6 +1593,17 @@ void SetupUIRender(RenderGraph& graph, PipelineManager* pipelineManager, const C
         const VkRenderingAttachmentInfo colorAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targetImage), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
         const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, &colorAttachment, 1, nullptr, nullptr);
         vkCmdBeginRendering(cmd, &renderInfo);
+
+        if (bHasRects) {
+            const PipelineEntry* rectPipeline = pipelineManager->GetPipelineEntry(SID("ui_rect_default"));
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, rectPipeline->pipeline);
+            UIRectRenderPushConstant pc{
+                .rects = graph.GetBufferAddress(UI_RECT_BUFFER),
+                .rectOffset = 0,
+            };
+            vkCmdPushConstants(cmd, rectPipeline->layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(UIRectRenderPushConstant), &pc);
+            vkCmdDraw(cmd, 4, static_cast<uint32_t>(viewFamily.uiRects.Size()), 0, 0);
+        }
 
         if (bHasImages) {
             const PipelineEntry* imagePipeline = pipelineManager->GetPipelineEntry(SID("ui_image_default"));

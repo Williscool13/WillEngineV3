@@ -339,6 +339,10 @@ preprocess_shader_interop(
         ${CMAKE_SOURCE_DIR}/src/render/shaders/text_interop.h
         ${CMAKE_SOURCE_DIR}/shaders/include/text_interop.slang
 )
+preprocess_shader_interop(
+        ${CMAKE_SOURCE_DIR}/src/render/shaders/ui_interop.h
+        ${CMAKE_SOURCE_DIR}/shaders/include/ui_interop.slang
+)
 
 
 get_property(INTEROP_FILES GLOBAL PROPERTY SHADER_INTEROP_FILES)
@@ -405,6 +409,8 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/text/ui_image_default.slang fragment FragmentMain ui_image_default
         ${CMAKE_SOURCE_DIR}/shaders/text/ui_text_default.slang vertex VertexMain ui_text_default
         ${CMAKE_SOURCE_DIR}/shaders/text/ui_text_default.slang fragment FragmentMain ui_text_default
+        ${CMAKE_SOURCE_DIR}/shaders/ui/ui_rect_default.slang vertex VertexMain ui_rect_default
+        ${CMAKE_SOURCE_DIR}/shaders/ui/ui_rect_default.slang fragment FragmentMain ui_rect_default
 
         # Debug Rendering
         ${CMAKE_SOURCE_DIR}/shaders/debug_render.slang fragment FragmentMain debug_render

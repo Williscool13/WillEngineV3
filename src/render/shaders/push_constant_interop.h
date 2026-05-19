@@ -20,6 +20,7 @@ import instancing_interop;
 import shadows_interop;
 import lights_interop;
 import text_interop;
+import ui_interop;
 #else
 #include <glm/glm.hpp>
 #include <volk.h>
@@ -28,6 +29,7 @@ import text_interop;
 #include "model_interop.h"
 #include "instancing_interop.h"
 #include "text_interop.h"
+#include "ui_interop.h"
 
 using uint = uint32_t;
 using int32 = int32_t;
@@ -797,6 +799,12 @@ SHADER_PUBLIC struct TextRenderPushConstant
     SHADER_PUBLIC uint32_t atlasBindlessIndex;
     SHADER_PUBLIC uint32_t textMaterialIndex;
     SHADER_PUBLIC uint32_t sceneDataIndex;
+};
+
+SHADER_PUBLIC struct UIRectRenderPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(UIRectData) rects;
+    SHADER_PUBLIC uint32_t rectOffset;
 };
 
 SHADER_PUBLIC struct UITextRenderPushConstant
