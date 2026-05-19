@@ -81,7 +81,11 @@ GAME_API void GameLoad(Engine::EngineContext* ctx, Engine::EngineState* state)
         state->uiFont = ctx->assetManager->LoadFont(robotoId);
     }
 
-    struct UIFontContext { Engine::AssetManager* assetManager; Engine::FontHandle handle; };
+    struct UIFontContext
+    {
+        Engine::AssetManager* assetManager;
+        Engine::FontHandle handle;
+    };
     static UIFontContext uiFontCtx{};
     uiFontCtx.assetManager = ctx->assetManager;
     uiFontCtx.handle = state->uiFont;
@@ -95,7 +99,10 @@ GAME_API void GameLoad(Engine::EngineContext* ctx, Engine::EngineState* state)
         for (int32_t i = 0; i < text.length; ++i) {
             const uint32_t cp = static_cast<unsigned char>(text.chars[i]);
             const Engine::WGlyphInfo* g = fc->assetManager->GetGlyph(fc->handle, cp);
-            if (!g) { width += config->fontSize * 0.25f; continue; }
+            if (!g) {
+                width += config->fontSize * 0.25f;
+                continue;
+            }
             width += g->advance * scale;
             if (i < text.length - 1) { width += config->letterSpacing; }
         }
@@ -210,7 +217,9 @@ static void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState*
 
     const Vec2 mousePos = state->inputFrame->mousePositionAbsolute;
     const bool bIsMouseDown = state->inputFrame->GetMouse(MouseButton::LMB).down;
-    Clay_SetPointerState(Clay_Vector2{mousePos.x, mousePos.y}, bIsMouseDown);
+    const float viewportOffsetX = static_cast<float>(ctx->windowContext.viewportOffsetX);
+    const float viewportOffsetY = static_cast<float>(ctx->windowContext.viewportOffsetY);
+    Clay_SetPointerState(Clay_Vector2{mousePos.x - viewportOffsetX, mousePos.y - viewportOffsetY}, bIsMouseDown);
 
     const Vec2 mouseWheelDelta = state->inputFrame->mouseWheelDelta;
     Clay_UpdateScrollContainers(true, Clay_Vector2{mouseWheelDelta.x, mouseWheelDelta.y}, state->timeFrame->deltaTime);
@@ -222,6 +231,11 @@ static void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState*
     constexpr Clay_Color COLOR_ORANGE = Clay_Color{225, 138, 50, 255};
 
     uint32_t smilingFriendImageIndex = SMILING_FRIENDS_BINDLESS_INDEX;
+
+    constexpr Clay_Color COLOR_DARK = Clay_Color{30, 30, 40, 240};
+    constexpr Clay_Color COLOR_ITEM = Clay_Color{60, 80, 120, 255};
+    constexpr Clay_Color COLOR_SCROLLBAR = Clay_Color{180, 180, 200, 160};
+    constexpr Clay_Color COLOR_OVERLAY = Clay_Color{255, 120, 60, 80};
 
     CLAY(CLAY_ID("OuterContainer"), { .layout = { .sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0)}, .padding = CLAY_PADDING_ALL(16), .childGap = 16 }, .backgroundColor = {250, 250, 255, 64} }) {
         CLAY(CLAY_ID("SideBar"), {
@@ -237,18 +251,47 @@ static void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState*
             CLAY(CLAY_ID("MainContent"), { .layout = { .sizing = { .width = CLAY_SIZING_GROW(0), .height = CLAY_SIZING_GROW(0) } }, .backgroundColor = COLOR_LIGHT }) {}
         }
 
-        // Scissor + overlay demo: a clipped panel where content overflows, tinted red
-        CLAY(CLAY_ID("ScissorDemo"), {
-            .layout = { .sizing = { .width = CLAY_SIZING_FIXED(200), .height = CLAY_SIZING_FIXED(120) }, .padding = CLAY_PADDING_ALL(8), .childGap = 8, .layoutDirection = CLAY_TOP_TO_BOTTOM },
-            .backgroundColor = {40, 40, 80, 220},
-            .overlayColor = {255, 80, 80, 100},
-            .clip = { .vertical = true },
-        }) {
-            CLAY_TEXT(CLAY_STRING("Scissored Panel"), { .textColor = {255, 255, 255, 255}, .fontSize = 18 });
-            CLAY_TEXT(CLAY_STRING("Line 1 - visible"), { .textColor = {200, 255, 200, 255}, .fontSize = 16 });
-            CLAY_TEXT(CLAY_STRING("Line 2 - visible"), { .textColor = {200, 255, 200, 255}, .fontSize = 16 });
-            CLAY_TEXT(CLAY_STRING("Line 3 - clipped"), { .textColor = {200, 255, 200, 255}, .fontSize = 16 });
-            CLAY_TEXT(CLAY_STRING("Line 4 - clipped"), { .textColor = {200, 255, 200, 255}, .fontSize = 16 });
+        // Scrollable list with overlay color tint and a floating scrollbar
+        CLAY(CLAY_ID("ScrollDemo"), {
+             .layout = { .sizing = { .width = CLAY_SIZING_FIXED(260), .height = CLAY_SIZING_FIXED(300) }, .layoutDirection = CLAY_TOP_TO_BOTTOM },
+             .backgroundColor = COLOR_DARK,
+             .overlayColor = COLOR_OVERLAY,
+             }) {
+            // Clipped scroll area (generates SCISSOR_START/END)
+            CLAY(CLAY_ID("ScrollList"), {
+                 .layout = { .sizing = { CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0) }, .padding = CLAY_PADDING_ALL(8), .childGap = 6, .layoutDirection = CLAY_TOP_TO_BOTTOM },
+                 .clip = { .vertical = true, .childOffset = Clay_GetScrollOffset() },
+                 }) {
+                for (int32_t i = 0; i < 32; ++i) {
+                    CLAY(CLAY_IDI("ScrollItem", i), {
+                         .layout = { .sizing = { CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(36) }, .padding = { 8, 8, 6, 6 }, .childAlignment = { .y = CLAY_ALIGN_Y_CENTER } },
+                         .backgroundColor = COLOR_ITEM,
+                         .cornerRadius = CLAY_CORNER_RADIUS(4),
+                         }) {
+                        CLAY_TEXT(CLAY_STRING("Item"), { .textColor = {220, 220, 255, 255}, .fontSize = 18 });
+                    }
+                }
+            }
+
+            // Floating scrollbar thumb
+            Clay_ScrollContainerData scrollData = Clay_GetScrollContainerData(Clay_GetElementId(CLAY_STRING("ScrollList")));
+            if (scrollData.found && scrollData.contentDimensions.height > scrollData.scrollContainerDimensions.height) {
+                const float trackH = scrollData.scrollContainerDimensions.height;
+                const float thumbH = (trackH / scrollData.contentDimensions.height) * trackH;
+                const float thumbY = (-scrollData.scrollPosition->y / scrollData.contentDimensions.height) * trackH;
+                CLAY(CLAY_ID("ScrollThumb"), {
+                     .layout = { .sizing = { CLAY_SIZING_FIXED(6), CLAY_SIZING_FIXED(thumbH) } },
+                     .backgroundColor = COLOR_SCROLLBAR,
+                     .cornerRadius = CLAY_CORNER_RADIUS(3),
+                     .floating = {
+                     .offset = { .x = -6, .y = thumbY },
+                     .parentId = Clay_GetElementId(CLAY_STRING("ScrollList")).id,
+                     .zIndex = 1,
+                     .attachPoints = { .element = CLAY_ATTACH_POINT_RIGHT_TOP, .parent = CLAY_ATTACH_POINT_RIGHT_TOP },
+                     .attachTo = CLAY_ATTACH_TO_PARENT,
+                     },
+                     }) {}
+            }
         }
     }
 
@@ -265,29 +308,34 @@ static void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState*
         const Clay_RenderCommand& cmd = renderCommands.internalArray[i];
 
         switch (cmd.commandType) {
-            case CLAY_RENDER_COMMAND_TYPE_SCISSOR_START: {
+            case CLAY_RENDER_COMMAND_TYPE_SCISSOR_START:
+            {
                 const Clay_BoundingBox& bb = cmd.boundingBox;
                 Core::UIDrawCommand dc{.type = Core::UICommandType::ScissorPush};
                 dc.scissor = Core::UIScissorCommand{static_cast<int32_t>(bb.x), static_cast<int32_t>(bb.y), static_cast<uint32_t>(bb.width), static_cast<uint32_t>(bb.height)};
                 vf.uiDrawList.PushBack(dc);
                 break;
             }
-            case CLAY_RENDER_COMMAND_TYPE_SCISSOR_END: {
+            case CLAY_RENDER_COMMAND_TYPE_SCISSOR_END:
+            {
                 vf.uiDrawList.PushBack(Core::UIDrawCommand{.type = Core::UICommandType::ScissorPop});
                 break;
             }
-            case CLAY_RENDER_COMMAND_TYPE_OVERLAY_COLOR_START: {
+            case CLAY_RENDER_COMMAND_TYPE_OVERLAY_COLOR_START:
+            {
                 const Clay_Color& c = cmd.renderData.overlayColor.color;
                 Core::UIDrawCommand dc{.type = Core::UICommandType::OverlayPush};
                 dc.overlay = Core::UIOverlayColorCommand{.color = {c.r / 255.0f, c.g / 255.0f, c.b / 255.0f, c.a / 255.0f}};
                 vf.uiDrawList.PushBack(dc);
                 break;
             }
-            case CLAY_RENDER_COMMAND_TYPE_OVERLAY_COLOR_END: {
+            case CLAY_RENDER_COMMAND_TYPE_OVERLAY_COLOR_END:
+            {
                 vf.uiDrawList.PushBack(Core::UIDrawCommand{.type = Core::UICommandType::OverlayPop});
                 break;
             }
-            case CLAY_RENDER_COMMAND_TYPE_RECTANGLE: {
+            case CLAY_RENDER_COMMAND_TYPE_RECTANGLE:
+            {
                 const Clay_BoundingBox& bb = cmd.boundingBox;
                 const Clay_Color& c = cmd.renderData.rectangle.backgroundColor;
                 const float xMin = bb.x / vpWidth * 2.0f - 1.0f;
@@ -304,7 +352,8 @@ static void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState*
                 vf.uiDrawList.PushBack(dc);
                 break;
             }
-            case CLAY_RENDER_COMMAND_TYPE_IMAGE: {
+            case CLAY_RENDER_COMMAND_TYPE_IMAGE:
+            {
                 const Clay_BoundingBox& bb = cmd.boundingBox;
                 const Clay_ImageRenderData& img = cmd.renderData.image;
                 const uint32_t bindlessIndex = *static_cast<const uint32_t*>(img.imageData);
@@ -317,8 +366,8 @@ static void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState*
                 const Clay_Color& tc = img.backgroundColor;
                 const bool bUntinted = tc.r == 0 && tc.g == 0 && tc.b == 0 && tc.a == 0;
                 const Vec4 tint = bUntinted
-                    ? Vec4{1.0f, 1.0f, 1.0f, 1.0f}
-                    : Vec4{tc.r / 255.0f, tc.g / 255.0f, tc.b / 255.0f, tc.a / 255.0f};
+                                      ? Vec4{1.0f, 1.0f, 1.0f, 1.0f}
+                                      : Vec4{tc.r / 255.0f, tc.g / 255.0f, tc.b / 255.0f, tc.a / 255.0f};
 
                 Core::UIDrawCommand dc{.type = Core::UICommandType::Image};
                 dc.image = Core::UIRenderCommandImage{
@@ -333,7 +382,8 @@ static void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState*
                 vf.uiDrawList.PushBack(dc);
                 break;
             }
-            case CLAY_RENDER_COMMAND_TYPE_TEXT: {
+            case CLAY_RENDER_COMMAND_TYPE_TEXT:
+            {
                 const Clay_BoundingBox& bb = cmd.boundingBox;
                 const Clay_TextRenderData& td = cmd.renderData.text;
                 const float fontSize = td.fontSize;
@@ -349,7 +399,10 @@ static void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState*
                 for (int32_t ci = 0; ci < td.stringContents.length; ++ci) {
                     const uint32_t cp = static_cast<unsigned char>(td.stringContents.chars[ci]);
                     const Engine::WGlyphInfo* g = ctx->assetManager->GetGlyph(state->uiFont, cp);
-                    if (!g) { cursorX += fontSize * 0.25f; continue; }
+                    if (!g) {
+                        cursorX += fontSize * 0.25f;
+                        continue;
+                    }
 
                     const float xMin = (cursorX + g->planeLeft * scale) / vpWidth * 2.0f - 1.0f;
                     const float yMax = (baselineY - g->planeBottom * scale) / vpHeight * 2.0f - 1.0f;

@@ -38,6 +38,7 @@
     <Expand>
       <Item Name="[size]">size_</Item>
       <Item Name="[capacity]">capacity_</Item>
+      <Item Name="[arena]">arena_</Item>
       <ArrayItems>
         <Size>size_</Size>
         <ValuePointer>data_</ValuePointer>
@@ -50,6 +51,7 @@
     <Expand>
       <Item Name="[size]">size_</Item>
       <Item Name="[capacity]">capacity_</Item>
+      <Item Name="[arena]">arena_</Item>
       <ArrayItems>
         <Size>size_</Size>
         <ValuePointer>data_</ValuePointer>
@@ -96,6 +98,7 @@
     <DisplayString>{{ size={size_} }}</DisplayString>
     <Expand>
       <Item Name="[size]">size_</Item>
+      <Item Name="[arena]">arena_</Item>
       <ArrayItems>
         <Size>size_</Size>
         <ValuePointer>data_</ValuePointer>
@@ -149,6 +152,7 @@
     <Expand>
       <Item Name="[size]">size_</Item>
       <Item Name="[capacity]">capacity_</Item>
+      <Item Name="[arena]">arena_</Item>
       <CustomListItems MaxItemsPerView="500">
         <Variable Name="i" InitialValue="0"/>
         <Loop Condition="i &lt; capacity_">
@@ -224,6 +228,7 @@
     <Expand>
       <Item Name="[size]">size_</Item>
       <Item Name="[capacity]">capacity_</Item>
+      <Item Name="[arena]">arena_</Item>
       <CustomListItems MaxItemsPerView="500">
         <Variable Name="i" InitialValue="0"/>
         <Loop Condition="i &lt; capacity_">

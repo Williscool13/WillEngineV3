@@ -1249,6 +1249,7 @@ void WillEngine::Run()
                 //
                 {
                     ZoneScopedN("GamePrepareFrame");
+                    engineRenderSynchronization->stagingFrameBuffer.Reinitialize();
                     gameFunctions.gamePrepareFrame(engineContext, engineState, &engineRenderSynchronization->stagingFrameBuffer);
                 }
 
@@ -1257,7 +1258,6 @@ void WillEngine::Run()
                     ZoneScopedN("SwapAndPrepare");
                     std::swap(currentFrameBuffer, engineRenderSynchronization->stagingFrameBuffer);
                     engineRenderSynchronization->stagingFrameBuffer.timeFrame = timeManager->GetTime();
-                    engineRenderSynchronization->stagingFrameBuffer.Reinitialize();
                     PrepareImgui(frameBufferIndex);
                 }
 

@@ -447,7 +447,7 @@ struct FrameBuffer
 {
     FrameBuffer() = default;
 
-    explicit FrameBuffer(ArenaSuballocator& pool, Core::AllocTag tag = Core::AllocTag::FrameSync0);
+    explicit FrameBuffer(ArenaSuballocator& pool, AllocTag tag = AllocTag::FrameSync0);
 
     ~FrameBuffer() = default;
 
