@@ -22,11 +22,11 @@ VertexOutput VertexMain(uint vid : SV_VertexID, uint iid : SV_InstanceID, unifor
     uint corner = vid;
     UIGlyphQuad q = pc.uiGlyphQuads[glyphIdx];
 
-    float px = (corner & 1u) ? q.posMax.x : q.posMin.x;
-    float py = (corner & 2u) ? q.posMax.y : q.posMin.y;
-    float ux = (corner & 1u) ? q.uvMax.x : q.uvMin.x;
+    float px = (corner & 1u) != 0u ? q.posMax.x : q.posMin.x;
+    float py = (corner & 2u) != 0u ? q.posMax.y : q.posMin.y;
+    float ux = (corner & 1u) != 0u ? q.uvMax.x : q.uvMin.x;
     // Screen space: posMin.y is glyph top (smaller NDC Y); atlas V=0 is top, so top maps to uvMin.y
-    float uy = (corner & 2u) ? q.uvMax.y : q.uvMin.y;
+    float uy = (corner & 2u) != 0u ? q.uvMax.y : q.uvMin.y;
 
     VertexOutput o;
     o.position = float4(px, py, 0.0, 1.0);
@@ -54,7 +54,7 @@ float4 FragmentMain(VertexOutput input, uniform UITextRenderPushConstant pc) : S
     float screenPxDist = screenPxRange * (sd - 0.5);
     float fillOpacity = clamp(screenPxDist + 0.5, 0.0, 1.0);
 
-    float4 result = float4(input.color.rgb, input.color.a * fillOpacity);
+    float4 result = float4(input.color.rgb, input.color.a * fillOpacity) * pc.colorTint;
     if (result.a < 0.001) { discard; }
     return result;
 }

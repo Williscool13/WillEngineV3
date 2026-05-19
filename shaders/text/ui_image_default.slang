@@ -11,10 +11,10 @@ struct VertexOutput
 [shader("vertex")]
 VertexOutput VertexMain(uint vid : SV_VertexID, uniform UIImagePushConstant pc)
 {
-    float px = (vid & 1u) ? pc.posMax.x : pc.posMin.x;
-    float py = (vid & 2u) ? pc.posMax.y : pc.posMin.y;
-    float ux = (vid & 1u) ? pc.uvMax.x : pc.uvMin.x;
-    float uy = (vid & 2u) ? pc.uvMax.y : pc.uvMin.y;
+    float px = (vid & 1u) != 0u ? pc.posMax.x : pc.posMin.x;
+    float py = (vid & 2u) != 0u ? pc.posMax.y : pc.posMin.y;
+    float ux = (vid & 1u) != 0u ? pc.uvMax.x : pc.uvMin.x;
+    float uy = (vid & 2u) != 0u ? pc.uvMax.y : pc.uvMin.y;
 
     VertexOutput o;
     o.position = float4(px, py, 0.0, 1.0);

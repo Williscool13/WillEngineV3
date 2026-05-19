@@ -65,7 +65,6 @@ struct RenderFamilyProperties
 
     size_t glyphQuadBufferSize{128};
     size_t uiGlyphQuadBufferSize{128};
-    size_t uiRectBufferSize{128};
     size_t textInstanceBufferSize{128};
     size_t textMaterialBufferSize{128};
 };

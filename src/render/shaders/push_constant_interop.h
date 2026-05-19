@@ -803,8 +803,9 @@ SHADER_PUBLIC struct TextRenderPushConstant
 
 SHADER_PUBLIC struct UIRectRenderPushConstant
 {
-    SHADER_PUBLIC SHADER_PTR(UIRectData) rects;
-    SHADER_PUBLIC uint32_t rectOffset;
+    SHADER_PUBLIC float4 color;
+    SHADER_PUBLIC float2 posMin;
+    SHADER_PUBLIC float2 posMax;
 };
 
 SHADER_PUBLIC struct UITextRenderPushConstant
@@ -812,6 +813,7 @@ SHADER_PUBLIC struct UITextRenderPushConstant
     SHADER_PUBLIC SHADER_PTR(UIGlyphQuad) uiGlyphQuads;
     SHADER_PUBLIC uint32_t quadOffset;
     SHADER_PUBLIC uint32_t quadCount;
+    SHADER_PUBLIC float4 colorTint;
     SHADER_PUBLIC uint32_t atlasBindlessIndex;
     SHADER_PUBLIC float pxRange;
 };

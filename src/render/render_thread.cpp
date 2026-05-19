@@ -1583,20 +1583,6 @@ void RenderThread::UploadTextUniforms(Core::ViewFamily& viewFamily, const Render
 
 void RenderThread::UploadUIUniforms(const Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties) const
 {
-    if (!viewFamily.uiRects.IsEmpty()) {
-        renderGraph->CreateBuffer(UI_RECT_BUFFER, renderFamilyProperties.uiRectBufferSize, false);
-        const uint32_t rectCount = viewFamily.uiRects.Size();
-        UploadAllocation upload = renderGraph->AllocateTransient(rectCount * sizeof(UIRectData));
-        memcpy(upload.ptr, viewFamily.uiRects.Data(), rectCount * sizeof(UIRectData));
-        RenderPass& uploadPass = renderGraph->AddPass(SID("Upload UI Rects"), VK_PIPELINE_STAGE_2_COPY_BIT);
-        uploadPass.WriteTransferBuffer(UI_RECT_BUFFER);
-        uploadPass.Execute([&, srcOffset = upload.offset, totalSize = rectCount * sizeof(UIRectData)](VkCommandBuffer cmd) {
-            VkBufferCopy2 copy{ .sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2, .srcOffset = srcOffset, .dstOffset = 0, .size = totalSize };
-            VkCopyBufferInfo2 copyInfo{ .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2, .srcBuffer = renderGraph->GetTransientUploadBuffer(), .dstBuffer = renderGraph->GetBufferHandle(UI_RECT_BUFFER), .regionCount = 1, .pRegions = &copy };
-            vkCmdCopyBuffer2(cmd, &copyInfo);
-        });
-    }
-
     if (!viewFamily.uiGlyphQuads.IsEmpty()) {
         renderGraph->CreateBuffer(UI_GLYPH_QUAD_BUFFER, renderFamilyProperties.uiGlyphQuadBufferSize, false);
         const uint32_t quadCount = viewFamily.uiGlyphQuads.Size();

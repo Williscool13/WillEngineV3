@@ -1,5 +1,4 @@
 import push_constant_interop;
-import ui_interop;
 
 struct VertexOutput
 {
@@ -8,14 +7,13 @@ struct VertexOutput
 };
 
 [shader("vertex")]
-VertexOutput VertexMain(uint vid : SV_VertexID, uint iid : SV_InstanceID, uniform UIRectRenderPushConstant pc)
+VertexOutput VertexMain(uint vid : SV_VertexID, uniform UIRectRenderPushConstant pc)
 {
-    UIRectData rect = pc.rects[pc.rectOffset + iid];
-    float px = (vid & 1u) ? rect.posMax.x : rect.posMin.x;
-    float py = (vid & 2u) ? rect.posMax.y : rect.posMin.y;
+    float px = (vid & 1u) != 0u ? pc.posMax.x : pc.posMin.x;
+    float py = (vid & 2u) != 0u ? pc.posMax.y : pc.posMin.y;
     VertexOutput o;
     o.position = float4(px, py, 0.0, 1.0);
-    o.color = rect.color;
+    o.color = pc.color;
     return o;
 }
 

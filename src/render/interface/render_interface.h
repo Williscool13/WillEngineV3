@@ -331,6 +331,40 @@ struct UIRenderCommandImage
     int16_t zIndex;
 };
 
+struct UIRectDrawCall
+{
+    float4 color;
+    float2 posMin;
+    float2 posMax;
+    int32_t zIndex;
+};
+
+struct UIScissorCommand
+{
+    int32_t x, y;
+    uint32_t width, height;
+};
+
+struct UIOverlayColorCommand
+{
+    float4 color;
+};
+
+enum class UICommandType : uint8_t { Rect, Image, Text, ScissorPush, ScissorPop, OverlayPush, OverlayPop };
+
+struct UIDrawCommand
+{
+    UICommandType type;
+    union {
+        UIScissorCommand scissor;
+        UIOverlayColorCommand overlay;
+        UIRectDrawCall rect;
+        UIRenderCommandImage image;
+        UITextDrawCall text;
+    };
+};
+
+
 struct ViewFamilyWatermarks
 {
     size_t instances{128};
@@ -344,10 +378,8 @@ struct ViewFamilyWatermarks
     size_t debugLines{256};
     size_t debugBoxes{256};
     size_t debugSpheres{256};
-    size_t uiRects{512};
-    size_t uiImageCommands{512};
+    size_t uiDrawCommands{64};
     size_t uiGlyphQuads{512};
-    size_t uiTextDrawCalls{32};
     size_t textDrawCalls{256};
 };
 
@@ -402,11 +434,9 @@ struct ViewFamily
     ArenaVector<DebugBox> debugBoxes{};
     ArenaVector<DebugSphere> debugSpheres{};
 
-    // UI
-    ArenaVector<UIRectData> uiRects{};
-    ArenaVector<UIRenderCommandImage> uiImageCommands{};
+    // UI: ordered draw list mirrors Clay's command sequence for correct scissor interleaving
+    ArenaVector<UIDrawCommand> uiDrawList{};
     ArenaVector<UIGlyphQuad> uiGlyphQuads{};
-    ArenaVector<UITextDrawCall> uiTextDrawCalls{};
 
     // Written to on render thread
     ArenaFixedMap<StringID, uint32_t> lightingBuckets{};

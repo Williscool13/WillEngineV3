@@ -47,7 +47,6 @@ inline const StringID GEOMETRY_MATERIAL_BUFFER = SID("material_buffer");
 
 inline const StringID TEXT_GLYPH_QUAD_BUFFER = SID("text_glyph_quad_buffer");
 inline const StringID UI_GLYPH_QUAD_BUFFER = SID("ui_glyph_quad_buffer");
-inline const StringID UI_RECT_BUFFER = SID("ui_rect_buffer");
 inline const StringID TEXT_INSTANCE_BUFFER = SID("text_instance_buffer");
 inline const StringID TEXT_MATERIAL_BUFFER = SID("text_material_buffer");
 

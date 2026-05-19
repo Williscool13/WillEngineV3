@@ -236,6 +236,20 @@ static void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState*
 
             CLAY(CLAY_ID("MainContent"), { .layout = { .sizing = { .width = CLAY_SIZING_GROW(0), .height = CLAY_SIZING_GROW(0) } }, .backgroundColor = COLOR_LIGHT }) {}
         }
+
+        // Scissor + overlay demo: a clipped panel where content overflows, tinted red
+        CLAY(CLAY_ID("ScissorDemo"), {
+            .layout = { .sizing = { .width = CLAY_SIZING_FIXED(200), .height = CLAY_SIZING_FIXED(120) }, .padding = CLAY_PADDING_ALL(8), .childGap = 8, .layoutDirection = CLAY_TOP_TO_BOTTOM },
+            .backgroundColor = {40, 40, 80, 220},
+            .overlayColor = {255, 80, 80, 100},
+            .clip = { .vertical = true },
+        }) {
+            CLAY_TEXT(CLAY_STRING("Scissored Panel"), { .textColor = {255, 255, 255, 255}, .fontSize = 18 });
+            CLAY_TEXT(CLAY_STRING("Line 1 - visible"), { .textColor = {200, 255, 200, 255}, .fontSize = 16 });
+            CLAY_TEXT(CLAY_STRING("Line 2 - visible"), { .textColor = {200, 255, 200, 255}, .fontSize = 16 });
+            CLAY_TEXT(CLAY_STRING("Line 3 - clipped"), { .textColor = {200, 255, 200, 255}, .fontSize = 16 });
+            CLAY_TEXT(CLAY_STRING("Line 4 - clipped"), { .textColor = {200, 255, 200, 255}, .fontSize = 16 });
+        }
     }
 
     Clay_RenderCommandArray renderCommands = Clay_EndLayout(frameBuffer->timeFrame.deltaTime);
@@ -250,92 +264,126 @@ static void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState*
     for (int32_t i = 0; i < renderCommands.length; ++i) {
         const Clay_RenderCommand& cmd = renderCommands.internalArray[i];
 
-        if (cmd.commandType == CLAY_RENDER_COMMAND_TYPE_RECTANGLE) {
-            const Clay_BoundingBox& bb = cmd.boundingBox;
-            const Clay_Color& c = cmd.renderData.rectangle.backgroundColor;
-            const float xMin = bb.x / vpWidth * 2.0f - 1.0f;
-            const float yMin = bb.y / vpHeight * 2.0f - 1.0f;
-            const float xMax = (bb.x + bb.width) / vpWidth * 2.0f - 1.0f;
-            const float yMax = (bb.y + bb.height) / vpHeight * 2.0f - 1.0f;
-            vf.uiRects.PushBack(UIRectData{
-                .color = {c.r / 255.0f, c.g / 255.0f, c.b / 255.0f, c.a / 255.0f},
-                .posMin = {xMin, yMin},
-                .posMax = {xMax, yMax},
-            });
-        }
-        else if (cmd.commandType == CLAY_RENDER_COMMAND_TYPE_IMAGE) {
-            const Clay_BoundingBox& bb = cmd.boundingBox;
-            const Clay_ImageRenderData& img = cmd.renderData.image;
-            const uint32_t bindlessIndex = *static_cast<const uint32_t*>(img.imageData);
-
-            const float xMin = bb.x / vpWidth * 2.0f - 1.0f;
-            const float yMin = bb.y / vpHeight * 2.0f - 1.0f;
-            const float xMax = (bb.x + bb.width) / vpWidth * 2.0f - 1.0f;
-            const float yMax = (bb.y + bb.height) / vpHeight * 2.0f - 1.0f;
-
-            const Clay_Color& tc = img.backgroundColor;
-            const bool bUntinted = tc.r == 0 && tc.g == 0 && tc.b == 0 && tc.a == 0;
-            const Vec4 tint = bUntinted
-                ? Vec4{1.0f, 1.0f, 1.0f, 1.0f}
-                : Vec4{tc.r / 255.0f, tc.g / 255.0f, tc.b / 255.0f, tc.a / 255.0f};
-
-            vf.uiImageCommands.PushBack(Core::UIRenderCommandImage{
-                .posMin = {xMin, yMin},
-                .posMax = {xMax, yMax},
-                .uvMin = {0.0f, 1.0f}, // y flip
-                .uvMax = {1.0f, 0.0f},
-                .tintColor = tint,
-                .imageBindlessIndex = bindlessIndex,
-                .zIndex = cmd.zIndex,
-            });
-        }
-        else if (cmd.commandType == CLAY_RENDER_COMMAND_TYPE_TEXT) {
-
-            const Clay_BoundingBox& bb = cmd.boundingBox;
-            const Clay_TextRenderData& td = cmd.renderData.text;
-            const float fontSize = td.fontSize;
-            const float scale = fontSize / uiFont->header.emSize;
-            const Vec4 color{td.textColor.r / 255.0f, td.textColor.g / 255.0f, td.textColor.b / 255.0f, td.textColor.a / 255.0f};
-
-            const auto quadStart = static_cast<uint32_t>(vf.uiGlyphQuads.Size());
-            uint32_t quadCount = 0;
-
-            float cursorX = bb.x;
-            const float baselineY = bb.y + fontSize;
-
-            for (int32_t ci = 0; ci < td.stringContents.length; ++ci) {
-                const uint32_t cp = static_cast<unsigned char>(td.stringContents.chars[ci]);
-                const Engine::WGlyphInfo* g = ctx->assetManager->GetGlyph(state->uiFont, cp);
-                if (!g) { cursorX += fontSize * 0.25f; continue; }
-
-                const float xMin = (cursorX + g->planeLeft * scale) / vpWidth * 2.0f - 1.0f;
-                const float yMax = (baselineY - g->planeBottom * scale) / vpHeight * 2.0f - 1.0f;
-                const float xMax = (cursorX + g->planeRight * scale) / vpWidth * 2.0f - 1.0f;
-                const float yMin = (baselineY - g->planeTop * scale) / vpHeight * 2.0f - 1.0f;
-
-                vf.uiGlyphQuads.PushBack(UIGlyphQuad{
-                    .color = {color.x, color.y, color.z, color.w},
+        switch (cmd.commandType) {
+            case CLAY_RENDER_COMMAND_TYPE_SCISSOR_START: {
+                const Clay_BoundingBox& bb = cmd.boundingBox;
+                Core::UIDrawCommand dc{.type = Core::UICommandType::ScissorPush};
+                dc.scissor = Core::UIScissorCommand{static_cast<int32_t>(bb.x), static_cast<int32_t>(bb.y), static_cast<uint32_t>(bb.width), static_cast<uint32_t>(bb.height)};
+                vf.uiDrawList.PushBack(dc);
+                break;
+            }
+            case CLAY_RENDER_COMMAND_TYPE_SCISSOR_END: {
+                vf.uiDrawList.PushBack(Core::UIDrawCommand{.type = Core::UICommandType::ScissorPop});
+                break;
+            }
+            case CLAY_RENDER_COMMAND_TYPE_OVERLAY_COLOR_START: {
+                const Clay_Color& c = cmd.renderData.overlayColor.color;
+                Core::UIDrawCommand dc{.type = Core::UICommandType::OverlayPush};
+                dc.overlay = Core::UIOverlayColorCommand{.color = {c.r / 255.0f, c.g / 255.0f, c.b / 255.0f, c.a / 255.0f}};
+                vf.uiDrawList.PushBack(dc);
+                break;
+            }
+            case CLAY_RENDER_COMMAND_TYPE_OVERLAY_COLOR_END: {
+                vf.uiDrawList.PushBack(Core::UIDrawCommand{.type = Core::UICommandType::OverlayPop});
+                break;
+            }
+            case CLAY_RENDER_COMMAND_TYPE_RECTANGLE: {
+                const Clay_BoundingBox& bb = cmd.boundingBox;
+                const Clay_Color& c = cmd.renderData.rectangle.backgroundColor;
+                const float xMin = bb.x / vpWidth * 2.0f - 1.0f;
+                const float yMin = bb.y / vpHeight * 2.0f - 1.0f;
+                const float xMax = (bb.x + bb.width) / vpWidth * 2.0f - 1.0f;
+                const float yMax = (bb.y + bb.height) / vpHeight * 2.0f - 1.0f;
+                Core::UIDrawCommand dc{.type = Core::UICommandType::Rect};
+                dc.rect = Core::UIRectDrawCall{
+                    .color = {c.r / 255.0f, c.g / 255.0f, c.b / 255.0f, c.a / 255.0f},
                     .posMin = {xMin, yMin},
                     .posMax = {xMax, yMax},
-                    .uvMin = {g->uvLeft, g->uvBottom},
-                    .uvMax = {g->uvRight, g->uvTop},
-                    .uvOrigMin = {g->uvLeft, g->uvBottom},
-                    .uvOrigMax = {g->uvRight, g->uvTop},
-                });
-                ++quadCount;
-
-                cursorX += g->advance * scale + td.letterSpacing;
+                    .zIndex = cmd.zIndex,
+                };
+                vf.uiDrawList.PushBack(dc);
+                break;
             }
+            case CLAY_RENDER_COMMAND_TYPE_IMAGE: {
+                const Clay_BoundingBox& bb = cmd.boundingBox;
+                const Clay_ImageRenderData& img = cmd.renderData.image;
+                const uint32_t bindlessIndex = *static_cast<const uint32_t*>(img.imageData);
 
-            if (quadCount == 0) { continue; }
+                const float xMin = bb.x / vpWidth * 2.0f - 1.0f;
+                const float yMin = bb.y / vpHeight * 2.0f - 1.0f;
+                const float xMax = (bb.x + bb.width) / vpWidth * 2.0f - 1.0f;
+                const float yMax = (bb.y + bb.height) / vpHeight * 2.0f - 1.0f;
 
-            vf.uiTextDrawCalls.PushBack(Core::UITextDrawCall{
-                .quadOffset = quadStart,
-                .quadCount = quadCount,
-                .atlasBindlessIndex = uiFont->atlasTexture.bindlessHandle.index,
-                .pxRange = static_cast<float>(uiFont->header.sdfSpread),
-                .zIndex = cmd.zIndex,
-            });
+                const Clay_Color& tc = img.backgroundColor;
+                const bool bUntinted = tc.r == 0 && tc.g == 0 && tc.b == 0 && tc.a == 0;
+                const Vec4 tint = bUntinted
+                    ? Vec4{1.0f, 1.0f, 1.0f, 1.0f}
+                    : Vec4{tc.r / 255.0f, tc.g / 255.0f, tc.b / 255.0f, tc.a / 255.0f};
+
+                Core::UIDrawCommand dc{.type = Core::UICommandType::Image};
+                dc.image = Core::UIRenderCommandImage{
+                    .posMin = {xMin, yMin},
+                    .posMax = {xMax, yMax},
+                    .uvMin = {0.0f, 1.0f}, // y flip: viewport Y-flip in SetupUIRender inverts V
+                    .uvMax = {1.0f, 0.0f},
+                    .tintColor = tint,
+                    .imageBindlessIndex = bindlessIndex,
+                    .zIndex = cmd.zIndex,
+                };
+                vf.uiDrawList.PushBack(dc);
+                break;
+            }
+            case CLAY_RENDER_COMMAND_TYPE_TEXT: {
+                const Clay_BoundingBox& bb = cmd.boundingBox;
+                const Clay_TextRenderData& td = cmd.renderData.text;
+                const float fontSize = td.fontSize;
+                const float scale = fontSize / uiFont->header.emSize;
+                const Vec4 color{td.textColor.r / 255.0f, td.textColor.g / 255.0f, td.textColor.b / 255.0f, td.textColor.a / 255.0f};
+
+                const auto quadStart = static_cast<uint32_t>(vf.uiGlyphQuads.Size());
+                uint32_t quadCount = 0;
+
+                float cursorX = bb.x;
+                const float baselineY = bb.y + fontSize;
+
+                for (int32_t ci = 0; ci < td.stringContents.length; ++ci) {
+                    const uint32_t cp = static_cast<unsigned char>(td.stringContents.chars[ci]);
+                    const Engine::WGlyphInfo* g = ctx->assetManager->GetGlyph(state->uiFont, cp);
+                    if (!g) { cursorX += fontSize * 0.25f; continue; }
+
+                    const float xMin = (cursorX + g->planeLeft * scale) / vpWidth * 2.0f - 1.0f;
+                    const float yMax = (baselineY - g->planeBottom * scale) / vpHeight * 2.0f - 1.0f;
+                    const float xMax = (cursorX + g->planeRight * scale) / vpWidth * 2.0f - 1.0f;
+                    const float yMin = (baselineY - g->planeTop * scale) / vpHeight * 2.0f - 1.0f;
+
+                    vf.uiGlyphQuads.PushBack(UIGlyphQuad{
+                        .color = {color.x, color.y, color.z, color.w},
+                        .posMin = {xMin, yMin},
+                        .posMax = {xMax, yMax},
+                        .uvMin = {g->uvLeft, g->uvBottom},
+                        .uvMax = {g->uvRight, g->uvTop},
+                        .uvOrigMin = {g->uvLeft, g->uvBottom},
+                        .uvOrigMax = {g->uvRight, g->uvTop},
+                    });
+                    ++quadCount;
+
+                    cursorX += g->advance * scale + td.letterSpacing;
+                }
+
+                if (quadCount == 0) { break; }
+
+                Core::UIDrawCommand dc{.type = Core::UICommandType::Text};
+                dc.text = Core::UITextDrawCall{
+                    .quadOffset = quadStart,
+                    .quadCount = quadCount,
+                    .atlasBindlessIndex = uiFont->atlasTexture.bindlessHandle.index,
+                    .pxRange = static_cast<float>(uiFont->header.sdfSpread),
+                    .zIndex = cmd.zIndex,
+                };
+                vf.uiDrawList.PushBack(dc);
+                break;
+            }
+            default: break;
         }
     }
 }

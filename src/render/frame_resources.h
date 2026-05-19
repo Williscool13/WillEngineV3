@@ -18,7 +18,6 @@ struct FrameResourceLimits
 
     size_t highestGlyphQuadCount{128};
     size_t highestUIGlyphQuadCount{128};
-    size_t highestUIRectCount{128};
     size_t highestTextInstanceCount{32};
     size_t highestTextMaterialCount{32};
 

@@ -1572,70 +1572,107 @@ StringID SetupPostProcessing(RenderGraph& graph,
 }
 void SetupUIRender(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, StringID targetImage)
 {
-    const bool bHasRects = !viewFamily.uiRects.IsEmpty() && graph.HasBuffer(UI_RECT_BUFFER);
-    const bool bHasImages = !viewFamily.uiImageCommands.IsEmpty();
-    const bool bHasText = !viewFamily.uiTextDrawCalls.IsEmpty() && graph.HasBuffer(UI_GLYPH_QUAD_BUFFER);
-    if (!bHasRects && !bHasImages && !bHasText) { return; }
+    if (viewFamily.uiDrawList.IsEmpty()) { return; }
+
+    const bool bHasText = !viewFamily.uiGlyphQuads.IsEmpty() && graph.HasBuffer(UI_GLYPH_QUAD_BUFFER);
 
     RenderPass& uiPass = graph.AddPass(SID("UI Render"), VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT);
-    if (bHasRects) { uiPass.ReadBuffer(UI_RECT_BUFFER); }
     if (bHasText) { uiPass.ReadBuffer(UI_GLYPH_QUAD_BUFFER); }
     uiPass.WriteColorAttachment(targetImage);
-    uiPass.Execute([&, width = renderExtent[0], height = renderExtent[1], targetImage, pipelineManager, bHasRects, bHasImages, bHasText](VkCommandBuffer cmd) {
+    uiPass.Execute([&, width = renderExtent[0], height = renderExtent[1], targetImage, pipelineManager, bHasText](VkCommandBuffer cmd) {
         // Y-flipped viewport: blit to swapchain inverts Y, so pre-invert here to cancel it out
         VkViewport viewport = VkHelpers::GenerateViewport(width, height);
         viewport.y = static_cast<float>(height);
         viewport.height = -static_cast<float>(height);
         vkCmdSetViewport(cmd, 0, 1, &viewport);
-        VkRect2D scissor = VkHelpers::GenerateScissor(width, height);
-        vkCmdSetScissor(cmd, 0, 1, &scissor);
+        const VkRect2D fullScissor = VkHelpers::GenerateScissor(width, height);
+        vkCmdSetScissor(cmd, 0, 1, &fullScissor);
 
         const VkRenderingAttachmentInfo colorAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targetImage), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
         const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, &colorAttachment, 1, nullptr, nullptr);
         vkCmdBeginRendering(cmd, &renderInfo);
 
-        if (bHasRects) {
-            const PipelineEntry* rectPipeline = pipelineManager->GetPipelineEntry(SID("ui_rect_default"));
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, rectPipeline->pipeline);
-            UIRectRenderPushConstant pc{
-                .rects = graph.GetBufferAddress(UI_RECT_BUFFER),
-                .rectOffset = 0,
-            };
-            vkCmdPushConstants(cmd, rectPipeline->layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(UIRectRenderPushConstant), &pc);
-            vkCmdDraw(cmd, 4, static_cast<uint32_t>(viewFamily.uiRects.Size()), 0, 0);
-        }
+        const VkDeviceAddress glyphQuadsAddr = bHasText ? graph.GetBufferAddress(UI_GLYPH_QUAD_BUFFER) : 0;
 
-        if (bHasImages) {
-            const PipelineEntry* imagePipeline = pipelineManager->GetPipelineEntry(SID("ui_image_default"));
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, imagePipeline->pipeline);
-            for (const Core::UIRenderCommandImage& uiCmd : viewFamily.uiImageCommands) {
-                UIImagePushConstant pc{
-                    .posMin = {uiCmd.posMin.x, uiCmd.posMin.y},
-                    .posMax = {uiCmd.posMax.x, uiCmd.posMax.y},
-                    .uvMin = {uiCmd.uvMin.x, uiCmd.uvMin.y},
-                    .uvMax = {uiCmd.uvMax.x, uiCmd.uvMax.y},
-                    .tintColor = {uiCmd.tintColor.x, uiCmd.tintColor.y, uiCmd.tintColor.z, uiCmd.tintColor.w},
-                    .imageBindlessIndex = uiCmd.imageBindlessIndex,
-                };
-                vkCmdPushConstants(cmd, imagePipeline->layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(UIImagePushConstant), &pc);
-                vkCmdDraw(cmd, 4, 1, 0, 0);
-            }
-        }
+        const PipelineEntry* rectPipeline = pipelineManager->GetPipelineEntry(SID("ui_rect_default"));
+        const PipelineEntry* imagePipeline = pipelineManager->GetPipelineEntry(SID("ui_image_default"));
+        const PipelineEntry* textPipeline = pipelineManager->GetPipelineEntry(SID("ui_text_default"));
 
-        if (bHasText) {
-            const PipelineEntry* textPipeline = pipelineManager->GetPipelineEntry(SID("ui_text_default"));
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, textPipeline->pipeline);
-            const VkDeviceAddress glyphQuadsAddr = graph.GetBufferAddress(UI_GLYPH_QUAD_BUFFER);
-            for (const Core::UITextDrawCall& dc : viewFamily.uiTextDrawCalls) {
-                UITextRenderPushConstant pc{
-                    .uiGlyphQuads = glyphQuadsAddr,
-                    .quadOffset = dc.quadOffset,
-                    .quadCount = dc.quadCount,
-                    .atlasBindlessIndex = dc.atlasBindlessIndex,
-                    .pxRange = dc.pxRange,
-                };
-                vkCmdPushConstants(cmd, textPipeline->layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(UITextRenderPushConstant), &pc);
-                vkCmdDraw(cmd, 4, dc.quadCount, 0, 0);
+        Core::UICommandType boundPipeline = Core::UICommandType::ScissorPop; // sentinel: nothing bound
+        glm::vec4 overlayColor{1.0f, 1.0f, 1.0f, 1.0f};
+
+        for (const Core::UIDrawCommand& drawCmd : viewFamily.uiDrawList) {
+            switch (drawCmd.type) {
+                case Core::UICommandType::ScissorPush: {
+                    const Core::UIScissorCommand& s = drawCmd.scissor;
+                    const VkRect2D scissor{{s.x, s.y}, {s.width, s.height}};
+                    vkCmdSetScissor(cmd, 0, 1, &scissor);
+                    break;
+                }
+                case Core::UICommandType::ScissorPop: {
+                    vkCmdSetScissor(cmd, 0, 1, &fullScissor);
+                    break;
+                }
+                case Core::UICommandType::OverlayPush: {
+                    const float4& c = drawCmd.overlay.color;
+                    overlayColor = {c.x, c.y, c.z, c.w};
+                    break;
+                }
+                case Core::UICommandType::OverlayPop: {
+                    overlayColor = {1.0f, 1.0f, 1.0f, 1.0f};
+                    break;
+                }
+                case Core::UICommandType::Rect: {
+                    if (boundPipeline != Core::UICommandType::Rect) {
+                        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, rectPipeline->pipeline);
+                        boundPipeline = Core::UICommandType::Rect;
+                    }
+                    const Core::UIRectDrawCall& r = drawCmd.rect;
+                    UIRectRenderPushConstant pc{
+                        .color = {r.color.x * overlayColor.x, r.color.y * overlayColor.y, r.color.z * overlayColor.z, r.color.w * overlayColor.w},
+                        .posMin = r.posMin,
+                        .posMax = r.posMax,
+                    };
+                    vkCmdPushConstants(cmd, rectPipeline->layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(UIRectRenderPushConstant), &pc);
+                    vkCmdDraw(cmd, 4, 1, 0, 0);
+                    break;
+                }
+                case Core::UICommandType::Image: {
+                    if (boundPipeline != Core::UICommandType::Image) {
+                        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, imagePipeline->pipeline);
+                        boundPipeline = Core::UICommandType::Image;
+                    }
+                    const Core::UIRenderCommandImage& uiCmd = drawCmd.image;
+                    UIImagePushConstant pc{
+                        .posMin = {uiCmd.posMin.x, uiCmd.posMin.y},
+                        .posMax = {uiCmd.posMax.x, uiCmd.posMax.y},
+                        .uvMin = {uiCmd.uvMin.x, uiCmd.uvMin.y},
+                        .uvMax = {uiCmd.uvMax.x, uiCmd.uvMax.y},
+                        .tintColor = {uiCmd.tintColor.x * overlayColor.x, uiCmd.tintColor.y * overlayColor.y, uiCmd.tintColor.z * overlayColor.z, uiCmd.tintColor.w * overlayColor.w},
+                        .imageBindlessIndex = uiCmd.imageBindlessIndex,
+                    };
+                    vkCmdPushConstants(cmd, imagePipeline->layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(UIImagePushConstant), &pc);
+                    vkCmdDraw(cmd, 4, 1, 0, 0);
+                    break;
+                }
+                case Core::UICommandType::Text: {
+                    if (!bHasText) { break; }
+                    if (boundPipeline != Core::UICommandType::Text) {
+                        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, textPipeline->pipeline);
+                        boundPipeline = Core::UICommandType::Text;
+                    }
+                    UITextRenderPushConstant pc{
+                        .uiGlyphQuads = glyphQuadsAddr,
+                        .quadOffset = drawCmd.text.quadOffset,
+                        .quadCount = drawCmd.text.quadCount,
+                        .colorTint = {overlayColor.x, overlayColor.y, overlayColor.z, overlayColor.w},
+                        .atlasBindlessIndex = drawCmd.text.atlasBindlessIndex,
+                        .pxRange = drawCmd.text.pxRange,
+                    };
+                    vkCmdPushConstants(cmd, textPipeline->layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(UITextRenderPushConstant), &pc);
+                    vkCmdDraw(cmd, 4, drawCmd.text.quadCount, 0, 0);
+                    break;
+                }
             }
         }
 
