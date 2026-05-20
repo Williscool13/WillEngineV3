@@ -251,6 +251,60 @@ static void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState*
             CLAY(CLAY_ID("MainContent"), { .layout = { .sizing = { .width = CLAY_SIZING_GROW(0), .height = CLAY_SIZING_GROW(0) } }, .backgroundColor = COLOR_LIGHT }) {}
         }
 
+        // Border demo: nested boxes showing per-side widths and corner radius
+        CLAY(CLAY_ID("BorderDemo"), {
+             .layout = { .sizing = { CLAY_SIZING_FIXED(200), CLAY_SIZING_FIXED(200) }, .padding = CLAY_PADDING_ALL(16), .childGap = 12, .layoutDirection = CLAY_TOP_TO_BOTTOM },
+             .backgroundColor = {20, 20, 30, 255},
+             .border = { .color = {100, 200, 255, 255}, .width = { .left = 3, .right = 3, .top = 3, .bottom = 3 } },
+             }) {
+            CLAY(CLAY_ID("BorderInner1"), {
+                 .layout = { .sizing = { CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(60) }, .childAlignment = { .x = CLAY_ALIGN_X_CENTER, .y = CLAY_ALIGN_Y_CENTER } },
+                 .backgroundColor = {40, 40, 60, 255},
+                 .cornerRadius = CLAY_CORNER_RADIUS(8),
+                 .border = { .color = {255, 180, 50, 255}, .width = { .left = 2, .right = 2, .top = 2, .bottom = 2 } },
+                 }) {
+                CLAY_TEXT(CLAY_STRING("Rounded"), { .textColor = {220, 220, 255, 255}, .fontSize = 18 });
+            }
+            CLAY(CLAY_ID("BorderInner2"), {
+                 .layout = { .sizing = { CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(60) }, .childAlignment = { .x = CLAY_ALIGN_X_CENTER, .y = CLAY_ALIGN_Y_CENTER } },
+                 .backgroundColor = {40, 40, 60, 255},
+                 .border = { .color = {80, 255, 120, 255}, .width = { .left = 6, .right = 1, .top = 1, .bottom = 6 } },
+                 }) {
+                CLAY_TEXT(CLAY_STRING("Asymmetric"), { .textColor = {220, 220, 255, 255}, .fontSize = 18 });
+            }
+        }
+
+        // Rounded image demo
+        CLAY(CLAY_ID("RoundedImage"), {
+             .layout = { .sizing = { CLAY_SIZING_FIXED(200), CLAY_SIZING_FIXED(120) } },
+             .cornerRadius = CLAY_CORNER_RADIUS(20),
+             .image = { .imageData = &smilingFriendImageIndex },
+             }) {}
+
+        // Overlay demo: a panel whose overlayColor tints all children
+        CLAY(CLAY_ID("OverlayDemo"), {
+             .layout = { .sizing = { CLAY_SIZING_FIXED(160), CLAY_SIZING_FIXED(200) }, .padding = CLAY_PADDING_ALL(10), .childGap = 8, .layoutDirection = CLAY_TOP_TO_BOTTOM },
+             .backgroundColor = {50, 50, 80, 255},
+             .overlayColor = { 80, 160, 255, 100 },
+             .border = { .color = {180, 180, 255, 200}, .width = { .left = 1, .right = 1, .top = 1, .bottom = 1 } },
+             }) {
+            CLAY_TEXT(CLAY_STRING("Overlay"), { .textColor = {255, 255, 255, 255}, .fontSize = 20 });
+            CLAY(CLAY_ID("OverlayItem1"), {
+                 .layout = { .sizing = { CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(40) }, .padding = { 8, 8, 0, 0 }, .childAlignment = { .y = CLAY_ALIGN_Y_CENTER } },
+                 .backgroundColor = COLOR_RED,
+                 .cornerRadius = CLAY_CORNER_RADIUS(4),
+                 }) {
+                CLAY_TEXT(CLAY_STRING("Red"), { .textColor = {255, 255, 255, 255}, .fontSize = 16 });
+            }
+            CLAY(CLAY_ID("OverlayItem2"), {
+                 .layout = { .sizing = { CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(40) }, .padding = { 8, 8, 0, 0 }, .childAlignment = { .y = CLAY_ALIGN_Y_CENTER } },
+                 .backgroundColor = COLOR_ORANGE,
+                 .cornerRadius = CLAY_CORNER_RADIUS(4),
+                 }) {
+                CLAY_TEXT(CLAY_STRING("Orange"), { .textColor = {255, 255, 255, 255}, .fontSize = 16 });
+            }
+        }
+
         // Scrollable list with overlay color tint and a floating scrollbar
         CLAY(CLAY_ID("ScrollDemo"), {
              .layout = { .sizing = { .width = CLAY_SIZING_FIXED(260), .height = CLAY_SIZING_FIXED(300) }, .layoutDirection = CLAY_TOP_TO_BOTTOM },
@@ -338,15 +392,13 @@ static void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState*
             {
                 const Clay_BoundingBox& bb = cmd.boundingBox;
                 const Clay_Color& c = cmd.renderData.rectangle.backgroundColor;
-                const float xMin = bb.x / vpWidth * 2.0f - 1.0f;
-                const float yMin = bb.y / vpHeight * 2.0f - 1.0f;
-                const float xMax = (bb.x + bb.width) / vpWidth * 2.0f - 1.0f;
-                const float yMax = (bb.y + bb.height) / vpHeight * 2.0f - 1.0f;
+                const Clay_CornerRadius& cr = cmd.renderData.rectangle.cornerRadius;
                 Core::UIDrawCommand dc{.type = Core::UICommandType::Rect};
                 dc.rect = Core::UIRectDrawCall{
                     .color = {c.r / 255.0f, c.g / 255.0f, c.b / 255.0f, c.a / 255.0f},
-                    .posMin = {xMin, yMin},
-                    .posMax = {xMax, yMax},
+                    .cornerRadius = {cr.topLeft, cr.topRight, cr.bottomLeft, cr.bottomRight},
+                    .pxMin = {bb.x, bb.y},
+                    .pxMax = {bb.x + bb.width, bb.y + bb.height},
                     .zIndex = cmd.zIndex,
                 };
                 vf.uiDrawList.PushBack(dc);
@@ -357,26 +409,48 @@ static void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState*
                 const Clay_BoundingBox& bb = cmd.boundingBox;
                 const Clay_ImageRenderData& img = cmd.renderData.image;
                 const uint32_t bindlessIndex = *static_cast<const uint32_t*>(img.imageData);
-
-                const float xMin = bb.x / vpWidth * 2.0f - 1.0f;
-                const float yMin = bb.y / vpHeight * 2.0f - 1.0f;
-                const float xMax = (bb.x + bb.width) / vpWidth * 2.0f - 1.0f;
-                const float yMax = (bb.y + bb.height) / vpHeight * 2.0f - 1.0f;
-
                 const Clay_Color& tc = img.backgroundColor;
                 const bool bUntinted = tc.r == 0 && tc.g == 0 && tc.b == 0 && tc.a == 0;
                 const Vec4 tint = bUntinted
-                                      ? Vec4{1.0f, 1.0f, 1.0f, 1.0f}
-                                      : Vec4{tc.r / 255.0f, tc.g / 255.0f, tc.b / 255.0f, tc.a / 255.0f};
-
+                    ? Vec4{1.0f, 1.0f, 1.0f, 1.0f}
+                    : Vec4{tc.r / 255.0f, tc.g / 255.0f, tc.b / 255.0f, tc.a / 255.0f};
+                const Clay_CornerRadius& cr = img.cornerRadius;
                 Core::UIDrawCommand dc{.type = Core::UICommandType::Image};
                 dc.image = Core::UIRenderCommandImage{
-                    .posMin = {xMin, yMin},
-                    .posMax = {xMax, yMax},
+                    .pxMin = {bb.x, bb.y},
+                    .pxMax = {bb.x + bb.width, bb.y + bb.height},
                     .uvMin = {0.0f, 1.0f}, // y flip: viewport Y-flip in SetupUIRender inverts V
                     .uvMax = {1.0f, 0.0f},
                     .tintColor = tint,
+                    .cornerRadius = {cr.topLeft, cr.topRight, cr.bottomLeft, cr.bottomRight},
                     .imageBindlessIndex = bindlessIndex,
+                    .zIndex = cmd.zIndex,
+                };
+                vf.uiDrawList.PushBack(dc);
+                break;
+            }
+            case CLAY_RENDER_COMMAND_TYPE_BORDER:
+            {
+                const Clay_BoundingBox& bb = cmd.boundingBox;
+                const Clay_BorderRenderData& bd = cmd.renderData.border;
+                const Clay_Color& c = bd.color;
+                Core::UIDrawCommand dc{.type = Core::UICommandType::Border};
+                dc.border = Core::UIBorderDrawCall{
+                    .color = {c.r / 255.0f, c.g / 255.0f, c.b / 255.0f, c.a / 255.0f},
+                    .borderWidths = {
+                        static_cast<float>(bd.width.left),
+                        static_cast<float>(bd.width.right),
+                        static_cast<float>(bd.width.top),
+                        static_cast<float>(bd.width.bottom),
+                    },
+                    .cornerRadius = {
+                        bd.cornerRadius.topLeft,
+                        bd.cornerRadius.topRight,
+                        bd.cornerRadius.bottomLeft,
+                        bd.cornerRadius.bottomRight,
+                    },
+                    .pxMin = {bb.x, bb.y},
+                    .pxMax = {bb.x + bb.width, bb.y + bb.height},
                     .zIndex = cmd.zIndex,
                 };
                 vf.uiDrawList.PushBack(dc);

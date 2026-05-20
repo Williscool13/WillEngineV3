@@ -804,8 +804,11 @@ SHADER_PUBLIC struct TextRenderPushConstant
 SHADER_PUBLIC struct UIRectRenderPushConstant
 {
     SHADER_PUBLIC float4 color;
-    SHADER_PUBLIC float2 posMin;
-    SHADER_PUBLIC float2 posMax;
+    SHADER_PUBLIC float2 ndcMin;
+    SHADER_PUBLIC float2 ndcMax;
+    SHADER_PUBLIC float4 cornerRadius; // x=TL, y=TR, z=BL, w=BR in pixels
+    SHADER_PUBLIC float2 pxMin;
+    SHADER_PUBLIC float2 pxMax;
 };
 
 SHADER_PUBLIC struct UITextRenderPushConstant
@@ -820,12 +823,26 @@ SHADER_PUBLIC struct UITextRenderPushConstant
 
 SHADER_PUBLIC struct UIImagePushConstant
 {
-    SHADER_PUBLIC float2 posMin;
-    SHADER_PUBLIC float2 posMax;
+    SHADER_PUBLIC float2 ndcMin;
+    SHADER_PUBLIC float2 ndcMax;
     SHADER_PUBLIC float2 uvMin;
     SHADER_PUBLIC float2 uvMax;
     SHADER_PUBLIC float4 tintColor;
+    SHADER_PUBLIC float4 cornerRadius; // x=TL, y=TR, z=BL, w=BR in pixels
+    SHADER_PUBLIC float2 pxMin;
+    SHADER_PUBLIC float2 pxMax;
     SHADER_PUBLIC uint32_t imageBindlessIndex;
+};
+
+SHADER_PUBLIC struct UIBorderPushConstant
+{
+    SHADER_PUBLIC float2 ndcMin;        // NDC position for vertex stage
+    SHADER_PUBLIC float2 ndcMax;
+    SHADER_PUBLIC float4 color;
+    SHADER_PUBLIC float4 borderWidths;  // x=left, y=right, z=top, w=bottom in pixels
+    SHADER_PUBLIC float4 cornerRadius;  // x=TL, y=TR, z=BL, w=BR in pixels
+    SHADER_PUBLIC float2 pxMin;         // pixel-space bounds for SDF in fragment stage
+    SHADER_PUBLIC float2 pxMax;
 };
 
 #endif //WILL_ENGINE_PUSH_CONSTANT_INTEROP_H

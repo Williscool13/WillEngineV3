@@ -358,6 +358,7 @@ add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/visibility_shading_commo
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/shader_constants.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/shader_functions.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/shadow_functions.slang")
+add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/ui_functions.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/pbr_functions.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/bindless_declarations.slang")
 
@@ -405,12 +406,14 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/text/text_default.slang fragment FragmentMain default_text
 
         # UI Rendering
-        ${CMAKE_SOURCE_DIR}/shaders/text/ui_image_default.slang vertex VertexMain ui_image_default
-        ${CMAKE_SOURCE_DIR}/shaders/text/ui_image_default.slang fragment FragmentMain ui_image_default
-        ${CMAKE_SOURCE_DIR}/shaders/text/ui_text_default.slang vertex VertexMain ui_text_default
-        ${CMAKE_SOURCE_DIR}/shaders/text/ui_text_default.slang fragment FragmentMain ui_text_default
+        ${CMAKE_SOURCE_DIR}/shaders/ui/ui_text_default.slang vertex VertexMain ui_text_default
+        ${CMAKE_SOURCE_DIR}/shaders/ui/ui_text_default.slang fragment FragmentMain ui_text_default
+        ${CMAKE_SOURCE_DIR}/shaders/ui/ui_image_default.slang vertex VertexMain ui_image_default
+        ${CMAKE_SOURCE_DIR}/shaders/ui/ui_image_default.slang fragment FragmentMain ui_image_default
         ${CMAKE_SOURCE_DIR}/shaders/ui/ui_rect_default.slang vertex VertexMain ui_rect_default
         ${CMAKE_SOURCE_DIR}/shaders/ui/ui_rect_default.slang fragment FragmentMain ui_rect_default
+        ${CMAKE_SOURCE_DIR}/shaders/ui/ui_border_default.slang vertex VertexMain ui_border_default
+        ${CMAKE_SOURCE_DIR}/shaders/ui/ui_border_default.slang fragment FragmentMain ui_border_default
 
         # Debug Rendering
         ${CMAKE_SOURCE_DIR}/shaders/debug_render.slang fragment FragmentMain debug_render

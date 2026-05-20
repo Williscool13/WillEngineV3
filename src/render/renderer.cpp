@@ -1597,6 +1597,7 @@ void SetupUIRender(RenderGraph& graph, PipelineManager* pipelineManager, const C
         const PipelineEntry* rectPipeline = pipelineManager->GetPipelineEntry(SID("ui_rect_default"));
         const PipelineEntry* imagePipeline = pipelineManager->GetPipelineEntry(SID("ui_image_default"));
         const PipelineEntry* textPipeline = pipelineManager->GetPipelineEntry(SID("ui_text_default"));
+        const PipelineEntry* borderPipeline = pipelineManager->GetPipelineEntry(SID("ui_border_default"));
 
         Core::UICommandType boundPipeline = Core::UICommandType::ScissorPop; // sentinel: nothing bound
         glm::vec4 overlayColor{1.0f, 1.0f, 1.0f, 1.0f};
@@ -1628,10 +1629,15 @@ void SetupUIRender(RenderGraph& graph, PipelineManager* pipelineManager, const C
                         boundPipeline = Core::UICommandType::Rect;
                     }
                     const Core::UIRectDrawCall& r = drawCmd.rect;
+                    const float fw = static_cast<float>(width);
+                    const float fh = static_cast<float>(height);
                     UIRectRenderPushConstant pc{
                         .color = {r.color.x * overlayColor.x, r.color.y * overlayColor.y, r.color.z * overlayColor.z, r.color.w * overlayColor.w},
-                        .posMin = r.posMin,
-                        .posMax = r.posMax,
+                        .ndcMin = {r.pxMin.x / fw * 2.0f - 1.0f, r.pxMin.y / fh * 2.0f - 1.0f},
+                        .ndcMax = {r.pxMax.x / fw * 2.0f - 1.0f, r.pxMax.y / fh * 2.0f - 1.0f},
+                        .cornerRadius = r.cornerRadius,
+                        .pxMin = r.pxMin,
+                        .pxMax = r.pxMax,
                     };
                     vkCmdPushConstants(cmd, rectPipeline->layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(UIRectRenderPushConstant), &pc);
                     vkCmdDraw(cmd, 4, 1, 0, 0);
@@ -1643,15 +1649,41 @@ void SetupUIRender(RenderGraph& graph, PipelineManager* pipelineManager, const C
                         boundPipeline = Core::UICommandType::Image;
                     }
                     const Core::UIRenderCommandImage& uiCmd = drawCmd.image;
+                    const float fw = static_cast<float>(width);
+                    const float fh = static_cast<float>(height);
                     UIImagePushConstant pc{
-                        .posMin = {uiCmd.posMin.x, uiCmd.posMin.y},
-                        .posMax = {uiCmd.posMax.x, uiCmd.posMax.y},
+                        .ndcMin = {uiCmd.pxMin.x / fw * 2.0f - 1.0f, uiCmd.pxMin.y / fh * 2.0f - 1.0f},
+                        .ndcMax = {uiCmd.pxMax.x / fw * 2.0f - 1.0f, uiCmd.pxMax.y / fh * 2.0f - 1.0f},
                         .uvMin = {uiCmd.uvMin.x, uiCmd.uvMin.y},
                         .uvMax = {uiCmd.uvMax.x, uiCmd.uvMax.y},
                         .tintColor = {uiCmd.tintColor.x * overlayColor.x, uiCmd.tintColor.y * overlayColor.y, uiCmd.tintColor.z * overlayColor.z, uiCmd.tintColor.w * overlayColor.w},
+                        .cornerRadius = uiCmd.cornerRadius,
+                        .pxMin = uiCmd.pxMin,
+                        .pxMax = uiCmd.pxMax,
                         .imageBindlessIndex = uiCmd.imageBindlessIndex,
                     };
                     vkCmdPushConstants(cmd, imagePipeline->layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(UIImagePushConstant), &pc);
+                    vkCmdDraw(cmd, 4, 1, 0, 0);
+                    break;
+                }
+                case Core::UICommandType::Border: {
+                    if (boundPipeline != Core::UICommandType::Border) {
+                        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, borderPipeline->pipeline);
+                        boundPipeline = Core::UICommandType::Border;
+                    }
+                    const Core::UIBorderDrawCall& b = drawCmd.border;
+                    const float fw = static_cast<float>(width);
+                    const float fh = static_cast<float>(height);
+                    UIBorderPushConstant pc{
+                        .ndcMin = {b.pxMin.x / fw * 2.0f - 1.0f, b.pxMin.y / fh * 2.0f - 1.0f},
+                        .ndcMax = {b.pxMax.x / fw * 2.0f - 1.0f, b.pxMax.y / fh * 2.0f - 1.0f},
+                        .color = {b.color.x * overlayColor.x, b.color.y * overlayColor.y, b.color.z * overlayColor.z, b.color.w * overlayColor.w},
+                        .borderWidths = b.borderWidths,
+                        .cornerRadius = b.cornerRadius,
+                        .pxMin = b.pxMin,
+                        .pxMax = b.pxMax,
+                    };
+                    vkCmdPushConstants(cmd, borderPipeline->layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(UIBorderPushConstant), &pc);
                     vkCmdDraw(cmd, 4, 1, 0, 0);
                     break;
                 }

@@ -322,11 +322,12 @@ struct UITextDrawCall
 
 struct UIRenderCommandImage
 {
-    Vec2 posMin;
-    Vec2 posMax;
+    Vec2 pxMin;
+    Vec2 pxMax;
     Vec2 uvMin;
     Vec2 uvMax;
     Vec4 tintColor;
+    Vec4 cornerRadius; // x=TL, y=TR, z=BL, w=BR in pixels
     uint32_t imageBindlessIndex;
     int16_t zIndex;
 };
@@ -334,8 +335,9 @@ struct UIRenderCommandImage
 struct UIRectDrawCall
 {
     float4 color;
-    float2 posMin;
-    float2 posMax;
+    float4 cornerRadius; // x=TL, y=TR, z=BL, w=BR in pixels
+    float2 pxMin;
+    float2 pxMax;
     int32_t zIndex;
 };
 
@@ -350,17 +352,30 @@ struct UIOverlayColorCommand
     float4 color;
 };
 
-enum class UICommandType : uint8_t { Rect, Image, Text, ScissorPush, ScissorPop, OverlayPush, OverlayPop };
+struct UIBorderDrawCall
+{
+    float4 color;
+    float4 borderWidths; // x=left, y=right, z=top, w=bottom in pixels
+    float4 cornerRadius; // x=TL, y=TR, z=BL, w=BR in pixels
+    float2 pxMin; // pixel-space bounds (Clay coords, y=0 at top)
+    float2 pxMax;
+    int32_t zIndex;
+};
+
+enum class UICommandType : uint8_t { Rect, Image, Text, Border, ScissorPush, ScissorPop, OverlayPush, OverlayPop };
 
 struct UIDrawCommand
 {
     UICommandType type;
-    union {
+
+    union
+    {
         UIScissorCommand scissor;
         UIOverlayColorCommand overlay;
         UIRectDrawCall rect;
         UIRenderCommandImage image;
         UITextDrawCall text;
+        UIBorderDrawCall border;
     };
 };
 
