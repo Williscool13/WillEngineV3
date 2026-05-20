@@ -493,6 +493,9 @@ struct FrameBuffer
     // Readback
     uint64_t stableIdUnderCursor{0};
 
+    // Selection
+    uint64_t selectedStableId{0};
+
     // Debug
     bool bDrawImgui = false;
     bool bFreezeVisibility = false;

@@ -532,6 +532,10 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
         SetupTextForwardPass(*renderGraph, pipelineManager, viewFamily, renderExtent, mainTargets);
 
+        if (frameBuffer.selectedStableId != 0) {
+            SetupSelectionOutlinePass(*renderGraph, pipelineManager, renderExtent, mainTargets, frameBuffer.selectedStableId);
+        }
+
         finalOutput = shadingOutputTarget;
         switch (viewFamily.aaMode) {
             case Core::AntiAliasingMode::SMAA:

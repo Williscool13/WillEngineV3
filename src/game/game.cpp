@@ -520,6 +520,19 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
     Game::FunctionKeyRenderUpdate(ctx, state, frameBuffer);
 
     Game::BuildViewFamily(state, frameBuffer->mainViewFamily);
+
+#if WILL_EDITOR
+    {
+        frameBuffer->selectedStableId = 0;
+        if (!state->editor.selectedEntities.IsEmpty()) {
+            entt::entity selected = state->editor.selectedEntities.Front();
+            if (auto* stable = state->registry.try_get<Game::Component::StableIdComponent>(selected)) {
+                frameBuffer->selectedStableId = stable->id.id;
+            }
+        }
+    }
+#endif
+
     frameBuffer->bWireframe = state->debug.bWireframe;
     frameBuffer->bEnableShadeDispatchBucketingVisualization = state->debug.bEnableShadeDispatchBucketingVisualization;
     frameBuffer->bEnableLightingBucketingVisualization = state->debug.bEnableLightingBucketingVisualization;

@@ -415,9 +415,10 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/ui/ui_border_default.slang vertex VertexMain ui_border_default
         ${CMAKE_SOURCE_DIR}/shaders/ui/ui_border_default.slang fragment FragmentMain ui_border_default
 
-        # Debug Rendering
+        # Debug / Editor Rendering
         ${CMAKE_SOURCE_DIR}/shaders/debug_render.slang fragment FragmentMain debug_render
         ${CMAKE_SOURCE_DIR}/shaders/debug_render.slang mesh MeshMain debug_render
+        ${CMAKE_SOURCE_DIR}/shaders/selection_outline.slang compute ComputeMain selection_outline
 
 
         # Deprecated

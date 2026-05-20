@@ -135,6 +135,12 @@ StringID SetupPostProcessing(RenderGraph& graph,
                              float deltaTime,
                              uint64_t frameNumber);
 
+void SetupSelectionOutlinePass(RenderGraph& graph,
+                               PipelineManager* pipelineManager,
+                               Core::Array<uint32_t, 2> renderExtent,
+                               const MainRenderTargets& targets,
+                               uint64_t selectedStableId);
+
 void SetupUIRender(RenderGraph& graph,
                    PipelineManager* pipelineManager,
                    const Core::ViewFamily& viewFamily,

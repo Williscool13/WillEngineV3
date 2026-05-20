@@ -421,7 +421,6 @@ void PipelineManager::RegisterPipelines()
     lightingPipelines.PushBack("default_unlit"_sid);
 
 
-
     RegisterComputePipeline(SID("instancing_instance_lod_shadows"), src / "instancing_instance_lod_shadows_compute.spv",
                             sizeof(InstanceLODShadowsPushConstant), PipelineCategory::Legacy);
     RegisterComputePipeline(SID("instancing_expand_instance_to_meshlet_shadows"), src / "instancing_expand_instance_to_meshlet_shadows_compute.spv",
@@ -485,6 +484,8 @@ void PipelineManager::RegisterPipelines()
     RegisterComputePipeline(SID("dither"), src / "dither_compute.spv",
                             sizeof(DitherPushConstant), PipelineCategory::Critical);
 
+    RegisterComputePipeline("selection_outline"_sid, src / "selection_outline_compute.spv",
+                            sizeof(SelectionOutlinePushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("debug_visualize"), src / "debug_visualize_compute.spv",
                             sizeof(DebugVisualizePushConstant), PipelineCategory::Critical);
 

@@ -1711,6 +1711,27 @@ void SetupUIRender(RenderGraph& graph, PipelineManager* pipelineManager, const C
         vkCmdEndRendering(cmd);
     });
 }
+void SetupSelectionOutlinePass(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, const MainRenderTargets& targets, uint64_t selectedStableId)
+{
+    RenderPass& outlinePass = graph.AddPass(SID("Selection Outline"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+    outlinePass.ReadStorageImage(targets.stableId);
+    outlinePass.WriteStorageImage(targets.outputColor);
+    outlinePass.Execute([&, pipelineManager, renderExtent, selectedStableId, stableId = targets.stableId, outputColor = targets.outputColor](VkCommandBuffer cmd) {
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("selection_outline"));
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+
+        SelectionOutlinePushConstant pc{
+            .selectedStableIdLo = static_cast<uint32_t>(selectedStableId & 0xFFFFFFFFu),
+            .selectedStableIdHi = static_cast<uint32_t>(selectedStableId >> 32u),
+            .extents = {renderExtent[0], renderExtent[1]},
+            .stableIdIndex = graph.GetStorageImageViewDescriptorIndex(stableId),
+            .outputColorIndex = graph.GetStorageImageViewDescriptorIndex(outputColor),
+        };
+        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+        vkCmdDispatch(cmd, (renderExtent[0] + 15) / 16, (renderExtent[1] + 15) / 16, 1);
+    });
+}
+
 } // Render
 
 /*InstancedGeometryPassOutputs SetupInstancedGeometryShadowPass(RenderGraph& graph, const InstancedGeometryPassConfig& config, PipelineManager* pipelineManager, uint32_t sceneDataIndex,

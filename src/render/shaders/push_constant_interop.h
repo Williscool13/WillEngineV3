@@ -725,6 +725,15 @@ SHADER_PUBLIC struct PortalCompositePushConstant
     SHADER_PUBLIC uint32_t portalDepthIndex;
 };
 
+SHADER_PUBLIC struct SelectionOutlinePushConstant
+{
+    SHADER_PUBLIC uint32_t selectedStableIdLo;
+    SHADER_PUBLIC uint32_t selectedStableIdHi;
+    SHADER_PUBLIC uint2 extents;
+    SHADER_PUBLIC uint32_t stableIdIndex;
+    SHADER_PUBLIC uint32_t outputColorIndex;
+};
+
 SHADER_PUBLIC struct DebugDrawPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
