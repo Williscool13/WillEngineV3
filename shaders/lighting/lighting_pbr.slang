@@ -41,7 +41,7 @@ void ComputeMain(uniform LightingResolvePushConstant pc, uint3 threadID : SV_Dis
 
     // SPECULAR: Cook-Torrance BRDF
     float NDF = D_GGX(N, H, roughness);
-    float G = G_SCHLICKGGX_SMITH(N, V, L, roughness);
+    float G = G_SMITH_HEIGHT_CORRELATED(N, V, L, roughness);
     float3 F0 = lerp(float3(0.04, 0.04, 0.04), li.albedo.xyz, li.metallic);
     float3 F = F_SCHLICK(V, H, F0);
 
@@ -52,9 +52,11 @@ void ComputeMain(uniform LightingResolvePushConstant pc, uint3 threadID : SV_Dis
     float3 kS = F;
     float3 kD = (1.0 - kS) * (1.0 - li.metallic);
 
-    // DIFFUSE: Lambert
+    // DIFFUSE: Oren-Nayar
     float nDotL = max(dot(N, L), 0.0);
-    float3 diffuse = kD * li.albedo.xyz / 3.14159265359;
+    float nDotV = max(dot(N, V), 0.0);
+    float orenNayar = Diffuse_OrenNayar(nDotL, nDotV, L, V, roughness);
+    float3 diffuse = kD * li.albedo.xyz * orenNayar;
 
     float shadowFactor = li.shadows.x;
     float gtao = li.shadows.y;
