@@ -193,6 +193,7 @@ struct EditorState
 
 struct DebugState
 {
+    bool bEnableUI{false};
     bool bWireframe{false};
     bool bEnablePortal{true};
     bool bEnableShadeDispatchBucketingVisualization{false};

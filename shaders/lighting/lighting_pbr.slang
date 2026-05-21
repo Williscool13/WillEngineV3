@@ -32,13 +32,16 @@ void ComputeMain(uniform LightingResolvePushConstant pc, uint3 threadID : SV_Dis
     float3 N = normalize(li.viewNormal);
     float3 V = normalize(-viewPosition);
 
+    // Clamp roughness so D_GGX never produces 0/0 at NdotH=1 (degenerate delta lobe)
+    float roughness = max(li.roughness, 0.045);
+
     // Directional light in view space (transform from world space)
     float3 L = normalize(mul((float3x3)pc.sceneData[pc.sceneDataIndex].view, normalize(-pc.lightData->mainLightDirection.xyz)));
     float3 H = normalize(V + L);
 
     // SPECULAR: Cook-Torrance BRDF
-    float NDF = D_GGX(N, H, li.roughness);
-    float G = G_SCHLICKGGX_SMITH(N, V, L, li.roughness);
+    float NDF = D_GGX(N, H, roughness);
+    float G = G_SCHLICKGGX_SMITH(N, V, L, roughness);
     float3 F0 = lerp(float3(0.04, 0.04, 0.04), li.albedo.xyz, li.metallic);
     float3 F = F_SCHLICK(V, H, F0);
 
@@ -66,14 +69,14 @@ void ComputeMain(uniform LightingResolvePushConstant pc, uint3 threadID : SV_Dis
     {
         float NdotV = max(dot(N, V), 0.0);
         float3 F0 = lerp(float3(0.04, 0.04, 0.04), li.albedo.xyz, li.metallic);
-        float3 F_ibl = F_SCHLICK_ROUGHNESS(NdotV, F0, li.roughness);
+        float3 F_ibl = F_SCHLICK_ROUGHNESS(NdotV, F0, roughness);
         float3 kS_ibl = F_ibl;
         float3 kD_ibl = (1.0 - kS_ibl) * (1.0 - li.metallic);
 
         float3 worldN = normalize(mul((float3x3)pc.sceneData[pc.sceneDataIndex].invView, N));
         float3 irradiance = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], worldN);
         float3 reflectionDiffuse = irradiance * li.albedo.xyz;
-        float3 reflectionSpecular = SpecularReflection(assetCubemaps[pc.skyboxIndex], assetTextures[BRDF_LUT_BINDLESS_INDEX], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], V, N, pc.sceneData[pc.sceneDataIndex].invView, li.roughness, F_ibl);
+        float3 reflectionSpecular = SpecularReflection(assetCubemaps[pc.skyboxIndex], assetTextures[BRDF_LUT_BINDLESS_INDEX], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], V, N, pc.sceneData[pc.sceneDataIndex].invView, roughness, F_ibl);
         ibl = (kD_ibl * reflectionDiffuse + reflectionSpecular) * gtao;
     }
 

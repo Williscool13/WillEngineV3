@@ -495,6 +495,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
     }
 
     if (ImGui::Begin("Debug View")) {
+        ImGui::Checkbox("Enable UI", &state->debug.bEnableUI);
         ImGui::Checkbox("Wireframe", &state->debug.bWireframe);
 
         ImGui::Text("Current Debug View: %s", state->debug.resourceName.IsEmpty() ? "None" : state->debug.resourceName.c_str());

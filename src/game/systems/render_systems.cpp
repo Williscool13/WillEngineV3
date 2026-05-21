@@ -640,4 +640,308 @@ void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* stat
         });
     }
 }
+
+void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
+{
+    Clay_SetLayoutDimensions({static_cast<float>(ctx->windowContext.viewportWidth), static_cast<float>(ctx->windowContext.viewportHeight)});
+
+    const Vec2 mousePos = state->inputFrame->mousePositionAbsolute;
+    const bool bIsMouseDown = state->inputFrame->GetMouse(MouseButton::LMB).down;
+    const float viewportOffsetX = static_cast<float>(ctx->windowContext.viewportOffsetX);
+    const float viewportOffsetY = static_cast<float>(ctx->windowContext.viewportOffsetY);
+    Clay_SetPointerState(Clay_Vector2{mousePos.x - viewportOffsetX, mousePos.y - viewportOffsetY}, bIsMouseDown);
+
+    const Vec2 mouseWheelDelta = state->inputFrame->mouseWheelDelta;
+    Clay_UpdateScrollContainers(true, Clay_Vector2{mouseWheelDelta.x, mouseWheelDelta.y}, state->timeFrame->deltaTime);
+
+    Clay_BeginLayout();
+
+    constexpr Clay_Color COLOR_LIGHT = Clay_Color{224, 215, 210, 255};
+    constexpr Clay_Color COLOR_RED = Clay_Color{168, 66, 28, 255};
+    constexpr Clay_Color COLOR_ORANGE = Clay_Color{225, 138, 50, 255};
+
+    uint32_t smilingFriendImageIndex = SMILING_FRIENDS_BINDLESS_INDEX;
+
+    constexpr Clay_Color COLOR_DARK = Clay_Color{30, 30, 40, 240};
+    constexpr Clay_Color COLOR_ITEM = Clay_Color{60, 80, 120, 255};
+    constexpr Clay_Color COLOR_SCROLLBAR = Clay_Color{180, 180, 200, 160};
+    constexpr Clay_Color COLOR_OVERLAY = Clay_Color{255, 120, 60, 80};
+
+    CLAY(CLAY_ID("OuterContainer"), { .layout = { .sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0)}, .padding = CLAY_PADDING_ALL(16), .childGap = 16 }, .backgroundColor = {250, 250, 255, 64} }) {
+        CLAY(CLAY_ID("SideBar"), {
+             .layout = {.sizing = {.width = CLAY_SIZING_FIXED(300), .height = CLAY_SIZING_GROW(0)}, .padding = CLAY_PADDING_ALL(16), .childGap = 16, .layoutDirection = CLAY_TOP_TO_BOTTOM, },
+             .backgroundColor = COLOR_LIGHT
+             }) {
+            CLAY(CLAY_ID("ProfilePictureOuter"), { .layout = { .sizing = { .width = CLAY_SIZING_GROW(0) }, .padding = CLAY_PADDING_ALL(16), .childGap = 16, .childAlignment = { .y = CLAY_ALIGN_Y_CENTER } }, .backgroundColor = COLOR_RED }) {
+                CLAY(CLAY_ID("ProfilePicture"), { .layout = { .sizing = { .width = CLAY_SIZING_FIXED(60), .height = CLAY_SIZING_FIXED(60) }}, .image = { .imageData = &smilingFriendImageIndex } }) {}
+                CLAY_TEXT(CLAY_STRING("Clay - UI Library"), { .textColor = {255, 255, 255, 255}, .fontSize = 24, });
+            }
+            CLAY_TEXT(CLAY_STRING("WillEngine"), {.textColor = {255, 255, 255, 255}, .fontSize = 24, });
+
+            CLAY(CLAY_ID("MainContent"), { .layout = { .sizing = { .width = CLAY_SIZING_GROW(0), .height = CLAY_SIZING_GROW(0) } }, .backgroundColor = COLOR_LIGHT }) {}
+        }
+
+        // Border demo: nested boxes showing per-side widths and corner radius
+        CLAY(CLAY_ID("BorderDemo"), {
+             .layout = { .sizing = { CLAY_SIZING_FIXED(200), CLAY_SIZING_FIXED(200) }, .padding = CLAY_PADDING_ALL(16), .childGap = 12, .layoutDirection = CLAY_TOP_TO_BOTTOM },
+             .backgroundColor = {20, 20, 30, 255},
+             .border = { .color = {100, 200, 255, 255}, .width = { .left = 3, .right = 3, .top = 3, .bottom = 3 } },
+             }) {
+            CLAY(CLAY_ID("BorderInner1"), {
+                 .layout = { .sizing = { CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(60) }, .childAlignment = { .x = CLAY_ALIGN_X_CENTER, .y = CLAY_ALIGN_Y_CENTER } },
+                 .backgroundColor = {40, 40, 60, 255},
+                 .cornerRadius = CLAY_CORNER_RADIUS(8),
+                 .border = { .color = {255, 180, 50, 255}, .width = { .left = 2, .right = 2, .top = 2, .bottom = 2 } },
+                 }) {
+                CLAY_TEXT(CLAY_STRING("Rounded"), { .textColor = {220, 220, 255, 255}, .fontSize = 18 });
+            }
+            CLAY(CLAY_ID("BorderInner2"), {
+                 .layout = { .sizing = { CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(60) }, .childAlignment = { .x = CLAY_ALIGN_X_CENTER, .y = CLAY_ALIGN_Y_CENTER } },
+                 .backgroundColor = {40, 40, 60, 255},
+                 .border = { .color = {80, 255, 120, 255}, .width = { .left = 6, .right = 1, .top = 1, .bottom = 6 } },
+                 }) {
+                CLAY_TEXT(CLAY_STRING("Asymmetric"), { .textColor = {220, 220, 255, 255}, .fontSize = 18 });
+            }
+        }
+
+        // Rounded image demo
+        CLAY(CLAY_ID("RoundedImage"), {
+             .layout = { .sizing = { CLAY_SIZING_FIXED(200), CLAY_SIZING_FIXED(120) } },
+             .cornerRadius = CLAY_CORNER_RADIUS(20),
+             .image = { .imageData = &smilingFriendImageIndex },
+             }) {}
+
+        // Overlay demo: a panel whose overlayColor tints all children
+        CLAY(CLAY_ID("OverlayDemo"), {
+             .layout = { .sizing = { CLAY_SIZING_FIXED(160), CLAY_SIZING_FIXED(200) }, .padding = CLAY_PADDING_ALL(10), .childGap = 8, .layoutDirection = CLAY_TOP_TO_BOTTOM },
+             .backgroundColor = {50, 50, 80, 255},
+             .overlayColor = { 80, 160, 255, 100 },
+             .border = { .color = {180, 180, 255, 200}, .width = { .left = 1, .right = 1, .top = 1, .bottom = 1 } },
+             }) {
+            CLAY_TEXT(CLAY_STRING("Overlay"), { .textColor = {255, 255, 255, 255}, .fontSize = 20 });
+            CLAY(CLAY_ID("OverlayItem1"), {
+                 .layout = { .sizing = { CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(40) }, .padding = { 8, 8, 0, 0 }, .childAlignment = { .y = CLAY_ALIGN_Y_CENTER } },
+                 .backgroundColor = COLOR_RED,
+                 .cornerRadius = CLAY_CORNER_RADIUS(4),
+                 }) {
+                CLAY_TEXT(CLAY_STRING("Red"), { .textColor = {255, 255, 255, 255}, .fontSize = 16 });
+            }
+            CLAY(CLAY_ID("OverlayItem2"), {
+                 .layout = { .sizing = { CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(40) }, .padding = { 8, 8, 0, 0 }, .childAlignment = { .y = CLAY_ALIGN_Y_CENTER } },
+                 .backgroundColor = COLOR_ORANGE,
+                 .cornerRadius = CLAY_CORNER_RADIUS(4),
+                 }) {
+                CLAY_TEXT(CLAY_STRING("Orange"), { .textColor = {255, 255, 255, 255}, .fontSize = 16 });
+            }
+        }
+
+        // Scrollable list with overlay color tint and a floating scrollbar
+        CLAY(CLAY_ID("ScrollDemo"), {
+             .layout = { .sizing = { .width = CLAY_SIZING_FIXED(260), .height = CLAY_SIZING_FIXED(300) }, .layoutDirection = CLAY_TOP_TO_BOTTOM },
+             .backgroundColor = COLOR_DARK,
+             .overlayColor = COLOR_OVERLAY,
+             }) {
+            // Clipped scroll area (generates SCISSOR_START/END)
+            CLAY(CLAY_ID("ScrollList"), {
+                 .layout = { .sizing = { CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0) }, .padding = CLAY_PADDING_ALL(8), .childGap = 6, .layoutDirection = CLAY_TOP_TO_BOTTOM },
+                 .clip = { .vertical = true, .childOffset = Clay_GetScrollOffset() },
+                 }) {
+                for (int32_t i = 0; i < 32; ++i) {
+                    CLAY(CLAY_IDI("ScrollItem", i), {
+                         .layout = { .sizing = { CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(36) }, .padding = { 8, 8, 6, 6 }, .childAlignment = { .y = CLAY_ALIGN_Y_CENTER } },
+                         .backgroundColor = COLOR_ITEM,
+                         .cornerRadius = CLAY_CORNER_RADIUS(4),
+                         }) {
+                        CLAY_TEXT(CLAY_STRING("Item"), { .textColor = {220, 220, 255, 255}, .fontSize = 18 });
+                    }
+                }
+            }
+
+            // Floating scrollbar thumb
+            Clay_ScrollContainerData scrollData = Clay_GetScrollContainerData(Clay_GetElementId(CLAY_STRING("ScrollList")));
+            if (scrollData.found && scrollData.contentDimensions.height > scrollData.scrollContainerDimensions.height) {
+                const float trackH = scrollData.scrollContainerDimensions.height;
+                const float thumbH = (trackH / scrollData.contentDimensions.height) * trackH;
+                const float thumbY = (-scrollData.scrollPosition->y / scrollData.contentDimensions.height) * trackH;
+                CLAY(CLAY_ID("ScrollThumb"), {
+                     .layout = { .sizing = { CLAY_SIZING_FIXED(6), CLAY_SIZING_FIXED(thumbH) } },
+                     .backgroundColor = COLOR_SCROLLBAR,
+                     .cornerRadius = CLAY_CORNER_RADIUS(3),
+                     .floating = {
+                     .offset = { .x = -6, .y = thumbY },
+                     .parentId = Clay_GetElementId(CLAY_STRING("ScrollList")).id,
+                     .zIndex = 1,
+                     .attachPoints = { .element = CLAY_ATTACH_POINT_RIGHT_TOP, .parent = CLAY_ATTACH_POINT_RIGHT_TOP },
+                     .attachTo = CLAY_ATTACH_TO_PARENT,
+                     },
+                     }) {}
+            }
+        }
+    }
+
+    Clay_RenderCommandArray renderCommands = Clay_EndLayout(frameBuffer->timeFrame.deltaTime);
+
+    const float vpWidth = static_cast<float>(ctx->windowContext.viewportWidth);
+    const float vpHeight = static_cast<float>(ctx->windowContext.viewportHeight);
+
+    Core::ViewFamily& vf = frameBuffer->mainViewFamily;
+    const Engine::Font* uiFont = ctx->assetManager->GetFont(state->uiFont);
+    assert(uiFont);
+
+    for (int32_t i = 0; i < renderCommands.length; ++i) {
+        const Clay_RenderCommand& cmd = renderCommands.internalArray[i];
+
+        switch (cmd.commandType) {
+            case CLAY_RENDER_COMMAND_TYPE_SCISSOR_START:
+            {
+                const Clay_BoundingBox& bb = cmd.boundingBox;
+                Core::UIDrawCommand dc{.type = Core::UICommandType::ScissorPush};
+                dc.scissor = Core::UIScissorCommand{static_cast<int32_t>(bb.x), static_cast<int32_t>(bb.y), static_cast<uint32_t>(bb.width), static_cast<uint32_t>(bb.height)};
+                vf.uiDrawList.PushBack(dc);
+                break;
+            }
+            case CLAY_RENDER_COMMAND_TYPE_SCISSOR_END:
+            {
+                vf.uiDrawList.PushBack(Core::UIDrawCommand{.type = Core::UICommandType::ScissorPop});
+                break;
+            }
+            case CLAY_RENDER_COMMAND_TYPE_OVERLAY_COLOR_START:
+            {
+                const Clay_Color& c = cmd.renderData.overlayColor.color;
+                Core::UIDrawCommand dc{.type = Core::UICommandType::OverlayPush};
+                dc.overlay = Core::UIOverlayColorCommand{.color = {c.r / 255.0f, c.g / 255.0f, c.b / 255.0f, c.a / 255.0f}};
+                vf.uiDrawList.PushBack(dc);
+                break;
+            }
+            case CLAY_RENDER_COMMAND_TYPE_OVERLAY_COLOR_END:
+            {
+                vf.uiDrawList.PushBack(Core::UIDrawCommand{.type = Core::UICommandType::OverlayPop});
+                break;
+            }
+            case CLAY_RENDER_COMMAND_TYPE_RECTANGLE:
+            {
+                const Clay_BoundingBox& bb = cmd.boundingBox;
+                const Clay_Color& c = cmd.renderData.rectangle.backgroundColor;
+                const Clay_CornerRadius& cr = cmd.renderData.rectangle.cornerRadius;
+                Core::UIDrawCommand dc{.type = Core::UICommandType::Rect};
+                dc.rect = Core::UIRectDrawCall{
+                    .color = {c.r / 255.0f, c.g / 255.0f, c.b / 255.0f, c.a / 255.0f},
+                    .cornerRadius = {cr.topLeft, cr.topRight, cr.bottomLeft, cr.bottomRight},
+                    .pxMin = {bb.x, bb.y},
+                    .pxMax = {bb.x + bb.width, bb.y + bb.height},
+                    .zIndex = cmd.zIndex,
+                };
+                vf.uiDrawList.PushBack(dc);
+                break;
+            }
+            case CLAY_RENDER_COMMAND_TYPE_IMAGE:
+            {
+                const Clay_BoundingBox& bb = cmd.boundingBox;
+                const Clay_ImageRenderData& img = cmd.renderData.image;
+                const uint32_t bindlessIndex = *static_cast<const uint32_t*>(img.imageData);
+                const Clay_Color& tc = img.backgroundColor;
+                const bool bUntinted = tc.r == 0 && tc.g == 0 && tc.b == 0 && tc.a == 0;
+                const Vec4 tint = bUntinted
+                    ? Vec4{1.0f, 1.0f, 1.0f, 1.0f}
+                    : Vec4{tc.r / 255.0f, tc.g / 255.0f, tc.b / 255.0f, tc.a / 255.0f};
+                const Clay_CornerRadius& cr = img.cornerRadius;
+                Core::UIDrawCommand dc{.type = Core::UICommandType::Image};
+                dc.image = Core::UIRenderCommandImage{
+                    .pxMin = {bb.x, bb.y},
+                    .pxMax = {bb.x + bb.width, bb.y + bb.height},
+                    .uvMin = {0.0f, 1.0f}, // y flip: viewport Y-flip in SetupUIRender inverts V
+                    .uvMax = {1.0f, 0.0f},
+                    .tintColor = tint,
+                    .cornerRadius = {cr.topLeft, cr.topRight, cr.bottomLeft, cr.bottomRight},
+                    .imageBindlessIndex = bindlessIndex,
+                    .zIndex = cmd.zIndex,
+                };
+                vf.uiDrawList.PushBack(dc);
+                break;
+            }
+            case CLAY_RENDER_COMMAND_TYPE_BORDER:
+            {
+                const Clay_BoundingBox& bb = cmd.boundingBox;
+                const Clay_BorderRenderData& bd = cmd.renderData.border;
+                const Clay_Color& c = bd.color;
+                Core::UIDrawCommand dc{.type = Core::UICommandType::Border};
+                dc.border = Core::UIBorderDrawCall{
+                    .color = {c.r / 255.0f, c.g / 255.0f, c.b / 255.0f, c.a / 255.0f},
+                    .borderWidths = {
+                        static_cast<float>(bd.width.left),
+                        static_cast<float>(bd.width.right),
+                        static_cast<float>(bd.width.top),
+                        static_cast<float>(bd.width.bottom),
+                    },
+                    .cornerRadius = {
+                        bd.cornerRadius.topLeft,
+                        bd.cornerRadius.topRight,
+                        bd.cornerRadius.bottomLeft,
+                        bd.cornerRadius.bottomRight,
+                    },
+                    .pxMin = {bb.x, bb.y},
+                    .pxMax = {bb.x + bb.width, bb.y + bb.height},
+                    .zIndex = cmd.zIndex,
+                };
+                vf.uiDrawList.PushBack(dc);
+                break;
+            }
+            case CLAY_RENDER_COMMAND_TYPE_TEXT:
+            {
+                const Clay_BoundingBox& bb = cmd.boundingBox;
+                const Clay_TextRenderData& td = cmd.renderData.text;
+                const float fontSize = td.fontSize;
+                const float scale = fontSize / uiFont->header.emSize;
+                const Vec4 color{td.textColor.r / 255.0f, td.textColor.g / 255.0f, td.textColor.b / 255.0f, td.textColor.a / 255.0f};
+
+                const auto quadStart = static_cast<uint32_t>(vf.uiGlyphQuads.Size());
+                uint32_t quadCount = 0;
+
+                float cursorX = bb.x;
+                const float baselineY = bb.y + fontSize;
+
+                for (int32_t ci = 0; ci < td.stringContents.length; ++ci) {
+                    const uint32_t cp = static_cast<unsigned char>(td.stringContents.chars[ci]);
+                    const Engine::WGlyphInfo* g = ctx->assetManager->GetGlyph(state->uiFont, cp);
+                    if (!g) {
+                        cursorX += fontSize * 0.25f;
+                        continue;
+                    }
+
+                    const float xMin = (cursorX + g->planeLeft * scale) / vpWidth * 2.0f - 1.0f;
+                    const float yMax = (baselineY - g->planeBottom * scale) / vpHeight * 2.0f - 1.0f;
+                    const float xMax = (cursorX + g->planeRight * scale) / vpWidth * 2.0f - 1.0f;
+                    const float yMin = (baselineY - g->planeTop * scale) / vpHeight * 2.0f - 1.0f;
+
+                    vf.uiGlyphQuads.PushBack(UIGlyphQuad{
+                        .color = {color.x, color.y, color.z, color.w},
+                        .posMin = {xMin, yMin},
+                        .posMax = {xMax, yMax},
+                        .uvMin = {g->uvLeft, g->uvBottom},
+                        .uvMax = {g->uvRight, g->uvTop},
+                        .uvOrigMin = {g->uvLeft, g->uvBottom},
+                        .uvOrigMax = {g->uvRight, g->uvTop},
+                    });
+                    ++quadCount;
+
+                    cursorX += g->advance * scale + td.letterSpacing;
+                }
+
+                if (quadCount == 0) { break; }
+
+                Core::UIDrawCommand dc{.type = Core::UICommandType::Text};
+                dc.text = Core::UITextDrawCall{
+                    .quadOffset = quadStart,
+                    .quadCount = quadCount,
+                    .atlasBindlessIndex = uiFont->atlasTexture.bindlessHandle.index,
+                    .pxRange = static_cast<float>(uiFont->header.sdfSpread),
+                    .zIndex = cmd.zIndex,
+                };
+                vf.uiDrawList.PushBack(dc);
+                break;
+            }
+            default: break;
+        }
+    }
+}
 }
