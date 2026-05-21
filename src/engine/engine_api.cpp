@@ -31,7 +31,7 @@ void EditorTextureResidency::Tick(EngineContext* ctx)
 
 void EditorTextureResidency::Acquire(TextureID id, EngineContext* ctx)
 {
-    if (entries.Contains(id)) return;
+    if (entries.Contains(id)) { return; }
 
     // Recover from destruction queue if re-acquired before cleanup
     for (auto it = pendingRemoval.begin(); it != pendingRemoval.end(); ++it) {
@@ -48,6 +48,7 @@ void EditorTextureResidency::Acquire(TextureID id, EngineContext* ctx)
         desc.magFilter = VK_FILTER_NEAREST;
         sampler = ctx->assetManager->LoadSampler(desc);
     }
+
     entries[id].texture = ctx->assetManager->LoadTexture(id);
 }
 

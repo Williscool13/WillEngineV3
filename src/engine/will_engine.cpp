@@ -200,6 +200,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
             memoryManager,
             renderThread->GetVulkanContext(),
             renderThread->GetResourceManager(),
+            renderThread->GetPipelineManager(),
             renderThread->GetPipelineManager()->GetPipelineCache(),
             scheduler);
         renderThread->InitializePipelineManager(asyncAssetLoadManager);
@@ -925,6 +926,14 @@ void WillEngine::EditorImgui()
                 assetGenerator->RequestFontGenerate(
                     Platform::GetAssetPath() / "fonts/JetBrainsMono/fonts/ttf/JetBrainsMonoNL-Regular.ttf",
                     Platform::GetAssetPath() / "fonts/JetBrainsMono/JetBrainsMono.wsfont");
+            }
+
+            ImGui::SeparatorText("Procedural Textures:");
+            if (ImGui::Button("Load Yellow Texture")) {
+                assetManager->LoadProceduralTexture(SID("yellow_texture"), 256, 256, VK_FORMAT_R8G8B8A8_UNORM, true, Engine::Texture::Origin::RuntimeProcedural);
+            }
+            if (ImGui::Button("Load Domain Warp")) {
+                assetManager->LoadProceduralTexture(SID("domain_warp"), 512, 512, VK_FORMAT_R8G8B8A8_UNORM, true, Engine::Texture::Origin::RuntimeProcedural);
             }
         }
 

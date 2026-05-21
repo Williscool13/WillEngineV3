@@ -786,6 +786,11 @@ SHADER_PUBLIC struct BRDFLUTPushConstant
     SHADER_PUBLIC uint32_t targetIndex;
 };
 
+SHADER_PUBLIC struct ProceduralTextureBasePushConstant
+{
+    SHADER_PUBLIC uint32_t outputIndex;
+};
+
 SHADER_PUBLIC struct SMAAAreaGeneratePushConstant
 {
     SHADER_PUBLIC uint32_t targetIndex;

@@ -104,8 +104,9 @@ RenderThread::~RenderThread()
     context->~VulkanContext();
 }
 
-void RenderThread::InitializePipelineManager(AssetLoad::AsyncAssetLoadManager* _asyncAssetLoadManager) const
+void RenderThread::InitializePipelineManager(AssetLoad::AsyncAssetLoadManager* _asyncAssetLoadManager)
 {
+    asyncAssetLoadManager = _asyncAssetLoadManager;
     pipelineManager->SetAssetLoadThread(_asyncAssetLoadManager);
     pipelineManager->RegisterPipelines();
 }
@@ -200,6 +201,19 @@ void RenderThread::ThreadMain()
             engineRenderSynchronization->gameFrames.fetch_add(1, std::memory_order_release);
         }
 
+        {
+            AssetLoad::GPUDispatchRequest req{};
+            uint32_t dispatched = 0;
+            while (dispatched < AssetLoad::PROCEDURAL_TEXTURE_DISPATCHES_PER_FRAME && asyncAssetLoadManager->graphicsDispatchQueue.try_dequeue(req)) {
+                VkSubmitInfo submitInfo{.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO};
+                submitInfo.commandBufferCount = 1;
+                submitInfo.pCommandBuffers = &req.cmd;
+                VK_CHECK(vkQueueSubmit(context->graphicsQueue, 1, &submitInfo, req.fence));
+                VK_CHECK(vkWaitForFences(context->device, 1, &req.fence, VK_TRUE, UINT64_MAX));
+                req.completionSignal->release();
+                ++dispatched;
+            }
+        }
 #ifdef WILL_EDITOR
         {
             AssetLoad::GPUDispatchRequest req{};

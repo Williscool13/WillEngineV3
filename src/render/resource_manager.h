@@ -13,6 +13,8 @@
 #include "render/descriptors/vk_bindless_resources_storage.h"
 #include "render-graph/render_graph_resources.h"
 
+#include "render/descriptors/procedural_texture_generate_resources.h"
+
 #if WILL_EDITOR
 #include "editor/asset-generation/environment_map_generate_resources.h"
 #include "editor/renderer/debug_readback_buffer.h"
@@ -54,6 +56,8 @@ struct ResourceManager
     // 1x1 black texture
     AllocatedImage blackDummyRG32Image;
     ImageView blackDummyRG32ImageView;
+
+    ProceduralTextureGenerateResources proceduralTextureGenerateResources{};
 
 #if WILL_EDITOR
     Editor::EnvironmentMapGenerateResources environmentMapGenerateResources{};

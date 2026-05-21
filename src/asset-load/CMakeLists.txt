@@ -22,6 +22,8 @@ add_library(asset-load STATIC
         asset_load_utils.cpp
         asset_load_utils.h
         model_types.cpp
+        asset-load-jobs/procedural_texture_load_slot.cpp
+        asset-load-jobs/procedural_texture_load_slot.h
 )
 
 target_include_directories(asset-load PUBLIC

@@ -50,7 +50,6 @@ struct EditorTextureResidency
     {
         Texture* texture{nullptr};
         uint64_t descSet{0};
-
         uint64_t freeOnFrame{~0x0ULL};
     };
 

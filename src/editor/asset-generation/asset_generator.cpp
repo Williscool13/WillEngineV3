@@ -192,7 +192,7 @@ void AssetGenerator::Join()
 
 void AssetGenerator::TransferQueueGPUDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) const
 {
-    asyncAssetLoadManager->QueueGPUDispatch(cmd, fence, completionSignal);
+    asyncAssetLoadManager->QueueTransferDispatch(cmd, fence, completionSignal);
 }
 
 void AssetGenerator::GraphicsQueueGPUDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) const
@@ -431,4 +431,5 @@ void AssetGenerator::OnFontGenerateComplete(bool success, FontGenerateSlotHandle
     workCounter.fetch_add(1);
     wakeCV.notify_one();
 }
+
 } // namespace Editor

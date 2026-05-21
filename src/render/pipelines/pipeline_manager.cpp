@@ -489,6 +489,12 @@ void PipelineManager::RegisterPipelines()
     RegisterComputePipeline(SID("debug_visualize"), src / "debug_visualize_compute.spv",
                             sizeof(DebugVisualizePushConstant), PipelineCategory::Critical);
 
+    const VkDescriptorSetLayout proceduralTexLayout = resourceManager->proceduralTextureGenerateResources.descriptorSetLayout.handle;
+    RegisterComputePipelineCustomLayout("yellow_texture"_sid, src / "yellow_texture_compute.spv",
+                                        sizeof(ProceduralTextureBasePushConstant), PipelineCategory::Critical, Core::Span(&proceduralTexLayout, 1));
+    RegisterComputePipelineCustomLayout("domain_warp"_sid, src / "domain_warp_compute.spv",
+                                        sizeof(ProceduralTextureBasePushConstant), PipelineCategory::Critical, Core::Span(&proceduralTexLayout, 1));
+
 #if WILL_EDITOR
     const VkDescriptorSetLayout emapLayout = resourceManager->environmentMapGenerateResources.descriptorSetLayout.handle;
     RegisterComputePipelineCustomLayout(SID("ibl_equirect_to_cubemap"), src / "ibl_equirect_to_cubemap_compute.spv",

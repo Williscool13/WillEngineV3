@@ -513,6 +513,32 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
         pendingSamplerLogCount = 0;
     }
 
+    AssetLoad::ProceduralTextureLoadComplete proceduralTexComplete{};
+    int32_t proceduralTexturesThisTick{0};
+    while (assetLoadManager->TryDequeueProceduralTextureComplete(proceduralTexComplete)) {
+        if (proceduralTexComplete.bSuccess) {
+            proceduralTexComplete.texture->loadState = Texture::LoadState::Loaded;
+            if (bVerboseLogging.load(std::memory_order_relaxed)) {
+                LOG_TRACE(Asset, "Procedural texture generation succeeded (bindless index: {})", static_cast<uint32_t>(proceduralTexComplete.texture->bindlessHandle.index));
+            }
+            loadCounts.textureLoadedCount++;
+            proceduralTexturesThisTick++;
+        }
+        else {
+            proceduralTexComplete.texture->loadState = Texture::LoadState::FailedToLoad;
+            LOG_ERROR(Asset, "Procedural texture generation failed: {:x}", proceduralTexComplete.texture->textureId.id);
+        }
+    }
+
+    if (proceduralTexturesThisTick > 0) {
+        pendingProceduralTextureLogCount += proceduralTexturesThisTick;
+        proceduralTextureLastActivity = std::chrono::steady_clock::now();
+    }
+    if (pendingProceduralTextureLogCount > 0 && proceduralTexturesThisTick == 0 && (std::chrono::steady_clock::now() - proceduralTextureLastActivity) >= std::chrono::seconds(ASSET_LOG_IDLE_SECONDS)) {
+        LOG_INFO(Asset, "{} procedural texture(s) generated", pendingProceduralTextureLogCount);
+        pendingProceduralTextureLogCount = 0;
+    }
+
     int32_t fontsThisTick{0};
     for (auto& font : fonts) {
         if (!fontAllocator.IsValid(font.selfHandle)) { continue; }
@@ -588,6 +614,10 @@ void AssetManager::ResolveUnloads()
         }
         resourceManager->bindlessSamplerTextureDescriptorBuffer.ReleaseTextureBinding(texture.bindlessHandle);
         textureIdToHandle.Remove(texture.textureId);
+        if (texture.origin == Texture::Origin::RuntimeProcedural) {
+            textureCache.Remove(texture.textureId);
+            textureNameToId.Remove(StringID{texture.name.c_str(), texture.name.Size()});
+        }
         textureAllocator.Remove(texture.selfHandle);
         texture = {};
         texturesUnloadedThisTick++;
@@ -835,6 +865,70 @@ Texture* AssetManager::LoadTexture(TextureID textureId)
         LOG_TRACE(Asset, "Requesting texture load: {}", texture.name.c_str());
     }
     assetLoadManager->RequestTextureLoad(&texture);
+
+    return &texture;
+}
+
+Texture* AssetManager::LoadProceduralTexture(StringID pipelineId, uint32_t width, uint32_t height, VkFormat format, bool mipmapped, Texture::Origin origin)
+{
+    TextureID textureId{pipelineId.id};
+
+    TextureHandle* existingPtr = textureIdToHandle.Find(textureId);
+    if (existingPtr != nullptr) {
+        if (textureAllocator.IsValid(*existingPtr)) {
+            Texture& existing = textures[existingPtr->index];
+            existing.refCount++;
+            existing.retireFrame = 0;
+            return &existing;
+        }
+        textureIdToHandle.Remove(textureId);
+    }
+
+    TextureHandle handle = textureAllocator.Add();
+    if (!handle.IsValid()) {
+        LOG_ERROR(Asset, "LoadProceduralTexture: no texture slots available");
+        return nullptr;
+    }
+
+    uint32_t mipCount = mipmapped ? static_cast<uint32_t>(std::floor(std::log2(static_cast<float>(std::max(width, height))))) + 1u : 1u;
+
+    VkImageCreateInfo imageCreateInfo = Render::VkHelpers::ImageCreateInfo(
+        format,
+        {width, height, 1},
+        VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT
+    );
+    imageCreateInfo.mipLevels = mipCount;
+    Render::AllocatedImage image = Render::AllocatedImage::CreateAllocatedImage(resourceManager->context, imageCreateInfo);
+
+    VkImageViewCreateInfo viewInfo = Render::VkHelpers::ImageViewCreateInfo(image.handle, format, VK_IMAGE_ASPECT_COLOR_BIT);
+    viewInfo.subresourceRange = Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, mipCount, 0, 1);
+    Render::ImageView sampledView = Render::ImageView::CreateImageView(resourceManager->context, viewInfo);
+
+    Core::InlineString<128> name = Core::InlineString<128>::Format("procedural_%llu", textureId.id);
+    const StringID nameSid{name.c_str(), name.Size()};
+
+    Texture& texture = textures[handle.index];
+    texture.selfHandle = handle;
+    texture.textureId = textureId;
+    texture.name = name;
+    texture.width = width;
+    texture.height = height;
+    texture.mipCount = mipCount;
+    texture.image = std::move(image);
+    texture.imageView = std::move(sampledView);
+    texture.loadState = Texture::LoadState::Loading;
+    texture.refCount = 1;
+    texture.origin = origin;
+    texture.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTexture();
+
+    textureIdToHandle[textureId] = handle;
+    textureNameToId[nameSid] = textureId;
+    textureCache[textureId] = {.name = name, .width = width, .height = height, .mipCount = mipCount};
+
+    if (bVerboseLogging.load(std::memory_order_relaxed)) {
+        LOG_TRACE(Asset, "Requesting procedural texture load: {:x} ({}x{}, {} mips)", textureId.id, width, height, mipCount);
+    }
+    assetLoadManager->RequestProceduralTextureLoad(&texture, pipelineId);
 
     return &texture;
 }

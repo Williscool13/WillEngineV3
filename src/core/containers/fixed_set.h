@@ -123,7 +123,7 @@ public:
         return *this;
     }
 
-    /** @brief Inserts key; no-op if already present. Returns true if inserted. */
+    /** Inserts key; no-op if already present. Returns true if inserted. */
     bool Insert(const K& key)
     {
         assert(slots_ != nullptr && "FixedSet: not initialized");

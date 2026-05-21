@@ -168,6 +168,9 @@ ResourceManager::ResourceManager(VulkanContext* context)
 
     blackDummyRG32ImageView = ImageView::CreateImageView(context, viewInfo);
 
+    proceduralTextureGenerateResources = ProceduralTextureGenerateResources(context);
+    proceduralTextureGenerateResources.SetSampler(linearSampler, 0);
+
 #if WILL_EDITOR
     environmentMapGenerateResources = Editor::EnvironmentMapGenerateResources(context);
     brdfLutGenerateResources = Render::BindlessResourcesStorage<1>(context);

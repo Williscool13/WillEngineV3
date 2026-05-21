@@ -21,6 +21,7 @@ namespace AssetLoad
 {
 class CubemapLoadSlot;
 class TextureLoadSlot;
+class ProceduralTextureLoadSlot;
 class StaticModelLoadSlot;
 class ProceduralModelLoadSlot;
 class AudioLoadSlot;
@@ -78,6 +79,7 @@ using ModelSlotHandle = Core::Handle<StaticModelLoadSlot>;
 using ProceduralModelSlotHandle = Core::Handle<ProceduralModelLoadSlot>;
 using TextureSlotHandle = Core::Handle<TextureLoadSlot>;
 using CubemapSlotHandle = Core::Handle<CubemapLoadSlot>;
+using ProceduralTextureSlotHandle = Core::Handle<ProceduralTextureLoadSlot>;
 using UploadStagingSlotHandle = Core::Handle<UploadStaging>;
 
 struct AudioLoadRequest
@@ -150,6 +152,18 @@ struct SamplerLoadRequest
 struct SamplerLoadComplete
 {
     Engine::Sampler* sampler;
+    bool bSuccess;
+};
+
+struct ProceduralTextureLoadRequest
+{
+    Engine::Texture* texture;
+    StringID pipelineId;
+};
+
+struct ProceduralTextureLoadComplete
+{
+    Engine::Texture* texture;
     bool bSuccess;
 };
 } // AssetLoad

@@ -112,7 +112,7 @@ public: // Models
 
 
 public: // Textures
-    bool IsTextureLoaded(TextureID textureId)
+    bool IsTextureLoaded(const TextureID textureId) const
     {
         return textureIdToHandle.Contains(textureId);
     }
@@ -127,6 +127,18 @@ public: // Textures
     Texture* LoadTexture(TextureID textureId);
 
     bool ReloadTexture(TextureID textureId);
+
+    /**
+     * Load a procedurally generated texture. If already loaded, returns the existing instance (deduplication by pipelineId).
+     * Pre-reserves a bindless slot and enqueues a compute dispatch via AsyncAssetLoadManager.
+     * @param pipelineId Compute pipeline that generates the texture; also serves as the TextureID.
+     * @param width Texture width in pixels.
+     * @param height Texture height in pixels.
+     * @param format VkFormat; must support VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT.
+     * @param mipmapped Generate full mip chain after dispatch.
+     * @return Pointer to the Texture (LoadState::Loading until generation completes), or nullptr on failure.
+     */
+    Texture* LoadProceduralTexture(StringID pipelineId, uint32_t width, uint32_t height, VkFormat format, bool mipmapped, Texture::Origin origin);
 
     void UnloadTexture(TextureID id);
 
@@ -273,6 +285,9 @@ private:
 
     int32_t pendingTextureLogCount{0};
     std::chrono::steady_clock::time_point textureLastActivity{};
+
+    int32_t pendingProceduralTextureLogCount{0};
+    std::chrono::steady_clock::time_point proceduralTextureLastActivity{};
 
     int32_t pendingCubemapLogCount{0};
     std::chrono::steady_clock::time_point cubemapLastActivity{};

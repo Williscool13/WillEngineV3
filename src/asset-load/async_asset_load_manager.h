@@ -18,6 +18,7 @@
 #include "asset-load-jobs/procedural_model_load_slot.h"
 #include "asset-load-jobs/texture_load_slot.h"
 #include "asset-load-jobs/cubemap_load_slot.h"
+#include "asset-load-jobs/procedural_texture_load_slot.h"
 #include "core/containers/array.h"
 #include "core/memory/lock_free_handle_allocator.h"
 #include "engine/resources/sampler/sampler.h"
@@ -30,6 +31,7 @@ public:
     AsyncAssetLoadManager(Core::MemoryManager& memoryManager,
                           Render::VulkanContext* context,
                           Render::ResourceManager* resourceManager,
+                          Render::PipelineManager* pipelineManager,
                           VkPipelineCache pipelineCache,
                           enki::TaskScheduler* scheduler);
 
@@ -85,6 +87,11 @@ public:
 
     bool TryDequeueSamplerComplete(SamplerLoadComplete& outResult);
 
+    // Procedural texture loading
+    void RequestProceduralTextureLoad(Engine::Texture* texture, StringID pipelineId);
+
+    bool TryDequeueProceduralTextureComplete(ProceduralTextureLoadComplete& outResult);
+
 
     [[nodiscard]] uint32_t GetActiveAudioLoadCount() const
     {
@@ -106,13 +113,19 @@ public:
         return textureLoadAllocator.GetCount();
     }
 
-    void QueueGPUDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal);
+    void QueueTransferDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal);
+
+    void QueueGraphicsDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal);
+
+    // Drained by RenderThread each frame on the graphics queue
+    moodycamel::ConcurrentQueue<GPUDispatchRequest> graphicsDispatchQueue;
 
 private:
     enki::TaskScheduler* scheduler{};
     Core::MemoryManager* memoryManager{};
     Render::VulkanContext* context;
     Render::ResourceManager* resourceManager;
+    Render::PipelineManager* pipelineManager;
     VkPipelineCache pipelineCache;
     std::atomic<bool> bShouldExit{false};
 
@@ -166,7 +179,13 @@ private:
     moodycamel::ConcurrentQueue<SamplerLoadRequest> samplerRequestQueue;
     moodycamel::ConcurrentQueue<SamplerLoadComplete> samplerLoadCompleteQueue;
 
-    // GPU Uploads
+    // Procedural Texture Loading
+    Core::LockFreeHandleAllocator<ProceduralTextureLoadSlot, PROCEDURAL_TEXTURE_JOB_COUNT> proceduralTextureLoadAllocator;
+    Core::Array<ProceduralTextureLoadSlot, PROCEDURAL_TEXTURE_JOB_COUNT> proceduralTextureLoadSlots;
+    moodycamel::ConcurrentQueue<ProceduralTextureLoadRequest> proceduralTextureRequestQueue;
+    moodycamel::ConcurrentQueue<ProceduralTextureLoadComplete> proceduralTextureCompleteQueue;
+
+    // GPU Uploads (transfer queue)
     moodycamel::ConcurrentQueue<GPUDispatchRequest> gpuDispatchQueue;
     Core::LockFreeHandleAllocator<UploadStaging, GPU_DISPATCH_COUNT> uploadStagingAllocator{};
     Core::Array<UploadStaging, GPU_DISPATCH_COUNT> uploadStagings{};
@@ -182,6 +201,8 @@ private:
     void OnTextureLoadComplete(bool success, TextureSlotHandle textureSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle);
 
     void OnCubemapComplete(bool success, CubemapSlotHandle cubemapSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle);
+
+    void OnProceduralTextureLoadComplete(bool success, ProceduralTextureSlotHandle slotHandle);
 };
 } // AssetLoad
 #endif //WILL_ENGINE_ASYNC_ASSET_LOAD_THREAD_H

@@ -90,7 +90,7 @@ public:
 
     ~RenderThread();
 
-    void InitializePipelineManager(AssetLoad::AsyncAssetLoadManager* _asyncAssetLoadManager) const;
+    void InitializePipelineManager(AssetLoad::AsyncAssetLoadManager* _asyncAssetLoadManager);
 
     void Start();
 
@@ -143,6 +143,7 @@ private:
     SDL_Window* window{};
     Core::FrameSync* engineRenderSynchronization{};
     enki::TaskScheduler* scheduler{};
+    AssetLoad::AsyncAssetLoadManager* asyncAssetLoadManager{};
 
     // Threading
     std::atomic<bool> bShouldExit{false};

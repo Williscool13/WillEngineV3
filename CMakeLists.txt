@@ -361,6 +361,7 @@ add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/shadow_functions.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/ui_functions.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/pbr_functions.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/bindless_declarations.slang")
+add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/procedural_texture_declarations.slang")
 
 compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/debug_visualize.slang compute ComputeMain debug_visualize
@@ -463,6 +464,9 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/environment_map.slang fragment FragmentSkybox environment_map_skybox
 
         ${CMAKE_SOURCE_DIR}/shaders/brdf_lut.slang compute ComputeBRDFLUT brdf_lut_generate
+
+        ${CMAKE_SOURCE_DIR}/shaders/procedural_textures/yellow_texture.slang compute ComputeMain yellow_texture
+        ${CMAKE_SOURCE_DIR}/shaders/procedural_textures/domain_warp.slang compute ComputeMain domain_warp
 
         ${CMAKE_SOURCE_DIR}/shaders/anti-aliasing/subpixel_morphological_anti_aliasing_temporal_resolve.slang compute TemporalResolveMain smaa_temporal_resolve
 )

@@ -26,12 +26,14 @@ namespace AssetLoad
 AsyncAssetLoadManager::AsyncAssetLoadManager(Core::MemoryManager& memoryManager,
                                              Render::VulkanContext* context,
                                              Render::ResourceManager* resourceManager,
+                                             Render::PipelineManager* pipelineManager,
                                              VkPipelineCache pipelineCache,
                                              enki::TaskScheduler* scheduler)
     : scheduler(scheduler),
       memoryManager(&memoryManager),
       context(context),
       resourceManager(resourceManager),
+      pipelineManager(pipelineManager),
       pipelineCache(pipelineCache)
 {
     for (uint32_t i = 0; i < AUDIO_JOB_COUNT; ++i) {
@@ -58,7 +60,7 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Core::MemoryManager& memoryManager,
             resourceManager,
             &memoryManager,
             [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
-                QueueGPUDispatch(cmd, fence, completionSignal);
+                QueueTransferDispatch(cmd, fence, completionSignal);
             },
             [this](bool success, ModelSlotHandle modelSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle) {
                 OnModelLoadComplete(success, modelSlotHandle, uploadStagingSlotHandle);
@@ -73,7 +75,7 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Core::MemoryManager& memoryManager,
             resourceManager,
             &memoryManager,
             [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
-                QueueGPUDispatch(cmd, fence, completionSignal);
+                QueueTransferDispatch(cmd, fence, completionSignal);
             },
             [this](bool success, ProceduralModelSlotHandle slotHandle, UploadStagingSlotHandle uploadStagingSlotHandle) {
                 OnProceduralModelLoadComplete(success, slotHandle, uploadStagingSlotHandle);
@@ -88,7 +90,7 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Core::MemoryManager& memoryManager,
             resourceManager,
             &memoryManager,
             [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
-                QueueGPUDispatch(cmd, fence, completionSignal);
+                QueueTransferDispatch(cmd, fence, completionSignal);
             },
             [this](bool success, TextureSlotHandle textureSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle) {
                 OnTextureLoadComplete(success, textureSlotHandle, uploadStagingSlotHandle);
@@ -103,7 +105,7 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Core::MemoryManager& memoryManager,
             resourceManager,
             &memoryManager,
             [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
-                QueueGPUDispatch(cmd, fence, completionSignal);
+                QueueTransferDispatch(cmd, fence, completionSignal);
             },
             [this](bool success, CubemapSlotHandle cubemapSlotHandle, UploadStagingSlotHandle uploadStagingSlotHandle) {
                 OnCubemapComplete(success, cubemapSlotHandle, uploadStagingSlotHandle);
@@ -113,6 +115,21 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Core::MemoryManager& memoryManager,
 
     for (UploadStaging& uploadStaging : uploadStagings) {
         uploadStaging.Initialize(context, GPU_DISPATCH_STAGING_SIZE);
+    }
+
+    for (uint32_t i = 0; i < PROCEDURAL_TEXTURE_JOB_COUNT; ++i) {
+        proceduralTextureLoadSlots[i].Initialize(
+            scheduler,
+            context,
+            resourceManager,
+            pipelineManager,
+            [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal) {
+                QueueGraphicsDispatch(cmd, fence, completionSignal);
+            },
+            [this](bool success, ProceduralTextureSlotHandle slotHandle) {
+                OnProceduralTextureLoadComplete(success, slotHandle);
+            }
+        );
     }
 
     thisThread = std::jthread([this] { ThreadMain(); });
@@ -253,6 +270,21 @@ void AsyncAssetLoadManager::ThreadMain()
                 }
                 else {
                     cubemapRequestQueue.enqueue(cubemapReq);
+                }
+            }
+        }
+        //
+        {
+            ZoneScopedN("Process Procedural Texture Requests");
+            ProceduralTextureLoadRequest proceduralTexReq{};
+            if (proceduralTextureRequestQueue.try_dequeue(proceduralTexReq)) {
+                Core::Handle<ProceduralTextureLoadSlot> slotHandle = proceduralTextureLoadAllocator.Add();
+                if (slotHandle.IsValid()) {
+                    ProceduralTextureLoadSlot& slot = proceduralTextureLoadSlots[slotHandle.index];
+                    slot.Launch(slotHandle, proceduralTexReq.texture, proceduralTexReq.pipelineId);
+                }
+                else {
+                    proceduralTextureRequestQueue.enqueue(proceduralTexReq);
                 }
             }
         }
@@ -480,11 +512,58 @@ bool AsyncAssetLoadManager::TryDequeueSamplerComplete(SamplerLoadComplete& outRe
     return samplerLoadCompleteQueue.try_dequeue(outResult);
 }
 
-void AsyncAssetLoadManager::QueueGPUDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)
+void AsyncAssetLoadManager::QueueTransferDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)
 {
     gpuDispatchQueue.enqueue({cmd, fence, completionSignal});
     gpuDispatchWorkCounter.fetch_add(1);
     gpuDispatchWakeCV.notify_one();
+}
+
+void AsyncAssetLoadManager::QueueGraphicsDispatch(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)
+{
+    graphicsDispatchQueue.enqueue({cmd, fence, completionSignal});
+}
+
+void AsyncAssetLoadManager::RequestProceduralTextureLoad(Engine::Texture* texture, StringID pipelineId)
+{
+    ZoneScoped;
+
+    if (!texture) {
+        LOG_ERROR(Asset, "RequestProceduralTextureLoad called with null texture");
+        return;
+    }
+
+    proceduralTextureRequestQueue.enqueue({texture, pipelineId});
+    workCounter.fetch_add(1);
+    wakeCV.notify_one();
+}
+
+bool AsyncAssetLoadManager::TryDequeueProceduralTextureComplete(ProceduralTextureLoadComplete& outResult)
+{
+    return proceduralTextureCompleteQueue.try_dequeue(outResult);
+}
+
+void AsyncAssetLoadManager::OnProceduralTextureLoadComplete(bool success, ProceduralTextureSlotHandle slotHandle)
+{
+    ZoneScoped;
+
+    if (!proceduralTextureLoadAllocator.IsValid(slotHandle)) {
+        LOG_ERROR(Asset, "OnProceduralTextureLoadComplete called with invalid slot handle");
+        return;
+    }
+
+    ProceduralTextureLoadSlot& slot = proceduralTextureLoadSlots[slotHandle.index];
+    proceduralTextureCompleteQueue.enqueue({slot.outputTexture, success});
+
+    if (!success) {
+        LOG_ERROR(Asset, "Failed to generate procedural texture: {:x}", slot.outputTexture->textureId.id);
+    }
+
+    slot.Clear();
+    proceduralTextureLoadAllocator.Remove(slotHandle);
+
+    workCounter.fetch_add(1);
+    wakeCV.notify_one();
 }
 
 void AsyncAssetLoadManager::OnAudioLoadComplete(bool success, AudioSlotHandle slotHandle)
