@@ -1121,7 +1121,7 @@ void WillEngine::Run()
 #endif
         shaderWatcher.Poll();
 
-        ResolveLoadResult loadCounts = assetManager->ResolveLoads(engineRenderSynchronization->stagingFrameBuffer);
+        ResolveLoadResult loadCounts = assetManager->ResolveLoads(*engineRenderSynchronization->GetCurrentFrameBuffer());
         assetManager->ResolveUnloads();
 #if WILL_EDITOR
         {
@@ -1219,29 +1219,34 @@ void WillEngine::Run()
                     timeManager->UpdateRender();
                 }
 
-                Core::FrameBuffer& currentFrameBuffer = engineRenderSynchronization->frameBuffers[frameBufferIndex];
-                engineContext->lastKnownStableIdUnderCursor = currentFrameBuffer.stableIdUnderCursor;
-                engineRenderSynchronization->stagingFrameBuffer.currentFrameBuffer = frameBufferIndex;
-                engineRenderSynchronization->stagingFrameBuffer.bFreezeVisibility = bFreezeVisibility;
-                engineRenderSynchronization->stagingFrameBuffer.bLogRDG = bLogRDG;
-                engineRenderSynchronization->stagingFrameBuffer.bDrawImgui = bDrawImgui;
+                Core::FrameBuffer* frameBufferFramesInFlightAgo = engineRenderSynchronization->GetFrameBufferMinusFIF();
+                engineContext->lastKnownStableIdUnderCursor = frameBufferFramesInFlightAgo->stableIdUnderCursor;
+
+                Core::FrameBuffer* currentFrameBuffer = engineRenderSynchronization->GetCurrentFrameBuffer();
+                ImDrawDataSnapshot* currentImguiSnapshot = engineRenderSynchronization->GetCurrentImguiSnapshot();
+                currentFrameBuffer->currentFrameBuffer = engineRenderSynchronization->currentRenderFrame;
+                currentFrameBuffer->bFreezeVisibility = bFreezeVisibility;
+                currentFrameBuffer->bLogRDG = bLogRDG;
+                currentFrameBuffer->bDrawImgui = bDrawImgui;
+
+                engineRenderSynchronization->renderFrameBuffer[engineRenderSynchronization->currentRenderFrame] = engineRenderSynchronization->currentFrameBufferIndex;
 
                 //
                 {
                     ZoneScopedN("SwapchainRecreate");
-                    engineRenderSynchronization->stagingFrameBuffer.swapchainRecreateCommand.bIsMinimized = bMinimized;
+                    engineRenderSynchronization->GetCurrentFrameBuffer()->swapchainRecreateCommand.bIsMinimized = bMinimized;
                     if (bRequireSwapchainRecreate) {
-                        engineRenderSynchronization->stagingFrameBuffer.swapchainRecreateCommand.bEngineCommandsRecreate = true;
+                        engineRenderSynchronization->GetCurrentFrameBuffer()->swapchainRecreateCommand.bEngineCommandsRecreate = true;
 
                         int32_t w;
                         int32_t h;
                         SDL_GetWindowSize(window, &w, &h);
-                        engineRenderSynchronization->stagingFrameBuffer.swapchainRecreateCommand.windowWidth = w;
-                        engineRenderSynchronization->stagingFrameBuffer.swapchainRecreateCommand.windowHeight = h;
+                        engineRenderSynchronization->GetCurrentFrameBuffer()->swapchainRecreateCommand.windowWidth = w;
+                        engineRenderSynchronization->GetCurrentFrameBuffer()->swapchainRecreateCommand.windowHeight = h;
                         bRequireSwapchainRecreate = false;
                     }
                     else {
-                        engineRenderSynchronization->stagingFrameBuffer.swapchainRecreateCommand.bEngineCommandsRecreate = false;
+                        engineRenderSynchronization->GetCurrentFrameBuffer()->swapchainRecreateCommand.bEngineCommandsRecreate = false;
                     }
                 }
 
@@ -1258,7 +1263,7 @@ void WillEngine::Run()
                 // Viewport
                 {
                     if (bRequireViewportRecreate) {
-                        engineRenderSynchronization->stagingFrameBuffer.viewportResizeCommand = {
+                        engineRenderSynchronization->GetCurrentFrameBuffer()->viewportResizeCommand = {
                             true,
                             engineContext->windowContext.viewportOffsetX,
                             engineContext->windowContext.viewportOffsetY,
@@ -1268,7 +1273,7 @@ void WillEngine::Run()
                         bRequireViewportRecreate = false;
                     }
                     else {
-                        engineRenderSynchronization->stagingFrameBuffer.viewportResizeCommand.bEngineCommandsResize = false;
+                        engineRenderSynchronization->GetCurrentFrameBuffer()->viewportResizeCommand.bEngineCommandsResize = false;
                     }
                 }
 
@@ -1278,14 +1283,13 @@ void WillEngine::Run()
                     engineState->inputFrame->mousePositionAbsolute.y - engineContext->windowContext.viewportOffsetY
                 };
                 mousePos.y = engineContext->windowContext.viewportHeight - 1 - mousePos.y;
-                engineRenderSynchronization->stagingFrameBuffer.currentMousePosition = {(mousePos.x), (mousePos.y)};
+                engineRenderSynchronization->GetCurrentFrameBuffer()->currentMousePosition = {(mousePos.x), (mousePos.y)};
                 //
                 {
                     ZoneScopedN("GamePrepareFrame");
                     engineState->inputFrame = &engineState->renderInputFrame;
                     engineState->timeFrame = &engineState->renderTimeFrame;
-                    engineRenderSynchronization->stagingFrameBuffer.Reinitialize();
-                    gameFunctions.gamePrepareFrame(engineContext, engineState, &engineRenderSynchronization->stagingFrameBuffer);
+                    gameFunctions.gamePrepareFrame(engineContext, engineState, engineRenderSynchronization->GetCurrentFrameBuffer());
                     engineState->renderInputFrame = {};
                     engineState->renderTimeFrame = {};
                 }
@@ -1293,13 +1297,17 @@ void WillEngine::Run()
                 //
                 {
                     ZoneScopedN("SwapAndPrepare");
-                    std::swap(currentFrameBuffer, engineRenderSynchronization->stagingFrameBuffer);
-                    engineRenderSynchronization->stagingFrameBuffer.timeFrame = timeManager->GetTime();
-                    PrepareImgui(frameBufferIndex);
+                    // std::swap(currentFrameBuffer, engineRenderSynchronization->stagingFrameBuffer);
+                    engineRenderSynchronization->GetCurrentFrameBuffer()->timeFrame = timeManager->GetTime();
+                    PrepareImgui(currentImguiSnapshot);
                 }
 
-                frameBufferIndex = (frameBufferIndex + 1) % Core::FRAME_BUFFER_COUNT;
                 engineContext->currentFrame++;
+                engineRenderSynchronization->NextFrameBuffer();
+                engineRenderSynchronization->NextRenderFrame();
+                // Clear the frame buffer to be accumulated until the next render frame
+                engineRenderSynchronization->GetCurrentFrameBuffer()->Reinitialize();
+
                 engineRenderSynchronization->renderFrames.fetch_add(1, std::memory_order_release);
                 engineRenderSynchronization->renderCV.notify_one();
             }
@@ -1309,12 +1317,11 @@ void WillEngine::Run()
     }
 }
 
-void WillEngine::PrepareImgui(uint32_t currentFrameBufferIndex)
+void WillEngine::PrepareImgui(ImDrawDataSnapshot* imguiSnapshot)
 {
     ZoneScopedN("PreparingImGui")
     ImGui::Render();
-    ImDrawDataSnapshot& imguiSnapshot = engineRenderSynchronization->imguiDataSnapshots[currentFrameBufferIndex];
-    imguiSnapshot.SnapUsingSwap(ImGui::GetDrawData(), ImGui::GetTime());
+    imguiSnapshot->SnapUsingSwap(ImGui::GetDrawData(), ImGui::GetTime());
     static int32_t first = 1;
     if (first > 0) {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));

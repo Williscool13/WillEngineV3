@@ -40,8 +40,8 @@
 #include "pipelines/pipeline_manager.h"
 #include "render-view/render_view_helpers.h"
 #include "shadows/shadow_helpers.h"
+
 #if WILL_EDITOR
-#include <imgui.h>
 #include "editor/renderer/debug_readback_buffer.h"
 #include "shaders/instancing_interop.h"
 #endif
@@ -158,7 +158,9 @@ void RenderThread::ThreadMain()
             // Render Frame
             {
                 currentFrameInFlight = frameNumber % Core::FRAME_BUFFER_COUNT;
-                Core::FrameBuffer& frameBuffer = engineRenderSynchronization->frameBuffers[currentFrameInFlight];
+                uint32_t frameBufferIndex = engineRenderSynchronization->renderFrameBuffer[currentFrameInFlight];
+                Core::FrameBuffer& frameBuffer = engineRenderSynchronization->frameBuffers[frameBufferIndex];
+                ImDrawDataSnapshot& imguiSnapshot = engineRenderSynchronization->imguiDataSnapshots[frameBufferIndex];
                 assert(frameBuffer.currentFrameBuffer == currentFrameInFlight);
 
 
@@ -189,7 +191,7 @@ void RenderThread::ThreadMain()
 
                 // Wait for the frame N - 3 to finish using resources
                 RenderSynchronization& currentRenderSynchronization = frameSynchronization[currentFrameInFlight];
-                RenderFrame(currentFrameInFlight, currentRenderSynchronization, frameBuffer);
+                RenderFrame(currentFrameInFlight, currentRenderSynchronization, frameBuffer, imguiSnapshot);
 
                 frameNumber++;
             }
@@ -216,7 +218,7 @@ void RenderThread::ThreadMain()
     vkDeviceWaitIdle(context->device);
 }
 
-void RenderThread::RenderFrame(uint32_t currentFrameIndex, RenderSynchronization& renderSync, Core::FrameBuffer& frameBuffer)
+void RenderThread::RenderFrame(uint32_t currentFrameIndex, RenderSynchronization& renderSync, Core::FrameBuffer& frameBuffer, ImDrawDataSnapshot& imguiSnapshot)
 {
     ZoneScoped;
 
@@ -255,7 +257,7 @@ void RenderThread::RenderFrame(uint32_t currentFrameIndex, RenderSynchronization
     {
         TracyVkZone(context->tracyContext, renderSync.commandBuffer, "Frame");
         ProcessAcquisitions(renderSync.commandBuffer, frameBuffer.bufferAcquireOperations, frameBuffer.imageAcquireOperations);
-        res = RecordFrame(currentFrameIndex, renderSync.commandBuffer, renderSync.swapchainSemaphore, frameBuffer);
+        res = RecordFrame(currentFrameIndex, renderSync.commandBuffer, renderSync.swapchainSemaphore, frameBuffer, imguiSnapshot);
     }
     // ends if not already ended
     pipelineStatsQuery.End(renderSync.commandBuffer, currentFrameIndex);
@@ -309,7 +311,7 @@ void RenderThread::RenderFrame(uint32_t currentFrameIndex, RenderSynchronization
     }
 }
 
-RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCommandBuffer cmd, VkSemaphore swapchainSemaphore, Core::FrameBuffer& frameBuffer)
+RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCommandBuffer cmd, VkSemaphore swapchainSemaphore, Core::FrameBuffer& frameBuffer, ImDrawDataSnapshot& imguiSnapshot)
 {
     ZoneScoped;
 
@@ -561,7 +563,6 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
 #if WILL_EDITOR
         resourceManager->debugReadback.ScheduleCopies(*renderGraph, SID("debug_readback_buffer"));
-#endif
 
         if (!viewFamily.debugResourceName.IsEmpty()) {
             StringID debugTargetName = StringID(viewFamily.debugResourceName.c_str(), viewFamily.debugResourceName.Size());
@@ -647,6 +648,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 });
             }
         }
+#endif
     }
 
     renderGraph->ImportTexture(SID("swapchain_image"), currentSwapchainImage, currentSwapchainImageView, TextureInfo{swapchain->format, swapchain->extent.width, swapchain->extent.height, 1},
@@ -699,7 +701,6 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             const ResourceDimensions& dims = renderGraph->GetImageDimensions(SID("swapchain_image"));
             const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({dims.width, dims.height}, &imguiAttachment, nullptr);
             vkCmdBeginRendering(_cmd, &renderInfo);
-            ImDrawDataSnapshot& imguiSnapshot = engineRenderSynchronization->imguiDataSnapshots[frameIndex];
             ImGui_ImplVulkan_RenderDrawData(&imguiSnapshot.DrawData, _cmd);
 
             vkCmdEndRendering(_cmd);
@@ -763,6 +764,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         screenCapture->StartScreenshot();
     }
 
+#if WILL_EDITOR
     if (frameBuffer.currentMousePosition[0] > 0 && frameBuffer.currentMousePosition[0] < renderExtent[0] &&
         frameBuffer.currentMousePosition[1] > 0 && frameBuffer.currentMousePosition[1] < renderExtent[1]) {
         RenderPass& copyStableId = renderGraph->AddPass(SID("Copy Stable ID"), VK_PIPELINE_STAGE_2_COPY_BIT);
@@ -790,6 +792,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             );
         });
     }
+#endif
 
     RenderPass& readbackMeshletCount = renderGraph->AddPass(SID("[Critical] Readback Copy"), VK_PIPELINE_STAGE_2_COPY_BIT);
     readbackMeshletCount.ReadTransferBuffer(SID("readback_buffer"));

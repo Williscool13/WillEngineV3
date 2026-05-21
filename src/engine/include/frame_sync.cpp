@@ -8,14 +8,12 @@ namespace Core
 {
 FrameSync::FrameSync(MemoryManager& memoryManager)
 {
-    constexpr Core::AllocTag kFrameTags[] = {
-        Core::AllocTag::FrameSync0, Core::AllocTag::FrameSync1,
-        Core::AllocTag::FrameSync2, Core::AllocTag::FrameSync3,
+    constexpr AllocTag kFrameTags[] = {
+        AllocTag::FrameSync0, AllocTag::FrameSync1,
+        AllocTag::FrameSync2, AllocTag::FrameSync3,
     };
     for (size_t i = 0; i < frameBuffers.Size(); ++i) {
         frameBuffers[i] = FrameBuffer(memoryManager.ArenaPool(), kFrameTags[i]);
     }
-
-    stagingFrameBuffer = FrameBuffer(memoryManager.ArenaPool(), Core::AllocTag::FrameSync3);
 }
 } // Core

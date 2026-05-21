@@ -63,11 +63,11 @@ struct EditorTextureResidency
     ~EditorTextureResidency() = default;
 
 
-    void Tick(Engine::EngineContext* ctx);
-    void Acquire(TextureID id, Engine::EngineContext* ctx);
-    uint64_t GetDescSet(TextureID id, Engine::EngineContext* ctx);
-    void Release(TextureID id, Engine::EngineContext* ctx);
-    void ReleaseAll(Engine::EngineContext* ctx);
+    void Tick(EngineContext* ctx);
+    void Acquire(TextureID id, EngineContext* ctx);
+    uint64_t GetDescSet(TextureID id, EngineContext* ctx);
+    void Release(TextureID id, EngineContext* ctx);
+    void ReleaseAll(EngineContext* ctx);
 };
 
 constexpr uint32_t MAX_LOADED_SCENES = 8;

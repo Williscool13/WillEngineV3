@@ -20,6 +20,9 @@
 #include "types/render_types.h"
 #include "post-processing/post_processing.h"
 
+#include <imgui.h>
+#include <imgui_threaded_rendering.h>
+
 namespace AssetLoad
 {
 class GpuAssetUploadThread;
@@ -97,9 +100,9 @@ public:
 
     void ThreadMain();
 
-    void RenderFrame(uint32_t currentFrameIndex, RenderSynchronization& renderSync, Core::FrameBuffer& frameBuffer);
+    void RenderFrame(uint32_t currentFrameIndex, RenderSynchronization& renderSync, Core::FrameBuffer& frameBuffer, ImDrawDataSnapshot& imguiSnapshot);
 
-    RenderResponse RecordFrame(uint32_t frameIndex, VkCommandBuffer cmd, VkSemaphore swapchainSemaphore, Core::FrameBuffer& frameBuffer);
+    RenderResponse RecordFrame(uint32_t frameIndex, VkCommandBuffer cmd, VkSemaphore swapchainSemaphore, Core::FrameBuffer& frameBuffer, ImDrawDataSnapshot& imguiSnapshot);
 
     void ProcessAcquisitions(VkCommandBuffer cmd, Core::Span<Core::BufferAcquireOperation> bufferAcquireOperations, Core::Span<Core::ImageAcquireOperation> imageAcquireOperations);
 

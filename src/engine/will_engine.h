@@ -100,7 +100,7 @@ public:
 
     void Run();
 
-    void PrepareImgui(uint32_t currentFrameBufferIndex);
+    void PrepareImgui(ImDrawDataSnapshot* imguiSnapshot);
 
     void Cleanup();
 
@@ -136,7 +136,6 @@ private: // Subsystems
     Core::InputManager* inputManager{};
     Core::TimeManager* timeManager{};
     bool bCursorHidden{false};
-    uint32_t frameBufferIndex{0};
 
 private: // Game DLL
 #ifndef GAME_STATIC
