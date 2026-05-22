@@ -264,6 +264,8 @@ public: // Fonts
 public: // Per-Tick calls
     ResolveLoadResult ResolveLoads(Core::FrameBuffer& stagingFrameBuffer);
 
+    void KickOffRetires();
+
     void ResolveUnloads();
 
     /**

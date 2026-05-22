@@ -31,6 +31,9 @@ inline constexpr uint32_t MAX_LOADED_TEXT_MATERIALS = 256;
 
 inline constexpr uint32_t ASSET_LOG_IDLE_SECONDS = 1;
 
+inline constexpr uint64_t TEXTURE_RETIRE_PENDING = UINT64_MAX;
+inline constexpr uint64_t MODEL_RETIRE_PENDING = UINT64_MAX;
+
 }
 
 #endif //WILL_ENGINE_ASSET_MANAGER_CONFIG_H

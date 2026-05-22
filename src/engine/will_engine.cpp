@@ -1131,6 +1131,7 @@ void WillEngine::Run()
         shaderWatcher.Poll();
 
         ResolveLoadResult loadCounts = assetManager->ResolveLoads(*engineRenderSynchronization->GetCurrentFrameBuffer());
+        assetManager->KickOffRetires();
         assetManager->ResolveUnloads();
 #if WILL_EDITOR
         {

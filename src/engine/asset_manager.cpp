@@ -356,7 +356,7 @@ void AssetManager::UnloadModel(StaticModelHandle handle)
     }
 
     if (model.refCount == 0) {
-        model.retireFrame = ctx->currentRenderFrame + Core::FRAME_BUFFER_COUNT * 4;
+        model.retireFrame = MODEL_RETIRE_PENDING;
     }
 }
 
@@ -397,7 +397,7 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
         else {
             complete.model->bufferAcquireOps.Clear();
             complete.model->imageAcquireOps.Clear();
-            complete.model->modelLoadState = StaticModel::ModelLoadState::NotLoaded;
+            complete.model->modelLoadState = StaticModel::ModelLoadState::FailedToLoad;
             LOG_ERROR(Asset, "Model load failed: {}", complete.model->name.c_str());
         }
     }
@@ -422,7 +422,7 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
         else {
             proceduralComplete.model->bufferAcquireOps.Clear();
             proceduralComplete.model->imageAcquireOps.Clear();
-            proceduralComplete.model->modelLoadState = StaticModel::ModelLoadState::NotLoaded;
+            proceduralComplete.model->modelLoadState = StaticModel::ModelLoadState::FailedToLoad;
             LOG_ERROR(Asset, "Procedural model generation failed: {}", proceduralComplete.model->name.c_str());
         }
     }
@@ -574,6 +574,25 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
     return loadCounts;
 }
 
+void AssetManager::KickOffRetires()
+{
+    const uint64_t currentFrame = ctx->currentRenderFrame;
+    for (auto& texture : textures) {
+        if (!textureAllocator.IsValid(texture.selfHandle)) { continue; }
+        if (texture.refCount > 0 || texture.retireFrame != TEXTURE_RETIRE_PENDING) { continue; }
+        if (texture.loadState == Texture::LoadState::Loaded || texture.loadState == Texture::LoadState::FailedToLoad) {
+            texture.retireFrame = currentFrame + Core::FRAME_BUFFER_COUNT * 4;
+        }
+    }
+    for (auto& model : models) {
+        if (!modelAllocator.IsValid(model.selfHandle)) { continue; }
+        if (model.refCount > 0 || model.retireFrame != MODEL_RETIRE_PENDING) { continue; }
+        if (model.modelLoadState == StaticModel::ModelLoadState::Loaded || model.modelLoadState == StaticModel::ModelLoadState::FailedToLoad) {
+            model.retireFrame = currentFrame + Core::FRAME_BUFFER_COUNT * 4;
+        }
+    }
+}
+
 void AssetManager::ResolveUnloads()
 {
     const uint64_t currentFrame = ctx->currentRenderFrame;
@@ -581,7 +600,7 @@ void AssetManager::ResolveUnloads()
     int32_t modelsUnloadedThisTick{0};
     for (auto& model : models) {
         if (!modelAllocator.IsValid(model.selfHandle)) { continue; }
-        if (model.refCount > 0 || model.retireFrame == 0 || currentFrame < model.retireFrame) { continue; }
+        if (model.refCount > 0 || model.retireFrame == 0 || model.retireFrame == MODEL_RETIRE_PENDING || currentFrame < model.retireFrame) { continue; }
 
         if (model.modelLoadState == StaticModel::ModelLoadState::Loaded) {
             model.modelData.Reset(resourceManager);
@@ -610,8 +629,7 @@ void AssetManager::ResolveUnloads()
     int32_t texturesUnloadedThisTick{0};
     for (auto& texture : textures) {
         if (!textureAllocator.IsValid(texture.selfHandle)) { continue; }
-        if (texture.refCount > 0 || texture.retireFrame == 0 || currentFrame < texture.retireFrame) { continue; }
-        if (texture.loadState != Texture::LoadState::Loaded) { continue; }
+        if (texture.refCount > 0 || texture.retireFrame == 0 || texture.retireFrame == TEXTURE_RETIRE_PENDING || currentFrame < texture.retireFrame) { continue; }
 
         if (bVerboseLogging.load(std::memory_order_relaxed)) {
             LOG_TRACE(Asset, "Texture unloaded: {} (bindless index: {})", texture.name.c_str(), static_cast<uint32_t>(texture.bindlessHandle.index));
@@ -1035,7 +1053,7 @@ void AssetManager::UnloadTexture(TextureID id)
     }
 
     if (texture.refCount == 0) {
-        texture.retireFrame = ctx->currentRenderFrame + Core::FRAME_BUFFER_COUNT * 4;
+        texture.retireFrame = TEXTURE_RETIRE_PENDING;
     }
 }
 
