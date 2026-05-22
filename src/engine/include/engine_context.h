@@ -95,7 +95,7 @@ struct EngineContext
     // Clay
     Clay_Context* clayContext{nullptr};
 
-    uint64_t currentFrame{0};
+    uint64_t currentRenderFrame{0};
     bool bModelLoadedThisFrame{false};
 
 

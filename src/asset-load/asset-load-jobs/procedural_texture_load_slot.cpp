@@ -98,10 +98,22 @@ void ProceduralTextureLoadSlot::GenerateTask::ExecuteRange(enki::TaskSetPartitio
     }
 
     Engine::Texture* tex = loadSlot->outputTexture;
-    const uint32_t width = tex->image.extent.width;
-    const uint32_t height = tex->image.extent.height;
+    const uint32_t width = tex->width;
+    const uint32_t height = tex->height;
     const uint32_t mipCount = tex->mipCount;
-    const VkFormat format = tex->image.format;
+    const VkFormat format = tex->format;
+
+    VkImageCreateInfo imageCreateInfo = Render::VkHelpers::ImageCreateInfo(
+        format,
+        {width, height, 1},
+        VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT
+    );
+    imageCreateInfo.mipLevels = mipCount;
+    tex->image = Render::AllocatedImage::CreateAllocatedImage(loadSlot->context, imageCreateInfo);
+
+    VkImageViewCreateInfo sampledViewInfo = Render::VkHelpers::ImageViewCreateInfo(tex->image.handle, format, VK_IMAGE_ASPECT_COLOR_BIT);
+    sampledViewInfo.subresourceRange = Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, mipCount, 0, 1);
+    tex->imageView = Render::ImageView::CreateImageView(loadSlot->context, sampledViewInfo);
 
     // Storage view for mip 0, write target for the compute shader
     VkImageViewCreateInfo storageViewInfo = Render::VkHelpers::ImageViewCreateInfo(tex->image.handle, format, VK_IMAGE_ASPECT_COLOR_BIT);

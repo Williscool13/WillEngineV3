@@ -26,7 +26,8 @@ AssetManager::AssetManager(Core::MemoryManager& memoryManager, Engine::EngineCon
       modelNameToId(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_CACHED_MODELS),
       modelCache(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_CACHED_MODELS),
       textureNameToId(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_CACHED_TEXTURES),
-      textureCache(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_CACHED_TEXTURES),
+      textureRegistry(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_CACHED_TEXTURES),
+      staticProceduralRegistry(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_STATIC_PROCEDURAL_TEXTURES),
       cubemapNameToId(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_CACHED_CUBEMAPS),
       cubemapCache(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_CACHED_CUBEMAPS),
       sceneCache(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_CACHED_SCENES),
@@ -40,7 +41,10 @@ AssetManager::AssetManager(Core::MemoryManager& memoryManager, Engine::EngineCon
 #endif
 
     ctx->bShouldRescanResources = true;
+
     Scan();
+
+    RegisterProceduralTextures();
 
     Texture* whiteTex = LoadTexture(FindTextureByName("engine_default_white"));
     assert(whiteTex && whiteTex->bindlessHandle.index == WHITE_IMAGE_BINDLESS_INDEX);
@@ -352,7 +356,7 @@ void AssetManager::UnloadModel(StaticModelHandle handle)
     }
 
     if (model.refCount == 0) {
-        model.retireFrame = ctx->currentFrame + Core::FRAME_BUFFER_COUNT * 4;
+        model.retireFrame = ctx->currentRenderFrame + Core::FRAME_BUFFER_COUNT * 4;
     }
 }
 
@@ -383,7 +387,7 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
             complete.model->bufferAcquireOps.Clear();
             complete.model->imageAcquireOps.Clear();
             complete.model->modelLoadState = StaticModel::ModelLoadState::Loaded;
-            complete.model->acquireFrame = ctx->currentFrame;
+            complete.model->acquireFrame = ctx->currentRenderFrame;
             if (bVerboseLogging.load(std::memory_order_relaxed)) {
                 LOG_TRACE(Asset, "Model load succeeded: {}", complete.model->name.c_str());
             }
@@ -408,7 +412,7 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
             proceduralComplete.model->bufferAcquireOps.Clear();
             proceduralComplete.model->imageAcquireOps.Clear();
             proceduralComplete.model->modelLoadState = StaticModel::ModelLoadState::Loaded;
-            proceduralComplete.model->acquireFrame = ctx->currentFrame;
+            proceduralComplete.model->acquireFrame = ctx->currentRenderFrame;
             if (bVerboseLogging.load(std::memory_order_relaxed)) {
                 LOG_TRACE(Asset, "Procedural model generation succeeded: {}", proceduralComplete.model->name.c_str());
             }
@@ -438,7 +442,7 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
         if (textureComplete.bSuccess) {
             stagingFrameBuffer.imageAcquireOperations.PushBack(textureComplete.texture->acquireBarrier);
             textureComplete.texture->loadState = Texture::LoadState::Loaded;
-            textureComplete.texture->acquireFrame = ctx->currentFrame;
+            textureComplete.texture->acquireFrame = ctx->currentRenderFrame;
             if (bVerboseLogging.load(std::memory_order_relaxed)) {
                 LOG_TRACE(Asset, "Texture load succeeded: {} (bindless index: {})", textureComplete.texture->name.c_str(), static_cast<uint32_t>(textureComplete.texture->bindlessHandle.index));
             }
@@ -572,7 +576,7 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
 
 void AssetManager::ResolveUnloads()
 {
-    const uint64_t currentFrame = ctx->currentFrame;
+    const uint64_t currentFrame = ctx->currentRenderFrame;
 
     int32_t modelsUnloadedThisTick{0};
     for (auto& model : models) {
@@ -615,7 +619,7 @@ void AssetManager::ResolveUnloads()
         resourceManager->bindlessSamplerTextureDescriptorBuffer.ReleaseTextureBinding(texture.bindlessHandle);
         textureIdToHandle.Remove(texture.textureId);
         if (texture.origin == Texture::Origin::RuntimeProcedural) {
-            textureCache.Remove(texture.textureId);
+            textureRegistry.Remove(texture.textureId);
             textureNameToId.Remove(StringID{texture.name.c_str(), texture.name.Size()});
         }
         textureAllocator.Remove(texture.selfHandle);
@@ -703,7 +707,7 @@ void AssetManager::Scan()
                     if (textureNameToId.Contains(nameSid) && *textureNameToId.Find(nameSid) != id) {
                         LOG_CRITICAL(Asset, "2 Textures were mounted that contain the same name. This will cause issues for texture lookups by name. ({})", path.c_str());
                     }
-                    CachedTextureMetadata& cached = textureCache[id];
+                    DiskTextureDesc& cached = textureRegistry[id];
                     cached.source = Core::Path(path);
                     cached.name = Core::InlineString<128>(header->name);
                     cached.width = header->width;
@@ -813,10 +817,40 @@ void AssetManager::Scan()
     ctx->bShouldRescanResources = false;
 }
 
+void AssetManager::RegisterProceduralTextures()
+{
+    auto addProceduralToRegistry = [&](Core::InlineString<128> name, StringID pipelineID, uint32_t width, uint32_t height, VkFormat format, bool mipmapped) {
+        const TextureID texId{pipelineID.id};
+        StaticProceduralDesc& desc = staticProceduralRegistry[texId];
+        desc.pipelineId = pipelineID;
+        desc.width = width;
+        desc.height = height;
+        desc.format = format;
+        desc.mipmapped = mipmapped;
+        desc.name = Core::InlineString<128>(name);
+        textureNameToId[pipelineID] = texId;
+    };
+
+    addProceduralToRegistry(Core::InlineString<128>("yellow_texture"), "yellow_texture"_sid, 256, 256, VK_FORMAT_R8G8B8A8_UNORM, true);
+    addProceduralToRegistry(Core::InlineString<128>("domain_warp"), "domain_warp"_sid, 512, 512, VK_FORMAT_R8G8B8A8_UNORM, true);
+}
+
 Texture* AssetManager::LoadTexture(TextureID textureId)
 {
-    if (!textureCache.Contains(textureId)) {
-        LOG_ERROR(Asset, "Texture {:x} not found in registry", textureId.id);
+    if (textureRegistry.Contains(textureId)) {
+        return LoadDiskTexture(textureId);
+    }
+    if (const StaticProceduralDesc* desc = staticProceduralRegistry.Find(textureId)) {
+        return LoadProceduralTexture(desc->pipelineId, desc->width, desc->height, desc->format, desc->mipmapped, Texture::Origin::StaticProcedural, desc->name);
+    }
+    LOG_ERROR(Asset, "LoadTexture: TextureID {:x} not found in disk cache or static procedural registry", textureId.id);
+    return nullptr;
+}
+
+Texture* AssetManager::LoadDiskTexture(TextureID textureId)
+{
+    if (!textureRegistry.Contains(textureId)) {
+        LOG_ERROR(Asset, "LoadDiskTexture: TextureID {:x} not in disk cache", textureId.id);
         return nullptr;
     }
 
@@ -841,7 +875,7 @@ Texture* AssetManager::LoadTexture(TextureID textureId)
         return nullptr;
     }
 
-    const CachedTextureMetadata& meta = textureCache[textureId];
+    const DiskTextureDesc& meta = textureRegistry[textureId];
 
     Texture& texture = textures[handle.index];
     texture.selfHandle = handle;
@@ -869,7 +903,7 @@ Texture* AssetManager::LoadTexture(TextureID textureId)
     return &texture;
 }
 
-Texture* AssetManager::LoadProceduralTexture(StringID pipelineId, uint32_t width, uint32_t height, VkFormat format, bool mipmapped, Texture::Origin origin)
+Texture* AssetManager::LoadProceduralTexture(StringID pipelineId, uint32_t width, uint32_t height, VkFormat format, bool mipmapped, Texture::Origin origin, Core::InlineString<128> displayName)
 {
     TextureID textureId{pipelineId.id};
 
@@ -892,19 +926,7 @@ Texture* AssetManager::LoadProceduralTexture(StringID pipelineId, uint32_t width
 
     uint32_t mipCount = mipmapped ? static_cast<uint32_t>(std::floor(std::log2(static_cast<float>(std::max(width, height))))) + 1u : 1u;
 
-    VkImageCreateInfo imageCreateInfo = Render::VkHelpers::ImageCreateInfo(
-        format,
-        {width, height, 1},
-        VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT
-    );
-    imageCreateInfo.mipLevels = mipCount;
-    Render::AllocatedImage image = Render::AllocatedImage::CreateAllocatedImage(resourceManager->context, imageCreateInfo);
-
-    VkImageViewCreateInfo viewInfo = Render::VkHelpers::ImageViewCreateInfo(image.handle, format, VK_IMAGE_ASPECT_COLOR_BIT);
-    viewInfo.subresourceRange = Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, mipCount, 0, 1);
-    Render::ImageView sampledView = Render::ImageView::CreateImageView(resourceManager->context, viewInfo);
-
-    Core::InlineString<128> name = Core::InlineString<128>::Format("procedural_%llu", textureId.id);
+    Core::InlineString<128> name = displayName.IsEmpty() ? displayName : Core::InlineString<128>::Format("procedural_%llu", textureId.id);
     const StringID nameSid{name.c_str(), name.Size()};
 
     Texture& texture = textures[handle.index];
@@ -914,8 +936,7 @@ Texture* AssetManager::LoadProceduralTexture(StringID pipelineId, uint32_t width
     texture.width = width;
     texture.height = height;
     texture.mipCount = mipCount;
-    texture.image = std::move(image);
-    texture.imageView = std::move(sampledView);
+    texture.format = format;
     texture.loadState = Texture::LoadState::Loading;
     texture.refCount = 1;
     texture.origin = origin;
@@ -923,7 +944,6 @@ Texture* AssetManager::LoadProceduralTexture(StringID pipelineId, uint32_t width
 
     textureIdToHandle[textureId] = handle;
     textureNameToId[nameSid] = textureId;
-    textureCache[textureId] = {.name = name, .width = width, .height = height, .mipCount = mipCount};
 
     if (bVerboseLogging.load(std::memory_order_relaxed)) {
         LOG_TRACE(Asset, "Requesting procedural texture load: {:x} ({}x{}, {} mips)", textureId.id, width, height, mipCount);
@@ -933,9 +953,30 @@ Texture* AssetManager::LoadProceduralTexture(StringID pipelineId, uint32_t width
     return &texture;
 }
 
+void AssetManager::GetAllTextureInfos(Core::ArenaFixedMap<TextureID, EditorTextureInfo>& out) const
+{
+    for (const auto& [texId, desc] : textureRegistry) {
+        out[texId] = {texId, desc.name, desc.width, desc.height, desc.mipCount};
+    }
+    for (const auto& [texId, desc] : staticProceduralRegistry) {
+        uint32_t mipCount = desc.mipmapped ? static_cast<uint32_t>(std::floor(std::log2(static_cast<float>(std::max(desc.width, desc.height))))) + 1u : 1u;
+        if (const TextureHandle* lh = textureIdToHandle.Find(texId); lh && textureAllocator.IsValid(*lh)) {
+            mipCount = textures[lh->index].mipCount;
+        }
+        out[texId] = {texId, desc.name, desc.width, desc.height, mipCount};
+    }
+    for (const auto& [texId, handle] : textureIdToHandle) {
+        if (!textureAllocator.IsValid(handle)) { continue; }
+        const Texture& tex = textures[handle.index];
+        if (tex.origin == Texture::Origin::RuntimeProcedural) {
+            out[texId] = {texId, tex.name, tex.width, tex.height, tex.mipCount};
+        }
+    }
+}
+
 bool AssetManager::ReloadTexture(TextureID textureId)
 {
-    if (!textureCache.Contains(textureId)) {
+    if (!textureRegistry.Contains(textureId)) {
         LOG_ERROR(Asset, "Texture {:x} not found in registry", textureId.id);
         return false;
     }
@@ -946,7 +987,7 @@ bool AssetManager::ReloadTexture(TextureID textureId)
         return false;
     }
 
-    const CachedTextureMetadata& meta = textureCache[textureId];
+    const DiskTextureDesc& meta = textureRegistry[textureId];
 
     Texture& texture = textures[existingPtr->index];
     texture.selfHandle = *existingPtr;
@@ -994,7 +1035,7 @@ void AssetManager::UnloadTexture(TextureID id)
     }
 
     if (texture.refCount == 0) {
-        texture.retireFrame = ctx->currentFrame + Core::FRAME_BUFFER_COUNT * 4;
+        texture.retireFrame = ctx->currentRenderFrame + Core::FRAME_BUFFER_COUNT * 4;
     }
 }
 
@@ -1064,7 +1105,7 @@ void AssetManager::UnloadSampler(SamplerDesc& desc)
     }
 
     if (sampler.refCount == 0) {
-        sampler.retireFrame = ctx->currentFrame + Core::FRAME_BUFFER_COUNT * 4;
+        sampler.retireFrame = ctx->currentRenderFrame + Core::FRAME_BUFFER_COUNT * 4;
     }
 }
 
@@ -1244,7 +1285,7 @@ void AssetManager::UnloadFont(FontHandle handle)
     }
 
     if (font.refCount == 0) {
-        font.retireFrame = ctx->currentFrame + Core::FRAME_BUFFER_COUNT * 4;
+        font.retireFrame = ctx->currentRenderFrame + Core::FRAME_BUFFER_COUNT * 4;
     }
 }
 

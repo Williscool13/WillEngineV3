@@ -163,7 +163,7 @@ void MaterialManager::ReleaseMaterial(MaterialID materialID)
     entry->refCounter--;
 
     if (entry->refCounter == 0) {
-        entry->retireFrame = ctx->currentFrame + Core::FRAME_BUFFER_COUNT + 1;
+        entry->retireFrame = ctx->currentRenderFrame + Core::FRAME_BUFFER_COUNT + 1;
         pendingMaterialRetireLogCount++;
         materialRetireLastActivity = std::chrono::steady_clock::now();
     }
@@ -177,7 +177,7 @@ void MaterialManager::ProcessRetirements()
         }
 
         if (entry.refCounter == 0) {
-            if (ctx->currentFrame >= entry.retireFrame) {
+            if (ctx->currentRenderFrame >= entry.retireFrame) {
                 auto it = materials.Find(entry.id);
                 assert(it && "Material released but does not exist in the materials map");
 

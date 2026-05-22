@@ -28,6 +28,8 @@
 #include "resources/scene/scene.h"
 #include "project_config.h"
 #include "core/input/input_frame.h"
+#include "core/containers/arena_fixed_map.h"
+#include "engine/asset_manager.h"
 
 struct ResolvedCollisionEvent
 {
@@ -188,6 +190,13 @@ struct EditorState
 
     // ImGui textures
     EditorTextureResidency texResidency{};
+
+    Core::ArenaFixedMap<TextureID, AssetManager::EditorTextureInfo>* textureInfoCache{nullptr};
+
+    void ResetFrameCache()
+    {
+        textureInfoCache = nullptr;
+    }
 };
 
 struct DebugState

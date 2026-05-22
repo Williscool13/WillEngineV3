@@ -16,6 +16,7 @@
 #include "core/memory/memory_manager.h"
 #include "core/containers/array.h"
 #include "core/containers/fixed_map.h"
+#include "core/containers/arena_fixed_map.h"
 #include "core/containers/inline_map.h"
 #include "core/containers/inline_path.h"
 #include "core/containers/inline_string.h"
@@ -72,10 +73,10 @@ public: // Models
         return found ? *found : ModelID::INVALID;
     }
 
-    [[nodiscard]] uint32_t GetActiveModelCount()   const { return modelAllocator.GetCount(); }
-    [[nodiscard]] uint32_t GetActiveTextureCount()  const { return textureAllocator.GetCount(); }
-    [[nodiscard]] uint32_t GetActiveSamplerCount()  const { return samplerAllocator.GetCount(); }
-    [[nodiscard]] uint32_t GetActiveCubemapCount()  const { return cubemapAllocator.GetCount(); }
+    [[nodiscard]] uint32_t GetActiveModelCount() const { return modelAllocator.GetCount(); }
+    [[nodiscard]] uint32_t GetActiveTextureCount() const { return textureAllocator.GetCount(); }
+    [[nodiscard]] uint32_t GetActiveSamplerCount() const { return samplerAllocator.GetCount(); }
+    [[nodiscard]] uint32_t GetActiveCubemapCount() const { return cubemapAllocator.GetCount(); }
 
     StaticModelHandle LoadModel(ModelID modelId);
 
@@ -110,8 +111,39 @@ public: // Models
         return modelCache.Find(modelID);
     }
 
-
 public: // Textures
+    struct DiskTextureDesc
+    {
+        Core::Path source;
+        Core::InlineString<128> name;
+        uint32_t width{};
+        uint32_t height{};
+        uint32_t mipCount{};
+        uint64_t dataOffset{};
+        uint64_t dataSize{};
+        uint64_t uncompressedSize{};
+        CompressionType compressionType{DEFAULT_TEXTURE_COMPRESSION};
+    };
+
+    struct StaticProceduralDesc
+    {
+        StringID pipelineId;
+        uint32_t width{};
+        uint32_t height{};
+        VkFormat format{};
+        bool mipmapped{false};
+        Core::InlineString<128> name;
+    };
+
+    struct EditorTextureInfo
+    {
+        TextureID id;
+        Core::InlineString<128> name;
+        uint32_t width;
+        uint32_t height;
+        uint32_t mipCount;
+    };
+
     bool IsTextureLoaded(const TextureID textureId) const
     {
         return textureIdToHandle.Contains(textureId);
@@ -136,32 +168,23 @@ public: // Textures
      * @param height Texture height in pixels.
      * @param format VkFormat; must support VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT.
      * @param mipmapped Generate full mip chain after dispatch.
+     * @param origin StaticProcedural if loaded via registry, RuntimeProcedural if called explicitly.
+     * @param displayName Optional display name override; auto-generated from textureId if null.
      * @return Pointer to the Texture (LoadState::Loading until generation completes), or nullptr on failure.
      */
-    Texture* LoadProceduralTexture(StringID pipelineId, uint32_t width, uint32_t height, VkFormat format, bool mipmapped, Texture::Origin origin);
+    Texture* LoadProceduralTexture(StringID pipelineId, uint32_t width, uint32_t height, VkFormat format, bool mipmapped, Texture::Origin origin, Core::InlineString<128> displayName = {});
 
     void UnloadTexture(TextureID id);
 
-    struct CachedTextureMetadata
-    {
-        Core::Path source;
-        Core::InlineString<128> name;
-        uint32_t width{};
-        uint32_t height{};
-        uint32_t mipCount{};
-        uint64_t dataOffset{};
-        uint64_t dataSize{};
-        uint64_t uncompressedSize{};
-        CompressionType compressionType{DEFAULT_TEXTURE_COMPRESSION};
-    };
+    /** @return Upper bound on the number of textures GetAllTextureInfos will emit; use for map capacity. */
+    [[nodiscard]] uint32_t GetTextureInfoCount() const { return static_cast<uint32_t>(textureRegistry.Size() + staticProceduralRegistry.Size() + textureIdToHandle.Size()); }
 
-    [[nodiscard]] const Core::FixedMap<StringID, TextureID>& GetTextureNameToId() const { return textureNameToId; }
-    [[nodiscard]] const Core::FixedMap<TextureID, CachedTextureMetadata>& GetTextureCache() const { return textureCache; }
-
-    [[nodiscard]] const CachedTextureMetadata* GetTextureMetadata(TextureID textureID) const
-    {
-        return textureCache.Find(textureID);
-    }
+    /**
+     * Populate a caller-owned ArenaFixedMap with info for every known texture (disk + static procedural + loaded runtime procedurals).
+     * The map must be pre-allocated with sufficient capacity. Existing entries are overwritten on collision.
+     * @param out Arena-backed map to fill; capacity must be >= total texture count.
+     */
+    void GetAllTextureInfos(Core::ArenaFixedMap<TextureID, EditorTextureInfo>& out) const;
 
 public: // Samplers
     Sampler* LoadSampler(SamplerDesc& samplerDesc);
@@ -212,6 +235,7 @@ public: // Fonts
     }
 
     FontHandle LoadFont(FontID id);
+
     void UnloadFont(FontHandle handle);
 
     /**
@@ -219,6 +243,7 @@ public: // Fonts
      * @param fontId
      */
     void EvictFont(FontID fontId);
+
     Font* GetFont(FontHandle handle);
 
     /** Returns the glyph info for the given codepoint, or nullptr if not found or not loaded. */
@@ -245,6 +270,8 @@ public: // Per-Tick calls
      * Scan for assets. Done once in constructor, but editor calls this frequently to gather generated assets.
      */
     void Scan();
+
+    void RegisterProceduralTextures();
 
 public:
     OffsetAllocator::Allocator& GetJointMatrixAllocator()
@@ -350,11 +377,14 @@ private: // Asset Registry
     Core::FixedMap<StringID, ModelID> modelNameToId;
     Core::FixedMap<ModelID, CachedModelMetadata> modelCache;
 
+    Texture* LoadDiskTexture(TextureID textureId);
+
     Core::FixedMap<StringID, FontID> fontNameToId;
     Core::FixedMap<FontID, CachedFontMetadata> fontCache;
 
     Core::FixedMap<StringID, TextureID> textureNameToId;
-    Core::FixedMap<TextureID, CachedTextureMetadata> textureCache;
+    Core::FixedMap<TextureID, DiskTextureDesc> textureRegistry;
+    Core::FixedMap<TextureID, StaticProceduralDesc> staticProceduralRegistry;
 
     Core::FixedMap<StringID, EnvironmentMapID> cubemapNameToId;
     Core::FixedMap<EnvironmentMapID, CachedCubemapMetadata> cubemapCache;

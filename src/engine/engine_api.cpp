@@ -18,7 +18,7 @@ EditorTextureResidency::EditorTextureResidency(Core::TlsfAllocator* allocator)
 void EditorTextureResidency::Tick(EngineContext* ctx)
 {
     for (auto it = pendingRemoval.begin(); it != pendingRemoval.end();) {
-        if (ctx->currentFrame >= it->freeOnFrame) {
+        if (ctx->currentRenderFrame >= it->freeOnFrame) {
             ctx->removeImguiTextureFn(it->descSet);
             ctx->assetManager->UnloadTexture(it->texture->textureId);
             it = pendingRemoval.Remove(it);
@@ -72,7 +72,7 @@ void EditorTextureResidency::Release(TextureID id, EngineContext* ctx)
     auto it = entries.Find(id);
     if (!it) { return; }
     Entry& e = *it;
-    e.freeOnFrame = ctx->currentFrame + Core::FRAME_BUFFER_COUNT + 1;
+    e.freeOnFrame = ctx->currentRenderFrame + Core::FRAME_BUFFER_COUNT * 2;
     pendingRemoval.PushBack(e);
     entries.Remove(id);
 }
@@ -80,7 +80,7 @@ void EditorTextureResidency::Release(TextureID id, EngineContext* ctx)
 void EditorTextureResidency::ReleaseAll(EngineContext* ctx)
 {
     for (const auto& [id, e] : entries) {
-        e.freeOnFrame = ctx->currentFrame + Core::FRAME_BUFFER_COUNT + 1;
+        e.freeOnFrame = ctx->currentRenderFrame + Core::FRAME_BUFFER_COUNT * 2;
         pendingRemoval.PushBack(e);
     }
     entries.Clear();

@@ -465,8 +465,8 @@ compile_shaders(will-engine
 
         ${CMAKE_SOURCE_DIR}/shaders/brdf_lut.slang compute ComputeBRDFLUT brdf_lut_generate
 
-        ${CMAKE_SOURCE_DIR}/shaders/procedural_textures/yellow_texture.slang compute ComputeMain yellow_texture
-        ${CMAKE_SOURCE_DIR}/shaders/procedural_textures/domain_warp.slang compute ComputeMain domain_warp
+        ${CMAKE_SOURCE_DIR}/shaders/procedural-textures/yellow_texture.slang compute ComputeMain yellow_texture
+        ${CMAKE_SOURCE_DIR}/shaders/procedural-textures/domain_warp.slang compute ComputeMain domain_warp
 
         ${CMAKE_SOURCE_DIR}/shaders/anti-aliasing/subpixel_morphological_anti_aliasing_temporal_resolve.slang compute TemporalResolveMain smaa_temporal_resolve
 )

@@ -47,6 +47,7 @@ struct Texture
     uint32_t width{0};
     uint32_t height{0};
     uint32_t mipCount{0};
+    VkFormat format{VK_FORMAT_UNDEFINED};
     uint32_t dataOffset{0};
     uint64_t dataSize{0};
     uint64_t uncompressedSize{0};

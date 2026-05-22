@@ -471,6 +471,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
 {
     ZoneScoped;
     state->editor.texResidency.Tick(ctx);
+    state->editor.ResetFrameCache();
 
     if (state->editor.bWantDeleteEntities) {
         state->editor.bWantDeleteEntities = false;
@@ -1918,17 +1919,20 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
                         static Engine::TextureID texEditPending = Engine::TextureID::INVALID;
                         static Engine::SamplerDesc samplerEditPending{};
 
-                        const auto& texCache = ctx->assetManager->GetTextureCache();
+                        if (!state->editor.textureInfoCache) {
+                            const uint32_t count = ctx->assetManager->GetTextureInfoCount();
+                            state->editor.textureInfoCache = ctx->editorArena.Get().Alloc<Core::ArenaFixedMap<Engine::TextureID, Engine::AssetManager::EditorTextureInfo>>(&ctx->editorArena.Get(), count);
+                            ctx->assetManager->GetAllTextureInfos(*state->editor.textureInfoCache);
+                        }
+                        const auto& matTexInfoMap = *state->editor.textureInfoCache;
 
                         for (int32_t slot = 0; slot < 6; ++slot) {
                             ImGui::PushID(slot);
 
                             const Engine::TextureID& texId = mat.textureRefs[slot];
                             const char* currentTexName = "None";
-                            if (texId.IsValid()) {
-                                if (const auto* it = texCache.Find(texId)) {
-                                    currentTexName = it->name.c_str();
-                                }
+                            if (const Engine::AssetManager::EditorTextureInfo* info = texId.IsValid() ? matTexInfoMap.Find(texId) : nullptr) {
+                                currentTexName = info->name.c_str();
                             }
 
                             ImGui::Text("%-13s", slotNames[slot]);
@@ -1980,19 +1984,20 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
                                     if (ImGui::Selectable("(None)", noneSelected)) {
                                         texEditPending = Engine::TextureID::INVALID;
                                     }
-                                    struct TexturePair
-                                    {
-                                        Core::InlineString<128> name;
-                                        StringID nameId;
-                                        Engine::TextureID id;
-                                    };
-
-                                    auto sorted = Core::ArenaFixedVector<TexturePair>(&ctx->editorArena.Get(), texCache.Size());
-                                    for (const auto& [texId2, meta] : texCache) {
-                                        sorted.EmplaceBack(meta.name, StringID(meta.name.c_str(), meta.name.Size()), texId2);
+                                    if (!state->editor.textureInfoCache) {
+                                        const uint32_t count = ctx->assetManager->GetTextureInfoCount();
+                                        state->editor.textureInfoCache = ctx->editorArena.Get().Alloc<Core::ArenaFixedMap<Engine::TextureID, Engine::AssetManager::EditorTextureInfo>>(&ctx->editorArena.Get(), count);
+                                        ctx->assetManager->GetAllTextureInfos(*state->editor.textureInfoCache);
                                     }
-                                    std::ranges::sort(sorted, {}, &TexturePair::name);
-                                    for (const auto& [name, nameId, id2] : sorted) {
+                                    const uint32_t texCount = static_cast<uint32_t>(state->editor.textureInfoCache->Size());
+                                    auto sorted = Core::ArenaFixedVector<Engine::AssetManager::EditorTextureInfo>(&ctx->editorArena.Get(), texCount);
+                                    for (const auto& [id2, info] : *state->editor.textureInfoCache) {
+                                        sorted.EmplaceBack(info);
+                                    }
+                                    std::ranges::sort(sorted, {}, &Engine::AssetManager::EditorTextureInfo::name);
+                                    for (const auto& info : sorted) {
+                                        const auto& id2 = info.id;
+                                        const auto& name = info.name;
                                         bool selected = texEditPending == id2;
                                         if (ImGui::Selectable(name.c_str(), selected)) {
                                             texEditPending = id2;
@@ -2211,20 +2216,17 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
     ImGui::End();
 
     if (ImGui::Begin("Textures")) {
-        const auto& texCache = ctx->assetManager->GetTextureCache();
-
-        struct TextureEntry
-        {
-            Core::InlineString<128> name;
-            uint32_t width;
-            uint32_t height;
-            uint32_t mipCount;
-        };
-        auto sorted = Core::ArenaFixedVector<TextureEntry>(&ctx->editorArena.Get(), texCache.Size());
-        for (const auto& [texId, meta] : texCache) {
-            sorted.EmplaceBack(meta.name, meta.width, meta.height, meta.mipCount);
+        if (!state->editor.textureInfoCache) {
+            const uint32_t count = ctx->assetManager->GetTextureInfoCount();
+            state->editor.textureInfoCache = ctx->editorArena.Get().Alloc<Core::ArenaFixedMap<Engine::TextureID, Engine::AssetManager::EditorTextureInfo>>(&ctx->editorArena.Get(), count);
+            ctx->assetManager->GetAllTextureInfos(*state->editor.textureInfoCache);
         }
-        std::ranges::sort(sorted, {}, &TextureEntry::name);
+        const uint32_t texCount = static_cast<uint32_t>(state->editor.textureInfoCache->Size());
+        auto sorted = Core::ArenaFixedVector<Engine::AssetManager::EditorTextureInfo>(&ctx->editorArena.Get(), texCount);
+        for (const auto& [texId, info] : *state->editor.textureInfoCache) {
+            sorted.EmplaceBack(info);
+        }
+        std::ranges::sort(sorted, {}, &Engine::AssetManager::EditorTextureInfo::name);
 
         if (ImGui::BeginTable("##textures", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY)) {
             ImGui::TableSetupScrollFreeze(0, 1);

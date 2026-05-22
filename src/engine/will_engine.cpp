@@ -418,7 +418,7 @@ void WillEngine::EditorImgui()
         auto newWidth = static_cast<uint32_t>(centralNode->Size.x);
         auto newHeight = static_cast<uint32_t>(centralNode->Size.y);
 
-        Engine::WindowContext& wc = engineContext->windowContext;
+        WindowContext& wc = engineContext->windowContext;
         if (newOffsetX != wc.viewportOffsetX || newOffsetY != wc.viewportOffsetY ||
             newWidth != wc.viewportWidth || newHeight != wc.viewportHeight) {
             wc.viewportOffsetX = newOffsetX;
@@ -930,10 +930,10 @@ void WillEngine::EditorImgui()
 
             ImGui::SeparatorText("Procedural Textures:");
             if (ImGui::Button("Load Yellow Texture")) {
-                assetManager->LoadProceduralTexture(SID("yellow_texture"), 256, 256, VK_FORMAT_R8G8B8A8_UNORM, true, Engine::Texture::Origin::RuntimeProcedural);
+                assetManager->LoadProceduralTexture(SID("yellow_texture"), 256, 256, VK_FORMAT_R8G8B8A8_UNORM, true, Texture::Origin::RuntimeProcedural);
             }
             if (ImGui::Button("Load Domain Warp")) {
-                assetManager->LoadProceduralTexture(SID("domain_warp"), 512, 512, VK_FORMAT_R8G8B8A8_UNORM, true, Engine::Texture::Origin::RuntimeProcedural);
+                assetManager->LoadProceduralTexture(SID("domain_warp"), 512, 512, VK_FORMAT_R8G8B8A8_UNORM, true, Texture::Origin::RuntimeProcedural);
             }
         }
 
@@ -1311,7 +1311,7 @@ void WillEngine::Run()
                     PrepareImgui(currentImguiSnapshot);
                 }
 
-                engineContext->currentFrame++;
+                engineContext->currentRenderFrame++;
                 engineRenderSynchronization->NextFrameBuffer();
                 engineRenderSynchronization->NextRenderFrame();
                 // Clear the frame buffer to be accumulated until the next render frame
