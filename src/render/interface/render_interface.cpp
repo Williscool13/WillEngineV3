@@ -32,7 +32,7 @@ ViewFamily::ViewFamily(Arena& arena, const ViewFamilyWatermarks& wm)
     uiGlyphQuads = ArenaVector<UIGlyphQuad>(&arena, wm.uiGlyphQuads);
 }
 
-FrameBuffer::FrameBuffer(ArenaSuballocator& pool, Core::AllocTag tag)
+FrameBuffer::FrameBuffer(ArenaSuballocator& pool, AllocTag tag)
     : frameArena(pool, 4ull * 1024 * 1024, tag)
 {
     mainViewFamily = ViewFamily(frameArena.Get());

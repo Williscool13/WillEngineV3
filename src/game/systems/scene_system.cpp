@@ -10,6 +10,7 @@
 
 #include <json/nlohmann/json.hpp>
 
+#include "core/containers/arena_array.h"
 #include "engine/asset_manager.h"
 #include "engine/engine_api.h"
 #include "engine/logging/engine_log.h"
@@ -244,31 +245,32 @@ void SaveSceneToFile(StringID sceneID, std::string_view sceneName, Engine::Engin
     LOG_INFO(Game, "Saved scene '{}' to '{}'", sceneName, path.c_str());
 }
 
-bool LoadSceneFromFile(Engine::EngineState* state, Engine::AssetManager* assetManager, StringID sceneId)
+LoadSceneResult LoadSceneFromFile(Engine::EngineState* state, Engine::AssetManager* assetManager, StringID sceneId)
 {
     if (std::ranges::any_of(state->editor.loadedScenes, [&](const auto& m) { return m.sceneId == sceneId; })) {
         LOG_WARN(Game, "Scene '{}' is already loaded", sceneId.ToString());
-        return false;
+        return {false, sceneId, {}};
     }
 
     const auto& sceneCache = assetManager->GetSceneCache();
     const auto* it = sceneCache.Find(sceneId);
     if (!it) {
         LOG_ERROR(Game, "Scene ID not found in registry");
-        return false;
+        return {false, sceneId, {}};
     }
 
+    const Core::InlineString<128> sceneName = it->sceneName;
     const Core::Path& path = it->source;
     std::ifstream file(path.c_str());
     if (!file.is_open()) {
         LOG_ERROR(Game, "Failed to open scene file '{}'", path.c_str());
-        return false;
+        return {false, sceneId, sceneName};
     }
 
     auto header = Engine::ReadWSceneHeader(file);
     if (!header) {
         LOG_ERROR(Game, "Failed to read scene header from '{}'", path.c_str());
-        return false;
+        return {false, sceneId, sceneName};
     }
 
     Engine::Scene s;
@@ -312,7 +314,7 @@ bool LoadSceneFromFile(Engine::EngineState* state, Engine::AssetManager* assetMa
     }
 
     LOG_INFO(Game, "Loaded scene '{}' from '{}'", sceneId.ToString(), path.c_str());
-    return true;
+    return {true, sceneId, sceneName};
 }
 
 Core::ArenaVector<entt::entity> SpawnModel(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::ModelID modelId, const glm::vec3& offset)
@@ -325,9 +327,9 @@ Core::ArenaVector<entt::entity> SpawnModel(Engine::EngineContext* ctx, Engine::E
 
     const auto& nodes = cached->nodes;
 
-     auto worldT = Core::ArenaFixedVector<Vec3>(&ctx->gameplayArena.Get(),nodes.Size());
-     auto worldR = Core::ArenaFixedVector<Quat>(&ctx->gameplayArena.Get(),nodes.Size());
-     auto worldS = Core::ArenaFixedVector<Vec3>(&ctx->gameplayArena.Get(),nodes.Size());
+     auto worldT = Core::ArenaArray<Vec3>(&ctx->gameplayArena.Get(),nodes.Size());
+     auto worldR = Core::ArenaArray<Quat>(&ctx->gameplayArena.Get(),nodes.Size());
+     auto worldS = Core::ArenaArray<Vec3>(&ctx->gameplayArena.Get(),nodes.Size());
 
     for (size_t i = 0; i < nodes.Size(); ++i) {
         const auto& node = nodes[i];

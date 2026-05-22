@@ -66,7 +66,7 @@ void ComputeMain(uniform LightingResolvePushConstant pc, uint3 threadID : SV_Dis
     float3 directLight = (diffuse + specular) * nDotL * shadowFactor * lightIntensity * lightColor;
 
     // IBL
-    float3 ibl = 1.0;
+    float3 ibl = 0.0;
     if (pc.skyboxIndex >= 0)
     {
         float NdotV = max(dot(N, V), 0.0);

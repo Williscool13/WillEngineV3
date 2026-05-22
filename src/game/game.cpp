@@ -121,17 +121,19 @@ GAME_API void GameLoad(Engine::EngineContext* ctx, Engine::EngineState* state)
     gResolveStringIdFn = ctx->resolveStringIdFn;
 #endif
 
-#ifndef WILL_EDITOR
     if (!state->projectConfig.defaultScene.IsEmpty()) {
         const auto& sceneCache = ctx->assetManager->GetSceneCache();
         for (const auto& pair : sceneCache) {
             if (pair.value.sceneName == state->projectConfig.defaultScene.c_str()) {
-                Game::LoadSceneFromFile(state, ctx->assetManager, pair.key);
+                auto res = Game::LoadSceneFromFile(state, ctx->assetManager, pair.key);
+                if (res.bSuccess) {
+                    state->currentSceneId = res.sceneId;
+                    state->currentSceneName = res.sceneName;
+                }
                 break;
             }
         }
     }
-#endif
 }
 
 GAME_API void GameUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)

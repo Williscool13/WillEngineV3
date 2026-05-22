@@ -39,7 +39,14 @@ void UnloadScene(Engine::EngineState* state, StringID sceneId);
 
 void SaveSceneToFile(StringID sceneID, std::string_view sceneName, Engine::EngineState* state, Engine::AssetManager* assetManager, Engine::EngineContext* ctx);
 
-bool LoadSceneFromFile(Engine::EngineState* state, Engine::AssetManager* assetManager, StringID sceneId);
+struct LoadSceneResult
+{
+    bool bSuccess;
+    StringID sceneId;
+    Core::InlineString<128> sceneName;
+};
+
+LoadSceneResult LoadSceneFromFile(Engine::EngineState* state, Engine::AssetManager* assetManager, StringID sceneId);
 
 void SaveEntityAsPrefab(Engine::EngineState* state, Engine::AssetManager* assetManager, Engine::EngineContext* ctx, entt::entity entity, std::string_view prefabName);
 
