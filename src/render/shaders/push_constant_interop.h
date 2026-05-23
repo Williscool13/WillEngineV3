@@ -850,13 +850,36 @@ SHADER_PUBLIC struct UIImagePushConstant
 
 SHADER_PUBLIC struct UIBorderPushConstant
 {
-    SHADER_PUBLIC float2 ndcMin;        // NDC position for vertex stage
+    SHADER_PUBLIC float2 ndcMin; // NDC position for vertex stage
     SHADER_PUBLIC float2 ndcMax;
     SHADER_PUBLIC float4 color;
-    SHADER_PUBLIC float4 borderWidths;  // x=left, y=right, z=top, w=bottom in pixels
-    SHADER_PUBLIC float4 cornerRadius;  // x=TL, y=TR, z=BL, w=BR in pixels
-    SHADER_PUBLIC float2 pxMin;         // pixel-space bounds for SDF in fragment stage
+    SHADER_PUBLIC float4 borderWidths; // x=left, y=right, z=top, w=bottom in pixels
+    SHADER_PUBLIC float4 cornerRadius; // x=TL, y=TR, z=BL, w=BR in pixels
+    SHADER_PUBLIC float2 pxMin; // pixel-space bounds for SDF in fragment stage
     SHADER_PUBLIC float2 pxMax;
+};
+
+SHADER_PUBLIC SHADER_CONST uint32_t SPRITE_FLAG_BILLBOARD = 1u;
+
+SHADER_PUBLIC struct SpriteData
+{
+    SHADER_PUBLIC float3 worldPosition;
+    SHADER_PUBLIC float pixelSize;
+    SHADER_PUBLIC uint32_t packedColor; // RGBA8 unorm
+    SHADER_PUBLIC uint32_t stableIdLo;
+    SHADER_PUBLIC uint32_t stableIdHi;
+    SHADER_PUBLIC uint32_t flags;
+};
+
+SHADER_PUBLIC struct SpritePushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC SHADER_PTR(SpriteData) sprites;
+    SHADER_PUBLIC uint32_t spriteCount; // count for this batch
+    SHADER_PUBLIC uint32_t spriteOffset; // start index into sprites for this batch
+    SHADER_PUBLIC uint32_t textureIndex; // bindless texture index, uniform for this batch
+    SHADER_PUBLIC uint32_t samplerIndex; // bindless sampler index, uniform for this batch
+    SHADER_PUBLIC uint32_t sceneDataIndex;
 };
 
 #endif //WILL_ENGINE_PUSH_CONSTANT_INTEROP_H

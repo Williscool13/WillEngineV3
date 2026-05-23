@@ -37,6 +37,10 @@ void CreateSMAATextures(Core::MemoryManager* memoryManager,
                         Core::Path outputSearchPath,
                         Engine::TextureID areaTextureId,
                         Engine::TextureID searchTextureId);
+
+void CreateSpriteTextures(Core::MemoryManager* memoryManager,
+                          Core::Path outputPointLightPath,
+                          Engine::TextureID pointLightTextureId);
 } // Editor
 
 #endif //WILL_ENGINE_MISCELLANEOUS_ASSET_GENERATE_H

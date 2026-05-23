@@ -46,6 +46,8 @@ inline const StringID GEOMETRY_MESHLET_TRIANGLE_BUFFER = SID("meshlet_triangle_b
 inline const StringID GEOMETRY_MESHLET_BUFFER = SID("meshlet_buffer");
 inline const StringID GEOMETRY_MATERIAL_BUFFER = SID("material_buffer");
 
+inline const StringID SPRITE_BUFFER = SID("sprite_buffer");
+
 inline const StringID TEXT_GLYPH_QUAD_BUFFER = SID("text_glyph_quad_buffer");
 inline const StringID UI_GLYPH_QUAD_BUFFER = SID("ui_glyph_quad_buffer");
 inline const StringID TEXT_INSTANCE_BUFFER = SID("text_instance_buffer");

@@ -18,8 +18,12 @@
 #include "game/components/debug_components.h"
 #include "game/components/render/procedural_mesh_component.h"
 #include "game/components/render/spline_mesh_component.h"
+#include "game/components/render/light_components.h"
+#include "render/shaders/lights_interop.h"
 #include "game/components/render/static_mesh_component.h"
 #include "game/components/render/text_component.h"
+#include "game/components/common/stable_id_component.h"
+#include "game/components/core_components.h"
 
 
 namespace Game
@@ -637,6 +641,89 @@ void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* stat
             .atlasBindlessIndex = font->atlasTexture.bindlessHandle.index,
             .textMaterialIndex = matIndexRef,
             .stableId = stableId,
+        });
+    }
+}
+
+void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
+{
+    ZoneScoped;
+    Core::ViewFamily& vf = frameBuffer->mainViewFamily;
+
+    auto pointView = state->registry.view<Component::PointLightComponent, Component::TransformComponent>();
+    for (auto [entity, light, transform] : pointView.each()) {
+        if (vf.pointLights.IsFull()) { break; }
+        const glm::vec3& c = light.color;
+        vf.pointLights.PushBack(PointLightData{
+            .positionRange = {transform.translation, light.range},
+            .packedColor =
+                (static_cast<uint32_t>(glm::clamp(c.r, 0.0f, 1.0f) * 255.0f + 0.5f))       |
+                (static_cast<uint32_t>(glm::clamp(c.g, 0.0f, 1.0f) * 255.0f + 0.5f) << 8)  |
+                (static_cast<uint32_t>(glm::clamp(c.b, 0.0f, 1.0f) * 255.0f + 0.5f) << 16) |
+                (0xFFu << 24),
+            .intensity = light.intensity,
+        });
+    }
+
+    auto areaView = state->registry.view<Component::AreaLightComponent, Component::TransformComponent>();
+    for (auto [entity, light, transform] : areaView.each()) {
+        if (vf.areaLights.IsFull()) { break; }
+        const glm::mat3 rot = glm::mat3_cast(transform.rotation);
+        const glm::vec3 normal = rot[2];
+        const glm::vec3 right  = rot[0];
+        const glm::vec3 up     = rot[1];
+        const glm::vec3& c = light.color;
+        vf.areaLights.PushBack(AreaLightData{
+            .position = {transform.translation, 0.0f},
+            .normal   = {normal, 0.0f},
+            .right    = {right,  light.halfWidth},
+            .up       = {up,     light.halfHeight},
+            .packedColor =
+                (static_cast<uint32_t>(glm::clamp(c.r, 0.0f, 1.0f) * 255.0f + 0.5f))       |
+                (static_cast<uint32_t>(glm::clamp(c.g, 0.0f, 1.0f) * 255.0f + 0.5f) << 8)  |
+                (static_cast<uint32_t>(glm::clamp(c.b, 0.0f, 1.0f) * 255.0f + 0.5f) << 16) |
+                (0xFFu << 24),
+            .intensity = light.intensity,
+        });
+    }
+}
+
+void GatherEditorSprites(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
+{
+    ZoneScoped;
+    Core::ArenaVector<Core::Sprite>& sprites = frameBuffer->mainViewFamily.sprites;
+
+    auto pointView = state->registry.view<Component::PointLightComponent, Component::TransformComponent>();
+    for (auto [entity, light, transform] : pointView.each()) {
+        uint64_t stableId = 0;
+        if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
+            stableId = stable->id.id;
+        }
+        sprites.PushBack(Core::Sprite{
+            .worldPosition = transform.translation,
+            .pixelSize = 0.5f,
+            .color = {light.color.r, light.color.g, light.color.b, 1.0f},
+            .stableId = stableId,
+            .textureIndex = SPRITE_POINT_LIGHT_BINDLESS_INDEX,
+            .samplerIndex = ASSET_SAMPLER_NEAREST_BINDLESS_INDEX,
+            .billboard = true,
+        });
+    }
+
+    auto areaView = state->registry.view<Component::AreaLightComponent, Component::TransformComponent>();
+    for (auto [entity, light, transform] : areaView.each()) {
+        uint64_t stableId = 0;
+        if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
+            stableId = stable->id.id;
+        }
+        sprites.PushBack(Core::Sprite{
+            .worldPosition = transform.translation,
+            .pixelSize = 0.5f,
+            .color = {light.color.r, light.color.g, light.color.b, 1.0f},
+            .stableId = stableId,
+            .textureIndex = SPRITE_AREA_LIGHT_BINDLESS_INDEX,
+            .samplerIndex = ASSET_SAMPLER_NEAREST_BINDLESS_INDEX,
+            .billboard = true,
         });
     }
 }

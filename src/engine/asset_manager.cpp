@@ -95,6 +95,26 @@ AssetManager::AssetManager(Core::MemoryManager& memoryManager, Engine::EngineCon
         LOG_CRITICAL(Asset, "Default SMAA Search logo does not exist, please regenerate and restart the engine");
     }
 
+    TextureID spritePointLight = FindTextureByName("sprite_point_light");
+    if (spritePointLight.IsValid()) {
+        Texture* spritePointLightTex = LoadTexture(spritePointLight);
+        assert(spritePointLightTex && spritePointLightTex->bindlessHandle.index == SPRITE_POINT_LIGHT_BINDLESS_INDEX);
+    }
+    else {
+        resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTexture();
+        LOG_CRITICAL(Asset, "Sprite texture sprite_point_light does not exist, please generate and restart the engine");
+    }
+
+    TextureID spriteAreaLight = FindTextureByName("sprite_area_light");
+    if (spriteAreaLight.IsValid()) {
+        Texture* spriteAreaLightTex = LoadTexture(spriteAreaLight);
+        assert(spriteAreaLightTex && spriteAreaLightTex->bindlessHandle.index == SPRITE_AREA_LIGHT_BINDLESS_INDEX);
+    }
+    else {
+        resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTexture();
+        LOG_CRITICAL(Asset, "Sprite texture sprite_area_light does not exist, please generate and restart the engine");
+    }
+
     auto roboto = FindFontByName("Roboto");
     if (roboto.IsValid()) {
         LoadFont(roboto);

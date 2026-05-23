@@ -49,13 +49,14 @@ void TextureGenerateSlot::Initialize(
 }
 
 void TextureGenerateSlot::Launch(TextureGenerateSlotHandle _slotHandle, const Core::Path& _imagePath, const Core::Path& _outputPath, Engine::TextureID _textureId,
-                                 bool _mipmapped, DXGI_FORMAT _targetFormat)
+                                 bool _mipmapped, DXGI_FORMAT _targetFormat, bool _flipY)
 {
     slotHandle = _slotHandle;
     imagePath = _imagePath;
     outputPath = _outputPath;
     textureId = _textureId;
     mipmapped = _mipmapped;
+    flipY = _flipY;
     targetFormat = _targetFormat;
 
     if (!task.GetIsComplete()) {
@@ -176,7 +177,7 @@ bool TextureGenerateSlot::LoadImageAndGenerate(VkCommandBuffer cmd, const Core::
         int32_t w{};
         int32_t h{};
         int32_t nrChannels{};
-        stbi_set_flip_vertically_on_load_thread(1);
+        stbi_set_flip_vertically_on_load_thread(flipY ? 1 : 0);
         stbiData = stbi_load(imagePath.c_str(), &w, &h, &nrChannels, 4);
         stbi_set_flip_vertically_on_load_thread(0);
         if (!stbiData) {

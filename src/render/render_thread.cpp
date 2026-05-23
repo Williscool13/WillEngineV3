@@ -382,6 +382,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         UploadModelUniforms(viewFamily, renderFamilyProperties);
         UploadTextUniforms(viewFamily, renderFamilyProperties);
         UploadUIUniforms(viewFamily, renderFamilyProperties);
+        UploadSpriteUniforms(viewFamily);
     }
     //
     {
@@ -547,6 +548,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         }*/
 
         SetupTextForwardPass(*renderGraph, pipelineManager, viewFamily, renderExtent, mainTargets);
+        SetupSpritesPass(*renderGraph, pipelineManager, viewFamily, renderExtent, mainTargets);
 
         if (frameBuffer.selectedStableId != 0) {
             SetupSelectionOutlinePass(*renderGraph, pipelineManager, renderExtent, mainTargets, frameBuffer.selectedStableId);
@@ -1246,6 +1248,16 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
             (static_cast<uint32_t>(glm::clamp(col.g, 0.0f, 1.0f) * 255.0f + 0.5f) << 8) |
             (static_cast<uint32_t>(glm::clamp(col.b, 0.0f, 1.0f) * 255.0f + 0.5f) << 16) |
             (0xFFu << 24);
+
+        lightData.pointLightCount = static_cast<int32_t>(viewFamily.pointLights.Size());
+        for (int32_t i = 0; i < lightData.pointLightCount; i++) {
+            lightData.pointLights[i] = viewFamily.pointLights[i];
+        }
+
+        lightData.areaLightCount = static_cast<int32_t>(viewFamily.areaLights.Size());
+        for (int32_t i = 0; i < lightData.areaLightCount; i++) {
+            lightData.areaLights[i] = viewFamily.areaLights[i];
+        }
     }
 
     UploadAllocation lightDataUploadAllocation = renderGraph->AllocateTransient(sizeof(LightData));
@@ -1610,6 +1622,56 @@ void RenderThread::UploadTextUniforms(Core::ViewFamily& viewFamily, const Render
         });
 }
 
+void RenderThread::UploadSpriteUniforms(const Core::ViewFamily& viewFamily) const
+{
+    if (viewFamily.spriteBatches.IsEmpty()) {
+        return;
+    }
+
+    const uint32_t spriteCount = static_cast<uint32_t>(viewFamily.sprites.Size());
+    const size_t uploadSize = spriteCount * sizeof(SpriteData);
+
+    renderGraph->CreateBuffer(SPRITE_BUFFER, uploadSize, false);
+    UploadAllocation spriteUpload = renderGraph->AllocateTransient(uploadSize);
+    auto* dst = static_cast<SpriteData*>(spriteUpload.ptr);
+
+    for (uint32_t i = 0; i < spriteCount; i++) {
+        const Core::Sprite& s = viewFamily.sprites[i];
+        const glm::vec4& c = s.color;
+        dst[i] = {
+            .worldPosition = s.worldPosition,
+            .pixelSize = s.pixelSize,
+            .packedColor =
+                (static_cast<uint32_t>(glm::clamp(c.r, 0.0f, 1.0f) * 255.0f + 0.5f))       |
+                (static_cast<uint32_t>(glm::clamp(c.g, 0.0f, 1.0f) * 255.0f + 0.5f) << 8)  |
+                (static_cast<uint32_t>(glm::clamp(c.b, 0.0f, 1.0f) * 255.0f + 0.5f) << 16) |
+                (static_cast<uint32_t>(glm::clamp(c.a, 0.0f, 1.0f) * 255.0f + 0.5f) << 24),
+            .stableIdLo = static_cast<uint32_t>(s.stableId & 0xFFFFFFFFu),
+            .stableIdHi = static_cast<uint32_t>(s.stableId >> 32u),
+            .flags = s.billboard ? SPRITE_FLAG_BILLBOARD : 0u,
+        };
+    }
+
+    RenderPass& uploadPass = renderGraph->AddPass(SID("Upload Sprites"), VK_PIPELINE_STAGE_2_COPY_BIT);
+    uploadPass.WriteTransferBuffer(SPRITE_BUFFER);
+    uploadPass.Execute([&, srcOffset = spriteUpload.offset, size = uploadSize](VkCommandBuffer cmd) {
+        const VkBufferCopy2 region{
+            .sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
+            .srcOffset = srcOffset,
+            .dstOffset = 0,
+            .size = size,
+        };
+        const VkCopyBufferInfo2 copyInfo{
+            .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
+            .srcBuffer = renderGraph->GetTransientUploadBuffer(),
+            .dstBuffer = renderGraph->GetBufferHandle(SPRITE_BUFFER),
+            .regionCount = 1,
+            .pRegions = &region,
+        };
+        vkCmdCopyBuffer2(cmd, &copyInfo);
+    });
+}
+
 void RenderThread::UploadUIUniforms(const Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties) const
 {
     if (!viewFamily.uiGlyphQuads.IsEmpty()) {
@@ -1874,6 +1936,8 @@ void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& 
     totalSegments += viewFamily.debugLines.Size(); // 1 segment per line
     totalSegments += viewFamily.debugBoxes.Size() * 12; // 12 edges per box
     totalSegments += viewFamily.debugSpheres.Size() * 96; // 32 segs * 3 circles (max LOD)
+    totalSegments += viewFamily.debugRects.Size() * 4; // 4 edges per rect
+    totalSegments += viewFamily.debugArrows.Size() * 20; // 4 head lines + 4 head base + 4 shaft edges + 4 start ring + 4 front ring
 
     if (totalSegments == 0) {
         return;
@@ -1944,6 +2008,65 @@ void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& 
         }
     }
 
+    for (const auto& rect : viewFamily.debugRects) {
+        glm::vec3 cx = rect.axisX * rect.halfX;
+        glm::vec3 cy = rect.axisY * rect.halfY;
+        glm::vec3 corners[4] = {rect.center - cx - cy, rect.center + cx - cy, rect.center + cx + cy, rect.center - cx + cy};
+        segments[segmentOffset++] = {.a = corners[0], .width = rect.width, .b = corners[1], .pad = 0.0f, .color = rect.color};
+        segments[segmentOffset++] = {.a = corners[1], .width = rect.width, .b = corners[2], .pad = 0.0f, .color = rect.color};
+        segments[segmentOffset++] = {.a = corners[2], .width = rect.width, .b = corners[3], .pad = 0.0f, .color = rect.color};
+        segments[segmentOffset++] = {.a = corners[3], .width = rect.width, .b = corners[0], .pad = 0.0f, .color = rect.color};
+    }
+
+    for (const auto& arrow : viewFamily.debugArrows) {
+        glm::vec3 dir = arrow.end - arrow.start;
+        const float len = glm::length(dir);
+        if (len < 1e-6f) { continue; }
+        dir /= len;
+
+        const glm::vec3 perp1 = glm::normalize(glm::cross(dir, glm::abs(dir.y) < 0.99f ? glm::vec3(0.0f, 1.0f, 0.0f) : glm::vec3(1.0f, 0.0f, 0.0f)));
+        const glm::vec3 perp2 = glm::cross(dir, perp1);
+
+        const float sh = arrow.shaftWidth;
+        const float hh = arrow.headSize;
+        const glm::vec3 headBase = arrow.end - dir * arrow.headSize;
+
+        // shaft corners at start
+        const glm::vec3 sb[4] = {
+            arrow.start + perp1 * sh + perp2 * sh,
+            arrow.start - perp1 * sh + perp2 * sh,
+            arrow.start - perp1 * sh - perp2 * sh,
+            arrow.start + perp1 * sh - perp2 * sh,
+        };
+        // shaft corners at head base (front ring)
+        const glm::vec3 se[4] = {
+            headBase + perp1 * sh + perp2 * sh,
+            headBase - perp1 * sh + perp2 * sh,
+            headBase - perp1 * sh - perp2 * sh,
+            headBase + perp1 * sh - perp2 * sh,
+        };
+        // head base corners
+        const glm::vec3 hb[4] = {
+            headBase + perp1 * hh + perp2 * hh,
+            headBase - perp1 * hh + perp2 * hh,
+            headBase - perp1 * hh - perp2 * hh,
+            headBase + perp1 * hh - perp2 * hh,
+        };
+
+        const float w = arrow.width;
+        const glm::vec4 col = arrow.color;
+
+        // 4 lines: tip to head base corners
+        for (int i = 0; i < 4; ++i) { segments[segmentOffset++] = {.a = arrow.end, .width = w, .b = hb[i], .pad = 0.0f, .color = col}; }
+        // 4 edges: head base quad
+        for (int i = 0; i < 4; ++i) { segments[segmentOffset++] = {.a = hb[i], .width = w, .b = hb[(i + 1) % 4], .pad = 0.0f, .color = col}; }
+        // 4 edges: shaft long edges
+        for (int i = 0; i < 4; ++i) { segments[segmentOffset++] = {.a = sb[i], .width = w, .b = se[i], .pad = 0.0f, .color = col}; }
+        // 4 edges: start cap ring
+        for (int i = 0; i < 4; ++i) { segments[segmentOffset++] = {.a = sb[i], .width = w, .b = sb[(i + 1) % 4], .pad = 0.0f, .color = col}; }
+        // 4 edges: front ring (shaft meets head)
+        for (int i = 0; i < 4; ++i) { segments[segmentOffset++] = {.a = se[i], .width = w, .b = se[(i + 1) % 4], .pad = 0.0f, .color = col}; }
+    }
 
     if (segmentOffset == 0) {
         return;

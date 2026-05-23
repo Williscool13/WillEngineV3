@@ -69,12 +69,11 @@ void ComputeMain(uniform LightingResolvePushConstant pc, uint3 threadID : SV_Dis
     float3 directLight = (diffuse + specular) * nDotL * shadowFactor * lightIntensity * lightColor;
 
     // Point lights
-    float3x3 viewMat3 = (float3x3)pc.sceneData[pc.sceneDataIndex].view;
     for (int i = 0; i < pc.lightData->pointLightCount; i++)
     {
         PointLightData pl = pc.lightData->pointLights[i];
 
-        float3 plViewPos = mul(viewMat3, pl.positionRange.xyz) + pc.sceneData[pc.sceneDataIndex].view[3].xyz;
+        float3 plViewPos = mul(pc.sceneData[pc.sceneDataIndex].view, float4(pl.positionRange.xyz, 1.0)).xyz;
         float3 plVec = plViewPos - viewPosition;
         float dist = length(plVec);
         float range = pl.positionRange.w;

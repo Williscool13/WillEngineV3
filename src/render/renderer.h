@@ -142,6 +142,12 @@ void SetupSelectionOutlinePass(RenderGraph& graph,
                                uint64_t selectedStableId);
 
 
+void SetupSpritesPass(RenderGraph& graph,
+                      PipelineManager* pipelineManager,
+                      const Core::ViewFamily& viewFamily,
+                      Core::Array<uint32_t, 2> renderExtent,
+                      const MainRenderTargets& targets);
+
 void SetupUIRender(RenderGraph& graph,
                    PipelineManager* pipelineManager,
                    const Core::ViewFamily& viewFamily,

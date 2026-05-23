@@ -103,6 +103,25 @@ struct DirectionalLight
     glm::vec3 color{1.0f, 1.0f, 1.0f};
 };
 
+struct Sprite
+{
+    glm::vec3 worldPosition{0.0f};
+    float pixelSize{24.0f};
+    glm::vec4 color{1.0f, 1.0f, 1.0f, 1.0f};
+    uint64_t stableId{0};
+    uint32_t textureIndex{0};
+    uint32_t samplerIndex{0};
+    bool billboard{true};
+};
+
+struct SpriteBatch
+{
+    uint32_t offset;
+    uint32_t count;
+    uint32_t textureIndex;
+    uint32_t samplerIndex;
+};
+
 struct PostProcessConfiguration
 {
     bool bExposureEnabled{true};
@@ -237,14 +256,39 @@ struct DebugSphere
     float width{0.05f};
 };
 
+struct DebugRect
+{
+    glm::vec3 center;
+    float halfX;
+    float halfY;
+    glm::vec3 axisX;
+    glm::vec3 axisY;
+    glm::vec4 color{0.0f, 1.0f, 0.0f, 1.0f};
+    float width{0.05f};
+};
+
+struct DebugArrow
+{
+    glm::vec3 start;
+    glm::vec3 end;
+    float headSize{0.15f};
+    float shaftWidth{0.03f};
+    glm::vec4 color{1.0f, 1.0f, 0.0f, 1.0f};
+    float width{0.03f};
+};
+
 #ifndef PACKAGED_BUILD
 #define DEBUG_ADD_LINE(container, ...) container.PushBack(__VA_ARGS__)
 #define DEBUG_ADD_BOX(container, ...) container.PushBack(__VA_ARGS__)
 #define DEBUG_ADD_SPHERE(container, ...) container.PushBack(__VA_ARGS__)
+#define DEBUG_ADD_RECT(container, ...) container.PushBack(__VA_ARGS__)
+#define DEBUG_ADD_ARROW(container, ...) container.PushBack(__VA_ARGS__)
 #else
 #define DEBUG_ADD_LINE(container, ...) ((void)0)
 #define DEBUG_ADD_BOX(container, ...) ((void)0)
 #define DEBUG_ADD_SPHERE(container, ...) ((void)0)
+#define DEBUG_ADD_RECT(container, ...) ((void)0)
+#define DEBUG_ADD_ARROW(container, ...) ((void)0)
 #endif
 
 
@@ -395,9 +439,13 @@ struct ViewFamilyWatermarks
     size_t debugLines{256};
     size_t debugBoxes{256};
     size_t debugSpheres{256};
+    size_t debugRects{256};
+    size_t debugArrows{256};
     size_t uiDrawCommands{64};
     size_t uiGlyphQuads{512};
     size_t textDrawCalls{256};
+    size_t sprites{256};
+    size_t spriteBatches{16};
 };
 
 struct ViewFamily
@@ -431,6 +479,8 @@ struct ViewFamily
     ArenaMap<Engine::TextMaterialID, uint32_t> activeTextMaterials{};
     ArenaVector<TextRenderMaterial> textMaterials{};
 
+    ArenaVector<Sprite> sprites{};
+
     int32_t skyboxIndex{-1};
     int32_t skyboxLOD{0};
 
@@ -444,6 +494,7 @@ struct ViewFamily
     SMAAConfiguration smaaConfig{};
     PostProcessConfiguration postProcessConfig{};
 
+
     // Debugging
     InlineString<> debugResourceName{};
     DebugTransformationType debugTransformationType{};
@@ -452,6 +503,8 @@ struct ViewFamily
     ArenaVector<DebugLine> debugLines{};
     ArenaVector<DebugBox> debugBoxes{};
     ArenaVector<DebugSphere> debugSpheres{};
+    ArenaVector<DebugRect> debugRects{};
+    ArenaVector<DebugArrow> debugArrows{};
 
     // UI: ordered draw list mirrors Clay's command sequence for correct scissor interleaving
     ArenaVector<UIDrawCommand> uiDrawList{};
@@ -460,6 +513,7 @@ struct ViewFamily
     // Written to on render thread
     ArenaFixedMap<StringID, uint32_t> lightingBuckets{};
     ArenaVector<TextDrawCall> textDrawCalls{};
+    ArenaVector<SpriteBatch> spriteBatches{};
 };
 
 struct FrameBuffer

@@ -180,6 +180,31 @@ void PrepareRenderFamily(Core::ViewFamily& viewFamily)
             drawCalls.PushBack({runStart, static_cast<uint32_t>(quads.Size()) - runStart, prev->atlasBindlessIndex, prev->textMaterialIndex});
         }
     }
+
+    // Sprite batch finalization
+    {
+        auto& sprites = viewFamily.sprites;
+        std::sort(sprites.Data(), sprites.Data() + sprites.Size(), [](const Core::Sprite& a, const Core::Sprite& b) {
+            if (a.textureIndex != b.textureIndex) { return a.textureIndex < b.textureIndex; }
+            return a.samplerIndex < b.samplerIndex;
+        });
+
+        auto& batches = viewFamily.spriteBatches;
+        if (!sprites.IsEmpty()) {
+            uint32_t runStart = 0;
+            uint32_t prevTex = sprites[0].textureIndex;
+            uint32_t prevSampler = sprites[0].samplerIndex;
+            for (uint32_t i = 1; i < sprites.Size(); ++i) {
+                if (sprites[i].textureIndex != prevTex || sprites[i].samplerIndex != prevSampler) {
+                    batches.PushBack({runStart, i - runStart, prevTex, prevSampler});
+                    runStart = i;
+                    prevTex = sprites[i].textureIndex;
+                    prevSampler = sprites[i].samplerIndex;
+                }
+            }
+            batches.PushBack({runStart, static_cast<uint32_t>(sprites.Size()) - runStart, prevTex, prevSampler});
+        }
+    }
 }
 
 

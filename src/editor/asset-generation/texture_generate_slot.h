@@ -52,7 +52,7 @@ struct TextureGenerateSlot
         Core::InlineFunction<void(bool success, TextureGenerateSlotHandle slotHandle)> notifyCallback
     );
 
-    void Launch(TextureGenerateSlotHandle _slotHandle, const Core::Path& _imagePath, const Core::Path& _outputPath, Engine::TextureID _textureId, bool _mipmapped, DXGI_FORMAT _targetFormat);
+    void Launch(TextureGenerateSlotHandle _slotHandle, const Core::Path& _imagePath, const Core::Path& _outputPath, Engine::TextureID _textureId, bool _mipmapped, DXGI_FORMAT _targetFormat, bool _flipY = true);
 
     void LaunchFromMemory(TextureGenerateSlotHandle _slotHandle, Core::HeapArray<uint8_t> pixels, uint32_t w, uint32_t h, uint32_t bytesPerPixel, const Core::Path& _outputPath,
                           Engine::TextureID _textureId, bool _mipmapped, DXGI_FORMAT _targetFormat);
@@ -89,6 +89,7 @@ private:
 
     TextureGenerateSlotHandle slotHandle{TextureGenerateSlotHandle::INVALID};
     bool mipmapped = true;
+    bool flipY = true;
     DXGI_FORMAT targetFormat = DXGI_FORMAT_BC7_UNORM;
 
     Core::HeapArray<uint8_t> preloadedPixels;

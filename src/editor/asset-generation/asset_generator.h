@@ -76,6 +76,7 @@ struct TextureGenerateRequest
     Core::Path outputPath;
     Engine::TextureID textureId;
     bool mipmapped;
+    bool flipY{true};
     DXGI_FORMAT targetFormat;
 
     Core::Path imagePath;
@@ -143,7 +144,7 @@ public:
     bool TryDequeueModelGenerateComplete(ModelGenerateComplete& outResult);
 
     Engine::TextureID RequestTextureGenerateFromFile(const Core::Path& imagePath, const Core::Path& outputPath, bool mipmapped = true,
-                                                     DXGI_FORMAT targetFormat = DXGI_FORMAT_BC7_UNORM);
+                                                     DXGI_FORMAT targetFormat = DXGI_FORMAT_BC7_UNORM, bool flipY = true);
 
     Engine::TextureID RequestTextureGenerateFromMemory(Core::HeapArray<uint8_t> pixels, uint32_t w, uint32_t h, uint32_t bytesPerPixel, const Core::Path& outputPath,
                                                        bool mipmapped = false, DXGI_FORMAT targetFormat = DXGI_FORMAT_BC7_UNORM);

@@ -126,7 +126,7 @@ void AssetGenerator::ThreadMain()
                                               req.targetFormat);
                     }
                     else {
-                        task.Launch(slotHandle, req.imagePath, req.outputPath, req.textureId, req.mipmapped, req.targetFormat);
+                        task.Launch(slotHandle, req.imagePath, req.outputPath, req.textureId, req.mipmapped, req.targetFormat, req.flipY);
                     }
                 }
                 else {
@@ -215,7 +215,7 @@ void AssetGenerator::RequestModelGenerate(const Core::Path& gltfPath, const Core
     wakeCV.notify_one();
 }
 
-Engine::TextureID AssetGenerator::RequestTextureGenerateFromFile(const Core::Path& imagePath, const Core::Path& outputPath, bool mipmapped, DXGI_FORMAT targetFormat)
+Engine::TextureID AssetGenerator::RequestTextureGenerateFromFile(const Core::Path& imagePath, const Core::Path& outputPath, bool mipmapped, DXGI_FORMAT targetFormat, bool flipY)
 {
     ZoneScoped;
     Engine::TextureID id{textureIdRng()};
@@ -224,7 +224,7 @@ Engine::TextureID AssetGenerator::RequestTextureGenerateFromFile(const Core::Pat
             id = Engine::TextureID{header->textureId};
         }
     }
-    textureGenerateRequestQueue.enqueue({outputPath, id, mipmapped, targetFormat, imagePath});
+    textureGenerateRequestQueue.enqueue({outputPath, id, mipmapped, flipY, targetFormat, imagePath});
     workCounter.fetch_add(1);
     wakeCV.notify_one();
     return id;

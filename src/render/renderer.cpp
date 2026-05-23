@@ -1197,6 +1197,57 @@ void SetupTextForwardPass(RenderGraph& graph,
     });
 }
 
+void SetupSpritesPass(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const MainRenderTargets& targets)
+{
+    if (viewFamily.spriteBatches.IsEmpty()) {
+        return;
+    }
+
+    auto& spritesPass = graph.AddPass(SID("Sprites"), VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT);
+    spritesPass.ReadBuffer(SCENE_DATA_BUFFER);
+    spritesPass.ReadBuffer(SPRITE_BUFFER);
+    spritesPass.ReadWriteDepthAttachment(targets.depthStencil);
+    spritesPass.WriteColorAttachment(targets.outputColor);
+    spritesPass.WriteColorAttachment(targets.stableId);
+    spritesPass.Execute([&, width = renderExtent[0], height = renderExtent[1], pipelineManager, outputColor = targets.outputColor, depthTarget = targets.depthStencil, stableId = targets.stableId](VkCommandBuffer cmd) {
+        VkViewport viewport = VkHelpers::GenerateViewport(width, height);
+        vkCmdSetViewport(cmd, 0, 1, &viewport);
+        VkRect2D scissor = VkHelpers::GenerateScissor(width, height);
+        vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+        VkRenderingAttachmentInfo colorAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(outputColor), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        VkRenderingAttachmentInfo stableIdAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(stableId), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(depthTarget), nullptr, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+        const VkRenderingAttachmentInfo colorAttachments[] = {colorAttachment, stableIdAttachment};
+        VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, colorAttachments, 2, &depthAttachment, nullptr);
+        vkCmdBeginRendering(cmd, &renderInfo);
+
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("sprites"));
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineEntry->pipeline);
+
+        const VkDeviceAddress sceneDataAddr = graph.GetBufferAddress(SCENE_DATA_BUFFER);
+        const VkDeviceAddress spritesAddr = graph.GetBufferAddress(SPRITE_BUFFER);
+
+        for (const Core::SpriteBatch& batch : viewFamily.spriteBatches) {
+            SpritePushConstant pc{
+                .sceneData = sceneDataAddr,
+                .sprites = spritesAddr,
+                .spriteCount = batch.count,
+                .spriteOffset = batch.offset,
+                .textureIndex = batch.textureIndex,
+                .samplerIndex = batch.samplerIndex,
+                .sceneDataIndex = 0,
+            };
+            vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(SpritePushConstant), &pc);
+
+            const uint32_t groupCount = (batch.count + 31) / 32;
+            vkCmdDrawMeshTasksEXT(cmd, groupCount, 1, 1);
+        }
+
+        vkCmdEndRendering(cmd);
+    });
+}
+
 StringID SetupSubpixelMorphologicalAntiAliasing(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent,
                                                 const MainRenderTargets& ppTargets)
 {

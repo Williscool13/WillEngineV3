@@ -649,6 +649,38 @@ void PipelineManager::RegisterPipelines()
         builder.Clear();
     }
 
+    // Sprites
+    {
+        builder.AddShaderStage(src / "sprites_mesh.spv", VK_SHADER_STAGE_MESH_BIT_EXT);
+        builder.AddShaderStage(src / "sprites_fragment.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
+        builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+        builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
+        builder.SetupDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_GREATER_OR_EQUAL);
+
+        VkPipelineColorBlendAttachmentState colorBlend{
+            .blendEnable = VK_FALSE,
+            .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT
+        };
+        VkPipelineColorBlendAttachmentState stableIdBlend{
+            .blendEnable = VK_FALSE,
+            .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT
+        };
+        VkPipelineColorBlendAttachmentState blendStates[] = {colorBlend, stableIdBlend};
+        builder.SetupBlending(blendStates, 2);
+
+        VkFormat colorFormats[2] = {COLOR_ATTACHMENT_FORMAT, GBUFFER_STABLE_ID_FORMAT};
+        builder.SetupRenderer(colorFormats, 2, DEPTH_ATTACHMENT_FORMAT);
+
+        RegisterGraphicsPipeline(
+            SID("sprites"),
+            builder,
+            sizeof(SpritePushConstant),
+            VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT,
+            PipelineCategory::Critical
+        );
+        builder.Clear();
+    }
+
     // Default Text
     {
         builder.AddShaderStage(src / "default_text_mesh.spv", VK_SHADER_STAGE_MESH_BIT_EXT);

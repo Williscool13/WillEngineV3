@@ -94,6 +94,8 @@ set(GAME_SOURCES
         systems/gameplay_systems.h
         systems/component_editor.cpp
         systems/component_editor.h
+        components/render/light_components.cpp
+        components/render/light_components.h
 )
 
 set(GAME_INCLUDE_DIRS

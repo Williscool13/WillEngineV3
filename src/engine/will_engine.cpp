@@ -799,6 +799,16 @@ void WillEngine::EditorImgui()
             assets / "textures/prototype_texture_dark.wtexture",
             true,
             DXGI_FORMAT_BC7_UNORM_SRGB);
+        assetGenerator->RequestTextureGenerateFromFile(
+            assets / "textures/sprites/sprite_point_light.png",
+            assets / "textures/sprites/sprite_point_light.wtexture",
+            true,
+            DXGI_FORMAT_BC7_UNORM_SRGB);
+        assetGenerator->RequestTextureGenerateFromFile(
+            assets / "textures/sprites/sprite_area_light.png",
+            assets / "textures/sprites/sprite_area_light.wtexture",
+            true,
+            DXGI_FORMAT_BC7_UNORM_SRGB);
         assetGenerator->GenerateBRDFLUT(assets / "textures/brdf_lut.wtexture");
         assetGenerator->GenerateSMAATextures(assets / "textures");
         assetGenerator->RequestFontGenerate(
@@ -926,6 +936,28 @@ void WillEngine::EditorImgui()
                 assetGenerator->RequestFontGenerate(
                     Platform::GetAssetPath() / "fonts/JetBrainsMono/fonts/ttf/JetBrainsMonoNL-Regular.ttf",
                     Platform::GetAssetPath() / "fonts/JetBrainsMono/JetBrainsMono.wsfont");
+            }
+
+            ImGui::SeparatorText("Sprites:");
+            static bool spriteFlipY = true;
+            ImGui::Checkbox("Flip Y##sprite", &spriteFlipY);
+            ImGui::SameLine();
+            if (ImGui::Button("Generate sprite_point_light")) {
+                assetGenerator->RequestTextureGenerateFromFile(
+                    Platform::GetAssetPath() / "textures/sprites/sprite_point_light.png",
+                    Platform::GetAssetPath() / "textures/sprites/sprite_point_light.wtexture",
+                    true,
+                    DXGI_FORMAT_BC7_UNORM_SRGB,
+                    spriteFlipY);
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Generate sprite_area_light")) {
+                assetGenerator->RequestTextureGenerateFromFile(
+                    Platform::GetAssetPath() / "textures/sprites/sprite_area_light.png",
+                    Platform::GetAssetPath() / "textures/sprites/sprite_area_light.wtexture",
+                    true,
+                    DXGI_FORMAT_BC7_UNORM_SRGB,
+                    spriteFlipY);
             }
 
             ImGui::SeparatorText("Procedural Textures:");

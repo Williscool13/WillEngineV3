@@ -5,23 +5,36 @@
 #ifndef WILL_ENGINE_LIGHT_COMPONENTS_H
 #define WILL_ENGINE_LIGHT_COMPONENTS_H
 
-#include <glm/vec3.hpp>
+#include <entt/entt.hpp>
+#include <json/nlohmann/json_fwd.hpp>
+
+#include "engine/engine_api.h"
+
+namespace Core { struct ViewFamily; }
 
 namespace Game::Component
 {
 struct PointLightComponent
 {
-    glm::vec3 color{1.0f, 1.0f, 1.0f};
+    Vec3 color{1.0f, 1.0f, 1.0f};
     float intensity{1.0f};
     float range{10.0f};
+
+    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
+    static void Serialize(const PointLightComponent& comp, nlohmann::json& json);
+    static void Deserialize(PointLightComponent& comp, const nlohmann::json& json);
 };
 
 struct AreaLightComponent
 {
-    glm::vec3 color{1.0f, 1.0f, 1.0f};
+    Vec3 color{1.0f, 1.0f, 1.0f};
     float intensity{1.0f};
     float halfWidth{1.0f};
     float halfHeight{1.0f};
+
+    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
+    static void Serialize(const AreaLightComponent& comp, nlohmann::json& json);
+    static void Deserialize(AreaLightComponent& comp, const nlohmann::json& json);
 };
 }
 

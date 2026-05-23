@@ -403,6 +403,10 @@ compile_shaders(will-engine
 
         ${CMAKE_SOURCE_DIR}/shaders/shadows_resolve.slang compute ComputeMain shadows_resolve
 
+        # Sprite Rendering
+        ${CMAKE_SOURCE_DIR}/shaders/sprites.slang mesh MeshMain sprites
+        ${CMAKE_SOURCE_DIR}/shaders/sprites.slang fragment FragmentMain sprites
+
         # Text Rendering
         ${CMAKE_SOURCE_DIR}/shaders/text/text_default.slang mesh MeshMain default_text
         ${CMAKE_SOURCE_DIR}/shaders/text/text_default.slang fragment FragmentMain default_text
