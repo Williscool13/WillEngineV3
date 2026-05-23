@@ -430,7 +430,7 @@ void EditorUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
     }
 
 
-    if (!ctx->bImguiMouseCaptured && state->inputFrame->GetMouse(MouseButton::LMB).pressed) {
+    if (!ctx->bImguiMouseCaptured && !state->editor.bCustomGizmoActivePrev && state->inputFrame->GetMouse(MouseButton::LMB).pressed) {
         auto it = state->stableIdToEntityMap.Find(StringID{ctx->lastKnownStableIdUnderCursor});
         if (it != nullptr) {
             entt::entity clicked = *it;
@@ -472,6 +472,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
     ZoneScoped;
     state->editor.texResidency.Tick(ctx);
     state->editor.ResetFrameCache();
+    state->editor.bSuppressEntityGizmo = false;
 
     if (state->editor.bWantDeleteEntities) {
         state->editor.bWantDeleteEntities = false;
@@ -1356,7 +1357,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
     }
     ImGui::End();
 
-    if (!state->editor.bCustomGizmoActive && !state->editor.selectedEntities.IsEmpty()) {
+    if (!state->editor.bCustomGizmoActive && !state->editor.bSuppressEntityGizmo && !state->editor.selectedEntities.IsEmpty()) {
         if (state->editor.selectedEntities.Size() == 1) {
             entt::entity entity = state->editor.selectedEntities[0];
             if (auto* transform = state->registry.try_get<Component::TransformComponent>(entity)) {
@@ -1633,15 +1634,6 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
 
     if (ImGui::Begin("Scene")) {
         ImGui::Checkbox("Enable Physics", &state->physics.bEnabled);
-
-        if (ImGui::CollapsingHeader("Directional Light")) {
-            ImGui::SliderFloat3("Direction", &state->lighting.directionalLight.direction.x, -1.0f, 1.0f);
-            if (ImGui::Button("Normalize Direction")) {
-                frameBuffer->mainViewFamily.directionalLight.direction = glm::normalize(state->lighting.directionalLight.direction);
-            }
-            ImGui::SliderFloat("Intensity", &state->lighting.directionalLight.intensity, 0.0f, 5.0f);
-            ImGui::ColorEdit3("Color", &state->lighting.directionalLight.color.x);
-        }
 
         if (ImGui::CollapsingHeader("Shadow Settings")) {
             const char* qualityNames[] = {"Ultra", "High", "Medium", "Low", "Custom"};
@@ -2252,7 +2244,6 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
     }
     ImGui::End();
 
-    frameBuffer->mainViewFamily.directionalLight = state->lighting.directionalLight;
     frameBuffer->mainViewFamily.shadowConfig = state->lighting.shadowConfig;
     frameBuffer->mainViewFamily.postProcessConfig = state->lighting.postProcess;
     frameBuffer->mainViewFamily.aaMode = state->lighting.aaMode;

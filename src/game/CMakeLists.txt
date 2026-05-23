@@ -96,6 +96,7 @@ set(GAME_SOURCES
         systems/component_editor.h
         components/render/light_components.cpp
         components/render/light_components.h
+        component-registry/editor_gizmo_helpers.cpp
 )
 
 set(GAME_INCLUDE_DIRS

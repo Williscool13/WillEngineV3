@@ -5,11 +5,12 @@
 #include "light_components.h"
 
 #include <imgui.h>
-#include <ImGuizmo.h>
-#include <glm/gtc/type_ptr.hpp>
+#include <glm/glm.hpp>
 #include "game/component-registry/component_editor.h"
+#include "game/component-registry/editor_gizmo_helpers.h"
 #include "game/component-registry/json_helpers.h"
 #include "game/components/core_components.h"
+#include "engine/include/engine_context.h"
 
 namespace Game
 {
@@ -45,52 +46,37 @@ Engine::ComponentEditorResult Component::AreaLightComponent::DrawEditor(Core::Vi
         ImGui::DragFloat("Intensity##al", &comp.intensity, 0.05f, 0.0f, 100.0f);
         ImGui::DragFloat("Half Width##al", &comp.halfWidth, 0.05f, 0.01f, 100.0f);
         ImGui::DragFloat("Half Height##al", &comp.halfHeight, 0.05f, 0.01f, 100.0f);
-        auto* transform = registry.try_get<Component::TransformComponent>(entity);
+        auto* transform = registry.try_get<TransformComponent>(entity);
         if (transform) {
-            const glm::mat4 view = viewFamily.mainView.currentViewData.view;
-            const glm::mat4 proj = viewFamily.mainView.currentViewData.proj;
-            const glm::vec3 center = transform->translation;
-            const glm::quat rot = transform->rotation;
-            const glm::vec3 right = rot * glm::vec3(1.0f, 0.0f, 0.0f);
-            const glm::vec3 up = rot * glm::vec3(0.0f, 1.0f, 0.0f);
-            const glm::vec3 forward = rot * glm::vec3(0.0f, 0.0f, 1.0f);
+            const auto& vd = viewFamily.mainView.currentViewData;
+            const Vec3 center = transform->translation;
+            const Quat rot = transform->rotation;
+            const Vec3 right = rot * Vec3(1.0f, 0.0f, 0.0f);
+            const Vec3 up = rot * Vec3(0.0f, 1.0f, 0.0f);
+            const Vec3 forward = rot * Vec3(0.0f, 0.0f, 1.0f);
 
-            ImGuizmo::Style savedStyle = ImGuizmo::GetStyle();
-            ImGuizmo::Style& s = ImGuizmo::GetStyle();
-            s.Colors[ImGuizmo::DIRECTION_X] = {0.5f, 0.8f, 1.0f, 1.0f};
-            s.Colors[ImGuizmo::DIRECTION_Y] = {0.5f, 0.8f, 1.0f, 1.0f};
-            s.Colors[ImGuizmo::DIRECTION_Z] = {0.5f, 0.8f, 1.0f, 1.0f};
-            s.Colors[ImGuizmo::PLANE_X] = {0.5f, 0.8f, 1.0f, 0.38f};
-            s.Colors[ImGuizmo::PLANE_Y] = {0.5f, 0.8f, 1.0f, 0.38f};
-            s.Colors[ImGuizmo::PLANE_Z] = {0.5f, 0.8f, 1.0f, 0.38f};
-            s.Colors[ImGuizmo::TRANSLATION_LINE] = {0.5f, 0.8f, 1.0f, 1.0f};
-            s.Colors[ImGuizmo::SELECTION] = {0.8f, 1.0f, 1.0f, 1.0f};
-            ImGuizmo::SetGizmoSizeClipSpace(0.07f);
-
-            int32_t gizmoId = 10000;
-            auto gizmo = [&](glm::vec3 worldPos, auto onMoved) {
-                glm::mat4 mat = glm::translate(glm::mat4(1.0f), worldPos);
-                ImGuizmo::PushID(gizmoId++);
-                if (ImGuizmo::Manipulate(
-                    glm::value_ptr(view), glm::value_ptr(proj),
-                    ImGuizmo::TRANSLATE, ImGuizmo::WORLD,
-                    glm::value_ptr(mat))) {
-                    onMoved(glm::vec3(mat[3]));
-                }
-                ImGuizmo::PopID();
+            auto* ctx = registry.ctx().get<Engine::EngineContext*>();
+            auto* state = registry.ctx().get<Engine::EngineState*>();
+            const Vec4 viewport{
+                static_cast<float>(ctx->windowContext.viewportOffsetX),
+                static_cast<float>(ctx->windowContext.viewportOffsetY),
+                static_cast<float>(ctx->windowContext.viewportWidth),
+                static_cast<float>(ctx->windowContext.viewportHeight),
             };
 
-            gizmo(center + right * comp.halfWidth, [&](glm::vec3 newPt) {
-                comp.halfWidth = glm::max(0.01f, glm::abs(glm::dot(newPt - center, right)));
-            });
-            gizmo(center + up * comp.halfHeight, [&](glm::vec3 newPt) {
-                comp.halfHeight = glm::max(0.01f, glm::dot(newPt - center, up));
-            });
+            const Vec3 widthPlaneNormal = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, right) * right);
+            Editor::DotHandle(20000, center + right * comp.halfWidth, widthPlaneNormal,
+                vd.view, vd.proj, viewport, vd.cameraPos, state,
+                [&](Vec3 newPt) { comp.halfWidth = glm::max(0.01f, glm::dot(newPt - center, right)); },
+                IM_COL32(220, 60, 60, 255));
 
-            ImGuizmo::GetStyle() = savedStyle;
-            ImGuizmo::SetGizmoSizeClipSpace(0.1f);
+            const Vec3 heightPlaneNormal = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, up) * up);
+            Editor::DotHandle(20001, center + up * comp.halfHeight, heightPlaneNormal,
+                vd.view, vd.proj, viewport, vd.cameraPos, state,
+                [&](Vec3 newPt) { comp.halfHeight = glm::max(0.01f, glm::dot(newPt - center, up)); },
+                IM_COL32(60, 220, 60, 255));
 
-            constexpr glm::vec4 editColor{0.5f, 0.8f, 1.0f, 1.0f};
+            constexpr Vec4 editColor{0.5f, 0.8f, 1.0f, 1.0f};
             DEBUG_ADD_RECT(viewFamily.debugRects, {center, comp.halfWidth, comp.halfHeight, right, up, editColor, 0.03f});
             DEBUG_ADD_ARROW(viewFamily.debugArrows, {center, center + forward * 0.5f, 0.08f, 0.02f, editColor, 0.01f});
         }
@@ -98,6 +84,7 @@ Engine::ComponentEditorResult Component::AreaLightComponent::DrawEditor(Core::Vi
 
     return {.requestRemoval = remove};
 }
+
 void Component::PointLightComponent::Serialize(const PointLightComponent& comp, nlohmann::json& json)
 {
     json["color"] = comp.color;
@@ -128,5 +115,46 @@ void Component::AreaLightComponent::Deserialize(AreaLightComponent& comp, const 
     comp.intensity = json.value("intensity", 1.0f);
     comp.halfWidth = json.value("halfWidth", 1.0f);
     comp.halfHeight = json.value("halfHeight", 1.0f);
+}
+
+Engine::ComponentEditorResult Component::DirectionalLightComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)
+{
+    bool open = ImGui::CollapsingHeader("Directional Light", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
+    ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+    bool remove = ImGui::SmallButton("X##deletedirlight");
+    ImGui::PopStyleColor();
+
+    if (open) {
+        auto& comp = registry.get<DirectionalLightComponent>(entity);
+        ImGui::ColorEdit3("Color##dl", &comp.color.r);
+        ImGui::DragFloat("Intensity##dl", &comp.intensity, 0.05f, 0.0f, 100.0f);
+        ImGui::DragInt("Priority##dl", &comp.priority, 1.0f, -100, 100);
+
+        auto* transform = registry.try_get<Component::TransformComponent>(entity);
+        if (transform) {
+            const glm::vec3 forward = transform->rotation * glm::vec3(0.0f, 0.0f, 1.0f);
+            const glm::vec3 pos = transform->translation;
+            constexpr glm::vec4 dirColor{1.0f, 0.9f, 0.5f, 1.0f};
+            DEBUG_ADD_ARROW(viewFamily.debugArrows, {pos, pos + forward * 2.0f, 0.15f, 0.04f, dirColor, 0.02f});
+        }
+    }
+
+    return {.requestRemoval = remove};
+}
+
+void Component::DirectionalLightComponent::Serialize(const DirectionalLightComponent& comp, nlohmann::json& json)
+{
+    json["color"] = comp.color;
+    json["intensity"] = comp.intensity;
+    json["priority"] = comp.priority;
+}
+
+void Component::DirectionalLightComponent::Deserialize(DirectionalLightComponent& comp, const nlohmann::json& json)
+{
+    if (!json.is_object()) { return; }
+    comp.color = json.contains("color") ? json["color"].get<Vec3>() : Vec3{1.0f, 1.0f, 1.0f};
+    comp.intensity = json.value("intensity", 2.0f);
+    comp.priority = json.value("priority", 0);
 }
 } // Game

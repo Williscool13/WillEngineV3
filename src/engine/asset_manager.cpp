@@ -115,6 +115,16 @@ AssetManager::AssetManager(Core::MemoryManager& memoryManager, Engine::EngineCon
         LOG_CRITICAL(Asset, "Sprite texture sprite_area_light does not exist, please generate and restart the engine");
     }
 
+    TextureID spriteDirectionalLight = FindTextureByName("sprite_directional_light");
+    if (spriteDirectionalLight.IsValid()) {
+        Texture* spriteDirectionalLightTex = LoadTexture(spriteDirectionalLight);
+        assert(spriteDirectionalLightTex && spriteDirectionalLightTex->bindlessHandle.index == SPRITE_DIRECTIONAL_LIGHT_BINDLESS_INDEX);
+    }
+    else {
+        resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTexture();
+        LOG_CRITICAL(Asset, "Sprite texture sprite_directional_light does not exist, please generate and restart the engine");
+    }
+
     auto roboto = FindFontByName("Roboto");
     if (roboto.IsValid()) {
         LoadFont(roboto);

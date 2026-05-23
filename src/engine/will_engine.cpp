@@ -809,6 +809,11 @@ void WillEngine::EditorImgui()
             assets / "textures/sprites/sprite_area_light.wtexture",
             true,
             DXGI_FORMAT_BC7_UNORM_SRGB);
+        assetGenerator->RequestTextureGenerateFromFile(
+            assets / "textures/sprites/sprite_directional_light.png",
+            assets / "textures/sprites/sprite_directional_light.wtexture",
+            true,
+            DXGI_FORMAT_BC7_UNORM_SRGB);
         assetGenerator->GenerateBRDFLUT(assets / "textures/brdf_lut.wtexture");
         assetGenerator->GenerateSMAATextures(assets / "textures");
         assetGenerator->RequestFontGenerate(
@@ -955,6 +960,15 @@ void WillEngine::EditorImgui()
                 assetGenerator->RequestTextureGenerateFromFile(
                     Platform::GetAssetPath() / "textures/sprites/sprite_area_light.png",
                     Platform::GetAssetPath() / "textures/sprites/sprite_area_light.wtexture",
+                    true,
+                    DXGI_FORMAT_BC7_UNORM_SRGB,
+                    spriteFlipY);
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Generate sprite_directional_light")) {
+                assetGenerator->RequestTextureGenerateFromFile(
+                    Platform::GetAssetPath() / "textures/sprites/sprite_directional_light.png",
+                    Platform::GetAssetPath() / "textures/sprites/sprite_directional_light.wtexture",
                     true,
                     DXGI_FORMAT_BC7_UNORM_SRGB,
                     spriteFlipY);

@@ -686,6 +686,24 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
             .intensity = light.intensity,
         });
     }
+
+    {
+        int32_t bestPriority = INT32_MIN;
+        bool found = false;
+        auto dirView = state->registry.view<Component::DirectionalLightComponent, Component::TransformComponent>();
+        for (auto [entity, light, transform] : dirView.each()) {
+            if (light.priority > bestPriority) {
+                bestPriority = light.priority;
+                vf.directionalLight.direction = transform.rotation * glm::vec3(0.0f, 0.0f, 1.0f);
+                vf.directionalLight.color = light.color;
+                vf.directionalLight.intensity = light.intensity;
+                found = true;
+            }
+        }
+        if (!found) {
+            vf.directionalLight = Core::DirectionalLight{};
+        }
+    }
 }
 
 void GatherEditorSprites(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
@@ -722,6 +740,23 @@ void GatherEditorSprites(Engine::EngineContext* ctx, Engine::EngineState* state,
             .color = {light.color.r, light.color.g, light.color.b, 1.0f},
             .stableId = stableId,
             .textureIndex = SPRITE_AREA_LIGHT_BINDLESS_INDEX,
+            .samplerIndex = ASSET_SAMPLER_NEAREST_BINDLESS_INDEX,
+            .billboard = true,
+        });
+    }
+
+    auto dirView = state->registry.view<Component::DirectionalLightComponent, Component::TransformComponent>();
+    for (auto [entity, light, transform] : dirView.each()) {
+        uint64_t stableId = 0;
+        if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
+            stableId = stable->id.id;
+        }
+        sprites.PushBack(Core::Sprite{
+            .worldPosition = transform.translation,
+            .pixelSize = 0.5f,
+            .color = {light.color.r, light.color.g, light.color.b, 1.0f},
+            .stableId = stableId,
+            .textureIndex = SPRITE_DIRECTIONAL_LIGHT_BINDLESS_INDEX,
             .samplerIndex = ASSET_SAMPLER_NEAREST_BINDLESS_INDEX,
             .billboard = true,
         });

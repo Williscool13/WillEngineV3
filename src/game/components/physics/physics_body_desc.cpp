@@ -9,6 +9,7 @@
 
 #include "physics_components.h"
 #include "game/component-registry/component_editor.h"
+#include "game/component-registry/editor_gizmo_helpers.h"
 
 #include "engine/include/engine_context.h"
 #include "engine/asset_manager.h"
@@ -527,8 +528,8 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
         editEntity = entity;
     }
 
-    const bool hasGizmoClaim = editShapeIdx != -1 && !state->editor.bCustomGizmoActive;
-    if (hasGizmoClaim) state->editor.bCustomGizmoActive = true;
+    const bool hasGizmoClaim = editShapeIdx != -1;
+    if (hasGizmoClaim) { state->editor.bSuppressEntityGizmo = true; }
 
     bool open = ImGui::CollapsingHeader("Physics Body", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
     ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
@@ -749,96 +750,117 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
         auto renderGizmo = [&](int i, PhysicsShapeDesc& shape) {
             if (editShapeIdx != i || !transform || !hasGizmoClaim) return;
 
-            const glm::mat4 entityMat = glm::translate(glm::mat4(1.0f), transform->translation) * glm::mat4_cast(transform->rotation);
-            const glm::mat4 entityMatInv = glm::inverse(entityMat);
-            const glm::vec3 shapeCenter = glm::vec3(entityMat * glm::vec4(shape.offset, 1.0f));
+            const Mat4 entityMat = glm::translate(Mat4(1.0f), transform->translation) * glm::mat4_cast(transform->rotation);
+            const Mat4 entityMatInv = glm::inverse(entityMat);
+            const Vec3 shapeCenter = Vec3(entityMat * Vec4(shape.offset, 1.0f));
+            const Vec3 entityRight = transform->rotation * Vec3(1.0f, 0.0f, 0.0f);
+            const Vec3 entityUp = transform->rotation * Vec3(0.0f, 1.0f, 0.0f);
+            const Vec3 entityForward = transform->rotation * Vec3(0.0f, 0.0f, 1.0f);
+            const auto& vd = viewFamily.mainView.currentViewData;
 
-            ImGuizmo::Style savedStyle = ImGuizmo::GetStyle();
-
-            auto applyStyle = [](ImVec4 full, ImVec4 select, float size) {
-                ImGuizmo::Style& s = ImGuizmo::GetStyle();
-                s.Colors[ImGuizmo::DIRECTION_X] = full;
-                s.Colors[ImGuizmo::DIRECTION_Y] = full;
-                s.Colors[ImGuizmo::DIRECTION_Z] = full;
-                s.Colors[ImGuizmo::PLANE_X] = {full.x, full.y, full.z, 0.38f};
-                s.Colors[ImGuizmo::PLANE_Y] = {full.x, full.y, full.z, 0.38f};
-                s.Colors[ImGuizmo::PLANE_Z] = {full.x, full.y, full.z, 0.38f};
-                s.Colors[ImGuizmo::TRANSLATION_LINE] = full;
-                s.Colors[ImGuizmo::SELECTION] = select;
-                ImGuizmo::SetGizmoSizeClipSpace(size);
+            auto* ctx = registry.ctx().get<Engine::EngineContext*>();
+            const Vec4 viewport{
+                static_cast<float>(ctx->windowContext.viewportOffsetX),
+                static_cast<float>(ctx->windowContext.viewportOffsetY),
+                static_cast<float>(ctx->windowContext.viewportWidth),
+                static_cast<float>(ctx->windowContext.viewportHeight),
             };
 
-            int gizmoId = 0;
-            auto gizmo = [&](glm::vec3 worldPos, auto onMoved) {
-                glm::mat4 mat = glm::translate(glm::mat4(1.0f), worldPos);
-                ImGuizmo::PushID(gizmoId++);
-                if (ImGuizmo::Manipulate(
-                    glm::value_ptr(view), glm::value_ptr(proj),
-                    ImGuizmo::TRANSLATE, ImGuizmo::WORLD,
-                    glm::value_ptr(mat))) {
-                    onMoved(glm::vec3(mat[3]));
+            {
+                ImGuizmo::SetGizmoSizeClipSpace(0.10f);
+                ImGuizmo::PushID(0);
+                Mat4 mat = glm::translate(Mat4(1.0f), shapeCenter);
+                if (ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(proj), ImGuizmo::TRANSLATE, ImGuizmo::WORLD, glm::value_ptr(mat))) {
+                    shape.offset = Vec3(entityMatInv * Vec4(Vec3(mat[3]), 1.0f));
                 }
+                if (ImGuizmo::IsOver() || ImGuizmo::IsUsing()) { state->editor.bCustomGizmoActive = true; }
                 ImGuizmo::PopID();
-            };
+                ImGuizmo::SetGizmoSizeClipSpace(0.1f);
+            }
 
-            applyStyle({1.0f, 0.55f, 0.05f, 1.0f}, {1.0f, 0.85f, 0.35f, 1.0f}, 0.10f);
-            gizmo(shapeCenter, [&](glm::vec3 newCenter) {
-                shape.offset = glm::vec3(entityMatInv * glm::vec4(newCenter, 1.0f));
-            });
-
-            applyStyle({1.0f, 0.85f, 0.20f, 1.0f}, {1.0f, 1.00f, 0.60f, 1.0f}, 0.07f);
+            constexpr ImU32 colorX = IM_COL32(220, 60, 60, 255);
+            constexpr ImU32 colorY = IM_COL32(60, 220, 60, 255);
+            constexpr ImU32 colorZ = IM_COL32(60, 100, 220, 255);
             switch (shape.type) {
                 case PhysicsShapeType::Sphere:
-                    gizmo(shapeCenter + glm::vec3(shape.sphere.radius, 0.0f, 0.0f), [&](glm::vec3 newPt) {
-                        shape.sphere.radius = glm::max(0.001f, glm::length(newPt - shapeCenter));
-                    });
+                {
+                    const Vec3 planeNormal = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, entityRight) * entityRight);
+                    Editor::DotHandle(10000, shapeCenter + entityRight * shape.sphere.radius, planeNormal,
+                        vd.view, vd.proj, viewport, vd.cameraPos, state,
+                        [&](Vec3 newPt) { shape.sphere.radius = glm::max(0.001f, glm::length(newPt - shapeCenter)); },
+                        colorX);
                     break;
+                }
                 case PhysicsShapeType::Capsule:
-                    gizmo(shapeCenter + glm::vec3(0.0f, shape.capsule.halfHeight, 0.0f), [&](glm::vec3 newPt) {
-                        shape.capsule.halfHeight = glm::max(0.001f, newPt.y - shapeCenter.y);
-                    });
-                    gizmo(shapeCenter + glm::vec3(shape.capsule.radius, 0.0f, 0.0f), [&](glm::vec3 newPt) {
-                        shape.capsule.radius = glm::max(0.001f, glm::length(newPt - shapeCenter));
-                    });
+                {
+                    const Vec3 upPlane = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, entityUp) * entityUp);
+                    const Vec3 rightPlane = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, entityRight) * entityRight);
+                    Editor::DotHandle(10000, shapeCenter + entityUp * shape.capsule.halfHeight, upPlane,
+                        vd.view, vd.proj, viewport, vd.cameraPos, state,
+                        [&](Vec3 newPt) { shape.capsule.halfHeight = glm::max(0.001f, glm::dot(newPt - shapeCenter, entityUp)); },
+                        colorY);
+                    Editor::DotHandle(10001, shapeCenter + entityRight * shape.capsule.radius, rightPlane,
+                        vd.view, vd.proj, viewport, vd.cameraPos, state,
+                        [&](Vec3 newPt) { shape.capsule.radius = glm::max(0.001f, glm::length(newPt - shapeCenter)); },
+                        colorX);
                     break;
+                }
                 case PhysicsShapeType::Box:
-                    gizmo(shapeCenter + glm::vec3(shape.box.halfExtents.x, 0.0f, 0.0f), [&](glm::vec3 newPt) {
-                        shape.box.halfExtents.x = glm::max(0.001f, glm::abs(newPt.x - shapeCenter.x));
-                    });
-                    gizmo(shapeCenter + glm::vec3(0.0f, shape.box.halfExtents.y, 0.0f), [&](glm::vec3 newPt) {
-                        shape.box.halfExtents.y = glm::max(0.001f, glm::abs(newPt.y - shapeCenter.y));
-                    });
-                    gizmo(shapeCenter + glm::vec3(0.0f, 0.0f, shape.box.halfExtents.z), [&](glm::vec3 newPt) {
-                        shape.box.halfExtents.z = glm::max(0.001f, glm::abs(newPt.z - shapeCenter.z));
-                    });
+                {
+                    const Vec3 xPlane = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, entityRight) * entityRight);
+                    const Vec3 yPlane = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, entityUp) * entityUp);
+                    const Vec3 zPlane = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, entityForward) * entityForward);
+                    Editor::DotHandle(10000, shapeCenter + entityRight * shape.box.halfExtents.x, xPlane,
+                        vd.view, vd.proj, viewport, vd.cameraPos, state,
+                        [&](Vec3 newPt) { shape.box.halfExtents.x = glm::max(0.001f, glm::abs(glm::dot(newPt - shapeCenter, entityRight))); },
+                        colorX);
+                    Editor::DotHandle(10001, shapeCenter + entityUp * shape.box.halfExtents.y, yPlane,
+                        vd.view, vd.proj, viewport, vd.cameraPos, state,
+                        [&](Vec3 newPt) { shape.box.halfExtents.y = glm::max(0.001f, glm::abs(glm::dot(newPt - shapeCenter, entityUp))); },
+                        colorY);
+                    Editor::DotHandle(10002, shapeCenter + entityForward * shape.box.halfExtents.z, zPlane,
+                        vd.view, vd.proj, viewport, vd.cameraPos, state,
+                        [&](Vec3 newPt) { shape.box.halfExtents.z = glm::max(0.001f, glm::abs(glm::dot(newPt - shapeCenter, entityForward))); },
+                        colorZ);
                     break;
+                }
                 default:
                     break;
             }
 
-            ImGuizmo::GetStyle() = savedStyle;
-            ImGuizmo::SetGizmoSizeClipSpace(0.1f);
-
-            constexpr glm::vec4 kEditColor{1.0f, 0.6f, 0.1f, 1.0f};
+            constexpr Vec4 editColorX{0.86f, 0.24f, 0.24f, 1.0f};
+            constexpr Vec4 editColorY{0.24f, 0.86f, 0.24f, 1.0f};
+            constexpr Vec4 editColorZ{0.24f, 0.39f, 0.86f, 1.0f};
             switch (shape.type) {
                 case PhysicsShapeType::Sphere:
-                    DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {shapeCenter, shape.sphere.radius, kEditColor});
+                    DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {shapeCenter, shape.sphere.radius, editColorX});
                     break;
                 case PhysicsShapeType::Capsule:
                 {
-                    const glm::vec3 top = shapeCenter + glm::vec3(0.0f, shape.capsule.halfHeight, 0.0f);
-                    const glm::vec3 bot = shapeCenter - glm::vec3(0.0f, shape.capsule.halfHeight, 0.0f);
-                    DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {top, shape.capsule.radius, kEditColor});
-                    DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {bot, shape.capsule.radius, kEditColor});
-                    DEBUG_ADD_LINE(viewFamily.debugLines, {top + glm::vec3( shape.capsule.radius, 0, 0), bot + glm::vec3( shape.capsule.radius, 0, 0), kEditColor});
-                    DEBUG_ADD_LINE(viewFamily.debugLines, {top + glm::vec3(-shape.capsule.radius, 0, 0), bot + glm::vec3(-shape.capsule.radius, 0, 0), kEditColor});
-                    DEBUG_ADD_LINE(viewFamily.debugLines, {top + glm::vec3(0, 0, shape.capsule.radius), bot + glm::vec3(0, 0, shape.capsule.radius), kEditColor});
-                    DEBUG_ADD_LINE(viewFamily.debugLines, {top + glm::vec3(0, 0, -shape.capsule.radius), bot + glm::vec3(0, 0, -shape.capsule.radius), kEditColor});
+                    const Vec3 top = shapeCenter + entityUp * shape.capsule.halfHeight;
+                    const Vec3 bot = shapeCenter - entityUp * shape.capsule.halfHeight;
+                    DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {top, shape.capsule.radius, editColorY});
+                    DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {bot, shape.capsule.radius, editColorY});
+                    DEBUG_ADD_LINE(viewFamily.debugLines, {top + entityRight * shape.capsule.radius, bot + entityRight * shape.capsule.radius, editColorX});
+                    DEBUG_ADD_LINE(viewFamily.debugLines, {top - entityRight * shape.capsule.radius, bot - entityRight * shape.capsule.radius, editColorX});
+                    DEBUG_ADD_LINE(viewFamily.debugLines, {top + entityForward * shape.capsule.radius, bot + entityForward * shape.capsule.radius, editColorZ});
+                    DEBUG_ADD_LINE(viewFamily.debugLines, {top - entityForward * shape.capsule.radius, bot - entityForward * shape.capsule.radius, editColorZ});
                     break;
                 }
                 case PhysicsShapeType::Box:
-                    DEBUG_ADD_BOX(viewFamily.debugBoxes, {shapeCenter, shape.box.halfExtents, transform->rotation * shape.rotation, kEditColor});
+                {
+                    const Quat boxRot = transform->rotation * shape.rotation;
+                    const Vec3 bx = boxRot * Vec3(shape.box.halfExtents.x, 0.0f, 0.0f);
+                    const Vec3 by = boxRot * Vec3(0.0f, shape.box.halfExtents.y, 0.0f);
+                    const Vec3 bz = boxRot * Vec3(0.0f, 0.0f, shape.box.halfExtents.z);
+                    DEBUG_ADD_RECT(viewFamily.debugRects, {shapeCenter + bx, shape.box.halfExtents.y, shape.box.halfExtents.z, glm::normalize(by), glm::normalize(bz), editColorX, 0.02f});
+                    DEBUG_ADD_RECT(viewFamily.debugRects, {shapeCenter - bx, shape.box.halfExtents.y, shape.box.halfExtents.z, glm::normalize(by), glm::normalize(bz), editColorX, 0.02f});
+                    DEBUG_ADD_RECT(viewFamily.debugRects, {shapeCenter + by, shape.box.halfExtents.x, shape.box.halfExtents.z, glm::normalize(bx), glm::normalize(bz), editColorY, 0.02f});
+                    DEBUG_ADD_RECT(viewFamily.debugRects, {shapeCenter - by, shape.box.halfExtents.x, shape.box.halfExtents.z, glm::normalize(bx), glm::normalize(bz), editColorY, 0.02f});
+                    DEBUG_ADD_RECT(viewFamily.debugRects, {shapeCenter + bz, shape.box.halfExtents.x, shape.box.halfExtents.y, glm::normalize(bx), glm::normalize(by), editColorZ, 0.02f});
+                    DEBUG_ADD_RECT(viewFamily.debugRects, {shapeCenter - bz, shape.box.halfExtents.x, shape.box.halfExtents.y, glm::normalize(bx), glm::normalize(by), editColorZ, 0.02f});
                     break;
+                }
             }
         };
 

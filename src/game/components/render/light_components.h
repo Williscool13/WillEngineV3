@@ -36,6 +36,17 @@ struct AreaLightComponent
     static void Serialize(const AreaLightComponent& comp, nlohmann::json& json);
     static void Deserialize(AreaLightComponent& comp, const nlohmann::json& json);
 };
+
+struct DirectionalLightComponent
+{
+    Vec3 color{1.0f, 1.0f, 1.0f};
+    float intensity{2.0f};
+    int32_t priority{0};
+
+    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
+    static void Serialize(const DirectionalLightComponent& comp, nlohmann::json& json);
+    static void Deserialize(DirectionalLightComponent& comp, const nlohmann::json& json);
+};
 }
 
 #endif //WILL_ENGINE_LIGHT_COMPONENTS_H

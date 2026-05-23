@@ -168,6 +168,8 @@ struct EditorState
     float snapScale{0.1f};
     bool bCustomGizmoActive{false};
     bool bCustomGizmoActivePrev{false};
+    int32_t activeDotHandleId{-1};
+    bool bSuppressEntityGizmo{false};
     PhysicsDebugMode physicsDebugMode{PhysicsDebugMode::SensorOnly};
 
     // Scene management
