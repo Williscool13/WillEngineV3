@@ -13,7 +13,7 @@ void ArenaSuballocator::Init(void* pool, size_t bytes)
     tlsf.Init(pool, bytes, false); // mutex_ covers all operations
 }
 
-Arena ArenaSuballocator::Acquire(size_t size, AllocTag tag)
+Arena ArenaSuballocator::Acquire(size_t size, AllocTag tag, const char* name)
 {
     std::lock_guard lock(mutex_);
     void* chunk = tlsf.Alloc(size, tag);
@@ -23,7 +23,7 @@ Arena ArenaSuballocator::Acquire(size_t size, AllocTag tag)
     assert(tracked_.Size() < kMaxTracked && "ArenaSuballocator: too many live arenas");
     tracked_.PushBack({chunk, tag, nullptr});
     ++activeChunks_;
-    return Arena{chunk, size};
+    return Arena{chunk, size, name};
 }
 
 void ArenaSuballocator::RegisterArena(void* chunkPtr, Arena* arena)

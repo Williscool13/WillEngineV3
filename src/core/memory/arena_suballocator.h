@@ -40,7 +40,7 @@ public:
      * an Arena wrapping it. Returns a null Arena (Data() == nullptr) on failure.
      * Call RegisterArena(arena.Data(), &arena) afterwards to enable live stats.
      */
-    Arena Acquire(size_t size, AllocTag tag = AllocTag::Unknown);
+    Arena Acquire(size_t size, AllocTag tag = AllocTag::Unknown, const char* name = "");
 
     /**
      * Patches the Arena* for an already-acquired chunk so GetLiveArenaStats can read it.
@@ -99,8 +99,8 @@ class ManagedArena
 public:
     ManagedArena() = default;
 
-    ManagedArena(ArenaSuballocator& pool, size_t size, AllocTag tag = AllocTag::Unknown)
-        : pool_(&pool), arena_(pool.Acquire(size, tag))
+    ManagedArena(ArenaSuballocator& pool, size_t size, AllocTag tag = AllocTag::Unknown, const char* name = "")
+        : pool_(&pool), arena_(pool.Acquire(size, tag, name))
     {
         if (arena_.Data()) {
             pool.RegisterArena(arena_.Data(), &arena_);

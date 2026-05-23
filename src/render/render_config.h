@@ -35,6 +35,7 @@ inline constexpr int32_t RDG_MAX_STORAGE_UINT = 64;
 
 inline const StringID SCENE_DATA_BUFFER = SID("scene_data");
 inline const StringID SHADOW_DATA_BUFFER = SID("shadow_data");
+inline const StringID LIGHT_DATA_BUFFER = SID("light_data");
 inline const StringID GEOMETRY_PRIMITIVE_BUFFER = SID("primitive_buffer");
 inline const StringID GEOMETRY_MODEL_BUFFER = SID("model_buffer");
 inline const StringID GEOMETRY_INSTANCE_BUFFER = SID("main_instance_buffer");

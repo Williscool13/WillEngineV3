@@ -258,6 +258,30 @@
     </Expand>
   </Type>
 
+  <!-- ===== ARENAS ===== -->
+
+  <Type Name="Core::Arena">
+    <DisplayString Condition="name.len &gt; 0">Arena "{name.buf,s}" [{head}/{capacity} bytes]</DisplayString>
+    <DisplayString>Arena [{head}/{capacity} bytes]</DisplayString>
+    <Expand>
+      <Item Name="[name]">name.buf,s</Item>
+      <Item Name="[used]">head</Item>
+      <Item Name="[capacity]">capacity</Item>
+      <Item Name="[peak]">peakHead</Item>
+      <Item Name="[free]">capacity - head</Item>
+    </Expand>
+  </Type>
+
+  <Type Name="Core::ManagedArena">
+    <DisplayString Condition="arena_.name.len &gt; 0">ManagedArena "{arena_.name.buf,s}" [{arena_.head}/{arena_.capacity} bytes]</DisplayString>
+    <DisplayString Condition="arena_.memory != 0">ManagedArena [{arena_.head}/{arena_.capacity} bytes]</DisplayString>
+    <DisplayString>ManagedArena (empty)</DisplayString>
+    <Expand>
+      <Item Name="[arena]">arena_</Item>
+      <Item Name="[pool]">pool_</Item>
+    </Expand>
+  </Type>
+
   <!-- ===== STRINGS ===== -->
 
   <Type Name="Core::String">

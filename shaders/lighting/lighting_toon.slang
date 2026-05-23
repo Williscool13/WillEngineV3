@@ -2,6 +2,7 @@ import push_constant_interop;
 import shader_functions;
 import constants_interop;
 import model_interop;
+import packing_functions;
 import visibility_lighting_common;
 
 import bindless_declarations;
@@ -25,7 +26,7 @@ void ComputeMain(uniform LightingResolvePushConstant pc, uint3 threadID : SV_Dis
     }
 
     float3 N = normalize(li.viewNormal);
-    float3 L = normalize(mul((float3x3)pc.sceneData[pc.sceneDataIndex].view, normalize(-pc.lightData->mainLightDirection.xyz)));
+    float3 L = normalize(mul((float3x3)pc.sceneData[pc.sceneDataIndex].view, normalize(-pc.lightData->directionalLight.directionIntensity.xyz)));
 
     float shadowFactor = li.shadows.x;
     float gtao = li.shadows.y;
@@ -37,8 +38,8 @@ void ComputeMain(uniform LightingResolvePushConstant pc, uint3 threadID : SV_Dis
     float toonDiffuse = floor(clamp(nDotL, 0.0, 1.0) * toonBands) / toonBands;
     toonDiffuse *= shadowFactor;
 
-    const float lightIntensity = pc.lightData->mainLightDirection.w;
-    const float3 lightColor = pc.lightData->mainLightColor.rgb;
+    const float lightIntensity = pc.lightData->directionalLight.directionIntensity.w;
+    const float3 lightColor = UnpackUnorm4x8(pc.lightData->directionalLight.packedColor).rgb;
     float3 directLight = li.albedo.xyz * toonDiffuse * lightIntensity * lightColor;
 
     float3 ambient = li.albedo.xyz * 0.15 * gtao;

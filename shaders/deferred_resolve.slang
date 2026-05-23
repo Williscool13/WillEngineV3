@@ -2,6 +2,7 @@ import push_constant_interop;
 import shader_functions;
 import constants_interop;
 import pbr_functions;
+import packing_functions;
 
 import bindless_declarations;
 
@@ -34,7 +35,7 @@ void ComputeMain(uniform DeferredResolvePushConstant pc, uint3 threadID : SV_Dis
     float3 V = normalize(-viewPosition);
 
     // Directional light in view space (transform from world space)
-    float3 L = normalize(mul((float3x3)pc.sceneData[pc.sceneDataIndex].view, normalize(-pc.lightData->mainLightDirection.xyz)));
+    float3 L = normalize(mul((float3x3)pc.sceneData[pc.sceneDataIndex].view, normalize(-pc.lightData->directionalLight.directionIntensity.xyz)));
     float3 H = normalize(V + L);
 
     // SPECULAR: Cook-Torrance BRDF
@@ -57,8 +58,8 @@ void ComputeMain(uniform DeferredResolvePushConstant pc, uint3 threadID : SV_Dis
     float shadowFactor = shadows.x;
     float gtao = shadows.y;
 
-    const float lightIntensity = pc.lightData->mainLightDirection.w;
-    const float3 lightColor = pc.lightData->mainLightColor.rgb;
+    const float lightIntensity = pc.lightData->directionalLight.directionIntensity.w;
+    const float3 lightColor = unpackUnorm4x8(pc.lightData->directionalLight.packedColor).rgb;
     float3 directLight = (diffuse + specular) * nDotL * shadowFactor * lightIntensity * lightColor;
 
     // IBL

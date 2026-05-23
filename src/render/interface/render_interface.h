@@ -18,6 +18,8 @@
 #include "core/time/time_frame.h"
 #include "core/types/transform.h"
 #include "engine/material_manager.h"
+#include "core/containers/inline_vector.h"
+#include "render/shaders/lights_interop.h"
 #include "render/shaders/model_interop.h"
 #include "render/shaders/push_constant_interop.h"
 #include "render/shaders/text_interop.h"
@@ -434,6 +436,8 @@ struct ViewFamily
 
     ShadowConfiguration shadowConfig{};
     DirectionalLight directionalLight{};
+    InlineVector<PointLightData, MAX_POINT_LIGHTS> pointLights{};
+    InlineVector<AreaLightData, MAX_AREA_LIGHTS> areaLights{};
 
     AntiAliasingMode aaMode{AntiAliasingMode::TAA};
     GTAOConfiguration gtaoConfig{};

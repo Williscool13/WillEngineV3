@@ -581,7 +581,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         if (!viewFamily.debugResourceName.IsEmpty()) {
             StringID debugTargetName = StringID(viewFamily.debugResourceName.c_str(), viewFamily.debugResourceName.Size());
 
-            bool bDebugBuffersReady = renderGraph->HasBuffer(SID("scene_data"));
+            bool bDebugBuffersReady = renderGraph->HasBuffer(SCENE_DATA_BUFFER);
             if (bDebugBuffersReady && renderGraph->HasTexture(debugTargetName)) {
                 auto& debugVisPass = renderGraph->AddPass(SID("Debug Visualize"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
                 debugVisPass.ReadSampledImage(debugTargetName);
@@ -634,7 +634,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                     uint32_t outputIndexIndex = renderGraph->GetStorageImageViewDescriptorIndex(finalOutput);
 
                     DebugVisualizePushConstant pc{
-                        .sceneData = renderGraph->TryGetBufferAddress(SID("scene_data")),
+                        .sceneData = renderGraph->TryGetBufferAddress(SCENE_DATA_BUFFER),
                         .vertexPosBuffer = renderGraph->TryGetBufferAddress(GEOMETRY_VERTEX_POSITION_BUFFER),
                         .vertexAttrBuffer = renderGraph->TryGetBufferAddress(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER),
                         .meshletVerticesBuffer = renderGraph->TryGetBufferAddress(GEOMETRY_MESHLET_VERTEX_BUFFER),
@@ -1170,9 +1170,9 @@ void RenderThread::RegisterDebugReadbacks()
 
 void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const Core::Array<uint32_t, 2> renderExtent, float renderDeltaTime) const
 {
-    renderGraph->CreateBuffer(SID("scene_data"), SCENE_DATA_BUFFER_SIZE, false);
+    renderGraph->CreateBuffer(SCENE_DATA_BUFFER, SCENE_DATA_BUFFER_SIZE, false);
     renderGraph->CreateBuffer(SID("shadow_data"), SHADOW_DATA_BUFFER_SIZE, false);
-    renderGraph->CreateBuffer(SID("light_data"), LIGHT_DATA_BUFFER_SIZE, false);
+    renderGraph->CreateBuffer(LIGHT_DATA_BUFFER, LIGHT_DATA_BUFFER_SIZE, false);
 
     // Scene Data
     SceneData sceneData = GenerateSceneData(viewFamily.mainView, viewFamily.aaMode, renderExtent, frameNumber, renderDeltaTime);
@@ -1237,16 +1237,24 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
 
     // Lights
     LightData lightData{};
-    lightData.mainLightDirection = {viewFamily.directionalLight.direction, viewFamily.directionalLight.intensity};
-    lightData.mainLightColor = {viewFamily.directionalLight.color, 0.0f};
+    {
+        const glm::vec3& dir = viewFamily.directionalLight.direction;
+        const glm::vec3& col = viewFamily.directionalLight.color;
+        lightData.directionalLight.directionIntensity = {dir, viewFamily.directionalLight.intensity};
+        lightData.directionalLight.packedColor =
+            (static_cast<uint32_t>(glm::clamp(col.r, 0.0f, 1.0f) * 255.0f + 0.5f)) |
+            (static_cast<uint32_t>(glm::clamp(col.g, 0.0f, 1.0f) * 255.0f + 0.5f) << 8) |
+            (static_cast<uint32_t>(glm::clamp(col.b, 0.0f, 1.0f) * 255.0f + 0.5f) << 16) |
+            (0xFFu << 24);
+    }
 
     UploadAllocation lightDataUploadAllocation = renderGraph->AllocateTransient(sizeof(LightData));
     memcpy(lightDataUploadAllocation.ptr, &lightData, sizeof(LightData));
 
     auto& uploadUniformsPass = renderGraph->AddPass(SID("Upload Uniforms"), VK_PIPELINE_STAGE_2_COPY_BIT);
-    uploadUniformsPass.WriteTransferBuffer(SID("scene_data"));
+    uploadUniformsPass.WriteTransferBuffer(SCENE_DATA_BUFFER);
     uploadUniformsPass.WriteTransferBuffer(SID("shadow_data"));
-    uploadUniformsPass.WriteTransferBuffer(SID("light_data"));
+    uploadUniformsPass.WriteTransferBuffer(LIGHT_DATA_BUFFER);
     uploadUniformsPass.Execute([&,
             sceneOffset = sceneDataUploadAllocation.offset,
             portalOffset = portalSceneDataUploadAllocation.offset,
@@ -1270,7 +1278,7 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
             const VkCopyBufferInfo2 sceneDataCopyInfo{
                 .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
                 .srcBuffer = renderGraph->GetTransientUploadBuffer(),
-                .dstBuffer = renderGraph->GetBufferHandle(SID("scene_data")),
+                .dstBuffer = renderGraph->GetBufferHandle(SCENE_DATA_BUFFER),
                 .regionCount = sceneDataCount,
                 .pRegions = sceneDataRegions.Data()
             };
@@ -1298,7 +1306,7 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
             const VkCopyBufferInfo2 lightDataCopyInfo{
                 .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
                 .srcBuffer = renderGraph->GetTransientUploadBuffer(),
-                .dstBuffer = renderGraph->GetBufferHandle(SID("light_data")),
+                .dstBuffer = renderGraph->GetBufferHandle(LIGHT_DATA_BUFFER),
                 .regionCount = lightDataRegions.Size(),
                 .pRegions = lightDataRegions.Data()
             };
@@ -1972,7 +1980,7 @@ void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& 
     if (bHasDepth) {
         debugDrawPass.ReadWriteDepthAttachment(depthTarget);
     }
-    debugDrawPass.ReadBuffer(SID("scene_data"));
+    debugDrawPass.ReadBuffer(SCENE_DATA_BUFFER);
     debugDrawPass.ReadBuffer(SID("debug_segment_buffer"));
     debugDrawPass.Execute([&, width = renderExtent[0], height = renderExtent[1], totalLineSegments, bHasDepth, depthTarget, targetImage](VkCommandBuffer cmd) {
         VkViewport viewport = VkHelpers::GenerateViewport(width, height);
@@ -1993,7 +2001,7 @@ void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& 
         vkCmdBeginRendering(cmd, &renderInfo);
 
         DebugDrawPushConstant pushConstants{
-            .sceneData = graph.GetBufferAddress(SID("scene_data")),
+            .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
             .segmentBuffer = graph.GetBufferAddress(SID("debug_segment_buffer")),
             .sceneDataIndex = 0,
             .totalLineSegments = totalLineSegments,

@@ -360,6 +360,7 @@ add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/shader_functions.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/shadow_functions.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/ui_functions.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/pbr_functions.slang")
+add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/packing_functions.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/bindless_declarations.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/procedural_texture_declarations.slang")
 

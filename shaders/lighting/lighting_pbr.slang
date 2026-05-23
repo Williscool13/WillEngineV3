@@ -1,8 +1,11 @@
 import push_constant_interop;
-import shader_functions;
 import constants_interop;
 import model_interop;
+import lights_interop;
+
+import shader_functions;
 import pbr_functions;
+import packing_functions;
 import visibility_lighting_common;
 
 import bindless_declarations;
@@ -36,7 +39,7 @@ void ComputeMain(uniform LightingResolvePushConstant pc, uint3 threadID : SV_Dis
     float roughness = max(li.roughness, 0.045);
 
     // Directional light in view space (transform from world space)
-    float3 L = normalize(mul((float3x3)pc.sceneData[pc.sceneDataIndex].view, normalize(-pc.lightData->mainLightDirection.xyz)));
+    float3 L = normalize(mul((float3x3)pc.sceneData[pc.sceneDataIndex].view, normalize(-pc.lightData->directionalLight.directionIntensity.xyz)));
     float3 H = normalize(V + L);
 
     // SPECULAR: Cook-Torrance BRDF
@@ -61,9 +64,41 @@ void ComputeMain(uniform LightingResolvePushConstant pc, uint3 threadID : SV_Dis
     float shadowFactor = li.shadows.x;
     float gtao = li.shadows.y;
 
-    const float lightIntensity = pc.lightData->mainLightDirection.w;
-    const float3 lightColor = pc.lightData->mainLightColor.rgb;
+    const float lightIntensity = pc.lightData->directionalLight.directionIntensity.w;
+    const float3 lightColor = UnpackUnorm4x8(pc.lightData->directionalLight.packedColor).rgb;
     float3 directLight = (diffuse + specular) * nDotL * shadowFactor * lightIntensity * lightColor;
+
+    // Point lights
+    float3x3 viewMat3 = (float3x3)pc.sceneData[pc.sceneDataIndex].view;
+    for (int i = 0; i < pc.lightData->pointLightCount; i++)
+    {
+        PointLightData pl = pc.lightData->pointLights[i];
+
+        float3 plViewPos = mul(viewMat3, pl.positionRange.xyz) + pc.sceneData[pc.sceneDataIndex].view[3].xyz;
+        float3 plVec = plViewPos - viewPosition;
+        float dist = length(plVec);
+        float range = pl.positionRange.w;
+        if (dist >= range) { continue; }
+
+        float3 Lpl = plVec / dist;
+        float3 Hpl = normalize(V + Lpl);
+
+        float NDFpl = D_GGX(N, Hpl, roughness);
+        float Gpl = G_SMITH_HEIGHT_CORRELATED(N, V, Lpl, roughness);
+        float3 Fpl = F_SCHLICK(V, Hpl, F0);
+        float3 specularPl = (NDFpl * Gpl * Fpl) / max(4.0 * max(dot(N, V), 0.0) * max(dot(N, Lpl), 0.0), 0.001);
+
+        float3 kSpl = Fpl;
+        float3 kDpl = (1.0 - kSpl) * (1.0 - li.metallic);
+        float nDotLpl = max(dot(N, Lpl), 0.0);
+        float orenNayarPl = Diffuse_OrenNayar(nDotLpl, nDotV, Lpl, V, roughness);
+        float3 diffusePl = kDpl * li.albedo.xyz * orenNayarPl;
+
+        float attenuation = 1.0 - smoothstep(0.0, range, dist);
+        attenuation *= attenuation;
+        float3 plColor = UnpackUnorm4x8(pl.packedColor).rgb;
+        directLight += (diffusePl + specularPl) * nDotLpl * attenuation * pl.intensity * plColor;
+    }
 
     // IBL
     float3 ibl = 0.0;

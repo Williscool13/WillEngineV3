@@ -10,6 +10,8 @@
 #include <new>
 #include <type_traits>
 
+#include "core/containers/inline_string.h"
+
 namespace Core
 {
 /**
@@ -22,7 +24,7 @@ class Arena
 public:
     Arena() = default;
 
-    Arena(void* memory, size_t size);
+    Arena(void* memory, size_t size, const char* name = "");
 
     Arena(const Arena&) = delete;
 
@@ -71,12 +73,14 @@ public:
     [[nodiscard]] size_t GetCapacity() const { return capacity; }
     [[nodiscard]] size_t GetRemaining() const { return capacity - head; }
     [[nodiscard]] size_t GetPeak() const { return peakHead; }
+    [[nodiscard]] const char* GetName() const { return name.buf; }
 
 private:
     void* memory{};
     size_t head{};
     size_t capacity{};
     size_t peakHead{};
+    InlineString<32> name{};
 };
 
 template<typename T, typename... Args>

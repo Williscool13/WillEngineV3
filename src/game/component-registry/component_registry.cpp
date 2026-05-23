@@ -20,6 +20,7 @@
 #include "game/components/gameplay/death_zone_component.h"
 #include "game/components/gameplay/path_mover_component.h"
 #include "game/components/gameplay/player_spawn_component.h"
+#include "game/components/render/light_components.h"
 #include "game/components/render/static_mesh_component.h"
 #include "game/components/render/text_component.h"
 
@@ -38,6 +39,8 @@ void RegisterComponents(Engine::ComponentRegistry& componentRegistry)
     RegisterComponent<Component::FreeCameraComponent>(componentRegistry, "FreeCameraComponent");
     RegisterComponent<Component::StaticMeshComponent>(componentRegistry, "StaticMeshComponent");
     RegisterComponent<Component::TextComponent>(componentRegistry, "TextComponent");
+    RegisterComponent<Component::PointLightComponent>(componentRegistry, "PointLightComponent");
+    RegisterComponent<Component::AreaLightComponent>(componentRegistry, "AreaLightComponent");
     RegisterComponent<Component::ProceduralMeshComponent>(componentRegistry, "ProceduralMeshComponent");
     RegisterComponent<Component::SplineMeshComponent>(componentRegistry, "SplineMeshComponent");
 

@@ -6,8 +6,8 @@
 
 namespace Core
 {
-Arena::Arena(void* memory, size_t size)
-    : memory(memory), head(0), capacity(size)
+Arena::Arena(void* memory, size_t size, const char* name)
+    : memory(memory), head(0), capacity(size), name(name)
 {
     assert(memory != nullptr);
     assert(size > 0);

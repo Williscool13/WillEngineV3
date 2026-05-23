@@ -49,11 +49,51 @@ using float4x4 = glm::mat4;
 #define SHADER_ATOMIC(T) T
 #endif // __SLANG__
 
+SHADER_CONST int MAX_POINT_LIGHTS = 32;
+SHADER_CONST int MAX_AREA_LIGHTS = 8;
+
+/** Directional light: direction (xyz) + intensity (w), color packed as RGBA8 unorm. */
+SHADER_PUBLIC struct DirectionalLightData
+{
+    SHADER_PUBLIC float4 directionIntensity; // xyz world-space direction, w intensity
+    SHADER_PUBLIC uint packedColor;          // RGBA8 unorm
+    SHADER_PUBLIC float _pad0;
+    SHADER_PUBLIC float _pad1;
+    SHADER_PUBLIC float _pad2;
+};
+
+/** Point light: position (xyz) + range (w), color packed as RGBA8 unorm, intensity separate. */
+SHADER_PUBLIC struct PointLightData
+{
+    SHADER_PUBLIC float4 positionRange; // xyz world-space position, w range
+    SHADER_PUBLIC uint packedColor;     // RGBA8 unorm
+    SHADER_PUBLIC float intensity;
+    SHADER_PUBLIC float _pad0;
+    SHADER_PUBLIC float _pad1;
+};
+
+/** Rectangular area light: position, normal, right/up half-extents, color. */
+SHADER_PUBLIC struct AreaLightData
+{
+    SHADER_PUBLIC float4 position;      // xyz world-space center, w unused
+    SHADER_PUBLIC float4 normal;        // xyz world-space normal, w unused
+    SHADER_PUBLIC float4 right;         // xyz right axis, w half-width
+    SHADER_PUBLIC float4 up;            // xyz up axis, w half-height
+    SHADER_PUBLIC uint packedColor;     // RGBA8 unorm
+    SHADER_PUBLIC float intensity;
+    SHADER_PUBLIC float _pad0;
+    SHADER_PUBLIC float _pad1;
+};
+
 SHADER_PUBLIC struct SHADER_ALIGN LightData
 {
-    SHADER_PUBLIC float4 mainLightDirection; // xyz direction, w intensity
-    SHADER_PUBLIC float4 mainLightColor; // xyz color
-
+    SHADER_PUBLIC int pointLightCount;
+    SHADER_PUBLIC int areaLightCount;
+    float _pad0;
+    float _pad1;
+    SHADER_PUBLIC DirectionalLightData directionalLight;
+    SHADER_PUBLIC PointLightData pointLights[MAX_POINT_LIGHTS];
+    SHADER_PUBLIC AreaLightData areaLights[MAX_AREA_LIGHTS];
 };
 
 
