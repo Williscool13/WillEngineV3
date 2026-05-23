@@ -17,6 +17,7 @@
 #include "render/interface/render_interface.h"
 #include "engine/engine_api.h"
 #include "game/component-registry/component_editor.h"
+#include "game/component-registry/editor_gizmo_helpers.h"
 #include "game/components/core_components.h"
 
 namespace Game::Component
@@ -217,7 +218,7 @@ Engine::ComponentEditorResult PathMoverComponent::DrawEditor(Core::ViewFamily& v
             ImGui::SameLine();
 
             const bool isEditing = (editPointIdx == i);
-            ImGui::PushStyleColor(ImGuiCol_Button, isEditing ? ImVec4(0.15f, 0.65f, 0.15f, 1.0f) : ImVec4(0.15f, 0.35f, 0.65f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_Button, isEditing ? Editor::ButtonEditing : Editor::ButtonIdle);
             ImGui::BeginDisabled((state->editor.bCustomGizmoActive || state->editor.bCustomGizmoActivePrev) && !isEditing);
             if (ImGui::SmallButton(isEditing ? "D##edit" : "E##edit")) {
                 editPointIdx = isEditing ? -1 : i;

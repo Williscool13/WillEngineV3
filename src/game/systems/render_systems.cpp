@@ -45,6 +45,23 @@ void ConnectRenderObservers(entt::registry& registry)
     registry.on_destroy<Component::TextComponent>().connect<&Component::TextComponent::OnDestroy>();
 }
 
+void DisconnectRenderObservers(entt::registry& registry)
+{
+    registry.on_destroy<Component::MeshRuntime>().disconnect<&Component::MeshRuntime::OnDestroy>();
+
+    registry.on_construct<Component::StaticMeshComponent>().disconnect<&Component::StaticMeshComponent::OnConstruct>();
+    registry.on_destroy<Component::StaticMeshComponent>().disconnect<&Component::StaticMeshComponent::OnDestroy>();
+
+    registry.on_construct<Component::ProceduralMeshComponent>().disconnect<&Component::ProceduralMeshComponent::OnConstruct>();
+    registry.on_destroy<Component::ProceduralMeshComponent>().disconnect<&Component::ProceduralMeshComponent::OnDestroy>();
+
+    registry.on_construct<Component::SplineMeshComponent>().disconnect<&Component::SplineMeshComponent::OnConstruct>();
+    registry.on_destroy<Component::SplineMeshComponent>().disconnect<&Component::SplineMeshComponent::OnDestroy>();
+
+    registry.on_construct<Component::TextComponent>().disconnect<&Component::TextComponent::OnConstruct>();
+    registry.on_destroy<Component::TextComponent>().disconnect<&Component::TextComponent::OnDestroy>();
+}
+
 void ResolveModelHotReloads(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     if (state->pendingHotReloadModelIds.IsEmpty()) { return; }

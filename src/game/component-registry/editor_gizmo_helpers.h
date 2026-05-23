@@ -12,6 +12,26 @@
 
 namespace Editor
 {
+// --- Centralized editor colors ---
+
+/** Axis-colored dot handles and ImDrawList geometry. */
+constexpr ImU32 ColorAxisX = IM_COL32(220, 60,  60,  255);
+constexpr ImU32 ColorAxisY = IM_COL32(60,  220, 60,  255);
+constexpr ImU32 ColorAxisZ = IM_COL32(60,  100, 220, 255);
+
+/** Axis-colored debug geometry (DEBUG_ADD_* macros). */
+constexpr Vec4 DebugAxisX{0.86f, 0.24f, 0.24f, 1.0f};
+constexpr Vec4 DebugAxisY{0.24f, 0.86f, 0.24f, 1.0f};
+constexpr Vec4 DebugAxisZ{0.24f, 0.39f, 0.86f, 1.0f};
+
+
+/** Edit-mode toggle button background colors. */
+constexpr ImVec4 ButtonTransparent{0.0f, 0.0f, 0.0f, 0.0f};
+constexpr ImVec4 ButtonEditing{0.15f, 0.65f, 0.15f, 1.0f};
+constexpr ImVec4 ButtonIdle{0.15f, 0.35f, 0.65f, 1.0f};
+
+// --- Helpers ---
+
 bool WorldToScreen(Vec3 worldPos, const Mat4& view, const Mat4& proj, Vec4 viewport, ImVec2& outScreen);
 Vec3 ScreenToRay(ImVec2 screenPos, const Mat4& view, const Mat4& proj, Vec4 viewport);
 

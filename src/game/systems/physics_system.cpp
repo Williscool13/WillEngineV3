@@ -35,6 +35,16 @@ void ConnectPhysicsObservers(entt::registry& registry)
     registry.on_destroy<Component::PhysicsBodyComponent>().connect<&Component::PhysicsBodyComponent::OnDestroy>();
 }
 
+void DisconnectPhysicsObservers(entt::registry& registry)
+{
+    registry.on_construct<Component::PhysicsBodyDesc>().disconnect<&Component::PhysicsBodyDesc::OnConstruct>();
+    registry.on_update<Component::PhysicsBodyDesc>().disconnect<&Component::PhysicsBodyDesc::OnUpdate>();
+    registry.on_destroy<Component::PhysicsBodyDesc>().disconnect<&Component::PhysicsBodyDesc::OnDestroy>();
+
+    registry.on_construct<Component::PhysicsBodyComponent>().disconnect<&Component::PhysicsBodyComponent::OnConstruct>();
+    registry.on_destroy<Component::PhysicsBodyComponent>().disconnect<&Component::PhysicsBodyComponent::OnDestroy>();
+}
+
 void PhysicsUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     ZoneScoped;

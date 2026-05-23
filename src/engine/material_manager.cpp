@@ -85,6 +85,7 @@ MaterialID MaterialManager::CreateImmutableMaterial(const Material& mat)
 
     materials[matId] = m;
     pendingMaterialLoadLogCount++;
+    materialLoadLastActivity = std::chrono::steady_clock::now();
 
     return matId;
 }
@@ -164,8 +165,6 @@ void MaterialManager::ReleaseMaterial(MaterialID materialID)
 
     if (entry->refCounter == 0) {
         entry->retireFrame = ctx->currentRenderFrame + Core::FRAME_BUFFER_COUNT + 1;
-        pendingMaterialRetireLogCount++;
-        materialRetireLastActivity = std::chrono::steady_clock::now();
     }
 }
 
@@ -197,6 +196,9 @@ void MaterialManager::ProcessRetirements()
                 activeMaterialAllocator.Remove(entry.handle);
                 idToEntryMap.Remove(entry.id);
                 entry = {};
+
+                pendingMaterialRetireLogCount++;
+                materialRetireLastActivity = std::chrono::steady_clock::now();
             }
         }
     }

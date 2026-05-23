@@ -16,6 +16,7 @@
 #include "engine/asset_manager.h"
 #include "engine/engine_api.h"
 #include "engine/spline/spline.h"
+#include "game/component-registry/editor_gizmo_helpers.h"
 #include "game/components/component_types.h"
 #include "game/components/core_components.h"
 
@@ -217,7 +218,7 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
             ImGui::EndDisabled();
             ImGui::SameLine();
 
-            ImGui::PushStyleColor(ImGuiCol_Button, isEditing ? ImVec4(0.15f, 0.65f, 0.15f, 1.0f) : ImVec4(0.15f, 0.35f, 0.65f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_Button, isEditing ? Editor::ButtonEditing : Editor::ButtonIdle);
             ImGui::BeginDisabled((state->editor.bCustomGizmoActive || state->editor.bCustomGizmoActivePrev) && !isEditing);
             if (ImGui::SmallButton(isEditing ? "D##edit" : "E##edit")) {
                 editPointIdx = isEditing ? -1 : i;

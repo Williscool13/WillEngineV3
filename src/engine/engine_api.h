@@ -181,6 +181,7 @@ struct EditorState
 
     // PIE
     Core::InlineVector<Scene, 8> pieSnapshot{};
+    Core::InlineVector<Scene, 8> hotReloadSnapshot{};
     Vec3 pieCameraTranslation{};
     Quat pieCameraRotation{1.0f, 0.0f, 0.0f, 0.0f};
 

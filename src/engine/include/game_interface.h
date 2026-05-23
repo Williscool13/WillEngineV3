@@ -22,6 +22,8 @@ using GameUpdateFunc = void(*)(Engine::EngineContext*, Engine::EngineState*);
 using GamePrepareFrameFunc = void(*)(Engine::EngineContext*, Engine::EngineState*, FrameBuffer*);
 using GameEndFrameFunc = void(*)(Engine::EngineContext*, Engine::EngineState*);
 using GameUnloadFunc = void(*)(Engine::EngineContext*, Engine::EngineState*);
+using GameHotReloadSaveFunc = void(*)(Engine::EngineContext*, Engine::EngineState*);
+using GameHotReloadLoadFunc = void(*)(Engine::EngineContext*, Engine::EngineState*);
 using GameShutdownFunc = void(*)(Engine::EngineContext*, Engine::EngineState*);
 
 void StubStartup(Engine::EngineContext* ctx, Engine::EngineState* state);
@@ -47,6 +49,8 @@ struct GameAPI
     GameEndFrameFunc gameEndFrame;
     GameUnloadFunc gameUnload;
     GameShutdownFunc gameShutdown;
+    GameHotReloadSaveFunc gameHotReloadSave;
+    GameHotReloadLoadFunc gameHotReloadLoad;
 
     void Stub()
     {
@@ -57,6 +61,8 @@ struct GameAPI
         gameEndFrame = StubEndFrame;
         gameUnload = StubUnload;
         gameShutdown = StubShutdown;
+        gameHotReloadSave = StubUnload;
+        gameHotReloadLoad = StubLoad;
     }
 };
 } // Core
@@ -122,6 +128,21 @@ GAME_API void GameUnload(Engine::EngineContext* ctx, Engine::EngineState* state)
  * @param state
  */
 GAME_API void GameShutdown(Engine::EngineContext* ctx, Engine::EngineState* state);
+
+/**
+ * Called before hot-reload DLL unload. Snapshots live scene state and disconnects all observers while vtables are still valid.
+ * If PIE is active it must be stopped first by the caller.
+ * @param ctx
+ * @param state
+ */
+GAME_API void GameHotReloadSave(Engine::EngineContext* ctx, Engine::EngineState* state);
+
+/**
+ * Called after the new hot-reloaded DLL is loaded. Reconnects observers and restores the snapshot. Does not load the default scene.
+ * @param ctx
+ * @param state
+ */
+GAME_API void GameHotReloadLoad(Engine::EngineContext* ctx, Engine::EngineState* state);
 }
 
 #endif // WILL_ENGINE_GAME_INTERFACE_H

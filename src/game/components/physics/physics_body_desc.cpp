@@ -533,7 +533,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
 
     bool open = ImGui::CollapsingHeader("Physics Body", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
     ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
-    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+    ImGui::PushStyleColor(ImGuiCol_Button, Editor::ButtonTransparent);
     bool remove = ImGui::SmallButton("X");
     ImGui::PopStyleColor();
 
@@ -654,7 +654,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
 
                     if (bHasAny) {
                         ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
-                        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+                        ImGui::PushStyleColor(ImGuiCol_Button, Editor::ButtonTransparent);
                         const bool bShouldClearMesh = ImGui::SmallButton("X");
                         ImGui::PopStyleColor();
                         if (bShouldClearMesh) {
@@ -778,9 +778,9 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                 ImGuizmo::SetGizmoSizeClipSpace(0.1f);
             }
 
-            constexpr ImU32 colorX = IM_COL32(220, 60, 60, 255);
-            constexpr ImU32 colorY = IM_COL32(60, 220, 60, 255);
-            constexpr ImU32 colorZ = IM_COL32(60, 100, 220, 255);
+            constexpr ImU32 colorX = Editor::ColorAxisX;
+            constexpr ImU32 colorY = Editor::ColorAxisY;
+            constexpr ImU32 colorZ = Editor::ColorAxisZ;
             switch (shape.type) {
                 case PhysicsShapeType::Sphere:
                 {
@@ -828,9 +828,9 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                     break;
             }
 
-            constexpr Vec4 editColorX{0.86f, 0.24f, 0.24f, 1.0f};
-            constexpr Vec4 editColorY{0.24f, 0.86f, 0.24f, 1.0f};
-            constexpr Vec4 editColorZ{0.24f, 0.39f, 0.86f, 1.0f};
+            constexpr Vec4 editColorX = Editor::DebugAxisX;
+            constexpr Vec4 editColorY = Editor::DebugAxisY;
+            constexpr Vec4 editColorZ = Editor::DebugAxisZ;
             switch (shape.type) {
                 case PhysicsShapeType::Sphere:
                     DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {shapeCenter, shape.sphere.radius, editColorX});
@@ -869,7 +869,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
             auto& shape = component.shapes[0];
             const bool isEditing = (editShapeIdx == 0);
             ImGui::PushID(0);
-            ImGui::PushStyleColor(ImGuiCol_Button, isEditing ? ImVec4(0.15f, 0.65f, 0.15f, 1.0f) : ImVec4(0.15f, 0.35f, 0.65f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_Button, isEditing ? Editor::ButtonEditing : Editor::ButtonIdle);
             ImGui::BeginDisabled((state->editor.bCustomGizmoActive || state->editor.bCustomGizmoActivePrev) && !isEditing);
             if (ImGui::Button(isEditing ? "Done" : "Edit")) {
                 editShapeIdx = isEditing ? -1 : 0;
@@ -896,7 +896,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                 const float spacing = ImGui::GetStyle().ItemSpacing.x;
 
                 ImGui::SameLine(avail - xBtnW - spacing - editBtnW);
-                ImGui::PushStyleColor(ImGuiCol_Button, isEditing ? ImVec4(0.15f, 0.65f, 0.15f, 1.0f) : ImVec4(0.15f, 0.35f, 0.65f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_Button, isEditing ? Editor::ButtonEditing : Editor::ButtonIdle);
                 ImGui::BeginDisabled((state->editor.bCustomGizmoActive || state->editor.bCustomGizmoActivePrev) && !isEditing);
                 if (ImGui::SmallButton(isEditing ? "Done##edit" : "Edit##edit")) {
                     editShapeIdx = isEditing ? -1 : i;
@@ -905,7 +905,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                 ImGui::PopStyleColor();
 
                 ImGui::SameLine(avail - xBtnW);
-                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+                ImGui::PushStyleColor(ImGuiCol_Button, Editor::ButtonTransparent);
                 if (ImGui::SmallButton("X##shape")) {
                     shapeToRemove = i;
                     if (editShapeIdx == i) { editShapeIdx = -1; }

@@ -28,7 +28,13 @@ public:
 
     DirectoryWatcher& operator=(const DirectoryWatcher&) = delete;
 
-    bool Start(const char* directory, Callback cb, float debounceSeconds = 0.2f);
+    /**
+     * @param directory Directory to watch (must be a directory, not a file path).
+     * @param cb Callback fired after debounce when a matching change is detected.
+     * @param debounceSeconds Seconds to wait after the last change before firing.
+     * @param filterFilename If non-null, only changes to this filename (e.g. "game.dll") trigger the callback.
+     */
+    bool Start(const char* directory, Callback cb, float debounceSeconds = 0.2f, const char* filterFilename = nullptr);
 
     void Stop();
 
@@ -43,6 +49,7 @@ private:
     char buffer[4096];
 #endif
     Callback callback;
+    std::wstring filterFilenameW{};
     std::chrono::steady_clock::time_point lastTrigger{};
     float debounceTime = 1.0f;
     bool pending = false;

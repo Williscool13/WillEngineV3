@@ -133,19 +133,13 @@ Core::InlineVector<Engine::Scene, 8> SerializeAll(Engine::ComponentRegistry& com
     for (int i = 0; i < loadedScenes.Size(); ++i) {
         auto& meta = loadedScenes[i];
         snapshots.PushBack(SaveScene(componentRegistry, registry, assetManager, meta.sceneId, meta.sceneId.ToString()));
-        LOG_INFO(Game, "PIE snapshot: serialized scene '{}'", meta.sceneId.ToString());
+        LOG_INFO(Game, "Saved scene snapshot '{}'", meta.sceneId.ToString());
     }
     return snapshots;
 }
 
 void DeserializeAll(Engine::EngineState* state, Core::Span<Engine::Scene> snapshots)
 {
-    Core::InlineVector<Engine::RuntimeSceneMetadata, 8> toUnload = state->editor.loadedScenes;
-    for (const auto& meta : toUnload) {
-        UnloadScene(state, meta.sceneId);
-        LOG_INFO(Game, "PIE restore: unloaded scene '{}'", meta.sceneId.ToString());
-    }
-
     for (Engine::Scene& scene : snapshots) {
         StringID loadedId = LoadScene(state->componentRegistry, state->registry, scene);
         uint64_t maxSortOrder = 0;
@@ -165,11 +159,19 @@ void DeserializeAll(Engine::EngineState* state, Core::Span<Engine::Scene> snapsh
             }
         }
         state->editor.loadedScenes.PushBack({loadedId, maxSortOrder + 100});
-        LOG_INFO(Game, "PIE restore: reloaded scene '{}'", loadedId.ToString());
+        LOG_INFO(Game, "Loaded scene snapshot '{}'", loadedId.ToString());
     }
 
     auto* ctx = state->registry.ctx().get<Engine::EngineContext*>();
     ResolvePrefabLoads(state, ctx->assetManager);
+}
+
+void UnloadScenes(Engine::EngineState* state, Core::Span<StringID> scenes)
+{
+    for (const StringID sceneId : scenes) {
+        UnloadScene(state, sceneId);
+        LOG_INFO(Game, "Unloaded scene '{}'", sceneId.ToString());
+    }
 }
 
 void UnloadScene(Engine::EngineState* state, StringID sceneId)
@@ -599,6 +601,11 @@ void PlayStop(Engine::EngineContext* ctx, Engine::EngineState* state)
 
     PhysicsOnPlayStop(ctx, state);
 
+    Core::InlineVector<StringID, 8> scenesToUnload;
+    for (Engine::RuntimeSceneMetadata scene : state->editor.loadedScenes) {
+        scenesToUnload.PushBack(scene.sceneId);
+    }
+    UnloadScenes(state, scenesToUnload);
     DeserializeAll(state, state->editor.pieSnapshot);
     state->editor.pieSnapshot.Clear();
 

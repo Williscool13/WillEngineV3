@@ -68,13 +68,13 @@ Engine::ComponentEditorResult Component::AreaLightComponent::DrawEditor(Core::Vi
             Editor::DotHandle(20000, center + right * comp.halfWidth, widthPlaneNormal,
                 vd.view, vd.proj, viewport, vd.cameraPos, state,
                 [&](Vec3 newPt) { comp.halfWidth = glm::max(0.01f, glm::dot(newPt - center, right)); },
-                IM_COL32(220, 60, 60, 255));
+                Editor::ColorAxisX);
 
             const Vec3 heightPlaneNormal = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, up) * up);
             Editor::DotHandle(20001, center + up * comp.halfHeight, heightPlaneNormal,
                 vd.view, vd.proj, viewport, vd.cameraPos, state,
                 [&](Vec3 newPt) { comp.halfHeight = glm::max(0.01f, glm::dot(newPt - center, up)); },
-                IM_COL32(60, 220, 60, 255));
+                Editor::ColorAxisY);
 
             constexpr Vec4 editColor{0.5f, 0.8f, 1.0f, 1.0f};
             DEBUG_ADD_RECT(viewFamily.debugRects, {center, comp.halfWidth, comp.halfHeight, right, up, editColor, 0.03f});

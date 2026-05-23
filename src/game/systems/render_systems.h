@@ -26,6 +26,7 @@ struct FrameBuffer;
 namespace Game
 {
 void ConnectRenderObservers(entt::registry& registry);
+void DisconnectRenderObservers(entt::registry& registry);
 
 // Editor-only (generate while engine is running)
 void ResolveModelHotReloads(Engine::EngineContext* ctx, Engine::EngineState* state);

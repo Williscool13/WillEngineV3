@@ -38,26 +38,32 @@
 
 extern "C"
 {
-GAME_API void GameStartup(Engine::EngineContext* ctx, Engine::EngineState* state)
+static void CreateCameras(Engine::EngineState* state, Vec3 editorPos, Quat editorRot)
 {
-    SPDLOG_TRACE("Game Start Up");
-
     const entt::entity editorCamera = state->registry.create();
     state->registry.emplace<Game::Component::FreeCameraComponent>(editorCamera);
     state->registry.emplace<Game::Component::CameraComponent>(editorCamera);
     state->registry.emplace<Game::Component::EditorCameraTag>(editorCamera);
-    Game::Component::TransformComponent& editorCameraTransform = state->registry.emplace<Game::Component::TransformComponent>(editorCamera);
-    editorCameraTransform.translation = glm::vec3(0.0f, 3.0f, 5.0f);
-    editorCameraTransform.rotation = glm::quatLookAt(glm::normalize(glm::vec3(0.0f, 0.0f, 0.0f) - glm::vec3(0.0f, 3.0f, 5.0f)), WORLD_UP);
+    auto& editorCameraTransform = state->registry.emplace<Game::Component::TransformComponent>(editorCamera);
+    editorCameraTransform.translation = editorPos;
+    editorCameraTransform.rotation = editorRot;
 
     const entt::entity gameCamera = state->registry.create();
     state->registry.emplace<Game::Component::FreeCameraComponent>(gameCamera);
     state->registry.emplace<Game::Component::CameraComponent>(gameCamera);
     state->registry.emplace<Game::Component::GameCameraTag>(gameCamera);
-    Game::Component::TransformComponent& gameCameraTransform = state->registry.emplace<Game::Component::TransformComponent>(gameCamera);
+    auto& gameCameraTransform = state->registry.emplace<Game::Component::TransformComponent>(gameCamera);
     gameCameraTransform.translation = glm::vec3(0.0f, 3.0f, 5.0f);
     gameCameraTransform.rotation = glm::quatLookAt(glm::normalize(glm::vec3(0.0f, 0.0f, 0.0f) - glm::vec3(0.0f, 3.0f, 5.0f)), WORLD_UP);
+}
 
+GAME_API void GameStartup(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
+    SPDLOG_TRACE("Game Start Up");
+
+    constexpr Vec3 defaultCameraPos{0.0f, 3.0f, 5.0f};
+    const Quat defaultCameraRot = glm::quatLookAt(glm::normalize(glm::vec3(0.0f, 0.0f, 0.0f) - defaultCameraPos), WORLD_UP);
+    CreateCameras(state, defaultCameraPos, defaultCameraRot);
 
     state->registry.ctx().emplace<Engine::EngineState*>(state);
     state->registry.ctx().emplace<Engine::EngineContext*>(ctx);
@@ -135,6 +141,77 @@ GAME_API void GameLoad(Engine::EngineContext* ctx, Engine::EngineState* state)
         }
     }
 }
+
+GAME_API void GameHotReloadSave(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
+    if (state->bIsPlaying) {
+        Game::PlayStop(ctx, state);
+    }
+
+    {
+        auto camView = state->registry.view<Game::Component::EditorCameraTag, Game::Component::TransformComponent>();
+        const auto camEntity = camView.front();
+        if (camEntity != entt::null) {
+            const auto& transform = state->registry.get<Game::Component::TransformComponent>(camEntity);
+            state->editor.pieCameraTranslation = transform.translation;
+            state->editor.pieCameraRotation = transform.rotation;
+        }
+    }
+
+    state->editor.hotReloadSnapshot = Game::SerializeAll(state->componentRegistry, state->registry, ctx->assetManager, state->editor.loadedScenes);
+    Core::InlineVector<StringID, 8> scenesToUnload;
+    for (Engine::RuntimeSceneMetadata scene : state->editor.loadedScenes) {
+        scenesToUnload.PushBack(scene.sceneId);
+    }
+    Game::UnloadScenes(state, scenesToUnload);
+    LOG_INFO(Game, "Hot reload: snapshot saved ({} scene(s))", state->editor.hotReloadSnapshot.Size());
+
+    state->registry.clear();
+
+    Game::DisconnectPhysicsObservers(state->registry);
+    Game::DisconnectCommonObservers(state->registry);
+    Game::DisconnectRenderObservers(state->registry);
+
+#ifndef GAME_STATIC
+    if (ctx->scheduler) {
+        ctx->scheduler->DeRegisterExternalTaskThread();
+    }
+#endif
+}
+
+GAME_API void GameHotReloadLoad(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
+#ifndef GAME_STATIC
+    ctx->engineLogger->RegisterLoggersForDLL(Engine::LogCategory::Game);
+
+    ImGui::SetCurrentContext(ctx->imguiContext);
+    ImGui::SetAllocatorFunctions(ctx->imguiAllocFn, ctx->imguiFreeFn, ctx->imguiAllocUserData);
+    Clay_SetCurrentContext(ctx->clayContext);
+
+    ctx->physicsSystem->RegisterPhysics();
+    ctx->scheduler->RegisterExternalTaskThread();
+#endif
+
+    Game::RegisterComponents(state->componentRegistry);
+    Game::ConnectPhysicsObservers(state->registry);
+    Game::ConnectCommonObservers(state->registry);
+    Game::ConnectRenderObservers(state->registry);
+
+#if DEBUG
+    gInternStringFn = ctx->internStringFn;
+    gResolveStringIdFn = ctx->resolveStringIdFn;
+#endif
+
+    CreateCameras(state, state->editor.pieCameraTranslation, state->editor.pieCameraRotation);
+
+    if (!state->editor.hotReloadSnapshot.IsEmpty()) {
+        Game::DeserializeAll(state, state->editor.hotReloadSnapshot);
+        state->editor.hotReloadSnapshot.Clear();
+        LOG_INFO(Game, "Hot reload: snapshot restored");
+    }
+}
+}
+
 
 GAME_API void GameUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
@@ -277,5 +354,4 @@ GAME_API void GameUnload(Engine::EngineContext* ctx, Engine::EngineState* state)
 GAME_API void GameShutdown(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     SPDLOG_TRACE("Game Shutdown");
-}
 }

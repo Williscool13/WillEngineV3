@@ -11,6 +11,7 @@
 #include "engine/include/engine_context.h"
 #include "engine/asset_manager.h"
 #include "engine/engine_api.h"
+#include "game/component-registry/editor_gizmo_helpers.h"
 #include "game/components/core_components.h"
 
 namespace Game::Component
@@ -504,12 +505,29 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                     if (ImGui::Checkbox("Closed", &p.bIsClosed)) { dirty = true; }
                 }
                 else if constexpr (std::is_same_v<T, Engine::BoxParams>) {
-                    ImGui::DragFloat("Size X", &p.sizeX, 0.01f, 0.01f, 100.0f);
-                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
-                    ImGui::DragFloat("Size Y", &p.sizeY, 0.01f, 0.01f, 100.0f);
-                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
-                    ImGui::DragFloat("Size Z", &p.sizeZ, 0.01f, 0.01f, 100.0f);
-                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    const float innerSpacing = ImGui::GetStyle().ItemInnerSpacing.x;
+                    const float outerSpacing = ImGui::GetStyle().ItemSpacing.x;
+                    const float frameRounding = ImGui::GetStyle().FrameRounding;
+                    const float fieldH = ImGui::GetFrameHeight();
+                    const float labelColW = ImGui::CalcTextSize("Size").x + outerSpacing * 3.0f;
+                    const float fieldW = (ImGui::GetContentRegionAvail().x - labelColW - innerSpacing * 2.0f) / 3.0f;
+                    constexpr float stripW = 4.0f;
+                    ImDrawList* dl = ImGui::GetWindowDrawList();
+
+                    auto drawSizeField = [&](const char* id, float* val, ImU32 strip) {
+                        ImGui::SetNextItemWidth(fieldW);
+                        ImGui::DragFloat(id, val, 0.01f, 0.01f, 100.0f, "%.2f");
+                        dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                        ImVec2 p = ImGui::GetItemRectMin();
+                        dl->AddRectFilled(p, {p.x + stripW, p.y + fieldH}, strip, frameRounding, ImDrawFlags_RoundCornersLeft);
+                    };
+
+                    ImGui::AlignTextToFramePadding();
+                    ImGui::TextUnformatted("Size");
+                    ImGui::SameLine(labelColW);
+                    drawSizeField("##bsx", &p.sizeX, Editor::ColorAxisX); ImGui::SameLine(0, innerSpacing);
+                    drawSizeField("##bsy", &p.sizeY, Editor::ColorAxisY); ImGui::SameLine(0, innerSpacing);
+                    drawSizeField("##bsz", &p.sizeZ, Editor::ColorAxisZ);
                 }
                 else if constexpr (std::is_same_v<T, Engine::CylinderParams>) {
                     ImGui::DragFloat("Radius", &p.radius, 0.01f, 0.01f, 50.0f);

@@ -179,7 +179,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
     //
     {
         ZoneScopedN("Engine Context");
-        engineContext = new(memoryManager.PersistentAllocRaw(sizeof(Engine::EngineContext), Core::AllocTag::EngineContext)) Engine::EngineContext();
+        engineContext = new(memoryManager.PersistentAllocRaw(sizeof(EngineContext), Core::AllocTag::EngineContext)) EngineContext();
         inputManager = new(memoryManager.PersistentAllocRaw(sizeof(Core::InputManager), Core::AllocTag::InputManager)) Core::InputManager(w, h);
         timeManager = new(memoryManager.PersistentAllocRaw(sizeof(Core::TimeManager), Core::AllocTag::TimeManager)) Core::TimeManager();
     }
@@ -322,6 +322,8 @@ void WillEngine::Initialize(Utils::Logger* logger)
         gameFunctions.gameEndFrame = &GameEndFrame;
         gameFunctions.gameUnload = &GameUnload;
         gameFunctions.gameShutdown = &GameShutdown;
+        gameFunctions.gameHotReloadSave = &GameHotReloadSave;
+        gameFunctions.gameHotReloadLoad = &GameHotReloadLoad;
 #else
         if (gameDll.Load("game.dll", "game_temp.dll")) {
             gameFunctions.gameStartup = gameDll.GetFunction<Core::GameStartUpFunc>("GameStartup");
@@ -331,6 +333,8 @@ void WillEngine::Initialize(Utils::Logger* logger)
             gameFunctions.gameEndFrame = gameDll.GetFunction<Core::GameEndFrameFunc>("GameEndFrame");
             gameFunctions.gameUnload = gameDll.GetFunction<Core::GameUnloadFunc>("GameUnload");
             gameFunctions.gameShutdown = gameDll.GetFunction<Core::GameShutdownFunc>("GameShutdown");
+            gameFunctions.gameHotReloadSave = gameDll.GetFunction<Core::GameHotReloadSaveFunc>("GameHotReloadSave");
+            gameFunctions.gameHotReloadLoad = gameDll.GetFunction<Core::GameHotReloadLoadFunc>("GameHotReloadLoad");
         }
         else {
             gameFunctions.Stub();
@@ -343,11 +347,17 @@ void WillEngine::Initialize(Utils::Logger* logger)
 
 #if WILL_EDITOR
 #if !GAME_STATIC
-    auto gameDirectory = Platform::GetExecutablePath() / "src/game";
+    auto gameDirectory = Platform::GetExecutablePath();
     if (gameDirectory.Exists()) {
         gameDllWatcher.Start(gameDirectory.c_str(), [&]() {
-            gameFunctions.gameUnload(engineContext, engineState);
+            gameFunctions.gameHotReloadSave(engineContext, engineState);
+            engineState->registry = entt::registry{};
+
             auto reloadResponse = gameDll.Reload();
+
+            engineState->registry.ctx().emplace<EngineContext*>(engineContext);
+            engineState->registry.ctx().emplace<EngineState*>(engineState);
+
             switch (reloadResponse) {
                 case Platform::DllLoadResponse::Loaded:
                     SPDLOG_DEBUG("Game lib was hot-reloaded");
@@ -360,6 +370,8 @@ void WillEngine::Initialize(Utils::Logger* logger)
                     gameFunctions.gameEndFrame = gameDll.GetFunction<Core::GameEndFrameFunc>("GameEndFrame");
                     gameFunctions.gameUnload = gameDll.GetFunction<Core::GameUnloadFunc>("GameUnload");
                     gameFunctions.gameShutdown = gameDll.GetFunction<Core::GameShutdownFunc>("GameShutdown");
+                    gameFunctions.gameHotReloadSave = gameDll.GetFunction<Core::GameHotReloadSaveFunc>("GameHotReloadSave");
+                    gameFunctions.gameHotReloadLoad = gameDll.GetFunction<Core::GameHotReloadLoadFunc>("GameHotReloadLoad");
                     break;
                 case Platform::DllLoadResponse::FailedToLoad:
                     gameFunctions.Stub();
@@ -367,8 +379,9 @@ void WillEngine::Initialize(Utils::Logger* logger)
                     break;
             }
 
-            gameFunctions.gameLoad(engineContext, engineState);
-        });
+            // Reconnect observers and restore snapshot; skips default scene load.
+            gameFunctions.gameHotReloadLoad(engineContext, engineState);
+        }, 2.0f, "game.dll");
     }
     else {
         SPDLOG_WARN("Game dll path not found.");

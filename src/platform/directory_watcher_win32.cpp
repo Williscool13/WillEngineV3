@@ -12,11 +12,20 @@ DirectoryWatcher::~DirectoryWatcher()
     Stop();
 }
 
-bool DirectoryWatcher::Start(const char* directory, Callback cb, float debounceSeconds)
+bool DirectoryWatcher::Start(const char* directory, Callback cb, float debounceSeconds, const char* filterFilename)
 {
     callback = std::move(cb);
     debounceTime = debounceSeconds;
     lastTrigger = std::chrono::steady_clock::now();
+
+    filterFilenameW.clear();
+    if (filterFilename && filterFilename[0] != '\0') {
+        const int len = MultiByteToWideChar(CP_UTF8, 0, filterFilename, -1, nullptr, 0);
+        if (len > 0) {
+            filterFilenameW.resize(len - 1);
+            MultiByteToWideChar(CP_UTF8, 0, filterFilename, -1, filterFilenameW.data(), len);
+        }
+    }
 
     handle = CreateFileA(
         directory,
@@ -67,10 +76,26 @@ void DirectoryWatcher::Poll()
     BOOL result = GetOverlappedResult(handle, &overlapped, &bytes_transferred, FALSE);
 
     if (result && bytes_transferred > 0) {
-        pending = true;
-        lastTrigger = std::chrono::steady_clock::now();
+        bool matched = filterFilenameW.empty();
+        if (!matched) {
+            const char* ptr = buffer;
+            while (true) {
+                const auto* info = reinterpret_cast<const FILE_NOTIFY_INFORMATION*>(ptr);
+                const std::wstring_view changedName{info->FileName, info->FileNameLength / sizeof(WCHAR)};
+                if (changedName == filterFilenameW) {
+                    matched = true;
+                    break;
+                }
+                if (info->NextEntryOffset == 0) { break; }
+                ptr += info->NextEntryOffset;
+            }
+        }
 
-        // Restart watch
+        if (matched) {
+            pending = true;
+            lastTrigger = std::chrono::steady_clock::now();
+        }
+
         memset(&overlapped, 0, sizeof(overlapped));
         ReadDirectoryChangesW(
             handle,

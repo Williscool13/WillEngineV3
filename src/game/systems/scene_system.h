@@ -35,6 +35,15 @@ Core::InlineVector<Engine::Scene, 8> SerializeAll(Engine::ComponentRegistry& com
 
 void DeserializeAll(Engine::EngineState* state, Core::Span<Engine::Scene> snapshots);
 
+/**
+ * Span must be consistent for this whole function call. Ensure that modification to the following is safe:
+ *   state->editor.loadedScenes
+ *   state->editor.modifiedScenes
+ * @param state
+ * @param scenes
+ */
+void UnloadScenes(Engine::EngineState* state, Core::Span<StringID> scenes);
+
 void UnloadScene(Engine::EngineState* state, StringID sceneId);
 
 void SaveSceneToFile(StringID sceneID, std::string_view sceneName, Engine::EngineState* state, Engine::AssetManager* assetManager, Engine::EngineContext* ctx);

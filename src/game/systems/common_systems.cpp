@@ -18,4 +18,13 @@ void ConnectCommonObservers(entt::registry& registry)
 
     registry.on_construct<Component::CheckpointComponent>().connect<&Component::CheckpointComponent::OnConstruct>();
 }
+
+void DisconnectCommonObservers(entt::registry& registry)
+{
+    registry.on_construct<Component::StableIdComponent>().disconnect<&Component::StableIdComponent::OnConstruct>();
+    registry.on_update<Component::StableIdComponent>().disconnect<&Component::StableIdComponent::OnUpdate>();
+    registry.on_destroy<Component::StableIdComponent>().disconnect<&Component::StableIdComponent::OnDestroy>();
+
+    registry.on_construct<Component::CheckpointComponent>().disconnect<&Component::CheckpointComponent::OnConstruct>();
+}
 } // Game

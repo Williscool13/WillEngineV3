@@ -10,6 +10,7 @@
 namespace Game
 {
 void ConnectCommonObservers(entt::registry& registry);
+void DisconnectCommonObservers(entt::registry& registry);
 } // Game
 
 #endif //WILL_ENGINE_COMMON_SYSTEMS_H
