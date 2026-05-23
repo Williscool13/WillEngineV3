@@ -335,40 +335,54 @@ bool ProceduralModelLoadSlot::FinalizeGeometry(Core::Span<const Engine::FullVert
 
     {
         outputModel->physicsCache = PhysicsCache{};
-
         auto& physicsCache = outputModel->physicsCache.value();
-        physicsCache.positions = Core::HeapArray<Vec3>(&memoryManager->Assets(), Core::AllocTag::AssetModel, remappedVertices.Size());
+
+        // Positions are available directly from remappedVertices
+        Core::HeapArray<Vec3> allPositions(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, remappedVertices.Size());
         for (size_t i = 0; i < remappedVertices.Size(); ++i) {
-            physicsCache.positions[i] = remappedVertices[i].position;
+            allPositions[i] = remappedVertices[i].position;
         }
 
-        physicsCache.indices = Core::HeapArray<uint32_t>(&memoryManager->Assets(), Core::AllocTag::AssetModel, remappedIndices.Size());
+        Core::HeapArray<uint32_t> allIndices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, remappedIndices.Size());
         for (size_t i = 0; i < remappedIndices.Size(); ++i) {
-            physicsCache.indices[i] = remappedIndices[i];
+            allIndices[i] = remappedIndices[i];
         }
 
-        // Always need to compute bounds here for procedural
-        // Compute with full fidelity index buffer
-        outputModel->bounds = ComputeBounds(physicsCache.positions);
+        // Always need to compute bounds here for procedural; compute with full fidelity index buffer
+        outputModel->bounds = ComputeBounds(allPositions);
 
         // todo parameterize
         constexpr size_t kSimplifyThreshold = 1500;
         constexpr size_t kSimplifyFloor = 1500;
         constexpr float kSimplifyRatio = 0.15f;
         constexpr float kSimplifyError = 0.01f;
-        if (physicsCache.indices.Size() > kSimplifyThreshold) {
-            const size_t target = std::max(kSimplifyFloor, static_cast<size_t>(physicsCache.indices.Size() * kSimplifyRatio));
-            Core::HeapArray<uint32_t> simplified = Core::HeapArray<uint32_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, physicsCache.indices.Size());
-            const size_t result = meshopt_simplify(
+        if (allIndices.Size() > kSimplifyThreshold) {
+            const size_t target = std::max(kSimplifyFloor, static_cast<size_t>(allIndices.Size() * kSimplifyRatio));
+            Core::HeapArray<uint32_t> simplified(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, allIndices.Size());
+            const size_t simplifiedCount = meshopt_simplify(
                 simplified.Data(),
-                physicsCache.indices.Data(), physicsCache.indices.Size(),
-                &physicsCache.positions[0].x, physicsCache.positions.Size(), sizeof(Vec3),
+                allIndices.Data(), allIndices.Size(),
+                &allPositions[0].x, allPositions.Size(), sizeof(Vec3),
                 target, kSimplifyError
             );
 
-            physicsCache.indices = Core::HeapArray<uint32_t>(&memoryManager->Assets(), Core::AllocTag::AssetModel, result);
-            for (size_t i = 0; i < result; ++i) {
-                physicsCache.indices[i] = simplified[i];
+            Core::HeapArray<uint32_t> remap(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, allPositions.Size());
+            const size_t uniqueVerts = meshopt_generateVertexRemap(remap.Data(), simplified.Data(), simplifiedCount, allPositions.Data(), allPositions.Size(), sizeof(Vec3));
+
+            physicsCache.positions = Core::HeapArray<Vec3>(&memoryManager->Assets(), Core::AllocTag::AssetModel, uniqueVerts);
+            meshopt_remapVertexBuffer(physicsCache.positions.Data(), allPositions.Data(), allPositions.Size(), sizeof(Vec3), remap.Data());
+
+            physicsCache.indices = Core::HeapArray<uint32_t>(&memoryManager->Assets(), Core::AllocTag::AssetModel, simplifiedCount);
+            meshopt_remapIndexBuffer(physicsCache.indices.Data(), simplified.Data(), simplifiedCount, remap.Data());
+        } else {
+            physicsCache.positions = Core::HeapArray<Vec3>(&memoryManager->Assets(), Core::AllocTag::AssetModel, allPositions.Size());
+            for (size_t i = 0; i < allPositions.Size(); ++i) {
+                physicsCache.positions[i] = allPositions[i];
+            }
+
+            physicsCache.indices = Core::HeapArray<uint32_t>(&memoryManager->Assets(), Core::AllocTag::AssetModel, allIndices.Size());
+            for (size_t i = 0; i < allIndices.Size(); ++i) {
+                physicsCache.indices[i] = allIndices[i];
             }
         }
     }
