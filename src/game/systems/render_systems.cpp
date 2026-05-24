@@ -703,7 +703,10 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
             .intensity = light.intensity,
             .range = light.range,
         });
-    } {
+    }
+
+    //
+    {
         int32_t bestPriority = INT32_MIN;
         bool found = false;
         auto dirView = state->registry.view<Component::DirectionalLightComponent, Component::TransformComponent>();

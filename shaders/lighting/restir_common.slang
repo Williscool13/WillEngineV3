@@ -84,5 +84,5 @@ public bool ReservoirMerge(inout Reservoir r, Reservoir other, float targetPdfY,
  */
 public void ReservoirFinalise(inout Reservoir r, float targetPdfY)
 {
-    r.W = (targetPdfY > 0.0) ? (r.wSum / (float(r.M) * targetPdfY)) : 0.0;
+    r.W = (targetPdfY > 0.0) ? (r.wSum / targetPdfY) : 0.0;
 }

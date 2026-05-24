@@ -48,7 +48,7 @@ void ComputeMain(uniform LightingResolvePushConstant pc, uint3 threadID : SV_Dis
 
     // Basic ReSTIR DI
     {
-        const int M = 2;
+        const int M = 32;
         int lightCount = pc.lightData->areaLightCount;
         if (lightCount > 0) {
             uint h = pixel.x * 1973u ^ pixel.y * 9277u;
