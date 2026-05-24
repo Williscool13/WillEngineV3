@@ -10,7 +10,10 @@
 
 #include "engine/engine_api.h"
 
-namespace Core { struct ViewFamily; }
+namespace Core
+{
+struct ViewFamily;
+}
 
 namespace Game::Component
 {
@@ -21,7 +24,9 @@ struct PointLightComponent
     float range{10.0f};
 
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
+
     static void Serialize(const PointLightComponent& comp, nlohmann::json& json);
+
     static void Deserialize(PointLightComponent& comp, const nlohmann::json& json);
 };
 
@@ -31,9 +36,12 @@ struct AreaLightComponent
     float intensity{1.0f};
     float halfWidth{1.0f};
     float halfHeight{1.0f};
+    float range{10.0f};
 
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
+
     static void Serialize(const AreaLightComponent& comp, nlohmann::json& json);
+
     static void Deserialize(AreaLightComponent& comp, const nlohmann::json& json);
 };
 
@@ -44,7 +52,9 @@ struct DirectionalLightComponent
     int32_t priority{0};
 
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
+
     static void Serialize(const DirectionalLightComponent& comp, nlohmann::json& json);
+
     static void Deserialize(DirectionalLightComponent& comp, const nlohmann::json& json);
 };
 }

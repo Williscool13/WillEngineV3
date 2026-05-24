@@ -81,7 +81,7 @@ SHADER_PUBLIC struct AreaLightData
     SHADER_PUBLIC float4 up;            // xyz up axis, w half-height
     SHADER_PUBLIC uint packedColor;     // RGBA8 unorm
     SHADER_PUBLIC float intensity;
-    SHADER_PUBLIC float _pad0;
+    SHADER_PUBLIC float range;          // smoothstep attenuation cutoff distance
     SHADER_PUBLIC float _pad1;
 };
 

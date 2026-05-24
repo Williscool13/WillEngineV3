@@ -674,10 +674,10 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
         vf.pointLights.PushBack(PointLightData{
             .positionRange = {transform.translation, light.range},
             .packedColor =
-                (static_cast<uint32_t>(glm::clamp(c.r, 0.0f, 1.0f) * 255.0f + 0.5f))       |
-                (static_cast<uint32_t>(glm::clamp(c.g, 0.0f, 1.0f) * 255.0f + 0.5f) << 8)  |
-                (static_cast<uint32_t>(glm::clamp(c.b, 0.0f, 1.0f) * 255.0f + 0.5f) << 16) |
-                (0xFFu << 24),
+            (static_cast<uint32_t>(glm::clamp(c.r, 0.0f, 1.0f) * 255.0f + 0.5f)) |
+            (static_cast<uint32_t>(glm::clamp(c.g, 0.0f, 1.0f) * 255.0f + 0.5f) << 8) |
+            (static_cast<uint32_t>(glm::clamp(c.b, 0.0f, 1.0f) * 255.0f + 0.5f) << 16) |
+            (0xFFu << 24),
             .intensity = light.intensity,
         });
     }
@@ -687,24 +687,23 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
         if (vf.areaLights.IsFull()) { break; }
         const glm::mat3 rot = glm::mat3_cast(transform.rotation);
         const glm::vec3 normal = rot[2];
-        const glm::vec3 right  = rot[0];
-        const glm::vec3 up     = rot[1];
+        const glm::vec3 right = rot[0];
+        const glm::vec3 up = rot[1];
         const glm::vec3& c = light.color;
         vf.areaLights.PushBack(AreaLightData{
             .position = {transform.translation, 0.0f},
-            .normal   = {normal, 0.0f},
-            .right    = {right,  light.halfWidth},
-            .up       = {up,     light.halfHeight},
+            .normal = {normal, 0.0f},
+            .right = {right, light.halfWidth},
+            .up = {up, light.halfHeight},
             .packedColor =
-                (static_cast<uint32_t>(glm::clamp(c.r, 0.0f, 1.0f) * 255.0f + 0.5f))       |
-                (static_cast<uint32_t>(glm::clamp(c.g, 0.0f, 1.0f) * 255.0f + 0.5f) << 8)  |
-                (static_cast<uint32_t>(glm::clamp(c.b, 0.0f, 1.0f) * 255.0f + 0.5f) << 16) |
-                (0xFFu << 24),
+            (static_cast<uint32_t>(glm::clamp(c.r, 0.0f, 1.0f) * 255.0f + 0.5f)) |
+            (static_cast<uint32_t>(glm::clamp(c.g, 0.0f, 1.0f) * 255.0f + 0.5f) << 8) |
+            (static_cast<uint32_t>(glm::clamp(c.b, 0.0f, 1.0f) * 255.0f + 0.5f) << 16) |
+            (0xFFu << 24),
             .intensity = light.intensity,
+            .range = light.range,
         });
-    }
-
-    {
+    } {
         int32_t bestPriority = INT32_MIN;
         bool found = false;
         auto dirView = state->registry.view<Component::DirectionalLightComponent, Component::TransformComponent>();
@@ -981,8 +980,8 @@ void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state,
                 const Clay_Color& tc = img.backgroundColor;
                 const bool bUntinted = tc.r == 0 && tc.g == 0 && tc.b == 0 && tc.a == 0;
                 const Vec4 tint = bUntinted
-                    ? Vec4{1.0f, 1.0f, 1.0f, 1.0f}
-                    : Vec4{tc.r / 255.0f, tc.g / 255.0f, tc.b / 255.0f, tc.a / 255.0f};
+                                      ? Vec4{1.0f, 1.0f, 1.0f, 1.0f}
+                                      : Vec4{tc.r / 255.0f, tc.g / 255.0f, tc.b / 255.0f, tc.a / 255.0f};
                 const Clay_CornerRadius& cr = img.cornerRadius;
                 Core::UIDrawCommand dc{.type = Core::UICommandType::Image};
                 dc.image = Core::UIRenderCommandImage{

@@ -99,6 +99,85 @@ void ComputeMain(uniform LightingResolvePushConstant pc, uint3 threadID : SV_Dis
         directLight += (diffusePl + specularPl) * nDotLpl * attenuation * pl.intensity * plColor;
     }
 
+    // Area lights (Brute Force))
+    {
+        const int AREA_SAMPLES = 256;
+        // PCG hash for a per-pixel, per-light seed
+        uint rngBase = pixel.x * 1973u + pixel.y * 9277u + 0u;
+
+        for (int i = 0; i < pc.lightData->areaLightCount; i++)
+        {
+            AreaLightData al = pc.lightData->areaLights[i];
+
+            float3 alCenter   = mul(pc.sceneData[pc.sceneDataIndex].view, float4(al.position.xyz, 1.0)).xyz;
+            float3 alNormal   = normalize(mul((float3x3)pc.sceneData[pc.sceneDataIndex].view, al.normal.xyz));
+            float3 alRight    = normalize(mul((float3x3)pc.sceneData[pc.sceneDataIndex].view, al.right.xyz));
+            float3 alUp       = normalize(mul((float3x3)pc.sceneData[pc.sceneDataIndex].view, al.up.xyz));
+            float  halfWidth  = al.right.w;
+            float  halfHeight = al.up.w;
+            float  area       = (2.0 * halfWidth) * (2.0 * halfHeight);
+            float3 alColor    = UnpackUnorm4x8(al.packedColor).rgb;
+
+            // Smoothstep attenuation from light center (same curve as point lights)
+            float centerDist = length(alCenter - viewPosition);
+            float attenuation = 1.0 - smoothstep(0.0, al.range, centerDist);
+            attenuation *= attenuation;
+            if (attenuation <= 0.0) { continue; }
+
+            float3 accumulated = float3(0.0, 0.0, 0.0);
+
+            for (int s = 0; s < AREA_SAMPLES; s++)
+            {
+                // PCG hash to get two uniform floats in [0,1)
+                uint h = rngBase ^ (uint(i) * 2654435761u) ^ (uint(s) * 805459861u);
+                h = h ^ (h >> 17u); h *= 0xbf324c81u;
+                h = h ^ (h >> 13u); h *= 0x9c7d2d49u;
+                h = h ^ (h >> 16u);
+                float u0 = float(h & 0xFFFFu) / 65536.0;
+
+                h = h ^ (h >> 17u); h *= 0xbf324c81u;
+                h = h ^ (h >> 13u); h *= 0x9c7d2d49u;
+                h = h ^ (h >> 16u);
+                float u1 = float(h & 0xFFFFu) / 65536.0;
+
+                // Sample a point on the rect
+                float su = (u0 * 2.0 - 1.0) * halfWidth;
+                float sv = (u1 * 2.0 - 1.0) * halfHeight;
+                float3 samplePos = alCenter + su * alRight + sv * alUp;
+
+                float3 toSample = samplePos - viewPosition;
+                float  dist2    = dot(toSample, toSample);
+                float  dist     = sqrt(dist2);
+                float3 Lal      = toSample / dist;
+
+                // Geometry terms
+                float cosShade  = max(dot(N, Lal), 0.0);
+                float cosLight  = max(dot(-alNormal, Lal), 0.0);
+                if (cosShade <= 0.0 || cosLight <= 0.0) { continue; }
+
+                // Solid-angle / area PDF: pdf = dist^2 / (cosLight * area)
+                // Weight = BRDF * cosShade / pdf = BRDF * cosShade * cosLight * area / dist^2
+                float geometryFactor = cosShade * cosLight * area / dist2;
+
+                float3 Hal = normalize(V + Lal);
+                float NDFal = D_GGX(N, Hal, roughness);
+                float Gal   = G_SMITH_HEIGHT_CORRELATED(N, V, Lal, roughness);
+                float3 Fal  = F_SCHLICK(V, Hal, F0);
+                float3 specularAl = (NDFal * Gal * Fal) / max(4.0 * max(dot(N, V), 0.0) * cosShade, 0.001);
+
+                float3 kSal = Fal;
+                float3 kDal = (1.0 - kSal) * (1.0 - li.metallic);
+                float nDotLal = cosShade;
+                float orenNayarAl = Diffuse_OrenNayar(nDotLal, nDotV, Lal, V, roughness);
+                float3 diffuseAl = kDal * li.albedo.xyz * orenNayarAl;
+
+                accumulated += (diffuseAl + specularAl) * geometryFactor;
+            }
+
+            directLight += (accumulated / float(AREA_SAMPLES)) * al.intensity * alColor * attenuation;
+        }
+    }
+
     // IBL
     float3 ibl = 0.0;
     if (pc.skyboxIndex >= 0)

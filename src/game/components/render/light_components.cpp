@@ -46,6 +46,7 @@ Engine::ComponentEditorResult Component::AreaLightComponent::DrawEditor(Core::Vi
         ImGui::DragFloat("Intensity##al", &comp.intensity, 0.05f, 0.0f, 100.0f);
         ImGui::DragFloat("Half Width##al", &comp.halfWidth, 0.05f, 0.01f, 100.0f);
         ImGui::DragFloat("Half Height##al", &comp.halfHeight, 0.05f, 0.01f, 100.0f);
+        ImGui::DragFloat("Range##al", &comp.range, 0.5f, 0.0f, 1000.0f);
         auto* transform = registry.try_get<TransformComponent>(entity);
         if (transform) {
             const auto& vd = viewFamily.mainView.currentViewData;
@@ -66,15 +67,15 @@ Engine::ComponentEditorResult Component::AreaLightComponent::DrawEditor(Core::Vi
 
             const Vec3 widthPlaneNormal = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, right) * right);
             Editor::DotHandle(20000, center + right * comp.halfWidth, widthPlaneNormal,
-                vd.view, vd.proj, viewport, vd.cameraPos, state,
-                [&](Vec3 newPt) { comp.halfWidth = glm::max(0.01f, glm::dot(newPt - center, right)); },
-                Editor::ColorAxisX);
+                              vd.view, vd.proj, viewport, vd.cameraPos, state,
+                              [&](Vec3 newPt) { comp.halfWidth = glm::max(0.01f, glm::dot(newPt - center, right)); },
+                              Editor::ColorAxisX);
 
             const Vec3 heightPlaneNormal = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, up) * up);
             Editor::DotHandle(20001, center + up * comp.halfHeight, heightPlaneNormal,
-                vd.view, vd.proj, viewport, vd.cameraPos, state,
-                [&](Vec3 newPt) { comp.halfHeight = glm::max(0.01f, glm::dot(newPt - center, up)); },
-                Editor::ColorAxisY);
+                              vd.view, vd.proj, viewport, vd.cameraPos, state,
+                              [&](Vec3 newPt) { comp.halfHeight = glm::max(0.01f, glm::dot(newPt - center, up)); },
+                              Editor::ColorAxisY);
 
             constexpr Vec4 editColor{0.5f, 0.8f, 1.0f, 1.0f};
             DEBUG_ADD_RECT(viewFamily.debugRects, {center, comp.halfWidth, comp.halfHeight, right, up, editColor, 0.03f});
@@ -106,6 +107,7 @@ void Component::AreaLightComponent::Serialize(const AreaLightComponent& comp, nl
     json["intensity"] = comp.intensity;
     json["halfWidth"] = comp.halfWidth;
     json["halfHeight"] = comp.halfHeight;
+    json["range"] = comp.range;
 }
 
 void Component::AreaLightComponent::Deserialize(AreaLightComponent& comp, const nlohmann::json& json)
@@ -115,6 +117,7 @@ void Component::AreaLightComponent::Deserialize(AreaLightComponent& comp, const 
     comp.intensity = json.value("intensity", 1.0f);
     comp.halfWidth = json.value("halfWidth", 1.0f);
     comp.halfHeight = json.value("halfHeight", 1.0f);
+    comp.range = json.value("range", 10.0f);
 }
 
 Engine::ComponentEditorResult Component::DirectionalLightComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)
