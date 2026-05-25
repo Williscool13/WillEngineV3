@@ -61,6 +61,14 @@ void SetupLightingBucketingDebugPass(RenderGraph& graph,
                                      const VisibilityShadingTargets& targets,
                                      uint32_t sceneIndex);
 
+void SetupReSTIRPass(RenderGraph& graph,
+                     PipelineManager* pipelineManager,
+                     const Core::ViewFamily& viewFamily,
+                     Core::Array<uint32_t, 2> renderExtent,
+                     const DeferredResolveTargets& targets,
+                     uint32_t sceneIndex,
+                     Core::Arena& arena,
+                     uint64_t frameNumber);
 
 void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                                         PipelineManager* pipelineManager,

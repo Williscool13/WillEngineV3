@@ -20,6 +20,7 @@ import shadows_interop;
 import lights_interop;
 import text_interop;
 import ui_interop;
+import restir_interop;
 #else
 #include <glm/glm.hpp>
 #include <volk.h>
@@ -29,6 +30,7 @@ import ui_interop;
 #include "instancing_interop.h"
 #include "text_interop.h"
 #include "ui_interop.h"
+#include "restir_interop.h"
 
 using uint = uint32_t;
 using int32 = int32_t;
@@ -68,6 +70,7 @@ SHADER_PUBLIC struct DebugVisualizePushConstant
     SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
     SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
     SHADER_PUBLIC SHADER_PTR(MaterialProperties) materialBuffer;
+    SHADER_PUBLIC SHADER_PTR(Reservoir) reservoirBuffer;
     SHADER_PUBLIC int2 srcExtent;
     SHADER_PUBLIC int2 dstExtent;
     SHADER_PUBLIC float nearPlane;
@@ -413,6 +416,21 @@ SHADER_PUBLIC struct ShadowsResolvePushConstant
     SHADER_PUBLIC int4 csmIndices;
     SHADER_PUBLIC uint32_t depthIndex;
     SHADER_PUBLIC uint32_t gbufferOneIndex;
+};
+
+SHADER_PUBLIC struct ReSTIRDIGeneratePushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC SHADER_PTR(LightData) lightData;
+    SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
+    SHADER_PUBLIC SHADER_PTR(Reservoir) reservoirBuffer;
+    SHADER_PUBLIC uint32_t visibilityBufferIndex;
+    SHADER_PUBLIC uint32_t gbufferOneIndex;
+    SHADER_PUBLIC uint32_t gbufferTwoIndex;
+    SHADER_PUBLIC uint32_t depthIndex;
+    SHADER_PUBLIC uint2 renderExtent;
+    SHADER_PUBLIC uint32_t sceneDataIndex;
+    SHADER_PUBLIC uint32_t frameIndex;
 };
 
 SHADER_PUBLIC struct LightingResolvePushConstant

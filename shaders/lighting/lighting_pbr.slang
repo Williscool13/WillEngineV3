@@ -9,7 +9,6 @@ import packing_functions;
 import visibility_lighting_common;
 
 import bindless_declarations;
-import restir_common;
 
 [numthreads(16, 16, 1)]
 void ComputeMain(uniform LightingResolvePushConstant pc, uint3 threadID : SV_DispatchThreadID) {
@@ -39,143 +38,84 @@ void ComputeMain(uniform LightingResolvePushConstant pc, uint3 threadID : SV_Dis
     // Clamp roughness so D_GGX never produces 0/0 at NdotH=1 (degenerate delta lobe)
     float roughness = max(li.roughness, 0.045);
 
-    float3 F0 = lerp(float3(0.04, 0.04, 0.04), li.albedo.xyz, li.metallic);
-    float nDotV = max(dot(N, V), 0.0);
+    // Directional light in view space (transform from world space)
+    float3 L = normalize(mul((float3x3)pc.sceneData[pc.sceneDataIndex].view, normalize(-pc.lightData->directionalLight.directionIntensity.xyz)));
+    float3 H = normalize(V + L);
 
+    // SPECULAR: Cook-Torrance BRDF
+    float NDF = D_GGX(N, H, roughness);
+    float G = G_SMITH_HEIGHT_CORRELATED(N, V, L, roughness);
+    float3 F0 = lerp(float3(0.04, 0.04, 0.04), li.albedo.xyz, li.metallic);
+    float3 F = F_SCHLICK(V, H, F0);
+
+    float3 numerator = NDF * G * F;
+    float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0);
+    float3 specular = numerator / max(denominator, 0.001);
+
+    float3 kS = F;
+    float3 kD = (1.0 - kS) * (1.0 - li.metallic);
+
+    // DIFFUSE: Oren-Nayar
+    float nDotL = max(dot(N, L), 0.0);
+    float nDotV = max(dot(N, V), 0.0);
+    float orenNayar = Diffuse_OrenNayar(nDotL, nDotV, L, V, roughness);
+    float3 diffuse = kD * li.albedo.xyz * orenNayar;
+
+    float shadowFactor = li.shadows.x;
     float gtao = li.shadows.y;
 
-    float3 directLight = float3(0.0, 0.0, 0.0);
+    const float lightIntensity = pc.lightData->directionalLight.directionIntensity.w;
+    const float3 lightColor = UnpackUnorm4x8(pc.lightData->directionalLight.packedColor).rgb;
+    float3 directLight = (diffuse + specular) * nDotL * shadowFactor * lightIntensity * lightColor;
 
-    // Basic ReSTIR DI
+    // Point lights
+    for (int i = 0; i < pc.lightData->pointLightCount; i++)
     {
-        const int M_light = 32;
-        const int M_brdf = 1;
-        const int M_total = M_light + M_brdf;
-        int lightCount = pc.lightData->areaLightCount;
-        if (lightCount > 0) {
-            uint h = pixel.x * 1973u ^ pixel.y * 9277u ^ pc.frameIndex * 2654435761u;
-            float4x4 view = pc.sceneData[pc.sceneDataIndex].view;
+        PointLightData pl = pc.lightData->pointLights[i];
 
-            Reservoir r = ReservoirEmpty();
-            ReservoirSample winner = { -1, float3(0.0, 0.0, 0.0), 0.0 };
+        float3 plViewPos = mul(pc.sceneData[pc.sceneDataIndex].view, float4(pl.positionRange.xyz, 1.0)).xyz;
+        float3 plVec = plViewPos - viewPosition;
+        float dist = length(plVec);
+        float range = pl.positionRange.w;
+        if (dist >= range) { continue; }
 
-            // Light sampling candidates
-            for (int i = 0; i < M_light; i++) {
-                float uLight = HashStep(h);
-                float uU = HashStep(h);
-                float uV = HashStep(h);
-                float uSelect = HashStep(h);
+        float3 Lpl = plVec / dist;
+        float3 Hpl = normalize(V + Lpl);
 
-                int lightIdx = clamp(int(uLight * float(lightCount)), 0, lightCount - 1);
-                AreaLightData al = pc.lightData->areaLights[lightIdx];
-                AreaLightVS vs = TransformAreaLight(al, view);
-                float3 samplePos = SampleAreaLightPos(vs, uU, uV);
-                AreaLightSample s = EvalAreaLightSample(vs, samplePos, viewPosition, N, al.range);
+        float NDFpl = D_GGX(N, Hpl, roughness);
+        float Gpl = G_SMITH_HEIGHT_CORRELATED(N, V, Lpl, roughness);
+        float3 Fpl = F_SCHLICK(V, Hpl, F0);
+        float3 specularPl = (NDFpl * Gpl * Fpl) / max(4.0 * max(dot(N, V), 0.0) * max(dot(N, Lpl), 0.0), 0.001);
 
-                float pHat = 0.0;
-                if (s.cosShade > 0.0 && s.cosLight > 0.0 && s.attenuation > 0.0)
-                {
-                    float3 Hal = normalize(V + s.L);
-                    float3 Fal = F_SCHLICK(V, Hal, F0);
-                    float3 kDal = (1.0 - Fal) * (1.0 - li.metallic);
-                    float3 alColor = UnpackUnorm4x8(al.packedColor).rgb;
-                    float geomTerm = s.cosLight / max(s.dist * s.dist, 0.0001);
-                    float3 brdfCos = (kDal * li.albedo.xyz + Fal) * s.cosShade * geomTerm * al.intensity * alColor * s.attenuation;
-                    pHat = dot(brdfCos, float3(0.2126, 0.7152, 0.0722));
-                }
+        float3 kSpl = Fpl;
+        float3 kDpl = (1.0 - kSpl) * (1.0 - li.metallic);
+        float nDotLpl = max(dot(N, Lpl), 0.0);
+        float orenNayarPl = Diffuse_OrenNayar(nDotLpl, nDotV, Lpl, V, roughness);
+        float3 diffusePl = kDpl * li.albedo.xyz * orenNayarPl;
 
-                float pLight = 1.0 / (float(lightCount) * vs.area);
-                float pBrdf = GGXPdf(N, V, s.L, roughness);
-                float misWeight = pHat / (float(M_light) * pLight + float(M_brdf) * pBrdf);
-                if (ReservoirAddSample(r, i, misWeight, uSelect))
-                {
-                    winner = { lightIdx, s.samplePos, s.attenuation };
-                }
-            }
-
-            // BRDF candidates
-            for (int i = 0; i < M_brdf; i++)
-            {
-                float uXi0 = HashStep(h);
-                float uXi1 = HashStep(h);
-                float uSelect = HashStep(h);
-
-                float brdfPdf;
-                float3 brdfL = ImportanceSampleGGX(float2(uXi0, uXi1), N, V, roughness, brdfPdf);
-
-                if (dot(N, brdfL) <= 0.0 || brdfPdf <= 0.0) { continue; }
-
-                // Brute-force search: find the closest area light hit along brdfL
-                float bestT = 1e30;
-                int bestLightIdx = -1;
-
-                for (int j = 0; j < lightCount; j++)
-                {
-                    AreaLightVS vs = TransformAreaLight(pc.lightData->areaLights[j], view);
-                    float t;
-                    if (RayIntersectQuad(viewPosition, brdfL, vs.center, vs.normal, vs.right, vs.up, vs.halfWidth, vs.halfHeight, t) && t < bestT)
-                    {
-                        bestT = t;
-                        bestLightIdx = j;
-                    }
-                }
-
-                if (bestLightIdx < 0) { continue; }
-
-                AreaLightData al = pc.lightData->areaLights[bestLightIdx];
-                AreaLightVS vs = TransformAreaLight(al, view);
-                float3 samplePos = viewPosition + brdfL * bestT;
-                AreaLightSample s = EvalAreaLightSample(vs, samplePos, viewPosition, N, al.range);
-
-                float pHat = 0.0;
-                if (s.cosLight > 0.0 && s.attenuation > 0.0)
-                {
-                    float3 Hal = normalize(V + brdfL);
-                    float3 Fal = F_SCHLICK(V, Hal, F0);
-                    float3 kDal = (1.0 - Fal) * (1.0 - li.metallic);
-                    float3 alColor = UnpackUnorm4x8(al.packedColor).rgb;
-                    float geomTerm = s.cosLight / max(s.dist * s.dist, 0.0001);
-                    float3 brdfCos = (kDal * li.albedo.xyz + Fal) * s.cosShade * geomTerm * al.intensity * alColor * s.attenuation;
-                    pHat = dot(brdfCos, float3(0.2126, 0.7152, 0.0722));
-                }
-
-                float pLight = 1.0 / (float(lightCount) * vs.area);
-                float misWeight = pHat / (float(M_light) * pLight + float(M_brdf) * brdfPdf);
-                if (ReservoirAddSample(r, M_light + i, misWeight, uSelect))
-                {
-                    winner = { bestLightIdx, samplePos, s.attenuation };
-                }
-            }
-
-            if (r.y >= 0 && winner.lightIdx >= 0)
-            {
-                AreaLightData al = pc.lightData->areaLights[winner.lightIdx];
-                AreaLightVS vs = TransformAreaLight(al, view);
-                AreaLightSample s = EvalAreaLightSample(vs, winner.samplePos, viewPosition, N, al.range);
-
-                if (s.cosShade > 0.0 && s.cosLight > 0.0)
-                {
-                    float3 Hal = normalize(V + s.L);
-                    float NDFal = D_GGX(N, Hal, roughness);
-                    float Gal   = G_SMITH_HEIGHT_CORRELATED(N, V, s.L, roughness);
-                    float3 Fal  = F_SCHLICK(V, Hal, F0);
-                    float3 specularAl = (NDFal * Gal * Fal) / max(4.0 * nDotV * s.cosShade, 0.001);
-                    float3 kDal = (1.0 - Fal) * (1.0 - li.metallic);
-                    float orenNayarAl = Diffuse_OrenNayar(s.cosShade, nDotV, s.L, V, roughness);
-                    float3 diffuseAl = kDal * li.albedo.xyz * orenNayarAl;
-                    float3 alColor = UnpackUnorm4x8(al.packedColor).rgb;
-
-                    float geomTerm = s.cosLight / max(s.dist * s.dist, 0.0001);
-                    float3 brdfCos = (kDal * li.albedo.xyz + Fal) * s.cosShade * geomTerm * al.intensity * alColor * winner.attenuation;
-                    float pHatWinner = dot(brdfCos, float3(0.2126, 0.7152, 0.0722));
-                    ReservoirFinalise(r, pHatWinner);
-
-                    directLight = (diffuseAl + specularAl) * geomTerm * al.intensity * alColor * winner.attenuation * r.W;
-                }
-            }
-        }
+        float attenuation = 1.0 - smoothstep(0.0, range, dist);
+        attenuation *= attenuation;
+        float3 plColor = UnpackUnorm4x8(pl.packedColor).rgb;
+        directLight += (diffusePl + specularPl) * nDotLpl * attenuation * pl.intensity * plColor;
     }
 
-    float3 finalColor = directLight + li.emissiveRGB;
+    // IBL
+    float3 ibl = 0.0;
+    if (pc.skyboxIndex >= 0)
+    {
+        float NdotV = max(dot(N, V), 0.0);
+        float3 F0 = lerp(float3(0.04, 0.04, 0.04), li.albedo.xyz, li.metallic);
+        float3 F_ibl = F_SCHLICK_ROUGHNESS(NdotV, F0, roughness);
+        float3 kS_ibl = F_ibl;
+        float3 kD_ibl = (1.0 - kS_ibl) * (1.0 - li.metallic);
+
+        float3 worldN = normalize(mul((float3x3)pc.sceneData[pc.sceneDataIndex].invView, N));
+        float3 irradiance = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], worldN);
+        float3 reflectionDiffuse = irradiance * li.albedo.xyz;
+        float3 reflectionSpecular = SpecularReflection(assetCubemaps[pc.skyboxIndex], assetTextures[BRDF_LUT_BINDLESS_INDEX], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], V, N, pc.sceneData[pc.sceneDataIndex].invView, roughness, F_ibl);
+        ibl = (kD_ibl * reflectionDiffuse + reflectionSpecular) * gtao;
+    }
+
+    float3 finalColor = directLight + ibl + li.emissiveRGB;
     rdgStorageFloat4[pc.outputImageIndex][pixel] = float4(finalColor, 1.0);
 }

@@ -61,6 +61,7 @@ SHADER_PUBLIC SHADER_ENUM DebugTransformationType
     GBufferEmissive = 14,
     VisBucketShading = 15,
     VisBucketLighting = 16,
+    ReservoirLightIdx = 17,
 };
 
 SHADER_PUBLIC struct Frustum

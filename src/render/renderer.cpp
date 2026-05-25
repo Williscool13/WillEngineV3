@@ -806,6 +806,52 @@ void SetupLightingBucketingDebugPass(RenderGraph& graph, PipelineManager* pipeli
         });
 }
 
+void SetupReSTIRPass(RenderGraph& graph,
+                     PipelineManager* pipelineManager,
+                     const Core::ViewFamily& viewFamily,
+                     Core::Array<uint32_t, 2> renderExtent,
+                     const DeferredResolveTargets& targets,
+                     uint32_t sceneIndex,
+                     Core::Arena& arena,
+                     uint64_t frameNumber)
+{
+    const uint32_t pixelCount = renderExtent[0] * renderExtent[1];
+    graph.CreateBuffer(SID("restir_reservoir_buffer"), pixelCount * sizeof(Reservoir), false);
+
+    RenderPass& pass = graph.AddPass(SID("ReSTIR DI Generate"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+    pass.ReadBuffer(SCENE_DATA_BUFFER);
+    pass.ReadBuffer(SID("light_data"));
+    pass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
+    pass.ReadSampledImage(targets.visibility);
+    pass.ReadSampledImage(targets.gbufferOne);
+    pass.ReadSampledImage(targets.gbufferTwo);
+    pass.ReadSampledImage(targets.depthStencil);
+    pass.WriteBuffer(SID("restir_reservoir_buffer"));
+    pass.Execute([&, pipelineManager, sceneIndex, frameNumber, renderExtent,visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,depth = targets.depthStencil](VkCommandBuffer cmd) {
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("restir_di_generate"));
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+
+        ReSTIRDIGeneratePushConstant pc{
+            .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
+            .lightData = graph.GetBufferAddress(SID("light_data")),
+            .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
+            .reservoirBuffer = graph.GetBufferAddress(SID("restir_reservoir_buffer")),
+            .visibilityBufferIndex = graph.GetSampledImageViewDescriptorIndex(visibility),
+            .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
+            .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
+            .depthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(depth),
+            .renderExtent = {renderExtent[0], renderExtent[1]},
+            .sceneDataIndex = sceneIndex,
+            .frameIndex = static_cast<uint32_t>(frameNumber),
+        };
+        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+
+        const uint32_t groupsX = (renderExtent[0] + 15) / 16;
+        const uint32_t groupsY = (renderExtent[1] + 15) / 16;
+        vkCmdDispatch(cmd, groupsX, groupsY, 1);
+    });
+}
+
 void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                                         PipelineManager* pipelineManager,
                                         const Core::ViewFamily& viewFamily,
@@ -819,12 +865,12 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
 
     struct LightingEntry
     {
-        uint32_t bucketIndex;
+        uint32_t bucketIndex{};
         StringID lightingShader;
     };
 
-    const uint32_t lightingCount = static_cast<uint32_t>(viewFamily.lightingBuckets.Size());
-    LightingEntry* buckets = arena.AllocArray<LightingEntry>(lightingCount);
+    const auto lightingCount = static_cast<uint32_t>(viewFamily.lightingBuckets.Size());
+    auto buckets = arena.AllocArray<LightingEntry>(lightingCount);
     uint32_t idx = 0;
     for (const auto& [shader, bucketIndex] : viewFamily.lightingBuckets) {
         buckets[idx++] = {bucketIndex, shader};
@@ -1623,6 +1669,7 @@ StringID SetupPostProcessing(RenderGraph& graph,
     current = PPDither(ctx, current);
     return current;
 }
+
 void SetupUIRender(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, StringID targetImage)
 {
     if (viewFamily.uiDrawList.IsEmpty()) { return; }
@@ -1657,26 +1704,31 @@ void SetupUIRender(RenderGraph& graph, PipelineManager* pipelineManager, const C
 
         for (const Core::UIDrawCommand& drawCmd : viewFamily.uiDrawList) {
             switch (drawCmd.type) {
-                case Core::UICommandType::ScissorPush: {
+                case Core::UICommandType::ScissorPush:
+                {
                     const Core::UIScissorCommand& s = drawCmd.scissor;
                     const VkRect2D scissor{{s.x, static_cast<int32_t>(height) - s.y - static_cast<int32_t>(s.height)}, {s.width, s.height}};
                     vkCmdSetScissor(cmd, 0, 1, &scissor);
                     break;
                 }
-                case Core::UICommandType::ScissorPop: {
+                case Core::UICommandType::ScissorPop:
+                {
                     vkCmdSetScissor(cmd, 0, 1, &fullScissor);
                     break;
                 }
-                case Core::UICommandType::OverlayPush: {
+                case Core::UICommandType::OverlayPush:
+                {
                     const float4& c = drawCmd.overlay.color;
                     overlayColor = {c.x, c.y, c.z, c.w};
                     break;
                 }
-                case Core::UICommandType::OverlayPop: {
+                case Core::UICommandType::OverlayPop:
+                {
                     overlayColor = {1.0f, 1.0f, 1.0f, 1.0f};
                     break;
                 }
-                case Core::UICommandType::Rect: {
+                case Core::UICommandType::Rect:
+                {
                     if (boundPipeline != Core::UICommandType::Rect) {
                         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, rectPipeline->pipeline);
                         boundPipeline = Core::UICommandType::Rect;
@@ -1696,7 +1748,8 @@ void SetupUIRender(RenderGraph& graph, PipelineManager* pipelineManager, const C
                     vkCmdDraw(cmd, 4, 1, 0, 0);
                     break;
                 }
-                case Core::UICommandType::Image: {
+                case Core::UICommandType::Image:
+                {
                     if (boundPipeline != Core::UICommandType::Image) {
                         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, imagePipeline->pipeline);
                         boundPipeline = Core::UICommandType::Image;
@@ -1719,7 +1772,8 @@ void SetupUIRender(RenderGraph& graph, PipelineManager* pipelineManager, const C
                     vkCmdDraw(cmd, 4, 1, 0, 0);
                     break;
                 }
-                case Core::UICommandType::Border: {
+                case Core::UICommandType::Border:
+                {
                     if (boundPipeline != Core::UICommandType::Border) {
                         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, borderPipeline->pipeline);
                         boundPipeline = Core::UICommandType::Border;
@@ -1740,7 +1794,8 @@ void SetupUIRender(RenderGraph& graph, PipelineManager* pipelineManager, const C
                     vkCmdDraw(cmd, 4, 1, 0, 0);
                     break;
                 }
-                case Core::UICommandType::Text: {
+                case Core::UICommandType::Text:
+                {
                     if (!bHasText) { break; }
                     if (boundPipeline != Core::UICommandType::Text) {
                         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, textPipeline->pipeline);
@@ -1764,6 +1819,7 @@ void SetupUIRender(RenderGraph& graph, PipelineManager* pipelineManager, const C
         vkCmdEndRendering(cmd);
     });
 }
+
 void SetupSelectionOutlinePass(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, const MainRenderTargets& targets, uint64_t selectedStableId)
 {
     RenderPass& outlinePass = graph.AddPass(SID("Selection Outline"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
@@ -1784,7 +1840,6 @@ void SetupSelectionOutlinePass(RenderGraph& graph, PipelineManager* pipelineMana
         vkCmdDispatch(cmd, (renderExtent[0] + 15) / 16, (renderExtent[1] + 15) / 16, 1);
     });
 }
-
 } // Render
 
 /*InstancedGeometryPassOutputs SetupInstancedGeometryShadowPass(RenderGraph& graph, const InstancedGeometryPassConfig& config, PipelineManager* pipelineManager, uint32_t sceneDataIndex,

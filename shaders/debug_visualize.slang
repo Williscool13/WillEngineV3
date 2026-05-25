@@ -1,5 +1,6 @@
 import push_constant_interop;
 import constants_interop;
+import restir_interop;
 
 import bindless_declarations;
 import shader_functions;
@@ -14,7 +15,7 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
     float2 uv = (float2(threadID.xy) + 0.5) / float2(pc.dstExtent);
 
     int3 sampleTexCoord = int3(threadID.xy, 0);
-    int2 texCoord =  uint2(threadID.xy);
+    int2 texCoord = uint2(threadID.xy);
 
     float4 srcPixel = float4(1.0f, 0.0f, 0.0f, 1.0f);
     switch (pc.textureArrayIndex) {
@@ -130,6 +131,17 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
             uint bucketIdx = pc.materialBuffer[matIdx].lightingBucketIndex;
             uint h = (bucketIdx + 1u) * 2654435761u;
             srcPixel.xyz = float3(float(h >> 24), float((h >> 16) & 0xFF), float((h >> 8) & 0xFF)) / 255.0;
+            break;
+        }
+        case 17: { // ReservoirLightIdx - hash-color the selected light index from the reservoir buffer
+            uint pixelIdx = uint(threadID.y) * uint(pc.dstExtent.x) + uint(threadID.x);
+            Reservoir r = pc.reservoirBuffer[pixelIdx];
+            if (r.lightIdx == ~0u) {
+                srcPixel.xyz = float3(0.0, 0.0, 0.0);
+            } else {
+                uint h = (r.lightIdx + 1u) * 2654435761u;
+                srcPixel.xyz = float3(float(h >> 24), float((h >> 16) & 0xFF), float((h >> 8) & 0xFF)) / 255.0;
+            }
             break;
         }
     }

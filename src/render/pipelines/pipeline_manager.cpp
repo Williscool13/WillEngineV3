@@ -410,6 +410,9 @@ void PipelineManager::RegisterPipelines()
     shadingPipelines.PushBack("error_unlit"_sid);
 
 
+    RegisterComputePipeline(SID("restir_di_generate"), src / "restir_di_main_compute.spv",
+                            sizeof(ReSTIRDIGeneratePushConstant), PipelineCategory::Critical);
+
     RegisterComputePipeline("default_pbr"_sid, src / "lighting_pbr_compute.spv",
                             sizeof(LightingResolvePushConstant), PipelineCategory::Critical);
     lightingPipelines.PushBack("default_pbr"_sid);

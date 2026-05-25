@@ -343,6 +343,10 @@ preprocess_shader_interop(
         ${CMAKE_SOURCE_DIR}/src/render/shaders/ui_interop.h
         ${CMAKE_SOURCE_DIR}/shaders/include/ui_interop.slang
 )
+preprocess_shader_interop(
+        ${CMAKE_SOURCE_DIR}/src/render/shaders/restir_interop.h
+        ${CMAKE_SOURCE_DIR}/shaders/include/restir_interop.slang
+)
 
 
 get_property(INTEROP_FILES GLOBAL PROPERTY SHADER_INTEROP_FILES)
@@ -400,6 +404,9 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/lighting/lighting_pbr.slang compute ComputeMain lighting_pbr
         ${CMAKE_SOURCE_DIR}/shaders/lighting/lighting_toon.slang compute ComputeMain lighting_toon
         ${CMAKE_SOURCE_DIR}/shaders/lighting/lighting_unlit.slang compute ComputeMain lighting_unlit
+
+        # ReSTIR
+        ${CMAKE_SOURCE_DIR}/shaders/lighting/restir-di/restir_di_main.slang compute ComputeMain restir_di_main
 
         ${CMAKE_SOURCE_DIR}/shaders/shadows_resolve.slang compute ComputeMain shadows_resolve
 

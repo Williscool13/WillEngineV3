@@ -2,6 +2,7 @@ module restir_common;
 
 import shader_constants;
 import lights_interop;
+import restir_interop;
 
 /** Area light data transformed into view space, with derived geometry cached. */
 public struct AreaLightVS
@@ -57,7 +58,7 @@ public struct AreaLightSample
 public AreaLightSample EvalAreaLightSample(AreaLightVS vs, float3 samplePos, float3 shadingPos, float3 N, float range)
 {
     AreaLightSample s;
-    s.samplePos  = samplePos;
+    s.samplePos = samplePos;
     float3 toSample = samplePos - shadingPos;
     s.dist = length(toSample);
     s.L = toSample / s.dist;
@@ -87,102 +88,89 @@ public float HashStep(inout uint h)
     return float(h & 0xFFFFu) / 65536.0;
 }
 
-public struct ReservoirSample
-{
-    public int lightIdx;
-    public float3 samplePos;
-    public float attenuation;
-}
-
-/**
- * A single ReSTIR reservoir storing one selected light sample.
- *
- * @param y     Selected sample index, or -1 if empty.
- * @param wSum  Running sum of candidate weights during WRS streaming update.
- * @param M     Number of candidates seen so far.
- * @param W     Unbiased contribution weight: wSum / (M * targetPdf(y)). Multiply shading result by W to get the unbiased estimate.
- */
-public struct Reservoir
-{
-    public int32_t y;
-    public float wSum;
-    public int32_t M;
-    public float W;
-}
-
 public Reservoir ReservoirEmpty()
 {
     Reservoir r;
-    r.y = -1;
-    r.wSum = 0.0;
-    r.M = 0;
+    r.sampleOffset = float2(0.0, 0.0);
+    r.lightIdx = ~0u;
     r.W = 0.0;
     return r;
+}
+
+/** Encodes a view-space sample position into the light-local 2D offset stored in the reservoir. */
+public float2 EncodeSampleOffset(float3 samplePos, AreaLightVS vs)
+{
+    float3 delta = samplePos - vs.center;
+    return float2(dot(delta, vs.right), dot(delta, vs.up));
+}
+
+/** Reconstructs the view-space sample position from a reservoir's stored offset. */
+public float3 DecodeSamplePos(Reservoir r, AreaLightVS vs)
+{
+    return vs.center + r.sampleOffset.x * vs.right + r.sampleOffset.y * vs.up;
+}
+
+/**
+ * Transient accumulator used during candidate generation. Not written to the output buffer.
+ *
+ * @param wSum Running sum of candidate weights.
+ * @param M Number of candidates seen so far.
+ */
+public struct ReservoirAccum
+{
+    public float wSum;
+    public int32_t M;
+}
+
+public ReservoirAccum ReservoirAccumEmpty()
+{
+    ReservoirAccum a;
+    a.wSum = 0.0;
+    a.M = 0;
+    return a;
 }
 
 /**
  * Streaming WRS update for a single new candidate.
  *
- * @param r Reservoir to update.
- * @param candidateY Index of the incoming candidate.
- * @param candidateWeight w_i = targetPdf(candidateY) / sourcePdf(candidateY).
+ * @param accum Running accumulator.
+ * @param r Reservoir to update on selection.
+ * @param candidateWeight w_i = targetPdf(x) / sourcePdf(x).
  * @param u Uniform random float in [0, 1).
- * @return True if the candidate was selected.
+ * @return True if this candidate was selected.
  */
-public bool ReservoirAddSample(inout Reservoir r, int candidateY, float candidateWeight, float u)
+public bool ReservoirAddSample(inout ReservoirAccum accum, inout Reservoir r, float candidateWeight, float u)
 {
-    r.wSum += candidateWeight;
-    r.M += 1;
-    if (u < candidateWeight / r.wSum)
+    accum.wSum += candidateWeight;
+    accum.M += 1;
+    if (u < candidateWeight / accum.wSum)
     {
-        r.y = candidateY;
         return true;
     }
     return false;
 }
 
 /**
- * Merges another reservoir into this one (temporal/spatial reuse). The incoming reservoir contributes its full M to the confidence count.
- *
- * @param r Reservoir to merge into.
- * @param other Reservoir to merge in.
- * @param targetPdfY p_hat evaluated at other.y from this pixel's perspective.
- * @param u Uniform random float in [0, 1).
- * @return True if other.y was selected.
- */
-public bool ReservoirMerge(inout Reservoir r, Reservoir other, float targetPdfY, float u)
-{
-    float candidateWeight = targetPdfY * other.W * float(other.M);
-    r.wSum += candidateWeight;
-    r.M += other.M;
-    if (u < candidateWeight / r.wSum)
-    {
-        r.y = other.y;
-        return true;
-    }
-    return false;
-}
-
-/**
- * Finalises W after all candidates/merges have been streamed.
+ * Finalises W after all candidates have been streamed.
  *
  * @param r Reservoir to finalise.
- * @param targetPdfY p_hat evaluated at the selected sample y.
+ * @param accum Completed accumulator.
+ * @param targetPdfY p_hat evaluated at the selected sample.
  */
-public void ReservoirFinalise(inout Reservoir r, float targetPdfY)
+public void ReservoirFinalise(inout Reservoir r, ReservoirAccum accum, float targetPdfY)
 {
-    r.W = (targetPdfY > 0.0) ? (r.wSum / targetPdfY) : 0.0;
+    r.W = (targetPdfY > 0.0) ? (accum.wSum / targetPdfY) : 0.0;
 }
 
 /**
  * Evaluates the GGX solid-angle PDF for a given light direction L.
  * Matches the distribution sampled by ImportanceSampleGGX.
  *
- * @param N         Shading normal.
- * @param V         View direction (toward camera).
- * @param L         Light direction to evaluate.
+ * @param N Shading normal.
+ * @param V View direction (toward camera).
+ * @param L Light direction to evaluate.
  * @param roughness Perceptual roughness (squared internally).
- * @return          pdf >= 0. Returns 0 if L is below the hemisphere or H is degenerate.
+ * @return pdf >= 0. Returns 0 if L is below the hemisphere or H is degenerate.
  */
 public float GGXPdf(float3 N, float3 V, float3 L, float roughness)
 {
@@ -235,16 +223,16 @@ public float3 ImportanceSampleGGX(float2 xi, float3 N, float3 V, float roughness
 /**
  * Ray vs. axis-aligned quad intersection test.
  *
- * @param rayOrigin  Ray origin.
- * @param rayDir     Ray direction (need not be normalised).
- * @param center     Quad center.
- * @param normal     Quad normal (must face the side the ray comes from for a valid hit).
- * @param right      Quad right axis (unit length).
- * @param up         Quad up axis (unit length).
- * @param halfWidth  Half-extent along right.
+ * @param rayOrigin Ray origin.
+ * @param rayDir Ray direction (need not be normalised).
+ * @param center Quad center.
+ * @param normal Quad normal (must face the side the ray comes from for a valid hit).
+ * @param right Quad right axis (unit length).
+ * @param up Quad up axis (unit length).
+ * @param halfWidth Half-extent along right.
  * @param halfHeight Half-extent along up.
- * @param t          Output: ray parameter at intersection. Negative if miss or behind origin.
- * @return           True if the ray hits the quad at t > 0.
+ * @param t Output: ray parameter at intersection. Negative if miss or behind origin.
+ * @return True if the ray hits the quad at t > 0.
  */
 public bool RayIntersectQuad(float3 rayOrigin, float3 rayDir, float3 center, float3 normal, float3 right, float3 up, float halfWidth, float halfHeight, out float t)
 {
