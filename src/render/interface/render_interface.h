@@ -552,17 +552,14 @@ struct FrameBuffer
 {
     FrameBuffer() = default;
 
-    explicit FrameBuffer(ArenaSuballocator& pool, AllocTag tag = AllocTag::FrameSync0);
-
     ~FrameBuffer() = default;
 
     FrameBuffer(const FrameBuffer&) = delete;
-
     FrameBuffer& operator=(const FrameBuffer&) = delete;
+    FrameBuffer(FrameBuffer&&) = delete;
+    FrameBuffer& operator=(FrameBuffer&&) = delete;
 
-    FrameBuffer(FrameBuffer&&) = default;
-
-    FrameBuffer& operator=(FrameBuffer&&) = default;
+    void Initialize(ArenaSuballocator& pool, AllocTag tag = AllocTag::FrameSync0);
 
     void Reinitialize();
 

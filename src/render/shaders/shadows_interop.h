@@ -9,7 +9,6 @@
 module SHADOWS_interop;
 #define SHADER_PUBLIC public
 #define SHADER_CONST const static
-#define SHADER_ALIGN
 #define SHADER_PTR(T) T*
 #define SHADER_ATOMIC(T) Atomic<T>
 import common_interop;
@@ -44,12 +43,11 @@ using float4x4 = glm::mat4;
 
 #define SHADER_PUBLIC
 #define SHADER_CONST constexpr inline
-#define SHADER_ALIGN alignas(16)
 #define SHADER_PTR(T) VkDeviceAddress
 #define SHADER_ATOMIC(T) T
 #endif // __SLANG__
 
-SHADER_PUBLIC struct SHADER_ALIGN ShadowData
+SHADER_PUBLIC struct ShadowData
 {
     SHADER_PUBLIC float4x4 lightSpaceMatrices[SHADOW_CASCADE_COUNT];
     SHADER_PUBLIC Frustum lightFrustums[SHADOW_CASCADE_COUNT];

@@ -489,14 +489,14 @@ void PipelineManager::RegisterPipelines()
     RegisterComputePipeline(SID("debug_visualize"), src / "debug_visualize_compute.spv",
                             sizeof(DebugVisualizePushConstant), PipelineCategory::Critical);
 
-    const VkDescriptorSetLayout proceduralTexLayout = resourceManager->proceduralTextureGenerateResources.descriptorSetLayout.handle;
+    VkDescriptorSetLayout proceduralTexLayout = resourceManager->proceduralTextureGenerateResources.descriptorSetLayout.handle;
     RegisterComputePipelineCustomLayout("yellow_texture"_sid, src / "yellow_texture_compute.spv",
                                         sizeof(ProceduralTextureBasePushConstant), PipelineCategory::Critical, Core::Span(&proceduralTexLayout, 1));
     RegisterComputePipelineCustomLayout("domain_warp"_sid, src / "domain_warp_compute.spv",
                                         sizeof(ProceduralTextureBasePushConstant), PipelineCategory::Critical, Core::Span(&proceduralTexLayout, 1));
 
 #if WILL_EDITOR
-    const VkDescriptorSetLayout emapLayout = resourceManager->environmentMapGenerateResources.descriptorSetLayout.handle;
+    VkDescriptorSetLayout emapLayout = resourceManager->environmentMapGenerateResources.descriptorSetLayout.handle;
     RegisterComputePipelineCustomLayout(SID("ibl_equirect_to_cubemap"), src / "ibl_equirect_to_cubemap_compute.spv",
                                         sizeof(EquirectToCubemapPushConstant), PipelineCategory::AssetGeneration, Core::Span(&emapLayout, 1));
 
@@ -506,7 +506,7 @@ void PipelineManager::RegisterPipelines()
     RegisterComputePipelineCustomLayout(SID("ibl_prefilter_specular"), src / "ibl_prefilter_specular_compute.spv",
                                         sizeof(PrefilterSpecularPushConstant), PipelineCategory::AssetGeneration, Core::Span(&emapLayout, 1));
 
-    const VkDescriptorSetLayout brdfLutLayout = resourceManager->brdfLutGenerateResources.descriptorSetLayout.handle;
+    VkDescriptorSetLayout brdfLutLayout = resourceManager->brdfLutGenerateResources.descriptorSetLayout.handle;
     RegisterComputePipelineCustomLayout(SID("ibl_brdf_lut"), src / "brdf_lut_generate_compute.spv",
                                         sizeof(BRDFLUTPushConstant), PipelineCategory::AssetGeneration, Core::Span(&brdfLutLayout, 1));
 #endif

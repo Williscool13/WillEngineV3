@@ -9,12 +9,11 @@
 module ui_interop;
 import common_interop;
 #define SHADER_PUBLIC public
-#define SHADER_ALIGN
 #else
 #include "common_interop.h"
 #endif // __SLANG__
 
-SHADER_PUBLIC struct SHADER_ALIGN UIRectData
+SHADER_PUBLIC struct UIRectData
 {
     SHADER_PUBLIC float4 color;
     SHADER_PUBLIC float2 posMin;

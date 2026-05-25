@@ -48,101 +48,134 @@ void ComputeMain(uniform LightingResolvePushConstant pc, uint3 threadID : SV_Dis
 
     // Basic ReSTIR DI
     {
-        const int M = 32;
+        const int M_light = 32;
+        const int M_brdf = 1;
+        const int M_total = M_light + M_brdf;
         int lightCount = pc.lightData->areaLightCount;
         if (lightCount > 0) {
-            uint h = pixel.x * 1973u ^ pixel.y * 9277u;
+            uint h = pixel.x * 1973u ^ pixel.y * 9277u ^ pc.frameIndex * 2654435761u;
+            float4x4 view = pc.sceneData[pc.sceneDataIndex].view;
 
             Reservoir r = ReservoirEmpty();
             ReservoirSample winner = { -1, float3(0.0, 0.0, 0.0), 0.0 };
 
-            for (int i = 0; i < M; i++) {
-                h = h ^ (h >> 17u); h *= 0xbf324c81u; h = h ^ (h >> 13u); h *= 0x9c7d2d49u; h = h ^ (h >> 16u);
-                float uLight = float(h & 0xFFFFu) / 65536.0;
-                h = h ^ (h >> 17u); h *= 0xbf324c81u; h = h ^ (h >> 13u); h *= 0x9c7d2d49u; h = h ^ (h >> 16u);
-                float uU = float(h & 0xFFFFu) / 65536.0;
-                h = h ^ (h >> 17u); h *= 0xbf324c81u; h = h ^ (h >> 13u); h *= 0x9c7d2d49u; h = h ^ (h >> 16u);
-                float uV = float(h & 0xFFFFu) / 65536.0;
-                h = h ^ (h >> 17u); h *= 0xbf324c81u; h = h ^ (h >> 13u); h *= 0x9c7d2d49u; h = h ^ (h >> 16u);
-                float uSelect = float(h & 0xFFFFu) / 65536.0;
+            // Light sampling candidates
+            for (int i = 0; i < M_light; i++) {
+                float uLight = HashStep(h);
+                float uU = HashStep(h);
+                float uV = HashStep(h);
+                float uSelect = HashStep(h);
 
                 int lightIdx = clamp(int(uLight * float(lightCount)), 0, lightCount - 1);
                 AreaLightData al = pc.lightData->areaLights[lightIdx];
-
-                float3 alCenter = mul(pc.sceneData[pc.sceneDataIndex].view, float4(al.position.xyz, 1.0)).xyz;
-                float3 alNormal = normalize(mul((float3x3)pc.sceneData[pc.sceneDataIndex].view, al.normal.xyz));
-                float3 alRight = normalize(mul((float3x3)pc.sceneData[pc.sceneDataIndex].view, al.right.xyz));
-                float3 alUp = normalize(mul((float3x3)pc.sceneData[pc.sceneDataIndex].view, al.up.xyz));
-                float halfWidth = al.right.w;
-                float halfHeight = al.up.w;
-                float area = (2.0 * halfWidth) * (2.0 * halfHeight);
-
-                float3 samplePos = alCenter + (uU * 2.0 - 1.0) * halfWidth * alRight + (uV * 2.0 - 1.0) * halfHeight * alUp;
-
-                float centerDist = length(alCenter - viewPosition);
-                float attenuation = 1.0 - smoothstep(0.0, al.range, centerDist);
-                attenuation *= attenuation;
-
-                float3 toSample = samplePos - viewPosition;
-                float dist = length(toSample);
-                float3 Lal = toSample / dist;
-                float cosShade = max(dot(N, Lal), 0.0);
-                float cosLight = max(dot(-alNormal, Lal), 0.0);
+                AreaLightVS vs = TransformAreaLight(al, view);
+                float3 samplePos = SampleAreaLightPos(vs, uU, uV);
+                AreaLightSample s = EvalAreaLightSample(vs, samplePos, viewPosition, N, al.range);
 
                 float pHat = 0.0;
-                if (cosShade > 0.0 && cosLight > 0.0 && attenuation > 0.0)
+                if (s.cosShade > 0.0 && s.cosLight > 0.0 && s.attenuation > 0.0)
                 {
-                    float3 Hal = normalize(V + Lal);
+                    float3 Hal = normalize(V + s.L);
                     float3 Fal = F_SCHLICK(V, Hal, F0);
                     float3 kDal = (1.0 - Fal) * (1.0 - li.metallic);
                     float3 alColor = UnpackUnorm4x8(al.packedColor).rgb;
-                    float3 brdfCos = (kDal * li.albedo.xyz + Fal) * cosShade * al.intensity * alColor * attenuation;
+                    float geomTerm = s.cosLight / max(s.dist * s.dist, 0.0001);
+                    float3 brdfCos = (kDal * li.albedo.xyz + Fal) * s.cosShade * geomTerm * al.intensity * alColor * s.attenuation;
                     pHat = dot(brdfCos, float3(0.2126, 0.7152, 0.0722));
                 }
 
-                float risWeight = (1.0 / float(M)) * pHat * float(lightCount) * area;
-                if (ReservoirAddSample(r, i, risWeight, uSelect))
+                float pLight = 1.0 / (float(lightCount) * vs.area);
+                float pBrdf = GGXPdf(N, V, s.L, roughness);
+                float misWeight = pHat / (float(M_light) * pLight + float(M_brdf) * pBrdf);
+                if (ReservoirAddSample(r, i, misWeight, uSelect))
                 {
-                    winner = { lightIdx, samplePos, attenuation };
+                    winner = { lightIdx, s.samplePos, s.attenuation };
+                }
+            }
+
+            // BRDF candidates
+            for (int i = 0; i < M_brdf; i++)
+            {
+                float uXi0 = HashStep(h);
+                float uXi1 = HashStep(h);
+                float uSelect = HashStep(h);
+
+                float brdfPdf;
+                float3 brdfL = ImportanceSampleGGX(float2(uXi0, uXi1), N, V, roughness, brdfPdf);
+
+                if (dot(N, brdfL) <= 0.0 || brdfPdf <= 0.0) { continue; }
+
+                // Brute-force search: find the closest area light hit along brdfL
+                float bestT = 1e30;
+                int bestLightIdx = -1;
+
+                for (int j = 0; j < lightCount; j++)
+                {
+                    AreaLightVS vs = TransformAreaLight(pc.lightData->areaLights[j], view);
+                    float t;
+                    if (RayIntersectQuad(viewPosition, brdfL, vs.center, vs.normal, vs.right, vs.up, vs.halfWidth, vs.halfHeight, t) && t < bestT)
+                    {
+                        bestT = t;
+                        bestLightIdx = j;
+                    }
+                }
+
+                if (bestLightIdx < 0) { continue; }
+
+                AreaLightData al = pc.lightData->areaLights[bestLightIdx];
+                AreaLightVS vs = TransformAreaLight(al, view);
+                float3 samplePos = viewPosition + brdfL * bestT;
+                AreaLightSample s = EvalAreaLightSample(vs, samplePos, viewPosition, N, al.range);
+
+                float pHat = 0.0;
+                if (s.cosLight > 0.0 && s.attenuation > 0.0)
+                {
+                    float3 Hal = normalize(V + brdfL);
+                    float3 Fal = F_SCHLICK(V, Hal, F0);
+                    float3 kDal = (1.0 - Fal) * (1.0 - li.metallic);
+                    float3 alColor = UnpackUnorm4x8(al.packedColor).rgb;
+                    float geomTerm = s.cosLight / max(s.dist * s.dist, 0.0001);
+                    float3 brdfCos = (kDal * li.albedo.xyz + Fal) * s.cosShade * geomTerm * al.intensity * alColor * s.attenuation;
+                    pHat = dot(brdfCos, float3(0.2126, 0.7152, 0.0722));
+                }
+
+                float pLight = 1.0 / (float(lightCount) * vs.area);
+                float misWeight = pHat / (float(M_light) * pLight + float(M_brdf) * brdfPdf);
+                if (ReservoirAddSample(r, M_light + i, misWeight, uSelect))
+                {
+                    winner = { bestLightIdx, samplePos, s.attenuation };
                 }
             }
 
             if (r.y >= 0 && winner.lightIdx >= 0)
             {
                 AreaLightData al = pc.lightData->areaLights[winner.lightIdx];
-                float3 alCenter = mul(pc.sceneData[pc.sceneDataIndex].view, float4(al.position.xyz, 1.0)).xyz;
-                float3 alNormal = normalize(mul((float3x3)pc.sceneData[pc.sceneDataIndex].view, al.normal.xyz));
+                AreaLightVS vs = TransformAreaLight(al, view);
+                AreaLightSample s = EvalAreaLightSample(vs, winner.samplePos, viewPosition, N, al.range);
 
-                float3 toSample = winner.samplePos - viewPosition;
-                float dist2 = dot(toSample, toSample);
-                float dist = sqrt(dist2);
-                float3 Lal = toSample / dist;
-                float cosShade = max(dot(N, Lal), 0.0);
-                float cosLight = max(dot(-alNormal, Lal), 0.0);
-
-                if (cosShade > 0.0 && cosLight > 0.0)
+                if (s.cosShade > 0.0 && s.cosLight > 0.0)
                 {
-                    float3 Hal = normalize(V + Lal);
+                    float3 Hal = normalize(V + s.L);
                     float NDFal = D_GGX(N, Hal, roughness);
-                    float Gal   = G_SMITH_HEIGHT_CORRELATED(N, V, Lal, roughness);
+                    float Gal   = G_SMITH_HEIGHT_CORRELATED(N, V, s.L, roughness);
                     float3 Fal  = F_SCHLICK(V, Hal, F0);
-                    float3 specularAl = (NDFal * Gal * Fal) / max(4.0 * nDotV * cosShade, 0.001);
+                    float3 specularAl = (NDFal * Gal * Fal) / max(4.0 * nDotV * s.cosShade, 0.001);
                     float3 kDal = (1.0 - Fal) * (1.0 - li.metallic);
-                    float orenNayarAl = Diffuse_OrenNayar(cosShade, nDotV, Lal, V, roughness);
+                    float orenNayarAl = Diffuse_OrenNayar(s.cosShade, nDotV, s.L, V, roughness);
                     float3 diffuseAl = kDal * li.albedo.xyz * orenNayarAl;
                     float3 alColor = UnpackUnorm4x8(al.packedColor).rgb;
 
-                    float3 brdfCos = (kDal * li.albedo.xyz + Fal) * cosShade * al.intensity * alColor * winner.attenuation;
+                    float geomTerm = s.cosLight / max(s.dist * s.dist, 0.0001);
+                    float3 brdfCos = (kDal * li.albedo.xyz + Fal) * s.cosShade * geomTerm * al.intensity * alColor * winner.attenuation;
                     float pHatWinner = dot(brdfCos, float3(0.2126, 0.7152, 0.0722));
                     ReservoirFinalise(r, pHatWinner);
 
-                    float geometryTerm = cosLight / dist2;
-                    directLight = (diffuseAl + specularAl) * geometryTerm * al.intensity * alColor * winner.attenuation * r.W;
+                    directLight = (diffuseAl + specularAl) * geomTerm * al.intensity * alColor * winner.attenuation * r.W;
                 }
             }
         }
     }
 
-    float3 finalColor = directLight;
+    float3 finalColor = directLight + li.emissiveRGB;
     rdgStorageFloat4[pc.outputImageIndex][pixel] = float4(finalColor, 1.0);
 }

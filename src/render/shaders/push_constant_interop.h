@@ -9,7 +9,6 @@
 module push_constant_interop;
 #define SHADER_PUBLIC public
 #define SHADER_CONST const static
-#define SHADER_ALIGN
 #define SHADER_PTR(T) T*
 #define SHADER_ATOMIC(T) Atomic<T>
 
@@ -53,7 +52,6 @@ using float4x4 = glm::mat4;
 
 #define SHADER_PUBLIC
 #define SHADER_CONST constexpr inline
-#define SHADER_ALIGN alignas(16)
 #define SHADER_PTR(T) VkDeviceAddress
 #define SHADER_ATOMIC(T) T
 #endif // __SLANG__
@@ -417,7 +415,7 @@ SHADER_PUBLIC struct ShadowsResolvePushConstant
     SHADER_PUBLIC uint32_t gbufferOneIndex;
 };
 
-SHADER_PUBLIC struct SHADER_ALIGN LightingResolvePushConstant
+SHADER_PUBLIC struct LightingResolvePushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC SHADER_PTR(ShadowData) shadowData;
@@ -433,9 +431,10 @@ SHADER_PUBLIC struct SHADER_ALIGN LightingResolvePushConstant
     SHADER_PUBLIC uint32_t outputImageIndex;
     SHADER_PUBLIC uint32_t sceneDataIndex;
     SHADER_PUBLIC uint32_t lightingIndex;
+    SHADER_PUBLIC uint32_t frameIndex;
 };
 
-SHADER_PUBLIC struct SHADER_ALIGN DeferredResolvePushConstant
+SHADER_PUBLIC struct DeferredResolvePushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC SHADER_PTR(ShadowData) shadowData;

@@ -13,7 +13,7 @@ FrameSync::FrameSync(MemoryManager& memoryManager)
         AllocTag::FrameSync2, AllocTag::FrameSync3,
     };
     for (size_t i = 0; i < frameBuffers.Size(); ++i) {
-        frameBuffers[i] = std::move(FrameBuffer(memoryManager.ArenaPool(), kFrameTags[i]));
+        frameBuffers[i].Initialize(memoryManager.ArenaPool(), kFrameTags[i]);
     }
 }
 } // Core

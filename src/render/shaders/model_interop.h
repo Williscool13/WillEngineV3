@@ -11,7 +11,6 @@ module model_interop;
 import constants_interop;
 #define SHADER_PUBLIC public
 #define SHADER_CONST const static
-#define SHADER_ALIGN
 #else
 #include <glm/glm.hpp>
 #include <cstdint>
@@ -39,7 +38,6 @@ using float4x4 = glm::mat4;
 
 #define SHADER_PUBLIC
 #define SHADER_CONST constexpr inline
-#define SHADER_ALIGN alignas(16)
 #endif // __SLANG__
 
 SHADER_PUBLIC struct DebugVertex
@@ -100,7 +98,7 @@ SHADER_PUBLIC struct Primitive
     SHADER_PUBLIC uint32_t indexOffset;
 };
 
-SHADER_PUBLIC struct SHADER_ALIGN MaterialProperties
+SHADER_PUBLIC struct MaterialProperties
 {
     SHADER_PUBLIC uint32_t shadingBucketIndex;
     SHADER_PUBLIC uint32_t lightingBucketIndex;
@@ -141,13 +139,13 @@ SHADER_PUBLIC struct Instance
     uint32_t padding3;
 };
 
-SHADER_PUBLIC struct SHADER_ALIGN Model
+SHADER_PUBLIC struct Model
 {
     SHADER_PUBLIC float4x4 modelMatrix;
     SHADER_PUBLIC float4x4 prevModelMatrix;
 };
 
-SHADER_PUBLIC struct SHADER_ALIGN ShadeDispatchParameters
+SHADER_PUBLIC struct ShadeDispatchParameters
 {
     SHADER_PUBLIC uint32_t xDispatch;
     SHADER_PUBLIC uint32_t yDispatch;
@@ -160,7 +158,7 @@ SHADER_PUBLIC struct SHADER_ALIGN ShadeDispatchParameters
 
     SHADER_PUBLIC uint32_t shadingIndex;
 };
-SHADER_PUBLIC struct SHADER_ALIGN LightingDispatchParameters
+SHADER_PUBLIC struct LightingDispatchParameters
 {
     SHADER_PUBLIC uint32_t xDispatch;
     SHADER_PUBLIC uint32_t yDispatch;

@@ -9,7 +9,6 @@
 module SHADOWS_interop;
 #define SHADER_PUBLIC public
 #define SHADER_CONST const static
-#define SHADER_ALIGN
 #define SHADER_PTR(T) T*
 #define SHADER_ATOMIC(T) Atomic<T>
 import common_interop;
@@ -44,13 +43,12 @@ using float4x4 = glm::mat4;
 
 #define SHADER_PUBLIC
 #define SHADER_CONST constexpr inline
-#define SHADER_ALIGN alignas(16)
 #define SHADER_PTR(T) VkDeviceAddress
 #define SHADER_ATOMIC(T) T
 #endif // __SLANG__
 
-SHADER_CONST int MAX_POINT_LIGHTS = 64;
-SHADER_CONST int MAX_AREA_LIGHTS = 64;
+SHADER_CONST int MAX_POINT_LIGHTS = 128;
+SHADER_CONST int MAX_AREA_LIGHTS = 128;
 
 /** Directional light: direction (xyz) + intensity (w), color packed as RGBA8 unorm. */
 SHADER_PUBLIC struct DirectionalLightData
@@ -85,7 +83,7 @@ SHADER_PUBLIC struct AreaLightData
     SHADER_PUBLIC float _pad1;
 };
 
-SHADER_PUBLIC struct SHADER_ALIGN LightData
+SHADER_PUBLIC struct LightData
 {
     SHADER_PUBLIC int pointLightCount;
     SHADER_PUBLIC int areaLightCount;

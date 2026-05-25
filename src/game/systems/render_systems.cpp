@@ -20,6 +20,7 @@
 #include "game/components/render/spline_mesh_component.h"
 #include "game/components/render/light_components.h"
 #include "render/shaders/lights_interop.h"
+#include "render/shaders/text_interop.h"
 #include "game/components/render/static_mesh_component.h"
 #include "game/components/render/text_component.h"
 #include "game/components/common/stable_id_component.h"
@@ -602,7 +603,7 @@ void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* stat
     ZoneScoped;
     auto view = state->registry.view<Component::TextComponent, Component::TextRuntime, Component::RenderTransformComponent>(entt::exclude<Component::TextLoadingTag>);
 
-    for (auto [entity, textComp, runtime, renderTransform] : view.each()) {
+    for (const auto& [entity, textComp, runtime, renderTransform] : view.each()) {
         if (textComp.text.IsEmpty()) { continue; }
 
         Engine::Font* font = ctx->assetManager->GetFont(runtime.fontHandle);

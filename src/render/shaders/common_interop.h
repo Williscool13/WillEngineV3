@@ -10,7 +10,6 @@ module common_interop;
 #define SHADER_PUBLIC public
 #define SHADER_ENUM enum
 #define SHADER_CONST const static
-#define SHADER_ALIGN
 #define SHADER_PTR(T) T*
 #else
 #include <glm/glm.hpp>
@@ -40,7 +39,6 @@ using float4x4 = Mat4;
 #define SHADER_PUBLIC
 #define SHADER_ENUM enum class
 #define SHADER_CONST constexpr inline
-#define SHADER_ALIGN alignas(16)
 #define SHADER_PTR(T) VkDeviceAddress
 #endif // __SLANG__
 
@@ -70,7 +68,7 @@ SHADER_PUBLIC struct Frustum
     SHADER_PUBLIC float4 planes[6];
 };
 
-SHADER_PUBLIC struct SHADER_ALIGN SceneData
+SHADER_PUBLIC struct SceneData
 {
     SHADER_PUBLIC float4x4 view;
     SHADER_PUBLIC float4x4 proj;

@@ -812,7 +812,8 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                                         Core::Array<uint32_t, 2> renderExtent,
                                         const DeferredResolveTargets& targets,
                                         uint32_t sceneIndex,
-                                        Core::Arena& arena)
+                                        Core::Arena& arena,
+                                        uint64_t frameNumber)
 {
     if (!graph.HasBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER)) { return; }
 
@@ -841,7 +842,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
         lightingResolve.ReadSampledImage(targets.shadows);
     }
     lightingResolve.WriteStorageImage(targets.output);
-    lightingResolve.Execute([&, pipelineManager, sceneIndex,
+    lightingResolve.Execute([&, pipelineManager, sceneIndex, frameNumber,
             visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             depth = targets.depthStencil, shadows = targets.shadows,
             output = targets.output, skyboxIndex = viewFamily.skyboxIndex,
@@ -871,6 +872,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                     .outputImageIndex = graph.GetStorageImageViewDescriptorIndex(output),
                     .sceneDataIndex = sceneIndex,
                     .lightingIndex = entry.bucketIndex,
+                    .frameIndex = static_cast<uint32_t>(frameNumber),
                 };
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(LIGHTING_DISPATCH_BUCKETING_BUFFER),

@@ -9,7 +9,6 @@
 module instancing_interop;
 #define SHADER_PUBLIC public
 #define SHADER_CONST const static
-#define SHADER_ALIGN
 #define SHADER_PTR(T) T*
 #define SHADER_ATOMIC(T) Atomic<T>
 import common_interop;
@@ -43,7 +42,6 @@ using float4x4 = glm::mat4;
 
 #define SHADER_PUBLIC
 #define SHADER_CONST constexpr inline
-#define SHADER_ALIGN alignas(16)
 #define SHADER_PTR(T) VkDeviceAddress
 #define SHADER_ATOMIC(T) T
 #endif // __SLANG__

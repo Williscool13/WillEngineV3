@@ -37,9 +37,9 @@ ViewFamily::ViewFamily(Arena& arena, const ViewFamilyWatermarks& wm)
     spriteBatches = ArenaVector<SpriteBatch>(&arena, wm.spriteBatches);
 }
 
-FrameBuffer::FrameBuffer(ArenaSuballocator& pool, AllocTag tag)
-    : frameArena(pool, 16ull * 1024 * 1024, tag)
+void FrameBuffer::Initialize(ArenaSuballocator& pool, AllocTag tag)
 {
+    frameArena = ManagedArena(pool, 16ull * 1024 * 1024, tag);
     mainViewFamily = ViewFamily(frameArena.Get());
     bufferAcquireOperations = ArenaVector<BufferAcquireOperation>(&frameArena.Get(), 2048);
     imageAcquireOperations = ArenaVector<ImageAcquireOperation>(&frameArena.Get(), 2048);

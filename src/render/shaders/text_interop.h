@@ -9,12 +9,11 @@
 module text_interop;
 import common_interop;
 #define SHADER_PUBLIC public
-#define SHADER_ALIGN
 #else
 #include "common_interop.h"
 #endif // __SLANG__
 
-SHADER_PUBLIC struct SHADER_ALIGN WorldGlyphQuad
+SHADER_PUBLIC struct WorldGlyphQuad
 {
     SHADER_PUBLIC float4 color;
     SHADER_PUBLIC float2 posMin;
@@ -30,7 +29,7 @@ SHADER_PUBLIC struct SHADER_ALIGN WorldGlyphQuad
 };
 
 // GPU-side text material. Uploaded as a flat buffer; indexed by pc.textMaterialIndex.
-SHADER_PUBLIC struct SHADER_ALIGN TextRenderMaterial
+SHADER_PUBLIC struct TextRenderMaterial
 {
     SHADER_PUBLIC float4 colorTint;
     SHADER_PUBLIC float4 outlineColor;
@@ -40,7 +39,7 @@ SHADER_PUBLIC struct SHADER_ALIGN TextRenderMaterial
     SHADER_PUBLIC float shadowSoftness;
 };
 
-SHADER_PUBLIC struct SHADER_ALIGN TextInstanceData
+SHADER_PUBLIC struct TextInstanceData
 {
     SHADER_PUBLIC uint32_t modelIndex;
     SHADER_PUBLIC float pxRange;
@@ -48,7 +47,7 @@ SHADER_PUBLIC struct SHADER_ALIGN TextInstanceData
     SHADER_PUBLIC uint32_t stableIdHi;
 };
 
-SHADER_PUBLIC struct SHADER_ALIGN UIGlyphQuad
+SHADER_PUBLIC struct UIGlyphQuad
 {
     SHADER_PUBLIC float4 color;
     SHADER_PUBLIC float2 posMin;

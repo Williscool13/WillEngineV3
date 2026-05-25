@@ -68,7 +68,8 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                                         Core::Array<uint32_t, 2> renderExtent,
                                         const DeferredResolveTargets& targets,
                                         uint32_t sceneIndex,
-                                        Core::Arena& arena);
+                                        Core::Arena& arena,
+                                        uint64_t frameNumber);
 
 
 void SetupGroundTruthAmbientOcclusion(RenderGraph& graph,

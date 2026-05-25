@@ -68,7 +68,7 @@ void ComputeMain(uint3 dtid : SV_DispatchThreadID, uniform VisibilityShadingPush
     }
 
     // Emissive
-    float3 emissiveColor = material.emissiveFactor.rgb;
+    float3 emissiveColor = material.emissiveFactor.rgb * material.emissiveFactor.w;
     if (material.textureImageIndices.w >= 0) {
         float2 emissiveUV = shadingInputs.interp.uv * material.emissiveUvTransform.xy + material.emissiveUvTransform.zw;
         float2 ddx = shadingInputs.uvDdx * material.emissiveUvTransform.xy;
