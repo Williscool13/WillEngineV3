@@ -498,7 +498,7 @@ SHADER_PUBLIC struct SmaaTemporalResolvePushConstant
 
 SHADER_PUBLIC struct TonemapSDRPushConstant
 {
-    // 0=ACES, 1=Uncharted2, 2=Reinhard, 3=Lottes
+    // -1=None, 0=ACES Fitted, 1=Hable, 2=Reinhard, 3=Lottes, 4=Reinhard-Jodie, 5=Clamp, 6=Hejl-Burgess-Dawson, 7=Uchimura, 8=ACES Narkowicz, 9=AgX, 10=Khronos PBR Neutral
     SHADER_PUBLIC int32_t tonemapOperator;
     SHADER_PUBLIC float targetLuminance;
     SHADER_PUBLIC SHADER_PTR(float) luminanceBufferAddress;
@@ -508,6 +508,12 @@ SHADER_PUBLIC struct TonemapSDRPushConstant
     SHADER_PUBLIC uint32_t outputHeight;
     SHADER_PUBLIC uint32_t srcImageIndex;
     SHADER_PUBLIC uint32_t dstImageIndex;
+    // Hable:   [0]=whitePoint
+    // Reinhard:[0]=whitePoint
+    // Uchimura:[0]=P, [1]=a, [2]=m, [3]=l, [4]=c, [5]=b
+    // AgX:     [0]=minEV, [1]=maxEV
+    // Khronos: [0]=startCompression, [1]=desaturation
+    SHADER_PUBLIC float params[6];
 };
 
 SHADER_PUBLIC struct BuildDirectIndirectPushConstant

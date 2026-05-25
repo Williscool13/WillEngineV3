@@ -224,6 +224,23 @@ StringID PPTonemap(PostProcessContext& ctx, StringID input)
     float targetLuminance = ctx.config.exposureTargetLuminance;
     float bloomIntensity = ctx.config.bloomIntensity;
 
+    float tonemapParams[6]{};
+    switch (tonemapOperator) {
+        case 1: tonemapParams[0] = ctx.config.hableParams.whitePoint; break;
+        case 2: tonemapParams[0] = ctx.config.reinhardParams.whitePoint; break;
+        case 7:
+            tonemapParams[0] = ctx.config.uchimuraParams.P;
+            tonemapParams[1] = ctx.config.uchimuraParams.a;
+            tonemapParams[2] = ctx.config.uchimuraParams.m;
+            tonemapParams[3] = ctx.config.uchimuraParams.l;
+            tonemapParams[4] = ctx.config.uchimuraParams.c;
+            tonemapParams[5] = ctx.config.uchimuraParams.b;
+            break;
+        case 9: tonemapParams[0] = ctx.config.agxParams.minEV; tonemapParams[1] = ctx.config.agxParams.maxEV; break;
+        case 10: tonemapParams[0] = ctx.config.khronosParams.startCompression; tonemapParams[1] = ctx.config.khronosParams.desaturation; break;
+        default: break;
+    }
+
     // CLEAR_COLOR_EMPTY: add support for HDR swapchain
     graph.CreateTexture(SID("tonemap_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, width, height, 1}, CLEAR_COLOR_EMPTY, true);
     RenderPass& tonemapPass = graph.AddPass(SID("[Tonemap] SDR"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
@@ -232,7 +249,7 @@ StringID PPTonemap(PostProcessContext& ctx, StringID input)
     tonemapPass.ReadSampledImage(SID("bloom_chain"));
     tonemapPass.ReadBuffer(SID("luminance_buffer"));
     tonemapPass.WriteStorageImage(SID("tonemap_output"));
-    tonemapPass.Execute([&graph, width, height, input, pipelines, tonemapOperator, targetLuminance, bloomIntensity](VkCommandBuffer cmd) {
+    tonemapPass.Execute([&graph, width, height, input, pipelines, tonemapOperator, targetLuminance, bloomIntensity, tonemapParams](VkCommandBuffer cmd) {
         TonemapSDRPushConstant pc{
             .tonemapOperator = tonemapOperator,
             .targetLuminance = targetLuminance,
@@ -244,6 +261,7 @@ StringID PPTonemap(PostProcessContext& ctx, StringID input)
             .srcImageIndex = graph.GetSampledImageViewDescriptorIndex(input),
             .dstImageIndex = graph.GetStorageImageViewDescriptorIndex(SID("tonemap_output")),
         };
+        memcpy(pc.params, tonemapParams, sizeof(pc.params));
 
         const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry(SID("tonemap_sdr"));
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);

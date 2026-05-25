@@ -1527,7 +1527,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
 
         ImGui::Spacing();
         ImGui::SeparatorText("Tonemapping");
-        const char* tonemapOperators[] = {"None", "ACES", "Uncharted 2", "Reinhard", "Lottes"};
+        const char* tonemapOperators[] = {"None", "[Simple] ACES (Hill)", "[Simple] Hable", "[Simple] Reinhard", "[Simple] Lottes", "[Simple] Reinhard-Jodie", "[Simple] Clamp", "[Filmic] Hejl-Burgess-Dawson", "[Filmic] Uchimura", "[Filmic] ACES (Narkowicz)", "[Modern] AgX", "[Modern] Khronos PBR Neutral"};
         int currentItem = state->lighting.postProcess.tonemapOperator + 1;
         if (ImGui::Combo("Operator", &currentItem, tonemapOperators, IM_ARRAYSIZE(tonemapOperators))) {
             state->lighting.postProcess.tonemapOperator = currentItem - 1;
@@ -1913,7 +1913,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
 
                         if (!state->editor.textureInfoCache) {
                             const uint32_t count = ctx->assetManager->GetTextureInfoCount();
-                            state->editor.textureInfoCache = ctx->editorArena.Get().Alloc<Core::ArenaFixedMap<Engine::TextureID, Engine::AssetManager::EditorTextureInfo>>(&ctx->editorArena.Get(), count);
+                            state->editor.textureInfoCache = ctx->editorArena.Get().Alloc<Core::ArenaFixedMap<Engine::TextureID, Engine::AssetManager::EditorTextureInfo> >(&ctx->editorArena.Get(), count);
                             ctx->assetManager->GetAllTextureInfos(*state->editor.textureInfoCache);
                         }
                         const auto& matTexInfoMap = *state->editor.textureInfoCache;
@@ -1978,7 +1978,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
                                     }
                                     if (!state->editor.textureInfoCache) {
                                         const uint32_t count = ctx->assetManager->GetTextureInfoCount();
-                                        state->editor.textureInfoCache = ctx->editorArena.Get().Alloc<Core::ArenaFixedMap<Engine::TextureID, Engine::AssetManager::EditorTextureInfo>>(&ctx->editorArena.Get(), count);
+                                        state->editor.textureInfoCache = ctx->editorArena.Get().Alloc<Core::ArenaFixedMap<Engine::TextureID, Engine::AssetManager::EditorTextureInfo> >(&ctx->editorArena.Get(), count);
                                         ctx->assetManager->GetAllTextureInfos(*state->editor.textureInfoCache);
                                     }
                                     const uint32_t texCount = static_cast<uint32_t>(state->editor.textureInfoCache->Size());
@@ -2210,7 +2210,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
     if (ImGui::Begin("Textures")) {
         if (!state->editor.textureInfoCache) {
             const uint32_t count = ctx->assetManager->GetTextureInfoCount();
-            state->editor.textureInfoCache = ctx->editorArena.Get().Alloc<Core::ArenaFixedMap<Engine::TextureID, Engine::AssetManager::EditorTextureInfo>>(&ctx->editorArena.Get(), count);
+            state->editor.textureInfoCache = ctx->editorArena.Get().Alloc<Core::ArenaFixedMap<Engine::TextureID, Engine::AssetManager::EditorTextureInfo> >(&ctx->editorArena.Get(), count);
             ctx->assetManager->GetAllTextureInfos(*state->editor.textureInfoCache);
         }
         const uint32_t texCount = static_cast<uint32_t>(state->editor.textureInfoCache->Size());

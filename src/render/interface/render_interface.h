@@ -134,7 +134,39 @@ struct PostProcessConfiguration
     float bloomRadius{1.0f};
     float bloomIntensity{0.04f};
 
-    int32_t tonemapOperator{3};
+    int32_t tonemapOperator{10};
+
+    struct UchimuraParams
+    {
+        float P{1.0f}; // max display brightness
+        float a{1.0f}; // contrast
+        float m{0.22f}; // linear section start
+        float l{0.4f}; // linear section length
+        float c{1.33f}; // black (toe power)
+        float b{0.0f}; // pedestal
+    } uchimuraParams;
+
+    struct HableParams
+    {
+        float whitePoint{11.2f};
+    } hableParams;
+
+    struct ReinhardParams
+    {
+        float whitePoint{4.0f};
+    } reinhardParams;
+
+    struct AgXParams
+    {
+        float minEV{-12.47393f};
+        float maxEV{4.026069f};
+    } agxParams;
+
+    struct KhronosParams
+    {
+        float startCompression{0.76f};
+        float desaturation{0.15f};
+    } khronosParams;
 
     float motionBlurVelocityScale{0.8f};
     float motionBlurDepthScale{50.0f};
