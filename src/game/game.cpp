@@ -326,6 +326,7 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
 #if WILL_EDITOR
     Game::DrawEditorInterface(ctx, state, frameBuffer);
     Game::GatherEditorSprites(ctx, state, frameBuffer);
+    Game::GatherLightDebugDraws(ctx, state, frameBuffer);
 #endif
 
 #ifndef PACKAGED_BUILD

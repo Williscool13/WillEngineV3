@@ -789,24 +789,28 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             }
         }
 
-        // Right-aligned controls: light gizmo combo + physics debug combo
+        // Right-aligned controls: sprite checkbox + light debug combo + physics debug combo
         {
-            static constexpr const char* kLightGizmoLabels[] = {"None", "Sprite", "Direction", "Both"};
+            static constexpr const char* kLightDebugLabels[] = {"None", "Selected", "All"};
             static constexpr const char* kPhysicsDebugLabels[] = {"Off", "Sensor Only", "Sensor + Tag", "On"};
-            int lightMode = static_cast<int>(state->editor.lightGizmoMode);
+            int lightMode = static_cast<int>(state->editor.lightDebugDrawMode);
             int physicsMode = static_cast<int>(state->editor.physicsDebugMode);
-            constexpr float comboW = 110.0f;
-            constexpr float lightComboW = 80.0f;
+            constexpr float checkW = 16.0f;
+            constexpr float lightComboW = 72.0f;
+            constexpr float physicsComboW = 110.0f;
             constexpr float spacing = 4.0f;
-            const float totalW = lightComboW + spacing + comboW;
+            const float totalW = checkW + spacing + lightComboW + spacing + physicsComboW;
             ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - totalW);
-            ImGui::SetNextItemWidth(lightComboW);
-            if (ImGui::Combo("##light_gizmo", &lightMode, kLightGizmoLabels, IM_ARRAYSIZE(kLightGizmoLabels))) {
-                state->editor.lightGizmoMode = static_cast<Engine::LightGizmoMode>(lightMode);
-            }
-            if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Light gizmos: None / Sprite (icons) / Direction (arrows) / Both"); }
+            ImGui::Checkbox("##light_sprites", &state->editor.bShowLightSprites);
+            if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Show light sprite icons in viewport"); }
             ImGui::SameLine(0.0f, spacing);
-            ImGui::SetNextItemWidth(comboW);
+            ImGui::SetNextItemWidth(lightComboW);
+            if (ImGui::Combo("##light_debug", &lightMode, kLightDebugLabels, IM_ARRAYSIZE(kLightDebugLabels))) {
+                state->editor.lightDebugDrawMode = static_cast<Engine::LightDebugDrawMode>(lightMode);
+            }
+            if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Light debug draws: None / Selected entity only / All lights in scene"); }
+            ImGui::SameLine(0.0f, spacing);
+            ImGui::SetNextItemWidth(physicsComboW);
             if (ImGui::Combo("##physics_debug", &physicsMode, kPhysicsDebugLabels, IM_ARRAYSIZE(kPhysicsDebugLabels))) {
                 state->editor.physicsDebugMode = static_cast<Engine::PhysicsDebugMode>(physicsMode);
             }

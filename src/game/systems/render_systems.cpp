@@ -727,8 +727,7 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
 void GatherEditorSprites(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
-    const Engine::LightGizmoMode lgMode = state->editor.lightGizmoMode;
-    if (lgMode != Engine::LightGizmoMode::Sprite && lgMode != Engine::LightGizmoMode::Both) { return; }
+    if (!state->editor.bShowLightSprites) { return; }
     Core::ArenaVector<Core::Sprite>& sprites = frameBuffer->mainViewFamily.sprites;
 
     auto pointView = state->registry.view<Component::PointLightComponent, Component::TransformComponent>();
@@ -780,6 +779,30 @@ void GatherEditorSprites(Engine::EngineContext* ctx, Engine::EngineState* state,
             .samplerIndex = ASSET_SAMPLER_NEAREST_BINDLESS_INDEX,
             .billboard = true,
         });
+    }
+}
+
+void GatherLightDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
+{
+    ZoneScoped;
+    if (state->editor.lightDebugDrawMode != Engine::LightDebugDrawMode::All) { return; }
+
+    Core::ViewFamily& viewFamily = frameBuffer->mainViewFamily;
+
+    for (auto [entity, light, transform] : state->registry.view<Component::AreaLightComponent, Component::TransformComponent>().each()) {
+        const Vec3 center = transform.translation;
+        const Vec3 right = transform.rotation * Vec3(1.0f, 0.0f, 0.0f);
+        const Vec3 up = transform.rotation * Vec3(0.0f, 1.0f, 0.0f);
+        const Vec3 forward = transform.rotation * Vec3(0.0f, 0.0f, 1.0f);
+        constexpr Vec4 editColor{0.5f, 0.8f, 1.0f, 1.0f};
+        DEBUG_ADD_RECT(viewFamily.debugRects, {center, light.halfWidth * transform.scale.x, light.halfHeight * transform.scale.y, right, up, editColor, 0.03f});
+        DEBUG_ADD_ARROW(viewFamily.debugArrows, {center, center + forward * 0.5f, 0.08f, 0.02f, editColor, 0.01f});
+    }
+
+    for (auto [entity, light, transform] : state->registry.view<Component::DirectionalLightComponent, Component::TransformComponent>().each()) {
+        const Vec3 forward = transform.rotation * Vec3(0.0f, 0.0f, 1.0f);
+        constexpr Vec4 dirColor{1.0f, 0.9f, 0.5f, 1.0f};
+        DEBUG_ADD_ARROW(viewFamily.debugArrows, {transform.translation, transform.translation + forward * 2.0f, 0.15f, 0.04f, dirColor, 0.02f});
     }
 }
 

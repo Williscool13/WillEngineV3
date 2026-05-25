@@ -81,7 +81,7 @@ Engine::ComponentEditorResult Component::AreaLightComponent::DrawEditor(Core::Vi
         const Vec3 up = rot * Vec3(0.0f, 1.0f, 0.0f);
         const Vec3 forward = rot * Vec3(0.0f, 0.0f, 1.0f);
 
-        const bool showDirection = state->editor.lightGizmoMode == Engine::LightGizmoMode::Direction || state->editor.lightGizmoMode == Engine::LightGizmoMode::Both;
+        const bool showDirection = state->editor.lightDebugDrawMode == Engine::LightDebugDrawMode::Selected || state->editor.lightDebugDrawMode == Engine::LightDebugDrawMode::All;
         const bool anotherHoldsExclusive = state->editor.bExclusiveGizmoActivePrev && !bEditing;
         if (showDirection && !anotherHoldsExclusive) {
             constexpr Vec4 editColor{0.5f, 0.8f, 1.0f, 1.0f};
@@ -165,13 +165,11 @@ Engine::ComponentEditorResult Component::DirectionalLightComponent::DrawEditor(C
 
     {
         auto* state = registry.ctx().get<Engine::EngineState*>();
-        const bool showDirection = state->editor.lightGizmoMode == Engine::LightGizmoMode::Direction || state->editor.lightGizmoMode == Engine::LightGizmoMode::Both;
         auto* transform = registry.try_get<Component::TransformComponent>(entity);
-        if (showDirection && transform) {
+        if (transform && state->editor.lightDebugDrawMode == Engine::LightDebugDrawMode::Selected) {
             const glm::vec3 forward = transform->rotation * glm::vec3(0.0f, 0.0f, 1.0f);
-            const glm::vec3 pos = transform->translation;
             constexpr glm::vec4 dirColor{1.0f, 0.9f, 0.5f, 1.0f};
-            DEBUG_ADD_ARROW(viewFamily.debugArrows, {pos, pos + forward * 2.0f, 0.15f, 0.04f, dirColor, 0.02f});
+            DEBUG_ADD_ARROW(viewFamily.debugArrows, {transform->translation, transform->translation + forward * 2.0f, 0.15f, 0.04f, dirColor, 0.02f});
         }
     }
 

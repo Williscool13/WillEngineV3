@@ -46,6 +46,7 @@ void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* stat
 void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
 void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
 void GatherEditorSprites(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
+void GatherLightDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
 } // Game
 
 #endif //WILL_ENGINE_GATHER_RENDERABLES_COMPONENT_H

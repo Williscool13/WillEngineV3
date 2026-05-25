@@ -116,7 +116,7 @@ struct ComponentRegistry
 };
 
 enum class PhysicsDebugMode : uint8_t { Off, SensorOnly, SensorAndTag, On };
-enum class LightGizmoMode : uint8_t { None, Sprite, Direction, Both };
+enum class LightDebugDrawMode : uint8_t { None, Selected, All };
 
 struct RuntimeSceneMetadata
 {
@@ -171,7 +171,8 @@ struct EditorState
     bool bExclusiveGizmoActivePrev{false};
     int32_t activeDotHandleId{-1};
     PhysicsDebugMode physicsDebugMode{PhysicsDebugMode::SensorOnly};
-    LightGizmoMode lightGizmoMode{LightGizmoMode::Both};
+    LightDebugDrawMode lightDebugDrawMode{LightDebugDrawMode::Selected};
+    bool bShowLightSprites{true};
 
     // Scene management
     Core::InlineVector<RuntimeSceneMetadata, 8> loadedScenes{};
