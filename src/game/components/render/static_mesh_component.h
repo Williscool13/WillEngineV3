@@ -29,6 +29,7 @@ struct StaticMeshComponent
     int32_t meshIndex{-1};
     Core::Array<Engine::MaterialID, MaxMaterialOverrides> materialOverrides{};
     Vec3 renderOffset{0.0f};
+    Quat renderRotation{1.0f, 0.0f, 0.0f, 0.0f};
 
     static void Serialize(const StaticMeshComponent& comp, nlohmann::json& json);
     static void Deserialize(StaticMeshComponent& comp, const nlohmann::json& json);

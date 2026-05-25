@@ -52,6 +52,10 @@ void ComputeEquirectToCubemap(uniform EquirectToCubemapPushConstant pc, uint3 ti
     sphericalUV = saturate(sphericalUV);
 
     float4 color = sourceTextures[pc.sourceEquiIndex].SampleLevel(samplers[pc.samplerIndex], sphericalUV, 0);
+    // Clamp luminance to suppress HDRI hotspots before they bake into the cubemap
+    float luma = dot(color.rgb, float3(0.2126, 0.7152, 0.0722));
+    const float maxLuma = 100.0;
+    if (luma > maxLuma) { color.rgb *= maxLuma / luma; }
     intermediateCubemaps[pc.targetCubeIndex][storePos] = color;
 }
 

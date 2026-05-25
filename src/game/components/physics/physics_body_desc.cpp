@@ -1,4 +1,4 @@
-//
+﻿//
 // Created by William on 2026-03-21.
 //
 
@@ -514,7 +514,7 @@ void Component::PhysicsBodyDesc::Deserialize(PhysicsBodyDesc& comp, const nlohma
 }
 
 Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity,
-                                                                      const char* name)
+                                                                     const char* name)
 {
     auto& component = registry.get<PhysicsBodyDesc>(entity);
     static int editShapeIdx = -1;
@@ -529,7 +529,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
     }
 
     const bool hasGizmoClaim = editShapeIdx != -1;
-    if (hasGizmoClaim) { state->editor.bSuppressEntityGizmo = true; }
+    if (hasGizmoClaim) { state->editor.bExclusiveGizmoActive = true; }
 
     bool open = ImGui::CollapsingHeader("Physics Body", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
     ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
@@ -764,16 +764,14 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                 static_cast<float>(ctx->windowContext.viewportOffsetY),
                 static_cast<float>(ctx->windowContext.viewportWidth),
                 static_cast<float>(ctx->windowContext.viewportHeight),
-            };
-
-            {
+            }; {
                 ImGuizmo::SetGizmoSizeClipSpace(0.10f);
                 ImGuizmo::PushID(0);
                 Mat4 mat = glm::translate(Mat4(1.0f), shapeCenter);
                 if (ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(proj), ImGuizmo::TRANSLATE, ImGuizmo::WORLD, glm::value_ptr(mat))) {
                     shape.offset = Vec3(entityMatInv * Vec4(Vec3(mat[3]), 1.0f));
                 }
-                if (ImGuizmo::IsOver() || ImGuizmo::IsUsing()) { state->editor.bCustomGizmoActive = true; }
+                if (ImGuizmo::IsOver() || ImGuizmo::IsUsing()) { state->editor.bExclusiveGizmoActive = true; }
                 ImGuizmo::PopID();
                 ImGuizmo::SetGizmoSizeClipSpace(0.1f);
             }
@@ -786,9 +784,9 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                 {
                     const Vec3 planeNormal = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, entityRight) * entityRight);
                     Editor::DotHandle(10000, shapeCenter + entityRight * shape.sphere.radius, planeNormal,
-                        vd.view, vd.proj, viewport, vd.cameraPos, state,
-                        [&](Vec3 newPt) { shape.sphere.radius = glm::max(0.001f, glm::length(newPt - shapeCenter)); },
-                        colorX);
+                                      vd.view, vd.proj, viewport, vd.cameraPos, state,
+                                      [&](Vec3 newPt) { shape.sphere.radius = glm::max(0.001f, glm::length(newPt - shapeCenter)); },
+                                      colorX);
                     break;
                 }
                 case PhysicsShapeType::Capsule:
@@ -796,13 +794,13 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                     const Vec3 upPlane = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, entityUp) * entityUp);
                     const Vec3 rightPlane = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, entityRight) * entityRight);
                     Editor::DotHandle(10000, shapeCenter + entityUp * shape.capsule.halfHeight, upPlane,
-                        vd.view, vd.proj, viewport, vd.cameraPos, state,
-                        [&](Vec3 newPt) { shape.capsule.halfHeight = glm::max(0.001f, glm::dot(newPt - shapeCenter, entityUp)); },
-                        colorY);
+                                      vd.view, vd.proj, viewport, vd.cameraPos, state,
+                                      [&](Vec3 newPt) { shape.capsule.halfHeight = glm::max(0.001f, glm::dot(newPt - shapeCenter, entityUp)); },
+                                      colorY);
                     Editor::DotHandle(10001, shapeCenter + entityRight * shape.capsule.radius, rightPlane,
-                        vd.view, vd.proj, viewport, vd.cameraPos, state,
-                        [&](Vec3 newPt) { shape.capsule.radius = glm::max(0.001f, glm::length(newPt - shapeCenter)); },
-                        colorX);
+                                      vd.view, vd.proj, viewport, vd.cameraPos, state,
+                                      [&](Vec3 newPt) { shape.capsule.radius = glm::max(0.001f, glm::length(newPt - shapeCenter)); },
+                                      colorX);
                     break;
                 }
                 case PhysicsShapeType::Box:
@@ -811,17 +809,17 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                     const Vec3 yPlane = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, entityUp) * entityUp);
                     const Vec3 zPlane = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, entityForward) * entityForward);
                     Editor::DotHandle(10000, shapeCenter + entityRight * shape.box.halfExtents.x, xPlane,
-                        vd.view, vd.proj, viewport, vd.cameraPos, state,
-                        [&](Vec3 newPt) { shape.box.halfExtents.x = glm::max(0.001f, glm::abs(glm::dot(newPt - shapeCenter, entityRight))); },
-                        colorX);
+                                      vd.view, vd.proj, viewport, vd.cameraPos, state,
+                                      [&](Vec3 newPt) { shape.box.halfExtents.x = glm::max(0.001f, glm::abs(glm::dot(newPt - shapeCenter, entityRight))); },
+                                      colorX);
                     Editor::DotHandle(10001, shapeCenter + entityUp * shape.box.halfExtents.y, yPlane,
-                        vd.view, vd.proj, viewport, vd.cameraPos, state,
-                        [&](Vec3 newPt) { shape.box.halfExtents.y = glm::max(0.001f, glm::abs(glm::dot(newPt - shapeCenter, entityUp))); },
-                        colorY);
+                                      vd.view, vd.proj, viewport, vd.cameraPos, state,
+                                      [&](Vec3 newPt) { shape.box.halfExtents.y = glm::max(0.001f, glm::abs(glm::dot(newPt - shapeCenter, entityUp))); },
+                                      colorY);
                     Editor::DotHandle(10002, shapeCenter + entityForward * shape.box.halfExtents.z, zPlane,
-                        vd.view, vd.proj, viewport, vd.cameraPos, state,
-                        [&](Vec3 newPt) { shape.box.halfExtents.z = glm::max(0.001f, glm::abs(glm::dot(newPt - shapeCenter, entityForward))); },
-                        colorZ);
+                                      vd.view, vd.proj, viewport, vd.cameraPos, state,
+                                      [&](Vec3 newPt) { shape.box.halfExtents.z = glm::max(0.001f, glm::abs(glm::dot(newPt - shapeCenter, entityForward))); },
+                                      colorZ);
                     break;
                 }
                 default:
@@ -864,13 +862,12 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
             }
         };
 
-        ImGui::SeparatorText("Shape");
-        {
+        ImGui::SeparatorText("Shape"); {
             auto& shape = component.shapes[0];
             const bool isEditing = (editShapeIdx == 0);
             ImGui::PushID(0);
             ImGui::PushStyleColor(ImGuiCol_Button, isEditing ? Editor::ButtonEditing : Editor::ButtonIdle);
-            ImGui::BeginDisabled((state->editor.bCustomGizmoActive || state->editor.bCustomGizmoActivePrev) && !isEditing);
+            ImGui::BeginDisabled((state->editor.bExclusiveGizmoActive || state->editor.bExclusiveGizmoActivePrev) && !isEditing);
             if (ImGui::Button(isEditing ? "Done" : "Edit")) {
                 editShapeIdx = isEditing ? -1 : 0;
             }
@@ -897,7 +894,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
 
                 ImGui::SameLine(avail - xBtnW - spacing - editBtnW);
                 ImGui::PushStyleColor(ImGuiCol_Button, isEditing ? Editor::ButtonEditing : Editor::ButtonIdle);
-                ImGui::BeginDisabled((state->editor.bCustomGizmoActive || state->editor.bCustomGizmoActivePrev) && !isEditing);
+                ImGui::BeginDisabled((state->editor.bExclusiveGizmoActive || state->editor.bExclusiveGizmoActivePrev) && !isEditing);
                 if (ImGui::SmallButton(isEditing ? "Done##edit" : "Edit##edit")) {
                     editShapeIdx = isEditing ? -1 : i;
                 }

@@ -1,4 +1,4 @@
-//
+﻿//
 // Created by William on 2026-03-26.
 //
 
@@ -165,7 +165,7 @@ Engine::ComponentEditorResult PathMoverComponent::DrawEditor(Core::ViewFamily& v
         wasUsingGizmo = false;
     }
 
-    bool hasGizmoClaim = editPointIdx != -1 && !state->editor.bCustomGizmoActive;
+    bool hasGizmoClaim = editPointIdx != -1 && !state->editor.bExclusiveGizmoActivePrev;
 
     bool open = ImGui::CollapsingHeader("Path Mover", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
     ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
@@ -219,7 +219,7 @@ Engine::ComponentEditorResult PathMoverComponent::DrawEditor(Core::ViewFamily& v
 
             const bool isEditing = (editPointIdx == i);
             ImGui::PushStyleColor(ImGuiCol_Button, isEditing ? Editor::ButtonEditing : Editor::ButtonIdle);
-            ImGui::BeginDisabled((state->editor.bCustomGizmoActive || state->editor.bCustomGizmoActivePrev) && !isEditing);
+            ImGui::BeginDisabled((state->editor.bExclusiveGizmoActive || state->editor.bExclusiveGizmoActivePrev) && !isEditing);
             if (ImGui::SmallButton(isEditing ? "D##edit" : "E##edit")) {
                 editPointIdx = isEditing ? -1 : i;
                 if (editPointIdx == -1) { hasGizmoClaim = false; }
@@ -391,7 +391,7 @@ Engine::ComponentEditorResult PathMoverComponent::DrawEditor(Core::ViewFamily& v
         }
     }
 
-    if (hasGizmoClaim) { state->editor.bCustomGizmoActive = true; }
+    if (hasGizmoClaim) { state->editor.bExclusiveGizmoActive = true; }
 
     return {.requestRemoval = remove};
 }

@@ -7,6 +7,7 @@
 
 #include <glm/glm.hpp>
 #include <glm/vec3.hpp>
+#include <glm/gtc/quaternion.hpp>
 #include <entt/entt.hpp>
 
 #include "core/containers/inline_vector.h"
@@ -27,6 +28,7 @@ struct RenderTransformComponent
     glm::mat4 modelMatrix;
     glm::mat4 previousMatrix;
     glm::vec3 renderOffset{0.0f};
+    glm::quat renderRotation{1.0f, 0.0f, 0.0f, 0.0f};
 };
 
 struct PrimitiveData

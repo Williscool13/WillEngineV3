@@ -359,7 +359,7 @@ void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* st
         ZoneScopedN("Serial");
         for (auto [entity, transform, renderTransform, dirtyRender] : dirtyView.each()) {
             renderTransform.previousMatrix = renderTransform.modelMatrix;
-            renderTransform.modelMatrix = glm::translate(GetMatrix(transform), renderTransform.renderOffset);
+            renderTransform.modelMatrix = glm::translate(GetMatrix(transform), renderTransform.renderOffset) * glm::mat4_cast(renderTransform.renderRotation);
             dirtyRender.counter--;
         }
     }
@@ -377,7 +377,7 @@ void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* st
                 auto& renderTransform = dirtyView.get<Component::RenderTransformComponent>(entity);
 
                 renderTransform.previousMatrix = renderTransform.modelMatrix;
-                renderTransform.modelMatrix = glm::translate(GetMatrix(transform), renderTransform.renderOffset);
+                renderTransform.modelMatrix = glm::translate(GetMatrix(transform), renderTransform.renderOffset) * glm::mat4_cast(renderTransform.renderRotation);
 
                 auto& dirty = dirtyView.get<Component::DirtyRenderTransformComponent>(entity);
                 dirty.counter--;
@@ -402,8 +402,7 @@ void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* st
         float alpha = state->physics.interpolationAlpha;
         glm::vec3 interpPos = glm::mix(physics.previousPosition, transform.translation, alpha);
         glm::quat interpRot = glm::slerp(physics.previousRotation, transform.rotation, alpha);
-        renderTransform.modelMatrix = glm::translate(glm::mat4(1.0f), interpPos) * glm::mat4_cast(interpRot) * glm::scale(glm::mat4(1.0f), transform.scale) * glm::translate(
-                                          glm::mat4(1.0f), renderTransform.renderOffset);
+        renderTransform.modelMatrix = glm::translate(glm::mat4(1.0f), interpPos) * glm::mat4_cast(interpRot) * glm::scale(glm::mat4(1.0f), transform.scale) * glm::translate(glm::mat4(1.0f), renderTransform.renderOffset) * glm::mat4_cast(renderTransform.renderRotation);
     }
 }
 
@@ -693,8 +692,8 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
         vf.areaLights.PushBack(AreaLightData{
             .position = {transform.translation, 0.0f},
             .normal = {normal, 0.0f},
-            .right = {right, light.halfWidth},
-            .up = {up, light.halfHeight},
+            .right = {right, light.halfWidth * transform.scale.x},
+            .up = {up, light.halfHeight * transform.scale.y},
             .packedColor =
             (static_cast<uint32_t>(glm::clamp(c.r, 0.0f, 1.0f) * 255.0f + 0.5f)) |
             (static_cast<uint32_t>(glm::clamp(c.g, 0.0f, 1.0f) * 255.0f + 0.5f) << 8) |
@@ -728,6 +727,8 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
 void GatherEditorSprites(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
+    const Engine::LightGizmoMode lgMode = state->editor.lightGizmoMode;
+    if (lgMode != Engine::LightGizmoMode::Sprite && lgMode != Engine::LightGizmoMode::Both) { return; }
     Core::ArenaVector<Core::Sprite>& sprites = frameBuffer->mainViewFamily.sprites;
 
     auto pointView = state->registry.view<Component::PointLightComponent, Component::TransformComponent>();

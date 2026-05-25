@@ -1,4 +1,4 @@
-//
+﻿//
 // Created by William on 2026-05-23.
 //
 
@@ -37,7 +37,7 @@ Vec3 ScreenToRay(ImVec2 screenPos, const Mat4& view, const Mat4& proj, Vec4 view
 
 /**
  * Draws a dot handle in world space; calls onMoved(hitPoint) while dragging.
- * Sets state->editor.bCustomGizmoActive when hovered or active to suppress viewport selection.
+ * Sets state->editor.bExclusiveGizmoActive when hovered or active to suppress viewport selection.
  * Drag plane normal for a single-axis constraint: normalize(cameraForward - dot(cameraForward, axis) * axis).
  * @param handleId Unique integer per simultaneously-visible handle.
  */
@@ -49,6 +49,9 @@ void DotHandle(int32_t handleId, Vec3 worldPos, Vec3 dragPlaneNormal,
 {
     ImVec2 screen;
     if (!WorldToScreen(worldPos, view, proj, viewport, screen)) { return; }
+
+    const bool anotherHoldsExclusive = state->editor.bExclusiveGizmoActivePrev && (state->editor.activeDotHandleId != handleId);
+    if (anotherHoldsExclusive) { return; }
 
     ImVec2 mouse = ImGui::GetIO().MousePos;
     float dx = mouse.x - screen.x;
@@ -65,7 +68,7 @@ void DotHandle(int32_t handleId, Vec3 worldPos, Vec3 dragPlaneNormal,
         active = false;
     }
 
-    if (hovered || active) { state->editor.bCustomGizmoActive = true; }
+    if (hovered || active) { state->editor.bExclusiveGizmoActive = true; }
 
     ImU32 fill = active  ? IM_COL32(255, 255, 255, 255)
                : hovered ? IM_COL32(200, 235, 255, 255)

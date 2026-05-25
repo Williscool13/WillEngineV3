@@ -1,4 +1,4 @@
-//
+﻿//
 // Created by William on 2026-01-30.
 //
 
@@ -430,28 +430,7 @@ void EditorUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
     }
 
 
-    if (!ctx->bImguiMouseCaptured && !state->editor.bCustomGizmoActivePrev && state->inputFrame->GetMouse(MouseButton::LMB).pressed) {
-        auto it = state->stableIdToEntityMap.Find(StringID{ctx->lastKnownStableIdUnderCursor});
-        if (it != nullptr) {
-            entt::entity clicked = *it;
-            if (ctrlHeld) {
-                auto pos = std::find(state->editor.selectedEntities.begin(), state->editor.selectedEntities.end(), clicked);
-                if (pos != state->editor.selectedEntities.end()) {
-                    state->editor.selectedEntities.Remove(pos);
-                }
-                else {
-                    state->editor.selectedEntities.PushBack(clicked);
-                }
-            }
-            else {
-                state->editor.selectedEntities.Clear();
-                state->editor.selectedEntities.PushBack(clicked);
-            }
-        }
-        else if (!ctrlHeld) {
-            state->editor.selectedEntities.Clear();
-        }
-    }
+
 
     for (const auto& hotkey : DEBUG_HOTKEYS) {
         if (state->inputFrame->GetKey(hotkey.key).pressed) {
@@ -472,7 +451,37 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
     ZoneScoped;
     state->editor.texResidency.Tick(ctx);
     state->editor.ResetFrameCache();
-    state->editor.bSuppressEntityGizmo = false;
+    state->editor.bExclusiveGizmoActivePrev = state->editor.bExclusiveGizmoActive;
+    state->editor.bExclusiveGizmoActive = false;
+
+
+    bool bJustSelected = false;
+
+    const bool ctrlHeld = state->inputFrame->GetKey(Key::LCTRL).down || state->inputFrame->GetKey(Key::RCTRL).down;
+    if (!ctx->bImguiMouseCaptured && !state->editor.bExclusiveGizmoActivePrev && state->inputFrame->GetMouse(MouseButton::LMB).pressed) {
+        auto it = state->stableIdToEntityMap.Find(StringID{ctx->lastKnownStableIdUnderCursor});
+        if (it != nullptr) {
+            bJustSelected = true;
+            entt::entity clicked = *it;
+            if (ctrlHeld) {
+                auto pos = std::find(state->editor.selectedEntities.begin(), state->editor.selectedEntities.end(), clicked);
+                if (pos != state->editor.selectedEntities.end()) {
+                    state->editor.selectedEntities.Remove(pos);
+                }
+                else {
+                    state->editor.selectedEntities.PushBack(clicked);
+                }
+            }
+            else {
+                state->editor.selectedEntities.Clear();
+                state->editor.selectedEntities.PushBack(clicked);
+            }
+        }
+        else if (!ctrlHeld) {
+            state->editor.selectedEntities.Clear();
+        }
+    }
+
 
     if (state->editor.bWantDeleteEntities) {
         state->editor.bWantDeleteEntities = false;
@@ -780,15 +789,26 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
             }
         }
 
-        // Right-aligned physics debug dropdown
+        // Right-aligned controls: light gizmo combo + physics debug combo
         {
+            static constexpr const char* kLightGizmoLabels[] = {"None", "Sprite", "Direction", "Both"};
             static constexpr const char* kPhysicsDebugLabels[] = {"Off", "Sensor Only", "Sensor + Tag", "On"};
-            int currentMode = static_cast<int>(state->editor.physicsDebugMode);
-            const float comboW = 110.0f;
-            ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - comboW);
+            int lightMode = static_cast<int>(state->editor.lightGizmoMode);
+            int physicsMode = static_cast<int>(state->editor.physicsDebugMode);
+            constexpr float comboW = 110.0f;
+            constexpr float lightComboW = 80.0f;
+            constexpr float spacing = 4.0f;
+            const float totalW = lightComboW + spacing + comboW;
+            ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - totalW);
+            ImGui::SetNextItemWidth(lightComboW);
+            if (ImGui::Combo("##light_gizmo", &lightMode, kLightGizmoLabels, IM_ARRAYSIZE(kLightGizmoLabels))) {
+                state->editor.lightGizmoMode = static_cast<Engine::LightGizmoMode>(lightMode);
+            }
+            if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Light gizmos: None / Sprite (icons) / Direction (arrows) / Both"); }
+            ImGui::SameLine(0.0f, spacing);
             ImGui::SetNextItemWidth(comboW);
-            if (ImGui::Combo("##physics_debug", &currentMode, kPhysicsDebugLabels, IM_ARRAYSIZE(kPhysicsDebugLabels))) {
-                state->editor.physicsDebugMode = static_cast<Engine::PhysicsDebugMode>(currentMode);
+            if (ImGui::Combo("##physics_debug", &physicsMode, kPhysicsDebugLabels, IM_ARRAYSIZE(kPhysicsDebugLabels))) {
+                state->editor.physicsDebugMode = static_cast<Engine::PhysicsDebugMode>(physicsMode);
             }
             if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Physics debug draw: Off / Sensor Only / Sensor + Tag / On (all)"); }
         }
@@ -1298,8 +1318,6 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
                 ImGui::TextDisabled("(order: %llu)", stable->sortOrder);
             }
 
-            state->editor.bCustomGizmoActivePrev = state->editor.bCustomGizmoActive;
-            state->editor.bCustomGizmoActive = false;
             auto* entityScene = state->registry.try_get<Component::SceneComponent>(entity);
             for (Engine::ComponentEntry& entry : state->componentRegistry.registry) {
                 if (entry.has(state->registry, entity)) {
@@ -1357,7 +1375,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
     }
     ImGui::End();
 
-    if (!state->editor.bCustomGizmoActive && !state->editor.bSuppressEntityGizmo && !state->editor.selectedEntities.IsEmpty()) {
+    if (!state->editor.bExclusiveGizmoActive && !bJustSelected && !state->editor.selectedEntities.IsEmpty()) {
         if (state->editor.selectedEntities.Size() == 1) {
             entt::entity entity = state->editor.selectedEntities[0];
             if (auto* transform = state->registry.try_get<Component::TransformComponent>(entity)) {
@@ -1531,6 +1549,34 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
         int currentItem = state->lighting.postProcess.tonemapOperator + 1;
         if (ImGui::Combo("Operator", &currentItem, tonemapOperators, IM_ARRAYSIZE(tonemapOperators))) {
             state->lighting.postProcess.tonemapOperator = currentItem - 1;
+        }
+
+        Core::PostProcessConfiguration& pp = state->lighting.postProcess;
+        switch (pp.tonemapOperator) {
+            case 1: // Hable
+                ImGui::SliderFloat("White Point##hable", &pp.hableParams.whitePoint, 1.0f, 20.0f, "%.2f");
+                break;
+            case 2: // Reinhard
+                ImGui::SliderFloat("White Point##reinhard", &pp.reinhardParams.whitePoint, 1.0f, 20.0f, "%.2f");
+                break;
+            case 7: // Uchimura
+                ImGui::SliderFloat("Max Brightness##uchimura", &pp.uchimuraParams.P, 0.5f, 2.0f, "%.2f");
+                ImGui::SliderFloat("Contrast##uchimura", &pp.uchimuraParams.a, 0.5f, 2.0f, "%.2f");
+                ImGui::SliderFloat("Linear Start##uchimura", &pp.uchimuraParams.m, 0.0f, 0.5f, "%.3f");
+                ImGui::SliderFloat("Linear Length##uchimura", &pp.uchimuraParams.l, 0.0f, 1.0f, "%.2f");
+                ImGui::SliderFloat("Toe Power##uchimura", &pp.uchimuraParams.c, 0.5f, 3.0f, "%.2f");
+                ImGui::SliderFloat("Pedestal##uchimura", &pp.uchimuraParams.b, 0.0f, 0.1f, "%.3f");
+                break;
+            case 9: // AgX
+                ImGui::SliderFloat("Min EV##agx", &pp.agxParams.minEV, -20.0f, -1.0f, "%.3f");
+                ImGui::SliderFloat("Max EV##agx", &pp.agxParams.maxEV, 0.0f, 10.0f, "%.3f");
+                break;
+            case 10: // Khronos PBR Neutral
+                ImGui::SliderFloat("Start Compression##khronos", &pp.khronosParams.startCompression, 0.5f, 0.95f, "%.3f");
+                ImGui::SliderFloat("Desaturation##khronos", &pp.khronosParams.desaturation, 0.0f, 0.5f, "%.3f");
+                break;
+            default:
+                break;
         }
 
         ImGui::Spacing();

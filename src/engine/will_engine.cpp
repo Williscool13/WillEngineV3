@@ -802,6 +802,7 @@ void WillEngine::EditorImgui()
         assetGenerator->RequestModelGenerate(assets / "Sphere.glb", assets / "Sphere.wsmesh");
         assetGenerator->RequestModelGenerate(assets / "sponza2/sponza.gltf", assets / "sponza2/sponza.wsmesh");
         assetGenerator->RequestModelGenerate(assets / "Plane.glb", assets / "Plane.wsmesh");
+        assetGenerator->RequestModelGenerate(assets / "LightPanel.glb", assets / "LightPanel.wsmesh");
         assetGenerator->RequestTextureGenerateFromFile(
             assets / "textures/smiling_friend.jpg",
             assets / "textures/smiling_friend.wtexture",
@@ -865,6 +866,9 @@ void WillEngine::EditorImgui()
             }
             if (ImGui::Button("plane.wsmesh")) {
                 assetGenerator->RequestModelGenerate(Platform::GetAssetPath() / "Plane.glb", Platform::GetAssetPath() / "Plane.wsmesh");
+            }
+            if (ImGui::Button("LightPanel.wsmesh")) {
+                assetGenerator->RequestModelGenerate(Platform::GetAssetPath() / "LightPanel.glb", Platform::GetAssetPath() / "LightPanel.wsmesh");
             }
 
             ImGui::SeparatorText("Generate Environment Map:"); {
