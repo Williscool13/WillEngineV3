@@ -816,7 +816,7 @@ void SetupReSTIRPass(RenderGraph& graph,
                      uint64_t frameNumber)
 {
     const uint32_t pixelCount = renderExtent[0] * renderExtent[1];
-    graph.CreateBuffer(SID("restir_reservoir_buffer"), pixelCount * sizeof(Reservoir), false);
+    graph.CreateBuffer(SID("restir_reservoir_buffer"), pixelCount * sizeof(Reservoir), true);
 
     RenderPass& pass = graph.AddPass(SID("ReSTIR DI Generate"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
     pass.ReadBuffer(SCENE_DATA_BUFFER);
