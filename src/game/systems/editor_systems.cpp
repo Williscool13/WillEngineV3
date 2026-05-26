@@ -13,6 +13,7 @@
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "scene_system.h"
+#include "core/containers/arena_array.h"
 #include "core/containers/arena_fixed_vector.h"
 #include "engine/include/engine_context.h"
 #include "core/input/input_frame.h"
@@ -1900,29 +1901,24 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
                         ImGui::SeparatorText("Shader"); {
                             Core::Span<const StringID> shadingPipelines = ctx->pipelineManager->GetShadingPipelines();
                             const int32_t pipelineCount = static_cast<int32_t>(shadingPipelines.Size());
+                            Core::Arena& arena = ctx->editorArena.Get();
 
                             int currentShader = -1;
                             for (int32_t i = 0; i < pipelineCount; ++i) {
-                                if (editMat.fragmentShader == shadingPipelines[i]) {
-                                    currentShader = i;
-                                    break;
-                                }
+                                if (editMat.fragmentShader == shadingPipelines[i]) { currentShader = i; break; }
                             }
 
                             const bool isUnknown = currentShader < 0;
-                            Core::InlineString unknownLabel{};
-                            Core::InlineVector<const char*, 32> options{};
-                            for (int32_t i = 0; i < pipelineCount; ++i) {
-                                options.PushBack(shadingPipelines[i].ToString());
-                            }
+                            const int32_t optionCount = isUnknown ? pipelineCount + 1 : pipelineCount;
+                            Core::ArenaArray<Core::InlineString<64>> labels(&arena, optionCount);
+                            for (int32_t i = 0; i < pipelineCount; ++i) { labels[i] = Core::InlineString<64>(shadingPipelines[i].ToString()); }
                             if (isUnknown) {
-                                unknownLabel = Core::InlineString{"(unknown) "};
-                                unknownLabel.Append(editMat.fragmentShader.ToString());
-                                options.PushBack(unknownLabel.c_str());
+                                labels[pipelineCount] = Core::InlineString<64>("(unknown) ");
+                                labels[pipelineCount].Append(editMat.fragmentShader.ToString());
                                 currentShader = pipelineCount;
                             }
-
-                            if (ImGui::Combo("Fragment Shader", &currentShader, options.Data(), static_cast<int32_t>(options.Size()))) {
+                            auto shadingGetter = [](void* data, int idx) -> const char* { return (*static_cast<Core::ArenaArray<Core::InlineString<64>>*>(data))[idx].c_str(); };
+                            if (ImGui::Combo("Fragment Shader", &currentShader, shadingGetter, &labels, static_cast<int32_t>(labels.Size()))) {
                                 if (currentShader < pipelineCount) {
                                     editMat.fragmentShader = shadingPipelines[currentShader];
                                     changed = true;
@@ -1931,29 +1927,24 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
                         } {
                             Core::Span<const StringID> lightingPipelines = ctx->pipelineManager->GetLightingPipelines();
                             const int32_t pipelineCount = static_cast<int32_t>(lightingPipelines.Size());
+                            Core::Arena& arena = ctx->editorArena.Get();
 
                             int currentShader = -1;
                             for (int32_t i = 0; i < pipelineCount; ++i) {
-                                if (editMat.lightingShader == lightingPipelines[i]) {
-                                    currentShader = i;
-                                    break;
-                                }
+                                if (editMat.lightingShader == lightingPipelines[i]) { currentShader = i; break; }
                             }
 
                             const bool isUnknown = currentShader < 0;
-                            Core::InlineString<64> unknownLabel{};
-                            Core::InlineVector<const char*, 32> options{};
-                            for (int32_t i = 0; i < pipelineCount; ++i) {
-                                options.PushBack(lightingPipelines[i].ToString());
-                            }
+                            const int32_t optionCount = isUnknown ? pipelineCount + 1 : pipelineCount;
+                            Core::ArenaArray<Core::InlineString<64>> labels(&arena, optionCount);
+                            for (int32_t i = 0; i < pipelineCount; ++i) { labels[i] = Core::InlineString<64>(lightingPipelines[i].ToString()); }
                             if (isUnknown) {
-                                unknownLabel = Core::InlineString<64>{"(unknown) "};
-                                unknownLabel.Append(editMat.lightingShader.ToString());
-                                options.PushBack(unknownLabel.c_str());
+                                labels[pipelineCount] = Core::InlineString<64>("(unknown) ");
+                                labels[pipelineCount].Append(editMat.lightingShader.ToString());
                                 currentShader = pipelineCount;
                             }
-
-                            if (ImGui::Combo("Lighting Shader", &currentShader, options.Data(), static_cast<int32_t>(options.Size()))) {
+                            auto lightingGetter = [](void* data, int idx) -> const char* { return (*static_cast<Core::ArenaArray<Core::InlineString<64>>*>(data))[idx].c_str(); };
+                            if (ImGui::Combo("Lighting Shader", &currentShader, lightingGetter, &labels, static_cast<int32_t>(labels.Size()))) {
                                 if (currentShader < pipelineCount) {
                                     editMat.lightingShader = lightingPipelines[currentShader];
                                     changed = true;

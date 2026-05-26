@@ -359,6 +359,7 @@ function(add_shader_include INCLUDE_FILE)
     set_property(GLOBAL APPEND PROPERTY SHADER_INCLUDE_FILES ${INCLUDE_ABS})
 endfunction()
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/visibility_shading_common.slang")
+add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/visibility_lighting_common.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/shader_constants.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/shader_functions.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/shadow_functions.slang")
@@ -402,6 +403,7 @@ compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/shading/shading_error_unlit.slang compute ComputeMain shading_error_unlit
         #   "Lighting Shaders"
         ${CMAKE_SOURCE_DIR}/shaders/lighting/lighting_pbr.slang compute ComputeMain lighting_pbr
+        ${CMAKE_SOURCE_DIR}/shaders/lighting/lighting_pbr_restir.slang compute ComputeMain lighting_pbr_restir
         ${CMAKE_SOURCE_DIR}/shaders/lighting/lighting_toon.slang compute ComputeMain lighting_toon
         ${CMAKE_SOURCE_DIR}/shaders/lighting/lighting_unlit.slang compute ComputeMain lighting_unlit
 

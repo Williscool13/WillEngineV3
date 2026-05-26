@@ -17,6 +17,8 @@
 #include "game/component-registry/component_editor.h"
 #include "game/component-registry/editor_gizmo_helpers.h"
 #include <ImGuizmo.h>
+
+#include "core/containers/arena_array.h"
 #include "game/components/core_components.h"
 #include "game/components/render/procedural_mesh_component.h"
 #include "game/components/render/spline_mesh_component.h"
@@ -105,6 +107,8 @@ void Component::StaticMeshComponent::Serialize(const StaticMeshComponent& comp, 
     if (!overrides.empty()) {
         json["materialOverrides"] = std::move(overrides);
     }
+    if (comp.shadingShaderOverride) { json["shadingShaderOverride"] = comp.shadingShaderOverride.id; }
+    if (comp.lightingShaderOverride) { json["lightingShaderOverride"] = comp.lightingShaderOverride.id; }
     json["renderOffset"] = {comp.renderOffset.x, comp.renderOffset.y, comp.renderOffset.z};
     json["renderRotation"] = {comp.renderRotation.w, comp.renderRotation.x, comp.renderRotation.y, comp.renderRotation.z};
 }
@@ -126,6 +130,8 @@ void Component::StaticMeshComponent::Deserialize(StaticMeshComponent& comp, cons
             }
         }
     }
+    if (json.contains("shadingShaderOverride")) { comp.shadingShaderOverride = StringID(json["shadingShaderOverride"].get<uint64_t>()); }
+    if (json.contains("lightingShaderOverride")) { comp.lightingShaderOverride = StringID(json["lightingShaderOverride"].get<uint64_t>()); }
     if (json.contains("renderOffset")) {
         const auto& o = json["renderOffset"];
         comp.renderOffset = glm::vec3(o[0].get<float>(), o[1].get<float>(), o[2].get<float>());
@@ -340,6 +346,55 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
                 }
 
                 ImGui::TreePop();
+            }
+        }
+
+        ImGui::SeparatorText("Shader Overrides");
+        {
+            auto* pm = ctx->pipelineManager;
+            Core::Span<const StringID> shadingPipelines = pm->GetShadingPipelines();
+            Core::Span<const StringID> lightingPipelines = pm->GetLightingPipelines();
+            Core::Arena& arena = ctx->editorArena.Get();
+
+            bool shaderChanged = false;
+
+            {
+                const int32_t pipelineCount = static_cast<int32_t>(shadingPipelines.Size());
+                int32_t current = -1;
+                for (int32_t i = 0; i < pipelineCount; ++i) {
+                    if (component.shadingShaderOverride == shadingPipelines[i]) { current = i; break; }
+                }
+                Core::ArenaArray<Core::InlineString<64>> labels(&arena, pipelineCount + 1);
+                labels[0] = Core::InlineString<64>("(none)");
+                for (int32_t i = 0; i < pipelineCount; ++i) { labels[i + 1] = Core::InlineString<64>(shadingPipelines[i].ToString()); }
+                int32_t comboIdx = current + 1;
+                auto getter = [](void* data, int idx) -> const char* { return (*static_cast<Core::ArenaArray<Core::InlineString<64>>*>(data))[idx].c_str(); };
+                if (ImGui::Combo("Shading", &comboIdx, getter, &labels, static_cast<int32_t>(labels.Size()))) {
+                    component.shadingShaderOverride = comboIdx == 0 ? StringID{} : shadingPipelines[comboIdx - 1];
+                    shaderChanged = true;
+                }
+            }
+
+            {
+                const int32_t pipelineCount = static_cast<int32_t>(lightingPipelines.Size());
+                int32_t current = -1;
+                for (int32_t i = 0; i < pipelineCount; ++i) {
+                    if (component.lightingShaderOverride == lightingPipelines[i]) { current = i; break; }
+                }
+                Core::ArenaArray<Core::InlineString<64>> labels(&arena, pipelineCount + 1);
+                labels[0] = Core::InlineString<64>("(none)");
+                for (int32_t i = 0; i < pipelineCount; ++i) { labels[i + 1] = Core::InlineString<64>(lightingPipelines[i].ToString()); }
+                int32_t comboIdx = current + 1;
+                auto getter = [](void* data, int idx) -> const char* { return (*static_cast<Core::ArenaArray<Core::InlineString<64>>*>(data))[idx].c_str(); };
+                if (ImGui::Combo("Lighting", &comboIdx, getter, &labels, static_cast<int32_t>(labels.Size()))) {
+                    component.lightingShaderOverride = comboIdx == 0 ? StringID{} : lightingPipelines[comboIdx - 1];
+                    shaderChanged = true;
+                }
+            }
+
+            if (shaderChanged) {
+                registry.emplace_or_replace<StaticMeshLoadingTag>(entity);
+                state->bPendingModelResolve |= true;
             }
         }
 

@@ -26,7 +26,7 @@ void ComputeMain(uniform ReSTIRDIGeneratePushConstant pc, uint3 threadID : SV_Di
         return;
     }
 
-    LightingInputs li = ReconstructLightingInputs(pixel, pc.visibilityBufferIndex, 0, pc.instanceBuffer, pc.gbufferOneIndex, pc.gbufferTwoIndex, ~0u);
+    LightingInputs li = ReconstructLightingInputs(pixel, pc.visibilityBufferIndex, ~0x0, pc.instanceBuffer, pc.gbufferOneIndex, pc.gbufferTwoIndex, ~0u);
     if (!li.valid) {
         pc.reservoirBuffer[pixel.y * pc.renderExtent.x + pixel.x] = ReservoirEmpty();
         return;

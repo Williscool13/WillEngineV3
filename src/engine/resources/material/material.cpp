@@ -24,6 +24,8 @@ MaterialID HashMaterial(const Material& m)
         glm::vec4 physicalProperties;
         TextureID textureRefs[6];
         SamplerDesc samplerDesc[6];
+        uint64_t fragmentShaderID;
+        uint64_t lightingShaderID;
 
     };
 
@@ -40,6 +42,8 @@ MaterialID HashMaterial(const Material& m)
     key.physicalProperties = m.props.physicalProperties;
     for (int i = 0; i < 6; ++i) key.textureRefs[i] = m.textureRefs[i];
     for (int i = 0; i < 6; ++i) key.samplerDesc[i] = m.samplerDesc[i];
+    key.fragmentShaderID = m.fragmentShader.id;
+    key.lightingShaderID = m.lightingShader.id;
 
     return MaterialID(fnv1a64(reinterpret_cast<const uint8_t*>(&key), sizeof(StableKey)));
 }

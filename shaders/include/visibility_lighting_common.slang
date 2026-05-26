@@ -37,7 +37,7 @@ public LightingInputs ReconstructLightingInputs(
 
     uint instanceIndex = vis.y;
     Instance instance = instanceBuffer[instanceIndex];
-    if (instance.lightingIndex != lightingIndex) {
+    if (lightingIndex != ~0u && instance.lightingIndex != lightingIndex) {
         return result;
     }
 

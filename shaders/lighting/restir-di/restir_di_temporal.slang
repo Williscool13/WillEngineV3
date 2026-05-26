@@ -118,7 +118,8 @@ void ComputeMain(uniform ReSTIRDITemporalPushConstant pc, uint3 threadID : SV_Di
     combined.M = current.M + clampedHistoryM;
 
     // Finalise: re-evaluate p_hat at winner.
-    if (combined.lightIdx != ~0u) {
+    bool bHasLight = combined.lightIdx != ~0u;
+    if (bHasLight) {
         AreaLightData alWinner = pc.lightData->areaLights[combined.lightIdx];
         AreaLightVS vsWinner = TransformAreaLight(alWinner, view);
         float3 yStar = DecodeSamplePos(combined, vsWinner);

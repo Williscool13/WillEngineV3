@@ -28,6 +28,8 @@ struct StaticMeshComponent
     Engine::ModelID modelId{};
     int32_t meshIndex{-1};
     Core::Array<Engine::MaterialID, MaxMaterialOverrides> materialOverrides{};
+    StringID shadingShaderOverride{};
+    StringID lightingShaderOverride{};
     Vec3 renderOffset{0.0f};
     Quat renderRotation{1.0f, 0.0f, 0.0f, 0.0f};
 

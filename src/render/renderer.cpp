@@ -931,6 +931,9 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
     lightingResolve.ReadBuffer(SCENE_DATA_BUFFER);
     lightingResolve.ReadBuffer(SHADOW_DATA_BUFFER);
     lightingResolve.ReadBuffer(SID("light_data"));
+    if (graph.HasBuffer(SID("restir_reservoir_temporal"))) {
+        lightingResolve.ReadBuffer(SID("restir_reservoir_temporal"));
+    }
     lightingResolve.ReadIndirectBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER);
     lightingResolve.ReadSampledImage(targets.gbufferOne);
     lightingResolve.ReadSampledImage(targets.gbufferTwo);
@@ -960,6 +963,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                     .lightData = graph.GetBufferAddress(SID("light_data")),
                     .lightDispatchBuffer = lightDispatchAddress,
                     .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
+                    .reservoirBuffer = graph.TryGetBufferAddress(SID("restir_reservoir_temporal")),
                     .visibilityBufferIndex = graph.GetSampledImageViewDescriptorIndex(visibility),
                     .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                     .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),

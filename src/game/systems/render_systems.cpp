@@ -174,6 +174,12 @@ void ResolveStaticMeshLoads(Engine::EngineContext* ctx, Engine::EngineState* sta
 
         size_t primCount = std::min(mesh.primitiveProperties.Size(), Component::MeshRuntime::MaxPrimitives);
 
+        auto applyShaderOverrides = [&](Engine::Material mat) -> Engine::Material {
+            if (meshComponent.shadingShaderOverride) { mat.fragmentShader = meshComponent.shadingShaderOverride; }
+            if (meshComponent.lightingShaderOverride) { mat.lightingShader = meshComponent.lightingShaderOverride; }
+            return mat;
+        };
+
         for (size_t j = 0; j < primCount; ++j) {
             Engine::PrimitiveProperty& primitive = mesh.primitiveProperties[j];
 
@@ -188,12 +194,12 @@ void ResolveStaticMeshLoads(Engine::EngineContext* ctx, Engine::EngineState* sta
                         matID = materialOverride;
                     }
                     else {
-                        matID = materialManager->CreateImmutableMaterial(model->modelData.materials[primitive.materialIndex]);
+                        matID = materialManager->CreateImmutableMaterial(applyShaderOverrides(model->modelData.materials[primitive.materialIndex]));
                         LOG_WARN(Engine, "Mesh was resolved with a material override that does not exist in the registry.");
                     }
                 }
                 else {
-                    matID = materialManager->CreateImmutableMaterial(model->modelData.materials[primitive.materialIndex]);
+                    matID = materialManager->CreateImmutableMaterial(applyShaderOverrides(model->modelData.materials[primitive.materialIndex]));
                 }
             }
 
