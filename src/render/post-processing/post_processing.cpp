@@ -224,6 +224,9 @@ StringID PPTonemap(PostProcessContext& ctx, StringID input)
     float targetLuminance = ctx.config.exposureTargetLuminance;
     float bloomIntensity = ctx.config.bloomIntensity;
 
+    bool bBloomEnabled = ctx.config.bBloomEnabled;
+    bool bExposureEnabled = ctx.config.bExposureEnabled;
+
     float tonemapParams[6]{};
     switch (tonemapOperator) {
         case 1: tonemapParams[0] = ctx.config.hableParams.whitePoint; break;
@@ -241,25 +244,26 @@ StringID PPTonemap(PostProcessContext& ctx, StringID input)
         default: break;
     }
 
-    // CLEAR_COLOR_EMPTY: add support for HDR swapchain
+    // todo: add support for HDR swapchain
     graph.CreateTexture(SID("tonemap_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, width, height, 1}, CLEAR_COLOR_EMPTY, true);
     RenderPass& tonemapPass = graph.AddPass(SID("[Tonemap] SDR"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
     tonemapPass.ReadSampledImage(input);
-    // todo if either bloom or luminance dont exist, need to handle in shader
-    tonemapPass.ReadSampledImage(SID("bloom_chain"));
-    tonemapPass.ReadBuffer(SID("luminance_buffer"));
+    if (bBloomEnabled) { tonemapPass.ReadSampledImage(SID("bloom_chain")); }
+    if (bExposureEnabled) { tonemapPass.ReadBuffer(SID("luminance_buffer")); }
     tonemapPass.WriteStorageImage(SID("tonemap_output"));
-    tonemapPass.Execute([&graph, width, height, input, pipelines, tonemapOperator, targetLuminance, bloomIntensity, tonemapParams](VkCommandBuffer cmd) {
+    tonemapPass.Execute([&graph, width, height, input, pipelines, tonemapOperator, targetLuminance, bloomIntensity, tonemapParams, bBloomEnabled, bExposureEnabled](VkCommandBuffer cmd) {
         TonemapSDRPushConstant pc{
             .tonemapOperator = tonemapOperator,
             .targetLuminance = targetLuminance,
-            .luminanceBufferAddress = graph.GetBufferAddress(SID("luminance_buffer")),
-            .bloomImageIndex = graph.GetSampledImageViewDescriptorIndex(SID("bloom_chain")),
+            .luminanceBufferAddress = bExposureEnabled ? graph.GetBufferAddress(SID("luminance_buffer")) : 0,
+            .bloomImageIndex = bBloomEnabled ? graph.GetSampledImageViewDescriptorIndex(SID("bloom_chain")) : 0u,
             .bloomIntensity = bloomIntensity,
             .outputWidth = width,
             .outputHeight = height,
             .srcImageIndex = graph.GetSampledImageViewDescriptorIndex(input),
             .dstImageIndex = graph.GetStorageImageViewDescriptorIndex(SID("tonemap_output")),
+            .bBloomEnabled = bBloomEnabled ? 1 : 0,
+            .bExposureEnabled = bExposureEnabled ? 1 : 0,
         };
         memcpy(pc.params, tonemapParams, sizeof(pc.params));
 

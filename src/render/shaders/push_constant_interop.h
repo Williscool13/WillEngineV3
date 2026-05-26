@@ -531,6 +531,8 @@ SHADER_PUBLIC struct TonemapSDRPushConstant
     // AgX:     [0]=minEV, [1]=maxEV
     // Khronos: [0]=startCompression, [1]=desaturation
     SHADER_PUBLIC float params[6];
+    SHADER_PUBLIC int32_t bBloomEnabled;
+    SHADER_PUBLIC int32_t bExposureEnabled;
 };
 
 SHADER_PUBLIC struct BuildDirectIndirectPushConstant

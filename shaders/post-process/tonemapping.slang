@@ -195,11 +195,17 @@ void ComputeSDRTonemap(uniform TonemapSDRPushConstant pc, uint3 dtid : SV_Dispat
     int2 pixelCoord = int2(dtid.xy);
     float3 sceneColor = rdgTexturesFloat4[pc.srcImageIndex].Load(int3(pixelCoord, 0)).rgb;
 
-    float3 bloom = rdgTexturesFloat4[pc.bloomImageIndex].Load(int3(pixelCoord, 0)).rgb;
+    float3 bloom = float3(0.0, 0.0, 0.0);
+    if (pc.bBloomEnabled != 0) {
+        bloom = rdgTexturesFloat4[pc.bloomImageIndex].Load(int3(pixelCoord, 0)).rgb;
+    }
     float3 hdrColor = sceneColor + bloom * pc.bloomIntensity;
 
-    float avgLuminance = pc.luminanceBufferAddress[0];
-    float exposure = pc.targetLuminance / max(avgLuminance, 0.001);
+    float exposure = 1.0;
+    if (pc.bExposureEnabled != 0) {
+        float avgLuminance = pc.luminanceBufferAddress[0];
+        exposure = pc.targetLuminance / max(avgLuminance, 0.001);
+    }
     float3 exposedColor = hdrColor * exposure;
 
     float3 ldrColor;
