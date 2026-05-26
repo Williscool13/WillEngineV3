@@ -91,7 +91,7 @@ void ComputeMain(uniform ReSTIRDIGeneratePushConstant pc, uint3 threadID : SV_Di
             if (ReservoirAddSample(accum, r, w_i, uSelect))
             {
                 r.lightIdx = uint(lightIdx);
-                r.sampleOffset = EncodeSampleOffset(Xi, vs);
+                r.sampleOffsetPacked = EncodeSampleOffset(Xi, vs);
             }
         }
 
@@ -153,7 +153,7 @@ void ComputeMain(uniform ReSTIRDIGeneratePushConstant pc, uint3 threadID : SV_Di
             if (ReservoirAddSample(accum, r, w_i, uSelect) && bestLightIdx >= 0)
             {
                 r.lightIdx = uint(bestLightIdx);
-                r.sampleOffset = EncodeSampleOffset(Xi, bestVS);
+                r.sampleOffsetPacked = EncodeSampleOffset(Xi, bestVS);
             }
         }
 
@@ -177,6 +177,7 @@ void ComputeMain(uniform ReSTIRDIGeneratePushConstant pc, uint3 threadID : SV_Di
                 ReservoirFinalise(r, accum, p_hat_yStar);
             }
         }
+        r.M = uint(M);
     }
 
     pc.reservoirBuffer[pixel.y * pc.renderExtent.x + pixel.x] = r;

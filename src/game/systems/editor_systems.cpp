@@ -558,6 +558,8 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
         }
         if (ImGui::CollapsingHeader("ReSTIR DI")) {
             if (ImGui::Button("Reservoir Light Index")) setDebugTarget("depth_target", DebugTransformationType::ReservoirLightIdx, Core::DebugViewAspect::Depth);
+            if (ImGui::Button("Temporal Reservoir Light Index")) setDebugTarget("depth_target", DebugTransformationType::ReservoirTemporalLightIdx, Core::DebugViewAspect::Depth);
+            if (ImGui::Button("Temporal Reservoir W")) setDebugTarget("depth_target", DebugTransformationType::ReservoirTemporalW, Core::DebugViewAspect::Depth);
         }
         if (ImGui::CollapsingHeader("G-Buffer")) {
             if (ImGui::Button("Depth Target")) setDebugTarget("depth_target", DebugTransformationType::DepthRemap, Core::DebugViewAspect::Depth);

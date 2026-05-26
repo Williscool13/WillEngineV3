@@ -62,6 +62,8 @@ SHADER_PUBLIC SHADER_ENUM DebugTransformationType
     VisBucketShading = 15,
     VisBucketLighting = 16,
     ReservoirLightIdx = 17,
+    ReservoirTemporalLightIdx = 18,
+    ReservoirTemporalW = 19,
 };
 
 SHADER_PUBLIC struct Frustum

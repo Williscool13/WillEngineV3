@@ -144,6 +144,24 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
             }
             break;
         }
+        case 18: { // ReservoirTemporalLightIdx - hash-color the selected light index from the temporal reservoir buffer
+            uint pixelIdx = uint(threadID.y) * uint(pc.dstExtent.x) + uint(threadID.x);
+            Reservoir r = pc.reservoirTemporalBuffer[pixelIdx];
+            if (r.lightIdx == ~0u) {
+                srcPixel.xyz = float3(0.0, 0.0, 0.0);
+            } else {
+                uint h = (r.lightIdx + 1u) * 2654435761u;
+                srcPixel.xyz = float3(float(h >> 24), float((h >> 16) & 0xFF), float((h >> 8) & 0xFF)) / 255.0;
+            }
+            break;
+        }
+        case 19: { // ReservoirTemporalW - visualize W from temporal reservoir; remapped via W/(W+1)
+            uint pixelIdx = uint(threadID.y) * uint(pc.dstExtent.x) + uint(threadID.x);
+            Reservoir r = pc.reservoirTemporalBuffer[pixelIdx];
+            float w = (r.lightIdx != ~0u) ? r.W / (r.W + 1.0) : 0.0;
+            srcPixel.xyz = float3(w, w, w);
+            break;
+        }
     }
 
     rdgStorageFloat4[pc.outputImageIndex][threadID.xy] = srcPixel;

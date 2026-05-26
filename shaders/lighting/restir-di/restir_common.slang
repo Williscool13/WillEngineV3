@@ -91,23 +91,37 @@ public float HashStep(inout uint h)
 public Reservoir ReservoirEmpty()
 {
     Reservoir r;
-    r.sampleOffset = float2(0.0, 0.0);
+    r.sampleOffsetPacked = 0u;
     r.lightIdx = ~0u;
     r.W = 0.0;
+    r.M = 0u;
     return r;
 }
 
-/** Encodes a view-space sample position into the light-local 2D offset stored in the reservoir. */
-public float2 EncodeSampleOffset(float3 samplePos, AreaLightVS vs)
+/**
+ * Encodes a view-space sample position as snorm16x2 packed into a uint.
+ * Normalizes by half-extents so the stored value is in [-1, 1] along each axis.
+ */
+public uint EncodeSampleOffset(float3 samplePos, AreaLightVS vs)
 {
     float3 delta = samplePos - vs.center;
-    return float2(dot(delta, vs.right), dot(delta, vs.up));
+    float u = clamp(dot(delta, vs.right) / vs.halfWidth, -1.0, 1.0);
+    float v = clamp(dot(delta, vs.up) / vs.halfHeight, -1.0, 1.0);
+    uint ux = uint(int(u * 32767.0) & 0xFFFF);
+    uint vy = uint(int(v * 32767.0) & 0xFFFF);
+    return ux | (vy << 16);
 }
 
-/** Reconstructs the view-space sample position from a reservoir's stored offset. */
+/**
+ * Reconstructs the view-space sample position from a reservoir's packed snorm16x2 offset.
+ */
 public float3 DecodeSamplePos(Reservoir r, AreaLightVS vs)
 {
-    return vs.center + r.sampleOffset.x * vs.right + r.sampleOffset.y * vs.up;
+    int ix = int(r.sampleOffsetPacked << 16) >> 16;
+    int iy = int(r.sampleOffsetPacked) >> 16;
+    float u = max(float(ix) / 32767.0, -1.0);
+    float v = max(float(iy) / 32767.0, -1.0);
+    return vs.center + u * vs.halfWidth * vs.right + v * vs.halfHeight * vs.up;
 }
 
 /**

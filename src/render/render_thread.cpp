@@ -515,6 +515,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             };
 
             SetupReSTIRPass(*renderGraph, pipelineManager, viewFamily, renderExtent, deferredResolveTargets, 0, renderArena.Get(), frameNumber);
+            SetupReSTIRTemporalPass(*renderGraph, pipelineManager, renderExtent, deferredResolveTargets, 0, renderArena.Get(), frameNumber);
             SetupVisibilityLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, deferredResolveTargets, 0, renderArena.Get(), frameNumber);
             //SetupDeferredResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, deferredResolveTargets, 0);
         }
@@ -648,6 +649,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                         .modelBuffer = renderGraph->TryGetBufferAddress(GEOMETRY_MODEL_BUFFER),
                         .materialBuffer = renderGraph->TryGetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
                         .reservoirBuffer = renderGraph->TryGetBufferAddress(SID("restir_reservoir_buffer")),
+                        .reservoirTemporalBuffer = renderGraph->TryGetBufferAddress(SID("restir_reservoir_temporal")),
                         .srcExtent = {dims.width, dims.height},
                         .dstExtent = {renderExtent[0], renderExtent[1]},
                         .nearPlane = viewFamily.mainView.currentViewData.nearPlane,

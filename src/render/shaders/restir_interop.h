@@ -9,28 +9,28 @@
 module restir_interop;
 #define SHADER_PUBLIC public
 #else
-#include <glm/glm.hpp>
 #include <cstdint>
 
 using uint = uint32_t;
-using float2 = glm::vec2;
 #define SHADER_PUBLIC
 #endif // __SLANG__
 
 /**
  * Per-pixel reservoir written by the ReSTIR DI generate pass and read by the shade pass.
- * 16 bytes, naturally aligned.
  *
- * sampleOffset is the (u, v) offset from the light center along its right/up axes (view space, world units).
- * Reconstruct samplePos = lightCenter + sampleOffset.x * lightRight + sampleOffset.y * lightUp.
+ * sampleOffsetPacked: snorm16x2 encoding of the light-local sample position, normalized by half-extents.
+ *   u = dot(samplePos - lightCenter, lightRight) / halfWidth  in [-1, 1]
+ *   v = dot(samplePos - lightCenter, lightUp)    / halfHeight in [-1, 1]
+ *   Packed as: lower 16 bits = u, upper 16 bits = v (both signed, scaled by 32767).
  * lightIdx == ~0u indicates an empty reservoir.
- * wSum and M are transient locals during generation and are not stored.
+ * M is the candidate count; used by temporal/spatial reuse combination.
  */
 SHADER_PUBLIC struct Reservoir
 {
-    SHADER_PUBLIC float2 sampleOffset;
+    SHADER_PUBLIC uint sampleOffsetPacked;
     SHADER_PUBLIC uint lightIdx;
     SHADER_PUBLIC float W;
+    SHADER_PUBLIC uint M;
 };
 
 #endif //WILL_ENGINE_RETIR_INTEROP_H

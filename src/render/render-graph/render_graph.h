@@ -64,6 +64,8 @@ public: // Resource registration
      */
     void AliasTexture(StringID aliasId, StringID existingId);
 
+    void AliasBuffer(StringID aliasId, StringID existingId);
+
     void CreateBuffer(StringID bufferId, VkDeviceSize size, bool bIsViewportScaled = false, bool bCanAlias = true);
 
     void ImportTexture(StringID textureId, VkImage image, VkImageView view, const TextureInfo& info, VkImageUsageFlags usage, VkImageLayout initialLayout, VkPipelineStageFlags2 initialStage,

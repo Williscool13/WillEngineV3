@@ -1479,6 +1479,13 @@ void RenderGraph::AliasTexture(const StringID aliasId, const StringID existingId
     textureNameToIndex[aliasId] = *idx;
 }
 
+void RenderGraph::AliasBuffer(const StringID aliasId, const StringID existingId)
+{
+    uint32_t* idx = bufferNameToIndex.Find(existingId);
+    ENGINE_ASSERT(Renderer, idx != nullptr, "Aliasing buffer failed because existing buffer doesn't exist");
+    bufferNameToIndex[aliasId] = *idx;
+}
+
 void RenderGraph::CreateBuffer(StringID bufferId, VkDeviceSize size, bool bIsViewportScaled, bool bCanAlias)
 {
     BufferResource* buf = GetOrCreateBuffer(bufferId);
