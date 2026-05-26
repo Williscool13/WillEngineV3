@@ -42,8 +42,10 @@ void ComputeMain(uniform ReSTIRDIGeneratePushConstant pc, uint3 threadID : SV_Di
     float roughness = max(li.roughness, 0.045);
     float3 F0 = lerp(float3(0.04, 0.04, 0.04), li.albedo.xyz, li.metallic);
 
-    const int M_light = 8;
+    // M_i: number of candidates per strategy
+    const int M_light = 32;
     const int M_brdf = 1;
+    const int M = M_light + M_brdf;
 
     int lightCount = pc.lightData->areaLightCount;
 
@@ -65,28 +67,31 @@ void ComputeMain(uniform ReSTIRDIGeneratePushConstant pc, uint3 threadID : SV_Di
             int lightIdx = clamp(int(uLight * float(lightCount)), 0, lightCount - 1);
             AreaLightData al = pc.lightData->areaLights[lightIdx];
             AreaLightVS vs = TransformAreaLight(al, view);
-            float3 samplePos = SampleAreaLightPos(vs, uU, uV);
-            AreaLightSample s = EvalAreaLightSample(vs, samplePos, viewPosition, N, al.range);
+            float3 Xi = SampleAreaLightPos(vs, uU, uV);
+            AreaLightSample s = EvalAreaLightSample(vs, Xi, viewPosition, N, al.range);
 
-            float pHat = 0.0;
+            // p_hat(Xi): target PDF (integrand without visibility)
+            float p_hat_Xi = 0.0;
             if (s.cosShade > 0.0 && s.cosLight > 0.0 && s.attenuation > 0.0)
             {
-                float3 Hal = normalize(V + s.L);
-                float3 Fal = F_SCHLICK(V, Hal, F0);
-                float3 kDal = (1.0 - Fal) * (1.0 - li.metallic);
-                float3 alColor = UnpackUnorm4x8(al.packedColor).rgb;
+                float3 H = normalize(V + s.L);
+                float3 F = F_SCHLICK(V, H, F0);
+                float3 kD = (1.0 - F) * (1.0 - li.metallic);
+                float3 lightColor = UnpackUnorm4x8(al.packedColor).rgb;
                 float geomTerm = s.cosLight / max(s.dist * s.dist, 0.0001);
-                float3 brdfCos = (kDal * li.albedo.xyz + Fal) * s.cosShade * geomTerm * al.intensity * alColor * s.attenuation;
-                pHat = dot(brdfCos, float3(0.2126, 0.7152, 0.0722));
+                float3 brdfCos = (kD * li.albedo.xyz + F) * s.cosShade * geomTerm * al.intensity * lightColor * s.attenuation;
+                p_hat_Xi = dot(brdfCos, float3(0.2126, 0.7152, 0.0722));
             }
 
-            float pLight = 1.0 / (float(lightCount) * vs.area);
-            float pBrdf = GGXPdf(N, V, s.L, roughness);
-            float misWeight = pHat / (float(M_light) * pLight + float(M_brdf) * pBrdf);
-            if (ReservoirAddSample(accum, r, misWeight, uSelect))
+            // Talbot MIS: w_i = p_hat(Xi) / (M_light * p_light(Xi) + M_brdf * p_brdf(Xi))
+            float p_light = 1.0 / (float(lightCount) * vs.area);
+            float p_brdf = GGXPdf(N, V, s.L, roughness);
+            float denom = float(M_light) * p_light + float(M_brdf) * p_brdf;
+            float w_i = (denom > 0.0) ? (p_hat_Xi / denom) : 0.0;
+            if (ReservoirAddSample(accum, r, w_i, uSelect))
             {
                 r.lightIdx = uint(lightIdx);
-                r.sampleOffset = EncodeSampleOffset(samplePos, vs);
+                r.sampleOffset = EncodeSampleOffset(Xi, vs);
             }
         }
 
@@ -97,71 +102,79 @@ void ComputeMain(uniform ReSTIRDIGeneratePushConstant pc, uint3 threadID : SV_Di
             float uXi1 = HashStep(h);
             float uSelect = HashStep(h);
 
-            float brdfPdf;
-            float3 brdfL = ImportanceSampleGGX(float2(uXi0, uXi1), N, V, roughness, brdfPdf);
+            float p_brdf_sample;
+            float3 brdfL = ImportanceSampleGGX(float2(uXi0, uXi1), N, V, roughness, p_brdf_sample);
 
-            if (dot(N, brdfL) <= 0.0 || brdfPdf <= 0.0) { continue; }
-
-            float bestT = 1e30;
+            float p_hat_Xi = 0.0;
             int bestLightIdx = -1;
+            float3 Xi = float3(0.0, 0.0, 0.0);
+            float p_light = 0.0;
+            AreaLightVS bestVS = (AreaLightVS)0;
 
-            for (int j = 0; j < lightCount; j++)
+            if (dot(N, brdfL) > 0.0 && p_brdf_sample > 0.0)
             {
-                AreaLightVS vs = TransformAreaLight(pc.lightData->areaLights[j], view);
-                float t;
-                if (RayIntersectQuad(viewPosition, brdfL, vs.center, vs.normal, vs.right, vs.up, vs.halfWidth, vs.halfHeight, t) && t < bestT)
+                float bestT = 1e30;
+                for (int j = 0; j < lightCount; j++)
                 {
-                    bestT = t;
-                    bestLightIdx = j;
+                    AreaLightVS vs = TransformAreaLight(pc.lightData->areaLights[j], view);
+                    float t;
+                    if (RayIntersectQuad(viewPosition, brdfL, vs.center, vs.normal, vs.right, vs.up, vs.halfWidth, vs.halfHeight, t) && t < bestT)
+                    {
+                        bestT = t;
+                        bestLightIdx = j;
+                        bestVS = vs;
+                    }
+                }
+
+                if (bestLightIdx >= 0)
+                {
+                    AreaLightData al = pc.lightData->areaLights[bestLightIdx];
+                    Xi = viewPosition + brdfL * bestT;
+                    AreaLightSample s = EvalAreaLightSample(bestVS, Xi, viewPosition, N, al.range);
+                    p_light = 1.0 / (float(lightCount) * bestVS.area);
+
+                    // p_hat(Xi): target PDF (integrand without visibility)
+                    if (s.cosLight > 0.0 && s.attenuation > 0.0)
+                    {
+                        float3 H = normalize(V + brdfL);
+                        float3 F = F_SCHLICK(V, H, F0);
+                        float3 kD = (1.0 - F) * (1.0 - li.metallic);
+                        float3 lightColor = UnpackUnorm4x8(al.packedColor).rgb;
+                        float geomTerm = s.cosLight / max(s.dist * s.dist, 0.0001);
+                        float3 brdfCos = (kD * li.albedo.xyz + F) * s.cosShade * geomTerm * al.intensity * lightColor * s.attenuation;
+                        p_hat_Xi = dot(brdfCos, float3(0.2126, 0.7152, 0.0722));
+                    }
                 }
             }
 
-            if (bestLightIdx < 0) { continue; }
-
-            AreaLightData al = pc.lightData->areaLights[bestLightIdx];
-            AreaLightVS vs = TransformAreaLight(al, view);
-            float3 samplePos = viewPosition + brdfL * bestT;
-            AreaLightSample s = EvalAreaLightSample(vs, samplePos, viewPosition, N, al.range);
-
-            float pHat = 0.0;
-            if (s.cosLight > 0.0 && s.attenuation > 0.0)
-            {
-                float3 Hal = normalize(V + brdfL);
-                float3 Fal = F_SCHLICK(V, Hal, F0);
-                float3 kDal = (1.0 - Fal) * (1.0 - li.metallic);
-                float3 alColor = UnpackUnorm4x8(al.packedColor).rgb;
-                float geomTerm = s.cosLight / max(s.dist * s.dist, 0.0001);
-                float3 brdfCos = (kDal * li.albedo.xyz + Fal) * s.cosShade * geomTerm * al.intensity * alColor * s.attenuation;
-                pHat = dot(brdfCos, float3(0.2126, 0.7152, 0.0722));
-            }
-
-            float pLight = 1.0 / (float(lightCount) * vs.area);
-            float misWeight = pHat / (float(M_light) * pLight + float(M_brdf) * brdfPdf);
-            if (ReservoirAddSample(accum, r, misWeight, uSelect))
+            // Talbot MIS: w_i = p_hat(Xi) / (M_light * p_light(Xi) + M_brdf * p_brdf(Xi))
+            float denom = float(M_light) * p_light + float(M_brdf) * p_brdf_sample;
+            float w_i = (denom > 0.0) ? (p_hat_Xi / denom) : 0.0;
+            if (ReservoirAddSample(accum, r, w_i, uSelect) && bestLightIdx >= 0)
             {
                 r.lightIdx = uint(bestLightIdx);
-                r.sampleOffset = EncodeSampleOffset(samplePos, vs);
+                r.sampleOffset = EncodeSampleOffset(Xi, bestVS);
             }
         }
 
-        // Finalise W using pHat re-evaluated at the winner
+        // Finalise W = wSum / p_hat(y*)
         if (r.lightIdx != ~0u)
         {
             AreaLightData al = pc.lightData->areaLights[r.lightIdx];
             AreaLightVS vs = TransformAreaLight(al, view);
-            float3 samplePos = DecodeSamplePos(r, vs);
-            AreaLightSample s = EvalAreaLightSample(vs, samplePos, viewPosition, N, al.range);
+            float3 yStar = DecodeSamplePos(r, vs);
+            AreaLightSample s = EvalAreaLightSample(vs, yStar, viewPosition, N, al.range);
 
             if (s.cosShade > 0.0 && s.cosLight > 0.0)
             {
-                float3 Hal = normalize(V + s.L);
-                float3 Fal = F_SCHLICK(V, Hal, F0);
-                float3 kDal = (1.0 - Fal) * (1.0 - li.metallic);
-                float3 alColor = UnpackUnorm4x8(al.packedColor).rgb;
+                float3 H = normalize(V + s.L);
+                float3 F = F_SCHLICK(V, H, F0);
+                float3 kD = (1.0 - F) * (1.0 - li.metallic);
+                float3 lightColor = UnpackUnorm4x8(al.packedColor).rgb;
                 float geomTerm = s.cosLight / max(s.dist * s.dist, 0.0001);
-                float3 brdfCos = (kDal * li.albedo.xyz + Fal) * s.cosShade * geomTerm * al.intensity * alColor * s.attenuation;
-                float pHatWinner = dot(brdfCos, float3(0.2126, 0.7152, 0.0722));
-                ReservoirFinalise(r, accum, pHatWinner);
+                float3 brdfCos = (kD * li.albedo.xyz + F) * s.cosShade * geomTerm * al.intensity * lightColor * s.attenuation;
+                float p_hat_yStar = dot(brdfCos, float3(0.2126, 0.7152, 0.0722));
+                ReservoirFinalise(r, accum, p_hat_yStar);
             }
         }
     }

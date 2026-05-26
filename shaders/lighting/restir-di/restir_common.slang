@@ -152,14 +152,20 @@ public bool ReservoirAddSample(inout ReservoirAccum accum, inout Reservoir r, fl
 
 /**
  * Finalises W after all candidates have been streamed.
+ * Talbot MIS: w_i = p_hat/denom absorbs M, so W = wSum / p_hat(y*) with no explicit M divisor.
+ * r.M is stored separately for use in reuse passes (temporal/spatial combination).
  *
  * @param r Reservoir to finalise.
  * @param accum Completed accumulator.
- * @param targetPdfY p_hat evaluated at the selected sample.
+ * @param p_hat_yStar p_hat evaluated at the selected sample y*.
  */
-public void ReservoirFinalise(inout Reservoir r, ReservoirAccum accum, float targetPdfY)
+public void ReservoirFinalise(inout Reservoir r, ReservoirAccum accum, float p_hat_yStar)
 {
-    r.W = (targetPdfY > 0.0) ? (accum.wSum / targetPdfY) : 0.0;
+    if (p_hat_yStar <= 0.0) {
+        r.W = 0.0;
+    } else {
+        r.W = accum.wSum / p_hat_yStar;
+    }
 }
 
 /**
