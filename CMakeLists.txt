@@ -368,6 +368,7 @@ add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/pbr_functions.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/packing_functions.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/bindless_declarations.slang")
 add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/procedural_texture_declarations.slang")
+add_shader_include("${CMAKE_SOURCE_DIR}/shaders/include/restir_common.slang")
 
 compile_shaders(will-engine
         ${CMAKE_SOURCE_DIR}/shaders/debug_visualize.slang compute ComputeMain debug_visualize

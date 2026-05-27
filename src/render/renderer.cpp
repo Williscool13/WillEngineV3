@@ -872,22 +872,28 @@ void SetupReSTIRTemporalPass(RenderGraph& graph,
     RenderPass& pass = graph.AddPass(SID("ReSTIR DI Temporal"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
     pass.ReadBuffer(SCENE_DATA_BUFFER);
     pass.ReadBuffer(SID("light_data"));
+    pass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
     pass.ReadBuffer(SID("restir_reservoir_buffer"));
     pass.ReadBuffer(SID("restir_reservoir_history"));
+    pass.ReadSampledImage(targets.visibility);
     pass.ReadSampledImage(targets.gbufferOne);
+    pass.ReadSampledImage(targets.gbufferTwo);
     pass.ReadSampledImage(targets.depthStencil);
     pass.WriteBuffer(SID("restir_reservoir_temporal"));
-    pass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, gbufferOne = targets.gbufferOne, depth = targets.depthStencil](VkCommandBuffer cmd) {
+    pass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthStencil](VkCommandBuffer cmd) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("restir_di_temporal"));
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
         ReSTIRDITemporalPushConstant pc{
             .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
             .lightData = graph.GetBufferAddress(SID("light_data")),
+            .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
             .currentBuffer = graph.GetBufferAddress(SID("restir_reservoir_buffer")),
             .historyBuffer = graph.GetBufferAddress(SID("restir_reservoir_history")),
             .outputBuffer = graph.GetBufferAddress(SID("restir_reservoir_temporal")),
+            .visibilityBufferIndex = graph.GetSampledImageViewDescriptorIndex(visibility),
             .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
+            .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
             .depthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(depth),
             .renderExtent = {renderExtent[0], renderExtent[1]},
             .sceneDataIndex = sceneIndex,

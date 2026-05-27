@@ -61,7 +61,7 @@ public AreaLightSample EvalAreaLightSample(AreaLightVS vs, float3 samplePos, flo
     AreaLightSample s;
     s.samplePos = samplePos;
     float3 toSample = samplePos - shadingPos;
-    s.dist = length(toSample);
+    s.dist = max(length(toSample), 1e-5);
     s.L = toSample / s.dist;
     s.cosShade = max(dot(N, s.L), 0.0);
     s.cosLight = max(dot(-vs.normal, s.L), 0.0);
@@ -292,7 +292,7 @@ public float3 ImportanceSampleGGX(float2 xi, float3 N, float3 V, float roughness
 public bool RayIntersectQuad(float3 rayOrigin, float3 rayDir, float3 center, float3 normal, float3 right, float3 up, float halfWidth, float halfHeight, out float t)
 {
     float denom = dot(normal, rayDir);
-    if (abs(denom) < 0.0001) { t = -1.0; return false; }
+    if (denom >= 0.0) { t = -1.0; return false; }
     t = dot(normal, center - rayOrigin) / denom;
     if (t <= 0.0) { return false; }
     float3 hitPos = rayOrigin + t * rayDir;

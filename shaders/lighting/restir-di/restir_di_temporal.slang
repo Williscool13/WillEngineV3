@@ -6,6 +6,7 @@ import restir_interop;
 
 import packing_functions;
 import shader_functions;
+import visibility_lighting_common;
 import bindless_declarations;
 import restir_common;
 
@@ -17,6 +18,9 @@ void ComputeMain(uniform ReSTIRDITemporalPushConstant pc, uint3 threadID : SV_Di
     }
 
     Reservoir current = pc.currentBuffer[pixel.y * pc.renderExtent.x + pixel.x];
+
+    //pc.outputBuffer[pixel.y * pc.renderExtent.x + pixel.x] = current;
+    //return;
 
     // No valid sample
     if (current.lightIdx == ~0u) {
@@ -72,40 +76,36 @@ void ComputeMain(uniform ReSTIRDITemporalPushConstant pc, uint3 threadID : SV_Di
         return;
     }
 
-    // Reconstruct current pixel's shading data to evaluate p_hat at each reservoir's sample.
+    // Reconstruct full material at the current pixel for consistent p_hat evaluation.
+    LightingInputs li = ReconstructLightingInputs(pixel, pc.visibilityBufferIndex, ~0x0, pc.instanceBuffer, pc.gbufferOneIndex, pc.gbufferTwoIndex, ~0u);
+    if (!li.valid) {
+        pc.outputBuffer[pixel.y * pc.renderExtent.x + pixel.x] = current;
+        return;
+    }
+
     float3 viewPosition = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, uv, viewSpaceDepth);
-    float3 N = currentN;
+    float3 N = normalize(li.viewNormal);
+    float3 V = normalize(-viewPosition);
+    float roughness = max(li.roughness, 0.045);
+    float3 F0 = lerp(float3(0.04, 0.04, 0.04), li.albedo.xyz, li.metallic);
 
     // Evaluate p_hat for the current reservoir's sample at the current pixel's shading point.
     AreaLightData alCurrent = pc.lightData->areaLights[current.lightIdx];
     AreaLightVS vsCurrent = TransformAreaLight(alCurrent, view);
     float3 yStarCurrent = DecodeSamplePos(current, vsCurrent);
     AreaLightSample sCurrent = EvalAreaLightSample(vsCurrent, yStarCurrent, viewPosition, N, alCurrent.range);
-
-    float p_hat_current = 0.0;
-    if (sCurrent.cosShade > 0.0 && sCurrent.cosLight > 0.0 && sCurrent.attenuation > 0.0) {
-        float3 lightColor = UnpackUnorm4x8(alCurrent.packedColor).rgb;
-        float geomTerm = sCurrent.cosLight / max(sCurrent.dist * sCurrent.dist, 0.0001);
-        float3 contrib = sCurrent.cosShade * geomTerm * alCurrent.intensity * lightColor * sCurrent.attenuation;
-        p_hat_current = dot(contrib, float3(0.2126, 0.7152, 0.0722));
-    }
+    float3 currentLightColor = UnpackUnorm4x8(alCurrent.packedColor).rgb;
+    float p_hat_current = EvalPHat(sCurrent, V, N, li.albedo.xyz, F0, li.metallic, roughness, currentLightColor, alCurrent.intensity);
 
     // Evaluate p_hat for the history reservoir's sample at the current pixel's shading point.
     AreaLightData alHistory = pc.lightData->areaLights[history.lightIdx];
     AreaLightVS vsHistory = TransformAreaLight(alHistory, view);
     float3 yStarHistory = DecodeSamplePos(history, vsHistory);
     AreaLightSample sHistory = EvalAreaLightSample(vsHistory, yStarHistory, viewPosition, N, alHistory.range);
+    float3 historyLightColor = UnpackUnorm4x8(alHistory.packedColor).rgb;
+    float p_hat_history = EvalPHat(sHistory, V, N, li.albedo.xyz, F0, li.metallic, roughness, historyLightColor, alHistory.intensity);
 
-    float p_hat_history = 0.0;
-    if (sHistory.cosShade > 0.0 && sHistory.cosLight > 0.0 && sHistory.attenuation > 0.0) {
-        float3 lightColor = UnpackUnorm4x8(alHistory.packedColor).rgb;
-        float geomTerm = sHistory.cosLight / max(sHistory.dist * sHistory.dist, 0.0001);
-        float3 contrib = sHistory.cosShade * geomTerm * alHistory.intensity * lightColor * sHistory.attenuation;
-        p_hat_history = dot(contrib, float3(0.2126, 0.7152, 0.0722));
-    }
-
-    // WRS for RIS
-    // w_j = p_hat(y_j, current shading point) * W_j * r_j.M  (reuse combination formula)
+    // WRS combination: w_j = p_hat(y_j at current shading point) * W_j * M_j
     ReservoirAccum accum = ReservoirAccumEmpty();
     Reservoir combined = ReservoirEmpty();
 
@@ -131,22 +131,14 @@ void ComputeMain(uniform ReSTIRDITemporalPushConstant pc, uint3 threadID : SV_Di
 
     combined.M = current.M + clampedHistoryM;
 
-    // Finalise: re-evaluate p_hat at winner.
-    bool bHasLight = combined.lightIdx != ~0u;
-    if (bHasLight) {
+    // Finalise: re-evaluate p_hat at the winner.
+    if (combined.lightIdx != ~0u) {
         AreaLightData alWinner = pc.lightData->areaLights[combined.lightIdx];
         AreaLightVS vsWinner = TransformAreaLight(alWinner, view);
         float3 yStar = DecodeSamplePos(combined, vsWinner);
         AreaLightSample sWinner = EvalAreaLightSample(vsWinner, yStar, viewPosition, N, alWinner.range);
-
-        float p_hat_winner = 0.0;
-        if (sWinner.cosShade > 0.0 && sWinner.cosLight > 0.0 && sWinner.attenuation > 0.0) {
-            float3 lightColor = UnpackUnorm4x8(alWinner.packedColor).rgb;
-            float geomTerm = sWinner.cosLight / max(sWinner.dist * sWinner.dist, 0.0001);
-            float3 contrib = sWinner.cosShade * geomTerm * alWinner.intensity * lightColor * sWinner.attenuation;
-            p_hat_winner = dot(contrib, float3(0.2126, 0.7152, 0.0722));
-        }
-
+        float3 winnerLightColor = UnpackUnorm4x8(alWinner.packedColor).rgb;
+        float p_hat_winner = EvalPHat(sWinner, V, N, li.albedo.xyz, F0, li.metallic, roughness, winnerLightColor, alWinner.intensity);
         ReservoirFinalise(combined, accum, p_hat_winner, float(combined.M));
     }
 
