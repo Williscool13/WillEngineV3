@@ -414,6 +414,8 @@ void PipelineManager::RegisterPipelines()
                             sizeof(ReSTIRDIGeneratePushConstant), PipelineCategory::Critical);
     RegisterComputePipeline(SID("restir_di_temporal"), src / "restir_di_temporal_compute.spv",
                             sizeof(ReSTIRDITemporalPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline(SID("restir_di_spatial"), src / "restir_di_spatial_compute.spv",
+                            sizeof(ReSTIRDISpatialPushConstant), PipelineCategory::Critical);
 
     RegisterComputePipeline("default_pbr"_sid, src / "lighting_pbr_compute.spv",
                             sizeof(LightingResolvePushConstant), PipelineCategory::Critical);

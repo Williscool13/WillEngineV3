@@ -45,7 +45,8 @@ void ComputeMain(uniform LightingResolvePushConstant pc, uint3 threadID : SV_Dis
 
     float3 directLight = float3(0.0);
 
-    if (pc.reservoirBuffer != 0)
+    bool bAnyLight = pc.reservoirBuffer != 0;
+    if (bAnyLight)
     {
         uint pixelIdx = pixel.y * uint(scene.mainRenderTargetSize.x) + pixel.x;
         Reservoir r = pc.reservoirBuffer[pixelIdx];

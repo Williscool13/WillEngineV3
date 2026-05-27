@@ -35,6 +35,8 @@ void ComputeMain(uniform ReSTIRDITemporalPushConstant pc, uint3 threadID : SV_Di
 
     bool validHistory = all(historyUV >= float2(0.0)) && all(historyUV <= float2(1.0));
 
+    // todo disocclusion rejection
+    // todo velocity mismatch rejection
     if (!validHistory) {
         pc.outputBuffer[pixel.y * pc.renderExtent.x + pixel.x] = current;
         return;

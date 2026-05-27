@@ -410,6 +410,7 @@ compile_shaders(will-engine
         # ReSTIR
         ${CMAKE_SOURCE_DIR}/shaders/lighting/restir-di/restir_di_main.slang compute ComputeMain restir_di_main
         ${CMAKE_SOURCE_DIR}/shaders/lighting/restir-di/restir_di_temporal.slang compute ComputeMain restir_di_temporal
+        ${CMAKE_SOURCE_DIR}/shaders/lighting/restir-di/restir_di_spatial.slang compute ComputeMain restir_di_spatial
 
         ${CMAKE_SOURCE_DIR}/shaders/shadows_resolve.slang compute ComputeMain shadows_resolve
 

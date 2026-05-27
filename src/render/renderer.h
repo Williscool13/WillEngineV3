@@ -78,6 +78,14 @@ void SetupReSTIRTemporalPass(RenderGraph& graph,
                              Core::Arena& arena,
                              uint64_t frameNumber);
 
+void SetupReSTIRSpatialPass(RenderGraph& graph,
+                            PipelineManager* pipelineManager,
+                            Core::Array<uint32_t, 2> renderExtent,
+                            const DeferredResolveTargets& targets,
+                            uint32_t sceneIndex,
+                            Core::Arena& arena,
+                            uint64_t frameNumber);
+
 void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                                         PipelineManager* pipelineManager,
                                         const Core::ViewFamily& viewFamily,

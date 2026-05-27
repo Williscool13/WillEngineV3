@@ -162,6 +162,31 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
             srcPixel.xyz = float3(w, w, w);
             break;
         }
+        case 20: { // ReservoirGenerateW - visualize W from generate reservoir; remapped via W/(W+1)
+            uint pixelIdx = uint(threadID.y) * uint(pc.dstExtent.x) + uint(threadID.x);
+            Reservoir r = pc.reservoirBuffer[pixelIdx];
+            float w = (r.lightIdx != ~0u) ? r.W / (r.W + 1.0) : 0.0;
+            srcPixel.xyz = float3(w, w, w);
+            break;
+        }
+        case 21: { // ReservoirSpatialLightIdx - hash-color the selected light index from the spatial reservoir buffer
+            uint pixelIdx = uint(threadID.y) * uint(pc.dstExtent.x) + uint(threadID.x);
+            Reservoir r = pc.reservoirSpatialBuffer[pixelIdx];
+            if (r.lightIdx == ~0u) {
+                srcPixel.xyz = float3(0.0, 0.0, 0.0);
+            } else {
+                uint h = (r.lightIdx + 1u) * 2654435761u;
+                srcPixel.xyz = float3(float(h >> 24), float((h >> 16) & 0xFF), float((h >> 8) & 0xFF)) / 255.0;
+            }
+            break;
+        }
+        case 22: { // ReservoirSpatialW - visualize W from spatial reservoir; remapped via W/(W+1)
+            uint pixelIdx = uint(threadID.y) * uint(pc.dstExtent.x) + uint(threadID.x);
+            Reservoir r = pc.reservoirSpatialBuffer[pixelIdx];
+            float w = (r.lightIdx != ~0u) ? r.W / (r.W + 1.0) : 0.0;
+            srcPixel.xyz = float3(w, w, w);
+            break;
+        }
     }
 
     rdgStorageFloat4[pc.outputImageIndex][threadID.xy] = srcPixel;
