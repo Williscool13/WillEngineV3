@@ -35,8 +35,6 @@ void ComputeMain(uniform ReSTIRDITemporalPushConstant pc, uint3 threadID : SV_Di
 
     bool validHistory = all(historyUV >= float2(0.0)) && all(historyUV <= float2(1.0));
 
-    // todo disocclusion rejection
-    // todo velocity mismatch rejection
     if (!validHistory) {
         pc.outputBuffer[pixel.y * pc.renderExtent.x + pixel.x] = current;
         return;
@@ -44,6 +42,28 @@ void ComputeMain(uniform ReSTIRDITemporalPushConstant pc, uint3 threadID : SV_Di
 
     uint2 historyPixel = uint2(historyUV * float2(scene.mainRenderTargetSize));
     historyPixel = clamp(historyPixel, uint2(0, 0), pc.renderExtent - uint2(1, 1));
+
+    // Disocclusion rejection.
+    float3 currentN = normalize(UnpackNormalOct16(g1.r));
+    float3 historyN = normalize(UnpackNormalOct16(rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(historyPixel, 0)).r));
+    if (dot(currentN, historyN) < 0.906) {
+        pc.outputBuffer[pixel.y * pc.renderExtent.x + pixel.x] = current;
+        return;
+    }
+
+    float depth = rdgTexturesFloat[pc.depthIndex].Load(int3(pixel, 0)).r;
+    if (depth <= 0.0) {
+        pc.outputBuffer[pixel.y * pc.renderExtent.x + pixel.x] = ReservoirEmpty();
+        return;
+    }
+    float viewSpaceDepth = ScreenToViewSpaceDepth(depth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
+
+    float historyRawDepth = rdgTexturesFloat[pc.depthIndex].Load(int3(historyPixel, 0)).r;
+    float historyViewDepth = ScreenToViewSpaceDepth(historyRawDepth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
+    if (abs(historyViewDepth - viewSpaceDepth) > 0.1 * viewSpaceDepth) {
+        pc.outputBuffer[pixel.y * pc.renderExtent.x + pixel.x] = current;
+        return;
+    }
 
     Reservoir history = pc.historyBuffer[historyPixel.y * pc.renderExtent.x + historyPixel.x];
 
@@ -53,16 +73,8 @@ void ComputeMain(uniform ReSTIRDITemporalPushConstant pc, uint3 threadID : SV_Di
     }
 
     // Reconstruct current pixel's shading data to evaluate p_hat at each reservoir's sample.
-    float depth = rdgTexturesFloat[pc.depthIndex].Load(int3(pixel, 0)).r;
-    if (depth <= 0.0) {
-        pc.outputBuffer[pixel.y * pc.renderExtent.x + pixel.x] = ReservoirEmpty();
-        return;
-    }
-
-    float viewSpaceDepth = ScreenToViewSpaceDepth(depth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
     float3 viewPosition = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, uv, viewSpaceDepth);
-
-    float3 N = normalize(UnpackNormalOct16(g1.r));
+    float3 N = currentN;
 
     // Evaluate p_hat for the current reservoir's sample at the current pixel's shading point.
     AreaLightData alCurrent = pc.lightData->areaLights[current.lightIdx];
@@ -97,7 +109,7 @@ void ComputeMain(uniform ReSTIRDITemporalPushConstant pc, uint3 threadID : SV_Di
     ReservoirAccum accum = ReservoirAccumEmpty();
     Reservoir combined = ReservoirEmpty();
 
-    uint h = pixel.x * 2654435761u ^ pixel.y * 805459861u ^ pc.frameIndex * 1973u;
+    uint h = (pixel.x * 2654435761u) ^ (pixel.y * 805459861u) ^ (pc.frameIndex * 1973u);
     float uSelect0 = HashStep(h);
     float uSelect1 = HashStep(h);
 
@@ -135,12 +147,7 @@ void ComputeMain(uniform ReSTIRDITemporalPushConstant pc, uint3 threadID : SV_Di
             p_hat_winner = dot(contrib, float3(0.2126, 0.7152, 0.0722));
         }
 
-        float M_total = float(combined.M);
-        if (p_hat_winner > 0.0 && M_total > 0.0) {
-            combined.W = accum.wSum / (M_total * p_hat_winner);
-        } else {
-            combined.W = 0.0;
-        }
+        ReservoirFinalise(combined, accum, p_hat_winner, float(combined.M));
     }
 
     pc.outputBuffer[pixel.y * pc.renderExtent.x + pixel.x] = combined;

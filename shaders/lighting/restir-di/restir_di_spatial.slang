@@ -19,8 +19,8 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
     Reservoir center = pc.inputBuffer[pixel.y * pc.renderExtent.x + pixel.x];
 
     //
-    // pc.outputBuffer[pixel.y * pc.renderExtent.x + pixel.x] = center;
-    // return;
+    pc.outputBuffer[pixel.y * pc.renderExtent.x + pixel.x] = center;
+    return;
 
     if (center.lightIdx == ~0u) {
         pc.outputBuffer[pixel.y * pc.renderExtent.x + pixel.x] = ReservoirEmpty();
@@ -38,7 +38,7 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
     ReservoirAccum accum = ReservoirAccumEmpty();
     Reservoir combined = ReservoirEmpty();
 
-    uint h = pixel.x * 2654435761u ^ pixel.y * 805459861u ^ pc.frameIndex * 1973u;
+    uint h = (pixel.x * 2654435761u) ^ (pixel.y * 805459861u) ^ (pc.frameIndex * 1973u);
 
     // Add center to Reservoir.
     AreaLightData alCenter = pc.lightData->areaLights[center.lightIdx];
@@ -60,11 +60,12 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
     }
     combined.M = center.M;
 
+    uint32_t spatialRadius = pc.spatialRadius;
+    uint32_t spatialNeighbors = pc.spatialNeighbors;
     // Combine with spatially offset neighbors via WRS.
-    const float radius = float(pc.spatialRadius);
-    for (uint i = 0; i < pc.spatialNeighbors; i++) {
-        float angle = (float(i) + HashStep(h)) * (6.28318530718 / float(pc.spatialNeighbors));
-        float r = sqrt(HashStep(h)) * radius;
+    for (uint i = 0; i < spatialNeighbors; i++) {
+        float angle = (float(i) + HashStep(h)) * (6.28318530718 / float(spatialNeighbors));
+        float r = sqrt(HashStep(h)) * spatialRadius;
         int2 neighborPixel = int2(pixel) + int2(round(cos(angle) * r), round(sin(angle) * r));
 
         if (any(neighborPixel < int2(0, 0)) || any(neighborPixel >= int2(pc.renderExtent))) {
@@ -112,8 +113,9 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
             p_hat_winner = dot(sWinner.cosShade * geomTerm * alWinner.intensity * lightColor * sWinner.attenuation, float3(0.2126, 0.7152, 0.0722));
         }
 
-        float M_total = float(combined.M);
-        combined.W = (p_hat_winner > 0.0 && M_total > 0.0) ? accum.wSum / (M_total * p_hat_winner) : 0.0;
+        ReservoirFinalise(combined, accum, p_hat_winner, float(combined.M));
+        const float W_CLAMP = 20.0;
+        combined.W = min(combined.W, W_CLAMP);
     }
 
     pc.outputBuffer[pixel.y * pc.renderExtent.x + pixel.x] = combined;

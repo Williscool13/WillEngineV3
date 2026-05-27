@@ -52,7 +52,7 @@ void ComputeMain(uniform ReSTIRDIGeneratePushConstant pc, uint3 threadID : SV_Di
     Reservoir r = ReservoirEmpty();
 
     if (lightCount > 0) {
-        uint h = pixel.x * 1973u ^ pixel.y * 9277u ^ pc.frameIndex * 2654435761u;
+        uint h = (pixel.x * 1973u) ^ (pixel.y * 9277u) ^ (pc.frameIndex * 2654435761u);
         float4x4 view = scene.view;
 
         ReservoirAccum accum = ReservoirAccumEmpty();
@@ -70,23 +70,16 @@ void ComputeMain(uniform ReSTIRDIGeneratePushConstant pc, uint3 threadID : SV_Di
             float3 Xi = SampleAreaLightPos(vs, uU, uV);
             AreaLightSample s = EvalAreaLightSample(vs, Xi, viewPosition, N, al.range);
 
-            // p_hat(Xi): target PDF (integrand without visibility)
-            float p_hat_Xi = 0.0;
-            if (s.cosShade > 0.0 && s.cosLight > 0.0 && s.attenuation > 0.0)
-            {
-                float3 H = normalize(V + s.L);
-                float3 F = F_SCHLICK(V, H, F0);
-                float3 kD = (1.0 - F) * (1.0 - li.metallic);
-                float3 lightColor = UnpackUnorm4x8(al.packedColor).rgb;
-                float geomTerm = s.cosLight / max(s.dist * s.dist, 0.0001);
-                float3 brdfCos = (kD * li.albedo.xyz + F) * s.cosShade * geomTerm * al.intensity * lightColor * s.attenuation;
-                p_hat_Xi = dot(brdfCos, float3(0.2126, 0.7152, 0.0722));
-            }
+            float3 lightColor = UnpackUnorm4x8(al.packedColor).rgb;
+            float p_hat_Xi = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, lightColor, al.intensity);
 
-            // Talbot MIS: w_i = p_hat(Xi) / (M_light * p_light(Xi) + M_brdf * p_brdf(Xi))
-            float p_light = 1.0 / (float(lightCount) * vs.area);
-            float p_brdf = GGXPdf(N, V, s.L, roughness);
-            float denom = float(M_light) * p_light + float(M_brdf) * p_brdf;
+
+            // Talbot MIS in area measure. p_hat has cosLight/dist² baked in, so all PDFs must be area-measure.
+            // p_brdf_area = p_brdf_sa * cosLight / dist²
+            float p_light_area = 1.0 / (float(lightCount) * vs.area);
+            float p_brdf_sa = GGXPdf(N, V, s.L, roughness);
+            float p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sa * s.cosLight / max(s.dist * s.dist, 1e-4)) : 0.0;
+            float denom = float(M_light) * p_light_area + float(M_brdf) * p_brdf_area;
             float w_i = (denom > 0.0) ? (p_hat_Xi / denom) : 0.0;
             if (ReservoirAddSample(accum, r, w_i, uSelect))
             {
@@ -108,7 +101,8 @@ void ComputeMain(uniform ReSTIRDIGeneratePushConstant pc, uint3 threadID : SV_Di
             float p_hat_Xi = 0.0;
             int bestLightIdx = -1;
             float3 Xi = float3(0.0, 0.0, 0.0);
-            float p_light = 0.0;
+            float p_light_area = 0.0;
+            float p_brdf_area = 0.0;
             AreaLightVS bestVS = (AreaLightVS)0;
 
             if (dot(N, brdfL) > 0.0 && p_brdf_sample > 0.0)
@@ -131,24 +125,17 @@ void ComputeMain(uniform ReSTIRDIGeneratePushConstant pc, uint3 threadID : SV_Di
                     AreaLightData al = pc.lightData->areaLights[bestLightIdx];
                     Xi = viewPosition + brdfL * bestT;
                     AreaLightSample s = EvalAreaLightSample(bestVS, Xi, viewPosition, N, al.range);
-                    p_light = 1.0 / (float(lightCount) * bestVS.area);
+                    // Area-measure PDFs. p_brdf_area = p_brdf_sa * cosLight / dist²
+                    p_light_area = 1.0 / (float(lightCount) * bestVS.area);
+                    p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sample * s.cosLight / max(s.dist * s.dist, 1e-4)) : 0.0;
 
-                    // p_hat(Xi): target PDF (integrand without visibility)
-                    if (s.cosLight > 0.0 && s.attenuation > 0.0)
-                    {
-                        float3 H = normalize(V + brdfL);
-                        float3 F = F_SCHLICK(V, H, F0);
-                        float3 kD = (1.0 - F) * (1.0 - li.metallic);
-                        float3 lightColor = UnpackUnorm4x8(al.packedColor).rgb;
-                        float geomTerm = s.cosLight / max(s.dist * s.dist, 0.0001);
-                        float3 brdfCos = (kD * li.albedo.xyz + F) * s.cosShade * geomTerm * al.intensity * lightColor * s.attenuation;
-                        p_hat_Xi = dot(brdfCos, float3(0.2126, 0.7152, 0.0722));
-                    }
+                    float3 brdfLightColor = UnpackUnorm4x8(al.packedColor).rgb;
+                    p_hat_Xi = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, brdfLightColor, al.intensity);
                 }
             }
 
-            // Talbot MIS: w_i = p_hat(Xi) / (M_light * p_light(Xi) + M_brdf * p_brdf(Xi))
-            float denom = float(M_light) * p_light + float(M_brdf) * p_brdf_sample;
+            // Talbot MIS in area measure (consistent with p_hat which has cosLight/dist² baked in).
+            float denom = float(M_light) * p_light_area + float(M_brdf) * p_brdf_area;
             float w_i = (denom > 0.0) ? (p_hat_Xi / denom) : 0.0;
             if (ReservoirAddSample(accum, r, w_i, uSelect) && bestLightIdx >= 0)
             {
@@ -165,17 +152,10 @@ void ComputeMain(uniform ReSTIRDIGeneratePushConstant pc, uint3 threadID : SV_Di
             float3 yStar = DecodeSamplePos(r, vs);
             AreaLightSample s = EvalAreaLightSample(vs, yStar, viewPosition, N, al.range);
 
-            if (s.cosShade > 0.0 && s.cosLight > 0.0)
-            {
-                float3 H = normalize(V + s.L);
-                float3 F = F_SCHLICK(V, H, F0);
-                float3 kD = (1.0 - F) * (1.0 - li.metallic);
-                float3 lightColor = UnpackUnorm4x8(al.packedColor).rgb;
-                float geomTerm = s.cosLight / max(s.dist * s.dist, 0.0001);
-                float3 brdfCos = (kD * li.albedo.xyz + F) * s.cosShade * geomTerm * al.intensity * lightColor * s.attenuation;
-                float p_hat_yStar = dot(brdfCos, float3(0.2126, 0.7152, 0.0722));
-                ReservoirFinalise(r, accum, p_hat_yStar);
-            }
+            float3 winnerLightColor = UnpackUnorm4x8(al.packedColor).rgb;
+            float p_hat_yStar = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, winnerLightColor, al.intensity);
+            // M_total = 1: Talbot MIS already absorbs M into each w_i, so no outer M divisor.
+            ReservoirFinalise(r, accum, p_hat_yStar, 1.0);
         }
         r.M = uint(M);
     }

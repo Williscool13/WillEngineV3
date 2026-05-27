@@ -3,6 +3,7 @@ module restir_common;
 import shader_constants;
 import lights_interop;
 import restir_interop;
+import pbr_functions;
 
 /** Area light data transformed into view space, with derived geometry cached. */
 public struct AreaLightVS
@@ -166,20 +167,54 @@ public bool ReservoirAddSample(inout ReservoirAccum accum, inout Reservoir r, fl
 
 /**
  * Finalises W after all candidates have been streamed.
- * Talbot MIS: w_i = p_hat/denom absorbs M, so W = wSum / p_hat(y*) with no explicit M divisor.
- * r.M is stored separately for use in reuse passes (temporal/spatial combination).
+ *
+ * For the initial generation pass (Talbot MIS), M is already absorbed into each w_i = p_hat/denom,
+ * so pass M_total = 1; W = wSum / p_hat(y*).
+ *
+ * For reuse combination passes (temporal/spatial), pass M_total = float(combined.M);
+ * W = wSum / (M_total * p_hat(y*)).
  *
  * @param r Reservoir to finalise.
  * @param accum Completed accumulator.
  * @param p_hat_yStar p_hat evaluated at the selected sample y*.
+ * @param M_total Total candidate count across all merged reservoirs.
  */
-public void ReservoirFinalise(inout Reservoir r, ReservoirAccum accum, float p_hat_yStar)
+public void ReservoirFinalise(inout Reservoir r, ReservoirAccum accum, float p_hat_yStar, float M_total)
 {
-    if (p_hat_yStar <= 0.0) {
+    if (p_hat_yStar <= 0.0 || M_total <= 0.0) {
         r.W = 0.0;
     } else {
-        r.W = accum.wSum / p_hat_yStar;
+        r.W = accum.wSum / (M_total * p_hat_yStar);
     }
+}
+
+/**
+ * Evaluates the full BRDF integrand as a scalar luminance for use as p_hat.
+ * Includes the area-light geometry term (cosLight / dist²), attenuation, and light emission.
+ * Returns 0 if cosShade, cosLight, or attenuation are non-positive.
+ *
+ * @param s Area light sample (geometry terms, must have cosShade > 0, cosLight > 0, attenuation > 0).
+ * @param V View direction (toward camera, view space).
+ * @param N Shading normal (view space).
+ * @param albedo Diffuse albedo.
+ * @param F0 Specular F0.
+ * @param metallic Metallic factor.
+ * @param roughness Perceptual roughness (clamped before calling).
+ * @param lightColor Decoded linear light color.
+ * @param lightIntensity Light intensity scalar.
+ */
+public float EvalPHat(AreaLightSample s, float3 V, float3 N, float3 albedo, float3 F0, float metallic, float roughness, float3 lightColor, float lightIntensity)
+{
+    if (s.cosShade <= 0.0 || s.cosLight <= 0.0 || s.attenuation <= 0.0) { return 0.0; }
+    float3 H = normalize(V + s.L);
+    float NDF = D_GGX(N, H, roughness);
+    float G = G_SMITH_HEIGHT_CORRELATED(N, V, s.L, roughness);
+    float3 F = F_SCHLICK(V, H, F0);
+    float3 specular = (NDF * G * F) / max(4.0 * max(dot(N, V), 0.0) * s.cosShade, 0.001);
+    float3 kD = (1.0 - F) * (1.0 - metallic);
+    float geomTerm = s.cosLight / max(s.dist * s.dist, 0.0001);
+    float3 brdfCos = (kD * albedo / PI + specular) * s.cosShade * geomTerm * lightIntensity * lightColor * s.attenuation;
+    return dot(brdfCos, float3(0.2126, 0.7152, 0.0722));
 }
 
 /**
