@@ -49,6 +49,7 @@ void ComputeMain(uniform ReSTIRDITemporalPushConstant pc, uint3 threadID : SV_Di
 
     // Disocclusion rejection.
     float3 currentN = normalize(UnpackNormalOct16(g1.r));
+    // TODO: should sample previous-frame gbuffer for proper disocclusion
     float3 historyN = normalize(UnpackNormalOct16(rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(historyPixel, 0)).r));
     if (dot(currentN, historyN) < 0.906) {
         pc.outputBuffer[pixel.y * pc.renderExtent.x + pixel.x] = current;
@@ -114,7 +115,7 @@ void ComputeMain(uniform ReSTIRDITemporalPushConstant pc, uint3 threadID : SV_Di
     float uSelect1 = HashStep(h);
 
     // Paper suggests 5-30
-    const uint M_cap = 20u * current.M;
+    const uint M_cap = 10u * current.M;
     uint clampedHistoryM = min(history.M, M_cap);
 
     float w_current = p_hat_current * current.W * float(current.M);

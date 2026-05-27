@@ -6,6 +6,7 @@ import restir_interop;
 
 import packing_functions;
 import shader_functions;
+import visibility_lighting_common;
 import bindless_declarations;
 import restir_common;
 
@@ -19,8 +20,8 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
     Reservoir center = pc.inputBuffer[pixel.y * pc.renderExtent.x + pixel.x];
 
     //
-    pc.outputBuffer[pixel.y * pc.renderExtent.x + pixel.x] = center;
-    return;
+    // pc.outputBuffer[pixel.y * pc.renderExtent.x + pixel.x] = center;
+    // return;
 
     if (center.lightIdx == ~0u) {
         pc.outputBuffer[pixel.y * pc.renderExtent.x + pixel.x] = ReservoirEmpty();
@@ -33,25 +34,30 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
     float viewSpaceDepth = ScreenToViewSpaceDepth(rdgTexturesFloat[pc.depthIndex].Load(int3(pixel, 0)).r, scene.depthLinearizeMult, scene.depthLinearizeAdd);
     float3 viewPosition = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, uv, viewSpaceDepth);
 
-    float3 N = normalize(UnpackNormalOct16(rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(pixel, 0)).r));
+    // Reconstruct full material at the center pixel for consistent p_hat evaluation.
+    LightingInputs li = ReconstructLightingInputs(pixel, pc.visibilityBufferIndex, ~0x0, pc.instanceBuffer, pc.gbufferOneIndex, pc.gbufferTwoIndex, ~0u);
+    if (!li.valid) {
+        pc.outputBuffer[pixel.y * pc.renderExtent.x + pixel.x] = center;
+        return;
+    }
+
+    float3 N = normalize(li.viewNormal);
+    float3 V = normalize(-viewPosition);
+    float roughness = max(li.roughness, 0.045);
+    float3 F0 = lerp(float3(0.04, 0.04, 0.04), li.albedo.xyz, li.metallic);
 
     ReservoirAccum accum = ReservoirAccumEmpty();
     Reservoir combined = ReservoirEmpty();
 
     uint h = (pixel.x * 2654435761u) ^ (pixel.y * 805459861u) ^ (pc.frameIndex * 1973u);
 
-    // Add center to Reservoir.
+    // Add center reservoir.
     AreaLightData alCenter = pc.lightData->areaLights[center.lightIdx];
     AreaLightVS vsCenter = TransformAreaLight(alCenter, view);
     float3 yStarCenter = DecodeSamplePos(center, vsCenter);
     AreaLightSample sCenter = EvalAreaLightSample(vsCenter, yStarCenter, viewPosition, N, alCenter.range);
-
-    float p_hat_center = 0.0;
-    if (sCenter.cosShade > 0.0 && sCenter.cosLight > 0.0 && sCenter.attenuation > 0.0) {
-        float3 lightColor = UnpackUnorm4x8(alCenter.packedColor).rgb;
-        float geomTerm = sCenter.cosLight / max(sCenter.dist * sCenter.dist, 0.0001);
-        p_hat_center = dot(sCenter.cosShade * geomTerm * alCenter.intensity * lightColor * sCenter.attenuation, float3(0.2126, 0.7152, 0.0722));
-    }
+    float3 centerLightColor = UnpackUnorm4x8(alCenter.packedColor).rgb;
+    float p_hat_center = EvalPHat(sCenter, V, N, li.albedo.xyz, F0, li.metallic, roughness, centerLightColor, alCenter.intensity);
 
     float w_center = p_hat_center * center.W * float(center.M);
     if (ReservoirAddSample(accum, combined, w_center, HashStep(h))) {
@@ -82,17 +88,11 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
         AreaLightVS vsNeighbor = TransformAreaLight(alNeighbor, view);
         float3 yStarNeighbor = DecodeSamplePos(neighbor, vsNeighbor);
         AreaLightSample sNeighbor = EvalAreaLightSample(vsNeighbor, yStarNeighbor, viewPosition, N, alNeighbor.range);
+        float3 neighborLightColor = UnpackUnorm4x8(alNeighbor.packedColor).rgb;
+        float p_hat_neighbor = EvalPHat(sNeighbor, V, N, li.albedo.xyz, F0, li.metallic, roughness, neighborLightColor, alNeighbor.intensity);
 
-        float p_hat_neighbor = 0.0;
-        if (sNeighbor.cosShade > 0.0 && sNeighbor.cosLight > 0.0 && sNeighbor.attenuation > 0.0) {
-            float3 lightColor = UnpackUnorm4x8(alNeighbor.packedColor).rgb;
-            float geomTerm = sNeighbor.cosLight / max(sNeighbor.dist * sNeighbor.dist, 0.0001);
-            p_hat_neighbor = dot(sNeighbor.cosShade * geomTerm * alNeighbor.intensity * lightColor * sNeighbor.attenuation, float3(0.2126, 0.7152, 0.0722));
-        }
-
-        float uSelect = HashStep(h);
         float w_neighbor = p_hat_neighbor * neighbor.W * float(neighbor.M);
-        if (ReservoirAddSample(accum, combined, w_neighbor, uSelect)) {
+        if (ReservoirAddSample(accum, combined, w_neighbor, HashStep(h))) {
             combined.lightIdx = neighbor.lightIdx;
             combined.sampleOffsetPacked = neighbor.sampleOffsetPacked;
         }
@@ -105,14 +105,8 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
         AreaLightVS vsWinner = TransformAreaLight(alWinner, view);
         float3 yStar = DecodeSamplePos(combined, vsWinner);
         AreaLightSample sWinner = EvalAreaLightSample(vsWinner, yStar, viewPosition, N, alWinner.range);
-
-        float p_hat_winner = 0.0;
-        if (sWinner.cosShade > 0.0 && sWinner.cosLight > 0.0 && sWinner.attenuation > 0.0) {
-            float3 lightColor = UnpackUnorm4x8(alWinner.packedColor).rgb;
-            float geomTerm = sWinner.cosLight / max(sWinner.dist * sWinner.dist, 0.0001);
-            p_hat_winner = dot(sWinner.cosShade * geomTerm * alWinner.intensity * lightColor * sWinner.attenuation, float3(0.2126, 0.7152, 0.0722));
-        }
-
+        float3 winnerLightColor = UnpackUnorm4x8(alWinner.packedColor).rgb;
+        float p_hat_winner = EvalPHat(sWinner, V, N, li.albedo.xyz, F0, li.metallic, roughness, winnerLightColor, alWinner.intensity);
         ReservoirFinalise(combined, accum, p_hat_winner, float(combined.M));
         const float W_CLAMP = 20.0;
         combined.W = min(combined.W, W_CLAMP);

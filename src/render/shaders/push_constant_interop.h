@@ -456,9 +456,12 @@ SHADER_PUBLIC struct ReSTIRDISpatialPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC SHADER_PTR(LightData) lightData;
+    SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
     SHADER_PUBLIC SHADER_PTR(Reservoir) inputBuffer;
     SHADER_PUBLIC SHADER_PTR(Reservoir) outputBuffer;
+    SHADER_PUBLIC uint32_t visibilityBufferIndex;
     SHADER_PUBLIC uint32_t gbufferOneIndex;
+    SHADER_PUBLIC uint32_t gbufferTwoIndex;
     SHADER_PUBLIC uint32_t depthIndex;
     SHADER_PUBLIC uint2 renderExtent;
     SHADER_PUBLIC uint32_t sceneDataIndex;

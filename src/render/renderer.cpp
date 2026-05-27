@@ -924,20 +924,26 @@ void SetupReSTIRSpatialPass(RenderGraph& graph,
     RenderPass& pass = graph.AddPass(SID("ReSTIR DI Spatial"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
     pass.ReadBuffer(SCENE_DATA_BUFFER);
     pass.ReadBuffer(SID("light_data"));
+    pass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
     pass.ReadBuffer(SID("restir_reservoir_temporal"));
+    pass.ReadSampledImage(targets.visibility);
     pass.ReadSampledImage(targets.gbufferOne);
+    pass.ReadSampledImage(targets.gbufferTwo);
     pass.ReadSampledImage(targets.depthStencil);
     pass.WriteBuffer(SID("restir_reservoir_spatial"));
-    pass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, gbufferOne = targets.gbufferOne, depth = targets.depthStencil](VkCommandBuffer cmd) {
+    pass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthStencil](VkCommandBuffer cmd) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("restir_di_spatial"));
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
         ReSTIRDISpatialPushConstant pc{
             .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
             .lightData = graph.GetBufferAddress(SID("light_data")),
+            .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
             .inputBuffer = graph.GetBufferAddress(SID("restir_reservoir_temporal")),
             .outputBuffer = graph.GetBufferAddress(SID("restir_reservoir_spatial")),
+            .visibilityBufferIndex = graph.GetSampledImageViewDescriptorIndex(visibility),
             .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
+            .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
             .depthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(depth),
             .renderExtent = {renderExtent[0], renderExtent[1]},
             .sceneDataIndex = sceneIndex,
