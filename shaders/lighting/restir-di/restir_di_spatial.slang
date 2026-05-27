@@ -78,6 +78,19 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
             continue;
         }
 
+        // Geometry rejection: depth.
+        float neighborRawDepth = rdgTexturesFloat[pc.depthIndex].Load(int3(neighborPixel, 0)).r;
+        float neighborViewDepth = ScreenToViewSpaceDepth(neighborRawDepth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
+        if (abs(neighborViewDepth - viewSpaceDepth) > 0.1 * viewSpaceDepth) {
+            continue;
+        }
+
+        // Geometry rejection: normal.
+        float3 neighborN = normalize(UnpackNormalOct16(rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(neighborPixel, 0)).r));
+        if (dot(N, neighborN) < 0.906) {
+            continue;
+        }
+
         Reservoir neighbor = pc.inputBuffer[neighborPixel.y * pc.renderExtent.x + neighborPixel.x];
         if (neighbor.lightIdx == ~0u || neighbor.lightIdx >= uint(pc.lightData->areaLightCount)) {
             continue;
@@ -91,12 +104,26 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
         float3 neighborLightColor = UnpackUnorm4x8(alNeighbor.packedColor).rgb;
         float p_hat_neighbor = EvalPHat(sNeighbor, V, N, li.albedo.xyz, F0, li.metallic, roughness, neighborLightColor, alNeighbor.intensity);
 
-        float w_neighbor = p_hat_neighbor * neighbor.W * float(neighbor.M);
+        // Jacobian correction for the reconnection shift: accounts for the change in solid angle when reusing a sample originally drawn at the neighbor's shading point.
+        // |J| = (cosLight_at_center * dist_neighbor^2) / (cosLight_at_neighbor * dist_center^2)
+        float2 neighborUV = (float2(neighborPixel) + 0.5) / float2(scene.mainRenderTargetSize);
+        float3 neighborViewPosition = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, neighborUV, neighborViewDepth);
+        AreaLightSample sNeighborFromNeighbor = EvalAreaLightSample(vsNeighbor, yStarNeighbor, neighborViewPosition, neighborN, alNeighbor.range);
+        float jacobian = 0.0;
+        if (sNeighborFromNeighbor.cosLight > 1e-4) {
+            float distCenter2 = max(sNeighbor.dist * sNeighbor.dist, 1e-4);
+            float distNeighbor2 = max(sNeighborFromNeighbor.dist * sNeighborFromNeighbor.dist, 1e-4);
+            jacobian = (sNeighbor.cosLight * distNeighbor2) / (sNeighborFromNeighbor.cosLight * distCenter2);
+            if (jacobian < 0.05 || jacobian > 20.0) { continue; }
+        }
+
+        uint clampedNeighborM = min(neighbor.M, 10u * center.M);
+        float w_neighbor = p_hat_neighbor * neighbor.W * float(clampedNeighborM) * jacobian;
         if (ReservoirAddSample(accum, combined, w_neighbor, HashStep(h))) {
             combined.lightIdx = neighbor.lightIdx;
             combined.sampleOffsetPacked = neighbor.sampleOffsetPacked;
         }
-        combined.M += neighbor.M;
+        combined.M += clampedNeighborM;
     }
 
     // Finalise W at the winner.
