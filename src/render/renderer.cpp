@@ -1047,10 +1047,11 @@ void SetupGroundTruthLightingPass(RenderGraph& graph,
                                   const DeferredResolveTargets& targets,
                                   uint32_t sceneIndex,
                                   bool bReset,
+                                  uint32_t accumulationCount,
                                   uint64_t frameNumber)
 {
     const uint32_t pixelCount = renderExtent[0] * renderExtent[1];
-    const VkDeviceSize bufferSize = static_cast<VkDeviceSize>(1 + pixelCount) * sizeof(float[4]);
+    const VkDeviceSize bufferSize = static_cast<VkDeviceSize>(pixelCount) * sizeof(float[4]);
 
     if (!graph.HasBuffer(SID("gt_accum"))) {
         graph.CreateBuffer(SID("gt_accum"), bufferSize, false);
@@ -1079,7 +1080,7 @@ void SetupGroundTruthLightingPass(RenderGraph& graph,
         pass.ReadSampledImage(targets.shadows);
     }
     pass.WriteStorageImage(targets.output);
-    pass.Execute([&, pipelineManager, sceneIndex, frameNumber,
+    pass.Execute([&, pipelineManager, sceneIndex, frameNumber, accumulationCount,
             visibility = targets.visibility,
             gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             depth = targets.depthStencil, shadows = targets.shadows,
@@ -1106,6 +1107,7 @@ void SetupGroundTruthLightingPass(RenderGraph& graph,
                 .sceneDataIndex = sceneIndex,
                 .frameIndex = static_cast<uint32_t>(frameNumber),
                 .renderExtent = {renderExtent[0], renderExtent[1]},
+                .accumulationCount = accumulationCount,
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 

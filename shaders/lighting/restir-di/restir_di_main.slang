@@ -144,6 +144,7 @@ void ComputeMain(uniform ReSTIRDIGeneratePushConstant pc, uint3 threadID : SV_Di
             }
         }
 
+        r.M = uint(M);
         // Finalise W = wSum / p_hat(y*)
         if (r.lightIdx != ~0u)
         {
@@ -157,7 +158,6 @@ void ComputeMain(uniform ReSTIRDIGeneratePushConstant pc, uint3 threadID : SV_Di
             // M_total = 1: Talbot MIS already absorbs M into each w_i, so no outer M divisor.
             ReservoirFinalise(r, accum, p_hat_yStar, 1.0);
         }
-        r.M = uint(M);
     }
 
     pc.reservoirBuffer[pixel.y * pc.renderExtent.x + pixel.x] = r;

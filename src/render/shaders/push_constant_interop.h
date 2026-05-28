@@ -490,6 +490,7 @@ SHADER_PUBLIC struct LightingResolvePushConstant
     SHADER_PUBLIC uint32_t lightingIndex;
     SHADER_PUBLIC uint32_t frameIndex;
     SHADER_PUBLIC uint2 renderExtent;
+    SHADER_PUBLIC uint32_t accumulationCount;
 };
 
 SHADER_PUBLIC struct DeferredResolvePushConstant

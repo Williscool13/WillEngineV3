@@ -103,6 +103,7 @@ void SetupGroundTruthLightingPass(RenderGraph& graph,
                                   const DeferredResolveTargets& targets,
                                   uint32_t sceneIndex,
                                   bool bReset,
+                                  uint32_t accumulationCount,
                                   uint64_t frameNumber);
 
 void SetupGroundTruthAmbientOcclusion(RenderGraph& graph,

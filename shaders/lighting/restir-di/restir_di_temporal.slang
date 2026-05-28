@@ -19,8 +19,8 @@ void ComputeMain(uniform ReSTIRDITemporalPushConstant pc, uint3 threadID : SV_Di
 
     Reservoir current = pc.currentBuffer[pixel.y * pc.renderExtent.x + pixel.x];
 
-    //pc.outputBuffer[pixel.y * pc.renderExtent.x + pixel.x] = current;
-    //return;
+    // pc.outputBuffer[pixel.y * pc.renderExtent.x + pixel.x] = current;
+    // return;
 
     // No valid sample
     if (current.lightIdx == ~0u) {
@@ -72,6 +72,12 @@ void ComputeMain(uniform ReSTIRDITemporalPushConstant pc, uint3 threadID : SV_Di
 
     Reservoir history = pc.historyBuffer[historyPixel.y * pc.renderExtent.x + historyPixel.x];
 
+    // fails here a LOT.
+    /*if (history.lightIdx >= uint(pc.lightData->areaLightCount)) {
+        current.W = 50000;
+        pc.outputBuffer[pixel.y * pc.renderExtent.x + pixel.x] = current;
+        return;
+    }*/
     if (history.lightIdx == ~0u || history.lightIdx >= uint(pc.lightData->areaLightCount)) {
         pc.outputBuffer[pixel.y * pc.renderExtent.x + pixel.x] = current;
         return;

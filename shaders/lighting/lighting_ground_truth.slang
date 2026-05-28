@@ -16,7 +16,7 @@ import bindless_declarations;
 [numthreads(16, 16, 1)]
 void ComputeMain(uniform LightingResolvePushConstant pc, uint3 dtid : SV_DispatchThreadID) {
     uint2 pixel = dtid.xy;
-    if (any(pixel >= pc.sceneData.mainRenderTargetSize)) {
+    if (any(pixel >= pc.renderExtent)) {
         return;
     }
 
@@ -44,7 +44,6 @@ void ComputeMain(uniform LightingResolvePushConstant pc, uint3 dtid : SV_Dispatc
     float3 F0 = lerp(float3(0.04, 0.04, 0.04), li.albedo.xyz, li.metallic);
     float nDotV = max(dot(N, V), 0.0);
 
-    // uniform random light sample
     uint seed = pixel.y * pc.renderExtent.x + pixel.x + pc.frameIndex * 1973904141u;
     seed = seed ^ (seed >> 16);
     seed *= 0x45d9f3bu;
@@ -67,7 +66,7 @@ void ComputeMain(uniform LightingResolvePushConstant pc, uint3 dtid : SV_Dispatc
             float(seed2 & 0x00FFFFFFu) / float(0x01000000u),
             float((seed2 >> 8) & 0x00FFFFFFu) / float(0x01000000u)
         );
-        float3 yStar = vs.center + vs.right * (xi.x * 2.0 - 1.0) + vs.up * (xi.y * 2.0 - 1.0);
+        float3 yStar = vs.center + vs.right * (xi.x * 2.0 - 1.0) * vs.halfWidth + vs.up * (xi.y * 2.0 - 1.0) * vs.halfHeight;
 
         AreaLightSample s = EvalAreaLightSample(vs, yStar, viewPosition, N, al.range);
 
@@ -89,23 +88,17 @@ void ComputeMain(uniform LightingResolvePushConstant pc, uint3 dtid : SV_Dispatc
             float3 alColor = UnpackUnorm4x8(al.packedColor).rgb;
             float3 f = (diffuse + specular) * s.cosShade * geomTerm * al.intensity * alColor * s.attenuation;
 
-            // unbiased estimator: multiply by N lights (inverse of uniform pdf)
-            directLight = f * float(areaLightCount);
+            directLight = f * float(areaLightCount) * vs.area;
         }
     }
 
     float3 newSample = directLight + li.emissiveRGB;
 
-    // accumulate
     uint pixelIdx = pixel.y * pc.renderExtent.x + pixel.x;
-    float count = pc.accumulationBuffer[0].x;
-    float4 oldAccum = pc.accumulationBuffer[1 + pixelIdx];
+    float count = float(pc.accumulationCount);
+    float4 oldAccum = pc.accumulationBuffer[pixelIdx];
     float4 newAccum = (oldAccum * count + float4(newSample, 1.0)) / (count + 1.0);
-    pc.accumulationBuffer[1 + pixelIdx] = newAccum;
-
-    if (all(pixel == uint2(0, 0))) {
-        pc.accumulationBuffer[0] = float4(count + 1.0, 0.0, 0.0, 0.0);
-    }
+    pc.accumulationBuffer[pixelIdx] = newAccum;
 
     rdgStorageFloat4[pc.outputImageIndex][pixel] = float4(newAccum.xyz, 1.0);
 }

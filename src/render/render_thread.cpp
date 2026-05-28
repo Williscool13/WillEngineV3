@@ -515,7 +515,8 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             };
 
             if (frameBuffer.bGroundTruthMode) {
-                SetupGroundTruthLightingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, deferredResolveTargets, 0, frameBuffer.bResetGroundTruth, frameNumber);
+                if (frameBuffer.bResetGroundTruth) { groundTruthAccumCount = 0; }
+                SetupGroundTruthLightingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, deferredResolveTargets, 0, frameBuffer.bResetGroundTruth, groundTruthAccumCount++, frameNumber);
             } else {
                 SetupReSTIRPass(*renderGraph, pipelineManager, viewFamily, renderExtent, deferredResolveTargets, 0, renderArena.Get(), frameNumber);
                 SetupReSTIRTemporalPass(*renderGraph, pipelineManager, renderExtent, deferredResolveTargets, 0, renderArena.Get(), frameNumber);

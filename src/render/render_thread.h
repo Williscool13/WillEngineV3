@@ -171,6 +171,7 @@ private:
 
     uint32_t currentFrameInFlight{0};
     uint64_t frameNumber{0};
+    uint32_t groundTruthAccumCount{0};
     FrameResourceLimits frameResourceLimits{};
     bool bEngineRequestsRecreate{false};
     bool bRenderRequestsRecreate{false};
