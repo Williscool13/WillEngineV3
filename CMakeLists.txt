@@ -405,6 +405,7 @@ compile_shaders(will-engine
         #   "Lighting Shaders"
         ${CMAKE_SOURCE_DIR}/shaders/lighting/lighting_pbr.slang compute ComputeMain lighting_pbr
         ${CMAKE_SOURCE_DIR}/shaders/lighting/lighting_pbr_restir.slang compute ComputeMain lighting_pbr_restir
+        ${CMAKE_SOURCE_DIR}/shaders/lighting/lighting_ground_truth.slang compute ComputeMain lighting_ground_truth
         ${CMAKE_SOURCE_DIR}/shaders/lighting/lighting_toon.slang compute ComputeMain lighting_toon
         ${CMAKE_SOURCE_DIR}/shaders/lighting/lighting_unlit.slang compute ComputeMain lighting_unlit
 

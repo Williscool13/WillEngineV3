@@ -429,6 +429,8 @@ void PipelineManager::RegisterPipelines()
     RegisterComputePipeline("default_unlit"_sid, src / "lighting_unlit_compute.spv",
                             sizeof(LightingResolvePushConstant), PipelineCategory::Critical);
     lightingPipelines.PushBack("default_unlit"_sid);
+    RegisterComputePipeline(SID("lighting_ground_truth"), src / "lighting_ground_truth_compute.spv",
+                            sizeof(LightingResolvePushConstant), PipelineCategory::Critical);
 
 
     RegisterComputePipeline(SID("instancing_instance_lod_shadows"), src / "instancing_instance_lod_shadows_compute.spv",

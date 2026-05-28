@@ -542,6 +542,9 @@ struct ViewFamily
     ArenaVector<UIDrawCommand> uiDrawList{};
     ArenaVector<UIGlyphQuad> uiGlyphQuads{};
 
+    StringID shadingShaderOverride{};
+    StringID lightingShaderOverride{};
+
     // Written to on render thread
     ArenaFixedMap<StringID, uint32_t> lightingBuckets{};
     ArenaVector<TextDrawCall> textDrawCalls{};
@@ -590,6 +593,8 @@ struct FrameBuffer
     bool bEnableShadeDispatchBucketingVisualization = false;
     bool bEnableLightingBucketingVisualization = false;
     bool bLogRDG = false;
+    bool bGroundTruthMode = false;
+    bool bResetGroundTruth = false;
 
     bool bTakeScreenshot{false};
 };

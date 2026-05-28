@@ -211,6 +211,10 @@ struct DebugState
     bool bEnablePortal{true};
     bool bEnableShadeDispatchBucketingVisualization{false};
     bool bEnableLightingBucketingVisualization{false};
+    bool bGroundTruthMode{false};
+    bool bResetGroundTruth{false};
+    StringID shadingShaderOverride{};
+    StringID lightingShaderOverride{};
     Core::InlineString<> resourceName{};
     DebugTransformationType transformationType{};
     Core::DebugViewAspect viewAspect{};

@@ -96,6 +96,15 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                                         uint64_t frameNumber);
 
 
+void SetupGroundTruthLightingPass(RenderGraph& graph,
+                                  PipelineManager* pipelineManager,
+                                  const Core::ViewFamily& viewFamily,
+                                  Core::Array<uint32_t, 2> renderExtent,
+                                  const DeferredResolveTargets& targets,
+                                  uint32_t sceneIndex,
+                                  bool bReset,
+                                  uint64_t frameNumber);
+
 void SetupGroundTruthAmbientOcclusion(RenderGraph& graph,
                                       PipelineManager* pipelineManager,
                                       const Core::ViewFamily& viewFamily,

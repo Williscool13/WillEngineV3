@@ -518,6 +518,53 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
         ImGui::Checkbox("Enable V-Buffer Shade Dispatch Bucketing Visualization", &state->debug.bEnableShadeDispatchBucketingVisualization);
         ImGui::Checkbox("Enable V-Buffer Lighting Bucketing Visualization", &state->debug.bEnableLightingBucketingVisualization);
 
+        ImGui::Separator();
+        ImGui::Checkbox("Ground Truth Mode", &state->debug.bGroundTruthMode);
+
+        ImGui::Separator();
+        ImGui::BeginDisabled(state->debug.bGroundTruthMode);
+        {
+            Core::Span<const StringID> shadingPipelines = ctx->pipelineManager->GetShadingPipelines();
+            const int32_t pipelineCount = static_cast<int32_t>(shadingPipelines.Size());
+            Core::Arena& arena = ctx->editorArena.Get();
+
+            int currentShader = pipelineCount; // "None"
+            for (int32_t i = 0; i < pipelineCount; ++i) {
+                if (state->debug.shadingShaderOverride == shadingPipelines[i]) { currentShader = i; break; }
+            }
+
+            Core::ArenaArray<Core::InlineString<64>> labels(&arena, pipelineCount + 1);
+            labels[0] = Core::InlineString<64>("None");
+            for (int32_t i = 0; i < pipelineCount; ++i) { labels[i + 1] = Core::InlineString<64>(shadingPipelines[i].ToString()); }
+            const int comboIndex = currentShader == pipelineCount ? 0 : currentShader + 1;
+            int selected = comboIndex;
+            auto getter = [](void* data, int idx) -> const char* { return (*static_cast<Core::ArenaArray<Core::InlineString<64>>*>(data))[idx].c_str(); };
+            if (ImGui::Combo("Shading Override", &selected, getter, &labels, static_cast<int32_t>(labels.Size()))) {
+                state->debug.shadingShaderOverride = selected == 0 ? StringID{} : shadingPipelines[selected - 1];
+            }
+        }
+        {
+            Core::Span<const StringID> lightingPipelines = ctx->pipelineManager->GetLightingPipelines();
+            const int32_t pipelineCount = static_cast<int32_t>(lightingPipelines.Size());
+            Core::Arena& arena = ctx->editorArena.Get();
+
+            int currentShader = pipelineCount; // "None"
+            for (int32_t i = 0; i < pipelineCount; ++i) {
+                if (state->debug.lightingShaderOverride == lightingPipelines[i]) { currentShader = i; break; }
+            }
+
+            Core::ArenaArray<Core::InlineString<64>> labels(&arena, pipelineCount + 1);
+            labels[0] = Core::InlineString<64>("None");
+            for (int32_t i = 0; i < pipelineCount; ++i) { labels[i + 1] = Core::InlineString<64>(lightingPipelines[i].ToString()); }
+            const int comboIndex = currentShader == pipelineCount ? 0 : currentShader + 1;
+            int selected = comboIndex;
+            auto getter = [](void* data, int idx) -> const char* { return (*static_cast<Core::ArenaArray<Core::InlineString<64>>*>(data))[idx].c_str(); };
+            if (ImGui::Combo("Lighting Override", &selected, getter, &labels, static_cast<int32_t>(labels.Size()))) {
+                state->debug.lightingShaderOverride = selected == 0 ? StringID{} : lightingPipelines[selected - 1];
+            }
+        }
+        ImGui::EndDisabled();
+
         ImGui::BeginDisabled(true);
         ImGui::Checkbox("Enable Portals", &state->debug.bEnablePortal);
         if (ImGui::IsItemHovered()) {
@@ -774,6 +821,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
         }
 
         if (state->editor.prevSelectedEntities != state->editor.selectedEntities) {
+            ImGui::ClearActiveID();
             if (state->editor.selectedEntities.Size() == 1) {
                 if (auto* tf = state->registry.try_get<Component::TransformComponent>(state->editor.selectedEntities[0])) {
                     const bool scaleIsUniform = glm::epsilonEqual(tf->scale.x, tf->scale.y, 1e-5f) && glm::epsilonEqual(tf->scale.y, tf->scale.z, 1e-5f);

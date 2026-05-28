@@ -690,11 +690,12 @@ void SetupVisibilityShadingPass(RenderGraph& graph,
                 const MaterialEntry& entry = sortedMaterials[i];
                 if (!entry.fragmentShader) { continue; }
 
-                if (entry.fragmentShader != boundShader) {
-                    pipelineEntry = pipelineManager->GetPipelineEntry(entry.fragmentShader);
+                StringID shaderToUse = viewFamily.shadingShaderOverride ? viewFamily.shadingShaderOverride : entry.fragmentShader;
+                if (shaderToUse != boundShader) {
+                    pipelineEntry = pipelineManager->GetPipelineEntry(shaderToUse);
                     assert(pipelineEntry && "Pipeline missing even after sanitization");
                     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
-                    boundShader = entry.fragmentShader;
+                    boundShader = shaderToUse;
                 }
 
                 VisibilityShadingPushConstant pc{
@@ -1009,7 +1010,8 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                 const LightingEntry& entry = buckets[i];
                 if (!entry.lightingShader) { continue; }
 
-                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(entry.lightingShader);
+                StringID shaderToUse = viewFamily.lightingShaderOverride ? viewFamily.lightingShaderOverride : entry.lightingShader;
+                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(shaderToUse);
                 if (!pipelineEntry) { continue; }
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
@@ -1036,6 +1038,83 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                                       entry.bucketIndex * sizeof(LightingDispatchParameters) + offsetof(LightingDispatchParameters, xDispatch));
             }
         });
+}
+
+void SetupGroundTruthLightingPass(RenderGraph& graph,
+                                  PipelineManager* pipelineManager,
+                                  const Core::ViewFamily& viewFamily,
+                                  Core::Array<uint32_t, 2> renderExtent,
+                                  const DeferredResolveTargets& targets,
+                                  uint32_t sceneIndex,
+                                  bool bReset,
+                                  uint64_t frameNumber)
+{
+    const uint32_t pixelCount = renderExtent[0] * renderExtent[1];
+    const VkDeviceSize bufferSize = static_cast<VkDeviceSize>(1 + pixelCount) * sizeof(float[4]);
+
+    if (!graph.HasBuffer(SID("gt_accum"))) {
+        graph.CreateBuffer(SID("gt_accum"), bufferSize, false);
+        bReset = true;
+    }
+
+    if (bReset) {
+        RenderPass& clearPass = graph.AddPass(SID("GT Accum Clear"), VK_PIPELINE_STAGE_2_CLEAR_BIT);
+        clearPass.WriteTransferBuffer(SID("gt_accum"));
+        clearPass.Execute([&](VkCommandBuffer cmd) {
+            vkCmdFillBuffer(cmd, graph.GetBufferHandle(SID("gt_accum")), 0, VK_WHOLE_SIZE, 0);
+        });
+    }
+
+    RenderPass& pass = graph.AddPass(SID("Ground Truth Lighting"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+    pass.ReadBuffer(SCENE_DATA_BUFFER);
+    pass.ReadBuffer(SHADOW_DATA_BUFFER);
+    pass.ReadBuffer(SID("light_data"));
+    pass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
+    pass.ReadWriteBuffer(SID("gt_accum"));
+    pass.ReadSampledImage(targets.visibility);
+    pass.ReadSampledImage(targets.gbufferOne);
+    pass.ReadSampledImage(targets.gbufferTwo);
+    pass.ReadSampledImage(targets.depthStencil);
+    if (targets.shadows != StringID{}) {
+        pass.ReadSampledImage(targets.shadows);
+    }
+    pass.WriteStorageImage(targets.output);
+    pass.Execute([&, pipelineManager, sceneIndex, frameNumber,
+            visibility = targets.visibility,
+            gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
+            depth = targets.depthStencil, shadows = targets.shadows,
+            output = targets.output, skyboxIndex = viewFamily.skyboxIndex, renderExtent](VkCommandBuffer cmd) {
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("lighting_ground_truth"));
+            if (!pipelineEntry) { return; }
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+
+            LightingResolvePushConstant pc{
+                .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
+                .shadowData = graph.GetBufferAddress(SHADOW_DATA_BUFFER),
+                .lightData = graph.GetBufferAddress(SID("light_data")),
+                .lightDispatchBuffer = 0,
+                .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
+                .reservoirBuffer = 0,
+                .accumulationBuffer = graph.GetBufferAddress(SID("gt_accum")),
+                .visibilityBufferIndex = graph.GetSampledImageViewDescriptorIndex(visibility),
+                .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
+                .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
+                .depthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(depth),
+                .shadowsIndex = shadows != StringID{} ? graph.GetSampledImageViewDescriptorIndex(shadows) : ~0u,
+                .skyboxIndex = skyboxIndex,
+                .outputImageIndex = graph.GetStorageImageViewDescriptorIndex(output),
+                .sceneDataIndex = sceneIndex,
+                .frameIndex = static_cast<uint32_t>(frameNumber),
+                .renderExtent = {renderExtent[0], renderExtent[1]},
+            };
+            vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+
+            const uint32_t groupsX = (renderExtent[0] + 15) / 16;
+            const uint32_t groupsY = (renderExtent[1] + 15) / 16;
+            vkCmdDispatch(cmd, groupsX, groupsY, 1);
+        });
+
+    graph.CarryBufferToNextFrame(SID("gt_accum"), SID("gt_accum"), 0);
 }
 
 void SetupGroundTruthAmbientOcclusion(RenderGraph& graph,

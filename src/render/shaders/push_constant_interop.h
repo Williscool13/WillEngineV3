@@ -478,6 +478,7 @@ SHADER_PUBLIC struct LightingResolvePushConstant
     SHADER_PUBLIC SHADER_PTR(LightingDispatchParameters) lightDispatchBuffer;
     SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
     SHADER_PUBLIC SHADER_PTR(Reservoir) reservoirBuffer;
+    SHADER_PUBLIC SHADER_PTR(float4) accumulationBuffer;
     SHADER_PUBLIC uint32_t visibilityBufferIndex;
     SHADER_PUBLIC uint32_t gbufferOneIndex;
     SHADER_PUBLIC uint32_t gbufferTwoIndex;
@@ -488,6 +489,7 @@ SHADER_PUBLIC struct LightingResolvePushConstant
     SHADER_PUBLIC uint32_t sceneDataIndex;
     SHADER_PUBLIC uint32_t lightingIndex;
     SHADER_PUBLIC uint32_t frameIndex;
+    SHADER_PUBLIC uint2 renderExtent;
 };
 
 SHADER_PUBLIC struct DeferredResolvePushConstant

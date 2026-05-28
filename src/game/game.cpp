@@ -311,6 +311,17 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
     frameBuffer->bWireframe = state->debug.bWireframe;
     frameBuffer->bEnableShadeDispatchBucketingVisualization = state->debug.bEnableShadeDispatchBucketingVisualization;
     frameBuffer->bEnableLightingBucketingVisualization = state->debug.bEnableLightingBucketingVisualization;
+    frameBuffer->bGroundTruthMode = state->debug.bGroundTruthMode;
+    if (state->debug.bGroundTruthMode) {
+        const Core::RenderView& rv = frameBuffer->mainViewFamily.mainView;
+        if (rv.currentViewData.view != rv.previousViewData.view) {
+            state->debug.bResetGroundTruth = true;
+        }
+    }
+    frameBuffer->bResetGroundTruth = state->debug.bResetGroundTruth;
+    state->debug.bResetGroundTruth = false;
+    frameBuffer->mainViewFamily.shadingShaderOverride = state->debug.shadingShaderOverride;
+    frameBuffer->mainViewFamily.lightingShaderOverride = state->debug.lightingShaderOverride;
     if (state->debug.bEnablePortal) {
         Game::BuildPortalViewFamily(state, frameBuffer->mainViewFamily);
     }
