@@ -54,7 +54,6 @@ void ComputeMain(uniform ReSTIRDIGeneratePushConstant pc, uint3 threadID : SV_Di
     if (lightCount > 0) {
         uint h = (pixel.x * 1973u) ^ (pixel.y * 9277u) ^ (pc.frameIndex * 2654435761u);
         float4x4 view = scene.view;
-
         ReservoirAccum accum = ReservoirAccumEmpty();
 
         // Light sampling candidates

@@ -73,6 +73,7 @@ SHADER_PUBLIC struct DebugVisualizePushConstant
     SHADER_PUBLIC SHADER_PTR(Reservoir) reservoirBuffer;
     SHADER_PUBLIC SHADER_PTR(Reservoir) reservoirTemporalBuffer;
     SHADER_PUBLIC SHADER_PTR(Reservoir) reservoirSpatialBuffer;
+    SHADER_PUBLIC SHADER_PTR(Reservoir) reservoirHistoryBuffer;
     SHADER_PUBLIC int2 srcExtent;
     SHADER_PUBLIC int2 dstExtent;
     SHADER_PUBLIC float nearPlane;

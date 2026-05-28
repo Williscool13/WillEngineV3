@@ -193,6 +193,26 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
             else { float t = min((r.W - 500.0) / 500.0, 1.0); srcPixel.xyz = float3(0.0, t, 0.0); }
             break;
         }
+        case 23: { // ReservoirHistoryLightIdx - hash-color the selected light index from the history reservoir buffer
+            uint pixelIdx = uint(threadID.y) * uint(pc.dstExtent.x) + uint(threadID.x);
+            Reservoir r = pc.reservoirHistoryBuffer[pixelIdx];
+            if (r.lightIdx == ~0u) {
+                srcPixel.xyz = float3(0.0, 0.0, 0.0);
+            } else {
+                uint h = (r.lightIdx + 1u) * 2654435761u;
+                srcPixel.xyz = float3(float(h >> 24), float((h >> 16) & 0xFF), float((h >> 8) & 0xFF)) / 255.0;
+            }
+            break;
+        }
+        case 24: { // ReservoirHistoryW - visualize W with range coloring: red [0,100), blue [100,500), green [500,inf)
+            uint pixelIdx = uint(threadID.y) * uint(pc.dstExtent.x) + uint(threadID.x);
+            Reservoir r = pc.reservoirHistoryBuffer[pixelIdx];
+            if (r.lightIdx == ~0u) { srcPixel.xyz = float3(0.0, 0.0, 0.0); }
+            else if (r.W < 100.0) { float t = r.W / 100.0; srcPixel.xyz = float3(t, 0.0, 0.0); }
+            else if (r.W < 500.0) { float t = (r.W - 100.0) / 400.0; srcPixel.xyz = float3(0.0, 0.0, t); }
+            else { float t = min((r.W - 500.0) / 500.0, 1.0); srcPixel.xyz = float3(0.0, t, 0.0); }
+            break;
+        }
     }
 
     rdgStorageFloat4[pc.outputImageIndex][threadID.xy] = srcPixel;

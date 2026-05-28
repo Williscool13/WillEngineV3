@@ -18,15 +18,7 @@ void ComputeMain(uniform ReSTIRDITemporalPushConstant pc, uint3 threadID : SV_Di
     }
 
     Reservoir current = pc.currentBuffer[pixel.y * pc.renderExtent.x + pixel.x];
-
-    // pc.outputBuffer[pixel.y * pc.renderExtent.x + pixel.x] = current;
-    // return;
-
-    // No valid sample
-    if (current.lightIdx == ~0u) {
-        pc.outputBuffer[pixel.y * pc.renderExtent.x + pixel.x] = ReservoirEmpty();
-        return;
-    }
+    bool validCurrent = current.lightIdx != ~0u;
 
     SceneData scene = pc.sceneData[pc.sceneDataIndex];
     float4x4 view = scene.view;
@@ -36,18 +28,15 @@ void ComputeMain(uniform ReSTIRDITemporalPushConstant pc, uint3 threadID : SV_Di
     uint4 g1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(pixel, 0));
     float2 velocityNDC = UnpackMotionVectors(g1.g);
     float2 historyUV = uv + velocityNDC * 0.5;
-
     bool validHistory = all(historyUV >= float2(0.0)) && all(historyUV <= float2(1.0));
-
     if (!validHistory) {
         pc.outputBuffer[pixel.y * pc.renderExtent.x + pixel.x] = current;
         return;
     }
-
     uint2 historyPixel = uint2(historyUV * float2(scene.mainRenderTargetSize));
     historyPixel = clamp(historyPixel, uint2(0, 0), pc.renderExtent - uint2(1, 1));
 
-    // Disocclusion rejection.
+    // Normal disocclusion rejection.
     float3 currentN = normalize(UnpackNormalOct16(g1.r));
     // TODO: should sample previous-frame gbuffer for proper disocclusion
     float3 historyN = normalize(UnpackNormalOct16(rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(historyPixel, 0)).r));
@@ -56,13 +45,13 @@ void ComputeMain(uniform ReSTIRDITemporalPushConstant pc, uint3 threadID : SV_Di
         return;
     }
 
+    // Depth disocclusion rejection.
     float depth = rdgTexturesFloat[pc.depthIndex].Load(int3(pixel, 0)).r;
     if (depth <= 0.0) {
         pc.outputBuffer[pixel.y * pc.renderExtent.x + pixel.x] = ReservoirEmpty();
         return;
     }
     float viewSpaceDepth = ScreenToViewSpaceDepth(depth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
-
     float historyRawDepth = rdgTexturesFloat[pc.depthIndex].Load(int3(historyPixel, 0)).r;
     float historyViewDepth = ScreenToViewSpaceDepth(historyRawDepth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
     if (abs(historyViewDepth - viewSpaceDepth) > 0.1 * viewSpaceDepth) {
@@ -70,16 +59,11 @@ void ComputeMain(uniform ReSTIRDITemporalPushConstant pc, uint3 threadID : SV_Di
         return;
     }
 
+    // Early exit if no valid sample to use.
     Reservoir history = pc.historyBuffer[historyPixel.y * pc.renderExtent.x + historyPixel.x];
-
-    // fails here a LOT.
-    /*if (history.lightIdx >= uint(pc.lightData->areaLightCount)) {
-        current.W = 50000;
-        pc.outputBuffer[pixel.y * pc.renderExtent.x + pixel.x] = current;
-        return;
-    }*/
-    if (history.lightIdx == ~0u || history.lightIdx >= uint(pc.lightData->areaLightCount)) {
-        pc.outputBuffer[pixel.y * pc.renderExtent.x + pixel.x] = current;
+    bool validHistoryReservoir = history.lightIdx != ~0u && history.lightIdx < uint(pc.lightData->areaLightCount);
+    if (!validCurrent && !validHistoryReservoir) {
+        pc.outputBuffer[pixel.y * pc.renderExtent.x + pixel.x] = ReservoirEmpty();
         return;
     }
 
@@ -96,22 +80,6 @@ void ComputeMain(uniform ReSTIRDITemporalPushConstant pc, uint3 threadID : SV_Di
     float roughness = max(li.roughness, 0.045);
     float3 F0 = lerp(float3(0.04, 0.04, 0.04), li.albedo.xyz, li.metallic);
 
-    // Evaluate p_hat for the current reservoir's sample at the current pixel's shading point.
-    AreaLightData alCurrent = pc.lightData->areaLights[current.lightIdx];
-    AreaLightVS vsCurrent = TransformAreaLight(alCurrent, view);
-    float3 yStarCurrent = DecodeSamplePos(current, vsCurrent);
-    AreaLightSample sCurrent = EvalAreaLightSample(vsCurrent, yStarCurrent, viewPosition, N, alCurrent.range);
-    float3 currentLightColor = UnpackUnorm4x8(alCurrent.packedColor).rgb;
-    float p_hat_current = EvalPHat(sCurrent, V, N, li.albedo.xyz, F0, li.metallic, roughness, currentLightColor, alCurrent.intensity);
-
-    // Evaluate p_hat for the history reservoir's sample at the current pixel's shading point.
-    AreaLightData alHistory = pc.lightData->areaLights[history.lightIdx];
-    AreaLightVS vsHistory = TransformAreaLight(alHistory, view);
-    float3 yStarHistory = DecodeSamplePos(history, vsHistory);
-    AreaLightSample sHistory = EvalAreaLightSample(vsHistory, yStarHistory, viewPosition, N, alHistory.range);
-    float3 historyLightColor = UnpackUnorm4x8(alHistory.packedColor).rgb;
-    float p_hat_history = EvalPHat(sHistory, V, N, li.albedo.xyz, F0, li.metallic, roughness, historyLightColor, alHistory.intensity);
-
     // WRS combination: w_j = p_hat(y_j at current shading point) * W_j * M_j
     ReservoirAccum accum = ReservoirAccumEmpty();
     Reservoir combined = ReservoirEmpty();
@@ -120,20 +88,40 @@ void ComputeMain(uniform ReSTIRDITemporalPushConstant pc, uint3 threadID : SV_Di
     float uSelect0 = HashStep(h);
     float uSelect1 = HashStep(h);
 
-    // Paper suggests 5-30
-    const uint M_cap = 10u * current.M;
-    uint clampedHistoryM = min(history.M, M_cap);
-
-    float w_current = p_hat_current * current.W * float(current.M);
-    if (ReservoirAddSample(accum, combined, w_current, uSelect0)) {
-        combined.lightIdx = current.lightIdx;
-        combined.sampleOffsetPacked = current.sampleOffsetPacked;
+    if (validCurrent) {
+        AreaLightData alCurrent = pc.lightData->areaLights[current.lightIdx];
+        AreaLightVS vsCurrent = TransformAreaLight(alCurrent, view);
+        float3 yStarCurrent = DecodeSamplePos(current, vsCurrent);
+        AreaLightSample sCurrent = EvalAreaLightSample(vsCurrent, yStarCurrent, viewPosition, N, alCurrent.range);
+        float3 currentLightColor = UnpackUnorm4x8(alCurrent.packedColor).rgb;
+        float p_hat_current = EvalPHat(sCurrent, V, N, li.albedo.xyz, F0, li.metallic, roughness, currentLightColor, alCurrent.intensity);
+        float w_current = p_hat_current * current.W * float(current.M);
+        if (ReservoirAddSample(accum, combined, w_current, uSelect0)) {
+            combined.lightIdx = current.lightIdx;
+            combined.sampleOffsetPacked = current.sampleOffsetPacked;
+        }
     }
 
-    float w_history = p_hat_history * history.W * float(clampedHistoryM);
-    if (ReservoirAddSample(accum, combined, w_history, uSelect1)) {
-        combined.lightIdx = history.lightIdx;
-        combined.sampleOffsetPacked = history.sampleOffsetPacked;
+    // Paper suggests 5-30 for param
+    // param x 32 + 1 from base pass
+    const uint M_cap = 20 * 33;
+    uint clampedHistoryM = 0u;
+
+    if (validHistoryReservoir) {
+        // Evaluate p_hat for the history reservoir's sample at the current pixel's shading point.
+        AreaLightData alHistory = pc.lightData->areaLights[history.lightIdx];
+        AreaLightVS vsHistory = TransformAreaLight(alHistory, view);
+        float3 yStarHistory = DecodeSamplePos(history, vsHistory);
+        AreaLightSample sHistory = EvalAreaLightSample(vsHistory, yStarHistory, viewPosition, N, alHistory.range);
+        float3 historyLightColor = UnpackUnorm4x8(alHistory.packedColor).rgb;
+        float p_hat_history = EvalPHat(sHistory, V, N, li.albedo.xyz, F0, li.metallic, roughness, historyLightColor, alHistory.intensity);
+
+        clampedHistoryM = min(history.M, M_cap);
+        float w_history = p_hat_history * history.W * float(clampedHistoryM);
+        if (ReservoirAddSample(accum, combined, w_history, uSelect1)) {
+            combined.lightIdx = history.lightIdx;
+            combined.sampleOffsetPacked = history.sampleOffsetPacked;
+        }
     }
 
     combined.M = current.M + clampedHistoryM;

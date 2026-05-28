@@ -18,15 +18,11 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
     }
 
     Reservoir center = pc.inputBuffer[pixel.y * pc.renderExtent.x + pixel.x];
+    bool validCenter = center.lightIdx != ~0u;
 
     //
-    // pc.outputBuffer[pixel.y * pc.renderExtent.x + pixel.x] = center;
-    // return;
-
-    if (center.lightIdx == ~0u) {
-        pc.outputBuffer[pixel.y * pc.renderExtent.x + pixel.x] = ReservoirEmpty();
-        return;
-    }
+    //pc.outputBuffer[pixel.y * pc.renderExtent.x + pixel.x] = center;
+    //return;
 
     SceneData scene = pc.sceneData[pc.sceneDataIndex];
     float4x4 view = scene.view;
@@ -51,18 +47,18 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
 
     uint h = (pixel.x * 2654435761u) ^ (pixel.y * 805459861u) ^ (pc.frameIndex * 1973u);
 
-    // Add center reservoir.
-    AreaLightData alCenter = pc.lightData->areaLights[center.lightIdx];
-    AreaLightVS vsCenter = TransformAreaLight(alCenter, view);
-    float3 yStarCenter = DecodeSamplePos(center, vsCenter);
-    AreaLightSample sCenter = EvalAreaLightSample(vsCenter, yStarCenter, viewPosition, N, alCenter.range);
-    float3 centerLightColor = UnpackUnorm4x8(alCenter.packedColor).rgb;
-    float p_hat_center = EvalPHat(sCenter, V, N, li.albedo.xyz, F0, li.metallic, roughness, centerLightColor, alCenter.intensity);
-
-    float w_center = p_hat_center * center.W * float(center.M);
-    if (ReservoirAddSample(accum, combined, w_center, HashStep(h))) {
-        combined.lightIdx = center.lightIdx;
-        combined.sampleOffsetPacked = center.sampleOffsetPacked;
+    if (validCenter) {
+        AreaLightData alCenter = pc.lightData->areaLights[center.lightIdx];
+        AreaLightVS vsCenter = TransformAreaLight(alCenter, view);
+        float3 yStarCenter = DecodeSamplePos(center, vsCenter);
+        AreaLightSample sCenter = EvalAreaLightSample(vsCenter, yStarCenter, viewPosition, N, alCenter.range);
+        float3 centerLightColor = UnpackUnorm4x8(alCenter.packedColor).rgb;
+        float p_hat_center = EvalPHat(sCenter, V, N, li.albedo.xyz, F0, li.metallic, roughness, centerLightColor, alCenter.intensity);
+        float w_center = p_hat_center * center.W * float(center.M);
+        if (ReservoirAddSample(accum, combined, w_center, HashStep(h))) {
+            combined.lightIdx = center.lightIdx;
+            combined.sampleOffsetPacked = center.sampleOffsetPacked;
+        }
     }
     combined.M = center.M;
 
@@ -104,21 +100,12 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
         float3 neighborLightColor = UnpackUnorm4x8(alNeighbor.packedColor).rgb;
         float p_hat_neighbor = EvalPHat(sNeighbor, V, N, li.albedo.xyz, F0, li.metallic, roughness, neighborLightColor, alNeighbor.intensity);
 
-        // Jacobian correction for the reconnection shift: accounts for the change in solid angle when reusing a sample originally drawn at the neighbor's shading point.
-        // |J| = (cosLight_at_center * dist_neighbor^2) / (cosLight_at_neighbor * dist_center^2)
         float2 neighborUV = (float2(neighborPixel) + 0.5) / float2(scene.mainRenderTargetSize);
         float3 neighborViewPosition = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, neighborUV, neighborViewDepth);
         AreaLightSample sNeighborFromNeighbor = EvalAreaLightSample(vsNeighbor, yStarNeighbor, neighborViewPosition, neighborN, alNeighbor.range);
-        float jacobian = 0.0;
-        if (sNeighborFromNeighbor.cosLight > 1e-4) {
-            float distCenter2 = max(sNeighbor.dist * sNeighbor.dist, 1e-4);
-            float distNeighbor2 = max(sNeighborFromNeighbor.dist * sNeighborFromNeighbor.dist, 1e-4);
-            jacobian = (sNeighbor.cosLight * distNeighbor2) / (sNeighborFromNeighbor.cosLight * distCenter2);
-            if (jacobian < 0.05 || jacobian > 20.0) { continue; }
-        }
 
-        uint clampedNeighborM = min(neighbor.M, 10u * center.M);
-        float w_neighbor = p_hat_neighbor * neighbor.W * float(clampedNeighborM) * jacobian;
+        uint clampedNeighborM = validCenter ? min(neighbor.M, 20u * center.M) : neighbor.M;
+        float w_neighbor = p_hat_neighbor * neighbor.W * float(clampedNeighborM);
         if (ReservoirAddSample(accum, combined, w_neighbor, HashStep(h))) {
             combined.lightIdx = neighbor.lightIdx;
             combined.sampleOffsetPacked = neighbor.sampleOffsetPacked;

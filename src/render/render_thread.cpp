@@ -516,7 +516,8 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
             if (frameBuffer.bGroundTruthMode) {
                 if (frameBuffer.bResetGroundTruth) { groundTruthAccumCount = 0; }
-                SetupGroundTruthLightingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, deferredResolveTargets, 0, frameBuffer.bResetGroundTruth, groundTruthAccumCount++, frameNumber);
+                SetupGroundTruthLightingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, deferredResolveTargets, 0, frameBuffer.bResetGroundTruth, groundTruthAccumCount, frameNumber);
+                groundTruthAccumCount += 4;
             } else {
                 SetupReSTIRPass(*renderGraph, pipelineManager, viewFamily, renderExtent, deferredResolveTargets, 0, renderArena.Get(), frameNumber);
                 SetupReSTIRTemporalPass(*renderGraph, pipelineManager, renderExtent, deferredResolveTargets, 0, renderArena.Get(), frameNumber);
@@ -657,6 +658,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                         .reservoirBuffer = renderGraph->TryGetBufferAddress(SID("restir_reservoir_buffer")),
                         .reservoirTemporalBuffer = renderGraph->TryGetBufferAddress(SID("restir_reservoir_temporal")),
                         .reservoirSpatialBuffer = renderGraph->TryGetBufferAddress(SID("restir_reservoir_spatial")),
+                        .reservoirHistoryBuffer = renderGraph->TryGetBufferAddress(SID("restir_reservoir_history")),
                         .srcExtent = {dims.width, dims.height},
                         .dstExtent = {renderExtent[0], renderExtent[1]},
                         .nearPlane = viewFamily.mainView.currentViewData.nearPlane,

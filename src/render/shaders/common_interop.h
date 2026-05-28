@@ -67,6 +67,8 @@ SHADER_PUBLIC SHADER_ENUM DebugTransformationType
     ReservoirGenerateW = 20,
     ReservoirSpatialLightIdx = 21,
     ReservoirSpatialW = 22,
+    ReservoirHistoryLightIdx = 23,
+    ReservoirHistoryW = 24,
 };
 
 SHADER_PUBLIC struct Frustum
