@@ -101,7 +101,7 @@ void WillEngine::Initialize(Utils::Logger* logger)
     memoryManager.Init({
         .persistentSize = 48ull * 1024 * 1024, // 64 MB
         .generalPoolSize = 32ull * 1024 * 1024, // 16 MB
-        .assetsScratchPoolSize = 1024ull * 1024 * 1024, // 128 MB
+        .assetsScratchPoolSize = 4096ull * 1024 * 1024,
         .assetsPoolSize = 128ull * 1024 * 1024, // 128 MB
         .physicsAlignedPoolSize = 32ull * 1024 * 1024, // 64 MB
         .renderPoolSize = 4ull * 1024 * 1024, // 4 MB
@@ -869,6 +869,13 @@ void WillEngine::EditorImgui()
             }
             if (ImGui::Button("LightPanel.wsmesh")) {
                 assetGenerator->RequestModelGenerate(Platform::GetAssetPath() / "LightPanel.glb", Platform::GetAssetPath() / "LightPanel.wsmesh");
+            }
+            if (ImGui::Button("LumberyardBistro.wsmesh")) {
+                assetGenerator->RequestModelGenerate(
+                    Core::Path{"D:/source/repos/RTXDI-Assets/bistro/bistro.gltf"},
+                    Platform::GetAssetPath() / "models/LumberyardBistro/LumberyardBistro.wsmesh",
+                    Platform::GetAssetPath() / "models/LumberyardBistro/textures"
+                );
             }
 
             ImGui::SeparatorText("Generate Environment Map:"); {

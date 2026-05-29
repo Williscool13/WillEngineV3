@@ -21,7 +21,7 @@ namespace Game::Component
 {
 struct StaticMeshComponent
 {
-    static constexpr size_t MaxMaterialOverrides = 128;
+    static constexpr size_t MaxMaterialOverrides = 512;
 
     Vec4 modelFlags{1.0f, 1.0f, 0.0f, 0.0f}; // x: visible, y: shadow-caster, zw: reserved
 

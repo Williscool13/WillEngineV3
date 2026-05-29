@@ -61,6 +61,7 @@ struct ModelGenerateRequest
 {
     Core::Path gltfPath;
     Core::Path outputPath;
+    Core::Path textureOutputPath;
     uint64_t modelId{0};
 };
 
@@ -139,7 +140,7 @@ public:
 
     ~AssetGenerator();
 
-    void RequestModelGenerate(const Core::Path& gltfPath, const Core::Path& outputPath);
+    void RequestModelGenerate(const Core::Path& gltfPath, const Core::Path& outputPath, const Core::Path& textureOutputPath = {});
 
     bool TryDequeueModelGenerateComplete(ModelGenerateComplete& outResult);
 

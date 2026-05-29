@@ -39,6 +39,7 @@ struct RawImage
     int32_t h;
     int32_t bpp;
     Core::HeapArray<uint8_t> data;
+    Core::InlinePath<256> sourcePath;
 };
 
 struct RawStaticModel

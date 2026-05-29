@@ -12,6 +12,7 @@
 #include <meshoptimizer/src/meshoptimizer.h>
 
 #include "asset_generator.h"
+#include "core/containers/fixed_map.h"
 #include "core/containers/fixed_vector.h"
 #include "engine/compression/compression.h"
 #include "engine/logging/engine_log.h"
@@ -43,12 +44,13 @@ void StaticModelGenerateSlot::Initialize(
     _notifyCallback = std::move(notifyCallback);
 }
 
-void StaticModelGenerateSlot::Launch(ModelGenerateSlotHandle _slotHandle, const Core::Path& _gltfPath, const Core::Path& _outputPath, uint64_t _modelId)
+void StaticModelGenerateSlot::Launch(ModelGenerateSlotHandle _slotHandle, const Core::Path& _gltfPath, const Core::Path& _outputPath, const Core::Path& _textureOutputPath, uint64_t _modelId)
 {
     gltfPath = Core::Path{};
     slotHandle = _slotHandle;
     gltfPath = _gltfPath;
     outputPath = _outputPath;
+    textureOutputPath = _textureOutputPath;
     modelId = _modelId;
 
     if (!task.GetIsComplete()) {
@@ -62,6 +64,7 @@ void StaticModelGenerateSlot::Launch(ModelGenerateSlotHandle _slotHandle, const 
 void StaticModelGenerateSlot::Clear()
 {
     outputPath = Core::Path{};
+    textureOutputPath = Core::Path{};
     rawModel.Reset();
     rawModel.Init(&memoryManager->AssetsScratch());
 }
@@ -103,8 +106,7 @@ bool StaticModelGenerateSlot::LoadGltf()
     fastgltf::Parser parser{fastgltf::Extensions::KHR_texture_basisu | fastgltf::Extensions::KHR_mesh_quantization | fastgltf::Extensions::KHR_texture_transform};
     constexpr auto gltfOptions = fastgltf::Options::DontRequireValidAssetMember
                                  | fastgltf::Options::AllowDouble
-                                 | fastgltf::Options::LoadExternalBuffers
-                                 | fastgltf::Options::LoadExternalImages;
+                                 | fastgltf::Options::LoadExternalBuffers;
 
     // MEM: fastgltf forces the use of std::filesystem::path
     auto gltfSrcPath = std::filesystem::path(gltfPath.c_str());
@@ -155,7 +157,7 @@ bool StaticModelGenerateSlot::LoadGltf()
         int32_t width;
         int32_t height;
         int32_t nrChannels;
-        bool bFailedImageLoads = false;
+        bool bSuccessfullyProcessedImage = false;
         Core::Path parentPath = gltfPath.Parent();
         for (int i = 0; i < gltf.images.size(); ++i) {
             const auto& gltfImage = gltf.images[i];
@@ -172,8 +174,29 @@ bool StaticModelGenerateSlot::LoadGltf()
                             return;
                         }
 
-                        const Core::Path fullPath = parentPath / fileName.uri.path();
-                        stbiData = stbi_load(fullPath.c_str(), &width, &height, &nrChannels, 4);
+                        std::string_view uriPath = fileName.uri.path();
+                        const size_t dotPos = uriPath.rfind('.');
+                        const std::string_view ext = dotPos != std::string_view::npos ? uriPath.substr(dotPos) : std::string_view{};
+                        const std::string_view stem = uriPath.substr(0, dotPos != std::string_view::npos ? dotPos : uriPath.size());
+                        // Skip DDS
+                        const bool bForceFallback = (ext == ".dds" || ext == ".DDS");
+
+                        Core::Path candidate = parentPath / uriPath;
+                        if (!bForceFallback && candidate.Exists()) {
+                            rawModel.images[i].sourcePath = Core::InlinePath<256>{uriPath};
+                        }
+                        else {
+                            constexpr std::string_view altExts[] = {".png", ".jpg", ".jpeg", ".tga"};
+                            for (const std::string_view altExt : altExts) {
+                                Core::InlineString<512> altUri{stem};
+                                altUri.Append(altExt);
+                                if ((parentPath / altUri.c_str()).Exists()) {
+                                    rawModel.images[i].sourcePath = Core::InlinePath<256>{altUri.View()};
+                                    break;
+                                }
+                            }
+                        }
+                        stbiData = nullptr;
                     },
                     [&](const fastgltf::sources::Array& vector) {
                         if (vector.bytes.size() > 30) {
@@ -200,22 +223,29 @@ bool StaticModelGenerateSlot::LoadGltf()
                     }
                 }, gltfImage.data);
 
-            if (!stbiData) {
-                bFailedImageLoads = true;
-                break;
+            if (stbiData) {
+                rawModel.images[i].w = width;
+                rawModel.images[i].h = height;
+                rawModel.images[i].bpp = 4;
+                size_t size = width * height * 4;
+                rawModel.images[i].data = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, size);
+                memcpy(rawModel.images[i].data.Data(), stbiData, size);
+                stbi_image_free(stbiData);
+                stbiData = nullptr;
+                bSuccessfullyProcessedImage = true;
+            }
+            else if (!rawModel.images[i].sourcePath.IsEmpty()) {
+                bSuccessfullyProcessedImage = true;
             }
 
-            rawModel.images[i].w = width;
-            rawModel.images[i].h = height;
-            rawModel.images[i].bpp = 4;
-            size_t size = width * height * 4;
-            rawModel.images[i].data = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, size);
-            memcpy(rawModel.images[i].data.Data(), stbiData, size);
-            stbi_image_free(stbiData);
-            stbiData = nullptr;
+            if (!bSuccessfullyProcessedImage) {
+                rawModel.images = {};
+                SPDLOG_ERROR("Mismatch of loaded images and expected images in the gltf");
+                return false;
+            }
         }
 
-        if (bFailedImageLoads) {
+        if (!bSuccessfullyProcessedImage) {
             rawModel.images = {};
             SPDLOG_ERROR("Mismatch of loaded images and expected images in the gltf");
             return false;
@@ -532,22 +562,37 @@ bool StaticModelGenerateSlot::LoadGltf()
                         ZoneScopedN("Generate LOD");
 
                         constexpr float thresholds[LOD_COUNT - 1]{0.5f, 0.5f, 0.3f};
-                        size_t targetIndexCount = lodInformation[lod - 1].indexCount * thresholds[lod - 1];
+                        const int32_t prevIndexCount = lodInformation[lod - 1].indexCount;
+                        size_t targetIndexCount = prevIndexCount * thresholds[lod - 1];
                         targetIndexCount = targetIndexCount / 3 * 3;
 
-                        // Allocate worst case (equal to previous LOD)
                         lodIndices[lod] = Core::HeapArray<uint32_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, lodIndices[lod - 1].Size());
 
-                        lodInformation[lod].indexCount = meshopt_simplify(
-                            lodIndices[lod].Data(),
-                            lodIndices[lod - 1].Data(),
-                            lodInformation[lod - 1].indexCount,
-                            &primitiveVertices[0].position.x,
-                            primitiveVertices.Size(),
-                            sizeof(Engine::FullVertex),
-                            targetIndexCount,
-                            0.01f
-                        );
+                        if (targetIndexCount < 3) {
+                            // Too small to simplify; duplicate the previous LOD
+                            memcpy(lodIndices[lod].Data(), lodIndices[lod - 1].Data(), prevIndexCount * sizeof(uint32_t));
+                            lodInformation[lod].indexCount = prevIndexCount;
+                        }
+                        else {
+                            size_t simplifiedCount = meshopt_simplify(
+                                lodIndices[lod].Data(),
+                                lodIndices[lod - 1].Data(),
+                                prevIndexCount,
+                                &primitiveVertices[0].position.x,
+                                primitiveVertices.Size(),
+                                sizeof(Engine::FullVertex),
+                                targetIndexCount,
+                                0.01f
+                            );
+
+                            if (simplifiedCount < 3) {
+                                memcpy(lodIndices[lod].Data(), lodIndices[lod - 1].Data(), prevIndexCount * sizeof(uint32_t));
+                                lodInformation[lod].indexCount = prevIndexCount;
+                            }
+                            else {
+                                lodInformation[lod].indexCount = simplifiedCount;
+                            }
+                        }
                     }
 
                     for (size_t lod = 0; lod < LOD_COUNT; ++lod) {
@@ -896,18 +941,51 @@ bool StaticModelGenerateSlot::WriteStaticModel()
 
         auto textureIDs = Core::HeapArray<Engine::TextureID>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, rawModel.images.Size());
 
+        Core::FixedMap<Core::Path, Engine::TextureID> seenTextures(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, rawModel.images.Size());
+
+        const Core::Path texOutDir = textureOutputPath.IsEmpty() ? gltfPath.Parent() / "textures" : textureOutputPath;
+
         for (int32_t i = 0; i < static_cast<int32_t>(rawModel.images.Size()); ++i) {
             RawImage& image = rawModel.images[i];
-            char indexBuf[16];
-            *std::to_chars(indexBuf, indexBuf + sizeof(indexBuf), i).ptr = '\0';
 
-            Core::InlineString<128> texName(gltfPath.Stem());
-            texName.Append("_texture_");
-            texName.Append(indexBuf);
-            texName.Append(".wtexture");
+            Core::Path textureOutPath;
 
-            Core::Path textureOutPath = gltfPath.Parent() / "textures" / texName.c_str();
-            textureIDs[i] = generator->RequestTextureGenerateFromMemory(std::move(image.data), image.w, image.h, image.bpp, textureOutPath, true, preferredImageFormats[i]);
+            if (!image.sourcePath.IsEmpty()) {
+                std::string_view relPath = image.sourcePath.View();
+                constexpr std::string_view texPrefix = "textures/";
+                if (relPath.starts_with(texPrefix)) {
+                    relPath = relPath.substr(texPrefix.size());
+                }
+
+                const size_t dotPos = relPath.rfind('.');
+                const std::string_view stem = relPath.substr(0, dotPos != std::string_view::npos ? dotPos : relPath.size());
+                Core::InlineString<512> texName(stem);
+                texName.Append(".wtexture");
+                textureOutPath = texOutDir / texName.c_str();
+            }
+            else {
+                char indexBuf[16];
+                *std::to_chars(indexBuf, indexBuf + sizeof(indexBuf), i).ptr = '\0';
+
+                Core::InlineString<128> texName(gltfPath.Stem());
+                texName.Append("_texture_");
+                texName.Append(indexBuf);
+                texName.Append(".wtexture");
+                textureOutPath = texOutDir / texName.c_str();
+            }
+
+            if (const Engine::TextureID* existing = seenTextures.Find(textureOutPath)) {
+                textureIDs[i] = *existing;
+            }
+            else if (image.data.IsAllocated()) {
+                textureIDs[i] = generator->RequestTextureGenerateFromMemory(std::move(image.data), image.w, image.h, image.bpp, textureOutPath, true, preferredImageFormats[i]);
+                seenTextures.Insert(textureOutPath, textureIDs[i]);
+            }
+            else {
+                const Core::Path fullSourcePath = gltfPath.Parent() / image.sourcePath.c_str();
+                textureIDs[i] = generator->RequestTextureGenerateFromFile(fullSourcePath, textureOutPath, true, preferredImageFormats[i], false);
+                seenTextures.Insert(textureOutPath, textureIDs[i]);
+            }
         }
 
         auto texRef = [&](int idx) -> Engine::TextureID {
