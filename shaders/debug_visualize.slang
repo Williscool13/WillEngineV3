@@ -213,6 +213,17 @@ void ComputeMain(uint3 threadID : SV_DispatchThreadID) {
             else { float t = min((r.W - 500.0) / 500.0, 1.0); srcPixel.xyz = float3(0.0, t, 0.0); }
             break;
         }
+        case 25: { // ViewSpacePosition
+            float3 vsPos = ReconstructViewPosition(pc.sceneData->invProj, uv, srcPixel.x);
+            srcPixel.xyz = abs(vsPos) / 100.0;
+            break;
+        }
+        case 26: {
+            float3 N = UnpackNormalOct16(asuint(srcPixel.x));
+            float ndotv = N.z;
+            srcPixel.xyz = ndotv < 0.0 ? float3(-ndotv, 0, 0) : float3(0, ndotv, 0);
+            break;
+        }
     }
 
     rdgStorageFloat4[pc.outputImageIndex][threadID.xy] = srcPixel;

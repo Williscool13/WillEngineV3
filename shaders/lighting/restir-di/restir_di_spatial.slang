@@ -22,8 +22,8 @@ void ComputeMain(uniform ReSTIRDISpatialPushConstant pc, uint3 threadID : SV_Dis
     bool validCenter = center.lightIdx != ~0u && center.lightIdx < uint(pc.lightData->areaLightCount);
 
     //
-    //pc.outputBuffer[pixel.y * pc.renderExtent.x + pixel.x] = center;
-    //return;
+    // pc.outputBuffer[pixel.y * pc.renderExtent.x + pixel.x] = center;
+    // return;
 
     SceneData scene = pc.sceneData[pc.sceneDataIndex];
     float4x4 view = scene.view;

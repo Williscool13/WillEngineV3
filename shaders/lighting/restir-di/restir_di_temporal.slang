@@ -18,6 +18,11 @@ void ComputeMain(uniform ReSTIRDITemporalPushConstant pc, uint3 threadID : SV_Di
     }
 
     Reservoir current = pc.currentBuffer[pixel.y * pc.renderExtent.x + pixel.x];
+
+    //
+    // pc.outputBuffer[pixel.y * pc.renderExtent.x + pixel.x] = current;
+    // return;
+
     bool validCurrent = current.lightIdx != ~0u;
 
     SceneData scene = pc.sceneData[pc.sceneDataIndex];
@@ -54,7 +59,7 @@ void ComputeMain(uniform ReSTIRDITemporalPushConstant pc, uint3 threadID : SV_Di
     float viewSpaceDepth = ScreenToViewSpaceDepth(depth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
     float historyRawDepth = rdgTexturesFloat[pc.depthIndex].Load(int3(historyPixel, 0)).r;
     float historyViewDepth = ScreenToViewSpaceDepth(historyRawDepth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
-    if (abs(historyViewDepth - viewSpaceDepth) > 0.1 * viewSpaceDepth) {
+    if (abs(historyViewDepth - viewSpaceDepth) > 0.01 * viewSpaceDepth) {
         pc.outputBuffer[pixel.y * pc.renderExtent.x + pixel.x] = current;
         return;
     }

@@ -69,6 +69,8 @@ SHADER_PUBLIC SHADER_ENUM DebugTransformationType
     ReservoirSpatialW = 22,
     ReservoirHistoryLightIdx = 23,
     ReservoirHistoryW = 24,
+    ViewSpacePosition = 25,
+    NdotV = 26,
 };
 
 SHADER_PUBLIC struct Frustum

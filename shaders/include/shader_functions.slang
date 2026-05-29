@@ -189,7 +189,8 @@ InterpolatedVertex InterpolateVertex(float3 bary, VertexAttribute v0, VertexAttr
     float s1 = DecodeTangentSign(v1);
     float s2 = DecodeTangentSign(v2);
 
-    interp.normalVS   = normalize(mul((float3x3)mv, normalOS));
+    float3x3 normalMatrix = Adjugate((float3x3)mv);
+    interp.normalVS = normalize(mul(normalMatrix, normalOS));
     interp.tangentVS  = normalize(mul((float3x3)mv, tangentOS));
     interp.tangentSign = sign(bary.x * s0 + bary.y * s1 + bary.z * s2);
     interp.uv         = bary.x * uv0 + bary.y * uv1 + bary.z * uv2;
